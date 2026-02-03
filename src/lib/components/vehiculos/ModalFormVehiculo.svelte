@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
+	import { createEventDispatcher, onMount } from 'svelte';
 	import { fade, fly, scale } from 'svelte/transition';
 	import { vehiculosAPI } from '$lib/api/apiClient';
 	import { socketUtils } from '$lib/socket';
@@ -11,10 +11,12 @@
 	const dispatch = createEventDispatcher();
 
 	let isSubmitting = false;
+	let isLoadingData = false;
 	let error: string | null = null;
 	let fieldErrors: { [key: string]: string } = {};
 	let showSuccessAnimation = false;
 	let successMessage = '';
+	let lastLoadedId: string | null = null; // Track the last loaded vehicle ID
 
 	// Form data
 	let formData = {
@@ -48,7 +50,10 @@
 
 	const handleClose = () => {
 		if (isSubmitting) return;
+		console.log('🚪 Closing modal - Before reset:', { lastLoadedId, vehiculoId });
 		isOpen = false;
+		lastLoadedId = null; // Reset to force reload next time
+		console.log('🔄 After reset lastLoadedId:', lastLoadedId);
 		resetForm();
 		dispatch('close');
 	};
@@ -67,6 +72,9 @@
 		fieldErrors = {};
 		showSuccessAnimation = false;
 		successMessage = '';
+		// NO resetear vehiculoId aquí - es una prop controlada por el padre
+		// vehiculoId = null; 
+		lastLoadedId = null; // Reset last loaded ID
 	};
 
 	const parseBackendError = (err: any): string => {
@@ -220,8 +228,11 @@
 
 			// Cerrar el modal después de 2 segundos
 			setTimeout(() => {
+				console.log('⏰ Success timeout - Closing modal and resetting');
 				showSuccessAnimation = false;
 				isOpen = false;
+				lastLoadedId = null; // Reset to force reload next time
+				console.log('🔄 lastLoadedId reset to:', lastLoadedId);
 				resetForm();
 				dispatch('success');
 			}, 2000);
@@ -234,27 +245,83 @@
 	};
 
 	// Load vehiculo data if editing
-	$: if (isOpen && vehiculoId) {
-		loadVehiculo();
+	// Only reload when vehicle ID changes OR when it's a fresh open (lastLoadedId is null)
+	$: if (isOpen && vehiculoId && lastLoadedId !== vehiculoId) {
+		console.log('🔄 Reactive statement triggered - Loading vehiculo:', {
+			isOpen,
+			vehiculoId,
+			lastLoadedId,
+			shouldLoad: lastLoadedId !== vehiculoId
+		});
+		loadVehiculo(vehiculoId);
+	} else if (isOpen && !vehiculoId) {
+		console.log('🆕 Reactive statement - New vehicle form');
+		resetForm();
+	} else {
+		console.log('⏸️ Reactive statement - No action taken:', {
+			isOpen,
+			vehiculoId,
+			lastLoadedId,
+			reason: lastLoadedId === vehiculoId ? 'Vehicle already loaded' : 'Other'
+		});
 	}
 
-	async function loadVehiculo() {
+	async function loadVehiculo(id: string) {
+		console.log('📥 loadVehiculo called with ID:', id);
+		console.log('📊 Current state:', {
+			isLoadingData,
+			lastLoadedId,
+			currentFormData: { ...formData }
+		});
+		
 		try {
-			const response = await vehiculosAPI.getById(vehiculoId!);
-			const vehiculo = response.data;
+			isLoadingData = true;
+			error = null;
+			
+			console.log('🌐 Fetching vehicle from API...');
+			const response = await vehiculosAPI.getById(id);
+			console.log('✅ API Response received:', response);
+			
+			// La respuesta puede venir en response.data.data o directamente en response.data
+			const vehiculo = response.data?.data || response.data;
+			console.log('📦 Extracted vehiculo:', vehiculo);
 
-			formData = {
-				placa: vehiculo.placa || '',
-				marca: vehiculo.marca || '',
-				modelo: vehiculo.modelo || '',
-				ano: vehiculo.ano || new Date().getFullYear(),
-				clase_vehiculo: vehiculo.clase_vehiculo || '',
-				capacidad_pasajeros: vehiculo.capacidad_pasajeros || 1,
-				estado: vehiculo.estado || 'DISPONIBLE'
+			// Si vehiculo tiene la estructura {success: true, data: {...}}, extraer data
+			const vehiculoData = vehiculo.success ? vehiculo.data : vehiculo;
+
+			if (!vehiculoData || (typeof vehiculoData === 'object' && Object.keys(vehiculoData).length === 0)) {
+				throw new Error('No se encontraron datos del vehículo');
+			}
+
+			// Normalizar clase_vehiculo para que coincida con las opciones del select
+			// Backend devuelve "CAMIONETA", select necesita "Camioneta"
+			const normalizeClaseVehiculo = (clase: string) => {
+				if (!clase) return '';
+				// Convertir primera letra en mayúscula y el resto en minúsculas
+				return clase.charAt(0).toUpperCase() + clase.slice(1).toLowerCase();
 			};
+
+			const newFormData = {
+				placa: vehiculoData.placa || '',
+				marca: vehiculoData.marca || '',
+				modelo: vehiculoData.modelo || '',
+				ano: vehiculoData.ano || new Date().getFullYear(),
+				clase_vehiculo: normalizeClaseVehiculo(vehiculoData.clase_vehiculo || ''),
+				capacidad_pasajeros: vehiculoData.capacidad_pasajeros || 1,
+				estado: vehiculoData.estado || 'DISPONIBLE'
+			};
+			
+			console.log('📝 Setting formData to:', newFormData);
+			formData = newFormData;
+			
+			// Mark this vehicle as loaded
+			console.log('✅ Marking vehicle as loaded, setting lastLoadedId:', id);
+			lastLoadedId = id;
 		} catch (err) {
-			console.error('Error al cargar vehículo:', err);
+			console.error('❌ Error al cargar vehículo:', err);
 			error = 'Error al cargar los datos del vehículo';
+		} finally {
+			isLoadingData = false;
 		}
 	}
 </script>
@@ -363,6 +430,29 @@
 								class="h-1 bg-gradient-to-r from-orange-500 to-amber-600"
 								style="animation: progressBar 2s linear forwards;"
 							></div>
+						</div>
+					</div>
+				{:else if isLoadingData}
+					<!-- Loading skeleton -->
+					<div class="space-y-6 animate-pulse">
+						<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
+							{#each Array(7) as _, i}
+								<div>
+									<div class="mb-2 h-4 w-24 bg-gray-200 rounded"></div>
+									<div class="h-10 w-full bg-gray-200 rounded-lg"></div>
+								</div>
+							{/each}
+						</div>
+						<div class="flex justify-center items-center py-4">
+							<svg class="h-8 w-8 animate-spin text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+								/>
+							</svg>
+							<span class="ml-3 text-gray-600">Cargando datos del vehículo...</span>
 						</div>
 					</div>
 				{:else}

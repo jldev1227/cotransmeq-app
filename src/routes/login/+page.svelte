@@ -94,10 +94,8 @@
 		>
 			<!-- Logo -->
 			<div class="mb-8 text-center" in:fade={{ duration: 800, delay: 400 }}>
-				<div
-					class="soft-shadow mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-400 to-orange-600"
-				>
-					<span class="text-3xl font-bold text-white">T</span>
+				<div class="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-lg bg-white p-2">
+					<img src="/assets/logo.png" alt="Cotransmeq Logo" class="h-full w-full object-contain scale-150" />
 				</div>
 				<h1 class="mb-1 text-2xl font-semibold text-white">Cotransmeq</h1>
 				<p class="text-sm font-medium text-orange-200">Sistema de Gestión</p>

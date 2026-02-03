@@ -214,9 +214,9 @@
 		<div class="border-b border-white/10 p-6" in:fade={{ duration: 600, delay: 200 }}>
 			<div class="flex items-center space-x-3">
 				<div
-					class="soft-shadow flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-400 to-orange-600"
+					class="soft-shadow flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white overflow-hidden"
 				>
-					<span class="text-lg font-bold text-white">T</span>
+					<img src="/assets/logo.png" alt="Cotransmeq Logo" class="h-full w-full object-contain" />
 				</div>
 				{#if !isCollapsed}
 					<div class="min-w-0" in:fade={{ duration: 300 }}>
