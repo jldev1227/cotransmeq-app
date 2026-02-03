@@ -74,27 +74,27 @@
 			badge: null,
 			href: '/dashboard/clientes'
 		},
-		{
-			id: 'asistencias',
-			label: 'Asistencias',
-			icon: 'clipboard',
-			badge: null,
-			href: '/dashboard/asistencias'
-		},
-		{
-			id: 'acciones-correctivas',
-			label: 'Acciones C/P',
-			icon: 'shield-check',
-			badge: null,
-			href: '/dashboard/acciones-correctivas'
-		},
-		{
-			id: 'evaluaciones',
-			label: 'Evaluaciones',
-			icon: 'clipboard-list',
-			badge: null,
-			href: '/dashboard/evaluaciones'
-		}
+		// {
+		// 	id: 'asistencias',
+		// 	label: 'Asistencias',
+		// 	icon: 'clipboard',
+		// 	badge: null,
+		// 	href: '/dashboard/asistencias'
+		// },
+		// {
+		// 	id: 'acciones-correctivas',
+		// 	label: 'Acciones C/P',
+		// 	icon: 'shield-check',
+		// 	badge: null,
+		// 	href: '/dashboard/acciones-correctivas'
+		// },
+		// {
+		// 	id: 'evaluaciones',
+		// 	label: 'Evaluaciones',
+		// 	icon: 'clipboard-list',
+		// 	badge: null,
+		// 	href: '/dashboard/evaluaciones'
+		// }
 		// {
 		// 	id: 'rutas',
 		// 	label: 'Rutas',
