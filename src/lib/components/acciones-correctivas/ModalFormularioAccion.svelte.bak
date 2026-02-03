@@ -1,0 +1,634 @@
+<script lang="ts">
+	import { createEventDispatcher } from 'svelte';
+	import { fade, fly } from 'svelte/transition';
+	import { toast } from 'svelte-sonner';
+	import {
+		accionesCorrectivasAPI,
+		type AccionCorrectivaPreventiva,
+		type CreateAccionInput,
+		type TipoHallazgo,
+		type ValoracionRiesgo,
+		type TipoAccion,
+		type EstadoAccion,
+		type EvaluacionCierre
+	} from '$lib/api/acciones-correctivas';
+
+	export let accion: AccionCorrectivaPreventiva | null = null;
+	export let modoEdicion = false;
+
+	const dispatch = createEventDispatcher();
+
+	let isSubmitting = false;
+	let seccionActiva = 1; // 1-5 para las 5 secciones
+
+	// Form fields - Sección 1: Identificación del Hallazgo
+	let accion_numero = accion?.accion_numero || '';
+	let lugar_sede = accion?.lugar_sede || '';
+	let proceso_origen_hallazgo = accion?.proceso_origen_hallazgo || '';
+	let componente_elemento_referencia = accion?.componente_elemento_referencia || '';
+	let fuente_genero_hallazgo = accion?.fuente_genero_hallazgo || '';
+	let marco_legal_normativo = accion?.marco_legal_normativo || '';
+	let fecha_identificacion_hallazgo = accion?.fecha_identificacion_hallazgo?.split('T')[0] || '';
+	let descripcion_hallazgo = accion?.descripcion_hallazgo || '';
+	let tipo_hallazgo_detectado: TipoHallazgo | '' = accion?.tipo_hallazgo_detectado || '';
+	let variable_categoria_analisis = accion?.variable_categoria_analisis || '';
+
+	// Sección 2: Corrección Inmediata
+	let correccion_solucion_inmediata = accion?.correccion_solucion_inmediata || '';
+	let fecha_implementacion = accion?.fecha_implementacion?.split('T')[0] || '';
+	let valoracion_riesgo: ValoracionRiesgo | '' = accion?.valoracion_riesgo || '';
+	let requiere_actualizar_matriz = accion?.requiere_actualizar_matriz || false;
+
+	// Sección 3: Análisis y Plan de Acción
+	let tipo_accion_ejecutar: TipoAccion | '' = accion?.tipo_accion_ejecutar || '';
+	let analisis_causas = accion?.analisis_causas || '';
+	let descripcion_accion_plan = accion?.descripcion_accion_plan || '';
+	let fecha_limite_implementacion = accion?.fecha_limite_implementacion?.split('T')[0] || '';
+	let responsable_ejecucion = accion?.responsable_ejecucion || '';
+
+	// Sección 4: Seguimiento
+	let fecha_seguimiento = accion?.fecha_seguimiento?.split('T')[0] || '';
+	let estado_accion_planeada: EstadoAccion | '' = accion?.estado_accion_planeada || '';
+	let descripcion_estado_observaciones = accion?.descripcion_estado_observaciones || '';
+
+	// Sección 5: Evaluación de Eficacia
+	let fecha_evaluacion_eficacia = accion?.fecha_evaluacion_eficacia?.split('T')[0] || '';
+	let criterio_evaluacion_eficacia = accion?.criterio_evaluacion_eficacia || '';
+	let analisis_evidencias_cierre = accion?.analisis_evidencias_cierre || '';
+	let evaluacion_cierre_eficaz: EvaluacionCierre | '' = accion?.evaluacion_cierre_eficaz || '';
+	let soporte_cierre_eficaz = accion?.soporte_cierre_eficaz || '';
+	let fecha_cierre_definitivo = accion?.fecha_cierre_definitivo?.split('T')[0] || '';
+	let responsable_cierre = accion?.responsable_cierre || '';
+
+	// Errors
+	let errors: { [key: string]: string } = {};
+
+	function validateForm(): boolean {
+		errors = {};
+
+		if (!accion_numero.trim()) {
+			errors.accion_numero = 'El número de acción es requerido';
+		}
+
+		if (!descripcion_hallazgo.trim()) {
+			errors.descripcion_hallazgo = 'La descripción del hallazgo es requerida';
+		}
+
+		if (!tipo_accion_ejecutar) {
+			errors.tipo_accion_ejecutar = 'El tipo de acción es requerido';
+		}
+
+		return Object.keys(errors).length === 0;
+	}
+
+	async function handleSubmit() {
+		if (!validateForm()) {
+			toast.error('Por favor complete los campos requeridos');
+			return;
+		}
+
+		isSubmitting = true;
+
+		try {
+			const data: CreateAccionInput = {
+				accion_numero: accion_numero.trim(),
+				lugar_sede: lugar_sede.trim() || undefined,
+				proceso_origen_hallazgo: proceso_origen_hallazgo.trim() || undefined,
+				componente_elemento_referencia: componente_elemento_referencia.trim() || undefined,
+				fuente_genero_hallazgo: fuente_genero_hallazgo.trim() || undefined,
+				marco_legal_normativo: marco_legal_normativo.trim() || undefined,
+				fecha_identificacion_hallazgo: fecha_identificacion_hallazgo || undefined,
+				descripcion_hallazgo: descripcion_hallazgo.trim() || undefined,
+				tipo_hallazgo_detectado: tipo_hallazgo_detectado || undefined,
+				variable_categoria_analisis: variable_categoria_analisis.trim() || undefined,
+				correccion_solucion_inmediata: correccion_solucion_inmediata.trim() || undefined,
+				fecha_implementacion: fecha_implementacion || undefined,
+				valoracion_riesgo: valoracion_riesgo || undefined,
+				requiere_actualizar_matriz,
+				tipo_accion_ejecutar: tipo_accion_ejecutar || undefined,
+				analisis_causas: analisis_causas.trim() || undefined,
+				descripcion_accion_plan: descripcion_accion_plan.trim() || undefined,
+				fecha_limite_implementacion: fecha_limite_implementacion || undefined,
+				responsable_ejecucion: responsable_ejecucion.trim() || undefined,
+				fecha_seguimiento: fecha_seguimiento || undefined,
+				estado_accion_planeada: estado_accion_planeada || undefined,
+				descripcion_estado_observaciones: descripcion_estado_observaciones.trim() || undefined,
+				fecha_evaluacion_eficacia: fecha_evaluacion_eficacia || undefined,
+				criterio_evaluacion_eficacia: criterio_evaluacion_eficacia.trim() || undefined,
+				analisis_evidencias_cierre: analisis_evidencias_cierre.trim() || undefined,
+				evaluacion_cierre_eficaz: evaluacion_cierre_eficaz || undefined,
+				soporte_cierre_eficaz: soporte_cierre_eficaz.trim() || undefined,
+				fecha_cierre_definitivo: fecha_cierre_definitivo || undefined,
+				responsable_cierre: responsable_cierre.trim() || undefined
+			};
+
+			if (modoEdicion && accion) {
+				await accionesCorrectivasAPI.actualizar(accion.id, data);
+			} else {
+				await accionesCorrectivasAPI.crear(data);
+			}
+
+			dispatch('guardado');
+		} catch (error: any) {
+			toast.error(error.message || 'Error al guardar la acción');
+		} finally {
+			isSubmitting = false;
+		}
+	}
+
+	function cerrarModal() {
+		dispatch('close');
+	}
+
+	function cambiarSeccion(numero: number) {
+		seccionActiva = numero;
+	}
+
+	function avanzarSeccion() {
+		if (seccionActiva < 5) {
+			seccionActiva++;
+		}
+	}
+
+	function retrocederSeccion() {
+		if (seccionActiva > 1) {
+			seccionActiva--;
+		}
+	}
+</script>
+
+<!-- svelte-ignore a11y-click-events-have-key-events -->
+<!-- svelte-ignore a11y-no-static-element-interactions -->
+<div class="fixed inset-0 z-50 overflow-y-auto" transition:fade={{ duration: 200 }}>
+	<div class="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
+		<!-- Overlay -->
+		<div class="fixed inset-0 transition-opacity bg-black/70 backdrop-blur-sm" on:click={cerrarModal}></div>
+
+		<!-- Modal -->
+		<div
+			class="inline-block align-bottom glass-dark border border-white/10 rounded-2xl text-left overflow-hidden soft-shadow transform transition-all sm:my-8 sm:align-middle sm:max-w-5xl sm:w-full"
+			transition:fly={{ y: 50, duration: 300 }}
+		>
+			<!-- Header -->
+			<div class="bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-5">
+				<div class="flex items-center justify-between">
+					<h3 class="text-xl font-bold text-white">
+						{modoEdicion ? 'Editar Acción' : 'Nueva Acción Correctiva/Preventiva'}
+					</h3>
+					<button
+						on:click={cerrarModal}
+						class="text-white/80 hover:text-white apple-transition"
+					>
+						<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+						</svg>
+					</button>
+				</div>
+
+				<!-- Navegación de secciones -->
+				<div class="mt-5 flex items-center justify-between gap-2">
+					{#each [
+						{ num: 1, nombre: 'Identificación' },
+						{ num: 2, nombre: 'Corrección' },
+						{ num: 3, nombre: 'Plan' },
+						{ num: 4, nombre: 'Seguimiento' },
+						{ num: 5, nombre: 'Evaluación' }
+					] as seccion}
+						<button
+							on:click={() => cambiarSeccion(seccion.num)}
+							class="flex-1 text-center py-2.5 px-2 text-sm font-medium rounded-lg apple-transition {seccionActiva === seccion.num
+								? 'bg-white/20 text-white'
+								: 'text-white/60 hover:text-white hover:bg-white/10'}"
+						>
+							<span class="hidden sm:inline">{seccion.num}. {seccion.nombre}</span>
+							<span class="sm:hidden">{seccion.num}</span>
+						</button>
+					{/each}
+				</div>
+			</div>
+
+			<!-- Form -->
+			<form on:submit|preventDefault={handleSubmit} class="bg-gray-900/95">
+				<div class="px-6 py-6 max-h-[60vh] overflow-y-auto">
+					<!-- Sección 1: Identificación del Hallazgo -->
+					{#if seccionActiva === 1}
+						<div transition:fly={{ x: -20, duration: 200 }}>
+							<h4 class="text-lg font-semibold text-white mb-4">1. Identificación del Hallazgo</h4>
+							<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+								<div>
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">
+										Número de Acción <span class="text-red-400">*</span>
+									</label>
+									<input
+										type="text"
+										bind:value={accion_numero}
+										placeholder="Ej: A22_1"
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-orange-200/30 focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 apple-transition {errors.accion_numero ? 'border-red-500/50' : ''}"
+										disabled={modoEdicion}
+									/>
+									{#if errors.accion_numero}
+										<p class="mt-1 text-sm text-red-400">{errors.accion_numero}</p>
+									{/if}
+								</div>
+
+								<div>
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">Lugar / Sede</label>
+									<input
+										type="text"
+										bind:value={lugar_sede}
+										placeholder="Ej: Sede Principal"
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-orange-200/30 focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 apple-transition"
+									/>
+								</div>
+
+								<div>
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">Proceso Origen del Hallazgo</label>
+									<input
+										type="text"
+										bind:value={proceso_origen_hallazgo}
+										placeholder="Ej: Auditoría interna"
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-orange-200/30 focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 apple-transition"
+									/>
+								</div>
+
+								<div>
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">Componente / Elemento de Referencia</label>
+									<input
+										type="text"
+										bind:value={componente_elemento_referencia}
+										placeholder="Ej: Sistema de gestión"
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-orange-200/30 focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 apple-transition"
+									/>
+								</div>
+
+								<div>
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">Fuente que Generó el Hallazgo</label>
+									<input
+										type="text"
+										bind:value={fuente_genero_hallazgo}
+										placeholder="Ej: Inspección, Cliente, Auditor"
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-orange-200/30 focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 apple-transition"
+									/>
+								</div>
+
+								<div>
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">Marco Legal / Normativo</label>
+									<input
+										type="text"
+										bind:value={marco_legal_normativo}
+										placeholder="Ej: ISO 9001:2015"
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-orange-200/30 focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 apple-transition"
+									/>
+								</div>
+
+								<div>
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">Fecha de Identificación del Hallazgo</label>
+									<input
+										type="date"
+										bind:value={fecha_identificacion_hallazgo}
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white apple-transition focus:ring-2 focus:ring-orange-500/50"
+									/>
+								</div>
+
+								<div>
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">Tipo de Hallazgo Detectado</label>
+									<select
+										bind:value={tipo_hallazgo_detectado}
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white apple-transition focus:ring-2 focus:ring-orange-500/50"
+									>
+										<option value="">Seleccione...</option>
+										<option value="No conformidad mayor">No conformidad mayor</option>
+										<option value="No conformidad menor">No conformidad menor</option>
+										<option value="Observación">Observación</option>
+										<option value="Oportunidad de mejora">Oportunidad de mejora</option>
+										<option value="Hallazgo positivo">Hallazgo positivo</option>
+										<option value="Otro">Otro</option>
+									</select>
+								</div>
+
+								<div class="md:col-span-2">
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">
+										Descripción del Hallazgo <span class="text-red-400">*</span>
+									</label>
+									<textarea
+										bind:value={descripcion_hallazgo}
+										rows="3"
+										placeholder="Describa detalladamente el hallazgo identificado..."
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-orange-200/30 focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 apple-transition {errors.descripcion_hallazgo ? 'border-red-500/50' : ''}"
+									></textarea>
+									{#if errors.descripcion_hallazgo}
+										<p class="mt-1 text-sm text-red-400">{errors.descripcion_hallazgo}</p>
+									{/if}
+								</div>
+
+								<div class="md:col-span-2">
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">Variable / Categoría de Análisis</label>
+									<input
+										type="text"
+										bind:value={variable_categoria_analisis}
+										placeholder="Ej: Documentación, Recursos, Procesos"
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-orange-200/30 focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 apple-transition"
+									/>
+								</div>
+							</div>
+						</div>
+					{/if}
+
+					<!-- Sección 2: Corrección Inmediata -->
+					{#if seccionActiva === 2}
+						<div transition:fly={{ x: -20, duration: 200 }}>
+							<h4 class="text-lg font-semibold text-white mb-4">2. Corrección Inmediata</h4>
+							<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+								<div class="md:col-span-2">
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">Corrección / Solución Inmediata</label>
+									<textarea
+										bind:value={correccion_solucion_inmediata}
+										rows="4"
+										placeholder="Describa la corrección implementada de forma inmediata..."
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-orange-200/30 focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 apple-transition"
+									></textarea>
+								</div>
+
+								<div>
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">Fecha de Implementación</label>
+									<input
+										type="date"
+										bind:value={fecha_implementacion}
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white apple-transition focus:ring-2 focus:ring-orange-500/50"
+									/>
+								</div>
+
+								<div>
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">Valoración del Riesgo</label>
+									<select
+										bind:value={valoracion_riesgo}
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white apple-transition focus:ring-2 focus:ring-orange-500/50"
+									>
+										<option value="">Seleccione...</option>
+										<option value="ALTO">Alto</option>
+										<option value="MEDIO">Medio</option>
+										<option value="BAJO">Bajo</option>
+									</select>
+								</div>
+
+								<div class="md:col-span-2">
+									<label class="flex items-center space-x-2">
+										<input
+											type="checkbox"
+											bind:checked={requiere_actualizar_matriz}
+											class="w-4 h-4 text-orange-500 bg-white/5 border-white/10 rounded focus:ring-orange-500/50 apple-transition"
+										/>
+										<span class="text-sm font-medium text-orange-200/70">¿Requiere actualizar matriz de riesgos?</span>
+									</label>
+								</div>
+							</div>
+						</div>
+					{/if}
+
+					<!-- Sección 3: Análisis y Plan de Acción -->
+					{#if seccionActiva === 3}
+						<div transition:fly={{ x: -20, duration: 200 }}>
+							<h4 class="text-lg font-semibold text-white mb-4">3. Análisis y Plan de Acción</h4>
+							<div class="grid grid-cols-1 gap-4">
+								<div>
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">
+										Tipo de Acción a Ejecutar <span class="text-red-400">*</span>
+									</label>
+									<select
+										bind:value={tipo_accion_ejecutar}
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white apple-transition focus:ring-2 focus:ring-orange-500/50 {errors.tipo_accion_ejecutar ? 'border-red-500/50' : ''}"
+									>
+										<option value="">Seleccione...</option>
+										<option value="CORRECTIVA">Correctiva</option>
+										<option value="PREVENTIVA">Preventiva</option>
+										<option value="MEJORA">Mejora</option>
+									</select>
+									{#if errors.tipo_accion_ejecutar}
+										<p class="mt-1 text-sm text-red-400">{errors.tipo_accion_ejecutar}</p>
+									{/if}
+								</div>
+
+								<div>
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">
+										Análisis de Causas (5 Por Qués)
+									</label>
+									<textarea
+										bind:value={analisis_causas}
+										rows="6"
+										placeholder="¿Por qué ocurrió? Aplique la metodología de los 5 por qués..."
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-orange-200/30 focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 apple-transition"
+									></textarea>
+								</div>
+
+								<div>
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">Descripción del Plan de Acción</label>
+									<textarea
+										bind:value={descripcion_accion_plan}
+										rows="4"
+										placeholder="Describa las acciones específicas a implementar..."
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-orange-200/30 focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 apple-transition"
+									></textarea>
+								</div>
+
+								<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+									<div>
+										<label class="block text-sm font-medium text-orange-200/70 mb-2">Fecha Límite de Implementación</label>
+										<input
+											type="date"
+											bind:value={fecha_limite_implementacion}
+											class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white apple-transition focus:ring-2 focus:ring-orange-500/50"
+										/>
+									</div>
+
+									<div>
+										<label class="block text-sm font-medium text-orange-200/70 mb-2">Responsable de Ejecución</label>
+										<input
+											type="text"
+											bind:value={responsable_ejecucion}
+											placeholder="Nombre del responsable"
+											class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-orange-200/30 focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 apple-transition"
+										/>
+									</div>
+								</div>
+							</div>
+						</div>
+					{/if}
+
+					<!-- Sección 4: Seguimiento -->
+					{#if seccionActiva === 4}
+						<div transition:fly={{ x: -20, duration: 200 }}>
+							<h4 class="text-lg font-semibold text-white mb-4">4. Seguimiento</h4>
+							<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+								<div>
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">Fecha de Seguimiento</label>
+									<input
+										type="date"
+										bind:value={fecha_seguimiento}
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white apple-transition focus:ring-2 focus:ring-orange-500/50"
+									/>
+								</div>
+
+								<div>
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">Estado de la Acción Planeada</label>
+									<select
+										bind:value={estado_accion_planeada}
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white apple-transition focus:ring-2 focus:ring-orange-500/50"
+									>
+										<option value="">Seleccione...</option>
+										<option value="Cumplidas">Cumplidas</option>
+										<option value="En Proceso">En Proceso</option>
+										<option value="Vencidas">Vencidas</option>
+									</select>
+								</div>
+
+								<div class="md:col-span-2">
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">Descripción del Estado / Observaciones</label>
+									<textarea
+										bind:value={descripcion_estado_observaciones}
+										rows="4"
+										placeholder="Describa el estado actual de la acción y cualquier observación relevante..."
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-orange-200/30 focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 apple-transition"
+									></textarea>
+								</div>
+							</div>
+						</div>
+					{/if}
+
+					<!-- Sección 5: Evaluación de Eficacia -->
+					{#if seccionActiva === 5}
+						<div transition:fly={{ x: -20, duration: 200 }}>
+							<h4 class="text-lg font-semibold text-white mb-4">5. Evaluación de Eficacia</h4>
+							<div class="grid grid-cols-1 gap-4">
+								<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+									<div>
+										<label class="block text-sm font-medium text-orange-200/70 mb-2">Fecha de Evaluación de Eficacia</label>
+										<input
+											type="date"
+											bind:value={fecha_evaluacion_eficacia}
+											class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white apple-transition focus:ring-2 focus:ring-orange-500/50"
+										/>
+									</div>
+
+									<div>
+										<label class="block text-sm font-medium text-orange-200/70 mb-2">Evaluación del Cierre</label>
+										<select
+											bind:value={evaluacion_cierre_eficaz}
+											class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white apple-transition focus:ring-2 focus:ring-orange-500/50"
+										>
+											<option value="">Seleccione...</option>
+											<option value="EFICAZ">Eficaz</option>
+											<option value="NO EFICAZ">No Eficaz</option>
+										</select>
+									</div>
+								</div>
+
+								<div>
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">Criterio de Evaluación de Eficacia</label>
+									<textarea
+										bind:value={criterio_evaluacion_eficacia}
+										rows="3"
+										placeholder="Describa los criterios utilizados para evaluar la eficacia..."
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-orange-200/30 focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 apple-transition"
+									></textarea>
+								</div>
+
+								<div>
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">Análisis de Evidencias de Cierre</label>
+									<textarea
+										bind:value={analisis_evidencias_cierre}
+										rows="3"
+										placeholder="Analice las evidencias que soportan el cierre de la acción..."
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-orange-200/30 focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 apple-transition"
+									></textarea>
+								</div>
+
+								<div>
+									<label class="block text-sm font-medium text-orange-200/70 mb-2">Soporte del Cierre Eficaz</label>
+									<input
+										type="text"
+										bind:value={soporte_cierre_eficaz}
+										placeholder="Ej: Documento, registro, evidencia fotográfica"
+										class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-orange-200/30 focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 apple-transition"
+									/>
+								</div>
+
+								<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+									<div>
+										<label class="block text-sm font-medium text-orange-200/70 mb-2">Fecha de Cierre Definitivo</label>
+										<input
+											type="date"
+											bind:value={fecha_cierre_definitivo}
+											class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white apple-transition focus:ring-2 focus:ring-orange-500/50"
+										/>
+									</div>
+
+									<div>
+										<label class="block text-sm font-medium text-orange-200/70 mb-2">Responsable del Cierre</label>
+										<input
+											type="text"
+											bind:value={responsable_cierre}
+											placeholder="Nombre del responsable"
+											class="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white placeholder-orange-200/30 focus:ring-2 focus:ring-orange-500/50 focus:border-orange-500/50 apple-transition"
+										/>
+									</div>
+								</div>
+							</div>
+						</div>
+					{/if}
+				</div>
+
+				<!-- Footer con navegación -->
+				<div class="bg-gray-900/95 px-6 py-4 flex items-center justify-between border-t border-white/10">
+					<div class="flex gap-2">
+						{#if seccionActiva > 1}
+							<button
+								type="button"
+								on:click={retrocederSeccion}
+								class="px-4 py-2.5 bg-white/5 text-orange-200 rounded-lg hover:bg-white/10 apple-transition border border-white/10"
+							>
+								← Anterior
+							</button>
+						{/if}
+					</div>
+
+					<div class="flex gap-2">
+						<button
+							type="button"
+							on:click={cerrarModal}
+							class="px-6 py-2.5 bg-white/5 text-orange-200 rounded-lg hover:bg-white/10 apple-transition border border-white/10"
+							disabled={isSubmitting}
+						>
+							Cancelar
+						</button>
+
+						{#if seccionActiva < 5}
+							<button
+								type="button"
+								on:click={avanzarSeccion}
+								class="px-4 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:from-orange-600 hover:to-orange-700 apple-transition soft-shadow"
+							>
+								Siguiente →
+							</button>
+						{:else}
+							<button
+								type="submit"
+								class="px-6 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-lg hover:from-orange-600 hover:to-orange-700 apple-transition soft-shadow disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+								disabled={isSubmitting}
+							>
+								{#if isSubmitting}
+									<svg class="animate-spin h-5 w-5" fill="none" viewBox="0 0 24 24">
+										<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+										<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+									</svg>
+									Guardando...
+								{:else}
+									{modoEdicion ? 'Actualizar' : 'Guardar'}
+								{/if}
+							</button>
+						{/if}
+					</div>
+				</div>
+			</form>
+		</div>
+	</div>
+</div>
