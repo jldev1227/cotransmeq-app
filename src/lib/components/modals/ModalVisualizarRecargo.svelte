@@ -118,10 +118,14 @@
 					dias_laborales: diasMapeados,
 					total_horas: parseFloat(recargoData.total_horas_trabajadas || '0'),
 					total_dias: recargoData.total_dias_laborados || 0,
-					// Mapear información de auditoría
+					// Mapear información de auditoría con valores por defecto seguros
 					auditoria: {
 						version: recargoData.version || 1,
-						creado_por: recargoData.users_recargos_planillas_creado_por_idTousers || null,
+						creado_por: recargoData.users_recargos_planillas_creado_por_idTousers || {
+							nombre: 'Sistema',
+							apellido: '',
+							email: 'sistema@cotransmeq.com'
+						},
 						actualizado_por: recargoData.users_recargos_planillas_actualizado_por_idTousers || null,
 						created_at: recargoData.created_at,
 						updated_at: recargoData.updated_at
@@ -210,7 +214,7 @@
 	// Asegurar que auditoria tenga valores por defecto seguros
 	$: auditoria = recargo?.auditoria || {
 		version: 1,
-		creado_por: { nombre: '', apellido: '', email: '' },
+		creado_por: { nombre: 'Sistema', apellido: '', email: 'sistema@cotransmeq.com' },
 		created_at: null,
 		actualizado_por: null,
 		updated_at: null

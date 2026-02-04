@@ -72,16 +72,16 @@
 		tmNumber: '',
 		servicio_id: null as string | null,
 
-		// Estado del conductor
-		estado_conductor: null as 'optimo' | 'fatigado' | 'regular' | 'malo' | null,
+		// Estado del conductor (valores por defecto aprobados)
+		estado_conductor: 'optimo' as 'optimo' | 'fatigado' | 'regular' | 'malo' | null,
 
-		// Condiciones de vía
+		// Condiciones de vía (por defecto pavimentada)
 		via_trocha: false,
 		via_afirmado: false,
 		via_mixto: false,
-		via_pavimentada: false,
+		via_pavimentada: true,
 
-		// Riesgos de seguridad
+		// Riesgos de seguridad (por defecto sin riesgos)
 		riesgo_desniveles: false,
 		riesgo_deslizamientos: false,
 		riesgo_sin_senalizacion: false,
@@ -89,9 +89,9 @@
 		riesgo_peatones: false,
 		riesgo_trafico_alto: false,
 
-		// Evaluación
-		fuente_consulta: null as 'conductor' | 'gps' | 'cliente' | 'sistema' | null,
-		calificacion_servicio: null as 'excelente' | 'bueno' | 'regular' | 'malo' | null,
+		// Evaluación (valores por defecto óptimos)
+		fuente_consulta: 'sistema' as 'conductor' | 'gps' | 'cliente' | 'sistema' | null,
+		calificacion_servicio: 'excelente' as 'excelente' | 'bueno' | 'regular' | 'malo' | null,
 
 		// Métricas de tiempo
 		tiempo_disponibilidad_horas: null as number | null,
@@ -152,11 +152,7 @@
 	// Calcular progreso
 	$: tabCompleted = {
 		informacion: !!(formData.conductorId && formData.vehiculoId && formData.empresaId),
-		condiciones: !!(
-			formData.estado_conductor ||
-			formData.fuente_consulta ||
-			formData.calificacion_servicio
-		),
+		condiciones: true, // Siempre validado por defecto (opcional)
 		horarios: diasLaborales.some((dia) => dia.dia && dia.hora_inicio && dia.hora_fin)
 	};
 
@@ -165,7 +161,7 @@
 			(formData.conductorId ? 1 : 0) +
 			(formData.vehiculoId ? 1 : 0) +
 			(formData.empresaId ? 1 : 0) +
-			(tabCompleted.condiciones ? 1 : 0) +
+			1 + // Condiciones siempre cuenta como completado
 			(tabCompleted.horarios ? 1 : 0),
 		total: 5
 	};
@@ -1052,6 +1048,7 @@
 							/>
 						</svg>
 						<span>Condiciones y Evaluación</span>
+						<span class="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600">Opcional</span>
 						{#if tabCompleted.condiciones}
 							<svg class="h-4 w-4 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
 								<path
@@ -1562,6 +1559,26 @@
 				{:else if activeTab === 'condiciones'}
 					<!-- Tab: Condiciones y Evaluación -->
 					<div class="space-y-6" transition:fade={{ duration: 200 }}>
+						<!-- Banner informativo -->
+						<div class="rounded-lg border border-green-200 bg-green-50 p-4">
+							<div class="flex gap-3">
+								<svg class="h-5 w-5 flex-shrink-0 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+									/>
+								</svg>
+								<div>
+									<h4 class="font-semibold text-green-900">Sección Opcional - Preaprobada</h4>
+									<p class="mt-1 text-sm text-green-800">
+										Esta sección ya está validada con valores óptimos por defecto. Puede modificar los campos si desea agregar información específica del servicio, pero no es necesario para crear el recargo.
+									</p>
+								</div>
+							</div>
+						</div>
+
 						<!-- Estado del Conductor -->
 						<div class="rounded-lg border border-gray-200 bg-white p-4">
 							<h3 class="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-800">
