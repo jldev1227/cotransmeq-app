@@ -45,7 +45,7 @@
 	// Constantes para cálculo de recargos
 	const HORAS_LIMITE = {
 		JORNADA_NORMAL: 10,
-		INICIO_NOCTURNO: 21,
+		INICIO_NOCTURNO: 19,
 		FIN_NOCTURNO: 6
 	};
 
@@ -241,7 +241,7 @@
 	function validarHora(id: string, campo: 'inicio' | 'fin', valor: any): string {
 		const numValor = typeof valor === 'string' ? parseFloat(valor) : valor;
 
-		if (!valor || valor === '') {
+		if (valor === '' || valor === null || valor === undefined) {
 			return '';
 		}
 
@@ -249,8 +249,8 @@
 			return 'Valor inválido';
 		}
 
-		if (numValor < 0.5) {
-			return 'Mínimo: 0.5 horas';
+		if (numValor < 0) {
+			return 'Mínimo: 0 horas';
 		}
 
 		if (numValor > 48) {
@@ -332,15 +332,16 @@
 			rn = 0,
 			rd = 0;
 
-		// Calcular recargo nocturno considerando que las horas pueden pasar de 24
-		// Normalizamos las horas para calcular el período nocturno (21:00 a 06:00)
+		// Calcular recargo nocturno SOLO en las primeras 10 horas (jornada normal)
+		// RN no aplica a horas extras porque HEN/HEFN ya incluyen recargo nocturno
 		let horaActual = horaInicio;
-		while (horaActual < horaFin) {
+		const horaLimiteRN = Math.min(horaInicio + totalHoras, horaInicio + HORAS_LIMITE.JORNADA_NORMAL);
+		
+		while (horaActual < horaLimiteRN) {
 			const horaDelDia = normalizarHora(horaActual);
-			const siguienteHora = Math.min(horaActual + 0.5, horaFin);
-			const horaDelDiaSiguiente = normalizarHora(siguienteHora);
+			const siguienteHora = Math.min(horaActual + 0.5, horaLimiteRN);
 
-			// Verificar si está en período nocturno (21:00-23:59 o 00:00-06:00)
+			// Verificar si está en período nocturno (19:00-23:59 o 00:00-06:00)
 			if (horaDelDia >= HORAS_LIMITE.INICIO_NOCTURNO || horaDelDia < HORAS_LIMITE.FIN_NOCTURNO) {
 				rn += siguienteHora - horaActual;
 			}
