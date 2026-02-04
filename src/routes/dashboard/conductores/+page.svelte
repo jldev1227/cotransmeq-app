@@ -94,6 +94,15 @@
 		});
 	};
 
+	const formatTipoSangre = (tipo?: string | null) => {
+		if (!tipo) return '';
+		// Convertir O_POSITIVO a O+, AB_NEGATIVO a AB-, etc.
+		return tipo
+			.replace('_POSITIVO', '+')
+			.replace('_NEGATIVO', '-')
+			.replace('_', '');
+	};
+
 	const getEstadoColor = (estado: string) => {
 		switch (estado) {
 			case 'ACTIVO':
@@ -1230,7 +1239,7 @@
 							<span
 								class="inline-flex items-center rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700"
 							>
-								Tipo de sangre {conductor.tipo_sangre}
+								Tipo de sangre {formatTipoSangre(conductor.tipo_sangre)}
 							</span>
 						{/if}
 						{#if hasValidData(conductor.vencimiento_licencia)}

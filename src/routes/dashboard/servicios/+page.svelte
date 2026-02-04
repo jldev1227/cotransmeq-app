@@ -992,7 +992,7 @@
 			<div class="space-y-3 p-4">
 				{#each servicios as servicio, index (servicio?.id || `temp-${index}`)}
 					<div
-						class="apple-transition group min-h-32 overflow-hidden rounded-xl border border-gray-200/50 bg-white hover:border-orange-300 hover:shadow-md"
+						class="apple-transition group overflow-hidden rounded-xl border border-gray-200/50 bg-white hover:border-orange-300 hover:shadow-md"
 						in:fly={{ y: 20, duration: 400, delay: index * 50 }}
 					>
 						<!-- on:click={() => verDetalle(servicio.id)} -->
@@ -1004,11 +1004,11 @@
 							></div>
 
 							<!-- Contenido principal -->
-							<div class="flex min-w-0 flex-1 flex-col px-4 py-2.5">
+							<div class="flex min-w-0 flex-1 flex-col px-3 sm:px-4 py-2.5">
 								<!-- Fila 1: Ruta, Cliente, Conductor, Vehículo -->
-								<div class="mb-2 flex min-w-0 items-center gap-4">
+								<div class="mb-2 flex min-w-0 flex-col lg:flex-row items-start lg:items-center gap-3 lg:gap-4">
 									<!-- Ruta (sin límite, flex-1) -->
-									<div class="min-w-0 flex-1">
+									<div class="min-w-0 w-full lg:flex-1">
 										<div class="flex items-start gap-1.5">
 											<svg
 												class="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-orange-500"
@@ -1030,7 +1030,7 @@
 												/>
 											</svg>
 											<div class="min-w-0 flex-1">
-												<p class="text-sm leading-tight font-semibold text-gray-900">
+												<p class="text-sm leading-tight font-semibold text-gray-900 break-words">
 													{servicio.origen_especifico ||
 														servicio.origen?.nombre_municipio ||
 														'Origen no especificado'}
@@ -1049,7 +1049,7 @@
 															d="M19 14l-7 7m0 0l-7-7m7 7V3"
 														/>
 													</svg>
-													<p class="text-xs leading-tight text-gray-600">
+													<p class="text-xs leading-tight text-gray-600 break-words">
 														{servicio.destino_especifico ||
 															servicio.destino?.nombre_municipio ||
 															'Destino no especificado'}
@@ -1059,58 +1059,61 @@
 										</div>
 									</div>
 
-									<!-- Cliente -->
-									<div class="w-48 min-w-0 flex-shrink-0">
-										<p class="mb-0.5 text-xs text-gray-500">Cliente</p>
-										<p
-											class="truncate text-sm font-medium text-gray-900"
-											title={servicio.cliente?.nombre || 'Sin cliente'}
-										>
-											{servicio.cliente?.nombre || 'Sin cliente'}
-										</p>
-										{#if servicio.cliente?.nit}
-											<p class="text-xs text-gray-500">NIT: {servicio.cliente.nit}</p>
-										{/if}
-									</div>
-
-									<!-- Conductor -->
-									<div class="w-44 min-w-0 flex-shrink-0">
-										<p class="mb-0.5 text-xs text-gray-500">Conductor</p>
-										{#if servicio.conductor}
+									<!-- Grid para Cliente, Conductor, Vehículo -->
+									<div class="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full lg:w-auto">
+										<!-- Cliente -->
+										<div class="min-w-0 lg:w-48 lg:flex-shrink-0">
+											<p class="mb-0.5 text-xs text-gray-500">Cliente</p>
 											<p
-												class="truncate text-sm text-gray-900"
-												title="{servicio.conductor.nombre} {servicio.conductor.apellido}"
+												class="truncate text-sm font-medium text-gray-900"
+												title={servicio.cliente?.nombre || 'Sin cliente'}
 											>
-												{servicio.conductor.nombre}
-												{servicio.conductor.apellido}
+												{servicio.cliente?.nombre || 'Sin cliente'}
 											</p>
-											{#if servicio.conductor.telefono}
-												<p class="text-xs text-gray-500">{servicio.conductor.telefono}</p>
+											{#if servicio.cliente?.nit}
+												<p class="text-xs text-gray-500">NIT: {servicio.cliente.nit}</p>
 											{/if}
-										{:else}
-											<span class="text-sm text-gray-400 italic">Sin asignar</span>
-										{/if}
-									</div>
+										</div>
 
-									<!-- Vehículo -->
-									<div class="w-32 min-w-0 flex-shrink-0">
-										<p class="mb-0.5 text-xs text-gray-500">Vehículo</p>
-										{#if servicio.vehiculo}
-											<p class="text-sm font-semibold text-gray-900">{servicio.vehiculo.placa}</p>
-											<p class="truncate text-xs text-gray-500">
-												{servicio.vehiculo.marca}
-												{servicio.vehiculo.modelo}
-											</p>
-										{:else}
-											<span class="text-sm text-gray-400 italic">Sin asignar</span>
-										{/if}
+										<!-- Conductor -->
+										<div class="min-w-0 lg:w-44 lg:flex-shrink-0">
+											<p class="mb-0.5 text-xs text-gray-500">Conductor</p>
+											{#if servicio.conductor}
+												<p
+													class="truncate text-sm text-gray-900"
+													title="{servicio.conductor.nombre} {servicio.conductor.apellido}"
+												>
+													{servicio.conductor.nombre}
+													{servicio.conductor.apellido}
+												</p>
+												{#if servicio.conductor.telefono}
+													<p class="text-xs text-gray-500">{servicio.conductor.telefono}</p>
+												{/if}
+											{:else}
+												<span class="text-sm text-gray-400 italic">Sin asignar</span>
+											{/if}
+										</div>
+
+										<!-- Vehículo -->
+										<div class="min-w-0 lg:w-32 lg:flex-shrink-0">
+											<p class="mb-0.5 text-xs text-gray-500">Vehículo</p>
+											{#if servicio.vehiculo}
+												<p class="text-sm font-semibold text-gray-900">{servicio.vehiculo.placa}</p>
+												<p class="truncate text-xs text-gray-500">
+													{servicio.vehiculo.marca}
+													{servicio.vehiculo.modelo}
+												</p>
+											{:else}
+												<span class="text-sm text-gray-400 italic">Sin asignar</span>
+											{/if}
+										</div>
 									</div>
 								</div>
 
 								<!-- Fila 2: Fechas, Acciones y Estado -->
-								<div class="grid grid-cols-2 gap-4 border-t border-gray-100 pt-2">
+								<div class="flex flex-col lg:grid lg:grid-cols-2 gap-3 lg:gap-4 border-t border-gray-100 pt-2">
 									<!-- Columna 1: Fechas -->
-									<div class="flex items-center gap-4">
+									<div class="flex flex-wrap items-center gap-x-3 gap-y-1.5">
 										<!-- Fecha Creación -->
 										{#if servicio.created_at}
 											<div class="flex items-center gap-1.5">
@@ -1151,9 +1154,9 @@
 									</div>
 
 									<!-- Columna 2: Acciones y Estado -->
-									<div class="flex items-center justify-end gap-4">
+									<div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-end gap-2 lg:gap-4">
 										<!-- Acciones -->
-										<div class="flex items-center gap-2">
+										<div class="flex flex-wrap items-center gap-2 justify-center sm:justify-start">
 											<!-- Compartir -->
 											<button
 												on:click|stopPropagation={() => handleCompartirServicio(servicio)}
@@ -1168,7 +1171,7 @@
 														d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
 													/>
 												</svg>
-												<span>Compartir</span>
+												<span class="hidden sm:inline">Compartir</span>
 											</button>
 
 											<!-- Ticket -->
@@ -1188,7 +1191,7 @@
 														d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"
 													/>
 												</svg>
-												<span>Ticket</span>
+												<span class="hidden sm:inline">Ticket</span>
 											</button>
 
 											<!-- Editar -->
@@ -1211,7 +1214,7 @@
 															d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
 														/>
 													</svg>
-													<span>Editar</span>
+													<span class="hidden sm:inline">Editar</span>
 												</button>
 											{/if}
 
@@ -1229,7 +1232,7 @@
 														d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
 													/>
 												</svg>
-												<span>Eliminar</span>
+												<span class="hidden sm:inline">Eliminar</span>
 											</button>
 
 											<!-- Ver detalle -->
@@ -1252,14 +1255,14 @@
 														d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
 													/>
 												</svg>
-												<span>Ver detalle</span>
+												<span class="hidden sm:inline">Ver detalle</span>
 											</button>
 										</div>
 
 										<!-- Estado -->
-										<div class="flex-shrink-0">
+										<div class="flex justify-center sm:justify-end">
 											<span
-												class="inline-flex items-center rounded-lg border px-3 py-1 text-xs font-semibold"
+												class="inline-flex items-center rounded-lg border px-3 py-1 text-xs font-semibold whitespace-nowrap"
 												style="background-color: {getEstadoColor(
 													servicio.estado
 												)}15; border-color: {getEstadoColor(

@@ -330,6 +330,15 @@
 		}
 	}
 
+	function formatTipoSangre(tipo?: string | null): string {
+		if (!tipo) return '';
+		// Convertir O_POSITIVO a O+, AB_NEGATIVO a AB-, etc.
+		return tipo
+			.replace('_POSITIVO', '+')
+			.replace('_NEGATIVO', '-')
+			.replace('_', '');
+	}
+
 	function goBack() {
 		goto('/dashboard/conductores');
 	}

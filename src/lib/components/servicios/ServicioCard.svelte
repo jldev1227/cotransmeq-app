@@ -51,11 +51,11 @@
 >
 	<!-- Header con gradiente -->
 	<div class="border-b border-gray-200/50 bg-gradient-to-r from-orange-50 to-transparent p-4">
-		<div class="flex items-start justify-between">
-			<div class="flex-1">
+		<div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+			<div class="flex-1 min-w-0">
 				<div class="mb-2 flex items-center gap-2">
 					<div
-						class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-orange-600"
+						class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-orange-600"
 					>
 						<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
@@ -66,12 +66,12 @@
 							/>
 						</svg>
 					</div>
-					<span class="font-mono text-xs text-gray-500">#{servicio.id.slice(0, 8)}</span>
+					<span class="font-mono text-xs text-gray-500 truncate">#{servicio.id.slice(0, 8)}</span>
 				</div>
-				<h3 class="mb-1 text-lg font-semibold text-gray-900">{servicio.cliente.nombre}</h3>
+				<h3 class="mb-1 text-base sm:text-lg font-semibold text-gray-900 break-words">{servicio.cliente.nombre}</h3>
 			</div>
 			<span
-				class="rounded-lg border px-3 py-1.5 text-xs font-semibold"
+				class="rounded-lg border px-3 py-1.5 text-xs font-semibold whitespace-nowrap self-start"
 				style="background-color: {getEstadoColor(servicio.estado)}15; border-color: {getEstadoColor(
 					servicio.estado
 				)}40; color: {getEstadoColor(servicio.estado)}"
@@ -93,7 +93,7 @@
 				</div>
 				<div class="min-w-0 flex-1">
 					<p class="mb-0.5 text-xs text-gray-500">Origen</p>
-					<p class="truncate text-sm font-medium text-gray-900">
+					<p class="text-sm font-medium text-gray-900 break-words">
 						{servicio.origen_especifico || servicio.origen.nombre_municipio}
 					</p>
 				</div>
@@ -107,7 +107,7 @@
 				</div>
 				<div class="min-w-0 flex-1">
 					<p class="mb-0.5 text-xs text-gray-500">Destino</p>
-					<p class="truncate text-sm font-medium text-gray-900">
+					<p class="text-sm font-medium text-gray-900 break-words">
 						{servicio.destino_especifico || servicio.destino.nombre_municipio}
 					</p>
 				</div>
@@ -116,9 +116,9 @@
 
 		<!-- Detalles -->
 		<div class="space-y-2 border-t border-gray-200/50 pt-4">
-			<div class="flex items-center justify-between text-sm">
+			<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2 text-sm">
 				<span class="text-gray-500">Conductor:</span>
-				<span class="font-medium text-gray-900">
+				<span class="font-medium text-gray-900 break-words text-right">
 					{servicio.conductor
 						? `${servicio.conductor.nombre} ${servicio.conductor.apellido}`
 						: 'No asignado'}
@@ -126,27 +126,27 @@
 			</div>
 
 			{#if servicio.vehiculo}
-				<div class="flex items-center justify-between text-sm">
+				<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2 text-sm">
 					<span class="text-gray-500">Vehículo:</span>
 					<span class="font-bold text-gray-900">{servicio.vehiculo.placa}</span>
 				</div>
 			{/if}
 
-			<div class="flex items-center justify-between text-sm">
+			<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 sm:gap-2 text-sm">
 				<span class="text-gray-500">Fecha:</span>
-				<span class="font-medium text-gray-900">{formatDateTime(servicio.fecha_solicitud)}</span>
+				<span class="font-medium text-gray-900 text-xs sm:text-sm">{formatDateTime(servicio.fecha_solicitud)}</span>
 			</div>
 
-			<div class="flex items-center justify-between border-t border-gray-200/50 pt-2 text-sm">
+			<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between border-t border-gray-200/50 pt-2 gap-1 sm:gap-2 text-sm">
 				<span class="text-gray-500">Valor:</span>
-				<span class="text-lg font-bold text-orange-600">{formatCurrency(servicio.valor)}</span>
+				<span class="text-base sm:text-lg font-bold text-orange-600">{formatCurrency(servicio.valor)}</span>
 			</div>
 		</div>
 	</div>
 
 	<!-- Footer con acciones -->
 	<div class="border-t border-gray-200/50 bg-gray-50/50 px-4 py-3">
-		<div class="flex items-center justify-between gap-2">
+		<div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
 			<!-- Botones de acción principales -->
 			<div class="flex items-center gap-2">
 				<!-- Ver detalles -->
@@ -168,7 +168,7 @@
 				{#if onEdit && canEdit}
 					<button
 						on:click={handleEdit}
-						class="apple-transition flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+						class="apple-transition flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 w-full sm:w-auto"
 						title="Editar servicio"
 					>
 						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
