@@ -613,6 +613,69 @@
 	$: selectedIndex = selectedRow ? diasLaborales.findIndex((d) => d.id === selectedRow) : -1;
 	$: hayDiasSiguientes = selectedIndex !== -1 && selectedIndex < diasLaborales.length - 1;
 
+	// Calcular total de horas trabajadas (suma de todas las jornadas)
+	$: totalHorasTrabajadas = diasLaborales.reduce((total, dia) => {
+		if (!dia.hora_inicio || !dia.hora_fin) return total;
+		const inicio = parseFloat(dia.hora_inicio);
+		const fin = parseFloat(dia.hora_fin);
+		if (isNaN(inicio) || isNaN(fin)) return total;
+		
+		let horas = fin - inicio;
+		if (horas < 0) horas += 24; // Manejo de jornadas nocturnas
+		return total + horas;
+	}, 0);
+
+	// Calcular total de kilometraje (suma de km recorridos por día)
+	$: totalKilometraje = diasLaborales.reduce((total, dia) => {
+		if (!dia.kilometraje_inicial || !dia.kilometraje_final) return total;
+		const inicial = parseFloat(dia.kilometraje_inicial);
+		const final = parseFloat(dia.kilometraje_final);
+		if (isNaN(inicial) || isNaN(final) || final < inicial) return total;
+		return total + (final - inicial);
+	}, 0);
+
+	// Sincronizar duracion_trayecto_horas con el total de horas trabajadas
+	$: {
+		if (totalHorasTrabajadas > 0) {
+			formData.duracion_trayecto_horas = totalHorasTrabajadas;
+		}
+	}
+
+	// Crear filas automáticamente basado en numero_dias_servicio
+	$: {
+		const numeroDias = formData.numero_dias_servicio;
+		if (numeroDias && numeroDias > 0 && !isLoadingData) {
+			const diasActuales = diasLaborales.length;
+			
+			// Si el número es diferente, ajustar las filas
+			if (diasActuales !== numeroDias) {
+				console.log(`📅 Ajustando días laborales: ${diasActuales} → ${numeroDias}`);
+				
+				if (numeroDias > diasActuales) {
+					// Agregar filas vacías
+					const filasNuevas = Array.from({ length: numeroDias - diasActuales }, (_, index) => ({
+						id: (diasActuales + index + 1).toString(),
+						dia: '',
+						mes: currentMonth.toString(),
+						año: currentYear.toString(),
+						hora_inicio: '',
+						hora_fin: '',
+						kilometraje_inicial: null,
+						kilometraje_final: null,
+						es_domingo: false,
+						es_festivo: false,
+						pernocte: false,
+						disponibilidad: false
+					}));
+					diasLaborales = [...diasLaborales, ...filasNuevas];
+				} else {
+					// Reducir filas (mantener las primeras)
+					diasLaborales = diasLaborales.slice(0, numeroDias);
+				}
+			}
+		}
+	}
+
 	// Obtener todos los mensajes de error actuales
 	$: mensajesError = [
 		// Errores de días
@@ -2042,7 +2105,7 @@
 								</svg>
 								Métricas de Tiempo
 							</h3>
-							<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
+							<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
 								<div>
 									<label class="mb-2 block text-sm font-medium text-gray-700">
 										Tiempo Disponibilidad (horas)
@@ -2064,9 +2127,9 @@
 										type="number"
 										step="0.1"
 										min="0"
-										bind:value={formData.duracion_trayecto_horas}
-										placeholder="Ej: 8.0"
-										class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+										value={totalHorasTrabajadas.toFixed(1)}
+										disabled
+										class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-600 cursor-not-allowed"
 									/>
 								</div>
 								<div>
@@ -2079,6 +2142,19 @@
 										bind:value={formData.numero_dias_servicio}
 										placeholder="Ej: 3"
 										class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+									/>
+								</div>
+								<div>
+									<label class="mb-2 block text-sm font-medium text-gray-700">
+										Total Kilometraje (km)
+									</label>
+									<input
+										type="number"
+										step="0.1"
+										min="0"
+										value={totalKilometraje.toFixed(1)}
+										disabled
+										class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-600 cursor-not-allowed"
 									/>
 								</div>
 							</div>
@@ -2231,7 +2307,8 @@
 								{/if}
 							</div>
 
-							<!-- Botón agregar día -->
+							<!-- Botón agregar día - OCULTO: Los días se generan automáticamente según numero_dias_servicio -->
+							<!-- 
 							<button
 								on:click={agregarDiaLaboral}
 								disabled={diasLaborales.length >= 15}
@@ -2250,6 +2327,7 @@
 									<span class="text-xs opacity-75">({diasLaborales.length}/15)</span>
 								{/if}
 							</button>
+							-->
 						</div>
 
 						<!-- Tabla de Recargos -->
@@ -2281,6 +2359,11 @@
 											class="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
 										>
 											KM Final
+										</th>
+										<th
+											class="px-3 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase"
+										>
+											KM Recorridos
 										</th>
 										<th
 											class="px-3 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase"
@@ -2327,11 +2410,7 @@
 										>
 											RD<br /><span class="text-[10px] font-normal">(75%)</span>
 										</th>
-										<th
-											class="px-3 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase"
-										>
-											Acciones
-										</th>
+										<!-- Columna Acciones REMOVIDA - Los días se generan automáticamente -->
 									</tr>
 								</thead>
 								<tbody class="divide-y divide-gray-200 bg-white">
@@ -2342,6 +2421,9 @@
 										{@const isDomingo = dia.es_domingo}
 										{@const isFestivo = dia.es_festivo}
 										{@const maxDia = obtenerMaximoDiaMes(currentMonth, currentYear)}
+										{@const kmInicial = dia.kilometraje_inicial ? parseFloat(dia.kilometraje_inicial) : 0}
+										{@const kmFinal = dia.kilometraje_final ? parseFloat(dia.kilometraje_final) : 0}
+										{@const kmRecorridos = kmFinal > kmInicial ? kmFinal - kmInicial : 0}
 										<tr
 											on:click={() => (selectedRow = dia.id)}
 											class="cursor-pointer transition-colors {isSelected
@@ -2449,6 +2531,13 @@
 												/>
 											</td>
 
+											<!-- KM Recorridos (Calculado) -->
+											<td class="px-3 py-2 text-center whitespace-nowrap">
+												<span class="text-sm font-semibold text-gray-700">
+													{kmRecorridos > 0 ? kmRecorridos.toFixed(1) : '-'}
+												</span>
+											</td>
+
 											<!-- Pernocte -->
 											<td class="px-3 py-2 text-center">
 												<input
@@ -2549,29 +2638,7 @@
 												</span>
 											</td>
 
-											<!-- Acciones -->
-											<td class="px-3 py-2 text-center">
-												<button
-													on:click|stopPropagation={() => eliminarDiaLaboral(dia.id)}
-													disabled={diasLaborales.length === 1}
-													class="rounded p-1 text-red-600 transition-colors hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-30"
-													title="Eliminar día"
-												>
-													<svg
-														class="h-4 w-4"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															stroke-width="2"
-															d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-														/>
-													</svg>
-												</button>
-											</td>
+											<!-- Columna Acciones REMOVIDA -->
 										</tr>
 									{/each}
 								</tbody>
