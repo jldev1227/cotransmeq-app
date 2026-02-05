@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, createEventDispatcher } from 'svelte';
+	import { onMount, createEventDispatcher, tick } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { recargosStore } from '$lib/stores/recargos';
 	import { recursos } from '$lib/stores/recursos';
@@ -24,7 +24,9 @@
 	// Estados
 	let isLoading = false;
 	let isLoadingData = false;
+	let isGenerandoPlanilla = false; // Loading específico para generación de planilla
 	let editMode = false;
+	let lastLoadedRecargoId: string | null = null; // Track para evitar cargar el mismo recargo múltiples veces
 	let archivoAdjunto: File | null = null;
 	let archivoExistente: string | null = null;
 	let archivoExistenteKey: string | null = null;
@@ -37,6 +39,7 @@
 	let showEmpresaDropdown = false;
 	let selectedRow: string | null = null;
 	let fromServicio = false; // Indica si el recargo viene de un servicio
+	let planillaGenerada = false; // Flag para evitar regenerar automáticamente
 
 	// Validaciones de horas
 	let erroresHoras: { [key: string]: { inicio: string; fin: string } } = {};
@@ -148,6 +151,88 @@
 	$: empresasFiltradas = empresas.filter((e) =>
 		e.nombre.toLowerCase().includes(searchEmpresa.toLowerCase())
 	);
+
+	// Función para obtener el último número de planilla y generar el siguiente
+	async function generarNumeroPlanilla() {
+		if (isGenerandoPlanilla) return; // Evitar múltiples llamadas simultáneas
+		
+		isGenerandoPlanilla = true;
+		
+		try {
+			const token = localStorage.getItem('transmeralda_token');
+			if (!token) {
+				console.error('❌ No hay token de autenticación');
+				toast.error('No hay sesión activa');
+				return;
+			}
+
+			// Obtener todos los recargos ordenados por fecha de creación
+			const response = await fetch('https://backend-cotransmeq-production.up.railway.app/api/recargos', {
+				headers: {
+					'Authorization': `Bearer ${token}`
+				}
+			});
+
+			if (!response.ok) {
+				console.error('Error al obtener recargos:', response.statusText);
+				toast.error('Error al consultar recargos');
+				return;
+			}
+
+			const data = await response.json();
+			console.log('📦 Respuesta de la API:', data);
+			
+			// La respuesta puede venir como array directo o como objeto con propiedad 'data' o 'recargos'
+			let recargos = Array.isArray(data) ? data : (data.data || data.recargos || []);
+			
+			if (!Array.isArray(recargos)) {
+				console.error('❌ La respuesta no contiene un array de recargos:', data);
+				recargos = [];
+			}
+
+			console.log('📋 Total de recargos:', recargos.length);
+			console.log('📋 Recargos completos:', recargos);
+			
+			// Filtrar solo los que tienen numero_planilla y extraer el número
+			const numerosExistentes = recargos
+				.filter((r: any) => r.numero_planilla)
+				.map((r: any) => {
+					// Extraer el número del formato "TM-0001" o similar
+					const match = r.numero_planilla.match(/(\d+)$/);
+					return match ? parseInt(match[1], 10) : 0;
+				})
+				.filter((n: number) => !isNaN(n));
+
+			console.log('📊 Números de planilla existentes:', numerosExistentes);
+			console.log('📊 Recargos con planilla:', recargos.filter((r: any) => r.numero_planilla));
+
+			// Encontrar el número más alto
+			const ultimoNumero = numerosExistentes.length > 0 
+				? Math.max(...numerosExistentes) 
+				: 0;
+
+			console.log('🔢 Último número:', ultimoNumero);
+
+			// Generar el siguiente número con formato TM-0001
+			const siguienteNumero = (ultimoNumero + 1).toString().padStart(4, '0');
+			const nuevoNumero = `TM-${siguienteNumero}`;
+			
+			// Setear el valor y esperar a que se actualice el DOM
+			formData.tmNumber = nuevoNumero;
+			await tick(); // Esperar a que Svelte actualice el DOM
+			
+			// Ahora marcar como generado para evitar regeneración
+			planillaGenerada = true;
+			
+			console.log('✅ Número de planilla generado:', formData.tmNumber);
+			toast.success(`Número generado: ${nuevoNumero}`);
+		} catch (error) {
+			console.error('❌ Error al generar número de planilla:', error);
+			toast.error('Error al generar número de planilla');
+		} finally {
+			isGenerandoPlanilla = false;
+		}
+	}
 
 	// Calcular progreso
 	$: tabCompleted = {
@@ -553,11 +638,21 @@
 
 	// Cargar datos del recargo a editar
 	async function cargarDatosRecargo(id: string) {
+		// Evitar cargar el mismo recargo múltiples veces
+		if (lastLoadedRecargoId === id && isLoadingData) {
+			console.log('⏭️  Ya se está cargando este recargo, saltando...');
+			return;
+		}
+		
 		try {
+			console.log('📥 Cargando recargo para edición, ID:', id);
+			lastLoadedRecargoId = id;
 			isLoadingData = true;
+			
 			const recargo = await recargosApi.obtenerPorId(id);
 
 			if (recargo) {
+				console.log('📦 Recargo obtenido:', recargo);
 				// Verificar si viene de un servicio
 				fromServicio = !!recargo.servicio_id;
 
@@ -688,6 +783,9 @@
 		activeTab = 'informacion';
 		editMode = false;
 		fromServicio = false;
+		planillaGenerada = false; // Resetear flag para permitir nueva generación
+		isGenerandoPlanilla = false; // Resetear loading de planilla
+		lastLoadedRecargoId = null; // Resetear ID del último recargo cargado
 	}
 
 	// Handle submit
@@ -746,10 +844,16 @@
 					fuente_consulta: formData.fuente_consulta,
 					calificacion_servicio: formData.calificacion_servicio,
 
-					// Métricas de tiempo
-					tiempo_disponibilidad_horas: formData.tiempo_disponibilidad_horas,
-					duracion_trayecto_horas: formData.duracion_trayecto_horas,
-					numero_dias_servicio: formData.numero_dias_servicio,
+					// Métricas de tiempo (convertir a number o null)
+					tiempo_disponibilidad_horas: formData.tiempo_disponibilidad_horas 
+						? parseFloat(formData.tiempo_disponibilidad_horas.toString()) 
+						: null,
+					duracion_trayecto_horas: formData.duracion_trayecto_horas 
+						? parseFloat(formData.duracion_trayecto_horas.toString()) 
+						: null,
+					numero_dias_servicio: formData.numero_dias_servicio 
+						? parseInt(formData.numero_dias_servicio.toString()) 
+						: null,
 
 					dias_laborales: diasLaborales.map((dia) => ({
 						dia: parseInt(dia.dia),
@@ -814,10 +918,16 @@
 					fuente_consulta: formData.fuente_consulta,
 					calificacion_servicio: formData.calificacion_servicio,
 
-					// Métricas de tiempo
-					tiempo_disponibilidad_horas: formData.tiempo_disponibilidad_horas,
-					duracion_trayecto_horas: formData.duracion_trayecto_horas,
-					numero_dias_servicio: formData.numero_dias_servicio,
+					// Métricas de tiempo (convertir a number o null)
+					tiempo_disponibilidad_horas: formData.tiempo_disponibilidad_horas 
+						? parseFloat(formData.tiempo_disponibilidad_horas.toString()) 
+						: null,
+					duracion_trayecto_horas: formData.duracion_trayecto_horas 
+						? parseFloat(formData.duracion_trayecto_horas.toString()) 
+						: null,
+					numero_dias_servicio: formData.numero_dias_servicio 
+						? parseInt(formData.numero_dias_servicio.toString()) 
+						: null,
 
 					dias_laborales: diasLaborales.map((dia) => ({
 						dia: parseInt(dia.dia),
@@ -897,9 +1007,22 @@
 		await recursos.cargarClientes();
 	});
 
-	// Cargar datos al abrir en modo edición
-	$: if (isOpen && recargoId) {
-		cargarDatosRecargo(recargoId);
+	// Cargar datos al abrir en modo edición o generar número de planilla en modo creación
+	$: {
+		if (isOpen && recargoId && !isLoadingData && lastLoadedRecargoId !== recargoId) {
+			console.log('🔵 Modo EDICIÓN - ID:', recargoId);
+			editMode = true;
+			cargarDatosRecargo(recargoId);
+		} else if (isOpen && recargoId && isLoadingData) {
+			console.log('🔒 Ya se está cargando este recargo, saltando...');
+		} else if (isOpen && !recargoId && !planillaGenerada && !isGenerandoPlanilla) {
+			console.log('🟢 Modo CREACIÓN - Generando planilla...');
+			editMode = false;
+			// Solo generar si estamos en modo creación y no se ha generado antes
+			generarNumeroPlanilla();
+		} else if (isOpen && !recargoId && planillaGenerada) {
+			console.log('🟡 Modo CREACIÓN - Planilla ya generada:', formData.tmNumber);
+		}
 	}
 </script>
 
@@ -1410,17 +1533,85 @@
 												d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
 											/>
 										</svg>
-										Número de Planilla (Opcional)
+										Número de Planilla (Generado Automáticamente)
 									</div>
 								</label>
-								<input
-									type="text"
-									bind:value={formData.tmNumber}
-									placeholder="TM-12345"
-									class="w-full rounded-xl border-2 px-4 transition-all focus:ring-2 focus:ring-orange-200 {formData.tmNumber
-										? 'border-orange-500 bg-orange-50 py-5.5'
-										: 'border-gray-300 py-3'} focus:border-orange-500"
-								/>
+								<div class="flex gap-2">
+									<div class="relative flex-1">
+										<input
+											type="text"
+											bind:value={formData.tmNumber}
+											placeholder={isGenerandoPlanilla ? 'Generando...' : 'TM-0001'}
+											disabled={isGenerandoPlanilla}
+											class="w-full rounded-xl border-2 px-4 transition-all focus:ring-2 focus:ring-orange-200 {formData.tmNumber
+												? 'border-orange-500 bg-orange-50 py-5.5'
+												: 'border-gray-300 py-3'} focus:border-orange-500 disabled:cursor-wait disabled:opacity-70"
+										/>
+										{#if isGenerandoPlanilla}
+											<div class="absolute right-3 top-1/2 -translate-y-1/2">
+												<svg
+													class="h-5 w-5 animate-spin text-orange-600"
+													fill="none"
+													viewBox="0 0 24 24"
+												>
+													<circle
+														class="opacity-25"
+														cx="12"
+														cy="12"
+														r="10"
+														stroke="currentColor"
+														stroke-width="4"
+													/>
+													<path
+														class="opacity-75"
+														fill="currentColor"
+														d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+													/>
+												</svg>
+											</div>
+										{/if}
+									</div>
+									<button
+										type="button"
+										on:click={generarNumeroPlanilla}
+										disabled={isGenerandoPlanilla}
+										class="rounded-xl border-2 px-4 py-3 transition-all focus:ring-2 focus:ring-orange-200 disabled:cursor-not-allowed disabled:opacity-50 {isGenerandoPlanilla
+											? 'border-gray-300 bg-gray-100 text-gray-400'
+											: 'border-orange-500 bg-orange-50 text-orange-600 hover:bg-orange-100'}"
+										title={isGenerandoPlanilla ? 'Generando...' : 'Regenerar número de planilla'}
+									>
+										{#if isGenerandoPlanilla}
+											<svg
+												class="h-5 w-5 animate-spin"
+												fill="none"
+												viewBox="0 0 24 24"
+											>
+												<circle
+													class="opacity-25"
+													cx="12"
+													cy="12"
+													r="10"
+													stroke="currentColor"
+													stroke-width="4"
+												/>
+												<path
+													class="opacity-75"
+													fill="currentColor"
+													d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+												/>
+											</svg>
+										{:else}
+											<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													stroke-width="2"
+													d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+												/>
+											</svg>
+										{/if}
+									</button>
+								</div>
 							</div>
 						</div>
 						<!-- Archivo adjunto -->
