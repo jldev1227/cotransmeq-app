@@ -27,9 +27,13 @@
 	let selectedMonth = new Date().getMonth() + 1;
 	let selectedYear = new Date().getFullYear();
 	let currentPage = 1;
-	let itemsPerPage = 50;
+	let itemsPerPageSelect: string = '20'; // selector de paginación ("all", "200", "150", "100", "50", "20")
+	let itemsPerPage = 20;
 	let sortField = '';
 	let sortDirection: 'asc' | 'desc' = 'asc';
+
+	// Tipado laxo para columnas en la tabla (evita problemas de unión de tipos en el template)
+	let columns: any[] = [];
 
 	// Highlight states - para resaltar recargos nuevos o actualizados
 	let recentlyCreated = new Set<string>();
@@ -50,8 +54,8 @@
 
 	// User role checks
 	$: user = $authStore.user;
-	$: isKilometrajeRole = user?.role === 'kilometraje';
-	$: isConsultaRole = user?.role === 'consulta';
+	$: isKilometrajeRole = user?.rol === 'kilometraje';
+	$: isConsultaRole = user?.rol === 'consulta';
 	$: isReadOnly = isConsultaRole;
 
 	// Store data
@@ -183,6 +187,7 @@
 	});
 
 	// Paginated data
+	$: itemsPerPage = itemsPerPageSelect === 'all' ? Number.MAX_SAFE_INTEGER : parseInt(itemsPerPageSelect);
 	$: paginatedRecargos = filteredRecargos.slice(
 		(currentPage - 1) * itemsPerPage,
 		currentPage * itemsPerPage
@@ -287,6 +292,148 @@
 			toast.error('Error al eliminar recargos');
 		} finally {
 			deleteLoading = false;
+		}
+	}
+
+	// --- Clipboard: Copiar filas seleccionadas ---
+	function formatNumberWithComma(value: string | number): string {
+		if (value === '' || value === '-' || value === null || value === undefined) {
+			return value?.toString() || '';
+		}
+		const numValue = typeof value === 'string' ? parseFloat(value) : value;
+		if (isNaN(numValue)) {
+			return (value as string).toString();
+		}
+		return numValue.toString().replace('.', ',');
+	}
+
+	function copyToClipboardFallback(text: string) {
+		const textarea = document.createElement('textarea');
+		textarea.value = text;
+		textarea.style.position = 'fixed';
+		textarea.style.left = '-9999px';
+		textarea.style.top = '-9999px';
+		document.body.appendChild(textarea);
+
+		textarea.focus();
+		textarea.select();
+
+		try {
+			document.execCommand('copy');
+		} finally {
+			document.body.removeChild(textarea);
+		}
+	}
+
+	function getCellCopyValue(item: any, key: string): string {
+		switch (key) {
+			case 'empresa':
+				return item.empresa?.nombre || '';
+			case 'numero_planilla': {
+				let np = item.numero_planilla || '';
+				// Si es solo números y no tiene prefijo, añadir TM-
+				if (np && /^\d+$/.test(np) && !np.startsWith('TM-')) {
+					np = `TM-${np}`;
+				}
+				return np;
+			}
+			case 'vehiculo':
+				return item.vehiculo?.placa || '';
+			case 'conductor':
+				return `${item.conductor?.nombre || ''} ${item.conductor?.apellido || ''}`.trim();
+			case 'total_horas':
+				return toNumber(item.total_horas).toFixed(1);
+			case 'promedio':
+				return (toNumber(item.total_horas) / (item.total_dias || 1)).toFixed(1);
+			case 'total_hed':
+				return toNumber(item.total_hed).toFixed(1);
+			case 'total_hen':
+				return toNumber(item.total_hen).toFixed(1);
+			case 'total_hefd':
+				return toNumber(item.total_hefd).toFixed(1);
+			case 'total_hefn':
+				return toNumber(item.total_hefn).toFixed(1);
+			case 'total_rn':
+				return toNumber(item.total_rn).toFixed(1);
+			case 'total_rd':
+				return toNumber(item.total_rd).toFixed(1);
+			default: {
+				const dayMatch = key.match(/^day_(\d+)$/);
+				if (dayMatch) {
+					const day = parseInt(dayMatch[1], 10);
+					const dia = item.dias_laborales?.find((d: any) => d.dia === day);
+					// Siempre completar hasta 31 días; si no hay horas/dato, devolver vacío
+					if (!dia) return '';
+					const horas = toNumber(dia.total_horas);
+					return horas > 0 ? horas.toFixed(1) : '';
+				}
+				return '';
+			}
+		}
+	}
+
+	async function handleCopySelectedRows() {
+		try {
+			// Campos numéricos que requieren coma decimal
+			const numericFieldsWithComma = [
+				...Array.from({ length: 31 }, (_, i) => `day_${i + 1}`),
+				'total_horas',
+				'promedio',
+				'total_hed',
+				'total_hen',
+				'total_hefd',
+				'total_hefn',
+				'total_rn',
+				'total_rd'
+			];
+
+			// Orden exacto
+			const orderedKeys = [
+				'empresa',
+				'numero_planilla',
+				'vehiculo',
+				'conductor',
+				...Array.from({ length: 31 }, (_, i) => `day_${i + 1}`),
+				'total_horas',
+				'promedio',
+				'total_hed',
+				'total_hen',
+				'total_hefd',
+				'total_hefn',
+				'total_rn',
+				'total_rd'
+			];
+
+			const selectedRowsData = filteredRecargos.filter((row) => selectedRows.has(row.id));
+			if (selectedRowsData.length === 0) {
+				toast.info('No hay filas seleccionadas para copiar');
+				return;
+			}
+
+			const rowsToCopy = selectedRowsData.map((item) =>
+				orderedKeys
+					.map((key) => {
+						let cellValue = getCellCopyValue(item, key);
+						if (numericFieldsWithComma.includes(key)) {
+							cellValue = formatNumberWithComma(cellValue);
+						}
+						return cellValue;
+					})
+					.join('\t')
+			);
+
+			const textToCopy = rowsToCopy.join('\n');
+
+			if (navigator.clipboard && navigator.clipboard.writeText) {
+				await navigator.clipboard.writeText(textToCopy);
+			} else {
+				copyToClipboardFallback(textToCopy);
+			}
+
+			toast.success('Filas copiadas al portapapeles');
+		} catch (e) {
+			console.error('Error copiando filas:', e);
+			toast.error('No se pudo copiar. Intenta de nuevo.');
 		}
 	}
 
@@ -452,6 +599,8 @@
 			<div class="flex items-center gap-2 rounded-lg border border-gray-200 bg-white p-2">
 				<button
 					on:click={() => handleMonthChange(-1)}
+					aria-label="Mes anterior"
+					title="Mes anterior"
 					class="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-gray-100"
 				>
 					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -485,6 +634,8 @@
 
 				<button
 					on:click={() => handleMonthChange(1)}
+					aria-label="Mes siguiente"
+					title="Mes siguiente"
 					class="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-gray-100"
 				>
 					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -545,18 +696,46 @@
 			</div>
 		</div>
 
-		<!-- Actions -->
-		{#if selectedRows.size > 0 && !isReadOnly}
-			<div class="flex items-center gap-2">
-				<span class="text-sm text-gray-600">{selectedRows.size} seleccionado(s)</span>
+		<!-- Actions y paginación -->
+		<div class="flex items-center gap-3">
+			{#if selectedRows.size > 0}
 				<button
-					on:click={handleDeleteSelected}
-					class="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600"
+					on:click={handleCopySelectedRows}
+					class="rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-900"
 				>
-					Eliminar
+					Copiar seleccionados
 				</button>
+			{/if}
+
+			{#if selectedRows.size > 0 && !isReadOnly}
+				<div class="flex items-center gap-2">
+					<span class="text-sm text-gray-600">{selectedRows.size} seleccionado(s)</span>
+					<button
+						on:click={handleDeleteSelected}
+						class="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600"
+					>
+						Eliminar
+					</button>
+				</div>
+			{/if}
+
+			<!-- Selector de tamaño de página -->
+			<div class="flex items-center gap-2">
+				<label class="text-xs text-gray-600" for="items-per-page-select">Mostrar</label>
+				<select
+					id="items-per-page-select"
+					bind:value={itemsPerPageSelect}
+					class="h-9 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+				>
+					<option value="all">Todas</option>
+					<option value="200">200</option>
+					<option value="150">150</option>
+					<option value="100">100</option>
+					<option value="50">50</option>
+					<option value="20">20</option>
+				</select>
 			</div>
-		{/if}
+		</div>
 	</div>
 
 	<!-- Canvas Table -->
@@ -660,7 +839,7 @@
 												/>
 											</div>
 										{:else if column.isDayColumn}
-											{@const dia = recargo.dias_laborales?.find((d) => d.dia === column.day)}
+											{@const dia = recargo.dias_laborales?.find((d: any) => d.dia === column.day)}
 											{@const horas = dia ? toNumber(dia.total_horas) : 0}
 											{#if horas > 0}
 												<span
