@@ -37,6 +37,11 @@
 	let showConductorDropdown = false;
 	let showVehiculoDropdown = false;
 	let showEmpresaDropdown = false;
+
+	// Índices de preselección para navegación con teclado en dropdowns
+	let highlightConductor = -1;
+	let highlightVehiculo = -1;
+	let highlightEmpresa = -1;
 	let selectedRow: string | null = null;
 	let fromServicio = false; // Indica si el recargo viene de un servicio
 	let planillaGenerada = false; // Flag para evitar regenerar automáticamente
@@ -151,6 +156,99 @@
 	$: empresasFiltradas = empresas.filter((e) =>
 		e.nombre.toLowerCase().includes(searchEmpresa.toLowerCase())
 	);
+
+	// Resetear highlight cuando cambia el texto de búsqueda o la lista filtrada
+	$: if (searchConductor !== undefined) highlightConductor = -1;
+	$: if (searchVehiculo !== undefined) highlightVehiculo = -1;
+	$: if (searchEmpresa !== undefined) highlightEmpresa = -1;
+
+	// Helper para scroll-into-view del elemento destacado en un dropdown
+	function scrollHighlightedIntoView(containerId: string, index: number) {
+		tick().then(() => {
+			const container = document.getElementById(containerId);
+			if (!container) return;
+			const items = container.querySelectorAll('[data-dropdown-item]');
+			if (items[index]) {
+				items[index].scrollIntoView({ block: 'nearest' });
+			}
+		});
+	}
+
+	// Keydown handlers para cada dropdown
+	function handleConductorKeydown(e: KeyboardEvent) {
+		if (!showConductorDropdown || conductoresFiltrados.length === 0) return;
+		const len = conductoresFiltrados.length;
+		if (e.key === 'ArrowDown') {
+			e.preventDefault();
+			highlightConductor = (highlightConductor + 1) % len;
+			scrollHighlightedIntoView('dropdown-conductor', highlightConductor);
+		} else if (e.key === 'ArrowUp') {
+			e.preventDefault();
+			highlightConductor = (highlightConductor - 1 + len) % len;
+			scrollHighlightedIntoView('dropdown-conductor', highlightConductor);
+		} else if (e.key === 'Enter' && highlightConductor >= 0) {
+			e.preventDefault();
+			const selected = conductoresFiltrados[highlightConductor];
+			if (selected) {
+				formData.conductorId = selected.id;
+				showConductorDropdown = false;
+				highlightConductor = -1;
+			}
+		} else if (e.key === 'Escape') {
+			showConductorDropdown = false;
+			highlightConductor = -1;
+		}
+	}
+
+	function handleVehiculoKeydown(e: KeyboardEvent) {
+		if (!showVehiculoDropdown || vehiculosFiltrados.length === 0) return;
+		const len = vehiculosFiltrados.length;
+		if (e.key === 'ArrowDown') {
+			e.preventDefault();
+			highlightVehiculo = (highlightVehiculo + 1) % len;
+			scrollHighlightedIntoView('dropdown-vehiculo', highlightVehiculo);
+		} else if (e.key === 'ArrowUp') {
+			e.preventDefault();
+			highlightVehiculo = (highlightVehiculo - 1 + len) % len;
+			scrollHighlightedIntoView('dropdown-vehiculo', highlightVehiculo);
+		} else if (e.key === 'Enter' && highlightVehiculo >= 0) {
+			e.preventDefault();
+			const selected = vehiculosFiltrados[highlightVehiculo];
+			if (selected) {
+				formData.vehiculoId = selected.id;
+				showVehiculoDropdown = false;
+				highlightVehiculo = -1;
+			}
+		} else if (e.key === 'Escape') {
+			showVehiculoDropdown = false;
+			highlightVehiculo = -1;
+		}
+	}
+
+	function handleEmpresaKeydown(e: KeyboardEvent) {
+		if (!showEmpresaDropdown || empresasFiltradas.length === 0) return;
+		const len = empresasFiltradas.length;
+		if (e.key === 'ArrowDown') {
+			e.preventDefault();
+			highlightEmpresa = (highlightEmpresa + 1) % len;
+			scrollHighlightedIntoView('dropdown-empresa', highlightEmpresa);
+		} else if (e.key === 'ArrowUp') {
+			e.preventDefault();
+			highlightEmpresa = (highlightEmpresa - 1 + len) % len;
+			scrollHighlightedIntoView('dropdown-empresa', highlightEmpresa);
+		} else if (e.key === 'Enter' && highlightEmpresa >= 0) {
+			e.preventDefault();
+			const selected = empresasFiltradas[highlightEmpresa];
+			if (selected) {
+				formData.empresaId = selected.id;
+				showEmpresaDropdown = false;
+				highlightEmpresa = -1;
+			}
+		} else if (e.key === 'Escape') {
+			showEmpresaDropdown = false;
+			highlightEmpresa = -1;
+		}
+	}
 
 	// Función para obtener el último número de planilla y generar el siguiente
 	async function generarNumeroPlanilla() {
@@ -540,6 +638,90 @@
 				return 'bg-red-100 text-red-700';
 			default:
 				return 'bg-gray-100 text-gray-600';
+		}
+	}
+
+	// Navegación por teclado entre celdas editables de la tabla de horarios
+	// Las columnas navegables son: dia(0), hora_inicio(1), hora_fin(2), km_inicial(3), km_final(4)
+	const NAV_COLS = 5; // cantidad de columnas navegables por fila
+
+	function handleHorarioCellKeydown(e: KeyboardEvent) {
+		const target = e.currentTarget as HTMLInputElement;
+		const row = parseInt(target.dataset.navRow || '-1', 10);
+		const col = parseInt(target.dataset.navCol || '-1', 10);
+		if (row < 0 || col < 0) return;
+
+		let nextRow = row;
+		let nextCol = col;
+		let shouldNavigate = false;
+
+		switch (e.key) {
+			case 'ArrowDown':
+				e.preventDefault();
+				nextRow = row + 1;
+				shouldNavigate = true;
+				break;
+			case 'ArrowUp':
+				e.preventDefault();
+				nextRow = row - 1;
+				shouldNavigate = true;
+				break;
+			case 'ArrowRight':
+				e.preventDefault();
+				if (col < NAV_COLS - 1) {
+					nextCol = col + 1;
+				} else {
+					// Última columna → primera columna de siguiente fila
+					nextCol = 0;
+					nextRow = row + 1;
+				}
+				shouldNavigate = true;
+				break;
+			case 'ArrowLeft':
+				e.preventDefault();
+				if (col > 0) {
+					nextCol = col - 1;
+				} else {
+					// Primera columna → última columna de fila anterior
+					nextCol = NAV_COLS - 1;
+					nextRow = row - 1;
+				}
+				shouldNavigate = true;
+				break;
+			case 'Tab':
+				if (!e.shiftKey && col === NAV_COLS - 1) {
+					e.preventDefault();
+					nextCol = 0;
+					nextRow = row + 1;
+					shouldNavigate = true;
+				} else if (e.shiftKey && col === 0) {
+					e.preventDefault();
+					nextCol = NAV_COLS - 1;
+					nextRow = row - 1;
+					shouldNavigate = true;
+				} else {
+					return; // Tab normal entre columnas adyacentes
+				}
+				break;
+			case 'Enter':
+				// Enter baja a la siguiente fila (como Excel)
+				e.preventDefault();
+				nextRow = row + 1;
+				shouldNavigate = true;
+				break;
+			default:
+				return; // no interceptar otras teclas (números, backspace, etc.)
+		}
+
+		if (!shouldNavigate) return;
+
+		// Buscar el input destino
+		const nextInput = document.querySelector<HTMLInputElement>(
+			`input[data-nav-row="${nextRow}"][data-nav-col="${nextCol}"]`
+		);
+		if (nextInput) {
+			nextInput.focus();
+			nextInput.select();
 		}
 	}
 
@@ -1361,21 +1543,25 @@
 											bind:value={searchConductor}
 											on:focus={() => (showConductorDropdown = true)}
 											on:blur={() => setTimeout(() => (showConductorDropdown = false), 200)}
+											on:keydown={handleConductorKeydown}
 											placeholder="Buscar conductor por nombre..."
 											disabled={fromServicio}
 											class="w-full rounded-xl border-2 border-gray-300 px-4 py-3 transition-all focus:border-orange-500 focus:ring-2 focus:ring-orange-200 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:opacity-60"
 										/>
 										{#if showConductorDropdown && conductoresFiltrados.length > 0}
 											<div
+												id="dropdown-conductor"
 												class="absolute z-20 mt-2 max-h-60 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"
 											>
-												{#each conductoresFiltrados as conductor}
+												{#each conductoresFiltrados as conductor, i}
 													<button
+														data-dropdown-item
 														on:click={() => {
 															formData.conductorId = conductor.id;
 															showConductorDropdown = false;
+															highlightConductor = -1;
 														}}
-														class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-gray-50"
+														class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 {highlightConductor === i ? 'bg-orange-100' : 'hover:bg-gray-50'}"
 													>
 														<div class="font-medium text-gray-900">
 															{conductor.nombre}
@@ -1458,21 +1644,25 @@
 											bind:value={searchVehiculo}
 											on:focus={() => (showVehiculoDropdown = true)}
 											on:blur={() => setTimeout(() => (showVehiculoDropdown = false), 200)}
+											on:keydown={handleVehiculoKeydown}
 											placeholder="Buscar vehículo por placa..."
 											disabled={fromServicio}
 											class="w-full rounded-xl border-2 border-gray-300 px-4 py-3 transition-all focus:border-orange-500 focus:ring-2 focus:ring-orange-200 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:opacity-60"
 										/>
 										{#if showVehiculoDropdown && vehiculosFiltrados.length > 0}
 											<div
+												id="dropdown-vehiculo"
 												class="absolute z-20 mt-2 max-h-60 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"
 											>
-												{#each vehiculosFiltrados as vehiculo}
+												{#each vehiculosFiltrados as vehiculo, i}
 													<button
+														data-dropdown-item
 														on:click={() => {
 															formData.vehiculoId = vehiculo.id;
 															showVehiculoDropdown = false;
+															highlightVehiculo = -1;
 														}}
-														class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-gray-50"
+														class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 {highlightVehiculo === i ? 'bg-orange-100' : 'hover:bg-gray-50'}"
 													>
 														<div class="font-medium text-gray-900">{vehiculo.placa}</div>
 														{#if vehiculo.marca}
@@ -1552,21 +1742,25 @@
 											bind:value={searchEmpresa}
 											on:focus={() => (showEmpresaDropdown = true)}
 											on:blur={() => setTimeout(() => (showEmpresaDropdown = false), 200)}
+											on:keydown={handleEmpresaKeydown}
 											placeholder="Buscar empresa por nombre..."
 											disabled={fromServicio}
 											class="w-full rounded-xl border-2 border-gray-300 px-4 py-3 transition-all focus:border-orange-500 focus:ring-2 focus:ring-orange-200 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:opacity-60"
 										/>
 										{#if showEmpresaDropdown && empresasFiltradas.length > 0}
 											<div
+												id="dropdown-empresa"
 												class="absolute z-20 mt-2 max-h-60 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"
 											>
-												{#each empresasFiltradas as empresa}
+												{#each empresasFiltradas as empresa, i}
 													<button
+														data-dropdown-item
 														on:click={() => {
 															formData.empresaId = empresa.id;
 															showEmpresaDropdown = false;
+															highlightEmpresa = -1;
 														}}
-														class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-gray-50"
+														class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 {highlightEmpresa === i ? 'bg-orange-100' : 'hover:bg-gray-50'}"
 													>
 														<div class="font-medium text-gray-900">{empresa.nombre}</div>
 														{#if empresa.nit}
@@ -2414,7 +2608,7 @@
 									</tr>
 								</thead>
 								<tbody class="divide-y divide-gray-200 bg-white">
-									{#each diasLaborales as dia (dia.id)}
+									{#each diasLaborales as dia, rowIdx (dia.id)}
 										{@const recargos = calcularRecargos(dia)}
 										{@const totalHoras = calcularTotalHoras(dia.hora_inicio, dia.hora_fin)}
 										{@const isSelected = selectedRow === dia.id}
@@ -2444,6 +2638,9 @@
 														bind:value={dia.dia}
 														on:input={(e) =>
 															actualizarDiaLaboral(dia.id, 'dia', e.currentTarget.value)}
+														on:keydown={handleHorarioCellKeydown}
+														data-nav-row={rowIdx}
+														data-nav-col="0"
 														class="w-14 rounded border px-2 py-1 text-sm focus:ring-1 {erroresDias[
 															dia.id
 														]
@@ -2471,6 +2668,9 @@
 													bind:value={dia.hora_inicio}
 													on:input={(e) =>
 														actualizarDiaLaboral(dia.id, 'hora_inicio', e.currentTarget.value)}
+													on:keydown={handleHorarioCellKeydown}
+													data-nav-row={rowIdx}
+													data-nav-col="1"
 													class="w-20 rounded border px-2 py-1 text-sm focus:ring-1 {erroresHoras[
 														dia.id
 													]?.inicio
@@ -2490,6 +2690,9 @@
 													bind:value={dia.hora_fin}
 													on:input={(e) =>
 														actualizarDiaLaboral(dia.id, 'hora_fin', e.currentTarget.value)}
+													on:keydown={handleHorarioCellKeydown}
+													data-nav-row={rowIdx}
+													data-nav-col="2"
 													class="w-20 rounded border px-2 py-1 text-sm focus:ring-1 {erroresHoras[
 														dia.id
 													]?.fin
@@ -2510,6 +2713,9 @@
 															'kilometraje_inicial',
 															e.currentTarget.value
 														)}
+													on:keydown={handleHorarioCellKeydown}
+													data-nav-row={rowIdx}
+													data-nav-col="3"
 													class="w-20 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
 													placeholder="0"
 												/>
@@ -2526,6 +2732,9 @@
 															'kilometraje_final',
 															e.currentTarget.value
 														)}
+													on:keydown={handleHorarioCellKeydown}
+													data-nav-row={rowIdx}
+													data-nav-col="4"
 													class="w-20 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
 													placeholder="0"
 												/>

@@ -68,7 +68,10 @@
 	$: if (recargos.length > 0) {
 		console.log('📊 DEBUG RECARGOS - Total recargos:', recargos.length);
 		console.log('📊 DEBUG RECARGOS - Primer recargo:', recargos[0]);
-		console.log('📊 DEBUG RECARGOS - Estructura completa primer recargo:', JSON.stringify(recargos[0], null, 2));
+		console.log(
+			'📊 DEBUG RECARGOS - Estructura completa primer recargo:',
+			JSON.stringify(recargos[0], null, 2)
+		);
 	}
 
 	// Columns dinámicas según mes/año
@@ -94,6 +97,7 @@
 	// Columnas fijas
 	const fixedColumns = [
 		{ key: 'select', label: '', width: '40px', fixed: true },
+		{ key: 'acciones', label: 'Acciones', width: '100px', fixed: true },
 		{
 			key: 'empresa',
 			label: 'Empresa',
@@ -138,8 +142,7 @@
 		{ key: 'total_hefn', label: 'HEFN', width: '70px', sortable: true, bgColor: 'bg-orange-50' },
 		{ key: 'total_rn', label: 'RN', width: '70px', sortable: true, bgColor: 'bg-orange-50' },
 		{ key: 'total_rd', label: 'RD', width: '70px', sortable: true, bgColor: 'bg-orange-50' },
-		{ key: 'estado', label: 'Estado', width: '100px' },
-		{ key: 'acciones', label: 'Acciones', width: '100px', fixed: true }
+		{ key: 'estado', label: 'Estado', width: '100px' }
 	];
 
 	// Todas las columnas
@@ -187,7 +190,8 @@
 	});
 
 	// Paginated data
-	$: itemsPerPage = itemsPerPageSelect === 'all' ? Number.MAX_SAFE_INTEGER : parseInt(itemsPerPageSelect);
+	$: itemsPerPage =
+		itemsPerPageSelect === 'all' ? Number.MAX_SAFE_INTEGER : parseInt(itemsPerPageSelect);
 	$: paginatedRecargos = filteredRecargos.slice(
 		(currentPage - 1) * itemsPerPage,
 		currentPage * itemsPerPage
@@ -460,27 +464,41 @@
 				return `${recargo.conductor?.nombre || ''} ${recargo.conductor?.apellido || ''}`.trim();
 			case 'total_horas':
 				const totalHoras = toNumber(recargo.total_horas);
-				console.log(`📊 DEBUG total_horas - Recargo ID: ${recargo.id}, Raw: ${recargo.total_horas}, Parsed: ${totalHoras}`);
+				console.log(
+					`📊 DEBUG total_horas - Recargo ID: ${recargo.id}, Raw: ${recargo.total_horas}, Parsed: ${totalHoras}`
+				);
 				return totalHoras.toFixed(1);
 			case 'promedio':
 				return (toNumber(recargo.total_horas) / (recargo.total_dias || 1)).toFixed(1);
 			case 'total_hed':
-				console.log(`📊 DEBUG total_hed - Recargo ID: ${recargo.id}, Raw: ${recargo.total_hed}, Parsed: ${toNumber(recargo.total_hed)}`);
+				console.log(
+					`📊 DEBUG total_hed - Recargo ID: ${recargo.id}, Raw: ${recargo.total_hed}, Parsed: ${toNumber(recargo.total_hed)}`
+				);
 				return toNumber(recargo.total_hed).toFixed(1);
 			case 'total_hen':
-				console.log(`📊 DEBUG total_hen - Recargo ID: ${recargo.id}, Raw: ${recargo.total_hen}, Parsed: ${toNumber(recargo.total_hen)}`);
+				console.log(
+					`📊 DEBUG total_hen - Recargo ID: ${recargo.id}, Raw: ${recargo.total_hen}, Parsed: ${toNumber(recargo.total_hen)}`
+				);
 				return toNumber(recargo.total_hen).toFixed(1);
 			case 'total_hefd':
-				console.log(`📊 DEBUG total_hefd - Recargo ID: ${recargo.id}, Raw: ${recargo.total_hefd}, Parsed: ${toNumber(recargo.total_hefd)}`);
+				console.log(
+					`📊 DEBUG total_hefd - Recargo ID: ${recargo.id}, Raw: ${recargo.total_hefd}, Parsed: ${toNumber(recargo.total_hefd)}`
+				);
 				return toNumber(recargo.total_hefd).toFixed(1);
 			case 'total_hefn':
-				console.log(`📊 DEBUG total_hefn - Recargo ID: ${recargo.id}, Raw: ${recargo.total_hefn}, Parsed: ${toNumber(recargo.total_hefn)}`);
+				console.log(
+					`📊 DEBUG total_hefn - Recargo ID: ${recargo.id}, Raw: ${recargo.total_hefn}, Parsed: ${toNumber(recargo.total_hefn)}`
+				);
 				return toNumber(recargo.total_hefn).toFixed(1);
 			case 'total_rn':
-				console.log(`📊 DEBUG total_rn - Recargo ID: ${recargo.id}, Raw: ${recargo.total_rn}, Parsed: ${toNumber(recargo.total_rn)}`);
+				console.log(
+					`📊 DEBUG total_rn - Recargo ID: ${recargo.id}, Raw: ${recargo.total_rn}, Parsed: ${toNumber(recargo.total_rn)}`
+				);
 				return toNumber(recargo.total_rn).toFixed(1);
 			case 'total_rd':
-				console.log(`📊 DEBUG total_rd - Recargo ID: ${recargo.id}, Raw: ${recargo.total_rd}, Parsed: ${toNumber(recargo.total_rd)}`);
+				console.log(
+					`📊 DEBUG total_rd - Recargo ID: ${recargo.id}, Raw: ${recargo.total_rd}, Parsed: ${toNumber(recargo.total_rd)}`
+				);
 				return toNumber(recargo.total_rd).toFixed(1);
 			case 'estado':
 				return getEstadoLabel(recargo.estado);
