@@ -101,7 +101,12 @@ export function getEstadoLabel(estado: string): string {
 		encontrada: 'Encontrada',
 		no_esta: 'No está',
 		noesta: 'No está',
-		'no-esta': 'No está'
+		'no-esta': 'No está',
+		borrador: 'Borrador',
+		activo: 'Activo',
+		completado: 'Completado',
+		liquidado: 'Liquidado',
+		cancelado: 'Cancelado'
 	};
 
 	return labels[estado?.toLowerCase()] || estado || 'Desconocido';
@@ -118,7 +123,12 @@ export function getEstadoColor(estado: string): string {
 		encontrada: 'bg-cyan-500',
 		no_esta: 'bg-red-500',
 		noesta: 'bg-red-500',
-		'no-esta': 'bg-red-500'
+		'no-esta': 'bg-red-500',
+		borrador: 'bg-gray-400',
+		activo: 'bg-green-500',
+		completado: 'bg-blue-500',
+		liquidado: 'bg-indigo-500',
+		cancelado: 'bg-red-600'
 	};
 
 	return colors[estado?.toLowerCase()] || 'bg-gray-500';
@@ -135,7 +145,12 @@ export function getEstadoBgColor(estado: string): string {
 		encontrada: 'bg-cyan-50',
 		no_esta: 'bg-red-50',
 		noesta: 'bg-red-50',
-		'no-esta': 'bg-red-50'
+		'no-esta': 'bg-red-50',
+		borrador: 'bg-gray-50',
+		activo: 'bg-green-50',
+		completado: 'bg-blue-50',
+		liquidado: 'bg-indigo-50',
+		cancelado: 'bg-red-50'
 	};
 
 	return colors[estado?.toLowerCase()] || 'bg-white';

@@ -19,6 +19,7 @@
 	import ModalVisualizarRecargo from '$lib/components/modals/ModalVisualizarRecargo.svelte';
 	import ModalFormRecargo from '$lib/components/modals/ModalFormRecargo.svelte';
 	import ModalConfirmarEliminar from '$lib/components/modals/ModalConfirmarEliminar.svelte';
+	import ModalCambiarEstado from '$lib/components/modals/ModalCambiarEstado.svelte';
 	import { toast } from 'svelte-sonner';
 
 	// State
@@ -49,8 +50,10 @@
 	let modalFormIsOpen = false;
 	let modalViewIsOpen = false;
 	let modalDeleteIsOpen = false;
+	let modalEstadoIsOpen = false;
 	let selectedRecargoId: string | null = null;
 	let deleteLoading = false;
+	let estadoLoading = false;
 
 	// User role checks
 	$: user = $authStore.user;
@@ -299,6 +302,34 @@
 		}
 	}
 
+	async function handleConfirmCambiarEstado(event: CustomEvent<{ estado: string }>) {
+		if (selectedRows.size === 0) return;
+
+		estadoLoading = true;
+		try {
+			const idsToUpdate = Array.from(selectedRows);
+			const nuevoEstado = event.detail.estado;
+
+			const result = await recargosApi.cambiarEstadoMultiple(idsToUpdate, nuevoEstado);
+			toast.success(`${result.actualizados} recargo(s) actualizado(s) a "${getEstadoLabel(nuevoEstado)}"`);
+
+			// Limpiar selección
+			selectedRows.clear();
+			selectedRows = selectedRows;
+
+			// Recargar datos
+			await recargosStore.fetchRecargos();
+
+			// Cerrar modal
+			modalEstadoIsOpen = false;
+		} catch (error) {
+			console.error('Error cambiando estado:', error);
+			toast.error('Error al cambiar el estado de los recargos');
+		} finally {
+			estadoLoading = false;
+		}
+	}
+
 	// --- Clipboard: Copiar filas seleccionadas ---
 	function formatNumberWithComma(value: string | number): string {
 		if (value === '' || value === '-' || value === null || value === undefined) {
@@ -529,6 +560,7 @@
 		socketUtils.off('recargo-actualizado', handleRecargoActualizado);
 		socketUtils.off('recargo-eliminado', handleRecargoEliminado);
 		socketUtils.off('recargos-eliminados', handleRecargosEliminados);
+		socketUtils.off('recargos-estado-actualizado', handleRecargosEstadoActualizado);
 	});
 
 	// Socket event handlers
@@ -537,6 +569,7 @@
 		socketUtils.on('recargo-actualizado', handleRecargoActualizado);
 		socketUtils.on('recargo-eliminado', handleRecargoEliminado);
 		socketUtils.on('recargos-eliminados', handleRecargosEliminados);
+		socketUtils.on('recargos-estado-actualizado', handleRecargosEstadoActualizado);
 	}
 
 	function handleRecargoCreado(data: any) {
@@ -591,6 +624,16 @@
 
 		// Mostrar notificación
 		toast.info(`${data.cantidad} recargo(s) fueron eliminados`);
+	}
+
+	function handleRecargosEstadoActualizado(data: any) {
+		console.log('🔄 Recargos estado actualizado:', data);
+
+		// Recargar datos
+		recargosStore.fetchRecargos();
+
+		// Mostrar notificación
+		toast.info(`${data.cantidad} recargo(s) cambiaron a estado "${getEstadoLabel(data.estado)}"`);
 	}
 
 	// Reload when month/year changes
@@ -728,6 +771,15 @@
 			{#if selectedRows.size > 0 && !isReadOnly}
 				<div class="flex items-center gap-2">
 					<span class="text-sm text-gray-600">{selectedRows.size} seleccionado(s)</span>
+					<button
+						on:click={() => (modalEstadoIsOpen = true)}
+						class="flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
+					>
+						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+						</svg>
+						Cambiar estado
+					</button>
 					<button
 						on:click={handleDeleteSelected}
 						class="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600"
@@ -1022,5 +1074,15 @@
 		loading={deleteLoading}
 		on:confirm={handleConfirmDelete}
 		on:cancel={() => (modalDeleteIsOpen = false)}
+	/>
+{/if}
+
+{#if modalEstadoIsOpen}
+	<ModalCambiarEstado
+		bind:isOpen={modalEstadoIsOpen}
+		itemCount={selectedRows.size}
+		loading={estadoLoading}
+		on:confirm={handleConfirmCambiarEstado}
+		on:cancel={() => (modalEstadoIsOpen = false)}
 	/>
 {/if}

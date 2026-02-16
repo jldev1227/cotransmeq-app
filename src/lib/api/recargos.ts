@@ -84,6 +84,17 @@ export const recargosApi = {
 	},
 
 	/**
+	 * Cambiar estado de múltiples recargos
+	 */
+	async cambiarEstadoMultiple(ids: string[], estado: string): Promise<{ actualizados: number; estado: string }> {
+		const response = await apiClient.patch<{ data: { actualizados: number; estado: string } }>(
+			`${BASE_URL}/cambiar-estado-multiple`,
+			{ ids, estado }
+		);
+		return response.data.data;
+	},
+
+	/**
 	 * Liquidar recargo (cambiar estado a liquidada)
 	 */
 	async liquidar(id: string): Promise<RecargoPlanilla> {
