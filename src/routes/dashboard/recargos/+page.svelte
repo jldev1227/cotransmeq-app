@@ -539,6 +539,9 @@
 	}
 
 	function getDayChipColor(dia: any): string {
+		if (dia.disponibilidad) {
+			return 'bg-blue-100 text-blue-800 border-blue-300';
+		}
 		if (dia.es_festivo) {
 			return 'bg-orange-100 text-orange-800 border-orange-300';
 		}
@@ -911,7 +914,14 @@
 										{:else if column.isDayColumn}
 											{@const dia = recargo.dias_laborales?.find((d: any) => d.dia === column.day)}
 											{@const horas = dia ? toNumber(dia.total_horas) : 0}
-											{#if horas > 0}
+											{#if dia?.disponibilidad}
+												<span
+													class="inline-block rounded border px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 border-blue-300"
+													title="Día disponible"
+												>
+													D
+												</span>
+											{:else if horas > 0}
 												<span
 													class="inline-block rounded border px-2 py-0.5 text-xs font-medium {getDayChipColor(
 														dia

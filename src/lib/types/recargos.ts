@@ -30,7 +30,13 @@ export interface DiaLaboralPlanilla {
 	hora_inicio: number | null;
 	hora_fin: number | null;
 	total_horas: number;
+	horas_ordinarias?: number;
 	es_festivo: boolean;
+	es_domingo: boolean;
+	pernocte: boolean;
+	disponibilidad: boolean;
+	kilometraje_inicial?: number | null;
+	kilometraje_final?: number | null;
 	observaciones?: string;
 	detallesRecargos?: DetalleRecargosDia[];
 	created_at: Date;
