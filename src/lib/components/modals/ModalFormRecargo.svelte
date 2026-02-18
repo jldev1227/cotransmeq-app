@@ -39,9 +39,9 @@
 	let showEmpresaDropdown = false;
 
 	// Índices de preselección para navegación con teclado en dropdowns
-	let highlightConductor = -1;
-	let highlightVehiculo = -1;
-	let highlightEmpresa = -1;
+	let highlightConductor = 0;
+	let highlightVehiculo = 0;
+	let highlightEmpresa = 0;
 	let selectedRow: string | null = null;
 	let fromServicio = false; // Indica si el recargo viene de un servicio
 	let planillaGenerada = false; // Flag para evitar regenerar automáticamente
@@ -83,11 +83,11 @@
 		// Estado del conductor (valores por defecto aprobados)
 		estado_conductor: 'optimo' as 'optimo' | 'fatigado' | 'regular' | 'malo' | null,
 
-		// Condiciones de vía (por defecto pavimentada)
-		via_trocha: false,
+		// Condiciones de vía (por defecto trocha)
+		via_trocha: true,
 		via_afirmado: false,
 		via_mixto: false,
-		via_pavimentada: true,
+		via_pavimentada: false,
 
 		// Riesgos de seguridad (por defecto sin riesgos)
 		riesgo_desniveles: false,
@@ -99,7 +99,7 @@
 
 		// Evaluación (valores por defecto óptimos)
 		fuente_consulta: 'sistema' as 'conductor' | 'gps' | 'cliente' | 'sistema' | null,
-		calificacion_servicio: 'excelente' as 'excelente' | 'bueno' | 'regular' | 'malo' | null,
+		calificacion_servicio: 'bueno' as 'bueno' | 'regular' | 'malo' | null,
 
 		// Métricas de tiempo
 		tiempo_disponibilidad_horas: null as number | null,
@@ -157,10 +157,10 @@
 		e.nombre.toLowerCase().includes(searchEmpresa.toLowerCase())
 	);
 
-	// Resetear highlight cuando cambia el texto de búsqueda o la lista filtrada
-	$: if (searchConductor !== undefined) highlightConductor = -1;
-	$: if (searchVehiculo !== undefined) highlightVehiculo = -1;
-	$: if (searchEmpresa !== undefined) highlightEmpresa = -1;
+	// Resetear highlight cuando cambia el texto de búsqueda — siempre preseleccionar el primer resultado
+	$: if (searchConductor !== undefined) highlightConductor = 0;
+	$: if (searchVehiculo !== undefined) highlightVehiculo = 0;
+	$: if (searchEmpresa !== undefined) highlightEmpresa = 0;
 
 	// Helper para scroll-into-view del elemento destacado en un dropdown
 	function scrollHighlightedIntoView(containerId: string, index: number) {
@@ -192,11 +192,11 @@
 			if (selected) {
 				formData.conductorId = selected.id;
 				showConductorDropdown = false;
-				highlightConductor = -1;
+				highlightConductor = 0;
 			}
 		} else if (e.key === 'Escape') {
 			showConductorDropdown = false;
-			highlightConductor = -1;
+			highlightConductor = 0;
 		}
 	}
 
@@ -217,11 +217,11 @@
 			if (selected) {
 				formData.vehiculoId = selected.id;
 				showVehiculoDropdown = false;
-				highlightVehiculo = -1;
+				highlightVehiculo = 0;
 			}
 		} else if (e.key === 'Escape') {
 			showVehiculoDropdown = false;
-			highlightVehiculo = -1;
+			highlightVehiculo = 0;
 		}
 	}
 
@@ -242,11 +242,11 @@
 			if (selected) {
 				formData.empresaId = selected.id;
 				showEmpresaDropdown = false;
-				highlightEmpresa = -1;
+				highlightEmpresa = 0;
 			}
 		} else if (e.key === 'Escape') {
 			showEmpresaDropdown = false;
-			highlightEmpresa = -1;
+			highlightEmpresa = 0;
 		}
 	}
 
@@ -605,6 +605,8 @@
 		const totales = { totalHoras: 0, HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RN: 0, RD: 0 };
 
 		diasLaborales.forEach((dia) => {
+			// Excluir días marcados como disponible
+			if (dia.disponibilidad) return;
 			const horasTotales = calcularTotalHoras(dia.hora_inicio, dia.hora_fin);
 			if (horasTotales > 0) {
 				totales.totalHoras += horasTotales;
@@ -788,6 +790,7 @@
 			void d.dia;
 			void d.es_domingo;
 			void d.es_festivo;
+			void d.disponibilidad;
 		});
 		return calcularTotales();
 	})();
@@ -797,6 +800,7 @@
 
 	// Calcular total de horas trabajadas (suma de todas las jornadas)
 	$: totalHorasTrabajadas = diasLaborales.reduce((total, dia) => {
+		if (dia.disponibilidad) return total; // Excluir días disponibles
 		if (!dia.hora_inicio || !dia.hora_fin) return total;
 		const inicio = parseFloat(dia.hora_inicio);
 		const fin = parseFloat(dia.hora_fin);
@@ -809,6 +813,7 @@
 
 	// Calcular total de kilometraje (suma de km recorridos por día)
 	$: totalKilometraje = diasLaborales.reduce((total, dia) => {
+		if (dia.disponibilidad) return total; // Excluir días disponibles
 		if (!dia.kilometraje_inicial || !dia.kilometraje_final) return total;
 		const inicial = parseFloat(dia.kilometraje_inicial);
 		const final = parseFloat(dia.kilometraje_final);
@@ -984,7 +989,7 @@
 			estado_conductor: null,
 
 			// Condiciones de vía
-			via_trocha: false,
+			via_trocha: true,
 			via_afirmado: false,
 			via_mixto: false,
 			via_pavimentada: false,
@@ -998,8 +1003,8 @@
 			riesgo_trafico_alto: false,
 
 			// Evaluación
-			fuente_consulta: null,
-			calificacion_servicio: null,
+			fuente_consulta: 'sistema',
+			calificacion_servicio: 'bueno',
 
 			// Métricas de tiempo
 			tiempo_disponibilidad_horas: null,
@@ -2272,10 +2277,9 @@
 										class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
 									>
 										<option value={null}>Seleccione...</option>
-										<option value="excelente">⭐⭐⭐⭐⭐ Excelente</option>
-										<option value="bueno">⭐⭐⭐⭐ Bueno</option>
-										<option value="regular">⭐⭐⭐ Regular</option>
-										<option value="malo">⭐⭐ Malo</option>
+										<option value="bueno">⭐⭐⭐⭐⭐ Bueno</option>
+										<option value="regular">⭐⭐⭐⭐ Regular</option>
+										<option value="malo">⭐⭐⭐ Malo</option>
 									</select>
 								</div>
 							</div>
@@ -2622,11 +2626,13 @@
 											on:click={() => (selectedRow = dia.id)}
 											class="cursor-pointer transition-colors {isSelected
 												? 'border-l-4 border-blue-500 bg-blue-50'
-												: isDomingo
-													? 'bg-red-50 hover:bg-red-100'
-													: isFestivo
-														? 'bg-orange-50 hover:bg-orange-100'
-														: 'hover:bg-gray-50'}"
+												: dia.disponibilidad
+													? 'bg-green-50 hover:bg-green-100'
+													: isDomingo
+														? 'bg-red-50 hover:bg-red-100'
+														: isFestivo
+															? 'bg-orange-50 hover:bg-orange-100'
+															: 'hover:bg-gray-50'}"
 										>
 											<!-- Día -->
 											<td class="px-3 py-2 whitespace-nowrap">
@@ -2770,13 +2776,20 @@
 											</td>
 											<!-- Total Horas -->
 											<td class="px-3 py-2 text-center whitespace-nowrap">
-												<span class="text-sm font-semibold text-gray-700">
-													{totalHoras > 0 ? totalHoras.toFixed(1) : '-'}
+												<span class="text-sm font-semibold {dia.disponibilidad ? 'text-green-600' : 'text-gray-700'}">
+													{#if dia.disponibilidad}
+														<span title="Día disponible - no se contabiliza">D</span>
+													{:else}
+														{totalHoras > 0 ? totalHoras.toFixed(1) : '-'}
+													{/if}
 												</span>
 											</td>
 
 											<!-- HED -->
 											<td class="px-3 py-2 text-center">
+												{#if dia.disponibilidad}
+													<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-400">-</span>
+												{:else}
 												<span
 													class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
 														'HED',
@@ -2785,10 +2798,14 @@
 												>
 													{recargos.HED > 0 ? recargos.HED.toFixed(1) : '-'}
 												</span>
+												{/if}
 											</td>
 
 											<!-- HEN -->
 											<td class="px-3 py-2 text-center">
+												{#if dia.disponibilidad}
+													<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-400">-</span>
+												{:else}
 												<span
 													class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
 														'HEN',
@@ -2797,10 +2814,14 @@
 												>
 													{recargos.HEN > 0 ? recargos.HEN.toFixed(1) : '-'}
 												</span>
+												{/if}
 											</td>
 
 											<!-- HEFD -->
 											<td class="px-3 py-2 text-center">
+												{#if dia.disponibilidad}
+													<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-400">-</span>
+												{:else}
 												<span
 													class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
 														'HEFD',
@@ -2809,10 +2830,14 @@
 												>
 													{recargos.HEFD > 0 ? recargos.HEFD.toFixed(1) : '-'}
 												</span>
+												{/if}
 											</td>
 
 											<!-- HEFN -->
 											<td class="px-3 py-2 text-center">
+												{#if dia.disponibilidad}
+													<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-400">-</span>
+												{:else}
 												<span
 													class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
 														'HEFN',
@@ -2821,10 +2846,14 @@
 												>
 													{recargos.HEFN > 0 ? recargos.HEFN.toFixed(1) : '-'}
 												</span>
+												{/if}
 											</td>
 
 											<!-- RN -->
 											<td class="px-3 py-2 text-center">
+												{#if dia.disponibilidad}
+													<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-400">-</span>
+												{:else}
 												<span
 													class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
 														'RN',
@@ -2833,10 +2862,14 @@
 												>
 													{recargos.RN > 0 ? recargos.RN.toFixed(1) : '-'}
 												</span>
+												{/if}
 											</td>
 
 											<!-- RD -->
 											<td class="px-3 py-2 text-center">
+												{#if dia.disponibilidad}
+													<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-400">-</span>
+												{:else}
 												<span
 													class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
 														'RD',
@@ -2845,6 +2878,7 @@
 												>
 													{recargos.RD > 0 ? recargos.RD.toFixed(1) : '-'}
 												</span>
+												{/if}
 											</td>
 
 											<!-- Columna Acciones REMOVIDA -->
