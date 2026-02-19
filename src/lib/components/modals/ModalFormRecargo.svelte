@@ -1514,8 +1514,8 @@
 													{conductorSeleccionado.nombre}
 													{conductorSeleccionado.apellido}
 												</div>
-												{#if conductorSeleccionado.telefono}
-													<div class="text-sm text-gray-600">{conductorSeleccionado.telefono}</div>
+												{#if conductorSeleccionado.numero_identificacion}
+													<div class="text-sm text-gray-600">CC {conductorSeleccionado.numero_identificacion}</div>
 												{/if}
 											</div>
 											{#if !fromServicio}
@@ -1572,8 +1572,8 @@
 															{conductor.nombre}
 															{conductor.apellido}
 														</div>
-														{#if conductor.telefono}
-															<div class="text-sm text-gray-600">{conductor.telefono}</div>
+														{#if conductor.numero_identificacion}
+															<div class="text-sm text-gray-600">CC {conductor.numero_identificacion}</div>
 														{/if}
 													</button>
 												{/each}

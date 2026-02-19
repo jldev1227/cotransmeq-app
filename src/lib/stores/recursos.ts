@@ -6,7 +6,7 @@ interface Conductor {
 	id: string;
 	nombre: string;
 	apellido: string;
-	telefono?: string;
+	numero_identificacion?: string;
 }
 
 interface Vehiculo {
