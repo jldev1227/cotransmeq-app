@@ -15,16 +15,62 @@
 
 	let searchQuery = '';
 	let searchInput: HTMLInputElement;
+	let highlightedIndex = 0;
+	let listContainer: HTMLDivElement;
 
 	$: filteredItems = items.filter((item) =>
 		item.label.toLowerCase().includes(searchQuery.toLowerCase())
 	);
 
+	// Resetear índice cuando cambia la búsqueda y preseleccionar el primer item
+	$: if (filteredItems) {
+		highlightedIndex = 0;
+	}
+
 	// Enfocar el input cuando el modal se abre
 	$: if (isOpen && searchInput) {
 		tick().then(() => {
 			searchInput?.focus();
+			searchQuery = '';
+			highlightedIndex = 0;
 		});
+	}
+
+	function scrollToHighlighted() {
+		tick().then(() => {
+			if (!listContainer) return;
+			const highlighted = listContainer.querySelector('[data-highlighted="true"]');
+			if (highlighted) {
+				highlighted.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+			}
+		});
+	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (filteredItems.length === 0) return;
+
+		switch (e.key) {
+			case 'ArrowDown':
+				e.preventDefault();
+				highlightedIndex = (highlightedIndex + 1) % filteredItems.length;
+				scrollToHighlighted();
+				break;
+			case 'ArrowUp':
+				e.preventDefault();
+				highlightedIndex = (highlightedIndex - 1 + filteredItems.length) % filteredItems.length;
+				scrollToHighlighted();
+				break;
+			case 'Enter':
+				e.preventDefault();
+				if (filteredItems[highlightedIndex]) {
+					handleSelect(filteredItems[highlightedIndex].value);
+				}
+				break;
+			case 'Escape':
+				e.preventDefault();
+				handleBackdropClick();
+				break;
+		}
 	}
 
 	function handleSelect(value: string) {
@@ -121,13 +167,14 @@
 							type="text"
 							bind:value={searchQuery}
 							placeholder={searchPlaceholder}
+							on:keydown={handleKeydown}
 							class="w-full rounded-xl border border-gray-200 bg-white py-2.5 pr-4 pl-10 text-sm text-gray-900 transition-all focus:border-orange-400 focus:ring-4 focus:ring-orange-400/10 focus:outline-none"
 						/>
 					</div>
 				</div>
 
 				<!-- List -->
-				<div class="max-h-[60vh] overflow-y-auto">
+				<div class="max-h-[60vh] overflow-y-auto" bind:this={listContainer}>
 					{#if filteredItems.length === 0}
 						<div class="flex flex-col items-center justify-center py-12 text-center">
 							<div class="mb-3 rounded-full bg-gray-100 p-3 text-gray-400">
@@ -145,15 +192,19 @@
 						</div>
 					{:else}
 						<div class="divide-y divide-gray-100">
-							{#each filteredItems as item (item.value)}
+							{#each filteredItems as item, i (item.value)}
 								<button
 									on:click={() => handleSelect(item.value)}
-									class="group flex w-full items-center justify-between px-6 py-3.5 text-left transition-colors hover:bg-orange-50"
+									on:mouseenter={() => (highlightedIndex = i)}
+									data-highlighted={i === highlightedIndex}
+									class="group flex w-full items-center justify-between px-6 py-3.5 text-left transition-colors {i === highlightedIndex ? 'bg-orange-50' : 'hover:bg-orange-50'}"
 								>
 									<span
 										class="text-sm font-medium transition-colors {item.value === selectedValue
 											? 'text-orange-600'
-											: 'text-gray-900 group-hover:text-orange-600'}"
+											: i === highlightedIndex
+												? 'text-orange-600'
+												: 'text-gray-900 group-hover:text-orange-600'}"
 									>
 										{item.label}
 									</span>
