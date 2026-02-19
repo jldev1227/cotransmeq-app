@@ -515,10 +515,10 @@
 			rn = 0,
 			rd = 0;
 
-		// Calcular recargo nocturno SOLO en las primeras 10 horas (jornada normal)
-		// RN no aplica a horas extras porque HEN/HEFN ya incluyen recargo nocturno
+		// Calcular recargo nocturno (19:00-06:00) sobre TODAS las horas trabajadas
+		// RN aplica a cualquier hora nocturna trabajada (jornada normal + extras)
 		let horaActual = horaInicio;
-		const horaLimiteRN = Math.min(horaInicio + totalHoras, horaInicio + HORAS_LIMITE.JORNADA_NORMAL);
+		const horaLimiteRN = horaInicio + totalHoras;
 		
 		while (horaActual < horaLimiteRN) {
 			const horaDelDia = normalizarHora(horaActual);
