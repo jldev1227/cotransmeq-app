@@ -364,9 +364,9 @@
 
 			let estadoServicio: string;
 			if (finalizarServicio && fechaFinalizacion) {
-				estadoServicio = 'completado';
+				estadoServicio = 'realizado';
 			} else if (conductorSelected && vehicleSelected) {
-				estadoServicio = fechaReal < now ? 'en_curso' : 'asignado';
+				estadoServicio = fechaReal < now ? 'en_curso' : 'planificado';
 			} else {
 				estadoServicio = 'solicitado';
 			}
