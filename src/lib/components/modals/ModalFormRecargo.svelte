@@ -295,7 +295,7 @@
 			const numerosExistentes = recargos
 				.filter((r: any) => r.numero_planilla)
 				.map((r: any) => {
-					// Extraer el número del formato "TM-0001" o similar
+					// Extraer el número del formato "CM-0001" o similar
 					const match = r.numero_planilla.match(/(\d+)$/);
 					return match ? parseInt(match[1], 10) : 0;
 				})
@@ -311,9 +311,9 @@
 
 			console.log('🔢 Último número:', ultimoNumero);
 
-			// Generar el siguiente número con formato TM-0001
+			// Generar el siguiente número con formato CM-0001
 			const siguienteNumero = (ultimoNumero + 1).toString().padStart(4, '0');
-			const nuevoNumero = `TM-${siguienteNumero}`;
+			const nuevoNumero = `CM-${siguienteNumero}`;
 			
 			// Setear el valor y esperar a que se actualice el DOM
 			formData.tmNumber = nuevoNumero;
@@ -1803,7 +1803,7 @@
 										<input
 											type="text"
 											bind:value={formData.tmNumber}
-											placeholder={isGenerandoPlanilla ? 'Generando...' : 'TM-0001'}
+											placeholder={isGenerandoPlanilla ? 'Generando...' : 'CM-0001'}
 											disabled={isGenerandoPlanilla}
 											class="w-full rounded-xl border-2 px-4 transition-all focus:ring-2 focus:ring-orange-200 {formData.tmNumber
 												? 'border-orange-500 bg-orange-50 py-5.5'

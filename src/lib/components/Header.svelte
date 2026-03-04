@@ -32,7 +32,7 @@
 		{
 			id: 3,
 			title: 'Mantenimiento programado',
-			message: 'Vehículo TM-001 necesita revisión',
+			message: 'Vehículo CM-001 necesita revisión',
 			time: '2 horas ago',
 			unread: false
 		}

@@ -157,19 +157,19 @@ export function getEstadoBgColor(estado: string): string {
 }
 
 /**
- * Formatear número de planilla con prefijo TM-
+ * Formatear número de planilla con prefijo CM-
  */
 export function formatearNumeroPlanilla(numero: string | number | null): string {
 	if (!numero) return '';
 
 	const numStr = numero.toString();
 
-	// Si ya tiene prefijo TM-, retornar como está
-	if (numStr.startsWith('TM-')) return numStr;
+	// Si ya tiene prefijo CM-, retornar como está
+	if (numStr.startsWith('CM-')) return numStr;
 
 	// Si es solo números, agregar prefijo
 	if (/^\d+$/.test(numStr)) {
-		return `TM-${numStr}`;
+		return `CM-${numStr}`;
 	}
 
 	return numStr;

@@ -366,9 +366,9 @@
 				return item.empresa?.nombre || '';
 			case 'numero_planilla': {
 				let np = item.numero_planilla || '';
-				// Si es solo números y no tiene prefijo, añadir TM-
-				if (np && /^\d+$/.test(np) && !np.startsWith('TM-')) {
-					np = `TM-${np}`;
+				// Si es solo números y no tiene prefijo, añadir CM-
+				if (np && /^\d+$/.test(np) && !np.startsWith('CM-')) {
+					np = `CM-${np}`;
 				}
 				return np;
 			}

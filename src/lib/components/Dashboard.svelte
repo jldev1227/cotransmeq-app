@@ -45,7 +45,7 @@
 		{
 			id: 1,
 			type: 'vehicle_start',
-			message: 'Vehículo TM-001 inició ruta Centro-Norte',
+			message: 'Vehículo CM-001 inició ruta Centro-Norte',
 			time: '2 min ago',
 			icon: 'truck',
 			color: 'orange'
@@ -69,7 +69,7 @@
 		{
 			id: 4,
 			type: 'maintenance',
-			message: 'TM-005 necesita mantenimiento',
+			message: 'CM-005 necesita mantenimiento',
 			time: '1 hora ago',
 			icon: 'warning',
 			color: 'orange'
