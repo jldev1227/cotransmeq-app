@@ -50,14 +50,13 @@
 	let erroresHoras: { [key: string]: { inicio: string; fin: string } } = {};
 	let erroresDias: { [key: string]: string } = {};
 
-	// Constantes para cálculo de recargos
-	const HORAS_LIMITE = {
-		JORNADA_NORMAL: 10,
-		INICIO_NOCTURNO: 19,
-		FIN_NOCTURNO: 6
-	};
-
-	// Obtener días festivos colombianos del año actual
+        // Constantes para cálculo de recargos
+        const HORAS_LIMITE = {
+                JORNADA_NORMAL: 9.33,   // 9 horas 20 minutos - extras (días normales)
+                JORNADA_FESTIVA: 7.33,  // 7 horas 20 minutos - extras (domingos/festivos)
+                INICIO_NOCTURNO: 19,
+                FIN_NOCTURNO: 6
+        };	// Obtener días festivos colombianos del año actual
 	$: diasFestivos = obtenerFestivosCompletos(currentYear);
 	$: festivosDelMes = diasFestivos.filter((f) => f.mes === currentMonth);
 
@@ -534,14 +533,14 @@
 
 		if (esDomingoOFestivo) {
 			// Recargo dominical/festivo
-			rd = Math.min(totalHoras, HORAS_LIMITE.JORNADA_NORMAL);
+			rd = Math.min(totalHoras, HORAS_LIMITE.JORNADA_FESTIVA);
 
-			// Horas extras festivas (después de las primeras 10 horas)
-			if (totalHoras > HORAS_LIMITE.JORNADA_NORMAL) {
-				const horasExtras = totalHoras - HORAS_LIMITE.JORNADA_NORMAL;
+			// Horas extras festivas (después de las primeras 7.33 horas)
+			if (totalHoras > HORAS_LIMITE.JORNADA_FESTIVA) {
+				const horasExtras = totalHoras - HORAS_LIMITE.JORNADA_FESTIVA;
 
 				// Calcular cuántas horas extras son nocturnas
-				const horaInicioExtras = horaInicio + HORAS_LIMITE.JORNADA_NORMAL;
+				const horaInicioExtras = horaInicio + HORAS_LIMITE.JORNADA_FESTIVA;
 				let horasExtrasNocturnas = 0;
 
 				let horaActualExtra = horaInicioExtras;

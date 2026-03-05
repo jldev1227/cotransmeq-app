@@ -4,21 +4,20 @@
  * Constantes para cálculo de recargos
  */
 export const HORAS_LIMITE = {
-	JORNADA_NORMAL: 10, // 10 horas (no 8!)
-	INICIO_NOCTURNO: 21, // 21:00 (9 PM)
+	JORNADA_NORMAL: 9.33, // 9 horas 20 minutos - extras empiezan después de esto (días normales)
+	JORNADA_FESTIVA: 7.33, // 7 horas 20 minutos - extras empiezan después de esto (domingos/festivos)
+	INICIO_NOCTURNO: 19, // 19:00 (7 PM)
 	FIN_NOCTURNO: 6 // 06:00 (6 AM)
 } as const;
 
 export const PORCENTAJES_RECARGO = {
 	HE_DIURNA: 25,
 	HE_NOCTURNA: 75,
-	HE_FESTIVA_DIURNA: 100,
-	HE_FESTIVA_NOCTURNA: 150,
+	HE_FESTIVA_DIURNA: 105,
+	HE_FESTIVA_NOCTURNA: 155,
 	RECARGO_NOCTURNO: 35,
-	RECARGO_DOMINICAL: 75
-} as const;
-
-/**
+	RECARGO_DOMINICAL: 80
+} as const;/**
  * Obtener cantidad de días en un mes
  */
 export function getDaysInMonth(mes: number, año: number): number {
@@ -324,8 +323,8 @@ export function calcularHEFD(
 ): number {
 	// Solo si es domingo o festivo
 	if (esDomingoOFestivo(dia, mes, año, diasFestivos)) {
-		if (totalHoras > HORAS_LIMITE.JORNADA_NORMAL) {
-			return redondear(totalHoras - HORAS_LIMITE.JORNADA_NORMAL);
+		if (totalHoras > HORAS_LIMITE.JORNADA_FESTIVA) {
+			return redondear(totalHoras - HORAS_LIMITE.JORNADA_FESTIVA);
 		}
 	}
 
@@ -348,7 +347,7 @@ export function calcularHEFN(
 ): number {
 	// Solo si es domingo o festivo
 	if (esDomingoOFestivo(dia, mes, año, diasFestivos)) {
-		if (totalHoras > HORAS_LIMITE.JORNADA_NORMAL && horaFin > HORAS_LIMITE.INICIO_NOCTURNO) {
+		if (totalHoras > HORAS_LIMITE.JORNADA_FESTIVA && horaFin > HORAS_LIMITE.INICIO_NOCTURNO) {
 			return redondear(horaFin - HORAS_LIMITE.INICIO_NOCTURNO);
 		}
 	}
@@ -399,7 +398,7 @@ export function calcularRecargoDominical(
 	// Solo si es domingo o festivo
 	if (esDomingoOFestivo(dia, mes, año, diasFestivos)) {
 		return redondear(
-			totalHoras <= HORAS_LIMITE.JORNADA_NORMAL ? totalHoras : HORAS_LIMITE.JORNADA_NORMAL
+			totalHoras <= HORAS_LIMITE.JORNADA_FESTIVA ? totalHoras : HORAS_LIMITE.JORNADA_FESTIVA
 		);
 	}
 
