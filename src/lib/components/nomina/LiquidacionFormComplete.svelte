@@ -245,12 +245,15 @@
 		const fin = new Date(periodo_fin + 'T00:00:00');
 		const meses: string[] = [];
 		
-		const current = new Date(inicio);
-		while (current <= fin) {
+		// Iterar mes a mes desde el mes de inicio hasta el mes de fin
+		const current = new Date(inicio.getFullYear(), inicio.getMonth(), 1);
+		const mesFinYear = fin.getFullYear();
+		const mesFinMonth = fin.getMonth();
+		
+		while (current.getFullYear() < mesFinYear || 
+			   (current.getFullYear() === mesFinYear && current.getMonth() <= mesFinMonth)) {
 			const mesStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}`;
-			if (!meses.includes(mesStr)) {
-				meses.push(mesStr);
-			}
+			meses.push(mesStr);
 			current.setMonth(current.getMonth() + 1);
 		}
 		
@@ -281,7 +284,29 @@
 			);
 
 			if (detalleExistente) {
-				return detalleExistente;
+				// Actualizar meses en bonos existentes preservando cantidades
+				const bonosActualizados = detalleExistente.bonos.map(bono => ({
+					...bono,
+					values: mesesRange.map(mes => {
+						const existing = bono.values.find(v => v.mes === mes);
+						return existing || { mes, quantity: 0 };
+					})
+				}));
+
+				// Actualizar meses en mantenimientos existentes preservando cantidades
+				const mantenimientosActualizados = detalleExistente.mantenimientos.map(mant => ({
+					...mant,
+					values: mesesRange.map(mes => {
+						const existing = mant.values.find(v => v.mes === mes);
+						return existing || { mes, quantity: 0 };
+					})
+				}));
+
+				return {
+					...detalleExistente,
+					bonos: bonosActualizados,
+					mantenimientos: mantenimientosActualizados
+				};
 			}
 
 			// Crear bonos para cada mes
