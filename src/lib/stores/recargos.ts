@@ -34,7 +34,7 @@ function createRecargosStore() {
 		filtros: {},
 		pagination: {
 			page: 1,
-			limit: 50,
+			limit: 10000,
 			total: 0,
 			totalPages: 0
 		},
