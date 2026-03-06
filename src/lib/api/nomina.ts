@@ -194,6 +194,96 @@ export const verificarEstadoDesprendibles = async (jobId: string) => {
 	return response.data;
 };
 
+// ==================== PREVIEW RECARGOS ====================
+
+export interface PreviewRecargoDia {
+	dia: number;
+	fecha: string;
+	nombre_dia: string;
+	tipo_dia: string;
+	es_festivo: boolean;
+	es_domingo: boolean;
+	disponibilidad: boolean;
+	hora_inicio: number;
+	hora_fin: number;
+	total_horas: number;
+	recargos: Array<{
+		tipo_codigo: string;
+		tipo_nombre: string;
+		es_hora_extra: boolean;
+		porcentaje: number;
+		horas: number;
+		valor_hora_base: number;
+		valor_hora_calculada: number;
+		valor_total: number;
+	}>;
+	total_valor_dia: number;
+}
+
+export interface PreviewRecargoPlanilla {
+	planilla_id: string;
+	numero_planilla: string | null;
+	vehiculo: { id: string; placa: string; marca: string; modelo: string };
+	empresa: { id: string; nombre: string };
+	mes: number;
+	año: number;
+	total_dias: number;
+	total_horas: number;
+	total_valor: number;
+	dias: PreviewRecargoDia[];
+}
+
+export interface PreviewRecargosResponse {
+	conductor_id: string;
+	periodo: { inicio: string; fin: string };
+	configuracion_salarial: {
+		id: string;
+		salario_basico: number;
+		valor_hora_trabajador: number;
+		horas_mensuales_base: number;
+		sede: string | null;
+		paga_dias_festivos: boolean;
+		porcentaje_festivos: number;
+	} | null;
+	resumen: {
+		total_planillas: number;
+		total_dias_trabajados: number;
+		total_horas_trabajadas: number;
+		total_recargos: number;
+		total_festivos: number;
+		total_general: number;
+	};
+	resumen_tipos: Array<{
+		codigo: string;
+		nombre: string;
+		porcentaje: number;
+		es_hora_extra: boolean;
+		totalHoras: number;
+		valorHoraBase: number;
+		valorTotal: number;
+	}>;
+	planillas: PreviewRecargoPlanilla[];
+}
+
+/**
+ * Obtener preview de recargos para un conductor en un período
+ */
+export const obtenerPreviewRecargos = async (
+	conductor_id: string,
+	periodo_inicio: string,
+	periodo_fin: string
+): Promise<{ success: boolean; data: PreviewRecargosResponse }> => {
+	const params = new URLSearchParams({
+		conductor_id,
+		periodo_inicio,
+		periodo_fin
+	});
+	const response = await apiClient.get<{ success: boolean; data: PreviewRecargosResponse }>(
+		`/api/liquidaciones/preview-recargos?${params.toString()}`
+	);
+	return response.data;
+};
+
 export default {
 	obtenerLiquidaciones,
 	obtenerLiquidacionPorId,
@@ -207,5 +297,6 @@ export default {
 	actualizarConfiguracion,
 	generarDesprendibles,
 	verificarEstadoDesprendibles,
-	obtenerFirmasPorLiquidacion
+	obtenerFirmasPorLiquidacion,
+	obtenerPreviewRecargos
 };

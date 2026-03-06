@@ -18,6 +18,7 @@
 	} from 'lucide-svelte';
 	import { toast } from 'svelte-sonner';
 	import CalendarPernote from './CalendarPernote.svelte';
+	import RecargosPreview from './RecargosPreview.svelte';
 
 	// Props
 	export let mode: 'create' | 'edit' = 'create';
@@ -103,6 +104,11 @@
 
 	let detallesVehiculos: VehiculoDetalle[] = [];
 	let mesesRange: string[] = [];
+
+	// Preview de recargos
+	let recargosPreviewRef: RecargosPreview;
+	let totalRecargosPreview = 0;
+	let previewRecargosData: any = null;
 
 	// Anticipos
 	let anticipos: Array<{ id: string; valor: number; fecha: string; concepto: string }> = [];
@@ -557,7 +563,8 @@
 		isCesantias, isPrima, noDescontarSalud, noDescontarPension, descontarTransporte,
 		periodo_vacaciones_inicio, periodo_vacaciones_fin,
 		periodo_incapacidad_inicio, periodo_incapacidad_fin,
-		cesantias, interes_cesantias, prima, prima_pendiente, configuracion
+		cesantias, interes_cesantias, prima, prima_pendiente, configuracion,
+		totalRecargosPreview
 	];
 	$: totales = (_deps, calcularTotales());
 
@@ -613,12 +620,13 @@
 			}, 0);
 		}, 0);
 
-		// Calcular recargos
-		const totalRecargos = detallesVehiculos.reduce((acc, detalle) => {
+		// Calcular recargos (manuales + preview de planillas)
+		const recargosManual = detallesVehiculos.reduce((acc, detalle) => {
 			return acc + detalle.recargos.reduce((total, recargo) => {
 				return total + recargo.valor;
 			}, 0);
 		}, 0);
+		const totalRecargos = recargosManual + totalRecargosPreview;
 
 		// Bonificación Villanueva
 		let bonificacionVillanueva = 0;
@@ -847,6 +855,12 @@
 		const date = new Date(parseInt(year), parseInt(month) - 1);
 		return date.toLocaleDateString('es-CO', { month: 'short', year: 'numeric' });
 	}
+
+	function handleRecargosCalculated(event: CustomEvent) {
+		const { totalRecargos, detalle } = event.detail;
+		totalRecargosPreview = totalRecargos;
+		previewRecargosData = detalle;
+	}
 </script>
 
 {#if loadingData}
@@ -859,7 +873,7 @@
 		</div>
 	</div>
 {:else}
-	<div class="mx-auto max-w-7xl p-6">
+	<div class="p-6">
 		<!-- Header -->
 		<div class="mb-6">
 			<button
@@ -1062,14 +1076,14 @@
 								{#if detalle.bonos.length > 0}
 									<div class="mb-6">
 										<h4 class="mb-3 font-semibold text-gray-800">Bonificaciones</h4>
-										<div class="space-y-4">
+										<div class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
 											{#each detalle.bonos as bono}
 												<div class="rounded-lg bg-orange-50 p-4">
-													<div class="mb-2 flex items-center justify-between">
-														<span class="font-medium text-orange-900">{bono.name}</span>
-														<span class="text-sm text-orange-700">{formatCurrency(bono.value)} / unidad</span>
+													<div class="mb-2">
+														<span class="block font-medium text-orange-900 text-sm">{bono.name}</span>
+														<span class="text-xs text-orange-700">{formatCurrency(bono.value)} / unidad</span>
 													</div>
-													<div class="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+													<div class="space-y-2">
 														{#each bono.values as val}
 															<div>
 																<label class="mb-1 block text-xs text-gray-600">{formatMes(val.mes)}</label>
@@ -1293,6 +1307,15 @@
 							</div>
 						{/each}
 					{/if}
+
+					<!-- Preview de Recargos desde Planillas -->
+					<RecargosPreview
+						bind:this={recargosPreviewRef}
+						conductorId={conductorSelected?.value || ''}
+						periodoInicio={periodo_inicio}
+						periodoFin={periodo_fin}
+						on:recargosCalculated={handleRecargosCalculated}
+					/>
 				</div>
 			{:else if currentStep === 3}
 				<!-- PASO 3: Cálculos Finales -->
