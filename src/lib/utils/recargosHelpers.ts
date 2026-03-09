@@ -258,101 +258,128 @@ export function calcularHorasTrabajadas(horaInicio: number, horaFin: number): nu
 }
 
 /**
+ * Calcular horas extras nocturnas para un turno (auxiliar)
+ * Calcula qué fracción de las horas extras cae en horario nocturno (≥19:00)
+ * usando el punto donde termina la jornada ordinaria como referencia.
+ *
+ * Ejemplo: turno 4:00-20:00 (16h), jornada=9.33h
+ *   horaFinJornada = 4 + 9.33 = 13.33
+ *   nocStart = max(19, 13.33) = 19
+ *   extrasNocturnas = 20 - 19 = 1h
+ *   extrasDiurnas = (16-9.33) - 1 = 5.67h
+ */
+function calcularExtrasNocturnas(
+	horaInicio: number,
+	horaFin: number,
+	totalHoras: number,
+	jornada: number
+): number {
+	const extras = totalHoras - jornada;
+	if (extras <= 0) return 0;
+
+	const horaFinJornada = horaInicio + jornada;
+	let extNoc = 0;
+
+	if (horaFin > HORAS_LIMITE.INICIO_NOCTURNO) {
+		const nocStart = Math.max(HORAS_LIMITE.INICIO_NOCTURNO, horaFinJornada);
+		if (nocStart < horaFin) {
+			extNoc = horaFin - nocStart;
+		}
+	}
+
+	return Math.min(extNoc, extras);
+}
+
+/**
  * Calcular Hora Extra Diurna (HED)
  * Fórmula: Si es domingo o festivo → 0
- *          Si NO: Si trabajó > 10 horas → total_horas - 10 - HEN
+ *          Si NO: extras = total_horas - 9.33, luego restar la porción nocturna
  */
 export function calcularHED(
 	dia: number,
 	mes: number,
 	año: number,
+	horaInicio: number,
+	horaFin: number,
 	totalHoras: number,
 	diasFestivos: number[] = []
 ): number {
-	// Si es domingo o festivo, no hay HED
-	if (esDomingoOFestivo(dia, mes, año, diasFestivos)) {
-		return 0;
-	}
+	if (esDomingoOFestivo(dia, mes, año, diasFestivos)) return 0;
+	if (totalHoras <= HORAS_LIMITE.JORNADA_NORMAL) return 0;
 
-	// Si trabajó más de 10 horas
-	if (totalHoras > HORAS_LIMITE.JORNADA_NORMAL) {
-		return redondear(totalHoras - HORAS_LIMITE.JORNADA_NORMAL);
-	}
+	const extras = totalHoras - HORAS_LIMITE.JORNADA_NORMAL;
+	const extNoc = calcularExtrasNocturnas(horaInicio, horaFin, totalHoras, HORAS_LIMITE.JORNADA_NORMAL);
 
-	return 0;
+	return redondear(extras - extNoc);
 }
 
 /**
  * Calcular Hora Extra Nocturna (HEN)
  * Fórmula: Si es domingo o festivo → 0
- *          Si NO: Si trabajó > 10 horas Y terminó después de las 21:00 → hora_fin - 21
+ *          Si NO: la porción de extras que cae en horario nocturno (≥19:00)
  */
 export function calcularHEN(
 	dia: number,
 	mes: number,
 	año: number,
+	horaInicio: number,
 	horaFin: number,
 	totalHoras: number,
 	diasFestivos: number[] = []
 ): number {
-	// Si es domingo o festivo, no hay HEN
-	if (esDomingoOFestivo(dia, mes, año, diasFestivos)) {
-		return 0;
-	}
+	if (esDomingoOFestivo(dia, mes, año, diasFestivos)) return 0;
+	if (totalHoras <= HORAS_LIMITE.JORNADA_NORMAL) return 0;
 
-	// Si trabajó más de 10 horas Y terminó después de las 21:00
-	if (totalHoras > HORAS_LIMITE.JORNADA_NORMAL && horaFin > HORAS_LIMITE.INICIO_NOCTURNO) {
-		return redondear(horaFin - HORAS_LIMITE.INICIO_NOCTURNO);
-	}
+	const extNoc = calcularExtrasNocturnas(horaInicio, horaFin, totalHoras, HORAS_LIMITE.JORNADA_NORMAL);
 
-	return 0;
+	return redondear(extNoc);
 }
 
 /**
  * Calcular Hora Extra Festiva Diurna (HEFD)
  * Fórmula: Si es domingo o festivo:
- *            Si trabajó > 10 horas → total_horas - 10 - HEFN
+ *            extras = total_horas - 7.33, luego restar la porción nocturna
  *          Si NO → 0
  */
 export function calcularHEFD(
 	dia: number,
 	mes: number,
 	año: number,
+	horaInicio: number,
+	horaFin: number,
 	totalHoras: number,
 	diasFestivos: number[] = []
 ): number {
-	// Solo si es domingo o festivo
-	if (esDomingoOFestivo(dia, mes, año, diasFestivos)) {
-		if (totalHoras > HORAS_LIMITE.JORNADA_FESTIVA) {
-			return redondear(totalHoras - HORAS_LIMITE.JORNADA_FESTIVA);
-		}
-	}
+	if (!esDomingoOFestivo(dia, mes, año, diasFestivos)) return 0;
+	if (totalHoras <= HORAS_LIMITE.JORNADA_FESTIVA) return 0;
 
-	return 0;
+	const extras = totalHoras - HORAS_LIMITE.JORNADA_FESTIVA;
+	const extNoc = calcularExtrasNocturnas(horaInicio, horaFin, totalHoras, HORAS_LIMITE.JORNADA_FESTIVA);
+
+	return redondear(extras - extNoc);
 }
 
 /**
  * Calcular Hora Extra Festiva Nocturna (HEFN)
  * Fórmula: Si es domingo o festivo:
- *            Si trabajó > 10 horas Y terminó después de las 21:00 → hora_fin - 21
+ *            la porción de extras que cae en horario nocturno (≥19:00)
  *          Si NO → 0
  */
 export function calcularHEFN(
 	dia: number,
 	mes: number,
 	año: number,
+	horaInicio: number,
 	horaFin: number,
 	totalHoras: number,
 	diasFestivos: number[] = []
 ): number {
-	// Solo si es domingo o festivo
-	if (esDomingoOFestivo(dia, mes, año, diasFestivos)) {
-		if (totalHoras > HORAS_LIMITE.JORNADA_FESTIVA && horaFin > HORAS_LIMITE.INICIO_NOCTURNO) {
-			return redondear(horaFin - HORAS_LIMITE.INICIO_NOCTURNO);
-		}
-	}
+	if (!esDomingoOFestivo(dia, mes, año, diasFestivos)) return 0;
+	if (totalHoras <= HORAS_LIMITE.JORNADA_FESTIVA) return 0;
 
-	return 0;
+	const extNoc = calcularExtrasNocturnas(horaInicio, horaFin, totalHoras, HORAS_LIMITE.JORNADA_FESTIVA);
+
+	return redondear(extNoc);
 }
 
 /**
@@ -434,17 +461,11 @@ export function calcularRecargos(params: {
 	// Calcular total de horas
 	const totalHoras = calcularHorasTrabajadas(horaInicio, horaFin);
 
-	// Calcular todos los tipos
-	const horaExtraNocturna = calcularHEN(dia, mes, año, horaFin, totalHoras, diasFestivos);
-	const horaExtraDiurna = Math.max(
-		0,
-		calcularHED(dia, mes, año, totalHoras, diasFestivos) - horaExtraNocturna
-	);
-	const horaExtraFestivaNocturna = calcularHEFN(dia, mes, año, horaFin, totalHoras, diasFestivos);
-	const horaExtraFestivaDiurna = Math.max(
-		0,
-		calcularHEFD(dia, mes, año, totalHoras, diasFestivos) - horaExtraFestivaNocturna
-	);
+	// Calcular todos los tipos con la lógica correcta
+	const horaExtraDiurna = calcularHED(dia, mes, año, horaInicio, horaFin, totalHoras, diasFestivos);
+	const horaExtraNocturna = calcularHEN(dia, mes, año, horaInicio, horaFin, totalHoras, diasFestivos);
+	const horaExtraFestivaDiurna = calcularHEFD(dia, mes, año, horaInicio, horaFin, totalHoras, diasFestivos);
+	const horaExtraFestivaNocturna = calcularHEFN(dia, mes, año, horaInicio, horaFin, totalHoras, diasFestivos);
 
 	return {
 		totalHoras,

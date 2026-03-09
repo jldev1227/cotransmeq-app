@@ -101,7 +101,7 @@ export const vehiculosAPI = {
 };
 
 export const conductoresAPI = {
-	getAll: () => apiClient.get('/api/conductores'),
+	getAll: (params?: any) => apiClient.get('/api/conductores', { params }),
 	getById: (id: string) => apiClient.get(`/api/conductores/${id}`),
 	create: (data: any) => apiClient.post('/api/conductores', data),
 	update: (id: string, data: any) => apiClient.put(`/api/conductores/${id}`, data),
@@ -135,6 +135,17 @@ export const clientesAPI = {
 	update: (id: string, data: any) => apiClient.put(`/api/clientes/${id}`, data),
 	delete: (id: string) => apiClient.delete(`/api/clientes/${id}`),
 	updateTipo: (id: string, tipo: string) => apiClient.patch(`/api/clientes/${id}/tipo`, { tipo })
+};
+
+export const extractosAPI = {
+	getAll: (params?: any) => apiClient.get('/api/extractos', { params }),
+	getMatches: () => apiClient.get('/api/extractos/matches'),
+	getContratantes: () => apiClient.get('/api/extractos/contratantes'),
+	syncToDatabase: () => apiClient.post('/api/extractos/sync'),
+	getNextConsecutivo: () => apiClient.get('/api/extractos/next-consecutivo'),
+	create: (data: any) => apiClient.post('/api/extractos', data),
+	deleteAll: () => apiClient.delete('/api/extractos/all'),
+	delete: (consecutivo: string) => apiClient.delete(`/api/extractos/${consecutivo}`)
 };
 
 export { apiClient };

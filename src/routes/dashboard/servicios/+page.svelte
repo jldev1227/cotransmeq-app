@@ -329,6 +329,39 @@
 		mostrarModalConfirm = false;
 		servicioAEliminar = null;
 	}
+
+	// Descargar rutograma PDF
+	async function handleDescargarRutograma(servicio: ServicioConRelaciones) {
+		try {
+			const token = localStorage.getItem('transmeralda_token');
+			const baseURL = import.meta.env.VITE_API_URL;
+			const url = `${baseURL}/api/servicios/${servicio.id}/rutograma`;
+
+			const response = await fetch(url, {
+				headers: { Authorization: `Bearer ${token}` }
+			});
+
+			if (!response.ok) {
+				const errorData = await response.json().catch(() => null);
+				throw new Error(errorData?.message || `Error ${response.status}`);
+			}
+
+			const blob = await response.blob();
+			const blobUrl = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = blobUrl;
+			a.download = `rutograma-${servicio.origen_especifico || 'servicio'}-${servicio.destino_especifico || ''}.pdf`;
+			document.body.appendChild(a);
+			a.click();
+			document.body.removeChild(a);
+			URL.revokeObjectURL(blobUrl);
+
+			toast.success('Rutograma descargado exitosamente');
+		} catch (error: any) {
+			console.error('Error descargando rutograma:', error);
+			toast.error('Error al descargar rutograma: ' + (error.message || 'Error desconocido'));
+		}
+	}
 </script>
 
 <svelte:head>
@@ -1192,6 +1225,23 @@
 													/>
 												</svg>
 												<span class="hidden sm:inline">Ticket</span>
+											</button>
+
+											<!-- Rutograma PDF -->
+											<button
+												on:click|stopPropagation={() => handleDescargarRutograma(servicio)}
+												class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-50"
+												title="Descargar Rutograma PDF"
+											>
+												<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														stroke-width="2"
+														d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+													/>
+												</svg>
+												<span class="hidden sm:inline">Rutograma</span>
 											</button>
 
 											<!-- Editar -->

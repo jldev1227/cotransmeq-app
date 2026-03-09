@@ -217,6 +217,53 @@
 		dias_laborales: []
 	};
 
+	function calcularKmRecorridos(recargo: any): number {
+		if (!recargo.dias_laborales || recargo.dias_laborales.length === 0) return 0;
+		return recargo.dias_laborales.reduce((total: number, dia: any) => {
+			const kmInicial = dia.kilometraje_inicial != null ? parseFloat(dia.kilometraje_inicial) : NaN;
+			const kmFinal = dia.kilometraje_final != null ? parseFloat(dia.kilometraje_final) : NaN;
+			if (isNaN(kmInicial) || isNaN(kmFinal)) return total;
+			const diff = kmFinal - kmInicial;
+			return total + (diff > 0 ? diff : 0);
+		}, 0);
+	}
+
+	// Stats reactivos — se actualizan con búsqueda y filtros
+	$: stats = (() => {
+		const totalPlanillas = filteredRecargos.length;
+		const totalDiasServicio = filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_dias), 0);
+		const totalHoras = filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_horas), 0);
+
+		const totalHED = filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_hed), 0);
+		const totalHEN = filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_hen), 0);
+		const totalHEFD = filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_hefd), 0);
+		const totalHEFN = filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_hefn), 0);
+		const totalRN = filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_rn), 0);
+		const totalRD = filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_rd), 0);
+		const totalKm = filteredRecargos.reduce((sum, r) => sum + calcularKmRecorridos(r), 0);
+
+		const totalExtras = totalHED + totalHEN + totalHEFD + totalHEFN;
+		const totalRecargos = totalRN + totalRD;
+
+		const totalOrdinarias = Math.max(0, totalHoras - totalExtras);
+
+		return {
+			totalPlanillas,
+			totalDiasServicio,
+			totalHoras,
+			totalOrdinarias,
+			totalHED,
+			totalHEN,
+			totalHEFD,
+			totalHEFN,
+			totalRN,
+			totalRD,
+			totalKm,
+			totalExtras,
+			totalRecargos
+		};
+	})();
+
 	// Handlers
 	function handleMonthChange(increment: number) {
 		selectedMonth += increment;
@@ -810,6 +857,161 @@
 			</div>
 		</div>
 	</div>
+
+	<!-- Stats Panel -->
+	{#if !loading && filteredRecargos.length > 0}
+		<div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-7" transition:fade={{ duration: 200 }}>
+			<!-- Planillas -->
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<div class="flex items-center gap-2">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100">
+						<svg class="h-4 w-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+						</svg>
+					</div>
+					<div>
+						<p class="text-xs text-gray-500">Planillas</p>
+						<p class="text-lg font-bold text-gray-900">{stats.totalPlanillas}</p>
+						<p class="text-[10px] text-gray-400">Registros del mes</p>
+					</div>
+				</div>
+			</div>
+
+			<!-- Días de servicio -->
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<div class="flex items-center gap-2">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-100">
+						<svg class="h-4 w-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+						</svg>
+					</div>
+					<div>
+						<p class="text-xs text-gray-500">Días servicio</p>
+						<p class="text-lg font-bold text-gray-900">{stats.totalDiasServicio}</p>
+						<p class="text-[10px] text-gray-400">Días laborados en total</p>
+					</div>
+				</div>
+			</div>
+
+			<!-- Horas totales -->
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<div class="flex items-center gap-2">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100">
+						<svg class="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+						</svg>
+					</div>
+					<div>
+						<p class="text-xs text-gray-500">Horas totales</p>
+						<p class="text-lg font-bold text-gray-900">{stats.totalHoras.toFixed(1)}</p>
+						<p class="text-[10px] text-gray-400">Ordinarias + Extras</p>
+					</div>
+				</div>
+			</div>
+
+			<!-- Horas ordinarias -->
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<div class="flex items-center gap-2">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100">
+						<svg class="h-4 w-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+						</svg>
+					</div>
+					<div>
+						<p class="text-xs text-gray-500">Ordinarias</p>
+						<p class="text-lg font-bold text-gray-900">{stats.totalOrdinarias.toFixed(1)}</p>
+						<p class="text-[10px] text-gray-400">Dentro de jornada normal</p>
+					</div>
+				</div>
+			</div>
+
+			<!-- KM recorridos -->
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<div class="flex items-center gap-2">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-100">
+						<svg class="h-4 w-4 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+						</svg>
+					</div>
+					<div>
+						<p class="text-xs text-gray-500">KM recorridos</p>
+						<p class="text-lg font-bold text-gray-900">{stats.totalKm.toFixed(1)}</p>
+						<p class="text-[10px] text-gray-400">KM final - KM inicial</p>
+					</div>
+				</div>
+			</div>
+
+			<!-- Total Extras -->
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<div class="flex items-center gap-2">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100">
+						<svg class="h-4 w-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+						</svg>
+					</div>
+					<div>
+						<p class="text-xs text-gray-500">H. Extras</p>
+						<p class="text-lg font-bold text-gray-900">{stats.totalExtras.toFixed(1)}</p>
+						<p class="text-[10px] text-gray-400">HED+HEN+HEFD+HEFN</p>
+					</div>
+				</div>
+			</div>
+
+			<!-- Total Recargos -->
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<div class="flex items-center gap-2">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-100">
+						<svg class="h-4 w-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+						</svg>
+					</div>
+					<div>
+						<p class="text-xs text-gray-500">Recargos (RN+RD)</p>
+						<p class="text-lg font-bold text-gray-900">{stats.totalRecargos.toFixed(1)}</p>
+						<p class="text-[10px] text-gray-400">Incluidas en horas totales</p>
+					</div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Desglose detallado -->
+		<div class="mb-4 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+			<div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
+				<span class="font-semibold text-gray-700">Desglose:</span>
+				<span class="flex items-center gap-1">
+					<span class="inline-block h-2.5 w-2.5 rounded-full bg-green-500"></span>
+					HED <strong class="text-gray-900">{stats.totalHED.toFixed(1)}</strong>
+				</span>
+				<span class="flex items-center gap-1">
+					<span class="inline-block h-2.5 w-2.5 rounded-full bg-green-700"></span>
+					HEN <strong class="text-gray-900">{stats.totalHEN.toFixed(1)}</strong>
+				</span>
+				<span class="flex items-center gap-1">
+					<span class="inline-block h-2.5 w-2.5 rounded-full bg-orange-500"></span>
+					HEFD <strong class="text-gray-900">{stats.totalHEFD.toFixed(1)}</strong>
+				</span>
+				<span class="flex items-center gap-1">
+					<span class="inline-block h-2.5 w-2.5 rounded-full bg-orange-700"></span>
+					HEFN <strong class="text-gray-900">{stats.totalHEFN.toFixed(1)}</strong>
+				</span>
+				<span class="text-gray-300">|</span>
+				<span class="flex items-center gap-1">
+					<span class="inline-block h-2.5 w-2.5 rounded-full bg-purple-500"></span>
+					RN <strong class="text-gray-900">{stats.totalRN.toFixed(1)}</strong>
+				</span>
+				<span class="flex items-center gap-1">
+					<span class="inline-block h-2.5 w-2.5 rounded-full bg-red-500"></span>
+					RD <strong class="text-gray-900">{stats.totalRD.toFixed(1)}</strong>
+				</span>
+				{#if searchTerm || conductorFilter.length > 0 || vehiculoFilter.length > 0 || empresaFilter.length > 0 || estadoFilter.length > 0}
+					<span class="text-gray-300">|</span>
+					<span class="rounded bg-amber-100 px-2 py-0.5 text-amber-700 font-medium">
+						Filtrado: {filteredRecargos.length} de {recargos.length} planillas
+					</span>
+				{/if}
+			</div>
+		</div>
+	{/if}
 
 	<!-- Canvas Table -->
 	<div class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow">
