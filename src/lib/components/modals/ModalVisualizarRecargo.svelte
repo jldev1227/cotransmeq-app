@@ -28,6 +28,7 @@
 		hen: number;
 		hefd: number;
 		hefn: number;
+		rndf: number;
 		rn: number;
 		rd: number;
 	}
@@ -73,6 +74,7 @@
 						hen: 0,
 						hefd: 0,
 						hefn: 0,
+						rndf: 0,
 						rn: 0,
 						rd: 0
 					};
@@ -103,6 +105,7 @@
 						hen: recargos.hen,
 						hefd: recargos.hefd,
 						hefn: recargos.hefn,
+						rndf: recargos.rndf,
 						rn: recargos.rn,
 						rd: recargos.rd
 					};
@@ -229,15 +232,16 @@
 						HEN: acc.HEN + (dia.hen || 0),
 						HEFD: acc.HEFD + (dia.hefd || 0),
 						HEFN: acc.HEFN + (dia.hefn || 0),
+						RNDF: acc.RNDF + (dia.rndf || 0),
 						RN: acc.RN + (dia.rn || 0),
 						RD: acc.RD + (dia.rd || 0)
 					}),
-					{ HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RN: 0, RD: 0 }
+					{ HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RNDF: 0, RN: 0, RD: 0 }
 				)
 			}
 		: {
 				totalHoras: 0,
-				totalesRecargos: { HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RN: 0, RD: 0 }
+				totalesRecargos: { HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RNDF: 0, RN: 0, RD: 0 }
 			};
 
 	// Cargar datos cuando se abre el modal
@@ -517,7 +521,7 @@
 								<div class="mb-3 text-xs tracking-wide text-gray-400 uppercase">
 									Resumen de Horas
 								</div>
-								<div class="grid grid-cols-4 gap-4 md:grid-cols-8">
+								<div class="grid grid-cols-4 gap-4 md:grid-cols-9">
 									<div class="text-center">
 										<div class="text-lg font-semibold text-gray-900">
 											{formatearHoras(totales.totalHoras)}
@@ -528,7 +532,7 @@
 										<div class="text-lg font-semibold text-gray-900">{infoRecargo.totalDias}</div>
 										<div class="text-xs text-gray-400">Días</div>
 									</div>
-									{#each [{ key: 'HED', value: totales.totalesRecargos.HED, label: 'HED', percent: '25%' }, { key: 'HEN', value: totales.totalesRecargos.HEN, label: 'HEN', percent: '75%' }, { key: 'HEFD', value: totales.totalesRecargos.HEFD, label: 'HEFD', percent: '100%' }, { key: 'HEFN', value: totales.totalesRecargos.HEFN, label: 'HEFN', percent: '150%' }, { key: 'RN', value: totales.totalesRecargos.RN, label: 'RN', percent: '35%' }, { key: 'RD', value: totales.totalesRecargos.RD, label: 'RD', percent: '75%' }] as { key, value, label, percent }}
+									{#each [{ key: 'HED', value: totales.totalesRecargos.HED, label: 'HED', percent: '25%' }, { key: 'HEN', value: totales.totalesRecargos.HEN, label: 'HEN', percent: '75%' }, { key: 'HEFD', value: totales.totalesRecargos.HEFD, label: 'HEFD', percent: '100%' }, { key: 'HEFN', value: totales.totalesRecargos.HEFN, label: 'HEFN', percent: '150%' }, { key: 'RNDF', value: totales.totalesRecargos.RNDF, label: 'RNDF', percent: '115%' }, { key: 'RN', value: totales.totalesRecargos.RN, label: 'RN', percent: '35%' }, { key: 'RD', value: totales.totalesRecargos.RD, label: 'RD', percent: '75%' }] as { key, value, label, percent }}
 										<div class="text-center">
 											<div class="text-lg font-semibold text-gray-900">
 												{formatearHoras(value)}
@@ -555,6 +559,7 @@
 											HEN: dia.hen || 0,
 											HEFD: dia.hefd || 0,
 											HEFN: dia.hefn || 0,
+											RNDF: dia.rndf || 0,
 											RN: dia.rn || 0,
 											RD: dia.rd || 0
 										}}
@@ -592,7 +597,7 @@
 											<!-- Recargos -->
 											{#if tieneRecargos}
 												<div class="space-y-1">
-													{#each [{ key: 'HED', color: 'bg-orange-50 text-orange-700', value: recargosDelDia.HED }, { key: 'HEN', color: 'bg-blue-50 text-blue-700', value: recargosDelDia.HEN }, { key: 'RN', color: 'bg-purple-50 text-purple-700', value: recargosDelDia.RN }, { key: 'RD', color: 'bg-red-50 text-red-700', value: recargosDelDia.RD }, { key: 'HEFD', color: 'bg-orange-50 text-orange-700', value: recargosDelDia.HEFD }, { key: 'HEFN', color: 'bg-indigo-50 text-indigo-700', value: recargosDelDia.HEFN }] as { key, color, value }}
+													{#each [{ key: 'HED', color: 'bg-orange-50 text-orange-700', value: recargosDelDia.HED }, { key: 'HEN', color: 'bg-blue-50 text-blue-700', value: recargosDelDia.HEN }, { key: 'HEFD', color: 'bg-orange-50 text-orange-700', value: recargosDelDia.HEFD }, { key: 'HEFN', color: 'bg-indigo-50 text-indigo-700', value: recargosDelDia.HEFN }, { key: 'RNDF', color: 'bg-emerald-50 text-emerald-700', value: recargosDelDia.RNDF }, { key: 'RN', color: 'bg-purple-50 text-purple-700', value: recargosDelDia.RN }, { key: 'RD', color: 'bg-red-50 text-red-700', value: recargosDelDia.RD }] as { key, color, value }}
 														{#if value > 0}
 															<div
 																class="flex items-center justify-between rounded px-2 py-1 text-xs {color}"

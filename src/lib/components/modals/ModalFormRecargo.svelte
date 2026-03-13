@@ -503,7 +503,7 @@
 			isNaN(horaInicio) ||
 			isNaN(horaFin)
 		) {
-			return { HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RN: 0, RD: 0 };
+			return { HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RNDF: 0, RN: 0, RD: 0 };
 		}
 
 		const esDomingoOFestivo = dia.es_domingo || dia.es_festivo;
@@ -511,97 +511,113 @@
 			hen = 0,
 			hefd = 0,
 			hefn = 0,
+			rndf = 0,
 			rn = 0,
 			rd = 0;
 
-		// Calcular recargo nocturno (19:00-06:00) sobre TODAS las horas trabajadas
-		// RN aplica a cualquier hora nocturna trabajada (jornada normal + extras)
-		let horaActual = horaInicio;
-		const horaLimiteRN = horaInicio + totalHoras;
-		
-		while (horaActual < horaLimiteRN) {
-			const horaDelDia = normalizarHora(horaActual);
-			const siguienteHora = Math.min(horaActual + 0.5, horaLimiteRN);
+		// Determinar jornada ordinaria según tipo de día
+		const jornadaOrdinaria = esDomingoOFestivo
+			? HORAS_LIMITE.JORNADA_FESTIVA
+			: HORAS_LIMITE.JORNADA_NORMAL;
 
-			// Verificar si está en período nocturno (19:00-23:59 o 00:00-06:00)
-			if (horaDelDia >= HORAS_LIMITE.INICIO_NOCTURNO || horaDelDia < HORAS_LIMITE.FIN_NOCTURNO) {
-				rn += siguienteHora - horaActual;
+		// Función helper para verificar si una hora es nocturna (19:00-06:00)
+		function esNocturna(hora: number): boolean {
+			const h = normalizarHora(hora);
+			return h >= HORAS_LIMITE.INICIO_NOCTURNO || h < HORAS_LIMITE.FIN_NOCTURNO;
+		}
+
+		// Recorrer cada fracción de hora y clasificarla
+		let horaActual = horaInicio;
+		let horasAcumuladas = 0;
+
+		while (horaActual < horaFin) {
+			const siguienteHora = Math.min(horaActual + 0.5, horaFin);
+			const fraccion = siguienteHora - horaActual;
+			const nocturna = esNocturna(horaActual);
+			const esExtra = horasAcumuladas >= jornadaOrdinaria;
+
+			if (esDomingoOFestivo) {
+				if (esExtra) {
+					// Horas extras en domingo/festivo
+					if (nocturna) {
+						hefn += fraccion;
+					} else {
+						hefd += fraccion;
+					}
+				} else {
+					// Jornada ordinaria en domingo/festivo
+					// Verificar si esta fracción cruza el límite de jornada
+					const horasRestantesJornada = jornadaOrdinaria - horasAcumuladas;
+					if (fraccion <= horasRestantesJornada) {
+						// Toda la fracción es jornada ordinaria
+						if (nocturna) {
+							rndf += fraccion;
+						} else {
+							rd += fraccion;
+						}
+					} else {
+						// Parte es jornada ordinaria, parte es extra
+						const parteOrdinaria = horasRestantesJornada;
+						const parteExtra = fraccion - parteOrdinaria;
+						if (nocturna) {
+							rndf += parteOrdinaria;
+							hefn += parteExtra;
+						} else {
+							rd += parteOrdinaria;
+							hefd += parteExtra;
+						}
+					}
+				}
+			} else {
+				// Día normal
+				if (esExtra) {
+					// Horas extras en día normal
+					if (nocturna) {
+						hen += fraccion;
+					} else {
+						hed += fraccion;
+					}
+				} else {
+					// Jornada ordinaria en día normal
+					const horasRestantesJornada = jornadaOrdinaria - horasAcumuladas;
+					if (fraccion <= horasRestantesJornada) {
+						// Jornada ordinaria normal: solo recargo si es nocturna
+						if (nocturna) {
+							rn += fraccion;
+						}
+						// Diurna ordinaria en día normal = no genera recargo
+					} else {
+						// Parte ordinaria, parte extra
+						const parteOrdinaria = horasRestantesJornada;
+						const parteExtra = fraccion - parteOrdinaria;
+						if (nocturna) {
+							rn += parteOrdinaria;
+							hen += parteExtra;
+						} else {
+							// parteOrdinaria diurna = sin recargo
+							hed += parteExtra;
+						}
+					}
+				}
 			}
 
+			horasAcumuladas += fraccion;
 			horaActual = siguienteHora;
 		}
 
-		if (esDomingoOFestivo) {
-			// Recargo dominical/festivo
-			rd = Math.min(totalHoras, HORAS_LIMITE.JORNADA_FESTIVA);
-
-			// Horas extras festivas (después de las primeras 7.33 horas)
-			if (totalHoras > HORAS_LIMITE.JORNADA_FESTIVA) {
-				const horasExtras = totalHoras - HORAS_LIMITE.JORNADA_FESTIVA;
-
-				// Calcular cuántas horas extras son nocturnas
-				const horaInicioExtras = horaInicio + HORAS_LIMITE.JORNADA_FESTIVA;
-				let horasExtrasNocturnas = 0;
-
-				let horaActualExtra = horaInicioExtras;
-				while (horaActualExtra < horaFin) {
-					const horaDelDia = normalizarHora(horaActualExtra);
-					const siguienteHora = Math.min(horaActualExtra + 0.5, horaFin);
-
-					if (
-						horaDelDia >= HORAS_LIMITE.INICIO_NOCTURNO ||
-						horaDelDia < HORAS_LIMITE.FIN_NOCTURNO
-					) {
-						horasExtrasNocturnas += siguienteHora - horaActualExtra;
-					}
-
-					horaActualExtra = siguienteHora;
-				}
-
-				hefn = Math.min(horasExtrasNocturnas, horasExtras);
-				hefd = horasExtras - hefn;
-			}
-		} else {
-			// Día normal
-			if (totalHoras > HORAS_LIMITE.JORNADA_NORMAL) {
-				const horasExtras = totalHoras - HORAS_LIMITE.JORNADA_NORMAL;
-
-				// Calcular cuántas horas extras son nocturnas
-				const horaInicioExtras = horaInicio + HORAS_LIMITE.JORNADA_NORMAL;
-				let horasExtrasNocturnas = 0;
-
-				let horaActualExtra = horaInicioExtras;
-				while (horaActualExtra < horaFin) {
-					const horaDelDia = normalizarHora(horaActualExtra);
-					const siguienteHora = Math.min(horaActualExtra + 0.5, horaFin);
-
-					if (
-						horaDelDia >= HORAS_LIMITE.INICIO_NOCTURNO ||
-						horaDelDia < HORAS_LIMITE.FIN_NOCTURNO
-					) {
-						horasExtrasNocturnas += siguienteHora - horaActualExtra;
-					}
-
-					horaActualExtra = siguienteHora;
-				}
-
-				hen = Math.min(horasExtrasNocturnas, horasExtras);
-				hed = horasExtras - hen;
-			}
-		}
-
 		return {
-			HED: parseFloat(hed.toFixed(1)),
-			HEN: parseFloat(hen.toFixed(1)),
-			HEFD: parseFloat(hefd.toFixed(1)),
-			HEFN: parseFloat(hefn.toFixed(1)),
-			RN: parseFloat(rn.toFixed(1)),
-			RD: parseFloat(rd.toFixed(1))
+			HED: parseFloat(hed.toFixed(2)),
+			HEN: parseFloat(hen.toFixed(2)),
+			HEFD: parseFloat(hefd.toFixed(2)),
+			HEFN: parseFloat(hefn.toFixed(2)),
+			RNDF: parseFloat(rndf.toFixed(2)),
+			RN: parseFloat(rn.toFixed(2)),
+			RD: parseFloat(rd.toFixed(2))
 		};
 	}
 
 	function calcularTotales() {
-		const totales = { totalHoras: 0, HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RN: 0, RD: 0 };
+		const totales = { totalHoras: 0, HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RNDF: 0, RN: 0, RD: 0 };
 
 		diasLaborales.forEach((dia) => {
 			// Excluir días marcados como disponible
@@ -614,6 +630,7 @@
 				totales.HEN += recargos.HEN;
 				totales.HEFD += recargos.HEFD;
 				totales.HEFN += recargos.HEFN;
+				totales.RNDF += recargos.RNDF;
 				totales.RN += recargos.RN;
 				totales.RD += recargos.RD;
 			}
@@ -633,6 +650,8 @@
 				return 'bg-yellow-100 text-yellow-700';
 			case 'HEFN':
 				return 'bg-purple-100 text-purple-700';
+			case 'RNDF':
+				return 'bg-emerald-100 text-emerald-700';
 			case 'RN':
 				return 'bg-blue-100 text-blue-700';
 			case 'RD':
@@ -2600,6 +2619,11 @@
 										<th
 											class="px-3 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase"
 										>
+											RNDF<br /><span class="text-[10px] font-normal">(115%)</span>
+										</th>
+										<th
+											class="px-3 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase"
+										>
 											RN<br /><span class="text-[10px] font-normal">(35%)</span>
 										</th>
 										<th
@@ -2848,6 +2872,22 @@
 												{/if}
 											</td>
 
+											<!-- RNDF -->
+											<td class="px-3 py-2 text-center">
+												{#if dia.disponibilidad}
+													<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-400">-</span>
+												{:else}
+												<span
+													class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
+														'RNDF',
+														recargos.RNDF
+													)}"
+												>
+													{recargos.RNDF > 0 ? recargos.RNDF.toFixed(1) : '-'}
+												</span>
+												{/if}
+											</td>
+
 											<!-- RN -->
 											<td class="px-3 py-2 text-center">
 												{#if dia.disponibilidad}
@@ -2888,7 +2928,7 @@
 						</div>
 
 						<!-- Resumen de Totales -->
-						<div class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+						<div class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
 							<!-- HED Card -->
 							<div
 								class="rounded-lg border border-orange-200 bg-gradient-to-br from-orange-50 to-orange-100 p-4"
@@ -2935,6 +2975,18 @@
 								</div>
 								<div class="text-2xl font-bold text-purple-800">{totales.HEFN.toFixed(1)}</div>
 								<div class="mt-1 text-[10px] text-purple-600">H. Extra Festiva Nocturna</div>
+							</div>
+
+							<!-- RNDF Card -->
+							<div
+								class="rounded-lg border border-emerald-200 bg-gradient-to-br from-emerald-50 to-emerald-100 p-4"
+							>
+								<div class="mb-2 flex items-center justify-between">
+									<span class="text-xs font-medium text-emerald-700">RNDF</span>
+									<span class="text-xs text-emerald-600">115%</span>
+								</div>
+								<div class="text-2xl font-bold text-emerald-800">{totales.RNDF.toFixed(1)}</div>
+								<div class="mt-1 text-[10px] text-emerald-600">Rec. Noct. Dom/Fest</div>
 							</div>
 
 							<!-- RN Card -->

@@ -143,6 +143,7 @@
 		{ key: 'total_hen', label: 'HEN', width: '70px', sortable: true, bgColor: 'bg-orange-50' },
 		{ key: 'total_hefd', label: 'HEFD', width: '70px', sortable: true, bgColor: 'bg-orange-50' },
 		{ key: 'total_hefn', label: 'HEFN', width: '70px', sortable: true, bgColor: 'bg-orange-50' },
+		{ key: 'total_rndf', label: 'RNDF', width: '70px', sortable: true, bgColor: 'bg-green-50' },
 		{ key: 'total_rn', label: 'RN', width: '70px', sortable: true, bgColor: 'bg-orange-50' },
 		{ key: 'total_rd', label: 'RD', width: '70px', sortable: true, bgColor: 'bg-orange-50' },
 		{ key: 'estado', label: 'Estado', width: '100px' }
@@ -212,6 +213,7 @@
 		total_hen: filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_hen), 0),
 		total_hefd: filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_hefd), 0),
 		total_hefn: filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_hefn), 0),
+		total_rndf: filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_rndf), 0),
 		total_rn: filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_rn), 0),
 		total_rd: filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_rd), 0),
 		dias_laborales: []
@@ -240,10 +242,11 @@
 		const totalHEFN = filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_hefn), 0);
 		const totalRN = filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_rn), 0);
 		const totalRD = filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_rd), 0);
+		const totalRNDF = filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_rndf), 0);
 		const totalKm = filteredRecargos.reduce((sum, r) => sum + calcularKmRecorridos(r), 0);
 
 		const totalExtras = totalHED + totalHEN + totalHEFD + totalHEFN;
-		const totalRecargos = totalRN + totalRD;
+		const totalRecargos = totalRN + totalRD + totalRNDF;
 
 		const totalOrdinarias = Math.max(0, totalHoras - totalExtras);
 
@@ -256,6 +259,7 @@
 			totalHEN,
 			totalHEFD,
 			totalHEFN,
+			totalRNDF,
 			totalRN,
 			totalRD,
 			totalKm,
@@ -435,6 +439,8 @@
 				return toNumber(item.total_hefd).toFixed(1);
 			case 'total_hefn':
 				return toNumber(item.total_hefn).toFixed(1);
+			case 'total_rndf':
+				return toNumber(item.total_rndf).toFixed(1);
 			case 'total_rn':
 				return toNumber(item.total_rn).toFixed(1);
 			case 'total_rd':
@@ -465,6 +471,7 @@
 				'total_hen',
 				'total_hefd',
 				'total_hefn',
+				'total_rndf',
 				'total_rn',
 				'total_rd'
 			];
@@ -482,6 +489,7 @@
 				'total_hen',
 				'total_hefd',
 				'total_hefn',
+				'total_rndf',
 				'total_rn',
 				'total_rd'
 			];
@@ -568,6 +576,11 @@
 					`📊 DEBUG total_hefn - Recargo ID: ${recargo.id}, Raw: ${recargo.total_hefn}, Parsed: ${toNumber(recargo.total_hefn)}`
 				);
 				return toNumber(recargo.total_hefn).toFixed(1);
+			case 'total_rndf':
+				console.log(
+					`📊 DEBUG total_rndf - Recargo ID: ${recargo.id}, Raw: ${recargo.total_rndf}, Parsed: ${toNumber(recargo.total_rndf)}`
+				);
+				return toNumber(recargo.total_rndf).toFixed(1);
 			case 'total_rn':
 				console.log(
 					`📊 DEBUG total_rn - Recargo ID: ${recargo.id}, Raw: ${recargo.total_rn}, Parsed: ${toNumber(recargo.total_rn)}`
@@ -966,7 +979,7 @@
 						</svg>
 					</div>
 					<div>
-						<p class="text-xs text-gray-500">Recargos (RN+RD)</p>
+						<p class="text-xs text-gray-500">Recargos (RNDF+RN+RD)</p>
 						<p class="text-lg font-bold text-gray-900">{stats.totalRecargos.toFixed(1)}</p>
 						<p class="text-[10px] text-gray-400">Incluidas en horas totales</p>
 					</div>
@@ -995,6 +1008,10 @@
 					HEFN <strong class="text-gray-900">{stats.totalHEFN.toFixed(1)}</strong>
 				</span>
 				<span class="text-gray-300">|</span>
+				<span class="flex items-center gap-1">
+					<span class="inline-block h-2.5 w-2.5 rounded-full bg-emerald-600"></span>
+					RNDF <strong class="text-gray-900">{stats.totalRNDF.toFixed(1)}</strong>
+				</span>
 				<span class="flex items-center gap-1">
 					<span class="inline-block h-2.5 w-2.5 rounded-full bg-purple-500"></span>
 					RN <strong class="text-gray-900">{stats.totalRN.toFixed(1)}</strong>

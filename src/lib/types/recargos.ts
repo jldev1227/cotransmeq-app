@@ -61,6 +61,7 @@ export interface RecargoPlanilla {
 	total_hen: number;
 	total_hefd: number;
 	total_hefn: number;
+	total_rndf: number;
 	total_rn: number;
 	total_rd: number;
 	observaciones?: string;
@@ -106,6 +107,7 @@ export interface CanvasRecargo {
 	total_hen: number;
 	total_hefd: number;
 	total_hefn: number;
+	total_rndf: number;
 	total_rn: number;
 	total_rd: number;
 	dias_laborales?: DiaLaboralPlanilla[];
@@ -191,6 +193,7 @@ export interface RecargoDetallado {
 	total_hen: number;
 	total_hefd: number;
 	total_hefn: number;
+	total_rndf: number;
 	total_rn: number;
 	total_rd: number;
 	observaciones?: string;
@@ -208,6 +211,7 @@ export interface RecargoDetallado {
 		hen: number;
 		hefd: number;
 		hefn: number;
+		rndf: number;
 		rn: number;
 		rd: number;
 	}>;
