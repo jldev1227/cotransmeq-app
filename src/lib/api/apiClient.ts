@@ -148,4 +148,38 @@ export const extractosAPI = {
 	delete: (consecutivo: string) => apiClient.delete(`/api/extractos/${consecutivo}`)
 };
 
+// API para desprendibles públicos (sin autenticación)
+export const desprendiblesAPI = {
+	// Generar token (requiere auth)
+	generarToken: (liquidacionId: string, expiresHours?: number) =>
+		apiClient.post(`/api/liquidaciones/${liquidacionId}/compartir`, { expires_hours: expiresHours }),
+	// Validar token (público)
+	validarToken: (token: string) =>
+		publicApiClient.get(`/api/desprendible/public/${token}`),
+	// Registrar firma (público - envía imagen como multipart)
+	firmar: (token: string, firmaBlob: Blob) => {
+		const formData = new FormData();
+		formData.append('file', firmaBlob, 'firma.png');
+		return publicApiClient.post(`/api/desprendible/public/${token}/firmar`, formData, {
+			headers: { 'Content-Type': 'multipart/form-data' }
+		});
+	},
+	// Obtener datos si ya firmó (público)
+	obtenerDatos: (token: string) =>
+		publicApiClient.get(`/api/desprendible/public/${token}/datos`)
+};
+
+// API para documentos compartidos (independientes de liquidaciones)
+export const sharedDocumentsAPI = {
+	validar: (token: string) => publicApiClient.get(`/api/desprendible/compartido/${token}`),
+	firmar: (token: string, firmaBlob: Blob) => {
+		const formData = new FormData();
+		formData.append('file', firmaBlob, 'firma.png');
+		return publicApiClient.post(`/api/desprendible/compartido/${token}/firmar`, formData, {
+			headers: { 'Content-Type': 'multipart/form-data' }
+		});
+	},
+	obtenerDatos: (token: string) => publicApiClient.get(`/api/desprendible/compartido/${token}/datos`)
+}
+
 export { apiClient };
