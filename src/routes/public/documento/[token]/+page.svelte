@@ -58,13 +58,24 @@
 	$: token = $page.params.token ?? '';
 
 	onMount(async () => {
-		// El layout público oculta overflow para el mapa, restaurar para esta página
-		document.body.style.overflow = 'auto';
-		await validarToken();
+			// El layout público oculta overflow para el mapa, restaurar para esta página
+			// Asegurar overflow en <html> y <body> para permitir scroll en todos los navegadores
+			try {
+				document.documentElement.style.overflow = 'auto';
+			} catch (e) {}
+			try {
+				document.body.style.overflow = 'auto';
+			} catch (e) {}
+			await validarToken();
 	});
 
 	onDestroy(() => {
-		document.body.style.overflow = '';
+			try {
+				document.body.style.overflow = '';
+			} catch (e) {}
+			try {
+				document.documentElement.style.overflow = '';
+			} catch (e) {}
 	});
 
 	async function validarToken() {
@@ -229,7 +240,7 @@
 	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
-<div class="min-h-screen bg-gradient-to-br from-gray-50 via-orange-50/30 to-amber-50/20">
+<div class="min-h-screen overflow-auto bg-gradient-to-br from-gray-50 via-orange-50/30 to-amber-50/20">
 	<!-- Header -->
 	<header class="border-b border-orange-100 bg-white/80 backdrop-blur-md">
 		<div class="mx-auto flex max-w-2xl items-center justify-center gap-3 px-4 py-4">
