@@ -1308,14 +1308,14 @@
 						{/each}
 					{/if}
 
-					<!-- Preview de Recargos desde Planillas -->
+					<!-- Preview de Recargos desde Planillas
 					<RecargosPreview
 						bind:this={recargosPreviewRef}
 						conductorId={conductorSelected?.value || ''}
 						periodoInicio={periodo_inicio}
 						periodoFin={periodo_fin}
 						on:recargosCalculated={handleRecargosCalculated}
-					/>
+					/> -->
 				</div>
 			{:else if currentStep === 3}
 				<!-- PASO 3: Cálculos Finales -->

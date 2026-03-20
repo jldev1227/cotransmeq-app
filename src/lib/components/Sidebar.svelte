@@ -88,13 +88,13 @@
 			badge: null,
 			href: '/dashboard/extractos'
 		},
-		// {
-		// 	id: 'asistencias',
-		// 	label: 'Asistencias',
-		// 	icon: 'clipboard',
-		// 	badge: null,
-		// 	href: '/dashboard/asistencias'
-		// },
+		{
+			id: 'asistencias',
+			label: 'Asistencias',
+			icon: 'clipboard',
+			badge: null,
+			href: '/dashboard/asistencias'
+		},
 		// {
 		// 	id: 'acciones-correctivas',
 		// 	label: 'Acciones C/P',
