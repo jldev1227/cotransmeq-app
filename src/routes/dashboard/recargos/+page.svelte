@@ -300,6 +300,10 @@
 		selectedRows = selectedRows; // Trigger reactivity
 	}
 
+	function handleUnselectRow() {
+		selectedRows = new Set();
+	}
+
 	function handleViewRecargo(id: string) {
 		selectedRecargoId = id;
 		modalViewIsOpen = true;
@@ -362,7 +366,9 @@
 			const nuevoEstado = event.detail.estado;
 
 			const result = await recargosApi.cambiarEstadoMultiple(idsToUpdate, nuevoEstado);
-			toast.success(`${result.actualizados} recargo(s) actualizado(s) a "${getEstadoLabel(nuevoEstado)}"`);
+			toast.success(
+				`${result.actualizados} recargo(s) actualizado(s) a "${getEstadoLabel(nuevoEstado)}"`
+			);
 
 			// Limpiar selección
 			selectedRows.clear();
@@ -824,6 +830,11 @@
 		<div class="flex items-center gap-3">
 			{#if selectedRows.size > 0}
 				<button
+					on:click={handleUnselectRow}
+					class="rounded-lg bg-red-200 px-4 py-2 text-sm font-medium text-red-500 hover:cursor-pointer hover:opacity-85"
+					>Deseleccionar</button
+				>
+				<button
 					on:click={handleCopySelectedRows}
 					class="rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-900"
 				>
@@ -839,7 +850,12 @@
 						class="flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
 					>
 						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+							/>
 						</svg>
 						Cambiar estado
 					</button>
@@ -873,13 +889,26 @@
 
 	<!-- Stats Panel -->
 	{#if !loading && filteredRecargos.length > 0}
-		<div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-7" transition:fade={{ duration: 200 }}>
+		<div
+			class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-7"
+			transition:fade={{ duration: 200 }}
+		>
 			<!-- Planillas -->
 			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
 				<div class="flex items-center gap-2">
 					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100">
-						<svg class="h-4 w-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+						<svg
+							class="h-4 w-4 text-gray-600"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+							/>
 						</svg>
 					</div>
 					<div>
@@ -894,8 +923,18 @@
 			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
 				<div class="flex items-center gap-2">
 					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-100">
-						<svg class="h-4 w-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+						<svg
+							class="h-4 w-4 text-orange-600"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+							/>
 						</svg>
 					</div>
 					<div>
@@ -910,8 +949,18 @@
 			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
 				<div class="flex items-center gap-2">
 					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100">
-						<svg class="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+						<svg
+							class="h-4 w-4 text-blue-600"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+							/>
 						</svg>
 					</div>
 					<div>
@@ -926,8 +975,18 @@
 			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
 				<div class="flex items-center gap-2">
 					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-100">
-						<svg class="h-4 w-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+						<svg
+							class="h-4 w-4 text-indigo-600"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+							/>
 						</svg>
 					</div>
 					<div>
@@ -942,8 +1001,18 @@
 			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
 				<div class="flex items-center gap-2">
 					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-cyan-100">
-						<svg class="h-4 w-4 text-cyan-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+						<svg
+							class="h-4 w-4 text-cyan-600"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
+							/>
 						</svg>
 					</div>
 					<div>
@@ -958,8 +1027,18 @@
 			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
 				<div class="flex items-center gap-2">
 					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100">
-						<svg class="h-4 w-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+						<svg
+							class="h-4 w-4 text-amber-600"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M13 10V3L4 14h7v7l9-11h-7z"
+							/>
 						</svg>
 					</div>
 					<div>
@@ -974,8 +1053,18 @@
 			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
 				<div class="flex items-center gap-2">
 					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-100">
-						<svg class="h-4 w-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+						<svg
+							class="h-4 w-4 text-purple-600"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
+							/>
 						</svg>
 					</div>
 					<div>
@@ -1022,7 +1111,7 @@
 				</span>
 				{#if searchTerm || conductorFilter.length > 0 || vehiculoFilter.length > 0 || empresaFilter.length > 0 || estadoFilter.length > 0}
 					<span class="text-gray-300">|</span>
-					<span class="rounded bg-amber-100 px-2 py-0.5 text-amber-700 font-medium">
+					<span class="rounded bg-amber-100 px-2 py-0.5 font-medium text-amber-700">
 						Filtrado: {filteredRecargos.length} de {recargos.length} planillas
 					</span>
 				{/if}
@@ -1087,13 +1176,16 @@
 						{#each paginatedRecargos as recargo (recargo.id)}
 							{@const isNew = recentlyCreated.has(recargo.id)}
 							{@const isUpdated = recentlyUpdated.has(recargo.id)}
+							{@const isSelected = selectedRows.has(recargo.id)}
+
 							<tr
 								class="border-b border-gray-100 hover:bg-gray-50 {getEstadoBgColor(
 									recargo.estado
 								)} {isNew ? 'border-l-4 border-l-orange-500 bg-orange-50/30' : ''} {isUpdated
 									? 'border-l-4 border-l-blue-500 bg-blue-50/30'
-									: ''}"
+									: ''} {isSelected ? 'border-l-4 border-l-orange-600' : ''}"
 								transition:fade={{ duration: 200 }}
+								on:click={() => handleSelectRow(recargo.id)}
 							>
 								{#each columns as column, index}
 									<td
@@ -1104,7 +1196,9 @@
 											? 'text-left'
 											: 'text-center'} text-xs {column.fixed
 											? 'sticky left-0 z-10'
-											: ''} {column.bgColor || ''}"
+												: ''} {column.bgColor || ''} {isSelected
+											? 'shadow-[inset_0_0_0_9999px_rgba(200,80,10,0.18)]'
+											: ''}"
 										style="min-width: {column.width}; {column.fixed && column.bgColor
 											? `background-color: rgb(249 250 251);`
 											: ''}"
@@ -1135,7 +1229,7 @@
 											{@const horas = dia ? toNumber(dia.total_horas) : 0}
 											{#if dia?.disponibilidad}
 												<span
-													class="inline-block rounded border px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-800 border-blue-300"
+													class="inline-block rounded border border-blue-300 bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800"
 													title="Día disponible"
 												>
 													D
