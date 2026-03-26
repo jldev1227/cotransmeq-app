@@ -70,6 +70,15 @@ export const obtenerLiquidacionPorId = async (id: string) => {
 };
 
 /**
+ * Obtener un analisis de liquidaciones
+ */
+export const obtenerAnalisis = async () => {
+	const response = await apiClient.get<{ data: Liquidacion }>('/api/liquidaciones/analisis');
+	return response.data;
+};
+
+
+/**
  * Crear nueva liquidación
  */
 export const crearLiquidacion = async (payload: CreateLiquidacionPayload) => {
