@@ -331,6 +331,9 @@
 
 			itemsIzqShuffled.set(pregunta.id, shuffleArray(itemsIzq));
 			itemsDerShuffled.set(pregunta.id, shuffleArray(itemsDer));
+			// Reasignar para que Svelte detecte el cambio reactivo
+			itemsIzqShuffled = itemsIzqShuffled;
+			itemsDerShuffled = itemsDerShuffled;
 		}
 	}
 
