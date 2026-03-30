@@ -4,7 +4,7 @@
 	import { fade } from 'svelte/transition';
 	import { onMount } from 'svelte';
 
-	type TipoPregunta = 'OPCION_UNICA' | 'OPCION_MULTIPLE' | 'NUMERICA' | 'TEXTO' | 'RELACION';
+	type TipoPregunta = 'OPCION_UNICA' | 'OPCION_MULTIPLE' | 'NUMERICA' | 'TEXTO' | 'RELACION' | 'VERDADERO_FALSO';
 
 	interface Pregunta {
 		id?: string;
@@ -160,6 +160,14 @@
 			}
 			preguntaActual.opciones = [];
 			preguntaActual.respuestaCorrecta = undefined;
+		} else if (preguntaActual.tipo === 'VERDADERO_FALSO') {
+			if (preguntaActual.respuestaCorrecta === undefined || preguntaActual.respuestaCorrecta === null) {
+				alert('Debe seleccionar si la respuesta correcta es Verdadero o Falso');
+				return;
+			}
+			preguntaActual.opciones = [];
+			preguntaActual.relacionIzq = [];
+			preguntaActual.relacionDer = [];
 		} else {
 			preguntaActual.opciones = [];
 			preguntaActual.relacionIzq = [];
@@ -233,7 +241,8 @@
 			OPCION_MULTIPLE: 'Opción Múltiple',
 			NUMERICA: 'Numérica',
 			TEXTO: 'Texto',
-			RELACION: 'Relación'
+			RELACION: 'Relación',
+			VERDADERO_FALSO: 'Verdadero o Falso'
 		};
 		return labels[tipo];
 	}
@@ -380,6 +389,18 @@
 									{/each}
 								</div>
 							{/if}
+
+							<!-- Verdadero o Falso -->
+							{#if pregunta.tipo === 'VERDADERO_FALSO'}
+								<div class="mt-2 flex items-center gap-2 text-sm">
+									<span class="font-semibold text-gray-600">Respuesta correcta:</span>
+									{#if pregunta.respuestaCorrecta === 1}
+										<span class="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700">Verdadero</span>
+									{:else}
+										<span class="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">Falso</span>
+									{/if}
+								</div>
+							{/if}
 						</div>
 					{/each}
 				</div>
@@ -435,6 +456,7 @@
 						>
 							<option value="OPCION_UNICA">Opción Única</option>
 							<option value="OPCION_MULTIPLE">Opción Múltiple</option>
+							<option value="VERDADERO_FALSO">Verdadero o Falso</option>
 							<option value="NUMERICA">Numérica</option>
 							<option value="TEXTO">Texto</option>
 							<option value="RELACION">Relación</option>
@@ -499,6 +521,40 @@
 							placeholder="Ingrese el número correcto"
 						/>
 						<p class="mt-1 text-xs text-gray-500">Los estudiantes deberán ingresar este valor exacto</p>
+					</div>
+				{/if}
+
+				<!-- Verdadero o Falso -->
+				{#if preguntaActual.tipo === 'VERDADERO_FALSO'}
+					<div>
+						<label class="mb-3 block text-sm font-semibold text-gray-700">Respuesta Correcta *</label>
+						<p class="mb-3 text-xs text-gray-500">Selecciona cuál es la respuesta correcta para esta afirmación</p>
+						<div class="grid grid-cols-2 gap-4">
+							<button
+								type="button"
+								on:click={() => preguntaActual.respuestaCorrecta = 1}
+								class="apple-transition rounded-lg border-2 p-4 text-center font-semibold {preguntaActual.respuestaCorrecta === 1
+									? 'border-orange-500 bg-orange-50 text-orange-700'
+									: 'border-gray-200 bg-white text-gray-700 hover:border-orange-300'}"
+							>
+								<svg class="mx-auto mb-2 h-8 w-8 {preguntaActual.respuestaCorrecta === 1 ? 'text-orange-500' : 'text-gray-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+								</svg>
+								Verdadero
+							</button>
+							<button
+								type="button"
+								on:click={() => preguntaActual.respuestaCorrecta = 0}
+								class="apple-transition rounded-lg border-2 p-4 text-center font-semibold {preguntaActual.respuestaCorrecta === 0
+									? 'border-red-500 bg-red-50 text-red-700'
+									: 'border-gray-200 bg-white text-gray-700 hover:border-red-300'}"
+							>
+								<svg class="mx-auto mb-2 h-8 w-8 {preguntaActual.respuestaCorrecta === 0 ? 'text-red-500' : 'text-gray-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+								</svg>
+								Falso
+							</button>
+						</div>
 					</div>
 				{/if}
 

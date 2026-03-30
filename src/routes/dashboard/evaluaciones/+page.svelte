@@ -16,7 +16,7 @@
 	interface Pregunta {
 		id: string;
 		texto: string;
-		tipo: 'OPCION_UNICA' | 'OPCION_MULTIPLE' | 'NUMERICA' | 'TEXTO' | 'RELACION';
+		tipo: 'OPCION_UNICA' | 'OPCION_MULTIPLE' | 'NUMERICA' | 'TEXTO' | 'RELACION' | 'VERDADERO_FALSO';
 		puntaje: number;
 		opciones: Opcion[];
 	}
@@ -60,7 +60,8 @@
 			OPCION_MULTIPLE: 'bg-purple-100 text-purple-800',
 			NUMERICA: 'bg-orange-100 text-orange-800',
 			TEXTO: 'bg-orange-100 text-orange-800',
-			RELACION: 'bg-pink-100 text-pink-800'
+			RELACION: 'bg-pink-100 text-pink-800',
+			VERDADERO_FALSO: 'bg-teal-100 text-teal-800'
 		};
 		return colors[tipo] || 'bg-gray-100 text-gray-800';
 	}
@@ -71,7 +72,8 @@
 			OPCION_MULTIPLE: 'Opción Múltiple',
 			NUMERICA: 'Numérica',
 			TEXTO: 'Texto',
-			RELACION: 'Relación'
+			RELACION: 'Relación',
+			VERDADERO_FALSO: 'Verdadero o Falso'
 		};
 		return labels[tipo] || tipo;
 	}

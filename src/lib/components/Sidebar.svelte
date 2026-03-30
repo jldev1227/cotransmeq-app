@@ -102,13 +102,13 @@
 		// 	badge: null,
 		// 	href: '/dashboard/acciones-correctivas'
 		// },
-		// {
-		// 	id: 'evaluaciones',
-		// 	label: 'Evaluaciones',
-		// 	icon: 'clipboard-list',
-		// 	badge: null,
-		// 	href: '/dashboard/evaluaciones'
-		// }
+		{
+			id: 'evaluaciones',
+			label: 'Evaluaciones',
+			icon: 'clipboard-list',
+			badge: null,
+			href: '/dashboard/evaluaciones'
+		}
 		// {
 		// 	id: 'rutas',
 		// 	label: 'Rutas',

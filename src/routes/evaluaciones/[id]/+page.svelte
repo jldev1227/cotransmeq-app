@@ -18,7 +18,7 @@
 	interface Pregunta {
 		id: string;
 		texto: string;
-		tipo: 'OPCION_UNICA' | 'OPCION_MULTIPLE' | 'NUMERICA' | 'TEXTO' | 'RELACION';
+		tipo: 'OPCION_UNICA' | 'OPCION_MULTIPLE' | 'NUMERICA' | 'TEXTO' | 'RELACION' | 'VERDADERO_FALSO';
 		puntaje: number;
 		opciones: Opcion[];
 		relacionIzq: string[];
@@ -227,6 +227,11 @@
 					mostrarToast('Por favor relaciona los elementos', 'error');
 					return;
 				}
+			} else if (preguntaActual.tipo === 'VERDADERO_FALSO') {
+				if (respuesta.valor_numero === undefined || respuesta.valor_numero === null) {
+					mostrarToast('Por favor selecciona Verdadero o Falso', 'error');
+					return;
+				}
 			}
 		}
 
@@ -273,6 +278,14 @@
 		respuestas.set(preguntaId, {
 			preguntaId,
 			valor_texto: valor
+		});
+		respuestas = respuestas;
+	}
+
+	function handleVerdaderoFalso(preguntaId: string, valor: number) {
+		respuestas.set(preguntaId, {
+			preguntaId,
+			valor_numero: valor
 		});
 		respuestas = respuestas;
 	}
@@ -477,7 +490,8 @@
 			OPCION_MULTIPLE: 'Opción Múltiple',
 			NUMERICA: 'Numérica',
 			TEXTO: 'Texto',
-			RELACION: 'Relación'
+			RELACION: 'Relación',
+			VERDADERO_FALSO: 'Verdadero o Falso'
 		};
 		return nombres[tipo] || tipo;
 	}
@@ -488,7 +502,8 @@
 			OPCION_MULTIPLE: 'bg-purple-100 text-purple-800',
 			NUMERICA: 'bg-orange-100 text-orange-800',
 			TEXTO: 'bg-orange-100 text-orange-800',
-			RELACION: 'bg-pink-100 text-pink-800'
+			RELACION: 'bg-pink-100 text-pink-800',
+			VERDADERO_FALSO: 'bg-teal-100 text-teal-800'
 		};
 		return colors[tipo] || 'bg-gray-100 text-gray-800';
 	}
@@ -814,7 +829,9 @@
 																		? 'bg-purple-100 text-purple-700'
 																		: pregunta.tipo === 'OPCION_MULTIPLE'
 																			? 'bg-pink-100 text-pink-700'
-																			: 'bg-indigo-100 text-indigo-700'}"
+																			: pregunta.tipo === 'VERDADERO_FALSO'
+																				? 'bg-teal-100 text-teal-700'
+																				: 'bg-indigo-100 text-indigo-700'}"
 														>
 															{pregunta.tipo === 'TEXTO'
 																? 'Texto'
@@ -824,7 +841,9 @@
 																		? 'Opción Única'
 																		: pregunta.tipo === 'OPCION_MULTIPLE'
 																			? 'Opción Múltiple'
-																			: 'Relación'}
+																			: pregunta.tipo === 'VERDADERO_FALSO'
+																				? 'Verdadero o Falso'
+																				: 'Relación'}
 														</span>
 													</div>
 													<p class="leading-relaxed font-medium text-gray-900">{pregunta.texto}</p>
@@ -993,6 +1012,27 @@
 																>
 															</div>
 														{/each}
+													</div>
+												</div>
+											{:else if pregunta.tipo === 'VERDADERO_FALSO'}
+												<div class="mt-3 rounded-lg border border-teal-200 bg-gradient-to-r from-teal-50 to-cyan-50 p-4">
+													<p class="mb-2 text-xs font-semibold text-teal-700">Tu respuesta:</p>
+													<div class="flex items-center gap-3">
+														{#if respuesta.valor_numero === 1}
+															<div class="flex items-center gap-2 rounded-lg bg-orange-100 px-4 py-2 font-bold text-orange-800 shadow-sm">
+																<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+																</svg>
+																Verdadero
+															</div>
+														{:else}
+															<div class="flex items-center gap-2 rounded-lg bg-red-100 px-4 py-2 font-bold text-red-800 shadow-sm">
+																<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+																</svg>
+																Falso
+															</div>
+														{/if}
 													</div>
 												</div>
 											{/if}
@@ -1564,6 +1604,39 @@
 												<span>Limpiar todo</span>
 											</button>
 										{/if}
+									</div>
+								</div>
+							{/if}
+
+							<!-- Verdadero o Falso -->
+							{#if pregunta.tipo === 'VERDADERO_FALSO'}
+								<div class="space-y-4">
+									<p class="text-center text-sm font-medium text-gray-600">Selecciona tu respuesta:</p>
+									<div class="flex justify-center gap-6">
+										<button
+											type="button"
+											on:click={() => handleVerdaderoFalso(pregunta.id, 1)}
+											class="group flex items-center gap-3 rounded-xl border-2 px-8 py-4 text-lg font-bold transition-all duration-200 {respuesta?.valor_numero === 1
+												? 'border-orange-500 bg-orange-50 text-orange-700 shadow-lg ring-2 ring-orange-200'
+												: 'border-gray-300 bg-white text-gray-700 hover:border-orange-400 hover:bg-orange-50 hover:shadow-md'}"
+										>
+											<svg class="h-6 w-6 {respuesta?.valor_numero === 1 ? 'text-orange-600' : 'text-gray-400 group-hover:text-orange-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+											</svg>
+											Verdadero
+										</button>
+										<button
+											type="button"
+											on:click={() => handleVerdaderoFalso(pregunta.id, 0)}
+											class="group flex items-center gap-3 rounded-xl border-2 px-8 py-4 text-lg font-bold transition-all duration-200 {respuesta?.valor_numero === 0
+												? 'border-red-500 bg-red-50 text-red-700 shadow-lg ring-2 ring-red-200'
+												: 'border-gray-300 bg-white text-gray-700 hover:border-red-400 hover:bg-red-50 hover:shadow-md'}"
+										>
+											<svg class="h-6 w-6 {respuesta?.valor_numero === 0 ? 'text-red-600' : 'text-gray-400 group-hover:text-red-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+											</svg>
+											Falso
+										</button>
 									</div>
 								</div>
 							{/if}

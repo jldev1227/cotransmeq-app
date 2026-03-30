@@ -19,7 +19,7 @@
 	interface Pregunta {
 		id: string;
 		texto: string;
-		tipo: 'OPCION_UNICA' | 'OPCION_MULTIPLE' | 'NUMERICA' | 'TEXTO' | 'RELACION';
+		tipo: 'OPCION_UNICA' | 'OPCION_MULTIPLE' | 'NUMERICA' | 'TEXTO' | 'RELACION' | 'VERDADERO_FALSO';
 		puntaje: number;
 		opciones: Opcion[];
 		relacionIzq: string[];
@@ -50,8 +50,11 @@
 	interface RespuestaDetalle {
 		id: string;
 		pregunta_id: string;
-		respuesta_texto: string | null;
-		puntaje_obtenido: number;
+		valor_texto: string | null;
+		valor_numero: number | null;
+		opcionesIds: string[];
+		relacion: { izq: string; der: string }[] | null;
+		puntaje: number;
 		pregunta?: Pregunta;
 	}
 
@@ -175,7 +178,8 @@
 			OPCION_MULTIPLE: 'bg-purple-100 text-purple-800',
 			NUMERICA: 'bg-orange-100 text-orange-800',
 			TEXTO: 'bg-orange-100 text-orange-800',
-			RELACION: 'bg-pink-100 text-pink-800'
+			RELACION: 'bg-pink-100 text-pink-800',
+			VERDADERO_FALSO: 'bg-teal-100 text-teal-800'
 		};
 		return colors[tipo] || 'bg-gray-100 text-gray-800';
 	}
@@ -186,7 +190,8 @@
 			OPCION_MULTIPLE: 'Opción Múltiple',
 			NUMERICA: 'Numérica',
 			TEXTO: 'Texto',
-			RELACION: 'Relación'
+			RELACION: 'Relación',
+			VERDADERO_FALSO: 'Verdadero o Falso'
 		};
 		return labels[tipo] || tipo;
 	}
@@ -234,6 +239,43 @@
 			toast.error('Error al eliminar la evaluación');
 		}
 	}
+
+	async function exportarPDF() {
+		if (!resultados.length) {
+			toast.error('No hay resultados para exportar');
+			return;
+		}
+
+		try {
+			toast.loading('Generando PDF...');
+			const response = await fetch(
+				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}/exportar-pdf`
+			);
+
+			if (!response.ok) {
+				throw new Error('Error al generar el PDF');
+			}
+
+			const blob = await response.blob();
+			const url = window.URL.createObjectURL(blob);
+			const link = document.createElement('a');
+			link.href = url;
+			link.setAttribute(
+				'download',
+				`evaluacion_${evaluacion?.titulo?.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.pdf`
+			);
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+			window.URL.revokeObjectURL(url);
+
+			toast.dismiss();
+			toast.success('PDF generado exitosamente');
+		} catch (error: any) {
+			toast.dismiss();
+			toast.error(error.message || 'Error al generar el PDF');
+		}
+	}
 </script>
 
 <svelte:head>
@@ -265,6 +307,21 @@
 
 		{#if evaluacion}
 			<div class="flex gap-2">
+				<button
+					on:click={exportarPDF}
+					class="apple-transition rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600"
+					title="Exportar resultados a PDF"
+				>
+					<svg class="mr-2 inline h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+						/>
+					</svg>
+					Exportar PDF
+				</button>
 				<button
 					on:click={() => goto(`/dashboard/evaluaciones/${evaluacionId}/editar`)}
 					class="apple-transition rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600"
@@ -449,6 +506,21 @@
 												<div class="rounded bg-purple-50 px-2 py-1 text-xs">{item}</div>
 											{/each}
 										</div>
+									</div>
+								{/if}
+
+								<!-- Verdadero o Falso -->
+								{#if pregunta.tipo === 'VERDADERO_FALSO'}
+									<div class="mt-2">
+										<span class="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-semibold {pregunta.respuestaCorrecta === 1 ? 'bg-orange-100 text-orange-800' : 'bg-red-100 text-red-800'}">
+											{#if pregunta.respuestaCorrecta === 1}
+												<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+												Respuesta correcta: Verdadero
+											{:else}
+												<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+												Respuesta correcta: Falso
+											{/if}
+										</span>
 									</div>
 								{/if}
 							</div>
@@ -686,8 +758,8 @@
 													<span class="rounded-full px-2 py-1 text-xs font-semibold {getTipoColor(respuesta.pregunta.tipo)}">
 														{getTipoLabel(respuesta.pregunta.tipo)}
 													</span>
-													<span class="rounded-full {respuesta.puntaje_obtenido === respuesta.pregunta.puntaje ? 'bg-orange-100 text-orange-800' : respuesta.puntaje_obtenido > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'} px-2 py-1 text-xs font-semibold">
-														{respuesta.puntaje_obtenido} / {respuesta.pregunta.puntaje} pts
+													<span class="rounded-full {respuesta.puntaje === respuesta.pregunta.puntaje ? 'bg-green-100 text-green-800' : respuesta.puntaje > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'} px-2 py-1 text-xs font-semibold">
+														{respuesta.puntaje} / {respuesta.pregunta.puntaje} pts
 													</span>
 												</div>
 												<p class="font-medium text-gray-900">{respuesta.pregunta.texto}</p>
@@ -697,49 +769,85 @@
 										<div class="rounded-lg bg-gray-50 p-3">
 											<p class="mb-1 text-xs font-semibold text-gray-600">Respuesta del usuario:</p>
 											{#if respuesta.pregunta.tipo === 'TEXTO'}
-												<p class="text-sm text-gray-900">{respuesta.respuesta_texto || 'Sin respuesta'}</p>
-												<p class="mt-2 text-xs italic text-blue-600">✨ Esta respuesta será evaluada por IA</p>
+												<p class="text-sm text-gray-900">{respuesta.valor_texto || 'Sin respuesta'}</p>
+												<p class="mt-2 text-xs italic text-blue-600">✨ Esta respuesta fue evaluada por IA</p>
 											{:else if respuesta.pregunta.tipo === 'NUMERICA'}
-												<p class="text-sm font-semibold text-gray-900">{respuesta.respuesta_texto}</p>
-												{#if respuesta.pregunta.respuestaCorrecta !== undefined}
+												<p class="text-sm font-semibold text-gray-900">{respuesta.valor_numero ?? respuesta.valor_texto ?? 'Sin respuesta'}</p>
+												{#if respuesta.pregunta.respuestaCorrecta !== undefined && respuesta.pregunta.respuestaCorrecta !== null}
 													<p class="mt-1 text-xs text-gray-600">Respuesta correcta: {respuesta.pregunta.respuestaCorrecta}</p>
 												{/if}
 											{:else if respuesta.pregunta.tipo === 'RELACION'}
-												{@const relaciones = respuesta.respuesta_texto ? JSON.parse(respuesta.respuesta_texto) : []}
-												<div class="space-y-1">
-													{#each relaciones as rel}
-														<div class="flex items-center gap-2 text-sm">
-															<span class="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">{rel.izq}</span>
-															<svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-																<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-															</svg>
-															<span class="rounded bg-purple-100 px-2 py-1 text-xs font-medium text-purple-800">{rel.der}</span>
-														</div>
-													{/each}
-												</div>
-											{:else}
-												{@const opcionesIds = respuesta.respuesta_texto ? JSON.parse(respuesta.respuesta_texto) : []}
-												<div class="space-y-1">
-													{#each respuesta.pregunta.opciones as opcion}
-														{@const fueSeleccionada = opcionesIds.includes(opcion.id)}
-														{#if fueSeleccionada}
+												{@const relaciones = Array.isArray(respuesta.relacion) ? respuesta.relacion : []}
+												{#if relaciones.length > 0}
+													<div class="space-y-1">
+														{#each relaciones as rel}
 															<div class="flex items-center gap-2 text-sm">
-																{#if opcion.esCorrecta}
-																	<svg class="h-4 w-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
-																		<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-																	</svg>
-																{:else}
-																	<svg class="h-4 w-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-																		<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-																	</svg>
-																{/if}
-																<span class:text-orange-700={opcion.esCorrecta} class:font-semibold={opcion.esCorrecta} class:text-red-700={!opcion.esCorrecta}>
-																	{opcion.texto}
-																</span>
+																<span class="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">{rel.izq}</span>
+																<svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+																	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+																</svg>
+																<span class="rounded bg-purple-100 px-2 py-1 text-xs font-medium text-purple-800">{rel.der}</span>
 															</div>
+														{/each}
+													</div>
+												{:else}
+													<p class="text-sm text-gray-500">Sin respuesta</p>
+												{/if}
+											{:else if respuesta.pregunta.tipo === 'VERDADERO_FALSO'}
+												{@const respuestaUsuario = respuesta.valor_numero}
+												{@const respuestaCorrectaVF = respuesta.pregunta.respuestaCorrecta}
+												{@const esCorrectoVF = typeof respuestaUsuario === 'number' && respuestaCorrectaVF !== null && respuestaCorrectaVF !== undefined && respuestaUsuario === respuestaCorrectaVF}
+												{#if typeof respuestaUsuario === 'number'}
+													<div class="flex items-center gap-3">
+														<div class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold {esCorrectoVF ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+															{#if esCorrectoVF}
+																<svg class="h-5 w-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+																	<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+																</svg>
+															{:else}
+																<svg class="h-5 w-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+																	<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+																</svg>
+															{/if}
+															{respuestaUsuario === 1 ? 'Verdadero' : 'Falso'}
+														</div>
+														{#if !esCorrectoVF && respuestaCorrectaVF !== null && respuestaCorrectaVF !== undefined}
+															<span class="text-xs text-gray-500">
+																Respuesta correcta: <span class="font-semibold text-green-700">{respuestaCorrectaVF === 1 ? 'Verdadero' : 'Falso'}</span>
+															</span>
 														{/if}
-													{/each}
-												</div>
+													</div>
+												{:else}
+													<p class="text-sm text-gray-500">Sin respuesta</p>
+												{/if}
+											{:else}
+												<!-- OPCION_UNICA / OPCION_MULTIPLE -->
+												{@const selectedIds = Array.isArray(respuesta.opcionesIds) ? respuesta.opcionesIds : []}
+												{#if selectedIds.length > 0}
+													<div class="space-y-1">
+														{#each respuesta.pregunta.opciones as opcion}
+															{@const fueSeleccionada = selectedIds.includes(opcion.id)}
+															{#if fueSeleccionada}
+																<div class="flex items-center gap-2 text-sm">
+																	{#if opcion.esCorrecta}
+																		<svg class="h-4 w-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+																			<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+																		</svg>
+																	{:else}
+																		<svg class="h-4 w-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+																			<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+																		</svg>
+																	{/if}
+																	<span class:text-green-700={opcion.esCorrecta} class:font-semibold={opcion.esCorrecta} class:text-red-700={!opcion.esCorrecta}>
+																		{opcion.texto}
+																	</span>
+																</div>
+															{/if}
+														{/each}
+													</div>
+												{:else}
+													<p class="text-sm text-gray-500">Sin respuesta</p>
+												{/if}
 											{/if}
 										</div>
 									</div>
