@@ -143,6 +143,14 @@
 			const data = await response.json();
 			if (data.success) {
 				evaluacion = data.data;
+				// Pre-inicializar items de relación para todas las preguntas de tipo RELACION
+				if (evaluacion?.preguntas) {
+					for (const pregunta of evaluacion.preguntas) {
+						if (pregunta.tipo === 'RELACION' && pregunta.relacionIzq?.length > 0) {
+							initRelacionItems(pregunta);
+						}
+					}
+				}
 			} else {
 				error = 'Evaluación no encontrada';
 			}
