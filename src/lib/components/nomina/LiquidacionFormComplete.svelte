@@ -32,6 +32,7 @@
 	let empresas: Empresa[] = [];
 	let configuracion: any[] = [];
 	let loadingData = true;
+	let datosInicialesCargados = false;
 
 	// Estado del formulario
 	let currentStep = 1;
@@ -238,7 +239,95 @@
 		// Cargar conceptos adicionales
 		conceptos_adicionales = initialData.conceptos_adicionales || [];
 
-		// TODO: Cargar detalles de vehículos (bonos, pernotes, recargos, mantenimientos)
+		// Marcar flag para que inicializarDetallesVehiculos cargue los datos existentes
+		datosInicialesCargados = false;
+	}
+
+	// Poblar detallesVehiculos con los datos existentes de la liquidación (bonos, recargos, pernotes, mantenimientos)
+	function cargarDetallesVehiculosDesdeData() {
+		if (!initialData || datosInicialesCargados) return;
+		datosInicialesCargados = true;
+
+		const bonificacionesData = initialData.bonificaciones || [];
+		const recargosData = initialData.recargos || [];
+		const pernotesData = initialData.pernotes || [];
+		const mantenimientosData = initialData.mantenimientos || [];
+
+		detallesVehiculos = detallesVehiculos.map(detalle => {
+			const vehiculoId = detalle.vehiculo.value;
+
+			// Cargar bonificaciones existentes para este vehículo
+			const bonosVehiculo = bonificacionesData.filter((b: any) => b.vehiculo_id === vehiculoId);
+			const bonosActualizados = detalle.bonos.map(bono => {
+				const bonoExistente = bonosVehiculo.find((b: any) => b.name === bono.name);
+				if (bonoExistente) {
+					const parsedValues = typeof bonoExistente.values === 'string'
+						? JSON.parse(bonoExistente.values)
+						: (bonoExistente.values || []);
+					return {
+						...bono,
+						value: Number(bonoExistente.value) || bono.value,
+						values: mesesRange.map(mes => {
+							const existing = parsedValues.find((v: any) => v.mes === mes);
+							return existing ? { mes, quantity: existing.quantity || 0 } : { mes, quantity: 0 };
+						})
+					};
+				}
+				return bono;
+			});
+
+			// Cargar mantenimientos existentes para este vehículo
+			const mantsVehiculo = mantenimientosData.filter((m: any) =>
+				(m.vehiculo_id || m.vehiculoId) === vehiculoId
+			);
+			const mantenimientosActualizados = detalle.mantenimientos.map(mant => {
+				const mantExistente = mantsVehiculo[0]; // Normalmente solo hay 1 mantenimiento por vehículo
+				if (mantExistente) {
+					const parsedValues = typeof mantExistente.values === 'string'
+						? JSON.parse(mantExistente.values)
+						: (mantExistente.values || []);
+					return {
+						...mant,
+						value: Number(mantExistente.value) || mant.value,
+						values: mesesRange.map(mes => {
+							const existing = parsedValues.find((v: any) => v.mes === mes);
+							return existing ? { mes, quantity: existing.quantity || 0 } : { mes, quantity: 0 };
+						})
+					};
+				}
+				return mant;
+			});
+
+			// Cargar pernotes existentes para este vehículo
+			const pernotesVehiculo = pernotesData
+				.filter((p: any) => p.vehiculo_id === vehiculoId)
+				.map((p: any) => ({
+					vehiculo_id: vehiculoId,
+					empresa_id: p.empresa_id || p.clientes?.id || '',
+					cantidad: p.cantidad || 0,
+					fechas: p.fechas || [],
+					valor: Number(p.valor) || 0
+				}));
+
+			// Cargar recargos existentes para este vehículo
+			const recargosVehiculo = recargosData
+				.filter((r: any) => r.vehiculo_id === vehiculoId)
+				.map((r: any) => ({
+					vehiculo_id: vehiculoId,
+					empresa_id: r.empresa_id || r.clientes?.id || '',
+					valor: Number(r.valor) || 0,
+					pag_cliente: r.pag_cliente || false,
+					mes: r.mes || ''
+				}));
+
+			return {
+				...detalle,
+				bonos: bonosActualizados,
+				mantenimientos: mantenimientosActualizados,
+				pernotes: pernotesVehiculo.length > 0 ? pernotesVehiculo : detalle.pernotes,
+				recargos: recargosVehiculo.length > 0 ? recargosVehiculo : detalle.recargos
+			};
+		});
 	}
 
 	// Actualizar meses cuando cambian las fechas
@@ -338,6 +427,11 @@
 				recargos: []
 			};
 		});
+
+		// En modo edición, poblar con datos existentes después de inicializar
+		if (mode === 'edit' && initialData && !datosInicialesCargados) {
+			cargarDetallesVehiculosDesdeData();
+		}
 	}
 
 	// Manejo de cambios en bonos
