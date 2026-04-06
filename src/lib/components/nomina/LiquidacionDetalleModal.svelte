@@ -443,7 +443,7 @@
 									<p class="text-base font-medium">{liquidacion.dias_laborados} días</p>
 								</div>
 								<div>
-									<p class="text-sm text-gray-500">Días en Villanueva</p>
+									<p class="text-sm text-gray-500">Días Ajuste Salarial</p>
 									<p class="text-base font-medium">
 										{liquidacion.dias_laborados_villanueva} días
 									</p>

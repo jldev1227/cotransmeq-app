@@ -35,6 +35,7 @@ export interface DiaLaboralPlanilla {
 	es_domingo: boolean;
 	pernocte: boolean;
 	disponibilidad: boolean;
+	continua_siguiente_dia?: boolean;
 	kilometraje_inicial?: number | null;
 	kilometraje_final?: number | null;
 	observaciones?: string;

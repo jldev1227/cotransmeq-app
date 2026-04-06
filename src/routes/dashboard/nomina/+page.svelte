@@ -721,7 +721,7 @@
 								<th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">Días Lab.</th>
 								<th class="px-4 py-3 text-right text-sm font-semibold text-gray-700">
 									<button on:click={() => toggleSort('monto')} class="ml-auto flex items-center gap-1 hover:text-orange-600 transition-colors">
-										Monto
+										Neto a Pagar
 										{#if sortBy === 'monto'}{#if sortOrder === 'desc'}<ChevronDown class="h-4 w-4 text-orange-600" />{:else}<ChevronUp class="h-4 w-4 text-orange-600" />{/if}{:else}<ChevronsUpDown class="h-4 w-4 text-gray-400" />{/if}
 									</button>
 								</th>
@@ -752,12 +752,12 @@
 									<td class="px-4 py-3 text-center">
 										<p class="font-semibold text-gray-900">{liq.dias_laborados ?? 0}</p>
 										{#if liq.dias_laborados_villanueva}
-											<p class="text-xs text-orange-600 font-medium">{liq.dias_laborados_villanueva} en Villa.</p>
+											<p class="text-xs text-orange-600 font-medium">{liq.dias_laborados_villanueva} Aj. Salarial</p>
 										{/if}
 									</td>
 									<td class="px-4 py-3 text-right">
-										<p class="text-lg font-bold text-gray-900">{formatCurrency(liq.total_devengado || 0)}</p>
-										<p class="text-xs text-gray-500">Devengado: {formatCurrency(liq.salario_devengado || 0)}</p>
+										<p class="text-lg font-bold text-emerald-700">{formatCurrency(liq.sueldo_total || 0)}</p>
+										<p class="text-xs text-gray-500">Neto a pagar</p>
 									</td>
 									<td class="px-4 py-3 text-center">
 										<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {getEstadoColor(liq.estado || 'Pendiente')}">

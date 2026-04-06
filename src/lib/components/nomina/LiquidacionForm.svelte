@@ -399,7 +399,7 @@
 							/>
 						</div>
 						<div>
-							<label class="block text-sm font-medium text-gray-700 mb-2">Días Villanueva</label>
+							<label class="block text-sm font-medium text-gray-700 mb-2">Días Ajuste Salarial</label>
 							<input
 								type="number"
 								bind:value={dias_laborados_villanueva}
@@ -433,7 +433,7 @@
 							<p class="text-sm text-gray-500 mt-1">{formatCurrency(salario_base)}</p>
 						</div>
 						<div>
-							<label class="block text-sm font-medium text-gray-700 mb-2">Salario Villanueva</label>
+							<label class="block text-sm font-medium text-gray-700 mb-2">Salario Ajuste Salarial</label>
 							<input
 								type="number"
 								bind:value={salario_villanueva}

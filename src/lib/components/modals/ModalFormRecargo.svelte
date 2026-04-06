@@ -52,8 +52,8 @@
 
         // Constantes para cálculo de recargos
         const HORAS_LIMITE = {
-                JORNADA_NORMAL: 9.33,   // 9 horas 20 minutos - extras (días normales)
-                JORNADA_FESTIVA: 7.33,  // 7 horas 20 minutos - extras (domingos/festivos)
+                JORNADA_NORMAL: 10.33,  // 10 horas 20 minutos - extras SIEMPRE empiezan después de esto
+                JORNADA_FESTIVA: 7.33,  // 7 horas 20 minutos - RD fijo para domingos/festivos
                 INICIO_NOCTURNO: 19,
                 FIN_NOCTURNO: 6
         };	// Obtener días festivos colombianos del año actual
@@ -119,6 +119,7 @@
 		es_festivo: boolean;
 		pernocte: boolean;
 		disponibilidad: boolean;
+		continua_siguiente_dia: boolean;
 	}
 
 	let diasLaborales: DiaLaboral[] = [
@@ -134,7 +135,8 @@
 			es_domingo: false,
 			es_festivo: false,
 			pernocte: false,
-			disponibilidad: false
+			disponibilidad: false,
+			continua_siguiente_dia: false
 		}
 	];
 
@@ -380,7 +382,8 @@
 					es_domingo: false,
 					es_festivo: false,
 					pernocte: false,
-					disponibilidad: false
+					disponibilidad: false,
+					continua_siguiente_dia: false
 				}
 			];
 		}
@@ -506,7 +509,33 @@
 			return { HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RNDF: 0, RN: 0, RD: 0 };
 		}
 
-		const esDomingoOFestivo = dia.es_domingo || dia.es_festivo;
+		// Si este día continúa al siguiente, combinar horas con el siguiente día
+		let horaFinEfectiva = horaFin;
+		let esDomingoOFestivo = dia.es_domingo || dia.es_festivo;
+		
+		if (dia.continua_siguiente_dia) {
+			const currentIndex = diasLaborales.findIndex(d => d.id === dia.id);
+			if (currentIndex >= 0 && currentIndex < diasLaborales.length - 1) {
+				const siguienteDia = diasLaborales[currentIndex + 1];
+				if (siguienteDia.hora_inicio && siguienteDia.hora_fin) {
+					const horasNextDia = calcularTotalHoras(siguienteDia.hora_inicio, siguienteDia.hora_fin);
+					horaFinEfectiva = horaFin + horasNextDia;
+				}
+			}
+		}
+
+		// Verificar si este día es el "siguiente" de uno que continúa
+		const currentIdx = diasLaborales.findIndex(d => d.id === dia.id);
+		if (currentIdx > 0) {
+			const diaAnterior = diasLaborales[currentIdx - 1];
+			if (diaAnterior.continua_siguiente_dia) {
+				// Este día ya fue contabilizado en el anterior, no generar recargos propios
+				return { HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RNDF: 0, RN: 0, RD: 0 };
+			}
+		}
+
+		const totalHorasEfectivas = calcularTotalHoras(horaInicio.toString(), horaFinEfectiva.toString());
+
 		let hed = 0,
 			hen = 0,
 			hefd = 0,
@@ -515,10 +544,8 @@
 			rn = 0,
 			rd = 0;
 
-		// Determinar jornada ordinaria según tipo de día
-		const jornadaOrdinaria = esDomingoOFestivo
-			? HORAS_LIMITE.JORNADA_FESTIVA
-			: HORAS_LIMITE.JORNADA_NORMAL;
+		// Extras SIEMPRE empiezan después de JORNADA_NORMAL (10.33h)
+		const umbralExtras = HORAS_LIMITE.JORNADA_NORMAL;
 
 		// Función helper para verificar si una hora es nocturna (19:00-06:00)
 		function esNocturna(hora: number): boolean {
@@ -530,15 +557,15 @@
 		let horaActual = horaInicio;
 		let horasAcumuladas = 0;
 
-		while (horaActual < horaFin) {
-			const siguienteHora = Math.min(horaActual + 0.5, horaFin);
+		while (horaActual < horaFinEfectiva) {
+			const siguienteHora = Math.min(horaActual + 0.5, horaFinEfectiva);
 			const fraccion = siguienteHora - horaActual;
 			const nocturna = esNocturna(horaActual);
-			const esExtra = horasAcumuladas >= jornadaOrdinaria;
+			const esExtra = horasAcumuladas >= umbralExtras;
 
 			if (esDomingoOFestivo) {
 				if (esExtra) {
-					// Horas extras en domingo/festivo
+					// Horas extras en domingo/festivo (después de 10.33h)
 					if (nocturna) {
 						hefn += fraccion;
 					} else {
@@ -546,18 +573,16 @@
 					}
 				} else {
 					// Jornada ordinaria en domingo/festivo
-					// Verificar si esta fracción cruza el límite de jornada
-					const horasRestantesJornada = jornadaOrdinaria - horasAcumuladas;
-					if (fraccion <= horasRestantesJornada) {
-						// Toda la fracción es jornada ordinaria
+					const horasRestantes = umbralExtras - horasAcumuladas;
+					if (fraccion <= horasRestantes) {
 						if (nocturna) {
 							rndf += fraccion;
 						} else {
 							rd += fraccion;
 						}
 					} else {
-						// Parte es jornada ordinaria, parte es extra
-						const parteOrdinaria = horasRestantesJornada;
+						// Parte ordinaria, parte extra
+						const parteOrdinaria = horasRestantes;
 						const parteExtra = fraccion - parteOrdinaria;
 						if (nocturna) {
 							rndf += parteOrdinaria;
@@ -571,30 +596,25 @@
 			} else {
 				// Día normal
 				if (esExtra) {
-					// Horas extras en día normal
 					if (nocturna) {
 						hen += fraccion;
 					} else {
 						hed += fraccion;
 					}
 				} else {
-					// Jornada ordinaria en día normal
-					const horasRestantesJornada = jornadaOrdinaria - horasAcumuladas;
-					if (fraccion <= horasRestantesJornada) {
-						// Jornada ordinaria normal: solo recargo si es nocturna
+					const horasRestantes = umbralExtras - horasAcumuladas;
+					if (fraccion <= horasRestantes) {
 						if (nocturna) {
 							rn += fraccion;
 						}
 						// Diurna ordinaria en día normal = no genera recargo
 					} else {
-						// Parte ordinaria, parte extra
-						const parteOrdinaria = horasRestantesJornada;
+						const parteOrdinaria = horasRestantes;
 						const parteExtra = fraccion - parteOrdinaria;
 						if (nocturna) {
 							rn += parteOrdinaria;
 							hen += parteExtra;
 						} else {
-							// parteOrdinaria diurna = sin recargo
 							hed += parteExtra;
 						}
 					}
@@ -870,7 +890,8 @@
 						es_domingo: false,
 						es_festivo: false,
 						pernocte: false,
-						disponibilidad: false
+						disponibilidad: false,
+						continua_siguiente_dia: false
 					}));
 					diasLaborales = [...diasLaborales, ...filasNuevas];
 				} else {
@@ -979,7 +1000,8 @@
 						es_domingo: dia.es_domingo || false,
 						es_festivo: dia.es_festivo || false,
 						pernocte: dia.pernocte || false,
-						disponibilidad: dia.disponibilidad || false
+						disponibilidad: dia.disponibilidad || false,
+						continua_siguiente_dia: dia.continua_siguiente_dia || false
 					}));
 
 					console.log('✅ Días laborales cargados:', diasLaborales);
@@ -1042,7 +1064,8 @@
 				es_domingo: false,
 				es_festivo: false,
 				pernocte: false,
-				disponibilidad: false
+				disponibilidad: false,
+				continua_siguiente_dia: false
 			}
 		];
 		archivoAdjunto = null;
@@ -1135,7 +1158,8 @@
 						es_domingo: esDomingo(parseInt(dia.dia), currentMonth, currentYear),
 						es_festivo: dia.es_festivo,
 						pernocte: dia.pernocte,
-						disponibilidad: dia.disponibilidad
+						disponibilidad: dia.disponibilidad,
+						continua_siguiente_dia: dia.continua_siguiente_dia || false
 					}))
 				};
 				console.log('📤 Datos de actualización a enviar:', JSON.stringify(updateData, null, 2));
@@ -1209,7 +1233,8 @@
 						es_domingo: esDomingo(parseInt(dia.dia), currentMonth, currentYear),
 						es_festivo: dia.es_festivo,
 						pernocte: dia.pernocte,
-						disponibilidad: dia.disponibilidad
+						disponibilidad: dia.disponibilidad,
+						continua_siguiente_dia: dia.continua_siguiente_dia || false
 					}))
 				};
 				console.log('📤 Datos a enviar al backend:', JSON.stringify(recargoData, null, 2));
@@ -2593,6 +2618,12 @@
 										</th>
 										<th
 											class="px-3 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase"
+											title="Continúa al día siguiente"
+										>
+											Cont.
+										</th>
+										<th
+											class="px-3 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase"
 										>
 											Total (h)
 										</th>
@@ -2797,6 +2828,19 @@
 													class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
 												/>
 											</td>
+
+											<!-- Continúa día siguiente -->
+											<td class="px-3 py-2 text-center">
+												<input
+													type="checkbox"
+													bind:checked={dia.continua_siguiente_dia}
+													on:change={(e) =>
+														actualizarDiaLaboral(dia.id, 'continua_siguiente_dia', e.currentTarget.checked)}
+													class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+													title="Marcar si el servicio continúa al día siguiente"
+												/>
+											</td>
+
 											<!-- Total Horas -->
 											<td class="px-3 py-2 text-center whitespace-nowrap">
 												<span class="text-sm font-semibold {dia.disponibilidad ? 'text-green-600' : 'text-gray-700'}">

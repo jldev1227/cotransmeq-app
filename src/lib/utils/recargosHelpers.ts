@@ -4,8 +4,8 @@
  * Constantes para cálculo de recargos
  */
 export const HORAS_LIMITE = {
-	JORNADA_NORMAL: 9.33, // 9 horas 20 minutos - extras empiezan después de esto (días normales)
-	JORNADA_FESTIVA: 7.33, // 7 horas 20 minutos - extras empiezan después de esto (domingos/festivos)
+	JORNADA_NORMAL: 10.33, // 10 horas 20 minutos - extras SIEMPRE empiezan después de esto
+	JORNADA_FESTIVA: 7.33, // 7 horas 20 minutos - RD fijo para domingos/festivos (NO es umbral de extras)
 	INICIO_NOCTURNO: 19, // 19:00 (7 PM)
 	FIN_NOCTURNO: 6 // 06:00 (6 AM)
 } as const;
@@ -334,6 +334,7 @@ export function calcularHEN(
 
 /**
  * Calcular Hora Extra Festiva Diurna (HEFD) - mantener para compatibilidad
+ * Extras SIEMPRE después de 10.33h, incluso en festivos
  */
 export function calcularHEFD(
 	dia: number,
@@ -345,16 +346,17 @@ export function calcularHEFD(
 	diasFestivos: number[] = []
 ): number {
 	if (!esDomingoOFestivo(dia, mes, año, diasFestivos)) return 0;
-	if (totalHoras <= HORAS_LIMITE.JORNADA_FESTIVA) return 0;
+	if (totalHoras <= HORAS_LIMITE.JORNADA_NORMAL) return 0;
 
-	const extras = totalHoras - HORAS_LIMITE.JORNADA_FESTIVA;
-	const extNoc = calcularExtrasNocturnas(horaInicio, horaFin, totalHoras, HORAS_LIMITE.JORNADA_FESTIVA);
+	const extras = totalHoras - HORAS_LIMITE.JORNADA_NORMAL;
+	const extNoc = calcularExtrasNocturnas(horaInicio, horaFin, totalHoras, HORAS_LIMITE.JORNADA_NORMAL);
 
 	return redondear(extras - extNoc);
 }
 
 /**
  * Calcular Hora Extra Festiva Nocturna (HEFN) - mantener para compatibilidad
+ * Extras SIEMPRE después de 10.33h, incluso en festivos
  */
 export function calcularHEFN(
 	dia: number,
@@ -366,9 +368,9 @@ export function calcularHEFN(
 	diasFestivos: number[] = []
 ): number {
 	if (!esDomingoOFestivo(dia, mes, año, diasFestivos)) return 0;
-	if (totalHoras <= HORAS_LIMITE.JORNADA_FESTIVA) return 0;
+	if (totalHoras <= HORAS_LIMITE.JORNADA_NORMAL) return 0;
 
-	const extNoc = calcularExtrasNocturnas(horaInicio, horaFin, totalHoras, HORAS_LIMITE.JORNADA_FESTIVA);
+	const extNoc = calcularExtrasNocturnas(horaInicio, horaFin, totalHoras, HORAS_LIMITE.JORNADA_NORMAL);
 
 	return redondear(extNoc);
 }
@@ -376,6 +378,7 @@ export function calcularHEFN(
 /**
  * Calcular Recargo Nocturno (RN) - SOLO horas nocturnas dentro de la jornada ordinaria
  * NO incluye horas nocturnas que son extras (esas van a HEN o HEFN)
+ * Jornada ordinaria = 10.33h SIEMPRE
  */
 export function calcularRecargoNocturno(horaInicio: number, horaFin: number, totalHoras?: number, esDomFest?: boolean): number {
 	// Si no se pasan parámetros extra, usar lógica legacy para compatibilidad
@@ -394,8 +397,8 @@ export function calcularRecargoNocturno(horaInicio: number, horaFin: number, tot
 		return redondear(recargoNocturno);
 	}
 
-	// Nueva lógica: solo horas nocturnas dentro de la jornada ordinaria
-	const jornadaOrdinaria = esDomFest ? HORAS_LIMITE.JORNADA_FESTIVA : HORAS_LIMITE.JORNADA_NORMAL;
+	// Nueva lógica: solo horas nocturnas dentro de la jornada ordinaria (10.33h SIEMPRE)
+	const jornadaOrdinaria = HORAS_LIMITE.JORNADA_NORMAL; // 10.33h siempre
 	const horaFinJornada = Math.min(horaInicio + jornadaOrdinaria, horaFin);
 	let recargoNocturno = 0;
 
@@ -411,8 +414,9 @@ export function calcularRecargoNocturno(horaInicio: number, horaFin: number, tot
 }
 
 /**
- * Calcular Recargo Dominical (RD) - SOLO horas DIURNAS dentro de la jornada ordinaria
- * Las horas nocturnas de la jornada ya van a RNDF
+ * Calcular Recargo Dominical (RD) - Horas diurnas en domingos/festivos
+ * RD = min(totalHoras, jornadaOrdinaria) - horas nocturnas dentro de esa jornada
+ * La jornada para RD en festivos se extiende hasta 10.33h (no solo 7.33h)
  */
 export function calcularRecargoDominical(
 	dia: number,
@@ -428,12 +432,12 @@ export function calcularRecargoDominical(
 	// Si no se pasan hora_inicio/fin, usar lógica legacy
 	if (horaInicio === undefined || horaFin === undefined) {
 		return redondear(
-			totalHoras <= HORAS_LIMITE.JORNADA_FESTIVA ? totalHoras : HORAS_LIMITE.JORNADA_FESTIVA
+			totalHoras <= HORAS_LIMITE.JORNADA_NORMAL ? totalHoras : HORAS_LIMITE.JORNADA_NORMAL
 		);
 	}
 
-	// Nueva lógica: RD = jornada ordinaria - horas nocturnas dentro de la jornada
-	const jornadaReal = Math.min(totalHoras, HORAS_LIMITE.JORNADA_FESTIVA);
+	// Nueva lógica: RD = jornada ordinaria (hasta 10.33h) - horas nocturnas dentro de la jornada
+	const jornadaReal = Math.min(totalHoras, HORAS_LIMITE.JORNADA_NORMAL);
 	const horaFinJornada = Math.min(horaInicio + jornadaReal, horaFin);
 	
 	// Calcular horas nocturnas dentro de la jornada ordinaria
@@ -451,13 +455,16 @@ export function calcularRecargoDominical(
 
 /**
  * Calcular todos los recargos de un día
- * Lógica unificada:
- * - Jornada ordinaria (primeras 7.33h festivo / 9.33h normal):
- *     Nocturnas → RNDF (dom/fest) o RN (normal)
- *     Diurnas → RD (dom/fest) o sin recargo (normal)
- * - Horas extras (después de la jornada):
- *     Nocturnas → HEFN (dom/fest) o HEN (normal)
- *     Diurnas → HEFD (dom/fest) o HED (normal)
+ * Lógica unificada Cotransmeq:
+ * - Extras SIEMPRE empiezan después de 10.33h (JORNADA_NORMAL), sin importar si es festivo o normal
+ * - Para domingos/festivos:
+ *     RD = min(totalHoras, 7.33) fijo (horas diurnas de la jornada ordinaria festiva)
+ *     RNDF = horas nocturnas dentro de la jornada ordinaria festiva (primeras 7.33h)
+ *     Horas entre 7.33 y 10.33 = jornada ordinaria festiva adicional (RD diurno / RNDF nocturno)
+ *     Después de 10.33h → HEFD (diurnas) / HEFN (nocturnas)
+ * - Para días normales:
+ *     RN = horas nocturnas dentro de la jornada ordinaria (primeras 10.33h)
+ *     Después de 10.33h → HED (diurnas) / HEN (nocturnas)
  */
 export interface RecargosCalculados {
 	totalHoras: number;
@@ -486,10 +493,8 @@ export function calcularRecargos(params: {
 	const totalHoras = calcularHorasTrabajadas(horaInicio, horaFin);
 	const esDomFest = esDomingoOFestivo(dia, mes, año, diasFestivos);
 
-	// Determinar jornada ordinaria según tipo de día
-	const jornadaOrdinaria = esDomFest
-		? HORAS_LIMITE.JORNADA_FESTIVA
-		: HORAS_LIMITE.JORNADA_NORMAL;
+	// Extras SIEMPRE empiezan después de JORNADA_NORMAL (10.33h)
+	const umbralExtras = HORAS_LIMITE.JORNADA_NORMAL;
 
 	// Función helper para verificar si una hora es nocturna (19:00-06:00)
 	function esNocturna(hora: number): boolean {
@@ -507,17 +512,38 @@ export function calcularRecargos(params: {
 		const siguienteHora = Math.min(horaActual + 0.5, horaFin);
 		const fraccion = siguienteHora - horaActual;
 		const nocturna = esNocturna(horaActual);
-		const esExtra = horasAcumuladas >= jornadaOrdinaria;
+		const esExtra = horasAcumuladas >= umbralExtras;
 
 		if (esDomFest) {
 			if (esExtra) {
+				// Horas extras en domingo/festivo (después de 10.33h)
 				if (nocturna) { hefn += fraccion; } else { hefd += fraccion; }
 			} else {
-				const horasRestantesJornada = jornadaOrdinaria - horasAcumuladas;
-				if (fraccion <= horasRestantesJornada) {
-					if (nocturna) { rndf += fraccion; } else { rd += fraccion; }
+				// Jornada ordinaria en domingo/festivo
+				const horasRestantes = umbralExtras - horasAcumuladas;
+				if (fraccion <= horasRestantes) {
+					// Toda la fracción es jornada ordinaria
+					// RD = solo horas diurnas dentro de las primeras 7.33h
+					if (horasAcumuladas < HORAS_LIMITE.JORNADA_FESTIVA) {
+						const dentroRD = Math.min(fraccion, HORAS_LIMITE.JORNADA_FESTIVA - horasAcumuladas);
+						const fueraRD = fraccion - dentroRD;
+						if (nocturna) {
+							rndf += dentroRD;
+							// Horas nocturnas entre 7.33-10.33 siguen siendo RNDF
+							rndf += fueraRD;
+						} else {
+							rd += dentroRD;
+							// Horas diurnas entre 7.33-10.33: no generan recargo extra (ya están en jornada)
+							// pero siguen contando como RD ya que es domingo/festivo
+							rd += fueraRD;
+						}
+					} else {
+						// Ya pasó las 7.33h pero aún no llega a 10.33h (extras)
+						if (nocturna) { rndf += fraccion; } else { rd += fraccion; }
+					}
 				} else {
-					const parteOrdinaria = horasRestantesJornada;
+					// Parte ordinaria, parte extra
+					const parteOrdinaria = horasRestantes;
 					const parteExtra = fraccion - parteOrdinaria;
 					if (nocturna) {
 						rndf += parteOrdinaria;
@@ -529,15 +555,16 @@ export function calcularRecargos(params: {
 				}
 			}
 		} else {
+			// Día normal
 			if (esExtra) {
 				if (nocturna) { hen += fraccion; } else { hed += fraccion; }
 			} else {
-				const horasRestantesJornada = jornadaOrdinaria - horasAcumuladas;
-				if (fraccion <= horasRestantesJornada) {
+				const horasRestantes = umbralExtras - horasAcumuladas;
+				if (fraccion <= horasRestantes) {
 					if (nocturna) { rn += fraccion; }
 					// Diurna ordinaria en día normal = no genera recargo
 				} else {
-					const parteOrdinaria = horasRestantesJornada;
+					const parteOrdinaria = horasRestantes;
 					const parteExtra = fraccion - parteOrdinaria;
 					if (nocturna) {
 						rn += parteOrdinaria;

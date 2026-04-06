@@ -198,10 +198,15 @@ export interface Liquidacion {
 	tiene_ajuste: boolean;
 	ajuste_por_dia_flag: boolean;
 	ajuste_parex: boolean;
+	ajuste_recargos_config?: {
+		mode: 'empresas' | 'total';
+		empresa_ids: string[];
+		porcentaje: number;
+		detalle?: { empresa_id: string; empresa_nombre: string; total_recargos: number; ajuste: number }[];
+	} | null;
 	no_descontar_salud: boolean;
 	no_descontar_pension: boolean;
 	descontar_transporte: boolean;
-	es_cotransmeq?: boolean;
 
 	// Conceptos adicionales
 	conceptos_adicionales?: ConceptoAdicional[];
@@ -213,6 +218,9 @@ export interface Liquidacion {
 	total_deducido: number;
 	neto_pagado: number;
 	sueldo_total?: number;
+
+	// Valor ajuste parex (legado)
+	ajuste_parex_valor?: number;
 
 	// Relaciones
 	conductor?: Conductor;
@@ -245,6 +253,10 @@ export interface Liquidacion {
 	periodo_start_incapacidad?: string;
 	periodo_end_incapacidad?: string;
 	ajuste_salarial?: number;
+	disponibilidad?: number;
+
+	// Flag adicional
+	es_cotransmeq?: boolean;
 }
 
 // ==================== CONFIGURACIÓN ====================
@@ -295,6 +307,12 @@ export interface CreateLiquidacionPayload {
 	tiene_ajuste: boolean;
 	ajuste_por_dia_flag: boolean;
 	ajuste_parex: boolean;
+	ajuste_recargos_config?: {
+		mode: 'empresas' | 'total';
+		empresa_ids: string[];
+		porcentaje: number;
+		detalle?: { empresa_id: string; empresa_nombre: string; total_recargos: number; ajuste: number }[];
+	} | null;
 	no_descontar_salud: boolean;
 	no_descontar_pension: boolean;
 	descontar_transporte: boolean;
@@ -304,6 +322,7 @@ export interface CreateLiquidacionPayload {
 	periodo_incapacidad_fin?: string;
 	ajuste_valor?: number;
 	ajuste_por_dia?: number;
+	ajuste_parex_valor?: number;
 	cesantias?: number;
 	interes_cesantias?: number;
 	prima?: number;

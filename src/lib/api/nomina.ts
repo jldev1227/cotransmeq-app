@@ -143,11 +143,22 @@ export const obtenerEmpresas = async () => {
 // ==================== CONFIGURACIÓN ====================
 
 /**
- * Obtener configuración de liquidación
+ * Obtener configuraciones de liquidación (filtrar por año opcional)
  */
-export const obtenerConfiguracion = async () => {
-	const response = await apiClient.get<{ data: ConfiguracionLiquidacion }>(
-		'/api/configuraciones-liquidacion'
+export const obtenerConfiguracion = async (anio?: number) => {
+	const params = anio ? `?anio=${anio}` : '';
+	const response = await apiClient.get<{ data: ConfiguracionLiquidacion[] }>(
+		`/api/configuraciones-liquidacion${params}`
+	);
+	return response.data;
+};
+
+/**
+ * Obtener años disponibles de configuraciones
+ */
+export const obtenerAniosConfiguraciones = async () => {
+	const response = await apiClient.get<{ data: number[] }>(
+		'/api/configuraciones-liquidacion/anios'
 	);
 	return response.data;
 };

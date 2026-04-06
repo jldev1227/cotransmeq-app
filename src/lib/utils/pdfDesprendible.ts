@@ -1,11 +1,14 @@
 /**
  * Generador de PDF Desprendible de Nómina usando pdfmake
- * Portado de pdfMaker.tsx (@react-pdf/renderer) a pdfmake
+ * COTRANSMEQ - Siempre usa branding Cotransmeq
  */
 import type { Liquidacion, FirmaConUrl } from '$lib/types/nomina';
 import { obtenerLogoBase64 } from '$lib/utils/pdfUtils';
 
 const PAREX_EMPRESA_ID = 'cfb258a6-448c-4469-aa71-8eeafa4530ef';
+const EMPRESA = 'SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S';
+const NIT = '901983227';
+const COLOR = '#1e40af'; // Azul Cotransmeq
 
 function formatCurrency(value: number | string | null | undefined): string {
 	const num = Number(value) || 0;
@@ -63,18 +66,15 @@ export async function generarPdfDesprendible(
 	const pdfFonts = (await import('pdfmake/build/vfs_fonts')).default;
 	pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts.vfs;
 
-	const esCotransmeq = item.es_cotransmeq || false;
-	const color = esCotransmeq ? '#FF9500' : '#2E8B57';
-	const empresa = esCotransmeq
-		? 'SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S'
-		: 'TRANSPORTES Y SERVICIOS ESMERALDA S.A.S';
-	const nit = esCotransmeq ? '901983227' : '901528440-3';
+	const color = COLOR;
+	const empresa = EMPRESA;
+	const nit = NIT;
 
 	const conductorNombre = `${safeValue(item.conductor?.nombre, 'N/A')}`;
 	const conductorCedula = safeValue((item.conductor as any)?.cedula, 'N/A');
 
 	// Cargar logo
-	const logoBase64 = await obtenerLogoBase64(esCotransmeq);
+	const logoBase64 = await obtenerLogoBase64();
 
 	// Recargos PAREX
 	const recargosParex = item.recargos?.filter((r) => r.empresa_id === PAREX_EMPRESA_ID) || [];
@@ -149,7 +149,7 @@ export async function generarPdfDesprendible(
 		{
 			text: `${Number(c.valor) < 0 ? '' : '+'}${formatCurrency(c.valor)}`,
 			alignment: 'right' as const,
-			color: Number(c.valor) < 0 ? '#e60f0f' : '#2E8B57'
+			color: Number(c.valor) < 0 ? '#e60f0f' : COLOR
 		}
 	]);
 
@@ -186,7 +186,7 @@ export async function generarPdfDesprendible(
 					width: '*'
 				},
 				...(logoBase64
-					? [{ image: logoBase64, width: 175, height: 100, alignment: 'right' as const, margin: [0, -15, -30, 0] }]
+					? [{ image: logoBase64, width: 140, height: 80, alignment: 'right' as const, margin: [0, -5, 0, 0] }]
 					: [])
 			]
 		},
@@ -216,7 +216,7 @@ export async function generarPdfDesprendible(
 						{ text: 'Salario devengado', bold: false },
 						{
 							text: formatCurrency(item.salario_devengado),
-							color: '#007AFF',
+							color: COLOR,
 							alignment: 'right' as const
 						}
 					],
@@ -241,7 +241,7 @@ export async function generarPdfDesprendible(
 							]
 						: []),
 					[
-						{ text: 'Ajuste villanueva', bold: false },
+						{ text: 'Ajuste salarial', bold: false },
 						{
 							columns: [
 								{
@@ -250,7 +250,7 @@ export async function generarPdfDesprendible(
 								},
 								{
 									text: formatCurrency(item.ajuste_salarial || 0),
-									color: '#FF9500',
+									color: '#2563eb',
 									alignment: 'right' as const,
 									width: '*'
 								}
@@ -379,7 +379,7 @@ export async function generarPdfDesprendible(
 			{ text: 'Vacaciones' },
 			{
 				text: formatCurrency(item.total_vacaciones),
-				color: '#FF9500',
+				color: '#2563eb',
 				alignment: 'right' as const
 			}
 		]);
