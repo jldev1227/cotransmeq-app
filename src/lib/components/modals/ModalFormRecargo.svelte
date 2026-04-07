@@ -491,8 +491,22 @@
 		return Math.abs(fin - inicio);
 	}
 
+	/**
+	 * Calcula recargos de un turno continuo (puede abarcar 2 días).
+	 * Retorna un objeto con los recargos que corresponden SOLO al día solicitado.
+	 *
+	 * Lógica de continuidad:
+	 * - Si día X tiene continua_siguiente_dia=true, se arma un turno combinado
+	 *   desde hora_inicio de X hasta hora_fin de X + horas del día X+1.
+	 *   La jornada (10.33h) aplica al turno completo.
+	 *   Pero solo se retornan los recargos de las horas que pertenecen a día X.
+	 * - Si día Y es el "siguiente" de uno que continúa, se calcula el turno
+	 *   combinado desde el día anterior y se retornan solo los recargos de
+	 *   las horas que pertenecen a día Y.
+	 * - Cada fracción horaria usa el estado festivo/domingo del día calendario
+	 *   real al que pertenece (puede cambiar al cruzar medianoche).
+	 */
 	function calcularRecargos(dia: DiaLaboral) {
-		const diaNum = parseInt(dia.dia);
 		const horaInicio =
 			typeof dia.hora_inicio === 'string' ? parseFloat(dia.hora_inicio) : dia.hora_inicio || 0;
 		const horaFin = typeof dia.hora_fin === 'string' ? parseFloat(dia.hora_fin) : dia.hora_fin || 0;
@@ -509,113 +523,150 @@
 			return { HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RNDF: 0, RN: 0, RD: 0 };
 		}
 
-		// Si este día continúa al siguiente, combinar horas con el siguiente día
-		let horaFinEfectiva = horaFin;
-		let esDomingoOFestivo = dia.es_domingo || dia.es_festivo;
-		
-		if (dia.continua_siguiente_dia) {
-			const currentIndex = diasLaborales.findIndex(d => d.id === dia.id);
-			if (currentIndex >= 0 && currentIndex < diasLaborales.length - 1) {
-				const siguienteDia = diasLaborales[currentIndex + 1];
-				if (siguienteDia.hora_inicio && siguienteDia.hora_fin) {
-					const horasNextDia = calcularTotalHoras(siguienteDia.hora_inicio, siguienteDia.hora_fin);
-					horaFinEfectiva = horaFin + horasNextDia;
-				}
-			}
-		}
+		const currentIdx = diasLaborales.findIndex(d => d.id === dia.id);
+
+		// Determinar si estamos en un turno continuo y cuál es el rango completo
+		let turnoInicio: number;       // hora absoluta de inicio del turno combinado
+		let turnoFin: number;          // hora absoluta de fin del turno combinado
+		let limiteInferior: number;    // hora absoluta donde empieza "mi" día
+		let limiteSuperior: number;    // hora absoluta donde termina "mi" día
+		let diaAnterior: DiaLaboral | null = null;
+		let diaSiguiente: DiaLaboral | null = null;
+		let esContinuacion = false;    // true si este día es el "siguiente" de uno que continúa
 
 		// Verificar si este día es el "siguiente" de uno que continúa
-		const currentIdx = diasLaborales.findIndex(d => d.id === dia.id);
 		if (currentIdx > 0) {
-			const diaAnterior = diasLaborales[currentIdx - 1];
+			diaAnterior = diasLaborales[currentIdx - 1];
 			if (diaAnterior.continua_siguiente_dia) {
-				// Este día ya fue contabilizado en el anterior, no generar recargos propios
-				return { HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RNDF: 0, RN: 0, RD: 0 };
+				esContinuacion = true;
 			}
 		}
 
-		const totalHorasEfectivas = calcularTotalHoras(horaInicio.toString(), horaFinEfectiva.toString());
+		if (esContinuacion && diaAnterior) {
+			// Este día es la continuación: el turno empezó en el día anterior
+			const prevInicio = typeof diaAnterior.hora_inicio === 'string' ? parseFloat(diaAnterior.hora_inicio) : diaAnterior.hora_inicio || 0;
+			const prevFin = typeof diaAnterior.hora_fin === 'string' ? parseFloat(diaAnterior.hora_fin) : diaAnterior.hora_fin || 0;
 
-		let hed = 0,
-			hen = 0,
-			hefd = 0,
-			hefn = 0,
-			rndf = 0,
-			rn = 0,
-			rd = 0;
+			turnoInicio = prevInicio;
+			turnoFin = prevFin + totalHoras; // prevFin + horas del día actual
+			limiteInferior = prevFin;         // mi día empieza donde terminó el anterior
+			limiteSuperior = turnoFin;
+		} else if (dia.continua_siguiente_dia) {
+			// Este día continúa al siguiente: calcular turno combinado
+			turnoInicio = horaInicio;
+			turnoFin = horaFin;
+			limiteInferior = horaInicio;
+			limiteSuperior = horaFin;
 
-		// Extras SIEMPRE empiezan después de JORNADA_NORMAL (10.33h)
+			if (currentIdx >= 0 && currentIdx < diasLaborales.length - 1) {
+				diaSiguiente = diasLaborales[currentIdx + 1];
+				if (diaSiguiente.hora_inicio && diaSiguiente.hora_fin) {
+					const nextHoras = calcularTotalHoras(diaSiguiente.hora_inicio, diaSiguiente.hora_fin);
+					turnoFin = horaFin + nextHoras;
+				}
+			}
+		} else {
+			// Día normal sin continuidad
+			turnoInicio = horaInicio;
+			turnoFin = horaFin;
+			limiteInferior = horaInicio;
+			limiteSuperior = horaFin;
+		}
+
+		// Datos del día actual y del otro día para determinar festivo/domingo
+		const esDomFestDia1 = esContinuacion && diaAnterior
+			? (diaAnterior.es_domingo || diaAnterior.es_festivo)
+			: (dia.es_domingo || dia.es_festivo);
+		const esDomFestDia2 = esContinuacion
+			? (dia.es_domingo || dia.es_festivo)
+			: (diaSiguiente ? (diaSiguiente.es_domingo || diaSiguiente.es_festivo) : esDomFestDia1);
+
+		// El punto de corte entre día 1 y día 2 del turno (donde termina el primer día)
+		const puntoCorte = esContinuacion && diaAnterior
+			? (typeof diaAnterior.hora_fin === 'string' ? parseFloat(diaAnterior.hora_fin) : diaAnterior.hora_fin || 0)
+			: horaFin;
+
+		let hed = 0, hen = 0, hefd = 0, hefn = 0, rndf = 0, rn = 0, rd = 0;
+
 		const umbralExtras = HORAS_LIMITE.JORNADA_NORMAL;
 
-		// Función helper para verificar si una hora es nocturna (19:00-06:00)
 		function esNocturna(hora: number): boolean {
 			const h = normalizarHora(hora);
 			return h >= HORAS_LIMITE.INICIO_NOCTURNO || h < HORAS_LIMITE.FIN_NOCTURNO;
 		}
 
-		// Recorrer cada fracción de hora y clasificarla
-		let horaActual = horaInicio;
+		// Descuento de almuerzo (12:00-13:00): aplica cuando el turno inicia antes de las 6am
+		// y cubre la franja del mediodía. Las fracciones en ese rango no cuentan para horasAcumuladas.
+		const inicioTurnoNorm = normalizarHora(turnoInicio);
+		const aplicaDescuentoAlmuerzo = inicioTurnoNorm < HORAS_LIMITE.FIN_NOCTURNO && turnoFin > 13;
+		const ALMUERZO_INICIO = 12;
+		const ALMUERZO_FIN = 13;
+
+		function esHoraAlmuerzo(hora: number): boolean {
+			if (!aplicaDescuentoAlmuerzo) return false;
+			const h = normalizarHora(hora);
+			return h >= ALMUERZO_INICIO && h < ALMUERZO_FIN;
+		}
+
+		// Recorrer TODO el turno combinado pero solo acumular recargos de "mi" día
+		let horaActual = turnoInicio;
 		let horasAcumuladas = 0;
 
-		while (horaActual < horaFinEfectiva) {
-			const siguienteHora = Math.min(horaActual + 0.5, horaFinEfectiva);
+		while (horaActual < turnoFin) {
+			const siguienteHora = Math.min(horaActual + 0.5, turnoFin);
 			const fraccion = siguienteHora - horaActual;
+
+			// Si es hora de almuerzo (12-13) y aplica descuento, saltar esta fracción
+			if (esHoraAlmuerzo(horaActual)) {
+				horaActual = siguienteHora;
+				continue;
+			}
+
 			const nocturna = esNocturna(horaActual);
 			const esExtra = horasAcumuladas >= umbralExtras;
 
-			if (esDomingoOFestivo) {
-				if (esExtra) {
-					// Horas extras en domingo/festivo (después de 10.33h)
-					if (nocturna) {
-						hefn += fraccion;
+			// Determinar si esta fracción pertenece a "mi" día
+			const esMiDia = horaActual >= limiteInferior && horaActual < limiteSuperior;
+
+			// Determinar si esta fracción es festivo/domingo según el día calendario real
+			const esDomFest = horaActual < puntoCorte ? esDomFestDia1 : esDomFestDia2;
+
+			if (esMiDia) {
+				if (esDomFest) {
+					if (esExtra) {
+						if (nocturna) { hefn += fraccion; } else { hefd += fraccion; }
 					} else {
-						hefd += fraccion;
+						const horasRestantes = umbralExtras - horasAcumuladas;
+						if (fraccion <= horasRestantes) {
+							if (nocturna) { rndf += fraccion; } else { rd += fraccion; }
+						} else {
+							const parteOrdinaria = horasRestantes;
+							const parteExtra = fraccion - parteOrdinaria;
+							if (nocturna) {
+								rndf += parteOrdinaria;
+								hefn += parteExtra;
+							} else {
+								rd += parteOrdinaria;
+								hefd += parteExtra;
+							}
+						}
 					}
 				} else {
-					// Jornada ordinaria en domingo/festivo
-					const horasRestantes = umbralExtras - horasAcumuladas;
-					if (fraccion <= horasRestantes) {
-						if (nocturna) {
-							rndf += fraccion;
-						} else {
-							rd += fraccion;
-						}
+					if (esExtra) {
+						if (nocturna) { hen += fraccion; } else { hed += fraccion; }
 					} else {
-						// Parte ordinaria, parte extra
-						const parteOrdinaria = horasRestantes;
-						const parteExtra = fraccion - parteOrdinaria;
-						if (nocturna) {
-							rndf += parteOrdinaria;
-							hefn += parteExtra;
+						const horasRestantes = umbralExtras - horasAcumuladas;
+						if (fraccion <= horasRestantes) {
+							if (nocturna) { rn += fraccion; }
 						} else {
-							rd += parteOrdinaria;
-							hefd += parteExtra;
-						}
-					}
-				}
-			} else {
-				// Día normal
-				if (esExtra) {
-					if (nocturna) {
-						hen += fraccion;
-					} else {
-						hed += fraccion;
-					}
-				} else {
-					const horasRestantes = umbralExtras - horasAcumuladas;
-					if (fraccion <= horasRestantes) {
-						if (nocturna) {
-							rn += fraccion;
-						}
-						// Diurna ordinaria en día normal = no genera recargo
-					} else {
-						const parteOrdinaria = horasRestantes;
-						const parteExtra = fraccion - parteOrdinaria;
-						if (nocturna) {
-							rn += parteOrdinaria;
-							hen += parteExtra;
-						} else {
-							hed += parteExtra;
+							const parteOrdinaria = horasRestantes;
+							const parteExtra = fraccion - parteOrdinaria;
+							if (nocturna) {
+								rn += parteOrdinaria;
+								hen += parteExtra;
+							} else {
+								hed += parteExtra;
+							}
 						}
 					}
 				}
@@ -623,6 +674,58 @@
 
 			horasAcumuladas += fraccion;
 			horaActual = siguienteHora;
+		}
+
+		// Post-procesamiento para días festivos/dominicales:
+		// 1. RNDF = horas nocturnas ordinarias de MADRUGADA (antes de 6am) en festivo
+		// 2. RD = min(horas_ordinarias_festivas, 7.33) - RNDF
+		// 3. Las horas nocturnas ordinarias DESPUÉS de las 19:00 no generan RNDF
+		//    (se consideran parte de la jornada normal sin recargo adicional)
+		const hayFraccionesFestivas = esDomFestDia1 || esDomFestDia2;
+		if (hayFraccionesFestivas) {
+			// Recalcular RNDF: solo horas nocturnas de MADRUGADA (antes de 6am) en fracciones festivas ordinarias
+			let rndfRecalculado = 0;
+			let rdRecalculado = 0;
+			let h = turnoInicio;
+			let hAcum = 0;
+			while (h < turnoFin) {
+				const sig = Math.min(h + 0.5, turnoFin);
+				const frac = sig - h;
+
+				// Saltar almuerzo igual que en el bucle principal
+				if (esHoraAlmuerzo(h)) {
+					h = sig;
+					continue;
+				}
+
+				const esMiDia = h >= limiteInferior && h < limiteSuperior;
+				const esDomFest = h < puntoCorte ? esDomFestDia1 : esDomFestDia2;
+				const esOrdinaria = hAcum < umbralExtras;
+				const horaActualNorm = normalizarHora(h);
+				// Madrugada: antes de las 6am (nocturna de madrugada, no la de la noche)
+				const esMadrugada = horaActualNorm < HORAS_LIMITE.FIN_NOCTURNO;
+
+				if (esMiDia && esDomFest && esOrdinaria) {
+					const ordinaria = Math.min(frac, umbralExtras - hAcum);
+					if (esMadrugada) {
+						rndfRecalculado += ordinaria;
+					} else {
+						rdRecalculado += ordinaria;
+					}
+				}
+				hAcum += frac;
+				h = sig;
+			}
+
+			rndf = parseFloat(rndfRecalculado.toFixed(2));
+			// RD = min(horas diurnas ordinarias festivas, 7.33) 
+			// Si no hay RNDF, RD tope 7.33. Si hay RNDF, RD = 7.33 - RNDF
+			const totalOrdinariasFestivas = rdRecalculado + rndfRecalculado;
+			if (totalOrdinariasFestivas >= HORAS_LIMITE.JORNADA_FESTIVA) {
+				rd = Math.max(HORAS_LIMITE.JORNADA_FESTIVA - rndf, 0);
+			} else {
+				rd = parseFloat(rdRecalculado.toFixed(2));
+			}
 		}
 
 		return {
@@ -829,6 +932,7 @@
 			void d.es_domingo;
 			void d.es_festivo;
 			void d.disponibilidad;
+			void d.continua_siguiente_dia;
 		});
 		return calcularTotales();
 	})();
@@ -2676,17 +2780,20 @@
 										{@const kmInicial = dia.kilometraje_inicial ? parseFloat(dia.kilometraje_inicial) : 0}
 										{@const kmFinal = dia.kilometraje_final ? parseFloat(dia.kilometraje_final) : 0}
 										{@const kmRecorridos = kmFinal > kmInicial ? kmFinal - kmInicial : 0}
+										{@const esContinuacion = rowIdx > 0 && diasLaborales[rowIdx - 1].continua_siguiente_dia}
 										<tr
 											on:click={() => (selectedRow = dia.id)}
 											class="cursor-pointer transition-colors {isSelected
 												? 'border-l-4 border-blue-500 bg-blue-50'
-												: dia.disponibilidad
-													? 'bg-green-50 hover:bg-green-100'
-													: isDomingo
-														? 'bg-red-50 hover:bg-red-100'
-														: isFestivo
-															? 'bg-orange-50 hover:bg-orange-100'
-															: 'hover:bg-gray-50'}"
+												: dia.continua_siguiente_dia || esContinuacion
+													? 'border-l-4 border-orange-400 bg-orange-50/50 hover:bg-orange-100/50'
+													: dia.disponibilidad
+														? 'bg-green-50 hover:bg-green-100'
+														: isDomingo
+															? 'bg-red-50 hover:bg-red-100'
+															: isFestivo
+																? 'bg-orange-50 hover:bg-orange-100'
+																: 'hover:bg-gray-50'}"
 										>
 											<!-- Día -->
 											<td class="px-3 py-2 whitespace-nowrap">
@@ -2847,7 +2954,7 @@
 													{#if dia.disponibilidad}
 														<span title="Día disponible - no se contabiliza">D</span>
 													{:else}
-														{totalHoras > 0 ? totalHoras.toFixed(1) : '-'}
+														{totalHoras > 0 ? totalHoras.toFixed(2) : '-'}
 													{/if}
 												</span>
 											</td>
@@ -2863,7 +2970,7 @@
 														recargos.HED
 													)}"
 												>
-													{recargos.HED > 0 ? recargos.HED.toFixed(1) : '-'}
+													{recargos.HED > 0 ? recargos.HED.toFixed(2) : '-'}
 												</span>
 												{/if}
 											</td>
@@ -2879,7 +2986,7 @@
 														recargos.HEN
 													)}"
 												>
-													{recargos.HEN > 0 ? recargos.HEN.toFixed(1) : '-'}
+													{recargos.HEN > 0 ? recargos.HEN.toFixed(2) : '-'}
 												</span>
 												{/if}
 											</td>
@@ -2895,7 +3002,7 @@
 														recargos.HEFD
 													)}"
 												>
-													{recargos.HEFD > 0 ? recargos.HEFD.toFixed(1) : '-'}
+													{recargos.HEFD > 0 ? recargos.HEFD.toFixed(2) : '-'}
 												</span>
 												{/if}
 											</td>
@@ -2911,7 +3018,7 @@
 														recargos.HEFN
 													)}"
 												>
-													{recargos.HEFN > 0 ? recargos.HEFN.toFixed(1) : '-'}
+													{recargos.HEFN > 0 ? recargos.HEFN.toFixed(2) : '-'}
 												</span>
 												{/if}
 											</td>
@@ -2927,7 +3034,7 @@
 														recargos.RNDF
 													)}"
 												>
-													{recargos.RNDF > 0 ? recargos.RNDF.toFixed(1) : '-'}
+													{recargos.RNDF > 0 ? recargos.RNDF.toFixed(2) : '-'}
 												</span>
 												{/if}
 											</td>
@@ -2943,7 +3050,7 @@
 														recargos.RN
 													)}"
 												>
-													{recargos.RN > 0 ? recargos.RN.toFixed(1) : '-'}
+													{recargos.RN > 0 ? recargos.RN.toFixed(2) : '-'}
 												</span>
 												{/if}
 											</td>
@@ -2959,7 +3066,7 @@
 														recargos.RD
 													)}"
 												>
-													{recargos.RD > 0 ? recargos.RD.toFixed(1) : '-'}
+													{recargos.RD > 0 ? recargos.RD.toFixed(2) : '-'}
 												</span>
 												{/if}
 											</td>
@@ -2981,7 +3088,7 @@
 									<span class="text-xs font-medium text-orange-700">HED</span>
 									<span class="text-xs text-orange-600">25%</span>
 								</div>
-								<div class="text-2xl font-bold text-orange-800">{totales.HED.toFixed(1)}</div>
+								<div class="text-2xl font-bold text-orange-800">{totales.HED.toFixed(2)}</div>
 								<div class="mt-1 text-[10px] text-orange-600">Hora Extra Diurna</div>
 							</div>
 
@@ -2993,7 +3100,7 @@
 									<span class="text-xs font-medium text-blue-700">HEN</span>
 									<span class="text-xs text-blue-600">75%</span>
 								</div>
-								<div class="text-2xl font-bold text-blue-800">{totales.HEN.toFixed(1)}</div>
+								<div class="text-2xl font-bold text-blue-800">{totales.HEN.toFixed(2)}</div>
 								<div class="mt-1 text-[10px] text-blue-600">Hora Extra Nocturna</div>
 							</div>
 
@@ -3005,7 +3112,7 @@
 									<span class="text-xs font-medium text-yellow-700">HEFD</span>
 									<span class="text-xs text-yellow-600">100%</span>
 								</div>
-								<div class="text-2xl font-bold text-yellow-800">{totales.HEFD.toFixed(1)}</div>
+								<div class="text-2xl font-bold text-yellow-800">{totales.HEFD.toFixed(2)}</div>
 								<div class="mt-1 text-[10px] text-yellow-600">H. Extra Festiva Diurna</div>
 							</div>
 
@@ -3017,7 +3124,7 @@
 									<span class="text-xs font-medium text-purple-700">HEFN</span>
 									<span class="text-xs text-purple-600">150%</span>
 								</div>
-								<div class="text-2xl font-bold text-purple-800">{totales.HEFN.toFixed(1)}</div>
+								<div class="text-2xl font-bold text-purple-800">{totales.HEFN.toFixed(2)}</div>
 								<div class="mt-1 text-[10px] text-purple-600">H. Extra Festiva Nocturna</div>
 							</div>
 
@@ -3029,7 +3136,7 @@
 									<span class="text-xs font-medium text-emerald-700">RNDF</span>
 									<span class="text-xs text-emerald-600">115%</span>
 								</div>
-								<div class="text-2xl font-bold text-emerald-800">{totales.RNDF.toFixed(1)}</div>
+								<div class="text-2xl font-bold text-emerald-800">{totales.RNDF.toFixed(2)}</div>
 								<div class="mt-1 text-[10px] text-emerald-600">Rec. Noct. Dom/Fest</div>
 							</div>
 
@@ -3041,7 +3148,7 @@
 									<span class="text-xs font-medium text-indigo-700">RN</span>
 									<span class="text-xs text-indigo-600">35%</span>
 								</div>
-								<div class="text-2xl font-bold text-indigo-800">{totales.RN.toFixed(1)}</div>
+								<div class="text-2xl font-bold text-indigo-800">{totales.RN.toFixed(2)}</div>
 								<div class="mt-1 text-[10px] text-indigo-600">Recargo Nocturno</div>
 							</div>
 
@@ -3053,7 +3160,7 @@
 									<span class="text-xs font-medium text-red-700">RD</span>
 									<span class="text-xs text-red-600">75%</span>
 								</div>
-								<div class="text-2xl font-bold text-red-800">{totales.RD.toFixed(1)}</div>
+								<div class="text-2xl font-bold text-red-800">{totales.RD.toFixed(2)}</div>
 								<div class="mt-1 text-[10px] text-red-600">Recargo Dominical/Festivo</div>
 							</div>
 						</div>
@@ -3075,7 +3182,7 @@
 								</div>
 								<div>
 									<span class="font-medium">Total Horas:</span>
-									<span class="ml-1 font-bold text-gray-800">{totales.totalHoras.toFixed(1)}</span>
+									<span class="ml-1 font-bold text-gray-800">{totales.totalHoras.toFixed(2)}</span>
 								</div>
 							</div>
 							<div class="text-[10px] text-gray-500 italic">

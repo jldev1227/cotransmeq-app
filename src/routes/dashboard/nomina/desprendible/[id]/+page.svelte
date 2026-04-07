@@ -10,7 +10,7 @@
 	let liquidacion: Liquidacion | null = null;
 	let loading = true;
 
-	$: liquidacionId = $page.params.id as string;
+	$: liquidacionId = $page.params.id;
 
 	onMount(async () => {
 		await cargarLiquidacion();
@@ -39,7 +39,7 @@
 	}
 
 	function formatDate(dateStr: string): string {
-		return new Date(dateStr + (dateStr.length === 10 ? 'T00:00:00' : '')).toLocaleDateString('es-CO', {
+		return new Date(dateStr).toLocaleDateString('es-CO', {
 			year: 'numeric',
 			month: 'long',
 			day: 'numeric'
@@ -52,16 +52,14 @@
 </script>
 
 <svelte:head>
-	<title>Desprendible de Pago - Cotransmeq</title>
+	<title>Desprendible de Pago - Transmeralda</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gradient-to-br from-orange-50 via-white to-amber-50 p-6">
+<div class="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-teal-50 p-6">
 	{#if loading}
 		<div class="flex items-center justify-center min-h-screen">
 			<div class="text-center">
-				<div
-					class="w-16 h-16 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto"
-				></div>
+				<div class="w-16 h-16 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
 				<p class="mt-4 text-gray-600">Cargando desprendible...</p>
 			</div>
 		</div>
@@ -79,7 +77,7 @@
 				<div class="flex gap-2">
 					<button
 						on:click={imprimirDesprendible}
-						class="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+						class="flex items-center gap-2 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
 					>
 						<Download class="h-4 w-4" />
 						Imprimir/Guardar PDF
@@ -90,15 +88,15 @@
 			<!-- Desprendible de pago -->
 			<div class="bg-white shadow-lg rounded-xl p-8 print:shadow-none">
 				<!-- Header -->
-				<div class="border-b-2 border-orange-600 pb-4 mb-6">
+				<div class="border-b-2 border-emerald-600 pb-4 mb-6">
 					<h1 class="text-3xl font-bold text-gray-900">DESPRENDIBLE DE PAGO</h1>
-					<p class="text-gray-600 mt-1">Cotransmeq S.A.S.</p>
+					<p class="text-gray-600 mt-1">Transmeralda S.A.S.</p>
 				</div>
 
 				<!-- Información del conductor -->
 				<div class="mb-6">
 					<h2 class="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-						<User class="h-5 w-5 text-orange-600" />
+						<User class="h-5 w-5 text-emerald-600" />
 						Información del Conductor
 					</h2>
 					<div class="grid grid-cols-2 gap-4 text-sm">
@@ -127,14 +125,12 @@
 				{#if liquidacion.vehiculos && liquidacion.vehiculos.length > 0}
 					<div class="mb-6">
 						<h2 class="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
-							<Truck class="h-5 w-5 text-orange-600" />
+							<Truck class="h-5 w-5 text-emerald-600" />
 							Vehículos Asignados
 						</h2>
 						<div class="flex flex-wrap gap-2">
 							{#each liquidacion.vehiculos as vehiculo}
-								<span
-									class="px-3 py-1 bg-orange-100 text-orange-800 rounded-full text-sm font-medium"
-								>
+								<span class="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-sm font-medium">
 									{vehiculo.placa}
 								</span>
 							{/each}
@@ -155,9 +151,7 @@
 						{#if liquidacion.total_bonificaciones > 0}
 							<div class="flex justify-between py-2 border-b">
 								<span class="text-gray-600">Bonificaciones</span>
-								<span class="font-medium"
-									>{formatCurrency(liquidacion.total_bonificaciones)}</span
-								>
+								<span class="font-medium">{formatCurrency(liquidacion.total_bonificaciones)}</span>
 							</div>
 						{/if}
 						{#if liquidacion.total_pernotes > 0}
@@ -175,9 +169,7 @@
 						{#if liquidacion.auxilio_transporte > 0}
 							<div class="flex justify-between py-2 border-b">
 								<span class="text-gray-600">Auxilio de Transporte</span>
-								<span class="font-medium"
-									>{formatCurrency(liquidacion.auxilio_transporte)}</span
-								>
+								<span class="font-medium">{formatCurrency(liquidacion.auxilio_transporte)}</span>
 							</div>
 						{/if}
 						{#if liquidacion.cesantias && liquidacion.cesantias > 0}
@@ -189,9 +181,7 @@
 						{#if liquidacion.interes_cesantias && liquidacion.interes_cesantias > 0}
 							<div class="flex justify-between py-2 border-b">
 								<span class="text-gray-600">Intereses Cesantías</span>
-								<span class="font-medium"
-									>{formatCurrency(liquidacion.interes_cesantias)}</span
-								>
+								<span class="font-medium">{formatCurrency(liquidacion.interes_cesantias)}</span>
 							</div>
 						{/if}
 						{#if liquidacion.prima && liquidacion.prima > 0}
@@ -202,9 +192,7 @@
 						{/if}
 						<div class="flex justify-between py-2 font-bold text-lg">
 							<span>Total Devengado</span>
-							<span class="text-green-600"
-								>{formatCurrency(liquidacion.total_devengado || 0)}</span
-							>
+							<span class="text-green-600">{formatCurrency(liquidacion.total_devengado || 0)}</span>
 						</div>
 					</div>
 				</div>
@@ -230,9 +218,7 @@
 						{#if liquidacion.total_mantenimientos > 0}
 							<div class="flex justify-between py-2 border-b">
 								<span class="text-gray-600">Mantenimientos</span>
-								<span class="font-medium"
-									>{formatCurrency(liquidacion.total_mantenimientos)}</span
-								>
+								<span class="font-medium">{formatCurrency(liquidacion.total_mantenimientos)}</span>
 							</div>
 						{/if}
 						{#if liquidacion.total_anticipos > 0}
@@ -243,23 +229,19 @@
 						{/if}
 						<div class="flex justify-between py-2 font-bold text-lg">
 							<span>Total Deducido</span>
-							<span class="text-red-600"
-								>{formatCurrency(liquidacion.total_deducido || 0)}</span
-							>
+							<span class="text-red-600">{formatCurrency(liquidacion.total_deducido || 0)}</span>
 						</div>
 					</div>
 				</div>
 
 				<!-- Neto a pagar -->
-				<div class="bg-gradient-to-r from-orange-500 to-amber-600 text-white rounded-lg p-6">
+				<div class="bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-lg p-6">
 					<div class="flex items-center justify-between">
 						<div>
-							<p class="text-orange-100 mb-1">Neto a Pagar</p>
-							<p class="text-4xl font-bold">
-								{formatCurrency(liquidacion.neto_pagado || 0)}
-							</p>
+							<p class="text-emerald-100 mb-1">Neto a Pagar</p>
+							<p class="text-4xl font-bold">{formatCurrency(liquidacion.neto_pagado || 0)}</p>
 						</div>
-						<DollarSign class="h-16 w-16 text-orange-100" />
+						<DollarSign class="h-16 w-16 text-emerald-100" />
 					</div>
 				</div>
 
@@ -275,7 +257,7 @@
 			<p class="text-gray-600">No se encontró la liquidación</p>
 			<button
 				on:click={() => goto('/dashboard/nomina')}
-				class="mt-4 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+				class="mt-4 px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
 			>
 				Volver al listado
 			</button>
@@ -288,10 +270,10 @@
 		body {
 			background: white;
 		}
-		:global(.print\:hidden) {
+		.print\:hidden {
 			display: none !important;
 		}
-		:global(.print\:shadow-none) {
+		.print\:shadow-none {
 			box-shadow: none !important;
 		}
 	}

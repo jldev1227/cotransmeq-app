@@ -12,7 +12,7 @@ import type {
 } from '$lib/types/nomina';
 
 /**
- * API Cliente para el módulo de Nómina - Cotransmeq
+ * API Cliente para el módulo de Nómina
  */
 
 // ==================== LIQUIDACIONES ====================
@@ -77,7 +77,6 @@ export const obtenerAnalisis = async () => {
 	return response.data;
 };
 
-
 /**
  * Crear nueva liquidación
  */
@@ -113,10 +112,18 @@ export const eliminarLiquidacion = async (id: string) => {
 // ==================== CONDUCTORES ====================
 
 /**
- * Obtener todos los conductores
+ * Obtener todos los conductores (sin límite para selects)
  */
 export const obtenerConductores = async () => {
 	const response = await apiClient.get<{ data: Conductor[] }>('/api/conductores?limit=9999');
+	return response.data;
+};
+
+/**
+ * Obtener conductor por ID
+ */
+export const obtenerConductorPorId = async (id: string) => {
+	const response = await apiClient.get<{ data: Conductor }>(`/api/conductores/${id}`);
 	return response.data;
 };
 
@@ -127,6 +134,14 @@ export const obtenerConductores = async () => {
  */
 export const obtenerVehiculos = async () => {
 	const response = await apiClient.get<{ data: Vehiculo[] }>('/api/vehiculos');
+	return response.data;
+};
+
+/**
+ * Obtener vehículo por ID
+ */
+export const obtenerVehiculoPorId = async (id: string) => {
+	const response = await apiClient.get<{ data: Vehiculo }>(`/api/vehiculos/${id}`);
 	return response.data;
 };
 
@@ -145,7 +160,7 @@ export const obtenerEmpresas = async () => {
 /**
  * Obtener configuraciones de liquidación (filtrar por año opcional)
  */
-export const obtenerConfiguracion = async (anio?: number) => {
+export const obtenerConfiguraciones = async (anio?: number) => {
 	const params = anio ? `?anio=${anio}` : '';
 	const response = await apiClient.get<{ data: ConfiguracionLiquidacion[] }>(
 		`/api/configuraciones-liquidacion${params}`
@@ -168,7 +183,7 @@ export const obtenerAniosConfiguraciones = async () => {
  */
 export const actualizarConfiguracion = async (
 	id: string,
-	payload: Partial<ConfiguracionLiquidacion>
+	payload: { nombre?: string; valor?: number; tipo?: string }
 ) => {
 	const response = await apiClient.put<{ success: boolean; data: ConfiguracionLiquidacion }>(
 		`/api/configuraciones-liquidacion/${id}`,
@@ -177,7 +192,45 @@ export const actualizarConfiguracion = async (
 	return response.data;
 };
 
-// ==================== DESPRENDIBLES ====================
+/**
+ * Crear nueva configuración
+ */
+export const crearConfiguracion = async (payload: {
+	nombre: string;
+	valor: number;
+	tipo: string;
+	anio: number;
+}) => {
+	const response = await apiClient.post<{ success: boolean; data: ConfiguracionLiquidacion }>(
+		'/api/configuraciones-liquidacion',
+		payload
+	);
+	return response.data;
+};
+
+/**
+ * Duplicar configuraciones de un año a otro
+ */
+export const duplicarConfiguraciones = async (anio_origen: number, anio_destino: number) => {
+	const response = await apiClient.post<{
+		success: boolean;
+		data: ConfiguracionLiquidacion[];
+		message: string;
+	}>('/api/configuraciones-liquidacion/duplicar', { anio_origen, anio_destino });
+	return response.data;
+};
+
+/**
+ * Eliminar configuración
+ */
+export const eliminarConfiguracionItem = async (id: string) => {
+	const response = await apiClient.delete<{ success: boolean; message: string }>(
+		`/api/configuraciones-liquidacion/${id}`
+	);
+	return response.data;
+};
+
+// ==================== DESPRENDIBLES (PDF + EMAIL) ====================
 
 /**
  * Obtener firmas de desprendible por liquidación ID
@@ -190,27 +243,50 @@ export const obtenerFirmasPorLiquidacion = async (liquidacionId: string) => {
 };
 
 /**
- * Generar PDFs y enviar correos
+ * Preview de desprendibles a enviar (muestra conductores, emails, montos)
  */
-export const generarDesprendibles = async (liquidacionIds: string[]) => {
+export const previewDesprendibles = async (liquidacionIds: string[]) => {
 	const response = await apiClient.post<{
 		success: boolean;
-		jobId: string;
-		message: string;
-	}>('/api/desprendibles/generate', { liquidacionIds });
+		data: {
+			total: number;
+			canSend: number;
+			cannotSend: number;
+			items: Array<{
+				liquidacionId: string;
+				conductor: string;
+				email: string | null;
+				periodo_inicio: string;
+				periodo_fin: string;
+				sueldo_total: number;
+				estado: string;
+				canSend: boolean;
+			}>;
+		};
+	}>('/api/liquidaciones/preview-desprendibles', { liquidacionIds });
 	return response.data;
 };
 
 /**
- * Verificar estado de generación de desprendibles
+ * Enviar notificación de desprendibles por email a conductores
  */
-export const verificarEstadoDesprendibles = async (jobId: string) => {
-	const response = await apiClient.get<{
-		status: string;
-		progress: number;
-		completed?: number;
-		failed?: number;
-	}>(`/api/desprendibles/status/${jobId}`);
+export const enviarDesprendibles = async (liquidacionIds: string[]) => {
+	const response = await apiClient.post<{
+		success: boolean;
+		message: string;
+		data: {
+			enviados: number;
+			errores: number;
+			total: number;
+			resultados: Array<{
+				liquidacionId: string;
+				conductor: string;
+				email?: string;
+				status: 'enviado' | 'error';
+				message?: string;
+			}>;
+		};
+	}>('/api/liquidaciones/enviar-desprendibles', { liquidacionIds });
 	return response.data;
 };
 
@@ -231,6 +307,7 @@ export interface PreviewRecargoDia {
 		tipo_codigo: string;
 		tipo_nombre: string;
 		es_hora_extra: boolean;
+		adicional: boolean;
 		porcentaje: number;
 		horas: number;
 		valor_hora_base: number;
@@ -251,6 +328,15 @@ export interface PreviewRecargoPlanilla {
 	total_horas: number;
 	total_valor: number;
 	dias: PreviewRecargoDia[];
+	configuracion_salarial: {
+		id: string;
+		empresa_id: string | null;
+		salario_basico: number;
+		valor_hora_trabajador: number;
+		horas_mensuales_base: number;
+		paga_dias_festivos: boolean;
+		porcentaje_festivos: number;
+	};
 }
 
 export interface PreviewRecargosResponse {
@@ -262,6 +348,14 @@ export interface PreviewRecargosResponse {
 		valor_hora_trabajador: number;
 		horas_mensuales_base: number;
 		sede: string | null;
+		paga_dias_festivos: boolean;
+		porcentaje_festivos: number;
+	} | null;
+	configuracion_salarial_base: {
+		id: string;
+		salario_basico: number;
+		valor_hora_trabajador: number;
+		horas_mensuales_base: number;
 		paga_dias_festivos: boolean;
 		porcentaje_festivos: number;
 	} | null;
@@ -278,6 +372,7 @@ export interface PreviewRecargosResponse {
 		nombre: string;
 		porcentaje: number;
 		es_hora_extra: boolean;
+		adicional: boolean;
 		totalHoras: number;
 		valorHoraBase: number;
 		valorTotal: number;
@@ -305,18 +400,39 @@ export const obtenerPreviewRecargos = async (
 };
 
 export default {
+	// Liquidaciones
 	obtenerLiquidaciones,
 	obtenerLiquidacionPorId,
 	crearLiquidacion,
 	editarLiquidacion,
 	eliminarLiquidacion,
+
+	// Conductores
 	obtenerConductores,
+	obtenerConductorPorId,
+
+	// Vehículos
 	obtenerVehiculos,
+	obtenerVehiculoPorId,
+
+	// Empresas
 	obtenerEmpresas,
-	obtenerConfiguracion,
+
+	// Configuración
+	obtenerConfiguraciones,
+	obtenerAniosConfiguraciones,
 	actualizarConfiguracion,
-	generarDesprendibles,
-	verificarEstadoDesprendibles,
+	crearConfiguracion,
+	duplicarConfiguraciones,
+	eliminarConfiguracionItem,
+
+	// Desprendibles
+	previewDesprendibles,
+	enviarDesprendibles,
+
+	// Firmas
 	obtenerFirmasPorLiquidacion,
+
+	// Preview Recargos
 	obtenerPreviewRecargos
 };

@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import Select from 'svelte-select';
-	import { obtenerConductores, obtenerVehiculos, obtenerEmpresas, obtenerConfiguracion } from '$lib/api/nomina';
+	import { obtenerConductores, obtenerVehiculos, obtenerEmpresas, obtenerConfiguraciones } from '$lib/api/nomina';
 	import type { Conductor, Vehiculo, Empresa, ConfiguracionLiquidacion } from '$lib/types/nomina';
 	import { 
 		ChevronLeft, 
@@ -62,6 +62,7 @@
 	let noDescontarSalud = false;
 	let noDescontarPension = false;
 	let descontarTransporte = false;
+	let redondearNetoArriba = false;
 	let estadoLiquidacion: 'Pendiente' | 'Liquidado' = 'Pendiente';
 
 	// Períodos especiales
@@ -114,6 +115,19 @@
 	let recargosPreviewRef: RecargosPreview;
 	let totalRecargosPreview = 0;
 	let previewRecargosData: any = null;
+	let previewRecargosGrupos: Array<{
+		key: string;
+		vehiculo_id: string;
+		vehiculo_placa: string;
+		empresa_id: string;
+		empresa_nombre: string;
+		mes: string;
+		valor: number;
+		pag_cliente: boolean;
+		porcentaje_propietario: number;
+	}> = [];
+	/** Overrides for pagCliente/porcentajePropietario per grupo key — survives step navigation */
+	let cachedGrupoOverrides: Record<string, { pagCliente: boolean; porcentajePropietario: number }> = {};
 
 	// Anticipos
 	let anticipos: Array<{ id: string; valor: number; fecha: string; concepto: string }> = [];
@@ -178,7 +192,7 @@
 		if (!periodo_inicio) return;
 		try {
 			const anio = new Date(periodo_inicio).getFullYear();
-			const configRes = await obtenerConfiguracion(anio);
+			const configRes = await obtenerConfiguraciones(anio);
 			if (configRes.data) {
 				configuracion = Array.isArray(configRes.data) ? configRes.data : [configRes.data];
 			}
@@ -331,9 +345,9 @@
 					};
 				});
 
-			// Cargar recargos existentes para este vehículo
+			// Cargar recargos MANUALES existentes para este vehículo (excluir automáticos de planillas)
 			const recargosVehiculo = recargosData
-				.filter((r: any) => r.vehiculo_id === vehiculoId)
+				.filter((r: any) => r.vehiculo_id === vehiculoId && !r.es_automatico)
 				.map((r: any) => ({
 					vehiculo_id: vehiculoId,
 					empresa_id: r.empresa_id || r.clientes?.id || '',
@@ -351,8 +365,34 @@
 			};
 		});
 
-		// Restaurar totalRecargosPreview: total guardado menos los recargos manuales recién cargados
-		if (initialData.total_recargos != null) {
+		// Restaurar datos de recargos automáticos guardados (para mostrar en resumen antes de que RecargosPreview recalcule)
+		const recargosAutomaticosGuardados = recargosData.filter((r: any) => r.es_automatico);
+		if (recargosAutomaticosGuardados.length > 0) {
+			totalRecargosPreview = recargosAutomaticosGuardados.reduce((sum: number, r: any) => sum + (Number(r.valor) || 0), 0);
+			// Restaurar previewRecargosGrupos y cachedGrupoOverrides desde los rows guardados
+			previewRecargosGrupos = recargosAutomaticosGuardados.map((r: any) => {
+				const empresaNombre = empresas.find(e => e.id === (r.empresa_id || r.clientes?.id))?.nombre || r.clientes?.nombre || '';
+				const vehiculoPlaca = vehiculosSelected.find(v => v.value === r.vehiculo_id)?.label || r.vehiculos?.placa || '';
+				return {
+					key: `${r.vehiculo_id}-${r.mes}-${r.empresa_id}`,
+					vehiculo_id: r.vehiculo_id || '',
+					vehiculo_placa: vehiculoPlaca,
+					empresa_id: r.empresa_id || r.clientes?.id || '',
+					empresa_nombre: empresaNombre,
+					mes: r.mes || '',
+					valor: Number(r.valor) || 0,
+					pag_cliente: r.pag_cliente || false,
+					porcentaje_propietario: Number(r.porcentaje_propietario) || 0
+				};
+			});
+			// Rebuild overrides cache from saved data
+			const overrides: Record<string, { pagCliente: boolean; porcentajePropietario: number }> = {};
+			for (const g of previewRecargosGrupos) {
+				overrides[g.key] = { pagCliente: g.pag_cliente, porcentajePropietario: g.porcentaje_propietario };
+			}
+			cachedGrupoOverrides = overrides;
+		} else if (initialData.total_recargos != null) {
+			// Fallback: si no hay es_automatico rows (liquidaciones antiguas), estimar desde total
 			const totalRecargosGuardado = Number(initialData.total_recargos) || 0;
 			const recargosManualCargados = detallesVehiculos.reduce((acc, detalle) => {
 				return acc + detalle.recargos.reduce((total, recargo) => total + recargo.valor, 0);
@@ -695,7 +735,7 @@
 		periodo_vacaciones_inicio, periodo_vacaciones_fin,
 		periodo_incapacidad_inicio, periodo_incapacidad_fin,
 		cesantias, interes_cesantias, prima, prima_pendiente, configuracion,
-		totalRecargosPreview, previewRecargosData, disponibilidad
+		totalRecargosPreview, previewRecargosData, previewRecargosGrupos, disponibilidad
 	];
 	$: totales = (_deps, calcularTotales());
 
@@ -937,7 +977,7 @@
 			ajuste_parex_recargos_completos: isAjusteParexRecargosCompletos,
 			dias_ajuste_deducciones: diasAjusteDeducciones,
 			auxilio_transporte: totales.auxilioTransporte,
-			sueldo_total: totales.sueldoTotal,
+			sueldo_total: redondearNetoArriba ? Math.ceil(totales.sueldoTotal) : Math.floor(totales.sueldoTotal),
 			salario_base: totales.salarioDevengado,
 			total_pernotes: totales.totalPernotes,
 			total_bonificaciones: totales.totalBonificaciones,
@@ -960,7 +1000,8 @@
 			vehiculos: vehiculosSelected.map(v => v.value),
 			detalles_vehiculos: detallesVehiculos,
 			anticipos,
-			conceptos_adicionales
+			conceptos_adicionales,
+			recargos_preview: previewRecargosGrupos
 		};
 
 		// === DEBUG: Log payload antes de enviar ===
@@ -995,6 +1036,24 @@
 		}).format(Math.round(amount));
 	}
 
+	function formatCurrencyFloor(amount: number): string {
+		return new Intl.NumberFormat('es-CO', {
+			style: 'currency',
+			currency: 'COP',
+			minimumFractionDigits: 0,
+			maximumFractionDigits: 0
+		}).format(Math.floor(amount));
+	}
+
+	function formatCurrencyDecimal(amount: number): string {
+		return new Intl.NumberFormat('es-CO', {
+			style: 'currency',
+			currency: 'COP',
+			minimumFractionDigits: 1,
+			maximumFractionDigits: 1
+		}).format(amount);
+	}
+
 	// Formateo COP para inputs de texto
 	function formatCOPInput(value: number): string {
 		if (!value && value !== 0) return '';
@@ -1027,16 +1086,23 @@
 	}
 
 	function handleRecargosCalculated(event: CustomEvent) {
-		const { totalRecargos, detalle } = event.detail;
+		const { totalRecargos, detalle, grupos } = event.detail;
 		totalRecargosPreview = totalRecargos;
 		previewRecargosData = detalle;
+		previewRecargosGrupos = grupos || [];
+		// Cache per-grupo overrides so they survive step navigation (component re-mount)
+		const overrides: Record<string, { pagCliente: boolean; porcentajePropietario: number }> = {};
+		for (const g of previewRecargosGrupos) {
+			overrides[g.key] = { pagCliente: g.pag_cliente, porcentajePropietario: g.porcentaje_propietario };
+		}
+		cachedGrupoOverrides = overrides;
 	}
 </script>
 
 {#if loadingData}
 	<div class="flex min-h-[60vh] items-center justify-center">
 		<div class="text-center">
-			<div class="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent"></div>
+			<div class="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-orange-600 border-t-transparent"></div>
 			<p class="mt-3 text-sm text-gray-500">Cargando datos...</p>
 		</div>
 	</div>
@@ -1060,13 +1126,13 @@
 					<button
 						on:click={() => { if (i + 1 < currentStep) currentStep = i + 1; }}
 						class="flex items-center gap-1.5 rounded-full px-3 py-1 font-medium transition
-							{currentStep === i + 1 ? 'bg-emerald-600 text-white' : currentStep > i + 1 ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-gray-100 text-gray-400'}"
+							{currentStep === i + 1 ? 'bg-orange-600 text-white' : currentStep > i + 1 ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' : 'bg-gray-100 text-gray-400'}"
 					>
 						<span class="text-[11px]">{i + 1}</span>
 						<span class="hidden sm:inline">{label}</span>
 					</button>
 					{#if i < 2}
-						<div class="h-px w-4 {currentStep > i + 1 ? 'bg-emerald-300' : 'bg-gray-200'}"></div>
+						<div class="h-px w-4 {currentStep > i + 1 ? 'bg-orange-300' : 'bg-gray-200'}"></div>
 					{/if}
 				{/each}
 			</div>
@@ -1078,7 +1144,7 @@
 				<!-- PASO 1: Información Básica -->
 				<div class="space-y-5">
 					<h2 class="flex items-center gap-2 text-base font-semibold text-gray-800">
-						<Users class="h-4 w-4 text-emerald-600" />
+						<Users class="h-4 w-4 text-orange-600" />
 						Información Básica
 					</h2>
 
@@ -1112,7 +1178,7 @@
 								type="date"
 								bind:value={periodo_inicio}
 								required
-								class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+								class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 							/>
 						</div>
 						<div>
@@ -1123,7 +1189,7 @@
 								type="date"
 								bind:value={periodo_fin}
 								required
-								class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+								class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 							/>
 						</div>
 					</div>
@@ -1161,7 +1227,7 @@
 								bind:value={dias_laborados}
 								min="0"
 								max="31"
-								class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+								class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 							/>
 						</div>
 						<div>
@@ -1171,7 +1237,7 @@
 								bind:value={dias_laborados_villanueva}
 								min="0"
 								max="31"
-								class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+								class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 							/>
 						</div>
 					</div>
@@ -1180,7 +1246,7 @@
 				<!-- PASO 2: Detalles por Vehículo -->
 				<div class="space-y-5">
 					<h2 class="flex items-center gap-2 text-base font-semibold text-gray-800">
-						<Truck class="h-4 w-4 text-emerald-600" />
+						<Truck class="h-4 w-4 text-orange-600" />
 						Detalles por Vehículo
 					</h2>
 
@@ -1225,7 +1291,7 @@
 																			parseInt(e.currentTarget.value) || 0
 																		)}
 																	min="0"
-																	class="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+																	class="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 																/>
 															</div>
 														{/each}
@@ -1256,7 +1322,7 @@
 																		parseInt(e.currentTarget.value) || 0
 																	)}
 																min="0"
-																class="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+																class="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 															/>
 														</div>
 													{/each}
@@ -1378,7 +1444,7 @@
 																value={recargo.mes}
 																on:change={(e) =>
 																	handleRecargoChange(detalle.vehiculo.value, rIdx, 'mes', e.currentTarget.value)}
-																class="w-full rounded border border-gray-200 px-2 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+																class="w-full rounded border border-gray-200 px-2 py-1.5 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 															>
 																{#each mesesRange as mes}
 																	<option value={mes}>{formatMes(mes)}</option>
@@ -1400,7 +1466,7 @@
 																		'valor',
 																		parseCOPInput(e.currentTarget.value)
 																	)}
-																class="w-full rounded border border-gray-200 px-2 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+																class="w-full rounded border border-gray-200 px-2 py-1.5 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 															/>
 														</div>
 													</div>
@@ -1416,7 +1482,7 @@
 																		'pag_cliente',
 																		e.currentTarget.checked
 																	)}
-																class="mr-1.5 h-3.5 w-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+																class="mr-1.5 h-3.5 w-3.5 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
 															/>
 															Pagado por cliente
 														</label>
@@ -1433,20 +1499,23 @@
 						{/each}
 					{/if}
 
-					<!-- Preview de Recargos desde Planillas -->
+					<!-- Recargos Calculados desde Planillas -->
 					<RecargosPreview
 						bind:this={recargosPreviewRef}
 						conductorId={conductorSelected?.value || ''}
 						periodoInicio={periodo_inicio}
 						periodoFin={periodo_fin}
+						cachedPreviewData={previewRecargosData}
+						cachedGrupoOverrides={cachedGrupoOverrides}
 						on:recargosCalculated={handleRecargosCalculated}
 					/>
+
 				</div>
 			{:else if currentStep === 3}
 				<!-- PASO 3: Cálculos Finales -->
 				<div class="space-y-5">
 					<h2 class="flex items-center gap-2 text-base font-semibold text-gray-800">
-						<Calculator class="h-4 w-4 text-emerald-600" />
+						<Calculator class="h-4 w-4 text-orange-600" />
 						Cálculos y Ajustes
 					</h2>
 
@@ -1455,39 +1524,39 @@
 						<h3 class="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Opciones</h3>
 						<div class="grid grid-cols-2 gap-x-6 gap-y-2 lg:grid-cols-3">
 							<label class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900">
-								<input type="checkbox" bind:checked={isCheckedAjuste} class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+								<input type="checkbox" bind:checked={isCheckedAjuste} class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
 								Ajuste Salarial
 							</label>
 							{#if isCheckedAjuste}
 								<label class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900">
-									<input type="checkbox" bind:checked={isAjustePorDia} class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+									<input type="checkbox" bind:checked={isAjustePorDia} class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
 									Ajuste por Día
 								</label>
 							{/if}
 							<label class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900">
-								<input type="checkbox" bind:checked={isAjusteParex} class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+								<input type="checkbox" bind:checked={isAjusteParex} class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
 								Ajuste PAREX
 							</label>
 							{#if isAjusteParex}
 								<label class="flex cursor-pointer items-center gap-2 py-1 pl-6 text-sm text-gray-700 hover:text-gray-900">
-									<input type="checkbox" bind:checked={isAjusteParexRecargosCompletos} class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+									<input type="checkbox" bind:checked={isAjusteParexRecargosCompletos} class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
 									8% sobre recargos completos
 								</label>
 							{/if}
 							<label class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900">
-								<input type="checkbox" bind:checked={isVacaciones} class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+								<input type="checkbox" bind:checked={isVacaciones} class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
 								Vacaciones
 							</label>
 							<label class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900">
-								<input type="checkbox" bind:checked={isIncapacidad} class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+								<input type="checkbox" bind:checked={isIncapacidad} class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
 								Incapacidad
 							</label>
 							<label class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900">
-								<input type="checkbox" bind:checked={isCesantias} class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+								<input type="checkbox" bind:checked={isCesantias} class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
 								Pagar Cesantías
 							</label>
 							<label class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900">
-								<input type="checkbox" bind:checked={isPrima} class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500" />
+								<input type="checkbox" bind:checked={isPrima} class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
 								Pagar Prima
 							</label>
 							<label class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900">
@@ -1517,7 +1586,7 @@
 									max="30"
 									bind:value={diasAjusteDeducciones}
 									placeholder="Todos"
-									class="w-24 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-emerald-500 focus:ring-emerald-500"
+									class="w-24 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-orange-500 focus:ring-orange-500"
 								/>
 								<span class="text-xs text-gray-400">
 									{#if diasAjusteDeducciones !== null && diasAjusteDeducciones !== undefined}
@@ -1547,7 +1616,7 @@
 									}
 								}}
 								placeholder="$ 0"
-								class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+								class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 							/>
 						</div>
 						<div class="flex items-end pb-2">
@@ -1566,11 +1635,11 @@
 							<div class="grid grid-cols-2 gap-4">
 								<div>
 									<label class="mb-1.5 block text-xs text-gray-500">Fecha Inicio</label>
-									<input type="date" bind:value={periodo_vacaciones_inicio} class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+									<input type="date" bind:value={periodo_vacaciones_inicio} class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500" />
 								</div>
 								<div>
 									<label class="mb-1.5 block text-xs text-gray-500">Fecha Fin</label>
-									<input type="date" bind:value={periodo_vacaciones_fin} class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+									<input type="date" bind:value={periodo_vacaciones_fin} class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500" />
 								</div>
 							</div>
 						</div>
@@ -1582,11 +1651,11 @@
 							<div class="grid grid-cols-2 gap-4">
 								<div>
 									<label class="mb-1.5 block text-xs text-gray-500">Fecha Inicio</label>
-									<input type="date" bind:value={periodo_incapacidad_inicio} class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+									<input type="date" bind:value={periodo_incapacidad_inicio} class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500" />
 								</div>
 								<div>
 									<label class="mb-1.5 block text-xs text-gray-500">Fecha Fin</label>
-									<input type="date" bind:value={periodo_incapacidad_fin} class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500" />
+									<input type="date" bind:value={periodo_incapacidad_fin} class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500" />
 								</div>
 							</div>
 						</div>
@@ -1606,7 +1675,7 @@
 										on:focus={handleCOPFocus}
 										on:blur={handleCOPBlur}
 										on:input={(e) => cesantias = parseCOPInput(e.currentTarget.value)}
-										class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+										class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 									/>
 								</div>
 								<div>
@@ -1618,7 +1687,7 @@
 										on:focus={handleCOPFocus}
 										on:blur={handleCOPBlur}
 										on:input={(e) => interes_cesantias = parseCOPInput(e.currentTarget.value)}
-										class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+										class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 									/>
 								</div>
 							</div>
@@ -1639,7 +1708,7 @@
 										on:focus={handleCOPFocus}
 										on:blur={handleCOPBlur}
 										on:input={(e) => prima = parseCOPInput(e.currentTarget.value)}
-										class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+										class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 									/>
 								</div>
 								<div>
@@ -1651,7 +1720,7 @@
 										on:focus={handleCOPFocus}
 										on:blur={handleCOPBlur}
 										on:input={(e) => prima_pendiente = parseCOPInput(e.currentTarget.value) || null}
-										class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+										class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 									/>
 								</div>
 							</div>
@@ -1683,7 +1752,7 @@
 											on:focus={handleCOPFocus}
 											on:blur={handleCOPBlur}
 											on:input={(e) => nuevoAnticipo.valor = String(parseCOPInput(e.currentTarget.value))}
-											class="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+											class="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 										/>
 									</div>
 									<div>
@@ -1691,7 +1760,7 @@
 										<input
 											type="date"
 											bind:value={nuevoAnticipo.fecha}
-											class="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+											class="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 										/>
 									</div>
 									<div>
@@ -1700,14 +1769,14 @@
 											type="text"
 											bind:value={nuevoAnticipo.concepto}
 											placeholder="Opcional"
-											class="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+											class="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 										/>
 									</div>
 								</div>
 								<div class="mt-3 flex gap-2">
 									<button
 										on:click={agregarAnticipo}
-										class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+										class="rounded-md bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-700"
 									>
 										Agregar
 									</button>
@@ -1769,7 +1838,7 @@
 											on:blur={handleCOPBlur}
 											on:input={(e) => nuevoConcepto.valor = String(parseCOPInput(e.currentTarget.value))}
 											placeholder="+Devengo / -Deducción"
-											class="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+											class="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 										/>
 									</div>
 									<div>
@@ -1778,14 +1847,14 @@
 											type="text"
 											bind:value={nuevoConcepto.observaciones}
 											placeholder="Descripción"
-											class="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+											class="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 										/>
 									</div>
 								</div>
 								<div class="mt-3 flex gap-2">
 									<button
 										on:click={agregarConcepto}
-										class="rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-700"
+										class="rounded-md bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-700"
 									>
 										Agregar
 									</button>
@@ -1804,7 +1873,7 @@
 								{#each conceptos_adicionales as concepto, idx}
 									<div class="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2">
 										<div>
-											<span class="text-sm font-medium {concepto.valor > 0 ? 'text-emerald-700' : 'text-red-600'}">{formatCurrency(concepto.valor)}</span>
+											<span class="text-sm font-medium {concepto.valor > 0 ? 'text-orange-700' : 'text-red-600'}">{formatCurrency(concepto.valor)}</span>
 											<span class="ml-2 text-xs text-gray-400">{concepto.observaciones}</span>
 										</div>
 										<button on:click={() => eliminarConcepto(idx)} class="text-red-400 hover:text-red-600">
@@ -1851,14 +1920,14 @@
 															{#each bono.values as val}
 																<td class="py-1.5 text-center {val.quantity > 0 ? 'font-semibold text-gray-800' : 'text-gray-300'}">{val.quantity}</td>
 															{/each}
-															<td class="py-1.5 text-right font-semibold text-emerald-700">{formatCurrency(subtotal)}</td>
+															<td class="py-1.5 text-right font-semibold text-orange-700">{formatCurrency(subtotal)}</td>
 														</tr>
 													{/each}
 												</tbody>
 												<tfoot>
 													<tr class="border-t border-gray-300">
 														<td colspan="{2 + mesesRange.length}" class="py-1.5 text-right text-xs font-semibold text-gray-600">Total Vehículo:</td>
-														<td class="py-1.5 text-right text-xs font-bold text-emerald-700">
+														<td class="py-1.5 text-right text-xs font-bold text-orange-700">
 															{formatCurrency(bonosConCantidad.reduce((acc, b) => acc + b.values.reduce((s, v) => s + v.quantity * b.value, 0), 0))}
 														</td>
 													</tr>
@@ -1870,23 +1939,24 @@
 							{/each}
 							<div class="mt-2 flex items-center justify-between border-t border-gray-200 px-1 pt-3">
 								<span class="text-sm font-semibold text-gray-700">Total Bonificaciones</span>
-								<span class="text-sm font-bold text-emerald-700">{formatCurrency(totales.totalBonificaciones)}</span>
+								<span class="text-sm font-bold text-orange-700">{formatCurrency(totales.totalBonificaciones)}</span>
 							</div>
 							</div>
 						</div>
 					{/if}
 
 					<!-- Detalle de Recargos -->
-					{#if detallesVehiculos.some(d => d.recargos.length > 0) || totalRecargosPreview > 0}
+					{#if detallesVehiculos.some(d => d.recargos.length > 0) || previewRecargosGrupos.length > 0 || totalRecargosPreview > 0}
 						<div class="rounded-md border border-gray-200">
 							<div class="border-b border-gray-100 bg-gray-50 px-4 py-2.5">
 								<h3 class="text-xs font-semibold uppercase tracking-wide text-gray-500">Detalle Recargos</h3>
 							</div>
 							<div class="p-4">
+							<!-- Recargos manuales por vehículo -->
 							{#each detallesVehiculos as detalle}
 								{#if detalle.recargos.length > 0}
 									<div class="mb-3">
-										<p class="mb-2 text-xs font-medium text-gray-500">{detalle.vehiculo.label}</p>
+										<p class="mb-2 text-xs font-medium text-gray-500">{detalle.vehiculo.label} <span class="text-gray-400">(manuales)</span></p>
 										<div class="overflow-x-auto">
 											<table class="w-full text-xs">
 												<thead>
@@ -1904,26 +1974,57 @@
 															<td class="py-1.5 text-gray-700">{empresaNombre}</td>
 															<td class="py-1.5 text-center text-gray-600">{recargo.mes ? formatMes(recargo.mes) : '-'}</td>
 															<td class="py-1.5 text-center">
-																<span class="text-[11px] {recargo.pag_cliente ? 'text-emerald-600' : 'text-gray-400'}">{recargo.pag_cliente ? 'Sí' : 'No'}</span>
+																<span class="text-[11px] {recargo.pag_cliente ? 'text-orange-600' : 'text-gray-400'}">{recargo.pag_cliente ? 'Sí' : 'No'}</span>
 															</td>
 															<td class="py-1.5 text-right font-medium text-gray-800">{formatCurrency(recargo.valor)}</td>
 														</tr>
 													{/each}
 												</tbody>
-												<tfoot>
-													<tr class="border-t border-gray-300">
-														<td colspan="3" class="py-1.5 text-right text-xs font-semibold text-gray-600">Subtotal:</td>
-														<td class="py-1.5 text-right text-xs font-bold text-gray-800">
-															{formatCurrency(detalle.recargos.reduce((s, r) => s + r.valor, 0))}
-														</td>
-													</tr>
-												</tfoot>
 											</table>
 										</div>
 									</div>
 								{/if}
 							{/each}
-							{#if totalRecargosPreview > 0}
+							<!-- Recargos calculados desde planillas -->
+							{#if previewRecargosGrupos.length > 0}
+								<div class="mb-3">
+									<p class="mb-2 text-xs font-medium text-gray-500">Recargos de Planillas</p>
+									<div class="overflow-x-auto">
+										<table class="w-full text-xs">
+											<thead>
+												<tr class="border-b border-gray-200">
+													<th class="py-1.5 text-left font-medium text-gray-500">Vehículo</th>
+													<th class="py-1.5 text-left font-medium text-gray-500">Empresa</th>
+													<th class="py-1.5 text-center font-medium text-gray-500">Mes</th>
+													<th class="py-1.5 text-center font-medium text-gray-500">Pag. Cliente</th>
+													<th class="py-1.5 text-center font-medium text-gray-500">% Propietario</th>
+													<th class="py-1.5 text-right font-medium text-gray-500">Valor</th>
+												</tr>
+											</thead>
+											<tbody>
+												{#each previewRecargosGrupos as grupo}
+													<tr class="border-b border-gray-50">
+														<td class="py-1.5 font-medium text-gray-800">{grupo.vehiculo_placa}</td>
+														<td class="py-1.5 text-gray-700">{grupo.empresa_nombre}</td>
+														<td class="py-1.5 text-center text-gray-600">{grupo.mes ? formatMes(grupo.mes) : '-'}</td>
+														<td class="py-1.5 text-center">
+															<span class="text-[11px] {grupo.pag_cliente ? 'text-orange-600' : 'text-gray-400'}">{grupo.pag_cliente ? 'Sí' : 'No'}</span>
+														</td>
+														<td class="py-1.5 text-center text-gray-600">{grupo.pag_cliente && grupo.porcentaje_propietario > 0 ? grupo.porcentaje_propietario + '%' : '—'}</td>
+														<td class="py-1.5 text-right font-medium text-gray-800">{formatCurrency(grupo.valor)}</td>
+													</tr>
+												{/each}
+											</tbody>
+											<tfoot>
+												<tr class="border-t border-gray-200">
+													<td colspan="5" class="py-1.5 text-right text-xs font-semibold text-gray-600">Subtotal Planillas:</td>
+													<td class="py-1.5 text-right text-xs font-bold text-gray-800">{formatCurrency(totalRecargosPreview)}</td>
+												</tr>
+											</tfoot>
+										</table>
+									</div>
+								</div>
+							{:else if totalRecargosPreview > 0}
 								<div class="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2 text-xs">
 									<div>
 										<span class="font-medium text-gray-600">Recargos de Planillas</span>
@@ -1936,7 +2037,7 @@
 							{/if}
 							<div class="mt-2 flex items-center justify-between border-t border-gray-200 px-1 pt-3">
 								<span class="text-sm font-semibold text-gray-700">Total Recargos</span>
-								<span class="text-sm font-bold text-emerald-700">{formatCurrency(totales.totalRecargos)}</span>
+								<span class="text-sm font-bold text-orange-700">{formatCurrency(totales.totalRecargos)}</span>
 							</div>
 							</div>
 						</div>
@@ -1981,7 +2082,7 @@
 							{/each}
 							<div class="mt-2 flex items-center justify-between border-t border-gray-200 px-1 pt-3">
 								<span class="text-sm font-semibold text-gray-700">Total Pernotes</span>
-								<span class="text-sm font-bold text-emerald-700">{formatCurrency(totales.totalPernotes)}</span>
+								<span class="text-sm font-bold text-orange-700">{formatCurrency(totales.totalPernotes)}</span>
 							</div>
 							</div>
 						</div>
@@ -2021,7 +2122,7 @@
 											</tr>
 											<tr class="border-t border-gray-200">
 												<td class="py-1.5 font-semibold text-gray-700">Total Ajuste</td>
-												<td class="py-1.5 text-right font-bold text-emerald-700">{formatCurrency(totales.bonificacionVillanueva)}</td>
+												<td class="py-1.5 text-right font-bold text-orange-700">{formatCurrency(totales.bonificacionVillanueva)}</td>
 											</tr>
 										</tbody>
 									</table>
@@ -2051,7 +2152,7 @@
 											</tr>
 											<tr class="border-t border-gray-200">
 												<td class="py-1.5 font-semibold text-gray-700">Ajuste PAREX</td>
-												<td class="py-1.5 text-right font-bold text-emerald-700">{formatCurrency(totales.ajusteParex)}</td>
+												<td class="py-1.5 text-right font-bold text-orange-700">{formatCurrency(totales.ajusteParex)}</td>
 											</tr>
 											<tr class="border-b border-gray-50">
 												<td class="py-1 text-gray-500">50% → Salud</td>
@@ -2080,7 +2181,7 @@
 						<div class="grid grid-cols-1 gap-0 lg:grid-cols-2">
 							<!-- Devengados -->
 							<div class="border-b border-gray-200 p-5 lg:border-b-0 lg:border-r">
-								<h4 class="mb-3 text-xs font-bold uppercase tracking-wider text-emerald-600">Devengados</h4>
+								<h4 class="mb-3 text-xs font-bold uppercase tracking-wider text-orange-600">Devengados</h4>
 								<table class="w-full text-sm">
 									<tbody>
 										<tr class="border-b border-gray-100">
@@ -2093,20 +2194,20 @@
 										</tr>
 										<tr class="border-b border-gray-100">
 											<td class="py-2 text-gray-600">Bonificaciones</td>
-											<td class="py-2 text-right font-medium text-emerald-600">{formatCurrency(totales.totalBonificaciones)}</td>
+											<td class="py-2 text-right font-medium text-orange-600">{formatCurrency(totales.totalBonificaciones)}</td>
 										</tr>
 										<tr class="border-b border-gray-100">
 											<td class="py-2 text-gray-600">Pernotes</td>
-											<td class="py-2 text-right font-medium text-emerald-600">{formatCurrency(totales.totalPernotes)}</td>
+											<td class="py-2 text-right font-medium text-orange-600">{formatCurrency(totales.totalPernotes)}</td>
 										</tr>
 										<tr class="border-b border-gray-100">
 											<td class="py-2 text-gray-600">Recargos</td>
-											<td class="py-2 text-right font-medium text-emerald-600">{formatCurrency(totales.totalRecargos)}</td>
+											<td class="py-2 text-right font-medium text-orange-600">{formatCurrency(totales.totalRecargos)}</td>
 										</tr>
 									{#if totales.bonificacionVillanueva > 0}
 											<tr class="border-b border-gray-100">
 												<td class="py-2 text-gray-600">Ajuste Salarial</td>
-												<td class="py-2 text-right font-medium text-emerald-600">{formatCurrency(totales.bonificacionVillanueva)}</td>
+												<td class="py-2 text-right font-medium text-orange-600">{formatCurrency(totales.bonificacionVillanueva)}</td>
 											</tr>
 									{/if}
 									{#if totales.valorIncapacidad > 0}
@@ -2130,14 +2231,19 @@
 									{#if totales.totalAjustesAdicionales !== 0}
 											<tr class="border-b border-gray-100">
 												<td class="py-2 text-gray-600">Conceptos Adicionales</td>
-												<td class="py-2 text-right font-medium {totales.totalAjustesAdicionales > 0 ? 'text-emerald-600' : 'text-red-600'}">{formatCurrency(totales.totalAjustesAdicionales)}</td>
+												<td class="py-2 text-right font-medium {totales.totalAjustesAdicionales > 0 ? 'text-orange-600' : 'text-red-600'}">{formatCurrency(totales.totalAjustesAdicionales)}</td>
 											</tr>
 									{/if}
 									</tbody>
 									<tfoot>
 										<tr class="border-t-2 border-gray-300">
 											<td class="py-3 font-bold text-gray-800">Total Devengado</td>
-											<td class="py-3 text-right font-bold text-gray-900">{formatCurrency(totales.sueldoBruto)}</td>
+											<td class="py-3 text-right">
+												<span class="font-bold text-gray-900">{formatCurrency(totales.sueldoBruto)}</span>
+												{#if totales.sueldoBruto % 1 !== 0}
+													<span class="block text-[10px] text-gray-400">{formatCurrencyDecimal(totales.sueldoBruto)}</span>
+												{/if}
+											</td>
 										</tr>
 									</tfoot>
 								</table>
@@ -2166,7 +2272,12 @@
 									<tfoot>
 										<tr class="border-t-2 border-gray-300">
 											<td class="py-3 font-bold text-red-700">Total Deducciones</td>
-											<td class="py-3 text-right font-bold text-red-600">-{formatCurrency(totales.totalDeducciones)}</td>
+											<td class="py-3 text-right">
+												<span class="font-bold text-red-600">-{formatCurrency(totales.totalDeducciones)}</span>
+												{#if totales.totalDeducciones % 1 !== 0}
+													<span class="block text-[10px] text-red-300">-{formatCurrencyDecimal(totales.totalDeducciones)}</span>
+												{/if}
+											</td>
 										</tr>
 									</tfoot>
 								</table>
@@ -2176,8 +2287,23 @@
 						<!-- Total a Pagar -->
 						<div class="border-t border-gray-200 bg-gray-900 px-6 py-5 rounded-b-lg">
 							<div class="flex items-center justify-between">
-								<span class="text-sm font-bold uppercase tracking-wider text-gray-400">Total a Pagar</span>
-								<span class="text-3xl font-bold text-emerald-400">{formatCurrency(totales.sueldoTotal)}</span>
+								<div>
+									<span class="text-sm font-bold uppercase tracking-wider text-gray-400">Total a Pagar</span>
+									{#if totales.sueldoTotal % 1 !== 0}
+										<label class="mt-2 flex items-center gap-2 cursor-pointer">
+											<input type="checkbox" bind:checked={redondearNetoArriba} class="rounded border-gray-600 bg-gray-800 text-orange-500 focus:ring-orange-500 focus:ring-offset-gray-900" />
+											<span class="text-[11px] text-gray-500">Aproximar hacia arriba</span>
+										</label>
+									{/if}
+								</div>
+								<div class="text-right">
+									<span class="text-3xl font-bold text-orange-400">
+										{redondearNetoArriba ? formatCurrency(Math.ceil(totales.sueldoTotal)) : formatCurrencyFloor(totales.sueldoTotal)}
+									</span>
+									{#if totales.sueldoTotal % 1 !== 0}
+										<span class="block text-xs text-gray-500">{formatCurrencyDecimal(totales.sueldoTotal)}</span>
+									{/if}
+								</div>
 							</div>
 						</div>
 					</div>
@@ -2185,14 +2311,14 @@
 					<!-- Estado de la liquidación -->
 					<div class="mt-4 flex items-center justify-between rounded-lg border border-gray-200 bg-white px-5 py-4">
 						<div class="flex items-center gap-3">
-							<div class="h-3 w-3 rounded-full {estadoLiquidacion === 'Liquidado' ? 'bg-emerald-500' : 'bg-gray-400'}"></div>
+							<div class="h-3 w-3 rounded-full {estadoLiquidacion === 'Liquidado' ? 'bg-orange-500' : 'bg-gray-400'}"></div>
 							<span class="text-sm font-semibold text-gray-700">{estadoLiquidacion === 'Liquidado' ? 'Liquidado' : 'Pendiente'}</span>
 						</div>
 						<button
 							type="button"
 							on:click={() => estadoLiquidacion = estadoLiquidacion === 'Pendiente' ? 'Liquidado' : 'Pendiente'}
 							class="rounded-md px-4 py-2 text-xs font-semibold uppercase tracking-wide transition-colors {estadoLiquidacion === 'Pendiente'
-								? 'bg-emerald-600 text-white hover:bg-emerald-700'
+								? 'bg-orange-600 text-white hover:bg-orange-700'
 								: 'bg-gray-200 text-gray-700 hover:bg-gray-300'}"
 						>
 							{estadoLiquidacion === 'Pendiente' ? 'Marcar Liquidada' : 'Marcar Pendiente'}
@@ -2216,7 +2342,7 @@
 					<button
 						on:click={handleSubmit}
 						disabled={loading}
-						class="flex items-center gap-2 rounded-md bg-emerald-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+						class="flex items-center gap-2 rounded-md bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-700 disabled:opacity-50"
 					>
 						{#if loading}
 							<div class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>

@@ -6,8 +6,8 @@
 		obtenerLiquidaciones,
 		obtenerAnalisis,
 		eliminarLiquidacion,
-		generarDesprendibles,
-		verificarEstadoDesprendibles
+		previewDesprendibles,
+		enviarDesprendibles
 	} from '$lib/api/nomina';
 	import type { LiquidacionesParams } from '$lib/api/nomina';
 	import type { Liquidacion } from '$lib/types/nomina';
@@ -15,7 +15,7 @@
 	import {
 		Users, Plus, Edit, Trash2, Eye, FileText, Mail, TrendingUp, Clock,
 		ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight,
-		BarChart2, Zap, Moon, Wrench, AlertCircle
+		BarChart2, Zap, Moon, Wrench, AlertCircle, Send, CheckCircle, XCircle, X
 	} from 'lucide-svelte';
 	import LiquidacionDetalleModal from '$lib/components/nomina/LiquidacionDetalleModal.svelte';
 	// Chart.js via svelte-chartjs
@@ -39,6 +39,7 @@
 	interface RecargoA {
 		vehiculo_id: string; valor: number | string; pag_cliente: boolean;
 		empresa_id?: string;
+		porcentaje_propietario?: number | string | null;
 		// El endpoint /analisis usa "clientes"; otras rutas pueden usar "empresa"
 		clientes?: { id?: string; nombre: string };
 		empresa?:  { id?: string; nombre: string };
@@ -60,7 +61,7 @@
 		mantenimientos?: MantenimientoA[];
 	}
 	interface ResBon { placa: string; nombre: string; mes: string; cantidad: number; valorUnitario: number; valorTotal: number; conductor: string; }
-	interface ResRec { placa: string; valor: number; pagaCliente: string; empresa_id: string; empresa_nombre: string; mes: string; conductor: string; }
+	interface ResRec { placa: string; valor: number; pagaCliente: string; empresa_id: string; empresa_nombre: string; mes: string; conductor: string; tipo_fila?: 'cliente' | 'propietario'; porcentaje_propietario?: number; }
 	interface ResPer { placa: string; cantidad: number; valor: number; valorTotal: number; fechas: string[]; conductor: string; }
 	interface ResMnt { placa: string; conductor: string; mes: string; cantidad: number; }
 
@@ -104,6 +105,36 @@
 	}
 
 	// =============================================
+	// CACHE KEY (sessionStorage)
+	// =============================================
+	const CACHE_KEY = 'nomina_filters';
+
+	function saveFiltersToCache() {
+		try {
+			sessionStorage.setItem(CACHE_KEY, JSON.stringify({
+				searchTerm,
+				nominaMonth,
+				sortBy,
+				sortOrder,
+				page: pagination.page
+			}));
+		} catch { /* ignore */ }
+	}
+
+	function loadFiltersFromCache() {
+		try {
+			const raw = sessionStorage.getItem(CACHE_KEY);
+			if (!raw) return;
+			const cached = JSON.parse(raw);
+			if (cached.searchTerm) searchTerm = cached.searchTerm;
+			if (cached.nominaMonth) nominaMonth = cached.nominaMonth;
+			if (cached.sortBy) sortBy = cached.sortBy;
+			if (cached.sortOrder) sortOrder = cached.sortOrder;
+			if (cached.page) pagination.page = cached.page;
+		} catch { /* ignore */ }
+	}
+
+	// =============================================
 	// ESTADO — LIQUIDACIONES LIST
 	// =============================================
 	let liquidaciones: Liquidacion[] = [];
@@ -117,6 +148,28 @@
 	let detalleId = '';
 	let generatingPDFs = false;
 	let pdfProgress = 0;
+	// Preview modal para envío de desprendibles
+	let showPreviewModal = false;
+	let previewItems: Array<{
+		liquidacionId: string;
+		conductor: string;
+		email: string | null;
+		periodo_inicio: string;
+		periodo_fin: string;
+		sueldo_total: number;
+		estado: string;
+		canSend: boolean;
+	}> = [];
+	let previewLoading = false;
+	let sendingEmails = false;
+	let sendResults: Array<{
+		liquidacionId: string;
+		conductor: string;
+		email?: string;
+		status: 'enviado' | 'error';
+		message?: string;
+	}> = [];
+	let sendComplete = false;
 
 	let pagination = { total: 0, page: 1, limit: 20, totalPages: 0, hasNext: false, hasPrev: false };
 	let stats = { totalRegistros: 0, totalPendientes: 0, montoTotal: 0 };
@@ -139,6 +192,7 @@
 	// CICLO DE VIDA
 	// =============================================
 	onMount(async () => {
+		loadFiltersFromCache();
 		await Promise.all([cargarLiquidaciones(), cargarAnalisis()]);
 	});
 
@@ -185,17 +239,17 @@
 	// =============================================
 	function handleSearch() {
 		clearTimeout(searchTimeout);
-		searchTimeout = setTimeout(() => { pagination.page = 1; cargarLiquidaciones(); }, 400);
+		searchTimeout = setTimeout(() => { pagination.page = 1; saveFiltersToCache(); cargarLiquidaciones(); }, 400);
 	}
 	function toggleSort(col: string) {
 		if (sortBy === col) { sortOrder = sortOrder === 'desc' ? 'asc' : 'desc'; }
 		else { sortBy = col; sortOrder = 'desc'; }
-		pagination.page = 1; cargarLiquidaciones();
+		pagination.page = 1; saveFiltersToCache(); cargarLiquidaciones();
 	}
-	function handleMonthChange() { pagination.page = 1; cargarLiquidaciones(); }
-	function clearMonthFilter() { nominaMonth = ''; pagination.page = 1; cargarLiquidaciones(); }
-	function goToPage(p: number) { if (p < 1 || p > pagination.totalPages) return; pagination.page = p; cargarLiquidaciones(); }
-	function handleLimitChange() { pagination.page = 1; cargarLiquidaciones(); }
+	function handleMonthChange() { pagination.page = 1; saveFiltersToCache(); cargarLiquidaciones(); }
+	function clearMonthFilter() { nominaMonth = ''; pagination.page = 1; saveFiltersToCache(); cargarLiquidaciones(); }
+	function goToPage(p: number) { if (p < 1 || p > pagination.totalPages) return; pagination.page = p; saveFiltersToCache(); cargarLiquidaciones(); }
+	function handleLimitChange() { pagination.page = 1; saveFiltersToCache(); cargarLiquidaciones(); }
 
 	function irACrear() { goto('/dashboard/nomina/agregar'); }
 	function irAEditar(id: string) { goto(`/dashboard/nomina/editar/${id}`); }
@@ -223,27 +277,46 @@
 		selectedLiquidaciones = selectedLiquidaciones;
 	}
 
-	async function generarDesprendiblesSeleccionados() {
+	async function abrirPreviewDesprendibles() {
 		if (selectedLiquidaciones.size === 0) { toast.error('Selecciona al menos una liquidación'); return; }
 		try {
-			generatingPDFs = true; pdfProgress = 0;
-			const r = await generarDesprendibles(Array.from(selectedLiquidaciones));
-			toast.success('Generando desprendibles...');
-			const interval = setInterval(async () => {
-				try {
-					const s = await verificarEstadoDesprendibles(r.jobId);
-					pdfProgress = s.progress || 0;
-					if (s.status === 'completed') {
-						clearInterval(interval); generatingPDFs = false; pdfProgress = 0;
-						toast.success('Desprendibles generados y enviados');
-						selectedLiquidaciones.clear(); selectedLiquidaciones = selectedLiquidaciones;
-					} else if (s.status === 'failed') {
-						clearInterval(interval); generatingPDFs = false; pdfProgress = 0;
-						toast.error('Error al generar desprendibles');
-					}
-				} catch { clearInterval(interval); generatingPDFs = false; pdfProgress = 0; }
-			}, 2000);
-		} catch { toast.error('Error al generar desprendibles'); generatingPDFs = false; pdfProgress = 0; }
+			previewLoading = true;
+			sendComplete = false;
+			sendResults = [];
+			showPreviewModal = true;
+			const r = await previewDesprendibles(Array.from(selectedLiquidaciones));
+			previewItems = r.data?.items ?? [];
+		} catch (err: any) {
+			toast.error('Error al cargar preview');
+			showPreviewModal = false;
+		} finally {
+			previewLoading = false;
+		}
+	}
+
+	async function confirmarEnvioDesprendibles() {
+		const idsToSend = previewItems.filter(p => p.canSend).map(p => p.liquidacionId);
+		if (idsToSend.length === 0) { toast.error('No hay conductores con email válido'); return; }
+		try {
+			sendingEmails = true;
+			const r = await enviarDesprendibles(idsToSend);
+			sendResults = r.data?.resultados ?? [];
+			sendComplete = true;
+			toast.success(r.message || `${r.data?.enviados} email(s) enviado(s)`);
+			selectedLiquidaciones.clear();
+			selectedLiquidaciones = selectedLiquidaciones;
+		} catch (err: any) {
+			toast.error(err?.response?.data?.message || 'Error al enviar desprendibles');
+		} finally {
+			sendingEmails = false;
+		}
+	}
+
+	function cerrarPreviewModal() {
+		showPreviewModal = false;
+		previewItems = [];
+		sendResults = [];
+		sendComplete = false;
 	}
 
 	// =============================================
@@ -395,14 +468,43 @@
 				const mesNorm = normalizeMes(rec.mes);
 				if (filtroMes && mesNorm !== filtroMes) return;
 				const mesLabel = MESES.find(m => m.valor === mesNorm)?.nombre || rec.mes;
-				res.push({
-					placa: v.placa, valor: Number(rec.valor),
-					pagaCliente: rec.pag_cliente ? 'Sí' : 'No',
-					empresa_id: rec.empresa_id,
-					empresa_nombre: getEmpresaNombre(rec),
-					mes: mesLabel,
-					conductor: getConductorA(liq)
-				});
+				const valorTotal = Number(rec.valor);
+				const pctProp = Number(rec.porcentaje_propietario || 0);
+
+				if (pctProp > 0) {
+					// Split: fila del cliente (valor - porcentaje) y fila del propietario (porcentaje)
+					const valorPropietario = Math.round(valorTotal * pctProp / 100);
+					const valorCliente = valorTotal - valorPropietario;
+					res.push({
+						placa: v.placa, valor: valorCliente,
+						pagaCliente: rec.pag_cliente ? 'Sí' : 'No',
+						empresa_id: rec.empresa_id,
+						empresa_nombre: getEmpresaNombre(rec),
+						mes: mesLabel,
+						conductor: getConductorA(liq),
+						tipo_fila: 'cliente',
+						porcentaje_propietario: pctProp
+					});
+					res.push({
+						placa: v.placa, valor: valorPropietario,
+						pagaCliente: rec.pag_cliente ? 'Sí' : 'No',
+						empresa_id: rec.empresa_id,
+						empresa_nombre: getEmpresaNombre(rec),
+						mes: mesLabel,
+						conductor: getConductorA(liq),
+						tipo_fila: 'propietario',
+						porcentaje_propietario: pctProp
+					});
+				} else {
+					res.push({
+						placa: v.placa, valor: valorTotal,
+						pagaCliente: rec.pag_cliente ? 'Sí' : 'No',
+						empresa_id: rec.empresa_id,
+						empresa_nombre: getEmpresaNombre(rec),
+						mes: mesLabel,
+						conductor: getConductorA(liq)
+					});
+				}
 			});
 		});
 		return res;
@@ -657,13 +759,9 @@
 					{/if}
 				</div>
 				{#if selectedLiquidaciones.size > 0}
-					<button on:click={generarDesprendiblesSeleccionados} disabled={generatingPDFs}
-						class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-blue-500 to-blue-600 px-4 py-2 text-sm text-white shadow-md transition-all hover:shadow-lg disabled:opacity-50">
-						{#if generatingPDFs}
-							<div class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>{pdfProgress}%
-						{:else}
-							<Mail class="h-4 w-4" />Generar y Enviar ({selectedLiquidaciones.size})
-						{/if}
+					<button on:click={abrirPreviewDesprendibles}
+						class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 px-4 py-2 text-sm text-white shadow-md transition-all hover:shadow-lg hover:from-orange-600 hover:to-orange-700">
+						<Send class="h-4 w-4" />Enviar Desprendibles ({selectedLiquidaciones.size})
 					</button>
 				{/if}
 			</div>
@@ -721,7 +819,7 @@
 								<th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">Días Lab.</th>
 								<th class="px-4 py-3 text-right text-sm font-semibold text-gray-700">
 									<button on:click={() => toggleSort('monto')} class="ml-auto flex items-center gap-1 hover:text-orange-600 transition-colors">
-										Neto a Pagar
+										Monto
 										{#if sortBy === 'monto'}{#if sortOrder === 'desc'}<ChevronDown class="h-4 w-4 text-orange-600" />{:else}<ChevronUp class="h-4 w-4 text-orange-600" />{/if}{:else}<ChevronsUpDown class="h-4 w-4 text-gray-400" />{/if}
 									</button>
 								</th>
@@ -752,12 +850,12 @@
 									<td class="px-4 py-3 text-center">
 										<p class="font-semibold text-gray-900">{liq.dias_laborados ?? 0}</p>
 										{#if liq.dias_laborados_villanueva}
-											<p class="text-xs text-orange-600 font-medium">{liq.dias_laborados_villanueva} Aj. Salarial</p>
+											<p class="text-xs text-orange-600 font-medium">{liq.dias_laborados_villanueva} en Villa.</p>
 										{/if}
 									</td>
 									<td class="px-4 py-3 text-right">
-										<p class="text-lg font-bold text-emerald-700">{formatCurrency(liq.sueldo_total || 0)}</p>
-										<p class="text-xs text-gray-500">Neto a pagar</p>
+										<p class="text-lg font-bold text-gray-900">{formatCurrency(liq.neto_pagado || liq.sueldo_total || 0)}</p>
+										<p class="text-xs text-gray-500">Devengado: {formatCurrency(liq.total_devengado || 0)}</p>
 									</td>
 									<td class="px-4 py-3 text-center">
 										<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {getEstadoColor(liq.estado || 'Pendiente')}">
@@ -1071,8 +1169,15 @@
 						<div class="space-y-3 md:hidden">
 							{#if recPaginado.length > 0}
 								{#each recPaginado as item}
-									<div class="rounded-lg border p-4 shadow-sm {item.pagaCliente === 'No' ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'}">
-										<p class="font-semibold text-sm text-gray-800">{item.placa} — {item.empresa_nombre}</p>
+									<div class="rounded-lg border p-4 shadow-sm {item.tipo_fila === 'propietario' ? 'border-amber-300 bg-amber-50' : item.pagaCliente === 'No' ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'}">
+										<div class="flex items-center gap-2">
+											<p class="font-semibold text-sm text-gray-800">{item.placa} — {item.empresa_nombre}</p>
+											{#if item.tipo_fila}
+												<span class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider {item.tipo_fila === 'propietario' ? 'bg-amber-200 text-amber-800' : 'bg-blue-100 text-blue-700'}">
+													{item.tipo_fila === 'propietario' ? `Propietario ${item.porcentaje_propietario}%` : `Cliente ${100 - (item.porcentaje_propietario || 0)}%`}
+												</span>
+											{/if}
+										</div>
 										<p class="text-xs text-gray-500 mb-3">{item.conductor}</p>
 										<div class="space-y-1.5 text-sm">
 											<div class="flex justify-between"><span class="text-gray-500">Mes</span><span>{item.mes}</span></div>
@@ -1100,7 +1205,7 @@
 							<table class="w-full text-sm">
 								<thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
 									<tr>
-										{#each ['Placa','Conductor','Cliente','Mes','Valor','Paga Cliente'] as h}
+										{#each ['Placa','Conductor','Cliente','Mes','Valor','Paga Cliente','Asume'] as h}
 											<th class="px-4 py-3 text-left font-semibold">{h}</th>
 										{/each}
 									</tr>
@@ -1108,7 +1213,7 @@
 								<tbody class="divide-y divide-gray-100">
 									{#if recPaginado.length > 0}
 										{#each recPaginado as item}
-											<tr class="hover:bg-gray-50 transition-colors {item.pagaCliente === 'No' ? 'bg-red-50' : ''}">
+											<tr class="hover:bg-gray-50 transition-colors {item.tipo_fila === 'propietario' ? 'bg-amber-50' : item.pagaCliente === 'No' ? 'bg-red-50' : ''}">
 												<td class="px-4 py-3 font-medium text-gray-900">{item.placa}</td>
 												<td class="px-4 py-3 text-gray-600">{item.conductor}</td>
 												<td class="px-4 py-3 text-gray-600">{item.empresa_nombre}</td>
@@ -1119,11 +1224,24 @@
 														{item.pagaCliente}
 													</span>
 												</td>
+												<td class="px-4 py-3">
+													{#if item.tipo_fila === 'propietario'}
+														<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-bold bg-amber-200 text-amber-800">
+															Propietario {item.porcentaje_propietario}%
+														</span>
+													{:else if item.tipo_fila === 'cliente'}
+														<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-bold bg-blue-100 text-blue-700">
+															Cliente {100 - (item.porcentaje_propietario || 0)}%
+														</span>
+													{:else}
+														<span class="text-xs text-gray-400">—</span>
+													{/if}
+												</td>
 											</tr>
 										{/each}
 									{:else}
 										<tr>
-											<td colspan="6" class="py-12 text-center">
+											<td colspan="7" class="py-12 text-center">
 												<AlertCircle class="mx-auto h-8 w-8 text-gray-300 mb-2" />
 												<p class="text-sm text-gray-400">Sin registros{hayFiltros ? ' para los filtros aplicados' : ''}</p>
 											</td>
@@ -1345,6 +1463,167 @@
 			<div class="flex gap-3 justify-end">
 				<button on:click={() => (showDeleteModal = false)} class="rounded-lg px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 transition-colors">Cancelar</button>
 				<button on:click={eliminar} class="rounded-lg bg-red-600 px-4 py-2 text-sm text-white font-semibold hover:bg-red-700 transition-colors">Eliminar</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- ═══════════════════════════════════════════════════════════ -->
+<!-- Modal Preview Desprendibles -->
+<!-- ═══════════════════════════════════════════════════════════ -->
+{#if showPreviewModal}
+	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+		on:click={cerrarPreviewModal}
+		on:keydown={(e) => e.key === 'Escape' && cerrarPreviewModal()}
+		role="button" tabindex="-1">
+		<div class="relative w-full max-w-3xl mx-4 max-h-[85vh] flex flex-col rounded-2xl bg-white shadow-2xl overflow-hidden"
+			on:click|stopPropagation on:keydown={() => {}} role="dialog" tabindex="0">
+
+			<!-- Header -->
+			<div class="flex items-center justify-between border-b bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-4">
+				<div class="flex items-center gap-3">
+					<div class="flex h-10 w-10 items-center justify-center rounded-full bg-white/20">
+						<Mail class="h-5 w-5 text-white" />
+					</div>
+					<div>
+						<h2 class="text-lg font-bold text-white">Enviar Desprendibles</h2>
+						<p class="text-sm text-orange-100">Preview de notificaciones por email</p>
+					</div>
+				</div>
+				<button on:click={cerrarPreviewModal} class="rounded-full p-1.5 text-white/80 hover:bg-white/20 hover:text-white transition-colors">
+					<X class="h-5 w-5" />
+				</button>
+			</div>
+
+			<!-- Body -->
+			<div class="flex-1 overflow-y-auto p-6">
+				{#if previewLoading}
+					<div class="flex flex-col items-center justify-center py-12">
+						<div class="mb-4 h-10 w-10 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"></div>
+						<p class="text-gray-500 text-sm">Cargando datos de conductores...</p>
+					</div>
+				{:else if sendComplete}
+					<!-- Resultados del envío -->
+					<div class="space-y-3">
+						<div class="flex items-center gap-3 rounded-xl bg-orange-50 border border-orange-200 p-4 mb-4">
+							<CheckCircle class="h-6 w-6 text-orange-600 flex-shrink-0" />
+							<div>
+								<p class="font-semibold text-orange-800">Envío completado</p>
+								<p class="text-sm text-orange-600">
+									{sendResults.filter(r => r.status === 'enviado').length} enviado(s),
+									{sendResults.filter(r => r.status === 'error').length} error(es)
+								</p>
+							</div>
+						</div>
+						{#each sendResults as result}
+							<div class="flex items-center gap-3 rounded-lg border p-3 {result.status === 'enviado' ? 'border-orange-200 bg-orange-50/50' : 'border-red-200 bg-red-50/50'}">
+								{#if result.status === 'enviado'}
+									<CheckCircle class="h-5 w-5 text-orange-500 flex-shrink-0" />
+								{:else}
+									<XCircle class="h-5 w-5 text-red-500 flex-shrink-0" />
+								{/if}
+								<div class="flex-1 min-w-0">
+									<p class="font-medium text-sm text-gray-900 truncate">{result.conductor}</p>
+									<p class="text-xs text-gray-500 truncate">{result.email || 'Sin email'}</p>
+								</div>
+								{#if result.status === 'error'}
+									<span class="text-xs text-red-500 bg-red-100 px-2 py-0.5 rounded-full">{result.message}</span>
+								{:else}
+									<span class="text-xs text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">Enviado ✓</span>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<!-- Preview de conductores -->
+					<div class="mb-4 flex items-center gap-4">
+						<div class="flex items-center gap-2 rounded-lg bg-orange-50 border border-orange-200 px-3 py-2">
+							<CheckCircle class="h-4 w-4 text-orange-600" />
+							<span class="text-sm font-medium text-orange-700">{previewItems.filter(p => p.canSend).length} con email</span>
+						</div>
+						{#if previewItems.filter(p => !p.canSend).length > 0}
+							<div class="flex items-center gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2">
+								<AlertCircle class="h-4 w-4 text-amber-600" />
+								<span class="text-sm font-medium text-amber-700">{previewItems.filter(p => !p.canSend).length} sin email</span>
+							</div>
+						{/if}
+					</div>
+
+					<div class="rounded-xl border border-gray-200 overflow-hidden">
+						<table class="w-full text-sm">
+							<thead>
+								<tr class="bg-gray-50 text-left">
+									<th class="px-4 py-3 font-semibold text-gray-600">Conductor</th>
+									<th class="px-4 py-3 font-semibold text-gray-600">Email</th>
+									<th class="px-4 py-3 font-semibold text-gray-600 text-right">Monto</th>
+									<th class="px-4 py-3 font-semibold text-gray-600 text-center">Estado</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each previewItems as item, i}
+									<tr class="border-t border-gray-100 {i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} {!item.canSend ? 'opacity-60' : ''}">
+										<td class="px-4 py-3">
+											<p class="font-medium text-gray-900">{item.conductor}</p>
+											<p class="text-xs text-gray-400">{formatDateShort(item.periodo_inicio)} – {formatDateShort(item.periodo_fin)}</p>
+										</td>
+										<td class="px-4 py-3">
+											{#if item.email}
+												<span class="text-gray-700">{item.email}</span>
+											{:else}
+												<span class="text-amber-500 italic text-xs">Sin email registrado</span>
+											{/if}
+										</td>
+										<td class="px-4 py-3 text-right font-semibold text-gray-900">
+											{formatCurrency(Number(item.sueldo_total) || 0)}
+										</td>
+										<td class="px-4 py-3 text-center">
+											{#if item.canSend}
+												<span class="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-medium text-orange-700">
+													<Mail class="h-3 w-3" /> Listo
+												</span>
+											{:else}
+												<span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-700">
+													<AlertCircle class="h-3 w-3" /> Sin email
+												</span>
+											{/if}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Footer -->
+			<div class="border-t bg-gray-50 px-6 py-4 flex items-center justify-between">
+				{#if sendComplete}
+					<div></div>
+					<button on:click={cerrarPreviewModal}
+						class="rounded-lg bg-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-300 transition-colors">
+						Cerrar
+					</button>
+				{:else}
+					<p class="text-xs text-gray-400">
+						Se enviará un email con link al Portal del Conductor
+					</p>
+					<div class="flex items-center gap-3">
+						<button on:click={cerrarPreviewModal} disabled={sendingEmails}
+							class="rounded-lg px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-200 transition-colors disabled:opacity-50">
+							Cancelar
+						</button>
+						<button on:click={confirmarEnvioDesprendibles} disabled={sendingEmails || previewItems.filter(p => p.canSend).length === 0}
+							class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 px-5 py-2.5 text-sm font-semibold text-white shadow-md hover:shadow-lg hover:from-orange-600 hover:to-orange-700 transition-all disabled:opacity-50">
+							{#if sendingEmails}
+								<div class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
+								Enviando...
+							{:else}
+								<Send class="h-4 w-4" />
+								Enviar {previewItems.filter(p => p.canSend).length} Email(s)
+							{/if}
+						</button>
+					</div>
+				{/if}
 			</div>
 		</div>
 	</div>

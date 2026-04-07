@@ -99,9 +99,16 @@ export async function generarPdfDesprendible(
 		.filter((b) => b.quantity > 0)
 		.map((b) => [b.name, '', String(b.quantity), formatCurrency(b.totalValue)]);
 
-	// Cantidad pernotes
+	// Cantidad pernotes - parsear fechas defensivamente (puede venir como JSON string)
+	const parseFechas = (fechas: any): string[] => {
+		if (Array.isArray(fechas)) return fechas;
+		if (typeof fechas === 'string') {
+			try { const p = JSON.parse(fechas); return Array.isArray(p) ? p : []; } catch { return []; }
+		}
+		return [];
+	};
 	const cantidadPernotes =
-		item.pernotes?.reduce((t, p) => t + (p.fechas ? p.fechas.length : 0), 0) || 0;
+		item.pernotes?.reduce((t, p) => t + parseFechas(p.fechas).length, 0) || 0;
 
 	// Tabla de conceptos adicionales
 	const conceptosBody = [
