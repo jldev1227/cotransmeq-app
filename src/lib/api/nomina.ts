@@ -327,16 +327,16 @@ export interface PreviewRecargoPlanilla {
 	total_dias: number;
 	total_horas: number;
 	total_valor: number;
+	total_festivos: number;
 	dias: PreviewRecargoDia[];
 	configuracion_salarial: {
 		id: string;
-		empresa_id: string | null;
 		salario_basico: number;
 		valor_hora_trabajador: number;
 		horas_mensuales_base: number;
 		paga_dias_festivos: boolean;
 		porcentaje_festivos: number;
-	};
+	} | null;
 }
 
 export interface PreviewRecargosResponse {

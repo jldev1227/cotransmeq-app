@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { obtenerLiquidacionPorId } from '$lib/api/nomina';
+	import { obtenerLiquidacionPorId, obtenerPreviewRecargos } from '$lib/api/nomina';
 	import type { Liquidacion, FirmaConUrl } from '$lib/types/nomina';
 	import { toast } from 'svelte-sonner';
 	import {
@@ -188,7 +188,21 @@
 		if (!liquidacion || generatingPdf) return;
 		try {
 			generatingPdf = true;
-			await generarPdfDesprendible(liquidacion, firmas);
+			// Obtener datos de recargos planillas para la página 2+ del PDF
+			let recargosData = null;
+			if (liquidacion.conductor_id && liquidacion.periodo_inicio && liquidacion.periodo_fin) {
+				try {
+					const recargosRes = await obtenerPreviewRecargos(
+						liquidacion.conductor_id,
+						liquidacion.periodo_inicio,
+						liquidacion.periodo_fin
+					);
+					recargosData = recargosRes.data;
+				} catch (e) {
+					console.warn('No se pudieron cargar recargos para el PDF:', e);
+				}
+			}
+			await generarPdfDesprendible(liquidacion, firmas, recargosData);
 		} catch (error: any) {
 			console.error('Error generando PDF:', error);
 			toast.error('Error al generar el PDF del desprendible');

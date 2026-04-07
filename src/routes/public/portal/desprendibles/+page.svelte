@@ -144,10 +144,10 @@
     generandoPdf = id;
     try {
       const res = await portalFetch(`/conductor-portal/desprendibles/${id}`);
-      const { liquidacion, firma } = res.data;
+      const { liquidacion, firma, recargos } = res.data;
       const firmasArr = firma?.presignedUrl ? [{ presignedUrl: firma.presignedUrl }] : [];
       const { generarPdfDesprendible } = await import('$lib/utils/pdfDesprendible');
-      await generarPdfDesprendible(liquidacion, firmasArr as any);
+      await generarPdfDesprendible(liquidacion, firmasArr as any, recargos);
     } catch (err: any) {
       if (err.status === 401) {
         portalSession.logout();
