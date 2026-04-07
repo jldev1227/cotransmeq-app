@@ -963,7 +963,7 @@ export async function generarPdfDesprendible(
 
 			// Días laborales table
 			const dias: any[] = planilla.dias || [];
-			const headers = ['DÍA', 'HORARIO', 'HORAS', 'HED', 'RN', 'HEN', 'RD', 'HEFD', 'HEFN'];
+			const headers = ['DÍA', 'HORARIO', 'HORAS', 'HED', 'RN', 'HEN', 'RD', 'RNDF', 'HEFD', 'HEFN'];
 			const headerRow = headers.map((h) => ({
 				text: h,
 				bold: true,
@@ -999,6 +999,7 @@ export async function generarPdfDesprendible(
 				const rn = getRecargo('RN');
 				const hen = getRecargo('HEN');
 				const rd = getRecargo('RD');
+				const rndf = getRecargo('RNDF');
 				const hefd = getRecargo('HEFD');
 				const hefn = getRecargo('HEFN');
 
@@ -1033,6 +1034,7 @@ export async function generarPdfDesprendible(
 					{ text: fmtVal(rn), ...cellStyle },
 					{ text: fmtVal(hen), ...cellStyle },
 					{ text: fmtVal(rd), ...cellStyle },
+					{ text: fmtVal(rndf), ...cellStyle },
 					{ text: fmtVal(hefd), ...cellStyle },
 					{ text: fmtVal(hefn), ...cellStyle }
 				];
@@ -1082,6 +1084,7 @@ export async function generarPdfDesprendible(
 					getTotal('RN'),
 					getTotal('HEN'),
 					getTotal('RD'),
+					getTotal('RNDF'),
 					getTotal('HEFD'),
 					getTotal('HEFN')
 				].map((v) => ({
@@ -1097,7 +1100,7 @@ export async function generarPdfDesprendible(
 			content.push({
 				table: {
 					headerRows: 1,
-					widths: Array(9).fill('*'),
+					widths: Array(10).fill('*'),
 					body: [headerRow, ...diasRows, totalesRow]
 				},
 				layout: {
