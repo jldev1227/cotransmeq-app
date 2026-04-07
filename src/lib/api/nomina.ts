@@ -290,6 +290,18 @@ export const enviarDesprendibles = async (liquidacionIds: string[]) => {
 	return response.data;
 };
 
+/**
+ * Toggle visibilidad de desprendibles en el portal del conductor
+ */
+export const toggleDesprendibleVisible = async (liquidacionIds: string[], visible: boolean) => {
+	const response = await apiClient.patch<{
+		success: boolean;
+		message: string;
+		data: { count: number; visible: boolean };
+	}>('/api/liquidaciones/desprendible-visible', { liquidacionIds, visible });
+	return response.data;
+};
+
 // ==================== PREVIEW RECARGOS ====================
 
 export interface PreviewRecargoDia {
@@ -429,6 +441,7 @@ export default {
 	// Desprendibles
 	previewDesprendibles,
 	enviarDesprendibles,
+	toggleDesprendibleVisible,
 
 	// Firmas
 	obtenerFirmasPorLiquidacion,

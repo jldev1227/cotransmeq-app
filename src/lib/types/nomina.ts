@@ -257,6 +257,9 @@ export interface Liquidacion {
 
 	// Flag adicional
 	es_cotransmeq?: boolean;
+
+	// Visibilidad portal conductor
+	desprendible_visible?: boolean;
 }
 
 // ==================== CONFIGURACIÓN ====================

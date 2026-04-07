@@ -7,7 +7,8 @@
 		obtenerAnalisis,
 		eliminarLiquidacion,
 		previewDesprendibles,
-		enviarDesprendibles
+		enviarDesprendibles,
+		toggleDesprendibleVisible
 	} from '$lib/api/nomina';
 	import type { LiquidacionesParams } from '$lib/api/nomina';
 	import type { Liquidacion } from '$lib/types/nomina';
@@ -309,6 +310,32 @@
 			toast.error(err?.response?.data?.message || 'Error al enviar desprendibles');
 		} finally {
 			sendingEmails = false;
+		}
+	}
+
+	async function handleToggleVisible(id: string, currentValue: boolean) {
+		try {
+			await toggleDesprendibleVisible([id], !currentValue);
+			const idx = liquidaciones.findIndex(l => l.id === id);
+			if (idx !== -1) {
+				liquidaciones[idx].desprendible_visible = !currentValue;
+				liquidaciones = liquidaciones;
+			}
+			toast.success(!currentValue ? 'Desprendible visible en portal' : 'Desprendible oculto del portal');
+		} catch (err: any) {
+			toast.error(err?.response?.data?.message || 'Error al cambiar visibilidad');
+		}
+	}
+
+	async function handleBulkToggleVisible(visible: boolean) {
+		if (selectedLiquidaciones.size === 0) { toast.error('Selecciona al menos una liquidación'); return; }
+		try {
+			const ids = Array.from(selectedLiquidaciones);
+			await toggleDesprendibleVisible(ids, visible);
+			liquidaciones = liquidaciones.map(l => ids.includes(l.id) ? { ...l, desprendible_visible: visible } : l);
+			toast.success(`${ids.length} desprendible(s) ${visible ? 'visibles' : 'ocultos'}`);
+		} catch (err: any) {
+			toast.error(err?.response?.data?.message || 'Error al cambiar visibilidad');
 		}
 	}
 
@@ -759,10 +786,22 @@
 					{/if}
 				</div>
 				{#if selectedLiquidaciones.size > 0}
-					<button on:click={abrirPreviewDesprendibles}
-						class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 px-4 py-2 text-sm text-white shadow-md transition-all hover:shadow-lg hover:from-orange-600 hover:to-orange-700">
-						<Send class="h-4 w-4" />Enviar Desprendibles ({selectedLiquidaciones.size})
-					</button>
+					<div class="flex items-center gap-2">
+						<button on:click={() => handleBulkToggleVisible(true)}
+							class="flex items-center gap-2 rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-sm text-orange-700 transition-all hover:bg-orange-100"
+							title="Hacer visibles en el portal">
+							<Eye class="h-4 w-4" />Mostrar ({selectedLiquidaciones.size})
+						</button>
+						<button on:click={() => handleBulkToggleVisible(false)}
+							class="flex items-center gap-2 rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-600 transition-all hover:bg-gray-100"
+							title="Ocultar del portal">
+							<XCircle class="h-4 w-4" />Ocultar ({selectedLiquidaciones.size})
+						</button>
+						<button on:click={abrirPreviewDesprendibles}
+							class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 px-4 py-2 text-sm text-white shadow-md transition-all hover:shadow-lg hover:from-orange-600 hover:to-orange-700">
+							<Send class="h-4 w-4" />Enviar Desprendibles ({selectedLiquidaciones.size})
+						</button>
+					</div>
 				{/if}
 			</div>
 		</div>
@@ -829,6 +868,7 @@
 										{#if sortBy === 'estado'}{#if sortOrder === 'desc'}<ChevronDown class="h-4 w-4 text-orange-600" />{:else}<ChevronUp class="h-4 w-4 text-orange-600" />{/if}{:else}<ChevronsUpDown class="h-4 w-4 text-gray-400" />{/if}
 									</button>
 								</th>
+								<th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">Visible</th>
 								<th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">Acciones</th>
 							</tr>
 						</thead>
@@ -864,6 +904,19 @@
 										{#if liq.fecha_liquidacion}
 											<p class="text-xs text-gray-400 mt-1">{formatDateShort(liq.fecha_liquidacion)}</p>
 										{/if}
+									</td>
+									<td class="px-4 py-3 text-center">
+										<button
+											on:click={() => handleToggleVisible(liq.id, liq.desprendible_visible ?? false)}
+											class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors
+											{liq.desprendible_visible ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}"
+											title={liq.desprendible_visible ? 'Visible en portal - Click para ocultar' : 'Oculto del portal - Click para mostrar'}>
+											{#if liq.desprendible_visible}
+												<CheckCircle class="h-3.5 w-3.5" />Sí
+											{:else}
+												<XCircle class="h-3.5 w-3.5" />No
+											{/if}
+										</button>
 									</td>
 									<td class="px-4 py-3">
 										<div class="flex items-center justify-center gap-1">
