@@ -63,6 +63,7 @@
 	let noDescontarPension = false;
 	let descontarTransporte = false;
 	let redondearNetoArriba = false;
+	let descontarUnPeso = false;
 	let estadoLiquidacion: 'Pendiente' | 'Liquidado' = 'Pendiente';
 
 	// Períodos especiales
@@ -977,7 +978,7 @@
 			ajuste_parex_recargos_completos: isAjusteParexRecargosCompletos,
 			dias_ajuste_deducciones: diasAjusteDeducciones,
 			auxilio_transporte: totales.auxilioTransporte,
-			sueldo_total: redondearNetoArriba ? Math.ceil(totales.sueldoTotal) : Math.floor(totales.sueldoTotal),
+			sueldo_total: (redondearNetoArriba ? Math.ceil(totales.sueldoTotal) : Math.floor(totales.sueldoTotal)) - (descontarUnPeso ? 1 : 0),
 			salario_base: totales.salarioDevengado,
 			total_pernotes: totales.totalPernotes,
 			total_bonificaciones: totales.totalBonificaciones,
@@ -2295,10 +2296,14 @@
 											<span class="text-[11px] text-gray-500">Aproximar hacia arriba</span>
 										</label>
 									{/if}
+									<label class="mt-2 flex items-center gap-2 cursor-pointer">
+										<input type="checkbox" bind:checked={descontarUnPeso} class="rounded border-gray-600 bg-gray-800 text-red-500 focus:ring-red-500 focus:ring-offset-gray-900" />
+										<span class="text-[11px] text-gray-500">Descontar $1</span>
+									</label>
 								</div>
 								<div class="text-right">
 									<span class="text-3xl font-bold text-orange-400">
-										{redondearNetoArriba ? formatCurrency(Math.ceil(totales.sueldoTotal)) : formatCurrencyFloor(totales.sueldoTotal)}
+										{formatCurrency((redondearNetoArriba ? Math.ceil(totales.sueldoTotal) : Math.floor(totales.sueldoTotal)) - (descontarUnPeso ? 1 : 0))}
 									</span>
 									{#if totales.sueldoTotal % 1 !== 0}
 										<span class="block text-xs text-gray-500">{formatCurrencyDecimal(totales.sueldoTotal)}</span>
