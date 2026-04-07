@@ -126,7 +126,7 @@
 
 <style>
   /* ═══════════════════════════════════════
-     CSS VARIABLES — COTRANSMEQ (Blue theme)
+     CSS VARIABLES — COTRANSMEQ (Orange primary, Blue secondary)
   ═══════════════════════════════════════ */
   .portal {
     --bg: #f1f5f9;
@@ -136,9 +136,11 @@
     --text: #0f172a;
     --text2: #475569;
     --text3: #94a3b8;
-    --accent: #1e40af;
-    --accent-light: #eff6ff;
-    --accent-dark: #1d4ed8;
+    --accent: #EA580C;
+    --accent-light: #FFF7ED;
+    --accent-dark: #C2410C;
+    --accent2: #1e40af;
+    --accent2-light: #eff6ff;
     --shadow: 0 1px 3px rgba(0,0,0,0.08);
     --shadow-lg: 0 4px 16px rgba(0,0,0,0.12);
 
@@ -158,7 +160,8 @@
     --text: #f1f5f9;
     --text2: #94a3b8;
     --text3: #64748b;
-    --accent-light: #172554;
+    --accent-light: #431407;
+    --accent2-light: #172554;
     --shadow: 0 1px 3px rgba(0,0,0,0.3);
     --shadow-lg: 0 4px 16px rgba(0,0,0,0.4);
   }

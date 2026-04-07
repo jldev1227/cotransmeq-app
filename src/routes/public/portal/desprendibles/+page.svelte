@@ -190,7 +190,7 @@
     firmaCanvas.width = rect.width * dpr;
     firmaCanvas.height = rect.height * dpr;
     firmaCtx.scale(dpr, dpr);
-    firmaCtx.strokeStyle = '#1e40af';
+    firmaCtx.strokeStyle = '#EA580C';
     firmaCtx.lineWidth = 2.5;
     firmaCtx.lineCap = 'round';
     firmaCtx.lineJoin = 'round';
@@ -509,7 +509,7 @@
             </div>
             <div class="m-stat">
               <span class="m-stat-label">Firma</span>
-              <span class="m-stat-value" style={d.firmado ? 'color:#1e40af' : 'color:#d97706'}>
+              <span class="m-stat-value" style={d.firmado ? 'color:#EA580C' : 'color:#d97706'}>
                 {d.firmado ? '✅' : '🖊️ Pendiente'}
               </span>
             </div>
@@ -688,24 +688,24 @@
 <style>
   /* ═══ Highlight Animation (from email link) ═══ */
   @keyframes highlightPulse {
-    0% { box-shadow: 0 0 0 0 rgba(30, 64, 175, 0.6); }
-    40% { box-shadow: 0 0 0 8px rgba(30, 64, 175, 0.2); }
-    100% { box-shadow: 0 0 0 0 rgba(30, 64, 175, 0); }
+    0% { box-shadow: 0 0 0 0 rgba(234, 88, 12, 0.6); }
+    40% { box-shadow: 0 0 0 8px rgba(234, 88, 12, 0.2); }
+    100% { box-shadow: 0 0 0 0 rgba(234, 88, 12, 0); }
   }
   @keyframes highlightBg {
-    0% { background-color: rgba(30, 64, 175, 0.15); }
-    50% { background-color: rgba(30, 64, 175, 0.05); }
-    100% { background-color: rgba(30, 64, 175, 0.15); }
+    0% { background-color: rgba(234, 88, 12, 0.15); }
+    50% { background-color: rgba(234, 88, 12, 0.05); }
+    100% { background-color: rgba(234, 88, 12, 0.15); }
   }
 
   :global(tr.highlight-row) {
     animation: highlightPulse 1.5s ease-in-out infinite, highlightBg 2s ease-in-out infinite;
-    border-left: 3px solid #1e40af !important;
+    border-left: 3px solid #EA580C !important;
     position: relative;
   }
   .highlight-card {
     animation: highlightPulse 1.5s ease-in-out infinite, highlightBg 2s ease-in-out infinite;
-    border-left: 4px solid #1e40af !important;
+    border-left: 4px solid #EA580C !important;
   }
 
   .desprendibles-page {
@@ -780,7 +780,7 @@
     cursor: pointer;
     min-width: 90px;
   }
-  .filter-select:focus { border-color: #1e40af; box-shadow: 0 0 0 2px rgba(30,64,175,0.12); }
+  .filter-select:focus { border-color: #EA580C; box-shadow: 0 0 0 2px rgba(234,88,12,0.12); }
   .search-wrap {
     position: relative;
     display: flex;
@@ -803,7 +803,7 @@
     font-family: inherit;
     outline: none;
   }
-  .filter-input:focus { border-color: #1e40af; box-shadow: 0 0 0 2px rgba(30,64,175,0.12); }
+  .filter-input:focus { border-color: #EA580C; box-shadow: 0 0 0 2px rgba(234,88,12,0.12); }
   .filter-input::placeholder { color: var(--text3, #94a3b8); }
   .search-clear {
     position: absolute;
@@ -831,7 +831,7 @@
   .spinner {
     width: 32px; height: 32px;
     border: 3px solid var(--border, #e2e8f0);
-    border-top-color: #1e40af;
+    border-top-color: #EA580C;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
     display: inline-block;
@@ -911,7 +911,7 @@
   .status-pill.liquidado { background: #dbeafe; color: #1e3a8a; }
   .status-pill.pendiente { background: #fef9c3; color: #854d0e; }
   .status-pill.otro { background: #f1f5f9; color: #475569; }
-  .sueldo { font-weight: 700; color: #1e40af; }
+  .sueldo { font-weight: 700; color: #EA580C; }
   .firma-si { font-size: 1rem; cursor: help; }
   .firma-pendiente { font-size: 0.95rem; opacity: 0.7; }
 
@@ -927,24 +927,24 @@
     border: none;
   }
   .btn-ver {
-    background: #eff6ff;
-    color: #1e40af;
-    border: 1px solid #93c5fd;
+    background: #FFF7ED;
+    color: #EA580C;
+    border: 1px solid #FDBA74;
   }
-  .btn-ver:hover:not(:disabled) { background: #dbeafe; }
+  .btn-ver:hover:not(:disabled) { background: #FFEDD5; }
   .btn-ver:disabled { opacity: 0.5; cursor: wait; }
   .btn-firmar {
-    background: linear-gradient(135deg, #1e40af, #1d4ed8);
+    background: linear-gradient(135deg, #EA580C, #C2410C);
     color: #fff;
-    box-shadow: 0 1px 4px rgba(30,64,175,0.2);
+    box-shadow: 0 1px 4px rgba(234,88,12,0.2);
   }
-  .btn-firmar:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(30,64,175,0.3); }
+  .btn-firmar:hover { transform: translateY(-1px); box-shadow: 0 2px 8px rgba(234,88,12,0.3); }
   .btn-firmar:active { transform: scale(0.96); }
 
   .spinner-mini {
     width: 14px; height: 14px;
     border: 2px solid var(--border, #e2e8f0);
-    border-top-color: #1e40af;
+    border-top-color: #EA580C;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
     display: inline-block;
@@ -962,7 +962,7 @@
     border-radius: 12px;
     overflow: hidden;
     box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-    border-left: 4px solid #1e40af;
+    border-left: 4px solid #EA580C;
   }
   .m-card-header {
     display: flex;
@@ -1002,7 +1002,7 @@
     color: var(--text, #0f172a);
     font-family: 'JetBrains Mono', monospace;
   }
-  .m-stat-value.main { font-size: 1.05rem; color: #1e40af; }
+  .m-stat-value.main { font-size: 1.05rem; color: #EA580C; }
   .m-btn-pdf {
     display: flex;
     align-items: center;
@@ -1013,12 +1013,12 @@
     padding: 0.55rem;
     border: none;
     border-radius: 9px;
-    background: linear-gradient(135deg, #1e40af, #1d4ed8);
+    background: linear-gradient(135deg, #EA580C, #C2410C);
     color: #fff;
     font-weight: 700;
     font-size: 0.85rem;
     cursor: pointer;
-    box-shadow: 0 2px 6px rgba(30,64,175,0.18);
+    box-shadow: 0 2px 6px rgba(234,88,12,0.18);
     transition: transform .1s;
   }
   .m-btn-pdf:active:not(:disabled) { transform: scale(0.97); }
@@ -1032,16 +1032,16 @@
     width: calc(100% - 1.7rem);
     margin: 0 0.85rem 0.7rem;
     padding: 0.55rem;
-    border: 2px solid #1e40af;
+    border: 2px solid #EA580C;
     border-radius: 9px;
-    background: #eff6ff;
-    color: #1e40af;
+    background: #FFF7ED;
+    color: #EA580C;
     font-weight: 700;
     font-size: 0.85rem;
     cursor: pointer;
     transition: all .15s;
   }
-  .m-btn-firmar:active { transform: scale(0.97); background: #dbeafe; }
+  .m-btn-firmar:active { transform: scale(0.97); background: #FFEDD5; }
 
   .spinner-mini-w {
     width: 14px; height: 14px;
@@ -1137,7 +1137,7 @@
     color: var(--text, #0f172a);
     font-family: 'JetBrains Mono', monospace;
   }
-  .fr-value.main { color: #1e40af; font-size: 0.95rem; }
+  .fr-value.main { color: #EA580C; font-size: 0.95rem; }
 
   .firma-canvas-container { padding: 0.85rem 1.25rem; }
   .firma-canvas-label {
@@ -1158,8 +1158,8 @@
     background: #fff;
   }
   .canvas-wrap.canvas-valid {
-    border-color: #1e40af;
-    box-shadow: 0 0 0 3px rgba(30,64,175,0.12);
+    border-color: #EA580C;
+    box-shadow: 0 0 0 3px rgba(234,88,12,0.12);
   }
   .canvas-wrap.canvas-invalid {
     border-color: #f59e0b;
@@ -1208,7 +1208,7 @@
     margin: 0.4rem 0 0;
   }
   .firma-feedback.invalid { color: #d97706; }
-  .firma-feedback.valid { color: #1e40af; }
+  .firma-feedback.valid { color: #EA580C; }
 
   .firma-progress-bar {
     height: 4px;
@@ -1219,7 +1219,7 @@
   }
   .firma-progress-fill {
     height: 100%;
-    background: linear-gradient(90deg, #f59e0b, #1e40af);
+    background: linear-gradient(90deg, #f59e0b, #EA580C);
     border-radius: 4px;
     transition: width .2s;
   }
@@ -1249,16 +1249,16 @@
     padding: 0.65rem;
     border: none;
     border-radius: 10px;
-    background: linear-gradient(135deg, #1e40af, #1d4ed8);
+    background: linear-gradient(135deg, #EA580C, #C2410C);
     color: #fff;
     font-weight: 700;
     font-size: 0.88rem;
     cursor: pointer;
     display: flex; align-items: center; justify-content: center; gap: 0.35rem;
-    box-shadow: 0 2px 8px rgba(30,64,175,0.2);
+    box-shadow: 0 2px 8px rgba(234,88,12,0.2);
     transition: all .15s;
   }
-  .btn-modal-submit:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(30,64,175,0.3); }
+  .btn-modal-submit:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(234,88,12,0.3); }
   .btn-modal-submit:active:not(:disabled) { transform: scale(0.98); }
   .btn-modal-submit:disabled { opacity: 0.5; cursor: not-allowed; }
 
@@ -1270,7 +1270,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: linear-gradient(135deg, rgba(30,64,175,0.95), rgba(29,78,216,0.95));
+    background: linear-gradient(135deg, rgba(234,88,12,0.95), rgba(194,65,12,0.95));
     padding: 1rem;
   }
   .success-content {
@@ -1287,7 +1287,7 @@
   }
   .success-icon {
     width: 72px; height: 72px;
-    color: #1e40af;
+    color: #EA580C;
   }
   .success-title {
     font-size: 1.8rem;

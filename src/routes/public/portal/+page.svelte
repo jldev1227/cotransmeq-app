@@ -210,8 +210,9 @@
     --text: #0f172a;
     --text2: #475569;
     --text3: #94a3b8;
-    --accent-color: #1e40af;
-    --accent-dark: #1d4ed8;
+    --accent-color: #EA580C;
+    --accent-dark: #C2410C;
+    --accent2: #1e40af;
     --input-bg: #f8fafc;
 
     font-family: 'Barlow', sans-serif;
@@ -223,7 +224,7 @@
     padding: 1.5rem 1rem;
     position: relative;
     background:
-      radial-gradient(ellipse 80% 50% at 50% -10%, #1e40af15 0%, transparent 60%),
+      radial-gradient(ellipse 80% 50% at 50% -10%, #EA580C15 0%, transparent 60%),
       var(--bg);
     color: var(--text);
     transition: background .25s, color .25s;
@@ -278,7 +279,7 @@
     font-weight: 800;
     line-height: 1.15;
     margin: 0 0 0.5rem;
-    background: linear-gradient(135deg, #1e40af, #1d4ed8);
+    background: linear-gradient(135deg, #EA580C, #C2410C);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -302,18 +303,18 @@
 
   .feature-chip {
     padding: 0.35rem 0.85rem;
-    background: #eff6ff;
-    border: 1px solid #93c5fd;
+    background: #FFF7ED;
+    border: 1px solid #FDBA74;
     border-radius: 99px;
     font-size: 0.78rem;
     font-weight: 600;
-    color: #1e3a5f;
+    color: #9A3412;
   }
 
   .page.dark .feature-chip {
-    background: #172554;
-    border-color: #1e40af;
-    color: #93c5fd;
+    background: #431407;
+    border-color: #EA580C;
+    color: #FDBA74;
   }
 
   .input-label {
@@ -343,7 +344,7 @@
   }
   .cedula-input:focus {
     border-color: var(--accent-color);
-    box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.12);
+    box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.12);
   }
   .cedula-input.input-error { border-color: #ef4444; }
 
@@ -361,7 +362,7 @@
     padding: 0.85rem;
     border: none;
     border-radius: 12px;
-    background: linear-gradient(135deg, #1e40af, #1d4ed8);
+    background: linear-gradient(135deg, #EA580C, #C2410C);
     color: #fff;
     font-size: 1rem;
     font-weight: 700;
@@ -371,9 +372,9 @@
     justify-content: center;
     gap: 0.5rem;
     transition: transform .1s, box-shadow .2s;
-    box-shadow: 0 2px 12px rgba(30, 64, 175, 0.25);
+    box-shadow: 0 2px 12px rgba(234, 88, 12, 0.25);
   }
-  .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(30, 64, 175, 0.35); }
+  .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(234, 88, 12, 0.35); }
   .btn-primary:active:not(:disabled) { transform: scale(0.98); }
   .btn-primary:disabled { opacity: 0.6; cursor: wait; }
 

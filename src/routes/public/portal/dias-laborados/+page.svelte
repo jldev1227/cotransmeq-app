@@ -28,8 +28,8 @@
   // CONSTANTES
   // ═══════════════════════════════
   const TIPOS: { value: TipoLabor; label: string; color: string; icon: string }[] = [
-    { value: 'LABORADO',      label: 'Día Laborado',  color: '#1e40af', icon: '🚛' },
-    { value: 'DISPONIBLE',    label: 'Disponible',    color: '#2563eb', icon: '✅' },
+    { value: 'LABORADO',      label: 'Día Laborado',  color: '#EA580C', icon: '🚛' },
+    { value: 'DISPONIBLE',    label: 'Disponible',    color: '#1e40af', icon: '✅' },
     { value: 'DESCANSO',      label: 'Descanso',      color: '#d97706', icon: '🌙' },
     { value: 'MANTENIMIENTO', label: 'Mantenimiento', color: '#dc2626', icon: '🔧' }
   ];
@@ -266,11 +266,11 @@
 
   <!-- Stats -->
   <div class="stats-row">
-    <div class="stat-card" style="--accent:#1e40af">
+    <div class="stat-card" style="--accent:#EA580C">
       <div class="stat-val">{statsMes.laborados}</div>
       <div class="stat-label">Laborados</div>
     </div>
-    <div class="stat-card" style="--accent:#2563eb">
+    <div class="stat-card" style="--accent:#1e40af">
       <div class="stat-val">{statsMes.disponibles}</div>
       <div class="stat-label">Disponible</div>
     </div>
@@ -282,7 +282,7 @@
       <div class="stat-val">{statsMes.mantenimiento}</div>
       <div class="stat-label">Mant.</div>
     </div>
-    <div class="stat-card" style="--accent:#f97316">
+    <div class="stat-card" style="--accent:#C2410C">
       <div class="stat-val">{statsMes.horasTotales}h</div>
       <div class="stat-label">Horas</div>
     </div>
@@ -589,7 +589,7 @@
     border: 2px solid var(--tcolor);
   }
   .dia-celda.hoy-celda {
-    box-shadow: inset 0 0 0 2px #1e40af;
+    box-shadow: inset 0 0 0 2px #EA580C;
   }
   .dia-celda:not(.vacio):not(.futuro):hover {
     background: var(--surface2, #f8fafc);
@@ -761,9 +761,9 @@
     outline: none;
     font-family: inherit;
   }
-  .field-input:focus { border-color: #1e40af; box-shadow: 0 0 0 2px rgba(30,64,175,0.1); }
+  .field-input:focus { border-color: #EA580C; box-shadow: 0 0 0 2px rgba(234,88,12,0.1); }
   .field-textarea { resize: vertical; min-height: 50px; }
-  .field-hint { font-size: 0.78rem; color: #1e40af; margin: 0.3rem 0 0; }
+  .field-hint { font-size: 0.78rem; color: #EA580C; margin: 0.3rem 0 0; }
 
   .form-error {
     margin-top: 0.75rem;
@@ -801,7 +801,7 @@
     padding: 0.65rem;
     border: none;
     border-radius: 10px;
-    background: linear-gradient(135deg, #1e40af, #1d4ed8);
+    background: linear-gradient(135deg, #EA580C, #C2410C);
     color: #fff;
     font-weight: 700;
     font-size: 0.9rem;
@@ -810,7 +810,7 @@
     transition: all .15s;
   }
   .btn-guardar:disabled { opacity: 0.5; cursor: not-allowed; }
-  .btn-guardar.ok { background: #1e40af; }
+  .btn-guardar.ok { background: #EA580C; }
 
   .spinner-sm, .spinner-dark {
     width: 16px; height: 16px;
@@ -822,7 +822,7 @@
   }
   .spinner-sm {
     border-color: var(--border, #e2e8f0);
-    border-top-color: #1e40af;
+    border-top-color: #EA580C;
   }
 
   @keyframes spin { to { transform: rotate(360deg); } }
