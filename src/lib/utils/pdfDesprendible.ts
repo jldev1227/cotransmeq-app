@@ -125,6 +125,10 @@ function obtenerDiferenciaDias(startStr: string, endStr: string): number {
  * Convierte una URL de imagen a base64 data URL
  */
 async function imageToBase64Url(url: string): Promise<string> {
+	// Si ya es un data URL base64, retornarlo directamente
+	if (url.startsWith('data:')) {
+		return url;
+	}
 	const response = await fetch(url);
 	const blob = await response.blob();
 	return new Promise((resolve, reject) => {
