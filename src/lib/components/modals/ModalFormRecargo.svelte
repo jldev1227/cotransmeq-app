@@ -265,8 +265,8 @@
 				return;
 			}
 
-			// Obtener todos los recargos ordenados por fecha de creación
-			const response = await fetch('https://backend-cotransmeq-production.up.railway.app/api/recargos', {
+			// Obtener todos los recargos (limit alto para traer todos y calcular consecutivo correcto)
+			const response = await fetch('https://backend-cotransmeq-production.up.railway.app/api/recargos?limit=10000&page=1', {
 				headers: {
 					'Authorization': `Bearer ${token}`
 				}
@@ -292,15 +292,15 @@
 			console.log('📋 Total de recargos:', recargos.length);
 			console.log('📋 Recargos completos:', recargos);
 			
-			// Filtrar solo los que tienen numero_planilla y extraer el número
+			// Filtrar solo los que tienen numero_planilla con formato CM-XXXX y extraer el número
 			const numerosExistentes = recargos
-				.filter((r: any) => r.numero_planilla)
+				.filter((r: any) => r.numero_planilla && r.numero_planilla.startsWith('CM-'))
 				.map((r: any) => {
-					// Extraer el número del formato "CM-0001" o similar
-					const match = r.numero_planilla.match(/(\d+)$/);
+					// Extraer el número del formato "CM-0001"
+					const match = r.numero_planilla.match(/^CM-(\d+)$/);
 					return match ? parseInt(match[1], 10) : 0;
 				})
-				.filter((n: number) => !isNaN(n));
+				.filter((n: number) => n > 0);
 
 			console.log('📊 Números de planilla existentes:', numerosExistentes);
 			console.log('📊 Recargos con planilla:', recargos.filter((r: any) => r.numero_planilla));
