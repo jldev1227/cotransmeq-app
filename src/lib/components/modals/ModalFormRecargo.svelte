@@ -300,7 +300,6 @@
 			}
 
 			const data = await response.json();
-			console.log('📦 Respuesta de la API:', data);
 			
 			// La respuesta puede venir como array directo o como objeto con propiedad 'data' o 'recargos'
 			let recargos = Array.isArray(data) ? data : (data.data || data.recargos || []);
@@ -310,9 +309,6 @@
 				recargos = [];
 			}
 
-			console.log('📋 Total de recargos:', recargos.length);
-			console.log('📋 Recargos completos:', recargos);
-			
 			// Filtrar solo los que tienen numero_planilla con formato CM-XXXX y extraer el número
 			const numerosExistentes = recargos
 				.filter((r: any) => r.numero_planilla && r.numero_planilla.startsWith('CM-'))
@@ -323,15 +319,10 @@
 				})
 				.filter((n: number) => n > 0);
 
-			console.log('📊 Números de planilla existentes:', numerosExistentes);
-			console.log('📊 Recargos con planilla:', recargos.filter((r: any) => r.numero_planilla));
-
 			// Encontrar el número más alto
 			const ultimoNumero = numerosExistentes.length > 0 
 				? Math.max(...numerosExistentes) 
 				: 0;
-
-			console.log('🔢 Último número:', ultimoNumero);
 
 			// Generar el siguiente número con formato CM-0001
 			const siguienteNumero = (ultimoNumero + 1).toString().padStart(4, '0');
@@ -344,7 +335,6 @@
 			// Ahora marcar como generado para evitar regeneración
 			planillaGenerada = true;
 			
-			console.log('✅ Número de planilla generado:', formData.tmNumber);
 			toast.success(`Número generado: ${nuevoNumero}`);
 		} catch (error) {
 			console.error('❌ Error al generar número de planilla:', error);
@@ -999,8 +989,6 @@
 			
 			// Si el número es diferente, ajustar las filas
 			if (diasActuales !== numeroDias) {
-				console.log(`📅 Ajustando días laborales: ${diasActuales} → ${numeroDias}`);
-				
 				if (numeroDias > diasActuales) {
 					// Agregar filas vacías
 					const filasNuevas = Array.from({ length: numeroDias - diasActuales }, (_, index) => ({
@@ -1054,19 +1042,16 @@
 	async function cargarDatosRecargo(id: string) {
 		// Evitar cargar el mismo recargo múltiples veces
 		if (lastLoadedRecargoId === id && isLoadingData) {
-			console.log('⏭️  Ya se está cargando este recargo, saltando...');
 			return;
 		}
 		
 		try {
-			console.log('📥 Cargando recargo para edición, ID:', id);
 			lastLoadedRecargoId = id;
 			isLoadingData = true;
 			
 			const recargo = await recargosApi.obtenerPorId(id);
 
 			if (recargo) {
-				console.log('📦 Recargo obtenido:', recargo);
 				// Verificar si viene de un servicio
 				fromServicio = !!(recargo as any).servicio_id;
 
@@ -1134,8 +1119,6 @@
 
 				// Cargar días laborales
 				if (recargo.dias_laborales_planillas && recargo.dias_laborales_planillas.length > 0) {
-					console.log('📋 Cargando días laborales:', recargo.dias_laborales_planillas);
-
 					diasLaborales = recargo.dias_laborales_planillas.map((dia: any) => ({
 						id: dia.id,
 						dia: dia.dia.toString(),
@@ -1151,8 +1134,6 @@
 						disponibilidad: dia.disponibilidad || false,
 						continua_siguiente_dia: dia.continua_siguiente_dia || false
 					}));
-
-					console.log('✅ Días laborales cargados:', diasLaborales);
 				}
 				editMode = true;
 			}
@@ -1337,7 +1318,6 @@
 						continua_siguiente_dia: dia.continua_siguiente_dia || false
 					}))
 				};
-				console.log('📤 Datos de actualización a enviar:', JSON.stringify(updateData, null, 2));
 
 				// Si hay clave S3 existente y no se adjuntó archivo nuevo, preservarla
 				if (archivoExistenteKey && !archivoAdjunto) {
@@ -1424,7 +1404,6 @@
 						continua_siguiente_dia: dia.continua_siguiente_dia || false
 					}))
 				};
-				console.log('📤 Datos a enviar al backend:', JSON.stringify(recargoData, null, 2));
 
 				// TODO: Si hay archivo, implementar endpoint que acepte multipart
 				if (archivoAdjunto) {
@@ -1506,19 +1485,13 @@
 	// Cargar datos al abrir en modo edición o generar número de planilla en modo creación
 	$: {
 		if (isOpen && recargoId && !isLoadingData && lastLoadedRecargoId !== recargoId) {
-			console.log('🔵 Modo EDICIÓN - ID:', recargoId);
 			editMode = true;
 			cargarDatosRecargo(recargoId);
-		} else if (isOpen && recargoId && isLoadingData) {
-			console.log('🔒 Ya se está cargando este recargo, saltando...');
 		} else if (isOpen && !recargoId && !planillaGenerada && !isGenerandoPlanilla) {
-			console.log('🟢 Modo CREACIÓN - Generando planilla...');
 			editMode = false;
 			// Solo generar si estamos en modo creación y no se ha generado antes
 			generarNumeroPlanilla();
-		} else if (isOpen && !recargoId && planillaGenerada) {
-			console.log('🟡 Modo CREACIÓN - Planilla ya generada:', formData.tmNumber);
-		}
+		} 
 	}
 </script>
 

@@ -1005,26 +1005,6 @@
 			recargos_preview: previewRecargosGrupos
 		};
 
-		// === DEBUG: Log payload antes de enviar ===
-		console.log('=== FRONTEND PAYLOAD ===');
-		console.log('salario_base:', payload.salario_base);
-		console.log('auxilio_transporte:', payload.auxilio_transporte);
-		console.log('total_bonificaciones:', payload.total_bonificaciones);
-		console.log('total_pernotes:', payload.total_pernotes);
-		console.log('total_recargos:', payload.total_recargos);
-		console.log('salud:', payload.salud);
-		console.log('pension:', payload.pension);
-		console.log('sueldo_total:', payload.sueldo_total);
-		console.log('ajuste_valor:', payload.ajuste_valor);
-		console.log('ajuste_parex:', payload.ajuste_parex, '| ajuste_parex_valor:', payload.ajuste_parex_valor);
-		console.log('disponibilidad:', payload.disponibilidad);
-		console.log('detalles_vehiculos:', payload.detalles_vehiculos.length);
-		payload.detalles_vehiculos.forEach((det: any) => {
-			console.log(`  veh ${det.vehiculo?.label}: bonos=${det.bonos?.length}, mant=${det.mantenimientos?.length}, pernotes=${det.pernotes?.length}, recargos=${det.recargos?.length}`);
-			det.pernotes?.forEach((p: any) => console.log(`    pernote: empresa=${p.empresa_id}, cant=${p.cantidad}, val=${p.valor}, fechas=${Array.isArray(p.fechas) ? p.fechas.length + ' items' : typeof p.fechas}`));
-		});
-		console.log('========================');
-
 		await onSubmit(payload);
 	}
 

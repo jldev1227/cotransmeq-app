@@ -52,7 +52,6 @@ export const municipios = {
 		});
 
 		if (!force && isCacheValid(currentState.lastFetch)) {
-			console.log('✅ Municipios en cache, usando datos existentes');
 			return;
 		}
 
@@ -63,7 +62,6 @@ export const municipios = {
 		}));
 
 		try {
-			console.log('🔄 Cargando municipios desde API...');
 			const response = await apiClient.get('/api/municipios');
 
 			let municipiosData: Municipio[] = [];
@@ -86,10 +84,6 @@ export const municipios = {
 				{} as Record<number, Municipio[]>
 			);
 
-			console.log(
-				`✅ Municipios cargados: ${municipiosData.length} municipios en ${Object.keys(porDepartamento).length} departamentos`
-			);
-
 			municipiosStore.update((state) => ({
 				...state,
 				municipios: municipiosData,
@@ -110,7 +104,6 @@ export const municipios = {
 	// Cargar municipios de un departamento específico
 	async cargarPorDepartamento(codigoDepartamento: number) {
 		try {
-			console.log(`🔄 Cargando municipios del departamento ${codigoDepartamento}...`);
 			const response = await apiClient.get(`/api/municipios/departamento/${codigoDepartamento}`);
 
 			let municipiosData: Municipio[] = [];
@@ -126,9 +119,6 @@ export const municipios = {
 				}
 			}));
 
-			console.log(
-				`✅ Municipios del departamento ${codigoDepartamento} cargados: ${municipiosData.length}`
-			);
 			return municipiosData;
 		} catch (error) {
 			console.error(`❌ Error cargando municipios del departamento ${codigoDepartamento}:`, error);
@@ -146,7 +136,6 @@ export const municipios = {
 		limit?: number;
 	}) {
 		try {
-			console.log('🔍 Buscando municipios con filtros:', filtros);
 			const params = new URLSearchParams();
 
 			Object.entries(filtros).forEach(([key, value]) => {
@@ -156,7 +145,6 @@ export const municipios = {
 			});
 
 			const response = await apiClient.get(`/api/municipios/buscar?${params.toString()}`);
-			console.log('✅ Búsqueda completada');
 			return response.data;
 		} catch (error) {
 			console.error('❌ Error buscando municipios:', error);

@@ -78,11 +78,7 @@
 				correo: formData.correo.trim() || null
 			};
 
-			console.log('📤 Enviando nuevo cliente:', clienteData);
-
 			const response = await clientesAPI.create(clienteData);
-
-			console.log('✅ Cliente creado exitosamente:', response.data);
 
 			successMessage = 'Cliente creado exitosamente';
 

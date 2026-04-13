@@ -111,11 +111,8 @@
 				tipo_sangre: formData.tipo_sangre || null
 			};
 
-			console.log('📤 Enviando nuevo conductor:', conductorData);
 
-			const response = await conductoresAPI.create(conductorData);
-
-			console.log('✅ Conductor creado exitosamente:', response.data);
+			await conductoresAPI.create(conductorData);
 
 			toast.success('Conductor creado exitosamente', {
 				duration: 3000,

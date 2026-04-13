@@ -140,13 +140,6 @@
 		error = null;
 
 		try {
-			console.log('🔄 Iniciando request a /api/clientes...', {
-				page,
-				search,
-				tipo,
-				mostrarOcultos
-			});
-
 			// Si mostrarOcultos está activo, usar endpoint diferente
 			if (mostrarOcultos) {
 				const response = await fetch(`${import.meta.env.VITE_API_URL}/clientes/ocultos`, {
@@ -155,7 +148,6 @@
 					}
 				}).then((r) => r.json());
 
-				console.log('✅ Response de ocultos:', response);
 				clientes = response.data || [];
 
 				// Actualizar paginación manual ya que ocultos no tiene paginación
@@ -168,7 +160,6 @@
 					hasPrev: false
 				};
 
-				console.log('🎯 Clientes ocultos cargados:', clientes.length);
 				return;
 			}
 
@@ -188,9 +179,6 @@
 
 			const response = await clientesAPI.getAll(params);
 
-			console.log('✅ Response completa recibida:', response);
-			console.log('📊 Estructura de data:', response.data);
-
 			// Verificar la estructura del response según el formato especificado
 			if (response.data && response.data.success && Array.isArray(response.data.data)) {
 				clientes = response.data.data;
@@ -198,19 +186,9 @@
 				// Actualizar información de paginación
 				if (response.data.pagination) {
 					pagination = response.data.pagination;
-					console.log('📄 Información de paginación:', pagination);
 				}
 
-				console.log('🎯 Clientes cargados exitosamente:', {
-					totalClientes: clientes.length,
-					paginaActual: pagination.page,
-					totalPaginas: pagination.pages,
-					totalRegistros: pagination.total,
-					filtros: { search, tipo }
-				});
-
 				// Log detallado de los primeros clientes para debug
-				console.log('👥 Primeros 3 clientes:', clientes.slice(0, 3));
 			} else {
 				console.warn('⚠️ Formato de respuesta inesperado:', {
 					hasData: !!response.data,
@@ -232,7 +210,6 @@
 			error = err.response?.data?.message || err.message || 'Error al cargar los clientes';
 
 			// Datos de ejemplo para desarrollo/testing
-			console.log('🔧 Cargando datos de ejemplo...');
 			clientes = [
 				{
 					id: '1',
@@ -327,7 +304,6 @@
 			];
 		} finally {
 			isLoading = false;
-			console.log('🏁 LoadClientes finalizado. Total clientes:', clientes.length);
 		}
 	}
 
@@ -365,14 +341,12 @@
 		}
 
 		searchTimeout = setTimeout(() => {
-			console.log('🔍 Realizando búsqueda:', searchTerm);
 			pagination.page = 1; // Reset a la primera página
 			loadClientes(1, searchTerm, filtroTipo);
 		}, 500); // 500ms de delay
 	}
 
 	function handleFilterChange() {
-		console.log('🔽 Cambiando filtro:', filtroTipo);
 		pagination.page = 1; // Reset a la primera página
 		loadClientes(1, searchTerm, filtroTipo);
 	}
@@ -380,7 +354,6 @@
 	// Función para manejar cambio de página
 	function goToPage(page: number) {
 		if (page >= 1 && page <= pagination.pages && page !== pagination.page) {
-			console.log('📄 Cambiando a página:', page);
 			loadClientes(page, searchTerm, filtroTipo);
 		}
 	}

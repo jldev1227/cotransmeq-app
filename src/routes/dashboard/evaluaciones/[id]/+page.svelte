@@ -95,7 +95,6 @@
 		});
 
 		socket.on('nueva-respuesta', (data: Resultado) => {
-			console.log('Nueva respuesta recibida:', data);
 			// Agregar al inicio del array
 			resultados = [data, ...resultados];
 			nuevosResultadosCount++;
@@ -144,10 +143,6 @@
 			const data = await response.json();
 			if (data.success) {
 				resultados = data.data;
-				console.log('📊 Resultados cargados:', resultados.length);
-				if (resultados.length > 0) {
-					console.log('📋 Primer resultado:', resultados[0]);
-				}
 			}
 		} catch (err: any) {
 			console.error('Error:', err);
@@ -157,8 +152,6 @@
 	}
 
 	function verDetalleResultado(resultado: Resultado) {
-		console.log('🔍 Resultado seleccionado:', resultado);
-		console.log('📝 Respuestas:', resultado.respuestas);
 		resultadoSeleccionado = resultado;
 		showModalDetalle = true;
 	}

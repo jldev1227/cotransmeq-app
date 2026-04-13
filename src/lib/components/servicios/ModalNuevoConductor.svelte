@@ -46,18 +46,6 @@
 				email: email || null
 			});
 
-			console.log('🔍 [ModalNuevoConductor] Respuesta completa del servidor:', response);
-			console.log('📦 [ModalNuevoConductor] response.data:', response.data);
-			console.log('👤 [ModalNuevoConductor] Conductor creado - ID:', response.data?.data?.id);
-			console.log(
-				'👤 [ModalNuevoConductor] Conductor creado - Nombre:',
-				response.data?.data?.nombre
-			);
-			console.log(
-				'👤 [ModalNuevoConductor] Conductor creado - Apellido:',
-				response.data?.data?.apellido
-			);
-
 			toast.success('Conductor creado exitosamente');
 			onSuccess(response.data.data); // <-- Aquí está el fix: response.data.data
 			handleClose();

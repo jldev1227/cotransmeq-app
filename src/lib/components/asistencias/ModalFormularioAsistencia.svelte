@@ -108,14 +108,11 @@
 
 			if (formularioEdit) {
 				formulario = await asistenciasAPI.actualizarFormulario(formularioEdit.id, data);
-				console.log('📝 [Modal] Formulario actualizado desde API:', formulario);
 			} else {
 				formulario = await asistenciasAPI.crearFormulario(data);
-				console.log('📝 [Modal] Formulario creado desde API:', formulario);
 				toast.success('Formulario creado exitosamente');
 			}
 
-			console.log('📝 [Modal] Emitiendo evento save con formulario:', formulario);
 			dispatch('save', { formulario });
 			closeModal();
 		} catch (error: any) {

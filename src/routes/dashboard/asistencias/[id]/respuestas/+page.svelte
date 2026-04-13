@@ -33,7 +33,6 @@
 	const onRespuestaCreated = ({ respuesta, formularioId: formId }: any) => {
 		// Solo actualizar si es para este formulario
 		if (formId === formularioId) {
-			console.log('📥 Socket: Nueva respuesta en tiempo real', respuesta);
 			respuestas = [respuesta, ...respuestas];
 			toast.success('Nueva respuesta recibida en tiempo real');
 		}

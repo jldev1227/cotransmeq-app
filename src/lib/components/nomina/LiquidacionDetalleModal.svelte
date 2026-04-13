@@ -72,22 +72,7 @@
 		try {
 			const liqResponse = await obtenerLiquidacionPorId(liquidacionId);
 			liquidacion = liqResponse.data;
-			console.log('=== DATA LIQUIDACIÓN ===', JSON.parse(JSON.stringify(liquidacion)));
-			console.log('conductor:', liquidacion?.conductor);
-			console.log('vehiculos:', liquidacion?.vehiculos);
-			console.log('bonificaciones:', liquidacion?.bonificaciones);
-			console.log('recargos:', liquidacion?.recargos);
-			console.log('pernotes:', liquidacion?.pernotes);
-			console.log('anticipos:', liquidacion?.anticipos);
-			console.log('mantenimientos:', liquidacion?.mantenimientos);
-			console.log('conceptos_adicionales:', liquidacion?.conceptos_adicionales);
-			console.log('firmas_desprendibles:', liquidacion?.firmas_desprendibles);
-			console.log('creado_por:', liquidacion?.creado_por);
-			console.log('actualizado_por:', liquidacion?.actualizado_por);
-			console.log('liquidado_por:', liquidacion?.liquidado_por);
-			console.log('es_cotransmeq:', liquidacion?.es_cotransmeq);
-			console.log('sueldo_total:', liquidacion?.sueldo_total);
-			console.log('neto_pagado:', liquidacion?.neto_pagado);
+	
 			// Firmas vienen incluidas en la respuesta de liquidación
 			firmas = (liquidacion?.firmas_desprendibles as FirmaConUrl[]) || [];
 		} catch (error: any) {

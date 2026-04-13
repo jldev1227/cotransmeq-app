@@ -35,33 +35,21 @@ function createAuthStore() {
 		// Hidratar el estado desde localStorage o cookies al inicializar
 		init() {
 			if (browser) {
-				console.log('🔄 [AUTH] Inicializando authStore...');
 				let token = localStorage.getItem('transmeralda_token');
 				const userData = localStorage.getItem('transmeralda_user');
 
-				console.log(
-					'📦 [AUTH] Token en localStorage:',
-					token ? `${token.substring(0, 20)}...` : 'NO HAY TOKEN'
-				);
-				console.log('👤 [AUTH] User data en localStorage:', userData ? 'EXISTE' : 'NO EXISTE');
-
 				// Si no hay token en localStorage, intentar leer de cookies
 				if (!token) {
-					console.log('🍪 [AUTH] Intentando leer de cookies...');
 					const cookies = document.cookie.split(';');
 					const tokenCookie = cookies.find((c) => c.trim().startsWith('transmeralda_token='));
 					if (tokenCookie) {
 						token = tokenCookie.split('=')[1];
-						console.log('✅ [AUTH] Token encontrado en cookies:', `${token.substring(0, 20)}...`);
-					} else {
-						console.log('❌ [AUTH] No hay token en cookies');
 					}
 				}
 
 				if (token && userData) {
 					try {
 						const user = JSON.parse(userData);
-						console.log('✅ [AUTH] Usuario autenticado:', user.correo || user.email);
 						update((state) => ({
 							...state,
 							token,
@@ -71,8 +59,6 @@ function createAuthStore() {
 						console.error('❌ [AUTH] Error parsing user data:', error);
 						this.logout();
 					}
-				} else {
-					console.log('⚠️ [AUTH] No hay token o user data, usuario no autenticado');
 				}
 			}
 		},
@@ -85,11 +71,7 @@ function createAuthStore() {
 				// Importar dinámicamente para evitar problemas SSR
 				const { authAPI } = await import('$lib/api/apiClient');
 
-				console.log('🔐 Enviando credenciales a /api/login:', { correo });
-
 				const response = await authAPI.login(correo, password);
-
-				console.log('✅ Respuesta del servidor:', response.data);
 
 				const { token, user } = response.data;
 
@@ -116,7 +98,6 @@ function createAuthStore() {
 					error: null
 				}));
 
-				console.log('🎉 Login exitoso para:', user.correo || user.email);
 				return true;
 			} catch (error: any) {
 				console.error('❌ Error en login:', error);
@@ -145,20 +126,13 @@ function createAuthStore() {
 
 		// Función de logout
 		logout(redirectToLogin: boolean = true) {
-			console.log('🚪 [AUTH] Logout ejecutándose...');
-			console.log('↩️ [AUTH] redirectToLogin:', redirectToLogin);
-
 			if (browser) {
-				const currentPath = window.location.pathname;
-				console.log('📍 [AUTH] Ruta actual:', currentPath);
-
 				localStorage.removeItem('transmeralda_token');
 				localStorage.removeItem('transmeralda_user');
 
 				// Eliminar también la cookie
 				document.cookie =
 					'transmeralda_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict';
-				console.log('🗑️ [AUTH] Token y cookies eliminados');
 			}
 
 			set(initialState);
@@ -168,9 +142,7 @@ function createAuthStore() {
 				const currentPath = window.location.pathname;
 				if (currentPath !== '/login') {
 					localStorage.setItem('redirect_after_login', currentPath);
-					console.log('💾 [AUTH] Guardando redirect path:', currentPath);
 				}
-				console.log('➡️ [AUTH] Redirigiendo a /login');
 				goto('/login');
 			}
 		},

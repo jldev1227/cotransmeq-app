@@ -69,13 +69,6 @@ function createServiciosStore() {
 
 		// Obtener servicios con paginación y filtros
 		async obtenerServicios(params?: BuscarServiciosParams, forceRefresh = false): Promise<void> {
-			console.log(
-				'🔍 [STORE] obtenerServicios llamado con params:',
-				params,
-				'forceRefresh:',
-				forceRefresh
-			);
-
 			// SIEMPRE hacer el request cuando cambian los parámetros (incluyendo la página)
 			// El caché no debe bloquear las peticiones con diferentes parámetros
 
@@ -84,7 +77,6 @@ function createServiciosStore() {
 			try {
 				const { apiClient } = await import('$lib/api/apiClient');
 
-				console.log('🔄 [API] Obteniendo servicios desde la API con params:', params);
 				const response = await apiClient.get('/api/servicios', { params });
 
 				if (response.data.success) {
@@ -97,9 +89,6 @@ function createServiciosStore() {
 						cacheTimestamp: Date.now(),
 						isInitialized: true
 					}));
-					console.log('✅ [API] Servicios cargados:', response.data.data?.length || 0);
-					console.log('📊 [API] Paginación:', response.data.pagination);
-					console.log('📊 [API] Stats actualizadas:', response.data.stats);
 				} else {
 					throw new Error(response.data.message || 'Error al obtener servicios');
 				}
@@ -294,7 +283,6 @@ function createServiciosStore() {
 						loading: false
 					}));
 
-					console.log('✅ Servicio eliminado exitosamente');
 					return true;
 				} else {
 					throw new Error(response.data.message || 'Error al eliminar el servicio');
@@ -512,7 +500,6 @@ function createServiciosStore() {
 
 			// Servicio creado
 			socketUtils.on('servicio:creado', (data: ServicioConRelaciones) => {
-				console.log('🆕 Nuevo servicio creado:', data);
 				update((state) => ({
 					...state,
 					servicios: [data, ...state.servicios],
@@ -522,7 +509,6 @@ function createServiciosStore() {
 
 			// Servicio actualizado
 			socketUtils.on('servicio:actualizado', (data: ServicioConRelaciones) => {
-				console.log('✏️ Servicio actualizado:', data);
 				update((state) => ({
 					...state,
 					servicios: state.servicios.map((s) => (s.id === data.id ? data : s)),
@@ -536,7 +522,6 @@ function createServiciosStore() {
 			socketUtils.on(
 				'servicio:estado-actualizado',
 				(data: { servicio: ServicioConRelaciones; estadoAnterior: EstadoServicio }) => {
-					console.log('🔄 Estado de servicio actualizado:', data);
 					update((state) => ({
 						...state,
 						servicios: state.servicios.map((s) => (s.id === data.servicio.id ? data.servicio : s)),
@@ -553,7 +538,6 @@ function createServiciosStore() {
 			socketUtils.on(
 				'servicio:numero-planilla-actualizado',
 				(data: { id: string; servicio: ServicioConRelaciones }) => {
-					console.log('📋 Planilla asignada:', data);
 					update((state) => ({
 						...state,
 						servicios: state.servicios.map((s) => (s.id === data.id ? data.servicio : s)),
@@ -568,7 +552,6 @@ function createServiciosStore() {
 
 			// Servicio cancelado
 			socketUtils.on('servicio:cancelado', (data: ServicioConRelaciones) => {
-				console.log('❌ Servicio cancelado:', data);
 				update((state) => ({
 					...state,
 					servicios: state.servicios.filter((s) => s.id !== data.id),
@@ -578,7 +561,6 @@ function createServiciosStore() {
 
 			// Servicio eliminado
 			socketUtils.on('servicio:eliminado', (data: { id: string }) => {
-				console.log('🗑️ Servicio eliminado:', data);
 				update((state) => ({
 					...state,
 					servicios: state.servicios.filter((s) => s.id !== data.id),
@@ -612,11 +594,8 @@ function createServiciosStore() {
 
 			// Si ya está inicializado y no es forzado, no reinicializar
 			if (!forceRefresh && state.isInitialized) {
-				console.log('✅ Store de servicios ya inicializado');
 				return;
 			}
-
-			console.log('🚀 Inicializando store de servicios (solo socket)...');
 
 			// Configurar Socket.IO solo si no está configurado
 			if (!state.isInitialized) {
@@ -625,8 +604,6 @@ function createServiciosStore() {
 
 			// Marcar como inicializado
 			update((state) => ({ ...state, isInitialized: true }));
-
-			console.log('✅ Store de servicios inicializado (socket configurado)');
 		},
 
 		// Limpiar caché y forzar recarga
@@ -635,7 +612,6 @@ function createServiciosStore() {
 				...state,
 				cacheTimestamp: null
 			}));
-			console.log('🗑️ Caché de servicios invalidado');
 		}
 	};
 }

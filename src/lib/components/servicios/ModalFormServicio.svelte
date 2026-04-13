@@ -179,21 +179,10 @@
 	}
 
 	async function handleConductorCreado(conductor: any) {
-		console.log('🎯 [ModalFormServicio] handleConductorCreado recibió:', conductor);
-		console.log('🔍 [ModalFormServicio] Tipo de dato:', typeof conductor);
-		console.log('📋 [ModalFormServicio] Propiedades del objeto:', Object.keys(conductor || {}));
-		console.log('🆔 [ModalFormServicio] conductor.id:', conductor?.id);
-		console.log('👤 [ModalFormServicio] conductor.nombre:', conductor?.nombre);
-		console.log('👤 [ModalFormServicio] conductor.apellido:', conductor?.apellido);
-
 		// Agregar al store y auto-seleccionar
-		console.log('📦 [ModalFormServicio] Agregando al store...');
 		recursos.agregarConductor(conductor);
 
-		console.log('✅ [ModalFormServicio] Estableciendo conductorSelected =', conductor?.id);
 		conductorSelected = conductor.id;
-
-		console.log('📊 [ModalFormServicio] Estado actual de conductorOptions:', $conductoresOptions);
 	}
 
 	async function handleVehiculoCreado(vehiculo: any) {
@@ -401,12 +390,6 @@
 			if (finalizarServicio && fechaFinalizacion) {
 				servicioData.fecha_finalizacion = new Date(fechaFinalizacion).toISOString();
 			}
-			console.log('🔍 DEBUG - Datos a enviar:', {
-				finalizarServicio,
-				fechaFinalizacion,
-				fecha_finalizacion: servicioData.fecha_finalizacion,
-				estado: servicioData.estado
-			});
 
 			if (isEditing && servicio?.id) {
 				await apiClient.put(`/api/servicios/${servicio.id}`, servicioData);

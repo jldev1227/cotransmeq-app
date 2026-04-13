@@ -28,23 +28,19 @@
 
 	// Callbacks para eventos socket
 	const onFormularioCreated = ({ formulario }: any) => {
-		console.log('📥 Socket: Nuevo formulario creado', formulario);
 		asistenciasStore.addFormulario(formulario, 'created');
 		toast.success(`Nuevo formulario: ${formulario.tematica}`);
 	};
 
 	const onFormularioUpdated = ({ formulario }: any) => {
-		console.log('📥 Socket: Formulario actualizado', formulario);
 		asistenciasStore.updateFormulario(formulario, 'updated');
 	};
 
 	const onFormularioDisabled = ({ formulario }: any) => {
-		console.log('📥 Socket: Formulario deshabilitado', formulario);
 		asistenciasStore.updateFormulario(formulario, 'disabled');
 	};
 
 	const onRespuestaCreated = ({ formularioId }: any) => {
-		console.log('📥 Socket: Nueva respuesta recibida para formulario', formularioId);
 		asistenciasStore.incrementResponseCount(formularioId);
 		toast.success('Nueva respuesta recibida');
 	};
@@ -92,20 +88,14 @@
 		// Si el evento trae la data actualizada, actualizar solo ese formulario
 		if (event.detail?.formulario) {
 			const updatedFormulario = event.detail.formulario;
-			console.log('📝 Formulario guardado desde modal:', updatedFormulario);
 
 			// Verificar si existe
 			const exists = formularios.find((f) => f.id === updatedFormulario.id);
 
 			if (exists) {
 				// ACTUALIZACIÓN: Aplicar indicador visual
-				console.log('✏️ Actualizando formulario existente con status "updated"');
 				asistenciasStore.updateFormulario(updatedFormulario, 'updated');
 				toast.success('Formulario actualizado exitosamente');
-			} else {
-				// CREACIÓN: No hacer nada, el socket ya lo agregará
-				// El backend emite el evento socket automáticamente
-				console.log('✨ Formulario creado, esperando evento socket...');
 			}
 		}
 	}

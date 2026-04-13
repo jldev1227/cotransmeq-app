@@ -22,14 +22,12 @@
 	 */
 	function checkTokenExpiration() {
 		if (!token) {
-			console.log('⚠️ [TOKEN CHECK] No hay token');
 			return;
 		}
 
 		const expired = isTokenExpired(token);
 
 		if (expired) {
-			console.log('🔴 [TOKEN CHECK] Token expirado, cerrando sesión...');
 			toast.error('Tu sesión ha expirado. Por favor, inicia sesión nuevamente.');
 			authStore.logout();
 			return;
@@ -40,15 +38,11 @@
 
 		// Advertir cuando quedan 5 minutos o menos
 		if (minutesRemaining <= 5 && minutesRemaining > 0) {
-			console.log(`⚠️ [TOKEN CHECK] Token expira en ${minutesRemaining} minutos`);
 			toast.warning(`Tu sesión expirará en ${minutesRemaining} minutos. Guarda tu trabajo.`);
-		} else {
-			console.log(`✅ [TOKEN CHECK] Token válido. Expira en ${minutesRemaining} minutos`);
 		}
 	}
 
 	onMount(() => {
-		console.log('🚀 [DASHBOARD LAYOUT] onMount ejecutándose...');
 		// Inicializar auth store
 		authStore.init();
 		mounted = true;
@@ -60,15 +54,12 @@
 		tokenCheckInterval = setInterval(() => {
 			checkTokenExpiration();
 		}, 60000); // 60000ms = 1 minuto
-
-		console.log('✅ [DASHBOARD LAYOUT] Layout montado con validación de token activa');
 	});
 
 	onDestroy(() => {
 		// Limpiar el intervalo cuando el componente se desmonte
 		if (tokenCheckInterval) {
 			clearInterval(tokenCheckInterval);
-			console.log('🧹 [DASHBOARD LAYOUT] Intervalo de verificación de token limpiado');
 		}
 	});
 

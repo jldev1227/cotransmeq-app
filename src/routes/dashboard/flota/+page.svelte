@@ -116,7 +116,6 @@
 	}
 
 	function handleVehiculoCreado(data: any) {
-		console.log('Vehículo creado vía socket:', data);
 		// El store ya lo agregó, solo necesitamos actualizar la lista local
 		flotaStore.subscribe((state) => {
 			vehiculos = state.vehiculos;
@@ -125,7 +124,6 @@
 	}
 
 	function handleVehiculoActualizado(data: any) {
-		console.log('Vehículo actualizado vía socket:', data);
 		const index = vehiculos.findIndex((v) => v.id === data.vehiculoId);
 		if (index !== -1) {
 			vehiculos[index] = { ...vehiculos[index], ...data.vehiculo };
@@ -135,7 +133,6 @@
 	}
 
 	function handleVehiculoEstado(data: any) {
-		console.log('Estado de vehículo actualizado vía socket:', data);
 		const index = vehiculos.findIndex((v) => v.id === data.vehiculoId);
 		if (index !== -1) {
 			vehiculos[index].estado = data.estado;
@@ -145,14 +142,12 @@
 	}
 
 	function handleVehiculoEliminado(data: any) {
-		console.log('Vehículo eliminado vía socket:', data);
 		// Remover del array local
 		vehiculos = vehiculos.filter((v) => v.id !== data.vehiculoId);
 		applyFilters();
 	}
 
 	function handleVehiculoRestaurado(data: any) {
-		console.log('Vehículo restaurado vía socket:', data);
 		// Recargar ambas listas
 		loadVehiculos();
 		if (showDeleted) {
@@ -182,7 +177,6 @@
 			flotaStore.setVehiculos(vehiculos);
 
 			vehiculosFiltrados = vehiculos;
-			console.log('Vehículos cargados:', vehiculos);
 		} catch (err: any) {
 			error = err.response?.data?.message || 'Error al cargar vehículos';
 			console.error('Error loading vehiculos:', err);

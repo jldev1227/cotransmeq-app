@@ -16,40 +16,31 @@
 	$: redirectPath = $page.url.searchParams.get('redirect');
 
 	onMount(() => {
-		console.log('🔐 [LOGIN] onMount ejecutándose...');
-		console.log('📍 [LOGIN] Redirect path desde URL:', redirectPath || 'NINGUNO');
-
 		// Inicializar el store de auth
 		authStore.init();
 
 		// Si ya está autenticado, redirigir
 		if (authStore.isAuthenticated()) {
-			console.log('✅ [LOGIN] Usuario ya autenticado');
 			const targetPath =
 				redirectPath || localStorage.getItem('redirect_after_login') || '/dashboard';
-			console.log('➡️ [LOGIN] Redirigiendo a:', targetPath);
 
 			localStorage.removeItem('redirect_after_login');
 			goto(targetPath);
 			return;
 		}
 
-		console.log('⚠️ [LOGIN] Usuario NO autenticado, mostrando form');
 		mounted = true;
 	});
 
 	async function handleLogin() {
 		if (!correo || !password) return;
 
-		console.log('🔑 [LOGIN] Intentando login con:', correo);
 		const success = await authStore.login(correo, password);
 
 		if (success) {
-			console.log('✅ [LOGIN] Login exitoso');
 			// Redirigir a la página guardada o al dashboard
 			const targetPath =
 				redirectPath || localStorage.getItem('redirect_after_login') || '/dashboard';
-			console.log('➡️ [LOGIN] Redirigiendo después del login a:', targetPath);
 			localStorage.removeItem('redirect_after_login');
 			goto(targetPath);
 		} else {

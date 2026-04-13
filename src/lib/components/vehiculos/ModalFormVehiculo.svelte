@@ -50,10 +50,8 @@
 
 	const handleClose = () => {
 		if (isSubmitting) return;
-		console.log('🚪 Closing modal - Before reset:', { lastLoadedId, vehiculoId });
 		isOpen = false;
 		lastLoadedId = null; // Reset to force reload next time
-		console.log('🔄 After reset lastLoadedId:', lastLoadedId);
 		resetForm();
 		dispatch('close');
 	};
@@ -228,11 +226,9 @@
 
 			// Cerrar el modal después de 2 segundos
 			setTimeout(() => {
-				console.log('⏰ Success timeout - Closing modal and resetting');
 				showSuccessAnimation = false;
 				isOpen = false;
 				lastLoadedId = null; // Reset to force reload next time
-				console.log('🔄 lastLoadedId reset to:', lastLoadedId);
 				resetForm();
 				dispatch('success');
 			}, 2000);
@@ -247,44 +243,20 @@
 	// Load vehiculo data if editing
 	// Only reload when vehicle ID changes OR when it's a fresh open (lastLoadedId is null)
 	$: if (isOpen && vehiculoId && lastLoadedId !== vehiculoId) {
-		console.log('🔄 Reactive statement triggered - Loading vehiculo:', {
-			isOpen,
-			vehiculoId,
-			lastLoadedId,
-			shouldLoad: lastLoadedId !== vehiculoId
-		});
 		loadVehiculo(vehiculoId);
 	} else if (isOpen && !vehiculoId) {
-		console.log('🆕 Reactive statement - New vehicle form');
 		resetForm();
-	} else {
-		console.log('⏸️ Reactive statement - No action taken:', {
-			isOpen,
-			vehiculoId,
-			lastLoadedId,
-			reason: lastLoadedId === vehiculoId ? 'Vehicle already loaded' : 'Other'
-		});
 	}
 
 	async function loadVehiculo(id: string) {
-		console.log('📥 loadVehiculo called with ID:', id);
-		console.log('📊 Current state:', {
-			isLoadingData,
-			lastLoadedId,
-			currentFormData: { ...formData }
-		});
-		
 		try {
 			isLoadingData = true;
 			error = null;
 			
-			console.log('🌐 Fetching vehicle from API...');
 			const response = await vehiculosAPI.getById(id);
-			console.log('✅ API Response received:', response);
 			
 			// La respuesta puede venir en response.data.data o directamente en response.data
 			const vehiculo = response.data?.data || response.data;
-			console.log('📦 Extracted vehiculo:', vehiculo);
 
 			// Si vehiculo tiene la estructura {success: true, data: {...}}, extraer data
 			const vehiculoData = vehiculo.success ? vehiculo.data : vehiculo;
@@ -311,11 +283,9 @@
 				estado: vehiculoData.estado || 'DISPONIBLE'
 			};
 			
-			console.log('📝 Setting formData to:', newFormData);
 			formData = newFormData;
 			
 			// Mark this vehicle as loaded
-			console.log('✅ Marking vehicle as loaded, setting lastLoadedId:', id);
 			lastLoadedId = id;
 		} catch (err) {
 			console.error('❌ Error al cargar vehículo:', err);

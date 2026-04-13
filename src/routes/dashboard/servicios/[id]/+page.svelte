@@ -159,12 +159,6 @@
 
 	// Inicializar mapa
 	function initializeMap() {
-		console.log('🗺️ [INIT MAP] Intentando inicializar...', {
-			hasToken: !!MAPBOX_TOKEN,
-			hasServicio: !!servicio,
-			mapExists: !!map
-		});
-
 		if (!MAPBOX_TOKEN || !servicio || map) {
 			console.warn('⚠️ [INIT MAP] No se puede inicializar:', {
 				hasToken: !!MAPBOX_TOKEN,
@@ -181,17 +175,10 @@
 			return;
 		}
 
-		console.log('📦 [INIT MAP] Container encontrado:', {
-			width: container.offsetWidth,
-			height: container.offsetHeight
-		});
-
 		const originLat = servicio.origen_latitud || servicio.origen?.latitud;
 		const originLng = servicio.origen_longitud || servicio.origen?.longitud;
 		const destLat = servicio.destino_latitud || servicio.destino?.latitud;
 		const destLng = servicio.destino_longitud || servicio.destino?.longitud;
-
-		console.log('📍 [INIT MAP] Coordenadas:', { originLng, originLat, destLng, destLat });
 
 		if (!originLat || !originLng || !destLat || !destLng) {
 			console.warn('⚠️ [INIT MAP] Coordenadas no disponibles');
@@ -201,8 +188,6 @@
 		try {
 			mapboxgl.accessToken = MAPBOX_TOKEN;
 
-			console.log('🗺️ [INIT MAP] Creando mapa con container ID "map"');
-
 			map = new mapboxgl.Map({
 				container: 'map', // Usar ID simple como en la página pública
 				style: 'mapbox://styles/mapbox/outdoors-v12',
@@ -210,32 +195,9 @@
 				zoom: 12
 			});
 
-			console.log('✅ [INIT MAP] Objeto Map creado exitosamente');
-
-			// Verificar canvas inmediatamente después de crear el mapa
-			setTimeout(() => {
-				const canvas = document.querySelector('#map canvas');
-				console.log('🎨 [INIT MAP] Canvas después de crear mapa:', {
-					existe: !!canvas,
-					width: canvas?.getAttribute('width'),
-					height: canvas?.getAttribute('height'),
-					style: canvas?.getAttribute('style')
-				});
-			}, 100);
-
 			// NO agregar controles de navegación (zoom, brújula) según solicitud del usuario
 
 			map.on('load', () => {
-				console.log('✅ [INIT MAP] Mapa cargado exitosamente');
-				const canvas = map.getCanvas();
-				console.log('🎨 [INIT MAP] Canvas al cargar:', {
-					width: canvas.width,
-					height: canvas.height,
-					clientWidth: canvas.clientWidth,
-					clientHeight: canvas.clientHeight,
-					offsetWidth: canvas.offsetWidth,
-					offsetHeight: canvas.offsetHeight
-				});
 				isMapLoaded = true;
 			});
 
@@ -358,9 +320,7 @@
 
 	// Lifecycle
 	onMount(async () => {
-		console.log('🗺️ [MAP PAGE] onMount ejecutándose');
 		const id = $page.params.id;
-		console.log('🆔 [MAP PAGE] ID del servicio:', id);
 		if (id) {
 			await servicioDetalleStore.obtenerServicio(id);
 		}
@@ -368,13 +328,10 @@
 
 	// Inicializar mapa cuando el servicio se cargue Y no exista mapa aún
 	$: if (servicio && !map && !loading) {
-		console.log('🗺️ [REACTIVE] Servicio cargado, verificando container...');
 		// Esperar a que el DOM se actualice y el container exista
 		setTimeout(() => {
 			const container = document.getElementById('map');
-			console.log('� [REACTIVE] Container existe?', !!container);
 			if (container) {
-				console.log('✅ [REACTIVE] Inicializando mapa');
 				initializeMap();
 			} else {
 				console.warn('⚠️ [REACTIVE] Container no encontrado en DOM');
@@ -384,23 +341,8 @@
 
 	// Crear ruta cuando el mapa esté listo
 	$: if (isMapLoaded && servicio) {
-		console.log('🛣️ [MAP PAGE] Creando ruta para servicio:', servicio.id);
 		createRoute();
 	}
-
-	// Debug: Monitorear cambios en las variables
-	$: console.log(
-		'📊 [MAP PAGE] Estado - loading:',
-		loading,
-		'error:',
-		error,
-		'servicio:',
-		servicio?.id,
-		'map:',
-		!!map,
-		'mapLoaded:',
-		isMapLoaded
-	);
 
 	// Limpiar al desmontar
 	onDestroy(() => {

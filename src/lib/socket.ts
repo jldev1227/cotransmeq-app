@@ -70,7 +70,6 @@ class SocketManager {
 
 		// Eventos de conexión
 		this.socket.on('connect', () => {
-			console.log('Socket conectado:', this.socket?.id);
 			this.reconnectAttempts = 0;
 			socketStore.update((state) => ({
 				...state,
@@ -80,7 +79,6 @@ class SocketManager {
 		});
 
 		this.socket.on('disconnect', (reason) => {
-			console.log('Socket desconectado:', reason);
 			socketStore.update((state) => ({
 				...state,
 				connected: false

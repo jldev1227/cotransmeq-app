@@ -70,62 +70,10 @@
 		const _destLng = getCoord(servicio?.destino_longitud, servicio?.destino?.longitud);
 		const _destLat = getCoord(servicio?.destino_latitud, servicio?.destino?.latitud);
 
-		console.log('🔄 [COORDS CALC] Calculando coordenadas:', {
-			servicio_origen_lng: servicio?.origen_longitud,
-			servicio_origen_lat: servicio?.origen_latitud,
-			municipio_origen_lng: servicio?.origen?.longitud,
-			municipio_origen_lat: servicio?.origen?.latitud,
-			tipo_municipio_lng: typeof servicio?.origen?.longitud,
-			tipo_municipio_lat: typeof servicio?.origen?.latitud,
-			resultado_originLng: _originLng,
-			resultado_originLat: _originLat,
-			servicio_destino_lng: servicio?.destino_longitud,
-			servicio_destino_lat: servicio?.destino_latitud,
-			municipio_destino_lng: servicio?.destino?.longitud,
-			municipio_destino_lat: servicio?.destino?.latitud,
-			resultado_destLng: _destLng,
-			resultado_destLat: _destLat
-		});
-
 		originLng = _originLng;
 		originLat = _originLat;
 		destLng = _destLng;
 		destLat = _destLat;
-	}
-
-	// Debug logs para coordenadas
-	$: if (servicio) {
-		console.log('🗺️ [DEBUG COORDS] Servicio cargado:', {
-			servicio_id: servicio.id,
-			origen_especifico: servicio.origen_especifico,
-			destino_especifico: servicio.destino_especifico,
-			origen_coords_servicio: {
-				lat: servicio.origen_latitud,
-				lng: servicio.origen_longitud
-			},
-			destino_coords_servicio: {
-				lat: servicio.destino_latitud,
-				lng: servicio.destino_longitud
-			},
-			origen_municipio: {
-				nombre: servicio.origen?.nombre_municipio,
-				lat: servicio.origen?.latitud,
-				lng: servicio.origen?.longitud,
-				objeto_completo: servicio.origen
-			},
-			destino_municipio: {
-				nombre: servicio.destino?.nombre_municipio,
-				lat: servicio.destino?.latitud,
-				lng: servicio.destino?.longitud,
-				objeto_completo: servicio.destino
-			},
-			coords_finales: {
-				originLat,
-				originLng,
-				destLat,
-				destLng
-			}
-		});
 	}
 
 	onMount(async () => {
@@ -139,14 +87,11 @@
 		try {
 			loading = true;
 			error = null;
-			console.log('🔄 [PUBLIC] Cargando servicio con token:', token);
 
 			const response = await serviciosAPI.getByShareToken(token);
-			console.log('📦 [PUBLIC] Respuesta del servidor:', response.data);
 
 			if (response.data.success) {
 				servicio = response.data.data;
-				console.log('✅ [PUBLIC] Servicio cargado:', servicio);
 			} else {
 				error = response.data.message || 'No se pudo cargar el servicio';
 				console.error('❌ [PUBLIC] Error del servidor:', error);
@@ -168,28 +113,10 @@
 			}
 		} finally {
 			loading = false;
-			console.log(
-				'🏁 [PUBLIC] Carga finalizada. Loading:',
-				loading,
-				'Error:',
-				error,
-				'Servicio:',
-				!!servicio
-			);
 		}
 	}
 
 	function initMap() {
-		console.log('🗺️ [INIT MAP] Intentando inicializar mapa:', {
-			servicio: !!servicio,
-			originLat,
-			originLng,
-			destLat,
-			destLng,
-			tiene_origen: !!(originLat && originLng),
-			tiene_destino: !!(destLat && destLng)
-		});
-
 		if (!servicio || !originLat || !originLng) {
 			console.warn('⚠️ [INIT MAP] No se puede inicializar el mapa:', {
 				servicio: !!servicio,
@@ -204,8 +131,6 @@
 			return;
 		}
 
-		console.log('✅ [INIT MAP] Inicializando mapa con coordenadas:', { originLng, originLat });
-
 		mapboxgl.accessToken = MAPBOX_TOKEN;
 
 		map = new mapboxgl.Map({
@@ -216,8 +141,6 @@
 		});
 
 		map.on('load', () => {
-			console.log('🗺️ [MAP LOADED] Mapa cargado, agregando marcadores');
-
 			if (!map || !servicio) {
 				console.warn('⚠️ [MAP LOADED] No hay mapa o servicio');
 				return;
@@ -244,15 +167,7 @@
 				)
 				.addTo(map);
 
-			// Marcador de destino (si existe)
-			console.log('🗺️ [DESTINO] Verificando destino:', {
-				destLat,
-				destLng,
-				tiene_destino: !!(destLat && destLng)
-			});
-
 			if (destLat && destLng) {
-				console.log('✅ [DESTINO] Agregando marcador de destino');
 				const destEl = document.createElement('div');
 				destEl.className = 'custom-marker dest-marker';
 				destEl.innerHTML = `
@@ -274,33 +189,21 @@
 					.addTo(map);
 
 				// Dibujar ruta
-				console.log('🗺️ [RUTA] Llamando a drawRoute()');
 				drawRoute();
 			} else {
 				console.warn('⚠️ [DESTINO] No hay coordenadas de destino válidas:', { destLat, destLng });
 			}
 
 			// Ajustar vista
-			console.log('🗺️ [CENTER] Centrando vista del mapa');
 			centerRoute();
 		});
 	}
 
 	async function drawRoute() {
-		console.log('🗺️ [DRAW ROUTE] Intentando dibujar ruta:', {
-			map: !!map,
-			originLat,
-			originLng,
-			destLat,
-			destLng
-		});
-
 		if (!map || !originLat || !originLng || !destLat || !destLng) {
 			console.warn('⚠️ [DRAW ROUTE] No se puede dibujar ruta - coordenadas incompletas');
 			return;
 		}
-
-		console.log('✅ [DRAW ROUTE] Solicitando ruta a Mapbox API');
 
 		try {
 			const response = await fetch(
@@ -309,13 +212,7 @@
 
 			const data = await response.json();
 
-			console.log('🗺️ [DRAW ROUTE] Respuesta de Mapbox:', {
-				routes_count: data.routes?.length || 0,
-				has_geometry: !!data.routes?.[0]?.geometry
-			});
-
 			if (data.routes && data.routes.length > 0) {
-				console.log('✅ [DRAW ROUTE] Dibujando ruta en el mapa');
 				const route = data.routes[0].geometry;
 
 				// Añadir la ruta al mapa
@@ -348,7 +245,6 @@
 					}
 				});
 
-				console.log('✅ [DRAW ROUTE] Ruta dibujada exitosamente');
 			} else {
 				console.warn('⚠️ [DRAW ROUTE] No se encontraron rutas en la respuesta');
 			}
@@ -358,15 +254,6 @@
 	}
 
 	function centerRoute() {
-		console.log('🗺️ [CENTER ROUTE] Centrando ruta:', {
-			map: !!map,
-			servicio: !!servicio,
-			originLat,
-			originLng,
-			destLat,
-			destLng
-		});
-
 		if (!map || !servicio) {
 			console.warn('⚠️ [CENTER ROUTE] No hay mapa o servicio');
 			return;
@@ -379,15 +266,11 @@
 			bounds.extend([destLng, destLat]);
 		}
 
-		console.log('🗺️ [CENTER ROUTE] Ajustando vista a bounds:', bounds);
-
 		map.fitBounds(bounds, {
 			padding: 100,
 			maxZoom: 14,
 			duration: 1000
 		});
-
-		console.log('✅ [CENTER ROUTE] Vista centrada exitosamente');
 	}
 </script>
 

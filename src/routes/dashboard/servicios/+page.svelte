@@ -68,17 +68,6 @@
 
 	// Función para cargar servicios con filtros y paginación
 	async function cargarServicios(forceRefresh = false) {
-		console.log('🚀 cargarServicios llamado con params:', {
-			filtroEstado,
-			busqueda,
-			conductorSeleccionado,
-			vehiculoSeleccionado,
-			clienteSeleccionado,
-			filtroFechaDesde,
-			filtroFechaHasta,
-			paginaActual
-		});
-
 		const params: any = {
 			page: paginaActual,
 			limit: itemsPorPagina,
@@ -118,7 +107,6 @@
 			params.campo_fecha = campoFecha;
 		}
 
-		console.log('📡 Enviando request con params:', params);
 		await serviciosStore.obtenerServicios(params, forceRefresh);
 	}
 
@@ -140,12 +128,6 @@
 
 	// Handler para cambios en filtros de estado
 	function handleEstadoChange() {
-		console.log(
-			'🔔 handleEstadoChange llamado - inicializado:',
-			inicializado,
-			'estado:',
-			filtroEstado
-		);
 		if (!inicializado) return;
 		paginaActual = 1;
 		cargarServicios();
@@ -153,7 +135,6 @@
 
 	// Handler para cambios en los selects (conductor, vehículo, cliente)
 	function handleSelectChange() {
-		console.log('🔔 handleSelectChange llamado - inicializado:', inicializado);
 		if (!inicializado) return;
 		paginaActual = 1;
 		cargarServicios();
@@ -161,7 +142,6 @@
 
 	// Handler para cambios en fechas
 	function handleFechaChange() {
-		console.log('🔔 handleFechaChange llamado - inicializado:', inicializado);
 		if (!inicializado) return;
 		paginaActual = 1;
 		cargarServicios();
@@ -169,7 +149,6 @@
 
 	// Handler para cambios en ordenamiento
 	function handleOrdenChange() {
-		console.log('🔔 handleOrdenChange llamado - inicializado:', inicializado);
 		if (!inicializado) return;
 		cargarServicios();
 	}
@@ -189,26 +168,19 @@
 
 	// Inicializar
 	onMount(async () => {
-		console.log('🎬 [SERVICIOS PAGE] Montando componente...');
-
 		try {
 			// 1. Inicializar store de servicios (solo socket, sin cargar datos)
-			console.log('� [SERVICIOS PAGE] Configurando socket...');
 			await serviciosStore.inicializar();
 
 			// 2. Cargar recursos básicos para los selects (conductores, vehículos, clientes, municipios)
-			console.log('📦 [SERVICIOS PAGE] Cargando recursos para filtros...');
 			await recursos.cargarTodos();
 
 			// 3. Ahora sí, marcar como inicializado para activar watchers
 			inicializado = true;
-			console.log('✅ [SERVICIOS PAGE] Componente inicializado, watchers activos');
 
 			// 4. Cargar servicios y stats manualmente UNA SOLA VEZ
-			console.log('📊 [SERVICIOS PAGE] Cargando servicios y stats...');
 			await cargarServicios();
 
-			console.log('✅ [SERVICIOS PAGE] Componente montado completamente');
 		} catch (error) {
 			console.error('❌ [SERVICIOS PAGE] Error en onMount:', error);
 		}
@@ -265,7 +237,6 @@
 
 	// Función auxiliar para cambiar filtro de estado desde las stats cards
 	function cambiarFiltroEstado(estado: EstadoServicio) {
-		console.log('🎯 Cambiar filtro estado a:', estado);
 		filtroEstado = estado;
 		paginaActual = 1;
 		cargarServicios();

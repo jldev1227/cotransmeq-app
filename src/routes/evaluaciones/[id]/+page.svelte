@@ -91,7 +91,6 @@
 	onMount(async () => {
 		// Generar fingerprint del dispositivo
 		deviceFingerprint = await getDeviceFingerprint();
-		console.log('Device fingerprint generado:', deviceFingerprint);
 
 		await loadEvaluacion();
 		await verificarSiYaRespondio();
@@ -452,8 +451,6 @@
 				payload.firma = firmaData;
 			}
 
-			console.log('Enviando payload:', JSON.stringify(payload, null, 2));
-
 			const response = await fetch(
 				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}/responder`,
 				{
@@ -465,8 +462,6 @@
 
 			const data = await response.json();
 			
-			console.log('📦 Respuesta del servidor:', data);
-
 			// Manejar error 409 (dispositivo ya respondió)
 			if (response.status === 409) {
 				mostrarToast(
@@ -477,9 +472,6 @@
 			}
 
 			if (data.success) {
-				console.log('✅ Resultado recibido:', data.data);
-				console.log('📋 Evaluación en resultado:', data.data.evaluacion);
-				console.log('📝 Respuestas en resultado:', data.data.respuestas);
 				resultado = data.data;
 				yaRespondio = true;
 				miResultado = data.data;

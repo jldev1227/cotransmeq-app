@@ -104,7 +104,6 @@ export const recursos = {
 
 		// Si no es forzado y el cache es válido, no recargar
 		if (!force && isCacheValid(currentState.lastFetch.conductores)) {
-			console.log('✅ Conductores en cache, usando datos existentes');
 			return;
 		}
 
@@ -115,7 +114,6 @@ export const recursos = {
 		}));
 
 		try {
-			console.log('🔄 Cargando conductores desde API...');
 			const response = await apiClient.get('/api/servicios/filtros/conductores');
 
 			// Extraer datos de la respuesta
@@ -125,8 +123,6 @@ export const recursos = {
 			} else if (response.data?.data && Array.isArray(response.data.data)) {
 				conductoresData = response.data.data;
 			}
-
-			console.log('✅ Conductores cargados:', conductoresData.length);
 
 			recursosStore.update((state) => ({
 				...state,
@@ -154,7 +150,6 @@ export const recursos = {
 		});
 
 		if (!force && isCacheValid(currentState.lastFetch.vehiculos)) {
-			console.log('✅ Vehículos en cache, usando datos existentes');
 			return;
 		}
 
@@ -165,7 +160,6 @@ export const recursos = {
 		}));
 
 		try {
-			console.log('🔄 Cargando vehículos desde API...');
 			const response = await apiClient.get('/api/servicios/filtros/vehiculos');
 
 			let vehiculosData: Vehiculo[] = [];
@@ -174,8 +168,6 @@ export const recursos = {
 			} else if (response.data?.data && Array.isArray(response.data.data)) {
 				vehiculosData = response.data.data;
 			}
-
-			console.log('✅ Vehículos cargados:', vehiculosData.length);
 
 			recursosStore.update((state) => ({
 				...state,
@@ -203,7 +195,6 @@ export const recursos = {
 		});
 
 		if (!force && isCacheValid(currentState.lastFetch.clientes)) {
-			console.log('✅ Clientes en cache, usando datos existentes');
 			return;
 		}
 
@@ -214,7 +205,6 @@ export const recursos = {
 		}));
 
 		try {
-			console.log('🔄 Cargando clientes desde API...');
 			const response = await apiClient.get('/api/servicios/filtros/clientes');
 
 			let clientesData: Cliente[] = [];
@@ -223,8 +213,6 @@ export const recursos = {
 			} else if (response.data?.data && Array.isArray(response.data.data)) {
 				clientesData = response.data.data;
 			}
-
-			console.log('✅ Clientes cargados:', clientesData.length);
 
 			recursosStore.update((state) => ({
 				...state,
@@ -252,7 +240,6 @@ export const recursos = {
 		});
 
 		if (!force && isCacheValid(currentState.lastFetch.municipios)) {
-			console.log('✅ Municipios en cache, usando datos existentes');
 			return;
 		}
 
@@ -263,7 +250,6 @@ export const recursos = {
 		}));
 
 		try {
-			console.log('🔄 Cargando municipios desde API...');
 			const response = await apiClient.get('/api/municipios');
 
 			let municipiosData: Municipio[] = [];
@@ -272,8 +258,6 @@ export const recursos = {
 			} else if (response.data?.data && Array.isArray(response.data.data)) {
 				municipiosData = response.data.data;
 			}
-
-			console.log('✅ Municipios cargados:', municipiosData.length);
 
 			recursosStore.update((state) => ({
 				...state,
@@ -296,16 +280,12 @@ export const recursos = {
 
 	// Cargar todos los recursos
 	async cargarTodos(force = false) {
-		console.log('📦 [RECURSOS] Iniciando carga de todos los recursos...', { force });
-
 		await Promise.all([
 			recursos.cargarConductores(force),
 			recursos.cargarVehiculos(force),
 			recursos.cargarClientes(force),
 			recursos.cargarMunicipios(force)
 		]);
-
-		console.log('✅ [RECURSOS] Todos los recursos cargados');
 	},
 
 	// Agregar un nuevo conductor (después de crear)

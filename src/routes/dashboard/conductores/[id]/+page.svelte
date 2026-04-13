@@ -67,7 +67,6 @@
 
 		// Escuchar evento de foto actualizada
 		const handleFotoActualizada = (data: any) => {
-			console.log('📸 Foto actualizada via socket:', data);
 			if (data.conductorId === conductorId && conductor) {
 				conductor.foto_signed_url = data.fotoUrlFirmada;
 				// Forzar reactualización
@@ -156,9 +155,7 @@
 	}
 
 	function onCropComplete(e: CustomEvent) {
-		console.log('✂️ Crop completado:', e.detail);
 		croppedAreaPixels = e.detail.pixels;
-		console.log('📐 Área de recorte actualizada:', croppedAreaPixels);
 	}
 
 	async function createImage(url: string): Promise<HTMLImageElement> {
@@ -212,12 +209,6 @@
 	}
 
 	async function handleUploadCroppedImage() {
-		console.log('🚀 Iniciando subida de foto...');
-		console.log('croppedAreaPixels:', croppedAreaPixels);
-		console.log('crop:', crop);
-		console.log('zoom:', zoom);
-		console.log('imageSrc length:', imageSrc?.length);
-
 		try {
 			// Si croppedAreaPixels es null, crear un área por defecto (toda la imagen)
 			if (!croppedAreaPixels) {
@@ -230,12 +221,10 @@
 					width: img.width,
 					height: img.height
 				};
-				console.log('📐 Área de recorte creada automáticamente:', croppedAreaPixels);
 			}
 
 			isUploadingPhoto = true;
 			error = null;
-			console.log('📸 Recortando imagen...');
 
 			const croppedBlob = await getCroppedImg(imageSrc, croppedAreaPixels, rotation);
 
@@ -243,23 +232,11 @@
 				throw new Error('Error al procesar la imagen');
 			}
 
-			console.log('✅ Imagen recortada:', {
-				size: croppedBlob.size,
-				type: croppedBlob.type
-			});
-
 			const croppedFile = new File([croppedBlob], imageFile?.name || 'photo.jpg', {
 				type: 'image/jpeg'
 			});
 
-			console.log('📤 Subiendo a servidor...', {
-				conductorId,
-				fileName: croppedFile.name,
-				fileSize: croppedFile.size
-			});
-
 			const response = await conductoresAPI.uploadFoto(conductorId, croppedFile);
-			console.log('✅ Respuesta del servidor:', response.data);
 
 			// Actualizar la foto con la URL firmada
 			if (conductor && response.data?.data?.foto_url_firmada) {

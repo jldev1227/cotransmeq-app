@@ -62,18 +62,7 @@
 				vehiculoData.capacidad_pasajeros = parseInt(capacidad_pasajeros);
 			}
 
-			console.log('🚗 [ModalNuevoVehiculo] Datos a enviar:', vehiculoData);
-
 			const response = await apiClient.post('/api/vehiculos', vehiculoData);
-
-			console.log('🔍 [ModalNuevoVehiculo] Respuesta completa del servidor:', response);
-			console.log('📦 [ModalNuevoVehiculo] response.data:', response.data);
-			console.log('🚗 [ModalNuevoVehiculo] Vehículo creado - ID:', response.data?.data?.id);
-			console.log('🚗 [ModalNuevoVehiculo] Vehículo creado - Placa:', response.data?.data?.placa);
-			console.log(
-				'🚗 [ModalNuevoVehiculo] Vehículo creado - Clase:',
-				response.data?.data?.clase_vehiculo
-			);
 
 			toast.success('Vehículo creado exitosamente');
 			onSuccess(response.data.data); // <-- Fix: response.data.data

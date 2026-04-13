@@ -17,7 +17,6 @@ function createAsistenciasStore() {
 	const NEW_RESPONSE_BADGE_DURATION = 10000; // 10 segundos para el badge de nueva respuesta
 
 	function addFormulario(formulario: FormularioAsistencia, status: FormularioStatus) {
-		console.log('🏪 [Store] addFormulario called:', { formulario, status });
 		update((formularios) => {
 			const withStatus: FormularioWithStatus = {
 				...formulario,
@@ -27,7 +26,6 @@ function createAsistenciasStore() {
 
 			// Agregar al principio del array
 			const newFormularios = [withStatus, ...formularios];
-			console.log('🏪 [Store] Formulario agregado. Total formularios:', newFormularios.length);
 
 			// Limpiar el status después de 5 segundos
 			setTimeout(() => {
@@ -39,7 +37,6 @@ function createAsistenciasStore() {
 	}
 
 	function updateFormulario(formulario: FormularioAsistencia, status: FormularioStatus) {
-		console.log('🏪 [Store] updateFormulario called:', { formularioId: formulario.id, status });
 		update((formularios) => {
 			const index = formularios.findIndex((f) => f.id === formulario.id);
 

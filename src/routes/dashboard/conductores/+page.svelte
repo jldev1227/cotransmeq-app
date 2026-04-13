@@ -248,20 +248,6 @@
 
 	// Calcular estadísticas solo para conductores visibles (no ocultos)
 	$: {
-		console.log('🔍 [STATS] Recalculando estadísticas');
-		console.log('🔍 [STATS] mostrarOcultos:', mostrarOcultos);
-		console.log('🔍 [STATS] conductores.length:', conductores.length);
-		console.log(
-			'🔍 [STATS] conductores:',
-			conductores.map((c) => ({
-				id: c.id.substring(0, 8),
-				nombre: c.nombre,
-				apellido: c.apellido,
-				estado: c.estado,
-				sede: c.sede_trabajo
-			}))
-		);
-
 		// Si estamos viendo ocultos, no mostramos stats (o mostramos stats diferentes)
 		if (mostrarOcultos) {
 			stats = {
@@ -285,8 +271,6 @@
 					.length
 			};
 		}
-
-		console.log('🔍 [STATS] Resultado:', stats);
 	}
 
 	async function loadConductores() {
@@ -321,21 +305,8 @@
 				data = jsonData.data || [];
 			} else {
 				// Usar el API client normal que ya maneja el token
-				console.log('📥 [LOAD] Cargando conductores visibles (no ocultos)...');
 				const response = await conductoresAPI.getAll();
-				console.log('📥 [LOAD] Respuesta completa del backend:', response);
-				console.log('📥 [LOAD] response.data:', response.data);
-				console.log('📥 [LOAD] response.data.data:', response.data.data);
 				data = response.data.data || [];
-				console.log('📥 [LOAD] Total conductores recibidos:', data.length);
-				console.log(
-					'📥 [LOAD] Conductores:',
-					data.map((c) => ({
-						id: c.id.substring(0, 8),
-						nombre: c.nombre,
-						apellido: c.apellido
-					}))
-				);
 			}
 
 			// Ordenar alfabéticamente por nombre (A-Z)
@@ -345,7 +316,6 @@
 				return nombreA.localeCompare(nombreB, 'es');
 			});
 
-			console.log('✅ [LOAD] Conductores después de ordenar:', data.length);
 			conductores = data;
 			conductoresFiltrados = data;
 		} catch (err) {

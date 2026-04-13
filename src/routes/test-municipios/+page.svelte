@@ -39,7 +39,6 @@
 				page: 1,
 				limit: 50
 			});
-			console.log('Resultados de búsqueda:', result);
 		} catch (error) {
 			console.error('Error buscando:', error);
 		} finally {
