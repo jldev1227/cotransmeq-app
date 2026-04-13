@@ -2134,7 +2134,7 @@
 									</div>
 									<div>
 										<h3 class="text-sm font-semibold text-gray-900">Información del Servicio</h3>
-										<p class="text-xs text-gray-500">{isEditMode ? 'Editar datos del servicio vinculado' : 'Registrar servicio asociado (opcional)'}</p>
+										<p class="text-xs text-gray-500">{editMode ? 'Editar datos del servicio vinculado' : 'Registrar servicio asociado (opcional)'}</p>
 									</div>
 								</div>
 
@@ -2286,7 +2286,7 @@
 									</div>
 								</div>
 							</div>
-						{:else if !isEditMode}
+						{:else if !editMode}
 							<button
 								type="button"
 								on:click={() => mostrarServicioInfo = true}
