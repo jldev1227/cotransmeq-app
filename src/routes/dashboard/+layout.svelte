@@ -105,7 +105,7 @@
 			<Header
 				userName={user?.nombre || 'Usuario'}
 				userEmail={user?.correo || 'usuario@cotransmeq.com'}
-				userRole={user?.rol || 'Usuario'}
+				userRole={user?.role || user?.rol || 'Usuario'}
 				isCollapsed={$sidebarStore}
 				showSessionTimer={false}
 				on:logout={handleLogout}

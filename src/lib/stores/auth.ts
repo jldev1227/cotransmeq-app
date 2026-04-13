@@ -6,8 +6,10 @@ export interface User {
 	id: string;
 	nombre: string;
 	correo: string;
-	rol: string;
+	rol?: string;
+	role?: string;
 	avatar?: string;
+	permisos?: Record<string, boolean>;
 }
 
 export interface AuthState {

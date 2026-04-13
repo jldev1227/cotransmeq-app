@@ -18,6 +18,22 @@
 	const COP = (v: number | string) =>
 		new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(parseFloat(String(v)) || 0);
 
+	// --- COP input formatting helpers ---
+	const fmtCOP = (v: number) => v ? new Intl.NumberFormat('es-CO').format(v) : '';
+	const parseCOP = (s: string) => parseFloat(s.replace(/[.\s]/g, '').replace(',', '.')) || 0;
+
+	function handleCOPFocus(e: FocusEvent) {
+		const input = e.target as HTMLInputElement;
+		const raw = parseCOP(input.value);
+		input.value = raw ? String(raw) : '';
+	}
+	function handleCOPBlur(e: FocusEvent, field: keyof typeof configForm) {
+		const input = e.target as HTMLInputElement;
+		const raw = parseCOP(input.value);
+		(configForm as any)[field] = raw;
+		input.value = fmtCOP(raw);
+	}
+
 	let liquidaciones: LiquidacionServicio[] = [];
 	let listLoading = false;
 	let listError = '';
@@ -80,7 +96,7 @@
 
 	$: configValorHoraAuto = configForm.salario_basico > 0 ? configForm.salario_basico / 220 : 0;
 
-	$: isAdmin = $authStore.user?.rol === 'admin';
+	$: isAdmin = $authStore.user?.role === 'admin' || $authStore.user?.rol === 'admin';
 	$: canLiquidar = isAdmin;
 	$: canAprobar = isAdmin;
 	$: canAnular = isAdmin;
@@ -490,7 +506,7 @@
 			<div class="cfg-grid">
 				<div class="cfg-field">
 					<label>Salario Básico ($)</label>
-					<input type="number" bind:value={configForm.salario_basico} step="1" />
+					<input type="text" value={fmtCOP(configForm.salario_basico)} on:focus={handleCOPFocus} on:blur={(e) => handleCOPBlur(e, 'salario_basico')} inputmode="numeric" />
 				</div>
 				<div class="cfg-field">
 					<label>Cargo</label>
@@ -498,12 +514,12 @@
 				</div>
 				<div class="cfg-field">
 					<label>Valor Hora (override)</label>
-					<input type="number" bind:value={configForm.valor_hora_override} step="0.01" />
-					<span class="cfg-hint">0 = automático: ${configValorHoraAuto.toLocaleString('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/hr</span>
+					<input type="text" value={fmtCOP(configForm.valor_hora_override)} on:focus={handleCOPFocus} on:blur={(e) => handleCOPBlur(e, 'valor_hora_override')} inputmode="numeric" />
+					<span class="cfg-hint">0 = automático: {COP(configValorHoraAuto)}/hr</span>
 				</div>
 				<div class="cfg-field">
 					<label>Conductor Adicional ($)</label>
-					<input type="number" bind:value={configForm.conductor_adicional} step="1" />
+					<input type="text" value={fmtCOP(configForm.conductor_adicional)} on:focus={handleCOPFocus} on:blur={(e) => handleCOPBlur(e, 'conductor_adicional')} inputmode="numeric" />
 				</div>
 				<div class="cfg-field">
 					<label>% Seguridad Social</label>
@@ -519,7 +535,7 @@
 				</div>
 				<div class="cfg-field">
 					<label>Prueba COVID ($)</label>
-					<input type="number" bind:value={configForm.prueba_covid} step="1" />
+					<input type="text" value={fmtCOP(configForm.prueba_covid)} on:focus={handleCOPFocus} on:blur={(e) => handleCOPBlur(e, 'prueba_covid')} inputmode="numeric" />
 				</div>
 			</div>
 			<div style="display:flex;justify-content:flex-end;margin-top:20px">

@@ -247,7 +247,7 @@
 	function handleBeforeUnload(_e: BeforeUnloadEvent) { if (view === 'editor') saveDraft(); }
 
 	// ─── PERMISSIONS ────────────────────────────────────────────
-	$: isAdmin = $authStore.user?.rol === 'admin';
+	$: isAdmin = ($authStore.user as any)?.role === 'admin' || $authStore.user?.rol === 'admin';
 	$: canSeeTerceros = isAdmin;
 
 	// ─── MOUNT ──────────────────────────────────────────────────
