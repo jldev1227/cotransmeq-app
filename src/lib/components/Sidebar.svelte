@@ -243,9 +243,9 @@
 	in:fly={{ x: -100, duration: 400 }}
 >
 	<!-- Sidebar Background -->
-	<div class="glass-dark relative h-full border-r border-white/10">
+	<div class="glass-dark relative flex h-full flex-col border-r border-white/10">
 		<!-- Logo Area -->
-		<div class="border-b border-white/10 p-6" in:fade={{ duration: 600, delay: 200 }}>
+		<div class="flex-shrink-0 border-b border-white/10 p-6" in:fade={{ duration: 600, delay: 200 }}>
 			<div class="flex items-center space-x-3">
 				<div
 					class="soft-shadow flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white overflow-hidden"
@@ -321,7 +321,7 @@
 		</nav>
 
 		<!-- Collapse Toggle -->
-		<div class="border-t border-white/10 p-4">
+		<div class="flex-shrink-0 border-t border-white/10 p-4">
 			<button
 				class="apple-transition group flex w-full items-center justify-center rounded-xl px-3 py-3 text-orange-100/70 hover:bg-white/5 hover:text-orange-200"
 				on:click={() => dispatch('toggleCollapse')}
@@ -378,9 +378,9 @@
 
 	<!-- Drawer -->
 	<div class="fixed top-0 left-0 z-[70] h-full w-64" transition:fly={{ x: -300, duration: 300 }}>
-		<div class="glass-dark relative h-full border-r border-white/10">
+		<div class="glass-dark relative flex h-full flex-col border-r border-white/10">
 			<!-- Header con botón cerrar -->
-			<div class="flex items-center justify-between border-b border-white/10 p-4">
+			<div class="flex flex-shrink-0 items-center justify-between border-b border-white/10 p-4">
 				<div class="flex items-center space-x-3">
 					<div
 						class="soft-shadow flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-400 to-orange-600"
