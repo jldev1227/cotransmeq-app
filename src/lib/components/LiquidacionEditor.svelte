@@ -70,9 +70,30 @@
 		return `${d.padStart(2,'0')}-${m.padStart(2,'0')}-${y}`;
 	};
 
+// --- Fecha helpers: convert ISO dates to short textual form used by liquidador ---
+const MONTH_ABBR = ['ENE','FEB','MAR','ABR','MAY','JUN','JUL','AGO','SEP','OCT','NOV','DIC'];
+function shortDateFromIso(s: string): string {
+	if (!s) return '';
+	// if already non-ISO textual (e.g., '13 FEB') return uppercase
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return String(s).toUpperCase();
+	const d = new Date(s);
+	if (isNaN(d.getTime())) return String(s).toUpperCase();
+	const day = String(d.getDate()).padStart(2,'0');
+	const mon = MONTH_ABBR[d.getMonth()] || '';
+	return `${day} ${mon}`;
+}
+function fechasFromPair(ini: string | undefined, fin: string | undefined): string {
+	const a = shortDateFromIso(ini || '');
+	const b = shortDateFromIso(fin || '');
+	if (!a && !b) return '';
+	if (a && b) return a === b ? a : `${a} - ${b}`;
+	return a || b;
+}
+
 	let uid = 0;
 	const newRow = () => ({
 		id: ++uid, placa: '', placa_search: '', placa_dropdown: false, placa_highlight: 0,
+		// service rows keep date fields as ISO for calculations; terceros will use textual 'fechas'
 		fecha_ini: '', fecha_fin: '',
 		recorrido: '', tipo: TIPOS[0], cant: 1, vr_unit: 0, dcto: 0, planilla: '',
 	});
@@ -413,7 +434,7 @@
 					recorrido: t.recorrido ?? (rows[idx]?.recorrido || ''),
 					nombre_tercero: t.nombre_tercero || '', tercero_id: t.tercero_id || '',
 					tercero_identificacion: t.tercero_identificacion || '', tercero_tipo_persona: t.tercero_tipo_persona || '',
-					fecha_ini: t.fecha_ini ?? (rows[idx]?.fecha_ini || ''), fecha_fin: t.fecha_fin ?? (rows[idx]?.fecha_fin || ''),
+					fechas: (t.fechas ?? fechasFromPair(t.fecha_ini, t.fecha_fin) ?? fechasFromPair(rows[idx]?.fecha_ini, rows[idx]?.fecha_fin)) || '',
 					vr_unit: t.vr_unit ?? (parseFloat(String(rows[idx]?.vr_unit)) || 0),
 					cant: t.cant ?? (parseFloat(String(rows[idx]?.cant)) || 1),
 					pct_admin: t.pct_admin ?? 10, ingreso_extra_global: t.ingreso_extra_global ?? 0, ingresos_extra_aval: t.ingresos_extra_aval ?? 0,
@@ -567,7 +588,8 @@
 	interface TerceroRow {
 		src_index: number; placa: string; recorrido: string;
 		nombre_tercero: string; tercero_id: string; tercero_identificacion: string; tercero_tipo_persona: string;
-		fecha_ini: string; fecha_fin: string; vr_unit: number; cant: number;
+		// unified textual fechas field (e.g. "13 FEB" or "13 FEB - 15 FEB")
+		fechas: string; vr_unit: number; cant: number;
 		pct_admin: number; ingreso_extra_global: number; ingresos_extra_aval: number;
 	}
 	let terceroRows: TerceroRow[] = [];
@@ -579,7 +601,7 @@
 			terceroRows.push({
 				src_index: idx, placa: srcRow?.placa || '', recorrido: srcRow?.recorrido || '',
 				nombre_tercero: '', tercero_id: '', tercero_identificacion: '', tercero_tipo_persona: '',
-				fecha_ini: srcRow?.fecha_ini || '', fecha_fin: srcRow?.fecha_fin || '',
+				fechas: fechasFromPair(srcRow?.fecha_ini, srcRow?.fecha_fin) || '',
 				vr_unit: parseFloat(String(srcRow?.vr_unit)) || 0, cant: parseFloat(String(srcRow?.cant)) || 1,
 				pct_admin: 10, ingreso_extra_global: 0, ingresos_extra_aval: 0,
 			});
@@ -594,7 +616,7 @@
 			src_index: i, placa: r.placa || '', recorrido: r.recorrido || '',
 			nombre_tercero: terceroRows[i]?.nombre_tercero || '', tercero_id: terceroRows[i]?.tercero_id || '',
 			tercero_identificacion: terceroRows[i]?.tercero_identificacion || '', tercero_tipo_persona: terceroRows[i]?.tercero_tipo_persona || '',
-			fecha_ini: r.fecha_ini || '', fecha_fin: r.fecha_fin || '',
+			fechas: terceroRows[i]?.fechas || fechasFromPair(r.fecha_ini, r.fecha_fin) || '',
 			vr_unit: parseFloat(String(r.vr_unit)) || 0, cant: parseFloat(String(r.cant)) || 1,
 			pct_admin: terceroRows[i]?.pct_admin ?? 10, ingreso_extra_global: 0, ingresos_extra_aval: terceroRows[i]?.ingresos_extra_aval ?? 0,
 		}));
@@ -985,7 +1007,7 @@
 		<div class="ch" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px"><span>👥 Liquidación de Terceros</span><button class="btn-sync-terc" on:click={resetTerceroFromItems}>🔄 Sincronizar desde Servicios</button></div>
 		<div class="tbl-s">
 			<table class="tbl terc-tbl">
-				<thead><tr><th style="width:36px">#</th><th style="width:80px">Placa</th><th style="min-width:170px">Nombre 3°</th><th style="min-width:140px">Descripción</th><th style="width:108px">F. Ini</th><th style="width:108px">F. Fin</th><th style="width:112px">V/Unidad</th><th style="width:64px">Cant.</th><th style="width:112px">Total Fact.</th><th style="width:64px">Admin%</th><th style="width:112px">Admon$</th><th style="width:112px">V/Liquidar</th><th style="width:112px">Ing.Extra Glob.</th><th style="width:112px">Ing.Extra Aval</th><th style="width:112px">Ing. Cotransmeq</th><th style="width:40px"></th></tr></thead>
+				<thead><tr><th style="width:36px">#</th><th style="width:80px">Placa</th><th style="min-width:170px">Nombre 3°</th><th style="min-width:140px">Descripción</th><th style="width:140px">Fechas</th><th style="width:112px">V/Unidad</th><th style="width:64px">Cant.</th><th style="width:112px">Total Fact.</th><th style="width:64px">Admin%</th><th style="width:112px">Admon$</th><th style="width:112px">V/Liquidar</th><th style="width:112px">Ing.Extra Glob.</th><th style="width:112px">Ing.Extra Aval</th><th style="width:112px">Ing. Cotransmeq</th><th style="width:40px"></th></tr></thead>
 				<tbody>
 					{#each terceroRows as t, i}
 						{@const calc = terceroCalcs[i]}
@@ -1012,8 +1034,7 @@
 								</div>
 							</td>
 							<td style="font-size:11px;color:#475569">{t.recorrido || '—'}</td>
-							<td><input type="date" bind:value={terceroRows[i].fecha_ini} style="font-size:11px;padding:5px 6px" /></td>
-							<td><input type="date" bind:value={terceroRows[i].fecha_fin} style="font-size:11px;padding:5px 6px" /></td>
+							<td><input type="text" bind:value={terceroRows[i].fechas} placeholder="ej. 13 FEB o 13 FEB - 14 FEB" style="font-size:11px;padding:5px 6px;text-transform:uppercase" /></td>
 							<td><input type="text" inputmode="numeric" value={fmtCOPInput(terceroRows[i].vr_unit)} on:focus={e => { e.currentTarget.value = String(terceroRows[i].vr_unit || ''); e.currentTarget.select(); }} on:blur={e => { terceroRows[i].vr_unit = parseCOPInput(e.currentTarget.value); terceroRows = terceroRows; e.currentTarget.value = fmtCOPInput(terceroRows[i].vr_unit); }} style="font-size:12px;padding:5px 6px;text-align:right;font-family:monospace" /></td>
 							<td><input type="number" bind:value={terceroRows[i].cant} min="0" step="0.5" style="font-size:12px;padding:5px 5px;text-align:center" /></td>
 							<td class="calc-g">{COP(calc?.totalRow || 0)}</td>
@@ -1157,7 +1178,7 @@
 			<div class="dh"><div class="dh-logo">{#if logoError}<div class="dh-logo-fallback">COTRANS<br/>MEQ</div>{:else}<img src="/assets/logo.png" alt="Logo" on:error={() => logoError = true} style="height:58px;width:auto;object-fit:contain" />{/if}</div><div class="dh-title"><div class="dh-co">{hdr.empresa}</div><div class="dh-doc">LIQUIDACIÓN DE INGRESOS RECIBIDOS PARA TERCEROS</div></div><div class="dh-meta"><table class="mt"><tbody><tr><td class="ml">Código:</td><td class="mv">GAF-FR-11</td></tr><tr><td class="ml">Versión:</td><td>1</td></tr><tr><td class="ml">Fecha:</td><td>{new Date().toLocaleDateString('es-CO')}</td></tr></tbody></table></div></div>
 			<div class="pb"><div class="pc"><span class="pclabel">MES:</span><span class="pcval">{hdr.mes}</span></div><div class="pc"><span class="pclabel">AÑO:</span><span class="pcval">{hdr.anio}</span></div><div class="pc"><span class="pclabel">CONSECUTIVO:</span><span class="pcval">{hdr.consecutivo || ''}</span></div></div>
 			<table class="terc-prev-tbl"><thead><tr><th style="width:35px">#</th><th>PLACA</th><th>NOMBRE DEL TERCERO</th><th>DESCRIPCIÓN SERVICIO</th><th>FECHAS</th><th>VR UNIDAD</th><th>CANT</th><th>TOTAL FACTURADO</th><th>ADMON %</th><th>ADMON $</th><th>V/LIQUIDAR 3°</th></tr></thead>
-			<tbody>{#each terceroRows as t, i}{@const calc = terceroCalcs[i]}<tr><td class="tc">{i+1}</td><td class="tc" style="font-weight:600">{fmtPlaca(t.placa)}</td><td style="font-size:7.5pt">{(t.nombre_tercero || getTerceroNombre(t.placa, i) || '').toUpperCase()}</td><td style="font-size:7.5pt">{t.recorrido || ''}</td><td class="tc" style="font-size:7pt;white-space:nowrap">{t.fecha_ini || ''}{t.fecha_fin ? ' - ' + t.fecha_fin : ''}</td><td class="mc">{COP(t.vr_unit)}</td><td class="tc">{t.cant}</td><td class="mc" style="font-weight:700">{COP(calc?.totalRow || 0)}</td><td class="tc">{(calc?.pctAdmin || 0)}%</td><td class="mc" style="color:#b91c1c">{COP(calc?.admon || 0)}</td><td class="mc" style="font-weight:700;color:#9a3412">{COP(calc?.vLiquidar || 0)}</td></tr>{/each}</tbody>
+			<tbody>{#each terceroRows as t, i}{@const calc = terceroCalcs[i]}<tr><td class="tc">{i+1}</td><td class="tc" style="font-weight:600">{fmtPlaca(t.placa)}</td><td style="font-size:7.5pt">{(t.nombre_tercero || getTerceroNombre(t.placa, i) || '').toUpperCase()}</td><td style="font-size:7.5pt">{t.recorrido || ''}</td><td class="tc" style="font-size:7pt;white-space:nowrap">{t.fechas || ''}</td><td class="mc">{COP(t.vr_unit)}</td><td class="tc">{t.cant}</td><td class="mc" style="font-weight:700">{COP(calc?.totalRow || 0)}</td><td class="tc">{(calc?.pctAdmin || 0)}%</td><td class="mc" style="color:#b91c1c">{COP(calc?.admon || 0)}</td><td class="mc" style="font-weight:700;color:#9a3412">{COP(calc?.vLiquidar || 0)}</td></tr>{/each}</tbody>
 			<tfoot><tr style="font-weight:800;background:#e2e8f0"><td colspan="7" style="text-align:right;padding-right:6px">TOTALES</td><td class="mc">{COP(tercTotalFacturado)}</td><td></td><td class="mc" style="color:#b91c1c">{COP(tercTotalAdmon)}</td><td class="mc" style="color:#9a3412">{COP(tercTotalVLiquidar)}</td></tr></tfoot></table>
 			<table class="terc-prev-tbl" style="margin-top:10px"><thead><tr><th style="width:28px">#</th><th>PLACA</th><th>PROPIETARIO</th><th>CC / NIT</th><th>TIPO</th><th style="width:50px">ÍTEMS</th><th>V/LIQUIDAR</th></tr></thead>
 			<tbody>{#each terceroPlacasGroup as g, gi}<tr><td class="tc">{gi+1}</td><td class="tc" style="font-weight:700;font-family:monospace">{fmtPlaca(g.placa)}</td><td style="font-size:7.5pt;font-weight:600">{g.nombre.toUpperCase()}</td><td class="tc" style="font-size:7.5pt">{g.identificacion || '—'}</td><td class="tc" style="font-size:7pt">{g.tipo === 'EMPRESA' ? '🏢 EMPRESA' : '👤 PERSONA'}</td><td class="tc">{g.items}</td><td class="mc" style="font-weight:700;color:#9a3412">{COP(g.vLiquidar)}</td></tr>{/each}</tbody>
