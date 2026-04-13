@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { fade, scale } from 'svelte/transition';
-	import { createEventDispatcher } from 'svelte';
+	import { createEventDispatcher, onMount } from 'svelte';
 	import type { ServicioConRelaciones, CreateServicioDTO } from '$lib/types/servicios';
+	import { municipios } from '$lib/stores/municipios';
 
 	const dispatch = createEventDispatcher();
 
@@ -23,6 +24,37 @@
 	let loading = false;
 	let error: string | null = null;
 
+	// Estado para búsqueda de municipios
+	let searchOrigen = '';
+	let searchDestino = '';
+	let showOrigenDropdown = false;
+	let showDestinoDropdown = false;
+	let origenSeleccionado: any = null;
+	let destinoSeleccionado: any = null;
+
+	onMount(() => {
+		if ($municipios.municipios.length === 0) {
+			municipios.cargarTodos();
+		}
+	});
+
+	// Filtrado reactivo de municipios
+	$: municipiosFiltradosOrigen = searchOrigen.length >= 2
+		? $municipios.municipios.filter((m: any) =>
+			m.nombre_municipio.toLowerCase().includes(searchOrigen.toLowerCase()) ||
+			m.nombre_departamento.toLowerCase().includes(searchOrigen.toLowerCase()) ||
+			String(m.codigo_municipio).includes(searchOrigen)
+		).slice(0, 20)
+		: [];
+
+	$: municipiosFiltradosDestino = searchDestino.length >= 2
+		? $municipios.municipios.filter((m: any) =>
+			m.nombre_municipio.toLowerCase().includes(searchDestino.toLowerCase()) ||
+			m.nombre_departamento.toLowerCase().includes(searchDestino.toLowerCase()) ||
+			String(m.codigo_municipio).includes(searchDestino)
+		).slice(0, 20)
+		: [];
+
 	// Resetear form cuando se abre/cierra
 	$: if (visible && servicio && mode === 'edit') {
 		formData = {
@@ -36,6 +68,10 @@
 			destino_especifico: servicio.destino_especifico || '',
 			observaciones: servicio.observaciones || ''
 		};
+		origenSeleccionado = servicio.origen || null;
+		destinoSeleccionado = servicio.destino || null;
+		searchOrigen = servicio.origen?.nombre_municipio || '';
+		searchDestino = servicio.destino?.nombre_municipio || '';
 	} else if (visible && mode === 'create') {
 		formData = {
 			cliente_id: '',
@@ -47,6 +83,10 @@
 			origen_especifico: '',
 			destino_especifico: ''
 		};
+		origenSeleccionado = null;
+		destinoSeleccionado = null;
+		searchOrigen = '';
+		searchDestino = '';
 	}
 
 	function handleClose() {
@@ -214,33 +254,141 @@
 						</div>
 
 						<!-- Origen ID -->
-						<div>
+						<div class="relative">
 							<label for="origen_id" class="mb-2 block text-sm font-semibold text-gray-700">
 								Municipio Origen <span class="text-red-500">*</span>
 							</label>
-							<input
-								id="origen_id"
-								type="text"
-								bind:value={formData.origen_id}
-								required
-								placeholder="ID del municipio"
-								class="apple-transition w-full rounded-xl border border-gray-200 px-4 py-3 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
-							/>
+							{#if origenSeleccionado}
+								<div class="flex items-center gap-2 rounded-xl border border-orange-300 bg-orange-50 px-4 py-3">
+									<div class="flex-1">
+										<div class="font-medium text-gray-900">{origenSeleccionado.nombre_municipio}</div>
+										<div class="flex items-center gap-2 text-xs text-gray-500">
+											<span>{origenSeleccionado.nombre_departamento}</span>
+											<span class="inline-flex items-center rounded bg-orange-100 px-1.5 py-0.5 font-mono font-semibold text-orange-700">
+												DIVIPOLA: {origenSeleccionado.codigo_municipio}
+											</span>
+										</div>
+									</div>
+									<button
+										type="button"
+										on:click={() => {
+											origenSeleccionado = null;
+											formData.origen_id = '';
+											searchOrigen = '';
+										}}
+										class="rounded-lg p-1 text-gray-400 hover:bg-orange-100 hover:text-orange-600"
+										aria-label="Limpiar origen"
+									>
+										<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+										</svg>
+									</button>
+								</div>
+							{:else}
+								<input
+									id="origen_id"
+									type="text"
+									bind:value={searchOrigen}
+									on:focus={() => showOrigenDropdown = true}
+									on:blur={() => setTimeout(() => showOrigenDropdown = false, 200)}
+									placeholder="Buscar municipio de origen..."
+									autocomplete="off"
+									class="apple-transition w-full rounded-xl border border-gray-200 px-4 py-3 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+								/>
+								{#if showOrigenDropdown && municipiosFiltradosOrigen.length > 0}
+									<div class="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg">
+										{#each municipiosFiltradosOrigen as mun}
+											<button
+												type="button"
+												class="w-full px-4 py-2 text-left hover:bg-orange-50 transition-colors"
+												on:mousedown|preventDefault={() => {
+													origenSeleccionado = mun;
+													formData.origen_id = mun.id;
+													searchOrigen = mun.nombre_municipio;
+													showOrigenDropdown = false;
+												}}
+											>
+												<div class="font-medium text-gray-900">{mun.nombre_municipio}</div>
+												<div class="flex items-center gap-2 text-xs text-gray-500">
+													<span>{mun.nombre_departamento}</span>
+													<span class="inline-flex items-center rounded bg-blue-100 px-1.5 py-0.5 font-mono font-semibold text-blue-700">
+														{mun.codigo_municipio}
+													</span>
+												</div>
+											</button>
+										{/each}
+									</div>
+								{/if}
+							{/if}
 						</div>
 
 						<!-- Destino ID -->
-						<div>
+						<div class="relative">
 							<label for="destino_id" class="mb-2 block text-sm font-semibold text-gray-700">
 								Municipio Destino <span class="text-red-500">*</span>
 							</label>
-							<input
-								id="destino_id"
-								type="text"
-								bind:value={formData.destino_id}
-								required
-								placeholder="ID del municipio"
-								class="apple-transition w-full rounded-xl border border-gray-200 px-4 py-3 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
-							/>
+							{#if destinoSeleccionado}
+								<div class="flex items-center gap-2 rounded-xl border border-orange-300 bg-orange-50 px-4 py-3">
+									<div class="flex-1">
+										<div class="font-medium text-gray-900">{destinoSeleccionado.nombre_municipio}</div>
+										<div class="flex items-center gap-2 text-xs text-gray-500">
+											<span>{destinoSeleccionado.nombre_departamento}</span>
+											<span class="inline-flex items-center rounded bg-orange-100 px-1.5 py-0.5 font-mono font-semibold text-orange-700">
+												DIVIPOLA: {destinoSeleccionado.codigo_municipio}
+											</span>
+										</div>
+									</div>
+									<button
+										type="button"
+										on:click={() => {
+											destinoSeleccionado = null;
+											formData.destino_id = '';
+											searchDestino = '';
+										}}
+										class="rounded-lg p-1 text-gray-400 hover:bg-orange-100 hover:text-orange-600"
+										aria-label="Limpiar destino"
+									>
+										<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+										</svg>
+									</button>
+								</div>
+							{:else}
+								<input
+									id="destino_id"
+									type="text"
+									bind:value={searchDestino}
+									on:focus={() => showDestinoDropdown = true}
+									on:blur={() => setTimeout(() => showDestinoDropdown = false, 200)}
+									placeholder="Buscar municipio de destino..."
+									autocomplete="off"
+									class="apple-transition w-full rounded-xl border border-gray-200 px-4 py-3 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+								/>
+								{#if showDestinoDropdown && municipiosFiltradosDestino.length > 0}
+									<div class="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg">
+										{#each municipiosFiltradosDestino as mun}
+											<button
+												type="button"
+												class="w-full px-4 py-2 text-left hover:bg-orange-50 transition-colors"
+												on:mousedown|preventDefault={() => {
+													destinoSeleccionado = mun;
+													formData.destino_id = mun.id;
+													searchDestino = mun.nombre_municipio;
+													showDestinoDropdown = false;
+												}}
+											>
+												<div class="font-medium text-gray-900">{mun.nombre_municipio}</div>
+												<div class="flex items-center gap-2 text-xs text-gray-500">
+													<span>{mun.nombre_departamento}</span>
+													<span class="inline-flex items-center rounded bg-blue-100 px-1.5 py-0.5 font-mono font-semibold text-blue-700">
+														{mun.codigo_municipio}
+													</span>
+												</div>
+											</button>
+										{/each}
+									</div>
+								{/if}
+							{/if}
 						</div>
 
 						<!-- Dirección específica origen -->

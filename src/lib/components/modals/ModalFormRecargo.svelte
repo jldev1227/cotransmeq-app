@@ -12,6 +12,8 @@
 		esDiaFestivo
 	} from '$lib/utils/recargosHelpers';
 	import { obtenerFestivosCompletos, esDiaFestivoColombiano } from '$lib/utils/festivosColombia';
+	import MapboxSearch from '../ui/MapboxSearch.svelte';
+	import { municipios } from '$lib/stores/municipios';
 
 	// Props
 	export let isOpen = false;
@@ -45,6 +47,25 @@
 	let selectedRow: string | null = null;
 	let fromServicio = false; // Indica si el recargo viene de un servicio
 	let planillaGenerada = false; // Flag para evitar regenerar automáticamente
+
+	// Toggle para mostrar sección de servicio opcional en creación
+	let mostrarServicioInfo = false;
+
+	// Estado para búsqueda de municipios de servicio
+	let searchServicioOrigen = '';
+	let searchServicioDestino = '';
+	let showServicioOrigenDropdown = false;
+	let showServicioDestinoDropdown = false;
+	let servicioOrigenSeleccionado: any = null;
+	let servicioDestinoSeleccionado: any = null;
+	let servicioOrigenEspecifico = '';
+	let servicioDestinoEspecifico = '';
+	let servicioOrigenLatitud: number | null = null;
+	let servicioOrigenLongitud: number | null = null;
+	let servicioDestinoLatitud: number | null = null;
+	let servicioDestinoLongitud: number | null = null;
+	let servicioObservaciones = '';
+	let servicioProposito: string = 'personal';
 
 	// Validaciones de horas
 	let erroresHoras: { [key: string]: { inicio: string; fin: string } } = {};
@@ -1047,7 +1068,30 @@
 			if (recargo) {
 				console.log('📦 Recargo obtenido:', recargo);
 				// Verificar si viene de un servicio
-				fromServicio = !!recargo.servicio_id;
+				fromServicio = !!(recargo as any).servicio_id;
+
+				// Extraer info del servicio si existe
+				if ((recargo as any).servicio_id && (recargo as any).servicio) {
+					const svc = (recargo as any).servicio;
+					const origen = svc.municipios_servicio_origen_idTomunicipios || null;
+					const destino = svc.municipios_servicio_destino_idTomunicipios || null;
+					
+					servicioOrigenSeleccionado = origen;
+					servicioDestinoSeleccionado = destino;
+					searchServicioOrigen = origen?.nombre_municipio || '';
+					searchServicioDestino = destino?.nombre_municipio || '';
+					servicioOrigenEspecifico = svc.origen_especifico || '';
+					servicioDestinoEspecifico = svc.destino_especifico || '';
+					servicioOrigenLatitud = svc.origen_latitud || null;
+					servicioOrigenLongitud = svc.origen_longitud || null;
+					servicioDestinoLatitud = svc.destino_latitud || null;
+					servicioDestinoLongitud = svc.destino_longitud || null;
+					servicioObservaciones = svc.observaciones || '';
+					servicioProposito = svc.proposito_servicio || 'personal';
+					mostrarServicioInfo = true;
+				} else {
+					mostrarServicioInfo = false;
+				}
 
 				formData = {
 					conductorId: recargo.conductor_id,
@@ -1178,6 +1222,21 @@
 		activeTab = 'informacion';
 		editMode = false;
 		fromServicio = false;
+		mostrarServicioInfo = false;
+		searchServicioOrigen = '';
+		searchServicioDestino = '';
+		showServicioOrigenDropdown = false;
+		showServicioDestinoDropdown = false;
+		servicioOrigenSeleccionado = null;
+		servicioDestinoSeleccionado = null;
+		servicioOrigenEspecifico = '';
+		servicioDestinoEspecifico = '';
+		servicioOrigenLatitud = null;
+		servicioOrigenLongitud = null;
+		servicioDestinoLatitud = null;
+		servicioDestinoLongitud = null;
+		servicioObservaciones = '';
+		servicioProposito = 'personal';
 		planillaGenerada = false; // Resetear flag para permitir nueva generación
 		isGenerandoPlanilla = false; // Resetear loading de planilla
 		lastLoadedRecargoId = null; // Resetear ID del último recargo cargado
@@ -1217,6 +1276,18 @@
 					mes: currentMonth,
 					año: currentYear,
 					servicio_id: formData.servicio_id,
+
+					// Datos del servicio (editables)
+					servicio_origen_id: servicioOrigenSeleccionado?.id || null,
+					servicio_destino_id: servicioDestinoSeleccionado?.id || null,
+					servicio_origen_especifico: servicioOrigenEspecifico || null,
+					servicio_destino_especifico: servicioDestinoEspecifico || null,
+					servicio_origen_latitud: servicioOrigenLatitud,
+					servicio_origen_longitud: servicioOrigenLongitud,
+					servicio_destino_latitud: servicioDestinoLatitud,
+					servicio_destino_longitud: servicioDestinoLongitud,
+					servicio_observaciones: servicioObservaciones || null,
+					servicio_proposito: servicioProposito || null,
 
 					// Estado del conductor
 					estado_conductor: formData.estado_conductor,
@@ -1292,6 +1363,18 @@
 					mes: currentMonth,
 					año: currentYear,
 					servicio_id: formData.servicio_id,
+
+					// Datos del servicio (opcionales al crear)
+					servicio_origen_id: servicioOrigenSeleccionado?.id || null,
+					servicio_destino_id: servicioDestinoSeleccionado?.id || null,
+					servicio_origen_especifico: servicioOrigenEspecifico || null,
+					servicio_destino_especifico: servicioDestinoEspecifico || null,
+					servicio_origen_latitud: servicioOrigenLatitud,
+					servicio_origen_longitud: servicioOrigenLongitud,
+					servicio_destino_latitud: servicioDestinoLatitud,
+					servicio_destino_longitud: servicioDestinoLongitud,
+					servicio_observaciones: servicioObservaciones || null,
+					servicio_proposito: servicioProposito || null,
 
 					// Estado del conductor
 					estado_conductor: formData.estado_conductor,
@@ -1397,11 +1480,27 @@
 		}
 	}
 
+	// Filtrado reactivo de municipios para servicio
+	$: filteredServicioOrigen = searchServicioOrigen.length >= 2
+		? ($municipios.municipios || []).filter((m: any) =>
+			m.nombre_municipio.toLowerCase().includes(searchServicioOrigen.toLowerCase()) ||
+			m.nombre_departamento.toLowerCase().includes(searchServicioOrigen.toLowerCase())
+		).slice(0, 20)
+		: [];
+
+	$: filteredServicioDestino = searchServicioDestino.length >= 2
+		? ($municipios.municipios || []).filter((m: any) =>
+			m.nombre_municipio.toLowerCase().includes(searchServicioDestino.toLowerCase()) ||
+			m.nombre_departamento.toLowerCase().includes(searchServicioDestino.toLowerCase())
+		).slice(0, 20)
+		: [];
+
 	// Cargar recursos al abrir
 	onMount(async () => {
 		await recursos.cargarConductores();
 		await recursos.cargarVehiculos();
 		await recursos.cargarClientes();
+		await municipios.cargarTodos();
 	});
 
 	// Cargar datos al abrir en modo edición o generar número de planilla en modo creación
@@ -2023,6 +2122,183 @@
 								</div>
 							</div>
 						</div>
+
+						<!-- Información del Servicio -->
+						{#if mostrarServicioInfo}
+							<div class="rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50 to-amber-50 p-5">
+								<div class="mb-4 flex items-center gap-3">
+									<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-600">
+										<svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+										</svg>
+									</div>
+									<div>
+										<h3 class="text-sm font-semibold text-gray-900">Información del Servicio</h3>
+										<p class="text-xs text-gray-500">{isEditMode ? 'Editar datos del servicio vinculado' : 'Registrar servicio asociado (opcional)'}</p>
+									</div>
+								</div>
+
+								<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+									<!-- Municipio Origen -->
+									<div class="space-y-1">
+										<label for="servicio-origen" class="text-xs font-medium tracking-wide text-gray-500 uppercase">Municipio Origen</label>
+										<div class="relative">
+											<input
+												id="servicio-origen"
+												type="text"
+												bind:value={searchServicioOrigen}
+												on:focus={() => showServicioOrigenDropdown = true}
+												placeholder="Buscar municipio origen..."
+												class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+											/>
+											{#if servicioOrigenSeleccionado}
+												<div class="mt-1 rounded bg-orange-100 px-2 py-1 text-xs text-orange-700">
+													✓ {servicioOrigenSeleccionado.nombre_municipio} — {servicioOrigenSeleccionado.nombre_departamento}
+													<span class="font-mono font-semibold">DIVIPOLA: {servicioOrigenSeleccionado.codigo_municipio}</span>
+													<button on:click={() => { servicioOrigenSeleccionado = null; searchServicioOrigen = ''; }} class="ml-1 text-orange-500 hover:text-orange-700">✕</button>
+												</div>
+											{/if}
+											{#if showServicioOrigenDropdown && filteredServicioOrigen.length > 0}
+												<div class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+													{#each filteredServicioOrigen.slice(0, 20) as mun}
+														<button
+															type="button"
+															class="w-full px-3 py-2 text-left text-sm hover:bg-orange-50"
+															on:click={() => {
+																servicioOrigenSeleccionado = mun;
+																searchServicioOrigen = mun.nombre_municipio;
+																showServicioOrigenDropdown = false;
+															}}
+														>
+															<span class="font-medium">{mun.nombre_municipio}</span>
+															<span class="text-xs text-gray-500">— {mun.nombre_departamento}</span>
+															<span class="ml-1 text-xs font-mono text-gray-400">{mun.codigo_municipio}</span>
+														</button>
+													{/each}
+												</div>
+											{/if}
+										</div>
+									</div>
+
+									<!-- Municipio Destino -->
+									<div class="space-y-1">
+										<label for="servicio-destino" class="text-xs font-medium tracking-wide text-gray-500 uppercase">Municipio Destino</label>
+										<div class="relative">
+											<input
+												id="servicio-destino"
+												type="text"
+												bind:value={searchServicioDestino}
+												on:focus={() => showServicioDestinoDropdown = true}
+												placeholder="Buscar municipio destino..."
+												class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+											/>
+											{#if servicioDestinoSeleccionado}
+												<div class="mt-1 rounded bg-orange-100 px-2 py-1 text-xs text-orange-700">
+													✓ {servicioDestinoSeleccionado.nombre_municipio} — {servicioDestinoSeleccionado.nombre_departamento}
+													<span class="font-mono font-semibold">DIVIPOLA: {servicioDestinoSeleccionado.codigo_municipio}</span>
+													<button on:click={() => { servicioDestinoSeleccionado = null; searchServicioDestino = ''; }} class="ml-1 text-orange-500 hover:text-orange-700">✕</button>
+												</div>
+											{/if}
+											{#if showServicioDestinoDropdown && filteredServicioDestino.length > 0}
+												<div class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+													{#each filteredServicioDestino.slice(0, 20) as mun}
+														<button
+															type="button"
+															class="w-full px-3 py-2 text-left text-sm hover:bg-orange-50"
+															on:click={() => {
+																servicioDestinoSeleccionado = mun;
+																searchServicioDestino = mun.nombre_municipio;
+																showServicioDestinoDropdown = false;
+															}}
+														>
+															<span class="font-medium">{mun.nombre_municipio}</span>
+															<span class="text-xs text-gray-500">— {mun.nombre_departamento}</span>
+															<span class="ml-1 text-xs font-mono text-gray-400">{mun.codigo_municipio}</span>
+														</button>
+													{/each}
+												</div>
+											{/if}
+										</div>
+									</div>
+
+									<!-- Dirección Específica Origen -->
+									<div class="space-y-1">
+										<div class="text-xs font-medium tracking-wide text-gray-500 uppercase">Dirección Específica Origen</div>
+										<MapboxSearch
+											placeholder="Buscar dirección origen..."
+											bind:value={servicioOrigenEspecifico}
+											on:select={(e) => {
+												servicioOrigenEspecifico = e.detail.place_name || e.detail.text;
+												if (e.detail.center) {
+													servicioOrigenLongitud = e.detail.center[0];
+													servicioOrigenLatitud = e.detail.center[1];
+												}
+											}}
+										/>
+										{#if servicioOrigenEspecifico}
+											<div class="text-xs text-gray-600">📍 {servicioOrigenEspecifico}</div>
+										{/if}
+									</div>
+
+									<!-- Dirección Específica Destino -->
+									<div class="space-y-1">
+										<div class="text-xs font-medium tracking-wide text-gray-500 uppercase">Dirección Específica Destino</div>
+										<MapboxSearch
+											placeholder="Buscar dirección destino..."
+											bind:value={servicioDestinoEspecifico}
+											on:select={(e) => {
+												servicioDestinoEspecifico = e.detail.place_name || e.detail.text;
+												if (e.detail.center) {
+													servicioDestinoLongitud = e.detail.center[0];
+													servicioDestinoLatitud = e.detail.center[1];
+												}
+											}}
+										/>
+										{#if servicioDestinoEspecifico}
+											<div class="text-xs text-gray-600">📍 {servicioDestinoEspecifico}</div>
+										{/if}
+									</div>
+
+									<!-- Propósito del Servicio -->
+									<div class="space-y-1">
+										<label for="servicio-proposito" class="text-xs font-medium tracking-wide text-gray-500 uppercase">Tipo de Servicio</label>
+										<select
+											id="servicio-proposito"
+											bind:value={servicioProposito}
+											class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+										>
+											<option value="">Seleccionar...</option>
+											<option value="personal">🚗 Personal</option>
+											<option value="personal_y_herramienta">🔧 Personal y Herramienta</option>
+										</select>
+									</div>
+
+									<!-- Observaciones -->
+									<div class="space-y-1 md:col-span-2">
+										<label for="servicio-observaciones" class="text-xs font-medium tracking-wide text-gray-500 uppercase">Observaciones del Servicio</label>
+										<textarea
+											id="servicio-observaciones"
+											bind:value={servicioObservaciones}
+											placeholder="Observaciones del servicio..."
+											rows="2"
+											class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+										></textarea>
+									</div>
+								</div>
+							</div>
+						{:else if !isEditMode}
+							<button
+								type="button"
+								on:click={() => mostrarServicioInfo = true}
+								class="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-orange-300 bg-orange-50/50 px-4 py-3 text-sm font-medium text-orange-600 transition-colors hover:border-orange-400 hover:bg-orange-100/50"
+							>
+								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+								</svg>
+								Agregar información de servicio (opcional)
+							</button>
+						{/if}
+
 						<!-- Archivo adjunto -->
 						<div>
 							<label class="mb-2 block text-sm font-semibold text-gray-800">

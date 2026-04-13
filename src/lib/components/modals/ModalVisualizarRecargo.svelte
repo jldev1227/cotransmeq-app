@@ -14,6 +14,15 @@
 	let mesAño: { mes: number; año: number } | null = null;
 	let archivoExistente: string | null = null;
 	let selectedTab = 'detalles';
+	let servicioInfo: {
+		origen: any;
+		destino: any;
+		origen_especifico: string;
+		destino_especifico: string;
+		proposito_servicio: string;
+		observaciones: string;
+		fecha_solicitud: string;
+	} | null = null;
 
 	interface DiaLaboral {
 		id: string;
@@ -138,6 +147,22 @@
 
 				mesAño = { mes: recargoData.mes, año: recargoData.a_o };
 
+				// Extraer info del servicio si existe
+				const servicioData = (recargoData as any).servicio;
+				if (servicioData) {
+					servicioInfo = {
+						origen: servicioData.municipios_servicio_origen_idTomunicipios || null,
+						destino: servicioData.municipios_servicio_destino_idTomunicipios || null,
+						origen_especifico: servicioData.origen_especifico || '',
+						destino_especifico: servicioData.destino_especifico || '',
+						proposito_servicio: servicioData.proposito_servicio || '',
+						observaciones: servicioData.observaciones || '',
+						fecha_solicitud: servicioData.fecha_solicitud || ''
+					};
+				} else {
+					servicioInfo = null;
+				}
+
 				// Cargar archivo si existe
 				if (recargoData.planilla_s3key) {
 					const url = await getPresignedUrl(recargoData.planilla_s3key);
@@ -176,6 +201,7 @@
 		error = null;
 		mesAño = null;
 		archivoExistente = null;
+		servicioInfo = null;
 		selectedTab = 'detalles';
 		isOpen = false;
 	}
@@ -515,6 +541,97 @@
 									<div class="text-sm text-gray-500">NIT: {infoRecargo.empresa.nit}</div>
 								</div>
 							</div>
+
+							<!-- Servicio Asociado -->
+							{#if servicioInfo}
+								<div class="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-5">
+									<div class="mb-4 flex items-center gap-3">
+										<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600">
+											<svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+											</svg>
+										</div>
+										<div>
+											<h3 class="text-sm font-semibold text-gray-900">Servicio Asociado</h3>
+											<p class="text-xs text-gray-500">Información del servicio vinculado</p>
+										</div>
+									</div>
+
+									<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+										<!-- Origen -->
+										<div class="space-y-1">
+											<div class="text-xs font-medium tracking-wide text-gray-500 uppercase">Municipio Origen</div>
+											{#if servicioInfo.origen}
+												<div class="rounded-lg bg-white/70 px-3 py-2">
+													<div class="font-medium text-gray-900">{servicioInfo.origen.nombre_municipio}</div>
+													<div class="flex items-center gap-2 text-xs text-gray-500">
+														<span>{servicioInfo.origen.nombre_departamento}</span>
+														<span class="inline-flex items-center rounded bg-blue-100 px-1.5 py-0.5 text-xs font-mono font-semibold text-blue-700">
+															DIVIPOLA: {servicioInfo.origen.codigo_municipio}
+														</span>
+													</div>
+												</div>
+											{:else}
+												<div class="text-sm text-gray-400">No disponible</div>
+											{/if}
+											{#if servicioInfo.origen_especifico}
+												<div class="text-xs text-gray-600">
+													<span class="font-medium">Dirección:</span> {servicioInfo.origen_especifico}
+												</div>
+											{/if}
+										</div>
+
+										<!-- Destino -->
+										<div class="space-y-1">
+											<div class="text-xs font-medium tracking-wide text-gray-500 uppercase">Municipio Destino</div>
+											{#if servicioInfo.destino}
+												<div class="rounded-lg bg-white/70 px-3 py-2">
+													<div class="font-medium text-gray-900">{servicioInfo.destino.nombre_municipio}</div>
+													<div class="flex items-center gap-2 text-xs text-gray-500">
+														<span>{servicioInfo.destino.nombre_departamento}</span>
+														<span class="inline-flex items-center rounded bg-blue-100 px-1.5 py-0.5 text-xs font-mono font-semibold text-blue-700">
+															DIVIPOLA: {servicioInfo.destino.codigo_municipio}
+														</span>
+													</div>
+												</div>
+											{:else}
+												<div class="text-sm text-gray-400">No disponible</div>
+											{/if}
+											{#if servicioInfo.destino_especifico}
+												<div class="text-xs text-gray-600">
+													<span class="font-medium">Dirección:</span> {servicioInfo.destino_especifico}
+												</div>
+											{/if}
+										</div>
+
+										<!-- Tipo de Servicio -->
+										<div class="space-y-1">
+											<div class="text-xs font-medium tracking-wide text-gray-500 uppercase">Tipo de Servicio</div>
+											<div class="rounded-lg bg-white/70 px-3 py-2">
+												<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {
+													servicioInfo.proposito_servicio === 'personal' ? 'bg-amber-100 text-amber-700' :
+													servicioInfo.proposito_servicio === 'personal_y_herramienta' ? 'bg-orange-100 text-orange-700' :
+													'bg-gray-100 text-gray-700'
+												}">
+													{servicioInfo.proposito_servicio === 'personal' ? '🚗 Personal' :
+													 servicioInfo.proposito_servicio === 'personal_y_herramienta' ? '� Personal y Herramienta' :
+													 servicioInfo.proposito_servicio || 'No especificado'}
+												</span>
+											</div>
+										</div>
+
+										<!-- Observaciones -->
+										{#if servicioInfo.observaciones}
+											<div class="space-y-1 md:col-span-2">
+												<div class="text-xs font-medium tracking-wide text-gray-500 uppercase">Observaciones</div>
+												<div class="rounded-lg bg-white/70 px-3 py-2 text-sm text-gray-700">
+													{servicioInfo.observaciones}
+												</div>
+											</div>
+										{/if}
+									</div>
+								</div>
+							{/if}
 
 							<!-- Resumen de Totales -->
 							<div class="rounded-lg bg-gray-50 p-4">
