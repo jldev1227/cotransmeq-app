@@ -82,6 +82,20 @@
 			href: '/dashboard/clientes'
 		},
 		{
+			id: 'terceros',
+			label: 'Terceros',
+			icon: 'users',
+			badge: null,
+			href: '/dashboard/terceros'
+		},
+		{
+			id: 'liquidaciones-servicios',
+			label: 'Liq. Servicios',
+			icon: 'file-text',
+			badge: null,
+			href: '/dashboard/liquidaciones-servicios'
+		},
+		{
 			id: 'extractos',
 			label: 'Extractos',
 			icon: 'file-text',
@@ -150,6 +164,8 @@
 		if (pathname.startsWith('/dashboard/acciones-correctivas')) return 'acciones-correctivas';
 		if (pathname.startsWith('/dashboard/evaluaciones')) return 'evaluaciones';
 		if (pathname.startsWith('/dashboard/clientes')) return 'clientes';
+		if (pathname.startsWith('/dashboard/terceros')) return 'terceros';
+		if (pathname.startsWith('/dashboard/liquidaciones-servicios')) return 'liquidaciones-servicios';
 		if (pathname.startsWith('/dashboard/extractos')) return 'extractos';
 		// if (pathname.startsWith('/dashboard/rutas')) return 'rutas';
 		// if (pathname.startsWith('/dashboard/planillas')) return 'planillas';
@@ -221,7 +237,7 @@
 
 <!-- Desktop Sidebar (lg+) -->
 <div
-	class="apple-transition fixed top-0 left-0 z-40 hidden h-full lg:block {isCollapsed
+	class="no-print apple-transition fixed top-0 left-0 z-40 hidden h-full lg:block {isCollapsed
 		? 'w-20'
 		: 'w-64'}"
 	in:fly={{ x: -100, duration: 400 }}
@@ -334,7 +350,7 @@
 <!-- Mobile Menu Button (fixed en esquina superior izquierda) -->
 <button
 	type="button"
-	class="fixed top-4 left-4 z-50 flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500 shadow-lg transition-colors hover:bg-orange-600 lg:hidden"
+	class="no-print fixed top-4 left-4 z-50 flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500 shadow-lg transition-colors hover:bg-orange-600 lg:hidden"
 	on:click={toggleDrawer}
 	aria-label="Abrir menú"
 >

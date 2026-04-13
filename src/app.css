@@ -191,3 +191,48 @@ body {
 	color: rgb(107, 114, 128);
 	font-size: 0.875rem;
 }
+
+/* ── PRINT STYLES ── */
+@media print {
+	/* Hide all dashboard chrome */
+	body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
+	body > div { overflow: visible !important; }
+
+	/* Hide sidebar */
+	aside, nav, [class*="sidebar"], [class*="Sidebar"] {
+		display: none !important;
+	}
+
+	/* Hide header */
+	header, [class*="Header"], [class*="header-"] {
+		display: none !important;
+	}
+
+	/* Hide sidebar/header div wrappers that use Tailwind's .fixed class */
+	.glass-dark, .z-40, .z-30, .z-50 {
+		display: none !important;
+	}
+
+	/* Hide socket/connection warnings */
+	.border-orange-500 { display: none !important; }
+
+	/* Remove main content offset (sidebar margin + header padding) */
+	main {
+		margin: 0 !important;
+		padding: 0 !important;
+		overflow: visible !important;
+		width: 100% !important;
+	}
+
+	/* Parent containers should allow full-width printing */
+	.min-h-screen, [class*="min-h-screen"] {
+		display: block !important;
+		overflow: visible !important;
+	}
+
+	/* Apple transitions off for print */
+	.apple-transition { transition: none !important; }
+
+	/* Hide non-print elements */
+	.no-print { display: none !important; }
+}

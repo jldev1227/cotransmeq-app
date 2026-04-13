@@ -73,7 +73,7 @@
 <svelte:window on:click={handleClickOutside} on:keydown={handleKeydown} />
 
 <header
-	class="apple-transition fixed top-0 right-0 left-0 z-30 h-16 border-b border-gray-200/50 bg-white/80 backdrop-blur-lg backdrop-filter {isCollapsed
+	class="no-print apple-transition fixed top-0 right-0 left-0 z-30 h-16 border-b border-gray-200/50 bg-white/80 backdrop-blur-lg backdrop-filter {isCollapsed
 		? 'lg:left-20'
 		: 'lg:left-64'}"
 	in:fly={{ y: -20, duration: 400, delay: 300 }}
