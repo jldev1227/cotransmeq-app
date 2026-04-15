@@ -80,7 +80,7 @@
 	].sort();
 	$: uniqueVehiculos = [...new Set(recargos.map((r) => r.vehiculo?.placa).filter((v) => v != null).map(String))].sort();
 	$: uniqueEstados = [...new Set(recargos.map((r) => r.estado).filter((v) => v != null).map(String))];
-	let planillaFilter: string[] = [];
+	let planillaFilter: string = '';
 	$: dayColumns = Array.from({ length: daysInMonth }, (_, i) => {
 		const day = i + 1;
 		const isSunday = esDomingo(day, selectedMonth, selectedYear);
@@ -177,19 +177,25 @@
 
 		// Filtros específicos
 		if (conductorFilter.length > 0) {
-			if (!conductorFilter.includes(recargo.conductor_id)) return false;
+			const nombre = `${recargo.conductor?.nombre || ''} ${recargo.conductor?.apellido || ''}`.trim();
+			if (!conductorFilter.includes(nombre)) return false;
 		}
 
 		if (vehiculoFilter.length > 0) {
-			if (!vehiculoFilter.includes(recargo.vehiculo_id)) return false;
+			if (!vehiculoFilter.includes(recargo.vehiculo?.placa ?? '')) return false;
 		}
 
 		if (empresaFilter.length > 0) {
-			if (!empresaFilter.includes(recargo.empresa_id)) return false;
+			if (!empresaFilter.includes(recargo.empresa?.nombre ?? '')) return false;
 		}
 
 		if (estadoFilter.length > 0) {
 			if (!estadoFilter.includes(recargo.estado)) return false;
+		}
+
+		if (planillaFilter && planillaFilter.trim() !== '') {
+			const planilla = recargo.numero_planilla?.toLowerCase() || '';
+			if (!planilla.includes(planillaFilter.toLowerCase())) return false;
 		}
 
 		return true;

@@ -2052,6 +2052,22 @@
 												{/each}
 											</div>
 										{/if}
+										<button
+											type="button"
+											on:click={() => (mostrarModalEmpresa = true)}
+											class="group flex h-11 w-11 items-center justify-center rounded-xl border-2 border-dashed border-orange-300 bg-orange-50/50 text-orange-600 transition-all hover:scale-105 hover:border-orange-400 hover:bg-orange-50"
+											title="Crear nueva empresa"
+										>
+											<svg
+												class="h-5 w-5 transition-transform group-hover:rotate-90"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2.5"
+												viewBox="0 0 24 24"
+											>
+												<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+											</svg>
+										</button>
 									{/if}
 								</div>
 							</div>
@@ -3553,3 +3569,21 @@
 		</div>
 	</div>
 {/if}
+
+<ModalNuevaEmpresa
+	isOpen={mostrarModalEmpresa}
+	onClose={() => (mostrarModalEmpresa = false)}
+	onSuccess={handleEmpresaCreada}
+/>
+
+<ModalNuevoConductor
+	isOpen={mostrarModalConductor}
+	onClose={() => (mostrarModalConductor = false)}
+	onSuccess={handleConductorCreado}
+/>
+
+<ModalNuevoVehiculo
+	isOpen={mostrarModalVehiculo}
+	onClose={() => (mostrarModalVehiculo = false)}
+	onSuccess={handleVehiculoCreado}
+/>
