@@ -1987,92 +1987,94 @@
 										<span class="text-red-500">*</span>
 									</div>
 								</label>
-								<div class="relative">
-									{#if empresaSeleccionada}
-										<div
-											class="flex items-center justify-between rounded-xl border-2 border-orange-500 bg-orange-50 px-4 py-3"
-										>
-											<div>
-												<div class="font-medium text-gray-900">{empresaSeleccionada.nombre}</div>
-												{#if empresaSeleccionada.nit}
-													<div class="text-sm text-gray-600">NIT: {empresaSeleccionada.nit}</div>
+								<div class="flex items-start gap-2">
+									<div class="relative flex-1">
+										{#if empresaSeleccionada}
+											<div
+												class="flex items-center justify-between rounded-xl border-2 border-orange-500 bg-orange-50 px-4 py-3"
+											>
+												<div>
+													<div class="font-medium text-gray-900">{empresaSeleccionada.nombre}</div>
+													{#if empresaSeleccionada.nit}
+														<div class="text-sm text-gray-600">NIT: {empresaSeleccionada.nit}</div>
+													{/if}
+												</div>
+												{#if !fromServicio}
+													<button
+														on:click={() => {
+															formData.empresaId = '';
+															searchEmpresa = '';
+														}}
+														class="rounded-lg p-2 transition-colors hover:bg-orange-100"
+													>
+														<svg
+															class="h-5 w-5 text-gray-600"
+															fill="none"
+															stroke="currentColor"
+															viewBox="0 0 24 24"
+														>
+															<path
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																stroke-width="2"
+																d="M6 18L18 6M6 6l12 12"
+															/>
+														</svg>
+													</button>
 												{/if}
 											</div>
-											{#if !fromServicio}
-												<button
-													on:click={() => {
-														formData.empresaId = '';
-														searchEmpresa = '';
-													}}
-													class="rounded-lg p-2 transition-colors hover:bg-orange-100"
+										{:else}
+											<input
+												type="text"
+												bind:value={searchEmpresa}
+												on:focus={() => (showEmpresaDropdown = true)}
+												on:blur={() => setTimeout(() => (showEmpresaDropdown = false), 200)}
+												on:keydown={handleEmpresaKeydown}
+												placeholder="Buscar empresa por nombre..."
+												disabled={fromServicio}
+												class="w-full rounded-xl border-2 border-gray-300 px-4 py-3 transition-all focus:border-orange-500 focus:ring-2 focus:ring-orange-200 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:opacity-60"
+											/>
+											{#if showEmpresaDropdown && empresasFiltradas.length > 0}
+												<div
+													id="dropdown-empresa"
+													class="absolute z-20 mt-2 max-h-60 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"
 												>
-													<svg
-														class="h-5 w-5 text-gray-600"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															stroke-width="2"
-															d="M6 18L18 6M6 6l12 12"
-														/>
-													</svg>
-												</button>
+													{#each empresasFiltradas as empresa, i}
+														<button
+															data-dropdown-item
+															on:click={() => {
+																formData.empresaId = empresa.id;
+																showEmpresaDropdown = false;
+																highlightEmpresa = -1;
+															}}
+															class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 {highlightEmpresa === i ? 'bg-orange-100' : 'hover:bg-gray-50'}"
+														>
+															<div class="font-medium text-gray-900">{empresa.nombre}</div>
+															{#if empresa.nit}
+																<div class="text-sm text-gray-600">NIT: {empresa.nit}</div>
+															{/if}
+														</button>
+													{/each}
+												</div>
 											{/if}
-										</div>
-									{:else}
-										<input
-											type="text"
-											bind:value={searchEmpresa}
-											on:focus={() => (showEmpresaDropdown = true)}
-											on:blur={() => setTimeout(() => (showEmpresaDropdown = false), 200)}
-											on:keydown={handleEmpresaKeydown}
-											placeholder="Buscar empresa por nombre..."
-											disabled={fromServicio}
-											class="w-full rounded-xl border-2 border-gray-300 px-4 py-3 transition-all focus:border-orange-500 focus:ring-2 focus:ring-orange-200 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:opacity-60"
-										/>
-										{#if showEmpresaDropdown && empresasFiltradas.length > 0}
-											<div
-												id="dropdown-empresa"
-												class="absolute z-20 mt-2 max-h-60 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"
-											>
-												{#each empresasFiltradas as empresa, i}
-													<button
-														data-dropdown-item
-														on:click={() => {
-															formData.empresaId = empresa.id;
-															showEmpresaDropdown = false;
-															highlightEmpresa = -1;
-														}}
-														class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 {highlightEmpresa === i ? 'bg-orange-100' : 'hover:bg-gray-50'}"
-													>
-														<div class="font-medium text-gray-900">{empresa.nombre}</div>
-														{#if empresa.nit}
-															<div class="text-sm text-gray-600">NIT: {empresa.nit}</div>
-														{/if}
-													</button>
-												{/each}
-											</div>
 										{/if}
-										<button
-											type="button"
-											on:click={() => (mostrarModalEmpresa = true)}
-											class="group flex h-11 w-11 items-center justify-center rounded-xl border-2 border-dashed border-orange-300 bg-orange-50/50 text-orange-600 transition-all hover:scale-105 hover:border-orange-400 hover:bg-orange-50"
-											title="Crear nueva empresa"
+									</div>
+									<button
+										type="button"
+										on:click={() => (mostrarModalEmpresa = true)}
+										class="group mt-0.5 flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-orange-300 bg-orange-50/50 text-orange-600 transition-all hover:scale-105 hover:border-orange-400 hover:bg-orange-50"
+										title="Crear nueva empresa"
+									>
+										<svg
+											class="h-5 w-5 transition-transform group-hover:rotate-90"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2.5"
+											viewBox="0 0 24 24"
 										>
-											<svg
-												class="h-5 w-5 transition-transform group-hover:rotate-90"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2.5"
-												viewBox="0 0 24 24"
-											>
-												<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-											</svg>
-										</button>
-									{/if}
+											<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+										</svg>
+									</button>
 								</div>
 							</div>
 							<!-- Número de planilla -->
