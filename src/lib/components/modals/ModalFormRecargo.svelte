@@ -1749,85 +1749,88 @@
 										<span class="text-red-500">*</span>
 									</div>
 								</label>
-								<div class="relative">
-									{#if conductorSeleccionado}
-										<div
-											class="flex items-center justify-between rounded-xl border-2 border-orange-500 bg-orange-50 px-4 py-3"
-										>
-											<div>
-												<div class="font-medium text-gray-900">
-													{conductorSeleccionado.nombre}
-													{conductorSeleccionado.apellido}
+								<div class="flex items-start gap-2">
+									<div class="relative flex-1">
+										{#if conductorSeleccionado}
+											<div
+												class="flex items-center justify-between rounded-xl border-2 border-orange-500 bg-orange-50 px-4 py-3"
+											>
+												<div>
+													<div class="font-medium text-gray-900">
+														{conductorSeleccionado.nombre}
+														{conductorSeleccionado.apellido}
+													</div>
+													{#if conductorSeleccionado.numero_identificacion}
+														<div class="text-sm text-gray-600">CC {conductorSeleccionado.numero_identificacion}</div>
+													{/if}
 												</div>
-												{#if conductorSeleccionado.numero_identificacion}
-													<div class="text-sm text-gray-600">CC {conductorSeleccionado.numero_identificacion}</div>
+												{#if !fromServicio}
+													<button
+														on:click={() => {
+															formData.conductorId = '';
+															searchConductor = '';
+														}}
+														class="rounded-lg p-2 transition-colors hover:bg-orange-100"
+													>
+														<svg
+															class="h-5 w-5 text-gray-600"
+															fill="none"
+															stroke="currentColor"
+															viewBox="0 0 24 24"
+														>
+															<path
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																stroke-width="2"
+																d="M6 18L18 6M6 6l12 12"
+															/>
+														</svg>
+													</button>
 												{/if}
 											</div>
-											{#if !fromServicio}
-												<button
-													on:click={() => {
-														formData.conductorId = '';
-														searchConductor = '';
-													}}
-													class="rounded-lg p-2 transition-colors hover:bg-orange-100"
-												>
-													<svg
-														class="h-5 w-5 text-gray-600"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															stroke-width="2"
-															d="M6 18L18 6M6 6l12 12"
-														/>
-													</svg>
-												</button>
-											{/if}
-										</div>
-									{:else}
+										{:else}
 											<input
-											type="text"
-											bind:value={searchConductor}
-											on:focus={() => (showConductorDropdown = true)}
-											on:blur={() => setTimeout(() => (showConductorDropdown = false), 200)}
-											on:keydown={handleConductorKeydown}
-											placeholder="Buscar conductor por nombre..."
-											disabled={fromServicio}
-											class="w-full rounded-xl border-2 border-gray-300 px-4 py-3 transition-all focus:border-orange-500 focus:ring-2 focus:ring-orange-200 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:opacity-60"
-										/>
-										{#if showConductorDropdown && conductoresFiltrados.length > 0}
-											<div
-												id="dropdown-conductor"
-												class="absolute z-20 mt-2 max-h-60 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"
-											>
-												{#each conductoresFiltrados as conductor, i}
-													<button
-														data-dropdown-item
-														on:click={() => {
-															formData.conductorId = conductor.id;
-															showConductorDropdown = false;
-															highlightConductor = -1;
-														}}
-														class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 {highlightConductor === i ? 'bg-orange-100' : 'hover:bg-gray-50'}"
-													>
-														<div class="font-medium text-gray-900">
-															{conductor.nombre}
-															{conductor.apellido}
-														</div>
-														{#if conductor.numero_identificacion}
-															<div class="text-sm text-gray-600">CC {conductor.numero_identificacion}</div>
-														{/if}
-													</button>
-												{/each}
-											</div>
+												type="text"
+												bind:value={searchConductor}
+												on:focus={() => (showConductorDropdown = true)}
+												on:blur={() => setTimeout(() => (showConductorDropdown = false), 200)}
+												on:keydown={handleConductorKeydown}
+												placeholder="Buscar conductor por nombre..."
+												disabled={fromServicio}
+												class="w-full rounded-xl border-2 border-gray-300 px-4 py-3 transition-all focus:border-orange-500 focus:ring-2 focus:ring-orange-200 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:opacity-60"
+											/>
+											{#if showConductorDropdown && conductoresFiltrados.length > 0}
+												<div
+													id="dropdown-conductor"
+													class="absolute z-20 mt-2 max-h-60 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"
+												>
+													{#each conductoresFiltrados as conductor, i}
+														<button
+															data-dropdown-item
+															on:click={() => {
+																formData.conductorId = conductor.id;
+																showConductorDropdown = false;
+																highlightConductor = -1;
+															}}
+															class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 {highlightConductor === i ? 'bg-orange-100' : 'hover:bg-gray-50'}"
+														>
+															<div class="font-medium text-gray-900">
+																{conductor.nombre}
+																{conductor.apellido}
+															</div>
+															{#if conductor.numero_identificacion}
+																<div class="text-sm text-gray-600">CC {conductor.numero_identificacion}</div>
+															{/if}
+														</button>
+													{/each}
+												</div>
+											{/if}
 										{/if}
+									</div>
 									<button
 										type="button"
 										on:click={() => (mostrarModalConductor = true)}
-										class="group flex h-11 w-11 items-center justify-center rounded-xl border-2 border-dashed border-orange-300 bg-orange-50/50 text-orange-600 transition-all hover:scale-105 hover:border-orange-400 hover:bg-orange-50"
+										class="group mt-0.5 flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-orange-300 bg-orange-50/50 text-orange-600 transition-all hover:scale-105 hover:border-orange-400 hover:bg-orange-50"
 										title="Crear nuevo conductor"
 									>
 										<svg
@@ -1840,7 +1843,6 @@
 											<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
 										</svg>
 									</button>
-									{/if}
 								</div>
 							</div>
 
@@ -1865,100 +1867,102 @@
 										<span class="text-red-500">*</span>
 									</div>
 								</label>
-								<div class="relative">
-									{#if vehiculoSeleccionado}
-										<div
-											class="flex items-center justify-between rounded-xl border-2 border-orange-500 bg-orange-50 px-4 py-3"
-										>
-											<div>
-												<div class="font-medium text-gray-900">{vehiculoSeleccionado.placa}</div>
-												{#if vehiculoSeleccionado.marca}
-													<div class="text-sm text-gray-600">
-														{vehiculoSeleccionado.marca}
-														{vehiculoSeleccionado.linea || ''}
-														{vehiculoSeleccionado.modelo || ''}
-													</div>
+								<div class="flex items-start gap-2">
+									<div class="relative flex-1">
+										{#if vehiculoSeleccionado}
+											<div
+												class="flex items-center justify-between rounded-xl border-2 border-orange-500 bg-orange-50 px-4 py-3"
+											>
+												<div>
+													<div class="font-medium text-gray-900">{vehiculoSeleccionado.placa}</div>
+													{#if vehiculoSeleccionado.marca}
+														<div class="text-sm text-gray-600">
+															{vehiculoSeleccionado.marca}
+															{vehiculoSeleccionado.linea || ''}
+															{vehiculoSeleccionado.modelo || ''}
+														</div>
+													{/if}
+												</div>
+												{#if !fromServicio}
+													<button
+														on:click={() => {
+															formData.vehiculoId = '';
+															searchVehiculo = '';
+														}}
+														class="rounded-lg p-2 transition-colors hover:bg-orange-100"
+													>
+														<svg
+															class="h-5 w-5 text-gray-600"
+															fill="none"
+															stroke="currentColor"
+															viewBox="0 0 24 24"
+														>
+															<path
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																stroke-width="2"
+																d="M6 18L18 6M6 6l12 12"
+															/>
+														</svg>
+													</button>
 												{/if}
 											</div>
-											{#if !fromServicio}
-												<button
-													on:click={() => {
-														formData.vehiculoId = '';
-														searchVehiculo = '';
-													}}
-													class="rounded-lg p-2 transition-colors hover:bg-orange-100"
+										{:else}
+											<input
+												type="text"
+												bind:value={searchVehiculo}
+												on:focus={() => (showVehiculoDropdown = true)}
+												on:blur={() => setTimeout(() => (showVehiculoDropdown = false), 200)}
+												on:keydown={handleVehiculoKeydown}
+												placeholder="Buscar vehículo por placa..."
+												disabled={fromServicio}
+												class="w-full rounded-xl border-2 border-gray-300 px-4 py-3 transition-all focus:border-orange-500 focus:ring-2 focus:ring-orange-200 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:opacity-60"
+											/>
+											{#if showVehiculoDropdown && vehiculosFiltrados.length > 0}
+												<div
+													id="dropdown-vehiculo"
+													class="absolute z-20 mt-2 max-h-60 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"
 												>
-													<svg
-														class="h-5 w-5 text-gray-600"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															stroke-width="2"
-															d="M6 18L18 6M6 6l12 12"
-														/>
-													</svg>
-												</button>
+													{#each vehiculosFiltrados as vehiculo, i}
+														<button
+															data-dropdown-item
+															on:click={() => {
+																formData.vehiculoId = vehiculo.id;
+																showVehiculoDropdown = false;
+																highlightVehiculo = -1;
+															}}
+															class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 {highlightVehiculo === i ? 'bg-orange-100' : 'hover:bg-gray-50'}"
+														>
+															<div class="font-medium text-gray-900">{vehiculo.placa}</div>
+															{#if vehiculo.marca}
+																<div class="text-sm text-gray-600">
+																	{vehiculo.marca}
+																	{vehiculo.linea || ''}
+																	{vehiculo.modelo || ''}
+																</div>
+															{/if}
+														</button>
+													{/each}
+												</div>
 											{/if}
-										</div>
-									{:else}
-										<input
-											type="text"
-											bind:value={searchVehiculo}
-											on:focus={() => (showVehiculoDropdown = true)}
-											on:blur={() => setTimeout(() => (showVehiculoDropdown = false), 200)}
-											on:keydown={handleVehiculoKeydown}
-											placeholder="Buscar vehículo por placa..."
-											disabled={fromServicio}
-											class="w-full rounded-xl border-2 border-gray-300 px-4 py-3 transition-all focus:border-orange-500 focus:ring-2 focus:ring-orange-200 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:opacity-60"
-										/>
-										{#if showVehiculoDropdown && vehiculosFiltrados.length > 0}
-											<div
-												id="dropdown-vehiculo"
-												class="absolute z-20 mt-2 max-h-60 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"
-											>
-												{#each vehiculosFiltrados as vehiculo, i}
-													<button
-														data-dropdown-item
-														on:click={() => {
-															formData.vehiculoId = vehiculo.id;
-															showVehiculoDropdown = false;
-															highlightVehiculo = -1;
-														}}
-														class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 {highlightVehiculo === i ? 'bg-orange-100' : 'hover:bg-gray-50'}"
-													>
-														<div class="font-medium text-gray-900">{vehiculo.placa}</div>
-														{#if vehiculo.marca}
-															<div class="text-sm text-gray-600">
-																{vehiculo.marca}
-																{vehiculo.linea || ''}
-																{vehiculo.modelo || ''}
-															</div>
-														{/if}
-													</button>
-												{/each}
-											</div>
 										{/if}
-										<button
-											type="button"
-											on:click={() => (mostrarModalVehiculo = true)}
-											class="group flex h-11 w-11 items-center justify-center rounded-xl border-2 border-dashed border-orange-300 bg-orange-50/50 text-orange-600 transition-all hover:scale-105 hover:border-orange-400 hover:bg-orange-50"
-											title="Crear nuevo vehículo"
+									</div>
+									<button
+										type="button"
+										on:click={() => (mostrarModalVehiculo = true)}
+										class="group mt-0.5 flex h-[50px] w-[50px] shrink-0 items-center justify-center rounded-xl border-2 border-dashed border-orange-300 bg-orange-50/50 text-orange-600 transition-all hover:scale-105 hover:border-orange-400 hover:bg-orange-50"
+										title="Crear nuevo vehículo"
+									>
+										<svg
+											class="h-5 w-5 transition-transform group-hover:rotate-90"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2.5"
+											viewBox="0 0 24 24"
 										>
-											<svg
-												class="h-5 w-5 transition-transform group-hover:rotate-90"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2.5"
-												viewBox="0 0 24 24"
-											>
-												<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-											</svg>
-										</button>
-									{/if}
+											<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+										</svg>
+									</button>
 								</div>
 							</div>
 
