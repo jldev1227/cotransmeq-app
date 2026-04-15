@@ -21,6 +21,7 @@
 	import ModalConfirmarEliminar from '$lib/components/modals/ModalConfirmarEliminar.svelte';
 	import ModalCambiarEstado from '$lib/components/modals/ModalCambiarEstado.svelte';
 	import { toast } from 'svelte-sonner';
+	import MultiSelectFilter from '$lib/components/ui/MultiSelectFilter.svelte';
 
 	// State
 	let searchTerm = '';
@@ -69,6 +70,17 @@
 
 	// Columns dinámicas según mes/año
 	$: daysInMonth = getDaysInMonth(selectedMonth, selectedYear);
+	$: uniqueEmpresas = [...new Set(recargos.map((r) => r.empresa?.nombre).filter((v) => v != null).map(String))].sort();
+	$: uniqueConductores = [
+		...new Set(
+			recargos
+				.map((r) => `${r.conductor?.nombre || ''} ${r.conductor?.apellido || ''}`.trim())
+				.filter((v) => v != null)
+		)
+	].sort();
+	$: uniqueVehiculos = [...new Set(recargos.map((r) => r.vehiculo?.placa).filter((v) => v != null).map(String))].sort();
+	$: uniqueEstados = [...new Set(recargos.map((r) => r.estado).filter((v) => v != null).map(String))];
+	let planillaFilter: string[] = [];
 	$: dayColumns = Array.from({ length: daysInMonth }, (_, i) => {
 		const day = i + 1;
 		const isSunday = esDomingo(day, selectedMonth, selectedYear);
@@ -1121,6 +1133,44 @@
 										/>
 									{:else}
 										{column.label}
+									{/if}
+									{#if column.key === 'empresa'}
+										<MultiSelectFilter
+											bind:selected={empresaFilter}
+											options={uniqueEmpresas}
+											placeholder="Todas"
+											searchable
+										/>
+									{:else if column.key === 'conductor'}
+										<MultiSelectFilter
+											bind:selected={conductorFilter}
+											options={uniqueConductores}
+											placeholder="Todos"
+											searchable
+										/>
+									{:else if column.key === 'vehiculo'}
+										<MultiSelectFilter
+											bind:selected={vehiculoFilter}
+											options={uniqueVehiculos}
+											placeholder="Todos"
+											searchable
+										/>
+									{:else if column.key === 'numero_planilla'}
+										<input
+											type="text"
+											bind:value={planillaFilter}
+											placeholder="Filtrar..."
+											class="w-full rounded border border-gray-300 px-1 py-0.5 text-[11px] focus:border-emerald-400 focus:outline-none"
+										/>
+									{:else if column.key === 'estado'}
+										<MultiSelectFilter
+											bind:selected={estadoFilter}
+											options={uniqueEstados}
+											placeholder="Todos"
+											labelFn={getEstadoLabel}
+										/>
+									{:else}
+										<span></span>
 									{/if}
 								</th>
 							{/each}

@@ -13,6 +13,9 @@
 	} from '$lib/utils/recargosHelpers';
 	import { obtenerFestivosCompletos, esDiaFestivoColombiano } from '$lib/utils/festivosColombia';
 	import MapboxSearch from '../ui/MapboxSearch.svelte';
+	import ModalNuevoVehiculo from '../servicios/ModalNuevoVehiculo.svelte';
+	import ModalNuevoConductor from '../servicios/ModalNuevoConductor.svelte';
+	import ModalNuevaEmpresa from '../servicios/ModalNuevaEmpresa.svelte';
 	import { municipios } from '$lib/stores/municipios';
 
 	// Props
@@ -39,6 +42,10 @@
 	let showConductorDropdown = false;
 	let showVehiculoDropdown = false;
 	let showEmpresaDropdown = false;
+
+	let mostrarModalEmpresa = false;
+	let mostrarModalConductor = false;
+	let mostrarModalVehiculo = false;
 
 	// Índices de preselección para navegación con teclado en dropdowns
 	let highlightConductor = 0;
@@ -375,6 +382,25 @@
 	$: empresaSeleccionada = formData.empresaId
 		? empresas.find((e) => e.id === formData.empresaId)
 		: null;
+
+	// Handlers for sub-modals - add created entity to recursos store and select in form
+	async function handleEmpresaCreada(empresa: any) {
+		recursos.agregarCliente(empresa);
+		formData.empresaId = empresa.id;
+		mostrarModalEmpresa = false;
+	}
+
+	async function handleConductorCreado(conductor: any) {
+		recursos.agregarConductor(conductor);
+		formData.conductorId = conductor.id;
+		mostrarModalConductor = false;
+	}
+
+	async function handleVehiculoCreado(vehiculo: any) {
+		recursos.agregarVehiculo(vehiculo);
+		formData.vehiculoId = vehiculo.id;
+		mostrarModalVehiculo = false;
+	}
 
 	// Funciones de gestión de días laborales
 	function agregarDiaLaboral() {
@@ -1762,7 +1788,7 @@
 											{/if}
 										</div>
 									{:else}
-										<input
+											<input
 											type="text"
 											bind:value={searchConductor}
 											on:focus={() => (showConductorDropdown = true)}
@@ -1798,6 +1824,22 @@
 												{/each}
 											</div>
 										{/if}
+									<button
+										type="button"
+										on:click={() => (mostrarModalConductor = true)}
+										class="group flex h-11 w-11 items-center justify-center rounded-xl border-2 border-dashed border-orange-300 bg-orange-50/50 text-orange-600 transition-all hover:scale-105 hover:border-orange-400 hover:bg-orange-50"
+										title="Crear nuevo conductor"
+									>
+										<svg
+											class="h-5 w-5 transition-transform group-hover:rotate-90"
+											fill="none"
+											stroke="currentColor"
+											stroke-width="2.5"
+											viewBox="0 0 24 24"
+										>
+											<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+										</svg>
+									</button>
 									{/if}
 								</div>
 							</div>
@@ -1900,6 +1942,22 @@
 												{/each}
 											</div>
 										{/if}
+										<button
+											type="button"
+											on:click={() => (mostrarModalVehiculo = true)}
+											class="group flex h-11 w-11 items-center justify-center rounded-xl border-2 border-dashed border-orange-300 bg-orange-50/50 text-orange-600 transition-all hover:scale-105 hover:border-orange-400 hover:bg-orange-50"
+											title="Crear nuevo vehículo"
+										>
+											<svg
+												class="h-5 w-5 transition-transform group-hover:rotate-90"
+												fill="none"
+												stroke="currentColor"
+												stroke-width="2.5"
+												viewBox="0 0 24 24"
+											>
+												<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
+											</svg>
+										</button>
 									{/if}
 								</div>
 							</div>
