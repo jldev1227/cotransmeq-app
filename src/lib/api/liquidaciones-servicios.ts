@@ -512,6 +512,16 @@ export const liquidacionesServiciosAPI = {
 		});
 		const json = await res.json();
 		if (!res.ok) throw new Error(json.error || 'Error al actualizar configuración');
-		return json;
-	}
+                return json;
+        },
+
+        async checkConsecutivo(consecutivo: string, excludeId?: string): Promise<{ available: boolean }> {
+                const qs = excludeId ? `?excludeId=${excludeId}` : '';
+                const res = await fetch(`${API_URL}/api/liquidaciones-servicios/check-consecutivo/${encodeURIComponent(consecutivo)}${qs}`, {
+                        headers: getAuthHeaders()
+                });
+                const json = await res.json();
+                if (!res.ok) throw new Error(json.error || 'Error al verificar consecutivo');
+                return json;
+        }
 };

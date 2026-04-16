@@ -168,6 +168,28 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 
 	let rows = [newRow()];
 
+	// ── Consecutivo real-time validation ──
+	let consecStatus: 'idle' | 'checking' | 'available' | 'taken' = 'idle';
+	let consecTimer: ReturnType<typeof setTimeout> | null = null;
+
+	function onConsecInput() {
+		consecStatus = 'idle';
+		if (consecTimer) clearTimeout(consecTimer);
+		const val = hdr.consecutivo.trim();
+		if (!val) { consecStatus = 'idle'; return; }
+		consecStatus = 'checking';
+		consecTimer = setTimeout(async () => {
+			try {
+				const res = await liquidacionesServiciosAPI.checkConsecutivo(val, editingId || undefined);
+				if (hdr.consecutivo.trim() === val) {
+					consecStatus = res.available ? 'available' : 'taken';
+				}
+			} catch {
+				consecStatus = 'idle';
+			}
+		}, 500);
+	}
+
 	let ext = {
 		trans_adic: 0,
 		pernote_unit: 0, pernote_cant: 0, iva_pct: 0,
@@ -268,7 +290,8 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 	function handleBeforeUnload(_e: BeforeUnloadEvent) { if (view === 'editor') saveDraft(); }
 
 	// ─── PERMISSIONS ────────────────────────────────────────────
-	$: isAdmin = ($authStore.user as any)?.role === 'admin' || $authStore.user?.rol === 'admin';
+	$: userAreas = Array.isArray($authStore.user?.area) ? $authStore.user.area : ($authStore.user?.area ? [$authStore.user.area] : []);
+	$: isAdmin = userAreas.includes('administracion');
 	$: canSeeTerceros = isAdmin;
 
 	// ─── MOUNT ──────────────────────────────────────────────────
@@ -835,7 +858,23 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 		<div class="ch">{editingId ? '✏️ Editar Liquidación' : '📋 Encabezado del Documento'}</div>
 		<div class="g3" style="margin-bottom:13px">
 			<div style="grid-column:span 2"><label>Empresa Emisora</label><input bind:value={hdr.empresa} /></div>
-			<div><label>Consecutivo</label><input bind:value={hdr.consecutivo} placeholder="ej. LS-2025-0001" style="font-family:monospace;font-weight:800;font-size:14px" /></div>
+			<div><label>Consecutivo</label>
+				<div class="consec-wrap">
+					<input bind:value={hdr.consecutivo} placeholder="ej. LS-2025-0001"
+						on:input={onConsecInput}
+						class="consec-input"
+						class:consec-ok={consecStatus === 'available'}
+						class:consec-taken={consecStatus === 'taken'}
+						style="font-family:monospace;font-weight:800;font-size:14px" />
+					{#if consecStatus === 'checking'}
+						<span class="consec-badge consec-checking">⏳ Verificando...</span>
+					{:else if consecStatus === 'available'}
+						<span class="consec-badge consec-ok-badge">✅ Disponible</span>
+					{:else if consecStatus === 'taken'}
+						<span class="consec-badge consec-taken-badge">❌ Ya existe</span>
+					{/if}
+				</div>
+			</div>
 		</div>
 		<div class="g4">
 			<div><label>Mes</label><select bind:value={hdr.mes}>{#each MESES as m}<option>{m}</option>{/each}</select></div>
@@ -1116,8 +1155,8 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 			<tbody>{#each rows as row (row.id)}{@const { sub, vf } = calcRow(row)}<tr><td><span class="placa">{fmtPlaca(row.placa)}</span></td><td class="tc">{fmtD(row.fecha_ini)}</td><td class="tc">{fmtD(row.fecha_fin)}</td><td style="font-size:7.2pt;line-height:1.3">{row.recorrido}</td><td style="font-size:7pt">{row.tipo}</td><td class="tc" style="font-weight:700">{row.cant}</td><td class="mc">{COP(row.vr_unit)}</td><td class="mc">{COP(sub)}</td><td class="tc">{row.dcto}%</td><td class="mch">{COP(vf)}</td><td class="tc" style="font-family:monospace;font-size:7.2pt">{row.planilla}</td></tr>{/each}{#each Array(Math.max(0, 4 - rows.length)) as _}<tr class="filler">{#each Array(11) as __}<td></td>{/each}</tr>{/each}</tbody>
 			<tfoot><tr><td colspan="9" style="text-align:right;color:#9a3412;padding-right:8px;font-size:8pt;font-weight:800">TOTAL SERVICIOS:</td><td class="mch" style="border-left:1px solid #aaa">{COP(totalSvc)}</td><td></td></tr></tfoot></table>
 			<div class="bg"><div class="bl"><div class="obs-t">Observaciones:</div><div class="obs-b">{hdr.observaciones}</div><div class="op-row"><div class="op-line"><span class="opl">OPERADORA:</span><span class="opv">{hdr.operadora}</span></div>{#if hdr.osi}<div class="op-line"><span class="opl">OSI:</span><span class="opv">{hdr.osi}</span></div>{/if}</div>
-			<div class="pernote-box"><div class="pernote-hd-row"><span style="text-align:left">PERNOCTE</span><span>Vr. Unitario</span><span>Cantidad</span><span>Total</span></div><div class="pernote-val-row"><span style="text-align:left;color:#555">&nbsp;</span><span style="font-family:monospace;font-size:7.5pt">{COP(ext.pernote_unit)}</span><span style="font-weight:700">{ext.pernote_cant}</span><span style="font-weight:800;color:#9a3412">{COP(valPern)}</span></div></div></div>
-			<div class="br"><table class="stbl"><tbody><tr><td class="sla" style="padding-left:12px;font-size:7pt">TRANSPORTE ADICIONAL (CORRESPONDIENTE A TIEMPO EXTRA DEL PERSONAL EN SERVICIO)</td><td class="sva" style="padding-right:10px;font-size:7pt">{COP(valTransAd)}</td></tr><tr class="sep-row"><td class="slb" style="padding-left:12px">VALOR TOTAL DEL SERVICIO SIN RECARGOS</td><td class="svb" style="padding-right:10px">{COP(totalSvc)}</td></tr><tr><td class="slb" style="padding-left:12px">VALOR TOTAL RECARGOS</td><td class="svb" style="padding-right:10px">{COP(valRec)}</td></tr><tr><td class="slb" style="padding-left:12px">PERNOTE</td><td class="svb" style="padding-right:10px">{COP(valPern)}</td></tr><tr class="sep-row"><td class="slb" style="padding-left:12px;font-size:8.5pt">SUBTOTAL</td><td class="svb" style="padding-right:10px;font-size:8.5pt">{COP(subtotal)}</td></tr><tr><td class="sla" style="padding-left:12px;font-size:7pt;color:#666">IVA {ext.iva_pct}%</td><td class="sva" style="padding-right:10px;font-size:7pt;color:#666">{COP(ivaVal)}</td></tr><tr><td class="slhi" style="padding-left:12px">TOTAL SERVICIO</td><td class="svhi" style="padding-right:10px">{COP(total)}</td></tr></tbody></table></div></div>
+			<div class="pernote-box"><div style="font-size:6.8pt;font-weight:800;color:#9a3412;padding:2px 6px;background:#ffedd5;border:1px solid #fed7aa;border-bottom:none">PERNOCTE</div><table class="pernote-tbl"><thead><tr><th>Vr. Unitario</th><th>Cantidad</th><th>Total</th></tr></thead><tbody><tr><td style="font-family:monospace;font-size:7.5pt">{COP(ext.pernote_unit)}</td><td style="font-weight:700">{ext.pernote_cant}</td><td style="font-weight:800;color:#9a3412">{COP(valPern)}</td></tr></tbody></table></div></div>
+			<div class="br"><table class="stbl"><tbody><tr><td class="sla" style="padding-left:12px;font-size:7pt">TRANSPORTE ADICIONAL (CORRESPONDIENTE A TIEMPO EXTRA DEL PERSONAL EN SERVICIO)</td><td class="sva" style="padding-right:10px;font-size:7pt">{COP(valTransAd)}</td></tr><tr class="sep-row"><td class="slb" style="padding-left:12px">VALOR TOTAL DEL SERVICIO SIN RECARGOS</td><td class="svb" style="padding-right:10px">{COP(totalSvc)}</td></tr><tr><td class="slb" style="padding-left:12px">VALOR TOTAL RECARGOS</td><td class="svb" style="padding-right:10px">{COP(valRec)}</td></tr><tr><td class="slb" style="padding-left:12px">PERNOCTE</td><td class="svb" style="padding-right:10px">{COP(valPern)}</td></tr><tr class="sep-row"><td class="slb" style="padding-left:12px;font-size:8.5pt">SUBTOTAL</td><td class="svb" style="padding-right:10px;font-size:8.5pt">{COP(subtotal)}</td></tr><tr><td class="sla" style="padding-left:12px;font-size:7pt;color:#666">IVA {ext.iva_pct}%</td><td class="sva" style="padding-right:10px;font-size:7pt;color:#666">{COP(ivaVal)}</td></tr><tr><td class="slhi" style="padding-left:12px">TOTAL SERVICIO</td><td class="svhi" style="padding-right:10px">{COP(total)}</td></tr></tbody></table></div></div>
 			<div class="sigs"><div class="sig"><div class="sig-lbl">FIRMA AUTORIZADA POR CLIENTE {selectedCliente?.nombre ? `— ${selectedCliente.nombre}` : ''}:</div><div class="sig-line">{selectedCliente?.nombre || ''}{selectedCliente?.nit ? ` — NIT: ${selectedCliente.nit}` : ''}</div></div><div class="sig"><div class="sig-lbl">FIRMA AUTORIZADA POR:</div><div class="sig-line">&nbsp;</div></div></div>
 			<div class="doc-ft"><span>OP-FR-07 · Versión 1</span><span>Generado el {new Date().toLocaleDateString('es-CO', { day:'2-digit', month:'long', year:'numeric' })}</span><span>{hdr.empresa}</span></div>
 		</div>
@@ -1152,7 +1191,7 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 	<div class="pdf-body print-sheet">
 		<div class="page" style="transform: scale({pdfZoom}); transform-origin: top center;">
 			<div class="dh"><div class="dh-logo">{#if logoError}<div class="dh-logo-fallback">COTRANS<br/>MEQ</div>{:else}<img src="/assets/logo.png" alt="Logo" on:error={() => logoError = true} style="height:58px;width:auto;object-fit:contain" />{/if}</div><div class="dh-title"><div class="dh-co">{hdr.empresa}</div><div class="dh-doc">LIQUIDADOR DE RECARGOS</div></div><div class="dh-meta"><table class="mt"><tbody><tr><td class="ml">Código:</td><td class="mv">OP-FR-06</td></tr><tr><td class="ml">Versión:</td><td>1</td></tr></tbody></table></div><div class="dh-super"><img src="https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.png" alt="Supertransporte" /></div></div>
-			<div class="liq-salary-bar"><div class="liq-sal-row"><span class="liq-sal-lbl">SALARIO BASICO</span><span class="liq-sal-val">$ {liqCfg.salario_basico.toLocaleString('es-CO')}</span><span class="liq-sal-lbl" style="margin-left:auto">CARGO</span><span class="liq-sal-val">{liqCfg.cargo}</span></div><div class="liq-sal-row"><span class="liq-sal-lbl">VALOR HORA TRABAJADOR{liqCfg.valor_hora_override > 0 ? ' (manual)' : ''}</span><span class="liq-sal-val">$ {fmtDec1(valorHora)}</span></div></div>
+			<div class="liq-salary-bar"><div class="liq-sal-group"><span class="liq-sal-lbl">SALARIO BASICO</span><span class="liq-sal-val">$ {liqCfg.salario_basico.toLocaleString('es-CO')}</span><span class="liq-sal-lbl">VALOR HORA TRABAJADOR{liqCfg.valor_hora_override > 0 ? ' (manual)' : ''}</span><span class="liq-sal-val">$ {fmtDec1(valorHora)}</span></div><div class="liq-sal-group"><span class="liq-sal-lbl">CARGO</span><span class="liq-sal-val">{liqCfg.cargo}</span></div></div>
 			<div class="pb"><div class="pc"><span class="pclabel">PERIDO DE LIQUIDACIÓN MES:</span><span class="pcval">{hdr.mes}</span></div><div class="pc"><span class="pclabel">AÑO:</span><span class="pcval">AÑO {hdr.anio}</span></div></div>
 			<table class="liq-tbl"><thead><tr><th style="text-align:left;width:50%">DESCRIPCION</th><th style="width:10%">%</th><th style="width:15%">VR UNITARIO</th><th style="width:12%">TOTAL HORAS</th><th style="width:13%">TOTAL</th></tr></thead>
 			<tbody>
@@ -1200,23 +1239,54 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 </div>
 {/if}
 
-<!-- PRINT MODAL -->
+<!-- ═══ PRINT SHEET SELECTOR MODAL ═══ -->
 {#if printModalOpen}
 <!-- svelte-ignore a11y-click-events-have-key-events -->
 <!-- svelte-ignore a11y-no-static-element-interactions -->
-<div class="modal-bg" on:click|self={() => printModalOpen = false}>
-	<div class="modal-box" style="max-width:440px">
-		<div class="modal-hd" style="background:linear-gradient(135deg,#9a3412,#c2410c);color:#fff;padding:22px 24px 16px"><span style="font-size:32px">🖨</span><div style="flex:1"><div style="font-size:17px;font-weight:800">Imprimir Liquidación</div><div style="font-size:12px;color:rgba(255,255,255,.7);margin-top:2px">Seleccione las hojas</div></div></div>
-		<div class="modal-body">
-			<label class="print-check"><input type="checkbox" checked={printSheetCount === (canSeeTerceros ? 4 : 3)} on:change={(e) => toggleAllSheets(e.currentTarget.checked)} /><span style="font-weight:800">Seleccionar todas</span></label>
-			<label class="print-check"><input type="checkbox" bind:checked={printSheets.liquidacion} /> 📄 Hoja 1 — Liquidación</label>
-			<label class="print-check"><input type="checkbox" bind:checked={printSheets.recargos} /> 📊 Hoja 2 — Recargos</label>
-			<label class="print-check"><input type="checkbox" bind:checked={printSheets.liquidador} /> 📋 Hoja 3 — Liquidador</label>
-			{#if canSeeTerceros}<label class="print-check"><input type="checkbox" bind:checked={printSheets.terceros} /> 📑 Hoja 4 — Terceros</label>{/if}
+<div class="print-modal-overlay" on:click|self={() => printModalOpen = false}>
+	<div class="print-modal">
+		<div class="print-modal-hd">
+			<span class="print-modal-icon">🖨</span>
+			<div>
+				<div class="print-modal-title">Imprimir Liquidación</div>
+				<div class="print-modal-sub">Seleccione las hojas que desea imprimir</div>
+			</div>
 		</div>
-		<div style="padding:16px 24px 20px;display:flex;justify-content:flex-end;gap:10px;border-top:1px solid #f1f5f9">
-			<button class="btn-estado" style="border-color:#94a3b8;color:#64748b" on:click={() => printModalOpen = false}>Cancelar</button>
-			<button class="btn-registrar" style="width:auto;margin:0;padding:10px 22px;font-size:13px" disabled={printSheetCount === 0} on:click={executePrint}>🖨 Imprimir {printSheetCount} {printSheetCount === 1 ? 'hoja' : 'hojas'}</button>
+		<div class="print-modal-body">
+			<label class="print-check print-check-all">
+				<input type="checkbox" checked={printSheetCount === (canSeeTerceros ? 4 : 3)} on:change={(e) => toggleAllSheets(e.currentTarget.checked)} />
+				<span class="print-check-mark"></span>
+				<span class="print-check-lbl">Seleccionar todas</span>
+			</label>
+			<div class="print-divider"></div>
+			<label class="print-check">
+				<input type="checkbox" bind:checked={printSheets.liquidacion} />
+				<span class="print-check-mark"></span>
+				<span class="print-check-lbl">📄 Hoja 1 — Liquidación de Servicios <span class="print-check-tag">A4 horizontal</span></span>
+			</label>
+			<label class="print-check">
+				<input type="checkbox" bind:checked={printSheets.recargos} />
+				<span class="print-check-mark"></span>
+				<span class="print-check-lbl">📊 Hoja 2 — Recargos (Horas) <span class="print-check-tag">A4 horizontal</span></span>
+			</label>
+			<label class="print-check">
+				<input type="checkbox" bind:checked={printSheets.liquidador} />
+				<span class="print-check-mark"></span>
+				<span class="print-check-lbl">📋 Hoja 3 — Liquidador de Recargos <span class="print-check-tag">A4 horizontal</span></span>
+			</label>
+			{#if canSeeTerceros}
+			<label class="print-check">
+				<input type="checkbox" bind:checked={printSheets.terceros} />
+				<span class="print-check-mark"></span>
+				<span class="print-check-lbl">📑 Hoja 4 — Terceros <span class="print-check-tag">A4 horizontal</span></span>
+			</label>
+			{/if}
+		</div>
+		<div class="print-modal-ft">
+			<button class="print-modal-btn print-modal-cancel" on:click={() => printModalOpen = false}>Cancelar</button>
+			<button class="print-modal-btn print-modal-go" disabled={printSheetCount === 0} on:click={executePrint}>
+				🖨 Imprimir {printSheetCount} {printSheetCount === 1 ? 'hoja' : 'hojas'}
+			</button>
 		</div>
 	</div>
 </div>
@@ -1270,6 +1340,16 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 {/if}
 
 <style>
+	/* ─ CONSECUTIVO VALIDATION ─ */
+	.consec-wrap { position: relative; display: flex; flex-direction: column; gap: 4px; }
+	.consec-input { transition: border-color .2s, box-shadow .2s; }
+	.consec-ok { border-color: #22c55e !important; box-shadow: 0 0 0 2px rgba(34,197,94,.25) !important; }
+	.consec-taken { border-color: #ef4444 !important; box-shadow: 0 0 0 2px rgba(239,68,68,.25) !important; }
+	.consec-badge { font-size: 11px; font-weight: 600; }
+	.consec-checking { color: #94a3b8; }
+	.consec-ok-badge { color: #16a34a; }
+	.consec-taken-badge { color: #dc2626; }
+
 	/* ── LAYOUT ── */
 	.page-wrap { padding: 24px 18px 48px; }
 	.topbar { background: linear-gradient(135deg, #9a3412 0%, #c2410c 60%, #ea580c 100%); border-radius: 18px; padding: 16px 26px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 10px 40px rgba(154,52,18,.35); }
@@ -1446,9 +1526,10 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 	.op-line { display: flex; align-items: center; gap: 6px; font-size: 8pt; }
 	.opl { font-weight: 700; color: #555; }
 	.opv { font-weight: 900; color: #9a3412; font-size: 9.5pt; }
-	.pernote-box { margin-top: 7px; border: 1px solid #fed7aa; border-radius: 3px; overflow: hidden; }
-	.pernote-hd-row { background: #ffedd5; display: grid; grid-template-columns: auto 1fr 1fr 1fr; font-size: 6.8pt; font-weight: 800; color: #9a3412; text-align: center; padding: 3px 6px; }
-	.pernote-val-row { display: grid; grid-template-columns: auto 1fr 1fr 1fr; font-size: 7.5pt; text-align: center; padding: 3px 6px; }
+	.pernote-box { margin-top: 7px; border-radius: 3px; overflow: hidden; }
+	.pernote-tbl { width: 100%; border-collapse: collapse; font-size: 7.5pt; }
+	.pernote-tbl th { background: #ffedd5; font-size: 6.8pt; font-weight: 800; color: #9a3412; text-align: center; padding: 3px 6px; border: 1px solid #fed7aa; }
+	.pernote-tbl td { text-align: center; padding: 3px 6px; border: 1px solid #fed7aa; }
 	.stbl { width: 100%; border-collapse: collapse; font-size: 7.6pt; }
 	.stbl td { padding: 3.5px 9px; border-bottom: 1px solid #e2e8e0; }
 	.sla { font-weight: 600; color: #444; }
@@ -1480,8 +1561,8 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 	.crt th { background: linear-gradient(135deg, #fff7ed, #ffedd5); color: #9a3412; font-weight: 800; font-size: 6.5pt; text-transform: uppercase; letter-spacing: .03em; padding: 5px 4px; border: .5px solid #fed7aa; text-align: center; }
 	.crt td { padding: 4px 4px; border: .5px solid #dde3eb; vertical-align: middle; }
 	/* ── LIQUIDADOR PDF ── */
-	.liq-salary-bar { margin: 8px 0 6px; padding: 8px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 8pt; }
-	.liq-sal-row { display: flex; align-items: center; gap: 12px; padding: 2px 0; }
+	.liq-salary-bar { margin: 4px 0 4px; padding: 5px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; font-size: 8pt; display: flex; align-items: center; justify-content: space-between; }
+	.liq-sal-group { display: flex; align-items: center; gap: 12px; }
 	.liq-sal-lbl { font-weight: 800; color: #9a3412; text-transform: uppercase; font-size: 7.5pt; }
 	.liq-sal-val { font-family: monospace; font-weight: 700; font-size: 8.5pt; }
 	.liq-tbl { width: 100%; border-collapse: collapse; font-size: 8pt; margin-top: 6px; }
@@ -1543,10 +1624,69 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 	@keyframes successStroke { to { stroke-dashoffset: 0 } }
 	.success-title { font-size: 32px; font-weight: 800; color: #fff; margin: 0 0 8px; }
 	.success-subtitle { font-size: 16px; color: rgba(255,255,255,.85); margin: 0; }
+	/* ─ PRINT MODAL ─ */
+	.print-modal-overlay {
+		position: fixed; inset: 0; z-index: 9000; background: rgba(0,0,0,.55);
+		display: flex; align-items: center; justify-content: center;
+		animation: pmFadeIn .2s ease-out;
+	}
+	@keyframes pmFadeIn { from { opacity: 0 } to { opacity: 1 } }
+	.print-modal {
+		background: #fff; border-radius: 20px; width: 440px; max-width: 94vw;
+		box-shadow: 0 25px 80px rgba(0,0,0,.35); overflow: hidden;
+		animation: pmSlide .25s cubic-bezier(.175,.885,.32,1.275);
+	}
+	@keyframes pmSlide { from { opacity: 0; transform: scale(.9) translateY(20px) } to { opacity: 1; transform: scale(1) translateY(0) } }
+	.print-modal-hd {
+		display: flex; align-items: center; gap: 14px; padding: 22px 24px 16px;
+		background: linear-gradient(135deg, #9a3412 0%, #c2410c 100%); color: #fff;
+	}
+	.print-modal-icon { font-size: 32px; }
+	.print-modal-title { font-size: 17px; font-weight: 800; letter-spacing: -.02em; }
+	.print-modal-sub { font-size: 12px; color: rgba(255,255,255,.7); margin-top: 2px; }
+	.print-modal-body { padding: 20px 24px; display: flex; flex-direction: column; gap: 10px; }
+	.print-divider { height: 1px; background: #e2e8f0; margin: 4px 0; }
+	.print-check {
+		display: flex; align-items: center; gap: 12px; padding: 10px 14px;
+		border-radius: 10px; cursor: pointer; transition: all .15s;
+		border: 1.5px solid #e2e8f0; background: #fff;
+	}
+	.print-check:hover { border-color: #fed7aa; background: #fff7ed; }
+	.print-check input[type="checkbox"] { display: none; }
+	.print-check-mark {
+		width: 22px; height: 22px; border-radius: 6px; border: 2px solid #cbd5e1;
+		display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+		transition: all .15s; position: relative;
+	}
+	.print-check input:checked + .print-check-mark {
+		background: #9a3412; border-color: #9a3412;
+	}
+	.print-check input:checked + .print-check-mark::after {
+		content: '✓'; color: #fff; font-size: 14px; font-weight: 800;
+	}
+	.print-check-lbl { font-size: 13.5px; font-weight: 600; color: #1e293b; line-height: 1.3; }
+	.print-check-tag { font-size: 10px; font-weight: 700; color: #64748b; background: #f1f5f9; padding: 2px 7px; border-radius: 4px; margin-left: 4px; }
+	.print-check-all { background: #f8fafc; border-color: #cbd5e1; }
+	.print-check-all .print-check-lbl { font-weight: 800; color: #9a3412; }
+	.print-modal-ft { padding: 16px 24px 20px; display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #f1f5f9; }
+	.print-modal-btn {
+		border: none; border-radius: 10px; padding: 11px 22px; font-weight: 800;
+		font-size: 13px; cursor: pointer; transition: all .15s;
+	}
+	.print-modal-cancel { background: #f1f5f9; color: #64748b; }
+	.print-modal-cancel:hover { background: #e2e8f0; }
+	.print-modal-go {
+		background: linear-gradient(135deg, #9a3412, #c2410c); color: #fff;
+		box-shadow: 0 4px 16px rgba(154,52,18,.35);
+	}
+	.print-modal-go:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(154,52,18,.4); }
+	.print-modal-go:disabled { opacity: .4; cursor: not-allowed; transform: none; box-shadow: none; }
+
 	/* ── PRINT ── */
 	@media print {
 		.pdf-bar { display: none !important; }
 		.modal-bg { display: none !important; }
+		.print-modal-overlay { display: none !important; }
 		.pdf-wrap { position: static !important; background: #fff !important; overflow: visible !important; display: block !important; }
 		.pdf-body { padding: 0 !important; overflow: visible !important; background: #fff !important; display: block !important; }
 		.pdf-body-landscape { overflow-x: visible !important; }

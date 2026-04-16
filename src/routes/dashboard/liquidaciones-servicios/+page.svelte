@@ -90,6 +90,9 @@
 	let anularFacturaTarget: FacturaLiquidacion | null = null;
 	let anularFacturaMotivo = '';
 	let anulandoFactura = false;
+	let eliminarFacturaModalOpen = false;
+	let eliminarFacturaTarget: FacturaLiquidacion | null = null;
+	let eliminandoFactura = false;
 
 	let detalleFactura: FacturaLiquidacion | null = null;
 
@@ -159,6 +162,7 @@
 	$: isLimited = accessResult.level === 'limited';
 	$: userAreas = Array.isArray($authStore.user?.area) ? $authStore.user.area : ($authStore.user?.area ? [$authStore.user.area] : []);
 	$: isAdmin = userAreas.includes('administracion');
+	$: isFacturacion = userAreas.includes('facturacion');
 	$: canLiquidar = isFull; // admin + operaciones: borrador → liquidada
 	$: canAprobar = isAdmin; // solo admin: liquidada → aprobada
 	$: canAnular = isAdmin; // solo admin: anular liquidaciones
@@ -418,6 +422,21 @@
 		} catch (err: any) { alert(err.response?.data?.error || err.message || 'Error'); }
 		finally { anulandoFactura = false; }
 	}
+
+	function abrirEliminarFactura(fac: FacturaLiquidacion) {
+		eliminarFacturaTarget = fac; eliminarFacturaModalOpen = true;
+	}
+
+	async function confirmarEliminarFactura() {
+		if (!eliminarFacturaTarget) return;
+		eliminandoFactura = true;
+		try {
+			await facturacionLiquidacionesAPI.eliminar(eliminarFacturaTarget.id);
+			eliminarFacturaModalOpen = false; eliminarFacturaTarget = null;
+			cargarFacturas();
+		} catch (err: any) { alert(err.response?.data?.error || err.message || 'Error al eliminar factura'); }
+		finally { eliminandoFactura = false; }
+	}
 </script>
 
 <div class="page-wrap">
@@ -450,8 +469,8 @@
 	{#if facturasTab === 'liquidaciones'}
 	<div class="card">
 		<div class="ch" style="display:flex;align-items:center;justify-content:space-between">
-			<span>📋 Liquidaciones Registradas</span>
-			{#if isFull || isLimited}
+			<span style="margin-right:auto">📋 Liquidaciones Registradas</span>
+			{#if (isFull || isLimited) && (isFacturacion || isAdmin)}
 				<button class="btn-facturar-hdr" on:click={abrirModalFacturar}>🧾 Facturar</button>
 			{/if}
 		</div>
@@ -550,7 +569,7 @@
 								<td style="white-space:nowrap;font-size:11px">{liq.created_at ? new Date(liq.created_at).toLocaleDateString('es-CO', { weekday:'short', day:'numeric', month:'short' }) + ' ' + new Date(liq.created_at).toLocaleTimeString('es-CO', { hour:'2-digit', minute:'2-digit', hour12:false }) : '—'}</td>
 								<td style="text-align:center;white-space:nowrap">
 									<button class="btn-icon" title="Ver" on:click={() => irVerLiquidacion(liq.id)}>👁</button>
-									{#if isFull && liq.estado === 'BORRADOR'}
+									{#if isFull && (liq.estado === 'BORRADOR' || (isAdmin && liq.estado === 'LIQUIDADA'))}
 										<button class="btn-icon" title="Editar" on:click={() => irEditarLiquidacion(liq.id)}>✏️</button>
 									{/if}
 									{#if canLiquidar && liq.estado === 'BORRADOR'}
@@ -658,6 +677,9 @@
 									{#if fac.estado === 'ACTIVA'}
 										<button class="btn-estado anl" title="Anular factura" on:click={() => abrirAnularFactura(fac)}>🚫 Anular</button>
 									{/if}
+									{#if fac.estado === 'ANULADA' && (isAdmin || isFacturacion)}
+										<button class="btn-icon del" title="Eliminar factura" on:click={() => abrirEliminarFactura(fac)}>🗑</button>
+									{/if}
 								</td>
 							</tr>
 						{/each}
@@ -743,7 +765,7 @@
 		<div class="modal-hd">
 			<h3>📄 {detailLiq?.consecutivo || 'Detalle'}</h3>
 			<div style="display:flex;gap:8px;align-items:center">
-				{#if detailLiq && detailLiq.estado === 'BORRADOR'}
+				{#if detailLiq && (detailLiq.estado === 'BORRADOR' || (isAdmin && detailLiq.estado === 'LIQUIDADA'))}
 					<button class="btn-estado" style="border-color:#2563eb;color:#2563eb;font-size:11px;padding:5px 12px" on:click={() => { cerrarDetalle(); if (detailLiq) irEditarLiquidacion(detailLiq.id); }}>✏️ Editar</button>
 				{/if}
 				{#if detailLiq}
@@ -1050,6 +1072,36 @@
 				<button class="btn-estado" style="border-color:#94a3b8;color:#64748b" on:click={() => { anularFacturaModalOpen = false; anularFacturaTarget = null; }}>Cancelar</button>
 				<button class="btn-estado red" disabled={!anularFacturaMotivo.trim() || anulandoFactura} on:click={confirmarAnularFactura}>
 					{anulandoFactura ? '⏳ Anulando...' : '🚫 Confirmar Anulacion'}
+				</button>
+			</div>
+		</div>
+	</div>
+</div>
+{/if}
+
+<!-- MODAL: ELIMINAR FACTURA -->
+{#if eliminarFacturaModalOpen && eliminarFacturaTarget}
+<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+<div class="modal-bg" on:click|self={() => { eliminarFacturaModalOpen = false; eliminarFacturaTarget = null; }}>
+	<div class="modal-box" style="max-width:440px">
+		<div class="modal-hd">
+			<h3>🗑 Eliminar Factura</h3>
+			<button class="modal-close" on:click={() => { eliminarFacturaModalOpen = false; eliminarFacturaTarget = null; }}>✕</button>
+		</div>
+		<div class="modal-body">
+			<div style="text-align:center;margin-bottom:16px">
+				<div style="font-size:48px;margin-bottom:8px">⚠️</div>
+				<p style="font-size:14px;color:#374151;font-weight:600;margin:0">
+					¿Eliminar permanentemente la factura <span style="font-family:monospace">#{eliminarFacturaTarget.numero_factura}</span>?
+				</p>
+				<p style="font-size:12px;color:#dc2626;margin:8px 0 0;font-weight:500">
+					Esta acción es irreversible. Se eliminarán la factura y todos sus ítems asociados.
+				</p>
+			</div>
+			<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+				<button class="btn-estado" style="border-color:#94a3b8;color:#64748b" on:click={() => { eliminarFacturaModalOpen = false; eliminarFacturaTarget = null; }}>Cancelar</button>
+				<button class="btn-estado red" disabled={eliminandoFactura} on:click={confirmarEliminarFactura}>
+					{eliminandoFactura ? '⏳ Eliminando...' : '🗑 Confirmar Eliminación'}
 				</button>
 			</div>
 		</div>

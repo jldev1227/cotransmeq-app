@@ -86,6 +86,13 @@ export const facturacionLiquidacionesAPI = {
 		return res.data;
 	},
 
+	async eliminar(id: string): Promise<{ message: string }> {
+		const res = await apiClient.delete<{ message: string }>(
+			`/api/facturacion-liquidaciones/${id}`
+		);
+		return res.data;
+	},
+
 	async batchFacturaInfo(ids: string[]): Promise<FacturaInfoMap> {
 		const res = await apiClient.post<FacturaInfoMap>(
 			'/api/facturacion-liquidaciones/batch-info',
