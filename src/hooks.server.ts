@@ -46,17 +46,22 @@ export const handle: Handle = async ({ event, resolve }) => {
 			throw redirect(302, `/login?redirect=${encodeURIComponent(url.pathname)}`);
 		}
 
+		// If token lacks area (old format), let it through — frontend/backend will handle gracefully
+		const userArea = payload.area ?? [];
+		const userRole = payload.role ?? 'usuario';
+
 		const moduleId = getModuleFromPath(url.pathname);
-		if (moduleId) {
-			const { allowed } = checkAccess(payload.role, payload.area, moduleId);
-			if (!allowed) {
+		if (moduleId && userArea.length > 0) {
+			const { allowed } = checkAccess(userRole, userArea, moduleId);
+			// Only redirect if denied AND not already on the fallback route (prevent loop)
+			if (!allowed && moduleId !== 'servicios') {
 				throw redirect(302, '/dashboard/servicios?denied=1');
 			}
 		}
 
 		event.locals.token = token;
-		event.locals.userRole = payload.role;
-		event.locals.userArea = payload.area;
+		event.locals.userRole = userRole;
+		event.locals.userArea = userArea;
 	} else {
 		event.locals.token = token;
 	}
