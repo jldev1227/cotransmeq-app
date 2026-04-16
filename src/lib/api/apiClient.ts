@@ -77,7 +77,25 @@ export const authAPI = {
 
 	refreshToken: () => apiClient.post('/api/auth/refresh'),
 
-	getProfile: () => apiClient.get('/api/auth/profile')
+	getProfile: () => apiClient.get('/api/auth/profile'),
+
+	getMySession: () => apiClient.get('/api/auth/my-session'),
+
+	getMyFirma: () => apiClient.get('/api/auth/my-firma'),
+
+	uploadMyFirma: (file: File) => {
+		const formData = new FormData();
+		formData.append('file', file);
+		return apiClient.post('/api/auth/my-firma', formData);
+	},
+
+	deleteMyFirma: () => apiClient.delete('/api/auth/my-firma'),
+
+	changePassword: (data: { currentPassword: string; newPassword: string }) =>
+		apiClient.post('/api/auth/change-password', data),
+
+	updateMyProfile: (data: { telefono?: string }) =>
+		apiClient.put('/api/auth/profile', data)
 };
 
 // Cliente público (sin autenticación)

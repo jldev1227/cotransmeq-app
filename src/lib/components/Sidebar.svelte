@@ -5,6 +5,8 @@
 	import { page } from '$app/stores';
 	import { building } from '$app/environment';
 	import { onMount } from 'svelte';
+	import { authStore } from '$lib/stores/auth';
+	import { checkAccess, type Area } from '$lib/config/permissions';
 
 	const dispatch = createEventDispatcher();
 
@@ -122,7 +124,7 @@
 			icon: 'clipboard-list',
 			badge: null,
 			href: '/dashboard/evaluaciones'
-		}
+		},
 		// {
 		// 	id: 'rutas',
 		// 	label: 'Rutas',
@@ -151,7 +153,32 @@
 		// 	badge: null,
 		// 	href: '/dashboard/configuracion'
 		// }
+		{
+			id: 'usuarios',
+			label: 'Usuarios',
+			icon: 'users',
+			badge: null,
+			href: '/dashboard/usuarios'
+		},
+		{
+			id: 'sesiones',
+			label: 'Sesiones',
+			icon: 'clock',
+			badge: null,
+			href: '/dashboard/sesiones'
+		}
 	];
+
+	$: currentUser = $authStore.user;
+	$: filteredMenuItems = menuItems.filter(item => {
+		if (!currentUser) return false;
+		const { allowed } = checkAccess(
+			currentUser.role || currentUser.rol,
+			currentUser.area,
+			item.id
+		);
+		return allowed;
+	});
 
 	function getActiveSectionFromPath(pathname: string): string {
 		// if (pathname === '/dashboard') return 'dashboard';
@@ -167,6 +194,9 @@
 		if (pathname.startsWith('/dashboard/terceros')) return 'terceros';
 		if (pathname.startsWith('/dashboard/liquidaciones-servicios')) return 'liquidaciones-servicios';
 		if (pathname.startsWith('/dashboard/extractos')) return 'extractos';
+		if (pathname.startsWith('/dashboard/usuarios')) return 'usuarios';
+		if (pathname.startsWith('/dashboard/sesiones')) return 'sesiones';
+		if (pathname.startsWith('/dashboard/perfil')) return 'perfil';
 		// if (pathname.startsWith('/dashboard/rutas')) return 'rutas';
 		// if (pathname.startsWith('/dashboard/planillas')) return 'planillas';
 		// if (pathname.startsWith('/dashboard/reportes')) return 'reportes';
@@ -263,7 +293,7 @@
 
 		<!-- Navigation Menu -->
 		<nav class="flex-1 space-y-1 overflow-y-auto p-4">
-			{#each menuItems as item, index (item.id)}
+			{#each filteredMenuItems as item, index (item.id)}
 				<button
 					class="apple-transition group relative flex w-full cursor-pointer items-center overflow-hidden rounded-xl px-3 py-3
 						{activeSection === item.id
@@ -411,7 +441,7 @@
 
 			<!-- Navigation Menu -->
 			<nav class="flex-1 space-y-1 overflow-y-auto p-4">
-				{#each menuItems as item, index (item.id)}
+				{#each filteredMenuItems as item, index (item.id)}
 					<button
 						class="apple-transition group relative flex w-full cursor-pointer items-center overflow-hidden rounded-xl px-3 py-3
 							{activeSection === item.id

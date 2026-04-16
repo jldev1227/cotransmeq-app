@@ -13,7 +13,11 @@
 
 	// Reactive declarations
 	$: error = $authStore.error;
-	$: redirectPath = $page.url.searchParams.get('redirect');
+	$: redirectPath = (() => {
+		const raw = $page.url.searchParams.get('redirect');
+		if (raw && raw.startsWith('/dashboard/nomina')) return null;
+		return raw;
+	})();
 
 	onMount(() => {
 		// Inicializar el store de auth
@@ -21,8 +25,9 @@
 
 		// Si ya está autenticado, redirigir
 		if (authStore.isAuthenticated()) {
-			const targetPath =
-				redirectPath || localStorage.getItem('redirect_after_login') || '/dashboard';
+			let savedRedirect = localStorage.getItem('redirect_after_login');
+			if (savedRedirect?.startsWith('/dashboard/nomina')) savedRedirect = null;
+			const targetPath = redirectPath || savedRedirect || '/dashboard/servicios';
 
 			localStorage.removeItem('redirect_after_login');
 			goto(targetPath);
@@ -38,9 +43,9 @@
 		const success = await authStore.login(correo, password);
 
 		if (success) {
-			// Redirigir a la página guardada o al dashboard
-			const targetPath =
-				redirectPath || localStorage.getItem('redirect_after_login') || '/dashboard';
+			let savedRedirect = localStorage.getItem('redirect_after_login');
+			if (savedRedirect?.startsWith('/dashboard/nomina')) savedRedirect = null;
+			const targetPath = redirectPath || savedRedirect || '/dashboard/servicios';
 			localStorage.removeItem('redirect_after_login');
 			goto(targetPath);
 		} else {

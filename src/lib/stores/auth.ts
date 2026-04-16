@@ -1,15 +1,34 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
+import { checkAccess, type Area, type AccessLevel } from '$lib/config/permissions';
+
+export interface UserPermisos {
+	flota: boolean;
+	conductores: boolean;
+	servicios: boolean;
+	recargos: boolean;
+	clientes: boolean;
+	asistencias: boolean;
+	'acciones-correctivas': boolean;
+	evaluaciones: boolean;
+	nomina: boolean;
+	usuarios: boolean;
+	[key: string]: boolean;
+}
 
 export interface User {
 	id: string;
 	nombre: string;
 	correo: string;
-	rol?: string;
+	rol: string;
 	role?: string;
+	area?: Area | null;
+	cargo?: string;
+	telefono?: string;
+	ultimo_acceso?: string;
+	permisos?: UserPermisos;
 	avatar?: string;
-	permisos?: Record<string, boolean>;
 }
 
 export interface AuthState {
@@ -33,7 +52,7 @@ function createAuthStore() {
 		subscribe,
 
 		// Hidratar el estado desde localStorage o cookies al inicializar
-		init() {
+		async init() {
 			if (browser) {
 				let token = localStorage.getItem('transmeralda_token');
 				const userData = localStorage.getItem('transmeralda_user');
@@ -44,21 +63,56 @@ function createAuthStore() {
 					const tokenCookie = cookies.find((c) => c.trim().startsWith('transmeralda_token='));
 					if (tokenCookie) {
 						token = tokenCookie.split('=')[1];
+					} else {
+						console.log('❌ [AUTH] No hay token en cookies');
 					}
 				}
 
 				if (token && userData) {
 					try {
+						// Cargar datos locales inmediatamente para evitar flash
 						const user = JSON.parse(userData);
 						update((state) => ({
 							...state,
 							token,
-							user
+							user,
+							isLoading: true
 						}));
+
+						// Luego refrescar desde el servidor para tener datos actualizados
+						try {
+							const { authAPI } = await import('$lib/api/apiClient');
+							const response = await authAPI.getProfile();
+							const freshUser = response.data;
+
+							if (freshUser && freshUser.id) {
+								// Actualizar store y localStorage con datos frescos
+								localStorage.setItem('transmeralda_user', JSON.stringify(freshUser));
+								update((state) => ({
+									...state,
+									user: freshUser,
+									isLoading: false
+								}));
+								console.log('✅ [AUTH] Datos de usuario actualizados desde servidor');
+							} else {
+								update((state) => ({ ...state, isLoading: false }));
+							}
+						} catch (profileError: any) {
+							console.warn('⚠️ [AUTH] No se pudieron refrescar datos:', profileError?.message);
+							// Si es 401, el token expiró
+							if (profileError?.response?.status === 401) {
+								this.logout();
+								return;
+							}
+							// Si falla por red, mantener datos locales
+							update((state) => ({ ...state, isLoading: false }));
+						}
 					} catch (error) {
 						console.error('❌ [AUTH] Error parsing user data:', error);
 						this.logout();
 					}
+				} else {
+					console.log('⚠️ [AUTH] No hay token o user data, usuario no autenticado');
 				}
 			}
 		},
@@ -104,7 +158,9 @@ function createAuthStore() {
 
 				let errorMessage = 'Error al iniciar sesión';
 
-				if (error.response?.data?.message) {
+				if (error.response?.data?.error) {
+					errorMessage = error.response.data.error;
+				} else if (error.response?.data?.message) {
 					errorMessage = error.response.data.message;
 				} else if (error.response?.status === 401) {
 					errorMessage = 'Credenciales incorrectas';
@@ -127,6 +183,8 @@ function createAuthStore() {
 		// Función de logout
 		logout(redirectToLogin: boolean = true) {
 			if (browser) {
+				const currentPath = window.location.pathname;
+
 				localStorage.removeItem('transmeralda_token');
 				localStorage.removeItem('transmeralda_user');
 
@@ -166,6 +224,54 @@ function createAuthStore() {
 		// Limpiar errores
 		clearError() {
 			update((state) => ({ ...state, error: null }));
+		},
+
+		// Verificar si el usuario tiene permiso para una ruta específica
+		hasPermission(routeId: string): boolean {
+			let currentState: AuthState = initialState;
+			const unsubscribe = subscribe((state) => (currentState = state));
+			unsubscribe();
+			
+			const user = currentState.user;
+			if (!user) return false;
+			
+			const { allowed } = checkAccess(user.role || user.rol, user.area, routeId);
+			return allowed;
+		},
+
+		// Obtener el nivel de acceso para un módulo
+		getAccessLevel(routeId: string): AccessLevel | null {
+			let currentState: AuthState = initialState;
+			const unsubscribe = subscribe((state) => (currentState = state));
+			unsubscribe();
+			
+			const user = currentState.user;
+			if (!user) return null;
+			
+			const { level } = checkAccess(user.role || user.rol, user.area, routeId);
+			return level;
+		},
+
+		// Obtener permisos del usuario actual
+		getPermisos(): UserPermisos | null {
+			let currentState: AuthState = initialState;
+			const unsubscribe = subscribe((state) => (currentState = state));
+			unsubscribe();
+			return currentState.user?.permisos || null;
+		},
+
+		// Actualizar los permisos del usuario en el store (después de un update en el backend)
+		updateUserPermisos(permisos: UserPermisos) {
+			update((state) => {
+				if (state.user) {
+					const updatedUser = { ...state.user, permisos };
+					if (browser) {
+						localStorage.setItem('transmeralda_user', JSON.stringify(updatedUser));
+					}
+					return { ...state, user: updatedUser };
+				}
+				return state;
+			});
 		}
 	};
 }

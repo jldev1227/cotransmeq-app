@@ -1,10 +1,12 @@
-import { apiClient } from './apiClient';
+import { browser } from '$app/environment';
+
+const API_URL = browser ? import.meta.env.VITE_API_URL : 'http://localhost:4000';
 
 // ═══ Tipos ═══
 
 export type TipoServicioTarifa = 'HORA_24' | 'HORA_12' | 'HORA' | 'KILOMETRO';
 export type EstadoLiquidacionServicio = 'BORRADOR' | 'LIQUIDADA' | 'APROBADA' | 'FACTURADA' | 'ANULADA';
-export type Operadora = string;
+export type Operadora = 'PAREX' | 'GEOPARK';
 
 export const TIPO_SERVICIO_LABELS: Record<TipoServicioTarifa, string> = {
 	HORA_24: '24 Horas',
@@ -19,7 +21,7 @@ export const ESTADO_LIQUIDACION_LABELS: Record<
 > = {
 	BORRADOR: { label: 'Borrador', color: 'gray' },
 	LIQUIDADA: { label: 'Liquidada', color: 'blue' },
-	APROBADA: { label: 'Aprobada', color: 'orange' },
+	APROBADA: { label: 'Aprobada', color: 'green' },
 	FACTURADA: { label: 'Facturada', color: 'emerald' },
 	ANULADA: { label: 'Anulada', color: 'red' }
 };
@@ -28,8 +30,7 @@ export const ESTADO_LIQUIDACION_LABELS: Record<
 
 export interface TarifaServicio {
 	id: string;
-	cliente_id: string;
-	operadora: string | null;
+	operadora: Operadora;
 	anio: number;
 	valor_24h: number;
 	valor_12h: number;
@@ -41,8 +42,7 @@ export interface TarifaServicio {
 }
 
 export interface TarifaInput {
-	cliente_id: string;
-	operadora?: string;
+	operadora: Operadora;
 	anio: number;
 	valor_24h: number;
 	valor_12h: number;
@@ -96,7 +96,6 @@ export interface ItemLiquidacionServicio {
 	valor_pernoctes_total: number;
 	conductor?: { nombre: string; cedula: string } | null;
 	orden?: number;
-	tercero_id?: string | null;
 }
 
 export interface LiquidacionServicio {
@@ -141,6 +140,8 @@ export interface HistorialEstado {
 	estado_nuevo: string;
 	usuario: { id: string; nombre: string; correo: string };
 	motivo: string | null;
+	accion: string | null;
+	snapshot: any | null;
 	created_at: string;
 }
 
@@ -148,7 +149,7 @@ export interface PreviewLiquidacion {
 	cliente: { id: string; nombre: string; nit: string };
 	tarifa: {
 		id: string;
-		operadora: string;
+		operadora: Operadora;
 		anio: number;
 		valor_24h: number;
 		valor_12h: number;
@@ -268,30 +269,71 @@ export function formatCOP(valor: number): string {
 	}).format(valor);
 }
 
-// ═══ API Client (axios) ═══
+// ═══ Auth ═══
+
+function getAuthHeaders(): Record<string, string> {
+	const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+	if (browser) {
+		const token = localStorage.getItem('transmeralda_token');
+		if (token) headers['Authorization'] = `Bearer ${token}`;
+	}
+	return headers;
+}
+
+// ═══ API Client ═══
 
 export const liquidacionesServiciosAPI = {
-	// ── Tarifas ──
-	async obtenerTarifas(operadora?: string, anio?: number): Promise<TarifaServicio[]> {
-		const params: any = {};
-		if (operadora) params.operadora = operadora;
-		if (anio) params.anio = anio;
-		const res = await apiClient.get('/api/liquidaciones-servicios/tarifas', { params });
-		return res.data;
+	// ── Tarifas (operadoras) ──
+	async obtenerTarifas(
+		operadora?: Operadora,
+		anio?: number
+	): Promise<TarifaServicio[]> {
+		const params = new URLSearchParams();
+		if (operadora) params.set('operadora', operadora);
+		if (anio) params.set('anio', String(anio));
+
+		const res = await fetch(
+			`${API_URL}/api/liquidaciones-servicios/tarifas?${params.toString()}`,
+			{ headers: getAuthHeaders() }
+		);
+		if (!res.ok) {
+			const json = await res.json();
+			throw new Error(json.error || 'Error al obtener tarifas');
+		}
+		return await res.json();
 	},
 
 	async crearTarifa(data: TarifaInput): Promise<TarifaServicio> {
-		const res = await apiClient.post('/api/liquidaciones-servicios/tarifas', data);
-		return res.data;
+		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/tarifas`, {
+			method: 'POST',
+			headers: getAuthHeaders(),
+			body: JSON.stringify(data)
+		});
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al crear tarifa');
+		return json;
 	},
 
 	async actualizarTarifa(id: string, data: Partial<TarifaInput>): Promise<TarifaServicio> {
-		const res = await apiClient.put(`/api/liquidaciones-servicios/tarifas/${id}`, data);
-		return res.data;
+		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/tarifas/${id}`, {
+			method: 'PUT',
+			headers: getAuthHeaders(),
+			body: JSON.stringify(data)
+		});
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al actualizar tarifa');
+		return json;
 	},
 
 	async eliminarTarifa(id: string): Promise<void> {
-		await apiClient.delete(`/api/liquidaciones-servicios/tarifas/${id}`);
+		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/tarifas/${id}`, {
+			method: 'DELETE',
+			headers: getAuthHeaders()
+		});
+		if (!res.ok) {
+			const json = await res.json();
+			throw new Error(json.error || 'Error al eliminar tarifa');
+		}
 	},
 
 	// ── Preview ──
@@ -302,14 +344,25 @@ export const liquidacionesServiciosAPI = {
 		servicioIds?: string[],
 		tarifa_id?: string
 	): Promise<PreviewLiquidacion> {
-		const res = await apiClient.post('/api/liquidaciones-servicios/preview', {
+		const params = new URLSearchParams({
 			cliente_id,
-			mes,
-			anio,
-			servicio_ids: servicioIds,
-			tarifa_id,
+			mes: String(mes),
+			anio: String(anio)
 		});
-		return res.data;
+		if (servicioIds && servicioIds.length > 0) {
+			params.set('servicio_ids', servicioIds.join(','));
+		}
+		if (tarifa_id) {
+			params.set('tarifa_id', tarifa_id);
+		}
+
+		const res = await fetch(
+			`${API_URL}/api/liquidaciones-servicios/preview?${params.toString()}`,
+			{ headers: getAuthHeaders() }
+		);
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al generar preview');
+		return json;
 	},
 
 	// ── Servicios disponibles ──
@@ -318,10 +371,19 @@ export const liquidacionesServiciosAPI = {
 		mes: number,
 		anio: number
 	): Promise<ServicioDisponible[]> {
-		const res = await apiClient.get('/api/liquidaciones-servicios/servicios-disponibles', {
-			params: { cliente_id, mes, anio }
+		const params = new URLSearchParams({
+			cliente_id,
+			mes: String(mes),
+			anio: String(anio)
 		});
-		return res.data;
+
+		const res = await fetch(
+			`${API_URL}/api/liquidaciones-servicios/servicios-disponibles?${params.toString()}`,
+			{ headers: getAuthHeaders() }
+		);
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al obtener servicios');
+		return json;
 	},
 
 	// ── CRUD Liquidaciones ──
@@ -331,38 +393,73 @@ export const liquidacionesServiciosAPI = {
 		totalPages: number;
 		page: number;
 	}> {
-		const params: any = {};
+		const params = new URLSearchParams();
 		Object.entries(filtros).forEach(([key, val]) => {
-			if (val !== undefined && val !== '') params[key] = val;
+			if (val !== undefined && val !== '') params.set(key, String(val));
 		});
-		const res = await apiClient.get('/api/liquidaciones-servicios', { params });
-		return res.data;
+
+		const res = await fetch(
+			`${API_URL}/api/liquidaciones-servicios?${params.toString()}`,
+			{ headers: getAuthHeaders() }
+		);
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al listar liquidaciones');
+		return json;
 	},
 
 	async crear(data: CrearLiquidacionInput): Promise<LiquidacionServicio> {
-		const res = await apiClient.post('/api/liquidaciones-servicios', data);
-		return res.data;
+		const res = await fetch(`${API_URL}/api/liquidaciones-servicios`, {
+			method: 'POST',
+			headers: getAuthHeaders(),
+			body: JSON.stringify(data)
+		});
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al crear liquidación');
+		return json;
 	},
 
 	async obtenerPorId(id: string): Promise<LiquidacionServicio> {
-		const res = await apiClient.get(`/api/liquidaciones-servicios/${id}`);
-		return res.data;
+		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/${id}`, {
+			headers: getAuthHeaders()
+		});
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al obtener liquidación');
+		return json;
 	},
 
 	async actualizar(id: string, data: CrearLiquidacionInput): Promise<LiquidacionServicio> {
-		const res = await apiClient.put(`/api/liquidaciones-servicios/${id}`, data);
-		return res.data;
+		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/${id}`, {
+			method: 'PUT',
+			headers: getAuthHeaders(),
+			body: JSON.stringify(data)
+		});
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al actualizar liquidación');
+		return json;
 	},
 
 	async eliminar(id: string): Promise<void> {
-		await apiClient.delete(`/api/liquidaciones-servicios/${id}`);
+		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/${id}`, {
+			method: 'DELETE',
+			headers: getAuthHeaders()
+		});
+		if (!res.ok) {
+			const json = await res.json();
+			throw new Error(json.error || 'Error al eliminar liquidación');
+		}
 	},
 
 	async cambiarEstado(id: string, estado: EstadoLiquidacionServicio, motivo_anulacion?: string): Promise<LiquidacionServicio> {
 		const body: any = { estado };
 		if (motivo_anulacion) body.motivo_anulacion = motivo_anulacion;
-		const res = await apiClient.patch(`/api/liquidaciones-servicios/${id}/estado`, body);
-		return res.data;
+		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/${id}/estado`, {
+			method: 'PATCH',
+			headers: getAuthHeaders(),
+			body: JSON.stringify(body)
+		});
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al cambiar estado');
+		return json;
 	},
 
 	async estadisticas(): Promise<{
@@ -370,29 +467,51 @@ export const liquidacionesServiciosAPI = {
 		por_estado: { estado: EstadoLiquidacionServicio; cantidad: number }[];
 		monto_total: number;
 	}> {
-		const res = await apiClient.get('/api/liquidaciones-servicios/estadisticas');
-		return res.data;
+		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/estadisticas`, {
+			headers: getAuthHeaders()
+		});
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al obtener estadísticas');
+		return json;
 	},
 
 	async obtenerTiposRecargo(): Promise<TipoRecargo[]> {
-		const res = await apiClient.get('/api/liquidaciones-servicios/tipos-recargo');
-		return res.data;
+		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/tipos-recargo`, {
+			headers: getAuthHeaders()
+		});
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al obtener tipos de recargo');
+		return json;
 	},
 
 	async obtenerHistorial(liquidacionId: string): Promise<HistorialEstado[]> {
-		const res = await apiClient.get(`/api/liquidaciones-servicios/${liquidacionId}/historial`);
-		return res.data;
+		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/${liquidacionId}/historial`, {
+			headers: getAuthHeaders()
+		});
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al obtener historial');
+		return json;
 	},
 
 	// ── Configuración Liquidador de Servicios ──
 
 	async obtenerConfigLiquidador(): Promise<ConfigLiquidadorServicio> {
-		const res = await apiClient.get('/api/liquidaciones-servicios/config-liquidador');
-		return res.data;
+		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/config-liquidador`, {
+			headers: getAuthHeaders()
+		});
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al obtener configuración');
+		return json;
 	},
 
 	async actualizarConfigLiquidador(data: Partial<Omit<ConfigLiquidadorServicio, 'id'>>): Promise<ConfigLiquidadorServicio> {
-		const res = await apiClient.put('/api/liquidaciones-servicios/config-liquidador', data);
-		return res.data;
+		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/config-liquidador`, {
+			method: 'PUT',
+			headers: getAuthHeaders(),
+			body: JSON.stringify(data)
+		});
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al actualizar configuración');
+		return json;
 	}
 };

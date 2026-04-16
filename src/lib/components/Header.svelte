@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
+	import { goto } from '$app/navigation';
 	import SessionTimer from './SessionTimer.svelte';
 
 	const dispatch = createEventDispatcher();
@@ -233,6 +234,7 @@
 						<div class="p-2">
 							<button
 								class="apple-transition flex w-full items-center rounded-xl px-3 py-2 text-left text-gray-700 hover:bg-orange-50 hover:text-orange-700"
+								on:click={() => { showUserMenu = false; goto('/dashboard/perfil'); }}
 							>
 								<svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path

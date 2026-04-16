@@ -8,6 +8,9 @@
 	import { fade } from 'svelte/transition';
 	import { toast } from 'svelte-sonner';
 	import { isTokenExpired, getTimeUntilExpiration } from '$lib/utils/jwt';
+	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
+	import { checkAccess, AREA_LABELS, type Area } from '$lib/config/permissions';
 
 	let mounted = false;
 	let tokenCheckInterval: ReturnType<typeof setInterval> | null = null;
@@ -16,6 +19,28 @@
 	$: user = $authStore.user;
 	$: isConnected = $socketStore.connected;
 	$: token = $authStore.token;
+
+	// Guard reactivo: verificar permisos al cambiar de ruta
+	$: if (mounted && user && $page.url.pathname !== '/dashboard') {
+		checkRoutePermission($page.url.pathname);
+	}
+
+	function checkRoutePermission(pathname: string) {
+		const match = pathname.match(/^\/dashboard\/([^/]+)/);
+		if (!match) return;
+		const moduleId = match[1];
+
+		const { allowed } = checkAccess(
+			user?.role || user?.rol,
+			user?.area,
+			moduleId
+		);
+
+		if (!allowed) {
+			toast.error('No tienes permiso para acceder a esta sección');
+			goto('/dashboard/servicios');
+		}
+	}
 
 	/**
 	 * Verifica si el token ha expirado y cierra sesión automáticamente
@@ -96,7 +121,7 @@
 			<Header
 				userName={user?.nombre || 'Usuario'}
 				userEmail={user?.correo || 'usuario@cotransmeq.com'}
-				userRole={user?.role || user?.rol || 'Usuario'}
+				userRole={user?.area && Array.isArray(user.area) && user.area.length > 0 ? user.area.map((a: string) => AREA_LABELS[a as Area] || a).join(', ') : 'Usuario'}
 				isCollapsed={$sidebarStore}
 				showSessionTimer={false}
 				on:logout={handleLogout}
