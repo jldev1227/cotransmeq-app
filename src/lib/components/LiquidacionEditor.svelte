@@ -76,10 +76,9 @@ function shortDateFromIso(s: string): string {
 	if (!s) return '';
 	// if already non-ISO textual (e.g., '13 FEB') return uppercase
 	if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return String(s).toUpperCase();
-	const d = new Date(s);
-	if (isNaN(d.getTime())) return String(s).toUpperCase();
-	const day = String(d.getDate()).padStart(2,'0');
-	const mon = MONTH_ABBR[d.getMonth()] || '';
+	const [, mm, dd] = s.split('-');
+	const day = dd.padStart(2, '0');
+	const mon = MONTH_ABBR[parseInt(mm, 10) - 1] || '';
 	return `${day} ${mon}`;
 }
 function fechasFromPair(ini: string | undefined, fin: string | undefined): string {

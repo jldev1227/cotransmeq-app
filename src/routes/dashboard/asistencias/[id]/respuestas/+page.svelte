@@ -29,6 +29,11 @@
 	// Edit modal
 	let showEditModal = false;
 
+	// Delete
+	let selectedIds: Set<string> = new Set();
+	let showDeleteModal = false;
+	let deleting = false;
+
 	// Socket listener
 	const onRespuestaCreated = ({ respuesta, formularioId: formId }: any) => {
 		// Solo actualizar si es para este formulario
@@ -179,6 +184,48 @@
 			toast.success('PDF generado exitosamente');
 		} catch (error: any) {
 			toast.error(error.message || 'Error al generar el PDF');
+		}
+	}
+
+	function toggleSelect(id: string) {
+		if (selectedIds.has(id)) {
+			selectedIds.delete(id);
+		} else {
+			selectedIds.add(id);
+		}
+		selectedIds = new Set(selectedIds);
+	}
+
+	function toggleSelectAll() {
+		if (selectedIds.size === respuestasOrdenadas.length) {
+			selectedIds = new Set();
+		} else {
+			selectedIds = new Set(respuestasOrdenadas.map((r) => r.id));
+		}
+	}
+
+	function abrirDeleteModal() {
+		if (selectedIds.size === 0) return;
+		showDeleteModal = true;
+	}
+
+	function cerrarDeleteModal() {
+		showDeleteModal = false;
+	}
+
+	async function confirmarEliminar() {
+		deleting = true;
+		try {
+			const ids = Array.from(selectedIds);
+			await asistenciasAPI.eliminarRespuestas(ids);
+			respuestas = respuestas.filter((r) => !selectedIds.has(r.id));
+			selectedIds = new Set();
+			showDeleteModal = false;
+			toast.success('Respuestas eliminadas exitosamente');
+		} catch (error: any) {
+			toast.error(error.message || 'Error al eliminar respuestas');
+		} finally {
+			deleting = false;
 		}
 	}
 
@@ -620,6 +667,19 @@
 						</svg>
 					</button>
 				</div>
+
+				<!-- Delete button -->
+				{#if selectedIds.size > 0}
+					<button
+						on:click={abrirDeleteModal}
+						class="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-red-700"
+					>
+						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+						</svg>
+						Eliminar ({selectedIds.size})
+					</button>
+				{/if}
 			</div>
 
 			<!-- Respuestas -->
@@ -653,21 +713,29 @@
 					<div
 						class="grid grid-cols-12 gap-4 border-b border-gray-200 bg-gray-50 px-4 py-3 text-xs font-semibold text-gray-700"
 					>
+						<div class="col-span-1 flex items-center justify-center">
+							<input type="checkbox" class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" checked={selectedIds.size > 0 && selectedIds.size === respuestasOrdenadas.length} on:change={toggleSelectAll} />
+						</div>
 						<div class="col-span-2">Nombre Completo</div>
 						<div class="col-span-2">Documento</div>
 						<div class="col-span-2">Cargo</div>
 						<div class="col-span-1">Teléfono</div>
 						<div class="col-span-2">Fecha</div>
-						<div class="col-span-3 text-center">Firma Digital</div>
+						<div class="col-span-2 text-center">Firma Digital</div>
 					</div>
 
 					<!-- Filas -->
 					<div class="divide-y divide-gray-200">
 						{#each respuestasOrdenadas as respuesta, i (respuesta.id)}
 							<div
-								class="grid grid-cols-12 gap-4 px-4 py-3 transition-colors hover:bg-gray-50"
+								class="grid grid-cols-12 gap-4 px-4 py-3 transition-colors {selectedIds.has(respuesta.id) ? 'bg-orange-50' : 'hover:bg-gray-50'}"
 								in:fly={{ y: 20, duration: 300, delay: i * 20 }}
 							>
+								<!-- Checkbox -->
+								<div class="col-span-1 flex items-center justify-center">
+									<input type="checkbox" class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" checked={selectedIds.has(respuesta.id)} on:change={() => toggleSelect(respuesta.id)} />
+								</div>
+
 								<!-- Nombre -->
 								<div class="col-span-2">
 									<p class="text-sm font-medium text-gray-900">{respuesta.nombre_completo}</p>
@@ -694,7 +762,7 @@
 								</div>
 
 								<!-- Firma -->
-								<div class="col-span-3 flex justify-center">
+								<div class="col-span-2 flex justify-center">
 									<button
 										on:click={() => verFirma(respuesta.firma)}
 										class="group relative overflow-hidden rounded-lg border border-gray-200 bg-gray-50 p-1 transition-all hover:border-orange-400"
@@ -728,16 +796,19 @@
 				<div class="space-y-4 lg:hidden">
 					{#each respuestasOrdenadas as respuesta, i (respuesta.id)}
 						<div
-							class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm"
+							class="rounded-xl border {selectedIds.has(respuesta.id) ? 'border-orange-400 bg-orange-50' : 'border-gray-200 bg-white'} p-4 shadow-sm"
 							in:fly={{ y: 20, duration: 300, delay: i * 20 }}
 						>
-							<!-- Header con nombre y fecha -->
+							<!-- Header con checkbox, nombre y fecha -->
 							<div
 								class="mb-3 flex items-start justify-between gap-3 border-b border-gray-100 pb-3"
 							>
-								<div class="flex-1">
-									<h3 class="font-semibold text-gray-900">{respuesta.nombre_completo}</h3>
-									<p class="mt-1 text-xs text-gray-500">{formatFecha(respuesta.created_at)}</p>
+								<div class="flex items-start gap-3 flex-1">
+									<input type="checkbox" class="mt-1 h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" checked={selectedIds.has(respuesta.id)} on:change={() => toggleSelect(respuesta.id)} />
+									<div class="flex-1">
+										<h3 class="font-semibold text-gray-900">{respuesta.nombre_completo}</h3>
+										<p class="mt-1 text-xs text-gray-500">{formatFecha(respuesta.created_at)}</p>
+									</div>
 								</div>
 								<button
 									on:click={() => verFirma(respuesta.firma)}
@@ -782,6 +853,66 @@
 		{/if}
 	</div>
 </div>
+
+<!-- Modal Confirmar Eliminación -->
+{#if showDeleteModal}
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+		on:click={cerrarDeleteModal}
+		on:keydown={(e) => e.key === 'Escape' && cerrarDeleteModal()}
+		role="button"
+		tabindex="0"
+		transition:fade={{ duration: 150 }}
+	>
+		<div
+			class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+			on:click|stopPropagation
+			on:keydown|stopPropagation
+			role="dialog"
+			tabindex="0"
+			in:fly={{ y: 30, duration: 200 }}
+		>
+			<div class="mb-4 flex items-center gap-3">
+				<div class="flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
+					<svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+					</svg>
+				</div>
+				<div>
+					<h3 class="text-lg font-bold text-gray-900">Eliminar respuestas</h3>
+					<p class="text-sm text-gray-500">Esta acción no se puede deshacer</p>
+				</div>
+			</div>
+			<p class="mb-6 text-sm text-gray-600">
+				¿Estás seguro de que deseas eliminar <span class="font-semibold text-red-600">{selectedIds.size}</span> respuesta{selectedIds.size > 1 ? 's' : ''}? Se eliminarán permanentemente del sistema.
+			</p>
+			<div class="flex justify-end gap-3">
+				<button
+					on:click={cerrarDeleteModal}
+					disabled={deleting}
+					class="rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+				>
+					Cancelar
+				</button>
+				<button
+					on:click={confirmarEliminar}
+					disabled={deleting}
+					class="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+				>
+					{#if deleting}
+						<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+							<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+						</svg>
+						Eliminando...
+					{:else}
+						Eliminar
+					{/if}
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
 
 <!-- Signature Modal -->
 {#if showSignatureModal}

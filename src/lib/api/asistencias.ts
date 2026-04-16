@@ -273,6 +273,17 @@ class AsistenciasAPI {
 		return await response.blob();
 	}
 
+	async eliminarRespuestas(ids: string[]): Promise<{ deleted: number }> {
+		const response = await fetch(`${this.baseUrl}/asistencias/respuestas`, {
+			method: 'DELETE',
+			headers: await this.getAuthHeaders(),
+			body: JSON.stringify({ ids })
+		});
+		const data = await response.json();
+		if (!response.ok) throw new Error(data.message || 'Error al eliminar respuestas');
+		return data;
+	}
+
 	// Helper para generar URL pública
 	generarUrlPublica(token: string): string {
 		const baseUrl = window.location.origin;
