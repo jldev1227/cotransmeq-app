@@ -172,9 +172,14 @@
 	$: currentUser = $authStore.user;
 	$: filteredMenuItems = menuItems.filter(item => {
 		if (!currentUser) return false;
+		// Si el usuario no tiene áreas asignadas, mostrar todo (usuarios legacy)
+		const areas = currentUser.area;
+		if (!areas || (Array.isArray(areas) && areas.length === 0)) {
+			return true;
+		}
 		const { allowed } = checkAccess(
 			currentUser.role || currentUser.rol,
-			currentUser.area,
+			areas,
 			item.id
 		);
 		return allowed;

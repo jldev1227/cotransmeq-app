@@ -30,13 +30,19 @@
 		if (!match) return;
 		const moduleId = match[1];
 
+		// Si el usuario no tiene áreas asignadas, permitir acceso (usuarios legacy)
+		const areas = user?.area;
+		if (!areas || (Array.isArray(areas) && areas.length === 0)) {
+			return;
+		}
+
 		const { allowed } = checkAccess(
 			user?.role || user?.rol,
-			user?.area,
+			areas,
 			moduleId
 		);
 
-		if (!allowed) {
+		if (!allowed && moduleId !== 'servicios') {
 			toast.error('No tienes permiso para acceder a esta sección');
 			goto('/dashboard/servicios');
 		}
