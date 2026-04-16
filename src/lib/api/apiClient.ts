@@ -47,9 +47,13 @@ apiClient.interceptors.response.use(
 		if (error.response?.status === 401 && !originalRequest._retry) {
 			originalRequest._retry = true;
 
-			// Limpiar autenticación y redirigir al login
+			// Limpiar autenticación y forzar recarga completa para que el hook server-side vea los cookies limpios
 			if (browser) {
-				authStore.logout();
+				localStorage.removeItem('transmeralda_token');
+				localStorage.removeItem('transmeralda_user');
+				document.cookie = 'transmeralda_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict';
+				// Full page redirect (not goto) so the browser sends updated cookies
+				window.location.href = '/login';
 			}
 
 			return Promise.reject(error);
