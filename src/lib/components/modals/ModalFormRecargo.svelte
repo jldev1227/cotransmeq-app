@@ -1104,48 +1104,49 @@
 					mostrarServicioInfo = false;
 				}
 
+				const recargoAny = recargo as any;
 				formData = {
 					conductorId: recargo.conductor_id,
 					vehiculoId: recargo.vehiculo_id,
 					empresaId: recargo.empresa_id,
 					tmNumber: recargo.numero_planilla || '',
-					servicio_id: recargo.servicio_id || null,
+					servicio_id: recargoAny.servicio_id || null,
 
 					// Estado del conductor
-					estado_conductor: recargo.estado_conductor || null,
+					estado_conductor: recargoAny.estado_conductor || null,
 
 					// Condiciones de vía
-					via_trocha: recargo.via_trocha || false,
-					via_afirmado: recargo.via_afirmado || false,
-					via_mixto: recargo.via_mixto || false,
-					via_pavimentada: recargo.via_pavimentada || false,
+					via_trocha: recargoAny.via_trocha || false,
+					via_afirmado: recargoAny.via_afirmado || false,
+					via_mixto: recargoAny.via_mixto || false,
+					via_pavimentada: recargoAny.via_pavimentada || false,
 
 					// Riesgos de seguridad
-					riesgo_desniveles: recargo.riesgo_desniveles || false,
-					riesgo_deslizamientos: recargo.riesgo_deslizamientos || false,
-					riesgo_sin_senalizacion: recargo.riesgo_sin_senalizacion || false,
-					riesgo_animales: recargo.riesgo_animales || false,
-					riesgo_peatones: recargo.riesgo_peatones || false,
-					riesgo_trafico_alto: recargo.riesgo_trafico_alto || false,
+					riesgo_desniveles: recargoAny.riesgo_desniveles || false,
+					riesgo_deslizamientos: recargoAny.riesgo_deslizamientos || false,
+					riesgo_sin_senalizacion: recargoAny.riesgo_sin_senalizacion || false,
+					riesgo_animales: recargoAny.riesgo_animales || false,
+					riesgo_peatones: recargoAny.riesgo_peatones || false,
+					riesgo_trafico_alto: recargoAny.riesgo_trafico_alto || false,
 
 					// Evaluación
-					fuente_consulta: recargo.fuente_consulta || null,
-					calificacion_servicio: recargo.calificacion_servicio || null,
+					fuente_consulta: recargoAny.fuente_consulta || null,
+					calificacion_servicio: recargoAny.calificacion_servicio || null,
 
 					// Métricas de tiempo
-					tiempo_disponibilidad_horas: recargo.tiempo_disponibilidad_horas || null,
-					duracion_trayecto_horas: recargo.duracion_trayecto_horas || null,
-					numero_dias_servicio: recargo.numero_dias_servicio || null
+					tiempo_disponibilidad_horas: recargoAny.tiempo_disponibilidad_horas || null,
+					duracion_trayecto_horas: recargoAny.duracion_trayecto_horas || null,
+					numero_dias_servicio: recargoAny.numero_dias_servicio || null
 				};
 
-				if (recargo.planilla_s3key) {
-					// TODO: Obtener URL firmada cuando esté implementado
-					archivoExistenteKey = recargo.planilla_s3key;
-				}
+				if ((recargo as any).planilla_s3key) {
+						// TODO: Obtener URL firmada cuando esté implementado
+						archivoExistenteKey = (recargo as any).planilla_s3key;
+					}
 
 				// Cargar días laborales
-				if (recargo.dias_laborales_planillas && recargo.dias_laborales_planillas.length > 0) {
-					diasLaborales = recargo.dias_laborales_planillas.map((dia: any) => ({
+				if ((recargo as any).dias_laborales_planillas && (recargo as any).dias_laborales_planillas.length > 0) {
+					diasLaborales = (recargo as any).dias_laborales_planillas.map((dia: any) => ({
 						id: dia.id,
 						dia: dia.dia.toString(),
 						mes: currentMonth.toString(),
@@ -1604,6 +1605,7 @@
 						<button
 							on:click={handleClose}
 							disabled={isLoading}
+							aria-label="Cerrar modal"
 							class="rounded-lg p-2 transition-colors hover:bg-gray-100 disabled:opacity-50"
 						>
 							<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1730,7 +1732,7 @@
 						<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
 							<!-- Conductor -->
 							<div>
-								<label class="mb-2 block text-sm font-semibold text-gray-800">
+								<div class="mb-2 block text-sm font-semibold text-gray-800">
 									<div class="flex items-center gap-2">
 										<svg
 											class="h-5 w-5 text-orange-600"
@@ -1748,7 +1750,7 @@
 										Conductor
 										<span class="text-red-500">*</span>
 									</div>
-								</label>
+								</div>
 								<div class="flex items-start gap-2">
 									<div class="relative flex-1">
 										{#if conductorSeleccionado}
@@ -1770,6 +1772,7 @@
 															formData.conductorId = '';
 															searchConductor = '';
 														}}
+														aria-label="Deseleccionar conductor"
 														class="rounded-lg p-2 transition-colors hover:bg-orange-100"
 													>
 														<svg
@@ -1848,7 +1851,7 @@
 
 							<!-- Vehículo -->
 							<div>
-								<label class="mb-2 block text-sm font-semibold text-gray-800">
+								<div class="mb-2 block text-sm font-semibold text-gray-800">
 									<div class="flex items-center gap-2">
 										<svg
 											class="h-5 w-5 text-orange-600"
@@ -1866,7 +1869,7 @@
 										Vehículo
 										<span class="text-red-500">*</span>
 									</div>
-								</label>
+								</div>
 								<div class="flex items-start gap-2">
 									<div class="relative flex-1">
 										{#if vehiculoSeleccionado}
@@ -1889,6 +1892,7 @@
 															formData.vehiculoId = '';
 															searchVehiculo = '';
 														}}
+														aria-label="Deseleccionar vehículo"
 														class="rounded-lg p-2 transition-colors hover:bg-orange-100"
 													>
 														<svg
@@ -1968,7 +1972,7 @@
 
 							<!-- Empresa -->
 							<div>
-								<label class="mb-2 block text-sm font-semibold text-gray-800">
+								<div class="mb-2 block text-sm font-semibold text-gray-800">
 									<div class="flex items-center gap-2">
 										<svg
 											class="h-5 w-5 text-orange-600"
@@ -1986,7 +1990,7 @@
 										Empresa
 										<span class="text-red-500">*</span>
 									</div>
-								</label>
+								</div>
 								<div class="flex items-start gap-2">
 									<div class="relative flex-1">
 										{#if empresaSeleccionada}
@@ -2005,6 +2009,7 @@
 															formData.empresaId = '';
 															searchEmpresa = '';
 														}}
+														aria-label="Deseleccionar empresa"
 														class="rounded-lg p-2 transition-colors hover:bg-orange-100"
 													>
 														<svg
@@ -2079,7 +2084,7 @@
 							</div>
 							<!-- Número de planilla -->
 							<div>
-								<label class="mb-2 block text-sm font-semibold text-gray-800">
+								<label for="tm-number" class="mb-2 block text-sm font-semibold text-gray-800">
 									<div class="flex items-center gap-2">
 										<svg
 											class="h-5 w-5 text-orange-600"
@@ -2100,6 +2105,7 @@
 								<div class="flex gap-2">
 									<div class="relative flex-1">
 										<input
+											id="tm-number"
 											type="text"
 											bind:value={formData.tmNumber}
 											placeholder={isGenerandoPlanilla ? 'Generando...' : 'CM-0001'}
@@ -2354,8 +2360,8 @@
 
 						<!-- Archivo adjunto -->
 						<div>
-							<label class="mb-2 block text-sm font-semibold text-gray-800">
-								<div class="flex items-center gap-2">
+							<p class="mb-2 block text-sm font-semibold text-gray-800">
+								<span class="flex items-center gap-2">
 									<svg
 										class="h-5 w-5 text-orange-600"
 										fill="none"
@@ -2370,8 +2376,8 @@
 										/>
 									</svg>
 									Archivo PDF (Opcional)
-								</div>
-							</label>
+								</span>
+							</p>
 
 							{#if archivoExistente}
 								<div
@@ -2399,6 +2405,7 @@
 											archivoExistente = null;
 											archivoExistenteKey = null;
 										}}
+										aria-label="Eliminar archivo existente"
 										class="rounded-lg p-2 transition-colors hover:bg-blue-100"
 									>
 										<svg
@@ -2440,9 +2447,10 @@
 										</p>
 									</div>
 									<button
-										on:click={() => (archivoAdjunto = null)}
-										class="rounded-lg p-2 transition-colors hover:bg-orange-100"
-									>
+											on:click={() => (archivoAdjunto = null)}
+											aria-label="Eliminar archivo adjunto"
+											class="rounded-lg p-2 transition-colors hover:bg-orange-100"
+										>
 										<svg
 											class="h-5 w-5 text-gray-600"
 											fill="none"
@@ -2529,10 +2537,11 @@
 							</h3>
 							<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 								<div>
-									<label class="mb-2 block text-sm font-medium text-gray-700">
+									<label for="estado-conductor" class="mb-2 block text-sm font-medium text-gray-700">
 										Estado Físico/Mental
 									</label>
 									<select
+										id="estado-conductor"
 										bind:value={formData.estado_conductor}
 										class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
 									>
@@ -2566,6 +2575,7 @@
 							</h3>
 							<div class="grid grid-cols-2 gap-3 md:grid-cols-4">
 								<label
+									for="via-trocha"
 									class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 p-3 transition-colors hover:bg-gray-50 {formData.via_trocha
 										? 'border-orange-500 bg-orange-50'
 										: ''}"
@@ -2629,18 +2639,20 @@
 										stroke-linecap="round"
 										stroke-linejoin="round"
 										stroke-width="2"
-										d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+							d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
 									/>
 								</svg>
 								Riesgos y Condiciones de Seguridad
 							</h3>
 							<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
 								<label
+									for="riesgo-desniveles"
 									class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 p-3 transition-colors hover:bg-gray-50 {formData.riesgo_desniveles
 										? 'border-red-500 bg-red-50'
 										: ''}"
 								>
 									<input
+										id="riesgo-desniveles"
 										type="checkbox"
 										bind:checked={formData.riesgo_desniveles}
 										class="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
@@ -2648,11 +2660,13 @@
 									<span class="text-sm font-medium">⛰️ Desniveles</span>
 								</label>
 								<label
+									for="riesgo-deslizamientos"
 									class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 p-3 transition-colors hover:bg-gray-50 {formData.riesgo_deslizamientos
 										? 'border-red-500 bg-red-50'
 										: ''}"
 								>
 									<input
+										id="riesgo-deslizamientos"
 										type="checkbox"
 										bind:checked={formData.riesgo_deslizamientos}
 										class="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
@@ -2660,11 +2674,13 @@
 									<span class="text-sm font-medium">🪨 Deslizamientos</span>
 								</label>
 								<label
+									for="riesgo-sin-senalizacion"
 									class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 p-3 transition-colors hover:bg-gray-50 {formData.riesgo_sin_senalizacion
 										? 'border-red-500 bg-red-50'
 										: ''}"
 								>
 									<input
+										id="riesgo-sin-senalizacion"
 										type="checkbox"
 										bind:checked={formData.riesgo_sin_senalizacion}
 										class="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
@@ -2672,11 +2688,13 @@
 									<span class="text-sm font-medium">🚫 Sin Señalización</span>
 								</label>
 								<label
+									for="riesgo-animales"
 									class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 p-3 transition-colors hover:bg-gray-50 {formData.riesgo_animales
 										? 'border-red-500 bg-red-50'
 										: ''}"
 								>
 									<input
+										id="riesgo-animales"
 										type="checkbox"
 										bind:checked={formData.riesgo_animales}
 										class="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
@@ -2684,11 +2702,13 @@
 									<span class="text-sm font-medium">🐄 Animales en Vía</span>
 								</label>
 								<label
+									for="riesgo-peatones"
 									class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 p-3 transition-colors hover:bg-gray-50 {formData.riesgo_peatones
 										? 'border-red-500 bg-red-50'
 										: ''}"
 								>
 									<input
+										id="riesgo-peatones"
 										type="checkbox"
 										bind:checked={formData.riesgo_peatones}
 										class="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
@@ -2696,11 +2716,13 @@
 									<span class="text-sm font-medium">🚶 Peatones</span>
 								</label>
 								<label
+									for="riesgo-trafico-alto"
 									class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 p-3 transition-colors hover:bg-gray-50 {formData.riesgo_trafico_alto
 										? 'border-red-500 bg-red-50'
 										: ''}"
 								>
 									<input
+										id="riesgo-trafico-alto"
 										type="checkbox"
 										bind:checked={formData.riesgo_trafico_alto}
 										class="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
@@ -2730,25 +2752,26 @@
 							</h3>
 							<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 								<div>
-									<label class="mb-2 block text-sm font-medium text-gray-700">
+									<label for="fuente-consulta" class="mb-2 block text-sm font-medium text-gray-700">
 										Fuente de Consulta
 									</label>
 									<select
+										id="fuente-consulta"
 										bind:value={formData.fuente_consulta}
 										class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
 									>
 										<option value={null}>Seleccione...</option>
 										<option value="conductor">👤 Conductor</option>
 										<option value="gps">📍 GPS</option>
-										<option value="cliente">🏢 Cliente</option>
 										<option value="sistema">💻 Sistema</option>
 									</select>
 								</div>
 								<div>
-									<label class="mb-2 block text-sm font-medium text-gray-700">
+									<label for="calificacion-servicio" class="mb-2 block text-sm font-medium text-gray-700">
 										Calificación del Servicio
 									</label>
 									<select
+										id="calificacion-servicio"
 										bind:value={formData.calificacion_servicio}
 										class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
 									>
@@ -2781,10 +2804,11 @@
 							</h3>
 							<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
 								<div>
-									<label class="mb-2 block text-sm font-medium text-gray-700">
+									<label for="tiempo-disponibilidad" class="mb-2 block text-sm font-medium text-gray-700">
 										Tiempo Disponibilidad (horas)
 									</label>
 									<input
+										id="tiempo-disponibilidad"
 										type="number"
 										step="0.1"
 										min="0"
@@ -2794,10 +2818,11 @@
 									/>
 								</div>
 								<div>
-									<label class="mb-2 block text-sm font-medium text-gray-700">
+									<label for="duracion-trayecto" class="mb-2 block text-sm font-medium text-gray-700">
 										Duración Trayecto (horas)
 									</label>
 									<input
+										id="duracion-trayecto"
 										type="number"
 										step="0.1"
 										min="0"
@@ -2807,10 +2832,11 @@
 									/>
 								</div>
 								<div>
-									<label class="mb-2 block text-sm font-medium text-gray-700">
+									<label for="numero-dias-servicio" class="mb-2 block text-sm font-medium text-gray-700">
 										Número de Días Servicio
 									</label>
 									<input
+										id="numero-dias-servicio"
 										type="number"
 										min="1"
 										bind:value={formData.numero_dias_servicio}
@@ -2819,10 +2845,11 @@
 									/>
 								</div>
 								<div>
-									<label class="mb-2 block text-sm font-medium text-gray-700">
+									<label for="total-kilometraje" class="mb-2 block text-sm font-medium text-gray-700">
 										Total Kilometraje (km)
 									</label>
 									<input
+										id="total-kilometraje"
 										type="number"
 										step="0.1"
 										min="0"
