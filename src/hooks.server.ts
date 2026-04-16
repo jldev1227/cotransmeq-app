@@ -21,34 +21,43 @@ function getModuleFromPath(pathname: string): string | null {
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const { url, cookies } = event;
-	const path = url.pathname;
 
-	// Dejar pasar assets, API, archivos estáticos
-	if (
-		path.startsWith('/_app/') ||
-		path.startsWith('/api/') ||
-		path.startsWith('/assets/') ||
-		path.startsWith('/favicon') ||
-		path.endsWith('.js') ||
-		path.endsWith('.css') ||
-		path.endsWith('.png') ||
-		path.endsWith('.svg') ||
-		path.endsWith('.ico') ||
-		path.endsWith('.json') ||
-		path.endsWith('.woff') ||
-		path.endsWith('.woff2') ||
-		path.endsWith('.ttf')
-	) {
-		return await resolve(event);
-	}
+	const token =
+		cookies.get('transmeralda_token') ||
+		event.request.headers.get('authorization')?.replace('Bearer ', '');
 
-	// Forzar re-login: cualquier página que NO sea /login redirige a /login y limpia cookie
-	if (path !== '/login') {
-		const token = cookies.get('transmeralda_token');
-		if (token) {
-			cookies.delete('transmeralda_token', { path: '/' });
+	const protectedRoutes = ['/dashboard'];
+	const isProtectedRoute = protectedRoutes.some((route) => url.pathname.startsWith(route));
+
+	if (isProtectedRoute) {
+		if (!token) {
+			throw redirect(302, `/login?redirect=${encodeURIComponent(url.pathname)}`);
 		}
-		throw redirect(302, '/login');
+
+		const payload = decodeJwtPayload(token);
+
+		// Token inválido, expirado o formato viejo (sin area) → limpiar y mandar a login
+		if (!payload || !Array.isArray(payload.area)) {
+			cookies.delete('transmeralda_token', { path: '/' });
+			throw redirect(302, '/login');
+		}
+
+		const userArea = payload.area;
+		const userRole = payload.role ?? 'usuario';
+
+		const moduleId = getModuleFromPath(url.pathname);
+		if (moduleId && userArea.length > 0) {
+			const { allowed } = checkAccess(userRole, userArea, moduleId);
+			if (!allowed && moduleId !== 'servicios') {
+				throw redirect(302, '/dashboard/servicios?denied=1');
+			}
+		}
+
+		event.locals.token = token;
+		event.locals.userRole = userRole;
+		event.locals.userArea = userArea;
+	} else {
+		event.locals.token = token ?? undefined;
 	}
 
 	return await resolve(event);
