@@ -34,9 +34,16 @@ export const handle: Handle = async ({ event, resolve }) => {
 	}
 
 	if (url.pathname === '/login' && token) {
-		let redirectTo = url.searchParams.get('redirect') || '/dashboard/servicios';
-		if (redirectTo.startsWith('/dashboard/nomina')) redirectTo = '/dashboard/servicios';
-		throw redirect(302, redirectTo);
+		// Validate token before redirecting — old/invalid tokens should not cause a loop
+		const payload = decodeJwtPayload(token);
+		if (payload) {
+			let redirectTo = url.searchParams.get('redirect') || '/dashboard/servicios';
+			if (redirectTo.startsWith('/dashboard/nomina')) redirectTo = '/dashboard/servicios';
+			throw redirect(302, redirectTo);
+		} else {
+			// Token is invalid/expired — clear it and let the login page render
+			cookies.delete('transmeralda_token', { path: '/' });
+		}
 	}
 
 	if (isProtectedRoute && token) {
