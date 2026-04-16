@@ -21,9 +21,29 @@ function getModuleFromPath(pathname: string): string | null {
 
 export const handle: Handle = async ({ event, resolve }) => {
 	const { url, cookies } = event;
+	const path = url.pathname;
 
-	// Forzar re-login: cualquier ruta que NO sea /login redirige a /login y limpia cookie
-	if (url.pathname !== '/login' && !url.pathname.startsWith('/login')) {
+	// Dejar pasar assets, API, archivos estáticos
+	if (
+		path.startsWith('/_app/') ||
+		path.startsWith('/api/') ||
+		path.startsWith('/assets/') ||
+		path.startsWith('/favicon') ||
+		path.endsWith('.js') ||
+		path.endsWith('.css') ||
+		path.endsWith('.png') ||
+		path.endsWith('.svg') ||
+		path.endsWith('.ico') ||
+		path.endsWith('.json') ||
+		path.endsWith('.woff') ||
+		path.endsWith('.woff2') ||
+		path.endsWith('.ttf')
+	) {
+		return await resolve(event);
+	}
+
+	// Forzar re-login: cualquier página que NO sea /login redirige a /login y limpia cookie
+	if (path !== '/login') {
 		const token = cookies.get('transmeralda_token');
 		if (token) {
 			cookies.delete('transmeralda_token', { path: '/' });
