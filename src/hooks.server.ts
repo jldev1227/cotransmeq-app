@@ -29,25 +29,34 @@ export const handle: Handle = async ({ event, resolve }) => {
 	const protectedRoutes = ['/dashboard'];
 	const isProtectedRoute = protectedRoutes.some((route) => url.pathname.startsWith(route));
 
+	// --- LIMPIAR TOKENS VIEJOS EN CUALQUIER RUTA ---
+	// Si hay token pero es inválido/expirado/viejo (sin campo 'area'), eliminarlo
+	if (token) {
+		const payload = decodeJwtPayload(token);
+		if (!payload || !Array.isArray(payload.area)) {
+			// Token viejo o inválido — limpiar cookie
+			cookies.delete('transmeralda_token', { path: '/' });
+			
+			if (isProtectedRoute) {
+				throw redirect(302, `/login?redirect=${encodeURIComponent(url.pathname)}`);
+			}
+			// Si está en /login u otra ruta pública, dejar que la página cargue normalmente
+			return await resolve(event);
+		}
+	}
+
 	if (isProtectedRoute && !token) {
 		throw redirect(302, `/login?redirect=${encodeURIComponent(url.pathname)}`);
 	}
 
 	if (isProtectedRoute && token) {
-		const payload = decodeJwtPayload(token);
-		if (!payload) {
-			cookies.delete('transmeralda_token', { path: '/' });
-			throw redirect(302, `/login?redirect=${encodeURIComponent(url.pathname)}`);
-		}
-
-		// If token lacks area (old format), let it through — frontend/backend will handle gracefully
-		const userArea = payload.area ?? [];
+		const payload = decodeJwtPayload(token)!; // Ya validado arriba
+		const userArea = payload.area;
 		const userRole = payload.role ?? 'usuario';
 
 		const moduleId = getModuleFromPath(url.pathname);
 		if (moduleId && userArea.length > 0) {
 			const { allowed } = checkAccess(userRole, userArea, moduleId);
-			// Only redirect if denied AND not already on the fallback route (prevent loop)
 			if (!allowed && moduleId !== 'servicios') {
 				throw redirect(302, '/dashboard/servicios?denied=1');
 			}
