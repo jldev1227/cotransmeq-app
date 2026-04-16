@@ -367,7 +367,7 @@
 			BORRADOR:  { bg: '#f1f5f9', text: '#64748b', label: 'Borrador' },
 			LIQUIDADA: { bg: '#dbeafe', text: '#2563eb', label: 'Liquidada' },
 			APROBADA:  { bg: '#dcfce7', text: '#16a34a', label: 'Aprobada' },
-			FACTURADA: { bg: '#d1fae5', text: '#059669', label: 'Facturada' },
+			FACTURADA: { bg: '#fef3c7', text: '#d97706', label: 'Facturada' },
 			ANULADA:   { bg: '#fee2e2', text: '#dc2626', label: 'Anulada' },
 		};
 		return map[estado] || map.BORRADOR;
@@ -747,7 +747,7 @@
 					<button class="btn-estado" style="border-color:#2563eb;color:#2563eb;font-size:11px;padding:5px 12px" on:click={() => { cerrarDetalle(); if (detailLiq) irEditarLiquidacion(detailLiq.id); }}>✏️ Editar</button>
 				{/if}
 				{#if detailLiq}
-					<button class="btn-estado" style="border-color:#0f4025;color:#0f4025;font-size:11px;padding:5px 12px" on:click={() => { cerrarDetalle(); if (detailLiq) irVerLiquidacion(detailLiq.id); }}>👁 Ver</button>
+					<button class="btn-estado" style="border-color:#92400e;color:#92400e;font-size:11px;padding:5px 12px" on:click={() => { cerrarDetalle(); if (detailLiq) irVerLiquidacion(detailLiq.id); }}>👁 Ver</button>
 				{/if}
 				<button class="modal-close" on:click={cerrarDetalle}>✕</button>
 			</div>
@@ -759,7 +759,7 @@
 				<div class="det-grid">
 					<div>
 						<div class="det-label">Consecutivo</div>
-						<div class="det-value" style="font-family:monospace;color:#0f4025">{detailLiq.consecutivo}</div>
+						<div class="det-value" style="font-family:monospace;color:#92400e">{detailLiq.consecutivo}</div>
 					</div>
 					<div>
 						<div class="det-label">Cliente</div>
@@ -812,7 +812,7 @@
 							<tbody>
 								{#each detailLiq.items as it}
 									<tr>
-										<td style="font-family:monospace;font-weight:700;color:#0f4025">{it.placa}</td>
+										<td style="font-family:monospace;font-weight:700;color:#92400e">{it.placa}</td>
 										<td>{it.fecha_inicial ? new Date(it.fecha_inicial).toLocaleDateString('es-CO') : '—'}</td>
 										<td>{it.fecha_final ? new Date(it.fecha_final).toLocaleDateString('es-CO') : '—'}</td>
 										<td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis">{it.recorrido || ''}</td>
@@ -821,7 +821,7 @@
 										<td class="mc">{COP(it.valor_unitario)}</td>
 										<td class="mc">{COP(it.subtotal || it.cantidad * it.valor_unitario)}</td>
 										<td style="text-align:center">{it.porcentaje_descuento || 0}%</td>
-										<td class="mc" style="font-weight:700;color:#0f4025">{COP(it.valor_final || it.subtotal || it.cantidad * it.valor_unitario)}</td>
+										<td class="mc" style="font-weight:700;color:#92400e">{COP(it.valor_final || it.subtotal || it.cantidad * it.valor_unitario)}</td>
 									</tr>
 								{/each}
 							</tbody>
@@ -965,7 +965,7 @@
 				</div>
 				<div>
 					<span style="font-size:11px;color:#64748b">Total</span>
-					<div style="font-weight:700;color:#0f4025">{COP(detalleFactura.valor_total || 0)}</div>
+					<div style="font-weight:700;color:#92400e">{COP(detalleFactura.valor_total || 0)}</div>
 				</div>
 				<div>
 					<span style="font-size:11px;color:#64748b">Facturado por</span>
@@ -1154,52 +1154,52 @@
 <style>
 	.page-wrap { padding: 24px 18px 48px; }
 	.topbar {
-		background: linear-gradient(135deg, #0f4025 0%, #1b6b3a 60%, #247a45 100%);
+		background: linear-gradient(135deg, #92400e 0%, #b45309 60%, #d97706 100%);
 		border-radius: 18px; padding: 16px 26px; margin-bottom: 20px;
 		display: flex; align-items: center; justify-content: space-between;
-		box-shadow: 0 10px 40px rgba(15,64,37,.35);
+		box-shadow: 0 10px 40px rgba(146,64,14,.35);
 	}
 	.topbar-l { display: flex; align-items: center; gap: 14px; }
 	.t-logo { height: 48px; width: 48px; object-fit: contain; background: #fff; border-radius: 12px; padding: 5px; flex-shrink: 0; }
 	.t-title { color: #fff; font-size: 18px; font-weight: 800; letter-spacing: -.02em; line-height: 1.2; }
 	.t-sub { color: rgba(255,255,255,.65); font-size: 11.5px; margin-top: 2px; }
 	.btn-hdr {
-		background: #fff; color: #0f4025; border: none; border-radius: 10px;
+		background: #fff; color: #92400e; border: none; border-radius: 10px;
 		padding: 10px 22px; font-weight: 800; font-size: 13px; cursor: pointer;
 		box-shadow: 0 2px 16px rgba(0,0,0,.2); transition: all .15s;
 	}
 	.btn-hdr:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(0,0,0,.25); }
 	.card { background: #fff; border-radius: 16px; border: 1px solid #dde3eb; padding: 22px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
-	.ch { font-size: 11px; font-weight: 800; color: #0f4025; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
-	.ch::before { content: ''; width: 3px; height: 16px; background: linear-gradient(180deg, #1b6b3a, #5cb87a); border-radius: 2px; display: block; }
+	.ch { font-size: 11px; font-weight: 800; color: #92400e; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+	.ch::before { content: ''; width: 3px; height: 16px; background: linear-gradient(180deg, #b45309, #f59e0b); border-radius: 2px; display: block; }
 	label { display: block; font-size: 10.5px; font-weight: 700; color: #6b7e8c; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
 	input, select { width: 100%; border: 1.5px solid #dde3eb; border-radius: 8px; padding: 8px 11px; font-size: 13px; color: #1a2530; background: #fafbfc; outline: none; transition: all .15s; }
-	input:focus, select:focus { border-color: #1b6b3a; background: #fff; box-shadow: 0 0 0 3px rgba(27,107,58,.1); }
+	input:focus, select:focus { border-color: #b45309; background: #fff; box-shadow: 0 0 0 3px rgba(180,83,9,.1); }
 	.list-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 16px; }
 	.list-toolbar .field { display: flex; flex-direction: column; gap: 3px; }
 	.list-toolbar input, .list-toolbar select { padding: 7px 11px; font-size: 12px; min-width: 140px; }
-	.btn-filtrar { padding: 7px 20px; border: none; border-radius: 8px; background: #0f4025; color: #fff; font-weight: 700; font-size: 12px; cursor: pointer; transition: all .15s; width: auto; }
-	.btn-filtrar:hover { background: #1b6b3a; }
+	.btn-filtrar { padding: 7px 20px; border: none; border-radius: 8px; background: #92400e; color: #fff; font-weight: 700; font-size: 12px; cursor: pointer; transition: all .15s; width: auto; }
+	.btn-filtrar:hover { background: #b45309; }
 	.ltbl-wrap { overflow-x: auto; border: 1px solid #dde3eb; border-radius: 12px; }
 	.ltbl { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 900px; }
-	.ltbl th { background: linear-gradient(135deg, #e2f0e8, #d4ecdb); color: #0f4025; font-weight: 800; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; padding: 11px 10px; border-bottom: 2px solid #b8dfc6; white-space: nowrap; text-align: left; }
+	.ltbl th { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #92400e; font-weight: 800; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; padding: 11px 10px; border-bottom: 2px solid #fcd34d; white-space: nowrap; text-align: left; }
 	.ltbl td { padding: 10px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
-	.ltbl tbody tr:hover td { background: #f7fdf9; }
+	.ltbl tbody tr:hover td { background: #fffbeb; }
 	.ltbl tbody tr.row-new td { animation: highlightNew 8s ease-out forwards; }
 	.ltbl tbody tr.row-updated td { animation: highlightUpdated 8s ease-out forwards; }
-	.ltbl tbody tr.row-new { box-shadow: inset 3px 0 0 #22c55e; }
-	.ltbl tbody tr.row-updated { box-shadow: inset 3px 0 0 #a7c4b5; }
-	@keyframes highlightNew { 0% { background: #dcfce7; } 60% { background: #dcfce7; } 100% { background: transparent; } }
-	@keyframes highlightUpdated { 0% { background: #f0f7f4; } 60% { background: #f0f7f4; } 100% { background: transparent; } }
-	.ltbl .consec { font-family: monospace; font-weight: 800; color: #0f4025; font-size: 12px; }
-	.ltbl .monto-total { font-family: monospace; font-weight: 800; color: #0f4025; font-size: 13px; text-align: right; white-space: nowrap; }
+	.ltbl tbody tr.row-new { box-shadow: inset 3px 0 0 #f59e0b; }
+	.ltbl tbody tr.row-updated { box-shadow: inset 3px 0 0 #fbbf24; }
+	@keyframes highlightNew { 0% { background: #fef3c7; } 60% { background: #fef3c7; } 100% { background: transparent; } }
+	@keyframes highlightUpdated { 0% { background: #fefce8; } 60% { background: #fefce8; } 100% { background: transparent; } }
+	.ltbl .consec { font-family: monospace; font-weight: 800; color: #92400e; font-size: 12px; }
+	.ltbl .monto-total { font-family: monospace; font-weight: 800; color: #92400e; font-size: 13px; text-align: right; white-space: nowrap; }
 	.badge { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
 	.btn-icon { background: none; border: none; cursor: pointer; padding: 5px 7px; border-radius: 6px; font-size: 14px; transition: all .1s; width: auto; }
 	.btn-icon:hover { background: #f1f5f9; }
 	.btn-icon.del:hover { background: #fee2e2; }
 	.pagination { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 16px; }
 	.pagination button { padding: 6px 14px; border: 1px solid #dde3eb; border-radius: 8px; background: #fff; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .1s; width: auto; }
-	.pagination button.active { background: #0f4025; color: #fff; border-color: #0f4025; }
+	.pagination button.active { background: #92400e; color: #fff; border-color: #92400e; }
 	.pagination button:hover:not(.active) { background: #f1f5f9; }
 	.pagination button:disabled { opacity: .4; cursor: not-allowed; }
 	.empty-state { text-align: center; padding: 48px 20px; color: #94a3b8; }
@@ -1207,12 +1207,12 @@
 	.empty-state .msg { font-size: 14px; font-weight: 600; color: #64748b; }
 	.empty-state .hint { font-size: 12px; margin-top: 6px; }
 	.loading-center { display: flex; justify-content: center; align-items: center; padding: 48px; }
-	.spinner { width: 32px; height: 32px; border: 3px solid #e2e8f0; border-top-color: #0f4025; border-radius: 50%; animation: spin .6s linear infinite; }
+	.spinner { width: 32px; height: 32px; border: 3px solid #e2e8f0; border-top-color: #92400e; border-radius: 50%; animation: spin .6s linear infinite; }
 	@keyframes spin { to { transform: rotate(360deg); } }
 	.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
 	.modal-box { background: #fff; border-radius: 18px; max-width: 900px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 25px 60px rgba(0,0,0,.25); }
 	.modal-hd { padding: 20px 24px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; }
-	.modal-hd h3 { font-size: 16px; font-weight: 800; color: #0f4025; margin: 0; }
+	.modal-hd h3 { font-size: 16px; font-weight: 800; color: #92400e; margin: 0; }
 	.modal-close { background: #f1f5f9; border: none; border-radius: 8px; width: 32px; height: 32px; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .1s; }
 	.modal-close:hover { background: #e2e8f0; }
 	.modal-body { padding: 20px 24px; }
@@ -1227,9 +1227,9 @@
 	.det-tbl th { background: #f8fafc; color: #64748b; font-weight: 700; font-size: 10px; text-transform: uppercase; padding: 9px 8px; border-bottom: 1px solid #e2e8f0; text-align: left; white-space: nowrap; }
 	.det-tbl td { padding: 8px 8px; border-bottom: 1px solid #f1f5f9; }
 	.det-tbl .mc { text-align: right; font-family: monospace; }
-	.det-totals { margin-top: 16px; background: #f8fdf9; border-radius: 10px; padding: 14px 18px; }
+	.det-totals { margin-top: 16px; background: #fffbeb; border-radius: 10px; padding: 14px 18px; }
 	.det-total-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
-	.det-total-row.main { font-size: 16px; font-weight: 800; color: #0f4025; padding-top: 8px; border-top: 2px solid #d4ecdb; margin-top: 6px; }
+	.det-total-row.main { font-size: 16px; font-weight: 800; color: #92400e; padding-top: 8px; border-top: 2px solid #fde68a; margin-top: 6px; }
 	.estado-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 16px; }
 	.btn-estado { padding: 6px 16px; border: 1.5px solid; border-radius: 8px; font-size: 11px; font-weight: 700; cursor: pointer; transition: all .15s; background: #fff; width: auto; }
 	.btn-estado:hover { transform: translateY(-1px); }
@@ -1248,7 +1248,7 @@
 	.btn-estado:disabled { opacity: .5; cursor: not-allowed; transform: none; }
 	.sub-tabs { display: flex; gap: 3px; background: #f1f5f9; border-radius: 8px; padding: 3px; width: fit-content; margin-bottom: 16px; }
 	.sub-tab-btn { padding: 6px 18px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 700; transition: all .15s; background: transparent; color: #64748b; }
-	.sub-tab-btn.active { background: #fff; color: #0f4025; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+	.sub-tab-btn.active { background: #fff; color: #92400e; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
 	.sub-tab-btn:not(.active):hover { background: rgba(255,255,255,.5); color: #334155; }
 	.btn-facturar-hdr {
 		background: linear-gradient(135deg, #7c3aed, #5b21b6); color: #fff;
