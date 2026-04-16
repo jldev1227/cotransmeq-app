@@ -22,21 +22,14 @@ function getModuleFromPath(pathname: string): string | null {
 export const handle: Handle = async ({ event, resolve }) => {
 	const { url, cookies } = event;
 
-	const token =
-		cookies.get('transmeralda_token') ||
-		event.request.headers.get('authorization')?.replace('Bearer ', '');
-
-	const protectedRoutes = ['/dashboard'];
-	const isProtectedRoute = protectedRoutes.some((route) => url.pathname.startsWith(route));
-
-	// Forzar re-login: limpiar token viejo y mandar a login
-	if (isProtectedRoute) {
+	// Forzar re-login: cualquier ruta que NO sea /login redirige a /login y limpia cookie
+	if (url.pathname !== '/login' && !url.pathname.startsWith('/login')) {
+		const token = cookies.get('transmeralda_token');
 		if (token) {
 			cookies.delete('transmeralda_token', { path: '/' });
 		}
 		throw redirect(302, '/login');
 	}
 
-	event.locals.token = token ?? undefined;
 	return await resolve(event);
 };
