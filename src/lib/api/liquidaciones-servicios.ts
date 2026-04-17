@@ -120,6 +120,25 @@ export interface LiquidacionServicio {
 	observaciones?: string;
 	osi?: string;
 	recargos_data?: any;
+	terceros_items?: {
+		id: string;
+		tercero_id?: string | null;
+		placa: string;
+		recorrido: string;
+		fechas: string;
+		valor_unitario: number;
+		cantidad: number;
+		total_facturado: number;
+		porcentaje_admin: number;
+		valor_admin: number;
+		valor_liquidar: number;
+		ingreso_extra_global: number;
+		ingresos_extra_aval: number;
+		ingreso_empresa: number;
+		src_index: number;
+		orden: number;
+		tercero?: { id: string; nombre_completo: string; identificacion: string; tipo_persona: string } | null;
+	}[];
 	fecha_aprobacion?: string | null;
 	fecha_facturacion?: string | null;
 	cliente?: { id: string; nombre: string; nit: string };
@@ -247,6 +266,19 @@ export interface CrearLiquidacionInput {
 	valor_transporte_adicional?: number;
 	valor_recargos?: number;
 	recargos_data?: any;
+	terceros_items?: {
+		tercero_id?: string | null;
+		placa: string;
+		recorrido: string;
+		fechas: string;
+		valor_unitario: number;
+		cantidad: number;
+		porcentaje_admin: number;
+		ingreso_extra_global?: number;
+		ingresos_extra_aval?: number;
+		ingreso_empresa?: number;
+		src_index?: number;
+	}[];
 }
 
 // ═══ Helpers ═══
@@ -524,4 +556,71 @@ export const liquidacionesServiciosAPI = {
                 if (!res.ok) throw new Error(json.error || 'Error al verificar consecutivo');
                 return json;
         }
+};
+
+// ═══ API Liquidaciones Terceros (historial) ═══
+
+export interface TerceroItemHistorial {
+	id: string;
+	tercero_id?: string | null;
+	item_id?: string | null;
+	placa: string;
+	recorrido: string;
+	fechas: string;
+	valor_unitario: number;
+	cantidad: number;
+	total_facturado: number;
+	porcentaje_admin: number;
+	valor_admin: number;
+	valor_liquidar: number;
+	ingreso_extra_global: number;
+	ingresos_extra_aval: number;
+	ingreso_empresa: number;
+	src_index: number;
+	orden: number;
+	tercero?: { id: string; nombre_completo: string; identificacion: string; tipo_persona: string } | null;
+	item?: { id: string; numero_planilla: string | null } | null;
+	liquidacion?: {
+		id: string;
+		consecutivo: string;
+		mes: number;
+		anio: number;
+		estado: string;
+		osi?: string;
+		tercero_liquidado?: boolean;
+		cliente?: { id: string; nombre: string; nit: string };
+		factura_items?: Array<{ factura: { id: string; numero_factura: string; estado: string } }>;
+	};
+}
+
+export interface TerceroHistorialResponse {
+	items: TerceroItemHistorial[];
+	total: number;
+	totalPages: number;
+	page: number;
+}
+
+export const liquidacionesTercerosAPI = {
+	async listarHistorial(filtros: Record<string, string | number>): Promise<TerceroHistorialResponse> {
+		const params = new URLSearchParams();
+		for (const [k, v] of Object.entries(filtros)) {
+			if (v !== '' && v !== undefined && v !== null) params.set(k, String(v));
+		}
+		const res = await fetch(`${API_URL}/api/liquidaciones-terceros?${params}`, {
+			headers: getAuthHeaders()
+		});
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al listar historial terceros');
+		return json;
+	},
+
+	async migrar(): Promise<any> {
+		const res = await fetch(`${API_URL}/api/liquidaciones-terceros/migrar`, {
+			method: 'POST',
+			headers: getAuthHeaders()
+		});
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al migrar');
+		return json;
+	}
 };

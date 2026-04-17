@@ -291,7 +291,7 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 	// ─── PERMISSIONS ────────────────────────────────────────────
 	$: userAreas = Array.isArray($authStore.user?.area) ? $authStore.user.area : ($authStore.user?.area ? [$authStore.user.area] : []);
 	$: isAdmin = userAreas.includes('administracion');
-	$: canSeeTerceros = isAdmin;
+	$: canSeeTerceros = isAdmin || userAreas.includes('facturacion');
 
 	// ─── MOUNT ──────────────────────────────────────────────────
 	onMount(async () => {
@@ -463,6 +463,25 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 				}));
 			}
 		} else { recargosRows = []; terceroRows = []; }
+
+		// Si hay terceros_items de la nueva tabla, usarlos (prioridad sobre recargos_data.terceroRows)
+		if (liq.terceros_items && Array.isArray(liq.terceros_items) && liq.terceros_items.length > 0) {
+			terceroRows = liq.terceros_items.map((t: any, idx: number) => ({
+				src_index: t.src_index ?? idx,
+				placa: t.placa || '',
+				recorrido: t.recorrido || '',
+				nombre_tercero: t.tercero?.nombre_completo || '',
+				tercero_id: t.tercero_id || '',
+				tercero_identificacion: t.tercero?.identificacion || '',
+				tercero_tipo_persona: t.tercero?.tipo_persona || '',
+				fechas: t.fechas || '',
+				vr_unit: t.valor_unitario ?? 0,
+				cant: t.cantidad ?? 1,
+				pct_admin: t.porcentaje_admin ?? 10,
+				ingreso_extra_global: t.ingreso_extra_global ?? 0,
+				ingresos_extra_aval: t.ingresos_extra_aval ?? 0,
+			}));
+		}
 		view = 'editor';
 		draftPaused = true;
 		lastDraftHash = hashStr(JSON.stringify(buildDraftPayload()));
@@ -501,10 +520,9 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 	}
 
 	$: totalSvc   = rows.reduce((a, r) => a + calcRow(r).vf, 0);
-	$: valTransAd = parseFloat(String(ext.trans_adic)) || 0;
 	$: valRec     = liqTotal;
 	$: valPern    = (parseFloat(String(ext.pernote_unit)) || 0) * (parseFloat(String(ext.pernote_cant)) || 0);
-	$: subtotal   = totalSvc + valTransAd + valRec + valPern;
+	$: subtotal   = totalSvc + valRec + valPern;
 	$: ivaVal     = subtotal * ((parseFloat(String(ext.iva_pct)) || 0) / 100);
 	$: total      = subtotal + ivaVal;
 
@@ -710,9 +728,7 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 	$: tercIngresoTotalTercero = tercTotalVLiquidar;
 	$: tercAdminCotransmeq = tercTotalAdmon;
 	$: tercIngresoExtraTrans = tercTotalIngresoTrans;
-	$: tercValTransAdicional = valTransAd;
-	$: tercAdminTransAdicional = valTransAd * ((terceroRows[0]?.pct_admin || 10) / 100);
-	$: tercIngresoTotalCotransmeq = tercAdminCotransmeq + tercIngresoExtraTrans + tercValTransAdicional + tercAdminTransAdicional;
+	$: tercIngresoTotalCotransmeq = tercAdminCotransmeq + tercIngresoExtraTrans;
 	$: tercValorTotalFacturar = tercIngresoTotalTercero + tercIngresoTotalCotransmeq;
 
 	interface TerceroPlacaGroup { placa: string; nombre: string; identificacion: string; tipo: string; items: number; totalFacturado: number; vLiquidar: number; }
@@ -789,8 +805,24 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 				}),
 				porcentaje_iva: parseFloat(String(ext.iva_pct)) || 0,
 				observaciones: hdr.observaciones || undefined, osi: hdr.osi || undefined,
-				valor_transporte_adicional: valTransAd, valor_recargos: valRec,
+				valor_transporte_adicional: 0, valor_recargos: valRec,
 				recargos_data: { rows: recargosRows, liqCfg, terceroRows },
+				terceros_items: terceroRows.map((t, i) => {
+					const calc = terceroCalcs[i];
+					return {
+						tercero_id: t.tercero_id || null,
+						placa: t.placa,
+						recorrido: t.recorrido || 'N/A',
+						fechas: t.fechas || '',
+						valor_unitario: parseFloat(String(t.vr_unit)) || 0,
+						cantidad: parseFloat(String(t.cant)) || 0,
+						porcentaje_admin: parseFloat(String(t.pct_admin)) || 0,
+						ingreso_extra_global: calc?.extraGlobal || 0,
+						ingresos_extra_aval: parseFloat(String(t.ingresos_extra_aval)) || 0,
+						ingreso_empresa: calc?.ingresoTransmeralda || 0,
+						src_index: t.src_index ?? i,
+					};
+				}),
 			};
 
 			if (editingId) {
@@ -1020,7 +1052,6 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 		<div class="card">
 			<div class="ch">💰 Valores Adicionales</div>
 			<div style="display:flex;flex-direction:column;gap:12px">
-				<div><label>Transporte Adicional</label><input type="text" inputmode="numeric" value={fmtCOPInput(ext.trans_adic)} on:focus={e => { e.currentTarget.value = String(ext.trans_adic || ''); e.currentTarget.select(); }} on:blur={e => { ext.trans_adic = parseCOPInput(e.currentTarget.value); ext = ext; e.currentTarget.value = fmtCOPInput(ext.trans_adic); }} /></div>
 				<div class="g2"><div><label>Pernocte — Valor Unitario</label><input type="text" inputmode="numeric" value={fmtCOPInput(ext.pernote_unit)} on:focus={e => { e.currentTarget.value = String(ext.pernote_unit || ''); e.currentTarget.select(); }} on:blur={e => { ext.pernote_unit = parseCOPInput(e.currentTarget.value); ext = ext; e.currentTarget.value = fmtCOPInput(ext.pernote_unit); }} /></div><div><label>Pernocte — Cantidad</label><input type="number" bind:value={ext.pernote_cant} min="0" /></div></div>
 				<div style="width:140px"><label>IVA %</label><input type="number" bind:value={ext.iva_pct} min="0" max="100" /></div>
 			</div>
@@ -1029,7 +1060,6 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 			<div class="ch">📈 Resumen Liquidación</div>
 			<div style="padding:2px 0">
 				<div class="sl"><span>Valor Total Servicios sin Recargos</span><strong style="color:#9a3412">{COP(totalSvc)}</strong></div>
-				<div class="sl"><span style="color:#64748b;font-size:12px">Transporte Adicional</span><strong style="color:#2563eb">{COP(valTransAd)}</strong></div>
 				<div class="sl"><span>Valor Total Recargos</span><strong style="color:#2563eb">{COP(valRec)}</strong></div>
 				<div class="sl"><span>Pernote ({ext.pernote_cant} noche{ext.pernote_cant !== 1 ? 's' : ''})</span><strong style="color:#7c3aed">{COP(valPern)}</strong></div>
 				<div class="sl" style="border-top:2px solid #e2e8f0;margin-top:6px;padding-top:10px"><span>Subtotal</span><strong>{COP(subtotal)}</strong></div>
@@ -1094,8 +1124,6 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 			<div class="sl"><span>Ingreso Total Tercero (V/Liquidar)</span><strong style="color:#9a3412">{COP(tercIngresoTotalTercero)}</strong></div>
 			<div class="sl"><span>Administración Cotransmeq</span><strong style="color:#dc2626">{COP(tercAdminCotransmeq)}</strong></div>
 			<div class="sl"><span>Ingreso Extra Cotransmeq</span><strong style="color:#2563eb">{COP(tercIngresoExtraTrans)}</strong></div>
-			<div class="sl"><span>Valor Transporte Adicional</span><strong>{COP(tercValTransAdicional)}</strong></div>
-			<div class="sl"><span>Admin Trans. Adicional ({terceroRows[0]?.pct_admin || 10}%)</span><strong>{COP(tercAdminTransAdicional)}</strong></div>
 			<div class="sl" style="border-top:2px solid #e2e8f0;margin-top:6px;padding-top:8px"><span style="font-weight:700">INGRESO TOTAL COTRANSMEQ</span><strong style="color:#7c3aed">{COP(tercIngresoTotalCotransmeq)}</strong></div>
 			<div class="stotal"><span>VALOR TOTAL A FACTURAR</span><span>{COP(tercValorTotalFacturar)}</span></div>
 		</div>
@@ -1155,7 +1183,7 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 			<tfoot><tr><td colspan="9" style="text-align:right;color:#9a3412;padding-right:8px;font-size:8pt;font-weight:800">TOTAL SERVICIOS:</td><td class="mch" style="border-left:1px solid #aaa">{COP(totalSvc)}</td><td></td></tr></tfoot></table>
 			<div class="bg"><div class="bl"><div class="obs-t">Observaciones:</div><div class="obs-b">{hdr.observaciones}</div><div class="op-row"><div class="op-line"><span class="opl">OPERADORA:</span><span class="opv">{hdr.operadora}</span></div>{#if hdr.osi}<div class="op-line"><span class="opl">OSI:</span><span class="opv">{hdr.osi}</span></div>{/if}</div>
 			<div class="pernote-box"><div style="font-size:6.8pt;font-weight:800;color:#9a3412;padding:2px 6px;background:#ffedd5;border:1px solid #fed7aa;border-bottom:none">PERNOCTE</div><table class="pernote-tbl"><thead><tr><th>Vr. Unitario</th><th>Cantidad</th><th>Total</th></tr></thead><tbody><tr><td style="font-family:monospace;font-size:7.5pt">{COP(ext.pernote_unit)}</td><td style="font-weight:700">{ext.pernote_cant}</td><td style="font-weight:800;color:#9a3412">{COP(valPern)}</td></tr></tbody></table></div></div>
-			<div class="br"><table class="stbl"><tbody><tr><td class="sla" style="padding-left:12px;font-size:7pt">TRANSPORTE ADICIONAL (CORRESPONDIENTE A TIEMPO EXTRA DEL PERSONAL EN SERVICIO)</td><td class="sva" style="padding-right:10px;font-size:7pt">{COP(valTransAd)}</td></tr><tr class="sep-row"><td class="slb" style="padding-left:12px">VALOR TOTAL DEL SERVICIO SIN RECARGOS</td><td class="svb" style="padding-right:10px">{COP(totalSvc)}</td></tr><tr><td class="slb" style="padding-left:12px">VALOR TOTAL RECARGOS</td><td class="svb" style="padding-right:10px">{COP(valRec)}</td></tr><tr><td class="slb" style="padding-left:12px">PERNOCTE</td><td class="svb" style="padding-right:10px">{COP(valPern)}</td></tr><tr class="sep-row"><td class="slb" style="padding-left:12px;font-size:8.5pt">SUBTOTAL</td><td class="svb" style="padding-right:10px;font-size:8.5pt">{COP(subtotal)}</td></tr><tr><td class="sla" style="padding-left:12px;font-size:7pt;color:#666">IVA {ext.iva_pct}%</td><td class="sva" style="padding-right:10px;font-size:7pt;color:#666">{COP(ivaVal)}</td></tr><tr><td class="slhi" style="padding-left:12px">TOTAL SERVICIO</td><td class="svhi" style="padding-right:10px">{COP(total)}</td></tr></tbody></table></div></div>
+			<div class="br"><table class="stbl"><tbody><tr class="sep-row"><td class="slb" style="padding-left:12px">VALOR TOTAL DEL SERVICIO SIN RECARGOS</td><td class="svb" style="padding-right:10px">{COP(totalSvc)}</td></tr><tr><td class="slb" style="padding-left:12px">VALOR TOTAL RECARGOS</td><td class="svb" style="padding-right:10px">{COP(valRec)}</td></tr><tr><td class="slb" style="padding-left:12px">PERNOCTE</td><td class="svb" style="padding-right:10px">{COP(valPern)}</td></tr><tr class="sep-row"><td class="slb" style="padding-left:12px;font-size:8.5pt">SUBTOTAL</td><td class="svb" style="padding-right:10px;font-size:8.5pt">{COP(subtotal)}</td></tr><tr><td class="sla" style="padding-left:12px;font-size:7pt;color:#666">IVA {ext.iva_pct}%</td><td class="sva" style="padding-right:10px;font-size:7pt;color:#666">{COP(ivaVal)}</td></tr><tr><td class="slhi" style="padding-left:12px">TOTAL SERVICIO</td><td class="svhi" style="padding-right:10px">{COP(total)}</td></tr></tbody></table></div></div>
 			<div class="sigs"><div class="sig"><div class="sig-lbl">FIRMA AUTORIZADA POR CLIENTE {selectedCliente?.nombre ? `— ${selectedCliente.nombre}` : ''}:</div><div class="sig-line">{selectedCliente?.nombre || ''}{selectedCliente?.nit ? ` — NIT: ${selectedCliente.nit}` : ''}</div></div><div class="sig"><div class="sig-lbl">FIRMA AUTORIZADA POR:</div><div class="sig-line">&nbsp;</div></div></div>
 			<div class="doc-ft"><span>OP-FR-07 · Versión 1</span><span>Generado el {new Date().toLocaleDateString('es-CO', { day:'2-digit', month:'long', year:'numeric' })}</span><span>{hdr.empresa}</span></div>
 		</div>
@@ -1225,8 +1253,6 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 				<tr><td class="ts-lbl">INGRESO TOTAL TERCERO (V/Liquidar)</td><td class="ts-val" style="color:#9a3412">{COP(tercIngresoTotalTercero)}</td></tr>
 				<tr class="ts-sep"><td class="ts-lbl">ADMINISTRACIÓN COTRANSMEQ</td><td class="ts-val" style="color:#b91c1c">{COP(tercAdminCotransmeq)}</td></tr>
 				<tr><td class="ts-lbl">INGRESO EXTRA COTRANSMEQ</td><td class="ts-val" style="color:#2563eb">{COP(tercIngresoExtraTrans)}</td></tr>
-				<tr><td class="ts-lbl">VALOR TRANSPORTE ADICIONAL</td><td class="ts-val">{COP(tercValTransAdicional)}</td></tr>
-				<tr><td class="ts-lbl">ADMIN TRANSPORTE ADICIONAL ({terceroRows[0]?.pct_admin || 10}%)</td><td class="ts-val">{COP(tercAdminTransAdicional)}</td></tr>
 				<tr class="ts-total"><td class="ts-lbl">INGRESO TOTAL COTRANSMEQ</td><td class="ts-val" style="color:#7c3aed">{COP(tercIngresoTotalCotransmeq)}</td></tr>
 				<tr class="ts-grand"><td class="ts-lbl">VALOR TOTAL A FACTURAR</td><td class="ts-val">{COP(tercValorTotalFacturar)}</td></tr>
 			</tbody></table></div>

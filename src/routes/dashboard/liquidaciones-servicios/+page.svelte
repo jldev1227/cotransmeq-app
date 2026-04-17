@@ -6,9 +6,11 @@
 	import {
 		liquidacionesServiciosAPI,
 		getMesLabel,
+		liquidacionesTercerosAPI,
 		type LiquidacionServicio,
 		type EstadoLiquidacionServicio,
 		type ConfigLiquidadorServicio,
+		type TerceroItemHistorial,
 	} from '$lib/api/liquidaciones-servicios';
 	import { facturacionLiquidacionesAPI, type FacturaInfoMap, type FacturaLiquidacion } from '$lib/api/facturacionLiquidaciones';
 	import ModalFacturar from '$lib/components/ModalFacturar.svelte';
@@ -77,7 +79,18 @@
 	let facturarPreselected: string[] = [];
 	let facturaInfoMap: FacturaInfoMap = {};
 
-	let facturasTab: 'liquidaciones' | 'facturas' | 'configuracion' = 'liquidaciones';
+	let facturasTab: 'liquidaciones' | 'facturas' | 'configuracion' | 'terceros' = 'liquidaciones';
+
+	// Terceros historial
+	let tercerosItems: TerceroItemHistorial[] = [];
+	let tercerosLoading = false;
+	let tercerosPage = 1;
+	let tercerosTotalPages = 1;
+	let tercerosTotal = 0;
+	let tercerosBusqueda = '';
+	let tercerosMes: number | '' = '';
+	let tercerosAnio: number | '' = new Date().getFullYear();
+	let tercerosPlaca = '';
 	let facturas: FacturaLiquidacion[] = [];
 	let facturasLoading = false;
 	let facturasPage = 1;
@@ -142,6 +155,25 @@
 		} catch (e: any) { alert(e.message || 'Error guardando config'); }
 		finally { configSaving = false; }
 	}
+
+	// ─── Terceros historial ───
+	async function cargarTerceros() {
+		tercerosLoading = true;
+		try {
+			const filtros: Record<string, string | number> = { page: tercerosPage, limit: 50 };
+			if (tercerosBusqueda) filtros.busqueda = tercerosBusqueda;
+			if (tercerosMes !== '') filtros.mes = tercerosMes;
+			if (tercerosAnio !== '') filtros.anio = tercerosAnio;
+			if (tercerosPlaca) filtros.placa = tercerosPlaca;
+			const r = await liquidacionesTercerosAPI.listarHistorial(filtros);
+			tercerosItems = r.items;
+			tercerosTotal = r.total;
+			tercerosTotalPages = r.totalPages;
+		} catch (e: any) { alert(e.message || 'Error cargando historial terceros'); }
+		finally { tercerosLoading = false; }
+	}
+	function filtrarTerceros() { tercerosPage = 1; cargarTerceros(); }
+	function irPaginaTerceros(p: number) { tercerosPage = p; cargarTerceros(); }
 
 	let highlightedIds: Record<string, 'created' | 'updated'> = {};
 	const highlightTimers: Record<string, ReturnType<typeof setTimeout>> = {};
@@ -461,6 +493,7 @@
 	<div class="sub-tabs">
 		<button class="sub-tab-btn" class:active={facturasTab === 'liquidaciones'} on:click={() => { facturasTab = 'liquidaciones'; }}>📋 Liquidaciones</button>
 		<button class="sub-tab-btn" class:active={facturasTab === 'facturas'} on:click={() => { facturasTab = 'facturas'; cargarFacturas(); }}>🧾 Facturas</button>
+		<button class="sub-tab-btn" class:active={facturasTab === 'terceros'} on:click={() => { facturasTab = 'terceros'; cargarTerceros(); }}>👤 Terceros</button>
 		{#if isFull}
 		<button class="sub-tab-btn" class:active={facturasTab === 'configuracion'} on:click={() => { facturasTab = 'configuracion'; cargarConfig(); }}>⚙️ Configuracion</button>
 		{/if}
@@ -694,6 +727,130 @@
 						<button class:active={facturasPage === i + 1} on:click={() => irPaginaFacturas(i + 1)}>{i + 1}</button>
 					{/each}
 					<button disabled={facturasPage >= facturasTotalPages} on:click={() => irPaginaFacturas(facturasPage + 1)}>Sig →</button>
+				</div>
+			{/if}
+		{/if}
+	</div>
+
+	{:else if facturasTab === 'terceros'}
+	<!-- TERCEROS HISTORIAL SUB-TAB -->
+	<div class="card">
+		<div class="ch" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+			<span>👤 Historial de Items Terceros</span>
+			<div style="display:flex;align-items:center;gap:8px">
+				<span style="font-size:11px;font-weight:600;color:#64748b;background:#f1f5f9;padding:3px 10px;border-radius:6px">{tercerosTotal} registros</span>
+				<button class="btn-filtrar" style="padding:4px 12px;font-size:11px" on:click={() => { tercerosBusqueda=''; tercerosPlaca=''; tercerosMes=''; tercerosAnio=new Date().getFullYear(); filtrarTerceros(); }}>✕ Limpiar</button>
+			</div>
+		</div>
+
+		{#if tercerosLoading}
+			<div class="loading-center"><div class="spinner"></div></div>
+		{:else if tercerosItems.length === 0}
+			<div class="empty-state">
+				<div class="icon">👤</div>
+				<div class="msg">No se encontraron items de terceros</div>
+				<div class="hint">Ajusta los filtros o crea liquidaciones con items de terceros</div>
+			</div>
+		{:else}
+			<div class="ltbl-wrap">
+				<table class="ltbl terc-excel" style="min-width:1700px">
+					<thead>
+						<tr>
+							<th style="width:36px">#</th>
+							<th>Consecutivo</th>
+							<th>Cliente</th>
+							<th>Placa</th>
+							<th>N° Planilla</th>
+							<th>Tercero (Propietario)</th>
+							<th>Recorrido</th>
+							<th>Fechas</th>
+							<th class="th-r">V/Unidad</th>
+							<th class="th-r" style="width:50px">Cant.</th>
+							<th class="th-r">Total Fact.</th>
+							<th class="th-r" style="width:55px">Adm %</th>
+							<th class="th-r">Admon $</th>
+							<th class="th-r">V/Liquidar</th>
+							<th class="th-r">Ing. Cotransmeq</th>
+							<th style="text-align:center">N° Factura</th>
+						</tr>
+						<tr class="excel-filter-row">
+							<th></th>
+							<th><input type="text" placeholder="🔍" bind:value={tercerosBusqueda} on:keydown={(e) => e.key === 'Enter' && filtrarTerceros()} /></th>
+							<th></th>
+							<th><input type="text" placeholder="🔍" bind:value={tercerosPlaca} on:keydown={(e) => e.key === 'Enter' && filtrarTerceros()} /></th>
+							<th></th>
+							<th></th>
+							<th></th>
+							<th>
+								<div class="ef-period">
+									<select bind:value={tercerosMes} on:change={filtrarTerceros}>
+										<option value="">Mes</option>
+										{#each MESES as m, i}<option value={i + 1}>{m.slice(0,3)}</option>{/each}
+									</select>
+									<select bind:value={tercerosAnio} on:change={filtrarTerceros}>
+										<option value="">Año</option>
+										{#each YEARS as y}<option value={y}>{y}</option>{/each}
+									</select>
+								</div>
+							</th>
+							<th></th>
+							<th></th>
+							<th></th>
+							<th></th>
+							<th></th>
+							<th></th>
+							<th></th>
+							<th></th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each tercerosItems as item, idx}
+							{@const facItem = item.liquidacion?.factura_items?.[0]}
+							{@const numFactura = facItem?.factura?.numero_factura || ''}
+							<tr style={numFactura ? 'background:#fffbeb' : ''}>
+								<td style="color:#94a3b8;font-size:10px;text-align:center">{(tercerosPage - 1) * 50 + idx + 1}</td>
+								<td><span class="consec">{item.liquidacion?.consecutivo || '—'}</span></td>
+								<td style="font-size:11px;color:#475569;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title={item.liquidacion?.cliente?.nombre || ''}>{item.liquidacion?.cliente?.nombre || '—'}</td>
+								<td><span style="font-weight:700;color:#1e293b">{item.placa}</span></td>
+								<td style="font-size:11px;font-family:monospace;color:#475569">{item.item?.numero_planilla || '—'}</td>
+								<td style="font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title={item.tercero?.nombre_completo || ''}>{item.tercero?.nombre_completo || '—'}</td>
+								<td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title={item.recorrido}>{item.recorrido}</td>
+								<td style="font-size:11px;white-space:nowrap">{item.fechas}</td>
+								<td class="monto-total" style="font-size:11px">{COP(item.valor_unitario)}</td>
+								<td style="text-align:right;font-family:monospace;font-size:11px">{item.cantidad}</td>
+								<td class="monto-total" style="font-size:11px">{COP(item.total_facturado)}</td>
+								<td style="text-align:right;font-family:monospace;font-size:11px;color:#64748b">{item.porcentaje_admin}%</td>
+								<td class="monto-total" style="font-size:11px;color:#64748b">{COP(item.valor_admin)}</td>
+								<td class="monto-total" style="font-size:11.5px">{COP(item.valor_liquidar)}</td>
+								<td class="monto-total" style="font-size:11.5px">{COP(item.ingreso_empresa)}</td>
+								<td style="text-align:center;font-size:11px">{#if numFactura}<span class="badge" style="background:#fef3c7;color:#92400e">📄 {numFactura}</span>{:else}<span style="color:#94a3b8;font-size:10px">Sin factura</span>{/if}</td>
+							</tr>
+						{/each}
+					</tbody>
+					<tfoot>
+						<tr class="terc-totals-row">
+							<td colspan="8" style="text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.05em">Totales página</td>
+							<td class="monto-total">{COP(tercerosItems.reduce((s, i) => s + i.valor_unitario, 0))}</td>
+							<td style="text-align:right;font-family:monospace;font-weight:800">{tercerosItems.reduce((s, i) => s + i.cantidad, 0)}</td>
+							<td class="monto-total">{COP(tercerosItems.reduce((s, i) => s + i.total_facturado, 0))}</td>
+							<td></td>
+							<td class="monto-total">{COP(tercerosItems.reduce((s, i) => s + i.valor_admin, 0))}</td>
+							<td class="monto-total">{COP(tercerosItems.reduce((s, i) => s + i.valor_liquidar, 0))}</td>
+							<td class="monto-total">{COP(tercerosItems.reduce((s, i) => s + i.ingreso_empresa, 0))}</td>
+							<td></td>
+						</tr>
+					</tfoot>
+				</table>
+			</div>
+
+			{#if tercerosTotalPages > 1}
+				<div class="pagination">
+					<button disabled={tercerosPage <= 1} on:click={() => irPaginaTerceros(tercerosPage - 1)}>← Ant</button>
+					{#each Array(Math.min(tercerosTotalPages, 10)) as _, i}
+						<button class:active={tercerosPage === i + 1} on:click={() => irPaginaTerceros(i + 1)}>{i + 1}</button>
+					{/each}
+					{#if tercerosTotalPages > 10}<span style="color:#94a3b8;font-size:12px">…{tercerosTotalPages}</span>{/if}
+					<button disabled={tercerosPage >= tercerosTotalPages} on:click={() => irPaginaTerceros(tercerosPage + 1)}>Sig →</button>
 				</div>
 			{/if}
 		{/if}
@@ -1245,6 +1402,20 @@
 	@keyframes highlightUpdated { 0% { background: #fefce8; } 60% { background: #fefce8; } 100% { background: transparent; } }
 	.ltbl .consec { font-family: monospace; font-weight: 800; color: #92400e; font-size: 12px; }
 	.ltbl .monto-total { font-family: monospace; font-weight: 800; color: #92400e; font-size: 13px; text-align: right; white-space: nowrap; }
+	.ltbl .th-r { text-align: right; }
+	.ltbl tfoot .terc-totals-row { background: linear-gradient(135deg, #fef3c7, #fde68a); font-weight: 800; font-size: 12px; }
+	.ltbl tfoot .terc-totals-row td { border-bottom: none; padding: 12px 10px; }
+
+	/* Excel-style filter row */
+	.terc-excel thead { position: sticky; top: 0; z-index: 2; }
+	.excel-filter-row th { background: #fefce8; padding: 4px 4px !important; border-bottom: 2px solid #d97706 !important; }
+	.excel-filter-row input { width: 100%; padding: 3px 6px; font-size: 10px; border: 1px solid #e2e8f0; border-radius: 4px; background: #fff; outline: none; transition: border .15s; }
+	.excel-filter-row input:focus { border-color: #d97706; box-shadow: 0 0 0 2px rgba(217,119,6,.15); }
+	.excel-filter-row select { width: 100%; padding: 2px 2px; font-size: 10px; border: 1px solid #e2e8f0; border-radius: 4px; background: #fff; cursor: pointer; outline: none; }
+	.excel-filter-row select:focus { border-color: #d97706; }
+	.ef-period { display: flex; gap: 3px; }
+	.ef-period select { min-width: 0; flex: 1; }
+
 	.badge { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
 	.btn-icon { background: none; border: none; cursor: pointer; padding: 5px 7px; border-radius: 6px; font-size: 14px; transition: all .1s; width: auto; }
 	.btn-icon:hover { background: #f1f5f9; }
