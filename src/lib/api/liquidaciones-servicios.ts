@@ -424,6 +424,13 @@ export const liquidacionesServiciosAPI = {
 		total: number;
 		totalPages: number;
 		page: number;
+		metadata: {
+			globalTotal: number;
+			globalCount: number;
+			estadoCounts: Record<string, number>;
+			clientes: { id: string; nombre: string }[];
+			liquidadores: { id: string; nombre: string }[];
+		};
 	}> {
 		const params = new URLSearchParams();
 		Object.entries(filtros).forEach(([key, val]) => {

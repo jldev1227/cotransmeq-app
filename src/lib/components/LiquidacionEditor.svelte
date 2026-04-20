@@ -1168,7 +1168,7 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 	{/if}
 
 	<!-- A4 HOJA 1: LIQUIDACIÓN -->
-	{#if previewPage === 'liquidacion' || (isPrinting && printSheets.liquidacion)}
+	{#if (isPrinting && printSheets.liquidacion) || (!isPrinting && previewPage === 'liquidacion')}
 	<div class="pdf-body print-sheet">
 		<div class="page" style="transform: scale({pdfZoom}); transform-origin: top center;">
 			<div class="dh">
@@ -1191,7 +1191,7 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 	{/if}
 
 	<!-- A4 HOJA 2: RECARGOS -->
-	{#if previewPage === 'recargos' || (isPrinting && printSheets.recargos)}
+	{#if (isPrinting && printSheets.recargos) || (!isPrinting && previewPage === 'recargos')}
 	<div class="pdf-body pdf-body-landscape print-sheet">
 		<div class="page page-landscape" style="transform: scale({pdfZoom}); transform-origin: top center;">
 			<div class="dh"><div class="dh-logo">{#if logoError}<div class="dh-logo-fallback">COTRANS<br/>MEQ</div>{:else}<img src="/assets/logo.png" alt="Logo" on:error={() => logoError = true} style="height:46px;width:auto;object-fit:contain" />{/if}</div><div class="dh-title"><div class="dh-co">{hdr.empresa}</div><div class="dh-doc">LIQUIDADOR DE RECARGOS</div></div><div class="dh-meta"><table class="mt"><tbody><tr><td class="ml">Código:</td><td class="mv">OP-FR-06</td></tr><tr><td class="ml">Versión:</td><td>1</td></tr></tbody></table></div><div class="dh-super"><img src="https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.png" alt="Supertransporte" /></div></div>
@@ -1214,7 +1214,7 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 	{/if}
 
 	<!-- A4 HOJA 3: LIQUIDADOR -->
-	{#if previewPage === 'liquidador' || (isPrinting && printSheets.liquidador)}
+	{#if (isPrinting && printSheets.liquidador) || (!isPrinting && previewPage === 'liquidador')}
 	<div class="pdf-body print-sheet">
 		<div class="page" style="transform: scale({pdfZoom}); transform-origin: top center;">
 			<div class="dh"><div class="dh-logo">{#if logoError}<div class="dh-logo-fallback">COTRANS<br/>MEQ</div>{:else}<img src="/assets/logo.png" alt="Logo" on:error={() => logoError = true} style="height:58px;width:auto;object-fit:contain" />{/if}</div><div class="dh-title"><div class="dh-co">{hdr.empresa}</div><div class="dh-doc">LIQUIDADOR DE RECARGOS</div></div><div class="dh-meta"><table class="mt"><tbody><tr><td class="ml">Código:</td><td class="mv">OP-FR-06</td></tr><tr><td class="ml">Versión:</td><td>1</td></tr></tbody></table></div><div class="dh-super"><img src="https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.png" alt="Supertransporte" /></div></div>
@@ -1238,7 +1238,7 @@ function fechasFromPair(ini: string | undefined, fin: string | undefined): strin
 	{/if}
 
 	<!-- A4 HOJA 4: TERCEROS -->
-	{#if previewPage === 'terceros' || (isPrinting && printSheets.terceros)}
+	{#if (isPrinting && printSheets.terceros) || (!isPrinting && previewPage === 'terceros')}
 	<div class="pdf-body print-sheet">
 		<div class="page" style="transform: scale({pdfZoom}); transform-origin: top center;">
 			<div class="dh"><div class="dh-logo">{#if logoError}<div class="dh-logo-fallback">COTRANS<br/>MEQ</div>{:else}<img src="/assets/logo.png" alt="Logo" on:error={() => logoError = true} style="height:58px;width:auto;object-fit:contain" />{/if}</div><div class="dh-title"><div class="dh-co">{hdr.empresa}</div><div class="dh-doc">LIQUIDACIÓN DE INGRESOS RECIBIDOS PARA TERCEROS</div></div><div class="dh-meta"><table class="mt"><tbody><tr><td class="ml">Código:</td><td class="mv">GAF-FR-11</td></tr><tr><td class="ml">Versión:</td><td>1</td></tr><tr><td class="ml">Fecha:</td><td>{new Date().toLocaleDateString('es-CO')}</td></tr></tbody></table></div></div>

@@ -73,6 +73,7 @@
 	let servicioDestinoLongitud: number | null = null;
 	let servicioObservaciones = '';
 	let servicioProposito: string = 'personal';
+	let servicioFechaRealizacion: string = '';
 
 	// Validaciones de horas
 	let erroresHoras: { [key: string]: { inicio: string; fin: string } } = {};
@@ -1099,6 +1100,12 @@
 					servicioDestinoLongitud = svc.destino_longitud || null;
 					servicioObservaciones = svc.observaciones || '';
 					servicioProposito = svc.proposito_servicio || 'personal';
+					if (svc.fecha_realizacion) {
+						const date = new Date(svc.fecha_realizacion);
+						servicioFechaRealizacion = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}T${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+					} else {
+						servicioFechaRealizacion = '';
+					}
 					mostrarServicioInfo = true;
 				} else {
 					mostrarServicioInfo = false;
@@ -1245,6 +1252,7 @@
 		servicioDestinoLongitud = null;
 		servicioObservaciones = '';
 		servicioProposito = 'personal';
+		servicioFechaRealizacion = '';
 		planillaGenerada = false; // Resetear flag para permitir nueva generación
 		isGenerandoPlanilla = false; // Resetear loading de planilla
 		lastLoadedRecargoId = null; // Resetear ID del último recargo cargado
@@ -1296,6 +1304,7 @@
 					servicio_destino_longitud: servicioDestinoLongitud,
 					servicio_observaciones: servicioObservaciones || null,
 					servicio_proposito: servicioProposito || null,
+					servicio_fecha_realizacion: servicioFechaRealizacion ? new Date(servicioFechaRealizacion).toISOString() : null,
 
 					// Estado del conductor
 					estado_conductor: formData.estado_conductor,
@@ -1382,6 +1391,7 @@
 					servicio_destino_longitud: servicioDestinoLongitud,
 					servicio_observaciones: servicioObservaciones || null,
 					servicio_proposito: servicioProposito || null,
+					servicio_fecha_realizacion: servicioFechaRealizacion ? new Date(servicioFechaRealizacion).toISOString() : null,
 
 					// Estado del conductor
 					estado_conductor: formData.estado_conductor,
@@ -2316,6 +2326,16 @@
 										{#if servicioDestinoEspecifico}
 											<div class="text-xs text-gray-600">📍 {servicioDestinoEspecifico}</div>
 										{/if}
+									</div>
+
+									<!-- Fecha de Realización -->
+									<div>
+										<div class="mb-1 text-xs font-medium tracking-wide text-gray-600 uppercase">Fecha y hora de realización</div>
+										<input
+											type="datetime-local"
+											bind:value={servicioFechaRealizacion}
+											class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
+										/>
 									</div>
 
 									<!-- Propósito del Servicio -->

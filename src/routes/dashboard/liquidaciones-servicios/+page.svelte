@@ -1,8 +1,10 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { fade } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import { authStore } from '$lib/stores/auth';
 	import { socketUtils } from '$lib/socket';
+	import MultiSelectFilter from '$lib/components/ui/MultiSelectFilter.svelte';
 	import {
 		liquidacionesServiciosAPI,
 		getMesLabel,
@@ -54,6 +56,44 @@
 	let listEstado: EstadoLiquidacionServicio | '' = '';
 	let listMes: number | '' = '';
 	let listAnio: number | '' = '';
+	let listSortBy = '';
+	let listSortDir: 'asc' | 'desc' = 'desc';
+
+	// Column header multi-select filters (server-side, Excel-style)
+	let colFilterConsecutivo: string[] = [];
+	let colFilterCliente: string[] = [];
+	let colFilterPeriodo: string[] = [];
+	let colFilterEstado: string[] = [];
+	let colFilterFactura: string[] = [];
+	let colFilterLiquidador: string[] = [];
+
+	// Unique values for column filters (from ALL records via metadata)
+	$: uniqueConsecutivos = listMetadata.consecutivos || [];
+	$: uniqueClientes = listMetadata.clientes.map(c => c.nombre);
+	$: uniquePeriodos = (listMetadata.periodos || []).map(p => `${getMesLabel(p.mes)} ${p.anio}`);
+	$: uniqueEstados = listMetadata.estados || [];
+	$: uniqueFacturas = listMetadata.facturas || [];
+	$: uniqueLiquidadores = listMetadata.liquidadores.map(l => l.nombre);
+
+	// filteredLiquidaciones = liquidaciones (filtering is now server-side)
+	$: filteredLiquidaciones = liquidaciones;
+
+	$: hasColumnFilter = colFilterConsecutivo.length > 0 || colFilterCliente.length > 0 || colFilterPeriodo.length > 0 || colFilterEstado.length > 0 || colFilterFactura.length > 0 || colFilterLiquidador.length > 0;
+
+	// Metadata from API
+	let listMetadata: {
+		globalTotal: number;
+		globalCount: number;
+		estadoCounts: Record<string, number>;
+		clientes: { id: string; nombre: string }[];
+		liquidadores: { id: string; nombre: string }[];
+		consecutivos: string[];
+		periodos: { mes: number; anio: number }[];
+		facturas: string[];
+		estados: string[];
+	} = { globalTotal: 0, globalCount: 0, estadoCounts: {}, clientes: [], liquidadores: [], consecutivos: [], periodos: [], facturas: [], estados: [] };
+
+	$: hasActiveFilter = !!(listBusqueda || hasColumnFilter);
 
 	let detailModal = false;
 	let detailLoading = false;
@@ -102,10 +142,10 @@
 	let anularFacturaModalOpen = false;
 	let anularFacturaTarget: FacturaLiquidacion | null = null;
 	let anularFacturaMotivo = '';
-	let anulandoFactura = false;
 	let eliminarFacturaModalOpen = false;
 	let eliminarFacturaTarget: FacturaLiquidacion | null = null;
 	let eliminandoFactura = false;
+	let anulandoFactura = false;
 
 	let detalleFactura: FacturaLiquidacion | null = null;
 
@@ -195,6 +235,7 @@
 	$: userAreas = Array.isArray($authStore.user?.area) ? $authStore.user.area : ($authStore.user?.area ? [$authStore.user.area] : []);
 	$: isAdmin = userAreas.includes('administracion');
 	$: isFacturacion = userAreas.includes('facturacion');
+	$: isOperaciones = userAreas.includes('operaciones');
 	$: canLiquidar = isFull; // admin + operaciones: borrador → liquidada
 	$: canAprobar = isAdmin; // solo admin: liquidada → aprobada
 	$: canAnular = isAdmin; // solo admin: anular liquidaciones
@@ -299,14 +340,32 @@
 		try {
 			const filtros: Record<string, any> = { page: listPage, limit: 15 };
 			if (listBusqueda) filtros.busqueda = listBusqueda;
-			if (listEstado) filtros.estado = listEstado;
 			if (listMes) filtros.mes = listMes;
 			if (listAnio) filtros.anio = listAnio;
+			if (listSortBy) { filtros.sortBy = listSortBy; filtros.sortDir = listSortDir; }
+			// Column filters (server-side)
+			if (colFilterConsecutivo.length) filtros.consecutivos = colFilterConsecutivo.join(',');
+			if (colFilterEstado.length) filtros.estados = colFilterEstado.join(',');
+			if (colFilterCliente.length) filtros.cliente_nombres = colFilterCliente.join(',');
+			if (colFilterLiquidador.length) filtros.liquidador_nombres = colFilterLiquidador.join(',');
+			if (colFilterPeriodo.length) {
+				// Convert "Enero 2026" -> "1-2026"
+				filtros.periodos = colFilterPeriodo.map(p => {
+					const parts = p.split(' ');
+					const mesLabel = parts[0];
+					const anio = parts[1];
+					const meses = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+					const mesNum = meses.indexOf(mesLabel) + 1;
+					return `${mesNum}-${anio}`;
+				}).join(',');
+			}
+			if (colFilterFactura.length) filtros.facturas = colFilterFactura.join(',');
 			const res = await liquidacionesServiciosAPI.listar(filtros);
 			liquidaciones = res.liquidaciones;
 			listTotal = res.total;
 			listTotalPages = res.totalPages;
 			listPage = res.page;
+			if (res.metadata) listMetadata = { consecutivos: [], periodos: [], facturas: [], estados: [], ...res.metadata };
 		} catch (err: any) { listError = err.message || 'Error al cargar liquidaciones'; }
 		finally {
 			listLoading = false;
@@ -324,6 +383,18 @@
 
 	function filtrar() { listPage = 1; cargarListado(); }
 	function irPagina(p: number) { listPage = p; cargarListado(); }
+
+	function toggleSort(col: string) {
+		if (listSortBy === col) {
+			listSortDir = listSortDir === 'asc' ? 'desc' : 'asc';
+		} else {
+			listSortBy = col;
+			listSortDir = col === 'fecha' ? 'desc' : 'asc';
+		}
+		filtrar();
+	}
+
+	function sortIcon(col: string) { return listSortBy === col ? (listSortDir === 'asc' ? ' ▲' : ' ▼') : ''; }
 
 	function irNuevaLiquidacion() { goto('/dashboard/liquidaciones-servicios/nueva'); }
 	function irEditarLiquidacion(id: string) { goto('/dashboard/liquidaciones-servicios/editar/' + id); }
@@ -403,7 +474,7 @@
 			BORRADOR:  { bg: '#f1f5f9', text: '#64748b', label: 'Borrador' },
 			LIQUIDADA: { bg: '#dbeafe', text: '#2563eb', label: 'Liquidada' },
 			APROBADA:  { bg: '#dcfce7', text: '#16a34a', label: 'Aprobada' },
-			FACTURADA: { bg: '#fef3c7', text: '#d97706', label: 'Facturada' },
+			FACTURADA: { bg: '#d1fae5', text: '#059669', label: 'Facturada' },
 			ANULADA:   { bg: '#fee2e2', text: '#dc2626', label: 'Anulada' },
 		};
 		return map[estado] || map.BORRADOR;
@@ -472,163 +543,236 @@
 </script>
 
 <div class="page-wrap">
-
-	<!-- TOP BAR -->
-	<div class="topbar">
-		<div class="topbar-l">
-			<img src="/assets/logo.png" alt="Logo" class="t-logo"
-				on:error={() => logoError = true}
-				style={logoError ? 'display:none' : ''} />
-			<div>
-				<div class="t-title">Liquidacion de Servicios — OP-FR-07</div>
-				<div class="t-sub">Gestion, creacion y vista previa de liquidaciones</div>
-			</div>
-		</div>
-		{#if isFull}
-		<button class="btn-hdr" on:click={irNuevaLiquidacion}>✏️ Nueva Liquidacion</button>
+	<!-- Sub-tabs -->
+	<div class="mb-4 flex gap-1 border-b border-gray-200">
+		<button class="px-4 py-2 text-sm font-semibold transition-colors {facturasTab === 'liquidaciones' ? 'border-b-2 border-emerald-600 text-emerald-700' : 'text-gray-500 hover:text-gray-700'}" on:click={() => { facturasTab = 'liquidaciones'; }}>📋 Liquidaciones</button>
+		{#if isAdmin || isFacturacion}
+		<button class="px-4 py-2 text-sm font-semibold transition-colors {facturasTab === 'facturas' ? 'border-b-2 border-emerald-600 text-emerald-700' : 'text-gray-500 hover:text-gray-700'}" on:click={() => { facturasTab = 'facturas'; cargarFacturas(); }}>🧾 Facturas</button>
+		<button class="px-4 py-2 text-sm font-semibold transition-colors {facturasTab === 'terceros' ? 'border-b-2 border-emerald-600 text-emerald-700' : 'text-gray-500 hover:text-gray-700'}" on:click={() => { facturasTab = 'terceros'; cargarTerceros(); }}>👤 Terceros</button>
 		{/if}
-	</div>
-
-	<!-- Sub-tabs: Liquidaciones / Facturas -->
-	<div class="sub-tabs">
-		<button class="sub-tab-btn" class:active={facturasTab === 'liquidaciones'} on:click={() => { facturasTab = 'liquidaciones'; }}>📋 Liquidaciones</button>
-		<button class="sub-tab-btn" class:active={facturasTab === 'facturas'} on:click={() => { facturasTab = 'facturas'; cargarFacturas(); }}>🧾 Facturas</button>
-		<button class="sub-tab-btn" class:active={facturasTab === 'terceros'} on:click={() => { facturasTab = 'terceros'; cargarTerceros(); }}>👤 Terceros</button>
-		{#if isFull}
-		<button class="sub-tab-btn" class:active={facturasTab === 'configuracion'} on:click={() => { facturasTab = 'configuracion'; cargarConfig(); }}>⚙️ Configuracion</button>
+		{#if isAdmin || isOperaciones}
+		<button class="px-4 py-2 text-sm font-semibold transition-colors {facturasTab === 'configuracion' ? 'border-b-2 border-emerald-600 text-emerald-700' : 'text-gray-500 hover:text-gray-700'}" on:click={() => { facturasTab = 'configuracion'; cargarConfig(); }}>⚙️ Configuración</button>
 		{/if}
 	</div>
 
 	{#if facturasTab === 'liquidaciones'}
-	<div class="card">
-		<div class="ch" style="display:flex;align-items:center;justify-content:space-between">
-			<span style="margin-right:auto">📋 Liquidaciones Registradas</span>
-			{#if (isFull || isLimited) && (isFacturacion || isAdmin)}
-				<button class="btn-facturar-hdr" on:click={abrirModalFacturar}>🧾 Facturar</button>
-			{/if}
+
+	<!-- Header -->
+	<div class="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+		<div>
+			<h2 class="text-2xl font-bold text-gray-900 md:text-3xl">Liquidaciones Registradas</h2>
+			<p class="text-sm text-gray-600">{listTotal} liquidaciones encontradas</p>
 		</div>
-		<div class="list-toolbar">
-			<div class="field">
-				<label for="list-busqueda">Buscar</label>
-				<input id="list-busqueda" placeholder="Consecutivo, cliente..." bind:value={listBusqueda} />
-			</div>
-			<div class="field">
-				<label for="list-estado">Estado</label>
-				<select id="list-estado" bind:value={listEstado}>
-					<option value="">Todos</option>
-					<option value="BORRADOR">Borrador</option>
-					<option value="LIQUIDADA">Liquidada</option>
-					<option value="APROBADA">Aprobada</option>
-					<option value="FACTURADA">Facturada</option>
-					<option value="ANULADA">Anulada</option>
-				</select>
-			</div>
-			<div class="field">
-				<label for="list-mes">Mes</label>
-				<select id="list-mes" bind:value={listMes}>
-					<option value="">Todos</option>
+		<div class="flex items-center gap-2">
+			<!-- Mes/Año -->
+			<div class="w-96 flex items-center gap-2 rounded-lg border border-gray-200 bg-white p-2">
+				<select bind:value={listMes} on:change={filtrar} class="h-10 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200">
+					<option value="">Todos los meses</option>
 					{#each MESES as m}<option value={m}>{m}</option>{/each}
 				</select>
-			</div>
-			<div class="field">
-				<label for="list-anio">Ano</label>
-				<select id="list-anio" bind:value={listAnio}>
-					<option value="">Todos</option>
+				<select bind:value={listAnio} on:change={filtrar} class="h-10 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200">
+					<option value="">Año</option>
 					{#each YEARS as y}<option value={y}>{y}</option>{/each}
 				</select>
 			</div>
-			<button class="btn-filtrar" on:click={filtrar}>🔍 Filtrar</button>
+			{#if (isFull || isLimited) && (isFacturacion || isAdmin)}
+				<button class="flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-3 text-sm font-medium text-white hover:bg-purple-700 transition-colors" on:click={abrirModalFacturar}>🧾 Facturar</button>
+			{/if}
+			{#if isFull}
+				<button class="flex items-center gap-2 rounded-lg bg-emerald-500 px-4 py-3 text-sm font-medium text-white hover:bg-emerald-600 transition-colors" on:click={irNuevaLiquidacion}>✏️ Nueva Liquidación</button>
+			{/if}
 		</div>
+	</div>
 
-		{#if listLoading}
-			<div class="loading-center"><div class="spinner"></div><span style="margin-left:12px;color:#64748b;font-size:13px;font-weight:500">Cargando liquidaciones…</span></div>
-		{:else if listError}
-			<div class="empty-state">
-				<div class="icon">⚠️</div>
-				<div class="msg">{listError}</div>
+	<!-- Filtros -->
+	<div class="mb-4 flex items-center gap-2">
+		<div class="relative flex-1 max-w-sm">
+			<svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+			<input type="text" bind:value={listBusqueda} on:keydown={(e) => e.key === 'Enter' && filtrar()} placeholder="Buscar por consecutivo, cliente…" class="h-9 w-full rounded-lg border border-gray-300 bg-white py-1.5 pr-3 !pl-9 text-xs focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200" />
+		</div>
+		<button on:click={() => { listBusqueda=''; listMes=''; listAnio=''; listSortBy=''; listSortDir='desc'; colFilterConsecutivo=[]; colFilterCliente=[]; colFilterPeriodo=[]; colFilterEstado=[]; colFilterFactura=[]; colFilterLiquidador=[]; filtrar(); }} class="h-9 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 transition-colors whitespace-nowrap">✕ Limpiar</button>
+	</div>
+
+	<!-- Stats Cards -->
+	{#if !listLoading}
+		{@const filteredTotal = filteredLiquidaciones.reduce((s, l) => s + (l.total || 0), 0)}
+		{@const filteredItems = filteredLiquidaciones.reduce((s, l) => s + (l.total_items || 0), 0)}
+		{@const filteredBorrador = filteredLiquidaciones.filter(l => l.estado === 'BORRADOR').length}
+		{@const filteredLiquidada = filteredLiquidaciones.filter(l => l.estado === 'LIQUIDADA').length}
+		{@const filteredAprobada = filteredLiquidaciones.filter(l => l.estado === 'APROBADA').length}
+		{@const filteredFacturada = filteredLiquidaciones.filter(l => l.estado === 'FACTURADA').length}
+		{@const m = listMetadata}
+		{@const showFiltered = hasActiveFilter}
+		<div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6" transition:fade={{ duration: 200 }}>
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<p class="text-xs text-gray-500">Total Monto</p>
+				<p class="text-lg font-bold text-gray-900">{COP(showFiltered ? filteredTotal : m.globalTotal)}</p>
+				{#if showFiltered}<p class="text-[10px] text-gray-400">General: {COP(m.globalTotal)}</p>{/if}
 			</div>
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<p class="text-xs text-gray-500">Total Registros</p>
+				<p class="text-lg font-bold text-gray-900">{showFiltered ? listTotal : m.globalCount}</p>
+				{#if showFiltered}<p class="text-[10px] text-gray-400">General: {m.globalCount}</p>{/if}
+			</div>
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<p class="text-xs text-gray-500">Borrador</p>
+				<p class="text-lg font-bold text-gray-500">{showFiltered ? filteredBorrador : (m.estadoCounts['BORRADOR'] || 0)}</p>
+				{#if showFiltered}<p class="text-[10px] text-gray-400">General: {m.estadoCounts['BORRADOR'] || 0}</p>{/if}
+			</div>
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<p class="text-xs text-gray-500">Liquidadas</p>
+				<p class="text-lg font-bold text-blue-600">{showFiltered ? filteredLiquidada : (m.estadoCounts['LIQUIDADA'] || 0)}</p>
+				{#if showFiltered}<p class="text-[10px] text-gray-400">General: {m.estadoCounts['LIQUIDADA'] || 0}</p>{/if}
+			</div>
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<p class="text-xs text-gray-500">Aprobadas</p>
+				<p class="text-lg font-bold text-emerald-600">{showFiltered ? filteredAprobada : (m.estadoCounts['APROBADA'] || 0)}</p>
+				{#if showFiltered}<p class="text-[10px] text-gray-400">General: {m.estadoCounts['APROBADA'] || 0}</p>{/if}
+			</div>
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<p class="text-xs text-gray-500">Facturadas</p>
+				<p class="text-lg font-bold text-purple-600">{showFiltered ? filteredFacturada : (m.estadoCounts['FACTURADA'] || 0)}</p>
+				{#if showFiltered}<p class="text-[10px] text-gray-400">General: {m.estadoCounts['FACTURADA'] || 0}</p>{/if}
+			</div>
+		</div>
+	{/if}
+
+	<!-- Canvas Table -->
+	<div class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow">
+		{#if listLoading}
+			<div class="flex h-96 items-center justify-center">
+				<div class="text-center">
+					<div class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
+					<p class="text-gray-600">Cargando liquidaciones…</p>
+				</div>
+			</div>
+		{:else if listError}
+			<div class="flex h-64 items-center justify-center"><p class="text-red-600">{listError}</p></div>
 		{:else if liquidaciones.length === 0}
-			<div class="empty-state">
-				<div class="icon">📭</div>
-				<div class="msg">No hay liquidaciones</div>
-				<div class="hint">Crea una nueva haciendo clic en "Nueva Liquidacion"</div>
+			<div class="flex h-64 items-center justify-center">
+				<div class="text-center">
+					<div class="text-5xl mb-3">📭</div>
+					<p class="text-sm font-semibold text-gray-500">No hay liquidaciones</p>
+					<p class="text-xs text-gray-400 mt-1">Crea una nueva haciendo clic en "Nueva Liquidación"</p>
+				</div>
 			</div>
 		{:else}
-			<div class="ltbl-wrap">
-				<table class="ltbl">
-					<thead>
+			<!-- ═══ DESKTOP TABLE (hidden on mobile) ═══ -->
+			<div class="hidden md:block overflow-x-auto">
+				<table class="w-full border-collapse" style="min-width:1400px">
+					<thead class="sticky top-0 z-20 bg-gray-50">
 						<tr>
-							<th>Consecutivo</th>
-							<th>Cliente</th>
-							<th>Periodo</th>
-							<th>Estado</th>
-							<th>Factura</th>
-							<th style="text-align:center">3° Liq.</th>
-							<th style="text-align:right">Total</th>
-							<th style="text-align:center">Items</th>
-							<th>Liquidador</th>
-							<th>Fecha</th>
-							<th style="text-align:center">Acciones</th>
+							<th class="border border-gray-200 px-2 py-2 text-left text-xs font-semibold text-gray-700" style="min-width:100px">
+								<span class="flex items-center gap-1">
+									<button type="button" class="cursor-pointer select-none hover:text-emerald-700" on:click={() => toggleSort('consecutivo')}>Consecutivo{sortIcon('consecutivo')}</button>
+									<MultiSelectFilter bind:selected={colFilterConsecutivo} options={uniqueConsecutivos} placeholder="Todos" searchable iconOnly on:change={filtrar} />
+								</span>
+							</th>
+							<th class="border border-gray-200 px-2 py-2 text-left text-xs font-semibold text-gray-700" style="min-width:160px">
+								<span class="flex items-center gap-1">
+									<button type="button" class="cursor-pointer select-none hover:text-emerald-700" on:click={() => toggleSort('cliente')}>Cliente{sortIcon('cliente')}</button>
+									<MultiSelectFilter bind:selected={colFilterCliente} options={uniqueClientes} placeholder="Todos" searchable iconOnly on:change={filtrar} />
+								</span>
+							</th>
+							<th class="border border-gray-200 px-2 py-2 text-left text-xs font-semibold text-gray-700" style="min-width:120px">
+								<span class="flex items-center gap-1">
+									<button type="button" class="cursor-pointer select-none hover:text-emerald-700" on:click={() => toggleSort('periodo')}>Periodo{sortIcon('periodo')}</button>
+									<MultiSelectFilter bind:selected={colFilterPeriodo} options={uniquePeriodos} placeholder="Todos" iconOnly on:change={filtrar} />
+								</span>
+							</th>
+							<th class="border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-700" style="min-width:100px">
+								<span class="flex items-center justify-center gap-1">
+									<button type="button" class="cursor-pointer select-none hover:text-emerald-700" on:click={() => toggleSort('estado')}>Estado{sortIcon('estado')}</button>
+									<MultiSelectFilter bind:selected={colFilterEstado} options={uniqueEstados} placeholder="Todos" labelFn={(e) => getEstadoBadge(e as EstadoLiquidacionServicio).label} iconOnly on:change={filtrar} />
+								</span>
+							</th>
+							<th class="border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-700" style="min-width:110px">
+								<span class="flex items-center justify-center gap-1">
+									Factura
+									<MultiSelectFilter bind:selected={colFilterFactura} options={uniqueFacturas} placeholder="Todas" searchable iconOnly on:change={filtrar} />
+								</span>
+							</th>
+							<th class="border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-700" style="min-width:70px">3° Liq.</th>
+							<th class="border border-gray-200 px-2 py-2 text-right text-xs font-semibold text-gray-700 bg-green-50" style="min-width:120px">
+								<button type="button" class="cursor-pointer select-none hover:text-emerald-700 w-full text-right" on:click={() => toggleSort('total')}>Total{sortIcon('total')}</button>
+							</th>
+							<th class="border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-700" style="min-width:60px">Items</th>
+							<th class="border border-gray-200 px-2 py-2 text-left text-xs font-semibold text-gray-700" style="min-width:120px">
+								<span class="flex items-center gap-1">
+									Liquidador
+									<MultiSelectFilter bind:selected={colFilterLiquidador} options={uniqueLiquidadores} placeholder="Todos" searchable iconOnly on:change={filtrar} />
+								</span>
+							</th>
+							<th class="border border-gray-200 px-2 py-2 text-left text-xs font-semibold text-gray-700" style="min-width:130px">
+								<button type="button" class="cursor-pointer select-none hover:text-emerald-700" on:click={() => toggleSort('fecha')}>Fecha{sortIcon('fecha')}</button>
+							</th>
+							<th class="border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-700" style="min-width:200px">Acciones</th>
 						</tr>
 					</thead>
 					<tbody>
-						{#each liquidaciones as liq (liq.id)}
+						{#each filteredLiquidaciones as liq (liq.id)}
 							{@const badge = getEstadoBadge(liq.estado)}
 							{@const facturaInfo = facturaInfoMap[liq.id]}
-							<tr class={highlightedIds[liq.id] === 'created' ? 'row-new' : highlightedIds[liq.id] === 'updated' ? 'row-updated' : ''}>
-								<td class="consec">{liq.consecutivo}</td>
-								<td>{liq.cliente?.nombre || '—'}</td>
-								<td>{getMesLabel(liq.mes)} {liq.anio}</td>
-								<td>
-									<span class="badge" style="background:{badge.bg};color:{badge.text}">{liq.estado}</span>
+							{@const isNew = highlightedIds[liq.id] === 'created'}
+							{@const isUpdated = highlightedIds[liq.id] === 'updated'}
+							<tr class="border-b border-gray-100 hover:bg-emerald-50 {isNew ? 'border-l-4 border-l-emerald-500 bg-emerald-50/30' : ''} {isUpdated ? 'border-l-4 border-l-blue-500 bg-blue-50/30' : ''}">
+								<td class="border border-gray-200 px-2 py-2 text-left text-xs">
+									<span class="font-mono font-bold text-emerald-800">{liq.consecutivo}</span>
 								</td>
-								<td>
+								<td class="border border-gray-200 px-2 py-2 text-left text-xs text-gray-600 truncate max-w-[160px]" title={liq.cliente?.nombre || ''}>{liq.cliente?.nombre || '—'}</td>
+								<td class="border border-gray-200 px-2 py-2 text-left text-xs text-gray-600">{getMesLabel(liq.mes)} {liq.anio}</td>
+								<td class="border border-gray-200 px-2 py-2 text-center text-xs">
+									<span class="inline-block rounded px-2 py-1 text-xs font-medium" style="background:{badge.bg};color:{badge.text}">{liq.estado}</span>
+								</td>
+								<td class="border border-gray-200 px-2 py-2 text-center text-xs">
 									{#if facturaInfo}
-										<span class="badge-factura" title="Factura #{facturaInfo.numero_factura}">🧾 {facturaInfo.numero_factura}</span>
+										<span class="inline-block rounded px-2 py-1 text-xs font-bold font-mono bg-purple-100 text-purple-800">🧾 {facturaInfo.numero_factura}</span>
 									{:else}
-										<span style="color:#aaa">—</span>
+										<span class="text-gray-400">—</span>
 									{/if}
 								</td>
-								<td style="text-align:center">
+								<td class="border border-gray-200 px-2 py-2 text-center text-xs">
 									{#if liq.tercero_liquidado}
-										<span class="badge" style="background:#d4edda;color:#155724;font-size:11px" title="Tercero liquidado">✅ Si</span>
+										<span class="inline-block rounded px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800">✅ Si</span>
 									{:else}
-										<span class="badge" style="background:#f8d7da;color:#721c24;font-size:11px" title="Tercero sin liquidar">❌ No</span>
+										<span class="inline-block rounded px-2 py-0.5 text-[10px] font-bold bg-red-100 text-red-700">❌ No</span>
 									{/if}
 								</td>
-								<td class="monto-total">{COP(liq.total || 0)}</td>
-								<td style="text-align:center">{liq.total_items || 0}</td>
-								<td style="white-space:nowrap;font-size:11px">{liq.liquidado_por?.nombre || liq.creado_por?.nombre || '—'}</td>
-								<td style="white-space:nowrap;font-size:11px">{liq.created_at ? new Date(liq.created_at).toLocaleDateString('es-CO', { weekday:'short', day:'numeric', month:'short' }) + ' ' + new Date(liq.created_at).toLocaleTimeString('es-CO', { hour:'2-digit', minute:'2-digit', hour12:false }) : '—'}</td>
-								<td style="text-align:center;white-space:nowrap">
-									<button class="btn-icon" title="Ver" on:click={() => irVerLiquidacion(liq.id)}>👁</button>
-									{#if isFull && (liq.estado === 'BORRADOR' || (isAdmin && liq.estado === 'LIQUIDADA'))}
-										<button class="btn-icon" title="Editar" on:click={() => irEditarLiquidacion(liq.id)}>✏️</button>
-									{/if}
-									{#if canLiquidar && liq.estado === 'BORRADOR'}
-										<button class="btn-estado liq" title="Liquidar" disabled={estadoChanging} on:click={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>✅ Liquidar</button>
-									{/if}
-									{#if canAprobar && liq.estado === 'LIQUIDADA'}
-										<button class="btn-estado liq" title="Aprobar" disabled={estadoChanging} on:click={() => cambiarEstadoLiq(liq.id, 'APROBADA')}>✅ Aprobar</button>
-									{/if}
-									{#if canAnular && liq.estado !== 'ANULADA' && liq.estado !== 'FACTURADA'}
-										<button class="btn-estado anl" title="Anular" disabled={estadoChanging} on:click={() => abrirAnularModal(liq.id)}>🚫 Anular</button>
-									{/if}
-									{#if isAdmin && liq.estado === 'ANULADA'}
-										<button class="btn-estado rev" title="Revertir a Borrador" disabled={estadoChanging} on:click={() => cambiarEstadoLiq(liq.id, 'BORRADOR')}>↩️ Revertir</button>
-									{/if}
-									{#if canRevertirABorrador && liq.estado === 'LIQUIDADA'}
-										<button class="btn-estado rev" title="Revertir a Borrador" disabled={estadoChanging} on:click={() => cambiarEstadoLiq(liq.id, 'BORRADOR')}>↩️ A Borrador</button>
-									{/if}
-									{#if canRevertirALiquidada && liq.estado === 'APROBADA'}
-										<button class="btn-estado rev" title="Revertir a Liquidada" disabled={estadoChanging} on:click={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>↩️ A Liquidada</button>
-									{/if}
-									{#if isFull && liq.estado === 'BORRADOR'}
-										<button class="btn-icon del" title="Eliminar" on:click={() => { deleteTargetLiq = liq; deleteModalOpen = true; }}>🗑</button>
-									{/if}
-									{#if isAdmin}
-										<button class="btn-icon" title="Historial" on:click={() => abrirHistorial(liq.id, liq.consecutivo)}>📜</button>
-									{/if}
+								<td class="border border-gray-200 px-2 py-2 text-right text-xs font-mono font-bold text-emerald-800">{COP(liq.total || 0)}</td>
+								<td class="border border-gray-200 px-2 py-2 text-center text-xs font-mono">{liq.total_items || 0}</td>
+								<td class="border border-gray-200 px-2 py-2 text-left text-xs text-gray-600 whitespace-nowrap">{liq.liquidado_por?.nombre || liq.creado_por?.nombre || '—'}</td>
+								<td class="border border-gray-200 px-2 py-2 text-left text-xs text-gray-600 whitespace-nowrap">{liq.created_at ? new Date(liq.created_at).toLocaleDateString('es-CO', { weekday:'short', day:'numeric', month:'short' }) + ' ' + new Date(liq.created_at).toLocaleTimeString('es-CO', { hour:'2-digit', minute:'2-digit', hour12:false }) : '—'}</td>
+								<td class="border border-gray-200 px-2 py-2 text-center whitespace-nowrap">
+									<div class="flex items-center justify-center gap-1 flex-wrap">
+										<button class="rounded p-1 hover:bg-gray-200 text-sm" title="Ver" on:click={() => irVerLiquidacion(liq.id)}>👁</button>
+										{#if isFull && (liq.estado === 'BORRADOR' || (isAdmin && liq.estado === 'LIQUIDADA'))}
+											<button class="rounded p-1 hover:bg-gray-200 text-sm" title="Editar" on:click={() => irEditarLiquidacion(liq.id)}>✏️</button>
+										{/if}
+										{#if canLiquidar && liq.estado === 'BORRADOR'}
+											<button class="rounded bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-[10px] font-bold hover:bg-emerald-200" disabled={estadoChanging} on:click={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>✅ Liquidar</button>
+										{/if}
+										{#if canAprobar && liq.estado === 'LIQUIDADA'}
+											<button class="rounded bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-[10px] font-bold hover:bg-emerald-200" disabled={estadoChanging} on:click={() => cambiarEstadoLiq(liq.id, 'APROBADA')}>✅ Aprobar</button>
+										{/if}
+										{#if canAnular && liq.estado !== 'ANULADA' && liq.estado !== 'FACTURADA'}
+											<button class="rounded bg-red-100 text-red-700 px-1.5 py-0.5 text-[10px] font-bold hover:bg-red-200" disabled={estadoChanging} on:click={() => abrirAnularModal(liq.id)}>🚫 Anular</button>
+										{/if}
+										{#if isAdmin && liq.estado === 'ANULADA'}
+											<button class="rounded bg-amber-100 text-amber-700 px-1.5 py-0.5 text-[10px] font-bold hover:bg-amber-200" disabled={estadoChanging} on:click={() => cambiarEstadoLiq(liq.id, 'BORRADOR')}>↩️ Revertir</button>
+										{/if}
+										{#if canRevertirABorrador && liq.estado === 'LIQUIDADA'}
+											<button class="rounded bg-amber-100 text-amber-700 px-1.5 py-0.5 text-[10px] font-bold hover:bg-amber-200" disabled={estadoChanging} on:click={() => cambiarEstadoLiq(liq.id, 'BORRADOR')}>↩️ Borrador</button>
+										{/if}
+										{#if canRevertirALiquidada && liq.estado === 'APROBADA'}
+											<button class="rounded bg-amber-100 text-amber-700 px-1.5 py-0.5 text-[10px] font-bold hover:bg-amber-200" disabled={estadoChanging} on:click={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>↩️ Liquidada</button>
+										{/if}
+										{#if isFull && liq.estado === 'BORRADOR'}
+											<button class="rounded p-1 hover:bg-red-100 text-sm" title="Eliminar" on:click={() => { deleteTargetLiq = liq; deleteModalOpen = true; }}>🗑</button>
+										{/if}
+										{#if isAdmin}
+											<button class="rounded p-1 hover:bg-gray-200 text-sm" title="Historial" on:click={() => abrirHistorial(liq.id, liq.consecutivo)}>📜</button>
+										{/if}
+									</div>
 								</td>
 							</tr>
 						{/each}
@@ -636,225 +780,454 @@
 				</table>
 			</div>
 
-			{#if listTotalPages > 1}
-				<div class="pagination">
-					<button disabled={listPage <= 1} on:click={() => irPagina(listPage - 1)}>← Ant</button>
-					{#each Array(listTotalPages) as _, i}
-						<button class:active={listPage === i + 1} on:click={() => irPagina(i + 1)}>{i + 1}</button>
-					{/each}
-					<button disabled={listPage >= listTotalPages} on:click={() => irPagina(listPage + 1)}>Sig →</button>
-				</div>
-			{/if}
+			<!-- ═══ MOBILE CARDS (shown on mobile only) ═══ -->
+			<div class="md:hidden flex flex-col gap-3">
+				{#each filteredLiquidaciones as liq (liq.id)}
+					{@const badge = getEstadoBadge(liq.estado)}
+					{@const facturaInfo = facturaInfoMap[liq.id]}
+					{@const isNew = highlightedIds[liq.id] === 'created'}
+					{@const isUpdated = highlightedIds[liq.id] === 'updated'}
+					<div class="rounded-lg border bg-white shadow-sm {isNew ? 'border-l-4 border-l-emerald-500' : isUpdated ? 'border-l-4 border-l-blue-500' : 'border-gray-200'}">
+						<!-- Card header -->
+						<div class="flex items-center justify-between border-b border-gray-100 px-3 py-2">
+							<div class="flex items-center gap-2">
+								<span class="font-mono text-sm font-bold text-emerald-800">{liq.consecutivo}</span>
+								<span class="inline-block rounded px-2 py-0.5 text-[10px] font-medium" style="background:{badge.bg};color:{badge.text}">{liq.estado}</span>
+							</div>
+							<span class="text-right font-mono text-sm font-bold text-emerald-800">{COP(liq.total || 0)}</span>
+						</div>
+						<!-- Card body -->
+						<div class="px-3 py-2 space-y-1.5">
+							<div class="flex items-center justify-between">
+								<span class="text-[11px] text-gray-500">Cliente</span>
+								<span class="text-xs font-medium text-gray-800 text-right max-w-[60%] truncate">{liq.cliente?.nombre || '—'}</span>
+							</div>
+							<div class="flex items-center justify-between">
+								<span class="text-[11px] text-gray-500">Periodo</span>
+								<span class="text-xs text-gray-700">{getMesLabel(liq.mes)} {liq.anio}</span>
+							</div>
+							<div class="flex items-center justify-between">
+								<span class="text-[11px] text-gray-500">Factura</span>
+								{#if facturaInfo}
+									<span class="rounded px-1.5 py-0.5 text-[10px] font-bold font-mono bg-purple-100 text-purple-800">🧾 {facturaInfo.numero_factura}</span>
+								{:else}
+									<span class="text-xs text-gray-400">—</span>
+								{/if}
+							</div>
+							<div class="flex items-center justify-between">
+								<span class="text-[11px] text-gray-500">3° Liq.</span>
+								{#if liq.tercero_liquidado}
+									<span class="rounded px-1.5 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800">✅ Si</span>
+								{:else}
+									<span class="rounded px-1.5 py-0.5 text-[10px] font-bold bg-red-100 text-red-700">❌ No</span>
+								{/if}
+							</div>
+							<div class="flex items-center justify-between">
+								<span class="text-[11px] text-gray-500">Items</span>
+								<span class="text-xs font-mono text-gray-700">{liq.total_items || 0}</span>
+							</div>
+							<div class="flex items-center justify-between">
+								<span class="text-[11px] text-gray-500">Liquidador</span>
+								<span class="text-xs text-gray-700">{liq.liquidado_por?.nombre || liq.creado_por?.nombre || '—'}</span>
+							</div>
+							<div class="flex items-center justify-between">
+								<span class="text-[11px] text-gray-500">Fecha</span>
+								<span class="text-xs text-gray-600">{liq.created_at ? new Date(liq.created_at).toLocaleDateString('es-CO', { day:'numeric', month:'short' }) + ' ' + new Date(liq.created_at).toLocaleTimeString('es-CO', { hour:'2-digit', minute:'2-digit', hour12:false }) : '—'}</span>
+							</div>
+						</div>
+						<!-- Card actions -->
+						<div class="flex flex-wrap items-center gap-1 border-t border-gray-100 px-3 py-2">
+							<button class="rounded p-1.5 hover:bg-gray-200 text-sm" title="Ver" on:click={() => irVerLiquidacion(liq.id)}>👁</button>
+							{#if isFull && (liq.estado === 'BORRADOR' || (isAdmin && liq.estado === 'LIQUIDADA'))}
+								<button class="rounded p-1.5 hover:bg-gray-200 text-sm" title="Editar" on:click={() => irEditarLiquidacion(liq.id)}>✏️</button>
+							{/if}
+							{#if canLiquidar && liq.estado === 'BORRADOR'}
+								<button class="rounded bg-emerald-100 text-emerald-700 px-2 py-1 text-[11px] font-bold hover:bg-emerald-200" disabled={estadoChanging} on:click={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>✅ Liquidar</button>
+							{/if}
+							{#if canAprobar && liq.estado === 'LIQUIDADA'}
+								<button class="rounded bg-emerald-100 text-emerald-700 px-2 py-1 text-[11px] font-bold hover:bg-emerald-200" disabled={estadoChanging} on:click={() => cambiarEstadoLiq(liq.id, 'APROBADA')}>✅ Aprobar</button>
+							{/if}
+							{#if canAnular && liq.estado !== 'ANULADA' && liq.estado !== 'FACTURADA'}
+								<button class="rounded bg-red-100 text-red-700 px-2 py-1 text-[11px] font-bold hover:bg-red-200" disabled={estadoChanging} on:click={() => abrirAnularModal(liq.id)}>🚫 Anular</button>
+							{/if}
+							{#if isAdmin && liq.estado === 'ANULADA'}
+								<button class="rounded bg-amber-100 text-amber-700 px-2 py-1 text-[11px] font-bold hover:bg-amber-200" disabled={estadoChanging} on:click={() => cambiarEstadoLiq(liq.id, 'BORRADOR')}>↩️ Revertir</button>
+							{/if}
+							{#if canRevertirABorrador && liq.estado === 'LIQUIDADA'}
+								<button class="rounded bg-amber-100 text-amber-700 px-2 py-1 text-[11px] font-bold hover:bg-amber-200" disabled={estadoChanging} on:click={() => cambiarEstadoLiq(liq.id, 'BORRADOR')}>↩️ Borrador</button>
+							{/if}
+							{#if canRevertirALiquidada && liq.estado === 'APROBADA'}
+								<button class="rounded bg-amber-100 text-amber-700 px-2 py-1 text-[11px] font-bold hover:bg-amber-200" disabled={estadoChanging} on:click={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>↩️ Liquidada</button>
+							{/if}
+							{#if isFull && liq.estado === 'BORRADOR'}
+								<button class="rounded p-1.5 hover:bg-red-100 text-sm" title="Eliminar" on:click={() => { deleteTargetLiq = liq; deleteModalOpen = true; }}>🗑</button>
+							{/if}
+							{#if isAdmin}
+								<button class="rounded p-1.5 hover:bg-gray-200 text-sm" title="Historial" on:click={() => abrirHistorial(liq.id, liq.consecutivo)}>📜</button>
+							{/if}
+						</div>
+					</div>
+				{/each}
+			</div>
 		{/if}
 	</div>
 
+	<!-- Pagination -->
+	{#if !listLoading && listTotalPages > 1}
+		<div class="mt-4 flex items-center justify-between">
+			<div class="text-sm text-gray-600">
+				Página {listPage} de {listTotalPages} — {listTotal} registros
+			</div>
+			<div class="flex gap-2">
+				<button disabled={listPage <= 1} on:click={() => irPagina(listPage - 1)} class="rounded-lg border border-gray-300 px-3 py-1 text-sm disabled:opacity-50">Anterior</button>
+				{#each Array(Math.min(listTotalPages, 10)) as _, i}
+					<button class="rounded-lg border px-3 py-1 text-sm {listPage === i + 1 ? 'bg-emerald-600 text-white border-emerald-600' : 'border-gray-300 hover:bg-gray-50'}" on:click={() => irPagina(i + 1)}>{i + 1}</button>
+				{/each}
+				{#if listTotalPages > 10}<span class="text-xs text-gray-400">…{listTotalPages}</span>{/if}
+				<button disabled={listPage >= listTotalPages} on:click={() => irPagina(listPage + 1)} class="rounded-lg border border-gray-300 px-3 py-1 text-sm disabled:opacity-50">Siguiente</button>
+			</div>
+		</div>
+	{/if}
+
 	{:else if facturasTab === 'facturas'}
-	<!-- FACTURAS SUB-TAB -->
-	<div class="card">
-		<div class="ch" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-			<span>📋 Facturas de Liquidaciones</span>
-		</div>
 
-		<div style="margin-bottom:12px;display:flex;gap:10px;flex-wrap:wrap;align-items:end">
-			<div style="flex:1;min-width:180px">
-				<label for="facturas-busqueda">Buscar</label>
-				<input id="facturas-busqueda" placeholder="No factura, cliente..." bind:value={facturasBusqueda} on:input={filtrarFacturas} />
-			</div>
-			<div style="min-width:130px">
-				<label for="facturas-estado">Estado</label>
-				<select id="facturas-estado" bind:value={facturasEstado} on:change={filtrarFacturas}>
-					<option value="">Todos</option>
-					<option value="ACTIVA">ACTIVA</option>
-					<option value="ANULADA">ANULADA</option>
-				</select>
+	<!-- Header -->
+	<div class="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+		<div>
+			<h2 class="text-2xl font-bold text-gray-900 md:text-3xl">Facturas de Liquidaciones</h2>
+			<p class="text-sm text-gray-600">{facturasTotal} facturas encontradas</p>
+		</div>
+	</div>
+
+	<!-- Filtros -->
+	<div class="mb-4 flex flex-col gap-4 md:flex-row">
+		<div class="flex-1">
+			<div class="relative">
+				<svg class="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+				<input type="text" bind:value={facturasBusqueda} on:input={filtrarFacturas} placeholder="Buscar por N° factura, cliente..." class="h-10 w-full rounded-lg border border-gray-300 bg-white py-2 pr-4 pl-10 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200" style="padding-left: 2.5rem;" />
 			</div>
 		</div>
+		<div class="flex items-center gap-3">
+			<select bind:value={facturasEstado} on:change={filtrarFacturas} class="h-10 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200">
+				<option value="">Todos los estados</option>
+				<option value="ACTIVA">Activa</option>
+				<option value="ANULADA">Anulada</option>
+			</select>
+			<button on:click={() => { facturasBusqueda=''; facturasEstado=''; filtrarFacturas(); }} class="rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors whitespace-nowrap">✕ Limpiar</button>
+		</div>
+	</div>
 
+	<!-- Stats Cards -->
+	{#if !facturasLoading && facturas.length > 0}
+		{@const totalValor = facturas.reduce((s, f) => s + (f.valor_total || 0), 0)}
+		{@const countActiva = facturas.filter(f => f.estado === 'ACTIVA').length}
+		{@const countAnulada = facturas.filter(f => f.estado === 'ANULADA').length}
+		{@const totalLiqs = facturas.reduce((s, f) => s + (f.items?.length || 0), 0)}
+		<div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4" transition:fade={{ duration: 200 }}>
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<p class="text-xs text-gray-500">Total Facturado</p>
+				<p class="text-lg font-bold text-gray-900">{COP(totalValor)}</p>
+			</div>
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<p class="text-xs text-gray-500">Liquidaciones</p>
+				<p class="text-lg font-bold text-gray-900">{totalLiqs}</p>
+			</div>
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<p class="text-xs text-gray-500">Activas</p>
+				<p class="text-lg font-bold text-emerald-600">{countActiva}</p>
+			</div>
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<p class="text-xs text-gray-500">Anuladas</p>
+				<p class="text-lg font-bold text-red-600">{countAnulada}</p>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Canvas Table -->
+	<div class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow">
 		{#if facturasLoading}
-			<div class="loading-center"><div class="spinner"></div></div>
+			<div class="flex h-96 items-center justify-center">
+				<div class="text-center">
+					<div class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
+					<p class="text-gray-600">Cargando facturas…</p>
+				</div>
+			</div>
 		{:else if facturas.length === 0}
-			<div class="empty-msg">No se encontraron facturas</div>
+			<div class="flex h-64 items-center justify-center">
+				<div class="text-center">
+					<div class="text-5xl mb-3">📭</div>
+					<p class="text-sm font-semibold text-gray-500">No se encontraron facturas</p>
+				</div>
+			</div>
 		{:else}
-			<div class="ltbl-wrap">
-				<table class="ltbl">
-					<thead>
+			<div class="overflow-x-auto">
+				<table class="w-full border-collapse" style="min-width:1000px">
+					<thead class="sticky top-0 z-20 bg-gray-50">
 						<tr>
-							<th>No Factura</th>
-							<th>Fecha</th>
-							<th style="text-align:center">Liquidaciones</th>
-							<th style="text-align:right">Total</th>
-							<th>Estado</th>
-							<th>Facturado por</th>
-							<th>Observaciones</th>
-							<th style="text-align:center">Acciones</th>
+							<th class="border border-gray-200 px-2 py-2 text-left text-xs font-semibold text-gray-700" style="min-width:110px">No Factura</th>
+							<th class="border border-gray-200 px-2 py-2 text-left text-xs font-semibold text-gray-700" style="min-width:120px">Fecha</th>
+							<th class="border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-700" style="min-width:100px">Liquidaciones</th>
+							<th class="border border-gray-200 px-2 py-2 text-right text-xs font-semibold text-gray-700 bg-green-50" style="min-width:130px">Total</th>
+							<th class="border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-700" style="min-width:90px">Estado</th>
+							<th class="border border-gray-200 px-2 py-2 text-left text-xs font-semibold text-gray-700" style="min-width:120px">Facturado por</th>
+							<th class="border border-gray-200 px-2 py-2 text-left text-xs font-semibold text-gray-700" style="min-width:150px">Observaciones</th>
+							<th class="border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-700" style="min-width:120px">Acciones</th>
 						</tr>
 					</thead>
 					<tbody>
 						{#each facturas as fac (fac.id)}
-							<tr>
-								<td style="font-family:monospace;font-weight:700">{fac.numero_factura}</td>
-								<td style="white-space:nowrap;font-size:11px">{fac.fecha_facturacion ? new Date(fac.fecha_facturacion).toLocaleDateString('es-CO', { day:'numeric', month:'short', year:'numeric' }) : '—'}</td>
-								<td style="text-align:center">{fac.items?.length || 0}</td>
-								<td class="monto-total">{COP(fac.valor_total || 0)}</td>
-								<td>
+							<tr class="border-b border-gray-100 hover:bg-emerald-50">
+								<td class="border border-gray-200 px-2 py-2 text-left text-xs">
+									<span class="font-mono font-bold text-purple-800">{fac.numero_factura}</span>
+								</td>
+								<td class="border border-gray-200 px-2 py-2 text-left text-xs text-gray-600 whitespace-nowrap">{fac.fecha_facturacion ? new Date(fac.fecha_facturacion).toLocaleDateString('es-CO', { day:'numeric', month:'short', year:'numeric' }) : '—'}</td>
+								<td class="border border-gray-200 px-2 py-2 text-center text-xs font-mono">{fac.items?.length || 0}</td>
+								<td class="border border-gray-200 px-2 py-2 text-right text-xs font-mono font-bold text-emerald-800">{COP(fac.valor_total || 0)}</td>
+								<td class="border border-gray-200 px-2 py-2 text-center text-xs">
 									{#if fac.estado === 'ACTIVA'}
-										<span class="badge" style="background:#d4edda;color:#155724">ACTIVA</span>
+										<span class="inline-block rounded px-2 py-1 text-xs font-medium bg-emerald-100 text-emerald-800">ACTIVA</span>
 									{:else}
-										<span class="badge" style="background:#f8d7da;color:#721c24">ANULADA</span>
+										<span class="inline-block rounded px-2 py-1 text-xs font-medium bg-red-100 text-red-800">ANULADA</span>
 									{/if}
 								</td>
-								<td style="font-size:11px">{fac.facturado_por?.nombre || '—'}</td>
-								<td style="font-size:11px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title={fac.observaciones || ''}>{fac.observaciones || '—'}</td>
-								<td style="text-align:center;white-space:nowrap">
-									<button class="btn-icon" title="Ver detalle" on:click={() => verDetalleFactura(fac.id)}>👁</button>
-									{#if fac.estado === 'ACTIVA'}
-										<button class="btn-estado anl" title="Anular factura" on:click={() => abrirAnularFactura(fac)}>🚫 Anular</button>
-									{/if}
-									{#if fac.estado === 'ANULADA' && (isAdmin || isFacturacion)}
-										<button class="btn-icon del" title="Eliminar factura" on:click={() => abrirEliminarFactura(fac)}>🗑</button>
-									{/if}
+								<td class="border border-gray-200 px-2 py-2 text-left text-xs text-gray-600">{fac.facturado_por?.nombre || '—'}</td>
+								<td class="border border-gray-200 px-2 py-2 text-left text-xs text-gray-600 truncate max-w-[150px]" title={fac.observaciones || ''}>{fac.observaciones || '—'}</td>
+								<td class="border border-gray-200 px-2 py-2 text-center whitespace-nowrap">
+									<div class="flex items-center justify-center gap-1">
+										<button class="rounded p-1 hover:bg-gray-200 text-sm" title="Ver detalle" on:click={() => verDetalleFactura(fac.id)}>👁</button>
+										{#if fac.estado === 'ACTIVA'}
+											<button class="rounded bg-red-100 text-red-700 px-1.5 py-0.5 text-[10px] font-bold hover:bg-red-200" on:click={() => abrirAnularFactura(fac)}>🚫 Anular</button>
+										{/if}
+										{#if fac.estado === 'ANULADA' && (isAdmin || isFacturacion)}
+											<button class="rounded p-1 hover:bg-red-100 text-sm" title="Eliminar" on:click={() => abrirEliminarFactura(fac)}>🗑</button>
+										{/if}
+									</div>
 								</td>
 							</tr>
 						{/each}
 					</tbody>
 				</table>
 			</div>
-
-			{#if facturasTotalPages > 1}
-				<div class="pagination">
-					<button disabled={facturasPage <= 1} on:click={() => irPaginaFacturas(facturasPage - 1)}>← Ant</button>
-					{#each Array(facturasTotalPages) as _, i}
-						<button class:active={facturasPage === i + 1} on:click={() => irPaginaFacturas(i + 1)}>{i + 1}</button>
-					{/each}
-					<button disabled={facturasPage >= facturasTotalPages} on:click={() => irPaginaFacturas(facturasPage + 1)}>Sig →</button>
-				</div>
-			{/if}
 		{/if}
 	</div>
 
-	{:else if facturasTab === 'terceros'}
-	<!-- TERCEROS HISTORIAL SUB-TAB -->
-	<div class="card">
-		<div class="ch" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-			<span>👤 Historial de Items Terceros</span>
-			<div style="display:flex;align-items:center;gap:8px">
-				<span style="font-size:11px;font-weight:600;color:#64748b;background:#f1f5f9;padding:3px 10px;border-radius:6px">{tercerosTotal} registros</span>
-				<button class="btn-filtrar" style="padding:4px 12px;font-size:11px" on:click={() => { tercerosBusqueda=''; tercerosPlaca=''; tercerosMes=''; tercerosAnio=new Date().getFullYear(); filtrarTerceros(); }}>✕ Limpiar</button>
+	<!-- Pagination -->
+	{#if !facturasLoading && facturasTotalPages > 1}
+		<div class="mt-4 flex items-center justify-between">
+			<div class="text-sm text-gray-600">
+				Página {facturasPage} de {facturasTotalPages} — {facturasTotal} registros
+			</div>
+			<div class="flex gap-2">
+				<button disabled={facturasPage <= 1} on:click={() => irPaginaFacturas(facturasPage - 1)} class="rounded-lg border border-gray-300 px-3 py-1 text-sm disabled:opacity-50">Anterior</button>
+				{#each Array(Math.min(facturasTotalPages, 10)) as _, i}
+					<button class="rounded-lg border px-3 py-1 text-sm {facturasPage === i + 1 ? 'bg-emerald-600 text-white border-emerald-600' : 'border-gray-300 hover:bg-gray-50'}" on:click={() => irPaginaFacturas(i + 1)}>{i + 1}</button>
+				{/each}
+				{#if facturasTotalPages > 10}<span class="text-xs text-gray-400">…{facturasTotalPages}</span>{/if}
+				<button disabled={facturasPage >= facturasTotalPages} on:click={() => irPaginaFacturas(facturasPage + 1)} class="rounded-lg border border-gray-300 px-3 py-1 text-sm disabled:opacity-50">Siguiente</button>
 			</div>
 		</div>
+	{/if}
 
+	{:else if facturasTab === 'terceros'}
+	<!-- TERCEROS HISTORIAL SUB-TAB — Canvas style like Recargos -->
+
+	<!-- Header -->
+	<div class="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+		<div>
+			<h2 class="text-2xl font-bold text-gray-900 md:text-3xl">Historial Liquidaciones de Terceros</h2>
+			<p class="text-sm text-gray-600">{tercerosTotal} registros encontrados</p>
+		</div>
+
+		<div class="flex items-center gap-2">
+			<!-- Navegación Mes/Año -->
+			<div class="w-96 flex items-center gap-2 rounded-lg border border-gray-200 bg-white p-2">
+				<select value={tercerosMes === '' ? '' : String(tercerosMes)} on:change={(e) => { const v = (e.target as HTMLSelectElement).value; tercerosMes = v === '' ? '' : parseInt(v); filtrarTerceros(); }} class="h-10 w-96 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200">
+						<option value="">Todos los meses</option>
+						{#each MESES as m, i}<option value={String(i + 1)}>{m}</option>{/each}
+					</select>
+				<input type="number" bind:value={tercerosAnio} on:change={filtrarTerceros} class="h-10 w-20 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200" min="2020" max="2030" />
+			</div>
+			<!-- Limpiar -->
+			<button on:click={() => { tercerosBusqueda=''; tercerosPlaca=''; tercerosMes=''; tercerosAnio=new Date().getFullYear(); filtrarTerceros(); }} class="flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">✕ Limpiar</button>
+		</div>
+	</div>
+
+	<!-- Filtros y búsqueda -->
+	<div class="mb-4 flex flex-col gap-4 md:flex-row">
+		<div class="flex-1">
+			<div class="relative">
+				<svg class="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+				<input type="text" bind:value={tercerosBusqueda} on:keydown={(e) => e.key === 'Enter' && filtrarTerceros()} placeholder="Buscar por consecutivo, tercero, recorrido..." class="h-10 w-full rounded-lg border border-gray-300 bg-white py-2 pr-4 pl-10 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200" style="padding-left: 2.5rem;" />
+			</div>
+		</div>
+		<div class="flex items-center gap-3">
+			<input type="text" bind:value={tercerosPlaca} on:keydown={(e) => e.key === 'Enter' && filtrarTerceros()} placeholder="Placa..." class="h-10 w-28 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200" />
+		</div>
+	</div>
+
+	<!-- Stats Panel Terceros -->
+	{#if !tercerosLoading && tercerosItems.length > 0}
+		<div class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" transition:fade={{ duration: 200 }}>
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<div class="flex items-center gap-2">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100">
+						<span class="text-sm">📋</span>
+					</div>
+					<div>
+						<p class="text-xs text-gray-500">Registros</p>
+						<p class="text-lg font-bold text-gray-900">{tercerosItems.length}</p>
+					</div>
+				</div>
+			</div>
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<div class="flex items-center gap-2">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100">
+						<span class="text-sm">💰</span>
+					</div>
+					<div>
+						<p class="text-xs text-gray-500">Total Facturado</p>
+						<p class="text-lg font-bold text-gray-900">{COP(tercerosItems.reduce((s, i) => s + i.total_facturado, 0))}</p>
+					</div>
+				</div>
+			</div>
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<div class="flex items-center gap-2">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-100">
+						<span class="text-sm">🏢</span>
+					</div>
+					<div>
+						<p class="text-xs text-gray-500">Admon Total</p>
+						<p class="text-lg font-bold text-gray-900">{COP(tercerosItems.reduce((s, i) => s + i.valor_admin, 0))}</p>
+					</div>
+				</div>
+			</div>
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<div class="flex items-center gap-2">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-green-100">
+						<span class="text-sm">👤</span>
+					</div>
+					<div>
+						<p class="text-xs text-gray-500">V/Liquidar</p>
+						<p class="text-lg font-bold text-gray-900">{COP(tercerosItems.reduce((s, i) => s + i.valor_liquidar, 0))}</p>
+					</div>
+				</div>
+			</div>
+			<div class="rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+				<div class="flex items-center gap-2">
+					<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-100">
+						<span class="text-sm">🏦</span>
+					</div>
+					<div>
+						<p class="text-xs text-gray-500">Ing. Cotransmeq</p>
+						<p class="text-lg font-bold text-gray-900">{COP(tercerosItems.reduce((s, i) => s + i.ingreso_empresa, 0))}</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Canvas Table -->
+	<div class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow">
 		{#if tercerosLoading}
-			<div class="loading-center"><div class="spinner"></div></div>
+			<div class="flex h-96 items-center justify-center">
+				<div class="text-center">
+					<div class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
+					<p class="text-gray-600">Cargando terceros...</p>
+				</div>
+			</div>
 		{:else if tercerosItems.length === 0}
-			<div class="empty-state">
-				<div class="icon">👤</div>
-				<div class="msg">No se encontraron items de terceros</div>
-				<div class="hint">Ajusta los filtros o crea liquidaciones con items de terceros</div>
+			<div class="flex h-64 items-center justify-center">
+				<div class="text-center">
+					<div class="text-5xl mb-3">👤</div>
+					<p class="text-sm font-semibold text-gray-500">No se encontraron items de terceros</p>
+					<p class="text-xs text-gray-400 mt-1">Ajusta los filtros o crea liquidaciones con items de terceros</p>
+				</div>
 			</div>
 		{:else}
-			<div class="ltbl-wrap">
-				<table class="ltbl terc-excel" style="min-width:1700px">
-					<thead>
+			<div class="overflow-x-auto">
+				<table class="w-full border-collapse" style="min-width:1600px">
+					<thead class="sticky top-0 z-20 bg-gray-50">
 						<tr>
-							<th style="width:36px">#</th>
-							<th>Consecutivo</th>
-							<th>Cliente</th>
-							<th>Placa</th>
-							<th>N° Planilla</th>
-							<th>Tercero (Propietario)</th>
-							<th>Recorrido</th>
-							<th>Fechas</th>
-							<th class="th-r">V/Unidad</th>
-							<th class="th-r" style="width:50px">Cant.</th>
-							<th class="th-r">Total Fact.</th>
-							<th class="th-r" style="width:55px">Adm %</th>
-							<th class="th-r">Admon $</th>
-							<th class="th-r">V/Liquidar</th>
-							<th class="th-r">Ing. Cotransmeq</th>
-							<th style="text-align:center">N° Factura</th>
-						</tr>
-						<tr class="excel-filter-row">
-							<th></th>
-							<th><input type="text" placeholder="🔍" bind:value={tercerosBusqueda} on:keydown={(e) => e.key === 'Enter' && filtrarTerceros()} /></th>
-							<th></th>
-							<th><input type="text" placeholder="🔍" bind:value={tercerosPlaca} on:keydown={(e) => e.key === 'Enter' && filtrarTerceros()} /></th>
-							<th></th>
-							<th></th>
-							<th></th>
-							<th>
-								<div class="ef-period">
-									<select bind:value={tercerosMes} on:change={filtrarTerceros}>
-										<option value="">Mes</option>
-										{#each MESES as m, i}<option value={i + 1}>{m.slice(0,3)}</option>{/each}
-									</select>
-									<select bind:value={tercerosAnio} on:change={filtrarTerceros}>
-										<option value="">Año</option>
-										{#each YEARS as y}<option value={y}>{y}</option>{/each}
-									</select>
-								</div>
-							</th>
-							<th></th>
-							<th></th>
-							<th></th>
-							<th></th>
-							<th></th>
-							<th></th>
-							<th></th>
-							<th></th>
+							<th class="border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-700" style="min-width:40px">#</th>
+							<th class="border border-gray-200 px-2 py-2 text-left text-xs font-semibold text-gray-700" style="min-width:100px">Consecutivo</th>
+							<th class="border border-gray-200 px-2 py-2 text-left text-xs font-semibold text-gray-700" style="min-width:150px">Cliente</th>
+							<th class="border border-gray-200 px-2 py-2 text-left text-xs font-semibold text-gray-700" style="min-width:90px">Placa</th>
+							<th class="border border-gray-200 px-2 py-2 text-left text-xs font-semibold text-gray-700" style="min-width:110px">N° Planilla</th>
+							<th class="border border-gray-200 px-2 py-2 text-left text-xs font-semibold text-gray-700" style="min-width:180px">Tercero (Propietario)</th>
+							<th class="border border-gray-200 px-2 py-2 text-left text-xs font-semibold text-gray-700" style="min-width:200px">Recorrido</th>
+							<th class="border border-gray-200 px-2 py-2 text-left text-xs font-semibold text-gray-700" style="min-width:110px">Fechas</th>
+							<th class="border border-gray-200 px-2 py-2 text-right text-xs font-semibold text-gray-700 bg-gray-50" style="min-width:100px">V/Unidad</th>
+							<th class="border border-gray-200 px-2 py-2 text-right text-xs font-semibold text-gray-700 bg-gray-50" style="min-width:110px">Total Fact.</th>
+							<th class="border border-gray-200 px-2 py-2 text-right text-xs font-semibold text-gray-700 bg-gray-50" style="min-width:100px">Admon $</th>
+							<th class="border border-gray-200 px-2 py-2 text-right text-xs font-semibold text-gray-700 bg-green-50" style="min-width:110px">V/Liquidar</th>
+							<th class="border border-gray-200 px-2 py-2 text-right text-xs font-semibold text-gray-700 bg-green-50" style="min-width:120px">Ing. Cotransmeq</th>
+							<th class="border border-gray-200 px-2 py-2 text-center text-xs font-semibold text-gray-700" style="min-width:110px">N° Factura</th>
 						</tr>
 					</thead>
 					<tbody>
 						{#each tercerosItems as item, idx}
 							{@const facItem = item.liquidacion?.factura_items?.[0]}
 							{@const numFactura = facItem?.factura?.numero_factura || ''}
-							<tr style={numFactura ? 'background:#fffbeb' : ''}>
-								<td style="color:#94a3b8;font-size:10px;text-align:center">{(tercerosPage - 1) * 50 + idx + 1}</td>
-								<td><span class="consec">{item.liquidacion?.consecutivo || '—'}</span></td>
-								<td style="font-size:11px;color:#475569;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title={item.liquidacion?.cliente?.nombre || ''}>{item.liquidacion?.cliente?.nombre || '—'}</td>
-								<td><span style="font-weight:700;color:#1e293b">{item.placa}</span></td>
-								<td style="font-size:11px;font-family:monospace;color:#475569">{item.item?.numero_planilla || '—'}</td>
-								<td style="font-size:11px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title={item.tercero?.nombre_completo || ''}>{item.tercero?.nombre_completo || '—'}</td>
-								<td style="font-size:11px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title={item.recorrido}>{item.recorrido}</td>
-								<td style="font-size:11px;white-space:nowrap">{item.fechas}</td>
-								<td class="monto-total" style="font-size:11px">{COP(item.valor_unitario)}</td>
-								<td style="text-align:right;font-family:monospace;font-size:11px">{item.cantidad}</td>
-								<td class="monto-total" style="font-size:11px">{COP(item.total_facturado)}</td>
-								<td style="text-align:right;font-family:monospace;font-size:11px;color:#64748b">{item.porcentaje_admin}%</td>
-								<td class="monto-total" style="font-size:11px;color:#64748b">{COP(item.valor_admin)}</td>
-								<td class="monto-total" style="font-size:11.5px">{COP(item.valor_liquidar)}</td>
-								<td class="monto-total" style="font-size:11.5px">{COP(item.ingreso_empresa)}</td>
-								<td style="text-align:center;font-size:11px">{#if numFactura}<span class="badge" style="background:#fef3c7;color:#92400e">📄 {numFactura}</span>{:else}<span style="color:#94a3b8;font-size:10px">Sin factura</span>{/if}</td>
+							<tr class="border-b border-gray-100 hover:bg-emerald-50 {numFactura ? 'bg-emerald-50/30' : ''}">
+								<td class="border border-gray-200 px-2 py-2 text-center text-xs text-gray-400">{(tercerosPage - 1) * 50 + idx + 1}</td>
+								<td class="border border-gray-200 px-2 py-2 text-left text-xs">
+									<span class="font-mono font-bold text-emerald-800">{item.liquidacion?.consecutivo || '—'}</span>
+								</td>
+								<td class="border border-gray-200 px-2 py-2 text-left text-xs text-gray-600 truncate max-w-[150px]" title={item.liquidacion?.cliente?.nombre || ''}>{item.liquidacion?.cliente?.nombre || '—'}</td>
+								<td class="border border-gray-200 px-2 py-2 text-left text-xs font-bold text-gray-900">{item.placa}</td>
+								<td class="border border-gray-200 px-2 py-2 text-left text-xs font-mono text-gray-600">{item.item?.numero_planilla || '—'}</td>
+								<td class="border border-gray-200 px-2 py-2 text-left text-xs text-gray-600 truncate max-w-[180px]" title={item.tercero?.nombre_completo || ''}>{item.tercero?.nombre_completo || '—'}</td>
+								<td class="border border-gray-200 px-2 py-2 text-left text-xs text-gray-600 truncate max-w-[200px]" title={item.recorrido}>{item.recorrido}</td>
+								<td class="border border-gray-200 px-2 py-2 text-left text-xs text-gray-600 whitespace-nowrap">{item.fechas}</td>
+								<td class="border border-gray-200 px-2 py-2 text-right text-xs font-mono font-semibold text-gray-900">{COP(item.valor_unitario)}</td>
+								<td class="border border-gray-200 px-2 py-2 text-right text-xs font-mono font-semibold text-gray-900">{COP(item.total_facturado)}</td>
+								<td class="border border-gray-200 px-2 py-2 text-right text-xs font-mono text-gray-500">{COP(item.valor_admin)}</td>
+								<td class="border border-gray-200 px-2 py-2 text-right text-xs font-mono font-bold text-emerald-800">{COP(item.valor_liquidar)}</td>
+								<td class="border border-gray-200 px-2 py-2 text-right text-xs font-mono font-bold text-emerald-800">{COP(item.ingreso_empresa)}</td>
+								<td class="border border-gray-200 px-2 py-2 text-center text-xs">
+									{#if numFactura}
+										<span class="inline-block rounded px-2 py-1 text-xs font-medium bg-emerald-100 text-emerald-800">📄 {numFactura}</span>
+									{:else}
+										<span class="text-gray-400 text-[10px]">Sin factura</span>
+									{/if}
+								</td>
 							</tr>
 						{/each}
-					</tbody>
-					<tfoot>
-						<tr class="terc-totals-row">
-							<td colspan="8" style="text-align:right;font-size:11px;text-transform:uppercase;letter-spacing:.05em">Totales página</td>
-							<td class="monto-total">{COP(tercerosItems.reduce((s, i) => s + i.valor_unitario, 0))}</td>
-							<td style="text-align:right;font-family:monospace;font-weight:800">{tercerosItems.reduce((s, i) => s + i.cantidad, 0)}</td>
-							<td class="monto-total">{COP(tercerosItems.reduce((s, i) => s + i.total_facturado, 0))}</td>
-							<td></td>
-							<td class="monto-total">{COP(tercerosItems.reduce((s, i) => s + i.valor_admin, 0))}</td>
-							<td class="monto-total">{COP(tercerosItems.reduce((s, i) => s + i.valor_liquidar, 0))}</td>
-							<td class="monto-total">{COP(tercerosItems.reduce((s, i) => s + i.ingreso_empresa, 0))}</td>
-							<td></td>
+
+						<!-- Totals Row -->
+						<tr class="sticky bottom-0 bg-emerald-50 font-semibold">
+							<td class="border border-gray-200 px-2 py-2" colspan="8">
+								<span class="text-xs text-gray-600 uppercase tracking-wide">Totales página</span>
+							</td>
+							<td class="border border-gray-200 px-2 py-2 text-right text-xs font-mono font-bold text-emerald-900">{COP(tercerosItems.reduce((s, i) => s + i.valor_unitario, 0))}</td>
+							<td class="border border-gray-200 px-2 py-2 text-right text-xs font-mono font-bold text-emerald-900">{COP(tercerosItems.reduce((s, i) => s + i.total_facturado, 0))}</td>
+							<td class="border border-gray-200 px-2 py-2 text-right text-xs font-mono font-bold text-emerald-900">{COP(tercerosItems.reduce((s, i) => s + i.valor_admin, 0))}</td>
+							<td class="border border-gray-200 px-2 py-2 text-right text-xs font-mono font-bold text-emerald-900">{COP(tercerosItems.reduce((s, i) => s + i.valor_liquidar, 0))}</td>
+							<td class="border border-gray-200 px-2 py-2 text-right text-xs font-mono font-bold text-emerald-900">{COP(tercerosItems.reduce((s, i) => s + i.ingreso_empresa, 0))}</td>
+							<td class="border border-gray-200 px-2 py-2"></td>
 						</tr>
-					</tfoot>
+					</tbody>
 				</table>
 			</div>
-
-			{#if tercerosTotalPages > 1}
-				<div class="pagination">
-					<button disabled={tercerosPage <= 1} on:click={() => irPaginaTerceros(tercerosPage - 1)}>← Ant</button>
-					{#each Array(Math.min(tercerosTotalPages, 10)) as _, i}
-						<button class:active={tercerosPage === i + 1} on:click={() => irPaginaTerceros(i + 1)}>{i + 1}</button>
-					{/each}
-					{#if tercerosTotalPages > 10}<span style="color:#94a3b8;font-size:12px">…{tercerosTotalPages}</span>{/if}
-					<button disabled={tercerosPage >= tercerosTotalPages} on:click={() => irPaginaTerceros(tercerosPage + 1)}>Sig →</button>
-				</div>
-			{/if}
 		{/if}
 	</div>
+
+	<!-- Pagination -->
+	{#if !tercerosLoading && tercerosTotalPages > 1}
+		<div class="mt-4 flex items-center justify-between">
+			<div class="text-sm text-gray-600">
+				Mostrando {(tercerosPage - 1) * 50 + 1} a {Math.min(tercerosPage * 50, tercerosTotal)} de {tercerosTotal} registros
+			</div>
+			<div class="flex gap-2">
+				<button disabled={tercerosPage <= 1} on:click={() => irPaginaTerceros(tercerosPage - 1)} class="rounded-lg border border-gray-300 px-3 py-1 text-sm disabled:opacity-50">Anterior</button>
+				{#each Array(Math.min(tercerosTotalPages, 10)) as _, i}
+					<button class="rounded-lg border px-3 py-1 text-sm {tercerosPage === i + 1 ? 'bg-emerald-600 text-white border-emerald-600' : 'border-gray-300 hover:bg-gray-50'}" on:click={() => irPaginaTerceros(i + 1)}>{i + 1}</button>
+				{/each}
+				{#if tercerosTotalPages > 10}<span class="text-xs text-gray-400">…{tercerosTotalPages}</span>{/if}
+				<button disabled={tercerosPage >= tercerosTotalPages} on:click={() => irPaginaTerceros(tercerosPage + 1)} class="rounded-lg border border-gray-300 px-3 py-1 text-sm disabled:opacity-50">Siguiente</button>
+			</div>
+		</div>
+	{/if}
 
 	{:else if facturasTab === 'configuracion'}
 	<!-- CONFIG SUB-TAB -->
@@ -926,7 +1299,7 @@
 					<button class="btn-estado" style="border-color:#2563eb;color:#2563eb;font-size:11px;padding:5px 12px" on:click={() => { cerrarDetalle(); if (detailLiq) irEditarLiquidacion(detailLiq.id); }}>✏️ Editar</button>
 				{/if}
 				{#if detailLiq}
-					<button class="btn-estado" style="border-color:#92400e;color:#92400e;font-size:11px;padding:5px 12px" on:click={() => { cerrarDetalle(); if (detailLiq) irVerLiquidacion(detailLiq.id); }}>👁 Ver</button>
+					<button class="btn-estado" style="border-color:#0f4025;color:#0f4025;font-size:11px;padding:5px 12px" on:click={() => { cerrarDetalle(); if (detailLiq) irVerLiquidacion(detailLiq.id); }}>👁 Ver</button>
 				{/if}
 				<button class="modal-close" on:click={cerrarDetalle}>✕</button>
 			</div>
@@ -938,7 +1311,7 @@
 				<div class="det-grid">
 					<div>
 						<div class="det-label">Consecutivo</div>
-						<div class="det-value" style="font-family:monospace;color:#92400e">{detailLiq.consecutivo}</div>
+						<div class="det-value" style="font-family:monospace;color:#0f4025">{detailLiq.consecutivo}</div>
 					</div>
 					<div>
 						<div class="det-label">Cliente</div>
@@ -991,7 +1364,7 @@
 							<tbody>
 								{#each detailLiq.items as it}
 									<tr>
-										<td style="font-family:monospace;font-weight:700;color:#92400e">{it.placa}</td>
+										<td style="font-family:monospace;font-weight:700;color:#0f4025">{it.placa}</td>
 										<td>{it.fecha_inicial ? new Date(it.fecha_inicial).toLocaleDateString('es-CO') : '—'}</td>
 										<td>{it.fecha_final ? new Date(it.fecha_final).toLocaleDateString('es-CO') : '—'}</td>
 										<td style="font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis">{it.recorrido || ''}</td>
@@ -1000,7 +1373,7 @@
 										<td class="mc">{COP(it.valor_unitario)}</td>
 										<td class="mc">{COP(it.subtotal || it.cantidad * it.valor_unitario)}</td>
 										<td style="text-align:center">{it.porcentaje_descuento || 0}%</td>
-										<td class="mc" style="font-weight:700;color:#92400e">{COP(it.valor_final || it.subtotal || it.cantidad * it.valor_unitario)}</td>
+										<td class="mc" style="font-weight:700;color:#0f4025">{COP(it.valor_final || it.subtotal || it.cantidad * it.valor_unitario)}</td>
 									</tr>
 								{/each}
 							</tbody>
@@ -1144,7 +1517,7 @@
 				</div>
 				<div>
 					<span style="font-size:11px;color:#64748b">Total</span>
-					<div style="font-weight:700;color:#92400e">{COP(detalleFactura.valor_total || 0)}</div>
+					<div style="font-weight:700;color:#0f4025">{COP(detalleFactura.valor_total || 0)}</div>
 				</div>
 				<div>
 					<span style="font-size:11px;color:#64748b">Facturado por</span>
@@ -1362,80 +1735,21 @@
 
 <style>
 	.page-wrap { padding: 24px 18px 48px; }
-	.topbar {
-		background: linear-gradient(135deg, #92400e 0%, #b45309 60%, #d97706 100%);
-		border-radius: 18px; padding: 16px 26px; margin-bottom: 20px;
-		display: flex; align-items: center; justify-content: space-between;
-		box-shadow: 0 10px 40px rgba(146,64,14,.35);
-	}
-	.topbar-l { display: flex; align-items: center; gap: 14px; }
-	.t-logo { height: 48px; width: 48px; object-fit: contain; background: #fff; border-radius: 12px; padding: 5px; flex-shrink: 0; }
-	.t-title { color: #fff; font-size: 18px; font-weight: 800; letter-spacing: -.02em; line-height: 1.2; }
-	.t-sub { color: rgba(255,255,255,.65); font-size: 11.5px; margin-top: 2px; }
-	.btn-hdr {
-		background: #fff; color: #92400e; border: none; border-radius: 10px;
-		padding: 10px 22px; font-weight: 800; font-size: 13px; cursor: pointer;
-		box-shadow: 0 2px 16px rgba(0,0,0,.2); transition: all .15s;
-	}
-	.btn-hdr:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(0,0,0,.25); }
 	.card { background: #fff; border-radius: 16px; border: 1px solid #dde3eb; padding: 22px 24px; margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,.05); }
-	.ch { font-size: 11px; font-weight: 800; color: #92400e; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
-	.ch::before { content: ''; width: 3px; height: 16px; background: linear-gradient(180deg, #b45309, #f59e0b); border-radius: 2px; display: block; }
+	.ch { font-size: 11px; font-weight: 800; color: #0f4025; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+	.ch::before { content: ''; width: 3px; height: 16px; background: linear-gradient(180deg, #1b6b3a, #5cb87a); border-radius: 2px; display: block; }
 	label { display: block; font-size: 10.5px; font-weight: 700; color: #6b7e8c; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
 	input, select { width: 100%; border: 1.5px solid #dde3eb; border-radius: 8px; padding: 8px 11px; font-size: 13px; color: #1a2530; background: #fafbfc; outline: none; transition: all .15s; }
-	input:focus, select:focus { border-color: #b45309; background: #fff; box-shadow: 0 0 0 3px rgba(180,83,9,.1); }
-	.list-toolbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 16px; }
-	.list-toolbar .field { display: flex; flex-direction: column; gap: 3px; }
-	.list-toolbar input, .list-toolbar select { padding: 7px 11px; font-size: 12px; min-width: 140px; }
-	.btn-filtrar { padding: 7px 20px; border: none; border-radius: 8px; background: #92400e; color: #fff; font-weight: 700; font-size: 12px; cursor: pointer; transition: all .15s; width: auto; }
-	.btn-filtrar:hover { background: #b45309; }
-	.ltbl-wrap { overflow-x: auto; border: 1px solid #dde3eb; border-radius: 12px; }
-	.ltbl { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 900px; }
-	.ltbl th { background: linear-gradient(135deg, #fef3c7, #fde68a); color: #92400e; font-weight: 800; font-size: 10px; text-transform: uppercase; letter-spacing: .07em; padding: 11px 10px; border-bottom: 2px solid #fcd34d; white-space: nowrap; text-align: left; }
-	.ltbl td { padding: 10px 10px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
-	.ltbl tbody tr:hover td { background: #fffbeb; }
-	.ltbl tbody tr.row-new td { animation: highlightNew 8s ease-out forwards; }
-	.ltbl tbody tr.row-updated td { animation: highlightUpdated 8s ease-out forwards; }
-	.ltbl tbody tr.row-new { box-shadow: inset 3px 0 0 #f59e0b; }
-	.ltbl tbody tr.row-updated { box-shadow: inset 3px 0 0 #fbbf24; }
-	@keyframes highlightNew { 0% { background: #fef3c7; } 60% { background: #fef3c7; } 100% { background: transparent; } }
-	@keyframes highlightUpdated { 0% { background: #fefce8; } 60% { background: #fefce8; } 100% { background: transparent; } }
-	.ltbl .consec { font-family: monospace; font-weight: 800; color: #92400e; font-size: 12px; }
-	.ltbl .monto-total { font-family: monospace; font-weight: 800; color: #92400e; font-size: 13px; text-align: right; white-space: nowrap; }
-	.ltbl .th-r { text-align: right; }
-	.ltbl tfoot .terc-totals-row { background: linear-gradient(135deg, #fef3c7, #fde68a); font-weight: 800; font-size: 12px; }
-	.ltbl tfoot .terc-totals-row td { border-bottom: none; padding: 12px 10px; }
-
-	/* Excel-style filter row */
-	.terc-excel thead { position: sticky; top: 0; z-index: 2; }
-	.excel-filter-row th { background: #fefce8; padding: 4px 4px !important; border-bottom: 2px solid #d97706 !important; }
-	.excel-filter-row input { width: 100%; padding: 3px 6px; font-size: 10px; border: 1px solid #e2e8f0; border-radius: 4px; background: #fff; outline: none; transition: border .15s; }
-	.excel-filter-row input:focus { border-color: #d97706; box-shadow: 0 0 0 2px rgba(217,119,6,.15); }
-	.excel-filter-row select { width: 100%; padding: 2px 2px; font-size: 10px; border: 1px solid #e2e8f0; border-radius: 4px; background: #fff; cursor: pointer; outline: none; }
-	.excel-filter-row select:focus { border-color: #d97706; }
-	.ef-period { display: flex; gap: 3px; }
-	.ef-period select { min-width: 0; flex: 1; }
-
-	.badge { display: inline-block; padding: 3px 10px; border-radius: 6px; font-size: 10.5px; font-weight: 700; white-space: nowrap; }
-	.btn-icon { background: none; border: none; cursor: pointer; padding: 5px 7px; border-radius: 6px; font-size: 14px; transition: all .1s; width: auto; }
-	.btn-icon:hover { background: #f1f5f9; }
-	.btn-icon.del:hover { background: #fee2e2; }
-	.pagination { display: flex; justify-content: center; align-items: center; gap: 6px; margin-top: 16px; }
-	.pagination button { padding: 6px 14px; border: 1px solid #dde3eb; border-radius: 8px; background: #fff; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .1s; width: auto; }
-	.pagination button.active { background: #92400e; color: #fff; border-color: #92400e; }
-	.pagination button:hover:not(.active) { background: #f1f5f9; }
-	.pagination button:disabled { opacity: .4; cursor: not-allowed; }
-	.empty-state { text-align: center; padding: 48px 20px; color: #94a3b8; }
-	.empty-state .icon { font-size: 48px; margin-bottom: 12px; }
-	.empty-state .msg { font-size: 14px; font-weight: 600; color: #64748b; }
-	.empty-state .hint { font-size: 12px; margin-top: 6px; }
+	input:focus, select:focus { border-color: #1b6b3a; background: #fff; box-shadow: 0 0 0 3px rgba(27,107,58,.1); }
+	.btn-filtrar { padding: 7px 20px; border: none; border-radius: 8px; background: #0f4025; color: #fff; font-weight: 700; font-size: 12px; cursor: pointer; transition: all .15s; width: auto; }
+	.btn-filtrar:hover { background: #1b6b3a; }
 	.loading-center { display: flex; justify-content: center; align-items: center; padding: 48px; }
-	.spinner { width: 32px; height: 32px; border: 3px solid #e2e8f0; border-top-color: #92400e; border-radius: 50%; animation: spin .6s linear infinite; }
+	.spinner { width: 32px; height: 32px; border: 3px solid #e2e8f0; border-top-color: #0f4025; border-radius: 50%; animation: spin .6s linear infinite; }
 	@keyframes spin { to { transform: rotate(360deg); } }
 	.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 20px; }
 	.modal-box { background: #fff; border-radius: 18px; max-width: 900px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 25px 60px rgba(0,0,0,.25); }
 	.modal-hd { padding: 20px 24px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; }
-	.modal-hd h3 { font-size: 16px; font-weight: 800; color: #92400e; margin: 0; }
+	.modal-hd h3 { font-size: 16px; font-weight: 800; color: #0f4025; margin: 0; }
 	.modal-close { background: #f1f5f9; border: none; border-radius: 8px; width: 32px; height: 32px; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all .1s; }
 	.modal-close:hover { background: #e2e8f0; }
 	.modal-body { padding: 20px 24px; }
@@ -1450,9 +1764,9 @@
 	.det-tbl th { background: #f8fafc; color: #64748b; font-weight: 700; font-size: 10px; text-transform: uppercase; padding: 9px 8px; border-bottom: 1px solid #e2e8f0; text-align: left; white-space: nowrap; }
 	.det-tbl td { padding: 8px 8px; border-bottom: 1px solid #f1f5f9; }
 	.det-tbl .mc { text-align: right; font-family: monospace; }
-	.det-totals { margin-top: 16px; background: #fffbeb; border-radius: 10px; padding: 14px 18px; }
+	.det-totals { margin-top: 16px; background: #f8fdf9; border-radius: 10px; padding: 14px 18px; }
 	.det-total-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
-	.det-total-row.main { font-size: 16px; font-weight: 800; color: #92400e; padding-top: 8px; border-top: 2px solid #fde68a; margin-top: 6px; }
+	.det-total-row.main { font-size: 16px; font-weight: 800; color: #0f4025; padding-top: 8px; border-top: 2px solid #d4ecdb; margin-top: 6px; }
 	.estado-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 16px; }
 	.btn-estado { padding: 6px 16px; border: 1.5px solid; border-radius: 8px; font-size: 11px; font-weight: 700; cursor: pointer; transition: all .15s; background: #fff; width: auto; }
 	.btn-estado:hover { transform: translateY(-1px); }
@@ -1462,31 +1776,7 @@
 	.btn-estado.red:hover { background: #fef2f2; }
 	.btn-estado.amber { border-color: #d97706; color: #d97706; }
 	.btn-estado.amber:hover { background: #fffbeb; }
-	.btn-estado.liq { border-color: #16a34a; color: #16a34a; font-size: 10px; padding: 3px 8px; }
-	.btn-estado.liq:hover { background: #f0fdf4; }
-	.btn-estado.anl { border-color: #dc2626; color: #dc2626; font-size: 10px; padding: 3px 8px; }
-	.btn-estado.anl:hover { background: #fef2f2; }
-	.btn-estado.rev { border-color: #d97706; color: #d97706; font-size: 10px; padding: 3px 8px; }
-	.btn-estado.rev:hover { background: #fffbeb; }
 	.btn-estado:disabled { opacity: .5; cursor: not-allowed; transform: none; }
-	.sub-tabs { display: flex; gap: 3px; background: #f1f5f9; border-radius: 8px; padding: 3px; width: fit-content; margin-bottom: 16px; }
-	.sub-tab-btn { padding: 6px 18px; border: none; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 700; transition: all .15s; background: transparent; color: #64748b; }
-	.sub-tab-btn.active { background: #fff; color: #92400e; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
-	.sub-tab-btn:not(.active):hover { background: rgba(255,255,255,.5); color: #334155; }
-	.btn-facturar-hdr {
-		background: linear-gradient(135deg, #7c3aed, #5b21b6); color: #fff;
-		border: none; border-radius: 8px; padding: 7px 16px;
-		font-size: 12px; font-weight: 700; cursor: pointer;
-		box-shadow: 0 2px 8px rgba(124,58,237,.3); transition: all .15s;
-	}
-	.btn-facturar-hdr:hover { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(124,58,237,.4); }
-	.badge-factura {
-		display: inline-flex; align-items: center; gap: 3px;
-		background: #ede9fe; color: #5b21b6;
-		padding: 2px 8px; border-radius: 6px;
-		font-size: 11px; font-weight: 700; font-family: monospace; white-space: nowrap;
-	}
-	.empty-msg { text-align: center; color: #94a3b8; font-size: 13px; padding: 32px 0; font-weight: 600; }
 
 	/* Config grid */
 	.cfg-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 16px; }
