@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { fade, fly, slide } from 'svelte/transition';
 	import { clientesAPI } from '$lib/api/apiClient';
+	import { toast } from 'svelte-sonner';
 
 	// Constante para TipoCliente
 	const TipoCliente = {
@@ -70,13 +71,14 @@
 	// Estado
 	let cliente: Cliente | null = null;
 	let isLoading = true;
+	let updatedLoading = false;
 	let isEditing = false;
 	let error: string | null = null;
 	let activeTab: 'info' | 'servicios' | 'actividad' = 'info';
 	let editForm: Partial<Cliente> = {};
 
 	// Obtener ID del cliente de la URL
-	$: clienteId = $page.params.id;
+	$: clienteId = $page.params.id as string;
 
 	onMount(() => {
 		loadCliente();
@@ -133,19 +135,23 @@
 	}
 
 	async function saveChanges() {
+		updatedLoading = true;
+
 		try {
 			// Aquí iría la llamada a la API para guardar los cambios
-			// await clientesAPI.update(clienteId, editForm);
+			await clientesAPI.update(clienteId, editForm);
 
 			// Por ahora, solo actualizamos localmente
 			cliente = { ...cliente!, ...editForm } as Cliente;
 			isEditing = false;
 
 			// Mostrar notificación de éxito
-			alert('Cliente actualizado exitosamente');
+			toast.info('Cliente actualizado exitosamente');
 		} catch (err: any) {
 			console.error('Error guardando cambios:', err);
 			error = err.message || 'Error al guardar los cambios';
+		} finally {
+			updatedLoading = false;
 		}
 	}
 
@@ -301,9 +307,29 @@
 								</button>
 								<button
 									on:click={saveChanges}
-									class="apple-transition rounded-lg bg-gradient-to-r from-orange-500 to-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:shadow-xl"
+									class="apple-transition flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:shadow-xl disabled:opacity-80"
+									disabled={updatedLoading}
 								>
-									Guardar
+									{#if updatedLoading}
+										<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
+											<circle
+												class="opacity-25"
+												cx="12"
+												cy="12"
+												r="10"
+												stroke="currentColor"
+												stroke-width="4"
+											/>
+											<path
+												class="opacity-75"
+												fill="currentColor"
+												d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+											/>
+										</svg>
+										<span>Guardando...</span>
+									{:else}
+										<span>Guardar</span>
+									{/if}
 								</button>
 							{:else}
 								<button
