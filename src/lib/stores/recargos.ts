@@ -78,22 +78,11 @@ function createRecargosStore() {
 			}
 		},
 
-		/**
-		 * Cambiar mes y recargar datos
-		 */
-		async setMes(mes: number) {
-			update((s) => ({ ...s, selectedMes: mes }));
-			await this.fetchRecargos();
+		async setMesYAño(mes: number, año: number) {
+			update((s) => ({ ...s, selectedMes: mes, selectedAño: año }));
+			await this.fetchRecargos(); // Solo 1 fetch
 		},
-
-		/**
-		 * Cambiar año y recargar datos
-		 */
-		async setAño(año: number) {
-			update((s) => ({ ...s, selectedAño: año }));
-			await this.fetchRecargos();
-		},
-
+		
 		/**
 		 * Aplicar filtros
 		 */

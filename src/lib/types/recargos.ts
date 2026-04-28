@@ -126,6 +126,7 @@ export interface CanvasRecargo {
 		id: string;
 		nombre: string;
 	};
+	deleted_at?: Date
 }
 
 export interface RecargoPlanillaFiltros {

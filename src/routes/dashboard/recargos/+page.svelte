@@ -15,7 +15,6 @@
 		toNumber
 	} from '$lib/utils/recargosHelpers';
 	import { fade } from 'svelte/transition';
-	import type { CanvasRecargo } from '$lib/types/recargos';
 	import ModalVisualizarRecargo from '$lib/components/modals/ModalVisualizarRecargo.svelte';
 	import ModalFormRecargo from '$lib/components/modals/ModalFormRecargo.svelte';
 	import ModalConfirmarEliminar from '$lib/components/modals/ModalConfirmarEliminar.svelte';
@@ -286,8 +285,7 @@
 			selectedMonth = 12;
 			selectedYear--;
 		}
-		recargosStore.setMes(selectedMonth);
-		recargosStore.setAño(selectedYear);
+		recargosStore.setMesYAño(selectedMonth, selectedYear);
 	}
 
 	function handleSelectAll() {
@@ -603,7 +601,6 @@
 
 	// Load data on mount
 	onMount(async () => {
-		await recargosStore.fetchRecargos();
 		setupSocketListeners();
 	});
 
@@ -681,8 +678,7 @@
 
 	// Reload when month/year changes
 	$: if (selectedMonth && selectedYear) {
-		recargosStore.setMes(selectedMonth);
-		recargosStore.setAño(selectedYear);
+		recargosStore.setMesYAño(selectedMonth, selectedYear);
 	}
 </script>
 
