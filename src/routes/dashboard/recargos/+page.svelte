@@ -326,6 +326,7 @@
 		} else {
 			selectedRows.add(id);
 		}
+		console.log(paginatedRecargos)
 		selectedRows = selectedRows; // Trigger reactivity
 	}
 
@@ -1259,9 +1260,13 @@
 											{@const dia = recargo.dias_laborales?.find((d: any) => d.dia === column.day)}
 											{@const horas = dia ? toNumber(dia.total_horas) : 0}
 
-											{@const fechaRealizacionDia = recargo.servicio.fecha_realizacion}
-											{@const esDiaPendiente = getDia(fechaRealizacionDia) === (column as any).day}
+											{@const fechaBase = dia
+												? recargo?.servicio?.fecha_realizacion
+												: recargo?.servicio?.fecha_realizacion}
 
+											{@const esDiaPendiente = fechaBase
+												? getDia(fechaBase) === (column as any).day
+												: false}
 											{#if dia?.disponibilidad}
 												<span
 													class="inline-block rounded border border-blue-300 bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800"
