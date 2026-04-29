@@ -94,6 +94,7 @@ export interface RecargoPlanilla {
 }
 
 export interface CanvasRecargo {
+	[x: string]: any;
 	id: string;
 	conductor_id: string;
 	vehiculo_id: string;
@@ -126,7 +127,7 @@ export interface CanvasRecargo {
 		id: string;
 		nombre: string;
 	};
-	deleted_at?: Date
+	deleted_at?: Date;
 }
 
 export interface RecargoPlanillaFiltros {

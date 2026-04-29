@@ -12,7 +12,8 @@
 		getEstadoColor,
 		getEstadoBgColor,
 		formatearNumeroPlanilla,
-		toNumber
+		toNumber,
+		getDia
 	} from '$lib/utils/recargosHelpers';
 	import { fade } from 'svelte/transition';
 	import ModalVisualizarRecargo from '$lib/components/modals/ModalVisualizarRecargo.svelte';
@@ -69,7 +70,14 @@
 
 	// Columns dinámicas según mes/año
 	$: daysInMonth = getDaysInMonth(selectedMonth, selectedYear);
-	$: uniqueEmpresas = [...new Set(recargos.map((r) => r.empresa?.nombre).filter((v) => v != null).map(String))].sort();
+	$: uniqueEmpresas = [
+		...new Set(
+			recargos
+				.map((r) => r.empresa?.nombre)
+				.filter((v) => v != null)
+				.map(String)
+		)
+	].sort();
 	$: uniqueConductores = [
 		...new Set(
 			recargos
@@ -77,8 +85,22 @@
 				.filter((v) => v != null)
 		)
 	].sort();
-	$: uniqueVehiculos = [...new Set(recargos.map((r) => r.vehiculo?.placa).filter((v) => v != null).map(String))].sort();
-	$: uniqueEstados = [...new Set(recargos.map((r) => r.estado).filter((v) => v != null).map(String))];
+	$: uniqueVehiculos = [
+		...new Set(
+			recargos
+				.map((r) => r.vehiculo?.placa)
+				.filter((v) => v != null)
+				.map(String)
+		)
+	].sort();
+	$: uniqueEstados = [
+		...new Set(
+			recargos
+				.map((r) => r.estado)
+				.filter((v) => v != null)
+				.map(String)
+		)
+	];
 	let planillaFilter: string = '';
 	$: dayColumns = Array.from({ length: daysInMonth }, (_, i) => {
 		const day = i + 1;
@@ -176,7 +198,8 @@
 
 		// Filtros específicos
 		if (conductorFilter.length > 0) {
-			const nombre = `${recargo.conductor?.nombre || ''} ${recargo.conductor?.apellido || ''}`.trim();
+			const nombre =
+				`${recargo.conductor?.nombre || ''} ${recargo.conductor?.apellido || ''}`.trim();
 			if (!conductorFilter.includes(nombre)) return false;
 		}
 
@@ -1204,7 +1227,7 @@
 											? 'text-left'
 											: 'text-center'} text-xs {column.fixed
 											? 'sticky left-0 z-10'
-												: ''} {column.bgColor || ''} {isSelected
+											: ''} {column.bgColor || ''} {isSelected
 											? 'shadow-[inset_0_0_0_9999px_rgba(200,80,10,0.18)]'
 											: ''}"
 										style="min-width: {column.width}; {column.fixed && column.bgColor
@@ -1235,6 +1258,10 @@
 										{:else if column.isDayColumn}
 											{@const dia = recargo.dias_laborales?.find((d: any) => d.dia === column.day)}
 											{@const horas = dia ? toNumber(dia.total_horas) : 0}
+
+											{@const fechaRealizacionDia = recargo.servicio.fecha_realizacion}
+											{@const esDiaPendiente = getDia(fechaRealizacionDia) === (column as any).day}
+
 											{#if dia?.disponibilidad}
 												<span
 													class="inline-block rounded border border-blue-300 bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800"
@@ -1249,6 +1276,13 @@
 													)}"
 												>
 													{horas.toFixed(1)}
+												</span>
+											{:else if esDiaPendiente}
+												<span
+													class="inline-block rounded border border-yellow-400 bg-yellow-50 px-2 py-0.5 text-xs font-medium text-yellow-700"
+													title="Pendiente"
+												>
+													P
 												</span>
 											{:else}
 												<span class="text-gray-400">-</span>

@@ -232,6 +232,11 @@ export function toNumber(value: any): number {
 	return isNaN(num) ? 0 : num;
 }
 
+export function getDia(fechaISO : Date) {
+  const fecha = new Date(fechaISO);
+  return fecha.getUTCDate(); // usa UTC porque tu fecha viene en Z
+}
+
 /**
  * Calcular total de horas trabajadas
  */
