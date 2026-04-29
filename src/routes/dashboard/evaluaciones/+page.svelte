@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { fade, fly } from 'svelte/transition';
+	import SortIcon from '$lib/components/ui/SortIcon.svelte';
 
 	interface Evaluacion {
 		id: string;
@@ -30,322 +31,560 @@
 	let evaluaciones: Evaluacion[] = [];
 	let isLoading = false;
 	let error: string | null = null;
+	let searchQuery = '';
+	let sortField: 'titulo' | 'preguntas' | 'puntaje' | 'created_at' = 'created_at';
+	let sortDir: 'asc' | 'desc' = 'desc';
 
-	onMount(() => {
-		loadEvaluaciones();
-	});
+	$: filtered = evaluaciones
+		.filter((e) =>
+			searchQuery.trim() === '' ||
+			e.titulo.toLowerCase().includes(searchQuery.toLowerCase()) ||
+			(e.descripcion ?? '').toLowerCase().includes(searchQuery.toLowerCase())
+		)
+		.sort((a, b) => {
+			let va: any, vb: any;
+			if (sortField === 'titulo')         { va = a.titulo;                 vb = b.titulo; }
+			else if (sortField === 'preguntas') { va = a.preguntas.length;       vb = b.preguntas.length; }
+			else if (sortField === 'puntaje')   { va = calcularPuntajeTotal(a);  vb = calcularPuntajeTotal(b); }
+			else                               { va = a.created_at;             vb = b.created_at; }
+			if (va < vb) return sortDir === 'asc' ? -1 : 1;
+			if (va > vb) return sortDir === 'asc' ?  1 : -1;
+			return 0;
+		});
+
+	onMount(() => { loadEvaluaciones(); });
 
 	async function loadEvaluaciones() {
-		isLoading = true;
-		error = null;
+		isLoading = true; error = null;
 		try {
 			const response = await fetch(`${import.meta.env.VITE_API_URL}/api/evaluaciones`);
 			const data = await response.json();
-			if (data.success) {
-				evaluaciones = data.data;
-			} else {
-				error = 'Error al cargar evaluaciones';
-			}
+			if (data.success) { evaluaciones = data.data; }
+			else { error = 'Error al cargar evaluaciones'; }
 		} catch (err: any) {
 			error = err.message || 'Error al cargar evaluaciones';
-			console.error('Error:', err);
-		} finally {
-			isLoading = false;
-		}
+		} finally { isLoading = false; }
 	}
 
 	function getTipoColor(tipo: string) {
-		const colors: Record<string, string> = {
-			OPCION_UNICA: 'bg-blue-100 text-blue-800',
-			OPCION_MULTIPLE: 'bg-purple-100 text-purple-800',
-			NUMERICA: 'bg-orange-100 text-orange-800',
-			TEXTO: 'bg-orange-100 text-orange-800',
-			RELACION: 'bg-pink-100 text-pink-800',
-			VERDADERO_FALSO: 'bg-teal-100 text-teal-800'
+		const c: Record<string, string> = {
+			OPCION_UNICA: 'chip-blue', OPCION_MULTIPLE: 'chip-purple',
+			NUMERICA: 'chip-green',   TEXTO: 'chip-orange',
+			RELACION: 'chip-pink',    VERDADERO_FALSO: 'chip-teal'
 		};
-		return colors[tipo] || 'bg-gray-100 text-gray-800';
+		return c[tipo] || 'chip-gray';
 	}
 
 	function getTipoLabel(tipo: string) {
-		const labels: Record<string, string> = {
-			OPCION_UNICA: 'Opción Única',
-			OPCION_MULTIPLE: 'Opción Múltiple',
-			NUMERICA: 'Numérica',
-			TEXTO: 'Texto',
-			RELACION: 'Relación',
-			VERDADERO_FALSO: 'Verdadero o Falso'
+		const l: Record<string, string> = {
+			OPCION_UNICA: 'Única',   OPCION_MULTIPLE: 'Múltiple',
+			NUMERICA: 'Numérica',    TEXTO: 'Texto',
+			RELACION: 'Relación',    VERDADERO_FALSO: 'V/F'
 		};
-		return labels[tipo] || tipo;
+		return l[tipo] || tipo;
 	}
 
-	function formatDate(dateString: string) {
-		return new Date(dateString).toLocaleDateString('es-CO', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
+	function formatDate(d: string) {
+		return new Date(d).toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 	}
 
-	function calcularPuntajeTotal(evaluacion: Evaluacion) {
-		return evaluacion.preguntas.reduce((sum, p) => sum + p.puntaje, 0);
+	function calcularPuntajeTotal(e: Evaluacion) {
+		return e.preguntas.reduce((s, p) => s + p.puntaje, 0);
 	}
 
-	function navigateToCrear() {
-		goto('/dashboard/evaluaciones/crear');
+	function toggleSort(field: typeof sortField) {
+		if (sortField === field) { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; }
+		else { sortField = field; sortDir = 'asc'; }
 	}
 
-	function navigateToDetalle(id: string) {
-		goto(`/dashboard/evaluaciones/${id}`);
-	}
+	function navigateToCrear()            { goto('/dashboard/evaluaciones/crear'); }
+	function navigateToDetalle(id: string) { goto(`/dashboard/evaluaciones/${id}`); }
 
 	async function deleteEvaluacion(id: string, titulo: string) {
-		if (!confirm(`¿Estás seguro de eliminar la evaluación "${titulo}"?`)) return;
+		if (!confirm(`¿Estás seguro de eliminar "${titulo}"?`)) return;
 		try {
-			const response = await fetch(`${import.meta.env.VITE_API_URL}/api/evaluaciones/${id}`, {
-				method: 'DELETE'
-			});
-			if (response.ok) {
-				evaluaciones = evaluaciones.filter((e) => e.id !== id);
-			} else {
-				alert('Error al eliminar la evaluación');
-			}
-		} catch (err) {
-			console.error('Error:', err);
-			alert('Error al eliminar la evaluación');
-		}
+			const r = await fetch(`${import.meta.env.VITE_API_URL}/api/evaluaciones/${id}`, { method: 'DELETE' });
+			if (r.ok) { evaluaciones = evaluaciones.filter((e) => e.id !== id); }
+			else { alert('Error al eliminar'); }
+		} catch { alert('Error al eliminar'); }
 	}
 </script>
 
-<svelte:head>
-	<title>Evaluaciones - Cotransmeq</title>
-</svelte:head>
+<svelte:head><title>Evaluaciones - Transmeralda</title></svelte:head>
 
-<div class="space-y-8 p-6">
+<div class="page-wrapper" in:fade={{ duration: 500 }}>
+
 	<!-- Header -->
-	<div
-		class="glass rounded-3xl border border-orange-200/30 bg-gradient-to-r from-orange-50/50 to-amber-50/50 p-8"
-		in:fade={{ duration: 600 }}
-	>
-		<div class="flex flex-col items-start justify-between gap-6 lg:flex-row lg:items-center">
-			<div class="flex-1">
-				<div class="mb-2 flex items-center gap-3">
-					<div
-						class="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 shadow-lg"
-					>
-						<svg class="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-							/>
-						</svg>
-					</div>
-					<div>
-						<h1 class="text-3xl font-bold text-gray-900">Evaluaciones</h1>
-						<p class="text-gray-600">Gestión de evaluaciones y formularios</p>
-					</div>
-				</div>
-
-				<!-- Métricas -->
-				<div class="mt-4 flex flex-wrap gap-4">
-					<div class="rounded-lg bg-white/60 px-4 py-2 backdrop-blur-sm">
-						<div class="text-2xl font-bold text-orange-600">{evaluaciones.length}</div>
-						<div class="text-xs text-gray-600">Evaluaciones</div>
-					</div>
-				</div>
+	<div class="page-header" in:fly={{ y: -16, duration: 500 }}>
+		<div class="header-left">
+			<div class="header-icon">
+				<svg class="icon-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+						d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+				</svg>
 			</div>
-
-			<button
-				on:click={navigateToCrear}
-				class="apple-transition rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-6 py-3 font-semibold text-white shadow-lg hover:shadow-xl"
-			>
-				<svg class="mr-2 inline h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M12 4v16m8-8H4"
-					/>
+			<div>
+				<h1 class="page-title">Evaluaciones</h1>
+				<p class="page-subtitle">Gestión de evaluaciones y formularios</p>
+			</div>
+		</div>
+		<div class="header-right">
+			<div class="stat-pill">
+				<span class="stat-num">{evaluaciones.length}</span>
+				<span class="stat-label">Total</span>
+			</div>
+			<button class="btn-primary" on:click={navigateToCrear}>
+				<svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
 				</svg>
 				Nueva Evaluación
 			</button>
 		</div>
 	</div>
 
-	<!-- Lista de Evaluaciones -->
-	{#if isLoading}
-		<div class="flex items-center justify-center py-12">
-			<div class="text-center">
-				<div
-					class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-orange-200 border-t-orange-600"
-				></div>
-				<p class="text-gray-600">Cargando evaluaciones...</p>
-			</div>
-		</div>
-	{:else if error}
-		<div class="glass rounded-2xl border border-red-200/50 bg-red-50/30 p-8 text-center">
-			<div class="mb-4 text-red-500">
-				<svg class="mx-auto h-16 w-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-					/>
-				</svg>
-			</div>
-			<h3 class="mb-2 text-lg font-semibold text-gray-900">Error al cargar evaluaciones</h3>
-			<p class="mb-6 text-gray-600">{error}</p>
-			<button
-				class="apple-transition rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-6 py-3 font-semibold text-white shadow-lg hover:shadow-xl"
-				on:click={loadEvaluaciones}
-			>
-				Reintentar
-			</button>
-		</div>
-	{:else if evaluaciones.length === 0}
-		<div class="glass rounded-2xl border border-gray-200/50 p-12 text-center">
-			<svg
-				class="mx-auto mb-4 h-16 w-16 text-gray-400"
-				fill="none"
-				stroke="currentColor"
-				viewBox="0 0 24 24"
-			>
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					stroke-width="2"
-					d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-				/>
+	<!-- Toolbar -->
+	<div class="toolbar" in:fly={{ y: -8, duration: 500, delay: 100 }}>
+		<div class="search-wrap">
+			<svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+					d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
 			</svg>
-			<h3 class="mb-2 text-lg font-semibold text-gray-900">No hay evaluaciones</h3>
-			<p class="mb-6 text-gray-600">Crea tu primera evaluación para comenzar</p>
-			<button
-				on:click={navigateToCrear}
-				class="apple-transition rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-6 py-3 font-semibold text-white shadow-lg hover:shadow-xl"
-			>
-				<svg class="mr-2 inline h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M12 4v16m8-8H4"
-					/>
+			<input class="search-input" type="text" placeholder="Buscar evaluación…" bind:value={searchQuery} />
+			{#if searchQuery}
+				<button class="search-clear" on:click={() => (searchQuery = '')}>✕</button>
+			{/if}
+		</div>
+		<span class="result-count">{filtered.length} resultado{filtered.length !== 1 ? 's' : ''}</span>
+	</div>
+
+	<!-- States -->
+	{#if isLoading}
+		<div class="state-center" in:fade>
+			<div class="spinner"></div>
+			<p class="state-text">Cargando evaluaciones…</p>
+		</div>
+
+	{:else if error}
+		<div class="state-center error-state" in:fade>
+			<svg class="state-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+					d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+			</svg>
+			<p class="state-text">{error}</p>
+			<button class="btn-primary" on:click={loadEvaluaciones}>Reintentar</button>
+		</div>
+
+	{:else if evaluaciones.length === 0}
+		<div class="state-center" in:fade>
+			<svg class="state-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+					d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+			</svg>
+			<p class="state-heading">Sin evaluaciones</p>
+			<p class="state-text">Crea tu primera evaluación para comenzar</p>
+			<button class="btn-primary" on:click={navigateToCrear}>
+				<svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
 				</svg>
 				Crear Evaluación
 			</button>
 		</div>
+
 	{:else}
-		<div
-			class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3"
-			in:fly={{ y: 20, duration: 600, delay: 400 }}
-		>
-			{#each evaluaciones as evaluacion (evaluacion.id)}
-				<div
-					class="glass apple-transition group relative overflow-hidden rounded-2xl border border-gray-200/50 p-6 hover:shadow-lg"
-					in:fade={{ duration: 300 }}
-				>
-					<!-- Badge de firma requerida -->
-					{#if evaluacion.requiere_firma}
-						<div class="absolute top-4 right-4">
-							<span
-								class="rounded-full bg-purple-100 px-3 py-1 text-xs font-semibold text-purple-800"
-							>
-								<svg
-									class="mr-1 inline h-3 w-3"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-									/>
-								</svg>
-								Firma
-							</span>
-						</div>
-					{/if}
+		<!-- ── DESKTOP TABLE ──────────────────────────────────── -->
+		<div class="table-card desktop-only" in:fly={{ y: 16, duration: 500, delay: 200 }}>
+			<table class="ev-table">
+				<thead>
+					<tr>
+						<th class="th-main">
+							<button class="th-btn" on:click={() => toggleSort('titulo')}>
+								Evaluación <SortIcon field="titulo" {sortField} {sortDir} />
+							</button>
+						</th>
+						<th>
+							<button class="th-btn" on:click={() => toggleSort('preguntas')}>
+								Preguntas <SortIcon field="preguntas" {sortField} {sortDir} />
+							</button>
+						</th>
+						<th>
+							<button class="th-btn" on:click={() => toggleSort('puntaje')}>
+								Puntaje <SortIcon field="puntaje" {sortField} {sortDir} />
+							</button>
+						</th>
+						<th>Tipos</th>
+						<th>
+							<button class="th-btn" on:click={() => toggleSort('created_at')}>
+								Creada <SortIcon field="created_at" {sortField} {sortDir} />
+							</button>
+						</th>
+						<th class="th-actions">Acciones</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each filtered as ev, i (ev.id)}
+						<tr class="ev-row" in:fly={{ x: -12, duration: 250, delay: i * 40 }}
+							on:click={() => navigateToDetalle(ev.id)}>
+							<td class="td-main">
+								<div class="td-title-wrap">
+									<span class="td-title">{ev.titulo}</span>
+									{#if ev.requiere_firma}
+										<span class="badge-firma">
+											<svg class="icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+													d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+											</svg>
+											Firma
+										</span>
+									{/if}
+								</div>
+								{#if ev.descripcion}
+									<p class="td-desc">{ev.descripcion}</p>
+								{/if}
+							</td>
+							<td class="td-center"><span class="num-badge green">{ev.preguntas.length}</span></td>
+							<td class="td-center"><span class="num-badge blue">{calcularPuntajeTotal(ev)}</span></td>
+							<td>
+								<div class="chips-wrap">
+									{#each [...new Set(ev.preguntas.map((p) => p.tipo))] as tipo}
+										<span class="chip {getTipoColor(tipo)}">{getTipoLabel(tipo)}</span>
+									{/each}
+								</div>
+							</td>
+							<td class="td-date">{formatDate(ev.created_at)}</td>
+							<td class="td-actions" on:click|stopPropagation>
+								<button class="btn-icon btn-view" title="Ver" on:click={() => navigateToDetalle(ev.id)}>
+									<svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+											d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+											d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+									</svg>
+								</button>
+								<button class="btn-icon btn-delete" title="Eliminar"
+									on:click={() => deleteEvaluacion(ev.id, ev.titulo)}>
+									<svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+											d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+									</svg>
+								</button>
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			</table>
+			{#if filtered.length === 0 && searchQuery}
+				<div class="no-results">Sin resultados para <strong>"{searchQuery}"</strong></div>
+			{/if}
+		</div>
 
-					<!-- Título y descripción -->
-					<div class="mb-4 cursor-pointer" on:click={() => navigateToDetalle(evaluacion.id)}>
-						<h3 class="mb-2 text-xl font-bold text-gray-900">{evaluacion.titulo}</h3>
-						{#if evaluacion.descripcion}
-							<p class="line-clamp-2 text-sm text-gray-600">{evaluacion.descripcion}</p>
-						{/if}
-					</div>
-
-					<!-- Estadísticas -->
-					<div class="mb-4 grid grid-cols-2 gap-4">
-						<div class="rounded-lg bg-orange-50 p-3">
-							<div class="text-2xl font-bold text-orange-600">
-								{evaluacion.preguntas.length}
+		<!-- ── MOBILE CARDS ───────────────────────────────────── -->
+		<div class="mobile-only" in:fly={{ y: 16, duration: 500, delay: 200 }}>
+			{#if filtered.length === 0 && searchQuery}
+				<div class="no-results-mobile">Sin resultados para <strong>"{searchQuery}"</strong></div>
+			{:else}
+				<div class="cards-grid">
+					{#each filtered as ev, i (ev.id)}
+						<div class="m-card" in:fly={{ y: 12, duration: 250, delay: i * 50 }}>
+							<!-- Card header -->
+							<div class="m-card-header" on:click={() => navigateToDetalle(ev.id)}>
+								<div class="m-card-title-row">
+									<span class="m-card-title">{ev.titulo}</span>
+									{#if ev.requiere_firma}
+										<span class="badge-firma">
+											<svg class="icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+													d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+											</svg>
+											Firma
+										</span>
+									{/if}
+								</div>
+								{#if ev.descripcion}
+									<p class="m-card-desc">{ev.descripcion}</p>
+								{/if}
 							</div>
-							<div class="text-xs text-gray-600">Preguntas</div>
-						</div>
-						<div class="rounded-lg bg-blue-50 p-3">
-							<div class="text-2xl font-bold text-blue-600">
-								{calcularPuntajeTotal(evaluacion)}
+
+							<!-- Stats row -->
+							<div class="m-card-stats">
+								<div class="m-stat">
+									<span class="num-badge green">{ev.preguntas.length}</span>
+									<span class="m-stat-label">Preguntas</span>
+								</div>
+								<div class="m-stat">
+									<span class="num-badge blue">{calcularPuntajeTotal(ev)}</span>
+									<span class="m-stat-label">Puntos</span>
+								</div>
+								<div class="m-stat-date">
+									<svg class="icon-xs2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+											d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+									</svg>
+									{formatDate(ev.created_at)}
+								</div>
 							</div>
-							<div class="text-xs text-gray-600">Puntos</div>
+
+							<!-- Chips -->
+							<div class="chips-wrap m-chips">
+								{#each [...new Set(ev.preguntas.map((p) => p.tipo))] as tipo}
+									<span class="chip {getTipoColor(tipo)}">{getTipoLabel(tipo)}</span>
+								{/each}
+							</div>
+
+							<!-- Actions -->
+							<div class="m-card-actions">
+								<button class="btn-full-view" on:click={() => navigateToDetalle(ev.id)}>
+									<svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+											d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+											d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+									</svg>
+									Ver Detalle
+								</button>
+								<button class="btn-icon btn-delete"
+									on:click={() => deleteEvaluacion(ev.id, ev.titulo)}>
+									<svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+											d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+									</svg>
+								</button>
+							</div>
 						</div>
-					</div>
-
-					<!-- Tipos de preguntas -->
-					<div class="mb-4">
-						<div class="mb-2 text-xs font-semibold text-gray-500">Tipos de preguntas:</div>
-						<div class="flex flex-wrap gap-1">
-							{#each [...new Set(evaluacion.preguntas.map((p) => p.tipo))] as tipo}
-								<span class="rounded-full px-2 py-1 text-xs {getTipoColor(tipo)}">
-									{getTipoLabel(tipo)}
-								</span>
-							{/each}
-						</div>
-					</div>
-
-					<!-- Fecha -->
-					<div class="mb-4 text-xs text-gray-500">
-						Creada: {formatDate(evaluacion.created_at)}
-					</div>
-
-					<!-- Acciones -->
-					<div class="flex gap-2">
-						<button
-							on:click={() => navigateToDetalle(evaluacion.id)}
-							class="apple-transition flex-1 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600"
-						>
-							Ver Detalle
-						</button>
-						<button
-							on:click={() => deleteEvaluacion(evaluacion.id, evaluacion.titulo)}
-							class="apple-transition rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600"
-						>
-							<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-								/>
-							</svg>
-						</button>
-					</div>
+					{/each}
 				</div>
-			{/each}
+			{/if}
 		</div>
 	{/if}
 </div>
 
 <style>
-	.line-clamp-2 {
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
+	/* ── Base ─────────────────────────────────────────────────── */
+	.page-wrapper { display: flex; flex-direction: column; gap: 1.25rem; padding: 1.5rem; }
+
+	/* ── Responsive visibility ────────────────────────────────── */
+	.desktop-only { display: block; }
+	.mobile-only  { display: none; }
+	@media (max-width: 767px) {
+		.desktop-only { display: none; }
+		.mobile-only  { display: block; }
+		.page-wrapper { padding: 1rem; gap: 1rem; }
 	}
+
+	/* ── Header ───────────────────────────────────────────────── */
+	.page-header {
+		display: flex; align-items: center; justify-content: space-between;
+		flex-wrap: wrap; gap: 1rem;
+		background: linear-gradient(135deg, #fff7ed 0%, #fffbeb 100%);
+		border: 1px solid #fed7aa; border-radius: 1.25rem; padding: 1.5rem 2rem;
+	}
+	@media (max-width: 767px) { .page-header { padding: 1rem 1.25rem; } }
+	.header-left  { display: flex; align-items: center; gap: 1rem; }
+	.header-right { display: flex; align-items: center; gap: 0.75rem; }
+	.header-icon {
+		display: flex; align-items: center; justify-content: center;
+		width: 3.25rem; height: 3.25rem; flex-shrink: 0;
+		background: linear-gradient(135deg, #f97316, #d97706);
+		border-radius: 1rem; box-shadow: 0 4px 14px #f9731640;
+	}
+	@media (max-width: 767px) {
+		.header-icon { width: 2.5rem; height: 2.5rem; border-radius: 0.75rem; }
+	}
+	.page-title    { font-size: 1.75rem; font-weight: 800; color: #111827; line-height: 1.1; }
+	.page-subtitle { font-size: 0.875rem; color: #6b7280; margin-top: 0.125rem; }
+	@media (max-width: 767px) {
+		.page-title    { font-size: 1.35rem; }
+		.page-subtitle { font-size: 0.78rem; }
+	}
+	.stat-pill {
+		display: flex; flex-direction: column; align-items: center;
+		background: white; border: 1px solid #fed7aa;
+		border-radius: 0.75rem; padding: 0.5rem 1rem;
+	}
+	.stat-num   { font-size: 1.5rem; font-weight: 800; color: #ea580c; line-height: 1; }
+	.stat-label { font-size: 0.7rem; color: #6b7280; text-transform: uppercase; letter-spacing: .05em; }
+
+	/* ── Buttons ──────────────────────────────────────────────── */
+	.btn-primary {
+		display: inline-flex; align-items: center; gap: 0.5rem;
+		background: linear-gradient(135deg, #f97316, #d97706);
+		color: white; font-weight: 700; font-size: 0.9rem;
+		padding: 0.65rem 1.4rem; border-radius: 0.75rem;
+		border: none; cursor: pointer; box-shadow: 0 4px 14px #f9731635;
+		transition: transform .15s, box-shadow .15s;
+	}
+	.btn-primary:hover  { transform: translateY(-1px); box-shadow: 0 6px 20px #f9731645; }
+	.btn-primary:active { transform: translateY(0); }
+	@media (max-width: 767px) {
+		.btn-primary { padding: 0.55rem 1rem; font-size: 0.82rem; }
+	}
+	.btn-icon {
+		display: inline-flex; align-items: center; justify-content: center;
+		width: 2rem; height: 2rem; border-radius: 0.5rem;
+		border: none; cursor: pointer; transition: background .15s, transform .1s;
+	}
+	.btn-icon:hover { transform: scale(1.1); }
+	.btn-view          { background: #fff7ed; color: #ea580c; }
+	.btn-view:hover    { background: #fed7aa; }
+	.btn-delete        { background: #fef2f2; color: #dc2626; }
+	.btn-delete:hover  { background: #fee2e2; }
+	.btn-full-view {
+		flex: 1; display: inline-flex; align-items: center; justify-content: center;
+		gap: 0.4rem; background: #fff7ed; color: #ea580c;
+		font-weight: 700; font-size: 0.85rem;
+		padding: 0.55rem 1rem; border-radius: 0.6rem;
+		border: none; cursor: pointer; transition: background .15s;
+	}
+	.btn-full-view:hover { background: #fed7aa; }
+
+	/* ── Toolbar ──────────────────────────────────────────────── */
+	.toolbar { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+	.search-wrap {
+		position: relative; display: flex; align-items: center;
+		background: white; border: 1.5px solid #d1d5db;
+		border-radius: 0.75rem; flex: 1; min-width: 200px; max-width: 400px;
+		transition: border-color .2s;
+	}
+	.search-wrap:focus-within { border-color: #f97316; box-shadow: 0 0 0 3px #f9731620; }
+	.search-icon { width: 1rem; height: 1rem; color: #9ca3af; position: absolute; left: 0.75rem; pointer-events: none; }
+	.search-input {
+		width: 100%; padding: 0.55rem 2.25rem;
+		font-size: 0.875rem; background: transparent;
+		border: none; outline: none; color: #111827;
+	}
+	.search-clear {
+		position: absolute; right: 0.6rem;
+		background: none; border: none; cursor: pointer;
+		color: #9ca3af; font-size: 0.75rem; padding: 0.2rem;
+	}
+	.search-clear:hover { color: #6b7280; }
+	.result-count { font-size: 0.8rem; color: #9ca3af; white-space: nowrap; }
+
+	/* ── Desktop table ────────────────────────────────────────── */
+	.table-card {
+		background: white; border: 1px solid #e5e7eb;
+		border-radius: 1.25rem; overflow: hidden;
+		box-shadow: 0 1px 8px #0000000a;
+	}
+	.ev-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+	.ev-table thead tr { background: #f9fafb; border-bottom: 1.5px solid #e5e7eb; }
+	.ev-table th {
+		padding: 0.9rem 1rem; text-align: left;
+		font-size: 0.75rem; font-weight: 700; color: #6b7280;
+		text-transform: uppercase; letter-spacing: .06em; white-space: nowrap;
+	}
+	.th-main    { padding-left: 1.5rem; width: 35%; }
+	.th-actions { text-align: right; padding-right: 1.5rem; }
+	.th-btn {
+		display: inline-flex; align-items: center; gap: 0.35rem;
+		background: none; border: none; cursor: pointer;
+		color: #6b7280; font-size: inherit; font-weight: 700;
+		text-transform: uppercase; letter-spacing: .06em; padding: 0;
+	}
+	.th-btn:hover { color: #ea580c; }
+	.ev-row { border-bottom: 1px solid #f3f4f6; cursor: pointer; transition: background .12s; }
+	.ev-row:last-child { border-bottom: none; }
+	.ev-row:hover      { background: #fff7ed; }
+	.ev-table td { padding: 0.85rem 1rem; vertical-align: middle; }
+	.td-main    { padding-left: 1.5rem; }
+	.td-center  { text-align: center; }
+	.td-date    { color: #9ca3af; white-space: nowrap; font-size: 0.8rem; }
+	.td-actions { text-align: right; padding-right: 1.25rem; }
+	.td-title-wrap { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+	.td-title      { font-weight: 700; color: #111827; }
+	.td-desc {
+		font-size: 0.78rem; color: #6b7280; margin-top: 0.2rem;
+		max-width: 28ch; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+	}
+	.no-results { text-align: center; padding: 2.5rem; color: #9ca3af; font-size: 0.875rem; }
+	.no-results strong { color: #6b7280; }
+
+	/* ── Mobile cards ─────────────────────────────────────────── */
+	.cards-grid { display: flex; flex-direction: column; gap: 0.875rem; }
+	.no-results-mobile {
+		text-align: center; padding: 2rem; color: #9ca3af;
+		font-size: 0.875rem; background: white;
+		border: 1px solid #e5e7eb; border-radius: 1rem;
+	}
+	.m-card {
+		background: white; border: 1px solid #e5e7eb;
+		border-radius: 1rem; overflow: hidden;
+		box-shadow: 0 1px 6px #0000000d;
+	}
+	.m-card-header {
+		padding: 1rem 1rem 0.75rem;
+		cursor: pointer; transition: background .12s;
+	}
+	.m-card-header:active { background: #fff7ed; }
+	.m-card-title-row { display: flex; align-items: flex-start; gap: 0.5rem; flex-wrap: wrap; }
+	.m-card-title  { font-weight: 700; color: #111827; font-size: 0.95rem; flex: 1; }
+	.m-card-desc   { font-size: 0.78rem; color: #6b7280; margin-top: 0.3rem; line-height: 1.4; }
+	.m-card-stats  {
+		display: flex; align-items: center; gap: 1rem;
+		padding: 0.6rem 1rem; background: #f9fafb;
+		border-top: 1px solid #f3f4f6; border-bottom: 1px solid #f3f4f6;
+	}
+	.m-stat        { display: flex; align-items: center; gap: 0.4rem; }
+	.m-stat-label  { font-size: 0.72rem; color: #9ca3af; }
+	.m-stat-date   {
+		display: flex; align-items: center; gap: 0.3rem;
+		margin-left: auto; font-size: 0.72rem; color: #9ca3af;
+	}
+	.m-chips { padding: 0.6rem 1rem; }
+	.m-card-actions {
+		display: flex; align-items: center; gap: 0.5rem;
+		padding: 0.75rem 1rem;
+		border-top: 1px solid #f3f4f6;
+	}
+
+	/* ── Shared badges & chips ────────────────────────────────── */
+	.badge-firma {
+		display: inline-flex; align-items: center; gap: 0.2rem;
+		background: #f3e8ff; color: #7c3aed;
+		font-size: 0.68rem; font-weight: 700;
+		padding: 0.15rem 0.5rem; border-radius: 999px;
+	}
+	.num-badge {
+		display: inline-block; font-size: 0.9rem; font-weight: 800;
+		padding: 0.2rem 0.65rem; border-radius: 0.5rem;
+	}
+	.num-badge.green { background: #fff7ed; color: #ea580c; }
+	.num-badge.blue  { background: #eff6ff; color: #2563eb; }
+	.chips-wrap { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+	.chip {
+		font-size: 0.68rem; font-weight: 600;
+		padding: 0.2rem 0.55rem; border-radius: 999px;
+	}
+	.chip-blue   { background: #dbeafe; color: #1d4ed8; }
+	.chip-purple { background: #ede9fe; color: #6d28d9; }
+	.chip-green  { background: #dcfce7; color: #15803d; }
+	.chip-orange { background: #ffedd5; color: #c2410c; }
+	.chip-pink   { background: #fce7f3; color: #be185d; }
+	.chip-teal   { background: #ccfbf1; color: #0f766e; }
+	.chip-gray   { background: #f3f4f6; color: #4b5563; }
+
+	/* ── State screens ────────────────────────────────────────── */
+	.state-center {
+		display: flex; flex-direction: column; align-items: center;
+		justify-content: center; gap: 1rem; padding: 4rem 2rem; text-align: center;
+		background: white; border: 1px solid #e5e7eb; border-radius: 1.25rem;
+	}
+	.error-state { border-color: #fecaca; background: #fff5f5; }
+	.state-icon  { width: 3.5rem; height: 3.5rem; color: #d1d5db; }
+	.error-state .state-icon { color: #f87171; }
+	.state-heading { font-size: 1.1rem; font-weight: 700; color: #111827; margin: 0; }
+	.state-text    { font-size: 0.875rem; color: #6b7280; margin: 0; }
+
+	/* ── Icons ────────────────────────────────────────────────── */
+	.icon-lg  { width: 1.75rem; height: 1.75rem; color: white; }
+	.icon-sm  { width: 1rem;    height: 1rem; }
+	.icon-xs  { width: 0.65rem; height: 0.65rem; }
+	.icon-xs2 { width: 0.75rem; height: 0.75rem; }
+
+	/* ── Spinner ──────────────────────────────────────────────── */
+	.spinner {
+		width: 2.5rem; height: 2.5rem;
+		border: 3px solid #fed7aa; border-top-color: #ea580c;
+		border-radius: 50%; animation: spin .7s linear infinite;
+	}
+	@keyframes spin { to { transform: rotate(360deg); } }
 </style>
