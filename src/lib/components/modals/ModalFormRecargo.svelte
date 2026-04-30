@@ -79,13 +79,13 @@
 	let erroresHoras: { [key: string]: { inicio: string; fin: string } } = {};
 	let erroresDias: { [key: string]: string } = {};
 
-        // Constantes para cálculo de recargos
-        const HORAS_LIMITE = {
-                JORNADA_NORMAL: 10.33,  // 10 horas 20 minutos - extras SIEMPRE empiezan después de esto
-                JORNADA_FESTIVA: 7.33,  // 7 horas 20 minutos - RD fijo para domingos/festivos
-                INICIO_NOCTURNO: 19,
-                FIN_NOCTURNO: 6
-        };	// Obtener días festivos colombianos del año actual
+	// Constantes para cálculo de recargos
+	const HORAS_LIMITE = {
+		JORNADA_NORMAL: 10.33, // 10 horas 20 minutos - extras SIEMPRE empiezan después de esto
+		JORNADA_FESTIVA: 7.33, // 7 horas 20 minutos - RD fijo para domingos/festivos
+		INICIO_NOCTURNO: 19,
+		FIN_NOCTURNO: 6
+	}; // Obtener días festivos colombianos del año actual
 	$: diasFestivos = obtenerFestivosCompletos(currentYear);
 	$: festivosDelMes = diasFestivos.filter((f) => f.mes === currentMonth);
 
@@ -283,9 +283,9 @@
 	// Función para obtener el último número de planilla y generar el siguiente
 	async function generarNumeroPlanilla() {
 		if (isGenerandoPlanilla) return; // Evitar múltiples llamadas simultáneas
-		
+
 		isGenerandoPlanilla = true;
-		
+
 		try {
 			const token = localStorage.getItem('transmeralda_token');
 			if (!token) {
@@ -295,11 +295,14 @@
 			}
 
 			// Obtener todos los recargos (limit alto para traer todos y calcular consecutivo correcto)
-			const response = await fetch('https://backend-cotransmeq-production.up.railway.app/api/recargos?limit=10000&page=1', {
-				headers: {
-					'Authorization': `Bearer ${token}`
+			const response = await fetch(
+				'https://backend-cotransmeq-production.up.railway.app/api/recargos?limit=10000&page=1',
+				{
+					headers: {
+						Authorization: `Bearer ${token}`
+					}
 				}
-			});
+			);
 
 			if (!response.ok) {
 				console.error('Error al obtener recargos:', response.statusText);
@@ -308,10 +311,10 @@
 			}
 
 			const data = await response.json();
-			
+
 			// La respuesta puede venir como array directo o como objeto con propiedad 'data' o 'recargos'
-			let recargos = Array.isArray(data) ? data : (data.data || data.recargos || []);
-			
+			let recargos = Array.isArray(data) ? data : data.data || data.recargos || [];
+
 			if (!Array.isArray(recargos)) {
 				console.error('❌ La respuesta no contiene un array de recargos:', data);
 				recargos = [];
@@ -328,21 +331,19 @@
 				.filter((n: number) => n > 0);
 
 			// Encontrar el número más alto
-			const ultimoNumero = numerosExistentes.length > 0 
-				? Math.max(...numerosExistentes) 
-				: 0;
+			const ultimoNumero = numerosExistentes.length > 0 ? Math.max(...numerosExistentes) : 0;
 
 			// Generar el siguiente número con formato CM-0001
 			const siguienteNumero = (ultimoNumero + 1).toString().padStart(4, '0');
 			const nuevoNumero = `CM-${siguienteNumero}`;
-			
+
 			// Setear el valor y esperar a que se actualice el DOM
 			formData.tmNumber = nuevoNumero;
 			await tick(); // Esperar a que Svelte actualice el DOM
-			
+
 			// Ahora marcar como generado para evitar regeneración
 			planillaGenerada = true;
-			
+
 			toast.success(`Número generado: ${nuevoNumero}`);
 		} catch (error) {
 			console.error('❌ Error al generar número de planilla:', error);
@@ -401,30 +402,6 @@
 		recursos.agregarVehiculo(vehiculo);
 		formData.vehiculoId = vehiculo.id;
 		mostrarModalVehiculo = false;
-	}
-
-	// Funciones de gestión de días laborales
-	function agregarDiaLaboral() {
-		if (diasLaborales.length < 15) {
-			diasLaborales = [
-				...diasLaborales,
-				{
-					id: Date.now().toString(),
-					dia: '',
-					mes: currentMonth.toString(),
-					año: currentYear.toString(),
-					hora_inicio: '',
-					hora_fin: '',
-					kilometraje_inicial: null,
-					kilometraje_final: null,
-					es_domingo: false,
-					es_festivo: false,
-					pernocte: false,
-					disponibilidad: false,
-					continua_siguiente_dia: false
-				}
-			];
-		}
 	}
 
 	function eliminarDiaLaboral(id: string) {
@@ -561,16 +538,16 @@
 			return { HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RNDF: 0, RN: 0, RD: 0 };
 		}
 
-		const currentIdx = diasLaborales.findIndex(d => d.id === dia.id);
+		const currentIdx = diasLaborales.findIndex((d) => d.id === dia.id);
 
 		// Determinar si estamos en un turno continuo y cuál es el rango completo
-		let turnoInicio: number;       // hora absoluta de inicio del turno combinado
-		let turnoFin: number;          // hora absoluta de fin del turno combinado
-		let limiteInferior: number;    // hora absoluta donde empieza "mi" día
-		let limiteSuperior: number;    // hora absoluta donde termina "mi" día
+		let turnoInicio: number; // hora absoluta de inicio del turno combinado
+		let turnoFin: number; // hora absoluta de fin del turno combinado
+		let limiteInferior: number; // hora absoluta donde empieza "mi" día
+		let limiteSuperior: number; // hora absoluta donde termina "mi" día
 		let diaAnterior: DiaLaboral | null = null;
 		let diaSiguiente: DiaLaboral | null = null;
-		let esContinuacion = false;    // true si este día es el "siguiente" de uno que continúa
+		let esContinuacion = false; // true si este día es el "siguiente" de uno que continúa
 
 		// Verificar si este día es el "siguiente" de uno que continúa
 		if (currentIdx > 0) {
@@ -582,12 +559,18 @@
 
 		if (esContinuacion && diaAnterior) {
 			// Este día es la continuación: el turno empezó en el día anterior
-			const prevInicio = typeof diaAnterior.hora_inicio === 'string' ? parseFloat(diaAnterior.hora_inicio) : diaAnterior.hora_inicio || 0;
-			const prevFin = typeof diaAnterior.hora_fin === 'string' ? parseFloat(diaAnterior.hora_fin) : diaAnterior.hora_fin || 0;
+			const prevInicio =
+				typeof diaAnterior.hora_inicio === 'string'
+					? parseFloat(diaAnterior.hora_inicio)
+					: diaAnterior.hora_inicio || 0;
+			const prevFin =
+				typeof diaAnterior.hora_fin === 'string'
+					? parseFloat(diaAnterior.hora_fin)
+					: diaAnterior.hora_fin || 0;
 
 			turnoInicio = prevInicio;
 			turnoFin = prevFin + totalHoras; // prevFin + horas del día actual
-			limiteInferior = prevFin;         // mi día empieza donde terminó el anterior
+			limiteInferior = prevFin; // mi día empieza donde terminó el anterior
 			limiteSuperior = turnoFin;
 		} else if (dia.continua_siguiente_dia) {
 			// Este día continúa al siguiente: calcular turno combinado
@@ -612,19 +595,31 @@
 		}
 
 		// Datos del día actual y del otro día para determinar festivo/domingo
-		const esDomFestDia1 = esContinuacion && diaAnterior
-			? (diaAnterior.es_domingo || diaAnterior.es_festivo)
-			: (dia.es_domingo || dia.es_festivo);
+		const esDomFestDia1 =
+			esContinuacion && diaAnterior
+				? diaAnterior.es_domingo || diaAnterior.es_festivo
+				: dia.es_domingo || dia.es_festivo;
 		const esDomFestDia2 = esContinuacion
-			? (dia.es_domingo || dia.es_festivo)
-			: (diaSiguiente ? (diaSiguiente.es_domingo || diaSiguiente.es_festivo) : esDomFestDia1);
+			? dia.es_domingo || dia.es_festivo
+			: diaSiguiente
+				? diaSiguiente.es_domingo || diaSiguiente.es_festivo
+				: esDomFestDia1;
 
 		// El punto de corte entre día 1 y día 2 del turno (donde termina el primer día)
-		const puntoCorte = esContinuacion && diaAnterior
-			? (typeof diaAnterior.hora_fin === 'string' ? parseFloat(diaAnterior.hora_fin) : diaAnterior.hora_fin || 0)
-			: horaFin;
+		const puntoCorte =
+			esContinuacion && diaAnterior
+				? typeof diaAnterior.hora_fin === 'string'
+					? parseFloat(diaAnterior.hora_fin)
+					: diaAnterior.hora_fin || 0
+				: horaFin;
 
-		let hed = 0, hen = 0, hefd = 0, hefn = 0, rndf = 0, rn = 0, rd = 0;
+		let hed = 0,
+			hen = 0,
+			hefd = 0,
+			hefn = 0,
+			rndf = 0,
+			rn = 0,
+			rd = 0;
 
 		const umbralExtras = HORAS_LIMITE.JORNADA_NORMAL;
 
@@ -649,6 +644,7 @@
 		// Recorrer TODO el turno combinado pero solo acumular recargos de "mi" día
 		let horaActual = turnoInicio;
 		let horasAcumuladas = 0;
+		let horasAlmuerzoSkipped = 0;
 
 		while (horaActual < turnoFin) {
 			const siguienteHora = Math.min(horaActual + 0.5, turnoFin);
@@ -656,6 +652,8 @@
 
 			// Si es hora de almuerzo (12-13) y aplica descuento, saltar esta fracción
 			if (esHoraAlmuerzo(horaActual)) {
+				horasAlmuerzoSkipped += fraccion;
+				horasAcumuladas += fraccion; // 👈 esta es la línea que falta
 				horaActual = siguienteHora;
 				continue;
 			}
@@ -672,11 +670,19 @@
 			if (esMiDia) {
 				if (esDomFest) {
 					if (esExtra) {
-						if (nocturna) { hefn += fraccion; } else { hefd += fraccion; }
+						if (nocturna) {
+							hefn += fraccion;
+						} else {
+							hefd += fraccion;
+						}
 					} else {
 						const horasRestantes = umbralExtras - horasAcumuladas;
 						if (fraccion <= horasRestantes) {
-							if (nocturna) { rndf += fraccion; } else { rd += fraccion; }
+							if (nocturna) {
+								rndf += fraccion;
+							} else {
+								rd += fraccion;
+							}
 						} else {
 							const parteOrdinaria = horasRestantes;
 							const parteExtra = fraccion - parteOrdinaria;
@@ -691,11 +697,17 @@
 					}
 				} else {
 					if (esExtra) {
-						if (nocturna) { hen += fraccion; } else { hed += fraccion; }
+						if (nocturna) {
+							hen += fraccion;
+						} else {
+							hed += fraccion;
+						}
 					} else {
 						const horasRestantes = umbralExtras - horasAcumuladas;
 						if (fraccion <= horasRestantes) {
-							if (nocturna) { rn += fraccion; }
+							if (nocturna) {
+								rn += fraccion;
+							}
 						} else {
 							const parteOrdinaria = horasRestantes;
 							const parteExtra = fraccion - parteOrdinaria;
@@ -756,7 +768,7 @@
 			}
 
 			rndf = parseFloat(rndfRecalculado.toFixed(2));
-			// RD = min(horas diurnas ordinarias festivas, 7.33) 
+			// RD = min(horas diurnas ordinarias festivas, 7.33)
 			// Si no hay RNDF, RD tope 7.33. Si hay RNDF, RD = 7.33 - RNDF
 			const totalOrdinariasFestivas = rdRecalculado + rndfRecalculado;
 			if (totalOrdinariasFestivas >= HORAS_LIMITE.JORNADA_FESTIVA) {
@@ -985,7 +997,7 @@
 		const inicio = parseFloat(dia.hora_inicio);
 		const fin = parseFloat(dia.hora_fin);
 		if (isNaN(inicio) || isNaN(fin)) return total;
-		
+
 		let horas = fin - inicio;
 		if (horas < 0) horas += 24; // Manejo de jornadas nocturnas
 		return total + horas;
@@ -1013,7 +1025,7 @@
 		const numeroDias = formData.numero_dias_servicio;
 		if (numeroDias && numeroDias > 0 && !isLoadingData) {
 			const diasActuales = diasLaborales.length;
-			
+
 			// Si el número es diferente, ajustar las filas
 			if (diasActuales !== numeroDias) {
 				if (numeroDias > diasActuales) {
@@ -1071,11 +1083,11 @@
 		if (lastLoadedRecargoId === id && isLoadingData) {
 			return;
 		}
-		
+
 		try {
 			lastLoadedRecargoId = id;
 			isLoadingData = true;
-			
+
 			const recargo = await recargosApi.obtenerPorId(id);
 
 			if (recargo) {
@@ -1087,7 +1099,7 @@
 					const svc = (recargo as any).servicio;
 					const origen = svc.municipios_servicio_origen_idTomunicipios || null;
 					const destino = svc.municipios_servicio_destino_idTomunicipios || null;
-					
+
 					servicioOrigenSeleccionado = origen;
 					servicioDestinoSeleccionado = destino;
 					searchServicioOrigen = origen?.nombre_municipio || '';
@@ -1147,12 +1159,15 @@
 				};
 
 				if ((recargo as any).planilla_s3key) {
-						// TODO: Obtener URL firmada cuando esté implementado
-						archivoExistenteKey = (recargo as any).planilla_s3key;
-					}
+					// TODO: Obtener URL firmada cuando esté implementado
+					archivoExistenteKey = (recargo as any).planilla_s3key;
+				}
 
 				// Cargar días laborales
-				if ((recargo as any).dias_laborales_planillas && (recargo as any).dias_laborales_planillas.length > 0) {
+				if (
+					(recargo as any).dias_laborales_planillas &&
+					(recargo as any).dias_laborales_planillas.length > 0
+				) {
 					diasLaborales = (recargo as any).dias_laborales_planillas.map((dia: any) => ({
 						id: dia.id,
 						dia: dia.dia.toString(),
@@ -1304,7 +1319,9 @@
 					servicio_destino_longitud: servicioDestinoLongitud,
 					servicio_observaciones: servicioObservaciones || null,
 					servicio_proposito: servicioProposito || null,
-					servicio_fecha_realizacion: servicioFechaRealizacion ? new Date(servicioFechaRealizacion).toISOString() : null,
+					servicio_fecha_realizacion: servicioFechaRealizacion
+						? new Date(servicioFechaRealizacion).toISOString()
+						: null,
 
 					// Estado del conductor
 					estado_conductor: formData.estado_conductor,
@@ -1328,14 +1345,14 @@
 					calificacion_servicio: formData.calificacion_servicio,
 
 					// Métricas de tiempo (convertir a number o null)
-					tiempo_disponibilidad_horas: formData.tiempo_disponibilidad_horas 
-						? parseFloat(formData.tiempo_disponibilidad_horas.toString()) 
+					tiempo_disponibilidad_horas: formData.tiempo_disponibilidad_horas
+						? parseFloat(formData.tiempo_disponibilidad_horas.toString())
 						: null,
-					duracion_trayecto_horas: formData.duracion_trayecto_horas 
-						? parseFloat(formData.duracion_trayecto_horas.toString()) 
+					duracion_trayecto_horas: formData.duracion_trayecto_horas
+						? parseFloat(formData.duracion_trayecto_horas.toString())
 						: null,
-					numero_dias_servicio: formData.numero_dias_servicio 
-						? parseInt(formData.numero_dias_servicio.toString()) 
+					numero_dias_servicio: formData.numero_dias_servicio
+						? parseInt(formData.numero_dias_servicio.toString())
 						: null,
 
 					dias_laborales: diasLaborales.map((dia) => ({
@@ -1391,7 +1408,9 @@
 					servicio_destino_longitud: servicioDestinoLongitud,
 					servicio_observaciones: servicioObservaciones || null,
 					servicio_proposito: servicioProposito || null,
-					servicio_fecha_realizacion: servicioFechaRealizacion ? new Date(servicioFechaRealizacion).toISOString() : null,
+					servicio_fecha_realizacion: servicioFechaRealizacion
+						? new Date(servicioFechaRealizacion).toISOString()
+						: null,
 
 					// Estado del conductor
 					estado_conductor: formData.estado_conductor,
@@ -1415,14 +1434,14 @@
 					calificacion_servicio: formData.calificacion_servicio,
 
 					// Métricas de tiempo (convertir a number o null)
-					tiempo_disponibilidad_horas: formData.tiempo_disponibilidad_horas 
-						? parseFloat(formData.tiempo_disponibilidad_horas.toString()) 
+					tiempo_disponibilidad_horas: formData.tiempo_disponibilidad_horas
+						? parseFloat(formData.tiempo_disponibilidad_horas.toString())
 						: null,
-					duracion_trayecto_horas: formData.duracion_trayecto_horas 
-						? parseFloat(formData.duracion_trayecto_horas.toString()) 
+					duracion_trayecto_horas: formData.duracion_trayecto_horas
+						? parseFloat(formData.duracion_trayecto_horas.toString())
 						: null,
-					numero_dias_servicio: formData.numero_dias_servicio 
-						? parseInt(formData.numero_dias_servicio.toString()) 
+					numero_dias_servicio: formData.numero_dias_servicio
+						? parseInt(formData.numero_dias_servicio.toString())
 						: null,
 
 					dias_laborales: diasLaborales.map((dia) => ({
@@ -1497,19 +1516,27 @@
 	}
 
 	// Filtrado reactivo de municipios para servicio
-	$: filteredServicioOrigen = searchServicioOrigen.length >= 2
-		? ($municipios.municipios || []).filter((m: any) =>
-			m.nombre_municipio.toLowerCase().includes(searchServicioOrigen.toLowerCase()) ||
-			m.nombre_departamento.toLowerCase().includes(searchServicioOrigen.toLowerCase())
-		).slice(0, 20)
-		: [];
+	$: filteredServicioOrigen =
+		searchServicioOrigen.length >= 2
+			? ($municipios.municipios || [])
+					.filter(
+						(m: any) =>
+							m.nombre_municipio.toLowerCase().includes(searchServicioOrigen.toLowerCase()) ||
+							m.nombre_departamento.toLowerCase().includes(searchServicioOrigen.toLowerCase())
+					)
+					.slice(0, 20)
+			: [];
 
-	$: filteredServicioDestino = searchServicioDestino.length >= 2
-		? ($municipios.municipios || []).filter((m: any) =>
-			m.nombre_municipio.toLowerCase().includes(searchServicioDestino.toLowerCase()) ||
-			m.nombre_departamento.toLowerCase().includes(searchServicioDestino.toLowerCase())
-		).slice(0, 20)
-		: [];
+	$: filteredServicioDestino =
+		searchServicioDestino.length >= 2
+			? ($municipios.municipios || [])
+					.filter(
+						(m: any) =>
+							m.nombre_municipio.toLowerCase().includes(searchServicioDestino.toLowerCase()) ||
+							m.nombre_departamento.toLowerCase().includes(searchServicioDestino.toLowerCase())
+					)
+					.slice(0, 20)
+			: [];
 
 	// Cargar recursos al abrir
 	onMount(async () => {
@@ -1528,7 +1555,7 @@
 			editMode = false;
 			// Solo generar si estamos en modo creación y no se ha generado antes
 			generarNumeroPlanilla();
-		} 
+		}
 	}
 </script>
 
@@ -1679,7 +1706,9 @@
 							/>
 						</svg>
 						<span>Condiciones y Evaluación</span>
-						<span class="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600">Opcional</span>
+						<span class="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600"
+							>Opcional</span
+						>
 						{#if tabCompleted.condiciones}
 							<svg class="h-4 w-4 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
 								<path
@@ -1773,7 +1802,9 @@
 														{conductorSeleccionado.apellido}
 													</div>
 													{#if conductorSeleccionado.numero_identificacion}
-														<div class="text-sm text-gray-600">CC {conductorSeleccionado.numero_identificacion}</div>
+														<div class="text-sm text-gray-600">
+															CC {conductorSeleccionado.numero_identificacion}
+														</div>
 													{/if}
 												</div>
 												{#if !fromServicio}
@@ -1825,14 +1856,19 @@
 																showConductorDropdown = false;
 																highlightConductor = -1;
 															}}
-															class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 {highlightConductor === i ? 'bg-orange-100' : 'hover:bg-gray-50'}"
+															class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 {highlightConductor ===
+															i
+																? 'bg-orange-100'
+																: 'hover:bg-gray-50'}"
 														>
 															<div class="font-medium text-gray-900">
 																{conductor.nombre}
 																{conductor.apellido}
 															</div>
 															{#if conductor.numero_identificacion}
-																<div class="text-sm text-gray-600">CC {conductor.numero_identificacion}</div>
+																<div class="text-sm text-gray-600">
+																	CC {conductor.numero_identificacion}
+																</div>
 															{/if}
 														</button>
 													{/each}
@@ -1945,7 +1981,10 @@
 																showVehiculoDropdown = false;
 																highlightVehiculo = -1;
 															}}
-															class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 {highlightVehiculo === i ? 'bg-orange-100' : 'hover:bg-gray-50'}"
+															class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 {highlightVehiculo ===
+															i
+																? 'bg-orange-100'
+																: 'hover:bg-gray-50'}"
 														>
 															<div class="font-medium text-gray-900">{vehiculo.placa}</div>
 															{#if vehiculo.marca}
@@ -2062,7 +2101,10 @@
 																showEmpresaDropdown = false;
 																highlightEmpresa = -1;
 															}}
-															class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 {highlightEmpresa === i ? 'bg-orange-100' : 'hover:bg-gray-50'}"
+															class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 {highlightEmpresa ===
+															i
+																? 'bg-orange-100'
+																: 'hover:bg-gray-50'}"
 														>
 															<div class="font-medium text-gray-900">{empresa.nombre}</div>
 															{#if empresa.nit}
@@ -2125,7 +2167,7 @@
 												: 'border-gray-300 py-3'} focus:border-orange-500 disabled:cursor-wait disabled:opacity-70"
 										/>
 										{#if isGenerandoPlanilla}
-											<div class="absolute right-3 top-1/2 -translate-y-1/2">
+											<div class="absolute top-1/2 right-3 -translate-y-1/2">
 												<svg
 													class="h-5 w-5 animate-spin text-orange-600"
 													fill="none"
@@ -2158,11 +2200,7 @@
 										title={isGenerandoPlanilla ? 'Generando...' : 'Regenerar número de planilla'}
 									>
 										{#if isGenerandoPlanilla}
-											<svg
-												class="h-5 w-5 animate-spin"
-												fill="none"
-												viewBox="0 0 24 24"
-											>
+											<svg class="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
 												<circle
 													class="opacity-25"
 													cx="12"
@@ -2194,41 +2232,71 @@
 
 						<!-- Información del Servicio -->
 						{#if mostrarServicioInfo}
-							<div class="rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50 to-amber-50 p-5">
+							<div
+								class="rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50 to-amber-50 p-5"
+							>
 								<div class="mb-4 flex items-center gap-3">
 									<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-600">
-										<svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+										<svg
+											class="h-5 w-5 text-white"
+											fill="none"
+											stroke="currentColor"
+											viewBox="0 0 24 24"
+										>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+											/>
 										</svg>
 									</div>
 									<div>
 										<h3 class="text-sm font-semibold text-gray-900">Información del Servicio</h3>
-										<p class="text-xs text-gray-500">{editMode ? 'Editar datos del servicio vinculado' : 'Registrar servicio asociado (opcional)'}</p>
+										<p class="text-xs text-gray-500">
+											{editMode
+												? 'Editar datos del servicio vinculado'
+												: 'Registrar servicio asociado (opcional)'}
+										</p>
 									</div>
 								</div>
 
 								<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 									<!-- Municipio Origen -->
 									<div class="space-y-1">
-										<label for="servicio-origen" class="text-xs font-medium tracking-wide text-gray-500 uppercase">Municipio Origen</label>
+										<label
+											for="servicio-origen"
+											class="text-xs font-medium tracking-wide text-gray-500 uppercase"
+											>Municipio Origen</label
+										>
 										<div class="relative">
 											<input
 												id="servicio-origen"
 												type="text"
 												bind:value={searchServicioOrigen}
-												on:focus={() => showServicioOrigenDropdown = true}
+												on:focus={() => (showServicioOrigenDropdown = true)}
 												placeholder="Buscar municipio origen..."
 												class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 											/>
 											{#if servicioOrigenSeleccionado}
 												<div class="mt-1 rounded bg-orange-100 px-2 py-1 text-xs text-orange-700">
 													✓ {servicioOrigenSeleccionado.nombre_municipio} — {servicioOrigenSeleccionado.nombre_departamento}
-													<span class="font-mono font-semibold">DIVIPOLA: {servicioOrigenSeleccionado.codigo_municipio}</span>
-													<button on:click={() => { servicioOrigenSeleccionado = null; searchServicioOrigen = ''; }} class="ml-1 text-orange-500 hover:text-orange-700">✕</button>
+													<span class="font-mono font-semibold"
+														>DIVIPOLA: {servicioOrigenSeleccionado.codigo_municipio}</span
+													>
+													<button
+														on:click={() => {
+															servicioOrigenSeleccionado = null;
+															searchServicioOrigen = '';
+														}}
+														class="ml-1 text-orange-500 hover:text-orange-700">✕</button
+													>
 												</div>
 											{/if}
 											{#if showServicioOrigenDropdown && filteredServicioOrigen.length > 0}
-												<div class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+												<div
+													class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg"
+												>
 													{#each filteredServicioOrigen.slice(0, 20) as mun}
 														<button
 															type="button"
@@ -2241,7 +2309,9 @@
 														>
 															<span class="font-medium">{mun.nombre_municipio}</span>
 															<span class="text-xs text-gray-500">— {mun.nombre_departamento}</span>
-															<span class="ml-1 text-xs font-mono text-gray-400">{mun.codigo_municipio}</span>
+															<span class="ml-1 font-mono text-xs text-gray-400"
+																>{mun.codigo_municipio}</span
+															>
 														</button>
 													{/each}
 												</div>
@@ -2251,25 +2321,39 @@
 
 									<!-- Municipio Destino -->
 									<div class="space-y-1">
-										<label for="servicio-destino" class="text-xs font-medium tracking-wide text-gray-500 uppercase">Municipio Destino</label>
+										<label
+											for="servicio-destino"
+											class="text-xs font-medium tracking-wide text-gray-500 uppercase"
+											>Municipio Destino</label
+										>
 										<div class="relative">
 											<input
 												id="servicio-destino"
 												type="text"
 												bind:value={searchServicioDestino}
-												on:focus={() => showServicioDestinoDropdown = true}
+												on:focus={() => (showServicioDestinoDropdown = true)}
 												placeholder="Buscar municipio destino..."
 												class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 											/>
 											{#if servicioDestinoSeleccionado}
 												<div class="mt-1 rounded bg-orange-100 px-2 py-1 text-xs text-orange-700">
 													✓ {servicioDestinoSeleccionado.nombre_municipio} — {servicioDestinoSeleccionado.nombre_departamento}
-													<span class="font-mono font-semibold">DIVIPOLA: {servicioDestinoSeleccionado.codigo_municipio}</span>
-													<button on:click={() => { servicioDestinoSeleccionado = null; searchServicioDestino = ''; }} class="ml-1 text-orange-500 hover:text-orange-700">✕</button>
+													<span class="font-mono font-semibold"
+														>DIVIPOLA: {servicioDestinoSeleccionado.codigo_municipio}</span
+													>
+													<button
+														on:click={() => {
+															servicioDestinoSeleccionado = null;
+															searchServicioDestino = '';
+														}}
+														class="ml-1 text-orange-500 hover:text-orange-700">✕</button
+													>
 												</div>
 											{/if}
 											{#if showServicioDestinoDropdown && filteredServicioDestino.length > 0}
-												<div class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg">
+												<div
+													class="absolute z-50 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg"
+												>
 													{#each filteredServicioDestino.slice(0, 20) as mun}
 														<button
 															type="button"
@@ -2282,7 +2366,9 @@
 														>
 															<span class="font-medium">{mun.nombre_municipio}</span>
 															<span class="text-xs text-gray-500">— {mun.nombre_departamento}</span>
-															<span class="ml-1 text-xs font-mono text-gray-400">{mun.codigo_municipio}</span>
+															<span class="ml-1 font-mono text-xs text-gray-400"
+																>{mun.codigo_municipio}</span
+															>
 														</button>
 													{/each}
 												</div>
@@ -2292,7 +2378,9 @@
 
 									<!-- Dirección Específica Origen -->
 									<div class="space-y-1">
-										<div class="text-xs font-medium tracking-wide text-gray-500 uppercase">Dirección Específica Origen</div>
+										<div class="text-xs font-medium tracking-wide text-gray-500 uppercase">
+											Dirección Específica Origen
+										</div>
 										<MapboxSearch
 											placeholder="Buscar dirección origen..."
 											bind:value={servicioOrigenEspecifico}
@@ -2311,7 +2399,9 @@
 
 									<!-- Dirección Específica Destino -->
 									<div class="space-y-1">
-										<div class="text-xs font-medium tracking-wide text-gray-500 uppercase">Dirección Específica Destino</div>
+										<div class="text-xs font-medium tracking-wide text-gray-500 uppercase">
+											Dirección Específica Destino
+										</div>
 										<MapboxSearch
 											placeholder="Buscar dirección destino..."
 											bind:value={servicioDestinoEspecifico}
@@ -2330,7 +2420,9 @@
 
 									<!-- Fecha de Realización -->
 									<div>
-										<div class="mb-1 text-xs font-medium tracking-wide text-gray-600 uppercase">Fecha y hora de realización</div>
+										<div class="mb-1 text-xs font-medium tracking-wide text-gray-600 uppercase">
+											Fecha y hora de realización
+										</div>
 										<input
 											type="datetime-local"
 											bind:value={servicioFechaRealizacion}
@@ -2340,7 +2432,11 @@
 
 									<!-- Propósito del Servicio -->
 									<div class="space-y-1">
-										<label for="servicio-proposito" class="text-xs font-medium tracking-wide text-gray-500 uppercase">Tipo de Servicio</label>
+										<label
+											for="servicio-proposito"
+											class="text-xs font-medium tracking-wide text-gray-500 uppercase"
+											>Tipo de Servicio</label
+										>
 										<select
 											id="servicio-proposito"
 											bind:value={servicioProposito}
@@ -2354,7 +2450,11 @@
 
 									<!-- Observaciones -->
 									<div class="space-y-1 md:col-span-2">
-										<label for="servicio-observaciones" class="text-xs font-medium tracking-wide text-gray-500 uppercase">Observaciones del Servicio</label>
+										<label
+											for="servicio-observaciones"
+											class="text-xs font-medium tracking-wide text-gray-500 uppercase"
+											>Observaciones del Servicio</label
+										>
 										<textarea
 											id="servicio-observaciones"
 											bind:value={servicioObservaciones}
@@ -2368,11 +2468,16 @@
 						{:else if !editMode}
 							<button
 								type="button"
-								on:click={() => mostrarServicioInfo = true}
+								on:click={() => (mostrarServicioInfo = true)}
 								class="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-orange-300 bg-orange-50/50 px-4 py-3 text-sm font-medium text-orange-600 transition-colors hover:border-orange-400 hover:bg-orange-100/50"
 							>
 								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+									/>
 								</svg>
 								Agregar información de servicio (opcional)
 							</button>
@@ -2467,10 +2572,10 @@
 										</p>
 									</div>
 									<button
-											on:click={() => (archivoAdjunto = null)}
-											aria-label="Eliminar archivo adjunto"
-											class="rounded-lg p-2 transition-colors hover:bg-orange-100"
-										>
+										on:click={() => (archivoAdjunto = null)}
+										aria-label="Eliminar archivo adjunto"
+										class="rounded-lg p-2 transition-colors hover:bg-orange-100"
+									>
 										<svg
 											class="h-5 w-5 text-gray-600"
 											fill="none"
@@ -2520,7 +2625,12 @@
 						<!-- Banner informativo -->
 						<div class="rounded-lg border border-green-200 bg-green-50 p-4">
 							<div class="flex gap-3">
-								<svg class="h-5 w-5 flex-shrink-0 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<svg
+									class="h-5 w-5 flex-shrink-0 text-green-600"
+									fill="none"
+									stroke="currentColor"
+									viewBox="0 0 24 24"
+								>
 									<path
 										stroke-linecap="round"
 										stroke-linejoin="round"
@@ -2531,7 +2641,9 @@
 								<div>
 									<h4 class="font-semibold text-green-900">Sección Opcional - Preaprobada</h4>
 									<p class="mt-1 text-sm text-green-800">
-										Esta sección ya está validada con valores óptimos por defecto. Puede modificar los campos si desea agregar información específica del servicio, pero no es necesario para crear el recargo.
+										Esta sección ya está validada con valores óptimos por defecto. Puede modificar
+										los campos si desea agregar información específica del servicio, pero no es
+										necesario para crear el recargo.
 									</p>
 								</div>
 							</div>
@@ -2557,7 +2669,10 @@
 							</h3>
 							<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 								<div>
-									<label for="estado-conductor" class="mb-2 block text-sm font-medium text-gray-700">
+									<label
+										for="estado-conductor"
+										class="mb-2 block text-sm font-medium text-gray-700"
+									>
 										Estado Físico/Mental
 									</label>
 									<select
@@ -2659,7 +2774,7 @@
 										stroke-linecap="round"
 										stroke-linejoin="round"
 										stroke-width="2"
-							d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+										d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
 									/>
 								</svg>
 								Riesgos y Condiciones de Seguridad
@@ -2787,7 +2902,10 @@
 									</select>
 								</div>
 								<div>
-									<label for="calificacion-servicio" class="mb-2 block text-sm font-medium text-gray-700">
+									<label
+										for="calificacion-servicio"
+										class="mb-2 block text-sm font-medium text-gray-700"
+									>
 										Calificación del Servicio
 									</label>
 									<select
@@ -2824,7 +2942,10 @@
 							</h3>
 							<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
 								<div>
-									<label for="tiempo-disponibilidad" class="mb-2 block text-sm font-medium text-gray-700">
+									<label
+										for="tiempo-disponibilidad"
+										class="mb-2 block text-sm font-medium text-gray-700"
+									>
 										Tiempo Disponibilidad (horas)
 									</label>
 									<input
@@ -2838,7 +2959,10 @@
 									/>
 								</div>
 								<div>
-									<label for="duracion-trayecto" class="mb-2 block text-sm font-medium text-gray-700">
+									<label
+										for="duracion-trayecto"
+										class="mb-2 block text-sm font-medium text-gray-700"
+									>
 										Duración Trayecto (horas)
 									</label>
 									<input
@@ -2848,11 +2972,14 @@
 										min="0"
 										value={totalHorasTrabajadas.toFixed(1)}
 										disabled
-										class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-600 cursor-not-allowed"
+										class="w-full cursor-not-allowed rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-600"
 									/>
 								</div>
 								<div>
-									<label for="numero-dias-servicio" class="mb-2 block text-sm font-medium text-gray-700">
+									<label
+										for="numero-dias-servicio"
+										class="mb-2 block text-sm font-medium text-gray-700"
+									>
 										Número de Días Servicio
 									</label>
 									<input
@@ -2865,7 +2992,10 @@
 									/>
 								</div>
 								<div>
-									<label for="total-kilometraje" class="mb-2 block text-sm font-medium text-gray-700">
+									<label
+										for="total-kilometraje"
+										class="mb-2 block text-sm font-medium text-gray-700"
+									>
 										Total Kilometraje (km)
 									</label>
 									<input
@@ -2875,7 +3005,7 @@
 										min="0"
 										value={totalKilometraje.toFixed(1)}
 										disabled
-										class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-600 cursor-not-allowed"
+										class="w-full cursor-not-allowed rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-600"
 									/>
 								</div>
 							</div>
@@ -3027,28 +3157,6 @@
 									</div>
 								{/if}
 							</div>
-
-							<!-- Botón agregar día - OCULTO: Los días se generan automáticamente según numero_dias_servicio -->
-							<!-- 
-							<button
-								on:click={agregarDiaLaboral}
-								disabled={diasLaborales.length >= 15}
-								class="flex flex-shrink-0 items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-white transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
-							>
-								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M12 4v16m8-8H4"
-									/>
-								</svg>
-								Agregar Día
-								{#if diasLaborales.length < 15}
-									<span class="text-xs opacity-75">({diasLaborales.length}/15)</span>
-								{/if}
-							</button>
-							-->
 						</div>
 
 						<!-- Tabla de Recargos -->
@@ -3153,10 +3261,13 @@
 										{@const isDomingo = dia.es_domingo}
 										{@const isFestivo = dia.es_festivo}
 										{@const maxDia = obtenerMaximoDiaMes(currentMonth, currentYear)}
-										{@const kmInicial = dia.kilometraje_inicial ? parseFloat(dia.kilometraje_inicial) : 0}
+										{@const kmInicial = dia.kilometraje_inicial
+											? parseFloat(dia.kilometraje_inicial)
+											: 0}
 										{@const kmFinal = dia.kilometraje_final ? parseFloat(dia.kilometraje_final) : 0}
 										{@const kmRecorridos = kmFinal > kmInicial ? kmFinal - kmInicial : 0}
-										{@const esContinuacion = rowIdx > 0 && diasLaborales[rowIdx - 1].continua_siguiente_dia}
+										{@const esContinuacion =
+											rowIdx > 0 && diasLaborales[rowIdx - 1].continua_siguiente_dia}
 										<tr
 											on:click={() => (selectedRow = dia.id)}
 											class="cursor-pointer transition-colors {isSelected
@@ -3318,7 +3429,11 @@
 													type="checkbox"
 													bind:checked={dia.continua_siguiente_dia}
 													on:change={(e) =>
-														actualizarDiaLaboral(dia.id, 'continua_siguiente_dia', e.currentTarget.checked)}
+														actualizarDiaLaboral(
+															dia.id,
+															'continua_siguiente_dia',
+															e.currentTarget.checked
+														)}
 													class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
 													title="Marcar si el servicio continúa al día siguiente"
 												/>
@@ -3326,7 +3441,11 @@
 
 											<!-- Total Horas -->
 											<td class="px-3 py-2 text-center whitespace-nowrap">
-												<span class="text-sm font-semibold {dia.disponibilidad ? 'text-green-600' : 'text-gray-700'}">
+												<span
+													class="text-sm font-semibold {dia.disponibilidad
+														? 'text-green-600'
+														: 'text-gray-700'}"
+												>
 													{#if dia.disponibilidad}
 														<span title="Día disponible - no se contabiliza">D</span>
 													{:else}
@@ -3338,112 +3457,133 @@
 											<!-- HED -->
 											<td class="px-3 py-2 text-center">
 												{#if dia.disponibilidad}
-													<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-400">-</span>
+													<span
+														class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-400"
+														>-</span
+													>
 												{:else}
-												<span
-													class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
-														'HED',
-														recargos.HED
-													)}"
-												>
-													{recargos.HED > 0 ? recargos.HED.toFixed(2) : '-'}
-												</span>
+													<span
+														class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
+															'HED',
+															recargos.HED
+														)}"
+													>
+														{recargos.HED > 0 ? recargos.HED.toFixed(2) : '-'}
+													</span>
 												{/if}
 											</td>
 
 											<!-- HEN -->
 											<td class="px-3 py-2 text-center">
 												{#if dia.disponibilidad}
-													<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-400">-</span>
+													<span
+														class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-400"
+														>-</span
+													>
 												{:else}
-												<span
-													class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
-														'HEN',
-														recargos.HEN
-													)}"
-												>
-													{recargos.HEN > 0 ? recargos.HEN.toFixed(2) : '-'}
-												</span>
+													<span
+														class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
+															'HEN',
+															recargos.HEN
+														)}"
+													>
+														{recargos.HEN > 0 ? recargos.HEN.toFixed(2) : '-'}
+													</span>
 												{/if}
 											</td>
 
 											<!-- HEFD -->
 											<td class="px-3 py-2 text-center">
 												{#if dia.disponibilidad}
-													<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-400">-</span>
+													<span
+														class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-400"
+														>-</span
+													>
 												{:else}
-												<span
-													class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
-														'HEFD',
-														recargos.HEFD
-													)}"
-												>
-													{recargos.HEFD > 0 ? recargos.HEFD.toFixed(2) : '-'}
-												</span>
+													<span
+														class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
+															'HEFD',
+															recargos.HEFD
+														)}"
+													>
+														{recargos.HEFD > 0 ? recargos.HEFD.toFixed(2) : '-'}
+													</span>
 												{/if}
 											</td>
 
 											<!-- HEFN -->
 											<td class="px-3 py-2 text-center">
 												{#if dia.disponibilidad}
-													<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-400">-</span>
+													<span
+														class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-400"
+														>-</span
+													>
 												{:else}
-												<span
-													class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
-														'HEFN',
-														recargos.HEFN
-													)}"
-												>
-													{recargos.HEFN > 0 ? recargos.HEFN.toFixed(2) : '-'}
-												</span>
+													<span
+														class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
+															'HEFN',
+															recargos.HEFN
+														)}"
+													>
+														{recargos.HEFN > 0 ? recargos.HEFN.toFixed(2) : '-'}
+													</span>
 												{/if}
 											</td>
 
 											<!-- RNDF -->
 											<td class="px-3 py-2 text-center">
 												{#if dia.disponibilidad}
-													<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-400">-</span>
+													<span
+														class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-400"
+														>-</span
+													>
 												{:else}
-												<span
-													class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
-														'RNDF',
-														recargos.RNDF
-													)}"
-												>
-													{recargos.RNDF > 0 ? recargos.RNDF.toFixed(2) : '-'}
-												</span>
+													<span
+														class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
+															'RNDF',
+															recargos.RNDF
+														)}"
+													>
+														{recargos.RNDF > 0 ? recargos.RNDF.toFixed(2) : '-'}
+													</span>
 												{/if}
 											</td>
 
 											<!-- RN -->
 											<td class="px-3 py-2 text-center">
 												{#if dia.disponibilidad}
-													<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-400">-</span>
+													<span
+														class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-400"
+														>-</span
+													>
 												{:else}
-												<span
-													class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
-														'RN',
-														recargos.RN
-													)}"
-												>
-													{recargos.RN > 0 ? recargos.RN.toFixed(2) : '-'}
-												</span>
+													<span
+														class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
+															'RN',
+															recargos.RN
+														)}"
+													>
+														{recargos.RN > 0 ? recargos.RN.toFixed(2) : '-'}
+													</span>
 												{/if}
 											</td>
 
 											<!-- RD -->
 											<td class="px-3 py-2 text-center">
 												{#if dia.disponibilidad}
-													<span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-gray-100 text-gray-400">-</span>
+													<span
+														class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-400"
+														>-</span
+													>
 												{:else}
-												<span
-													class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
-														'RD',
-														recargos.RD
-													)}"
-												>
-													{recargos.RD > 0 ? recargos.RD.toFixed(2) : '-'}
-												</span>
+													<span
+														class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
+															'RD',
+															recargos.RD
+														)}"
+													>
+														{recargos.RD > 0 ? recargos.RD.toFixed(2) : '-'}
+													</span>
 												{/if}
 											</td>
 

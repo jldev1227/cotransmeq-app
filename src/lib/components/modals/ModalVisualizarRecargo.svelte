@@ -46,7 +46,7 @@
 	function formatearHoras(horas: number | string | undefined): string {
 		if (!horas) return '0.0';
 		const num = typeof horas === 'string' ? parseFloat(horas) : horas;
-		return isNaN(num) ? '0.0' : num.toFixed(1);
+		return isNaN(num) ? '0.0' : num.toFixed(2);
 	}
 
 	// Función para obtener URL firmada

@@ -169,7 +169,15 @@ export async function generarPdfDesprendible(
 	const recargosParex = item.recargos?.filter((r) => r.empresa_id === PAREX_EMPRESA_ID) || [];
 	const totalRecargosParex = recargosParex.reduce((s, r) => s + Number(r.valor || 0), 0);
 	const hayRecargosParex = totalRecargosParex > 0;
+
 	const disponibilidadVal = Number(safeValue(item.disponibilidad, 0));
+	
+	// Total final después de disponibilidad
+	const totalRecargos = Number(item.total_recargos || 0);
+	const totalRecargosFinal = Math.max(0, totalRecargos - disponibilidadVal);
+	
+	// Separaciones
+	const totalRecargosNoParex = totalRecargos - totalRecargosParex;
 
 	// Separar "Otros" (no-PAREX) y restar disponibilidad
 	// Si "Otros" tiene suficiente, se resta de ahí. Si no alcanza, el sobrante se resta de PAREX.
@@ -179,6 +187,7 @@ export async function generarPdfDesprendible(
 	// Si "Otros" no alcanzó para absorber toda la disponibilidad, el resto se resta de PAREX
 	const disponibilidadSobrante = otrosMenosDisp < 0 ? Math.abs(otrosMenosDisp) : 0;
 	const totalRecargosParexFinal = totalRecargosParex - disponibilidadSobrante;
+
 
 	// Bonificaciones agrupadas
 	const bonosAgrupados: Record<string, { name: string; quantity: number; totalValue: number }> =
