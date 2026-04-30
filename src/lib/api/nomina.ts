@@ -10,6 +10,7 @@ import type {
 	FirmaDesprendible,
 	FirmaConUrl
 } from '$lib/types/nomina';
+import type { DiaLaboralPlanilla } from '$lib/types/recargos';
 
 /**
  * API Cliente para el módulo de Nómina
@@ -392,6 +393,47 @@ export interface PreviewRecargosResponse {
 	planillas: PreviewRecargoPlanilla[];
 }
 
+export function agruparPorMesVehiculoEmpresa(data: any[]) {
+  const map = new Map();
+
+  for (const item of data) {
+    const key = [
+      item.año,
+      item.mes,
+      item.vehiculo.id,
+      item.empresa.id
+    ].join("_");
+
+    if (!map.has(key)) {
+      map.set(key, {
+        ...item, // base
+
+        // reiniciamos acumuladores
+        total_dias: 0,
+        total_horas: 0,
+        total_valor: 0,
+        total_festivos: 0,
+
+        // importante: aquí sí unificas días
+        dias: []
+      });
+    }
+
+    const acc = map.get(key);
+
+    acc.total_dias += item.total_dias || 0;
+    acc.total_horas += item.total_horas || 0;
+    acc.total_valor += item.total_valor || 0;
+    acc.total_festivos += item.total_festivos || 0;
+
+    // 🔥 aquí está la clave: unificas días, no planillas
+    acc.dias.push(...(item.dias || []));
+	acc.dias.sort((a: DiaLaboralPlanilla, b: DiaLaboralPlanilla) => a.dia - b.dia);
+  }
+
+  return Array.from(map.values());
+}
+
 /**
  * Obtener preview de recargos para un conductor en un período
  */
@@ -437,6 +479,8 @@ export default {
 	crearConfiguracion,
 	duplicarConfiguraciones,
 	eliminarConfiguracionItem,
+
+	agruparPorMesVehiculoEmpresa,
 
 	// Desprendibles
 	previewDesprendibles,
