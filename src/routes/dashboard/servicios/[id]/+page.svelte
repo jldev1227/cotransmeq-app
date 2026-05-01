@@ -8,447 +8,1450 @@
 	import { servicioDetalleStore } from '$lib/stores/servicio-detalle';
 	import { serviciosStore } from '$lib/stores/servicios';
 	import { sidebarStore } from '$lib/stores/sidebar';
+	import distracomLocations from '$lib/data/distracomlocations';
 
 	const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
+	const OVERPASS_API = 'https://overpass-api.de/api/interpreter';
+	const DISTRACOM_ICON_URL =
+		import.meta.env.VITE_DISTRACOM_ICON_URL ??
+		'https://transmeralda.s3.us-east-2.amazonaws.com/assets/Surtidor.png';
 
-	// Variables reactivas del store
+	const DISTRACOM_DEPARTAMENTOS = [
+		'cundinamarca',
+		'bogotá',
+		'bogota',
+		'boyacá',
+		'boyaca',
+		'meta',
+		'casanare',
+		'vichada'
+	];
+
+	// ─── TIPOS ────────────────────────────────────────────────────
+
+	interface DistracomEstacion {
+		nombre: string;
+		direccion: string;
+		ciudad: string;
+		departamento: string;
+		lat: number;
+		lon: number;
+		diesel: boolean;
+		gasolina: boolean;
+		hotel: boolean;
+		lubricentro: boolean;
+	}
+	interface PeajeInfo {
+		nombre: string;
+		lat: number;
+		lon: number;
+	}
+	interface ParadaSegura {
+		nombre: string;
+		tipo: 'restaurante' | 'estacion_servicio' | 'hospedaje';
+		lat: number;
+		lon: number;
+	}
+
+	// ─── STORE ────────────────────────────────────────────────────
+
 	$: servicio = $servicioDetalleStore.servicio;
 	$: loading = $servicioDetalleStore.loading;
 	$: error = $servicioDetalleStore.error;
-	$: sidebarCollapsed = $sidebarStore;
 
-	// Variables de mapa
+	// ─── ESTADO ───────────────────────────────────────────────────
+
 	let map: mapboxgl.Map | null = null;
 	let isMapLoaded = false;
 	let markers: mapboxgl.Marker[] = [];
-	let routeCoordinates: number[][] = [];
-	let distancia = '0';
-	let duracion = '0';
+	let distracomMarkers: mapboxgl.Marker[] = [];
+	let peajeMarkersArr: mapboxgl.Marker[] = [];
+	let paradaMarkersArr: mapboxgl.Marker[] = [];
 
-	// Variables de UI
+	let distancia = '—';
+	let duracion = '—';
 	let isNavigating = false;
 	let showShareModal = false;
 	let generatedShareUrl = '';
 	let copySuccess = false;
 
-	// Función para ajustar el mapa a los bounds de la ruta
-	function fitMapToBounds() {
-		if (!map || !servicio) return;
+	// POIs
+	let peajes: PeajeInfo[] = [];
+	let paradasSeguras: ParadaSegura[] = [];
+	let loadingPOIs = false;
 
-		const originLat = servicio.origen_latitud || servicio.origen?.latitud;
-		const originLng = servicio.origen_longitud || servicio.origen?.longitud;
-		const destLat = servicio.destino_latitud || servicio.destino?.latitud;
-		const destLng = servicio.destino_longitud || servicio.destino?.longitud;
+	// Toggles capas de riesgo y tráfico
+	let showTrafico = true;
+	let showRiesgos = true;
 
-		if (!originLat || !originLng || !destLat || !destLng) return;
+	// Estado panel condiciones viales
+	interface CondicionVial {
+		tipo: 'trafico' | 'riesgo' | 'clima' | 'info';
+		nivel: 'ok' | 'moderado' | 'alto' | 'critico';
+		titulo: string;
+		descripcion: string;
+	}
+	interface IncidenteVial {
+		id: string;
+		tipo: string; // accident | road_closure | construction | hazard | weather | congestion
+		descripcion: string;
+		longDescripcion: string;
+		impacto: string; // critical | major | minor | low
+		cerrrado: boolean;
+		viasAfectadas: string[];
+		lat: number;
+		lon: number;
+	}
+	let condicionesViales: CondicionVial[] = [];
+	let incidentes: IncidenteVial[] = [];
+	let incidenteMarkersArr: mapboxgl.Marker[] = [];
+	let loadingCondiciones = false;
+	let showIncidentes = true;
 
-		const bounds = new mapboxgl.LngLatBounds();
-		bounds.extend([originLng, originLat]);
-		bounds.extend([destLng, destLat]);
-		map.fitBounds(bounds, { padding: 100, maxZoom: 14 });
+	// Incidentes nacionales (viewport — estilo Waze)
+	let incidentesNacionales: any[] = [];
+	let fetchingNacionales = false;
+	let moveendTimer: ReturnType<typeof setTimeout>;
+
+	// Toggles leyenda
+	let showPeajes = true;
+	let showRestaurantes = true;
+	let showEstaciones = true;
+	let showHospedajes = true;
+	let showDistracom = true;
+
+	// ─── HELPERS ──────────────────────────────────────────────────
+
+	const STATUS_COLOR: Record<string, string> = {
+		pendiente: '#F59E0B',
+		en_curso: '#3B82F6',
+		planificado: '#8B5CF6',
+		completado: '#10B981',
+		realizado: '#10B981',
+		cancelado: '#EF4444',
+		liquidado: '#6B7280'
+	};
+	const STATUS_LABEL: Record<string, string> = {
+		pendiente: 'Pendiente',
+		en_curso: 'En Curso',
+		planificado: 'Planificado',
+		completado: 'Completado',
+		realizado: 'Realizado',
+		cancelado: 'Cancelado',
+		liquidado: 'Liquidado'
+	};
+
+	const fmtDate = (d: any) =>
+		d
+			? new Intl.DateTimeFormat('es-CO', {
+					day: 'numeric',
+					month: 'short',
+					year: 'numeric'
+				}).format(new Date(d))
+			: '—';
+	const fmtTime = (d: any) =>
+		d
+			? new Intl.DateTimeFormat('es-CO', { hour: '2-digit', minute: '2-digit' }).format(new Date(d))
+			: '—';
+	const fmtMin = (m: number) => {
+		const h = Math.floor(m / 60),
+			r = Math.round(m % 60);
+		return h > 0 ? `${h}h ${r}min` : `${r}min`;
+	};
+
+	// ─── GEOMETRÍA: DISTANCIA PUNTO → SEGMENTO DE POLILÍNEA ────────
+	// Calcula la distancia mínima en km desde un punto (lat/lon)
+	// a cualquier segmento de la polilínea de la ruta.
+	// Esto es necesario porque Mapbox devuelve puntos espaciados y
+	// la ruta entre dos coordenadas puede pasar lejos de los puntos de muestreo.
+
+	function distPuntoSegmento(
+		pLat: number,
+		pLon: number,
+		aLat: number,
+		aLon: number,
+		bLat: number,
+		bLon: number
+	): number {
+		// Convertir a coordenadas planas aproximadas (suficiente para <500 km)
+		const R = 111.32; // km por grado
+		const cosLat = Math.cos((((aLat + bLat) / 2) * Math.PI) / 180);
+
+		const px = (pLon - aLon) * R * cosLat;
+		const py = (pLat - aLat) * R;
+		const dx = (bLon - aLon) * R * cosLat;
+		const dy = (bLat - aLat) * R;
+
+		const lenSq = dx * dx + dy * dy;
+		if (lenSq === 0) return Math.sqrt(px * px + py * py);
+
+		// Parámetro t: proyección del punto sobre el segmento [0,1]
+		const t = Math.max(0, Math.min(1, (px * dx + py * dy) / lenSq));
+
+		const nearX = px - t * dx;
+		const nearY = py - t * dy;
+		return Math.sqrt(nearX * nearX + nearY * nearY);
 	}
 
-	// NO redimensionar el mapa cuando el drawer cambia para evitar deformación de marcadores
-	// El mapa se mantiene en su tamaño inicial
+	function esCercanoPolicromia(
+		lat: number,
+		lon: number,
+		coords: number[][],
+		umbralKm: number
+	): boolean {
+		for (let i = 0; i < coords.length - 1; i++) {
+			const d = distPuntoSegmento(
+				lat,
+				lon,
+				coords[i][1],
+				coords[i][0],
+				coords[i + 1][1],
+				coords[i + 1][0]
+			);
+			if (d <= umbralKm) return true;
+		}
+		return false;
+	}
 
-	// Helper: Obtener color según estado
-	function getStatusColor(status: string): string {
-		const colors: Record<string, string> = {
-			pendiente: '#F59E0B',
-			en_curso: '#3B82F6',
-			completado: '#10B981',
-			cancelado: '#EF4444'
+	// ─── OVERPASS: PEAJES ─────────────────────────────────────────
+
+	async function obtenerPeajes(routeCoords: number[][]): Promise<PeajeInfo[]> {
+		try {
+			const lats = routeCoords.map((c) => c[1]);
+			const lngs = routeCoords.map((c) => c[0]);
+			// Buffer de 0.05° (~5 km) alrededor del bbox de la ruta
+			const bbox = [
+				Math.min(...lats) - 0.05,
+				Math.min(...lngs) - 0.05,
+				Math.max(...lats) + 0.05,
+				Math.max(...lngs) + 0.05
+			];
+			const query = `[out:json];(node["barrier"="toll_booth"](${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]});node["amenity"="toll_booth"](${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]}););out body;`;
+			const res = await fetch(OVERPASS_API, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+				body: `data=${encodeURIComponent(query)}`,
+				signal: AbortSignal.timeout(10000)
+			});
+			if (!res.ok) return [];
+			const data = (await res.json()) as { elements?: any[] };
+
+			// Origen y destino de la ruta
+			const origenLat = routeCoords[0][1],
+				origenLon = routeCoords[0][0];
+			const destinoLat = routeCoords[routeCoords.length - 1][1];
+			const destinoLon = routeCoords[routeCoords.length - 1][0];
+			const EXCLUSION_KM = 10; // Peajes dentro de 10 km de la ciudad los ignoramos
+
+			const distKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+				const R = 111.32;
+				const cosLat = Math.cos((((lat1 + lat2) / 2) * Math.PI) / 180);
+				return Math.sqrt(((lat2 - lat1) * R) ** 2 + ((lon2 - lon1) * R * cosLat) ** 2);
+			};
+
+			return (data.elements || [])
+				.map((el: any) => ({ nombre: el.tags?.name || 'Peaje', lat: el.lat, lon: el.lon }))
+				.filter((p: PeajeInfo) => {
+					// 1. Debe estar sobre el trazado real de la ruta (≤ 2 km)
+					if (!esCercanoPolicromia(p.lat, p.lon, routeCoords, 2)) return false;
+					// 2. Excluir peajes dentro del radio urbano de origen o destino
+					if (distKm(p.lat, p.lon, origenLat, origenLon) <= EXCLUSION_KM) return false;
+					if (distKm(p.lat, p.lon, destinoLat, destinoLon) <= EXCLUSION_KM) return false;
+					return true;
+				});
+		} catch {
+			return [];
+		}
+	}
+
+	// ─── OVERPASS: PARADAS SEGURAS ────────────────────────────────
+
+	async function obtenerParadasSeguras(routeCoords: number[][]): Promise<ParadaSegura[]> {
+		try {
+			const lats = routeCoords.map((c) => c[1]);
+			const lngs = routeCoords.map((c) => c[0]);
+
+			// Origen y destino de la ruta (primer y último punto)
+			const origenLat = routeCoords[0][1],
+				origenLon = routeCoords[0][0];
+			const destinoLat = routeCoords[routeCoords.length - 1][1];
+			const destinoLon = routeCoords[routeCoords.length - 1][0];
+
+			// Radio de exclusión alrededor de las ciudades extremas:
+			// 15 km en zonas urbanas evita los cientos de hoteles/restaurantes
+			// de origen y destino. Solo quedan los del trayecto intermedio.
+			const EXCLUSION_KM = 15;
+
+			// Buffer de 0.04° (~4 km) alrededor del bbox
+			const bbox = [
+				Math.min(...lats) - 0.04,
+				Math.min(...lngs) - 0.04,
+				Math.max(...lats) + 0.04,
+				Math.max(...lngs) + 0.04
+			];
+			const query = `[out:json][timeout:20];(
+				node["amenity"="restaurant"](${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]});
+				node["amenity"="fuel"](${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]});
+				node["tourism"="hotel"](${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]});
+				node["tourism"="hostel"](${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]});
+				node["tourism"="guest_house"](${bbox[0]},${bbox[1]},${bbox[2]},${bbox[3]});
+			);out body;`;
+			const res = await fetch(OVERPASS_API, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+				body: `data=${encodeURIComponent(query)}`,
+				signal: AbortSignal.timeout(20000)
+			});
+			if (!res.ok) return [];
+			const data = (await res.json()) as { elements?: any[] };
+
+			// Distancia aproximada entre dos puntos en km (Haversine simplificado)
+			const distKm = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+				const R = 111.32;
+				const cosLat = Math.cos((((lat1 + lat2) / 2) * Math.PI) / 180);
+				const dLat = (lat2 - lat1) * R;
+				const dLon = (lon2 - lon1) * R * cosLat;
+				return Math.sqrt(dLat * dLat + dLon * dLon);
+			};
+
+			return (data.elements || [])
+				.map((el: any) => {
+					let tipo: ParadaSegura['tipo'] = 'restaurante';
+					if (el.tags?.amenity === 'fuel') tipo = 'estacion_servicio';
+					if (['hotel', 'hostel', 'guest_house'].includes(el.tags?.tourism)) tipo = 'hospedaje';
+					return {
+						nombre:
+							el.tags?.name ||
+							(tipo === 'restaurante'
+								? 'Restaurante'
+								: tipo === 'estacion_servicio'
+									? 'Est. Servicio'
+									: 'Hospedaje'),
+						tipo,
+						lat: el.lat,
+						lon: el.lon
+					};
+				})
+				.filter((p: ParadaSegura) => {
+					// 1. Debe estar a ≤ 3 km del trazado real de la ruta
+					if (!esCercanoPolicromia(p.lat, p.lon, routeCoords, 3)) return false;
+
+					// 2. Excluir POIs dentro del radio urbano de origen o destino
+					//    Evita los cientos de hoteles/restaurantes de las ciudades extremas
+					if (distKm(p.lat, p.lon, origenLat, origenLon) <= EXCLUSION_KM) return false;
+					if (distKm(p.lat, p.lon, destinoLat, destinoLon) <= EXCLUSION_KM) return false;
+
+					return true;
+				})
+				.slice(0, 30);
+		} catch {
+			return [];
+		}
+	}
+
+	// ─── DISTRACOM ────────────────────────────────────────────────
+
+	function getEstaciones(routeCoords: number[][]): DistracomEstacion[] {
+		if (!routeCoords.length) {
+			// Sin ruta: mostrar todas las de departamentos permitidos
+			return (distracomLocations as any[]).reduce((acc: DistracomEstacion[], r) => {
+				const d = (r.Departamento || '').toLowerCase().trim();
+				const lat = Number(r.Latitud),
+					lon = Number(r.Longitud);
+				if (!DISTRACOM_DEPARTAMENTOS.includes(d) || isNaN(lat) || isNaN(lon)) return acc;
+				const srvs: string[] = (r.Servicios || []).map((s: any) => s.Nombre?.toLowerCase() || '');
+				acc.push({
+					nombre: r.NombreEstacion || 'Distracom',
+					direccion: r.Direccion || '',
+					ciudad: r.Ciudad || '',
+					departamento: r.Departamento || '',
+					lat,
+					lon,
+					diesel: (r.DIESEL ?? 0) > 0,
+					gasolina: (r.CORRIENTE ?? 0) > 0 || (r.PREMIUM ?? 0) > 0,
+					hotel: r.Hotel === true,
+					lubricentro: srvs.some((s) => s.includes('lubricentro'))
+				});
+				return acc;
+			}, []);
+		}
+		const lats = routeCoords.map((c) => c[1]),
+			lngs = routeCoords.map((c) => c[0]);
+		const bbox = {
+			minLat: Math.min(...lats) - 0.5,
+			maxLat: Math.max(...lats) + 0.5,
+			minLng: Math.min(...lngs) - 0.5,
+			maxLng: Math.max(...lngs) + 0.5
 		};
-		return colors[status] || '#6B7280';
+		return (distracomLocations as any[])
+			.filter((r) => {
+				const d = (r.Departamento || '').toLowerCase().trim(),
+					lat = Number(r.Latitud),
+					lon = Number(r.Longitud);
+				if (!DISTRACOM_DEPARTAMENTOS.includes(d) || isNaN(lat) || isNaN(lon)) return false;
+				if (lat < bbox.minLat || lat > bbox.maxLat || lon < bbox.minLng || lon > bbox.maxLng)
+					return false;
+				return routeCoords.some((c) => Math.abs(lat - c[1]) < 0.45 && Math.abs(lon - c[0]) < 0.45);
+			})
+			.map((r) => {
+				const srvs: string[] = (r.Servicios || []).map((s: any) => s.Nombre?.toLowerCase() || '');
+				return {
+					nombre: r.NombreEstacion || 'Distracom',
+					direccion: r.Direccion || '',
+					ciudad: r.Ciudad || '',
+					departamento: r.Departamento || '',
+					lat: Number(r.Latitud),
+					lon: Number(r.Longitud),
+					diesel: (r.DIESEL ?? 0) > 0,
+					gasolina: (r.CORRIENTE ?? 0) > 0 || (r.PREMIUM ?? 0) > 0,
+					hotel: r.Hotel === true,
+					lubricentro: srvs.some((s) => s.includes('lubricentro'))
+				};
+			})
+			.slice(0, 6);
 	}
 
-	// Helper: Formatear fecha
-	function formatearFecha(fecha: string | Date): string {
-		if (!fecha) return 'No disponible';
-		const date = typeof fecha === 'string' ? new Date(fecha) : fecha;
-		return new Intl.DateTimeFormat('es-CO', {
-			year: 'numeric',
-			month: 'long',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		}).format(date);
+	// ─── INCIDENTES VIALES ────────────────────────────────────────
+
+	function tipoLabel(tipo: string): string {
+		const labels: Record<string, string> = {
+			accident: 'Accidente vial',
+			road_closure: 'Cierre de vía',
+			construction: 'Obra en vía',
+			hazard: 'Peligro en vía',
+			weather: 'Condición climática',
+			congestion: 'Congestión vehicular',
+			disabled_vehicle: 'Vehículo varado'
+		};
+		return labels[tipo] ?? 'Novedad vial';
 	}
 
-	// Helper: Formatear duración
-	function formatDuration(minutes: number): string {
-		const hours = Math.floor(minutes / 60);
-		const mins = Math.round(minutes % 60);
-		if (hours > 0) {
-			return `${hours}h ${mins}min`;
+	function tipoIcono(tipo: string, cerrado: boolean): { emoji: string; color: string } {
+		if (cerrado) return { emoji: '🚧', color: '#DC2626' };
+		const map: Record<string, { emoji: string; color: string }> = {
+			accident: { emoji: '💥', color: '#EA580C' },
+			road_closure: { emoji: '🚧', color: '#DC2626' },
+			construction: { emoji: '🏗️', color: '#D97706' },
+			hazard: { emoji: '⚠️', color: '#CA8A04' },
+			weather: { emoji: '🌧️', color: '#2563EB' },
+			congestion: { emoji: '🚗', color: '#7C3AED' },
+			disabled_vehicle: { emoji: '🚘', color: '#6B7280' }
+		};
+		return map[tipo] ?? { emoji: '⚠️', color: '#CA8A04' };
+	}
+
+	function popupIncidente(inc: IncidenteVial): string {
+		const { emoji, color } = tipoIcono(inc.tipo, inc.cerrrado);
+		const impactoLabel: Record<string, string> = {
+			critical: '🔴 Crítico',
+			major: '🟠 Mayor',
+			minor: '🟡 Menor',
+			low: '🟢 Bajo'
+		};
+		const vias =
+			inc.viasAfectadas.length > 0
+				? `<p style="color:#555;font-size:11px;margin:0 0 6px;">📍 ${inc.viasAfectadas.join(', ')}</p>`
+				: '';
+		const desc = inc.longDescripcion || inc.descripcion;
+		return `<div style="padding:12px 14px;min-width:210px;font-family:system-ui,sans-serif;">
+			<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+				<div style="width:28px;height:28px;background:${color};border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;">${emoji}</div>
+				<strong style="color:#111;font-size:12px;">${inc.cerrrado ? 'VÍA CERRADA — ' : ''}${tipoLabel(inc.tipo)}</strong>
+			</div>
+			${vias}
+			<p style="color:#333;font-size:11px;margin:0 0 8px;line-height:1.5;">${desc}</p>
+			<span style="display:inline-block;background:#f3f4f6;color:#374151;font-size:10px;padding:2px 8px;border-radius:999px;">${impactoLabel[inc.impacto] ?? inc.impacto}</span>
+		</div>`;
+	}
+
+	function pintarIncidentes() {
+		incidenteMarkersArr.forEach((m) => m.remove());
+		incidenteMarkersArr = [];
+		if (!map || !showIncidentes) return;
+		for (const inc of incidentes) {
+			const { emoji, color } = tipoIcono(inc.tipo, inc.cerrrado);
+			const el = document.createElement('div');
+			el.style.cssText = 'width:32px;height:32px;cursor:pointer;';
+			// Marcador pulsante para cierres críticos
+			const pulsar = inc.cerrrado || inc.impacto === 'critical';
+			el.innerHTML = `
+				<div style="position:relative;width:32px;height:32px;">
+					${pulsar ? `<span style="position:absolute;inset:0;border-radius:50%;background:${color};opacity:0.35;animation:ping 1.2s cubic-bezier(0,0,0.2,1) infinite;"></span>` : ''}
+					<div style="position:relative;width:32px;height:32px;background:${color};border-radius:50%;border:2.5px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,0.35);display:flex;align-items:center;justify-content:center;font-size:15px;">${emoji}</div>
+				</div>`;
+			const popup = new mapboxgl.Popup({
+				offset: [0, -18],
+				maxWidth: '260px',
+				closeButton: true,
+				anchor: 'bottom'
+			}).setHTML(popupIncidente(inc));
+			const mk = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
+				.setLngLat([inc.lon, inc.lat])
+				.setPopup(popup)
+				.addTo(map!);
+			el.addEventListener('click', (e) => {
+				e.stopPropagation();
+				mk.togglePopup();
+			});
+			incidenteMarkersArr.push(mk);
 		}
-		return `${mins} min`;
 	}
 
-	// Helper: Obtener ruta de Mapbox
-	async function fetchMapboxRoute(
-		originLng: number,
-		originLat: number,
-		destLng: number,
-		destLat: number
-	): Promise<number[][]> {
-		const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${originLng},${originLat};${destLng},${destLat}?geometries=geojson&overview=full&access_token=${MAPBOX_TOKEN}`;
+	// ─── INCIDENTES NACIONALES (viewport — estilo Waze) ──────────
 
-		const response = await fetch(url);
-		const data = await response.json();
+	const ICON_NACIONAL: Record<string, { color: string; emoji: string }> = {
+		accident: { color: '#ef4444', emoji: '💥' },
+		road_closure: { color: '#dc2626', emoji: '🚧' },
+		construction: { color: '#d97706', emoji: '🏗️' },
+		hazard: { color: '#ca8a04', emoji: '⚠️' },
+		weather: { color: '#2563eb', emoji: '🌧️' },
+		disabled_vehicle: { color: '#6b7280', emoji: '🚘' },
+		other: { color: '#7c3aed', emoji: '📍' }
+	};
 
-		if (data.routes && data.routes.length > 0) {
-			const route = data.routes[0];
-			distancia = (route.distance / 1000).toFixed(2);
-			duracion = formatDuration(route.duration / 60);
-			return route.geometry.coordinates;
+	// Consulta Overpass para incidentes/cierres en el viewport actual
+	let lastOverpassFetch = 0;
+	const OVERPASS_COOLDOWN_MS = 8000; // mínimo 8s entre requests a Overpass
+
+	async function cargarIncidentesNacionales() {
+		if (!map || fetchingNacionales) return;
+		// Cooldown global para no saturar Overpass
+		const now = Date.now();
+		if (now - lastOverpassFetch < OVERPASS_COOLDOWN_MS) return;
+		// Solo consultar a zoom útil (>= 11) — bbox muy grande es rechazado
+		if (map.getZoom() < 11) return;
+		fetchingNacionales = true;
+		lastOverpassFetch = now;
+		try {
+			const bounds = map.getBounds();
+			if (!bounds) return;
+			const s = bounds.getSouth().toFixed(4);
+			const w = bounds.getWest().toFixed(4);
+			const n = bounds.getNorth().toFixed(4);
+			const e = bounds.getEast().toFixed(4);
+
+			// Solo nodos — más liviano, menos propenso a 400/429
+			const query = `[out:json][timeout:10][maxsize:1048576];
+(
+  node["highway"="construction"](${s},${w},${n},${e});
+  node["construction"](${s},${w},${n},${e});
+  node["hazard"](${s},${w},${n},${e});
+  node["barrier"="block"](${s},${w},${n},${e});
+  node["barrier"="jersey_barrier"](${s},${w},${n},${e});
+);out body;`;
+			const res = await fetch(OVERPASS_API, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+				body: `data=${encodeURIComponent(query)}`,
+				signal: AbortSignal.timeout(12000)
+			});
+			if (!res.ok) return;
+			const data = (await res.json()) as { elements?: any[] };
+
+			const puntos = (data.elements || [])
+				.map((el: any) => {
+					const lat = el.lat ?? el.center?.lat;
+					const lon = el.lon ?? el.center?.lon;
+					if (!lat || !lon) return null;
+					let tipo = 'other';
+					if (el.tags?.highway === 'construction' || el.tags?.construction) tipo = 'construction';
+					else if (el.tags?.hazard) tipo = 'hazard';
+					else if (el.tags?.accident) tipo = 'accident';
+					else if (el.tags?.barrier) tipo = 'road_closure';
+					const nombre =
+						el.tags?.name ||
+						el.tags?.description ||
+						el.tags?.hazard ||
+						el.tags?.construction ||
+						tipoLabel(tipo);
+					return { tipo, nombre, lat, lon, tags: el.tags || {} };
+				})
+				.filter(Boolean);
+
+			incidentesNacionales = puntos;
+			actualzarCapaIncidentesNacionales();
+		} catch (e) {
+			console.warn('[Incidentes nacionales]', e);
+		} finally {
+			fetchingNacionales = false;
 		}
-
-		return [];
 	}
 
-	// Helper: Crear marcador personalizado
-	function createMarker(type: 'origin' | 'destination'): HTMLDivElement {
+	function actualzarCapaIncidentesNacionales() {
+		if (!map) return;
+		const sourceId = 'nacional-incidents-src';
+		const layerIds = ['nacional-incidents-circles', 'nacional-incidents-labels'];
+
+		// Limpiar capas anteriores
+		layerIds.forEach((id) => {
+			if (map!.getLayer(id)) map!.removeLayer(id);
+		});
+		if (map.getSource(sourceId)) map.removeSource(sourceId);
+
+		if (!showIncidentes || incidentesNacionales.length === 0) return;
+
+		const geojson: GeoJSON.FeatureCollection = {
+			type: 'FeatureCollection',
+			features: incidentesNacionales.map((inc: any) => ({
+				type: 'Feature',
+				geometry: { type: 'Point', coordinates: [inc.lon, inc.lat] },
+				properties: {
+					tipo: inc.tipo,
+					nombre: inc.nombre,
+					color: ICON_NACIONAL[inc.tipo]?.color ?? '#7c3aed',
+					emoji: ICON_NACIONAL[inc.tipo]?.emoji ?? '📍'
+				}
+			}))
+		};
+
+		map.addSource(sourceId, { type: 'geojson', data: geojson });
+
+		// Círculo exterior (halo) — efecto Waze
+		map.addLayer({
+			id: 'nacional-incidents-circles',
+			type: 'circle',
+			source: sourceId,
+			paint: {
+				'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 7, 14, 14],
+				'circle-color': ['get', 'color'],
+				'circle-opacity': 0.85,
+				'circle-stroke-width': 2,
+				'circle-stroke-color': '#ffffff',
+				'circle-stroke-opacity': 0.9
+			}
+		});
+
+		// Emoji label encima del círculo
+		map.addLayer({
+			id: 'nacional-incidents-labels',
+			type: 'symbol',
+			source: sourceId,
+			layout: {
+				'text-field': ['get', 'emoji'],
+				'text-size': ['interpolate', ['linear'], ['zoom'], 8, 10, 14, 16],
+				'text-allow-overlap': true,
+				'text-ignore-placement': true
+			},
+			paint: { 'text-color': '#ffffff' }
+		});
+
+		// Click en el círculo → popup
+		map.on('click', 'nacional-incidents-circles', (e) => {
+			const feat = e.features?.[0];
+			if (!feat) return;
+			const { tipo, nombre, color, emoji } = feat.properties as any;
+			const coords = (feat.geometry as GeoJSON.Point).coordinates as [number, number];
+			const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${coords[1]},${coords[0]}`;
+			new mapboxgl.Popup({ offset: [0, -14], maxWidth: '240px', anchor: 'bottom' })
+				.setLngLat(coords)
+				.setHTML(
+					`<div style="padding:12px 14px;min-width:200px;font-family:system-ui,sans-serif;">
+					<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+						<div style="width:28px;height:28px;background:${color};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;">${emoji}</div>
+						<strong style="color:#111;font-size:12px;">${tipoLabel(tipo)}</strong>
+					</div>
+					<p style="color:#555;font-size:11px;margin:0 0 10px;">${nombre}</p>
+					<a href="${mapsUrl}" target="_blank" rel="noopener"
+						style="display:flex;align-items:center;justify-content:center;gap:5px;background:${color};color:#fff;font-size:11px;font-weight:600;padding:5px 8px;border-radius:6px;text-decoration:none;">
+						📍 Ver en Google Maps
+					</a>
+				</div>`
+				)
+				.addTo(map!);
+		});
+		map.on('mouseenter', 'nacional-incidents-circles', () => {
+			map!.getCanvas().style.cursor = 'pointer';
+		});
+		map.on('mouseleave', 'nacional-incidents-circles', () => {
+			map!.getCanvas().style.cursor = '';
+		});
+	}
+
+	// ─── CONDICIONES VIALES (análisis basado en la ruta) ───────────
+
+	async function cargarCondicionesViales(routeCoords: number[][]) {
+		loadingCondiciones = true;
+		condicionesViales = [];
+
+		try {
+			// Calcular bbox de la ruta para consultas
+			const lats = routeCoords.map((c) => c[1]);
+			const lngs = routeCoords.map((c) => c[0]);
+			const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+			const centerLng = (Math.min(...lngs) + Math.max(...lngs)) / 2;
+
+			// ─ 1. Llamada sin tráfico (duración base)
+			// ─ 2. Llamada con tráfico + incidents para calcular demora y obtener cierres/accidentes
+			const oLng0 = routeCoords[0][0],
+				oLat0 = routeCoords[0][1];
+			const dLng0 = routeCoords[routeCoords.length - 1][0],
+				dLat0 = routeCoords[routeCoords.length - 1][1];
+
+			const [resNormal, resTrafico] = await Promise.all([
+				fetch(
+					`https://api.mapbox.com/directions/v5/mapbox/driving/${oLng0},${oLat0};${dLng0},${dLat0}?overview=false&access_token=${MAPBOX_TOKEN}`
+				),
+				fetch(
+					`https://api.mapbox.com/directions/v5/mapbox/driving-traffic/${oLng0},${oLat0};${dLng0},${dLat0}?overview=full&geometries=geojson&steps=true&annotations=congestion&access_token=${MAPBOX_TOKEN}`
+				)
+			]);
+
+			const nuevasCondiciones: CondicionVial[] = [];
+
+			if (resNormal.ok && resTrafico.ok) {
+				const [dataNormal, dataTrafico] = await Promise.all([resNormal.json(), resTrafico.json()]);
+				const durNormal = dataNormal.routes?.[0]?.duration ?? 0;
+				const durTrafico = dataTrafico.routes?.[0]?.duration ?? 0;
+
+				// ─── PARSEAR INCIDENTS ──────────────────────────────────
+				const legs = dataTrafico.routes?.[0]?.legs ?? [];
+				const routeGeom = dataTrafico.routes?.[0]?.geometry?.coordinates ?? [];
+				const rawIncidents: any[] = legs.flatMap((leg: any) => leg.incidents ?? []);
+
+				const nuevosIncidentes: IncidenteVial[] = rawIncidents
+					.filter((inc: any) => inc.geometry_index_start != null && routeGeom.length > 0)
+					.map((inc: any) => {
+						// Coordenada del punto medio del incidente en la polilínea
+						const midIdx = Math.floor(
+							(inc.geometry_index_start + (inc.geometry_index_end ?? inc.geometry_index_start)) / 2
+						);
+						const coord = routeGeom[Math.min(midIdx, routeGeom.length - 1)] ?? routeGeom[0];
+						return {
+							id: inc.id ?? crypto.randomUUID(),
+							tipo: inc.type ?? 'hazard',
+							descripcion: inc.description ?? tipoLabel(inc.type),
+							longDescripcion: inc.long_description ?? inc.description ?? '',
+							impacto: inc.impact ?? 'minor',
+							cerrrado: inc.road_is_closed ?? false,
+							viasAfectadas: inc.affected_road_names ?? [],
+							lon: coord[0],
+							lat: coord[1]
+						};
+					});
+
+				incidentes = nuevosIncidentes;
+				pintarIncidentes();
+
+				// Agregar tarjeta de incidentes en panel de condiciones
+				const cierres = nuevosIncidentes.filter((i) => i.cerrrado);
+				const criticos = nuevosIncidentes.filter(
+					(i) => i.impacto === 'critical' || i.impacto === 'major'
+				);
+				if (cierres.length > 0) {
+					nuevasCondiciones.push({
+						tipo: 'trafico',
+						nivel: 'critico',
+						titulo: `🚧 ${cierres.length} cierre(s) de vía detectado(s)`,
+						descripcion: `Vías cerradas: ${cierres.map((i) => i.viasAfectadas[0] || i.descripcion).join(' · ')}. Consulte los marcadores 🚧 en el mapa para rutas alternas.`
+					});
+				} else if (criticos.length > 0) {
+					nuevasCondiciones.push({
+						tipo: 'trafico',
+						nivel: 'alto',
+						titulo: `⚠️ ${criticos.length} incidente(s) en la ruta`,
+						descripcion: criticos.map((i) => i.descripcion).join(' · ')
+					});
+				} else if (nuevosIncidentes.length > 0) {
+					nuevasCondiciones.push({
+						tipo: 'trafico',
+						nivel: 'moderado',
+						titulo: `ℹ️ ${nuevosIncidentes.length} novedad(es) en la vía`,
+						descripcion: nuevosIncidentes.map((i) => i.descripcion).join(' · ')
+					});
+				} else {
+					nuevasCondiciones.push({
+						tipo: 'trafico',
+						nivel: 'ok',
+						titulo: 'Sin incidentes reportados',
+						descripcion:
+							'No se detectaron cierres, accidentes ni construcciones activas en el trayecto.'
+					});
+				}
+
+				if (durNormal > 0) {
+					const demora = durTrafico - durNormal;
+					const porcentaje = (demora / durNormal) * 100;
+					const demMin = Math.round(demora / 60);
+
+					if (porcentaje < 10) {
+						nuevasCondiciones.push({
+							tipo: 'trafico',
+							nivel: 'ok',
+							titulo: 'Tráfico fluido',
+							descripcion:
+								'La vía presenta condiciones normales de circulación. No se reportan congestiones en el trayecto.'
+						});
+					} else if (porcentaje < 30) {
+						nuevasCondiciones.push({
+							tipo: 'trafico',
+							nivel: 'moderado',
+							titulo: 'Tráfico moderado',
+							descripcion: `Se estima una demora aproximada de ${demMin} min adicionales por condiciones de tráfico en algunos tramos del recorrido.`
+						});
+					} else if (porcentaje < 60) {
+						nuevasCondiciones.push({
+							tipo: 'trafico',
+							nivel: 'alto',
+							titulo: 'Tráfico congestionado',
+							descripcion: `Congestión significativa detectada. Demora estimada de ${demMin} min adicionales. Se recomienda considerar ruta alterna o ajustar horario de salida.`
+						});
+					} else {
+						nuevasCondiciones.push({
+							tipo: 'trafico',
+							nivel: 'critico',
+							titulo: 'Tráfico crítico',
+							descripcion: `Congestión severa en la vía. Demora estimada de ${demMin} min adicionales. Se recomienda esperar o usar ruta alterna.`
+						});
+					}
+				}
+			}
+
+			// Condición de riesgo: revisar si la ruta pasa por zonas de alta amenaza
+			// (basado en el departamento/región de la ruta — conocimiento geográfico Colombia)
+			const zonasAltoRiesgo = [
+				{ lat: 4.5, lon: -75.7, nombre: 'Eje Cafetero', radio: 0.8 }, // Caldas/Risaralda
+				{ lat: 1.2, lon: -77.2, nombre: 'Nariño', radio: 1.5 },
+				{ lat: 5.8, lon: -75.9, nombre: 'Antioquia Occidental', radio: 1.0 },
+				{ lat: 3.4, lon: -76.5, nombre: 'Valle del Cauca', radio: 0.8 }
+			];
+
+			const R = 111.32;
+			const zonaCercana = zonasAltoRiesgo.find((z) => {
+				const dist = Math.sqrt(
+					((centerLat - z.lat) * R) ** 2 +
+						((centerLng - z.lon) * R * Math.cos((centerLat * Math.PI) / 180)) ** 2
+				);
+				return dist <= z.radio * R;
+			});
+
+			if (zonaCercana) {
+				nuevasCondiciones.push({
+					tipo: 'riesgo',
+					nivel: 'alto',
+					titulo: `Zona de riesgo: ${zonaCercana.nombre}`,
+					descripcion:
+						'La ruta atraviesa una región con historial de movimientos en masa y deslizamientos. Consulte el mapa de riesgo SGC activado en el panel de capas y verifique alertas del IDEAM antes de iniciar el recorrido.'
+				});
+			} else {
+				// Revisar si es zona de llanura (Casanare, Meta, Vichada) — riesgo bajo deslizamientos
+				const esLlanura = centerLat > 3 && centerLat < 7 && centerLng > -73.5 && centerLng < -68;
+				if (esLlanura) {
+					nuevasCondiciones.push({
+						tipo: 'riesgo',
+						nivel: 'ok',
+						titulo: 'Zona de baja amenaza sísmica',
+						descripcion:
+							'El recorrido transcurre principalmente por la Orinoquia. Riesgo bajo de deslizamientos. Se recomienda precaución en cruces de caños y ríos en época de lluvias.'
+					});
+				} else {
+					nuevasCondiciones.push({
+						tipo: 'riesgo',
+						nivel: 'moderado',
+						titulo: 'Revisar condiciones del terreno',
+						descripcion:
+							'Active la capa de riesgo SGC para visualizar zonas de amenaza por movimientos en masa a lo largo del recorrido.'
+					});
+				}
+			}
+
+			// Información general de la ruta
+			nuevasCondiciones.push({
+				tipo: 'info',
+				nivel: 'ok',
+				titulo: 'Fuentes de información',
+				descripcion:
+					'Tráfico: Mapbox Traffic API (tiempo real). Riesgo geológico: Servicio Geológico Colombiano (SGC) — Amenaza por Movimientos en Masa v2.'
+			});
+
+			condicionesViales = nuevasCondiciones;
+		} catch (e) {
+			console.warn('[Condiciones viales]', e);
+		} finally {
+			loadingCondiciones = false;
+		}
+	}
+
+	// ─── CAPAS MAPA: TRÁFICO Y RIESGO SGC ───────────────────────
+
+	function addTraficoLayer() {
+		if (!map) return;
+		if (map.getLayer('traffic-layer')) map.removeLayer('traffic-layer');
+		if (map.getSource('mapbox-traffic')) map.removeSource('mapbox-traffic');
+		map.addSource('mapbox-traffic', {
+			type: 'vector',
+			url: 'mapbox://mapbox.mapbox-traffic-v1'
+		});
+		map.addLayer({
+			id: 'traffic-layer',
+			type: 'line',
+			source: 'mapbox-traffic',
+			'source-layer': 'traffic',
+			paint: {
+				'line-color': [
+					'match',
+					['get', 'congestion'],
+					'low',
+					'#22c55e',
+					'moderate',
+					'#f59e0b',
+					'heavy',
+					'#f97316',
+					'severe',
+					'#ef4444',
+					'#94a3b8'
+				],
+				'line-width': 4,
+				'line-opacity': 0.9
+			}
+		});
+	}
+
+	function removeTraficoLayer() {
+		if (!map) return;
+		if (map.getLayer('traffic-layer')) map.removeLayer('traffic-layer');
+		if (map.getSource('mapbox-traffic')) map.removeSource('mapbox-traffic');
+	}
+
+	function toggleTrafico() {
+		if (!map) return;
+		showTrafico = !showTrafico;
+		if (showTrafico) addTraficoLayer();
+		else removeTraficoLayer();
+	}
+	function addRiesgoLayer() {
+		if (!map) return;
+		if (map.getLayer('sgc-riesgos-layer')) map.removeLayer('sgc-riesgos-layer');
+		if (map.getSource('sgc-riesgos')) map.removeSource('sgc-riesgos');
+
+		// El SGC usa ArcGIS Dynamic Map Service (no tiled).
+		// Se consume vía endpoint export con {bbox-epsg-3857} que Mapbox resuelve automáticamente.
+		// Fuente: geoportal.sgc.gov.co — Amenaza por Movimientos en Masa nacional 1:500.000
+		// Servicio confirmado vía geoportal.sgc.gov.co — Zonificación Amenaza Mov. en Masa CARDIQUE
+		// Como fallback usamos el servicio de Zonificacion_Amenazas_Mov_Masa que sí existe
+		const SGC_BASE = 'https://geoportal.sgc.gov.co/arcgis/rest/services';
+		const SGC_SERVICE =
+			'Zonificacion_Amenazas_Mov_Masa/Zonificacion_Amenaza_por_Movimientos_Masa_Cardique/MapServer';
+		const tileUrl =
+			`${SGC_BASE}/${SGC_SERVICE}/export` +
+			'?bbox={bbox-epsg-3857}' +
+			'&bboxSR=3857&imageSR=3857' +
+			'&size=256,256' +
+			'&format=png32' +
+			'&transparent=true' +
+			'&f=image';
+
+		map.addSource('sgc-riesgos', {
+			type: 'raster',
+			tiles: [tileUrl],
+			tileSize: 256,
+			attribution: '© Servicio Geológico Colombiano (SGC)'
+		});
+		map.addLayer(
+			{
+				id: 'sgc-riesgos-layer',
+				type: 'raster',
+				source: 'sgc-riesgos',
+				paint: { 'raster-opacity': 0.55 }
+			},
+			map.getLayer('route') ? 'route' : undefined
+		);
+
+		// Manejar error silencioso si el servicio SGC no responde
+		map.on('error', (e: any) => {
+			if (e?.source === 'sgc-riesgos') {
+				console.warn('[SGC] Capa de riesgo no disponible temporalmente:', e.error?.message);
+				if (map?.getLayer('sgc-riesgos-layer')) map.removeLayer('sgc-riesgos-layer');
+				if (map?.getSource('sgc-riesgos')) map.removeSource('sgc-riesgos');
+				showRiesgos = false;
+			}
+		});
+	}
+
+	function removeRiesgoLayer() {
+		if (!map) return;
+		if (map.getLayer('sgc-riesgos-layer')) map.removeLayer('sgc-riesgos-layer');
+		if (map.getSource('sgc-riesgos')) map.removeSource('sgc-riesgos');
+	}
+
+	function toggleRiesgosSGC() {
+		if (!map) return;
+		showRiesgos = !showRiesgos;
+		if (showRiesgos) addRiesgoLayer();
+		else removeRiesgoLayer();
+	}
+
+	// ─── POPUPS ───────────────────────────────────────────────────
+
+	function popupPeaje(p: PeajeInfo): string {
+		const url = `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`;
+		return `<div style="padding:12px 14px;min-width:190px;font-family:system-ui,sans-serif;">
+			<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+				<div style="width:26px;height:26px;background:#f59e0b;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+					<span style="color:#fff;font-weight:700;font-size:11px;">P</span>
+				</div>
+				<strong style="color:#92400e;font-size:12px;">${p.nombre}</strong>
+			</div>
+			<span style="display:inline-block;background:#fef3c7;color:#78350f;font-size:10px;padding:2px 8px;border-radius:999px;border:1px solid #fcd34d;margin-bottom:10px;">🛣️ Peaje</span>
+			<a href="${url}" target="_blank" rel="noopener"
+				style="display:flex;align-items:center;justify-content:center;gap:5px;background:#f59e0b;color:#fff;font-size:11px;font-weight:600;padding:5px 8px;border-radius:6px;text-decoration:none;">
+				📍 Ver en Google Maps
+			</a>
+		</div>`;
+	}
+
+	function popupParada(p: ParadaSegura): string {
+		const url = `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`;
+		const cfg = {
+			restaurante: {
+				bg: '#2196f3',
+				light: '#e3f2fd',
+				border: '#90caf9',
+				dark: '#0d47a1',
+				emoji: '🍽️',
+				label: 'Restaurante'
+			},
+			estacion_servicio: {
+				bg: '#9c27b0',
+				light: '#f3e5f5',
+				border: '#ce93d8',
+				dark: '#4a148c',
+				emoji: '⛽',
+				label: 'Est. Servicio'
+			},
+			hospedaje: {
+				bg: '#009688',
+				light: '#e0f2f1',
+				border: '#80cbc4',
+				dark: '#004d40',
+				emoji: '🏨',
+				label: 'Hospedaje'
+			}
+		}[p.tipo];
+		return `<div style="padding:12px 14px;min-width:190px;font-family:system-ui,sans-serif;">
+			<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+				<div style="width:26px;height:26px;background:${cfg.bg};border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+					<span style="font-size:13px;">${cfg.emoji}</span>
+				</div>
+				<strong style="color:${cfg.dark};font-size:12px;">${p.nombre}</strong>
+			</div>
+			<span style="display:inline-block;background:${cfg.light};color:${cfg.dark};font-size:10px;padding:2px 8px;border-radius:999px;border:1px solid ${cfg.border};margin-bottom:10px;">${cfg.emoji} ${cfg.label}</span>
+			<a href="${url}" target="_blank" rel="noopener"
+				style="display:flex;align-items:center;justify-content:center;gap:5px;background:${cfg.bg};color:#fff;font-size:11px;font-weight:600;padding:5px 8px;border-radius:6px;text-decoration:none;">
+				📍 Ver en Google Maps
+			</a>
+		</div>`;
+	}
+
+	function popupDistracom(e: DistracomEstacion): string {
+		const url = `https://www.google.com/maps/search/?api=1&query=${e.lat},${e.lon}`;
+		const badges = [
+			e.diesel &&
+				`<span style="background:#e8f5e9;color:#2e7d32;font-size:10px;padding:2px 7px;border-radius:999px;border:1px solid #a5d6a7;">🛢 Diésel</span>`,
+			e.gasolina &&
+				`<span style="background:#e8f5e9;color:#2e7d32;font-size:10px;padding:2px 7px;border-radius:999px;border:1px solid #a5d6a7;">⛽ Gasolina</span>`,
+			e.hotel &&
+				`<span style="background:#e3f2fd;color:#1565c0;font-size:10px;padding:2px 7px;border-radius:999px;border:1px solid #90caf9;">🏨 Hotel</span>`,
+			e.lubricentro &&
+				`<span style="background:#fff3e0;color:#e65100;font-size:10px;padding:2px 7px;border-radius:999px;border:1px solid #ffcc80;">🔧 Lubricentro</span>`
+		]
+			.filter(Boolean)
+			.join('');
+		return `<div style="padding:12px 14px;min-width:210px;font-family:system-ui,sans-serif;">
+			<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+				<img src="${DISTRACOM_ICON_URL}" style="width:20px;height:20px;object-fit:contain;" alt=""/>
+				<strong style="color:#1b5e20;font-size:12px;">${e.nombre}</strong>
+			</div>
+			${e.direccion ? `<p style="color:#555;font-size:11px;margin:0 0 2px;">${e.direccion}</p>` : ''}
+			<p style="color:#999;font-size:11px;margin:0 0 8px;">${e.ciudad}, ${e.departamento}</p>
+			${badges ? `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:8px;">${badges}</div>` : ''}
+			<a href="${url}" target="_blank" rel="noopener noreferrer"
+				style="display:flex;align-items:center;justify-content:center;gap:5px;background:#1b5e20;color:#fff;font-size:11px;font-weight:600;padding:5px 8px;border-radius:6px;text-decoration:none;">
+				📍 Ver en Google Maps
+			</a>
+		</div>`;
+	}
+
+	// ─── MARKERS ──────────────────────────────────────────────────
+
+	function circuloEl(color: string, letra: string): HTMLElement {
 		const el = document.createElement('div');
-		el.className = `custom-marker-${type}`;
-		el.style.cssText = `
-			background-color: ${type === 'origin' ? '#059669' : '#DC2626'};
-			width: 32px;
-			height: 32px;
-			border-radius: 50%;
-			border: 3px solid white;
-			box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-			display: flex;
-			align-items: center;
-			justify-content: center;
-			color: white;
-			font-weight: bold;
-			font-size: 14px;
-		`;
-		el.innerText = type === 'origin' ? 'A' : 'B';
+		el.style.cssText = 'width:28px;height:28px;';
+		el.innerHTML = `<div style="width:28px;height:28px;background:${color};border-radius:50%;border:2.5px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.28);display:flex;align-items:center;justify-content:center;cursor:pointer;">
+			<span style="color:#fff;font-weight:700;font-size:11px;">${letra}</span>
+		</div>`;
 		return el;
 	}
 
-	// Helper: Crear HTML para popup
-	function createPopupHTML(
-		type: 'origin' | 'destination',
-		title: string,
-		subtitle: string
-	): string {
-		const color = type === 'origin' ? 'orange' : 'red';
-		return `
-			<div class="p-3">
-				<h3 class="font-bold text-${color}-600 mb-1">${title}</h3>
-				<p class="text-sm text-gray-700">${subtitle}</p>
-			</div>
-		`;
-	}
-
-	// Limpiar objetos del mapa
-	function clearMapObjects() {
-		markers.forEach((marker) => marker.remove());
-		markers = [];
-
-		if (map?.getLayer('route')) {
-			map.removeLayer('route');
-		}
-		if (map?.getSource('route')) {
-			map.removeSource('route');
-		}
-	}
-
-	// Inicializar mapa
-	function initializeMap() {
-		if (!MAPBOX_TOKEN || !servicio || map) {
-			console.warn('⚠️ [INIT MAP] No se puede inicializar:', {
-				hasToken: !!MAPBOX_TOKEN,
-				hasServicio: !!servicio,
-				mapExists: !!map
+	function pintarPeajes() {
+		peajeMarkersArr.forEach((m) => m.remove());
+		peajeMarkersArr = [];
+		if (!map || !showPeajes) return;
+		for (const p of peajes) {
+			const el = circuloEl('#f59e0b', 'P');
+			const popup = new mapboxgl.Popup({
+				offset: [0, -16],
+				maxWidth: '240px',
+				closeButton: true,
+				anchor: 'bottom'
+			}).setHTML(popupPeaje(p));
+			const mk = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
+				.setLngLat([p.lon, p.lat])
+				.setPopup(popup)
+				.addTo(map!);
+			el.addEventListener('click', (e) => {
+				e.stopPropagation();
+				mk.togglePopup();
 			});
-			return;
+			peajeMarkersArr.push(mk);
 		}
+	}
 
-		// Verificar que el container existe
-		const container = document.getElementById('map');
-		if (!container) {
-			console.error('❌ [INIT MAP] Container #map no encontrado en DOM');
-			return;
+	function pintarParadas() {
+		paradaMarkersArr.forEach((m) => m.remove());
+		paradaMarkersArr = [];
+		if (!map) return;
+		const cfg = {
+			restaurante: { color: '#2196f3', letra: 'R', show: () => showRestaurantes },
+			estacion_servicio: { color: '#9c27b0', letra: 'S', show: () => showEstaciones },
+			hospedaje: { color: '#009688', letra: 'H', show: () => showHospedajes }
+		};
+		for (const p of paradasSeguras) {
+			const c = cfg[p.tipo];
+			if (!c.show()) continue;
+			const el = circuloEl(c.color, c.letra);
+			const popup = new mapboxgl.Popup({
+				offset: [0, -16],
+				maxWidth: '240px',
+				closeButton: true,
+				anchor: 'bottom'
+			}).setHTML(popupParada(p));
+			const mk = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
+				.setLngLat([p.lon, p.lat])
+				.setPopup(popup)
+				.addTo(map!);
+			el.addEventListener('click', (e) => {
+				e.stopPropagation();
+				mk.togglePopup();
+			});
+			paradaMarkersArr.push(mk);
 		}
+	}
 
-		const originLat = servicio.origen_latitud || servicio.origen?.latitud;
-		const originLng = servicio.origen_longitud || servicio.origen?.longitud;
-		const destLat = servicio.destino_latitud || servicio.destino?.latitud;
-		const destLng = servicio.destino_longitud || servicio.destino?.longitud;
-
-		if (!originLat || !originLng || !destLat || !destLng) {
-			console.warn('⚠️ [INIT MAP] Coordenadas no disponibles');
-			return;
+	function pintarDistracom(routeCoords: number[][] = []) {
+		distracomMarkers.forEach((m) => m.remove());
+		distracomMarkers = [];
+		if (!map || !showDistracom) return;
+		for (const est of getEstaciones(routeCoords)) {
+			const el = document.createElement('div');
+			el.style.cssText = 'width:26px;height:26px;';
+			el.innerHTML = `<img src="${DISTRACOM_ICON_URL}" alt="${est.nombre}" style="width:26px;height:26px;object-fit:contain;cursor:pointer;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.28));" draggable="false"/>`;
+			const popup = new mapboxgl.Popup({
+				offset: [0, -26],
+				maxWidth: '255px',
+				closeButton: true,
+				closeOnClick: false,
+				anchor: 'bottom'
+			}).setHTML(popupDistracom(est));
+			const mk = new mapboxgl.Marker({ element: el, anchor: 'bottom' })
+				.setLngLat([est.lon, est.lat])
+				.setPopup(popup)
+				.addTo(map!);
+			el.addEventListener('click', (ev) => {
+				ev.stopPropagation();
+				const was = popup.isOpen();
+				distracomMarkers.forEach((m) => {
+					if (m.getPopup()?.isOpen()) m.togglePopup();
+				});
+				if (!was) mk.togglePopup();
+			});
+			distracomMarkers.push(mk);
 		}
+	}
 
+	// Reactivos a toggles
+	$: if (map) {
+		pintarIncidentes();
+		actualzarCapaIncidentesNacionales();
+	}
+	$: if (map) pintarPeajes();
+	$: if (map) pintarParadas();
+	$: if (map) {
+		distracomMarkers.forEach((m) => {
+			m.getElement().style.display = showDistracom ? '' : 'none';
+		});
+	}
+
+	// ─── MAPA ─────────────────────────────────────────────────────
+
+	function pinEl(color: string, label: string): HTMLDivElement {
+		const el = document.createElement('div');
+		el.style.cssText = `background:${color};width:32px;height:32px;border-radius:50%;border:3px solid white;box-shadow:0 2px 10px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;color:white;font-weight:700;font-size:13px;`;
+		el.innerText = label;
+		return el;
+	}
+
+	function clearMap() {
+		markers.forEach((m) => m.remove());
+		markers = [];
+		if (map?.getLayer('route')) map.removeLayer('route');
+		if (map?.getSource('route')) map.removeSource('route');
+		removeTraficoLayer();
+		removeRiesgoLayer();
+		incidenteMarkersArr.forEach((m) => m.remove());
+		incidenteMarkersArr = [];
+		incidentes = [];
+		incidentesNacionales = [];
+		['nacional-incidents-circles', 'nacional-incidents-labels'].forEach((id) => {
+			if (map?.getLayer(id)) map.removeLayer(id);
+		});
+		if (map?.getSource('nacional-incidents-src')) map.removeSource('nacional-incidents-src');
+		// toggles no se resetean — buildRoute los restaura
+	}
+
+	function initMap() {
+		if (!MAPBOX_TOKEN || !servicio || map || !document.getElementById('map')) return;
+		const oLat = servicio.origen_latitud || servicio.origen?.latitud;
+		const oLng = servicio.origen_longitud || servicio.origen?.longitud;
+		if (!oLat || !oLng) return;
 		try {
 			mapboxgl.accessToken = MAPBOX_TOKEN;
-
 			map = new mapboxgl.Map({
-				container: 'map', // Usar ID simple como en la página pública
+				container: 'map',
 				style: 'mapbox://styles/mapbox/outdoors-v12',
-				center: [originLng, originLat],
-				zoom: 12
+				center: [oLng, oLat],
+				zoom: 11
 			});
-
-			// NO agregar controles de navegación (zoom, brújula) según solicitud del usuario
-
+			map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'bottom-right');
 			map.on('load', () => {
 				isMapLoaded = true;
 			});
-
-			map.on('error', (e) => {
-				console.error('❌ [INIT MAP] Error en el mapa:', e);
+			// Actualizar incidentes al mover/hacer zoom
+			// Debounce 3s + solo a zoom >= 11 para no saturar Overpass
+			map.on('moveend', () => {
+				clearTimeout(moveendTimer);
+				const z = map!.getZoom();
+				if (z >= 11) {
+					moveendTimer = setTimeout(() => cargarIncidentesNacionales(), 3000);
+				}
 			});
-		} catch (err) {
-			console.error('❌ [INIT MAP] Error inicializando mapa:', err);
+		} catch (e) {
+			console.error(e);
 		}
 	}
 
-	// Crear ruta en el mapa
-	async function createRoute() {
+	async function buildRoute() {
 		if (!map || !servicio) return;
-
-		clearMapObjects();
-
-		const originLat = servicio.origen_latitud || servicio.origen?.latitud;
-		const originLng = servicio.origen_longitud || servicio.origen?.longitud;
-		const destLat = servicio.destino_latitud || servicio.destino?.latitud;
-		const destLng = servicio.destino_longitud || servicio.destino?.longitud;
-
-		if (!originLat || !originLng || !destLat || !destLng) return;
-
+		clearMap();
+		const oLat = servicio.origen_latitud || servicio.origen?.latitud;
+		const oLng = servicio.origen_longitud || servicio.origen?.longitud;
+		const dLat = servicio.destino_latitud || servicio.destino?.latitud;
+		const dLng = servicio.destino_longitud || servicio.destino?.longitud;
+		if (!oLat || !oLng || !dLat || !dLng) {
+			pintarDistracom([]);
+			return;
+		}
 		try {
-			// Obtener coordenadas de la ruta
-			routeCoordinates = await fetchMapboxRoute(originLng, originLat, destLng, destLat);
+			const r = await fetch(
+				`https://api.mapbox.com/directions/v5/mapbox/driving/${oLng},${oLat};${dLng},${dLat}?geometries=geojson&overview=full&access_token=${MAPBOX_TOKEN}`
+			);
+			const d = await r.json();
+			let routeCoords: number[][] = [];
 
-			// Agregar marcadores
-			const originMarker = new mapboxgl.Marker(createMarker('origin'))
-				.setLngLat([originLng, originLat])
-				.setPopup(
-					new mapboxgl.Popup({ offset: 25 }).setHTML(
-						createPopupHTML(
-							'origin',
-							'Origen',
-							servicio.origen_especifico || servicio.origen?.nombre_municipio || 'Sin especificar'
-						)
-					)
-				);
-			originMarker.addTo(map);
-			markers.push(originMarker);
+			if (d.routes?.[0]) {
+				const route = d.routes[0];
+				distancia = `${(route.distance / 1000).toFixed(1)} km`;
+				duracion = fmtMin(route.duration / 60);
+				routeCoords = route.geometry.coordinates;
 
-			const destMarker = new mapboxgl.Marker(createMarker('destination'))
-				.setLngLat([destLng, destLat])
-				.setPopup(
-					new mapboxgl.Popup({ offset: 25 }).setHTML(
-						createPopupHTML(
-							'destination',
-							'Destino',
-							servicio.destino_especifico || servicio.destino?.nombre_municipio || 'Sin especificar'
-						)
-					)
-				);
-			destMarker.addTo(map);
-			markers.push(destMarker);
-
-			// Agregar ruta
-			if (routeCoordinates.length > 0) {
 				map.addSource('route', {
 					type: 'geojson',
 					data: {
 						type: 'Feature',
 						properties: {},
-						geometry: {
-							type: 'LineString',
-							coordinates: routeCoordinates
-						}
+						geometry: { type: 'LineString', coordinates: routeCoords }
 					}
 				});
-
 				map.addLayer({
 					id: 'route',
 					type: 'line',
 					source: 'route',
-					layout: {
-						'line-join': 'round',
-						'line-cap': 'round'
-					},
-					paint: {
-						'line-color': '#059669',
-						'line-width': 5,
-						'line-opacity': 0.75
-					}
+					layout: { 'line-join': 'round', 'line-cap': 'round' },
+					paint: { 'line-color': '#059669', 'line-width': 5, 'line-opacity': 0.8 }
 				});
-
-				// Ajustar vista
-				const bounds = new mapboxgl.LngLatBounds();
-				bounds.extend([originLng, originLat]);
-				bounds.extend([destLng, destLat]);
-				map.fitBounds(bounds, { padding: 100, maxZoom: 14 });
 			}
-		} catch (err) {
-			console.error('Error creando ruta:', err);
+
+			// Activar tráfico y riesgos directamente (siempre ON al cargar ruta)
+			showTrafico = true;
+			showRiesgos = true;
+			addTraficoLayer();
+			addRiesgoLayer();
+
+			// Analizar condiciones viales de la ruta
+			cargarCondicionesViales(routeCoords);
+			// Cargar incidentes del viewport actual
+			cargarIncidentesNacionales();
+
+			// Markers A / B
+			const om = new mapboxgl.Marker(pinEl('#059669', 'A'))
+				.setLngLat([oLng, oLat])
+				.setPopup(
+					new mapboxgl.Popup({ offset: 25 }).setHTML(
+						`<div style="padding:10px;font-family:system-ui"><strong style="color:#059669">Origen</strong><br/><span style="font-size:12px;">${servicio.origen_especifico || servicio.origen?.nombre_municipio || '—'}</span></div>`
+					)
+				);
+			om.addTo(map!);
+			markers.push(om);
+
+			const dm = new mapboxgl.Marker(pinEl('#DC2626', 'B'))
+				.setLngLat([dLng, dLat])
+				.setPopup(
+					new mapboxgl.Popup({ offset: 25 }).setHTML(
+						`<div style="padding:10px;font-family:system-ui"><strong style="color:#DC2626">Destino</strong><br/><span style="font-size:12px;">${servicio.destino_especifico || servicio.destino?.nombre_municipio || '—'}</span></div>`
+					)
+				);
+			dm.addTo(map!);
+			markers.push(dm);
+
+			const bounds = new mapboxgl.LngLatBounds();
+			bounds.extend([oLng, oLat]);
+			bounds.extend([dLng, dLat]);
+			map.fitBounds(bounds, { padding: 80, maxZoom: 14 });
+
+			// POIs en paralelo — activar loading antes de los requests
+			loadingPOIs = true;
+			try {
+				const [peajesData, paradasData] = await Promise.all([
+					obtenerPeajes(routeCoords),
+					obtenerParadasSeguras(routeCoords)
+				]);
+				peajes = peajesData;
+				paradasSeguras = paradasData;
+				pintarPeajes();
+				pintarParadas();
+				pintarDistracom(routeCoords);
+			} finally {
+				loadingPOIs = false;
+			}
+		} catch (e) {
+			console.error(e);
+			loadingPOIs = false;
 		}
 	}
 
-	// Helpers de formato
-	function getEstadoText(estado: string): string {
-		const estados: Record<string, string> = {
-			pendiente: 'Pendiente',
-			en_curso: 'En Curso',
-			completado: 'Completado',
-			cancelado: 'Cancelado'
-		};
-		return estados[estado] || estado;
+	function centerRoute() {
+		if (!map || !servicio) return;
+		const oLat = servicio.origen_latitud || servicio.origen?.latitud,
+			oLng = servicio.origen_longitud || servicio.origen?.longitud;
+		const dLat = servicio.destino_latitud || servicio.destino?.latitud,
+			dLng = servicio.destino_longitud || servicio.destino?.longitud;
+		if (!oLat || !oLng || !dLat || !dLng) return;
+		const b = new mapboxgl.LngLatBounds();
+		b.extend([oLng, oLat]);
+		b.extend([dLng, dLat]);
+		map.fitBounds(b, { padding: 80, maxZoom: 14, duration: 900 });
 	}
 
-	function formatDateTime(fecha: string | Date): string {
-		return formatearFecha(fecha);
-	}
-
-	function formatCurrency(value: number): string {
-		return new Intl.NumberFormat('es-CO', {
-			style: 'currency',
-			currency: 'COP',
-			minimumFractionDigits: 0
-		}).format(value);
-	}
-
-	// Lifecycle
 	onMount(async () => {
 		const id = $page.params.id;
-		if (id) {
-			await servicioDetalleStore.obtenerServicio(id);
-		}
+		if (id) await servicioDetalleStore.obtenerServicio(id);
 	});
-
-	// Inicializar mapa cuando el servicio se cargue Y no exista mapa aún
-	$: if (servicio && !map && !loading) {
-		// Esperar a que el DOM se actualice y el container exista
+	$: if (servicio && !map && !loading)
 		setTimeout(() => {
-			const container = document.getElementById('map');
-			if (container) {
-				initializeMap();
-			} else {
-				console.warn('⚠️ [REACTIVE] Container no encontrado en DOM');
-			}
+			if (document.getElementById('map')) initMap();
 		}, 150);
-	}
+	$: if (isMapLoaded && servicio) buildRoute();
 
-	// Crear ruta cuando el mapa esté listo
-	$: if (isMapLoaded && servicio) {
-		createRoute();
-	}
-
-	// Limpiar al desmontar
 	onDestroy(() => {
+		[...distracomMarkers, ...peajeMarkersArr, ...paradaMarkersArr, ...incidenteMarkersArr].forEach(
+			(m) => m.remove()
+		);
 		if (map) {
-			clearMapObjects();
+			clearMap();
 			map.remove();
 			map = null;
 		}
 		servicioDetalleStore.limpiar();
 	});
 
-	// Función para volver atrás
-	function handleGoBack() {
-		isNavigating = true;
-		goto('/dashboard/servicios');
-	}
+	// ─── COMPARTIR ────────────────────────────────────────────────
 
-	// Función para centrar la ruta en el mapa
-	function centerRoute() {
-		if (!map || !servicio) return;
-
-		const originLat = servicio.origen_latitud || servicio.origen?.latitud;
-		const originLng = servicio.origen_longitud || servicio.origen?.longitud;
-		const destLat = servicio.destino_latitud || servicio.destino?.latitud;
-		const destLng = servicio.destino_longitud || servicio.destino?.longitud;
-
-		if (!originLat || !originLng || !destLat || !destLng) return;
-
-		const bounds = new mapboxgl.LngLatBounds();
-		bounds.extend([originLng, originLat]);
-		bounds.extend([destLng, destLat]);
-		map.fitBounds(bounds, {
-			padding: 100,
-			maxZoom: 14,
-			duration: 1000 // Animación suave de 1 segundo
-		});
-	}
-
-	// Generar y copiar link compartible
-	async function handleCompartirServicio() {
+	async function handleCompartir() {
 		if (!servicio) return;
-
 		try {
-			let token = servicio.share_token;
-
-			// Si no tiene token, generarlo
-			if (!token) {
-				const response = await serviciosStore.generarShareToken(servicio.id);
-				token = response;
-				if (!token) {
-					alert('Error al generar enlace compartible');
-					return;
-				}
+			let t = servicio.share_token;
+			if (!t) t = (await serviciosStore.generarShareToken(servicio.id)) ?? undefined;
+			if (!t) {
+				alert('Error al generar enlace');
+				return;
 			}
-
-			// Construir URL pública
-			generatedShareUrl = `${window.location.origin}/public/servicio/${token}`;
-
-			// Mostrar modal
+			generatedShareUrl = `${window.location.origin}/public/servicio/${t}`;
 			showShareModal = true;
-		} catch (error) {
-			console.error('Error compartiendo servicio:', error);
-			alert('Error al compartir servicio');
+		} catch {
+			alert('Error al compartir');
 		}
 	}
-
-	// Copiar enlace al portapapeles
-	async function copyToClipboard() {
+	async function copyLink() {
 		try {
 			await navigator.clipboard.writeText(generatedShareUrl);
 			copySuccess = true;
 			setTimeout(() => {
 				copySuccess = false;
 			}, 2000);
-		} catch (error) {
-			console.error('Error copiando al portapapeles:', error);
-			alert('Error al copiar enlace');
+		} catch {
+			alert('Error al copiar');
 		}
 	}
 
-	// Cerrar modal
-	function closeShareModal() {
-		showShareModal = false;
-		copySuccess = false;
-	}
+	// Contadores reactivos
+	$: countRestaurantes = paradasSeguras.filter((p) => p.tipo === 'restaurante').length;
+	$: countEstaciones = paradasSeguras.filter((p) => p.tipo === 'estacion_servicio').length;
+	$: countHospedajes = paradasSeguras.filter((p) => p.tipo === 'hospedaje').length;
+
+	// 🔹 Variables derivadas del servicio (reactivas)
+	$: rc = (servicio as any)?.recargos_planillas?.[0];
+
+	$: estadoConductor = rc?.estado_conductor || 'optimo';
+
+	$: viaMixto = rc?.via_mixto ?? true;
+	$: viaTrocha = rc?.via_trocha ?? false;
+	$: viaAfirmado = rc?.via_afirmado ?? false;
+	$: viaPavimentada = rc?.via_pavimentada ?? false;
+
+	$: riesgoPeatones = rc?.riesgo_peatones ?? true;
+	$: riesgoDesniveles = rc?.riesgo_desniveles ?? false;
+	$: riesgoDeslizamientos = rc?.riesgo_deslizamientos ?? false;
+	$: riesgoSinSenalizacion = rc?.riesgo_sin_senalizacion ?? false;
+	$: riesgoAnimales = rc?.riesgo_animales ?? false;
+	$: riesgoTrafico = rc?.riesgo_trafico_alto ?? false;
+
+	$: calificacion = rc?.calificacion_servicio || 'bueno';
+
+	$: esRealizado = ['realizado', 'completado', 'liquidado'].includes(servicio?.estado ?? '');
+
+	$: esDefault = !rc;
 </script>
 
 <svelte:head>
-	<title>{servicio ? `Servicio ${servicio.id.slice(0, 8)}` : 'Cargando...'} - Cotransmeq</title>
+	<title
+		>{servicio ? `Servicio ${servicio.id.slice(0, 8).toUpperCase()}` : 'Cargando...'} - Transmeralda</title
+	>
 </svelte:head>
 
-<div class="relative min-h-screen w-full">
+<div class="flex h-screen w-full flex-col overflow-hidden bg-gray-50">
 	{#if loading}
-		<div class="flex min-h-screen items-center justify-center bg-white" in:fade={{ duration: 300 }}>
+		<div class="flex flex-1 items-center justify-center bg-white" in:fade>
 			<div class="text-center">
 				<div
-					class="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"
+					class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"
 				></div>
-				<p class="font-medium text-gray-600">Cargando servicio...</p>
+				<p class="text-sm text-gray-500">Cargando servicio...</p>
 			</div>
 		</div>
 	{:else if error}
-		<div class="flex min-h-screen items-center justify-center bg-white" in:fade={{ duration: 300 }}>
-			<div class="max-w-md text-center">
-				<div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-red-100">
-					<svg class="h-8 w-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+		<div class="flex flex-1 items-center justify-center bg-white p-6" in:fade>
+			<div class="max-w-xs text-center">
+				<div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-red-100">
+					<svg class="h-6 w-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
@@ -457,149 +1460,457 @@
 						/>
 					</svg>
 				</div>
-				<h2 class="mb-2 text-2xl font-bold text-gray-900">Error</h2>
-				<p class="mb-6 text-gray-600">{error}</p>
+				<p class="mb-4 text-gray-600">{error}</p>
 				<button
-					on:click={handleGoBack}
-					class="apple-transition rounded-xl bg-orange-500 px-6 py-2.5 font-medium text-white hover:bg-orange-600"
+					on:click={() => goto('/dashboard/servicios')}
+					class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white">Volver</button
 				>
-					Volver a servicios
-				</button>
 			</div>
 		</div>
 	{:else if servicio}
-		<!-- Layout principal prioriza la información del servicio -->
-		<div class="min-h-screen bg-gray-50/50 backdrop-blur-3xl">
-			<!-- Header con navegación -->
-			<div class="sticky top-0 z-50 border-b border-white/20 bg-white/80 backdrop-blur-xl">
-				<div class="flex items-center justify-between px-4 py-3 md:px-6 md:py-4">
-					<div class="flex items-center space-x-2 md:space-x-4">
-						<button
-							on:click={handleGoBack}
-							class="flex h-9 w-9 items-center justify-center rounded-xl bg-gray-100 text-gray-600 transition-all hover:scale-105 hover:bg-gray-200 md:h-10 md:w-10"
-							class:opacity-50={isNavigating}
-							disabled={isNavigating}
-						>
-							<svg
-								class="h-4 w-4 md:h-5 md:w-5"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M10 19l-7-7m0 0l7-7m-7 7h18"
-								/>
-							</svg>
-						</button>
-						<div>
-							<h1 class="text-base font-bold text-gray-900 md:text-xl">Detalle del Servicio</h1>
-							<p class="text-xs text-gray-500 md:text-sm">
-								ID: {servicio.id.slice(0, 8).toUpperCase()}
-							</p>
-						</div>
-					</div>
-					<div class="flex items-center space-x-2 md:space-x-3">
-						<button
-							on:click={handleCompartirServicio}
-							class="flex items-center space-x-1 rounded-xl bg-orange-500 px-3 py-1.5 text-xs font-medium text-white transition-all hover:bg-orange-600 md:space-x-2 md:px-4 md:py-2 md:text-sm"
-						>
-							<svg
-								class="h-3.5 w-3.5 md:h-4 md:w-4"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-								/>
-							</svg>
-							<span class="hidden sm:inline">Compartir</span>
-						</button>
-					</div>
+		<!-- ── HEADER ─────────────────────────────────────────────── -->
+		<header
+			class="z-50 flex h-14 flex-shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 md:px-6"
+		>
+			<div class="flex items-center gap-3">
+				<button
+					on:click={() => {
+						isNavigating = true;
+						goto('/dashboard/servicios');
+					}}
+					class="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200"
+					disabled={isNavigating}
+					class:opacity-40={isNavigating}
+					aria-label="Volver a servicios"
+				>
+					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M10 19l-7-7m0 0l7-7m-7 7h18"
+						/>
+					</svg>
+				</button>
+				<div>
+					<p class="text-[11px] font-medium tracking-wide text-gray-400 uppercase">
+						Detalle del Servicio
+					</p>
+					<p class="text-sm leading-tight font-bold text-gray-900">
+						{servicio.id.slice(0, 8).toUpperCase()}
+					</p>
 				</div>
 			</div>
+			<div class="flex items-center gap-2">
+				<span
+					class="rounded-full px-3 py-1 text-xs font-bold text-white"
+					style="background:{STATUS_COLOR[servicio.estado] ?? '#6B7280'}"
+				>
+					{STATUS_LABEL[servicio.estado] ?? servicio.estado}
+				</span>
+				<button
+					on:click={handleCompartir}
+					class="flex items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-600"
+				>
+					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+						/>
+					</svg>
+					<span class="hidden sm:inline">Compartir</span>
+				</button>
+			</div>
+		</header>
 
-			<!-- DISEÑO LIMPIO Y PROFESIONAL -->
-			<div class="min-h-[calc(100vh-6rem)] w-full bg-gray-50 p-4 md:p-6 lg:p-8">
-				<div class="flex h-full flex-col gap-4 md:gap-6 lg:flex-row lg:gap-8">
-					<!-- COLUMNA IZQUIERDA: Conductor, Vehículo y Cliente - 25% en desktop, full en mobile -->
-					<div class="w-full space-y-4 md:space-y-6 lg:w-1/4">
-						<!-- CONDUCTOR -->
-						<div class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm md:p-6">
-							<!-- Foto -->
-							<div class="mb-4 flex justify-center md:mb-5">
-								{#if servicio.conductor?.foto_signed_url}
-									<img
-										src={servicio.conductor.foto_signed_url}
-										alt={`${servicio.conductor.nombre} ${servicio.conductor.apellido}`}
-										class="h-40 w-40 rounded-2xl object-cover shadow-md sm:h-48 sm:w-48 lg:h-56 lg:w-56"
-									/>
-								{:else if servicio.conductor}
-									<div
-										class="flex h-40 w-40 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-md sm:h-48 sm:w-48 lg:h-56 lg:w-56"
-									>
-										<span class="text-5xl font-bold text-white sm:text-6xl lg:text-7xl">
-											{servicio.conductor.nombre.charAt(0)}{servicio.conductor.apellido.charAt(0)}
-										</span>
-									</div>
-								{:else}
-									<div
-										class="flex h-40 w-40 items-center justify-center rounded-2xl bg-gray-200 shadow-2xl sm:h-48 sm:w-48 lg:h-56 lg:w-56"
-									>
-										<span class="text-5xl font-bold text-gray-400 sm:text-6xl lg:text-7xl">?</span>
-									</div>
-								{/if}
-							</div>
+		<!-- ── ÁREA SCROLLEABLE ───────────────────────────────────── -->
+		<div class="flex-1 overflow-y-auto">
+			<div class="mx-auto max-w-7xl px-4 py-5 md:px-6">
+				<!-- MAPA -->
+				<div class="relative mb-2 h-[420px] overflow-hidden rounded-2xl shadow-md md:h-[500px]">
+					<div id="map" class="h-full w-full"></div>
 
-							<!-- Nombre -->
-							<div class="mb-4 text-center md:mb-5">
-								<h2 class="mb-1 text-lg font-bold text-gray-900 md:text-xl">
-									{servicio.conductor?.nombre || 'Sin'}
-									{servicio.conductor?.apellido || 'asignar'}
-								</h2>
-								<p class="text-xs font-medium text-orange-600 md:text-sm">Conductor</p>
-							</div>
+					<!-- Botón centrar -->
+					<button
+						on:click={centerRoute}
+						class="absolute top-3 left-3 z-10 flex items-center gap-1.5 rounded-xl bg-white/95 px-3 py-2 text-sm font-medium text-gray-700 shadow hover:bg-white"
+					>
+						<svg
+							class="h-4 w-4 text-orange-600"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+							/>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+							/>
+						</svg>
+						Centrar
+					</button>
 
-							<!-- Info -->
-							<div class="space-y-2">
-								{#if servicio.conductor?.numero_identificacion}
-									<div class="flex items-center justify-between rounded-lg bg-gray-50 p-3 text-sm">
-										<span class="text-gray-600">Cédula</span>
-										<span class="font-semibold text-gray-900"
-											>{servicio.conductor.numero_identificacion}</span
-										>
-									</div>
-								{:else}
-									<div class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-center">
-										<p class="text-xs text-blue-800">Cédula pendiente de registrar</p>
-									</div>
-								{/if}
-
-								{#if servicio.conductor?.telefono}
-									<div class="flex items-center justify-between rounded-lg bg-gray-50 p-3 text-sm">
-										<span class="text-gray-600">Teléfono</span>
-										<span class="font-semibold text-gray-900">{servicio.conductor.telefono}</span>
-									</div>
-								{:else}
-									<div class="rounded-lg border border-blue-200 bg-blue-50 p-3 text-center">
-										<p class="text-xs text-blue-800">Teléfono pendiente de registrar</p>
-									</div>
-								{/if}
-							</div>
+					<!-- ─── LEYENDA INTERACTIVA ─── -->
+					<div
+						class="absolute bottom-3 left-3 z-10 overflow-hidden rounded-xl border border-gray-200 bg-white/97 shadow-lg"
+						style="min-width:200px;backdrop-filter:blur(8px);"
+					>
+						<div class="border-b border-gray-100 px-3 py-2">
+							<p class="text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+								Puntos de interés
+							</p>
 						</div>
 
-						<!-- VEHÍCULO -->
-						<div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-							<div class="mb-4 flex items-center gap-2">
-								<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100">
+						<div class="space-y-px p-1.5">
+							<!-- Origen / Destino -->
+							<div class="flex items-center gap-2 rounded-lg px-2 py-1">
+								<div
+									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-orange-500"
+								>
+									<span style="color:#fff;font-weight:700;font-size:9px;">A</span>
+								</div>
+								<span class="text-xs text-gray-500">Origen</span>
+							</div>
+							<div class="flex items-center gap-2 rounded-lg px-2 py-1">
+								<div
+									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-red-500"
+								>
+									<span style="color:#fff;font-weight:700;font-size:9px;">B</span>
+								</div>
+								<span class="text-xs text-gray-500">Destino</span>
+							</div>
+
+							<div class="my-1 border-t border-gray-100"></div>
+
+							<!-- Peajes -->
+							<button
+								class="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-gray-50"
+								class:opacity-40={!showPeajes}
+								on:click={() => (showPeajes = !showPeajes)}
+							>
+								<div
+									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-amber-400"
+								>
+									<span style="color:#fff;font-weight:700;font-size:9px;">P</span>
+								</div>
+								<span class="flex-1 text-left text-xs text-gray-700">Peajes</span>
+								{#if peajes.length > 0}
+									<span
+										class="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"
+										>{peajes.length}</span
+									>
+								{/if}
+							</button>
+
+							<!-- Restaurantes -->
+							<button
+								class="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-gray-50"
+								class:opacity-40={!showRestaurantes}
+								on:click={() => {
+									showRestaurantes = !showRestaurantes;
+									pintarParadas();
+								}}
+							>
+								<div
+									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-blue-500"
+								>
+									<span style="color:#fff;font-weight:700;font-size:9px;">R</span>
+								</div>
+								<span class="flex-1 text-left text-xs text-gray-700">Restaurantes</span>
+								{#if countRestaurantes > 0}
+									<span
+										class="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700"
+										>{countRestaurantes}</span
+									>
+								{/if}
+							</button>
+
+							<!-- Estaciones de servicio -->
+							<button
+								class="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-gray-50"
+								class:opacity-40={!showEstaciones}
+								on:click={() => {
+									showEstaciones = !showEstaciones;
+									pintarParadas();
+								}}
+							>
+								<div
+									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-purple-500"
+								>
+									<span style="color:#fff;font-weight:700;font-size:9px;">S</span>
+								</div>
+								<span class="flex-1 text-left text-xs text-gray-700">Est. Servicio</span>
+								{#if countEstaciones > 0}
+									<span
+										class="rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700"
+										>{countEstaciones}</span
+									>
+								{/if}
+							</button>
+
+							<!-- Hospedajes -->
+							<button
+								class="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-gray-50"
+								class:opacity-40={!showHospedajes}
+								on:click={() => {
+									showHospedajes = !showHospedajes;
+									pintarParadas();
+								}}
+							>
+								<div
+									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-teal-500"
+								>
+									<span style="color:#fff;font-weight:700;font-size:9px;">H</span>
+								</div>
+								<span class="flex-1 text-left text-xs text-gray-700">Hospedajes</span>
+								{#if countHospedajes > 0}
+									<span
+										class="rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700"
+										>{countHospedajes}</span
+									>
+								{/if}
+							</button>
+
+							<!-- Incidentes / Cierres -->
+							<button
+								class="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-gray-50"
+								class:opacity-40={!showIncidentes}
+								on:click={() => {
+									showIncidentes = !showIncidentes;
+									pintarIncidentes();
+								}}
+							>
+								<div
+									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-red-600"
+								>
+									<span style="font-size:10px;">🚧</span>
+								</div>
+								<span class="flex-1 text-left text-xs text-gray-700">Cierres / Accidentes</span>
+								{#if loadingCondiciones}
+									<span
+										class="h-3 w-3 animate-spin rounded-full border border-red-400 border-t-transparent"
+									></span>
+								{:else if incidentes.length > 0 || incidentesNacionales.length > 0}
+									{@const total = incidentes.length + incidentesNacionales.length}
+									<span
+										class="rounded-full {incidentes.some((i) => i.cerrrado)
+											? 'bg-red-100 text-red-700'
+											: 'bg-orange-100 text-orange-700'} px-1.5 py-0.5 text-[10px] font-semibold"
+										>{total}</span
+									>
+								{/if}
+							</button>
+
+							<!-- Distracom -->
+							<button
+								class="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-gray-50"
+								class:opacity-40={!showDistracom}
+								on:click={() => (showDistracom = !showDistracom)}
+							>
+								<img
+									src={DISTRACOM_ICON_URL}
+									alt="Distracom"
+									class="h-5 w-5 flex-shrink-0 object-contain"
+								/>
+								<span class="flex-1 text-left text-xs text-gray-700">Distracom</span>
+								{#if distracomMarkers.length > 0}
+									<span
+										class="rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700"
+										>{distracomMarkers.length}</span
+									>
+								{/if}
+							</button>
+
+							<div class="my-1 border-t border-gray-100"></div>
+
+							<!-- Tráfico en tiempo real -->
+							<button
+								class="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-gray-50"
+								class:opacity-40={!showTrafico}
+								on:click={toggleTrafico}
+							>
+								<div
+									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-orange-400"
+								>
+									<span style="color:#fff;font-weight:700;font-size:9px;">T</span>
+								</div>
+								<span class="flex-1 text-left text-xs text-gray-700">Tráfico</span>
+								{#if showTrafico}
+									<span
+										class="rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700"
+										>ON</span
+									>
+								{/if}
+							</button>
+
+							<!-- Riesgo deslizamientos SGC -->
+							<button
+								class="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-gray-50"
+								class:opacity-40={!showRiesgos}
+								on:click={toggleRiesgosSGC}
+							>
+								<div
+									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-red-600"
+								>
+									<span style="color:#fff;font-weight:700;font-size:9px;">⚠</span>
+								</div>
+								<span class="flex-1 text-left text-xs text-gray-700">Riesgo desliz.</span>
+								{#if showRiesgos}
+									<span
+										class="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
+										>ON</span
+									>
+								{/if}
+							</button>
+						</div>
+
+						<div class="border-t border-gray-100 px-3 py-1.5">
+							<p class="text-[9px] text-gray-400">Click para mostrar/ocultar</p>
+						</div>
+					</div>
+				</div>
+
+				<!-- ─── CONDICIONES VIALES ─── -->
+				{#if loadingCondiciones}
+					<div
+						class="mb-3 flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-2.5"
+					>
+						<span
+							class="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-blue-400 border-t-transparent"
+						></span>
+						<span class="text-xs font-medium text-blue-700"
+							>Analizando condiciones actuales de la vía...</span
+						>
+					</div>
+				{:else if condicionesViales.length > 0}
+					<div class="mb-4 grid [grid-template-columns:repeat(auto-fit,minmax(250px,1fr))] gap-2">
+						{#each condicionesViales as cond}
+							{@const estilos = {
+								ok: {
+									bg: 'bg-orange-50',
+									border: 'border-orange-200',
+									icon: '✅',
+									dot: 'bg-orange-500',
+									titulo: 'text-orange-900',
+									desc: 'text-orange-700'
+								},
+								moderado: {
+									bg: 'bg-amber-50',
+									border: 'border-amber-200',
+									icon: '⚠️',
+									dot: 'bg-amber-500',
+									titulo: 'text-amber-900',
+									desc: 'text-amber-700'
+								},
+								alto: {
+									bg: 'bg-orange-50',
+									border: 'border-orange-200',
+									icon: '🔶',
+									dot: 'bg-orange-500',
+									titulo: 'text-orange-900',
+									desc: 'text-orange-700'
+								},
+								critico: {
+									bg: 'bg-red-50',
+									border: 'border-red-200',
+									icon: '🚨',
+									dot: 'bg-red-500',
+									titulo: 'text-red-900',
+									desc: 'text-red-700'
+								}
+							}[cond.nivel]}
+							<div class="rounded-xl border {estilos.border} {estilos.bg} px-4 py-3 shadow-sm">
+								<div class="mb-1 flex items-center gap-2">
+									<span class="text-sm">{estilos.icon}</span>
+									<p class="text-xs font-bold {estilos.titulo}">{cond.titulo}</p>
+									<div class="ml-auto h-2 w-2 rounded-full {estilos.dot} animate-pulse"></div>
+								</div>
+								<p class="text-[11px] leading-relaxed {estilos.desc}">{cond.descripcion}</p>
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				<!-- LOADING POIs -->
+				{#if loadingPOIs}
+					<div
+						class="mb-4 flex items-center gap-3 rounded-xl border border-orange-100 bg-orange-50 px-4 py-2.5 shadow-sm"
+						in:fade={{ duration: 200 }}
+						out:fade={{ duration: 200 }}
+					>
+						<div class="relative flex h-5 w-5 flex-shrink-0">
+							<span
+								class="absolute inline-flex h-full w-full animate-ping rounded-full bg-orange-400 opacity-60"
+							></span>
+							<span
+								class="relative inline-flex h-5 w-5 animate-spin rounded-full border-2 border-orange-500 border-t-transparent"
+							></span>
+						</div>
+						<div class="flex min-w-0 flex-1 items-center gap-2">
+							<span class="text-sm font-medium text-orange-800"
+								>Buscando puntos de interés en la ruta...</span
+							>
+							<span class="hidden items-center gap-1.5 text-xs text-orange-600 sm:flex">
+								<span
+									class="flex items-center gap-1 rounded-full border border-orange-200 bg-orange-100 px-2 py-0.5"
+									>🛣️ Peajes</span
+								>
+								<span
+									class="flex items-center gap-1 rounded-full border border-orange-200 bg-orange-100 px-2 py-0.5"
+									>🍽️ Restaurantes</span
+								>
+								<span
+									class="flex items-center gap-1 rounded-full border border-orange-200 bg-orange-100 px-2 py-0.5"
+									>⛽ Est. Servicio</span
+								>
+								<span
+									class="flex items-center gap-1 rounded-full border border-orange-200 bg-orange-100 px-2 py-0.5"
+									>🏨 Hospedajes</span
+								>
+							</span>
+						</div>
+					</div>
+				{/if}
+
+				<!-- CARDS -->
+				<div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+					<!-- Conductor -->
+					<div class="rounded-2xl bg-white p-5 shadow-sm">
+						<p class="mb-3 text-[11px] font-semibold tracking-wide text-gray-400 uppercase">
+							Conductor
+						</p>
+						<div class="flex items-center gap-4">
+							{#if servicio.conductor?.foto_signed_url}
+								<img
+									src={servicio.conductor.foto_signed_url}
+									alt={servicio.conductor.nombre}
+									class="h-16 w-16 flex-shrink-0 rounded-2xl object-cover shadow"
+								/>
+							{:else if servicio.conductor}
+								<div
+									class="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-400 to-orange-600 shadow"
+								>
+									<span class="text-xl font-bold text-white"
+										>{servicio.conductor.nombre.charAt(0)}{servicio.conductor.apellido.charAt(
+											0
+										)}</span
+									>
+								</div>
+							{:else}
+								<div
+									class="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-gray-100"
+								>
 									<svg
-										class="h-4 w-4 text-gray-700"
+										class="h-7 w-7 text-gray-300"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
@@ -607,354 +1918,105 @@
 										<path
 											stroke-linecap="round"
 											stroke-linejoin="round"
-											stroke-width="2"
-											d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"
+											stroke-width="1.5"
+											d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
 										/>
 									</svg>
 								</div>
-								<h3 class="text-sm font-bold text-gray-900">Vehículo</h3>
-							</div>
-
-							{#if servicio.vehiculo?.placa}
-								<div class="mb-3 rounded-lg border-2 border-gray-300 bg-gray-100 p-3 text-center">
-									<p class="text-2xl font-black tracking-widest text-gray-900">
-										{servicio.vehiculo.placa}
-									</p>
-								</div>
-
-								<div class="grid grid-cols-2 gap-2 text-xs">
-									<div class="rounded bg-gray-50 p-2 text-center">
-										<p class="mb-1 text-gray-500">Marca</p>
-										<p class="font-bold text-gray-900">
-											{servicio.vehiculo.marca || 'Sin especificar'}
-										</p>
-									</div>
-									<div class="rounded bg-gray-50 p-2 text-center">
-										<p class="mb-1 text-gray-500">Modelo</p>
-										<p class="font-bold text-gray-900">
-											{servicio.vehiculo.modelo || 'Sin especificar'}
-										</p>
-									</div>
-								</div>
-							{:else}
-								<div
-									class="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-4 text-center"
-								>
-									<div
-										class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-lg bg-gray-200"
-									>
-										<svg
-											class="h-6 w-6 text-gray-400"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"
-											/>
-										</svg>
-									</div>
-									<p class="mb-1 text-sm font-medium text-gray-900">Sin vehículo asignado</p>
-									<p class="text-xs text-gray-500">
-										Este servicio aún no tiene un vehículo asociado
-									</p>
-								</div>
 							{/if}
-						</div>
-
-						<!-- CLIENTE -->
-						<div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-							<div class="mb-4 flex items-center gap-2">
-								<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100">
-									<svg
-										class="h-4 w-4 text-gray-700"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-										/>
-									</svg>
-								</div>
-								<h3 class="text-sm font-bold text-gray-900">Cliente</h3>
+							<div class="min-w-0 flex-1">
+								<p class="truncate font-bold text-gray-900">
+									{servicio.conductor
+										? `${servicio.conductor.nombre} ${servicio.conductor.apellido}`
+										: 'Sin asignar'}
+								</p>
+								{#if servicio.conductor?.telefono}<p class="text-sm text-gray-500">
+										{servicio.conductor.telefono}
+									</p>{/if}
+								{#if servicio.conductor?.numero_identificacion}<p class="text-xs text-gray-400">
+										CC {servicio.conductor.numero_identificacion}
+									</p>{/if}
 							</div>
-
-							{#if servicio.cliente?.razon_social || servicio.cliente?.nombre}
-								<div class="space-y-3">
-									<div class="rounded-lg bg-gray-50 p-3">
-										<p class="mb-1 text-xs text-gray-500">Razón Social</p>
-										<p class="text-sm font-bold text-gray-900">
-											{servicio.cliente.razon_social || servicio.cliente.nombre}
-										</p>
-									</div>
-
-									<div class="flex items-center justify-between rounded-lg bg-gray-50 p-2 text-sm">
-										<span class="text-gray-600">NIT</span>
-										<span class="font-semibold text-gray-900"
-											>{servicio.cliente.nit || 'Sin especificar'}</span
-										>
-									</div>
-								</div>
-							{:else}
-								<div
-									class="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-4 text-center"
-								>
-									<div
-										class="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-lg bg-gray-200"
-									>
-										<svg
-											class="h-6 w-6 text-gray-400"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-											/>
-										</svg>
-									</div>
-									<p class="mb-1 text-sm font-medium text-gray-900">Sin cliente asignado</p>
-									<p class="text-xs text-gray-500">
-										Este servicio aún no tiene un cliente asociado
-									</p>
-								</div>
-							{/if}
 						</div>
-
-						<!-- INFORMACIÓN DE RECARGOS -->
-						{#if servicio.recargos_planillas && servicio.recargos_planillas.length > 0}
-							{@const recargo = servicio.recargos_planillas[0]}
-							<div class="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-								<div class="mb-4 flex items-center gap-2">
-									<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100">
-										<svg
-											class="h-4 w-4 text-blue-700"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-											/>
-										</svg>
-									</div>
-									<h3 class="text-sm font-bold text-gray-900">Detalles de Recargo</h3>
-								</div>
-
-								<div class="space-y-3">
-									<!-- Estado del Conductor -->
-									{#if recargo.estado_conductor}
-										<div class="rounded-lg bg-gray-50 p-3">
-											<p class="mb-1 text-xs text-gray-500">Estado del Conductor</p>
-											<div class="flex items-center gap-2">
-												<div
-													class="h-2 w-2 rounded-full {recargo.estado_conductor === 'optimo'
-														? 'bg-orange-500'
-														: recargo.estado_conductor === 'regular'
-															? 'bg-yellow-500'
-															: recargo.estado_conductor === 'fatigado'
-																? 'bg-orange-500'
-																: 'bg-red-500'}"
-												></div>
-												<p class="text-sm font-bold text-gray-900 capitalize">
-													{recargo.estado_conductor}
-												</p>
-											</div>
-										</div>
-									{/if}
-
-									<!-- Condiciones de Vía -->
-									{#if recargo.via_trocha || recargo.via_afirmado || recargo.via_mixto || recargo.via_pavimentada}
-										<div class="rounded-lg bg-gray-50 p-3">
-											<p class="mb-2 text-xs text-gray-500">Condiciones de Vía</p>
-											<div class="flex flex-wrap gap-1.5">
-												{#if recargo.via_trocha}
-													<span
-														class="rounded bg-amber-100 px-2 py-1 text-xs font-medium text-amber-800"
-														>Trocha</span
-													>
-												{/if}
-												{#if recargo.via_afirmado}
-													<span
-														class="rounded bg-yellow-100 px-2 py-1 text-xs font-medium text-yellow-800"
-														>Afirmado</span
-													>
-												{/if}
-												{#if recargo.via_mixto}
-													<span
-														class="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800"
-														>Mixto</span
-													>
-												{/if}
-												{#if recargo.via_pavimentada}
-													<span
-														class="rounded bg-orange-100 px-2 py-1 text-xs font-medium text-orange-800"
-														>Pavimentada</span
-													>
-												{/if}
-											</div>
-										</div>
-									{/if}
-
-									<!-- Riesgos de Seguridad -->
-									{#if recargo.riesgo_desniveles || recargo.riesgo_deslizamientos || recargo.riesgo_sin_senalizacion || recargo.riesgo_animales || recargo.riesgo_peatones || recargo.riesgo_trafico_alto}
-										<div class="rounded-lg bg-red-50 p-3">
-											<p class="mb-2 text-xs text-red-600">Riesgos de Seguridad</p>
-											<div class="flex flex-wrap gap-1.5">
-												{#if recargo.riesgo_desniveles}
-													<span
-														class="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-800"
-														>Desniveles</span
-													>
-												{/if}
-												{#if recargo.riesgo_deslizamientos}
-													<span
-														class="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-800"
-														>Deslizamientos</span
-													>
-												{/if}
-												{#if recargo.riesgo_sin_senalizacion}
-													<span
-														class="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-800"
-														>Sin Señalización</span
-													>
-												{/if}
-												{#if recargo.riesgo_animales}
-													<span
-														class="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-800"
-														>Animales</span
-													>
-												{/if}
-												{#if recargo.riesgo_peatones}
-													<span
-														class="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-800"
-														>Peatones</span
-													>
-												{/if}
-												{#if recargo.riesgo_trafico_alto}
-													<span
-														class="rounded bg-red-100 px-2 py-1 text-xs font-medium text-red-800"
-														>Tráfico Alto</span
-													>
-												{/if}
-											</div>
-										</div>
-									{/if}
-
-									<!-- Calificación del Servicio -->
-									{#if recargo.calificacion_servicio}
-										<div class="rounded-lg bg-gray-50 p-3">
-											<p class="mb-1 text-xs text-gray-500">Calificación del Servicio</p>
-											<div class="flex items-center gap-2">
-												{#if recargo.calificacion_servicio === 'excelente'}
-													<svg
-														class="h-5 w-5 text-orange-500"
-														fill="currentColor"
-														viewBox="0 0 20 20"
-													>
-														<path
-															d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"
-														/>
-													</svg>
-												{:else if recargo.calificacion_servicio === 'bueno'}
-													<svg
-														class="h-5 w-5 text-blue-500"
-														fill="currentColor"
-														viewBox="0 0 20 20"
-													>
-														<path
-															d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"
-														/>
-													</svg>
-												{:else if recargo.calificacion_servicio === 'regular'}
-													<svg
-														class="h-5 w-5 text-yellow-500"
-														fill="currentColor"
-														viewBox="0 0 20 20"
-													>
-														<path
-															d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"
-														/>
-													</svg>
-												{:else}
-													<svg class="h-5 w-5 text-red-500" fill="currentColor" viewBox="0 0 20 20">
-														<path
-															d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"
-														/>
-													</svg>
-												{/if}
-												<p class="text-sm font-bold text-gray-900 capitalize">
-													{recargo.calificacion_servicio}
-												</p>
-											</div>
-										</div>
-									{/if}
-
-									<!-- Número de Días de Servicio -->
-									{#if recargo.numero_dias_servicio}
-										<div
-											class="flex items-center justify-between rounded-lg bg-gray-50 p-3 text-sm"
-										>
-											<span class="text-gray-600">Días de Servicio</span>
-											<span class="font-semibold text-gray-900"
-												>{recargo.numero_dias_servicio} días</span
-											>
-										</div>
-									{/if}
+						{#if servicio.vehiculo?.placa}
+							<div class="mt-3 flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2.5">
+								<span class="text-xs text-gray-400">Vehículo</span>
+								<div class="text-right">
+									<span class="font-bold tracking-widest text-gray-900"
+										>{servicio.vehiculo.placa}</span
+									>
+									{#if servicio.vehiculo.marca}<span class="ml-2 text-xs text-gray-400"
+											>{servicio.vehiculo.marca} {servicio.vehiculo.modelo || ''}</span
+										>{/if}
 								</div>
 							</div>
 						{/if}
 					</div>
 
-					<!-- COLUMNA DERECHA: Mapa y Detalles - 75% en desktop, full en mobile -->
-					<div class="flex min-h-[600px] flex-1 flex-col gap-4 md:gap-6 lg:min-h-0">
-						<!-- MAPA - 80% altura en desktop, altura fija en mobile -->
-						<div
-							class="flex h-[400px] flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm lg:h-auto lg:flex-[80]"
-						>
-							<!-- Header -->
-							<div
-								class="flex flex-shrink-0 items-center justify-between border-b border-gray-200 px-4 py-3 md:px-6 md:py-4"
-							>
-								<div class="flex items-center gap-2 md:gap-3">
-									<div
-										class="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500 md:h-10 md:w-10"
-									>
-										<svg
-											class="h-4 w-4 text-white md:h-5 md:w-5"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-											/>
-										</svg>
-									</div>
-									<h3 class="text-sm font-bold text-gray-900 md:text-base">Ruta del Servicio</h3>
+					<!-- Recorrido -->
+					<div class="rounded-2xl bg-white p-5 shadow-sm">
+						<p class="mb-3 text-[11px] font-semibold tracking-wide text-gray-400 uppercase">
+							Recorrido
+						</p>
+						<div class="flex gap-3">
+							<div class="flex flex-col items-center pt-1">
+								<div
+									class="flex h-6 w-6 items-center justify-center rounded-full bg-orange-500 text-xs font-bold text-white"
+								>
+									A
 								</div>
-								<button
-									on:click={centerRoute}
-									class="flex items-center gap-1 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-orange-600 md:gap-2 md:px-4 md:py-2 md:text-sm"
+								<div class="my-1.5 h-7 w-0.5 bg-gradient-to-b from-orange-400 to-red-400"></div>
+								<div
+									class="flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white"
+								>
+									B
+								</div>
+							</div>
+							<div class="flex flex-1 flex-col gap-2">
+								<div class="rounded-xl bg-orange-50 px-3 py-2.5">
+									<p class="text-xs font-semibold text-orange-700">Origen</p>
+									<p class="text-sm leading-snug font-medium text-gray-900">
+										{servicio.origen_especifico ||
+											servicio.origen?.nombre_municipio ||
+											'Sin especificar'}
+									</p>
+								</div>
+								<div class="rounded-xl bg-red-50 px-3 py-2.5">
+									<p class="text-xs font-semibold text-red-600">Destino</p>
+									<p class="text-sm leading-snug font-medium text-gray-900">
+										{servicio.destino_especifico ||
+											servicio.destino?.nombre_municipio ||
+											'Sin especificar'}
+									</p>
+								</div>
+							</div>
+						</div>
+						{#if distancia !== '—'}
+							<div class="mt-3 grid grid-cols-2 gap-2">
+								<div class="rounded-xl bg-gray-50 p-2.5 text-center">
+									<p class="text-xs text-gray-400">Distancia</p>
+									<p class="font-bold text-gray-900">{distancia}</p>
+								</div>
+								<div class="rounded-xl bg-gray-50 p-2.5 text-center">
+									<p class="text-xs text-gray-400">Tiempo est.</p>
+									<p class="font-bold text-gray-900">{duracion}</p>
+								</div>
+							</div>
+						{/if}
+					</div>
+
+					<!-- Cliente + Fechas -->
+					<div class="rounded-2xl bg-white p-5 shadow-sm">
+						{#if servicio.cliente}
+							<p class="mb-3 text-[11px] font-semibold tracking-wide text-gray-400 uppercase">
+								Cliente
+							</p>
+							<div class="mb-4 flex items-center gap-3">
+								<div
+									class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-amber-100"
 								>
 									<svg
-										class="h-3 w-3 md:h-4 md:w-4"
+										class="h-5 w-5 text-amber-600"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
@@ -962,347 +2024,240 @@
 										<path
 											stroke-linecap="round"
 											stroke-linejoin="round"
-											stroke-width="2"
-											d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+											stroke-width="1.5"
+											d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
 										/>
 									</svg>
-									<span class="hidden sm:inline">Centrar</span>
-								</button>
-							</div>
-							<!-- Mapa -->
-							<div class="relative flex-1 bg-gray-50">
-								<div id="map" class="h-full w-full"></div>
-							</div>
-						</div>
-
-						<!-- DETALLES - 20% altura en desktop, auto en mobile -->
-						<div
-							class="rounded-xl border border-gray-200 bg-white p-4 shadow-sm md:p-6 lg:flex-[20]"
-						>
-							<div
-								class="grid h-full grid-cols-1 gap-4 md:grid-cols-2 md:gap-6 lg:grid-cols-3 lg:gap-8"
-							>
-								<!-- RECORRIDO -->
-								<div>
-									<div class="mb-3 flex items-center gap-2 md:mb-4">
-										<div
-											class="flex h-7 w-7 items-center justify-center rounded-lg bg-orange-500 md:h-8 md:w-8"
-										>
-											<svg
-												class="h-3.5 w-3.5 text-white md:h-4 md:w-4"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-												/>
-											</svg>
-										</div>
-										<h4 class="text-xs font-bold text-gray-900 md:text-sm">Recorrido</h4>
-									</div>
-
-									<div class="space-y-3">
-										{#if servicio.origen_especifico}
-											<div>
-												<div class="mb-1 flex items-center gap-2">
-													<div
-														class="flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-xs font-bold text-white"
-													>
-														A
-													</div>
-													<span class="text-xs font-medium text-gray-500">ORIGEN</span>
-												</div>
-												<p class="line-clamp-2 pl-7 text-sm font-semibold text-gray-900">
-													{servicio.origen_especifico}
-												</p>
-											</div>
-										{:else if servicio.origen?.nombre_municipio}
-											<div>
-												<div class="mb-1 flex items-center gap-2">
-													<div
-														class="flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-xs font-bold text-white"
-													>
-														A
-													</div>
-													<span class="text-xs font-medium text-gray-500">ORIGEN</span>
-												</div>
-												<p class="line-clamp-2 pl-7 text-sm font-semibold text-gray-900">
-													{servicio.origen.nombre_municipio}
-												</p>
-												<p class="mt-1 pl-7 text-xs text-amber-600">Dirección exacta pendiente</p>
-											</div>
-										{:else}
-											<div class="rounded-lg border border-amber-200 bg-amber-50 p-2">
-												<p class="text-xs text-amber-800">
-													<span class="font-semibold">Origen:</span> Pendiente de configurar
-												</p>
-											</div>
-										{/if}
-
-										{#if servicio.destino_especifico}
-											<div>
-												<div class="mb-1 flex items-center gap-2">
-													<div
-														class="flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white"
-													>
-														B
-													</div>
-													<span class="text-xs font-medium text-gray-500">DESTINO</span>
-												</div>
-												<p class="line-clamp-2 pl-7 text-sm font-semibold text-gray-900">
-													{servicio.destino_especifico}
-												</p>
-											</div>
-										{:else if servicio.destino?.nombre_municipio}
-											<div>
-												<div class="mb-1 flex items-center gap-2">
-													<div
-														class="flex h-5 w-5 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white"
-													>
-														B
-													</div>
-													<span class="text-xs font-medium text-gray-500">DESTINO</span>
-												</div>
-												<p class="line-clamp-2 pl-7 text-sm font-semibold text-gray-900">
-													{servicio.destino.nombre_municipio}
-												</p>
-												<p class="mt-1 pl-7 text-xs text-amber-600">Dirección exacta pendiente</p>
-											</div>
-										{:else}
-											<div class="rounded-lg border border-amber-200 bg-amber-50 p-2">
-												<p class="text-xs text-amber-800">
-													<span class="font-semibold">Destino:</span> Pendiente de configurar
-												</p>
-											</div>
-										{/if}
-
-										{#if distancia !== '0'}
-											<div class="flex gap-2 pt-2">
-												<div class="flex-1 rounded bg-gray-50 p-2 text-center">
-													<p class="text-xs text-gray-500">Distancia</p>
-													<p class="text-sm font-bold text-gray-900">{distancia} km</p>
-												</div>
-												<div class="flex-1 rounded bg-gray-50 p-2 text-center">
-													<p class="text-xs text-gray-500">Tiempo</p>
-													<p class="text-sm font-bold text-gray-900">{duracion}</p>
-												</div>
-											</div>
-										{/if}
-									</div>
 								</div>
-
-								<!-- ESTADO Y FECHAS -->
 								<div>
-									<div class="mb-3 flex items-center gap-2 md:mb-4">
-										<div
-											class="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 md:h-8 md:w-8"
-										>
-											<svg
-												class="h-3.5 w-3.5 text-gray-700 md:h-4 md:w-4"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-												/>
-											</svg>
-										</div>
-										<h4 class="text-xs font-bold text-gray-900 md:text-sm">Estado y Fechas</h4>
-									</div>
-
-									<div class="space-y-3">
-										<div class="mb-3">
-											<span
-												class="inline-block rounded-lg px-3 py-1 text-xs font-bold text-white capitalize"
-												style="background-color: {getStatusColor(servicio.estado)}"
-											>
-												{getEstadoText(servicio.estado)}
-											</span>
-										</div>
-
-										<div class="space-y-2 text-xs">
-											{#if servicio.fecha_solicitud}
-												<div class="flex items-center justify-between rounded bg-gray-50 p-2">
-													<span class="text-gray-600">Solicitud</span>
-													<span class="font-bold text-gray-900"
-														>{new Date(servicio.fecha_solicitud).toLocaleDateString('es-CO', {
-															month: 'short',
-															day: 'numeric'
-														})}</span
-													>
-												</div>
-											{:else}
-												<div class="rounded border border-blue-200 bg-blue-50 p-2">
-													<p class="text-xs text-blue-800">Fecha de solicitud pendiente</p>
-												</div>
-											{/if}
-
-											{#if servicio.fecha_servicio}
-												<div class="flex items-center justify-between rounded bg-gray-50 p-2">
-													<span class="text-gray-600">Servicio</span>
-													<span class="font-bold text-gray-900"
-														>{new Date(servicio.fecha_servicio).toLocaleDateString('es-CO', {
-															month: 'short',
-															day: 'numeric'
-														})}</span
-													>
-												</div>
-											{:else}
-												<div class="rounded border border-blue-200 bg-blue-50 p-2">
-													<p class="text-xs text-blue-800">Fecha de servicio por definir</p>
-												</div>
-											{/if}
-
-											{#if servicio.hora_inicio}
-												<div class="flex items-center justify-between rounded bg-gray-50 p-2">
-													<span class="text-gray-600">Inicio</span>
-													<span class="font-bold text-gray-900"
-														>{new Date(servicio.hora_inicio).toLocaleTimeString('es-CO', {
-															hour: '2-digit',
-															minute: '2-digit'
-														})}</span
-													>
-												</div>
-											{/if}
-
-											{#if servicio.hora_fin}
-												<div class="flex items-center justify-between rounded bg-gray-50 p-2">
-													<span class="text-gray-600">Fin</span>
-													<span class="font-bold text-gray-900"
-														>{new Date(servicio.hora_fin).toLocaleTimeString('es-CO', {
-															hour: '2-digit',
-															minute: '2-digit'
-														})}</span
-													>
-												</div>
-											{/if}
-
-											{#if servicio.created_at}
-												<div class="flex items-center justify-between rounded bg-gray-50 p-2">
-													<span class="text-gray-600">Creación</span>
-													<span class="font-bold text-gray-900"
-														>{new Date(servicio.created_at).toLocaleDateString('es-CO', {
-															month: 'short',
-															day: 'numeric'
-														})}</span
-													>
-												</div>
-											{/if}
-										</div>
-									</div>
-								</div>
-
-								<!-- OBSERVACIONES -->
-								<div>
-									<div class="mb-3 flex items-center gap-2 md:mb-4">
-										<div
-											class="flex h-7 w-7 items-center justify-center rounded-lg bg-gray-100 md:h-8 md:w-8"
-										>
-											<svg
-												class="h-3.5 w-3.5 text-gray-700 md:h-4 md:w-4"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-												/>
-											</svg>
-										</div>
-										<h4 class="text-xs font-bold text-gray-900 md:text-sm">Observaciones</h4>
-									</div>
-
-									{#if servicio.observaciones}
-										<div class="rounded-lg bg-gray-50 p-3">
-											<p class="text-sm leading-relaxed text-gray-700">{servicio.observaciones}</p>
-										</div>
-									{:else}
-										<div
-											class="rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 p-4 text-center"
-										>
-											<div
-												class="mx-auto mb-2 flex h-10 w-10 items-center justify-center rounded-lg bg-gray-200"
-											>
-												<svg
-													class="h-5 w-5 text-gray-400"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-													/>
-												</svg>
-											</div>
-											<p class="mb-1 text-xs font-medium text-gray-700">Sin observaciones</p>
-											<p class="text-xs text-gray-500">
-												No hay notas adicionales para este servicio
-											</p>
-										</div>
-									{/if}
+									<p class="font-bold text-gray-900">
+										{(servicio.cliente as any).razon_social || servicio.cliente.nombre || '—'}
+									</p>
+									{#if servicio.cliente.nit}<p class="text-xs text-gray-400">
+											NIT {servicio.cliente.nit}
+										</p>{/if}
 								</div>
 							</div>
+						{/if}
+						<p class="mb-2 text-[11px] font-semibold tracking-wide text-gray-400 uppercase">
+							Fechas
+						</p>
+						<div class="space-y-2 text-sm">
+							{#if servicio.fecha_solicitud}
+								<div class="flex justify-between">
+									<span class="text-gray-400">Solicitud</span><span
+										class="font-medium text-gray-800">{fmtDate(servicio.fecha_solicitud)}</span
+									>
+								</div>
+							{/if}
+							{#if (servicio as any).fecha_servicio}
+								<div class="flex justify-between">
+									<span class="text-gray-400">Servicio</span><span class="font-medium text-gray-800"
+										>{fmtDate((servicio as any).fecha_servicio)}</span
+									>
+								</div>
+							{/if}
+							{#if (servicio as any).hora_inicio}
+								<div class="flex justify-between">
+									<span class="text-gray-400">Inicio</span><span class="font-medium text-gray-800"
+										>{fmtTime((servicio as any).hora_inicio)}</span
+									>
+								</div>
+							{/if}
+							{#if (servicio as any).hora_fin}
+								<div class="flex justify-between">
+									<span class="text-gray-400">Fin</span><span class="font-medium text-gray-800"
+										>{fmtTime((servicio as any).hora_fin)}</span
+									>
+								</div>
+							{/if}
+							{#if servicio.created_at}
+								<!-- <div class="flex justify-between">
+									<span class="text-gray-400">Creación</span><span class="font-medium text-gray-800"
+										>{fmtDate(servicio.created_at)}</span
+									>
+								</div> -->
+							{/if}
+							{#if servicio.fecha_finalizacion}
+								<div class="flex justify-between">
+									<span class="text-gray-400">Finalización</span><span class="font-medium text-gray-800"
+										>{fmtDate(servicio.fecha_finalizacion)}</span
+									>
+								</div>
+							{/if}
 						</div>
 					</div>
+
+					<div class="rounded-2xl bg-white p-5 shadow-sm md:col-span-2 xl:col-span-3">
+						<!-- Header -->
+						<div class="mb-3 flex items-center justify-between">
+							<p class="text-[11px] font-semibold tracking-wide text-gray-400 uppercase">
+								Condiciones del servicio
+							</p>
+							{#if esDefault}
+								<span class="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-400"
+									>Valores por defecto</span
+								>
+							{/if}
+						</div>
+
+						<!-- Badges condiciones -->
+						<div class="flex flex-wrap items-center gap-2">
+							<!-- Estado conductor -->
+							<div class="flex items-center gap-1.5">
+								<div
+									class="h-2 w-2 rounded-full {estadoConductor === 'optimo'
+										? 'bg-green-500'
+										: estadoConductor === 'regular'
+											? 'bg-yellow-400'
+											: estadoConductor === 'fatigado'
+												? 'bg-orange-400'
+												: 'bg-red-500'}"
+								></div>
+								<span class="text-xs font-medium text-gray-700 capitalize"
+									>Conductor {estadoConductor}</span
+								>
+							</div>
+
+							<!-- Tipo de vía -->
+							{#if viaTrocha}<span
+									class="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800"
+									>🏞️ Trocha</span
+								>{/if}
+							{#if viaAfirmado}<span
+									class="rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800"
+									>🪨 Afirmado</span
+								>{/if}
+							{#if viaMixto}<span
+									class="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800"
+									>🔀 Mixto</span
+								>{/if}
+							{#if viaPavimentada}<span
+									class="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800"
+									>🛣️ Pavimentada</span
+								>{/if}
+
+							<!-- Riesgos -->
+							{#if riesgoDesniveles}<span
+									class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700"
+									>⚠️ Desniveles</span
+								>{/if}
+							{#if riesgoDeslizamientos}<span
+									class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700"
+									>⚠️ Deslizamientos</span
+								>{/if}
+							{#if riesgoSinSenalizacion}<span
+									class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700"
+									>⚠️ Sin señalización</span
+								>{/if}
+							{#if riesgoAnimales}<span
+									class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700"
+									>⚠️ Animales</span
+								>{/if}
+							{#if riesgoPeatones}<span
+									class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700"
+									>🚶 Peatones</span
+								>{/if}
+							{#if riesgoTrafico}<span
+									class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700"
+									>🚗 Tráfico alto</span
+								>{/if}
+
+							{#if rc?.numero_dias_servicio}
+								<span class="ml-auto text-xs text-gray-400">{rc.numero_dias_servicio} días</span>
+							{/if}
+						</div>
+
+						<!-- Calificación — solo si realizado o si ya hay calificación -->
+						{#if esRealizado && rc?.calificacion_servicio}
+							{@const estrellas =
+								{ excelente: 5, bueno: 5, regular: 3, malo: 2 }[calificacion as 'excelente' | 'bueno' | 'regular' | 'malo'] ?? 5}
+							{@const calColor =
+								{
+									excelente: 'text-orange-600',
+									bueno: 'text-orange-600',
+									regular: 'text-amber-500',
+									malo: 'text-red-500'
+								}[calificacion as 'excelente' | 'bueno' | 'regular' | 'malo'] ?? 'text-orange-600'}
+							{@const calLabel =
+								{ excelente: 'Excelente', bueno: 'Bueno', regular: 'Regular', malo: 'Malo' }[
+									calificacion as 'excelente' | 'bueno' | 'regular' | 'malo'
+								] ?? 'Bueno'}
+							<div class="mt-3 flex items-center gap-3 border-t border-gray-100 pt-3">
+								<span class="text-[11px] font-semibold tracking-wide text-gray-400 uppercase"
+									>Calificación</span
+								>
+								<div class="flex items-center gap-1">
+									{#each Array(5) as _, i}
+										<svg
+											class="h-4 w-4 {i < estrellas ? 'text-amber-400' : 'text-gray-200'}"
+											fill="currentColor"
+											viewBox="0 0 20 20"
+										>
+											<path
+												d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"
+											/>
+										</svg>
+									{/each}
+								</div>
+								<span class="text-sm font-semibold {calColor}">{calLabel}</span>
+								{#if esDefault && !rc?.calificacion_servicio}
+									<span class="text-[10px] text-gray-400">(por defecto)</span>
+								{/if}
+							</div>
+						{/if}
+					</div>
+
+					<!-- Observaciones -->
+					{#if servicio.observaciones}
+						<div class="rounded-2xl bg-white p-5 shadow-sm md:col-span-2 xl:col-span-3">
+							<p class="mb-2 text-[11px] font-semibold tracking-wide text-gray-400 uppercase">
+								Observaciones
+							</p>
+							<p class="text-sm leading-relaxed text-gray-600">{servicio.observaciones}</p>
+						</div>
+					{/if}
 				</div>
+				<div class="h-8"></div>
 			</div>
 		</div>
 
-		<!-- Modal de compartir servicio -->
+		<!-- MODAL COMPARTIR -->
 		{#if showShareModal}
 			<div
-				class="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm"
-				on:click={closeShareModal}
+				class="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4"
+				role="button"
+				tabindex="0"
+				on:click={() => {
+					showShareModal = false;
+					copySuccess = false;
+				}}
+				on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') { showShareModal = false; copySuccess = false; } }}
 				transition:fade={{ duration: 200 }}
 			>
 				<div
-					class="mx-4 w-full max-w-lg overflow-hidden rounded-2xl bg-white shadow-2xl"
+					class="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
+					role="dialog"
+					aria-modal="true"
+					aria-label="Enlace compartible"
+					tabindex="0"
 					on:click|stopPropagation
-					transition:fly={{ y: 20, duration: 300 }}
+					on:keydown|stopPropagation
+					transition:fly={{ y: 16, duration: 250 }}
 				>
-					<!-- Header -->
 					<div class="bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-5">
 						<div class="flex items-center justify-between">
-							<div class="flex items-center space-x-3">
-								<div
-									class="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 backdrop-blur-md"
-								>
-									<svg
-										class="h-6 w-6 text-white"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-										/>
-									</svg>
-								</div>
-								<div>
-									<h3 class="text-xl font-bold text-white">Enlace Generado</h3>
-									<p class="text-sm text-orange-100">Comparte este enlace con tu cliente</p>
-								</div>
+							<div>
+								<h3 class="text-lg font-bold text-white">Enlace compartible</h3>
+								<p class="text-sm text-orange-100">Sin necesidad de login</p>
 							</div>
 							<button
-								on:click={closeShareModal}
-								class="rounded-lg p-2 text-white/80 transition-all hover:bg-white/10 hover:text-white"
+								on:click={() => {
+									showShareModal = false;
+									copySuccess = false;
+								}}
+								aria-label="Cerrar modal"
+								class="rounded-lg p-1.5 text-white/70 hover:bg-white/10"
 							>
 								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path
@@ -1315,147 +2270,21 @@
 							</button>
 						</div>
 					</div>
-
-					<!-- Body -->
-					<div class="space-y-4 p-6">
-						<!-- Mensaje de éxito -->
-						<div
-							class="flex items-start space-x-3 rounded-xl border border-orange-200 bg-orange-50 p-4"
-						>
-							<svg
-								class="mt-0.5 h-6 w-6 flex-shrink-0 text-orange-600"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-								/>
-							</svg>
-							<div>
-								<p class="font-semibold text-orange-900">¡Enlace creado exitosamente!</p>
-								<p class="mt-1 text-sm text-orange-700">
-									Este enlace permite visualizar el servicio sin necesidad de autenticación.
-								</p>
-							</div>
-						</div>
-
-						<!-- Chip con el enlace -->
-						<div class="space-y-2">
-							<label class="text-sm font-medium text-gray-700">Enlace público:</label>
-							<button
-								on:click={copyToClipboard}
-								class="group relative w-full cursor-pointer rounded-xl border-2 border-gray-200 bg-gray-50 p-4 transition-all duration-200 hover:border-orange-300 hover:bg-gray-100"
-							>
-								<div class="flex items-center justify-between space-x-3">
-									<div class="flex min-w-0 flex-1 items-center space-x-3">
-										<div
-											class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-orange-500"
-										>
-											<svg
-												class="h-5 w-5 text-white"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
-												/>
-											</svg>
-										</div>
-										<div class="min-w-0 flex-1 text-left">
-											<p class="mb-1 text-xs font-medium text-gray-500">Click para copiar</p>
-											<p class="truncate font-mono text-sm text-gray-900">
-												{generatedShareUrl}
-											</p>
-										</div>
-									</div>
-									<div class="flex-shrink-0">
-										{#if copySuccess}
-											<div
-												class="flex items-center space-x-2 rounded-lg bg-orange-500 px-3 py-2 text-white"
-												transition:fly={{ y: -5, duration: 200 }}
-											>
-												<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M5 13l4 4L19 7"
-													/>
-												</svg>
-												<span class="text-sm font-medium">Copiado</span>
-											</div>
-										{:else}
-											<div
-												class="rounded-lg bg-gray-200 px-3 py-2 text-gray-600 transition-all duration-200 group-hover:bg-orange-500 group-hover:text-white"
-											>
-												<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-													/>
-												</svg>
-											</div>
-										{/if}
-									</div>
-								</div>
-							</button>
-						</div>
-
-						<!-- Información adicional -->
-						<div
-							class="flex items-start space-x-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-gray-600"
-						>
-							<svg
-								class="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-600"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-								/>
-							</svg>
-							<p class="text-blue-800">
-								Puedes compartir este enlace por WhatsApp, email o cualquier otro medio. El enlace
-								permanece activo hasta que lo revoque.
-							</p>
-						</div>
-					</div>
-
-					<!-- Footer -->
-					<div class="flex items-center justify-end space-x-3 bg-gray-50 px-6 py-4">
+					<div class="space-y-3 p-5">
 						<button
-							on:click={closeShareModal}
-							class="rounded-lg px-4 py-2 font-medium text-gray-700 transition-colors hover:bg-gray-200"
+							on:click={copyLink}
+							class="w-full rounded-xl border-2 border-gray-200 bg-gray-50 p-4 text-left transition-colors hover:border-orange-300"
 						>
-							Cerrar
+							<p class="mb-1 text-xs text-gray-400">Click para copiar</p>
+							<p class="truncate font-mono text-sm text-gray-800">{generatedShareUrl}</p>
 						</button>
 						<button
-							on:click={copyToClipboard}
-							class="flex items-center space-x-2 rounded-lg bg-orange-500 px-4 py-2 font-medium text-white transition-colors hover:bg-orange-600"
+							on:click={copyLink}
+							class="w-full rounded-xl py-2.5 text-sm font-semibold transition-colors {copySuccess
+								? 'bg-orange-500 text-white'
+								: 'bg-gray-900 text-white hover:bg-gray-800'}"
 						>
-							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-								/>
-							</svg>
-							<span>Copiar enlace</span>
+							{copySuccess ? '✓ Copiado' : 'Copiar enlace'}
 						</button>
 					</div>
 				</div>
@@ -1465,43 +2294,31 @@
 </div>
 
 <style>
-	/* Estilos para el mapa - se adapta al contenedor padre */
 	:global(#map) {
 		width: 100%;
 		height: 100%;
 	}
-
-	:global(#map .mapboxgl-canvas) {
-		width: 100% !important;
-		height: 100% !important;
+	@keyframes ping {
+		75%,
+		100% {
+			transform: scale(2);
+			opacity: 0;
+		}
 	}
-
-	:global(.mapboxgl-map) {
-		width: 100%;
-		height: 100%;
-		border-radius: 0;
+	:global(.mapboxgl-marker) {
+		will-change: transform;
 	}
-
 	:global(.mapboxgl-popup-content) {
-		padding: 0;
-		border-radius: 16px;
-		box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+		padding: 0 !important;
+		border-radius: 12px !important;
+		box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18) !important;
 		overflow: hidden;
 	}
-
 	:global(.mapboxgl-popup-tip) {
 		display: none;
 	}
-
-	:global(.mapboxgl-ctrl-group) {
-		border-radius: 12px;
-		overflow: hidden;
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-		border: none;
-	}
-
-	:global(.mapboxgl-ctrl-group button) {
-		width: 36px;
-		height: 36px;
+	:global(.mapboxgl-ctrl-bottom-right) {
+		margin-bottom: 2rem;
+		margin-right: 0.75rem;
 	}
 </style>

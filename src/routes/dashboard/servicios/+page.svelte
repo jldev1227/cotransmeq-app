@@ -1044,7 +1044,10 @@
 											</svg>
 										</button>
 										<button
-											on:click|stopPropagation={() => { servicioSeleccionado = servicio; mostrarModalTicket = true; }}
+											on:click|stopPropagation={() => { 
+												console.log(servicio)
+												servicioSeleccionado = servicio; mostrarModalTicket = true;
+											 }}
 											class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-purple-50 hover:text-purple-600"
 											title="Ticket"
 										>

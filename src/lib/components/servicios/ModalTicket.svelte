@@ -27,101 +27,187 @@
 		}
 	}
 
-	async function handleShareTicket() {
-		if (!servicio || !modalContainerRef) return;
-		isSharing = true;
+async function handleShareTicket() {
+    if (!servicio || !modalContainerRef) return;
+    isSharing = true;
 
-		const images = modalContainerRef.querySelectorAll('img');
-		
-		try {
-			// Reemplazar TODAS las imágenes con placeholder SVG ANTES de capturar
-			// Esto evita completamente los problemas de CORS con S3
-			const placeholderSvg = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"%3E%3Crect width="24" height="24" fill="%23e5e7eb"/%3E%3Cpath d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="%239ca3af"/%3E%3C/svg%3E';
-			
-			images.forEach((img) => {
-				const imgElement = img as HTMLImageElement;
-				// Si es una imagen externa (no data URL)
-				if (imgElement.src.startsWith('http')) {
-					imgElement.setAttribute('data-original-src', imgElement.src);
-					imgElement.src = placeholderSvg;
-				}
-			});
+    const images = modalContainerRef.querySelectorAll('img');
 
-			// Pequeño delay para que el DOM se actualice
-			await new Promise(resolve => setTimeout(resolve, 50));
+    try {
+        const placeholderSvg = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"%3E%3Crect width="24" height="24" fill="%23e5e7eb"/%3E%3Cpath d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="%239ca3af"/%3E%3C/svg%3E';
 
-			// Generar imagen del modal usando html-to-image
-			const dataUrl = await toPng(modalContainerRef, {
-				backgroundColor: '#ffffff',
-				pixelRatio: 2, // Mayor calidad
-				skipAutoScale: false,
-				cacheBust: false, // Desactivar para evitar problemas con imágenes ya convertidas
-				// Evitar problemas con CORS
-				skipFonts: true, // Ignorar fuentes externas
-				preferredFontFormat: 'woff2',
-				filter: (element) => {
-					// Ignorar solo el botón de cerrar X y los botones de acción del footer
-					const isCloseButton = element.getAttribute?.('aria-label') === 'Cerrar modal';
-					const isActionButton = element.tagName === 'BUTTON' && element.closest('.flex-shrink-0');
-					return !isCloseButton && !isActionButton;
-				}
-			});
+        images.forEach((img) => {
+            const imgElement = img as HTMLImageElement;
+            if (imgElement.src.startsWith('http')) {
+                imgElement.setAttribute('data-original-src', imgElement.src);
+                imgElement.src = placeholderSvg;
+            }
+        });
 
-			// Convertir dataURL a blob
-			const response = await fetch(dataUrl);
-			const blob = await response.blob();
+        await new Promise(resolve => setTimeout(resolve, 50));
 
-			// Crear archivo para compartir
-			const file = new File([blob], `ticket-${servicio.id.slice(0, 8)}.png`, {
-				type: 'image/png'
-			});
+        // ✅ FIX: Guardar estilos originales y forzar posición limpia
+        const originalStyle = modalContainerRef.getAttribute('style') || '';
+        const computedStyle = window.getComputedStyle(modalContainerRef);
+        
+        // Forzar que no haya transformaciones ni offsets que afecten la captura
+        modalContainerRef.style.transform = 'none';
+        modalContainerRef.style.position = 'relative';
+        modalContainerRef.style.top = '0';
+        modalContainerRef.style.left = '0';
+        modalContainerRef.style.margin = '0';
 
-			const shareData = {
-				title: 'Ticket de Servicio - Cotransmeq',
-				text: `Servicio ${servicio.origen?.nombre_municipio || ''} → ${servicio.destino?.nombre_municipio || ''}\nEstado: ${getEstadoText(servicio.estado)}`,
-				files: [file]
-			};
+        await new Promise(resolve => setTimeout(resolve, 30));
 
-			// Verificar si el navegador soporta compartir archivos
-			if (navigator.canShare && navigator.canShare(shareData)) {
-				await navigator.share(shareData);
-				toast.success('Ticket compartido exitosamente');
-			} else {
-				// Fallback: descargar la imagen
-				const url = URL.createObjectURL(blob);
-				const a = document.createElement('a');
-				a.href = url;
-				a.download = `ticket-${servicio.id.slice(0, 8)}.png`;
-				document.body.appendChild(a);
-				a.click();
-				document.body.removeChild(a);
-				URL.revokeObjectURL(url);
-				toast.success('Ticket descargado como imagen');
-			}
-		} catch (error: any) {
-			if (error.name !== 'AbortError') {
-				console.error('Error al compartir:', error);
-				toast.error('Error al generar el ticket');
-			}
-		} finally {
-			// Restaurar las imágenes originales siempre
-			images.forEach((img) => {
-				const originalSrc = img.getAttribute('data-original-src');
-				if (originalSrc) {
-					img.src = originalSrc;
-					img.removeAttribute('data-original-src');
-				}
-			});
-			isSharing = false;
-		}
-	}
+        const dataUrl = await toPng(modalContainerRef, {
+            backgroundColor: '#ffffff',
+            pixelRatio: 2,
+            skipAutoScale: false,
+            cacheBust: false,
+            skipFonts: true,
+            preferredFontFormat: 'woff2',
+            // ✅ FIX: Forzar dimensiones exactas del elemento sin offsets
+            width: modalContainerRef.scrollWidth,
+            height: modalContainerRef.scrollHeight,
+            style: {
+                transform: 'none',
+                transformOrigin: 'top left',
+                margin: '0',
+                padding: computedStyle.padding, // Conservar el padding real del ticket
+                top: '0',
+                left: '0',
+                position: 'relative',
+            },
+            filter: (element) => {
+                const isCloseButton = element.getAttribute?.('aria-label') === 'Cerrar modal';
+                const isActionButton = element.tagName === 'BUTTON' && element.closest('.flex-shrink-0');
+                return !isCloseButton && !isActionButton;
+            }
+        });
+
+        // ✅ FIX: Restaurar estilos ANTES de procesar la imagen
+        modalContainerRef.setAttribute('style', originalStyle);
+
+        const response = await fetch(dataUrl);
+        const blob = await response.blob();
+
+        // ✅ FIX: Recortar whitespace superior usando canvas
+        const croppedBlob = await cropTopWhitespace(blob);
+
+        const file = new File([croppedBlob], `ticket-${servicio.id.slice(0, 8)}.png`, {
+            type: 'image/png'
+        });
+
+        const shareData = {
+            title: 'Ticket de Servicio - Cotransmeq',
+            files: [file]
+        };
+
+        if (navigator.canShare && navigator.canShare(shareData)) {
+            await navigator.share(shareData);
+            toast.success('Ticket compartido exitosamente');
+        } else {
+            const url = URL.createObjectURL(croppedBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `ticket-${servicio.id.slice(0, 8)}.png`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            toast.success('Ticket descargado como imagen');
+        }
+    } catch (error: any) {
+        if (error.name !== 'AbortError') {
+            console.error('Error al compartir:', error);
+            toast.error('Error al generar el ticket');
+        }
+    } finally {
+        images.forEach((img) => {
+            const originalSrc = img.getAttribute('data-original-src');
+            if (originalSrc) {
+                img.src = originalSrc;
+                img.removeAttribute('data-original-src');
+            }
+        });
+        isSharing = false;
+    }
+}
+
+async function cropTopWhitespace(blob: Blob, threshold = 250): Promise<Blob> {
+    return new Promise((resolve) => {
+        const img = new Image();
+        const url = URL.createObjectURL(blob);
+
+        img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d')!;
+            canvas.width = img.width;
+            canvas.height = img.height;
+            ctx.drawImage(img, 0, 0);
+
+            const { data, width, height } = ctx.getImageData(0, 0, img.width, img.height);
+
+            const SAFE_PADDING = 24 * 2; // x2 por pixelRatio: 2
+
+            // Primera fila no-blanca desde arriba
+            let topCropRaw = 0;
+            outer: for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const idx = (y * width + x) * 4;
+                    const r = data[idx], g = data[idx + 1], b = data[idx + 2], a = data[idx + 3];
+                    if (a > 10 && (r < threshold || g < threshold || b < threshold)) {
+                        topCropRaw = y;
+                        break outer;
+                    }
+                }
+            }
+
+            // Última fila no-blanca desde abajo
+            let bottomCropRaw = height;
+            outer2: for (let y = height - 1; y >= 0; y--) {
+                for (let x = 0; x < width; x++) {
+                    const idx = (y * width + x) * 4;
+                    const r = data[idx], g = data[idx + 1], b = data[idx + 2], a = data[idx + 3];
+                    if (a > 10 && (r < threshold || g < threshold || b < threshold)) {
+                        bottomCropRaw = y + 1;
+                        break outer2;
+                    }
+                }
+            }
+
+            // ✅ Aplicar padding de seguridad para no comerse el header/footer
+            const topCrop = Math.max(0, topCropRaw - SAFE_PADDING);
+            const bottomCrop = Math.min(height, bottomCropRaw + SAFE_PADDING);
+            const cropHeight = bottomCrop - topCrop;
+
+            const out = document.createElement('canvas');
+            out.width = width;
+            out.height = cropHeight;
+            const outCtx = out.getContext('2d')!;
+            outCtx.fillStyle = '#ffffff';
+            outCtx.fillRect(0, 0, width, cropHeight); // ✅ Fondo blanco explícito
+            outCtx.drawImage(canvas, 0, topCrop, width, cropHeight, 0, 0, width, cropHeight);
+
+            URL.revokeObjectURL(url);
+            out.toBlob((b) => resolve(b ?? blob), 'image/png');
+        };
+
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            resolve(blob);
+        };
+
+        img.src = url;
+    });
+}
 
 	// Obtener foto del conductor con URL firmada
 	function getConductorPhoto() {
 		if (servicio?.conductor?.foto_signed_url) {
 			return servicio.conductor.foto_signed_url;
 		}
-		
+
 		// Placeholder si no hay foto
 		return 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"%3E%3Crect width="24" height="24" fill="%23e5e7eb"/%3E%3Cpath d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="%239ca3af"/%3E%3C/svg%3E';
 	}
@@ -130,7 +216,7 @@
 {#if servicio}
 	<!-- Backdrop -->
 	<div
-		class="fixed inset-0 z-50 flex items-start sm:items-center justify-center overflow-y-auto bg-black/50 p-4 pt-20 sm:pt-4 backdrop-blur-sm"
+		class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 pt-20 backdrop-blur-sm sm:items-center sm:pt-4"
 		on:click={handleBackdropClick}
 		on:keydown={(e) => e.key === 'Escape' && handleClose()}
 		transition:fade={{ duration: 200 }}
@@ -141,7 +227,7 @@
 		<!-- Modal - Más compacto con scroll interno si es necesario -->
 		<div
 			bind:this={modalContainerRef}
-			class="relative w-full max-w-4xl my-auto overflow-hidden rounded-xl bg-white shadow-xl max-h-[90vh] flex flex-col"
+			class="relative my-auto flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl bg-white shadow-xl"
 			transition:fly={{ y: 20, duration: 300, easing: cubicOut }}
 			role="document"
 		>
@@ -149,8 +235,18 @@
 			<div class="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
 				<div class="flex items-center gap-3">
 					<div class="rounded-lg bg-orange-100 p-2">
-						<svg class="h-5 w-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+						<svg
+							class="h-5 w-5 text-orange-600"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+							/>
 						</svg>
 					</div>
 					<div>
@@ -164,13 +260,18 @@
 					aria-label="Cerrar modal"
 				>
 					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M6 18L18 6M6 6l12 12"
+						/>
 					</svg>
 				</button>
 			</div>
 
 			<!-- Content en 2 columnas - Con scroll -->
-			<div class="grid grid-cols-1 gap-6 p-6 md:grid-cols-2 overflow-y-auto flex-1">
+			<div class="grid flex-1 grid-cols-1 gap-6 overflow-y-auto p-6 md:grid-cols-2">
 				<!-- Columna izquierda: Info principal -->
 				<div class="space-y-4">
 					<!-- Estado -->
@@ -178,9 +279,14 @@
 						<div class="mb-2 text-xs font-medium text-gray-500">Estado</div>
 						<div
 							class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-sm font-semibold"
-							style="background-color: {getEstadoColor(servicio.estado)}20; color: {getEstadoColor(servicio.estado)}"
+							style="background-color: {getEstadoColor(servicio.estado)}20; color: {getEstadoColor(
+								servicio.estado
+							)}"
 						>
-							<div class="h-2 w-2 rounded-full" style="background-color: {getEstadoColor(servicio.estado)}"></div>
+							<div
+								class="h-2 w-2 rounded-full"
+								style="background-color: {getEstadoColor(servicio.estado)}"
+							></div>
 							{getEstadoText(servicio.estado)}
 						</div>
 					</div>
@@ -189,10 +295,22 @@
 					<div>
 						<div class="mb-2 text-xs font-medium text-gray-500">Cliente</div>
 						<div class="flex items-center gap-2">
-							<svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+							<svg
+								class="h-4 w-4 text-gray-400"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+								/>
 							</svg>
-							<span class="font-medium text-gray-900">{servicio.cliente?.nombre || 'Sin cliente'}</span>
+							<span class="font-medium text-gray-900"
+								>{servicio.cliente?.nombre || 'Sin cliente'}</span
+							>
 						</div>
 					</div>
 
@@ -203,7 +321,9 @@
 							<div class="flex items-start gap-2">
 								<div class="mt-1 h-3 w-3 rounded-full border-2 border-green-500 bg-green-100"></div>
 								<div class="flex-1">
-									<div class="text-sm font-medium text-gray-900">{servicio.origen?.nombre_municipio || 'Origen'}</div>
+									<div class="text-sm font-medium text-gray-900">
+										{servicio.origen?.nombre_municipio || 'Origen'}
+									</div>
 									{#if servicio.origen_especifico}
 										<div class="text-xs text-gray-500">{servicio.origen_especifico}</div>
 									{/if}
@@ -213,7 +333,9 @@
 							<div class="flex items-start gap-2">
 								<div class="mt-1 h-3 w-3 rounded-full border-2 border-red-500 bg-red-100"></div>
 								<div class="flex-1">
-									<div class="text-sm font-medium text-gray-900">{servicio.destino?.nombre_municipio || 'Destino'}</div>
+									<div class="text-sm font-medium text-gray-900">
+										{servicio.destino?.nombre_municipio || 'Destino'}
+									</div>
 									{#if servicio.destino_especifico}
 										<div class="text-xs text-gray-500">{servicio.destino_especifico}</div>
 									{/if}
@@ -226,14 +348,22 @@
 					<div class="grid grid-cols-2 gap-3">
 						<div>
 							<div class="mb-1 text-xs font-medium text-gray-500">Solicitud</div>
-							<div class="text-sm text-gray-900">{formatDateTime(servicio.fecha_solicitud).split(',')[0]}</div>
-							<div class="text-xs text-gray-500">{formatDateTime(servicio.fecha_solicitud).split(',')[1]}</div>
+							<div class="text-sm text-gray-900">
+								{formatDateTime(servicio.fecha_solicitud).split(',')[0]}
+							</div>
+							<div class="text-xs text-gray-500">
+								{formatDateTime(servicio.fecha_solicitud).split(',')[1]}
+							</div>
 						</div>
 						{#if servicio.fecha_realizacion}
 							<div>
 								<div class="mb-1 text-xs font-medium text-gray-500">Realización</div>
-								<div class="text-sm text-gray-900">{formatDateTime(servicio.fecha_realizacion).split(',')[0]}</div>
-								<div class="text-xs text-gray-500">{formatDateTime(servicio.fecha_realizacion).split(',')[1]}</div>
+								<div class="text-sm text-gray-900">
+									{formatDateTime(servicio.fecha_realizacion).split(',')[0]}
+								</div>
+								<div class="text-xs text-gray-500">
+									{formatDateTime(servicio.fecha_realizacion).split(',')[1]}
+								</div>
 							</div>
 						{/if}
 					</div>
@@ -252,7 +382,10 @@
 									class="h-12 w-12 rounded-full object-cover ring-2 ring-gray-100"
 								/>
 								<div class="flex-1">
-									<div class="font-medium text-gray-900">{servicio.conductor.nombre} {servicio.conductor.apellido}</div>
+									<div class="font-medium text-gray-900">
+										{servicio.conductor.nombre}
+										{servicio.conductor.apellido}
+									</div>
 									{#if servicio.conductor.telefono}
 										<div class="text-sm text-gray-500">{servicio.conductor.telefono}</div>
 									{/if}
@@ -275,7 +408,10 @@
 										{servicio.vehiculo.placa}
 									</div>
 								</div>
-								<div class="text-sm text-gray-900">{servicio.vehiculo.marca} {servicio.vehiculo.modelo}</div>
+								<div class="text-sm text-gray-900">
+									{servicio.vehiculo.marca}
+									{servicio.vehiculo.modelo}
+								</div>
 								<div class="text-xs text-gray-500">{servicio.vehiculo.clase_vehiculo}</div>
 							</div>
 						</div>
@@ -289,12 +425,16 @@
 					<div class="grid grid-cols-2 gap-3">
 						<div>
 							<div class="mb-1 text-xs font-medium text-gray-500">Propósito</div>
-							<div class="text-sm font-medium capitalize text-gray-900">{servicio.proposito_servicio?.replace('_', ' ')}</div>
+							<div class="text-sm font-medium text-gray-900 capitalize">
+								{servicio.proposito_servicio?.replace('_', ' ')}
+							</div>
 						</div>
 						{#if servicio.valor && Number(servicio.valor) > 0}
 							<div>
 								<div class="mb-1 text-xs font-medium text-gray-500">Valor</div>
-								<div class="text-sm font-bold text-gray-900">{formatCurrency(Number(servicio.valor))}</div>
+								<div class="text-sm font-bold text-gray-900">
+									{formatCurrency(Number(servicio.valor))}
+								</div>
 							</div>
 						{/if}
 					</div>
@@ -310,11 +450,13 @@
 			{/if}
 
 			<!-- Footer con acciones - Fijo en la parte inferior -->
-			<div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 border-t border-gray-200 bg-white px-6 py-4 flex-shrink-0">
-				<div class="text-xs text-gray-400 text-center sm:text-left">
+			<div
+				class="flex flex-shrink-0 flex-col items-stretch justify-between gap-3 border-t border-gray-200 bg-white px-6 py-4 sm:flex-row sm:items-center"
+			>
+				<div class="text-center text-xs text-gray-400 sm:text-left">
 					Generado el {new Date().toLocaleDateString('es-CO')}
 				</div>
-				<div class="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+				<div class="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
 					<button
 						on:click={handleShareTicket}
 						disabled={isSharing}
@@ -322,12 +464,28 @@
 					>
 						{#if isSharing}
 							<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-								<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-								<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+								<circle
+									class="opacity-25"
+									cx="12"
+									cy="12"
+									r="10"
+									stroke="currentColor"
+									stroke-width="4"
+								></circle>
+								<path
+									class="opacity-75"
+									fill="currentColor"
+									d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+								></path>
 							</svg>
 						{:else}
 							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+								/>
 							</svg>
 						{/if}
 						<span class="hidden sm:inline">Compartir Imagen</span>
@@ -344,5 +502,3 @@
 		</div>
 	</div>
 {/if}
-
-
