@@ -74,10 +74,9 @@ export const obtenerLiquidacionPorId = async (id: string) => {
  * Obtener un analisis de liquidaciones
  */
 export const obtenerAnalisis = async () => {
-	const response = await apiClient.get<{ data: Liquidacion }>('/api/liquidaciones/analisis');
+	const response = await apiClient.get<{ data: Liquidacion }>('/api/liquidaciones/analisis?noLimit=true');
 	return response.data;
 };
-
 /**
  * Crear nueva liquidación
  */
