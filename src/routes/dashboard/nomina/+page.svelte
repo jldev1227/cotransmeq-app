@@ -184,10 +184,42 @@
 	let liquidacionesA: LiquidacionA[] = [];
 	let loadingA = true;
 	let filtroPlaca = '';
+	let showDropdown = false;
+	let selectedIndex = 1;
 	let filtroMes = '';
 	let filtroAno = '';
 	let analisisTab: 'bonificaciones' | 'recargos' | 'pernotes' | 'mantenimientos' = 'bonificaciones';
 	let pagesBon = 1, pagesRec = 1, pagesPer = 1;
+
+
+	$: placasFiltradas = placasA.filter((p) => p.toLowerCase().includes(filtroPlaca.toLowerCase()));
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (!showDropdown) return;
+
+		if (e.key === 'ArrowDown') {
+			e.preventDefault();
+			selectedIndex = (selectedIndex + 1) % (placasFiltradas.length + 1);
+		}
+
+		if (e.key === 'ArrowUp') {
+			e.preventDefault();
+			selectedIndex =
+				(selectedIndex - 1 + (placasFiltradas.length + 1)) % (placasFiltradas.length + 1);
+		}
+
+		if (e.key === 'Enter') {
+			e.preventDefault();
+
+			if (selectedIndex === 0) {
+				filtroPlaca = '';
+			} else {
+				filtroPlaca = placasFiltradas[selectedIndex - 1];
+			}
+
+			showDropdown = false;
+		}
+	}
 
 	// =============================================
 	// CICLO DE VIDA
@@ -221,7 +253,7 @@
 	async function cargarAnalisis() {
 		try {
 			loadingA = true;
-			const r = await obtenerAnalisis();
+			const r: any = await obtenerAnalisis();
 			// El endpoint devuelve { data: { liquidaciones: [...] } }
 			// Intentamos varias formas de llegar al array por si el apiClient
 			// ya desenvuelve algún nivel.
@@ -487,25 +519,26 @@
 
 	$: datosRec = (() => {
 		const res: ResRec[] = [];
-		liqFiltradas.forEach(liq => {
-			liq.recargos?.forEach(rec => {
+		liqFiltradas.forEach((liq) => {
+			liq.recargos?.forEach((rec) => {
 				if (!rec.vehiculo_id) return;
-				const v = liq.vehiculos?.find(x => x.id === rec.vehiculo_id);
+				const v = liq.vehiculos?.find((x) => x.id === rec.vehiculo_id);
 				if (!v || (filtroPlaca && v.placa !== filtroPlaca)) return;
 				const mesNorm = normalizeMes(rec.mes);
 				if (filtroMes && mesNorm !== filtroMes) return;
-				const mesLabel = MESES.find(m => m.valor === mesNorm)?.nombre || rec.mes;
+				const mesLabel = MESES.find((m) => m.valor === mesNorm)?.nombre || rec.mes;
 				const valorTotal = Number(rec.valor);
 				const pctProp = Number(rec.porcentaje_propietario || 0);
 
 				if (pctProp > 0) {
 					// Split: fila del cliente (valor - porcentaje) y fila del propietario (porcentaje)
-					const valorPropietario = Math.round(valorTotal * pctProp / 100);
+					const valorPropietario = Math.round((valorTotal * pctProp) / 100);
 					const valorCliente = valorTotal - valorPropietario;
 					res.push({
-						placa: v.placa, valor: valorCliente,
+						placa: v.placa,
+						valor: valorCliente,
 						pagaCliente: rec.pag_cliente ? 'Sí' : 'No',
-						empresa_id: rec.empresa_id,
+						empresa_id: rec.empresa_id ?? '',
 						empresa_nombre: getEmpresaNombre(rec),
 						mes: mesLabel,
 						conductor: getConductorA(liq),
@@ -513,9 +546,10 @@
 						porcentaje_propietario: pctProp
 					});
 					res.push({
-						placa: v.placa, valor: valorPropietario,
+						placa: v.placa,
+						valor: valorPropietario,
 						pagaCliente: rec.pag_cliente ? 'Sí' : 'No',
-						empresa_id: rec.empresa_id,
+						empresa_id: rec.empresa_id ?? '',
 						empresa_nombre: getEmpresaNombre(rec),
 						mes: mesLabel,
 						conductor: getConductorA(liq),
@@ -524,9 +558,10 @@
 					});
 				} else {
 					res.push({
-						placa: v.placa, valor: valorTotal,
+						placa: v.placa,
+						valor: valorTotal,
 						pagaCliente: rec.pag_cliente ? 'Sí' : 'No',
-						empresa_id: rec.empresa_id,
+						empresa_id: rec.empresa_id ?? '',
 						empresa_nombre: getEmpresaNombre(rec),
 						mes: mesLabel,
 						conductor: getConductorA(liq)
@@ -536,6 +571,7 @@
 		});
 		return res;
 	})();
+
 
 	$: datosPer = (() => {
 		const res: ResPer[] = [];
@@ -1004,23 +1040,55 @@
 			<!-- Filtros -->
 			<div class="mb-5 rounded-xl bg-white p-4 shadow-md">
 				<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-					<div>
-						<label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Placa</label>
-						<select bind:value={filtroPlaca} class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20">
-							<option value="">Todas las placas</option>
-							{#each placasA as p}<option value={p}>{p}</option>{/each}
-						</select>
+					<div class="relative w-full">
+						<label
+							for="filtro-placa"
+							class="mb-1 block text-xs font-semibold tracking-wide text-gray-500 uppercase"
+							>Placa</label
+						>
+						<input
+							id="filtro-placa"
+							type="text"
+							placeholder="Buscar placa..."
+							bind:value={filtroPlaca}
+							on:focus={() => (showDropdown = true)}
+							on:blur={() => setTimeout(() => (showDropdown = false), 150)}
+							on:keydown={handleKeydown}
+							class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 focus:outline-none"
+						/>
+
+						{#if showDropdown && placasFiltradas.length > 0}
+							<ul
+								class="absolute top-full left-0 z-10 mt-1 max-h-48 w-full overflow-auto rounded-lg border border-gray-200 bg-white shadow-lg"
+							>
+								<!-- Todas -->
+
+								{#each placasFiltradas as p, i}
+									<li>
+										<button
+											type="button"
+											class={`w-full cursor-pointer px-3 py-2 text-left text-sm ${
+												selectedIndex === i + 1 ? 'bg-emerald-100' : 'hover:bg-emerald-50'
+											}`}
+											on:mousedown={() => (filtroPlaca = p)}
+										>
+											{p}
+										</button>
+									</li>
+								{/each}
+							</ul>
+						{/if}
 					</div>
 					<div>
-						<label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Mes</label>
-						<select bind:value={filtroMes} class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20">
+						<label for="filtro-mes" class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Mes</label>
+						<select id="filtro-mes" bind:value={filtroMes} class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20">
 							<option value="">Todos los meses</option>
 							{#each MESES as m}<option value={m.valor}>{m.nombre}</option>{/each}
 						</select>
 					</div>
 					<div>
-						<label class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Año</label>
-						<select bind:value={filtroAno} class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20">
+						<label for="filtro-ano" class="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Año</label>
+						<select id="filtro-ano" bind:value={filtroAno} class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20">
 							<option value="">Todos los años</option>
 							{#each anosA as a}<option value={a}>{a}</option>{/each}
 						</select>
