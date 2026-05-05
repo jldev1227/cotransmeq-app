@@ -23,9 +23,12 @@
 		mesLabel: string;
 		empresaId: string;
 		empresaNombre: string;
+		numeroPlanilla: string | null;
+		emisor: string;
 		totalValor: number;
 		pagCliente: boolean;
 		porcentajePropietario: number;
+		incluir: boolean;
 	}
 
 	export let conductorId: string = '';
@@ -34,7 +37,7 @@
 	/** Cached previewData from parent to restore on re-mount without re-fetching */
 	export let cachedPreviewData: PreviewRecargosResponse | null = null;
 	/** Cached per-grupo overrides (pagCliente / porcentajePropietario) keyed by grupo.key */
-	export let cachedGrupoOverrides: Record<string, { pagCliente: boolean; porcentajePropietario: number }> = {};
+	export let cachedGrupoOverrides: Record<string, { pagCliente: boolean; porcentajePropietario: number; incluir?: boolean }> = {};
 
 	const dispatch = createEventDispatcher();
 
@@ -49,7 +52,7 @@
 	let grupos: GrupoRecargo[] = [];
 
 	$: grupos = agruparDatos(previewData, cachedGrupoOverrides);
-	$: totalGeneral = grupos.reduce((sum, g) => sum + g.totalValor, 0);
+	$: totalGeneral = grupos.filter(g => g.incluir).reduce((sum, g) => sum + g.totalValor, 0);
 
 	function agruparDatos(data: PreviewRecargosResponse | null, _overrides: Record<string, { pagCliente: boolean; porcentajePropietario: number }>): GrupoRecargo[] {
 		if (!data || !data.planillas.length) return [];
@@ -57,7 +60,8 @@
 		const map = new Map<string, GrupoRecargo>();
 
 		for (const planilla of data.planillas) {
-			const key = `${planilla.vehiculo.id}-${planilla.año}-${String(planilla.mes).padStart(2, '0')}-${planilla.empresa.id}`;
+			const emisor = planilla.numero_planilla?.toUpperCase().includes('TRANSMERALDA') ? 'TRANSMERALDA' : 'COTRANSMEQ';
+			const key = `${planilla.vehiculo.id}-${planilla.año}-${String(planilla.mes).padStart(2, '0')}-${planilla.empresa.id}-${emisor}`;
 			if (!map.has(key)) {
 				const override = cachedGrupoOverrides[key];
 				map.set(key, {
@@ -69,9 +73,12 @@
 					mesLabel: `${MESES_NOMBRES[planilla.mes] || planilla.mes} ${planilla.año}`,
 					empresaId: planilla.empresa.id,
 					empresaNombre: planilla.empresa.nombre,
+					numeroPlanilla: planilla.numero_planilla || null,
+					emisor,
 					totalValor: 0,
 					pagCliente: override?.pagCliente ?? false,
-					porcentajePropietario: override?.porcentajePropietario ?? 0
+					porcentajePropietario: override?.porcentajePropietario ?? 0,
+					incluir: override?.incluir ?? true
 				});
 			}
 			const grupo = map.get(key)!;
@@ -112,7 +119,7 @@
 	}
 
 	function emitirDatos() {
-		const totalRecargos = grupos.reduce((sum, g) => sum + g.totalValor, 0);
+		const totalRecargos = grupos.filter(g => g.incluir).reduce((sum, g) => sum + g.totalValor, 0);
 		dispatch('recargosCalculated', {
 			totalRecargos,
 			detalle: previewData,
@@ -125,7 +132,9 @@
 				mes: `${g.año}-${String(g.mes).padStart(2, '0')}`,
 				valor: g.totalValor,
 				pag_cliente: g.pagCliente,
-				porcentaje_propietario: g.porcentajePropietario
+				porcentaje_propietario: g.porcentajePropietario,
+				numero_planilla: g.numeroPlanilla,
+				incluir: g.incluir
 			}))
 		});
 	}
@@ -144,6 +153,16 @@
 		grupos = grupos.map(g => {
 			if (g.key === key) {
 				return { ...g, porcentajePropietario: Math.min(100, Math.max(0, value)) };
+			}
+			return g;
+		});
+		emitirDatos();
+	}
+
+	function handleIncluirChange(key: string, checked: boolean) {
+		grupos = grupos.map(g => {
+			if (g.key === key) {
+				return { ...g, incluir: checked };
 			}
 			return g;
 		});
@@ -236,7 +255,9 @@
 								<th class="py-2 text-left font-medium text-gray-500">
 									<div class="flex items-center gap-1"><Building2 class="h-3 w-3" /> Empresa</div>
 								</th>
+								<th class="py-2 text-left font-medium text-gray-500">Emisor</th>
 								<th class="py-2 text-right font-medium text-gray-500">Valor</th>
+								<th class="py-2 text-center font-medium text-gray-500">Incluir</th>
 								<th class="py-2 text-center font-medium text-gray-500">Paga Cliente</th>
 								<th class="py-2 text-center font-medium text-gray-500">% Propietario</th>
 							</tr>
@@ -247,7 +268,16 @@
 									<td class="py-2.5 font-medium text-gray-800">{grupo.vehiculoPlaca}</td>
 									<td class="py-2.5 text-gray-600">{grupo.mesLabel}</td>
 									<td class="py-2.5 text-gray-600">{grupo.empresaNombre}</td>
+									<td class="py-2.5 text-gray-600">{grupo.emisor === 'TRANSMERALDA' ? 'Transmeralda' : 'Cotransmeq'}</td>
 									<td class="py-2.5 text-right font-semibold text-gray-900">{formatCurrency(grupo.totalValor)}</td>
+									<td class="py-2.5 text-center">
+										<input
+											type="checkbox"
+											checked={grupo.incluir}
+											on:change={(e) => handleIncluirChange(grupo.key, e.currentTarget.checked)}
+											class="h-3.5 w-3.5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+										/>
+									</td>
 									<td class="py-2.5 text-center">
 										<input
 											type="checkbox"
@@ -278,7 +308,7 @@
 								</tr>
 								{#if grupo.pagCliente && grupo.porcentajePropietario > 0}
 									<tr class="border-b border-gray-100 bg-gray-50/50">
-										<td colspan="6" class="py-1.5 pl-6 text-[11px] text-gray-400">
+										<td colspan="8" class="py-1.5 pl-6 text-[11px] text-gray-400">
 											↳ Propietario reconoce {grupo.porcentajePropietario}% = {formatCurrency(grupo.totalValor * grupo.porcentajePropietario / 100)} · Cliente asume {formatCurrency(grupo.totalValor * (100 - grupo.porcentajePropietario) / 100)}
 										</td>
 									</tr>
@@ -287,9 +317,9 @@
 						</tbody>
 						<tfoot>
 							<tr class="border-t border-gray-300">
-								<td colspan="3" class="py-2.5 text-right text-xs font-semibold text-gray-700">Total Recargos</td>
+								<td colspan="4" class="py-2.5 text-right text-xs font-semibold text-gray-700">Total Recargos</td>
 								<td class="py-2.5 text-right font-bold text-emerald-700">{formatCurrency(totalGeneral)}</td>
-								<td colspan="2"></td>
+								<td colspan="3"></td>
 							</tr>
 						</tfoot>
 					</table>

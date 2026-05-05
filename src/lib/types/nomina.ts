@@ -75,6 +75,9 @@ export interface Recargo {
 	empresa_id: string;
 	valor: number;
 	pag_cliente: boolean;
+	porcentaje_propietario?: number;
+	emisor?: string;
+	incluir?: boolean;
 	vehiculo_id: string;
 	mes: string;
 	liquidacion_id?: string;

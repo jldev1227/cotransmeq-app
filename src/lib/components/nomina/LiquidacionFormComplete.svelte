@@ -37,7 +37,7 @@
 	let empresas: Empresa[] = [];
 	let configuracion: any[] = [];
 	let loadingData = true;
-	let datosInicialesCargados = false;
+	let recargosManualesInicializados = false;
 
 	// Estado del formulario
 	let currentStep = 1;
@@ -111,6 +111,8 @@
 			empresa_id: string;
 			valor: number;
 			pag_cliente: boolean;
+			porcentaje_propietario?: number;
+			emisor?: string;
 			mes: string;
 		}>;
 	}
@@ -132,9 +134,10 @@
 		valor: number;
 		pag_cliente: boolean;
 		porcentaje_propietario: number;
+		incluir?: boolean;
 	}> = [];
 	/** Overrides for pagCliente/porcentajePropietario per grupo key — survives step navigation */
-	let cachedGrupoOverrides: Record<string, { pagCliente: boolean; porcentajePropietario: number }> =
+	let cachedGrupoOverrides: Record<string, { pagCliente: boolean; porcentajePropietario: number; incluir?: boolean }> =
 		{};
 
 	// Anticipos
@@ -276,14 +279,14 @@
 		// Cargar conceptos adicionales
 		conceptos_adicionales = initialData.conceptos_adicionales || [];
 
-		// Marcar flag para que inicializarDetallesVehiculos cargue los datos existentes
-		datosInicialesCargados = false;
+		// Los recargos manuales se cargarán en la primera ejecución de inicializarDetallesVehiculos
+		// No reseteamos recargosManualesInicializados para evitar sobrescribir cambios del usuario
 	}
 
 	// Poblar detallesVehiculos con los datos existentes de la liquidación (bonos, recargos, pernotes, mantenimientos)
 	function cargarDetallesVehiculosDesdeData() {
-		if (!initialData || datosInicialesCargados) return;
-		datosInicialesCargados = true;
+		if (!initialData || recargosManualesInicializados) return;
+		recargosManualesInicializados = true;
 
 		const bonificacionesData = initialData.bonificaciones || [];
 		const recargosData = initialData.recargos || [];
@@ -371,6 +374,8 @@
 					empresa_id: r.empresa_id || r.clientes?.id || '',
 					valor: Number(r.valor) || 0,
 					pag_cliente: r.pag_cliente || false,
+					porcentaje_propietario: Number(r.porcentaje_propietario) || 0,
+					emisor: r.emisor || 'COTRANSMEQ',
 					mes: r.mes || ''
 				}));
 
@@ -409,15 +414,17 @@
 					mes: r.mes || '',
 					valor: Number(r.valor) || 0,
 					pag_cliente: r.pag_cliente || false,
-					porcentaje_propietario: Number(r.porcentaje_propietario) || 0
+					porcentaje_propietario: Number(r.porcentaje_propietario) || 0,
+					incluir: r.incluir !== false
 				};
 			});
 			// Rebuild overrides cache from saved data
-			const overrides: Record<string, { pagCliente: boolean; porcentajePropietario: number }> = {};
+			const overrides: Record<string, { pagCliente: boolean; porcentajePropietario: number; incluir: boolean }> = {};
 			for (const g of previewRecargosGrupos) {
 				overrides[g.key] = {
 					pagCliente: g.pag_cliente,
-					porcentajePropietario: g.porcentaje_propietario
+					porcentajePropietario: g.porcentaje_propietario,
+					incluir: g.incluir !== false
 				};
 			}
 			cachedGrupoOverrides = overrides;
@@ -535,7 +542,7 @@
 		});
 
 		// En modo edición, poblar con datos existentes después de inicializar
-		if (mode === 'edit' && initialData && !datosInicialesCargados) {
+		if (mode === 'edit' && initialData && !recargosManualesInicializados) {
 			cargarDetallesVehiculosDesdeData();
 		}
 	}
@@ -637,6 +644,8 @@
 						empresa_id: '',
 						valor: 0,
 						pag_cliente: false,
+						porcentaje_propietario: 0,
+						emisor: 'COTRANSMEQ',
 						mes: mesesRange[0] || ''
 					}
 				]
@@ -873,12 +882,9 @@
 					.filter((r) => r.empresa_id === PAREX_EMPRESA_ID)
 					.reduce((sum, r) => sum + r.valor, 0);
 
-				let recargosPreviewParex = 0;
-				if (previewRecargosData?.planillas) {
-					recargosPreviewParex = previewRecargosData.planillas
-						.filter((p: any) => p.empresa?.id === PAREX_EMPRESA_ID)
-						.reduce((sum: number, p: any) => sum + (p.total_valor || 0), 0);
-				}
+				const recargosPreviewParex = previewRecargosGrupos
+					.filter((g: any) => g.empresa_id === PAREX_EMPRESA_ID && g.incluir !== false)
+					.reduce((sum: number, g: any) => sum + (g.valor || 0), 0);
 
 				const totalRecargosParex = recargosManualParex + recargosPreviewParex;
 				ajusteParexValor = totalRecargosParex * 0.08;
@@ -1053,8 +1059,6 @@
 			recargos_preview: previewRecargosGrupos
 		};
 
-		console.log(payload, " payload")
-return
 		await onSubmit(payload);
 	}
 
@@ -1111,9 +1115,18 @@ return
 	}
 
 	function formatMes(mes: string): string {
-		const [year, month] = mes.split('-');
-		const date = new Date(parseInt(year), parseInt(month) - 1);
-		return date.toLocaleDateString('es-CO', { month: 'short', year: 'numeric' });
+		if (!mes) return '-';
+		// Formato YYYY-MM
+		if (/^\d{4}-\d{2}$/.test(mes)) {
+			const [year, month] = mes.split('-');
+			const date = new Date(parseInt(year), parseInt(month) - 1);
+			return date.toLocaleDateString('es-CO', { month: 'short', year: 'numeric' });
+		}
+		// Formato nombre de mes (ej: "Diciembre", "Febrero")
+		const periodoYear = periodo_inicio
+			? periodo_inicio.split('-')[0]
+			: (periodo_fin ? periodo_fin.split('-')[0] : String(new Date().getFullYear()));
+		return `${mes} ${periodoYear}`;
 	}
 
 	function handleRecargosCalculated(event: CustomEvent) {
@@ -1122,11 +1135,12 @@ return
 		previewRecargosData = detalle;
 		previewRecargosGrupos = grupos || [];
 		// Cache per-grupo overrides so they survive step navigation (component re-mount)
-		const overrides: Record<string, { pagCliente: boolean; porcentajePropietario: number }> = {};
+		const overrides: Record<string, { pagCliente: boolean; porcentajePropietario: number; incluir?: boolean }> = {};
 		for (const g of previewRecargosGrupos) {
 			overrides[g.key] = {
 				pagCliente: g.pag_cliente,
-				porcentajePropietario: g.porcentaje_propietario
+				porcentajePropietario: g.porcentaje_propietario,
+				incluir: g.incluir !== false
 			};
 		}
 		cachedGrupoOverrides = overrides;
@@ -1543,6 +1557,9 @@ return
 																		)}
 																	class="w-full rounded border border-gray-200 px-2 py-1.5 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 																>
+																	{#if recargo.mes && !mesesRange.includes(recargo.mes)}
+																		<option value={recargo.mes}>{formatMes(recargo.mes)}</option>
+																	{/if}
 																	{#each mesesRange as mes}
 																		<option value={mes}>{formatMes(mes)}</option>
 																	{/each}
@@ -1567,7 +1584,7 @@ return
 																/>
 															</div>
 														</div>
-														<div class="mt-2">
+														<div class="mt-2 flex flex-wrap items-center gap-4">
 															<label class="flex items-center text-xs text-gray-500">
 																<input
 																	type="checkbox"
@@ -1583,17 +1600,54 @@ return
 																/>
 																Pagado por cliente
 															</label>
-														</div>
+															{#if recargo.pag_cliente}
+																<div class="inline-flex items-center gap-1">
+																	<label class="text-[11px] text-gray-400">% Propietario</label>
+																	<input
+																		type="number"
+																		value={recargo.porcentaje_propietario || 0}
+																		on:input={(e) =>
+																			handleRecargoChange(
+																				detalle.vehiculo.value,
+																				rIdx,
+																				'porcentaje_propietario',
+																				parseFloat(e.currentTarget.value) || 0
+																			)}
+																		min="0"
+																		max="100"
+																		step="1"
+																		placeholder="0"
+																		class="w-14 rounded border border-gray-200 px-2 py-1 text-center text-xs focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+																	/>
+																	<span class="text-[10px] text-gray-400">%</span>
+																</div>
+															{/if}
+															<label class="flex items-center text-xs text-gray-500">
+																<input
+																		type="checkbox"
+																		checked={recargo.emisor === 'TRANSMERALDA'}
+																		on:change={(e) =>
+																			handleRecargoChange(
+																				detalle.vehiculo.value,
+																				rIdx,
+																				'emisor',
+																				e.currentTarget.checked ? 'TRANSMERALDA' : 'COTRANSMEQ'
+																			)}
+																class="mr-1.5 h-3.5 w-3.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
+															/>
+															Transmeralda
+														</label>
 													</div>
-												{/each}
-											</div>
-										{:else}
-											<p class="text-xs text-gray-400">Sin recargos</p>
-										{/if}
+														</div>
+													{/each}
+												</div>
+											{:else}
+												<p class="text-xs text-gray-400">Sin recargos</p>
+											{/if}
+										</div>
 									</div>
 								</div>
-							</div>
-						{/each}
+							{/each}
 					{/if}
 
 					<!-- Recargos Calculados desde Planillas -->
@@ -2220,6 +2274,8 @@ return
 															<th class="py-1.5 text-center font-medium text-gray-500"
 																>Pag. Cliente</th
 															>
+															<th class="py-1.5 text-center font-medium text-gray-500">Asume</th>
+															<th class="py-1.5 text-center font-medium text-gray-500">Emisor</th>
 															<th class="py-1.5 text-right font-medium text-gray-500">Valor</th>
 														</tr>
 													</thead>
@@ -2239,6 +2295,20 @@ return
 																			? 'text-orange-600'
 																			: 'text-gray-400'}">{recargo.pag_cliente ? 'Sí' : 'No'}</span
 																	>
+																</td>
+																<td class="py-1.5 text-center">
+																	{#if recargo.pag_cliente && (recargo.porcentaje_propietario || 0) > 0}
+																		<span class="text-[11px] text-amber-600">Propietario {recargo.porcentaje_propietario}%</span>
+																	{:else if recargo.pag_cliente}
+																		<span class="text-[11px] text-blue-600">Cliente 100%</span>
+																	{:else}
+																		<span class="text-[11px] text-gray-400">—</span>
+																	{/if}
+																</td>
+																<td class="py-1.5 text-center">
+																	<span class="text-[11px] {recargo.emisor === 'TRANSMERALDA' ? 'text-purple-600' : 'text-teal-600'}">
+																		{recargo.emisor === 'TRANSMERALDA' ? 'Transmeralda' : 'Cotransmeq'}
+																	</span>
 																</td>
 																<td class="py-1.5 text-right font-medium text-gray-800"
 																	>{formatCurrency(recargo.valor)}</td
@@ -2465,9 +2535,9 @@ return
 										.filter((r) => r.empresa_id === PAREX_ID)
 										.reduce((s, r) => s + r.valor, 0)}
 									{@const recargosPreviewParex =
-										previewRecargosData?.planillas
-											?.filter((p: any) => p.empresa?.id === PAREX_ID)
-											.reduce((s: number, p: any) => s + (p.total_valor || 0), 0) || 0}
+											previewRecargosGrupos
+												.filter((g: any) => g.empresa_id === PAREX_ID && g.incluir !== false)
+												.reduce((s: number, g: any) => s + (g.valor || 0), 0)}
 									{@const totalRecargosParex = recargosManualParex + recargosPreviewParex}
 									<div>
 										<p class="mb-2 text-xs font-medium text-gray-500">Ajuste PAREX (8%)</p>

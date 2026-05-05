@@ -41,6 +41,8 @@
 		vehiculo_id: string; valor: number | string; pag_cliente: boolean;
 		empresa_id?: string;
 		porcentaje_propietario?: number | string | null;
+		numero_planilla?: string | null;
+		emisor?: string;
 		// El endpoint /analisis usa "clientes"; otras rutas pueden usar "empresa"
 		clientes?: { id?: string; nombre: string };
 		empresa?:  { id?: string; nombre: string };
@@ -62,7 +64,7 @@
 		mantenimientos?: MantenimientoA[];
 	}
 	interface ResBon { placa: string; nombre: string; mes: string; cantidad: number; valorUnitario: number; valorTotal: number; conductor: string; }
-	interface ResRec { placa: string; valor: number; pagaCliente: string; empresa_id: string; empresa_nombre: string; mes: string; conductor: string; tipo_fila?: 'cliente' | 'propietario'; porcentaje_propietario?: number; }
+	interface ResRec { placa: string; valor: number; pagaCliente: string; empresa_id: string; empresa_nombre: string; mes: string; conductor: string; tipo_fila?: 'cliente' | 'propietario'; porcentaje_propietario?: number; emisor?: string; }
 	interface ResPer { placa: string; cantidad: number; valor: number; valorTotal: number; fechas: string[]; conductor: string; }
 	interface ResMnt { placa: string; conductor: string; mes: string; cantidad: number; }
 
@@ -530,6 +532,7 @@
 				const valorTotal = Number(rec.valor);
 				const pctProp = Number(rec.porcentaje_propietario || 0);
 
+				const emisor = rec.emisor === 'TRANSMERALDA' ? 'Transmeralda' : 'Cotransmeq';
 				if (pctProp > 0) {
 					// Split: fila del cliente (valor - porcentaje) y fila del propietario (porcentaje)
 					const valorPropietario = Math.round((valorTotal * pctProp) / 100);
@@ -543,7 +546,8 @@
 						mes: mesLabel,
 						conductor: getConductorA(liq),
 						tipo_fila: 'cliente',
-						porcentaje_propietario: pctProp
+						porcentaje_propietario: pctProp,
+						emisor
 					});
 					res.push({
 						placa: v.placa,
@@ -554,7 +558,8 @@
 						mes: mesLabel,
 						conductor: getConductorA(liq),
 						tipo_fila: 'propietario',
-						porcentaje_propietario: pctProp
+						porcentaje_propietario: pctProp,
+						emisor
 					});
 				} else {
 					res.push({
@@ -564,7 +569,8 @@
 						empresa_id: rec.empresa_id ?? '',
 						empresa_nombre: getEmpresaNombre(rec),
 						mes: mesLabel,
-						conductor: getConductorA(liq)
+						conductor: getConductorA(liq),
+						emisor
 					});
 				}
 			});
@@ -1293,6 +1299,11 @@
 									<div class="rounded-lg border p-4 shadow-sm {item.tipo_fila === 'propietario' ? 'border-amber-300 bg-amber-50' : item.pagaCliente === 'No' ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-white'}">
 										<div class="flex items-center gap-2">
 											<p class="font-semibold text-sm text-gray-800">{item.placa} — {item.empresa_nombre}</p>
+											{#if item.emisor}
+												<span class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider {item.emisor === 'Transmeralda' ? 'bg-purple-100 text-purple-700' : 'bg-teal-100 text-teal-700'}">
+													{item.emisor}
+												</span>
+											{/if}
 											{#if item.tipo_fila}
 												<span class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider {item.tipo_fila === 'propietario' ? 'bg-amber-200 text-amber-800' : 'bg-blue-100 text-blue-700'}">
 													{item.tipo_fila === 'propietario' ? `Propietario ${item.porcentaje_propietario}%` : `Cliente ${100 - (item.porcentaje_propietario || 0)}%`}
@@ -1302,6 +1313,7 @@
 										<p class="text-xs text-gray-500 mb-3">{item.conductor}</p>
 										<div class="space-y-1.5 text-sm">
 											<div class="flex justify-between"><span class="text-gray-500">Mes</span><span>{item.mes}</span></div>
+											<div class="flex justify-between"><span class="text-gray-500">Emisor</span><span class="font-medium">{item.emisor || '—'}</span></div>
 											<div class="flex justify-between">
 												<span class="text-gray-500">Paga cliente</span>
 												<span class="font-medium {item.pagaCliente === 'Sí' ? 'text-green-600' : 'text-red-600'}">{item.pagaCliente}</span>
@@ -1326,7 +1338,7 @@
 							<table class="w-full text-sm">
 								<thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
 									<tr>
-										{#each ['Placa','Conductor','Cliente','Mes','Valor','Paga Cliente','Asume'] as h}
+										{#each ['Placa','Conductor','Cliente','Emisor','Mes','Valor','Paga Cliente','Asume'] as h}
 											<th class="px-4 py-3 text-left font-semibold">{h}</th>
 										{/each}
 									</tr>
@@ -1338,6 +1350,15 @@
 												<td class="px-4 py-3 font-medium text-gray-900">{item.placa}</td>
 												<td class="px-4 py-3 text-gray-600">{item.conductor}</td>
 												<td class="px-4 py-3 text-gray-600">{item.empresa_nombre}</td>
+												<td class="px-4 py-3 text-gray-600">
+													{#if item.emisor}
+														<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-bold {item.emisor === 'Transmeralda' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}">
+															{item.emisor}
+														</span>
+													{:else}
+														<span class="text-xs text-gray-400">—</span>
+													{/if}
+												</td>
 												<td class="px-4 py-3 text-gray-600">{item.mes}</td>
 												<td class="px-4 py-3 font-semibold">{formatCurrency(item.valor)}</td>
 												<td class="px-4 py-3">
