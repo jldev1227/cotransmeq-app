@@ -1,7 +1,7 @@
-import { io, type Socket } from 'socket.io-client';
 import { browser } from '$app/environment';
 import { authStore } from '$lib/stores/auth';
 import { writable } from 'svelte/store';
+import type { Socket } from 'socket.io-client';
 
 // Estado del socket
 export const socketStore = writable<{
@@ -30,10 +30,11 @@ class SocketManager {
 		}
 	}
 
-	connect() {
+	async connect() {
 		if (!browser || this.socket?.connected) return;
 
 		try {
+			const { io } = await import('socket.io-client');
 			this.socket = io(import.meta.env.VITE_API_URL, {
 				autoConnect: true,
 				reconnection: true,
