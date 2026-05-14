@@ -2463,6 +2463,7 @@
 						<table class="liq-v1-services">
 							<thead>
 								<tr>
+									<th>Planilla</th>
 									<th>Placa</th>
 									<th>Fechas</th>
 									<th>Recorrido / Servicio</th>
@@ -2470,13 +2471,13 @@
 									<th>Vr. Unitario</th>
 									<th>Dcto.</th>
 									<th>Vr. Final</th>
-									<th>Planilla</th>
 								</tr>
 							</thead>
 							<tbody>
 								{#each rows as row (row.id)}
 									{@const { sub, vf } = calcRow(row)}
 									<tr>
+										<td class="tc liq-v1-planilla">{row.planilla}</td>
 										<td><span class="placa">{fmtPlaca(row.placa)}</span></td>
 										<td class="tc">
 											<div class="liq-v1-date">{fmtD(row.fecha_ini)}</div>
@@ -2490,7 +2491,6 @@
 										<td class="mc">{COP(row.vr_unit)}</td>
 										<td class="tc">{row.dcto}%</td>
 										<td class="mch">{COP(vf)}</td>
-										<td class="tc liq-v1-planilla">{row.planilla}</td>
 									</tr>
 								{/each}
 								{#each Array(Math.max(0, 5 - rows.length)) as _}
@@ -4278,14 +4278,14 @@
 		padding: 5px 5px;
 		vertical-align: middle;
 	}
-	.liq-v1-services th:nth-child(1) { width: 20mm; }
+	.liq-v1-services th:nth-child(1) { width: 17mm; }
 	.liq-v1-services th:nth-child(2) { width: 20mm; }
-	.liq-v1-services th:nth-child(3) { width: 48mm; }
-	.liq-v1-services th:nth-child(4) { width: 12mm; }
-	.liq-v1-services th:nth-child(5) { width: 22mm; }
-	.liq-v1-services th:nth-child(6) { width: 13mm; }
-	.liq-v1-services th:nth-child(7) { width: 24mm; }
-	.liq-v1-services th:nth-child(8) { width: 17mm; }
+	.liq-v1-services th:nth-child(3) { width: 20mm; }
+	.liq-v1-services th:nth-child(4) { width: 48mm; }
+	.liq-v1-services th:nth-child(5) { width: 13mm; }
+	.liq-v1-services th:nth-child(6) { width: 20mm; }
+	.liq-v1-services th:nth-child(7) { width: 18mm; }
+	.liq-v1-services th:nth-child(8) { width: 24mm; }
 	.liq-v1-route {
 		font-weight: 800;
 		color: #111827;
