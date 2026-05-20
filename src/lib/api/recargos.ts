@@ -19,6 +19,19 @@ export const recargosApi = {
 	/**
 	 * Obtener recargos para canvas con filtros
 	 */
+	async obtenerParaConsecutivo(
+	): Promise<{ data: CanvasRecargo[]; pagination: any }> {
+		const params = new URLSearchParams();
+
+		const response = await apiClient.get<{ data: CanvasRecargo[]; pagination: any }>(
+			`${BASE_URL}?limit=10000&page=1`
+		);
+		return response.data;
+	},
+
+	/**
+	 * Obtener recargos para canvas con filtros
+	 */
 	async obtenerParaCanvas(
 		filtros: RecargoPlanillaFiltros = {}
 	): Promise<{ data: CanvasRecargo[]; pagination: any }> {

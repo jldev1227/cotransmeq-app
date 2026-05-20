@@ -295,22 +295,8 @@
 			}
 
 			// Obtener todos los recargos (limit alto para traer todos y calcular consecutivo correcto)
-			const response = await fetch(
-				'https://backend-cotransmeq-production.up.railway.app/api/recargos?limit=10000&page=1',
-				{
-					headers: {
-						Authorization: `Bearer ${token}`
-					}
-				}
-			);
-
-			if (!response.ok) {
-				console.error('Error al obtener recargos:', response.statusText);
-				toast.error('Error al consultar recargos');
-				return;
-			}
-
-			const data = await response.json();
+			const response = await recargosApi.obtenerParaConsecutivo();
+			const data = response.data;
 
 			// La respuesta puede venir como array directo o como objeto con propiedad 'data' o 'recargos'
 			let recargos = Array.isArray(data) ? data : data.data || data.recargos || [];
@@ -521,7 +507,7 @@
 	 * - Cada fracción horaria usa el estado festivo/domingo del día calendario
 	 *   real al que pertenece (puede cambiar al cruzar medianoche).
 	 */
-	function calcularRecargos(dia: DiaLaboral) {
+function calcularRecargos(dia: DiaLaboral, excluirRNDF = false) {
 		const horaInicio =
 			typeof dia.hora_inicio === 'string' ? parseFloat(dia.hora_inicio) : dia.hora_inicio || 0;
 		const horaFin = typeof dia.hora_fin === 'string' ? parseFloat(dia.hora_fin) : dia.hora_fin || 0;
@@ -732,61 +718,70 @@
 		// 3. Las horas nocturnas ordinarias DESPUÉS de las 19:00 no generan RNDF
 		//    (se consideran parte de la jornada normal sin recargo adicional)
 		const hayFraccionesFestivas = esDomFestDia1 || esDomFestDia2;
-		if (hayFraccionesFestivas) {
-			// Recalcular RNDF: solo horas nocturnas de MADRUGADA (antes de 6am) en fracciones festivas ordinarias
-			let rndfRecalculado = 0;
-			let rdRecalculado = 0;
-			let h = turnoInicio;
-			let hAcum = 0;
-			while (h < turnoFin) {
-				const sig = Math.min(h + 0.5, turnoFin);
-				const frac = sig - h;
+    if (hayFraccionesFestivas) {
+        let rndfRecalculado = 0;
+        let rdRecalculado = 0;
+        let h = turnoInicio;
+        let hAcum = 0;
 
-				// Saltar almuerzo igual que en el bucle principal
-				if (esHoraAlmuerzo(h)) {
-					h = sig;
-					continue;
-				}
+        while (h < turnoFin) {
+            const sig = Math.min(h + 0.5, turnoFin);
+            const frac = sig - h;
 
-				const esMiDia = h >= limiteInferior && h < limiteSuperior;
-				const esDomFest = h < puntoCorte ? esDomFestDia1 : esDomFestDia2;
-				const esOrdinaria = hAcum < umbralExtras;
-				const horaActualNorm = normalizarHora(h);
-				// Madrugada: antes de las 6am (nocturna de madrugada, no la de la noche)
-				const esMadrugada = horaActualNorm < HORAS_LIMITE.FIN_NOCTURNO;
+            if (esHoraAlmuerzo(h)) {
+                hAcum += frac;
+                h = sig;
+                continue;
+            }
 
-				if (esMiDia && esDomFest && esOrdinaria) {
-					const ordinaria = Math.min(frac, umbralExtras - hAcum);
-					if (esMadrugada) {
-						rndfRecalculado += ordinaria;
-					} else {
-						rdRecalculado += ordinaria;
-					}
-				}
-				hAcum += frac;
-				h = sig;
-			}
+            const esMiDia = h >= limiteInferior && h < limiteSuperior;
+            const esDomFest = h < puntoCorte ? esDomFestDia1 : esDomFestDia2;
+            const esOrdinaria = hAcum < umbralExtras;
+            const horaActualNorm = normalizarHora(h);
 
-			rndf = parseFloat(rndfRecalculado.toFixed(2));
-			// RD = min(horas diurnas ordinarias festivas, 7.33)
-			// Si no hay RNDF, RD tope 7.33. Si hay RNDF, RD = 7.33 - RNDF
-			const totalOrdinariasFestivas = rdRecalculado + rndfRecalculado;
-			if (totalOrdinariasFestivas >= HORAS_LIMITE.JORNADA_FESTIVA) {
-				rd = Math.max(HORAS_LIMITE.JORNADA_FESTIVA - rndf, 0);
-			} else {
-				rd = parseFloat(rdRecalculado.toFixed(2));
-			}
-		}
+            // ✅ RNDF = madrugada (< 6am) + noche (>= 19:00)
+            const esNocturnaFestiva =
+                horaActualNorm < HORAS_LIMITE.FIN_NOCTURNO ||
+                horaActualNorm >= HORAS_LIMITE.INICIO_NOCTURNO;
 
-		return {
-			HED: parseFloat(hed.toFixed(2)),
-			HEN: parseFloat(hen.toFixed(2)),
-			HEFD: parseFloat(hefd.toFixed(2)),
-			HEFN: parseFloat(hefn.toFixed(2)),
-			RNDF: parseFloat(rndf.toFixed(2)),
-			RN: parseFloat(rn.toFixed(2)),
-			RD: parseFloat(rd.toFixed(2))
-		};
+            if (esMiDia && esDomFest && esOrdinaria) {
+                const ordinaria = Math.min(frac, umbralExtras - hAcum);
+                if (esNocturnaFestiva) {
+                    rndfRecalculado += ordinaria;
+                } else {
+                    rdRecalculado += ordinaria;
+                }
+            }
+
+            hAcum += frac;
+            h = sig;
+        }
+
+        if (excluirRNDF) {
+            // PAREX: no reconoce RNDF, todo va a RD (cap 7.33)
+            rndf = 0;
+            const totalOrdinarias = rdRecalculado + rndfRecalculado;
+            rd = parseFloat(Math.min(totalOrdinarias, HORAS_LIMITE.JORNADA_FESTIVA).toFixed(2));
+        } else {
+            // ✅ RNDF independiente, RD = cap fijo 7.33 si trabajó >= 7.33h
+            rndf = parseFloat(rndfRecalculado.toFixed(2));
+            const totalOrdinarias = rdRecalculado + rndfRecalculado;
+            rd =
+                totalOrdinarias >= HORAS_LIMITE.JORNADA_FESTIVA
+                    ? HORAS_LIMITE.JORNADA_FESTIVA
+                    : parseFloat(rdRecalculado.toFixed(2));
+        }
+    }
+
+    return {
+        HED: parseFloat(hed.toFixed(2)),
+        HEN: parseFloat(hen.toFixed(2)),
+        HEFD: parseFloat(hefd.toFixed(2)),
+        HEFN: parseFloat(hefn.toFixed(2)),
+        RNDF: parseFloat(rndf.toFixed(2)),
+        RN: parseFloat(rn.toFixed(2)),
+        RD: parseFloat(rd.toFixed(2))
+    };
 	}
 
 	function calcularTotales() {
