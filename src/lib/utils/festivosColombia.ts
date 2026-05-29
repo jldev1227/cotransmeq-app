@@ -18,6 +18,7 @@ export interface FestivoColombiano {
 export const festivosFijos = [
 	{ mes: 1, dia: 1, nombre: 'Año Nuevo' },
 	{ mes: 5, dia: 1, nombre: 'Día del Trabajo' },
+	{ mes: 5, dia: 18, nombre: 'Día de la Ascensión' },
 	{ mes: 6, dia: 8, nombre: 'Corpus Christi' },
 	{ mes: 6, dia: 15, nombre: 'Sagrado Corazón de Jesús' },
 	{ mes: 6, dia: 29, nombre: 'San Pedro y San Pablo' },

@@ -176,5 +176,30 @@ export const recargosApi = {
 
 		const response = await apiClient.get<{ data: any }>(`${BASE_URL}/stats/resumen?${params}`);
 		return response.data.data;
+	},
+
+	/**
+	 * Obtener reporte mensual
+	 */
+	async reportePdf(mes: number, año: number): Promise<void> {
+		const params = new URLSearchParams();
+		params.append('mes', mes.toString());
+		params.append('anio', año.toString());
+
+		const response = await apiClient.get(`${BASE_URL}/reporte?${params}`, {
+			responseType: 'blob' // ← le dice a Axios que la respuesta es binario
+		});
+
+		// Crear URL temporal y disparar descarga
+		const blob = new Blob([response.data], { type: 'application/pdf' });
+		const url = window.URL.createObjectURL(blob);
+		const link = document.createElement('a');
+
+		link.href = url;
+		link.download = `Reporte_Servicios_${mes}_${año}.pdf`;
+		link.click();
+
+		// Limpiar memoria
+		window.URL.revokeObjectURL(url);
 	}
 };

@@ -66,6 +66,8 @@
 	let isPrima = false;
 	let noDescontarSalud = false;
 	let noDescontarPension = false;
+	let descontarSaludSalario = false;
+	let descontarPensionSalario = false;
 	let descontarTransporte = false;
 	let redondearNetoArriba = false;
 	let descontarPesos = false;
@@ -760,6 +762,8 @@
 		isPrima,
 		noDescontarSalud,
 		noDescontarPension,
+		descontarSaludSalario,
+		descontarPensionSalario,
 		descontarTransporte,
 		periodo_vacaciones_inicio,
 		periodo_vacaciones_fin,
@@ -917,7 +921,7 @@
 
 		// Base de cálculo para salud y pensión
 		// Incluye: salario + vacaciones + ajuste salarial (según días) + recargos PAREX si aplica
-		const baseCalculo = salarioDevengado + totalVacaciones + ajusteParaDeducciones;
+		const baseCalculo =  (descontarPensionSalario ? salarioBase : salarioDevengado) + totalVacaciones + ajusteParaDeducciones;
 
 		// Porcentajes de salud y pensión
 		const porcentajeSalud =
@@ -1779,6 +1783,26 @@
 									class="h-4 w-4 rounded border-gray-300 text-red-500 focus:ring-red-400"
 								/>
 								Descontar Transporte
+							</label>
+							<label
+								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900"
+							>
+								<input
+									type="checkbox"
+									bind:checked={descontarSaludSalario}
+									class="h-4 w-4 rounded border-gray-300 text-red-500 focus:ring-red-400"
+								/>
+								Descontar Salud del salario
+							</label>
+							<label
+								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900"
+							>
+								<input
+									type="checkbox"
+									bind:checked={descontarPensionSalario}
+									class="h-4 w-4 rounded border-gray-300 text-red-500 focus:ring-red-400"
+								/>
+								Descontar Pensión del salario
 							</label>
 						</div>
 					</div>

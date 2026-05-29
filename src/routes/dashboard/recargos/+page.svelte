@@ -55,6 +55,7 @@
 	let selectedRecargoId: string | null = null;
 	let deleteLoading = false;
 	let estadoLoading = false;
+	let reporteLoading = false;
 
 	// User role checks
 	$: user = $authStore.user;
@@ -623,6 +624,19 @@
 		return 'bg-gray-100 text-gray-800 border-gray-300';
 	}
 
+	async function getReportePdf() {
+		reporteLoading = true;
+		try {
+			await recargosApi.reportePdf(selectedMonth, selectedYear);
+		} catch (e) {
+			console.error('Error obteniendo reporte:', e);
+			toast.error('No se pudo obtener reporte. Intenta de nuevo.');
+		} finally {
+			reporteLoading = false;
+		}
+	}
+
+
 	// Load data on mount
 	onMount(async () => {
 		setupSocketListeners();
@@ -787,7 +801,20 @@
 							d="M12 4v16m8-8H4"
 						/>
 					</svg>
-					Nuevo Recargo
+					Nuevo Recargoaa
+				</button>
+
+				<!-- svelte-ignore a11y_consider_explicit_label -->
+				<button
+					on:click={getReportePdf}
+					class="flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-3 text-sm font-medium text-white hover:bg-blue-600"
+				>
+					<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+						><path
+							fill="currentColor"
+							d="M13 9h5.5L13 3.5zM6 2h8l6 6v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V4c0-1.11.89-2 2-2m9 16v-2H6v2zm3-4v-2H6v2z"
+						/></svg
+					>
 				</button>
 			{/if}
 		</div>
