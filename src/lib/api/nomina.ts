@@ -302,6 +302,18 @@ export const toggleDesprendibleVisible = async (liquidacionIds: string[], visibl
 	return response.data;
 };
 
+/**
+ * Toggle visibilidad de tablas en el desprendibles
+ */
+export const toggleDesprendibleTablasVisible = async (liquidacionIds: string[], visible: boolean) => {
+	const response = await apiClient.patch<{
+		success: boolean;
+		message: string;
+		data: { count: number; visible: boolean };
+	}>('/api/liquidaciones/desprendible-tablas-visible', { liquidacionIds, visible });
+	return response.data;
+};
+
 // ==================== PREVIEW RECARGOS ====================
 
 export interface PreviewRecargoDia {

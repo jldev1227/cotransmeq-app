@@ -822,7 +822,7 @@ export async function generarPdfDesprendible(
 	// ============================================================
 	// PÁGINA 2+: HORAS EXTRAS Y RECARGOS (si hay recargos planilla)
 	// ============================================================
-	if (recargosData?.planillas && recargosData.planillas.length > 0) {
+	if (recargosData?.planillas && recargosData.planillas.length > 0 && item.mostrar_recargos) {
 		const planillas: any[] = recargosData.planillas.filter(
 			(p: any) => p.dias && p.dias.length > 0
 		);

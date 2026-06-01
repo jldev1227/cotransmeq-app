@@ -263,6 +263,9 @@ export interface Liquidacion {
 
 	// Visibilidad portal conductor
 	desprendible_visible?: boolean;
+
+	// Visibilidad de tabla recargos conductor
+	mostrar_recargos?: boolean;
 }
 
 // ==================== CONFIGURACIÓN ====================

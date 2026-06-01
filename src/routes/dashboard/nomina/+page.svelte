@@ -8,7 +8,10 @@
 		eliminarLiquidacion,
 		previewDesprendibles,
 		enviarDesprendibles,
-		toggleDesprendibleVisible
+		toggleDesprendibleVisible,
+
+		toggleDesprendibleTablasVisible
+
 	} from '$lib/api/nomina';
 	import type { LiquidacionesParams } from '$lib/api/nomina';
 	import type { Liquidacion } from '$lib/types/nomina';
@@ -356,6 +359,20 @@
 				liquidaciones = liquidaciones;
 			}
 			toast.success(!currentValue ? 'Desprendible visible en portal' : 'Desprendible oculto del portal');
+		} catch (err: any) {
+			toast.error(err?.response?.data?.message || 'Error al cambiar visibilidad');
+		}
+	}
+
+	async function handleToggleTablaRecargos(id: string, currentValue: boolean) {
+		try {
+			await toggleDesprendibleTablasVisible([id], !currentValue);
+			const idx = liquidaciones.findIndex(l => l.id === id);
+			if (idx !== -1) {
+				liquidaciones[idx].mostrar_recargos = !currentValue;
+				liquidaciones = liquidaciones;
+			}
+			toast.success(!currentValue ? 'Tablas visible en Desprendible' : 'Tablas oculto en Desprendible');
 		} catch (err: any) {
 			toast.error(err?.response?.data?.message || 'Error al cambiar visibilidad');
 		}
@@ -911,6 +928,7 @@
 									</button>
 								</th>
 								<th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">Visible</th>
+								<th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">Tablas</th>
 								<th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">Acciones</th>
 							</tr>
 						</thead>
@@ -959,6 +977,19 @@
 												<XCircle class="h-3.5 w-3.5" />No
 											{/if}
 										</button>
+									</td>
+									<td class="px-4 py-3 text-center">
+										<button
+										on:click={() => handleToggleTablaRecargos(liq.id, liq.mostrar_recargos ?? false)}
+										class="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors
+										{liq.mostrar_recargos ? 'bg-orange-100 text-orange-700 hover:bg-orange-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}"
+										title={liq.mostrar_recargos ? 'Tablas visible en desprendible - Click para ocultar' : 'Tablas oculto en edsprendible - Click para mostrar'}>
+										{#if liq.mostrar_recargos}
+											<CheckCircle class="h-3.5 w-3.5" />Sí
+										{:else}
+											<XCircle class="h-3.5 w-3.5" />No
+										{/if}
+									</button>
 									</td>
 									<td class="px-4 py-3">
 										<div class="flex items-center justify-center gap-1">

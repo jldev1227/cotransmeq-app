@@ -102,7 +102,10 @@
 				.map(String)
 		)
 	];
-	let planillaFilter: string = '';
+	$: uniquePlanillas = [
+		...new Set(recargos.map((r) => r.numero_planilla).filter((p): p is string => Boolean(p)))
+	].sort();
+	let planillaFilter: string[] = []; // ← solo agregar esta
 	$: dayColumns = Array.from({ length: daysInMonth }, (_, i) => {
 		const day = i + 1;
 		const isSunday = esDomingo(day, selectedMonth, selectedYear);
@@ -216,9 +219,8 @@
 			if (!estadoFilter.includes(recargo.estado)) return false;
 		}
 
-		if (planillaFilter && planillaFilter.trim() !== '') {
-			const planilla = recargo.numero_planilla?.toLowerCase() || '';
-			if (!planilla.includes(planillaFilter.toLowerCase())) return false;
+		if (planillaFilter.length > 0) {
+			if (!planillaFilter.includes(recargo?.numero_planilla ?? '')) return false;
 		}
 
 		return true;
@@ -465,23 +467,23 @@
 			case 'conductor':
 				return `${item.conductor?.nombre || ''} ${item.conductor?.apellido || ''}`.trim();
 			case 'total_horas':
-				return toNumber(item.total_horas).toFixed(1);
+				return toNumber(item.total_horas).toFixed(2);
 			case 'promedio':
-				return (toNumber(item.total_horas) / (item.total_dias || 1)).toFixed(1);
+				return (toNumber(item.total_horas) / (item.total_dias || 1)).toFixed(2);
 			case 'total_hed':
-				return toNumber(item.total_hed).toFixed(1);
+				return toNumber(item.total_hed).toFixed(2);
 			case 'total_hen':
-				return toNumber(item.total_hen).toFixed(1);
+				return toNumber(item.total_hen).toFixed(2);
 			case 'total_hefd':
-				return toNumber(item.total_hefd).toFixed(1);
+				return toNumber(item.total_hefd).toFixed(2);
 			case 'total_hefn':
-				return toNumber(item.total_hefn).toFixed(1);
+				return toNumber(item.total_hefn).toFixed(2);
 			case 'total_rndf':
-				return toNumber(item.total_rndf).toFixed(1);
+				return toNumber(item.total_rndf).toFixed(2);
 			case 'total_rn':
-				return toNumber(item.total_rn).toFixed(1);
+				return toNumber(item.total_rn).toFixed(2);
 			case 'total_rd':
-				return toNumber(item.total_rd).toFixed(1);
+				return toNumber(item.total_rd).toFixed(2);
 			default: {
 				const dayMatch = key.match(/^day_(\d+)$/);
 				if (dayMatch) {
@@ -490,7 +492,7 @@
 					// Siempre completar hasta 31 días; si no hay horas/dato, devolver vacío
 					if (!dia) return '';
 					const horas = toNumber(dia.total_horas);
-					return horas > 0 ? horas.toFixed(1) : '';
+					return horas > 0 ? horas.toFixed(2) : '';
 				}
 				return '';
 			}
@@ -587,23 +589,23 @@
 				return `${recargo.conductor?.nombre || ''} ${recargo.conductor?.apellido || ''}`.trim();
 			case 'total_horas':
 				const totalHoras = toNumber(recargo.total_horas);
-				return totalHoras.toFixed(1);
+				return totalHoras.toFixed(2);
 			case 'promedio':
-				return (toNumber(recargo.total_horas) / (recargo.total_dias || 1)).toFixed(1);
+				return (toNumber(recargo.total_horas) / (recargo.total_dias || 1)).toFixed(2);
 			case 'total_hed':
-				return toNumber(recargo.total_hed).toFixed(1);
+				return toNumber(recargo.total_hed).toFixed(2);
 			case 'total_hen':
-				return toNumber(recargo.total_hen).toFixed(1);
+				return toNumber(recargo.total_hen).toFixed(2);
 			case 'total_hefd':
-				return toNumber(recargo.total_hefd).toFixed(1);
+				return toNumber(recargo.total_hefd).toFixed(2);
 			case 'total_hefn':
-				return toNumber(recargo.total_hefn).toFixed(1);
+				return toNumber(recargo.total_hefn).toFixed(2);
 			case 'total_rndf':
-				return toNumber(recargo.total_rndf).toFixed(1);
+				return toNumber(recargo.total_rndf).toFixed(2);
 			case 'total_rn':
-				return toNumber(recargo.total_rn).toFixed(1);
+				return toNumber(recargo.total_rn).toFixed(2);
 			case 'total_rd':
-				return toNumber(recargo.total_rd).toFixed(1);
+				return toNumber(recargo.total_rd).toFixed(2);
 			case 'estado':
 				return getEstadoLabel(recargo.estado);
 			default:
@@ -986,7 +988,7 @@
 					</div>
 					<div>
 						<p class="text-xs text-gray-500">Horas totales</p>
-						<p class="text-lg font-bold text-gray-900">{stats.totalHoras.toFixed(1)}</p>
+						<p class="text-lg font-bold text-gray-900">{stats.totalHoras.toFixed(2)}</p>
 						<p class="text-[10px] text-gray-400">Ordinarias + Extras</p>
 					</div>
 				</div>
@@ -1012,7 +1014,7 @@
 					</div>
 					<div>
 						<p class="text-xs text-gray-500">Ordinarias</p>
-						<p class="text-lg font-bold text-gray-900">{stats.totalOrdinarias.toFixed(1)}</p>
+						<p class="text-lg font-bold text-gray-900">{stats.totalOrdinarias.toFixed(2)}</p>
 						<p class="text-[10px] text-gray-400">Dentro de jornada normal</p>
 					</div>
 				</div>
@@ -1038,7 +1040,7 @@
 					</div>
 					<div>
 						<p class="text-xs text-gray-500">KM recorridos</p>
-						<p class="text-lg font-bold text-gray-900">{stats.totalKm.toFixed(1)}</p>
+						<p class="text-lg font-bold text-gray-900">{stats.totalKm.toFixed(2)}</p>
 						<p class="text-[10px] text-gray-400">KM final - KM inicial</p>
 					</div>
 				</div>
@@ -1064,7 +1066,7 @@
 					</div>
 					<div>
 						<p class="text-xs text-gray-500">H. Extras</p>
-						<p class="text-lg font-bold text-gray-900">{stats.totalExtras.toFixed(1)}</p>
+						<p class="text-lg font-bold text-gray-900">{stats.totalExtras.toFixed(2)}</p>
 						<p class="text-[10px] text-gray-400">HED+HEN+HEFD+HEFN</p>
 					</div>
 				</div>
@@ -1090,7 +1092,7 @@
 					</div>
 					<div>
 						<p class="text-xs text-gray-500">Recargos (RNDF+RN+RD)</p>
-						<p class="text-lg font-bold text-gray-900">{stats.totalRecargos.toFixed(1)}</p>
+						<p class="text-lg font-bold text-gray-900">{stats.totalRecargos.toFixed(2)}</p>
 						<p class="text-[10px] text-gray-400">Incluidas en horas totales</p>
 					</div>
 				</div>
@@ -1103,32 +1105,32 @@
 				<span class="font-semibold text-gray-700">Desglose:</span>
 				<span class="flex items-center gap-1">
 					<span class="inline-block h-2.5 w-2.5 rounded-full bg-green-500"></span>
-					HED <strong class="text-gray-900">{stats.totalHED.toFixed(1)}</strong>
+					HED <strong class="text-gray-900">{stats.totalHED.toFixed(2)}</strong>
 				</span>
 				<span class="flex items-center gap-1">
 					<span class="inline-block h-2.5 w-2.5 rounded-full bg-green-700"></span>
-					HEN <strong class="text-gray-900">{stats.totalHEN.toFixed(1)}</strong>
+					HEN <strong class="text-gray-900">{stats.totalHEN.toFixed(2)}</strong>
 				</span>
 				<span class="flex items-center gap-1">
 					<span class="inline-block h-2.5 w-2.5 rounded-full bg-orange-500"></span>
-					HEFD <strong class="text-gray-900">{stats.totalHEFD.toFixed(1)}</strong>
+					HEFD <strong class="text-gray-900">{stats.totalHEFD.toFixed(2)}</strong>
 				</span>
 				<span class="flex items-center gap-1">
 					<span class="inline-block h-2.5 w-2.5 rounded-full bg-orange-700"></span>
-					HEFN <strong class="text-gray-900">{stats.totalHEFN.toFixed(1)}</strong>
+					HEFN <strong class="text-gray-900">{stats.totalHEFN.toFixed(2)}</strong>
 				</span>
 				<span class="text-gray-300">|</span>
 				<span class="flex items-center gap-1">
 					<span class="inline-block h-2.5 w-2.5 rounded-full bg-emerald-600"></span>
-					RNDF <strong class="text-gray-900">{stats.totalRNDF.toFixed(1)}</strong>
+					RNDF <strong class="text-gray-900">{stats.totalRNDF.toFixed(2)}</strong>
 				</span>
 				<span class="flex items-center gap-1">
 					<span class="inline-block h-2.5 w-2.5 rounded-full bg-purple-500"></span>
-					RN <strong class="text-gray-900">{stats.totalRN.toFixed(1)}</strong>
+					RN <strong class="text-gray-900">{stats.totalRN.toFixed(2)}</strong>
 				</span>
 				<span class="flex items-center gap-1">
 					<span class="inline-block h-2.5 w-2.5 rounded-full bg-red-500"></span>
-					RD <strong class="text-gray-900">{stats.totalRD.toFixed(1)}</strong>
+					RD <strong class="text-gray-900">{stats.totalRD.toFixed(2)}</strong>
 				</span>
 				{#if searchTerm || conductorFilter.length > 0 || vehiculoFilter.length > 0 || empresaFilter.length > 0 || estadoFilter.length > 0}
 					<span class="text-gray-300">|</span>
@@ -1209,12 +1211,12 @@
 											searchable
 										/>
 									{:else if column.key === 'numero_planilla'}
-										<input
-											type="text"
-											bind:value={planillaFilter}
-											placeholder="Filtrar..."
-											class="w-full rounded border border-gray-300 px-1 py-0.5 text-[11px] focus:border-emerald-400 focus:outline-none"
-										/>
+									<MultiSelectFilter
+										bind:selected={planillaFilter}
+										options={uniquePlanillas}
+										placeholder="Todos"
+										searchable
+									/>
 									{:else if column.key === 'estado'}
 										<MultiSelectFilter
 											bind:selected={estadoFilter}
@@ -1307,7 +1309,7 @@
 														dia
 													)}"
 												>
-													{horas.toFixed(1)}
+													{horas.toFixed(2)}
 												</span>
 											{:else if esDiaPendiente}
 												<span
