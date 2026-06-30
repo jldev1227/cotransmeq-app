@@ -8,7 +8,12 @@ import type {
 	CreateLiquidacionPayload,
 	UpdateLiquidacionPayload,
 	FirmaDesprendible,
-	FirmaConUrl
+	FirmaConUrl,
+	Prima,
+	CreatePrimaPayload,
+	UpdatePrimaPayload,
+	PrimasParams,
+	PrimasStats
 } from '$lib/types/nomina';
 import type { DiaLaboralPlanilla } from '$lib/types/recargos';
 
@@ -463,6 +468,49 @@ export const obtenerPreviewRecargos = async (
 	);
 	return response.data;
 };
+
+// ============================================================
+// PRIMAS
+// ============================================================
+
+export async function obtenerPrimas(params: PrimasParams = {}) {
+	const query: Record<string, string> = {};
+	if (params.page) query.page = String(params.page);
+	if (params.limit) query.limit = String(params.limit);
+	if (params.search) query.search = params.search;
+	if (params.mes) query.mes = String(params.mes);
+	if (params.anio) query.anio = String(params.anio);
+	if (params.estado) query.estado = params.estado;
+	if (params.sortBy) query.sortBy = params.sortBy;
+	if (params.sortOrder) query.sortOrder = params.sortOrder;
+	return apiClient.get('/primas', { params: query });
+}
+
+export async function obtenerPrimaPorId(id: string) {
+	return apiClient.get(`/primas/${id}`);
+}
+
+export async function crearPrima(payload: CreatePrimaPayload) {
+	return apiClient.post('/primas', payload);
+}
+
+export async function editarPrima(id: string, payload: UpdatePrimaPayload) {
+	return apiClient.put(`/primas/${id}`, payload);
+}
+
+export async function eliminarPrima(id: string) {
+	return apiClient.delete(`/primas/${id}`);
+}
+
+export async function buscarPrimaPorConductorPeriodo(
+	conductor_id: string,
+	mes: number,
+	anio: number
+) {
+	return apiClient.get('/primas/buscar', {
+		params: { conductor_id, mes: String(mes), anio: String(anio) }
+	});
+}
 
 export default {
 	// Liquidaciones

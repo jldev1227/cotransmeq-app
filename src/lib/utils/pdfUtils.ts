@@ -28,3 +28,21 @@ export async function obtenerLogoBase64(esCotransmeq: boolean = true): Promise<s
 		return null;
 	}
 }
+
+/**
+ * Convierte una URL (o data URL) a base64 con prefijo data:image/...
+ * Usado para incrustar imágenes (firmas, logos) en PDFs generados con pdfmake.
+ */
+export async function imageToBase64Url(url: string): Promise<string> {
+	if (url.startsWith('data:')) {
+		return url;
+	}
+	const response = await fetch(url);
+	const blob = await response.blob();
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onloadend = () => resolve(reader.result as string);
+		reader.onerror = reject;
+		reader.readAsDataURL(blob);
+	});
+}

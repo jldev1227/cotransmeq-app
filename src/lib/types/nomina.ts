@@ -180,8 +180,6 @@ export interface Liquidacion {
 	// Prestaciones
 	cesantias?: number;
 	interes_cesantias?: number;
-	prima?: number;
-	prima_pendiente?: number;
 
 	// Ajustes
 	ajuste_valor?: number;
@@ -197,7 +195,6 @@ export interface Liquidacion {
 	tiene_vacaciones: boolean;
 	tiene_incapacidad: boolean;
 	tiene_cesantias: boolean;
-	tiene_prima: boolean;
 	tiene_ajuste: boolean;
 	ajuste_por_dia_flag: boolean;
 	ajuste_parex: boolean;
@@ -312,7 +309,6 @@ export interface CreateLiquidacionPayload {
 	tiene_vacaciones: boolean;
 	tiene_incapacidad: boolean;
 	tiene_cesantias: boolean;
-	tiene_prima: boolean;
 	tiene_ajuste: boolean;
 	ajuste_por_dia_flag: boolean;
 	ajuste_parex: boolean;
@@ -334,8 +330,6 @@ export interface CreateLiquidacionPayload {
 	ajuste_parex_valor?: number;
 	cesantias?: number;
 	interes_cesantias?: number;
-	prima?: number;
-	prima_pendiente?: number;
 	conceptos_adicionales?: ConceptoAdicional[];
 	vehiculos: string[];
 	detalles_vehiculos: VehiculoDetalle[];
@@ -368,4 +362,75 @@ export interface PaginatedResponse<T> {
 	page: number;
 	limit: number;
 	totalPages: number;
+}
+
+// ============================================================
+// PRIMAS (entidad independiente)
+// ============================================================
+
+export type PrimaEstado = 'Pendiente' | 'Pagado';
+
+export interface Prima {
+	id: string;
+	conductor_id: string;
+	conductor?: {
+		id?: string;
+		nombre?: string;
+		apellido?: string;
+		numero_identificacion?: string;
+		email?: string;
+	};
+	mes: number;
+	anio: number;
+	prima: number;
+	prima_pendiente?: number | null;
+	// Campos manuales del desprendible de prima
+	tiempo_trabajado_dias?: number | null;
+	sueldo_basico?: number | null;
+	auxilio_transporte?: number | null;
+	sueldo_variable?: number | null;
+	total_base_liquidacion?: number | null;
+	estado: PrimaEstado;
+	observaciones?: string | null;
+	creado_por?: { id?: string; nombre?: string; apellido?: string };
+	actualizado_por?: { id?: string; nombre?: string; apellido?: string };
+	created_at?: string;
+	updated_at?: string;
+	deleted_at?: string | null;
+}
+
+export interface CreatePrimaPayload {
+	conductor_id: string;
+	mes: number;
+	anio: number;
+	prima: number;
+	prima_pendiente?: number | null;
+	// Campos manuales del desprendible de prima
+	tiempo_trabajado_dias?: number | null;
+	sueldo_basico?: number | null;
+	auxilio_transporte?: number | null;
+	sueldo_variable?: number | null;
+	total_base_liquidacion?: number | null;
+	estado?: PrimaEstado;
+	observaciones?: string | null;
+}
+
+export type UpdatePrimaPayload = Partial<CreatePrimaPayload>;
+
+export interface PrimasParams {
+	page?: number;
+	limit?: number;
+	search?: string;
+	mes?: number;
+	anio?: number;
+	estado?: PrimaEstado;
+	sortBy?: string;
+	sortOrder?: 'asc' | 'desc';
+}
+
+export interface PrimasStats {
+	total: number;
+	totalPendientes: number;
+	totalPagados: number;
+	montoTotal: number;
 }

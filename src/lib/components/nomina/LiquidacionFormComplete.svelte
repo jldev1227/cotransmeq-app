@@ -63,7 +63,6 @@
 	let isVacaciones = false;
 	let isIncapacidad = false;
 	let isCesantias = false;
-	let isPrima = false;
 	let noDescontarSalud = false;
 	let noDescontarPension = false;
 	let descontarSaludSalario = false;
@@ -83,8 +82,6 @@
 	// Valores financieros
 	let cesantias = 0;
 	let interes_cesantias = 0;
-	let prima = 0;
-	let prima_pendiente: number | null = null;
 	let disponibilidad = 0;
 
 	// Detalles de vehículos
@@ -248,7 +245,6 @@
 		noDescontarPension = (initialData.pension ?? 0) === 0;
 		descontarTransporte = initialData.auxilio_transporte === 0;
 		isCesantias = (initialData.cesantias ?? 0) > 0 || (initialData.interes_cesantias ?? 0) > 0;
-		isPrima = (initialData.prima ?? 0) > 0;
 		isVacaciones = !!initialData.periodo_start_vacaciones;
 		isIncapacidad = !!initialData.periodo_start_incapacidad;
 		estadoLiquidacion = initialData.estado === 'Liquidado' ? 'Liquidado' : 'Pendiente';
@@ -256,8 +252,6 @@
 		// Cargar valores financieros
 		cesantias = initialData.cesantias || 0;
 		interes_cesantias = initialData.interes_cesantias || 0;
-		prima = initialData.prima || 0;
-		prima_pendiente = initialData.prima_pendiente || null;
 		disponibilidad = initialData.disponibilidad || 0;
 
 		// Cargar períodos especiales
@@ -759,7 +753,6 @@
 		isVacaciones,
 		isIncapacidad,
 		isCesantias,
-		isPrima,
 		noDescontarSalud,
 		noDescontarPension,
 		descontarSaludSalario,
@@ -771,8 +764,6 @@
 		periodo_incapacidad_fin,
 		cesantias,
 		interes_cesantias,
-		prima,
-		prima_pendiente,
 		configuracion,
 		totalRecargosPreview,
 		previewRecargosData,
@@ -953,7 +944,6 @@
 			bonificacionVillanueva +
 			valorIncapacidad +
 			interes_cesantias +
-			(prima_pendiente || 0) +
 			totalAjustesAdicionales;
 
 		const sueldoTotal = sueldoBruto - totalDeducciones;
@@ -1053,8 +1043,6 @@
 			pension: totales.pension,
 			cesantias,
 			interes_cesantias,
-			prima,
-			prima_pendiente,
 			estado: estadoLiquidacion,
 			vehiculos: vehiculosSelected.map((v) => v.value),
 			detalles_vehiculos: detallesVehiculos,
@@ -1749,16 +1737,6 @@
 							>
 								<input
 									type="checkbox"
-									bind:checked={isPrima}
-									class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-								/>
-								Pagar Prima
-							</label>
-							<label
-								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900"
-							>
-								<input
-									type="checkbox"
 									bind:checked={noDescontarSalud}
 									class="h-4 w-4 rounded border-gray-300 text-red-500 focus:ring-red-400"
 								/>
@@ -1947,44 +1925,6 @@
 										on:focus={handleCOPFocus}
 										on:blur={handleCOPBlur}
 										on:input={(e) => (interes_cesantias = parseCOPInput(e.currentTarget.value))}
-										class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-									/>
-								</div>
-							</div>
-						</div>
-					{/if}
-
-					<!-- Prima -->
-					{#if isPrima}
-						<div class="rounded-md border border-gray-200 p-4">
-							<h4 class="mb-3 text-xs font-semibold tracking-wide text-gray-500 uppercase">
-								Prima de Servicios
-							</h4>
-							<div class="grid grid-cols-2 gap-4">
-								<div>
-									<label class="mb-1.5 block text-xs text-gray-500">Prima</label>
-									<input
-										type="text"
-										inputmode="numeric"
-										value={prima ? '$ ' + formatCOPInput(prima) : ''}
-										on:focus={handleCOPFocus}
-										on:blur={handleCOPBlur}
-										on:input={(e) => (prima = parseCOPInput(e.currentTarget.value))}
-										class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-									/>
-								</div>
-								<div>
-									<label class="mb-1.5 block text-xs text-gray-500"
-										>Prima Pendiente (opcional)</label
-									>
-									<input
-										type="text"
-										inputmode="numeric"
-										value={prima_pendiente ? '$ ' + formatCOPInput(prima_pendiente) : ''}
-										on:focus={handleCOPFocus}
-										on:blur={handleCOPBlur}
-										on:input={(e) =>
-											(prima_pendiente = parseCOPInput(e.currentTarget.value) || null)}
 										class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 									/>
 								</div>

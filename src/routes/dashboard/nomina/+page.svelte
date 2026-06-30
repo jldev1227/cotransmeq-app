@@ -10,16 +10,26 @@
 		enviarDesprendibles,
 		toggleDesprendibleVisible,
 
-		toggleDesprendibleTablasVisible
+		toggleDesprendibleTablasVisible,
+
+		obtenerPrimas,
+		crearPrima,
+		editarPrima,
+		eliminarPrima as eliminarPrimaApi,
+		obtenerLiquidacionPorId,
+		obtenerVehiculos
 
 	} from '$lib/api/nomina';
 	import type { LiquidacionesParams } from '$lib/api/nomina';
-	import type { Liquidacion } from '$lib/types/nomina';
+	import type { Liquidacion, Prima, CreatePrimaPayload, PrimasStats, PrimaEstado } from '$lib/types/nomina';
+	import PrimaFormModal from '$lib/components/nomina/PrimaFormModal.svelte';
+	import { generarPdfPrima } from '$lib/utils/pdfPrima';
 	import { toast } from 'svelte-sonner';
 	import {
 		Users, Plus, Edit, Trash2, Eye, FileText, Mail, TrendingUp, Clock,
 		ChevronUp, ChevronDown, ChevronsUpDown, ChevronLeft, ChevronRight,
-		BarChart2, Zap, Moon, Wrench, AlertCircle, Send, CheckCircle, XCircle, X
+		BarChart2, Zap, Moon, Wrench, AlertCircle, Send, Download, CheckCircle, XCircle, X,
+		Sparkles, Layers
 	} from 'lucide-svelte';
 	import LiquidacionDetalleModal from '$lib/components/nomina/LiquidacionDetalleModal.svelte';
 	// Chart.js via svelte-chartjs
@@ -45,6 +55,7 @@
 		empresa_id?: string;
 		porcentaje_propietario?: number | string | null;
 		numero_planilla?: string | null;
+		es_automatico?: boolean;
 		emisor?: string;
 		// El endpoint /analisis usa "clientes"; otras rutas pueden usar "empresa"
 		clientes?: { id?: string; nombre: string };
@@ -70,6 +81,7 @@
 	interface ResRec { placa: string; valor: number; pagaCliente: string; empresa_id: string; empresa_nombre: string; mes: string; conductor: string; tipo_fila?: 'cliente' | 'propietario'; porcentaje_propietario?: number; emisor?: string; }
 	interface ResPer { placa: string; cantidad: number; valor: number; valorTotal: number; fechas: string[]; conductor: string; }
 	interface ResMnt { placa: string; conductor: string; mes: string; cantidad: number; }
+	interface ResAdi { placa: string; valor: number; empresa_id: string; empresa_nombre: string; mes: string; mes_key: string; conductor: string; numero_planilla?: string | null; emisor?: string; porcentaje_propietario: number; valor_cliente: number; valor_propietario: number; }
 
 	// =============================================
 	// CONSTANTES
@@ -90,13 +102,15 @@
 
 	const MAIN_TABS = [
 		{ key: 'liquidaciones', label: 'Liquidaciones', icon: FileText },
+		{ key: 'primas',        label: 'Primas',        icon: Sparkles },
 		{ key: 'analisis',      label: 'Análisis',      icon: BarChart2 }
 	];
 	const ANALISIS_TABS = [
 		{ key: 'bonificaciones',  label: 'Bonificaciones', icon: Zap },
 		{ key: 'recargos',        label: 'Recargos',       icon: TrendingUp },
 		{ key: 'pernotes',        label: 'Pernotes',       icon: Moon },
-		{ key: 'mantenimientos',  label: 'Mantenimientos', icon: Wrench }
+		{ key: 'mantenimientos',  label: 'Mantenimientos', icon: Wrench },
+		{ key: 'adicionales',     label: 'Adicionales',    icon: Layers }
 	];
 
 	// =============================================
@@ -184,17 +198,39 @@
 	let nominaMonth = '';
 
 	// =============================================
+	// ESTADO — PRIMAS
+	// =============================================
+	let primas: Prima[] = [];
+	let loadingPrimas = true;
+	let searchPrimas = '';
+	let searchPrimasTimeout: ReturnType<typeof setTimeout>;
+	let showDeletePrimaModal = false;
+	let primaToDelete: string | null = null;
+	let showPrimaFormModal = false;
+	let primaToEdit: Prima | null = null;
+	let downloadingPrimaPdf: string | null = null;
+	let paginationPrimas = { total: 0, page: 1, limit: 20, totalPages: 0, hasNext: false, hasPrev: false };
+	let statsPrimas: PrimasStats = { total: 0, totalPendientes: 0, totalPagados: 0, montoTotal: 0 };
+	let filtroPrimaMes: number | '' = '';
+	let filtroPrimaAnio: number | '' = '';
+
+	// =============================================
 	// ESTADO — ANÁLISIS
 	// =============================================
 	let liquidacionesA: LiquidacionA[] = [];
 	let loadingA = true;
+	// Mapa global id -> vehiculo, para resolver placas de recargos automáticos
+	// cuyo vehiculo_id no aparece en la liquidación que los contiene (caso típico:
+	// la liquidación del conductor es SIN-PLACA pero el recargo planilla sí
+	// referencia una placa real como WMA883).
+	let vehiculosMap: Map<string, VehiculoA> = new Map();
 	let filtroPlaca = '';
 	let showDropdown = false;
 	let selectedIndex = 1;
 	let filtroMes = '';
 	let filtroAno = '';
-	let analisisTab: 'bonificaciones' | 'recargos' | 'pernotes' | 'mantenimientos' = 'bonificaciones';
-	let pagesBon = 1, pagesRec = 1, pagesPer = 1;
+	let analisisTab: 'bonificaciones' | 'recargos' | 'pernotes' | 'mantenimientos' | 'adicionales' = 'bonificaciones';
+	let pagesBon = 1, pagesRec = 1, pagesPer = 1, pagesAdi = 1;
 
 
 	$: placasFiltradas = placasA.filter((p) => p.toLowerCase().includes(filtroPlaca.toLowerCase()));
@@ -231,8 +267,20 @@
 	// =============================================
 	onMount(async () => {
 		loadFiltersFromCache();
-		await Promise.all([cargarLiquidaciones(), cargarAnalisis()]);
+		await Promise.all([cargarLiquidaciones(), cargarAnalisis(), cargarPrimas(), cargarVehiculosMap()]);
 	});
+
+	async function cargarVehiculosMap() {
+		try {
+			const r: any = await obtenerVehiculos();
+			const arr: VehiculoA[] = Array.isArray(r?.data) ? r.data : Array.isArray(r) ? r : [];
+			const m = new Map<string, VehiculoA>();
+			arr.forEach((v) => { if (v?.id) m.set(v.id, v); });
+			vehiculosMap = m;
+		} catch (e) {
+			console.warn('No se pudo cargar el mapa de vehículos para análisis:', e);
+		}
+	}
 
 	// =============================================
 	// API — LISTA
@@ -270,6 +318,154 @@
 		} finally {
 			loadingA = false;
 		}
+	}
+
+	// =============================================
+	// API — PRIMAS
+	// =============================================
+	async function cargarPrimas() {
+		try {
+			loadingPrimas = true;
+			const params: any = { page: paginationPrimas.page, limit: paginationPrimas.limit };
+			if (searchPrimas.trim()) params.search = searchPrimas.trim();
+			if (filtroPrimaMes) params.mes = filtroPrimaMes;
+			if (filtroPrimaAnio) params.anio = filtroPrimaAnio;
+			const r: any = await obtenerPrimas(params);
+			primas = r.data?.primas || r.data || [];
+			if (r.data?.pagination) paginationPrimas = { ...paginationPrimas, ...r.data.pagination };
+			if (r.data?.stats) statsPrimas = r.data.stats;
+		} catch (e) {
+			console.error('Error cargando primas:', e);
+			toast.error('Error al cargar las primas');
+		} finally {
+			loadingPrimas = false;
+		}
+	}
+
+	function handleSearchPrimas() {
+		clearTimeout(searchPrimasTimeout);
+		searchPrimasTimeout = setTimeout(() => {
+			paginationPrimas.page = 1;
+			cargarPrimas();
+		}, 400);
+	}
+
+	function handlePrimaMesChange() {
+		paginationPrimas.page = 1;
+		cargarPrimas();
+	}
+
+	function clearPrimaFilters() {
+		searchPrimas = '';
+		filtroPrimaMes = '';
+		filtroPrimaAnio = '';
+		paginationPrimas.page = 1;
+		cargarPrimas();
+	}
+
+	function abrirCrearPrima() {
+		primaToEdit = null;
+		showPrimaFormModal = true;
+	}
+
+	function abrirEditarPrima(p: Prima) {
+		primaToEdit = p;
+		showPrimaFormModal = true;
+	}
+
+	function confirmarEliminarPrima(id: string) {
+		primaToDelete = id;
+		showDeletePrimaModal = true;
+	}
+
+	async function eliminarPrima() {
+		if (!primaToDelete) return;
+		try {
+			await eliminarPrimaApi(primaToDelete);
+			toast.success('Prima eliminada correctamente');
+			await cargarPrimas();
+			showDeletePrimaModal = false;
+			primaToDelete = null;
+		} catch (e) {
+			toast.error('Error al eliminar la prima');
+		}
+	}
+
+	async function handleGuardarPrima(payload: CreatePrimaPayload) {
+		try {
+			if (primaToEdit) {
+				await editarPrima(primaToEdit.id, payload);
+				toast.success('Prima actualizada');
+			} else {
+				await crearPrima(payload);
+				toast.success('Prima creada');
+			}
+			showPrimaFormModal = false;
+			primaToEdit = null;
+			await cargarPrimas();
+		} catch (e: any) {
+			console.error('Error guardando prima:', e);
+			toast.error(e?.response?.data?.message || 'Error al guardar la prima');
+		}
+	}
+
+	async function handleDescargarPdfPrima(p: Prima) {
+		try {
+			downloadingPrimaPdf = p.id;
+			const firmas: any[] = [];
+
+			try {
+				const liquidacionesRes: any = await obtenerLiquidaciones({
+					conductor_id: p.conductor_id,
+					limit: 50
+				} as any);
+
+				const candidatos: Array<{ anio: number; mes: number }> = [];
+				for (let offset = -1; offset <= 1; offset++) {
+					const d = new Date(p.anio, p.mes - 1 + offset, 1);
+					candidatos.push({ anio: d.getFullYear(), mes: d.getMonth() + 1 });
+				}
+
+				const candidata = (liquidacionesRes.data || []).find((l: any) => {
+					if (!l.periodo_fin) return false;
+					try {
+						const f = new Date(l.periodo_fin + (l.periodo_fin.length === 10 ? 'T00:00:00' : ''));
+						if (isNaN(f.getTime())) return false;
+						return candidatos.some((c) => c.anio === f.getFullYear() && c.mes === f.getMonth() + 1);
+					} catch {
+						return false;
+					}
+				});
+
+				if (candidata?.id) {
+					const detalle: any = await obtenerLiquidacionPorId(candidata.id);
+					const liq = detalle?.data || detalle;
+					const f = liq?.firmas_desprendibles?.[0];
+					if (f?.presignedUrl) {
+						firmas.push({ presignedUrl: f.presignedUrl, fecha_firma: f.fecha_firma });
+					}
+				}
+			} catch (e) {
+				console.warn('No se pudo obtener firma para la prima:', e);
+			}
+
+			await generarPdfPrima(p, firmas);
+			toast.success(firmas.length ? 'PDF generado con firma del conductor' : 'PDF generado sin firma');
+		} catch (e) {
+			console.error('Error generando PDF de prima:', e);
+			toast.error('Error al generar el PDF de prima');
+		} finally {
+			downloadingPrimaPdf = null;
+		}
+	}
+
+	function getPrimaMesLabel(mes: number): string {
+		const nombres = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+		return nombres[mes] || 'N/A';
+	}
+
+	function getPrimaEstadoColor(e: PrimaEstado): string {
+		return e === 'Pagado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700';
 	}
 
 	// =============================================
@@ -491,12 +687,25 @@
 	$: anosA = (() => {
 		const s = new Set<string>();
 		liquidacionesA.forEach(l => { if (l.periodo_start) s.add(new Date(l.periodo_start).getFullYear().toString()); });
+		// Incluir también los años presentes en los recargos automáticos (formato YYYY-MM),
+		// ya que un recargo automático puede tener año distinto al de su liquidación.
+		liquidacionesA.forEach(l => {
+			l.recargos?.forEach((r) => {
+				if (r.es_automatico === true && r.mes && /^\d{4}-\d{2}$/.test(r.mes)) {
+					s.add(r.mes.split('-')[0]);
+				}
+			});
+		});
 		return Array.from(s).sort((a, b) => +b - +a);
 	})();
 
 	$: placasA = (() => {
 		const s = new Set<string>();
 		liquidacionesA.forEach(l => l.vehiculos?.forEach(v => { if (v.placa) s.add(v.placa); }));
+		// Sumar placas que aparecen en recargos automáticos pero que tal vez
+		// no estén en los vehiculos de las liquidaciones visibles
+		// (caso liquidación con SIN-PLACA + recargo planilla con WMA883).
+		vehiculosMap.forEach((v) => { if (v.placa) s.add(v.placa); });
 		return Array.from(s).sort();
 	})();
 
@@ -634,6 +843,92 @@
 		return Array.from(map.values()).filter(r => r.cantidad > 0);
 	})();
 
+	/**
+	 * Adicionales = recargos automáticos (es_automatico === true).
+	 * Son recargos que NO se le pagan al conductor pero SÍ se le deben
+	 * descontar al propietario. Se filtran por el campo `mes` del PROPIO
+	 * recargo (formato YYYY-MM, ej. "2026-06"), NO por el periodo de la
+	 * liquidación a la que está asociado (un recargo automático de junio
+	 * puede estar dentro de una liquidación con periodo_end en julio).
+	 *
+	 * IMPORTANTE: la placa se resuelve desde el mapa global de vehículos
+	 * (vehiculosMap), NO desde los vehiculos de la liquidación. Esto es
+	 * crítico porque la liquidación del conductor puede tener vehículo
+	 * "SIN-PLACA" (cuando la nómina no se asoció a una placa específica)
+	 * pero el recargo planilla SÍ referencia una placa real (ej. WMA883)
+	 * que es la placa del propietario a quien se le descuenta.
+	 *
+	 * Se agrupan por (placa + empresa + mes + conductor + numero_planilla +
+	 * porcentaje_propietario) sumando valor cuando hay varios.
+	 */
+	$: datosAdi = (() => {
+		const res: ResAdi[] = [];
+		liquidacionesA.forEach((liq) => {
+			liq.recargos?.forEach((rec) => {
+				if (rec.es_automatico !== true) return;
+				if (!rec.vehiculo_id) return;
+				// Resolver placa desde el mapa global, no desde la liquidación
+				const v = vehiculosMap.get(rec.vehiculo_id);
+				if (!v || !v.placa) return;
+				if (filtroPlaca && v.placa !== filtroPlaca) return;
+
+				// El recargo automático guarda mes en formato YYYY-MM (ej. "2026-06").
+				// Los manuales pueden traer nombre de mes ("Junio"); los ignoramos
+				// porque ya filtramos por es_automatico=true arriba.
+				const mesRecargoRaw = (rec.mes || '').toString().trim();
+				const matchYyyymm = mesRecargoRaw.match(/^(\d{4})-(\d{2})$/);
+				if (!matchYyyymm) return;
+				const anioRecargo = matchYyyymm[1];
+				const mesRecargo = matchYyyymm[2];
+
+				// Filtrar por año/mes seleccionado (basado en el mes DEL RECARGO,
+				// no en el periodo de la liquidación).
+				if (filtroAno && anioRecargo !== filtroAno) return;
+				if (filtroMes && mesRecargo !== filtroMes) return;
+
+				const mesLabel = MESES.find((m) => m.valor === mesRecargo)?.nombre || mesRecargoRaw;
+				const valorTotal = Number(rec.valor) || 0;
+				if (valorTotal === 0) return;
+				const pctProp = Number(rec.porcentaje_propietario || 0);
+				const valorPropietario = pctProp > 0 ? Math.round((valorTotal * pctProp) / 100) : 0;
+				const valorCliente = valorTotal - valorPropietario;
+				const emisor = rec.emisor === 'TRANSMERALDA' ? 'Transmeralda' : 'Cotransmeq';
+				res.push({
+					placa: v.placa,
+					valor: valorTotal,
+					empresa_id: rec.empresa_id ?? '',
+					empresa_nombre: getEmpresaNombre(rec),
+					mes: mesLabel,
+					mes_key: `${anioRecargo}-${mesRecargo}`,
+					conductor: getConductorA(liq),
+					numero_planilla: rec.numero_planilla ?? null,
+					emisor,
+					porcentaje_propietario: pctProp,
+					valor_cliente: valorCliente,
+					valor_propietario: valorPropietario
+				});
+			});
+		});
+		// Agrupar por (placa, empresa, mes, conductor, numero_planilla) sumando valor
+		const map = new Map<string, ResAdi>();
+		res.forEach((item) => {
+			const k = `${item.placa}|${item.empresa_id}|${item.mes_key}|${item.conductor}|${item.numero_planilla ?? ''}|${item.porcentaje_propietario}`;
+			const e = map.get(k);
+			if (e) {
+				e.valor += item.valor;
+				e.valor_cliente += item.valor_cliente;
+				e.valor_propietario += item.valor_propietario;
+			} else {
+				map.set(k, { ...item });
+			}
+		});
+		// Ordenar por mes_key descendente (más reciente primero) y luego por placa
+		return Array.from(map.values()).sort((a, b) => {
+			if (a.mes_key !== b.mes_key) return a.mes_key < b.mes_key ? 1 : -1;
+			return a.placa.localeCompare(b.placa);
+		});
+	})();
+
 	// Agrupados para gráficas
 	$: bonPorPlaca = (() => {
 		const m: Record<string, number> = {};
@@ -714,6 +1009,15 @@
 		labels: perPorPlaca.map(d => d.placa),
 		datasets: [{ label: 'Pernotes', data: perPorPlaca.map(d => d.total), backgroundColor: '#eab308cc', borderColor: '#eab308', borderWidth: 1, borderRadius: 4 }]
 	};
+	$: adiPorPlaca = (() => {
+		const m: Record<string, number> = {};
+		datosAdi.forEach(i => { m[i.placa] = (m[i.placa] || 0) + i.valor; });
+		return Object.entries(m).map(([placa, total]) => ({ placa, total }));
+	})();
+	$: adiChartData = {
+		labels: adiPorPlaca.map(d => d.placa),
+		datasets: [{ label: 'Adicionales', data: adiPorPlaca.map(d => d.total), backgroundColor: '#8b5cf6cc', borderColor: '#8b5cf6', borderWidth: 1, borderRadius: 4 }]
+	};
 	$: pieChartData = {
 		labels: recPie.map(d => d.name),
 		datasets: [{ data: recPie.map(d => d.value), backgroundColor: ['#059669cc', '#f97316cc'], borderColor: ['#059669', '#f97316'], borderWidth: 1 }]
@@ -724,18 +1028,23 @@
 	$: totalRec = datosRec.reduce((s, i) => s + i.valor, 0);
 	$: totalPer = datosPer.reduce((s, i) => s + i.valorTotal, 0);
 	$: totalMnt = datosMnt.reduce((s, i) => s + i.cantidad, 0);
+	$: totalAdi = datosAdi.reduce((s, i) => s + i.valor, 0);
+	$: totalAdiPropietario = datosAdi.reduce((s, i) => s + i.valor_propietario, 0);
+	$: totalAdiCliente = datosAdi.reduce((s, i) => s + i.valor_cliente, 0);
 
 	// Paginación análisis
 	$: bonPaginado = datosBon.slice((pagesBon - 1) * ITEMS_PER_PAGE_A, pagesBon * ITEMS_PER_PAGE_A);
 	$: recPaginado = datosRec.slice((pagesRec - 1) * ITEMS_PER_PAGE_A, pagesRec * ITEMS_PER_PAGE_A);
 	$: perPaginado = datosPer.slice((pagesPer - 1) * ITEMS_PER_PAGE_A, pagesPer * ITEMS_PER_PAGE_A);
+	$: adiPaginado = datosAdi.slice((pagesAdi - 1) * ITEMS_PER_PAGE_A, pagesAdi * ITEMS_PER_PAGE_A);
 	$: totalPagesBon = Math.max(1, Math.ceil(datosBon.length / ITEMS_PER_PAGE_A));
 	$: totalPagesRec = Math.max(1, Math.ceil(datosRec.length / ITEMS_PER_PAGE_A));
 	$: totalPagesPer = Math.max(1, Math.ceil(datosPer.length / ITEMS_PER_PAGE_A));
+	$: totalPagesAdi = Math.max(1, Math.ceil(datosAdi.length / ITEMS_PER_PAGE_A));
 
 	// Resetear página al cambiar filtros
 	$: if (filtroPlaca || filtroMes || filtroAno || analisisTab) {
-		pagesBon = 1; pagesRec = 1; pagesPer = 1;
+		pagesBon = 1; pagesRec = 1; pagesPer = 1; pagesAdi = 1;
 	}
 
 	function limpiarFiltros() { filtroPlaca = ''; filtroMes = ''; filtroAno = ''; }
@@ -1048,6 +1357,243 @@
 		</div>
 
 	<!-- ================================================================ -->
+	<!--  TAB: PRIMAS                                                      -->
+	<!-- ================================================================ -->
+	{:else if mainTab === 'primas'}
+
+		<!-- Estadísticas -->
+		<div class="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+			<div class="rounded-xl bg-white p-4 shadow-md">
+				<div class="flex items-center justify-between">
+					<div>
+						<p class="text-sm text-gray-600">Total Primas</p>
+						<p class="text-2xl font-bold text-gray-900">{statsPrimas.total}</p>
+					</div>
+					<div class="rounded-lg bg-emerald-100 p-3"><Sparkles class="h-6 w-6 text-emerald-600" /></div>
+				</div>
+			</div>
+			<div class="rounded-xl bg-white p-4 shadow-md">
+				<div class="flex items-center justify-between">
+					<div>
+						<p class="text-sm text-gray-600">Pendientes</p>
+						<p class="text-2xl font-bold text-gray-900">{statsPrimas.totalPendientes}</p>
+					</div>
+					<div class="rounded-lg bg-yellow-100 p-3"><Clock class="h-6 w-6 text-yellow-600" /></div>
+				</div>
+			</div>
+			<div class="rounded-xl bg-white p-4 shadow-md">
+				<div class="flex items-center justify-between">
+					<div>
+						<p class="text-sm text-gray-600">Pagadas</p>
+						<p class="text-2xl font-bold text-gray-900">{statsPrimas.totalPagados}</p>
+					</div>
+					<div class="rounded-lg bg-green-100 p-3"><CheckCircle class="h-6 w-6 text-green-600" /></div>
+				</div>
+			</div>
+			<div class="rounded-xl bg-white p-4 shadow-md">
+				<div class="flex items-center justify-between">
+					<div>
+						<p class="text-sm text-gray-600">Monto Total</p>
+						<p class="text-2xl font-bold text-gray-900">{formatCurrency(statsPrimas.montoTotal)}</p>
+					</div>
+					<div class="rounded-lg bg-amber-100 p-3"><TrendingUp class="h-6 w-6 text-amber-600" /></div>
+				</div>
+			</div>
+		</div>
+
+		<!-- Búsqueda y filtros -->
+		<div class="mb-4 rounded-xl bg-white p-4 shadow-md">
+			<div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+				<div class="flex flex-1 flex-wrap items-center gap-3">
+					<input
+						type="text"
+						bind:value={searchPrimas}
+						on:input={handleSearchPrimas}
+						placeholder="Buscar por conductor o cédula..."
+						class="min-w-0 flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+					/>
+					<select
+						bind:value={filtroPrimaMes}
+						on:change={handlePrimaMesChange}
+						class="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+					>
+						<option value="">Todos los meses</option>
+						{#each Array.from({ length: 12 }, (_, i) => i + 1) as m}
+							<option value={m}>{getPrimaMesLabel(m)}</option>
+						{/each}
+					</select>
+					<input
+						type="number"
+						bind:value={filtroPrimaAnio}
+						on:change={handlePrimaMesChange}
+						placeholder="Año"
+						min="2000"
+						max="2100"
+						class="w-24 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+					/>
+					{#if searchPrimas || filtroPrimaMes || filtroPrimaAnio}
+						<button
+							on:click={clearPrimaFilters}
+							class="rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-500 transition-colors hover:bg-gray-50"
+							title="Limpiar filtros"
+						>✕ Limpiar</button>
+					{/if}
+				</div>
+				<button
+					on:click={abrirCrearPrima}
+					class="flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-5 py-2.5 font-semibold text-white shadow-lg shadow-orange-500/30 transition-all hover:shadow-xl hover:-translate-y-0.5 text-sm"
+				>
+					<Plus class="h-4 w-4" /> Nueva Prima
+				</button>
+			</div>
+		</div>
+
+		<!-- Tabla de primas -->
+		<div class="rounded-xl bg-white shadow-md overflow-hidden">
+			{#if loadingPrimas}
+				<div class="flex items-center justify-center py-16">
+					<div class="text-center">
+						<div class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"></div>
+						<p class="text-gray-500">Cargando primas...</p>
+					</div>
+				</div>
+			{:else if primas.length === 0}
+				<div class="py-16 text-center">
+					<div class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50">
+						<Sparkles class="h-8 w-8 text-emerald-400" />
+					</div>
+					<h3 class="text-lg font-semibold text-gray-700 mb-1">Sin primas</h3>
+					<p class="text-sm text-gray-500 mb-4">
+						{searchPrimas || filtroPrimaMes || filtroPrimaAnio
+							? 'No hay resultados para los filtros aplicados.'
+							: 'Aún no hay primas registradas.'}
+					</p>
+					{#if !searchPrimas && !filtroPrimaMes && !filtroPrimaAnio}
+						<button
+							on:click={abrirCrearPrima}
+							class="rounded-lg bg-orange-500 px-5 py-2 text-sm text-white font-semibold hover:bg-orange-600 transition-colors"
+						>
+							Crear primera prima
+						</button>
+					{/if}
+				</div>
+			{:else}
+				<div class="overflow-x-auto">
+					<table class="w-full">
+						<thead class="bg-gray-50">
+							<tr>
+								<th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Conductor</th>
+								<th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">Periodo</th>
+								<th class="px-4 py-3 text-right text-sm font-semibold text-gray-700">Prima</th>
+								<th class="px-4 py-3 text-right text-sm font-semibold text-gray-700">Prima Pendiente</th>
+								<th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">Estado</th>
+								<th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">Acciones</th>
+							</tr>
+						</thead>
+						<tbody class="divide-y divide-gray-200">
+							{#each primas as p (p.id)}
+								<tr class="hover:bg-gray-50 transition-colors">
+									<td class="px-4 py-3">
+										<p class="text-sm font-medium text-gray-900">
+											{p.conductor?.nombre || 'N/A'} {p.conductor?.apellido || ''}
+										</p>
+										<p class="text-xs text-gray-500">
+											CC: {p.conductor?.numero_identificacion || '—'}
+										</p>
+									</td>
+									<td class="px-4 py-3 text-center">
+										<p class="font-semibold text-gray-900">{getPrimaMesLabel(p.mes)} {p.anio}</p>
+									</td>
+									<td class="px-4 py-3 text-right">
+										<p class="text-lg font-bold text-gray-900">{formatCurrency(p.prima)}</p>
+									</td>
+									<td class="px-4 py-3 text-right">
+										{#if p.prima_pendiente && Number(p.prima_pendiente) > 0}
+											<p class="text-sm font-medium text-emerald-600">+{formatCurrency(p.prima_pendiente)}</p>
+										{:else}
+											<p class="text-xs text-gray-400">—</p>
+										{/if}
+									</td>
+									<td class="px-4 py-3 text-center">
+										<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {getPrimaEstadoColor(p.estado)}">
+											{p.estado}
+										</span>
+									</td>
+									<td class="px-4 py-3">
+										<div class="flex items-center justify-center gap-1">
+											<button
+												on:click={() => handleDescargarPdfPrima(p)}
+												disabled={downloadingPrimaPdf === p.id}
+												class="rounded-lg p-2 text-emerald-600 hover:bg-emerald-50 transition-colors disabled:opacity-50"
+												title="Descargar PDF de Prima"
+											>
+												{#if downloadingPrimaPdf === p.id}
+													<div class="h-4 w-4 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent"></div>
+												{:else}
+													<Download class="h-4 w-4" />
+												{/if}
+											</button>
+											<button
+												on:click={() => abrirEditarPrima(p)}
+												class="rounded-lg p-2 text-orange-600 hover:bg-orange-50 transition-colors"
+												title="Editar"
+											>
+												<Edit class="h-4 w-4" />
+											</button>
+											<button
+												on:click={() => confirmarEliminarPrima(p.id)}
+												class="rounded-lg p-2 text-red-600 hover:bg-red-50 transition-colors"
+												title="Eliminar"
+											>
+												<Trash2 class="h-4 w-4" />
+											</button>
+										</div>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+			{/if}
+		</div>
+
+		<!-- Modal Eliminar Prima -->
+		{#if showDeletePrimaModal}
+			<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+				<div class="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl">
+					<div class="mb-4 flex items-center gap-3">
+						<div class="rounded-full bg-red-100 p-2">
+							<AlertCircle class="h-5 w-5 text-red-600" />
+						</div>
+						<h3 class="text-lg font-semibold text-gray-900">Eliminar Prima</h3>
+					</div>
+					<p class="mb-6 text-sm text-gray-600">
+						¿Está seguro que desea eliminar esta prima? Esta acción no se puede deshacer.
+					</p>
+					<div class="flex justify-end gap-2">
+						<button
+							on:click={() => { showDeletePrimaModal = false; primaToDelete = null; }}
+							class="rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+						>Cancelar</button>
+						<button
+							on:click={eliminarPrima}
+							class="rounded-md bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
+						>Eliminar</button>
+					</div>
+				</div>
+			</div>
+		{/if}
+
+		<!-- Modal Crear/Editar Prima -->
+		<PrimaFormModal
+			show={showPrimaFormModal}
+			prima={primaToEdit}
+			{loading}
+			onClose={() => { showPrimaFormModal = false; primaToEdit = null; }}
+			onSubmit={handleGuardarPrima}
+		/>
+
+	<!-- ================================================================ -->
 	<!--  TAB: ANÁLISIS                                                    -->
 	<!-- ================================================================ -->
 	{:else if mainTab === 'analisis'}
@@ -1154,12 +1700,13 @@
 			</div>
 
 			<!-- Resumen -->
-			<div class="mb-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+			<div class="mb-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
 				{#each [
 					{ label: 'Bonificaciones', value: formatCurrency(totalBon), count: datosBon.length },
 					{ label: 'Recargos',       value: formatCurrency(totalRec), count: datosRec.length },
 					{ label: 'Pernotes',       value: formatCurrency(totalPer), count: datosPer.length },
-					{ label: 'Mantenimientos', value: String(totalMnt),          count: datosMnt.length }
+					{ label: 'Mantenimientos', value: String(totalMnt),          count: datosMnt.length },
+					{ label: 'Adicionales',    value: formatCurrency(totalAdi), count: datosAdi.length }
 				] as card}
 					<div class="rounded-xl bg-white p-4 shadow-md">
 						<p class="text-xs font-semibold uppercase tracking-wide text-gray-500">{card.label}</p>
@@ -1606,6 +2153,173 @@
 								</tbody>
 							</table>
 						</div>
+
+					<!-- ===== ADICIONALES ===== -->
+					{:else if analisisTab === 'adicionales'}
+						<div class="mb-3 flex items-center justify-between">
+							<div>
+								<h2 class="text-base font-bold text-gray-800">Adicionales por Vehículo</h2>
+								<p class="text-xs text-gray-500 mt-0.5">Recargos automáticos / planilla que no se pagan al conductor pero se descuentan al propietario.</p>
+							</div>
+							<span class="text-xs text-gray-500">{adiPaginado.length} de {datosAdi.length} registros</span>
+						</div>
+
+						<!-- Sub-stats: total / propietario / cliente -->
+						<div class="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+							<div class="rounded-xl border border-purple-100 bg-purple-50/40 p-3">
+								<p class="text-[10px] font-semibold uppercase tracking-wide text-purple-700">Total Adicionales</p>
+								<p class="mt-1 text-lg font-bold text-purple-800">{formatCurrency(totalAdi)}</p>
+								<p class="text-[10px] text-purple-600">{datosAdi.length} registros agrupados</p>
+							</div>
+							<div class="rounded-xl border border-amber-100 bg-amber-50/40 p-3">
+								<p class="text-[10px] font-semibold uppercase tracking-wide text-amber-700">Asume Propietario</p>
+								<p class="mt-1 text-lg font-bold text-amber-800">{formatCurrency(totalAdiPropietario)}</p>
+								<p class="text-[10px] text-amber-600">Descuento al dueño del vehículo</p>
+							</div>
+							<div class="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3">
+								<p class="text-[10px] font-semibold uppercase tracking-wide text-emerald-700">Asume Cliente</p>
+								<p class="mt-1 text-lg font-bold text-emerald-800">{formatCurrency(totalAdiCliente)}</p>
+								<p class="text-[10px] text-emerald-600">Lo paga la empresa cliente</p>
+							</div>
+						</div>
+
+						{#if adiPorPlaca.length > 0}
+							<div class="mb-4 rounded-xl border border-gray-100 bg-gray-50 p-3" style="height:200px">
+								<Bar data={adiChartData} options={BAR_OPTS('Adicionales', '#8b5cf6')} />
+							</div>
+						{:else}
+							<div class="mb-4 rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 py-10 text-center">
+								<Layers class="mx-auto h-9 w-9 text-gray-300 mb-2" />
+								<p class="text-sm text-gray-400">Sin adicionales para los filtros aplicados</p>
+							</div>
+						{/if}
+
+						<!-- Mobile -->
+						<div class="space-y-3 md:hidden">
+							{#if adiPaginado.length > 0}
+								{#each adiPaginado as item}
+									<div class="rounded-lg border border-purple-200 bg-purple-50/30 p-4 shadow-sm">
+										<div class="flex items-center gap-2 flex-wrap">
+											<p class="font-semibold text-sm text-gray-800">{item.placa}</p>
+											{#if item.emisor}
+												<span class="inline-flex rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider {item.emisor === 'Transmeralda' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}">
+													{item.emisor}
+												</span>
+											{/if}
+											{#if item.numero_planilla}
+												<span class="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-700">
+													Planilla: {item.numero_planilla}
+												</span>
+											{/if}
+										</div>
+										<p class="text-xs text-gray-500 mt-1">{item.empresa_nombre} · {item.conductor}</p>
+										<div class="mt-3 space-y-1.5 text-sm">
+											<div class="flex justify-between"><span class="text-gray-500">Mes</span><span class="font-medium">{item.mes}</span></div>
+											<div class="flex justify-between">
+												<span class="text-gray-500">Asume propietario</span>
+												<span class="font-semibold {item.valor_propietario > 0 ? 'text-amber-700' : 'text-gray-400'}">
+													{formatCurrency(item.valor_propietario)}{item.porcentaje_propietario > 0 ? ` (${item.porcentaje_propietario}%)` : ''}
+												</span>
+											</div>
+											<div class="flex justify-between">
+												<span class="text-gray-500">Asume cliente</span>
+												<span class="font-medium text-emerald-700">{formatCurrency(item.valor_cliente)}</span>
+											</div>
+											<div class="flex justify-between border-t pt-1.5">
+												<span class="font-semibold text-gray-700">Total</span>
+												<span class="font-bold text-purple-700">{formatCurrency(item.valor)}</span>
+											</div>
+										</div>
+									</div>
+								{/each}
+							{:else}
+								<div class="rounded-xl border-2 border-dashed border-gray-200 py-12 text-center">
+									<AlertCircle class="mx-auto h-8 w-8 text-gray-300 mb-2" />
+									<p class="text-sm text-gray-400">Sin registros{hayFiltros ? ' para los filtros aplicados' : ''}</p>
+								</div>
+							{/if}
+						</div>
+
+						<!-- Desktop -->
+						<div class="hidden md:block overflow-x-auto rounded-lg border border-gray-200">
+							<table class="w-full text-sm">
+								<thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+									<tr>
+										{#each ['Placa','Conductor','Cliente/Empresa','Emisor','Planilla','Periodo','Asume Propietario','Asume Cliente','Total'] as h}
+											<th class="px-4 py-3 text-left font-semibold">{h}</th>
+										{/each}
+									</tr>
+								</thead>
+								<tbody class="divide-y divide-gray-100">
+									{#if adiPaginado.length > 0}
+										{#each adiPaginado as item}
+											<tr class="hover:bg-purple-50/30 transition-colors">
+												<td class="px-4 py-3 font-medium text-gray-900">{item.placa}</td>
+												<td class="px-4 py-3 text-gray-600">{item.conductor}</td>
+												<td class="px-4 py-3 text-gray-600">{item.empresa_nombre}</td>
+												<td class="px-4 py-3">
+													{#if item.emisor}
+														<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-bold {item.emisor === 'Transmeralda' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}">
+															{item.emisor}
+														</span>
+													{:else}
+														<span class="text-xs text-gray-400">—</span>
+													{/if}
+												</td>
+												<td class="px-4 py-3 text-xs font-mono">
+													{#if item.numero_planilla}
+														<span class="inline-flex rounded-md bg-gray-100 px-2 py-0.5 text-gray-700">{item.numero_planilla}</span>
+													{:else}
+														<span class="text-gray-400 italic">Sin planilla</span>
+													{/if}
+												</td>
+												<td class="px-4 py-3 text-gray-600">
+													<span class="font-medium">{item.mes}</span>
+													<span class="text-[10px] text-gray-500 ml-1">{item.mes_key.split('-')[0]}</span>
+												</td>
+												<td class="px-4 py-3">
+													<div class="flex flex-col">
+														<span class="font-semibold {item.valor_propietario > 0 ? 'text-amber-700' : 'text-gray-400'}">
+															{formatCurrency(item.valor_propietario)}
+														</span>
+														{#if item.porcentaje_propietario > 0}
+															<span class="text-[10px] text-gray-500">{item.porcentaje_propietario}% del total</span>
+														{/if}
+													</div>
+												</td>
+												<td class="px-4 py-3 font-medium text-emerald-700">{formatCurrency(item.valor_cliente)}</td>
+												<td class="px-4 py-3 font-bold text-purple-700">{formatCurrency(item.valor)}</td>
+											</tr>
+										{/each}
+									{:else}
+										<tr>
+											<td colspan="9" class="py-12 text-center">
+												<Layers class="mx-auto h-8 w-8 text-gray-300 mb-2" />
+												<p class="text-sm text-gray-400">Sin registros{hayFiltros ? ' para los filtros aplicados' : ''}</p>
+											</td>
+										</tr>
+									{/if}
+								</tbody>
+							</table>
+						</div>
+
+						<!-- Paginación adi -->
+						{#if totalPagesAdi > 1}
+							<div class="mt-4 flex items-center justify-between">
+								<span class="text-xs text-gray-500">Página {pagesAdi} de {totalPagesAdi}</span>
+								<div class="flex gap-1">
+									<button disabled={pagesAdi === 1} on:click={() => pagesAdi--} class="rounded-lg border border-gray-300 p-2 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"><ChevronLeft class="h-4 w-4"/></button>
+									{#each getPageNumbers(pagesAdi, totalPagesAdi) as p}
+										{#if p === '...'}<span class="px-2 py-2 text-xs text-gray-400">...</span>
+										{:else}
+											<button on:click={() => (pagesAdi = Number(p))} class="h-9 w-9 rounded-lg text-xs font-bold border transition-colors {p === pagesAdi ? 'bg-gradient-to-r from-orange-500 to-amber-600 text-white border-transparent shadow' : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'}">{p}</button>
+										{/if}
+									{/each}
+									<button disabled={pagesAdi === totalPagesAdi} on:click={() => pagesAdi++} class="rounded-lg border border-gray-300 p-2 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"><ChevronRight class="h-4 w-4"/></button>
+								</div>
+							</div>
+						{/if}
+
 					{/if}
 
 				</div>

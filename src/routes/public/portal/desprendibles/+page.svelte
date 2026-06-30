@@ -22,12 +22,21 @@
     created_at: string;
     firmado: boolean;
     fecha_firma: string | null;
+    prima_asociada?: {
+      id: string;
+      mes: number;
+      anio: number;
+      prima: number;
+      prima_pendiente?: number | null;
+      estado: string;
+    } | null;
   }
 
   let desprendibles: Desprendible[] = [];
   let loading = true;
   let error = '';
   let generandoPdf: string | null = null;
+  let generandoPdfPrima: string | null = null;
 
   // ── Highlight desde email ──
   let highlightId: string | null = null;
@@ -157,6 +166,32 @@
       alert(err.message || 'Error al generar PDF');
     } finally {
       generandoPdf = null;
+    }
+  }
+
+  async function verPrima(primaId: string) {
+    generandoPdfPrima = primaId;
+    try {
+      const res: any = await portalFetch(`/conductor-portal/prima/${primaId}`);
+      const { prima } = res.data;
+
+      // El portal del conductor NO muestra la firma en el PDF de prima
+      const { generarPdfPrima } = await import('$lib/utils/pdfPrima');
+      await generarPdfPrima(prima, []);
+    } catch (err: any) {
+      if (err.status === 401) {
+        portalSession.logout();
+        goto('/public/portal');
+        return;
+      }
+      if (err.status === 404) {
+        alert('La prima ya no está disponible.');
+        await cargarDesprendibles();
+        return;
+      }
+      alert(err.message || 'Error al generar el PDF de la prima');
+    } finally {
+      generandoPdfPrima = null;
     }
   }
 
@@ -422,7 +457,17 @@
           {#each filtered as d (d.id)}
             <tr id="desp-{d.id}" class:highlight-row={highlightId === d.id}>
               <td class="td-mes">
-                <span class="mes-name">{getMes(d.periodo_fin)}</span>
+                <div class="mes-row">
+                  <span class="mes-name">{getMes(d.periodo_fin)}</span>
+                  {#if d.es_cotransmeq}
+                    <span class="tag-cotrans">CTM</span>
+                  {/if}
+                </div>
+                {#if d.prima_asociada}
+                  <span class="tag-prima" title="Prima asociada: {fmt(d.prima_asociada.prima)}">
+                    💰 Prima {fmt(d.prima_asociada.prima)}
+                  </span>
+                {/if}
               </td>
               <td class="td-periodo">{periodoRango(d.periodo_inicio, d.periodo_fin)}</td>
               <td>
@@ -445,28 +490,44 @@
                 {/if}
               </td>
               <td class="text-center">
-                {#if d.firmado}
-                  <button
-                    class="btn-action btn-ver"
-                    on:click={() => verDesprendible(d.id)}
-                    disabled={generandoPdf === d.id}
-                    title="Ver Desprendible PDF"
-                  >
-                    {#if generandoPdf === d.id}
-                      <span class="spinner-mini"></span>
-                    {:else}
-                      📥 Ver
-                    {/if}
-                  </button>
-                {:else}
-                  <button
-                    class="btn-action btn-firmar"
-                    on:click={() => abrirFirmaModal(d)}
-                    title="Firmar Desprendible"
-                  >
-                    ✍️ Firmar
-                  </button>
-                {/if}
+                <div class="action-stack">
+                  {#if d.firmado}
+                    <button
+                      class="btn-action btn-ver"
+                      on:click={() => verDesprendible(d.id)}
+                      disabled={generandoPdf === d.id}
+                      title="Ver Desprendible PDF"
+                    >
+                      {#if generandoPdf === d.id}
+                        <span class="spinner-mini"></span>
+                      {:else}
+                        📥 Ver
+                      {/if}
+                    </button>
+                  {:else}
+                    <button
+                      class="btn-action btn-firmar"
+                      on:click={() => abrirFirmaModal(d)}
+                      title="Firmar Desprendible"
+                    >
+                      ✍️ Firmar
+                    </button>
+                  {/if}
+                  {#if d.prima_asociada}
+                    <button
+                      class="btn-action btn-prima"
+                      on:click={() => verPrima(d.prima_asociada!.id)}
+                      disabled={generandoPdfPrima === d.prima_asociada!.id}
+                      title="Ver Desprendible de Prima"
+                    >
+                      {#if generandoPdfPrima === d.prima_asociada!.id}
+                        <span class="spinner-mini"></span>
+                      {:else}
+                        💰 Prima
+                      {/if}
+                    </button>
+                  {/if}
+                </div>
               </td>
             </tr>
           {/each}
@@ -484,6 +545,14 @@
               <span class="m-periodo">{periodoRango(d.periodo_inicio, d.periodo_fin)}</span>
             </div>
             <div class="m-card-badges">
+              {#if d.es_cotransmeq}
+                <span class="tag-cotrans">CTM</span>
+              {/if}
+              {#if d.prima_asociada}
+                <span class="tag-prima" title="Prima incluida: {fmt(d.prima_asociada.prima)}">
+                  💰 Prima
+                </span>
+              {/if}
               {#if d.estado === 'Liquidado'}
                 <span class="status-pill liquidado">{d.estado}</span>
               {:else if d.estado === 'Pendiente'}
@@ -533,6 +602,20 @@
               on:click={() => abrirFirmaModal(d)}
             >
               ✍️ Firmar Desprendible
+            </button>
+          {/if}
+
+          {#if d.prima_asociada}
+            <button
+              class="m-btn-prima"
+              on:click={() => verPrima(d.prima_asociada!.id)}
+              disabled={generandoPdfPrima === d.prima_asociada!.id}
+            >
+              {#if generandoPdfPrima === d.prima_asociada!.id}
+                <span class="spinner-mini-w"></span> Generando prima...
+              {:else}
+                💰 Ver Desprendible de Prima
+              {/if}
             </button>
           {/if}
         </div>
@@ -1354,4 +1437,63 @@
     .m-card-stats { grid-template-columns: 1fr; }
     .firma-resumen { flex-direction: column; gap: 0.4rem; }
   }
+
+  /* ═══ PRIMA ASOCIADA ═══ */
+  .mes-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    white-space: nowrap;
+  }
+  .tag-prima {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.18rem 0.5rem;
+    margin-top: 0.3rem;
+    border-radius: 5px;
+    font-size: 0.65rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, #fef3c7, #fde68a);
+    color: #92400e;
+    border: 1px solid #fcd34d;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+  }
+  .action-stack {
+    display: flex;
+    flex-direction: row;
+    gap: 0.3rem;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+  .btn-prima {
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    color: #fff;
+    border: 1px solid #f59e0b;
+    box-shadow: 0 1px 3px rgba(245, 158, 11, 0.25);
+  }
+  .btn-prima:hover:not(:disabled) { background: linear-gradient(135deg, #f59e0b, #d97706); }
+  .btn-prima:disabled { opacity: 0.5; cursor: wait; }
+  .m-btn-prima {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    width: calc(100% - 1.7rem);
+    margin: 0 0.85rem 0.4rem;
+    padding: 0.5rem;
+    border: none;
+    border-radius: 9px;
+    background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.82rem;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(245, 158, 11, 0.2);
+    transition: transform .1s;
+  }
+  .m-btn-prima:active:not(:disabled) { transform: scale(0.97); }
+  .m-btn-prima:disabled { opacity: 0.6; cursor: wait; }
 </style>

@@ -1,9 +1,10 @@
 /**
  * Generador de PDF Desprendible de Prima usando pdfmake
- * Portado de pdfMakerPrima.tsx
+ * Entidad independiente: la prima ya no está asociada a una liquidación.
+ * Reutiliza la firma del desprendible de nómina (firmas con presignedUrl).
  */
-import type { Liquidacion, FirmaConUrl } from '$lib/types/nomina';
-import { obtenerLogoBase64 } from '$lib/utils/pdfUtils';
+import type { Prima, FirmaConUrl } from '$lib/types/nomina';
+import { obtenerLogoBase64, imageToBase64Url } from '$lib/utils/pdfUtils';
 
 function formatCurrency(value: number | string | null | undefined): string {
 	const num = Number(value) || 0;
@@ -19,53 +20,75 @@ function safeValue(val: any, def: any = '') {
 	return val !== undefined && val !== null ? val : def;
 }
 
+const MESES_NOMBRES = [
+	'',
+	'Enero',
+	'Febrero',
+	'Marzo',
+	'Abril',
+	'Mayo',
+	'Junio',
+	'Julio',
+	'Agosto',
+	'Septiembre',
+	'Octubre',
+	'Noviembre',
+	'Diciembre'
+];
+
 export async function generarPdfPrima(
-	item: Liquidacion,
+	prima: Prima,
 	firmas: FirmaConUrl[] = []
 ): Promise<void> {
 	const pdfMake = (await import('pdfmake/build/pdfmake')).default;
 	const pdfFonts = (await import('pdfmake/build/vfs_fonts')).default;
 	pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts.vfs;
 
-	const esCotransmeq = item.es_cotransmeq || false;
+	const esCotransmeq = !!prima.conductor?.numero_identificacion
+		? false
+		: false; // Por defecto Transmeralda; se puede derivar del conductor si se requiere
 	const color = esCotransmeq ? '#FF9500' : '#2E8B57';
 	const empresa = esCotransmeq
 		? 'SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S'
 		: 'TRANSPORTES Y SERVICIOS ESMERALDA S.A.S';
 	const nit = esCotransmeq ? '901983227' : '901528440-3';
 
-	const conductorNombre = `${safeValue(item.conductor?.nombre, 'N/A')}`;
-	const conductorCedula = safeValue((item.conductor as any)?.cedula, 'N/A');
+	const conductorNombre = `${safeValue(prima.conductor?.nombre, 'N/A')} ${safeValue(prima.conductor?.apellido, '')}`.trim();
+	const conductorCedula = safeValue(prima.conductor?.numero_identificacion, 'N/A');
 
 	// Cargar logo
 	const logoBase64 = await obtenerLogoBase64(esCotransmeq);
 
-	const prima = Number(safeValue(item.prima, 0));
-	const primaPendiente = Number(safeValue(item.prima_pendiente, 0));
+	const valorPrima = Number(safeValue(prima.prima, 0));
+	const primaPendiente = Number(safeValue(prima.prima_pendiente, 0));
+
+	const mes = Number(prima.mes) || 0;
+	const year = Number(prima.anio) || new Date().getFullYear();
+	const mesLabel = `${MESES_NOMBRES[mes] || 'Periodo'} ${year}`;
 
 	// Filas de detalle de prima
 	const detalleBody: any[][] = [];
-	if (prima > 0) {
+	if (valorPrima > 0) {
 		detalleBody.push([
 			{
 				stack: [
-					{ text: 'Prima diciembre 2025' },
+					{ text: `Prima ${mesLabel}` },
 					{
-						text: 'Valor pagado en periodo anterior',
+						text: 'Valor pagado',
 						fontSize: 8,
 						color: '#666',
 						italics: true
 					}
 				]
 			},
-			{ text: formatCurrency(prima), color, alignment: 'right' as const, bold: true }
+			{ text: formatCurrency(valorPrima), color, alignment: 'right' as const, bold: true }
 		]);
 	}
 	if (primaPendiente > 0) {
 		detalleBody.push([
 			{
 				stack: [
-					{ text: 'Ajuste prima diciembre 2025 (Parex)' },
+					{ text: `Ajuste prima ${mesLabel}` },
 					{
 						text: 'Valor pendiente adicional',
 						fontSize: 8,
@@ -83,6 +106,48 @@ export async function generarPdfPrima(
 		]);
 	}
 
+	// Datos del desprendible (campos manuales)
+	const datosManualesBody: any[][] = [];
+	const tiempoDias = Number(safeValue(prima.tiempo_trabajado_dias, 0));
+	const sueldoBasico = Number(safeValue(prima.sueldo_basico, 0));
+	const auxTransporte = Number(safeValue(prima.auxilio_transporte, 0));
+	const sueldoVariable = Number(safeValue(prima.sueldo_variable, 0));
+	const totalBase = Number(safeValue(prima.total_base_liquidacion, 0));
+
+	if (tiempoDias > 0) {
+		datosManualesBody.push([
+			{ text: 'Tiempo trabajado', color: '#666' },
+			{ text: `${tiempoDias} días`, alignment: 'right' as const, bold: true }
+		]);
+	}
+	if (sueldoBasico > 0) {
+		datosManualesBody.push([
+			{ text: 'Sueldo básico', color: '#666' },
+			{ text: formatCurrency(sueldoBasico), alignment: 'right' as const, bold: true }
+		]);
+	}
+	if (auxTransporte > 0) {
+		datosManualesBody.push([
+			{ text: 'Auxilio de transporte', color: '#666' },
+			{ text: formatCurrency(auxTransporte), alignment: 'right' as const, bold: true }
+		]);
+	}
+	if (sueldoVariable > 0) {
+		datosManualesBody.push([
+			{ text: 'Sueldo variable', color: '#666' },
+			{ text: formatCurrency(sueldoVariable), alignment: 'right' as const, bold: true }
+		]);
+	}
+	if (totalBase > 0) {
+		datosManualesBody.push([
+			{ text: 'Total base de liquidación', color: '#666' },
+			{ text: formatCurrency(totalBase), alignment: 'right' as const, bold: true }
+		]);
+	}
+
+	const hasFirmaPresignedUrl = !!(firmas && firmas[0]?.presignedUrl);
+	console.log('[pdfPrima] Verificando firma. hasPresignedUrl:', hasFirmaPresignedUrl, 'firmasCount:', firmas?.length || 0);
+
 	const content: any[] = [
 		// Header
 		{
@@ -92,7 +157,7 @@ export async function generarPdfPrima(
 						{ text: empresa, style: 'header', color },
 						{ text: `NIT: ${nit}`, fontSize: 10, margin: [0, 2, 0, 0] },
 						{
-							text: 'DESPRENDIBLE DE PRIMA - DICIEMBRE 2025',
+							text: `DESPRENDIBLE DE PRIMA - ${mesLabel.toUpperCase()}`,
 							fontSize: 10,
 							color,
 							bold: true,
@@ -102,7 +167,15 @@ export async function generarPdfPrima(
 					width: '*'
 				},
 				...(logoBase64
-					? [{ image: logoBase64, width: 175, height: 100, alignment: 'right' as const, margin: [0, -15, -30, 0] }]
+					? [
+							{
+								image: logoBase64,
+								width: 175,
+								height: 100,
+								alignment: 'right' as const,
+								margin: [0, -15, -30, 0]
+							}
+						]
 					: [])
 			]
 		},
@@ -116,12 +189,11 @@ export async function generarPdfPrima(
 				body: [
 					[{ text: 'Nombre' }, { text: conductorNombre, alignment: 'right' as const }],
 					[{ text: 'C.C.' }, { text: conductorCedula, alignment: 'right' as const }],
-					[{ text: 'Periodo' }, { text: 'Diciembre 2025', alignment: 'right' as const }]
+					[{ text: 'Periodo' }, { text: mesLabel, alignment: 'right' as const }]
 				]
 			},
 			layout: {
-				hLineWidth: (i: number, node: any) =>
-					i === 0 || i === node.table.body.length ? 1 : 0.5,
+				hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length ? 1 : 0.5),
 				vLineWidth: () => 1,
 				hLineColor: () => '#E0E0E0',
 				vLineColor: () => '#E0E0E0',
@@ -149,7 +221,7 @@ export async function generarPdfPrima(
 									margin: [0, 0, 0, 4]
 								},
 								{
-									text: 'Este desprendible corresponde al pago de la prima de servicios del segundo semestre del año 2025. Los valores que se detallan a continuación fueron cancelados en el mes de diciembre de 2025, dentro de los términos legales establecidos, y se presentan en este documento únicamente para su información y registro.',
+									text: `Este desprendible corresponde al pago de la prima de servicios del periodo ${mesLabel}, conforme al registro independiente de primas. Los valores que se detallan a continuación fueron cancelados dentro de los términos legales establecidos, y se presentan en este documento únicamente para su información y registro.`,
 									fontSize: 9,
 									lineHeight: 1.4
 								}
@@ -195,13 +267,93 @@ export async function generarPdfPrima(
 				]
 			: []),
 
-		// Footer
+		// Detalle de datos manuales (si hay)
+		...(datosManualesBody.length > 0
+			? [
+					{ text: 'DETALLE DEL DESPRENDIBLE', bold: true, color, fontSize: 11, margin: [0, 15, 0, 6] },
+					{
+						table: {
+							widths: ['*', 'auto'],
+							body: datosManualesBody
+						},
+						layout: {
+							hLineWidth: (i: number, node: any) =>
+								i === 0 || i === node.table.body.length ? 1 : 0.5,
+							vLineWidth: () => 1,
+							hLineColor: () => '#E0E0E0',
+							vLineColor: () => '#E0E0E0',
+							paddingLeft: () => 5,
+							paddingRight: () => 5,
+							paddingTop: () => 5,
+							paddingBottom: () => 5
+						}
+					}
+				]
+			: []),
+
+		// ============================================================
+		// FOOTER CON FIRMA (reutilizada del desprendible de nómina)
+		// ============================================================
+		...(hasFirmaPresignedUrl
+			? [
+					...(await (async () => {
+						try {
+							console.log('[pdfPrima] Convirtiendo URL a base64...');
+							const firmaBase64 = await imageToBase64Url(firmas[0].presignedUrl!);
+							console.log('[pdfPrima] Base64 generado, longitud:', firmaBase64.length, 'starts:', firmaBase64.substring(0, 30));
+							return [
+								{
+									stack: [
+										{
+											image: firmaBase64,
+											width: 180,
+											height: 50,
+											alignment: 'center' as const,
+											margin: [0, 30, 0, 0]
+										},
+										{
+											canvas: [
+												{
+													type: 'line',
+													x1: 0,
+													y1: 0,
+													x2: 190,
+													y2: 0,
+													lineWidth: 1,
+													lineColor: '#BDBDBD'
+												}
+											],
+											width: 190,
+											alignment: 'center' as const,
+											margin: [0, 2, 0, 0]
+										},
+										{
+											text: 'Firma de recibido',
+											fontSize: 10,
+											color: '#2E8B57',
+											alignment: 'center' as const,
+											bold: true,
+											margin: [0, 4, 0, 7]
+										}
+									],
+									alignment: 'center' as const
+								}
+							];
+						} catch (e) {
+							console.error('[pdfPrima] Error al procesar la firma:', e);
+							return [];
+						}
+					})())
+				]
+			: []),
+
+		// Footer fecha
 		{
 			text: `Documento generado el ${new Date().toLocaleDateString('es-CO')}`,
 			fontSize: 9,
 			color: '#9E9E9E',
 			alignment: 'center' as const,
-			margin: [0, 40, 0, 0]
+			margin: [0, 20, 0, 0]
 		}
 	];
 

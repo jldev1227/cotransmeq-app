@@ -38,7 +38,6 @@
 	let tiene_vacaciones = false;
 	let tiene_incapacidad = false;
 	let tiene_cesantias = false;
-	let tiene_prima = false;
 	let tiene_ajuste = false;
 	let ajuste_por_dia_flag = false;
 	let ajuste_parex = false;
@@ -57,8 +56,6 @@
 	let ajuste_por_dia = 0;
 	let cesantias = 0;
 	let interes_cesantias = 0;
-	let prima = 0;
-	let prima_pendiente: number | null = null;
 
 	// Detalles de vehículos (simplificado)
 	let detallesVehiculos: any[] = [];
@@ -125,7 +122,6 @@
 		tiene_vacaciones = initialData.tiene_vacaciones || false;
 		tiene_incapacidad = initialData.tiene_incapacidad || false;
 		tiene_cesantias = initialData.tiene_cesantias || false;
-		tiene_prima = initialData.tiene_prima || false;
 		tiene_ajuste = initialData.tiene_ajuste || false;
 		ajuste_por_dia_flag = initialData.ajuste_por_dia_flag || false;
 		ajuste_parex = initialData.ajuste_parex || false;
@@ -218,7 +214,6 @@
 			tiene_vacaciones,
 			tiene_incapacidad,
 			tiene_cesantias,
-			tiene_prima,
 			tiene_ajuste,
 			ajuste_por_dia_flag,
 			ajuste_parex,
@@ -233,8 +228,6 @@
 			ajuste_por_dia: ajuste_por_dia_flag ? ajuste_por_dia : undefined,
 			cesantias: tiene_cesantias ? cesantias : undefined,
 			interes_cesantias: tiene_cesantias ? interes_cesantias : undefined,
-			prima: tiene_prima ? prima : undefined,
-			prima_pendiente: tiene_prima && prima_pendiente ? prima_pendiente : undefined,
 			conceptos_adicionales,
 			vehiculos: vehiculosSeleccionados,
 			detalles_vehiculos: detallesVehiculos.map(d => ({
@@ -554,10 +547,6 @@
 							<span>Pagar Cesantías</span>
 						</label>
 						<label class="flex items-center space-x-2 cursor-pointer">
-							<input type="checkbox" bind:checked={tiene_prima} class="w-4 h-4 rounded text-orange-600" />
-							<span>Pagar Prima</span>
-						</label>
-						<label class="flex items-center space-x-2 cursor-pointer">
 							<input type="checkbox" bind:checked={no_descontar_salud} class="w-4 h-4 rounded text-orange-600" />
 							<span>No Descontar Salud</span>
 						</label>
@@ -583,29 +572,6 @@
 								<input
 									type="number"
 									bind:value={interes_cesantias}
-									min="0"
-									class="w-full px-4 py-2 border border-gray-300 rounded-lg"
-								/>
-							</div>
-						</div>
-					{/if}
-
-					{#if tiene_prima}
-						<div class="grid grid-cols-2 gap-4 bg-purple-50 p-4 rounded-lg">
-							<div>
-								<label class="block text-sm font-medium text-gray-700 mb-2">Prima</label>
-								<input
-									type="number"
-									bind:value={prima}
-									min="0"
-									class="w-full px-4 py-2 border border-gray-300 rounded-lg"
-								/>
-							</div>
-							<div>
-								<label class="block text-sm font-medium text-gray-700 mb-2">Prima Pendiente (opcional)</label>
-								<input
-									type="number"
-									bind:value={prima_pendiente}
 									min="0"
 									class="w-full px-4 py-2 border border-gray-300 rounded-lg"
 								/>

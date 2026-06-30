@@ -20,7 +20,6 @@
 		Loader2
 	} from 'lucide-svelte';
 	import { generarPdfDesprendible } from '$lib/utils/pdfDesprendible';
-	import { generarPdfPrima } from '$lib/utils/pdfPrima';
 	import { generarPdfInteresesCesantias } from '$lib/utils/pdfInteresesCesantias';
 
 	export let liquidacionId: string;
@@ -168,8 +167,6 @@
 	);
 	$: netoAPagar = Number(liquidacion?.sueldo_total || liquidacion?.neto_pagado || 0);
 
-	$: mostrarBotonPrima =
-		Number(liquidacion?.prima || 0) > 0 || Number(liquidacion?.prima_pendiente || 0) > 0;
 	$: mostrarBotonIntereses = Number(liquidacion?.interes_cesantias || 0) > 0;
 
 	// ============= PDF =============
@@ -203,16 +200,6 @@
 			toast.error('Error al generar el PDF del desprendible');
 		} finally {
 			generatingPdf = false;
-		}
-	}
-
-	async function handleGeneratePrimaPDF() {
-		if (!liquidacion) return;
-		try {
-			await generarPdfPrima(liquidacion, firmas);
-		} catch (error: any) {
-			console.error('Error generando PDF Prima:', error);
-			toast.error('Error al generar el PDF de prima');
 		}
 	}
 
@@ -1004,15 +991,6 @@
 					class="flex shrink-0 items-center justify-between rounded-b-2xl border-t border-gray-200 bg-white px-6 py-4"
 				>
 					<div class="flex gap-3">
-						{#if mostrarBotonPrima}
-							<button
-								on:click={handleGeneratePrimaPDF}
-								class="flex items-center gap-2 rounded-lg bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100"
-							>
-								<FileText class="h-4 w-4" />
-								Desprendible Prima
-							</button>
-						{/if}
 						{#if mostrarBotonIntereses}
 							<button
 								on:click={handleGenerateInteresesPDF}
