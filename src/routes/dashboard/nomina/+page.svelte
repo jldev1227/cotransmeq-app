@@ -17,7 +17,10 @@
 		editarPrima,
 		eliminarPrima as eliminarPrimaApi,
 		obtenerLiquidacionPorId,
-		obtenerVehiculos
+		obtenerVehiculos,
+		previewPrimas,
+		enviarPrimas,
+		togglePrimaPortalVisible
 
 	} from '$lib/api/nomina';
 	import type { LiquidacionesParams } from '$lib/api/nomina';
@@ -122,6 +125,11 @@
 		const u = new URL($page.url.href);
 		u.searchParams.set('tab', tab);
 		goto(u.toString(), { replaceState: true, noScroll: true });
+		// Limpiar selecciones entre tabs para que la barra de bulk no muestre IDs del otro tab
+		selectedLiquidaciones.clear();
+		selectedLiquidaciones = selectedLiquidaciones;
+		selectedPrimas.clear();
+		selectedPrimas = selectedPrimas;
 	}
 
 	// =============================================
@@ -204,6 +212,7 @@
 	let loadingPrimas = true;
 	let searchPrimas = '';
 	let searchPrimasTimeout: ReturnType<typeof setTimeout>;
+	let selectedPrimas: Set<string> = new Set();
 	let showDeletePrimaModal = false;
 	let primaToDelete: string | null = null;
 	let showPrimaFormModal = false;
@@ -213,6 +222,31 @@
 	let statsPrimas: PrimasStats = { total: 0, totalPendientes: 0, totalPagados: 0, montoTotal: 0 };
 	let filtroPrimaMes: number | '' = '';
 	let filtroPrimaAnio: number | '' = '';
+
+	// Preview / envío de primas (separado del de liquidaciones)
+	let showPreviewPrimasModal = false;
+	let previewPrimaItems: Array<{
+		primaId: string;
+		conductor: string;
+		email: string | null;
+		mes: number;
+		anio: number;
+		prima: number;
+		prima_pendiente: number | null;
+		estado: string;
+		canSend: boolean;
+	}> = [];
+	let previewPrimasLoading = false;
+	let sendingPrimasEmails = false;
+	let sendPrimasResults: Array<{
+		primaId: string;
+		conductor: string;
+		email?: string;
+		status: 'enviado' | 'error';
+		message?: string;
+		portalLink?: string;
+	}> = [];
+	let sendPrimasComplete = false;
 
 	// =============================================
 	// ESTADO — ANÁLISIS
@@ -331,9 +365,18 @@
 			if (filtroPrimaMes) params.mes = filtroPrimaMes;
 			if (filtroPrimaAnio) params.anio = filtroPrimaAnio;
 			const r: any = await obtenerPrimas(params);
-			primas = r.data?.primas || r.data || [];
-			if (r.data?.pagination) paginationPrimas = { ...paginationPrimas, ...r.data.pagination };
-			if (r.data?.stats) statsPrimas = r.data.stats;
+			primas = r.data?.data?.primas || r.data?.primas || r.data || [];
+			if (r.data?.data?.pagination) paginationPrimas = { ...paginationPrimas, ...r.data.data.pagination };
+			else if (r.data?.pagination) paginationPrimas = { ...paginationPrimas, ...r.data.pagination };
+			if (r.data?.data?.stats) statsPrimas = r.data.data.stats;
+			else if (r.data?.stats) statsPrimas = r.data.stats;
+			// Persistir en sessionStorage para que el mock de envío de emails
+			// pueda resolver el email del conductor sin volver a la API.
+			try {
+				sessionStorage.setItem('primas_cache', JSON.stringify(primas));
+			} catch {
+				/* ignore */
+			}
 		} catch (e) {
 			console.error('Error cargando primas:', e);
 			toast.error('Error al cargar las primas');
@@ -466,6 +509,94 @@
 
 	function getPrimaEstadoColor(e: PrimaEstado): string {
 		return e === 'Pagado' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700';
+	}
+
+	// ── Selección / Bulk actions / Preview / Envío (primas) ─────────
+	function togglePrimaSelection(id: string) {
+		selectedPrimas.has(id) ? selectedPrimas.delete(id) : selectedPrimas.add(id);
+		selectedPrimas = selectedPrimas;
+	}
+
+	function togglePrimaSelectAll() {
+		if (selectedPrimas.size === primas.length) {
+			selectedPrimas.clear();
+		} else {
+			primas.forEach((p) => selectedPrimas.add(p.id));
+		}
+		selectedPrimas = selectedPrimas;
+	}
+
+	async function handleBulkTogglePrimaVisible(visible: boolean) {
+		if (selectedPrimas.size === 0) {
+			toast.error('Selecciona al menos una prima');
+			return;
+		}
+		try {
+			const ids = Array.from(selectedPrimas);
+			await togglePrimaPortalVisible(ids, visible);
+			toast.success(`${ids.length} prima(s) ${visible ? 'visibles en portal' : 'ocultas del portal'}`);
+		} catch (err: any) {
+			toast.error(err?.response?.data?.message || 'Error al cambiar visibilidad');
+		}
+	}
+
+	async function handleTogglePrimaVisible(id: string) {
+		try {
+			await togglePrimaPortalVisible([id], true);
+			toast.success('Prima visible en el portal del conductor');
+		} catch (err: any) {
+			toast.error(err?.response?.data?.message || 'Error al cambiar visibilidad');
+		}
+	}
+
+	async function abrirPreviewPrimas() {
+		if (selectedPrimas.size === 0) {
+			toast.error('Selecciona al menos una prima');
+			return;
+		}
+		try {
+			previewPrimasLoading = true;
+			sendPrimasComplete = false;
+			sendPrimasResults = [];
+			showPreviewPrimasModal = true;
+			const r = await previewPrimas(Array.from(selectedPrimas));
+			previewPrimaItems = r.items ?? [];
+		} catch (err: any) {
+			toast.error('Error al cargar preview de primas');
+			showPreviewPrimasModal = false;
+		} finally {
+			previewPrimasLoading = false;
+		}
+	}
+
+	async function confirmarEnvioPrimas() {
+		const idsToSend = previewPrimaItems.filter((p) => p.canSend).map((p) => p.primaId);
+		if (idsToSend.length === 0) {
+			toast.error('No hay conductores con email válido');
+			return;
+		}
+		try {
+			sendingPrimasEmails = true;
+			const r = await enviarPrimas(idsToSend);
+			sendPrimasResults = r.resultados ?? [];
+			sendPrimasComplete = true;
+			const ok = r.enviados ?? 0;
+			const err = r.errores ?? 0;
+			toast.success(`${ok} email(s) enviado(s)${err ? `, ${err} con error` : ''}`);
+			selectedPrimas.clear();
+			selectedPrimas = selectedPrimas;
+		} catch (err: any) {
+			toast.error(err?.response?.data?.message || 'Error al enviar primas');
+		} finally {
+			sendingPrimasEmails = false;
+		}
+	}
+
+	function cerrarPreviewPrimasModal() {
+		showPreviewPrimasModal = false;
+		previewPrimaItems = [];
+		sendPrimasResults = [];
+		sendPrimasComplete = false;
 	}
 
 	// =============================================
@@ -1439,12 +1570,45 @@
 						>✕ Limpiar</button>
 					{/if}
 				</div>
-				<button
-					on:click={abrirCrearPrima}
-					class="flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-5 py-2.5 font-semibold text-white shadow-lg shadow-orange-500/30 transition-all hover:shadow-xl hover:-translate-y-0.5 text-sm"
-				>
-					<Plus class="h-4 w-4" /> Nueva Prima
-				</button>
+				<div class="flex items-center gap-2">
+					{#if selectedPrimas.size > 0}
+						<span class="text-xs text-gray-500">{selectedPrimas.size} sel.</span>
+						<button
+							on:click={togglePrimaSelectAll}
+							class="text-xs font-medium text-orange-600 underline transition-colors hover:text-orange-700"
+						>
+							{selectedPrimas.size === primas.length ? 'Deseleccionar' : 'Seleccionar todo'}
+						</button>
+						<div class="h-4 w-px bg-gray-300"></div>
+						<button
+							on:click={() => handleBulkTogglePrimaVisible(true)}
+							class="flex items-center gap-1.5 rounded-lg border border-orange-300 bg-orange-50 px-2.5 py-1.5 text-xs text-orange-700 transition-all hover:bg-orange-100"
+							title="Hacer visibles en el portal"
+						>
+							<Eye class="h-3.5 w-3.5" />Mostrar
+						</button>
+						<button
+							on:click={() => handleBulkTogglePrimaVisible(false)}
+							class="flex items-center gap-1.5 rounded-lg border border-gray-300 bg-gray-50 px-2.5 py-1.5 text-xs text-gray-700 transition-all hover:bg-gray-100"
+							title="Ocultar del portal"
+						>
+							<XCircle class="h-3.5 w-3.5" />Ocultar
+						</button>
+						<button
+							on:click={abrirPreviewPrimas}
+							class="flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-orange-500 to-amber-600 px-3 py-1.5 text-xs text-white transition-all hover:from-orange-600 hover:to-amber-700"
+						>
+							<Send class="h-3.5 w-3.5" />Enviar ({selectedPrimas.size})
+						</button>
+					{:else}
+						<button
+							on:click={abrirCrearPrima}
+							class="flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-5 py-2.5 font-semibold text-white shadow-lg shadow-orange-500/30 transition-all hover:shadow-xl hover:-translate-y-0.5 text-sm"
+						>
+							<Plus class="h-4 w-4" /> Nueva Prima
+						</button>
+					{/if}
+				</div>
 			</div>
 		</div>
 
@@ -1482,6 +1646,14 @@
 					<table class="w-full">
 						<thead class="bg-gray-50">
 							<tr>
+								<th class="w-10 px-4 py-3 text-left text-sm font-semibold text-gray-700">
+									<input
+										type="checkbox"
+										checked={primas.length > 0 && selectedPrimas.size === primas.length}
+										on:change={togglePrimaSelectAll}
+										class="h-4 w-4 cursor-pointer rounded border-gray-300 text-orange-600 accent-orange-600"
+									/>
+								</th>
 								<th class="px-4 py-3 text-left text-sm font-semibold text-gray-700">Conductor</th>
 								<th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">Periodo</th>
 								<th class="px-4 py-3 text-right text-sm font-semibold text-gray-700">Prima</th>
@@ -1492,13 +1664,25 @@
 						</thead>
 						<tbody class="divide-y divide-gray-200">
 							{#each primas as p (p.id)}
-								<tr class="hover:bg-gray-50 transition-colors">
+								<tr
+									class="border-l-2 transition-colors hover:bg-gray-50 {selectedPrimas.has(p.id)
+										? 'border-l-orange-500 bg-orange-50/40'
+										: 'border-l-transparent'}"
+								>
+									<td class="w-10 px-4 py-3">
+										<input
+											type="checkbox"
+											checked={selectedPrimas.has(p.id)}
+											on:change={() => togglePrimaSelection(p.id)}
+											class="h-4 w-4 cursor-pointer rounded border-gray-300 text-orange-600 accent-orange-600"
+										/>
+									</td>
 									<td class="px-4 py-3">
 										<p class="text-sm font-medium text-gray-900">
 											{p.conductor?.nombre || 'N/A'} {p.conductor?.apellido || ''}
 										</p>
 										<p class="text-xs text-gray-500">
-											CC: {p.conductor?.numero_identificacion || '—'}
+											CC: {p.conductor?.numero_identificacion || p.conductor?.cedula || '—'}
 										</p>
 									</td>
 									<td class="px-4 py-3 text-center">
@@ -1521,6 +1705,13 @@
 									</td>
 									<td class="px-4 py-3">
 										<div class="flex items-center justify-center gap-1">
+											<button
+												on:click={() => handleTogglePrimaVisible(p.id)}
+												class="rounded-lg p-2 text-blue-600 hover:bg-blue-50 transition-colors"
+												title="Hacer visible en portal del conductor"
+											>
+												<Eye class="h-4 w-4" />
+											</button>
 											<button
 												on:click={() => handleDescargarPdfPrima(p)}
 												disabled={downloadingPrimaPdf === p.id}
@@ -2507,6 +2698,229 @@
 							{:else}
 								<Send class="h-4 w-4" />
 								Enviar {previewItems.filter(p => p.canSend).length} Email(s)
+							{/if}
+						</button>
+					</div>
+				{/if}
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- MODAL: PREVIEW / ENVÍO DE PRIMAS                         -->
+<!-- ═══════════════════════════════════════════════════════ -->
+{#if showPreviewPrimasModal}
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+		on:click={cerrarPreviewPrimasModal}
+		on:keydown={(e) => e.key === 'Escape' && cerrarPreviewPrimasModal()}
+		role="button"
+		tabindex="-1"
+	>
+		<div
+			class="relative mx-4 flex max-h-[85vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-gray-200/50 bg-white shadow-2xl"
+			on:click|stopPropagation
+			on:keydown={() => {}}
+			role="dialog"
+			tabindex="0"
+		>
+			<!-- Header -->
+			<div
+				class="flex items-center justify-between border-b border-gray-100 bg-gradient-to-r from-orange-500 to-amber-600 px-6 py-4"
+			>
+				<div class="flex items-center gap-3">
+					<div class="flex h-10 w-10 items-center justify-center rounded-full bg-white/20">
+						<Sparkles class="h-5 w-5 text-white" />
+					</div>
+					<div>
+						<h2 class="text-lg font-bold text-white">Enviar Primas</h2>
+						<p class="text-sm text-white/80">Preview de liquidaciones de prima por email</p>
+					</div>
+				</div>
+				<button
+					on:click={cerrarPreviewPrimasModal}
+					class="rounded-full p-1.5 text-white/80 transition-colors hover:bg-white/20 hover:text-white"
+				>
+					<X class="h-5 w-5" />
+				</button>
+			</div>
+
+			<!-- Body -->
+			<div class="flex-1 overflow-y-auto bg-white p-6">
+				{#if previewPrimasLoading}
+					<div class="flex flex-col items-center justify-center py-12">
+						<div
+							class="mb-4 h-10 w-10 animate-spin rounded-full border-4 border-orange-200 border-t-orange-600"
+						></div>
+						<p class="text-sm text-gray-500">Cargando datos de conductores...</p>
+					</div>
+				{:else if sendPrimasComplete}
+					<!-- Resultados del envío -->
+					<div class="space-y-3">
+						<div
+							class="mb-4 flex items-center gap-3 rounded-xl border border-orange-200 bg-orange-50 p-4"
+						>
+							<CheckCircle class="h-6 w-6 flex-shrink-0 text-orange-600" />
+							<div>
+								<p class="font-semibold text-gray-900">Envío de primas completado</p>
+								<p class="text-sm text-gray-700">
+									{sendPrimasResults.filter((r) => r.status === 'enviado').length} enviado(s),
+									{sendPrimasResults.filter((r) => r.status === 'error').length} error(es)
+								</p>
+							</div>
+						</div>
+						{#each sendPrimasResults as result}
+							<div
+								class="flex items-center gap-3 rounded-xl border p-3 {result.status === 'enviado'
+									? 'border-gray-200 bg-gray-50'
+									: 'border-red-200 bg-red-50'}"
+							>
+								{#if result.status === 'enviado'}
+									<CheckCircle class="h-5 w-5 flex-shrink-0 text-orange-500" />
+								{:else}
+									<XCircle class="h-5 w-5 flex-shrink-0 text-red-500" />
+								{/if}
+								<div class="min-w-0 flex-1">
+									<p class="truncate text-sm font-medium text-gray-900">{result.conductor}</p>
+									<p class="truncate text-xs text-gray-500">{result.email || 'Sin email'}</p>
+								</div>
+								{#if result.status === 'error'}
+									<span
+										class="rounded-md border border-red-200 bg-red-100 px-2 py-0.5 text-xs font-semibold tracking-wide text-red-700 uppercase"
+										>{result.message}</span
+									>
+								{:else}
+									<span
+										class="rounded-md border border-orange-200 bg-orange-100 px-2 py-0.5 text-xs font-semibold tracking-wide text-orange-700 uppercase"
+										>Enviado ✓</span
+									>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				{:else}
+					<!-- Preview de conductores -->
+					<div class="mb-4 flex items-center gap-4">
+						<div
+							class="flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2"
+						>
+							<CheckCircle class="h-4 w-4 text-orange-600" />
+							<span class="text-sm font-medium text-orange-700"
+								>{previewPrimaItems.filter((p) => p.canSend).length} con email</span
+							>
+						</div>
+						{#if previewPrimaItems.filter((p) => !p.canSend).length > 0}
+							<div
+								class="flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 py-2"
+							>
+								<AlertCircle class="h-4 w-4 text-orange-600" />
+								<span class="text-sm font-medium text-orange-700"
+									>{previewPrimaItems.filter((p) => !p.canSend).length} sin email</span
+								>
+							</div>
+						{/if}
+					</div>
+
+					<div class="overflow-hidden rounded-xl border border-gray-200">
+						<table class="w-full text-sm">
+							<thead class="bg-gray-50">
+								<tr>
+									<th class="px-4 py-3 text-left text-xs font-semibold tracking-wide text-gray-600 uppercase">
+										Conductor
+									</th>
+									<th class="px-4 py-3 text-left text-xs font-semibold tracking-wide text-gray-600 uppercase">
+										Email
+									</th>
+									<th class="px-4 py-3 text-center text-xs font-semibold tracking-wide text-gray-600 uppercase">
+										Periodo
+									</th>
+									<th class="px-4 py-3 text-right text-xs font-semibold tracking-wide text-gray-600 uppercase">
+										Monto
+									</th>
+									<th class="px-4 py-3 text-center text-xs font-semibold tracking-wide text-gray-600 uppercase">
+										Estado
+									</th>
+								</tr>
+							</thead>
+							<tbody class="divide-y divide-gray-100">
+								{#each previewPrimaItems as item}
+									<tr class="hover:bg-gray-50">
+										<td class="px-4 py-3 text-sm font-medium text-gray-900">
+											{item.conductor}
+										</td>
+										<td class="px-4 py-3 text-sm text-gray-700">
+											{#if item.email}
+												<span class="text-gray-700">{item.email}</span>
+											{:else}
+												<span class="text-xs text-gray-400 italic">Sin email</span>
+											{/if}
+										</td>
+										<td class="px-4 py-3 text-center text-sm text-gray-700">
+											{getPrimaMesLabel(item.mes)} {item.anio}
+										</td>
+										<td class="px-4 py-3 text-right text-sm font-semibold text-gray-900">
+											{formatCurrency(item.prima + (item.prima_pendiente || 0))}
+										</td>
+										<td class="px-4 py-3 text-center">
+											{#if item.canSend}
+												<span
+													class="inline-flex items-center rounded-full border border-orange-200 bg-orange-100 px-2 py-0.5 text-xs font-semibold tracking-wide text-orange-700 uppercase"
+												>
+													Listo
+												</span>
+											{:else}
+												<span
+													class="inline-flex items-center rounded-full border border-gray-200 bg-gray-100 px-2 py-0.5 text-xs font-semibold tracking-wide text-gray-600 uppercase"
+												>
+													Sin email
+												</span>
+											{/if}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				{/if}
+			</div>
+
+			<!-- Footer -->
+			<div class="flex items-center justify-between border-t border-gray-100 bg-gray-50 px-6 py-4">
+				{#if sendPrimasComplete}
+					<div></div>
+					<button
+						on:click={cerrarPreviewPrimasModal}
+						class="rounded-xl border border-gray-200 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+					>
+						Cerrar
+					</button>
+				{:else}
+					<p class="text-xs text-gray-500">
+						Se enviará un email con link al Portal del Conductor
+						<span class="text-orange-600">(highlight de prima)</span>
+					</p>
+					<div class="flex items-center gap-3">
+						<button
+							on:click={cerrarPreviewPrimasModal}
+							disabled={sendingPrimasEmails}
+							class="rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+						>
+							Cancelar
+						</button>
+						<button
+							on:click={confirmarEnvioPrimas}
+							disabled={sendingPrimasEmails || previewPrimaItems.filter((p) => p.canSend).length === 0}
+							class="flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-orange-600 hover:to-amber-700 disabled:opacity-50"
+						>
+							{#if sendingPrimasEmails}
+								<div
+									class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+								></div>
+								Enviando...
+							{:else}
+								<Send class="h-4 w-4" />
+								Enviar {previewPrimaItems.filter((p) => p.canSend).length} Email(s)
 							{/if}
 						</button>
 					</div>

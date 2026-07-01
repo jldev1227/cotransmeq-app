@@ -1,23 +1,35 @@
 /**
- * Generador de PDF Desprendible de Prima usando pdfmake
- * Entidad independiente: la prima ya no está asociada a una liquidación.
+ * Generador de PDF Desprendible/Liquidación de Prima usando pdfmake
+ * Replica el formato físico de referencia: encabezado con logo + código/versión/fecha,
+ * datos del conductor, tiempo trabajado, tabla de valores base, valor prima, firma y
+ * cuadro de elaborado/aprobado.
+ *
+ * Ambientado a COTRANSMEQ (paleta naranja, empresa y NIT corporativos).
+ *
  * Reutiliza la firma del desprendible de nómina (firmas con presignedUrl).
  */
 import type { Prima, FirmaConUrl } from '$lib/types/nomina';
 import { obtenerLogoBase64, imageToBase64Url } from '$lib/utils/pdfUtils';
 
-function formatCurrency(value: number | string | null | undefined): string {
+function safeValue<T>(val: T | null | undefined, def: T): T {
+	return val !== undefined && val !== null ? val : def;
+}
+
+function formatCurrencyPlain(value: number | string | null | undefined): string {
 	const num = Number(value) || 0;
 	return new Intl.NumberFormat('es-CO', {
-		style: 'currency',
-		currency: 'COP',
 		minimumFractionDigits: 0,
 		maximumFractionDigits: 0
 	}).format(num);
 }
 
-function safeValue(val: any, def: any = '') {
-	return val !== undefined && val !== null ? val : def;
+function formatDateDDMMYYYY(value: string | Date | null | undefined): string {
+	if (!value) return '';
+	const d = value instanceof Date ? value : new Date(value);
+	if (isNaN(d.getTime())) return '';
+	const day = String(d.getDate()).padStart(2, '0');
+	const month = String(d.getMonth() + 1).padStart(2, '0');
+	return `${day}/${month}/${d.getFullYear()}`;
 }
 
 const MESES_NOMBRES = [
@@ -36,6 +48,48 @@ const MESES_NOMBRES = [
 	'Diciembre'
 ];
 
+function formatDateLong(value: string | Date | null | undefined): string {
+	if (!value) return '';
+	const d = value instanceof Date ? value : new Date(value);
+	if (isNaN(d.getTime())) return '';
+	const day = String(d.getDate()).padStart(2, '0');
+	const month = String(d.getMonth() + 1).padStart(2, '0');
+	return `${day}/${month}/${d.getFullYear()}`;
+}
+
+function computePeriodoFechas(mes: number, anio: number): { inicio: string; fin: string } {
+	const inicio = new Date(anio, mes - 1, 1);
+	const fin = new Date(anio, mes, 0);
+	return {
+		inicio: formatDateLong(inicio),
+		fin: formatDateLong(fin)
+	};
+}
+
+function getNombreCompleto(prima: Prima): string {
+	// Acepta `conductor` (singular, usado en dashboard) y `conductores` (plural, devuelto por Prisma include)
+	const c: any = (prima as any).conductor || (prima as any).conductores;
+	if (!c) return 'N/A';
+	return `${safeValue(c.nombre, '')} ${safeValue(c.apellido, '')}`.trim() || 'N/A';
+}
+
+function getCedulaConductor(prima: Prima): string {
+	const c: any = (prima as any).conductor || (prima as any).conductores;
+	return safeValue(c?.numero_identificacion || c?.cedula, '');
+}
+
+function getElaboradoPor(prima: Prima): string {
+	const u: any = (prima as any).creado_por;
+	if (!u) return '';
+	return `${safeValue(u.nombre, '')} ${safeValue(u.apellido, '')}`.trim();
+}
+
+function getAprobadoPor(prima: Prima): string {
+	const u: any = (prima as any).actualizado_por;
+	if (!u) return '';
+	return `${safeValue(u.nombre, '')} ${safeValue(u.apellido, '')}`.trim();
+}
+
 export async function generarPdfPrima(
 	prima: Prima,
 	firmas: FirmaConUrl[] = []
@@ -44,169 +98,139 @@ export async function generarPdfPrima(
 	const pdfFonts = (await import('pdfmake/build/vfs_fonts')).default;
 	pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts.vfs;
 
-	const esCotransmeq = !!prima.conductor?.numero_identificacion
-		? false
-		: false; // Por defecto Transmeralda; se puede derivar del conductor si se requiere
+	const esCotransmeq = true;
 	const color = esCotransmeq ? '#FF9500' : '#2E8B57';
-	const empresa = esCotransmeq
-		? 'SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S'
-		: 'TRANSPORTES Y SERVICIOS ESMERALDA S.A.S';
-	const nit = esCotransmeq ? '901983227' : '901528440-3';
 
-	const conductorNombre = `${safeValue(prima.conductor?.nombre, 'N/A')} ${safeValue(prima.conductor?.apellido, '')}`.trim();
-	const conductorCedula = safeValue(prima.conductor?.numero_identificacion, 'N/A');
+	let logoBase64: string | null = null;
+	try {
+		logoBase64 = await obtenerLogoBase64(esCotransmeq);
+	} catch (e) {
+		console.warn('[pdfPrima] No se pudo cargar el logo de Cotransmeq:', e);
+	}
 
-	// Cargar logo
-	const logoBase64 = await obtenerLogoBase64(esCotransmeq);
+	const codigoFormato = 'RH-FR-30';
+	const versionFormato = '1';
+	const fechaFormato = '23/04/2024';
 
-	const valorPrima = Number(safeValue(prima.prima, 0));
-	const primaPendiente = Number(safeValue(prima.prima_pendiente, 0));
+	const conductorNombre = getNombreCompleto(prima);
+	const conductorCedula = getCedulaConductor(prima);
 
 	const mes = Number(prima.mes) || 0;
-	const year = Number(prima.anio) || new Date().getFullYear();
-	const mesLabel = `${MESES_NOMBRES[mes] || 'Periodo'} ${year}`;
+	const anio = Number(prima.anio) || new Date().getFullYear();
+	const fechaLiquidacion = formatDateDDMMYYYY(
+		prima.created_at ? new Date(prima.created_at) : new Date(anio, mes, 0)
+	);
+	const { inicio: periodoInicio, fin: periodoFin } = computePeriodoFechas(mes, anio);
 
-	// Filas de detalle de prima
-	const detalleBody: any[][] = [];
-	if (valorPrima > 0) {
-		detalleBody.push([
-			{
-				stack: [
-					{ text: `Prima ${mesLabel}` },
-					{
-						text: 'Valor pagado',
-						fontSize: 8,
-						color: '#666',
-						italics: true
-					}
-				]
-			},
-			{ text: formatCurrency(valorPrima), color, alignment: 'right' as const, bold: true }
-		]);
-	}
-	if (primaPendiente > 0) {
-		detalleBody.push([
-			{
-				stack: [
-					{ text: `Ajuste prima ${mesLabel}` },
-					{
-						text: 'Valor pendiente adicional',
-						fontSize: 8,
-						color: '#666',
-						italics: true
-					}
-				]
-			},
-			{
-				text: formatCurrency(primaPendiente),
-				color,
-				alignment: 'right' as const,
-				bold: true
-			}
-		]);
-	}
-
-	// Datos del desprendible (campos manuales)
-	const datosManualesBody: any[][] = [];
-	const tiempoDias = Number(safeValue(prima.tiempo_trabajado_dias, 0));
+	const tiempoTrabajadoDias = Number(safeValue(prima.tiempo_trabajado_dias, 0));
 	const sueldoBasico = Number(safeValue(prima.sueldo_basico, 0));
-	const auxTransporte = Number(safeValue(prima.auxilio_transporte, 0));
+	const auxilioTransporte = Number(safeValue(prima.auxilio_transporte, 0));
 	const sueldoVariable = Number(safeValue(prima.sueldo_variable, 0));
-	const totalBase = Number(safeValue(prima.total_base_liquidacion, 0));
+	const totalBaseLiquidacion = Number(safeValue(sueldoBasico + auxilioTransporte, 0));
 
-	if (tiempoDias > 0) {
-		datosManualesBody.push([
-			{ text: 'Tiempo trabajado', color: '#666' },
-			{ text: `${tiempoDias} días`, alignment: 'right' as const, bold: true }
-		]);
-	}
-	if (sueldoBasico > 0) {
-		datosManualesBody.push([
-			{ text: 'Sueldo básico', color: '#666' },
-			{ text: formatCurrency(sueldoBasico), alignment: 'right' as const, bold: true }
-		]);
-	}
-	if (auxTransporte > 0) {
-		datosManualesBody.push([
-			{ text: 'Auxilio de transporte', color: '#666' },
-			{ text: formatCurrency(auxTransporte), alignment: 'right' as const, bold: true }
-		]);
-	}
-	if (sueldoVariable > 0) {
-		datosManualesBody.push([
-			{ text: 'Sueldo variable', color: '#666' },
-			{ text: formatCurrency(sueldoVariable), alignment: 'right' as const, bold: true }
-		]);
-	}
-	if (totalBase > 0) {
-		datosManualesBody.push([
-			{ text: 'Total base de liquidación', color: '#666' },
-			{ text: formatCurrency(totalBase), alignment: 'right' as const, bold: true }
-		]);
-	}
+	const valorPrimaPagado = Number(safeValue(prima.prima, 0));
+	const valorPrimaPendiente = Number(safeValue(prima.prima_pendiente, 0));
+	const valorPrimaServicio = valorPrimaPagado + valorPrimaPendiente;
+
+	const elaboradoPor = getElaboradoPor(prima);
+	const aprobadoPor = getAprobadoPor(prima);
 
 	const hasFirmaPresignedUrl = !!(firmas && firmas[0]?.presignedUrl);
-	console.log('[pdfPrima] Verificando firma. hasPresignedUrl:', hasFirmaPresignedUrl, 'firmasCount:', firmas?.length || 0);
+
+	let firmaBase64: string | null = null;
+	if (hasFirmaPresignedUrl) {
+		try {
+			firmaBase64 = await imageToBase64Url(firmas[0].presignedUrl!);
+		} catch (e) {
+			console.error('[pdfPrima] Error al procesar la firma:', e);
+			firmaBase64 = null;
+		}
+	}
 
 	const content: any[] = [
-		// Header
-		{
-			columns: [
-				{
-					stack: [
-						{ text: empresa, style: 'header', color },
-						{ text: `NIT: ${nit}`, fontSize: 10, margin: [0, 2, 0, 0] },
-						{
-							text: `DESPRENDIBLE DE PRIMA - ${mesLabel.toUpperCase()}`,
-							fontSize: 10,
-							color,
-							bold: true,
-							margin: [0, 8, 0, 0]
-						}
-					],
-					width: '*'
-				},
-				...(logoBase64
-					? [
-							{
-								image: logoBase64,
-								width: 175,
-								height: 100,
-								alignment: 'right' as const,
-								margin: [0, -15, -30, 0]
-							}
-						]
-					: [])
-			]
-		},
-
-		{ text: '', margin: [0, 15, 0, 0] },
-
-		// Datos del empleado
+		// ============================================================
+		// ENCABEZADO: Logo | Título | Caja Código/Versión/Fecha
+		// ============================================================
 		{
 			table: {
-				widths: ['*', '*'],
+				widths: ['25%', '50%', '25%'],
 				body: [
-					[{ text: 'Nombre' }, { text: conductorNombre, alignment: 'right' as const }],
-					[{ text: 'C.C.' }, { text: conductorCedula, alignment: 'right' as const }],
-					[{ text: 'Periodo' }, { text: mesLabel, alignment: 'right' as const }]
+					[
+						...(logoBase64
+							? [
+									{
+										image: 'logo',
+										width: 110,
+										height: 40,
+										alignment: 'left' as const,
+										margin: [0, 5, 0, 0]
+									}
+								]
+							: [{ text: '' }]),
+						{
+							text: 'LIQUIDACIÓN PRIMA DE SERVICIO',
+							bold: true,
+							fontSize: 13,
+							alignment: 'center' as const,
+							margin: [0, 18, 0, 0]
+						},
+						{
+							table: {
+								widths: ['*', '*'],
+								body: [
+									[
+										{ text: 'Código:', fontSize: 8, bold: true },
+										{ text: codigoFormato, fontSize: 8, alignment: 'right' as const }
+									],
+									[
+										{ text: 'Versión:', fontSize: 8, bold: true },
+										{ text: versionFormato, fontSize: 8, alignment: 'right' as const }
+									],
+									[
+										{ text: 'Fecha:', fontSize: 8, bold: true },
+										{ text: fechaFormato, fontSize: 8, alignment: 'right' as const }
+									]
+								]
+							},
+							layout: {
+								hLineWidth: () => 0.5,
+								vLineWidth: () => 0.5,
+								hLineColor: () => '#000000',
+								vLineColor: () => '#000000',
+								paddingLeft: () => 4,
+								paddingRight: () => 4,
+								paddingTop: () => 2,
+								paddingBottom: () => 2
+							}
+						}
+					]
 				]
 			},
 			layout: {
-				hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length ? 1 : 0.5),
-				vLineWidth: () => 1,
-				hLineColor: () => '#E0E0E0',
-				vLineColor: () => '#E0E0E0',
-				paddingLeft: () => 5,
-				paddingRight: () => 5,
-				paddingTop: () => 4,
-				paddingBottom: () => 4
+				hLineWidth: () => 0.5,
+				vLineWidth: () => 0.5,
+				hLineColor: () => '#000000',
+				vLineColor: () => '#000000'
 			}
 		},
 
-		{ text: 'DETALLE DE PRIMA', bold: true, color, fontSize: 11, margin: [0, 15, 0, 6] },
+		{ text: '', margin: [0, 10, 0, 0] },
 
-		// Información destacada
+		// ============================================================
+		// FECHA
+		// ============================================================
+		{
+			text: [
+				{ text: 'FECHA:        ', bold: true },
+				{ text: fechaLiquidacion }
+			],
+			fontSize: 10,
+			margin: [0, 0, 0, 8]
+		},
+
+		// ============================================================
+		// NOMBRE / C.C. / PERIODO
+		// ============================================================
 		{
 			table: {
 				widths: ['*'],
@@ -215,15 +239,27 @@ export async function generarPdfPrima(
 						{
 							stack: [
 								{
-									text: 'Información importante:',
-									fontSize: 10,
-									bold: true,
-									margin: [0, 0, 0, 4]
+									columns: [
+										{ text: 'NOMBRE:', bold: true, fontSize: 10, width: 100 },
+										{ text: conductorNombre, fontSize: 10 }
+									]
 								},
 								{
-									text: `Este desprendible corresponde al pago de la prima de servicios del periodo ${mesLabel}, conforme al registro independiente de primas. Los valores que se detallan a continuación fueron cancelados dentro de los términos legales establecidos, y se presentan en este documento únicamente para su información y registro.`,
-									fontSize: 9,
-									lineHeight: 1.4
+									columns: [
+										{ text: 'C.C.:', bold: true, fontSize: 10, width: 100 },
+										{ text: conductorCedula, fontSize: 10 }
+									],
+									margin: [0, 4, 0, 0]
+								},
+								{
+									columns: [
+										{ text: 'PERIODO:', bold: true, fontSize: 10, width: 100 },
+										{
+											text: `${periodoInicio}    a    ${periodoFin}`,
+											fontSize: 10
+										}
+									],
+									margin: [0, 4, 0, 0]
 								}
 							]
 						}
@@ -231,139 +267,212 @@ export async function generarPdfPrima(
 				]
 			},
 			layout: {
-				hLineWidth: () => 1,
-				vLineWidth: () => 1,
-				hLineColor: () => (esCotransmeq ? '#FFA726' : '#FFD700'),
-				vLineColor: () => (esCotransmeq ? '#FFA726' : '#FFD700'),
-				fillColor: () => (esCotransmeq ? '#FFF4E6' : '#FFF9E6'),
-				paddingLeft: () => 10,
-				paddingRight: () => 10,
-				paddingTop: () => 8,
-				paddingBottom: () => 8
-			},
-			margin: [0, 0, 0, 10]
+				hLineWidth: () => 0.5,
+				vLineWidth: () => 0.5,
+				hLineColor: () => '#000000',
+				vLineColor: () => '#000000',
+				paddingLeft: () => 6,
+				paddingRight: () => 6,
+				paddingTop: () => 6,
+				paddingBottom: () => 6
+			}
 		},
 
-		// Detalle de prima
-		...(detalleBody.length > 0
-			? [
-					{
-						table: {
-							widths: ['*', 'auto'],
-							body: detalleBody
-						},
-						layout: {
-							hLineWidth: (i: number, node: any) =>
-								i === 0 || i === node.table.body.length ? 1 : 0.5,
-							vLineWidth: () => 1,
-							hLineColor: () => '#E0E0E0',
-							vLineColor: () => '#E0E0E0',
-							paddingLeft: () => 5,
-							paddingRight: () => 5,
-							paddingTop: () => 5,
-							paddingBottom: () => 5
-						}
-					}
-				]
-			: []),
-
-		// Detalle de datos manuales (si hay)
-		...(datosManualesBody.length > 0
-			? [
-					{ text: 'DETALLE DEL DESPRENDIBLE', bold: true, color, fontSize: 11, margin: [0, 15, 0, 6] },
-					{
-						table: {
-							widths: ['*', 'auto'],
-							body: datosManualesBody
-						},
-						layout: {
-							hLineWidth: (i: number, node: any) =>
-								i === 0 || i === node.table.body.length ? 1 : 0.5,
-							vLineWidth: () => 1,
-							hLineColor: () => '#E0E0E0',
-							vLineColor: () => '#E0E0E0',
-							paddingLeft: () => 5,
-							paddingRight: () => 5,
-							paddingTop: () => 5,
-							paddingBottom: () => 5
-						}
-					}
-				]
-			: []),
+		{ text: '', margin: [0, 8, 0, 0] },
 
 		// ============================================================
-		// FOOTER CON FIRMA (reutilizada del desprendible de nómina)
+		// TIEMPO TRABAJADO
 		// ============================================================
-		...(hasFirmaPresignedUrl
-			? [
-					...(await (async () => {
-						try {
-							console.log('[pdfPrima] Convirtiendo URL a base64...');
-							const firmaBase64 = await imageToBase64Url(firmas[0].presignedUrl!);
-							console.log('[pdfPrima] Base64 generado, longitud:', firmaBase64.length, 'starts:', firmaBase64.substring(0, 30));
-							return [
-								{
-									stack: [
-										{
-											image: firmaBase64,
-											width: 180,
-											height: 50,
-											alignment: 'center' as const,
-											margin: [0, 30, 0, 0]
-										},
-										{
-											canvas: [
-												{
-													type: 'line',
-													x1: 0,
-													y1: 0,
-													x2: 190,
-													y2: 0,
-													lineWidth: 1,
-													lineColor: '#BDBDBD'
-												}
-											],
-											width: 190,
-											alignment: 'center' as const,
-											margin: [0, 2, 0, 0]
-										},
-										{
-											text: 'Firma de recibido',
-											fontSize: 10,
-											color: '#2E8B57',
-											alignment: 'center' as const,
-											bold: true,
-											margin: [0, 4, 0, 7]
-										}
-									],
-									alignment: 'center' as const
-								}
-							];
-						} catch (e) {
-							console.error('[pdfPrima] Error al procesar la firma:', e);
-							return [];
-						}
-					})())
-				]
-			: []),
-
-		// Footer fecha
 		{
-			text: `Documento generado el ${new Date().toLocaleDateString('es-CO')}`,
-			fontSize: 9,
-			color: '#9E9E9E',
-			alignment: 'center' as const,
-			margin: [0, 20, 0, 0]
+			table: {
+				widths: ['*'],
+				body: [
+					[
+						{
+							columns: [
+								{ text: 'TIEMPO TRABAJADO', bold: true, fontSize: 10 },
+								{
+									text: `${tiempoTrabajadoDias}    DIAS`,
+									fontSize: 10,
+									alignment: 'right' as const
+								}
+							]
+						}
+					]
+				]
+			},
+			layout: {
+				hLineWidth: () => 0.5,
+				vLineWidth: () => 0.5,
+				hLineColor: () => '#000000',
+				vLineColor: () => '#000000',
+				paddingLeft: () => 6,
+				paddingRight: () => 6,
+				paddingTop: () => 8,
+				paddingBottom: () => 8
+			}
+		},
+
+		{ text: '', margin: [0, 8, 0, 0] },
+
+		// ============================================================
+		// TABLA DE VALORES
+		// ============================================================
+		{
+			table: {
+				widths: ['*', 'auto'],
+				body: [
+					[
+						{ text: 'SUELDO BASICO:', fontSize: 10 },
+						{
+							text: formatCurrencyPlain(sueldoBasico),
+							fontSize: 10,
+							alignment: 'right' as const
+						}
+					],
+					[
+						{ text: 'AUXILIO DE TRANSPORTE', fontSize: 10 },
+						{
+							text: formatCurrencyPlain(auxilioTransporte),
+							fontSize: 10,
+							alignment: 'right' as const
+						}
+					],
+					[
+						{ text: 'SUELDO VARIABLE', fontSize: 10 },
+						{
+							text: sueldoVariable > 0 ? formatCurrencyPlain(sueldoVariable) : '-',
+							fontSize: 10,
+							alignment: 'right' as const
+						}
+					],
+					[
+						{ text: 'TOTAL BASE DE LIQUIDACION', fontSize: 10, bold: true },
+						{
+							text: formatCurrencyPlain(totalBaseLiquidacion),
+							fontSize: 10,
+							alignment: 'right' as const,
+							bold: true
+						}
+					],
+					[{ text: '' }, { text: '' }],
+					[
+						{
+							text: 'VALOR PRIMA DE SERVICIO',
+							fontSize: 10,
+							bold: true,
+							color
+						},
+						{
+							text: formatCurrencyPlain(valorPrimaServicio),
+							fontSize: 10,
+							alignment: 'right' as const,
+							bold: true,
+							color
+						}
+					]
+				]
+			},
+			layout: {
+				hLineWidth: (i: number, node: any) =>
+					i === 0 || i === node.table.body.length ? 0.5 : 0.3,
+				vLineWidth: () => 0.5,
+				hLineColor: () => '#000000',
+				vLineColor: () => '#000000',
+				paddingLeft: () => 6,
+				paddingRight: () => 6,
+				paddingTop: () => 5,
+				paddingBottom: () => 5
+			}
+		},
+
+		{ text: '', margin: [0, 10, 0, 0] },
+
+		// ============================================================
+		// RECIBI DE CONFORMIDAD (firma)
+		// ============================================================
+		{
+			table: {
+				widths: ['*'],
+				body: [
+					[
+						{
+							stack: [
+								{
+									text: 'RECIBI DE CONFORMIDAD:',
+									bold: true,
+									fontSize: 10,
+									margin: [0, 0, 0, 4]
+								},
+								...(firmaBase64
+									? [
+											{
+												image: 'firma',
+												width: 160,
+												height: 45,
+												alignment: 'left' as const,
+												margin: [0, 6, 0, 0]
+											}
+										]
+									: [{ text: ' ', margin: [0, 30, 0, 0] }])
+							]
+						}
+					]
+				]
+			},
+			layout: {
+				hLineWidth: () => 0.5,
+				vLineWidth: () => 0.5,
+				hLineColor: () => '#000000',
+				vLineColor: () => '#000000',
+				paddingLeft: () => 6,
+				paddingRight: () => 6,
+				paddingTop: () => 6,
+				paddingBottom: () => 6
+			}
+		},
+
+		{ text: '', margin: [0, 8, 0, 0] },
+
+		// ============================================================
+		// ELABORÓ / APROBÓ
+		// ============================================================
+		{
+			table: {
+				widths: ['50%', '50%'],
+				body: [
+					[
+						{ text: 'ELABORÓ:', bold: true, fontSize: 10 },
+						{ text: 'APROBÓ:', bold: true, fontSize: 10 }
+					],
+					[
+						{ text: elaboradoPor || ' ', fontSize: 10, margin: [0, 25, 0, 0] },
+						{ text: aprobadoPor || ' ', fontSize: 10, margin: [0, 25, 0, 0] }
+					]
+				]
+			},
+			layout: {
+				hLineWidth: () => 0.5,
+				vLineWidth: () => 0.5,
+				hLineColor: () => '#000000',
+				vLineColor: () => '#000000',
+				paddingLeft: () => 6,
+				paddingRight: () => 6,
+				paddingTop: () => 6,
+				paddingBottom: () => 6
+			}
 		}
 	];
+
+	const images: Record<string, string> = {};
+	if (logoBase64) images['logo'] = logoBase64;
+	if (firmaBase64) images['firma'] = firmaBase64;
 
 	const docDefinition: any = {
 		pageSize: 'A4',
 		pageMargins: [40, 30, 40, 30],
 		content,
-		styles: {
-			header: { fontSize: 13, bold: true, margin: [0, 0, 0, 2] }
-		},
+		images,
 		defaultStyle: { fontSize: 11 }
 	};
 

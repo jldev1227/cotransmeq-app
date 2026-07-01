@@ -32,14 +32,36 @@
     } | null;
   }
 
+  interface PrimaPortal {
+    id: string;
+    mes: number;
+    anio: number;
+    prima: number;
+    prima_pendiente?: number | null;
+    estado: string;
+    observaciones?: string | null;
+    es_cotransmeq?: boolean;
+    conductor_id?: string;
+    created_at?: string;
+  }
+
   let desprendibles: Desprendible[] = [];
   let loading = true;
   let error = '';
   let generandoPdf: string | null = null;
   let generandoPdfPrima: string | null = null;
 
+  // ── Primas (sección independiente) ──
+  let primas: PrimaPortal[] = [];
+  let loadingPrimas = true;
+  let filtroPrimaMes = '';
+  let filtroPrimaAnio: number | '' = '';
+  let availablePrimaYears: number[] = [];
+  let activeTab: 'desprendibles' | 'primas' = 'desprendibles';
+
   // ── Highlight desde email ──
   let highlightId: string | null = null;
+  let highlightPrimaId: string | null = null;
 
   // ── Filtros ──
   let selectedYear = new Date().getFullYear();
@@ -148,6 +170,73 @@
       loading = false;
     }
   }
+
+  // ── Primas (entidad independiente de la liquidación) ─────────
+  // 1) Intenta el endpoint dedicado /conductor-portal/primas
+  // 2) Si no existe, arma la lista deduplicando desde `prima_asociada` de los
+  //    desprendibles ya cargados.
+  // 3) Filtra por visibilidad (sessionStorage 'primas_portal_visibility').
+  async function cargarPrimas() {
+    loadingPrimas = true;
+    try {
+      let list: PrimaPortal[] = [];
+      try {
+        const res: any = await portalFetch('/conductor-portal/primas');
+        list = (res.data || []) as PrimaPortal[];
+      } catch (err: any) {
+        if (err?.status !== 404 && err?.status !== 501) throw err;
+        // 2) Fallback: dedupe desde prima_asociada
+        const seen = new Set<string>();
+        list = [];
+        for (const d of desprendibles) {
+          const p = d.prima_asociada;
+          if (p && !seen.has(p.id)) {
+            seen.add(p.id);
+            list.push({
+              id: p.id,
+              mes: p.mes,
+              anio: p.anio,
+              prima: Number(p.prima) || 0,
+              prima_pendiente: p.prima_pendiente != null ? Number(p.prima_pendiente) : null,
+              estado: p.estado
+            });
+          }
+        }
+      }
+
+      // 3) Visibilidad (mock)
+      try {
+        const raw = sessionStorage.getItem('primas_portal_visibility') || '{}';
+        const map: Record<string, boolean> = JSON.parse(raw);
+        list = list.filter((p) => map[p.id] !== false);
+      } catch {
+        /* ignore */
+      }
+
+      list.sort((a, b) => (b.anio - a.anio) || (b.mes - a.mes));
+      primas = list;
+
+      const years = new Set<number>();
+      list.forEach((p) => years.add(p.anio));
+      availablePrimaYears = [...years].sort((a, b) => b - a);
+      if (availablePrimaYears.length === 0) availablePrimaYears = [new Date().getFullYear()];
+    } catch (err: any) {
+      console.warn('Error cargando primas del portal:', err);
+    } finally {
+      loadingPrimas = false;
+    }
+  }
+
+  $: filteredPrimas = primas.filter((p) => {
+    if (filtroPrimaAnio && p.anio !== filtroPrimaAnio) return false;
+    if (filtroPrimaMes.trim()) {
+      const mesNombre = MESES[p.mes - 1]?.toLowerCase() || '';
+      const mesNum = String(p.mes);
+      const q = filtroPrimaMes.trim().toLowerCase();
+      if (!mesNombre.includes(q) && !mesNum.startsWith(q)) return false;
+    }
+    return true;
+  });
 
   async function verDesprendible(id: string) {
     generandoPdf = id;
@@ -350,7 +439,14 @@
       return;
     }
     highlightId = $page.url.searchParams.get('highlight');
+    highlightPrimaId = $page.url.searchParams.get('highlight_prima');
     await cargarDesprendibles();
+    await cargarPrimas();
+
+    if (highlightPrimaId) {
+      activeTab = 'primas';
+    }
+
     if (highlightId) {
       const target = desprendibles.find(d => d.id === highlightId);
       if (target?.periodo_fin) {
@@ -370,6 +466,23 @@
       url.searchParams.delete('highlight');
       window.history.replaceState({}, '', url.toString());
     }
+
+    if (highlightPrimaId) {
+      const target = primas.find(p => p.id === highlightPrimaId);
+      if (target) {
+        filtroPrimaAnio = target.anio;
+        filtroPrimaMes = '';
+      }
+      await tick();
+      const el = document.getElementById(`prima-${highlightPrimaId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => { highlightPrimaId = null; }, 6000);
+      }
+      const url = new URL(window.location.href);
+      url.searchParams.delete('highlight_prima');
+      window.history.replaceState({}, '', url.toString());
+    }
   });
 </script>
 
@@ -377,14 +490,42 @@
   <!-- ═══ Header ═══ -->
   <div class="page-header">
     <div>
-      <h1 class="page-title">📄 Mis Desprendibles</h1>
-      <p class="page-sub">Consulta y descarga tus comprobantes de nómina</p>
+      <h1 class="page-title">📄 Mis Desprendibles y Primas</h1>
+      <p class="page-sub">Consulta, firma y descarga tus comprobantes de nómina y liquidaciones de prima</p>
     </div>
     <button class="btn-refresh" on:click={cargarDesprendibles} disabled={loading} title="Actualizar">
       <span class:spinning={loading}>↻</span>
     </button>
   </div>
 
+  <!-- ═══ Tabs ═══ -->
+  <div class="portal-tabs" role="tablist">
+    <button
+      type="button"
+      role="tab"
+      class="portal-tab"
+      class:active={activeTab === 'desprendibles'}
+      aria-selected={activeTab === 'desprendibles'}
+      on:click={() => (activeTab = 'desprendibles')}
+    >
+      📄 Desprendibles
+      <span class="portal-tab-count">{desprendibles.length}</span>
+    </button>
+    <button
+      type="button"
+      role="tab"
+      class="portal-tab"
+      class:active={activeTab === 'primas'}
+      aria-selected={activeTab === 'primas'}
+      on:click={() => (activeTab = 'primas')}
+    >
+      💰 Primas
+      <span class="portal-tab-count">{primas.length}</span>
+    </button>
+  </div>
+
+  <!-- ═══ TAB: DESPRENDIBLES (lógica original) ═══ -->
+  {#if activeTab === 'desprendibles'}
   <!-- ═══ Filtros ═══ -->
   <div class="filters-bar">
     <div class="filter-group">
@@ -463,11 +604,6 @@
                     <span class="tag-cotrans">CTM</span>
                   {/if}
                 </div>
-                {#if d.prima_asociada}
-                  <span class="tag-prima" title="Prima asociada: {fmt(d.prima_asociada.prima)}">
-                    💰 Prima {fmt(d.prima_asociada.prima)}
-                  </span>
-                {/if}
               </td>
               <td class="td-periodo">{periodoRango(d.periodo_inicio, d.periodo_fin)}</td>
               <td>
@@ -513,20 +649,6 @@
                       ✍️ Firmar
                     </button>
                   {/if}
-                  {#if d.prima_asociada}
-                    <button
-                      class="btn-action btn-prima"
-                      on:click={() => verPrima(d.prima_asociada!.id)}
-                      disabled={generandoPdfPrima === d.prima_asociada!.id}
-                      title="Ver Desprendible de Prima"
-                    >
-                      {#if generandoPdfPrima === d.prima_asociada!.id}
-                        <span class="spinner-mini"></span>
-                      {:else}
-                        💰 Prima
-                      {/if}
-                    </button>
-                  {/if}
                 </div>
               </td>
             </tr>
@@ -547,11 +669,6 @@
             <div class="m-card-badges">
               {#if d.es_cotransmeq}
                 <span class="tag-cotrans">CTM</span>
-              {/if}
-              {#if d.prima_asociada}
-                <span class="tag-prima" title="Prima incluida: {fmt(d.prima_asociada.prima)}">
-                  💰 Prima
-                </span>
               {/if}
               {#if d.estado === 'Liquidado'}
                 <span class="status-pill liquidado">{d.estado}</span>
@@ -600,22 +717,8 @@
             <button
               class="m-btn-firmar"
               on:click={() => abrirFirmaModal(d)}
-            >
+             >
               ✍️ Firmar Desprendible
-            </button>
-          {/if}
-
-          {#if d.prima_asociada}
-            <button
-              class="m-btn-prima"
-              on:click={() => verPrima(d.prima_asociada!.id)}
-              disabled={generandoPdfPrima === d.prima_asociada!.id}
-            >
-              {#if generandoPdfPrima === d.prima_asociada!.id}
-                <span class="spinner-mini-w"></span> Generando prima...
-              {:else}
-                💰 Ver Desprendible de Prima
-              {/if}
             </button>
           {/if}
         </div>
@@ -625,6 +728,182 @@
     <div class="results-count">
       {filtered.length} de {desprendibles.length} desprendible{desprendibles.length !== 1 ? 's' : ''}
     </div>
+  {/if}
+
+  <!-- ═══ TAB: PRIMAS (entidad separada) ═══ -->
+  {:else if activeTab === 'primas'}
+    <!-- Filtros de primas -->
+    <div class="filters-bar">
+      <div class="filter-group">
+        <label class="filter-label" for="filter-prima-anio">Año</label>
+        <select
+          id="filter-prima-anio"
+          class="filter-select"
+          bind:value={filtroPrimaAnio}
+        >
+          <option value={''}>Todos</option>
+          {#each availablePrimaYears as y}
+            <option value={y}>{y}</option>
+          {/each}
+        </select>
+      </div>
+      <div class="filter-group grow">
+        <label class="filter-label" for="filter-prima-mes">Buscar mes</label>
+        <div class="search-wrap">
+          <span class="search-icon">🔍</span>
+          <input
+            id="filter-prima-mes"
+            type="text"
+            class="filter-input"
+            placeholder="Ej: Marzo, 3, Abr..."
+            bind:value={filtroPrimaMes}
+          />
+          {#if filtroPrimaMes}
+            <button class="search-clear" on:click={() => filtroPrimaMes = ''}>✕</button>
+          {/if}
+        </div>
+      </div>
+    </div>
+
+    {#if loadingPrimas && primas.length === 0}
+      <div class="state-box">
+        <span class="spinner"></span>
+        <p>Cargando primas...</p>
+      </div>
+    {:else if primas.length === 0}
+      <div class="state-box">
+        <span class="state-emoji">💰</span>
+        <p class="state-title">Sin primas</p>
+        <p>Aún no tienes liquidaciones de prima registradas.</p>
+      </div>
+    {:else if filteredPrimas.length === 0}
+      <div class="state-box">
+        <span class="state-emoji">🔎</span>
+        <p class="state-title">Sin resultados</p>
+        <p>No se encontraron primas para los filtros aplicados.</p>
+      </div>
+    {:else}
+      <!-- ═══ TABLA (Desktop ≥640px) ═══ -->
+      <div class="table-wrap">
+        <table class="desp-table">
+          <thead>
+            <tr>
+              <th>Mes</th>
+              <th>Año</th>
+              <th>Estado</th>
+              <th class="text-right">Prima</th>
+              <th class="text-right">Pendiente</th>
+              <th class="text-right">Total</th>
+              <th class="text-center">Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each filteredPrimas as p (p.id)}
+              <tr
+                id={`prima-${p.id}`}
+                class:highlight-row={highlightPrimaId === p.id}
+              >
+                <td>
+                  <div class="mes-row">
+                    <span class="mes-name">{MESES[p.mes - 1] || '—'}</span>
+                  </div>
+                </td>
+                <td class="td-periodo mono">{p.anio}</td>
+                <td>
+                  {#if p.estado === 'Pagado'}
+                    <span class="status-pill liquidado">{p.estado}</span>
+                  {:else}
+                    <span class="status-pill pendiente">{p.estado}</span>
+                  {/if}
+                </td>
+                <td class="text-right mono">{fmt(p.prima)}</td>
+                <td class="text-right mono">
+                  {#if p.prima_pendiente && Number(p.prima_pendiente) > 0}
+                    +{fmt(p.prima_pendiente)}
+                  {:else}
+                    <span class="text-xs text-gray-400">—</span>
+                  {/if}
+                </td>
+                <td class="text-right mono sueldo">
+                  {fmt(p.prima + (p.prima_pendiente || 0))}
+                </td>
+                <td class="text-center">
+                  <button
+                    class="btn-action btn-prima"
+                    on:click={() => verPrima(p.id)}
+                    disabled={generandoPdfPrima === p.id}
+                    title="Ver Desprendible de Prima"
+                  >
+                    {#if generandoPdfPrima === p.id}
+                      <span class="spinner-mini"></span>
+                    {:else}
+                      💰 Ver Prima
+                    {/if}
+                  </button>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- ═══ CARDS (Mobile <640px) ═══ -->
+      <div class="mobile-cards">
+        {#each filteredPrimas as p (p.id)}
+          <div
+            id={`prima-${p.id}`}
+            class="m-card m-card-prima"
+            class:highlight-card={highlightPrimaId === p.id}
+          >
+            <div class="m-card-header">
+              <div class="m-card-mes">
+                <span class="m-mes-name">{MESES[p.mes - 1] || '—'} {p.anio}</span>
+              </div>
+              <div class="m-card-badges">
+                {#if p.estado === 'Pagado'}
+                  <span class="status-pill liquidado">{p.estado}</span>
+                {:else}
+                  <span class="status-pill pendiente">{p.estado}</span>
+                {/if}
+              </div>
+            </div>
+
+            <div class="m-card-stats">
+              <div class="m-stat">
+                <span class="m-stat-label">Prima</span>
+                <span class="m-stat-value main">{fmt(p.prima)}</span>
+              </div>
+              {#if p.prima_pendiente && Number(p.prima_pendiente) > 0}
+                <div class="m-stat m-stat-prima">
+                  <span class="m-stat-label">Pendiente</span>
+                  <span class="m-stat-value">+{fmt(p.prima_pendiente)}</span>
+                </div>
+              {/if}
+              <div class="m-stat">
+                <span class="m-stat-label">Total</span>
+                <span class="m-stat-value sueldo">{fmt(p.prima + (p.prima_pendiente || 0))}</span>
+              </div>
+            </div>
+
+            <button
+              class="m-btn-prima"
+              on:click={() => verPrima(p.id)}
+              disabled={generandoPdfPrima === p.id}
+            >
+              {#if generandoPdfPrima === p.id}
+                <span class="spinner-mini-w"></span> Generando prima...
+              {:else}
+                💰 Ver Desprendible de Prima
+              {/if}
+            </button>
+          </div>
+        {/each}
+      </div>
+
+      <div class="results-count">
+        {filteredPrimas.length} de {primas.length} prima{primas.length !== 1 ? 's' : ''}
+      </div>
+    {/if}
   {/if}
 </div>
 
@@ -1418,6 +1697,67 @@
   .confetti:nth-child(3n) { background: rgba(255,255,255,0.6); width: 12px; height: 4px; }
 
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ═══ TABS (Desprendibles | Primas) ═══ */
+  .portal-tabs {
+    display: flex;
+    gap: 0.4rem;
+    background: #FFF7ED;
+    border: 1px solid #FED7AA;
+    border-radius: 12px;
+    padding: 0.3rem;
+    margin-bottom: 1rem;
+  }
+  .portal-tab {
+    flex: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    padding: 0.55rem 0.8rem;
+    border: none;
+    background: transparent;
+    color: #9A3412;
+    font-family: inherit;
+    font-size: 0.85rem;
+    font-weight: 600;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .portal-tab:hover:not(.active) {
+    background: rgba(249, 115, 22, 0.08);
+    color: #7C2D12;
+  }
+  .portal-tab.active {
+    background: linear-gradient(135deg, #F97316, #EA580C);
+    color: #fff;
+    box-shadow: 0 1px 4px rgba(249, 115, 22, 0.25);
+  }
+  .portal-tab-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 22px;
+    height: 20px;
+    padding: 0 0.4rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    font-size: 0.7rem;
+    font-weight: 700;
+  }
+  .portal-tab:not(.active) .portal-tab-count {
+    background: #FED7AA;
+    color: #9A3412;
+  }
+
+  /* Mobile: prima card con acento naranja */
+  .m-card.m-card-prima {
+    border-left-color: #F97316;
+  }
+  .m-stat-value.sueldo {
+    color: #F97316;
+  }
 
   /* ═══ RESPONSIVE ═══ */
   @media (min-width: 640px) {
