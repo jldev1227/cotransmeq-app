@@ -110,7 +110,7 @@ export async function generarPdfPrima(
 
 	const codigoFormato = 'RH-FR-30';
 	const versionFormato = '1';
-	const fechaFormato = '23/04/2024';
+	const fechaFormato = '19/09/2025';
 
 	const conductorNombre = getNombreCompleto(prima);
 	const conductorCedula = getCedulaConductor(prima);
