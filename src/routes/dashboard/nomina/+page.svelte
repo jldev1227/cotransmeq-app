@@ -1659,6 +1659,7 @@
 								<th class="px-4 py-3 text-right text-sm font-semibold text-gray-700">Prima</th>
 								<th class="px-4 py-3 text-right text-sm font-semibold text-gray-700">Prima Pendiente</th>
 								<th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">Estado</th>
+								<th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">Firmado</th>
 								<th class="px-4 py-3 text-center text-sm font-semibold text-gray-700">Acciones</th>
 							</tr>
 						</thead>
@@ -1702,6 +1703,21 @@
 										<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {getPrimaEstadoColor(p.estado)}">
 											{p.estado}
 										</span>
+									</td>
+									<td class="px-4 py-3 text-center">
+										{#if p.firmas_desprendibles && p.firmas_desprendibles.length > 0}
+											<span
+												class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-1 text-xs font-medium text-green-700"
+												title="Firmado el {formatDate(p.firmas_desprendibles[0].fecha_firma)}">
+												<CheckCircle class="h-3.5 w-3.5" />Sí
+											</span>
+										{:else}
+											<span
+												class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-500"
+												title="Desprendible pendiente de firma">
+												<XCircle class="h-3.5 w-3.5" />No
+											</span>
+										{/if}
 									</td>
 									<td class="px-4 py-3">
 										<div class="flex items-center justify-center gap-1">

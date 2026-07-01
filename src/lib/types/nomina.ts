@@ -398,6 +398,8 @@ export interface Prima {
 	created_at?: string;
 	updated_at?: string;
 	deleted_at?: string | null;
+	// Firmas del desprendible de prima
+	firmas_desprendibles?: FirmaDesprendible[];
 }
 
 export interface CreatePrimaPayload {

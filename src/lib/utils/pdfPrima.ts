@@ -103,7 +103,7 @@ export async function generarPdfPrima(
 
 	let logoBase64: string | null = null;
 	try {
-		logoBase64 = await obtenerLogoBase64(esCotransmeq);
+		logoBase64 = await obtenerLogoBase64(esCotransmeq, true);
 	} catch (e) {
 		console.warn('[pdfPrima] No se pudo cargar el logo de Cotransmeq:', e);
 	}
@@ -166,9 +166,9 @@ export async function generarPdfPrima(
 							? [
 									{
 										image: 'logo',
-										width: 110,
+										width: 100,
 										height: 40,
-										alignment: 'left' as const,
+										alignment: 'center' as const,
 										margin: [0, 5, 0, 0]
 									}
 								]
