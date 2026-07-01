@@ -327,19 +327,17 @@ export interface PrimaEnvioResultado {
 
 /**
  * Preview de envío de primas por email (muestra conductores, emails, monto)
- * Intenta primero el endpoint real del backend; si no existe (404) cae a un mock local
- * que construye el preview a partir de las primas ya cargadas en el cliente.
  */
 export const previewPrimas = async (primaIds: string[]): Promise<PrimaPreviewResponse> => {
-	// El backend de Cotransmeq aún no expone /api/primas/preview-envio.
-	// Usamos el mock local que arma el preview desde la cache de sessionStorage.
-	return buildPrimaPreviewMock(primaIds);
+	const response = await apiClient.post<{
+		success: boolean;
+		data: PrimaPreviewResponse;
+	}>('/api/primas/preview-envio', { primaIds });
+	return response.data.data;
 };
 
 /**
  * Enviar notificación de primas por email a conductores.
- * Intenta el endpoint real; si no existe, simula el envío (log + queue localStorage)
- * y devuelve los links al portal con highlight en la prima correspondiente.
  */
 export const enviarPrimas = async (
 	primaIds: string[]
@@ -349,180 +347,18 @@ export const enviarPrimas = async (
 	total: number;
 	resultados: PrimaEnvioResultado[];
 }> => {
-	// El backend de Cotransmeq aún no expone /api/primas/enviar.
-	// Usamos el mock local que simula el envío (log + queue localStorage).
-	return buildPrimaEnvioMock(primaIds);
+	const response = await apiClient.post<{
+		success: boolean;
+		message: string;
+		data: {
+			enviados: number;
+			errores: number;
+			total: number;
+			resultados: PrimaEnvioResultado[];
+		};
+	}>('/api/primas/enviar', { primaIds });
+	return response.data.data;
 };
-
-/**
- * Mock local de preview: arma el preview desde la cache de sessionStorage
- * (cacheadas por la pantalla de Primas al hacer `cargarPrimas`).
- */
-function buildPrimaPreviewMock(primaIds: string[]): PrimaPreviewResponse {
-	const cache = readPrimasCache();
-	const items: PrimaPreviewItem[] = primaIds
-		.map((id) => cache.get(id))
-		.filter(Boolean)
-		.map((p) => ({
-			primaId: p.id,
-			conductor:
-				`${p.conductor?.nombre ?? ''} ${p.conductor?.apellido ?? ''}`.trim() || 'Sin conductor',
-			email: p.conductor?.email ?? null,
-			mes: p.mes,
-			anio: p.anio,
-			prima: Number(p.prima) || 0,
-			prima_pendiente: p.prima_pendiente != null ? Number(p.prima_pendiente) : null,
-			estado: p.estado,
-			canSend: !!p.conductor?.email
-		}));
-	return {
-		total: items.length,
-		canSend: items.filter((i) => i.canSend).length,
-		cannotSend: items.filter((i) => !i.canSend).length,
-		items
-	};
-}
-
-/**
- * Mock local de envío: arma links al portal con `?highlight_prima=<prima_id>`,
- * los guarda en localStorage para que el portal del conductor los pueda leer
- * (cuando el conductor abre el link), y devuelve los resultados.
- */
-function buildPrimaEnvioMock(primaIds: string[]): {
-	enviados: number;
-	errores: number;
-	total: number;
-	resultados: PrimaEnvioResultado[];
-} {
-	const cache = readPrimasCache();
-	const queue = readEmailQueue();
-	let enviados = 0;
-	let errores = 0;
-	const resultados: PrimaEnvioResultado[] = [];
-
-	for (const id of primaIds) {
-		const p = cache.get(id);
-		if (!p) {
-			resultados.push({ primaId: id, conductor: 'N/A', status: 'error', message: 'Prima no encontrada' });
-			errores++;
-			continue;
-		}
-		const conductorNombre =
-			`${p.conductor?.nombre ?? ''} ${p.conductor?.apellido ?? ''}`.trim() || 'Sin conductor';
-		const email = p.conductor?.email ?? null;
-		if (!email) {
-			resultados.push({
-				primaId: id,
-				conductor: conductorNombre,
-				status: 'error',
-				message: 'Conductor sin email registrado'
-			});
-			errores++;
-			continue;
-		}
-
-		const token = generateMockPortalToken(p.conductor_id ?? '', id);
-		const portalLink = `${window.location.origin}/public/portal?token=${encodeURIComponent(token)}&highlight_prima=${id}`;
-
-		queue.push({
-			id: cryptoRandomId(),
-			tipo: 'prima',
-			createdAt: new Date().toISOString(),
-			to: email,
-			conductorNombre,
-			mes: p.mes,
-			anio: p.anio,
-			prima: Number(p.prima) || 0,
-			prima_pendiente: p.prima_pendiente != null ? Number(p.prima_pendiente) : null,
-			conductorId: p.conductor_id,
-			primaId: id,
-			portalLink,
-			subject: `💰 Tu Liquidación de Prima — ${mesNombre(p.mes)} ${p.anio}`,
-			consumed: false
-		});
-		enviados++;
-		resultados.push({
-			primaId: id,
-			conductor: conductorNombre,
-			email,
-			status: 'enviado',
-			portalLink
-		});
-
-		console.info('[PrimaEmailMock] ✉️ Email enviado:', {
-			to: email,
-			subject: `💰 Tu Liquidación de Prima — ${mesNombre(p.mes)} ${p.anio}`,
-			portalLink
-		});
-	}
-	writeEmailQueue(queue);
-	return { enviados, errores, total: primaIds.length, resultados };
-}
-
-function readPrimasCache(): Map<string, any> {
-	try {
-		const raw = sessionStorage.getItem('primas_cache');
-		const arr: any[] = raw ? JSON.parse(raw) : [];
-		return new Map(arr.map((p) => [p.id, p]));
-	} catch {
-		return new Map();
-	}
-}
-
-const EMAIL_QUEUE_KEY = 'prima_email_queue_mock';
-function readEmailQueue(): any[] {
-	try {
-		const raw = localStorage.getItem(EMAIL_QUEUE_KEY);
-		return raw ? JSON.parse(raw) : [];
-	} catch {
-		return [];
-	}
-}
-function writeEmailQueue(q: any[]) {
-	try {
-		localStorage.setItem(EMAIL_QUEUE_KEY, JSON.stringify(q));
-	} catch {
-		/* ignore */
-	}
-}
-
-function generateMockPortalToken(conductorId: string, primaId: string): string {
-	const payload = btoa(
-		JSON.stringify({
-			sub: conductorId,
-			prima: primaId,
-			tipo: 'conductor_portal',
-			mock: true,
-			ts: Date.now()
-		})
-	);
-	return `mock.${payload}.${cryptoRandomId()}`;
-}
-
-function cryptoRandomId(): string {
-	return (typeof crypto !== 'undefined' && 'randomUUID' in crypto)
-		? crypto.randomUUID()
-		: Math.random().toString(36).slice(2) + Date.now().toString(36);
-}
-
-function mesNombre(m: number): string {
-	const nombres = [
-		'',
-		'Enero',
-		'Febrero',
-		'Marzo',
-		'Abril',
-		'Mayo',
-		'Junio',
-		'Julio',
-		'Agosto',
-		'Septiembre',
-		'Octubre',
-		'Noviembre',
-		'Diciembre'
-	];
-	return nombres[m] || '';
-}
 
 /**
  * Toggle visibilidad de una prima en el portal del conductor (futuro endpoint real).

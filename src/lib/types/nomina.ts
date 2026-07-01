@@ -131,6 +131,7 @@ export interface FirmaDesprendible {
 
 export interface FirmaConUrl extends FirmaDesprendible {
 	presignedUrl?: string;
+	base64?: string;
 }
 
 // ==================== USUARIO (auditoría) ====================

@@ -43,6 +43,8 @@
     es_cotransmeq?: boolean;
     conductor_id?: string;
     created_at?: string;
+    firmado?: boolean;
+    fecha_firma?: string | null;
   }
 
   let desprendibles: Desprendible[] = [];
@@ -63,6 +65,9 @@
   let highlightId: string | null = null;
   let highlightPrimaId: string | null = null;
 
+  // ── Firma Target (polimórfico: desprendible o prima) ──
+  let firmaTarget: { id: string; tipo: 'desprendible' | 'prima'; ref: Desprendible | PrimaPortal } | null = null;
+
   // ── Filtros ──
   let selectedYear = new Date().getFullYear();
   let searchMes = '';
@@ -72,7 +77,6 @@
 
   // ── Firma Modal ──
   let showFirmaModal = false;
-  let firmaTarget: Desprendible | null = null;
   let firmaCanvas: HTMLCanvasElement;
   let firmaCtx: CanvasRenderingContext2D | null = null;
   let isDrawing = false;
@@ -261,12 +265,38 @@
   async function verPrima(primaId: string) {
     generandoPdfPrima = primaId;
     try {
-      const res: any = await portalFetch(`/conductor-portal/prima/${primaId}`);
-      const { prima } = res.data;
+      const res: any = await portalFetch(`/conductor-portal/primas/${primaId}/enriquecida`);
+      const { prima, firma } = res.data;
 
-      // El portal del conductor NO muestra la firma en el PDF de prima
+      // Regla: el portal del conductor SOLO permite ver el PDF si la prima
+      // tiene firma propia. Si no la tiene, abre el modal de firma.
+      const tieneFirma = firma && (firma.base64 || firma.presignedUrl);
+      if (!tieneFirma) {
+        const primaLocal = primas.find((p) => p.id === primaId);
+        if (primaLocal) {
+          abrirFirmaModalPrima(primaLocal);
+        } else {
+          abrirFirmaModalPrima({
+            id: primaId,
+            mes: prima.mes,
+            anio: prima.anio,
+            prima: Number(prima.prima) || 0,
+            prima_pendiente: prima.prima_pendiente != null ? Number(prima.prima_pendiente) : null,
+            estado: prima.estado
+          });
+        }
+        return;
+      }
+
+      const firmas = [
+        {
+          presignedUrl: firma.presignedUrl,
+          base64: firma.base64,
+          fecha_firma: firma.fecha_firma
+        }
+      ];
       const { generarPdfPrima } = await import('$lib/utils/pdfPrima');
-      await generarPdfPrima(prima, []);
+      await generarPdfPrima(prima, firmas as any);
     } catch (err: any) {
       if (err.status === 401) {
         portalSession.logout();
@@ -287,7 +317,18 @@
   // ═══ FIRMA CANVAS LOGIC ═══
 
   async function abrirFirmaModal(d: Desprendible) {
-    firmaTarget = d;
+    firmaTarget = { id: d.id, tipo: 'desprendible', ref: d };
+    showFirmaModal = true;
+    firmaBase64 = '';
+    totalStrokeLength = 0;
+    strokePoints = [];
+    strokeCount = 0;
+    await tick();
+    initCanvas();
+  }
+
+  async function abrirFirmaModalPrima(p: PrimaPortal) {
+    firmaTarget = { id: p.id, tipo: 'prima', ref: p };
     showFirmaModal = true;
     firmaBase64 = '';
     totalStrokeLength = 0;
@@ -303,6 +344,14 @@
     firmaBase64 = '';
     totalStrokeLength = 0;
     strokeCount = 0;
+  }
+
+  function handleActionPrima(p: PrimaPortal) {
+    if (p.firmado) {
+      verPrima(p.id);
+    } else {
+      abrirFirmaModalPrima(p);
+    }
   }
 
   function initCanvas() {
@@ -381,27 +430,58 @@
   async function enviarFirma() {
     if (!firmaTarget || !firmaValida || !firmaBase64) return;
     firmaEnviando = true;
+
+    const esPrima = firmaTarget.tipo === 'prima';
+    const endpoint = esPrima
+      ? `/conductor-portal/primas/${firmaTarget.id}/firmar`
+      : `/conductor-portal/desprendibles/${firmaTarget.id}/firmar`;
+    const successMsg = esPrima
+      ? '¡Prima firmada exitosamente!'
+      : '¡Desprendible firmado exitosamente!';
+    const yaFirmadoMsg = esPrima
+      ? 'Esta prima ya fue firmada.'
+      : 'Este desprendible ya fue firmado.';
+
     try {
-      const res = await portalFetch(`/conductor-portal/desprendibles/${firmaTarget.id}/firmar`, {
+      const res = await portalFetch(endpoint, {
         method: 'POST',
         body: JSON.stringify({ firma_base64: firmaBase64 })
       });
-      const idx = desprendibles.findIndex(d => d.id === firmaTarget!.id);
-      if (idx !== -1) {
-        desprendibles[idx] = {
-          ...desprendibles[idx],
-          firmado: true,
-          fecha_firma: res.data?.fecha_firma || new Date().toISOString()
-        };
-        desprendibles = desprendibles;
+
+      if (esPrima) {
+        const idx = primas.findIndex(p => p.id === firmaTarget!.id);
+        if (idx !== -1) {
+          primas[idx] = {
+            ...primas[idx],
+            firmado: true,
+            fecha_firma: res.data?.fecha_firma || new Date().toISOString()
+          };
+          primas = primas;
+        }
+      } else {
+        const idx = desprendibles.findIndex(d => d.id === firmaTarget!.id);
+        if (idx !== -1) {
+          desprendibles[idx] = {
+            ...desprendibles[idx],
+            firmado: true,
+            fecha_firma: res.data?.fecha_firma || new Date().toISOString()
+          };
+          desprendibles = desprendibles;
+        }
       }
+
       const targetId = firmaTarget.id;
       cerrarFirmaModal();
-      successMessage = '¡Desprendible firmado exitosamente!';
+      successMessage = successMsg;
       showSuccess = true;
+
       setTimeout(async () => {
         showSuccess = false;
-        await verDesprendible(targetId);
+        if (esPrima) {
+          await verPrima(targetId);
+        } else {
+          await verDesprendible(targetId);
+        }
       }, 2500);
     } catch (err: any) {
       if (err.status === 401) {
@@ -410,13 +490,21 @@
         return;
       }
       if (err.status === 409) {
-        const idx = desprendibles.findIndex(d => d.id === firmaTarget!.id);
-        if (idx !== -1) {
-          desprendibles[idx] = { ...desprendibles[idx], firmado: true };
-          desprendibles = desprendibles;
+        if (esPrima) {
+          const idx = primas.findIndex(p => p.id === firmaTarget!.id);
+          if (idx !== -1) {
+            primas[idx] = { ...primas[idx], firmado: true };
+            primas = primas;
+          }
+        } else {
+          const idx = desprendibles.findIndex(d => d.id === firmaTarget!.id);
+          if (idx !== -1) {
+            desprendibles[idx] = { ...desprendibles[idx], firmado: true };
+            desprendibles = desprendibles;
+          }
         }
         cerrarFirmaModal();
-        alert('Este desprendible ya fue firmado.');
+        alert(yaFirmadoMsg);
       } else {
         alert(err.message || 'Error al enviar la firma');
       }
@@ -794,6 +882,7 @@
               <th class="text-right">Prima</th>
               <th class="text-right">Pendiente</th>
               <th class="text-right">Total</th>
+              <th class="text-center">Firma</th>
               <th class="text-center">Acción</th>
             </tr>
           </thead>
@@ -828,18 +917,35 @@
                   {fmt(p.prima + (p.prima_pendiente || 0))}
                 </td>
                 <td class="text-center">
-                  <button
-                    class="btn-action btn-prima"
-                    on:click={() => verPrima(p.id)}
-                    disabled={generandoPdfPrima === p.id}
-                    title="Ver Desprendible de Prima"
-                  >
-                    {#if generandoPdfPrima === p.id}
-                      <span class="spinner-mini"></span>
-                    {:else}
-                      💰 Ver Prima
-                    {/if}
-                  </button>
+                  {#if p.firmado}
+                    <span class="firma-si" title={p.fecha_firma ? `Firmado el ${new Date(p.fecha_firma).toLocaleDateString('es-CO')}` : 'Firmado'}>✅</span>
+                  {:else}
+                    <span class="firma-pendiente" title="Pendiente de firma">🖊️</span>
+                  {/if}
+                </td>
+                <td class="text-center">
+                  {#if p.firmado}
+                    <button
+                      class="btn-action btn-ver"
+                      on:click={() => verPrima(p.id)}
+                      disabled={generandoPdfPrima === p.id}
+                      title="Ver Desprendible de Prima"
+                    >
+                      {#if generandoPdfPrima === p.id}
+                        <span class="spinner-mini"></span>
+                      {:else}
+                        💰 Ver Prima
+                      {/if}
+                    </button>
+                  {:else}
+                    <button
+                      class="btn-action btn-firmar"
+                      on:click={() => abrirFirmaModalPrima(p)}
+                      title="Firmar Prima"
+                    >
+                      ✍️ Firmar
+                    </button>
+                  {/if}
                 </td>
               </tr>
             {/each}
@@ -883,19 +989,34 @@
                 <span class="m-stat-label">Total</span>
                 <span class="m-stat-value sueldo">{fmt(p.prima + (p.prima_pendiente || 0))}</span>
               </div>
+              <div class="m-stat">
+                <span class="m-stat-label">Firma</span>
+                <span class="m-stat-value" style={p.firmado ? 'color:#16a34a' : 'color:#d97706'}>
+                  {p.firmado ? '✅' : '🖊️ Pendiente'}
+                </span>
+              </div>
             </div>
 
-            <button
-              class="m-btn-prima"
-              on:click={() => verPrima(p.id)}
-              disabled={generandoPdfPrima === p.id}
-            >
-              {#if generandoPdfPrima === p.id}
-                <span class="spinner-mini-w"></span> Generando prima...
-              {:else}
-                💰 Ver Desprendible de Prima
-              {/if}
-            </button>
+            {#if p.firmado}
+              <button
+                class="m-btn-pdf"
+                on:click={() => verPrima(p.id)}
+                disabled={generandoPdfPrima === p.id}
+              >
+                {#if generandoPdfPrima === p.id}
+                  <span class="spinner-mini-w"></span> Generando prima...
+                {:else}
+                  💰 Ver Desprendible de Prima
+                {/if}
+              </button>
+            {:else}
+              <button
+                class="m-btn-firmar"
+                on:click={() => abrirFirmaModalPrima(p)}
+              >
+                ✍️ Firmar Prima
+              </button>
+            {/if}
           </div>
         {/each}
       </div>
@@ -909,32 +1030,51 @@
 
 <!-- ═══ MODAL DE FIRMA ═══ -->
 {#if showFirmaModal && firmaTarget}
+  {@const isPrimaModal = firmaTarget.tipo === 'prima'}
+  {@const targetRef = firmaTarget.ref}
   <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
   <div class="modal-overlay" role="dialog" aria-modal="true" tabindex="-1" transition:fade={{ duration: 200 }} on:click|self={cerrarFirmaModal}>
     <div class="modal-content" transition:fly={{ y: 40, duration: 300 }}>
       <div class="modal-header">
         <div>
-          <h2 class="modal-title">✍️ Firmar Desprendible</h2>
+          <h2 class="modal-title">{isPrimaModal ? '✍️ Firmar Prima' : '✍️ Firmar Desprendible'}</h2>
           <p class="modal-sub">
-            {getMes(firmaTarget.periodo_fin)} — {periodoRango(firmaTarget.periodo_inicio, firmaTarget.periodo_fin)}
+            {#if isPrimaModal}
+              {MESES[(targetRef as PrimaPortal).mes - 1]} {(targetRef as PrimaPortal).anio}
+            {:else}
+              {getMes((targetRef as Desprendible).periodo_fin)} — {periodoRango((targetRef as Desprendible).periodo_inicio, (targetRef as Desprendible).periodo_fin)}
+            {/if}
           </p>
         </div>
         <button class="modal-close" on:click={cerrarFirmaModal} disabled={firmaEnviando}>✕</button>
       </div>
 
       <div class="firma-resumen">
-        <div class="fr-item">
-          <span class="fr-label">Sueldo Total</span>
-          <span class="fr-value main">{fmt(firmaTarget.sueldo_total)}</span>
-        </div>
-        <div class="fr-item">
-          <span class="fr-label">Días</span>
-          <span class="fr-value">{firmaTarget.dias_laborados}</span>
-        </div>
-        <div class="fr-item">
-          <span class="fr-label">Recargos</span>
-          <span class="fr-value">{fmt(firmaTarget.total_recargos)}</span>
-        </div>
+        {#if isPrimaModal}
+          <div class="fr-item">
+            <span class="fr-label">Valor Prima</span>
+            <span class="fr-value main">{fmt((targetRef as PrimaPortal).prima)}</span>
+          </div>
+          {#if (targetRef as PrimaPortal).prima_pendiente}
+            <div class="fr-item">
+              <span class="fr-label">Prima Pendiente</span>
+              <span class="fr-value">{fmt((targetRef as PrimaPortal).prima_pendiente)}</span>
+            </div>
+          {/if}
+        {:else}
+          <div class="fr-item">
+            <span class="fr-label">Sueldo Total</span>
+            <span class="fr-value main">{fmt((targetRef as Desprendible).sueldo_total)}</span>
+          </div>
+          <div class="fr-item">
+            <span class="fr-label">Días</span>
+            <span class="fr-value">{(targetRef as Desprendible).dias_laborados}</span>
+          </div>
+          <div class="fr-item">
+            <span class="fr-label">Recargos</span>
+            <span class="fr-value">{fmt((targetRef as Desprendible).total_recargos)}</span>
+          </div>
+        {/if}
       </div>
 
       <div class="firma-canvas-container">

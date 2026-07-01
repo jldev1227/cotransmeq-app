@@ -135,12 +135,18 @@ export async function generarPdfPrima(
 	const elaboradoPor = getElaboradoPor(prima);
 	const aprobadoPor = getAprobadoPor(prima);
 
-	const hasFirmaPresignedUrl = !!(firmas && firmas[0]?.presignedUrl);
+	const firmaInput = firmas && firmas[0];
+	// Preferir base64 que ya viene del backend (evita fetch al presignedUrl,
+	// que puede fallar por CORS cuando el portal corre en otro origen).
+	const hasFirmaBase64 = !!(firmaInput?.base64);
+	const hasFirmaPresignedUrl = !!(firmaInput?.presignedUrl);
 
 	let firmaBase64: string | null = null;
-	if (hasFirmaPresignedUrl) {
+	if (hasFirmaBase64) {
+		firmaBase64 = firmaInput!.base64!;
+	} else if (hasFirmaPresignedUrl) {
 		try {
-			firmaBase64 = await imageToBase64Url(firmas[0].presignedUrl!);
+			firmaBase64 = await imageToBase64Url(firmaInput!.presignedUrl!);
 		} catch (e) {
 			console.error('[pdfPrima] Error al procesar la firma:', e);
 			firmaBase64 = null;
