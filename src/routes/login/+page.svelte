@@ -101,7 +101,7 @@
 					<div class="brand-mark">
 						<img
 							class="brand-logo"
-							src="/assets/logo_nombre.webp-264.webp"
+							src="/assets/logo_nombre.webp"
 							alt="Cotransmeq"
 							width="132"
 							height="45"
