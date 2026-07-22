@@ -1,0 +1,1850 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HSEQ-FR-07 V5 — Acciones Correctivas, Preventivas y de Mejora</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+  :root {
+    --navy: #1F3864;
+    --blue: #2E75B6;
+    --green: #375623;
+    --orange: #9E480E;
+    --purple: #7030A0;
+    --red: #C00000;
+    --teal: #006B6B;
+    --gray-50: #F8F9FA;
+    --gray-100: #F2F2F2;
+    --gray-200: #E8E8E8;
+    --gray-300: #CCCCCC;
+    --gray-600: #555555;
+    --gray-800: #222222;
+    --yellow: #FFFFC0;
+    --green-light: #EBF5E6;
+    --orange-light: #FFF0E6;
+    --purple-light: #F0E6FF;
+    --blue-light: #EBF3FB;
+    --red-light: #FCEBEB;
+    --teal-light: #E0F4F4;
+    --navy-light: #E8EEF7;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: #F0F2F5;
+    color: var(--gray-800);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .page { max-width: 980px; margin: 0 auto; padding: 16px; }
+
+  /* HEADER */
+  .header {
+    background: var(--navy);
+    border-radius: 8px 8px 0 0;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .header-left { display: flex; align-items: center; gap: 14px; }
+  .header-logo {
+    background: white;
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-weight: 700;
+    font-size: 11px;
+    color: var(--navy);
+    line-height: 1.2;
+    text-align: center;
+  }
+  .header-title { color: white; }
+  .header-title h1 { font-size: 15px; font-weight: 700; letter-spacing: 0.02em; }
+  .header-title p { font-size: 11px; opacity: 0.7; margin-top: 2px; }
+  .header-code {
+    text-align: right;
+    color: white;
+    font-size: 11px;
+    font-family: 'IBM Plex Mono', monospace;
+    opacity: 0.85;
+    line-height: 1.8;
+  }
+
+  /* TABLA DE PLAZOS */
+  .plazos-banner {
+    background: var(--navy);
+    padding: 0 20px 14px;
+  }
+  .plazos-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .plazos-table th {
+    background: rgba(255,255,255,0.15);
+    color: white;
+    padding: 6px 8px;
+    text-align: center;
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+  .plazos-table td {
+    padding: 5px 8px;
+    text-align: center;
+    color: white;
+    border: 1px solid rgba(255,255,255,0.15);
+    font-size: 11px;
+  }
+  .plazos-table tr.alto td:first-child { background: rgba(192,0,0,0.4); font-weight: 700; }
+  .plazos-table tr.medio td:first-child { background: rgba(158,72,14,0.4); font-weight: 700; }
+  .plazos-table tr.bajo td:first-child { background: rgba(55,86,35,0.4); font-weight: 700; }
+
+  /* FORM BODY */
+  .form-body {
+    background: white;
+    border-radius: 0 0 8px 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  }
+
+  /* SECTION */
+  .section { margin-bottom: 0; }
+  .section-header {
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .section-header .num {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.25);
+    color: white;
+    font-weight: 700;
+    font-size: 12px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .section-header h2 { font-size: 13px; font-weight: 600; color: white; flex: 1; }
+  .section-header .arrow { color: white; font-size: 12px; transition: transform 0.2s; }
+  .section-header.collapsed .arrow { transform: rotate(-90deg); }
+
+  .sec-1 .section-header { background: var(--blue); }
+  .sec-2 .section-header { background: var(--red); }
+  .sec-3 .section-header { background: var(--green); }
+  .sec-4 .section-header { background: var(--purple); }
+  .sec-5 .section-header { background: var(--teal); }
+  .sec-6 .section-header { background: var(--orange); }
+
+  .section-body { padding: 16px 20px; border-bottom: 1px solid var(--gray-200); }
+  .section-body.hidden { display: none; }
+
+  /* FIELDS */
+  .field-row { display: grid; gap: 12px; margin-bottom: 12px; }
+  .field-row.cols-2 { grid-template-columns: 1fr 1fr; }
+  .field-row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .field-row.cols-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .field-row.cols-1 { grid-template-columns: 1fr; }
+
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--gray-600);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .field label .req { color: var(--red); }
+  .field input, .field select, .field textarea {
+    border: 1.5px solid var(--gray-200);
+    border-radius: 5px;
+    padding: 7px 10px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 12px;
+    color: var(--gray-800);
+    background: var(--yellow);
+    transition: border-color 0.15s, box-shadow 0.15s;
+    width: 100%;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus {
+    outline: none;
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px rgba(46,117,182,0.1);
+    background: white;
+  }
+  .field textarea { resize: vertical; min-height: 70px; }
+  .field .hint {
+    font-size: 10px;
+    color: var(--gray-600);
+    line-height: 1.4;
+    padding: 4px 8px;
+    background: var(--gray-50);
+    border-left: 2px solid var(--gray-300);
+    border-radius: 0 3px 3px 0;
+    font-style: italic;
+  }
+  .field .hint.blue { border-left-color: var(--blue); background: var(--blue-light); color: #185FA5; }
+  .field .hint.green { border-left-color: var(--green); background: var(--green-light); color: var(--green); }
+  .field .hint.orange { border-left-color: var(--orange); background: var(--orange-light); color: var(--orange); }
+  .field .hint.purple { border-left-color: var(--purple); background: var(--purple-light); color: var(--purple); }
+  .field .hint.red { border-left-color: var(--red); background: var(--red-light); color: var(--red); }
+  .field .hint.teal { border-left-color: var(--teal); background: var(--teal-light); color: var(--teal); }
+
+  /* CHECKBOXES */
+  .checkbox-group { display: flex; gap: 12px; flex-wrap: wrap; padding: 6px 0; }
+  .checkbox-item { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+  .checkbox-item input[type=checkbox] { width: 14px; height: 14px; accent-color: var(--blue); cursor: pointer; }
+  .checkbox-item span { font-size: 12px; }
+
+  /* TIPO HALLAZGO CARDS */
+  .tipo-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .tipo-card {
+    border: 2px solid var(--gray-200);
+    border-radius: 6px;
+    padding: 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+  }
+  .tipo-card:hover { border-color: var(--blue); background: var(--blue-light); }
+  .tipo-card.selected-ncm { border-color: var(--red); background: var(--red-light); }
+  .tipo-card.selected-ncn { border-color: var(--orange); background: var(--orange-light); }
+  .tipo-card.selected-obs { border-color: var(--blue); background: var(--blue-light); }
+  .tipo-card.selected-odm { border-color: var(--green); background: var(--green-light); }
+  .tipo-card .tipo-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .tipo-card .tipo-desc { font-size: 10px; color: var(--gray-600); line-height: 1.3; }
+  .tipo-card .tipo-req { font-size: 9px; margin-top: 4px; font-style: italic; color: var(--gray-600); }
+
+  /* RIESGO CARDS */
+  .riesgo-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px; }
+  .riesgo-card {
+    border: 2px solid var(--gray-200);
+    border-radius: 6px;
+    padding: 12px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .riesgo-card:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0,0,0,0.1); }
+  .riesgo-card.selected { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0,0,0,0.15); }
+  .riesgo-card.alto.selected { border-color: var(--red); background: var(--red-light); }
+  .riesgo-card.medio.selected { border-color: var(--orange); background: var(--orange-light); }
+  .riesgo-card.bajo.selected { border-color: var(--green); background: var(--green-light); }
+  .riesgo-title { font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+  .riesgo-card.alto .riesgo-title { color: var(--red); }
+  .riesgo-card.medio .riesgo-title { color: var(--orange); }
+  .riesgo-card.bajo .riesgo-title { color: var(--green); }
+  .riesgo-desc { font-size: 10px; color: var(--gray-600); line-height: 1.4; margin-bottom: 6px; }
+  .riesgo-examples { font-size: 9px; color: var(--gray-600); font-style: italic; }
+
+  /* PLAZOS AUTOMÁTICOS */
+  .plazos-auto {
+    display: none;
+    border-radius: 6px;
+    padding: 10px 14px;
+    margin-top: 10px;
+    font-size: 11px;
+    line-height: 1.7;
+  }
+  .plazos-auto.show { display: block; }
+  .plazos-auto.alto { background: var(--red-light); border: 1px solid var(--red); color: var(--red); }
+  .plazos-auto.medio { background: var(--orange-light); border: 1px solid var(--orange); color: var(--orange); }
+  .plazos-auto.bajo { background: var(--green-light); border: 1px solid var(--green); color: var(--green); }
+  .plazos-auto .plazo-row { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(0,0,0,0.1); padding: 2px 0; }
+  .plazos-auto .plazo-row:last-child { border-bottom: none; }
+  .plazos-auto .plazo-row span:first-child { font-weight: 600; }
+
+  /* CORRECCIÓN INMEDIATA ESTADOS */
+  .correc-opts { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; margin: 8px 0; }
+  .correc-opt {
+    border: 1.5px solid var(--gray-200);
+    border-radius: 5px;
+    padding: 8px 6px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .correc-opt:hover { border-color: var(--blue); }
+  .correc-opt.sel-cumplida { border-color: var(--green); background: var(--green-light); color: var(--green); }
+  .correc-opt.sel-proceso { border-color: var(--blue); background: var(--blue-light); color: var(--blue); }
+  .correc-opt.sel-vencida { border-color: var(--red); background: var(--red-light); color: var(--red); }
+  .correc-opt.sel-replanteada { border-color: var(--orange); background: var(--orange-light); color: var(--orange); }
+  .correc-opt.sel-norequiere { border-color: var(--teal); background: var(--teal-light); color: var(--teal); }
+
+  /* CAUSA BLOCK */
+  .causa-block {
+    border: 1.5px solid var(--gray-200);
+    border-radius: 6px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .causa-header {
+    background: var(--green-light);
+    padding: 8px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--gray-200);
+  }
+  .causa-header span { font-weight: 600; font-size: 12px; color: var(--green); }
+  .causa-raiz-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: var(--green);
+    color: white;
+    font-weight: 600;
+    display: none;
+  }
+  .causa-body { padding: 12px 14px; }
+  .raiz-toggle { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+  .raiz-toggle label { font-size: 11px; font-weight: 600; color: var(--gray-600); }
+  .raiz-toggle input { accent-color: var(--green); width: 14px; height: 14px; }
+
+  /* SEGUIMIENTO/CICLOS BLOCK */
+  .seguimiento-block {
+    border: 1px solid var(--gray-200);
+    border-radius: 5px;
+    margin-top: 10px;
+    overflow: hidden;
+  }
+  .seguimiento-header {
+    background: var(--gray-100);
+    padding: 6px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--gray-600);
+    border-bottom: 1px solid var(--gray-200);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .seguimiento-body { padding: 10px 12px; }
+
+  /* ESTADO ACCION */
+  .estado-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; }
+  .estado-opt {
+    border: 1.5px solid var(--gray-200);
+    border-radius: 5px;
+    padding: 6px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .estado-opt:hover { transform: translateY(-1px); }
+  .estado-opt.selected-cumplida { border-color: var(--green); background: var(--green-light); color: var(--green); }
+  .estado-opt.selected-proceso { border-color: var(--blue); background: var(--blue-light); color: var(--blue); }
+  .estado-opt.selected-vencida { border-color: var(--red); background: var(--red-light); color: var(--red); }
+  .estado-opt.selected-replanteada { border-color: var(--orange); background: var(--orange-light); color: var(--orange); }
+
+  /* REPLANTEADO BLOCK */
+  .replanteo-block {
+    display: none;
+    margin-top: 10px;
+    background: var(--orange-light);
+    border: 1.5px solid var(--orange);
+    border-radius: 6px;
+    padding: 10px 14px;
+  }
+  .replanteo-block.show { display: block; }
+  .replanteo-block .replanteo-title {
+    font-size: 11px; font-weight: 700; color: var(--orange);
+    text-transform: uppercase; margin-bottom: 8px; letter-spacing: 0.04em;
+  }
+
+  /* CICLO BLOCK */
+  .ciclo-block {
+    border: 1.5px solid var(--purple);
+    border-radius: 6px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .ciclo-header {
+    background: var(--purple);
+    padding: 7px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .ciclo-header span { font-weight: 600; font-size: 12px; color: white; }
+  .ciclo-header .ciclo-prog { font-size: 10px; color: rgba(255,255,255,0.7); font-style: italic; }
+  .ciclo-body { padding: 12px 14px; background: var(--purple-light); }
+
+  /* RESULTADO CICLO */
+  .resultado-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; }
+  .resultado-opt {
+    border: 1.5px solid var(--gray-200);
+    border-radius: 5px;
+    padding: 8px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+    font-size: 11px;
+    font-weight: 500;
+    background: white;
+  }
+  .resultado-opt:hover { border-color: var(--purple); }
+  .resultado-opt.selected-avance { border-color: var(--green); background: var(--green-light); color: var(--green); }
+  .resultado-opt.selected-sin { border-color: var(--orange); background: var(--orange-light); color: var(--orange); }
+  .resultado-opt.selected-imp { border-color: var(--red); background: var(--red-light); color: var(--red); }
+  .impedimento-field { display: none; margin-top: 8px; }
+  .impedimento-field.show { display: block; }
+
+  /* EVALUACIÓN DE EFICACIA */
+  .eficacia-eval-block {
+    border: 1.5px solid var(--orange);
+    border-radius: 6px;
+    margin-bottom: 12px;
+    overflow: hidden;
+  }
+  .eficacia-eval-header {
+    background: var(--orange);
+    padding: 7px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .eficacia-eval-header span { font-weight: 600; font-size: 12px; color: white; }
+  .eficacia-eval-body { padding: 12px 14px; background: var(--orange-light); }
+
+  /* CIERRE */
+  .cierre-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; }
+  .cierre-opt {
+    border: 2px solid var(--gray-200);
+    border-radius: 6px;
+    padding: 12px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+    background: white;
+  }
+  .cierre-opt .cierre-icon { font-size: 20px; margin-bottom: 4px; }
+  .cierre-opt .cierre-label { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+  .cierre-opt .cierre-desc { font-size: 10px; color: var(--gray-600); line-height: 1.3; }
+  .cierre-opt:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0,0,0,0.1); }
+  .cierre-opt.selected-eficaz { border-color: var(--green); background: var(--green-light); }
+  .cierre-opt.selected-eficaz .cierre-label { color: var(--green); }
+  .cierre-opt.selected-parcial { border-color: var(--orange); background: var(--orange-light); }
+  .cierre-opt.selected-parcial .cierre-label { color: var(--orange); }
+  .cierre-opt.selected-noeficaz { border-color: var(--red); background: var(--red-light); }
+  .cierre-opt.selected-noeficaz .cierre-label { color: var(--red); }
+
+  /* REAPERTURA */
+  .reapertura-block {
+    display: none;
+    margin-top: 12px;
+    background: var(--red-light);
+    border: 2px solid var(--red);
+    border-radius: 6px;
+    padding: 12px 16px;
+  }
+  .reapertura-block.show { display: block; }
+  .btn-reabrir {
+    background: var(--red);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 22px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.03em;
+    margin-top: 10px;
+  }
+  .btn-reabrir:hover { background: #900000; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(192,0,0,0.35); }
+
+  /* EVIDENCIA BLOCK */
+  .evidencia-block {
+    border: 1.5px solid var(--orange);
+    border-radius: 6px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+  .evidencia-header {
+    background: var(--orange);
+    padding: 7px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .evidencia-header span { font-weight: 600; font-size: 12px; color: white; }
+  .evidencia-body { padding: 12px 14px; background: var(--orange-light); }
+
+  /* APROBACIÓN SECCIÓN 5 */
+  .aprobacion-card {
+    border: 2px solid var(--gray-200);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .aprobacion-card-header {
+    padding: 8px 14px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .aprobacion-card-header.ncm { background: var(--red-light); color: var(--red); border-bottom: 1px solid var(--red); }
+  .aprobacion-card-header.coord { background: var(--teal-light); color: var(--teal); border-bottom: 1px solid var(--teal); }
+  .aprobacion-card-body { padding: 12px 14px; }
+
+  /* FIRMAS */
+  .firma-block {
+    border: 1px solid var(--gray-300);
+    border-radius: 5px;
+    padding: 10px 12px;
+    background: var(--gray-50);
+    margin-top: 8px;
+  }
+  .firma-block .firma-rol { font-size: 10px; font-weight: 700; color: var(--gray-600); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 6px; }
+
+  /* INSTRUCCION */
+  .instruccion {
+    background: var(--blue-light);
+    border: 1px solid var(--blue);
+    border-radius: 5px;
+    padding: 8px 12px;
+    font-size: 11px;
+    color: #185FA5;
+    margin-bottom: 12px;
+    line-height: 1.5;
+  }
+  .instruccion.orange { background: var(--orange-light); border-color: var(--orange); color: var(--orange); }
+  .instruccion.purple { background: var(--purple-light); border-color: var(--purple); color: var(--purple); }
+  .instruccion.red { background: var(--red-light); border-color: var(--red); color: var(--red); }
+  .instruccion.green { background: var(--green-light); border-color: var(--green); color: var(--green); }
+  .instruccion.teal { background: var(--teal-light); border-color: var(--teal); color: var(--teal); }
+
+  /* ADD BTN */
+  .add-btn {
+    background: none;
+    border: 1px dashed var(--gray-300);
+    border-radius: 4px;
+    padding: 5px 12px;
+    font-size: 11px;
+    color: var(--gray-600);
+    cursor: pointer;
+    width: 100%;
+    margin-top: 6px;
+    transition: all 0.15s;
+    font-family: 'IBM Plex Sans', sans-serif;
+  }
+  .add-btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-light); }
+
+  /* SUBMIT */
+  .submit-bar {
+    background: var(--gray-50);
+    border-top: 1px solid var(--gray-200);
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .submit-bar .note { font-size: 11px; color: var(--gray-600); font-style: italic; }
+  .btn-submit {
+    background: var(--navy);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 28px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.02em;
+  }
+  .btn-submit:hover { background: var(--blue); transform: translateY(-1px); box-shadow: 0 4px 12px rgba(46,117,182,0.3); }
+
+  .divider { height: 1px; background: var(--gray-200); margin: 14px 0; }
+  .tag { display: inline-block; font-size: 10px; padding: 2px 8px; border-radius: 3px; font-weight: 600; }
+  .tag-mandatory { background: var(--red-light); color: var(--red); }
+  .tag-ncm { background: var(--red-light); color: var(--red); }
+  .tag-coord { background: var(--teal-light); color: var(--teal); }
+
+  .subsection-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--gray-600);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin: 14px 0 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .subsection-title::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--gray-200);
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-left">
+      <div class="header-logo">TRANS<br>MERALDA<br>S.A.S</div>
+      <div class="header-title">
+        <h1>ACCIONES CORRECTIVAS, PREVENTIVAS Y DE MEJORA</h1>
+        <p>Formulario de Registro y Tratamiento — HSEQ-FR-07 V5</p>
+      </div>
+    </div>
+    <div class="header-code">
+      Código: HSEQ-FR-07<br>
+      Versión: 5<br>
+      Fecha: 10-04-2026
+    </div>
+  </div>
+
+  <!-- TABLA DE PLAZOS (Tabla C) -->
+  <div class="plazos-banner">
+    <table class="plazos-table">
+      <thead>
+        <tr>
+          <th>Nivel de Riesgo</th>
+          <th>Corrección Inmediata</th>
+          <th>Plan Aprobado</th>
+          <th>Implementación Acciones</th>
+          <th>Ciclos de Seguimiento</th>
+          <th>Evaluación de Eficacia</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="alto"><td>🔴 ALTO</td><td>15 días cal.</td><td>30 días cal.</td><td>90 días cal.</td><td>Cada 30 días · Ciclos: 30/60/90 días</td><td>2 evaluaciones: 1ª al completar acciones · 2ª 60 días después</td></tr>
+        <tr class="medio"><td>🟡 MEDIO</td><td>30 días cal.</td><td>60 días cal.</td><td>120 días cal.</td><td>Cada 40 días · Ciclos: 40/80/120 días</td><td>1 evaluación al completar acciones · Si Parcialmente Eficaz: 2ª en 60 días</td></tr>
+        <tr class="bajo"><td>🟢 BAJO</td><td>45 días cal.</td><td>90 días cal.</td><td>180 días cal.</td><td>Cada 60 días · Ciclos: 60/120/180 días</td><td>1 evaluación al completar acciones</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="form-body">
+
+    <!-- ═══ SECCIÓN 1: IDENTIFICACIÓN ═══ -->
+    <div class="section sec-1">
+      <div class="section-header" onclick="toggleSection(this)">
+        <div class="num">1</div>
+        <h2>IDENTIFICACIÓN DEL HALLAZGO</h2>
+        <span class="arrow">▼</span>
+      </div>
+      <div class="section-body">
+
+        <div class="field-row cols-4">
+          <div class="field">
+            <label>Fecha de registro</label>
+            <input type="date" id="fecha-registro" value="2026-06-02">
+          </div>
+          <div class="field">
+            <label>Acción No. <span class="req">*</span></label>
+            <input type="text" placeholder="Ej: A27">
+          </div>
+          <div class="field">
+            <label>Proceso donde se origina <span class="req">*</span></label>
+            <input type="text" placeholder="Ej: Gestión HSEQ">
+          </div>
+          <div class="field">
+            <label>Lugar / Sede</label>
+            <input type="text" placeholder="Ej: Sede Principal">
+          </div>
+        </div>
+
+        <div class="field-row cols-2">
+          <div class="field">
+            <label>Fuente que generó el hallazgo <span class="req">*</span></label>
+            <select>
+              <option value="">Seleccionar...</option>
+              <option>Auditoría interna</option>
+              <option>Auditoría externa CCS</option>
+              <option>Revisión por la dirección</option>
+              <option>Investigación de incidente / accidente</option>
+              <option>Seguimiento a indicadores</option>
+              <option>Inspección</option>
+              <option>Reporte de trabajador o contratista</option>
+              <option>Queja o reclamo (PQRSAF)</option>
+              <option>Desempeño de proveedores o contratistas</option>
+              <option>Requisito legal o normativo</option>
+              <option>Resultados de simulacros</option>
+              <option>Gestión del cambio</option>
+              <option>Otro</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Fecha de identificación del hallazgo <span class="req">*</span></label>
+            <input type="date">
+            <span class="hint">La fecha del informe, acta o evento que generó el hallazgo. No debe diferir más de 5 días calendario de la fecha de registro.</span>
+          </div>
+        </div>
+
+        <div class="field-row cols-1">
+          <div class="field">
+            <label>Tipo de hallazgo <span class="req">*</span></label>
+            <div class="tipo-grid" style="margin-top:6px">
+              <div class="tipo-card" onclick="selectTipo(this,'ncm')">
+                <div class="tipo-badge" style="color:var(--red)">NC Mayor</div>
+                <div class="tipo-desc">Incumplimiento ya ocurrido que vulnera seriamente el SG HSEQ y PESV.</div>
+                <div class="tipo-req">⚠ Aprobación de Gerencia: plan y cierre</div>
+              </div>
+              <div class="tipo-card" onclick="selectTipo(this,'ncn')">
+                <div class="tipo-badge" style="color:var(--orange)">NC Menor</div>
+                <div class="tipo-desc">Incumplimiento real o potencial de carácter parcial o esporádico.</div>
+                <div class="tipo-req">Correctiva (ya ocurrió) o Preventiva (riesgo)</div>
+              </div>
+              <div class="tipo-card" onclick="selectTipo(this,'obs')">
+                <div class="tipo-badge" style="color:var(--blue)">Observación</div>
+                <div class="tipo-desc">No implica incumplimiento pero es oportunidad de fortalecer el sistema.</div>
+                <div class="tipo-req">Tipo acción: Mejora</div>
+              </div>
+              <div class="tipo-card" onclick="selectTipo(this,'odm')">
+                <div class="tipo-badge" style="color:var(--green)">Posibilidad de Mejora</div>
+                <div class="tipo-desc">Elevar el desempeño más allá del cumplimiento actual.</div>
+                <div class="tipo-req">Tipo acción: Mejora</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="field-row cols-2">
+          <div class="field">
+            <label>Tipo de acción <span class="req">*</span></label>
+            <select>
+              <option value="">Seleccionar...</option>
+              <option>Correctiva — incumplimiento ya ocurrió (NC Mayor o NC Menor Real)</option>
+              <option>Preventiva — incumplimiento no ha ocurrido pero hay riesgo (NC Menor Potencial)</option>
+              <option>Mejora — no hay incumplimiento, se eleva el desempeño (Observación u OdM)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Variable / Categoría para análisis de tendencias</label>
+            <select>
+              <option value="">Seleccionar...</option>
+              <option>Requisito RUC / ISO</option>
+              <option>Gestión de Proveedores</option>
+              <option>Accidentalidad</option>
+              <option>Incumplimiento Legal</option>
+              <option>Gestión Documental</option>
+              <option>Competencias</option>
+              <option>Infraestructura</option>
+              <option>Seguridad Vial</option>
+              <option>Ambiente</option>
+              <option>Otro</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-row cols-2">
+          <div class="field">
+            <label>Componente / Elemento / Requisito de entrada</label>
+            <input type="text" placeholder="Ej: GAF-PR-01 V8, Paso 14 / ISO 45001:8.1.4.1">
+            <span class="hint">Cite el documento, numeral o requisito específico. No use referencias genéricas.</span>
+          </div>
+          <div class="field">
+            <label>Marco legal / Normativo / Contractual</label>
+            <input type="text" placeholder="Ej: ISO 45001:2018 – 8.1.4.1 / Dec 1072 Art. 2.2.4.6.8">
+          </div>
+        </div>
+
+        <div class="field-row cols-1">
+          <div class="field">
+            <label>Descripción del hallazgo <span class="req">*</span></label>
+            <textarea placeholder="Incluya: (1) qué ocurrió o qué no existe, (2) dónde se evidenció, (3) qué requisito se incumple.&#10;Ejemplo: No se tiene documentado el procedimiento para la planificación de desplazamientos laborales incluyendo todos los criterios de la Guía RUC Transporte." style="min-height:80px"></textarea>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Requiere actualizar matrices</label>
+          <div class="checkbox-group">
+            <label class="checkbox-item"><input type="checkbox"><span>Matriz de Riesgos y Oportunidades</span></label>
+            <label class="checkbox-item"><input type="checkbox"><span>Matriz de Peligros SST</span></label>
+            <label class="checkbox-item"><input type="checkbox"><span>Matriz de Impactos Ambientales</span></label>
+            <label class="checkbox-item"><input type="checkbox"><span>Matriz de Riesgos Viales</span></label>
+            <label class="checkbox-item"><input type="checkbox"><span>Matriz de Requisitos Legales</span></label>
+            <label class="checkbox-item"><input type="checkbox"><span>Otro</span></label>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ═══ SECCIÓN 2: VALORACIÓN DEL RIESGO ═══ -->
+    <div class="section sec-2">
+      <div class="section-header" onclick="toggleSection(this)">
+        <div class="num">2</div>
+        <h2>VALORACIÓN DEL RIESGO DEL HALLAZGO</h2>
+        <span class="arrow">▼</span>
+      </div>
+      <div class="section-body">
+
+        <div class="instruccion red">
+          La valoración del riesgo determina <strong>todos los plazos máximos</strong> para la gestión del hallazgo (corrección inmediata, aprobación del plan, implementación de acciones, ciclos de seguimiento y evaluaciones de eficacia). Al seleccionar el nivel se calcularán automáticamente las fechas límite desde la fecha de registro.
+        </div>
+
+        <div class="riesgo-grid">
+          <div class="riesgo-card alto" onclick="selectRiesgo(this,'alto')">
+            <div class="riesgo-title">🔴 ALTO</div>
+            <div class="riesgo-desc">Potencial de causar daño grave a personas, incumplimiento legal inminente, suspensión operativa o pérdida de certificación RUC/ISO. Afecta directa y totalmente el SG HSEQ y PESV.</div>
+            <div class="riesgo-examples">Ej: NC Mayor CCS, accidente grave sin investigación, conductor sin licencia vigente.</div>
+          </div>
+          <div class="riesgo-card medio" onclick="selectRiesgo(this,'medio')">
+            <div class="riesgo-title">🟡 MEDIO</div>
+            <div class="riesgo-desc">Afecta parcialmente el sistema sin consecuencia operativa inmediata, pero de no corregirse puede escalar a Alto. Afecta parcialmente la prestación del servicio.</div>
+            <div class="riesgo-examples">Ej: NC Menor CCS, procedimiento no aplicado completamente, indicador fuera de rango, falla GPS.</div>
+          </div>
+          <div class="riesgo-card bajo" onclick="selectRiesgo(this,'bajo')">
+            <div class="riesgo-title">🟢 BAJO</div>
+            <div class="riesgo-desc">Oportunidad de mejora sin impacto en la operación ni en el cumplimiento normativo. No afecta la satisfacción del cliente ni la prestación del servicio.</div>
+            <div class="riesgo-examples">Ej: campo sin diligenciar sin impacto en trazabilidad, mejora de redacción, sugerencia de trabajador.</div>
+          </div>
+        </div>
+
+        <!-- PLAZOS AUTOMÁTICOS -->
+        <div id="plazos-auto-alto" class="plazos-auto alto">
+          <strong style="display:block;margin-bottom:6px">📋 PLAZOS CALCULADOS — RIESGO ALTO</strong>
+          <div class="plazo-row"><span>Corrección inmediata:</span><span id="fecha-correc-alto">—</span></div>
+          <div class="plazo-row"><span>Plan de acción aprobado:</span><span id="fecha-plan-alto">—</span></div>
+          <div class="plazo-row"><span>Implementación de acciones:</span><span id="fecha-impl-alto">—</span></div>
+          <div class="plazo-row"><span>Ciclo 1 de seguimiento:</span><span id="fecha-c1-alto">—</span></div>
+          <div class="plazo-row"><span>Ciclo 2 de seguimiento:</span><span id="fecha-c2-alto">—</span></div>
+          <div class="plazo-row"><span>Ciclo 3 de seguimiento:</span><span id="fecha-c3-alto">—</span></div>
+          <div class="plazo-row" style="border-top:1px solid rgba(192,0,0,0.3);margin-top:4px;padding-top:4px"><span>1ª Evaluación de eficacia:</span><span id="fecha-ef1-alto">—</span></div>
+          <div class="plazo-row"><span>2ª Evaluación de eficacia:</span><span id="fecha-ef2-alto">—</span></div>
+          <div style="font-size:9px;margin-top:6px;opacity:0.8">⚠ Escalamiento automático a Riesgo Alto si: vence plazo sin acciones cumplidas, hallazgo se repite en segunda auditoría, o auditor externo lo clasifica como NC Mayor.</div>
+        </div>
+        <div id="plazos-auto-medio" class="plazos-auto medio">
+          <strong style="display:block;margin-bottom:6px">📋 PLAZOS CALCULADOS — RIESGO MEDIO</strong>
+          <div class="plazo-row"><span>Corrección inmediata:</span><span id="fecha-correc-medio">—</span></div>
+          <div class="plazo-row"><span>Plan de acción aprobado:</span><span id="fecha-plan-medio">—</span></div>
+          <div class="plazo-row"><span>Implementación de acciones:</span><span id="fecha-impl-medio">—</span></div>
+          <div class="plazo-row"><span>Ciclo 1 de seguimiento:</span><span id="fecha-c1-medio">—</span></div>
+          <div class="plazo-row"><span>Ciclo 2 de seguimiento:</span><span id="fecha-c2-medio">—</span></div>
+          <div class="plazo-row"><span>Ciclo 3 de seguimiento:</span><span id="fecha-c3-medio">—</span></div>
+          <div class="plazo-row" style="border-top:1px solid rgba(158,72,14,0.3);margin-top:4px;padding-top:4px"><span>Evaluación de eficacia:</span><span id="fecha-ef1-medio">—</span></div>
+          <div style="font-size:9px;margin-top:4px;opacity:0.8">Si resultado es Parcialmente Eficaz: segunda evaluación máximo 60 días después de la primera.</div>
+        </div>
+        <div id="plazos-auto-bajo" class="plazos-auto bajo">
+          <strong style="display:block;margin-bottom:6px">📋 PLAZOS CALCULADOS — RIESGO BAJO</strong>
+          <div class="plazo-row"><span>Corrección inmediata:</span><span id="fecha-correc-bajo">—</span></div>
+          <div class="plazo-row"><span>Plan de acción aprobado:</span><span id="fecha-plan-bajo">—</span></div>
+          <div class="plazo-row"><span>Implementación de acciones:</span><span id="fecha-impl-bajo">—</span></div>
+          <div class="plazo-row"><span>Ciclo 1 de seguimiento:</span><span id="fecha-c1-bajo">—</span></div>
+          <div class="plazo-row"><span>Ciclo 2 de seguimiento:</span><span id="fecha-c2-bajo">—</span></div>
+          <div class="plazo-row"><span>Ciclo 3 de seguimiento:</span><span id="fecha-c3-bajo">—</span></div>
+          <div class="plazo-row" style="border-top:1px solid rgba(55,86,35,0.3);margin-top:4px;padding-top:4px"><span>Evaluación de eficacia:</span><span id="fecha-ef1-bajo">—</span></div>
+        </div>
+
+        <div class="instruccion" style="margin-top:10px">
+          <strong>⚠ Excepción CCS:</strong> Cuando el hallazgo proviene de un informe de No Conformidad del Consejo Colombiano de Seguridad, los plazos están sujetos a los plazos de la entidad u organismo certificador.
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ═══ SECCIÓN 3: CORRECCIÓN INMEDIATA ═══ -->
+    <div class="section sec-3">
+      <div class="section-header" onclick="toggleSection(this)">
+        <div class="num">3</div>
+        <h2>CORRECCIÓN O SOLUCIÓN INMEDIATA</h2>
+        <span class="arrow">▼</span>
+      </div>
+      <div class="section-body">
+
+        <div class="instruccion green">
+          La corrección controla el problema de forma temporal. <strong>NO elimina la causa raíz.</strong><br>
+          • <strong>Obligatoria</strong> para NC Mayor, NC Menor y Observaciones.<br>
+          • Para Posibilidades de Mejora es <strong>opcional</strong> según criterio del Coordinador HSEQ: si no se formula, seleccione "No se requiere".<br>
+          • Una corrección Vencida sin justificación documentada será tratada como un <strong>nuevo hallazgo de Riesgo Alto.</strong>
+        </div>
+
+        <!-- OPCIÓN: NO REQUIERE / APLICA -->
+        <div class="field" style="margin-bottom:12px">
+          <label>¿Se formula corrección inmediata? <span class="req">*</span></label>
+          <div class="correc-opts" id="aplica-correc-opts">
+            <div class="correc-opt" onclick="setAplicaCorrec(this,'si')" style="grid-column:span 2">✅ Sí — Se formula corrección inmediata</div>
+            <div class="correc-opt" onclick="setAplicaCorrec(this,'no')" style="grid-column:span 2">⭕ No se requiere — Posibilidad de Mejora sin corrección inmediata</div>
+          </div>
+        </div>
+
+        <div id="bloque-correccion">
+          <div class="field-row cols-1">
+            <div class="field">
+              <label>Descripción de la corrección / solución inmediata</label>
+              <textarea placeholder="Describa la acción concreta e inmediata tomada. Debe ser algo ya realizado o en ejecución, no un plan futuro.&#10;Ej. válido: Se retiró el galón de desengrasante sin etiqueta SGA del vehículo NSY 310 y se sustituyó por producto etiquetado.&#10;Ej. NO válido: Se revisará el procedimiento."></textarea>
+            </div>
+          </div>
+
+          <div class="field-row cols-2">
+            <div class="field">
+              <label>Fecha de implementación</label>
+              <input type="date" id="fecha-correc-impl">
+              <span class="hint orange" id="hint-plazo-correc">Seleccione el nivel de riesgo en la Sección 2 para ver el plazo máximo aplicable.</span>
+            </div>
+            <div class="field">
+              <label>Responsable de la corrección</label>
+              <input type="text" placeholder="Nombre y cargo">
+            </div>
+          </div>
+
+          <!-- ESTADO + SEGUIMIENTO -->
+          <div class="seguimiento-block">
+            <div class="seguimiento-header">
+              <span>Seguimiento al estado de la corrección inmediata</span>
+              <span style="font-size:10px;font-weight:400">Frecuencia igual a los ciclos de seguimiento según nivel de riesgo</span>
+            </div>
+            <div class="seguimiento-body" id="seg-correccion">
+              <div id="seg-corr-1">
+                <div class="field-row cols-3">
+                  <div class="field"><label>Fecha de seguimiento</label><input type="date"></div>
+                  <div class="field" style="grid-column:span 2">
+                    <label>Estado de la corrección</label>
+                    <div class="correc-opts">
+                      <div class="correc-opt" onclick="selectCorrecEstado(this,'cumplida')">✅ Cumplida</div>
+                      <div class="correc-opt" onclick="selectCorrecEstado(this,'proceso')">🔄 En Proceso</div>
+                      <div class="correc-opt" onclick="selectCorrecEstado(this,'vencida')">⛔ Vencida</div>
+                      <div class="correc-opt" onclick="selectCorrecEstado(this,'replanteada')">📅 Replanteada</div>
+                    </div>
+                    <!-- REPLANTEO CORRECCIÓN -->
+                    <div class="replanteo-block" id="replanteo-correc-1">
+                      <div class="replanteo-title">📅 Documentación de Replanteo</div>
+                      <div class="field-row cols-2">
+                        <div class="field">
+                          <label>Nueva fecha límite <span class="req">*</span></label>
+                          <input type="date">
+                          <span class="hint orange">Debe definirse antes del vencimiento del plazo original. HSEQ-PR-07 V5.</span>
+                        </div>
+                        <div class="field">
+                          <label>Responsable del replanteo</label>
+                          <input type="text" placeholder="Nombre y cargo">
+                        </div>
+                      </div>
+                      <div class="field" style="margin-top:8px">
+                        <label>Justificación del replanteo <span class="req">*</span></label>
+                        <textarea placeholder="Describa el obstáculo o impedimento concreto que motivó el cambio de plazo. Si es Vencida: notificar a Gerencia dentro de los 5 días calendario siguientes al vencimiento."></textarea>
+                      </div>
+                      <div class="field" style="margin-top:8px">
+                        <label>Cambios realizados al replantear</label>
+                        <textarea placeholder="Indique qué cambios se realizaron: nueva estrategia de corrección, recursos adicionales, nuevos responsables, etc."></textarea>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="field" style="margin-top:8px"><label>Descripción / Evidencias / Observaciones</label><textarea placeholder="Gestiones realizadas, evidencias disponibles, estado de implementación..."></textarea></div>
+              </div>
+            </div>
+            <button class="add-btn" onclick="addSeguimientoCorreccion()">+ Nuevo registro de seguimiento a corrección</button>
+          </div>
+        </div>
+
+        <div id="bloque-norequiere" style="display:none">
+          <div class="instruccion teal">
+            ✅ Registrado: No se formula corrección inmediata. Aplica para Posibilidades de Mejora. El análisis de causas y el plan de acción deberán formularse en la Sección 4.
+          </div>
+          <div class="field">
+            <label>Justificación de no formular corrección inmediata</label>
+            <textarea placeholder="Explique por qué no se requiere corrección inmediata para este hallazgo..."></textarea>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ═══ SECCIÓN 4: ANÁLISIS DE CAUSAS Y PLAN DE ACCIÓN ═══ -->
+    <div class="section sec-4">
+      <div class="section-header" onclick="toggleSection(this)">
+        <div class="num">4</div>
+        <h2>ANÁLISIS DE CAUSAS Y PLANES DE ACCIÓN</h2>
+        <span class="arrow">▼</span>
+      </div>
+      <div class="section-body">
+
+        <div class="instruccion green">
+          Metodología principal: <strong>5 Por Qués.</strong> Mínimo requerido: <strong>NC Mayor → 5 niveles de análisis</strong> · NC Menor / Observación / OdM → 3 niveles mínimo. Resalte en negrilla la causa raíz. Cada causa debe tener su propia acción diferenciada. No es válido definir la misma acción para causas distintas. Descripciones genéricas ("mejorar el proceso", "revisar el procedimiento") no son válidas como acciones. <strong>NC Mayor: plan de acción aprobado por Gerencia ANTES de iniciar implementación.</strong>
+        </div>
+
+        <div id="causas-container">
+          <!-- CAUSA 1 -->
+          <div class="causa-block" id="causa-1">
+            <div class="causa-header">
+              <span>Causa #1</span>
+              <span class="causa-raiz-badge" id="badge-1">✓ CAUSA RAÍZ</span>
+            </div>
+            <div class="causa-body">
+              <div class="field">
+                <label>Análisis de causas (5 Por Qués) <span class="req">*</span></label>
+                <textarea placeholder="¿Por qué 1? Porque...&#10;¿Por qué 2? Porque...&#10;¿Por qué 3? Porque...&#10;¿Por qué 4? Porque... (obligatorio para NC Mayor)&#10;¿Por qué 5? Porque... (obligatorio para NC Mayor)&#10;&#10;Use **negrilla** para identificar la causa raíz en la HSEQ-MTR-07."></textarea>
+              </div>
+              <div class="raiz-toggle">
+                <input type="checkbox" id="raiz-1" onchange="toggleRaiz(this,1)">
+                <label for="raiz-1">¿Es la causa raíz?</label>
+              </div>
+              <div class="field">
+                <label>Descripción de la acción / Plan de acción <span class="req">*</span></label>
+                <textarea placeholder="Acción específica, medible y con resultado verificable.&#10;NO válido: 'mejorar el proceso' · SÍ válido: 'Actualizar el GAF-PR-01 V8 incluyendo protocolo de escalamiento con nombre y cargo del responsable y plazo de comunicación de 24h.'"></textarea>
+              </div>
+              <div class="field-row cols-3" style="margin-top:8px">
+                <div class="field">
+                  <label>Fecha límite de implementación</label>
+                  <input type="date">
+                  <span class="hint">Alto: 90 días · Medio: 120 días · Bajo: 180 días cal. desde la fecha de registro.</span>
+                </div>
+                <div class="field">
+                  <label>Responsable de la ejecución</label>
+                  <input type="text" placeholder="Nombre y cargo">
+                  <span class="hint green">NC Mayor: plan aprobado formalmente por Gerencia antes de iniciar implementación.</span>
+                </div>
+                <div class="field">
+                  <label>Estado actual</label>
+                  <div class="estado-grid" style="grid-template-columns:1fr 1fr">
+                    <div class="estado-opt" onclick="selectEstado(this,'cumplida')">✅ Cumplida</div>
+                    <div class="estado-opt" onclick="selectEstado(this,'proceso')">🔄 En Proceso</div>
+                    <div class="estado-opt" onclick="selectEstado(this,'vencida')">⛔ Vencida</div>
+                    <div class="estado-opt" onclick="selectEstado(this,'replanteada')">📅 Replanteada</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- CICLOS DE SEGUIMIENTO POR CAUSA -->
+              <div class="seguimiento-block" style="border-color:var(--purple)">
+                <div class="seguimiento-header" style="background:var(--purple-light);color:var(--purple)">
+                  <span>📊 Ciclos de seguimiento — Causa #1</span>
+                  <span style="font-size:10px;font-weight:400" id="hint-ciclos-causa-1">Seleccione nivel de riesgo en Sección 2 para ver fechas programadas de cada ciclo</span>
+                </div>
+                <div class="seguimiento-body" id="ciclos-causa-1">
+                  <div class="ciclo-block" id="ciclo-causa1-1">
+                    <div class="ciclo-header">
+                      <span>Ciclo 1 <span class="ciclo-prog" id="prog-causa1-1"></span></span>
+                    </div>
+                    <div class="ciclo-body">
+                      <div class="field-row cols-3">
+                        <div class="field"><label>Fecha del ciclo <span class="req">*</span></label><input type="date"></div>
+                        <div class="field"><label>Responsable <span class="req">*</span></label><input type="text" placeholder="Nombre y cargo"></div>
+                        <div class="field"><label>Estado de la acción</label>
+                          <div class="estado-grid" style="grid-template-columns:1fr 1fr">
+                            <div class="estado-opt" onclick="selectEstado(this,'cumplida')">✅ Cumplida</div>
+                            <div class="estado-opt" onclick="selectEstado(this,'proceso')">🔄 En Proceso</div>
+                            <div class="estado-opt" onclick="selectEstado(this,'vencida')">⛔ Vencida</div>
+                            <div class="estado-opt" onclick="selectEstado(this,'replanteada')">📅 Replanteada</div>
+                          </div>
+                        </div>
+                      </div>
+                      <!-- REPLANTEO EN CICLO -->
+                      <div class="replanteo-block" id="replanteo-causa1-ciclo1">
+                        <div class="replanteo-title">📅 Replanteo de la Acción</div>
+                        <div class="field-row cols-2">
+                          <div class="field">
+                            <label>Nueva fecha límite <span class="req">*</span></label>
+                            <input type="date">
+                            <span class="hint orange">Definir antes del vencimiento del plazo original. Documentar en HSEQ-MTR-07.</span>
+                          </div>
+                          <div class="field">
+                            <label>Responsable del replanteo</label>
+                            <input type="text" placeholder="Nombre y cargo">
+                          </div>
+                        </div>
+                        <div class="field" style="margin-top:8px">
+                          <label>Justificación / Impedimento <span class="req">*</span></label>
+                          <textarea placeholder="Obstáculo concreto que impide cumplir el plazo. Si es Vencida: notificar a Gerencia dentro de 5 días calendario."></textarea>
+                        </div>
+                        <div class="field" style="margin-top:8px">
+                          <label>Cambios realizados al replantear</label>
+                          <textarea placeholder="Ajustes a la estrategia de implementación, recursos adicionales, cambio de responsable, etc."></textarea>
+                        </div>
+                      </div>
+                      <div class="field" style="margin-top:8px"><label>Descripción del avance / Evidencias</label><textarea placeholder="Qué se verificó, cómo se verificó, qué evidencias respaldan el resultado. Ej: Se verificó en la GAF-MTR-04 que los 3 proveedores tienen evaluación actualizada con fecha y firma."></textarea></div>
+                    </div>
+                  </div>
+                </div>
+                <button class="add-btn" onclick="addCicloCausa(1)" style="color:var(--purple);border-color:var(--purple)">+ Agregar ciclo de seguimiento a esta acción</button>
+              </div>
+
+            </div>
+          </div>
+        </div>
+
+        <button class="add-btn" onclick="addCausa()" style="margin-top:4px">+ Nueva causa</button>
+
+      </div>
+    </div>
+
+    <!-- ═══ SECCIÓN 5: APROBACIÓN DEL PLAN DE ACCIÓN ═══ -->
+    <div class="section sec-5">
+      <div class="section-header" onclick="toggleSection(this)">
+        <div class="num">5</div>
+        <h2>APROBACIÓN DEL PLAN DE ACCIÓN</h2>
+        <span class="arrow">▼</span>
+      </div>
+      <div class="section-body">
+
+        <div class="instruccion teal">
+          Conforme al HSEQ-PR-07 V5, Paso 8: el plan de acción debe estar aprobado antes de iniciar la implementación. La cadena de aprobación varía según el tipo de hallazgo. El plan completo debe documentarse y aprobarse dentro de los plazos definidos por el nivel de riesgo (calculados en la Sección 2).
+        </div>
+
+        <!-- NC MAYOR -->
+        <div class="aprobacion-card">
+          <div class="aprobacion-card-header ncm">
+            <span class="tag tag-ncm">NC MAYOR</span>
+            Aprobación de Gerencia — Obligatoria antes de iniciar implementación
+          </div>
+          <div class="aprobacion-card-body">
+            <div class="instruccion red" style="margin-bottom:10px">
+              Para NC Mayor: el plan debe ser elaborado/revisado por el Coordinador HSEQ y aprobado formalmente por <strong>Gerencia</strong> mediante visado en este formulario o aprobación en el software. <strong>Sin aprobación de Gerencia la implementación no puede iniciarse.</strong>
+            </div>
+            <div class="field-row cols-3">
+              <div class="field">
+                <label>Elaborado por (Coordinador HSEQ)</label>
+                <input type="text" placeholder="Nombre y cargo">
+              </div>
+              <div class="field">
+                <label>Fecha de elaboración</label>
+                <input type="date">
+                <span class="hint red">Riesgo Alto: máx. 30 días desde registro · Riesgo Medio: 60 días · Riesgo Bajo: 90 días.</span>
+              </div>
+              <div class="field">
+                <label>Estado de la aprobación</label>
+                <select id="estado-aprobacion-ncm">
+                  <option value="">Seleccionar...</option>
+                  <option>✅ Aprobado por Gerencia</option>
+                  <option>⏳ Pendiente de aprobación</option>
+                  <option>🔄 En revisión</option>
+                  <option>⛔ Rechazado — requiere ajuste</option>
+                </select>
+              </div>
+            </div>
+            <div class="firma-block">
+              <div class="firma-rol">Firma y aprobación — Gerente General</div>
+              <div class="field-row cols-3">
+                <div class="field"><label>Nombre del Gerente</label><input type="text" placeholder="Nombre completo"></div>
+                <div class="field"><label>Fecha de aprobación</label><input type="date"></div>
+                <div class="field"><label>Observaciones de Gerencia</label><textarea placeholder="Observaciones, ajustes requeridos o condiciones de la aprobación..." style="min-height:40px"></textarea></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- NC MENOR / OBS / ODM -->
+        <div class="aprobacion-card">
+          <div class="aprobacion-card-header coord">
+            <span class="tag tag-coord">NC MENOR · OBSERVACIÓN · OdM</span>
+            Aprobación por Coordinador HSEQ
+          </div>
+          <div class="aprobacion-card-body">
+            <div class="instruccion teal" style="margin-bottom:10px">
+              Para NC Menor, Observación y Posibilidad de Mejora: el plan puede ser elaborado y aprobado directamente por el Coordinador HSEQ. Debe estar documentado dentro de los plazos según el nivel de riesgo.
+            </div>
+            <div class="field-row cols-3">
+              <div class="field">
+                <label>Coordinador HSEQ responsable</label>
+                <input type="text" placeholder="Nombre y cargo">
+              </div>
+              <div class="field">
+                <label>Fecha de aprobación del plan</label>
+                <input type="date">
+                <span class="hint teal">Riesgo Alto: máx. 30 días · Medio: 60 días · Bajo: 90 días desde registro.</span>
+              </div>
+              <div class="field">
+                <label>Estado del plan</label>
+                <select>
+                  <option value="">Seleccionar...</option>
+                  <option>✅ Aprobado — en implementación</option>
+                  <option>⏳ Pendiente de aprobación</option>
+                  <option>🔄 En revisión / ajuste</option>
+                </select>
+              </div>
+            </div>
+            <div class="field" style="margin-top:8px">
+              <label>Observaciones del Coordinador HSEQ</label>
+              <textarea placeholder="Observaciones sobre el plan de acción, criterios de priorización o condiciones especiales..." style="min-height:50px"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- PRIORIZACIÓN -->
+        <div class="instruccion" style="margin-top:4px">
+          <strong>Priorización de acciones simultáneas (HSEQ-PR-07 V5):</strong> Cuando existan múltiples hallazgos activos simultáneamente, la atención se prioriza en el orden: (1) NC Mayor → (2) NC Menor → (3) Observaciones → (4) Posibilidades de Mejora.
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ═══ SECCIÓN 6: ANÁLISIS Y EVALUACIÓN DE LA EFICACIA ═══ -->
+    <div class="section sec-6">
+      <div class="section-header" onclick="toggleSection(this)">
+        <div class="num">6</div>
+        <h2>ANÁLISIS Y EVALUACIÓN DE LA EFICACIA</h2>
+        <span class="arrow">▼</span>
+      </div>
+      <div class="section-body">
+
+        <div class="instruccion orange">
+          La evaluación de eficacia verifica que la causa raíz fue eliminada y que el problema no volverá a ocurrir. <strong>Se activa a partir del tercer ciclo de seguimiento, una vez todas las acciones estén en estado Cumplida.</strong> Si en el tercer ciclo alguna acción está Vencida o En Proceso, la evaluación se pospone.<br><br>
+          <strong>Frecuencia según tipo de hallazgo (HSEQ-PR-07 V5, Paso 11):</strong><br>
+          • <strong>NC Mayor:</strong> 2 evaluaciones obligatorias. 1ª al completar todas las acciones · 2ª 60 días después. Ambas aprobadas por Gerencia.<br>
+          • <strong>NC Menor:</strong> 1 evaluación. Si Parcialmente Eficaz: 2ª evaluación en máx. 30 días.<br>
+          • <strong>Observación / OdM:</strong> 1 evaluación al completar todas las acciones.
+        </div>
+
+        <div class="subsection-title">Condiciones previas y criterios</div>
+
+        <div class="instruccion purple">
+          <strong>⚠ OBLIGATORIO (ISO 9001:10.2.1.d / ISO 14001:10.2.c / ISO 45001:10.2.f):</strong> Cada ciclo debe registrar los 3 datos obligatorios: <strong>Fecha · Responsable (nombre y cargo) · Resultado clasificado.</strong> La ausencia de cualquiera de estos 3 datos invalida el ciclo como evidencia ante auditoría externa.
+        </div>
+
+        <div class="field-row cols-2">
+          <div class="field">
+            <label>Criterio de evaluación de la eficacia <span class="req">*</span></label>
+            <textarea placeholder="Defina criterios observables y verificables. Formato: Que [documento/condición] [verbo] [resultado].&#10;Ej: Que la GAF-MTR-04 registre la evaluación de los 3 proveedores con calificación y fecha firmada.&#10;&#10;No son válidos criterios genéricos como 'que se mejore el proceso'." style="min-height:80px"></textarea>
+            <span class="hint orange">Cada ciclo de seguimiento verificará uno o más de estos criterios.</span>
+          </div>
+          <div class="field">
+            <label>Fecha límite para 1ª evaluación de eficacia</label>
+            <input type="date">
+            <span class="hint orange" id="hint-eficacia">Seleccione el nivel de riesgo en la Sección 2 para ver la fecha calculada automáticamente.</span>
+          </div>
+        </div>
+
+        <!-- CICLOS DE SEGUIMIENTO DE EFICACIA -->
+        <div class="subsection-title">Ciclos de seguimiento a la eficacia</div>
+
+        <div id="ciclos-eficacia-container">
+          <div class="ciclo-block">
+            <div class="ciclo-header">
+              <span>Ciclo de seguimiento a la eficacia #1</span>
+              <span class="ciclo-prog" id="prog-eficacia-1"></span>
+            </div>
+            <div class="ciclo-body">
+              <div class="field-row cols-3">
+                <div class="field"><label>Fecha del ciclo <span class="req">*</span></label><input type="date"></div>
+                <div class="field"><label>Responsable <span class="req">*</span></label><input type="text" placeholder="Nombre del responsable"></div>
+                <div class="field"><label>Cargo <span class="req">*</span></label><input type="text" placeholder="Cargo del responsable"></div>
+              </div>
+              <div class="field" style="margin:8px 0">
+                <label>Resultado del ciclo <span class="req">*</span></label>
+                <div class="resultado-grid" style="margin-top:6px">
+                  <div class="resultado-opt" onclick="selectResultado(this,'avance')">✅ Avance Satisfactorio<br><span style="font-size:9px;opacity:0.7">Acciones avanzan sin obstáculos verificables</span></div>
+                  <div class="resultado-opt" onclick="selectResultado(this,'sin')">⚠ Sin Avances Significativos<br><span style="font-size:9px;opacity:0.7">Documentar impedimento y replantear en siguiente ciclo</span></div>
+                  <div class="resultado-opt" onclick="selectResultadoImp(this,'impedimento-ef-1')">🚫 Impedimento Identificado<br><span style="font-size:9px;opacity:0.7">Obstáculo concreto que bloquea la implementación</span></div>
+                </div>
+                <div class="impedimento-field" id="impedimento-ef-1">
+                  <div class="field">
+                    <label>Describa el impedimento, responsable de resolverlo y nueva fecha propuesta <span class="req">*</span></label>
+                    <textarea placeholder="Naturaleza del impedimento, quién lo resuelve y nueva fecha propuesta..."></textarea>
+                  </div>
+                </div>
+              </div>
+              <div class="field"><label>Descripción del análisis y actividades verificadas</label><textarea placeholder="Qué se verificó en este ciclo, cómo se verificó y qué evidencia respalda el resultado.&#10;NO válido: 'Se revisó el avance.'&#10;SÍ válido: 'Se verificó en la GAF-MTR-04 que los 3 proveedores tienen evaluación actualizada con fecha y firma del 28/05/2026.'"></textarea></div>
+            </div>
+          </div>
+        </div>
+
+        <button class="add-btn" onclick="addCicloEficacia()" style="color:var(--purple);border-color:var(--purple)">+ Agregar ciclo de seguimiento a la eficacia</button>
+
+        <div class="divider"></div>
+
+        <!-- EVALUACIONES DE EFICACIA -->
+        <div class="subsection-title">Evaluaciones formales de eficacia</div>
+
+        <div id="evaluaciones-container">
+          <div class="eficacia-eval-block">
+            <div class="eficacia-eval-header">
+              <span>Evaluación de Eficacia #1</span>
+              <span style="font-size:10px;color:rgba(255,255,255,0.8)">NC Mayor: 1ª al completar acciones · NC Menor/Obs/OdM: única evaluación</span>
+            </div>
+            <div class="eficacia-eval-body">
+              <div class="field-row cols-2">
+                <div class="field"><label>Fecha de la evaluación <span class="req">*</span></label><input type="date"></div>
+                <div class="field"><label>Evaluador (responsable) <span class="req">*</span></label><input type="text" placeholder="NC Mayor: Coordinador HSEQ + Gerencia · NC Menor/Obs/OdM: Coordinador HSEQ"></div>
+              </div>
+              <div class="field" style="margin-top:8px"><label>Análisis de la evaluación</label><textarea placeholder="¿Las acciones implementadas eliminaron la causa raíz? ¿El problema no volverá a ocurrir? Responda con evidencias concretas."></textarea></div>
+            </div>
+          </div>
+        </div>
+
+        <button class="add-btn" onclick="addEvaluacion()" style="color:var(--orange);border-color:var(--orange)">+ Agregar evaluación de eficacia (NC Mayor: 2ª evaluación a 60 días)</button>
+
+        <div class="divider"></div>
+
+        <!-- EVIDENCIAS -->
+        <div class="subsection-title">Evidencias que soportan el cierre eficaz</div>
+
+        <div class="instruccion orange" style="margin-bottom:10px">
+          Liste una evidencia por cada criterio. Cada una debe especificar: documento o registro exacto, qué demuestra, fecha y estado. Evidencias en estado Pendiente impiden declarar el cierre eficaz. <strong>No son válidas evidencias genéricas como "se realizó la acción".</strong>
+        </div>
+
+        <div id="evidencias-container">
+          <div class="evidencia-block">
+            <div class="evidencia-header"><span>Evidencia #1</span></div>
+            <div class="evidencia-body">
+              <div class="field-row cols-2">
+                <div class="field">
+                  <label>Tipo de evidencia / soporte</label>
+                  <input type="text" placeholder="Ej: Procedimiento GAF-PR-01 V8 con protocolo de escalamiento">
+                  <span class="hint orange">Sea específico. No escriba 'documento' sino el nombre exacto del registro o archivo.</span>
+                </div>
+                <div class="field"><label>Fecha</label><input type="date"></div>
+              </div>
+              <div class="field" style="margin-top:8px"><label>Descripción específica</label><textarea placeholder="Qué demuestra concretamente esta evidencia en relación con el criterio de eficacia..."></textarea></div>
+              <div class="field" style="margin-top:8px"><label>Estado / Ubicación</label>
+                <select>
+                  <option value="">Seleccionar...</option>
+                  <option>Disponible — existe y puede presentarse al auditor</option>
+                  <option>Pendiente — aún no existe, impide declarar cierre eficaz</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button class="add-btn" onclick="addEvidencia()" style="color:var(--orange);border-color:var(--orange)">+ Agregar evidencia</button>
+
+        <div class="divider"></div>
+
+        <!-- REGISTRO DE CIERRE -->
+        <div class="subsection-title">Registro del Cierre Definitivo</div>
+
+        <div class="field">
+          <label>Resultado de la evaluación de eficacia <span class="req">*</span></label>
+          <div class="cierre-grid" style="margin-top:8px">
+            <div class="cierre-opt" onclick="selectCierre(this,'eficaz')">
+              <div class="cierre-icon">✅</div>
+              <div class="cierre-label">EFICAZ</div>
+              <div class="cierre-desc">Todas las acciones cumplidas, criterios verificados con evidencia objetiva. Causa raíz eliminada de forma demostrable. Se procede al cierre definitivo.</div>
+            </div>
+            <div class="cierre-opt" onclick="selectCierre(this,'parcial')">
+              <div class="cierre-icon">⚠️</div>
+              <div class="cierre-label">PARCIALMENTE EFICAZ</div>
+              <div class="cierre-desc">Criterios cumplidos parcialmente. Plazo adicional máximo 30 días calendario. Si al vencer no se completan los criterios se reclasifica automáticamente como No Eficaz.</div>
+            </div>
+            <div class="cierre-opt" onclick="selectCierre(this,'noeficaz')">
+              <div class="cierre-icon">🔄</div>
+              <div class="cierre-label">NO EFICAZ</div>
+              <div class="cierre-desc">Una o más acciones pendientes o criterios no verificados. La acción se reabre. Nuevo análisis de causas y nuevas acciones hasta eliminar la causa raíz.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- REAPERTURA (No Eficaz) -->
+        <div class="reapertura-block" id="bloque-reapertura">
+          <p style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:6px">🔄 REAPERTURA DE ACCIÓN — No Eficaz</p>
+          <p style="font-size:11px;margin-bottom:10px;">Al ser clasificada como No Eficaz, la acción se reabre. Se debe realizar un nuevo análisis de causas y definir nuevas acciones hasta eliminar la causa raíz. La nueva acción lleva la fecha de hoy como fecha de reapertura.</p>
+          <div class="field-row cols-2">
+            <div class="field">
+              <label>Fecha de reapertura</label>
+              <input type="date" id="fecha-reapertura" readonly style="background:var(--red-light)">
+            </div>
+            <div class="field">
+              <label>Razón de la reapertura</label>
+              <textarea placeholder="Describa por qué las acciones implementadas no eliminaron la causa raíz..."></textarea>
+            </div>
+          </div>
+          <button class="btn-reabrir" onclick="reabrir()">🔄 Generar Nueva Acción desde Reapertura</button>
+          <p style="font-size:10px;color:var(--red);margin-top:6px;font-style:italic">Al hacer clic se generará un nuevo formulario pre-cargado con la fecha de hoy y la referencia a esta acción. El análisis de causas deberá realizarse nuevamente.</p>
+        </div>
+
+        <!-- APROBACIÓN CIERRE DEFINITIVO -->
+        <div class="field-row cols-2" style="margin-top:12px">
+          <div class="field">
+            <label>Fecha de cierre definitivo</label>
+            <input type="date">
+          </div>
+          <div class="field">
+            <label>Responsable del cierre</label>
+            <input type="text" placeholder="Nombre y cargo de quien valida el cierre">
+            <span class="hint orange">NC Mayor: aprobado por Gerencia (Coordinador HSEQ prepara informe + visado de Gerencia). NC Menor / Observación / OdM: aprobado por Coordinador HSEQ directamente.</span>
+          </div>
+        </div>
+
+        <div class="field" style="margin-top:8px">
+          <label>Observaciones del cierre y lecciones aprendidas</label>
+          <textarea placeholder="¿La causa raíz fue efectivamente eliminada? ¿Qué cambió en el sistema de gestión? ¿Qué aprendizaje puede prevenir NC similares en el futuro?" style="min-height:60px"></textarea>
+        </div>
+
+        <!-- BANNER CADENA DE APROBACIÓN CIERRE -->
+        <div style="background:var(--navy);border-radius:6px;padding:12px 16px;margin-top:14px;display:flex;gap:20px">
+          <div style="flex:1">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.6);letter-spacing:0.05em;margin-bottom:4px">NC Mayor</div>
+            <div style="color:white;font-size:11px;line-height:1.5">Coordinador HSEQ prepara informe de cierre con todas las evidencias. <strong>Gerencia aprueba</strong> mediante visado en el formulario o en el software. <strong>Sin aprobación de Gerencia el hallazgo no puede declararse cerrado.</strong> Se requieren mínimo 2 evaluaciones de eficacia aprobadas por Gerencia.</div>
+          </div>
+          <div style="flex:1">
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;color:rgba(255,255,255,0.6);letter-spacing:0.05em;margin-bottom:4px">NC Menor · Observación · OdM</div>
+            <div style="color:white;font-size:11px;line-height:1.5">El <strong>Coordinador HSEQ</strong> evalúa y aprueba el cierre directamente. NC Menor: mínimo 1 evaluación de eficacia (si Parcialmente Eficaz: segunda evaluación en máx. 30 días). Observación / OdM: 1 evaluación al completar acciones.</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- SUBMIT -->
+    <div class="submit-bar">
+      <span class="note">HSEQ-FR-07 V5 · HSEQ-PR-07 V5 · ISO 9001:10.2 · ISO 14001:10.2 · ISO 45001:10.2</span>
+      <button class="btn-submit">💾 Guardar Acción</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  // ─── ESTADO GLOBAL ────────────────────────────────
+  let riesgoActual = null;
+  let fechaRegistro = null;
+  let causaCount = 1;
+  let cicloEficaciaCount = 1;
+  let evaluacionCount = 1;
+  let evidenciaCount = 1;
+  let segCorrCount = 1;
+  let ciclosCausaCount = {}; // {causaId: count}
+
+  // ─── UTILS ────────────────────────────────────────
+  function addDays(date, days) {
+    const d = new Date(date);
+    d.setDate(d.getDate() + days);
+    return d.toLocaleDateString('es-CO', {day:'2-digit',month:'2-digit',year:'numeric'});
+  }
+
+  function toggleSection(header) {
+    const body = header.nextElementSibling;
+    if (body.classList.contains('hidden')) {
+      body.classList.remove('hidden');
+      header.classList.remove('collapsed');
+    } else {
+      body.classList.add('hidden');
+      header.classList.add('collapsed');
+    }
+  }
+
+  // ─── TIPO HALLAZGO ────────────────────────────────
+  function selectTipo(card, tipo) {
+    document.querySelectorAll('.tipo-card').forEach(c => c.className = 'tipo-card');
+    card.classList.add('selected-' + tipo);
+  }
+
+  // ─── VALORACIÓN DEL RIESGO + CÁLCULO AUTOMÁTICO ──
+  function selectRiesgo(card, nivel) {
+    document.querySelectorAll('.riesgo-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    riesgoActual = nivel;
+
+    document.querySelectorAll('.plazos-auto').forEach(el => { el.classList.remove('show'); });
+    const plazoEl = document.getElementById('plazos-auto-' + nivel);
+    if (plazoEl) plazoEl.classList.add('show');
+
+    fechaRegistro = document.getElementById('fecha-registro').value;
+    if (!fechaRegistro) { fechaRegistro = new Date().toISOString().split('T')[0]; }
+
+    calcularPlazos(nivel, fechaRegistro);
+    actualizarHintsCiclos(nivel);
+  }
+
+  function calcularPlazos(nivel, base) {
+    const cfg = {
+      alto:  { correc:15, plan:30, impl:90, c1:30, c2:60, c3:90, ef1:90, ef2:150 },
+      medio: { correc:30, plan:60, impl:120, c1:40, c2:80, c3:120, ef1:120 },
+      bajo:  { correc:45, plan:90, impl:180, c1:60, c2:120, c3:180, ef1:180 }
+    };
+    const c = cfg[nivel];
+    const pfx = 'fecha-';
+    const p = nivel;
+
+    const set = (id, dias) => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = addDays(base, dias);
+    };
+
+    set(pfx+'correc-'+p, c.correc);
+    set(pfx+'plan-'+p, c.plan);
+    set(pfx+'impl-'+p, c.impl);
+    set(pfx+'c1-'+p, c.c1);
+    set(pfx+'c2-'+p, c.c2);
+    set(pfx+'c3-'+p, c.c3);
+    set(pfx+'ef1-'+p, c.ef1);
+    if (nivel === 'alto') set(pfx+'ef2-'+p, c.ef2);
+
+    // Actualizar hint corrección
+    const hc = document.getElementById('hint-plazo-correc');
+    if (hc) {
+      const labels = {alto:'15', medio:'30', bajo:'45'};
+      const dateStr = addDays(base, c.correc);
+      hc.textContent = `Plazo máximo ${labels[nivel]} días calendario desde la fecha de registro → ${dateStr}`;
+    }
+  }
+
+  function actualizarHintsCiclos(nivel) {
+    const cfg = {
+      alto:  { c1:30, c2:60, c3:90 },
+      medio: { c1:40, c2:80, c3:120 },
+      bajo:  { c1:60, c2:120, c3:180 }
+    };
+    const c = cfg[nivel];
+    const base = document.getElementById('fecha-registro').value || new Date().toISOString().split('T')[0];
+    const fechas = `Ciclo 1: ${addDays(base, c.c1)} · Ciclo 2: ${addDays(base, c.c2)} · Ciclo 3: ${addDays(base, c.c3)}`;
+
+    // Actualizar hints en causas
+    for (let i = 1; i <= causaCount; i++) {
+      const el = document.getElementById('hint-ciclos-causa-' + i);
+      if (el) el.textContent = fechas;
+      const prog1 = document.getElementById('prog-causa'+i+'-1');
+      if (prog1) prog1.textContent = `(Programado: ${addDays(base, c.c1)})`;
+    }
+
+    // Actualizar hint eficacia
+    const ef1 = { alto:90, medio:120, bajo:180 };
+    const hef = document.getElementById('hint-eficacia');
+    if (hef) hef.textContent = `Plazo máximo según Riesgo ${nivel.toUpperCase()}: evaluación de eficacia a los ${ef1[nivel]} días → ${addDays(base, ef1[nivel])}`;
+
+    const pe1 = document.getElementById('prog-eficacia-1');
+    if (pe1) pe1.textContent = `(Programado: ${addDays(base, ef1[nivel])})`;
+  }
+
+  // ─── CORRECCIÓN INMEDIATA ─────────────────────────
+  function setAplicaCorrec(btn, val) {
+    document.querySelectorAll('#aplica-correc-opts .correc-opt').forEach(b => {
+      b.className = 'correc-opt';
+    });
+    if (val === 'si') {
+      btn.classList.add('sel-cumplida');
+      document.getElementById('bloque-correccion').style.display = '';
+      document.getElementById('bloque-norequiere').style.display = 'none';
+    } else {
+      btn.classList.add('sel-norequiere');
+      document.getElementById('bloque-correccion').style.display = 'none';
+      document.getElementById('bloque-norequiere').style.display = '';
+    }
+  }
+
+  function selectCorrecEstado(btn, estado) {
+    const parent = btn.closest('.correc-opts');
+    parent.querySelectorAll('.correc-opt').forEach(b => { b.className = 'correc-opt'; });
+    btn.classList.add('sel-' + estado);
+    const replanteoId = parent.parentElement.querySelector('.replanteo-block');
+    if (replanteoId) {
+      if (estado === 'replanteada' || estado === 'vencida') {
+        replanteoId.classList.add('show');
+      } else {
+        replanteoId.classList.remove('show');
+      }
+    }
+  }
+
+  function addSeguimientoCorreccion() {
+    segCorrCount++;
+    const n = segCorrCount;
+    const div = document.createElement('div');
+    div.style.marginTop = '10px';
+    div.style.borderTop = '1px solid #E8E8E8';
+    div.style.paddingTop = '10px';
+    div.innerHTML = `
+      <div class="field-row cols-3">
+        <div class="field"><label>Fecha de seguimiento #${n}</label><input type="date"></div>
+        <div class="field" style="grid-column:span 2">
+          <label>Estado de la corrección</label>
+          <div class="correc-opts">
+            <div class="correc-opt" onclick="selectCorrecEstado(this,'cumplida')">✅ Cumplida</div>
+            <div class="correc-opt" onclick="selectCorrecEstado(this,'proceso')">🔄 En Proceso</div>
+            <div class="correc-opt" onclick="selectCorrecEstado(this,'vencida')">⛔ Vencida</div>
+            <div class="correc-opt" onclick="selectCorrecEstado(this,'replanteada')">📅 Replanteada</div>
+          </div>
+          <div class="replanteo-block" id="replanteo-correc-${n}">
+            <div class="replanteo-title">📅 Documentación de Replanteo</div>
+            <div class="field-row cols-2">
+              <div class="field"><label>Nueva fecha límite <span class="req">*</span></label><input type="date"><span class="hint orange">Antes del vencimiento del plazo original.</span></div>
+              <div class="field"><label>Responsable</label><input type="text" placeholder="Nombre y cargo"></div>
+            </div>
+            <div class="field" style="margin-top:8px"><label>Justificación del replanteo <span class="req">*</span></label><textarea placeholder="Obstáculo o impedimento concreto que motivó el cambio de plazo..."></textarea></div>
+            <div class="field" style="margin-top:8px"><label>Cambios realizados al replantear</label><textarea placeholder="Nueva estrategia, recursos adicionales, cambio de responsable, etc."></textarea></div>
+          </div>
+        </div>
+      </div>
+      <div class="field" style="margin-top:8px"><label>Descripción / Evidencias</label><textarea placeholder="Gestiones realizadas, evidencias..."></textarea></div>`;
+    document.getElementById('seg-correccion').appendChild(div);
+  }
+
+  // ─── CAUSAS ───────────────────────────────────────
+  function selectEstado(btn, estado) {
+    const parent = btn.closest('.estado-grid');
+    parent.querySelectorAll('.estado-opt').forEach(b => b.className = 'estado-opt');
+    btn.classList.add('selected-' + estado);
+    // Mostrar replanteo si aplica
+    const replanteo = btn.closest('.ciclo-body');
+    if (replanteo) {
+      const rb = replanteo.querySelector('.replanteo-block');
+      if (rb) {
+        if (estado === 'replanteada' || estado === 'vencida') rb.classList.add('show');
+        else rb.classList.remove('show');
+      }
+    }
+  }
+
+  function toggleRaiz(cb, num) {
+    const badge = document.getElementById('badge-' + num);
+    if (badge) badge.style.display = cb.checked ? 'inline-block' : 'none';
+  }
+
+  function addCausa() {
+    causaCount++;
+    const n = causaCount;
+    ciclosCausaCount[n] = 1;
+    const base = document.getElementById('fecha-registro').value || new Date().toISOString().split('T')[0];
+    const cfg = riesgoActual ? { alto:{c1:30,c2:60,c3:90}, medio:{c1:40,c2:80,c3:120}, bajo:{c1:60,c2:120,c3:180} }[riesgoActual] : null;
+    const cicloHint = cfg ? `Ciclo 1: ${addDays(base, cfg.c1)} · Ciclo 2: ${addDays(base, cfg.c2)} · Ciclo 3: ${addDays(base, cfg.c3)}` : 'Seleccione nivel de riesgo en Sección 2';
+    const prog1 = cfg ? `(Programado: ${addDays(base, cfg.c1)})` : '';
+
+    const div = document.createElement('div');
+    div.className = 'causa-block';
+    div.id = 'causa-' + n;
+    div.innerHTML = `
+      <div class="causa-header">
+        <span>Causa #${n}</span>
+        <span class="causa-raiz-badge" id="badge-${n}">✓ CAUSA RAÍZ</span>
+      </div>
+      <div class="causa-body">
+        <div class="field"><label>Análisis de causas (5 Por Qués) <span class="req">*</span></label><textarea placeholder="¿Por qué 1? Porque...&#10;¿Por qué 2? Porque...&#10;¿Por qué 3? Porque..."></textarea></div>
+        <div class="raiz-toggle">
+          <input type="checkbox" id="raiz-${n}" onchange="toggleRaiz(this,${n})">
+          <label for="raiz-${n}">¿Es la causa raíz?</label>
+        </div>
+        <div class="field"><label>Descripción de la acción / Plan de acción <span class="req">*</span></label><textarea placeholder="Acción específica, medible y con resultado verificable..."></textarea></div>
+        <div class="field-row cols-3" style="margin-top:8px">
+          <div class="field"><label>Fecha límite</label><input type="date"><span class="hint">Alto: 90 · Medio: 120 · Bajo: 180 días desde registro.</span></div>
+          <div class="field"><label>Responsable</label><input type="text" placeholder="Nombre y cargo"></div>
+          <div class="field"><label>Estado actual</label>
+            <div class="estado-grid" style="grid-template-columns:1fr 1fr">
+              <div class="estado-opt" onclick="selectEstado(this,'cumplida')">✅ Cumplida</div>
+              <div class="estado-opt" onclick="selectEstado(this,'proceso')">🔄 En Proceso</div>
+              <div class="estado-opt" onclick="selectEstado(this,'vencida')">⛔ Vencida</div>
+              <div class="estado-opt" onclick="selectEstado(this,'replanteada')">📅 Replanteada</div>
+            </div>
+          </div>
+        </div>
+        <div class="seguimiento-block" style="border-color:var(--purple)">
+          <div class="seguimiento-header" style="background:var(--purple-light);color:var(--purple)">
+            <span>📊 Ciclos de seguimiento — Causa #${n}</span>
+            <span style="font-size:10px;font-weight:400" id="hint-ciclos-causa-${n}">${cicloHint}</span>
+          </div>
+          <div class="seguimiento-body" id="ciclos-causa-${n}">
+            <div class="ciclo-block" id="ciclo-causa${n}-1">
+              <div class="ciclo-header">
+                <span>Ciclo 1 <span class="ciclo-prog" id="prog-causa${n}-1">${prog1}</span></span>
+              </div>
+              <div class="ciclo-body">
+                <div class="field-row cols-3">
+                  <div class="field"><label>Fecha <span class="req">*</span></label><input type="date"></div>
+                  <div class="field"><label>Responsable <span class="req">*</span></label><input type="text" placeholder="Nombre y cargo"></div>
+                  <div class="field"><label>Estado</label>
+                    <div class="estado-grid" style="grid-template-columns:1fr 1fr">
+                      <div class="estado-opt" onclick="selectEstado(this,'cumplida')">✅ Cumplida</div>
+                      <div class="estado-opt" onclick="selectEstado(this,'proceso')">🔄 En Proceso</div>
+                      <div class="estado-opt" onclick="selectEstado(this,'vencida')">⛔ Vencida</div>
+                      <div class="estado-opt" onclick="selectEstado(this,'replanteada')">📅 Replanteada</div>
+                    </div>
+                  </div>
+                </div>
+                <div class="replanteo-block" id="replanteo-causa${n}-ciclo1">
+                  <div class="replanteo-title">📅 Replanteo de la Acción</div>
+                  <div class="field-row cols-2">
+                    <div class="field"><label>Nueva fecha límite <span class="req">*</span></label><input type="date"><span class="hint orange">Antes del vencimiento. Documentar en HSEQ-MTR-07.</span></div>
+                    <div class="field"><label>Responsable del replanteo</label><input type="text" placeholder="Nombre y cargo"></div>
+                  </div>
+                  <div class="field" style="margin-top:8px"><label>Justificación / Impedimento <span class="req">*</span></label><textarea placeholder="Obstáculo concreto. Si Vencida: notificar Gerencia dentro de 5 días."></textarea></div>
+                  <div class="field" style="margin-top:8px"><label>Cambios al replantear</label><textarea placeholder="Ajustes a la estrategia, recursos, cambio de responsable..."></textarea></div>
+                </div>
+                <div class="field" style="margin-top:8px"><label>Descripción / Evidencias</label><textarea placeholder="Qué se verificó, cómo y qué evidencia respalda el resultado..."></textarea></div>
+              </div>
+            </div>
+          </div>
+          <button class="add-btn" onclick="addCicloCausa(${n})" style="color:var(--purple);border-color:var(--purple)">+ Agregar ciclo de seguimiento a esta acción</button>
+        </div>
+      </div>`;
+    document.getElementById('causas-container').appendChild(div);
+    ciclosCausaCount[n] = 1;
+  }
+
+  function addCicloCausa(causaId) {
+    if (!ciclosCausaCount[causaId]) ciclosCausaCount[causaId] = 1;
+    ciclosCausaCount[causaId]++;
+    const cn = ciclosCausaCount[causaId];
+    const base = document.getElementById('fecha-registro').value || new Date().toISOString().split('T')[0];
+    const cfgMap = { alto:{c1:30,c2:60,c3:90}, medio:{c1:40,c2:80,c3:120}, bajo:{c1:60,c2:120,c3:180} };
+    const cfg = riesgoActual ? cfgMap[riesgoActual] : null;
+    const diasMapa = [null, cfg?.c1, cfg?.c2, cfg?.c3];
+    const prog = (cn <= 3 && cfg) ? `(Programado: ${addDays(base, diasMapa[cn])})` : `(Ciclo adicional ${cn})`;
+
+    const div = document.createElement('div');
+    div.className = 'ciclo-block';
+    div.id = `ciclo-causa${causaId}-${cn}`;
+    div.innerHTML = `
+      <div class="ciclo-header">
+        <span>Ciclo ${cn} <span class="ciclo-prog">${prog}</span></span>
+      </div>
+      <div class="ciclo-body">
+        <div class="field-row cols-3">
+          <div class="field"><label>Fecha <span class="req">*</span></label><input type="date"></div>
+          <div class="field"><label>Responsable <span class="req">*</span></label><input type="text" placeholder="Nombre y cargo"></div>
+          <div class="field"><label>Estado</label>
+            <div class="estado-grid" style="grid-template-columns:1fr 1fr">
+              <div class="estado-opt" onclick="selectEstado(this,'cumplida')">✅ Cumplida</div>
+              <div class="estado-opt" onclick="selectEstado(this,'proceso')">🔄 En Proceso</div>
+              <div class="estado-opt" onclick="selectEstado(this,'vencida')">⛔ Vencida</div>
+              <div class="estado-opt" onclick="selectEstado(this,'replanteada')">📅 Replanteada</div>
+            </div>
+          </div>
+        </div>
+        <div class="replanteo-block" id="replanteo-causa${causaId}-ciclo${cn}">
+          <div class="replanteo-title">📅 Replanteo de la Acción</div>
+          <div class="field-row cols-2">
+            <div class="field"><label>Nueva fecha límite <span class="req">*</span></label><input type="date"><span class="hint orange">Antes del vencimiento. Documentar en HSEQ-MTR-07.</span></div>
+            <div class="field"><label>Responsable del replanteo</label><input type="text" placeholder="Nombre y cargo"></div>
+          </div>
+          <div class="field" style="margin-top:8px"><label>Justificación / Impedimento <span class="req">*</span></label><textarea placeholder="Obstáculo concreto..."></textarea></div>
+          <div class="field" style="margin-top:8px"><label>Cambios al replantear</label><textarea placeholder="Ajustes a la estrategia..."></textarea></div>
+        </div>
+        <div class="field" style="margin-top:8px"><label>Descripción / Evidencias</label><textarea placeholder="Qué se verificó, cómo y qué evidencia respalda el resultado..."></textarea></div>
+      </div>`;
+    document.getElementById('ciclos-causa-' + causaId).appendChild(div);
+  }
+
+  // ─── CICLOS EFICACIA ──────────────────────────────
+  function selectResultado(btn, tipo) {
+    const parent = btn.closest('.resultado-grid');
+    parent.querySelectorAll('.resultado-opt').forEach(b => b.className = 'resultado-opt');
+    btn.classList.add('selected-' + tipo);
+    const impId = btn.closest('.ciclo-body')?.querySelector('.impedimento-field');
+    if (impId) impId.classList.remove('show');
+  }
+
+  function selectResultadoImp(btn, impId) {
+    const parent = btn.closest('.resultado-grid');
+    parent.querySelectorAll('.resultado-opt').forEach(b => b.className = 'resultado-opt');
+    btn.classList.add('selected-imp');
+    const imp = document.getElementById(impId) || btn.closest('.ciclo-body')?.querySelector('.impedimento-field');
+    if (imp) imp.classList.add('show');
+  }
+
+  function addCicloEficacia() {
+    cicloEficaciaCount++;
+    const n = cicloEficaciaCount;
+    const base = document.getElementById('fecha-registro').value || new Date().toISOString().split('T')[0];
+    const cfgMap = { alto:{c1:30,c2:60,c3:90}, medio:{c1:40,c2:80,c3:120}, bajo:{c1:60,c2:120,c3:180} };
+    const cfg = riesgoActual ? cfgMap[riesgoActual] : null;
+    const diasMapa = [null, cfg?.c1, cfg?.c2, cfg?.c3];
+    const prog = (n <= 3 && cfg) ? `(Programado: ${addDays(base, diasMapa[n])})` : '';
+
+    const div = document.createElement('div');
+    div.className = 'ciclo-block';
+    div.innerHTML = `
+      <div class="ciclo-header">
+        <span>Ciclo de seguimiento a la eficacia #${n}</span>
+        <span class="ciclo-prog" id="prog-eficacia-${n}">${prog}</span>
+      </div>
+      <div class="ciclo-body">
+        <div class="field-row cols-3">
+          <div class="field"><label>Fecha del ciclo <span class="req">*</span></label><input type="date"></div>
+          <div class="field"><label>Responsable <span class="req">*</span></label><input type="text" placeholder="Nombre"></div>
+          <div class="field"><label>Cargo <span class="req">*</span></label><input type="text" placeholder="Cargo"></div>
+        </div>
+        <div class="field" style="margin:8px 0">
+          <label>Resultado del ciclo <span class="req">*</span></label>
+          <div class="resultado-grid" style="margin-top:6px">
+            <div class="resultado-opt" onclick="selectResultado(this,'avance')">✅ Avance Satisfactorio<br><span style="font-size:9px;opacity:0.7">Acciones avanzan sin obstáculos</span></div>
+            <div class="resultado-opt" onclick="selectResultado(this,'sin')">⚠ Sin Avances Significativos<br><span style="font-size:9px;opacity:0.7">Documentar impedimento y replantear</span></div>
+            <div class="resultado-opt" onclick="selectResultadoImp(this,'impedimento-ef-${n}')">🚫 Impedimento Identificado<br><span style="font-size:9px;opacity:0.7">Obstáculo concreto que bloquea</span></div>
+          </div>
+          <div class="impedimento-field" id="impedimento-ef-${n}">
+            <div class="field"><label>Impedimento, responsable y nueva fecha <span class="req">*</span></label><textarea placeholder="Naturaleza del obstáculo, quién lo resuelve y nueva fecha..."></textarea></div>
+          </div>
+        </div>
+        <div class="field"><label>Descripción del análisis y actividades</label><textarea placeholder="Qué se verificó, cómo se verificó y qué evidencia respalda..."></textarea></div>
+      </div>`;
+    document.getElementById('ciclos-eficacia-container').appendChild(div);
+  }
+
+  // ─── EVALUACIONES ─────────────────────────────────
+  function addEvaluacion() {
+    evaluacionCount++;
+    const n = evaluacionCount;
+    const div = document.createElement('div');
+    div.className = 'eficacia-eval-block';
+    div.innerHTML = `
+      <div class="eficacia-eval-header">
+        <span>Evaluación de Eficacia #${n}</span>
+        <span style="font-size:10px;color:rgba(255,255,255,0.8)">NC Mayor: 2ª evaluación a los 60 días de la 1ª</span>
+      </div>
+      <div class="eficacia-eval-body">
+        <div class="field-row cols-2">
+          <div class="field"><label>Fecha de la evaluación <span class="req">*</span></label><input type="date"></div>
+          <div class="field"><label>Evaluador <span class="req">*</span></label><input type="text" placeholder="NC Mayor: Coordinador HSEQ + Gerencia"></div>
+        </div>
+        <div class="field" style="margin-top:8px"><label>Análisis de la evaluación</label><textarea placeholder="¿Las acciones eliminaron la causa raíz? ¿El problema no volverá a ocurrir?..."></textarea></div>
+      </div>`;
+    document.getElementById('evaluaciones-container').appendChild(div);
+  }
+
+  // ─── EVIDENCIAS ───────────────────────────────────
+  function addEvidencia() {
+    evidenciaCount++;
+    const n = evidenciaCount;
+    const div = document.createElement('div');
+    div.className = 'evidencia-block';
+    div.innerHTML = `
+      <div class="evidencia-header"><span>Evidencia #${n}</span></div>
+      <div class="evidencia-body">
+        <div class="field-row cols-2">
+          <div class="field"><label>Tipo de evidencia / soporte</label><input type="text" placeholder="Nombre exacto del documento o registro"></div>
+          <div class="field"><label>Fecha</label><input type="date"></div>
+        </div>
+        <div class="field" style="margin-top:8px"><label>Descripción específica</label><textarea placeholder="Qué demuestra concretamente esta evidencia..."></textarea></div>
+        <div class="field" style="margin-top:8px"><label>Estado / Ubicación</label>
+          <select>
+            <option value="">Seleccionar...</option>
+            <option>Disponible — existe y puede presentarse al auditor</option>
+            <option>Pendiente — aún no existe, impide declarar cierre eficaz</option>
+          </select>
+        </div>
+      </div>`;
+    document.getElementById('evidencias-container').appendChild(div);
+  }
+
+  // ─── CIERRE / REAPERTURA ──────────────────────────
+  function selectCierre(card, tipo) {
+    document.querySelectorAll('.cierre-opt').forEach(c => c.className = 'cierre-opt');
+    card.classList.add('selected-' + tipo);
+    const rb = document.getElementById('bloque-reapertura');
+    if (tipo === 'noeficaz') {
+      rb.classList.add('show');
+      const hoy = new Date().toISOString().split('T')[0];
+      document.getElementById('fecha-reapertura').value = hoy;
+    } else {
+      rb.classList.remove('show');
+    }
+  }
+
+  function reabrir() {
+    const hoy = new Date().toLocaleDateString('es-CO', {day:'2-digit',month:'2-digit',year:'numeric'});
+    const accionNo = document.querySelector('input[placeholder="Ej: A27"]')?.value || '[número]';
+    alert(`🔄 REAPERTURA DE ACCIÓN\n\nSe generará una nueva acción a partir de la fecha ${hoy} con referencia a la Acción No. ${accionNo}.\n\nEn el nuevo formulario:\n• La fecha de registro será hoy: ${hoy}\n• El campo "Fuente" indicará "Reapertura por No Eficacia"\n• El análisis de causas debe realizarse nuevamente\n• Los plazos se recalcularán desde hoy\n\nEste formulario se marcará como CERRADO POR REAPERTURA.`);
+  }
+
+  // ─── INICIALIZACIÓN ───────────────────────────────
+  document.addEventListener('DOMContentLoaded', function() {
+    ciclosCausaCount[1] = 1;
+    // Actualizar fecha de registro si cambia
+    document.getElementById('fecha-registro').addEventListener('change', function() {
+      if (riesgoActual) selectRiesgo(document.querySelector('.riesgo-card.' + riesgoActual + '.selected'), riesgoActual);
+    });
+  });
+</script>
+</body>
+</html>

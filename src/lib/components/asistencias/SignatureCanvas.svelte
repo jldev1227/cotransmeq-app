@@ -96,12 +96,13 @@
 </script>
 
 <div class="space-y-2">
-	<label class="block text-sm font-semibold text-gray-700">
+	<label for="signature-canvas" class="block text-sm font-semibold text-gray-700">
 		Firma <span class="text-red-500">*</span>
 	</label>
 
 	<div class="relative">
 		<canvas
+			id="signature-canvas"
 			bind:this={canvas}
 			class="h-48 w-full cursor-crosshair rounded-xl border-2 {error
 				? 'border-red-300 bg-red-50/30'

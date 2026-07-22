@@ -2,7 +2,8 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { fade, fly, scale } from 'svelte/transition';
+	import { fade, fly } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
 	import { toast } from 'svelte-sonner';
 	import {
 		asistenciasAPI,
@@ -30,13 +31,46 @@
 	let showEditModal = false;
 
 	// Delete
-	let selectedIds: Set<string> = new Set();
+	let selectedIds = new Set<string>();
 	let showDeleteModal = false;
 	let deleting = false;
 
+	function toggleSelect(id: string) {
+		if (selectedIds.has(id)) selectedIds.delete(id);
+		else selectedIds.add(id);
+		selectedIds = new Set(selectedIds);
+	}
+	function toggleSelectAll() {
+		if (selectedIds.size === respuestasOrdenadas.length) {
+			selectedIds = new Set();
+		} else {
+			selectedIds = new Set(respuestasOrdenadas.map((r) => r.id));
+		}
+	}
+	function abrirDeleteModal() {
+		showDeleteModal = true;
+	}
+	function cerrarDeleteModal() {
+		showDeleteModal = false;
+	}
+	async function confirmarEliminar() {
+		if (selectedIds.size === 0) return;
+		deleting = true;
+		try {
+			await asistenciasAPI.eliminarRespuestas([...selectedIds]);
+			respuestas = respuestas.filter((r) => !selectedIds.has(r.id));
+			toast.success(`${selectedIds.size} respuesta(s) eliminada(s)`);
+			selectedIds = new Set();
+			showDeleteModal = false;
+		} catch (error: any) {
+			toast.error(error.message || 'Error al eliminar');
+		} finally {
+			deleting = false;
+		}
+	}
+
 	// Socket listener
 	const onRespuestaCreated = ({ respuesta, formularioId: formId }: any) => {
-		// Solo actualizar si es para este formulario
 		if (formId === formularioId) {
 			respuestas = [respuesta, ...respuestas];
 			toast.success('Nueva respuesta recibida en tiempo real');
@@ -44,7 +78,7 @@
 	};
 
 	onMount(async () => {
-		formularioId = $page.params.id;
+		formularioId = $page.params.id ?? '';
 		await cargarDatos();
 		setupSocketListener();
 	});
@@ -104,13 +138,10 @@
 	async function handleFormularioUpdated(event: CustomEvent) {
 		showEditModal = false;
 
-		// Si el evento trae la data actualizada, usarla directamente
 		if (event.detail?.formulario) {
-			// Forzar reactividad creando un nuevo objeto
 			formulario = { ...event.detail.formulario };
 			toast.success('Formulario actualizado exitosamente');
 		} else {
-			// Fallback: recargar si no viene la data
 			await cargarDatos();
 		}
 	}
@@ -168,7 +199,6 @@
 			toast.loading('Generando PDF...');
 			const blob = await asistenciasAPI.exportarPDF(formularioId);
 
-			// Crear URL del blob y descargar
 			const url = window.URL.createObjectURL(blob);
 			const link = document.createElement('a');
 			link.href = url;
@@ -187,48 +217,6 @@
 		}
 	}
 
-	function toggleSelect(id: string) {
-		if (selectedIds.has(id)) {
-			selectedIds.delete(id);
-		} else {
-			selectedIds.add(id);
-		}
-		selectedIds = new Set(selectedIds);
-	}
-
-	function toggleSelectAll() {
-		if (selectedIds.size === respuestasOrdenadas.length) {
-			selectedIds = new Set();
-		} else {
-			selectedIds = new Set(respuestasOrdenadas.map((r) => r.id));
-		}
-	}
-
-	function abrirDeleteModal() {
-		if (selectedIds.size === 0) return;
-		showDeleteModal = true;
-	}
-
-	function cerrarDeleteModal() {
-		showDeleteModal = false;
-	}
-
-	async function confirmarEliminar() {
-		deleting = true;
-		try {
-			const ids = Array.from(selectedIds);
-			await asistenciasAPI.eliminarRespuestas(ids);
-			respuestas = respuestas.filter((r) => !selectedIds.has(r.id));
-			selectedIds = new Set();
-			showDeleteModal = false;
-			toast.success('Respuestas eliminadas exitosamente');
-		} catch (error: any) {
-			toast.error(error.message || 'Error al eliminar respuestas');
-		} finally {
-			deleting = false;
-		}
-	}
-
 	function formatFecha(fechaISO: string): string {
 		const fecha = new Date(fechaISO);
 		return fecha.toLocaleDateString('es-CO', {
@@ -238,6 +226,27 @@
 			hour: '2-digit',
 			minute: '2-digit'
 		});
+	}
+
+	function formatFechaCorta(fechaISO: string): string {
+		const fecha = new Date(fechaISO);
+		return fecha.toLocaleDateString('es-CO', {
+			day: '2-digit',
+			month: 'short',
+			year: 'numeric'
+		});
+	}
+
+	function getTipoEventoLabel(tipo: string, tipoOtro?: string): string {
+		const labels: Record<string, string> = {
+			capacitacion: 'Capacitación',
+			asesoria: 'Asesoría',
+			charla: 'Charla',
+			induccion: 'Inducción',
+			reunion: 'Reunión',
+			divulgacion: 'Divulgación'
+		};
+		return tipo === 'otro' ? tipoOtro || 'Otro' : labels[tipo] || tipo;
 	}
 
 	$: respuestasFiltradas = respuestas.filter((r) => {
@@ -266,336 +275,78 @@
 </script>
 
 <svelte:head>
-	<title>Respuestas - {formulario?.tematica || 'Asistencias'}</title>
+	<title>Respuestas · {formulario?.tematica || 'Asistencias'} — Cotransmeq</title>
 </svelte:head>
 
-<div class="px-4 py-6 sm:px-6 lg:px-8">
-	<div class="space-y-6">
-		{#if isLoading}
-			<!-- Loading State -->
-			<div class="flex items-center justify-center py-20">
-				<div class="text-center">
-					<svg
-						class="mx-auto h-12 w-12 animate-spin text-orange-500"
-						fill="none"
-						viewBox="0 0 24 24"
-					>
-						<circle
-							class="opacity-25"
-							cx="12"
-							cy="12"
-							r="10"
-							stroke="currentColor"
-							stroke-width="4"
-						/>
-						<path
-							class="opacity-75"
-							fill="currentColor"
-							d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-						/>
-					</svg>
-					<p class="mt-4 text-gray-600">Cargando respuestas...</p>
+<div class="page" in:fade={{ duration: 300 }}>
+	{#if isLoading}
+		<div class="state-block" in:fade={{ duration: 200 }}>
+			<span class="spinner-lg"></span>
+			<p class="state-text">Cargando respuestas…</p>
+		</div>
+	{:else if formulario}
+		<!-- ═══ HEADER ═══ -->
+		<header class="page-header">
+			<div class="page-header-inner">
+				<div class="page-header-left">
+					<button class="back-btn" on:click={volver} aria-label="Volver a asistencias">
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+						</svg>
+						<span>Volver</span>
+					</button>
+					<div class="page-titles">
+						<span class="eyebrow">
+							Respuestas · {getTipoEventoLabel(formulario.tipo_evento, formulario.tipo_evento_otro)}
+						</span>
+						<h1 class="page-title">{formulario.tematica}</h1>
+						<p class="page-sub">
+							{respuestas.length} {respuestas.length === 1 ? 'asistente registrado' : 'asistentes registrados'}
+							{#if formulario.fecha}
+								· <span class="meta-mono">{formatFechaCorta(formulario.fecha)}</span>
+							{/if}
+						</p>
+					</div>
 				</div>
-			</div>
-		{:else if formulario}
-			<!-- Header -->
-			<div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-				<button
-					on:click={volver}
-					class="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-600 transition-all hover:bg-gray-50 hover:text-gray-900"
-					in:fade={{ duration: 300 }}
-				>
-					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M10 19l-7-7m0 0l7-7m-7 7h18"
-						/>
-					</svg>
-				</button>
 
-				<div class="flex gap-2">
-					<button
-						on:click={exportarCSV}
-						class="flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-orange-600"
-						in:fade={{ duration: 300, delay: 100 }}
-					>
-						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<div class="page-header-actions">
+					{#if selectedIds.size > 0}
+						<button class="btn-danger" on:click={abrirDeleteModal} in:fade={{ duration: 200 }}>
+							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+								/>
+							</svg>
+							Eliminar ({selectedIds.size})
+						</button>
+					{/if}
+					<button class="btn-secondary" on:click={exportarCSV} aria-label="Exportar a Excel">
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
-								stroke-width="2"
 								d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
 							/>
 						</svg>
-						Exportar Excel
+						Excel
 					</button>
-
-					<button
-						on:click={exportarPDF}
-						class="flex items-center gap-2 rounded-xl bg-red-500 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-red-600"
-						in:fade={{ duration: 300, delay: 150 }}
-					>
-						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<button class="btn-secondary" on:click={exportarPDF} aria-label="Exportar a PDF">
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
-								stroke-width="2"
 								d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
 							/>
 						</svg>
-						Exportar PDF
+						PDF
 					</button>
-				</div>
-			</div>
-
-			<!-- Información del Formulario -->
-			<div
-				class="rounded-2xl border border-gray-200 bg-white p-6"
-				in:fly={{ y: -20, duration: 400, delay: 100 }}
-			>
-				<div class="flex items-start justify-between gap-4">
-					<div class="flex-1 space-y-4">
-						<!-- Título y Estado -->
-						<div class="flex items-center gap-3">
-							<h2 class="text-xl font-bold text-gray-900">{formulario.tematica}</h2>
-							<span
-								class="rounded-full px-3 py-1 text-xs font-medium {formulario.activo
-									? 'bg-orange-100 text-orange-700'
-									: 'bg-gray-100 text-gray-700'}"
-							>
-								{formulario.activo ? 'Activo' : 'Inactivo'}
-							</span>
-							<!-- Tipo de Evento Badge -->
-							<span
-								class="inline-flex items-center rounded-md bg-purple-50 px-2.5 py-1 text-xs font-medium text-purple-700"
-							>
-								<svg class="mr-1 h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
-									/>
-								</svg>
-								{#if formulario.tipo_evento === 'capacitacion'}Capacitación
-								{:else if formulario.tipo_evento === 'asesoria'}Asesoría
-								{:else if formulario.tipo_evento === 'charla'}Charla
-								{:else if formulario.tipo_evento === 'induccion'}Inducción
-								{:else if formulario.tipo_evento === 'reunion'}Reunión
-								{:else if formulario.tipo_evento === 'divulgacion'}Divulgación
-								{:else if formulario.tipo_evento === 'otro'}{formulario.tipo_evento_otro || 'Otro'}
-								{:else}{formulario.tipo_evento}
-								{/if}
-							</span>
-						</div>
-
-						<!-- Objetivo -->
-						{#if formulario.objetivo}
-							<p class="text-sm text-gray-600">{formulario.objetivo}</p>
-						{/if}
-
-						<!-- Grid de Información Detallada -->
-						<div
-							class="grid grid-cols-1 gap-4 border-t border-gray-100 pt-3 md:grid-cols-2 lg:grid-cols-3"
-						>
-							<!-- Fecha -->
-							<div class="flex items-center gap-2 text-sm">
-								<svg
-									class="h-4 w-4 flex-shrink-0 text-blue-500"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-									/>
-								</svg>
-								<div>
-									<p class="text-xs text-gray-500">Fecha</p>
-									<p class="font-medium text-gray-900">
-										{new Date(formulario.fecha).toLocaleDateString('es-CO', {
-											day: '2-digit',
-											month: 'long',
-											year: 'numeric'
-										})}
-									</p>
-								</div>
-							</div>
-
-							<!-- Horario -->
-							{#if formulario.hora_inicio || formulario.hora_finalizacion}
-								<div class="flex items-center gap-2 text-sm">
-									<svg
-										class="h-4 w-4 flex-shrink-0 text-amber-500"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-										/>
-									</svg>
-									<div>
-										<p class="text-xs text-gray-500">Horario</p>
-										<p class="font-medium text-gray-900">
-											{formulario.hora_inicio || '--:--'} - {formulario.hora_finalizacion ||
-												'--:--'}
-											{#if formulario.duracion_minutos}
-												<span class="ml-1 text-xs text-gray-500">
-													({Math.floor(formulario.duracion_minutos / 60)}h {formulario.duracion_minutos %
-														60}m)
-												</span>
-											{/if}
-										</p>
-									</div>
-								</div>
-							{/if}
-
-							<!-- Lugar -->
-							{#if formulario.lugar_sede}
-								<div class="flex items-center gap-2 text-sm">
-									<svg
-										class="h-4 w-4 flex-shrink-0 text-orange-500"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-										/>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-										/>
-									</svg>
-									<div>
-										<p class="text-xs text-gray-500">Lugar / Sede</p>
-										<p class="font-medium text-gray-900">{formulario.lugar_sede}</p>
-									</div>
-								</div>
-							{/if}
-
-							<!-- Instructor -->
-							{#if formulario.nombre_instructor}
-								<div class="flex items-center gap-2 text-sm">
-									<svg
-										class="h-4 w-4 flex-shrink-0 text-indigo-500"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-										/>
-									</svg>
-									<div>
-										<p class="text-xs text-gray-500">Instructor</p>
-										<p class="font-medium text-gray-900">{formulario.nombre_instructor}</p>
-									</div>
-								</div>
-							{/if}
-
-							<!-- Respuestas -->
-							<div class="flex items-center gap-2 text-sm">
-								<svg
-									class="h-4 w-4 flex-shrink-0 text-blue-500"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-									/>
-								</svg>
-								<div>
-									<p class="text-xs text-gray-500">Respuestas</p>
-									<p class="font-medium text-gray-900">
-										{respuestas.length}
-										{respuestas.length === 1 ? 'respuesta' : 'respuestas'}
-									</p>
-								</div>
-							</div>
-
-							<!-- Creado por -->
-							{#if formulario.creado_por}
-								<div class="flex items-center gap-2 text-sm">
-									<svg
-										class="h-4 w-4 flex-shrink-0 text-gray-500"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-										/>
-									</svg>
-									<div>
-										<p class="text-xs text-gray-500">Creado por</p>
-										<p class="font-medium text-gray-900">{formulario.creado_por.nombre}</p>
-									</div>
-								</div>
-							{/if}
-						</div>
-
-						<!-- Observaciones -->
-						{#if formulario.observaciones}
-							<div class="border-t border-gray-100 pt-3">
-								<div class="flex items-start gap-2 text-sm">
-									<svg
-										class="mt-0.5 h-4 w-4 flex-shrink-0 text-gray-500"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-										/>
-									</svg>
-									<div class="flex-1">
-										<p class="mb-1 text-xs text-gray-500">Observaciones</p>
-										<p class="text-sm leading-relaxed text-gray-700">{formulario.observaciones}</p>
-									</div>
-								</div>
-							</div>
-						{/if}
-					</div>
-
-					<!-- Botón de edición -->
-					<button
-						on:click={openEditModal}
-						class="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-all hover:bg-gray-50"
-						title="Editar formulario"
-					>
-						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<button class="btn-primary" on:click={openEditModal} aria-label="Editar formulario">
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
-								stroke-width="2"
 								d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
 							/>
 						</svg>
@@ -603,367 +354,1262 @@
 					</button>
 				</div>
 			</div>
+		</header>
 
-			<!-- Filters -->
+		<!-- ═══ Modal Confirmar Eliminación ═══ -->
+		{#if showDeleteModal}
 			<div
-				class="glass flex flex-col gap-4 rounded-2xl border border-gray-200 bg-white p-4 md:flex-row md:items-center"
-				in:fly={{ y: -20, duration: 400 }}
+				class="modal-backdrop"
+				on:click={cerrarDeleteModal}
+				on:keydown={(e) => e.key === 'Escape' && cerrarDeleteModal()}
+				role="button"
+				tabindex="0"
+				transition:fade={{ duration: 150 }}
 			>
-				<!-- Search -->
-				<div class="flex-1">
-					<div class="relative">
-						<svg
-							class="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-gray-400"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-							/>
-						</svg>
-						<input
-							type="text"
-							bind:value={searchQuery}
-							placeholder="Buscar por nombre, documento o cargo..."
-							class="input-glow w-full rounded-xl border border-gray-200 bg-white py-2 pr-4 pl-10 text-gray-900 placeholder-gray-400 transition-all focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 focus:outline-none"
-						/>
+				<div
+					class="modal"
+					on:click|stopPropagation
+					on:keydown|stopPropagation
+					role="dialog"
+					tabindex="0"
+					in:fly={{ y: 24, duration: 250, easing: quintOut }}
+				>
+					<div class="modal-head">
+						<div class="modal-icon">
+							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+							</svg>
+						</div>
+						<div>
+							<h3 class="modal-title">Eliminar respuestas</h3>
+							<p class="modal-sub">Esta acción no se puede deshacer</p>
+						</div>
+					</div>
+					<p class="modal-body">
+						¿Estás seguro de que deseas eliminar
+						<strong class="text-danger">{selectedIds.size}</strong>
+						respuesta{selectedIds.size > 1 ? 's' : ''}? Se eliminarán permanentemente del sistema.
+					</p>
+					<div class="modal-actions">
+						<button class="btn-secondary" on:click={cerrarDeleteModal} disabled={deleting}>
+							Cancelar
+						</button>
+						<button class="btn-danger" on:click={confirmarEliminar} disabled={deleting}>
+							{#if deleting}
+								<span class="spinner-sm"></span>
+								Eliminando…
+							{:else}
+								Eliminar
+							{/if}
+						</button>
 					</div>
 				</div>
+			</div>
+		{/if}
 
-				<!-- Sort -->
-				<div class="flex gap-2">
-					<select
-						bind:value={sortBy}
-						class="input-glow rounded-xl border border-gray-200 bg-white px-4 py-2 text-gray-900 transition-all focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 focus:outline-none"
-					>
+		<!-- ═══ Signature Modal ═══ -->
+		{#if showSignatureModal}
+			<div
+				class="modal-backdrop"
+				on:click={closeSignatureModal}
+				on:keydown={(e) => e.key === 'Escape' && closeSignatureModal()}
+				role="button"
+				tabindex="0"
+				transition:fade={{ duration: 150 }}
+			>
+				<div
+					class="modal modal--lg"
+					on:click|stopPropagation
+					on:keydown|stopPropagation
+					role="dialog"
+					tabindex="0"
+					in:fly={{ y: 24, duration: 250, easing: quintOut }}
+				>
+					<div class="modal-head">
+						<h3 class="modal-title">Firma Digital</h3>
+						<button class="modal-close" on:click={closeSignatureModal} aria-label="Cerrar firma">
+							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+							</svg>
+						</button>
+					</div>
+					<div class="firma-frame">
+						<img src={selectedSignature} alt="Firma ampliada" draggable="false" />
+					</div>
+				</div>
+			</div>
+		{/if}
+
+		<div class="page-body">
+			<!-- ═══ INFO CARD ═══ -->
+			<section class="info-card" in:fly={{ y: 16, duration: 400, easing: quintOut, delay: 80 }}>
+				<div class="info-grid">
+					<div class="info-item">
+						<span class="info-label">Fecha</span>
+						<span class="info-value">
+							{new Date(formulario.fecha).toLocaleDateString('es-CO', {
+								day: '2-digit',
+								month: 'long',
+								year: 'numeric'
+							})}
+						</span>
+					</div>
+					{#if formulario.hora_inicio || formulario.hora_finalizacion}
+						<div class="info-item">
+							<span class="info-label">Horario</span>
+							<span class="info-value">
+								{formulario.hora_inicio || '--:--'} – {formulario.hora_finalizacion || '--:--'}
+								{#if formulario.duracion_minutos}
+									<span class="meta-muted">
+										· {Math.floor(formulario.duracion_minutos / 60)}h {formulario.duracion_minutos % 60}m
+									</span>
+								{/if}
+							</span>
+						</div>
+					{/if}
+					{#if formulario.lugar_sede}
+						<div class="info-item">
+							<span class="info-label">Lugar</span>
+							<span class="info-value">{formulario.lugar_sede}</span>
+						</div>
+					{/if}
+					{#if formulario.nombre_instructor}
+						<div class="info-item">
+							<span class="info-label">Instructor</span>
+							<span class="info-value">{formulario.nombre_instructor}</span>
+						</div>
+					{/if}
+					<div class="info-item">
+						<span class="info-label">Estado</span>
+						<span class="status-pill" class:status-active={formulario.activo} class:status-inactive={!formulario.activo}>
+							{formulario.activo ? 'Activo' : 'Inactivo'}
+						</span>
+					</div>
+					{#if formulario.creado_por}
+						<div class="info-item">
+							<span class="info-label">Creado por</span>
+							<span class="info-value">{formulario.creado_por.nombre}</span>
+						</div>
+					{/if}
+				</div>
+
+				{#if formulario.objetivo}
+					<div class="info-block">
+						<span class="info-label">Objetivo</span>
+						<p class="info-text">{formulario.objetivo}</p>
+					</div>
+				{/if}
+
+				{#if formulario.observaciones}
+					<div class="info-block">
+						<span class="info-label">Observaciones</span>
+						<p class="info-text">{formulario.observaciones}</p>
+					</div>
+				{/if}
+			</section>
+
+			<!-- ═══ FILTERS ═══ -->
+			<section class="filter-bar" in:fly={{ y: 12, duration: 400, easing: quintOut, delay: 160 }}>
+				<div class="search-wrap">
+					<svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+					</svg>
+					<input
+						type="search"
+						bind:value={searchQuery}
+						placeholder="Buscar por nombre, documento o cargo…"
+						aria-label="Buscar respuestas"
+					/>
+				</div>
+
+				<div class="sort-wrap">
+					<select bind:value={sortBy} class="select" aria-label="Ordenar por">
 						<option value="fecha">Fecha</option>
 						<option value="nombre">Nombre</option>
 						<option value="documento">Documento</option>
 					</select>
-
 					<button
+						class="sort-dir"
 						on:click={() => (sortOrder = sortOrder === 'asc' ? 'desc' : 'asc')}
-						class="flex items-center justify-center rounded-xl border border-gray-200 bg-white px-3 transition-all hover:bg-gray-50"
 						title={sortOrder === 'asc' ? 'Ascendente' : 'Descendente'}
+						aria-label="Cambiar dirección de orden"
 					>
 						<svg
-							class="h-5 w-5 text-gray-900 transition-transform {sortOrder === 'desc'
-								? 'rotate-180'
-								: ''}"
+							class="dir-icon"
+							class:rotate={sortOrder === 'desc'}
 							fill="none"
 							stroke="currentColor"
 							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M5 15l7-7 7 7"
-							/>
-						</svg>
-					</button>
-				</div>
-
-				<!-- Delete button -->
-				{#if selectedIds.size > 0}
-					<button
-						on:click={abrirDeleteModal}
-						class="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white transition-all hover:bg-red-700"
-					>
-						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-						</svg>
-						Eliminar ({selectedIds.size})
-					</button>
-				{/if}
-			</div>
-
-			<!-- Respuestas -->
-			{#if respuestasOrdenadas.length === 0}
-				<div
-					class="glass rounded-2xl border border-gray-200 bg-white p-12 text-center"
-					in:fade={{ duration: 300 }}
-				>
-					<svg class="mx-auto h-16 w-16 text-gray-300" fill="none" viewBox="0 0 24 24">
-						<path
-							stroke="currentColor"
-							stroke-linecap="round"
-							stroke-linejoin="round"
 							stroke-width="2"
-							d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-						/>
-					</svg>
-					<h3 class="mt-4 text-lg font-semibold text-gray-900">
-						{searchQuery ? 'No se encontraron resultados' : 'Aún no hay respuestas'}
-					</h3>
-					<p class="mt-2 text-gray-600">
-						{searchQuery
-							? 'Intenta con otros términos de búsqueda'
-							: 'Las respuestas aparecerán aquí'}
-					</p>
+						>
+							<path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7" />
+						</svg>
+					</button>
 				</div>
+
+				<div class="results-pill">
+					<span class="meta-mono">{respuestasOrdenadas.length}</span>
+					<span>{respuestasOrdenadas.length === 1 ? 'resultado' : 'resultados'}</span>
+				</div>
+			</section>
+
+			<!-- ═══ TABLE / CARDS ═══ -->
+			{#if respuestasOrdenadas.length === 0}
+				<section class="empty-state" in:fade={{ duration: 250 }}>
+					<div class="empty-icon">
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.4">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+						</svg>
+					</div>
+					<h2 class="empty-title">
+						{searchQuery ? 'Sin resultados' : 'Aún no hay respuestas'}
+					</h2>
+					<p class="empty-sub">
+						{searchQuery
+							? 'Intenta con otros términos de búsqueda.'
+							: 'Las respuestas se mostrarán aquí en tiempo real.'}
+					</p>
+				</section>
 			{:else}
-				<!-- Vista Desktop: Tabla -->
-				<div class="hidden overflow-hidden rounded-xl border border-gray-200 bg-white lg:block">
-					<!-- Encabezados -->
-					<div
-						class="grid grid-cols-12 gap-4 border-b border-gray-200 bg-gray-50 px-4 py-3 text-xs font-semibold text-gray-700"
-					>
-						<div class="col-span-1 flex items-center justify-center">
-							<input type="checkbox" class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" checked={selectedIds.size > 0 && selectedIds.size === respuestasOrdenadas.length} on:change={toggleSelectAll} />
+				<!-- Desktop table -->
+				<section class="table-card" in:fly={{ y: 16, duration: 400, easing: quintOut, delay: 220 }}>
+					<div class="table-head">
+						<div class="th th-check">
+							<input
+								type="checkbox"
+								class="checkbox"
+								checked={selectedIds.size > 0 &&
+									selectedIds.size === respuestasOrdenadas.length}
+								on:change={toggleSelectAll}
+								aria-label="Seleccionar todas las respuestas"
+							/>
 						</div>
-						<div class="col-span-2">Nombre Completo</div>
-						<div class="col-span-2">Documento</div>
-						<div class="col-span-2">Cargo</div>
-						<div class="col-span-1">Teléfono</div>
-						<div class="col-span-2">Fecha</div>
-						<div class="col-span-2 text-center">Firma Digital</div>
+						<div class="th th-name">Nombre</div>
+						<div class="th th-doc">Documento</div>
+						<div class="th th-cargo">Cargo</div>
+						<div class="th th-tel">Teléfono</div>
+						<div class="th th-comite">Comité</div>
+						<div class="th th-fecha">Fecha</div>
+						<div class="th th-firma">Firma</div>
 					</div>
 
-					<!-- Filas -->
-					<div class="divide-y divide-gray-200">
+					<div class="table-body">
 						{#each respuestasOrdenadas as respuesta, i (respuesta.id)}
 							<div
-								class="grid grid-cols-12 gap-4 px-4 py-3 transition-colors {selectedIds.has(respuesta.id) ? 'bg-orange-50' : 'hover:bg-gray-50'}"
-								in:fly={{ y: 20, duration: 300, delay: i * 20 }}
+								class="tr"
+								class:tr-selected={selectedIds.has(respuesta.id)}
+								in:fly={{ y: 8, duration: 250, delay: Math.min(i, 8) * 18 }}
 							>
-								<!-- Checkbox -->
-								<div class="col-span-1 flex items-center justify-center">
-									<input type="checkbox" class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" checked={selectedIds.has(respuesta.id)} on:change={() => toggleSelect(respuesta.id)} />
+								<div class="td td-check">
+									<input
+										type="checkbox"
+										class="checkbox"
+										checked={selectedIds.has(respuesta.id)}
+										on:change={() => toggleSelect(respuesta.id)}
+										aria-label="Seleccionar {respuesta.nombre_completo}"
+									/>
 								</div>
-
-								<!-- Nombre -->
-								<div class="col-span-2">
-									<p class="text-sm font-medium text-gray-900">{respuesta.nombre_completo}</p>
+								<div class="td td-name">
+									<span class="cell-strong">{respuesta.nombre_completo}</span>
 								</div>
-
-								<!-- Documento -->
-								<div class="col-span-2">
-									<p class="text-sm text-gray-600">{respuesta.numero_documento}</p>
+								<div class="td td-doc">
+									<span class="meta-mono">{respuesta.numero_documento}</span>
 								</div>
-
-								<!-- Cargo -->
-								<div class="col-span-2">
-									<p class="text-sm text-gray-600">{respuesta.cargo}</p>
+								<div class="td td-cargo">
+									<span class="cell-soft">{respuesta.cargo}</span>
 								</div>
-
-								<!-- Teléfono -->
-								<div class="col-span-1">
-									<p class="text-sm text-gray-600">{respuesta.numero_telefono}</p>
+								<div class="td td-tel">
+									<span class="meta-mono">{respuesta.numero_telefono}</span>
 								</div>
-
-								<!-- Fecha -->
-								<div class="col-span-2">
-									<p class="text-sm text-gray-600">{formatFecha(respuesta.created_at)}</p>
-								</div>
-
-								<!-- Firma -->
-								<div class="col-span-2 flex justify-center">
-									<button
-										on:click={() => verFirma(respuesta.firma)}
-										class="group relative overflow-hidden rounded-lg border border-gray-200 bg-gray-50 p-1 transition-all hover:border-orange-400"
-									>
-										<img
-											src={respuesta.firma}
-											alt="Firma"
-											class="h-12 w-24 rounded object-contain"
-										/>
-										<div
-											class="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100"
-										>
-											<svg class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-												<path
-													stroke="currentColor"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-												/>
-											</svg>
+								<div class="td td-comite">
+									{#if respuesta.pertenece_comite === true}
+										<div class="comite-cell">
+											<span class="status-pill status-active">Sí</span>
+											{#if respuesta.nombre_comite}
+												<span class="comite-name" title={respuesta.nombre_comite}>
+													{respuesta.nombre_comite}
+												</span>
+											{/if}
 										</div>
+									{:else if respuesta.pertenece_comite === false}
+										<span class="status-pill status-inactive">No</span>
+									{:else}
+										<span class="meta-muted">—</span>
+									{/if}
+								</div>
+								<div class="td td-fecha">
+									<span class="cell-soft">{formatFecha(respuesta.created_at)}</span>
+								</div>
+								<div class="td td-firma">
+									<button
+										class="firma-thumb"
+										on:click={() => verFirma(respuesta.firma)}
+										aria-label="Ver firma de {respuesta.nombre_completo}"
+									>
+										<img src={respuesta.firma} alt="Firma" />
 									</button>
 								</div>
 							</div>
 						{/each}
 					</div>
-				</div>
+				</section>
 
-				<!-- Vista Mobile/Tablet: Cards -->
-				<div class="space-y-4 lg:hidden">
+				<!-- Mobile cards -->
+				<section class="m-cards">
 					{#each respuestasOrdenadas as respuesta, i (respuesta.id)}
-						<div
-							class="rounded-xl border {selectedIds.has(respuesta.id) ? 'border-orange-400 bg-orange-50' : 'border-gray-200 bg-white'} p-4 shadow-sm"
-							in:fly={{ y: 20, duration: 300, delay: i * 20 }}
+						<article
+							class="m-card"
+							class:m-card-selected={selectedIds.has(respuesta.id)}
+							in:fly={{ y: 8, duration: 250, delay: Math.min(i, 8) * 18 }}
 						>
-							<!-- Header con checkbox, nombre y fecha -->
-							<div
-								class="mb-3 flex items-start justify-between gap-3 border-b border-gray-100 pb-3"
-							>
-								<div class="flex items-start gap-3 flex-1">
-									<input type="checkbox" class="mt-1 h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500" checked={selectedIds.has(respuesta.id)} on:change={() => toggleSelect(respuesta.id)} />
-									<div class="flex-1">
-										<h3 class="font-semibold text-gray-900">{respuesta.nombre_completo}</h3>
-										<p class="mt-1 text-xs text-gray-500">{formatFecha(respuesta.created_at)}</p>
+							<div class="m-card-head">
+								<div class="m-card-left">
+									<input
+										type="checkbox"
+										class="checkbox"
+										checked={selectedIds.has(respuesta.id)}
+										on:change={() => toggleSelect(respuesta.id)}
+										aria-label="Seleccionar {respuesta.nombre_completo}"
+									/>
+									<div class="m-card-name-wrap">
+										<h3 class="m-card-name">{respuesta.nombre_completo}</h3>
+										<span class="m-card-date">{formatFecha(respuesta.created_at)}</span>
 									</div>
 								</div>
-								<button
-									on:click={() => verFirma(respuesta.firma)}
-									class="group relative overflow-hidden rounded-lg border border-gray-200 bg-gray-50 p-1 transition-all hover:border-orange-400"
-								>
-									<img src={respuesta.firma} alt="Firma" class="h-16 w-20 rounded object-contain" />
-									<div
-										class="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 transition-opacity group-hover:opacity-100"
-									>
-										<svg class="h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-											<path
-												stroke="currentColor"
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-											/>
-										</svg>
-									</div>
+								<button class="firma-thumb firma-thumb--lg" on:click={() => verFirma(respuesta.firma)}>
+									<img src={respuesta.firma} alt="Firma" />
 								</button>
 							</div>
 
-							<!-- Datos en grid -->
-							<div class="grid grid-cols-2 gap-3">
+							<dl class="m-card-dl">
 								<div>
-									<p class="text-xs font-medium text-gray-500">Documento</p>
-									<p class="mt-1 text-sm text-gray-900">{respuesta.numero_documento}</p>
+									<dt>Documento</dt>
+									<dd class="meta-mono">{respuesta.numero_documento}</dd>
 								</div>
 								<div>
-									<p class="text-xs font-medium text-gray-500">Teléfono</p>
-									<p class="mt-1 text-sm text-gray-900">{respuesta.numero_telefono}</p>
+									<dt>Teléfono</dt>
+									<dd class="meta-mono">{respuesta.numero_telefono}</dd>
 								</div>
-								<div class="col-span-2">
-									<p class="text-xs font-medium text-gray-500">Cargo</p>
-									<p class="mt-1 text-sm text-gray-900">{respuesta.cargo}</p>
+								<div class="full-row">
+									<dt>Cargo</dt>
+									<dd>{respuesta.cargo}</dd>
 								</div>
-							</div>
-						</div>
+								<div class="full-row">
+									<dt>Comité</dt>
+									<dd>
+										{#if respuesta.pertenece_comite === true}
+											<div class="comite-cell">
+												<span class="status-pill status-active">Sí</span>
+												{#if respuesta.nombre_comite}
+													<span class="comite-name">{respuesta.nombre_comite}</span>
+												{/if}
+											</div>
+										{:else if respuesta.pertenece_comite === false}
+											<span class="status-pill status-inactive">No</span>
+										{:else}
+											<span class="meta-muted">No especificado</span>
+										{/if}
+									</dd>
+								</div>
+							</dl>
+						</article>
 					{/each}
-				</div>
+				</section>
 			{/if}
-		{/if}
-	</div>
+		</div>
+	{/if}
 </div>
 
-<!-- Modal Confirmar Eliminación -->
-{#if showDeleteModal}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-		on:click={cerrarDeleteModal}
-		on:keydown={(e) => e.key === 'Escape' && cerrarDeleteModal()}
-		role="button"
-		tabindex="0"
-		transition:fade={{ duration: 150 }}
-	>
-		<div
-			class="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
-			on:click|stopPropagation
-			on:keydown|stopPropagation
-			role="dialog"
-			tabindex="0"
-			in:fly={{ y: 30, duration: 200 }}
-		>
-			<div class="mb-4 flex items-center gap-3">
-				<div class="flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
-					<svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-					</svg>
-				</div>
-				<div>
-					<h3 class="text-lg font-bold text-gray-900">Eliminar respuestas</h3>
-					<p class="text-sm text-gray-500">Esta acción no se puede deshacer</p>
-				</div>
-			</div>
-			<p class="mb-6 text-sm text-gray-600">
-				¿Estás seguro de que deseas eliminar <span class="font-semibold text-red-600">{selectedIds.size}</span> respuesta{selectedIds.size > 1 ? 's' : ''}? Se eliminarán permanentemente del sistema.
-			</p>
-			<div class="flex justify-end gap-3">
-				<button
-					on:click={cerrarDeleteModal}
-					disabled={deleting}
-					class="rounded-xl border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
-				>
-					Cancelar
-				</button>
-				<button
-					on:click={confirmarEliminar}
-					disabled={deleting}
-					class="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
-				>
-					{#if deleting}
-						<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-							<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-						</svg>
-						Eliminando...
-					{:else}
-						Eliminar
-					{/if}
-				</button>
-			</div>
-		</div>
-	</div>
-{/if}
-
-<!-- Signature Modal -->
-{#if showSignatureModal}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm select-none"
-		on:click={closeSignatureModal}
-		on:keydown={(e) => e.key === 'Escape' && closeSignatureModal()}
-		role="button"
-		tabindex="0"
-		transition:fade={{ duration: 150 }}
-	>
-		<div
-			class="max-w-4xl rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl select-none"
-			on:click|stopPropagation
-			on:keydown|stopPropagation
-			role="button"
-			tabindex="0"
-			transition:fade={{ duration: 150 }}
-		>
-			<div class="mb-4 flex items-center justify-between">
-				<h3 class="text-xl font-bold text-gray-900">Firma Digital</h3>
-				<button
-					on:click={closeSignatureModal}
-					class="flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-gray-50 text-gray-600 transition-all hover:bg-gray-100 hover:text-gray-900"
-				>
-					<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M6 18L18 6M6 6l12 12"
-						/>
-					</svg>
-				</button>
-			</div>
-			<div class="rounded-xl border border-gray-200 bg-white p-4">
-				<img
-					src={selectedSignature}
-					alt="Firma ampliada"
-					class="pointer-events-none w-full select-none"
-					draggable="false"
-				/>
-			</div>
-		</div>
-	</div>
-{/if}
-
-<!-- Modal de Edición -->
 <ModalFormularioAsistencia
 	bind:isOpen={showEditModal}
 	formularioEdit={formulario}
 	on:close={closeEditModal}
 	on:save={handleFormularioUpdated}
 />
+
+<style>
+	/* ═══════════════════════════════════════════════════
+	   TOKENS — landing-transmeralda editorial
+	   ═══════════════════════════════════════════════════ */
+	.page {
+		--bg: #faf7f2;
+		--surface: #ffffff;
+		--border: rgba(0, 0, 0, 0.08);
+		--border-default: rgba(0, 0, 0, 0.12);
+		--border-hover: rgba(0, 0, 0, 0.2);
+		--text-primary: #0f1f1a;
+		--text-secondary: #4a4a4a;
+		--text-muted: #6b6b6b;
+		--text-very-muted: #9a9a9a;
+		--accent: #f97316;
+		--accent-hover: #ea580c;
+		--accent-bg: rgba(249, 115, 22, 0.08);
+		--shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.04);
+		--ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+
+		min-height: 100vh;
+		background: var(--bg);
+		font-family: 'Inter', 'Geist', system-ui, sans-serif;
+		color: var(--text-primary);
+		-webkit-font-smoothing: antialiased;
+	}
+
+	/* ═══ Loading state ═══ */
+	.state-block {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.85rem;
+		padding: 6rem 1rem;
+		color: var(--text-muted);
+	}
+	.state-text {
+		font-size: 0.9rem;
+		margin: 0;
+	}
+	.spinner-lg {
+		width: 36px;
+		height: 36px;
+		border: 3px solid rgba(249, 115, 22, 0.15);
+		border-top-color: var(--accent);
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+	.spinner-sm {
+		width: 14px;
+		height: 14px;
+		border: 2px solid rgba(255, 255, 255, 0.35);
+		border-top-color: #fff;
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+		display: inline-block;
+	}
+
+	/* ═══ Header ═══ */
+	.page-header {
+		background: rgba(255, 255, 255, 0.85);
+		backdrop-filter: saturate(180%) blur(20px);
+		-webkit-backdrop-filter: saturate(180%) blur(20px);
+		border-bottom: 1px solid var(--border);
+		position: sticky;
+		top: 0;
+		z-index: 30;
+	}
+	.page-header-inner {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		padding: 1rem 1.5rem;
+		max-width: 1400px;
+		margin: 0 auto;
+		flex-wrap: wrap;
+	}
+	.page-header-left {
+		display: flex;
+		align-items: center;
+		gap: 1rem;
+		flex: 1;
+		min-width: 0;
+	}
+	.back-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.4rem 0.7rem 0.4rem 0.4rem;
+		background: transparent;
+		border: 1px solid var(--border-default);
+		border-radius: 8px;
+		color: var(--text-secondary);
+		font-family: inherit;
+		font-size: 0.78rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s var(--ease);
+		flex-shrink: 0;
+	}
+	.back-btn svg {
+		width: 14px;
+		height: 14px;
+	}
+	.back-btn:hover {
+		background: var(--surface);
+		color: var(--accent-hover);
+		border-color: rgba(249, 115, 22, 0.3);
+	}
+
+	.page-titles {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+	.eyebrow {
+		display: inline-block;
+		font-family: 'Geist', monospace;
+		font-size: 0.65rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.12em;
+		color: var(--accent-hover);
+		background: var(--accent-bg);
+		padding: 0.2rem 0.6rem;
+		border-radius: 5px;
+		margin-bottom: 0.35rem;
+		align-self: flex-start;
+	}
+	.page-title {
+		font-family: 'Geist', Georgia, serif;
+		font-size: 1.4rem;
+		font-weight: 500;
+		color: var(--text-primary);
+		letter-spacing: -0.015em;
+		line-height: 1.2;
+		margin: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.page-sub {
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		margin: 0.2rem 0 0;
+	}
+
+	.page-header-actions {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+
+	.btn-primary,
+	.btn-secondary,
+	.btn-danger {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.55rem 0.95rem;
+		font-family: inherit;
+		font-size: 0.82rem;
+		font-weight: 600;
+		border-radius: 10px;
+		cursor: pointer;
+		transition: all 0.2s var(--ease);
+		white-space: nowrap;
+	}
+	.btn-primary {
+		background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+		color: #fff;
+		border: none;
+		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+	}
+	.btn-primary:hover:not(:disabled) {
+		transform: translateY(-1px);
+		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
+	}
+	.btn-primary svg {
+		width: 14px;
+		height: 14px;
+	}
+
+	.btn-secondary {
+		background: var(--surface);
+		color: var(--text-primary);
+		border: 1px solid var(--border-default);
+	}
+	.btn-secondary:hover:not(:disabled) {
+		background: var(--bg);
+		border-color: var(--border-hover);
+	}
+	.btn-secondary svg {
+		width: 14px;
+		height: 14px;
+	}
+
+	.btn-danger {
+		background: rgba(220, 38, 38, 0.08);
+		color: #b91c1c;
+		border: 1px solid rgba(220, 38, 38, 0.25);
+	}
+	.btn-danger:hover:not(:disabled) {
+		background: rgba(220, 38, 38, 0.14);
+		border-color: rgba(220, 38, 38, 0.4);
+	}
+	.btn-danger svg {
+		width: 14px;
+		height: 14px;
+	}
+
+	/* ═══ Body ═══ */
+	.page-body {
+		max-width: 1400px;
+		margin: 0 auto;
+		padding: 1.5rem 1.5rem 3rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1.25rem;
+	}
+
+	/* ═══ Info card ═══ */
+	.info-card {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 20px;
+		padding: 1.25rem 1.4rem;
+		box-shadow: var(--shadow-soft);
+		display: flex;
+		flex-direction: column;
+		gap: 1.1rem;
+	}
+	.info-grid {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 0.85rem 1.5rem;
+	}
+	@media (min-width: 640px) {
+		.info-grid {
+			grid-template-columns: repeat(2, 1fr);
+		}
+	}
+	@media (min-width: 1024px) {
+		.info-grid {
+			grid-template-columns: repeat(3, 1fr);
+		}
+	}
+	.info-item {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+	}
+	.info-label {
+		font-family: 'Geist', monospace;
+		font-size: 0.62rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		color: var(--text-muted);
+	}
+	.info-value {
+		font-size: 0.88rem;
+		font-weight: 500;
+		color: var(--text-primary);
+	}
+	.info-block {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		padding-top: 0.9rem;
+		border-top: 1px solid var(--border);
+	}
+	.info-text {
+		font-size: 0.85rem;
+		color: var(--text-secondary);
+		line-height: 1.55;
+		margin: 0;
+	}
+	.meta-mono {
+		font-family: 'Geist', monospace;
+		font-size: 0.85em;
+		color: var(--text-primary);
+	}
+	.meta-muted {
+		color: var(--text-very-muted);
+		font-size: 0.78rem;
+	}
+
+	/* ═══ Status pill ═══ */
+	.status-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.2rem 0.55rem;
+		font-family: 'Geist', monospace;
+		font-size: 0.65rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		border-radius: 999px;
+		align-self: flex-start;
+	}
+	.status-pill::before {
+		content: '';
+		width: 5px;
+		height: 5px;
+		border-radius: 50%;
+	}
+	.status-active {
+		background: var(--accent-bg);
+		color: var(--accent-hover);
+	}
+	.status-active::before {
+		background: var(--accent);
+	}
+	.status-inactive {
+		background: rgba(0, 0, 0, 0.05);
+		color: var(--text-muted);
+	}
+	.status-inactive::before {
+		background: var(--text-very-muted);
+	}
+
+	/* ═══ Filters ═══ */
+	.filter-bar {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.6rem;
+		padding: 0.75rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 16px;
+		box-shadow: var(--shadow-soft);
+	}
+	.search-wrap {
+		position: relative;
+		flex: 1;
+		min-width: 200px;
+	}
+	.search-icon {
+		position: absolute;
+		left: 0.85rem;
+		top: 50%;
+		transform: translateY(-50%);
+		width: 16px;
+		height: 16px;
+		color: var(--text-very-muted);
+		pointer-events: none;
+	}
+	.search-wrap input {
+		width: 100%;
+		padding: 0.55rem 0.85rem 0.55rem 2.4rem;
+		font-size: 0.85rem;
+		font-family: inherit;
+		background: var(--surface);
+		border: 1px solid var(--border-default);
+		border-radius: 10px;
+		color: var(--text-primary);
+		outline: none;
+		transition: all 0.2s var(--ease);
+	}
+	.search-wrap input::placeholder {
+		color: var(--text-very-muted);
+	}
+	.search-wrap input:focus {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+	}
+
+	.sort-wrap {
+		display: flex;
+		gap: 0.3rem;
+	}
+	.select {
+		padding: 0.55rem 0.85rem;
+		font-size: 0.82rem;
+		font-family: inherit;
+		font-weight: 500;
+		color: var(--text-primary);
+		background: var(--surface);
+		border: 1px solid var(--border-default);
+		border-radius: 10px;
+		cursor: pointer;
+		outline: none;
+		transition: all 0.2s var(--ease);
+	}
+	.select:focus {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+	}
+	.sort-dir {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		background: var(--surface);
+		border: 1px solid var(--border-default);
+		border-radius: 10px;
+		color: var(--text-secondary);
+		cursor: pointer;
+		transition: all 0.2s var(--ease);
+	}
+	.sort-dir:hover {
+		background: var(--bg);
+		border-color: var(--border-hover);
+		color: var(--text-primary);
+	}
+	.dir-icon {
+		width: 16px;
+		height: 16px;
+		transition: transform 0.2s var(--ease);
+	}
+	.dir-icon.rotate {
+		transform: rotate(180deg);
+	}
+
+	.results-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.35rem 0.7rem;
+		font-size: 0.78rem;
+		font-weight: 500;
+		color: var(--text-muted);
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: 999px;
+	}
+	.results-pill .meta-mono {
+		font-weight: 700;
+		color: var(--accent-hover);
+	}
+
+	/* ═══ Table ═══ */
+	.table-card {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 20px;
+		box-shadow: var(--shadow-soft);
+		overflow: hidden;
+		display: none;
+	}
+	@media (min-width: 1024px) {
+		.table-card {
+			display: block;
+		}
+	}
+
+	.table-head {
+		display: grid;
+		grid-template-columns: 40px 1.6fr 1fr 1.4fr 1fr 1.4fr 1.4fr 130px;
+		gap: 0.85rem;
+		padding: 0.75rem 1rem;
+		background: var(--bg);
+		border-bottom: 1px solid var(--border);
+	}
+	.th {
+		font-family: 'Geist', monospace;
+		font-size: 0.62rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		color: var(--text-muted);
+		display: flex;
+		align-items: center;
+	}
+	.th-check {
+		justify-content: center;
+	}
+	.th-firma {
+		justify-content: center;
+	}
+
+	.table-body {
+		display: flex;
+		flex-direction: column;
+	}
+	.tr {
+		display: grid;
+		grid-template-columns: 40px 1.6fr 1fr 1.4fr 1fr 1.4fr 1.4fr 130px;
+		gap: 0.85rem;
+		padding: 0.75rem 1rem;
+		border-bottom: 1px solid var(--border);
+		transition: background-color 0.15s var(--ease);
+		align-items: center;
+	}
+	.tr:last-child {
+		border-bottom: none;
+	}
+	.tr:hover {
+		background: rgba(249, 115, 22, 0.04);
+	}
+	.tr-selected {
+		background: var(--accent-bg);
+	}
+	.td {
+		display: flex;
+		align-items: center;
+		min-width: 0;
+		font-size: 0.85rem;
+	}
+	.td-check {
+		justify-content: center;
+	}
+	.td-firma {
+		justify-content: center;
+	}
+	.cell-strong {
+		font-weight: 500;
+		color: var(--text-primary);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.cell-soft {
+		color: var(--text-secondary);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.comite-cell {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+		min-width: 0;
+	}
+	.comite-name {
+		font-size: 0.72rem;
+		color: var(--text-muted);
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	/* ═══ Checkbox ═══ */
+	.checkbox {
+		width: 16px;
+		height: 16px;
+		appearance: none;
+		-webkit-appearance: none;
+		margin: 0;
+		border: 1.5px solid rgba(0, 0, 0, 0.24);
+		border-radius: 4px;
+		background: #fff;
+		cursor: pointer;
+		transition: all 0.2s var(--ease);
+		position: relative;
+		flex-shrink: 0;
+	}
+	.checkbox:hover:not(:disabled) {
+		border-color: var(--accent);
+	}
+	.checkbox:checked {
+		background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+		border-color: transparent;
+	}
+	.checkbox:checked::after {
+		content: '';
+		position: absolute;
+		top: 1px;
+		left: 4px;
+		width: 5px;
+		height: 9px;
+		border: solid #fff;
+		border-width: 0 2px 2px 0;
+		transform: rotate(45deg);
+	}
+
+	/* ═══ Firma thumb ═══ */
+	.firma-thumb {
+		width: 110px;
+		height: 50px;
+		padding: 4px;
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		cursor: pointer;
+		overflow: hidden;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		transition: all 0.2s var(--ease);
+	}
+	.firma-thumb:hover {
+		border-color: rgba(249, 115, 22, 0.3);
+		background: var(--surface);
+		box-shadow: 0 4px 12px rgba(249, 115, 22, 0.1);
+	}
+	.firma-thumb img {
+		max-width: 100%;
+		max-height: 100%;
+		object-fit: contain;
+		display: block;
+	}
+	.firma-thumb--lg {
+		width: 80px;
+		height: 56px;
+	}
+
+	/* ═══ Empty state ═══ */
+	.empty-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.6rem;
+		padding: 4rem 1.5rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 20px;
+		text-align: center;
+		box-shadow: var(--shadow-soft);
+	}
+	.empty-icon {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 56px;
+		height: 56px;
+		border-radius: 50%;
+		background: var(--accent-bg);
+		color: var(--accent);
+		margin-bottom: 0.3rem;
+	}
+	.empty-icon svg {
+		width: 26px;
+		height: 26px;
+	}
+	.empty-title {
+		font-family: 'Geist', Georgia, serif;
+		font-size: 1.1rem;
+		font-weight: 500;
+		color: var(--text-primary);
+		margin: 0;
+	}
+	.empty-sub {
+		font-size: 0.85rem;
+		color: var(--text-muted);
+		margin: 0;
+		max-width: 360px;
+	}
+
+	/* ═══ Mobile cards ═══ */
+	.m-cards {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+	@media (min-width: 1024px) {
+		.m-cards {
+			display: none;
+		}
+	}
+	.m-card {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 16px;
+		padding: 0.95rem 1rem;
+		box-shadow: var(--shadow-soft);
+		display: flex;
+		flex-direction: column;
+		gap: 0.85rem;
+		transition: all 0.2s var(--ease);
+	}
+	.m-card-selected {
+		border-color: rgba(249, 115, 22, 0.3);
+		background: rgba(249, 115, 22, 0.03);
+	}
+	.m-card-head {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+	.m-card-left {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.6rem;
+		flex: 1;
+		min-width: 0;
+	}
+	.m-card-left .checkbox {
+		margin-top: 0.2rem;
+	}
+	.m-card-name-wrap {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+	.m-card-name {
+		font-size: 0.92rem;
+		font-weight: 600;
+		color: var(--text-primary);
+		margin: 0;
+		letter-spacing: -0.005em;
+	}
+	.m-card-date {
+		font-family: 'Geist', monospace;
+		font-size: 0.7rem;
+		color: var(--text-muted);
+		margin-top: 0.15rem;
+	}
+	.m-card-dl {
+		margin: 0;
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.6rem;
+		padding-top: 0.75rem;
+		border-top: 1px solid var(--border);
+	}
+	.m-card-dl > div {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+	}
+	.m-card-dl .full-row {
+		grid-column: 1 / -1;
+	}
+	.m-card-dl dt {
+		font-family: 'Geist', monospace;
+		font-size: 0.6rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		color: var(--text-muted);
+	}
+	.m-card-dl dd {
+		font-size: 0.85rem;
+		color: var(--text-primary);
+		margin: 0;
+	}
+
+	/* ═══ Modals ═══ */
+	.modal-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 50;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 1rem;
+		background: rgba(15, 31, 26, 0.55);
+		backdrop-filter: blur(8px);
+		-webkit-backdrop-filter: blur(8px);
+	}
+	.modal {
+		width: 100%;
+		max-width: 440px;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 20px;
+		padding: 1.5rem 1.5rem 1.25rem;
+		box-shadow: 0 24px 64px rgba(15, 31, 26, 0.3);
+	}
+	.modal--lg {
+		max-width: 720px;
+	}
+	.modal-head {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		margin-bottom: 0.85rem;
+	}
+	.modal-head > div:first-child {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+	.modal-icon {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 44px;
+		height: 44px;
+		border-radius: 50%;
+		background: rgba(220, 38, 38, 0.08);
+		color: #b91c1c;
+		flex-shrink: 0;
+	}
+	.modal-icon svg {
+		width: 22px;
+		height: 22px;
+	}
+	.modal-title {
+		font-family: 'Geist', Georgia, serif;
+		font-size: 1.1rem;
+		font-weight: 500;
+		color: var(--text-primary);
+		margin: 0;
+	}
+	.modal-sub {
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		margin: 0.1rem 0 0;
+	}
+	.modal-body {
+		font-size: 0.85rem;
+		color: var(--text-secondary);
+		line-height: 1.55;
+		margin: 0 0 1.25rem;
+	}
+	.text-danger {
+		color: #b91c1c;
+		font-weight: 700;
+	}
+	.modal-actions {
+		display: flex;
+		justify-content: flex-end;
+		gap: 0.6rem;
+	}
+	.modal-close {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		background: transparent;
+		border: 1px solid var(--border-default);
+		border-radius: 8px;
+		color: var(--text-secondary);
+		cursor: pointer;
+		transition: all 0.2s var(--ease);
+	}
+	.modal-close:hover {
+		background: var(--bg);
+		color: var(--text-primary);
+	}
+	.modal-close svg {
+		width: 14px;
+		height: 14px;
+	}
+
+	.firma-frame {
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: 12px;
+		padding: 1rem;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+	.firma-frame img {
+		max-width: 100%;
+		max-height: 60vh;
+		object-fit: contain;
+		display: block;
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	@media (max-width: 640px) {
+		.page-header-inner {
+			padding: 0.85rem 1rem;
+		}
+		.page-body {
+			padding: 1rem 1rem 2rem;
+		}
+		.page-title {
+			font-size: 1.15rem;
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.tr,
+		.btn-primary,
+		.btn-secondary,
+		.btn-danger,
+		.checkbox,
+		.firma-thumb,
+		.back-btn {
+			transition: none !important;
+		}
+		.tr {
+			animation: none !important;
+		}
+	}
+</style>

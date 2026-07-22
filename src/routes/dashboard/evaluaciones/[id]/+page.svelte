@@ -269,6 +269,80 @@
 			toast.error(error.message || 'Error al generar el PDF');
 		}
 	}
+
+	async function exportarPDFIndividual(resultadoId: string) {
+		if (!resultados.length) {
+			toast.error('No hay resultado para exportar');
+			return;
+		}
+
+		try {
+			toast.loading('Generando PDF...');
+			const response = await fetch(
+				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}/resultados/${resultadoId}/exportar-pdf`
+			);
+
+			if (!response.ok) {
+				throw new Error('Error al generar el PDF');
+			}
+
+			const blob = await response.blob();
+			const url = window.URL.createObjectURL(blob);
+			const link = document.createElement('a');
+			link.href = url;
+			link.setAttribute(
+				'download',
+				`evaluacion_${evaluacion?.titulo?.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.pdf`
+			);
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+			window.URL.revokeObjectURL(url);
+
+			toast.dismiss();
+			toast.success('PDF generado exitosamente');
+		} catch (error: any) {
+			toast.dismiss();
+			toast.error(error.message || 'Error al generar el PDF');
+		}
+	}
+
+	async function exportarPDFTodos() {
+		if (!resultados.length) {
+			toast.error('No hay resultados para exportar');
+			return;
+		}
+
+		try {
+			toast.loading('Generando PDF...');
+			const response = await fetch(
+				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}/exportar-zip`
+			);
+
+			if (!response.ok) {
+				throw new Error('Error al generar el PDF');
+			}
+
+			const blob = await response.blob();
+			const url = window.URL.createObjectURL(blob);
+			const link = document.createElement('a');
+			link.href = url;
+			link.setAttribute(
+				'download',
+				`evaluacion_${evaluacion?.titulo?.replace(/[^a-zA-Z0-9]/g, '_')}_${Date.now()}.zip`
+			);
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+			window.URL.revokeObjectURL(url);
+
+			toast.dismiss();
+			toast.success('PDFs generados exitosamente');
+		} catch (error: any) {
+			toast.dismiss();
+			toast.error(error.message || 'Error al generar los PDFs');
+		}
+	}
 </script>
 
 <svelte:head>
@@ -282,6 +356,7 @@
 			<button
 				on:click={() => goto('/dashboard/evaluaciones')}
 				class="apple-transition rounded-lg bg-gray-200 p-2 text-gray-700 hover:bg-gray-300"
+				aria-label="Volver a evaluaciones"
 			>
 				<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path
@@ -299,65 +374,67 @@
 		</div>
 
 		{#if evaluacion}
-			<div class="flex gap-2">
-				<button
-					on:click={exportarPDF}
-					class="apple-transition rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600"
-					title="Exportar resultados a PDF"
-				>
-					<svg class="mr-2 inline h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-						/>
-					</svg>
-					Exportar PDF
-				</button>
-				<button
-					on:click={() => goto(`/dashboard/evaluaciones/${evaluacionId}/editar`)}
-					class="apple-transition rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600"
-				>
-					<svg class="mr-2 inline h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-						/>
-					</svg>
-					Editar
-				</button>
-				<button
-					on:click={generarEnlacePublico}
-					class="apple-transition rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-600"
-				>
-					<svg class="mr-2 inline h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-						/>
-					</svg>
-					Copiar Enlace Público
-				</button>
-				<button
-					on:click={eliminarEvaluacion}
-					class="apple-transition rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600"
-				>
-					<svg class="mr-2 inline h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-						/>
-					</svg>
-					Eliminar
-				</button>
-			</div>
+			<div class="flex flex-wrap gap-1.5">
+  <button
+    on:click={exportarPDF}
+    class="apple-transition inline-flex items-center gap-1.5 rounded-md bg-red-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600"
+    title="Exportar resultados a PDF"
+  >
+    <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+        d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+    </svg>
+    <span class="hidden sm:inline">PDF</span>
+  </button>
+
+  <button
+    on:click={exportarPDFTodos}
+    class="apple-transition inline-flex items-center gap-1.5 rounded-md bg-red-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600"
+    title="Exportar todos los resultados"
+  >
+    <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+        d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+    </svg>
+    <span class="hidden sm:inline">Exportar todo</span>
+  </button>
+
+  <button
+    on:click={() => goto(`/dashboard/evaluaciones/${evaluacionId}/editar`)}
+    class="apple-transition inline-flex items-center gap-1.5 rounded-md bg-orange-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-600"
+    title="Editar evaluación"
+  >
+    <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+        d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+    </svg>
+    <span class="hidden sm:inline">Editar</span>
+  </button>
+
+  <button
+    on:click={generarEnlacePublico}
+    class="apple-transition inline-flex items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-600"
+    title="Copiar enlace público"
+  >
+    <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+        d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
+    </svg>
+    <span class="hidden sm:inline">Enlace</span>
+  </button>
+
+  <button
+    on:click={eliminarEvaluacion}
+    class="apple-transition inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50"
+    title="Eliminar evaluación"
+  >
+    <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+    </svg>
+    <span class="hidden sm:inline">Eliminar</span>
+  </button>
+</div>
 		{/if}
 	</div>
 
@@ -599,6 +676,12 @@
 									>
 										Ver Detalles
 									</button>
+									<button
+										on:click={() => exportarPDFIndividual(resultado.id)}
+										class="mt-2 w-full rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-600"
+									>
+										Exportar PDF
+									</button>
 								</div>
 							{/each}
 						</div>
@@ -619,32 +702,37 @@
 {#if showModalDetalle && resultadoSeleccionado && evaluacion}
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+		role="button"
+		tabindex="0"
 		on:click={cerrarModalDetalle}
+		on:keydown={(e) => e.key === 'Escape' && cerrarModalDetalle()}
 		transition:fade
 	>
 		<div
 			class="max-h-[35rem] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
+			role="dialog"
+			aria-modal="true"
+			tabindex="-1"
 			on:click|stopPropagation
+			on:keydown|stopPropagation
 			transition:fly={{ y: 50, duration: 300 }}
 		>
 			<!-- Header -->
-			<div class="sticky top-0 z-10 bg-gradient-to-r from-orange-500 to-amber-600 px-6 py-6">
+			<div class="sticky top-0 z-10 bg-gradient-to-r from-orange-500 to-teal-600 px-6 py-6">
 				<div class="flex items-start justify-between">
 					<div class="flex-1">
-						<h2 class="mb-2 text-2xl font-bold text-white">
-							{resultadoSeleccionado.nombre_completo}
-						</h2>
-						<div class="flex flex-wrap gap-2 text-sm text-orange-50">
+					<h2 class="mb-2 text-2xl font-bold text-white">
+						{resultadoSeleccionado.nombre_completo}
+					</h2>
+					<div class="flex flex-wrap gap-2 text-sm text-orange-50">
 							<span>{resultadoSeleccionado.cargo}</span>
-							<span>•</span>
-							<span>{resultadoSeleccionado.numero_documento}</span>
-							<span>•</span>
-							<span>{formatDate(resultadoSeleccionado.created_at)}</span>
 						</div>
 					</div>
 					<button
 						on:click={cerrarModalDetalle}
 						class="rounded-lg bg-white/20 p-2 text-white backdrop-blur-sm transition-colors hover:bg-white/30"
+						aria-label="Cerrar modal"
+					>
 					>
 						<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
@@ -663,7 +751,7 @@
 				<!-- Columna Izquierda: Info General -->
 				<div class="space-y-4 lg:col-span-1">
 					<!-- Puntaje -->
-					<div class="rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50 to-amber-50 p-6 text-center">
+					<div class="rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50 to-teal-50 p-6 text-center">
 						<div class="mb-2 inline-flex h-16 w-16 items-center justify-center rounded-full bg-orange-100">
 							<svg class="h-8 w-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -683,7 +771,7 @@
 					</div>
 				</div>					<!-- Información de Contacto -->
 					<div class="overflow-hidden rounded-xl border border-gray-200 bg-white">
-						<div class="bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-3">
+						<div class="bg-gradient-to-r from-orange-500 to-teal-500 px-4 py-3">
 							<h3 class="flex items-center gap-2 text-lg font-bold text-white">
 								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
@@ -710,7 +798,7 @@
 					<!-- Firma -->
 					{#if resultadoSeleccionado.firma}
 						<div class="overflow-hidden rounded-xl border border-gray-200 bg-white">
-							<div class="bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-3">
+							<div class="bg-gradient-to-r from-orange-500 to-teal-500 px-4 py-3">
 								<h3 class="flex items-center gap-2 text-lg font-bold text-white">
 									<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -728,7 +816,7 @@
 				<!-- Columna Derecha: Respuestas Detalladas -->
 				<div class="lg:col-span-2">
 					<div class="overflow-hidden rounded-xl border border-gray-200 bg-white">
-						<div class="bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-4">
+						<div class="bg-gradient-to-r from-orange-500 to-teal-500 px-6 py-4">
 							<h3 class="flex items-center gap-2 text-lg font-bold text-white">
 								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -751,7 +839,7 @@
 													<span class="rounded-full px-2 py-1 text-xs font-semibold {getTipoColor(respuesta.pregunta.tipo)}">
 														{getTipoLabel(respuesta.pregunta.tipo)}
 													</span>
-													<span class="rounded-full {respuesta.puntaje === respuesta.pregunta.puntaje ? 'bg-green-100 text-green-800' : respuesta.puntaje > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'} px-2 py-1 text-xs font-semibold">
+													<span class="rounded-full {respuesta.puntaje === respuesta.pregunta.puntaje ? 'bg-orange-100 text-orange-800' : respuesta.puntaje > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'} px-2 py-1 text-xs font-semibold">
 														{respuesta.puntaje} / {respuesta.pregunta.puntaje} pts
 													</span>
 												</div>
@@ -792,9 +880,9 @@
 												{@const esCorrectoVF = typeof respuestaUsuario === 'number' && respuestaCorrectaVF !== null && respuestaCorrectaVF !== undefined && respuestaUsuario === respuestaCorrectaVF}
 												{#if typeof respuestaUsuario === 'number'}
 													<div class="flex items-center gap-3">
-														<div class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold {esCorrectoVF ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+														<div class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold {esCorrectoVF ? 'bg-orange-100 text-orange-800' : 'bg-red-100 text-red-800'}">
 															{#if esCorrectoVF}
-																<svg class="h-5 w-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+																<svg class="h-5 w-5 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
 																	<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
 																</svg>
 															{:else}
@@ -806,7 +894,7 @@
 														</div>
 														{#if !esCorrectoVF && respuestaCorrectaVF !== null && respuestaCorrectaVF !== undefined}
 															<span class="text-xs text-gray-500">
-																Respuesta correcta: <span class="font-semibold text-green-700">{respuestaCorrectaVF === 1 ? 'Verdadero' : 'Falso'}</span>
+																Respuesta correcta: <span class="font-semibold text-orange-700">{respuestaCorrectaVF === 1 ? 'Verdadero' : 'Falso'}</span>
 															</span>
 														{/if}
 													</div>
@@ -823,7 +911,7 @@
 															{#if fueSeleccionada}
 																<div class="flex items-center gap-2 text-sm">
 																	{#if opcion.esCorrecta}
-																		<svg class="h-4 w-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+																		<svg class="h-4 w-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
 																			<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
 																		</svg>
 																	{:else}
@@ -831,7 +919,7 @@
 																			<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
 																		</svg>
 																	{/if}
-																	<span class:text-green-700={opcion.esCorrecta} class:font-semibold={opcion.esCorrecta} class:text-red-700={!opcion.esCorrecta}>
+																	<span class:text-orange-700={opcion.esCorrecta} class:font-semibold={opcion.esCorrecta} class:text-red-700={!opcion.esCorrecta}>
 																		{opcion.texto}
 																	</span>
 																</div>

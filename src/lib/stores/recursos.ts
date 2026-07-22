@@ -6,6 +6,8 @@ interface Conductor {
 	id: string;
 	nombre: string;
 	apellido: string;
+	telefono?: string;
+	tipo_identificacion?: string;
 	numero_identificacion?: string;
 }
 
@@ -115,7 +117,7 @@ export const recursos = {
 
 		try {
 			const response = await apiClient.get('/api/servicios/filtros/conductores');
-
+			console.log(response)
 			// Extraer datos de la respuesta
 			let conductoresData: Conductor[] = [];
 			if (Array.isArray(response.data)) {
@@ -320,25 +322,116 @@ export const recursos = {
 
 // Derived stores para opciones de svelte-select
 export const conductoresOptions = derived(recursosStore, ($recursos) => {
-	return $recursos.conductores.map((c) => ({
-		value: c.id,
-		label: `${c.nombre || ''} ${c.apellido || ''}`.trim() || `Conductor ${c.id}`
-	}));
+	return $recursos.conductores.map((c) => {
+		const nombre = c.nombre?.trim() || '';
+		const apellido = c.apellido?.trim() || '';
+		const telefono = c.telefono?.trim() || '';
+		const tipoDoc = c.tipo_identificacion?.trim().toUpperCase() || '';
+		const numeroDoc = c.numero_identificacion?.trim() || '';
+
+		const docLabel = tipoDoc && numeroDoc
+			? `${tipoDoc} ${numeroDoc}`
+			: tipoDoc
+				? `${tipoDoc} sin número`
+				: numeroDoc
+					? `Doc. ${numeroDoc}`
+					: '';
+
+		let labelPrincipal: string;
+		let labelSecundario: string;
+
+		if (nombre || apellido) {
+			labelPrincipal = `${nombre} ${apellido}`.trim();
+			if (docLabel) {
+				labelSecundario = docLabel;
+			} else if (telefono) {
+				labelSecundario = `Tel. ${telefono}`;
+			} else {
+				labelSecundario = 'Sin identificación';
+			}
+		} else if (docLabel) {
+			labelPrincipal = docLabel;
+			labelSecundario = telefono
+				? `Tel. ${telefono} · Conductor sin nombre`
+				: 'Conductor sin nombre';
+		} else if (telefono) {
+			labelPrincipal = `Tel. ${telefono}`;
+			labelSecundario = 'Conductor sin nombre';
+		} else {
+			labelPrincipal = `Conductor ${c.id.slice(0, 8)}`;
+			labelSecundario = 'Sin datos';
+		}
+
+		return {
+			value: c.id,
+			label: labelPrincipal,
+			labelSecundario,
+			searchLabel: `${labelPrincipal} ${labelSecundario}`.toLowerCase()
+		};
+	});
 });
 
 export const vehiculosOptions = derived(recursosStore, ($recursos) =>
-	$recursos.vehiculos.map((v) => ({
-		value: v.id,
-		label:
-			`${v.placa || 'Sin placa'}${v.marca ? ' - ' + v.marca : ''}${v.modelo ? ' ' + v.modelo : ''}`.trim()
-	}))
+	$recursos.vehiculos.map((v) => {
+		const placa = v.placa?.trim() || '';
+		const marca = v.marca?.trim() || '';
+		const modelo = v.modelo?.trim() || '';
+		const linea = v.linea?.trim() || '';
+
+		const detalle = [marca, modelo, linea].filter(Boolean).join(' ').trim();
+
+		let labelPrincipal: string;
+		let labelSecundario: string;
+
+		if (placa) {
+			labelPrincipal = placa;
+			labelSecundario = detalle || 'Vehículo sin detalles';
+		} else if (detalle) {
+			labelPrincipal = detalle;
+			labelSecundario = 'Sin placa';
+		} else {
+			labelPrincipal = `Vehículo ${v.id.slice(0, 8)}`;
+			labelSecundario = 'Sin datos';
+		}
+
+		return {
+			value: v.id,
+			label: labelPrincipal,
+			labelSecundario,
+			searchLabel: `${labelPrincipal} ${labelSecundario}`.toLowerCase()
+		};
+	})
 );
 
 export const clientesOptions = derived(recursosStore, ($recursos) =>
-	$recursos.clientes.map((c) => ({
-		value: c.id,
-		label: c.nombre || `Cliente ${c.id}`
-	}))
+	$recursos.clientes.map((c) => {
+		const nombre = c.nombre?.trim() || '';
+		const nit = c.nit?.trim() || '';
+
+		let labelPrincipal: string;
+		let labelSecundario: string;
+
+		if (nombre && nit) {
+			labelPrincipal = nombre;
+			labelSecundario = `NIT ${nit}`;
+		} else if (nombre) {
+			labelPrincipal = nombre;
+			labelSecundario = 'Sin NIT';
+		} else if (nit) {
+			labelPrincipal = `NIT ${nit}`;
+			labelSecundario = 'Cliente sin nombre';
+		} else {
+			labelPrincipal = `Cliente ${c.id.slice(0, 8)}`;
+			labelSecundario = 'Sin datos';
+		}
+
+		return {
+			value: c.id,
+			label: labelPrincipal,
+			labelSecundario,
+			searchLabel: `${labelPrincipal} ${labelSecundario}`.toLowerCase()
+		};
+	})
 );
 
 export const municipiosOptions = derived(recursosStore, ($recursos) =>

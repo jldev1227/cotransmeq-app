@@ -186,7 +186,7 @@
 </script>
 
 <svelte:head>
-	<title>Mi Perfil - Transmeralda</title>
+	<title>Mi Perfil - Cotransmeq</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50 p-4 lg:p-6">
@@ -199,7 +199,7 @@
 	{#if loading}
 		<div class="flex items-center justify-center py-20">
 			<div class="text-center">
-				<div class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-emerald-200 border-t-emerald-600"></div>
+				<div class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-orange-200 border-t-orange-600"></div>
 				<p class="text-sm text-gray-500">Cargando perfil...</p>
 			</div>
 		</div>
@@ -209,9 +209,9 @@
 			<!-- Card: Info del usuario -->
 			<div class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
 				<!-- Banner -->
-				<div class="relative h-32 bg-gradient-to-r from-emerald-500 to-emerald-700">
+				<div class="relative h-32 bg-gradient-to-r from-orange-500 to-orange-700">
 					<div class="absolute -bottom-12 left-6">
-						<div class="flex h-24 w-24 items-center justify-center rounded-2xl border-4 border-white bg-gradient-to-br from-emerald-400 to-emerald-600 text-3xl font-bold text-white shadow-lg">
+						<div class="flex h-24 w-24 items-center justify-center rounded-2xl border-4 border-white bg-gradient-to-br from-orange-400 to-orange-600 text-3xl font-bold text-white shadow-lg">
 							{user.nombre.charAt(0).toUpperCase()}
 						</div>
 					</div>
@@ -225,7 +225,7 @@
 							<div class="mt-2 flex flex-wrap gap-2">
 								{#if user.area && Array.isArray(user.area) && user.area.length > 0}
 									{#each user.area as a}
-										<span class="inline-flex rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+										<span class="inline-flex rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700">
 											{AREA_LABELS[a as Area] || a}
 										</span>
 									{/each}
@@ -247,7 +247,7 @@
 										Cancelar
 									</button>
 									<button
-										class="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+										class="flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
 										disabled={savingProfile}
 										on:click={saveProfile}
 									>
@@ -280,7 +280,7 @@
 									type="tel"
 									bind:value={editTelefono}
 									placeholder="Ej: 3001234567"
-									class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-900 focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 focus:outline-none"
+									class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-900 focus:border-orange-400 focus:ring-2 focus:ring-orange-100 focus:outline-none"
 								/>
 							{:else}
 								<p class="mt-1 text-sm font-medium text-gray-900">{user.telefono || 'No registrado'}</p>
@@ -352,16 +352,16 @@
 			<div class="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm" in:fly={{ y: 20, duration: 400, delay: 100 }}>
 				<div class="mb-4 flex items-center justify-between">
 					<h3 class="flex items-center gap-2 text-lg font-semibold text-gray-900">
-						<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100">
-							<svg class="h-4 w-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<div class="flex h-8 w-8 items-center justify-center rounded-lg bg-orange-100">
+							<svg class="h-4 w-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
 							</svg>
 						</div>
 						Sesión Actual
 					</h3>
 					{#if sesion}
-						<span class="inline-flex items-center gap-1.5 rounded-full bg-green-100 px-3 py-1 text-xs font-semibold text-green-700">
-							<span class="h-2 w-2 animate-pulse rounded-full bg-green-500"></span>
+						<span class="inline-flex items-center gap-1.5 rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700">
+							<span class="h-2 w-2 animate-pulse rounded-full bg-orange-500"></span>
 							Activa
 						</span>
 					{:else}
@@ -449,7 +449,7 @@
 
 				{#if !showPasswordForm}
 					<button
-						class="flex items-center gap-3 rounded-xl border border-gray-200 px-5 py-3 text-sm font-medium text-gray-700 transition-colors hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-700"
+						class="flex items-center gap-3 rounded-xl border border-gray-200 px-5 py-3 text-sm font-medium text-gray-700 transition-colors hover:border-orange-200 hover:bg-orange-50 hover:text-orange-700"
 						on:click={() => (showPasswordForm = true)}
 					>
 						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -468,7 +468,7 @@
 									type={showCurrentPw ? 'text' : 'password'}
 									bind:value={currentPassword}
 									placeholder="Ingresa tu contraseña actual"
-									class="w-full rounded-xl border border-gray-300 px-4 py-2.5 pr-10 text-sm focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 focus:outline-none"
+									class="w-full rounded-xl border border-gray-300 px-4 py-2.5 pr-10 text-sm focus:border-orange-400 focus:ring-2 focus:ring-orange-100 focus:outline-none"
 								/>
 								<button
 									type="button"
@@ -493,7 +493,7 @@
 									type={showNewPw ? 'text' : 'password'}
 									bind:value={newPassword}
 									placeholder="Mínimo 6 caracteres"
-									class="w-full rounded-xl border border-gray-300 px-4 py-2.5 pr-10 text-sm focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 focus:outline-none"
+									class="w-full rounded-xl border border-gray-300 px-4 py-2.5 pr-10 text-sm focus:border-orange-400 focus:ring-2 focus:ring-orange-100 focus:outline-none"
 								/>
 								<button
 									type="button"
@@ -517,7 +517,7 @@
 								type="password"
 								bind:value={confirmPassword}
 								placeholder="Repite la nueva contraseña"
-								class="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 focus:outline-none
+								class="w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:border-orange-400 focus:ring-2 focus:ring-orange-100 focus:outline-none
 									{confirmPassword && confirmPassword !== newPassword ? 'border-red-300 focus:border-red-400 focus:ring-red-100' : ''}"
 							/>
 							{#if confirmPassword && confirmPassword !== newPassword}
@@ -539,7 +539,7 @@
 								Cancelar
 							</button>
 							<button
-								class="flex items-center gap-2 rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+								class="flex items-center gap-2 rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-orange-700 disabled:opacity-50"
 								disabled={savingPassword || !currentPassword || !newPassword || newPassword !== confirmPassword}
 								on:click={handleChangePassword}
 							>

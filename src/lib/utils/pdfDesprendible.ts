@@ -1,6 +1,6 @@
 /**
  * Generador de PDF Desprendible de Nómina usando pdfmake
- * COTRANSMEQ - Replicado de Transmeralda con branding Cotransmeq
+ * COTRANSMEQ - Replicado de Cotransmeq con branding Cotransmeq
  */
 import type { Liquidacion, FirmaConUrl } from '$lib/types/nomina';
 import { obtenerLogoBase64 } from '$lib/utils/pdfUtils';

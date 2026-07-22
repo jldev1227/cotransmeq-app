@@ -14,9 +14,11 @@
 	let mesAño: { mes: number; año: number } | null = null;
 	let archivoExistente: string | null = null;
 	let selectedTab = 'detalles';
+
+	// Info del servicio asociado
 	let servicioInfo: {
-		origen: any;
-		destino: any;
+		origen: { id: string; codigo_municipio: number; nombre_municipio: string; nombre_departamento: string } | null;
+		destino: { id: string; codigo_municipio: number; nombre_municipio: string; nombre_departamento: string } | null;
 		origen_especifico: string;
 		destino_especifico: string;
 		proposito_servicio: string;
@@ -123,45 +125,45 @@
 				// Mapear los datos de la API al formato esperado por el modal
 				recargo = {
 					...recargoData,
-					año: recargoData.a_o, // Mapear a_o -> año
-					conductor: recargoData.conductores, // Mapear conductores -> conductor
-					vehiculo: recargoData.vehiculos, // Mapear vehiculos -> vehiculo
-					empresa: recargoData.clientes, // Mapear clientes -> empresa
-					dias_laborales: diasMapeados,
-					total_horas: parseFloat(recargoData.total_horas_trabajadas || '0'),
-					total_dias: recargoData.total_dias_laborados || 0,
-					// Mapear información de auditoría con valores por defecto seguros
-					auditoria: {
-						version: recargoData.version || 1,
-						creado_por: recargoData.users_recargos_planillas_creado_por_idTousers || {
-							nombre: 'Sistema',
-							apellido: '',
-							email: 'sistema@cotransmeq.com'
-						},
-						actualizado_por: recargoData.users_recargos_planillas_actualizado_por_idTousers || null,
-						created_at: recargoData.created_at,
-						updated_at: recargoData.updated_at
+					año: (recargoData as any).a_o || recargoData.año, // Mapear a_o -> año
+					conductor: recargoData.conductor, // Ya tiene el nombre correcto
+					vehiculo: recargoData.vehiculo, // Mapear vehiculo -> vehiculo
+					empresa: (recargoData as any).clientes || (recargoData as any).cliente || {}, // Mapear clientes/cliente -> empresa
+				dias_laborales: diasMapeados,
+				total_horas: parseFloat(String(recargoData.total_horas_trabajadas || '0')),
+				total_dias: (recargoData as any).total_dias_laborados || 0,
+				// Mapear información de auditoría
+				auditoria: {
+					version: recargoData.version || 1,
+					creado_por: (recargoData as any).users_recargos_planillas_creado_por_idTousers || {
+						nombre: 'Sistema',
+						apellido: '',
+						email: 'sistema@cotransmeq.com'
 					},
-					historial: [] // TODO: Obtener historial de cambios
+					actualizado_por: (recargoData as any).users_recargos_planillas_actualizado_por_idTousers || null,
+					created_at: recargoData.created_at,
+					updated_at: recargoData.updated_at
+				},
+				historial: [] // TODO: Obtener historial de cambios
 				} as any;
 
-				mesAño = { mes: recargoData.mes, año: recargoData.a_o };
-
 				// Extraer info del servicio si existe
-				const servicioData = (recargoData as any).servicio;
-				if (servicioData) {
+				if (recargoData.servicio_id && (recargoData as any).servicio) {
+					const svc = (recargoData as any).servicio;
 					servicioInfo = {
-						origen: servicioData.municipios_servicio_origen_idTomunicipios || null,
-						destino: servicioData.municipios_servicio_destino_idTomunicipios || null,
-						origen_especifico: servicioData.origen_especifico || '',
-						destino_especifico: servicioData.destino_especifico || '',
-						proposito_servicio: servicioData.proposito_servicio || '',
-						observaciones: servicioData.observaciones || '',
-						fecha_solicitud: servicioData.fecha_solicitud || ''
+						origen: svc.municipios_servicio_origen_idTomunicipios || null,
+						destino: svc.municipios_servicio_destino_idTomunicipios || null,
+						origen_especifico: svc.origen_especifico || '',
+						destino_especifico: svc.destino_especifico || '',
+						proposito_servicio: svc.proposito_servicio || '',
+						observaciones: svc.observaciones || '',
+						fecha_solicitud: svc.fecha_solicitud || ''
 					};
 				} else {
 					servicioInfo = null;
 				}
+
+				mesAño = { mes: recargoData.mes, año: (recargoData as any).a_o || recargoData.año };
 
 				// Cargar archivo si existe
 				if (recargoData.planilla_s3key) {
@@ -249,7 +251,7 @@
 		updated_at: null
 	};
 
-	$: totales = diasLaborales.length
+	$: totales = diasLaborales.length && recargo
 		? {
 				totalHoras: recargo.total_horas || 0,
 				totalesRecargos: diasLaborales.reduce(
@@ -311,31 +313,55 @@
 </script>
 
 {#if isOpen}
-	<!-- Modal Overlay -->
-	<div
-		class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+	<!-- Backdrop con blur (paleta landing) -->
+	<button
+		type="button"
+		class="modal-overlay cursor-default"
+		style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.45), rgba(10, 20, 16, 0.6)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%); z-index: 60;"
+		aria-label="Cerrar modal"
 		on:click={handleClose}
+	></button>
+
+	<!-- Modal Container -->
+	<div
+		class="modal-overlay"
+		style="pointer-events: none; z-index: 60;"
 		on:keydown={(e) => e.key === 'Escape' && handleClose()}
-		role="button"
-		tabindex="0"
+		role="presentation"
 	>
 		<!-- Modal Content -->
 		<div
-			class="relative max-h-[67.5vh] w-full max-w-5xl overflow-hidden rounded-lg bg-white shadow-xl"
+			class="modal-content"
+			style="max-width: 64rem; max-height: 85vh; pointer-events: auto; background-color: var(--bg-surface); border: 1px solid var(--border-subtle); box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);"
 			on:click|stopPropagation
 			on:keydown|stopPropagation
 			role="dialog"
+			aria-modal="true"
 			tabindex="-1"
 		>
 			<!-- Header -->
-			<div class="border-b border-gray-100 px-6 py-4">
-				<div class="flex items-center justify-between">
-					<div>
-						<div class="flex items-center gap-2">
-							<h2 class="text-xl font-medium text-gray-900">Detalle de Recargo</h2>
+			<div
+				class="modal-header"
+				style="background: linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-base) 100%);"
+			>
+				<div class="flex items-center justify-between gap-3">
+					<div class="min-w-0 flex-1">
+						<h2
+							style="font-family: 'Geist', sans-serif; font-size: 1.5rem; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em; margin: 0;"
+						>
+							Detalle de Recargo
+						</h2>
+						<div class="mt-1 flex items-center gap-2">
+							<p
+								class="font-mono-meta inline-block rounded-md px-2 py-0.5 text-[10px]"
+								style="color: var(--emerald-500); background: rgba(249, 115, 22, 0.08); letter-spacing: 0.12em;"
+							>
+								{infoRecargo?.mesAño ?? '—'}
+							</p>
 							{#if recargo?.planilla_s3key}
 								<span
-									class="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-medium text-orange-700"
+									class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
+									style="background: rgba(249, 115, 22, 0.10); color: var(--emerald-700);"
 									title="Documento adjunto disponible"
 								>
 									<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -365,16 +391,13 @@
 								</span>
 							{/if}
 						</div>
-						{#if infoRecargo}
-							<p class="mt-0.5 text-sm text-gray-500">{infoRecargo.mesAño}</p>
-						{/if}
 					</div>
-					<div class="flex items-center gap-2">
+					<div class="flex flex-shrink-0 items-center gap-2">
 						{#if recargo?.planilla_s3key}
 							<!-- Botón Ver PDF -->
 							<button
 								on:click={visualizarPDF}
-								class="flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
+								class="btn-primary"
 								title="Visualizar PDF"
 							>
 								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -394,8 +417,8 @@
 								Ver PDF
 							</button>
 						{/if}
-						<button on:click={handleClose} class="rounded-lg p-2 text-gray-400 hover:text-gray-600">
-							<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<button on:click={handleClose} class="filter-close" aria-label="Cerrar modal">
+							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path
 									stroke-linecap="round"
 									stroke-linejoin="round"
@@ -409,12 +432,13 @@
 			</div>
 
 			<!-- Body -->
-			<div class="max-h-[calc(67.5vh-160px)] overflow-y-auto px-6 py-6">
+			<div class="modal-body" style="max-height: calc(85vh - 180px);">
 				{#if isLoadingData}
 					<div class="flex items-center justify-center py-12">
 						<div class="text-center">
 							<div
-								class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"
+								class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-t-transparent"
+								style="border-color: var(--emerald-500) var(--emerald-500) var(--emerald-500) transparent;"
 							></div>
 							<p class="text-sm text-gray-500">Cargando información...</p>
 						</div>
@@ -443,9 +467,10 @@
 					<div class="mb-6 border-b border-gray-200">
 						<div class="flex gap-4">
 							<button
-								class="border-b-2 px-4 py-2 text-sm font-medium {selectedTab === 'detalles'
-									? 'border-orange-500 text-orange-600'
+								class="border-b-2 px-4 py-2 text-sm font-medium transition-colors {selectedTab === 'detalles'
+									? 'text-orange-600'
 									: 'border-transparent text-gray-500 hover:text-gray-700'}"
+								style="border-color: {selectedTab === 'detalles' ? 'var(--emerald-500)' : 'transparent'};"
 								on:click={() => (selectedTab = 'detalles')}
 							>
 								<div class="flex items-center gap-2">
@@ -461,9 +486,10 @@
 								</div>
 							</button>
 							<button
-								class="border-b-2 px-4 py-2 text-sm font-medium {selectedTab === 'auditoria'
-									? 'border-orange-500 text-orange-600'
+								class="border-b-2 px-4 py-2 text-sm font-medium transition-colors {selectedTab === 'auditoria'
+									? 'text-orange-600'
 									: 'border-transparent text-gray-500 hover:text-gray-700'}"
+								style="border-color: {selectedTab === 'auditoria' ? 'var(--emerald-500)' : 'transparent'};"
 								on:click={() => (selectedTab = 'auditoria')}
 							>
 								<div class="flex items-center gap-2">
@@ -479,9 +505,10 @@
 								</div>
 							</button>
 							<button
-								class="border-b-2 px-4 py-2 text-sm font-medium {selectedTab === 'historial'
-									? 'border-orange-500 text-orange-600'
+								class="border-b-2 px-4 py-2 text-sm font-medium transition-colors {selectedTab === 'historial'
+									? 'text-orange-600'
 									: 'border-transparent text-gray-500 hover:text-gray-700'}"
+								style="border-color: {selectedTab === 'historial' ? 'var(--emerald-500)' : 'transparent'};"
 								on:click={() => (selectedTab = 'historial')}
 							>
 								<div class="flex items-center gap-2">
@@ -496,7 +523,8 @@
 									<span>Historial</span>
 									{#if historial.length > 0}
 										<span
-											class="ml-1 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700"
+											class="ml-1 rounded-full px-2 py-0.5 text-xs font-medium"
+											style="background: rgba(249, 115, 22, 0.10); color: var(--emerald-700);"
 										>
 											{historial.length}
 										</span>
@@ -542,12 +570,12 @@
 								</div>
 							</div>
 
-							<!-- Servicio Asociado -->
+							<!-- Información del Servicio Asociado -->
 							{#if servicioInfo}
 								<div class="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-5">
 									<div class="mb-4 flex items-center gap-3">
-										<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600">
-											<svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<div class="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600">
+											<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
 											</svg>
 										</div>
@@ -557,76 +585,64 @@
 										</div>
 									</div>
 
-									<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+									<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
 										<!-- Origen -->
-										<div class="space-y-1">
-											<div class="text-xs font-medium tracking-wide text-gray-500 uppercase">Municipio Origen</div>
+										<div class="rounded-lg bg-white/70 px-3 py-2">
+											<div class="mb-1 text-xs font-medium text-gray-500 uppercase">Origen</div>
 											{#if servicioInfo.origen}
-												<div class="rounded-lg bg-white/70 px-3 py-2">
-													<div class="font-medium text-gray-900">{servicioInfo.origen.nombre_municipio}</div>
-													<div class="flex items-center gap-2 text-xs text-gray-500">
-														<span>{servicioInfo.origen.nombre_departamento}</span>
-														<span class="inline-flex items-center rounded bg-blue-100 px-1.5 py-0.5 text-xs font-mono font-semibold text-blue-700">
-															DIVIPOLA: {servicioInfo.origen.codigo_municipio}
-														</span>
-													</div>
+												<div class="font-medium text-gray-900">{servicioInfo.origen.nombre_municipio}</div>
+												<div class="flex items-center gap-2 text-xs text-gray-500">
+													<span>{servicioInfo.origen.nombre_departamento}</span>
+													<span class="inline-flex items-center rounded bg-blue-100 px-1.5 py-0.5 font-mono font-semibold text-blue-700">
+														DIVIPOLA: {servicioInfo.origen.codigo_municipio}
+													</span>
 												</div>
+												{#if servicioInfo.origen_especifico}
+													<div class="mt-1 text-xs text-gray-600">📍 {servicioInfo.origen_especifico}</div>
+												{/if}
 											{:else}
 												<div class="text-sm text-gray-400">No disponible</div>
-											{/if}
-											{#if servicioInfo.origen_especifico}
-												<div class="text-xs text-gray-600">
-													<span class="font-medium">Dirección:</span> {servicioInfo.origen_especifico}
-												</div>
 											{/if}
 										</div>
 
 										<!-- Destino -->
-										<div class="space-y-1">
-											<div class="text-xs font-medium tracking-wide text-gray-500 uppercase">Municipio Destino</div>
+										<div class="rounded-lg bg-white/70 px-3 py-2">
+											<div class="mb-1 text-xs font-medium text-gray-500 uppercase">Destino</div>
 											{#if servicioInfo.destino}
-												<div class="rounded-lg bg-white/70 px-3 py-2">
-													<div class="font-medium text-gray-900">{servicioInfo.destino.nombre_municipio}</div>
-													<div class="flex items-center gap-2 text-xs text-gray-500">
-														<span>{servicioInfo.destino.nombre_departamento}</span>
-														<span class="inline-flex items-center rounded bg-blue-100 px-1.5 py-0.5 text-xs font-mono font-semibold text-blue-700">
-															DIVIPOLA: {servicioInfo.destino.codigo_municipio}
-														</span>
-													</div>
+												<div class="font-medium text-gray-900">{servicioInfo.destino.nombre_municipio}</div>
+												<div class="flex items-center gap-2 text-xs text-gray-500">
+													<span>{servicioInfo.destino.nombre_departamento}</span>
+													<span class="inline-flex items-center rounded bg-blue-100 px-1.5 py-0.5 font-mono font-semibold text-blue-700">
+														DIVIPOLA: {servicioInfo.destino.codigo_municipio}
+													</span>
 												</div>
+												{#if servicioInfo.destino_especifico}
+													<div class="mt-1 text-xs text-gray-600">📍 {servicioInfo.destino_especifico}</div>
+												{/if}
 											{:else}
 												<div class="text-sm text-gray-400">No disponible</div>
-											{/if}
-											{#if servicioInfo.destino_especifico}
-												<div class="text-xs text-gray-600">
-													<span class="font-medium">Dirección:</span> {servicioInfo.destino_especifico}
-												</div>
 											{/if}
 										</div>
 
 										<!-- Tipo de Servicio -->
-										<div class="space-y-1">
-											<div class="text-xs font-medium tracking-wide text-gray-500 uppercase">Tipo de Servicio</div>
-											<div class="rounded-lg bg-white/70 px-3 py-2">
-												<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {
-													servicioInfo.proposito_servicio === 'personal' ? 'bg-amber-100 text-amber-700' :
-													servicioInfo.proposito_servicio === 'personal_y_herramienta' ? 'bg-orange-100 text-orange-700' :
-													'bg-gray-100 text-gray-700'
-												}">
-													{servicioInfo.proposito_servicio === 'personal' ? '🚗 Personal' :
-													 servicioInfo.proposito_servicio === 'personal_y_herramienta' ? '� Personal y Herramienta' :
-													 servicioInfo.proposito_servicio || 'No especificado'}
-												</span>
-											</div>
+										<div class="rounded-lg bg-white/70 px-3 py-2">
+											<div class="mb-1 text-xs font-medium text-gray-500 uppercase">Tipo de Servicio</div>
+											<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {
+												servicioInfo.proposito_servicio === 'personal' ? 'bg-blue-100 text-blue-700' :
+												servicioInfo.proposito_servicio === 'personal_y_herramienta' ? 'bg-orange-100 text-orange-700' :
+												'bg-gray-100 text-gray-700'
+											}">
+												{servicioInfo.proposito_servicio === 'personal' ? '👤 Personal' :
+												 servicioInfo.proposito_servicio === 'personal_y_herramienta' ? '🛠️ Personal y Herramienta' :
+												 servicioInfo.proposito_servicio || 'No especificado'}
+											</span>
 										</div>
 
 										<!-- Observaciones -->
 										{#if servicioInfo.observaciones}
-											<div class="space-y-1 md:col-span-2">
-												<div class="text-xs font-medium tracking-wide text-gray-500 uppercase">Observaciones</div>
-												<div class="rounded-lg bg-white/70 px-3 py-2 text-sm text-gray-700">
-													{servicioInfo.observaciones}
-												</div>
+											<div class="rounded-lg bg-white/70 px-3 py-2 md:col-span-2">
+												<div class="mb-1 text-xs font-medium text-gray-500 uppercase">Observaciones</div>
+												<div class="text-sm text-gray-700">{servicioInfo.observaciones}</div>
 											</div>
 										{/if}
 									</div>
@@ -638,7 +654,7 @@
 								<div class="mb-3 text-xs tracking-wide text-gray-400 uppercase">
 									Resumen de Horas
 								</div>
-								<div class="grid grid-cols-4 gap-4 md:grid-cols-9">
+								<div class="grid grid-cols-4 gap-4 md:grid-cols-8">
 									<div class="text-center">
 										<div class="text-lg font-semibold text-gray-900">
 											{formatearHoras(totales.totalHoras)}
@@ -714,7 +730,7 @@
 											<!-- Recargos -->
 											{#if tieneRecargos}
 												<div class="space-y-1">
-													{#each [{ key: 'HED', color: 'bg-orange-50 text-orange-700', value: recargosDelDia.HED }, { key: 'HEN', color: 'bg-blue-50 text-blue-700', value: recargosDelDia.HEN }, { key: 'HEFD', color: 'bg-orange-50 text-orange-700', value: recargosDelDia.HEFD }, { key: 'HEFN', color: 'bg-indigo-50 text-indigo-700', value: recargosDelDia.HEFN }, { key: 'RNDF', color: 'bg-emerald-50 text-emerald-700', value: recargosDelDia.RNDF }, { key: 'RN', color: 'bg-purple-50 text-purple-700', value: recargosDelDia.RN }, { key: 'RD', color: 'bg-red-50 text-red-700', value: recargosDelDia.RD }] as { key, color, value }}
+													{#each [{ key: 'HED', color: 'bg-orange-50 text-orange-700', value: recargosDelDia.HED }, { key: 'HEN', color: 'bg-blue-50 text-blue-700', value: recargosDelDia.HEN }, { key: 'HEFD', color: 'bg-orange-50 text-orange-700', value: recargosDelDia.HEFD }, { key: 'HEFN', color: 'bg-purple-50 text-purple-700', value: recargosDelDia.HEFN }, { key: 'RNDF', color: 'bg-indigo-50 text-indigo-700', value: recargosDelDia.RNDF }, { key: 'RN', color: 'bg-teal-50 text-teal-700', value: recargosDelDia.RN }, { key: 'RD', color: 'bg-red-50 text-red-700', value: recargosDelDia.RD }] as { key, color, value }}
 														{#if value > 0}
 															<div
 																class="flex items-center justify-between rounded px-2 py-1 text-xs {color}"
@@ -741,14 +757,16 @@
 						{:else if selectedTab === 'auditoria'}
 							<!-- Auditoría -->
 							<div class="space-y-6">
-								<!-- Información de Creación -->
-								<div
-									class="rounded-lg border border-orange-100 bg-gradient-to-br from-orange-50 to-orange-50 p-6"
-								>
-									<div class="mb-4 flex items-center gap-3">
-										<div
-											class="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-600"
-										>
+							<!-- Información de Creación -->
+							<div
+								class="rounded-lg border p-6"
+								style="border-color: rgba(249, 115, 22, 0.18); background: linear-gradient(135deg, rgba(249, 115, 22, 0.04), rgba(22, 101, 52, 0.08));"
+							>
+								<div class="mb-4 flex items-center gap-3">
+									<div
+										class="flex h-10 w-10 items-center justify-center rounded-lg"
+										style="background: linear-gradient(135deg, #f97316, #ea580c); color: white;"
+									>
 											<svg
 												class="h-5 w-5 text-white"
 												fill="none"
@@ -795,7 +813,7 @@
 														d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
 													/>
 												</svg>
-												{formatearFecha(auditoria.created_at)}
+												{auditoria.created_at ? formatearFecha(auditoria.created_at) : 'No disponible'}
 											</div>
 										</div>
 									</div>
@@ -857,7 +875,7 @@
 															d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
 														/>
 													</svg>
-													{formatearFecha(auditoria.updated_at)}
+													{auditoria.updated_at ? formatearFecha(auditoria.updated_at) : 'No disponible'}
 												</div>
 											</div>
 										</div>
@@ -867,14 +885,15 @@
 								<!-- Información Adicional -->
 								<div class="rounded-lg bg-gray-50 p-4">
 									<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-										<div>
-											<div class="mb-1 text-xs tracking-wide text-gray-400 uppercase">Estado</div>
-											<span
-												class="inline-flex items-center rounded-full bg-orange-100 px-2 py-1 text-xs font-medium text-orange-800 uppercase"
-											>
-												{recargo.estado}
-											</span>
-										</div>
+								<div>
+									<div class="mb-1 text-xs tracking-wide text-gray-400 uppercase">Estado</div>
+									<span
+										class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium uppercase"
+										style="background: rgba(22, 101, 52, 0.10); color: var(--emerald-800);"
+									>
+										{recargo.estado}
+									</span>
+								</div>
 										<div>
 											<div class="mb-1 text-xs tracking-wide text-gray-400 uppercase">Versión</div>
 											<div class="text-sm font-semibold text-gray-900">
@@ -959,11 +978,15 @@
 															d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
 														/>
 													</svg>
-													<span class="font-medium text-gray-900">
-														{item.usuario.nombre}
-														{item.usuario.apellido}
-													</span>
-													<span class="text-gray-500">({item.usuario.email})</span>
+													{#if item.usuario}
+														<span class="font-medium text-gray-900">
+															{item.usuario.nombre}
+															{item.usuario.apellido}
+														</span>
+														<span class="text-gray-500">({item.usuario.email})</span>
+													{:else}
+														<span class="text-gray-500">Usuario no disponible</span>
+													{/if}
 												</div>
 
 												{#if item.campos_modificados && item.campos_modificados.length > 0}
@@ -1000,12 +1023,12 @@
 			</div>
 
 			<!-- Footer -->
-			<div class="border-t border-gray-100 px-6 py-4">
+			<div
+				class="modal-footer"
+				style="background-color: var(--bg-base);"
+			>
 				<div class="flex justify-end">
-					<button
-						on:click={handleClose}
-						class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
-					>
+					<button on:click={handleClose} class="btn-primary">
 						Cerrar
 					</button>
 				</div>

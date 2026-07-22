@@ -111,12 +111,11 @@
 				tipo_sangre: formData.tipo_sangre || null
 			};
 
-
-			await conductoresAPI.create(conductorData);
+			const response = await conductoresAPI.create(conductorData);
 
 			toast.success('Conductor creado exitosamente', {
 				duration: 3000,
-				style: 'background: white; color: black; border: 1px solid #10b981;'
+				style: 'background: white; color: black; border: 1px solid #f97316;'
 			});
 
 			// Redirigir a la lista después de 1.5 segundos
@@ -171,30 +170,75 @@
 	<title>Nuevo Conductor - Cotransmeq</title>
 </svelte:head>
 
-<div class="min-h-screen p-6">
-	<!-- Header -->
+<div
+	class="min-h-screen p-6"
+	style="background-color: var(--bg-base);"
+>
+	<!-- Header (page-card editorial) -->
 	<div
-		class="glass mb-6 rounded-2xl border border-gray-200/50 p-6"
+		class="page-card mb-6"
+		style="padding: 1.5rem 2rem;"
 		in:fly={{ y: -20, duration: 600, easing: quintOut }}
 	>
-		<div class="flex items-center justify-between">
-			<div>
-				<h1 class="text-3xl font-bold text-gray-900">Nuevo Conductor</h1>
-				<p class="mt-1 text-sm text-gray-600">Registra un nuevo conductor en el sistema</p>
+		<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+			<div class="flex items-center gap-3">
+				<button
+					on:click={handleCancel}
+					class="btn-icon"
+					aria-label="Volver a conductores"
+				>
+					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M15 19l-7-7 7-7"
+						/>
+					</svg>
+				</button>
+				<div
+					class="brand-gradient flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl"
+					style="box-shadow: 0 6px 16px rgba(249, 115, 22, 0.30);"
+				>
+					<svg
+						class="h-6 w-6 text-white"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+						stroke-width="1.8"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+						/>
+					</svg>
+				</div>
+				<div class="min-w-0 flex-1">
+					<p
+						class="font-mono-meta mb-1 inline-block rounded-md px-2 py-0.5 text-[10px]"
+						style="color: var(--emerald-500); background: rgba(249, 115, 22, 0.08); letter-spacing: 0.12em;"
+					>
+						NUEVO REGISTRO
+					</p>
+					<h1
+						class="font-display text-3xl"
+						style="color: var(--bg-charcoal); font-weight: 500; letter-spacing: -0.01em;"
+					>
+						Nuevo Conductor
+					</h1>
+					<p class="mt-0.5 text-sm" style="color: var(--text-muted);">
+						Registra un nuevo conductor en el sistema
+					</p>
+				</div>
 			</div>
-			<button
-				on:click={handleCancel}
-				class="apple-transition rounded-xl bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200"
-			>
-				Cancelar
-			</button>
 		</div>
 	</div>
 
-	<!-- Formulario -->
+	<!-- Formulario (table-card editorial) -->
 	<form
 		on:submit|preventDefault={handleSubmit}
-		class="glass rounded-2xl border border-gray-200/50 p-6"
+		class="table-card"
+		style="padding: 1.5rem 2rem;"
 		in:fly={{ y: 20, duration: 600, delay: 100, easing: quintOut }}
 	>
 		<!-- Información Personal -->
@@ -213,7 +257,7 @@
 						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 {errors.nombre
 							? 'border-red-500'
 							: ''}"
-						placeholder="Juan"
+						placeholder="Ej: Juan"
 					/>
 					{#if errors.nombre}
 						<p class="mt-1 text-xs text-red-600">{errors.nombre}</p>
@@ -232,7 +276,7 @@
 						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 {errors.apellido
 							? 'border-red-500'
 							: ''}"
-						placeholder="Pérez"
+						placeholder="Ej: Pérez"
 					/>
 					{#if errors.apellido}
 						<p class="mt-1 text-xs text-red-600">{errors.apellido}</p>
@@ -312,9 +356,14 @@
 						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
 					>
 						<option value="">Seleccionar...</option>
-						{#each tiposSangre as tipo}
-							<option value={tipo}>{tipo}</option>
-						{/each}
+						<option value="A_POSITIVO">A+</option>
+						<option value="A_NEGATIVO">A-</option>
+						<option value="B_POSITIVO">B+</option>
+						<option value="B_NEGATIVO">B-</option>
+						<option value="AB_POSITIVO">AB+</option>
+						<option value="AB_NEGATIVO">AB-</option>
+						<option value="O_POSITIVO">O+</option>
+						<option value="O_NEGATIVO">O-</option>
 					</select>
 				</div>
 			</div>
@@ -353,7 +402,7 @@
 						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 {errors.email
 							? 'border-red-500'
 							: ''}"
-						placeholder="conductor@ejemplo.com"
+						placeholder="Ej: juan.perez@email.com"
 					/>
 					{#if errors.email}
 						<p class="mt-1 text-xs text-red-600">{errors.email}</p>
@@ -370,7 +419,7 @@
 						type="text"
 						bind:value={formData.direccion}
 						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
-						placeholder="Calle 123 # 45-67"
+						placeholder="Ej: Calle 123 # 45-67"
 					/>
 				</div>
 			</div>
@@ -388,7 +437,7 @@
 						type="text"
 						bind:value={formData.cargo}
 						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
-						placeholder="Conductor"
+						placeholder="Ej: CONDUCTOR"
 					/>
 				</div>
 
@@ -560,18 +609,21 @@
 		</div>
 
 		<!-- Botones de acción -->
-		<div class="flex justify-end gap-3 border-t border-gray-200 pt-6">
+		<div
+			class="flex justify-end gap-3 pt-6"
+			style="border-top: 1px solid var(--border-subtle);"
+		>
 			<button
 				type="button"
 				on:click={handleCancel}
-				class="apple-transition rounded-xl bg-gray-100 px-6 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-200"
+				class="btn-secondary"
 				disabled={isSubmitting}
 			>
 				Cancelar
 			</button>
 			<button
 				type="submit"
-				class="apple-transition inline-flex items-center rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50"
+				class="btn-primary"
 				disabled={isSubmitting}
 			>
 				{#if isSubmitting}
@@ -616,3 +668,5 @@
 		transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 	}
 </style>
+le>
+

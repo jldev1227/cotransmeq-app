@@ -74,7 +74,7 @@
 						id="email"
 						bind:value={email}
 						on:keydown={handleKeydown}
-						placeholder="usuario@cotransmeq.com"
+						placeholder="usuario@transmeralda.com"
 						class="input-glow apple-transition w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white placeholder-orange-300/50 focus:border-orange-400 focus:bg-black/30"
 						required
 					/>
@@ -154,7 +154,7 @@
 			<button
 				type="submit"
 				disabled={isLoading || !email || !password}
-				class="apple-hover apple-transition orange-glow relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-3 font-semibold text-white disabled:transform-none disabled:cursor-not-allowed disabled:opacity-50"
+				class="apple-hover apple-transition emerald-glow relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-3 font-semibold text-white disabled:transform-none disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				{#if isLoading}
 					<div class="flex items-center justify-center">

@@ -8,7 +8,7 @@
 	export let icon: string = 'chart';
 	export let trend: 'up' | 'down' | 'neutral' = 'neutral';
 	export let trendValue: string = '';
-	export let color: 'orange' | 'blue' | 'purple' | 'orange' = 'orange';
+	export let color: 'emerald' | 'blue' | 'purple' | 'orange' = 'emerald';
 	export let delay: number = 0;
 
 	let isVisible = false;
@@ -34,7 +34,7 @@
 
 	function getColorClasses(colorName: string) {
 		const colorMap = {
-			orange: {
+			emerald: {
 				gradient: 'from-orange-400 to-orange-600',
 				bg: 'bg-orange-50/80',
 				text: 'text-orange-700',
@@ -59,7 +59,7 @@
 				border: 'border-orange-200/50'
 			}
 		};
-		return colorMap[colorName as keyof typeof colorMap] || colorMap.orange;
+		return colorMap[colorName as keyof typeof colorMap] || colorMap.emerald;
 	}
 
 	$: colorClasses = getColorClasses(color);

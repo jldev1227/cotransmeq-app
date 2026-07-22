@@ -108,6 +108,7 @@
 		tabindex="-1"
 	>
 		<!-- Modal content -->
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 		<div
 			class="relative w-full max-w-2xl"
 			role="document"

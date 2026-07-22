@@ -32,10 +32,9 @@ export interface DiaLaboralPlanilla {
 	total_horas: number;
 	horas_ordinarias?: number;
 	es_festivo: boolean;
-	es_domingo: boolean;
-	pernocte: boolean;
-	disponibilidad: boolean;
-	continua_siguiente_dia?: boolean;
+	es_domingo?: boolean;
+	pernocte?: boolean;
+	disponibilidad?: boolean;
 	kilometraje_inicial?: number | null;
 	kilometraje_final?: number | null;
 	observaciones?: string;
@@ -50,6 +49,7 @@ export interface RecargoPlanilla {
 	vehiculo_id: string;
 	empresa_id: string;
 	numero_planilla?: string;
+	servicio_id?: string;
 	mes: number;
 	año: number;
 	estado: 'pendiente' | 'liquidada' | 'facturada';
@@ -66,10 +66,41 @@ export interface RecargoPlanilla {
 	total_rn: number;
 	total_rd: number;
 	observaciones?: string;
+
+	// Estado del conductor
+	estado_conductor?: string;
+
+	// Condiciones de vía
+	via_trocha?: boolean;
+	via_afirmado?: boolean;
+	via_mixto?: boolean;
+	via_pavimentada?: boolean;
+
+	// Riesgos de seguridad
+	riesgo_desniveles?: boolean;
+	riesgo_deslizamientos?: boolean;
+	riesgo_sin_senalizacion?: boolean;
+	riesgo_animales?: boolean;
+	riesgo_peatones?: boolean;
+	riesgo_trafico_alto?: boolean;
+
+	// Evaluación
+	fuente_consulta?: string;
+	calificacion_servicio?: string;
+
+	// Métricas de tiempo
+	tiempo_disponibilidad_horas?: number;
+	duracion_trayecto_horas?: number;
+	numero_dias_servicio?: number;
+
+	// S3 archivo
+	planilla_s3key?: string;
+
 	creado_por_id?: string;
 	actualizado_por_id?: string;
 	version: number;
 	dias_laborales?: DiaLaboralPlanilla[];
+	dias_laborales_planillas?: DiaLaboralPlanilla[];
 	conductor?: {
 		id: string;
 		nombre: string;
@@ -112,6 +143,7 @@ export interface CanvasRecargo {
 	total_rndf: number;
 	total_rn: number;
 	total_rd: number;
+	tiene_documento?: boolean;
 	dias_laborales?: DiaLaboralPlanilla[];
 	conductor?: {
 		id: string;
@@ -127,7 +159,7 @@ export interface CanvasRecargo {
 		id: string;
 		nombre: string;
 	};
-	deleted_at?: Date;
+	deleted_at?: Date
 }
 
 export interface RecargoPlanillaFiltros {
@@ -138,6 +170,7 @@ export interface RecargoPlanillaFiltros {
 	año?: number;
 	estado?: string;
 	numero_planilla?: string;
+	eliminados?: boolean
 	page?: number;
 	limit?: number;
 }
@@ -259,14 +292,77 @@ export interface RecargoDetallado {
 
 export interface ConfiguracionSalario {
 	id: string;
-	empresa_id: string;
+	empresa_id: string | null;
+	salario_basico: number;
 	valor_hora_trabajador: number;
+	horas_mensuales_base: number;
+	vigencia_desde: string;
+	vigencia_hasta: string | null;
 	activo: boolean;
-	fecha_vigencia: Date;
-	empresa?: {
+	observaciones: string | null;
+	paga_dias_festivos: boolean;
+	porcentaje_festivos: number;
+	seguridad_social: number;
+	administracion: number;
+	prueba_antigeno_covid: number;
+	prestaciones_sociales: number;
+	sede: 'YOPAL' | 'VILLANUEVA' | 'TAURAMENA' | null;
+	creado_por_id: string | null;
+	created_at: string;
+	updated_at: string;
+	deleted_at: string | null;
+	clientes?: {
+		id: string;
+		nombre: string | null;
+		nit: string | null;
+	} | null;
+	usuarios?: {
 		id: string;
 		nombre: string;
-	};
+		correo: string;
+	} | null;
+}
+
+export interface CrearConfiguracionSalarioDTO {
+	empresa_id?: string | null;
+	salario_basico: number;
+	valor_hora_trabajador: number;
+	horas_mensuales_base?: number;
+	vigencia_desde: string;
+	vigencia_hasta?: string | null;
+	activo?: boolean;
+	observaciones?: string;
+	paga_dias_festivos?: boolean;
+	porcentaje_festivos?: number;
+	seguridad_social?: number;
+	administracion?: number;
+	prueba_antigeno_covid?: number;
+	prestaciones_sociales?: number;
+	sede?: 'YOPAL' | 'VILLANUEVA' | 'TAURAMENA' | null;
+}
+
+export interface ActualizarConfiguracionSalarioDTO {
+	empresa_id?: string | null;
+	salario_basico?: number;
+	valor_hora_trabajador?: number;
+	horas_mensuales_base?: number;
+	vigencia_desde?: string;
+	vigencia_hasta?: string | null;
+	activo?: boolean;
+	observaciones?: string;
+	paga_dias_festivos?: boolean;
+	porcentaje_festivos?: number;
+	seguridad_social?: number;
+	administracion?: number;
+	prueba_antigeno_covid?: number;
+	prestaciones_sociales?: number;
+	sede?: 'YOPAL' | 'VILLANUEVA' | 'TAURAMENA' | null;
+}
+
+export interface EmpresaDisponible {
+	id: string;
+	nombre: string | null;
+	nit: string | null;
 }
 
 export interface CrearRecargoPlanillaDTO {

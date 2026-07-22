@@ -137,6 +137,7 @@
 			on:click|stopPropagation
 			on:keydown|stopPropagation
 			role="dialog"
+			tabindex="0"
 			transition:fly={{ y: 50, duration: 300 }}
 		>
 			<!-- Header -->
@@ -148,6 +149,7 @@
 					on:click={closeModal}
 					class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
 					disabled={isSubmitting}
+					aria-label="Cerrar modal"
 				>
 					<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
@@ -180,7 +182,7 @@
 				<!-- Objetivo -->
 				<div>
 					<label for="objetivo" class="mb-2 block text-sm font-medium text-gray-700">
-						Objetivo del Evento
+						Objetivo
 					</label>
 					<textarea
 						id="objetivo"
@@ -189,7 +191,7 @@
 						rows="3"
 						class="w-full rounded-xl border border-gray-300 px-4 py-2.5 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 focus:outline-none"
 						disabled={isSubmitting}
-					/>
+					></textarea>
 				</div>
 
 				<!-- Tipo de Evento -->
@@ -313,7 +315,7 @@
 						rows="3"
 						class="w-full rounded-xl border border-gray-300 px-4 py-2.5 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 focus:outline-none"
 						disabled={isSubmitting}
-					/>
+					></textarea>
 				</div>
 
 				<!-- Buttons -->

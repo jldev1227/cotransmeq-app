@@ -1,29 +1,31 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import Select from 'svelte-select';
 	import {
 		obtenerConductores,
 		obtenerVehiculos,
 		obtenerEmpresas,
-		obtenerConfiguraciones
+		obtenerConfiguraciones,
+		obtenerPreviewRecargos,
+		type PreviewRecargosResponse
 	} from '$lib/api/nomina';
-	import type { Conductor, Vehiculo, Empresa, ConfiguracionLiquidacion } from '$lib/types/nomina';
+	import { bonosAPI } from '$lib/api/apiClient';
+	import type { Conductor, Vehiculo, Empresa } from '$lib/types/nomina';
 	import {
 		ChevronLeft,
 		ChevronRight,
 		Save,
 		Plus,
 		Trash2,
-		Calendar,
 		Users,
 		Truck,
 		DollarSign,
-		Calculator,
-		FileText
+		Calculator
 	} from 'lucide-svelte';
 	import { toast } from 'svelte-sonner';
 	import CalendarPernote from './CalendarPernote.svelte';
 	import RecargosPreview from './RecargosPreview.svelte';
+	import RecorridosSincronizadosModal from './RecorridosSincronizadosModal.svelte';
 
 	// Props
 	export let mode: 'create' | 'edit' = 'create';
@@ -37,11 +39,12 @@
 	let empresas: Empresa[] = [];
 	let configuracion: any[] = [];
 	let loadingData = true;
-	let recargosManualesInicializados = false;
+	let loadingPreviewRecargos = false;
+	let errorPreviewRecargos = '';
+	let datosInicialesCargados = false;
 
 	// Estado del formulario
-	let currentStep = 1;
-	const totalSteps = 3;
+	// (Single page layout — sin steps)
 
 	// PASO 1: Datos básicos
 	let conductorSelected: { value: string; label: string; salario_base?: number } | null = null;
@@ -58,7 +61,13 @@
 	let isCheckedAjuste = false;
 	let isAjustePorDia = false;
 	let isAjusteParex = false;
-	let isAjusteParexRecargosCompletos = false;
+	let isAjusteGeopark = false;
+
+	// Ajustes de empresas para base prestacional
+	let ajusteParexValor = 0;
+	let ajusteGeoparkValor = 0;
+
+	let isAjusteRecargosCompletos = false;
 	let diasAjusteDeducciones: number | null = null;
 	let isVacaciones = false;
 	let isIncapacidad = false;
@@ -69,12 +78,12 @@
 	let descontarPensionSalario = false;
 	let descontarTransporte = false;
 	let redondearNetoArriba = false;
-	let descontarPesos = false;
-	let pesosDescontar = 0;
+	let ajustePesos: -5 | -3 | -2 | -1 | 0 | 1 | 2 | 3 | 5 = 0;
 	let estadoLiquidacion: 'Pendiente' | 'Liquidado' = 'Pendiente';
 
 	// Períodos especiales
 	let periodo_vacaciones_inicio = '';
+	let valor_vacaciones = '';
 	let periodo_vacaciones_fin = '';
 	let periodo_incapacidad_inicio = '';
 	let periodo_incapacidad_fin = '';
@@ -83,6 +92,36 @@
 	let cesantias = 0;
 	let interes_cesantias = 0;
 	let disponibilidad = 0;
+
+	const MESES_NOMBRES = [
+		'',
+		'Enero',
+		'Febrero',
+		'Marzo',
+		'Abril',
+		'Mayo',
+		'Junio',
+		'Julio',
+		'Agosto',
+		'Septiembre',
+		'Octubre',
+		'Noviembre',
+		'Diciembre'
+	];
+
+	interface GrupoRecargo {
+		key: string;
+		vehiculoId: string;
+		vehiculoPlaca: string;
+		mes: number;
+		año: number;
+		mesLabel: string;
+		empresaId: string;
+		empresaNombre: string;
+		totalValor: number;
+		pagCliente: boolean;
+		porcentajePropietario: number;
+	}
 
 	// Detalles de vehículos
 	interface VehiculoDetalle {
@@ -106,13 +145,15 @@
 			valor: number;
 		}>;
 		recargos: Array<{
+			id?: string;
 			vehiculo_id: string;
 			empresa_id: string;
 			valor: number;
 			pag_cliente: boolean;
-			porcentaje_propietario?: number;
-			emisor?: string;
 			mes: string;
+			es_override?: boolean;
+			origen_planilla_id?: string | null;
+			numero_planilla?: string | null;
 		}>;
 	}
 
@@ -134,10 +175,194 @@
 		pag_cliente: boolean;
 		porcentaje_propietario: number;
 		incluir?: boolean;
+		origen_planilla_id?: string | null;
 	}> = [];
+
+	// ═══════════════════════════════════════════════════════════════
+	//  SINCRONIZACIÓN DE BONIFICACIONES DESDE RECORRIDOS
+	//  Lee los `registro_dia_laboral_bono` persistidos (que el usuario
+	//  marcó en la pestaña Recorridos de Conductores) y autocompleta
+	//  los inputs de cantidad en la sección "Bonificaciones" agrupando
+	//  por (config_liquidacion.nombre, vehiculo, mes).
+	//
+	//  Pensado como el equivalente compacto de RecargosPreview pero
+	//  para bonificaciones: el usuario click "Sincronizar", se
+	//  consultan los bonos en el rango del período y se rellenan las
+	//  celdas matching. Después puede ajustar manualmente.
+	// ═══════════════════════════════════════════════════════════════
+	let sincronizandoBonos = false;
+	let ultimoSyncBonosResumen: {
+		items: number;
+		porConfig: Array<{ nombre: string; count: number }>;
+		porVehiculo: Array<{ vehiculo_id: string; count: number; placa?: string }>;
+		ts: number;
+	} | null = null;
+
+	// Modal de recorridos sincronizados
+	let modalRecorridosOpen = false;
+	let clavesSincronizadas: Array<{ registro_dia_id: string; segmento_id: string | null }> = [];
+
+	function abrirModalRecorridos() {
+		if (!conductorSelected?.value || !periodo_inicio || !periodo_fin) {
+			toast.warning('Selecciona conductor y un período antes de consultar recorridos');
+			return;
+		}
+		modalRecorridosOpen = true;
+	}
+
+	function placaDeVehiculoId(vehiculoId: string): string | null {
+		const v = vehiculos.find((x) => x.id === vehiculoId);
+		return v?.placa ?? null;
+	}
+
+	function idDePlaca(placa: string): string | null {
+		const v = vehiculos.find((x) => x.placa === placa);
+		return v?.id ?? null;
+	}
+
+	async function sincronizarBonificacionesDesdeRecorridos() {
+		if (!conductorSelected?.value || !periodo_inicio || !periodo_fin) {
+			toast.warning('Selecciona conductor y un período antes de sincronizar');
+			return;
+		}
+		if (detallesVehiculos.length === 0) {
+			toast.warning('Agrega al menos un vehículo para sincronizar bonificaciones');
+			return;
+		}
+
+		sincronizandoBonos = true;
+		try {
+			const res = await bonosAPI.listar({
+				desde: periodo_inicio,
+				hasta: periodo_fin,
+				conductor_id: conductorSelected.value
+			});
+			const bonos: any[] = res.data?.data ?? [];
+
+			// Guardar las claves (registro_dia_id, segmento_id) de los bonos
+			// que se aplicaron para resaltarlas en el modal de recorridos.
+			clavesSincronizadas = bonos
+				.filter((b) => b.vehiculo_id && b.config_liquidacion?.nombre)
+				.map((b) => ({
+					registro_dia_id: b.registro_dia_id,
+					segmento_id: b.segmento_id ?? null
+				}));
+
+			if (bonos.length === 0) {
+				toast.info('No hay bonos persistidos en este período para este conductor.', {
+					description:
+					'Ve a Conductores → Recorridos y marca los bonos con checkboxes. Luego vuelve aquí y sincroniza.'
+				});
+				return;
+			}
+
+			// Indexar para match rápido:
+			//   - por nombre de config: mapa de nombre lowercase → items
+			//   - por vehiculo_id + mes → conteo
+			interface Clave {
+				vehiculoId: string;
+				configNombre: string;
+				mes: string;
+			}
+			const counts = new Map<string, number>();
+			const porConfig = new Map<string, number>();
+			const porVehiculo = new Map<string, number>();
+			let itemsConsiderados = 0;
+
+			for (const bono of bonos) {
+				const configNombre = bono.config_liquidacion?.nombre?.trim();
+				const vehiculoId = bono.vehiculo_id;
+				const fechaStr: string | null = bono.fecha ?? null;
+				if (!configNombre || !vehiculoId || !fechaStr) {
+					// No se puede asociar (ej: bono sin segmento) — lo saltamos
+					continue;
+				}
+				const fechaOnly = fechaStr.length > 10 ? fechaStr.substring(0, 10) : fechaStr;
+				const mes = fechaOnly.substring(0, 7); // "YYYY-MM"
+				const key = `${vehiculoId}|${configNombre.toLowerCase()}|${mes}`;
+				counts.set(key, (counts.get(key) || 0) + 1);
+				porConfig.set(configNombre, (porConfig.get(configNombre) || 0) + 1);
+				porVehiculo.set(vehiculoId, (porVehiculo.get(vehiculoId) || 0) + 1);
+				itemsConsiderados++;
+			}
+
+			if (itemsConsiderados === 0) {
+				toast.info('Los bonos persistidos no tienen segmento (vehículo) o fecha asociable.', {
+					description: 'Solo se sincronizan bonos vinculados a un tramo con vehículo.'
+				});
+				return;
+			}
+
+			// Aplicar al estado `detallesVehiculos`
+			let aplicados = 0;
+			const detalleNuevo = detallesVehiculos.map((detalle) => {
+				const vehiculoId = detalle.vehiculo.value;
+				const bonosActualizados = detalle.bonos.map((bono) => {
+					const valuesActualizados = bono.values.map((val) => {
+						const key = `${vehiculoId}|${bono.name.toLowerCase()}|${val.mes}`;
+						const q = counts.get(key) || 0;
+						if (q > 0) {
+							aplicados += q;
+						}
+						return { ...val, quantity: q };
+					});
+					return { ...bono, values: valuesActualizados };
+				});
+				return { ...detalle, bonos: bonosActualizados };
+			});
+
+			detallesVehiculos = detalleNuevo;
+
+			ultimoSyncBonosResumen = {
+				items: itemsConsiderados,
+				porConfig: Array.from(porConfig.entries())
+					.sort((a, b) => b[1] - a[1])
+					.map(([nombre, count]) => ({ nombre, count })),
+				porVehiculo: Array.from(porVehiculo.entries())
+					.sort((a, b) => b[1] - a[1])
+					.map(([vehiculo_id, count]) => ({
+						vehiculo_id,
+						count,
+						placa: placaDeVehiculoId(vehiculo_id) ?? vehiculo_id.slice(0, 6)
+					})),
+				ts: Date.now()
+			};
+
+			const breakdown = ultimoSyncBonosResumen.porConfig
+				.slice(0, 4)
+				.map((c) => `${c.nombre} ×${c.count}`)
+				.join(' · ');
+			toast.success(
+				`✓ ${aplicados} unidad${aplicados === 1 ? '' : 'es'} sincronizada${aplicados === 1 ? '' : 's'} desde recorridos`,
+				{
+					description: breakdown || `${itemsConsiderados} bonos en el período`,
+					duration: 5000
+				}
+			);
+		} catch (err: any) {
+			console.error('Error sincronizando bonos desde recorridos:', err);
+			toast.error(err?.message || 'Error al sincronizar bonificaciones desde recorridos');
+		} finally {
+			sincronizandoBonos = false;
+		}
+	}
 	/** Overrides for pagCliente/porcentajePropietario per grupo key — survives step navigation */
-	let cachedGrupoOverrides: Record<string, { pagCliente: boolean; porcentajePropietario: number; incluir?: boolean }> =
+	let cachedGrupoOverrides: Record<string, { pagCliente: boolean; porcentajePropietario: number }> =
 		{};
+
+	// `previewRecargosGrupos` puede venir expandido (1 entrada por planilla origen)
+	// para soportar upsert idempotente en backend. Para la UI, deduplicamos por
+	// `key` (vehiculo + mes + empresa) para mostrar 1 fila por grupo.
+	$: previewRecargosGruposDedup = (() => {
+		const seen = new Set<string>();
+		const out: any[] = [];
+		for (const g of previewRecargosGrupos || []) {
+			if (!g.key || seen.has(g.key)) continue;
+			seen.add(g.key);
+			out.push(g);
+		}
+		return out;
+	})();
 
 	// Anticipos
 	let anticipos: Array<{ id: string; valor: number; fecha: string; concepto: string }> = [];
@@ -149,12 +374,15 @@
 	let showConceptoForm = false;
 	let nuevoConcepto = { valor: '', observaciones: '' };
 
+	// Resumen móvil (toggle en pantallas pequeñas)
+	let showMobileResumen = false;
+
 	// Options para selects
 	$: conductoresOptions = [...conductores]
 		.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''))
 		.map((c) => ({
 			value: c.id,
-			label: `${c.nombre} ${c.apellido || ''}`.trim(),
+			label: `${c.nombre || ''} ${c.apellido || ''}`,
 			salario_base: Number(c.salario_base) || 0
 		}));
 
@@ -169,6 +397,16 @@
 		value: e.id,
 		label: e.nombre
 	}));
+
+	$: canLoad = !!(conductorSelected && periodo_inicio && periodo_fin);
+
+	// Dispara la carga del preview de recargos de planillas cuando el formulario
+	// tiene los datos mínimos (conductor + período). El `RecargosPreview` también
+	// tiene su propio trigger reactivo, pero este garantiza que se dispare incluso
+	// si la referencia todavía no está bindeada al primer render.
+	$: if (canLoad && recargosPreviewRef && typeof recargosPreviewRef.cargarPreview === 'function') {
+		recargosPreviewRef.cargarPreview();
+	}
 
 	onMount(async () => {
 		await cargarDatos();
@@ -239,10 +477,13 @@
 			(initialData.ajuste_salarial ?? 0) > 0 || (initialData.dias_laborados_villanueva ?? 0) > 0;
 		isAjustePorDia = !!initialData.ajuste_salarial_por_dia;
 		isAjusteParex = (initialData.ajuste_parex ?? 0) > 0;
-		isAjusteParexRecargosCompletos = !!initialData.ajuste_parex_recargos_completos;
+		isAjusteGeopark = (initialData.ajuste_geopark ?? 0) > 0;
+		isAjusteRecargosCompletos = !!initialData.ajuste_parex_recargos_completos;
 		diasAjusteDeducciones = initialData.dias_ajuste_deducciones ?? null;
 		noDescontarSalud = (initialData.salud ?? 0) === 0;
 		noDescontarPension = (initialData.pension ?? 0) === 0;
+		descontarSaludSalario = !!initialData.descontar_salud_salario;
+		descontarPensionSalario = !!initialData.descontar_pension_salario;
 		descontarTransporte = initialData.auxilio_transporte === 0;
 		isCesantias = (initialData.cesantias ?? 0) > 0 || (initialData.interes_cesantias ?? 0) > 0;
 		isVacaciones = !!initialData.periodo_start_vacaciones;
@@ -275,14 +516,14 @@
 		// Cargar conceptos adicionales
 		conceptos_adicionales = initialData.conceptos_adicionales || [];
 
-		// Los recargos manuales se cargarán en la primera ejecución de inicializarDetallesVehiculos
-		// No reseteamos recargosManualesInicializados para evitar sobrescribir cambios del usuario
+		// Marcar flag para que inicializarDetallesVehiculos cargue los datos existentes
+		datosInicialesCargados = false;
 	}
 
 	// Poblar detallesVehiculos con los datos existentes de la liquidación (bonos, recargos, pernotes, mantenimientos)
 	function cargarDetallesVehiculosDesdeData() {
-		if (!initialData || recargosManualesInicializados) return;
-		recargosManualesInicializados = true;
+		if (!initialData || datosInicialesCargados) return;
+		datosInicialesCargados = true;
 
 		const bonificacionesData = initialData.bonificaciones || [];
 		const recargosData = initialData.recargos || [];
@@ -366,13 +607,15 @@
 			const recargosVehiculo = recargosData
 				.filter((r: any) => r.vehiculo_id === vehiculoId && !r.es_automatico)
 				.map((r: any) => ({
+					id: r.id, // ID de la fila de BD (necesario para revertir override)
 					vehiculo_id: vehiculoId,
 					empresa_id: r.empresa_id || r.clientes?.id || '',
 					valor: Number(r.valor) || 0,
 					pag_cliente: r.pag_cliente || false,
-					porcentaje_propietario: Number(r.porcentaje_propietario) || 0,
-					emisor: r.emisor || 'COTRANSMEQ',
-					mes: r.mes || ''
+					mes: r.mes || '',
+					es_override: !!r.es_override,
+					origen_planilla_id: r.origen_planilla_id || null,
+					numero_planilla: r.numero_planilla || null
 				}));
 
 			return {
@@ -387,12 +630,15 @@
 		// Restaurar datos de recargos automáticos guardados (para mostrar en resumen antes de que RecargosPreview recalcule)
 		const recargosAutomaticosGuardados = recargosData.filter((r: any) => r.es_automatico);
 		if (recargosAutomaticosGuardados.length > 0) {
-			totalRecargosPreview = recargosAutomaticosGuardados.reduce(
-				(sum: number, r: any) => sum + (Number(r.valor) || 0),
-				0
-			);
-			// Restaurar previewRecargosGrupos y cachedGrupoOverrides desde los rows guardados
-			previewRecargosGrupos = recargosAutomaticosGuardados.map((r: any) => {
+			totalRecargosPreview = recargosAutomaticosGuardados
+				.filter((r: any) => r.incluir !== false)
+				.reduce((sum: number, r: any) => sum + (Number(r.valor) || 0), 0);
+			// Restaurar previewRecargosGrupos. Expandir cada recargo automático
+			// (1 entrada por origen_planilla_id) para que coincida con la forma
+			// que emite el RecargosPreview. Dedupear por key para evitar duplicar
+			// entradas en el mismo grupo al mostrar totales.
+			const gruposPorKey: Record<string, any> = {};
+			for (const r of recargosAutomaticosGuardados) {
 				const empresaNombre =
 					empresas.find((e) => e.id === (r.empresa_id || r.clientes?.id))?.nombre ||
 					r.clientes?.nombre ||
@@ -401,26 +647,41 @@
 					vehiculosSelected.find((v) => v.value === r.vehiculo_id)?.label ||
 					r.vehiculos?.placa ||
 					'';
-				return {
-					key: `${r.vehiculo_id}-${r.mes}-${r.empresa_id}`,
-					vehiculo_id: r.vehiculo_id || '',
-					vehiculo_placa: vehiculoPlaca,
-					empresa_id: r.empresa_id || r.clientes?.id || '',
-					empresa_nombre: empresaNombre,
-					mes: r.mes || '',
-					valor: Number(r.valor) || 0,
-					pag_cliente: r.pag_cliente || false,
-					porcentaje_propietario: Number(r.porcentaje_propietario) || 0,
-					incluir: r.incluir !== false
-				};
-			});
+				const key = `${r.vehiculo_id}-${r.mes}-${r.empresa_id}`;
+				if (!gruposPorKey[key]) {
+					gruposPorKey[key] = {
+						key,
+						vehiculo_id: r.vehiculo_id || '',
+						vehiculo_placa: vehiculoPlaca,
+						empresa_id: r.empresa_id || r.clientes?.id || '',
+						empresa_nombre: empresaNombre,
+						mes: r.mes || '',
+						valor: 0,
+						pag_cliente: r.pag_cliente || false,
+						porcentaje_propietario: Number(r.porcentaje_propietario) || 0,
+						emisor: r.emisor || null,
+						numero_planilla: r.numero_planilla || null,
+						origen_planilla_id: r.origen_planilla_id || null,
+						origenPlanillaIds: [],
+						incluir: r.incluir !== false
+					};
+				}
+				const grupo = gruposPorKey[key];
+				// Sumar valor si hay varios recargos automáticos en el mismo grupo
+				grupo.valor += Number(r.valor) || 0;
+				// Acumular origen_planilla_id
+				if (r.origen_planilla_id && !grupo.origenPlanillaIds.includes(r.origen_planilla_id)) {
+					grupo.origenPlanillaIds.push(r.origen_planilla_id);
+				}
+			}
+			previewRecargosGrupos = Object.values(gruposPorKey);
 			// Rebuild overrides cache from saved data
-			const overrides: Record<string, { pagCliente: boolean; porcentajePropietario: number; incluir: boolean }> = {};
+			const overrides: Record<string, { pagCliente: boolean; porcentajePropietario: number; incluir?: boolean }> = {};
 			for (const g of previewRecargosGrupos) {
 				overrides[g.key] = {
 					pagCliente: g.pag_cliente,
 					porcentajePropietario: g.porcentaje_propietario,
-					incluir: g.incluir !== false
+					incluir: g.incluir
 				};
 			}
 			cachedGrupoOverrides = overrides;
@@ -466,8 +727,20 @@
 		mesesRange = meses;
 	}
 
+	// Garantizar que vehiculosSelected siempre sea un array.
+	// svelte-select puede emitir `undefined` al hacer clear, lo que rompe
+	// handleMultiItemClear internamente y los `.length` del template.
+	$: if (!Array.isArray(vehiculosSelected)) {
+		vehiculosSelected = [];
+	}
+
 	// Inicializar detalles de vehículos cuando cambian vehículos, meses o configuración
-	$: if (vehiculosSelected.length > 0 && mesesRange.length > 0 && configuracion.length > 0) {
+	$: if (
+		Array.isArray(vehiculosSelected) &&
+		vehiculosSelected.length > 0 &&
+		mesesRange.length > 0 &&
+		configuracion.length > 0
+	) {
 		inicializarDetallesVehiculos();
 	}
 
@@ -538,7 +811,7 @@
 		});
 
 		// En modo edición, poblar con datos existentes después de inicializar
-		if (mode === 'edit' && initialData && !recargosManualesInicializados) {
+		if (mode === 'edit' && initialData && !datosInicialesCargados) {
 			cargarDetallesVehiculosDesdeData();
 		}
 	}
@@ -640,8 +913,6 @@
 						empresa_id: '',
 						valor: 0,
 						pag_cliente: false,
-						porcentaje_propietario: 0,
-						emisor: 'COTRANSMEQ',
 						mes: mesesRange[0] || ''
 					}
 				]
@@ -748,7 +1019,8 @@
 		isCheckedAjuste,
 		isAjustePorDia,
 		isAjusteParex,
-		isAjusteParexRecargosCompletos,
+		isAjusteGeopark,
+		isAjusteRecargosCompletos,
 		diasAjusteDeducciones,
 		isVacaciones,
 		isIncapacidad,
@@ -766,14 +1038,22 @@
 		interes_cesantias,
 		configuracion,
 		totalRecargosPreview,
-		previewRecargosData,
 		previewRecargosGrupos,
-		disponibilidad
+		cachedGrupoOverrides,
+		previewRecargosData,
+		valor_vacaciones,
+		disponibilidad,
+		ajustePesos
 	];
 	$: totales = (() => {
 		void _deps;
 		return calcularTotales();
 	})();
+
+	// Total a pagar: se usa en la UI y se envía al backend como sueldo_total.
+	// Ya no se aplica redondeo hacia arriba: se respeta el cálculo crudo y solo se
+	// permite el ajuste manual (positivo o negativo) definido por el usuario.
+	$: totalAPagarVisual = Math.round(totales.sueldoTotal) + ajustePesos;
 
 	function calcularTotales() {
 		const conductor = conductores.find((c) => c.id === conductorSelected?.value);
@@ -788,9 +1068,13 @@
 				bonificacionVillanueva: 0,
 				valorIncapacidad: 0,
 				ajusteParex: 0,
+				ajusteGeopark: 0,
+				totalRecargosParex: 0,
+				totalRecargosGeopark: 0,
 				interesCesantias: 0,
 				disponibilidad: 0,
 				sueldoBruto: 0,
+				baseCalculo: 0,
 				salud: 0,
 				pension: 0,
 				totalAnticipos: 0,
@@ -836,16 +1120,71 @@
 			);
 		}, 0);
 
-		// Calcular recargos (manuales + preview de planillas)
+		// Calcular recargos: solo manuales (los automáticos van por su propio canal)
 		const recargosManual = detallesVehiculos.reduce((acc, detalle) => {
 			return (
 				acc +
-				detalle.recargos.reduce((total, recargo) => {
-					return total + recargo.valor;
+				detalle.recargos.reduce((total, recargo: any) => {
+					if (recargo.es_automatico) return total;
+					return total + (recargo.valor || 0);
 				}, 0)
 			);
 		}, 0);
-		const totalRecargos = recargosManual + totalRecargosPreview;
+
+		// Set de origen_planilla_id que tienen un override manual. Cuando un
+		// automático tiene un override, el automático NO debe sumarse al total
+		// (lo reemplaza el valor del manual). Esto evita doble conteo.
+		const origenesConOverride = new Set<string>(
+			detallesVehiculos
+				.flatMap((d) => d.recargos || [])
+				.filter((r: any) => r.es_override && r.origen_planilla_id)
+				.map((r: any) => r.origen_planilla_id as string)
+		);
+
+		// `previewRecargosGrupos` puede venir expandido (1 entrada por cada
+		// `origen_planilla_id` que compone el grupo, todas con el mismo `valor`
+		// = total del grupo). Para cálculos agregados hay que deduplicar por
+		// `key` antes de sumar, si no se duplica el valor del grupo.
+		// Para el override, en cambio, hay que razonar a nivel de grupo: un grupo
+		// se considera "completamente sobreescrito" solo si TODAS sus planillas
+		// tienen override. Si al menos una planilla del grupo no está
+		// sobreescrita, el grupo aporta al total (con su valor completo, ya que
+		// no se almacena el desglose por planilla).
+		const origenesPorGrupo: Record<string, Set<string>> = {};
+		for (const g of previewRecargosGrupos || []) {
+			if (!g?.key || !g.origen_planilla_id) continue;
+			if (!origenesPorGrupo[g.key]) origenesPorGrupo[g.key] = new Set();
+			origenesPorGrupo[g.key].add(g.origen_planilla_id);
+		}
+		const gruposCompletamenteOverridden = new Set<string>();
+		for (const [key, set] of Object.entries(origenesPorGrupo)) {
+			let allOverridden = true;
+			for (const o of set) {
+				if (!origenesConOverride.has(o)) {
+					allOverridden = false;
+					break;
+				}
+			}
+			if (allOverridden) gruposCompletamenteOverridden.add(key);
+		}
+
+		// Solo sumar preview si está marcado para incluir. Deduplicar por key
+		// para no contar N veces el mismo grupo (RecargosPreview emite 1
+		// entrada por planilla origen, todas con `valor = total del grupo`).
+		const seenKeys = new Set<string>();
+		const recargosPreviewIncluidosCalc = (previewRecargosGrupos || [])
+			.filter((g: any) => g.incluir !== false)
+			.filter((g: any) => {
+				// Excluir grupos completamente sobreescritos manualmente
+				if (gruposCompletamenteOverridden.has(g.key)) return false;
+				// Dedupe por key
+				if (seenKeys.has(g.key)) return false;
+				seenKeys.add(g.key);
+				return true;
+			})
+			.reduce((acc: number, g: any) => acc + (g.valor || 0), 0);
+
+		const totalRecargos = recargosManual + recargosPreviewIncluidosCalc;
 
 		// Bonificación Ajuste Salarial
 		let bonificacionVillanueva = 0;
@@ -862,28 +1201,71 @@
 			}
 		}
 
-		// Ajuste PAREX
-		let ajusteParexValor = 0;
-		if (isAjusteParex) {
+		// Ajuste PAREX (se activa si está marcado el check de PAREX o el de "8% sobre recargos completos")
+		let totalRecargosParex = 0;
+		if (isAjusteParex || isAjusteRecargosCompletos) {
 			const PAREX_EMPRESA_ID = 'cfb258a6-448c-4469-aa71-8eeafa4530ef';
 
-			if (isAjusteParexRecargosCompletos) {
-				// 8% sobre TODOS los recargos del conductor
+			if (isAjusteRecargosCompletos) {
+				// 8% sobre TODOS los recargos del conductor (ya sin overrides)
 				ajusteParexValor = totalRecargos * 0.08;
 			} else {
-				// 8% solo sobre recargos de PAREX
 				const recargosManualParex = detallesVehiculos
 					.flatMap((d) => d.recargos)
 					.filter((r) => r.empresa_id === PAREX_EMPRESA_ID)
 					.reduce((sum, r) => sum + r.valor, 0);
 
-				const recargosPreviewParex = previewRecargosGrupos
-					.filter((g: any) => g.empresa_id === PAREX_EMPRESA_ID && g.incluir !== false)
-					.reduce((sum: number, g: any) => sum + (g.valor || 0), 0);
+				let recargosPreviewParex = 0;
 
-				const totalRecargosParex = recargosManualParex + recargosPreviewParex;
+				if (previewRecargosGrupos?.length) {
+					// Dedupe por key (cada grupo viene expandido en N entradas con
+					// el mismo `valor` = total del grupo) y excluir grupos
+					// completamente sobreescritos manualmente.
+					const seen = new Set<string>();
+					recargosPreviewParex = previewRecargosGrupos
+						.filter((g: any) => g.empresa_id === PAREX_EMPRESA_ID && g.incluir !== false)
+						.filter((g: any) => {
+							if (gruposCompletamenteOverridden.has(g.key)) return false;
+							if (seen.has(g.key)) return false;
+							seen.add(g.key);
+							return true;
+						})
+						.reduce((sum: number, g: any) => sum + (g.valor || 0), 0);
+				}
+
+				totalRecargosParex = recargosManualParex + recargosPreviewParex;
+
 				ajusteParexValor = totalRecargosParex * 0.08;
 			}
+		}
+
+		// Ajuste Geopark
+		let totalRecargosGeopark = 0;
+		if (isAjusteGeopark) {
+			const GEOPARK_EMPRESA_ID = 'eea5eda5-1b60-45a0-b4c7-606a8c908ff9';
+
+			// 8% solo sobre recargos de Geopark
+			const recargosManualGeopark = detallesVehiculos
+				.flatMap((d) => d.recargos)
+				.filter((r) => r.empresa_id === GEOPARK_EMPRESA_ID)
+				.reduce((sum, r) => sum + r.valor, 0);
+
+			let recargosPreviewGeopark = 0;
+			if (previewRecargosGrupos) {
+				const seen = new Set<string>();
+				recargosPreviewGeopark = previewRecargosGrupos
+					.filter((p: any) => p.empresa_id === GEOPARK_EMPRESA_ID && p.incluir !== false)
+					.filter((p: any) => {
+						if (gruposCompletamenteOverridden.has(p.key)) return false;
+						if (seen.has(p.key)) return false;
+						seen.add(p.key);
+						return true;
+					})
+					.reduce((sum: number, p: any) => sum + (p.valor || 0), 0);
+			}
+
+			totalRecargosGeopark = recargosManualGeopark + recargosPreviewGeopark;
+			ajusteGeoparkValor = totalRecargosGeopark * 0.08;
 		}
 
 		// Valor incapacidad
@@ -895,8 +1277,13 @@
 		}
 
 		// Vacaciones
+		// Si el usuario digitó valor_vacaciones manualmente, ese es el que manda.
+		// Si no, se calcula automáticamente desde las fechas (salarioBase / 30 × días).
 		let totalVacaciones = 0;
-		if (isVacaciones && periodo_vacaciones_inicio && periodo_vacaciones_fin) {
+		const valorVacacionesManual = Number(valor_vacaciones) || 0;
+		if (valorVacacionesManual > 0) {
+			totalVacaciones = valorVacacionesManual;
+		} else if (isVacaciones && periodo_vacaciones_inicio && periodo_vacaciones_fin) {
 			const inicio = new Date(periodo_vacaciones_inicio);
 			const fin = new Date(periodo_vacaciones_fin);
 			const diasVacaciones =
@@ -904,15 +1291,63 @@
 			totalVacaciones = (salarioBase / 30) * diasVacaciones;
 		}
 
-		// Ajuste salarial para deducciones: si se especifican días, solo tomar esa fracción
-		const ajusteParaDeducciones =
+		// Ajuste salarial para base prestacional y deducciones: si se especifican días,
+		// solo tomar esa fracción del ajuste salarial (Villanueva). Si no, se toma completo.
+		const ajusteParaBase =
 			diasAjusteDeducciones !== null && diasAjusteDeducciones !== undefined
 				? (bonificacionVillanueva / 30) * diasAjusteDeducciones
 				: bonificacionVillanueva;
 
-		// Base de cálculo para salud y pensión
-		// Incluye: salario + vacaciones + ajuste salarial (según días) + recargos PAREX si aplica
-		const baseCalculo =  (descontarPensionSalario ? salarioBase : salarioDevengado) + totalVacaciones + ajusteParaDeducciones;
+		// Total de conceptos adicionales (necesario para el IBC de la base)
+		const totalAjustesAdicionales = conceptos_adicionales.reduce(
+			(sum, c) => sum + c.valor,
+			0
+		);
+
+		// Recargos completos de PAREX / GEOPARK a adicionar a la base prestacional.
+		// Si "Ajuste PAREX recargos completos" está activo (con o sin PAREX marcado),
+		// se toma el total de recargos del conductor (manual + planillas, ya sin
+		// duplicados por overrides). Si no, se toman solo los recargos de la
+		// empresa PAREX. Si el flag de PAREX no está activo, no se suman recargos
+		// a la base por este concepto.
+		const recargosAjusteParaBase =
+			isAjusteParex || isAjusteRecargosCompletos
+				? isAjusteRecargosCompletos
+					? totalRecargos
+					: totalRecargosParex
+				: 0;
+		const recargosGeoparkParaBase = isAjusteGeopark ? totalRecargosGeopark : 0;
+
+		// Base de cálculo para salud y pensión (IBC).
+		// Componentes incluidos cuando NO se marca "Descontar del Salario Base":
+		//   - Salario devengado
+		//   - Vacaciones (si aplica)
+		//   - Fracción del ajuste salarial (Villanueva) según diasAjusteDeducciones
+		//   - 100% de los recargos de PAREX (si isAjusteParex) o de TODOS los
+		//     recargos (si isAjusteRecargosCompletos)
+		//   - 100% de los recargos de Geopark (si isAjusteGeopark)
+		// Auxilio de transporte, bonificaciones y conceptos adicionales NO entran
+		// en la base prestacional (van al sueldo bruto pero no al IBC).
+		// Si descontarSaludSalario / descontarPensionSalario está activo, la base
+		// es el salario base puro (IBC reducido). Cada deducción tiene su flag
+		// independiente, así que una puede usar IBC y la otra no.
+		const baseCalculoSalud = descontarSaludSalario
+			? salarioBase
+			: salarioDevengado +
+				totalVacaciones +
+				ajusteParaBase +
+				recargosAjusteParaBase +
+				recargosGeoparkParaBase;
+		const baseCalculoPension = descontarPensionSalario
+			? salarioBase
+			: salarioDevengado +
+				totalVacaciones +
+				ajusteParaBase +
+				recargosAjusteParaBase +
+				recargosGeoparkParaBase;
+		// La "Base Prestacional" del resumen refleja la base efectiva mayor que se usa
+		// (cuando algún flag está activo, se reduce al salario base del conductor)
+		const baseCalculo = Math.max(baseCalculoSalud, baseCalculoPension);
 
 		// Porcentajes de salud y pensión
 		const porcentajeSalud =
@@ -920,16 +1355,14 @@
 		const porcentajePension =
 			Number(configuracion.find((c) => c.nombre === 'Pensión')?.valor || 0) / 100;
 
-		const ajusteParexPorConcepto = ajusteParexValor * 0.5;
+		// Deducciones (unificadas: salud y pensión ya incluyen vacaciones + ajuste salarial
+		// + 100% de los recargos de PAREX/GEOPARK en la base, por lo que NO se suma
+		// ningún porcentaje adicional del 8% por separado).
+		const salud = noDescontarSalud ? 0 : baseCalculoSalud * porcentajeSalud;
 
-		// Deducciones (unificadas: salud y pensión ya incluyen vacaciones en la base)
-		const salud = noDescontarSalud ? 0 : baseCalculo * porcentajeSalud + ajusteParexPorConcepto;
-		const pension = noDescontarPension
-			? 0
-			: baseCalculo * porcentajePension + ajusteParexPorConcepto;
+		const pension = noDescontarPension ? 0 : baseCalculoPension * porcentajePension;
 
-		const totalAnticipos = anticipos.reduce((sum, a) => sum + a.valor, 0);
-		const totalAjustesAdicionales = conceptos_adicionales.reduce((sum, c) => sum + c.valor, 0);
+		const totalAnticipos = anticipos.reduce((sum, a) => sum + Number(a.valor), 0);
 
 		const totalDeducciones = salud + pension + totalAnticipos;
 
@@ -940,7 +1373,7 @@
 			totalBonificaciones +
 			totalPernotes +
 			totalRecargos +
-			totalVacaciones +
+			Number(valor_vacaciones) +
 			bonificacionVillanueva +
 			valorIncapacidad +
 			interes_cesantias +
@@ -954,13 +1387,17 @@
 			totalBonificaciones,
 			totalPernotes,
 			totalRecargos,
+			totalRecargosParex,
+			totalRecargosGeopark,
 			totalVacaciones,
 			bonificacionVillanueva,
 			valorIncapacidad,
 			ajusteParex: ajusteParexValor,
+			ajusteGeopark: ajusteGeoparkValor,
 			interesCesantias: interes_cesantias,
 			disponibilidad,
 			sueldoBruto,
+			baseCalculo,
 			salud,
 			pension,
 			totalAnticipos,
@@ -971,43 +1408,36 @@
 	}
 
 	// Navegación
-	function nextStep() {
-		if (!validarPaso()) return;
-		if (currentStep < totalSteps) {
-			currentStep++;
-			window.scrollTo(0, 0);
-		}
-	}
-
-	function prevStep() {
-		if (currentStep > 1) {
-			currentStep--;
-			window.scrollTo(0, 0);
-		}
-	}
+	// (Single page layout — sin navegación entre steps)
 
 	// Validación
-	function validarPaso(): boolean {
-		switch (currentStep) {
-			case 1:
-				if (!conductorSelected) {
-					toast.error('Seleccione un conductor');
-					return false;
-				}
-				if (!periodo_inicio || !periodo_fin) {
-					toast.error('Ingrese las fechas del período');
-					return false;
-				}
-				break;
-			case 2:
-				break;
+	function validarFormulario(): boolean {
+		if (!conductorSelected) {
+			toast.error('Seleccione un conductor');
+			return false;
+		}
+		if (!periodo_inicio || !periodo_fin) {
+			toast.error('Ingrese las fechas del período');
+			return false;
 		}
 		return true;
 	}
 
 	// Envío del formulario
 	async function handleSubmit() {
-		if (!validarPaso()) return;
+		if (!validarFormulario()) return;
+
+		// Defensa en profundidad: limpiar recargos automáticos que se hayan colado
+		// en detalle.recargos (deberían ir solo en recargos_preview).
+		const detallesLimpios = detallesVehiculos.map((d: any) => ({
+			...d,
+			recargos: (d.recargos || []).filter((r: any) => !r.es_automatico)
+		}));
+
+		// Solo enviar los grupos de preview marcados con incluir !== false
+		const recargosPreviewIncluidos = (previewRecargosGrupos || []).filter(
+			(g: any) => g.incluir !== false
+		);
 
 		const payload = {
 			id: initialData?.id,
@@ -1019,19 +1449,20 @@
 			periodo_incapacidad_inicio: isIncapacidad ? periodo_incapacidad_inicio : null,
 			periodo_incapacidad_fin: isIncapacidad ? periodo_incapacidad_fin : null,
 			ajuste_parex: isAjusteParex,
+			ajuste_geopark: isAjusteGeopark,
 			ajuste_parex_valor: totales.ajusteParex,
 			ajuste_por_dia_flag: isAjustePorDia,
-			ajuste_parex_recargos_completos: isAjusteParexRecargosCompletos,
+			ajuste_parex_recargos_completos: isAjusteRecargosCompletos,
 			dias_ajuste_deducciones: diasAjusteDeducciones,
+			descontar_salud_salario: descontarSaludSalario,
+			descontar_pension_salario: descontarPensionSalario,
 			auxilio_transporte: totales.auxilioTransporte,
-			sueldo_total:
-				(redondearNetoArriba ? Math.ceil(totales.sueldoTotal) : Math.floor(totales.sueldoTotal)) -
-				(descontarPesos ? pesosDescontar : 0),
+			sueldo_total: totalAPagarVisual,
 			salario_base: totales.salarioDevengado,
 			total_pernotes: totales.totalPernotes,
 			total_bonificaciones: totales.totalBonificaciones,
 			total_recargos: totales.totalRecargos,
-			total_vacaciones: totales.totalVacaciones,
+			total_vacaciones: Number(valor_vacaciones),
 			total_anticipos: totales.totalAnticipos,
 			dias_laborados,
 			dias_laborados_villanueva,
@@ -1045,10 +1476,10 @@
 			interes_cesantias,
 			estado: estadoLiquidacion,
 			vehiculos: vehiculosSelected.map((v) => v.value),
-			detalles_vehiculos: detallesVehiculos,
+			detalles_vehiculos: detallesLimpios,
 			anticipos,
 			conceptos_adicionales,
-			recargos_preview: previewRecargosGrupos
+			recargos_preview: recargosPreviewIncluidos
 		};
 
 		await onSubmit(payload);
@@ -1061,6 +1492,15 @@
 			minimumFractionDigits: 0,
 			maximumFractionDigits: 0
 		}).format(Math.round(amount));
+	}
+
+	function formatCurrencyFloor(amount: number): string {
+		return new Intl.NumberFormat('es-CO', {
+			style: 'currency',
+			currency: 'COP',
+			minimumFractionDigits: 0,
+			maximumFractionDigits: 0
+		}).format(Math.floor(amount));
 	}
 
 	function formatCurrencyDecimal(amount: number): string {
@@ -1097,29 +1537,39 @@
 		input.value = raw ? '$ ' + formatCOPInput(raw) : '';
 	}
 
-	function formatMes(mes: string): string {
-		if (!mes) return '-';
-		// Formato YYYY-MM
-		if (/^\d{4}-\d{2}$/.test(mes)) {
-			const [year, month] = mes.split('-');
-			const date = new Date(parseInt(year), parseInt(month) - 1);
-			return date.toLocaleDateString('es-CO', { month: 'short', year: 'numeric' });
+	function formatMes(mes: string | number): string {
+		if (typeof mes !== 'string') {
+			console.warn('mes inválido:', mes);
+			return '';
 		}
-		// Formato nombre de mes (ej: "Diciembre", "Febrero")
-		const periodoYear = periodo_inicio
-			? periodo_inicio.split('-')[0]
-			: (periodo_fin ? periodo_fin.split('-')[0] : String(new Date().getFullYear()));
-		return `${mes} ${periodoYear}`;
+
+		const [year, month] = mes.split('-');
+
+		const date = new Date(parseInt(year), parseInt(month) - 1);
+
+		return date.toLocaleDateString('es-CO', {
+			month: 'short',
+			year: 'numeric'
+		});
 	}
 
 	function handleRecargosCalculated(event: CustomEvent) {
 		const { totalRecargos, detalle, grupos } = event.detail;
 		totalRecargosPreview = totalRecargos;
 		previewRecargosData = detalle;
+		// `grupos` puede venir expandido (1 entrada por planilla origen) para
+		// permitir upsert idempotente. Lo guardamos tal cual para enviar al backend.
 		previewRecargosGrupos = grupos || [];
-		// Cache per-grupo overrides so they survive step navigation (component re-mount)
-		const overrides: Record<string, { pagCliente: boolean; porcentajePropietario: number; incluir?: boolean }> = {};
+		// Cache per-grupo overrides (deduplicado por key) para que sobrevivan al
+		// re-mount del componente cuando el usuario navega entre steps.
+		const overrides: Record<
+			string,
+			{ pagCliente: boolean; porcentajePropietario: number; incluir?: boolean }
+		> = {};
+		const seen = new Set<string>();
 		for (const g of previewRecargosGrupos) {
+			if (seen.has(g.key)) continue;
+			seen.add(g.key);
 			overrides[g.key] = {
 				pagCliente: g.pag_cliente,
 				porcentajePropietario: g.porcentaje_propietario,
@@ -1133,111 +1583,246 @@
 {#if loadingData}
 	<div class="flex min-h-[60vh] items-center justify-center">
 		<div class="text-center">
-			<div
-				class="mx-auto h-10 w-10 animate-spin rounded-full border-2 border-orange-600 border-t-transparent"
-			></div>
-			<p class="mt-3 text-sm text-gray-500">Cargando datos...</p>
+			<div class="spinner mx-auto"></div>
+			<p class="mt-3 text-sm text-[var(--text-muted)]">Cargando datos...</p>
 		</div>
 	</div>
 {:else}
-	<div class="mx-auto max-w-5xl px-4 py-6">
+	<div class="mx-auto px-4 py-6">
 		<!-- Header -->
 		<div class="mb-5 flex items-center justify-between">
 			<div class="flex items-center gap-4">
 				<button
 					on:click={() => window.history.back()}
-					class="flex h-8 w-8 items-center justify-center rounded-md border border-gray-200 text-gray-500 transition hover:bg-gray-100 hover:text-gray-900"
+					class="apple-transition flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border-default)] bg-white text-[var(--text-muted)] hover:border-[var(--border-emphasis)] hover:bg-[var(--bg-base)] hover:text-[var(--text-primary)]"
 				>
 					<ChevronLeft class="h-4 w-4" />
 				</button>
-				<h1 class="text-xl font-semibold text-gray-900">
-					{mode === 'create' ? 'Nueva Liquidación' : 'Editar Liquidación'}
-				</h1>
-			</div>
-			<div class="flex items-center gap-1.5 text-xs text-gray-400">
-				{#each ['Info Básica', 'Vehículos', 'Cálculos'] as label, i}
-					<button
-						on:click={() => {
-							if (i + 1 < currentStep) currentStep = i + 1;
-						}}
-						class="flex items-center gap-1.5 rounded-full px-3 py-1 font-medium transition
-							{currentStep === i + 1
-							? 'bg-orange-600 text-white'
-							: currentStep > i + 1
-								? 'bg-orange-100 text-orange-700 hover:bg-orange-200'
-								: 'bg-gray-100 text-gray-400'}"
-					>
-						<span class="text-[11px]">{i + 1}</span>
-						<span class="hidden sm:inline">{label}</span>
-					</button>
-					{#if i < 2}
-						<div class="h-px w-4 {currentStep > i + 1 ? 'bg-orange-300' : 'bg-gray-200'}"></div>
-					{/if}
-				{/each}
+				<div>
+					<span class="eyebrow">Liquidaciones · {mode === 'create' ? 'Nueva' : 'Editar'}</span>
+					<h1 class="font-display mt-1 text-2xl font-normal tracking-tight text-[var(--text-primary)]">
+						{mode === 'create' ? 'Nueva Liquidación' : 'Editar Liquidación'}
+					</h1>
+				</div>
 			</div>
 		</div>
 
-		<!-- Contenido del paso -->
-		<div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-			{#if currentStep === 1}
+		<!-- Layout 2 columnas: form (izq) + resumen sticky (der) -->
+		<div class="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_500px]">
+			<!-- COLUMNA IZQUIERDA: Formulario -->
+			<div class="space-y-5 min-w-0">
+				<!-- Sección: Período y Conductor -->
+				<div class="rounded-xl border border-[var(--border-subtle)] bg-white p-5 shadow-[var(--shadow-card)]">
 				<!-- PASO 1: Información Básica -->
 				<div class="space-y-5">
-					<h2 class="flex items-center gap-2 text-base font-semibold text-gray-800">
-						<Users class="h-4 w-4 text-orange-600" />
+					<h2 class="flex items-center gap-2 font-display text-base font-medium text-[var(--text-primary)]">
+						<Users class="h-4 w-4 text-[var(--emerald-600)]" />
 						Información Básica
 					</h2>
 
 					<!-- Conductor -->
 					<div>
-						<label class="mb-1.5 block text-xs font-medium tracking-wide text-gray-500 uppercase">
-							Conductor <span class="text-red-500">*</span>
+						<label
+							for="conductor-select"
+							class="font-mono-meta mb-1.5 block text-[0.65rem] text-[var(--text-muted)]"
+						>
+							Conductor <span class="text-[#DC2626]">*</span>
 						</label>
-						<Select
-							items={conductoresOptions}
-							bind:value={conductorSelected}
-							placeholder="Buscar conductor..."
-							searchable={true}
-							clearable={false}
-							--border-radius="0.5rem"
-							--border="1px solid #E5E7EB"
-							--border-focused="1px solid #10b981"
-							--border-hover="1px solid #D1D5DB"
-							--padding="0.75rem 1rem"
-							--height="42px"
-						/>
+						<div id="conductor-select">
+							<Select
+								items={conductoresOptions}
+								bind:value={conductorSelected}
+								placeholder="Buscar conductor..."
+								searchable={true}
+								clearable={false}
+								--border-radius="0.625rem"
+								--border="1px solid var(--border-default)"
+								--border-focused="1px solid var(--emerald-500)"
+								--border-hover="1px solid var(--border-emphasis)"
+								--padding="0.65rem 0.85rem"
+								--height="42px"
+							/>
+						</div>
 					</div>
 
 					<!-- Fechas -->
 					<div class="grid grid-cols-2 gap-4">
 						<div>
-							<label class="mb-1.5 block text-xs font-medium tracking-wide text-gray-500 uppercase">
-								Fecha Inicio <span class="text-red-500">*</span>
+							<label
+								for="periodo_inicio"
+								class="font-mono-meta mb-1.5 block text-[0.65rem] text-[var(--text-muted)]"
+							>
+								Fecha Inicio <span class="text-[#DC2626]">*</span>
 							</label>
 							<input
+								id="periodo_inicio"
 								type="date"
 								bind:value={periodo_inicio}
 								required
-								class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+								class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
 							/>
 						</div>
 						<div>
-							<label class="mb-1.5 block text-xs font-medium tracking-wide text-gray-500 uppercase">
-								Fecha Fin <span class="text-red-500">*</span>
+							<label
+								for="periodo_fin"
+								class="font-mono-meta mb-1.5 block text-[0.65rem] text-[var(--text-muted)]"
+							>
+								Fecha Fin <span class="text-[#DC2626]">*</span>
 							</label>
 							<input
+								id="periodo_fin"
 								type="date"
 								bind:value={periodo_fin}
 								required
-								class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+								class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
 							/>
 						</div>
 					</div>
 
-					<!-- Vehículos -->
-					<div>
-						<label class="mb-1.5 block text-xs font-medium tracking-wide text-gray-500 uppercase">
+					<!-- Vehículos: el selector de vehículos ahora vive en la sección
+					     "Vehículos y Detalles" para evitar loops de bind:value duplicado. -->
+
+					<!-- Días laborados -->
+					<div class="grid grid-cols-2 gap-4">
+						<div>
+							<label
+								for="dias_laborados"
+								class="font-mono-meta mb-1.5 block text-[0.65rem] text-[var(--text-muted)]"
+								>Días Totales</label
+							>
+							<input
+								id="dias_laborados"
+								type="number"
+								bind:value={dias_laborados}
+								min="0"
+								max="31"
+								class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
+							/>
+						</div>
+						<div>
+							<label
+								for="dias_laborados_villanueva"
+								class="font-mono-meta mb-1.5 block text-[0.65rem] text-[var(--text-muted)]"
+								>Días Ajuste Salarial</label
+							>
+							<input
+								id="dias_laborados_villanueva"
+								type="number"
+								bind:value={dias_laborados_villanueva}
+								min="0"
+								max="31"
+								class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
+							/>
+						</div>
+					</div>
+				</div>
+				</div>
+				<!-- /Sección: Período y Conductor -->
+
+				<!-- Sección: Vehículos y Detalles -->
+				<div class="rounded-xl border border-[var(--border-subtle)] bg-white p-5 shadow-[var(--shadow-card)]">
+					<div class="mb-4 flex items-start justify-between gap-3">
+						<div class="flex items-center gap-2">
+							<div class="card-icon-sm">
+								<Truck class="h-4 w-4 text-white" />
+							</div>
+							<div>
+								<h2 class="font-display text-base font-medium text-[var(--text-primary)]">
+									Vehículos y Detalles
+								</h2>
+								<p class="font-mono-meta text-[0.6rem] text-[var(--text-muted)]">
+									Bonificaciones · Mantenimientos · Pernotes · Recargos
+								</p>
+							</div>
+						</div>
+						<!-- Botones: consulta y sincronización de bonificaciones desde recorridos -->
+						<div class="flex items-center gap-1.5">
+							<!-- Consultar recorridos (modal general, no auto-abre) -->
+							<button
+								type="button"
+								on:click={abrirModalRecorridos}
+								disabled={!conductorSelected?.value || !periodo_inicio || !periodo_fin}
+								class="apple-transition flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-base)] disabled:cursor-not-allowed disabled:opacity-60"
+								title={!conductorSelected?.value
+									? 'Selecciona un conductor primero'
+									: !periodo_inicio || !periodo_fin
+										? 'Define el período'
+										: 'Ver los recorridos del conductor en el período'}
+							>
+								<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+								</svg>
+								Consultar recorridos
+							</button>
+							<!-- Sincronizar bonificaciones desde recorridos -->
+							<button
+								type="button"
+								on:click={sincronizarBonificacionesDesdeRecorridos}
+								disabled={sincronizandoBonos ||
+									!conductorSelected?.value ||
+									!periodo_inicio ||
+									!periodo_fin ||
+									detallesVehiculos.length === 0}
+								class="apple-transition flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+								style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: white; border-color: transparent;"
+								title={!conductorSelected?.value
+									? 'Selecciona un conductor primero'
+									: !periodo_inicio || !periodo_fin
+										? 'Define el período'
+										: detallesVehiculos.length === 0
+											? 'Agrega al menos un vehículo'
+											: 'Sincroniza las bonificaciones marcadas en la pestaña Recorridos de Conductores'}
+							>
+								{#if sincronizandoBonos}
+									<svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+										<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25" />
+										<path d="M4 12a8 8 0 018-8v0" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+									</svg>
+									Sincronizando…
+								{:else}
+									<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+									</svg>
+									Sincronizar desde recorridos
+								{/if}
+							</button>
+						</div>
+					</div>
+
+					<!-- Resumen del último sync (transitorio) -->
+					{#if ultimoSyncBonosResumen && ultimoSyncBonosResumen.items > 0}
+						<div
+							class="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-indigo-200/60 bg-indigo-50/60 px-3 py-2 text-[11px]"
+							style="color: #3730a3;"
+						>
+							<svg class="h-3.5 w-3.5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+							</svg>
+							<span class="font-semibold">
+								Sincronización: {ultimoSyncBonosResumen.items} bono{ultimoSyncBonosResumen.items === 1 ? '' : 's'} aplicado{ultimoSyncBonosResumen.items === 1 ? '' : 's'}
+							</span>
+							<span class="text-indigo-700/70">·</span>
+							{#each ultimoSyncBonosResumen.porConfig.slice(0, 4) as item (item.nombre)}
+								<span
+									class="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-white/80 px-2 py-0.5 text-[10px] font-semibold"
+								>
+									{item.nombre} <span class="text-indigo-600">×{item.count}</span>
+								</span>
+							{/each}
+							{#if ultimoSyncBonosResumen.porVehiculo.length > 1}
+								<span class="text-indigo-700/70">·</span>
+								<span class="text-[10px] text-indigo-700/80">
+									en {ultimoSyncBonosResumen.porVehiculo.map((v) => v.placa ?? v.vehiculo_id.slice(0, 6)).join(', ')}
+								</span>
+							{/if}
+						</div>
+					{/if}
+
+					<!-- Selector de vehículos -->
+					<div class="mb-4">
+						<span class="font-mono-meta mb-1.5 block text-[0.65rem] text-[var(--text-muted)]">
 							Vehículos
-						</label>
+						</span>
 						<Select
 							items={vehiculosOptions}
 							bind:value={vehiculosSelected}
@@ -1245,92 +1830,71 @@
 							placeholder="Buscar vehículos..."
 							searchable={true}
 							clearable={true}
-							--border-radius="0.375rem"
-							--border="1px solid #E5E7EB"
-							--border-focused="1px solid #10b981"
-							--border-hover="1px solid #D1D5DB"
+							on:change={(e) => {
+								// Normalizar siempre a array (svelte-select a veces emite undefined
+								// desde handleMultiItemClear cuando se remueve el último chip).
+								// NO usamos on:clear porque svelte-select v5 lo dispara también
+								// al remover UN SOLO chip (no solo al limpiar todo), lo que
+								// vaciaría la selección completa en lugar de solo ese item.
+								vehiculosSelected = Array.isArray(e.detail) ? e.detail : [];
+							}}
+							--border-radius="0.5rem"
+							--border="1px solid var(--border-default)"
+							--border-focused="1px solid var(--emerald-500)"
+							--border-hover="1px solid var(--border-emphasis)"
 							--padding="0.5rem 0.75rem"
-							--multi-item-bg="#f3f4f6"
-							--multi-item-color="#374151"
-							--multi-item-clear-icon-color="#6b7280"
+							--multi-item-bg="rgba(249,115,22,0.10)"
+							--multi-item-color="var(--emerald-700)"
+							--multi-item-clear-icon-color="var(--text-muted)"
 						/>
-						<p class="mt-1 text-xs text-gray-400">Opcional — para bonificaciones o recargos</p>
+						<p class="mt-1 text-xs text-[var(--text-very-muted)]">Opcional — para bonificaciones o recargos</p>
 					</div>
 
-					<!-- Días laborados -->
-					<div class="grid grid-cols-2 gap-4">
-						<div>
-							<label class="mb-1.5 block text-xs font-medium tracking-wide text-gray-500 uppercase"
-								>Días Totales</label
-							>
-							<input
-								type="number"
-								bind:value={dias_laborados}
-								min="0"
-								max="31"
-								class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-							/>
-						</div>
-						<div>
-							<label class="mb-1.5 block text-xs font-medium tracking-wide text-gray-500 uppercase"
-								>Días Ajuste Salarial</label
-							>
-							<input
-								type="number"
-								bind:value={dias_laborados_villanueva}
-								min="0"
-								max="31"
-								class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-							/>
-						</div>
-					</div>
-				</div>
-			{:else if currentStep === 2}
-				<!-- PASO 2: Detalles por Vehículo -->
-				<div class="space-y-5">
-					<h2 class="flex items-center gap-2 text-base font-semibold text-gray-800">
-						<Truck class="h-4 w-4 text-orange-600" />
-						Detalles por Vehículo
-					</h2>
-
-					{#if detallesVehiculos.length === 0}
-						<div class="rounded-md border border-dashed border-gray-300 py-10 text-center">
-							<p class="text-sm text-gray-400">
-								Sin vehículos seleccionados. Agregue vehículos en el paso 1 si aplica.
+					{#if !Array.isArray(vehiculosSelected) || vehiculosSelected.length === 0}
+						<div class="rounded-xl border border-dashed border-[var(--border-default)] py-10 text-center">
+							<p class="text-sm text-[var(--text-very-muted)]">
+								Sin vehículos seleccionados. Agregue vehículos arriba si aplica.
 							</p>
 						</div>
 					{:else}
 						{#each detallesVehiculos as detalle, idx (detalle.vehiculo.value)}
-							<div class="rounded-md border border-gray-200">
-								<div class="flex items-center gap-2 border-b border-gray-100 bg-gray-50 px-4 py-3">
-									<Truck class="h-4 w-4 text-gray-500" />
-									<h3 class="text-sm font-semibold text-gray-800">{detalle.vehiculo.label}</h3>
+							<div class="rounded-xl border border-[var(--border-subtle)]">
+								<div
+									class="flex items-center gap-2 rounded-t-xl border-b border-[var(--border-subtle)] bg-[var(--bg-base)] px-4 py-3"
+								>
+									<Truck class="h-4 w-4 text-[var(--text-muted)]" />
+									<h3 class="text-sm font-semibold text-[var(--text-primary)]">
+										{detalle.vehiculo.label}
+									</h3>
 								</div>
 								<div class="space-y-4 p-4">
 									<!-- Bonificaciones -->
 									{#if detalle.bonos.length > 0}
 										<div>
-											<h4 class="mb-2 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+											<h4 class="font-mono-meta mb-2 text-[0.65rem] text-[var(--text-muted)]">
 												Bonificaciones
 											</h4>
 											<div
 												class="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
 											>
 												{#each detalle.bonos as bono}
-													<div class="rounded-md border border-gray-100 bg-gray-50 p-3">
+													<div
+														class="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3"
+													>
 														<div class="mb-1.5">
-															<span class="block text-xs font-medium text-gray-700"
+															<span class="block text-xs font-medium text-[var(--text-primary)]"
 																>{bono.name}</span
 															>
-															<span class="text-[11px] text-gray-400"
+															<span class="text-[11px] text-[var(--text-very-muted)]"
 																>{formatCurrency(bono.value)} / u</span
 															>
 														</div>
 														<div class="space-y-1.5">
 															{#each bono.values as val}
 																<div>
-																	<label class="mb-0.5 block text-[11px] text-gray-400"
-																		>{formatMes(val.mes)}</label
+																	<span
+																		class="font-mono-meta mb-0.5 block text-[0.6rem] text-[var(--text-muted)]"
+																		>{formatMes(val.mes)}</span
 																	>
 																	<input
 																		type="number"
@@ -1343,7 +1907,7 @@
 																				parseInt(e.currentTarget.value) || 0
 																			)}
 																		min="0"
-																		class="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+																		class="input-glow w-full rounded-lg border border-[var(--border-default)] bg-white px-2 py-1 text-sm"
 																	/>
 																</div>
 															{/each}
@@ -1357,16 +1921,19 @@
 									<!-- Mantenimientos -->
 									{#if detalle.mantenimientos.length > 0}
 										<div>
-											<h4 class="mb-2 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+											<h4 class="font-mono-meta mb-2 text-[0.65rem] text-[var(--text-muted)]">
 												Mantenimientos
 											</h4>
 											{#each detalle.mantenimientos as mant}
-												<div class="rounded-md border border-gray-100 bg-gray-50 p-3">
+												<div
+													class="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3"
+												>
 													<div class="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
 														{#each mant.values as val}
 															<div>
-																<label class="mb-0.5 block text-[11px] text-gray-400"
-																	>{formatMes(val.mes)}</label
+																<span
+																	class="font-mono-meta mb-0.5 block text-[0.6rem] text-[var(--text-muted)]"
+																	>{formatMes(val.mes)}</span
 																>
 																<input
 																	type="number"
@@ -1378,7 +1945,7 @@
 																			parseInt(e.currentTarget.value) || 0
 																		)}
 																	min="0"
-																	class="w-full rounded border border-gray-200 px-2 py-1 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+																	class="input-glow w-full rounded-lg border border-[var(--border-default)] bg-white px-2 py-1 text-sm"
 																/>
 															</div>
 														{/each}
@@ -1390,35 +1957,44 @@
 
 									<!-- Pernotes -->
 									<div>
-										<div class="mb-2 flex items-center justify-between">
-											<h4 class="text-xs font-semibold tracking-wide text-gray-500 uppercase">
+										<div class="section-header">
+											<span class="section-header-label">
+												<span class="section-header-dot" aria-hidden="true"></span>
 												Pernotes
-											</h4>
+												{#if detalle.pernotes.length > 0}
+													<span class="section-header-count">{detalle.pernotes.length}</span>
+												{/if}
+											</span>
 											<button
 												on:click={() => handleAddPernote(detalle.vehiculo.value)}
-												class="flex items-center gap-1 rounded-md bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200"
+												class="help-btn"
 											>
-												<Plus class="h-3 w-3" />
+												<Plus />
 												Agregar
 											</button>
 										</div>
 										{#if detalle.pernotes.length > 0}
 											<div class="space-y-2">
 												{#each detalle.pernotes as pernote, pIdx}
-													<div class="rounded-md border border-gray-200 bg-gray-50 p-3">
-														<div class="mb-2 flex items-center justify-between">
-															<span class="text-xs font-medium text-gray-600"
-																>Pernote #{pIdx + 1}</span
-															>
+													<div class="item-card">
+														<div class="item-card-header">
+															<span class="item-card-tag">
+																<span class="item-card-tag-dot" aria-hidden="true"></span>
+																Pernote #{pIdx + 1}
+															</span>
 															<button
 																on:click={() => handleRemovePernote(detalle.vehiculo.value, pIdx)}
-																class="text-red-400 hover:text-red-600"
+																class="item-card-remove"
+																aria-label="Eliminar pernote"
 															>
-																<Trash2 class="h-3.5 w-3.5" />
+																<Trash2 />
 															</button>
 														</div>
 														<div class="mb-2">
-															<label class="mb-0.5 block text-[11px] text-gray-400">Empresa</label>
+															<span
+																class="font-mono-meta mb-0.5 block text-[0.6rem] text-[var(--text-muted)]"
+																>Empresa</span
+															>
 															<Select
 																items={empresasOptions}
 																value={empresasOptions.find((e) => e.value === pernote.empresa_id)}
@@ -1431,9 +2007,11 @@
 																	)}
 																placeholder="Seleccionar..."
 																searchable={true}
-																--border-radius="0.375rem"
+																--border-radius="0.5rem"
 																--font-size="0.875rem"
 																--height="36px"
+																--border="1px solid var(--border-default)"
+																--border-focused="1px solid var(--emerald-500)"
 															/>
 														</div>
 														<!-- Calendario de pernotes -->
@@ -1457,13 +2035,13 @@
 																);
 															}}
 														/>
-														<div class="mt-2 flex items-center justify-between text-xs">
-															<span class="text-gray-500">
+														<div class="item-card-summary">
+															<span class="item-card-summary-label">
 																{pernote.cantidad} día{pernote.cantidad !== 1 ? 's' : ''} × {formatCurrency(
 																	pernote.valor
 																)}
 															</span>
-															<span class="font-semibold text-gray-800">
+															<span class="item-card-summary-value">
 																{formatCurrency(pernote.cantidad * pernote.valor)}
 															</span>
 														</div>
@@ -1471,42 +2049,75 @@
 												{/each}
 											</div>
 										{:else}
-											<p class="text-xs text-gray-400">Sin pernotes</p>
+											<p
+												class="rounded-lg border border-dashed border-[var(--border-subtle)] py-2.5 text-center text-xs text-[var(--text-very-muted)]"
+											>
+												Sin pernotes
+											</p>
 										{/if}
 									</div>
 
 									<!-- Recargos -->
 									<div>
-										<div class="mb-2 flex items-center justify-between">
-											<h4 class="text-xs font-semibold tracking-wide text-gray-500 uppercase">
+										<div class="section-header">
+											<span class="section-header-label">
+												<span class="section-header-dot" aria-hidden="true"></span>
 												Recargos
-											</h4>
+												{#if detalle.recargos.length > 0}
+													<span class="section-header-count">{detalle.recargos.length}</span>
+												{/if}
+											</span>
 											<button
 												on:click={() => handleAddRecargo(detalle.vehiculo.value)}
-												class="flex items-center gap-1 rounded-md bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200"
+												class="help-btn"
 											>
-												<Plus class="h-3 w-3" />
+												<Plus />
 												Agregar
 											</button>
 										</div>
 										{#if detalle.recargos.length > 0}
 											<div class="space-y-2">
 												{#each detalle.recargos as recargo, rIdx}
-													<div class="rounded-md border border-gray-200 bg-gray-50 p-3">
-														<div class="mb-2 flex items-center justify-between">
-															<span class="text-xs font-medium text-gray-600"
-																>Recargo #{rIdx + 1}</span
-															>
+													<div class="item-card" style:border-color={recargo.es_override ? 'rgba(245, 158, 11, 0.30)' : ''}>
+														<div class="item-card-header">
+															<span class="item-card-tag" style:background-color={recargo.es_override ? 'rgba(245, 158, 11, 0.10)' : ''} style:color={recargo.es_override ? '#92400E' : ''}>
+																<span class="item-card-tag-dot" aria-hidden="true" style:background-color={recargo.es_override ? '#F59E0B' : ''} style:box-shadow={recargo.es_override ? '0 0 0 2px rgba(245, 158, 11, 0.18)' : ''}></span>
+																Recargo #{rIdx + 1}
+																{#if recargo.es_override}
+																	<span
+																		class="ml-1 inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-800"
+																		title="Este recargo sobreescribe un automático de planilla. Elimínalo para revertir."
+																	>
+																		<svg
+																			class="h-2.5 w-2.5"
+																			fill="none"
+																			stroke="currentColor"
+																			viewBox="0 0 24 24"
+																			stroke-width="2.5"
+																		>
+																			<path
+																				stroke-linecap="round"
+																				stroke-linejoin="round"
+																				d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+																			/>
+																		</svg>
+																		Override
+																	</span>
+																{/if}
+															</span>
 															<button
 																on:click={() => handleRemoveRecargo(detalle.vehiculo.value, rIdx)}
-																class="text-red-400 hover:text-red-600"
+																class="item-card-remove"
+																aria-label="Eliminar recargo"
 															>
-																<Trash2 class="h-3.5 w-3.5" />
+																<Trash2 />
 															</button>
 														</div>
 														<div class="grid grid-cols-3 gap-2">
 															<div>
-																<label class="mb-0.5 block text-[11px] text-gray-400">Empresa</label
+																<span
+																	class="font-mono-meta mb-0.5 block text-[0.6rem] text-[var(--text-muted)]"
+																	>Empresa</span
 																>
 																<Select
 																	items={empresasOptions}
@@ -1522,14 +2133,21 @@
 																		)}
 																	placeholder="Seleccionar..."
 																	searchable={true}
-																	--border-radius="0.375rem"
+																	--border-radius="0.5rem"
 																	--font-size="0.875rem"
 																	--height="36px"
+																	--border="1px solid var(--border-default)"
+																	--border-focused="1px solid var(--emerald-500)"
 																/>
 															</div>
 															<div>
-																<label class="mb-0.5 block text-[11px] text-gray-400">Mes</label>
+																<label
+																	for="recargo-mes-{detalle.vehiculo.value}-{rIdx}"
+																	class="font-mono-meta mb-0.5 block text-[0.6rem] text-[var(--text-muted)]"
+																	>Mes</label
+																>
 																<select
+																	id="recargo-mes-{detalle.vehiculo.value}-{rIdx}"
 																	value={recargo.mes}
 																	on:change={(e) =>
 																		handleRecargoChange(
@@ -1538,19 +2156,21 @@
 																			'mes',
 																			e.currentTarget.value
 																		)}
-																	class="w-full rounded border border-gray-200 px-2 py-1.5 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+																	class="input-glow w-full rounded-lg border border-[var(--border-default)] bg-white px-2 py-1.5 text-sm"
 																>
-																	{#if recargo.mes && !mesesRange.includes(recargo.mes)}
-																		<option value={recargo.mes}>{formatMes(recargo.mes)}</option>
-																	{/if}
 																	{#each mesesRange as mes}
 																		<option value={mes}>{formatMes(mes)}</option>
 																	{/each}
 																</select>
 															</div>
 															<div>
-																<label class="mb-0.5 block text-[11px] text-gray-400">Valor</label>
+																<label
+																	for="recargo-valor-{detalle.vehiculo.value}-{rIdx}"
+																	class="font-mono-meta mb-0.5 block text-[0.6rem] text-[var(--text-muted)]"
+																	>Valor</label
+																>
 																<input
+																	id="recargo-valor-{detalle.vehiculo.value}-{rIdx}"
 																	type="text"
 																	inputmode="numeric"
 																	value={recargo.valor ? '$ ' + formatCOPInput(recargo.valor) : ''}
@@ -1563,12 +2183,12 @@
 																			'valor',
 																			parseCOPInput(e.currentTarget.value)
 																		)}
-																	class="w-full rounded border border-gray-200 px-2 py-1.5 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+																	class="input-glow w-full rounded-lg border border-[var(--border-default)] bg-white px-2 py-1.5 text-sm"
 																/>
 															</div>
 														</div>
-														<div class="mt-2 flex flex-wrap items-center gap-4">
-															<label class="flex items-center text-xs text-gray-500">
+														<div class="mt-2">
+															<label class="flex items-center text-xs text-[var(--text-muted)]">
 																<input
 																	type="checkbox"
 																	checked={recargo.pag_cliente}
@@ -1579,231 +2199,222 @@
 																			'pag_cliente',
 																			e.currentTarget.checked
 																		)}
-																	class="mr-1.5 h-3.5 w-3.5 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+																	class="mr-1.5 h-3.5 w-3.5 cursor-pointer rounded border-[var(--border-default)] accent-[var(--emerald-500)]"
 																/>
 																Pagado por cliente
 															</label>
-															{#if recargo.pag_cliente}
-																<div class="inline-flex items-center gap-1">
-																	<label class="text-[11px] text-gray-400">% Propietario</label>
-																	<input
-																		type="number"
-																		value={recargo.porcentaje_propietario || 0}
-																		on:input={(e) =>
-																			handleRecargoChange(
-																				detalle.vehiculo.value,
-																				rIdx,
-																				'porcentaje_propietario',
-																				parseFloat(e.currentTarget.value) || 0
-																			)}
-																		min="0"
-																		max="100"
-																		step="1"
-																		placeholder="0"
-																		class="w-14 rounded border border-gray-200 px-2 py-1 text-center text-xs focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-																	/>
-																	<span class="text-[10px] text-gray-400">%</span>
-																</div>
-															{/if}
-															<label class="flex items-center text-xs text-gray-500">
-																<input
-																		type="checkbox"
-																		checked={recargo.emisor === 'TRANSMERALDA'}
-																		on:change={(e) =>
-																			handleRecargoChange(
-																				detalle.vehiculo.value,
-																				rIdx,
-																				'emisor',
-																				e.currentTarget.checked ? 'TRANSMERALDA' : 'COTRANSMEQ'
-																			)}
-																class="mr-1.5 h-3.5 w-3.5 rounded border-gray-300 text-purple-600 focus:ring-purple-500"
-															/>
-															Transmeralda
-														</label>
-													</div>
 														</div>
-													{/each}
-												</div>
-											{:else}
-												<p class="text-xs text-gray-400">Sin recargos</p>
-											{/if}
-										</div>
+													</div>
+												{/each}
+											</div>
+										{:else}
+											<p class="text-xs text-[var(--text-very-muted)]">Sin recargos</p>
+										{/if}
 									</div>
 								</div>
-							{/each}
+							</div>
+						{/each}
 					{/if}
 
 					<!-- Recargos Calculados desde Planillas -->
-					<RecargosPreview
-						bind:this={recargosPreviewRef}
-						conductorId={conductorSelected?.value || ''}
-						periodoInicio={periodo_inicio}
-						periodoFin={periodo_fin}
-						cachedPreviewData={previewRecargosData}
-						{cachedGrupoOverrides}
-						on:recargosCalculated={handleRecargosCalculated}
-					/>
+					<div class="mt-4">
+						<RecargosPreview
+							bind:this={recargosPreviewRef}
+							conductorId={conductorSelected?.value || ''}
+							periodoInicio={periodo_inicio}
+							periodoFin={periodo_fin}
+							cachedPreviewData={previewRecargosData}
+							{cachedGrupoOverrides}
+							recargosExistentes={initialData?.recargos || []}
+							on:recargosCalculated={handleRecargosCalculated}
+						/>
+					</div>
 				</div>
-			{:else if currentStep === 3}
-				<!-- PASO 3: Cálculos Finales -->
-				<div class="space-y-5">
-					<h2 class="flex items-center gap-2 text-base font-semibold text-gray-800">
-						<Calculator class="h-4 w-4 text-orange-600" />
-						Cálculos y Ajustes
-					</h2>
+				<!-- /Sección: Vehículos y Detalles -->
+
+				<!-- Sección: Ajustes y Períodos Especiales -->
+				<div
+					class="space-y-4 rounded-xl border border-[var(--border-subtle)] bg-white p-5 shadow-[var(--shadow-card)]"
+				>
+					<div class="mb-4 flex items-center gap-2">
+						<div class="card-icon-sm">
+							<Calculator class="h-4 w-4 text-white" />
+						</div>
+						<div>
+							<h2 class="font-display text-base font-medium text-[var(--text-primary)]">
+								Ajustes y Períodos Especiales
+							</h2>
+							<p class="font-mono-meta text-[0.6rem] text-[var(--text-muted)]">
+								Opciones de cálculo · Vacaciones · Incapacidad · Cesantías
+							</p>
+						</div>
+					</div>
 
 					<!-- Opciones booleanas -->
-					<div class="rounded-md border border-gray-200 p-4">
-						<h3 class="mb-3 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+					<div class="rounded-xl border border-[var(--border-subtle)] p-4">
+						<h3 class="font-mono-meta mb-3 text-[0.65rem] text-[var(--text-muted)]">
 							Opciones
 						</h3>
 						<div class="grid grid-cols-2 gap-x-6 gap-y-2 lg:grid-cols-3">
 							<label
-								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900"
+								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 							>
 								<input
 									type="checkbox"
 									bind:checked={isCheckedAjuste}
-									class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+									class="h-4 w-4 cursor-pointer rounded border-[var(--border-default)] accent-[var(--emerald-500)]"
 								/>
 								Ajuste Salarial
 							</label>
 							{#if isCheckedAjuste}
 								<label
-									class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900"
+									class="flex cursor-pointer items-center gap-2 py-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 								>
 									<input
 										type="checkbox"
 										bind:checked={isAjustePorDia}
-										class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+										class="h-4 w-4 cursor-pointer rounded border-[var(--border-default)] accent-[var(--emerald-500)]"
 									/>
 									Ajuste por Día
 								</label>
 							{/if}
 							<label
-								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900"
+								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+							>
+								<input
+									type="checkbox"
+									bind:checked={isAjusteGeopark}
+									class="h-4 w-4 cursor-pointer rounded border-[var(--border-default)] accent-[#2563EB]"
+								/>
+								Ajuste GEOPARK
+							</label>
+							<label
+								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 							>
 								<input
 									type="checkbox"
 									bind:checked={isAjusteParex}
-									class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+									class="h-4 w-4 cursor-pointer rounded border-[var(--border-default)] accent-[var(--emerald-500)]"
 								/>
 								Ajuste PAREX
 							</label>
-							{#if isAjusteParex}
-								<label
-									class="flex cursor-pointer items-center gap-2 py-1 pl-6 text-sm text-gray-700 hover:text-gray-900"
-								>
-									<input
-										type="checkbox"
-										bind:checked={isAjusteParexRecargosCompletos}
-										class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-									/>
-									8% sobre recargos completos
-								</label>
-							{/if}
 							<label
-								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900"
+								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+							>
+								<input
+									type="checkbox"
+									bind:checked={isAjusteRecargosCompletos}
+									class="h-4 w-4 cursor-pointer rounded border-[var(--border-default)] accent-[var(--emerald-500)]"
+								/>
+								8% sobre recargos completos
+							</label>
+							<label
+								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 							>
 								<input
 									type="checkbox"
 									bind:checked={isVacaciones}
-									class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+									class="h-4 w-4 cursor-pointer rounded border-[var(--border-default)] accent-[var(--emerald-500)]"
 								/>
 								Vacaciones
 							</label>
 							<label
-								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900"
+								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 							>
 								<input
 									type="checkbox"
 									bind:checked={isIncapacidad}
-									class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+									class="h-4 w-4 cursor-pointer rounded border-[var(--border-default)] accent-[var(--emerald-500)]"
 								/>
 								Incapacidad
 							</label>
 							<label
-								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900"
+								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 							>
 								<input
 									type="checkbox"
 									bind:checked={isCesantias}
-									class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+									class="h-4 w-4 cursor-pointer rounded border-[var(--border-default)] accent-[var(--emerald-500)]"
 								/>
 								Pagar Cesantías
 							</label>
 							<label
-								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900"
+								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 							>
 								<input
 									type="checkbox"
 									bind:checked={noDescontarSalud}
-									class="h-4 w-4 rounded border-gray-300 text-red-500 focus:ring-red-400"
+									class="h-4 w-4 cursor-pointer rounded border-[var(--border-default)] accent-[#DC2626]"
 								/>
 								No Descontar Salud
 							</label>
 							<label
-								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900"
+								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 							>
 								<input
 									type="checkbox"
 									bind:checked={noDescontarPension}
-									class="h-4 w-4 rounded border-gray-300 text-red-500 focus:ring-red-400"
+									class="h-4 w-4 cursor-pointer rounded border-[var(--border-default)] accent-[#DC2626]"
 								/>
 								No Descontar Pensión
 							</label>
 							<label
-								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900"
-							>
-								<input
-									type="checkbox"
-									bind:checked={descontarTransporte}
-									class="h-4 w-4 rounded border-gray-300 text-red-500 focus:ring-red-400"
-								/>
-								Descontar Transporte
-							</label>
-							<label
-								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900"
+								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 							>
 								<input
 									type="checkbox"
 									bind:checked={descontarSaludSalario}
-									class="h-4 w-4 rounded border-gray-300 text-red-500 focus:ring-red-400"
+									class="h-4 w-4 cursor-pointer rounded border-[var(--border-default)] accent-[#DC2626]"
 								/>
-								Descontar Salud del salario
+								Descontar Salud del Salario Base
 							</label>
 							<label
-								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-gray-700 hover:text-gray-900"
+								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
 							>
 								<input
 									type="checkbox"
 									bind:checked={descontarPensionSalario}
-									class="h-4 w-4 rounded border-gray-300 text-red-500 focus:ring-red-400"
+									class="h-4 w-4 cursor-pointer rounded border-[var(--border-default)] accent-[#DC2626]"
 								/>
-								Descontar Pensión del salario
+								Descontar Pensión del Salario Base
+							</label>
+							<label
+								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
+							>
+								<input
+									type="checkbox"
+									bind:checked={descontarTransporte}
+									class="h-4 w-4 cursor-pointer rounded border-[var(--border-default)] accent-[#DC2626]"
+								/>
+								Descontar Transporte
 							</label>
 						</div>
 					</div>
 
 					<!-- Días ajuste para deducciones -->
 					{#if isCheckedAjuste}
-						<div class="rounded-md border border-gray-200 p-4">
-							<h3 class="mb-3 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+						<div class="rounded-xl border border-[var(--border-subtle)] p-4">
+							<h3 class="font-mono-meta mb-3 text-[0.65rem] text-[var(--text-muted)]">
 								Deducciones del Ajuste Salarial
 							</h3>
 							<div class="flex items-center gap-4">
-								<span class="text-sm text-gray-600">Días del ajuste a tomar para deducciones:</span>
+								<span class="text-sm text-[var(--text-secondary)]"
+									>Días del ajuste a tomar para deducciones:</span
+								>
 								<input
 									type="number"
 									min="0"
 									max="30"
 									bind:value={diasAjusteDeducciones}
 									placeholder="Todos"
-									class="w-24 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-orange-500 focus:ring-orange-500"
+									class="input-glow w-24 rounded-xl border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm"
 								/>
-								<span class="text-xs text-gray-400">
+								<span class="text-xs text-[var(--text-very-muted)]">
 									{#if diasAjusteDeducciones !== null && diasAjusteDeducciones !== undefined}
-										(Ajuste/30 × {diasAjusteDeducciones})
+										(Ajuste: {formatCurrency(
+											(configuracion.find((c) => c.nombre === 'Salario villanueva')?.valor || 0) -
+												totales.salarioDevengado
+										)}/30 × {diasAjusteDeducciones})
 									{:else}
 										(Se toma el ajuste completo)
 									{/if}
@@ -1815,7 +2426,9 @@
 					<!-- Disponibilidad -->
 					<div class="grid grid-cols-2 gap-4">
 						<div>
-							<label for="disponibilidad" class="mb-1.5 block text-xs font-medium tracking-wide text-gray-500 uppercase"
+							<label
+								for="disponibilidad"
+								class="font-mono-meta mb-1.5 block text-[0.65rem] text-[var(--text-muted)]"
 								>Disponibilidad</label
 							>
 							<input
@@ -1832,39 +2445,68 @@
 									}
 								}}
 								placeholder="$ 0"
-								class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+								class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
 							/>
 						</div>
 						<div class="flex items-end pb-2">
 							{#if disponibilidad > 0}
-								<span class="text-xs text-gray-400">Con disponibilidad </span>
+								<span class="text-xs text-[var(--text-very-muted)]">Con disponibilidad </span>
 							{:else}
-								<span class="text-xs text-gray-400">Sin disponibilidad</span>
+								<span class="text-xs text-[var(--text-very-muted)]">Sin disponibilidad</span>
 							{/if}
 						</div>
 					</div>
 
 					<!-- Períodos especiales -->
 					{#if isVacaciones}
-						<div class="rounded-md border border-gray-200 p-4">
-							<h4 class="mb-3 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+						<div class="rounded-xl border border-[var(--border-subtle)] p-4">
+							<h4 class="font-mono-meta mb-3 text-[0.65rem] text-[var(--text-muted)]">
 								Vacaciones
 							</h4>
-							<div class="grid grid-cols-2 gap-4">
+							<div class="grid grid-cols-3 gap-4">
 								<div>
-									<label class="mb-1.5 block text-xs text-gray-500">Fecha Inicio</label>
+									<label
+										for="valor_vacaciones"
+										class="font-mono-meta mb-1.5 block text-[0.6rem] text-[var(--text-muted)]"
+										>Valor Vacaciones</label
+									>
 									<input
-										type="date"
-										bind:value={periodo_vacaciones_inicio}
-										class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+										id="valor_vacaciones"
+										placeholder={`Sugerido: ${formatCurrency(totales.totalVacaciones)}`}
+										type="text"
+										inputmode="numeric"
+										value={valor_vacaciones ? '$ ' + formatCOPInput(Number(valor_vacaciones)) : ''}
+										on:focus={handleCOPFocus}
+										on:blur={handleCOPBlur}
+										on:input={(e) =>
+											(valor_vacaciones = String(parseCOPInput(e.currentTarget.value)))}
+										class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
 									/>
 								</div>
 								<div>
-									<label class="mb-1.5 block text-xs text-gray-500">Fecha Fin</label>
+									<label
+										for="periodo_vacaciones_inicio"
+										class="font-mono-meta mb-1.5 block text-[0.6rem] text-[var(--text-muted)]"
+										>Fecha Inicio</label
+									>
 									<input
+										id="periodo_vacaciones_inicio"
+										type="date"
+										bind:value={periodo_vacaciones_inicio}
+										class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
+									/>
+								</div>
+								<div>
+									<label
+										for="periodo_vacaciones_fin"
+										class="font-mono-meta mb-1.5 block text-[0.6rem] text-[var(--text-muted)]"
+										>Fecha Fin</label
+									>
+									<input
+										id="periodo_vacaciones_fin"
 										type="date"
 										bind:value={periodo_vacaciones_fin}
-										class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+										class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
 									/>
 								</div>
 							</div>
@@ -1872,25 +2514,35 @@
 					{/if}
 
 					{#if isIncapacidad}
-						<div class="rounded-md border border-gray-200 p-4">
-							<h4 class="mb-3 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+						<div class="rounded-xl border border-[var(--border-subtle)] p-4">
+							<h4 class="font-mono-meta mb-3 text-[0.65rem] text-[var(--text-muted)]">
 								Incapacidad
 							</h4>
 							<div class="grid grid-cols-2 gap-4">
 								<div>
-									<label class="mb-1.5 block text-xs text-gray-500">Fecha Inicio</label>
+									<label
+										for="periodo_incapacidad_inicio"
+										class="font-mono-meta mb-1.5 block text-[0.6rem] text-[var(--text-muted)]"
+										>Fecha Inicio</label
+									>
 									<input
+										id="periodo_incapacidad_inicio"
 										type="date"
 										bind:value={periodo_incapacidad_inicio}
-										class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+										class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
 									/>
 								</div>
 								<div>
-									<label class="mb-1.5 block text-xs text-gray-500">Fecha Fin</label>
+									<label
+										for="periodo_incapacidad_fin"
+										class="font-mono-meta mb-1.5 block text-[0.6rem] text-[var(--text-muted)]"
+										>Fecha Fin</label
+									>
 									<input
+										id="periodo_incapacidad_fin"
 										type="date"
 										bind:value={periodo_incapacidad_fin}
-										class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+										class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
 									/>
 								</div>
 							</div>
@@ -1899,33 +2551,45 @@
 
 					<!-- Cesantías -->
 					{#if isCesantias}
-						<div class="rounded-md border border-gray-200 p-4">
-							<h4 class="mb-3 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+						<div class="rounded-xl border border-[var(--border-subtle)] p-4">
+							<h4 class="font-mono-meta mb-3 text-[0.65rem] text-[var(--text-muted)]">
 								Cesantías e Intereses
 							</h4>
 							<div class="grid grid-cols-2 gap-4">
 								<div>
-									<label class="mb-1.5 block text-xs text-gray-500">Cesantías</label>
+									<label
+										for="cesantias"
+										class="font-mono-meta mb-1.5 block text-[0.6rem] text-[var(--text-muted)]"
+										>Cesantías</label
+									>
 									<input
+										id="cesantias"
 										type="text"
 										inputmode="numeric"
+										placeholder="$ 0"
 										value={cesantias ? '$ ' + formatCOPInput(cesantias) : ''}
 										on:focus={handleCOPFocus}
 										on:blur={handleCOPBlur}
 										on:input={(e) => (cesantias = parseCOPInput(e.currentTarget.value))}
-										class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+										class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
 									/>
 								</div>
 								<div>
-									<label class="mb-1.5 block text-xs text-gray-500">Interés Cesantías</label>
+									<label
+										for="interes_cesantias"
+										class="font-mono-meta mb-1.5 block text-[0.6rem] text-[var(--text-muted)]"
+										>Interés Cesantías</label
+									>
 									<input
+										id="interes_cesantias"
 										type="text"
 										inputmode="numeric"
+										placeholder="$ 0"
 										value={interes_cesantias ? '$ ' + formatCOPInput(interes_cesantias) : ''}
 										on:focus={handleCOPFocus}
 										on:blur={handleCOPBlur}
 										on:input={(e) => (interes_cesantias = parseCOPInput(e.currentTarget.value))}
-										class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+										class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
 									/>
 								</div>
 							</div>
@@ -1933,12 +2597,12 @@
 					{/if}
 
 					<!-- Anticipos -->
-					<div class="rounded-md border border-gray-200 p-4">
+					<div class="rounded-xl border border-[var(--border-subtle)] p-4">
 						<div class="mb-3 flex items-center justify-between">
-							<h3 class="text-xs font-semibold tracking-wide text-gray-500 uppercase">Anticipos</h3>
+							<h3 class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]">Anticipos</h3>
 							<button
 								on:click={() => (showAnticipoForm = !showAnticipoForm)}
-								class="flex items-center gap-1 rounded-md bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200"
+								class="help-btn apple-transition"
 							>
 								<Plus class="h-3 w-3" />
 								Agregar
@@ -1946,11 +2610,19 @@
 						</div>
 
 						{#if showAnticipoForm}
-							<div class="mb-3 rounded-md bg-gray-50 p-3">
+							<div
+								class="mb-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3"
+							>
 								<div class="grid grid-cols-3 gap-3">
 									<div>
-										<label class="mb-1 block text-xs text-gray-500">Valor</label>
+										<label
+											for="nuevo-anticipo-valor"
+											class="font-mono-meta mb-1 block text-[0.6rem] text-[var(--text-muted)]"
+											>Valor</label
+										>
 										<input
+											id="nuevo-anticipo-valor"
+											placeholder="$ 0"
 											type="text"
 											inputmode="numeric"
 											value={nuevoAnticipo.valor
@@ -1960,37 +2632,47 @@
 											on:blur={handleCOPBlur}
 											on:input={(e) =>
 												(nuevoAnticipo.valor = String(parseCOPInput(e.currentTarget.value)))}
-											class="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+											class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm"
 										/>
 									</div>
 									<div>
-										<label class="mb-1 block text-xs text-gray-500">Fecha</label>
+										<label
+											for="nuevo-anticipo-fecha"
+											class="font-mono-meta mb-1 block text-[0.6rem] text-[var(--text-muted)]"
+											>Fecha</label
+										>
 										<input
+											id="nuevo-anticipo-fecha"
 											type="date"
 											bind:value={nuevoAnticipo.fecha}
-											class="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+											class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm"
 										/>
 									</div>
 									<div>
-										<label class="mb-1 block text-xs text-gray-500">Concepto</label>
+										<label
+											for="nuevo-anticipo-concepto"
+											class="font-mono-meta mb-1 block text-[0.6rem] text-[var(--text-muted)]"
+											>Concepto</label
+										>
 										<input
+											id="nuevo-anticipo-concepto"
 											type="text"
 											bind:value={nuevoAnticipo.concepto}
 											placeholder="Opcional"
-											class="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+											class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm"
 										/>
 									</div>
 								</div>
 								<div class="mt-3 flex gap-2">
 									<button
 										on:click={agregarAnticipo}
-										class="rounded-md bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-700"
+										class="btn-primary apple-transition"
 									>
 										Agregar
 									</button>
 									<button
 										on:click={() => (showAnticipoForm = false)}
-										class="rounded-md bg-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-300"
+										class="btn-secondary apple-transition"
 									>
 										Cancelar
 									</button>
@@ -2001,12 +2683,14 @@
 						{#if anticipos.length > 0}
 							<div class="space-y-1">
 								{#each anticipos as anticipo (anticipo.id)}
-									<div class="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2">
+									<div
+										class="flex items-center justify-between rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] px-3 py-2"
+									>
 										<div>
-											<span class="text-sm font-medium text-gray-800"
+											<span class="text-sm font-semibold text-[var(--text-primary)]"
 												>{formatCurrency(anticipo.valor)}</span
 											>
-											<span class="ml-2 text-xs text-gray-400">
+											<span class="ml-2 text-xs text-[var(--text-very-muted)]">
 												{new Date(anticipo.fecha).toLocaleDateString('es-CO')}
 												{#if anticipo.concepto}
 													· {anticipo.concepto}{/if}
@@ -2014,7 +2698,7 @@
 										</div>
 										<button
 											on:click={() => eliminarAnticipo(anticipo.id)}
-											class="text-red-400 hover:text-red-600"
+											class="apple-transition rounded-lg p-1 text-[#DC2626] hover:bg-[rgba(220,38,38,0.08)]"
 										>
 											<Trash2 class="h-3.5 w-3.5" />
 										</button>
@@ -2022,19 +2706,19 @@
 								{/each}
 							</div>
 						{:else}
-							<p class="text-xs text-gray-400">Sin anticipos</p>
+							<p class="text-xs text-[var(--text-very-muted)]">Sin anticipos</p>
 						{/if}
 					</div>
 
 					<!-- Conceptos adicionales -->
-					<div class="rounded-md border border-gray-200 p-4">
+					<div class="rounded-xl border border-[var(--border-subtle)] p-4">
 						<div class="mb-3 flex items-center justify-between">
-							<h3 class="text-xs font-semibold tracking-wide text-gray-500 uppercase">
+							<h3 class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
 								Conceptos Adicionales
 							</h3>
 							<button
 								on:click={() => (showConceptoForm = !showConceptoForm)}
-								class="flex items-center gap-1 rounded-md bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600 hover:bg-gray-200"
+								class="help-btn apple-transition"
 							>
 								<Plus class="h-3 w-3" />
 								Agregar
@@ -2042,11 +2726,18 @@
 						</div>
 
 						{#if showConceptoForm}
-							<div class="mb-3 rounded-md bg-gray-50 p-3">
+							<div
+								class="mb-3 rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3"
+							>
 								<div class="grid grid-cols-2 gap-3">
 									<div>
-										<label class="mb-1 block text-xs text-gray-500">Valor</label>
+										<label
+											for="nuevo-concepto-valor"
+											class="font-mono-meta mb-1 block text-[0.6rem] text-[var(--text-muted)]"
+											>Valor</label
+										>
 										<input
+											id="nuevo-concepto-valor"
 											type="text"
 											inputmode="numeric"
 											value={nuevoConcepto.valor
@@ -2057,29 +2748,34 @@
 											on:input={(e) =>
 												(nuevoConcepto.valor = String(parseCOPInput(e.currentTarget.value)))}
 											placeholder="+Devengo / -Deducción"
-											class="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+											class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm"
 										/>
 									</div>
 									<div>
-										<label class="mb-1 block text-xs text-gray-500">Observaciones</label>
+										<label
+											for="nuevo-concepto-observaciones"
+											class="font-mono-meta mb-1 block text-[0.6rem] text-[var(--text-muted)]"
+											>Observaciones</label
+										>
 										<input
+											id="nuevo-concepto-observaciones"
 											type="text"
 											bind:value={nuevoConcepto.observaciones}
 											placeholder="Descripción"
-											class="w-full rounded-md border border-gray-200 px-3 py-1.5 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+											class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm"
 										/>
 									</div>
 								</div>
 								<div class="mt-3 flex gap-2">
 									<button
 										on:click={agregarConcepto}
-										class="rounded-md bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-700"
+										class="btn-primary apple-transition"
 									>
 										Agregar
 									</button>
 									<button
 										on:click={() => (showConceptoForm = false)}
-										class="rounded-md bg-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-300"
+										class="btn-secondary apple-transition"
 									>
 										Cancelar
 									</button>
@@ -2090,18 +2786,22 @@
 						{#if conceptos_adicionales.length > 0}
 							<div class="space-y-1">
 								{#each conceptos_adicionales as concepto, idx}
-									<div class="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2">
+									<div
+										class="flex items-center justify-between rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] px-3 py-2"
+									>
 										<div>
 											<span
-												class="text-sm font-medium {concepto.valor > 0
-													? 'text-orange-700'
-													: 'text-red-600'}">{formatCurrency(concepto.valor)}</span
+												class="text-sm font-semibold {concepto.valor > 0
+													? 'text-[var(--emerald-700)]'
+													: 'text-[#DC2626]'}">{formatCurrency(concepto.valor)}</span
 											>
-											<span class="ml-2 text-xs text-gray-400">{concepto.observaciones}</span>
+											<span class="ml-2 text-xs text-[var(--text-very-muted)]"
+												>{concepto.observaciones}</span
+											>
 										</div>
 										<button
 											on:click={() => eliminarConcepto(idx)}
-											class="text-red-400 hover:text-red-600"
+											class="apple-transition rounded-lg p-1 text-[#DC2626] hover:bg-[rgba(220,38,38,0.08)]"
 										>
 											<Trash2 class="h-3.5 w-3.5" />
 										</button>
@@ -2109,15 +2809,17 @@
 								{/each}
 							</div>
 						{:else}
-							<p class="text-xs text-gray-400">Sin conceptos adicionales</p>
+							<p class="text-xs text-[var(--text-very-muted)]">Sin conceptos adicionales</p>
 						{/if}
 					</div>
 
 					<!-- Detalle de Bonificaciones por Vehículo y Período -->
 					{#if detallesVehiculos.length > 0}
-						<div class="rounded-md border border-gray-200">
-							<div class="border-b border-gray-100 bg-gray-50 px-4 py-2.5">
-								<h3 class="text-xs font-semibold tracking-wide text-gray-500 uppercase">
+						<div class="rounded-xl border border-[var(--border-subtle)]">
+							<div
+								class="rounded-t-xl border-b border-[var(--border-subtle)] bg-[var(--bg-base)] px-4 py-2.5"
+							>
+								<h3 class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
 									Detalle Bonificaciones
 								</h3>
 							</div>
@@ -2128,55 +2830,59 @@
 									)}
 									{#if bonosConCantidad.length > 0}
 										<div class="mb-3">
-											<p class="mb-2 text-xs font-medium text-gray-500">{detalle.vehiculo.label}</p>
+											<p class="mb-2 font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
+												{detalle.vehiculo.label}
+											</p>
 											<div class="overflow-x-auto">
 												<table class="w-full text-xs">
 													<thead>
-														<tr class="border-b border-gray-200">
-															<th class="py-1.5 text-left font-medium text-gray-500"
-																>Bonificación</th
-															>
-															<th class="py-1.5 text-right font-medium text-gray-500">V. Unit.</th>
+														<tr class="table-header">
+															<th class="py-1.5 text-left">Bonificación</th>
+															<th class="py-1.5 text-right">V. Unit.</th>
 															{#each mesesRange as mes}
-																<th class="py-1.5 text-center font-medium text-gray-500"
-																	>{formatMes(mes)}</th
-																>
+																<th class="py-1.5 text-center">{formatMes(mes)}</th>
 															{/each}
-															<th class="py-2 text-right font-medium text-gray-600">Subtotal</th>
+															<th class="py-2 text-right text-[var(--text-secondary)]">
+																Subtotal
+															</th>
 														</tr>
 													</thead>
-													<tbody>
+													<tbody class="divide-y divide-[var(--border-subtle)]">
 														{#each bonosConCantidad as bono}
 															{@const subtotal = bono.values.reduce(
 																(s, v) => s + v.quantity * bono.value,
 																0
 															)}
-															<tr class="border-b border-gray-100">
-																<td class="py-2 text-gray-800">{bono.name}</td>
-																<td class="py-1.5 text-right text-gray-600"
+															<tr>
+																<td class="py-2 text-[var(--text-primary)]">{bono.name}</td>
+																<td class="py-1.5 text-right text-[var(--text-secondary)]"
 																	>{formatCurrency(bono.value)}</td
 																>
 																{#each bono.values as val}
 																	<td
 																		class="py-1.5 text-center {val.quantity > 0
-																			? 'font-semibold text-gray-800'
-																			: 'text-gray-300'}">{val.quantity}</td
+																			? 'font-semibold text-[var(--text-primary)]'
+																			: 'text-[var(--text-very-muted)]'}">{val.quantity}</td
 																	>
 																{/each}
-																<td class="py-1.5 text-right font-semibold text-orange-700"
+																<td
+																	class="py-1.5 text-right font-semibold text-[var(--emerald-700)]"
 																	>{formatCurrency(subtotal)}</td
 																>
 															</tr>
 														{/each}
 													</tbody>
 													<tfoot>
-														<tr class="border-t border-gray-300">
+														<tr class="border-t border-[var(--border-emphasis)]">
 															<td
 																colspan={2 + mesesRange.length}
-																class="py-1.5 text-right text-xs font-semibold text-gray-600"
-																>Total Vehículo:</td
+																class="py-1.5 text-right font-mono-meta text-[0.65rem] text-[var(--text-secondary)]"
 															>
-															<td class="py-1.5 text-right text-xs font-bold text-orange-700">
+																Total Vehículo:
+															</td>
+															<td
+																class="py-1.5 text-right font-mono-meta text-[0.7rem] font-bold text-[var(--emerald-700)]"
+															>
 																{formatCurrency(
 																	bonosConCantidad.reduce(
 																		(acc, b) =>
@@ -2193,10 +2899,12 @@
 									{/if}
 								{/each}
 								<div
-									class="mt-2 flex items-center justify-between border-t border-gray-200 px-1 pt-3"
+									class="mt-2 flex items-center justify-between border-t border-[var(--border-subtle)] px-1 pt-3"
 								>
-									<span class="text-sm font-semibold text-gray-700">Total Bonificaciones</span>
-									<span class="text-sm font-bold text-orange-700"
+									<span class="text-sm font-semibold text-[var(--text-secondary)]"
+										>Total Bonificaciones</span
+									>
+									<span class="text-sm font-bold text-[var(--emerald-700)]"
 										>{formatCurrency(totales.totalBonificaciones)}</span
 									>
 								</div>
@@ -2206,9 +2914,11 @@
 
 					<!-- Detalle de Recargos -->
 					{#if detallesVehiculos.some((d) => d.recargos.length > 0) || previewRecargosGrupos.length > 0 || totalRecargosPreview > 0}
-						<div class="rounded-md border border-gray-200">
-							<div class="border-b border-gray-100 bg-gray-50 px-4 py-2.5">
-								<h3 class="text-xs font-semibold tracking-wide text-gray-500 uppercase">
+						<div class="rounded-xl border border-[var(--border-subtle)]">
+							<div
+								class="rounded-t-xl border-b border-[var(--border-subtle)] bg-[var(--bg-base)] px-4 py-2.5"
+							>
+								<h3 class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
 									Detalle Recargos
 								</h3>
 							</div>
@@ -2217,55 +2927,44 @@
 								{#each detallesVehiculos as detalle}
 									{#if detalle.recargos.length > 0}
 										<div class="mb-3">
-											<p class="mb-2 text-xs font-medium text-gray-500">
-												{detalle.vehiculo.label} <span class="text-gray-400">(manuales)</span>
+											<p class="mb-2 font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
+												{detalle.vehiculo.label} <span class="text-[var(--text-very-muted)]"
+													>(manuales)</span
+												>
 											</p>
 											<div class="overflow-x-auto">
 												<table class="w-full text-xs">
 													<thead>
-														<tr class="border-b border-gray-200">
-															<th class="py-1.5 text-left font-medium text-gray-500">Empresa</th>
-															<th class="py-1.5 text-center font-medium text-gray-500">Período</th>
-															<th class="py-1.5 text-center font-medium text-gray-500"
-																>Pag. Cliente</th
-															>
-															<th class="py-1.5 text-center font-medium text-gray-500">Asume</th>
-															<th class="py-1.5 text-center font-medium text-gray-500">Emisor</th>
-															<th class="py-1.5 text-right font-medium text-gray-500">Valor</th>
+														<tr class="table-header">
+															<th class="py-1.5 text-left">Empresa</th>
+															<th class="py-1.5 text-center">Período</th>
+															<th class="py-1.5 text-center">Pag. Cliente</th>
+															<th class="py-1.5 text-right">Valor</th>
 														</tr>
 													</thead>
-													<tbody>
+													<tbody class="divide-y divide-[var(--border-subtle)]">
 														{#each detalle.recargos as recargo}
 															{@const empresaNombre =
 																empresas.find((e) => e.id === recargo.empresa_id)?.nombre ||
 																recargo.empresa_id}
-															<tr class="border-b border-gray-50">
-																<td class="py-1.5 text-gray-700">{empresaNombre}</td>
-																<td class="py-1.5 text-center text-gray-600"
+															<tr>
+																<td class="py-1.5 text-[var(--text-secondary)]">
+																	{empresaNombre}
+																</td>
+																<td class="py-1.5 text-center text-[var(--text-secondary)]"
 																	>{recargo.mes ? formatMes(recargo.mes) : '-'}</td
 																>
 																<td class="py-1.5 text-center">
 																	<span
 																		class="text-[11px] {recargo.pag_cliente
-																			? 'text-orange-600'
-																			: 'text-gray-400'}">{recargo.pag_cliente ? 'Sí' : 'No'}</span
+																			? 'text-[#C2410C]'
+																			: 'text-[var(--text-very-muted)]'}">{recargo.pag_cliente
+																			? 'Sí'
+																			: 'No'}</span
 																	>
 																</td>
-																<td class="py-1.5 text-center">
-																	{#if recargo.pag_cliente && (recargo.porcentaje_propietario || 0) > 0}
-																		<span class="text-[11px] text-amber-600">Propietario {recargo.porcentaje_propietario}%</span>
-																	{:else if recargo.pag_cliente}
-																		<span class="text-[11px] text-blue-600">Cliente 100%</span>
-																	{:else}
-																		<span class="text-[11px] text-gray-400">—</span>
-																	{/if}
-																</td>
-																<td class="py-1.5 text-center">
-																	<span class="text-[11px] {recargo.emisor === 'TRANSMERALDA' ? 'text-purple-600' : 'text-teal-600'}">
-																		{recargo.emisor === 'TRANSMERALDA' ? 'Transmeralda' : 'Cotransmeq'}
-																	</span>
-																</td>
-																<td class="py-1.5 text-right font-medium text-gray-800"
+																<td
+																	class="py-1.5 text-right font-semibold text-[var(--text-primary)]"
 																	>{formatCurrency(recargo.valor)}</td
 																>
 															</tr>
@@ -2279,59 +2978,64 @@
 								<!-- Recargos calculados desde planillas -->
 								{#if previewRecargosGrupos.length > 0}
 									<div class="mb-3">
-										<p class="mb-2 text-xs font-medium text-gray-500">Recargos de Planillas</p>
+										<p class="mb-2 font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
+											Recargos de Planillas
+										</p>
 										<div class="overflow-x-auto">
 											<table class="w-full text-xs">
 												<thead>
-													<tr class="border-b border-gray-200">
-														<th class="py-1.5 text-left font-medium text-gray-500">Vehículo</th>
-														<th class="py-1.5 text-left font-medium text-gray-500">Empresa</th>
-														<th class="py-1.5 text-center font-medium text-gray-500">Mes</th>
-														<th class="py-1.5 text-center font-medium text-gray-500"
-															>Pag. Cliente</th
-														>
-														<th class="py-1.5 text-center font-medium text-gray-500"
-															>% Propietario</th
-														>
-														<th class="py-1.5 text-right font-medium text-gray-500">Valor</th>
+													<tr class="table-header">
+														<th class="py-1.5 text-left">Vehículo</th>
+														<th class="py-1.5 text-left">Empresa</th>
+														<th class="py-1.5 text-center">Mes</th>
+														<th class="py-1.5 text-center">Pag. Cliente</th>
+														<th class="py-1.5 text-center">% Propietario</th>
+														<th class="py-1.5 text-right">Valor</th>
 													</tr>
 												</thead>
-												<tbody>
-													{#each previewRecargosGrupos as grupo}
-														<tr class="border-b border-gray-50">
-															<td class="py-1.5 font-medium text-gray-800"
+												<tbody class="divide-y divide-[var(--border-subtle)]">
+													{#each previewRecargosGruposDedup as grupo (grupo.key)}
+														<tr>
+															<td class="py-1.5 font-semibold text-[var(--text-primary)]"
 																>{grupo.vehiculo_placa}</td
 															>
-															<td class="py-1.5 text-gray-700">{grupo.empresa_nombre}</td>
-															<td class="py-1.5 text-center text-gray-600"
+															<td class="py-1.5 text-[var(--text-secondary)]">
+																{grupo.empresa_nombre}
+															</td>
+															<td class="py-1.5 text-center text-[var(--text-secondary)]"
 																>{grupo.mes ? formatMes(grupo.mes) : '-'}</td
 															>
 															<td class="py-1.5 text-center">
 																<span
 																	class="text-[11px] {grupo.pag_cliente
-																		? 'text-orange-600'
-																		: 'text-gray-400'}">{grupo.pag_cliente ? 'Sí' : 'No'}</span
+																		? 'text-[#C2410C]'
+																		: 'text-[var(--text-very-muted)]'}">{grupo.pag_cliente
+																		? 'Sí'
+																		: 'No'}</span
 																>
 															</td>
-															<td class="py-1.5 text-center text-gray-600"
+															<td class="py-1.5 text-center text-[var(--text-secondary)]"
 																>{grupo.pag_cliente && grupo.porcentaje_propietario > 0
 																	? grupo.porcentaje_propietario + '%'
 																	: '—'}</td
 															>
-															<td class="py-1.5 text-right font-medium text-gray-800"
+															<td
+																class="py-1.5 text-right font-semibold text-[var(--text-primary)]"
 																>{formatCurrency(grupo.valor)}</td
 															>
 														</tr>
 													{/each}
 												</tbody>
 												<tfoot>
-													<tr class="border-t border-gray-200">
+													<tr class="border-t border-[var(--border-subtle)]">
 														<td
 															colspan="5"
-															class="py-1.5 text-right text-xs font-semibold text-gray-600"
-															>Subtotal Planillas:</td
+															class="py-1.5 text-right font-mono-meta text-[0.65rem] text-[var(--text-secondary)]"
 														>
-														<td class="py-1.5 text-right text-xs font-bold text-gray-800"
+															Subtotal Planillas:
+														</td>
+														<td
+															class="py-1.5 text-right font-mono-meta text-[0.7rem] font-bold text-[var(--text-primary)]"
 															>{formatCurrency(totalRecargosPreview)}</td
 														>
 													</tr>
@@ -2341,24 +3045,30 @@
 									</div>
 								{:else if totalRecargosPreview > 0}
 									<div
-										class="flex items-center justify-between rounded-md bg-gray-50 px-3 py-2 text-xs"
+										class="flex items-center justify-between rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] px-3 py-2 text-xs"
 									>
 										<div>
-											<span class="font-medium text-gray-600">Recargos de Planillas</span>
+											<span class="font-semibold text-[var(--text-secondary)]"
+												>Recargos de Planillas</span
+											>
 											{#if !previewRecargosData && mode === 'edit'}
-												<span class="ml-1 text-[11px] text-gray-400">(guardado)</span>
+												<span class="ml-1 text-[11px] text-[var(--text-very-muted)]"
+													>(guardado)</span
+												>
 											{/if}
 										</div>
-										<span class="font-semibold text-gray-800"
+										<span class="font-semibold text-[var(--text-primary)]"
 											>{formatCurrency(totalRecargosPreview)}</span
 										>
 									</div>
 								{/if}
 								<div
-									class="mt-2 flex items-center justify-between border-t border-gray-200 px-1 pt-3"
+									class="mt-2 flex items-center justify-between border-t border-[var(--border-subtle)] px-1 pt-3"
 								>
-									<span class="text-sm font-semibold text-gray-700">Total Recargos</span>
-									<span class="text-sm font-bold text-orange-700"
+									<span class="text-sm font-semibold text-[var(--text-secondary)]"
+										>Total Recargos</span
+									>
+									<span class="text-sm font-bold text-[#C2410C]"
 										>{formatCurrency(totales.totalRecargos)}</span
 									>
 								</div>
@@ -2368,9 +3078,11 @@
 
 					<!-- Detalle de Pernotes -->
 					{#if detallesVehiculos.some((d) => d.pernotes.length > 0)}
-						<div class="rounded-md border border-gray-200">
-							<div class="border-b border-gray-100 bg-gray-50 px-4 py-2.5">
-								<h3 class="text-xs font-semibold tracking-wide text-gray-500 uppercase">
+						<div class="rounded-xl border border-[var(--border-subtle)]">
+							<div
+								class="rounded-t-xl border-b border-[var(--border-subtle)] bg-[var(--bg-base)] px-4 py-2.5"
+							>
+								<h3 class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
 									Detalle Pernotes
 								</h3>
 							</div>
@@ -2378,29 +3090,36 @@
 								{#each detallesVehiculos as detalle}
 									{#if detalle.pernotes.length > 0}
 										<div class="mb-3">
-											<p class="mb-2 text-xs font-medium text-gray-500">{detalle.vehiculo.label}</p>
+											<p class="mb-2 font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
+												{detalle.vehiculo.label}
+											</p>
 											<div class="overflow-x-auto">
 												<table class="w-full text-xs">
 													<thead>
-														<tr class="border-b border-gray-200">
-															<th class="py-1.5 text-left font-medium text-gray-500">Empresa</th>
-															<th class="py-1.5 text-center font-medium text-gray-500">Cant.</th>
-															<th class="py-1.5 text-right font-medium text-gray-500">V. Unit.</th>
-															<th class="py-1.5 text-right font-medium text-gray-500">Subtotal</th>
+														<tr class="table-header">
+															<th class="py-1.5 text-left">Empresa</th>
+															<th class="py-1.5 text-center">Cant.</th>
+															<th class="py-1.5 text-right">V. Unit.</th>
+															<th class="py-1.5 text-right">Subtotal</th>
 														</tr>
 													</thead>
-													<tbody>
+													<tbody class="divide-y divide-[var(--border-subtle)]">
 														{#each detalle.pernotes as pernote}
 															{@const empresaNombre =
 																empresas.find((e) => e.id === pernote.empresa_id)?.nombre ||
 																pernote.empresa_id}
-															<tr class="border-b border-gray-50">
-																<td class="py-1.5 text-gray-700">{empresaNombre}</td>
-																<td class="py-1.5 text-center text-gray-600">{pernote.cantidad}</td>
-																<td class="py-1.5 text-right text-gray-600"
+															<tr>
+																<td class="py-1.5 text-[var(--text-secondary)]">
+																	{empresaNombre}
+																</td>
+																<td class="py-1.5 text-center text-[var(--text-secondary)]">
+																	{pernote.cantidad}
+																</td>
+																<td class="py-1.5 text-right text-[var(--text-secondary)]"
 																	>{formatCurrency(pernote.valor)}</td
 																>
-																<td class="py-1.5 text-right font-medium text-gray-800"
+																<td
+																	class="py-1.5 text-right font-semibold text-[var(--text-primary)]"
 																	>{formatCurrency(pernote.cantidad * pernote.valor)}</td
 																>
 															</tr>
@@ -2412,10 +3131,12 @@
 									{/if}
 								{/each}
 								<div
-									class="mt-2 flex items-center justify-between border-t border-gray-200 px-1 pt-3"
+									class="mt-2 flex items-center justify-between border-t border-[var(--border-subtle)] px-1 pt-3"
 								>
-									<span class="text-sm font-semibold text-gray-700">Total Pernotes</span>
-									<span class="text-sm font-bold text-orange-700"
+									<span class="text-sm font-semibold text-[var(--text-secondary)]"
+										>Total Pernotes</span
+									>
+									<span class="text-sm font-bold text-[var(--emerald-700)]"
 										>{formatCurrency(totales.totalPernotes)}</span
 									>
 								</div>
@@ -2425,9 +3146,11 @@
 
 					<!-- Detalle de Ajustes -->
 					{#if isCheckedAjuste || isAjusteParex}
-						<div class="rounded-md border border-gray-200">
-							<div class="border-b border-gray-100 bg-gray-50 px-4 py-2.5">
-								<h3 class="text-xs font-semibold tracking-wide text-gray-500 uppercase">
+						<div class="rounded-xl border border-[var(--border-subtle)]">
+							<div
+								class="rounded-t-xl border-b border-[var(--border-subtle)] bg-[var(--bg-base)] px-4 py-2.5"
+							>
+								<h3 class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
 									Detalle Ajustes
 								</h3>
 							</div>
@@ -2441,30 +3164,32 @@
 									)}
 									{@const diferencia = salarioVillanueva - salarioBase}
 									<div>
-										<p class="mb-2 text-xs font-medium text-gray-500">Ajuste Salarial</p>
+										<p class="mb-2 font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
+											Ajuste Salarial
+										</p>
 										<table class="w-full text-xs">
-											<tbody>
-												<tr class="border-b border-gray-50">
-													<td class="py-1 text-gray-500">Salario Base</td>
-													<td class="py-1 text-right font-medium text-gray-700"
+											<tbody class="divide-y divide-[var(--border-subtle)]">
+												<tr>
+													<td class="py-1 text-[var(--text-muted)]">Salario Base</td>
+													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]"
 														>{formatCurrency(salarioBase)}</td
 													>
 												</tr>
-												<tr class="border-b border-gray-50">
-													<td class="py-1 text-gray-500">Salario Ajuste Salarial</td>
-													<td class="py-1 text-right font-medium text-gray-700"
+												<tr>
+													<td class="py-1 text-[var(--text-muted)]">Salario Ajuste Salarial</td>
+													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]"
 														>{formatCurrency(salarioVillanueva)}</td
 													>
 												</tr>
-												<tr class="border-b border-gray-50">
-													<td class="py-1 text-gray-500">Diferencia</td>
-													<td class="py-1 text-right font-medium text-gray-700"
+												<tr>
+													<td class="py-1 text-[var(--text-muted)]">Diferencia</td>
+													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]"
 														>{formatCurrency(diferencia)}</td
 													>
 												</tr>
-												<tr class="border-b border-gray-50">
-													<td class="py-1 text-gray-500">Días × Modalidad</td>
-													<td class="py-1 text-right font-medium text-gray-700"
+												<tr>
+													<td class="py-1 text-[var(--text-muted)]">Días × Modalidad</td>
+													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]"
 														>{dias_laborados_villanueva} · {isAjustePorDia
 															? 'Por día'
 															: dias_laborados_villanueva >= 17
@@ -2472,9 +3197,11 @@
 																: 'Por día'}</td
 													>
 												</tr>
-												<tr class="border-t border-gray-200">
-													<td class="py-1.5 font-semibold text-gray-700">Total Ajuste</td>
-													<td class="py-1.5 text-right font-bold text-orange-700"
+												<tr class="border-t-2 border-[var(--border-emphasis)]">
+													<td class="py-1.5 font-bold text-[var(--text-primary)]">
+														Total Ajuste
+													</td>
+													<td class="py-1.5 text-right font-bold text-[var(--emerald-700)]"
 														>{formatCurrency(totales.bonificacionVillanueva)}</td
 													>
 												</tr>
@@ -2489,47 +3216,84 @@
 										.flatMap((d) => d.recargos)
 										.filter((r) => r.empresa_id === PAREX_ID)
 										.reduce((s, r) => s + r.valor, 0)}
-									{@const recargosPreviewParex =
-											previewRecargosGrupos
-												.filter((g: any) => g.empresa_id === PAREX_ID && g.incluir !== false)
-												.reduce((s: number, g: any) => s + (g.valor || 0), 0)}
+									{@const recargosPreviewParex = previewRecargosGrupos
+										.filter((g: any) => g.empresa_id === PAREX_ID && g.incluir !== false)
+										.reduce((s: number, g: any) => s + (g.valor || 0), 0)}
 									{@const totalRecargosParex = recargosManualParex + recargosPreviewParex}
 									<div>
-										<p class="mb-2 text-xs font-medium text-gray-500">Ajuste PAREX (8%)</p>
+										<p class="mb-2 font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
+											Ajuste PAREX (8%)
+										</p>
 										<table class="w-full text-xs">
-											<tbody>
-												<tr class="border-b border-gray-50">
-													<td class="py-1 text-gray-500">Empresa</td>
-													<td class="py-1 text-right font-medium text-gray-700"
+											<tbody class="divide-y divide-[var(--border-subtle)]">
+												<tr>
+													<td class="py-1 text-[var(--text-muted)]">Empresa</td>
+													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]"
 														>{empresas.find((e) => e.id === PAREX_ID)?.nombre || 'PAREX'}</td
 													>
 												</tr>
-												<tr class="border-b border-gray-50">
-													<td class="py-1 text-gray-500">Total Recargos PAREX</td>
-													<td class="py-1 text-right font-medium text-gray-700"
+												<tr>
+													<td class="py-1 text-[var(--text-muted)]">Total Recargos PAREX</td>
+													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]"
 														>{formatCurrency(totalRecargosParex)}</td
 													>
 												</tr>
-												<tr class="border-b border-gray-50">
-													<td class="py-1 text-gray-500">Porcentaje</td>
-													<td class="py-1 text-right font-medium text-gray-700">8%</td>
+												<tr>
+													<td class="py-1 text-[var(--text-muted)]">Porcentaje</td>
+													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]">
+														8%
+													</td>
 												</tr>
-												<tr class="border-t border-gray-200">
-													<td class="py-1.5 font-semibold text-gray-700">Ajuste PAREX</td>
-													<td class="py-1.5 text-right font-bold text-orange-700"
+												<tr class="border-t-2 border-[var(--border-emphasis)]">
+													<td class="py-1.5 font-bold text-[var(--text-primary)]">
+														Ajuste PAREX
+													</td>
+													<td class="py-1.5 text-right font-bold text-[#C2410C]"
 														>{formatCurrency(totales.ajusteParex)}</td
 													>
 												</tr>
-												<tr class="border-b border-gray-50">
-													<td class="py-1 text-gray-500">50% → Salud</td>
-													<td class="py-1 text-right font-medium text-red-500"
-														>{formatCurrency(totales.ajusteParex * 0.5)}</td
+											</tbody>
+										</table>
+									</div>
+								{/if}
+
+								{#if isAjusteGeopark}
+									{@const GEOPARK_ID = 'eea5eda5-1b60-45a0-b4c7-606a8c908ff9'}
+									{@const recargosPreviewParex =
+										previewRecargosGrupos
+											?.filter((p: any) => p.empresa?.id === GEOPARK_ID)
+											.reduce((s: number, p: any) => s + (p.total_valor || 0), 0) || 0}
+									{@const totalRecargos = totales.totalRecargosGeopark + recargosPreviewParex}
+									<div>
+										<p class="mb-2 font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
+											Ajuste GEOPARK (8%)
+										</p>
+										<table class="w-full text-xs">
+											<tbody class="divide-y divide-[var(--border-subtle)]">
+												<tr>
+													<td class="py-1 text-[var(--text-muted)]">Empresa</td>
+													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]"
+														>{empresas.find((e) => e.id === GEOPARK_ID)?.nombre || 'GEOPARK'}</td
 													>
 												</tr>
-												<tr class="border-b border-gray-50">
-													<td class="py-1 text-gray-500">50% → Pensión</td>
-													<td class="py-1 text-right font-medium text-red-500"
-														>{formatCurrency(totales.ajusteParex * 0.5)}</td
+												<tr>
+													<td class="py-1 text-[var(--text-muted)]">Total Recargos GEOPARK</td>
+													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]"
+														>{formatCurrency(totalRecargos)}</td
+													>
+												</tr>
+												<tr>
+													<td class="py-1 text-[var(--text-muted)]">Porcentaje</td>
+													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]">
+														8%
+													</td>
+												</tr>
+												<tr class="border-t-2 border-[var(--border-emphasis)]">
+													<td class="py-1.5 font-bold text-[var(--text-primary)]">
+														Ajuste GEOPARK
+													</td>
+													<td class="py-1.5 text-right font-bold text-[var(--emerald-700)]"
+														>{formatCurrency(totales.ajusteGeopark)}</td
 													>
 												</tr>
 											</tbody>
@@ -2540,222 +3304,17 @@
 						</div>
 					{/if}
 
-					<!-- Resumen de Liquidación -->
-					<div class="rounded-lg border border-gray-200 bg-white">
-						<!-- Header -->
-						<div class="flex items-center gap-3 border-b border-gray-200 px-6 py-4">
-							<DollarSign class="h-5 w-5 text-gray-400" />
-							<h3 class="text-sm font-semibold tracking-wide text-gray-700 uppercase">
-								Resumen de Liquidación
-							</h3>
-						</div>
-
-						<div class="grid grid-cols-1 gap-0 lg:grid-cols-2">
-							<!-- Devengados -->
-							<div class="border-b border-gray-200 p-5 lg:border-r lg:border-b-0">
-								<h4 class="mb-3 text-xs font-bold tracking-wider text-orange-600 uppercase">
-									Devengados
-								</h4>
-								<table class="w-full text-sm">
-									<tbody>
-										<tr class="border-b border-gray-100">
-											<td class="py-2 text-gray-600">Salario ({dias_laborados} días)</td>
-											<td class="py-2 text-right font-medium text-gray-900"
-												>{formatCurrency(totales.salarioDevengado)}</td
-											>
-										</tr>
-										<tr class="border-b border-gray-100">
-											<td class="py-2 text-gray-600">Auxilio de Transporte</td>
-											<td class="py-2 text-right font-medium text-gray-900"
-												>{formatCurrency(totales.auxilioTransporte)}</td
-											>
-										</tr>
-										<tr class="border-b border-gray-100">
-											<td class="py-2 text-gray-600">Bonificaciones</td>
-											<td class="py-2 text-right font-medium text-orange-600"
-												>{formatCurrency(totales.totalBonificaciones)}</td
-											>
-										</tr>
-										<tr class="border-b border-gray-100">
-											<td class="py-2 text-gray-600">Pernotes</td>
-											<td class="py-2 text-right font-medium text-orange-600"
-												>{formatCurrency(totales.totalPernotes)}</td
-											>
-										</tr>
-										<tr class="border-b border-gray-100">
-											<td class="py-2 text-gray-600">Recargos</td>
-											<td class="py-2 text-right font-medium text-orange-600"
-												>{formatCurrency(totales.totalRecargos)}</td
-											>
-										</tr>
-										{#if totales.bonificacionVillanueva > 0}
-											<tr class="border-b border-gray-100">
-												<td class="py-2 text-gray-600">Ajuste Salarial</td>
-												<td class="py-2 text-right font-medium text-orange-600"
-													>{formatCurrency(totales.bonificacionVillanueva)}</td
-												>
-											</tr>
-										{/if}
-										{#if totales.valorIncapacidad > 0}
-											<tr class="border-b border-gray-100">
-												<td class="py-2 text-gray-600">Incapacidad</td>
-												<td class="py-2 text-right font-medium text-gray-900"
-													>{formatCurrency(totales.valorIncapacidad)}</td
-												>
-											</tr>
-										{/if}
-										{#if totales.totalVacaciones > 0}
-											<tr class="border-b border-gray-100">
-												<td class="py-2 text-gray-600">Vacaciones</td>
-												<td class="py-2 text-right font-medium text-gray-900"
-													>{formatCurrency(totales.totalVacaciones)}</td
-												>
-											</tr>
-										{/if}
-										{#if totales.interesCesantias > 0}
-											<tr class="border-b border-gray-100">
-												<td class="py-2 text-gray-600">Interés Cesantías</td>
-												<td class="py-2 text-right font-medium text-gray-900"
-													>{formatCurrency(totales.interesCesantias)}</td
-												>
-											</tr>
-										{/if}
-										{#if totales.totalAjustesAdicionales !== 0}
-											<tr class="border-b border-gray-100">
-												<td class="py-2 text-gray-600">Conceptos Adicionales</td>
-												<td
-													class="py-2 text-right font-medium {totales.totalAjustesAdicionales > 0
-														? 'text-orange-600'
-														: 'text-red-600'}">{formatCurrency(totales.totalAjustesAdicionales)}</td
-												>
-											</tr>
-										{/if}
-									</tbody>
-									<tfoot>
-										<tr class="border-t-2 border-gray-300">
-											<td class="py-3 font-bold text-gray-800">Total Devengado</td>
-											<td class="py-3 text-right">
-												<span class="font-bold text-gray-900"
-													>{formatCurrency(totales.sueldoBruto)}</span
-												>
-												{#if totales.sueldoBruto % 1 !== 0}
-													<span class="block text-[10px] text-gray-400"
-														>{formatCurrencyDecimal(totales.sueldoBruto)}</span
-													>
-												{/if}
-											</td>
-										</tr>
-									</tfoot>
-								</table>
-							</div>
-
-							<!-- Deducciones -->
-							<div class="p-5">
-								<h4 class="mb-3 text-xs font-bold tracking-wider text-red-500 uppercase">
-									Deducciones
-								</h4>
-								<table class="w-full text-sm">
-									<tbody>
-										<tr class="border-b border-gray-100">
-											<td class="py-2 text-gray-600"
-												>Salud (4%){totales.ajusteParex > 0 ? ' + PAREX' : ''}</td
-											>
-											<td class="py-2 text-right font-medium text-red-500"
-												>-{formatCurrency(totales.salud)}</td
-											>
-										</tr>
-										<tr class="border-b border-gray-100">
-											<td class="py-2 text-gray-600"
-												>Pensión (4%){totales.ajusteParex > 0 ? ' + PAREX' : ''}</td
-											>
-											<td class="py-2 text-right font-medium text-red-500"
-												>-{formatCurrency(totales.pension)}</td
-											>
-										</tr>
-										{#if totales.totalAnticipos > 0}
-											<tr class="border-b border-gray-100">
-												<td class="py-2 text-gray-600">Anticipos</td>
-												<td class="py-2 text-right font-medium text-red-500"
-													>-{formatCurrency(totales.totalAnticipos)}</td
-												>
-											</tr>
-										{/if}
-									</tbody>
-									<tfoot>
-										<tr class="border-t-2 border-gray-300">
-											<td class="py-3 font-bold text-red-700">Total Deducciones</td>
-											<td class="py-3 text-right">
-												<span class="font-bold text-red-600"
-													>-{formatCurrency(totales.totalDeducciones)}</span
-												>
-												{#if totales.totalDeducciones % 1 !== 0}
-													<span class="block text-[10px] text-red-300"
-														>-{formatCurrencyDecimal(totales.totalDeducciones)}</span
-													>
-												{/if}
-											</td>
-										</tr>
-									</tfoot>
-								</table>
-							</div>
-						</div>
-
-						<!-- Total a Pagar -->
-						<div class="rounded-b-lg border-t border-gray-200 bg-gray-900 px-6 py-5">
-							<div class="flex items-center justify-between">
-								<div>
-									<span class="text-sm font-bold tracking-wider text-gray-400 uppercase"
-										>Total a Pagar</span
-									>
-									{#if totales.sueldoTotal % 1 !== 0}
-										<label class="mt-2 flex cursor-pointer items-center gap-2">
-											<input
-												type="checkbox"
-												bind:checked={redondearNetoArriba}
-												class="rounded border-gray-600 bg-gray-800 text-orange-500 focus:ring-orange-500 focus:ring-offset-gray-900"
-											/>
-											<span class="text-[11px] text-gray-500">Aproximar hacia arriba</span>
-										</label>
-									{/if}
-									<label class="mt-2 flex cursor-pointer items-center gap-2">
-										<input
-											type="checkbox"
-											bind:checked={descontarPesos}
-											class="rounded border-gray-600 bg-gray-800 text-red-500 focus:ring-red-500 focus:ring-offset-gray-900"
-										/>
-										<span class="text-[11px] text-gray-500">Descontar Pesos</span>
-									</label>
-									<input type="number" bind:value={pesosDescontar} />
-								</div>
-								<div class="text-right">
-									<span class="text-3xl font-bold text-orange-400">
-										{formatCurrency(
-											(redondearNetoArriba
-												? Math.ceil(totales.sueldoTotal)
-												: Math.floor(totales.sueldoTotal)) - (descontarPesos ? pesosDescontar : 0)
-										)}
-									</span>
-									{#if totales.sueldoTotal % 1 !== 0}
-										<span class="block text-xs text-gray-500"
-											>{formatCurrencyDecimal(totales.sueldoTotal)}</span
-										>
-									{/if}
-								</div>
-							</div>
-						</div>
-					</div>
-
 					<!-- Estado de la liquidación -->
 					<div
-						class="mt-4 flex items-center justify-between rounded-lg border border-gray-200 bg-white px-5 py-4"
+						class="flex items-center justify-between rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-base)] px-5 py-4"
 					>
 						<div class="flex items-center gap-3">
 							<div
 								class="h-3 w-3 rounded-full {estadoLiquidacion === 'Liquidado'
-									? 'bg-orange-500'
-									: 'bg-gray-400'}"
+									? 'bg-[var(--emerald-500)] shadow-[0_0_0_3px_rgba(249,115,22,0.20)]'
+									: 'bg-[var(--text-very-muted)]'}"
 							></div>
-							<span class="text-sm font-semibold text-gray-700"
+							<span class="text-sm font-semibold text-[var(--text-secondary)]"
 								>{estadoLiquidacion === 'Liquidado' ? 'Liquidado' : 'Pendiente'}</span
 							>
 						</div>
@@ -2763,33 +3322,439 @@
 							type="button"
 							on:click={() =>
 								(estadoLiquidacion = estadoLiquidacion === 'Pendiente' ? 'Liquidado' : 'Pendiente')}
-							class="rounded-md px-4 py-2 text-xs font-semibold tracking-wide uppercase transition-colors {estadoLiquidacion ===
-							'Pendiente'
-								? 'bg-orange-600 text-white hover:bg-orange-700'
-								: 'bg-gray-200 text-gray-700 hover:bg-gray-300'}"
+							class="apple-transition rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] hover:border-[var(--border-emphasis)] hover:bg-[var(--bg-surface)]"
 						>
 							{estadoLiquidacion === 'Pendiente' ? 'Marcar Liquidada' : 'Marcar Pendiente'}
 						</button>
 					</div>
 				</div>
-			{/if}
+				<!-- /Sección: Ajustes y Períodos Especiales -->
+			</div>
+			<!-- /COLUMNA IZQUIERDA -->
 
-			<!-- Botones de navegación -->
-			<div class="mt-8 flex items-center justify-between border-t border-gray-200 pt-6">
-				<button
-					on:click={prevStep}
-					disabled={currentStep === 1}
-					class="flex items-center gap-2 rounded-md border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+			<!-- COLUMNA DERECHA: Resumen sticky -->
+			<aside class="hidden lg:block sticky top-0">
+				<div class="space-y-4">
+					<!-- Card: Total a Pagar (dark hero) -->
+					<div
+						class="overflow-hidden rounded-2xl border border-[var(--border-subtle)] shadow-[var(--shadow-card)]"
+					>
+						<div
+							class="px-5 py-5"
+							style="background: linear-gradient(135deg, #0F1F1A, #0A1410);"
+						>
+							<span class="font-mono-meta text-[0.65rem] text-[#9A9A9A]">Total a Pagar</span>
+							<div class="mt-1 flex items-baseline justify-between gap-2">
+								<span class="font-display text-2xl font-medium text-[#34D399] sm:text-3xl">
+									{formatCurrency(totalAPagarVisual)}
+								</span>
+							</div>
+							{#if totales.sueldoTotal % 1 !== 0}
+								<span class="block text-[11px] text-[#6B6B6B]"
+									>{formatCurrencyDecimal(totales.sueldoTotal)}</span
+								>
+							{/if}
+
+							<!-- Ajuste ±$ -->
+							<div class="mt-3">
+								<label
+									for="ajuste-pesos"
+									class="font-mono-meta mb-1 block text-[0.6rem] text-[#9A9A9A]"
+									>Ajuste manual ±$</label
+								>
+								<div class="inline-flex overflow-hidden rounded-lg border border-[#374151]">
+									{#each [-5, -3, -2, -1, 0, 1, 2, 3, 5] as const as val}
+										<button
+											type="button"
+											on:click={() => (ajustePesos = val)}
+											class="apple-transition px-2 py-1 text-[11px] font-medium {ajustePesos ===
+											val
+												? val < 0
+													? 'bg-[#DC2626] text-white'
+													: 'bg-[var(--emerald-500)] text-white'
+												: 'bg-[#1F2937] text-[#9A9A9A] hover:bg-[#374151] hover:text-[#E5E7EB]'}"
+										>
+											{val > 0 ? `+${val}` : val}
+										</button>
+									{/each}
+								</div>
+							</div>
+
+							{#if ajustePesos !== 0}
+								<span
+									class="mt-2 block font-mono-meta text-[0.6rem] {ajustePesos > 0
+										? 'text-[#FBBF24]'
+										: 'text-[#FCA5A5]'}"
+								>
+									(ajuste {ajustePesos > 0 ? `+${ajustePesos}` : ajustePesos} · se envía al backend)
+								</span>
+							{/if}
+						</div>
+					</div>
+
+					<!-- Card: Desglose financiero -->
+					<div
+						class="rounded-2xl border border-[var(--border-subtle)] bg-white shadow-[var(--shadow-card)]"
+					>
+						<div
+							class="flex items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--bg-base)] px-5 py-3"
+						>
+							<DollarSign class="h-4 w-4 text-[var(--text-muted)]" />
+							<h3 class="font-mono-meta text-[0.7rem] text-[var(--text-secondary)]">
+								Desglose Financiero
+							</h3>
+						</div>
+
+						<div class="space-y-4 p-5">
+							<!-- Devengados -->
+							<div>
+								<h4 class="font-mono-meta mb-2 text-[0.65rem] text-[var(--emerald-600)]">
+									Devengados
+								</h4>
+								<table class="w-full text-xs">
+									<tbody class="divide-y divide-[var(--border-subtle)]">
+										<tr>
+											<td class="py-1.5 text-[var(--text-secondary)]"
+												>Salario ({dias_laborados} días)</td
+											>
+											<td class="py-1.5 text-right font-semibold text-[var(--text-primary)]"
+												>{formatCurrency(totales.salarioDevengado)}</td
+											>
+										</tr>
+										<tr>
+											<td class="py-1.5 text-[var(--text-secondary)]">Aux. Transporte</td>
+											<td class="py-1.5 text-right font-semibold text-[var(--text-primary)]"
+												>{formatCurrency(totales.auxilioTransporte)}</td
+											>
+										</tr>
+										{#if totales.totalBonificaciones > 0}
+											<tr>
+												<td class="py-1.5 text-[var(--text-secondary)]">Bonificaciones</td>
+												<td class="py-1.5 text-right font-semibold text-[var(--emerald-600)]"
+													>{formatCurrency(totales.totalBonificaciones)}</td
+												>
+											</tr>
+										{/if}
+										{#if totales.totalPernotes > 0}
+											<tr>
+												<td class="py-1.5 text-[var(--text-secondary)]">Pernotes</td>
+												<td class="py-1.5 text-right font-semibold text-[var(--emerald-600)]"
+													>{formatCurrency(totales.totalPernotes)}</td
+												>
+											</tr>
+										{/if}
+										{#if totales.totalRecargos > 0}
+											<tr>
+												<td class="py-1.5 text-[var(--text-secondary)]">Recargos</td>
+												<td class="py-1.5 text-right font-semibold text-[var(--emerald-600)]"
+													>{formatCurrency(totales.totalRecargos)}</td
+												>
+											</tr>
+										{/if}
+										{#if totales.bonificacionVillanueva > 0}
+											<tr>
+												<td class="py-1.5 text-[var(--text-secondary)]">Ajuste Salarial</td>
+												<td class="py-1.5 text-right font-semibold text-[var(--emerald-600)]"
+													>{formatCurrency(totales.bonificacionVillanueva)}</td
+												>
+											</tr>
+										{/if}
+										{#if totales.valorIncapacidad > 0}
+											<tr>
+												<td class="py-1.5 text-[var(--text-secondary)]">Incapacidad</td>
+												<td class="py-1.5 text-right font-semibold text-[var(--text-primary)]"
+													>{formatCurrency(totales.valorIncapacidad)}</td
+												>
+											</tr>
+										{/if}
+										{#if totales.totalVacaciones > 0}
+											<tr>
+												<td class="py-1.5 text-[var(--text-secondary)]">Vacaciones</td>
+												<td class="py-1.5 text-right font-semibold text-[var(--text-primary)]"
+													>{formatCurrency(Number(valor_vacaciones))}</td
+												>
+											</tr>
+										{/if}
+										{#if totales.interesCesantias > 0}
+											<tr>
+												<td class="py-1.5 text-[var(--text-secondary)]">Interés Cesantías</td>
+												<td class="py-1.5 text-right font-semibold text-[var(--text-primary)]"
+													>{formatCurrency(totales.interesCesantias)}</td
+												>
+											</tr>
+										{/if}
+										{#if cesantias > 0}
+											<tr>
+												<td class="py-1.5 text-[var(--text-secondary)]">Cesantías</td>
+												<td class="py-1.5 text-right font-semibold text-[var(--text-primary)]"
+													>{formatCurrency(cesantias)}</td
+												>
+											</tr>
+										{/if}
+										{#if totales.totalAjustesAdicionales !== 0}
+											<tr>
+												<td class="py-1.5 text-[var(--text-secondary)]"
+													>Conceptos Adicionales</td
+												>
+												<td
+													class="py-1.5 text-right font-semibold {totales.totalAjustesAdicionales >
+													0
+														? 'text-[var(--emerald-600)]'
+														: 'text-[#DC2626]'}">{formatCurrency(totales.totalAjustesAdicionales)}</td
+												>
+											</tr>
+										{/if}
+									</tbody>
+									<tfoot>
+										<tr class="border-t-2 border-[var(--border-emphasis)]">
+											<td class="pt-2 text-sm font-bold text-[var(--text-primary)]"
+												>Total Bruto</td
+											>
+											<td class="pt-2 text-right text-sm font-bold text-[var(--text-primary)]"
+												>{formatCurrency(totales.sueldoBruto)}</td
+											>
+										</tr>
+									</tfoot>
+								</table>
+							</div>
+
+							<!-- Deducciones -->
+							<div>
+								<h4 class="font-mono-meta mb-2 text-[0.65rem] text-[#DC2626]">Deducciones</h4>
+								<table class="w-full text-xs">
+									<tbody class="divide-y divide-[var(--border-subtle)]">
+										<tr>
+											<td class="py-1.5 text-[var(--text-secondary)]"
+												>Salud (4%){descontarSaludSalario ? ' (Base)' : ''}</td
+											>
+											<td class="py-1.5 text-right font-semibold text-[#DC2626]"
+												>-{formatCurrency(totales.salud)}</td
+											>
+										</tr>
+										<tr>
+											<td class="py-1.5 text-[var(--text-secondary)]"
+												>Pensión (4%){descontarPensionSalario ? ' (Base)' : ''}</td
+											>
+											<td class="py-1.5 text-right font-semibold text-[#DC2626]"
+												>-{formatCurrency(totales.pension)}</td
+											>
+										</tr>
+										{#if totales.totalAnticipos > 0}
+											<tr>
+												<td class="py-1.5 text-[var(--text-secondary)]">Anticipos</td>
+												<td class="py-1.5 text-right font-semibold text-[#DC2626]"
+													>-{formatCurrency(totales.totalAnticipos)}</td
+												>
+											</tr>
+										{/if}
+									</tbody>
+									<tfoot>
+										<tr class="border-t-2 border-[var(--border-emphasis)]">
+											<td class="pt-2 text-sm font-bold text-[#991B1B]">Total Deducciones</td>
+											<td class="pt-2 text-right text-sm font-bold text-[#DC2626]"
+												>-{formatCurrency(totales.totalDeducciones)}</td
+											>
+										</tr>
+									</tfoot>
+								</table>
+							</div>
+
+							<!-- Base prestacional -->
+							<div
+								class="rounded-lg border border-[rgba(220,38,38,0.20)] bg-[rgba(220,38,38,0.04)] p-3"
+							>
+								<div class="flex items-center justify-between">
+									<span class="font-mono-meta text-[0.65rem] text-[#991B1B]"
+										>Base Prestacional</span
+									>
+									<span class="text-sm font-bold text-[#991B1B]"
+										>{formatCurrency(totales.baseCalculo)}</span
+									>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<!-- Botones de acción sticky al final del resumen -->
+					<div class="flex flex-col gap-2">
+						<button
+							on:click={handleSubmit}
+							disabled={loading}
+							class="apple-transition flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-btn)] hover:shadow-[var(--shadow-btn-hover)] disabled:opacity-50"
+							style="background: linear-gradient(135deg, #f97316, #ea580c);"
+						>
+							{#if loading}
+								<div
+									class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
+								></div>
+								Guardando...
+							{:else}
+								<Save class="h-4 w-4" />
+								Guardar Liquidación
+							{/if}
+						</button>
+						<button
+							type="button"
+							on:click={() => window.history.back()}
+							class="btn-secondary apple-transition"
+						>
+							Cancelar
+						</button>
+					</div>
+				</div>
+			</aside>
+		</div>
+		<!-- /Grid 2 columnas -->
+
+		<!-- ═══ RESUMEN MÓVIL: al final de la página en mobile, oculto en desktop (lg+) ═══ -->
+		<div class="mt-6 lg:hidden">
+			<button
+				type="button"
+				class="apple-transition flex w-full items-center justify-between rounded-xl border border-[var(--border-subtle)] bg-white px-4 py-3 text-sm font-semibold text-[var(--text-secondary)] shadow-[var(--shadow-card)] hover:bg-[var(--bg-base)]"
+				on:click={() => (showMobileResumen = !showMobileResumen)}
+			>
+				<span class="flex items-center gap-2">
+					<DollarSign class="h-4 w-4 text-[var(--emerald-600)]" />
+					{showMobileResumen ? 'Ocultar desglose' : 'Ver desglose'}
+				</span>
+				<span class="font-display text-sm font-bold text-[var(--emerald-700)]">
+					{formatCurrency(totalAPagarVisual)}
+				</span>
+			</button>
+			{#if showMobileResumen}
+				<div
+					class="mt-3 space-y-3 rounded-2xl border border-[var(--border-subtle)] bg-white p-4 shadow-[var(--shadow-card)]"
 				>
-					<ChevronLeft class="h-4 w-4" />
-					Anterior
-				</button>
+					<!-- Total a pagar -->
+					<div class="text-center">
+						<span class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]"
+							>Total a Pagar</span
+						>
+						<div class="font-display text-2xl font-medium text-[var(--emerald-700)]">
+							{formatCurrency(totalAPagarVisual)}
+						</div>
+					</div>
 
-				{#if currentStep === totalSteps}
+					<!-- Devengado / Deducciones -->
+					<div class="grid grid-cols-2 gap-2 text-xs">
+						<div
+							class="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-2"
+						>
+							<div class="font-mono-meta text-[0.6rem] text-[var(--text-muted)]">
+								Devengado
+							</div>
+							<div class="font-bold text-[var(--text-primary)]">
+								{formatCurrency(totales.sueldoBruto)}
+							</div>
+						</div>
+						<div
+							class="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-2"
+						>
+							<div class="font-mono-meta text-[0.6rem] text-[var(--text-muted)]">
+								Deducciones
+							</div>
+							<div class="font-bold text-[#DC2626]">
+								-{formatCurrency(totales.totalDeducciones)}
+							</div>
+						</div>
+					</div>
+
+					<!-- Base Prestacional -->
+					<div
+						class="rounded-lg border border-[rgba(220,38,38,0.20)] bg-[rgba(220,38,38,0.04)] p-2.5"
+					>
+						<div class="flex items-center justify-between">
+							<span class="font-mono-meta text-[0.65rem] text-[#991B1B]"
+								>Base Prestacional</span
+							>
+							<span class="text-sm font-bold text-[#991B1B]">
+								{formatCurrency(totales.baseCalculo)}
+							</span>
+						</div>
+					</div>
+
+					<!-- Desglose conceptos (mismo que el aside de desktop) -->
+					<details class="rounded-lg border border-[var(--border-subtle)] bg-white">
+						<summary
+							class="cursor-pointer select-none px-3 py-2 text-xs font-semibold text-[var(--text-secondary)]"
+						>
+							Desglose de conceptos
+						</summary>
+						<div class="space-y-1.5 px-3 pb-3 text-xs">
+							<div class="flex items-center justify-between">
+								<span class="text-[var(--text-muted)]">Salario devengado</span>
+								<span class="font-mono text-[var(--text-primary)]"
+									>{formatCurrency(totales.salarioDevengado)}</span
+								>
+							</div>
+							<div class="flex items-center justify-between">
+								<span class="text-[var(--text-muted)]">Auxilio de transporte</span>
+								<span class="font-mono text-[var(--text-primary)]"
+									>{formatCurrency(totales.auxilioTransporte)}</span
+								>
+							</div>
+							<div class="flex items-center justify-between">
+								<span class="text-[var(--text-muted)]">Bonificaciones</span>
+								<span class="font-mono text-[var(--text-primary)]"
+									>{formatCurrency(totales.totalBonificaciones)}</span
+								>
+							</div>
+							<div class="flex items-center justify-between">
+								<span class="text-[var(--text-muted)]">Pernotes</span>
+								<span class="font-mono text-[var(--text-primary)]"
+									>{formatCurrency(totales.totalPernotes)}</span
+								>
+							</div>
+							<div class="flex items-center justify-between">
+								<span class="text-[var(--text-muted)]">Recargos</span>
+								<span class="font-mono font-semibold text-[var(--emerald-700)]"
+									>{formatCurrency(totales.totalRecargos)}</span
+								>
+							</div>
+							<div class="flex items-center justify-between">
+								<span class="text-[var(--text-muted)]">Ajuste PAREX</span>
+								<span class="font-mono text-[var(--text-primary)]"
+									>{formatCurrency(totales.ajusteParex)}</span
+								>
+							</div>
+							<div class="flex items-center justify-between">
+								<span class="text-[var(--text-muted)]">Ajuste Geopark</span>
+								<span class="font-mono text-[var(--text-primary)]"
+									>{formatCurrency(totales.ajusteGeopark)}</span
+								>
+							</div>
+							<div class="flex items-center justify-between border-t border-[var(--border-subtle)] pt-1.5">
+								<span class="font-semibold text-[var(--text-primary)]">Sueldo bruto</span>
+								<span class="font-mono font-semibold text-[var(--text-primary)]"
+									>{formatCurrency(totales.sueldoBruto)}</span
+								>
+							</div>
+							<div class="flex items-center justify-between">
+								<span class="text-[#DC2626]">− Salud</span>
+								<span class="font-mono text-[#DC2626]">{formatCurrency(totales.salud)}</span>
+							</div>
+							<div class="flex items-center justify-between">
+								<span class="text-[#DC2626]">− Pensión</span>
+								<span class="font-mono text-[#DC2626]"
+									>{formatCurrency(totales.pension)}</span
+								>
+							</div>
+							<div class="flex items-center justify-between">
+								<span class="text-[#DC2626]">− Anticipos</span>
+								<span class="font-mono text-[#DC2626]"
+									>{formatCurrency(totales.totalAnticipos)}</span
+								>
+							</div>
+						</div>
+					</details>
+
+					<!-- Botón guardar en mobile -->
 					<button
+						type="button"
 						on:click={handleSubmit}
 						disabled={loading}
-						class="flex items-center gap-2 rounded-md bg-orange-600 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-700 disabled:opacity-50"
+						class="apple-transition flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-btn)] disabled:opacity-50"
+						style="background: linear-gradient(135deg, #f97316, #ea580c);"
 					>
 						{#if loading}
 							<div
@@ -2801,16 +3766,19 @@
 							Guardar Liquidación
 						{/if}
 					</button>
-				{:else}
-					<button
-						on:click={nextStep}
-						class="flex items-center gap-2 rounded-md bg-gray-900 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-gray-800"
-					>
-						Siguiente
-						<ChevronRight class="h-4 w-4" />
-					</button>
-				{/if}
-			</div>
+				</div>
+			{/if}
 		</div>
 	</div>
+
+	<!-- Modal: Reporte de recorridos del período (estilo PreviewTerceroPDF) -->
+	<RecorridosSincronizadosModal
+		open={modalRecorridosOpen}
+		conductorId={conductorSelected?.value || ''}
+		conductorNombre={conductorSelected?.label || ''}
+		desde={periodo_inicio}
+		hasta={periodo_fin}
+		clavesSincronizadas={clavesSincronizadas}
+		onclose={() => (modalRecorridosOpen = false)}
+	/>
 {/if}

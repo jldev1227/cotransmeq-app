@@ -12,6 +12,7 @@ import type {
 import { toast } from 'svelte-sonner';
 
 interface RecargosState {
+	eliminados: boolean | undefined;
 	recargos: CanvasRecargo[];
 	loading: boolean;
 	error: string | null;
@@ -38,6 +39,7 @@ function createRecargosStore() {
 			total: 0,
 			totalPages: 0
 		},
+		eliminados: false,
 		selectedMes: new Date().getMonth() + 1,
 		selectedAño: new Date().getFullYear()
 	};
@@ -51,6 +53,7 @@ function createRecargosStore() {
 		 * Obtener recargos con filtros actuales
 		 */
 		async fetchRecargos(filtrosCustom?: RecargoPlanillaFiltros) {
+			console.log('Ocurriendo un fetch');
 			update((state) => ({ ...state, loading: true, error: null }));
 
 			try {
@@ -60,7 +63,8 @@ function createRecargosStore() {
 					mes: state.selectedMes,
 					año: state.selectedAño,
 					page: state.pagination.page,
-					limit: state.pagination.limit
+					limit: state.pagination.limit,
+					eliminados: state.eliminados
 				};
 
 				const response = await recargosApi.obtenerParaCanvas(filtros);
@@ -78,11 +82,28 @@ function createRecargosStore() {
 			}
 		},
 
+		/**
+		 * Obtener recargos eliminados
+		 */
+		async fetchEliminados() {
+			update((s) => ({ ...s, eliminados: true }));
+			await this.fetchRecargos();
+		},
+
+		/**
+		 * Obtener recargos activos
+		 */
+		async fetchActivos() {
+			update((s) => ({ ...s, eliminados: false }));
+			await this.fetchRecargos();
+		},
+
+		// En el store
 		async setMesYAño(mes: number, año: number) {
 			update((s) => ({ ...s, selectedMes: mes, selectedAño: año }));
 			await this.fetchRecargos(); // Solo 1 fetch
 		},
-		
+
 		/**
 		 * Aplicar filtros
 		 */

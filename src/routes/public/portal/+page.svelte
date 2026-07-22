@@ -4,22 +4,18 @@
   import { goto } from '$app/navigation';
   import { browser } from '$app/environment';
   import { portalSession, isAuthenticated, getApiBase } from '$lib/stores/portalStore';
+  import { fade, fly } from 'svelte/transition';
+  import { quintOut } from 'svelte/easing';
 
-  const LOGO_SRC = '/assets/logo.png';
-  const THEME_KEY = 'cotransmeq_portal_theme';
+  const LOGO_SRC = '/assets/logo_transmeralda-264.webp';
   const TOKEN_DAYS = 30;
 
-  let dark = false;
   let authStep: 'cedula' | 'email_sent' | 'verificando' = 'cedula';
   let cedulaInput = '';
   let cedulaError = '';
   let emailHidden = '';
   let loadingAuth = false;
-
-  function toggleTheme() {
-    dark = !dark;
-    localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light');
-  }
+  let mounted = false;
 
   function validarCedula(v: string) {
     if (!v.trim()) return 'Ingresa tu número de cédula';
@@ -59,7 +55,7 @@
       const base = getApiBase();
       const res = await fetch(`${base}/api/conductor-portal/verificar-token?token=${encodeURIComponent(token)}`);
       const json = await res.json();
-      
+
       if (!res.ok) {
         cedulaError = json.message || 'Enlace inválido o expirado.';
         authStep = 'cedula';
@@ -74,17 +70,27 @@
         expiresAt: data.expires_at
       });
 
-      const desprendibleId = browser ? new URL(window.location.href).searchParams.get('desprendible') : null;
+      const currentUrl = browser ? new URL(window.location.href) : null;
+      const desprendibleId = currentUrl?.searchParams.get('desprendible') || null;
+      const primaId = currentUrl?.searchParams.get('prima') || null;
+      const tabParam = currentUrl?.searchParams.get('tab') || null;
 
       if (browser) {
         const url = new URL(window.location.href);
         url.searchParams.delete('token');
         url.searchParams.delete('desprendible');
+        url.searchParams.delete('prima');
+        url.searchParams.delete('tab');
         window.history.replaceState({}, '', url.toString());
       }
 
-      const redirectUrl = desprendibleId
-        ? `/public/portal/desprendibles?highlight=${encodeURIComponent(desprendibleId)}`
+      const targetParams = new URLSearchParams();
+      if (desprendibleId) targetParams.set('highlight', desprendibleId);
+      if (primaId) targetParams.set('highlight_prima', primaId);
+      if (tabParam) targetParams.set('tab', tabParam);
+      const qs = targetParams.toString();
+      const redirectUrl = qs
+        ? `/public/portal/desprendibles?${qs}`
         : '/public/portal/desprendibles';
       goto(redirectUrl);
     } catch (err: any) {
@@ -97,338 +103,595 @@
 
   function handleKey(e: KeyboardEvent) { if (e.key === 'Enter') solicitarAcceso(); }
 
+  function formatEmail(email: string): string {
+    if (!email) return '';
+    const [user, domain] = email.split('@');
+    if (!user || !domain) return email;
+    const visible = user.slice(0, 2);
+    return `${visible}${'•'.repeat(Math.max(user.length - 2, 3))}@${domain}`;
+  }
+
   onMount(async () => {
-    const saved = localStorage.getItem(THEME_KEY);
-    dark = saved === 'dark';
+    const currentUrl = new URL(window.location.href);
+    const desprendibleParam = currentUrl.searchParams.get('desprendible');
+    const primaParam = currentUrl.searchParams.get('prima');
+    const tabParam = currentUrl.searchParams.get('tab');
 
-    const desprendibleParam = $page.url.searchParams.get('desprendible');
+    const urlToken = $page.url.searchParams.get('token');
 
+    // PRIORIDAD 1: Si hay un token en la URL, SIEMPRE validarlo.
+    // El enlace mágico es una credencial fresca y debe reemplazar
+    // cualquier sesión guardada (ej: de un login anterior en el mismo
+    // navegador). Sin esto, un usuario con sesión activa en localStorage
+    // nunca podría re-autenticarse con un nuevo enlace y la página se
+    // quedaba en blanco (mounted=false) sin enviar request al backend.
+    if (urlToken) {
+      mounted = true;
+      await verificarTokenFromUrl(urlToken);
+      return;
+    }
+
+    // PRIORIDAD 2: Sin token en URL pero ya autenticado → ir al dashboard
     if ($isAuthenticated) {
-      const redirectUrl = desprendibleParam
-        ? `/public/portal/desprendibles?highlight=${encodeURIComponent(desprendibleParam)}`
+      const targetParams = new URLSearchParams();
+      if (desprendibleParam) targetParams.set('highlight', desprendibleParam);
+      if (primaParam) targetParams.set('highlight_prima', primaParam);
+      if (tabParam) targetParams.set('tab', tabParam);
+      const qs = targetParams.toString();
+      const redirectUrl = qs
+        ? `/public/portal/desprendibles?${qs}`
         : '/public/portal/desprendibles';
       goto(redirectUrl);
       return;
     }
 
-    const urlToken = $page.url.searchParams.get('token');
-    if (urlToken) {
-      await verificarTokenFromUrl(urlToken);
-    }
+    // PRIORIDAD 3: Sin token y sin sesión → mostrar formulario
+    mounted = true;
   });
 </script>
 
-<div class="page" class:dark>
-  <button class="theme-fab" on:click={toggleTheme} title="Cambiar tema" aria-label="Cambiar tema">
-    {#if dark}☀️{:else}🌙{/if}
-  </button>
+<svelte:head>
+  <title>Portal del Conductor · Cotransmeq S.A.S</title>
+  <meta name="description" content="Acceso al portal del conductor de Cotransmeq S.A.S. Consulta tus desprendibles, servicios y días laborados." />
+</svelte:head>
 
-  {#if authStep === 'verificando'}
-    <div class="auth-card">
-      <div class="auth-logo-wrap">
-        <img src={LOGO_SRC} alt="Cotransmeq" class="auth-logo-img"
-          on:error={(e) => { (e.currentTarget as HTMLImageElement).style.display='none'; }} />
-      </div>
-      <div class="loading-state">
-        <span class="spinner-lg"></span>
-        <p class="loading-text">Verificando acceso...</p>
-      </div>
+{#if mounted}
+  <div class="portal-page" in:fade={{ duration: 300 }}>
+    <!-- Ambient orbs (sutiles, editorial) -->
+    <div class="orbs" aria-hidden="true">
+      <div class="orb orb-1"></div>
+      <div class="orb orb-2"></div>
     </div>
 
-  {:else if authStep === 'email_sent'}
-    <div class="auth-card" style="text-align:center;">
-      <div class="auth-logo-wrap">
-        <img src={LOGO_SRC} alt="Cotransmeq" class="auth-logo-img"
-          on:error={(e) => { (e.currentTarget as HTMLImageElement).style.display='none'; }} />
-      </div>
-      <div class="email-icon">📧</div>
-      <h1 class="auth-title">Revisa tu<br/>correo</h1>
-      <p class="auth-sub" style="text-align:center;">
-        Hemos enviado un enlace de acceso a<br/>
-        <strong class="email-addr">{emailHidden}</strong>
-      </p>
-      <div class="auth-note">
-        💡 Revisa bandeja de entrada y spam.<br/>
-        El enlace es válido por <strong class="accent">{TOKEN_DAYS} días</strong>.
-      </div>
-      <button class="btn-secondary" on:click={() => { authStep = 'cedula'; cedulaError = ''; }}>
-        ← Volver a intentar
-      </button>
-    </div>
+    <div class="auth-shell" in:fly={{ y: 20, duration: 500, easing: quintOut }}>
+      <div class="auth-card">
+        <div class="auth-head">
+          <img src={LOGO_SRC} alt="Cotransmeq S.A.S" class="auth-logo" />
+        </div>
 
-  {:else}
-    <div class="auth-card">
-      <div class="auth-logo-wrap">
-        <img src={LOGO_SRC} alt="Cotransmeq" class="auth-logo-img"
-          on:error={(e) => { (e.currentTarget as HTMLImageElement).style.display='none'; }} />
-      </div>
+        {#if authStep === 'verificando'}
+          <div class="state-block" in:fade={{ duration: 250 }}>
+            <div class="state-icon">
+              <span class="spinner-lg"></span>
+            </div>
+            <h1 class="state-title">Verificando acceso</h1>
+            <p class="state-sub">Estamos validando tu enlace mágico.</p>
+          </div>
 
-      <h1 class="auth-title">Portal del<br/>Conductor</h1>
-      <p class="auth-sub">
-        Ingresa tu número de cédula para acceder a tus <strong>desprendibles</strong> y <strong>reporte diario</strong>.
-      </p>
+        {:else if authStep === 'email_sent'}
+          <div class="state-block" in:fly={{ y: 16, duration: 350, easing: quintOut }}>
+            <div class="state-icon state-icon--success">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <span class="eyebrow">Enlace enviado</span>
+            <h1 class="auth-title">Revisa tu correo</h1>
+            <p class="auth-sub">
+              Hemos enviado un enlace de acceso a
+              <strong class="email-addr">{formatEmail(emailHidden)}</strong>
+            </p>
 
-      <div class="features-row">
-        <div class="feature-chip">📄 Desprendibles</div>
-        <div class="feature-chip">📅 Días Laborados</div>
-      </div>
+            <aside class="hint-card">
+              <span class="hint-label">Importante</span>
+              <p>
+                Revisa tu bandeja de entrada y la carpeta de spam. El enlace es válido por
+                <strong>{TOKEN_DAYS} días</strong>.
+              </p>
+            </aside>
 
-      <label for="cedula" class="input-label">Número de cédula</label>
-      <input
-        id="cedula" type="tel" inputmode="numeric"
-        class="cedula-input" class:input-error={cedulaError}
-        bind:value={cedulaInput}
-        on:keydown={handleKey}
-        placeholder="· · · · · · · ·"
-        maxlength="12" autocomplete="off"
-      />
-      {#if cedulaError}
-        <p class="error-msg">⚠ {cedulaError}</p>
-      {/if}
+            <button class="btn-secondary" on:click={() => { authStep = 'cedula'; cedulaError = ''; }}>
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+              Volver a intentar
+            </button>
+          </div>
 
-      <button class="btn-primary" on:click={solicitarAcceso} disabled={loadingAuth}>
-        {#if loadingAuth}
-          <span class="spinner"></span> Verificando...
         {:else}
-          Solicitar acceso →
-        {/if}
-      </button>
+          <div class="state-block" in:fly={{ y: 16, duration: 350, easing: quintOut }}>
+            <span class="eyebrow">Acceso seguro</span>
+            <h1 class="auth-title">Portal del<br />Conductor</h1>
+            <p class="auth-sub">
+              Ingresa tu número de cédula para acceder a tus
+              <strong>desprendibles</strong>, <strong>servicios</strong> y
+              <strong>reporte diario</strong>.
+            </p>
 
-      <div class="auth-note">
-        📧 Recibirás un enlace de acceso en tu correo registrado.<br/>
-        🔒 Sesión activa por <strong class="accent">{TOKEN_DAYS} días</strong>.
+            <ul class="features">
+              <li>
+                <span class="feature-mark">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </span>
+                Desprendibles de pago
+              </li>
+              <li>
+                <span class="feature-mark">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </span>
+                Mis servicios asignados
+              </li>
+              <li>
+                <span class="feature-mark">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </span>
+                Días laborados
+              </li>
+            </ul>
+
+            <div class="field">
+              <label for="cedula" class="field-label">Número de cédula</label>
+              <input
+                id="cedula"
+                type="tel"
+                inputmode="numeric"
+                class="cedula-input"
+                class:input-error={cedulaError}
+                bind:value={cedulaInput}
+                on:keydown={handleKey}
+                placeholder="00000000"
+                maxlength="12"
+                autocomplete="off"
+              />
+              {#if cedulaError}
+                <p class="error-msg" in:fly={{ y: -4, duration: 200 }}>
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                  </svg>
+                  {cedulaError}
+                </p>
+              {/if}
+            </div>
+
+            <button class="btn-primary" on:click={solicitarAcceso} disabled={loadingAuth}>
+              {#if loadingAuth}
+                <span class="spinner"></span>
+                Enviando enlace…
+              {:else}
+                Solicitar acceso
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                </svg>
+              {/if}
+            </button>
+
+            <aside class="hint-card">
+              <span class="hint-label">Cómo funciona</span>
+              <p>
+                Recibirás un enlace de acceso en tu correo registrado. La sesión
+                permanece activa durante <strong>{TOKEN_DAYS} días</strong>.
+              </p>
+            </aside>
+          </div>
+        {/if}
       </div>
+
+      <p class="footer-copy">
+        © {new Date().getFullYear()} Cotransmeq S.A.S · Yopal, Casanare · Colombia
+      </p>
     </div>
-  {/if}
-</div>
+  </div>
+{/if}
 
 <style>
-  .page {
-    --bg: #f1f5f9;
-    --surface: #ffffff;
-    --border: #e2e8f0;
-    --text: #0f172a;
-    --text2: #475569;
-    --text3: #94a3b8;
-    --accent-color: #EA580C;
-    --accent-dark: #C2410C;
-    --accent2: #1e40af;
-    --input-bg: #f8fafc;
-
-    font-family: 'Barlow', sans-serif;
+  .portal-page {
+    position: relative;
     min-height: 100vh;
     min-height: 100dvh;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 1.5rem 1rem;
+    background-color: #faf7f2;
+    font-family: 'Inter', 'Inter Tight', system-ui, sans-serif;
+    color: #1a1a1a;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  .orbs {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+  }
+  .orb-1 {
+    top: -8rem;
+    right: -6rem;
+    width: 28rem;
+    height: 28rem;
+    background: rgba(249, 115, 22, 0.18);
+  }
+  .orb-2 {
+    bottom: -10rem;
+    left: -8rem;
+    width: 32rem;
+    height: 32rem;
+    background: rgba(249, 115, 22, 0.12);
+  }
+
+  .auth-shell {
     position: relative;
-    background:
-      radial-gradient(ellipse 80% 50% at 50% -10%, #EA580C15 0%, transparent 60%),
-      var(--bg);
-    color: var(--text);
-    transition: background .25s, color .25s;
+    z-index: 1;
+    width: 100%;
+    max-width: 460px;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
   }
-
-  .page.dark {
-    --bg: #0f172a;
-    --surface: #1e293b;
-    --border: #334155;
-    --text: #f1f5f9;
-    --text2: #94a3b8;
-    --text3: #64748b;
-    --input-bg: #0f172a;
-  }
-
-  :global(body) { margin: 0; }
-  * { box-sizing: border-box; }
-
-  .theme-fab {
-    position: fixed;
-    top: 1rem;
-    right: 1rem;
-    width: 40px; height: 40px;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 50%; font-size: 1.1rem;
-    cursor: pointer; display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
-    z-index: 10;
-    transition: transform .15s;
-  }
-  .theme-fab:active { transform: scale(0.9); }
 
   .auth-card {
-    width: 100%;
-    max-width: 400px;
-    background: var(--surface);
-    border-radius: 20px;
-    padding: 2rem 1.75rem;
-    box-shadow: 0 4px 32px rgba(0,0,0,0.08);
-    border: 1px solid var(--border);
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 24px;
+    padding: 2.25rem 1.75rem 2rem;
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.04),
+      0 20px 60px rgba(15, 31, 26, 0.08);
   }
 
-  .auth-logo-wrap {
-    text-align: center;
-    margin-bottom: 1.25rem;
+  .auth-head {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1.5rem;
   }
-  .auth-logo-img { height: 50px; width: auto; }
+
+  .auth-logo {
+    height: 44px;
+    width: auto;
+    display: block;
+  }
+
+  .state-block {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .state-icon {
+    align-self: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: rgba(249, 115, 22, 0.08);
+    color: #f97316;
+    margin-bottom: 1rem;
+  }
+  .state-icon svg {
+    width: 28px;
+    height: 28px;
+  }
+  .state-icon--success {
+    background: linear-gradient(135deg, #f97316, #ea580c);
+    color: #ffffff;
+    box-shadow: 0 8px 24px rgba(249, 115, 22, 0.3);
+  }
+
+  .eyebrow {
+    display: inline-block;
+    align-self: flex-start;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #f97316;
+    background: rgba(249, 115, 22, 0.08);
+    padding: 0.3rem 0.75rem;
+    border-radius: 6px;
+    margin-bottom: 0.75rem;
+  }
 
   .auth-title {
-    text-align: center;
-    font-size: 2rem;
-    font-weight: 800;
-    line-height: 1.15;
-    margin: 0 0 0.5rem;
-    background: linear-gradient(135deg, #EA580C, #C2410C);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: clamp(1.75rem, 5vw, 2.15rem);
+    font-weight: 400;
+    line-height: 1.1;
+    letter-spacing: -0.02em;
+    color: #0f1f1a;
+    margin: 0 0 0.6rem;
   }
 
   .auth-sub {
-    text-align: center;
-    color: var(--text2);
-    font-size: 0.92rem;
-    line-height: 1.5;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: #4a4a4a;
     margin: 0 0 1.25rem;
   }
+  .auth-sub strong {
+    color: #0f1f1a;
+    font-weight: 600;
+  }
 
-  .features-row {
+  .email-addr {
+    font-family: 'JetBrains Mono', monospace;
+    color: #065f46;
+    background: rgba(249, 115, 22, 0.08);
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.88em;
+    font-weight: 700;
+  }
+
+  .features {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 1.5rem;
     display: flex;
-    gap: 0.5rem;
+    flex-direction: column;
+    gap: 0.55rem;
+  }
+  .features li {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    font-size: 0.85rem;
+    color: #1a1a1a;
+  }
+  .feature-mark {
+    display: inline-flex;
+    align-items: center;
     justify-content: center;
-    margin-bottom: 1.5rem;
-    flex-wrap: wrap;
+    width: 22px;
+    height: 22px;
+    border-radius: 7px;
+    background: rgba(249, 115, 22, 0.12);
+    color: #f97316;
+    flex-shrink: 0;
+  }
+  .feature-mark svg {
+    width: 12px;
+    height: 12px;
   }
 
-  .feature-chip {
-    padding: 0.35rem 0.85rem;
-    background: #FFF7ED;
-    border: 1px solid #FDBA74;
-    border-radius: 99px;
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: #9A3412;
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    margin-bottom: 0.25rem;
   }
 
-  .page.dark .feature-chip {
-    background: #431407;
-    border-color: #EA580C;
-    color: #FDBA74;
-  }
-
-  .input-label {
-    display: block;
-    font-weight: 600;
-    font-size: 0.82rem;
-    color: var(--text2);
-    margin-bottom: 0.4rem;
+  .field-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.1em;
+    color: #6b6b6b;
   }
 
   .cedula-input {
     width: 100%;
     padding: 0.85rem 1rem;
-    border: 2px solid var(--border);
-    border-radius: 12px;
-    font-size: 1.2rem;
     font-family: 'JetBrains Mono', monospace;
+    font-size: 1.15rem;
     font-weight: 600;
-    letter-spacing: 0.15em;
-    background: var(--input-bg);
-    color: var(--text);
+    letter-spacing: 0.18em;
+    color: #0f1f1a;
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 12px;
     text-align: center;
     outline: none;
-    transition: border-color .2s, box-shadow .2s;
+    transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+  .cedula-input::placeholder {
+    color: #9a9a9a;
+    letter-spacing: 0.3em;
+  }
+  .cedula-input:hover:not(:disabled) {
+    border-color: rgba(0, 0, 0, 0.2);
   }
   .cedula-input:focus {
-    border-color: var(--accent-color);
-    box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.12);
+    border-color: #f97316;
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
   }
-  .cedula-input.input-error { border-color: #ef4444; }
+  .cedula-input.input-error {
+    border-color: rgba(220, 38, 38, 0.45);
+    background: rgba(220, 38, 38, 0.03);
+  }
 
   .error-msg {
-    color: #ef4444;
-    font-size: 0.82rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: #991b1b;
+    font-size: 0.78rem;
     font-weight: 600;
-    margin: 0.4rem 0 0;
-    text-align: center;
+    margin: 0;
+  }
+  .error-msg svg {
+    width: 14px;
+    height: 14px;
+    color: #dc2626;
+    flex-shrink: 0;
   }
 
   .btn-primary {
-    width: 100%;
-    margin-top: 1rem;
-    padding: 0.85rem;
-    border: none;
-    border-radius: 12px;
-    background: linear-gradient(135deg, #EA580C, #C2410C);
-    color: #fff;
-    font-size: 1rem;
-    font-weight: 700;
-    cursor: pointer;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    transition: transform .1s, box-shadow .2s;
-    box-shadow: 0 2px 12px rgba(234, 88, 12, 0.25);
+    width: 100%;
+    padding: 0.85rem 1.25rem;
+    margin-top: 0.75rem;
+    font-family: inherit;
+    font-size: 0.92rem;
+    font-weight: 600;
+    color: #ffffff;
+    background: linear-gradient(135deg, #f97316, #ea580c);
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+    transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
-  .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(234, 88, 12, 0.35); }
-  .btn-primary:active:not(:disabled) { transform: scale(0.98); }
-  .btn-primary:disabled { opacity: 0.6; cursor: wait; }
+  .btn-primary:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
+  }
+  .btn-primary:active:not(:disabled) {
+    transform: translateY(0);
+  }
+  .btn-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .btn-primary svg {
+    width: 16px;
+    height: 16px;
+  }
 
   .btn-secondary {
-    display: inline-block;
-    margin-top: 1rem;
-    padding: 0.6rem 1.2rem;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--surface);
-    color: var(--text2);
-    font-weight: 600;
-    font-size: 0.88rem;
-    cursor: pointer;
-    transition: all .15s;
-  }
-  .btn-secondary:hover { background: var(--input-bg); }
-
-  .auth-note {
-    margin-top: 1.25rem;
-    font-size: 0.78rem;
-    color: var(--text3);
-    text-align: center;
-    line-height: 1.65;
-  }
-  .accent { color: var(--accent-color); }
-  .email-addr { color: var(--accent-color); font-family: 'JetBrains Mono', monospace; font-size: 0.88rem; }
-  .email-icon { font-size: 3rem; margin-bottom: 1rem; }
-
-  .loading-state {
-    display: flex;
-    flex-direction: column;
+    display: inline-flex;
     align-items: center;
-    gap: 1rem;
-    padding: 2rem 0;
+    justify-content: center;
+    gap: 0.4rem;
+    align-self: center;
+    margin-top: 0.5rem;
+    padding: 0.6rem 1.1rem;
+    font-family: inherit;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #0f1f1a;
+    background: #ffffff;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
-  .loading-text { color: var(--text2); font-size: 0.95rem; margin: 0; }
+  .btn-secondary:hover {
+    background: #faf7f2;
+    border-color: rgba(0, 0, 0, 0.2);
+  }
+  .btn-secondary svg {
+    width: 14px;
+    height: 14px;
+  }
 
-  .spinner-lg {
-    width: 40px; height: 40px;
-    border: 3px solid var(--border);
-    border-top-color: var(--accent-color);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+  .hint-card {
+    background: linear-gradient(135deg, rgba(249, 115, 22, 0.04), rgba(249, 115, 22, 0.08));
+    border: 1px solid rgba(249, 115, 22, 0.15);
+    border-radius: 12px;
+    padding: 0.85rem 1rem;
+    margin-top: 1.25rem;
+  }
+  .hint-label {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: #f97316;
+    background: #ffffff;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    margin-bottom: 0.45rem;
+  }
+  .hint-card p {
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: #065f46;
+    margin: 0;
+  }
+  .hint-card strong {
+    color: #047857;
+    font-weight: 700;
   }
 
   .spinner {
-    width: 18px; height: 18px;
-    border: 2px solid rgba(255,255,255,0.3);
-    border-top-color: #fff;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #ffffff;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    display: inline-block;
+  }
+  .spinner-lg {
+    width: 36px;
+    height: 36px;
+    border: 3px solid rgba(249, 115, 22, 0.18);
+    border-top-color: #f97316;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
     display: inline-block;
   }
 
-  @keyframes spin { to { transform: rotate(360deg); } }
+  .state-title {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 1.5rem;
+    font-weight: 500;
+    color: #0f1f1a;
+    margin: 0 0 0.35rem;
+    text-align: center;
+  }
+  .state-sub {
+    font-size: 0.9rem;
+    color: #4a4a4a;
+    margin: 0;
+    text-align: center;
+  }
+
+  .footer-copy {
+    font-size: 0.72rem;
+    color: #9a9a9a;
+    text-align: center;
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  @media (max-width: 480px) {
+    .auth-card {
+      padding: 1.75rem 1.25rem 1.5rem;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .auth-card,
+    .btn-primary,
+    .btn-secondary,
+    .cedula-input {
+      transition: none !important;
+      animation: none !important;
+    }
+  }
 </style>

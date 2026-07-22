@@ -46,6 +46,8 @@ export interface RespuestaAsistencia {
 	numero_documento: string;
 	cargo: string;
 	numero_telefono: string;
+	pertenece_comite?: boolean;
+	nombre_comite?: string;
 	firma: string;
 	ip_address: string;
 	user_agent: string;
@@ -84,8 +86,30 @@ export interface CreateRespuestaInput {
 	numero_documento: string;
 	cargo: string;
 	numero_telefono: string;
+	pertenece_comite?: boolean;
+	nombre_comite?: string;
 	firma: string; // Base64
 	device_fingerprint: string;
+}
+
+export interface GetFormulariosParams {
+	page?: number;
+	limit?: number;
+	search?: string;
+	filterActivo?: 'all' | 'activo' | 'inactivo';
+	sortBy?: 'fecha' | 'tematica' | 'respuestas';
+	sortOrder?: 'asc' | 'desc';
+}
+
+export interface FormularioAsistenciaResponse {
+	success: boolean;
+	data: FormularioAsistencia[];
+	meta: {
+		total: number;
+		page: number;
+		limit: number;
+		totalPages: number;
+	};
 }
 
 class AsistenciasAPI {
@@ -120,8 +144,26 @@ class AsistenciasAPI {
 		return result.data;
 	}
 
-	async obtenerFormularios(): Promise<FormularioAsistencia[]> {
-		const response = await fetch(`${this.baseUrl}/formularios`, {
+	async obtenerFormularios(params: GetFormulariosParams = {}): Promise<FormularioAsistenciaResponse> {
+		const {
+			page = 1,
+			limit = 10,
+			search,
+			filterActivo = 'all',
+			sortBy = 'fecha',
+			sortOrder = 'desc'
+		} = params;
+
+		const queryParams = new URLSearchParams({
+			page: String(page),
+			limit: String(limit),
+			...(search && { search }),
+			filterActivo,
+			sortBy,
+			sortOrder
+		});
+
+		const response = await fetch(`${this.baseUrl}/formularios?${queryParams}`, {
 			headers: await this.getAuthHeaders()
 		});
 
@@ -129,8 +171,28 @@ class AsistenciasAPI {
 			throw new Error('Error al obtener los formularios');
 		}
 
+		return await response.json();
+	}
+
+	// Obtener solo los IDs de los formularios filtrados (para selección masiva)
+	async obtenerTodosLosIds(params?: { filterActivo?: 'all' | 'activo' | 'inactivo'; search?: string }): Promise<string[]> {
+		const queryParams = new URLSearchParams();
+		if (params?.filterActivo) queryParams.set('filterActivo', params.filterActivo);
+		if (params?.search) queryParams.set('search', params.search);
+
+		const qs = queryParams.toString();
+		const url = `${this.baseUrl}/formularios/ids${qs ? `?${qs}` : ''}`;
+
+		const response = await fetch(url, {
+			headers: await this.getAuthHeaders()
+		});
+
+		if (!response.ok) {
+			throw new Error('Error al obtener los IDs');
+		}
+
 		const result = await response.json();
-		return result.data;
+		return result.data || [];
 	}
 
 	async obtenerFormularioPorId(id: string): Promise<FormularioAsistencia> {
@@ -273,8 +335,46 @@ class AsistenciasAPI {
 		return await response.blob();
 	}
 
+	// Exportar TODAS las asistencias a un ZIP
+	async exportarTodasPDFs(params?: { filterActivo?: 'all' | 'activo' | 'inactivo'; search?: string; jobId?: string }): Promise<Blob> {
+		const queryParams = new URLSearchParams();
+		if (params?.filterActivo) queryParams.set('filterActivo', params.filterActivo);
+		if (params?.search) queryParams.set('search', params.search);
+		if (params?.jobId) queryParams.set('jobId', params.jobId);
+
+		const qs = queryParams.toString();
+		const url = `${this.baseUrl}/formularios/exportar-todas-pdf${qs ? `?${qs}` : ''}`;
+
+		const response = await fetch(url, {
+			headers: await this.getAuthHeaders()
+		});
+
+		if (!response.ok) {
+			const error = await response.json().catch(() => ({ message: 'Error al exportar las asistencias' }));
+			throw new Error(error.message || 'Error al exportar las asistencias');
+		}
+
+		return await response.blob();
+	}
+
+	// Exportar formularios SELECCIONADOS a un ZIP
+	async exportarSeleccionadosPDFs(ids: string[], jobId?: string): Promise<Blob> {
+		const response = await fetch(`${this.baseUrl}/formularios/exportar-seleccionados-pdf`, {
+			method: 'POST',
+			headers: await this.getAuthHeaders(),
+			body: JSON.stringify({ ids, jobId })
+		});
+
+		if (!response.ok) {
+			const error = await response.json().catch(() => ({ message: 'Error al exportar los formularios seleccionados' }));
+			throw new Error(error.message || 'Error al exportar los formularios seleccionados');
+		}
+
+		return await response.blob();
+	}
+
 	async eliminarRespuestas(ids: string[]): Promise<{ deleted: number }> {
-		const response = await fetch(`${this.baseUrl}/asistencias/respuestas`, {
+		const response = await fetch(`${this.baseUrl}/respuestas`, {
 			method: 'DELETE',
 			headers: await this.getAuthHeaders(),
 			body: JSON.stringify({ ids })

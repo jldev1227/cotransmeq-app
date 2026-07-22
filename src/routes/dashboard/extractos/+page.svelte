@@ -283,6 +283,7 @@
 		try {
 			const res = await extractosAPI.getNextConsecutivo();
 			nextConsecutivo = res.data?.consecutivo || null;
+			// Auto-set in form if empty
 			if (nextConsecutivo && !extracto.numero_contrato) {
 				extracto.numero_contrato = nextConsecutivo.toString();
 			}
@@ -317,6 +318,7 @@
 		loadingMatches = true;
 		syncing = true;
 		try {
+			// Sync creates missing entities AND returns the full maps
 			const res = await extractosAPI.syncToDatabase();
 			matches = res.data || null;
 			if (res.data?.created) {
@@ -326,11 +328,13 @@
 					toast.success(
 						`Sincronizado: ${c.clientes} contratantes, ${c.vehiculos} vehículos, ${c.conductores} conductores creados`
 					);
+					// Reload form data since new entities were created
 					await loadFormData();
 				}
 			}
 		} catch (err: any) {
 			console.error('Error sincronizando:', err);
+			// Fallback to just loading matches
 			try {
 				const res = await extractosAPI.getMatches();
 				matches = res.data || null;
@@ -352,6 +356,7 @@
 			]);
 			clientes = clientesRes.data?.data || clientesRes.data || [];
 			vehiculos = vehiculosRes.data?.data || vehiculosRes.data || [];
+			// Filtrar conductores duplicados/importados (EXT-) y quedarse solo con los reales
 			const allConductores: Conductor[] = conductoresRes.data?.data || conductoresRes.data || [];
 			conductoresList = allConductores.filter(
 				(c) => !c.numero_identificacion?.startsWith('EXT-')
@@ -409,6 +414,9 @@
 		};
 
 		let contratanteNombre = ext.contratante;
+		if (contratanteNombre === 'HV SERVICES Y SUPPLY SAS') {
+			contratanteNombre = 'FEPCO SERVICIOS S.A.S';
+		}
 
 		extracto = {
 			numero_contrato: ext.consecutivo,
@@ -493,9 +501,11 @@
 			if (condName) {
 				const normalizedName = normalizeStr(condName);
 				const extWords = normalizedName.split(' ').filter(Boolean);
+				// 1) Exact match
 				let matchedCond = conductoresList.find(
 					(c) => normalizeStr(`${c.nombre} ${c.apellido}`) === normalizedName
 				);
+				// 2) Sorted word-set match (handles different word order)
 				if (!matchedCond) {
 					const sortedExt = [...extWords].sort().join(' ');
 					matchedCond = conductoresList.find((c) => {
@@ -503,6 +513,7 @@
 						return dbWords === sortedExt;
 					});
 				}
+				// 3) All words contained (handles partial name differences)
 				if (!matchedCond && extWords.length >= 2) {
 					matchedCond = conductoresList.find((c) => {
 						const fullName = normalizeStr(`${c.nombre} ${c.apellido}`);
@@ -593,7 +604,7 @@
 
 			let logoBase64 = '';
 			try {
-				const response = await fetch('/assets/logo.png');
+				const response = await fetch('/assets/logo_transmeralda-264.webp');
 				const blob = await response.blob();
 				logoBase64 = await new Promise<string>((resolve) => {
 					const reader = new FileReader();
@@ -624,7 +635,7 @@
 					{
 						text: `CONDUCTOR ${i + 1}`,
 						style: 'labelCell',
-						fillColor: '#FFF3E0',
+						fillColor: '#E8F5E9',
 						colSpan: 2
 					},
 					{},
@@ -636,18 +647,18 @@
 					{}
 				]);
 				conductorRows.push([
-					{ text: 'CÉDULA', style: 'labelCell', fillColor: '#FFF3E0' },
+					{ text: 'CÉDULA', style: 'labelCell', fillColor: '#E8F5E9' },
 					{ text: c.cedula || '', style: 'valueCell' },
 					{
 						text: 'LICENCIA CONDUCCIÓN',
 						style: 'labelCell',
-						fillColor: '#FFF3E0',
+						fillColor: '#E8F5E9',
 						colSpan: 2
 					},
 					{},
 					{ text: c.licencia_conduccion || '', style: 'valueCell', colSpan: 2 },
 					{},
-					{ text: 'VIGENCIA', style: 'labelCell', fillColor: '#FFF3E0' },
+					{ text: 'VIGENCIA', style: 'labelCell', fillColor: '#E8F5E9' },
 					{ text: c.vigencia_licencia || '', style: 'valueCell' }
 				]);
 			}
@@ -725,8 +736,8 @@
 						layout: {
 							hLineWidth: () => 0.8,
 							vLineWidth: () => 0.8,
-							hLineColor: () => '#E65100',
-							vLineColor: () => '#E65100'
+							hLineColor: () => '#2E7D32',
+							vLineColor: () => '#2E7D32'
 						}
 					},
 					{ text: '', margin: [0, 6, 0, 0] },
@@ -742,11 +753,11 @@
 												text: extracto.numero_contrato || '________',
 												bold: true,
 												fontSize: 11,
-												color: '#E65100'
+												color: '#1B5E20'
 											}
 										],
 										alignment: 'center',
-										fillColor: '#FFF3E0',
+										fillColor: '#E8F5E9',
 										margin: [0, 4, 0, 4]
 									}
 								]
@@ -755,8 +766,8 @@
 						layout: {
 							hLineWidth: () => 0.8,
 							vLineWidth: () => 0.8,
-							hLineColor: () => '#E65100',
-							vLineColor: () => '#E65100'
+							hLineColor: () => '#2E7D32',
+							vLineColor: () => '#2E7D32'
 						}
 					},
 					{ text: '', margin: [0, 4, 0, 0] },
@@ -768,7 +779,7 @@
 									{
 										text: 'CONTRATANTE',
 										style: 'labelCell',
-										fillColor: '#FFF3E0',
+										fillColor: '#E8F5E9',
 										colSpan: 2
 									},
 									{},
@@ -780,14 +791,14 @@
 									{},
 									{},
 									{},
-									{ text: 'NIT', style: 'labelCell', fillColor: '#FFF3E0' },
+									{ text: 'NIT', style: 'labelCell', fillColor: '#E8F5E9' },
 									{ text: extracto.contratante_nit || '', style: 'valueCell' }
 								],
 								[
 									{
 										text: 'OBJETO DEL CONTRATO',
 										style: 'labelCell',
-										fillColor: '#FFF3E0',
+										fillColor: '#E8F5E9',
 										colSpan: 2
 									},
 									{},
@@ -803,7 +814,7 @@
 									{}
 								],
 								[
-									{ text: 'ORIGEN', style: 'labelCell', fillColor: '#FFF3E0' },
+									{ text: 'ORIGEN', style: 'labelCell', fillColor: '#E8F5E9' },
 									{
 										text: extracto.origen || '',
 										style: 'valueCell',
@@ -811,7 +822,7 @@
 									},
 									{},
 									{},
-									{ text: 'DESTINO', style: 'labelCell', fillColor: '#FFF3E0' },
+									{ text: 'DESTINO', style: 'labelCell', fillColor: '#E8F5E9' },
 									{
 										text: extracto.destino || '',
 										style: 'valueCell',
@@ -824,7 +835,7 @@
 									{
 										text: 'VIGENCIA DEL CONTRATO',
 										style: 'labelCell',
-										fillColor: '#FFE0B2',
+										fillColor: '#C8E6C9',
 										colSpan: 8,
 										alignment: 'center',
 										bold: true
@@ -841,7 +852,7 @@
 									{
 										text: 'FECHA INICIAL',
 										style: 'labelCell',
-										fillColor: '#FFF3E0'
+										fillColor: '#E8F5E9'
 									},
 									{
 										text: `DÍA: ${fechaIni.dia}`,
@@ -861,7 +872,7 @@
 									{
 										text: 'FECHA VENCIMIENTO',
 										style: 'labelCell',
-										fillColor: '#FFF3E0'
+										fillColor: '#E8F5E9'
 									},
 									{
 										text: `DÍA: ${fechaVen.dia}`,
@@ -883,7 +894,7 @@
 									{
 										text: 'DATOS DEL VEHÍCULO',
 										style: 'labelCell',
-										fillColor: '#FFE0B2',
+										fillColor: '#C8E6C9',
 										colSpan: 8,
 										alignment: 'center',
 										bold: true
@@ -897,25 +908,25 @@
 									{}
 								],
 								[
-									{ text: 'PLACA', style: 'labelCell', fillColor: '#FFF3E0' },
+									{ text: 'PLACA', style: 'labelCell', fillColor: '#E8F5E9' },
 									{
 										text: extracto.placa || '',
 										style: 'valueCell',
 										bold: true,
 										fontSize: 10
 									},
-									{ text: 'MODELO', style: 'labelCell', fillColor: '#FFF3E0' },
+									{ text: 'MODELO', style: 'labelCell', fillColor: '#E8F5E9' },
 									{ text: extracto.modelo_vehiculo || '', style: 'valueCell' },
-									{ text: 'MARCA', style: 'labelCell', fillColor: '#FFF3E0' },
+									{ text: 'MARCA', style: 'labelCell', fillColor: '#E8F5E9' },
 									{ text: extracto.marca_vehiculo || '', style: 'valueCell' },
-									{ text: 'CLASE', style: 'labelCell', fillColor: '#FFF3E0' },
+									{ text: 'CLASE', style: 'labelCell', fillColor: '#E8F5E9' },
 									{ text: extracto.clase_vehiculo || '', style: 'valueCell' }
 								],
 								[
 									{
 										text: 'TARJETA DE OPERACIÓN',
 										style: 'labelCell',
-										fillColor: '#FFF3E0',
+										fillColor: '#E8F5E9',
 										colSpan: 2
 									},
 									{},
@@ -928,7 +939,7 @@
 									{
 										text: 'Nº INTERNO',
 										style: 'labelCell',
-										fillColor: '#FFF3E0',
+										fillColor: '#E8F5E9',
 										colSpan: 2
 									},
 									{},
@@ -943,7 +954,7 @@
 									{
 										text: 'DATOS DE LOS CONDUCTORES',
 										style: 'labelCell',
-										fillColor: '#FFE0B2',
+										fillColor: '#C8E6C9',
 										colSpan: 8,
 										alignment: 'center',
 										bold: true
@@ -961,7 +972,7 @@
 									{
 										text: 'RESPONSABLE DEL CONTRATANTE',
 										style: 'labelCell',
-										fillColor: '#FFE0B2',
+										fillColor: '#C8E6C9',
 										colSpan: 8,
 										alignment: 'center',
 										bold: true
@@ -975,7 +986,7 @@
 									{}
 								],
 								[
-									{ text: 'NOMBRE', style: 'labelCell', fillColor: '#FFF3E0' },
+									{ text: 'NOMBRE', style: 'labelCell', fillColor: '#E8F5E9' },
 									{
 										text: extracto.responsable_nombre || '',
 										style: 'valueCell',
@@ -983,7 +994,7 @@
 									},
 									{},
 									{},
-									{ text: 'CÉDULA', style: 'labelCell', fillColor: '#FFF3E0' },
+									{ text: 'CÉDULA', style: 'labelCell', fillColor: '#E8F5E9' },
 									{
 										text: extracto.responsable_cedula || '',
 										style: 'valueCell',
@@ -996,7 +1007,7 @@
 									{
 										text: 'TELÉFONO',
 										style: 'labelCell',
-										fillColor: '#FFF3E0'
+										fillColor: '#E8F5E9'
 									},
 									{
 										text: extracto.responsable_telefono || '',
@@ -1008,7 +1019,7 @@
 									{
 										text: 'DIRECCIÓN',
 										style: 'labelCell',
-										fillColor: '#FFF3E0'
+										fillColor: '#E8F5E9'
 									},
 									{
 										text: extracto.responsable_direccion || '',
@@ -1023,8 +1034,8 @@
 						layout: {
 							hLineWidth: () => 0.6,
 							vLineWidth: () => 0.6,
-							hLineColor: () => '#E65100',
-							vLineColor: () => '#E65100',
+							hLineColor: () => '#2E7D32',
+							vLineColor: () => '#2E7D32',
 							paddingLeft: () => 4,
 							paddingRight: () => 4,
 							paddingTop: () => 3,
@@ -1044,12 +1055,12 @@
 												text:
 													extracto.numero_extracto || '________________________',
 												fontSize: 9,
-												color: '#E65100'
+												color: '#1B5E20'
 											}
 										],
 										alignment: 'center',
 										margin: [0, 3, 0, 3],
-										fillColor: '#FFF8E1'
+										fillColor: '#F1F8E9'
 									}
 								]
 							]
@@ -1057,8 +1068,8 @@
 						layout: {
 							hLineWidth: () => 0.6,
 							vLineWidth: () => 0.6,
-							hLineColor: () => '#E65100',
-							vLineColor: () => '#E65100'
+							hLineColor: () => '#2E7D32',
+							vLineColor: () => '#2E7D32'
 						}
 					},
 					{ text: '', margin: [0, 15, 0, 0] },
@@ -1089,11 +1100,22 @@
 										margin: [0, 3, 0, 0]
 									},
 									{
-										text: 'COOPERATIVA DE TRANSPORTADORES DE MAQUINARIA Y EQUIPO',
+										text: 'NIT: 901.053.612-7',
+										fontSize: 8,
+										alignment: 'center'
+									},
+									{
+										text: 'Cra 14 #20-11 Apto 201 - Tunja, Boyacá',
 										fontSize: 7,
 										alignment: 'center',
 										color: '#666',
 										margin: [0, 2, 0, 0]
+									},
+									{
+										text: 'Tel: 310 339 7671',
+										fontSize: 7,
+										alignment: 'center',
+										color: '#666'
 									}
 								]
 							},
@@ -1102,11 +1124,11 @@
 					}
 				],
 				styles: {
-					headerTitle: { fontSize: 8, bold: true, color: '#E65100' },
-					headerSubtitle: { fontSize: 10, bold: true, color: '#E65100' },
-					headerCompany: { fontSize: 9, bold: true, color: '#F57C00' },
+					headerTitle: { fontSize: 8, bold: true, color: '#1B5E20' },
+					headerSubtitle: { fontSize: 10, bold: true, color: '#1B5E20' },
+					headerCompany: { fontSize: 9, bold: true, color: '#2E7D32' },
 					headerMeta: { fontSize: 8, color: '#555' },
-					labelCell: { fontSize: 7.5, bold: true, color: '#E65100' },
+					labelCell: { fontSize: 7.5, bold: true, color: '#1B5E20' },
 					valueCell: { fontSize: 8.5 }
 				},
 				defaultStyle: { font: 'Roboto' }
@@ -1118,10 +1140,11 @@
 					`Extracto_Contrato_${extracto.numero_contrato || 'SN'}_${extracto.placa || 'SN'}.pdf`
 				);
 
-			// Save to backend
+			// Save to backend (extractos.txt)
 			try {
 				const formatDateToFile = (dateStr: string) => {
 					if (!dateStr) return '';
+					// From YYYY-MM-DD to DD/MM/YYYY
 					const parts = dateStr.split('-');
 					if (parts.length === 3) {
 						return `${parts[2]}/${parts[1]}/${parts[0]}`;
@@ -1149,6 +1172,7 @@
 					vigencia_pase_3: extracto.conductores[2]?.vigencia_licencia || ''
 				});
 
+				// Reload next consecutivo and historial
 				await loadNextConsecutivo();
 				await loadHistorial(1);
 			} catch (saveErr: any) {
@@ -1222,6 +1246,10 @@
 		}
 	}
 </script>
+
+<svelte:head>
+	<title>Extractos · Cotransmeq</title>
+</svelte:head>
 
 <svelte:window on:click={handleClickOutside} />
 
@@ -1459,16 +1487,45 @@
 						<table class="w-full min-w-[1200px] text-left text-sm">
 							<thead>
 								<tr class="border-b border-gray-200 bg-gray-50">
-									<th class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600">Nº</th>
-									<th class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600">Contratante</th>
-									<th class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600">Origen - Destino</th>
-									<th class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600">Fechas</th>
-									<th class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600">Placa</th>
-									<th class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600">Int.</th>
-									<th class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600">Conductor 1</th>
-									<th class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600">Conductor 2</th>
-									<th class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600">Conductor 3</th>
-									<th class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"></th>
+									<th
+										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
+										>Nº</th
+									>
+									<th
+										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
+										>Contratante</th
+									>
+									<th
+										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
+										>Origen - Destino</th
+									>
+									<th
+										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
+										>Fechas</th
+									>
+									<th
+										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
+										>Placa</th
+									>
+									<th
+										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
+										>Int.</th
+									>
+									<th
+										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
+										>Conductor 1</th
+									>
+									<th
+										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
+										>Conductor 2</th
+									>
+									<th
+										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
+										>Conductor 3</th
+									>
+									<th
+										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
+									></th>
 								</tr>
 							</thead>
 							<tbody>
@@ -1533,7 +1590,8 @@
 													: 'bg-gray-100 text-gray-500'}"
 											>
 												{#if isPlacaMatched(ext.placa)}
-													<span class="h-1.5 w-1.5 rounded-full bg-orange-500"></span>
+													<span class="h-1.5 w-1.5 rounded-full bg-orange-500"
+													></span>
 												{/if}
 												{ext.placa}
 											</span>
@@ -1546,7 +1604,9 @@
 												</div>
 											{/if}
 										</td>
-										<td class="px-3 py-2.5 text-xs text-gray-400">{ext.num_interno}</td>
+										<td class="px-3 py-2.5 text-xs text-gray-400"
+											>{ext.num_interno}</td
+										>
 										<td class="max-w-[160px] px-3 py-2.5">
 											{#if ext.conductor_1}
 												<div class="flex items-center gap-1">
@@ -1703,6 +1763,8 @@
 					<span class="h-2 w-2 rounded-full bg-amber-400"></span>
 					No encontrado en base de datos
 				</span>
+				<span class="text-gray-300">|</span>
+				<span>HV SERVICES Y SUPPLY SAS = FEPCO SERVICIOS S.A.S</span>
 			</div>
 		</div>
 	{/if}
@@ -1892,7 +1954,9 @@
 												on:click|stopPropagation={() => selectCliente(cliente)}
 											>
 												<span class="truncate font-medium">{cliente.nombre}</span>
-												<span class="ml-auto text-xs text-gray-400">{cliente.nit || ''}</span>
+												<span class="ml-auto text-xs text-white/40"
+													>{cliente.nit || ''}</span
+												>
 											</button>
 										{/each}
 									</div>
@@ -1956,7 +2020,9 @@
 						</h2>
 						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
 							<div>
-								<label for="origen" class="mb-1 block text-xs font-medium text-gray-600">Origen</label>
+								<label for="origen" class="mb-1 block text-xs font-medium text-gray-600"
+									>Origen</label
+								>
 								<input
 									id="origen"
 									type="text"
@@ -1966,7 +2032,9 @@
 								/>
 							</div>
 							<div>
-								<label for="destino" class="mb-1 block text-xs font-medium text-gray-600">Destino</label>
+								<label for="destino" class="mb-1 block text-xs font-medium text-gray-600"
+									>Destino</label
+								>
 								<input
 									id="destino"
 									type="text"
@@ -1976,7 +2044,11 @@
 								/>
 							</div>
 							<div>
-								<label for="fecha_inicial" class="mb-1 block text-xs font-medium text-gray-600">Fecha Inicial</label>
+								<label
+									for="fecha_inicial"
+									class="mb-1 block text-xs font-medium text-gray-600"
+									>Fecha Inicial</label
+								>
 								<input
 									id="fecha_inicial"
 									type="date"
@@ -1985,7 +2057,11 @@
 								/>
 							</div>
 							<div>
-								<label for="fecha_vencimiento" class="mb-1 block text-xs font-medium text-gray-600">Fecha Vencimiento</label>
+								<label
+									for="fecha_vencimiento"
+									class="mb-1 block text-xs font-medium text-gray-600"
+									>Fecha Vencimiento</label
+								>
 								<input
 									id="fecha_vencimiento"
 									type="date"
@@ -2013,14 +2089,32 @@
 									stroke-width="2"
 									fill="none"
 								/>
-								<circle cx="7" cy="17" r="2" stroke="currentColor" stroke-width="2" fill="none" />
-								<circle cx="17" cy="17" r="2" stroke="currentColor" stroke-width="2" fill="none" />
+								<circle
+									cx="7"
+									cy="17"
+									r="2"
+									stroke="currentColor"
+									stroke-width="2"
+									fill="none"
+								/>
+								<circle
+									cx="17"
+									cy="17"
+									r="2"
+									stroke="currentColor"
+									stroke-width="2"
+									fill="none"
+								/>
 							</svg>
 							Vehículo
 						</h2>
 						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
 							<div class="autocomplete-wrapper relative">
-								<label for="vehiculo_search" class="mb-1 block text-xs font-medium text-gray-600">Buscar Vehículo *</label>
+								<label
+									for="vehiculo_search"
+									class="mb-1 block text-xs font-medium text-gray-600"
+									>Buscar Vehículo *</label
+								>
 								<input
 									id="vehiculo_search"
 									type="text"
@@ -2042,17 +2136,26 @@
 												class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-orange-50 hover:text-gray-900"
 												on:click|stopPropagation={() => selectVehiculo(vehiculo)}
 											>
-												<span class="font-mono font-bold text-orange-600">{vehiculo.placa}</span>
-												<span class="text-gray-300">·</span>
-												<span class="truncate">{vehiculo.marca || ''} {vehiculo.linea || ''}</span>
-												<span class="ml-auto text-xs text-gray-400">{vehiculo.modelo || ''}</span>
+												<span class="font-mono font-bold text-orange-300"
+													>{vehiculo.placa}</span
+												>
+												<span class="text-white/50">·</span>
+												<span class="truncate"
+													>{vehiculo.marca || ''} {vehiculo.linea || ''}</span
+												>
+												<span class="ml-auto text-xs text-white/40"
+													>{vehiculo.modelo || ''}</span
+												>
 											</button>
 										{/each}
 									</div>
 								{/if}
 							</div>
 							<div>
-								<label for="marca_vehiculo" class="mb-1 block text-xs font-medium text-gray-600">Marca</label>
+								<label
+									for="marca_vehiculo"
+									class="mb-1 block text-xs font-medium text-gray-600">Marca</label
+								>
 								<input
 									id="marca_vehiculo"
 									type="text"
@@ -2062,7 +2165,11 @@
 								/>
 							</div>
 							<div>
-								<label for="modelo_vehiculo" class="mb-1 block text-xs font-medium text-gray-600">Modelo (Año)</label>
+								<label
+									for="modelo_vehiculo"
+									class="mb-1 block text-xs font-medium text-gray-600"
+									>Modelo (Año)</label
+								>
 								<input
 									id="modelo_vehiculo"
 									type="text"
@@ -2072,7 +2179,10 @@
 								/>
 							</div>
 							<div>
-								<label for="clase_vehiculo" class="mb-1 block text-xs font-medium text-gray-600">Clase</label>
+								<label
+									for="clase_vehiculo"
+									class="mb-1 block text-xs font-medium text-gray-600">Clase</label
+								>
 								<input
 									id="clase_vehiculo"
 									type="text"
@@ -2082,7 +2192,11 @@
 								/>
 							</div>
 							<div>
-								<label for="tarjeta_op" class="mb-1 block text-xs font-medium text-gray-600">Tarjeta de Operación</label>
+								<label
+									for="tarjeta_op"
+									class="mb-1 block text-xs font-medium text-gray-600"
+									>Tarjeta de Operación</label
+								>
 								<input
 									id="tarjeta_op"
 									type="text"
@@ -2092,7 +2206,11 @@
 								/>
 							</div>
 							<div>
-								<label for="numero_interno" class="mb-1 block text-xs font-medium text-gray-600">Nº Interno</label>
+								<label
+									for="numero_interno"
+									class="mb-1 block text-xs font-medium text-gray-600"
+									>Nº Interno</label
+								>
 								<input
 									id="numero_interno"
 									type="text"
@@ -2123,17 +2241,17 @@
 								/>
 							</svg>
 							Conductores
-							<span class="ml-2 text-xs font-normal text-gray-400">(hasta 3)</span>
+							<span class="ml-2 text-xs font-normal text-white/40">(hasta 3)</span>
 						</h2>
 
 						{#each [0, 1, 2] as i}
 							<div
-								class="rounded-xl border border-gray-100 bg-gray-50/50 p-4 {i > 0
+								class="rounded-xl border border-white/5 bg-white/[0.02] p-4 {i > 0
 									? 'mt-3'
 									: ''}"
 							>
 								<div class="mb-3 flex items-center justify-between">
-									<span class="text-xs font-semibold text-orange-500"
+									<span class="text-xs font-semibold text-orange-400/80"
 										>Conductor {i + 1}
 										{i === 0 ? '*' : '(Opcional)'}</span
 									>
@@ -2183,7 +2301,7 @@
 														<span class="truncate font-medium"
 															>{conductor.nombre} {conductor.apellido}</span
 														>
-														<span class="ml-auto text-xs text-gray-400"
+														<span class="ml-auto text-xs text-white/40"
 															>{conductor.numero_identificacion}</span
 														>
 													</button>
@@ -2222,16 +2340,16 @@
 								</div>
 								{#if extracto.conductores[i].nombre}
 									<div class="mt-2 flex items-center gap-4 text-xs">
-										<span class="text-gray-500">
-											<span class="text-gray-400">Nombre:</span>
-											<span class="font-medium text-orange-600"
+										<span class="text-white/50">
+											<span class="text-white/30">Nombre:</span>
+											<span class="font-medium text-orange-300"
 												>{extracto.conductores[i].nombre}</span
 											>
 										</span>
 										{#if extracto.conductores[i].vigencia_licencia}
-											<span class="text-gray-500">
-												<span class="text-gray-400">Vigencia Lic:</span>
-												<span class="text-gray-600"
+											<span class="text-white/50">
+												<span class="text-white/30">Vigencia Lic:</span>
+												<span class="text-white/70"
 													>{extracto.conductores[i].vigencia_licencia}</span
 												>
 											</span>
@@ -2264,7 +2382,11 @@
 						</h2>
 						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
 							<div>
-								<label for="resp_nombre" class="mb-1 block text-xs font-medium text-gray-600">Nombre</label>
+								<label
+									for="resp_nombre"
+									class="mb-1 block text-xs font-medium text-gray-600"
+									>Nombre</label
+								>
 								<input
 									id="resp_nombre"
 									type="text"
@@ -2274,7 +2396,11 @@
 								/>
 							</div>
 							<div>
-								<label for="resp_cedula" class="mb-1 block text-xs font-medium text-gray-600">Cédula</label>
+								<label
+									for="resp_cedula"
+									class="mb-1 block text-xs font-medium text-gray-600"
+									>Cédula</label
+								>
 								<input
 									id="resp_cedula"
 									type="text"
@@ -2284,7 +2410,11 @@
 								/>
 							</div>
 							<div>
-								<label for="resp_telefono" class="mb-1 block text-xs font-medium text-gray-600">Teléfono</label>
+								<label
+									for="resp_telefono"
+									class="mb-1 block text-xs font-medium text-gray-600"
+									>Teléfono</label
+								>
 								<input
 									id="resp_telefono"
 									type="text"
@@ -2294,7 +2424,11 @@
 								/>
 							</div>
 							<div>
-								<label for="resp_direccion" class="mb-1 block text-xs font-medium text-gray-600">Dirección</label>
+								<label
+									for="resp_direccion"
+									class="mb-1 block text-xs font-medium text-gray-600"
+									>Dirección</label
+								>
 								<input
 									id="resp_direccion"
 									type="text"
@@ -2319,8 +2453,18 @@
 								stroke="currentColor"
 								viewBox="0 0 24 24"
 							>
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+								/>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+								/>
 							</svg>
 							Vista Previa
 						</h2>
@@ -2328,7 +2472,7 @@
 						<!-- Mini thumbnail preview -->
 						<div class="mb-4 rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
 							<div class="flex items-center justify-between border-b border-gray-200 pb-2 mb-2">
-								<img src="/assets/logo.png" alt="Cotransmeq" class="h-4 object-contain" />
+								<img src="/assets/logo_transmeralda-264.webp" alt="Cotransmeq" class="h-4 object-contain" />
 								<div class="text-[6px] text-gray-500">Extracto</div>
 							</div>
 							<div class="space-y-1">
@@ -2411,13 +2555,13 @@
 			<!-- Modal Body: PDF Document -->
 			<div class="p-6">
 				<div class="mx-auto max-w-2xl rounded-lg border border-gray-300 bg-white shadow-lg" style="font-family: Arial, sans-serif;">
-					<!-- Header Row: Logo + Title -->
+					<!-- Header Row: Logos + Title + Code -->
 					<div class="border-b border-gray-400">
 						<table class="w-full border-collapse" style="table-layout: fixed;">
 							<tbody>
 								<tr>
 									<td class="w-[25%] border-r border-gray-400 p-2 text-center align-middle">
-										<img src="/assets/logo.png" alt="Cotransmeq" class="mx-auto h-10 object-contain" />
+										<img src="/assets/la_movilidad_es_de_todos.png" alt="Mintransporte - La movilidad es de todos" class="mx-auto h-10 object-contain" />
 									</td>
 									<td class="w-[50%] border-r border-gray-400 p-3 text-center align-middle">
 										<div class="text-[10px] font-bold text-gray-800 leading-tight">
@@ -2425,8 +2569,7 @@
 										</div>
 									</td>
 									<td class="w-[25%] p-2 text-center align-middle">
-										<div class="text-[10px] font-bold text-orange-700">COTRANSMEQ</div>
-										<div class="text-[8px] text-gray-500">S.A.S.</div>
+										<img src="/assets/logo_transmeralda-264.webp" alt="Cotransmeq S.A.S" class="mx-auto h-10 object-contain" />
 									</td>
 								</tr>
 							</tbody>
@@ -2455,14 +2598,14 @@
 					<!-- No. Extracto -->
 					<div class="border-b border-gray-400 px-3 py-2 text-center">
 						<div class="text-xs font-bold text-gray-800">
-							No. {extracto.numero_extracto || '________________________'}
+							No. {extracto.numero_extracto || '415464522202600054226'}
 						</div>
 					</div>
 
 					<!-- Company Info -->
 					<div class="border-b border-gray-400 px-3 py-1.5 text-center">
-						<div class="text-[11px] font-bold text-gray-800">COTRANSMEQ S.A.S.</div>
-						<div class="text-[10px] text-gray-600">COOPERATIVA DE TRANSPORTADORES DE MAQUINARIA Y EQUIPO</div>
+						<div class="text-[11px] font-bold text-gray-800">SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S. ZOMAC</div>
+						<div class="text-[10px] text-gray-600">NIT: 901.528.440-3</div>
 					</div>
 
 					<!-- Contrato No + Contratante + NIT -->
@@ -2498,7 +2641,7 @@
 								</tr>
 								<tr>
 									<td class="px-3 py-1.5 text-center text-[10px] text-gray-800">
-										{extracto.objeto_contrato || 'CONTRATO PARA TRANSPORTE DE PERSONAL'}
+										{extracto.objeto_contrato || 'CONTRATO PARA TRANSPORTE DE PERSONAL Y HERRAMIENTAS'}
 									</td>
 								</tr>
 							</tbody>
@@ -2651,17 +2794,21 @@
 					<!-- Footer -->
 					<div class="px-3 py-3">
 						<div class="flex items-center justify-between">
-							<div class="text-[9px] text-gray-500">
-								<div class="font-bold text-gray-700">COTRANSMEQ S.A.S.</div>
-								<div>Cooperativa de Transportadores</div>
-								<div>de Maquinaria y Equipo</div>
+							<div class="flex items-center gap-2">
+								<img src="/assets/super_transporte.png" alt="SuperTransporte" class="h-8 object-contain" />
+								<div class="text-[9px] text-gray-500">
+									<div>Finca San Martín (Vereda La Esmeralda) Tauramena Casanare</div>
+									<div>operaciones.transmeraldasas@gmail.com</div>
+									<div>3233340117</div>
+								</div>
 							</div>
 							<div class="text-center">
-								<img src="/assets/logo.png" alt="Cotransmeq" class="h-7 object-contain" />
+								<img src="/assets/logo_transmeralda-264.webp" alt="Cotransmeq S.A.S" class="h-7 object-contain" />
 							</div>
 							<div class="text-right text-[9px] text-gray-500">
-								<div class="font-bold text-gray-700">GERENCIA</div>
-								<div class="text-gray-500">COTRANSMEQ</div>
+								<img src="/assets/NELLY MORALES.jpg" alt="Firma Nelly Morales R." class="ml-auto h-6 object-contain" />
+								<div class="font-bold text-gray-700">NELLY MORALES R.</div>
+								<div class="text-gray-500">GERENTE</div>
 							</div>
 						</div>
 					</div>

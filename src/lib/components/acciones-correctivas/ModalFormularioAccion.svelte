@@ -39,6 +39,7 @@
 	let fecha_implementacion = accion?.fecha_implementacion?.split('T')[0] || '';
 	let valoracion_riesgo: ValoracionRiesgo | '' = accion?.valoracion_riesgo || '';
 	let requiere_actualizar_matriz = accion?.requiere_actualizar_matriz || false;
+	let matriz_a_actualizar = accion?.matriz_a_actualizar || '';
 
 	// Sección 3: Análisis y Plan de Acción
 	let tipo_accion_ejecutar: TipoAccion | '' = accion?.tipo_accion_ejecutar || '';
@@ -106,13 +107,6 @@
 
 		if (!tipo_accion_ejecutar) {
 			errors.tipo_accion_ejecutar = 'El tipo de acción es requerido';
-			isValid = false;
-		}
-
-		// Validar que haya al menos una causa con análisis completo
-		const causasCompletas = causas.filter((causa) => causa.analisis_causa.trim()).length;
-		if (causasCompletas === 0) {
-			errors.causas = 'Debe completar al menos un análisis de causa';
 			isValid = false;
 		}
 
@@ -204,6 +198,7 @@
 				fecha_implementacion: fecha_implementacion || undefined,
 				valoracion_riesgo: valoracion_riesgo || undefined,
 				requiere_actualizar_matriz,
+				matriz_a_actualizar: matriz_a_actualizar.trim() || undefined,
 				tipo_accion_ejecutar: tipo_accion_ejecutar || undefined,
 				causas: causasValidas.length > 0 ? causasValidas : undefined,
 				fecha_evaluacion_eficacia: fecha_evaluacion_eficacia || undefined,
@@ -273,19 +268,22 @@
 	}
 </script>
 
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <div
 	class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
 	transition:fade={{ duration: 200 }}
-	on:click={cerrarModal}
+	on:keydown={(e) => e.key === 'Escape' && cerrarModal()}
 	role="dialog"
 	aria-modal="true"
 	tabindex="-1"
 >
 	<!-- Modal -->
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 	<div
 		class="w-full max-w-5xl overflow-hidden rounded-2xl bg-white shadow-2xl"
 		transition:fly={{ y: 20, duration: 300 }}
-		on:click={(e) => e.stopPropagation()}
+		on:click|stopPropagation={() => {}}
+		on:keydown|stopPropagation={() => {}}
 		role="document"
 	>
 		<!-- Header -->
@@ -353,10 +351,11 @@
 						<h4 class="mb-4 text-lg font-semibold text-gray-900">1. Identificación del Hallazgo</h4>
 						<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 							<div>
-								<label class="mb-2 block text-sm font-medium text-gray-700">
+								<label for="accion_numero" class="mb-2 block text-sm font-medium text-gray-700">
 									ACCIÓN No. <span class="text-red-600">*</span>
 								</label>
 								<input
+									id="accion_numero"
 									type="text"
 									bind:value={accion_numero}
 									placeholder="Ej: A25_01, A25_02"
@@ -374,8 +373,9 @@
 							</div>
 
 							<div>
-								<label class="mb-2 block text-sm font-medium text-gray-700">LUGAR / SEDE</label>
+								<label for="lugar_sede" class="mb-2 block text-sm font-medium text-gray-700">LUGAR / SEDE</label>
 								<input
+									id="lugar_sede"
 									type="text"
 									bind:value={lugar_sede}
 									placeholder="Ej: Sede Principal, Instalación del cliente"
@@ -388,10 +388,11 @@
 							</div>
 
 							<div>
-								<label class="mb-2 block text-sm font-medium text-gray-700"
+								<label for="proceso_origen" class="mb-2 block text-sm font-medium text-gray-700"
 									>PROCESO DONDE SE ORIGINA EL HALLAZGO</label
 								>
 								<input
+									id="proceso_origen"
 									type="text"
 									bind:value={proceso_origen_hallazgo}
 									placeholder="Ej: Gestión de Calidad, Operaciones"
@@ -403,10 +404,11 @@
 							</div>
 
 							<div>
-								<label class="mb-2 block text-sm font-medium text-gray-700"
+								<label for="componente_ref" class="mb-2 block text-sm font-medium text-gray-700"
 									>COMPONENTE / ELEMENTO / DE ENTRADA DE REFERENCIA</label
 								>
 								<input
+									id="componente_ref"
 									type="text"
 									bind:value={componente_elemento_referencia}
 									placeholder="Ej: Procedimiento, Registro, Programa"
@@ -419,10 +421,11 @@
 							</div>
 
 							<div>
-								<label class="mb-2 block text-sm font-medium text-gray-700"
+								<label for="fuente_hallazgo" class="mb-2 block text-sm font-medium text-gray-700"
 									>FUENTE QUE GENERÓ O IDENTIFICÓ EL HALLAZGO</label
 								>
 								<select
+									id="fuente_hallazgo"
 									bind:value={fuente_genero_hallazgo}
 									class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50"
 								>
@@ -447,10 +450,11 @@
 							</div>
 
 							<div>
-								<label class="mb-2 block text-sm font-medium text-gray-700"
+								<label for="marco_legal" class="mb-2 block text-sm font-medium text-gray-700"
 									>MARCO LEGAL / NORMATIVO / CONTRACTUAL</label
 								>
 								<input
+									id="marco_legal"
 									type="text"
 									bind:value={marco_legal_normativo}
 									placeholder="Ej: ISO 9001:2015, Decreto 1072/2015"
@@ -462,10 +466,11 @@
 							</div>
 
 							<div>
-								<label class="mb-2 block text-sm font-medium text-gray-700"
+								<label for="fecha_hallazgo" class="mb-2 block text-sm font-medium text-gray-700"
 									>FECHA DE IDENTIFICACIÓN DEL HALLAZGO</label
 								>
 								<input
+									id="fecha_hallazgo"
 									type="date"
 									bind:value={fecha_identificacion_hallazgo}
 									class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50"
@@ -476,10 +481,11 @@
 							</div>
 
 							<div>
-								<label class="mb-2 block text-sm font-medium text-gray-700"
+								<label for="tipo_hallazgo" class="mb-2 block text-sm font-medium text-gray-700"
 									>TIPO DE HALLAZGO DETECTADO</label
 								>
 								<select
+									id="tipo_hallazgo"
 									bind:value={tipo_hallazgo_detectado}
 									class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50"
 								>
@@ -492,12 +498,13 @@
 							</div>
 
 							<div class="md:col-span-2">
-								<label class="mb-2 block text-sm font-medium text-gray-700">
+								<label for="descripcion_hallazgo" class="mb-2 block text-sm font-medium text-gray-700">
 									DESCRIPCIÓN DEL HALLAZGO / RIESGO POTENCIAL / NO CONFORMIDAD / OPORTUNIDAD DE
 									MEJORA
 									<span class="text-red-600">*</span>
 								</label>
 								<textarea
+									id="descripcion_hallazgo"
 									bind:value={descripcion_hallazgo}
 									rows="3"
 									placeholder="Describa: ¿Qué ocurrió? ¿Dónde ocurrió? ¿Qué requisito se incumple?"
@@ -514,10 +521,11 @@
 							</div>
 
 							<div class="md:col-span-2">
-								<label class="mb-2 block text-sm font-medium text-gray-700"
+								<label for="variable_categoria" class="mb-2 block text-sm font-medium text-gray-700"
 									>VARIABLE / CATEGORÍA PARA ANÁLISIS DE TENDENCIAS</label
 								>
 								<select
+									id="variable_categoria"
 									bind:value={variable_categoria_analisis}
 									class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50"
 								>
@@ -581,10 +589,11 @@
 						<h4 class="mb-4 text-lg font-semibold text-gray-900">2. Corrección Inmediata</h4>
 						<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 							<div class="md:col-span-2">
-								<label class="mb-2 block text-sm font-medium text-gray-700"
+								<label for="correccion_solucion_inmediata" class="mb-2 block text-sm font-medium text-gray-700"
 									>CORRECCIÓN O SOLUCIÓN INMEDIATA PROPUESTA</label
 								>
 								<textarea
+									id="correccion_solucion_inmediata"
 									bind:value={correccion_solucion_inmediata}
 									rows="4"
 									placeholder="Ej: Suspensión temporal del servicio / Notificación inmediata al proveedor"
@@ -597,10 +606,11 @@
 							</div>
 
 							<div>
-								<label class="mb-2 block text-sm font-medium text-gray-700"
+								<label for="fecha_implementacion" class="mb-2 block text-sm font-medium text-gray-700"
 									>FECHA DE IMPLEMENTACIÓN</label
 								>
 								<input
+									id="fecha_implementacion"
 									type="date"
 									bind:value={fecha_implementacion}
 									class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50"
@@ -611,10 +621,11 @@
 							</div>
 
 							<div>
-								<label class="mb-2 block text-sm font-medium text-gray-700"
+								<label for="valoracion_riesgo" class="mb-2 block text-sm font-medium text-gray-700"
 									>VALORACIÓN DEL RIESGO DEL HALLAZGO</label
 								>
 								<select
+									id="valoracion_riesgo"
 									bind:value={valoracion_riesgo}
 									class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50"
 								>
@@ -630,8 +641,8 @@
 							</div>
 
 							<div class="md:col-span-2">
-								<label class="mb-2 block text-sm font-medium text-gray-700"
-									>¿REQUIERE ACTUALIZAR MATRIZ?</label
+								<span class="mb-2 block text-sm font-medium text-gray-700"
+									>¿REQUIERE ACTUALIZAR MATRIZ?</span
 								>
 								<div class="space-y-2">
 									<label class="flex items-center space-x-2">
@@ -648,6 +659,16 @@
 										Indique o especifique cuál: Matriz de Riesgos y Oportunidades / Matriz de
 										peligros / Matriz ambiental / Matriz de riesgos viales / Otra
 									</p>
+									{#if requiere_actualizar_matriz}
+										<div class="ml-6 mt-2">
+											<input
+												type="text"
+												bind:value={matriz_a_actualizar}
+												placeholder="Indique qué matriz se va a actualizar"
+												class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/50"
+											/>
+										</div>
+									{/if}
 								</div>
 							</div>
 						</div>
@@ -660,10 +681,11 @@
 						<h4 class="mb-4 text-lg font-semibold text-gray-900">3. Análisis y Plan de Acción</h4>
 						<div class="grid grid-cols-1 gap-4">
 							<div>
-								<label class="mb-2 block text-sm font-medium text-gray-700">
+								<label for="tipo_accion_ejecutar" class="mb-2 block text-sm font-medium text-gray-700">
 									TIPO DE ACCIÓN A EJECUTAR <span class="text-red-600">*</span>
 								</label>
 								<select
+									id="tipo_accion_ejecutar"
 									bind:value={tipo_accion_ejecutar}
 									class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50 {errors.tipo_accion_ejecutar
 										? 'border-red-300'
@@ -685,9 +707,9 @@
 
 							<div>
 								<div class="mb-2 flex items-center justify-between">
-									<label class="block text-sm font-medium text-gray-700">
+									<span class="block text-sm font-medium text-gray-700">
 										CAUSAS Y PLAN DE ACCIÓN <span class="text-red-600">*</span>
-									</label>
+									</span>
 									{#if causas.length < 5}
 										<button
 											type="button"
@@ -749,37 +771,40 @@
 											<div class="space-y-3">
 												<!-- Análisis de Causa -->
 												<div>
-													<label class="mb-1 block text-xs font-medium text-gray-700">
+													<label for="causa_analisis_{index}" class="mb-1 block text-xs font-medium text-gray-700">
 														¿Por qué? (Análisis de Causa) <span class="text-red-600">*</span>
 													</label>
 													<textarea
+														id="causa_analisis_{index}"
 														bind:value={causa.analisis_causa}
 														placeholder="Describa el análisis de la causa raíz (Metodología 5 Por Qué)"
 														rows="2"
 														class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/50"
-													/>
+													></textarea>
 												</div>
 
 												<!-- Plan de Acción -->
 												<div>
-													<label class="mb-1 block text-xs font-medium text-gray-700">
+													<label for="causa_plan_{index}" class="mb-1 block text-xs font-medium text-gray-700">
 														Descripción de la Acción / Plan de Acción
 													</label>
 													<textarea
+														id="causa_plan_{index}"
 														bind:value={causa.descripcion_plan_accion}
 														placeholder="Describa el plan de acción para eliminar la causa"
 														rows="2"
 														class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/50"
-													/>
+													></textarea>
 												</div>
 
 												<!-- Grid para Fecha Límite y Responsable -->
 												<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
 													<div>
-														<label class="mb-1 block text-xs font-medium text-gray-700">
+														<label for="causa_fecha_limite_{index}" class="mb-1 block text-xs font-medium text-gray-700">
 															Fecha Límite Implementación
 														</label>
 														<input
+															id="causa_fecha_limite_{index}"
 															bind:value={causa.fecha_limite_implementacion}
 															type="date"
 															class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-3 py-2 text-sm text-gray-900 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/50"
@@ -788,10 +813,11 @@
 													</div>
 
 													<div>
-														<label class="mb-1 block text-xs font-medium text-gray-700">
+														<label for="causa_responsable_{index}" class="mb-1 block text-xs font-medium text-gray-700">
 															Responsable Ejecución
 														</label>
 														<input
+															id="causa_responsable_{index}"
 															bind:value={causa.responsable_ejecucion}
 															type="text"
 															placeholder="Nombre y cargo del responsable"
@@ -807,10 +833,11 @@
 													</h6>
 													<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
 														<div>
-															<label class="mb-1 block text-xs font-medium text-gray-700">
+															<label for="causa_fecha_seg_{index}" class="mb-1 block text-xs font-medium text-gray-700">
 																Fecha Seguimiento
 															</label>
 															<input
+																id="causa_fecha_seg_{index}"
 																bind:value={causa.fecha_seguimiento}
 																type="date"
 																class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-3 py-2 text-sm text-gray-900 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/50"
@@ -818,10 +845,11 @@
 														</div>
 
 														<div>
-															<label class="mb-1 block text-xs font-medium text-gray-700">
+															<label for="causa_estado_seg_{index}" class="mb-1 block text-xs font-medium text-gray-700">
 																Estado del Seguimiento
 															</label>
 															<select
+																id="causa_estado_seg_{index}"
 																bind:value={causa.estado_seguimiento}
 																class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-3 py-2 text-sm text-gray-900 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/50"
 															>
@@ -834,15 +862,16 @@
 													</div>
 
 													<div class="mt-3">
-														<label class="mb-1 block text-xs font-medium text-gray-700">
+														<label for="causa_observaciones_{index}" class="mb-1 block text-xs font-medium text-gray-700">
 															Observaciones del Seguimiento
 														</label>
 														<textarea
+															id="causa_observaciones_{index}"
 															bind:value={causa.descripcion_observaciones}
 															placeholder="Registre observaciones, avances o novedades del seguimiento"
 															rows="2"
 															class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-500/50 focus:ring-2 focus:ring-orange-500/50"
-														/>
+														></textarea>
 													</div>
 												</div>
 											</div>
@@ -864,10 +893,11 @@
 						<div class="grid grid-cols-1 gap-4">
 							<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 								<div>
-									<label class="mb-2 block text-sm font-medium text-gray-700"
+									<label for="fecha_evaluacion_eficacia" class="mb-2 block text-sm font-medium text-gray-700"
 										>FECHA DE EVALUACIÓN DE EFICACIA</label
 									>
 									<input
+										id="fecha_evaluacion_eficacia"
 										type="date"
 										bind:value={fecha_evaluacion_eficacia}
 										class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50"
@@ -878,10 +908,11 @@
 								</div>
 
 								<div>
-									<label class="mb-2 block text-sm font-medium text-gray-700"
+									<label for="evaluacion_cierre_eficaz" class="mb-2 block text-sm font-medium text-gray-700"
 										>EVALUACIÓN DEL CIERRE</label
 									>
 									<select
+										id="evaluacion_cierre_eficaz"
 										bind:value={evaluacion_cierre_eficaz}
 										class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50"
 									>
@@ -893,10 +924,11 @@
 							</div>
 
 							<div>
-								<label class="mb-2 block text-sm font-medium text-gray-700"
+								<label for="criterio_evaluacion_eficacia" class="mb-2 block text-sm font-medium text-gray-700"
 									>CRITERIO DE EVALUACIÓN DE EFICACIA</label
 								>
 								<textarea
+									id="criterio_evaluacion_eficacia"
 									bind:value={criterio_evaluacion_eficacia}
 									rows="3"
 									placeholder="Ej: No reincidencia, cumplimiento del indicador, evidencia comparativa"
@@ -909,10 +941,11 @@
 							</div>
 
 							<div>
-								<label class="mb-2 block text-sm font-medium text-gray-700"
+								<label for="analisis_evidencias_cierre" class="mb-2 block text-sm font-medium text-gray-700"
 									>ANÁLISIS DE EVIDENCIAS DE CIERRE</label
 								>
 								<textarea
+									id="analisis_evidencias_cierre"
 									bind:value={analisis_evidencias_cierre}
 									rows="3"
 									placeholder="Explique qué se verificó y qué evidencia lo soporta..."
@@ -925,10 +958,11 @@
 							</div>
 
 							<div>
-								<label class="mb-2 block text-sm font-medium text-gray-700"
+								<label for="soporte_cierre_eficaz" class="mb-2 block text-sm font-medium text-gray-700"
 									>SOPORTE DEL CIERRE EFICAZ</label
 								>
 								<input
+									id="soporte_cierre_eficaz"
 									type="text"
 									bind:value={soporte_cierre_eficaz}
 									placeholder="Ej: Acta de reunión, registro fotográfico, informe de auditoría, lista de chequeo"
@@ -941,10 +975,11 @@
 
 							<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 								<div>
-									<label class="mb-2 block text-sm font-medium text-gray-700"
+									<label for="fecha_cierre_definitivo" class="mb-2 block text-sm font-medium text-gray-700"
 										>FECHA DE CIERRE DEFINITIVO</label
 									>
 									<input
+										id="fecha_cierre_definitivo"
 										type="date"
 										bind:value={fecha_cierre_definitivo}
 										class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50"
@@ -955,10 +990,11 @@
 								</div>
 
 								<div>
-									<label class="mb-2 block text-sm font-medium text-gray-700"
+									<label for="responsable_cierre" class="mb-2 block text-sm font-medium text-gray-700"
 										>RESPONSABLE DEL CIERRE</label
 									>
 									<input
+										id="responsable_cierre"
 										type="text"
 										bind:value={responsable_cierre}
 										placeholder="Ej: Coordinador HSEQ, Gerente"

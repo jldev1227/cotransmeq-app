@@ -5,6 +5,7 @@
 	import { fade, fly, slide } from 'svelte/transition';
 	import { clientesAPI } from '$lib/api/apiClient';
 	import { toast } from 'svelte-sonner';
+	import { updated } from '$app/state';
 
 	// Constante para TipoCliente
 	const TipoCliente = {
@@ -88,6 +89,12 @@
 		isLoading = true;
 		error = null;
 
+		if (!clienteId) {
+			error = 'ID de cliente no encontrado';
+			isLoading = false;
+			return;
+		}
+
 		try {
 			const response = await clientesAPI.getById(clienteId);
 
@@ -136,7 +143,6 @@
 
 	async function saveChanges() {
 		updatedLoading = true;
-
 		try {
 			// Aquí iría la llamada a la API para guardar los cambios
 			await clientesAPI.update(clienteId, editForm);
@@ -159,16 +165,6 @@
 		return tipo === TipoCliente.EMPRESA
 			? 'bg-blue-100 text-blue-800'
 			: 'bg-orange-100 text-orange-800';
-	}
-
-	function formatDate(dateString: string) {
-		return new Date(dateString).toLocaleDateString('es-CO', {
-			year: 'numeric',
-			month: 'long',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
 	}
 
 	function getEstadoServicioColor(estado: string) {
@@ -214,7 +210,7 @@
 			<p class="mb-6 text-gray-600">{error}</p>
 			<button
 				on:click={() => goto('/dashboard/clientes')}
-				class="apple-transition rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-6 py-3 font-semibold text-white shadow-lg hover:shadow-xl"
+				class="apple-transition rounded-xl bg-gradient-to-r from-orange-500 to-teal-600 px-6 py-3 font-semibold text-white shadow-lg hover:shadow-xl"
 			>
 				Volver a Clientes
 			</button>
@@ -233,7 +229,7 @@
 						<div class="flex flex-col items-center gap-3 sm:flex-row">
 							<!-- Avatar -->
 							<div
-								class="flex h-20 w-20 items-center justify-center rounded-xl border-2 border-white bg-gradient-to-br from-orange-500 to-amber-600 shadow-lg"
+								class="flex h-20 w-20 items-center justify-center rounded-xl border-2 border-white bg-gradient-to-br from-orange-500 to-teal-600 shadow-lg"
 							>
 								{#if cliente.tipo === TipoCliente.EMPRESA}
 									<svg
@@ -307,7 +303,7 @@
 								</button>
 								<button
 									on:click={saveChanges}
-									class="apple-transition flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:shadow-xl disabled:opacity-80"
+									class="apple-transition flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:shadow-xl disabled:opacity-80"
 									disabled={updatedLoading}
 								>
 									{#if updatedLoading}
@@ -340,7 +336,7 @@
 								</button>
 								<button
 									on:click={toggleEdit}
-									class="apple-transition rounded-lg bg-gradient-to-r from-orange-500 to-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:shadow-xl"
+									class="apple-transition rounded-lg bg-gradient-to-r from-orange-500 to-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:shadow-xl"
 								>
 									✏️ Editar
 								</button>
@@ -357,7 +353,7 @@
 								on:click={() => (activeTab = 'info')}
 								class="apple-transition flex-1 rounded-lg px-4 py-2 text-sm font-semibold {activeTab ===
 								'info'
-									? 'bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-md'
+									? 'bg-gradient-to-r from-orange-500 to-teal-600 text-white shadow-md'
 									: 'text-gray-600 hover:bg-gray-100'}"
 							>
 								📋 Información
@@ -366,7 +362,7 @@
 								on:click={() => (activeTab = 'servicios')}
 								class="apple-transition flex-1 rounded-lg px-4 py-2 text-sm font-semibold {activeTab ===
 								'servicios'
-									? 'bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-md'
+									? 'bg-gradient-to-r from-orange-500 to-teal-600 text-white shadow-md'
 									: 'text-gray-600 hover:bg-gray-100'}"
 							>
 								🚛 Servicios ({cliente._count?.servicio || 0})
@@ -375,7 +371,7 @@
 								on:click={() => (activeTab = 'actividad')}
 								class="apple-transition flex-1 rounded-lg px-4 py-2 text-sm font-semibold {activeTab ===
 								'actividad'
-									? 'bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-md'
+									? 'bg-gradient-to-r from-orange-500 to-teal-600 text-white shadow-md'
 									: 'text-gray-600 hover:bg-gray-100'}"
 							>
 								📊 Actividad
@@ -400,10 +396,11 @@
 										<!-- Formulario de Edición -->
 										<div class="space-y-3">
 											<div>
-												<label class="mb-1 block text-xs font-medium text-gray-700">
+												<label for="nombre" class="mb-1 block text-xs font-medium text-gray-700">
 													Nombre Completo / Razón Social
 												</label>
 												<input
+													id="nombre"
 													type="text"
 													bind:value={editForm.nombre}
 													class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
@@ -412,8 +409,11 @@
 
 											<div class="grid gap-3 sm:grid-cols-2">
 												<div>
-													<label class="mb-1 block text-xs font-medium text-gray-700">NIT</label>
+													<label for="nit" class="mb-1 block text-xs font-medium text-gray-700"
+														>NIT</label
+													>
 													<input
+														id="nit"
 														type="text"
 														bind:value={editForm.nit}
 														class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
@@ -422,10 +422,11 @@
 
 												{#if cliente.tipo === TipoCliente.PERSONA_NATURAL}
 													<div>
-														<label class="mb-1 block text-xs font-medium text-gray-700"
+														<label for="cedula" class="mb-1 block text-xs font-medium text-gray-700"
 															>Cédula</label
 														>
 														<input
+															id="cedula"
 															type="text"
 															bind:value={editForm.cedula}
 															class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
@@ -436,10 +437,14 @@
 
 											{#if cliente.tipo === TipoCliente.EMPRESA}
 												<div>
-													<label class="mb-1 block text-xs font-medium text-gray-700">
+													<label
+														for="representante"
+														class="mb-1 block text-xs font-medium text-gray-700"
+													>
 														Representante Legal
 													</label>
 													<input
+														id="representante"
 														type="text"
 														bind:value={editForm.representante}
 														class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
@@ -449,10 +454,11 @@
 
 											<div class="grid gap-3 sm:grid-cols-2">
 												<div>
-													<label class="mb-1 block text-xs font-medium text-gray-700"
+													<label for="telefono" class="mb-1 block text-xs font-medium text-gray-700"
 														>Teléfono</label
 													>
 													<input
+														id="telefono"
 														type="text"
 														bind:value={editForm.telefono}
 														class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
@@ -460,8 +466,11 @@
 												</div>
 
 												<div>
-													<label class="mb-1 block text-xs font-medium text-gray-700">Correo</label>
+													<label for="correo" class="mb-1 block text-xs font-medium text-gray-700"
+														>Correo</label
+													>
 													<input
+														id="correo"
 														type="email"
 														bind:value={editForm.correo}
 														class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
@@ -470,9 +479,11 @@
 											</div>
 
 											<div>
-												<label class="mb-1 block text-xs font-medium text-gray-700">Dirección</label
+												<label for="direccion" class="mb-1 block text-xs font-medium text-gray-700"
+													>Dirección</label
 												>
 												<textarea
+													id="direccion"
 													bind:value={editForm.direccion}
 													rows="2"
 													class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
@@ -766,7 +777,7 @@
 
 												<div class="flex items-center gap-1 text-gray-700">
 													<svg
-														class="h-4 w-4 shrink-0 text-amber-600"
+														class="h-4 w-4 shrink-0 text-teal-600"
 														fill="none"
 														stroke="currentColor"
 														viewBox="0 0 24 24"
@@ -856,7 +867,7 @@
 								{#if (cliente._count?.servicio || 0) > 5}
 									<div class="mt-4 text-center">
 										<button
-											on:click={() => goto(`/dashboard/servicios?clienteId=${cliente.id}`)}
+											on:click={() => goto(`/dashboard/servicios?clienteId=${cliente?.id}`)}
 											class="text-sm font-medium text-gray-600 hover:text-orange-600"
 										>
 											Ver todos los {cliente._count?.servicio} servicios →

@@ -1,19 +1,19 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
-	import { fade, fly, slide } from 'svelte/transition';
+	import { fade, fly, slide, scale } from 'svelte/transition';
+	import { cubicOut, backOut } from 'svelte/easing';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { building } from '$app/environment';
 	import { onMount } from 'svelte';
 	import { authStore } from '$lib/stores/auth';
 	import { checkAccess, type Area } from '$lib/config/permissions';
+	import { mobileDrawerStore } from '$lib/stores/mobileDrawer';
 
 	const dispatch = createEventDispatcher();
 
 	export let isCollapsed = false;
 
 	let isMobile = false;
-	let isDrawerOpen = false;
 
 	// Detectar tamaño de pantalla
 	onMount(() => {
@@ -70,13 +70,6 @@
 			href: '/dashboard/recargos'
 		},
 		{
-			id: 'nomina',
-			label: 'Nómina',
-			icon: 'dollar-sign',
-			badge: null,
-			href: '/dashboard/nomina'
-		},
-		{
 			id: 'clientes',
 			label: 'Clientes',
 			icon: 'building',
@@ -84,25 +77,11 @@
 			href: '/dashboard/clientes'
 		},
 		{
-			id: 'terceros',
-			label: 'Terceros',
-			icon: 'users',
+			id: 'sarlaft',
+			label: 'SARLAFT / PTEE',
+			icon: 'document',
 			badge: null,
-			href: '/dashboard/terceros'
-		},
-		{
-			id: 'liquidaciones-servicios',
-			label: 'Liq. Servicios',
-			icon: 'file-text',
-			badge: null,
-			href: '/dashboard/liquidaciones-servicios'
-		},
-		{
-			id: 'extractos',
-			label: 'Extractos',
-			icon: 'file-text',
-			badge: null,
-			href: '/dashboard/extractos'
+			href: '/dashboard/sarlaft'
 		},
 		{
 			id: 'asistencias',
@@ -111,13 +90,13 @@
 			badge: null,
 			href: '/dashboard/asistencias'
 		},
-		// {
-		// 	id: 'acciones-correctivas',
-		// 	label: 'Acciones C/P',
-		// 	icon: 'shield-check',
-		// 	badge: null,
-		// 	href: '/dashboard/acciones-correctivas'
-		// },
+		{
+			id: 'acciones-correctivas',
+			label: 'Acciones C/P',
+			icon: 'shield-check',
+			badge: null,
+			href: '/dashboard/acciones-correctivas'
+		},
 		{
 			id: 'evaluaciones',
 			label: 'Evaluaciones',
@@ -125,6 +104,69 @@
 			badge: null,
 			href: '/dashboard/evaluaciones'
 		},
+		{
+			id: 'salidas-nc',
+			label: 'Salidas NC',
+			icon: 'alert-triangle',
+			badge: null,
+			href: '/dashboard/salidas-nc'
+		},
+		{
+			id: 'nomina',
+			label: 'Nómina',
+			icon: 'wallet',
+			badge: null,
+			href: '/dashboard/nomina'
+		},
+		// {
+		// 	id: 'extractos',
+		// 	label: 'Extractos',
+		// 	icon: 'file-text',
+		// 	badge: null,
+		// 	href: '/dashboard/extractos'
+		// },
+		{
+			id: 'liquidaciones-servicios',
+			label: 'Liq. Servicios',
+			icon: 'receipt',
+			badge: null,
+			href: '/dashboard/liquidaciones-servicios'
+		},
+		{
+			id: 'liquidaciones-terceros',
+			label: 'Liq. Terceros',
+			icon: 'receipt',
+			badge: null,
+			href: '/dashboard/liquidaciones-terceros'
+		},
+		{
+			id: 'pesv',
+			label: 'PESV',
+			icon: 'pesv-road',
+			badge: null,
+			href: '/dashboard/pesv'
+		},
+		{
+			id: 'contabilidad',
+			label: 'Contabilidad',
+			icon: 'calculator',
+			badge: null,
+			href: '/dashboard/contabilidad'
+		},
+		{
+			id: 'terceros',
+			label: 'Terceros',
+			icon: 'address-book',
+			badge: null,
+			href: '/dashboard/terceros'
+		},
+		{
+			id: 'usuarios',
+			label: 'Equipo',
+			icon: 'user-circle',
+			badge: null,
+			href: '/dashboard/usuarios'
+		}
 		// {
 		// 	id: 'rutas',
 		// 	label: 'Rutas',
@@ -153,35 +195,13 @@
 		// 	badge: null,
 		// 	href: '/dashboard/configuracion'
 		// }
-		{
-			id: 'usuarios',
-			label: 'Usuarios',
-			icon: 'users',
-			badge: null,
-			href: '/dashboard/usuarios'
-		},
-		{
-			id: 'sesiones',
-			label: 'Sesiones',
-			icon: 'clock',
-			badge: null,
-			href: '/dashboard/sesiones'
-		}
 	];
 
+	// Filtrar items del menú según permisos del usuario
 	$: currentUser = $authStore.user;
-	$: filteredMenuItems = menuItems.filter(item => {
+	$: filteredMenuItems = menuItems.filter((item) => {
 		if (!currentUser) return false;
-		// Si el usuario no tiene áreas asignadas, mostrar todo (usuarios legacy)
-		const areas = currentUser.area;
-		if (!areas || (Array.isArray(areas) && areas.length === 0)) {
-			return true;
-		}
-		const { allowed } = checkAccess(
-			currentUser.role || currentUser.rol,
-			areas,
-			item.id
-		);
+		const { allowed } = checkAccess(currentUser.role || currentUser.rol, currentUser.area, item.id);
 		return allowed;
 	});
 
@@ -191,21 +211,24 @@
 		if (pathname.startsWith('/dashboard/conductores')) return 'conductores';
 		if (pathname.startsWith('/dashboard/servicios')) return 'servicios';
 		if (pathname.startsWith('/dashboard/recargos')) return 'recargos';
-		if (pathname.startsWith('/dashboard/nomina')) return 'nomina';
 		if (pathname.startsWith('/dashboard/asistencias')) return 'asistencias';
 		if (pathname.startsWith('/dashboard/acciones-correctivas')) return 'acciones-correctivas';
 		if (pathname.startsWith('/dashboard/evaluaciones')) return 'evaluaciones';
+		if (pathname.startsWith('/dashboard/salidas-nc')) return 'salidas-nc';
 		if (pathname.startsWith('/dashboard/clientes')) return 'clientes';
-		if (pathname.startsWith('/dashboard/terceros')) return 'terceros';
+		if (pathname.startsWith('/dashboard/sarlaft')) return 'sarlaft';
+		if (pathname.startsWith('/dashboard/nomina')) return 'nomina';
+		// if (pathname.startsWith('/dashboard/extractos')) return 'extractos';
 		if (pathname.startsWith('/dashboard/liquidaciones-servicios')) return 'liquidaciones-servicios';
-		if (pathname.startsWith('/dashboard/extractos')) return 'extractos';
+		if (pathname.startsWith('/dashboard/liquidaciones-terceros')) return 'liquidaciones-terceros';
+		if (pathname.startsWith('/dashboard/sarlaft')) return 'SARLAFT + PTEE';
+		if (pathname.startsWith('/dashboard/pesv')) return 'pesv';
+		if (pathname.startsWith('/dashboard/contabilidad')) return 'contabilidad';
+		if (pathname.startsWith('/dashboard/terceros')) return 'terceros';
 		if (pathname.startsWith('/dashboard/usuarios')) return 'usuarios';
-		if (pathname.startsWith('/dashboard/sesiones')) return 'sesiones';
+		if (pathname.startsWith('/dashboard/sesiones')) return 'usuarios';
+		if (pathname.startsWith('/dashboard/directorio')) return 'usuarios';
 		if (pathname.startsWith('/dashboard/perfil')) return 'perfil';
-		// if (pathname.startsWith('/dashboard/rutas')) return 'rutas';
-		// if (pathname.startsWith('/dashboard/planillas')) return 'planillas';
-		// if (pathname.startsWith('/dashboard/reportes')) return 'reportes';
-		// if (pathname.startsWith('/dashboard/configuracion')) return 'configuracion';
 		return 'servicios';
 	}
 
@@ -215,16 +238,12 @@
 
 		// Cerrar drawer en mobile después de navegar
 		if (isMobile) {
-			isDrawerOpen = false;
+			mobileDrawerStore.close();
 		}
 	}
 
-	function toggleDrawer() {
-		isDrawerOpen = !isDrawerOpen;
-	}
-
 	function closeDrawer() {
-		isDrawerOpen = false;
+		mobileDrawerStore.close();
 	}
 
 	function getIcon(iconName: string) {
@@ -257,42 +276,53 @@
 				<rect x="10" y="17" width="4" height="5" fill="currentColor"/>
 			`,
 			chart: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />`,
-			'dollar-sign': `<line x1="12" y1="1" x2="12" y2="23" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/>`,
 			clipboard: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />`,
-			'file-text': `<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2" fill="none"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2" fill="none"/><line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" stroke-width="2"/><line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2"/><polyline points="10 9 9 9 8 9" stroke="currentColor" stroke-width="2"/>`,
+			document: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />`,
 			'clipboard-list': `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />`,
 			'shield-check': `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />`,
+			'alert-triangle': `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />`,
+			wallet: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />`,
+			'file-text': `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2" fill="none"/><line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" stroke-width="2"/><line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2"/><polyline points="10 9 9 9 8 9" stroke="currentColor" stroke-width="2" fill="none"/>`,
+			receipt: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6M4 4v16l2-1.5L8 20l2-1.5L12 20l2-1.5L16 20l2-1.5L20 20V4l-2 1.5L16 4l-2 1.5L12 4l-2 1.5L8 4 6 5.5 4 4z" /><circle cx="9" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="15" r="1" fill="currentColor"/>`,
+			'pesv-road': `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4m0 2v.01" />`,
+			calculator: `<rect x="4" y="2" width="16" height="20" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><line x1="8" y1="6" x2="16" y2="6" stroke="currentColor" stroke-width="2"/><line x1="8" y1="10" x2="10" y2="10" stroke="currentColor" stroke-width="2"/><line x1="14" y1="10" x2="16" y2="10" stroke="currentColor" stroke-width="2"/><line x1="8" y1="14" x2="10" y2="14" stroke="currentColor" stroke-width="2"/><line x1="14" y1="14" x2="16" y2="14" stroke="currentColor" stroke-width="2"/><line x1="8" y1="18" x2="10" y2="18" stroke="currentColor" stroke-width="2"/><line x1="14" y1="18" x2="16" y2="18" stroke="currentColor" stroke-width="2"/>`,
+			'address-book': `<rect x="4" y="2" width="16" height="20" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="2" fill="none"/><path d="M7 18c0-2.5 2.2-4 5-4s5 1.5 5 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><line x1="2" y1="8" x2="4" y2="8" stroke="currentColor" stroke-width="2"/><line x1="2" y1="14" x2="4" y2="14" stroke="currentColor" stroke-width="2"/>`,
 			settings: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-					   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />`
+				   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />`,
+			'user-circle': `<circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2" fill="none"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5" fill="none" stroke-dasharray="2 0"/>`
 		};
 
 		return icons[iconName as keyof typeof icons] || '';
 	}
 </script>
 
-<!-- Desktop Sidebar (lg+) -->
+<!-- Desktop Sidebar (lg+) — fondo charcoal profundo (no glass) -->
 <div
 	class="no-print apple-transition fixed top-0 left-0 z-40 hidden h-full lg:block {isCollapsed
-		? 'w-20'
+		? 'w-24'
 		: 'w-64'}"
 	in:fly={{ x: -100, duration: 400 }}
+	style="background-color: var(--bg-charcoal-deep); border-right: 1px solid rgba(255,255,255,0.06);"
 >
-	<!-- Sidebar Background -->
-	<div class="glass-dark relative flex h-full flex-col border-r border-white/10">
-		<!-- Logo Area -->
-		<div class="flex-shrink-0 border-b border-white/10 p-6" in:fade={{ duration: 600, delay: 200 }}>
+	<div class="relative flex h-full flex-col">
+		<!-- Logo Area — más editorial, padding generoso -->
+		<div
+			class="flex-shrink-0"
+			style="border-bottom: 1px solid rgba(255,255,255,0.06);"
+			in:fade={{ duration: 600, delay: 200 }}
+		>
 			<div class="flex items-center space-x-3">
-				<div
-					class="soft-shadow flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-white overflow-hidden"
-				>
-					<img src="/assets/logo.png" alt="Cotransmeq Logo" class="h-full w-full object-contain" />
+				<div class="flex h-16 w-full flex-shrink-0 items-center justify-center overflow-hidden">
+					<img
+						src="/assets/logo_cotransmeq_white-264.webp"
+						alt="Cotransmeq"
+						class="h-full w-3/3 max-w-[180px] object-contain"
+						width="40"
+						height="40"
+						in:scale={{ duration: 400, start: 0.7, opacity: 0, easing: backOut }}
+						out:scale={{ duration: 200, start: 0.85, opacity: 0, easing: cubicOut }}
+					/>
 				</div>
-				{#if !isCollapsed}
-					<div class="min-w-0" in:fade={{ duration: 300 }}>
-						<h2 class="truncate text-lg font-semibold text-white">Cotransmeq</h2>
-						<p class="text-xs text-orange-200">Sistema de Gestión</p>
-					</div>
-				{/if}
 			</div>
 		</div>
 
@@ -300,19 +330,19 @@
 		<nav class="flex-1 space-y-1 overflow-y-auto p-4">
 			{#each filteredMenuItems as item, index (item.id)}
 				<button
-					class="apple-transition group relative flex w-full cursor-pointer items-center overflow-hidden rounded-xl px-3 py-3
-						{activeSection === item.id
-						? 'border border-orange-400/30 bg-orange-500/20 text-orange-300'
-						: 'text-orange-100/70 hover:bg-white/5 hover:text-orange-200'}"
+					class="apple-transition group relative flex w-full cursor-pointer items-center overflow-hidden rounded-xl px-3 py-2.5
+						{activeSection === item.id ? 'text-white' : 'hover:bg-white/5'}"
+					style="color: {activeSection === item.id ? '#ffffff' : 'rgba(252,252,251,0.65)'};
+						background-color: {activeSection === item.id ? 'rgba(249,115,22,0.20)' : 'transparent'};
+						border: 1px solid {activeSection === item.id ? 'rgba(249,115,22,0.40)' : 'transparent'};"
 					on:click={() => handleMenuClick(item)}
 					in:fly={{ x: -30, duration: 400, delay: index * 50 + 300 }}
 				>
 					<!-- Icon -->
 					<div class="h-5 w-5 flex-shrink-0">
 						<svg
-							class="apple-transition h-5 w-5 {activeSection === item.id
-								? 'text-orange-400'
-								: 'text-current'}"
+							class="apple-transition h-5 w-5"
+							style="color: {activeSection === item.id ? 'var(--emerald-500)' : 'currentColor'};"
 							fill="none"
 							stroke="currentColor"
 							viewBox="0 0 24 24"
@@ -327,10 +357,11 @@
 							class="ml-3 flex min-w-0 flex-1 items-center justify-between"
 							in:fade={{ duration: 200 }}
 						>
-							<span class="truncate font-medium">{item.label}</span>
+							<span class="truncate text-sm font-medium">{item.label}</span>
 							{#if item.badge}
 								<span
-									class="ml-2 rounded-full bg-orange-500 px-2 py-0.5 text-xs font-medium text-white"
+									class="ml-2 rounded-full px-2 py-0.5 text-xs font-semibold text-white"
+									style="background-color: var(--emerald-500);"
 								>
 									{item.badge}
 								</span>
@@ -339,28 +370,23 @@
 					{:else if item.badge}
 						<!-- Badge for collapsed state -->
 						<div
-							class="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-xs font-medium text-white"
+							class="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full text-xs font-medium text-white"
+							style="background-color: var(--emerald-500);"
 						>
 							{item.badge}
 						</div>
-					{/if}
-
-					<!-- Active indicator -->
-					{#if activeSection === item.id}
-						<div
-							class="absolute inset-0 rounded-xl bg-gradient-to-r from-orange-400/5 to-orange-500/5"
-						></div>
 					{/if}
 				</button>
 			{/each}
 		</nav>
 
 		<!-- Collapse Toggle -->
-		<div class="flex-shrink-0 border-t border-white/10 p-4">
-			<button
-				class="apple-transition group flex w-full items-center justify-center rounded-xl px-3 py-3 text-orange-100/70 hover:bg-white/5 hover:text-orange-200"
-				on:click={() => dispatch('toggleCollapse')}
-			>
+		<div class="flex-shrink-0 p-4" style="border-top: 1px solid rgba(255,255,255,0.06);">
+		<button
+			class="apple-transition group flex w-full items-center justify-center rounded-xl px-3 py-2.5"
+			style="color: rgba(252,252,251,0.65);"
+			on:click={() => dispatch('toggleCollapse')}
+		>
 				<svg
 					class="apple-transition h-5 w-5 {isCollapsed ? 'rotate-180' : ''}"
 					fill="none"
@@ -375,32 +401,15 @@
 					/>
 				</svg>
 				{#if !isCollapsed}
-					<span class="ml-3 font-medium" in:fade={{ duration: 200 }}>Contraer</span>
+					<span class="ml-3 text-sm font-medium" in:fade={{ duration: 200 }}>Contraer</span>
 				{/if}
 			</button>
 		</div>
 	</div>
 </div>
 
-<!-- Mobile Menu Button (fixed en esquina superior izquierda) -->
-<button
-	type="button"
-	class="no-print fixed top-4 left-4 z-50 flex h-10 w-10 items-center justify-center rounded-xl bg-orange-500 shadow-lg transition-colors hover:bg-orange-600 lg:hidden"
-	on:click={toggleDrawer}
-	aria-label="Abrir menú"
->
-	<svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-		<path
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			stroke-width="2"
-			d="M4 6h16M4 12h16M4 18h16"
-		/>
-	</svg>
-</button>
-
 <!-- Mobile Drawer -->
-{#if isMobile && isDrawerOpen}
+{#if isMobile && $mobileDrawerStore}
 	<!-- Overlay -->
 	<button
 		type="button"
@@ -413,23 +422,39 @@
 
 	<!-- Drawer -->
 	<div class="fixed top-0 left-0 z-[70] h-full w-64" transition:fly={{ x: -300, duration: 300 }}>
-		<div class="glass-dark relative flex h-full flex-col border-r border-white/10">
+		<div
+			class="relative flex h-full flex-col"
+			style="background-color: var(--bg-charcoal-deep); border-right: 1px solid rgba(255,255,255,0.06);"
+		>
 			<!-- Header con botón cerrar -->
-			<div class="flex flex-shrink-0 items-center justify-between border-b border-white/10 p-4">
+			<div
+				class="flex flex-shrink-0 items-center justify-between p-4"
+				style="border-bottom: 1px solid rgba(255,255,255,0.06);"
+			>
 				<div class="flex items-center space-x-3">
-					<div
-						class="soft-shadow flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-400 to-orange-600"
-					>
-						<span class="text-lg font-bold text-white">T</span>
-					</div>
-					<div class="min-w-0">
-						<h2 class="truncate text-lg font-semibold text-white">Cotransmeq</h2>
-						<p class="text-xs text-orange-200">Sistema de Gestión</p>
-					</div>
+			<div
+				class="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl"
+				style="box-shadow: 0 4px 16px rgba(249, 115, 22, 0.35); background-color: #0f172a;"
+			>
+				<img
+					src="/favicon-32x32.png"
+					alt="Cotransmeq"
+					class="h-full w-full object-contain"
+					width="40"
+					height="40"
+				/>
+			</div>
+			<div class="min-w-0">
+				<h2 class="truncate font-display text-lg text-white" style="font-weight: 600;">
+					Cotransmeq
+				</h2>
+				<p class="text-xs" style="color: rgba(249,115,22,0.8);">Sistema de Gestión</p>
+			</div>
 				</div>
 				<button
 					type="button"
-					class="flex h-8 w-8 items-center justify-center rounded-lg text-orange-100/70 transition-colors hover:bg-white/10 hover:text-white"
+					class="apple-transition flex h-8 w-8 items-center justify-center rounded-lg"
+					style="color: rgba(252,252,251,0.65);"
 					on:click={closeDrawer}
 					aria-label="Cerrar menú"
 				>
@@ -448,18 +473,16 @@
 			<nav class="flex-1 space-y-1 overflow-y-auto p-4">
 				{#each filteredMenuItems as item, index (item.id)}
 					<button
-						class="apple-transition group relative flex w-full cursor-pointer items-center overflow-hidden rounded-xl px-3 py-3
-							{activeSection === item.id
-							? 'border border-orange-400/30 bg-orange-500/20 text-orange-300'
-							: 'text-orange-100/70 hover:bg-white/5 hover:text-orange-200'}"
+						class="apple-transition group relative flex w-full cursor-pointer items-center overflow-hidden rounded-xl px-3 py-2.5"
+						style="color: {activeSection === item.id ? '#ffffff' : 'rgba(252,252,251,0.65)'};
+							background-color: {activeSection === item.id ? 'rgba(249,115,22,0.20)' : 'transparent'};
+							border: 1px solid {activeSection === item.id ? 'rgba(249,115,22,0.40)' : 'transparent'};"
 						on:click={() => handleMenuClick(item)}
 					>
-						<!-- Icon -->
 						<div class="h-5 w-5 flex-shrink-0">
 							<svg
-								class="apple-transition h-5 w-5 {activeSection === item.id
-									? 'text-orange-400'
-									: 'text-current'}"
+								class="apple-transition h-5 w-5"
+								style="color: {activeSection === item.id ? 'var(--emerald-500)' : 'currentColor'};"
 								fill="none"
 								stroke="currentColor"
 								viewBox="0 0 24 24"
@@ -468,24 +491,17 @@
 							</svg>
 						</div>
 
-						<!-- Label and Badge -->
 						<div class="ml-3 flex min-w-0 flex-1 items-center justify-between">
-							<span class="truncate font-medium">{item.label}</span>
+							<span class="truncate text-sm font-medium">{item.label}</span>
 							{#if item.badge}
 								<span
-									class="ml-2 rounded-full bg-orange-500 px-2 py-0.5 text-xs font-medium text-white"
+									class="ml-2 rounded-full px-2 py-0.5 text-xs font-semibold text-white"
+									style="background-color: var(--emerald-500);"
 								>
 									{item.badge}
 								</span>
 							{/if}
 						</div>
-
-						<!-- Active indicator -->
-						{#if activeSection === item.id}
-							<div
-								class="absolute inset-0 rounded-xl bg-gradient-to-r from-orange-400/5 to-orange-500/5"
-							></div>
-						{/if}
 					</button>
 				{/each}
 			</nav>

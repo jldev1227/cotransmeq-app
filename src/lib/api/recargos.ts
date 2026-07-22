@@ -10,6 +10,9 @@ import type {
 	HistorialRecargo,
 	TipoRecargo,
 	ConfiguracionSalario,
+	CrearConfiguracionSalarioDTO,
+	ActualizarConfiguracionSalarioDTO,
+	EmpresaDisponible,
 	CanvasRecargo
 } from '$lib/types/recargos';
 
@@ -19,21 +22,8 @@ export const recargosApi = {
 	/**
 	 * Obtener recargos para canvas con filtros
 	 */
-	async obtenerParaConsecutivo(
-	): Promise<{ data: CanvasRecargo[]; pagination: any }> {
-		const params = new URLSearchParams();
-
-		const response = await apiClient.get<{ data: CanvasRecargo[]; pagination: any }>(
-			`${BASE_URL}?limit=10000&page=1`
-		);
-		return response.data;
-	},
-
-	/**
-	 * Obtener recargos para canvas con filtros
-	 */
 	async obtenerParaCanvas(
-		filtros: RecargoPlanillaFiltros = {}
+		filtros: RecargoPlanillaFiltros
 	): Promise<{ data: CanvasRecargo[]; pagination: any }> {
 		const params = new URLSearchParams();
 
@@ -46,6 +36,7 @@ export const recargosApi = {
 		if (filtros.numero_planilla) params.append('numero_planilla', filtros.numero_planilla);
 		if (filtros.page) params.append('page', filtros.page.toString());
 		if (filtros.limit) params.append('limit', filtros.limit.toString());
+		if (filtros.eliminados) params.append('eliminados', filtros.eliminados.toString());
 
 		const response = await apiClient.get<{ data: CanvasRecargo[]; pagination: any }>(
 			`${BASE_URL}?${params.toString()}`
@@ -97,9 +88,30 @@ export const recargosApi = {
 	},
 
 	/**
+	 * Restaurar recargo (soft delete)
+	 */
+	async restaurar(id: string): Promise<void> {
+		await apiClient.patch(`${BASE_URL}/restaurar/${id}`);
+	},
+
+	/**
+	 * Restaurar múltiples recargos (soft delete)
+	 */
+	async restaurarMultiple(ids: string[]): Promise<{ eliminados: number }> {
+		const response = await apiClient.post<{ data: { eliminados: number } }>(
+			`${BASE_URL}/restaurar-multiple`,
+			{ ids }
+		);
+		return response.data.data;
+	},
+
+	/**
 	 * Cambiar estado de múltiples recargos
 	 */
-	async cambiarEstadoMultiple(ids: string[], estado: string): Promise<{ actualizados: number; estado: string }> {
+	async cambiarEstadoMultiple(
+		ids: string[],
+		estado: string
+	): Promise<{ actualizados: number; estado: string }> {
 		const response = await apiClient.patch<{ data: { actualizados: number; estado: string } }>(
 			`${BASE_URL}/cambiar-estado-multiple`,
 			{ ids, estado }
@@ -143,6 +155,81 @@ export const recargosApi = {
 		return response.data.data;
 	},
 
+	// ═══════════════════════════════════════════════════════════
+	// CONFIGURACIONES SALARIOS — CRUD
+	// ═══════════════════════════════════════════════════════════
+
+	/**
+	 * Listar configuraciones de salarios con filtros opcionales
+	 */
+	async obtenerConfiguracionesSalarios(filtros?: {
+		activo?: boolean;
+		empresa_id?: string;
+	}): Promise<ConfiguracionSalario[]> {
+		const params = new URLSearchParams();
+		if (filtros?.activo !== undefined) params.append('activo', String(filtros.activo));
+		if (filtros?.empresa_id) params.append('empresa_id', filtros.empresa_id);
+		const query = params.toString() ? `?${params.toString()}` : '';
+		const response = await apiClient.get<{ data: ConfiguracionSalario[] }>(
+			`${BASE_URL}/configuraciones-salarios${query}`
+		);
+		return response.data.data;
+	},
+
+	/**
+	 * Obtener una configuración de salario por ID
+	 */
+	async obtenerConfiguracionSalario(id: string): Promise<ConfiguracionSalario> {
+		const response = await apiClient.get<{ data: ConfiguracionSalario }>(
+			`${BASE_URL}/configuraciones-salarios/${id}`
+		);
+		return response.data.data;
+	},
+
+	/**
+	 * Crear nueva configuración de salario
+	 */
+	async crearConfiguracionSalario(
+		data: CrearConfiguracionSalarioDTO
+	): Promise<ConfiguracionSalario> {
+		const response = await apiClient.post<{ data: ConfiguracionSalario }>(
+			`${BASE_URL}/configuraciones-salarios`,
+			data
+		);
+		return response.data.data;
+	},
+
+	/**
+	 * Actualizar configuración de salario existente
+	 */
+	async actualizarConfiguracionSalario(
+		id: string,
+		data: ActualizarConfiguracionSalarioDTO
+	): Promise<ConfiguracionSalario> {
+		const response = await apiClient.put<{ data: ConfiguracionSalario }>(
+			`${BASE_URL}/configuraciones-salarios/${id}`,
+			data
+		);
+		return response.data.data;
+	},
+
+	/**
+	 * Eliminar configuración de salario (soft delete)
+	 */
+	async eliminarConfiguracionSalario(id: string): Promise<void> {
+		await apiClient.delete(`${BASE_URL}/configuraciones-salarios/${id}`);
+	},
+
+	/**
+	 * Obtener empresas disponibles para selects
+	 */
+	async obtenerEmpresasDisponibles(): Promise<EmpresaDisponible[]> {
+		const response = await apiClient.get<{ data: EmpresaDisponible[] }>(
+			`${BASE_URL}/empresas-disponibles`
+		);
+		return response.data.data;
+	},
+
 	/**
 	 * Descargar archivo de planilla
 	 */
@@ -177,7 +264,6 @@ export const recargosApi = {
 		const response = await apiClient.get<{ data: any }>(`${BASE_URL}/stats/resumen?${params}`);
 		return response.data.data;
 	},
-
 	/**
 	 * Obtener reporte mensual
 	 */

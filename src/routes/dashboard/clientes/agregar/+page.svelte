@@ -78,7 +78,8 @@
 				correo: formData.correo.trim() || null
 			};
 
-			const response = await clientesAPI.create(clienteData);
+
+			await clientesAPI.create(clienteData);
 
 			successMessage = 'Cliente creado exitosamente';
 
@@ -124,23 +125,26 @@
 	<title>Agregar Cliente - Dashboard</title>
 </svelte:head>
 
-<!-- Container principal -->
-<div class="min-h-screen bg-gray-50 p-4 md:p-8">
+<!-- Container principal (paleta landing: bg cálido hueso) -->
+<div
+	class="min-h-screen p-4 md:p-8"
+	style="background-color: var(--bg-base);"
+>
 	<div class="mx-auto max-w-6xl">
-		<!-- Header de la página -->
-		<div class="mb-8" in:fly={{ y: -20, duration: 500 }}>
-			<div class="flex items-center justify-between">
+		<!-- Header de la página (page-card editorial) -->
+		<div class="page-card mb-8" style="padding: 1.5rem 2rem;" in:fly={{ y: -12, duration: 500, easing: quintOut }}>
+			<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 				<div class="flex items-center gap-4">
 					<button
 						on:click={goBack}
-						class="apple-transition flex h-10 w-10 items-center justify-center rounded-xl border border-gray-200 bg-white text-gray-500 shadow-sm hover:bg-gray-100 hover:text-gray-700"
+						class="btn-icon"
+						style="background-color: var(--bg-surface);"
 						aria-label="Volver a clientes"
 					>
-						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
-								stroke-width="2"
 								d="M15 19l-7-7 7-7"
 							/>
 						</svg>
@@ -148,50 +152,65 @@
 
 					<div class="flex items-center gap-3">
 						<div
-							class="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 shadow-lg"
+							class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl"
+							style="background: linear-gradient(135deg, #f97316, #ea580c); box-shadow: 0 6px 16px rgba(249, 115, 22, 0.30);"
 						>
-							<svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<svg
+								class="h-6 w-6 text-white"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+								stroke-width="1.8"
+							>
 								<path
 									stroke-linecap="round"
 									stroke-linejoin="round"
-									stroke-width="1.5"
 									d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"
 								/>
 							</svg>
 						</div>
-						<div>
+						<div class="min-w-0 flex-1">
+							<p
+								class="font-mono-meta mb-1 inline-block rounded-md px-2 py-0.5 text-[10px]"
+								style="color: var(--emerald-500); background: rgba(249, 115, 22, 0.08); letter-spacing: 0.12em;"
+							>
+								NUEVO REGISTRO
+							</p>
 							<h1
-								class="bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-3xl font-bold text-transparent"
+								class="font-display text-3xl"
+								style="color: var(--bg-charcoal); font-weight: 500; letter-spacing: -0.01em;"
 							>
 								Agregar Cliente
 							</h1>
-							<p class="text-gray-600">Completa la información del nuevo cliente</p>
+							<p class="text-sm" style="color: var(--text-muted);">
+								Completa la información del nuevo cliente
+							</p>
 						</div>
 					</div>
 				</div>
 
-				<!-- Breadcrumb -->
-				<nav class="hidden items-center space-x-2 text-sm text-gray-500 md:flex">
+				<!-- Breadcrumb (paleta landing) -->
+				<nav
+					class="hidden items-center space-x-2 text-sm md:flex"
+					style="color: var(--text-muted);"
+				>
 					<a href="/dashboard" class="transition-colors hover:text-orange-600">Dashboard</a>
-					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
-							stroke-width="2"
 							d="M9 5l7 7-7 7"
 						/>
 					</svg>
-					<a href="/dashboard/clientes" class="transition-colors hover:text-orange-600">Clientes</a
-					>
-					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<a href="/dashboard/clientes" class="transition-colors hover:text-orange-600">Clientes</a>
+					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
-							stroke-width="2"
 							d="M9 5l7 7-7 7"
 						/>
 					</svg>
-					<span class="font-medium text-orange-600">Agregar</span>
+					<span class="font-mono-meta" style="color: var(--emerald-500);">AGREGAR</span>
 				</nav>
 			</div>
 		</div>
@@ -199,35 +218,38 @@
 		<!-- Mensaje de éxito -->
 		{#if successMessage}
 			<div
-				class="mb-6 rounded-xl border border-orange-200 bg-orange-50 p-4"
+				class="alert alert-info mb-6"
+				style="border-radius: 16px;"
 				in:fly={{ y: -10, duration: 300 }}
 			>
-				<div class="flex items-center gap-2">
-					<svg
-						class="h-5 w-5 text-orange-500"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M5 13l4 4L19 7"
-						/>
-					</svg>
-					<p class="text-sm font-medium text-orange-700">{successMessage}. Redirigiendo...</p>
-				</div>
+				<svg
+					class="h-5 w-5"
+					style="color: var(--emerald-600);"
+					fill="none"
+					stroke="currentColor"
+					viewBox="0 0 24 24"
+					stroke-width="1.8"
+				>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M5 13l4 4L19 7"
+					/>
+				</svg>
+				<p class="text-sm font-medium" style="color: var(--emerald-800);">
+					{successMessage}. Redirigiendo…
+				</p>
 			</div>
 		{/if}
 
-		<!-- Card principal del formulario -->
+		<!-- Card principal del formulario (table-card editorial) -->
 		<div
-			class="rounded-xl border border-gray-200 bg-white shadow-lg"
+			class="table-card"
+			style="padding: 0;"
 			in:scale={{ duration: 800, easing: elasticOut, start: 0.9 }}
 		>
 			<!-- Contenido del formulario -->
-			<div class="p-6 md:p-8">
+			<div class="p-6 md:p-8" style="background-color: var(--bg-surface);">
 				<!-- Formulario -->
 				<form on:submit|preventDefault={handleSubmit} class="space-y-6">
 					<!-- Error general -->
@@ -730,7 +752,7 @@
 						<button
 							type="button"
 							on:click={goBack}
-							class="apple-transition order-2 cursor-pointer rounded-xl border border-gray-200/50 bg-white/50 px-6 py-3 font-medium text-gray-700 backdrop-blur-sm hover:bg-white hover:shadow-md sm:order-1"
+							class="btn-secondary order-2 sm:order-1"
 							disabled={isSubmitting}
 						>
 							Cancelar
@@ -738,33 +760,33 @@
 
 						<button
 							type="submit"
-							class="apple-transition order-1 flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-8 py-3 font-semibold text-white shadow-lg hover:scale-105 hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-50 sm:order-2"
+							class="btn-primary order-1 sm:order-2"
 							disabled={isSubmitting}
 						>
 							{#if isSubmitting}
-								<svg
-									class="h-5 w-5 animate-spin"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
+								<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"
+									><circle
+										class="opacity-25"
+										cx="12"
+										cy="12"
+										r="10"
+										stroke="currentColor"
+										stroke-width="4"
+									/><path
+										class="opacity-75"
+										fill="currentColor"
+										d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+									/></svg
 								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-									/>
-								</svg>
-								Guardando Cliente...
+								Guardando Cliente…
 							{:else}
-								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path
+								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"
+									><path
 										stroke-linecap="round"
 										stroke-linejoin="round"
-										stroke-width="2"
 										d="M5 13l4 4L19 7"
-									/>
-								</svg>
+									/></svg
+								>
 								Guardar Cliente
 							{/if}
 						</button>

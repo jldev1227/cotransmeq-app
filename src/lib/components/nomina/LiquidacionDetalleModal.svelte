@@ -110,21 +110,34 @@
 
 	function formatDate(dateStr: string | null | undefined): string {
 		if (!dateStr) return 'Sin fecha';
-		const date = new Date(dateStr + (dateStr.length === 10 ? 'T00:00:00' : ''));
+		// Agregar T12:00:00Z para evitar desfase de -1 día por timezone
+		const safe = dateStr.includes('T') ? dateStr : dateStr + 'T12:00:00Z';
+		const date = new Date(safe);
 		if (isNaN(date.getTime())) return 'Sin fecha';
-		return date.toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
+		return date.toLocaleDateString('es-CO', {
+			year: 'numeric',
+			month: 'long',
+			day: 'numeric',
+			timeZone: 'UTC'
+		});
 	}
 
 	function formatDateShort(dateStr: string | null | undefined): string {
 		if (!dateStr) return '';
-		const date = new Date(dateStr + (dateStr.length === 10 ? 'T00:00:00' : ''));
+		const safe = dateStr.includes('T') ? dateStr : dateStr + 'T12:00:00Z';
+		const date = new Date(safe);
 		if (isNaN(date.getTime())) return '';
-		return date.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
+		return date.toLocaleDateString('es-CO', {
+			day: 'numeric',
+			month: 'short',
+			year: 'numeric',
+			timeZone: 'UTC'
+		});
 	}
 
 	function formatDateTime(dateStr: string | null | undefined): string {
 		if (!dateStr) return '';
-		const date = new Date(dateStr + (dateStr.length === 10 ? 'T00:00:00' : ''));
+		const date = new Date(dateStr);
 		if (isNaN(date.getTime())) return '';
 		return date.toLocaleDateString('es-CO', {
 			year: 'numeric',
@@ -138,7 +151,7 @@
 	function getEstadoColor(estado: string | undefined): string {
 		switch (estado) {
 			case 'Liquidado':
-				return 'bg-green-100 text-green-700';
+				return 'bg-orange-100 text-orange-700';
 			case 'Pendiente':
 				return 'bg-yellow-100 text-yellow-700';
 			default:
@@ -174,8 +187,8 @@
 		if (!liquidacion || generatingPdf) return;
 		try {
 			generatingPdf = true;
-			// Obtener datos de recargos planillas para la página 2+ del PDF
 			let recargosData = null;
+
 			if (liquidacion.conductor_id && liquidacion.periodo_inicio && liquidacion.periodo_fin) {
 				try {
 					const recargosRes = await obtenerPreviewRecargos(
@@ -193,6 +206,9 @@
 				...recargosData,
 				planillas: planillasAgrupadas
 			};
+
+
+			console.log(dataParaPdf)
 
 			await generarPdfDesprendible(liquidacion, firmas, dataParaPdf);
 		} catch (error: any) {
@@ -255,10 +271,15 @@
 		mes: string;
 		valor: number;
 		pagaCliente: boolean;
+		esAutomatico: boolean;
+		esOverride: boolean;
+		numeroPlanilla?: string | null;
 	}
 	interface RecargoVehiculoGroup {
 		vehiculo: any;
 		total: number;
+		totalManual: number;
+		totalAutomatico: number;
 		detalles: RecargoDetalle[];
 	}
 	function agruparRecargosPorVehiculo(): RecargoVehiculoGroup[] {
@@ -267,17 +288,33 @@
 		liquidacion.recargos.forEach((r: any) => {
 			const vid = r.vehiculo_id;
 			const valor = Number(r.valor);
+			const esAutomatico = !!r.es_automatico;
+			const esOverride = !esAutomatico && !!r.es_override;
 			if (!map[vid]) {
-				map[vid] = { vehiculo: r.vehiculo, total: 0, detalles: [] };
+				map[vid] = {
+					vehiculo: r.vehiculo,
+					total: 0,
+					totalManual: 0,
+					totalAutomatico: 0,
+					detalles: []
+				};
 			}
 			map[vid].detalles.push({
 				id: r.id,
 				empresa: r.empresa?.nombre || r.clientes?.nombre || 'N/A',
 				mes: r.mes,
 				valor,
-				pagaCliente: r.pag_cliente
+				pagaCliente: r.pag_cliente,
+				esAutomatico,
+				esOverride,
+				numeroPlanilla: r.numero_planilla || null
 			});
 			map[vid].total += valor;
+			if (esAutomatico) {
+				map[vid].totalAutomatico += valor;
+			} else {
+				map[vid].totalManual += valor;
+			}
 		});
 		return Object.values(map).sort((a: any, b: any) =>
 			(a.vehiculo?.placa || '').localeCompare(b.vehiculo?.placa || '')
@@ -439,7 +476,7 @@
 									<p class="text-base font-medium">{liquidacion.dias_laborados} días</p>
 								</div>
 								<div>
-									<p class="text-sm text-gray-500">Días Ajuste Salarial</p>
+									<p class="text-sm text-gray-500">Días en Villanueva</p>
 									<p class="text-base font-medium">
 										{liquidacion.dias_laborados_villanueva} días
 									</p>
@@ -603,54 +640,102 @@
 											>
 										</div>
 
-										{#if expandedSections.recargos}
-											{@const recargosVehiculo = agruparRecargosPorVehiculo()}
-											{#if recargosVehiculo.length > 0}
-												<div class="mt-2 space-y-3">
-													{#each recargosVehiculo as item}
-														<div class="overflow-hidden rounded-md border">
-															<div class="flex items-center justify-between bg-gray-100 px-4 py-2">
-																<div>
-																	<span class="font-medium"
-																		>{item.vehiculo?.marca || ''}
-																		{item.vehiculo?.modelo || ''}</span
-																	>
-																	<span class="ml-2 text-sm font-bold"
-																		>({item.vehiculo?.placa || 'N/A'})</span
-																	>
-																</div>
-																<span class="text-right font-bold"
-																	>{formatCurrency(item.total)}</span
-																>
-															</div>
-															<div class="border-l-2 border-gray-200 p-2 pl-4">
-																{#each item.detalles.sort( (a: RecargoDetalle, b: RecargoDetalle) => {
-																		return (MESES_ORDER[a.mes] || 0) - (MESES_ORDER[b.mes] || 0);
-																	} ) as detalle}
-																	<div class="my-1 flex justify-between text-xs">
-																		<div>
-																			<span class="text-gray-600"
-																				>{detalle.empresa}
-																				{detalle.mes ? `(${detalle.mes})` : ''}</span
-																			>
-																			{#if detalle.pagaCliente}
-																				<span
-																					class="ml-2 rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-600"
-																					>Paga Cliente</span
-																				>
-																			{/if}
-																		</div>
-																		<span class="font-medium">{formatCurrency(detalle.valor)}</span>
-																	</div>
-																{/each}
-															</div>
-														</div>
-													{/each}
+						{#if expandedSections.recargos}
+							{@const recargosVehiculo = agruparRecargosPorVehiculo()}
+							{#if recargosVehiculo.length > 0}
+								<div class="mt-2 space-y-3">
+									{#each recargosVehiculo as item}
+										<div class="overflow-hidden rounded-md border">
+											<div class="flex items-center justify-between bg-gray-100 px-4 py-2">
+												<div>
+													<span class="font-medium"
+														>{item.vehiculo?.marca || ''}
+														{item.vehiculo?.modelo || ''}</span
+													>
+													<span class="ml-2 text-sm font-bold"
+														>({item.vehiculo?.placa || 'N/A'})</span
+													>
 												</div>
-											{:else}
-												<p class="text-gray-500 italic">No hay recargos</p>
-											{/if}
-										{/if}
+												<div class="text-right">
+													<div class="font-bold">{formatCurrency(item.total)}</div>
+													{#if item.totalManual > 0 && item.totalAutomatico > 0}
+														<div class="mt-0.5 flex gap-1 text-[10px] font-normal">
+															<span
+																class="rounded bg-gray-200 px-1.5 py-0.5 text-gray-700"
+																title="Recargos manuales"
+															>
+																Manual: {formatCurrency(item.totalManual)}
+															</span>
+															<span
+																class="rounded bg-orange-100 px-1.5 py-0.5 text-orange-700"
+																title="Recargos automáticos (de planillas)"
+															>
+																Auto: {formatCurrency(item.totalAutomatico)}
+															</span>
+														</div>
+													{/if}
+												</div>
+											</div>
+											<div class="border-l-2 border-gray-200 p-2 pl-4">
+												{#each item.detalles.sort( (a: RecargoDetalle, b: RecargoDetalle) => {
+														return (MESES_ORDER[a.mes] || 0) - (MESES_ORDER[b.mes] || 0);
+													} ) as detalle}
+													<div class="my-1 flex justify-between text-xs">
+														<div>
+															<span class="text-gray-600"
+																>{detalle.empresa}
+																{detalle.mes ? `(${detalle.mes})` : ''}</span
+															>
+															{#if detalle.esAutomatico}
+																<span
+																	class="ml-2 inline-flex items-center gap-0.5 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700"
+																	title="Recargo automático calculado desde planilla{detalle.numeroPlanilla
+																		? ' #' + detalle.numeroPlanilla
+																		: ''}"
+																>
+																	<svg
+																		class="h-2.5 w-2.5"
+																		fill="none"
+																		stroke="currentColor"
+																		viewBox="0 0 24 24"
+																		stroke-width="2.5"
+																	>
+																		<path
+																			stroke-linecap="round"
+																			stroke-linejoin="round"
+																			d="M13 10V3L4 14h7v7l9-11h-7z"
+																		/>
+																	</svg>
+																	Auto
+																</span>
+														{:else}
+															<span
+																class="ml-2 inline-flex items-center gap-0.5 rounded bg-gray-200 px-1.5 py-0.5 text-[10px] font-semibold text-gray-700"
+																title={detalle.esOverride
+																	? 'Recargo manual que sobreescribe un automático de planilla'
+																	: 'Recargo manual (capturado por el usuario)'}
+															>
+																{detalle.esOverride ? 'Override' : 'Manual'}
+															</span>
+														{/if}
+															{#if detalle.pagaCliente}
+																<span
+																	class="ml-1 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] text-orange-600"
+																	>Paga Cliente</span
+																>
+															{/if}
+														</div>
+														<span class="font-medium">{formatCurrency(detalle.valor)}</span>
+													</div>
+												{/each}
+											</div>
+										</div>
+									{/each}
+								</div>
+							{:else}
+								<p class="text-gray-500 italic">No hay recargos</p>
+							{/if}
+						{/if}
 
 										<!-- Pernotes con expand -->
 										<div class="flex items-center justify-between">
@@ -856,13 +941,13 @@
 													>{formatCurrency(liquidacion.cesantias)}</span
 												>
 											</div>
-											<div class="flex justify-between">
-												<span class="text-sm text-gray-500">Interés de Cesantías</span>
-												<span class="text-sm font-medium"
-													>{formatCurrency(liquidacion.interes_cesantias)}</span
-												>
-											</div>
+										<div class="flex justify-between">
+											<span class="text-sm text-gray-500">Interés de Cesantías</span>
+											<span class="text-sm font-medium"
+												>{formatCurrency(liquidacion.interes_cesantias)}</span
+											>
 										</div>
+									</div>
 									</div>
 								</div>
 							</div>
@@ -1005,7 +1090,7 @@
 					<button
 						on:click={handleGeneratePDF}
 						disabled={generatingPdf || firmasLoading}
-						class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-amber-600 px-5 py-2.5 font-medium text-white shadow-md transition-all hover:shadow-lg disabled:opacity-50"
+						class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-teal-600 px-5 py-2.5 font-medium text-white shadow-md transition-all hover:shadow-lg disabled:opacity-50"
 					>
 						{#if generatingPdf}
 							<Loader2 class="h-4 w-4 animate-spin" />

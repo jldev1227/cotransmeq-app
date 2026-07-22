@@ -9,6 +9,7 @@
 	import { serviciosStore } from '$lib/stores/servicios';
 	import { sidebarStore } from '$lib/stores/sidebar';
 	import distracomLocations from '$lib/data/distracomlocations';
+	import { quintOut } from 'svelte/easing';
 
 	const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
 	const OVERPASS_API = 'https://overpass-api.de/api/interpreter';
@@ -126,8 +127,8 @@
 		pendiente: '#F59E0B',
 		en_curso: '#3B82F6',
 		planificado: '#8B5CF6',
-		completado: '#10B981',
-		realizado: '#10B981',
+		completado: '#f97316',
+		realizado: '#f97316',
 		cancelado: '#EF4444',
 		liquidado: '#6B7280'
 	};
@@ -139,6 +140,15 @@
 		realizado: 'Realizado',
 		cancelado: 'Cancelado',
 		liquidado: 'Liquidado'
+	};
+	const STATUS_PALETTE: Record<string, { bg: string; fg: string; border: string; dot: string }> = {
+		pendiente: { bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe', dot: '#3b82f6' },
+		en_curso: { bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe', dot: '#3b82f6' },
+		planificado: { bg: '#faf5ff', fg: '#7e22ce', border: '#e9d5ff', dot: '#a855f7' },
+		completado: { bg: '#ecfdf5', fg: '#c2410c', border: '#a7f3d0', dot: '#f97316' },
+		realizado: { bg: '#ecfdf5', fg: '#c2410c', border: '#a7f3d0', dot: '#f97316' },
+		cancelado: { bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca', dot: '#ef4444' },
+		liquidado: { bg: '#f3f4f6', fg: '#374151', border: '#d1d5db', dot: '#6b7280' }
 	};
 
 	const fmtDate = (d: any) =>
@@ -1276,7 +1286,7 @@
 					type: 'line',
 					source: 'route',
 					layout: { 'line-join': 'round', 'line-cap': 'round' },
-					paint: { 'line-color': '#059669', 'line-width': 5, 'line-opacity': 0.8 }
+					paint: { 'line-color': '#ea580c', 'line-width': 5, 'line-opacity': 0.8 }
 				});
 			}
 
@@ -1292,11 +1302,11 @@
 			cargarIncidentesNacionales();
 
 			// Markers A / B
-			const om = new mapboxgl.Marker(pinEl('#059669', 'A'))
+			const om = new mapboxgl.Marker(pinEl('#ea580c', 'A'))
 				.setLngLat([oLng, oLat])
 				.setPopup(
 					new mapboxgl.Popup({ offset: 25 }).setHTML(
-						`<div style="padding:10px;font-family:system-ui"><strong style="color:#059669">Origen</strong><br/><span style="font-size:12px;">${servicio.origen_especifico || servicio.origen?.nombre_municipio || '—'}</span></div>`
+						`<div style="padding:10px;font-family:system-ui"><strong style="color:#ea580c">Origen</strong><br/><span style="font-size:12px;">${servicio.origen_especifico || servicio.origen?.nombre_municipio || '—'}</span></div>`
 					)
 				);
 			om.addTo(map!);
@@ -1433,25 +1443,26 @@
 
 <svelte:head>
 	<title
-		>{servicio ? `Servicio ${servicio.id.slice(0, 8).toUpperCase()}` : 'Cargando...'} - Transmeralda</title
+		>{servicio ? `Servicio ${servicio.id.slice(0, 8).toUpperCase()}` : 'Cargando...'} - Cotransmeq</title
 	>
 </svelte:head>
 
-<div class="flex h-screen w-full flex-col overflow-hidden bg-gray-50">
+<div class="servicio-cards flex h-full w-full flex-col overflow-hidden">
 	{#if loading}
-		<div class="flex flex-1 items-center justify-center bg-white" in:fade>
+		<div class="flex flex-1 items-center justify-center" style="background-color: var(--bg-base);" in:fade>
 			<div class="text-center">
-				<div
-					class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"
-				></div>
-				<p class="text-sm text-gray-500">Cargando servicio...</p>
+				<div class="spinner mx-auto mb-4" style="width: 3rem; height: 3rem;"></div>
+				<p class="text-sm" style="color: var(--text-muted);">Cargando servicio...</p>
 			</div>
 		</div>
 	{:else if error}
-		<div class="flex flex-1 items-center justify-center bg-white p-6" in:fade>
+		<div class="flex flex-1 items-center justify-center p-6" style="background-color: var(--bg-base);" in:fade>
 			<div class="max-w-xs text-center">
-				<div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-red-100">
-					<svg class="h-6 w-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<div
+					class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl"
+					style="background: rgba(220, 38, 38, 0.08);"
+				>
+					<svg class="h-6 w-6" style="color: #dc2626;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
@@ -1460,63 +1471,71 @@
 						/>
 					</svg>
 				</div>
-				<p class="mb-4 text-gray-600">{error}</p>
-				<button
-					on:click={() => goto('/dashboard/servicios')}
-					class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white">Volver</button
-				>
+				<p class="mb-4 text-sm" style="color: var(--text-secondary);">{error}</p>
+				<button on:click={() => goto('/dashboard/servicios')} class="btn-primary">
+					Volver
+				</button>
 			</div>
 		</div>
 	{:else if servicio}
-		<!-- ── HEADER ─────────────────────────────────────────────── -->
-		<header
-			class="z-50 flex h-14 flex-shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 md:px-6"
-		>
-			<div class="flex items-center gap-3">
-				<button
-					on:click={() => {
-						isNavigating = true;
-						goto('/dashboard/servicios');
-					}}
-					class="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-100 text-gray-500 hover:bg-gray-200"
-					disabled={isNavigating}
-					class:opacity-40={isNavigating}
-					aria-label="Volver a servicios"
+		<!-- ── HEADER (sistema landing) ─────────────────────────────────────── -->
+		<header class="servicio-header">
+			<button
+				on:click={() => {
+					isNavigating = true;
+					goto('/dashboard/servicios');
+				}}
+				disabled={isNavigating}
+				aria-label="Volver a servicios"
+				class="servicio-icon-btn"
+			>
+				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+				</svg>
+			</button>
+
+			<div class="servicio-brand-icon" aria-hidden="true">
+				<svg
+					class="h-5 w-5 text-white"
+					fill="none"
+					stroke="currentColor"
+					viewBox="0 0 24 24"
+					stroke-width="1.8"
 				>
-					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M10 19l-7-7m0 0l7-7m-7 7h18"
-						/>
-					</svg>
-				</button>
-				<div>
-					<p class="text-[11px] font-medium tracking-wide text-gray-400 uppercase">
-						Detalle del Servicio
-					</p>
-					<p class="text-sm leading-tight font-bold text-gray-900">
-						{servicio.id.slice(0, 8).toUpperCase()}
-					</p>
-				</div>
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+					/>
+				</svg>
 			</div>
+
+			<div class="min-w-0 flex-1">
+				<span class="servicio-eyebrow">Detalle del servicio</span>
+				<h1 class="servicio-title">
+					{servicio.id.slice(0, 8).toUpperCase()}
+				</h1>
+			</div>
+
 			<div class="flex items-center gap-2">
 				<span
-					class="rounded-full px-3 py-1 text-xs font-bold text-white"
-					style="background:{STATUS_COLOR[servicio.estado] ?? '#6B7280'}"
+					class="servicio-status-pill"
+					style="background-color: {STATUS_PALETTE[servicio.estado]?.bg ??
+						'#f3f4f6'}; color: {STATUS_PALETTE[servicio.estado]?.fg ??
+						'#374151'}; border-color: {STATUS_PALETTE[servicio.estado]?.border ?? '#d1d5db'}"
 				>
+					<span
+						class="h-1.5 w-1.5 rounded-full"
+						style="background-color: {STATUS_PALETTE[servicio.estado]?.dot ?? '#6b7280'}"
+					></span>
 					{STATUS_LABEL[servicio.estado] ?? servicio.estado}
 				</span>
-				<button
-					on:click={handleCompartir}
-					class="flex items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-600"
-				>
-					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+
+				<button on:click={handleCompartir} class="servicio-share-btn">
+					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
-							stroke-width="2"
 							d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
 						/>
 					</svg>
@@ -1526,46 +1545,68 @@
 		</header>
 
 		<!-- ── ÁREA SCROLLEABLE ───────────────────────────────────── -->
-		<div class="flex-1 overflow-y-auto">
+		<div class="flex-1 overflow-y-auto" style="background-color: var(--bg-base);">
 			<div class="mx-auto max-w-7xl px-4 py-5 md:px-6">
-				<!-- MAPA -->
-				<div class="relative mb-2 h-[420px] overflow-hidden rounded-2xl shadow-md md:h-[500px]">
+				<!-- ═══ MAPA (hero) ═══ -->
+				<div
+					class="servicio-map-frame relative mb-3 overflow-hidden rounded-2xl border"
+					style="background-color: var(--bg-surface); border-color: var(--border-subtle); box-shadow: 0 4px 24px rgba(0,0,0,0.04);"
+				>
 					<div id="map" class="h-full w-full"></div>
 
 					<!-- Botón centrar -->
 					<button
 						on:click={centerRoute}
-						class="absolute top-3 left-3 z-10 flex items-center gap-1.5 rounded-xl bg-white/95 px-3 py-2 text-sm font-medium text-gray-700 shadow hover:bg-white"
+						class="servicio-map-center-btn apple-transition absolute top-3 left-3 z-10 flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold"
+						style="background-color: rgba(255, 255, 255, 0.95); border-color: var(--border-subtle); color: var(--text-primary); box-shadow: 0 4px 16px rgba(0,0,0,0.08); backdrop-filter: blur(8px);"
 					>
 						<svg
-							class="h-4 w-4 text-orange-600"
+							class="h-4 w-4"
+							style="color: var(--orange-600);"
 							fill="none"
 							stroke="currentColor"
 							viewBox="0 0 24 24"
+							stroke-width="2"
 						>
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
-								stroke-width="2"
 								d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
 							/>
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
-								stroke-width="2"
 								d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
 							/>
 						</svg>
 						Centrar
 					</button>
 
-					<!-- ─── LEYENDA INTERACTIVA ─── -->
+					<!-- Trip summary overlay (esquina inferior izquierda, encima de la leyenda) -->
+					{#if distancia !== '—'}
+						<div class="servicio-map-stats" in:fade={{ duration: 300 }}>
+							<div class="stat-block">
+								<span class="stat-block-label">Distancia</span>
+								<span class="stat-block-value">{distancia}</span>
+							</div>
+							<div class="stat-divider"></div>
+							<div class="stat-block">
+								<span class="stat-block-label">Tiempo est.</span>
+								<span class="stat-block-value">{duracion}</span>
+							</div>
+						</div>
+					{/if}
+
+					<!-- ─── LEYENDA INTERACTIVA (subida para no chocar con stats) ─── -->
 					<div
-						class="absolute bottom-3 left-3 z-10 overflow-hidden rounded-xl border border-gray-200 bg-white/97 shadow-lg"
-						style="min-width:200px;backdrop-filter:blur(8px);"
+						class="servicio-map-leyenda absolute bottom-3 right-3 z-10 overflow-hidden rounded-xl border"
+						style="min-width:220px; background-color: rgba(255, 255, 255, 0.95); border-color: var(--border-subtle); box-shadow: 0 4px 16px rgba(0,0,0,0.08); backdrop-filter: blur(12px);"
 					>
-						<div class="border-b border-gray-100 px-3 py-2">
-							<p class="text-[10px] font-bold tracking-wider text-gray-400 uppercase">
+						<div class="border-b px-3 py-2" style="border-color: var(--border-subtle);">
+							<p
+								class="font-mono-meta"
+								style="color: var(--text-muted); font-size: 0.62rem;"
+							>
 								Puntos de interés
 							</p>
 						</div>
@@ -1574,11 +1615,11 @@
 							<!-- Origen / Destino -->
 							<div class="flex items-center gap-2 rounded-lg px-2 py-1">
 								<div
-									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-orange-500"
+									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full" style="background-color: var(--orange-500);"
 								>
 									<span style="color:#fff;font-weight:700;font-size:9px;">A</span>
 								</div>
-								<span class="text-xs text-gray-500">Origen</span>
+								<span class="text-xs font-medium text-gray-700">Origen</span>
 							</div>
 							<div class="flex items-center gap-2 rounded-lg px-2 py-1">
 								<div
@@ -1586,14 +1627,14 @@
 								>
 									<span style="color:#fff;font-weight:700;font-size:9px;">B</span>
 								</div>
-								<span class="text-xs text-gray-500">Destino</span>
+								<span class="text-xs font-medium text-gray-700">Destino</span>
 							</div>
 
 							<div class="my-1 border-t border-gray-100"></div>
 
 							<!-- Peajes -->
 							<button
-								class="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-gray-50"
+								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors leyenda-toggle"
 								class:opacity-40={!showPeajes}
 								on:click={() => (showPeajes = !showPeajes)}
 							>
@@ -1602,10 +1643,10 @@
 								>
 									<span style="color:#fff;font-weight:700;font-size:9px;">P</span>
 								</div>
-								<span class="flex-1 text-left text-xs text-gray-700">Peajes</span>
+								<span class="flex-1 text-left text-xs font-medium text-gray-700">Peajes</span>
 								{#if peajes.length > 0}
 									<span
-										class="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"
+										class="rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"
 										>{peajes.length}</span
 									>
 								{/if}
@@ -1613,7 +1654,7 @@
 
 							<!-- Restaurantes -->
 							<button
-								class="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-gray-50"
+								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors leyenda-toggle"
 								class:opacity-40={!showRestaurantes}
 								on:click={() => {
 									showRestaurantes = !showRestaurantes;
@@ -1625,10 +1666,10 @@
 								>
 									<span style="color:#fff;font-weight:700;font-size:9px;">R</span>
 								</div>
-								<span class="flex-1 text-left text-xs text-gray-700">Restaurantes</span>
+								<span class="flex-1 text-left text-xs font-medium text-gray-700">Restaurantes</span>
 								{#if countRestaurantes > 0}
 									<span
-										class="rounded-full bg-blue-100 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700"
+										class="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700"
 										>{countRestaurantes}</span
 									>
 								{/if}
@@ -1636,7 +1677,7 @@
 
 							<!-- Estaciones de servicio -->
 							<button
-								class="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-gray-50"
+								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors leyenda-toggle"
 								class:opacity-40={!showEstaciones}
 								on:click={() => {
 									showEstaciones = !showEstaciones;
@@ -1648,10 +1689,10 @@
 								>
 									<span style="color:#fff;font-weight:700;font-size:9px;">S</span>
 								</div>
-								<span class="flex-1 text-left text-xs text-gray-700">Est. Servicio</span>
+								<span class="flex-1 text-left text-xs font-medium text-gray-700">Est. Servicio</span>
 								{#if countEstaciones > 0}
 									<span
-										class="rounded-full bg-purple-100 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700"
+										class="rounded-md bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700"
 										>{countEstaciones}</span
 									>
 								{/if}
@@ -1659,7 +1700,7 @@
 
 							<!-- Hospedajes -->
 							<button
-								class="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-gray-50"
+								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors leyenda-toggle"
 								class:opacity-40={!showHospedajes}
 								on:click={() => {
 									showHospedajes = !showHospedajes;
@@ -1671,10 +1712,10 @@
 								>
 									<span style="color:#fff;font-weight:700;font-size:9px;">H</span>
 								</div>
-								<span class="flex-1 text-left text-xs text-gray-700">Hospedajes</span>
+								<span class="flex-1 text-left text-xs font-medium text-gray-700">Hospedajes</span>
 								{#if countHospedajes > 0}
 									<span
-										class="rounded-full bg-teal-100 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700"
+										class="rounded-md bg-teal-50 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700"
 										>{countHospedajes}</span
 									>
 								{/if}
@@ -1682,7 +1723,7 @@
 
 							<!-- Incidentes / Cierres -->
 							<button
-								class="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-gray-50"
+								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors leyenda-toggle"
 								class:opacity-40={!showIncidentes}
 								on:click={() => {
 									showIncidentes = !showIncidentes;
@@ -1690,11 +1731,11 @@
 								}}
 							>
 								<div
-									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-red-600"
+									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-red-600 text-[10px]"
 								>
-									<span style="font-size:10px;">🚧</span>
+									🚧
 								</div>
-								<span class="flex-1 text-left text-xs text-gray-700">Cierres / Accidentes</span>
+								<span class="flex-1 text-left text-xs font-medium text-gray-700">Cierres / Accidentes</span>
 								{#if loadingCondiciones}
 									<span
 										class="h-3 w-3 animate-spin rounded-full border border-red-400 border-t-transparent"
@@ -1702,17 +1743,16 @@
 								{:else if incidentes.length > 0 || incidentesNacionales.length > 0}
 									{@const total = incidentes.length + incidentesNacionales.length}
 									<span
-										class="rounded-full {incidentes.some((i) => i.cerrrado)
-											? 'bg-red-100 text-red-700'
-											: 'bg-orange-100 text-orange-700'} px-1.5 py-0.5 text-[10px] font-semibold"
-										>{total}</span
+										class="rounded-md px-1.5 py-0.5 text-[10px] font-semibold {incidentes.some((i) => i.cerrrado)
+											? 'bg-red-50 text-red-700'
+											: 'bg-orange-50 text-orange-700'}">{total}</span
 									>
 								{/if}
 							</button>
 
 							<!-- Distracom -->
 							<button
-								class="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-gray-50"
+								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors leyenda-toggle"
 								class:opacity-40={!showDistracom}
 								on:click={() => (showDistracom = !showDistracom)}
 							>
@@ -1721,10 +1761,11 @@
 									alt="Distracom"
 									class="h-5 w-5 flex-shrink-0 object-contain"
 								/>
-								<span class="flex-1 text-left text-xs text-gray-700">Distracom</span>
+								<span class="flex-1 text-left text-xs font-medium text-gray-700">Distracom</span>
 								{#if distracomMarkers.length > 0}
 									<span
-										class="rounded-full bg-green-100 px-1.5 py-0.5 text-[10px] font-semibold text-green-700"
+										class="rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
+										style="background-color: rgba(249, 115, 22, 0.08); color: #9a3412;"
 										>{distracomMarkers.length}</span
 									>
 								{/if}
@@ -1734,7 +1775,7 @@
 
 							<!-- Tráfico en tiempo real -->
 							<button
-								class="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-gray-50"
+								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors leyenda-toggle"
 								class:opacity-40={!showTrafico}
 								on:click={toggleTrafico}
 							>
@@ -1743,18 +1784,20 @@
 								>
 									<span style="color:#fff;font-weight:700;font-size:9px;">T</span>
 								</div>
-								<span class="flex-1 text-left text-xs text-gray-700">Tráfico</span>
+								<span class="flex-1 text-left text-xs font-medium text-gray-700">Tráfico</span>
 								{#if showTrafico}
 									<span
-										class="rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700"
-										>ON</span
+										class="inline-flex items-center gap-1.5 rounded-md border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700"
 									>
+										<span class="h-1.5 w-1.5 rounded-full bg-orange-500"></span>
+										ON
+									</span>
 								{/if}
 							</button>
 
 							<!-- Riesgo deslizamientos SGC -->
 							<button
-								class="flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-gray-50"
+								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors leyenda-toggle"
 								class:opacity-40={!showRiesgos}
 								on:click={toggleRiesgosSGC}
 							>
@@ -1763,18 +1806,86 @@
 								>
 									<span style="color:#fff;font-weight:700;font-size:9px;">⚠</span>
 								</div>
-								<span class="flex-1 text-left text-xs text-gray-700">Riesgo desliz.</span>
+								<span class="flex-1 text-left text-xs font-medium text-gray-700">Riesgo desliz.</span>
 								{#if showRiesgos}
 									<span
-										class="rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
-										>ON</span
+										class="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
 									>
+										<span class="h-1.5 w-1.5 rounded-full bg-red-500"></span>
+										ON
+									</span>
 								{/if}
 							</button>
 						</div>
 
 						<div class="border-t border-gray-100 px-3 py-1.5">
-							<p class="text-[9px] text-gray-400">Click para mostrar/ocultar</p>
+							<p class="text-[9px] font-medium text-gray-400">Click para mostrar/ocultar</p>
+						</div>
+					</div>
+				</div>
+
+				<!-- ═══ HERO RECORRIDO (protagonista #2) ═══ -->
+				<div class="servicio-hero-recorrido mb-3 rounded-2xl border p-5 md:p-6" style="background-color: var(--bg-surface); border-color: var(--border-subtle);">
+					<div class="mb-3 flex items-center gap-2">
+						<div
+							class="brand-gradient flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+						>
+							<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+								<path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+							</svg>
+						</div>
+						<p class="text-[10px] font-semibold tracking-widest text-gray-500 uppercase">Recorrido</p>
+					</div>
+					<div class="servicio-hero-route">
+						<!-- ORIGEN -->
+						<div class="route-end origin">
+							<div class="route-pin" aria-hidden="true">A</div>
+							<div class="route-end-body">
+								<span class="route-end-eyebrow">Origen</span>
+								<p class="route-end-text">
+									{servicio.origen_especifico ||
+										servicio.origen?.nombre_municipio ||
+										'Sin especificar'}
+								</p>
+								{#if servicio.origen?.nombre_departamento}
+									<p class="route-end-sub">
+										{servicio.origen.nombre_municipio}, {servicio.origen.nombre_departamento}
+									</p>
+								{/if}
+							</div>
+						</div>
+
+						<!-- LÍNEA CENTRAL CON DISTANCIA/TIEMPO -->
+						<div class="route-line" aria-hidden="true">
+							<div class="route-line-track"></div>
+							<div class="route-line-stats">
+								{#if distancia !== '—'}
+									<span class="route-stat">{distancia}</span>
+								{/if}
+								{#if duracion !== '—'}
+									<span class="route-stat-sep">·</span>
+									<span class="route-stat">{duracion}</span>
+								{/if}
+							</div>
+						</div>
+
+						<!-- DESTINO -->
+						<div class="route-end dest">
+							<div class="route-pin" aria-hidden="true">B</div>
+							<div class="route-end-body">
+								<span class="route-end-eyebrow">Destino</span>
+								<p class="route-end-text">
+									{servicio.destino_especifico ||
+										servicio.destino?.nombre_municipio ||
+										'Sin especificar'}
+								</p>
+								{#if servicio.destino?.nombre_departamento}
+									<p class="route-end-sub">
+										{servicio.destino.nombre_municipio}, {servicio.destino.nombre_departamento}
+									</p>
+								{/if}
+							</div>
 						</div>
 					</div>
 				</div>
@@ -1782,59 +1893,69 @@
 				<!-- ─── CONDICIONES VIALES ─── -->
 				{#if loadingCondiciones}
 					<div
-						class="mb-3 flex items-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-4 py-2.5"
+						class="mb-3 flex items-center gap-2 rounded-xl border px-4 py-2.5"
+						style="background-color: rgba(59, 130, 246, 0.08); border-color: rgba(59, 130, 246, 0.25);"
 					>
 						<span
-							class="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-blue-400 border-t-transparent"
+							class="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-t-transparent"
+							style="border-color: #3b82f6; border-top-color: transparent;"
 						></span>
-						<span class="text-xs font-medium text-blue-700"
+						<span class="text-xs font-semibold" style="color: #1d4ed8;"
 							>Analizando condiciones actuales de la vía...</span
 						>
 					</div>
 				{:else if condicionesViales.length > 0}
-					<div class="mb-4 grid [grid-template-columns:repeat(auto-fit,minmax(250px,1fr))] gap-2">
+					<div class="mb-4 grid [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))] gap-2">
 						{#each condicionesViales as cond}
 							{@const estilos = {
 								ok: {
-									bg: 'bg-orange-50',
-									border: 'border-orange-200',
+									bg: 'rgba(249, 115, 22, 0.06)',
+									border: 'rgba(249, 115, 22, 0.30)',
 									icon: '✅',
-									dot: 'bg-orange-500',
-									titulo: 'text-orange-900',
-									desc: 'text-orange-700'
+									dot: '#f97316',
+									titulo: '#7c2d12',
+									desc: '#9a3412'
 								},
 								moderado: {
-									bg: 'bg-amber-50',
-									border: 'border-amber-200',
+									bg: 'rgba(245, 158, 11, 0.08)',
+									border: 'rgba(245, 158, 11, 0.30)',
 									icon: '⚠️',
-									dot: 'bg-amber-500',
-									titulo: 'text-amber-900',
-									desc: 'text-amber-700'
+									dot: '#f59e0b',
+									titulo: '#78350f',
+									desc: '#92400e'
 								},
 								alto: {
-									bg: 'bg-orange-50',
-									border: 'border-orange-200',
+									bg: 'rgba(234, 88, 12, 0.08)',
+									border: 'rgba(234, 88, 12, 0.30)',
 									icon: '🔶',
-									dot: 'bg-orange-500',
-									titulo: 'text-orange-900',
-									desc: 'text-orange-700'
+									dot: '#ea580c',
+									titulo: '#7c2d12',
+									desc: '#9a3412'
 								},
 								critico: {
-									bg: 'bg-red-50',
-									border: 'border-red-200',
+									bg: 'rgba(220, 38, 38, 0.06)',
+									border: 'rgba(220, 38, 38, 0.30)',
 									icon: '🚨',
-									dot: 'bg-red-500',
-									titulo: 'text-red-900',
-									desc: 'text-red-700'
+									dot: '#dc2626',
+									titulo: '#7f1d1d',
+									desc: '#991b1b'
 								}
 							}[cond.nivel]}
-							<div class="rounded-xl border {estilos.border} {estilos.bg} px-4 py-3 shadow-sm">
+							<div
+								class="rounded-xl border px-4 py-3"
+								style="background-color: {estilos.bg}; border-color: {estilos.border}; box-shadow: 0 4px 24px rgba(0,0,0,0.04);"
+							>
 								<div class="mb-1 flex items-center gap-2">
 									<span class="text-sm">{estilos.icon}</span>
-									<p class="text-xs font-bold {estilos.titulo}">{cond.titulo}</p>
-									<div class="ml-auto h-2 w-2 rounded-full {estilos.dot} animate-pulse"></div>
+									<p class="text-xs font-bold" style="color: {estilos.titulo};">{cond.titulo}</p>
+									<div
+										class="ml-auto h-2 w-2 animate-pulse rounded-full"
+										style="background-color: {estilos.dot};"
+									></div>
 								</div>
-								<p class="text-[11px] leading-relaxed {estilos.desc}">{cond.descripcion}</p>
+								<p class="text-[11px] leading-relaxed" style="color: {estilos.desc};">
+									{cond.descripcion}
+								</p>
 							</div>
 						{/each}
 					</div>
@@ -1843,37 +1964,44 @@
 				<!-- LOADING POIs -->
 				{#if loadingPOIs}
 					<div
-						class="mb-4 flex items-center gap-3 rounded-xl border border-orange-100 bg-orange-50 px-4 py-2.5 shadow-sm"
+						class="mb-4 flex items-center gap-3 rounded-xl border px-4 py-2.5"
+						style="background-color: rgba(249, 115, 22, 0.06); border-color: rgba(249, 115, 22, 0.25); box-shadow: 0 4px 24px rgba(0,0,0,0.04);"
 						in:fade={{ duration: 200 }}
 						out:fade={{ duration: 200 }}
 					>
 						<div class="relative flex h-5 w-5 flex-shrink-0">
 							<span
-								class="absolute inline-flex h-full w-full animate-ping rounded-full bg-orange-400 opacity-60"
+								class="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
+								style="background-color: var(--orange-400, #f97316);"
 							></span>
 							<span
-								class="relative inline-flex h-5 w-5 animate-spin rounded-full border-2 border-orange-500 border-t-transparent"
+								class="relative inline-flex h-5 w-5 animate-spin rounded-full border-2 border-t-transparent"
+								style="border-color: var(--orange-500);"
 							></span>
 						</div>
 						<div class="flex min-w-0 flex-1 items-center gap-2">
-							<span class="text-sm font-medium text-orange-800"
+							<span class="text-sm font-semibold" style="color: #9a3412;"
 								>Buscando puntos de interés en la ruta...</span
 							>
-							<span class="hidden items-center gap-1.5 text-xs text-orange-600 sm:flex">
+							<span class="hidden items-center gap-1.5 text-xs sm:flex" style="color: #c2410c;">
 								<span
-									class="flex items-center gap-1 rounded-full border border-orange-200 bg-orange-100 px-2 py-0.5"
+									class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-semibold"
+									style="background-color: rgba(249,115,22,0.08); border-color: rgba(249,115,22,0.3);"
 									>🛣️ Peajes</span
 								>
 								<span
-									class="flex items-center gap-1 rounded-full border border-orange-200 bg-orange-100 px-2 py-0.5"
+									class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-semibold"
+									style="background-color: rgba(249,115,22,0.08); border-color: rgba(249,115,22,0.3);"
 									>🍽️ Restaurantes</span
 								>
 								<span
-									class="flex items-center gap-1 rounded-full border border-orange-200 bg-orange-100 px-2 py-0.5"
+									class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-semibold"
+									style="background-color: rgba(249,115,22,0.08); border-color: rgba(249,115,22,0.3);"
 									>⛽ Est. Servicio</span
 								>
 								<span
-									class="flex items-center gap-1 rounded-full border border-orange-200 bg-orange-100 px-2 py-0.5"
+									class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-semibold"
+									style="background-color: rgba(249,115,22,0.08); border-color: rgba(249,115,22,0.3);"
 									>🏨 Hospedajes</span
 								>
 							</span>
@@ -1881,25 +2009,38 @@
 					</div>
 				{/if}
 
-				<!-- CARDS -->
-				<div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-					<!-- Conductor -->
-					<div class="rounded-2xl bg-white p-5 shadow-sm">
-						<p class="mb-3 text-[11px] font-semibold tracking-wide text-gray-400 uppercase">
-							Conductor
-						</p>
-						<div class="flex items-center gap-4">
+				<!-- ═══ TRES HERO CARDS: Conductor | Vehículo | Cliente ═══ -->
+				<div class="servicio-hero-grid mb-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+					<!-- ─── CONDUCTOR ─── -->
+					<div class="servicio-hero-card rounded-2xl border p-4" style="background-color: var(--bg-surface); border-color: var(--border-subtle);">
+						<div class="mb-3 flex items-center gap-2">
+							<div
+								class="brand-gradient flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+							>
+								<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+									/>
+								</svg>
+							</div>
+							<p class="text-[10px] font-semibold tracking-widest text-gray-500 uppercase">
+								Conductor
+							</p>
+						</div>
+						<div class="flex flex-col items-center text-center">
 							{#if servicio.conductor?.foto_signed_url}
 								<img
 									src={servicio.conductor.foto_signed_url}
 									alt={servicio.conductor.nombre}
-									class="h-16 w-16 flex-shrink-0 rounded-2xl object-cover shadow"
+									class="servicio-hero-avatar mb-3 h-20 w-20 rounded-2xl object-cover shadow"
 								/>
 							{:else if servicio.conductor}
 								<div
-									class="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-400 to-orange-600 shadow"
+									class="brand-gradient servicio-hero-avatar soft-shadow mb-3 flex h-20 w-20 items-center justify-center rounded-2xl"
 								>
-									<span class="text-xl font-bold text-white"
+									<span class="text-2xl font-bold text-white"
 										>{servicio.conductor.nombre.charAt(0)}{servicio.conductor.apellido.charAt(
 											0
 										)}</span
@@ -1907,10 +2048,10 @@
 								</div>
 							{:else}
 								<div
-									class="flex h-16 w-16 flex-shrink-0 items-center justify-center rounded-2xl bg-gray-100"
+									class="servicio-hero-avatar mb-3 flex h-20 w-20 items-center justify-center rounded-2xl bg-gray-100"
 								>
 									<svg
-										class="h-7 w-7 text-gray-300"
+										class="h-9 w-9 text-gray-300"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
@@ -1924,273 +2065,266 @@
 									</svg>
 								</div>
 							{/if}
-							<div class="min-w-0 flex-1">
-								<p class="truncate font-bold text-gray-900">
-									{servicio.conductor
-										? `${servicio.conductor.nombre} ${servicio.conductor.apellido}`
-										: 'Sin asignar'}
-								</p>
-								{#if servicio.conductor?.telefono}<p class="text-sm text-gray-500">
-										{servicio.conductor.telefono}
-									</p>{/if}
-								{#if servicio.conductor?.numero_identificacion}<p class="text-xs text-gray-400">
-										CC {servicio.conductor.numero_identificacion}
-									</p>{/if}
-							</div>
-						</div>
-						{#if servicio.vehiculo?.placa}
-							<div class="mt-3 flex items-center justify-between rounded-xl bg-gray-50 px-3 py-2.5">
-								<span class="text-xs text-gray-400">Vehículo</span>
-								<div class="text-right">
-									<span class="font-bold tracking-widest text-gray-900"
-										>{servicio.vehiculo.placa}</span
-									>
-									{#if servicio.vehiculo.marca}<span class="ml-2 text-xs text-gray-400"
-											>{servicio.vehiculo.marca} {servicio.vehiculo.modelo || ''}</span
-										>{/if}
-								</div>
-							</div>
-						{/if}
-					</div>
-
-					<!-- Recorrido -->
-					<div class="rounded-2xl bg-white p-5 shadow-sm">
-						<p class="mb-3 text-[11px] font-semibold tracking-wide text-gray-400 uppercase">
-							Recorrido
-						</p>
-						<div class="flex gap-3">
-							<div class="flex flex-col items-center pt-1">
-								<div
-									class="flex h-6 w-6 items-center justify-center rounded-full bg-orange-500 text-xs font-bold text-white"
-								>
-									A
-								</div>
-								<div class="my-1.5 h-7 w-0.5 bg-gradient-to-b from-orange-400 to-red-400"></div>
-								<div
-									class="flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white"
-								>
-									B
-								</div>
-							</div>
-							<div class="flex flex-1 flex-col gap-2">
-								<div class="rounded-xl bg-orange-50 px-3 py-2.5">
-									<p class="text-xs font-semibold text-orange-700">Origen</p>
-									<p class="text-sm leading-snug font-medium text-gray-900">
-										{servicio.origen_especifico ||
-											servicio.origen?.nombre_municipio ||
-											'Sin especificar'}
-									</p>
-								</div>
-								<div class="rounded-xl bg-red-50 px-3 py-2.5">
-									<p class="text-xs font-semibold text-red-600">Destino</p>
-									<p class="text-sm leading-snug font-medium text-gray-900">
-										{servicio.destino_especifico ||
-											servicio.destino?.nombre_municipio ||
-											'Sin especificar'}
-									</p>
-								</div>
-							</div>
-						</div>
-						{#if distancia !== '—'}
-							<div class="mt-3 grid grid-cols-2 gap-2">
-								<div class="rounded-xl bg-gray-50 p-2.5 text-center">
-									<p class="text-xs text-gray-400">Distancia</p>
-									<p class="font-bold text-gray-900">{distancia}</p>
-								</div>
-								<div class="rounded-xl bg-gray-50 p-2.5 text-center">
-									<p class="text-xs text-gray-400">Tiempo est.</p>
-									<p class="font-bold text-gray-900">{duracion}</p>
-								</div>
-							</div>
-						{/if}
-					</div>
-
-					<!-- Cliente + Fechas -->
-					<div class="rounded-2xl bg-white p-5 shadow-sm">
-						{#if servicio.cliente}
-							<p class="mb-3 text-[11px] font-semibold tracking-wide text-gray-400 uppercase">
-								Cliente
+							<p class="servicio-hero-name">
+								{servicio.conductor
+									? `${servicio.conductor.nombre} ${servicio.conductor.apellido}`
+									: 'Sin asignar'}
 							</p>
-							<div class="mb-4 flex items-center gap-3">
+							{#if servicio.conductor?.numero_identificacion}
+								<p class="servicio-hero-sub">CC {servicio.conductor.numero_identificacion}</p>
+							{/if}
+							{#if servicio.conductor?.telefono}
+								<p class="servicio-hero-sub servicio-hero-sub--accent">
+									📞 {servicio.conductor.telefono}
+								</p>
+							{/if}
+						</div>
+					</div>
+
+					<!-- ─── VEHÍCULO (protagonista por la PLACA) ─── -->
+					{#if servicio.vehiculo?.placa}
+						<div class="servicio-hero-card rounded-2xl border p-4" style="background-color: var(--bg-surface); border-color: var(--border-subtle);">
+							<div class="mb-3 flex items-center gap-2">
 								<div
-									class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-amber-100"
+									class="brand-gradient flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
 								>
-									<svg
-										class="h-5 w-5 text-amber-600"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
+									<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 										<path
 											stroke-linecap="round"
 											stroke-linejoin="round"
-											stroke-width="1.5"
-											d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+											d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z"
+										/>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"
 										/>
 									</svg>
 								</div>
-								<div>
-									<p class="font-bold text-gray-900">
-										{(servicio.cliente as any).razon_social || servicio.cliente.nombre || '—'}
-									</p>
-									{#if servicio.cliente.nit}<p class="text-xs text-gray-400">
-											NIT {servicio.cliente.nit}
-										</p>{/if}
+								<p class="text-[10px] font-semibold tracking-widest text-gray-500 uppercase">
+									Vehículo
+								</p>
+							</div>
+							<div class="servicio-placa-wrap">
+								<span class="servicio-placa-label">Placa</span>
+								<span class="servicio-placa">{servicio.vehiculo.placa}</span>
+							</div>
+							{#if servicio.vehiculo.marca || servicio.vehiculo.linea || servicio.vehiculo.modelo}
+								<p class="servicio-hero-name mt-3 text-base">
+									{[servicio.vehiculo.marca, servicio.vehiculo.linea, servicio.vehiculo.modelo]
+										.filter(Boolean)
+										.join(' ')}
+								</p>
+							{/if}
+							{#if servicio.vehiculo.color || servicio.vehiculo.clase_vehiculo || (servicio.vehiculo as any).combustible}
+								<div class="mt-2 flex flex-wrap justify-center gap-1.5">
+									{#if servicio.vehiculo.color}
+										<span class="servicio-mini-tag">🎨 {servicio.vehiculo.color}</span>
+									{/if}
+									{#if servicio.vehiculo.clase_vehiculo}
+										<span class="servicio-mini-tag">🚗 {servicio.vehiculo.clase_vehiculo}</span>
+									{/if}
+									{#if (servicio.vehiculo as any).combustible}
+										<span class="servicio-mini-tag">⛽ {(servicio.vehiculo as any).combustible}</span>
+									{/if}
 								</div>
+							{/if}
+						</div>
+					{:else}
+						<div class="servicio-hero-card flex items-center justify-center rounded-2xl border p-4 text-sm" style="background-color: var(--bg-surface); border-color: var(--border-subtle); color: var(--text-very-muted);">
+							Sin vehículo asignado
+						</div>
+					{/if}
+
+					<!-- ─── CLIENTE ─── -->
+					<div class="servicio-hero-card rounded-2xl border p-4" style="background-color: var(--bg-surface); border-color: var(--border-subtle);">
+						<div class="mb-3 flex items-center gap-2">
+							<div
+								class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-amber-600"
+							>
+								<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+									/>
+								</svg>
+							</div>
+							<p class="text-[10px] font-semibold tracking-widest text-gray-500 uppercase">
+								Cliente
+							</p>
+						</div>
+						{#if servicio.cliente}
+							<div class="flex flex-col items-center text-center">
+								<div class="servicio-hero-avatar soft-shadow mb-3 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600">
+									<svg class="h-9 w-9 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+									</svg>
+								</div>
+								<p class="servicio-hero-name">
+									{(servicio.cliente as any).razon_social || servicio.cliente.nombre || '—'}
+								</p>
+								{#if servicio.cliente.nit}
+									<p class="servicio-hero-sub">NIT {servicio.cliente.nit}</p>
+								{/if}
+								{#if (servicio.cliente as any).telefono}
+									<p class="servicio-hero-sub servicio-hero-sub--accent">
+										📞 {(servicio.cliente as any).telefono}
+									</p>
+								{/if}
+							</div>
+						{:else}
+							<div class="flex flex-col items-center text-center text-sm text-gray-400">
+								<div class="servicio-hero-avatar mb-3 flex h-20 w-20 items-center justify-center rounded-2xl bg-gray-100">
+									<svg class="h-9 w-9 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+									</svg>
+								</div>
+								Sin cliente asignado
 							</div>
 						{/if}
-						<p class="mb-2 text-[11px] font-semibold tracking-wide text-gray-400 uppercase">
-							Fechas
-						</p>
-						<div class="space-y-2 text-sm">
+					</div>
+				</div>
+
+				<!-- ═══ SECCIÓN DE DETALLES: Fechas + Planilla + Condiciones ═══ -->
+				<div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+					<!-- Fechas + Planilla + Propósito (compacto) -->
+					<div class="rounded-2xl border p-4" style="background-color: var(--bg-surface); border-color: var(--border-subtle); box-shadow: 0 4px 24px rgba(0,0,0,0.04);">
+						<div class="mb-3 flex items-center gap-2">
+							<div
+								class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-400 to-blue-600"
+							>
+								<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+								</svg>
+							</div>
+							<p class="text-[10px] font-semibold tracking-widest text-gray-500 uppercase">
+								Información
+							</p>
+						</div>
+						<div class="grid grid-cols-2 gap-x-3 gap-y-1">
 							{#if servicio.fecha_solicitud}
-								<div class="flex justify-between">
-									<span class="text-gray-400">Solicitud</span><span
-										class="font-medium text-gray-800">{fmtDate(servicio.fecha_solicitud)}</span
-									>
+								<div class="servicio-info-row">
+									<span class="servicio-info-key">Solicitud</span>
+									<span class="servicio-info-val">{fmtDate(servicio.fecha_solicitud)}</span>
 								</div>
 							{/if}
 							{#if (servicio as any).fecha_servicio}
-								<div class="flex justify-between">
-									<span class="text-gray-400">Servicio</span><span class="font-medium text-gray-800"
-										>{fmtDate((servicio as any).fecha_servicio)}</span
-									>
+								<div class="servicio-info-row">
+									<span class="servicio-info-key">Servicio</span>
+									<span class="servicio-info-val">{fmtDate((servicio as any).fecha_servicio)}</span>
 								</div>
 							{/if}
 							{#if (servicio as any).hora_inicio}
-								<div class="flex justify-between">
-									<span class="text-gray-400">Inicio</span><span class="font-medium text-gray-800"
-										>{fmtTime((servicio as any).hora_inicio)}</span
-									>
+								<div class="servicio-info-row">
+									<span class="servicio-info-key">Hora inicio</span>
+									<span class="servicio-info-val">{fmtTime((servicio as any).hora_inicio)}</span>
 								</div>
 							{/if}
 							{#if (servicio as any).hora_fin}
-								<div class="flex justify-between">
-									<span class="text-gray-400">Fin</span><span class="font-medium text-gray-800"
-										>{fmtTime((servicio as any).hora_fin)}</span
-									>
+								<div class="servicio-info-row">
+									<span class="servicio-info-key">Hora fin</span>
+									<span class="servicio-info-val">{fmtTime((servicio as any).hora_fin)}</span>
 								</div>
 							{/if}
-							{#if servicio.created_at}
-								<!-- <div class="flex justify-between">
-									<span class="text-gray-400">Creación</span><span class="font-medium text-gray-800"
-										>{fmtDate(servicio.created_at)}</span
-									>
-								</div> -->
+							{#if servicio.fecha_realizacion}
+								<div class="servicio-info-row">
+									<span class="servicio-info-key">Realización</span>
+									<span class="servicio-info-val">{fmtDate(servicio.fecha_realizacion)}</span>
+								</div>
 							{/if}
 							{#if servicio.fecha_finalizacion}
-								<div class="flex justify-between">
-									<span class="text-gray-400">Finalización</span><span class="font-medium text-gray-800"
-										>{fmtDate(servicio.fecha_finalizacion)}</span
-									>
+								<div class="servicio-info-row">
+									<span class="servicio-info-key">Finalización</span>
+									<span class="servicio-info-val">{fmtDate(servicio.fecha_finalizacion)}</span>
+								</div>
+							{/if}
+							{#if servicio.numero_planilla}
+								<div class="servicio-info-row">
+									<span class="servicio-info-key">Planilla</span>
+									<span class="servicio-info-val servicio-info-val--mono">{servicio.numero_planilla}</span>
+								</div>
+							{/if}
+							{#if servicio.proposito_servicio}
+								<div class="servicio-info-row">
+									<span class="servicio-info-key">Propósito</span>
+									<span class="servicio-info-val capitalize">{servicio.proposito_servicio.replace(/_/g, ' ')}</span>
 								</div>
 							{/if}
 						</div>
 					</div>
 
-					<div class="rounded-2xl bg-white p-5 shadow-sm md:col-span-2 xl:col-span-3">
-						<!-- Header -->
-						<div class="mb-3 flex items-center justify-between">
-							<p class="text-[11px] font-semibold tracking-wide text-gray-400 uppercase">
-								Condiciones del servicio
-							</p>
-							{#if esDefault}
-								<span class="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] text-gray-400"
-									>Valores por defecto</span
+					<!-- Condiciones del servicio (compacto) -->
+					<div class="rounded-2xl border p-4" style="background-color: var(--bg-surface); border-color: var(--border-subtle); box-shadow: 0 4px 24px rgba(0,0,0,0.04);">
+						<div class="mb-3 flex items-center justify-between gap-2">
+							<div class="flex items-center gap-2">
+								<div
+									class="brand-gradient flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
 								>
+									<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+									</svg>
+								</div>
+								<p class="text-[10px] font-semibold tracking-widest text-gray-500 uppercase">
+									Condiciones
+								</p>
+							</div>
+							{#if esDefault}
+								<span class="servicio-default-tag">Por defecto</span>
 							{/if}
 						</div>
-
-						<!-- Badges condiciones -->
-						<div class="flex flex-wrap items-center gap-2">
+						<div class="flex flex-wrap gap-1.5">
 							<!-- Estado conductor -->
-							<div class="flex items-center gap-1.5">
+							<div class="servicio-cond-badge">
 								<div
-									class="h-2 w-2 rounded-full {estadoConductor === 'optimo'
-										? 'bg-green-500'
+									class="h-2 w-2 rounded-full"
+									style="background-color: {estadoConductor === 'optimo'
+										? '#f97316'
 										: estadoConductor === 'regular'
-											? 'bg-yellow-400'
+											? '#f59e0b'
 											: estadoConductor === 'fatigado'
-												? 'bg-orange-400'
-												: 'bg-red-500'}"
+												? '#ea580c'
+												: '#ef4444'};"
 								></div>
-								<span class="text-xs font-medium text-gray-700 capitalize"
-									>Conductor {estadoConductor}</span
-								>
+								<span>Conductor {estadoConductor}</span>
 							</div>
 
-							<!-- Tipo de vía -->
-							{#if viaTrocha}<span
-									class="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800"
-									>🏞️ Trocha</span
-								>{/if}
-							{#if viaAfirmado}<span
-									class="rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800"
-									>🪨 Afirmado</span
-								>{/if}
-							{#if viaMixto}<span
-									class="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800"
-									>🔀 Mixto</span
-								>{/if}
-							{#if viaPavimentada}<span
-									class="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800"
-									>🛣️ Pavimentada</span
-								>{/if}
+							{#if viaTrocha}<span class="servicio-cond-badge servicio-cond-badge--amber">🏞️ Trocha</span>{/if}
+							{#if viaAfirmado}<span class="servicio-cond-badge servicio-cond-badge--yellow">🪨 Afirmado</span>{/if}
+							{#if viaMixto}<span class="servicio-cond-badge servicio-cond-badge--blue">🔀 Mixto</span>{/if}
+							{#if viaPavimentada}<span class="servicio-cond-badge servicio-cond-badge--emerald">🛣️ Pavimentada</span>{/if}
 
-							<!-- Riesgos -->
-							{#if riesgoDesniveles}<span
-									class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700"
-									>⚠️ Desniveles</span
-								>{/if}
-							{#if riesgoDeslizamientos}<span
-									class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700"
-									>⚠️ Deslizamientos</span
-								>{/if}
-							{#if riesgoSinSenalizacion}<span
-									class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700"
-									>⚠️ Sin señalización</span
-								>{/if}
-							{#if riesgoAnimales}<span
-									class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700"
-									>⚠️ Animales</span
-								>{/if}
-							{#if riesgoPeatones}<span
-									class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700"
-									>🚶 Peatones</span
-								>{/if}
-							{#if riesgoTrafico}<span
-									class="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-700"
-									>🚗 Tráfico alto</span
-								>{/if}
-
-							{#if rc?.numero_dias_servicio}
-								<span class="ml-auto text-xs text-gray-400">{rc.numero_dias_servicio} días</span>
-							{/if}
+							{#if riesgoDesniveles}<span class="servicio-cond-badge servicio-cond-badge--red">⚠️ Desniveles</span>{/if}
+							{#if riesgoDeslizamientos}<span class="servicio-cond-badge servicio-cond-badge--red">⚠️ Deslizamientos</span>{/if}
+							{#if riesgoSinSenalizacion}<span class="servicio-cond-badge servicio-cond-badge--red">⚠️ Sin señalización</span>{/if}
+							{#if riesgoAnimales}<span class="servicio-cond-badge servicio-cond-badge--red">⚠️ Animales</span>{/if}
+							{#if riesgoPeatones}<span class="servicio-cond-badge servicio-cond-badge--red">🚶 Peatones</span>{/if}
+							{#if riesgoTrafico}<span class="servicio-cond-badge servicio-cond-badge--red">🚗 Tráfico alto</span>{/if}
 						</div>
 
-						<!-- Calificación — solo si realizado o si ya hay calificación -->
+						<!-- Calificación — solo si realizado -->
 						{#if esRealizado && rc?.calificacion_servicio}
 							{@const estrellas =
 								{ excelente: 5, bueno: 5, regular: 3, malo: 2 }[calificacion as 'excelente' | 'bueno' | 'regular' | 'malo'] ?? 5}
 							{@const calColor =
 								{
-									excelente: 'text-orange-600',
-									bueno: 'text-orange-600',
-									regular: 'text-amber-500',
-									malo: 'text-red-500'
-								}[calificacion as 'excelente' | 'bueno' | 'regular' | 'malo'] ?? 'text-orange-600'}
+									excelente: '#f97316',
+									bueno: '#f97316',
+									regular: '#f59e0b',
+									malo: '#ef4444'
+								}[calificacion as 'excelente' | 'bueno' | 'regular' | 'malo'] ?? '#f97316'}
 							{@const calLabel =
 								{ excelente: 'Excelente', bueno: 'Bueno', regular: 'Regular', malo: 'Malo' }[
 									calificacion as 'excelente' | 'bueno' | 'regular' | 'malo'
 								] ?? 'Bueno'}
-							<div class="mt-3 flex items-center gap-3 border-t border-gray-100 pt-3">
-								<span class="text-[11px] font-semibold tracking-wide text-gray-400 uppercase"
+							<div class="mt-3 flex items-center gap-2 border-t border-gray-100 pt-3">
+								<span class="text-[10px] font-semibold tracking-widest text-gray-500 uppercase"
 									>Calificación</span
 								>
-								<div class="flex items-center gap-1">
+								<div class="flex items-center gap-0.5">
 									{#each Array(5) as _, i}
 										<svg
-											class="h-4 w-4 {i < estrellas ? 'text-amber-400' : 'text-gray-200'}"
+											class="h-3.5 w-3.5 {i < estrellas ? 'text-amber-400' : 'text-gray-200'}"
 											fill="currentColor"
 											viewBox="0 0 20 20"
 										>
@@ -2200,32 +2334,43 @@
 										</svg>
 									{/each}
 								</div>
-								<span class="text-sm font-semibold {calColor}">{calLabel}</span>
-								{#if esDefault && !rc?.calificacion_servicio}
-									<span class="text-[10px] text-gray-400">(por defecto)</span>
-								{/if}
+								<span class="text-xs font-semibold" style="color: {calColor};">{calLabel}</span>
 							</div>
 						{/if}
 					</div>
+				</div>
 
-					<!-- Observaciones -->
-					{#if servicio.observaciones}
-						<div class="rounded-2xl bg-white p-5 shadow-sm md:col-span-2 xl:col-span-3">
-							<p class="mb-2 text-[11px] font-semibold tracking-wide text-gray-400 uppercase">
+				<!-- Observaciones (small, full width) -->
+				{#if servicio.observaciones}
+					<div class="servicio-obs mt-3 rounded-2xl border p-4" style="background-color: var(--bg-surface); border-color: var(--border-subtle);">
+						<div class="mb-2 flex items-center gap-2">
+							<div
+								class="brand-gradient flex h-6 w-6 shrink-0 items-center justify-center rounded-lg"
+							>
+								<svg class="h-3.5 w-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+									/>
+								</svg>
+							</div>
+							<p class="text-[10px] font-semibold tracking-widest text-gray-500 uppercase">
 								Observaciones
 							</p>
-							<p class="text-sm leading-relaxed text-gray-600">{servicio.observaciones}</p>
 						</div>
-					{/if}
-				</div>
+						<p class="text-sm leading-relaxed text-gray-700">{servicio.observaciones}</p>
+					</div>
+				{/if}
 				<div class="h-8"></div>
 			</div>
 		</div>
 
-		<!-- MODAL COMPARTIR -->
+		<!-- MODAL COMPARTIR (sistema landing) -->
 		{#if showShareModal}
 			<div
-				class="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4"
+				class="fixed inset-0 z-[200] flex items-center justify-center p-4"
+				style="background-color: rgba(15, 31, 26, 0.55); backdrop-filter: blur(8px);"
 				role="button"
 				tabindex="0"
 				on:click={() => {
@@ -2233,58 +2378,68 @@
 					copySuccess = false;
 				}}
 				on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') { showShareModal = false; copySuccess = false; } }}
-				transition:fade={{ duration: 200 }}
+				transition:fade={{ duration: 220 }}
 			>
 				<div
-					class="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
+					class="servicio-share-modal w-full max-w-md overflow-hidden"
 					role="dialog"
 					aria-modal="true"
 					aria-label="Enlace compartible"
 					tabindex="0"
 					on:click|stopPropagation
 					on:keydown|stopPropagation
-					transition:fly={{ y: 16, duration: 250 }}
+					transition:fly={{ y: 20, duration: 500, easing: quintOut }}
 				>
-					<div class="bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-5">
-						<div class="flex items-center justify-between">
-							<div>
-								<h3 class="text-lg font-bold text-white">Enlace compartible</h3>
-								<p class="text-sm text-orange-100">Sin necesidad de login</p>
-							</div>
-							<button
-								on:click={() => {
-									showShareModal = false;
-									copySuccess = false;
-								}}
-								aria-label="Cerrar modal"
-								class="rounded-lg p-1.5 text-white/70 hover:bg-white/10"
-							>
-								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<div class="servicio-share-hd">
+						<div class="flex items-center gap-3 min-w-0">
+							<div class="servicio-share-icon" aria-hidden="true">
+								<svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 									<path
 										stroke-linecap="round"
 										stroke-linejoin="round"
-										stroke-width="2"
-										d="M6 18L18 6M6 6l12 12"
+										d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
 									/>
 								</svg>
-							</button>
+							</div>
+							<div class="min-w-0">
+								<span class="servicio-share-eyebrow">Compartir</span>
+								<h3 class="servicio-share-title">Enlace compartible</h3>
+							</div>
 						</div>
-					</div>
-					<div class="space-y-3 p-5">
 						<button
-							on:click={copyLink}
-							class="w-full rounded-xl border-2 border-gray-200 bg-gray-50 p-4 text-left transition-colors hover:border-orange-300"
+							on:click={() => {
+								showShareModal = false;
+								copySuccess = false;
+							}}
+							aria-label="Cerrar modal"
+							class="servicio-share-close"
 						>
-							<p class="mb-1 text-xs text-gray-400">Click para copiar</p>
-							<p class="truncate font-mono text-sm text-gray-800">{generatedShareUrl}</p>
+							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+							</svg>
 						</button>
-						<button
-							on:click={copyLink}
-							class="w-full rounded-xl py-2.5 text-sm font-semibold transition-colors {copySuccess
-								? 'bg-orange-500 text-white'
-								: 'bg-gray-900 text-white hover:bg-gray-800'}"
-						>
-							{copySuccess ? '✓ Copiado' : 'Copiar enlace'}
+					</div>
+					<div class="servicio-share-body">
+						<button on:click={copyLink} class="servicio-share-link">
+							<span class="servicio-share-link-eyebrow">Click para copiar</span>
+							<span class="servicio-share-link-url">{generatedShareUrl}</span>
+						</button>
+						<button on:click={copyLink} class="servicio-share-cta" class:copied={copySuccess}>
+							{#if copySuccess}
+								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+								</svg>
+								¡Copiado al portapapeles!
+							{:else}
+								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+									/>
+								</svg>
+								Copiar enlace
+							{/if}
 						</button>
 					</div>
 				</div>
@@ -2294,9 +2449,706 @@
 </div>
 
 <style>
+	/* ── Header sticky (sistema landing) ─────────────────────────── */
+	.servicio-header {
+		background: #ffffff;
+		border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+		padding: 0.85rem 1.25rem;
+		display: flex;
+		align-items: center;
+		gap: 0.85rem;
+		flex-shrink: 0;
+		z-index: 50;
+		position: relative;
+	}
+	@media (min-width: 768px) {
+		.servicio-header {
+			padding: 0.85rem 1.5rem;
+		}
+	}
+
+	.servicio-icon-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		border-radius: 10px;
+		background: #faf7f2;
+		color: #4a4a4a;
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		cursor: pointer;
+		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+		flex-shrink: 0;
+	}
+	.servicio-icon-btn:hover:not(:disabled) {
+		background: white;
+		border-color: rgba(249, 115, 22, 0.3);
+		color: #ea580c;
+		transform: translateY(-1px);
+	}
+	.servicio-icon-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.servicio-brand-icon {
+		width: 40px;
+		height: 40px;
+		border-radius: 12px;
+		background: linear-gradient(135deg, #f97316, #ea580c);
+		display: none;
+		align-items: center;
+		justify-content: center;
+		color: white;
+		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+		flex-shrink: 0;
+	}
+	@media (min-width: 640px) {
+		.servicio-brand-icon {
+			display: flex;
+		}
+	}
+
+	.servicio-eyebrow {
+		display: inline-block;
+		font-size: 0.65rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.12em;
+		color: #f97316;
+		background: rgba(249, 115, 22, 0.08);
+		padding: 0.2rem 0.55rem;
+		border-radius: 5px;
+		font-family: 'Geist', ui-monospace, SFMono-Regular, monospace;
+	}
+
+	.servicio-title {
+		font-family: 'Geist', monospace;
+		font-weight: 700;
+		font-size: 1.05rem;
+		color: #0f1f1a;
+		margin: 0.3rem 0 0;
+		line-height: 1.2;
+		letter-spacing: 0.05em;
+		text-overflow: ellipsis;
+		overflow: hidden;
+		white-space: nowrap;
+	}
+
+	.servicio-status-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-family: 'Geist', monospace;
+		font-size: 0.65rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		padding: 0.3rem 0.65rem;
+		border-radius: 999px;
+		border: 1px solid;
+	}
+
+	.servicio-share-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.55rem 0.9rem;
+		border-radius: 12px;
+		background: linear-gradient(135deg, #f97316, #ea580c);
+		color: white;
+		font-family: 'Geist', system-ui, sans-serif;
+		font-size: 0.78rem;
+		font-weight: 600;
+		border: none;
+		cursor: pointer;
+		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+	}
+	.servicio-share-btn:hover {
+		transform: translateY(-1px);
+		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
+	}
+
+	/* ── Modal compartir (sistema landing) ─────────────────────── */
+	.servicio-share-modal {
+		background: white;
+		border-radius: 24px;
+		box-shadow: 0 20px 60px rgba(15, 31, 26, 0.25);
+		border: 1px solid rgba(0, 0, 0, 0.06);
+	}
+
+	.servicio-share-hd {
+		background: linear-gradient(135deg, #f97316, #ea580c);
+		padding: 1.1rem 1.5rem;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+
+	.servicio-share-icon {
+		width: 44px;
+		height: 44px;
+		border-radius: 14px;
+		background: rgba(255, 255, 255, 0.18);
+		backdrop-filter: blur(4px);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+	}
+
+	.servicio-share-eyebrow {
+		display: inline-block;
+		font-size: 0.62rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.12em;
+		color: rgba(255, 255, 255, 0.85);
+		font-family: 'Geist', monospace;
+	}
+
+	.servicio-share-title {
+		font-family: 'Geist', Georgia, serif;
+		font-weight: 500;
+		font-size: 1.2rem;
+		color: white;
+		margin: 0.2rem 0 0;
+		line-height: 1.2;
+	}
+
+	.servicio-share-close {
+		width: 32px;
+		height: 32px;
+		border-radius: 8px;
+		background: rgba(255, 255, 255, 0.12);
+		color: rgba(255, 255, 255, 0.9);
+		border: none;
+		cursor: pointer;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		transition: all 0.2s;
+	}
+	.servicio-share-close:hover {
+		background: rgba(255, 255, 255, 0.22);
+		color: white;
+	}
+
+	.servicio-share-body {
+		padding: 1.25rem 1.5rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.85rem;
+	}
+
+	.servicio-share-link {
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+		width: 100%;
+		text-align: left;
+		background: #faf7f2;
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		border-radius: 12px;
+		padding: 0.85rem 1rem;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.servicio-share-link:hover {
+		border-color: rgba(249, 115, 22, 0.3);
+		background: white;
+	}
+
+	.servicio-share-link-eyebrow {
+		font-size: 0.62rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		color: #6b6b6b;
+		font-family: 'Geist', monospace;
+	}
+
+	.servicio-share-link-url {
+		font-family: 'Geist', monospace;
+		font-size: 0.85rem;
+		color: #0f1f1a;
+		font-weight: 500;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.servicio-share-cta {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.45rem;
+		width: 100%;
+		padding: 0.7rem 1.25rem;
+		border-radius: 12px;
+		background: linear-gradient(135deg, #f97316, #ea580c);
+		color: white;
+		font-family: 'Geist', system-ui, sans-serif;
+		font-size: 0.88rem;
+		font-weight: 600;
+		border: none;
+		cursor: pointer;
+		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+	}
+	.servicio-share-cta:hover:not(:disabled) {
+		transform: translateY(-1px);
+		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
+	}
+	.servicio-share-cta.copied {
+		background: #ea580c;
+	}
+
+	/* ── Cards landing (override de .glass para servicio) ────── */
+	:global(.servicio-cards .glass) {
+		background: white;
+		backdrop-filter: none;
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		border-radius: 20px;
+		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+	}
+	:global(.servicio-cards .glass:hover) {
+		border-color: rgba(249, 115, 22, 0.22);
+	}
+
+	/* Eyebrows dentro de cards (label tracking-wide uppercase) */
+	:global(.servicio-cards .text-\[10px\].font-semibold.tracking-wide.uppercase) {
+		font-family: 'Geist', monospace !important;
+		letter-spacing: 0.12em !important;
+		font-size: 0.65rem !important;
+		color: #6b6b6b !important;
+	}
+
+	/* Nombres principales dentro de cards (font-bold gray-900) */
+	:global(.servicio-cards .font-bold.text-gray-900) {
+		font-family: 'Geist', system-ui, sans-serif;
+		color: #0f1f1a;
+		letter-spacing: -0.01em;
+	}
+
+	/* ── Leyenda del mapa (landing) ─────────────────────────────── */
+	:global(.servicio-cards .glass.soft-shadow) {
+		background: #faf7f2;
+		border: 1px solid rgba(0, 0, 0, 0.08);
+	}
+
+	/* ── Botón centrar del mapa ────────────────────────────────── */
+	:global(.servicio-cards button[class*='rounded-xl border border-gray-200']:hover) {
+		border-color: rgba(249, 115, 22, 0.3);
+		color: #ea580c;
+	}
+
+	/* ── Condiciones del servicio (badges inline) ─────────────── */
+	:global(.servicio-cards .inline-flex.items-center.gap-1.rounded-md) {
+		font-family: 'Geist', monospace;
+		letter-spacing: 0.06em;
+	}
+
+	/* ── Eyebrow del cuerpo (entre el mapa y las cards) ───────── */
+	:global(.servicio-cards .text-\[11px\].font-semibold) {
+		font-family: 'Geist', monospace;
+		letter-spacing: 0.1em;
+	}
+
+	/* ── Icon containers dentro de cards (h-6 w-6 → 32px landing) ─ */
+	:global(.servicio-cards .h-6.w-6.shrink-0.rounded-lg) {
+		width: 30px;
+		height: 30px;
+		border-radius: 10px;
+		box-shadow: 0 4px 12px rgba(249, 115, 22, 0.22);
+	}
+
+	/* ── Pin circular dentro del card Recorrido (A/B) ─────────── */
+	:global(.servicio-cards .h-6.w-6.items-center.justify-center.rounded-full) {
+		font-family: 'Geist', monospace;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+		border: 2px solid white;
+		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+	}
+
 	:global(#map) {
 		width: 100%;
 		height: 100%;
+	}
+
+	/* ── LEYENDA TOGGLES (hover naranja tint) ─────────────── */
+	.leyenda-toggle:hover {
+		background-color: rgba(249, 115, 22, 0.08) !important;
+	}
+	.leyenda-toggle:focus-visible {
+		background-color: rgba(249, 115, 22, 0.12) !important;
+		outline: 2px solid rgba(249, 115, 22, 0.4);
+		outline-offset: -2px;
+	}
+
+	/* ── MAPA: protagonista #1 (más grande) ──────────────────── */
+	.servicio-map-frame {
+		height: 480px;
+		isolation: isolate;
+	}
+	@media (min-width: 640px) {
+		.servicio-map-frame {
+			height: 540px;
+		}
+	}
+	@media (min-width: 1024px) {
+		.servicio-map-frame {
+			height: 600px;
+		}
+	}
+	@media (min-width: 1280px) {
+		.servicio-map-frame {
+			height: 640px;
+		}
+	}
+
+	/* Stats overlay sobre el mapa (distancia + tiempo) */
+	.servicio-map-stats {
+		position: absolute;
+		bottom: 0.75rem;
+		left: 0.75rem;
+		z-index: 10;
+		display: flex;
+		align-items: center;
+		gap: 0.85rem;
+		padding: 0.7rem 1.1rem;
+		background: rgba(255, 255, 255, 0.95);
+		backdrop-filter: blur(12px);
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		border-radius: 14px;
+		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+	}
+	.stat-block {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+	}
+	.stat-block-label {
+		font-family: 'Geist', monospace;
+		font-size: 0.6rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		color: #6b6b6b;
+	}
+	.stat-block-value {
+		font-family: 'Geist', Georgia, serif;
+		font-size: 1.15rem;
+		font-weight: 600;
+		color: #0f1f1a;
+		letter-spacing: -0.01em;
+		line-height: 1.1;
+	}
+	.stat-divider {
+		width: 1px;
+		height: 28px;
+		background: rgba(0, 0, 0, 0.08);
+	}
+
+	/* ── HERO RECORRIDO (protagonista #2) ──────────────────────── */
+	.servicio-hero-recorrido {
+		position: relative;
+		overflow: hidden;
+	}
+	.servicio-hero-recorrido::before {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(135deg, rgba(249, 115, 22, 0.04), rgba(249, 115, 22, 0));
+		pointer-events: none;
+	}
+	.servicio-hero-route {
+		position: relative;
+		display: grid;
+		grid-template-columns: 1fr auto 1fr;
+		align-items: center;
+		gap: 0.5rem;
+		margin-top: 0.5rem;
+	}
+	.route-end {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		min-width: 0;
+	}
+	.route-end.dest {
+		flex-direction: row-reverse;
+		text-align: right;
+	}
+	.route-pin {
+		width: 40px;
+		height: 40px;
+		border-radius: 50%;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-family: 'Geist', monospace;
+		font-weight: 700;
+		font-size: 0.95rem;
+		color: white;
+		flex-shrink: 0;
+		border: 2.5px solid white;
+		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+	}
+	.route-end.origin .route-pin {
+		background: linear-gradient(135deg, #f97316, #ea580c);
+	}
+	.route-end.dest .route-pin {
+		background: linear-gradient(135deg, #ef4444, #dc2626);
+	}
+	.route-end-body {
+		min-width: 0;
+		flex: 1;
+	}
+	.route-end-eyebrow {
+		font-family: 'Geist', monospace;
+		font-size: 0.6rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.12em;
+		color: #f97316;
+	}
+	.route-end.dest .route-end-eyebrow {
+		color: #dc2626;
+	}
+	.route-end-text {
+		font-family: 'Geist', Georgia, serif;
+		font-size: 1.15rem;
+		font-weight: 500;
+		color: #0f1f1a;
+		margin: 0.15rem 0 0;
+		line-height: 1.2;
+		letter-spacing: -0.01em;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+	}
+	.route-end-sub {
+		font-size: 0.72rem;
+		color: #6b6b6b;
+		margin: 0.15rem 0 0;
+	}
+	.route-line {
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		padding: 0 0.5rem;
+		min-width: 100px;
+	}
+	.route-line-track {
+		width: 100%;
+		height: 2px;
+		background: linear-gradient(to right, #f97316, #f59e0b, #ef4444);
+		border-radius: 1px;
+		opacity: 0.5;
+	}
+	.route-line-stats {
+		margin-top: 0.5rem;
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.25rem 0.75rem;
+		background: rgba(249, 115, 22, 0.08);
+		border: 1px solid rgba(249, 115, 22, 0.18);
+		border-radius: 999px;
+		white-space: nowrap;
+	}
+	.route-stat {
+		font-family: 'Geist', monospace;
+		font-size: 0.72rem;
+		font-weight: 700;
+		color: #c2410c;
+		letter-spacing: 0.02em;
+	}
+	.route-stat-sep {
+		color: #f97316;
+		opacity: 0.4;
+	}
+
+	/* ── HERO CARDS GRID (3 cols) ──────────────────────────────── */
+	.servicio-hero-grid {
+		--ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+	}
+	.servicio-hero-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		transition: all 0.3s var(--ease);
+	}
+	.servicio-hero-card:hover {
+		border-color: rgba(249, 115, 22, 0.25);
+		box-shadow: 0 8px 24px rgba(249, 115, 22, 0.08);
+		transform: translateY(-1px);
+	}
+	.servicio-hero-avatar {
+		font-family: 'Geist', system-ui, sans-serif;
+	}
+	.servicio-hero-name {
+		font-family: 'Geist', system-ui, sans-serif;
+		font-size: 1rem;
+		font-weight: 700;
+		color: #0f1f1a;
+		margin: 0;
+		line-height: 1.2;
+		letter-spacing: -0.01em;
+		word-break: break-word;
+	}
+	.servicio-hero-sub {
+		font-size: 0.78rem;
+		color: #6b6b6b;
+		margin: 0.2rem 0 0;
+		font-family: 'Geist', monospace;
+	}
+	.servicio-hero-sub--accent {
+		color: #c2410c;
+		font-family: 'Geist', system-ui, sans-serif;
+		font-weight: 500;
+	}
+
+	/* PLACA — protagonista del card vehículo */
+	.servicio-placa-wrap {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.85rem 1rem;
+		background: linear-gradient(135deg, #faf7f2, #f5f1e8);
+		border: 1.5px solid rgba(249, 115, 22, 0.3);
+		border-radius: 14px;
+		box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
+	}
+	.servicio-placa-label {
+		font-family: 'Geist', monospace;
+		font-size: 0.55rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.12em;
+		color: #f97316;
+	}
+	.servicio-placa {
+		font-family: 'Geist', 'Courier New', monospace;
+		font-size: 1.7rem;
+		font-weight: 800;
+		color: #0f1f1a;
+		letter-spacing: 0.12em;
+		line-height: 1;
+		text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
+	}
+	.servicio-mini-tag {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.2rem;
+		padding: 0.2rem 0.55rem;
+		font-size: 0.7rem;
+		font-weight: 600;
+		color: #4a4a4a;
+		background: #faf7f2;
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		border-radius: 6px;
+	}
+
+	/* ── INFO ROWS (Información compacta) ──────────────────────── */
+	.servicio-info-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.45rem 0.6rem;
+		border-radius: 8px;
+		transition: background 0.2s var(--ease);
+		min-width: 0;
+	}
+	.servicio-info-row:hover {
+		background: #faf7f2;
+	}
+	.servicio-info-key {
+		font-size: 0.75rem;
+		color: #6b6b6b;
+		font-weight: 500;
+	}
+	.servicio-info-val {
+		font-size: 0.82rem;
+		font-weight: 600;
+		color: #0f1f1a;
+		text-align: right;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.servicio-info-val--mono {
+		font-family: 'Geist', monospace;
+		color: #c2410c;
+	}
+
+	/* ── BADGES de condiciones (compacto) ──────────────────────── */
+	.servicio-default-tag {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.15rem 0.55rem;
+		font-family: 'Geist', monospace;
+		font-size: 0.6rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.1em;
+		color: #6b6b6b;
+		background: #faf7f2;
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		border-radius: 4px;
+	}
+	.servicio-cond-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.25rem 0.6rem;
+		font-family: 'Geist', monospace;
+		font-size: 0.65rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: #0f1f1a;
+		background: #faf7f2;
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		border-radius: 6px;
+	}
+	.servicio-cond-badge--amber {
+		color: #92400e;
+		background: rgba(245, 158, 11, 0.08);
+		border-color: rgba(245, 158, 11, 0.25);
+	}
+	.servicio-cond-badge--yellow {
+		color: #854d0e;
+		background: rgba(234, 179, 8, 0.08);
+		border-color: rgba(234, 179, 8, 0.25);
+	}
+	.servicio-cond-badge--blue {
+		color: #1e40af;
+		background: rgba(59, 130, 246, 0.08);
+		border-color: rgba(59, 130, 246, 0.25);
+	}
+	.servicio-cond-badge--emerald {
+		color: #c2410c;
+		background: rgba(249, 115, 22, 0.08);
+		border-color: rgba(249, 115, 22, 0.25);
+	}
+	.servicio-cond-badge--red {
+		color: #b91c1c;
+		background: rgba(239, 68, 68, 0.08);
+		border-color: rgba(239, 68, 68, 0.25);
 	}
 	@keyframes ping {
 		75%,

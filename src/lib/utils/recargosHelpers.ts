@@ -117,7 +117,7 @@ export function getEstadoColor(estado: string): string {
 	const colors: Record<string, string> = {
 		pendiente: 'bg-amber-500',
 		liquidada: 'bg-purple-500',
-		facturada: 'bg-emerald-500',
+		facturada: 'bg-orange-500',
 		encontrada: 'bg-cyan-500',
 		no_esta: 'bg-red-500',
 		noesta: 'bg-red-500',
@@ -134,7 +134,7 @@ export function getEstadoBgColor(estado: string): string {
 	const colors: Record<string, string> = {
 		pendiente: 'bg-white',
 		liquidada: 'bg-purple-50',
-		facturada: 'bg-emerald-50',
+		facturada: 'bg-orange-50',
 		encontrada: 'bg-cyan-50',
 		no_esta: 'bg-red-50',
 		noesta: 'bg-red-50',

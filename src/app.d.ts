@@ -6,7 +6,7 @@ declare global {
 		interface Locals {
 			token?: string;
 			userRole?: string;
-			userArea?: string[];
+			userArea?: string;
 		}
 		// interface PageData {}
 		// interface PageState {}

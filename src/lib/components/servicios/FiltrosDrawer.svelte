@@ -25,9 +25,9 @@
 	];
 
 	const propositos: { value: PropositoServicio; label: string }[] = [
-		{ value: 'contratos', label: 'Contratos' },
-		{ value: 'ocasional', label: 'Ocasional' },
-		{ value: 'turismo', label: 'Turismo' }
+		{ value: 'contrato' as PropositoServicio, label: 'Contratos' },
+		{ value: 'ocasional' as PropositoServicio, label: 'Ocasional' },
+		{ value: 'turismo' as PropositoServicio, label: 'Turismo' }
 	];
 
 	function handleClose() {

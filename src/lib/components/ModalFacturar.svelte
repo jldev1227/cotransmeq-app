@@ -6,6 +6,7 @@
 	export let open = false;
 	export let liquidaciones: LiquidacionServicio[] = [];
 	export let preselectedIds: string[] = [];
+	export let loading = false;
 
 	const dispatch = createEventDispatcher<{
 		created: { factura: any };
@@ -31,9 +32,9 @@
 		selectedIds = new Set(preselectedIds);
 	}
 
-	// Filter only facturable liquidaciones (LIQUIDADA or APROBADA)
+	// Filter only facturable liquidaciones (APROBADA only, not already facturada)
 	$: facturables = liquidaciones.filter(l =>
-		['LIQUIDADA', 'APROBADA'].includes(l.estado)
+		l.estado === 'APROBADA'
 	);
 
 	$: filtered = searchText
@@ -52,7 +53,7 @@
 		} else {
 			selectedIds.add(id);
 		}
-		selectedIds = new Set(selectedIds);
+		selectedIds = new Set(selectedIds); // trigger reactivity
 	}
 
 	function toggleAll() {
@@ -102,9 +103,9 @@
 </script>
 
 {#if open}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
 	<div class="modal-overlay" on:click={cerrar}>
-		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
 		<div class="modal-box" on:click|stopPropagation>
 			<div class="modal-header">
 				<h2>🧾 Facturar Liquidaciones</h2>
@@ -119,8 +120,9 @@
 				<!-- Número de factura -->
 				<div class="form-row">
 					<div class="field">
-						<label>Número / Consecutivo de Factura <span class="req">*</span></label>
+						<label for="numero-factura">Número / Consecutivo de Factura <span class="req">*</span></label>
 						<input
+							id="numero-factura"
 							type="text"
 							bind:value={numeroFactura}
 							placeholder="Ej: FV-2-5001, FAC-2026-001..."
@@ -128,8 +130,9 @@
 						/>
 					</div>
 					<div class="field">
-						<label>Observaciones</label>
+						<label for="observaciones">Observaciones</label>
 						<input
+							id="observaciones"
 							type="text"
 							bind:value={observaciones}
 							placeholder="Opcional..."
@@ -148,12 +151,17 @@
 					<span class="count-badge">{selectedIds.size} seleccionadas</span>
 				</div>
 
-				<!-- Tabla de selección -->
-				{#if facturables.length === 0}
-					<div class="empty">
-						<p>No hay liquidaciones en estado LIQUIDADA o APROBADA para facturar.</p>
-					</div>
-				{:else}
+			<!-- Tabla de selección -->
+			{#if loading}
+				<div class="empty">
+					<span class="spinner-sm" style="border-color:rgba(15,23,42,0.2);border-top-color:#0f4025"></span>
+					<p style="margin-top:8px">Cargando liquidaciones facturables…</p>
+				</div>
+			{:else if facturables.length === 0}
+				<div class="empty">
+					<p>No hay liquidaciones en estado LIQUIDADA o APROBADA para facturar.</p>
+				</div>
+			{:else}
 					<div class="table-wrap">
 						<table>
 							<thead>
@@ -173,7 +181,6 @@
 							</thead>
 							<tbody>
 								{#each filtered as liq (liq.id)}
-									<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
 									<tr
 										class:selected={selectedIds.has(liq.id)}
 										on:click={() => toggle(liq.id)}
@@ -246,7 +253,7 @@
 		display: flex; align-items: center; justify-content: space-between;
 		padding: 18px 24px; border-bottom: 1px solid #e2e8f0;
 	}
-	.modal-header h2 { margin: 0; font-size: 18px; color: #9a3412; }
+	.modal-header h2 { margin: 0; font-size: 18px; color: #1e293b; }
 	.close-btn {
 		background: none; border: none; font-size: 20px; color: #94a3b8;
 		cursor: pointer; padding: 4px 8px; border-radius: 6px;
@@ -269,7 +276,7 @@
 		border-radius: 8px; font-size: 13px; transition: border-color 0.2s;
 		box-sizing: border-box;
 	}
-	.field input:focus { outline: none; border-color: #ea580c; box-shadow: 0 0 0 3px rgba(234,88,12,0.1); }
+	.field input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
 	.factura-input { font-family: monospace; font-weight: 700; font-size: 15px !important; letter-spacing: 0.5px; }
 	.req { color: #ef4444; }
 	.search-row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
@@ -277,24 +284,24 @@
 		flex: 1; padding: 8px 12px; border: 1.5px solid #e2e8f0;
 		border-radius: 8px; font-size: 13px;
 	}
-	.search-input:focus { outline: none; border-color: #ea580c; }
+	.search-input:focus { outline: none; border-color: #3b82f6; }
 	.count-badge {
-		background: #fff7ed; color: #9a3412; padding: 6px 12px;
+		background: #eff6ff; color: #2563eb; padding: 6px 12px;
 		border-radius: 20px; font-size: 12px; font-weight: 600; white-space: nowrap;
 	}
 	.table-wrap { max-height: 320px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 10px; }
 	table { width: 100%; border-collapse: collapse; font-size: 13px; }
 	thead { position: sticky; top: 0; z-index: 1; }
 	th {
-		background: #fff7ed; padding: 10px 12px; text-align: left;
-		font-weight: 600; color: #9a3412; font-size: 11px;
+		background: #f8fafc; padding: 10px 12px; text-align: left;
+		font-weight: 600; color: #64748b; font-size: 11px;
 		text-transform: uppercase; letter-spacing: 0.5px;
-		border-bottom: 1px solid #fed7aa;
+		border-bottom: 1px solid #e2e8f0;
 	}
 	td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
 	tr { cursor: pointer; transition: background 0.15s; }
-	tbody tr:hover { background: #fffbf5; }
-	tr.selected { background: #fff7ed !important; }
+	tbody tr:hover { background: #f8fafc; }
+	tr.selected { background: #eff6ff !important; }
 	.chk-col { width: 36px; text-align: center; }
 	.right { text-align: right; }
 	.mono { font-family: monospace; font-weight: 600; }
@@ -305,24 +312,24 @@
 	.bg-blue { background: #dbeafe; color: #2563eb; }
 	.bg-green { background: #dcfce7; color: #16a34a; }
 	.resumen {
-		margin-top: 14px; padding: 12px 16px; background: #fff7ed;
+		margin-top: 14px; padding: 12px 16px; background: #f8fafc;
 		border-radius: 10px; display: flex; justify-content: space-between; align-items: center;
 	}
 	.resumen-item { display: flex; gap: 8px; align-items: center; }
 	.resumen-item .label { font-size: 13px; color: #64748b; }
 	.resumen-item .value { font-weight: 700; font-size: 14px; color: #1e293b; }
-	.resumen-item.total .value { color: #9a3412; font-size: 16px; }
+	.resumen-item.total .value { color: #ea580c; font-size: 16px; }
 	.btn-cancel {
 		padding: 10px 20px; border: 1.5px solid #e2e8f0; background: white;
 		border-radius: 8px; font-size: 13px; cursor: pointer; color: #475569;
 	}
 	.btn-cancel:hover { background: #f8fafc; }
 	.btn-facturar {
-		padding: 10px 24px; background: #9a3412; color: white;
+		padding: 10px 24px; background: #ea580c; color: white;
 		border: none; border-radius: 8px; font-size: 13px; font-weight: 600;
 		cursor: pointer; display: flex; align-items: center; gap: 6px;
 	}
-	.btn-facturar:hover:not(:disabled) { background: #c2410c; }
+	.btn-facturar:hover:not(:disabled) { background: #047857; }
 	.btn-facturar:disabled { opacity: 0.5; cursor: not-allowed; }
 	.spinner-sm {
 		display: inline-block; width: 14px; height: 14px;

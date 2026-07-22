@@ -1,5 +1,33 @@
 <script lang="ts">
+	import { fly } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
 	import LiquidacionEditor from '$lib/components/LiquidacionEditor.svelte';
 </script>
 
-<LiquidacionEditor />
+<svelte:head>
+	<title>Nueva Liquidación · Cotransmeq</title>
+</svelte:head>
+
+<div
+	class="workbook-page"
+	style="background-color: var(--bg-base);"
+	in:fly={{ y: 20, duration: 500, easing: quintOut }}
+>
+	<LiquidacionEditor />
+</div>
+
+<style>
+	.workbook-page {
+		min-height: 100vh;
+		padding: 0;
+		overflow: hidden;
+		display: flex;
+		flex-direction: column;
+	}
+
+	@media (max-width: 1279px) {
+		.workbook-page {
+			padding: 0;
+		}
+	}
+</style>

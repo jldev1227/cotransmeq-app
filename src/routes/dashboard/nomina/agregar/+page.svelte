@@ -2,7 +2,10 @@
 	import { goto } from '$app/navigation';
 	import { crearLiquidacion } from '$lib/api/nomina';
 	import { toast } from 'svelte-sonner';
+	import { fly } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
 	import LiquidacionFormComplete from '$lib/components/nomina/LiquidacionFormComplete.svelte';
+	import { ArrowLeft } from 'lucide-svelte';
 
 	let loading = false;
 
@@ -22,7 +25,13 @@
 </script>
 
 <svelte:head>
-	<title>Nueva Liquidación - Cotransmeq</title>
+	<title>Nueva Liquidación - Cotransmeq (NIT 901983227)</title>
 </svelte:head>
 
-<LiquidacionFormComplete mode="create" onSubmit={handleSubmit} {loading} />
+<div
+	class="min-h-screen p-4 sm:p-6"
+	style="background-color: var(--bg-base);"
+	in:fly={{ y: 20, duration: 500, easing: quintOut }}
+>
+	<LiquidacionFormComplete mode="create" onSubmit={handleSubmit} {loading} />
+</div>

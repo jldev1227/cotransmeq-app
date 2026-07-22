@@ -4,7 +4,13 @@
 	import { fade } from 'svelte/transition';
 	import { onMount } from 'svelte';
 
-	type TipoPregunta = 'OPCION_UNICA' | 'OPCION_MULTIPLE' | 'NUMERICA' | 'TEXTO' | 'RELACION' | 'VERDADERO_FALSO';
+	type TipoPregunta =
+		| 'OPCION_UNICA'
+		| 'OPCION_MULTIPLE'
+		| 'NUMERICA'
+		| 'TEXTO'
+		| 'RELACION'
+		| 'VERDADERO_FALSO';
 
 	interface Pregunta {
 		id?: string;
@@ -37,7 +43,7 @@
 	let preguntaActual: Pregunta = crearPreguntaVacia();
 	let editIndex: number | null = null;
 
-	$: evaluacionId = $page.params.id;
+	$: evaluacionId = $page.params.id ?? '';
 
 	onMount(() => {
 		loadEvaluacion();
@@ -47,7 +53,9 @@
 		isLoading = true;
 		error = null;
 		try {
-			const response = await fetch(`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}`);
+			const response = await fetch(
+				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}`
+			);
 			const data = await response.json();
 			if (data.success) {
 				const evaluacion = data.data;
@@ -133,7 +141,10 @@
 			preguntaActual.relacionDer = [];
 			preguntaActual.respuestaCorrecta = undefined;
 		} else if (preguntaActual.tipo === 'NUMERICA') {
-			if (preguntaActual.respuestaCorrecta === undefined || preguntaActual.respuestaCorrecta === null) {
+			if (
+				preguntaActual.respuestaCorrecta === undefined ||
+				preguntaActual.respuestaCorrecta === null
+			) {
 				alert('Debe ingresar la respuesta correcta numérica');
 				return;
 			}
@@ -154,14 +165,19 @@
 			// Validar que todos los pares tengan valores
 			for (let i = 0; i < preguntaActual.relacionIzq.length; i++) {
 				if (!preguntaActual.relacionIzq[i].trim() || !preguntaActual.relacionDer[i].trim()) {
-					alert(`El par #${i + 1} está incompleto. Todos los pares deben tener valores en ambos lados.`);
+					alert(
+						`El par #${i + 1} está incompleto. Todos los pares deben tener valores en ambos lados.`
+					);
 					return;
 				}
 			}
 			preguntaActual.opciones = [];
 			preguntaActual.respuestaCorrecta = undefined;
 		} else if (preguntaActual.tipo === 'VERDADERO_FALSO') {
-			if (preguntaActual.respuestaCorrecta === undefined || preguntaActual.respuestaCorrecta === null) {
+			if (
+				preguntaActual.respuestaCorrecta === undefined ||
+				preguntaActual.respuestaCorrecta === null
+			) {
 				alert('Debe seleccionar si la respuesta correcta es Verdadero o Falso');
 				return;
 			}
@@ -207,16 +223,19 @@
 		error = null;
 
 		try {
-			const response = await fetch(`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}`, {
-				method: 'PUT',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					titulo,
-					descripcion: descripcion.trim() || null,
-					requiere_firma,
-					preguntas
-				})
-			});
+			const response = await fetch(
+				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}`,
+				{
+					method: 'PUT',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({
+						titulo,
+						descripcion: descripcion.trim() || null,
+						requiere_firma,
+						preguntas
+					})
+				}
+			);
 
 			const data = await response.json();
 
@@ -255,7 +274,9 @@
 {#if isLoading}
 	<div class="flex items-center justify-center py-12">
 		<div class="text-center">
-			<div class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-orange-200 border-t-orange-600"></div>
+			<div
+				class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-orange-200 border-t-orange-600"
+			></div>
 			<p class="text-gray-600">Cargando evaluación...</p>
 		</div>
 	</div>
@@ -287,8 +308,10 @@
 
 			<div class="space-y-4">
 				<div>
-					<label class="mb-2 block text-sm font-semibold text-gray-700">Título *</label>
+					<label for="titulo" class="mb-2 block text-sm font-semibold text-gray-700">Título *</label
+					>
 					<input
+						id="titulo"
 						bind:value={titulo}
 						type="text"
 						class="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
@@ -297,8 +320,11 @@
 				</div>
 
 				<div>
-					<label class="mb-2 block text-sm font-semibold text-gray-700">Descripción</label>
+					<label for="descripcion" class="mb-2 block text-sm font-semibold text-gray-700"
+						>Descripción</label
+					>
 					<textarea
+						id="descripcion"
 						bind:value={descripcion}
 						class="w-full rounded-lg border border-gray-300 px-4 py-2 focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
 						rows="3"
@@ -308,7 +334,9 @@
 
 				<div class="flex items-center gap-2">
 					<input bind:checked={requiere_firma} type="checkbox" id="firma" class="h-4 w-4" />
-					<label for="firma" class="text-sm font-semibold text-gray-700">Requiere firma digital</label>
+					<label for="firma" class="text-sm font-semibold text-gray-700"
+						>Requiere firma digital</label
+					>
 				</div>
 			</div>
 		</div>
@@ -324,7 +352,12 @@
 					class="apple-transition rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600"
 				>
 					<svg class="mr-2 inline h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M12 4v16m8-8H4"
+						/>
 					</svg>
 					Agregar Pregunta
 				</button>
@@ -343,7 +376,9 @@
 								<div class="flex-1">
 									<div class="mb-1 flex items-center gap-2">
 										<span class="font-bold text-gray-700">#{index + 1}</span>
-										<span class="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800">
+										<span
+											class="rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800"
+										>
 											{getTipoLabel(pregunta.tipo)}
 										</span>
 										<span class="text-sm text-gray-500">{pregunta.puntaje} pts</span>
@@ -353,18 +388,31 @@
 								<div class="flex gap-2">
 									<button
 										on:click={() => editarPregunta(index)}
+										aria-label="Editar pregunta"
 										class="rounded-lg bg-blue-100 p-2 text-blue-600 hover:bg-blue-200"
 									>
 										<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+											/>
 										</svg>
 									</button>
+
 									<button
 										on:click={() => eliminarPregunta(index)}
+										aria-label="Eliminar pregunta"
 										class="rounded-lg bg-red-100 p-2 text-red-600 hover:bg-red-200"
 									>
 										<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+											/>
 										</svg>
 									</button>
 								</div>
@@ -377,11 +425,19 @@
 										<div class="flex items-center gap-2 text-sm">
 											{#if opcion.esCorrecta}
 												<svg class="h-4 w-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
-													<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+													<path
+														fill-rule="evenodd"
+														d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+														clip-rule="evenodd"
+													/>
 												</svg>
 											{:else}
 												<svg class="h-4 w-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-													<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+													<path
+														fill-rule="evenodd"
+														d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+														clip-rule="evenodd"
+													/>
 												</svg>
 											{/if}
 											<span class:text-orange-600={opcion.esCorrecta}>{opcion.texto}</span>
@@ -395,9 +451,15 @@
 								<div class="mt-2 flex items-center gap-2 text-sm">
 									<span class="font-semibold text-gray-600">Respuesta correcta:</span>
 									{#if pregunta.respuestaCorrecta === 1}
-										<span class="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700">Verdadero</span>
+										<span
+											class="rounded-full bg-orange-100 px-3 py-1 text-xs font-semibold text-orange-700"
+											>Verdadero</span
+										>
 									{:else}
-										<span class="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700">Falso</span>
+										<span
+											class="rounded-full bg-red-100 px-3 py-1 text-xs font-semibold text-red-700"
+											>Falso</span
+										>
 									{/if}
 								</div>
 							{/if}
@@ -437,20 +499,22 @@
 			<div class="space-y-4">
 				<!-- Texto de la pregunta -->
 				<div>
-					<label class="mb-2 block text-sm font-semibold text-gray-700">Pregunta *</label>
-					<textarea
-						bind:value={preguntaActual.texto}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2"
-						rows="2"
-						placeholder="Escribe la pregunta aquí"
-					></textarea>
+					<label for="pregunta-texto" class="mb-2 block text-sm font-semibold text-gray-700">Pregunta *</label>
+						<textarea
+							id="pregunta-texto"
+							bind:value={preguntaActual.texto}
+							class="w-full rounded-lg border border-gray-300 px-4 py-2"
+							rows="2"
+							placeholder="Escribe la pregunta aquí"
+						></textarea>
 				</div>
 
 				<!-- Tipo de pregunta -->
 				<div class="grid grid-cols-2 gap-4">
 					<div>
-						<label class="mb-2 block text-sm font-semibold text-gray-700">Tipo *</label>
+						<label for="pregunta-tipo" class="mb-2 block text-sm font-semibold text-gray-700">Tipo *</label>
 						<select
+							id="pregunta-tipo"
 							bind:value={preguntaActual.tipo}
 							class="w-full rounded-lg border border-gray-300 px-4 py-2"
 						>
@@ -463,8 +527,9 @@
 						</select>
 					</div>
 					<div>
-						<label class="mb-2 block text-sm font-semibold text-gray-700">Puntaje *</label>
+						<label for="pregunta-puntaje" class="mb-2 block text-sm font-semibold text-gray-700">Puntaje *</label>
 						<input
+							id="pregunta-puntaje"
 							bind:value={preguntaActual.puntaje}
 							type="number"
 							min="0"
@@ -477,7 +542,7 @@
 				{#if preguntaActual.tipo === 'OPCION_UNICA' || preguntaActual.tipo === 'OPCION_MULTIPLE'}
 					<div>
 						<div class="mb-2 flex items-center justify-between">
-							<label class="text-sm font-semibold text-gray-700">Opciones</label>
+							<span class="text-sm font-semibold text-gray-700">Opciones</span>
 							<button
 								on:click={agregarOpcion}
 								class="rounded-lg bg-blue-100 px-3 py-1 text-sm text-blue-600 hover:bg-blue-200"
@@ -497,10 +562,16 @@
 									/>
 									<button
 										on:click={() => eliminarOpcion(i)}
+										aria-label="Eliminar opción"
 										class="rounded-lg bg-red-100 p-2 text-red-600 hover:bg-red-200"
 									>
 										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M6 18L18 6M6 6l12 12"
+											/>
 										</svg>
 									</button>
 								</div>
@@ -512,45 +583,80 @@
 				<!-- Respuesta Correcta para NUMERICA -->
 				{#if preguntaActual.tipo === 'NUMERICA'}
 					<div>
-						<label class="mb-2 block text-sm font-semibold text-gray-700">Respuesta Correcta *</label>
+						<label for="respuesta-correcta-numerica" class="mb-2 block text-sm font-semibold text-gray-700"
+							>Respuesta Correcta *</label
+						>
 						<input
+							id="respuesta-correcta-numerica"
 							bind:value={preguntaActual.respuestaCorrecta}
 							type="number"
 							step="any"
 							class="w-full rounded-lg border border-gray-300 px-4 py-2"
 							placeholder="Ingrese el número correcto"
 						/>
-						<p class="mt-1 text-xs text-gray-500">Los estudiantes deberán ingresar este valor exacto</p>
+						<p class="mt-1 text-xs text-gray-500">
+							Los estudiantes deberán ingresar este valor exacto
+						</p>
 					</div>
 				{/if}
 
 				<!-- Verdadero o Falso -->
 				{#if preguntaActual.tipo === 'VERDADERO_FALSO'}
 					<div>
-						<label class="mb-3 block text-sm font-semibold text-gray-700">Respuesta Correcta *</label>
-						<p class="mb-3 text-xs text-gray-500">Selecciona cuál es la respuesta correcta para esta afirmación</p>
+						<span class="mb-3 block text-sm font-semibold text-gray-700"
+							>Respuesta Correcta *</span
+						>
+						<p class="mb-3 text-xs text-gray-500">
+							Selecciona cuál es la respuesta correcta para esta afirmación
+						</p>
 						<div class="grid grid-cols-2 gap-4">
 							<button
 								type="button"
-								on:click={() => preguntaActual.respuestaCorrecta = 1}
-								class="apple-transition rounded-lg border-2 p-4 text-center font-semibold {preguntaActual.respuestaCorrecta === 1
+								on:click={() => (preguntaActual.respuestaCorrecta = 1)}
+								class="apple-transition rounded-lg border-2 p-4 text-center font-semibold {preguntaActual.respuestaCorrecta ===
+								1
 									? 'border-orange-500 bg-orange-50 text-orange-700'
 									: 'border-gray-200 bg-white text-gray-700 hover:border-orange-300'}"
 							>
-								<svg class="mx-auto mb-2 h-8 w-8 {preguntaActual.respuestaCorrecta === 1 ? 'text-orange-500' : 'text-gray-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+								<svg
+									class="mx-auto mb-2 h-8 w-8 {preguntaActual.respuestaCorrecta === 1
+										? 'text-orange-500'
+										: 'text-gray-400'}"
+									fill="none"
+									stroke="currentColor"
+									viewBox="0 0 24 24"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+									/>
 								</svg>
 								Verdadero
 							</button>
 							<button
 								type="button"
-								on:click={() => preguntaActual.respuestaCorrecta = 0}
-								class="apple-transition rounded-lg border-2 p-4 text-center font-semibold {preguntaActual.respuestaCorrecta === 0
+								on:click={() => (preguntaActual.respuestaCorrecta = 0)}
+								class="apple-transition rounded-lg border-2 p-4 text-center font-semibold {preguntaActual.respuestaCorrecta ===
+								0
 									? 'border-red-500 bg-red-50 text-red-700'
 									: 'border-gray-200 bg-white text-gray-700 hover:border-red-300'}"
 							>
-								<svg class="mx-auto mb-2 h-8 w-8 {preguntaActual.respuestaCorrecta === 0 ? 'text-red-500' : 'text-gray-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+								<svg
+									class="mx-auto mb-2 h-8 w-8 {preguntaActual.respuestaCorrecta === 0
+										? 'text-red-500'
+										: 'text-gray-400'}"
+									fill="none"
+									stroke="currentColor"
+									viewBox="0 0 24 24"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
+									/>
 								</svg>
 								Falso
 							</button>
@@ -562,49 +668,69 @@
 				{#if preguntaActual.tipo === 'RELACION'}
 					<div>
 						<div class="mb-3 flex items-center justify-between">
-							<label class="text-sm font-semibold text-gray-700">Pares de Relación</label>
+							<span class="text-sm font-semibold text-gray-700">Pares de Relación</span>
 							<button
 								on:click={agregarParRelacion}
 								class="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600"
 							>
-								<svg class="mr-1 inline h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+								<svg
+									class="mr-1 inline h-4 w-4"
+									fill="none"
+									stroke="currentColor"
+									viewBox="0 0 24 24"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										stroke-width="2"
+										d="M12 4v16m8-8H4"
+									/>
 								</svg>
 								Agregar Par
 							</button>
 						</div>
-						<p class="mb-3 text-xs text-gray-500">Cada fila representa un par que se debe relacionar correctamente. Al diligenciar, se mostrarán aleatorizados.</p>
-						
+						<p class="mb-3 text-xs text-gray-500">
+							Cada fila representa un par que se debe relacionar correctamente. Al diligenciar, se
+							mostrarán aleatorizados.
+						</p>
+
 						<div class="space-y-2">
 							{#each preguntaActual.relacionIzq as item, i}
-								<div class="grid grid-cols-[1fr_auto_1fr_auto] gap-3 items-center rounded-lg border border-gray-200 bg-gray-50 p-3">
+								<div
+									class="grid grid-cols-[1fr_auto_1fr_auto] items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3"
+								>
 									<!-- Lado A -->
 									<div>
 										<input
 											bind:value={preguntaActual.relacionIzq[i]}
 											type="text"
-											class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+											class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
 											placeholder="Lado A"
 										/>
 									</div>
-									
+
 									<!-- Flecha -->
 									<div class="text-gray-400">
 										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M14 5l7 7m0 0l-7 7m7-7H3"
+											/>
 										</svg>
 									</div>
-									
+
 									<!-- Lado B -->
 									<div>
 										<input
 											bind:value={preguntaActual.relacionDer[i]}
 											type="text"
-											class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white"
+											class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"
 											placeholder="Lado B"
 										/>
 									</div>
-									
+
 									<!-- Botón Eliminar -->
 									<button
 										on:click={() => eliminarParRelacion(i)}
@@ -612,15 +738,22 @@
 										title="Eliminar este par"
 									>
 										<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M6 18L18 6M6 6l12 12"
+											/>
 										</svg>
 									</button>
 								</div>
 							{/each}
-							
+
 							{#if preguntaActual.relacionIzq.length === 0}
-								<div class="text-center py-8 text-gray-400">
-									<p class="text-sm">No hay pares agregados. Haz clic en "Agregar Par" para comenzar.</p>
+								<div class="py-8 text-center text-gray-400">
+									<p class="text-sm">
+										No hay pares agregados. Haz clic en "Agregar Par" para comenzar.
+									</p>
 								</div>
 							{/if}
 						</div>

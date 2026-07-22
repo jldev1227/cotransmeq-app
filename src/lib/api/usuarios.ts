@@ -50,8 +50,28 @@ export const usuariosAPI = {
 		return response.data;
 	},
 
+	// ── Permiso individual: bonos de planilla de días laborados ──
+	async setBonosPlanilla(userIds: string[], granted: boolean): Promise<{
+		success: boolean;
+		updated: Usuario[];
+		granted: boolean;
+	}> {
+		const response = await apiClient.post('/api/usuarios/permisos/bonos-planilla', {
+			userIds,
+			granted
+		});
+		return response.data;
+	},
+
 	async firmantes(): Promise<Firmante[]> {
 		const response = await apiClient.get('/api/usuarios/firmantes');
 		return response.data;
 	}
 };
+
+// Helper para chequear si un usuario tiene el permiso individual de bonos.
+// El flag se guarda dentro de `permisos['bonos-planilla']`.
+export function hasBonosPlanilla(u: Usuario | null | undefined): boolean {
+	if (!u) return false;
+	return u.permisos?.['bonos-planilla'] === true;
+}

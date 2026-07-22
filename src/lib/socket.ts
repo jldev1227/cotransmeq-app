@@ -1,7 +1,7 @@
+import { io, type Socket } from 'socket.io-client';
 import { browser } from '$app/environment';
 import { authStore } from '$lib/stores/auth';
 import { writable } from 'svelte/store';
-import type { Socket } from 'socket.io-client';
 
 // Estado del socket
 export const socketStore = writable<{
@@ -16,6 +16,8 @@ class SocketManager {
 	private socket: Socket | null = null;
 	private reconnectAttempts = 0;
 	private maxReconnectAttempts = 5;
+	// Listeners externos registrados vía socketUtils.on() — se re-registran al (re)crear el socket
+	private externalListeners: Map<string, Set<(data: any) => void>> = new Map();
 
 	constructor() {
 		if (browser) {
@@ -23,6 +25,11 @@ class SocketManager {
 			authStore.subscribe((authState) => {
 				if (authState.token && authState.user) {
 					this.connect();
+					// Re-emitir join-dashboard cada vez que el user cambia o se reconecta
+					if (this.socket?.connected) {
+						console.log('[socket] emit join-dashboard', authState.user.id);
+						this.socket.emit('join-dashboard', authState.user.id);
+					}
 				} else {
 					this.disconnect();
 				}
@@ -30,11 +37,17 @@ class SocketManager {
 		}
 	}
 
-	async connect() {
-		if (!browser || this.socket?.connected) return;
+	connect() {
+		if (!browser) return;
+		// Si ya hay un socket conectado, no crear otro
+		if (this.socket?.connected) return;
+		// Si existe un socket pero no está conectado, destruirlo
+		if (this.socket) {
+			this.socket.disconnect();
+			this.socket = null;
+		}
 
 		try {
-			const { io } = await import('socket.io-client');
 			this.socket = io(import.meta.env.VITE_API_URL, {
 				autoConnect: true,
 				reconnection: true,
@@ -46,6 +59,8 @@ class SocketManager {
 			});
 
 			this.setupEventListeners();
+			// Re-registrar listeners externos que se hayan registrado antes de que el socket existiera
+			this.reregisterExternalListeners();
 		} catch (error) {
 			console.error('Error connecting to socket:', error);
 			socketStore.update((state) => ({
@@ -53,6 +68,16 @@ class SocketManager {
 				error: 'Error de conexión al servidor'
 			}));
 		}
+	}
+
+	private reregisterExternalListeners() {
+		if (!this.socket) return;
+		for (const [event, callbacks] of this.externalListeners.entries()) {
+			for (const cb of callbacks) {
+				this.socket.on(event, cb);
+			}
+		}
+		console.log(`[socket] re-registrados ${this.externalListeners.size} eventos con ${[...this.externalListeners.values()].reduce((s, set) => s + set.size, 0)} listeners`);
 	}
 
 	disconnect() {
@@ -77,6 +102,14 @@ class SocketManager {
 				connected: true,
 				error: null
 			}));
+			// Unirse al room personal del usuario para recibir eventos dirigidos
+			const userId = authStore.getUser()?.id;
+			if (userId) {
+				console.log('[socket] connected, emit join-dashboard', userId);
+				this.socket?.emit('join-dashboard', userId);
+			} else {
+				console.warn('[socket] connected but no userId available for join-dashboard');
+			}
 		});
 
 		this.socket.on('disconnect', (reason) => {
@@ -96,11 +129,6 @@ class SocketManager {
 					error: 'No se pudo conectar al servidor'
 				}));
 			}
-		});
-
-		// Eventos de autenticación
-		this.socket.on('authenticated', (data) => {
-			console.log('Socket autenticado:', data);
 		});
 
 		this.socket.on('unauthorized', (error) => {
@@ -144,6 +172,19 @@ class SocketManager {
 			console.log('Nueva notificación:', data);
 			// Aquí podrías mostrar una notificación toast
 		});
+
+		// Liquidaciones de servicios
+		this.socket.on('liquidacion-servicio-created', (data) => {
+			console.log('Liquidación de servicio creada:', data);
+		});
+
+		this.socket.on('liquidacion-servicio-updated', (data) => {
+			console.log('Liquidación de servicio actualizada:', data);
+		});
+
+		this.socket.on('liquidacion-servicio-deleted', (data) => {
+			console.log('Liquidación de servicio eliminada:', data);
+		});
 	}
 
 	// Métodos públicos para emitir eventos
@@ -151,12 +192,18 @@ class SocketManager {
 		if (this.socket?.connected) {
 			this.socket.emit(event, data);
 		} else {
-			console.warn('Socket no conectado, no se puede emitir evento:', event);
+			console.warn('[socket] no conectado, no se puede emitir:', event);
 		}
 	}
 
 	// Método para escuchar eventos específicos desde componentes
 	on(event: string, callback: (data: any) => void) {
+		// Guardar el listener para re-registrarlo si el socket se (re)crea
+		if (!this.externalListeners.has(event)) {
+			this.externalListeners.set(event, new Set());
+		}
+		this.externalListeners.get(event)!.add(callback);
+		// Si el socket ya existe, registrarlo ahora
 		if (this.socket) {
 			this.socket.on(event, callback);
 		}
@@ -164,6 +211,9 @@ class SocketManager {
 
 	// Método para dejar de escuchar eventos
 	off(event: string, callback?: (data: any) => void) {
+		if (callback && this.externalListeners.has(event)) {
+			this.externalListeners.get(event)!.delete(callback);
+		}
 		if (this.socket) {
 			this.socket.off(event, callback);
 		}

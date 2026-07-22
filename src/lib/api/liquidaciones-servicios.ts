@@ -4,15 +4,30 @@ const API_URL = browser ? import.meta.env.VITE_API_URL : 'http://localhost:4000'
 
 // ═══ Tipos ═══
 
-export type TipoServicioTarifa = 'HORA_24' | 'HORA_12' | 'HORA' | 'KILOMETRO';
-export type EstadoLiquidacionServicio = 'BORRADOR' | 'LIQUIDADA' | 'APROBADA' | 'FACTURADA' | 'ANULADA';
+export type TipoServicioTarifa =
+	| 'TRANSPORTE_DE_PERSONAL_EN_CAMIONETA'
+	| 'TRANSPORTE_DE_PERSONAL_EN_BUSETA'
+	| 'TRANSPORTE_DE_PERSONAL_EN_MICROBUS'
+	| 'TRANSPORTE_DE_PERSONAL_EN_BUS'
+	| 'TRANSPORTE_ADICIONAL_HORA_ADICIONAL'
+	| 'TRANSPORTE_ADICIONAL_KM_ADICIONAL'
+	| 'TRANSPORTE_ADICIONAL_DISPONIBILIDAD';
+export type EstadoLiquidacionServicio =
+	| 'BORRADOR'
+	| 'LIQUIDADA'
+	| 'APROBADA'
+	| 'FACTURADA'
+	| 'ANULADA';
 export type Operadora = 'PAREX' | 'GEOPARK';
 
 export const TIPO_SERVICIO_LABELS: Record<TipoServicioTarifa, string> = {
-	HORA_24: '24 Horas',
-	HORA_12: '12 Horas',
-	HORA: 'Hora',
-	KILOMETRO: 'Kilómetro'
+  TRANSPORTE_DE_PERSONAL_EN_CAMIONETA: 'Transporte de personal en camioneta',
+  TRANSPORTE_DE_PERSONAL_EN_BUSETA: 'Transporte de personal en buseta',
+  TRANSPORTE_DE_PERSONAL_EN_MICROBUS: 'Transporte de personal en microbús',
+  TRANSPORTE_DE_PERSONAL_EN_BUS: 'Transporte de personal en bus',
+  TRANSPORTE_ADICIONAL_HORA_ADICIONAL: 'Transporte adicional (hora adicional)',
+  TRANSPORTE_ADICIONAL_KM_ADICIONAL: 'Transporte adicional (km adicional)',
+  TRANSPORTE_ADICIONAL_DISPONIBILIDAD: 'Transporte adicional (disponibilidad)'
 };
 
 export const ESTADO_LIQUIDACION_LABELS: Record<
@@ -110,6 +125,8 @@ export interface LiquidacionServicio {
 	valor_transporte_adicional: number;
 	valor_administracion_ta: number;
 	valor_pernoctes: number;
+	valor_unitario_pernoctes: number;
+	cantidad_pernoctes: number;
 	subtotal: number;
 	porcentaje_iva: number;
 	valor_iva: number;
@@ -119,6 +136,7 @@ export interface LiquidacionServicio {
 	motivo_anulacion?: string;
 	observaciones?: string;
 	osi?: string;
+	operadora?: string;
 	recargos_data?: any;
 	terceros_items?: {
 		id: string;
@@ -137,7 +155,12 @@ export interface LiquidacionServicio {
 		ingreso_empresa: number;
 		src_index: number;
 		orden: number;
-		tercero?: { id: string; nombre_completo: string; identificacion: string; tipo_persona: string } | null;
+		tercero?: {
+			id: string;
+			nombre_completo: string;
+			identificacion: string;
+			tipo_persona: string;
+		} | null;
 	}[];
 	fecha_aprobacion?: string | null;
 	fecha_facturacion?: string | null;
@@ -284,8 +307,19 @@ export interface CrearLiquidacionInput {
 // ═══ Helpers ═══
 
 const MESES_LABELS = [
-	'', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-	'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+	'',
+	'Enero',
+	'Febrero',
+	'Marzo',
+	'Abril',
+	'Mayo',
+	'Junio',
+	'Julio',
+	'Agosto',
+	'Septiembre',
+	'Octubre',
+	'Noviembre',
+	'Diciembre'
 ];
 
 export function getMesLabel(mes: number): string {
@@ -316,18 +350,14 @@ function getAuthHeaders(): Record<string, string> {
 
 export const liquidacionesServiciosAPI = {
 	// ── Tarifas (operadoras) ──
-	async obtenerTarifas(
-		operadora?: Operadora,
-		anio?: number
-	): Promise<TarifaServicio[]> {
+	async obtenerTarifas(operadora?: Operadora, anio?: number): Promise<TarifaServicio[]> {
 		const params = new URLSearchParams();
 		if (operadora) params.set('operadora', operadora);
 		if (anio) params.set('anio', String(anio));
 
-		const res = await fetch(
-			`${API_URL}/api/liquidaciones-servicios/tarifas?${params.toString()}`,
-			{ headers: getAuthHeaders() }
-		);
+		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/tarifas?${params.toString()}`, {
+			headers: getAuthHeaders()
+		});
 		if (!res.ok) {
 			const json = await res.json();
 			throw new Error(json.error || 'Error al obtener tarifas');
@@ -388,10 +418,9 @@ export const liquidacionesServiciosAPI = {
 			params.set('tarifa_id', tarifa_id);
 		}
 
-		const res = await fetch(
-			`${API_URL}/api/liquidaciones-servicios/preview?${params.toString()}`,
-			{ headers: getAuthHeaders() }
-		);
+		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/preview?${params.toString()}`, {
+			headers: getAuthHeaders()
+		});
 		const json = await res.json();
 		if (!res.ok) throw new Error(json.error || 'Error al generar preview');
 		return json;
@@ -430,6 +459,11 @@ export const liquidacionesServiciosAPI = {
 			estadoCounts: Record<string, number>;
 			clientes: { id: string; nombre: string }[];
 			liquidadores: { id: string; nombre: string }[];
+			consecutivos: string[];
+			periodos: { mes: number; anio: number }[];
+			facturas: string[];
+			estados: string[];
+			placas: string[];
 		};
 	}> {
 		const params = new URLSearchParams();
@@ -437,10 +471,9 @@ export const liquidacionesServiciosAPI = {
 			if (val !== undefined && val !== '') params.set(key, String(val));
 		});
 
-		const res = await fetch(
-			`${API_URL}/api/liquidaciones-servicios?${params.toString()}`,
-			{ headers: getAuthHeaders() }
-		);
+		const res = await fetch(`${API_URL}/api/liquidaciones-servicios?${params.toString()}`, {
+			headers: getAuthHeaders()
+		});
 		const json = await res.json();
 		if (!res.ok) throw new Error(json.error || 'Error al listar liquidaciones');
 		return json;
@@ -488,7 +521,11 @@ export const liquidacionesServiciosAPI = {
 		}
 	},
 
-	async cambiarEstado(id: string, estado: EstadoLiquidacionServicio, motivo_anulacion?: string): Promise<LiquidacionServicio> {
+	async cambiarEstado(
+		id: string,
+		estado: EstadoLiquidacionServicio,
+		motivo_anulacion?: string
+	): Promise<LiquidacionServicio> {
 		const body: any = { estado };
 		if (motivo_anulacion) body.motivo_anulacion = motivo_anulacion;
 		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/${id}/estado`, {
@@ -532,6 +569,18 @@ export const liquidacionesServiciosAPI = {
 		return json;
 	},
 
+	async obtenerCSV(liquidacionId: string): Promise<Blob> {
+		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/${liquidacionId}/csv`, {
+			headers: getAuthHeaders()
+		});
+
+		if (!res.ok) {
+			const json = await res.json();
+			throw new Error(json.error || 'Error al obtener Excel');
+		}
+		return await res.blob();
+	},
+
 	// ── Configuración Liquidador de Servicios ──
 
 	async obtenerConfigLiquidador(): Promise<ConfigLiquidadorServicio> {
@@ -543,7 +592,9 @@ export const liquidacionesServiciosAPI = {
 		return json;
 	},
 
-	async actualizarConfigLiquidador(data: Partial<Omit<ConfigLiquidadorServicio, 'id'>>): Promise<ConfigLiquidadorServicio> {
+	async actualizarConfigLiquidador(
+		data: Partial<Omit<ConfigLiquidadorServicio, 'id'>>
+	): Promise<ConfigLiquidadorServicio> {
 		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/config-liquidador`, {
 			method: 'PUT',
 			headers: getAuthHeaders(),
@@ -551,18 +602,21 @@ export const liquidacionesServiciosAPI = {
 		});
 		const json = await res.json();
 		if (!res.ok) throw new Error(json.error || 'Error al actualizar configuración');
-                return json;
-        },
+		return json;
+	},
 
-        async checkConsecutivo(consecutivo: string, excludeId?: string): Promise<{ available: boolean }> {
-                const qs = excludeId ? `?excludeId=${excludeId}` : '';
-                const res = await fetch(`${API_URL}/api/liquidaciones-servicios/check-consecutivo/${encodeURIComponent(consecutivo)}${qs}`, {
-                        headers: getAuthHeaders()
-                });
-                const json = await res.json();
-                if (!res.ok) throw new Error(json.error || 'Error al verificar consecutivo');
-                return json;
-        }
+	async checkConsecutivo(consecutivo: string, excludeId?: string): Promise<{ available: boolean }> {
+		const qs = excludeId ? `?excludeId=${excludeId}` : '';
+		const res = await fetch(
+			`${API_URL}/api/liquidaciones-servicios/check-consecutivo/${encodeURIComponent(consecutivo)}${qs}`,
+			{
+				headers: getAuthHeaders()
+			}
+		);
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al verificar consecutivo');
+		return json;
+	}
 };
 
 // ═══ API Liquidaciones Terceros (historial) ═══
@@ -585,7 +639,12 @@ export interface TerceroItemHistorial {
 	ingreso_empresa: number;
 	src_index: number;
 	orden: number;
-	tercero?: { id: string; nombre_completo: string; identificacion: string; tipo_persona: string } | null;
+	tercero?: {
+		id: string;
+		nombre_completo: string;
+		identificacion: string;
+		tipo_persona: string;
+	} | null;
 	item?: { id: string; numero_planilla: string | null } | null;
 	liquidacion?: {
 		id: string;
@@ -608,7 +667,9 @@ export interface TerceroHistorialResponse {
 }
 
 export const liquidacionesTercerosAPI = {
-	async listarHistorial(filtros: Record<string, string | number>): Promise<TerceroHistorialResponse> {
+	async listarHistorial(
+		filtros: Record<string, string | number>
+	): Promise<TerceroHistorialResponse> {
 		const params = new URLSearchParams();
 		for (const [k, v] of Object.entries(filtros)) {
 			if (v !== '' && v !== undefined && v !== null) params.set(k, String(v));

@@ -1,0 +1,1005 @@
+<script lang="ts">
+	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
+	import { fade, fly } from 'svelte/transition';
+	import { toast } from 'svelte-sonner';
+	import {
+		accionesCorrectivasAPI,
+		type AccionCorrectivaPreventiva,
+		type ListarAccionesFiltros,
+		type TipoAccion,
+		type EstadoAccion,
+		type ValoracionRiesgo,
+		type EstadisticasAcciones
+	} from '$lib/api/acciones-correctivas';
+	import { etiquetaTipoHallazgo } from '$lib/acciones-correctivas/constants';
+
+	// Estado
+	let acciones: AccionCorrectivaPreventiva[] = [];
+	let estadisticas: EstadisticasAcciones | null = null;
+	let isLoading = true;
+	let isLoadingStats = true;
+
+	// Paginación
+	let page = 1;
+	let limit = 10;
+	let total = 0;
+	let totalPages = 0;
+
+	// Ordenamiento
+	let sortBy = 'accion_numero';
+	let sortOrder: 'asc' | 'desc' = 'desc';
+
+	// Filtros
+	let filtros: ListarAccionesFiltros = {
+		page,
+		limit
+	};
+	let busqueda = '';
+	let tipoFiltro: TipoAccion | '' = '';
+	let estadoFiltro: EstadoAccion | '' = '';
+	let riesgoFiltro: ValoracionRiesgo | '' = '';
+	let fechaDesde = '';
+	let fechaHasta = '';
+	let mostrarFiltros = false;
+	let ultimos90Dias = true;
+
+	// Modal de confirmación de eliminación
+	let showDeleteModal = false;
+	let accionEliminar: { id: string; numero: string } | null = null;
+
+	onMount(async () => {
+		await Promise.all([cargarAcciones(), cargarEstadisticas()]);
+	});
+
+	async function cargarAcciones() {
+		isLoading = true;
+		try {
+			filtros = {
+				page,
+				limit,
+				sortBy,
+				sortOrder,
+				...(busqueda && { busqueda }),
+				...(tipoFiltro && { tipo: tipoFiltro }),
+				...(estadoFiltro && { estado: estadoFiltro }),
+				...(riesgoFiltro && { riesgo: riesgoFiltro }),
+				...(fechaDesde && { fecha_desde: fechaDesde }),
+				...(fechaHasta && { fecha_hasta: fechaHasta }),
+				...(ultimos90Dias && { ultimos_90_dias: true })
+			};
+
+			const resultado = await accionesCorrectivasAPI.listar(filtros);
+			acciones = resultado.acciones;
+			total = resultado.total;
+			totalPages = resultado.totalPages;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Error al cargar las acciones';
+			toast.error(message);
+			acciones = [];
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	async function cargarEstadisticas() {
+		isLoadingStats = true;
+		try {
+			estadisticas = await accionesCorrectivasAPI.obtenerEstadisticas();
+		} catch (error) {
+			console.error('Error al cargar estadísticas:', error);
+		} finally {
+			isLoadingStats = false;
+		}
+	}
+
+	function aplicarFiltros() {
+		page = 1;
+		cargarAcciones();
+	}
+
+	function limpiarFiltros() {
+		busqueda = '';
+		tipoFiltro = '';
+		estadoFiltro = '';
+		riesgoFiltro = '';
+		fechaDesde = '';
+		fechaHasta = '';
+		page = 1;
+		cargarAcciones();
+	}
+
+	function cambiarPagina(nuevaPagina: number) {
+		page = nuevaPagina;
+		cargarAcciones();
+	}
+
+	function abrirPaginaCrear() {
+		goto('/dashboard/acciones-correctivas/crear');
+	}
+
+	function abrirPaginaEditar(accion: AccionCorrectivaPreventiva) {
+		goto(`/dashboard/acciones-correctivas/editar/${accion.id}`);
+	}
+
+	function abrirModalEliminar(id: string, accion_numero: string) {
+		accionEliminar = { id, numero: accion_numero };
+		showDeleteModal = true;
+	}
+
+	function cerrarModalEliminar() {
+		showDeleteModal = false;
+		accionEliminar = null;
+	}
+
+	
+	async function duplicarAccion(id: string) {
+		try {
+			toast.loading('Duplicando acción...');
+			await accionesCorrectivasAPI.duplicar(id);
+			toast.success('Acción duplicada correctamente');
+			await cargarAcciones();
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Error al duplicar la acción';
+			toast.error(message);
+		}
+	}
+
+	async function confirmarEliminacion() {
+		if (!accionEliminar) return;
+
+		try {
+			await accionesCorrectivasAPI.eliminar(accionEliminar.id);
+			toast.success('Acción eliminada correctamente');
+			await Promise.all([cargarAcciones(), cargarEstadisticas()]);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Error al eliminar la acción';
+			toast.error(message);
+		} finally {
+			cerrarModalEliminar();
+		}
+	}
+
+	async function descargarPDF(id: string, accion_numero: string) {
+		try {
+			toast.loading('Generando PDF...');
+			await accionesCorrectivasAPI.descargarPDF(id, accion_numero);
+			toast.success('PDF descargado correctamente');
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Error al descargar el PDF';
+			toast.error(message);
+		}
+	}
+
+	function formatearFecha(fecha: string | undefined): string {
+		if (!fecha) return '—';
+		const [year, month, day] = fecha.split('T')[0].split('-');
+		const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+		return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+	}
+
+	function formatearFechaDate(fecha: Date): string {
+		return fecha.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
+	}
+
+	function getBadgeColorTipo(tipo: TipoAccion | string | undefined): string {
+		if (!tipo) return 'bg-gray-100 text-gray-700 border border-gray-200';
+		const t = tipo.toUpperCase();
+		if (t.includes('CORRECTIVA')) return 'bg-red-100 text-red-700 border border-red-200';
+		if (t.includes('PREVENTIVA')) return 'bg-blue-100 text-blue-700 border border-blue-200';
+		if (t.includes('MEJORA')) return 'bg-orange-100 text-orange-700 border border-orange-200';
+		return 'bg-gray-100 text-gray-700 border border-gray-200';
+	}
+
+	function getBadgeColorEstado(estado: string | undefined): string {
+		if (!estado) return 'bg-gray-100 text-gray-700 border border-gray-200';
+		const e = estado.toLowerCase();
+		if (e.includes('cumplida') || e.includes('cerrada'))
+			return 'bg-orange-100 text-orange-700 border border-orange-200';
+		if (e.includes('proceso') || e.includes('abierta'))
+			return 'bg-yellow-100 text-yellow-700 border border-yellow-200';
+		if (e.includes('vencida') || e.includes('replanteada'))
+			return 'bg-red-100 text-red-700 border border-red-200';
+		return 'bg-gray-100 text-gray-700 border border-gray-200';
+	}
+
+	function getBadgeColorRiesgo(riesgo: ValoracionRiesgo | undefined): string {
+		switch (riesgo) {
+			case 'ALTO':
+				return 'bg-red-100 text-red-700 border border-red-200';
+			case 'MEDIO':
+				return 'bg-yellow-100 text-yellow-700 border border-yellow-200';
+			case 'BAJO':
+				return 'bg-orange-100 text-orange-700 border border-orange-200';
+			default:
+				return 'bg-gray-100 text-gray-700 border border-gray-200';
+		}
+	}
+
+	function parseFechaLocal(fecha?: string | null): Date | null {
+		if (!fecha) return null;
+		const parte = fecha.split('T')[0];
+		const [y, m, d] = parte.split('-').map(Number);
+		if (!y || !m || !d) return null;
+		return new Date(y, m - 1, d);
+	}
+
+	function diasHasta(fecha: Date): number {
+		const hoy = new Date();
+		hoy.setHours(0, 0, 0, 0);
+		const f = new Date(fecha);
+		f.setHours(0, 0, 0, 0);
+		return Math.round((f.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+	}
+
+	function estaCumplida(accion: AccionCorrectivaPreventiva): boolean {
+		const e = (accion.estado_accion || '').toLowerCase();
+		return e.includes('cumplida') || e.includes('cerrada');
+	}
+
+	type RecordatorioSeguimiento = {
+		tipo: 'vencida' | 'urgente' | 'proxima' | 'ok' | 'sin_fecha' | 'cumplida';
+		mensaje: string;
+		dias: number | null;
+		contexto?: string;
+	};
+
+	function obtenerRecordatorio(accion: AccionCorrectivaPreventiva): RecordatorioSeguimiento {
+		if (estaCumplida(accion)) {
+			return { tipo: 'cumplida', mensaje: 'Acción cerrada', dias: null };
+		}
+
+		const candidatos: { fecha: Date; contexto: string }[] = [];
+		const fCierre = parseFechaLocal(accion.fecha_limite_cierre_accion);
+		if (fCierre) candidatos.push({ fecha: fCierre, contexto: 'Cierre acción' });
+		const fEficacia = parseFechaLocal(accion.fecha_limite_evaluacion_eficacia);
+		if (fEficacia) candidatos.push({ fecha: fEficacia, contexto: 'Eval. eficacia' });
+
+		for (const causa of accion.causas || []) {
+			const est = (causa.estado_seguimiento || '').toLowerCase();
+			if (est.includes('cumplida') || est.includes('cerrada')) continue;
+			const f = parseFechaLocal(causa.fecha_limite_implementacion);
+			if (f) candidatos.push({ fecha: f, contexto: `Causa #${causa.orden}` });
+		}
+
+		if (!candidatos.length) {
+			const pendientes = (accion.causas || []).filter((c) => {
+				const est = (c.estado_seguimiento || '').toLowerCase();
+				return !est.includes('cumplida') && !est.includes('cerrada');
+			}).length;
+			if (pendientes > 0) {
+				return {
+					tipo: 'sin_fecha',
+					mensaje: 'Seguimiento pendiente',
+					dias: null,
+					contexto: `${pendientes} causa(s) sin fecha`
+				};
+			}
+			return { tipo: 'sin_fecha', mensaje: 'Sin fecha programada', dias: null };
+		}
+
+		const masUrgente = candidatos.reduce((a, b) => (a.fecha < b.fecha ? a : b));
+		const dias = diasHasta(masUrgente.fecha);
+
+		if (dias < 0) {
+			return {
+				tipo: 'vencida',
+				mensaje: `Vencida hace ${Math.abs(dias)} día${Math.abs(dias) === 1 ? '' : 's'}`,
+				dias,
+				contexto: masUrgente.contexto
+			};
+		}
+		if (dias <= 7) {
+			return {
+				tipo: 'urgente',
+				mensaje: dias === 0 ? 'Vence hoy' : `Vence en ${dias} día${dias === 1 ? '' : 's'}`,
+				dias,
+				contexto: masUrgente.contexto
+			};
+		}
+		if (dias <= 30) {
+			return {
+				tipo: 'proxima',
+				mensaje: `En ${dias} días`,
+				dias,
+				contexto: masUrgente.contexto
+			};
+		}
+		return {
+			tipo: 'ok',
+			mensaje: `En ${dias} días`,
+			dias,
+			contexto: masUrgente.contexto
+		};
+	}
+
+	function getRecordatorioClasses(tipo: RecordatorioSeguimiento['tipo']): string {
+		switch (tipo) {
+			case 'vencida':
+				return 'bg-red-50 text-red-700 border-red-200';
+			case 'urgente':
+				return 'bg-orange-50 text-orange-700 border-orange-200';
+			case 'proxima':
+				return 'bg-amber-50 text-amber-800 border-amber-200';
+			case 'cumplida':
+				return 'bg-orange-50 text-orange-700 border-orange-200';
+			case 'ok':
+				return 'bg-slate-50 text-slate-600 border-slate-200';
+			default:
+				return 'bg-gray-50 text-gray-600 border-gray-200';
+		}
+	}
+
+	function getBarColor(accion: AccionCorrectivaPreventiva): string {
+		const rec = obtenerRecordatorio(accion);
+		switch (rec.tipo) {
+			case 'vencida':
+				return '#ef4444';
+			case 'urgente':
+				return '#f97316';
+			case 'proxima':
+				return '#eab308';
+			case 'cumplida':
+				return '#10b981';
+			default:
+				return '#94a3b8';
+		}
+	}
+
+	function resumenCausas(accion: AccionCorrectivaPreventiva) {
+		const causas = accion.causas || [];
+		let cumplidas = 0;
+		let vencidas = 0;
+		let enProceso = 0;
+		for (const c of causas) {
+			const est = (c.estado_seguimiento || '').toLowerCase();
+			if (est.includes('cumplida') || est.includes('cerrada')) cumplidas++;
+			else if (est.includes('vencida') || est.includes('replanteada')) vencidas++;
+			else enProceso++;
+		}
+		return { total: causas.length, cumplidas, vencidas, enProceso };
+	}
+
+	function obtenerUltimoSeguimiento(accion: AccionCorrectivaPreventiva) {
+		let mejor: { fecha: Date; estado?: string; origen: string } | null = null;
+
+		for (const s of accion.seguimientos_correccion || []) {
+			const f = parseFechaLocal(s.fecha_seguimiento);
+			if (!f) continue;
+			if (!mejor || f > mejor.fecha) {
+				mejor = { fecha: f, estado: s.estado_accion, origen: 'Corrección' };
+			}
+		}
+
+		for (const causa of accion.causas || []) {
+			const f = parseFechaLocal(causa.fecha_seguimiento);
+			if (!f) continue;
+			if (!mejor || f > mejor.fecha) {
+				mejor = {
+					fecha: f,
+					estado: causa.estado_seguimiento,
+					origen: `Causa #${causa.orden}`
+				};
+			}
+		}
+
+		return mejor;
+	}
+
+	function etiquetaEstadoCorto(estado?: string): string {
+		if (!estado) return '—';
+		if (estado.toLowerCase().includes('cumplida')) return 'Cumplida';
+		if (estado.toLowerCase().includes('vencida')) return 'Vencida';
+		if (estado.toLowerCase().includes('proceso')) return 'En proceso';
+		return estado.length > 18 ? estado.slice(0, 16) + '…' : estado;
+	}
+
+	function irPagina(nueva: number) {
+		if (nueva < 1 || nueva > totalPages || isLoading) return;
+		cambiarPagina(nueva);
+	}
+
+	function toggleSort(column: string) {
+		if (sortBy === column) {
+			sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+		} else {
+			sortBy = column;
+			sortOrder = 'desc';
+		}
+		page = 1;
+		cargarAcciones();
+	}
+</script>
+
+<div class="flex h-full flex-col gap-4 p-6" in:fade={{ duration: 400 }}>
+	<!-- Header -->
+	<div class="bg-white shadow-sm border border-gray-100 flex-shrink-0 rounded-2xl border border-gray-200/50 p-5">
+		<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+			<div class="flex items-center gap-3">
+				<div
+					class="soft-shadow flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-400 to-orange-600"
+				>
+					<svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+						/>
+					</svg>
+				</div>
+				<div>
+					<h1 class="text-xl font-bold text-gray-900">Acciones correctivas y preventivas</h1>
+					<p class="text-xs text-gray-500">Matriz HSEQ-MTR-07 · Hallazgos, seguimiento y eficacia</p>
+				</div>
+			</div>
+
+			<div class="flex flex-wrap items-center gap-2">
+				
+				<label class="flex items-center gap-2 cursor-pointer bg-white px-3 py-2 rounded-xl border border-gray-200 hover:bg-gray-50 transition-colors">
+					<input type="checkbox" bind:checked={ultimos90Dias} on:change={aplicarFiltros} class="rounded border-gray-300 text-orange-600 focus:ring-orange-500" />
+					<span class="text-sm font-medium text-gray-700">Últimos 90 días</span>
+				</label>
+
+				<div class="relative">
+					<input
+						type="text"
+						bind:value={busqueda}
+						placeholder="Buscar acciones..."
+						class="input-glow apple-transition w-64 rounded-xl border border-gray-200 bg-white/80 py-2 pr-4 pl-9 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-400"
+						on:keypress={(e) => e.key === 'Enter' && aplicarFiltros()}
+					/>
+					<svg
+						class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+						/>
+					</svg>
+				</div>
+
+				<button
+					on:click={() => (mostrarFiltros = !mostrarFiltros)}
+					class="apple-transition flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors
+						{mostrarFiltros ? 'border-orange-300 bg-orange-50 text-orange-700' : 'border-gray-200 bg-white text-gray-700 hover:border-orange-200 hover:bg-orange-50'}"
+				>
+					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+						/>
+					</svg>
+					Filtros
+					{#if tipoFiltro || estadoFiltro || riesgoFiltro || fechaDesde || fechaHasta}
+						<span
+							class="flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 text-[9px] font-bold text-white"
+							>!</span
+						>
+					{/if}
+				</button>
+
+				<button
+					on:click={abrirPaginaCrear}
+					class="apple-hover apple-transition soft-shadow emerald-glow flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-4 py-2 text-sm font-semibold text-white"
+				>
+					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							stroke-width="2"
+							d="M12 6v6m0 0v6m0-6h6m-6 0H6"
+						/>
+					</svg>
+					Nueva acción
+				</button>
+			</div>
+		</div>
+
+		{#if mostrarFiltros}
+			<div class="mt-4 border-t border-gray-100 pt-4" transition:fly={{ y: -12, duration: 200 }}>
+				<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-5">
+					<div>
+						<label for="tipoFiltro" class="mb-1.5 block text-xs font-medium text-gray-600"
+							>Tipo de acción</label
+						>
+						<select
+							id="tipoFiltro"
+							bind:value={tipoFiltro}
+							class="input-glow apple-transition w-full rounded-xl border border-gray-200 bg-white/80 px-3 py-2 text-sm text-gray-900 focus:border-orange-400"
+						>
+							<option value="">Todos</option>
+							<option value="CORRECTIVA">Correctiva</option>
+							<option value="PREVENTIVA">Preventiva</option>
+							<option value="MEJORA">Mejora</option>
+						</select>
+					</div>
+					<div>
+						<label for="estadoFiltro" class="mb-1.5 block text-xs font-medium text-gray-600"
+							>Estado</label
+						>
+						<select
+							id="estadoFiltro"
+							bind:value={estadoFiltro}
+							class="input-glow apple-transition w-full rounded-xl border border-gray-200 bg-white/80 px-3 py-2 text-sm text-gray-900 focus:border-orange-400"
+						>
+							<option value="">Todos</option>
+							<option value="Cumplidas">Cumplidas</option>
+							<option value="En Proceso">En proceso</option>
+							<option value="Vencidas">Vencidas</option>
+						</select>
+					</div>
+					<div>
+						<label for="riesgoFiltro" class="mb-1.5 block text-xs font-medium text-gray-600"
+							>Riesgo</label
+						>
+						<select
+							id="riesgoFiltro"
+							bind:value={riesgoFiltro}
+							class="input-glow apple-transition w-full rounded-xl border border-gray-200 bg-white/80 px-3 py-2 text-sm text-gray-900 focus:border-orange-400"
+						>
+							<option value="">Todos</option>
+							<option value="ALTO">Alto</option>
+							<option value="MEDIO">Medio</option>
+							<option value="BAJO">Bajo</option>
+						</select>
+					</div>
+					<div>
+						<label for="fechaDesde" class="mb-1.5 block text-xs font-medium text-gray-600"
+							>Desde</label
+						>
+						<input
+							id="fechaDesde"
+							type="date"
+							bind:value={fechaDesde}
+							class="input-glow apple-transition w-full rounded-xl border border-gray-200 bg-white/80 px-3 py-2 text-sm text-gray-900 focus:border-orange-400"
+						/>
+					</div>
+					<div>
+						<label for="fechaHasta" class="mb-1.5 block text-xs font-medium text-gray-600"
+							>Hasta</label
+						>
+						<input
+							id="fechaHasta"
+							type="date"
+							bind:value={fechaHasta}
+							class="input-glow apple-transition w-full rounded-xl border border-gray-200 bg-white/80 px-3 py-2 text-sm text-gray-900 focus:border-orange-400"
+						/>
+					</div>
+				</div>
+				<div class="mt-3 flex justify-end gap-2">
+					<button
+						on:click={limpiarFiltros}
+						class="apple-transition rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+					>
+						Limpiar
+					</button>
+					<button
+						on:click={aplicarFiltros}
+						class="apple-transition rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-700"
+					>
+						Aplicar
+					</button>
+				</div>
+			</div>
+		{/if}
+	</div>
+
+	<!-- Estadísticas compactas -->
+	{#if !isLoadingStats && estadisticas}
+		<div class="grid flex-shrink-0 grid-cols-2 gap-3 lg:grid-cols-4" transition:fade>
+			<div class="bg-white shadow-sm border border-gray-100 rounded-xl border border-gray-200/50 p-3">
+				<p class="text-[10px] font-medium uppercase tracking-wide text-gray-500">Total</p>
+				<p class="text-xl font-bold text-gray-900">{estadisticas.total}</p>
+			</div>
+			<div class="bg-white shadow-sm border border-gray-100 rounded-xl border border-gray-200/50 p-3">
+				<p class="text-[10px] font-medium uppercase tracking-wide text-gray-500">En proceso</p>
+				<p class="text-xl font-bold text-amber-600">
+					{estadisticas.por_estado['En Proceso'] ?? 0}
+				</p>
+			</div>
+			<div class="bg-white shadow-sm border border-gray-100 rounded-xl border border-gray-200/50 p-3">
+				<p class="text-[10px] font-medium uppercase tracking-wide text-gray-500">Próx. a vencer</p>
+				<p class="text-xl font-bold text-orange-600">{estadisticas.proximas_vencer}</p>
+			</div>
+			<div class="bg-white shadow-sm border border-gray-100 rounded-xl border border-gray-200/50 p-3">
+				<p class="text-[10px] font-medium uppercase tracking-wide text-gray-500">Cumplidas</p>
+				<p class="text-xl font-bold text-orange-600">
+					{estadisticas.por_estado.Cumplidas ?? 0}
+				</p>
+			</div>
+		</div>
+	{/if}
+
+	<!-- Tabla -->
+	<div
+		class="bg-white shadow-sm border border-gray-100 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200/50"
+		in:fly={{ y: 12, duration: 400, delay: 100 }}
+	>
+		{#if isLoading}
+			<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12">
+				<div
+					class="h-10 w-10 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"
+				></div>
+				<p class="text-sm text-gray-500">Cargando acciones...</p>
+			</div>
+		{:else if acciones.length === 0}
+			<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12">
+				<h3 class="text-base font-semibold text-gray-900">No hay acciones</h3>
+				<p class="text-sm text-gray-500">
+					{busqueda || tipoFiltro || estadoFiltro
+						? 'No se encontraron resultados con los filtros aplicados'
+						: 'Comienza creando una nueva acción'}
+				</p>
+				<button
+					on:click={abrirPaginaCrear}
+					class="apple-transition rounded-lg bg-orange-500 px-4 py-2 text-sm text-white hover:bg-orange-600"
+				>
+					Nueva acción
+				</button>
+			</div>
+		{:else}
+			<!-- Desktop: tabla estilo servicios -->
+			<div class="hidden min-h-0 flex-1 overflow-auto lg:block">
+				<table class="w-full border-collapse text-sm">
+					<thead>
+						<tr class="sticky top-0 z-10 border-b border-gray-200 bg-gray-50/95 backdrop-blur-sm">
+							<th class="w-1 p-0"></th>
+							<th
+								class="cursor-pointer px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500"
+								on:click={() => toggleSort('accion_numero')}
+							>
+								Acción / Hallazgo
+							</th>
+							<th
+								class="hidden cursor-pointer px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500 md:table-cell"
+								on:click={() => toggleSort('tipo_accion_ejecutar')}
+							>
+								Tipo
+							</th>
+							<th
+								class="cursor-pointer px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500 whitespace-nowrap"
+								on:click={() => toggleSort('valoracion_riesgo')}
+							>
+								Riesgo / Estado
+							</th>
+							<th class="hidden px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500 xl:table-cell">
+								Plan / Causas
+							</th>
+							<th
+								class="hidden cursor-pointer px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500 xl:table-cell"
+								on:click={() => toggleSort('fecha_limite_cierre_accion')}
+							>
+								Fechas límite
+							</th>
+							<th class="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500">
+								Recordatorio
+							</th>
+							<th class="hidden px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500 2xl:table-cell">
+								Últ. seguimiento
+							</th>
+							<th class="sticky right-0 bg-gray-50/95 px-3 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-gray-500 backdrop-blur-sm">
+								Acciones
+							</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-gray-100 bg-white">
+						{#each acciones as accion, index (accion.id)}
+							{@const rec = obtenerRecordatorio(accion)}
+							{@const causas = resumenCausas(accion)}
+							{@const ultimo = obtenerUltimoSeguimiento(accion)}
+							<tr
+								class="group cursor-pointer transition-colors duration-100 hover:bg-orange-50/40"
+								in:fly={{ y: 8, duration: 200, delay: index * 15 }}
+								on:click={() => goto(`/dashboard/acciones-correctivas/${accion.id}`)}
+								on:keydown={(e) => e.key === 'Enter' && goto(`/dashboard/acciones-correctivas/${accion.id}`)}
+								role="link"
+								tabindex="0"
+							>
+								<td class="w-1 p-0">
+									<div class="min-h-[2.5rem] w-1" style="background-color: {getBarColor(accion)}"></div>
+								</td>
+								<td class="max-w-[240px] min-w-[180px] px-3 py-2">
+									<p class="font-mono text-xs font-bold text-orange-700">{accion.accion_numero}</p>
+									<p class="mt-0.5 line-clamp-2 text-xs leading-tight text-gray-900" title={accion.descripcion_hallazgo}>
+										{accion.descripcion_hallazgo || 'Sin descripción'}
+									</p>
+									<p class="mt-0.5 truncate text-[10px] text-gray-500" title={accion.lugar_sede}>
+										{accion.lugar_sede || '—'}
+										{#if accion.proceso_origen_hallazgo}
+											· {accion.proceso_origen_hallazgo}
+										{/if}
+									</p>
+									<p class="text-[10px] text-gray-400">
+										Hallazgo: {etiquetaTipoHallazgo(accion.tipo_hallazgo_detectado)}
+										· {formatearFecha(accion.fecha_identificacion_hallazgo)}
+									</p>
+								</td>
+								<td class="hidden px-3 py-2 md:table-cell">
+									<span class="inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-medium {getBadgeColorTipo(accion.tipo_accion_ejecutar)}">
+										{accion.tipo_accion_ejecutar || '—'}
+									</span>
+								</td>
+								<td class="px-3 py-2 whitespace-nowrap">
+									<span class="inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-semibold {getBadgeColorRiesgo(accion.valoracion_riesgo)}">
+										{accion.valoracion_riesgo || '—'}
+									</span>
+									<p class="mt-1">
+										<span class="inline-flex rounded-md border px-1.5 py-0.5 text-[10px] font-medium {getBadgeColorEstado(accion.estado_accion)}">
+											{etiquetaEstadoCorto(accion.estado_accion)}
+										</span>
+									</p>
+								</td>
+								<td class="hidden px-3 py-2 xl:table-cell">
+									<p class="truncate text-xs text-gray-900" title={accion.responsable_ejecucion}>
+										{accion.responsable_ejecucion || 'Sin responsable'}
+									</p>
+									{#if causas.total > 0}
+										<p class="text-[10px] text-gray-500">
+											{causas.total} causa(s):
+											<span class="text-orange-600">{causas.cumplidas}✓</span>
+											{#if causas.enProceso}
+												<span class="text-amber-600"> {causas.enProceso} proc.</span>
+											{/if}
+											{#if causas.vencidas}
+												<span class="text-red-600"> {causas.vencidas} venc.</span>
+											{/if}
+										</p>
+									{:else}
+										<p class="text-[10px] italic text-gray-400">Sin causas</p>
+									{/if}
+								</td>
+								<td class="hidden px-3 py-2 xl:table-cell">
+									<p class="text-[10px] text-gray-500">Cierre</p>
+									<p class="text-xs text-gray-800">{formatearFecha(accion.fecha_limite_cierre_accion)}</p>
+									<p class="mt-1 text-[10px] text-gray-500">Eval. eficacia</p>
+									<p class="text-xs text-gray-800">{formatearFecha(accion.fecha_limite_evaluacion_eficacia)}</p>
+								</td>
+								<td class="px-3 py-2">
+									<span class="inline-flex flex-col gap-0.5 rounded-md border px-2 py-1 text-[10px] font-semibold {getRecordatorioClasses(rec.tipo)}">
+										<span>{rec.mensaje}</span>
+										{#if rec.contexto}
+											<span class="font-normal opacity-80">{rec.contexto}</span>
+										{/if}
+									</span>
+								</td>
+								<td class="hidden px-3 py-2 2xl:table-cell">
+									{#if ultimo}
+										<p class="text-xs text-gray-700">{formatearFechaDate(ultimo.fecha)}</p>
+										<p class="text-[10px] text-gray-500">{ultimo.origen}</p>
+										{#if ultimo.estado}
+											<span class="mt-0.5 inline-flex rounded border px-1 py-0.5 text-[9px] {getBadgeColorEstado(ultimo.estado)}">
+												{etiquetaEstadoCorto(ultimo.estado)}
+											</span>
+										{/if}
+									{:else}
+										<span class="text-xs text-gray-300">—</span>
+									{/if}
+								</td>
+								<td class="sticky right-0 bg-white px-2 py-2 group-hover:bg-orange-50/40" on:click|stopPropagation>
+									<div class="flex items-center justify-center gap-0.5">
+										<button
+											on:click={() => goto(`/dashboard/acciones-correctivas/${accion.id}`)}
+											class="rounded-md p-1.5 text-gray-400 hover:bg-orange-50 hover:text-orange-600"
+											title="Ver detalle"
+										>
+											<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+											</svg>
+										</button>
+										<button
+											on:click={() => descargarPDF(accion.id, accion.accion_numero)}
+											class="rounded-md p-1.5 text-gray-400 hover:bg-teal-50 hover:text-teal-600"
+											title="PDF"
+										>
+											<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+											</svg>
+										</button>
+										
+										<button
+											on:click={() => duplicarAccion(accion.id)}
+											class="rounded-md p-1.5 text-gray-400 hover:bg-orange-50 hover:text-orange-600"
+											title="Duplicar"
+										>
+											<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+											</svg>
+										</button>
+
+										<button
+											on:click={() => abrirPaginaEditar(accion)}
+											class="rounded-md p-1.5 text-gray-400 hover:bg-blue-50 hover:text-blue-600"
+											title="Editar"
+										>
+											<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+											</svg>
+										</button>
+										<button
+											on:click={() => abrirModalEliminar(accion.id, accion.accion_numero)}
+											class="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600"
+											title="Eliminar"
+										>
+											<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+											</svg>
+										</button>
+									</div>
+								</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+
+			<!-- Mobile: cards compactas -->
+			<div class="flex-1 space-y-3 overflow-auto p-3 lg:hidden">
+				{#each acciones as accion (accion.id)}
+					{@const rec = obtenerRecordatorio(accion)}
+					{@const ultimo = obtenerUltimoSeguimiento(accion)}
+					<div class="rounded-xl border border-gray-200 bg-white p-3 shadow-sm">
+						<div class="mb-2 flex items-start gap-2">
+							<div class="mt-1 h-8 w-1 rounded-full" style="background-color: {getBarColor(accion)}"></div>
+							<div class="min-w-0 flex-1">
+								<div class="flex flex-wrap items-center gap-1.5">
+									<span class="font-mono text-xs font-bold text-orange-700">{accion.accion_numero}</span>
+									<span class="rounded border px-1 py-0.5 text-[10px] {getRecordatorioClasses(rec.tipo)}">{rec.mensaje}</span>
+								</div>
+								<p class="mt-1 line-clamp-2 text-xs text-gray-800">{accion.descripcion_hallazgo || 'Sin descripción'}</p>
+								<p class="text-[10px] text-gray-500">{accion.lugar_sede || '—'} · {etiquetaTipoHallazgo(accion.tipo_hallazgo_detectado)}</p>
+							</div>
+						</div>
+						<div class="mb-2 flex flex-wrap gap-1">
+							<span class="rounded-md border px-1.5 py-0.5 text-[10px] {getBadgeColorTipo(accion.tipo_accion_ejecutar)}">{accion.tipo_accion_ejecutar || '—'}</span>
+							<span class="rounded-md border px-1.5 py-0.5 text-[10px] {getBadgeColorRiesgo(accion.valoracion_riesgo)}">{accion.valoracion_riesgo || '—'}</span>
+							<span class="rounded-md border px-1.5 py-0.5 text-[10px] {getBadgeColorEstado(accion.estado_accion)}">{etiquetaEstadoCorto(accion.estado_accion)}</span>
+						</div>
+						<div class="mb-2 grid grid-cols-2 gap-2 text-[10px] text-gray-600">
+							<div>
+								<span class="text-gray-400">Cierre</span>
+								<p class="font-medium text-gray-800">{formatearFecha(accion.fecha_limite_cierre_accion)}</p>
+							</div>
+							<div>
+								<span class="text-gray-400">Seguimiento</span>
+								<p class="font-medium text-gray-800">{ultimo ? formatearFechaDate(ultimo.fecha) : '—'}</p>
+							</div>
+						</div>
+						{#if rec.contexto}
+							<p class="mb-2 text-[10px] text-gray-500">{rec.contexto}</p>
+						{/if}
+						<div class="flex justify-end gap-1 border-t border-gray-100 pt-2">
+							<button on:click={() => goto(`/dashboard/acciones-correctivas/${accion.id}`)} class="rounded-md p-1.5 text-gray-500 hover:bg-orange-50 hover:text-orange-600" title="Ver">
+								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+							</button>
+							<button on:click={() => descargarPDF(accion.id, accion.accion_numero)} class="rounded-md p-1.5 text-gray-500 hover:bg-teal-50 hover:text-teal-600" title="PDF">
+								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+							</button>
+							<button on:click={() => duplicarAccion(accion.id)} class="rounded-md p-1.5 text-gray-500 hover:bg-orange-50 hover:text-orange-600" title="Duplicar">
+								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" /></svg>
+							</button>
+							<button on:click={() => abrirPaginaEditar(accion)} class="rounded-md p-1.5 text-gray-500 hover:bg-blue-50 hover:text-blue-600" title="Editar">
+								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+							</button>
+							<button on:click={() => abrirModalEliminar(accion.id, accion.accion_numero)} class="rounded-md p-1.5 text-gray-500 hover:bg-red-50 hover:text-red-600" title="Eliminar">
+								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+							</button>
+						</div>
+					</div>
+				{/each}
+			</div>
+
+			{#if totalPages > 1}
+				<div class="flex flex-shrink-0 items-center justify-between border-t border-gray-100 bg-gray-50/50 px-4 py-3">
+					<p class="text-xs text-gray-500">
+						<span class="font-semibold text-gray-700">{(page - 1) * limit + 1}–{Math.min(page * limit, total)}</span>
+						de <span class="font-semibold text-gray-700">{total}</span> acciones
+					</p>
+					<div class="flex items-center gap-1">
+						<button on:click={() => irPagina(1)} disabled={page === 1 || isLoading}
+							class="apple-transition rounded-lg border border-gray-200 p-1.5 {page === 1 || isLoading ? 'cursor-not-allowed bg-gray-100 text-gray-300' : 'bg-white text-gray-600 hover:border-orange-200 hover:bg-orange-50'}" title="Primera">
+							<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" /></svg>
+						</button>
+						<button on:click={() => irPagina(page - 1)} disabled={page === 1 || isLoading}
+							class="apple-transition rounded-lg border border-gray-200 p-1.5 {page === 1 || isLoading ? 'cursor-not-allowed bg-gray-100 text-gray-300' : 'bg-white text-gray-600 hover:border-orange-200 hover:bg-orange-50'}" title="Anterior">
+							<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
+						</button>
+						<span class="px-2 text-xs font-medium text-gray-600">{page} / {totalPages}</span>
+						<button on:click={() => irPagina(page + 1)} disabled={page === totalPages || isLoading}
+							class="apple-transition rounded-lg border border-gray-200 p-1.5 {page === totalPages || isLoading ? 'cursor-not-allowed bg-gray-100 text-gray-300' : 'bg-white text-gray-600 hover:border-orange-200 hover:bg-orange-50'}" title="Siguiente">
+							<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
+						</button>
+						<button on:click={() => irPagina(totalPages)} disabled={page === totalPages || isLoading}
+							class="apple-transition rounded-lg border border-gray-200 p-1.5 {page === totalPages || isLoading ? 'cursor-not-allowed bg-gray-100 text-gray-300' : 'bg-white text-gray-600 hover:border-orange-200 hover:bg-orange-50'}" title="Última">
+							<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" /></svg>
+						</button>
+					</div>
+				</div>
+			{/if}
+		{/if}
+	</div>
+</div>
+
+<!-- Modal de Confirmación de Eliminación -->
+{#if showDeleteModal}
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
+		transition:fade={{ duration: 200 }}
+		on:click={cerrarModalEliminar}
+		on:keydown={(e) => e.key === 'Escape' && cerrarModalEliminar()}
+		role="dialog"
+		aria-modal="true"
+		tabindex="-1"
+	>
+		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+		<div
+			class="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
+			transition:fly={{ y: 20, duration: 300 }}
+			on:click|stopPropagation
+			on:keydown|stopPropagation
+			role="presentation"
+		>
+			<!-- Header -->
+			<div class="bg-gradient-to-r from-red-500 to-red-600 px-6 py-5">
+				<div class="flex items-center gap-3">
+					<div
+						class="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm"
+					>
+						<svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+							/>
+						</svg>
+					</div>
+					<h2 class="text-2xl font-bold text-white">Confirmar Eliminación</h2>
+				</div>
+			</div>
+
+			<!-- Content -->
+			<div class="px-6 py-6">
+				<div class="mb-6">
+					<p class="mb-2 text-gray-700">¿Está seguro de que desea eliminar la siguiente acción?</p>
+					<div class="mt-4 rounded-lg border-l-4 border-red-500 bg-red-50 p-4">
+						<p class="font-semibold text-red-900">
+							{accionEliminar?.numero}
+						</p>
+					</div>
+					<p class="mt-4 text-sm text-gray-600">
+						Esta acción no se puede deshacer. Todos los datos asociados a esta acción
+						correctiva/preventiva serán eliminados permanentemente.
+					</p>
+				</div>
+
+				<!-- Botones -->
+				<div class="flex gap-3">
+					<button
+						type="button"
+						on:click={cerrarModalEliminar}
+						class="apple-transition flex-1 rounded-lg border border-gray-200 bg-white px-4 py-2.5 font-medium text-gray-700 hover:bg-gray-50"
+					>
+						Cancelar
+					</button>
+					<button
+						type="button"
+						on:click={confirmarEliminacion}
+						class="apple-transition flex-1 rounded-lg bg-gradient-to-r from-red-500 to-red-600 px-4 py-2.5 font-medium text-white shadow-lg shadow-red-500/30 hover:from-red-600 hover:to-red-700"
+					>
+						Eliminar
+					</button>
+				</div>
+			</div>
+		</div>
+	</div>
+{/if}

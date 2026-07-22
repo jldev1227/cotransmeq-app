@@ -54,6 +54,10 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
     general: true,
     description: 'Gestión de clientes/empresas'
   },
+  sarlaft: {
+    full: ['administracion', 'talento_humano'],
+    description: 'Formularios SARLAFT + PTEE (cumplimiento)'
+  },
   asistencias: {
     full: ['administracion', 'hseq'],
     description: 'Formularios de asistencia'
@@ -83,6 +87,11 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
     limited: ['facturacion'],
     description: 'Liquidaciones de servicios'
   },
+  'liquidaciones-terceros': {
+    full: ['administracion', 'operaciones'],
+    limited: ['facturacion', 'contabilidad'],
+    description: 'Liquidaciones de terceros (propietarios)'
+  },
   pesv: {
     full: ['administracion', 'operaciones', 'contabilidad', 'facturacion', 'talento_humano', 'hseq'],
     general: true,
@@ -103,6 +112,10 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   sesiones: {
     full: ['administracion'],
     description: 'Visualización de sesiones'
+  },
+  directorio: {
+    full: ['administracion'],
+    description: 'Directorio del equipo — presencia e invitaciones'
   }
 }
 

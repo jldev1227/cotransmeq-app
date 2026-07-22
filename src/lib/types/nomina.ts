@@ -1,13 +1,13 @@
 /**
- * Tipos TypeScript para el módulo de Nómina - Cotransmeq
+ * Tipos TypeScript para el módulo de Nómina
  */
 
 // ==================== ENTIDADES BASE ====================
 
 export interface Conductor {
+	apellido: string;
 	id: string;
 	nombre: string;
-	apellido?: string;
 	cedula: string;
 	telefono?: string;
 	email?: string;
@@ -75,9 +75,6 @@ export interface Recargo {
 	empresa_id: string;
 	valor: number;
 	pag_cliente: boolean;
-	porcentaje_propietario?: number;
-	emisor?: string;
-	incluir?: boolean;
 	vehiculo_id: string;
 	mes: string;
 	liquidacion_id?: string;
@@ -131,7 +128,27 @@ export interface FirmaDesprendible {
 
 export interface FirmaConUrl extends FirmaDesprendible {
 	presignedUrl?: string;
-	base64?: string;
+}
+
+export interface FirmaPrima {
+	id: string;
+	prima_id: string;
+	conductor_id: string;
+	firma_url: string;
+	firma_s3_key: string;
+	ip_address?: string;
+	user_agent?: string;
+	fecha_firma: string;
+	hash_firma?: string;
+	estado: string;
+	observaciones?: string;
+	created_at?: string;
+	updated_at?: string;
+}
+
+export interface FirmaPrimaConUrl extends FirmaPrima {
+	presignedUrl?: string;
+	origen?: 'prima' | 'nomina';
 }
 
 // ==================== USUARIO (auditoría) ====================
@@ -203,7 +220,12 @@ export interface Liquidacion {
 		mode: 'empresas' | 'total';
 		empresa_ids: string[];
 		porcentaje: number;
-		detalle?: { empresa_id: string; empresa_nombre: string; total_recargos: number; ajuste: number }[];
+		detalle?: {
+			empresa_id: string;
+			empresa_nombre: string;
+			total_recargos: number;
+			ajuste: number;
+		}[];
 	} | null;
 	no_descontar_salud: boolean;
 	no_descontar_pension: boolean;
@@ -246,7 +268,7 @@ export interface Liquidacion {
 	created_at?: string;
 	updated_at?: string;
 
-	// Vacaciones/Incapacidad
+	// Vacaciones/Incapacidad (aliases del backend)
 	total_vacaciones?: number;
 	valor_incapacidad?: number;
 	periodo_start_vacaciones?: string;
@@ -270,21 +292,16 @@ export interface Liquidacion {
 
 export interface ConfiguracionLiquidacion {
 	id: string;
-	salario_minimo: number;
-	auxilio_transporte: number;
-	porcentaje_salud: number;
-	porcentaje_pension: number;
-	porcentaje_cesantias: number;
-	porcentaje_interes_cesantias: number;
-	porcentaje_prima: number;
-	valor_mantenimiento: number;
-	valor_pernote: number;
-	dias_anio: number;
+	nombre: string;
+	valor: number;
+	tipo: string;
+	activo: boolean;
+	anio: number;
 	created_at?: string;
 	updated_at?: string;
 }
 
-// ==================== DTOs ====================
+// ==================== DTOs PARA CREAR/ACTUALIZAR ====================
 
 export interface VehiculoDetalle {
 	vehiculo: {
@@ -301,12 +318,18 @@ export interface CreateLiquidacionPayload {
 	conductor_id: string;
 	periodo_inicio: string;
 	periodo_fin: string;
+
+	// Salarios
 	salario_base: number;
 	salario_villanueva: number;
 	salario_anual: number;
+
+	// Días laborados
 	dias_laborados: number;
 	dias_laborados_villanueva: number;
 	dias_laborados_anual: number;
+
+	// Flags
 	tiene_vacaciones: boolean;
 	tiene_incapacidad: boolean;
 	tiene_cesantias: boolean;
@@ -317,23 +340,40 @@ export interface CreateLiquidacionPayload {
 		mode: 'empresas' | 'total';
 		empresa_ids: string[];
 		porcentaje: number;
-		detalle?: { empresa_id: string; empresa_nombre: string; total_recargos: number; ajuste: number }[];
+		detalle?: {
+			empresa_id: string;
+			empresa_nombre: string;
+			total_recargos: number;
+			ajuste: number;
+		}[];
 	} | null;
 	no_descontar_salud: boolean;
 	no_descontar_pension: boolean;
 	descontar_transporte: boolean;
+
+	// Períodos especiales
 	periodo_vacaciones_inicio?: string;
 	periodo_vacaciones_fin?: string;
 	periodo_incapacidad_inicio?: string;
 	periodo_incapacidad_fin?: string;
+
+	// Ajustes
 	ajuste_valor?: number;
 	ajuste_por_dia?: number;
 	ajuste_parex_valor?: number;
+
+	// Prestaciones
 	cesantias?: number;
 	interes_cesantias?: number;
+
+	// Conceptos adicionales
 	conceptos_adicionales?: ConceptoAdicional[];
+
+	// Detalles de vehículos
 	vehiculos: string[];
 	detalles_vehiculos: VehiculoDetalle[];
+
+	// Anticipos
 	anticipos: Anticipo[];
 }
 
@@ -378,19 +418,22 @@ export interface Prima {
 		id?: string;
 		nombre?: string;
 		apellido?: string;
+		cedula?: string;
 		numero_identificacion?: string;
 		email?: string;
 	};
-	mes: number;
-	anio: number;
+	mes: number; // 1-12
+	anio: number; // YYYY
 	prima: number;
 	prima_pendiente?: number | null;
+
 	// Campos manuales del desprendible de prima
 	tiempo_trabajado_dias?: number | null;
 	sueldo_basico?: number | null;
 	auxilio_transporte?: number | null;
 	sueldo_variable?: number | null;
 	total_base_liquidacion?: number | null;
+
 	estado: PrimaEstado;
 	observaciones?: string | null;
 	creado_por?: { id?: string; nombre?: string; apellido?: string };
@@ -398,8 +441,8 @@ export interface Prima {
 	created_at?: string;
 	updated_at?: string;
 	deleted_at?: string | null;
-	// Firmas del desprendible de prima
-	firmas_desprendibles?: FirmaDesprendible[];
+	firmas_primas?: FirmaPrima[];
+	firmado?: boolean;
 }
 
 export interface CreatePrimaPayload {
@@ -408,12 +451,14 @@ export interface CreatePrimaPayload {
 	anio: number;
 	prima: number;
 	prima_pendiente?: number | null;
+
 	// Campos manuales del desprendible de prima
 	tiempo_trabajado_dias?: number | null;
 	sueldo_basico?: number | null;
 	auxilio_transporte?: number | null;
 	sueldo_variable?: number | null;
 	total_base_liquidacion?: number | null;
+
 	estado?: PrimaEstado;
 	observaciones?: string | null;
 }

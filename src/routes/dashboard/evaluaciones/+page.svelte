@@ -2,589 +2,758 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { fade, fly } from 'svelte/transition';
-	import SortIcon from '$lib/components/ui/SortIcon.svelte';
+	import { getEvaluaciones, deleteEvaluacion, type Evaluacion, type Pregunta } from '$lib/api/evaluaciones';
+	import DataTable from '$lib/components/ui/data-table/DataTable.svelte';
 
-	interface Evaluacion {
-		id: string;
-		titulo: string;
-		descripcion: string | null;
-		requiere_firma: boolean;
-		created_at: string;
-		updated_at: string;
-		preguntas: Pregunta[];
+	let evaluaciones = $state<Evaluacion[]>([]);
+	let isLoading = $state(false);
+	let totalRows = $state(0);
+	let currentPage = $state(1);
+	let pageSize = $state(10);
+	let sortBy = $state<'titulo' | 'created_at'>('created_at');
+	let sortOrder = $state<'asc' | 'desc'>('desc');
+
+	let searchInput = $state('');
+	let searchQuery = $state('');
+	let debounceTimer: ReturnType<typeof setTimeout>;
+
+	onMount(() => {
+		loadEvaluaciones();
+	});
+
+	function debounceSearch() {
+		clearTimeout(debounceTimer);
+		debounceTimer = setTimeout(() => {
+			searchQuery = searchInput;
+			currentPage = 1;
+		}, 300);
 	}
-
-	interface Pregunta {
-		id: string;
-		texto: string;
-		tipo: 'OPCION_UNICA' | 'OPCION_MULTIPLE' | 'NUMERICA' | 'TEXTO' | 'RELACION' | 'VERDADERO_FALSO';
-		puntaje: number;
-		opciones: Opcion[];
-	}
-
-	interface Opcion {
-		id: string;
-		texto: string;
-		esCorrecta: boolean;
-	}
-
-	let evaluaciones: Evaluacion[] = [];
-	let isLoading = false;
-	let error: string | null = null;
-	let searchQuery = '';
-	let sortField: 'titulo' | 'preguntas' | 'puntaje' | 'created_at' = 'created_at';
-	let sortDir: 'asc' | 'desc' = 'desc';
-
-	$: filtered = evaluaciones
-		.filter((e) =>
-			searchQuery.trim() === '' ||
-			e.titulo.toLowerCase().includes(searchQuery.toLowerCase()) ||
-			(e.descripcion ?? '').toLowerCase().includes(searchQuery.toLowerCase())
-		)
-		.sort((a, b) => {
-			let va: any, vb: any;
-			if (sortField === 'titulo')         { va = a.titulo;                 vb = b.titulo; }
-			else if (sortField === 'preguntas') { va = a.preguntas.length;       vb = b.preguntas.length; }
-			else if (sortField === 'puntaje')   { va = calcularPuntajeTotal(a);  vb = calcularPuntajeTotal(b); }
-			else                               { va = a.created_at;             vb = b.created_at; }
-			if (va < vb) return sortDir === 'asc' ? -1 : 1;
-			if (va > vb) return sortDir === 'asc' ?  1 : -1;
-			return 0;
-		});
-
-	onMount(() => { loadEvaluaciones(); });
 
 	async function loadEvaluaciones() {
-		isLoading = true; error = null;
+		isLoading = true;
 		try {
-			const response = await fetch(`${import.meta.env.VITE_API_URL}/api/evaluaciones`);
-			const data = await response.json();
-			if (data.success) { evaluaciones = data.data; }
-			else { error = 'Error al cargar evaluaciones'; }
-		} catch (err: any) {
-			error = err.message || 'Error al cargar evaluaciones';
-		} finally { isLoading = false; }
+			const response = await getEvaluaciones({
+				page: currentPage,
+				limit: pageSize,
+				search: searchQuery || undefined,
+				sortBy,
+				sortOrder
+			});
+
+			if (response.success) {
+				evaluaciones = response.data;
+				totalRows = response.meta?.total ?? response.data.length;
+			}
+		} catch (err) {
+			console.error('Error al cargar evaluaciones:', err);
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	$effect(() => {
+		searchQuery;
+		sortBy;
+		sortOrder;
+		currentPage;
+		loadEvaluaciones();
+	});
+
+	function handleSort(field: string, order: 'asc' | 'desc') {
+		sortBy = field as 'titulo' | 'created_at';
+		sortOrder = order;
+		currentPage = 1;
+	}
+
+	function handlePageChange(page: number) {
+		currentPage = page;
+	}
+
+	function clearSearch() {
+		searchInput = '';
+		searchQuery = '';
+		currentPage = 1;
+	}
+
+	function navigateToCrear() {
+		goto('/dashboard/evaluaciones/crear');
+	}
+
+	function navigateToDetalle(id: string) {
+		goto(`/dashboard/evaluaciones/${id}`);
+	}
+
+	async function handleDelete(id: string, titulo: string) {
+		if (!confirm(`¿Estás seguro de eliminar "${titulo}"?`)) return;
+		try {
+			const r = await deleteEvaluacion(id);
+			if (r.success) loadEvaluaciones();
+		} catch (err) {
+			console.error('Error al eliminar:', err);
+		}
 	}
 
 	function getTipoColor(tipo: string) {
 		const c: Record<string, string> = {
-			OPCION_UNICA: 'chip-blue', OPCION_MULTIPLE: 'chip-purple',
-			NUMERICA: 'chip-green',   TEXTO: 'chip-orange',
-			RELACION: 'chip-pink',    VERDADERO_FALSO: 'chip-teal'
+			OPCION_UNICA: 'chip-blue',
+			OPCION_MULTIPLE: 'chip-purple',
+			NUMERICA: 'chip-green',
+			TEXTO: 'chip-orange',
+			RELACION: 'chip-pink',
+			VERDADERO_FALSO: 'chip-teal'
 		};
 		return c[tipo] || 'chip-gray';
 	}
 
 	function getTipoLabel(tipo: string) {
 		const l: Record<string, string> = {
-			OPCION_UNICA: 'Única',   OPCION_MULTIPLE: 'Múltiple',
-			NUMERICA: 'Numérica',    TEXTO: 'Texto',
-			RELACION: 'Relación',    VERDADERO_FALSO: 'V/F'
+			OPCION_UNICA: 'Única',
+			OPCION_MULTIPLE: 'Múltiple',
+			NUMERICA: 'Numérica',
+			TEXTO: 'Texto',
+			RELACION: 'Relación',
+			VERDADERO_FALSO: 'V/F'
 		};
 		return l[tipo] || tipo;
 	}
 
 	function formatDate(d: string) {
-		return new Date(d).toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+		return new Date(d).toLocaleDateString('es-CO', {
+			year: 'numeric',
+			month: 'short',
+			day: 'numeric'
+		});
 	}
 
 	function calcularPuntajeTotal(e: Evaluacion) {
 		return e.preguntas.reduce((s, p) => s + p.puntaje, 0);
 	}
-
-	function toggleSort(field: typeof sortField) {
-		if (sortField === field) { sortDir = sortDir === 'asc' ? 'desc' : 'asc'; }
-		else { sortField = field; sortDir = 'asc'; }
-	}
-
-	function navigateToCrear()            { goto('/dashboard/evaluaciones/crear'); }
-	function navigateToDetalle(id: string) { goto(`/dashboard/evaluaciones/${id}`); }
-
-	async function deleteEvaluacion(id: string, titulo: string) {
-		if (!confirm(`¿Estás seguro de eliminar "${titulo}"?`)) return;
-		try {
-			const r = await fetch(`${import.meta.env.VITE_API_URL}/api/evaluaciones/${id}`, { method: 'DELETE' });
-			if (r.ok) { evaluaciones = evaluaciones.filter((e) => e.id !== id); }
-			else { alert('Error al eliminar'); }
-		} catch { alert('Error al eliminar'); }
-	}
 </script>
 
-<svelte:head><title>Evaluaciones - Transmeralda</title></svelte:head>
+<svelte:head><title>Evaluaciones - Cotransmeq</title></svelte:head>
 
-<div class="page-wrapper" in:fade={{ duration: 500 }}>
-
-	<!-- Header -->
-	<div class="page-header" in:fly={{ y: -16, duration: 500 }}>
-		<div class="header-left">
-			<div class="header-icon">
-				<svg class="icon-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-						d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-				</svg>
+<div class="dash-wrapper" in:fade={{ duration: 400 }}>
+	<div class="dash">
+		<header class="header">
+			<div class="header-left">
+				<div class="logo-mark" aria-hidden="true">
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+					</svg>
+				</div>
+				<div>
+					<h1>Evaluaciones</h1>
+					<p class="header-sub">Sistema de gestión · {new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+				</div>
 			</div>
-			<div>
-				<h1 class="page-title">Evaluaciones</h1>
-				<p class="page-subtitle">Gestión de evaluaciones y formularios</p>
-			</div>
-		</div>
-		<div class="header-right">
-			<div class="stat-pill">
-				<span class="stat-num">{evaluaciones.length}</span>
-				<span class="stat-label">Total</span>
-			</div>
-			<button class="btn-primary" on:click={navigateToCrear}>
-				<svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+			<button class="btn-primary" on:click={navigateToCrear} aria-label="Crear nueva evaluación">
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+					<line x1="12" y1="5" x2="12" y2="19" />
+					<line x1="5" y1="12" x2="19" y2="12" />
 				</svg>
 				Nueva Evaluación
 			</button>
-		</div>
-	</div>
+		</header>
 
-	<!-- Toolbar -->
-	<div class="toolbar" in:fly={{ y: -8, duration: 500, delay: 100 }}>
-		<div class="search-wrap">
-			<svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-					d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-			</svg>
-			<input class="search-input" type="text" placeholder="Buscar evaluación…" bind:value={searchQuery} />
-			{#if searchQuery}
-				<button class="search-clear" on:click={() => (searchQuery = '')}>✕</button>
-			{/if}
-		</div>
-		<span class="result-count">{filtered.length} resultado{filtered.length !== 1 ? 's' : ''}</span>
-	</div>
-
-	<!-- States -->
-	{#if isLoading}
-		<div class="state-center" in:fade>
-			<div class="spinner"></div>
-			<p class="state-text">Cargando evaluaciones…</p>
-		</div>
-
-	{:else if error}
-		<div class="state-center error-state" in:fade>
-			<svg class="state-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-					d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-			</svg>
-			<p class="state-text">{error}</p>
-			<button class="btn-primary" on:click={loadEvaluaciones}>Reintentar</button>
-		</div>
-
-	{:else if evaluaciones.length === 0}
-		<div class="state-center" in:fade>
-			<svg class="state-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-					d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-			</svg>
-			<p class="state-heading">Sin evaluaciones</p>
-			<p class="state-text">Crea tu primera evaluación para comenzar</p>
-			<button class="btn-primary" on:click={navigateToCrear}>
-				<svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+		<div class="filter-bar" role="search">
+			<div class="search-wrap">
+				<svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+					<circle cx="11" cy="11" r="8" />
+					<line x1="21" y1="21" x2="16.65" y2="16.65" />
 				</svg>
-				Crear Evaluación
-			</button>
+				<input
+					type="search"
+					placeholder="Buscar evaluación..."
+					bind:value={searchInput}
+					on:input={debounceSearch}
+					aria-label="Buscar evaluaciones"
+				/>
+			</div>
 		</div>
 
-	{:else}
-		<!-- ── DESKTOP TABLE ──────────────────────────────────── -->
-		<div class="table-card desktop-only" in:fly={{ y: 16, duration: 500, delay: 200 }}>
-			<table class="ev-table">
-				<thead>
-					<tr>
-						<th class="th-main">
-							<button class="th-btn" on:click={() => toggleSort('titulo')}>
-								Evaluación <SortIcon field="titulo" {sortField} {sortDir} />
-							</button>
-						</th>
-						<th>
-							<button class="th-btn" on:click={() => toggleSort('preguntas')}>
-								Preguntas <SortIcon field="preguntas" {sortField} {sortDir} />
-							</button>
-						</th>
-						<th>
-							<button class="th-btn" on:click={() => toggleSort('puntaje')}>
-								Puntaje <SortIcon field="puntaje" {sortField} {sortDir} />
-							</button>
-						</th>
-						<th>Tipos</th>
-						<th>
-							<button class="th-btn" on:click={() => toggleSort('created_at')}>
-								Creada <SortIcon field="created_at" {sortField} {sortDir} />
-							</button>
-						</th>
-						<th class="th-actions">Acciones</th>
-					</tr>
-				</thead>
-				<tbody>
-					{#each filtered as ev, i (ev.id)}
-						<tr class="ev-row" in:fly={{ x: -12, duration: 250, delay: i * 40 }}
-							on:click={() => navigateToDetalle(ev.id)}>
-							<td class="td-main">
-								<div class="td-title-wrap">
-									<span class="td-title">{ev.titulo}</span>
-									{#if ev.requiere_firma}
-										<span class="badge-firma">
-											<svg class="icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-													d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-											</svg>
-											Firma
-										</span>
-									{/if}
-								</div>
-								{#if ev.descripcion}
-									<p class="td-desc">{ev.descripcion}</p>
-								{/if}
-							</td>
-							<td class="td-center"><span class="num-badge green">{ev.preguntas.length}</span></td>
-							<td class="td-center"><span class="num-badge blue">{calcularPuntajeTotal(ev)}</span></td>
-							<td>
-								<div class="chips-wrap">
-									{#each [...new Set(ev.preguntas.map((p) => p.tipo))] as tipo}
-										<span class="chip {getTipoColor(tipo)}">{getTipoLabel(tipo)}</span>
-									{/each}
-								</div>
-							</td>
-							<td class="td-date">{formatDate(ev.created_at)}</td>
-							<td class="td-actions" on:click|stopPropagation>
-								<button class="btn-icon btn-view" title="Ver" on:click={() => navigateToDetalle(ev.id)}>
-									<svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-											d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-											d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-									</svg>
-								</button>
-								<button class="btn-icon btn-delete" title="Eliminar"
-									on:click={() => deleteEvaluacion(ev.id, ev.titulo)}>
-									<svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-											d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-									</svg>
-								</button>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-			{#if filtered.length === 0 && searchQuery}
-				<div class="no-results">Sin resultados para <strong>"{searchQuery}"</strong></div>
+		<div class="results-info" aria-live="polite" aria-atomic="true">
+			{#if isLoading}
+				<span>Cargando...</span>
+			{:else}
+				<span>{totalRows} resultado{totalRows !== 1 ? 's' : ''} encontrado{totalRows !== 1 ? 's' : ''}</span>
+				{#if searchQuery}
+					<button class="reset-btn" on:click={clearSearch}>
+						Limpiar búsqueda
+					</button>
+				{/if}
 			{/if}
 		</div>
 
-		<!-- ── MOBILE CARDS ───────────────────────────────────── -->
-		<div class="mobile-only" in:fly={{ y: 16, duration: 500, delay: 200 }}>
-			{#if filtered.length === 0 && searchQuery}
-				<div class="no-results-mobile">Sin resultados para <strong>"{searchQuery}"</strong></div>
+		<div class="desktop-only">
+			<DataTable
+				data={evaluaciones}
+				columns={[
+					{
+						key: 'titulo',
+						label: 'Evaluación',
+						sortable: true,
+						render: (ev: Evaluacion) => {
+							if (!ev) return '<span class="text-muted">Sin datos</span>';
+							const titulo = ev.titulo || 'Sin título';
+							const desc = ev.descripcion ? `<p class="td-desc">${ev.descripcion}</p>` : '';
+							return `<div class="cell-titulo"><span class="td-title td-title-truncate">${titulo}</span>${desc}</div>`;
+						}
+					},
+					{
+						key: 'requiere_firma',
+						label: 'Firma',
+						align: 'center',
+						render: (ev: Evaluacion) => {
+							if (!ev) return '';
+							return ev.requiere_firma
+								? '<span class="badge-firma">Firma</span>'
+								: '<span class="text-muted">No</span>';
+						}
+					},
+					{
+						key: 'preguntas',
+						label: 'Preguntas',
+						align: 'center',
+						render: (ev: Evaluacion) => {
+							const count = ev?.preguntas?.length ?? 0;
+							return `<span class="num-badge">${count}</span>`;
+						}
+					},
+					{
+						key: 'puntaje',
+						label: 'Puntaje',
+						align: 'center',
+						render: (ev: Evaluacion) => {
+							const total = ev ? calcularPuntajeTotal(ev) : 0;
+							return `<span class="num-badge blue">${total}</span>`;
+						}
+					},
+					{
+						key: 'tipos',
+						label: 'Tipos',
+						render: (ev: Evaluacion) => {
+							if (!ev?.preguntas?.length) return '<span class="text-muted">-</span>';
+							const tipos = [...new Set(ev.preguntas.map((p: Pregunta) => p.tipo))];
+							const chips = tipos.map((t: string) => `<span class="chip ${getTipoColor(t)}">${getTipoLabel(t)}</span>`).join('');
+							return `<div class="chips-wrap">${chips}</div>`;
+						}
+					},
+					{
+						key: 'created_at',
+						label: 'Creada',
+						sortable: true,
+						render: (ev: Evaluacion) => {
+							const date = ev?.created_at ? formatDate(ev.created_at) : '-';
+							return `<span class="td-date">${date}</span>`;
+						}
+					},
+					{
+						key: 'acciones',
+						label: 'Acciones',
+						align: 'right',
+						render: (ev: Evaluacion) => {
+							if (!ev?.id) return '';
+							return `
+								<div class="actions-wrap">
+									<button class="action-btn view" title="Ver" data-action="view">
+										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+											<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+											<circle cx="12" cy="12" r="3" />
+										</svg>
+									</button>
+									<button class="action-btn delete" title="Eliminar" data-action="delete">
+										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+											<polyline points="3 6 5 6 21 6" />
+											<path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+										</svg>
+									</button>
+								</div>
+							`;
+						}
+					}
+				]}
+				{isLoading}
+				{totalRows}
+				{currentPage}
+				{pageSize}
+				onPageChange={handlePageChange}
+				onSortChange={handleSort}
+				onRowClick={(row) => {
+					const ev = row as Evaluacion;
+					if (ev?.id) navigateToDetalle(ev.id);
+				}}
+				onAction={(action, row) => {
+					if (!row) return;
+					const ev = row as Evaluacion;
+					if (action === 'view') {
+						navigateToDetalle(ev.id);
+					} else if (action === 'delete') {
+						handleDelete(ev.id, ev.titulo || '');
+					}
+				}}
+				emptyMessage={searchQuery ? 'Sin resultados para la búsqueda' : 'No hay evaluaciones creadas'}
+				emptyActionLabel={!searchQuery ? 'Crear primera evaluación' : undefined}
+				onEmptyAction={navigateToCrear}
+			/>
+		</div>
+
+		<div class="mobile-only">
+			{#if isLoading}
+				<div class="empty" role="status">
+					<div class="spinner"></div>
+					<p>Cargando...</p>
+				</div>
+			{:else if evaluaciones.length === 0}
+				<div class="empty" role="status">
+					<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+						<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+						<polyline points="14 2 14 8 20 8" />
+					</svg>
+					<p>{searchQuery ? 'Sin resultados para la búsqueda' : 'No hay evaluaciones creadas'}</p>
+					{#if !searchQuery}
+						<button class="btn-primary" on:click={navigateToCrear}>
+							Crear primera evaluación
+						</button>
+					{/if}
+				</div>
 			{:else}
 				<div class="cards-grid">
-					{#each filtered as ev, i (ev.id)}
-						<div class="m-card" in:fly={{ y: 12, duration: 250, delay: i * 50 }}>
-							<!-- Card header -->
-							<div class="m-card-header" on:click={() => navigateToDetalle(ev.id)}>
+					{#each evaluaciones as ev (ev.id)}
+						<div class="m-card" on:click={() => navigateToDetalle(ev.id)}>
+							<div class="m-card-header">
 								<div class="m-card-title-row">
 									<span class="m-card-title">{ev.titulo}</span>
 									{#if ev.requiere_firma}
-										<span class="badge-firma">
-											<svg class="icon-xs" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-													d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-											</svg>
-											Firma
-										</span>
+										<span class="badge-firma">Firma</span>
 									{/if}
 								</div>
 								{#if ev.descripcion}
 									<p class="m-card-desc">{ev.descripcion}</p>
 								{/if}
 							</div>
-
-							<!-- Stats row -->
 							<div class="m-card-stats">
 								<div class="m-stat">
-									<span class="num-badge green">{ev.preguntas.length}</span>
+									<span class="num-badge">{ev.preguntas.length}</span>
 									<span class="m-stat-label">Preguntas</span>
 								</div>
 								<div class="m-stat">
 									<span class="num-badge blue">{calcularPuntajeTotal(ev)}</span>
 									<span class="m-stat-label">Puntos</span>
 								</div>
-								<div class="m-stat-date">
-									<svg class="icon-xs2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-											d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-									</svg>
-									{formatDate(ev.created_at)}
-								</div>
+								<div class="m-stat-date">{formatDate(ev.created_at)}</div>
 							</div>
-
-							<!-- Chips -->
 							<div class="chips-wrap m-chips">
 								{#each [...new Set(ev.preguntas.map((p) => p.tipo))] as tipo}
 									<span class="chip {getTipoColor(tipo)}">{getTipoLabel(tipo)}</span>
 								{/each}
-							</div>
-
-							<!-- Actions -->
-							<div class="m-card-actions">
-								<button class="btn-full-view" on:click={() => navigateToDetalle(ev.id)}>
-									<svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-											d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-											d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-									</svg>
-									Ver Detalle
-								</button>
-								<button class="btn-icon btn-delete"
-									on:click={() => deleteEvaluacion(ev.id, ev.titulo)}>
-									<svg class="icon-sm" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-											d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-									</svg>
-								</button>
 							</div>
 						</div>
 					{/each}
 				</div>
 			{/if}
 		</div>
-	{/if}
+	</div>
 </div>
 
 <style>
-	/* ── Base ─────────────────────────────────────────────────── */
-	.page-wrapper { display: flex; flex-direction: column; gap: 1.25rem; padding: 1.5rem; }
-
-	/* ── Responsive visibility ────────────────────────────────── */
-	.desktop-only { display: block; }
-	.mobile-only  { display: none; }
-	@media (max-width: 767px) {
-		.desktop-only { display: none; }
-		.mobile-only  { display: block; }
-		.page-wrapper { padding: 1rem; gap: 1rem; }
+	.dash-wrapper {
+		--surface: #fff;
+		--surface-hover: #f9fafb;
+		--border: #e5e7eb;
+		--border-hover: #d1d5db;
+		--text-primary: #111827;
+		--text-secondary: #4b5563;
+		--text-muted: #6b7280;
+		--accent: #f97316;
+		--accent-hover: #ea580c;
+		--accent-bg: #d1fae5;
 	}
 
-	/* ── Header ───────────────────────────────────────────────── */
-	.page-header {
-		display: flex; align-items: center; justify-content: space-between;
-		flex-wrap: wrap; gap: 1rem;
-		background: linear-gradient(135deg, #fff7ed 0%, #fffbeb 100%);
-		border: 1px solid #fed7aa; border-radius: 1.25rem; padding: 1.5rem 2rem;
+	.dash {
+		padding: 2rem 2.5rem 4rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1.25rem;
 	}
-	@media (max-width: 767px) { .page-header { padding: 1rem 1.25rem; } }
-	.header-left  { display: flex; align-items: center; gap: 1rem; }
-	.header-right { display: flex; align-items: center; gap: 0.75rem; }
-	.header-icon {
-		display: flex; align-items: center; justify-content: center;
-		width: 3.25rem; height: 3.25rem; flex-shrink: 0;
-		background: linear-gradient(135deg, #f97316, #d97706);
-		border-radius: 1rem; box-shadow: 0 4px 14px #f9731640;
-	}
-	@media (max-width: 767px) {
-		.header-icon { width: 2.5rem; height: 2.5rem; border-radius: 0.75rem; }
-	}
-	.page-title    { font-size: 1.75rem; font-weight: 800; color: #111827; line-height: 1.1; }
-	.page-subtitle { font-size: 0.875rem; color: #6b7280; margin-top: 0.125rem; }
-	@media (max-width: 767px) {
-		.page-title    { font-size: 1.35rem; }
-		.page-subtitle { font-size: 0.78rem; }
-	}
-	.stat-pill {
-		display: flex; flex-direction: column; align-items: center;
-		background: white; border: 1px solid #fed7aa;
-		border-radius: 0.75rem; padding: 0.5rem 1rem;
-	}
-	.stat-num   { font-size: 1.5rem; font-weight: 800; color: #ea580c; line-height: 1; }
-	.stat-label { font-size: 0.7rem; color: #6b7280; text-transform: uppercase; letter-spacing: .05em; }
 
-	/* ── Buttons ──────────────────────────────────────────────── */
+	.header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		padding-bottom: 1rem;
+		border-bottom: 1px solid var(--border);
+		flex-wrap: wrap;
+	}
+
+	.header-left {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+	}
+
+	.logo-mark {
+		width: 40px;
+		height: 40px;
+		background: var(--accent-bg);
+		color: var(--accent);
+		border-radius: 10px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+	}
+
+	h1 {
+		font-size: 1.2rem;
+		font-weight: 700;
+		color: var(--text-primary);
+		letter-spacing: -0.02em;
+		line-height: 1.2;
+	}
+
+	.header-sub {
+		font-size: 11px;
+		color: var(--text-muted);
+		margin-top: 2px;
+	}
+
 	.btn-primary {
-		display: inline-flex; align-items: center; gap: 0.5rem;
-		background: linear-gradient(135deg, #f97316, #d97706);
-		color: white; font-weight: 700; font-size: 0.9rem;
-		padding: 0.65rem 1.4rem; border-radius: 0.75rem;
-		border: none; cursor: pointer; box-shadow: 0 4px 14px #f9731635;
-		transition: transform .15s, box-shadow .15s;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 8px 16px;
+		background: var(--accent);
+		color: #fff;
+		border: none;
+		border-radius: 8px;
+		font-size: 13px;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.15s;
+		white-space: nowrap;
+		font-family: inherit;
 	}
-	.btn-primary:hover  { transform: translateY(-1px); box-shadow: 0 6px 20px #f9731645; }
-	.btn-primary:active { transform: translateY(0); }
-	@media (max-width: 767px) {
-		.btn-primary { padding: 0.55rem 1rem; font-size: 0.82rem; }
-	}
-	.btn-icon {
-		display: inline-flex; align-items: center; justify-content: center;
-		width: 2rem; height: 2rem; border-radius: 0.5rem;
-		border: none; cursor: pointer; transition: background .15s, transform .1s;
-	}
-	.btn-icon:hover { transform: scale(1.1); }
-	.btn-view          { background: #fff7ed; color: #ea580c; }
-	.btn-view:hover    { background: #fed7aa; }
-	.btn-delete        { background: #fef2f2; color: #dc2626; }
-	.btn-delete:hover  { background: #fee2e2; }
-	.btn-full-view {
-		flex: 1; display: inline-flex; align-items: center; justify-content: center;
-		gap: 0.4rem; background: #fff7ed; color: #ea580c;
-		font-weight: 700; font-size: 0.85rem;
-		padding: 0.55rem 1rem; border-radius: 0.6rem;
-		border: none; cursor: pointer; transition: background .15s;
-	}
-	.btn-full-view:hover { background: #fed7aa; }
 
-	/* ── Toolbar ──────────────────────────────────────────────── */
-	.toolbar { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+	.btn-primary:hover {
+		background: var(--accent-hover);
+		transform: translateY(-1px);
+	}
+
+	.btn-primary:active {
+		transform: scale(0.98);
+	}
+
+	.filter-bar {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		flex-wrap: wrap;
+	}
+
 	.search-wrap {
-		position: relative; display: flex; align-items: center;
-		background: white; border: 1.5px solid #d1d5db;
-		border-radius: 0.75rem; flex: 1; min-width: 200px; max-width: 400px;
-		transition: border-color .2s;
-	}
-	.search-wrap:focus-within { border-color: #f97316; box-shadow: 0 0 0 3px #f9731620; }
-	.search-icon { width: 1rem; height: 1rem; color: #9ca3af; position: absolute; left: 0.75rem; pointer-events: none; }
-	.search-input {
-		width: 100%; padding: 0.55rem 2.25rem;
-		font-size: 0.875rem; background: transparent;
-		border: none; outline: none; color: #111827;
-	}
-	.search-clear {
-		position: absolute; right: 0.6rem;
-		background: none; border: none; cursor: pointer;
-		color: #9ca3af; font-size: 0.75rem; padding: 0.2rem;
-	}
-	.search-clear:hover { color: #6b7280; }
-	.result-count { font-size: 0.8rem; color: #9ca3af; white-space: nowrap; }
-
-	/* ── Desktop table ────────────────────────────────────────── */
-	.table-card {
-		background: white; border: 1px solid #e5e7eb;
-		border-radius: 1.25rem; overflow: hidden;
-		box-shadow: 0 1px 8px #0000000a;
-	}
-	.ev-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
-	.ev-table thead tr { background: #f9fafb; border-bottom: 1.5px solid #e5e7eb; }
-	.ev-table th {
-		padding: 0.9rem 1rem; text-align: left;
-		font-size: 0.75rem; font-weight: 700; color: #6b7280;
-		text-transform: uppercase; letter-spacing: .06em; white-space: nowrap;
-	}
-	.th-main    { padding-left: 1.5rem; width: 35%; }
-	.th-actions { text-align: right; padding-right: 1.5rem; }
-	.th-btn {
-		display: inline-flex; align-items: center; gap: 0.35rem;
-		background: none; border: none; cursor: pointer;
-		color: #6b7280; font-size: inherit; font-weight: 700;
-		text-transform: uppercase; letter-spacing: .06em; padding: 0;
-	}
-	.th-btn:hover { color: #ea580c; }
-	.ev-row { border-bottom: 1px solid #f3f4f6; cursor: pointer; transition: background .12s; }
-	.ev-row:last-child { border-bottom: none; }
-	.ev-row:hover      { background: #fff7ed; }
-	.ev-table td { padding: 0.85rem 1rem; vertical-align: middle; }
-	.td-main    { padding-left: 1.5rem; }
-	.td-center  { text-align: center; }
-	.td-date    { color: #9ca3af; white-space: nowrap; font-size: 0.8rem; }
-	.td-actions { text-align: right; padding-right: 1.25rem; }
-	.td-title-wrap { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-	.td-title      { font-weight: 700; color: #111827; }
-	.td-desc {
-		font-size: 0.78rem; color: #6b7280; margin-top: 0.2rem;
-		max-width: 28ch; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
-	}
-	.no-results { text-align: center; padding: 2.5rem; color: #9ca3af; font-size: 0.875rem; }
-	.no-results strong { color: #6b7280; }
-
-	/* ── Mobile cards ─────────────────────────────────────────── */
-	.cards-grid { display: flex; flex-direction: column; gap: 0.875rem; }
-	.no-results-mobile {
-		text-align: center; padding: 2rem; color: #9ca3af;
-		font-size: 0.875rem; background: white;
-		border: 1px solid #e5e7eb; border-radius: 1rem;
-	}
-	.m-card {
-		background: white; border: 1px solid #e5e7eb;
-		border-radius: 1rem; overflow: hidden;
-		box-shadow: 0 1px 6px #0000000d;
-	}
-	.m-card-header {
-		padding: 1rem 1rem 0.75rem;
-		cursor: pointer; transition: background .12s;
-	}
-	.m-card-header:active { background: #fff7ed; }
-	.m-card-title-row { display: flex; align-items: flex-start; gap: 0.5rem; flex-wrap: wrap; }
-	.m-card-title  { font-weight: 700; color: #111827; font-size: 0.95rem; flex: 1; }
-	.m-card-desc   { font-size: 0.78rem; color: #6b7280; margin-top: 0.3rem; line-height: 1.4; }
-	.m-card-stats  {
-		display: flex; align-items: center; gap: 1rem;
-		padding: 0.6rem 1rem; background: #f9fafb;
-		border-top: 1px solid #f3f4f6; border-bottom: 1px solid #f3f4f6;
-	}
-	.m-stat        { display: flex; align-items: center; gap: 0.4rem; }
-	.m-stat-label  { font-size: 0.72rem; color: #9ca3af; }
-	.m-stat-date   {
-		display: flex; align-items: center; gap: 0.3rem;
-		margin-left: auto; font-size: 0.72rem; color: #9ca3af;
-	}
-	.m-chips { padding: 0.6rem 1rem; }
-	.m-card-actions {
-		display: flex; align-items: center; gap: 0.5rem;
-		padding: 0.75rem 1rem;
-		border-top: 1px solid #f3f4f6;
+		position: relative;
+		display: flex;
+		align-items: center;
+		flex: 1;
+		min-width: 200px;
+		max-width: 400px;
 	}
 
-	/* ── Shared badges & chips ────────────────────────────────── */
-	.badge-firma {
-		display: inline-flex; align-items: center; gap: 0.2rem;
-		background: #f3e8ff; color: #7c3aed;
-		font-size: 0.68rem; font-weight: 700;
-		padding: 0.15rem 0.5rem; border-radius: 999px;
+	.search-icon {
+		position: absolute;
+		left: 12px;
+		color: var(--text-muted);
+		pointer-events: none;
 	}
-	.num-badge {
-		display: inline-block; font-size: 0.9rem; font-weight: 800;
-		padding: 0.2rem 0.65rem; border-radius: 0.5rem;
-	}
-	.num-badge.green { background: #fff7ed; color: #ea580c; }
-	.num-badge.blue  { background: #eff6ff; color: #2563eb; }
-	.chips-wrap { display: flex; flex-wrap: wrap; gap: 0.3rem; }
-	.chip {
-		font-size: 0.68rem; font-weight: 600;
-		padding: 0.2rem 0.55rem; border-radius: 999px;
-	}
-	.chip-blue   { background: #dbeafe; color: #1d4ed8; }
-	.chip-purple { background: #ede9fe; color: #6d28d9; }
-	.chip-green  { background: #dcfce7; color: #15803d; }
-	.chip-orange { background: #ffedd5; color: #c2410c; }
-	.chip-pink   { background: #fce7f3; color: #be185d; }
-	.chip-teal   { background: #ccfbf1; color: #0f766e; }
-	.chip-gray   { background: #f3f4f6; color: #4b5563; }
 
-	/* ── State screens ────────────────────────────────────────── */
-	.state-center {
-		display: flex; flex-direction: column; align-items: center;
-		justify-content: center; gap: 1rem; padding: 4rem 2rem; text-align: center;
-		background: white; border: 1px solid #e5e7eb; border-radius: 1.25rem;
+	.search-wrap input {
+		width: 100%;
+		padding: 9px 12px 9px 36px;
+		font-size: 13px;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 8px;
+		color: var(--text-primary);
+		font-family: inherit;
+		outline: none;
+		transition: border-color 0.15s, box-shadow 0.15s;
 	}
-	.error-state { border-color: #fecaca; background: #fff5f5; }
-	.state-icon  { width: 3.5rem; height: 3.5rem; color: #d1d5db; }
-	.error-state .state-icon { color: #f87171; }
-	.state-heading { font-size: 1.1rem; font-weight: 700; color: #111827; margin: 0; }
-	.state-text    { font-size: 0.875rem; color: #6b7280; margin: 0; }
 
-	/* ── Icons ────────────────────────────────────────────────── */
-	.icon-lg  { width: 1.75rem; height: 1.75rem; color: white; }
-	.icon-sm  { width: 1rem;    height: 1rem; }
-	.icon-xs  { width: 0.65rem; height: 0.65rem; }
-	.icon-xs2 { width: 0.75rem; height: 0.75rem; }
+	.search-wrap input:focus {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+	}
 
-	/* ── Spinner ──────────────────────────────────────────────── */
+	.search-wrap input::placeholder {
+		color: var(--text-muted);
+	}
+
+	.results-info {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		font-size: 12px;
+		color: var(--text-muted);
+	}
+
+	.reset-btn {
+		background: none;
+		border: none;
+		color: var(--accent);
+		font-size: 12px;
+		font-weight: 500;
+		cursor: pointer;
+		padding: 0;
+		font-family: inherit;
+	}
+
+	.reset-btn:hover {
+		text-decoration: underline;
+	}
+
+	/* Cell styles */
+	:global(.cell-titulo) {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+
+	:global(.td-title) {
+		font-weight: 600;
+		color: var(--text-primary);
+	}
+
+	:global(.td-title-truncate) {
+		display: block;
+		max-width: 400px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	:global(.td-desc) {
+		font-size: 11px;
+		color: var(--text-muted);
+		margin: 0;
+		max-width: 300px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	:global(.td-date) {
+		color: var(--text-muted);
+		font-size: 12px;
+	}
+
+	:global(.num-badge) {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 28px;
+		height: 24px;
+		padding: 0 8px;
+		font-size: 12px;
+		font-weight: 600;
+		background: #ecfdf5;
+		color: #ea580c;
+		border-radius: 6px;
+	}
+
+	:global(.num-badge.blue) {
+		background: #eff6ff;
+		color: #2563eb;
+	}
+
+	:global(.badge-firma) {
+		display: inline-flex;
+		align-items: center;
+		padding: 2px 6px;
+		font-size: 10px;
+		font-weight: 600;
+		background: #f3e8ff;
+		color: #7c3aed;
+		border-radius: 4px;
+	}
+
+	:global(.chips-wrap) {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+	}
+
+	:global(.chip) {
+		font-size: 10px;
+		font-weight: 600;
+		padding: 2px 6px;
+		border-radius: 4px;
+	}
+
+	:global(.chip-blue) { background: #dbeafe; color: #1d4ed8; }
+	:global(.chip-purple) { background: #ede9fe; color: #6d28d9; }
+	:global(.chip-green) { background: #dcfce7; color: #15803d; }
+	:global(.chip-orange) { background: #ffedd5; color: #c2410c; }
+	:global(.chip-pink) { background: #fce7f3; color: #be185d; }
+	:global(.chip-teal) { background: #ccfbf1; color: #0f766e; }
+	:global(.chip-gray) { background: #f3f4f6; color: #4b5563; }
+
+	:global(.actions-wrap) {
+		display: inline-flex;
+		gap: 4px;
+	}
+
+	:global(.action-btn) {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 28px;
+		height: 28px;
+		border: none;
+		border-radius: 6px;
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+
+	:global(.action-btn.view) {
+		background: #ecfdf5;
+		color: #ea580c;
+	}
+
+	:global(.action-btn.view:hover) {
+		background: #d1fae5;
+	}
+
+	:global(.action-btn.delete) {
+		background: #fef2f2;
+		color: #dc2626;
+	}
+
+	:global(.action-btn.delete:hover) {
+		background: #fee2e2;
+	}
+
+	/* Empty & spinner */
+	.empty {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 12px;
+		padding: 60px 20px;
+		text-align: center;
+		color: var(--text-muted);
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 12px;
+	}
+
+	.empty svg {
+		color: #d1d5db;
+	}
+
+	.empty p {
+		font-size: 13px;
+		margin: 0;
+	}
+
 	.spinner {
-		width: 2.5rem; height: 2.5rem;
-		border: 3px solid #fed7aa; border-top-color: #ea580c;
-		border-radius: 50%; animation: spin .7s linear infinite;
+		width: 32px;
+		height: 32px;
+		border: 3px solid #e5e7eb;
+		border-top-color: var(--accent);
+		border-radius: 50%;
+		animation: spin 0.7s linear infinite;
 	}
-	@keyframes spin { to { transform: rotate(360deg); } }
+
+	@keyframes spin {
+		to { transform: rotate(360deg); }
+	}
+
+	/* Responsive */
+	.desktop-only { display: block; }
+	.mobile-only { display: none; }
+
+	@media (max-width: 767px) {
+		.dash {
+			padding: 1.25rem 1rem 2rem;
+		}
+		.desktop-only { display: none; }
+		.mobile-only { display: block; }
+	}
+
+	/* Mobile cards */
+	.cards-grid {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+
+	.m-card {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 12px;
+		padding: 16px;
+		cursor: pointer;
+		transition: all 0.15s;
+	}
+
+	.m-card:hover {
+		border-color: var(--accent);
+	}
+
+	.m-card-header {
+		margin-bottom: 12px;
+	}
+
+	.m-card-title-row {
+		display: flex;
+		align-items: flex-start;
+		gap: 8px;
+		flex-wrap: wrap;
+	}
+
+	.m-card-title {
+		font-weight: 600;
+		font-size: 14px;
+		color: var(--text-primary);
+		flex: 1;
+	}
+
+	.m-card-desc {
+		font-size: 12px;
+		color: var(--text-muted);
+		margin: 4px 0 0;
+	}
+
+	.m-card-stats {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 10px 0;
+		border-top: 1px solid #f3f4f6;
+		border-bottom: 1px solid #f3f4f6;
+		margin-bottom: 10px;
+	}
+
+	.m-stat {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+
+	.m-stat-label {
+		font-size: 11px;
+		color: var(--text-muted);
+	}
+
+	.m-stat-date {
+		margin-left: auto;
+		font-size: 11px;
+		color: var(--text-muted);
+	}
+
+	.m-chips {
+		margin: 0;
+	}
 </style>

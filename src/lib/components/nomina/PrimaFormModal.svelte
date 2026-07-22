@@ -185,8 +185,8 @@
 			<!-- Header -->
 			<div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
 				<div class="flex items-center gap-3">
-					<div class="rounded-lg bg-emerald-100 p-2">
-						<Sparkles class="h-5 w-5 text-emerald-600" />
+					<div class="rounded-lg bg-orange-100 p-2">
+						<Sparkles class="h-5 w-5 text-orange-600" />
 					</div>
 					<div>
 						<h2 class="text-lg font-semibold text-gray-900">
@@ -226,7 +226,7 @@
 						disabled={loadingConductores}
 						--border-radius="0.5rem"
 						--border="1px solid #E5E7EB"
-						--border-focused="1px solid #10b981"
+						--border-focused="1px solid #f97316"
 						--padding="0.625rem 0.875rem"
 						--height="40px"
 					/>
@@ -247,7 +247,7 @@
 						<select
 							id="mes"
 							bind:value={mes}
-							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 						>
 							<option value={null}>— Seleccione —</option>
 							{#each MESES as m}
@@ -271,7 +271,7 @@
 							bind:value={anio}
 							min="2000"
 							max="2100"
-							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 						/>
 						{#if errors.anio}
 							<p class="mt-1 text-xs text-red-500">{errors.anio}</p>
@@ -297,7 +297,7 @@
 							on:focus={handleCOPFocus}
 							on:blur={handleCOPBlur}
 							on:input={(e) => (primaValor = parseCOPInput(e.currentTarget.value))}
-							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 						/>
 						{#if errors.prima}
 							<p class="mt-1 text-xs text-red-500">{errors.prima}</p>
@@ -320,7 +320,7 @@
 							on:blur={handleCOPBlur}
 							on:input={(e) =>
 								(primaPendiente = parseCOPInput(e.currentTarget.value) || null)}
-							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 						/>
 					</div>
 				</div>
@@ -336,7 +336,7 @@
 					<select
 						id="estado"
 						bind:value={estado}
-						class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+						class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
 					>
 						<option value="Pendiente">Pendiente</option>
 						<option value="Pagado">Pagado</option>
@@ -356,109 +356,115 @@
 						bind:value={observaciones}
 						rows="3"
 						placeholder="Notas adicionales..."
-						class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-				></textarea>
-			</div>
+						class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+					></textarea>
+				</div>
 
-			<!-- Campos manuales del desprendible -->
-			<div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
-				<h4 class="mb-3 text-xs font-semibold tracking-wide text-gray-500 uppercase">
-					Datos del Desprendible de Prima
-				</h4>
-				<div class="grid grid-cols-2 gap-4">
-					<!-- Tiempo trabajado (días) -->
-					<div>
-						<label for="tiempo-dias" class="mb-1.5 block text-xs font-medium text-gray-700">
-							Tiempo Trabajado (días)
-						</label>
-						<input
-							id="tiempo-dias"
-							type="number"
-							bind:value={tiempo_trabajado_dias}
-							min="0"
-							max="365"
-							placeholder="180"
-							class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-						/>
-					</div>
+				<!-- Campos manuales del desprendible -->
+				<div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
+					<h4 class="mb-3 text-xs font-semibold tracking-wide text-gray-500 uppercase">
+						Datos del Desprendible de Prima
+					</h4>
+					<div class="grid grid-cols-2 gap-4">
+						<!-- Tiempo trabajado (días) -->
+						<div>
+							<label for="tiempo-dias" class="mb-1.5 block text-xs font-medium text-gray-700">
+								Tiempo Trabajado (días)
+							</label>
+							<input
+								id="tiempo-dias"
+								type="number"
+								bind:value={tiempo_trabajado_dias}
+								min="0"
+								max="365"
+								placeholder="180"
+								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+							/>
+						</div>
 
-					<!-- Sueldo Básico -->
-					<div>
-						<label for="sueldo-basico" class="mb-1.5 block text-xs font-medium text-gray-700">
-							Sueldo Básico
-						</label>
-						<input
-							id="sueldo-basico"
-							type="text"
-							inputmode="numeric"
-							placeholder="$ 0"
-							value={sueldo_basico ? '$ ' + formatCOPInput(sueldo_basico) : ''}
-							on:focus={handleCOPFocus}
-							on:blur={handleCOPBlur}
-							on:input={(e) => (sueldo_basico = parseCOPInput(e.currentTarget.value) || null)}
-							class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-						/>
-					</div>
+						<!-- Sueldo Básico -->
+						<div>
+							<label for="sueldo-basico" class="mb-1.5 block text-xs font-medium text-gray-700">
+								Sueldo Básico
+							</label>
+							<input
+								id="sueldo-basico"
+								type="text"
+								inputmode="numeric"
+								placeholder="$ 0"
+								value={sueldo_basico ? '$ ' + formatCOPInput(sueldo_basico) : ''}
+								on:focus={handleCOPFocus}
+								on:blur={handleCOPBlur}
+								on:input={(e) => (sueldo_basico = parseCOPInput(e.currentTarget.value) || null)}
+								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+							/>
+						</div>
 
-					<!-- Auxilio de Transporte -->
-					<div>
-						<label for="auxilio-transporte" class="mb-1.5 block text-xs font-medium text-gray-700">
-							Auxilio de Transporte
-						</label>
-						<input
-							id="auxilio-transporte"
-							type="text"
-							inputmode="numeric"
-							placeholder="$ 0"
-							value={auxilio_transporte ? '$ ' + formatCOPInput(auxilio_transporte) : ''}
-							on:focus={handleCOPFocus}
-							on:blur={handleCOPBlur}
-							on:input={(e) =>
-								(auxilio_transporte = parseCOPInput(e.currentTarget.value) || null)}
-							class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-						/>
-					</div>
+						<!-- Auxilio de Transporte -->
+						<div>
+							<label
+								for="auxilio-transporte"
+								class="mb-1.5 block text-xs font-medium text-gray-700"
+							>
+								Auxilio de Transporte
+							</label>
+							<input
+								id="auxilio-transporte"
+								type="text"
+								inputmode="numeric"
+								placeholder="$ 0"
+								value={auxilio_transporte ? '$ ' + formatCOPInput(auxilio_transporte) : ''}
+								on:focus={handleCOPFocus}
+								on:blur={handleCOPBlur}
+								on:input={(e) =>
+									(auxilio_transporte = parseCOPInput(e.currentTarget.value) || null)}
+								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+							/>
+						</div>
 
-					<!-- Sueldo Variable -->
-					<div>
-						<label for="sueldo-variable" class="mb-1.5 block text-xs font-medium text-gray-700">
-							Sueldo Variable
-						</label>
-						<input
-							id="sueldo-variable"
-							type="text"
-							inputmode="numeric"
-							placeholder="$ 0"
-							value={sueldo_variable ? '$ ' + formatCOPInput(sueldo_variable) : ''}
-							on:focus={handleCOPFocus}
-							on:blur={handleCOPBlur}
-							on:input={(e) => (sueldo_variable = parseCOPInput(e.currentTarget.value) || null)}
-							class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-						/>
-					</div>
+						<!-- Sueldo Variable -->
+						<div>
+							<label
+								for="sueldo-variable"
+								class="mb-1.5 block text-xs font-medium text-gray-700"
+							>
+								Sueldo Variable
+							</label>
+							<input
+								id="sueldo-variable"
+								type="text"
+								inputmode="numeric"
+								placeholder="$ 0"
+								value={sueldo_variable ? '$ ' + formatCOPInput(sueldo_variable) : ''}
+								on:focus={handleCOPFocus}
+								on:blur={handleCOPBlur}
+								on:input={(e) => (sueldo_variable = parseCOPInput(e.currentTarget.value) || null)}
+								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+							/>
+						</div>
 
-					<!-- Total Base de Liquidación (span 2 columns) -->
-					<div class="col-span-2">
-						<label for="total-base" class="mb-1.5 block text-xs font-medium text-gray-700">
-							Total Base de Liquidación
-						</label>
-						<input
-							id="total-base"
-							type="text"
-							inputmode="numeric"
-							placeholder="$ 0"
-							value={total_base_liquidacion
-								? '$ ' + formatCOPInput(total_base_liquidacion)
-								: ''}
-							on:focus={handleCOPFocus}
-							on:blur={handleCOPBlur}
-							on:input={(e) =>
-								(total_base_liquidacion = parseCOPInput(e.currentTarget.value) || null)}
-							class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-						/>
+						<!-- Total Base de Liquidación (span 2 columns) -->
+						<div class="col-span-2">
+							<label for="total-base" class="mb-1.5 block text-xs font-medium text-gray-700">
+								Total Base de Liquidación
+							</label>
+							<input
+								id="total-base"
+								type="text"
+								inputmode="numeric"
+								placeholder="$ 0"
+								value={total_base_liquidacion
+									? '$ ' + formatCOPInput(total_base_liquidacion)
+									: ''}
+								on:focus={handleCOPFocus}
+								on:blur={handleCOPBlur}
+								on:input={(e) =>
+									(total_base_liquidacion = parseCOPInput(e.currentTarget.value) || null)}
+								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+							/>
+						</div>
 					</div>
 				</div>
-			</div>
 			</div>
 
 			<!-- Footer -->
@@ -473,7 +479,7 @@
 				<button
 					on:click={handleSubmit}
 					disabled={loading}
-					class="flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
+					class="flex items-center gap-2 rounded-md bg-orange-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-700 disabled:opacity-50"
 				>
 					{#if loading}
 						<div

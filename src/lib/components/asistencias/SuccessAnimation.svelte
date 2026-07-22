@@ -50,7 +50,7 @@
 						class="confetti"
 						style="--delay: {i * 0.1}s; --x: {Math.random() * 200 -
 							100}px; --rotation: {Math.random() * 360}deg;"
-					/>
+					></div>
 				{/each}
 			</div>
 		</div>

@@ -23,6 +23,7 @@
 		opciones: Opcion[];
 		relacionIzq: string[];
 		relacionDer: string[];
+		respuestaCorrecta?: number;
 	}
 
 	interface Opcion {
@@ -518,7 +519,7 @@
 </script>
 
 <svelte:head>
-	<title>{evaluacion?.titulo || 'Evaluación'} - cotransmeq</title>
+	<title>{evaluacion?.titulo || 'Evaluación'} - Cotransmeq</title>
 </svelte:head>
 
 <!-- Toast Notification -->
@@ -568,14 +569,14 @@
 	</div>
 {/if}
 
-<div class="min-h-screen bg-gradient-to-br from-orange-50 via-white to-amber-50">
+<div class="min-h-screen bg-gradient-to-br from-orange-50 via-white to-teal-50">
 	<!-- Header con Logo Cotransmeq -->
 	<div class="border-b border-gray-200 bg-white shadow-sm">
 		<div class="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
 			<div class="flex items-center justify-between">
 				<div class="flex items-center gap-3">
 					<!-- Logo Cotransmeq -->
-					<img src="/assets/logo.png" alt="Cotransmeq Logo" class="h-12 w-auto sm:h-14 lg:h-16" />
+					<img src="/assets/logo_transmeralda-264.webp" alt="Cotransmeq Logo" class="h-12 w-auto sm:h-14 lg:h-16" />
 				</div>
 				{#if evaluacion && !showResultado}
 					<div class="hidden items-center gap-2 text-sm text-gray-600 sm:flex">
@@ -628,8 +629,8 @@
 		{:else if yaRespondio && miResultado}
 			<!-- Mostrar resultado cuando ya respondió -->
 			<div class="overflow-hidden rounded-xl border border-orange-200 bg-white shadow-lg" in:fade>
-				<!-- Header con colores orange -->
-				<div class="bg-gradient-to-r from-orange-500 to-amber-600 px-6 py-8 sm:px-8">
+				<!-- Header con colores emerald -->
+				<div class="bg-gradient-to-r from-orange-500 to-teal-600 px-6 py-8 sm:px-8">
 					<div class="flex items-center justify-center gap-4">
 						<div class="rounded-full bg-white/20 p-3 backdrop-blur-sm">
 							<svg
@@ -663,7 +664,7 @@
 					<div class="space-y-6 lg:col-span-1">
 						<!-- Puntaje destacado -->
 						<div
-							class="rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50 to-amber-50 p-6"
+							class="rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50 to-teal-50 p-6"
 						>
 							<div class="text-center">
 								<div
@@ -697,7 +698,7 @@
 								<div class="mt-4">
 									<div class="h-3 w-full overflow-hidden rounded-full bg-orange-100">
 										<div
-											class="h-full rounded-full bg-gradient-to-r from-orange-500 to-amber-500 transition-all duration-1000"
+											class="h-full rounded-full bg-gradient-to-r from-orange-500 to-teal-500 transition-all duration-1000"
 											style="width: {Math.round(
 												(miResultado.puntaje_total /
 													(evaluacion?.preguntas.reduce((sum, p) => sum + p.puntaje, 0) || 1)) *
@@ -718,7 +719,7 @@
 
 						<!-- Información Personal -->
 						<div class="overflow-hidden rounded-xl border border-gray-200 bg-white">
-							<div class="bg-gradient-to-r from-orange-500 to-amber-500 px-4 py-3">
+							<div class="bg-gradient-to-r from-orange-500 to-teal-500 px-4 py-3">
 								<h2 class="flex items-center gap-2 text-lg font-bold text-white">
 									<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 										<path
@@ -785,7 +786,7 @@
 					<!-- Columna Derecha: Tus Respuestas -->
 					<div class="lg:col-span-2">
 						<div class="overflow-hidden rounded-xl border border-gray-200 bg-white">
-							<div class="bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-4">
+							<div class="bg-gradient-to-r from-orange-500 to-teal-500 px-6 py-4">
 								<h2 class="flex items-center gap-2 text-xl font-bold text-white">
 									<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 										<path
@@ -866,7 +867,7 @@
 											<!-- Mostrar respuesta según el tipo -->
 											{#if pregunta.tipo === 'TEXTO' && respuesta.valor_texto}
 												<div
-													class="mt-3 rounded-lg border border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50 p-4"
+													class="mt-3 rounded-lg border border-orange-200 bg-gradient-to-r from-orange-50 to-teal-50 p-4"
 												>
 													<p
 														class="mb-2 flex items-center gap-1 text-xs font-semibold text-orange-700"
@@ -1018,25 +1019,29 @@
 													</div>
 												</div>
 											{:else if pregunta.tipo === 'VERDADERO_FALSO'}
-												<div class="mt-3 rounded-lg border border-teal-200 bg-gradient-to-r from-teal-50 to-cyan-50 p-4">
-													<p class="mb-2 text-xs font-semibold text-teal-700">Tu respuesta:</p>
+												{@const valorUsuario = respuesta.valor_numero}
+												{@const esCorrecta = respuesta.puntaje === pregunta.puntaje}
+												<div class="mt-3 rounded-lg border {esCorrecta ? 'border-orange-200 bg-gradient-to-r from-orange-50 to-teal-50' : 'border-red-200 bg-gradient-to-r from-red-50 to-pink-50'} p-4">
+													<p class="mb-2 text-xs font-semibold {esCorrecta ? 'text-orange-700' : 'text-red-700'}">Tu respuesta:</p>
 													<div class="flex items-center gap-3">
-														{#if respuesta.valor_numero === 1}
-															<div class="flex items-center gap-2 rounded-lg bg-orange-100 px-4 py-2 font-bold text-orange-800 shadow-sm">
-																<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-																	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-																</svg>
-																Verdadero
-															</div>
+														{#if esCorrecta}
+															<svg class="h-6 w-6 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
+																<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+															</svg>
 														{:else}
-															<div class="flex items-center gap-2 rounded-lg bg-red-100 px-4 py-2 font-bold text-red-800 shadow-sm">
-																<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-																	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-																</svg>
-																Falso
-															</div>
+															<svg class="h-6 w-6 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+																<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>
+															</svg>
 														{/if}
+														<span class="text-lg font-bold {esCorrecta ? 'text-orange-900' : 'text-red-900'}">
+															{valorUsuario === 1 ? 'Verdadero' : 'Falso'}
+														</span>
 													</div>
+													{#if !esCorrecta}
+														<p class="mt-2 text-xs text-gray-600">
+															La respuesta correcta era: <span class="font-semibold">{pregunta.respuestaCorrecta === 1 ? 'Verdadero' : 'Falso'}</span>
+														</p>
+													{/if}
 												</div>
 											{/if}
 										</div>
@@ -1051,7 +1056,7 @@
 			<!-- Card de Evaluación -->
 			<div class="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg" in:fade>
 				<!-- Header de la Evaluación -->
-				<div class="bg-gradient-to-r from-orange-500 to-amber-600 px-6 py-6 sm:px-8">
+				<div class="bg-gradient-to-r from-orange-500 to-teal-600 px-6 py-6 sm:px-8">
 					<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 						<div class="flex-1">
 							<h2 class="mb-2 text-2xl font-bold text-white sm:text-3xl">{evaluacion.titulo}</h2>
@@ -1093,7 +1098,8 @@
 							<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
 								<div class="md:col-span-2">
 									<label
-										class="mb-2 block flex items-center gap-2 text-sm font-semibold text-gray-700"
+										for="nombre_completo"
+										class="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-700"
 									>
 										<svg
 											class="h-4 w-4 text-orange-600"
@@ -1116,9 +1122,10 @@
 										class="w-full rounded-lg border-2 px-4 py-3 text-base transition-all outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
 										class:border-red-300={errores.nombre_completo}
 										class:border-gray-200={!errores.nombre_completo}
-										class:bg-red-50={errores.nombre_completo}
+										id="nombre_completo"
 										placeholder="Ej: Juan Pérez González"
 									/>
+
 									{#if errores.nombre_completo}
 										<p class="mt-1.5 flex items-center gap-1 text-sm text-red-600">
 											<svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
@@ -1135,7 +1142,8 @@
 
 								<div>
 									<label
-										class="mb-2 block flex items-center gap-2 text-sm font-semibold text-gray-700"
+										for="numero_documento"
+										class="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-700"
 									>
 										<svg
 											class="h-4 w-4 text-orange-600"
@@ -1153,6 +1161,7 @@
 										Número de Documento *
 									</label>
 									<input
+										id="numero_documento"
 										bind:value={numero_documento}
 										type="number"
 										class="w-full rounded-lg border-2 px-4 py-3 text-base transition-all outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
@@ -1177,7 +1186,8 @@
 
 								<div>
 									<label
-										class="mb-2 block flex items-center gap-2 text-sm font-semibold text-gray-700"
+										for="cargo"
+										class="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-700"
 									>
 										<svg
 											class="h-4 w-4 text-orange-600"
@@ -1195,6 +1205,7 @@
 										Cargo *
 									</label>
 									<input
+										id="cargo"
 										bind:value={cargo}
 										type="text"
 										class="w-full rounded-lg border-2 px-4 py-3 text-base transition-all outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
@@ -1217,29 +1228,30 @@
 									{/if}
 								</div>
 
-
 								<div>
 									<label
-										class="mb-2 block flex items-center gap-2 text-sm font-semibold text-gray-700"
-									>
-										<svg
-											class="h-4 w-4 text-orange-600"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
+											for="correo"
+											class="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-700"
 										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-											/>
-										</svg>
-										Correo Electrónico *
-									</label>
-									<input
-										bind:value={correo}
-										type="email"
+											<svg
+												class="h-4 w-4 text-orange-600"
+												fill="none"
+												stroke="currentColor"
+												viewBox="0 0 24 24"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													stroke-width="2"
+													d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+												/>
+											</svg>
+											Correo Electrónico *
+										</label>
+										<input
+											id="correo"
+											bind:value={correo}
+											type="email"
 										class="w-full rounded-lg border-2 px-4 py-3 text-base transition-all outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
 										class:border-red-300={errores.correo}
 										class:border-gray-200={!errores.correo}
@@ -1262,7 +1274,8 @@
 
 								<div>
 									<label
-										class="mb-2 block flex items-center gap-2 text-sm font-semibold text-gray-700"
+										for="telefono"
+										class="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-700"
 									>
 										<svg
 											class="h-4 w-4 text-orange-600"
@@ -1280,6 +1293,7 @@
 										Teléfono *
 									</label>
 									<input
+										id="telefono"
 										bind:value={telefono}
 										type="number"
 										class="w-full rounded-lg border-2 px-4 py-3 text-base transition-all outline-none focus:border-orange-500 focus:ring-4 focus:ring-orange-100"
@@ -1404,6 +1418,44 @@
 										rows="5"
 										placeholder="Escribe tu respuesta aquí..."
 									></textarea>
+								</div>
+							{/if}
+
+							<!-- Verdadero o Falso -->
+							{#if pregunta.tipo === 'VERDADERO_FALSO'}
+								<div class="grid grid-cols-2 gap-4">
+									<button
+										type="button"
+										on:click={() => handleVerdaderoFalso(pregunta.id, 1)}
+										class="apple-transition rounded-xl border-2 p-6 text-center {respuesta?.valor_numero === 1
+											? 'border-orange-500 bg-orange-50 shadow-lg shadow-orange-100'
+											: 'border-gray-200 bg-white hover:border-orange-300 hover:shadow-md'}"
+									>
+										<div class="flex flex-col items-center gap-3">
+											<div class="rounded-full p-3 {respuesta?.valor_numero === 1 ? 'bg-orange-100' : 'bg-gray-100'}">
+												<svg class="h-10 w-10 {respuesta?.valor_numero === 1 ? 'text-orange-600' : 'text-gray-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+												</svg>
+											</div>
+											<span class="text-lg font-bold {respuesta?.valor_numero === 1 ? 'text-orange-700' : 'text-gray-700'}">Verdadero</span>
+										</div>
+									</button>
+									<button
+										type="button"
+										on:click={() => handleVerdaderoFalso(pregunta.id, 0)}
+										class="apple-transition rounded-xl border-2 p-6 text-center {respuesta?.valor_numero === 0
+											? 'border-red-500 bg-red-50 shadow-lg shadow-red-100'
+											: 'border-gray-200 bg-white hover:border-red-300 hover:shadow-md'}"
+									>
+										<div class="flex flex-col items-center gap-3">
+											<div class="rounded-full p-3 {respuesta?.valor_numero === 0 ? 'bg-red-100' : 'bg-gray-100'}">
+												<svg class="h-10 w-10 {respuesta?.valor_numero === 0 ? 'text-red-600' : 'text-gray-400'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+												</svg>
+											</div>
+											<span class="text-lg font-bold {respuesta?.valor_numero === 0 ? 'text-red-700' : 'text-gray-700'}">Falso</span>
+										</div>
+									</button>
 								</div>
 							{/if}
 
@@ -1610,39 +1662,6 @@
 									</div>
 								</div>
 							{/if}
-
-							<!-- Verdadero o Falso -->
-							{#if pregunta.tipo === 'VERDADERO_FALSO'}
-								<div class="space-y-4">
-									<p class="text-center text-sm font-medium text-gray-600">Selecciona tu respuesta:</p>
-									<div class="flex justify-center gap-6">
-										<button
-											type="button"
-											on:click={() => handleVerdaderoFalso(pregunta.id, 1)}
-											class="group flex items-center gap-3 rounded-xl border-2 px-8 py-4 text-lg font-bold transition-all duration-200 {respuesta?.valor_numero === 1
-												? 'border-orange-500 bg-orange-50 text-orange-700 shadow-lg ring-2 ring-orange-200'
-												: 'border-gray-300 bg-white text-gray-700 hover:border-orange-400 hover:bg-orange-50 hover:shadow-md'}"
-										>
-											<svg class="h-6 w-6 {respuesta?.valor_numero === 1 ? 'text-orange-600' : 'text-gray-400 group-hover:text-orange-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
-											</svg>
-											Verdadero
-										</button>
-										<button
-											type="button"
-											on:click={() => handleVerdaderoFalso(pregunta.id, 0)}
-											class="group flex items-center gap-3 rounded-xl border-2 px-8 py-4 text-lg font-bold transition-all duration-200 {respuesta?.valor_numero === 0
-												? 'border-red-500 bg-red-50 text-red-700 shadow-lg ring-2 ring-red-200'
-												: 'border-gray-300 bg-white text-gray-700 hover:border-red-400 hover:bg-red-50 hover:shadow-md'}"
-										>
-											<svg class="h-6 w-6 {respuesta?.valor_numero === 0 ? 'text-red-600' : 'text-gray-400 group-hover:text-red-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-											</svg>
-											Falso
-										</button>
-									</div>
-								</div>
-							{/if}
 						</div>
 					{:else if currentStep === totalPreguntas + 1 && evaluacion.requiere_firma}
 						<!-- Firma -->
@@ -1693,7 +1712,7 @@
 						{#if currentStep < totalPreguntas}
 							<button
 								on:click={siguiente}
-								class="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-amber-600 px-8 py-3.5 font-semibold text-white shadow-lg transition-all hover:scale-105 hover:shadow-xl sm:w-auto"
+								class="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-teal-600 px-8 py-3.5 font-semibold text-white shadow-lg transition-all hover:scale-105 hover:shadow-xl sm:w-auto"
 							>
 								Siguiente
 								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1709,7 +1728,7 @@
 							<button
 								on:click={enviarEvaluacion}
 								disabled={isSubmitting}
-								class="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-amber-600 px-8 py-3.5 font-semibold text-white shadow-lg transition-all hover:scale-105 hover:shadow-xl disabled:opacity-50 sm:w-auto"
+								class="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-teal-600 px-8 py-3.5 font-semibold text-white shadow-lg transition-all hover:scale-105 hover:shadow-xl disabled:opacity-50 sm:w-auto"
 							>
 								{#if isSubmitting}
 									<svg class="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -1743,7 +1762,7 @@
 						{:else if currentStep === totalPreguntas}
 							<button
 								on:click={siguiente}
-								class="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-amber-600 px-8 py-3.5 font-semibold text-white shadow-lg transition-all hover:scale-105 hover:shadow-xl sm:w-auto"
+								class="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-teal-600 px-8 py-3.5 font-semibold text-white shadow-lg transition-all hover:scale-105 hover:shadow-xl sm:w-auto"
 							>
 								Continuar a Firma
 								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1759,7 +1778,7 @@
 							<button
 								on:click={enviarEvaluacion}
 								disabled={isSubmitting}
-								class="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-amber-600 px-8 py-3.5 font-semibold text-white shadow-lg transition-all hover:scale-105 hover:shadow-xl disabled:opacity-50 sm:w-auto"
+								class="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-teal-600 px-8 py-3.5 font-semibold text-white shadow-lg transition-all hover:scale-105 hover:shadow-xl disabled:opacity-50 sm:w-auto"
 							>
 								{#if isSubmitting}
 									<svg class="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -1802,7 +1821,7 @@
 			>
 				<div class="mb-6">
 					<div
-						class="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-amber-600"
+						class="mx-auto mb-4 flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-teal-600"
 					>
 						<svg class="h-12 w-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
@@ -1817,7 +1836,7 @@
 					<p class="text-gray-600">Has finalizado exitosamente la evaluación</p>
 				</div>
 
-				<div class="mb-8 rounded-2xl bg-gradient-to-r from-orange-50 to-amber-50 p-8">
+				<div class="mb-8 rounded-2xl bg-gradient-to-r from-orange-50 to-teal-50 p-8">
 					<div class="mb-2 text-5xl font-bold text-orange-600">
 						{resultado.puntaje_total} / {calcularPuntajeTotal()}
 					</div>

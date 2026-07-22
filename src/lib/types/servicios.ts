@@ -151,6 +151,41 @@ export interface Servicio {
 	updatedAt?: string;
 }
 
+// Resumen de un día laboral de planilla (usado para agregar km en el canvas)
+export interface DiaLaboralPlanillaResumen {
+	dia: number;
+	kilometraje_inicial?: number | string | null;
+	kilometraje_final?: number | string | null;
+}
+
+// Resumen del recargo de planilla asociado al servicio
+export interface RecargoPlanillaResumen {
+	id: string;
+	numero_planilla?: string | null;
+	mes?: number | null;
+	a_o?: number | null;
+	total_dias_laborados?: number | null;
+	total_horas_trabajadas?: number | string | null;
+	estado?: string | null;
+	estado_conductor?: string | null;
+	via_trocha?: boolean | null;
+	via_afirmado?: boolean | null;
+	via_mixto?: boolean | null;
+	via_pavimentada?: boolean | null;
+	riesgo_desniveles?: boolean | null;
+	riesgo_deslizamientos?: boolean | null;
+	riesgo_sin_senalizacion?: boolean | null;
+	riesgo_animales?: boolean | null;
+	riesgo_peatones?: boolean | null;
+	riesgo_trafico_alto?: boolean | null;
+	fuente_consulta?: string | null;
+	calificacion_servicio?: string | null;
+	tiempo_disponibilidad_horas?: number | string | null;
+	duracion_trayecto_horas?: number | string | null;
+	numero_dias_servicio?: number | null;
+	dias_laborales_planillas?: DiaLaboralPlanillaResumen[];
+}
+
 // Servicio con relaciones cargadas
 export interface ServicioConRelaciones extends Servicio {
 	origen: Municipio;
@@ -161,6 +196,7 @@ export interface ServicioConRelaciones extends Servicio {
 	es_creador?: boolean;
 	creador_id?: string;
 	cancelacion?: Cancelacion;
+	recargos_planillas?: RecargoPlanillaResumen[];
 }
 
 // ==================== DTOs ====================

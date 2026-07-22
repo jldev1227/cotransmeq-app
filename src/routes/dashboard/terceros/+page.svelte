@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { fade, fly, slide } from 'svelte/transition';
+	import { fade, fly } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
 	import { tercerosAPI, type Tercero, type TerceroPagination, type TerceroCounts } from '$lib/api/terceros';
 
 	const REGIMENES: Record<string, string> = {
@@ -12,18 +13,27 @@
 		ORDINARIO: 'Ordinario',
 	};
 
+	const REGIMEN_SHORT: Record<string, string> = {
+		SIMPLIFICADO: 'Simplificado',
+		COMUN: 'Común',
+		GRAN_CONTRIBUYENTE: 'Gran Contrib.',
+		NO_RESPONSABLE: 'No Responsable',
+		AUTORRETENEDOR: 'Autorretenedor',
+		ORDINARIO: 'Ordinario',
+	};
+
 	let terceros: Tercero[] = [];
-	let pagination: TerceroPagination = { page: 1, limit: 20, total: 0, pages: 0, hasNext: false, hasPrev: false };
+	let pagination: TerceroPagination = { page: 1, limit: 12, total: 0, pages: 0, hasNext: false, hasPrev: false };
 	let counts: TerceroCounts = { total: 0, personas: 0, empresas: 0 };
 	let isLoading = false;
 	let error: string | null = null;
 	let searchTerm = '';
 	let filtroTipo: 'TODOS' | 'PERSONA' | 'EMPRESA' = 'TODOS';
 	let searchTimeout: ReturnType<typeof setTimeout>;
-
-	let sortBy = 'nombre_completo';
+	let sortBy: 'nombre_completo' | 'identificacion' | 'created_at' = 'nombre_completo';
 	let sortOrder: 'asc' | 'desc' = 'asc';
 
+	// Modal state
 	let showModal = false;
 	let editingTercero: Tercero | null = null;
 	let isSaving = false;
@@ -51,433 +61,2129 @@
 	let isImporting = false;
 	let importResult: { importados: number; duplicados: number; total: number } | null = null;
 
-	$: hasActiveFilter = searchTerm.trim() !== '' || filtroTipo !== 'TODOS';
-	$: { if (typeof searchTerm === 'string') handleSearch(); }
+	let showDetail = false;
+	let detailTercero: Tercero | null = null;
 
-	onMount(() => { loadTerceros(); });
+	$: hasActiveFilter = searchTerm.trim() !== '' || filtroTipo !== 'TODOS';
+
+	$: {
+		if (typeof searchTerm === 'string') handleSearch();
+	}
+
+	onMount(() => {
+		loadTerceros();
+	});
 
 	async function loadTerceros(page = 1) {
-		isLoading = true; error = null;
+		isLoading = true;
+		error = null;
 		try {
 			const params: any = { page, limit: pagination.limit, sortBy, sortOrder };
 			if (searchTerm?.trim()) params.search = searchTerm.trim();
 			if (filtroTipo !== 'TODOS') params.tipo_persona = filtroTipo;
+
 			const response = await tercerosAPI.listar(params);
 			terceros = response.data || [];
 			if (response.pagination) pagination = response.pagination;
 			if (response.counts) counts = response.counts;
 		} catch (err: any) {
 			error = err.response?.data?.message || err.message || 'Error al cargar terceros';
-		} finally { isLoading = false; }
+		} finally {
+			isLoading = false;
+		}
 	}
 
 	function handleSearch() {
 		if (searchTimeout) clearTimeout(searchTimeout);
-		searchTimeout = setTimeout(() => { pagination.page = 1; loadTerceros(1); }, 400);
+		searchTimeout = setTimeout(() => {
+			pagination.page = 1;
+			loadTerceros(1);
+		}, 400);
 	}
 
-	function handleFilterChange() { pagination.page = 1; loadTerceros(1); }
-	function clearFilters() { searchTerm = ''; filtroTipo = 'TODOS'; loadTerceros(1); }
-
-	function toggleSort(field: string) {
-		if (sortBy === field) { sortOrder = sortOrder === 'asc' ? 'desc' : 'asc'; }
-		else { sortBy = field; sortOrder = 'asc'; }
-		pagination.page = 1; loadTerceros(1);
+	function handleFilterChange() {
+		pagination.page = 1;
+		loadTerceros(1);
 	}
 
-	function goToPage(page: number) { if (page >= 1 && page <= pagination.pages && page !== pagination.page) loadTerceros(page); }
-	function previousPage() { if (pagination.hasPrev) goToPage(pagination.page - 1); }
-	function nextPage() { if (pagination.hasNext) goToPage(pagination.page + 1); }
+	function clearFilters() {
+		searchTerm = '';
+		filtroTipo = 'TODOS';
+		pagination.page = 1;
+		loadTerceros(1);
+	}
+
+	function toggleSort(field: typeof sortBy) {
+		if (sortBy === field) {
+			sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+		} else {
+			sortBy = field;
+			sortOrder = 'asc';
+		}
+		pagination.page = 1;
+		loadTerceros(1);
+	}
+
+	function goToPage(page: number) {
+		if (page >= 1 && page <= pagination.pages && page !== pagination.page) loadTerceros(page);
+	}
+	function previousPage() {
+		if (pagination.hasPrev) goToPage(pagination.page - 1);
+	}
+	function nextPage() {
+		if (pagination.hasNext) goToPage(pagination.page + 1);
+	}
 
 	function getPageNumbers(): (number | string)[] {
 		const pages: (number | string)[] = [];
-		const current = pagination.page; const total = pagination.pages;
-		if (total <= 7) { for (let i = 1; i <= total; i++) pages.push(i); return pages; }
+		const current = pagination.page;
+		const total = pagination.pages;
+		if (total <= 7) {
+			for (let i = 1; i <= total; i++) pages.push(i);
+			return pages;
+		}
 		pages.push(1);
-		let start = Math.max(2, current - 2); let end = Math.min(total - 1, current + 2);
-		if (current <= 4) { start = 2; end = 5; }
-		if (current >= total - 3) { start = total - 4; end = total - 1; }
-		if (start > 2) pages.push('...');
+		let start = Math.max(2, current - 1);
+		let end = Math.min(total - 1, current + 1);
+		if (current <= 3) {
+			start = 2;
+			end = 4;
+		}
+		if (current >= total - 2) {
+			start = total - 3;
+			end = total - 1;
+		}
+		if (start > 2) pages.push('…');
 		for (let i = start; i <= end; i++) pages.push(i);
-		if (end < total - 1) pages.push('...');
+		if (end < total - 1) pages.push('…');
 		pages.push(total);
 		return pages;
 	}
 
-	function openCreateModal() { editingTercero = null; form = resetForm(); modalError = null; showModal = true; }
-
-	function openEditModal(t: Tercero) {
-		editingTercero = t;
-		form = { nombre_completo: t.nombre_completo, identificacion: t.identificacion || '', telefono: t.telefono || '', correo: t.correo || '', direccion: t.direccion || '', tipo_persona: t.tipo_persona, regimen: t.regimen || '', notas: t.notas || '' };
-		modalError = null; showModal = true;
+	function initials(name: string): string {
+		if (!name) return '?';
+		const parts = name.trim().split(/\s+/);
+		if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
+		return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 	}
 
-	function closeModal() { showModal = false; editingTercero = null; modalError = null; }
+	// ─── CRUD Modal ───
+	function openCreateModal() {
+		editingTercero = null;
+		form = resetForm();
+		modalError = null;
+		showModal = true;
+	}
+
+	function openEditModal(t: Tercero, e?: Event) {
+		e?.stopPropagation();
+		editingTercero = t;
+		form = {
+			nombre_completo: t.nombre_completo,
+			identificacion: t.identificacion || '',
+			telefono: t.telefono || '',
+			correo: t.correo || '',
+			direccion: t.direccion || '',
+			tipo_persona: t.tipo_persona,
+			regimen: t.regimen || '',
+			notas: t.notas || '',
+		};
+		modalError = null;
+		showModal = true;
+	}
+
+	function closeModal() {
+		showModal = false;
+		editingTercero = null;
+		modalError = null;
+	}
 
 	async function saveTercero() {
-		if (!form.nombre_completo.trim()) { modalError = 'El nombre es requerido'; return; }
-		isSaving = true; modalError = null;
+		if (!form.nombre_completo.trim()) {
+			modalError = 'El nombre es requerido';
+			return;
+		}
+		isSaving = true;
+		modalError = null;
 		try {
-			const payload: any = { nombre_completo: form.nombre_completo.trim(), identificacion: form.identificacion.trim() || null, telefono: form.telefono.trim() || null, correo: form.correo.trim() || null, direccion: form.direccion.trim() || null, tipo_persona: form.tipo_persona, regimen: form.regimen || null, notas: form.notas.trim() || null };
-			if (editingTercero) { await tercerosAPI.actualizar(editingTercero.id, payload); }
-			else { await tercerosAPI.crear(payload); }
-			closeModal(); loadTerceros(pagination.page);
-		} catch (err: any) { modalError = err.response?.data?.message || err.message || 'Error al guardar'; }
-		finally { isSaving = false; }
+			const payload: any = {
+				nombre_completo: form.nombre_completo.trim(),
+				identificacion: form.identificacion.trim() || null,
+				telefono: form.telefono.trim() || null,
+				correo: form.correo.trim() || null,
+				direccion: form.direccion.trim() || null,
+				tipo_persona: form.tipo_persona,
+				regimen: form.regimen || null,
+				notas: form.notas.trim() || null,
+			};
+
+			if (editingTercero) {
+				await tercerosAPI.actualizar(editingTercero.id, payload);
+			} else {
+				await tercerosAPI.crear(payload);
+			}
+			closeModal();
+			loadTerceros(pagination.page);
+		} catch (err: any) {
+			modalError = err.response?.data?.message || err.message || 'Error al guardar';
+		} finally {
+			isSaving = false;
+		}
 	}
 
-	function openDeleteModal(t: Tercero, e: Event) { e.stopPropagation(); terceroToDelete = t; showDeleteModal = true; }
-	function closeDeleteModal() { showDeleteModal = false; terceroToDelete = null; }
+	function openDeleteModal(t: Tercero, e: Event) {
+		e.stopPropagation();
+		terceroToDelete = t;
+		showDeleteModal = true;
+	}
+
+	function closeDeleteModal() {
+		showDeleteModal = false;
+		terceroToDelete = null;
+	}
 
 	async function deleteTercero() {
 		if (!terceroToDelete) return;
 		isLoading = true;
-		try { await tercerosAPI.eliminar(terceroToDelete.id); closeDeleteModal(); loadTerceros(pagination.page); }
-		catch (err: any) { error = err.response?.data?.message || err.message || 'Error al eliminar'; }
-		finally { isLoading = false; }
+		try {
+			await tercerosAPI.eliminar(terceroToDelete.id);
+			closeDeleteModal();
+			loadTerceros(pagination.page);
+		} catch (err: any) {
+			error = err.response?.data?.message || err.message || 'Error al eliminar';
+		} finally {
+			isLoading = false;
+		}
 	}
 
-	function openImportModal() { importResult = null; showImportModal = true; }
+	// ─── Importar ───
+	function openImportModal() {
+		importResult = null;
+		showImportModal = true;
+	}
 
 	async function importFromVehiculos() {
 		isImporting = true;
-		try { importResult = await tercerosAPI.importarDesdeVehiculos(); loadTerceros(1); }
-		catch (err: any) { error = err.response?.data?.message || err.message || 'Error al importar'; showImportModal = false; }
-		finally { isImporting = false; }
+		try {
+			importResult = await tercerosAPI.importarDesdeVehiculos();
+			loadTerceros(1);
+		} catch (err: any) {
+			error = err.response?.data?.message || err.message || 'Error al importar';
+			showImportModal = false;
+		} finally {
+			isImporting = false;
+		}
 	}
 
-	function formatDate(d: string) { return new Date(d).toLocaleDateString('es-CO', { year: 'numeric', month: 'short', day: 'numeric' }); }
-	function getTipoColor(tipo: string) { return tipo === 'EMPRESA' ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-200' : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'; }
+	function openDetail(t: Tercero) {
+		detailTercero = t;
+		showDetail = true;
+	}
+
+	function closeDetail() {
+		showDetail = false;
+		detailTercero = null;
+	}
 </script>
 
 <svelte:head>
-	<title>Directorio de Terceros - Cotransmeq</title>
+	<title>Directorio de Terceros · Cotransmeq</title>
 </svelte:head>
 
-<div class="min-h-screen space-y-5 p-6">
-
-	<!-- ── HEADER ── -->
-	<div class="flex flex-col items-start justify-between gap-4 rounded-2xl border border-orange-100 bg-orange-50 p-6 lg:flex-row lg:items-center" in:fade={{ duration: 400 }}>
-		<div class="flex items-center gap-4">
-			<div class="flex h-11 w-11 items-center justify-center rounded-xl bg-orange-500 shadow-md">
-				<svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-				</svg>
+<div class="terceros-page" in:fly={{ y: 20, duration: 500, easing: quintOut }}>
+	<!-- ═══ HEADER EDITORIAL ═══ -->
+	<header class="page-hero" in:fade={{ duration: 400 }}>
+		<div class="hero-inner">
+			<div class="hero-left">
+				<div class="card-icon hero-icon">
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+					</svg>
+				</div>
+				<div class="hero-text">
+					<span class="eyebrow">Directorio · Terceros</span>
+					<h1>Propietarios y empresas</h1>
+					<p>
+						Gestiona el directorio de personas naturales y jurídicas vinculadas a la operación
+						de transporte. Importa desde la flota o crea registros manualmente.
+					</p>
+				</div>
 			</div>
-			<div>
-				<h1 class="text-xl font-bold text-gray-900">Directorio de Terceros</h1>
-				<p class="text-sm text-gray-500">Propietarios de vehículos, personas y empresas</p>
+
+			<div class="hero-actions">
+				<button class="btn-secondary" on:click={openImportModal} title="Importar desde vehículos">
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+					</svg>
+					Importar
+				</button>
+				<button class="btn-primary" on:click={openCreateModal}>
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+					</svg>
+					Nuevo tercero
+				</button>
 			</div>
 		</div>
 
-		<div class="flex flex-wrap items-center gap-2">
-			<span class="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-white px-3 py-1 text-xs font-semibold text-gray-700">
-				<span class="h-1.5 w-1.5 rounded-full bg-orange-500"></span> {counts.total} Total
-			</span>
-			<span class="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-white px-3 py-1 text-xs font-semibold text-gray-700">
-				<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span> {counts.personas} Personas
-			</span>
-			<span class="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-white px-3 py-1 text-xs font-semibold text-gray-700">
-				<span class="h-1.5 w-1.5 rounded-full bg-blue-500"></span> {counts.empresas} Empresas
-			</span>
+		<!-- Stats inline -->
+		<div class="hero-stats">
+			<div class="stat-item">
+				<span class="stat-label">Total</span>
+				<span class="stat-value">{counts.total}</span>
+			</div>
+			<span class="stat-sep" aria-hidden="true">·</span>
+			<div class="stat-item">
+				<span class="stat-dot stat-dot--emerald" aria-hidden="true"></span>
+				<span class="stat-label">Personas</span>
+				<span class="stat-value">{counts.personas}</span>
+			</div>
+			<span class="stat-sep" aria-hidden="true">·</span>
+			<div class="stat-item">
+				<span class="stat-dot stat-dot--amber" aria-hidden="true"></span>
+				<span class="stat-label">Empresas</span>
+				<span class="stat-value">{counts.empresas}</span>
+			</div>
 			{#if hasActiveFilter}
-				<span class="inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700">
-					<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
-					{pagination.total} resultado{pagination.total !== 1 ? 's' : ''}
-				</span>
+				<span class="stat-sep" aria-hidden="true">·</span>
+				<div class="stat-item stat-item--active">
+					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+					</svg>
+					<span class="stat-label">{pagination.total} resultado{pagination.total !== 1 ? 's' : ''}</span>
+				</div>
 			{/if}
 		</div>
+	</header>
 
-		<div class="flex shrink-0 items-center gap-2">
-			<button on:click={openImportModal} title="Importar desde vehículos" class="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50">
-				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
-				Importar
+	<!-- ═══ FILTROS ═══ -->
+	<div class="filters-bar" in:fade={{ duration: 400, delay: 80 }}>
+		<div class="search-wrap">
+			<svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+			</svg>
+			<input
+				type="text"
+				bind:value={searchTerm}
+				placeholder="Buscar por nombre, identificación, teléfono o correo…"
+				class="search-input"
+			/>
+		</div>
+
+		<div class="filter-group">
+			<button
+				class="chip"
+				class:chip--active={filtroTipo === 'TODOS'}
+				on:click={() => { filtroTipo = 'TODOS'; handleFilterChange(); }}
+			>
+				Todos
 			</button>
-			<button on:click={openCreateModal} class="inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-shadow hover:bg-orange-600 hover:shadow-md">
-				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
-				Nuevo Tercero
+			<button
+				class="chip"
+				class:chip--active={filtroTipo === 'PERSONA'}
+				on:click={() => { filtroTipo = 'PERSONA'; handleFilterChange(); }}
+			>
+				<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+				</svg>
+				Personas
+			</button>
+			<button
+				class="chip"
+				class:chip--active={filtroTipo === 'EMPRESA'}
+				on:click={() => { filtroTipo = 'EMPRESA'; handleFilterChange(); }}
+			>
+				<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+				</svg>
+				Empresas
 			</button>
 		</div>
-	</div>
 
-	<!-- ── FILTROS ── -->
-	<div class="flex flex-col gap-3 rounded-xl border border-gray-100 bg-white p-4 shadow-sm sm:flex-row sm:items-center" in:fade={{ duration: 300, delay: 100 }}>
-		<div class="relative flex-1">
-			<svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-			<input type="text" bind:value={searchTerm} placeholder="Buscar por nombre, identificación, teléfono, correo..." class="w-full rounded-lg border border-gray-200 bg-gray-50 py-2 pl-10 pr-4 text-sm transition-colors focus:border-orange-300 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-100" />
+		<div class="sort-group">
+			<span class="sort-label">Ordenar</span>
+			<button
+				class="sort-btn"
+				class:sort-btn--active={sortBy === 'nombre_completo'}
+				on:click={() => toggleSort('nombre_completo')}
+			>
+				Nombre
+				{#if sortBy === 'nombre_completo'}
+					<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.4">
+						{#if sortOrder === 'asc'}
+							<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+						{:else}
+							<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+						{/if}
+					</svg>
+				{/if}
+			</button>
+			<button
+				class="sort-btn"
+				class:sort-btn--active={sortBy === 'created_at'}
+				on:click={() => toggleSort('created_at')}
+			>
+				Reciente
+				{#if sortBy === 'created_at'}
+					<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.4">
+						{#if sortOrder === 'asc'}
+							<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+						{:else}
+							<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+						{/if}
+					</svg>
+				{/if}
+			</button>
 		</div>
-		<select bind:value={filtroTipo} on:change={handleFilterChange} class="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm transition-colors focus:border-orange-300 focus:outline-none focus:ring-2 focus:ring-orange-100">
-			<option value="TODOS">Todos los tipos</option>
-			<option value="PERSONA">Personas</option>
-			<option value="EMPRESA">Empresas</option>
-		</select>
-		{#if searchTerm || filtroTipo !== 'TODOS'}
-			<button on:click={clearFilters} class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50">
-				<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+
+		{#if hasActiveFilter}
+			<button class="clear-btn" on:click={clearFilters}>
+				<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+				</svg>
 				Limpiar
 			</button>
 		{/if}
 	</div>
 
-	<!-- ── TABLA ── -->
+	<!-- ═══ CONTENIDO ═══ -->
 	{#if isLoading && terceros.length === 0}
-		<div class="flex items-center justify-center py-20" in:fade>
-			<div class="flex flex-col items-center gap-3">
-				<div class="h-8 w-8 animate-spin rounded-full border-2 border-orange-500 border-t-transparent"></div>
-				<p class="text-sm text-gray-500">Cargando terceros...</p>
-			</div>
+		<div class="state-block" in:fade>
+			<div class="spin-ring" aria-hidden="true"></div>
+			<p>Cargando directorio…</p>
 		</div>
 	{:else if error && terceros.length === 0}
-		<div class="flex flex-col items-center justify-center gap-4 rounded-xl border border-red-100 bg-red-50 p-10" in:fade>
-			<svg class="h-10 w-10 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-			<p class="text-sm font-medium text-red-700">{error}</p>
-			<button on:click={() => loadTerceros()} class="rounded-lg bg-red-100 px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-200">Reintentar</button>
+		<div class="alert alert-error" in:fade>
+			<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+			</svg>
+			<div class="alert-body">
+				<strong>No pudimos cargar el directorio.</strong>
+				<span>{error}</span>
+			</div>
+			<button class="btn-secondary" on:click={() => loadTerceros()}>Reintentar</button>
 		</div>
 	{:else if terceros.length === 0}
-		<div class="flex flex-col items-center justify-center gap-4 rounded-xl border border-gray-100 bg-white p-16" in:fade>
-			<div class="flex h-16 w-16 items-center justify-center rounded-2xl bg-orange-50">
-				<svg class="h-8 w-8 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+		<div class="empty-state" in:fade>
+			<div class="empty-icon">
+				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.4">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+				</svg>
 			</div>
-			<div class="text-center">
-				<h3 class="text-base font-semibold text-gray-900">No hay terceros registrados</h3>
-				<p class="mt-1 text-sm text-gray-500">Puedes crear uno nuevo o importar desde los vehículos</p>
-			</div>
-			<div class="flex gap-2">
-				<button on:click={openImportModal} class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">Importar desde Vehículos</button>
-				<button on:click={openCreateModal} class="rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700">Nuevo Tercero</button>
+			<span class="eyebrow eyebrow--center">Sin registros</span>
+			<h2>No hay terceros en el directorio</h2>
+			<p>Importa los propietarios de tu flota o crea un tercero manualmente para empezar.</p>
+			<div class="empty-cta">
+				<button class="btn-secondary" on:click={openImportModal}>
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+					</svg>
+					Importar desde flota
+				</button>
+				<button class="btn-primary" on:click={openCreateModal}>
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+					</svg>
+					Crear tercero
+				</button>
 			</div>
 		</div>
 	{:else}
-		<div class="overflow-hidden rounded-xl border border-gray-100 bg-white shadow-sm" in:fade={{ duration: 300, delay: 150 }}>
-			<div class="overflow-x-auto">
-				<table class="w-full">
-					<thead>
-						<tr class="border-b border-gray-100 bg-gray-50/50">
-							{#each [
-								{ field: 'nombre_completo', label: 'Nombre' },
-								{ field: 'identificacion', label: 'Identificación' },
-								{ field: 'tipo_persona', label: 'Tipo' },
-								{ field: 'regimen', label: 'Régimen' },
-								{ field: 'telefono', label: 'Teléfono' },
-							] as col}
-								<th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-									<button on:click={() => toggleSort(col.field)} class="group inline-flex items-center gap-1 hover:text-gray-700">
-										{col.label}
-										<span class="transition-colors {sortBy === col.field ? 'text-orange-500' : 'text-gray-300 group-hover:text-gray-400'}">
-											{#if sortBy === col.field && sortOrder === 'desc'}
-												<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
-											{:else}
-												<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /></svg>
-											{/if}
-										</span>
-									</button>
-								</th>
-							{/each}
-							<th class="hidden px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500 lg:table-cell">
-								<button on:click={() => toggleSort('correo')} class="group inline-flex items-center gap-1 hover:text-gray-700">
-									Correo
-									<span class="transition-colors {sortBy === 'correo' ? 'text-orange-500' : 'text-gray-300 group-hover:text-gray-400'}">
-										{#if sortBy === 'correo' && sortOrder === 'desc'}
-											<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" /></svg>
-										{:else}
-											<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7" /></svg>
-										{/if}
-									</span>
-								</button>
-							</th>
-							<th class="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">Acciones</th>
-						</tr>
-					</thead>
-					<tbody class="divide-y divide-gray-50">
-						{#each terceros as t, idx (t.id)}
-							<tr class="group transition-colors hover:bg-orange-50/30" in:fly={{ y: 10, duration: 200, delay: idx * 30 }}>
-								<td class="px-4 py-3">
-									<div class="flex items-center gap-3">
-										<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg {t.tipo_persona === 'EMPRESA' ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600'} text-sm font-bold">
-											{t.tipo_persona === 'EMPRESA' ? '🏢' : '👤'}
-										</div>
-										<div class="min-w-0">
-											<p class="truncate text-sm font-semibold text-gray-900">{t.nombre_completo}</p>
-											{#if t.direccion}<p class="truncate text-xs text-gray-400">{t.direccion}</p>{/if}
-										</div>
-									</div>
-								</td>
-								<td class="px-4 py-3 text-sm text-gray-600 font-mono">{t.identificacion || '—'}</td>
-								<td class="px-4 py-3">
-									<span class="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold {getTipoColor(t.tipo_persona)}">
-										{t.tipo_persona === 'EMPRESA' ? 'Empresa' : 'Persona'}
-									</span>
-								</td>
-								<td class="px-4 py-3 text-sm text-gray-600">{t.regimen ? REGIMENES[t.regimen] || t.regimen : '—'}</td>
-								<td class="px-4 py-3 text-sm text-gray-600">{t.telefono || '—'}</td>
-								<td class="hidden px-4 py-3 text-sm text-gray-600 lg:table-cell">
-									{#if t.correo}
-										<a href="mailto:{t.correo}" class="text-orange-600 hover:underline">{t.correo}</a>
-									{:else}<span class="text-gray-400">—</span>{/if}
-								</td>
-								<td class="px-4 py-3 text-center">
-									<div class="flex items-center justify-center gap-1">
-										<button on:click={() => openEditModal(t)} title="Editar" class="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-orange-100 hover:text-orange-600">
-											<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-										</button>
-										<button on:click={(e) => openDeleteModal(t, e)} title="Eliminar" class="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-100 hover:text-red-600">
-											<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-										</button>
-									</div>
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
+		<!-- ── LISTA DE CARDS ── -->
+		<div class="cards-grid" in:fade={{ duration: 400, delay: 120 }}>
+			{#each terceros as t, idx (t.id)}
+			<div
+				class="tercero-card"
+				on:click={() => openDetail(t)}
+				on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), openDetail(t))}
+				role="button"
+				tabindex="0"
+				in:fly={{ y: 14, duration: 320, delay: idx * 35, easing: quintOut }}
+			>
+					<header class="card-head">
+						<div class="avatar avatar--{t.tipo_persona.toLowerCase()}">
+							<span>{initials(t.nombre_completo)}</span>
+						</div>
+						<div class="card-head-text">
+							<h3>{t.nombre_completo}</h3>
+							<span class="tipo-pill tipo-pill--{t.tipo_persona.toLowerCase()}">
+								{#if t.tipo_persona === 'EMPRESA'}
+									<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+									</svg>
+									Empresa
+								{:else}
+									<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+									</svg>
+									Persona
+								{/if}
+							</span>
+						</div>
+					</header>
 
-			{#if pagination.pages > 1}
-				<div class="flex items-center justify-between border-t border-gray-100 bg-gray-50/30 px-4 py-3">
-					<p class="text-xs text-gray-500">Mostrando {(pagination.page - 1) * pagination.limit + 1}–{Math.min(pagination.page * pagination.limit, pagination.total)} de {pagination.total}</p>
-					<div class="flex items-center gap-1">
-						<button on:click={previousPage} disabled={!pagination.hasPrev} aria-label="Anterior" class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-200 disabled:opacity-40">
-							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
-						</button>
-						{#each getPageNumbers() as p}
-							{#if typeof p === 'number'}
-								<button on:click={() => goToPage(p)} class="min-w-[32px] rounded-lg px-2 py-1 text-xs font-medium transition-colors {p === pagination.page ? 'bg-orange-600 text-white' : 'text-gray-600 hover:bg-gray-200'}">{p}</button>
-							{:else}<span class="px-1 text-xs text-gray-400">…</span>{/if}
-						{/each}
-						<button on:click={nextPage} disabled={!pagination.hasNext} aria-label="Siguiente" class="rounded-lg p-1.5 text-gray-400 hover:bg-gray-200 disabled:opacity-40">
-							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-						</button>
-					</div>
+					<dl class="card-data">
+						{#if t.identificacion}
+							<div class="data-row">
+								<dt>
+									<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5zM6 10.5h.008v.008H6V10.5zm0 3h.008v.008H6V13.5zm0 3h.008v.008H6V16.5z" />
+									</svg>
+									{t.tipo_persona === 'EMPRESA' ? 'NIT' : 'Cédula'}
+								</dt>
+								<dd class="mono">{t.identificacion}</dd>
+							</div>
+						{/if}
+
+						{#if t.regimen}
+							<div class="data-row">
+								<dt>
+									<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-11.302 0c1.413-.074 2.86-.18 4.302-.323a48.4 48.4 0 014.302.323 1.866 1.866 0 011.976 2.192M12 3v1.5M12 21v-1.5" />
+									</svg>
+									Régimen
+								</dt>
+								<dd>{REGIMEN_SHORT[t.regimen] || t.regimen}</dd>
+							</div>
+						{/if}
+
+						{#if t.telefono}
+							<div class="data-row">
+								<dt>
+									<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+									</svg>
+									Teléfono
+								</dt>
+								<dd class="mono">{t.telefono}</dd>
+							</div>
+						{/if}
+
+						{#if t.correo}
+							<div class="data-row data-row--truncate">
+								<dt>
+									<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+									</svg>
+									Correo
+								</dt>
+								<dd class="truncate">{t.correo}</dd>
+							</div>
+						{/if}
+					</dl>
+
+					<footer class="card-foot">
+						<span class="card-link">
+							Ver detalle
+							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+							</svg>
+						</span>
+						<div class="card-actions" on:click|stopPropagation role="presentation">
+							<button
+								type="button"
+								class="icon-btn"
+								title="Editar"
+								aria-label="Editar {t.nombre_completo}"
+								on:click={(e) => openEditModal(t, e)}
+							>
+								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+								</svg>
+							</button>
+							<button
+								type="button"
+								class="icon-btn icon-btn--danger"
+								title="Eliminar"
+								aria-label="Eliminar {t.nombre_completo}"
+								on:click={(e) => openDeleteModal(t, e)}
+							>
+								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+								</svg>
+							</button>
 				</div>
-			{/if}
+			</footer>
+				</div>
+			{/each}
 		</div>
+
+		<!-- ── PAGINACIÓN ── -->
+		{#if pagination.pages > 1}
+			<nav class="pagination" in:fade={{ duration: 300, delay: 200 }} aria-label="Paginación del directorio">
+				<p class="pagination-info">
+					<span class="mono">
+						{(pagination.page - 1) * pagination.limit + 1}–{Math.min(
+							pagination.page * pagination.limit,
+							pagination.total
+						)}
+					</span>
+					de <span class="mono">{pagination.total}</span>
+				</p>
+				<div class="pagination-controls">
+					<button
+						class="page-arrow"
+						on:click={previousPage}
+						disabled={!pagination.hasPrev}
+						aria-label="Página anterior"
+					>
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+						</svg>
+					</button>
+					{#each getPageNumbers() as p}
+						{#if typeof p === 'number'}
+							<button
+								class="page-num"
+								class:page-num--active={p === pagination.page}
+								on:click={() => goToPage(p)}
+							>
+								{p}
+							</button>
+						{:else}
+							<span class="page-ellipsis">{p}</span>
+						{/if}
+					{/each}
+					<button
+						class="page-arrow"
+						on:click={nextPage}
+						disabled={!pagination.hasNext}
+						aria-label="Página siguiente"
+					>
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+						</svg>
+					</button>
+				</div>
+			</nav>
+		{/if}
 	{/if}
 </div>
 
-<!-- ═══ MODAL: Crear / Editar Tercero ═══ -->
+<!-- ══════════════════════════════════════════════════════════════
+     MODAL: Crear / Editar Tercero
+     ══════════════════════════════════════════════════════════════ -->
 {#if showModal}
-	<!-- svelte-ignore a11y-click-events-have-key-events -->
-	<!-- svelte-ignore a11y-no-static-element-interactions -->
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" on:click={closeModal} transition:fade={{ duration: 200 }}>
-		<!-- svelte-ignore a11y-click-events-have-key-events -->
-		<!-- svelte-ignore a11y-no-static-element-interactions -->
-		<div class="relative mx-4 w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl" on:click|stopPropagation transition:fly={{ y: 30, duration: 250 }}>
-			<button on:click={closeModal} aria-label="Cerrar" class="absolute right-4 top-4 rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600">
-				<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-			</button>
-			<h2 class="mb-5 text-lg font-bold text-gray-900">{editingTercero ? 'Editar Tercero' : 'Nuevo Tercero'}</h2>
-			{#if modalError}<div class="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{modalError}</div>{/if}
-			<form on:submit|preventDefault={saveTercero} class="space-y-4">
+	<div
+		class="modal-backdrop"
+		on:click={closeModal}
+		on:keydown={(e) => e.key === 'Escape' && closeModal()}
+		role="presentation"
+		transition:fade={{ duration: 200 }}
+	>
+		<div
+			class="modal modal--md"
+			on:click|stopPropagation
+			on:keydown|stopPropagation
+			role="dialog"
+			tabindex="-1"
+			aria-modal="true"
+			aria-labelledby="tercero-modal-title"
+			transition:fly={{ y: 24, duration: 280, easing: quintOut }}
+		>
+			<header class="modal-head">
 				<div>
-					<label class="mb-1 block text-xs font-semibold text-gray-600">Tipo</label>
-					<div class="flex gap-2">
-						<button type="button" on:click={() => (form.tipo_persona = 'PERSONA')} class="flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors {form.tipo_persona === 'PERSONA' ? 'border-orange-400 bg-orange-50 text-orange-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}">👤 Persona</button>
-						<button type="button" on:click={() => (form.tipo_persona = 'EMPRESA')} class="flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-colors {form.tipo_persona === 'EMPRESA' ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}">🏢 Empresa</button>
+					<span class="eyebrow">{editingTercero ? 'Editar registro' : 'Nuevo registro'}</span>
+					<h2 id="tercero-modal-title">
+						{editingTercero ? 'Editar tercero' : 'Nuevo tercero'}
+					</h2>
+				</div>
+				<button class="modal-close" on:click={closeModal} aria-label="Cerrar">
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				</button>
+			</header>
+
+			{#if modalError}
+				<div class="alert alert-error" in:fly={{ y: -8, duration: 240 }}>
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+					</svg>
+					<strong>{modalError}</strong>
+				</div>
+			{/if}
+
+			<form on:submit|preventDefault={saveTercero} class="modal-form">
+				<!-- Tipo persona -->
+				<div class="field">
+					<span class="field-label">Tipo de tercero</span>
+					<div class="segmented">
+						<button
+							type="button"
+							class="seg"
+							class:seg--active={form.tipo_persona === 'PERSONA'}
+							class:seg--persona={form.tipo_persona === 'PERSONA'}
+							on:click={() => (form.tipo_persona = 'PERSONA')}
+						>
+							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+							</svg>
+							Persona natural
+						</button>
+						<button
+							type="button"
+							class="seg"
+							class:seg--active={form.tipo_persona === 'EMPRESA'}
+							class:seg--empresa={form.tipo_persona === 'EMPRESA'}
+							on:click={() => (form.tipo_persona = 'EMPRESA')}
+						>
+							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+							</svg>
+							Empresa
+						</button>
 					</div>
 				</div>
-				<div>
-					<label for="nombre" class="mb-1 block text-xs font-semibold text-gray-600">{form.tipo_persona === 'EMPRESA' ? 'Razón Social' : 'Nombre Completo'} *</label>
-					<input id="nombre" type="text" bind:value={form.nombre_completo} required class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100" placeholder={form.tipo_persona === 'EMPRESA' ? 'Ej: Transportes del Valle S.A.S.' : 'Ej: Juan Carlos Pérez'} />
+
+				<div class="field">
+					<label for="t-nombre" class="field-label">
+						{form.tipo_persona === 'EMPRESA' ? 'Razón social' : 'Nombre completo'}
+						<span class="field-required">*</span>
+					</label>
+					<input
+						id="t-nombre"
+						type="text"
+						bind:value={form.nombre_completo}
+						required
+						class="input"
+						placeholder={form.tipo_persona === 'EMPRESA' ? 'Transportes del Valle S.A.S.' : 'Juan Carlos Pérez'}
+					/>
 				</div>
-				<div class="grid grid-cols-2 gap-3">
-					<div>
-						<label for="ident" class="mb-1 block text-xs font-semibold text-gray-600">{form.tipo_persona === 'EMPRESA' ? 'NIT' : 'Cédula'}</label>
-						<input id="ident" type="text" bind:value={form.identificacion} class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100" placeholder={form.tipo_persona === 'EMPRESA' ? '900123456-1' : '12345678'} />
+
+				<div class="field-grid">
+					<div class="field">
+						<label for="t-ident" class="field-label">
+							{form.tipo_persona === 'EMPRESA' ? 'NIT' : 'Cédula'}
+						</label>
+						<input
+							id="t-ident"
+							type="text"
+							bind:value={form.identificacion}
+							class="input"
+							placeholder={form.tipo_persona === 'EMPRESA' ? '900123456-1' : '12345678'}
+						/>
 					</div>
-					<div>
-						<label for="regimen" class="mb-1 block text-xs font-semibold text-gray-600">Régimen Fiscal</label>
-						<select id="regimen" bind:value={form.regimen} class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100">
+					<div class="field">
+						<label for="t-regimen" class="field-label">Régimen fiscal</label>
+						<select id="t-regimen" bind:value={form.regimen} class="input">
 							<option value="">Sin especificar</option>
-							{#each Object.entries(REGIMENES) as [key, label]}<option value={key}>{label}</option>{/each}
+							{#each Object.entries(REGIMENES) as [key, label]}
+								<option value={key}>{label}</option>
+							{/each}
 						</select>
 					</div>
 				</div>
-				<div class="grid grid-cols-2 gap-3">
-					<div>
-						<label for="tel" class="mb-1 block text-xs font-semibold text-gray-600">Teléfono</label>
-						<input id="tel" type="tel" bind:value={form.telefono} class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100" placeholder="3201234567" />
+
+				<div class="field-grid">
+					<div class="field">
+						<label for="t-tel" class="field-label">Teléfono</label>
+						<input
+							id="t-tel"
+							type="tel"
+							bind:value={form.telefono}
+							class="input"
+							placeholder="3201234567"
+						/>
 					</div>
-					<div>
-						<label for="email" class="mb-1 block text-xs font-semibold text-gray-600">Correo</label>
-						<input id="email" type="email" bind:value={form.correo} class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100" placeholder="correo@ejemplo.com" />
+					<div class="field">
+						<label for="t-correo" class="field-label">Correo</label>
+						<input
+							id="t-correo"
+							type="email"
+							bind:value={form.correo}
+							class="input"
+							placeholder="correo@ejemplo.com"
+						/>
 					</div>
 				</div>
-				<div>
-					<label for="dir" class="mb-1 block text-xs font-semibold text-gray-600">Dirección</label>
-					<input id="dir" type="text" bind:value={form.direccion} class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100" placeholder="Calle 15 #23-45, Ciudad" />
+
+				<div class="field">
+					<label for="t-dir" class="field-label">Dirección</label>
+					<input
+						id="t-dir"
+						type="text"
+						bind:value={form.direccion}
+						class="input"
+						placeholder="Calle 15 #23-45, Ciudad"
+					/>
 				</div>
-				<div>
-					<label for="notas" class="mb-1 block text-xs font-semibold text-gray-600">Notas</label>
-					<textarea id="notas" bind:value={form.notas} rows="2" class="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none focus:ring-2 focus:ring-orange-100" placeholder="Observaciones adicionales..."></textarea>
+
+				<div class="field">
+					<label for="t-notas" class="field-label">Notas</label>
+					<textarea
+						id="t-notas"
+						bind:value={form.notas}
+						rows="3"
+						class="input"
+						placeholder="Observaciones adicionales…"
+					></textarea>
 				</div>
-				<div class="flex justify-end gap-2 pt-2">
-					<button type="button" on:click={closeModal} class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancelar</button>
-					<button type="submit" disabled={isSaving} class="rounded-lg bg-orange-500 px-5 py-2 text-sm font-semibold text-white shadow-sm transition-shadow hover:bg-orange-600 hover:shadow-md disabled:opacity-60">
+
+				<footer class="modal-foot">
+					<button type="button" class="btn-secondary" on:click={closeModal}>Cancelar</button>
+					<button type="submit" class="btn-primary" disabled={isSaving}>
 						{#if isSaving}
-							<span class="inline-flex items-center gap-2"><svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25" /><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" class="opacity-75" /></svg>Guardando...</span>
-						{:else}{editingTercero ? 'Actualizar' : 'Crear'}{/if}
+							<svg class="spin" viewBox="0 0 24 24" fill="none">
+								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25" />
+								<path
+									d="M4 12a8 8 0 018-8v0"
+									stroke="currentColor"
+									stroke-width="3"
+									stroke-linecap="round"
+								/>
+							</svg>
+							Guardando…
+						{:else}
+							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+							</svg>
+							{editingTercero ? 'Actualizar' : 'Crear tercero'}
+						{/if}
 					</button>
-				</div>
+				</footer>
 			</form>
 		</div>
 	</div>
 {/if}
 
-<!-- ═══ MODAL: Confirmar Eliminación ═══ -->
-{#if showDeleteModal && terceroToDelete}
-	<!-- svelte-ignore a11y-click-events-have-key-events -->
-	<!-- svelte-ignore a11y-no-static-element-interactions -->
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" on:click={closeDeleteModal} transition:fade={{ duration: 200 }}>
-		<!-- svelte-ignore a11y-click-events-have-key-events -->
-		<!-- svelte-ignore a11y-no-static-element-interactions -->
-		<div class="mx-4 w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl" on:click|stopPropagation transition:fly={{ y: 20, duration: 200 }}>
-			<div class="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-100">
-				<svg class="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-			</div>
-			<h3 class="text-base font-bold text-gray-900">Eliminar tercero</h3>
-			<p class="mt-2 text-sm text-gray-600">¿Estás seguro que deseas eliminar a <strong>{terceroToDelete.nombre_completo}</strong>?</p>
-			<div class="mt-5 flex justify-end gap-2">
-				<button on:click={closeDeleteModal} class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancelar</button>
-				<button on:click={deleteTercero} class="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700">Eliminar</button>
-			</div>
+<!-- ══════════════════════════════════════════════════════════════
+     MODAL: Detalle del tercero
+     ══════════════════════════════════════════════════════════════ -->
+{#if showDetail && detailTercero}
+	<div
+		class="modal-backdrop"
+		on:click={closeDetail}
+		on:keydown={(e) => e.key === 'Escape' && closeDetail()}
+		role="presentation"
+		transition:fade={{ duration: 200 }}
+	>
+		<div
+			class="modal modal--md"
+			on:click|stopPropagation
+			on:keydown|stopPropagation
+			role="dialog"
+			tabindex="-1"
+			aria-modal="true"
+			aria-labelledby="tercero-detail-title"
+			transition:fly={{ y: 24, duration: 280, easing: quintOut }}
+		>
+			<header class="modal-head">
+				<div>
+					<span class="eyebrow">
+						{detailTercero.tipo_persona === 'EMPRESA' ? 'Empresa' : 'Persona natural'}
+					</span>
+					<h2 id="tercero-detail-title">{detailTercero.nombre_completo}</h2>
+				</div>
+				<button class="modal-close" on:click={closeDetail} aria-label="Cerrar">
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				</button>
+			</header>
+
+			<dl class="detail-data">
+				{#if detailTercero.identificacion}
+					<div>
+						<dt>{detailTercero.tipo_persona === 'EMPRESA' ? 'NIT' : 'Cédula'}</dt>
+						<dd class="mono">{detailTercero.identificacion}</dd>
+					</div>
+				{/if}
+				{#if detailTercero.regimen}
+					<div>
+						<dt>Régimen fiscal</dt>
+						<dd>{REGIMENES[detailTercero.regimen] || detailTercero.regimen}</dd>
+					</div>
+				{/if}
+				{#if detailTercero.telefono}
+					<div>
+						<dt>Teléfono</dt>
+						<dd class="mono">{detailTercero.telefono}</dd>
+					</div>
+				{/if}
+				{#if detailTercero.correo}
+					<div>
+						<dt>Correo</dt>
+						<dd><a href="mailto:{detailTercero.correo}">{detailTercero.correo}</a></dd>
+					</div>
+				{/if}
+				{#if detailTercero.direccion}
+					<div>
+						<dt>Dirección</dt>
+						<dd>{detailTercero.direccion}</dd>
+					</div>
+				{/if}
+				<div>
+					<dt>Creado</dt>
+					<dd>
+						{new Date(detailTercero.created_at).toLocaleDateString('es-CO', {
+							year: 'numeric',
+							month: 'long',
+							day: 'numeric',
+						})}
+					</dd>
+				</div>
+				{#if detailTercero.notas}
+					<div>
+						<dt>Notas</dt>
+						<dd>{detailTercero.notas}</dd>
+					</div>
+				{/if}
+			</dl>
+
+			<footer class="modal-foot">
+				<button
+					class="btn-secondary"
+					on:click={(e) => {
+						if (detailTercero) {
+							closeDetail();
+							openEditModal(detailTercero, e);
+						}
+					}}
+				>
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+					</svg>
+					Editar
+				</button>
+				<button class="btn-primary" on:click={closeDetail}>Cerrar</button>
+			</footer>
 		</div>
 	</div>
 {/if}
 
-<!-- ═══ MODAL: Importar desde Vehículos ═══ -->
+<!-- ══════════════════════════════════════════════════════════════
+     MODAL: Confirmar Eliminación
+     ══════════════════════════════════════════════════════════════ -->
+{#if showDeleteModal && terceroToDelete}
+	<div
+		class="modal-backdrop"
+		on:click={closeDeleteModal}
+		on:keydown={(e) => e.key === 'Escape' && closeDeleteModal()}
+		role="presentation"
+		transition:fade={{ duration: 200 }}
+	>
+		<div
+			class="modal modal--sm"
+			on:click|stopPropagation
+			on:keydown|stopPropagation
+			role="alertdialog"
+			tabindex="-1"
+			aria-modal="true"
+			aria-labelledby="tercero-delete-title"
+			transition:fly={{ y: 20, duration: 240, easing: quintOut }}
+		>
+			<div class="danger-icon" aria-hidden="true">
+				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+				</svg>
+			</div>
+			<span class="eyebrow eyebrow--danger">Acción irreversible</span>
+			<h3 id="tercero-delete-title">Eliminar tercero</h3>
+			<p class="modal-desc">
+				¿Estás seguro que deseas eliminar a
+				<strong>{terceroToDelete.nombre_completo}</strong>? Esta acción no se puede deshacer.
+			</p>
+			<footer class="modal-foot">
+				<button class="btn-secondary" on:click={closeDeleteModal}>Cancelar</button>
+				<button class="btn-danger" on:click={deleteTercero}>
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+					</svg>
+					Sí, eliminar
+				</button>
+			</footer>
+		</div>
+	</div>
+{/if}
+
+<!-- ══════════════════════════════════════════════════════════════
+     MODAL: Importar desde Vehículos
+     ══════════════════════════════════════════════════════════════ -->
 {#if showImportModal}
-	<!-- svelte-ignore a11y-click-events-have-key-events -->
-	<!-- svelte-ignore a11y-no-static-element-interactions -->
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" on:click={() => (showImportModal = false)} transition:fade={{ duration: 200 }}>
-		<!-- svelte-ignore a11y-click-events-have-key-events -->
-		<!-- svelte-ignore a11y-no-static-element-interactions -->
-		<div class="mx-4 w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl" on:click|stopPropagation transition:fly={{ y: 20, duration: 200 }}>
+	<div
+		class="modal-backdrop"
+		on:click={() => (showImportModal = false)}
+		on:keydown={(e) => e.key === 'Escape' && (showImportModal = false)}
+		role="presentation"
+		transition:fade={{ duration: 200 }}
+	>
+		<div
+			class="modal modal--sm"
+			on:click|stopPropagation
+			on:keydown|stopPropagation
+			role="dialog"
+			tabindex="-1"
+			aria-modal="true"
+			aria-labelledby="tercero-import-title"
+			transition:fly={{ y: 20, duration: 240, easing: quintOut }}
+		>
 			{#if importResult}
-				<div class="text-center">
-					<div class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-green-100">
-						<svg class="h-7 w-7 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-					</div>
-					<h3 class="text-base font-bold text-gray-900">Importación completada</h3>
-					<div class="mt-3 space-y-1 text-sm text-gray-600">
-						<p><strong>{importResult.importados}</strong> terceros importados</p>
-						<p><strong>{importResult.duplicados}</strong> ya existían (omitidos)</p>
-					</div>
-					<button on:click={() => (showImportModal = false)} class="mt-5 w-full rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700">Cerrar</button>
+				<div class="confirm-icon" aria-hidden="true">
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+					</svg>
 				</div>
+				<span class="eyebrow eyebrow--center">Importación</span>
+				<h3 id="tercero-import-title">Importación completada</h3>
+				<dl class="result-list">
+					<div>
+						<dt>Importados</dt>
+						<dd class="mono">{importResult.importados}</dd>
+					</div>
+					<div>
+						<dt>Duplicados omitidos</dt>
+						<dd class="mono">{importResult.duplicados}</dd>
+					</div>
+					<div>
+						<dt>Total procesados</dt>
+						<dd class="mono">{importResult.total}</dd>
+					</div>
+				</dl>
+				<footer class="modal-foot">
+					<button class="btn-primary" on:click={() => (showImportModal = false)}>Cerrar</button>
+				</footer>
 			{:else}
-				<div class="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-orange-100">
-					<svg class="h-6 w-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>
+				<div class="import-icon" aria-hidden="true">
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+					</svg>
 				</div>
-				<h3 class="text-base font-bold text-gray-900">Importar desde Vehículos</h3>
-				<p class="mt-2 text-sm text-gray-600">Se extraerán los nombres y cédulas de los propietarios registrados en la flota vehicular y se crearán como terceros. Los duplicados serán omitidos.</p>
-				<div class="mt-5 flex justify-end gap-2">
-					<button on:click={() => (showImportModal = false)} class="rounded-lg border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50">Cancelar</button>
-					<button on:click={importFromVehiculos} disabled={isImporting} class="rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-60">
+				<span class="eyebrow eyebrow--center">Importar desde flota</span>
+				<h3 id="tercero-import-title">Propietarios de vehículos</h3>
+				<p class="modal-desc">
+					Extraeremos los nombres y cédulas/NIT de los propietarios registrados en la flota
+					vehicular y los crearemos como terceros. Los duplicados serán omitidos automáticamente.
+				</p>
+				<footer class="modal-foot">
+					<button class="btn-secondary" on:click={() => (showImportModal = false)}>Cancelar</button>
+					<button class="btn-primary" on:click={importFromVehiculos} disabled={isImporting}>
 						{#if isImporting}
-							<span class="inline-flex items-center gap-2"><svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25" /><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" class="opacity-75" /></svg>Importando...</span>
-						{:else}Importar{/if}
+							<svg class="spin" viewBox="0 0 24 24" fill="none">
+								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25" />
+								<path
+									d="M4 12a8 8 0 018-8v0"
+									stroke="currentColor"
+									stroke-width="3"
+									stroke-linecap="round"
+								/>
+							</svg>
+							Importando…
+						{:else}
+							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+							</svg>
+							Importar ahora
+						{/if}
 					</button>
-				</div>
+				</footer>
 			{/if}
 		</div>
 	</div>
 {/if}
+
+<style>
+	/* ═══════════════════════════════════════════════════════════════
+	   PAGE BASE — fondo cálido + tipografía editorial
+	   ═══════════════════════════════════════════════════════════════ */
+	.terceros-page {
+		min-height: 100vh;
+		background: #faf7f2;
+		font-family: 'Inter Tight', system-ui, sans-serif;
+		color: #1a1a1a;
+		padding: 1.5rem 1.25rem 3rem;
+		max-width: 1400px;
+		margin: 0 auto;
+	}
+
+	/* ═══════════════════════════════════════════════════════════════
+	   EYEBROW + TIPOGRAFÍA EDITORIAL
+	   ═══════════════════════════════════════════════════════════════ */
+	.eyebrow {
+		display: inline-block;
+		font-size: 0.7rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.12em;
+		color: #f97316;
+		background: rgba(249, 115, 22, 0.08);
+		padding: 0.3rem 0.75rem;
+		border-radius: 6px;
+		font-family: 'JetBrains Mono', monospace;
+	}
+	.eyebrow--center {
+		display: block;
+		text-align: center;
+		margin: 0 auto 0.5rem;
+		width: fit-content;
+	}
+	.eyebrow--danger {
+		color: #b91c1c;
+		background: rgba(220, 38, 38, 0.08);
+	}
+
+	h1,
+	h2,
+	h3 {
+		font-family: 'Fraunces', Georgia, serif;
+		color: #0f1f1a;
+		letter-spacing: -0.01em;
+	}
+
+	.mono {
+		font-family: 'JetBrains Mono', monospace;
+	}
+
+	/* ═══════════════════════════════════════════════════════════════
+	   HERO / HEADER
+	   ═══════════════════════════════════════════════════════════════ */
+	.page-hero {
+		background: white;
+		border: 1px solid rgba(0, 0, 0, 0.06);
+		border-radius: 24px;
+		padding: 1.75rem 1.75rem 1.25rem;
+		margin-bottom: 1.25rem;
+		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+	}
+	.hero-inner {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 1.5rem;
+		margin-bottom: 1.5rem;
+	}
+	.hero-left {
+		display: flex;
+		gap: 1rem;
+		align-items: flex-start;
+		flex: 1;
+		min-width: 280px;
+	}
+	.hero-icon {
+		flex-shrink: 0;
+	}
+	.hero-text {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+	.hero-text h1 {
+		font-size: clamp(1.6rem, 3.5vw, 2.1rem);
+		font-weight: 500;
+		line-height: 1.15;
+		margin: 0;
+	}
+	.hero-text p {
+		font-size: 0.92rem;
+		line-height: 1.6;
+		color: #4a4a4a;
+		margin: 0;
+		max-width: 540px;
+	}
+	.hero-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+		flex-shrink: 0;
+	}
+
+	.hero-stats {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.65rem;
+		padding-top: 1.1rem;
+		border-top: 1px solid rgba(0, 0, 0, 0.06);
+		font-family: 'JetBrains Mono', monospace;
+	}
+	.stat-item {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+	}
+	.stat-label {
+		font-size: 0.72rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: #6b6b6b;
+	}
+	.stat-value {
+		font-size: 0.95rem;
+		font-weight: 700;
+		color: #0f1f1a;
+	}
+	.stat-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+	}
+	.stat-dot--emerald {
+		background: #f97316;
+	}
+	.stat-dot--amber {
+		background: #f59e0b;
+	}
+	.stat-sep {
+		color: #c9c4ba;
+	}
+	.stat-item--active .stat-label {
+		color: #f97316;
+	}
+	.stat-item--active {
+		color: #f97316;
+	}
+
+	/* ═══════════════════════════════════════════════════════════════
+	   FILTROS
+	   ═══════════════════════════════════════════════════════════════ */
+	.filters-bar {
+		background: white;
+		border: 1px solid rgba(0, 0, 0, 0.06);
+		border-radius: 16px;
+		padding: 0.85rem;
+		margin-bottom: 1.25rem;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.75rem;
+		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+	}
+	.search-wrap {
+		position: relative;
+		flex: 1;
+		min-width: 240px;
+	}
+	.search-icon {
+		position: absolute;
+		left: 0.9rem;
+		top: 50%;
+		transform: translateY(-50%);
+		width: 16px;
+		height: 16px;
+		color: #9a9a9a;
+		pointer-events: none;
+	}
+	.search-input {
+		width: 100%;
+		padding: 0.6rem 0.9rem 0.6rem 2.5rem;
+		font-family: inherit;
+		font-size: 0.88rem;
+		color: #1a1a1a;
+		background: #faf7f2;
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		border-radius: 10px;
+		outline: none;
+		transition: all 0.2s;
+	}
+	.search-input::placeholder {
+		color: #9a9a9a;
+	}
+	.search-input:focus {
+		background: white;
+		border-color: rgba(249, 115, 22, 0.4);
+		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+	}
+
+	.filter-group {
+		display: flex;
+		gap: 0.35rem;
+		padding: 0.25rem;
+		background: #faf7f2;
+		border: 1px solid rgba(0, 0, 0, 0.06);
+		border-radius: 12px;
+	}
+	.chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.4rem 0.8rem;
+		font-family: inherit;
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: #4a4a4a;
+		background: transparent;
+		border: none;
+		border-radius: 8px;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.chip:hover {
+		color: #0f1f1a;
+	}
+	.chip--active {
+		background: white;
+		color: #065f46;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+	}
+
+	.sort-group {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding-left: 0.25rem;
+	}
+	.sort-label {
+		font-size: 0.72rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: #6b6b6b;
+		font-family: 'JetBrains Mono', monospace;
+	}
+	.sort-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.4rem 0.7rem;
+		font-family: inherit;
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: #6b6b6b;
+		background: transparent;
+		border: 1px solid transparent;
+		border-radius: 8px;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.sort-btn:hover {
+		color: #0f1f1a;
+		background: rgba(0, 0, 0, 0.03);
+	}
+	.sort-btn--active {
+		color: #065f46;
+		background: rgba(249, 115, 22, 0.08);
+		border-color: rgba(249, 115, 22, 0.15);
+	}
+
+	.clear-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.45rem 0.75rem;
+		font-family: inherit;
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: #6b6b6b;
+		background: transparent;
+		border: 1px solid rgba(0, 0, 0, 0.1);
+		border-radius: 10px;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.clear-btn:hover {
+		color: #dc2626;
+		border-color: rgba(220, 38, 38, 0.3);
+		background: rgba(220, 38, 38, 0.04);
+	}
+
+	/* ═══════════════════════════════════════════════════════════════
+	   LIST CARDS (grid)
+	   ═══════════════════════════════════════════════════════════════ */
+	.cards-grid {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 1.1rem;
+	}
+	@media (min-width: 640px) {
+		.cards-grid {
+			grid-template-columns: repeat(2, 1fr);
+		}
+	}
+	@media (min-width: 1024px) {
+		.cards-grid {
+			grid-template-columns: repeat(3, 1fr);
+		}
+	}
+	@media (min-width: 1280px) {
+		.cards-grid {
+			grid-template-columns: repeat(4, 1fr);
+		}
+	}
+
+	.tercero-card {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		background: white;
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		border-radius: 20px;
+		padding: 1.25rem;
+		cursor: pointer;
+		text-align: left;
+		font-family: inherit;
+		color: inherit;
+		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+		transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+		outline: none;
+	}
+	.tercero-card:hover,
+	.tercero-card:focus-visible {
+		transform: translateY(-3px);
+		border-color: rgba(249, 115, 22, 0.3);
+		box-shadow: 0 12px 32px rgba(249, 115, 22, 0.12);
+	}
+
+	.card-head {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.75rem;
+	}
+	.card-head-text {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.3rem;
+	}
+	.card-head-text h3 {
+		font-size: 1.02rem;
+		font-weight: 600;
+		line-height: 1.3;
+		margin: 0;
+		color: #0f1f1a;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+	}
+
+	.avatar {
+		flex-shrink: 0;
+		width: 44px;
+		height: 44px;
+		border-radius: 14px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.85rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+	}
+	.avatar--persona {
+		background: linear-gradient(135deg, rgba(249, 115, 22, 0.14), rgba(234, 88, 12, 0.18));
+		color: #065f46;
+	}
+	.avatar--empresa {
+		background: linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(217, 119, 6, 0.18));
+		color: #92400e;
+	}
+
+	.tipo-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.2rem 0.55rem;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.65rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		border-radius: 5px;
+		width: fit-content;
+	}
+	.tipo-pill--persona {
+		background: rgba(249, 115, 22, 0.08);
+		color: #047857;
+	}
+	.tipo-pill--empresa {
+		background: rgba(245, 158, 11, 0.1);
+		color: #b45309;
+	}
+
+	.card-data {
+		display: flex;
+		flex-direction: column;
+		gap: 0.55rem;
+		margin: 0;
+		padding: 0.85rem 0;
+		border-top: 1px solid rgba(0, 0, 0, 0.06);
+		border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+	}
+	.data-row {
+		display: grid;
+		grid-template-columns: 100px 1fr;
+		align-items: center;
+		gap: 0.6rem;
+		font-size: 0.82rem;
+		min-height: 22px;
+	}
+	.data-row dt {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		font-size: 0.7rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: #6b6b6b;
+		font-family: 'JetBrains Mono', monospace;
+		margin: 0;
+	}
+	.data-row dt svg {
+		color: #9a9a9a;
+		flex-shrink: 0;
+	}
+	.data-row dd {
+		margin: 0;
+		font-size: 0.85rem;
+		color: #0f1f1a;
+		font-weight: 500;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.data-row dd.mono {
+		font-size: 0.78rem;
+	}
+
+	.card-foot {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+	.card-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: #f97316;
+		transition: gap 0.2s;
+	}
+	.card-link svg {
+		width: 14px;
+		height: 14px;
+	}
+	.tercero-card:hover .card-link {
+		gap: 0.65rem;
+	}
+
+	.card-actions {
+		display: flex;
+		gap: 0.25rem;
+	}
+	.icon-btn {
+		width: 30px;
+		height: 30px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		background: transparent;
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		border-radius: 8px;
+		color: #6b6b6b;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.icon-btn svg {
+		width: 14px;
+		height: 14px;
+	}
+	.icon-btn:hover {
+		color: #f97316;
+		border-color: rgba(249, 115, 22, 0.3);
+		background: rgba(249, 115, 22, 0.06);
+	}
+	.icon-btn--danger:hover {
+		color: #dc2626;
+		border-color: rgba(220, 38, 38, 0.3);
+		background: rgba(220, 38, 38, 0.06);
+	}
+
+	/* ═══════════════════════════════════════════════════════════════
+	   PAGINACIÓN
+	   ═══════════════════════════════════════════════════════════════ */
+	.pagination {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-top: 1.5rem;
+		padding: 0.85rem 1.25rem;
+		background: white;
+		border: 1px solid rgba(0, 0, 0, 0.06);
+		border-radius: 14px;
+	}
+	.pagination-info {
+		font-size: 0.78rem;
+		color: #6b6b6b;
+		margin: 0;
+	}
+	.pagination-info .mono {
+		color: #0f1f1a;
+		font-weight: 700;
+	}
+	.pagination-controls {
+		display: flex;
+		align-items: center;
+		gap: 0.3rem;
+	}
+	.page-arrow,
+	.page-num {
+		min-width: 32px;
+		height: 32px;
+		padding: 0 0.5rem;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		font-family: inherit;
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: #4a4a4a;
+		background: transparent;
+		border: 1px solid transparent;
+		border-radius: 8px;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.page-arrow svg {
+		width: 14px;
+		height: 14px;
+	}
+	.page-arrow:hover:not(:disabled),
+	.page-num:hover {
+		background: #faf7f2;
+		color: #0f1f1a;
+	}
+	.page-arrow:disabled {
+		opacity: 0.35;
+		cursor: not-allowed;
+	}
+	.page-num--active {
+		background: linear-gradient(135deg, #f97316, #ea580c);
+		color: white;
+		box-shadow: 0 2px 8px rgba(249, 115, 22, 0.3);
+	}
+	.page-num--active:hover {
+		background: linear-gradient(135deg, #f97316, #ea580c);
+		color: white;
+	}
+	.page-ellipsis {
+		padding: 0 0.4rem;
+		color: #9a9a9a;
+		font-size: 0.78rem;
+	}
+
+	/* ═══════════════════════════════════════════════════════════════
+	   ESTADOS (loading / error / empty)
+	   ═══════════════════════════════════════════════════════════════ */
+	.state-block {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.85rem;
+		padding: 4rem 1.5rem;
+		background: white;
+		border: 1px solid rgba(0, 0, 0, 0.06);
+		border-radius: 20px;
+		color: #6b6b6b;
+		font-size: 0.88rem;
+	}
+	.spin-ring {
+		width: 32px;
+		height: 32px;
+		border: 2.5px solid rgba(249, 115, 22, 0.15);
+		border-top-color: #f97316;
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	.empty-state {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.75rem;
+		padding: 4rem 1.5rem;
+		background: white;
+		border: 1px dashed rgba(0, 0, 0, 0.12);
+		border-radius: 24px;
+		text-align: center;
+	}
+	.empty-state h2 {
+		font-size: 1.4rem;
+		font-weight: 500;
+		margin: 0.25rem 0 0;
+	}
+	.empty-state p {
+		font-size: 0.9rem;
+		color: #4a4a4a;
+		max-width: 420px;
+		margin: 0;
+		line-height: 1.6;
+	}
+	.empty-icon {
+		width: 72px;
+		height: 72px;
+		border-radius: 50%;
+		background: linear-gradient(135deg, rgba(249, 115, 22, 0.08), rgba(234, 88, 12, 0.12));
+		color: #f97316;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		margin-bottom: 0.5rem;
+		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.12);
+	}
+	.empty-icon svg {
+		width: 32px;
+		height: 32px;
+	}
+	.empty-cta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+		justify-content: center;
+		margin-top: 1rem;
+	}
+
+	/* ═══════════════════════════════════════════════════════════════
+	   ALERT
+	   ═══════════════════════════════════════════════════════════════ */
+	.alert {
+		display: flex;
+		align-items: center;
+		gap: 0.85rem;
+		padding: 0.95rem 1.1rem;
+		border-radius: 12px;
+		font-size: 0.88rem;
+		margin-bottom: 1rem;
+	}
+	.alert-error {
+		background: rgba(220, 38, 38, 0.06);
+		border: 1px solid rgba(220, 38, 38, 0.2);
+		color: #991b1b;
+	}
+	.alert-error svg {
+		width: 20px;
+		height: 20px;
+		flex-shrink: 0;
+		color: #dc2626;
+	}
+	.alert-body {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+	}
+	.alert-body strong {
+		font-weight: 700;
+	}
+	.alert-body span {
+		font-size: 0.82rem;
+		color: #b91c1c;
+	}
+
+	/* ═══════════════════════════════════════════════════════════════
+	   BOTONES
+	   ═══════════════════════════════════════════════════════════════ */
+	.btn-primary,
+	.btn-secondary,
+	.btn-danger {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.45rem;
+		padding: 0.65rem 1.15rem;
+		font-family: 'Inter Tight', system-ui, sans-serif;
+		font-size: 0.85rem;
+		font-weight: 600;
+		border-radius: 11px;
+		cursor: pointer;
+		transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+		border: 1px solid transparent;
+		white-space: nowrap;
+	}
+	.btn-primary {
+		background: linear-gradient(135deg, #f97316, #ea580c);
+		color: white;
+		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.28);
+	}
+	.btn-primary:hover:not(:disabled) {
+		transform: translateY(-1px);
+		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
+	}
+	.btn-primary:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+	.btn-primary svg,
+	.btn-secondary svg,
+	.btn-danger svg {
+		width: 15px;
+		height: 15px;
+	}
+
+	.btn-secondary {
+		background: white;
+		color: #1a1a1a;
+		border-color: rgba(0, 0, 0, 0.12);
+	}
+	.btn-secondary:hover:not(:disabled) {
+		background: #faf7f2;
+		border-color: rgba(0, 0, 0, 0.2);
+	}
+
+	.btn-danger {
+		background: linear-gradient(135deg, #dc2626, #b91c1c);
+		color: white;
+		box-shadow: 0 4px 16px rgba(220, 38, 38, 0.28);
+	}
+	.btn-danger:hover:not(:disabled) {
+		transform: translateY(-1px);
+		box-shadow: 0 6px 20px rgba(220, 38, 38, 0.4);
+	}
+
+	.spin {
+		width: 14px;
+		height: 14px;
+		animation: spin 0.8s linear infinite;
+	}
+
+	/* ═══════════════════════════════════════════════════════════════
+	   MODALES (landing-cotransmeq)
+	   ═══════════════════════════════════════════════════════════════ */
+	.modal-backdrop {
+		position: fixed;
+		inset: 0;
+		z-index: 60;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 1rem;
+		background: linear-gradient(135deg, rgba(15, 23, 42, 0.45), rgba(10, 20, 16, 0.6));
+		backdrop-filter: blur(8px) saturate(120%);
+		-webkit-backdrop-filter: blur(8px) saturate(120%);
+		overflow-y: auto;
+	}
+	.modal {
+		width: 100%;
+		background: white;
+		border: 1px solid var(--border-subtle, rgba(15, 23, 42, 0.08));
+		border-radius: 24px;
+		padding: 1.5rem 1.5rem 1.25rem;
+		box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+	.modal--sm {
+		max-width: 420px;
+	}
+	.modal--md {
+		max-width: 560px;
+	}
+
+	.modal-head {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 1rem;
+		padding-bottom: 0.5rem;
+		border-bottom: 1px solid var(--border-subtle, rgba(15, 23, 42, 0.08));
+	}
+	.modal-head h2 {
+		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-size: 1.25rem;
+		font-weight: 600;
+		margin: 0.35rem 0 0;
+		color: #0f172a;
+		letter-spacing: -0.01em;
+	}
+	.modal-close {
+		flex-shrink: 0;
+		width: 32px;
+		height: 32px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		background: transparent;
+		border: 1px solid var(--border-subtle, rgba(15, 23, 42, 0.08));
+		border-radius: 10px;
+		color: #6b6b6b;
+		cursor: pointer;
+		transition: all 0.2s var(--ease-apple, cubic-bezier(0.25, 0.46, 0.45, 0.94));
+	}
+	.modal-close svg {
+		width: 16px;
+		height: 16px;
+	}
+	.modal-close:hover {
+		color: #ea580c;
+		border-color: rgba(249, 115, 22, 0.3);
+		background: rgba(249, 115, 22, 0.06);
+		transform: rotate(90deg);
+	}
+
+	.modal-desc {
+		font-size: 0.9rem;
+		line-height: 1.6;
+		color: #4a4a4a;
+		margin: 0;
+	}
+	.modal-desc strong {
+		color: #0f172a;
+		font-weight: 600;
+	}
+
+	.modal-form {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
+
+	.field {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+	.field-grid {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 1rem;
+	}
+	@media (min-width: 540px) {
+		.field-grid {
+			grid-template-columns: repeat(2, 1fr);
+		}
+	}
+	.field-label {
+		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: #0f172a;
+	}
+	.field-required {
+		color: #dc2626;
+		margin-left: 0.1rem;
+	}
+	.input {
+		width: 100%;
+		padding: 0.6rem 0.85rem;
+		font-family: inherit;
+		font-size: 0.88rem;
+		color: #1a1a1a;
+		background: #fcfcfb;
+		border: 1px solid rgba(15, 23, 42, 0.1);
+		border-radius: 10px;
+		outline: none;
+		transition: all 0.2s var(--ease-apple, cubic-bezier(0.25, 0.46, 0.45, 0.94));
+	}
+	.input::placeholder {
+		color: #94a3b8;
+	}
+	.input:focus {
+		background: white;
+		border-color: #f97316;
+		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+	}
+	textarea.input {
+		resize: vertical;
+		font-family: inherit;
+		line-height: 1.5;
+	}
+
+	.segmented {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.5rem;
+	}
+	.seg {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.45rem;
+		padding: 0.65rem 0.8rem;
+		font-family: inherit;
+		font-size: 0.85rem;
+		font-weight: 600;
+		background: #fcfcfb;
+		color: #64748b;
+		border: 1px solid rgba(15, 23, 42, 0.1);
+		border-radius: 12px;
+		cursor: pointer;
+		transition: all 0.2s var(--ease-apple, cubic-bezier(0.25, 0.46, 0.45, 0.94));
+	}
+	.seg svg {
+		width: 16px;
+		height: 16px;
+	}
+	.seg:hover {
+		color: #0f172a;
+		border-color: rgba(15, 23, 42, 0.2);
+	}
+	.seg--active.seg--persona {
+		background: linear-gradient(135deg, rgba(249, 115, 22, 0.1), rgba(234, 88, 12, 0.14));
+		color: var(--emerald-700, #166534);
+		border-color: rgba(249, 115, 22, 0.35);
+	}
+	.seg--active.seg--empresa {
+		background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(217, 119, 6, 0.14));
+		color: #92400e;
+		border-color: rgba(245, 158, 11, 0.35);
+	}
+
+	.modal-foot {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+		justify-content: flex-end;
+		padding-top: 1rem;
+		border-top: 1px solid var(--border-subtle, rgba(15, 23, 42, 0.08));
+		margin-top: 0.25rem;
+	}
+
+	/* Detalle */
+	.detail-data {
+		background: #faf7f2;
+		border-radius: 14px;
+		padding: 1rem 1.15rem;
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0;
+	}
+	.detail-data > div {
+		display: flex;
+		flex-direction: column;
+		gap: 0.2rem;
+		padding: 0.65rem 0;
+		border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+	}
+	.detail-data > div:last-child {
+		border-bottom: none;
+	}
+	.detail-data dt {
+		font-size: 0.7rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: #6b6b6b;
+		font-family: 'JetBrains Mono', monospace;
+		margin: 0;
+	}
+	.detail-data dd {
+		margin: 0;
+		font-size: 0.92rem;
+		color: #0f1f1a;
+		font-weight: 500;
+	}
+	.detail-data dd a {
+		color: #f97316;
+		text-decoration: none;
+	}
+	.detail-data dd a:hover {
+		text-decoration: underline;
+	}
+
+	/* Modal iconos especiales */
+	.confirm-icon {
+		width: 64px;
+		height: 64px;
+		border-radius: 50%;
+		background: linear-gradient(135deg, #f97316, #ea580c);
+		color: white;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		margin: 0 auto 0.5rem;
+		box-shadow: 0 8px 24px rgba(249, 115, 22, 0.3);
+	}
+	.confirm-icon svg {
+		width: 30px;
+		height: 30px;
+	}
+
+	.danger-icon {
+		width: 56px;
+		height: 56px;
+		border-radius: 50%;
+		background: rgba(220, 38, 38, 0.08);
+		color: #dc2626;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		margin: 0 auto 0.5rem;
+		border: 1px solid rgba(220, 38, 38, 0.15);
+	}
+	.danger-icon svg {
+		width: 26px;
+		height: 26px;
+	}
+
+	.import-icon {
+		width: 56px;
+		height: 56px;
+		border-radius: 16px;
+		background: linear-gradient(135deg, rgba(249, 115, 22, 0.1), rgba(234, 88, 12, 0.16));
+		color: #065f46;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		margin: 0 auto 0.5rem;
+		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.18);
+	}
+	.import-icon svg {
+		width: 26px;
+		height: 26px;
+	}
+
+	.result-list {
+		background: #faf7f2;
+		border-radius: 12px;
+		padding: 0.85rem 1rem;
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	.result-list > div {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 0.35rem 0;
+		border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+	}
+	.result-list > div:last-child {
+		border-bottom: none;
+	}
+	.result-list dt {
+		font-size: 0.78rem;
+		color: #6b6b6b;
+		margin: 0;
+	}
+	.result-list dd {
+		margin: 0;
+		font-size: 0.95rem;
+		font-weight: 700;
+		color: #0f1f1a;
+	}
+
+	.card-icon {
+		width: 48px;
+		height: 48px;
+		border-radius: 14px;
+		background: linear-gradient(135deg, #f97316, #ea580c);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: white;
+		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+	}
+	.card-icon svg {
+		width: 24px;
+		height: 24px;
+	}
+</style>

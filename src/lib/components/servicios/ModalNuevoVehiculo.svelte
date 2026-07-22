@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { fade, fly } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
 	import { apiClient } from '$lib/api/apiClient';
 	import { toast } from '$lib/stores/toast';
 
@@ -87,21 +88,80 @@
 </script>
 
 {#if isOpen}
-	<div
-		class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+	<!-- Backdrop con blur (paleta landing) -->
+	<button
+		type="button"
+		class="fixed inset-0 z-[60] cursor-default border-0 p-0"
+		style="background: linear-gradient(135deg, rgba(15, 31, 26, 0.40), rgba(10, 20, 16, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
+		aria-label="Cerrar modal"
+		on:click={handleClose}
 		transition:fade={{ duration: 200 }}
-		role="dialog"
-		aria-modal="true"
-		tabindex="-1"
+	></button>
+
+	<!-- Modal Container -->
+	<div
+		class="fixed inset-0 z-[60] flex items-center justify-center p-4"
+		role="presentation"
 	>
 		<div
-			class="glass soft-shadow w-full max-w-md rounded-2xl border border-gray-200/50 bg-white p-6"
-			role="document"
-			transition:fly={{ y: 50, duration: 300 }}
+			class="w-full max-w-md overflow-hidden"
+			style="background-color: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 24px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);"
+			role="dialog"
+			aria-modal="true"
+			transition:fly={{ y: 50, duration: 300, easing: quintOut }}
 		>
-			<h3 class="mb-4 text-xl font-bold text-gray-900">Nuevo Vehículo</h3>
+			<!-- Header editorial -->
+			<div
+				class="flex items-center justify-between gap-3 px-6 py-5"
+				style="border-bottom: 1px solid var(--border-subtle); background: linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-base) 100%);"
+			>
+				<div class="flex items-center gap-3">
+					<div
+						class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
+						style="background: linear-gradient(135deg, #f97316, #ea580c); box-shadow: 0 6px 16px rgba(249, 115, 22, 0.30);"
+					>
+						<svg
+							class="h-5 w-5 text-white"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+							stroke-width="1.8"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M8 9l4-4 4 4m0 6l-4 4-4-4"
+							/>
+						</svg>
+					</div>
+					<div class="min-w-0 flex-1">
+						<p
+							class="font-mono-meta mb-1 inline-block rounded-md px-2 py-0.5 text-[10px]"
+							style="color: var(--emerald-500); background: rgba(249, 115, 22, 0.08); letter-spacing: 0.12em;"
+						>
+							NUEVO REGISTRO
+						</p>
+						<h2 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 500;">
+							Nuevo Vehículo
+						</h2>
+					</div>
+				</div>
+				<button
+					on:click={handleClose}
+					class="filter-close"
+					aria-label="Cerrar"
+				>
+					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
+						><path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M6 18L18 6M6 6l12 12"
+						/></svg
+					>
+				</button>
+			</div>
 
-			<form on:submit|preventDefault={handleSubmit} class="space-y-4">
+			<form on:submit|preventDefault={handleSubmit} class="space-y-4 px-6 py-5">
 				<div>
 					<label for="placa" class="mb-1 block text-sm font-medium text-gray-700">
 						Placa <span class="text-red-500">*</span>
@@ -113,11 +173,6 @@
 						required
 						maxlength="6"
 						minlength="6"
-						on:input={(e) => {
-							const target = e.target as HTMLInputElement;
-							target.value = target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-							placa = target.value;
-						}}
 						class="input-glow w-full rounded-xl border border-gray-200 px-3 py-2 uppercase focus:border-orange-400 focus:ring-2 focus:ring-orange-400/50 focus:outline-none"
 						placeholder="Ej: ABC123"
 						title="La placa debe tener exactamente 6 caracteres alfanuméricos (letras y números)"

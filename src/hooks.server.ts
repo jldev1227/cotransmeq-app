@@ -7,6 +7,7 @@ function decodeJwtPayload(token: string): any | null {
 		const parts = token.split('.');
 		if (parts.length !== 3) return null;
 		const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf-8'));
+		// Check expiry
 		if (payload.exp && payload.exp * 1000 < Date.now()) return null;
 		return payload;
 	} catch {
@@ -14,6 +15,7 @@ function decodeJwtPayload(token: string): any | null {
 	}
 }
 
+/** Extraer el moduleId de una ruta /dashboard/xxx */
 function getModuleFromPath(pathname: string): string | null {
 	const match = pathname.match(/^\/dashboard\/([^/]+)/);
 	return match ? match[1] : null;
@@ -62,3 +64,4 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	return await resolve(event);
 };
+

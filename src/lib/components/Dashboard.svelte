@@ -10,7 +10,7 @@
 			icon: 'truck',
 			trend: 'up' as const,
 			trendValue: '+5.2%',
-			color: 'orange' as const
+			color: 'emerald' as const
 		},
 		{
 			title: 'Conductores',
@@ -37,7 +37,7 @@
 			icon: 'money',
 			trend: 'up' as const,
 			trendValue: '+8.3%',
-			color: 'orange' as const
+			color: 'emerald' as const
 		}
 	];
 
@@ -45,10 +45,10 @@
 		{
 			id: 1,
 			type: 'vehicle_start',
-			message: 'Vehículo CM-001 inició ruta Centro-Norte',
+			message: 'Vehículo TM-001 inició ruta Centro-Norte',
 			time: '2 min ago',
 			icon: 'truck',
-			color: 'orange'
+			color: 'emerald'
 		},
 		{
 			id: 2,
@@ -69,7 +69,7 @@
 		{
 			id: 4,
 			type: 'maintenance',
-			message: 'CM-005 necesita mantenimiento',
+			message: 'TM-005 necesita mantenimiento',
 			time: '1 hora ago',
 			icon: 'warning',
 			color: 'orange'
@@ -88,12 +88,12 @@
 
 	function getActivityColorClasses(color: string) {
 		const colors = {
-			orange: 'from-orange-400 to-orange-600',
+			emerald: 'from-orange-400 to-orange-600',
 			blue: 'from-blue-400 to-blue-600',
 			purple: 'from-purple-400 to-purple-600',
 			orange: 'from-orange-400 to-orange-600'
 		};
-		return colors[color as keyof typeof colors] || colors.orange;
+		return colors[color as keyof typeof colors] || colors.emerald;
 	}
 </script>
 

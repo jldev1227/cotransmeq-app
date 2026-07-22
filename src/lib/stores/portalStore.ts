@@ -1,7 +1,7 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
 
-const STORAGE_KEY = 'cotransmeq_portal_token';
+const STORAGE_KEY = 'transmeralda_portal_token';
 
 export interface PortalSession {
   token: string;
@@ -16,6 +16,7 @@ export interface PortalSession {
 }
 
 function createPortalStore() {
+  // Restore from localStorage
   let initial: PortalSession | null = null;
   if (browser) {
     try {

@@ -1,11 +1,13 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { fade, fly } from 'svelte/transition';
+	import { fade, fly, scale } from 'svelte/transition';
 	import { clientesAPI } from '$lib/api/apiClient';
 	import { socketUtils } from '$lib/socket';
+	import { authStore } from '$lib/stores/auth';
+	import { toast } from 'svelte-sonner';
+	import FilterDrawer from '$lib/components/ui/FilterDrawer.svelte';
 
-	// Constante para TipoCliente
 	const TipoCliente = {
 		EMPRESA: 'EMPRESA',
 		PERSONA_NATURAL: 'PERSONA_NATURAL'
@@ -13,7 +15,6 @@
 
 	type TipoCliente = (typeof TipoCliente)[keyof typeof TipoCliente];
 
-	// Interface para Cliente (actualizada según API response)
 	interface Cliente {
 		id: string;
 		nit: string;
@@ -22,1256 +23,955 @@
 		cedula: string | null;
 		telefono: string;
 		direccion: string;
-		correo: string | null; // Puede ser null según la API
+		correo: string | null;
 		requiere_osi: boolean;
 		paga_recargos: boolean;
 		tipo: TipoCliente;
 		createdAt: string;
 		updatedAt: string;
-		deletedAt?: string | null; // Campo adicional de la API
-		_count?: {
-			// Contadores adicionales de la API
-			recargos: number;
-			pernotes: number;
-			servicio: number;
-		};
-		showDropdown?: boolean; // Propiedad opcional para el dropdown
+		deletedAt?: string | null;
 	}
 
-	// Estado del componente
 	let clientes: Cliente[] = [];
-	let pagination = {
-		page: 1,
-		limit: 10,
-		total: 0,
-		pages: 0,
-		hasNext: false,
-		hasPrev: false
-	};
-	let isLoading = false;
+	let pagination = { page: 1, limit: 20, total: 0, pages: 1 };
+	let isLoading = true;
 	let error: string | null = null;
 	let filtroTipo: TipoCliente | 'TODOS' = 'TODOS';
 	let searchTerm = '';
-	let selectedCliente: Cliente | null = null;
-	let searchTimeout: NodeJS.Timeout;
-	let mostrarOcultos = false; // Toggle para ver registros ocultos
+	let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+	let mostrarOcultos = false;
+	let mostrarFiltros = false;
 
-	// Modal de confirmación para eliminar
 	let showDeleteModal = false;
 	let clienteToDelete: Cliente | null = null;
-	// Función para abrir el modal de confirmación de borrado
+
+	// Estados para modo selección
+	let clientesSeleccionados = new Set<string>();
+	let ultimoSeleccionadoIndex: number | null = null;
+	let shiftPressed = false;
+	let procesandoMasivo = false;
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Shift') shiftPressed = true;
+	}
+
+	function handleKeyup(e: KeyboardEvent) {
+		if (e.key === 'Shift') shiftPressed = false;
+	}
+
+	function toggleSeleccion(id: string, index: number, event: MouseEvent | TouchEvent | any) {
+		if (event.shiftKey && ultimoSeleccionadoIndex !== null) {
+			const start = Math.min(ultimoSeleccionadoIndex, index);
+			const end = Math.max(ultimoSeleccionadoIndex, index);
+
+			const idsInRange = clientes.slice(start, end + 1).map((c) => c.id);
+			const someNotSelected = idsInRange.some((id) => !clientesSeleccionados.has(id));
+
+			if (someNotSelected) {
+				idsInRange.forEach((id) => clientesSeleccionados.add(id));
+			} else {
+				idsInRange.forEach((id) => clientesSeleccionados.delete(id));
+			}
+		} else {
+			if (clientesSeleccionados.has(id)) {
+				clientesSeleccionados.delete(id);
+			} else {
+				clientesSeleccionados.add(id);
+			}
+			ultimoSeleccionadoIndex = index;
+		}
+		clientesSeleccionados = clientesSeleccionados;
+	}
+
+	function toggleSeleccionarTodo() {
+		if (clientesSeleccionados.size === clientes.length && clientes.length > 0) {
+			clientesSeleccionados.clear();
+		} else {
+			clientes.forEach((c) => clientesSeleccionados.add(c.id));
+		}
+		clientesSeleccionados = clientesSeleccionados;
+	}
+
+	async function ejecutarAccionMasiva(accion: 'ocultar' | 'mostrar' | 'eliminar') {
+		if (clientesSeleccionados.size === 0) return;
+
+		const ids = Array.from(clientesSeleccionados);
+		procesandoMasivo = true;
+
+		try {
+			const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clientes/masivo`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${localStorage.getItem('token')}`
+				},
+				body: JSON.stringify({ ids, accion })
+			});
+
+			const data = await response.json();
+			if (data.success) {
+				toast.success(data.message);
+				clientesSeleccionados.clear();
+				clientesSeleccionados = clientesSeleccionados;
+				loadClientes();
+			} else {
+				toast.error(data.message || 'Error al ejecutar acción masiva');
+			}
+		} catch (err) {
+			toast.error('Error de conexión al ejecutar acción masiva');
+		} finally {
+			procesandoMasivo = false;
+		}
+	}
+
+	$: isAdmin = $authStore.user?.rol === 'admin' || $authStore.user?.role === 'admin';
+	$: isOperaciones = $authStore.user?.area?.includes('operaciones');
+	$: isTalentoHumano = $authStore.user?.area?.includes('talento_humano');
+	$: canAccessSpecialViews = isAdmin || isOperaciones || isTalentoHumano;
+
+	// Filtros activos (para chips removibles)
+	const TIPO_LABELS: Record<string, string> = {
+		EMPRESA: 'Empresa',
+		PERSONA_NATURAL: 'Persona Natural'
+	};
+	$: activeFilters = [
+		...(filtroTipo !== 'TODOS'
+			? [{ key: 'tipo', label: 'Tipo', value: TIPO_LABELS[filtroTipo] ?? filtroTipo }]
+			: []),
+		...(mostrarOcultos ? [{ key: 'ocultos', label: 'Visibilidad', value: 'Ocultos' }] : []),
+		...(searchTerm.trim()
+			? [{ key: 'search', label: 'Búsqueda', value: `"${searchTerm.trim()}"` }]
+			: [])
+	];
+
+	function clearFilter(key: string) {
+		if (key === 'tipo') {
+			filtroTipo = 'TODOS';
+			loadClientes();
+		}
+		if (key === 'ocultos') {
+			mostrarOcultos = false;
+			loadClientes();
+		}
+		if (key === 'search') {
+			searchTerm = '';
+			loadClientes();
+		}
+	}
+
+	$: stats = {
+		total: pagination.total || clientes.length,
+		empresas: clientes.filter((c) => c.tipo === TipoCliente.EMPRESA).length,
+		personas: clientes.filter((c) => c.tipo === TipoCliente.PERSONA_NATURAL).length,
+		conOSI: clientes.filter((c) => c.requiere_osi).length,
+		conRecargos: clientes.filter((c) => c.paga_recargos).length
+	};
+
+	async function loadClientes() {
+		isLoading = true;
+		error = null;
+		try {
+			const response = await (mostrarOcultos
+				? fetch(`${import.meta.env.VITE_API_URL}/api/clientes/ocultos`, {
+						headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
+					}).then((r) => r.json())
+				: clientesAPI.getAll({
+						page: pagination.page,
+						limit: pagination.limit,
+						search: searchTerm.trim() || undefined,
+						tipo: filtroTipo !== 'TODOS' ? filtroTipo : undefined
+					}));
+
+			if (response.data?.success || Array.isArray(response.data)) {
+				clientes = response.data.data || response.data || [];
+				if (response.data.pagination) pagination = response.data.pagination;
+				else {
+					pagination.total = clientes.length;
+					pagination.pages = 1;
+				}
+			}
+		} catch (err: any) {
+			error = err.message || 'Error al cargar los clientes';
+			if (error) toast.error(error);
+		} finally {
+			isLoading = false;
+		}
+	}
+
+	function handleSearch() {
+		if (searchTimeout) clearTimeout(searchTimeout);
+		searchTimeout = setTimeout(() => {
+			pagination.page = 1;
+			loadClientes();
+		}, 400);
+	}
+
+	function limpiarFiltros() {
+		searchTerm = '';
+		filtroTipo = 'TODOS';
+		mostrarOcultos = false;
+		pagination.page = 1;
+		loadClientes();
+	}
+
+	async function irPagina(pagina: number) {
+		if (pagina >= 1 && pagina <= pagination.pages) {
+			pagination.page = pagina;
+			await loadClientes();
+		}
+	}
+
 	function openDeleteModal(cliente: Cliente) {
 		clienteToDelete = cliente;
 		showDeleteModal = true;
 	}
 
-	// Función para cerrar el modal
-	function closeDeleteModal() {
-		showDeleteModal = false;
-		clienteToDelete = null;
-	}
-
-	// Función para eliminar (soft delete) un cliente
-	async function deleteCliente() {
+	async function confirmDelete() {
 		if (!clienteToDelete) return;
-		isLoading = true;
 		try {
-			const response = await fetch(
-				`${import.meta.env.VITE_API_URL}/clientes/${clienteToDelete.id}`,
-				{
-					method: 'DELETE',
-					headers: { 'Content-Type': 'application/json' }
-				}
-			);
-			if (!response.ok) {
-				throw new Error('Error al eliminar el cliente');
-			}
-			// Eliminar del array local
-			clientes = clientes.filter((c) => c.id !== clienteToDelete?.id);
-			closeDeleteModal();
-		} catch (err: any) {
-			error = err.message || 'Error al eliminar el cliente';
-		} finally {
-			isLoading = false;
+			await fetch(`${import.meta.env.VITE_API_URL}/api/clientes/${clienteToDelete.id}`, {
+				method: 'DELETE'
+			});
+			toast.success('Cliente eliminado');
+			showDeleteModal = false;
+			loadClientes();
+		} catch (err) {
+			toast.error('Error al eliminar');
 		}
 	}
 
-	// Reactive statements para manejar cambios en búsqueda y filtros
-	$: {
-		if (searchTerm !== '' && typeof searchTerm === 'string') {
-			handleSearch();
-		}
+	function getTipoColor(tipo: string) {
+		return tipo === TipoCliente.EMPRESA ? '#3b82f6' : '#f97316';
 	}
-
-	$: {
-		if (filtroTipo !== 'TODOS') {
-			handleFilterChange();
-		}
-	}
-
-	// Filtrado reactivo - solo para vista local, el filtrado real se hace en el servidor
-	$: clientesFiltrados = clientes;
-
-	// Estadísticas (usar el total de la API cuando esté disponible)
-	$: stats = {
-		total: pagination.total || clientes.length,
-		totalPagina: clientes.length,
-		empresas: clientes.filter((c) => c.tipo === TipoCliente.EMPRESA).length,
-		personasNaturales: clientes.filter((c) => c.tipo === TipoCliente.PERSONA_NATURAL).length,
-		conOSI: clientes.filter((c) => c.requiere_osi).length,
-		conRecargos: clientes.filter((c) => c.paga_recargos).length
-	};
 
 	onMount(() => {
 		loadClientes();
-		socketUtils.on('cliente:created', handleClienteCreated);
-		socketUtils.on('cliente:updated', handleClienteUpdated);
-		socketUtils.on('cliente:deleted', handleClienteDeleted);
+		socketUtils.on('cliente:created', loadClientes);
+		socketUtils.on('cliente:updated', loadClientes);
+		socketUtils.on('cliente:deleted', loadClientes);
+		window.addEventListener('keydown', handleKeydown);
+		window.addEventListener('keyup', handleKeyup);
 	});
 
 	onDestroy(() => {
-		socketUtils.off('cliente:created', handleClienteCreated);
-		socketUtils.off('cliente:updated', handleClienteUpdated);
-		socketUtils.off('cliente:deleted', handleClienteDeleted);
+		socketUtils.off('cliente:created', loadClientes);
+		socketUtils.off('cliente:updated', loadClientes);
+		socketUtils.off('cliente:deleted', loadClientes);
+		window.removeEventListener('keydown', handleKeydown);
+		window.removeEventListener('keyup', handleKeyup);
 	});
-
-	async function loadClientes(page = 1, search = '', tipo = 'TODOS') {
-		isLoading = true;
-		error = null;
-
-		try {
-			// Si mostrarOcultos está activo, usar endpoint diferente
-			if (mostrarOcultos) {
-				const response = await fetch(`${import.meta.env.VITE_API_URL}/clientes/ocultos`, {
-					headers: {
-						Authorization: `Bearer ${localStorage.getItem('token')}`
-					}
-				}).then((r) => r.json());
-
-				clientes = response.data || [];
-
-				// Actualizar paginación manual ya que ocultos no tiene paginación
-				pagination = {
-					page: 1,
-					limit: clientes.length,
-					total: clientes.length,
-					pages: 1,
-					hasNext: false,
-					hasPrev: false
-				};
-
-				return;
-			}
-
-			// Construir parámetros de consulta para clientes normales
-			const params: any = {
-				page: page.toString(),
-				limit: pagination.limit.toString()
-			};
-
-			if (search && search.trim() !== '') {
-				params.search = search.trim();
-			}
-
-			if (tipo !== 'TODOS') {
-				params.tipo = tipo;
-			}
-
-			const response = await clientesAPI.getAll(params);
-
-			// Verificar la estructura del response según el formato especificado
-			if (response.data && response.data.success && Array.isArray(response.data.data)) {
-				clientes = response.data.data;
-
-				// Actualizar información de paginación
-				if (response.data.pagination) {
-					pagination = response.data.pagination;
-				}
-
-				// Log detallado de los primeros clientes para debug
-			} else {
-				console.warn('⚠️ Formato de respuesta inesperado:', {
-					hasData: !!response.data,
-					hasSuccess: response.data?.success,
-					hasDataArray: Array.isArray(response.data?.data),
-					actualStructure: Object.keys(response.data || {})
-				});
-				clientes = [];
-			}
-		} catch (err: any) {
-			console.error('❌ Error cargando clientes:', err);
-			console.error('📋 Detalles del error:', {
-				message: err.message,
-				status: err.response?.status,
-				data: err.response?.data,
-				config: err.config
-			});
-
-			error = err.response?.data?.message || err.message || 'Error al cargar los clientes';
-
-			// Datos de ejemplo para desarrollo/testing
-			clientes = [
-				{
-					id: '1',
-					nit: '900123456-1',
-					nombre: 'Transportes del Valle S.A.S.',
-					representante: 'Juan Carlos Pérez',
-					cedula: null,
-					telefono: '3201234567',
-					direccion: 'Calle 15 #23-45, Valle del Cauca',
-					correo: 'gerencia@transportesvalle.com',
-					requiere_osi: true,
-					paga_recargos: true,
-					tipo: TipoCliente.EMPRESA,
-					createdAt: '2024-01-15T10:30:00Z',
-					updatedAt: '2024-01-15T10:30:00Z'
-				},
-				{
-					id: '2',
-					nit: '12345678',
-					nombre: 'María Esperanza García López',
-					representante: null,
-					cedula: '12345678',
-					telefono: '3109876543',
-					direccion: 'Carrera 45 #23-12, Sector Centro, Medellín',
-					correo: 'maria.garcia@email.com',
-					requiere_osi: false,
-					paga_recargos: true,
-					tipo: TipoCliente.PERSONA_NATURAL,
-					createdAt: '2024-01-16T14:20:00Z',
-					updatedAt: '2024-01-16T14:20:00Z'
-				},
-				{
-					id: '3',
-					nit: '800987654-3',
-					nombre: 'Logística Andina Ltda.',
-					representante: 'Ana María Rodríguez',
-					cedula: null,
-					telefono: '3157894561',
-					direccion: 'Zona Industrial Norte, Km 5 Vía Bogotá',
-					correo: 'contacto@logisticaandina.co',
-					requiere_osi: true,
-					paga_recargos: false,
-					tipo: TipoCliente.EMPRESA,
-					createdAt: '2024-01-17T09:15:00Z',
-					updatedAt: '2024-01-17T09:15:00Z'
-				},
-				{
-					id: '4',
-					nit: '87654321',
-					nombre: 'Carlos Alberto Mendoza Silva',
-					representante: null,
-					cedula: '87654321',
-					telefono: '3201234567',
-					direccion: 'Avenida Central #12-34, Barrio La Esperanza, Cali',
-					correo: 'carlos.mendoza@gmail.com',
-					requiere_osi: false,
-					paga_recargos: false,
-					tipo: TipoCliente.PERSONA_NATURAL,
-					createdAt: '2024-01-18T16:45:00Z',
-					updatedAt: '2024-01-18T16:45:00Z'
-				},
-				{
-					id: '5',
-					nit: '901234567-5',
-					nombre: 'Comercializadora del Pacífico S.A.',
-					representante: 'Luis Fernando Castro',
-					cedula: null,
-					telefono: '3184567890',
-					direccion: 'Centro Comercial Plaza Mayor, Local 205',
-					correo: 'ventas@comercializadorapacifico.com',
-					requiere_osi: true,
-					paga_recargos: true,
-					tipo: TipoCliente.EMPRESA,
-					createdAt: '2024-01-19T11:20:00Z',
-					updatedAt: '2024-01-19T11:20:00Z'
-				},
-				{
-					id: '6',
-					nit: '13579024',
-					nombre: 'Diana Patricia Morales Ruiz',
-					representante: null,
-					cedula: '13579024',
-					telefono: '3051234567',
-					direccion: 'Transversal 8 #45-23, Barrio El Prado, Barranquilla',
-					correo: 'diana.morales@hotmail.com',
-					requiere_osi: true,
-					paga_recargos: false,
-					tipo: TipoCliente.PERSONA_NATURAL,
-					createdAt: '2024-01-20T14:30:00Z',
-					updatedAt: '2024-01-20T14:30:00Z'
-				}
-			];
-		} finally {
-			isLoading = false;
-		}
-	}
-
-	function handleClienteCreated(data: Cliente) {
-		clientes = [data, ...clientes];
-	}
-
-	function handleClienteUpdated(data: Cliente) {
-		const index = clientes.findIndex((c) => c.id === data.id);
-		if (index !== -1) {
-			clientes[index] = data;
-			clientes = [...clientes];
-		}
-	}
-
-	function handleClienteDeleted(data: { id: string }) {
-		clientes = clientes.filter((c) => c.id !== data.id);
-	}
-
-	// Función para navegar a la página de agregar cliente
-	function navigateToAddCliente() {
-		goto('/dashboard/clientes/agregar');
-	}
-
-	// Función para reintentar carga
-	function retryLoadClientes() {
-		loadClientes(pagination.page, searchTerm, filtroTipo);
-	}
-
-	// Funciones para manejar búsqueda y filtros
-	function handleSearch() {
-		// Debounce para evitar múltiples requests
-		if (searchTimeout) {
-			clearTimeout(searchTimeout);
-		}
-
-		searchTimeout = setTimeout(() => {
-			pagination.page = 1; // Reset a la primera página
-			loadClientes(1, searchTerm, filtroTipo);
-		}, 500); // 500ms de delay
-	}
-
-	function handleFilterChange() {
-		pagination.page = 1; // Reset a la primera página
-		loadClientes(1, searchTerm, filtroTipo);
-	}
-
-	// Función para manejar cambio de página
-	function goToPage(page: number) {
-		if (page >= 1 && page <= pagination.pages && page !== pagination.page) {
-			loadClientes(page, searchTerm, filtroTipo);
-		}
-	}
-
-	// Función para ir a página anterior
-	function previousPage() {
-		if (pagination.hasPrev) {
-			goToPage(pagination.page - 1);
-		}
-	}
-
-	// Función para ir a página siguiente
-	function nextPage() {
-		if (pagination.hasNext) {
-			goToPage(pagination.page + 1);
-		}
-	}
-
-	function getTipoColor(tipo: TipoCliente) {
-		switch (tipo) {
-			case TipoCliente.EMPRESA:
-				return 'bg-blue-100 text-blue-800';
-			case TipoCliente.PERSONA_NATURAL:
-				return 'bg-orange-100 text-orange-800';
-			default:
-				return 'bg-gray-100 text-gray-800';
-		}
-	}
-
-	function getTipoLabel(tipo: TipoCliente | 'TODOS') {
-		if (tipo === 'TODOS') return 'Todos';
-		return tipo === TipoCliente.EMPRESA ? 'Empresa' : 'Persona Natural';
-	}
-
-	function formatDate(dateString: string) {
-		return new Date(dateString).toLocaleDateString('es-CO', {
-			year: 'numeric',
-			month: 'short',
-			day: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
-	}
-
-	function formatPhoneNumber(phone: string) {
-		// Formatear número de teléfono colombiano
-		const cleaned = phone.replace(/\D/g, '');
-		const match = cleaned.match(/^(\d{3})(\d{3})(\d{4})$/);
-		if (match) {
-			return `${match[1]} ${match[2]} ${match[3]}`;
-		}
-		return phone;
-	}
-
-	// Función para verificar si un campo tiene datos válidos
-	function hasValidData(value: string | null | undefined): boolean {
-		return value !== null && value !== undefined && value.trim() !== '';
-	}
-
-	// Función para obtener texto de fallback
-	function getFallbackText(fieldName: string): string {
-		const fallbacks: Record<string, string> = {
-			representante: 'Sin representante registrado',
-			telefono: 'Sin teléfono registrado',
-			correo: 'Sin correo registrado',
-			direccion: 'Sin dirección registrada'
-		};
-		return fallbacks[fieldName] || 'Sin información registrada';
-	}
-
-	// Función para obtener los números de página a mostrar
-	function getPageNumbers(): (number | string)[] {
-		const pages: (number | string)[] = [];
-		const current = pagination.page;
-		const total = pagination.pages;
-
-		// Si hay 10 o menos páginas, mostrar todas
-		if (total <= 10) {
-			for (let i = 1; i <= total; i++) {
-				pages.push(i);
-			}
-			return pages;
-		}
-
-		// Siempre mostrar primera página
-		pages.push(1);
-
-		// Calcular rango alrededor de la página actual
-		let startPage = Math.max(2, current - 2);
-		let endPage = Math.min(total - 1, current + 2);
-
-		// Ajustar si estamos cerca del inicio
-		if (current <= 4) {
-			startPage = 2;
-			endPage = 6;
-		}
-
-		// Ajustar si estamos cerca del final
-		if (current >= total - 3) {
-			startPage = total - 5;
-			endPage = total - 1;
-		}
-
-		// Agregar puntos suspensivos al inicio si es necesario
-		if (startPage > 2) {
-			pages.push('...');
-		}
-
-		// Agregar páginas del rango
-		for (let i = startPage; i <= endPage; i++) {
-			pages.push(i);
-		}
-
-		// Agregar puntos suspensivos al final si es necesario
-		if (endPage < total - 1) {
-			pages.push('...');
-		}
-
-		// Siempre mostrar última página
-		pages.push(total);
-
-		return pages;
-	}
-
-	// Función para navegar al perfil del cliente
-	function navigateToClientProfile(clienteId: string) {
-		goto(`/dashboard/clientes/${clienteId}`);
-	}
 </script>
 
 <svelte:head>
-	<title>Gestión de Clientes - Cotransmeq</title>
+	<title>Clientes — Cotransmeq</title>
 </svelte:head>
 
-<div class="space-y-8 p-6">
-	<!-- Header con Acciones Rápidas -->
-	<div
-		class="glass rounded-3xl border border-orange-200/30 bg-gradient-to-r from-orange-50/50 to-amber-50/50 p-8"
-		in:fade={{ duration: 600 }}
-	>
-		<div class="flex flex-col items-start justify-between gap-6 lg:flex-row lg:items-center">
-			<div class="flex-1">
-				<div class="mb-2 flex items-center gap-3">
-					<div
-						class="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-amber-600 shadow-lg"
-					>
-						<svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="1.5"
-								d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-							/>
-						</svg>
-					</div>
-					<div>
-						<h1 class="text-2xl font-bold text-gray-900">Gestión de Clientes</h1>
-						<p class="text-gray-600">
-							Centro de control para administrar toda la información de clientes
-						</p>
-					</div>
-				</div>
-
-				<!-- Métricas Rápidas -->
-				<div class="mt-4 flex flex-wrap gap-4">
-					<div
-						class="flex items-center gap-2 rounded-xl border border-white/20 bg-white/60 px-4 py-2 backdrop-blur-sm"
-					>
-						<div class="h-2 w-2 rounded-full bg-orange-500"></div>
-						<span class="text-sm font-medium text-gray-700">
-							{stats.total} Clientes Totales
-							{#if stats.totalPagina !== stats.total}
-								<span class="text-xs text-gray-500">({stats.totalPagina} en página)</span>
-							{/if}
-						</span>
-					</div>
-					<div
-						class="flex items-center gap-2 rounded-xl border border-white/20 bg-white/60 px-4 py-2 backdrop-blur-sm"
-					>
-						<div class="h-2 w-2 rounded-full bg-blue-500"></div>
-						<span class="text-sm font-medium text-gray-700">{stats.empresas} Empresas</span>
-					</div>
-					<div
-						class="flex items-center gap-2 rounded-xl border border-white/20 bg-white/60 px-4 py-2 backdrop-blur-sm"
-					>
-						<div class="h-2 w-2 rounded-full bg-orange-500"></div>
-						<span class="text-sm font-medium text-gray-700">{stats.personasNaturales} Personas</span
-						>
-					</div>
-					{#if pagination.total > 0}
-						<div
-							class="flex items-center gap-2 rounded-xl border border-white/20 bg-white/60 px-4 py-2 backdrop-blur-sm"
-						>
-							<div class="h-2 w-2 rounded-full bg-purple-500"></div>
-							<span class="text-sm font-medium text-gray-700"
-								>Página {pagination.page}/{pagination.pages}</span
-							>
-						</div>
-					{/if}
-				</div>
-			</div>
-
-			<div class="flex flex-col gap-3 sm:flex-row">
-				<button
-					on:click={navigateToAddCliente}
-					class="apple-transition rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-6 py-3 font-semibold text-white shadow-lg hover:shadow-xl"
+<div class="flex h-full min-h-0 flex-col gap-4 p-6" in:fade={{ duration: 400 }}>
+	<!-- ── HEADER (page-card editorial) ─────────────────────── -->
+	<div class="page-card flex-shrink-0" style="padding: 1.25rem 1.5rem;">
+		<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+			<!-- Título -->
+			<div class="flex items-center gap-3">
+				<div
+					class="brand-gradient flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
+					style="box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);"
 				>
-					<svg class="mr-2 inline h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<svg
+						class="h-5 w-5 text-white"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+						stroke-width="1.8"
+					>
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
-							stroke-width="2"
-							d="M12 4v16m8-8H4"
+							d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
 						/>
+					</svg>
+				</div>
+				<div>
+					<div class="flex items-center gap-2">
+						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 400;">
+							Gestión de Clientes
+						</h1>
+						<span
+							class="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
+							style="background: rgba(249, 115, 22,0.08); color: var(--emerald-800);"
+						>
+							<span
+								class="h-1.5 w-1.5 animate-pulse rounded-full"
+								style="background-color: var(--emerald-500);"
+							></span>
+							En vivo
+						</span>
+					</div>
+					<p class="text-xs" style="color: var(--text-muted);">
+						Administra toda la información de clientes registrados
+					</p>
+				</div>
+			</div>
+
+			<div class="flex flex-wrap items-center gap-2">
+				<!-- Vistas Rápidas (Icon Buttons) -->
+				{#if canAccessSpecialViews}
+					<div class="mr-1 flex items-center gap-1">
+						<button
+							on:click={() => {
+								mostrarOcultos = !mostrarOcultos;
+								loadClientes();
+							}}
+							title={mostrarOcultos ? 'Ver Activos' : 'Ver Ocultos'}
+							class="btn-icon"
+							style="border-color: {mostrarOcultos
+								? 'var(--emerald-500)'
+								: 'var(--border-default)'}; background-color: {mostrarOcultos
+								? 'rgba(249, 115, 22,0.04)'
+								: 'white'}; color: {mostrarOcultos ? 'var(--emerald-600)' : 'var(--text-muted)'};"
+						>
+							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
+								/>
+							</svg>
+						</button>
+					</div>
+				{/if}
+
+				<!-- Búsqueda -->
+				<div class="relative">
+					<input
+						type="text"
+						bind:value={searchTerm}
+						on:input={handleSearch}
+						placeholder="Buscar clientes…"
+						class="input-glow apple-transition w-64 rounded-xl border py-2 pr-4 pl-9 text-sm"
+						style="border-color: var(--border-default); background-color: var(--bg-surface); color: var(--text-primary);"
+					/>
+					<svg
+						class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2"
+						style="color: var(--text-very-muted);"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+						stroke-width="1.8"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+						/>
+					</svg>
+				</div>
+
+				<!-- Filtros -->
+				<button
+					on:click={() => (mostrarFiltros = !mostrarFiltros)}
+					class="btn-secondary"
+					style="border-color: {mostrarFiltros
+						? 'var(--emerald-500)'
+						: 'var(--border-default)'}; color: {mostrarFiltros
+						? 'var(--emerald-700)'
+						: 'var(--text-secondary)'}; background-color: {mostrarFiltros
+						? 'rgba(249, 115, 22,0.04)'
+						: 'white'};"
+				>
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+						/>
+					</svg>
+					Filtros
+					{#if filtroTipo !== 'TODOS' || mostrarOcultos}
+						<span
+							class="flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white"
+							style="background-color: var(--emerald-500);">!</span
+						>
+					{/if}
+				</button>
+
+				<!-- Nuevo -->
+				<button on:click={() => goto('/dashboard/clientes/agregar')} class="btn-primary">
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
 					</svg>
 					Nuevo Cliente
 				</button>
 			</div>
 		</div>
+
+		<!-- Panel de filtros (drawer lateral) — siempre montado para que las
+		     animaciones de entrada Y salida del FilterDrawer se ejecuten -->
+		<FilterDrawer
+			open={mostrarFiltros}
+			onClose={() => (mostrarFiltros = false)}
+			eyebrow="Filtros"
+			title="Refinar resultados"
+			subtitle="Filtra la cartera de clientes por tipo o palabra clave."
+			activeCount={activeFilters.length}
+		>
+			<div slot="chips" class="flex flex-wrap gap-1.5">
+				{#each activeFilters as chip, i (chip.key)}
+					<span class="chip-pop-in" style="animation-delay: {i * 60}ms">
+						<button class="filter-chip" on:click={() => clearFilter(chip.key)}>
+							<span style="color: var(--text-muted); font-weight: 500;">{chip.label}:</span>
+							<span>{chip.value}</span>
+							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
+								><path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M6 18L18 6M6 6l12 12"
+								/></svg
+							>
+						</button>
+					</span>
+				{/each}
+			</div>
+
+			<div class="flex flex-col gap-5">
+				<div class="filter-field">
+					<label for="filtro-tipo" class="filter-field-label">
+						Tipo de cliente
+						{#if filtroTipo !== 'TODOS'}<span class="filter-field-label-hint">filtrado</span>{/if}
+					</label>
+					<select id="filtro-tipo" bind:value={filtroTipo} on:change={loadClientes}>
+						<option value="TODOS">Todos los tipos</option>
+						<option value={TipoCliente.EMPRESA}>Empresa</option>
+						<option value={TipoCliente.PERSONA_NATURAL}>Persona Natural</option>
+					</select>
+				</div>
+
+				<div class="filter-field">
+					<label for="filtro-visibilidad" class="filter-field-label">
+						Visibilidad
+						{#if mostrarOcultos}<span class="filter-field-label-hint">filtrado</span>{/if}
+					</label>
+					<select
+						id="filtro-visibilidad"
+						value={mostrarOcultos ? 'ocultos' : 'todos'}
+						on:change={(e) => {
+							const v = (e.currentTarget as HTMLSelectElement).value;
+							mostrarOcultos = v === 'ocultos';
+							loadClientes();
+						}}
+					>
+						<option value="todos">Activos</option>
+						<option value="ocultos" disabled={!canAccessSpecialViews}>Solo ocultos</option>
+					</select>
+				</div>
+
+				<div class="filter-field">
+					<label for="filtro-busqueda" class="filter-field-label">
+						Búsqueda por nombre, NIT o correo
+						{#if searchTerm.trim()}<span class="filter-field-label-hint">filtrado</span>{/if}
+					</label>
+					<input
+						id="filtro-busqueda"
+						type="text"
+						bind:value={searchTerm}
+						on:input={handleSearch}
+						placeholder="Ej. Transportes Norte, 900.123.456…"
+					/>
+				</div>
+			</div>
+
+			<div slot="footer">
+				<button
+					class="filter-clear"
+					on:click={limpiarFiltros}
+					disabled={activeFilters.length === 0}
+				>
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"
+						><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg
+					>
+					Limpiar
+				</button>
+				<button class="btn-primary" on:click={() => (mostrarFiltros = false)}>
+					Ver resultados
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"
+						><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-7-7l7 7-7 7" /></svg
+					>
+				</button>
+			</div>
+		</FilterDrawer>
 	</div>
 
-	<!-- Dashboard de Estadísticas -->
+	<!-- ── STATS CARDS (radio 16, mono labels) ──────────────── -->
 	<div
-		class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4"
-		in:fly={{ y: 20, duration: 600, delay: 200 }}
+		class="grid flex-shrink-0 grid-cols-2 gap-3 lg:grid-cols-5"
+		in:fly={{ y: 12, duration: 400, delay: 100 }}
 	>
-		<!-- Total Clientes -->
-		<div
-			class="glass apple-transition group rounded-xl border border-gray-200/50 p-4 hover:shadow-lg"
-		>
-			<div class="mb-2 flex items-center justify-between">
+		<div class="stat-card">
+			<p class="stat-label">Total</p>
+			<p class="stat-value">{stats.total}</p>
+		</div>
+		<div class="stat-card">
+			<p class="stat-label">Empresas</p>
+			<p class="stat-value" style="color: #3b82f6;">{stats.empresas}</p>
+		</div>
+		<div class="stat-card">
+			<p class="stat-label">Personas</p>
+			<p class="stat-value" style="color: var(--emerald-600);">{stats.personas}</p>
+		</div>
+		<div class="stat-card">
+			<p class="stat-label">Con OSI</p>
+			<p class="stat-value" style="color: #f59e0b;">{stats.conOSI}</p>
+		</div>
+		<div class="stat-card">
+			<p class="stat-label">Recargos</p>
+			<p class="stat-value" style="color: #a855f7;">{stats.conRecargos}</p>
+		</div>
+	</div>
+
+	<!-- ── TABLA (table-card editorial) ──────────────────────── -->
+	<div
+		class="table-card flex min-h-0 flex-1 flex-col {shiftPressed ? 'select-none' : ''}"
+		in:fly={{ y: 12, duration: 400, delay: 150 }}
+	>
+		{#if isLoading}
+			<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12">
+				<div class="spinner" style="width: 2.5rem; height: 2.5rem; border-width: 4px;"></div>
+				<p class="text-sm" style="color: var(--text-muted);">Cargando clientes…</p>
+			</div>
+		{:else if clientes.length === 0}
+			<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12">
 				<div
-					class="apple-transition flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-orange-600 group-hover:scale-110"
+					class="flex h-14 w-14 items-center justify-center rounded-2xl"
+					style="background-color: var(--bg-base);"
 				>
-					<svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<svg
+						class="h-7 w-7"
+						style="color: var(--text-very-muted);"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+						stroke-width="1.8"
+					>
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
-							stroke-width="1.5"
 							d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
 						/>
 					</svg>
 				</div>
-				<div class="text-right">
-					<p class="text-xl font-bold text-gray-900">{stats.total}</p>
-					<p class="text-xs font-medium text-gray-600">Total Clientes</p>
+				<div class="text-center">
+					<h3 class="font-display mb-1 text-lg" style="color: var(--bg-charcoal); font-weight: 400;">
+						No hay clientes
+					</h3>
+					<p class="text-sm" style="color: var(--text-muted);">No se encontraron resultados</p>
 				</div>
+				<button on:click={limpiarFiltros} class="btn-primary">Limpiar filtros</button>
 			</div>
-			<div class="flex items-center justify-between text-xs">
-				<span class="font-medium text-orange-600">↗ +12% este mes</span>
-				<span class="text-gray-500">Activos</span>
-			</div>
-		</div>
+		{:else}
+			<!-- Cards grid: 1 col mobile, 2 sm, 3 lg, 4 xl -->
+			<div class="min-h-0 flex-1 overflow-y-auto p-3">
+				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+					{#each clientes as cliente, index (cliente.id)}
+						<article
+							class="list-card"
+							style="border-left: 4px solid {getTipoColor(cliente.tipo)};
+								background-color: {clientesSeleccionados.has(cliente.id)
+								? 'rgba(249, 115, 22, 0.04)'
+								: 'var(--bg-surface)'};
+								border-color: {clientesSeleccionados.has(cliente.id) ? 'var(--emerald-500)' : 'var(--border-subtle)'};
+								border-left-color: {getTipoColor(cliente.tipo)};"
+							in:fly={{ y: 8, duration: 200, delay: Math.min(index * 20, 200) }}
+							on:click={(e) => toggleSeleccion(cliente.id, index, e)}
+							role="button"
+							tabindex="0"
+						>
+							<!-- Checkbox -->
+							<div class="flex-shrink-0 pt-0.5">
+								<input
+									type="checkbox"
+									checked={clientesSeleccionados.has(cliente.id)}
+									on:click|stopPropagation={(e) => toggleSeleccion(cliente.id, index, e)}
+									class="rounded text-orange-600 focus:ring-orange-500"
+									style="border-color: var(--border-default);"
+								/>
+							</div>
 
-		<!-- Empresas -->
-		<div
-			class="glass apple-transition group rounded-xl border border-gray-200/50 p-4 hover:shadow-lg"
-		>
-			<div class="mb-2 flex items-center justify-between">
-				<div
-					class="apple-transition flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-400 to-blue-600 group-hover:scale-110"
-				>
-					<svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="1.5"
-							d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-						/>
-					</svg>
-				</div>
-				<div class="text-right">
-					<p class="text-xl font-bold text-gray-900">{stats.empresas}</p>
-					<p class="text-xs font-medium text-gray-600">Empresas</p>
-				</div>
-			</div>
-			<div class="flex items-center justify-between text-xs">
-				<span class="font-medium text-blue-600"
-					>{Math.round((stats.empresas / stats.total) * 100)}% del total</span
-				>
-				<span class="text-gray-500">Corporativo</span>
-			</div>
-		</div>
+							<!-- Contenido principal -->
+							<div class="min-w-0 flex-1">
+								<!-- Header: NIT (mono) + tipo pill -->
+								<div class="mb-1.5 flex items-start justify-between gap-2">
+									<p
+										class="font-mono-meta text-[11px]"
+										style="color: var(--text-very-muted); letter-spacing: 0.05em;"
+									>
+										NIT {cliente.nit}
+									</p>
+								</div>
 
-		<!-- Personas Naturales -->
-		<div
-			class="glass apple-transition group rounded-xl border border-gray-200/50 p-4 hover:shadow-lg"
-		>
-			<div class="mb-2 flex items-center justify-between">
-				<div
-					class="apple-transition flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-orange-600 group-hover:scale-110"
-				>
-					<svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="1.5"
-							d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-						/>
-					</svg>
-				</div>
-				<div class="text-right">
-					<p class="text-xl font-bold text-gray-900">{stats.personasNaturales}</p>
-					<p class="text-xs font-medium text-gray-600">Personas</p>
-				</div>
-			</div>
-			<div class="flex items-center justify-between text-xs">
-				<span class="font-medium text-orange-600"
-					>{Math.round((stats.personasNaturales / stats.total) * 100)}% del total</span
-				>
-				<span class="text-gray-500">Individual</span>
-			</div>
-		</div>
+								<!-- Nombre (línea principal) -->
+								<p
+									class="truncate text-sm leading-snug font-semibold"
+									style="color: var(--text-primary);"
+								>
+									{cliente.nombre}
+								</p>
 
-		<!-- Servicios Especiales -->
-		<div
-			class="glass apple-transition group rounded-xl border border-gray-200/50 p-4 hover:shadow-lg"
-		>
-			<div class="mb-2 flex items-center justify-between">
+								<!-- Tipo (label editorial) -->
+								<p
+									class="mt-0.5 text-[10px] font-semibold tracking-wide uppercase"
+									style="color: {getTipoColor(cliente.tipo)};"
+								>
+									{cliente.tipo === TipoCliente.EMPRESA ? 'Empresa' : 'Persona Natural'}
+								</p>
+
+								<!-- Representante -->
+								{#if cliente.representante}
+									<p
+										class="mt-1.5 truncate text-[11px]"
+										style="color: var(--text-secondary);"
+									>
+										{cliente.representante}
+									</p>
+								{/if}
+
+								<!-- Footer: contacto -->
+								<div
+									class="mt-1.5 flex items-center justify-between gap-2 text-[10px]"
+									style="color: var(--text-muted);"
+								>
+									{#if cliente.telefono}
+										<span class="flex items-center gap-1 truncate">
+											<svg
+												class="h-3 w-3 flex-shrink-0"
+												style="color: var(--text-very-muted);"
+												fill="none"
+												stroke="currentColor"
+												viewBox="0 0 24 24"
+												stroke-width="1.8"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+												/>
+											</svg>
+											<span class="truncate">{cliente.telefono}</span>
+										</span>
+									{:else}
+										<span class="italic" style="color: var(--text-very-muted);">Sin teléfono</span>
+									{/if}
+								</div>
+
+								<!-- Badges OSI/REC -->
+								{#if cliente.requiere_osi || cliente.paga_recargos}
+									<div class="mt-2 flex flex-wrap gap-1">
+										{#if cliente.requiere_osi}
+											<span
+												class="font-mono-meta inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px]"
+												style="background: rgba(245, 158, 11, 0.08); color: #b45309;"
+											>
+												OSI
+											</span>
+										{/if}
+										{#if cliente.paga_recargos}
+											<span
+												class="font-mono-meta inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px]"
+												style="background: rgba(168, 85, 247, 0.08); color: #7e22ce;"
+											>
+												REC
+											</span>
+										{/if}
+									</div>
+								{/if}
+							</div>
+
+							<!-- Actions (vertical) -->
+							<div class="flex flex-shrink-0 flex-col gap-1" on:click|stopPropagation>
+								<button
+									on:click={() => goto(`/dashboard/clientes/${cliente.id}`)}
+									class="apple-transition rounded-md p-1.5"
+									style="color: var(--emerald-600); background-color: rgba(249, 115, 22, 0.06);"
+									title="Ver detalle"
+								>
+									<svg
+										class="h-3.5 w-3.5"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+										stroke-width="1.8"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
+										/>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
+										/>
+									</svg>
+								</button>
+								<button
+									on:click={() => openDeleteModal(cliente)}
+									class="apple-transition rounded-md p-1.5"
+									style="color: #dc2626; background-color: rgba(220, 38, 38, 0.06);"
+									title="Eliminar"
+								>
+									<svg
+										class="h-3.5 w-3.5"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+										stroke-width="1.8"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+										/>
+									</svg>
+								</button>
+							</div>
+						</article>
+					{/each}
+				</div>
+			</div>
+
+			<!-- Paginación -->
+			{#if pagination.pages > 1}
 				<div
-					class="apple-transition flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-purple-400 to-purple-600 group-hover:scale-110"
+					class="flex flex-shrink-0 items-center justify-between px-4 py-3"
+					style="border-top: 1px solid var(--border-subtle); background-color: var(--bg-base);"
 				>
-					<svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="1.5"
-							d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-						/>
-					</svg>
+					<p class="text-xs" style="color: var(--text-muted);">
+						Mostrando <span class="font-semibold" style="color: var(--text-primary);"
+							>{(pagination.page - 1) * pagination.limit + 1}–{Math.min(
+								pagination.page * pagination.limit,
+								pagination.total
+							)}</span
+						>
+						de
+						<span class="font-semibold" style="color: var(--text-primary);">{pagination.total}</span>
+						clientes
+					</p>
+					<div class="flex items-center gap-1">
+						<button
+							on:click={() => irPagina(pagination.page - 1)}
+							disabled={pagination.page === 1 || isLoading}
+							class="apple-transition rounded-lg border p-1.5"
+							style="border-color: var(--border-default); color: {pagination.page === 1 ||
+							isLoading
+								? 'var(--text-very-muted)'
+								: 'var(--text-secondary)'}; background-color: {pagination.page === 1 || isLoading
+								? 'var(--bg-base)'
+								: 'white'}; cursor: {pagination.page === 1 || isLoading
+								? 'not-allowed'
+								: 'pointer'};"
+						>
+							<svg
+								class="h-3.5 w-3.5"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+								stroke-width="1.8"
+								><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg
+							>
+						</button>
+						<span
+							class="px-2 text-xs font-semibold"
+							style="color: var(--text-primary);"
+						>
+							{pagination.page} / {pagination.pages}
+						</span>
+						<button
+							on:click={() => irPagina(pagination.page + 1)}
+							disabled={pagination.page === pagination.pages || isLoading}
+							class="apple-transition rounded-lg border p-1.5"
+							style="border-color: var(--border-default); color: {pagination.page ===
+							pagination.pages || isLoading
+								? 'var(--text-very-muted)'
+								: 'var(--text-secondary)'}; background-color: {pagination.page ===
+							pagination.pages || isLoading
+								? 'var(--bg-base)'
+								: 'white'}; cursor: {pagination.page === pagination.pages || isLoading
+								? 'not-allowed'
+								: 'pointer'};"
+						>
+							<svg
+								class="h-3.5 w-3.5"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+								stroke-width="1.8"
+								><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg
+							>
+						</button>
+					</div>
 				</div>
-				<div class="text-right">
-					<p class="text-xl font-bold text-gray-900">{stats.conOSI}</p>
-					<p class="text-xs font-medium text-gray-600">Con OSI</p>
-				</div>
-			</div>
-			<div class="flex items-center justify-between text-xs">
-				<span class="font-medium text-purple-600">{stats.conRecargos} con recargos</span>
-				<span class="text-gray-500">Especiales</span>
-			</div>
-		</div>
+			{/if}
+		{/if}
 	</div>
 
-	<!-- Controles de Filtrado y Búsqueda -->
-	<div
-		class="glass rounded-xl border border-gray-200/50 p-4"
-		in:fly={{ y: 20, duration: 600, delay: 300 }}
-	>
-		<div class="flex flex-col gap-3 lg:flex-row">
-			<!-- Barra de Búsqueda Avanzada -->
-			<div class="flex-1">
-				<!-- Búsqueda para desktop -->
-				<div
-					class="apple-transition hidden items-center rounded-lg bg-gray-100/80 p-3 focus-within:bg-gray-100 focus-within:ring-2 focus-within:ring-orange-400/20 md:flex"
+	<!-- Bulk Actions Bar — fondo charcoal profundo (no glass) -->
+	{#if clientesSeleccionados.size > 0}
+		<div class="bulk-actions-container">
+			<div
+				class="flex items-center gap-4 rounded-2xl p-2.5 shadow-2xl"
+				style="background-color: var(--bg-charcoal); border: 1px solid rgba(255,255,255,0.08); color: white;"
+				in:scale={{ duration: 300, start: 0.9 }}
+			>
+				<span
+					class="px-2 text-xs font-medium"
+					style="border-right: 1px solid rgba(255,255,255,0.15);"
+				>
+					{clientesSeleccionados.size} seleccionados
+				</span>
+				<div class="flex gap-1.5">
+					<button
+						on:click={() => ejecutarAccionMasiva('ocultar')}
+						disabled={procesandoMasivo}
+						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
+						style="background-color: rgba(255,255,255,0.08);"
+					>
+						<svg
+							class="h-3.5 w-3.5"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+							stroke-width="1.8"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
+							/>
+						</svg>
+						Ocultar
+					</button>
+					<button
+						on:click={() => ejecutarAccionMasiva('eliminar')}
+						disabled={procesandoMasivo}
+						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
+						style="background-color: rgba(220,38,38,0.85);"
+					>
+						<svg
+							class="h-3.5 w-3.5"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+							stroke-width="1.8"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+							/>
+						</svg>
+						Papelera
+					</button>
+				</div>
+				<button
+					on:click={() => {
+						clientesSeleccionados.clear();
+						clientesSeleccionados = clientesSeleccionados;
+					}}
+					class="apple-transition ml-2"
+					style="color: rgba(255,255,255,0.5);"
 				>
 					<svg
-						class="mr-2 h-4 w-4 flex-shrink-0 text-gray-400 {isLoading ? 'animate-spin' : ''}"
+						class="h-4 w-4"
 						fill="none"
 						stroke="currentColor"
 						viewBox="0 0 24 24"
+						stroke-width="1.8"
 					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-						/>
-					</svg>
-					<input
-						type="text"
-						bind:value={searchTerm}
-						disabled={isLoading}
-						placeholder="Buscar por nombre, NIT, correo, representante o dirección..."
-						class="min-w-0 flex-1 bg-transparent text-sm text-gray-700 placeholder-gray-400 outline-none disabled:opacity-50"
-					/>
-					{#if isLoading}
-						<div class="ml-2 text-xs text-gray-500">Buscando...</div>
-					{/if}
-				</div>
-
-				<!-- Búsqueda para móvil -->
-				<div class="md:hidden">
-					<input
-						type="text"
-						bind:value={searchTerm}
-						disabled={isLoading}
-						placeholder="Buscar clientes..."
-						class="apple-transition w-full rounded-lg border border-gray-200/50 bg-white/50 px-3 py-2 text-sm focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-500 disabled:opacity-50"
-					/>
-				</div>
-			</div>
-
-			<!-- Filtros -->
-			<div class="flex gap-2">
-				<select
-					bind:value={filtroTipo}
-					class="apple-transition rounded-lg border border-gray-200/50 bg-white/50 px-4 py-2 text-sm text-gray-900 backdrop-blur-sm focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-500"
-				>
-					<option value="TODOS">🌟 Todos los tipos</option>
-					<option value={TipoCliente.EMPRESA}>🏢 Empresas</option>
-					<option value={TipoCliente.PERSONA_NATURAL}>👤 Personas Naturales</option>
-				</select>
-
-				<button
-					class="apple-transition rounded-lg border border-gray-200/50 bg-white/50 px-4 py-2 text-gray-700 backdrop-blur-sm hover:bg-white"
-					aria-label="Filtros avanzados"
-					title="Filtros avanzados"
-				>
-					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.207A1 1 0 013 6.5V4z"
-						/>
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 					</svg>
 				</button>
 			</div>
 		</div>
-
-		{#if searchTerm || filtroTipo !== 'TODOS'}
-			<div class="mt-4 flex flex-wrap gap-2">
-				<div class="text-sm text-gray-600">
-					Mostrando {clientesFiltrados.length} de {stats.total} clientes
-				</div>
-				{#if searchTerm}
-					<span
-						class="inline-flex items-center rounded-full bg-orange-100 px-3 py-1 text-xs font-medium text-orange-800"
-					>
-						Búsqueda: "{searchTerm}"
-					</span>
-				{/if}
-				{#if filtroTipo !== 'TODOS'}
-					<span
-						class="inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800"
-					>
-						Filtro: {getTipoLabel(filtroTipo)}
-					</span>
-				{/if}
-			</div>
-		{/if}
-	</div>
-
-	<!-- Grid de Clientes con Vista Detallada -->
-	{#if isLoading}
-		<div
-			class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3"
-			in:fly={{ y: 20, duration: 600, delay: 400 }}
-		>
-			{#each Array(6) as _}
-				<div class="glass animate-pulse rounded-2xl border border-gray-200/50 p-6">
-					<div class="mb-4 flex items-center justify-between">
-						<div class="flex items-center gap-3">
-							<div class="h-12 w-12 rounded-xl bg-gray-300"></div>
-							<div>
-								<div class="mb-2 h-5 w-32 rounded bg-gray-300"></div>
-								<div class="h-4 w-20 rounded bg-gray-300"></div>
-							</div>
-						</div>
-						<div class="h-6 w-16 rounded bg-gray-300"></div>
-					</div>
-					<div class="space-y-2">
-						<div class="h-4 w-full rounded bg-gray-300"></div>
-						<div class="h-4 w-3/4 rounded bg-gray-300"></div>
-						<div class="h-4 w-1/2 rounded bg-gray-300"></div>
-					</div>
-				</div>
-			{/each}
-		</div>
-	{:else if error && clientes.length === 0}
-		<div class="glass rounded-2xl border border-red-200/50 bg-red-50/30 p-8 text-center">
-			<div class="mb-4 text-red-500">
-				<svg class="mx-auto h-16 w-16" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="1"
-						d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-					/>
-				</svg>
-			</div>
-			<h3 class="mb-2 text-lg font-semibold text-gray-900">Error al cargar clientes</h3>
-			<p class="mb-6 text-gray-600">{error}</p>
-			<button
-				class="apple-transition rounded-xl bg-gradient-to-r from-orange-500 to-amber-600 px-6 py-3 font-semibold text-white shadow-lg hover:shadow-xl"
-				on:click={retryLoadClientes}
-			>
-				<svg class="mr-2 inline h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-					/>
-				</svg>
-				Reintentar
-			</button>
-		</div>
-	{:else if clientesFiltrados.length === 0}
-		<div class="glass rounded-2xl border border-gray-200/50 p-8 text-center">
-			<svg
-				class="mx-auto mb-4 h-16 w-16 text-gray-400"
-				fill="none"
-				stroke="currentColor"
-				viewBox="0 0 24 24"
-			>
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					stroke-width="1"
-					d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-				/>
-			</svg>
-			<h3 class="mb-2 text-lg font-semibold text-gray-900">No se encontraron clientes</h3>
-			<p class="text-gray-600">
-				{#if searchTerm}
-					No hay clientes que coincidan con "{searchTerm}"
-				{:else}
-					Ajusta los filtros para ver más resultados
-				{/if}
-			</p>
-		</div>
-	{:else}
-		<div
-			class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-			in:fly={{ y: 20, duration: 600, delay: 400 }}
-		>
-			{#each clientesFiltrados as cliente (cliente.id)}
-				<div
-					class="glass apple-transition group cursor-pointer rounded-xl border border-gray-200/50 p-4 hover:scale-[1.01] hover:shadow-lg"
-					in:fade={{ delay: parseInt(cliente.id) * 50 }}
-					on:click={() => (selectedCliente = cliente)}
-					on:keydown={(e) => {
-						if (e.key === 'Enter' || e.key === ' ') {
-							e.preventDefault();
-							selectedCliente = cliente;
-						}
-					}}
-					role="button"
-					tabindex="0"
-					aria-label="Ver detalles de {cliente.nombre}"
-				>
-					<!-- Header de la Tarjeta -->
-					<div class="mb-3 flex items-center justify-between gap-2">
-						<div class="flex items-center gap-2">
-							<div
-								class="apple-transition flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-amber-600 shadow-md group-hover:scale-110"
-							>
-								{#if cliente.tipo === TipoCliente.EMPRESA}
-									<svg
-										class="h-5 w-5 text-white"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="1.5"
-											d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-										/>
-									</svg>
-								{:else}
-									<svg
-										class="h-5 w-5 text-white"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="1.5"
-											d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-										/>
-									</svg>
-								{/if}
-							</div>
-							<div class="min-w-0 flex-1">
-								<h3
-									class="w-full max-w-xs truncate text-sm font-bold text-gray-900"
-									title={cliente.nombre}
-								>
-									{cliente.nombre.length > 30
-										? cliente.nombre.substring(0, 30) + '...'
-										: cliente.nombre}
-								</h3>
-								<p class="text-xs text-gray-500">NIT: {cliente.nit}</p>
-							</div>
-						</div>
-						<span
-							class="inline-flex rounded-full px-2 py-0.5 text-xs font-semibold {getTipoColor(
-								cliente.tipo
-							)} shrink-0"
-						>
-							{getTipoLabel(cliente.tipo)}
-						</span>
-					</div>
-
-					<!-- Información Principal -->
-					<div class="mb-3 space-y-2">
-						{#if cliente.representante && cliente.representante.trim() !== ''}
-							<div class="flex items-center gap-1.5">
-								<svg
-									class="h-3.5 w-3.5 shrink-0 text-gray-400"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-									/>
-								</svg>
-								<span class="truncate text-xs text-gray-600" title={cliente.representante}>
-									{cliente.representante}
-								</span>
-							</div>
-						{/if}
-
-						<div class="flex items-center gap-1.5">
-							<svg
-								class="h-3.5 w-3.5 shrink-0 text-gray-400"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21L6.374 11.5l8.25 8.25 2.113-3.85a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V20.72a2 2 0 01-2 2h-1.28C10.5 22.72 1.28 13.5 1.28 2.72V1.44a2 2 0 012-2H6.5z"
-								/>
-							</svg>
-							<span class="text-xs text-gray-900">
-								{cliente.telefono && cliente.telefono.trim() !== ''
-									? cliente.telefono
-									: 'Sin teléfono'}
-							</span>
-						</div>
-
-						{#if cliente.correo && cliente.correo.trim() !== ''}
-							<div class="flex items-start gap-1.5">
-								<svg
-									class="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M3 8l7.89 7.89a2 2 0 002.83 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-									/>
-								</svg>
-								<span class="truncate text-xs text-gray-600" title={cliente.correo}>
-									{cliente.correo}
-								</span>
-							</div>
-						{/if}
-
-						<div class="flex items-start gap-1.5">
-							<svg
-								class="mt-0.5 h-3.5 w-3.5 shrink-0 text-gray-400"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-								/>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-								/>
-							</svg>
-							<span
-								class="line-clamp-2 text-xs leading-tight text-gray-600"
-								title={cliente.direccion || 'Sin dirección'}
-							>
-								{cliente.direccion && cliente.direccion.trim() !== ''
-									? cliente.direccion
-									: 'Sin dirección'}
-							</span>
-						</div>
-					</div>
-
-					<!-- Características Especiales con Fallback -->
-					<div class="mb-3 flex flex-wrap gap-1.5">
-						{#if cliente.requiere_osi}
-							<span
-								class="inline-flex items-center rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700"
-							>
-								OSI
-							</span>
-						{/if}
-						{#if cliente.paga_recargos}
-							<span
-								class="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-700"
-							>
-								Recargos
-							</span>
-						{/if}
-					</div>
-
-					<!-- Acciones -->
-					<div class="flex gap-2 border-t border-gray-200/50 pt-3">
-						<button
-							on:click={() => navigateToClientProfile(cliente.id)}
-							class="apple-transition flex-1 rounded-lg bg-orange-50 px-3 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-100"
-						>
-							Ver Perfil
-						</button>
-						<div class="relative">
-							<button
-								class="apple-transition rounded-lg bg-gray-50 p-1.5 text-gray-700 hover:bg-gray-100"
-								aria-label="Más opciones para {cliente.nombre}"
-								title="Más opciones"
-								on:click={() => (cliente.showDropdown = !cliente.showDropdown)}
-								tabindex="0"
-							>
-								<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"
-									/>
-								</svg>
-							</button>
-							{#if cliente.showDropdown}
-								<div
-									class="absolute right-0 bottom-full z-10 mb-1 w-32 rounded-lg border border-gray-200 bg-white shadow-lg"
-									transition:fly={{ y: 10, duration: 200 }}
-								>
-									<button
-										class="flex w-full cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-xs text-gray-700 hover:bg-gray-100"
-										on:click={() => goto(`/clientes/${cliente.id}/editar`)}
-									>
-										<svg
-											class="h-3.5 w-3.5 text-gray-500"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-2.828 0L9 13zm-4 6h16"
-											/>
-										</svg>
-										Editar
-									</button>
-								</div>
-							{/if}
-						</div>
-					</div>
-				</div>
-			{/each}
-		</div>
-
-		<!-- Información de Paginación y Controles -->
-		{#if pagination.total > 0}
-			<div
-				class="glass mt-6 rounded-xl border border-gray-200/50 p-4"
-				in:fly={{ y: 20, duration: 600, delay: 500 }}
-			>
-				<div class="flex flex-col items-center justify-between gap-4 lg:flex-row">
-					<!-- Info de registros -->
-					<div class="flex items-center gap-3 text-xs text-gray-600">
-						<div class="flex items-center gap-1.5">
-							<svg
-								class="h-3.5 w-3.5 text-orange-500"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2-2V7a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 00-2 2h-2a2 2 0 00-2 2v6a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
-								/>
-							</svg>
-							<span>
-								<strong>{(pagination.page - 1) * pagination.limit + 1}</strong> -
-								<strong>{Math.min(pagination.page * pagination.limit, pagination.total)}</strong>
-								de <strong>{pagination.total}</strong>
-							</span>
-						</div>
-
-						<div class="h-3 w-px bg-gray-300"></div>
-
-						<div class="flex items-center gap-1.5">
-							<span
-								>Página <strong>{pagination.page}</strong> /
-								<strong>{pagination.pages}</strong></span
-							>
-						</div>
-					</div>
-
-					<!-- Controles de navegación -->
-					<div class="flex items-center gap-3">
-						<!-- Selector de items por página -->
-						<div
-							class="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-1.5"
-						>
-							<span class="text-xs font-semibold text-gray-700">Mostrar:</span>
-							<select
-								bind:value={pagination.limit}
-								on:change={() => {
-									pagination.page = 1;
-									loadClientes(1, searchTerm, filtroTipo);
-								}}
-								class="apple-transition border-0 bg-transparent pr-6 text-xs font-bold text-gray-900 focus:ring-0 focus:outline-none"
-							>
-								<option value={10}>10</option>
-								<option value={20}>20</option>
-								<option value={50}>50</option>
-								<option value={100}>100</option>
-							</select>
-						</div>
-
-						<!-- Botones de navegación -->
-						<div class="flex items-center gap-1">
-							<button
-								disabled={!pagination.hasPrev}
-								on:click={previousPage}
-								class="apple-transition rounded-lg border border-gray-300 bg-white p-2 text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-								title="Página anterior"
-							>
-								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M15 19l-7-7 7-7"
-									/>
-								</svg>
-							</button>
-
-							<div class="flex items-center gap-1">
-								{#each getPageNumbers() as pageNum}
-									{#if pageNum === '...'}
-										<span class="px-2 text-xs text-gray-400">...</span>
-									{:else}
-										<button
-											on:click={() => goToPage(pageNum)}
-											class="apple-transition flex h-9 w-9 items-center justify-center rounded-lg text-xs font-bold shadow-sm {pageNum ===
-											pagination.page
-												? 'bg-gradient-to-r from-orange-500 to-amber-600 text-white shadow-md ring-2 ring-orange-300'
-												: 'bg-white text-gray-700 hover:bg-gray-50'}"
-										>
-											{pageNum}
-										</button>
-									{/if}
-								{/each}
-							</div>
-
-							<button
-								disabled={!pagination.hasNext}
-								on:click={nextPage}
-								class="apple-transition rounded-lg border border-gray-300 bg-white p-2 text-gray-700 shadow-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-								title="Página siguiente"
-							>
-								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M9 5l7 7-7 7"
-									/>
-								</svg>
-							</button>
-						</div>
-					</div>
-				</div>
-			</div>
-		{/if}
 	{/if}
 </div>
 
-<!-- Modal de confirmación de borrado -->
 {#if showDeleteModal && clienteToDelete}
-	<div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" in:fade={{ duration: 200 }}>
+	<!-- Backdrop con blur (paleta landing) -->
+	<button
+		type="button"
+		class="fixed inset-0 z-50 cursor-default border-0 p-0"
+		style="background: linear-gradient(135deg, rgba(15, 31, 26, 0.40), rgba(10, 20, 16, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
+		aria-label="Cerrar modal"
+		on:click={() => (showDeleteModal = false)}
+	></button>
+
+	<div
+		class="fixed inset-0 z-50 flex items-center justify-center p-4"
+		on:keydown={(e) => e.key === 'Escape' && (showDeleteModal = false)}
+		role="dialog"
+		aria-modal="true"
+	>
 		<div
-			class="glass w-full max-w-md rounded-2xl border border-red-200/50 bg-white p-8 shadow-2xl"
-			in:fly={{ y: 20, duration: 300 }}
+			class="w-full max-w-sm overflow-hidden"
+			style="background-color: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 24px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18); padding: 1.5rem;"
+			in:scale={{ duration: 200, start: 0.95 }}
 		>
-			<h2 class="mb-4 text-lg font-semibold text-gray-900">¿Eliminar cliente?</h2>
-			<p class="mb-6 text-gray-700">
-				¿Estás seguro de que deseas eliminar el cliente <span class="font-bold"
+			<div class="mb-4 flex items-center gap-3">
+				<div
+					class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full"
+					style="background-color: rgba(220, 38, 38, 0.08);"
+				>
+					<svg
+						class="h-5 w-5"
+						style="color: #dc2626;"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+						stroke-width="1.8"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+						/>
+					</svg>
+				</div>
+				<div>
+					<h2 class="text-base font-bold" style="color: var(--text-primary);">
+						¿Eliminar cliente?
+					</h2>
+					<p class="mt-0.5 text-xs" style="color: var(--text-muted);">
+						Esta acción no se puede deshacer
+					</p>
+				</div>
+			</div>
+			<p class="mb-5 text-sm" style="color: var(--text-secondary);">
+				Se eliminará a <span class="font-semibold" style="color: var(--text-primary);"
 					>{clienteToDelete.nombre}</span
-				>? Esta acción es reversible (soft delete).
+				>
+				del sistema.
 			</p>
-			<div class="flex justify-end gap-3">
+			<div class="flex gap-2">
 				<button
-					class="rounded-lg bg-gray-100 px-4 py-2 text-gray-700 hover:bg-gray-200"
-					on:click={closeDeleteModal}
-					disabled={isLoading}>Cancelar</button
+					on:click={() => (showDeleteModal = false)}
+					class="btn-secondary flex-1"
+					style="justify-content: center;"
 				>
+					Cancelar
+				</button>
 				<button
-					class="rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700"
-					on:click={deleteCliente}
-					disabled={isLoading}
+					on:click={confirmDelete}
+					class="flex-1 rounded-xl px-4 py-2 text-sm font-semibold text-white"
+					style="background-color: #dc2626;"
 				>
-					{isLoading ? 'Eliminando...' : 'Eliminar'}
+					Eliminar
 				</button>
 			</div>
 		</div>
 	</div>
 {/if}
+
+<style>
+	/* .page-card, .stat-card, .table-card, .list-card, .brand-gradient, .btn-primary,
+	   .btn-secondary, .btn-icon, .spinner, .filter-field, .filter-chip, .filter-clear,
+	   .bulk-actions-container y .confirm-card ya están definidos en app.css con la
+	   nueva paleta editorial. Solo conservamos animaciones específicas si las hubiera. */
+</style>

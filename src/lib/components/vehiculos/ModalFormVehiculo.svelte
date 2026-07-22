@@ -1,6 +1,7 @@
 <script lang="ts">
-	import { createEventDispatcher, onMount } from 'svelte';
+	import { createEventDispatcher } from 'svelte';
 	import { fade, fly, scale } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
 	import { vehiculosAPI } from '$lib/api/apiClient';
 	import { socketUtils } from '$lib/socket';
 	import { flotaStore } from '$lib/stores/flota';
@@ -11,12 +12,10 @@
 	const dispatch = createEventDispatcher();
 
 	let isSubmitting = false;
-	let isLoadingData = false;
 	let error: string | null = null;
 	let fieldErrors: { [key: string]: string } = {};
 	let showSuccessAnimation = false;
 	let successMessage = '';
-	let lastLoadedId: string | null = null; // Track the last loaded vehicle ID
 
 	// Form data
 	let formData = {
@@ -30,28 +29,33 @@
 	};
 
 	const claseVehiculoOptions = [
-		'Automóvil',
-		'Camioneta',
-		'Van',
-		'Bus',
-		'Camión',
-		'Motocicleta',
-		'Otro'
+		'automovil',
+		'camioneta',
+		'van',
+		'bus',
+		'camion',
+		'motocicleta',
+		'otro'
 	];
 
 	const estadoOptions = [
 		{ value: 'DISPONIBLE', label: 'Disponible' },
+		{ value: 'disponible', label: 'Disponible' },
 		{ value: 'SERVICIO', label: 'En Servicio' },
+		{ value: 'servicio', label: 'En Servicio' },
 		{ value: 'MANTENIMIENTO', label: 'Mantenimiento' },
+		{ value: 'mantenimiento', label: 'Mantenimiento' },
 		{ value: 'INACTIVO', label: 'Inactivo' },
+		{ value: 'inactivo', label: 'Inactivo' },
 		{ value: 'NO_DISPONIBLE', label: 'No Disponible' },
-		{ value: 'DESVINCULADO', label: 'Desvinculado' }
+		{ value: 'no_disponible', label: 'No Disponible' },
+		{ value: 'DESVINCULADO', label: 'Desvinculado' },
+		{ value: 'desvinculado', label: 'Desvinculado' }
 	];
 
 	const handleClose = () => {
 		if (isSubmitting) return;
 		isOpen = false;
-		lastLoadedId = null; // Reset to force reload next time
 		resetForm();
 		dispatch('close');
 	};
@@ -70,9 +74,6 @@
 		fieldErrors = {};
 		showSuccessAnimation = false;
 		successMessage = '';
-		// NO resetear vehiculoId aquí - es una prop controlada por el padre
-		// vehiculoId = null; 
-		lastLoadedId = null; // Reset last loaded ID
 	};
 
 	const parseBackendError = (err: any): string => {
@@ -198,16 +199,18 @@
 			let response;
 			if (vehiculoId) {
 				response = await vehiculosAPI.update(vehiculoId, payload);
+				const vehiculo = response.data.data;
+
 				successMessage = 'Vehículo actualizado exitosamente';
 
 				// Emitir evento de actualización por socket
 				socketUtils.emit('vehiculo-actualizado', {
 					vehiculoId,
-					vehiculo: response.data
+					vehiculo
 				});
 
 				// Actualizar en el store
-				flotaStore.updateVehiculo(vehiculoId, response.data);
+				flotaStore.updateVehiculo(vehiculoId, vehiculo);
 			} else {
 				response = await vehiculosAPI.create(payload);
 				successMessage = 'Vehículo registrado exitosamente';
@@ -228,7 +231,6 @@
 			setTimeout(() => {
 				showSuccessAnimation = false;
 				isOpen = false;
-				lastLoadedId = null; // Reset to force reload next time
 				resetForm();
 				dispatch('success');
 			}, 2000);
@@ -241,105 +243,105 @@
 	};
 
 	// Load vehiculo data if editing
-	// Only reload when vehicle ID changes OR when it's a fresh open (lastLoadedId is null)
-	$: if (isOpen && vehiculoId && lastLoadedId !== vehiculoId) {
-		loadVehiculo(vehiculoId);
-	} else if (isOpen && !vehiculoId) {
-		resetForm();
+	$: if (isOpen && vehiculoId) {
+		loadVehiculo();
 	}
 
-	async function loadVehiculo(id: string) {
+	async function loadVehiculo() {
 		try {
-			isLoadingData = true;
-			error = null;
-			
-			const response = await vehiculosAPI.getById(id);
-			
-			// La respuesta puede venir en response.data.data o directamente en response.data
-			const vehiculo = response.data?.data || response.data;
+			const response = await vehiculosAPI.getById(vehiculoId!);
+			const vehiculo = response.data.data;
 
-			// Si vehiculo tiene la estructura {success: true, data: {...}}, extraer data
-			const vehiculoData = vehiculo.success ? vehiculo.data : vehiculo;
-
-			if (!vehiculoData || (typeof vehiculoData === 'object' && Object.keys(vehiculoData).length === 0)) {
-				throw new Error('No se encontraron datos del vehículo');
-			}
-
-			// Normalizar clase_vehiculo para que coincida con las opciones del select
-			// Backend devuelve "CAMIONETA", select necesita "Camioneta"
-			const normalizeClaseVehiculo = (clase: string) => {
-				if (!clase) return '';
-				// Convertir primera letra en mayúscula y el resto en minúsculas
-				return clase.charAt(0).toUpperCase() + clase.slice(1).toLowerCase();
+			formData = {
+				placa: vehiculo.placa || '',
+				marca: vehiculo.marca || '',
+				modelo: vehiculo.modelo || '',
+				ano: vehiculo.ano || new Date().getFullYear(),
+				clase_vehiculo: vehiculo.clase_vehiculo.toLowerCase() || '',
+				capacidad_pasajeros: vehiculo.capacidad_pasajeros || 1,
+				estado: vehiculo.estado || 'DISPONIBLE'
 			};
-
-			const newFormData = {
-				placa: vehiculoData.placa || '',
-				marca: vehiculoData.marca || '',
-				modelo: vehiculoData.modelo || '',
-				ano: vehiculoData.ano || new Date().getFullYear(),
-				clase_vehiculo: normalizeClaseVehiculo(vehiculoData.clase_vehiculo || ''),
-				capacidad_pasajeros: vehiculoData.capacidad_pasajeros || 1,
-				estado: vehiculoData.estado || 'DISPONIBLE'
-			};
-			
-			formData = newFormData;
-			
-			// Mark this vehicle as loaded
-			lastLoadedId = id;
 		} catch (err) {
-			console.error('❌ Error al cargar vehículo:', err);
+			console.error('Error al cargar vehículo:', err);
 			error = 'Error al cargar los datos del vehículo';
-		} finally {
-			isLoadingData = false;
 		}
 	}
 </script>
 
 {#if isOpen}
-	<div
-		class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
+	<!-- Backdrop con blur (paleta landing) -->
+	<button
+		type="button"
+		class="fixed inset-0 z-[60] cursor-default border-0 p-0"
+		style="background: linear-gradient(135deg, rgba(15, 31, 26, 0.40), rgba(10, 20, 16, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
+		aria-label="Cerrar modal"
+		on:click={handleClose}
 		transition:fade={{ duration: 200 }}
-		role="dialog"
-		aria-modal="true"
+	></button>
+
+	<!-- Modal Container -->
+	<div
+		class="fixed inset-0 z-[60] flex items-center justify-center p-4"
+		role="presentation"
 	>
 		<div
-			class="relative w-full max-w-2xl overflow-hidden rounded-2xl bg-white shadow-2xl"
-			transition:fly={{ y: 20, duration: 300 }}
+			class="relative w-full max-w-2xl overflow-hidden"
+			style="background-color: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 24px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);"
+			role="dialog"
+			aria-modal="true"
+			transition:fly={{ y: 20, duration: 300, easing: quintOut }}
 		>
-			<!-- Header -->
-			<div class="border-b border-gray-200 bg-gradient-to-r from-orange-500 to-amber-600 p-6">
-				<div class="flex items-center justify-between">
+			<!-- Header editorial (paleta landing) -->
+			<div
+				class="px-6 py-5"
+				style="border-bottom: 1px solid var(--border-subtle); background: linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-base) 100%);"
+			>
+				<div class="flex items-center justify-between gap-3">
 					<div class="flex items-center gap-3">
-						<div class="rounded-lg bg-white/20 p-2 backdrop-blur-sm">
-							<svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<div
+							class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
+							style="background: linear-gradient(135deg, #f97316, #ea580c); box-shadow: 0 6px 16px rgba(249, 115, 22, 0.30);"
+						>
+							<svg
+								class="h-5 w-5 text-white"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+								stroke-width="1.8"
+							>
 								<path
 									stroke-linecap="round"
 									stroke-linejoin="round"
-									stroke-width="2"
 									d="M8 9l4-4 4 4m0 6l-4 4-4-4"
 								/>
 							</svg>
 						</div>
-						<div>
-							<h2 class="text-xl font-bold text-white">
+						<div class="min-w-0 flex-1">
+							<p
+								class="font-mono-meta mb-1 inline-block rounded-md px-2 py-0.5 text-[10px]"
+								style="color: var(--emerald-500); background: rgba(249, 115, 22, 0.08); letter-spacing: 0.12em;"
+							>
+								{vehiculoId ? 'EDICIÓN' : 'NUEVO REGISTRO'}
+							</p>
+							<h2 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 500;">
 								{vehiculoId ? 'Editar Vehículo' : 'Registrar Nuevo Vehículo'}
 							</h2>
-							<p class="text-sm text-orange-50">Complete la información básica del vehículo</p>
+							<p class="mt-0.5 text-sm" style="color: var(--text-muted);">
+								Complete la información básica del vehículo
+							</p>
 						</div>
 					</div>
 					<button
 						on:click={handleClose}
 						disabled={isSubmitting}
-						class="rounded-lg p-2 text-white transition-colors hover:bg-white/20 disabled:opacity-50"
+						class="filter-close"
 						title="Cerrar"
 						aria-label="Cerrar modal"
 					>
-						<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
-								stroke-width="2"
 								d="M6 18L18 6M6 6l12 12"
 							/>
 						</svg>
@@ -397,32 +399,9 @@
 						<!-- Barra de progreso de cierre -->
 						<div class="mt-4 w-64 overflow-hidden rounded-full bg-gray-200">
 							<div
-								class="h-1 bg-gradient-to-r from-orange-500 to-amber-600"
+								class="h-1 bg-gradient-to-r from-orange-500 to-teal-600"
 								style="animation: progressBar 2s linear forwards;"
 							></div>
-						</div>
-					</div>
-				{:else if isLoadingData}
-					<!-- Loading skeleton -->
-					<div class="space-y-6 animate-pulse">
-						<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
-							{#each Array(7) as _, i}
-								<div>
-									<div class="mb-2 h-4 w-24 bg-gray-200 rounded"></div>
-									<div class="h-10 w-full bg-gray-200 rounded-lg"></div>
-								</div>
-							{/each}
-						</div>
-						<div class="flex justify-center items-center py-4">
-							<svg class="h-8 w-8 animate-spin text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-								/>
-							</svg>
-							<span class="ml-3 text-gray-600">Cargando datos del vehículo...</span>
 						</div>
 					</div>
 				{:else}
@@ -599,7 +578,7 @@
 						<button
 							type="submit"
 							disabled={isSubmitting}
-							class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-amber-600 px-6 py-2 text-sm font-medium text-white transition-all hover:shadow-lg disabled:opacity-50"
+							class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-teal-600 px-6 py-2 text-sm font-medium text-white transition-all hover:shadow-lg disabled:opacity-50"
 						>
 							{#if isSubmitting}
 								<svg
@@ -627,7 +606,7 @@
 								</svg>
 								<span>{vehiculoId ? 'Actualizar' : 'Registrar'}</span>
 							{/if}
-						</button>
+							</button>
 					</div>
 				{/if}
 			</form>

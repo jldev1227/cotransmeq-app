@@ -14,7 +14,9 @@ export interface UserPermisos {
 	evaluaciones: boolean;
 	nomina: boolean;
 	usuarios: boolean;
-	[key: string]: boolean;
+	/** Permiso individual: marcar y guardar bonos de planilla de días laborados. */
+	'bonos-planilla'?: boolean | undefined;
+	[key: string]: boolean | undefined;
 }
 
 export interface User {
@@ -221,6 +223,14 @@ function createAuthStore() {
 			return currentState.token;
 		},
 
+		// Obtener usuario actual
+		getUser: () => {
+			let currentState: AuthState = initialState;
+			const unsubscribe = subscribe((state) => (currentState = state));
+			unsubscribe();
+			return currentState.user;
+		},
+
 		// Limpiar errores
 		clearError() {
 			update((state) => ({ ...state, error: null }));
@@ -258,6 +268,16 @@ function createAuthStore() {
 			const unsubscribe = subscribe((state) => (currentState = state));
 			unsubscribe();
 			return currentState.user?.permisos || null;
+		},
+
+		// Verifica si el usuario actual tiene el permiso individual de
+		// gestionar bonos de planilla de días laborados. Este permiso
+		// es independiente del área y se otorga/revoca por usuario.
+		hasBonosPlanilla(): boolean {
+			let currentState: AuthState = initialState;
+			const unsubscribe = subscribe((state) => (currentState = state));
+			unsubscribe();
+			return currentState.user?.permisos?.['bonos-planilla'] === true;
 		},
 
 		// Actualizar los permisos del usuario en el store (después de un update en el backend)

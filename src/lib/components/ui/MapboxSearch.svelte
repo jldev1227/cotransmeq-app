@@ -2,7 +2,6 @@
 	import { fade, slide } from 'svelte/transition';
 	import { clickOutside } from '$lib/utils/clickOutside';
 
-	// Props
 	export let value = '';
 	export let label = '';
 	export let placeholder = 'Buscar ubicación...';
@@ -16,49 +15,55 @@
 		placeName: string;
 	}) => void = () => {};
 
-	// State
+	interface Suggestion {
+		id: string;
+		title: string;
+		subtitle: string;
+		address: string;
+		lat: number;
+		lng: number;
+	}
+
 	let searchQuery = '';
-	let suggestions: any[] = [];
+	let suggestions: Suggestion[] = [];
 	let isLoading = false;
 	let showDropdown = false;
 	let selectedIndex = -1;
-	let searchTimeout: any;
+	let searchTimeout: ReturnType<typeof setTimeout>;
 	let inputElement: HTMLInputElement;
-	let selectedData: any = null;
+	let selectedData: Suggestion | null = null;
 
-	// Mapbox token from env
-	const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
+	let showManualMode = false;
+	let manualNombre = '';
+	let manualLat = '';
+	let manualLng = '';
+	let manualError = '';
 
-	// Initialize searchQuery with value
 	$: if (value && !selectedData) {
 		searchQuery = value;
 	}
 
-	// Search function
-	async function searchLocations(query: string) {
-		if (!query || query.length < 3) {
+	async function buscarLugares(query: string) {
+		if (!query || query.trim().length < 3) {
 			suggestions = [];
 			showDropdown = false;
 			return;
 		}
-
 		isLoading = true;
-
 		try {
-			const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${MAPBOX_TOKEN}&country=co&language=es&types=poi,address,place,locality,neighborhood&limit=5`;
-
-			const response = await fetch(url);
-			const data = await response.json();
-
-			if (data.features && data.features.length > 0) {
-				suggestions = data.features;
+			const res = await fetch(
+				`/api/maps/autocomplete?q=${encodeURIComponent(query.trim())}&limit=8`
+			);
+			const data = await res.json();
+			if (Array.isArray(data?.results) && data.results.length > 0) {
+				suggestions = data.results;
 				showDropdown = true;
 			} else {
 				suggestions = [];
 				showDropdown = false;
 			}
-		} catch (error) {
-			console.error('Error searching locations:', error);
+		} catch (e) {
+			console.error('[AddressSearch] autocomplete error:', e);
 			suggestions = [];
 			showDropdown = false;
 		} finally {
@@ -66,48 +71,71 @@
 		}
 	}
 
-	// Handle input change
+	function seleccionarSugerencia(item: Suggestion) {
+		selectedData = item;
+		searchQuery = item.address || item.title;
+		value = item.address || item.title;
+		suggestions = [];
+		showDropdown = false;
+		const coordinates: [number, number] = [item.lng, item.lat];
+		onSelect({
+			address: item.title,
+			coordinates,
+			context: { subtitle: item.subtitle, id: item.id },
+			placeName: item.address
+		});
+	}
+
+	function confirmarManual() {
+		manualError = '';
+		const lat = parseFloat(manualLat.replace(',', '.'));
+		const lng = parseFloat(manualLng.replace(',', '.'));
+
+		if (!manualNombre.trim()) {
+			manualError = 'El nombre del lugar es obligatorio.';
+			return;
+		}
+		if (isNaN(lat) || lat < -90 || lat > 90) {
+			manualError = 'Latitud inválida. Ejemplo para Colombia: 5.353627';
+			return;
+		}
+		if (isNaN(lng) || lng < -180 || lng > 180) {
+			manualError = 'Longitud inválida. Ejemplo para Colombia: -72.398956';
+			return;
+		}
+
+		const placeName = manualNombre.trim();
+		searchQuery = placeName;
+		value = placeName;
+		selectedData = null;
+		showManualMode = false;
+		manualNombre = '';
+		manualLat = '';
+		manualLng = '';
+
+		onSelect({ address: placeName, coordinates: [lng, lat], context: [], placeName });
+	}
+
+	function cancelarManual() {
+		showManualMode = false;
+		manualNombre = '';
+		manualLat = '';
+		manualLng = '';
+		manualError = '';
+	}
+
 	function handleInput(e: Event) {
 		const target = e.target as HTMLInputElement;
 		searchQuery = target.value;
 		value = target.value;
 		selectedIndex = -1;
-		selectedData = null; // Reset selected data when user types
-
-		// Debounce search
+		selectedData = null;
 		clearTimeout(searchTimeout);
-		searchTimeout = setTimeout(() => {
-			searchLocations(searchQuery);
-		}, 300);
+		searchTimeout = setTimeout(() => buscarLugares(searchQuery), 300);
 	}
 
-	// Handle suggestion selection
-	function selectSuggestion(suggestion: any) {
-		const coordinates: [number, number] = suggestion.center;
-		const placeName = suggestion.place_name;
-		const address = suggestion.text || suggestion.place_name;
-		const context = suggestion.context || [];
-
-		// Update state
-		selectedData = suggestion;
-		searchQuery = placeName;
-		value = placeName;
-		showDropdown = false;
-		suggestions = [];
-
-		// Call callback
-		onSelect({
-			address,
-			coordinates,
-			context,
-			placeName
-		});
-	}
-
-	// Handle keyboard navigation
 	function handleKeydown(e: KeyboardEvent) {
-		if (!showDropdown || suggestions.length === 0) return;
-
+		if (!showDropdown || !suggestions.length) return;
 		switch (e.key) {
 			case 'ArrowDown':
 				e.preventDefault();
@@ -119,9 +147,7 @@
 				break;
 			case 'Enter':
 				e.preventDefault();
-				if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
-					selectSuggestion(suggestions[selectedIndex]);
-				}
+				if (selectedIndex >= 0) seleccionarSugerencia(suggestions[selectedIndex]);
 				break;
 			case 'Escape':
 				showDropdown = false;
@@ -129,7 +155,6 @@
 		}
 	}
 
-	// Clear search
 	function clearSearch() {
 		searchQuery = '';
 		value = '';
@@ -139,170 +164,226 @@
 		inputElement?.focus();
 	}
 
-	// Close dropdown
 	function closeDropdown() {
 		showDropdown = false;
 	}
 </script>
 
 {#if label}
-	<label for="mapbox-search-input" class="mb-2 block text-sm font-semibold text-gray-700">
+	<label for="address-search-input" class="mb-2 block text-sm font-semibold text-gray-700">
 		{label}
-		{#if required}
-			<span class="text-red-500">*</span>
-		{/if}
+		{#if required}<span class="text-red-500">*</span>{/if}
 	</label>
 {/if}
 
 <div class="relative" use:clickOutside={closeDropdown}>
-	<div class="relative h-12 w-full">
-		<!-- Search Icon -->
-		<div class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-gray-400">
-			<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					stroke-width="2"
-					d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-				/>
-			</svg>
-		</div>
-
-		<!-- Input -->
-		<input
-			bind:this={inputElement}
-			id="mapbox-search-input"
-			type="text"
-			bind:value={searchQuery}
-			on:input={handleInput}
-			on:keydown={handleKeydown}
-			on:focus={() => {
-				if (suggestions.length > 0) showDropdown = true;
-			}}
-			{placeholder}
-			{disabled}
-			class="h-full w-full rounded-lg border {error
-				? 'border-red-300'
-				: 'border-gray-300'} bg-white px-12 text-sm text-gray-900 placeholder-gray-400 transition-colors duration-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-		/>
-
-		<!-- Loading/Clear Icon -->
-		<div class="absolute top-1/2 right-3 -translate-y-1/2">
-			{#if isLoading}
-				<svg
-					class="h-5 w-5 animate-spin text-gray-400"
-					fill="none"
-					viewBox="0 0 24 24"
-					transition:fade={{ duration: 150 }}
-				>
-					<circle
-						class="opacity-25"
-						cx="12"
-						cy="12"
-						r="10"
-						stroke="currentColor"
-						stroke-width="4"
-					/>
-					<path
-						class="opacity-75"
-						fill="currentColor"
-						d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-					/>
+	{#if !showManualMode}
+		<div class="relative h-12 w-full">
+			<div class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-gray-400">
+				<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
 				</svg>
-			{:else if searchQuery}
+			</div>
+
+			<input
+				bind:this={inputElement}
+				id="address-search-input"
+				type="text"
+				bind:value={searchQuery}
+				on:input={handleInput}
+				on:keydown={handleKeydown}
+				on:focus={() => { if (suggestions.length > 0) showDropdown = true; }}
+				{placeholder}
+				{disabled}
+				class="h-full w-full rounded-lg border {error ? 'border-red-300' : 'border-gray-300'} bg-white px-12 text-sm text-gray-900 placeholder-gray-400 transition-colors duration-200 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+			/>
+
+			<div class="absolute top-1/2 right-2 -translate-y-1/2 flex items-center gap-1">
+				{#if isLoading}
+					<svg class="h-4 w-4 animate-spin text-gray-400" fill="none" viewBox="0 0 24 24" transition:fade={{ duration: 150 }}>
+						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+						<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+					</svg>
+				{:else if searchQuery}
+					<button
+						type="button"
+						on:click={clearSearch}
+						class="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+						transition:fade={{ duration: 150 }}
+					>
+						<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+						</svg>
+					</button>
+				{/if}
+
 				<button
 					type="button"
-					on:click={clearSearch}
-					class="flex h-6 w-6 items-center justify-center rounded-full text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-					transition:fade={{ duration: 150 }}
+					on:click={() => { showManualMode = true; showDropdown = false; }}
+					title="Ingresar nombre y coordenadas manualmente"
+					class="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-400 transition-colors hover:border-orange-400 hover:bg-orange-50 hover:text-orange-600"
 				>
-					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M6 18L18 6M6 6l12 12"
-						/>
+					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
 					</svg>
 				</button>
-			{/if}
+			</div>
 		</div>
-	</div>
 
-	<!-- Dropdown -->
-	{#if showDropdown && suggestions.length > 0}
-		<div
-			class="absolute top-full right-0 left-0 z-[99999] mt-2 max-h-80 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg"
-			transition:slide={{ duration: 200 }}
-		>
-			<ul class="py-1">
-				{#each suggestions as suggestion, index}
-					<li>
-						<button
-							type="button"
-							on:click={() => selectSuggestion(suggestion)}
-							class="w-full px-4 py-3 text-left transition-colors hover:bg-orange-50 {selectedIndex ===
-							index
-								? 'bg-orange-50'
-								: ''}"
-						>
-							<div class="font-semibold text-gray-900">
-								{suggestion.text}
-							</div>
-							<div class="mt-0.5 text-sm text-gray-500">
-								{suggestion.place_name}
-							</div>
-						</button>
-					</li>
-				{/each}
-			</ul>
+		{#if showDropdown && suggestions.length > 0}
+			<div
+				class="absolute top-full right-0 left-0 z-[99999] mt-2 max-h-72 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg"
+				transition:slide={{ duration: 200 }}
+			>
+				<ul class="py-1">
+					{#each suggestions as item, index}
+						<li>
+							<button
+								type="button"
+								on:click={() => seleccionarSugerencia(item)}
+								class="w-full px-4 py-3 text-left transition-colors hover:bg-orange-50 {selectedIndex === index ? 'bg-orange-50' : ''}"
+							>
+								<div class="font-semibold text-gray-900">{item.title}</div>
+								{#if item.subtitle}
+									<div class="mt-0.5 text-sm text-gray-500">{item.subtitle}</div>
+								{/if}
+							</button>
+						</li>
+					{/each}
+				</ul>
+				<div class="border-t border-gray-100 px-4 py-2">
+					<button
+						type="button"
+						on:click={() => { showDropdown = false; showManualMode = true; }}
+						class="flex w-full items-center gap-1.5 text-xs text-gray-500 transition-colors hover:text-orange-600"
+					>
+						<svg class="h-3.5 w-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+						</svg>
+						¿No encuentras el lugar? Ingresa las coordenadas manualmente
+					</button>
+				</div>
+			</div>
+		{/if}
+	{:else}
+		<div class="rounded-xl border border-orange-200 bg-orange-50/60 p-4 shadow-sm" transition:slide={{ duration: 200 }}>
+			<div class="mb-3 flex items-center justify-between">
+				<div class="flex items-center gap-2">
+					<svg class="h-4 w-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+					</svg>
+					<span class="text-xs font-semibold text-orange-800">Ingresar coordenadas manualmente</span>
+				</div>
+				<button
+					type="button"
+					on:click={cancelarManual}
+					class="rounded-lg p-1 text-gray-400 transition-colors hover:bg-white hover:text-gray-600"
+				>
+					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				</button>
+			</div>
+
+			<div class="space-y-3">
+				<div>
+					<label class="mb-1 block text-xs font-medium text-gray-600">
+						Nombre del lugar <span class="text-red-500">*</span>
+					</label>
+					<input
+						type="text"
+						bind:value={manualNombre}
+						placeholder="Ej: Pozo Rubiales, Campamento El Jardín, Patio de tanques..."
+						class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 focus:outline-none"
+					/>
+				</div>
+
+				<div class="grid grid-cols-2 gap-2">
+					<div>
+						<label class="mb-1 block text-xs font-medium text-gray-600">
+							Latitud <span class="text-red-500">*</span>
+							<span class="text-gray-400 font-normal"> (ej: 5.3536)</span>
+						</label>
+						<input
+							type="text"
+							bind:value={manualLat}
+							placeholder="5.353627"
+							inputmode="decimal"
+							class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-mono text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 focus:outline-none"
+						/>
+					</div>
+					<div>
+						<label class="mb-1 block text-xs font-medium text-gray-600">
+							Longitud <span class="text-red-500">*</span>
+							<span class="text-gray-400 font-normal"> (ej: -72.398)</span>
+						</label>
+						<input
+							type="text"
+							bind:value={manualLng}
+							placeholder="-72.398956"
+							inputmode="decimal"
+							class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-mono text-gray-900 placeholder-gray-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 focus:outline-none"
+						/>
+					</div>
+				</div>
+
+				<p class="flex items-start gap-1.5 text-[11px] leading-relaxed text-gray-500">
+					<svg class="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+					</svg>
+					Para obtener las coordenadas: abre Google Maps o Bing Maps, haz clic derecho sobre el punto y selecciona <strong>"¿Qué hay aquí?"</strong>. Verás la latitud y longitud en la parte inferior.
+				</p>
+
+				{#if manualError}
+					<p class="flex items-center gap-1.5 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600" transition:fade={{ duration: 150 }}>
+						<svg class="h-3.5 w-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+						</svg>
+						{manualError}
+					</p>
+				{/if}
+
+				<div class="flex gap-2 pt-0.5">
+					<button
+						type="button"
+						on:click={cancelarManual}
+						class="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+					>
+						Cancelar
+					</button>
+					<button
+						type="button"
+						on:click={confirmarManual}
+						class="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-orange-500 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-orange-600"
+					>
+						<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+						</svg>
+						Confirmar ubicación
+					</button>
+				</div>
+			</div>
 		</div>
 	{/if}
 </div>
 
-<!-- Error message -->
 {#if error}
 	<p class="mt-1 text-sm text-red-600">{error}</p>
 {/if}
 
-{#if !MAPBOX_TOKEN}
-	<div
-		class="mt-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-		transition:fade
-	>
-		<div class="flex items-center gap-2">
-			<svg class="h-4 w-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					stroke-width="2"
-					d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-				/>
-			</svg>
-			<span
-				>Token de Mapbox no configurado. Por favor configura VITE_MAPBOX_ACCESS_TOKEN en tu archivo
-				.env</span
-			>
-		</div>
-	</div>
-{/if}
-
 <style>
-	/* Scrollbar personalizado para el dropdown */
 	div::-webkit-scrollbar {
 		width: 6px;
 	}
-
 	div::-webkit-scrollbar-track {
 		background: #f1f1f1;
 		border-radius: 3px;
 	}
-
 	div::-webkit-scrollbar-thumb {
 		background: #d1d5db;
 		border-radius: 3px;
 	}
-
 	div::-webkit-scrollbar-thumb:hover {
 		background: #9ca3af;
 	}

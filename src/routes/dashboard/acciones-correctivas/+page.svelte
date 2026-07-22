@@ -6,69 +6,143 @@
 	import {
 		accionesCorrectivasAPI,
 		type AccionCorrectivaPreventiva,
-		type ListarAccionesFiltros,
-		type TipoAccion,
-		type EstadoAccion,
-		type ValoracionRiesgo,
-		type EstadisticasAcciones
+		type ActionStatusGlobal
 	} from '$lib/api/acciones-correctivas';
-	import ModalFormularioAccion from '$lib/components/acciones-correctivas/ModalFormularioAccion.svelte';
+	import KpiCard from '$lib/components/acciones-correctivas/dashboard/KpiCard.svelte';
+	import AccionCard from '$lib/components/acciones-correctivas/dashboard/AccionCard.svelte';
 
-	// Estado
+	const FILTERS: { label: string; value: ActionStatusGlobal | '' }[] = [
+		{ label: 'Todas', value: '' },
+		{ label: 'En Proceso', value: 'EN_PROCESO' },
+		{ label: 'Vencidas', value: 'VENCIDA' },
+		{ label: 'Cumplidas', value: 'CUMPLIDA' }
+	];
+
 	let acciones: AccionCorrectivaPreventiva[] = [];
-	let estadisticas: EstadisticasAcciones | null = null;
 	let isLoading = true;
-	let isLoadingStats = true;
-
-	// Paginación
-	let page = 1;
-	let limit = 10;
 	let total = 0;
-	let totalPages = 0;
+	let highlightId: string | null = null;
+	let highlightTimer: any;
+	let showDeleted = false;
+	let loadingState: { id: string; action: 'duplicar' | 'eliminar' | 'restaurar' | 'eliminar-permanente' | 'pdf' } | null = null;
 
-	// Filtros
-	let filtros: ListarAccionesFiltros = {
-		page,
-		limit
-	};
-	let busqueda = '';
-	let tipoFiltro: TipoAccion | '' = '';
-	let estadoFiltro: EstadoAccion | '' = '';
-	let riesgoFiltro: ValoracionRiesgo | '' = '';
-	let fechaDesde = '';
-	let fechaHasta = '';
+	let search = '';
+	let activeFilter: ActionStatusGlobal | '' = '';
+	let searchInput = '';
+	let debounceTimer: any;
 
-	// Modal
-	let showModal = false;
-	let accionEditar: AccionCorrectivaPreventiva | null = null;
-	let modoEdicion = false;
+	$: filteredAcciones = acciones;
 
-	// Modal de confirmación de eliminación
-	let showDeleteModal = false;
-	let accionEliminar: { id: string; numero: string } | null = null;
+	$: accionCounts = (() => {
+		let enProceso = 0;
+		let vencida = 0;
+		let cumplida = 0;
+		let proxVencer = 0;
+		const now = new Date();
+		const sevenDays = 7 * 24 * 60 * 60 * 1000;
+		acciones.forEach(a => {
+			if (a.estado_global === 'EN_PROCESO') enProceso++;
+			else if (a.estado_global === 'VENCIDA') vencida++;
+			else if (a.estado_global === 'CUMPLIDA') cumplida++;
+			if (a.fecha_limite_cierre_accion) {
+				const fecha = new Date(a.fecha_limite_cierre_accion);
+				const diff = fecha.getTime() - now.getTime();
+				if (diff > 0 && diff < sevenDays) proxVencer++;
+			}
+		});
+		return { enProceso, vencida, cumplida, proxVencer, total: acciones.length };
+	})();
 
-	onMount(async () => {
-		await Promise.all([cargarAcciones(), cargarEstadisticas()]);
-	});
+	$: tipoCounts = (() => {
+		const counts: Record<string, number> = {};
+		acciones.forEach(a => {
+			const tipo = a.tipo_accion_ejecutar || 'Sin tipo';
+			counts[tipo] = (counts[tipo] || 0) + 1;
+		});
+		return counts;
+	})();
+
+	$: causasStats = (() => {
+		let enProceso = 0;
+		let vencida = 0;
+		let cumplida = 0;
+		let total = 0;
+		acciones.forEach(a => {
+			if (a.causas) {
+				total += a.causas.length;
+				a.causas.forEach(c => {
+					if (c.estado_seguimiento === 'En Proceso') enProceso++;
+					else if (c.estado_seguimiento === 'Vencida') vencida++;
+					else if (c.estado_seguimiento === 'Cumplida') cumplida++;
+				});
+			}
+		});
+		return { enProceso, vencida, cumplida, total };
+	})();
+
+	$: kpis = [
+		{
+			label: 'Total',
+			value: accionCounts.total,
+			sub: `${accionCounts.proxVencer} próx. vencer`,
+			color: '#6366f1'
+		},
+		{
+			label: 'En Proceso',
+			value: accionCounts.enProceso,
+			sub: `${accionCounts.total > 0 ? Math.round((accionCounts.enProceso / accionCounts.total) * 100) : 0}%`,
+			color: '#3b82f6'
+		},
+		{
+			label: 'Vencidas',
+			value: accionCounts.vencida,
+			sub: `${accionCounts.total > 0 ? Math.round((accionCounts.vencida / accionCounts.total) * 100) : 0}%`,
+			color: '#ef4444'
+		},
+		{
+			label: 'Cumplidas',
+			value: accionCounts.cumplida,
+			sub: `${accionCounts.total > 0 ? Math.round((accionCounts.cumplida / accionCounts.total) * 100) : 0}%`,
+			color: '#22c55e'
+		}
+	];
+
+	function debounceSearch() {
+		clearTimeout(debounceTimer);
+		debounceTimer = setTimeout(() => {
+			search = searchInput;
+			updateUrl();
+			cargarAcciones();
+		}, 300);
+	}
+
+	function setFilter(value: ActionStatusGlobal | '') {
+		activeFilter = value;
+		updateUrl();
+		cargarAcciones();
+	}
+
+	function clearFilters() {
+		search = '';
+		searchInput = '';
+		activeFilter = '';
+		updateUrl();
+		cargarAcciones();
+	}
 
 	async function cargarAcciones() {
 		isLoading = true;
 		try {
-			filtros = {
-				page,
-				limit,
-				...(busqueda && { busqueda }),
-				...(tipoFiltro && { tipo: tipoFiltro }),
-				...(estadoFiltro && { estado: estadoFiltro }),
-				...(riesgoFiltro && { riesgo: riesgoFiltro }),
-				...(fechaDesde && { fecha_desde: fechaDesde }),
-				...(fechaHasta && { fecha_hasta: fechaHasta })
-			};
-
-			const resultado = await accionesCorrectivasAPI.listar(filtros);
+			const resultado = await accionesCorrectivasAPI.listar({
+				limit: 50,
+				sortBy: 'created_at',
+				sortOrder: 'desc',
+				...(search && { busqueda: search }),
+				...(activeFilter && { estado_global: activeFilter }),
+				...(showDeleted && { incluir_eliminados: true })
+			});
 			acciones = resultado.acciones;
 			total = resultado.total;
-			totalPages = resultado.totalPages;
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Error al cargar las acciones';
 			toast.error(message);
@@ -78,954 +152,643 @@
 		}
 	}
 
-	async function cargarEstadisticas() {
-		isLoadingStats = true;
+	function toggleDeleted() {
+		showDeleted = !showDeleted;
+		cargarAcciones();
+	}
+
+	onMount(async () => {
+		const params = new URLSearchParams(window.location.search);
+		const urlSearch = params.get('search') || '';
+		const urlEstado = params.get('estado') || '';
+
+		search = urlSearch;
+		searchInput = urlSearch;
+		activeFilter = urlEstado as ActionStatusGlobal | '';
+
+		await cargarAcciones();
+	});
+
+	function updateUrl() {
+		const params = new URLSearchParams();
+		if (search) params.set('search', search);
+		if (activeFilter) params.set('estado', activeFilter);
+		const qs = params.toString();
+		window.history.replaceState({}, '', qs ? `?${qs}` : window.location.pathname);
+	}
+
+	async function handleDuplicar(event: CustomEvent<{ id: string }>) {
+		const id = event.detail.id;
+		loadingState = { id, action: 'duplicar' };
 		try {
-			estadisticas = await accionesCorrectivasAPI.obtenerEstadisticas();
-		} catch (error) {
-			console.error('Error al cargar estadísticas:', error);
+			toast.loading('Duplicando acción...', { id: 'duplicar' });
+			const nuevaAccion = await accionesCorrectivasAPI.duplicar(id);
+			toast.success(`Acción duplicada: ${nuevaAccion.accion_numero}`, { id: 'duplicar' });
+			highlightId = nuevaAccion.id;
+			clearTimeout(highlightTimer);
+			highlightTimer = setTimeout(() => {
+				highlightId = null;
+			}, 3000);
+			await cargarAcciones();
+		} catch (error: any) {
+			const message = error instanceof Error ? error.message : 'Error al duplicar la acción';
+			toast.error(message, { id: 'duplicar' });
 		} finally {
-			isLoadingStats = false;
+			loadingState = null;
 		}
 	}
 
-	function aplicarFiltros() {
-		page = 1;
-		cargarAcciones();
-	}
-
-	function limpiarFiltros() {
-		busqueda = '';
-		tipoFiltro = '';
-		estadoFiltro = '';
-		riesgoFiltro = '';
-		fechaDesde = '';
-		fechaHasta = '';
-		page = 1;
-		cargarAcciones();
-	}
-
-	function cambiarPagina(nuevaPagina: number) {
-		page = nuevaPagina;
-		cargarAcciones();
-	}
-
-	function abrirModalCrear() {
-		accionEditar = null;
-		modoEdicion = false;
-		showModal = true;
-	}
-
-	function abrirModalEditar(accion: AccionCorrectivaPreventiva) {
-		accionEditar = accion;
-		modoEdicion = true;
-		showModal = true;
-	}
-
-	function cerrarModal() {
-		showModal = false;
-		accionEditar = null;
-		modoEdicion = false;
-	}
-
-	async function handleGuardado() {
-		cerrarModal();
-		await Promise.all([cargarAcciones(), cargarEstadisticas()]);
-		toast.success(modoEdicion ? 'Acción actualizada correctamente' : 'Acción creada correctamente');
-	}
-
-	function abrirModalEliminar(id: string, accion_numero: string) {
-		accionEliminar = { id, numero: accion_numero };
-		showDeleteModal = true;
-	}
-
-	function cerrarModalEliminar() {
-		showDeleteModal = false;
-		accionEliminar = null;
-	}
-
-	async function confirmarEliminacion() {
-		if (!accionEliminar) return;
-
+	async function handleEliminar(event: CustomEvent<{ id: string }>) {
+		const id = event.detail.id;
+		loadingState = { id, action: 'eliminar' };
 		try {
-			await accionesCorrectivasAPI.eliminar(accionEliminar.id);
-			toast.success('Acción eliminada correctamente');
-			await Promise.all([cargarAcciones(), cargarEstadisticas()]);
-		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Error al eliminar la acción';
-			toast.error(message);
+			await accionesCorrectivasAPI.eliminar(id);
+			toast.success('Acción movida a la papelera');
+			await cargarAcciones();
+		} catch (error: any) {
+			toast.error(error.message || 'Error al eliminar la acción');
 		} finally {
-			cerrarModalEliminar();
+			loadingState = null;
 		}
 	}
 
-	async function descargarPDF(id: string, accion_numero: string) {
+	async function handleRestaurar(event: CustomEvent<{ id: string }>) {
+		const id = event.detail.id;
+		loadingState = { id, action: 'restaurar' };
 		try {
-			toast.loading('Generando PDF...');
-			await accionesCorrectivasAPI.descargarPDF(id, accion_numero);
-			toast.success('PDF descargado correctamente');
-		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Error al descargar el PDF';
-			toast.error(message);
+			await accionesCorrectivasAPI.restaurar(id);
+			toast.success('Acción restaurada');
+			await cargarAcciones();
+		} catch (error: any) {
+			toast.error(error.message || 'Error al restaurar la acción');
+		} finally {
+			loadingState = null;
 		}
 	}
 
-	function formatearFecha(fecha: string | undefined): string {
-		if (!fecha) return 'N/A';
-		// Parsear la fecha como local para evitar problemas de zona horaria
-		const [year, month, day] = fecha.split('T')[0].split('-');
-		const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-		return date.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' });
-	}
-
-	function getBadgeColorTipo(tipo: TipoAccion | undefined): string {
-		switch (tipo) {
-			case 'CORRECTIVA':
-				return 'bg-red-100 text-red-700 border border-red-200';
-			case 'PREVENTIVA':
-				return 'bg-blue-100 text-blue-700 border border-blue-200';
-			case 'MEJORA':
-				return 'bg-orange-100 text-orange-700 border border-orange-200';
-			default:
-				return 'bg-gray-100 text-gray-700 border border-gray-200';
+	async function handleEliminarPermanente(event: CustomEvent<{ id: string }>) {
+		const id = event.detail.id;
+		if (!confirm('¿Eliminar permanentemente? Esta acción no se puede deshacer.')) return;
+		loadingState = { id, action: 'eliminar-permanente' };
+		try {
+			await accionesCorrectivasAPI.eliminarPermanente(id);
+			toast.success('Acción eliminada permanentemente');
+			await cargarAcciones();
+		} catch (error: any) {
+			toast.error(error.message || 'Error al eliminar permanentemente');
+		} finally {
+			loadingState = null;
 		}
 	}
 
-	function getBadgeColorEstado(estado: EstadoAccion | undefined): string {
-		switch (estado) {
-			case 'Cumplidas':
-				return 'bg-orange-100 text-orange-700 border border-orange-200';
-			case 'En Proceso':
-				return 'bg-yellow-100 text-yellow-700 border border-yellow-200';
-			case 'Vencidas':
-				return 'bg-red-100 text-red-700 border border-red-200';
-			default:
-				return 'bg-gray-100 text-gray-700 border border-gray-200';
-		}
-	}
-
-	function getBadgeColorRiesgo(riesgo: ValoracionRiesgo | undefined): string {
-		switch (riesgo) {
-			case 'ALTO':
-				return 'bg-red-100 text-red-700 border border-red-200';
-			case 'MEDIO':
-				return 'bg-yellow-100 text-yellow-700 border border-yellow-200';
-			case 'BAJO':
-				return 'bg-orange-100 text-orange-700 border border-orange-200';
-			default:
-				return 'bg-gray-100 text-gray-700 border border-gray-200';
+	async function handleExportPDF(event: CustomEvent<{ id: string }>) {
+		const id = event.detail.id;
+		loadingState = { id, action: 'pdf' };
+		try {
+			toast.loading('Generando PDF...', { id: 'pdf' });
+			const accion = acciones.find(a => a.id === id);
+			await accionesCorrectivasAPI.descargarPDF(id, accion?.accion_numero || id);
+			toast.success('PDF descargado', { id: 'pdf' });
+		} catch (error: any) {
+			toast.error(error.message || 'Error al exportar PDF', { id: 'pdf' });
+		} finally {
+			loadingState = null;
 		}
 	}
 </script>
 
-<div class="p-6">
-	<!-- Header -->
-	<div class="mb-6" in:fade={{ duration: 400 }}>
-		<h1 class="mb-2 text-2xl font-bold text-gray-900">Acciones Correctivas y Preventivas</h1>
-		<p class="text-gray-600">Matriz HSEQ-MTR-07 - Gestión de hallazgos y planes de acción</p>
-	</div>
+<svelte:head>
+	<title>Acciones Correctivas · Cotransmeq</title>
+</svelte:head>
 
-	<!-- Estadísticas -->
-	{#if !isLoadingStats && estadisticas}
-		<div class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4" transition:fade>
-			<!-- Total -->
-			<div class="glass rounded-xl border border-gray-200 p-5" in:fly={{ y: 20, delay: 100 }}>
-				<div class="flex items-center justify-between">
-					<div>
-						<p class="mb-1 text-sm text-gray-600">Total Acciones</p>
-						<p class="text-3xl font-bold text-gray-900">{estadisticas.total}</p>
-					</div>
-					<div
-						class="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 shadow-lg shadow-orange-500/30"
-					>
-						<svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-							/>
-						</svg>
-					</div>
+<div class="dash-wrapper" in:fade={{ duration: 400 }}>
+	<div class="dash">
+		<header class="header">
+			<div class="header-left">
+				<div class="logo-mark" aria-hidden="true">
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+				</div>
+				<div>
+					<span class="eyebrow">Acciones de mejora · {new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+					<h1>Acciones Correctivas y Preventivas</h1>
+					<p class="header-sub">Gestión HSEQ · Causas, planes de acción y seguimiento.</p>
 				</div>
 			</div>
+			<div class="header-actions">
+				<button
+					class="btn-trash-toggle"
+					class:btn-trash-active={showDeleted}
+					on:click={toggleDeleted}
+					aria-label="Ver papelera"
+				>
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+					<span>Papelera</span>
+				</button>
+				<button class="btn-primary" on:click={() => goto('/dashboard/acciones-correctivas/crear')} aria-label="Crear nueva acción">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+					Nueva acción
+				</button>
+			</div>
+		</header>
 
-			<!-- En Proceso -->
-			<div class="glass rounded-xl border border-gray-200 p-5" in:fly={{ y: 20, delay: 200 }}>
-				<div class="flex items-center justify-between">
-					<div>
-						<p class="mb-1 text-sm text-gray-600">En Proceso</p>
-						<p class="text-3xl font-bold text-yellow-600">
-							{estadisticas.por_estado['En Proceso']}
-						</p>
-					</div>
-					<div
-						class="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-yellow-400 to-yellow-600 shadow-lg shadow-yellow-500/30"
-					>
-						<svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-							/>
-						</svg>
+		{#if !isLoading && !showDeleted}
+			<section class="kpi-row" aria-label="Indicadores clave">
+				{#each kpis as kpi (kpi.label)}
+					<KpiCard {...kpi} />
+				{/each}
+			</section>
+		{/if}
+
+		{#if !isLoading && !showDeleted && acciones.length > 0 && causasStats.total > 0}
+			<section class="causa-stats-row" aria-label="Estado de causas">
+				<div class="causa-stat-card">
+					<span class="causa-stat-dot dot-proceso"></span>
+					<div class="causa-stat-info">
+						<span class="causa-stat-label">En Proceso (Causas)</span>
+						<span class="causa-stat-value">{causasStats.enProceso}</span>
 					</div>
 				</div>
-			</div>
-
-			<!-- Próximas a Vencer -->
-			<div class="glass rounded-xl border border-gray-200 p-5" in:fly={{ y: 20, delay: 300 }}>
-				<div class="flex items-center justify-between">
-					<div>
-						<p class="mb-1 text-sm text-gray-600">Próximas a Vencer</p>
-						<p class="text-3xl font-bold text-orange-600">{estadisticas.proximas_vencer}</p>
-					</div>
-					<div
-						class="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 shadow-lg shadow-orange-500/30"
-					>
-						<svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-							/>
-						</svg>
+				<div class="causa-stat-card">
+					<span class="causa-stat-dot dot-vencida"></span>
+					<div class="causa-stat-info">
+						<span class="causa-stat-label">Vencidas (Causas)</span>
+						<span class="causa-stat-value">{causasStats.vencida}</span>
 					</div>
 				</div>
-			</div>
-
-			<!-- Cumplidas -->
-			<div class="glass rounded-xl border border-gray-200 p-5" in:fly={{ y: 20, delay: 400 }}>
-				<div class="flex items-center justify-between">
-					<div>
-						<p class="mb-1 text-sm text-gray-600">Cumplidas</p>
-						<p class="text-3xl font-bold text-orange-600">{estadisticas.por_estado.Cumplidas}</p>
-					</div>
-					<div
-						class="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 shadow-lg shadow-orange-500/30"
-					>
-						<svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-							/>
-						</svg>
+				<div class="causa-stat-card">
+					<span class="causa-stat-dot dot-cumplida"></span>
+					<div class="causa-stat-info">
+						<span class="causa-stat-label">Cumplidas (Causas)</span>
+						<span class="causa-stat-value">{causasStats.cumplida}</span>
 					</div>
 				</div>
-			</div>
-		</div>
-	{/if}
+				<div class="causa-stat-card causa-stat-total">
+					<span class="causa-stat-label">Total causas</span>
+					<span class="causa-stat-value">{causasStats.total}</span>
+				</div>
+			</section>
+		{/if}
 
-	<!-- Filtros y Controles -->
-	<div class="glass mb-6 rounded-xl border border-gray-200 p-6" in:fly={{ y: 20, delay: 500 }}>
-		<div class="mb-4 flex flex-col gap-4 lg:flex-row">
-			<!-- Búsqueda -->
-			<div class="flex-1">
-				<input
-					type="text"
-					bind:value={busqueda}
-					placeholder="Buscar por número, descripción, lugar o responsable..."
-					class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20"
-					on:keypress={(e) => e.key === 'Enter' && aplicarFiltros()}
-				/>
-			</div>
-
-			<!-- Botón Nueva Acción -->
-			<button
-				on:click={abrirModalCrear}
-				class="apple-transition flex items-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-2.5 whitespace-nowrap text-white shadow-lg shadow-orange-500/30 hover:from-orange-600 hover:to-orange-700"
-			>
-				<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M12 4v16m8-8H4"
-					/>
-				</svg>
-				Nueva Acción
-			</button>
-		</div>
-
-		<!-- Filtros avanzados -->
-		<div class="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
-			<div>
-				<label for="tipoFiltro" class="mb-1.5 block text-sm font-medium text-gray-700">
-					Tipo de Acción
-				</label>
-				<select
-					id="tipoFiltro"
-					bind:value={tipoFiltro}
-					class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50"
-				>
-					<option value="">Todos los tipos</option>
-					<option value="CORRECTIVA">Correctiva</option>
-					<option value="PREVENTIVA">Preventiva</option>
-					<option value="MEJORA">Mejora</option>
-				</select>
-			</div>
-
-			<div>
-				<label for="estadoFiltro" class="mb-1.5 block text-sm font-medium text-gray-700">
-					Estado
-				</label>
-				<select
-					id="estadoFiltro"
-					bind:value={estadoFiltro}
-					class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50"
-				>
-					<option value="">Todos los estados</option>
-					<option value="Cumplidas">Cumplidas</option>
-					<option value="En Proceso">En Proceso</option>
-					<option value="Vencidas">Vencidas</option>
-				</select>
-			</div>
-
-			<div>
-				<label for="riesgoFiltro" class="mb-1.5 block text-sm font-medium text-gray-700">
-					Valoración del Riesgo
-				</label>
-				<select
-					id="riesgoFiltro"
-					bind:value={riesgoFiltro}
-					class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50"
-				>
-					<option value="">Todos los riesgos</option>
-					<option value="ALTO">Alto</option>
-					<option value="MEDIO">Medio</option>
-					<option value="BAJO">Bajo</option>
-				</select>
-			</div>
-
-			<div>
-				<label for="fechaDesde" class="mb-1.5 block text-sm font-medium text-gray-700">
-					Fecha Desde
-				</label>
-				<input
-					id="fechaDesde"
-					type="date"
-					bind:value={fechaDesde}
-					class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50"
-				/>
-			</div>
-
-			<div>
-				<label for="fechaHasta" class="mb-1.5 block text-sm font-medium text-gray-700">
-					Fecha Hasta
-				</label>
-				<input
-					id="fechaHasta"
-					type="date"
-					bind:value={fechaHasta}
-					class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50"
-				/>
-			</div>
-		</div>
-
-		<!-- Botones de acción -->
-		<div class="flex gap-2">
-			<button
-				on:click={aplicarFiltros}
-				class="apple-transition rounded-lg bg-orange-600 px-4 py-2 text-white hover:bg-orange-700"
-			>
-				Aplicar Filtros
-			</button>
-			<button
-				on:click={limpiarFiltros}
-				class="apple-transition rounded-lg bg-white/80 px-4 py-2 text-gray-700 hover:bg-gray-100"
-			>
-				Limpiar
-			</button>
-		</div>
-	</div>
-
-	<!-- Tabla de Acciones -->
-	{#if isLoading}
-		<div class="glass flex items-center justify-center rounded-xl border border-gray-200 p-8">
-			<div class="h-12 w-12 animate-spin rounded-full border-b-2 border-orange-500"></div>
-		</div>
-	{:else if acciones.length === 0}
-		<div class="glass rounded-xl border border-gray-200 p-8 text-center">
-			<svg
-				class="mx-auto mb-4 h-12 w-12 text-orange-600/50"
-				fill="none"
-				stroke="currentColor"
-				viewBox="0 0 24 24"
-			>
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					stroke-width="2"
-					d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-				/>
-			</svg>
-			<h3 class="mb-2 text-lg font-medium text-gray-900">No hay acciones registradas</h3>
-			<p class="mb-4 text-gray-600">Comienza creando una nueva acción correctiva o preventiva.</p>
-			<button
-				on:click={abrirModalCrear}
-				class="apple-transition soft-shadow rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-2 text-white hover:from-orange-600 hover:to-orange-700"
-			>
-				Crear Primera Acción
-			</button>
-		</div>
-	{:else}
-		<!-- Vista Desktop: Tabla -->
-		<div
-			class="glass hidden overflow-hidden rounded-xl border border-gray-200 lg:block"
-			transition:fade
-		>
-			<div class="overflow-x-auto">
-				<table class="min-w-full divide-y divide-gray-200">
-					<thead class="bg-white/80">
-						<tr>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-600 uppercase"
-							>
-								Número
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-600 uppercase"
-							>
-								Descripción
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-600 uppercase"
-							>
-								Tipo
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-600 uppercase"
-							>
-								Estado
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-600 uppercase"
-							>
-								Riesgo
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-600 uppercase"
-							>
-								Responsable
-							</th>
-							<th
-								class="px-6 py-3 text-left text-xs font-medium tracking-wider text-gray-600 uppercase"
-							>
-								Fecha Límite
-							</th>
-							<th
-								class="px-6 py-3 text-right text-xs font-medium tracking-wider text-gray-600 uppercase"
-							>
-								Acciones
-							</th>
-						</tr>
-					</thead>
-					<tbody class="divide-y divide-gray-200">
-						{#each acciones as accion (accion.id)}
-							<tr
-								class="apple-transition hover:bg-white/80"
-								transition:fly={{ y: 20, duration: 300 }}
-							>
-								<td class="px-6 py-4 whitespace-nowrap">
-									<span class="text-sm font-medium text-gray-900">{accion.accion_numero}</span>
-								</td>
-								<td class="px-6 py-4">
-									<div class="max-w-xs truncate text-sm text-gray-900">
-										{accion.descripcion_hallazgo || 'Sin descripción'}
-									</div>
-									<div class="text-xs text-gray-500">{accion.lugar_sede || 'Sin lugar'}</div>
-								</td>
-								<td class="px-6 py-4 whitespace-nowrap">
-									<span
-										class="rounded-full border px-2 py-1 text-xs font-semibold {getBadgeColorTipo(
-											accion.tipo_accion_ejecutar
-										)}"
-									>
-										{accion.tipo_accion_ejecutar || 'N/A'}
-									</span>
-								</td>
-								<td class="px-6 py-4 whitespace-nowrap">
-									<span
-										class="rounded-full border px-2 py-1 text-xs font-semibold {getBadgeColorEstado(
-											accion.estado_accion_planeada
-										)}"
-									>
-										{accion.estado_accion_planeada || 'N/A'}
-									</span>
-								</td>
-								<td class="px-6 py-4 whitespace-nowrap">
-									<span
-										class="rounded-full border px-2 py-1 text-xs font-semibold {getBadgeColorRiesgo(
-											accion.valoracion_riesgo
-										)}"
-									>
-										{accion.valoracion_riesgo || 'N/A'}
-									</span>
-								</td>
-								<td class="px-6 py-4 whitespace-nowrap">
-									<div class="text-sm text-gray-900">
-										{accion.responsable_ejecucion || 'No asignado'}
-									</div>
-								</td>
-								<td class="px-6 py-4 whitespace-nowrap">
-									<div class="text-sm text-gray-900">
-										{formatearFecha(accion.fecha_limite_implementacion)}
-									</div>
-								</td>
-								<td class="px-6 py-4 text-right text-sm font-medium whitespace-nowrap">
-									<div class="flex items-center justify-end gap-2">
-										<button
-											on:click={() => goto(`/dashboard/acciones-correctivas/${accion.id}`)}
-											class="apple-transition text-purple-600 hover:text-purple-700"
-											title="Ver Detalle"
-										>
-											<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-												/>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-												/>
-											</svg>
-										</button>
-										<button
-											on:click={() => descargarPDF(accion.id, accion.accion_numero)}
-											class="apple-transition text-orange-600 hover:text-orange-300"
-											title="Descargar PDF"
-										>
-											<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-												/>
-											</svg>
-										</button>
-										<button
-											on:click={() => abrirModalEditar(accion)}
-											class="apple-transition text-blue-400 hover:text-blue-300"
-											title="Editar"
-										>
-											<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-												/>
-											</svg>
-										</button>
-										<button
-											on:click={() => abrirModalEliminar(accion.id, accion.accion_numero)}
-											class="apple-transition text-red-400 hover:text-red-300"
-											title="Eliminar"
-										>
-											<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-												/>
-											</svg>
-										</button>
-									</div>
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			</div>
-
-			<!-- Paginación Desktop -->
-			{#if totalPages > 1}
-				<div
-					class="flex items-center justify-between border-t border-gray-200 bg-white/80 px-4 py-3 sm:px-6"
-				>
-					<div class="flex flex-1 justify-between sm:hidden">
-						<button
-							on:click={() => cambiarPagina(page - 1)}
-							disabled={page === 1}
-							class="apple-transition relative inline-flex items-center rounded-md border border-gray-200 bg-white/80 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
-						>
-							Anterior
-						</button>
-						<button
-							on:click={() => cambiarPagina(page + 1)}
-							disabled={page === totalPages}
-							class="apple-transition relative ml-3 inline-flex items-center rounded-md border border-gray-200 bg-white/80 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
-						>
-							Siguiente
-						</button>
-					</div>
-					<div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-						<div>
-							<p class="text-sm text-gray-600">
-								Mostrando <span class="font-medium text-gray-900">{(page - 1) * limit + 1}</span> a
-								<span class="font-medium text-gray-900">{Math.min(page * limit, total)}</span> de
-								<span class="font-medium text-gray-900">{total}</span> resultados
-							</p>
+		{#if !isLoading && !showDeleted && Object.keys(tipoCounts).length > 0}
+			<div class="tipo-row" role="list" aria-label="Distribución por tipo">
+				{#each Object.entries(tipoCounts) as [tipo, count] (tipo)}
+					{@const pct = accionCounts.total > 0 ? Math.round((count / accionCounts.total) * 100) : 0}
+					<div class="tipo-item" role="listitem">
+						<span class="tipo-name">{tipo}</span>
+						<div class="tipo-bar-track" aria-label="{tipo}: {count} acciones ({pct}%)">
+							<div class="tipo-bar-fill tipo-{tipo.toLowerCase()}" style="width: {pct}%"></div>
 						</div>
-						<div>
-							<nav
-								class="relative z-0 inline-flex -space-x-px rounded-md shadow-sm"
-								aria-label="Pagination"
-							>
-								<button
-									on:click={() => cambiarPagina(page - 1)}
-									disabled={page === 1}
-									class="apple-transition relative inline-flex items-center rounded-l-md border border-gray-200 bg-white/80 px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
-								>
-									<span class="sr-only">Anterior</span>
-									<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-										<path
-											fill-rule="evenodd"
-											d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
-											clip-rule="evenodd"
-										/>
-									</svg>
-								</button>
-								<!-- eslint-disable-next-line @typescript-eslint/no-unused-vars -->
-								{#each Array(totalPages) as _page, i (i)}
-									{#if i + 1 === 1 || i + 1 === totalPages || (i + 1 >= page - 1 && i + 1 <= page + 1)}
-										<button
-											on:click={() => cambiarPagina(i + 1)}
-											class="apple-transition relative inline-flex items-center border border-gray-200 px-4 py-2 text-sm font-medium {page ===
-											i + 1
-												? 'z-10 bg-orange-500/20 text-orange-300'
-												: 'bg-white/80 text-gray-700 hover:bg-gray-100'}"
-										>
-											{i + 1}
-										</button>
-									{:else if i + 1 === page - 2 || i + 1 === page + 2}
-										<span
-											class="relative inline-flex items-center border border-gray-200 bg-white/80 px-4 py-2 text-sm font-medium text-gray-700"
-										>
-											...
-										</span>
-									{/if}
-								{/each}
-								<button
-									on:click={() => cambiarPagina(page + 1)}
-									disabled={page === totalPages}
-									class="apple-transition relative inline-flex items-center rounded-r-md border border-gray-200 bg-white/80 px-2 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
-								>
-									<span class="sr-only">Siguiente</span>
-									<svg class="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-										<path
-											fill-rule="evenodd"
-											d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
-											clip-rule="evenodd"
-										/>
-									</svg>
-								</button>
-							</nav>
-						</div>
+						<span class="tipo-count">{count}</span>
 					</div>
-				</div>
+				{/each}
+			</div>
+		{/if}
+
+		<div class="filter-bar" role="search">
+			<div class="search-wrap">
+				<svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+				<input
+					type="search"
+					placeholder={showDeleted ? 'Buscar en papelera…' : 'Buscar por número, descripción, responsable…'}
+					bind:value={searchInput}
+					on:input={debounceSearch}
+					aria-label="Buscar acciones"
+				/>
+			</div>
+
+			{#if !showDeleted}
+			<nav class="pills" aria-label="Filtros de estado">
+				{#each FILTERS as f (f.label)}
+					<button
+						class="pill"
+						class:pill-active={activeFilter === f.value}
+						on:click={() => setFilter(f.value)}
+						aria-pressed={activeFilter === f.value}
+					>
+						{f.label}
+					{#if f.value}
+						<span class="pill-count">
+							{f.value === 'EN_PROCESO'
+								? accionCounts.enProceso
+								: f.value === 'VENCIDA'
+									? accionCounts.vencida
+									: accionCounts.cumplida}
+						</span>
+					{/if}
+					</button>
+				{/each}
+			</nav>
 			{/if}
 		</div>
 
-		<!-- Vista Mobile/Tablet: Cards -->
-		<div class="space-y-4 lg:hidden" transition:fade>
-			{#each acciones as accion (accion.id)}
-				<div class="glass rounded-xl border border-gray-200 p-4" in:fly={{ y: 20, duration: 300 }}>
-					<!-- Header Card -->
-					<div class="mb-3 flex items-start justify-between">
-						<div class="flex-1">
-							<h3 class="text-lg font-bold text-gray-900">{accion.accion_numero}</h3>
-							<p class="mt-1 line-clamp-2 text-sm text-gray-600">
-								{accion.descripcion_hallazgo && accion.descripcion_hallazgo.length > 80
-									? accion.descripcion_hallazgo.substring(0, 80) + '...'
-									: accion.descripcion_hallazgo || 'Sin descripción'}
-							</p>
-						</div>
-					</div>
-
-					<!-- Badges -->
-					<div class="mb-3 flex flex-wrap gap-2">
-						<span
-							class="rounded-full border px-2.5 py-1 text-xs font-semibold {getBadgeColorTipo(
-								accion.tipo_accion_ejecutar
-							)}"
-						>
-							{accion.tipo_accion_ejecutar || 'N/A'}
-						</span>
-						<span
-							class="rounded-full border px-2.5 py-1 text-xs font-semibold {getBadgeColorEstado(
-								accion.estado_accion_planeada
-							)}"
-						>
-							{accion.estado_accion_planeada || 'N/A'}
-						</span>
-						<span
-							class="rounded-full border px-2.5 py-1 text-xs font-semibold {getBadgeColorRiesgo(
-								accion.valoracion_riesgo
-							)}"
-						>
-							Riesgo: {accion.valoracion_riesgo || 'N/A'}
-						</span>
-					</div>
-
-					<!-- Info Grid -->
-					<div class="mb-3 space-y-2 border-t border-gray-200 pt-3">
-						<div class="flex items-center text-sm">
-							<svg
-								class="mr-2 h-4 w-4 text-gray-400"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-								/>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-								/>
-							</svg>
-							<span class="text-gray-600">{accion.lugar_sede || 'Sin lugar'}</span>
-						</div>
-						<div class="flex items-center text-sm">
-							<svg
-								class="mr-2 h-4 w-4 text-gray-400"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-								/>
-							</svg>
-							<span class="text-gray-600">{accion.responsable_ejecucion || 'No asignado'}</span>
-						</div>
-						<div class="flex items-center text-sm">
-							<svg
-								class="mr-2 h-4 w-4 text-gray-400"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-								/>
-							</svg>
-							<span class="text-gray-600"
-								>Fecha límite: {formatearFecha(accion.fecha_limite_implementacion)}</span
-							>
-						</div>
-					</div>
-
-					<!-- Actions -->
-					<div class="flex items-center justify-end gap-2 border-t border-gray-200 pt-3">
-						<button
-							on:click={() => goto(`/dashboard/acciones-correctivas/${accion.id}`)}
-							class="apple-transition flex items-center gap-1 rounded-lg bg-purple-600 px-3 py-2 text-sm text-white hover:bg-purple-700"
-							title="Ver Detalle"
-						>
-							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-								/>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-								/>
-							</svg>
-							Ver
-						</button>
-						<button
-							on:click={() => descargarPDF(accion.id, accion.accion_numero)}
-							class="apple-transition flex items-center gap-1 rounded-lg bg-orange-600 px-3 py-2 text-sm text-white hover:bg-orange-700"
-							title="Descargar PDF"
-						>
-							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-								/>
-							</svg>
-							PDF
-						</button>
-						<button
-							on:click={() => abrirModalEditar(accion)}
-							class="apple-transition rounded-lg bg-blue-600 p-2 text-white hover:bg-blue-700"
-							title="Editar"
-						>
-							<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-								/>
-							</svg>
-						</button>
-						<button
-							on:click={() => abrirModalEliminar(accion.id, accion.accion_numero)}
-							class="apple-transition rounded-lg bg-red-600 p-2 text-white hover:bg-red-700"
-							title="Eliminar"
-						>
-							<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-								/>
-							</svg>
-						</button>
-					</div>
-				</div>
-			{/each}
-
-			<!-- Paginación Mobile/Tablet -->
-			{#if totalPages > 1}
-				<div class="glass flex items-center justify-between rounded-xl border border-gray-200 p-4">
-					<button
-						on:click={() => cambiarPagina(page - 1)}
-						disabled={page === 1}
-						class="apple-transition flex items-center gap-1 rounded-lg border border-gray-200 bg-white/80 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
-					>
-						<svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-							<path
-								fill-rule="evenodd"
-								d="M12.707 5.293a1 1 0 010 1.414L9.414 10l3.293 3.293a1 1 0 01-1.414 1.414l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 0z"
-								clip-rule="evenodd"
-							/>
-						</svg>
-						Anterior
+		<div class="results-info" aria-live="polite" aria-atomic="true">
+			{#if isLoading}
+				<span>Cargando...</span>
+			{:else}
+				<span>{showDeleted ? '🗑️ Papelera: ' : ''}{acciones.length} acción{acciones.length !== 1 ? 'es' : ''} encontrada{acciones.length !== 1 ? 's' : ''}</span>
+				{#if search || activeFilter}
+					<button class="reset-btn" on:click={clearFilters}>
+						Limpiar filtros
 					</button>
-					<span class="text-sm text-gray-600">
-						Página <span class="font-medium text-gray-900">{page}</span> de
-						<span class="font-medium text-gray-900">{totalPages}</span>
-					</span>
-					<button
-						on:click={() => cambiarPagina(page + 1)}
-						disabled={page === totalPages}
-						class="apple-transition flex items-center gap-1 rounded-lg border border-gray-200 bg-white/80 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
-					>
-						Siguiente
-						<svg class="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-							<path
-								fill-rule="evenodd"
-								d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
-								clip-rule="evenodd"
-							/>
-						</svg>
-					</button>
-				</div>
+				{/if}
 			{/if}
 		</div>
-	{/if}
+
+		<main>
+			{#if isLoading}
+				<div class="empty" role="status">
+					<div class="spinner"></div>
+					<p>Cargando acciones...</p>
+				</div>
+			{:else if acciones.length === 0}
+				<div class="empty" role="status">
+					<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+					<p>{showDeleted ? 'No hay acciones en la papelera' : search || activeFilter ? 'Sin resultados para los filtros aplicados' : 'No hay acciones registradas'}</p>
+					{#if !search && !activeFilter && !showDeleted}
+						<button class="btn-primary" on:click={() => goto('/dashboard/acciones-correctivas/crear')}>
+							Crear primera acción
+						</button>
+					{/if}
+				</div>
+			{:else}
+				<div class="grid" transition:fly={{ y: 12, duration: 400 }}>
+					{#each acciones as accion (accion.id)}
+						<AccionCard
+							{accion}
+							highlight={highlightId === accion.id}
+							loadingAction={loadingState?.id === accion.id ? loadingState.action : null}
+							on:duplicar={handleDuplicar}
+							on:eliminar={handleEliminar}
+							on:restaurar={handleRestaurar}
+							on:eliminar-permanente={handleEliminarPermanente}
+							on:pdf={handleExportPDF}
+						/>
+					{/each}
+				</div>
+			{/if}
+		</main>
+	</div>
 </div>
 
-<!-- Modal -->
-{#if showModal}
-	<ModalFormularioAccion
-		accion={accionEditar}
-		{modoEdicion}
-		on:close={cerrarModal}
-		on:guardado={handleGuardado}
-	/>
-{/if}
+<style>
+	.dash-wrapper {
+		--surface: #fff;
+		--surface-hover: #faf7f2;
+		--border: rgba(0, 0, 0, 0.08);
+		--border-default: rgba(0, 0, 0, 0.12);
+		--border-hover: rgba(0, 0, 0, 0.2);
+		--text-primary: #0f1f1a;
+		--text-secondary: #4a4a4a;
+		--text-muted: #6b6b6b;
+		--accent: #f97316;
+		--accent-hover: #ea580c;
+		--accent-bg: rgba(249, 115, 22, 0.08);
+		--accent-ring: rgba(249, 115, 22, 0.15);
+		--tag-bg: rgba(0, 0, 0, 0.05);
+		--avatar-bg: rgba(0, 0, 0, 0.05);
+		--avatar-color: #0f1f1a;
+		--ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+	}
+	.dash {
+		padding: 2rem 2.5rem 4rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1.25rem;
+	}
+	.header {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 16px;
+		padding-bottom: 1rem;
+		border-bottom: 1px solid var(--border);
+		flex-wrap: wrap;
+	}
+	.header-left { display: flex; align-items: center; gap: 12px; }
+	.header-actions { display: flex; align-items: center; gap: 8px; }
+	.btn-trash-toggle {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		padding: 0.55rem 0.85rem;
+		background: transparent;
+		color: var(--text-muted);
+		border: 1px solid var(--border-default);
+		border-radius: 10px;
+		font-size: 0.8rem;
+		font-weight: 500;
+		cursor: pointer;
+		transition: all 0.2s var(--ease);
+		font-family: inherit;
+	}
+	.btn-trash-toggle:hover {
+		border-color: rgba(220, 38, 38, 0.3);
+		color: #b91c1c;
+		background: rgba(220, 38, 38, 0.04);
+	}
+	.btn-trash-active {
+		border-color: #b91c1c;
+		color: #b91c1c;
+		background: rgba(220, 38, 38, 0.06);
+	}
+	.logo-mark {
+		width: 44px;
+		height: 44px;
+		background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+		color: #fff;
+		border-radius: 12px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+	}
+	.eyebrow {
+		display: inline-block;
+		font-family: 'Geist', monospace;
+		font-size: 0.65rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.12em;
+		color: var(--accent-hover);
+		background: var(--accent-bg);
+		padding: 0.2rem 0.6rem;
+		border-radius: 5px;
+		margin-bottom: 0.35rem;
+	}
+	h1 {
+		font-family: 'Geist', Georgia, serif;
+		font-size: 1.4rem;
+		font-weight: 500;
+		color: var(--text-primary);
+		letter-spacing: -0.015em;
+		line-height: 1.2;
+		margin: 0;
+	}
+	.header-sub {
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		margin: 0.2rem 0 0;
+		line-height: 1.45;
+	}
+	.btn-primary {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 0.55rem 1rem;
+		background: linear-gradient(135deg, var(--accent), var(--accent-hover));
+		color: #fff;
+		border: none;
+		border-radius: 10px;
+		font-size: 0.82rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s var(--ease);
+		white-space: nowrap;
+		font-family: inherit;
+		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+	}
+	.btn-primary:hover {
+		transform: translateY(-1px);
+		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
+	}
+	.btn-primary:active {
+		transform: translateY(0);
+	}
 
-<!-- Modal de Confirmación de Eliminación -->
-{#if showDeleteModal}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-		transition:fade={{ duration: 200 }}
-		on:click={cerrarModalEliminar}
-		role="dialog"
-		aria-modal="true"
-	>
-		<div
-			class="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl"
-			transition:fly={{ y: 20, duration: 300 }}
-			on:click={(e) => e.stopPropagation()}
-			role="document"
-		>
-			<!-- Header -->
-			<div class="bg-gradient-to-r from-red-500 to-red-600 px-6 py-5">
-				<div class="flex items-center gap-3">
-					<div
-						class="flex h-12 w-12 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm"
-					>
-						<svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-							/>
-						</svg>
-					</div>
-					<h2 class="text-2xl font-bold text-white">Confirmar Eliminación</h2>
-				</div>
-			</div>
+	.kpi-row,
+	.causa-stats-row {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+		gap: 0.75rem;
+	}
+	.causa-stat-card {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		padding: 0.85rem 1rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 14px;
+		transition: all 0.2s var(--ease);
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+	}
+	.causa-stat-card:hover {
+		border-color: var(--border-hover);
+		transform: translateY(-1px);
+	}
+	.causa-stat-total {
+		justify-content: center;
+		background: var(--bg);
+	}
+	.causa-stat-dot {
+		width: 10px;
+		height: 10px;
+		border-radius: 50%;
+		flex-shrink: 0;
+		box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.03);
+	}
+	.dot-proceso { background: #3b82f6; }
+	.dot-vencida { background: #ef4444; }
+	.dot-cumplida { background: #22c55e; }
+	.causa-stat-info { display: flex; flex-direction: column; min-width: 0; }
+	.causa-stat-label {
+		font-family: 'Geist', monospace;
+		font-size: 0.62rem;
+		font-weight: 700;
+		color: var(--text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+	}
+	.causa-stat-value {
+		font-family: 'Geist', Georgia, serif;
+		font-size: 1.25rem;
+		font-weight: 500;
+		color: var(--text-primary);
+		font-variant-numeric: tabular-nums;
+		line-height: 1.1;
+		margin-top: 0.15rem;
+	}
+	.causa-stat-total .causa-stat-value { font-size: 1.35rem; }
 
-			<!-- Content -->
-			<div class="px-6 py-6">
-				<div class="mb-6">
-					<p class="mb-2 text-gray-700">¿Está seguro de que desea eliminar la siguiente acción?</p>
-					<div class="mt-4 rounded-lg border-l-4 border-red-500 bg-red-50 p-4">
-						<p class="font-semibold text-red-900">
-							{accionEliminar?.numero}
-						</p>
-					</div>
-					<p class="mt-4 text-sm text-gray-600">
-						Esta acción no se puede deshacer. Todos los datos asociados a esta acción
-						correctiva/preventiva serán eliminados permanentemente.
-					</p>
-				</div>
+	.tipo-row {
+		display: flex;
+		gap: 1.25rem;
+		padding: 1rem 1.25rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 14px;
+		flex-wrap: wrap;
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+	}
+	.tipo-item { display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 140px; }
+	.tipo-name {
+		font-family: 'Geist', monospace;
+		font-size: 0.65rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--text-muted);
+		min-width: 80px;
+	}
+	.tipo-bar-track {
+		flex: 1;
+		height: 6px;
+		background: rgba(0, 0, 0, 0.06);
+		border-radius: 3px;
+		overflow: hidden;
+	}
+	.tipo-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+	.tipo-correctiva { background: #f59e0b; }
+	.tipo-preventiva { background: #6366f1; }
+	.tipo-mejora { background: #22c55e; }
+	.tipo-count {
+		font-family: 'Geist', monospace;
+		font-size: 0.75rem;
+		font-weight: 700;
+		color: var(--text-primary);
+		font-variant-numeric: tabular-nums;
+		min-width: 20px;
+		text-align: right;
+	}
 
-				<!-- Botones -->
-				<div class="flex gap-3">
-					<button
-						type="button"
-						on:click={cerrarModalEliminar}
-						class="apple-transition flex-1 rounded-lg border border-gray-200 bg-white px-4 py-2.5 font-medium text-gray-700 hover:bg-gray-50"
-					>
-						Cancelar
-					</button>
-					<button
-						type="button"
-						on:click={confirmarEliminacion}
-						class="apple-transition flex-1 rounded-lg bg-gradient-to-r from-red-500 to-red-600 px-4 py-2.5 font-medium text-white shadow-lg shadow-red-500/30 hover:from-red-600 hover:to-red-700"
-					>
-						Eliminar
-					</button>
-				</div>
-			</div>
-		</div>
-	</div>
-{/if}
+	.filter-bar {
+		display: flex;
+		gap: 0.6rem;
+		align-items: center;
+		flex-wrap: wrap;
+		padding: 0.75rem;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 14px;
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+	}
+	.search-wrap { position: relative; flex: 1; min-width: 220px; }
+	.search-icon {
+		position: absolute;
+		left: 0.85rem;
+		top: 50%;
+		transform: translateY(-50%);
+		color: var(--text-very-muted, #9a9a9a);
+		pointer-events: none;
+	}
+	.search-wrap input {
+		width: 100%;
+		padding: 0.55rem 2.4rem 0.55rem;
+		font-size: 0.85rem;
+		border-radius: 10px;
+		border: 1px solid var(--border-default);
+		background: var(--surface);
+		color: var(--text-primary);
+		outline: none;
+		transition: all 0.2s var(--ease);
+		font-family: inherit;
+	}
+	.search-wrap input:focus {
+		border-color: var(--accent);
+		box-shadow: 0 0 0 3px var(--accent-ring);
+	}
+	.search-wrap input::placeholder { color: var(--text-muted); }
+
+	.pills { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+	.pill {
+		font-family: 'Geist', monospace;
+		font-size: 0.7rem;
+		font-weight: 600;
+		padding: 0.4rem 0.8rem;
+		border-radius: 999px;
+		border: 1px solid var(--border-default);
+		background: var(--surface);
+		color: var(--text-muted);
+		cursor: pointer;
+		transition: all 0.2s var(--ease);
+		display: flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-family: inherit;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+	.pill:hover {
+		border-color: var(--border-hover);
+		color: var(--text-primary);
+		background: var(--bg);
+	}
+	.pill-active {
+		background: var(--accent-bg);
+		border-color: rgba(249, 115, 22, 0.3);
+		color: var(--accent-hover);
+	}
+	.pill-count {
+		font-size: 0.6rem;
+		font-weight: 700;
+		background: rgba(0, 0, 0, 0.06);
+		border-radius: 8px;
+		padding: 0.1rem 0.4rem;
+		line-height: 1.4;
+		font-family: 'Geist', monospace;
+	}
+	.pill-active .pill-count { background: rgba(249, 115, 22, 0.2); color: var(--accent-hover); }
+
+	.results-info {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		font-size: 0.78rem;
+		color: var(--text-muted);
+	}
+	.reset-btn {
+		font-size: 0.78rem;
+		color: var(--accent);
+		background: none;
+		border: none;
+		cursor: pointer;
+		padding: 0;
+		font-family: inherit;
+		font-weight: 600;
+		transition: color 0.2s var(--ease);
+	}
+	.reset-btn:hover {
+		color: var(--accent-hover);
+	}
+
+	.grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+		gap: 0.85rem;
+	}
+
+	.empty {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.75rem;
+		padding: 4rem 2rem;
+		color: var(--text-muted);
+		text-align: center;
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 16px;
+	}
+	.empty p { font-size: 0.88rem; margin: 0; }
+	.spinner {
+		width: 32px;
+		height: 32px;
+		border: 3px solid rgba(249, 115, 22, 0.15);
+		border-top-color: var(--accent);
+		border-radius: 50%;
+		animation: spin 0.8s linear infinite;
+	}
+	@keyframes spin { to { transform: rotate(360deg); } }
+
+	@media (max-width: 600px) {
+		.dash { padding: 1.25rem 1rem 3rem; }
+		h1 { font-size: 1.2rem; }
+		.tipo-row { gap: 0.75rem; }
+		.kpi-row,
+		.causa-stats-row {
+			grid-template-columns: repeat(2, 1fr);
+		}
+	}
+</style>

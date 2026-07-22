@@ -106,7 +106,7 @@
 </script>
 
 <svelte:head>
-	<title>Sesiones de Usuarios - Transmeralda</title>
+	<title>Sesiones de Usuarios - Cotransmeq</title>
 </svelte:head>
 
 <div class="min-h-screen bg-gray-50 p-4 lg:p-6">
@@ -120,8 +120,8 @@
 				</p>
 			</div>
 			<div class="flex items-center gap-3">
-				<div class="rounded-lg bg-emerald-50 px-4 py-2">
-					<span class="text-sm font-semibold text-emerald-700">
+				<div class="rounded-lg bg-orange-50 px-4 py-2">
+					<span class="text-sm font-semibold text-orange-700">
 						{activasCount} activas
 					</span>
 				</div>
@@ -145,7 +145,7 @@
 				type="text"
 				bind:value={searchTerm}
 				placeholder="Buscar usuario o IP..."
-				class="w-full rounded-xl border border-gray-200 bg-white py-2.5 pr-4 pl-10 text-sm shadow-sm focus:border-emerald-400 focus:ring-2 focus:ring-emerald-100 focus:outline-none"
+				class="w-full rounded-xl border border-gray-200 bg-white py-2.5 pr-4 pl-10 text-sm shadow-sm focus:border-orange-400 focus:ring-2 focus:ring-orange-100 focus:outline-none"
 			/>
 		</div>
 
@@ -154,7 +154,7 @@
 				<button
 					class="px-4 py-2 text-sm font-medium transition-colors first:rounded-l-lg last:rounded-r-lg
 						{filtroActivas === tab.key
-						? 'bg-emerald-600 text-white'
+						? 'bg-orange-600 text-white'
 						: 'text-gray-600 hover:bg-gray-50'}"
 					on:click={() => (filtroActivas = tab.key as typeof filtroActivas)}
 				>
@@ -168,7 +168,7 @@
 	{#if loading}
 		<div class="flex items-center justify-center py-20">
 			<div class="text-center">
-				<div class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-emerald-200 border-t-emerald-600"></div>
+				<div class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-orange-200 border-t-orange-600"></div>
 				<p class="text-sm text-gray-500">Cargando sesiones...</p>
 			</div>
 		</div>
@@ -201,7 +201,7 @@
 								<!-- Usuario -->
 								<td class="px-4 py-3">
 									<div class="flex items-center gap-2.5">
-										<div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-xs font-bold text-white">
+										<div class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-orange-600 text-xs font-bold text-white">
 											{sesion.usuario?.nombre?.charAt(0)?.toUpperCase() || '?'}
 										</div>
 										<div>
@@ -257,8 +257,8 @@
 								<!-- Estado -->
 								<td class="px-4 py-3 text-center">
 									{#if sesion.is_active}
-										<span class="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
-											<span class="h-1.5 w-1.5 rounded-full bg-green-500"></span>
+										<span class="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-semibold text-orange-700">
+											<span class="h-1.5 w-1.5 rounded-full bg-orange-500"></span>
 											Activa
 										</span>
 									{:else}
