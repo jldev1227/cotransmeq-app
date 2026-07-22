@@ -1635,16 +1635,13 @@
 	}
 
 	// ─── FIT TO VIEWPORT (one-shot zoom helper) ─────────────────
-	// A4 portrait: 210mm × 297mm → 210×3.78 = 794px wide at 96dpi
-	const PORTRAIT_WIDTH_PX = 210 * 3.78;
-	// A4 landscape: 297mm × 210mm → 1400px wide (custom width for 31-day recargos)
-	const LANDSCAPE_WIDTH_PX = 1400;
+	// A4 landscape: 297mm × 210mm → 1123px wide at 96dpi (todas las hojas son landscape)
+	const LANDSCAPE_WIDTH_PX = 297 * 3.78;
 
 	function fitToViewport() {
 		if (typeof window === 'undefined' || viewportWidth <= 0) return;
-		// Use the page width that is currently being shown
-		const isLandscape = previewPage === 'recargos';
-		const pageWidth = isLandscape ? LANDSCAPE_WIDTH_PX : PORTRAIT_WIDTH_PX;
+		// Todas las hojas son A4 landscape
+		const pageWidth = LANDSCAPE_WIDTH_PX;
 		// Account for body padding (~20px on each side)
 		const padding = 40;
 		const availableWidth = Math.max(280, viewportWidth - padding);
@@ -3638,10 +3635,13 @@
 			</div>
 		{/if}
 
-		<!-- A4 PAGE — HOJA 1: LIQUIDACIÓN (vertical A4 portrait, layout del commit 5dc3f81^) -->
+		<!-- A4 LANDSCAPE — HOJA 1: LIQUIDACIÓN (horizontal, como transmeralda) -->
 		{#if (isPrinting && printSheets.liquidacion) || (!isPrinting && previewPage === 'liquidacion')}
-			<div class="pdf-body print-sheet">
-				<div class="page-portrait" style="transform: scale({pdfZoom}); transform-origin: top center;">
+			<div class="pdf-body pdf-body-landscape print-sheet print-sheet-landscape">
+				<div
+					class="page page-landscape"
+					style="transform: scale({pdfZoom}); transform-origin: top center;"
+				>
 					<div class="dh">
 						<div class="dh-logo">
 							{#if logoError}<div class="dh-logo-fallback">COTRANS<br />MEQ</div>{:else}<img
@@ -3723,7 +3723,7 @@
 									></tr
 								>
 							{/each}
-							{#each Array(Math.max(0, 4 - rows.length)) as _}<tr class="filler"
+							{#each Array(Math.max(0, 10 - rows.length)) as _}<tr class="filler"
 									>{#each Array(11) as __}<td></td>{/each}</tr
 								>{/each}
 						</tbody>
@@ -3731,117 +3731,111 @@
 							><tr
 								><td
 									colspan="9"
-									style="text-align:right;color:#ea580c;padding-right:8px;font-size:8pt;font-weight:800"
+									style="text-align:right;color:#ea580c;padding-right:8px;font-size:8pt;font-weight:800;text-transform:uppercase;letter-spacing:0.04em"
 									>TOTAL SERVICIOS:</td
-								><td class="mch" style="border-left:1px solid #aaa">{COP(totalSvc)}</td><td
+								><td class="mch" style="border-left:1px solid #fed7aa">{COP(totalSvc)}</td><td
 								></td></tr
 							></tfoot
 						>
 					</table>
-					<div class="bg">
-						<div class="bl">
-							<div class="obs-t">Observaciones:</div>
-							<div class="obs-b">{hdr.observaciones}</div>
-							<div class="op-row">
-								<div class="op-line">
-									<span class="opl">OPERADORA:</span><span class="opv">{hdr.operadora}</span>
+					<div class="doc-summary">
+						<div class="doc-summary-title">RESUMEN DEL DOCUMENTO</div>
+						<div class="doc-summary-grid">
+							<div class="doc-summary-left">
+								<div class="doc-summary-row">
+									<span class="doc-summary-lbl">Observaciones:</span>
+									<span class="doc-summary-val">{hdr.observaciones || '—'}</span>
 								</div>
-								{#if hdr.osi}<div class="op-line">
-										<span class="opl">OSI:</span><span class="opv">{hdr.osi}</span>
-									</div>{/if}
+								<div class="doc-summary-row">
+									<span class="doc-summary-lbl">OPERADORA:</span>
+									<span class="doc-summary-val">{hdr.operadora}</span>
+								</div>
+								{#if hdr.osi}
+									<div class="doc-summary-row">
+										<span class="doc-summary-lbl">OSI:</span>
+										<span class="doc-summary-val">{hdr.osi}</span>
+									</div>
+								{/if}
+								<div class="doc-summary-pernote">
+									<div class="doc-summary-pernote-title">PERNOCTE</div>
+									<table class="doc-summary-tbl">
+										<thead>
+											<tr>
+												<th>Vr. Unitario</th>
+												<th>Cantidad</th>
+												<th>Total</th>
+											</tr>
+										</thead>
+										<tbody>
+											<tr>
+												<td>{COP(ext.pernote_unit)}</td>
+												<td>{ext.pernote_cant}</td>
+												<td class="doc-summary-strong">{COP(valPern)}</td>
+											</tr>
+										</tbody>
+									</table>
+								</div>
 							</div>
-							<div class="pernote-box">
-								<div
-									style="font-size:6.8pt;font-weight:800;color:#ea580c;padding:2px 6px;background:#fff7ed;border:1px solid #fed7aa;border-bottom:none"
-								>
-									PERNOCTE
-								</div>
-								<table class="pernote-tbl">
-									<thead><tr><th>Vr. Unitario</th><th>Cantidad</th><th>Total</th></tr></thead><tbody
-										><tr
-											><td style="font-family:'Geist',sans-serif;font-variant-numeric:tabular-nums;font-size:7.5pt">{COP(ext.pernote_unit)}</td
-											><td style="font-weight:700">{ext.pernote_cant}</td><td
-												style="font-weight:800;color:#ea580c">{COP(valPern)}</td
-											></tr
-										></tbody
-									>
+							<div class="doc-summary-right">
+								<table class="doc-summary-totals">
+									<tbody>
+										<tr>
+											<td>VALOR TOTAL DEL SERVICIO SIN RECARGOS</td>
+											<td>{COP(totalSvc)}</td>
+										</tr>
+										<tr>
+											<td>VALOR TOTAL RECARGOS</td>
+											<td>{COP(valRec)}</td>
+										</tr>
+										<tr>
+											<td>PERNOCTE</td>
+											<td>{COP(valPern)}</td>
+										</tr>
+										<tr class="doc-summary-sub">
+											<td>SUBTOTAL</td>
+											<td>{COP(subtotal)}</td>
+										</tr>
+										<tr>
+											<td>IVA {ext.iva_pct}%</td>
+											<td>{COP(ivaVal)}</td>
+										</tr>
+										<tr class="doc-summary-grand">
+											<td>TOTAL SERVICIO</td>
+											<td>{COP(total)}</td>
+										</tr>
+									</tbody>
 								</table>
 							</div>
-						</div>
-						<div class="br">
-							<table class="stbl">
-								<tbody>
-									<tr class="sep-row"
-										><td class="slb" style="padding-left:12px"
-											>VALOR TOTAL DEL SERVICIO SIN RECARGOS</td
-										><td class="svb" style="padding-right:10px">{COP(totalSvc)}</td></tr
+							<div class="doc-summary-sigs">
+								<div>
+									<div class="doc-summary-siglbl"
+										>FIRMA AUTORIZADA POR CLIENTE{selectedCliente?.nombre
+											? ` — ${selectedCliente.nombre}`
+											: ''}:</div
 									>
-									<tr
-										><td class="slb" style="padding-left:12px">VALOR TOTAL RECARGOS</td><td
-											class="svb"
-											style="padding-right:10px">{COP(valRec)}</td
-										></tr
+									<div class="doc-summary-sigline"
+										>{selectedCliente?.nombre || ''}{selectedCliente?.nit
+											? ` — NIT: ${selectedCliente.nit}`
+											: ''}</div
 									>
-									<tr
-										><td class="slb" style="padding-left:12px">PERNOCTE</td><td
-											class="svb"
-											style="padding-right:10px">{COP(valPern)}</td
-										></tr
-									>
-									<tr class="sep-row"
-										><td class="slb" style="padding-left:12px;font-size:8.5pt">SUBTOTAL</td><td
-											class="svb"
-											style="padding-right:10px;font-size:8.5pt">{COP(subtotal)}</td
-										></tr
-									>
-									<tr
-										><td class="sla" style="padding-left:12px;font-size:7pt;color:#666"
-											>IVA &nbsp;{ext.iva_pct}%</td
-										><td class="sva" style="padding-right:10px;font-size:7pt;color:#666"
-											>{COP(ivaVal)}</td
-										></tr
-									>
-									<tr
-										><td class="slhi" style="padding-left:12px">TOTAL SERVICIO</td><td
-											class="svhi"
-											style="padding-right:10px">{COP(total)}</td
-										></tr
-									>
-								</tbody>
-							</table>
-						</div>
-					</div>
-					<div class="sigs">
-						<div class="sig">
-							<div class="sig-lbl">
-								FIRMA AUTORIZADA POR CLIENTE {selectedCliente?.nombre
-									? `— ${selectedCliente.nombre}`
-									: ''}:
+								</div>
+								<div>
+									<div class="doc-summary-siglbl">FIRMA AUTORIZADA POR:</div>
+									<div class="doc-summary-sigline">&nbsp;</div>
+								</div>
 							</div>
-							<div class="sig-line">
-								{selectedCliente?.nombre || ''}{selectedCliente?.nit
-									? ` — NIT: ${selectedCliente.nit}`
-									: ''}
+							<div class="doc-summary-ft">
+								<span>OP-FR-07 · Versión 2 · 14/08/23</span>
+								<span
+									>Generado el {new Date().toLocaleDateString('es-CO', {
+										day: '2-digit',
+										month: 'long',
+										year: 'numeric'
+									})}</span
+								>
+								<span>{hdr.empresa}</span>
 							</div>
 						</div>
-						<div class="sig">
-							<div class="sig-lbl">FIRMA AUTORIZADA POR:</div>
-							<!-- {#if ['APROBADA', 'FACTURADA'].includes(liqEstado) && firmaGerencia?.firma_signed_url}<img
-									class="firma-img"
-									src={firmaGerencia.firma_signed_url}
-									alt="Firma {firmaGerencia.nombre}"
-								/>{/if} -->
-							<div class="sig-line">&nbsp;</div>
-						</div>
-					</div>
-					<div class="doc-ft">
-						<span>OP-FR-07 · Versión 2 · 14/08/23</span><span
-							>Generado el {new Date().toLocaleDateString('es-CO', {
-								day: '2-digit',
-								month: 'long',
-								year: 'numeric'
-							})}</span
-						><span>{hdr.empresa}</span>
 					</div>
 				</div>
 			</div>
@@ -3984,7 +3978,7 @@
 							</table>
 						</div>
 					{/if}
-					<div class="sigs" style="margin-top:14px">
+					<div class="sigs" style="margin-top:24px">
 						<div class="sig">
 							<div class="sig-lbl">FIRMA AUTORIZADA POR CLIENTE:</div>
 							<div class="sig-line">{selectedCliente?.nombre || ''}</div>
@@ -4012,10 +4006,13 @@
 			</div>
 		{/if}
 
-		<!-- A4 PAGE — HOJA 3: LIQUIDADOR -->
+		<!-- A4 LANDSCAPE — HOJA 3: LIQUIDADOR (horizontal, como transmeralda) -->
 		{#if (isPrinting && printSheets.liquidador) || (!isPrinting && previewPage === 'liquidador')}
-			<div class="pdf-body print-sheet">
-				<div class="page" style="transform: scale({pdfZoom}); transform-origin: top center;">
+			<div class="pdf-body pdf-body-landscape print-sheet print-sheet-landscape">
+				<div
+					class="page page-landscape"
+					style="transform: scale({pdfZoom}); transform-origin: top center;"
+				>
 					<div class="dh">
 						<div class="dh-logo">
 							{#if logoError}<div class="dh-logo-fallback">COTRANS<br />MEQ</div>{:else}<img
@@ -4155,10 +4152,13 @@
 			</div>
 		{/if}
 
-		<!-- A4 PAGE — HOJA 4: TERCEROS -->
+		<!-- A4 LANDSCAPE — HOJA 4: TERCEROS -->
 		{#if (isPrinting && printSheets.terceros) || (!isPrinting && previewPage === 'terceros')}
-			<div class="pdf-body print-sheet">
-				<div class="page" style="transform: scale({pdfZoom}); transform-origin: top center;">
+			<div class="pdf-body pdf-body-landscape print-sheet print-sheet-landscape">
+				<div
+					class="page page-landscape"
+					style="transform: scale({pdfZoom}); transform-origin: top center;"
+				>
 					<div class="dh">
 						<div class="dh-logo">
 							{#if logoError}<div class="dh-logo-fallback">COTRANS<br />MEQ</div>{:else}<img
@@ -4380,7 +4380,7 @@
 					<input type="checkbox" bind:checked={printSheets.liquidacion} />
 					<span class="print-check-mark"></span>
 					<span class="print-check-lbl"
-						>📄 Hoja 1 — Liquidación de Servicios <span class="print-check-tag">A4 horizontal</span
+						>📄 Hoja 1 — Liquidación de Servicios <span class="print-check-tag print-tag-landscape">A4 horizontal</span
 						></span
 					>
 				</label>
@@ -4388,14 +4388,14 @@
 					<input type="checkbox" bind:checked={printSheets.recargos} />
 					<span class="print-check-mark"></span>
 					<span class="print-check-lbl"
-						>📊 Hoja 2 — Recargos (Horas) <span class="print-check-tag">A4 horizontal</span></span
+						>📊 Hoja 2 — Recargos (Horas) <span class="print-check-tag print-tag-landscape">A4 horizontal</span></span
 					>
 				</label>
 				<label class="print-check">
 					<input type="checkbox" bind:checked={printSheets.liquidador} />
 					<span class="print-check-mark"></span>
 					<span class="print-check-lbl"
-						>📋 Hoja 3 — Liquidador de Recargos <span class="print-check-tag">A4 horizontal</span
+						>📋 Hoja 3 — Liquidador de Recargos <span class="print-check-tag print-tag-landscape">A4 horizontal</span
 						></span
 					>
 				</label>
@@ -4404,7 +4404,7 @@
 						<input type="checkbox" bind:checked={printSheets.terceros} />
 						<span class="print-check-mark"></span>
 						<span class="print-check-lbl"
-							>📑 Hoja 4 — Terceros <span class="print-check-tag">A4 horizontal</span></span
+							>📑 Hoja 4 — Terceros <span class="print-check-tag print-tag-landscape">A4 horizontal</span></span
 						>
 					</label>
 				{/if}
@@ -5579,21 +5579,19 @@
 		overscroll-behavior: contain;
 	}
 
-	/* ─ A4 PORTRAIT (HOJA 1 liquidación) — vertical, 210mm × 297mm ─ */
-	.page-portrait {
+	/* ─ A4 PAGE (idéntico a transmeralda) ─ */
+	.page {
 		background: #fff;
-		width: 210mm;
-		height: 297mm;
+		width: 297mm;
 		max-width: 100%;
-		padding: 12mm 14mm 14mm;
+		padding: 8mm 11mm 13mm;
 		font-size: 8.8pt;
 		line-height: 1.35;
 		font-family: Arial, Helvetica, sans-serif;
 		box-shadow: 0 8px 50px rgba(0, 0, 0, 0.3);
 		border-radius: 2px;
-		box-sizing: border-box;
 	}
-	/* ─ A4 LANDSCAPE (HOJA 2 recargos) — 297mm × 210mm ─ */
+	/* ─ A4 LANDSCAPE (idéntico a transmeralda) ─ */
 	.page-landscape {
 		background: #fff;
 		width: 1400px;
@@ -5604,13 +5602,11 @@
 		font-family: Arial, Helvetica, sans-serif;
 		box-shadow: 0 8px 50px rgba(0, 0, 0, 0.3);
 		border-radius: 2px;
-		box-sizing: border-box;
 	}
-	/* legacy alias for HOJA 3+ (liquidador, terceros) that use class="page" */
-	.page {
+	/* legacy alias portrait (alias, igual a .page en transmeralda) */
+	.page-portrait {
 		background: #fff;
-		width: 210mm;
-		min-height: 297mm;
+		width: 297mm;
 		max-width: 100%;
 		padding: 8mm 11mm 13mm;
 		font-size: 8.8pt;
@@ -5618,191 +5614,241 @@
 		font-family: Arial, Helvetica, sans-serif;
 		box-shadow: 0 8px 50px rgba(0, 0, 0, 0.3);
 		border-radius: 2px;
-		box-sizing: border-box;
 	}
 
 	.dh {
 		display: grid;
 		grid-template-columns: auto 1fr auto auto;
-		border: 2.5px solid #000;
-		margin-bottom: 3.5px;
+		background: #f6f6f3;
+		border: 1px solid rgba(15, 23, 42, 0.08);
+		border-radius: 4px;
+		margin-bottom: 4px;
+		padding: 4px;
 	}
 	.dh-logo {
-		border-right: 2px solid #000;
-		padding: 8px 12px;
+		border-right: 1px solid rgba(15, 23, 42, 0.08);
+		padding: 6px 10px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		min-width: 100px;
+		background: #fff;
+		border-radius: 3px;
 	}
 	.dh-logo img {
-		height: 58px;
+		height: 50px;
 		width: auto;
 		object-fit: contain;
 	}
 	.dh-logo-fallback {
-		width: 88px;
-		height: 58px;
+		width: 80px;
+		height: 50px;
 		background: linear-gradient(135deg, #f97316, #ea580c);
-		border-radius: 6px;
+		border-radius: 4px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		color: #fff;
-		font-size: 7pt;
+		font-size: 6.5pt;
 		font-weight: 900;
 		text-align: center;
 		line-height: 1.2;
 		box-shadow: 0 4px 12px rgba(249, 115, 22, 0.25);
 	}
 	.dh-title {
-		padding: 7px 14px;
+		padding: 6px 14px;
 		display: flex;
 		flex-direction: column;
 		justify-content: center;
 	}
 	.dh-co {
-		font-size: 11pt;
+		font-size: 10pt;
 		font-weight: 900;
 		color: #ea580c;
 		text-transform: uppercase;
-		letter-spacing: -0.01em;
+		letter-spacing: 0.02em;
 	}
 	.dh-doc {
-		font-size: 10pt;
+		font-size: 9pt;
 		font-weight: 700;
-		color: #333;
-		margin-top: 3px;
+		color: #475569;
+		margin-top: 2px;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
 	}
 	.dh-meta {
-		border-left: 2px solid #000;
+		border-left: 1px solid rgba(15, 23, 42, 0.08);
+		background: #fff;
+		border-radius: 3px;
+		margin: 2px;
 	}
 	.dh-super {
-		border-left: 2px solid #000;
+		border-left: 1px solid rgba(15, 23, 42, 0.08);
 		padding: 4px 8px;
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		min-width: 80px;
+		min-width: 70px;
+		background: #fff;
+		border-radius: 3px;
+		margin: 2px;
 	}
 	.dh-super img {
-		height: 50px;
+		height: 42px;
 		width: auto;
 		object-fit: contain;
 	}
 	.mt {
 		width: 100%;
 		border-collapse: collapse;
-		height: 100%;
+		font-size: 7pt;
 	}
 	.mt td {
-		padding: 3px 10px;
-		font-size: 8pt;
-		border-bottom: 1px solid #999;
+		padding: 2px 8px;
+		font-size: 7pt;
+		border-bottom: 1px solid rgba(15, 23, 42, 0.06);
 	}
 	.mt tr:last-child td {
 		border-bottom: none;
 	}
 	.ml {
 		font-weight: 700;
-		background: #f5f5f5;
-		border-right: 1px solid #bbb !important;
-		color: #555;
+		color: #475569;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		font-size: 6.5pt;
 		white-space: nowrap;
 	}
 	.mv {
 		font-weight: 800;
 		color: #ea580c;
+		font-family: 'Geist', sans-serif;
+		font-variant-numeric: tabular-nums;
 	}
 
 	.pb {
-		border: 1.5px solid #000;
-		margin-bottom: 3.5px;
+		background: #fff7ed;
+		border: 1px solid #fed7aa;
+		border-radius: 4px;
+		margin-bottom: 4px;
 		display: flex;
 		flex-wrap: wrap;
-		background: #fff7ed;
-		font-size: 8.2pt;
+		font-size: 7.8pt;
+		padding: 3px 6px;
 	}
 	.pc {
-		padding: 4.5px 9px;
-		border-right: 1px solid #999;
+		padding: 3px 9px;
 		display: flex;
 		align-items: center;
-		gap: 4px;
+		gap: 5px;
 		white-space: nowrap;
+		border-right: 1px solid rgba(254, 215, 170, 0.6);
 	}
 	.pc:last-child {
 		border-right: none;
 		flex: 1;
 	}
 	.pclabel {
-		color: #666;
-		font-weight: 600;
-		font-size: 7.5pt;
+		color: #92400e;
+		font-weight: 700;
+		font-size: 6.8pt;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
 	}
 	.pcval {
 		color: #ea580c;
 		font-weight: 900;
-		font-size: 9pt;
+		font-size: 8.5pt;
+		font-family: 'Geist', sans-serif;
+		font-variant-numeric: tabular-nums;
 	}
 	.pc-consec .pcval {
-		color: #b00;
+		color: #ea580c;
 		font-family: 'Geist', sans-serif;
 		font-size: 10pt;
+		font-weight: 900;
 	}
 
 	.st {
 		width: 100%;
 		border-collapse: collapse;
 		margin-bottom: 4px;
-		font-size: 7.6pt;
+		font-size: 7.4pt;
+		background: #fff;
+		border: 1px solid #fed7aa;
+		border-radius: 4px;
+		overflow: hidden;
+	}
+	.st thead {
+		background: #fff7ed;
 	}
 	.st th {
 		background: #fff7ed;
 		color: #ea580c;
 		font-weight: 800;
 		text-align: center;
-		padding: 4px 3px;
-		border: 1px solid #000;
-		font-size: 6.8pt;
+		padding: 5px 4px;
+		border: 1px solid #fed7aa;
+		font-size: 6.6pt;
 		text-transform: uppercase;
+		letter-spacing: 0.04em;
 		line-height: 1.25;
 	}
 	.st td {
-		border: 1px solid #bbb;
-		padding: 3px 4px;
+		border: 1px solid rgba(254, 215, 170, 0.7);
+		padding: 4px 5px;
 		vertical-align: middle;
+		background: #fff;
+		height: 30px;
+		box-sizing: border-box;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.st tbody tr {
+		height: 30px;
+	}
+	.st tbody tr:hover td {
+		background: #fffaf2;
 	}
 	.st tfoot td {
-		border: 1.5px solid #000;
-		background: #ffedd5;
+		border: 1px solid #fed7aa;
+		background: #fff7ed;
 		font-weight: 800;
+		color: #ea580c;
 	}
 	.placa {
 		font-family: 'Geist', sans-serif;
 		font-weight: 900;
-		font-size: 8pt;
+		font-size: 7.6pt;
 		color: #ea580c;
 		text-align: center;
 		display: block;
+		letter-spacing: 0.02em;
 	}
 	.mc {
 		text-align: right;
 		font-family: 'Geist', sans-serif;
-		font-size: 7.6pt;
+		font-variant-numeric: tabular-nums;
+		font-size: 7.4pt;
+		color: #0f172a;
+		font-weight: 600;
 	}
 	.mch {
 		text-align: right;
 		font-family: 'Geist', sans-serif;
+		font-variant-numeric: tabular-nums;
 		font-size: 7.6pt;
 		font-weight: 900;
 		color: #ea580c;
 	}
 	.tc {
 		text-align: center;
+		font-variant-numeric: tabular-nums;
 	}
 	.filler td {
-		height: 15px;
+		height: 30px;
+		background: #fffaf2;
 	}
 
 	.bg {
@@ -5979,6 +6025,189 @@
 		padding-top: 4px;
 	}
 
+	/* ── RESUMEN FOOTER (al final de HOJA 1) — grid 2 cols para ahorrar espacio ── */
+	.doc-summary {
+		margin-top: 6px;
+		padding: 3mm 5mm 3mm;
+		background: #f6f6f3;
+		border: 1px solid rgba(15, 23, 42, 0.08);
+		border-radius: 4px;
+		font-size: 6.5pt;
+		line-height: 1.3;
+	}
+	.doc-summary-title {
+		font-size: 7pt;
+		font-weight: 800;
+		color: #ea580c;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		text-align: center;
+		padding-bottom: 3px;
+		margin-bottom: 4px;
+		border-bottom: 1px solid rgba(15, 23, 42, 0.1);
+	}
+	/* Grid 2 columnas: left (obs/pernocte) | right (totals) */
+	.doc-summary-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		grid-template-areas:
+			'left right'
+			'sigs sigs'
+			'ft ft';
+		gap: 8px;
+	}
+	.doc-summary-left {
+		grid-area: left;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.doc-summary-right {
+		grid-area: right;
+		display: flex;
+		flex-direction: column;
+	}
+	.doc-summary-row {
+		display: flex;
+		gap: 5px;
+		font-size: 6.5pt;
+		line-height: 1.3;
+	}
+	.doc-summary-lbl {
+		font-weight: 700;
+		color: #475569;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		min-width: 75px;
+		flex-shrink: 0;
+		font-size: 6pt;
+	}
+	.doc-summary-val {
+		color: #0f172a;
+		font-weight: 600;
+		flex: 1;
+		font-size: 6.5pt;
+	}
+	.doc-summary-pernote {
+		margin-top: 4px;
+	}
+	.doc-summary-pernote-title {
+		font-size: 6pt;
+		font-weight: 800;
+		color: #ea580c;
+		background: #fff7ed;
+		padding: 1.5px 5px;
+		border: 1px solid #fed7aa;
+		border-bottom: none;
+		display: inline-block;
+		letter-spacing: 0.04em;
+	}
+	.doc-summary-tbl {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 6.5pt;
+		border: 1px solid #fed7aa;
+	}
+	.doc-summary-tbl th {
+		background: #fff7ed;
+		color: #ea580c;
+		font-weight: 700;
+		padding: 1.5px 4px;
+		text-align: center;
+		border: 1px solid #fed7aa;
+		font-size: 6pt;
+		text-transform: uppercase;
+	}
+	.doc-summary-tbl td {
+		padding: 1.5px 4px;
+		text-align: center;
+		border: 1px solid #fed7aa;
+		font-family: 'Geist', sans-serif;
+		font-variant-numeric: tabular-nums;
+	}
+	.doc-summary-strong {
+		font-weight: 800;
+		color: #ea580c;
+	}
+	.doc-summary-totals {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 6.5pt;
+	}
+	.doc-summary-totals td {
+		padding: 1.5px 5px;
+		border-bottom: 1px dotted rgba(15, 23, 42, 0.12);
+	}
+	.doc-summary-totals td:first-child {
+		text-align: left;
+		color: #475569;
+		font-weight: 600;
+	}
+	.doc-summary-totals td:last-child {
+		text-align: right;
+		font-family: 'Geist', sans-serif;
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+		color: #0f172a;
+	}
+	.doc-summary-totals .doc-summary-sub td {
+		font-weight: 800;
+		color: #0f172a;
+		padding-top: 2.5px;
+		padding-bottom: 2.5px;
+		border-top: 1px solid rgba(15, 23, 42, 0.15);
+		border-bottom: 1px solid rgba(15, 23, 42, 0.15);
+	}
+	.doc-summary-totals .doc-summary-grand td {
+		font-weight: 900;
+		color: #ea580c;
+		font-size: 7.5pt;
+		padding-top: 3px;
+	}
+	/* Firmas: ocupan las 2 columnas (full width) */
+	.doc-summary-sigs {
+		grid-area: sigs;
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 24px;
+		margin-top: 2px;
+		padding-top: 5px;
+		border-top: 1px solid rgba(15, 23, 42, 0.1);
+	}
+	.doc-summary-sigs > div {
+		display: flex;
+		flex-direction: column;
+		min-height: 44px;
+	}
+	.doc-summary-siglbl {
+		font-size: 5.8pt;
+		font-weight: 700;
+		color: #475569;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		margin-bottom: 24px;
+		line-height: 1.3;
+	}
+	.doc-summary-sigline {
+		font-size: 6.5pt;
+		font-weight: 700;
+		color: #0f172a;
+		border-top: 1px solid #0f172a;
+		padding-top: 3px;
+		min-height: 12px;
+	}
+	/* Footer del pie: ocupa las 2 columnas */
+	.doc-summary-ft {
+		grid-area: ft;
+		display: flex;
+		justify-content: space-between;
+		font-size: 5.8pt;
+		color: #64748b;
+		margin-top: 2px;
+		padding-top: 3px;
+		border-top: 1px solid rgba(15, 23, 42, 0.08);
+	}
+
 	.pdf-body-landscape {
 		align-items: center;
 		overflow-x: auto;
@@ -6003,7 +6232,7 @@
 		table-layout: fixed;
 	}
 	.rgt th {
-		background: linear-gradient(135deg, #fff7ed, #fed7aa);
+		background: #fff7ed;
 		color: #ea580c;
 		font-weight: 800;
 		font-size: 7pt;
@@ -6064,7 +6293,7 @@
 		font-size: 7pt;
 	}
 	.crt th {
-		background: linear-gradient(135deg, #fff7ed, #fed7aa);
+		background: #fff7ed;
 		color: #ea580c;
 		font-weight: 800;
 		font-size: 6.5pt;
@@ -6114,7 +6343,7 @@
 		margin-top: 6px;
 	}
 	.liq-tbl th {
-		background: linear-gradient(135deg, #fff7ed, #fed7aa);
+		background: #fff7ed;
 		color: #ea580c;
 		font-weight: 800;
 		font-size: 7.5pt;
@@ -6552,17 +6781,8 @@
 	}
 
 	@media print {
-		/* Force A4 portrait by default (HOJA 1, 3, 4) */
+		/* ── A4 LANDSCAPE sin márgenes del navegador (clave para evitar páginas en blanco) ── */
 		@page {
-			size: A4 portrait;
-			margin: 0;
-		}
-
-		/* A4 landscape for HOJA 2 recargos via named page */
-		.print-sheet-landscape {
-			page: landscape-sheet;
-		}
-		@page landscape-sheet {
 			size: A4 landscape;
 			margin: 0;
 		}
@@ -6604,37 +6824,33 @@
 			break-after: avoid;
 		}
 
-		/* A4 landscape pages (default) */
+		/* A4 landscape pages (default) — idéntico a transmeralda */
 		.page {
 			box-shadow: none;
 			margin: 0;
 			border-radius: 0;
 			width: 100%;
-			min-height: 297mm;
-			padding: 6mm 8mm;
+			padding: 5mm 7mm;
 			transform: none !important;
 		}
 
-		/* A4 portrait pages (HOJA 1 liquidación) */
-		.page-portrait {
-			box-shadow: none;
-			margin: 0;
-			border-radius: 0;
-			width: 210mm;
-			height: 297mm;
-			min-height: 297mm;
-			padding: 10mm 12mm;
-			transform: none !important;
-			page-break-after: always;
-		}
-
-		/* A4 landscape pages (recargos) */
+		/* A4 landscape pages (recargos) — idéntico a transmeralda */
 		.page-landscape {
 			box-shadow: none;
 			margin: 0;
 			border-radius: 0;
 			width: 100%;
 			padding: 4mm 5mm;
+			transform: none !important;
+		}
+
+		/* legacy alias portrait */
+		.page-portrait {
+			box-shadow: none;
+			margin: 0;
+			border-radius: 0;
+			width: 100%;
+			padding: 5mm 7mm;
 			transform: none !important;
 		}
 
@@ -6814,6 +7030,14 @@
 		padding: 2px 7px;
 		border-radius: 4px;
 		margin-left: 4px;
+	}
+	.print-check-tag.print-tag-portrait {
+		color: #ea580c;
+		background: rgba(249, 115, 22, 0.08);
+	}
+	.print-check-tag.print-tag-landscape {
+		color: #166534;
+		background: rgba(22, 101, 52, 0.08);
 	}
 	.print-check-all {
 		background: #f6f6f3;
