@@ -5,7 +5,7 @@
   import { portalSession, isAuthenticated, conductorNombre, conductorCedula, diasRestantes } from '$lib/stores/portalStore';
   import '../../../app.css';
 
-  const LOGO_SRC = '/assets/logo_transmeralda-264.webp';
+  const LOGO_SRC = '/assets/logo_nombre.png';
 
   let mobileMenuOpen = false;
 

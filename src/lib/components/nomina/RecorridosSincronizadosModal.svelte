@@ -452,7 +452,7 @@
 					<!-- Logo + eyebrow -->
 					<div class="flex items-center gap-3">
 						<img
-							src="/assets/logo_transmeralda-264.webp"
+							src="/assets/logo_nombre.png"
 							alt="Logo"
 							class="h-12 w-auto object-contain"
 							onerror={(e: any) => (e.currentTarget.style.display = 'none')}

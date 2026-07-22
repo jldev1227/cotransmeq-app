@@ -727,7 +727,7 @@
 
 		<!-- Logo -->
 		<div class="fixed top-8 left-8 z-40 p-2">
-			<img src="/assets/logo_transmeralda-264.webp" alt="Cotransmeq" class="h-16 w-auto drop-shadow-lg" />
+			<img src="/assets/logo_nombre.png" alt="Cotransmeq" class="h-16 w-auto drop-shadow-lg" />
 		</div>
 
 		<!-- ─── LOADING POIs ─── -->

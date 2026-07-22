@@ -135,7 +135,7 @@
 					<div class="flex items-center gap-3">
 						<div class="h-10 w-38">
 							<img
-								src="/assets/logo_transmeralda-264.webp"
+								src="/assets/logo_nombre.png"
 								alt="Cotransmeq"
 								class="ticket-brand-logo"
 								width="100"

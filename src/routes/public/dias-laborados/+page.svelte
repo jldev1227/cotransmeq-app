@@ -30,7 +30,7 @@
 	const TOKEN_DAYS   = 30;
 
 	// ← REEMPLAZA ESTA RUTA CON LA DE TU LOGO
-	const LOGO_SRC = '/assets/logo_transmeralda-264.webp';
+	const LOGO_SRC = '/assets/logo_nombre.png';
 
 	const TIPOS: { value: TipoLabor; label: string; colorDark: string; colorLight: string; icon: string }[] = [
 		{ value: 'LABORADO',      label: 'Día Laborado',  colorDark: '#ea580c', colorLight: '#047857', icon: '🚛' },

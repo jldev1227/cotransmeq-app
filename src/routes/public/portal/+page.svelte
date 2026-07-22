@@ -7,7 +7,7 @@
   import { fade, fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
 
-  const LOGO_SRC = '/assets/logo_transmeralda-264.webp';
+  const LOGO_SRC = '/assets/logo_nombre.png';
   const TOKEN_DAYS = 30;
 
   let authStep: 'cedula' | 'email_sent' | 'verificando' = 'cedula';

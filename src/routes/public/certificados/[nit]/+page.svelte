@@ -632,7 +632,7 @@
 				<aside class="content-aside">
 					<div class="aside-card" in:fly={{ y: 16, duration: 400, easing: quintOut, delay: 150 }}>
 						<img
-							src="/assets/logo_transmeralda-264.webp"
+							src="/assets/logo_nombre.png"
 							alt="Cotransmeq S.A.S"
 							class="aside-logo"
 						/>
