@@ -177,7 +177,7 @@
 
 	async function getLogoBase64(): Promise<string> {
 		try {
-			const res = await fetch('/assets/logo_nombre.png');
+			const res = await fetch('/assets/logo_nombre.webp');
 			if (!res.ok) throw new Error('logo fetch failed');
 			const blob = await res.blob();
 			return await new Promise<string>((resolve, reject) => {
@@ -246,7 +246,7 @@
 		const firmaCamiloDataUrl = await getFirmaBase64(firmaCamiloUrl);
 
 		const clone = pageEl.cloneNode(true) as HTMLElement;
-		clone.querySelectorAll('img[src*="/assets/logo_nombre.png"]').forEach((img) => {
+		clone.querySelectorAll('img[src*="/assets/logo_nombre.webp"]').forEach((img) => {
 			if (logoDataUrl) {
 				(img as HTMLImageElement).src = logoDataUrl;
 			}
@@ -572,7 +572,7 @@
 	<div class="pdf-bar no-print">
 		<div class="pdf-bar-l">
 			<img
-				src="/assets/logo_nombre.png"
+				src="/assets/logo_nombre.webp"
 				alt="Cotransmeq"
 				class="pb-logo"
 				onerror={(e: any) => {
@@ -724,7 +724,7 @@
 				<div class="dh">
 					<div class="dh-logo">
 						{#if logoError}<div class="dh-logo-fallback">COTRANS<br />MEQ</div>{:else}<img
-								src="/assets/logo_nombre.png"
+								src="/assets/logo_nombre.webp"
 								alt="Logo"
 								onerror={() => (logoError = true)}
 								style="height:58px;width:auto;object-fit:contain"

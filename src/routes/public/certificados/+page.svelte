@@ -6,7 +6,7 @@
   import { fade, fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
 
-  const LOGO_SRC = '/assets/logo_nombre.png';
+  const LOGO_SRC = '/assets/logo_nombre.webp';
   const TOKEN_DAYS = 90;
 
   let authStep: 'identificacion' | 'email_sent' | 'verificando' | 'portal' = 'identificacion';

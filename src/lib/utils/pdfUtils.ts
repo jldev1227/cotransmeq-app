@@ -21,7 +21,7 @@ export async function imageToBase64(url: string): Promise<string> {
  */
 export async function obtenerLogoBase64(esCotransmeq: boolean = true, prima: boolean = false): Promise<string | null> {
 	try {
-		const logoPath = prima ? '/assets/logo_nombre.png' : '/assets/logo.png';
+		const logoPath = prima ? '/assets/logo_nombre.webp' : '/assets/logo.webp';
 		return await imageToBase64(logoPath);
 	} catch (error) {
 		console.warn('No se pudo cargar el logo para el PDF:', error);

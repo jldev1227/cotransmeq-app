@@ -604,7 +604,7 @@
 
 			let logoBase64 = '';
 			try {
-				const response = await fetch('/assets/logo_nombre.png');
+				const response = await fetch('/assets/logo_nombre.webp');
 				const blob = await response.blob();
 				logoBase64 = await new Promise<string>((resolve) => {
 					const reader = new FileReader();
@@ -2472,7 +2472,7 @@
 						<!-- Mini thumbnail preview -->
 						<div class="mb-4 rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
 							<div class="flex items-center justify-between border-b border-gray-200 pb-2 mb-2">
-								<img src="/assets/logo_nombre.png" alt="Cotransmeq" class="h-4 object-contain" />
+								<img src="/assets/logo_nombre.webp" alt="Cotransmeq" class="h-4 object-contain" />
 								<div class="text-[6px] text-gray-500">Extracto</div>
 							</div>
 							<div class="space-y-1">
@@ -2569,7 +2569,7 @@
 										</div>
 									</td>
 									<td class="w-[25%] p-2 text-center align-middle">
-										<img src="/assets/logo_nombre.png" alt="Cotransmeq S.A.S" class="mx-auto h-10 object-contain" />
+										<img src="/assets/logo_nombre.webp" alt="Cotransmeq S.A.S" class="mx-auto h-10 object-contain" />
 									</td>
 								</tr>
 							</tbody>
@@ -2803,7 +2803,7 @@
 								</div>
 							</div>
 							<div class="text-center">
-								<img src="/assets/logo_nombre.png" alt="Cotransmeq S.A.S" class="h-7 object-contain" />
+								<img src="/assets/logo_nombre.webp" alt="Cotransmeq S.A.S" class="h-7 object-contain" />
 							</div>
 							<div class="text-right text-[9px] text-gray-500">
 								<img src="/assets/NELLY MORALES.jpg" alt="Firma Nelly Morales R." class="ml-auto h-6 object-contain" />

@@ -333,7 +333,7 @@ Las estadísticas se actualizan automáticamente después de:
 
 - Verificar que el servidor backend esté corriendo
 - Endpoint: `GET /api/acciones-correctivas/:id/exportar-pdf`
-- Verificar logo en: `public/assets/cotransmeq-logo.png`
+- Verificar logo en: `public/assets/cotransmeq-logo.webp`
 
 ### Filtros no funcionan
 

@@ -314,9 +314,9 @@
 			<div class="flex items-center space-x-3">
 				<div class="flex h-16 w-full flex-shrink-0 items-center justify-center overflow-hidden">
 					<img
-						src="/assets/logo_cotransmeq_white-264.webp"
+						src="/assets/logo_nombre.webp"
 						alt="Cotransmeq"
-						class="h-full w-3/3 max-w-[180px] object-contain"
+						class="h-full w-3/3 max-w-[80px] object-contain"
 						width="40"
 						height="40"
 						in:scale={{ duration: 400, start: 0.7, opacity: 0, easing: backOut }}

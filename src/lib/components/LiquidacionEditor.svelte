@@ -1889,7 +1889,7 @@
 			<div class="liq-loading-header-inner">
 				<div class="liq-loading-brand">
 					<img
-						src="/assets/logo_nombre.png"
+						src="/assets/logo_nombre.webp"
 						alt="Logo"
 						class="liq-loading-logo"
 						on:error={() => (logoError = true)}
@@ -3645,7 +3645,7 @@
 					<div class="dh">
 						<div class="dh-logo">
 							{#if logoError}<div class="dh-logo-fallback">COTRANS<br />MEQ</div>{:else}<img
-									src="/assets/logo_nombre.png"
+									src="/assets/logo_nombre.webp"
 									alt="Logo"
 									on:error={() => (logoError = true)}
 									style="height:58px;width:auto;object-fit:contain"
@@ -3666,7 +3666,7 @@
 						</div>
 						<div class="dh-super">
 							<img
-								src="https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.png"
+								src="https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.webp"
 								alt="Supertransporte"
 							/>
 						</div>
@@ -3851,7 +3851,7 @@
 					<div class="dh">
 						<div class="dh-logo">
 							{#if logoError}<div class="dh-logo-fallback">COTRANS<br />MEQ</div>{:else}<img
-									src="/assets/logo_nombre.png"
+									src="/assets/logo_nombre.webp"
 									alt="Logo"
 									on:error={() => (logoError = true)}
 									style="height:46px;width:auto;object-fit:contain"
@@ -3872,7 +3872,7 @@
 						</div>
 						<div class="dh-super">
 							<img
-								src="https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.png"
+								src="https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.webp"
 								alt="Supertransporte"
 							/>
 						</div>
@@ -4016,7 +4016,7 @@
 					<div class="dh">
 						<div class="dh-logo">
 							{#if logoError}<div class="dh-logo-fallback">COTRANS<br />MEQ</div>{:else}<img
-									src="/assets/logo_nombre.png"
+									src="/assets/logo_nombre.webp"
 									alt="Logo"
 									on:error={() => (logoError = true)}
 									style="height:58px;width:auto;object-fit:contain"
@@ -4037,7 +4037,7 @@
 						</div>
 						<div class="dh-super">
 							<img
-								src="https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.png"
+								src="https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.webp"
 								alt="Supertransporte"
 							/>
 						</div>
@@ -4162,7 +4162,7 @@
 					<div class="dh">
 						<div class="dh-logo">
 							{#if logoError}<div class="dh-logo-fallback">COTRANS<br />MEQ</div>{:else}<img
-									src="/assets/logo_nombre.png"
+									src="/assets/logo_nombre.webp"
 									alt="Logo"
 									on:error={() => (logoError = true)}
 									style="height:58px;width:auto;object-fit:contain"

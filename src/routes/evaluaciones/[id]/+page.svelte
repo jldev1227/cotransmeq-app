@@ -576,7 +576,7 @@
 			<div class="flex items-center justify-between">
 				<div class="flex items-center gap-3">
 					<!-- Logo Cotransmeq -->
-					<img src="/assets/logo_nombre.png" alt="Cotransmeq Logo" class="h-12 w-auto sm:h-14 lg:h-16" />
+					<img src="/assets/logo_nombre.webp" alt="Cotransmeq Logo" class="h-12 w-auto sm:h-14 lg:h-16" />
 				</div>
 				{#if evaluacion && !showResultado}
 					<div class="hidden items-center gap-2 text-sm text-gray-600 sm:flex">
