@@ -2882,15 +2882,15 @@
 					</article>
 				{/if}
 
-				<!-- ═══ CARD 5: VALORES ADICIONALES & RESUMEN ═══ -->
+				<!-- ═══ CARD 5: VALORES ADICIONALES ═══ -->
 				<article class="wb-card">
 					<header class="wb-card-hd wb-card-hd-flex">
 						<div class="wb-card-hd-text">
 							<span class="wb-card-eyebrow">SECCIÓN 05</span>
-							<h2 class="wb-card-title">Valores adicionales & resumen</h2>
-							<p class="wb-card-sub">Pernocte, IVA y total del servicio</p>
+							<h2 class="wb-card-title">Valores adicionales</h2>
+							<p class="wb-card-sub">Pernocte e IVA del servicio</p>
 						</div>
-						<span class="wb-card-count">Pernocte · IVA · TOTAL</span>
+						<span class="wb-card-count">Pernocte · IVA</span>
 					</header>
 
 					<div class="wb-card-body">
@@ -2935,18 +2935,47 @@
 								</div>
 							</div>
 						</div>
+					</div>
+				</article>
 
-						<div class="wb-row wb-row-totals" data-row={valRow + 1}>
-							<div class="wb-cell wb-cell-summary">
-								<span
-									>Valor Total Servicios sin Recargos: <b style="color:#ea580c">{COP(totalSvc)}</b
-									></span
-								>
-								<span>Valor Total Recargos: <b style="color:#ea580c">{COP(valRec)}</b></span>
-								<span>Pernocte: <b style="color:#ea580c">{COP(valPern)}</b></span>
-								<span>Subtotal: <b>{COP(subtotal)}</b></span>
-								<span>IVA {ext.iva_pct}%: <b>{COP(ivaVal)}</b></span>
-								<span class="wb-grand-pill">TOTAL SERVICIO: <b>{COP(total)}</b></span>
+				<!-- ═══ CARD 5b: RESUMEN LIQUIDACIÓN ═══ -->
+				<article class="wb-card">
+					<header class="wb-card-hd wb-card-hd-flex">
+						<div class="wb-card-hd-text">
+							<span class="wb-card-eyebrow">RESUMEN</span>
+							<h2 class="wb-card-title">
+								<span class="wb-card-title-icon">📈</span> Resumen Liquidación
+							</h2>
+							<p class="wb-card-sub">Desglose del total a facturar del servicio</p>
+						</div>
+						<span class="wb-card-count">Servicios · Recargos · Pernote · IVA · TOTAL</span>
+					</header>
+
+					<div class="wb-card-body">
+						<div class="resumen-card">
+							<div class="resumen-row">
+								<span>Valor Total Servicios sin Recargos</span>
+								<strong style="color:#ea580c">{COP(totalSvc)}</strong>
+							</div>
+							<div class="resumen-row">
+								<span>Valor Total Recargos</span>
+								<strong style="color:#ea580c">{COP(valRec)}</strong>
+							</div>
+							<div class="resumen-row">
+								<span>Pernote ({ext.pernote_cant} noche{ext.pernote_cant !== 1 ? 's' : ''})</span>
+								<strong style="color:#ea580c">{COP(valPern)}</strong>
+							</div>
+							<div class="resumen-row resumen-divider emphasis">
+								<span>Subtotal</span>
+								<span>{COP(subtotal)}</span>
+							</div>
+							<div class="resumen-row muted">
+								<span>IVA {ext.iva_pct}%</span>
+								<span>{COP(ivaVal)}</span>
+							</div>
+							<div class="resumen-row resumen-total">
+								<span>TOTAL SERVICIO</span>
+								<span>{COP(total)}</span>
 							</div>
 						</div>
 					</div>
@@ -3245,29 +3274,51 @@
 									</div>
 								</div>
 							</div>
+						</div>
+					</article>
+				{/if}
 
-							<!-- Terceros resumen -->
-							<div class="wb-row wb-row-totals" data-row={tercRowStart + 2 + terceroRows.length}>
-								<div class="wb-row-num"></div>
-								<div class="wb-cell wb-cell-summary">
-									<span
-										>Ingreso Total Tercero (V/Liquidar): <b style="color:#ea580c"
-											>{COP(tercIngresoTotalTercero)}</b
-										></span
-									>
-									<span
-										>Administración Cotransmeq: <b style="color:#dc2626"
-											>{COP(tercAdminCotransmeq)}</b
-										></span
-									>
-									<span
-										>Ingreso Extra Global: <b style="color:#ea580c">{COP(tercTotalExtraGlobal)}</b
-										></span
-									>
-									<span>Recargos: <b style="color:#ea580c">{COP(valRec)}</b></span>
-									<span class="wb-grand-pill"
-										>VALOR TOTAL A FACTURAR: <b>{COP(tercValorTotalFacturar)}</b></span
-									>
+				<!-- ═══ CARD 6b: RESUMEN TERCEROS ═══ -->
+				{#if canSeeTerceros && rows.length > 0}
+					<article class="wb-card">
+						<header class="wb-card-hd wb-card-hd-flex">
+							<div class="wb-card-hd-text">
+								<span class="wb-card-eyebrow">RESUMEN</span>
+								<h2 class="wb-card-title">
+									<span class="wb-card-title-icon">📋</span> Resumen Terceros
+								</h2>
+								<p class="wb-card-sub">
+									Distribución de ingresos entre tercero, administración y Cotransmeq
+								</p>
+							</div>
+							<span class="wb-card-count">Tercero · Admin · Global · Recargos · TOTAL</span>
+						</header>
+
+						<div class="wb-card-body">
+							<div class="resumen-card">
+								<div class="resumen-row">
+									<span>Ingreso Total Tercero (V/Liquidar)</span>
+									<strong style="color:#ea580c">{COP(tercIngresoTotalTercero)}</strong>
+								</div>
+								<div class="resumen-row">
+									<span>Administración Cotransmeq</span>
+									<strong style="color:#dc2626">{COP(tercAdminCotransmeq)}</strong>
+								</div>
+								<div class="resumen-row">
+									<span>Ingreso Global</span>
+									<strong style="color:#059669">{COP(tercTotalExtraGlobal)}</strong>
+								</div>
+								<div class="resumen-row">
+									<span>Recargos</span>
+									<strong style="color:#ea580c">{COP(valRec)}</strong>
+								</div>
+								<div class="resumen-row resumen-divider emphasis">
+									<span>INGRESO TOTAL COTRANSMEQ</span>
+									<strong style="color:#166534">{COP(tercIngresoTotalCotransmeq)}</strong>
+								</div>
+								<div class="resumen-row resumen-total">
+									<span>VALOR TOTAL A FACTURAR</span>
+									<span>{COP(tercValorTotalFacturar)}</span>
 								</div>
 							</div>
 						</div>
@@ -8675,6 +8726,12 @@
 		font-size: 0.95rem;
 		margin-left: 0.4rem;
 	}
+	.wb-card-title-icon {
+		display: inline-block;
+		margin-right: 0.4rem;
+		font-size: 1.1em;
+		vertical-align: -0.05em;
+	}
 	.wb-card-sub {
 		font-size: 0.78rem;
 		color: #64748b;
@@ -8915,6 +8972,86 @@
 	.wb-grand-pill b {
 		color: #fff;
 		font-family: 'Geist', sans-serif;
+		font-variant-numeric: tabular-nums;
+	}
+
+	/* ═══ RESUMEN CARDS (Resumen Liquidación / Resumen Terceros) ═══ */
+	.resumen-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0;
+		padding: 2px 0;
+	}
+	.resumen-row {
+		display: flex;
+		justify-content: space-between;
+		align-items: center;
+		padding: 10px 4px;
+		border-bottom: 1px solid #f1f5f9;
+		font-size: 0.86rem;
+		color: #475569;
+		gap: 12px;
+	}
+	.resumen-row:last-child {
+		border-bottom: none;
+	}
+	.resumen-row > span:first-child {
+		flex: 1 1 auto;
+		min-width: 0;
+	}
+	.resumen-row > strong,
+	.resumen-row > span:last-child {
+		flex: 0 0 auto;
+		text-align: right;
+		font-family: 'Geist', sans-serif;
+		font-weight: 700;
+		color: #0f172a;
+		font-size: 0.92rem;
+		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
+	}
+	.resumen-row strong {
+		color: #0f172a;
+	}
+	.resumen-row.muted > span:last-child {
+		color: #94a3b8;
+		font-weight: 500;
+	}
+	.resumen-row.emphasis {
+		font-weight: 700;
+		color: #166534;
+	}
+	.resumen-row.emphasis > span:first-child {
+		font-weight: 700;
+		color: #166534;
+	}
+	.resumen-divider {
+		border-top: 2px solid #e2e8f0;
+		margin-top: 4px;
+		padding-top: 12px;
+	}
+	.resumen-total {
+		background: linear-gradient(135deg, #ea580c 0%, #f97316 60%, #fb923c 100%);
+		color: #fff;
+		padding: 14px 18px;
+		border-radius: 12px;
+		margin-top: 10px;
+		font-size: 0.95rem;
+		font-weight: 800;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.30);
+		border-bottom: none;
+	}
+	.resumen-total > span:first-child {
+		color: #fff;
+		font-weight: 800;
+	}
+	.resumen-total > span:last-child {
+		color: #fff;
+		font-family: 'Geist', sans-serif;
+		font-weight: 800;
+		font-size: 1.05rem;
 		font-variant-numeric: tabular-nums;
 	}
 

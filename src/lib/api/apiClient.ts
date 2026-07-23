@@ -11,14 +11,67 @@ const API_BASE = browser
 	? (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:4000'
 	: 'http://localhost:4000';
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  Configuración de resiliencia de red
+// ═══════════════════════════════════════════════════════════════════════════
+
+const DEFAULT_TIMEOUT = 30_000; // 30s por defecto (antes 15s, demasiado corto)
+const MAX_RETRIES = 2; // 1 intento original + 2 reintentos = 3 intentos totales
+const RETRY_BASE_DELAY_MS = 800; // 800ms, 1600ms, 3200ms (backoff exponencial)
+const SAFE_METHODS = new Set(['get', 'head', 'options']); // solo métodos idempotentes
+
+// In-flight requests para deduplicación (comparten la misma promesa)
+const inflight = new Map<string, Promise<AxiosResponse>>();
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+function isRetryableError(error: any): boolean {
+	// Sin respuesta = error de red o timeout → reintentar
+	if (!error.response) return true;
+	const status: number = error.response.status;
+	// Reintentar solo en: 408 (request timeout), 429 (too many requests), 5xx
+	return status === 408 || status === 429 || (status >= 500 && status < 600);
+}
+
+function shouldRetry(config: any): boolean {
+	if (!config) return false;
+	const method = (config.method || 'get').toLowerCase();
+	if (!SAFE_METHODS.has(method)) return false; // nunca reintentar mutaciones
+	if (config._noRetry) return false;
+	const retries = config._retryCount || 0;
+	return retries < MAX_RETRIES;
+}
+
+function dedupKey(config: InternalAxiosRequestConfig): string {
+	const method = (config.method || 'get').toLowerCase();
+	const url = config.url || '';
+	const params = config.params ? JSON.stringify(config.params) : '';
+	const data = config.data && !(config.data instanceof FormData) ? JSON.stringify(config.data) : '';
+	return `${method}:${url}::${params}::${data}`;
+}
+
 // Crear instancia de Axios
 const apiClient: AxiosInstance = axios.create({
 	baseURL: API_BASE,
-	timeout: 15000,
+	timeout: DEFAULT_TIMEOUT,
 	headers: {
-		'Content-Type': 'application/json'
-	}
+		'Content-Type': 'application/json',
+		'X-Client': 'cotransmeq-web'
+	},
+	// keep-alive: se configura abajo para Node (SSR). En el navegador el navegador
+	// ya reutiliza conexiones por origen — Vercel → Internet → Red corporativa.
+	httpAgent: undefined,
+	httpsAgent: undefined
 });
+
+// Configurar keep-alive en Node (cuando se ejecute en SSR/server)
+if (!browser) {
+	// eslint-disable-next-line @typescript-eslint/no-var-requires
+	const { Agent } = require('http');
+	const { Agent: HttpsAgent } = require('https');
+	(apiClient.defaults as any).httpAgent = new Agent({ keepAlive: true, maxSockets: 50 });
+	(apiClient.defaults as any).httpsAgent = new HttpsAgent({ keepAlive: true, maxSockets: 50 });
+}
 
 // Interceptor de request para agregar token de autorización
 apiClient.interceptors.request.use(
@@ -35,42 +88,128 @@ apiClient.interceptors.request.use(
 			delete config.headers['Content-Type'];
 		}
 
+		// Marcar tiempo de inicio para diagnóstico
+		(config as any)._startedAt = Date.now();
+
 		return config;
 	},
 	(error) => Promise.reject(error)
 );
 
-// Interceptor de response para manejar errores globales
+// Interceptor de response: maneja 401 (token expirado) y dispara el retry con backoff
 apiClient.interceptors.response.use(
-	(response: AxiosResponse) => response,
+	(response: AxiosResponse) => {
+		// Log de latencia para diagnóstico
+		if (browser && (response.config as any)._startedAt) {
+			const ms = Date.now() - (response.config as any)._startedAt;
+			if (ms > 5_000) {
+				console.warn(
+					`[api] ${(response.config.method || 'get').toUpperCase()} ` +
+						`${response.config.url} tardó ${ms}ms`
+				);
+			}
+		}
+		return response;
+	},
 	async (error) => {
 		const originalRequest = error.config;
 
-		// Si recibimos un 401, significa que el token expiró o es inválido
-		// Excepción: requests marcadas con _silent401 (endpoints del portal-conductor
-		// que se llaman legítimamente con token de admin y pueden devolver 401/403
-		// si el conductor aún no ha firmado). No deben disparar logout global.
-		if (
-			error.response?.status === 401 &&
-			!originalRequest._retry &&
-			!originalRequest._silent401
-		) {
+		// ───────── 1) Manejo de 401 (token expirado) ─────────
+		if (error.response?.status === 401 && !originalRequest._retry && !originalRequest._silent401) {
 			originalRequest._retry = true;
 
-			// Limpiar autenticación y forzar recarga completa para que el hook server-side vea los cookies limpios
 			if (browser) {
 				localStorage.removeItem('transmeralda_token');
 				localStorage.removeItem('transmeralda_user');
-				document.cookie = 'transmeralda_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict';
+				document.cookie =
+					'transmeralda_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict';
 				window.location.href = '/login';
 			}
 
 			return Promise.reject(error);
 		}
 
+		// ───────── 2) Retry con backoff exponencial ─────────
+		if (shouldRetry(originalRequest) && isRetryableError(error)) {
+			originalRequest._retryCount = (originalRequest._retryCount || 0) + 1;
+			const attempt = originalRequest._retryCount;
+			const delay = RETRY_BASE_DELAY_MS * 2 ** (attempt - 1);
+
+			if (browser) {
+				const status = error.response?.status ?? 'NETWORK';
+				const url = originalRequest?.url ?? '?';
+				console.warn(
+					`[api] reintento ${attempt}/${MAX_RETRIES} en ${delay}ms ` + `(${status}) → ${url}`
+				);
+			}
+
+			await sleep(delay);
+			return apiClient(originalRequest);
+		}
+
+		// Log final del error
+		if (browser && originalRequest) {
+			const ms = (originalRequest as any)._startedAt
+				? Date.now() - (originalRequest as any)._startedAt
+				: 0;
+			const status = error.response?.status ?? 'TIMEOUT/NETWORK';
+			const code = error.code || '';
+			console.error(
+				`[api] ${(originalRequest.method || 'get').toUpperCase()} ` +
+					`${originalRequest.url} falló (${status}${code ? ' / ' + code : ''}) ` +
+					`tras ${ms}ms`
+			);
+		}
+
 		return Promise.reject(error);
 	}
 );
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  Helpers públicos para configurar requests individuales
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * Opciones de resilience que se pueden pasar como tercer argumento
+ * a apiClient.get/post/put/delete en cualquier llamada del proyecto.
+ *
+ *   await apiClient.get('/api/servicios', {
+ *     params: { page: 1 },
+ *     ...withTimeout(60_000),       // 60s para este request puntual
+ *     ...withoutRetry(),            // desactivar retry (ej: uploads)
+ *     ...withoutDedup(),            // forzar fetch nuevo
+ *   })
+ */
+export const withTimeout = (ms: number) => ({ timeout: ms });
+export const withoutRetry = () => ({ _noRetry: true }) as any;
+export const withoutDedup = () => ({ _noDedup: true }) as any;
+export const silent401 = () => ({ _silent401: true }) as any;
+
+// Patch de los métodos de axios para soportar dedup automática en GETs
+// (sin cambiar la firma: acepta los mismos argumentos que axios)
+type AxiosMethod = 'get' | 'delete' | 'head' | 'options';
+
+(['get', 'delete', 'head', 'options'] as AxiosMethod[]).forEach((method) => {
+	const original = (apiClient as any)[method].bind(apiClient);
+	(apiClient as any)[method] = (url: string, config: any = {}) => {
+		if (config._noDedup) {
+			delete config._noDedup;
+			return original(url, config);
+		}
+		// Construir key estable para dedup
+		const fakeConfig: InternalAxiosRequestConfig = {
+			...config,
+			method,
+			url
+		} as InternalAxiosRequestConfig;
+		const key = dedupKey(fakeConfig);
+		const existing = inflight.get(key);
+		if (existing) return existing;
+		const promise = original(url, config).finally(() => inflight.delete(key));
+		inflight.set(key, promise);
+		return promise;
+	};
+});
 
 // Funciones de API específicas para autenticación
 export const authAPI = {
@@ -104,12 +243,13 @@ export const authAPI = {
 	deleteMyFirma: () => apiClient.delete('/api/auth/my-firma')
 };
 
-// Cliente público (sin autenticación)
+// Cliente público (sin autenticación) — sin retry agresivo para no abusar de endpoints públicos
 export const publicApiClient: AxiosInstance = axios.create({
 	baseURL: API_BASE,
-	timeout: 15000,
+	timeout: DEFAULT_TIMEOUT,
 	headers: {
-		'Content-Type': 'application/json'
+		'Content-Type': 'application/json',
+		'X-Client': 'cotransmeq-web'
 	}
 });
 
@@ -138,7 +278,7 @@ export const conductoresAPI = {
 		return apiClient.post(`/api/conductores/${id}/foto`, formData);
 	},
 	deleteFoto: (id: string) => apiClient.delete(`/api/conductores/${id}/foto`),
-	// Nuevos endpoints
+
 	getOcultos: (params?: any) => apiClient.get('/api/conductores/ocultos', { params }),
 	getPapelera: (params?: any) => apiClient.get('/api/conductores/papelera', { params }),
 	ocultar: (id: string, oculto: boolean) =>
