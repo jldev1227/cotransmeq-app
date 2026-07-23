@@ -17,6 +17,7 @@
   let open: boolean = false;
   let highlighted: number = 0;
   let inputEl: HTMLInputElement;
+  let dropdownEl: HTMLDivElement;
 
   // Clave: distingue "el usuario está escribiendo" de "el padre cambió `value`"
   let isTyping: boolean = false;
@@ -36,6 +37,14 @@
 
   $: if (filtered.length > 0 && highlighted >= filtered.length) {
     highlighted = filtered.length - 1;
+  }
+
+  // Cuando cambia la lista filtrada, reseteamos el scroll interno del dropdown
+  // a la posición 0 para que la primera opción (la más cercana al search input)
+  // quede siempre visible. Sin esto, el usuario queda "scrolleado más allá"
+  // del final de la lista nueva y pierde la referencia visual del input.
+  $: if (dropdownEl && filtered) {
+    dropdownEl.scrollTop = 0;
   }
 
   // Cuando se selecciona un item por código, sincronizar `value` y `query`
@@ -69,6 +78,7 @@
     query = target.value;
     open = true;
     highlighted = 0;
+    scheduleUpdate();
 
     // Si escribe y no coincide con el id actual, limpiar selección
     if (value) {
@@ -134,7 +144,19 @@
   }
 
   function handleViewportChange() {
-    if (open) updateDropdownPosition();
+    scheduleUpdate();
+  }
+
+  // requestAnimationFrame: agrupa múltiples eventos (scroll, resize, input) en
+  // un único recálculo por frame. Esto elimina el "salto" visible del dropdown
+  // cuando el usuario hace scroll continuo con el teclado del móvil abierto.
+  let rafId: number | null = null;
+  function scheduleUpdate() {
+    if (rafId !== null) return;
+    rafId = requestAnimationFrame(() => {
+      rafId = null;
+      if (open) updateDropdownPosition();
+    });
   }
 
   onMount(() => {
@@ -149,6 +171,10 @@
   });
 
   onDestroy(() => {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
     const vv = window.visualViewport;
     if (vv) {
       vv.removeEventListener('resize', handleViewportChange);
@@ -186,9 +212,11 @@
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       highlighted = Math.min(highlighted + 1, filtered.length - 1);
+      scrollHighlightedIntoView();
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       highlighted = Math.max(highlighted - 1, 0);
+      scrollHighlightedIntoView();
     } else if (e.key === 'Enter') {
       e.preventDefault();
       const sel = filtered[highlighted];
@@ -200,6 +228,12 @@
 
   function pickOption(opt: AutocompleteOption) {
     setSelected(opt);
+  }
+
+  function scrollHighlightedIntoView() {
+    if (!dropdownEl) return;
+    const optionEl = dropdownEl.querySelector(`[data-idx="${highlighted}"]`) as HTMLElement | null;
+    if (optionEl) optionEl.scrollIntoView({ block: 'nearest' });
   }
 
   function clearSelection() {
@@ -255,6 +289,7 @@
 
   {#if open && filtered.length > 0}
     <div
+      bind:this={dropdownEl}
       class="autocomplete-dropdown placement-{dropdownPlacement}"
       style={dropdownStyle}
       role="listbox"
@@ -269,11 +304,16 @@
           on:mouseenter={() => { highlighted = i; }}
           role="option"
           aria-selected={value === opt.id}
+          data-idx={i}
         >{@html highlightMatch(opt.label)}</button>
       {/each}
     </div>
   {:else if open && q && filtered.length === 0}
-    <div class="autocomplete-dropdown placement-{dropdownPlacement}" style={dropdownStyle}>
+    <div
+      bind:this={dropdownEl}
+      class="autocomplete-dropdown placement-{dropdownPlacement}"
+      style={dropdownStyle}
+    >
       <div class="autocomplete-empty">Sin resultados para "{query}"</div>
     </div>
   {/if}
