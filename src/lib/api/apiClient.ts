@@ -3,6 +3,12 @@ import type { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'a
 import { authStore } from '$lib/stores/auth';
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
+// Imports de Node.js con prefijo `node:` para que Vite los tree-shakee
+// del bundle del cliente (en el browser nunca se referencian gracias al
+// guard `if (!browser)` más abajo). Usar `require()` rompe porque
+// SvelteKit corre en ESM puro donde `require` no existe.
+import http from 'node:http';
+import https from 'node:https';
 
 // Resolver el baseURL en runtime: variable de entorno en el navegador,
 // fallback sensato a localhost:4000 (no usar dominios ficticios como
@@ -56,7 +62,7 @@ const apiClient: AxiosInstance = axios.create({
 	timeout: DEFAULT_TIMEOUT,
 	headers: {
 		'Content-Type': 'application/json',
-		'X-Client': 'cotransmeq-web'
+		'X-Client': 'transmeralda-web'
 	},
 	// keep-alive: se configura abajo para Node (SSR). En el navegador el navegador
 	// ya reutiliza conexiones por origen — Vercel → Internet → Red corporativa.
@@ -66,11 +72,11 @@ const apiClient: AxiosInstance = axios.create({
 
 // Configurar keep-alive en Node (cuando se ejecute en SSR/server)
 if (!browser) {
-	// eslint-disable-next-line @typescript-eslint/no-var-requires
-	const { Agent } = require('http');
-	const { Agent: HttpsAgent } = require('https');
-	(apiClient.defaults as any).httpAgent = new Agent({ keepAlive: true, maxSockets: 50 });
-	(apiClient.defaults as any).httpsAgent = new HttpsAgent({ keepAlive: true, maxSockets: 50 });
+	(apiClient.defaults as any).httpAgent = new http.Agent({ keepAlive: true, maxSockets: 50 });
+	(apiClient.defaults as any).httpsAgent = new https.Agent({
+		keepAlive: true,
+		maxSockets: 50
+	});
 }
 
 // Interceptor de request para agregar token de autorización
@@ -249,7 +255,7 @@ export const publicApiClient: AxiosInstance = axios.create({
 	timeout: DEFAULT_TIMEOUT,
 	headers: {
 		'Content-Type': 'application/json',
-		'X-Client': 'cotransmeq-web'
+		'X-Client': 'transmeralda-web'
 	}
 });
 
