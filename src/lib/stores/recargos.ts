@@ -35,7 +35,9 @@ function createRecargosStore() {
 		filtros: {},
 		pagination: {
 			page: 1,
-			limit: 10000,
+			// Cap máximo: el backend rechaza más de 200. Pedir más acá era el
+			// origen de los requests de 7-23s.
+			limit: 200,
 			total: 0,
 			totalPages: 0
 		},
@@ -46,14 +48,34 @@ function createRecargosStore() {
 
 	const { subscribe, set, update } = writable<RecargosState>(initialState);
 
+	// Track del request en vuelo para cancelarlo cuando llega uno nuevo.
+	// Sin esto, navegar de julio→enero con 6 clicks dispara 6 requests
+	// secuenciales que llegan en orden inverso y compiten entre sí.
+	let inflightController: AbortController | null = null;
+
+	function isCanceledError(error: any): boolean {
+		return (
+			error?.name === 'CanceledError' ||
+			error?.name === 'AbortError' ||
+			error?.code === 'ERR_CANCELED'
+		);
+	}
+
 	return {
 		subscribe,
 
 		/**
-		 * Obtener recargos con filtros actuales
+		 * Obtener recargos con filtros actuales.
+		 * Aborta automáticamente cualquier fetch previo en vuelo.
 		 */
 		async fetchRecargos(filtrosCustom?: RecargoPlanillaFiltros) {
-			console.log('Ocurriendo un fetch');
+			// 1) Cancelar el fetch anterior (si lo hay)
+			if (inflightController) {
+				inflightController.abort();
+			}
+			const controller = new AbortController();
+			inflightController = controller;
+
 			update((state) => ({ ...state, loading: true, error: null }));
 
 			try {
@@ -67,7 +89,12 @@ function createRecargosStore() {
 					eliminados: state.eliminados
 				};
 
-				const response = await recargosApi.obtenerParaCanvas(filtros);
+				const response = await recargosApi.obtenerParaCanvas(filtros, {
+					signal: controller.signal
+				});
+
+				// Si entre tanto llegó otro fetch, descartamos silenciosamente
+				if (controller.signal.aborted) return;
 
 				update((s) => ({
 					...s,
@@ -76,9 +103,16 @@ function createRecargosStore() {
 					loading: false
 				}));
 			} catch (error: any) {
+				// Request cancelado a propósito → no es un error real
+				if (isCanceledError(error)) return;
+
 				const errorMsg = error.response?.data?.message || 'Error cargando recargos';
 				update((s) => ({ ...s, error: errorMsg, loading: false }));
 				toast.error(errorMsg);
+			} finally {
+				if (inflightController === controller) {
+					inflightController = null;
+				}
 			}
 		},
 
@@ -100,8 +134,38 @@ function createRecargosStore() {
 
 		// En el store
 		async setMesYAño(mes: number, año: number) {
-			update((s) => ({ ...s, selectedMes: mes, selectedAño: año }));
+			// Cambiar mes/año reinicia a la página 1 (el conteo cambia,
+			// la página anterior puede no existir).
+			update((s) => ({
+				...s,
+				selectedMes: mes,
+				selectedAño: año,
+				pagination: { ...s.pagination, page: 1 }
+			}));
 			await this.fetchRecargos(); // Solo 1 fetch
+		},
+
+		/**
+		 * Cambiar la cantidad de items por página (50/100/200).
+		 * Resetea a página 1.
+		 */
+		async setLimit(limit: number) {
+			update((s) => ({
+				...s,
+				pagination: { ...s.pagination, limit, page: 1 }
+			}));
+			await this.fetchRecargos();
+		},
+
+		/**
+		 * Cambiar la página actual.
+		 */
+		async setPage(page: number) {
+			update((s) => ({
+				...s,
+				pagination: { ...s.pagination, page }
+			}));
+			await this.fetchRecargos();
 		},
 
 		/**
@@ -215,7 +279,22 @@ function createRecargosStore() {
 		 * Resetear store
 		 */
 		reset() {
+			if (inflightController) {
+				inflightController.abort();
+				inflightController = null;
+			}
 			set(initialState);
+		},
+
+		/**
+		 * Cancelar cualquier fetch en vuelo sin resetear el estado.
+		 * Útil en onDestroy de las páginas para no leakear requests.
+		 */
+		abortInflight() {
+			if (inflightController) {
+				inflightController.abort();
+				inflightController = null;
+			}
 		}
 	};
 }

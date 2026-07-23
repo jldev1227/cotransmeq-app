@@ -20,10 +20,13 @@ const BASE_URL = '/api/recargos';
 
 export const recargosApi = {
 	/**
-	 * Obtener recargos para canvas con filtros
+	 * Obtener recargos para canvas con filtros.
+	 * Acepta un AbortSignal opcional para cancelar la petición cuando el usuario
+	 * cambia de mes/año rápidamente (la página debouncea + aborta el request anterior).
 	 */
 	async obtenerParaCanvas(
-		filtros: RecargoPlanillaFiltros
+		filtros: RecargoPlanillaFiltros,
+		options?: { signal?: AbortSignal }
 	): Promise<{ data: CanvasRecargo[]; pagination: any }> {
 		const params = new URLSearchParams();
 
@@ -39,9 +42,25 @@ export const recargosApi = {
 		if (filtros.eliminados) params.append('eliminados', filtros.eliminados.toString());
 
 		const response = await apiClient.get<{ data: CanvasRecargo[]; pagination: any }>(
-			`${BASE_URL}?${params.toString()}`
+			`${BASE_URL}?${params.toString()}`,
+			{ signal: options?.signal }
 		);
 		return response.data;
+	},
+
+	/**
+	 * Devuelve el siguiente número de planilla libre (TM-XXXX).
+	 * Endpoint ligero: NO trae recargos, solo el campo numero_planilla.
+	 * Se usa en ModalFormRecargo para auto-generar el número al abrir
+	 * un nuevo recargo. El backend lo calcula leyendo solo numero_planilla
+	 * (sin joins), así que retorna en ms aunque haya miles de planillas.
+	 */
+	async obtenerSiguienteNumeroPlanilla(): Promise<string> {
+		const response = await apiClient.get<{
+			success: boolean;
+			data: { numero_planilla: string };
+		}>(`${BASE_URL}/next-numero-planilla`);
+		return response.data.data.numero_planilla;
 	},
 
 	/**

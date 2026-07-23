@@ -35,6 +35,9 @@
 	let selectedMonth = new Date().getMonth() + 1;
 	let selectedYear = new Date().getFullYear();
 	let currentPage = 1;
+	// Máximo 200: el backend limita a 200 por query. No hay opción "Todas"
+	// porque pedir miles de registros al backend era el origen de los
+	// requests de 7-23s que veías en consola.
 	let itemsPerPageSelect: string = '50';
 	let itemsPerPage = 50;
 	let sortField = '';
@@ -173,13 +176,13 @@
 		{ key: 'total_horas', label: 'Total H', width: '80px', sortable: true },
 		{ key: 'promedio', label: 'Promedio', width: '80px' },
 		{ key: 'total_km', label: 'KM Rec.', width: '80px', sortable: true, bgColor: 'bg-blue-50' },
-		{ key: 'total_hed', label: 'HED', width: '70px', sortable: true, bgColor: 'bg-orange-50' },
-		{ key: 'total_hen', label: 'HEN', width: '70px', sortable: true, bgColor: 'bg-orange-50' },
-		{ key: 'total_hefd', label: 'HEFD', width: '70px', sortable: true, bgColor: 'bg-orange-50' },
-		{ key: 'total_hefn', label: 'HEFN', width: '70px', sortable: true, bgColor: 'bg-orange-50' },
-		{ key: 'total_rndf', label: 'RNDF', width: '70px', sortable: true, bgColor: 'bg-orange-50' },
-		{ key: 'total_rn', label: 'RN', width: '70px', sortable: true, bgColor: 'bg-orange-50' },
-		{ key: 'total_rd', label: 'RD', width: '70px', sortable: true, bgColor: 'bg-orange-50' },
+		{ key: 'total_hed', label: 'HED', width: '70px', sortable: true, bgColor: 'bg-green-50' },
+		{ key: 'total_hen', label: 'HEN', width: '70px', sortable: true, bgColor: 'bg-green-50' },
+		{ key: 'total_hefd', label: 'HEFD', width: '70px', sortable: true, bgColor: 'bg-green-50' },
+		{ key: 'total_hefn', label: 'HEFN', width: '70px', sortable: true, bgColor: 'bg-green-50' },
+		{ key: 'total_rndf', label: 'RNDF', width: '70px', sortable: true, bgColor: 'bg-green-50' },
+		{ key: 'total_rn', label: 'RN', width: '70px', sortable: true, bgColor: 'bg-green-50' },
+		{ key: 'total_rd', label: 'RD', width: '70px', sortable: true, bgColor: 'bg-green-50' },
 		{ key: 'estado', label: 'Estado', width: '100px' }
 	];
 
@@ -240,12 +243,36 @@
 	});
 
 	// Paginated data
-	$: itemsPerPage =
-		itemsPerPageSelect === 'all' ? Number.MAX_SAFE_INTEGER : parseInt(itemsPerPageSelect);
+	$: itemsPerPage = parseInt(itemsPerPageSelect);
+	$: totalPages = Math.max(1, Math.ceil(filteredRecargos.length / itemsPerPage));
 	$: paginatedRecargos = filteredRecargos.slice(
 		(currentPage - 1) * itemsPerPage,
 		currentPage * itemsPerPage
 	);
+
+	// Reset a página 1 cuando cambian los filtros, el tamaño de página o el mes/año.
+	// (el reactive "if (currentPage > totalPages)" es el seguro secundario
+	// por si la página actual ya no existe tras reducir filtros).
+	let lastItemsPerPage = itemsPerPage;
+	let lastSearchKey = '';
+	let lastMesAnio = '';
+	$: searchKey = `${searchTerm}|${conductorFilter.join(',')}|${vehiculoFilter.join(',')}|${empresaFilter.join(',')}|${estadoFilter.join(',')}|${planillaFilter.join(',')}`;
+	$: mesAnioKey = `${selectedMonth}-${selectedYear}`;
+	$: {
+		const filtersChanged = searchKey !== lastSearchKey;
+		const pageSizeChanged = itemsPerPage !== lastItemsPerPage;
+		const monthChanged = mesAnioKey !== lastMesAnio;
+		if (filtersChanged || pageSizeChanged || monthChanged) {
+			lastSearchKey = searchKey;
+			lastItemsPerPage = itemsPerPage;
+			lastMesAnio = mesAnioKey;
+			currentPage = 1;
+		}
+	}
+
+	// Si el filtro reduce los resultados y la página actual queda fuera de rango,
+	// saltar a la última página disponible. Evita "página vacía" al filtrar.
+	$: if (currentPage > totalPages) currentPage = totalPages;
 
 	// Totals row
 	$: totalsRow = {
@@ -722,6 +749,11 @@
 		socketUtils.off('recargo-eliminado', handleRecargoEliminado);
 		socketUtils.off('recargos-eliminados', handleRecargosEliminados);
 		socketUtils.off('recargos-estado-actualizado', handleRecargosEstadoActualizado);
+
+		// Limpiar timers pendientes y abortar fetch en vuelo para no leakear
+		if (urlSyncTimer) clearTimeout(urlSyncTimer);
+		if (fetchDebounceTimer) clearTimeout(fetchDebounceTimer);
+		recargosStore.abortInflight();
 	});
 
 	// Socket event handlers
@@ -792,6 +824,11 @@
 	// (el flag mesAnioInicializado evita un doble fetch al hidratar desde URL en onMount)
 	let mesAnioInicializado = false;
 	let urlSyncTimer: ReturnType<typeof setTimeout> | null = null;
+	// Debounce del fetch: evita disparar 1 request por mes cuando el usuario
+	// navega rápido con prev/next (ej. julio→enero = 1 request, no 6).
+	// El store también aborta el request anterior cuando llega uno nuevo.
+	let fetchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	const FETCH_DEBOUNCE_MS = 350;
 
 	function syncUrl() {
 		if (!browser) return;
@@ -815,15 +852,20 @@
 		if (urlSyncTimer) clearTimeout(urlSyncTimer);
 		urlSyncTimer = setTimeout(syncUrl, 150);
 
-		// 2) Fetch sólo aplica a cambios de mes/año (search es client-side)
+		// 2) Fetch con debounce: si el usuario cambia de mes/año rápidamente,
+		// solo el último valor dispara request. El store aborta el anterior
+		// por si ya estaba en vuelo.
+		if (fetchDebounceTimer) clearTimeout(fetchDebounceTimer);
 		if (selectedMonth && selectedYear) {
-			recargosStore.setMesYAño(selectedMonth, selectedYear);
+			fetchDebounceTimer = setTimeout(() => {
+				recargosStore.setMesYAño(selectedMonth, selectedYear);
+			}, FETCH_DEBOUNCE_MS);
 		}
 	}
 </script>
 
 <svelte:head>
-	<title>Recargos - Cotransmeq</title>
+	<title>Recargos - Transmeralda</title>
 </svelte:head>
 
 <div
@@ -835,7 +877,9 @@
 	<div class="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
 		<div>
 			<span class="eyebrow mb-2.5">DASHBOARD / RECARGOS</span>
-			<h1 class="font-display text-2xl font-normal tracking-tight text-[var(--bg-charcoal)] md:text-3xl">
+			<h1
+				class="font-display text-2xl font-normal tracking-tight text-[var(--bg-charcoal)] md:text-3xl"
+			>
 				Recargos de Planillas
 			</h1>
 			<p class="mt-1 text-sm text-[var(--text-secondary)]">
@@ -851,7 +895,7 @@
 				<button
 					on:click={() => handleMonthChange(-1)}
 					aria-label="Mes anterior"
-					class="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-muted)] apple-transition hover:bg-[var(--bg-base)] hover:text-[var(--emerald-500)]"
+					class="apple-transition flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--bg-base)] hover:text-[var(--emerald-500)]"
 				>
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
@@ -884,7 +928,7 @@
 				<button
 					on:click={() => handleMonthChange(1)}
 					aria-label="Mes siguiente"
-					class="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-muted)] apple-transition hover:bg-[var(--bg-base)] hover:text-[var(--emerald-500)]"
+					class="apple-transition flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--bg-base)] hover:text-[var(--emerald-500)]"
 				>
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
@@ -898,10 +942,7 @@
 			</div>
 
 			<!-- Botón Configuración -->
-			<a
-				href="/dashboard/recargos/configuracion"
-				class="btn-secondary apple-transition"
-			>
+			<a href="/dashboard/recargos/configuracion" class="btn-secondary apple-transition">
 				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path
 						stroke-linecap="round"
@@ -921,10 +962,7 @@
 
 			<!-- Botón Crear -->
 			{#if !isKilometrajeRole && !isReadOnly}
-				<button
-					on:click={handleOpenFormModal}
-					class="btn-primary apple-transition"
-				>
+				<button on:click={handleOpenFormModal} class="btn-primary apple-transition">
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
 							stroke-linecap="round"
@@ -989,10 +1027,7 @@
 			</button>
 		{:else}
 			<!-- Ver activos -->
-			<button
-				on:click={handleListActivos}
-				class="btn-primary apple-transition"
-			>
+			<button on:click={handleListActivos} class="btn-primary apple-transition">
 				Ver Activos
 			</button>
 		{/if}
@@ -1044,7 +1079,7 @@
 			{:else if selectedRows.size > 0}
 				<button
 					on:click={() => (modalRestaurarIsOpen = true)}
-					class="apple-transition flex cursor-pointer items-center gap-1.5 rounded-xl border border-[rgba(249, 115, 22,0.3)] bg-[var(--emerald-500)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--emerald-600)]"
+					class="apple-transition flex cursor-pointer items-center gap-1.5 rounded-xl border border-[rgba(16,185,129,0.3)] bg-[var(--emerald-500)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--emerald-600)]"
 				>
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
@@ -1058,19 +1093,18 @@
 				</button>
 			{/if}
 
-			<!-- Selector de tamaño de página -->
+			<!-- Selector de tamaño de página (sin "Todas": el backend limita a 200 máx) -->
 			<div class="flex items-center gap-2">
-				<label class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]" for="items-per-page-select"
-					>Mostrar</label
+				<label
+					class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]"
+					for="items-per-page-select">Mostrar</label
 				>
 				<select
 					id="items-per-page-select"
 					bind:value={itemsPerPageSelect}
 					class="input-glow h-9 rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm font-semibold"
 				>
-					<option value="all">Todas</option>
 					<option value="200">200</option>
-					<option value="150">150</option>
 					<option value="100">100</option>
 					<option value="50">50</option>
 					<option value="20">20</option>
@@ -1116,7 +1150,7 @@
 			<div class="stat-card">
 				<div class="flex items-center gap-2">
 					<div
-						class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(249, 115, 22,0.10)]"
+						class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(16,185,129,0.10)]"
 					>
 						<svg
 							class="h-4 w-4 text-[var(--emerald-600)]"
@@ -1311,7 +1345,7 @@
 				{#if searchTerm || conductorFilter.length > 0 || vehiculoFilter.length > 0 || planillaFilter.length > 0 || empresaFilter.length > 0 || estadoFilter.length > 0}
 					<span class="text-[var(--text-very-muted)]">|</span>
 					<span
-						class="rounded-md bg-[rgba(245,158,11,0.10)] px-2 py-0.5 font-mono-meta text-[0.65rem] text-[#92400E]"
+						class="font-mono-meta rounded-md bg-[rgba(245,158,11,0.10)] px-2 py-0.5 text-[0.65rem] text-[#92400E]"
 					>
 						Filtrado: {filteredRecargos.length} / {recargos.length}
 					</span>
@@ -1323,7 +1357,7 @@
 	{#if verEliminados}
 		<!-- TOAST PERSISTENTE — Modo "Ver eliminados" (top-center, sin SVG grande) -->
 		<div
-			class="pointer-events-none fixed left-1/2 top-[80px] z-[9998] -translate-x-1/2 px-4"
+			class="pointer-events-none fixed top-[80px] left-1/2 z-[9998] -translate-x-1/2 px-4"
 			role="status"
 			aria-live="polite"
 			in:fly={{ y: -16, duration: 320, easing: quintOut }}
@@ -1343,7 +1377,7 @@
 				</span>
 
 				<span
-					class="font-mono text-[10px] font-bold uppercase tracking-[0.12em]"
+					class="font-mono text-[10px] font-bold tracking-[0.12em] uppercase"
 					style="color:#92400e"
 				>
 					Viendo eliminados
@@ -1362,7 +1396,7 @@
 
 				<button
 					on:click={handleListActivos}
-					class="ml-1 rounded-full px-2.5 py-1 text-[11px] font-semibold apple-transition"
+					class="apple-transition ml-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"
 					style="background:#92400e; color:#fef3c7;"
 					title="Volver a ver activos"
 				>
@@ -1481,7 +1515,7 @@
 							<tr
 								class="table-row cursor-pointer border-b border-[var(--border-subtle)]
 								{getEstadoBgColor(recargo.estado)} 
-								{isNew ? 'border-l-4 border-l-[var(--emerald-500)] bg-[rgba(249, 115, 22,0.06)]' : ''} 
+								{isNew ? 'border-l-4 border-l-[var(--emerald-500)] bg-[rgba(16,185,129,0.06)]' : ''} 
 								{isUpdated ? 'border-l-4 border-l-[#2563EB] bg-[rgba(37,99,235,0.06)]' : ''} 
 								{isSelected ? 'border-l-4 border-l-[var(--emerald-600)]' : ''}
 								{isDeleted ? 'border-l-4 border-l-[#EF4444] bg-[rgba(239,68,68,0.04)] opacity-75' : ''}"
@@ -1490,7 +1524,8 @@
 							>
 								{#each columns as column, index}
 									<td
-										class="border border-[var(--border-subtle)] px-2 py-2 {column.key === 'empresa' ||
+										class="border border-[var(--border-subtle)] px-2 py-2 {column.key ===
+											'empresa' ||
 										column.key === 'numero_planilla' ||
 										column.key === 'vehiculo' ||
 										column.key === 'conductor'
@@ -1545,11 +1580,7 @@
 													D
 												</span>
 											{:else if horas > 0}
-												<span
-													class="status-pill {getDayChipColor(
-														dia
-													)}"
-												>
+												<span class="status-pill {getDayChipColor(dia)}">
 													{horas.toFixed(1)}
 												</span>
 											{:else if esDiaPendiente}
@@ -1564,18 +1595,14 @@
 												<span class="text-[var(--text-very-muted)]">-</span>
 											{/if}
 										{:else if column.key === 'estado'}
-											<span
-												class="status-pill {getEstadoColor(
-													recargo.estado
-												)}"
-											>
+											<span class="status-pill {getEstadoColor(recargo.estado)}">
 												{getCellValue(recargo, column)}
 											</span>
 										{:else if column.key === 'acciones'}
 											<div class="flex gap-1">
 												<button
 													on:click|stopPropagation={() => handleViewRecargo(recargo.id)}
-													class="rounded-md p-1.5 text-[var(--text-muted)] apple-transition hover:bg-[var(--bg-base)] hover:text-[var(--emerald-600)]"
+													class="apple-transition rounded-md p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-base)] hover:text-[var(--emerald-600)]"
 													title="Ver detalles"
 												>
 													<svg
@@ -1601,7 +1628,7 @@
 												{#if !isReadOnly}
 													<button
 														on:click|stopPropagation={() => handleEditRecargo(recargo.id)}
-														class="rounded-md p-1.5 text-[var(--text-muted)] apple-transition hover:bg-[var(--bg-base)] hover:text-[var(--emerald-600)]"
+														class="apple-transition rounded-md p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-base)] hover:text-[var(--emerald-600)]"
 														title="Editar"
 													>
 														<svg
@@ -1630,11 +1657,7 @@
 														title="Documento cargado"
 														class="inline-flex items-center text-[var(--emerald-500)]"
 													>
-														<svg
-															class="h-3.5 w-3.5"
-															fill="currentColor"
-															viewBox="0 0 24 24"
-														>
+														<svg class="h-3.5 w-3.5" fill="currentColor" viewBox="0 0 24 24">
 															<path
 																d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM6 20V4h7v5h5v11H6z"
 															/>
@@ -1652,22 +1675,18 @@
 						{/each}
 
 						<!-- Totals Row -->
-						<tr
-							class="sticky bottom-0 font-semibold"
-							style="background: rgba(249, 115, 22, 0.08);"
-						>
+						<tr class="sticky bottom-0 font-semibold" style="background: rgba(16, 185, 129, 0.08);">
 							{#each columns as column}
 								<td
-									class="border border-[var(--border-subtle)] px-2 py-2 text-[var(--text-primary)] {column.key === 'empresa' ||
+									class="border border-[var(--border-subtle)] px-2 py-2 text-[var(--text-primary)] {column.key ===
+										'empresa' ||
 									column.key === 'numero_planilla' ||
 									column.key === 'vehiculo' ||
 									column.key === 'conductor'
 										? 'text-left'
-										: 'text-center'} text-xs {(column as any).fixed
-										? 'sticky left-0 z-10'
-										: ''}"
+										: 'text-center'} text-xs {(column as any).fixed ? 'sticky left-0 z-10' : ''}"
 									style="min-width: {column.width}; {(column as any).fixed
-										? 'background: rgba(249, 115, 22, 0.08);'
+										? 'background: rgba(16, 185, 129, 0.08);'
 										: ''}"
 								>
 									{#if column.key !== 'select' && column.key !== 'acciones'}
@@ -1682,45 +1701,64 @@
 		{/if}
 	</div>
 
-	<!-- Pagination -->
-	{#if !loading && filteredRecargos.length > itemsPerPage}
+	<!-- Pagination — siempre se muestra cuando hay datos, incluso si cabe en 1 página,
+	     para que el usuario sepa el total y pueda ajustar itemsPerPage -->
+	{#if !loading && filteredRecargos.length > 0}
 		<div
 			class="mt-4 flex flex-col gap-3 rounded-xl border border-[var(--border-subtle)] bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
 		>
 			<div class="text-xs text-[var(--text-secondary)]">
-				Mostrando
-				<span class="font-semibold text-[var(--text-primary)]"
-					>{(currentPage - 1) * itemsPerPage + 1}</span
-				>
-				a
-				<span class="font-semibold text-[var(--text-primary)]"
-					>{Math.min(currentPage * itemsPerPage, filteredRecargos.length)}</span
-				>
-				de
+				{#if filteredRecargos.length > itemsPerPage}
+					Mostrando
+					<span class="font-semibold text-[var(--text-primary)]"
+						>{(currentPage - 1) * itemsPerPage + 1}</span
+					>
+					a
+					<span class="font-semibold text-[var(--text-primary)]"
+						>{Math.min(currentPage * itemsPerPage, filteredRecargos.length)}</span
+					>
+					de
+				{:else}
+					Mostrando
+				{/if}
 				<span class="font-semibold text-[var(--text-primary)]">{filteredRecargos.length}</span>
 				recargos
+				{#if totalPages > 1}
+					· página {currentPage} de {totalPages}
+				{/if}
 			</div>
 
-			<div class="flex gap-2">
-				<button
-					on:click={() => (currentPage = Math.max(1, currentPage - 1))}
-					disabled={currentPage === 1}
-					class="apple-transition rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-base)] disabled:cursor-not-allowed disabled:opacity-40"
-				>
-					Anterior
-				</button>
-				<button
-					on:click={() =>
-						(currentPage = Math.min(
-							Math.ceil(filteredRecargos.length / itemsPerPage),
-							currentPage + 1
-						))}
-					disabled={currentPage >= Math.ceil(filteredRecargos.length / itemsPerPage)}
-					class="apple-transition rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-base)] disabled:cursor-not-allowed disabled:opacity-40"
-				>
-					Siguiente
-				</button>
-			</div>
+			{#if totalPages > 1}
+				<div class="flex flex-wrap items-center gap-1.5">
+					<button
+						on:click={() => (currentPage = Math.max(1, currentPage - 1))}
+						disabled={currentPage === 1}
+						class="apple-transition rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-base)] disabled:cursor-not-allowed disabled:opacity-40"
+					>
+						‹ Anterior
+					</button>
+					{#each Array.from({ length: totalPages }, (_, i) => i + 1) as p}
+						<button
+							on:click={() => (currentPage = p)}
+							class="apple-transition min-w-[2rem] rounded-lg border px-2.5 py-1.5 text-sm font-semibold"
+							style="border-color: {currentPage === p
+								? 'var(--emerald-500)'
+								: 'var(--border-default)'};
+								background-color: {currentPage === p ? 'var(--emerald-500)' : 'white'};
+								color: {currentPage === p ? 'white' : 'var(--text-secondary)'};"
+						>
+							{p}
+						</button>
+					{/each}
+					<button
+						on:click={() => (currentPage = Math.min(totalPages, currentPage + 1))}
+						disabled={currentPage >= totalPages}
+						class="apple-transition rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-base)] disabled:cursor-not-allowed disabled:opacity-40"
+					>
+						Siguiente ›
+					</button>
+				</div>
+			{/if}
 		</div>
 	{/if}
 </div>
