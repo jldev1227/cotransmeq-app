@@ -40,11 +40,17 @@
   }
 
   // Cuando cambia la lista filtrada, reseteamos el scroll interno del dropdown
-  // a la posición 0 para que la primera opción (la más cercana al search input)
-  // quede siempre visible. Sin esto, el usuario queda "scrolleado más allá"
-  // del final de la lista nueva y pierde la referencia visual del input.
+  // para que las opciones más cercanas al search input queden siempre visibles.
+  // - Placement "below": la primera opción está más cerca del input → scrollTop = 0
+  // - Placement "above": la última opción está más cerca del input → scrollTop = max
+  // Sin esto, el usuario queda "scrolleado más allá" del final de la lista
+  // nueva y pierde la referencia visual del input.
   $: if (dropdownEl && filtered) {
-    dropdownEl.scrollTop = 0;
+    if (dropdownPlacement === 'above') {
+      dropdownEl.scrollTop = dropdownEl.scrollHeight;
+    } else {
+      dropdownEl.scrollTop = 0;
+    }
   }
 
   // Cuando se selecciona un item por código, sincronizar `value` y `query`
@@ -94,7 +100,7 @@
   }
 
   function handleFocus() {
-    updateDropdownPosition();
+    scheduleUpdate();
     open = true;
     highlighted = 0;
   }
@@ -109,38 +115,53 @@
     if (!inputEl) return;
     const r = inputEl.getBoundingClientRect();
     const vv = typeof window !== 'undefined' ? window.visualViewport : null;
-    const viewportHeight = vv ? vv.height : window.innerHeight;
+    const visualViewportHeight = vv ? vv.height : window.innerHeight;
+    const layoutViewportHeight = window.innerHeight;
     const offsetTop = vv ? vv.offsetTop : 0;
 
-    // Posición del input en el visual viewport (no en el layout viewport).
-    // getBoundingClientRect devuelve coords del layout viewport; restamos
-    // offsetTop para llevarlas al visual viewport donde se dibuja position:fixed.
+    // El dropdown vive dentro del .modal-overlay que tiene `backdrop-filter`,
+    // lo que crea un containing block para position:fixed. El modal-overlay
+    // está anclado al LAYOUT viewport (con `position:fixed; inset:0`), por
+    // lo que `top` y `bottom` se interpretan en coords del layout viewport,
+    // no del visual viewport. Usar coords del visual viewport aquí causa un
+    // error acumulado en cada focus (cada apertura de teclado el cálculo se
+    // desfasa más).
     const inputTopVis = r.top - offsetTop;
     const inputBottomVis = r.bottom - offsetTop;
 
-    const spaceBelow = viewportHeight - inputBottomVis;
+    // El espacio disponible para decidir el flip y limitar el alto debe
+    // medirse en el VISUAL viewport (lo que el usuario realmente ve).
+    const spaceBelow = visualViewportHeight - inputBottomVis;
     const spaceAbove = inputTopVis;
 
     const gap = 6;
     const preferredMaxHeight = 240;
     const minSpaceForBelow = 80;
 
-    let top: number;
+    let top: number | null = null;
+    let bottom: number | null = null;
     let maxHeight: number;
 
     if (spaceBelow >= minSpaceForBelow || spaceBelow >= spaceAbove) {
-      // Colocar debajo
-      top = inputBottomVis + gap;
+      // "below": top en coords del layout viewport (r.bottom ya está en layout)
+      top = r.bottom + gap;
       maxHeight = Math.max(60, Math.min(preferredMaxHeight, spaceBelow - gap));
       dropdownPlacement = 'below';
     } else {
-      // Colocar arriba (caso típico: teclado del móvil abierto)
+      // "above": bottom en coords del layout viewport.
+      // bottom = distancia desde el bottom del layout viewport hasta el bottom
+      // del dropdown. El bottom del dropdown debe estar en r.top - gap.
+      // bottom = layoutViewportHeight - (r.top - gap) = layoutViewportHeight - r.top + gap
       maxHeight = Math.max(60, Math.min(preferredMaxHeight, spaceAbove - gap));
-      top = Math.max(gap, inputTopVis - gap - maxHeight);
+      bottom = layoutViewportHeight - r.top + gap;
       dropdownPlacement = 'above';
     }
 
-    dropdownStyle = `top: ${top}px; left: ${r.left}px; width: ${r.width}px; max-height: ${maxHeight}px;`;
+    if (top !== null) {
+      dropdownStyle = `top: ${top}px; left: ${r.left}px; width: ${r.width}px; max-height: ${maxHeight}px;`;
+    } else {
+      dropdownStyle = `bottom: ${bottom}px; left: ${r.left}px; width: ${r.width}px; max-height: ${maxHeight}px;`;
+    }
   }
 
   function handleViewportChange() {
