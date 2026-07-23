@@ -90,12 +90,73 @@
   }
 
   // Posición calculada para position: fixed (escapa del overflow de los ancestros)
+  // Usa el Visual Viewport API para evitar que el teclado del móvil tape el dropdown.
+  // Si no hay espacio suficiente debajo del input, el dropdown se voltea ARRIBA.
   let dropdownStyle: string = '';
+  let dropdownPlacement: 'above' | 'below' = 'below';
+
   function updateDropdownPosition() {
     if (!inputEl) return;
     const r = inputEl.getBoundingClientRect();
-    dropdownStyle = `top: ${r.bottom + 4}px; left: ${r.left}px; width: ${r.width}px;`;
+    const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+    const viewportHeight = vv ? vv.height : window.innerHeight;
+    const offsetTop = vv ? vv.offsetTop : 0;
+
+    // Posición del input en el visual viewport (no en el layout viewport).
+    // getBoundingClientRect devuelve coords del layout viewport; restamos
+    // offsetTop para llevarlas al visual viewport donde se dibuja position:fixed.
+    const inputTopVis = r.top - offsetTop;
+    const inputBottomVis = r.bottom - offsetTop;
+
+    const spaceBelow = viewportHeight - inputBottomVis;
+    const spaceAbove = inputTopVis;
+
+    const gap = 6;
+    const preferredMaxHeight = 240;
+    const minSpaceForBelow = 80;
+
+    let top: number;
+    let maxHeight: number;
+
+    if (spaceBelow >= minSpaceForBelow || spaceBelow >= spaceAbove) {
+      // Colocar debajo
+      top = inputBottomVis + gap;
+      maxHeight = Math.max(60, Math.min(preferredMaxHeight, spaceBelow - gap));
+      dropdownPlacement = 'below';
+    } else {
+      // Colocar arriba (caso típico: teclado del móvil abierto)
+      maxHeight = Math.max(60, Math.min(preferredMaxHeight, spaceAbove - gap));
+      top = Math.max(gap, inputTopVis - gap - maxHeight);
+      dropdownPlacement = 'above';
+    }
+
+    dropdownStyle = `top: ${top}px; left: ${r.left}px; width: ${r.width}px; max-height: ${maxHeight}px;`;
   }
+
+  function handleViewportChange() {
+    if (open) updateDropdownPosition();
+  }
+
+  onMount(() => {
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener('resize', handleViewportChange);
+      vv.addEventListener('scroll', handleViewportChange);
+    }
+    window.addEventListener('resize', handleViewportChange);
+    // Capturar scroll de cualquier ancestro (el modal tiene overflow-y:auto)
+    document.addEventListener('scroll', handleViewportChange, { capture: true, passive: true });
+  });
+
+  onDestroy(() => {
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.removeEventListener('resize', handleViewportChange);
+      vv.removeEventListener('scroll', handleViewportChange);
+    }
+    window.removeEventListener('resize', handleViewportChange);
+    document.removeEventListener('scroll', handleViewportChange, { capture: true } as EventListenerOptions);
+  });
 
   function handleBlur() {
     // Delay para permitir click en opción
@@ -193,7 +254,11 @@
   </div>
 
   {#if open && filtered.length > 0}
-    <div class="autocomplete-dropdown" style={dropdownStyle} role="listbox">
+    <div
+      class="autocomplete-dropdown placement-{dropdownPlacement}"
+      style={dropdownStyle}
+      role="listbox"
+    >
       {#each filtered as opt, i (opt.id)}
         <button
           type="button"
@@ -208,7 +273,7 @@
       {/each}
     </div>
   {:else if open && q && filtered.length === 0}
-    <div class="autocomplete-dropdown" style={dropdownStyle}>
+    <div class="autocomplete-dropdown placement-{dropdownPlacement}" style={dropdownStyle}>
       <div class="autocomplete-empty">Sin resultados para "{query}"</div>
     </div>
   {/if}
@@ -297,6 +362,15 @@
   }
   .autocomplete-option:first-child { border-radius: 10px 10px 0 0; }
   .autocomplete-option:last-child { border-radius: 0 0 10px 0; }
+
+  /* Cuando el dropdown se voltea ARRIBA del input (típico: teclado del móvil),
+     invertimos el border-radius para que las opciones pegadas al input queden
+     con la esquina inferior redondeada. */
+  .autocomplete-dropdown.placement-above {
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.18);
+  }
+  .autocomplete-dropdown.placement-above .autocomplete-option:first-child { border-radius: 0 0 10px 10px; }
+  .autocomplete-dropdown.placement-above .autocomplete-option:last-child { border-radius: 10px 10px 0 0; }
   .autocomplete-empty {
     padding: 0.65rem 0.75rem;
     font-size: 0.82rem;

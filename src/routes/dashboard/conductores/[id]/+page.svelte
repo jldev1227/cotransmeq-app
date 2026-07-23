@@ -309,7 +309,7 @@
 							{/if}
 						</div>
 						<div class="flex-1 text-center md:text-left">
-							<h2 class="text-2xl font-bold text-white">{conductor.nombre} {conductor.apellido}</h2>
+							<h2 class="text-2xl font-bold text-white uppercase">{conductor.nombre} {conductor.apellido}</h2>
 							<p class="mt-1 text-orange-50">{conductor.cargo || 'Conductor'}</p>
 							<div class="mt-3 flex flex-wrap justify-center gap-2 md:justify-start">
 								<span class={`rounded-full px-3 py-1 text-xs font-medium ${getEstadoBadgeClass(conductor.estado)} bg-white`}>{conductor.estado}</span>

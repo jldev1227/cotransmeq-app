@@ -8,6 +8,7 @@
     return Math.random().toString(36).slice(2) + Date.now().toString(36) + Math.random().toString(36).slice(2);
   }
   import Autocomplete from '$lib/components/Autocomplete.svelte';
+  import TimePicker from '$lib/components/TimePicker.svelte';
 
   // ═══════════════════════════════
   // TIPOS
@@ -22,6 +23,8 @@
     vehiculo_placa: string;
     hora_inicio: string;
     hora_fin: string;
+    inicio_dia_siguiente?: boolean;
+    fin_dia_siguiente?: boolean;
     horas_conducidas: number;
     km_inicial?: number | null;
     km_final?: number | null;
@@ -145,7 +148,11 @@
         if (!t.horas_conducidas || Number(t.horas_conducidas) <= 0) {
           formError = `Tramo ${i + 1}: horas conducidas`; return;
         }
-        if (t.hora_fin <= t.hora_inicio) {
+        const inicioMins = t.hora_inicio.split(':').reduce((a, v) => a * 60 + Number(v), 0)
+                          + (t.inicio_dia_siguiente ? 24 * 60 : 0);
+        const finMins    = t.hora_fin.split(':').reduce((a, v) => a * 60 + Number(v), 0)
+                          + (t.fin_dia_siguiente ? 24 * 60 : 0);
+        if (finMins <= inicioMins) {
           formError = `Tramo ${i + 1}: la hora fin debe ser mayor a la inicio`; return;
         }
       }
@@ -170,6 +177,8 @@
           vehiculo_placa: t.vehiculo_placa,
           hora_inicio: t.hora_inicio,
           hora_fin: t.hora_fin,
+          inicio_dia_siguiente: t.inicio_dia_siguiente === true,
+          fin_dia_siguiente: t.fin_dia_siguiente === true,
           horas_conducidas: Number(t.horas_conducidas) || 0,
           km_inicial: t.km_inicial != null && String(t.km_inicial) !== '' ? Number(t.km_inicial) : null,
           km_final: t.km_final != null && String(t.km_final) !== '' ? Number(t.km_final) : null,
@@ -316,6 +325,8 @@
       vehiculo_placa: '',
       hora_inicio: '',
       hora_fin: '',
+      inicio_dia_siguiente: false,
+      fin_dia_siguiente: false,
       horas_conducidas: 0,
       km_inicial: null,
       km_final: null,
@@ -342,9 +353,9 @@
 
   function horasTramo(t: Segmento): number | null {
     if (!t.hora_inicio || !t.hora_fin) return null;
-    const [h1, m1] = t.hora_inicio.split(':').map(Number);
-    const [h2, m2] = t.hora_fin.split(':').map(Number);
-    const mins = (h2 * 60 + m2) - (h1 * 60 + m1);
+    const toMins = (h: string, next: boolean) =>
+      h.split(':').reduce((a, v) => a * 60 + Number(v), 0) + (next ? 24 * 60 : 0);
+    const mins = toMins(t.hora_fin, !!t.fin_dia_siguiente) - toMins(t.hora_inicio, !!t.inicio_dia_siguiente);
     return mins > 0 ? +(mins / 60).toFixed(1) : null;
   }
 
@@ -643,7 +654,7 @@
                       <dt>Horario</dt>
                       <dd>
                         {#if t.hora_inicio && t.hora_fin}
-                          {t.hora_inicio} – {t.hora_fin}
+                          {t.hora_inicio}{#if t.inicio_dia_siguiente}<span class="dia-sig-inline">+1</span>{/if} – {t.hora_fin}{#if t.fin_dia_siguiente}<span class="dia-sig-inline">+1</span>{/if}
                         {:else}
                           —
                         {/if}
@@ -736,7 +747,9 @@
                           <span class="tramo-tag muted">Sin cliente</span>
                         {/if}
                         {#if t.hora_inicio && t.hora_fin}
-                          <span class="tramo-tag hora">🕐 {t.hora_inicio}–{t.hora_fin}</span>
+                          <span class="tramo-tag hora">
+                            🕐 {t.hora_inicio}{#if t.inicio_dia_siguiente}<sup class="dia-sig-sup">+1</sup>{/if}–{t.hora_fin}{#if t.fin_dia_siguiente}<sup class="dia-sig-sup">+1</sup>{/if}
+                          </span>
                         {/if}
                         {#if t.horas_conducidas > 0}
                           <span class="tramo-tag horas">{t.horas_conducidas}h</span>
@@ -750,11 +763,19 @@
                         <div class="field-row">
                           <div class="field">
                             <label class="field-label">Hora inicio</label>
-                            <input type="time" class="field-input" bind:value={t.hora_inicio} disabled={soloLectura} />
+                            <TimePicker
+                              bind:value={t.hora_inicio}
+                              bind:dayOffset={t.inicio_dia_siguiente}
+                              disabled={soloLectura}
+                              placeholder="Inicio" />
                           </div>
                           <div class="field">
                             <label class="field-label">Hora fin</label>
-                            <input type="time" class="field-input" bind:value={t.hora_fin} disabled={soloLectura} />
+                            <TimePicker
+                              bind:value={t.hora_fin}
+                              bind:dayOffset={t.fin_dia_siguiente}
+                              disabled={soloLectura}
+                              placeholder="Fin" />
                           </div>
                         </div>
                         {#if hrs !== null}
@@ -1427,6 +1448,27 @@
   .tramo-tag.hora     { background: #fef3c7; color: #92400e; }
   .tramo-tag.horas    { background: #ede9fe; color: #6d28d9; }
   .tramo-tag.muted    { background: #f1f5f9; color: var(--text3, #94a3b8); font-style: italic; }
+  .dia-sig-sup {
+    color: #f59e0b;
+    font-weight: 800;
+    font-size: 0.55rem;
+    margin-left: 1px;
+    vertical-align: super;
+    line-height: 1;
+  }
+  .dia-sig-inline {
+    display: inline-block;
+    font-size: 0.58rem;
+    font-weight: 800;
+    color: #fff;
+    background: #f59e0b;
+    padding: 1px 4px;
+    border-radius: 4px;
+    margin: 0 2px;
+    vertical-align: middle;
+    line-height: 1.2;
+    font-family: 'JetBrains Mono', monospace;
+  }
   .tramo-toggle {
     color: var(--text3, #94a3b8);
     font-size: 0.85rem;

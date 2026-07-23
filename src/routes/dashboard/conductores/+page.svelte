@@ -1178,7 +1178,7 @@
 									<!-- Header: nombre + status pill -->
 									<div class="mb-1 flex items-start justify-between gap-2">
 										<p
-											class="truncate text-sm leading-snug font-semibold"
+											class="truncate text-sm leading-snug font-semibold uppercase"
 											style="color: var(--text-primary);"
 										>
 											{conductor.nombre}
@@ -1717,7 +1717,7 @@
 							<h3 class="text-base font-bold text-gray-900">Eliminar permanentemente</h3>
 							{#if modalEliminar.conductor}
 								<p class="mt-0.5 text-xs text-gray-500">
-									<span class="font-semibold text-gray-700">{modalEliminar.conductor.nombre}</span>
+									<span class="font-semibold text-gray-700 uppercase">{modalEliminar.conductor.nombre}</span>
 									· CC {modalEliminar.conductor.identificacion}
 								</p>
 							{/if}
