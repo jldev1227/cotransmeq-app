@@ -311,26 +311,41 @@
 	}
 
 	// Función para obtener el siguiente número de planilla desde el backend
-	// (endpoint ligero: NO trae todos los recargos, solo el campo numero_planilla)
-	async function generarNumeroPlanilla() {
+	// (endpoint ligero: NO trae todos los recargos, solo el campo numero_planilla).
+	//
+	// Modos:
+	//   - Auto (al abrir modal): respeta lo que el usuario haya tipeado,
+	//     corre una sola vez por sesión del modal.
+	//   - Manual (botón Regenerar): { force: true } siempre sobrescribe,
+	//     esté o no el campo lleno. Es el "retry" manual que pediste.
+	async function generarNumeroPlanilla(opts: { force?: boolean } = {}) {
 		if (isGenerandoPlanilla) return; // Evitar múltiples llamadas simultáneas
-		if (planillaGenerada) return; // Ya se generó en esta sesión del modal
+
+		// Modo auto: no pisar si el usuario ya escribió algo o ya se generó
+		if (!opts.force) {
+			if (planillaGenerada) return;
+			if (formData.tmNumber) return;
+		}
 
 		isGenerandoPlanilla = true;
 
 		try {
 			const numero = await recargosApi.obtenerSiguienteNumeroPlanilla();
 
-			// Solo asignar si el usuario aún no escribió uno manualmente
-			if (!formData.tmNumber) {
-				formData.tmNumber = numero;
-				await tick();
-				planillaGenerada = true;
+			formData.tmNumber = numero;
+			planillaGenerada = true;
+			await tick();
+
+			if (opts.force) {
+				toast.success(`Número regenerado: ${numero}`);
 			}
 		} catch (error) {
 			console.error('Error al generar número de planilla:', error);
-			// No mostramos toast.error porque puede ser molesto cada vez que abre
-			console.warn('No se pudo generar el número automáticamente, el usuario puede escribirlo');
+			toast.error(
+				opts.force
+					? 'No se pudo regenerar el número. Reintentá o escribilo manualmente.'
+					: 'No se pudo generar el número. Reintentá o escribilo manualmente.'
+			);
 		} finally {
 			isGenerandoPlanilla = false;
 		}
@@ -2197,14 +2212,17 @@
 											</div>
 										{/if}
 									</div>
-									<!-- <button
+									<button
 										type="button"
-										on:click={generarNumeroPlanilla}
+										on:click={() => generarNumeroPlanilla({ force: true })}
 										disabled={isGenerandoPlanilla}
-										class="rounded-xl border-2 px-4 py-3 transition-all focus:ring-2 focus:ring-emerald-200 disabled:cursor-not-allowed disabled:opacity-50 {isGenerandoPlanilla
+										aria-label="Regenerar número de planilla"
+										title={isGenerandoPlanilla
+											? 'Generando...'
+											: 'Regenerar número de planilla (consulta el siguiente disponible en el backend)'}
+										class="flex h-[52px] flex-shrink-0 items-center gap-2 rounded-xl border-2 px-4 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50 {isGenerandoPlanilla
 											? 'border-gray-300 bg-gray-100 text-gray-400'
-											: 'border-emerald-500 bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}"
-										title={isGenerandoPlanilla ? 'Generando...' : 'Regenerar número de planilla'}
+											: 'border-emerald-500 bg-emerald-50 text-emerald-700 hover:border-emerald-600 hover:bg-emerald-100 active:scale-95'}"
 									>
 										{#if isGenerandoPlanilla}
 											<svg class="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -2222,6 +2240,7 @@
 													d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
 												/>
 											</svg>
+											<span>Generando…</span>
 										{:else}
 											<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 												<path
@@ -2231,8 +2250,9 @@
 													d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
 												/>
 											</svg>
+											<span>Regenerar</span>
 										{/if}
-									</button> -->
+									</button>
 								</div>
 							</div>
 						</div>
