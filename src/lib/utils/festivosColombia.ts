@@ -22,6 +22,7 @@ export const festivosFijos = [
 	{ mes: 6, dia: 8, nombre: 'Corpus Christi' },
 	{ mes: 6, dia: 15, nombre: 'Sagrado Corazón de Jesús' },
 	{ mes: 6, dia: 29, nombre: 'San Pedro y San Pablo' },
+	{ mes: 7, dia: 13, nombre: 'Día Nacional de Nuestra Señora del Rosario de Chiquinquirá' },
 	{ mes: 7, dia: 20, nombre: 'Día de la Independencia' },
 	{ mes: 8, dia: 7, nombre: 'Batalla de Boyacá' },
 	{ mes: 12, dia: 8, nombre: 'Inmaculada Concepción' },
