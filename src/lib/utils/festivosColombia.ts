@@ -25,6 +25,10 @@ export const festivosFijos = [
 	{ mes: 7, dia: 13, nombre: 'Día Nacional de Nuestra Señora del Rosario de Chiquinquirá' },
 	{ mes: 7, dia: 20, nombre: 'Día de la Independencia' },
 	{ mes: 8, dia: 7, nombre: 'Batalla de Boyacá' },
+	{ mes: 8, dia: 17, nombre: 'Asunción de la Virgen' },
+	{ mes: 10, dia: 12, nombre: 'Asunción de la Virgen' },
+	{ mes: 11, dia: 2, nombre: 'Asunción de la Virgen' },
+	{ mes: 11, dia: 16, nombre: 'Asunción de la Virgen' },
 	{ mes: 12, dia: 8, nombre: 'Inmaculada Concepción' },
 	{ mes: 12, dia: 25, nombre: 'Navidad' }
 ];
