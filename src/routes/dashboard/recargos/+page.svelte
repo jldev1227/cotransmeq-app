@@ -28,6 +28,7 @@
 	import { toast } from 'svelte-sonner';
 	import MultiSelectFilter from '$lib/components/ui/MultiSelectFilter.svelte';
 	import ModalConfirmarRestaurar from '$lib/components/modals/ModalConfirmarRestaurar.svelte';
+	import { obtenerFestivosCompletos } from '$lib/utils/festivosColombia';
 
 	// State
 	let searchTerm = '';
@@ -85,6 +86,10 @@
 
 	// Columns dinámicas según mes/año
 	$: daysInMonth = getDaysInMonth(selectedMonth, selectedYear);
+	// Días festivos del mes/año seleccionado (array de números: ej. [1, 6, 19, ...])
+	$: diasFestivosMes = obtenerFestivosCompletos(selectedYear)
+		.filter((f) => f.mes === selectedMonth)
+		.map((f) => f.dia);
 	$: uniqueEmpresas = [
 		...new Set(recargos.map((r) => r.empresa?.nombre).filter((n): n is string => Boolean(n)))
 	].sort();
@@ -107,7 +112,7 @@
 		const day = i + 1;
 		const isSunday = esDomingo(day, selectedMonth, selectedYear);
 		// TODO: Necesitarás una función para detectar festivos, por ahora false
-		const isFestivo = false;
+		const isFestivo = diasFestivosMes.includes(day);
 
 		return {
 			key: `day_${day}`,
