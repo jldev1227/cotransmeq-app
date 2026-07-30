@@ -66,6 +66,40 @@ function createRecargosStore() {
 	// secuenciales que llegan en orden inverso y compiten entre sí.
 	let inflightController: AbortController | null = null;
 
+	// Watchdog: si `loading` queda en true más de 30s sin un request
+	// en vuelo, forzar `loading: false`. Cubre el caso de un fetch que
+	// se "cuelga" sin abortar (ej: el server se cae mid-response, o un
+	// edge case donde el apiClient retry se queda atascado). Sin esto,
+	// el usuario ve el spinner para siempre sin forma de salir.
+	let loadingWatchdog: ReturnType<typeof setTimeout> | null = null;
+	const LOADING_WATCHDOG_MS = 30_000;
+
+	function armLoadingWatchdog() {
+		disarmLoadingWatchdog();
+		loadingWatchdog = setTimeout(() => {
+			const curr = get({ subscribe });
+			if (curr.loading && !inflightController) {
+				console.warn(
+					'[recargosStore] Watchdog: loading=true hace ' +
+						LOADING_WATCHDOG_MS +
+						'ms sin request en vuelo. Forzando loading=false.'
+				);
+				update((s) => ({
+					...s,
+					loading: false,
+					error: 'La carga tardó demasiado. Reintentá.'
+				}));
+			}
+		}, LOADING_WATCHDOG_MS);
+	}
+
+	function disarmLoadingWatchdog() {
+		if (loadingWatchdog) {
+			clearTimeout(loadingWatchdog);
+			loadingWatchdog = null;
+		}
+	}
+
 	function isCanceledError(error: any): boolean {
 		return (
 			error?.name === 'CanceledError' ||
@@ -90,6 +124,7 @@ function createRecargosStore() {
 			inflightController = controller;
 
 			update((state) => ({ ...state, loading: true, error: null }));
+			armLoadingWatchdog();
 
 			try {
 				const state = get({ subscribe });
@@ -128,6 +163,7 @@ function createRecargosStore() {
 				update((s) => ({ ...s, error: errorMsg, loading: false }));
 				toast.error(errorMsg);
 			} finally {
+				disarmLoadingWatchdog();
 				if (inflightController === controller) {
 					inflightController = null;
 				}
@@ -306,6 +342,7 @@ function createRecargosStore() {
 				inflightController.abort();
 				inflightController = null;
 			}
+			disarmLoadingWatchdog();
 			set(initialState);
 		},
 
@@ -318,6 +355,7 @@ function createRecargosStore() {
 				inflightController.abort();
 				inflightController = null;
 			}
+			disarmLoadingWatchdog();
 		}
 	};
 }

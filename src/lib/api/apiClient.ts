@@ -56,6 +56,26 @@ function dedupKey(config: InternalAxiosRequestConfig): string {
 	return `${method}:${url}::${params}::${data}`;
 }
 
+/**
+ * Detecta si un error de axios proviene de un `AbortController`
+ * (cancelación intencional del caller, ej: cambio de mes/año o
+ * búsqueda). En ese caso NO se debe reintentar: el caller ya no
+ * quiere la respuesta.
+ *
+ * Sin este check, el interceptor de retry veía `error.response`
+ * undefined (típico de CanceledError) y reintentaba 3 veces con
+ * backoff (800 + 1600 + 3200 = 5.6s), dejando el `loading: true`
+ * colgado en la UI después de cada cancelación.
+ */
+function isCanceledError(error: any): boolean {
+	return (
+		error?.name === 'CanceledError' ||
+		error?.name === 'AbortError' ||
+		error?.code === 'ERR_CANCELED' ||
+		error?.code === 'ERR_CANCELLED'
+	);
+}
+
 // Crear instancia de Axios
 const apiClient: AxiosInstance = axios.create({
 	baseURL: API_BASE,
@@ -119,6 +139,17 @@ apiClient.interceptors.response.use(
 	},
 	async (error) => {
 		const originalRequest = error.config;
+
+		// ───────── 0) Request cancelado a propósito → NO reintentar ─────────
+		// Si el caller abortó el fetch (cambio de mes/año, búsqueda rápida,
+		// navegación a otra ruta), el caller ya no quiere la respuesta.
+		// Reintentar 3 veces con backoff solo serviría para dejar el
+		// `loading: true` colgado ~5.6s después de cada cancelación, y
+		// si el usuario sigue tecleando, el ciclo se repite → "se queda
+		// cargando infinitamente".
+		if (isCanceledError(error)) {
+			return Promise.reject(error);
+		}
 
 		// ───────── 1) Manejo de 401 (token expirado) ─────────
 		if (error.response?.status === 401 && !originalRequest._retry && !originalRequest._silent401) {

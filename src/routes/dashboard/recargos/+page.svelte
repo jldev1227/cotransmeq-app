@@ -1427,6 +1427,17 @@
 	// El store también aborta el request anterior cuando llega uno nuevo.
 	let fetchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 	const FETCH_DEBOUNCE_MS = 350;
+	// Debounce de la URL (más corto que el fetch para que la URL refleje
+	// lo que el usuario está tipeando casi en tiempo real sin martillar goto).
+	const URL_SYNC_DEBOUNCE_MS = 200;
+
+	// Track del último mes/año que disparó fetch. El `search` es local
+	// (filtra `recargos` en cliente) → no necesita fetch al backend. Solo
+	// `selectedMonth` / `selectedYear` cambian el query string del server.
+	// Sin este guard, cada keystroke del search disparaba un setMesYAño
+	// → abort del fetch anterior → "se queda cargando infinitamente"
+	// combinado con el retry del apiClient.
+	let lastFetchedMesAnio = '';
 
 	function syncUrl() {
 		if (!browser) return;
@@ -1440,24 +1451,42 @@
 		goto(target, { replaceState: true, noScroll: true, keepFocus: true });
 	}
 
+	// 1) URL sync: se dispara con CUALQUIER cambio de searchTerm/mes/año
+	// (debounced 200ms para no martillar goto en cada tecla). El search
+	// es local → el URL refleja la intención del usuario sin fetches extra.
 	$: if (browser && mesAnioInicializado) {
-		// Track filter value changes (Svelte 4 dep tracking)
+		// Svelte 4 dep tracking: referenciar las vars para que el bloque
+		// se re-ejecute cuando cambien.
 		void searchTerm;
 		void selectedMonth;
 		void selectedYear;
 
-		// 1) URL primero (con debounce corto para no martillar goto en cada tecla)
 		if (urlSyncTimer) clearTimeout(urlSyncTimer);
-		urlSyncTimer = setTimeout(syncUrl, 150);
+		urlSyncTimer = setTimeout(syncUrl, URL_SYNC_DEBOUNCE_MS);
+	}
 
-		// 2) Fetch con debounce: si el usuario cambia de mes/año rápidamente,
-		// solo el último valor dispara request. El store aborta el anterior
-		// por si ya estaba en vuelo.
-		if (fetchDebounceTimer) clearTimeout(fetchDebounceTimer);
-		if (selectedMonth && selectedYear) {
-			fetchDebounceTimer = setTimeout(() => {
-				recargosStore.setMesYAño(selectedMonth, selectedYear);
-			}, FETCH_DEBOUNCE_MS);
+	// 2) Fetch: SOLO se dispara cuando cambia mes/año (no en cada keystroke
+	// del search). El `lastFetchedMesAnio` evita fetches redundantes cuando
+	// el usuario ya está en el mismo mes/año y solo está tipeando el search.
+	$: {
+		if (browser && mesAnioInicializado && selectedMonth && selectedYear) {
+			const currentKey = `${selectedMonth}-${selectedYear}`;
+			if (currentKey !== lastFetchedMesAnio) {
+				if (fetchDebounceTimer) clearTimeout(fetchDebounceTimer);
+				fetchDebounceTimer = setTimeout(() => {
+					// Guard: si justo antes de disparar el timer cambió
+					// de nuevo el mes/año, el currentKey ya no coincidirá
+					// con la key que disparó este timer, así que lo
+					// dejamos pasar y el siguiente timer (si lo hay) se
+					// encargará. Pero marcamos `lastFetchedMesAnio` solo
+					// cuando realmente se dispara el fetch, para no
+					// "comer" un cambio legítimo.
+					if (currentKey === `${selectedMonth}-${selectedYear}`) {
+						lastFetchedMesAnio = currentKey;
+						recargosStore.setMesYAño(selectedMonth, selectedYear);
+					}
+				}, FETCH_DEBOUNCE_MS);
+			}
 		}
 	}
 </script>
@@ -1702,13 +1731,8 @@
 				<input
 					type="text"
 					bind:value={searchTerm}
-					disabled={bloqueoPorRecalc || loading}
-					placeholder={bloqueoPorRecalc
-						? 'Esperá a que termine el recálculo bulk...'
-						: loading
-							? 'Cargando recargos…'
-							: 'Buscar por conductor, vehículo, empresa o planilla...'}
-					class="input-glow h-10 w-full rounded-xl border border-[var(--border-default)] bg-white px-4 pl-10 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+					placeholder="Buscar por conductor, vehículo, empresa o planilla..."
+					class="input-glow h-10 w-full rounded-xl border border-[var(--border-default)] bg-white px-4 pl-10 pr-10 text-sm"
 				/>
 				<svg
 					class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--text-very-muted)]"
@@ -1723,6 +1747,37 @@
 						d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
 					/>
 				</svg>
+				<!-- Indicador de carga inline: el usuario puede seguir
+				     tipeando mientras el server responde. El filtrado es
+				     local e instantáneo. -->
+				{#if loading}
+					<div
+						class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2"
+						title="Cargando datos del servidor…"
+					>
+						<svg
+							class="h-4 w-4 animate-spin"
+							style="color: var(--emerald-500);"
+							xmlns="http://www.w3.org/2000/svg"
+							fill="none"
+							viewBox="0 0 24 24"
+						>
+							<circle
+								class="opacity-25"
+								cx="12"
+								cy="12"
+								r="10"
+								stroke="currentColor"
+								stroke-width="4"
+							></circle>
+							<path
+								class="opacity-75"
+								fill="currentColor"
+								d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+							></path>
+						</svg>
+					</div>
+				{/if}
 			</div>
 		</div>
 
@@ -2163,22 +2218,65 @@
 	{/if}
 
 	<!-- Canvas Table -->
-	<div class="table-card">
-		{#if loading}
+	<div class="table-card relative">
+		<!-- Indicador flotante de "actualizando" cuando ya hay datos
+		     previos en pantalla. NO bloquea la interacción: el usuario
+		     puede seguir scrolleando, seleccionando, etc. mientras el
+		     server responde. Solo se ve cuando loading=true y ya hay
+		     al menos un recargo cargado. -->
+		{#if loading && recargos.length > 0}
+			<div
+				class="pointer-events-none absolute top-3 right-3 z-30 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
+				style="background: rgba(255,255,255,0.92); border: 1px solid var(--border-subtle); box-shadow: 0 2px 8px rgba(0,0,0,0.06); color: var(--emerald-700);"
+				role="status"
+				aria-live="polite"
+			>
+				<svg
+					class="h-3 w-3 animate-spin"
+					xmlns="http://www.w3.org/2000/svg"
+					fill="none"
+					viewBox="0 0 24 24"
+				>
+					<circle
+						class="opacity-25"
+						cx="12"
+						cy="12"
+						r="10"
+						stroke="currentColor"
+						stroke-width="4"
+					></circle>
+					<path
+						class="opacity-75"
+						fill="currentColor"
+						d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+					></path>
+				</svg>
+				Actualizando…
+			</div>
+		{/if}
+		{#if loading && recargos.length === 0}
 			<div class="flex h-96 items-center justify-center">
 				<div class="text-center">
 					<div class="spinner mx-auto mb-4"></div>
 					<p class="text-[var(--text-muted)]">Cargando recargos...</p>
 				</div>
 			</div>
-		{:else if error}
-			<div class="flex h-96 items-center justify-center">
-				<div class="text-center">
-					<p class="text-[#991B1B]">{error}</p>
-				</div>
+		{:else if error && recargos.length === 0}
+			<div class="flex h-96 flex-col items-center justify-center gap-3">
+				<p class="text-[#991B1B]">{error}</p>
+				<button
+					on:click={() => recargosStore.fetchRecargos()}
+					class="apple-transition rounded-xl border border-[var(--border-default)] bg-white px-4 py-2 text-sm font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-base)]"
+				>
+					Reintentar
+				</button>
 			</div>
 		{:else}
-			<div class="overflow-x-auto">
+			<div
+				class="overflow-x-auto transition-opacity duration-200"
+				class:opacity-60={loading}
+				class:pointer-events-none={loading}
+			>
 				<table class="w-full border-collapse" style="table-layout: fixed;">
 					<!-- Header -->
 					<thead class="table-header sticky top-0 z-20">
