@@ -225,42 +225,55 @@
 					const todasLasPlanillas: any[] = preview?.data?.planillas || [];
 					const recargosArr: any[] = (liquidacion.recargos as any[]) || [];
 
-					// Mapa recargo -> planilla, por origen_planilla_id
-					const recargoPorPlanillaId = new Map<string, any>();
-					for (const r of recargosArr) {
-						if (r?.origen_planilla_id) {
-							recargoPorPlanillaId.set(r.origen_planilla_id, r);
-						}
-					}
+					// Coincidencia por (vehiculo, empresa, mes). Razón: el recargo
+					// guardado puede ser la SUMA de varias planillas (p. ej.
+					// SCHLUMBERGER TM-7282 con 2 planillas, SERTECPET TM-7169
+					// + TM-7210 con 2 planillas) pero `origen_planilla_id`
+					// solo apunta a UNA. Si solo incluyéramos esa, los días del
+					// desglose no sumarían al TOTAL del recargo.
+					//
+					// Filtramos además por `dias.length > 0` y `total_valor > 0`
+					// para no incluir planillas vacías del mismo grupo
+					// (p. ej. FEPCO tiene 5 planillas en el preview, pero solo
+					// 1 tiene días con recargos).
+					const recargoMatch = (r: any, p: any) => {
+						if (!r || !p) return false;
+						const matchVehiculo = p.vehiculo?.id === r.vehiculo_id;
+						const matchEmpresa =
+							p.empresa?.id === (r.empresa_id || r.clientes?.id);
+						const planillaMes = `${p.año}-${String(p.mes).padStart(2, '0')}`;
+						const matchMes = planillaMes === r.mes;
+						const tieneDias = Array.isArray(p.dias) && p.dias.length > 0;
+						const tieneValor = Number(p.total_valor || 0) > 0;
+						return matchVehiculo && matchEmpresa && matchMes && tieneDias && tieneValor;
+					};
 
 					const planillasFinales: any[] = [];
+					const planillaIdsAgregadas = new Set<string>();
 
-					// 1) Planillas del preview que están referenciadas por recargos
-					//    Override total_valor con el valor del recargo guardado
-					//    (los recargos pueden haber sido editados manualmente
-					//    y diferir del total de la planilla cruda).
-					for (const p of todasLasPlanillas) {
-						const rec = recargoPorPlanillaId.get(p.planilla_id);
-						if (rec) {
-							planillasFinales.push({
-								...p,
-								total_valor: Number(rec.valor || p.total_valor || 0)
-							});
+					// 1) Planillas del preview que coinciden con algún recargo
+					//    (vehiculo+empresa+mes y con días/valor).
+					for (const rec of recargosArr) {
+						const matches = todasLasPlanillas.filter((p) => recargoMatch(rec, p));
+						for (const p of matches) {
+							if (planillaIdsAgregadas.has(p.planilla_id)) continue;
+							planillaIdsAgregadas.add(p.planilla_id);
+							planillasFinales.push(p);
 						}
 					}
 
-					// 2) Planillas SINTÉTICAS para recargos cuyo planilla:
-					//    - no aparece en el preview (p. ej. fue borrada), o
-					//    - aparece pero con `dias: []` (caso típico: la planilla
-					//      no tiene días laborales pero el recargo sí quedó
-					//      guardado con un valor, p. ej. FEPCO $42.977).
-					//    Para que el TOTAL del PDF cuadre con el del preview,
-					//    creamos un planilla con el valor del recargo y un
-					//    día sintético (sin desglose por tipo).
+					// 2) Recargos SIN planilla con días (caso típico FEPCO: el
+					//    recargo está guardado pero la planilla en el preview
+					//    tiene `dias: []` y `total_valor: 0`). Creamos una
+					//    planilla sintética con el valor del recargo para que
+					//    el TOTAL del PDF cuadre con el del preview.
 					for (const r of recargosArr) {
-						if (!r?.origen_planilla_id) continue;
-						if (planillasFinales.some((p) => p.planilla_id === r.origen_planilla_id))
-							continue;
+						if (!r) continue;
+						const tieneMatchConDias = todasLasPlanillas.some((p) =>
+							recargoMatch(r, p)
+						);
+						if (tieneMatchConDias) continue;
+						if (Number(r.valor || 0) <= 0) continue;
 
 						const vehiculo = (liquidacion.vehiculos as any[])?.find(
 							(v) => v.id === r.vehiculo_id
@@ -269,14 +282,12 @@
 						const year = Number(yearStr);
 						const month = Number(monthStr);
 
-						// Heredar config salarial de cualquier planilla del preview
-						// con la misma empresa (mejor aproximación disponible).
 						const planillaReferencia = todasLasPlanillas.find(
 							(p) => p.empresa?.id === (r.empresa_id || r.clientes?.id)
 						);
 
 						planillasFinales.push({
-							planilla_id: r.origen_planilla_id,
+							planilla_id: r.origen_planilla_id || r.id,
 							numero_planilla: r.numero_planilla || 'S/N',
 							vehiculo: vehiculo
 								? {
