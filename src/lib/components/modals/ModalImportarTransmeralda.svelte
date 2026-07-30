@@ -16,6 +16,19 @@
 			errores: number;
 			vehiculos_creados: number;
 			empresas_creadas: number;
+			/**
+			 * Id del job bulk de recálculo que arrancó el server en
+			 * background. El page lo usa para alimentar el
+			 * `bulkRecalcStore` y mostrar la barra de progreso global.
+			 * `null` si no se importó nada.
+			 */
+			recalculoBatchId: string | null;
+			/**
+			 * Ids de las planillas recién creadas. El page las pasa al
+			 * `bulkRecalcStore.iniciar(ids)` para que la UI sepa qué
+			 * filas están bloqueadas mientras se recalculan.
+			 */
+			newRecargoIds: string[];
 		};
 		cancel: void;
 	}>();
@@ -141,12 +154,15 @@
 		try {
 			const sourceIds = Array.from(selectedIds);
 			const result = await recargosApi.importarDesdeTransmeralda(sourceIds);
+			const newRecargoIds = (result.detalle?.importadas || []).map((d) => d.new_id);
 			dispatch('imported', {
 				importadas: result.importadas,
 				omitidas: result.omitidas,
 				errores: result.errores,
 				vehiculos_creados: result.vehiculos_creados,
-				empresas_creadas: result.empresas_creadas
+				empresas_creadas: result.empresas_creadas,
+				recalculoBatchId: result.recalculoBatchId,
+				newRecargoIds
 			});
 			isOpen = false;
 		} catch (err: any) {

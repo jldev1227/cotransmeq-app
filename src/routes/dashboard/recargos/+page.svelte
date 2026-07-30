@@ -712,10 +712,19 @@
 			errores: number;
 			vehiculos_creados: number;
 			empresas_creadas: number;
+			recalculoBatchId: string | null;
+			newRecargoIds: string[];
 		}>
 	) {
-		const { importadas, omitidas, errores, vehiculos_creados, empresas_creadas } =
-			event.detail;
+		const {
+			importadas,
+			omitidas,
+			errores,
+			vehiculos_creados,
+			empresas_creadas,
+			recalculoBatchId,
+			newRecargoIds
+		} = event.detail;
 		if (importadas > 0) {
 			const entidades =
 				vehiculos_creados || empresas_creadas
@@ -727,6 +736,25 @@
 					(errores ? ` · ${errores} con error` : '')
 			);
 			await recargosStore.fetchRecargos();
+
+			// El server ya arrancó el recálculo bulk en background y nos
+			// devolvió el batchId. Alimentamos el store global para que
+			// la barra de progreso aparezca y el socket listener (que ya
+			// está conectado) reciba los `recargos-bulk-recalc:progress`
+			// y `:done` para ir actualizándola.
+			//
+			// Usamos el batchId real directamente (no el placeholder
+			// `__pending__` que se usa en el flujo manual de
+			// "recalcular seleccionadas") porque acá el server ya
+			// devolvió el ID real en la misma respuesta.
+			if (recalculoBatchId && newRecargoIds.length > 0) {
+				const ok = bulkRecalcStore.iniciar(recalculoBatchId, newRecargoIds);
+				if (ok) {
+					toast.info(
+						`Recalculando ${newRecargoIds.length} planilla(s) en segundo plano.`
+					);
+				}
+			}
 		} else if (omitidas || errores) {
 			toast.warning(
 				`Importación sin nuevos registros: ${omitidas} omitidas, ${errores} con error`

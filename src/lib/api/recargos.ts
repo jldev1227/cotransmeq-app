@@ -685,6 +685,14 @@ export const recargosApi = {
 		errores: number;
 		vehiculos_creados: number;
 		empresas_creadas: number;
+		/**
+		 * Id del job bulk que recalcula las planillas recién importadas
+		 * en BACKGROUND. Si es null, no hay nada que recalcular (0
+		 * importadas). El frontend puede usar este id para escuchar
+		 * `recargos-bulk-recalc:progress` / `:done` y mostrar el progreso
+		 * del recálculo.
+		 */
+		recalculoBatchId: string | null;
 		detalle: {
 			importadas: Array<{ source_id: string; new_id: string; numero_planilla: string }>;
 			omitidas: Array<{ source_id: string; motivo: string }>;
@@ -694,8 +702,14 @@ export const recargosApi = {
 		const response = await apiClient.post<{
 			success: boolean;
 			message: string;
+			recalculoBatchId: string | null;
 			data: any;
 		}>(`${BASE_URL}/importar-desde-transmeralda`, { source_ids: sourceIds });
-		return response.data.data;
+		// El backend mete `recalculoBatchId` arriba del `data` para que
+		// sea fácil de consumir sin tener que navegar el data envelope.
+		return {
+			...response.data.data,
+			recalculoBatchId: response.data.recalculoBatchId ?? null
+		};
 	}
 };

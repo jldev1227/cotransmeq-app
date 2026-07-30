@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { obtenerLiquidacionPorId } from '$lib/api/nomina';
+	import { obtenerLiquidacionPorId, obtenerPreviewRecargos } from '$lib/api/nomina';
 	import type { Liquidacion, FirmaConUrl } from '$lib/types/nomina';
 	import { toast } from 'svelte-sonner';
 	import {
@@ -188,24 +188,129 @@
 		if (!liquidacion || generatingPdf) return;
 		try {
 			generatingPdf = true;
-			// ⚠️ NO consultamos `obtenerPreviewRecargos()` aquí.
-			// Razón: ese endpoint devuelve los recargos de las planillas crudas
-			// del conductor en el período, IGNORANDO la decisión del usuario
-			// al editar la liquidación (incluir/excluir cada grupo). En
-			// `pdfDesprendible.ts` hay un fallback que, si `item.recargos`
-			// está vacío (caso normal cuando el usuario quitó todos los
-			// recargos), toma el total de las planillas y lo muestra como
-			// "Otros $XXX.XXX" en el desprendible — aunque la liquidación
-			// guardada diga `total_recargos: 0`.
-			//
-			// Para que el PDF refleje exactamente lo que está guardado:
-			//  - `item.recargos` es la fuente de verdad (viene de la BD).
-			//  - `dataParaPdf.planillas = []` evita que entre al fallback
-			//    de planillas y muestre totales viejos.
-			//  - Si en el futuro queremos detalle por día para los recargos
-			//    incluidos, hay que pasar las planillas YA FILTRADAS por los
-			//    origen_planilla_id que están efectivamente en la liquidación.
-			const dataParaPdf = { planillas: [] };
+
+			// Construimos el `recargosData` para el PDF:
+			//  - `item.recargos` (tabla `recargos`) es la fuente de verdad.
+			//  - Si el toggle `mostrar_recargos` está activo Y hay recargos
+			//    con `origen_planilla_id`, consultamos `preview-recargos`
+			//    para obtener el desglose por día y tipo de recargo, y
+			//    FILTRAMOS las planillas a las que efectivamente están
+			//    incluidas en la liquidación (por `origen_planilla_id`).
+			//    Así el PDF muestra solo lo que el usuario guardó, sin
+			//    meter planillas crudas que se excluyeron en la edición.
+			//  - Si falla la consulta o no hay origen_planilla_id, caemos
+			//    a `planillas: []` para NO activar el fallback de planillas
+			//    en `pdfDesprendible.ts` (que duplicaría el total de "Otros").
+			let dataParaPdf: { planillas: any[] } = { planillas: [] };
+
+			const origenIdsEnLiquidacion = new Set(
+				((liquidacion.recargos as any[]) || [])
+					.map((r) => r?.origen_planilla_id)
+					.filter(Boolean)
+			);
+
+			if (
+				liquidacion.mostrar_recargos &&
+				origenIdsEnLiquidacion.size > 0 &&
+				liquidacion.conductor_id &&
+				liquidacion.periodo_inicio &&
+				liquidacion.periodo_fin
+			) {
+				try {
+					const preview: any = await obtenerPreviewRecargos(
+						liquidacion.conductor_id,
+						liquidacion.periodo_inicio,
+						liquidacion.periodo_fin
+					);
+					const todasLasPlanillas: any[] = preview?.data?.planillas || [];
+					const recargosArr: any[] = (liquidacion.recargos as any[]) || [];
+
+					// Mapa recargo -> planilla, por origen_planilla_id
+					const recargoPorPlanillaId = new Map<string, any>();
+					for (const r of recargosArr) {
+						if (r?.origen_planilla_id) {
+							recargoPorPlanillaId.set(r.origen_planilla_id, r);
+						}
+					}
+
+					const planillasFinales: any[] = [];
+
+					// 1) Planillas del preview que están referenciadas por recargos
+					//    Override total_valor con el valor del recargo guardado
+					//    (los recargos pueden haber sido editados manualmente
+					//    y diferir del total de la planilla cruda).
+					for (const p of todasLasPlanillas) {
+						const rec = recargoPorPlanillaId.get(p.planilla_id);
+						if (rec) {
+							planillasFinales.push({
+								...p,
+								total_valor: Number(rec.valor || p.total_valor || 0)
+							});
+						}
+					}
+
+					// 2) Planillas SINTÉTICAS para recargos cuyo planilla:
+					//    - no aparece en el preview (p. ej. fue borrada), o
+					//    - aparece pero con `dias: []` (caso típico: la planilla
+					//      no tiene días laborales pero el recargo sí quedó
+					//      guardado con un valor, p. ej. FEPCO $42.977).
+					//    Para que el TOTAL del PDF cuadre con el del preview,
+					//    creamos un planilla con el valor del recargo y un
+					//    día sintético (sin desglose por tipo).
+					for (const r of recargosArr) {
+						if (!r?.origen_planilla_id) continue;
+						if (planillasFinales.some((p) => p.planilla_id === r.origen_planilla_id))
+							continue;
+
+						const vehiculo = (liquidacion.vehiculos as any[])?.find(
+							(v) => v.id === r.vehiculo_id
+						);
+						const [yearStr, monthStr] = (r.mes || '').split('-');
+						const year = Number(yearStr);
+						const month = Number(monthStr);
+
+						// Heredar config salarial de cualquier planilla del preview
+						// con la misma empresa (mejor aproximación disponible).
+						const planillaReferencia = todasLasPlanillas.find(
+							(p) => p.empresa?.id === (r.empresa_id || r.clientes?.id)
+						);
+
+						planillasFinales.push({
+							planilla_id: r.origen_planilla_id,
+							numero_planilla: r.numero_planilla || 'S/N',
+							vehiculo: vehiculo
+								? {
+										id: vehiculo.id,
+										placa: vehiculo.placa,
+										marca: vehiculo.marca,
+										modelo: vehiculo.modelo
+									}
+								: planillaReferencia?.vehiculo || null,
+							empresa: r.clientes ||
+								planillaReferencia?.empresa || { id: r.empresa_id, nombre: 'N/A' },
+							mes: month || planillaReferencia?.mes || 0,
+							año: year || planillaReferencia?.año || 0,
+							total_dias: 0,
+							total_horas: 0,
+							total_valor: Number(r.valor || 0),
+							total_festivos: 0,
+							configuracion_salarial: planillaReferencia?.configuracion_salarial || {
+								valor_hora_trabajador: 0
+							},
+							dias: []
+						});
+					}
+
+					dataParaPdf = { planillas: planillasFinales };
+				} catch (previewErr) {
+					console.warn(
+						'[PDF] No se pudo obtener preview-recargos para el desglose:',
+						previewErr
+					);
+					dataParaPdf = { planillas: [] };
+				}
+			}
+
 			await generarPdfDesprendible(liquidacion, firmas, dataParaPdf);
 		} catch (error: any) {
 			console.error('Error generando PDF:', error);

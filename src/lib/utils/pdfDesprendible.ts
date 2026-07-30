@@ -880,7 +880,10 @@ export async function generarPdfDesprendible(
 	// PÁGINA 2+: HORAS EXTRAS Y RECARGOS (si hay recargos planilla)
 	// ============================================================
 	if (recargosData?.planillas && recargosData.planillas.length > 0 && item.mostrar_recargos) {
-		const planillas: any[] = recargosData.planillas.filter((p: any) => p.dias && p.dias.length > 0);
+		// No descartamos planillas sin `dias`: el modal puede enviar
+		// planillas sintéticas (total_valor > 0 pero sin desglose por
+		// día) para que el TOTAL del PDF cuadre con el del preview.
+		const planillas: any[] = recargosData.planillas;
 
 		for (const planilla of planillas) {
 			// Page break before each planilla group
@@ -1251,6 +1254,10 @@ export async function generarPdfDesprendible(
 
 			const tiposConsolidados = Object.values(tiposMap).sort((a, b) => a.porcentaje - b.porcentaje);
 
+			// Mostramos el desglose por tipo SOLO si hay tipos. Para
+			// planillas sintéticas (sin días) tiposConsolidados viene
+			// vacío, pero igual necesitamos mostrar el TOTAL del recargo
+			// para que cuadre con el total del preview.
 			if (tiposConsolidados.length > 0) {
 				const recargoHeaderRow = [
 					{
@@ -1365,9 +1372,13 @@ export async function generarPdfDesprendible(
 						fillColor: (rowIndex: number) => (rowIndex === 0 ? colorBg : null)
 					}
 				});
+			}
 
-				// SUBTOTAL / TOTAL bar
-				const totalValor = planilla.total_valor || 0;
+			// TOTAL bar: se muestra SIEMPRE que el planilla tenga un
+			// total_valor > 0 (incluso si no hay tipos consolidados,
+			// p. ej. planillas sintéticas sin desglose por día).
+			const totalValor = Number(planilla.total_valor || 0);
+			if (totalValor > 0) {
 				content.push({
 					table: {
 						widths: ['*', 'auto'],
