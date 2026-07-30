@@ -26,7 +26,18 @@
 	let numeroDocumento = '';
 	let cargo = '';
 	let numeroTelefono = '';
+	let perteneceComite: boolean | undefined = undefined;
+	let nombreComite = '';
 	let firma = '';
+
+	// Lista de comités
+	const comites = [
+		'COPASST/ VIGIA SST',
+		'COMITÉ CONVIVENCIA LABORAL',
+		'COMITÉ SEGURIDAD VIAL',
+		'LIDER PESV',
+		'ALTA DIRECCIÓN'
+	];
 
 	// Errors
 	let errors = {
@@ -34,6 +45,7 @@
 		numeroDocumento: '',
 		cargo: '',
 		numeroTelefono: '',
+		nombreComite: '',
 		firma: ''
 	};
 
@@ -65,6 +77,8 @@
 				numeroDocumento = miRespuesta.numero_documento;
 				cargo = miRespuesta.cargo;
 				numeroTelefono = miRespuesta.numero_telefono;
+				perteneceComite = miRespuesta.pertenece_comite;
+				nombreComite = miRespuesta.nombre_comite || '';
 				firma = miRespuesta.firma;
 			}
 		} catch (error: any) {
@@ -83,6 +97,7 @@
 			numeroDocumento: '',
 			cargo: '',
 			numeroTelefono: '',
+			nombreComite: '',
 			firma: ''
 		};
 
@@ -103,6 +118,11 @@
 
 		if (!numeroTelefono.trim()) {
 			errors.numeroTelefono = 'El número de teléfono es requerido';
+			isValid = false;
+		}
+
+		if (perteneceComite === true && !nombreComite.trim()) {
+			errors.nombreComite = 'Debe seleccionar el comité al que pertenece';
 			isValid = false;
 		}
 
@@ -134,6 +154,8 @@
 				numero_documento: numeroDocumento.trim(),
 				cargo: cargo.trim(),
 				numero_telefono: numeroTelefono.trim(),
+				pertenece_comite: perteneceComite,
+				nombre_comite: perteneceComite === true ? nombreComite.trim() : undefined,
 				firma,
 				device_fingerprint: deviceFingerprint
 			});
@@ -654,6 +676,62 @@
 									</div>
 								</div>
 
+								<!-- ¿Pertenece a Comité? -->
+								{#if miRespuesta.pertenece_comite !== null && miRespuesta.pertenece_comite !== undefined}
+									<div
+										class="group rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100/50 p-5 transition-all hover:shadow-md"
+									>
+										<div class="flex items-start gap-3">
+											<div class="mt-0.5 rounded-lg bg-white p-2 shadow-sm">
+												<svg
+													class="h-5 w-5 text-emerald-600"
+													fill="none"
+													stroke="currentColor"
+													viewBox="0 0 24 24"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														stroke-width="2"
+														d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+													/>
+												</svg>
+											</div>
+											<div class="flex-1">
+												<p class="text-xs font-medium tracking-wider text-emerald-600 uppercase">
+													¿Pertenece a Comité?
+												</p>
+												<div class="mt-1.5 flex flex-wrap items-center gap-2">
+													{#if miRespuesta.pertenece_comite === true}
+														<span
+															class="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700"
+														>
+															<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+																<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+															</svg>
+															Sí
+														</span>
+														{#if miRespuesta.nombre_comite}
+															<span class="text-sm font-semibold text-gray-900">
+																{miRespuesta.nombre_comite}
+															</span>
+														{/if}
+													{:else}
+														<span
+															class="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700"
+														>
+															<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+																<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+															</svg>
+															No
+														</span>
+													{/if}
+												</div>
+											</div>
+										</div>
+									</div>
+								{/if}
+
 								<!-- Firma -->
 								<div class="rounded-xl bg-gradient-to-br from-orange-50 to-orange-100/50 p-5">
 									<div class="mb-3 flex items-center gap-2">
@@ -803,6 +881,69 @@
 									</p>
 								{/if}
 							</div>
+
+							<!-- ¿Pertenece a Comité? -->
+							<fieldset>
+								<legend class="mb-1.5 block text-sm font-medium text-gray-700">
+									¿Pertenece a algún comité?
+									<span class="font-normal text-gray-400">(opcional)</span>
+								</legend>
+								<div class="grid grid-cols-2 gap-3">
+									<button
+										type="button"
+										on:click={() => (perteneceComite = true)}
+										disabled={isSubmitting}
+										class="apple-transition flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium {perteneceComite === true
+											? 'border-orange-500 bg-orange-50 text-orange-700'
+											: 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}"
+									>
+										<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+										</svg>
+										Sí
+									</button>
+									<button
+										type="button"
+										on:click={() => (perteneceComite = false)}
+										disabled={isSubmitting}
+										class="apple-transition flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium {perteneceComite === false
+											? 'border-gray-400 bg-gray-100 text-gray-800'
+											: 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}"
+									>
+										<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+										</svg>
+										No
+									</button>
+								</div>
+							</fieldset>
+
+							<!-- Selección de Comité (solo si perteneceComite es true) -->
+							{#if perteneceComite === true}
+								<div transition:fly={{ y: -10, duration: 300 }}>
+									<label for="comite" class="mb-1 block text-sm font-medium text-gray-700">
+										Seleccione el comité <span class="text-red-500">*</span>
+									</label>
+									<select
+										id="comite"
+										bind:value={nombreComite}
+										class="input-glow w-full rounded-xl border {errors.nombreComite
+											? 'border-red-300'
+											: 'border-gray-200'} px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/50 focus:outline-none"
+										disabled={isSubmitting}
+									>
+										<option value="">-- Seleccione un comité --</option>
+										{#each comites as comite}
+											<option value={comite}>{comite}</option>
+										{/each}
+									</select>
+									{#if errors.nombreComite}
+										<p class="mt-1 text-sm text-red-500" transition:fade={{ duration: 200 }}>
+											{errors.nombreComite}
+										</p>
+									{/if}
+								</div>
+							{/if}
 
 							<!-- Firma -->
 							<SignatureCanvas bind:value={firma} error={errors.firma} disabled={isSubmitting} />
