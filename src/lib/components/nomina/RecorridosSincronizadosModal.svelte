@@ -146,8 +146,8 @@
 	// Paleta warm para badges de actividad (LABORADO esmeralda = acento principal)
 	function fmtActividadColor(t: string): { bg: string; fg: string } {
 		const map: Record<string, { bg: string; fg: string }> = {
-			LABORADO: { bg: 'rgba(249, 115, 22, 0.10)', fg: '#065F46' },
-			DISPONIBLE: { bg: 'rgba(249, 115, 22, 0.04)', fg: '#0F1F1A' },
+			LABORADO: { bg: 'rgba(16, 185, 129, 0.10)', fg: '#065F46' },
+			DISPONIBLE: { bg: 'rgba(16, 185, 129, 0.04)', fg: '#0F1F1A' },
 			DESCANSO: { bg: 'rgba(0, 0, 0, 0.04)', fg: '#6B6B6B' },
 			MANTENIMIENTO: { bg: 'rgba(245, 158, 11, 0.10)', fg: '#92400E' }
 		};
@@ -452,13 +452,13 @@
 					<!-- Logo + eyebrow -->
 					<div class="flex items-center gap-3">
 						<img
-							src="/assets/logo_nombre.webp"
+							src="/assets/logo_transmeralda-264.webp"
 							alt="Logo"
 							class="h-12 w-auto object-contain"
 							onerror={(e: any) => (e.currentTarget.style.display = 'none')}
 						/>
 						<span
-							style="display: inline-block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #10B981; background: rgba(249, 115, 22, 0.08); padding: 0.3rem 0.7rem; border-radius: 6px; font-family: 'JetBrains Mono', monospace;"
+							style="display: inline-block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #10B981; background: rgba(16, 185, 129, 0.08); padding: 0.3rem 0.7rem; border-radius: 6px; font-family: 'JetBrains Mono', monospace;"
 						>
 							Reporte · GAF-FR-REC
 						</span>
@@ -575,7 +575,7 @@
 							{resumen.totalFilas} tramos
 						</span>
 						<span
-							style="display: inline-flex; align-items: center; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(249, 115, 22, 0.10); color: #065F46; font-size: 0.72rem; font-weight: 600; font-family: 'Inter Tight', sans-serif;"
+							style="display: inline-flex; align-items: center; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(16, 185, 129, 0.10); color: #065F46; font-size: 0.72rem; font-weight: 600; font-family: 'Inter Tight', sans-serif;"
 						>
 							{fmtNum(resumen.totalHoras, 1)}h
 						</span>
@@ -588,10 +588,10 @@
 						{/if}
 						{#if resumen.highlighted > 0}
 							<span
-								style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(249, 115, 22, 0.10); color: #065F46; font-size: 0.72rem; font-weight: 600; font-family: 'Inter Tight', sans-serif; border: 1px solid rgba(249, 115, 22, 0.30);"
+								style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(16, 185, 129, 0.10); color: #065F46; font-size: 0.72rem; font-weight: 600; font-family: 'Inter Tight', sans-serif; border: 1px solid rgba(16, 185, 129, 0.30);"
 							>
 								<span
-									style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #10B981; box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);"
+									style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #10B981; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);"
 								></span>
 								{resumen.highlighted} sincronizados
 							</span>
@@ -603,12 +603,12 @@
 						{#if clavesSincronizadas.length > 0}
 							<label
 								class="flex cursor-pointer items-center gap-1.5"
-								style="padding: 0.4rem 0.75rem; border-radius: 10px; background: rgba(249, 115, 22, 0.06); border: 1px solid rgba(249, 115, 22, 0.18); color: #065F46; font-size: 0.76rem; font-weight: 600; font-family: 'Inter Tight', sans-serif; transition: all 0.2s;"
+								style="padding: 0.4rem 0.75rem; border-radius: 10px; background: rgba(16, 185, 129, 0.06); border: 1px solid rgba(16, 185, 129, 0.18); color: #065F46; font-size: 0.76rem; font-weight: 600; font-family: 'Inter Tight', sans-serif; transition: all 0.2s;"
 							>
 								<input
 									type="checkbox"
 									bind:checked={onlyHighlighted}
-									style="height: 0.85rem; width: 0.85rem; cursor: pointer; border-radius: 4px; border-color: rgba(249, 115, 22, 0.30); accent-color: #10B981;"
+									style="height: 0.85rem; width: 0.85rem; cursor: pointer; border-radius: 4px; border-color: rgba(16, 185, 129, 0.30); accent-color: #10B981;"
 								/>
 								Solo sincronizados
 							</label>
@@ -636,7 +636,7 @@
 								style="width: 11rem; border-radius: 10px; border: 1px solid rgba(0, 0, 0, 0.12); background: #FFFFFF; padding: 0.45rem 0.75rem 0.45rem 2rem; font-size: 0.8rem; color: #1A1A1A; font-family: 'Inter Tight', sans-serif; transition: all 0.2s;"
 								onfocus={(e) => {
 									e.currentTarget.style.borderColor = '#10B981';
-									e.currentTarget.style.boxShadow = '0 0 0 3px rgba(249, 115, 22, 0.10)';
+									e.currentTarget.style.boxShadow = '0 0 0 3px rgba(16, 185, 129, 0.10)';
 									e.currentTarget.style.outline = 'none';
 								}}
 								onblur={(e) => {
@@ -683,14 +683,14 @@
 						<button
 							type="button"
 							onclick={descargarCSV}
-							style="display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.95rem; border-radius: 10px; background: linear-gradient(135deg, #10B981, #ea580c); color: #FFFFFF; border: none; font-family: 'Inter Tight', sans-serif; font-size: 0.78rem; font-weight: 600; cursor: pointer; box-shadow: 0 4px 16px rgba(249, 115, 22, 0.30); transition: all 0.2s;"
+							style="display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.95rem; border-radius: 10px; background: linear-gradient(135deg, #10B981, #059669); color: #FFFFFF; border: none; font-family: 'Inter Tight', sans-serif; font-size: 0.78rem; font-weight: 600; cursor: pointer; box-shadow: 0 4px 16px rgba(16, 185, 129, 0.30); transition: all 0.2s;"
 							onmouseenter={(e) => {
 								e.currentTarget.style.transform = 'translateY(-1px)';
-								e.currentTarget.style.boxShadow = '0 6px 20px rgba(249, 115, 22, 0.40)';
+								e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.40)';
 							}}
 							onmouseleave={(e) => {
 								e.currentTarget.style.transform = 'translateY(0)';
-								e.currentTarget.style.boxShadow = '0 4px 16px rgba(249, 115, 22, 0.30)';
+								e.currentTarget.style.boxShadow = '0 4px 16px rgba(16, 185, 129, 0.30)';
 							}}
 							title="Descargar CSV"
 						>
@@ -746,7 +746,7 @@
 				{#if loading}
 					<div class="flex h-full flex-col items-center justify-center gap-3 p-12">
 						<div
-							style="height: 2.5rem; width: 2.5rem; border-radius: 50%; border: 3px solid rgba(249, 115, 22, 0.20); border-top-color: #10B981; animation: spin 1s linear infinite;"
+							style="height: 2.5rem; width: 2.5rem; border-radius: 50%; border: 3px solid rgba(16, 185, 129, 0.20); border-top-color: #10B981; animation: spin 1s linear infinite;"
 						></div>
 						<p style="font-size: 0.85rem; color: #6B6B6B; font-family: 'Inter Tight', sans-serif;">
 							Cargando recorridos del período seleccionado…
@@ -776,7 +776,7 @@
 						class="flex h-full flex-col items-center justify-center gap-3 p-12 text-center"
 					>
 						<div
-							style="display: flex; height: 3.5rem; width: 3.5rem; align-items: center; justify-content: center; border-radius: 16px; background: linear-gradient(135deg, rgba(249, 115, 22, 0.08), rgba(249, 115, 22, 0.15)); color: #10B981;"
+							style="display: flex; height: 3.5rem; width: 3.5rem; align-items: center; justify-content: center; border-radius: 16px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(16, 185, 129, 0.15)); color: #10B981;"
 						>
 							<svg
 								style="height: 1.75rem; width: 1.75rem;"
@@ -876,15 +876,15 @@
 								{@const act = fmtActividadColor(fila.actividad)}
 								<tr
 									style:background-color={fila.tiene_bonos
-										? 'rgba(249, 115, 22, 0.06)'
+										? 'rgba(16, 185, 129, 0.06)'
 										: i % 2 === 0
 											? '#FFFFFF'
 											: '#FAF7F2'}
 									style="border-bottom: 1px solid rgba(0, 0, 0, 0.04); transition: background-color 0.2s;"
-									onmouseenter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(249, 115, 22, 0.10)')}
+									onmouseenter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(16, 185, 129, 0.10)')}
 									onmouseleave={(e) =>
 										(e.currentTarget.style.backgroundColor = fila.tiene_bonos
-											? 'rgba(249, 115, 22, 0.06)'
+											? 'rgba(16, 185, 129, 0.06)'
 											: i % 2 === 0
 												? '#FFFFFF'
 												: '#FAF7F2')}
@@ -896,7 +896,7 @@
 											<span>{fila.conductor}</span>
 											{#if fila.tiene_bonos}
 												<span
-													style="display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.1rem 0.5rem; border-radius: 999px; background: linear-gradient(135deg, #10B981, #ea580c); color: #FFFFFF; font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; box-shadow: 0 2px 6px rgba(249, 115, 22, 0.25);"
+													style="display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.1rem 0.5rem; border-radius: 999px; background: linear-gradient(135deg, #10B981, #059669); color: #FFFFFF; font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);"
 													title="Este tramo tiene bonos sincronizados"
 												>
 													<svg
@@ -1013,12 +1013,12 @@
 				style="background-color: #FAF7F2; border-top: 1px solid rgba(0, 0, 0, 0.06); padding: 0.65rem 1.5rem; font-size: 0.72rem; color: #6B6B6B;"
 			>
 				<span
-					style="display: inline-block; padding: 0.2rem 0.5rem; border-radius: 5px; background: rgba(249, 115, 22, 0.08); color: #065F46; font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;"
+					style="display: inline-block; padding: 0.2rem 0.5rem; border-radius: 5px; background: rgba(16, 185, 129, 0.08); color: #065F46; font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;"
 				>
 					GAF-FR-REC · V1
 				</span>
 				<span style="font-family: 'Inter Tight', sans-serif;">
-					Generado el {fechaGeneradoLarga} · SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S.
+					Generado el {fechaGeneradoLarga} · TRANSPORTES Y SERVICIOS ESMERALDA S.A.S.
 				</span>
 			</div>
 		</div>

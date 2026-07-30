@@ -7,7 +7,8 @@
 		RefreshCw,
 		Truck,
 		Building2,
-		CalendarDays
+		CalendarDays,
+		BarChart3
 	} from 'lucide-svelte';
 	import { obtenerPreviewRecargos } from '$lib/api/nomina';
 	import type { PreviewRecargosResponse } from '$lib/api/nomina';
@@ -90,7 +91,7 @@
 		const map = new Map<string, GrupoRecargo>();
 
 		for (const planilla of data.planillas) {
-			const emisor = planilla.numero_planilla?.toUpperCase().includes('COTRANSMEQ') ? 'COTRANSMEQ' : 'COTRANSMEQ';
+			const emisor = planilla.numero_planilla?.toUpperCase().includes('COTRANSMEQ') ? 'COTRANSMEQ' : 'TRANSMERALDA';
 			const key = `${planilla.vehiculo.id}-${planilla.año}-${String(planilla.mes).padStart(2, '0')}-${planilla.empresa.id}-${emisor}`;
 			if (!map.has(key)) {
 				const override = cachedGrupoOverrides[key];
@@ -291,24 +292,36 @@
 
 <div class="rounded-xl border border-[var(--border-subtle)] bg-white shadow-[var(--shadow-card)]">
 	<!-- Header -->
-	<div class="flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--bg-base)] px-4 py-3">
+	<div class="flex flex-col gap-3 border-b border-[var(--border-subtle)] bg-[var(--bg-base)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
 		<div class="flex items-center gap-2">
 			<DollarSign class="h-4 w-4 text-[var(--text-muted)]" />
 			<h3 class="font-mono-meta text-[0.7rem] text-[var(--text-muted)]">Recargos de Planillas</h3>
 		</div>
-		<button
-			on:click={cargarPreview}
-			disabled={!canLoad || loading}
-			class="apple-transition flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-base)] hover:border-[var(--border-emphasis)] disabled:opacity-50 disabled:cursor-not-allowed"
-		>
-			{#if loading}
-				<Loader2 class="h-3.5 w-3.5 animate-spin" />
-				Calculando...
-			{:else}
-				<RefreshCw class="h-3.5 w-3.5" />
-				Recalcular
-			{/if}
-		</button>
+		<div class="grid grid-cols-2 gap-1.5 sm:flex sm:items-center">
+			<button
+				on:click={() => dispatch('openDesglose')}
+				disabled={!previewData || !previewData.planillas?.length}
+				class="apple-transition flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
+				style="color: #047857; background: linear-gradient(135deg, rgba(16, 185, 129, 0.10), rgba(5, 150, 105, 0.06)); border-color: rgba(16, 185, 129, 0.30);"
+				title="Ver desglose detallado por día, tipo de recargo, configuración salarial, etc."
+			>
+				<BarChart3 class="h-3.5 w-3.5" />
+				Ver desglose
+			</button>
+			<button
+				on:click={cargarPreview}
+				disabled={!canLoad || loading}
+				class="apple-transition flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-base)] hover:border-[var(--border-emphasis)] disabled:opacity-50 disabled:cursor-not-allowed"
+			>
+				{#if loading}
+					<Loader2 class="h-3.5 w-3.5 animate-spin" />
+					Calculando...
+				{:else}
+					<RefreshCw class="h-3.5 w-3.5" />
+					Recalcular
+				{/if}
+			</button>
+		</div>
 	</div>
 
 	<!-- Content -->
@@ -395,7 +408,7 @@
 											<span>{grupo.vehiculoPlaca}</span>
 											{#if yaIncluido}
 												<span
-													class="inline-flex items-center gap-0.5 rounded-full bg-orange-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-orange-700"
+													class="inline-flex items-center gap-0.5 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-700"
 													title="Este recargo ya está registrado en la liquidación. Puedes editar 'Paga Cliente' y '% Propietario' aquí mismo; los cambios se guardan al pulsar 'Guardar Liquidación'."
 												>
 													<svg
@@ -435,12 +448,12 @@
 									</td>
 									<td class="px-3 py-2.5 text-[var(--text-secondary)]">{grupo.mesLabel}</td>
 									<td class="px-3 py-2.5 text-[var(--text-secondary)]">{grupo.empresaNombre}</td>
-									<td class="px-3 py-2.5 text-[var(--text-secondary)]">{grupo.emisor === 'COTRANSMEQ' ? 'Cotransmeq' : 'Cotransmeq'}</td>
+									<td class="px-3 py-2.5 text-[var(--text-secondary)]">{grupo.emisor === 'TRANSMERALDA' ? 'Transmeralda' : 'Cotransmeq'}</td>
 									<td class="px-3 py-2.5 text-right font-semibold text-[var(--text-primary)]">{formatCurrency(grupo.totalValor)}</td>
 									<td class="px-3 py-2.5 text-center">
 										{#if yaIncluido}
 											<span
-												class="inline-flex h-5 w-5 items-center justify-center rounded bg-orange-100 text-orange-700"
+												class="inline-flex h-5 w-5 items-center justify-center rounded bg-emerald-100 text-emerald-700"
 												title="Ya incluido en esta liquidación"
 											>
 												<svg

@@ -120,7 +120,7 @@
 </script>
 
 <svelte:head>
-	<title>Editar Liquidación - Cotransmeq (NIT 901983227)</title>
+	<title>Editar Liquidación - Transmeralda</title>
 </svelte:head>
 
 {#if loadingData}

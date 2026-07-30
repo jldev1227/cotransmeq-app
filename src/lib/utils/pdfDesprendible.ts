@@ -1,15 +1,12 @@
 /**
  * Generador de PDF Desprendible de Nómina usando pdfmake
- * COTRANSMEQ - Replicado de Cotransmeq con branding Cotransmeq
+ * Portado de pdfMaker.tsx (@react-pdf/renderer) a pdfmake - IGUALADO
  */
 import type { Liquidacion, FirmaConUrl } from '$lib/types/nomina';
 import { obtenerLogoBase64 } from '$lib/utils/pdfUtils';
 
 const PAREX_EMPRESA_ID = 'cfb258a6-448c-4469-aa71-8eeafa4530ef';
-const EMPRESA = 'SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S';
-const NIT = '901983227';
-const COLOR = '#EA580C';
-const COLOR_BG = '#FFF7ED';
+const GEOPARK_EMPRESA_ID = 'eea5eda5-1b60-45a0-b4c7-606a8c908ff9';
 
 function formatCurrency(value: number | string | null | undefined): string {
 	const num = Number(value) || 0;
@@ -39,9 +36,7 @@ function monthAndYear(dateStr: string | null | undefined): string {
 	if (!dateStr) return '';
 	const date = new Date(dateStr + 'T00:00:00');
 	if (isNaN(date.getTime())) return '';
-	return date
-		.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' })
-		.toUpperCase();
+	return date.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' }).toUpperCase();
 }
 
 function safeValue(val: any, def: any = '') {
@@ -108,14 +103,15 @@ function formatearRango(inicio: string, fin: string): string {
 }
 
 /**
- * Calcula la diferencia en días entre dos fechas
+ * Calcula la diferencia en días entre dos fechas (inclusiva: cuenta ambos extremos)
+ * Ej: del 1 al 5 = 5 días (1, 2, 3, 4, 5)
  */
 function obtenerDiferenciaDias(startStr: string, endStr: string): number {
 	try {
 		const start = new Date(startStr + 'T00:00:00');
 		const end = new Date(endStr + 'T00:00:00');
 		if (isNaN(start.getTime()) || isNaN(end.getTime())) return 0;
-		return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+		return Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 	} catch {
 		return 0;
 	}
@@ -149,10 +145,10 @@ export async function generarPdfDesprendible(
 	const pdfFonts = (await import('pdfmake/build/vfs_fonts')).default;
 	pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts.vfs;
 
-	const color = COLOR;
-	const colorBg = COLOR_BG;
-	const empresa = EMPRESA;
-	const nit = NIT;
+	const color = '#EA580C';
+	const colorBg = '#FFF7ED';
+	const empresa = 'SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S';
+	const nit = '901983227';
 
 	const conductorNombre = `${safeValue(item.conductor?.nombre, 'N/A')}`;
 	const conductorCedula = safeValue(
@@ -161,43 +157,96 @@ export async function generarPdfDesprendible(
 	);
 
 	// Cargar logo
-	const logoBase64 = await obtenerLogoBase64();
+	const logoBase64 = await obtenerLogoBase64(false);
 
-	// Recargos PAREX: sumar todos los recargos (manuales + automáticos) guardados con empresa PAREX
-	// item.recargos ya contiene ambos tipos (es_automatico=false y es_automatico=true)
-	// NO sumar desde recargosData.planillas porque eso duplicaría los automáticos
-	const recargosParex = item.recargos?.filter((r) => r.empresa_id === PAREX_EMPRESA_ID) || [];
-	const totalRecargosParex = recargosParex.reduce((s, r) => s + Number(r.valor || 0), 0);
-	const hayRecargosParex = totalRecargosParex > 0;
-
+	// Disponibilidad (viene separada de item.total_recargos en el payload)
 	const disponibilidadVal = Number(safeValue(item.disponibilidad, 0));
-	
-	// Total final después de disponibilidad
-	const totalRecargos = Number(item.total_recargos || 0);
-	const totalRecargosFinal = Math.max(0, totalRecargos - disponibilidadVal);
-	
-	// Separaciones
-	const totalRecargosNoParex = totalRecargos - totalRecargosParex;
 
-	// Separar "Otros" (no-PAREX) y restar disponibilidad
-	// Si "Otros" tiene suficiente, se resta de ahí. Si no alcanza, el sobrante se resta de PAREX.
-	const recargosNoParex = Number(item.total_recargos || 0) - totalRecargosParex;
-	const otrosMenosDisp = recargosNoParex - disponibilidadVal;
-	const totalRecargosNormal = Math.max(0, otrosMenosDisp);
-	// Si "Otros" no alcanzó para absorber toda la disponibilidad, el resto se resta de PAREX
-	const disponibilidadSobrante = otrosMenosDisp < 0 ? Math.abs(otrosMenosDisp) : 0;
-	const totalRecargosParexFinal = totalRecargosParex - disponibilidadSobrante;
+	// Recargos agrupados por empresa.
+	// Fuente: item.recargos (tabla `recargos` con ediciones manuales aplicadas).
+	// Deduplicamos por `id` porque el include de Prisma en la query de la
+	// liquidación arrastra joins 1:N (dias_laborales_planillas /
+	// detalles_recargos_dias) que multiplican las filas del recargo.
+	let totalRecargosParex = 0;
+	let totalRecargosGeopark = 0;
+	let totalRecargosOtros = 0;
+	let dedupDebug = { total: 0, unicos: 0 };
 
+	if (item.recargos && item.recargos.length > 0) {
+		const unicos = new Map<string, any>();
+		for (const r of item.recargos) {
+			dedupDebug.total += 1;
+			if (!r?.id) continue;
+			if (unicos.has(r.id)) continue;
+			unicos.set(r.id, r);
+		}
+		dedupDebug.unicos = unicos.size;
+
+		for (const r of unicos.values()) {
+			const valor = Number(r.valor || 0);
+			if (r.empresa_id === PAREX_EMPRESA_ID) {
+				totalRecargosParex += valor;
+			} else if (r.empresa_id === GEOPARK_EMPRESA_ID) {
+				totalRecargosGeopark += valor;
+			} else {
+				totalRecargosOtros += valor;
+			}
+		}
+	} else if (recargosData?.planillas && recargosData.planillas.length > 0) {
+		// Fallback: si no hay item.recargos, usamos las planillas (modo legacy).
+		for (const planilla of recargosData.planillas) {
+			const empresaId = planilla.empresa?.id;
+			const planillaTotal = Number(planilla.total_valor || 0);
+			if (empresaId === PAREX_EMPRESA_ID) {
+				totalRecargosParex += planillaTotal;
+			} else if (empresaId === GEOPARK_EMPRESA_ID) {
+				totalRecargosGeopark += planillaTotal;
+			} else {
+				totalRecargosOtros += planillaTotal;
+			}
+		}
+	}
+	const hayRecargosParex = totalRecargosParex > 0;
+	const hayRecargosGeopark = totalRecargosGeopark > 0;
+
+	// Restar disponibilidad del valor MAYOR entre Otros, PAREX y GEOPARK.
+	// Si la disponibilidad excede al mayor, el remanente baja al siguiente mayor.
+	if (disponibilidadVal > 0) {
+		const categorias = [
+			{ key: 'otros', valor: totalRecargosOtros },
+			{ key: 'parex', valor: totalRecargosParex },
+			{ key: 'geopark', valor: totalRecargosGeopark }
+		].sort((a, b) => b.valor - a.valor);
+
+		let restante = disponibilidadVal;
+		for (const cat of categorias) {
+			if (restante <= 0) break;
+			if (cat.valor <= 0) continue;
+			const descuento = Math.min(cat.valor, restante);
+			cat.valor -= descuento;
+			restante -= descuento;
+		}
+
+		totalRecargosOtros = categorias.find((c) => c.key === 'otros')!.valor;
+		totalRecargosParex = categorias.find((c) => c.key === 'parex')!.valor;
+		totalRecargosGeopark = categorias.find((c) => c.key === 'geopark')!.valor;
+	}
+
+	console.log('DEBUG RECARGOS', {
+		disponibilidadVal,
+		totalRecargosParex,
+		totalRecargosGeopark,
+		totalRecargosOtros,
+		recargosRecibidos: dedupDebug.total,
+		recargosUnicos: dedupDebug.unicos,
+		fuente: item.recargos?.length ? 'item.recargos (tabla)' : 'planillas (fallback)'
+	});
 
 	// Bonificaciones agrupadas
-	const bonosAgrupados: Record<string, { name: string; quantity: number; totalValue: number }> =
-		{};
+	const bonosAgrupados: Record<string, { name: string; quantity: number; totalValue: number }> = {};
 	if (item.bonificaciones && item.bonificaciones.length > 0) {
 		item.bonificaciones.forEach((b) => {
-			const qty = parseValues(b.values).reduce(
-				(s: number, v: any) => s + (v.quantity || 0),
-				0
-			);
+			const qty = parseValues(b.values).reduce((s: number, v: any) => s + (v.quantity || 0), 0);
 			if (bonosAgrupados[b.name]) {
 				bonosAgrupados[b.name].quantity += qty;
 				bonosAgrupados[b.name].totalValue += qty * Number(b.value);
@@ -268,13 +317,13 @@ export async function generarPdfDesprendible(
 		],
 		// Bonificaciones
 		...bonosFilas,
-		// Recargos (llamado "Otros" como en pdfMaker)
+		// Recargos (llamado "Otros" como en pdfMaker) - suma de recargos que no son PAREX ni GEOPARK
 		[
 			{ text: 'Otros', style: 'valueText' },
 			{ text: 'Ver recargos detallados más adelante', fontSize: 10, color: '#666' },
 			{ text: ' ', alignment: 'center' as const },
 			{
-				text: formatCurrency(totalRecargosNormal),
+				text: formatCurrency(totalRecargosOtros),
 				alignment: 'center' as const,
 				style: 'valueText'
 			}
@@ -291,7 +340,26 @@ export async function generarPdfDesprendible(
 						},
 						{ text: ' ', alignment: 'center' as const },
 						{
-							text: formatCurrency(totalRecargosParexFinal),
+							text: formatCurrency(totalRecargosParex),
+							alignment: 'center' as const,
+							style: 'valueText'
+						}
+					]
+				]
+			: []),
+		// Recargos Geopark (si hay — manuales + planillas)
+		...(hayRecargosGeopark
+			? [
+					[
+						{ text: 'Recargos GEOPARK', style: 'valueText' },
+						{
+							text: 'Ver recargos detallados más adelante',
+							fontSize: 10,
+							color: '#666'
+						},
+						{ text: ' ', alignment: 'center' as const },
+						{
+							text: formatCurrency(totalRecargosGeopark),
 							alignment: 'center' as const,
 							style: 'valueText'
 						}
@@ -319,14 +387,8 @@ export async function generarPdfDesprendible(
 	// DATOS DEL EMPLEADO (tabla label-value con colores iguales a pdfMaker)
 	// ============================================================
 	const empleadoBody: any[][] = [
-		[
-			{ text: 'Nombre' },
-			{ text: conductorNombre, alignment: 'right' as const }
-		],
-		[
-			{ text: 'C.C.' },
-			{ text: conductorCedula, alignment: 'right' as const }
-		],
+		[{ text: 'Nombre' }, { text: conductorNombre, alignment: 'right' as const }],
+		[{ text: 'C.C.' }, { text: conductorCedula, alignment: 'right' as const }],
 		[
 			{ text: 'Días laborados' },
 			{
@@ -376,9 +438,9 @@ export async function generarPdfDesprendible(
 		]);
 	}
 
-	// Ajuste salarial (siempre se muestra)
+	// Ajuste salarial (siempre se muestra en Transmeralda)
 	empleadoBody.push([
-		{ text: 'Ajuste salarial' },
+		{ text: 'Bono Nivelación de Salario' },
 		{
 			columns: [
 				{
@@ -436,8 +498,8 @@ export async function generarPdfDesprendible(
 								image: logoBase64,
 								width: 175,
 								height: 100,
-								alignment: 'right' as const,
-								margin: [0, -15, -20, 0]
+								alignment: 'left' as const,
+								margin: [0, -15, 0, 0]
 							}
 						]
 					: [])
@@ -452,10 +514,8 @@ export async function generarPdfDesprendible(
 				body: empleadoBody
 			},
 			layout: {
-				hLineWidth: (i: number, node: any) =>
-					i === 0 || i === node.table.body.length ? 1 : 0.5,
-				vLineWidth: (i: number, node: any) =>
-					i === 0 || i === node.table.widths.length ? 1 : 0,
+				hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length ? 1 : 0.5),
+				vLineWidth: (i: number, node: any) => (i === 0 || i === node.table.widths.length ? 1 : 0),
 				hLineColor: () => '#E0E0E0',
 				vLineColor: () => '#E0E0E0',
 				paddingLeft: () => 5,
@@ -483,8 +543,7 @@ export async function generarPdfDesprendible(
 				body: conceptosBody
 			},
 			layout: {
-				hLineWidth: (i: number, node: any) =>
-					i === 0 || i === node.table.body.length ? 1 : 0.5,
+				hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length ? 1 : 0.5),
 				vLineWidth: () => 1,
 				hLineColor: () => '#E0E0E0',
 				vLineColor: () => '#E0E0E0',
@@ -525,12 +584,11 @@ export async function generarPdfDesprendible(
 			},
 			{
 				table: {
-					widths: ['40%', '15%', '15%'],
+					widths: ['40%', '15%', '30%'],
 					body: conceptosAdicionalesBody
 				},
 				layout: {
-					hLineWidth: (i: number, node: any) =>
-						i === 0 || i === node.table.body.length ? 1 : 0.5,
+					hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length ? 1 : 0.5),
 					vLineWidth: () => 1,
 					hLineColor: () => '#E0E0E0',
 					vLineColor: () => '#E0E0E0',
@@ -570,10 +628,8 @@ export async function generarPdfDesprendible(
 					]
 				},
 				layout: {
-					hLineWidth: (i: number, node: any) =>
-						i === 0 || i === node.table.body.length ? 1 : 0.5,
-					vLineWidth: (i: number, node: any) =>
-						i === 0 || i === node.table.widths.length ? 1 : 0,
+					hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length ? 1 : 0.5),
+					vLineWidth: (i: number, node: any) => (i === 0 || i === node.table.widths.length ? 1 : 0),
 					hLineColor: () => '#E0E0E0',
 					vLineColor: () => '#E0E0E0',
 					paddingLeft: () => 5,
@@ -593,7 +649,7 @@ export async function generarPdfDesprendible(
 			{ text: 'Salud' },
 			{
 				text: formatCurrency(item.salud),
-				color: '#1e40af',
+				color: '#e60f0f',
 				alignment: 'right' as const
 			}
 		],
@@ -601,7 +657,7 @@ export async function generarPdfDesprendible(
 			{ text: 'Pensión' },
 			{
 				text: formatCurrency(item.pension),
-				color: '#1e40af',
+				color: '#e60f0f',
 				alignment: 'right' as const
 			}
 		]
@@ -612,10 +668,24 @@ export async function generarPdfDesprendible(
 			{ text: 'Anticipos' },
 			{
 				text: formatCurrency(item.total_anticipos),
-				color: '#1e40af',
+				color: '#e60f0f',
 				alignment: 'right' as const
 			}
 		]);
+
+		item.anticipos.forEach((a) => {
+			const conceptoTexto = a.concepto || a.observaciones || '';
+			deduccionesBody.push([
+				{
+					text: [
+						{ text: '  • ', color: '#9E9E9E' },
+						{ text: conceptoTexto, fontSize: 10, color: '#555' }
+					],
+					colSpan: 2
+				},
+				{}
+			]);
+		});
 	}
 
 	content.push(
@@ -632,10 +702,8 @@ export async function generarPdfDesprendible(
 				body: deduccionesBody
 			},
 			layout: {
-				hLineWidth: (i: number, node: any) =>
-					i === 0 || i === node.table.body.length ? 1 : 0.5,
-				vLineWidth: (i: number, node: any) =>
-					i === 0 || i === node.table.widths.length ? 1 : 0,
+				hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length ? 1 : 0.5),
+				vLineWidth: (i: number, node: any) => (i === 0 || i === node.table.widths.length ? 1 : 0),
 				hLineColor: () => '#E0E0E0',
 				vLineColor: () => '#E0E0E0',
 				paddingLeft: () => 5,
@@ -655,15 +723,9 @@ export async function generarPdfDesprendible(
 	if (Number(safeValue(item.total_vacaciones, 0)) > 0) {
 		const diasVacaciones =
 			item.periodo_vacaciones_inicio && item.periodo_vacaciones_fin
-				? obtenerDiferenciaDias(
-						item.periodo_vacaciones_inicio,
-						item.periodo_vacaciones_fin
-					)
+				? obtenerDiferenciaDias(item.periodo_vacaciones_inicio, item.periodo_vacaciones_fin)
 				: item.periodo_start_vacaciones && item.periodo_end_vacaciones
-					? obtenerDiferenciaDias(
-							item.periodo_start_vacaciones,
-							item.periodo_end_vacaciones
-						)
+					? obtenerDiferenciaDias(item.periodo_start_vacaciones, item.periodo_end_vacaciones)
 					: 0;
 
 		resumenBody.push([
@@ -680,8 +742,7 @@ export async function generarPdfDesprendible(
 	// Sueldo total ajustado
 	const sueldoBase = Number(safeValue(item.sueldo_total, 0));
 	const intereses = Number(safeValue(item.interes_cesantias, 0));
-	const primaPend = Number(safeValue(item.prima_pendiente, 0));
-	const sueldoAjustado = sueldoBase - intereses - primaPend;
+	const sueldoAjustado = sueldoBase - intereses;
 
 	// Si hay vacaciones, usar 3 columnas para alinear
 	if (resumenBody.length > 0) {
@@ -691,7 +752,7 @@ export async function generarPdfDesprendible(
 			{
 				text: formatCurrency(sueldoAjustado),
 				bold: true,
-				color,
+				color: '#007AFF',
 				alignment: 'right' as const
 			}
 		]);
@@ -710,10 +771,8 @@ export async function generarPdfDesprendible(
 					body: resumenBody
 				},
 				layout: {
-					hLineWidth: (i: number, node: any) =>
-						i === 0 || i === node.table.body.length ? 1 : 0.5,
-					vLineWidth: (i: number, node: any) =>
-						i === 0 || i === node.table.widths.length ? 1 : 0,
+					hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length ? 1 : 0.5),
+					vLineWidth: (i: number, node: any) => (i === 0 || i === node.table.widths.length ? 1 : 0),
 					hLineColor: () => '#E0E0E0',
 					vLineColor: () => '#E0E0E0',
 					paddingLeft: () => 5,
@@ -742,17 +801,15 @@ export async function generarPdfDesprendible(
 							{
 								text: formatCurrency(sueldoAjustado),
 								bold: true,
-								color,
+								color: '#007AFF',
 								alignment: 'right' as const
 							}
 						]
 					]
 				},
 				layout: {
-					hLineWidth: (i: number, node: any) =>
-						i === 0 || i === node.table.body.length ? 1 : 0.5,
-					vLineWidth: (i: number, node: any) =>
-						i === 0 || i === node.table.widths.length ? 1 : 0,
+					hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length ? 1 : 0.5),
+					vLineWidth: (i: number, node: any) => (i === 0 || i === node.table.widths.length ? 1 : 0),
 					hLineColor: () => '#E0E0E0',
 					vLineColor: () => '#E0E0E0',
 					paddingLeft: () => 5,
@@ -823,9 +880,7 @@ export async function generarPdfDesprendible(
 	// PÁGINA 2+: HORAS EXTRAS Y RECARGOS (si hay recargos planilla)
 	// ============================================================
 	if (recargosData?.planillas && recargosData.planillas.length > 0 && item.mostrar_recargos) {
-		const planillas: any[] = recargosData.planillas.filter(
-			(p: any) => p.dias && p.dias.length > 0
-		);
+		const planillas: any[] = recargosData.planillas.filter((p: any) => p.dias && p.dias.length > 0);
 
 		for (const planilla of planillas) {
 			// Page break before each planilla group
@@ -842,9 +897,7 @@ export async function generarPdfDesprendible(
 			});
 
 			// Avisos
-			const hayFestivosODomingos = planilla.dias?.some(
-				(d: any) => d.es_festivo || d.es_domingo
-			);
+			const hayFestivosODomingos = planilla.dias?.some((d: any) => d.es_festivo || d.es_domingo);
 			const hayDisponibles = planilla.dias?.some((d: any) => d.disponibilidad);
 
 			if (hayFestivosODomingos) {
@@ -866,7 +919,7 @@ export async function generarPdfDesprendible(
 				});
 			}
 
-			// Header azul con info del vehículo/conductor/periodo
+			// Header verde con info del vehículo/conductor/periodo
 			const mesNombre = new Date(planilla.año, planilla.mes - 1)
 				.toLocaleString('es-CO', { month: 'long' })
 				.toUpperCase();
@@ -909,7 +962,15 @@ export async function generarPdfDesprendible(
 				]
 			});
 
-			// Header background table
+			content.push({
+				stack: headerRows,
+				fillColor: color,
+				margin: [0, 5, 0, 0]
+				// Wrap in a table to get the green background
+			});
+
+			// Use a table to achieve the green header background
+			content.pop(); // Remove the stack we just added
 			content.push({
 				table: {
 					widths: ['*'],
@@ -963,8 +1024,7 @@ export async function generarPdfDesprendible(
 					]
 				},
 				layout: {
-					hLineWidth: (i: number, node: any) =>
-						i === node.table.body.length ? 1 : 0,
+					hLineWidth: (i: number, node: any) => (i === node.table.body.length ? 1 : 0),
 					vLineWidth: () => 0,
 					hLineColor: () => '#E0E0E0',
 					paddingLeft: () => 0,
@@ -996,11 +1056,7 @@ export async function generarPdfDesprendible(
 						: idx % 2 === 0
 							? '#ffffff'
 							: '#f9f9f9';
-				const textColor = esDisponible
-					? '#B91C1C'
-					: esEspecial
-						? '#92400E'
-						: '#333333';
+				const textColor = esDisponible ? '#B91C1C' : esEspecial ? '#92400E' : '#333333';
 
 				// Extract recargos values from dia.recargos array
 				const getRecargo = (codigo: string) => {
@@ -1193,9 +1249,7 @@ export async function generarPdfDesprendible(
 				}
 			}
 
-			const tiposConsolidados = Object.values(tiposMap).sort(
-				(a, b) => a.porcentaje - b.porcentaje
-			);
+			const tiposConsolidados = Object.values(tiposMap).sort((a, b) => a.porcentaje - b.porcentaje);
 
 			if (tiposConsolidados.length > 0) {
 				const recargoHeaderRow = [

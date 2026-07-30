@@ -25,7 +25,7 @@
 </script>
 
 <svelte:head>
-	<title>Nueva Liquidación - Cotransmeq (NIT 901983227)</title>
+	<title>Nueva Liquidación - Transmeralda</title>
 </svelte:head>
 
 <div

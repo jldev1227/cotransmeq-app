@@ -13,8 +13,10 @@
 	import UsuarioBadge from '$lib/components/common/UsuarioBadge.svelte';
 	import HistorialVersionesModal from '$lib/components/liquidaciones-terceros/HistorialVersionesModal.svelte';
 	import BorradorProgressModal from '$lib/components/liquidaciones-terceros/BorradorProgressModal.svelte';
+	import TabAdicionalesMensual from '$lib/components/liquidaciones-terceros/TabAdicionalesMensual.svelte';
 	import { borradorQueueStore, borradorQueue } from '$lib/stores/borradorQueue';
 	import { connectSocket, getSocket } from '$lib/socketClient';
+	import { toast } from 'svelte-sonner';
 
 	const COP = (v: number | string) =>
 		new Intl.NumberFormat('es-CO', {
@@ -65,27 +67,28 @@
 		});
 	}
 
-	let activeTab: 'historial' | 'formulario' = $state('historial');
+	let activeTab: 'historial' | 'formulario' | 'mensual' = $state('historial');
 
-	function readTabFromUrl(url: string | undefined): 'historial' | 'formulario' {
+	function readTabFromUrl(url: string | undefined): 'historial' | 'formulario' | 'mensual' {
 		if (typeof window === 'undefined') return 'historial';
 		try {
 			const tab = new URL(url ?? window.location.href).searchParams.get('tab');
-			return tab === 'formulario' || tab === 'nueva' || tab === 'nuevo'
-				? 'formulario'
-				: 'historial';
+			if (tab === 'formulario' || tab === 'nueva' || tab === 'nuevo') return 'formulario';
+			if (tab === 'mensual' || tab === 'adicionales') return 'mensual';
+			return 'historial';
 		} catch {
 			return 'historial';
 		}
 	}
 
-	function setTab(tab: 'historial' | 'formulario', pushUrl = true) {
+	function setTab(tab: 'historial' | 'formulario' | 'mensual', pushUrl = true) {
 		activeTab = tab;
 		if (typeof window === 'undefined') return;
 		if (!pushUrl) return;
 		const url = new URL(window.location.href);
 		if (tab === 'historial') url.searchParams.delete('tab');
-		else url.searchParams.set('tab', 'nueva');
+		else if (tab === 'formulario') url.searchParams.set('tab', 'nueva');
+		else if (tab === 'mensual') url.searchParams.set('tab', 'mensual');
 		const search = url.searchParams.toString();
 		const newUrl = url.pathname + (search ? '?' + search : '') + url.hash;
 		window.history.replaceState(window.history.state, '', newUrl);
@@ -118,7 +121,90 @@
 	let filterMes = $state('');
 	let filterAnio = $state('');
 	let filterBusqueda = $state('');
+	let filterBusquedaInput = $state('');
 	let mostrarFiltros = $state(false);
+
+	// ── Sort toggle ──
+	// Ordena por fecha de creación (desc por defecto). Click en el header
+	// de la columna Fecha alterna entre desc y asc.
+	type SortKey = 'created_at' | 'placa' | 'anio' | 'mes' | 'total_pagar';
+	type SortDir = 'asc' | 'desc';
+	let sortKey: SortKey = $state('created_at');
+	let sortDir: SortDir = $state('desc');
+	function toggleSort(key: SortKey) {
+		if (sortKey === key) {
+			sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+		} else {
+			sortKey = key;
+			sortDir = key === 'placa' ? 'asc' : 'desc';
+		}
+	}
+
+	// ── IDs de liquidaciones recién creadas (socket) ──
+	// Set de IDs que se muestran con un badge "NUEVO" + bg llamativo.
+	// Se hidrata desde localStorage para que persistan tras refresh.
+	const STORAGE_KEY_NUEVAS = 'lt:nuevas_recientes';
+	const STORAGE_KEY_NUEVAS_TTL_MS = 1000 * 60 * 60 * 24; // 24h
+	let recienCreadas = $state<Set<string>>(new Set());
+	let highlightClearAt = $state<number>(0);
+
+	function loadRecienCreadasFromStorage() {
+		if (typeof window === 'undefined') return;
+		try {
+			const raw = window.localStorage.getItem(STORAGE_KEY_NUEVAS);
+			if (!raw) return;
+			const parsed = JSON.parse(raw) as Record<string, number>;
+			const now = Date.now();
+			const fresh = new Set<string>();
+			for (const [id, ts] of Object.entries(parsed || {})) {
+				if (typeof ts === 'number' && now - ts < STORAGE_KEY_NUEVAS_TTL_MS) {
+					fresh.add(id);
+				}
+			}
+			recienCreadas = fresh;
+			// Limpiar el storage de los ya vencidos
+			saveRecienCreadasToStorage();
+		} catch (e) {
+			console.warn('[lt-page] No se pudo cargar STORAGE_KEY_NUEVAS:', e);
+		}
+	}
+
+	function saveRecienCreadasToStorage() {
+		if (typeof window === 'undefined') return;
+		try {
+			const obj: Record<string, number> = {};
+			recienCreadas.forEach((id) => {
+				obj[id] = Date.now();
+			});
+			window.localStorage.setItem(STORAGE_KEY_NUEVAS, JSON.stringify(obj));
+		} catch (e) {
+			console.warn('[lt-page] No se pudo guardar STORAGE_KEY_NUEVAS:', e);
+		}
+	}
+
+	function markRecienCreada(id: string) {
+		if (!id) return;
+		recienCreadas = new Set([...recienCreadas, id]);
+		highlightClearAt = Date.now() + 60_000; // el highlight animado dura 60s
+		saveRecienCreadasToStorage();
+	}
+
+	// ── Debounce para el search input ──
+	// 1 segundo entre que el usuario deja de tipear y se dispara la query.
+	// Cancelamos cualquier timeout pendiente al cambiar el valor (incluido
+	// pegar/borrar). Al desmontar la página también cancelamos.
+	let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+	const SEARCH_DEBOUNCE_MS = 1000;
+
+	function onSearchInput(value: string) {
+		filterBusquedaInput = value;
+		if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+		searchDebounceTimer = setTimeout(() => {
+			filterBusqueda = value;
+			page = 1;
+			cargarHistorial();
+		}, SEARCH_DEBOUNCE_MS);
+	}
 
 	// Stats
 	let stats = $state({
@@ -133,6 +219,7 @@
 
 	onMount(async () => {
 		activeTab = readTabFromUrl($pageStore.url.toString());
+		loadRecienCreadasFromStorage();
 		await cargarHistorial();
 
 		// Refresca el historial cuando el editor (u otra pestaña) persiste
@@ -143,6 +230,14 @@
 		const socket = getSocket();
 		if (socket) {
 			socket.on('row:updated:global', onRowUpdatedGlobal);
+			// Cuando cualquier usuario crea una liquidación nueva (vía form
+			// Nueva), recibimos este evento. Marcamos la fila como "NUEVO" y
+			// refrescamos la lista en background para que aparezca de una vez.
+			socket.on('liquidacion-tercero:created', onLiquidacionTerceroCreated);
+			// Cuando se crea o elimina una liquidación MENSUAL, refrescar
+			// la lista y, si estamos en el tab mensual, recargar la cabecera.
+			socket.on('liquidacion-tercero-mensual:created', onLiquidacionMensualCreated);
+			socket.on('liquidacion-tercero-mensual:deleted', onLiquidacionMensualDeleted);
 		}
 	});
 
@@ -150,7 +245,11 @@
 		const socket = getSocket();
 		if (socket) {
 			socket.off('row:updated:global', onRowUpdatedGlobal);
+			socket.off('liquidacion-tercero:created', onLiquidacionTerceroCreated);
+			socket.off('liquidacion-tercero-mensual:created', onLiquidacionMensualCreated);
+			socket.off('liquidacion-tercero-mensual:deleted', onLiquidacionMensualDeleted);
 		}
+		if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
 	});
 
 	async function onRowUpdatedGlobal(payload: { id: string }) {
@@ -158,6 +257,36 @@
 		// reflejar los totales persistidos en backend. Si no, no hace nada
 		// (el siguiente load ya traerá los datos correctos).
 		if (historial.some((it) => it.id === payload.id)) {
+			await cargarHistorial();
+		}
+	}
+
+	async function onLiquidacionTerceroCreated(payload: { id: string; placa?: string }) {
+		// Marca el ID como recién creado y refresca la lista en background.
+		// Si la fila entra en la página actual (top de la lista por sort
+		// por defecto created_at desc) se mostrará resaltada. Si no, queda
+		// en localStorage y se mostrará en cuanto el usuario navegue/filtre.
+		markRecienCreada(payload.id);
+		// Solo recargamos si estamos en el tab de historial
+		if (activeTab === 'historial') {
+			await cargarHistorial();
+		}
+	}
+
+	async function onLiquidacionMensualCreated(payload: { id: string }) {
+		// Cuando un usuario genera un nuevo borrador mensual desde otro
+		// cliente, refrescamos la lista del tab historial (si está visible)
+		// o dejamos que el tab mensual lo recargue al activarse.
+		if (activeTab === 'historial') {
+			await cargarHistorial();
+		}
+		toast.info(`Otro usuario creó una liquidación mensual (${payload.id.slice(0, 8)}…)`, {
+			description: 'Recarga el tab "Mensual" para verla.'
+		});
+	}
+
+	async function onLiquidacionMensualDeleted(payload: { id: string }) {
+		if (activeTab === 'historial') {
 			await cargarHistorial();
 		}
 	}
@@ -172,8 +301,26 @@
 			if (filterBusqueda) params.busqueda = filterBusqueda;
 
 			const res = await liquidacionesTercerosDescuentosAPI.listarHistorial(params);
-			historial = res.items || [];
+			let items = res.items || [];
 			total = res.total || 0;
+
+			// Orden client-side (UX): el backend ya ordena, pero el sort
+			// toggle es per-columna, así que aplicamos el sort aquí para
+			// que el click sea instantáneo sin round-trip al backend.
+			items = [...items].sort((a: any, b: any) => {
+				const av = a?.[sortKey];
+				const bv = b?.[sortKey];
+				const dir = sortDir === 'asc' ? 1 : -1;
+				if (av == null && bv == null) return 0;
+				if (av == null) return 1;
+				if (bv == null) return -1;
+				if (typeof av === 'string' && typeof bv === 'string') {
+					return av.localeCompare(bv) * dir;
+				}
+				return (Number(av) - Number(bv)) * dir;
+			});
+
+			historial = items;
 
 			// Compute stats from all items (not paginated)
 			if (page === 1) {
@@ -221,10 +368,10 @@
 				label: 'Liquidada'
 			},
 			APROBADA: {
-				bg: 'rgba(249, 115, 22,0.10)',
+				bg: 'rgba(16,185,129,0.10)',
 				text: '#047857',
-				border: 'rgba(249, 115, 22,0.25)',
-				borderHex: 'rgba(249, 115, 22,0.35)',
+				border: 'rgba(16,185,129,0.25)',
+				borderHex: 'rgba(16,185,129,0.35)',
 				label: 'Aprobada'
 			},
 			FACTURADA: {
@@ -256,7 +403,7 @@
 		const map: Record<string, string> = {
 			BORRADOR: '#9ca3af',
 			LIQUIDADA: '#3b82f6',
-			APROBADA: '#f97316',
+			APROBADA: '#10b981',
 			FACTURADA: '#8b5cf6',
 			ANULADA: '#ef4444',
 			REEMPLAZADA: '#f59e0b'
@@ -274,21 +421,45 @@
 	);
 	let isAdmin = $derived(userAreas.includes('administracion'));
 
-	// State change
-	let estadoChanging = $state(false);
+	// State change — loading tracked per id para poder mostrar spinner
+	// en la fila exacta que se está procesando, sin bloquear las demás.
+	let estadoLoading = $state<Record<string, boolean>>({});
 	let anularModalOpen = $state(false);
 	let anularTargetId = $state('');
 	let anularMotivo = $state('');
 
+	const ESTADO_LOADING_MSG: Record<string, string> = {
+		LIQUIDADA: 'Marcando como liquidada…',
+		APROBADA: 'Aprobando liquidación…',
+		BORRADOR: 'Revirtiendo a borrador…',
+		ANULADA: 'Anulando liquidación…'
+	};
+
+	const ESTADO_SUCCESS_MSG: Record<string, string> = {
+		LIQUIDADA: 'Liquidación marcada como LIQUIDADA',
+		APROBADA: 'Liquidación aprobada',
+		BORRADOR: 'Liquidación revertida a BORRADOR',
+		ANULADA: 'Liquidación anulada'
+	};
+
 	async function cambiarEstado(id: string, estado: string, motivo?: string) {
-		estadoChanging = true;
+		if (estadoLoading[id]) return;
+
+		estadoLoading[id] = true;
+		const toastId = toast.loading(
+			ESTADO_LOADING_MSG[estado] || 'Actualizando estado…'
+		);
+
 		try {
 			await liquidacionesTercerosDescuentosAPI.cambiarEstado(id, estado, motivo);
 			await cargarHistorial();
+			toast.success(ESTADO_SUCCESS_MSG[estado] || 'Estado actualizado', {
+				id: toastId
+			});
 		} catch (err: any) {
-			alert(err.message || 'Error al cambiar estado');
+			toast.error(err.message || 'Error al cambiar estado', { id: toastId });
 		} finally {
-			estadoChanging = false;
+			estadoLoading[id] = false;
 		}
 	}
 
@@ -367,10 +538,15 @@
 	}
 
 	async function limpiarFiltros() {
+		if (searchDebounceTimer) {
+			clearTimeout(searchDebounceTimer);
+			searchDebounceTimer = null;
+		}
 		filterPlaca = '';
 		filterMes = '';
 		filterAnio = '';
 		filterBusqueda = '';
+		filterBusquedaInput = '';
 		page = 1;
 		await cargarHistorial();
 	}
@@ -383,7 +559,7 @@
 </script>
 
 <svelte:head>
-	<title>Liquidaciones de Terceros · Cotransmeq</title>
+	<title>Liquidaciones de Terceros · Transmeralda</title>
 </svelte:head>
 
 <svelte:window
@@ -445,7 +621,7 @@
 						}}
 						class="apple-transition flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[12px] font-semibold
 							{activeTab === 'historial'
-							? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-sm'
+							? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-sm'
 							: 'text-[#4a4a4a] hover:bg-[#faf7f2]'}"
 					>
 						<svg
@@ -467,7 +643,7 @@
 						onclick={() => setTab('formulario')}
 						class="apple-transition flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[12px] font-semibold
 							{activeTab === 'formulario'
-							? 'bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-sm'
+							? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-sm'
 							: 'text-[#4a4a4a] hover:bg-[#faf7f2]'}"
 					>
 						<svg
@@ -481,21 +657,35 @@
 						</svg>
 						Nueva
 					</button>
+					<button
+						onclick={() => setTab('mensual')}
+						class="apple-transition flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-[12px] font-semibold
+							{activeTab === 'mensual'
+							? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-sm'
+							: 'text-[#4a4a4a] hover:bg-[#faf7f2]'}"
+					>
+						<svg
+							class="h-3.5 w-3.5"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+							stroke-width="2"
+						>
+							<path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+						</svg>
+						Mensual
+					</button>
 				</div>
 
-				<!-- Búsqueda -->
+				<!-- Búsqueda — debounced 1s -->
 				<div class="filter-field" style="width:auto">
 					<div class="relative">
 						<input
 							type="text"
-							bind:value={filterBusqueda}
+							value={filterBusquedaInput}
+							oninput={(e) => onSearchInput((e.currentTarget as HTMLInputElement).value)}
 							placeholder="Buscar placa, tercero, consecutivo…"
 							class="input-glow apple-transition w-72 rounded-xl border border-[rgba(0,0,0,0.12)] bg-white/80 py-2.5 pr-4 pl-10 text-sm text-[#1a1a1a] placeholder:text-[#9a9a9a]"
-							onkeydown={(e) => {
-								if (e.key === 'Enter') {
-									cargarHistorial();
-								}
-							}}
 						/>
 						<svg
 							class="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[#9a9a9a]"
@@ -518,7 +708,7 @@
 					onclick={() => (mostrarFiltros = !mostrarFiltros)}
 					class="apple-transition flex items-center gap-1.5 rounded-xl border px-3.5 py-2.5 text-[13px] font-semibold
 						{mostrarFiltros
-						? 'border-[rgba(249, 115, 22,0.30)] bg-[rgba(249, 115, 22,0.08)] text-[#065f46]'
+						? 'border-[rgba(16,185,129,0.30)] bg-[rgba(16,185,129,0.08)] text-[#065f46]'
 						: 'border-[rgba(0,0,0,0.12)] bg-white text-[#1a1a1a] hover:border-[rgba(0,0,0,0.20)] hover:bg-[#faf7f2]'}"
 				>
 					<svg
@@ -574,11 +764,9 @@
 						<input
 							id="filter-busqueda"
 							type="search"
-							bind:value={filterBusqueda}
+							value={filterBusquedaInput}
+							oninput={(e) => onSearchInput((e.currentTarget as HTMLInputElement).value)}
 							placeholder="Placa, tercero, consecutivo…"
-							onkeydown={(e) => {
-								if (e.key === 'Enter') cargarHistorial();
-							}}
 						/>
 					</div>
 				</div>
@@ -691,15 +879,51 @@
 						<thead>
 							<tr class="table-header sticky top-0 z-10 backdrop-blur-sm">
 								<th class="text-left">Consecutivo</th>
-								<th class="text-left">Placa</th>
+								<th class="text-left">
+									<button
+										type="button"
+										class="apple-transition inline-flex items-center gap-1 hover:text-[#1a1a1a]"
+										onclick={() => toggleSort('placa')}
+									>
+										Placa
+										<svg class="h-3 w-3" viewBox="0 0 8 12" fill="currentColor" style="opacity:{sortKey === 'placa' ? 1 : 0.3};transform:rotate({sortKey === 'placa' && sortDir === 'asc' ? 180 : 0}deg);transition:transform 0.2s,opacity 0.2s"><path d="M4 0l4 4H0z" /><path d="M4 12L0 8h8z" /></svg>
+									</button>
+								</th>
 								<th class="text-left">Propietario</th>
-								<th class="text-left">Período</th>
+								<th class="text-left">
+									<button
+										type="button"
+										class="apple-transition inline-flex items-center gap-1 hover:text-[#1a1a1a]"
+										onclick={() => toggleSort('anio')}
+									>
+										Período
+										<svg class="h-3 w-3" viewBox="0 0 8 12" fill="currentColor" style="opacity:{sortKey === 'anio' ? 1 : 0.3};transform:rotate({sortKey === 'anio' && sortDir === 'asc' ? 180 : 0}deg);transition:transform 0.2s,opacity 0.2s"><path d="M4 0l4 4H0z" /><path d="M4 12L0 8h8z" /></svg>
+									</button>
+								</th>
 								<th class="text-right">V/Liquidar</th>
 								<th class="text-right">Descuentos</th>
-								<th class="text-right">Total Pagar</th>
+								<th class="text-right">
+									<button
+										type="button"
+										class="apple-transition inline-flex items-center gap-1 hover:text-[#1a1a1a]"
+										onclick={() => toggleSort('total_pagar')}
+									>
+										Total Pagar
+										<svg class="h-3 w-3" viewBox="0 0 8 12" fill="currentColor" style="opacity:{sortKey === 'total_pagar' ? 1 : 0.3};transform:rotate({sortKey === 'total_pagar' && sortDir === 'asc' ? 180 : 0}deg);transition:transform 0.2s,opacity 0.2s"><path d="M4 0l4 4H0z" /><path d="M4 12L0 8h8z" /></svg>
+									</button>
+								</th>
 								<th class="text-center">Estado</th>
 								<th class="text-left">Creado por</th>
-								<th class="text-left">Fecha</th>
+								<th class="text-left">
+									<button
+										type="button"
+										class="apple-transition inline-flex items-center gap-1 hover:text-[#1a1a1a]"
+										onclick={() => toggleSort('created_at')}
+									>
+										Fecha
+										<svg class="h-3 w-3" viewBox="0 0 8 12" fill="currentColor" style="opacity:{sortKey === 'created_at' ? 1 : 0.3};transform:rotate({sortKey === 'created_at' && sortDir === 'asc' ? 180 : 0}deg);transition:transform 0.2s,opacity 0.2s"><path d="M4 0l4 4H0z" /><path d="M4 12L0 8h8z" /></svg>
+									</button>
+								</th>
 								<th class="text-center">Versión</th>
 								<th
 									class="sticky right-0 text-center"
@@ -712,18 +936,36 @@
 							{#each historial as item, index (item.id)}
 								{@const badge = getEstadoBadge(item.estado || 'BORRADOR')}
 								{@const totalDesc = item.total_descuentos || 0}
+								{@const rowBusy = !!estadoLoading[item.id]}
+								{@const isNuevo = recienCreadas.has(item.id)}
+								{@const highlightActive = isNuevo && Date.now() < highlightClearAt}
 								<tr
-									class="table-row"
+									class="table-row transition-opacity duration-200"
+									class:opacity-55={rowBusy}
+									class:pointer-events-none={rowBusy}
+									class:lt-row-new={isNuevo}
+									class:lt-row-new-pulse={highlightActive}
 									in:fly={{ y: 6, duration: 220, delay: index * 18, easing: quintOut }}
 								>
 									<td class="px-3.5 py-2.5">
-										{#if item.consecutivo}
-											<span class="code-badge" title="Consecutivo de la liquidación final">
-												{item.consecutivo}
-											</span>
-										{:else}
-											<span class="text-[11px] text-[#9a9a9a] italic">sin consecutivo</span>
-										{/if}
+										<div class="flex items-center gap-1.5">
+											{#if item.consecutivo}
+												<span class="code-badge" title="Consecutivo de la liquidación final">
+													{item.consecutivo}
+												</span>
+											{:else}
+												<span class="text-[11px] text-[#9a9a9a] italic">sin consecutivo</span>
+											{/if}
+											{#if isNuevo}
+												<span
+													class="lt-nuevo-badge"
+													title="Liquidación recién registrada"
+												>
+													<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+													NUEVO
+												</span>
+											{/if}
+										</div>
 									</td>
 									<td class="px-3.5 py-2.5">
 										<span
@@ -770,10 +1012,34 @@
 										>
 									</td>
 									<td class="px-3.5 py-2.5 text-center">
-										<span
-											class="status-pill {badge.bg} {badge.text}"
-											style="border:1px solid {badge.borderHex}">{badge.label}</span
-										>
+										<div class="flex items-center justify-center gap-1.5">
+											{#if rowBusy}
+												<svg
+													class="h-3.5 w-3.5 animate-spin"
+													style="color:#047857"
+													fill="none"
+													viewBox="0 0 24 24"
+												>
+													<circle
+														class="opacity-25"
+														cx="12"
+														cy="12"
+														r="10"
+														stroke="currentColor"
+														stroke-width="4"
+													></circle>
+													<path
+														class="opacity-75"
+														fill="currentColor"
+														d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+													></path>
+												</svg>
+											{/if}
+											<span
+												class="status-pill {badge.bg} {badge.text}"
+												style="border:1px solid {badge.borderHex}">{badge.label}</span
+											>
+										</div>
 									</td>
 									<td class="px-3.5 py-2.5">
 										{#if item.creado_por}
@@ -813,7 +1079,7 @@
 									>
 										<div class="flex items-center justify-center gap-0.5">
 											<button
-												class="apple-transition rounded-md p-1.5 text-[#9a9a9a] hover:bg-[rgba(249, 115, 22,0.08)] hover:text-[#ea580c]"
+												class="apple-transition rounded-md p-1.5 text-[#9a9a9a] hover:bg-[rgba(16,185,129,0.08)] hover:text-[#059669]"
 												title="Ver PDF"
 												onclick={() => abrirPreview(item)}
 											>
@@ -857,75 +1123,125 @@
 													</svg>
 												</button>
 												<button
-													class="apple-transition rounded-md p-1.5 text-[#9a9a9a] hover:bg-[rgba(249, 115, 22,0.08)] hover:text-[#ea580c]"
+													class="apple-transition rounded-md p-1.5 text-[#9a9a9a] hover:bg-[rgba(16,185,129,0.08)] hover:text-[#059669] disabled:cursor-not-allowed disabled:opacity-40"
 													title="Liquidar"
-													disabled={estadoChanging}
+													disabled={estadoLoading[item.id]}
 													onclick={() => cambiarEstado(item.id, 'LIQUIDADA')}
 												>
-													<svg
-														class="h-4 w-4"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-														stroke-width="1.8"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-														/>
-													</svg>
+													{#if estadoLoading[item.id]}
+														<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+															<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+															<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+														</svg>
+													{:else}
+														<svg
+															class="h-4 w-4"
+															fill="none"
+															stroke="currentColor"
+															viewBox="0 0 24 24"
+															stroke-width="1.8"
+														>
+															<path
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+															/>
+														</svg>
+													{/if}
 												</button>
 											{/if}
 											{#if (item.estado || 'BORRADOR') === 'LIQUIDADA' && isAdmin}
 												<button
-													class="apple-transition rounded-md p-1.5 text-[#9a9a9a] hover:bg-[rgba(249, 115, 22,0.08)] hover:text-[#ea580c]"
+													class="apple-transition rounded-md p-1.5 text-[#9a9a9a] hover:bg-[rgba(16,185,129,0.08)] hover:text-[#059669] disabled:cursor-not-allowed disabled:opacity-40"
 													title="Aprobar"
-													disabled={estadoChanging}
+													disabled={estadoLoading[item.id]}
 													onclick={() => cambiarEstado(item.id, 'APROBADA')}
 												>
-													<svg
-														class="h-4 w-4"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-														stroke-width="1.8"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M5 13l4 4L19 7"
-														/>
-													</svg>
+													{#if estadoLoading[item.id]}
+														<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+															<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+															<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+														</svg>
+													{:else}
+														<svg
+															class="h-4 w-4"
+															fill="none"
+															stroke="currentColor"
+															viewBox="0 0 24 24"
+															stroke-width="1.8"
+														>
+															<path
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																d="M5 13l4 4L19 7"
+															/>
+														</svg>
+													{/if}
 												</button>
 											{/if}
 											{#if (item.estado || 'BORRADOR') === 'LIQUIDADA'}
 												<button
-													class="apple-transition rounded-md p-1.5 text-[#9a9a9a] hover:bg-[rgba(245,158,11,0.10)] hover:text-[#b45309]"
+													class="apple-transition rounded-md p-1.5 text-[#9a9a9a] hover:bg-[rgba(245,158,11,0.10)] hover:text-[#b45309] disabled:cursor-not-allowed disabled:opacity-40"
 													title="Revertir a Borrador"
-													disabled={estadoChanging}
+													disabled={estadoLoading[item.id]}
 													onclick={() => cambiarEstado(item.id, 'BORRADOR')}
 												>
-													<svg
-														class="h-4 w-4"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-														stroke-width="1.8"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
-														/>
-													</svg>
+													{#if estadoLoading[item.id]}
+														<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+															<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+															<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+														</svg>
+													{:else}
+														<svg
+															class="h-4 w-4"
+															fill="none"
+															stroke="currentColor"
+															viewBox="0 0 24 24"
+															stroke-width="1.8"
+														>
+															<path
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6"
+															/>
+														</svg>
+													{/if}
+												</button>
+											{/if}
+											{#if (item.estado || 'BORRADOR') === 'APROBADA' && isAdmin}
+												<button
+													class="apple-transition rounded-md p-1.5 text-[#9a9a9a] hover:bg-[rgba(245,158,11,0.10)] hover:text-[#b45309] disabled:cursor-not-allowed disabled:opacity-40"
+													title="Revertir a Liquidada (solo administradores)"
+													disabled={estadoLoading[item.id]}
+													onclick={() => cambiarEstado(item.id, 'LIQUIDADA')}
+												>
+													{#if estadoLoading[item.id]}
+														<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+															<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+															<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+														</svg>
+													{:else}
+														<svg
+															class="h-4 w-4"
+															fill="none"
+															stroke="currentColor"
+															viewBox="0 0 24 24"
+															stroke-width="1.8"
+														>
+															<path
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3"
+															/>
+														</svg>
+													{/if}
 												</button>
 											{/if}
 											{#if !['ANULADA', 'FACTURADA', 'REEMPLAZADA'].includes(item.estado || 'BORRADOR')}
 												<button
-													class="apple-transition rounded-md p-1.5 text-[#9a9a9a] hover:bg-[rgba(220,38,38,0.08)] hover:text-[#dc2626]"
+													class="apple-transition rounded-md p-1.5 text-[#9a9a9a] hover:bg-[rgba(220,38,38,0.08)] hover:text-[#dc2626] disabled:cursor-not-allowed disabled:opacity-40"
 													title="Anular"
-													disabled={estadoChanging}
+													disabled={estadoLoading[item.id]}
 													onclick={() => abrirAnular(item.id)}
 												>
 													<svg
@@ -944,9 +1260,9 @@
 												</button>
 											{/if}
 											<button
-												class="apple-transition rounded-md p-1.5 text-[#9a9a9a] hover:bg-[rgba(0,0,0,0.05)] hover:text-[#1a1a1a]"
+												class="apple-transition rounded-md p-1.5 text-[#9a9a9a] hover:bg-[rgba(0,0,0,0.05)] hover:text-[#1a1a1a] disabled:cursor-not-allowed disabled:opacity-40"
 												title="Eliminar"
-												disabled={estadoChanging}
+												disabled={estadoLoading[item.id]}
 												onclick={() => abrirEliminar(item)}
 											>
 												<svg
@@ -977,8 +1293,15 @@
 						{#each historial as item, index (item.id)}
 							{@const badge = getEstadoBadge(item.estado || 'BORRADOR')}
 							{@const totalDesc = item.total_descuentos || 0}
+							{@const rowBusy = !!estadoLoading[item.id]}
+							{@const isNuevo = recienCreadas.has(item.id)}
+							{@const highlightActive = isNuevo && Date.now() < highlightClearAt}
 							<div
-								class="relative flex table-row gap-0"
+								class="relative flex table-row gap-0 transition-opacity duration-200"
+								class:opacity-55={rowBusy}
+								class:pointer-events-none={rowBusy}
+								class:lt-row-new={isNuevo}
+								class:lt-row-new-pulse={highlightActive}
 								in:fly={{ y: 6, duration: 220, delay: index * 18, easing: quintOut }}
 							>
 								<div
@@ -994,18 +1317,53 @@
 											>
 												{fmtPlaca(item.placa)}
 											</p>
-											{#if item.consecutivo}
-												<span class="code-badge mt-1 inline-block">{item.consecutivo}</span>
-											{/if}
+											<div class="mt-1 flex flex-wrap items-center gap-1.5">
+												{#if item.consecutivo}
+													<span class="code-badge">{item.consecutivo}</span>
+												{/if}
+												{#if isNuevo}
+													<span
+														class="lt-nuevo-badge"
+														title="Liquidación recién registrada"
+													>
+														<span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+														NUEVO
+													</span>
+												{/if}
+											</div>
 											<p class="mt-1 truncate text-[12px] text-[#6b6b6b]">
 												{item.tercero?.nombre_completo || 'Sin propietario'}
 											</p>
 										</div>
-										<span
-											class="status-pill flex-shrink-0"
-											style="background:{badge.bg};color:{badge.text};border:1px solid {badge.borderHex}"
-											>{badge.label}</span
-										>
+										<div class="flex flex-shrink-0 items-center gap-1.5">
+											{#if rowBusy}
+												<svg
+													class="h-3.5 w-3.5 animate-spin"
+													style="color:#047857"
+													fill="none"
+													viewBox="0 0 24 24"
+												>
+													<circle
+														class="opacity-25"
+														cx="12"
+														cy="12"
+														r="10"
+														stroke="currentColor"
+														stroke-width="4"
+													></circle>
+													<path
+														class="opacity-75"
+														fill="currentColor"
+														d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+													></path>
+												</svg>
+											{/if}
+											<span
+												class="status-pill"
+												style="background:{badge.bg};color:{badge.text};border:1px solid {badge.borderHex}"
+												>{badge.label}</span
+											>
+										</div>
 									</div>
 									<div class="mb-2 flex items-center justify-between gap-2">
 										<div>
@@ -1043,7 +1401,7 @@
 										</div>
 										<div class="flex items-center gap-0.5">
 											<button
-												class="apple-transition rounded-md p-1.5 text-[#9a9a9a] hover:bg-[rgba(249, 115, 22,0.08)] hover:text-[#ea580c]"
+												class="apple-transition rounded-md p-1.5 text-[#9a9a9a] hover:bg-[rgba(16,185,129,0.08)] hover:text-[#059669]"
 												title="Ver PDF"
 												onclick={() => abrirPreview(item)}
 											>
@@ -1084,9 +1442,49 @@
 													>
 												</button>
 											{/if}
+											{#if (item.estado || 'BORRADOR') === 'APROBADA' && isAdmin}
+												<button
+													class="apple-transition rounded-md p-1.5 text-[#9a9a9a] hover:bg-[rgba(245,158,11,0.10)] hover:text-[#b45309] disabled:cursor-not-allowed disabled:opacity-40"
+													title="Revertir a Liquidada (solo administradores)"
+													disabled={estadoLoading[item.id]}
+													onclick={() => cambiarEstado(item.id, 'LIQUIDADA')}
+												>
+													{#if estadoLoading[item.id]}
+														<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+															<circle
+																class="opacity-25"
+																cx="12"
+																cy="12"
+																r="10"
+																stroke="currentColor"
+																stroke-width="4"
+															></circle>
+															<path
+																class="opacity-75"
+																fill="currentColor"
+																d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+															></path>
+														</svg>
+													{:else}
+														<svg
+															class="h-4 w-4"
+															fill="none"
+															stroke="currentColor"
+															viewBox="0 0 24 24"
+															stroke-width="1.8"
+															><path
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3"
+															/></svg
+														>
+													{/if}
+												</button>
+											{/if}
 											<button
-												class="apple-transition rounded-md p-1.5 text-[#9a9a9a] hover:bg-[rgba(220,38,38,0.08)] hover:text-[#dc2626]"
+												class="apple-transition rounded-md p-1.5 text-[#9a9a9a] hover:bg-[rgba(220,38,38,0.08)] hover:text-[#dc2626] disabled:cursor-not-allowed disabled:opacity-40"
 												title="Eliminar"
+												disabled={estadoLoading[item.id]}
 												onclick={() => abrirEliminar(item)}
 											>
 												<svg
@@ -1150,6 +1548,16 @@
 			<div class="p-6">
 				<LiquidacionTerceroForm />
 			</div>
+		</div>
+	{/if}
+
+	<!-- TAB: MENSUAL — adicionales por mes -->
+	{#if activeTab === 'mensual'}
+		<div
+			class="glass soft-shadow flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200/50"
+			in:fly={{ y: 12, duration: 400, delay: 150, easing: quintOut }}
+		>
+			<TabAdicionalesMensual />
 		</div>
 	{/if}
 </div>

@@ -241,7 +241,7 @@
 	}
 
 	function getTipoColor(tipo: string) {
-		return tipo === TipoCliente.EMPRESA ? '#3b82f6' : '#f97316';
+		return tipo === TipoCliente.EMPRESA ? '#3b82f6' : '#10b981';
 	}
 
 	onMount(() => {
@@ -263,7 +263,7 @@
 </script>
 
 <svelte:head>
-	<title>Clientes — Cotransmeq</title>
+	<title>Clientes — Transmeralda</title>
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col gap-4 p-6" in:fade={{ duration: 400 }}>
@@ -274,7 +274,7 @@
 			<div class="flex items-center gap-3">
 				<div
 					class="brand-gradient flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
-					style="box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);"
+					style="box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);"
 				>
 					<svg
 						class="h-5 w-5 text-white"
@@ -297,7 +297,7 @@
 						</h1>
 						<span
 							class="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
-							style="background: rgba(249, 115, 22,0.08); color: var(--emerald-800);"
+							style="background: rgba(16,185,129,0.08); color: var(--emerald-800);"
 						>
 							<span
 								class="h-1.5 w-1.5 animate-pulse rounded-full"
@@ -326,7 +326,7 @@
 							style="border-color: {mostrarOcultos
 								? 'var(--emerald-500)'
 								: 'var(--border-default)'}; background-color: {mostrarOcultos
-								? 'rgba(249, 115, 22,0.04)'
+								? 'rgba(16,185,129,0.04)'
 								: 'white'}; color: {mostrarOcultos ? 'var(--emerald-600)' : 'var(--text-muted)'};"
 						>
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
@@ -375,7 +375,7 @@
 						: 'var(--border-default)'}; color: {mostrarFiltros
 						? 'var(--emerald-700)'
 						: 'var(--text-secondary)'}; background-color: {mostrarFiltros
-						? 'rgba(249, 115, 22,0.04)'
+						? 'rgba(16,185,129,0.04)'
 						: 'white'};"
 				>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
@@ -575,7 +575,7 @@
 							class="list-card"
 							style="border-left: 4px solid {getTipoColor(cliente.tipo)};
 								background-color: {clientesSeleccionados.has(cliente.id)
-								? 'rgba(249, 115, 22, 0.04)'
+								? 'rgba(16, 185, 129, 0.04)'
 								: 'var(--bg-surface)'};
 								border-color: {clientesSeleccionados.has(cliente.id) ? 'var(--emerald-500)' : 'var(--border-subtle)'};
 								border-left-color: {getTipoColor(cliente.tipo)};"
@@ -590,7 +590,7 @@
 									type="checkbox"
 									checked={clientesSeleccionados.has(cliente.id)}
 									on:click|stopPropagation={(e) => toggleSeleccion(cliente.id, index, e)}
-									class="rounded text-orange-600 focus:ring-orange-500"
+									class="rounded text-emerald-600 focus:ring-emerald-500"
 									style="border-color: var(--border-default);"
 								/>
 							</div>
@@ -689,7 +689,7 @@
 								<button
 									on:click={() => goto(`/dashboard/clientes/${cliente.id}`)}
 									class="apple-transition rounded-md p-1.5"
-									style="color: var(--emerald-600); background-color: rgba(249, 115, 22, 0.06);"
+									style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
 									title="Ver detalle"
 								>
 									<svg

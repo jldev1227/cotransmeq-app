@@ -253,7 +253,7 @@
 
 	function getEstadoBadgeClass(estado: string): string {
 		switch (estado?.toUpperCase()) {
-			case 'ACTIVO': return 'bg-orange-100 text-orange-800 border border-orange-200';
+			case 'ACTIVO': return 'bg-green-100 text-green-800 border border-green-200';
 			case 'INACTIVO': return 'bg-gray-100 text-gray-800 border border-gray-200';
 			case 'VACACIONES': return 'bg-blue-100 text-blue-800 border border-blue-200';
 			case 'INCAPACITADO': return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
@@ -293,24 +293,24 @@
 		</div>
 
 		{#if isLoading}
-			<div class="flex h-64 items-center justify-center"><div class="h-10 w-10 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"></div></div>
+			<div class="flex h-64 items-center justify-center"><div class="h-10 w-10 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div></div>
 		{:else if conductor}
 			<div class="rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
 				<!-- Photo Header Section -->
-				<div class="bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-8">
+				<div class="bg-gradient-to-r from-emerald-500 to-emerald-600 px-6 py-8">
 					<div class="flex flex-col items-center gap-6 md:flex-row md:items-start">
 						<div class="flex-shrink-0">
 							{#if conductor.foto_signed_url}
 								<img src={conductor.foto_signed_url} alt={conductor.nombre} class="h-32 w-32 rounded-xl border-4 border-white object-cover shadow-lg" />
 							{:else}
-								<div class="flex h-32 w-32 items-center justify-center rounded-xl border-4 border-white bg-orange-700 text-4xl font-bold text-white shadow-lg">
+								<div class="flex h-32 w-32 items-center justify-center rounded-xl border-4 border-white bg-emerald-700 text-4xl font-bold text-white shadow-lg">
 									{getInitials(conductor.nombre, conductor.apellido)}
 								</div>
 							{/if}
 						</div>
 						<div class="flex-1 text-center md:text-left">
-							<h2 class="text-2xl font-bold text-white uppercase">{conductor.nombre} {conductor.apellido}</h2>
-							<p class="mt-1 text-orange-50">{conductor.cargo || 'Conductor'}</p>
+							<h2 class="text-2xl font-bold text-white">{conductor.nombre} {conductor.apellido}</h2>
+							<p class="mt-1 text-emerald-50">{conductor.cargo || 'Conductor'}</p>
 							<div class="mt-3 flex flex-wrap justify-center gap-2 md:justify-start">
 								<span class={`rounded-full px-3 py-1 text-xs font-medium ${getEstadoBadgeClass(conductor.estado)} bg-white`}>{conductor.estado}</span>
 								{#if conductor.sede_trabajo}
@@ -341,7 +341,7 @@
 									</button>
 								{/if}
 								{#if !isEditing}
-									<button on:click={() => (isEditing = true)} class="inline-flex items-center rounded-lg border border-transparent bg-white px-4 py-2 text-sm font-medium text-orange-600 shadow-sm transition-colors hover:bg-orange-700">
+									<button on:click={() => (isEditing = true)} class="inline-flex items-center rounded-lg border border-transparent bg-white px-4 py-2 text-sm font-medium text-emerald-600 shadow-sm transition-colors hover:bg-emerald-700">
 										<svg class="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
 										Editar
 									</button>
@@ -355,8 +355,8 @@
 				<div class="border-b border-gray-200 bg-white">
 					<nav class="-mb-px flex overflow-x-auto">
 						{#each tabs as tab}
-							<button type="button" on:click={() => (activeTab = tab.id)} class={`group inline-flex items-center border-b-2 px-6 py-4 text-sm font-medium whitespace-nowrap transition-all ${activeTab === tab.id ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>
-								<svg class={`mr-2 -ml-0.5 h-5 w-5 ${activeTab === tab.id ? 'text-orange-500' : 'text-gray-400 group-hover:text-gray-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={tab.icon} /></svg>
+							<button type="button" on:click={() => (activeTab = tab.id)} class={`group inline-flex items-center border-b-2 px-6 py-4 text-sm font-medium whitespace-nowrap transition-all ${activeTab === tab.id ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}`}>
+								<svg class={`mr-2 -ml-0.5 h-5 w-5 ${activeTab === tab.id ? 'text-emerald-500' : 'text-gray-400 group-hover:text-gray-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d={tab.icon} /></svg>
 								{tab.label}
 							</button>
 						{/each}
@@ -368,63 +368,63 @@
 					{#if activeTab === 'personal'}
 						<div transition:fade={{ duration: 200 }} class="grid grid-cols-1 gap-6 md:grid-cols-2">
 							<div><label for="nombre" class="mb-1 block text-sm font-medium text-gray-700">Nombre <span class="text-red-500">*</span></label>
-								<input id="nombre" type="text" bind:value={formData.nombre} disabled={!isEditing} required placeholder="Ej: Juan" class="block w-full rounded-lg border border-gray-300 px-3 py-2 transition-colors focus:border-orange-500 disabled:bg-gray-50" /></div>
+								<input id="nombre" type="text" bind:value={formData.nombre} disabled={!isEditing} required placeholder="Ej: Juan" class="block w-full rounded-lg border border-gray-300 px-3 py-2 transition-colors focus:border-emerald-500 disabled:bg-gray-50" /></div>
 							<div><label for="apellido" class="mb-1 block text-sm font-medium text-gray-700">Apellido <span class="text-red-500">*</span></label>
-								<input id="apellido" type="text" bind:value={formData.apellido} disabled={!isEditing} required placeholder="Ej: Pérez" class="block w-full rounded-lg border border-gray-300 px-3 py-2 transition-colors focus:border-orange-500 disabled:bg-gray-50" /></div>
+								<input id="apellido" type="text" bind:value={formData.apellido} disabled={!isEditing} required placeholder="Ej: Pérez" class="block w-full rounded-lg border border-gray-300 px-3 py-2 transition-colors focus:border-emerald-500 disabled:bg-gray-50" /></div>
 							<div><label for="tipo_identificacion" class="mb-1 block text-sm font-medium text-gray-700">Tipo de Identificación <span class="text-red-500">*</span></label>
-								<select id="tipo_identificacion" bind:value={formData.tipo_identificacion} disabled={!isEditing} required class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 disabled:bg-gray-50"><option value="CC">Cédula de Ciudadanía</option><option value="CE">Cédula de Extranjería</option><option value="PA">Pasaporte</option></select></div>
+								<select id="tipo_identificacion" bind:value={formData.tipo_identificacion} disabled={!isEditing} required class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 disabled:bg-gray-50"><option value="CC">Cédula de Ciudadanía</option><option value="CE">Cédula de Extranjería</option><option value="PA">Pasaporte</option></select></div>
 							<div><label for="numero_identificacion" class="mb-1 block text-sm font-medium text-gray-700">Número de Identificación <span class="text-red-500">*</span></label>
-								<input id="numero_identificacion" type="text" bind:value={formData.numero_identificacion} disabled={!isEditing} required placeholder="Ej: 12345678" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 disabled:bg-gray-50" /></div>
+								<input id="numero_identificacion" type="text" bind:value={formData.numero_identificacion} disabled={!isEditing} required placeholder="Ej: 12345678" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 disabled:bg-gray-50" /></div>
 							<div><label for="email" class="mb-1 block text-sm font-medium text-gray-700">Email</label>
-								<input id="email" type="email" bind:value={formData.email} disabled={!isEditing} placeholder="Ej: juan.perez@email.com" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 disabled:bg-gray-50" /></div>
+								<input id="email" type="email" bind:value={formData.email} disabled={!isEditing} placeholder="Ej: juan.perez@email.com" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 disabled:bg-gray-50" /></div>
 							<div><label for="telefono" class="mb-1 block text-sm font-medium text-gray-700">Teléfono</label>
-								<input id="telefono" type="tel" bind:value={formData.telefono} disabled={!isEditing} placeholder="Ej: 310 123 4567" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 disabled:bg-gray-50" /></div>
+								<input id="telefono" type="tel" bind:value={formData.telefono} disabled={!isEditing} placeholder="Ej: 310 123 4567" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 disabled:bg-gray-50" /></div>
 							<div><label for="fecha_nacimiento" class="mb-1 block text-sm font-medium text-gray-700">Fecha de Nacimiento</label>
-								<input id="fecha_nacimiento" type="date" bind:value={formData.fecha_nacimiento} disabled={!isEditing} class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 disabled:bg-gray-50" /></div>
+								<input id="fecha_nacimiento" type="date" bind:value={formData.fecha_nacimiento} disabled={!isEditing} class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 disabled:bg-gray-50" /></div>
 							<div><label for="genero" class="mb-1 block text-sm font-medium text-gray-700">Género</label>
-								<select id="genero" bind:value={formData.genero} disabled={!isEditing} class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 disabled:bg-gray-50"><option value="">Seleccionar</option><option value="M">Masculino</option><option value="F">Femenino</option><option value="Otro">Otro</option></select></div>
+								<select id="genero" bind:value={formData.genero} disabled={!isEditing} class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 disabled:bg-gray-50"><option value="">Seleccionar</option><option value="M">Masculino</option><option value="F">Femenino</option><option value="Otro">Otro</option></select></div>
 							<div><label for="tipo_sangre" class="mb-1 block text-sm font-medium text-gray-700">Tipo de Sangre</label>
-								<select id="tipo_sangre" bind:value={formData.tipo_sangre} disabled={!isEditing} class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 disabled:bg-gray-50"><option value="">Seleccionar</option><option value="A_POSITIVO">A+</option><option value="A_NEGATIVO">A-</option><option value="B_POSITIVO">B+</option><option value="B_NEGATIVO">B-</option><option value="AB_POSITIVO">AB+</option><option value="AB_NEGATIVO">AB-</option><option value="O_POSITIVO">O+</option><option value="O_NEGATIVO">O-</option></select></div>
+								<select id="tipo_sangre" bind:value={formData.tipo_sangre} disabled={!isEditing} class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 disabled:bg-gray-50"><option value="">Seleccionar</option><option value="A_POSITIVO">A+</option><option value="A_NEGATIVO">A-</option><option value="B_POSITIVO">B+</option><option value="B_NEGATIVO">B-</option><option value="AB_POSITIVO">AB+</option><option value="AB_NEGATIVO">AB-</option><option value="O_POSITIVO">O+</option><option value="O_NEGATIVO">O-</option></select></div>
 							<div class="md:col-span-2"><label for="direccion" class="mb-1 block text-sm font-medium text-gray-700">Dirección</label>
-								<input id="direccion" type="text" bind:value={formData.direccion} disabled={!isEditing} placeholder="Ej: Calle 123 # 45-67" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 disabled:bg-gray-50" /></div>
+								<input id="direccion" type="text" bind:value={formData.direccion} disabled={!isEditing} placeholder="Ej: Calle 123 # 45-67" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 disabled:bg-gray-50" /></div>
 						</div>
 					{:else if activeTab === 'laboral'}
 						<div transition:fade={{ duration: 200 }} class="grid grid-cols-1 gap-6 md:grid-cols-2">
 							<div><label for="cargo" class="mb-1 block text-sm font-medium text-gray-700">Cargo</label>
-								<input id="cargo" type="text" bind:value={formData.cargo} disabled={!isEditing} placeholder="Ej: CONDUCTOR" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 disabled:bg-gray-50" /></div>
+								<input id="cargo" type="text" bind:value={formData.cargo} disabled={!isEditing} placeholder="Ej: CONDUCTOR" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 disabled:bg-gray-50" /></div>
 							<div><label for="fecha_ingreso" class="mb-1 block text-sm font-medium text-gray-700">Fecha de Ingreso</label>
-								<input id="fecha_ingreso" type="date" bind:value={formData.fecha_ingreso} disabled={!isEditing} class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 disabled:bg-gray-50" /></div>
+								<input id="fecha_ingreso" type="date" bind:value={formData.fecha_ingreso} disabled={!isEditing} class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 disabled:bg-gray-50" /></div>
 							<div><label for="salario_base" class="mb-1 block text-sm font-medium text-gray-700">Salario Base <span class="text-red-500">*</span></label>
-								<input id="salario_base" type="number" step="0.01" bind:value={formData.salario_base} disabled={!isEditing} required class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 disabled:bg-gray-50" /></div>
+								<input id="salario_base" type="number" step="0.01" bind:value={formData.salario_base} disabled={!isEditing} required class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 disabled:bg-gray-50" /></div>
 							<div><label for="estado" class="mb-1 block text-sm font-medium text-gray-700">Estado <span class="text-red-500">*</span></label>
-								<select id="estado" bind:value={formData.estado} disabled={!isEditing} required class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 disabled:bg-gray-50"><option value="ACTIVO">Activo</option><option value="INACTIVO">Inactivo</option><option value="VACACIONES">Vacaciones</option><option value="INCAPACITADO">Incapacitado</option><option value="RETIRADO">Retirado</option><option value="servicio">En Servicio</option></select></div>
+								<select id="estado" bind:value={formData.estado} disabled={!isEditing} required class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 disabled:bg-gray-50"><option value="ACTIVO">Activo</option><option value="INACTIVO">Inactivo</option><option value="VACACIONES">Vacaciones</option><option value="INCAPACITADO">Incapacitado</option><option value="RETIRADO">Retirado</option><option value="servicio">En Servicio</option></select></div>
 							<div><label for="sede_trabajo" class="mb-1 block text-sm font-medium text-gray-700">Sede de Trabajo</label>
-								<select id="sede_trabajo" bind:value={formData.sede_trabajo} disabled={!isEditing} class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 disabled:bg-gray-50"><option value="">Seleccionar</option><option value="YOPAL">Yopal</option><option value="VILLANUEVA">Villanueva</option></select></div>
+								<select id="sede_trabajo" bind:value={formData.sede_trabajo} disabled={!isEditing} class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 disabled:bg-gray-50"><option value="">Seleccionar</option><option value="YOPAL">Yopal</option><option value="VILLANUEVA">Villanueva</option></select></div>
 							<div><label for="tipo_contrato" class="mb-1 block text-sm font-medium text-gray-700">Tipo de Contrato</label>
-								<input id="tipo_contrato" type="text" bind:value={formData.tipo_contrato} disabled={!isEditing} placeholder="Ej: Término Indefinido" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 disabled:bg-gray-50" /></div>
+								<input id="tipo_contrato" type="text" bind:value={formData.tipo_contrato} disabled={!isEditing} placeholder="Ej: Término Indefinido" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 disabled:bg-gray-50" /></div>
 						</div>
 					{:else if activeTab === 'seguridad'}
 						<div transition:fade={{ duration: 200 }} class="grid grid-cols-1 gap-6 md:grid-cols-3">
 							<div><label for="eps" class="mb-1 block text-sm font-medium text-gray-700">EPS</label>
-								<input id="eps" type="text" bind:value={formData.eps} disabled={!isEditing} placeholder="Ej: Sanitas" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 disabled:bg-gray-50" /></div>
+								<input id="eps" type="text" bind:value={formData.eps} disabled={!isEditing} placeholder="Ej: Sanitas" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 disabled:bg-gray-50" /></div>
 							<div><label for="fondo_pension" class="mb-1 block text-sm font-medium text-gray-700">Fondo de Pensión</label>
-								<input id="fondo_pension" type="text" bind:value={formData.fondo_pension} disabled={!isEditing} placeholder="Ej: Porvenir" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 disabled:bg-gray-50" /></div>
+								<input id="fondo_pension" type="text" bind:value={formData.fondo_pension} disabled={!isEditing} placeholder="Ej: Porvenir" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 disabled:bg-gray-50" /></div>
 							<div><label for="arl" class="mb-1 block text-sm font-medium text-gray-700">ARL</label>
-								<input id="arl" type="text" bind:value={formData.arl} disabled={!isEditing} placeholder="Ej: Sura" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 disabled:bg-gray-50" /></div>
+								<input id="arl" type="text" bind:value={formData.arl} disabled={!isEditing} placeholder="Ej: Sura" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 disabled:bg-gray-50" /></div>
 						</div>
 					{:else if activeTab === 'licencia'}
 						<div transition:fade={{ duration: 200 }} class="grid grid-cols-1 gap-6 md:grid-cols-2">
 							<div><label for="categoria_licencia" class="mb-1 block text-sm font-medium text-gray-700">Categoría de Licencia</label>
-								<input id="categoria_licencia" type="text" bind:value={formData.categoria_licencia} disabled={!isEditing} placeholder="Ej: C2" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 disabled:bg-gray-50" /></div>
+								<input id="categoria_licencia" type="text" bind:value={formData.categoria_licencia} disabled={!isEditing} placeholder="Ej: C2" class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 disabled:bg-gray-50" /></div>
 							<div><label for="vencimiento_licencia" class="mb-1 block text-sm font-medium text-gray-700">Fecha de Vencimiento</label>
-								<input id="vencimiento_licencia" type="date" bind:value={formData.vencimiento_licencia} disabled={!isEditing} class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 disabled:bg-gray-50" /></div>
+								<input id="vencimiento_licencia" type="date" bind:value={formData.vencimiento_licencia} disabled={!isEditing} class="block w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 disabled:bg-gray-50" /></div>
 						</div>
 					{/if}
 
 					{#if isEditing}
 						<div class="mt-6 flex justify-end space-x-3 border-t border-gray-200 pt-6">
 							<button type="button" on:click={handleCancel} disabled={isSaving} class="rounded-lg border border-gray-300 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50">Cancelar</button>
-							<button type="submit" disabled={isSaving} class="inline-flex items-center rounded-lg border border-transparent bg-orange-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-orange-700 disabled:opacity-50">
+							<button type="submit" disabled={isSaving} class="inline-flex items-center rounded-lg border border-transparent bg-emerald-600 px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:opacity-50">
 								{#if isSaving}<svg class="mr-2 -ml-1 h-4 w-4 animate-spin text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" /></svg>Guardando...
 								{:else}<svg class="mr-2 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>Guardar Cambios{/if}
 							</button>
@@ -447,7 +447,7 @@
 				</svg>
 			</div>
 			<h2 class="text-3xl font-extrabold text-white mb-2 tracking-tight">¡ACTUALIZADO!</h2>
-			<p class="text-orange-50 text-lg opacity-90">Los cambios se guardaron correctamente</p>
+			<p class="text-emerald-50 text-lg opacity-90">Los cambios se guardaron correctamente</p>
 		</div>
 	</div>
 {/if}
@@ -469,7 +469,7 @@
 					</div>
 				</div>
 				<div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
-					<button type="button" on:click={handleUploadCroppedImage} disabled={isUploadingPhoto} class="inline-flex w-full justify-center rounded-md border border-transparent bg-orange-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-orange-700 sm:ml-3 sm:w-auto sm:text-sm">{#if isUploadingPhoto}Subiendo...{:else}Subir Foto{/if}</button>
+					<button type="button" on:click={handleUploadCroppedImage} disabled={isUploadingPhoto} class="inline-flex w-full justify-center rounded-md border border-transparent bg-emerald-600 px-4 py-2 text-base font-medium text-white shadow-sm hover:bg-emerald-700 sm:ml-3 sm:w-auto sm:text-sm">{#if isUploadingPhoto}Subiendo...{:else}Subir Foto{/if}</button>
 					<button type="button" on:click={handleCloseCropModal} disabled={isUploadingPhoto} class="mt-3 inline-flex w-full justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-base font-medium text-gray-700 shadow-sm hover:bg-gray-50 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm">Cancelar</button>
 				</div>
 			</div>
@@ -485,7 +485,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: linear-gradient(135deg, rgba(234, 88, 12, 0.95) 0%, rgba(249, 115, 22, 0.95) 100%);
+		background: linear-gradient(135deg, rgba(5, 150, 105, 0.95) 0%, rgba(16, 185, 129, 0.95) 100%);
 	}
 	.success-content { text-align: center; }
 	.success-circle {

@@ -57,7 +57,8 @@
 		pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts.vfs;
 
 		const esCotransmeq = item.es_cotransmeq || false;
-		const color = esCotransmeq ? '#FF9500' : '#2E8B57';
+		const color = '#EA580C';
+		const colorBg = '#FFF7ED';
 		const empresa = esCotransmeq
 			? 'SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S'
 			: 'TRANSPORTES Y SERVICIOS ESMERALDA S.A.S';
@@ -178,7 +179,7 @@
 			{
 				text: `${Number(c.valor) < 0 ? '' : '+'}${fmt(c.valor)}`,
 				alignment: 'right' as const,
-				color: Number(c.valor) < 0 ? '#e60f0f' : '#2E8B57'
+				color: Number(c.valor) < 0 ? '#e60f0f' : color
 			}
 		]);
 
@@ -220,8 +221,8 @@
 									image: logoBase64,
 									width: 175,
 									height: 100,
-									alignment: 'right' as const,
-									margin: [0, -15, -30, 0]
+									alignment: 'left' as const,
+									margin: [0, -15, 0, 0]
 								}
 							]
 						: [])
@@ -385,7 +386,7 @@
 								{
 									text: fmt(disponibilidadVal),
 									alignment: 'right' as const,
-									color: '#2E8B57'
+									color
 								}
 							]
 						]

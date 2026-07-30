@@ -685,6 +685,7 @@ export interface PreviewRecargoPlanilla {
 	total_dias: number;
 	total_horas: number;
 	total_valor: number;
+	total_festivos?: number;
 	dias: PreviewRecargoDia[];
 	configuracion_salarial: {
 		id: string;

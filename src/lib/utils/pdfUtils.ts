@@ -3,26 +3,40 @@
  */
 
 /**
- * Convierte una imagen (URL relativa o absoluta) a base64 data URL para pdfmake
+ * Convierte una imagen (URL relativa o absoluta) a base64 PNG para pdfmake.
+ * pdfmake/pdfkit no soporta WebP, así que cualquier formato se transcodifica
+ * a PNG vía <canvas> antes de devolver.
  */
 export async function imageToBase64(url: string): Promise<string> {
 	const response = await fetch(url);
 	const blob = await response.blob();
-	return new Promise((resolve, reject) => {
-		const reader = new FileReader();
-		reader.onloadend = () => resolve(reader.result as string);
-		reader.onerror = reject;
-		reader.readAsDataURL(blob);
-	});
+
+	const bitmap = await createImageBitmap(blob);
+	const canvas = document.createElement('canvas');
+	canvas.width = bitmap.width;
+	canvas.height = bitmap.height;
+	const ctx = canvas.getContext('2d');
+	if (!ctx) throw new Error('No se pudo crear contexto 2D para transcodificar imagen');
+	ctx.drawImage(bitmap, 0, 0);
+	bitmap.close();
+
+	return canvas.toDataURL('image/png');
 }
 
 /**
- * Obtiene el logo de Cotransmeq en base64 para PDFs
+ * Obtiene el logo correspondiente según si es Cotransmeq o Transmeralda
+ * - Transmeralda: /assets/logo.webp
+ * - Cotransmeq: /assets/logo_nombre.webp
  */
-export async function obtenerLogoBase64(esCotransmeq: boolean = true, prima: boolean = false): Promise<string | null> {
+export async function obtenerLogoBase64(esCotransmeq: boolean): Promise<string | null> {
 	try {
-		const logoPath = prima ? '/assets/logo_nombre.webp' : '/assets/logo.webp';
-		return await imageToBase64(logoPath);
+		const logoPath = esCotransmeq ? '/assets/logo_nombre.webp' : '/assets/logo.webp';
+		const dataUrl = await imageToBase64(logoPath);
+		if (!dataUrl.startsWith('data:image/')) {
+			console.warn('Logo no es una imagen válida, se omite:', logoPath);
+			return null;
+		}
+		return dataUrl;
 	} catch (error) {
 		console.warn('No se pudo cargar el logo para el PDF:', error);
 		return null;
@@ -30,19 +44,22 @@ export async function obtenerLogoBase64(esCotransmeq: boolean = true, prima: boo
 }
 
 /**
- * Convierte una URL (o data URL) a base64 con prefijo data:image/...
- * Usado para incrustar imágenes (firmas, logos) en PDFs generados con pdfmake.
+ * Convierte una URL (o data URL) a base64 PNG para pdfmake.
+ * Si ya viene como data URL, se re-transcodifica a PNG para garantizar
+ * compatibilidad (pdfkit no soporta WebP).
  */
 export async function imageToBase64Url(url: string): Promise<string> {
-	if (url.startsWith('data:')) {
-		return url;
-	}
 	const response = await fetch(url);
 	const blob = await response.blob();
-	return new Promise((resolve, reject) => {
-		const reader = new FileReader();
-		reader.onloadend = () => resolve(reader.result as string);
-		reader.onerror = reject;
-		reader.readAsDataURL(blob);
-	});
+
+	const bitmap = await createImageBitmap(blob);
+	const canvas = document.createElement('canvas');
+	canvas.width = bitmap.width;
+	canvas.height = bitmap.height;
+	const ctx = canvas.getContext('2d');
+	if (!ctx) throw new Error('No se pudo crear contexto 2D para transcodificar imagen');
+	ctx.drawImage(bitmap, 0, 0);
+	bitmap.close();
+
+	return canvas.toDataURL('image/png');
 }

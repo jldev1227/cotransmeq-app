@@ -6,7 +6,7 @@
 	import { toast } from 'svelte-sonner';
 	import { fade, fly, slide } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
-	import { Wrench, Settings, Plus, Edit, Trash2, Search, FileText } from 'lucide-svelte';
+	import { Wrench, Settings, Plus, Edit, Trash2, Search, FileText, Calendar, Clock } from 'lucide-svelte';
 	import type {
 		ConfiguracionSalario,
 		CrearConfiguracionSalarioDTO,
@@ -40,6 +40,35 @@
 	$: user = $authStore.user;
 	$: isReadOnly = user?.role === 'consulta';
 
+	// Detección de solapamiento de vigencias para el formulario
+	$: solapamientoDetectado = detectarSolapamiento(form, configuraciones, editingId);
+
+	function detectarSolapamiento(
+		formActual: CrearConfiguracionSalarioDTO,
+		todas: ConfiguracionSalario[],
+		idExcluir: string | null
+	): { conflictos: ConfiguracionSalario[] } {
+		if (!formActual.vigencia_desde) return { conflictos: [] };
+		const desde = new Date(formActual.vigencia_desde);
+		const hasta = formActual.vigencia_hasta ? new Date(formActual.vigencia_hasta) : null;
+
+		const conflictos = todas.filter((c) => {
+			if (c.id === idExcluir) return false;
+			if (c.deleted_at) return false;
+			// Mismo empresa_id (o ambos null = base)
+			if ((c.empresa_id || null) !== (formActual.empresa_id || null)) return false;
+			if (c.sede !== formActual.sede) return false;
+			const cDesde = new Date(c.vigencia_desde);
+			const cHasta = c.vigencia_hasta ? new Date(c.vigencia_hasta) : null;
+
+			// Solapan si los rangos se intersectan
+			if (cHasta && cHasta < desde) return false;
+			if (hasta && hasta < cDesde) return false;
+			return true;
+		});
+		return { conflictos };
+	}
+
 	// Filtered data
 	$: filtered = configuraciones.filter((c) => {
 		if (filtroActivo === 'activos' && !c.activo) return false;
@@ -55,6 +84,24 @@
 		}
 		return true;
 	});
+
+	// Agrupar configs por (empresa_id, sede) para mostrar el timeline
+	$: configsAgrupadas = (() => {
+		const grupos = new Map<string, ConfiguracionSalario[]>();
+		for (const c of configuraciones) {
+			if (c.deleted_at) continue;
+			const key = `${c.empresa_id || 'base'}|${c.sede || ''}`;
+			if (!grupos.has(key)) grupos.set(key, []);
+			grupos.get(key)!.push(c);
+		}
+		// Ordenar cada grupo por vigencia_desde
+		for (const arr of grupos.values()) {
+			arr.sort(
+				(a, b) => new Date(a.vigencia_desde).getTime() - new Date(b.vigencia_desde).getTime()
+			);
+		}
+		return Array.from(grupos.entries());
+	})();
 
 	function getEmptyForm(): CrearConfiguracionSalarioDTO {
 		return {
@@ -72,6 +119,10 @@
 			administracion: 0,
 			prueba_antigeno_covid: 0,
 			prestaciones_sociales: 0,
+			// Defaults históricos. Si el usuario deja el campo vacío al
+			// crear, el backend usa estos mismos valores (default del schema).
+			jornada_normal_horas: 10.33,
+			jornada_festiva_horas: 7.33,
 			sede: null
 		};
 	}
@@ -116,6 +167,11 @@
 			administracion: Number(config.administracion),
 			prueba_antigeno_covid: Number(config.prueba_antigeno_covid),
 			prestaciones_sociales: Number(config.prestaciones_sociales),
+			// Si por algún motivo la BD no trae estos campos (registros
+			// muy viejos anteriores a la migración), caemos a los
+			// defaults para no romper la edición.
+			jornada_normal_horas: Number(config.jornada_normal_horas) || 10.33,
+			jornada_festiva_horas: Number(config.jornada_festiva_horas) || 7.33,
 			sede: config.sede
 		};
 		modalOpen = true;
@@ -179,7 +235,6 @@
 
 	function formatDate(dateStr: string | null): string {
 		if (!dateStr) return '—';
-		// Usar timeZone UTC para evitar desfase de -1 día por conversión timezone
 		const fecha = new Date(dateStr.includes('T') ? dateStr : dateStr + 'T12:00:00Z');
 		return fecha.toLocaleDateString('es-CO', {
 			year: 'numeric',
@@ -187,6 +242,13 @@
 			day: 'numeric',
 			timeZone: 'UTC'
 		});
+	}
+
+	function getLabelGrupo(key: string): string {
+		const [empresaId, sede] = key.split('|');
+		if (empresaId === 'base') return 'General (todas las empresas)';
+		const empresa = empresas.find((e) => e.id === empresaId);
+		return empresa?.nombre || 'Empresa desconocida';
 	}
 
 	// Socket listeners
@@ -234,7 +296,7 @@
 </script>
 
 <svelte:head>
-	<title>Configuración Salarios - Recargos - Cotransmeq</title>
+	<title>Configuración Salarios - Recargos - Transmeralda</title>
 </svelte:head>
 
 <div
@@ -256,7 +318,7 @@
 					Recargos
 				</a>
 				<span class="text-[var(--text-very-muted)]">/</span>
-				<span class="rounded-md bg-[rgba(249, 115, 22,0.08)] px-2 py-0.5 text-[var(--emerald-700)]">
+				<span class="rounded-md bg-[rgba(16,185,129,0.08)] px-2 py-0.5 text-[var(--emerald-700)]">
 					Configuración
 				</span>
 			</div>
@@ -287,6 +349,73 @@
 			{/if}
 		</div>
 	</div>
+
+	<!-- Timeline de vigencias agrupado por empresa+sede -->
+	{#if !loading && configsAgrupadas.length > 0}
+		<div class="page-card mb-4">
+			<div class="mb-3 flex items-center gap-2">
+				<Calendar class="h-4 w-4 text-[var(--emerald-700)]" />
+				<h2 class="font-display text-sm font-semibold text-[var(--text-primary)]">
+					Timeline de Vigencias
+				</h2>
+				<span class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
+					({configsAgrupadas.length} {configsAgrupadas.length === 1 ? 'grupo' : 'grupos'})
+				</span>
+			</div>
+			<div class="space-y-3">
+				{#each configsAgrupadas as [key, configs]}
+					<div class="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3">
+						<div class="mb-2 flex items-center justify-between">
+							<p class="text-xs font-semibold text-[var(--text-primary)]">
+								{getLabelGrupo(key)}
+								{#if configs[0]?.sede}
+									<span class="ml-1 text-[var(--text-muted)]">· Sede {configs[0].sede}</span>
+								{/if}
+							</p>
+							<span class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
+								{configs.length} {configs.length === 1 ? 'vigencia' : 'vigencias'}
+							</span>
+						</div>
+						<div class="flex flex-wrap gap-2">
+							{#each configs as cfg}
+								{@const jn = Number(cfg.jornada_normal_horas) || 10.33}
+								{@const jf = Number(cfg.jornada_festiva_horas) || 7.33}
+								{@const jornadaDistinta = jn !== 10.33 || jf !== 7.33}
+								<div
+									class="apple-transition flex items-center gap-2 rounded-md border px-2 py-1 text-[10px] {cfg.activo
+										? jornadaDistinta
+											? 'border-[#B45309] bg-[rgba(180,83,9,0.08)] text-[#92400E]'
+											: 'border-[var(--emerald-300)] bg-[rgba(16,185,129,0.08)] text-[var(--emerald-800)]'
+										: 'border-gray-300 bg-gray-100 text-gray-500'}"
+									title={`${formatDate(cfg.vigencia_desde)}${cfg.vigencia_hasta ? ' → ' + formatDate(cfg.vigencia_hasta) : ' → ∞'} · ${formatCurrency(cfg.salario_basico)} · Jornada: ${jn.toFixed(2)}h / ${jf.toFixed(2)}h fest`}
+								>
+									<span class="font-mono-meta font-bold">
+										{formatDate(cfg.vigencia_desde)}
+										{#if cfg.vigencia_hasta}
+											→ {formatDate(cfg.vigencia_hasta)}
+										{:else}
+											→
+											<span class="text-[var(--emerald-600)]">actualidad</span>
+										{/if}
+									</span>
+									<span class="text-[var(--text-muted)]">·</span>
+									<span class="font-mono-meta">
+										{formatCurrency(cfg.salario_basico)}
+									</span>
+									{#if jornadaDistinta}
+										<span class="text-[var(--text-muted)]">·</span>
+										<span class="font-mono-meta" title="Jornada personalizada: {jn.toFixed(2)}h normal / {jf.toFixed(2)}h festiva">
+											⏱️ {jf.toFixed(2)}h
+										</span>
+									{/if}
+								</div>
+							{/each}
+						</div>
+					</div>
+				{/each}
+			</div>
+		</div>
+	{/if}
 
 	<!-- Filtros -->
 	<div class="page-card mb-4">
@@ -372,24 +501,28 @@
 		<div class="table-card">
 			<div class="overflow-x-auto">
 				<table class="w-full text-sm">
-					<thead class="table-header">
-						<tr>
-							<th class="text-left">Empresa</th>
-							<th class="text-left">Sede</th>
-							<th class="text-right">Salario Básico</th>
-							<th class="text-right">Valor Hora</th>
-							<th class="text-center">Hrs/Mes</th>
-							<th class="text-center">Festivos</th>
-							<th class="text-center">Vigencia</th>
-							<th class="text-center">Estado</th>
-							<th class="text-center">Acciones</th>
-						</tr>
-					</thead>
+						<thead class="table-header">
+							<tr>
+								<th class="text-left">Empresa</th>
+								<th class="text-left">Sede</th>
+								<th class="text-right">Salario Básico</th>
+								<th class="text-right">Valor Hora</th>
+								<th class="text-center">Hrs/Mes</th>
+								<th class="text-center">Jornada</th>
+								<th class="text-center">Festivos</th>
+								<th class="text-center">Vigencia</th>
+								<th class="text-center">Estado</th>
+								<th class="text-center">Acciones</th>
+							</tr>
+						</thead>
 					<tbody class="divide-y divide-[var(--border-subtle)]">
 						{#each filtered as config (config.id)}
+							{@const jn = Number(config.jornada_normal_horas) || 10.33}
+							{@const jf = Number(config.jornada_festiva_horas) || 7.33}
+							{@const jornadaDistinta = jn !== 10.33 || jf !== 7.33}
 							<tr
 								class="table-row {recentlyCreated.has(config.id)
-									? '!bg-[rgba(249, 115, 22,0.08)]'
+									? '!bg-[rgba(16,185,129,0.08)]'
 									: ''} {recentlyUpdated.has(config.id)
 									? '!bg-[rgba(37,99,235,0.08)]'
 									: ''}"
@@ -424,10 +557,27 @@
 								<td class="px-4 py-3 text-center font-mono-meta text-[0.7rem] text-[var(--emerald-700)]">
 									{config.horas_mensuales_base}
 								</td>
+								<td class="px-4 py-3 text-center font-mono-meta text-[0.7rem]">
+									<div class="flex flex-col items-center gap-0.5">
+										<span class="text-[var(--text-primary)]" title="Jornada normal (umbral de horas ordinarias)">
+											{jn.toFixed(2)}h
+										</span>
+										<span
+											class="text-[0.65rem]"
+											style="color: {jornadaDistinta ? '#B45309' : 'var(--text-muted)'}"
+											title="Jornada festiva (domingos/festivos)"
+										>
+											🎉 {jf.toFixed(2)}h
+											{#if jornadaDistinta}
+												<span class="ml-0.5 inline-block h-1.5 w-1.5 rounded-full bg-[#B45309]" title="Jornada personalizada"></span>
+											{/if}
+										</span>
+									</div>
+								</td>
 								<td class="px-4 py-3 text-center">
 									{#if config.paga_dias_festivos}
 										<span
-											class="status-pill !bg-[rgba(249, 115, 22,0.10)] !text-[var(--emerald-700)]"
+											class="status-pill !bg-[rgba(16,185,129,0.10)] !text-[var(--emerald-700)]"
 										>
 											<svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
 												<path
@@ -460,7 +610,7 @@
 										disabled={isReadOnly}
 										class="status-pill apple-transition
 											{config.activo
-											? '!bg-[rgba(249, 115, 22,0.10)] !text-[var(--emerald-700)] hover:!bg-[rgba(249, 115, 22,0.18)]'
+											? '!bg-[rgba(16,185,129,0.10)] !text-[var(--emerald-700)] hover:!bg-[rgba(16,185,129,0.18)]'
 											: '!bg-[rgba(0,0,0,0.04)] !text-[var(--text-muted)] hover:!bg-[rgba(0,0,0,0.08)]'}"
 									>
 										{config.activo ? 'Activo' : 'Inactivo'}
@@ -491,7 +641,7 @@
 							<!-- Delete confirmation inline -->
 							{#if deleteConfirmId === config.id}
 								<tr transition:slide>
-									<td colspan="9" class="px-4 py-3">
+									<td colspan="10" class="px-4 py-3">
 										<div
 											class="alert alert-error flex items-center justify-between"
 										>
@@ -527,6 +677,9 @@
 		<!-- Detalle de porcentajes (cards) -->
 		<div class="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
 			{#each filtered as config (config.id)}
+				{@const jn = Number(config.jornada_normal_horas) || 10.33}
+				{@const jf = Number(config.jornada_festiva_horas) || 7.33}
+				{@const jornadaDistinta = jn !== 10.33 || jf !== 7.33}
 				<div
 					class="page-card apple-transition
 						{recentlyCreated.has(config.id) ? '!border-[var(--emerald-500)] emerald-glow' : ''}
@@ -546,7 +699,7 @@
 						<span
 							class="status-pill
 								{config.activo
-								? '!bg-[rgba(249, 115, 22,0.10)] !text-[var(--emerald-700)]'
+								? '!bg-[rgba(16,185,129,0.10)] !text-[var(--emerald-700)]'
 								: '!bg-[rgba(0,0,0,0.04)] !text-[var(--text-muted)]'}"
 						>
 							{config.activo ? 'Activo' : 'Inactivo'}
@@ -554,6 +707,37 @@
 					</div>
 
 					<div class="grid grid-cols-2 gap-2 text-xs">
+						<div
+							class="rounded-lg p-2.5"
+							style="background: {jornadaDistinta
+								? 'linear-gradient(135deg, rgba(180, 83, 9, 0.06), rgba(245, 158, 11, 0.04))'
+								: 'var(--bg-base)'}; border: 1px solid {jornadaDistinta
+								? 'rgba(180, 83, 9, 0.20)'
+								: 'transparent'};"
+						>
+							<p class="flex items-center gap-1 font-mono-meta text-[0.6rem] text-[var(--text-muted)]">
+								<Clock class="h-2.5 w-2.5" />
+								JORNADA NORMAL
+							</p>
+							<p class="mt-0.5 font-mono-meta text-[0.7rem] text-[var(--text-primary)]">
+								{jn.toFixed(2)}h
+							</p>
+						</div>
+						<div
+							class="rounded-lg p-2.5"
+							style="background: {jornadaDistinta
+								? 'linear-gradient(135deg, rgba(180, 83, 9, 0.06), rgba(245, 158, 11, 0.04))'
+								: 'var(--bg-base)'}; border: 1px solid {jornadaDistinta
+								? 'rgba(180, 83, 9, 0.20)'
+								: 'transparent'};"
+						>
+							<p class="flex items-center gap-1 font-mono-meta text-[0.6rem] text-[var(--text-muted)]">
+								🎉 JORNADA FESTIVA
+							</p>
+							<p class="mt-0.5 font-mono-meta text-[0.7rem] text-[var(--text-primary)]">
+								{jf.toFixed(2)}h
+							</p>
+						</div>
 						<div class="rounded-lg bg-[var(--bg-base)] p-2.5">
 							<p class="font-mono-meta text-[0.6rem] text-[var(--text-muted)]">SEG. SOCIAL</p>
 							<p class="mt-0.5 font-mono-meta text-[0.7rem] text-[var(--text-primary)]">
@@ -742,6 +926,100 @@
 						</div>
 					</div>
 
+					<!-- Umbrales de jornada — Configurables por fecha -->
+					<div class="hint-card space-y-3">
+						<div class="flex items-center justify-between gap-2">
+							<div class="flex items-center gap-2">
+								<Clock class="h-3.5 w-3.5 text-[#B45309]" />
+								<span class="hint-label">⏱️ UMBRALES DE JORNADA</span>
+							</div>
+							<button
+								type="button"
+								on:click={() => {
+									form.jornada_normal_horas = 10.33;
+									form.jornada_festiva_horas = 7.33;
+									form = form;
+								}}
+								class="apple-transition rounded-md px-2 py-0.5 font-mono-meta text-[0.6rem] font-semibold text-[var(--text-muted)] hover:bg-[var(--bg-base)] hover:text-[var(--text-primary)]"
+								title="Restablecer a 10.33h / 7.33h (valores históricos)"
+							>
+								↺ Defaults
+							</button>
+						</div>
+						<p class="text-[0.7rem] text-[var(--text-muted)]">
+							Define a partir de cuántas horas empiezan a contar extras. Cambia estos
+							valores cuando hay un cambio de normativa (ej: 15-jul) creando una
+							nueva vigencia con la fecha de inicio.
+						</p>
+						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+							<div>
+								<label
+									for="jornada_normal_horas"
+									class="mb-1 block text-xs font-semibold text-[var(--text-secondary)]"
+								>
+									Jornada día normal
+									<span
+										class="ml-1 inline-block h-1.5 w-1.5 rounded-full align-middle"
+										style="background-color: #047857;"
+										title="Jornada aplicable de lunes a sábado"
+									></span>
+								</label>
+								<div class="relative">
+									<input
+										id="jornada_normal_horas"
+										type="number"
+										step="0.01"
+										min="0.5"
+										max="24"
+										bind:value={form.jornada_normal_horas}
+										class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 pr-9 font-mono-meta text-sm"
+									/>
+									<span
+										class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 font-mono-meta text-[0.7rem] text-[var(--text-muted)]"
+									>
+										h
+									</span>
+								</div>
+								<p class="mt-1 font-mono-meta text-[0.6rem] text-[var(--text-very-muted)]">
+									Default: 10.33h (10h 20min). Extras a partir de este umbral.
+								</p>
+							</div>
+							<div>
+								<label
+									for="jornada_festiva_horas"
+									class="mb-1 block text-xs font-semibold text-[var(--text-secondary)]"
+								>
+									Jornada domingo/festivo
+									<span
+										class="ml-1 inline-block h-1.5 w-1.5 rounded-full align-middle"
+										style="background-color: #B45309;"
+										title="Jornada aplicable los domingos y festivos"
+									></span>
+								</label>
+								<div class="relative">
+									<input
+										id="jornada_festiva_horas"
+										type="number"
+										step="0.01"
+										min="0.5"
+										max="24"
+										bind:value={form.jornada_festiva_horas}
+										class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 pr-9 font-mono-meta text-sm"
+									/>
+									<span
+										class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 font-mono-meta text-[0.7rem] text-[var(--text-muted)]"
+									>
+										h
+									</span>
+								</div>
+								<p class="mt-1 font-mono-meta text-[0.6rem] text-[var(--text-very-muted)]">
+									Default: 7.33h (7h 20min). Si trabajás más, se cuenta como extra
+									festiva.
+								</p>
+							</div>
+						</div>
+					</div>
+
 					<!-- Porcentajes y deducciones -->
 					<div class="hint-card space-y-3">
 						<div class="flex items-center gap-2">
@@ -881,6 +1159,47 @@
 						</div>
 					</div>
 
+					<!-- Alerta de solapamiento -->
+					{#if solapamientoDetectado.conflictos.length > 0}
+						<div
+							class="flex items-start gap-3 rounded-xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 p-3"
+							role="alert"
+						>
+							<svg
+								class="mt-0.5 h-4 w-4 shrink-0 text-amber-600"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									stroke-width="2"
+									d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+								/>
+							</svg>
+							<div class="min-w-0 flex-1 text-xs text-amber-900">
+								<p class="font-semibold">
+									Esta vigencia se solapa con {solapamientoDetectado.conflictos.length}
+									{solapamientoDetectado.conflictos.length === 1 ? 'configuración' : 'configuraciones'}:
+								</p>
+								<ul class="mt-1 space-y-0.5 text-amber-800">
+									{#each solapamientoDetectado.conflictos as conf}
+										<li class="font-mono-meta text-[0.7rem]">
+											• {formatDate(conf.vigencia_desde)}
+											{#if conf.vigencia_hasta}→ {formatDate(conf.vigencia_hasta)}{:else}→ actualidad{/if}
+											· {formatCurrency(conf.salario_basico)}
+										</li>
+									{/each}
+								</ul>
+								<p class="mt-1 text-[0.7rem] text-amber-700">
+									Los recargos nuevos usarán esta config. Las planillas con días en el rango
+									solapado podrían recibir valores incorrectos.
+								</p>
+							</div>
+						</div>
+					{/if}
+
 					<!-- Observaciones + Activo -->
 					<div>
 						<label
@@ -927,7 +1246,7 @@
 						type="submit"
 						disabled={saving}
 						class="apple-transition flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
-						style="background: linear-gradient(135deg, #10B981, #ea580c);"
+						style="background: linear-gradient(135deg, #10B981, #059669);"
 					>
 						{#if saving}
 							<div

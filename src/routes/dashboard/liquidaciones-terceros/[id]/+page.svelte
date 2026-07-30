@@ -79,7 +79,7 @@
 </script>
 
 <svelte:head>
-	<title>Vista previa Liquidacion · Cotransmeq</title>
+	<title>Vista previa Liquidacion · Transmeralda</title>
 </svelte:head>
 
 <div

@@ -153,7 +153,7 @@
 					<div class="flex items-center gap-3">
 						<div
 							class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl"
-							style="background: linear-gradient(135deg, #f97316, #ea580c); box-shadow: 0 6px 16px rgba(249, 115, 22, 0.30);"
+							style="background: linear-gradient(135deg, #10b981, #059669); box-shadow: 0 6px 16px rgba(16, 185, 129, 0.30);"
 						>
 							<svg
 								class="h-6 w-6 text-white"
@@ -172,7 +172,7 @@
 						<div class="min-w-0 flex-1">
 							<p
 								class="font-mono-meta mb-1 inline-block rounded-md px-2 py-0.5 text-[10px]"
-								style="color: var(--emerald-500); background: rgba(249, 115, 22, 0.08); letter-spacing: 0.12em;"
+								style="color: var(--emerald-500); background: rgba(16, 185, 129, 0.08); letter-spacing: 0.12em;"
 							>
 								NUEVO REGISTRO
 							</p>
@@ -194,7 +194,7 @@
 					class="hidden items-center space-x-2 text-sm md:flex"
 					style="color: var(--text-muted);"
 				>
-					<a href="/dashboard" class="transition-colors hover:text-orange-600">Dashboard</a>
+					<a href="/dashboard" class="transition-colors hover:text-emerald-600">Dashboard</a>
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 						<path
 							stroke-linecap="round"
@@ -202,7 +202,7 @@
 							d="M9 5l7 7-7 7"
 						/>
 					</svg>
-					<a href="/dashboard/clientes" class="transition-colors hover:text-orange-600">Clientes</a>
+					<a href="/dashboard/clientes" class="transition-colors hover:text-emerald-600">Clientes</a>
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 						<path
 							stroke-linecap="round"
@@ -284,7 +284,7 @@
 					>
 						<h3 class="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-900">
 							<svg
-								class="h-5 w-5 text-orange-600"
+								class="h-5 w-5 text-emerald-600"
 								fill="none"
 								stroke="currentColor"
 								viewBox="0 0 24 24"
@@ -308,7 +308,7 @@
 									class="peer sr-only"
 								/>
 								<div
-									class="apple-transition rounded-xl border-2 border-gray-200 bg-white p-4 peer-checked:border-orange-500 peer-checked:bg-orange-50 hover:bg-gray-50"
+									class="apple-transition rounded-xl border-2 border-gray-200 bg-white p-4 peer-checked:border-emerald-500 peer-checked:bg-emerald-50 hover:bg-gray-50"
 								>
 									<div class="flex items-center gap-3">
 										<div
@@ -344,11 +344,11 @@
 									class="peer sr-only"
 								/>
 								<div
-									class="apple-transition rounded-xl border-2 border-gray-200 bg-white p-4 peer-checked:border-orange-500 peer-checked:bg-orange-50 hover:bg-gray-50"
+									class="apple-transition rounded-xl border-2 border-gray-200 bg-white p-4 peer-checked:border-emerald-500 peer-checked:bg-emerald-50 hover:bg-gray-50"
 								>
 									<div class="flex items-center gap-3">
 										<div
-											class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-orange-600"
+											class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-green-400 to-green-600"
 										>
 											<svg
 												class="h-4 w-4 text-white"
@@ -384,7 +384,7 @@
 							<div class="h-full p-6">
 								<h3 class="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-900">
 									<svg
-										class="h-5 w-5 text-orange-600"
+										class="h-5 w-5 text-emerald-600"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
@@ -409,7 +409,7 @@
 											id="nombre"
 											type="text"
 											bind:value={formData.nombre}
-											class="apple-transition w-full rounded-lg border border-gray-200/50 bg-white/50 px-4 py-3 backdrop-blur-sm focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-500"
+											class="apple-transition w-full rounded-lg border border-gray-200/50 bg-white/50 px-4 py-3 backdrop-blur-sm focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500"
 											placeholder={formData.tipo === TipoCliente.EMPRESA
 												? 'Ej: Transportes ABC S.A.S.'
 												: 'Ej: Juan Pérez García'}
@@ -429,7 +429,7 @@
 											id="nit"
 											type="text"
 											bind:value={formData.nit}
-											class="apple-transition w-full rounded-lg border border-gray-200/50 bg-white/50 px-4 py-3 backdrop-blur-sm focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-500"
+											class="apple-transition w-full rounded-lg border border-gray-200/50 bg-white/50 px-4 py-3 backdrop-blur-sm focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500"
 											placeholder={formData.tipo === TipoCliente.EMPRESA
 												? 'Ej: 900.123.456-1'
 												: 'Ej: 12.345.678'}
@@ -453,7 +453,7 @@
 												id="representante"
 												type="text"
 												bind:value={formData.representante}
-												class="apple-transition w-full rounded-lg border border-gray-200/50 bg-white/50 px-4 py-3 backdrop-blur-sm focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-500"
+												class="apple-transition w-full rounded-lg border border-gray-200/50 bg-white/50 px-4 py-3 backdrop-blur-sm focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500"
 												placeholder="Ej: María García López"
 												class:border-red-300={errors.representante}
 											/>
@@ -473,7 +473,7 @@
 												id="cedula"
 												type="text"
 												bind:value={formData.cedula}
-												class="apple-transition w-full rounded-lg border border-gray-200/50 bg-white/50 px-4 py-3 backdrop-blur-sm focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-500"
+												class="apple-transition w-full rounded-lg border border-gray-200/50 bg-white/50 px-4 py-3 backdrop-blur-sm focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500"
 												placeholder="Ej: 12.345.678"
 												class:border-red-300={errors.cedula}
 											/>
@@ -495,7 +495,7 @@
 							<div class="h-full rounded-xl p-6">
 								<h3 class="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-900">
 									<svg
-										class="h-5 w-5 text-orange-600"
+										class="h-5 w-5 text-emerald-600"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
@@ -520,7 +520,7 @@
 											id="telefono"
 											type="tel"
 											bind:value={formData.telefono}
-											class="apple-transition w-full rounded-lg border border-gray-200/50 bg-white/50 px-4 py-3 backdrop-blur-sm focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-500"
+											class="apple-transition w-full rounded-lg border border-gray-200/50 bg-white/50 px-4 py-3 backdrop-blur-sm focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500"
 											placeholder="Ej: 312 345 6789"
 											class:border-red-300={errors.telefono}
 										/>
@@ -538,7 +538,7 @@
 											id="correo"
 											type="email"
 											bind:value={formData.correo}
-											class="apple-transition w-full rounded-lg border border-gray-200/50 bg-white/50 px-4 py-3 backdrop-blur-sm focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-500"
+											class="apple-transition w-full rounded-lg border border-gray-200/50 bg-white/50 px-4 py-3 backdrop-blur-sm focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500"
 											placeholder="Ej: cliente@ejemplo.com"
 											class:border-red-300={errors.correo}
 										/>
@@ -556,7 +556,7 @@
 											id="direccion"
 											bind:value={formData.direccion}
 											rows="3"
-											class="apple-transition w-full resize-none rounded-lg border border-gray-200/50 bg-white/50 px-4 py-3 backdrop-blur-sm focus:border-orange-500 focus:bg-white focus:ring-2 focus:ring-orange-500"
+											class="apple-transition w-full resize-none rounded-lg border border-gray-200/50 bg-white/50 px-4 py-3 backdrop-blur-sm focus:border-emerald-500 focus:bg-white focus:ring-2 focus:ring-emerald-500"
 											placeholder="Ej: Calle 123 #45-67, Barrio Centro"
 											class:border-red-300={errors.direccion}
 										></textarea>
@@ -576,7 +576,7 @@
 					>
 						<h3 class="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-900">
 							<svg
-								class="h-5 w-5 text-orange-600"
+								class="h-5 w-5 text-emerald-600"
 								fill="none"
 								stroke="currentColor"
 								viewBox="0 0 24 24"

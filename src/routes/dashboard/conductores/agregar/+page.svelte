@@ -115,7 +115,7 @@
 
 			toast.success('Conductor creado exitosamente', {
 				duration: 3000,
-				style: 'background: white; color: black; border: 1px solid #f97316;'
+				style: 'background: white; color: black; border: 1px solid #10b981;'
 			});
 
 			// Redirigir a la lista después de 1.5 segundos
@@ -167,7 +167,7 @@
 </script>
 
 <svelte:head>
-	<title>Nuevo Conductor - Cotransmeq</title>
+	<title>Nuevo Conductor - Transmeralda</title>
 </svelte:head>
 
 <div
@@ -197,7 +197,7 @@
 				</button>
 				<div
 					class="brand-gradient flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl"
-					style="box-shadow: 0 6px 16px rgba(249, 115, 22, 0.30);"
+					style="box-shadow: 0 6px 16px rgba(16, 185, 129, 0.30);"
 				>
 					<svg
 						class="h-6 w-6 text-white"
@@ -216,7 +216,7 @@
 				<div class="min-w-0 flex-1">
 					<p
 						class="font-mono-meta mb-1 inline-block rounded-md px-2 py-0.5 text-[10px]"
-						style="color: var(--emerald-500); background: rgba(249, 115, 22, 0.08); letter-spacing: 0.12em;"
+						style="color: var(--emerald-500); background: rgba(16, 185, 129, 0.08); letter-spacing: 0.12em;"
 					>
 						NUEVO REGISTRO
 					</p>
@@ -254,7 +254,7 @@
 						id="nombre"
 						type="text"
 						bind:value={formData.nombre}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 {errors.nombre
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 {errors.nombre
 							? 'border-red-500'
 							: ''}"
 						placeholder="Ej: Juan"
@@ -273,7 +273,7 @@
 						id="apellido"
 						type="text"
 						bind:value={formData.apellido}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 {errors.apellido
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 {errors.apellido
 							? 'border-red-500'
 							: ''}"
 						placeholder="Ej: Pérez"
@@ -291,7 +291,7 @@
 					<select
 						id="tipo_identificacion"
 						bind:value={formData.tipo_identificacion}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
 					>
 						{#each tiposIdentificacion as tipo}
 							<option value={tipo}>{tipo}</option>
@@ -308,7 +308,7 @@
 						id="numero_identificacion"
 						type="text"
 						bind:value={formData.numero_identificacion}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 {errors.numero_identificacion
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 {errors.numero_identificacion
 							? 'border-red-500'
 							: ''}"
 						placeholder="1234567890"
@@ -327,7 +327,7 @@
 						id="fecha_nacimiento"
 						type="date"
 						bind:value={formData.fecha_nacimiento}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
 					/>
 				</div>
 
@@ -337,7 +337,7 @@
 					<select
 						id="genero"
 						bind:value={formData.genero}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
 					>
 						<option value="MASCULINO">Masculino</option>
 						<option value="FEMENINO">Femenino</option>
@@ -353,7 +353,7 @@
 					<select
 						id="tipo_sangre"
 						bind:value={formData.tipo_sangre}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
 					>
 						<option value="">Seleccionar...</option>
 						<option value="A_POSITIVO">A+</option>
@@ -382,7 +382,7 @@
 						id="telefono"
 						type="text"
 						bind:value={formData.telefono}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 {errors.telefono
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 {errors.telefono
 							? 'border-red-500'
 							: ''}"
 						placeholder="3001234567"
@@ -399,7 +399,7 @@
 						id="email"
 						type="email"
 						bind:value={formData.email}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 {errors.email
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 {errors.email
 							? 'border-red-500'
 							: ''}"
 						placeholder="Ej: juan.perez@email.com"
@@ -418,7 +418,7 @@
 						id="direccion"
 						type="text"
 						bind:value={formData.direccion}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
 						placeholder="Ej: Calle 123 # 45-67"
 					/>
 				</div>
@@ -436,7 +436,7 @@
 						id="cargo"
 						type="text"
 						bind:value={formData.cargo}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
 						placeholder="Ej: CONDUCTOR"
 					/>
 				</div>
@@ -450,7 +450,7 @@
 						id="fecha_ingreso"
 						type="date"
 						bind:value={formData.fecha_ingreso}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
 					/>
 				</div>
 
@@ -463,7 +463,7 @@
 						id="salario_base"
 						type="number"
 						bind:value={formData.salario_base}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 {errors.salario_base
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 {errors.salario_base
 							? 'border-red-500'
 							: ''}"
 						placeholder="1500000"
@@ -479,7 +479,7 @@
 					<select
 						id="estado"
 						bind:value={formData.estado}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
 					>
 						<option value={EstadoConductor.ACTIVO}>Activo</option>
 						<option value={EstadoConductor.INACTIVO}>Inactivo</option>
@@ -497,7 +497,7 @@
 					<select
 						id="tipo_contrato"
 						bind:value={formData.tipo_contrato}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
 					>
 						<option value="INDEFINIDO">Indefinido</option>
 						<option value="FIJO">Fijo</option>
@@ -514,7 +514,7 @@
 					<select
 						id="sede_trabajo"
 						bind:value={formData.sede_trabajo}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
 					>
 						{#each sedes as sede}
 							<option value={sede}>{sede}</option>
@@ -529,7 +529,7 @@
 						id="eps"
 						type="text"
 						bind:value={formData.eps}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
 						placeholder="Nueva EPS"
 					/>
 				</div>
@@ -543,7 +543,7 @@
 						id="fondo_pension"
 						type="text"
 						bind:value={formData.fondo_pension}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
 						placeholder="Porvenir"
 					/>
 				</div>
@@ -555,7 +555,7 @@
 						id="arl"
 						type="text"
 						bind:value={formData.arl}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
 						placeholder="Sura"
 					/>
 				</div>
@@ -574,7 +574,7 @@
 					<select
 						id="categoria_licencia"
 						bind:value={formData.categoria_licencia}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 {errors.categoria_licencia
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 {errors.categoria_licencia
 							? 'border-red-500'
 							: ''}"
 					>
@@ -597,7 +597,7 @@
 						id="vencimiento_licencia"
 						type="date"
 						bind:value={formData.vencimiento_licencia}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200 {errors.vencimiento_licencia
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 {errors.vencimiento_licencia
 							? 'border-red-500'
 							: ''}"
 					/>

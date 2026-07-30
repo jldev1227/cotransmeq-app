@@ -220,7 +220,7 @@
 	function getTipoBadgeColor(tipo: string): string {
 		switch (tipo) {
 			case 'BONO':
-				return 'bg-orange-100 text-orange-700';
+				return 'bg-green-100 text-green-700';
 			case 'PORCENTAJE':
 				return 'bg-blue-100 text-blue-700';
 			case 'DESCUENTO':
@@ -250,8 +250,8 @@
 	<!-- Header de Configuración -->
 	<div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
 		<div class="flex items-center gap-3">
-			<div class="rounded-lg bg-orange-100 p-2">
-				<Settings class="h-5 w-5 text-orange-600" />
+			<div class="rounded-lg bg-emerald-100 p-2">
+				<Settings class="h-5 w-5 text-emerald-600" />
 			</div>
 			<div>
 				<h2 class="text-xl font-bold text-gray-900">Configuraciones de Liquidación</h2>
@@ -277,7 +277,7 @@
 			<!-- Botón duplicar año -->
 			<button
 				on:click={openDuplicarModal}
-				class="flex items-center gap-2 rounded-lg border border-orange-300 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-700 transition-colors hover:bg-orange-100"
+				class="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
 				title="Duplicar configuraciones a otro año"
 			>
 				<Copy class="h-4 w-4" />
@@ -287,7 +287,7 @@
 			<!-- Botón agregar -->
 			<button
 				on:click={openCrearModal}
-				class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
+				class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
 			>
 				<Plus class="h-4 w-4" />
 				Agregar
@@ -300,7 +300,7 @@
 		{#if loading}
 			<div class="flex items-center justify-center py-12">
 				<div class="text-center">
-					<div class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"></div>
+					<div class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
 					<p class="text-gray-600">Cargando configuraciones...</p>
 				</div>
 			</div>
@@ -311,14 +311,14 @@
 				<div class="mt-4 flex gap-3 justify-center">
 					<button
 						on:click={openCrearModal}
-						class="rounded-lg bg-orange-500 px-4 py-2 text-white hover:bg-orange-600"
+						class="rounded-lg bg-emerald-500 px-4 py-2 text-white hover:bg-emerald-600"
 					>
 						Crear configuración
 					</button>
 					{#if aniosDisponibles.length > 0}
 						<button
 							on:click={openDuplicarModal}
-							class="rounded-lg border border-orange-500 px-4 py-2 text-orange-600 hover:bg-orange-50"
+							class="rounded-lg border border-emerald-500 px-4 py-2 text-emerald-600 hover:bg-emerald-50"
 						>
 							Duplicar desde otro año
 						</button>
@@ -346,7 +346,7 @@
 										<input
 											type="text"
 											bind:value={editForm.nombre}
-											class="w-full rounded-lg border border-orange-300 px-3 py-1.5 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+											class="w-full rounded-lg border border-emerald-300 px-3 py-1.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
 										/>
 									</td>
 									<td class="px-6 py-3">
@@ -354,13 +354,13 @@
 											type="number"
 											step="0.01"
 											bind:value={editForm.valor}
-											class="w-full rounded-lg border border-orange-300 px-3 py-1.5 text-sm text-right focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+											class="w-full rounded-lg border border-emerald-300 px-3 py-1.5 text-sm text-right focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
 										/>
 									</td>
 									<td class="px-6 py-3">
 										<select
 											bind:value={editForm.tipo}
-											class="w-full rounded-lg border border-orange-300 px-3 py-1.5 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+											class="w-full rounded-lg border border-emerald-300 px-3 py-1.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
 										>
 											{#each tiposConfig as tipo}
 												<option value={tipo}>{tipo}</option>
@@ -374,7 +374,7 @@
 										<div class="flex items-center justify-center gap-1">
 											<button
 												on:click={saveEdit}
-												class="rounded-lg p-2 text-orange-600 hover:bg-orange-50 transition-colors"
+												class="rounded-lg p-2 text-emerald-600 hover:bg-emerald-50 transition-colors"
 												title="Guardar"
 											>
 												<Check class="h-4 w-4" />
@@ -411,7 +411,7 @@
 										<div class="flex items-center justify-center gap-1">
 											<button
 												on:click={() => startEdit(config)}
-												class="rounded-lg p-2 text-orange-600 hover:bg-orange-50 transition-colors"
+												class="rounded-lg p-2 text-emerald-600 hover:bg-emerald-50 transition-colors"
 												title="Editar"
 											>
 												<Edit class="h-4 w-4" />
@@ -470,7 +470,7 @@
 						type="text"
 						bind:value={crearForm.nombre}
 						placeholder="Ej: Auxilio de transporte"
-						class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+						class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
 					/>
 				</div>
 
@@ -482,7 +482,7 @@
 						step="0.01"
 						bind:value={crearForm.valor}
 						placeholder="0"
-						class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+						class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
 					/>
 				</div>
 
@@ -491,7 +491,7 @@
 					<select
 						id="crear-tipo"
 						bind:value={crearForm.tipo}
-						class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+						class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
 					>
 						{#each tiposConfig as tipo}
 							<option value={tipo}>{tipo}</option>
@@ -509,7 +509,7 @@
 				</button>
 				<button
 					on:click={handleCrear}
-					class="rounded-lg bg-gradient-to-r from-orange-500 to-teal-600 px-4 py-2 text-white font-semibold hover:shadow-lg transition-all"
+					class="rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-white font-semibold hover:shadow-lg transition-all"
 				>
 					<span class="flex items-center gap-2">
 						<Save class="h-4 w-4" />
@@ -543,21 +543,21 @@
 			</p>
 
 			<div class="space-y-4">
-				<div class="flex items-center gap-3 p-3 rounded-lg bg-orange-50 border border-orange-200">
-					<Calendar class="h-5 w-5 text-orange-600" />
+				<div class="flex items-center gap-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
+					<Calendar class="h-5 w-5 text-emerald-600" />
 					<div>
-						<p class="text-sm font-medium text-orange-800">Año origen</p>
-						<p class="text-lg font-bold text-orange-900">{anioSeleccionado}</p>
+						<p class="text-sm font-medium text-emerald-800">Año origen</p>
+						<p class="text-lg font-bold text-emerald-900">{anioSeleccionado}</p>
 					</div>
 					<span class="mx-2 text-gray-400">→</span>
 					<div>
-						<p class="text-sm font-medium text-orange-800">Año destino</p>
+						<p class="text-sm font-medium text-emerald-800">Año destino</p>
 						<input
 							type="number"
 							bind:value={anioDestino}
 							min="2020"
 							max="2050"
-							class="w-24 rounded-lg border border-orange-300 px-2 py-1 text-lg font-bold text-orange-900 text-center focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+							class="w-24 rounded-lg border border-emerald-300 px-2 py-1 text-lg font-bold text-emerald-900 text-center focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
 						/>
 					</div>
 				</div>
@@ -578,7 +578,7 @@
 				<button
 					on:click={handleDuplicar}
 					disabled={duplicando}
-					class="rounded-lg bg-gradient-to-r from-orange-500 to-teal-600 px-4 py-2 text-white font-semibold hover:shadow-lg transition-all disabled:opacity-50"
+					class="rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-white font-semibold hover:shadow-lg transition-all disabled:opacity-50"
 				>
 					{#if duplicando}
 						<span class="flex items-center gap-2">

@@ -26,9 +26,6 @@
 		}
 	}
 
-	$: minDate = periodoInicio ? new Date(periodoInicio + 'T00:00:00') : null;
-	$: maxDate = periodoFin ? new Date(periodoFin + 'T00:00:00') : null;
-
 	$: calendarDays = buildCalendarDays(viewYear, viewMonth);
 
 	$: selectedSet = new Set(fechasSeleccionadas);
@@ -87,20 +84,11 @@
 		return `${y}-${m}-${day}`;
 	}
 
-	function isInRange(dateStr: string): boolean {
-		if (!minDate && !maxDate) return true;
-		const d = new Date(dateStr + 'T00:00:00').getTime();
-		if (minDate && d < minDate.getTime()) return false;
-		if (maxDate && d > maxDate.getTime()) return false;
-		return true;
-	}
-
 	function isSelected(dateStr: string): boolean {
 		return fechasSeleccionadas.includes(dateStr);
 	}
 
 	function toggleDate(dateStr: string) {
-		if (!isInRange(dateStr)) return;
 		let newFechas: string[];
 		if (fechasSeleccionadas.includes(dateStr)) {
 			newFechas = fechasSeleccionadas.filter((f) => f !== dateStr);
@@ -175,16 +163,13 @@
 		{#each calendarDays as cell (cell.dateStr)}
 			{@const selected = selectedSet.has(cell.dateStr)}
 			{@const today = isToday(cell.dateStr)}
-			{@const inRange = isInRange(cell.dateStr)}
 			<button
 				type="button"
 				on:click={() => toggleDate(cell.dateStr)}
-				disabled={!inRange}
 				class="calendar-cell"
 				class:is-out-of-month={!cell.inMonth}
 				class:is-today={today && !selected && cell.inMonth}
 				class:is-selected={selected}
-				class:is-disabled={!inRange}
 				aria-label={`${cell.day} de ${MESES[viewMonth]} de ${viewYear}`}
 				aria-pressed={selected}
 			>

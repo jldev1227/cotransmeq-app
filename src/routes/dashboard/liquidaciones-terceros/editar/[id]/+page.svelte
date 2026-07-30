@@ -441,14 +441,14 @@
 		: [];
 
 	/**
-	 * Array combinado de items reales + adicionales Cotransmeq en una forma
+	 * Array combinado de items reales + adicionales Transmeralda en una forma
 	 * uniforme, para poder sumarlos todos juntos en la fila de TOTALES.
 	 * - Items: pasan tal cual con `_esAdicional: false`.
 	 * - Adicionales: se mapean a la forma del item con `_esAdicional: true`.
 	 *   - `valor_liquidar` = adc.valor_liquidar (es lo que suma)
 	 *   - `total_facturado` = adc.valor_liquidar (cuenta como facturado)
 	 *   - `valor_admin`, `ingreso_extra_global`, `ingresos_extra_aval` = 0
-	 *   - `ingresoTransmeraldaDelta` = -vLiq (para que reste en ING. COTRANSMEQ)
+	 *   - `ingresoTransmeraldaDelta` = -vLiq (para que reste en ING. TRANSMERALDA)
 	 */
 	$: itemsConAdicionales = [
 		...placaItemsIncluidos.map((item) => ({ ...item, _esAdicional: false })),
@@ -933,7 +933,7 @@
 		const totalDiasDotacion = sumDiasSalarioConductores(conceptos, true);
 		const totalDiasExamen = sumDiasSalarioConductores(conceptos, true);
 		// Base para GASTOS_DIVERSOS: total facturado de items + valor_liquidar
-		// BRUTO de los adicionales Cotransmeq (cada adicional cuenta como
+		// BRUTO de los adicionales Transmeralda (cada adicional cuenta como
 		// parte del servicio que se está prestando en la liquidación).
 		const totalItemsFacturado = sumTotalItemsLiquidacionPara(itemsIncluidos);
 		const totalAdicionales = (adicionales || []).reduce(
@@ -1540,7 +1540,7 @@
 	 * Recalcula el `valor_liquidar` del cierre (items + adicionales) y lo encola
 	 * como cambio del cierre vía socket. Esto asegura que el historial de
 	 * liquidaciones muestre el valor total real (incluyendo los adicionales
-	 * Cotransmeq) para TODOS los usuarios, no solo en este navegador.
+	 * Transmeralda) para TODOS los usuarios, no solo en este navegador.
 	 *
 	 * El backend persiste los seis campos en la tabla `liquidacion_tercero_final`
 	 * y emite `row:updated:global`, que la página de historial escucha para
@@ -2083,7 +2083,7 @@
 			//
 			// IMPORTANTE: `adicionalesPorPlaca` se inicializa ANTES del ensure/recalc
 			// para que GASTOS_DIVERSOS (0,4% × Σ total facturado) considere también
-			// el valor_liquidar de los adicionales Cotransmeq en su base.
+			// el valor_liquidar de los adicionales Transmeralda en su base.
 			adicionalesPorPlaca = {
 				0: (cierre.adicionales || []).map((a: any) => ({
 					...a,
@@ -2204,7 +2204,7 @@
 </script>
 
 <svelte:head>
-	<title>Editar Liquidación · Cotransmeq</title>
+	<title>Editar Liquidación · Transmeralda</title>
 </svelte:head>
 
 {#if loading}
@@ -2480,7 +2480,7 @@
 								class:sort-active={sortKey === 'ingresoTransmeralda'}
 								on:click={() => toggleSort('ingresoTransmeralda')}
 							>
-								<span>ING. COTRANSMEQ</span><span class="sort-icon"
+								<span>ING. TRANSMERALDA</span><span class="sort-icon"
 									>{sortIcons.ingresoTransmeralda}</span
 								>
 							</th>
@@ -2561,7 +2561,7 @@
 								{@const vLiq = vLiqGross - vAdmin}
 								<tr class="row-adicional">
 									<td class="cell-row-num"><span class="badge-adc">ADC</span></td>
-									<td class="cell-cliente"><strong>{adc.cliente || 'COTRANSMEQ'}</strong></td>
+									<td class="cell-cliente"><strong>{adc.cliente || 'TRANSMERALDA'}</strong></td>
 									<td class="cell-consecutivo">—</td>
 									<td class="cell-placa">{fmtPlaca(adc.placa || currentPlaca.placa)}</td>
 									<td class="cell-nombre">{adc.tercero_nombre || currentPlaca.nombre || '—'}</td>
@@ -2718,7 +2718,7 @@
 									>{fmtCOP(
 										itemsConAdicionales.reduce((s, i) => {
 											const lt2 = i.tercero?.liquidacion_tercero;
-											// Para los adicionales, ING. COTRANSMEQ resta el vLiq
+											// Para los adicionales, ING. TRANSMERALDA resta el vLiq
 											// (representado como un número negativo en la fila).
 											if (i._esAdicional) {
 												return s - (lt2?.valor_liquidar || 0);
@@ -3420,7 +3420,7 @@
 		width: 32px;
 		height: 32px;
 		border: 3px solid #e2e8f0;
-		border-top-color: #ea580c;
+		border-top-color: #059669;
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 	}
@@ -3826,7 +3826,7 @@
 		font-weight: 700;
 	}
 	.cell-green {
-		color: #ea580c !important;
+		color: #059669 !important;
 	}
 	.cell-red {
 		color: #dc2626 !important;
@@ -3868,7 +3868,7 @@
 	.row-prestaciones-header td {
 		background: #ecfdf5;
 		color: #065f46;
-		border-top: 3px solid #f97316;
+		border-top: 3px solid #10b981;
 		border-bottom-color: #a7f3d0;
 	}
 	.row-seguridad-header td {
@@ -3903,7 +3903,7 @@
 	.row-anticipos-header td {
 		background: #f0fdf4;
 		color: #065f46;
-		border-top: 3px solid #f97316;
+		border-top: 3px solid #10b981;
 		border-bottom-color: #a7f3d0;
 	}
 	.anticipos-header-cell {
@@ -3988,16 +3988,16 @@
 		font-weight: 700;
 		color: #047857;
 		background: #ffffff;
-		border: 1px solid #f97316;
+		border: 1px solid #10b981;
 		border-radius: 6px;
 		cursor: pointer;
 		transition: all 0.15s ease;
 		letter-spacing: 0.02em;
 	}
 	.add-anticipo-btn:hover {
-		background: #f97316;
+		background: #10b981;
 		color: #ffffff;
-		border-color: #ea580c;
+		border-color: #059669;
 	}
 	.add-anticipo-btn svg {
 		stroke: currentColor;
@@ -4256,8 +4256,8 @@
 		font-family: monospace;
 		font-size: 12px;
 		font-weight: 700;
-		color: #ea580c;
-		background: rgba(234, 88, 12, 0.08);
+		color: #059669;
+		background: rgba(5, 150, 105, 0.08);
 		padding: 2px 8px;
 		border-radius: 6px;
 	}
@@ -4266,7 +4266,7 @@
 		font-size: 12px;
 		font-weight: 700;
 		color: #1d4ed8;
-		background: rgba(234, 88, 12, 0.08);
+		background: rgba(5, 150, 105, 0.08);
 		padding: 2px 8px;
 		border-radius: 6px;
 	}
@@ -4275,7 +4275,7 @@
 		font-family: monospace;
 		font-size: 13px;
 		font-weight: 800;
-		color: #ea580c;
+		color: #059669;
 	}
 
 	.row-concepto td {
@@ -4304,7 +4304,7 @@
 		font-family: monospace;
 		font-size: 13px;
 		font-weight: 800;
-		color: #ea580c;
+		color: #059669;
 		text-align: right;
 		white-space: nowrap;
 	}
@@ -4424,9 +4424,9 @@
 		background: #fff;
 	}
 	.excel-cell-input:focus {
-		border-color: #ea580c;
+		border-color: #059669;
 		background: #fff;
-		box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.15);
+		box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.15);
 	}
 	.excel-cell-input-xs {
 		max-width: 80px;
@@ -4582,8 +4582,8 @@
 		outline: none;
 	}
 	.conductor-name-inline:focus {
-		border-color: #ea580c;
-		box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.15);
+		border-color: #059669;
+		box-shadow: 0 0 0 2px rgba(5, 150, 105, 0.15);
 	}
 
 	.btn-exclude {
@@ -4702,18 +4702,18 @@
 	.excel-table .cell-section-pct.cell-selected,
 	.excel-table .cell-tfoot-value.cell-selected,
 	.excel-table .cell-summary-red.cell-selected {
-		background: rgba(249, 115, 22, 0.18) !important;
-		box-shadow: inset 0 0 0 1px #f97316;
+		background: rgba(16, 185, 129, 0.18) !important;
+		box-shadow: inset 0 0 0 1px #10b981;
 		color: #047857 !important;
 		position: relative;
 		z-index: 1;
 	}
 	.excel-table input.cell-selected {
-		background: rgba(249, 115, 22, 0.15) !important;
-		box-shadow: inset 0 0 0 2px #f97316;
+		background: rgba(16, 185, 129, 0.15) !important;
+		box-shadow: inset 0 0 0 2px #10b981;
 	}
 	.excel-table tr:hover .cell-selected {
-		background: rgba(249, 115, 22, 0.28) !important;
+		background: rgba(16, 185, 129, 0.28) !important;
 	}
 
 	/* Cursor "cell" en celdas numéricas para indicar que se pueden arrastrar */

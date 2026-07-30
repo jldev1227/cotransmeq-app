@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
+	import { onMount, onDestroy, tick } from 'svelte';
 	import Select from 'svelte-select';
 	import {
 		obtenerConductores,
@@ -23,8 +23,11 @@
 		Calculator
 	} from 'lucide-svelte';
 	import { toast } from 'svelte-sonner';
+	import { socketUtils } from '$lib/socket';
+	import { authStore } from '$lib/stores/auth';
 	import CalendarPernote from './CalendarPernote.svelte';
 	import RecargosPreview from './RecargosPreview.svelte';
+	import RecargosDesgloseModal from './RecargosDesgloseModal.svelte';
 	import RecorridosSincronizadosModal from './RecorridosSincronizadosModal.svelte';
 
 	// Props
@@ -78,7 +81,8 @@
 	let descontarPensionSalario = false;
 	let descontarTransporte = false;
 	let redondearNetoArriba = false;
-	let ajustePesos: -5 | -3 | -2 | -1 | 0 | 1 | 2 | 3 | 5 = 0;
+	let ajustePesos:
+		-10 | -9 | -8 | -7 | -6 | -5 | -3 | -2 | -1 | 0 | 1 | 2 | 3 | 5 | 6 | 7 | 8 | 9 | 10 = 0;
 	let estadoLiquidacion: 'Pendiente' | 'Liquidado' = 'Pendiente';
 
 	// Períodos especiales
@@ -210,6 +214,16 @@
 		modalRecorridosOpen = true;
 	}
 
+	// Modal de desglose detallado de recargos (por día, tipo, config, etc.)
+	let modalDesgloseOpen = false;
+	function abrirModalDesglose() {
+		if (!previewRecargosData || !previewRecargosData.planillas?.length) {
+			toast.info('Aún no hay recargos calculados. Pulsa "Recalcular" primero.');
+			return;
+		}
+		modalDesgloseOpen = true;
+	}
+
 	function placaDeVehiculoId(vehiculoId: string): string | null {
 		const v = vehiculos.find((x) => x.id === vehiculoId);
 		return v?.placa ?? null;
@@ -251,7 +265,7 @@
 			if (bonos.length === 0) {
 				toast.info('No hay bonos persistidos en este período para este conductor.', {
 					description:
-					'Ve a Conductores → Recorridos y marca los bonos con checkboxes. Luego vuelve aquí y sincroniza.'
+						'Ve a Conductores → Recorridos y marca los bonos con checkboxes. Luego vuelve aquí y sincroniza.'
 				});
 				return;
 			}
@@ -410,9 +424,27 @@
 
 	onMount(async () => {
 		await cargarDatos();
+		// Esperar a que las declaraciones reactivas (`conductoresOptions`,
+		// `vehiculosOptions`, `empresasOptions`) se actualicen con los datos
+		// recién cargados antes de buscar el conductor. Sin esto, en modo
+		// edición `conductoresOptions` puede estar vacío cuando
+		// `cargarDatosIniciales` lo consulta → `conductorSelected = null` →
+		// `calcularTotales` retorna todos los ceros (incluyendo salario).
+		await tick();
 		if (mode === 'edit' && initialData) {
 			cargarDatosIniciales();
 		}
+
+		// Suscribirse a recalcs hechos por otros usuarios (o por este mismo
+		// usuario en otra pestaña). El backend emite `recargo-recalculado`
+		// cada vez que se recalcula una planilla con la config vigente.
+		// `socketUtils` ya se re-registra tras reconexiones automáticamente.
+		socketUtils.on('recargo-recalculado', handleRecargoRecalculadoSocket);
+	});
+
+	onDestroy(() => {
+		// Limpiar listener del socket al desmontar para no leakear.
+		socketUtils.off('recargo-recalculado', handleRecargoRecalculadoSocket);
 	});
 
 	async function cargarDatos() {
@@ -455,6 +487,22 @@
 		// Cargar conductor
 		conductorSelected =
 			conductoresOptions.find((c) => c.value === initialData.conductor_id) || null;
+
+		// Fallback defensivo: si el backend no devuelve `salario_base` en el listado
+		// de conductores (ver `obtenerConductores` en el backend), el form mostraría
+		// $0 en el Salario. La liquidación sí trae el `salario_base` del conductor
+		// embebido en `initialData.conductores` / `initialData.conductor`, así que lo
+		// usamos para enriquecer `conductorSelected` si viene en 0 o undefined.
+		if (conductorSelected && (!conductorSelected.salario_base || conductorSelected.salario_base <= 0)) {
+			const fallbackSalarioBase = Number(
+				initialData.conductores?.salario_base ??
+					initialData.conductor?.salario_base ??
+					0
+			);
+			if (fallbackSalarioBase > 0) {
+				conductorSelected = { ...conductorSelected, salario_base: fallbackSalarioBase };
+			}
+		}
 
 		// Cargar vehículos
 		vehiculosSelected = vehiculosOptions.filter((v) =>
@@ -535,8 +583,11 @@
 
 			// Cargar bonificaciones existentes para este vehículo
 			const bonosVehiculo = bonificacionesData.filter((b: any) => b.vehiculo_id === vehiculoId);
+			const normalizarNombre = (n: string) => (n || '').trim().toLowerCase();
 			const bonosActualizados = detalle.bonos.map((bono) => {
-				const bonoExistente = bonosVehiculo.find((b: any) => b.name === bono.name);
+				const bonoExistente = bonosVehiculo.find(
+					(b: any) => normalizarNombre(b.name) === normalizarNombre(bono.name)
+				);
 				if (bonoExistente) {
 					// values puede venir como string JSON desde la BD
 					const parsedValues =
@@ -676,7 +727,10 @@
 			}
 			previewRecargosGrupos = Object.values(gruposPorKey);
 			// Rebuild overrides cache from saved data
-			const overrides: Record<string, { pagCliente: boolean; porcentajePropietario: number; incluir?: boolean }> = {};
+			const overrides: Record<
+				string,
+				{ pagCliente: boolean; porcentajePropietario: number; incluir?: boolean }
+			> = {};
 			for (const g of previewRecargosGrupos) {
 				overrides[g.key] = {
 					pagCliente: g.pag_cliente,
@@ -734,20 +788,30 @@
 		vehiculosSelected = [];
 	}
 
-	// Inicializar detalles de vehículos cuando cambian vehículos, meses o configuración
-	$: if (
-		Array.isArray(vehiculosSelected) &&
-		vehiculosSelected.length > 0 &&
-		mesesRange.length > 0 &&
-		configuracion.length > 0
-	) {
-		inicializarDetallesVehiculos();
+	// Inicializar detalles de vehículos cuando cambian vehículos, meses o configuración.
+	// Solo requerimos que `vehiculosSelected` sea array; mesesRange y configuracion
+	// se referencian explícitamente para que Svelte los rastree como dependencias y
+	// re-ejecute este bloque cuando lleguen (re-poblando bonos/mantenimientos en los
+	// detalles existentes). Esto evita que seleccionar una placa antes de tener
+	// período o config deje `detallesVehiculos` vacío y oculte Pernotes/Recargos.
+	$: {
+		const _meses = mesesRange;
+		const _config = configuracion;
+		void _meses;
+		void _config;
+		if (Array.isArray(vehiculosSelected)) {
+			inicializarDetallesVehiculos();
+		}
 	}
 
 	function inicializarDetallesVehiculos() {
-		const bonosConfiguracion = configuracion.filter((c) =>
-			c.nombre?.toLowerCase().includes('bono')
-		);
+		// Acepta tanto "Bono X" como "Bonificación X" (y variantes como
+		// "Bonificaciones", "Bonificado"). La lista de configs suele mezclar
+		// ambas formas en distintos años, así que matcheamos por raíz común.
+		const bonosConfiguracion = configuracion.filter((c) => {
+			const nombre = (c.nombre || '').toLowerCase();
+			return nombre.includes('bono') || nombre.includes('bonif');
+		});
 
 		const valorMantenimiento = Number(
 			configuracion.find((c) => c.nombre === 'Mantenimiento')?.valor || 0
@@ -759,23 +823,46 @@
 			const detalleExistente = detallesVehiculos.find((d) => d.vehiculo.value === vehiculo.value);
 
 			if (detalleExistente) {
-				// Actualizar meses en bonos existentes preservando cantidades
-				const bonosActualizados = detalleExistente.bonos.map((bono) => ({
-					...bono,
-					values: mesesRange.map((mes) => {
-						const existing = bono.values.find((v) => v.mes === mes);
-						return existing || { mes, quantity: 0 };
-					})
-				}));
+				// Si los bonos están vacíos pero ya hay configuración disponible,
+				// crearlos (caso: vehículo seleccionado antes de que cargara la config).
+				let bonosActualizados = detalleExistente.bonos;
+				if (bonosActualizados.length === 0 && bonosConfiguracion.length > 0) {
+					bonosActualizados = bonosConfiguracion.map((bono) => ({
+						name: bono.nombre,
+						value: Number(bono.valor || 0),
+						values: mesesRange.map((mes) => ({ mes, quantity: 0 })),
+						vehiculo_id: vehiculo.value
+					}));
+				} else if (mesesRange.length > 0) {
+					// Sincronizar values con mesesRange preservando cantidades del usuario.
+					bonosActualizados = bonosActualizados.map((bono) => ({
+						...bono,
+						values: mesesRange.map((mes) => {
+							const existing = bono.values.find((v) => v.mes === mes);
+							return existing || { mes, quantity: 0 };
+						})
+					}));
+				}
 
-				// Actualizar meses en mantenimientos existentes preservando cantidades
-				const mantenimientosActualizados = detalleExistente.mantenimientos.map((mant) => ({
-					...mant,
-					values: mesesRange.map((mes) => {
-						const existing = mant.values.find((v) => v.mes === mes);
-						return existing || { mes, quantity: 0 };
-					})
-				}));
+				// Si los mantenimientos están vacíos pero ya hay meses, crearlos.
+				let mantenimientosActualizados = detalleExistente.mantenimientos;
+				if (mantenimientosActualizados.length === 0 && mesesRange.length > 0) {
+					mantenimientosActualizados = [
+						{
+							values: mesesRange.map((mes) => ({ mes, quantity: 0 })),
+							value: valorMantenimiento,
+							vehiculo_id: vehiculo.value
+						}
+					];
+				} else if (mesesRange.length > 0) {
+					mantenimientosActualizados = mantenimientosActualizados.map((mant) => ({
+						...mant,
+						values: mesesRange.map((mes) => {
+							const existing = mant.values.find((v) => v.mes === mes);
+							return existing || { mes, quantity: 0 };
+						})
+					}));
+				}
 
 				return {
 					...detalleExistente,
@@ -784,7 +871,7 @@
 				};
 			}
 
-			// Crear bonos para cada mes
+			// Crear bonos para cada mes (vacío si la configuración aún no ha cargado)
 			const bonos = bonosConfiguracion.map((bono) => ({
 				name: bono.nombre,
 				value: Number(bono.valor || 0),
@@ -792,14 +879,17 @@
 				vehiculo_id: vehiculo.value
 			}));
 
-			// Crear mantenimientos para cada mes
-			const mantenimientos = [
-				{
-					values: mesesRange.map((mes) => ({ mes, quantity: 0 })),
-					value: valorMantenimiento,
-					vehiculo_id: vehiculo.value
-				}
-			];
+			// Crear mantenimientos solo si hay meses definidos
+			const mantenimientos =
+				mesesRange.length > 0
+					? [
+							{
+								values: mesesRange.map((mes) => ({ mes, quantity: 0 })),
+								value: valorMantenimiento,
+								vehiculo_id: vehiculo.value
+							}
+						]
+					: [];
 
 			return {
 				vehiculo,
@@ -810,8 +900,19 @@
 			};
 		});
 
-		// En modo edición, poblar con datos existentes después de inicializar
-		if (mode === 'edit' && initialData && !datosInicialesCargados) {
+		// En modo edición, poblar con datos existentes después de inicializar.
+		// Solo cuando mesesRange y configuracion estén poblados: el match por
+		// `name` en cargarDetallesVehiculosDesdeData recorre `detalle.bonos`
+		// (que se crea desde la config), y si lo llamamos antes de que la config
+		// llegue, el array está vacío, ningún match se hace, y datosInicialesCargados
+		// queda en true prematuramente — los valores guardados nunca se cargan.
+		if (
+			mode === 'edit' &&
+			initialData &&
+			!datosInicialesCargados &&
+			mesesRange.length > 0 &&
+			configuracion.length > 0
+		) {
 			cargarDetallesVehiculosDesdeData();
 		}
 	}
@@ -1055,6 +1156,35 @@
 	// permite el ajuste manual (positivo o negativo) definido por el usuario.
 	$: totalAPagarVisual = Math.round(totales.sueldoTotal) + ajustePesos;
 
+	// Componentes de la Base Prestacional (IBC) — desglose en el aside
+	$: basePrestacionalDesglose = (() => {
+		const salarioBase = Number(
+			conductores.find((c) => c.id === conductorSelected?.value)?.salario_base || 0
+		);
+		const totalVacaciones = Number(valor_vacaciones) || 0;
+		const ajusteVillanueva = isCheckedAjuste
+			? diasAjusteDeducciones !== null && diasAjusteDeducciones !== undefined
+				? (totales.bonificacionVillanueva / 30) * diasAjusteDeducciones
+				: totales.bonificacionVillanueva
+			: 0;
+		const recargosParex =
+			isAjusteParex || isAjusteRecargosCompletos
+				? isAjusteRecargosCompletos
+					? totales.totalRecargos
+					: totales.totalRecargosParex
+				: 0;
+		const recargosGeopark = isAjusteGeopark ? totales.totalRecargosGeopark : 0;
+		return {
+			salarioBase,
+			salarioDevengado: totales.salarioDevengado,
+			totalVacaciones,
+			ajusteVillanueva,
+			recargosParex,
+			recargosGeopark,
+			esRecargosCompletos: isAjusteRecargosCompletos
+		};
+	})();
+
 	function calcularTotales() {
 		const conductor = conductores.find((c) => c.id === conductorSelected?.value);
 		if (!conductor) {
@@ -1188,14 +1318,21 @@
 
 		// Bonificación Ajuste Salarial
 		let bonificacionVillanueva = 0;
+		// Diferencia teórica completa entre salario villanueva y salario base
+		// (correspondiente a 30 días completos). Se usa para calcular la base
+		// prestacional (IBC) de salud/pensión cuando el usuario indica los
+		// "Días del ajuste a tomar para deducciones", independientemente de los
+		// días reales laborados en villanueva.
+		let ajusteSalarialCompleto = 0;
 		if (isCheckedAjuste) {
 			const salarioVillanueva = Number(
 				configuracion.find((c) => c.nombre === 'Salario villanueva')?.valor || 0
 			);
-			const ajusteCalculado = (salarioVillanueva - salarioBase) / 30;
+			ajusteSalarialCompleto = salarioVillanueva - salarioBase;
+			const ajusteCalculado = ajusteSalarialCompleto / 30;
 
 			if (!isAjustePorDia && dias_laborados_villanueva >= 17) {
-				bonificacionVillanueva = salarioVillanueva - salarioBase;
+				bonificacionVillanueva = ajusteSalarialCompleto;
 			} else {
 				bonificacionVillanueva = ajusteCalculado * dias_laborados_villanueva;
 			}
@@ -1291,18 +1428,21 @@
 			totalVacaciones = (salarioBase / 30) * diasVacaciones;
 		}
 
-		// Ajuste salarial para base prestacional y deducciones: si se especifican días,
-		// solo tomar esa fracción del ajuste salarial (Villanueva). Si no, se toma completo.
+		// Ajuste salarial para base prestacional (IBC) y deducciones: si se especifican
+		// "Días del ajuste a tomar para deducciones", se prorratea el AJUSTE COMPLETO
+		// (diferencia salario villanueva - salario base, equivalente a 30 días) sobre
+		// esos días, NO la bonificaciónVillanueva ya prorrateada por los días reales
+		// laborados. Esto es porque la base prestacional siempre se calcula sobre el
+		// ajuste teórico completo del mes, independientemente de los días villanueva
+		// que el conductor haya trabajado. Si no se indican días, se toma el ajuste
+		// completo (30/30) sin alterar.
 		const ajusteParaBase =
 			diasAjusteDeducciones !== null && diasAjusteDeducciones !== undefined
-				? (bonificacionVillanueva / 30) * diasAjusteDeducciones
-				: bonificacionVillanueva;
+				? (ajusteSalarialCompleto / 30) * diasAjusteDeducciones
+				: ajusteSalarialCompleto;
 
 		// Total de conceptos adicionales (necesario para el IBC de la base)
-		const totalAjustesAdicionales = conceptos_adicionales.reduce(
-			(sum, c) => sum + c.valor,
-			0
-		);
+		const totalAjustesAdicionales = conceptos_adicionales.reduce((sum, c) => sum + c.valor, 0);
 
 		// Recargos completos de PAREX / GEOPARK a adicionar a la base prestacional.
 		// Si "Ajuste PAREX recargos completos" está activo (con o sin PAREX marcado),
@@ -1427,16 +1567,52 @@
 	async function handleSubmit() {
 		if (!validarFormulario()) return;
 
+		// Validar pernotes: todo pernote con fechas/cantidad debe tener empresa_id.
+		// El backend hace `if (!pernote.empresa_id) continue;` y descarta silenciosamente,
+		// por lo que si el usuario marca fechas en el calendario sin elegir empresa,
+		// el form muestra el total pero al guardar el pernote se pierde sin aviso.
+		const pernotesInvalidos: Array<{ vehiculo: string; idx: number }> = [];
+		for (const detalle of detallesVehiculos) {
+			for (let i = 0; i < detalle.pernotes.length; i++) {
+				const p = detalle.pernotes[i];
+				const tieneContenido = (p.fechas?.length || 0) > 0 || (p.cantidad || 0) > 0;
+				if (tieneContenido && !p.empresa_id) {
+					pernotesInvalidos.push({ vehiculo: detalle.vehiculo.label, idx: i + 1 });
+				}
+			}
+		}
+		if (pernotesInvalidos.length > 0) {
+			const lista = pernotesInvalidos.map((p) => `${p.vehiculo} · Pernote #${p.idx}`).join('\n');
+			toast.error('Pernotes sin empresa seleccionada', {
+				description: `Selecciona la empresa antes de guardar:\n${lista}`,
+				duration: 6000
+			});
+			return;
+		}
+
 		// Defensa en profundidad: limpiar recargos automáticos que se hayan colado
-		// en detalle.recargos (deberían ir solo en recargos_preview).
+		// en detalle.recargos (deberían ir solo en recargos_preview) y descartar
+		// pernotes vacíos (sin fechas y sin cantidad) que el usuario agregó pero
+		// nunca terminó de diligenciar.
 		const detallesLimpios = detallesVehiculos.map((d: any) => ({
 			...d,
+			pernotes: (d.pernotes || []).filter(
+				(p: any) => (p.fechas?.length || 0) > 0 || (p.cantidad || 0) > 0
+			),
 			recargos: (d.recargos || []).filter((r: any) => !r.es_automatico)
 		}));
 
-		// Solo enviar los grupos de preview marcados con incluir !== false
-		const recargosPreviewIncluidos = (previewRecargosGrupos || []).filter(
-			(g: any) => g.incluir !== false
+		// Solo enviar los grupos de preview marcados con incluir !== false.
+		// `previewRecargosGrupos` viene expandido con 1 entrada por cada
+		// `origen_planilla_id` del grupo, todas con el mismo `valor` (total del
+		// grupo). Dedupeamos por `key` antes de enviar para que el backend no
+		// cree 1 recargo por entrada (lo que multiplicaba el total).
+		const recargosPreviewIncluidos = Array.from(
+			new Map(
+				(previewRecargosGrupos || [])
+					.filter((g: any) => g.incluir !== false)
+					.map((g: any) => [g.key, g])
+			).values()
 		);
 
 		const payload = {
@@ -1451,6 +1627,7 @@
 			ajuste_parex: isAjusteParex,
 			ajuste_geopark: isAjusteGeopark,
 			ajuste_parex_valor: totales.ajusteParex,
+			ajuste_geopark_valor: totales.ajusteGeopark,
 			ajuste_por_dia_flag: isAjustePorDia,
 			ajuste_parex_recargos_completos: isAjusteRecargosCompletos,
 			dias_ajuste_deducciones: diasAjusteDeducciones,
@@ -1578,6 +1755,69 @@
 		}
 		cachedGrupoOverrides = overrides;
 	}
+
+	/**
+	 * Handler del evento `recargosRecalculados` que emite el modal
+	 * RecargosDesgloseModal cuando el usuario pulsa "Recalcular" o
+	 * "Recalcular todas". Recarga el preview para reflejar los nuevos
+	 * valores en la UI.
+	 */
+	async function handleRecargosRecalculados() {
+		if (recargosPreviewRef && typeof recargosPreviewRef.cargarPreview === 'function') {
+			await recargosPreviewRef.cargarPreview();
+		}
+	}
+
+	/**
+	 * Handler del evento socket `recargo-recalculado` que emite el backend
+	 * cuando cualquier usuario (incluido este en otra pestaña) recalcula
+	 * una planilla con la config vigente. Si la planilla recalculada
+	 * corresponde al conductor que se está viendo en este formulario
+	 * (mismo id, mismo período), re-fetcheamos el preview para que tanto
+	 * la previsualización inline como el modal `RecargosDesgloseModal`
+	 * (que consume `previewRecargosData` por prop) se actualicen en vivo,
+	 * sin necesidad de recargar la página.
+	 *
+	 * Si el modal está abierto, mostramos un toast discreto para que el
+	 * usuario sepa que los datos cambiaron.
+	 */
+	async function handleRecargoRecalculadoSocket(payload: {
+		recargoId?: string;
+		conductorId?: string;
+		empresaId?: string;
+		mes?: number;
+		año?: number;
+		recargo?: any;
+		timestamp?: string;
+	}) {
+		// Filtro: solo reaccionar si la planilla recalculada corresponde al
+		// conductor que se está visualizando en este formulario. Sin esto,
+		// recalcs de OTROS conductores harían refetch innecesario.
+		const currentConductorId = conductorSelected?.value;
+		if (payload?.conductorId && currentConductorId && payload.conductorId !== currentConductorId) {
+			return;
+		}
+
+		if (recargosPreviewRef && typeof recargosPreviewRef.cargarPreview === 'function') {
+			await recargosPreviewRef.cargarPreview();
+		}
+
+		// Toast solo si el modal está abierto y los datos cambiaron de
+		// verdad (no cuando este mismo usuario es quien disparó el recalc
+		// desde ESTE modal — ese ya muestra su propio toast de éxito).
+		if (modalDesgloseOpen && payload?.recargoId) {
+			const userIdActual = authStore.getUser()?.id;
+			const esMismoUsuario =
+				payload.recargo?.actualizado_por_id === userIdActual ||
+				payload.recargo?.creado_por_id === userIdActual;
+			if (!esMismoUsuario) {
+				toast.info('Recargos actualizados', {
+					description:
+						'Otro usuario recalculó una planilla del período visible. El modal se ha actualizado.'
+				});
+			}
+		}
+	}
 </script>
 
 {#if loadingData}
@@ -1600,7 +1840,9 @@
 				</button>
 				<div>
 					<span class="eyebrow">Liquidaciones · {mode === 'create' ? 'Nueva' : 'Editar'}</span>
-					<h1 class="font-display mt-1 text-2xl font-normal tracking-tight text-[var(--text-primary)]">
+					<h1
+						class="mt-1 font-display text-2xl font-normal tracking-tight text-[var(--text-primary)]"
+					>
 						{mode === 'create' ? 'Nueva Liquidación' : 'Editar Liquidación'}
 					</h1>
 				</div>
@@ -1610,118 +1852,124 @@
 		<!-- Layout 2 columnas: form (izq) + resumen sticky (der) -->
 		<div class="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_500px]">
 			<!-- COLUMNA IZQUIERDA: Formulario -->
-			<div class="space-y-5 min-w-0">
+			<div class="min-w-0 space-y-5">
 				<!-- Sección: Período y Conductor -->
-				<div class="rounded-xl border border-[var(--border-subtle)] bg-white p-5 shadow-[var(--shadow-card)]">
-				<!-- PASO 1: Información Básica -->
-				<div class="space-y-5">
-					<h2 class="flex items-center gap-2 font-display text-base font-medium text-[var(--text-primary)]">
-						<Users class="h-4 w-4 text-[var(--emerald-600)]" />
-						Información Básica
-					</h2>
-
-					<!-- Conductor -->
-					<div>
-						<label
-							for="conductor-select"
-							class="font-mono-meta mb-1.5 block text-[0.65rem] text-[var(--text-muted)]"
+				<div
+					class="rounded-xl border border-[var(--border-subtle)] bg-white p-5 shadow-[var(--shadow-card)]"
+				>
+					<!-- PASO 1: Información Básica -->
+					<div class="space-y-5">
+						<h2
+							class="flex items-center gap-2 font-display text-base font-medium text-[var(--text-primary)]"
 						>
-							Conductor <span class="text-[#DC2626]">*</span>
-						</label>
-						<div id="conductor-select">
-							<Select
-								items={conductoresOptions}
-								bind:value={conductorSelected}
-								placeholder="Buscar conductor..."
-								searchable={true}
-								clearable={false}
-								--border-radius="0.625rem"
-								--border="1px solid var(--border-default)"
-								--border-focused="1px solid var(--emerald-500)"
-								--border-hover="1px solid var(--border-emphasis)"
-								--padding="0.65rem 0.85rem"
-								--height="42px"
-							/>
-						</div>
-					</div>
+							<Users class="h-4 w-4 text-[var(--emerald-600)]" />
+							Información Básica
+						</h2>
 
-					<!-- Fechas -->
-					<div class="grid grid-cols-2 gap-4">
+						<!-- Conductor -->
 						<div>
 							<label
-								for="periodo_inicio"
+								for="conductor-select"
 								class="font-mono-meta mb-1.5 block text-[0.65rem] text-[var(--text-muted)]"
 							>
-								Fecha Inicio <span class="text-[#DC2626]">*</span>
+								Conductor <span class="text-[#DC2626]">*</span>
 							</label>
-							<input
-								id="periodo_inicio"
-								type="date"
-								bind:value={periodo_inicio}
-								required
-								class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
-							/>
+							<div id="conductor-select">
+								<Select
+									items={conductoresOptions}
+									bind:value={conductorSelected}
+									placeholder="Buscar conductor..."
+									searchable={true}
+									clearable={false}
+									--border-radius="0.625rem"
+									--border="1px solid var(--border-default)"
+									--border-focused="1px solid var(--emerald-500)"
+									--border-hover="1px solid var(--border-emphasis)"
+									--padding="0.65rem 0.85rem"
+									--height="42px"
+								/>
+							</div>
 						</div>
-						<div>
-							<label
-								for="periodo_fin"
-								class="font-mono-meta mb-1.5 block text-[0.65rem] text-[var(--text-muted)]"
-							>
-								Fecha Fin <span class="text-[#DC2626]">*</span>
-							</label>
-							<input
-								id="periodo_fin"
-								type="date"
-								bind:value={periodo_fin}
-								required
-								class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
-							/>
-						</div>
-					</div>
 
-					<!-- Vehículos: el selector de vehículos ahora vive en la sección
+						<!-- Fechas -->
+						<div class="grid grid-cols-2 gap-4">
+							<div>
+								<label
+									for="periodo_inicio"
+									class="font-mono-meta mb-1.5 block text-[0.65rem] text-[var(--text-muted)]"
+								>
+									Fecha Inicio <span class="text-[#DC2626]">*</span>
+								</label>
+								<input
+									id="periodo_inicio"
+									type="date"
+									bind:value={periodo_inicio}
+									required
+									class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
+								/>
+							</div>
+							<div>
+								<label
+									for="periodo_fin"
+									class="font-mono-meta mb-1.5 block text-[0.65rem] text-[var(--text-muted)]"
+								>
+									Fecha Fin <span class="text-[#DC2626]">*</span>
+								</label>
+								<input
+									id="periodo_fin"
+									type="date"
+									bind:value={periodo_fin}
+									required
+									class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
+								/>
+							</div>
+						</div>
+
+						<!-- Vehículos: el selector de vehículos ahora vive en la sección
 					     "Vehículos y Detalles" para evitar loops de bind:value duplicado. -->
 
-					<!-- Días laborados -->
-					<div class="grid grid-cols-2 gap-4">
-						<div>
-							<label
-								for="dias_laborados"
-								class="font-mono-meta mb-1.5 block text-[0.65rem] text-[var(--text-muted)]"
-								>Días Totales</label
-							>
-							<input
-								id="dias_laborados"
-								type="number"
-								bind:value={dias_laborados}
-								min="0"
-								max="31"
-								class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
-							/>
-						</div>
-						<div>
-							<label
-								for="dias_laborados_villanueva"
-								class="font-mono-meta mb-1.5 block text-[0.65rem] text-[var(--text-muted)]"
-								>Días Ajuste Salarial</label
-							>
-							<input
-								id="dias_laborados_villanueva"
-								type="number"
-								bind:value={dias_laborados_villanueva}
-								min="0"
-								max="31"
-								class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
-							/>
+						<!-- Días laborados -->
+						<div class="grid grid-cols-2 gap-4">
+							<div>
+								<label
+									for="dias_laborados"
+									class="font-mono-meta mb-1.5 block text-[0.65rem] text-[var(--text-muted)]"
+									>Días Totales</label
+								>
+								<input
+									id="dias_laborados"
+									type="number"
+									bind:value={dias_laborados}
+									min="0"
+									max="31"
+									class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
+								/>
+							</div>
+							<div>
+								<label
+									for="dias_laborados_villanueva"
+									class="font-mono-meta mb-1.5 block text-[0.65rem] text-[var(--text-muted)]"
+									>Días Ajuste Salarial</label
+								>
+								<input
+									id="dias_laborados_villanueva"
+									type="number"
+									bind:value={dias_laborados_villanueva}
+									min="0"
+									max="31"
+									class="input-glow w-full rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm"
+								/>
+							</div>
 						</div>
 					</div>
-				</div>
 				</div>
 				<!-- /Sección: Período y Conductor -->
 
 				<!-- Sección: Vehículos y Detalles -->
-				<div class="rounded-xl border border-[var(--border-subtle)] bg-white p-5 shadow-[var(--shadow-card)]">
-					<div class="mb-4 flex items-start justify-between gap-3">
+				<div
+					class="rounded-xl border border-[var(--border-subtle)] bg-white p-5 shadow-[var(--shadow-card)]"
+				>
+					<div class="mb-4 flex flex-wrap items-start justify-between gap-3">
 						<div class="flex items-center gap-2">
 							<div class="card-icon-sm">
 								<Truck class="h-4 w-4 text-white" />
@@ -1736,7 +1984,7 @@
 							</div>
 						</div>
 						<!-- Botones: consulta y sincronización de bonificaciones desde recorridos -->
-						<div class="flex items-center gap-1.5">
+						<div class="flex flex-wrap items-center gap-1.5">
 							<!-- Consultar recorridos (modal general, no auto-abre) -->
 							<button
 								type="button"
@@ -1749,8 +1997,18 @@
 										? 'Define el período'
 										: 'Ver los recorridos del conductor en el período'}
 							>
-								<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+								<svg
+									class="h-3.5 w-3.5"
+									fill="none"
+									stroke="currentColor"
+									viewBox="0 0 24 24"
+									stroke-width="2"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+									/>
 								</svg>
 								Consultar recorridos
 							</button>
@@ -1775,13 +2033,35 @@
 							>
 								{#if sincronizandoBonos}
 									<svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-										<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25" />
-										<path d="M4 12a8 8 0 018-8v0" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+										<circle
+											cx="12"
+											cy="12"
+											r="10"
+											stroke="currentColor"
+											stroke-width="3"
+											opacity="0.25"
+										/>
+										<path
+											d="M4 12a8 8 0 018-8v0"
+											stroke="currentColor"
+											stroke-width="3"
+											stroke-linecap="round"
+										/>
 									</svg>
 									Sincronizando…
 								{:else}
-									<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+									<svg
+										class="h-3.5 w-3.5"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+										stroke-width="2"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"
+										/>
 									</svg>
 									Sincronizar desde recorridos
 								{/if}
@@ -1795,11 +2075,24 @@
 							class="mb-4 flex flex-wrap items-center gap-2 rounded-xl border border-indigo-200/60 bg-indigo-50/60 px-3 py-2 text-[11px]"
 							style="color: #3730a3;"
 						>
-							<svg class="h-3.5 w-3.5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+							<svg
+								class="h-3.5 w-3.5 text-indigo-600"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+								stroke-width="2"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"
+								/>
 							</svg>
 							<span class="font-semibold">
-								Sincronización: {ultimoSyncBonosResumen.items} bono{ultimoSyncBonosResumen.items === 1 ? '' : 's'} aplicado{ultimoSyncBonosResumen.items === 1 ? '' : 's'}
+								Sincronización: {ultimoSyncBonosResumen.items} bono{ultimoSyncBonosResumen.items ===
+								1
+									? ''
+									: 's'} aplicado{ultimoSyncBonosResumen.items === 1 ? '' : 's'}
 							</span>
 							<span class="text-indigo-700/70">·</span>
 							{#each ultimoSyncBonosResumen.porConfig.slice(0, 4) as item (item.nombre)}
@@ -1812,7 +2105,9 @@
 							{#if ultimoSyncBonosResumen.porVehiculo.length > 1}
 								<span class="text-indigo-700/70">·</span>
 								<span class="text-[10px] text-indigo-700/80">
-									en {ultimoSyncBonosResumen.porVehiculo.map((v) => v.placa ?? v.vehiculo_id.slice(0, 6)).join(', ')}
+									en {ultimoSyncBonosResumen.porVehiculo
+										.map((v) => v.placa ?? v.vehiculo_id.slice(0, 6))
+										.join(', ')}
 								</span>
 							{/if}
 						</div>
@@ -1843,15 +2138,19 @@
 							--border-focused="1px solid var(--emerald-500)"
 							--border-hover="1px solid var(--border-emphasis)"
 							--padding="0.5rem 0.75rem"
-							--multi-item-bg="rgba(249,115,22,0.10)"
+							--multi-item-bg="rgba(16,185,129,0.10)"
 							--multi-item-color="var(--emerald-700)"
 							--multi-item-clear-icon-color="var(--text-muted)"
 						/>
-						<p class="mt-1 text-xs text-[var(--text-very-muted)]">Opcional — para bonificaciones o recargos</p>
+						<p class="mt-1 text-xs text-[var(--text-very-muted)]">
+							Opcional — para bonificaciones o recargos
+						</p>
 					</div>
 
 					{#if !Array.isArray(vehiculosSelected) || vehiculosSelected.length === 0}
-						<div class="rounded-xl border border-dashed border-[var(--border-default)] py-10 text-center">
+						<div
+							class="rounded-xl border border-dashed border-[var(--border-default)] py-10 text-center"
+						>
 							<p class="text-sm text-[var(--text-very-muted)]">
 								Sin vehículos seleccionados. Agregue vehículos arriba si aplica.
 							</p>
@@ -1915,6 +2214,18 @@
 													</div>
 												{/each}
 											</div>
+										</div>
+									{:else if configuracion.length > 0 && mesesRange.length > 0}
+										<div>
+											<h4 class="font-mono-meta mb-2 text-[0.65rem] text-[var(--text-muted)]">
+												Bonificaciones
+											</h4>
+											<p
+												class="rounded-lg border border-dashed border-[var(--border-subtle)] py-2.5 text-center text-xs text-[var(--text-very-muted)]"
+											>
+												No hay bonificaciones configuradas para {new Date(periodo_inicio).getFullYear()}.
+												Crea una config con “Bono” o “Bonificación” en su nombre.
+											</p>
 										</div>
 									{/if}
 
@@ -2010,9 +2321,18 @@
 																--border-radius="0.5rem"
 																--font-size="0.875rem"
 																--height="36px"
-																--border="1px solid var(--border-default)"
-																--border-focused="1px solid var(--emerald-500)"
+																--border={pernote.fechas?.length > 0 && !pernote.empresa_id
+																	? '1px solid #DC2626'
+																	: '1px solid var(--border-default)'}
+																--border-focused={pernote.fechas?.length > 0 && !pernote.empresa_id
+																	? '1px solid #DC2626'
+																	: '1px solid var(--emerald-500)'}
 															/>
+															{#if pernote.fechas?.length > 0 && !pernote.empresa_id}
+																<p class="mt-1 text-[10px] font-medium text-[#DC2626]">
+																	Selecciona la empresa — sin ella este pernote no se guardará.
+																</p>
+															{/if}
 														</div>
 														<!-- Calendario de pernotes -->
 														<CalendarPernote
@@ -2078,14 +2398,32 @@
 										{#if detalle.recargos.length > 0}
 											<div class="space-y-2">
 												{#each detalle.recargos as recargo, rIdx}
-													<div class="item-card" style:border-color={recargo.es_override ? 'rgba(245, 158, 11, 0.30)' : ''}>
+													<div
+														class="item-card"
+														style:border-color={recargo.es_override
+															? 'rgba(245, 158, 11, 0.30)'
+															: ''}
+													>
 														<div class="item-card-header">
-															<span class="item-card-tag" style:background-color={recargo.es_override ? 'rgba(245, 158, 11, 0.10)' : ''} style:color={recargo.es_override ? '#92400E' : ''}>
-																<span class="item-card-tag-dot" aria-hidden="true" style:background-color={recargo.es_override ? '#F59E0B' : ''} style:box-shadow={recargo.es_override ? '0 0 0 2px rgba(245, 158, 11, 0.18)' : ''}></span>
+															<span
+																class="item-card-tag"
+																style:background-color={recargo.es_override
+																	? 'rgba(245, 158, 11, 0.10)'
+																	: ''}
+																style:color={recargo.es_override ? '#92400E' : ''}
+															>
+																<span
+																	class="item-card-tag-dot"
+																	aria-hidden="true"
+																	style:background-color={recargo.es_override ? '#F59E0B' : ''}
+																	style:box-shadow={recargo.es_override
+																		? '0 0 0 2px rgba(245, 158, 11, 0.18)'
+																		: ''}
+																></span>
 																Recargo #{rIdx + 1}
 																{#if recargo.es_override}
 																	<span
-																		class="ml-1 inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-amber-800"
+																		class="ml-1 inline-flex items-center gap-0.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold tracking-wider text-amber-800 uppercase"
 																		title="Este recargo sobreescribe un automático de planilla. Elimínalo para revertir."
 																	>
 																		<svg
@@ -2113,8 +2451,8 @@
 																<Trash2 />
 															</button>
 														</div>
-														<div class="grid grid-cols-3 gap-2">
-															<div>
+														<div class="grid grid-cols-2 gap-2 sm:grid-cols-3">
+															<div class="col-span-2 sm:col-span-1">
 																<span
 																	class="font-mono-meta mb-0.5 block text-[0.6rem] text-[var(--text-muted)]"
 																	>Empresa</span
@@ -2227,6 +2565,8 @@
 							{cachedGrupoOverrides}
 							recargosExistentes={initialData?.recargos || []}
 							on:recargosCalculated={handleRecargosCalculated}
+							on:openDesglose={abrirModalDesglose}
+							on:recargosRecalculados={handleRecargosRecalculados}
 						/>
 					</div>
 				</div>
@@ -2252,9 +2592,7 @@
 
 					<!-- Opciones booleanas -->
 					<div class="rounded-xl border border-[var(--border-subtle)] p-4">
-						<h3 class="font-mono-meta mb-3 text-[0.65rem] text-[var(--text-muted)]">
-							Opciones
-						</h3>
+						<h3 class="font-mono-meta mb-3 text-[0.65rem] text-[var(--text-muted)]">Opciones</h3>
 						<div class="grid grid-cols-2 gap-x-6 gap-y-2 lg:grid-cols-3">
 							<label
 								class="flex cursor-pointer items-center gap-2 py-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text-primary)]"
@@ -2413,7 +2751,7 @@
 									{#if diasAjusteDeducciones !== null && diasAjusteDeducciones !== undefined}
 										(Ajuste: {formatCurrency(
 											(configuracion.find((c) => c.nombre === 'Salario villanueva')?.valor || 0) -
-												totales.salarioDevengado
+												(conductores.find((c) => c.id === conductorSelected?.value)?.salario_base || 0)
 										)}/30 × {diasAjusteDeducciones})
 									{:else}
 										(Se toma el ajuste completo)
@@ -2664,10 +3002,7 @@
 									</div>
 								</div>
 								<div class="mt-3 flex gap-2">
-									<button
-										on:click={agregarAnticipo}
-										class="btn-primary apple-transition"
-									>
+									<button on:click={agregarAnticipo} class="btn-primary apple-transition">
 										Agregar
 									</button>
 									<button
@@ -2767,10 +3102,7 @@
 									</div>
 								</div>
 								<div class="mt-3 flex gap-2">
-									<button
-										on:click={agregarConcepto}
-										class="btn-primary apple-transition"
-									>
+									<button on:click={agregarConcepto} class="btn-primary apple-transition">
 										Agregar
 									</button>
 									<button
@@ -2813,519 +3145,18 @@
 						{/if}
 					</div>
 
-					<!-- Detalle de Bonificaciones por Vehículo y Período -->
-					{#if detallesVehiculos.length > 0}
-						<div class="rounded-xl border border-[var(--border-subtle)]">
-							<div
-								class="rounded-t-xl border-b border-[var(--border-subtle)] bg-[var(--bg-base)] px-4 py-2.5"
-							>
-								<h3 class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
-									Detalle Bonificaciones
-								</h3>
-							</div>
-							<div class="p-4">
-								{#each detallesVehiculos as detalle}
-									{@const bonosConCantidad = detalle.bonos.filter((b) =>
-										b.values.some((v) => v.quantity > 0)
-									)}
-									{#if bonosConCantidad.length > 0}
-										<div class="mb-3">
-											<p class="mb-2 font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
-												{detalle.vehiculo.label}
-											</p>
-											<div class="overflow-x-auto">
-												<table class="w-full text-xs">
-													<thead>
-														<tr class="table-header">
-															<th class="py-1.5 text-left">Bonificación</th>
-															<th class="py-1.5 text-right">V. Unit.</th>
-															{#each mesesRange as mes}
-																<th class="py-1.5 text-center">{formatMes(mes)}</th>
-															{/each}
-															<th class="py-2 text-right text-[var(--text-secondary)]">
-																Subtotal
-															</th>
-														</tr>
-													</thead>
-													<tbody class="divide-y divide-[var(--border-subtle)]">
-														{#each bonosConCantidad as bono}
-															{@const subtotal = bono.values.reduce(
-																(s, v) => s + v.quantity * bono.value,
-																0
-															)}
-															<tr>
-																<td class="py-2 text-[var(--text-primary)]">{bono.name}</td>
-																<td class="py-1.5 text-right text-[var(--text-secondary)]"
-																	>{formatCurrency(bono.value)}</td
-																>
-																{#each bono.values as val}
-																	<td
-																		class="py-1.5 text-center {val.quantity > 0
-																			? 'font-semibold text-[var(--text-primary)]'
-																			: 'text-[var(--text-very-muted)]'}">{val.quantity}</td
-																	>
-																{/each}
-																<td
-																	class="py-1.5 text-right font-semibold text-[var(--emerald-700)]"
-																	>{formatCurrency(subtotal)}</td
-																>
-															</tr>
-														{/each}
-													</tbody>
-													<tfoot>
-														<tr class="border-t border-[var(--border-emphasis)]">
-															<td
-																colspan={2 + mesesRange.length}
-																class="py-1.5 text-right font-mono-meta text-[0.65rem] text-[var(--text-secondary)]"
-															>
-																Total Vehículo:
-															</td>
-															<td
-																class="py-1.5 text-right font-mono-meta text-[0.7rem] font-bold text-[var(--emerald-700)]"
-															>
-																{formatCurrency(
-																	bonosConCantidad.reduce(
-																		(acc, b) =>
-																			acc + b.values.reduce((s, v) => s + v.quantity * b.value, 0),
-																		0
-																	)
-																)}
-															</td>
-														</tr>
-													</tfoot>
-												</table>
-											</div>
-										</div>
-									{/if}
-								{/each}
-								<div
-									class="mt-2 flex items-center justify-between border-t border-[var(--border-subtle)] px-1 pt-3"
-								>
-									<span class="text-sm font-semibold text-[var(--text-secondary)]"
-										>Total Bonificaciones</span
-									>
-									<span class="text-sm font-bold text-[var(--emerald-700)]"
-										>{formatCurrency(totales.totalBonificaciones)}</span
-									>
-								</div>
-							</div>
-						</div>
-					{/if}
-
-					<!-- Detalle de Recargos -->
-					{#if detallesVehiculos.some((d) => d.recargos.length > 0) || previewRecargosGrupos.length > 0 || totalRecargosPreview > 0}
-						<div class="rounded-xl border border-[var(--border-subtle)]">
-							<div
-								class="rounded-t-xl border-b border-[var(--border-subtle)] bg-[var(--bg-base)] px-4 py-2.5"
-							>
-								<h3 class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
-									Detalle Recargos
-								</h3>
-							</div>
-							<div class="p-4">
-								<!-- Recargos manuales por vehículo -->
-								{#each detallesVehiculos as detalle}
-									{#if detalle.recargos.length > 0}
-										<div class="mb-3">
-											<p class="mb-2 font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
-												{detalle.vehiculo.label} <span class="text-[var(--text-very-muted)]"
-													>(manuales)</span
-												>
-											</p>
-											<div class="overflow-x-auto">
-												<table class="w-full text-xs">
-													<thead>
-														<tr class="table-header">
-															<th class="py-1.5 text-left">Empresa</th>
-															<th class="py-1.5 text-center">Período</th>
-															<th class="py-1.5 text-center">Pag. Cliente</th>
-															<th class="py-1.5 text-right">Valor</th>
-														</tr>
-													</thead>
-													<tbody class="divide-y divide-[var(--border-subtle)]">
-														{#each detalle.recargos as recargo}
-															{@const empresaNombre =
-																empresas.find((e) => e.id === recargo.empresa_id)?.nombre ||
-																recargo.empresa_id}
-															<tr>
-																<td class="py-1.5 text-[var(--text-secondary)]">
-																	{empresaNombre}
-																</td>
-																<td class="py-1.5 text-center text-[var(--text-secondary)]"
-																	>{recargo.mes ? formatMes(recargo.mes) : '-'}</td
-																>
-																<td class="py-1.5 text-center">
-																	<span
-																		class="text-[11px] {recargo.pag_cliente
-																			? 'text-[#C2410C]'
-																			: 'text-[var(--text-very-muted)]'}">{recargo.pag_cliente
-																			? 'Sí'
-																			: 'No'}</span
-																	>
-																</td>
-																<td
-																	class="py-1.5 text-right font-semibold text-[var(--text-primary)]"
-																	>{formatCurrency(recargo.valor)}</td
-																>
-															</tr>
-														{/each}
-													</tbody>
-												</table>
-											</div>
-										</div>
-									{/if}
-								{/each}
-								<!-- Recargos calculados desde planillas -->
-								{#if previewRecargosGrupos.length > 0}
-									<div class="mb-3">
-										<p class="mb-2 font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
-											Recargos de Planillas
-										</p>
-										<div class="overflow-x-auto">
-											<table class="w-full text-xs">
-												<thead>
-													<tr class="table-header">
-														<th class="py-1.5 text-left">Vehículo</th>
-														<th class="py-1.5 text-left">Empresa</th>
-														<th class="py-1.5 text-center">Mes</th>
-														<th class="py-1.5 text-center">Pag. Cliente</th>
-														<th class="py-1.5 text-center">% Propietario</th>
-														<th class="py-1.5 text-right">Valor</th>
-													</tr>
-												</thead>
-												<tbody class="divide-y divide-[var(--border-subtle)]">
-													{#each previewRecargosGruposDedup as grupo (grupo.key)}
-														<tr>
-															<td class="py-1.5 font-semibold text-[var(--text-primary)]"
-																>{grupo.vehiculo_placa}</td
-															>
-															<td class="py-1.5 text-[var(--text-secondary)]">
-																{grupo.empresa_nombre}
-															</td>
-															<td class="py-1.5 text-center text-[var(--text-secondary)]"
-																>{grupo.mes ? formatMes(grupo.mes) : '-'}</td
-															>
-															<td class="py-1.5 text-center">
-																<span
-																	class="text-[11px] {grupo.pag_cliente
-																		? 'text-[#C2410C]'
-																		: 'text-[var(--text-very-muted)]'}">{grupo.pag_cliente
-																		? 'Sí'
-																		: 'No'}</span
-																>
-															</td>
-															<td class="py-1.5 text-center text-[var(--text-secondary)]"
-																>{grupo.pag_cliente && grupo.porcentaje_propietario > 0
-																	? grupo.porcentaje_propietario + '%'
-																	: '—'}</td
-															>
-															<td
-																class="py-1.5 text-right font-semibold text-[var(--text-primary)]"
-																>{formatCurrency(grupo.valor)}</td
-															>
-														</tr>
-													{/each}
-												</tbody>
-												<tfoot>
-													<tr class="border-t border-[var(--border-subtle)]">
-														<td
-															colspan="5"
-															class="py-1.5 text-right font-mono-meta text-[0.65rem] text-[var(--text-secondary)]"
-														>
-															Subtotal Planillas:
-														</td>
-														<td
-															class="py-1.5 text-right font-mono-meta text-[0.7rem] font-bold text-[var(--text-primary)]"
-															>{formatCurrency(totalRecargosPreview)}</td
-														>
-													</tr>
-												</tfoot>
-											</table>
-										</div>
-									</div>
-								{:else if totalRecargosPreview > 0}
-									<div
-										class="flex items-center justify-between rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] px-3 py-2 text-xs"
-									>
-										<div>
-											<span class="font-semibold text-[var(--text-secondary)]"
-												>Recargos de Planillas</span
-											>
-											{#if !previewRecargosData && mode === 'edit'}
-												<span class="ml-1 text-[11px] text-[var(--text-very-muted)]"
-													>(guardado)</span
-												>
-											{/if}
-										</div>
-										<span class="font-semibold text-[var(--text-primary)]"
-											>{formatCurrency(totalRecargosPreview)}</span
-										>
-									</div>
-								{/if}
-								<div
-									class="mt-2 flex items-center justify-between border-t border-[var(--border-subtle)] px-1 pt-3"
-								>
-									<span class="text-sm font-semibold text-[var(--text-secondary)]"
-										>Total Recargos</span
-									>
-									<span class="text-sm font-bold text-[#C2410C]"
-										>{formatCurrency(totales.totalRecargos)}</span
-									>
-								</div>
-							</div>
-						</div>
-					{/if}
-
-					<!-- Detalle de Pernotes -->
-					{#if detallesVehiculos.some((d) => d.pernotes.length > 0)}
-						<div class="rounded-xl border border-[var(--border-subtle)]">
-							<div
-								class="rounded-t-xl border-b border-[var(--border-subtle)] bg-[var(--bg-base)] px-4 py-2.5"
-							>
-								<h3 class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
-									Detalle Pernotes
-								</h3>
-							</div>
-							<div class="p-4">
-								{#each detallesVehiculos as detalle}
-									{#if detalle.pernotes.length > 0}
-										<div class="mb-3">
-											<p class="mb-2 font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
-												{detalle.vehiculo.label}
-											</p>
-											<div class="overflow-x-auto">
-												<table class="w-full text-xs">
-													<thead>
-														<tr class="table-header">
-															<th class="py-1.5 text-left">Empresa</th>
-															<th class="py-1.5 text-center">Cant.</th>
-															<th class="py-1.5 text-right">V. Unit.</th>
-															<th class="py-1.5 text-right">Subtotal</th>
-														</tr>
-													</thead>
-													<tbody class="divide-y divide-[var(--border-subtle)]">
-														{#each detalle.pernotes as pernote}
-															{@const empresaNombre =
-																empresas.find((e) => e.id === pernote.empresa_id)?.nombre ||
-																pernote.empresa_id}
-															<tr>
-																<td class="py-1.5 text-[var(--text-secondary)]">
-																	{empresaNombre}
-																</td>
-																<td class="py-1.5 text-center text-[var(--text-secondary)]">
-																	{pernote.cantidad}
-																</td>
-																<td class="py-1.5 text-right text-[var(--text-secondary)]"
-																	>{formatCurrency(pernote.valor)}</td
-																>
-																<td
-																	class="py-1.5 text-right font-semibold text-[var(--text-primary)]"
-																	>{formatCurrency(pernote.cantidad * pernote.valor)}</td
-																>
-															</tr>
-														{/each}
-													</tbody>
-												</table>
-											</div>
-										</div>
-									{/if}
-								{/each}
-								<div
-									class="mt-2 flex items-center justify-between border-t border-[var(--border-subtle)] px-1 pt-3"
-								>
-									<span class="text-sm font-semibold text-[var(--text-secondary)]"
-										>Total Pernotes</span
-									>
-									<span class="text-sm font-bold text-[var(--emerald-700)]"
-										>{formatCurrency(totales.totalPernotes)}</span
-									>
-								</div>
-							</div>
-						</div>
-					{/if}
-
-					<!-- Detalle de Ajustes -->
-					{#if isCheckedAjuste || isAjusteParex}
-						<div class="rounded-xl border border-[var(--border-subtle)]">
-							<div
-								class="rounded-t-xl border-b border-[var(--border-subtle)] bg-[var(--bg-base)] px-4 py-2.5"
-							>
-								<h3 class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
-									Detalle Ajustes
-								</h3>
-							</div>
-							<div class="space-y-3 p-4">
-								{#if isCheckedAjuste}
-									{@const salarioBase = Number(
-										conductores.find((c) => c.id === conductorSelected?.value)?.salario_base || 0
-									)}
-									{@const salarioVillanueva = Number(
-										configuracion.find((c) => c.nombre === 'Salario villanueva')?.valor || 0
-									)}
-									{@const diferencia = salarioVillanueva - salarioBase}
-									<div>
-										<p class="mb-2 font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
-											Ajuste Salarial
-										</p>
-										<table class="w-full text-xs">
-											<tbody class="divide-y divide-[var(--border-subtle)]">
-												<tr>
-													<td class="py-1 text-[var(--text-muted)]">Salario Base</td>
-													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]"
-														>{formatCurrency(salarioBase)}</td
-													>
-												</tr>
-												<tr>
-													<td class="py-1 text-[var(--text-muted)]">Salario Ajuste Salarial</td>
-													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]"
-														>{formatCurrency(salarioVillanueva)}</td
-													>
-												</tr>
-												<tr>
-													<td class="py-1 text-[var(--text-muted)]">Diferencia</td>
-													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]"
-														>{formatCurrency(diferencia)}</td
-													>
-												</tr>
-												<tr>
-													<td class="py-1 text-[var(--text-muted)]">Días × Modalidad</td>
-													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]"
-														>{dias_laborados_villanueva} · {isAjustePorDia
-															? 'Por día'
-															: dias_laborados_villanueva >= 17
-																? 'Completo'
-																: 'Por día'}</td
-													>
-												</tr>
-												<tr class="border-t-2 border-[var(--border-emphasis)]">
-													<td class="py-1.5 font-bold text-[var(--text-primary)]">
-														Total Ajuste
-													</td>
-													<td class="py-1.5 text-right font-bold text-[var(--emerald-700)]"
-														>{formatCurrency(totales.bonificacionVillanueva)}</td
-													>
-												</tr>
-											</tbody>
-										</table>
-									</div>
-								{/if}
-
-								{#if isAjusteParex}
-									{@const PAREX_ID = 'cfb258a6-448c-4469-aa71-8eeafa4530ef'}
-									{@const recargosManualParex = detallesVehiculos
-										.flatMap((d) => d.recargos)
-										.filter((r) => r.empresa_id === PAREX_ID)
-										.reduce((s, r) => s + r.valor, 0)}
-									{@const recargosPreviewParex = previewRecargosGrupos
-										.filter((g: any) => g.empresa_id === PAREX_ID && g.incluir !== false)
-										.reduce((s: number, g: any) => s + (g.valor || 0), 0)}
-									{@const totalRecargosParex = recargosManualParex + recargosPreviewParex}
-									<div>
-										<p class="mb-2 font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
-											Ajuste PAREX (8%)
-										</p>
-										<table class="w-full text-xs">
-											<tbody class="divide-y divide-[var(--border-subtle)]">
-												<tr>
-													<td class="py-1 text-[var(--text-muted)]">Empresa</td>
-													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]"
-														>{empresas.find((e) => e.id === PAREX_ID)?.nombre || 'PAREX'}</td
-													>
-												</tr>
-												<tr>
-													<td class="py-1 text-[var(--text-muted)]">Total Recargos PAREX</td>
-													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]"
-														>{formatCurrency(totalRecargosParex)}</td
-													>
-												</tr>
-												<tr>
-													<td class="py-1 text-[var(--text-muted)]">Porcentaje</td>
-													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]">
-														8%
-													</td>
-												</tr>
-												<tr class="border-t-2 border-[var(--border-emphasis)]">
-													<td class="py-1.5 font-bold text-[var(--text-primary)]">
-														Ajuste PAREX
-													</td>
-													<td class="py-1.5 text-right font-bold text-[#C2410C]"
-														>{formatCurrency(totales.ajusteParex)}</td
-													>
-												</tr>
-											</tbody>
-										</table>
-									</div>
-								{/if}
-
-								{#if isAjusteGeopark}
-									{@const GEOPARK_ID = 'eea5eda5-1b60-45a0-b4c7-606a8c908ff9'}
-									{@const recargosPreviewParex =
-										previewRecargosGrupos
-											?.filter((p: any) => p.empresa?.id === GEOPARK_ID)
-											.reduce((s: number, p: any) => s + (p.total_valor || 0), 0) || 0}
-									{@const totalRecargos = totales.totalRecargosGeopark + recargosPreviewParex}
-									<div>
-										<p class="mb-2 font-mono-meta text-[0.65rem] text-[var(--text-muted)]">
-											Ajuste GEOPARK (8%)
-										</p>
-										<table class="w-full text-xs">
-											<tbody class="divide-y divide-[var(--border-subtle)]">
-												<tr>
-													<td class="py-1 text-[var(--text-muted)]">Empresa</td>
-													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]"
-														>{empresas.find((e) => e.id === GEOPARK_ID)?.nombre || 'GEOPARK'}</td
-													>
-												</tr>
-												<tr>
-													<td class="py-1 text-[var(--text-muted)]">Total Recargos GEOPARK</td>
-													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]"
-														>{formatCurrency(totalRecargos)}</td
-													>
-												</tr>
-												<tr>
-													<td class="py-1 text-[var(--text-muted)]">Porcentaje</td>
-													<td class="py-1 text-right font-semibold text-[var(--text-secondary)]">
-														8%
-													</td>
-												</tr>
-												<tr class="border-t-2 border-[var(--border-emphasis)]">
-													<td class="py-1.5 font-bold text-[var(--text-primary)]">
-														Ajuste GEOPARK
-													</td>
-													<td class="py-1.5 text-right font-bold text-[var(--emerald-700)]"
-														>{formatCurrency(totales.ajusteGeopark)}</td
-													>
-												</tr>
-											</tbody>
-										</table>
-									</div>
-								{/if}
-							</div>
-						</div>
-					{/if}
-
-					<!-- Estado de la liquidación -->
+					<!-- Estado de la liquidación (solo display; el toggle vive en el aside) -->
 					<div
-						class="flex items-center justify-between rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-base)] px-5 py-4"
+						class="flex items-center gap-3 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-base)] px-5 py-4"
 					>
-						<div class="flex items-center gap-3">
-							<div
-								class="h-3 w-3 rounded-full {estadoLiquidacion === 'Liquidado'
-									? 'bg-[var(--emerald-500)] shadow-[0_0_0_3px_rgba(249,115,22,0.20)]'
-									: 'bg-[var(--text-very-muted)]'}"
-							></div>
-							<span class="text-sm font-semibold text-[var(--text-secondary)]"
-								>{estadoLiquidacion === 'Liquidado' ? 'Liquidado' : 'Pendiente'}</span
-							>
-						</div>
-						<button
-							type="button"
-							on:click={() =>
-								(estadoLiquidacion = estadoLiquidacion === 'Pendiente' ? 'Liquidado' : 'Pendiente')}
-							class="apple-transition rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] hover:border-[var(--border-emphasis)] hover:bg-[var(--bg-surface)]"
+						<div
+							class="h-3 w-3 rounded-full {estadoLiquidacion === 'Liquidado'
+								? 'bg-[var(--emerald-500)] shadow-[0_0_0_3px_rgba(16,185,129,0.20)]'
+								: 'bg-[var(--text-very-muted)]'}"
+						></div>
+						<span class="text-sm font-semibold text-[var(--text-secondary)]"
+							>{estadoLiquidacion === 'Liquidado' ? 'Liquidado' : 'Pendiente'}</span
 						>
-							{estadoLiquidacion === 'Pendiente' ? 'Marcar Liquidada' : 'Marcar Pendiente'}
-						</button>
 					</div>
 				</div>
 				<!-- /Sección: Ajustes y Períodos Especiales -->
@@ -3333,16 +3164,13 @@
 			<!-- /COLUMNA IZQUIERDA -->
 
 			<!-- COLUMNA DERECHA: Resumen sticky -->
-			<aside class="hidden lg:block sticky top-0">
+			<aside class="sticky top-0 hidden lg:block">
 				<div class="space-y-4">
 					<!-- Card: Total a Pagar (dark hero) -->
 					<div
 						class="overflow-hidden rounded-2xl border border-[var(--border-subtle)] shadow-[var(--shadow-card)]"
 					>
-						<div
-							class="px-5 py-5"
-							style="background: linear-gradient(135deg, #0F1F1A, #0A1410);"
-						>
+						<div class="px-5 py-5" style="background: linear-gradient(135deg, #0F1F1A, #0A1410);">
 							<span class="font-mono-meta text-[0.65rem] text-[#9A9A9A]">Total a Pagar</span>
 							<div class="mt-1 flex items-baseline justify-between gap-2">
 								<span class="font-display text-2xl font-medium text-[#34D399] sm:text-3xl">
@@ -3362,13 +3190,12 @@
 									class="font-mono-meta mb-1 block text-[0.6rem] text-[#9A9A9A]"
 									>Ajuste manual ±$</label
 								>
-								<div class="inline-flex overflow-hidden rounded-lg border border-[#374151]">
-									{#each [-5, -3, -2, -1, 0, 1, 2, 3, 5] as const as val}
+								<div class="flex flex-wrap rounded-lg border border-[#374151]">
+									{#each [-10, -9, -8, -7, -6, -5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const as val}
 										<button
 											type="button"
 											on:click={() => (ajustePesos = val)}
-											class="apple-transition px-2 py-1 text-[11px] font-medium {ajustePesos ===
-											val
+											class="apple-transition px-2 py-1 text-[11px] font-medium {ajustePesos === val
 												? val < 0
 													? 'bg-[#DC2626] text-white'
 													: 'bg-[var(--emerald-500)] text-white'
@@ -3382,7 +3209,7 @@
 
 							{#if ajustePesos !== 0}
 								<span
-									class="mt-2 block font-mono-meta text-[0.6rem] {ajustePesos > 0
+									class="font-mono-meta mt-2 block text-[0.6rem] {ajustePesos > 0
 										? 'text-[#FBBF24]'
 										: 'text-[#FCA5A5]'}"
 								>
@@ -3391,6 +3218,247 @@
 							{/if}
 						</div>
 					</div>
+
+					<!-- Card: Detalle por Concepto (compactos, movidos del left column) -->
+					{#if totales.totalBonificaciones > 0 || totales.totalPernotes > 0 || totales.totalRecargos > 0 || isCheckedAjuste || totales.ajusteParex > 0 || totales.ajusteGeopark > 0}
+						<div
+							class="rounded-2xl border border-[var(--border-subtle)] bg-white shadow-[var(--shadow-card)]"
+						>
+							<div
+								class="flex items-center gap-2 border-b border-[var(--border-subtle)] bg-[var(--bg-base)] px-5 py-3"
+							>
+								<svg
+									class="h-4 w-4 text-[var(--text-muted)]"
+									fill="none"
+									stroke="currentColor"
+									viewBox="0 0 24 24"
+									stroke-width="2"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+									/>
+								</svg>
+								<h3 class="font-mono-meta text-[0.7rem] text-[var(--text-secondary)]">
+									Detalle por Concepto
+								</h3>
+							</div>
+							<div class="divide-y divide-[var(--border-subtle)]">
+								<!-- Bonificaciones -->
+								{#if totales.totalBonificaciones > 0}
+									{@const bonosConCantidad = detallesVehiculos.flatMap((d) =>
+										d.bonos
+											.filter((b) => b.values.some((v) => v.quantity > 0))
+											.map((b) => ({ ...b, vehiculoLabel: d.vehiculo.label }))
+									)}
+									<details class="group">
+										<summary
+											class="flex cursor-pointer items-center justify-between px-5 py-2.5 text-xs transition-colors hover:bg-[var(--bg-base)]"
+										>
+											<div class="flex items-center gap-2">
+												<ChevronRight
+													class="h-3 w-3 text-[var(--text-very-muted)] transition-transform group-open:rotate-90"
+												/>
+												<span class="font-semibold text-[var(--text-secondary)]"
+													>Bonificaciones</span
+												>
+												<span class="text-[10px] text-[var(--text-very-muted)]"
+													>· {bonosConCantidad.length} item{bonosConCantidad.length === 1
+														? ''
+														: 's'}</span
+												>
+											</div>
+											<span class="font-mono font-bold text-[var(--emerald-600)]"
+												>{formatCurrency(totales.totalBonificaciones)}</span
+											>
+										</summary>
+										<div class="space-y-1.5 px-5 pb-3 pl-9 text-xs">
+											{#each bonosConCantidad as bono (bono.name + bono.vehiculoLabel)}
+												{@const subtotal = bono.values.reduce(
+													(s, v) => s + v.quantity * bono.value,
+													0
+												)}
+												<div class="flex items-center justify-between">
+													<span class="text-[var(--text-secondary)]">
+														{bono.name}
+														<span class="text-[var(--text-very-muted)]">· {bono.vehiculoLabel}</span
+														>
+													</span>
+													<span class="font-mono text-[var(--text-primary)]"
+														>{formatCurrency(subtotal)}</span
+													>
+												</div>
+											{/each}
+										</div>
+									</details>
+								{/if}
+
+								<!-- Pernotes -->
+								{#if totales.totalPernotes > 0}
+									{@const pernotesFlat = detallesVehiculos.flatMap((d) =>
+										d.pernotes.map((p) => ({ ...p, vehiculoLabel: d.vehiculo.label }))
+									)}
+									{@const totalDiasPernote = pernotesFlat.reduce((s, p) => s + p.cantidad, 0)}
+									<details class="group">
+										<summary
+											class="flex cursor-pointer items-center justify-between px-5 py-2.5 text-xs transition-colors hover:bg-[var(--bg-base)]"
+										>
+											<div class="flex items-center gap-2">
+												<ChevronRight
+													class="h-3 w-3 text-[var(--text-very-muted)] transition-transform group-open:rotate-90"
+												/>
+												<span class="font-semibold text-[var(--text-secondary)]">Pernotes</span>
+												<span class="text-[10px] text-[var(--text-very-muted)]"
+													>· {totalDiasPernote} día{totalDiasPernote === 1 ? '' : 's'}</span
+												>
+											</div>
+											<span class="font-mono font-bold text-[var(--emerald-600)]"
+												>{formatCurrency(totales.totalPernotes)}</span
+											>
+										</summary>
+										<div class="space-y-1.5 px-5 pb-3 pl-9 text-xs">
+											{#each pernotesFlat as pernote, pIdx (pIdx)}
+												{@const empresaNombre =
+													empresas.find((e) => e.id === pernote.empresa_id)?.nombre ||
+													pernote.empresa_id}
+												<div class="flex items-center justify-between">
+													<span class="text-[var(--text-secondary)]">
+														{empresaNombre}
+														<span class="text-[var(--text-very-muted)]"
+															>· {pernote.vehiculoLabel} · {pernote.cantidad} día{pernote.cantidad ===
+															1
+																? ''
+																: 's'} × {formatCurrency(pernote.valor)}</span
+														>
+													</span>
+													<span class="font-mono text-[var(--text-primary)]"
+														>{formatCurrency(pernote.cantidad * pernote.valor)}</span
+													>
+												</div>
+											{/each}
+										</div>
+									</details>
+								{/if}
+
+								<!-- Recargos -->
+								{#if totales.totalRecargos > 0}
+									{@const recargosManualesFlat = detallesVehiculos.flatMap((d) =>
+										d.recargos.map((r) => ({ ...r, vehiculoLabel: d.vehiculo.label }))
+									)}
+									{@const totalManual = recargosManualesFlat.reduce((s, r) => s + r.valor, 0)}
+									{@const totalPlanilla = totales.totalRecargos - totalManual}
+									<details class="group">
+										<summary
+											class="flex cursor-pointer items-center justify-between px-5 py-2.5 text-xs transition-colors hover:bg-[var(--bg-base)]"
+										>
+											<div class="flex items-center gap-2">
+												<ChevronRight
+													class="h-3 w-3 text-[var(--text-very-muted)] transition-transform group-open:rotate-90"
+												/>
+												<span class="font-semibold text-[var(--text-secondary)]">Recargos</span>
+											</div>
+											<span class="font-mono font-bold text-[#C2410C]"
+												>{formatCurrency(totales.totalRecargos)}</span
+											>
+										</summary>
+										<div class="space-y-1.5 px-5 pb-3 pl-9 text-xs">
+											{#each recargosManualesFlat as recargo, rIdx (rIdx)}
+												{@const empresaNombre =
+													empresas.find((e) => e.id === recargo.empresa_id)?.nombre ||
+													recargo.empresa_id}
+												<div class="flex items-center justify-between">
+													<span class="text-[var(--text-secondary)]">
+														{empresaNombre}
+														<span class="text-[var(--text-very-muted)]"
+															>· {recargo.vehiculoLabel} · {recargo.mes
+																? formatMes(recargo.mes)
+																: '-'}
+															· {recargo.pag_cliente ? 'Pag. cliente' : 'Manual'}</span
+														>
+													</span>
+													<span class="font-mono text-[var(--text-primary)]"
+														>{formatCurrency(recargo.valor)}</span
+													>
+												</div>
+											{/each}
+											{#each previewRecargosGruposDedup as grupo (grupo.key)}
+												<div class="flex items-center justify-between">
+													<span class="text-[var(--text-secondary)]">
+														{grupo.empresa_nombre}
+														<span class="text-[var(--text-very-muted)]"
+															>· {grupo.vehiculo_placa} · {grupo.mes ? formatMes(grupo.mes) : '-'}
+															· Planilla</span
+														>
+													</span>
+													<span class="font-mono text-[var(--text-primary)]"
+														>{formatCurrency(grupo.valor)}</span
+													>
+												</div>
+											{/each}
+											{#if totalManual > 0 && totalPlanilla > 0}
+												<div
+													class="flex items-center justify-between border-t border-[var(--border-subtle)] pt-1.5 text-[10px]"
+												>
+													<span class="text-[var(--text-very-muted)]"
+														>Manual {formatCurrency(totalManual)} · Planilla
+														{formatCurrency(totalPlanilla)}</span
+													>
+												</div>
+											{/if}
+										</div>
+									</details>
+								{/if}
+
+								<!-- Ajustes -->
+								{#if isCheckedAjuste || totales.ajusteParex > 0 || totales.ajusteGeopark > 0}
+									{@const totalAjustes =
+										totales.bonificacionVillanueva + totales.ajusteParex + totales.ajusteGeopark}
+									<details class="group">
+										<summary
+											class="flex cursor-pointer items-center justify-between px-5 py-2.5 text-xs transition-colors hover:bg-[var(--bg-base)]"
+										>
+											<div class="flex items-center gap-2">
+												<ChevronRight
+													class="h-3 w-3 text-[var(--text-very-muted)] transition-transform group-open:rotate-90"
+												/>
+												<span class="font-semibold text-[var(--text-secondary)]">Ajustes</span>
+											</div>
+											<span class="font-mono font-bold text-[var(--emerald-600)]"
+												>{formatCurrency(totalAjustes)}</span
+											>
+										</summary>
+										<div class="space-y-1.5 px-5 pb-3 pl-9 text-xs">
+											{#if isCheckedAjuste}
+												<div class="flex items-center justify-between">
+													<span class="text-[var(--text-secondary)]">Ajuste Salarial</span>
+													<span class="font-mono text-[var(--text-primary)]"
+														>{formatCurrency(totales.bonificacionVillanueva)}</span
+													>
+												</div>
+											{/if}
+											{#if totales.ajusteParex > 0}
+												<div class="flex items-center justify-between">
+													<span class="text-[var(--text-secondary)]">Ajuste PAREX (8%)</span>
+													<span class="font-mono text-[#C2410C]"
+														>{formatCurrency(totales.ajusteParex)}</span
+													>
+												</div>
+											{/if}
+											{#if totales.ajusteGeopark > 0}
+												<div class="flex items-center justify-between">
+													<span class="text-[var(--text-secondary)]">Ajuste GEOPARK (8%)</span>
+													<span class="font-mono text-[var(--emerald-600)]"
+														>{formatCurrency(totales.ajusteGeopark)}</span
+													>
+												</div>
+											{/if}
+										</div>
+									</details>
+								{/if}
+							</div>
+						</div>
+					{/if}
 
 					<!-- Card: Desglose financiero -->
 					<div
@@ -3493,23 +3561,20 @@
 										{/if}
 										{#if totales.totalAjustesAdicionales !== 0}
 											<tr>
-												<td class="py-1.5 text-[var(--text-secondary)]"
-													>Conceptos Adicionales</td
-												>
+												<td class="py-1.5 text-[var(--text-secondary)]">Conceptos Adicionales</td>
 												<td
 													class="py-1.5 text-right font-semibold {totales.totalAjustesAdicionales >
 													0
 														? 'text-[var(--emerald-600)]'
-														: 'text-[#DC2626]'}">{formatCurrency(totales.totalAjustesAdicionales)}</td
+														: 'text-[#DC2626]'}"
+													>{formatCurrency(totales.totalAjustesAdicionales)}</td
 												>
 											</tr>
 										{/if}
 									</tbody>
 									<tfoot>
 										<tr class="border-t-2 border-[var(--border-emphasis)]">
-											<td class="pt-2 text-sm font-bold text-[var(--text-primary)]"
-												>Total Bruto</td
-											>
+											<td class="pt-2 text-sm font-bold text-[var(--text-primary)]">Total Bruto</td>
 											<td class="pt-2 text-right text-sm font-bold text-[var(--text-primary)]"
 												>{formatCurrency(totales.sueldoBruto)}</td
 											>
@@ -3559,29 +3624,129 @@
 								</table>
 							</div>
 
-							<!-- Base prestacional -->
-							<div
-								class="rounded-lg border border-[rgba(220,38,38,0.20)] bg-[rgba(220,38,38,0.04)] p-3"
+							<!-- Base prestacional (expandible con desglose de componentes) -->
+							<details
+								class="group rounded-lg border border-[rgba(220,38,38,0.20)] bg-[rgba(220,38,38,0.04)]"
 							>
-								<div class="flex items-center justify-between">
-									<span class="font-mono-meta text-[0.65rem] text-[#991B1B]"
-										>Base Prestacional</span
-									>
-									<span class="text-sm font-bold text-[#991B1B]"
-										>{formatCurrency(totales.baseCalculo)}</span
-									>
+								<summary
+									class="flex cursor-pointer items-center justify-between p-3 select-none"
+								>
+									<div class="flex items-center gap-2">
+										<ChevronRight
+											class="h-3 w-3 text-[#991B1B] transition-transform group-open:rotate-90"
+										/>
+										<span class="font-mono-meta text-[0.65rem] text-[#991B1B]"
+											>Base Prestacional</span
+										>
+									</div>
+									<span class="text-sm font-bold text-[#991B1B]">
+										{formatCurrency(totales.baseCalculo)}
+									</span>
+								</summary>
+								<div class="space-y-1.5 px-3 pt-1 pb-3 text-xs">
+									{#if descontarSaludSalario && descontarPensionSalario}
+										<div class="flex items-center justify-between">
+											<span class="text-[var(--text-muted)]"
+												>Salario Base <span class="text-[10px] text-[#991B1B]"
+													>· reducido (Salud y Pensión)</span
+												></span
+											>
+											<span class="font-mono text-[var(--text-primary)]"
+												>{formatCurrency(basePrestacionalDesglose.salarioBase)}</span
+											>
+										</div>
+									{:else}
+										<div class="flex items-center justify-between">
+											<span class="text-[var(--text-muted)]">Salario Devengado</span>
+											<span class="font-mono text-[var(--text-primary)]"
+												>{formatCurrency(basePrestacionalDesglose.salarioDevengado)}</span
+											>
+										</div>
+										{#if basePrestacionalDesglose.totalVacaciones > 0}
+											<div class="flex items-center justify-between">
+												<span class="text-[var(--text-muted)]">Vacaciones</span>
+												<span class="font-mono text-[var(--text-primary)]"
+													>{formatCurrency(basePrestacionalDesglose.totalVacaciones)}</span
+												>
+											</div>
+										{/if}
+										{#if basePrestacionalDesglose.ajusteVillanueva > 0}
+											<div class="flex items-center justify-between">
+												<span class="text-[var(--text-muted)]">
+													Ajuste Salarial
+													{#if diasAjusteDeducciones !== null && diasAjusteDeducciones !== undefined}
+														<span class="text-[10px]"
+															>· {diasAjusteDeducciones} días</span
+														>
+													{/if}
+												</span>
+												<span class="font-mono text-[var(--text-primary)]"
+													>{formatCurrency(basePrestacionalDesglose.ajusteVillanueva)}</span
+												>
+											</div>
+										{/if}
+										{#if basePrestacionalDesglose.recargosParex > 0}
+											<div class="flex items-center justify-between">
+												<span class="text-[var(--text-muted)]">
+													{basePrestacionalDesglose.esRecargosCompletos
+														? 'Recargos completos'
+														: 'Recargos PAREX'}
+												</span>
+												<span class="font-mono text-[var(--text-primary)]"
+													>{formatCurrency(basePrestacionalDesglose.recargosParex)}</span
+												>
+											</div>
+										{/if}
+										{#if basePrestacionalDesglose.recargosGeopark > 0}
+											<div class="flex items-center justify-between">
+												<span class="text-[var(--text-muted)]">Recargos GEOPARK</span>
+												<span class="font-mono text-[var(--text-primary)]"
+													>{formatCurrency(basePrestacionalDesglose.recargosGeopark)}</span
+												>
+											</div>
+										{/if}
+										{#if descontarSaludSalario || descontarPensionSalario}
+											<div
+												class="flex items-center justify-between border-t border-[rgba(220,38,38,0.20)] pt-1.5 text-[10px] text-[#991B1B]"
+											>
+												<span>
+													⚠ Reducido a Salario Base ({descontarSaludSalario
+														? 'Salud'
+														: ''}{descontarSaludSalario && descontarPensionSalario
+														? ' y '
+														: ''}{descontarPensionSalario ? 'Pensión' : ''})
+												</span>
+												<span class="font-mono"
+													>{formatCurrency(basePrestacionalDesglose.salarioBase)}</span
+												>
+											</div>
+										{/if}
+									{/if}
 								</div>
-							</div>
+							</details>
 						</div>
 					</div>
 
 					<!-- Botones de acción sticky al final del resumen -->
 					<div class="flex flex-col gap-2">
 						<button
+							type="button"
+							on:click={() =>
+								(estadoLiquidacion = estadoLiquidacion === 'Pendiente' ? 'Liquidado' : 'Pendiente')}
+							class="apple-transition flex items-center justify-center gap-2 rounded-xl border border-[var(--border-default)] bg-white px-5 py-2.5 text-sm font-semibold text-[var(--text-secondary)] hover:border-[var(--border-emphasis)] hover:bg-[var(--bg-surface)]"
+						>
+							<div
+								class="h-2.5 w-2.5 rounded-full {estadoLiquidacion === 'Liquidado'
+									? 'bg-emerald-300'
+									: 'bg-[var(--text-very-muted)]'}"
+							></div>
+							{estadoLiquidacion === 'Pendiente' ? 'Se registrara como Pendiente' : 'Se registrara como Liquidada'}
+						</button>
+						<button
 							on:click={handleSubmit}
 							disabled={loading}
 							class="apple-transition flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-btn)] hover:shadow-[var(--shadow-btn-hover)] disabled:opacity-50"
-							style="background: linear-gradient(135deg, #f97316, #ea580c);"
+							style="background: linear-gradient(135deg, #10B981, #059669);"
 						>
 							{#if loading}
 								<div
@@ -3622,13 +3787,15 @@
 				</span>
 			</button>
 			{#if showMobileResumen}
+				{@const bp = basePrestacionalDesglose}
+				{@const ambasReducciones = descontarSaludSalario && descontarPensionSalario}
+				{@const algunaReduccion = descontarSaludSalario || descontarPensionSalario}
 				<div
 					class="mt-3 space-y-3 rounded-2xl border border-[var(--border-subtle)] bg-white p-4 shadow-[var(--shadow-card)]"
 				>
 					<!-- Total a pagar -->
 					<div class="text-center">
-						<span class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]"
-							>Total a Pagar</span
+						<span class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]">Total a Pagar</span
 						>
 						<div class="font-display text-2xl font-medium text-[var(--emerald-700)]">
 							{formatCurrency(totalAPagarVisual)}
@@ -3637,46 +3804,115 @@
 
 					<!-- Devengado / Deducciones -->
 					<div class="grid grid-cols-2 gap-2 text-xs">
-						<div
-							class="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-2"
-						>
-							<div class="font-mono-meta text-[0.6rem] text-[var(--text-muted)]">
-								Devengado
-							</div>
+						<div class="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-2">
+							<div class="font-mono-meta text-[0.6rem] text-[var(--text-muted)]">Devengado</div>
 							<div class="font-bold text-[var(--text-primary)]">
 								{formatCurrency(totales.sueldoBruto)}
 							</div>
 						</div>
-						<div
-							class="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-2"
-						>
-							<div class="font-mono-meta text-[0.6rem] text-[var(--text-muted)]">
-								Deducciones
-							</div>
+						<div class="rounded-lg border border-[var(--border-subtle)] bg-[var(--bg-base)] p-2">
+							<div class="font-mono-meta text-[0.6rem] text-[var(--text-muted)]">Deducciones</div>
 							<div class="font-bold text-[#DC2626]">
 								-{formatCurrency(totales.totalDeducciones)}
 							</div>
 						</div>
 					</div>
 
-					<!-- Base Prestacional -->
-					<div
-						class="rounded-lg border border-[rgba(220,38,38,0.20)] bg-[rgba(220,38,38,0.04)] p-2.5"
+					<!-- Base Prestacional (expandible con desglose de componentes) -->
+					<details
+						class="group rounded-lg border border-[rgba(220,38,38,0.20)] bg-[rgba(220,38,38,0.04)]"
 					>
-						<div class="flex items-center justify-between">
-							<span class="font-mono-meta text-[0.65rem] text-[#991B1B]"
-								>Base Prestacional</span
-							>
+						<summary class="flex cursor-pointer items-center justify-between p-2.5 select-none">
+							<div class="flex items-center gap-2">
+								<ChevronRight
+									class="h-3 w-3 text-[#991B1B] transition-transform group-open:rotate-90"
+								/>
+								<span class="font-mono-meta text-[0.65rem] text-[#991B1B]">Base Prestacional</span>
+							</div>
 							<span class="text-sm font-bold text-[#991B1B]">
 								{formatCurrency(totales.baseCalculo)}
 							</span>
+						</summary>
+						<div class="space-y-1.5 px-2.5 pt-1 pb-2.5 text-xs">
+							{#if ambasReducciones}
+								<div class="flex items-center justify-between">
+									<span class="text-[var(--text-muted)]"
+										>Salario Base <span class="text-[10px] text-[#991B1B]"
+											>· reducido (Salud y Pensión)</span
+										></span
+									>
+									<span class="font-mono text-[var(--text-primary)]"
+										>{formatCurrency(bp.salarioBase)}</span
+									>
+								</div>
+							{:else}
+								<div class="flex items-center justify-between">
+									<span class="text-[var(--text-muted)]">Salario Devengado</span>
+									<span class="font-mono text-[var(--text-primary)]"
+										>{formatCurrency(bp.salarioDevengado)}</span
+									>
+								</div>
+								{#if bp.totalVacaciones > 0}
+									<div class="flex items-center justify-between">
+										<span class="text-[var(--text-muted)]">Vacaciones</span>
+										<span class="font-mono text-[var(--text-primary)]"
+											>{formatCurrency(bp.totalVacaciones)}</span
+										>
+									</div>
+								{/if}
+								{#if bp.ajusteVillanueva > 0}
+									<div class="flex items-center justify-between">
+										<span class="text-[var(--text-muted)]">
+											Ajuste Salarial
+											{#if diasAjusteDeducciones !== null && diasAjusteDeducciones !== undefined}
+												<span class="text-[10px]">· {diasAjusteDeducciones} días</span>
+											{/if}
+										</span>
+										<span class="font-mono text-[var(--text-primary)]"
+											>{formatCurrency(bp.ajusteVillanueva)}</span
+										>
+									</div>
+								{/if}
+								{#if bp.recargosParex > 0}
+									<div class="flex items-center justify-between">
+										<span class="text-[var(--text-muted)]">
+											{bp.esRecargosCompletos ? 'Recargos completos' : 'Recargos PAREX'}
+										</span>
+										<span class="font-mono text-[var(--text-primary)]"
+											>{formatCurrency(bp.recargosParex)}</span
+										>
+									</div>
+								{/if}
+								{#if bp.recargosGeopark > 0}
+									<div class="flex items-center justify-between">
+										<span class="text-[var(--text-muted)]">Recargos GEOPARK</span>
+										<span class="font-mono text-[var(--text-primary)]"
+											>{formatCurrency(bp.recargosGeopark)}</span
+										>
+									</div>
+								{/if}
+								{#if algunaReduccion}
+									<div
+										class="flex items-center justify-between border-t border-[rgba(220,38,38,0.20)] pt-1.5 text-[10px] text-[#991B1B]"
+									>
+										<span>
+											⚠ Reducido a Salario Base ({descontarSaludSalario
+												? 'Salud'
+												: ''}{descontarSaludSalario && descontarPensionSalario
+												? ' y '
+												: ''}{descontarPensionSalario ? 'Pensión' : ''})
+										</span>
+										<span class="font-mono">{formatCurrency(bp.salarioBase)}</span>
+									</div>
+								{/if}
+							{/if}
 						</div>
-					</div>
+					</details>
 
 					<!-- Desglose conceptos (mismo que el aside de desktop) -->
 					<details class="rounded-lg border border-[var(--border-subtle)] bg-white">
 						<summary
-							class="cursor-pointer select-none px-3 py-2 text-xs font-semibold text-[var(--text-secondary)]"
+							class="cursor-pointer px-3 py-2 text-xs font-semibold text-[var(--text-secondary)] select-none"
 						>
 							Desglose de conceptos
 						</summary>
@@ -3723,7 +3959,9 @@
 									>{formatCurrency(totales.ajusteGeopark)}</span
 								>
 							</div>
-							<div class="flex items-center justify-between border-t border-[var(--border-subtle)] pt-1.5">
+							<div
+								class="flex items-center justify-between border-t border-[var(--border-subtle)] pt-1.5"
+							>
 								<span class="font-semibold text-[var(--text-primary)]">Sueldo bruto</span>
 								<span class="font-mono font-semibold text-[var(--text-primary)]"
 									>{formatCurrency(totales.sueldoBruto)}</span
@@ -3735,9 +3973,7 @@
 							</div>
 							<div class="flex items-center justify-between">
 								<span class="text-[#DC2626]">− Pensión</span>
-								<span class="font-mono text-[#DC2626]"
-									>{formatCurrency(totales.pension)}</span
-								>
+								<span class="font-mono text-[#DC2626]">{formatCurrency(totales.pension)}</span>
 							</div>
 							<div class="flex items-center justify-between">
 								<span class="text-[#DC2626]">− Anticipos</span>
@@ -3748,13 +3984,28 @@
 						</div>
 					</details>
 
+					<!-- Toggle Liquidada/Pendiente (mobile) -->
+					<button
+						type="button"
+						on:click={() =>
+							(estadoLiquidacion = estadoLiquidacion === 'Pendiente' ? 'Liquidado' : 'Pendiente')}
+						class="apple-transition flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border-default)] bg-white px-5 py-2.5 text-sm font-semibold text-[var(--text-secondary)] hover:border-[var(--border-emphasis)] hover:bg-[var(--bg-surface)]"
+					>
+						<div
+							class="h-2.5 w-2.5 rounded-full {estadoLiquidacion === 'Liquidado'
+								? 'bg-[var(--emerald-500)]'
+								: 'bg-[var(--text-very-muted)]'}"
+						></div>
+						{estadoLiquidacion === 'Pendiente' ? 'Marcar Liquidada' : 'Marcar Pendiente'}
+					</button>
+
 					<!-- Botón guardar en mobile -->
 					<button
 						type="button"
 						on:click={handleSubmit}
 						disabled={loading}
 						class="apple-transition flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-btn)] disabled:opacity-50"
-						style="background: linear-gradient(135deg, #f97316, #ea580c);"
+						style="background: linear-gradient(135deg, #10B981, #059669);"
 					>
 						{#if loading}
 							<div
@@ -3778,7 +4029,19 @@
 		conductorNombre={conductorSelected?.label || ''}
 		desde={periodo_inicio}
 		hasta={periodo_fin}
-		clavesSincronizadas={clavesSincronizadas}
+		{clavesSincronizadas}
 		onclose={() => (modalRecorridosOpen = false)}
+	/>
+
+	<!-- Modal: Desglose detallado de recargos de planillas
+	     (por día, por tipo de recargo, por empresa, por vehículo,
+	      por mes y por configuración salarial destinada) -->
+	<RecargosDesgloseModal
+		open={modalDesgloseOpen}
+		previewData={previewRecargosData}
+		conductorNombre={conductorSelected?.label || ''}
+		periodoInicio={periodo_inicio}
+		periodoFin={periodo_fin}
+		on:close={() => (modalDesgloseOpen = false)}
 	/>
 {/if}

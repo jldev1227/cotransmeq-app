@@ -67,6 +67,15 @@ export interface RecargoPlanilla {
 	total_rd: number;
 	observaciones?: string;
 
+	/**
+	 * True si esta planilla fue importada desde Transmeralda. La UI usa
+	 * esto para mostrar el badge "TM" en la celda del N° Planilla con
+	 * popover explicativo.
+	 */
+	imported_from_transmeralda?: boolean;
+	imported_from_transmeralda_id?: string;
+	imported_from_transmeralda_at?: string;
+
 	// Estado del conductor
 	estado_conductor?: string;
 
@@ -170,6 +179,13 @@ export interface RecargoPlanillaFiltros {
 	año?: number;
 	estado?: string;
 	numero_planilla?: string;
+	/**
+	 * Filtro de planillas importadas de Transmeralda:
+	 *   'si'  → solo importadas
+	 *   'no'  → solo nativas
+	 *   'all' → sin filtro (default)
+	 */
+	imported_from_transmeralda?: 'si' | 'no' | 'all';
 	eliminados?: boolean
 	page?: number;
 	limit?: number;

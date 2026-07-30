@@ -128,7 +128,7 @@
 </script>
 
 <svelte:head>
-	<title>Dashboard - Cotransmeq (NIT 901983227)</title>
+	<title>Dashboard - Transmeralda</title>
 </svelte:head>
 
 {#if mounted && user}
@@ -142,15 +142,15 @@
 
 		<!-- Main Content Area -->
 		<div class="flex flex-col overflow-hidden">
-		<!-- Header -->
-		<Header
-			userName={user?.nombre || 'Usuario'}
-			userEmail={user?.correo || 'usuario@cotransmeq.com'}
-			userRole={user?.area && Array.isArray(user.area) && user.area.length > 0 ? user.area.map((a: string) => AREA_LABELS[a as Area] || a).join(', ') : 'Usuario'}
-			isCollapsed={$sidebarStore}
-			showSessionTimer={false}
-			on:logout={handleLogout}
-		/>
+			<!-- Header -->
+			<Header
+				userName={user?.nombre || 'Usuario'}
+				userEmail={user?.correo || 'usuario@transmeralda.com'}
+				userRole={user?.area && Array.isArray(user.area) && user.area.length > 0 ? user.area.map((a: string) => AREA_LABELS[a as Area] || a).join(', ') : 'Usuario'}
+				isCollapsed={$sidebarStore}
+				showSessionTimer={false}
+				on:logout={handleLogout}
+			/>
 
 			<!-- Page Content -->
 			<main
@@ -215,7 +215,7 @@
 		<button
 			type="button"
 			class="fixed inset-0 z-[9999] cursor-default border-0 p-0"
-			style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.40), rgba(15, 23, 42, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
+			style="background: linear-gradient(135deg, rgba(15, 31, 26, 0.40), rgba(10, 20, 16, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
 			aria-label="Cerrar modal"
 			transition:fade={{ duration: 200 }}
 		></button>
@@ -286,17 +286,17 @@
 		<div class="text-center">
 			<div
 				class="mx-auto mb-5 flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl"
-				style="box-shadow: 0 8px 24px rgba(249, 115, 22, 0.25);"
+				style="box-shadow: 0 8px 24px rgba(16, 185, 129, 0.25);"
 			>
 				<img
 					src="/android-chrome-192x192.png"
-					alt="Cotransmeq"
+					alt="Transmeralda"
 					class="h-full w-full object-contain"
 					width="80"
 					height="80"
 				/>
 			</div>
-			<h1 class="font-display mb-1 text-3xl" style="color: var(--bg-charcoal);">Cotransmeq</h1>
+			<h1 class="font-display mb-1 text-3xl" style="color: var(--bg-charcoal);">Transmeralda</h1>
 			<p class="text-sm" style="color: var(--text-muted);">Cargando dashboard…</p>
 		</div>
 	</div>

@@ -164,7 +164,7 @@
 	function getTipoColor(tipo: TipoCliente) {
 		return tipo === TipoCliente.EMPRESA
 			? 'bg-blue-100 text-blue-800'
-			: 'bg-orange-100 text-orange-800';
+			: 'bg-green-100 text-green-800';
 	}
 
 	function getEstadoServicioColor(estado: string) {
@@ -172,7 +172,7 @@
 			solicitado: 'bg-yellow-100 text-yellow-800 border-yellow-200',
 			en_curso: 'bg-blue-100 text-blue-800 border-blue-200',
 			planificado: 'bg-purple-100 text-purple-800 border-purple-200',
-			realizado: 'bg-orange-100 text-orange-800 border-orange-200',
+			realizado: 'bg-green-100 text-green-800 border-green-200',
 			cancelado: 'bg-red-100 text-red-800 border-red-200'
 		};
 		return colores[estado as keyof typeof colores] || 'bg-gray-100 text-gray-800 border-gray-200';
@@ -198,7 +198,7 @@
 	<div class="flex min-h-screen items-center justify-center">
 		<div class="text-center">
 			<div
-				class="mb-4 inline-block h-12 w-12 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"
+				class="mb-4 inline-block h-12 w-12 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"
 			></div>
 			<p class="text-gray-600">Cargando perfil del cliente...</p>
 		</div>
@@ -210,7 +210,7 @@
 			<p class="mb-6 text-gray-600">{error}</p>
 			<button
 				on:click={() => goto('/dashboard/clientes')}
-				class="apple-transition rounded-xl bg-gradient-to-r from-orange-500 to-teal-600 px-6 py-3 font-semibold text-white shadow-lg hover:shadow-xl"
+				class="apple-transition rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-3 font-semibold text-white shadow-lg hover:shadow-xl"
 			>
 				Volver a Clientes
 			</button>
@@ -229,7 +229,7 @@
 						<div class="flex flex-col items-center gap-3 sm:flex-row">
 							<!-- Avatar -->
 							<div
-								class="flex h-20 w-20 items-center justify-center rounded-xl border-2 border-white bg-gradient-to-br from-orange-500 to-teal-600 shadow-lg"
+								class="flex h-20 w-20 items-center justify-center rounded-xl border-2 border-white bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg"
 							>
 								{#if cliente.tipo === TipoCliente.EMPRESA}
 									<svg
@@ -303,7 +303,7 @@
 								</button>
 								<button
 									on:click={saveChanges}
-									class="apple-transition flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:shadow-xl disabled:opacity-80"
+									class="apple-transition flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:shadow-xl disabled:opacity-80"
 									disabled={updatedLoading}
 								>
 									{#if updatedLoading}
@@ -336,7 +336,7 @@
 								</button>
 								<button
 									on:click={toggleEdit}
-									class="apple-transition rounded-lg bg-gradient-to-r from-orange-500 to-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:shadow-xl"
+									class="apple-transition rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:shadow-xl"
 								>
 									✏️ Editar
 								</button>
@@ -353,7 +353,7 @@
 								on:click={() => (activeTab = 'info')}
 								class="apple-transition flex-1 rounded-lg px-4 py-2 text-sm font-semibold {activeTab ===
 								'info'
-									? 'bg-gradient-to-r from-orange-500 to-teal-600 text-white shadow-md'
+									? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md'
 									: 'text-gray-600 hover:bg-gray-100'}"
 							>
 								📋 Información
@@ -362,7 +362,7 @@
 								on:click={() => (activeTab = 'servicios')}
 								class="apple-transition flex-1 rounded-lg px-4 py-2 text-sm font-semibold {activeTab ===
 								'servicios'
-									? 'bg-gradient-to-r from-orange-500 to-teal-600 text-white shadow-md'
+									? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md'
 									: 'text-gray-600 hover:bg-gray-100'}"
 							>
 								🚛 Servicios ({cliente._count?.servicio || 0})
@@ -371,7 +371,7 @@
 								on:click={() => (activeTab = 'actividad')}
 								class="apple-transition flex-1 rounded-lg px-4 py-2 text-sm font-semibold {activeTab ===
 								'actividad'
-									? 'bg-gradient-to-r from-orange-500 to-teal-600 text-white shadow-md'
+									? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md'
 									: 'text-gray-600 hover:bg-gray-100'}"
 							>
 								📊 Actividad
@@ -403,7 +403,7 @@
 													id="nombre"
 													type="text"
 													bind:value={editForm.nombre}
-													class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+													class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
 												/>
 											</div>
 
@@ -416,7 +416,7 @@
 														id="nit"
 														type="text"
 														bind:value={editForm.nit}
-														class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+														class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
 													/>
 												</div>
 
@@ -429,7 +429,7 @@
 															id="cedula"
 															type="text"
 															bind:value={editForm.cedula}
-															class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+															class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
 														/>
 													</div>
 												{/if}
@@ -447,7 +447,7 @@
 														id="representante"
 														type="text"
 														bind:value={editForm.representante}
-														class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+														class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
 													/>
 												</div>
 											{/if}
@@ -461,7 +461,7 @@
 														id="telefono"
 														type="text"
 														bind:value={editForm.telefono}
-														class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+														class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
 													/>
 												</div>
 
@@ -473,7 +473,7 @@
 														id="correo"
 														type="email"
 														bind:value={editForm.correo}
-														class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+														class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
 													/>
 												</div>
 											</div>
@@ -486,7 +486,7 @@
 													id="direccion"
 													bind:value={editForm.direccion}
 													rows="2"
-													class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+													class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
 												></textarea>
 											</div>
 
@@ -496,7 +496,7 @@
 														type="checkbox"
 														id="requiere_osi"
 														bind:checked={editForm.requiere_osi}
-														class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+														class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
 													/>
 													<label for="requiere_osi" class="text-xs font-medium text-gray-700">
 														Requiere OSI
@@ -508,7 +508,7 @@
 														type="checkbox"
 														id="paga_recargos"
 														bind:checked={editForm.paga_recargos}
-														class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+														class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
 													/>
 													<label for="paga_recargos" class="text-xs font-medium text-gray-700">
 														Paga Recargos
@@ -645,10 +645,10 @@
 								<div class="glass rounded-xl border border-white/50 bg-white/90 p-4">
 									<h3 class="mb-3 text-sm font-bold text-gray-900">Estadísticas</h3>
 									<div class="space-y-3">
-										<div class="rounded-lg bg-orange-50 p-3">
+										<div class="rounded-lg bg-emerald-50 p-3">
 											<div class="flex items-center justify-between">
 												<span class="text-xs text-gray-600">Servicios</span>
-												<span class="text-xl font-bold text-orange-600">
+												<span class="text-xl font-bold text-emerald-600">
 													{cliente._count?.servicio || 0}
 												</span>
 											</div>
@@ -737,7 +737,7 @@
 											<div class="mb-3 flex items-center gap-2 text-sm">
 												<div class="flex items-center gap-1 text-gray-700">
 													<svg
-														class="h-4 w-4 shrink-0 text-orange-600"
+														class="h-4 w-4 shrink-0 text-emerald-600"
 														fill="none"
 														stroke="currentColor"
 														viewBox="0 0 24 24"
@@ -855,7 +855,7 @@
 											<div class="mt-2 border-t border-gray-100 pt-2">
 												<button
 													on:click={() => goto(`/dashboard/servicios/${servicio.id}`)}
-													class="text-xs font-medium text-orange-600 hover:text-orange-700"
+													class="text-xs font-medium text-emerald-600 hover:text-emerald-700"
 												>
 													Ver detalles →
 												</button>
@@ -868,7 +868,7 @@
 									<div class="mt-4 text-center">
 										<button
 											on:click={() => goto(`/dashboard/servicios?clienteId=${cliente?.id}`)}
-											class="text-sm font-medium text-gray-600 hover:text-orange-600"
+											class="text-sm font-medium text-gray-600 hover:text-emerald-600"
 										>
 											Ver todos los {cliente._count?.servicio} servicios →
 										</button>

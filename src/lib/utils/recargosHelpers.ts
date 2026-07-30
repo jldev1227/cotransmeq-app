@@ -1,7 +1,16 @@
 // src/lib/utils/recargosHelpers.ts
 
 /**
- * Constantes para cálculo de recargos
+ * Constantes para cálculo de recargos.
+ *
+ * Los porcentajes Y los umbrales de jornada (jornada_normal / jornada_festiva)
+ * ya NO están hardcoded aquí. Se leen desde la base de datos
+ * (configuraciones_salarios con vigencias) y se pasan como parte de
+ * `ConfigRecargosVigente` a `calcularRecargos()` para soportar múltiples
+ * configs por fecha.
+ *
+ * Los defaults acá quedan solo como fallback de retrocompatibilidad
+ * (cálculos en vivo sin config resuelta).
  */
 export const HORAS_LIMITE = {
 	JORNADA_NORMAL: 10.33, // 10 horas 20 minutos - extras empiezan después de esto (días normales)
@@ -10,15 +19,87 @@ export const HORAS_LIMITE = {
 	FIN_NOCTURNO: 6 // 06:00 (6 AM)
 } as const;
 
-export const PORCENTAJES_RECARGO = {
-	HE_DIURNA: 25,
-	HE_NOCTURNA: 75,
-	HE_FESTIVA_DIURNA: 105,
-	HE_FESTIVA_NOCTURNA: 155,
-	RECARGO_NOCTURNO_DOMINICAL_FESTIVO: 115,
-	RECARGO_NOCTURNO: 35,
-	RECARGO_DOMINICAL: 80
-} as const;
+/**
+ * Umbrales de jornada aplicables a un día concreto. Se resuelve desde
+ * la config salarial vigente (configuraciones_salarios.jornada_normal_horas
+ * y .jornada_festiva_horas).
+ *
+ * Si la config no tiene valores (null/0) o el caller no la provee,
+ * se usan los defaults de `HORAS_LIMITE` para mantener el comportamiento
+ * histórico.
+ */
+export interface UmbralesJornada {
+	jornadaNormal: number;
+	jornadaFestiva: number;
+	inicioNocturno: number;
+	finNocturno: number;
+}
+
+export const UMBRALES_DEFECTO: UmbralesJornada = {
+	jornadaNormal: HORAS_LIMITE.JORNADA_NORMAL,
+	jornadaFestiva: HORAS_LIMITE.JORNADA_FESTIVA,
+	inicioNocturno: HORAS_LIMITE.INICIO_NOCTURNO,
+	finNocturno: HORAS_LIMITE.FIN_NOCTURNO
+};
+
+/**
+ * Resuelve umbrales de jornada a partir de la config cruda que llega
+ * del backend. Devuelve siempre un objeto válido (usa defaults si falta
+ * algún campo o si es null/0).
+ */
+export function umbralesDesdeConfig(raw: {
+	jornada_normal_horas?: number | string | null;
+	jornada_festiva_horas?: number | string | null;
+} | null | undefined): UmbralesJornada {
+	if (!raw) return UMBRALES_DEFECTO;
+	const toNum = (v: any, fb: number) => {
+		if (v == null) return fb;
+		const n = Number(v);
+		return isNaN(n) || n <= 0 ? fb : n;
+	};
+	return {
+		jornadaNormal: toNum(raw.jornada_normal_horas, UMBRALES_DEFECTO.jornadaNormal),
+		jornadaFestiva: toNum(raw.jornada_festiva_horas, UMBRALES_DEFECTO.jornadaFestiva),
+		inicioNocturno: UMBRALES_DEFECTO.inicioNocturno,
+		finNocturno: UMBRALES_DEFECTO.finNocturno
+	};
+}
+
+/**
+ * Porcentajes de un tipo de recargo vigentes en una fecha concreta.
+ * Se obtiene desde la BD (endpoint /api/recargos/tipos-recargo/vigentes)
+ * o desde un snapshot guardado en detalles_recargos_dias.
+ */
+export interface PorcentajesRecargo {
+	HED: number;
+	HEN: number;
+	HEFD: number;
+	HEFN: number;
+	RN: number;
+	RD: number;
+	RNDF: number;
+}
+
+/**
+ * Configuración completa de recargos vigente en una fecha.
+ * Encapsula los %, el valor hora (calculado desde salario/horas_mes)
+ * Y los umbrales de jornada aplicables a ese día.
+ *
+ * Los umbrales se propagan para que las funciones de cálculo en vivo
+ * (preview del modal, desglose) respeten la misma lógica que el backend.
+ */
+export interface ConfigRecargosVigente {
+	porcentajes: PorcentajesRecargo;
+	valorHora: number;
+	salarioBasico: number;
+	horasMensualesBase: number;
+	configuracionSalarioId: string | null;
+	etiqueta: string;
+	/** Umbral de horas ordinarias para días normales (default 10.33) */
+	jornadaNormal: number;
+	/** Umbral de horas ordinarias para domingos/festivos (default 7.33) */
+	jornadaFestiva: number;
+}
 
 /**
  * Obtener cantidad de días en un mes
@@ -117,7 +198,7 @@ export function getEstadoColor(estado: string): string {
 	const colors: Record<string, string> = {
 		pendiente: 'bg-amber-500',
 		liquidada: 'bg-purple-500',
-		facturada: 'bg-orange-500',
+		facturada: 'bg-emerald-500',
 		encontrada: 'bg-cyan-500',
 		no_esta: 'bg-red-500',
 		noesta: 'bg-red-500',
@@ -134,7 +215,7 @@ export function getEstadoBgColor(estado: string): string {
 	const colors: Record<string, string> = {
 		pendiente: 'bg-white',
 		liquidada: 'bg-purple-50',
-		facturada: 'bg-orange-50',
+		facturada: 'bg-emerald-50',
 		encontrada: 'bg-cyan-50',
 		no_esta: 'bg-red-50',
 		noesta: 'bg-red-50',
@@ -232,9 +313,9 @@ export function toNumber(value: any): number {
 	return isNaN(num) ? 0 : num;
 }
 
-export function getDia(fechaISO : Date) {
-  const fecha = new Date(fechaISO);
-  return fecha.getUTCDate(); // usa UTC porque tu fecha viene en Z
+export function getDia(fechaISO: Date) {
+	const fecha = new Date(fechaISO);
+	return fecha.getUTCDate(); // usa UTC porque tu fecha viene en Z
 }
 
 /**
@@ -251,326 +332,110 @@ export function calcularHorasTrabajadas(horaInicio: number, horaFin: number): nu
 	return redondear(totalHoras);
 }
 
+
 /**
- * Calcular horas extras nocturnas para un turno (auxiliar)
- * Calcula qué fracción de las horas extras cae en horario nocturno (≥19:00)
- * usando el punto donde termina la jornada ordinaria como referencia.
+ * Resultado monetario de aplicar los % vigentes a un día.
+ * Se calcula a partir de los snapshots guardados en detalles_recargos_dias,
+ * o en vivo con la config vigente si se pasa por parámetro.
+ */
+export interface ValoresMonetariosDia {
+	hed: number;
+	hen: number;
+	hefd: number;
+	hefn: number;
+	rn: number;
+	rd: number;
+	rndf: number;
+	total: number;
+	/** Etiqueta de la config usada (para mostrar en UI) */
+	configEtiqueta: string | null;
+	/** ID de la config usada */
+	configuracionSalarioId: string | null;
+	/** % efectivos aplicados (snapshot) */
+	porcentajesAplicados: PorcentajesRecargo;
+	/** Valor hora efectivo usado */
+	valorHoraEfectivo: number;
+}
+
+
+/**
+ * Calcula el valor monetario de los recargos de un día usando una config vigente.
  *
- * Ejemplo: turno 4:00-20:00 (16h), jornada=9.33h
- *   horaFinJornada = 4 + 9.33 = 13.33
- *   nocStart = max(19, 13.33) = 19
- *   extrasNocturnas = 20 - 19 = 1h
- *   extrasDiurnas = (16-9.33) - 1 = 5.67h
+ * Reglas (idénticas al backend):
+ *   - Horas extras: valorHora × (1 + %/100)
+ *   - Recargos: valorHora × %/100
+ *   - Se redondea por tipo con Math.round (estilo Excel)
  */
-function calcularExtrasNocturnas(
-	horaInicio: number,
-	horaFin: number,
-	totalHoras: number,
-	jornada: number
-): number {
-	const extras = totalHoras - jornada;
-	if (extras <= 0) return 0;
+export function calcularValoresMonetarios(
+	recargos: {
+		HED: number;
+		HEN: number;
+		HEFD: number;
+		HEFN: number;
+		RN: number;
+		RD: number;
+		RNDF: number;
+	},
+	config: ConfigRecargosVigente,
+	excluirRNDF: boolean = false
+): ValoresMonetariosDia {
+	const { porcentajes, valorHora, etiqueta, configuracionSalarioId } = config;
 
-	const horaFinJornada = horaInicio + jornada;
-	let extNoc = 0;
+	const tasa = (codigo: keyof PorcentajesRecargo, esHoraExtra: boolean) =>
+		esHoraExtra ? valorHora * (1 + porcentajes[codigo] / 100) : valorHora * (porcentajes[codigo] / 100);
 
-	if (horaFin > HORAS_LIMITE.INICIO_NOCTURNO) {
-		const nocStart = Math.max(HORAS_LIMITE.INICIO_NOCTURNO, horaFinJornada);
-		if (nocStart < horaFin) {
-			extNoc = horaFin - nocStart;
-		}
-	}
+	const hed = Math.round(recargos.HED * tasa('HED', true));
+	const hen = Math.round(recargos.HEN * tasa('HEN', true));
+	const hefd = Math.round(recargos.HEFD * tasa('HEFD', true));
+	const hefn = Math.round(recargos.HEFN * tasa('HEFN', true));
+	const rn = Math.round(recargos.RN * tasa('RN', false));
+	const rd = Math.round(recargos.RD * tasa('RD', false));
+	const rndf = excluirRNDF ? 0 : Math.round(recargos.RNDF * tasa('RNDF', false));
 
-	return Math.min(extNoc, extras);
-}
-
-/**
- * Calcular Hora Extra Diurna (HED)
- * Fórmula: Si es domingo o festivo → 0
- *          Si NO: extras = total_horas - 9.33, luego restar la porción nocturna
- */
-export function calcularHED(
-	dia: number,
-	mes: number,
-	año: number,
-	horaInicio: number,
-	horaFin: number,
-	totalHoras: number,
-	diasFestivos: number[] = []
-): number {
-	if (esDomingoOFestivo(dia, mes, año, diasFestivos)) return 0;
-	if (totalHoras <= HORAS_LIMITE.JORNADA_NORMAL) return 0;
-
-	const extras = totalHoras - HORAS_LIMITE.JORNADA_NORMAL;
-	const extNoc = calcularExtrasNocturnas(horaInicio, horaFin, totalHoras, HORAS_LIMITE.JORNADA_NORMAL);
-
-	return redondear(extras - extNoc);
-}
-
-/**
- * Calcular Hora Extra Nocturna (HEN)
- * Fórmula: Si es domingo o festivo → 0
- *          Si NO: la porción de extras que cae en horario nocturno (≥19:00)
- */
-export function calcularHEN(
-	dia: number,
-	mes: number,
-	año: number,
-	horaInicio: number,
-	horaFin: number,
-	totalHoras: number,
-	diasFestivos: number[] = []
-): number {
-	if (esDomingoOFestivo(dia, mes, año, diasFestivos)) return 0;
-	if (totalHoras <= HORAS_LIMITE.JORNADA_NORMAL) return 0;
-
-	const extNoc = calcularExtrasNocturnas(horaInicio, horaFin, totalHoras, HORAS_LIMITE.JORNADA_NORMAL);
-
-	return redondear(extNoc);
-}
-
-/**
- * Calcular Hora Extra Festiva Diurna (HEFD)
- * Fórmula: Si es domingo o festivo:
- *            extras = total_horas - 10.33 (misma jornada que día normal), luego restar la porción nocturna
- *          Si NO → 0
- */
-export function calcularHEFD(
-	dia: number,
-	mes: number,
-	año: number,
-	horaInicio: number,
-	horaFin: number,
-	totalHoras: number,
-	diasFestivos: number[] = []
-): number {
-	if (!esDomingoOFestivo(dia, mes, año, diasFestivos)) return 0;
-	if (totalHoras <= HORAS_LIMITE.JORNADA_NORMAL) return 0;
-
-	const extras = totalHoras - HORAS_LIMITE.JORNADA_NORMAL;
-	const extNoc = calcularExtrasNocturnas(horaInicio, horaFin, totalHoras, HORAS_LIMITE.JORNADA_NORMAL);
-
-	return redondear(extras - extNoc);
-}
-
-/**
- * Calcular Hora Extra Festiva Nocturna (HEFN)
- * Fórmula: Si es domingo o festivo:
- *            la porción de extras (después de 10.33h) que cae en horario nocturno (≥19:00)
- *          Si NO → 0
- */
-export function calcularHEFN(
-	dia: number,
-	mes: number,
-	año: number,
-	horaInicio: number,
-	horaFin: number,
-	totalHoras: number,
-	diasFestivos: number[] = []
-): number {
-	if (!esDomingoOFestivo(dia, mes, año, diasFestivos)) return 0;
-	if (totalHoras <= HORAS_LIMITE.JORNADA_NORMAL) return 0;
-
-	const extNoc = calcularExtrasNocturnas(horaInicio, horaFin, totalHoras, HORAS_LIMITE.JORNADA_NORMAL);
-
-	return redondear(extNoc);
-}
-
-/**
- * Calcular Recargo Nocturno (RN)
- * Fórmula: Recargo por iniciar antes de las 6:00 AM + Recargo por terminar después de las 21:00
- */
-export function calcularRecargoNocturno(horaInicio: number, horaFin: number): number {
-	let recargoNocturno = 0;
-
-	// Recargo por iniciar antes de las 6:00 AM
-	if (horaInicio < HORAS_LIMITE.FIN_NOCTURNO) {
-		recargoNocturno += HORAS_LIMITE.FIN_NOCTURNO - horaInicio;
-	}
-
-	// Recargo por terminar después de las 21:00
-	if (horaFin > HORAS_LIMITE.INICIO_NOCTURNO) {
-		if (horaInicio > HORAS_LIMITE.INICIO_NOCTURNO) {
-			// Si también inició después de las 21:00, es toda la jornada
-			recargoNocturno += horaFin - horaInicio;
-		} else {
-			// Solo las horas después de las 21:00
-			recargoNocturno += horaFin - HORAS_LIMITE.INICIO_NOCTURNO;
-		}
-	}
-
-	return redondear(recargoNocturno);
-}
-
-/**
- * Calcular Recargo Dominical (RD)
- * En domingo o festivo:
- * - Si trabajó >= 7.33h → RD = 7.33 fijas
- * - Si trabajó < 7.33h → RD = horas diurnas reales (las nocturnas van a RNDF)
- */
-export function calcularRecargoDominical(
-	dia: number,
-	mes: number,
-	año: number,
-	totalHoras: number,
-	diasFestivos: number[] = []
-): number {
-	if (!esDomingoOFestivo(dia, mes, año, diasFestivos)) return 0;
-	if (totalHoras <= 0) return 0;
-	if (totalHoras >= HORAS_LIMITE.JORNADA_FESTIVA) return HORAS_LIMITE.JORNADA_FESTIVA;
-	// Si trabajó menos de 7.33h, devolver las horas reales (la parte nocturna se calcula aparte como RNDF)
-	return redondear(totalHoras);
-}
-
-/**
- * Calcular todos los recargos de un día
- */
-export interface RecargosCalculados {
-	totalHoras: number;
-	horaExtraDiurna: number;
-	horaExtraNocturna: number;
-	horaExtraFestivaDiurna: number;
-	horaExtraFestivaNocturna: number;
-	recargoNocturnoDominicalFestivo: number;
-	recargoNocturno: number;
-	recargoDominical: number;
-	esDomingo: boolean;
-	esFestivo: boolean;
-	esDomingoOFestivo: boolean;
-}
-
-export function calcularRecargos(params: {
-	dia: number;
-	mes: number;
-	año: number;
-	horaInicio: number;
-	horaFin: number;
-	diasFestivos: number[];
-	excluirRNDF?: boolean;
-}): RecargosCalculados {
-	const { dia, mes, año, horaInicio, horaFin, diasFestivos = [], excluirRNDF = false } = params;
-
-	// Calcular total de horas
-	const totalHoras = calcularHorasTrabajadas(horaInicio, horaFin);
-
-	const es_domingo = esDomingo(dia, mes, año);
-	const es_festivo = esDiaFestivo(dia, diasFestivos);
-	const es_domingo_o_festivo = es_domingo || es_festivo;
-
-	// Las extras SIEMPRE empiezan después de 10.33h, sin importar tipo de día
-	const jornadaOrdinaria = HORAS_LIMITE.JORNADA_NORMAL;
-
-	let hed = 0, hen = 0, hefd = 0, hefn = 0, rndf = 0, rn = 0, rd = 0;
-
-	if (totalHoras <= 0) {
-		return {
-			totalHoras,
-			horaExtraDiurna: 0, horaExtraNocturna: 0,
-			horaExtraFestivaDiurna: 0, horaExtraFestivaNocturna: 0,
-			recargoNocturnoDominicalFestivo: 0, recargoNocturno: 0, recargoDominical: 0,
-			esDomingo: es_domingo, esFestivo: es_festivo, esDomingoOFestivo: es_domingo_o_festivo
-		};
-	}
-
-	// Ajustar horaFin para turnos que cruzan medianoche
-	let horaFinAjustada = horaFin;
-	if (horaFinAjustada <= horaInicio) {
-		horaFinAjustada += 24;
-	}
-
-	function esNocturna(hora: number): boolean {
-		const h = hora % 24;
-		return h >= HORAS_LIMITE.INICIO_NOCTURNO || h < HORAS_LIMITE.FIN_NOCTURNO;
-	}
-
-	// Recorrer el turno en pasos de 0.5h, clasificando cada fracción
-	let horaActual = horaInicio;
-	let horasAcumuladas = 0;
-
-	while (horaActual < horaFinAjustada) {
-		const siguienteHora = Math.min(horaActual + 0.5, horaFinAjustada);
-		const fraccion = siguienteHora - horaActual;
-		const nocturna = esNocturna(horaActual);
-		const esExtra = horasAcumuladas >= jornadaOrdinaria;
-
-		if (es_domingo_o_festivo) {
-			if (esExtra) {
-				if (nocturna) hefn += fraccion;
-				else hefd += fraccion;
-			} else {
-				const horasRestantesJornada = jornadaOrdinaria - horasAcumuladas;
-				if (fraccion <= horasRestantesJornada) {
-					if (nocturna) rndf += fraccion;
-					else rd += fraccion;
-				} else {
-					const parteOrdinaria = horasRestantesJornada;
-					const parteExtra = fraccion - parteOrdinaria;
-					if (nocturna) { rndf += parteOrdinaria; hefn += parteExtra; }
-					else { rd += parteOrdinaria; hefd += parteExtra; }
-				}
-			}
-		} else {
-			// Día normal
-			if (esExtra) {
-				if (nocturna) hen += fraccion;
-				else hed += fraccion;
-			} else {
-				const horasRestantesJornada = jornadaOrdinaria - horasAcumuladas;
-				if (fraccion <= horasRestantesJornada) {
-					if (nocturna) rn += fraccion;
-					// diurna ordinaria no genera recargo
-				} else {
-					const parteOrdinaria = horasRestantesJornada;
-					const parteExtra = fraccion - parteOrdinaria;
-					if (nocturna) { rn += parteOrdinaria; hen += parteExtra; }
-					else { hed += parteExtra; }
-				}
-			}
-		}
-
-		horasAcumuladas += fraccion;
-		horaActual = siguienteHora;
-	}
-
-	// En domingo/festivo:
-	// RNDF = TODAS las horas nocturnas del turno (ordinarias + extras)
-	// RD = 7.33 - RNDF (las nocturnas se restan del dominical)
-	// PAREX no reconoce RNDF, así que no se resta
-	if (es_domingo_o_festivo) {
-		// Recalcular RNDF como TODAS las horas nocturnas del turno
-		let totalNocturnas = 0;
-		let h = horaInicio;
-		while (h < horaFinAjustada) {
-			const sig = Math.min(h + 0.5, horaFinAjustada);
-			if (esNocturna(h)) totalNocturnas += sig - h;
-			h = sig;
-		}
-		rndf = totalNocturnas;
-
-		if (totalHoras >= HORAS_LIMITE.JORNADA_FESTIVA) {
-			rd = HORAS_LIMITE.JORNADA_FESTIVA;
-		}
-
-		if (!excluirRNDF) {
-			// Restar RNDF del RD (las horas nocturnas no deben contar como RD)
-			rd = Math.max(rd - rndf, 0);
-		} else {
-			// PAREX: no reconoce RNDF, RD se queda intacto
-			rndf = 0;
-		}
-	}
+	const total = hed + hen + hefd + hefn + rn + rd + rndf;
 
 	return {
-		totalHoras,
-		horaExtraDiurna: redondear(hed),
-		horaExtraNocturna: redondear(hen),
-		horaExtraFestivaDiurna: redondear(hefd),
-		horaExtraFestivaNocturna: redondear(hefn),
-		recargoNocturnoDominicalFestivo: redondear(rndf),
-		recargoNocturno: redondear(rn),
-		recargoDominical: redondear(rd),
-		esDomingo: es_domingo,
-		esFestivo: es_festivo,
-		esDomingoOFestivo: es_domingo_o_festivo
+		hed,
+		hen,
+		hefd,
+		hefn,
+		rn,
+		rd,
+		rndf,
+		total,
+		configEtiqueta: etiqueta,
+		configuracionSalarioId,
+		porcentajesAplicados: porcentajes,
+		valorHoraEfectivo: valorHora
 	};
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CÁLCULO CON CONTINUIDAD DE TURNO — orquestador modular
+// ═══════════════════════════════════════════════════════════════════════════
+
+export {
+	calcularRecargosConContinuacion,
+	type DiaLaboralRecargo,
+	type RecargosDiaResultado,
+	type ResolverConfigParaFecha,
+	type JornadaCalculada,
+	type Segmento,
+	type Tramo,
+	type Franja,
+	type TipoSegmento,
+	type CodigoRecargo,
+	type RecargosResultado,
+	type TurnoContexto,
+	crearJornada,
+	dividirSegmentos,
+	partirTodosLosSegmentos,
+	clasificarTramo,
+	sumarResultados,
+	postProceso,
+	resolverTurnoContinuo,
+	resolverSkipFlags,
+	esHoraSkip,
+	esNocturna as esNocturnaRecargo,
+	franjaDeHora
+} from './recargos/index';

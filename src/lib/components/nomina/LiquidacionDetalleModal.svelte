@@ -76,8 +76,13 @@
 			const liqResponse = await obtenerLiquidacionPorId(liquidacionId);
 			liquidacion = liqResponse.data;
 
-			// Firmas vienen incluidas en la respuesta de liquidación
-			firmas = (liquidacion?.firmas_desprendibles as FirmaConUrl[]) || [];
+			// Firmas vienen incluidas en la respuesta de liquidación.
+			// Se excluyen las que vienen como fallback desde PRIMA (origen_fallback === 'prima'),
+			// ya que no son firmas propias del desprendible.
+			firmas =
+				((liquidacion?.firmas_desprendibles as any[]) || []).filter(
+					(f) => f?.origen_fallback !== 'prima'
+				) as FirmaConUrl[];
 		} catch (error: any) {
 			console.error('Error cargando liquidación:', error);
 			toast.error('Error al cargar los datos de la liquidación');
@@ -151,7 +156,7 @@
 	function getEstadoColor(estado: string | undefined): string {
 		switch (estado) {
 			case 'Liquidado':
-				return 'bg-orange-100 text-orange-700';
+				return 'bg-green-100 text-green-700';
 			case 'Pendiente':
 				return 'bg-yellow-100 text-yellow-700';
 			default:
@@ -364,7 +369,7 @@
 				<!-- Loading -->
 				<div class="flex flex-col items-center justify-center py-20">
 					<div
-						class="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"
+						class="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"
 					></div>
 					<p class="text-gray-600">Cargando liquidación...</p>
 				</div>
@@ -409,7 +414,7 @@
 								on:click={() => (activeTab = tab.key)}
 								class="border-b-2 px-4 py-3 text-sm font-medium transition-colors {activeTab ===
 								tab.key
-									? 'border-orange-500 text-orange-600'
+									? 'border-emerald-500 text-emerald-600'
 									: 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'}"
 							>
 								{tab.label}
@@ -460,7 +465,7 @@
 								</div>
 								<div>
 									<p class="text-sm text-gray-500">Sueldo Total</p>
-									<p class="text-base font-medium text-orange-600">
+									<p class="text-base font-medium text-emerald-600">
 										{formatCurrency(liquidacion.sueldo_total || liquidacion.neto_pagado)}
 									</p>
 								</div>
@@ -512,7 +517,7 @@
 							<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
 								<div>
 									<p class="text-sm text-gray-500">Total Ingresos</p>
-									<p class="text-base font-medium text-orange-600">
+									<p class="text-base font-medium text-emerald-600">
 										{formatCurrency(
 											(liquidacion.sueldo_total || liquidacion.neto_pagado || 0) +
 												Math.abs(totalDeducciones)
@@ -527,7 +532,7 @@
 								</div>
 								<div>
 									<p class="text-sm text-gray-500">Neto a Pagar</p>
-									<p class="text-base font-medium text-orange-600">
+									<p class="text-base font-medium text-emerald-600">
 										{formatCurrency(netoAPagar)}
 									</p>
 								</div>
@@ -667,7 +672,7 @@
 																Manual: {formatCurrency(item.totalManual)}
 															</span>
 															<span
-																class="rounded bg-orange-100 px-1.5 py-0.5 text-orange-700"
+																class="rounded bg-emerald-100 px-1.5 py-0.5 text-emerald-700"
 																title="Recargos automáticos (de planillas)"
 															>
 																Auto: {formatCurrency(item.totalAutomatico)}
@@ -688,7 +693,7 @@
 															>
 															{#if detalle.esAutomatico}
 																<span
-																	class="ml-2 inline-flex items-center gap-0.5 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700"
+																	class="ml-2 inline-flex items-center gap-0.5 rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700"
 																	title="Recargo automático calculado desde planilla{detalle.numeroPlanilla
 																		? ' #' + detalle.numeroPlanilla
 																		: ''}"
@@ -720,7 +725,7 @@
 														{/if}
 															{#if detalle.pagaCliente}
 																<span
-																	class="ml-1 rounded bg-orange-100 px-1.5 py-0.5 text-[10px] text-orange-600"
+																	class="ml-1 rounded bg-green-100 px-1.5 py-0.5 text-[10px] text-green-600"
 																	>Paga Cliente</span
 																>
 															{/if}
@@ -891,7 +896,7 @@
 									<div class="mt-4 border-t border-gray-200 pt-4">
 										<div class="flex justify-between font-semibold">
 											<span>Total</span>
-											<span class="text-orange-600">
+											<span class="text-emerald-600">
 												{formatCurrency(
 													(liquidacion.sueldo_total || liquidacion.neto_pagado || 0) +
 														Math.abs(totalDeducciones)
@@ -926,7 +931,7 @@
 										<div class="mt-4 border-t border-gray-200 pt-4">
 											<div class="flex justify-between text-lg font-bold">
 												<span>Neto a Pagar</span>
-												<span class="text-orange-600">{formatCurrency(netoAPagar)}</span>
+												<span class="text-emerald-600">{formatCurrency(netoAPagar)}</span>
 											</div>
 										</div>
 									</div>
@@ -1090,7 +1095,7 @@
 					<button
 						on:click={handleGeneratePDF}
 						disabled={generatingPdf || firmasLoading}
-						class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-teal-600 px-5 py-2.5 font-medium text-white shadow-md transition-all hover:shadow-lg disabled:opacity-50"
+						class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-5 py-2.5 font-medium text-white shadow-md transition-all hover:shadow-lg disabled:opacity-50"
 					>
 						{#if generatingPdf}
 							<Loader2 class="h-4 w-4 animate-spin" />

@@ -127,8 +127,8 @@
 		pendiente: '#F59E0B',
 		en_curso: '#3B82F6',
 		planificado: '#8B5CF6',
-		completado: '#f97316',
-		realizado: '#f97316',
+		completado: '#10B981',
+		realizado: '#10B981',
 		cancelado: '#EF4444',
 		liquidado: '#6B7280'
 	};
@@ -145,8 +145,8 @@
 		pendiente: { bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe', dot: '#3b82f6' },
 		en_curso: { bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe', dot: '#3b82f6' },
 		planificado: { bg: '#faf5ff', fg: '#7e22ce', border: '#e9d5ff', dot: '#a855f7' },
-		completado: { bg: '#ecfdf5', fg: '#c2410c', border: '#a7f3d0', dot: '#f97316' },
-		realizado: { bg: '#ecfdf5', fg: '#c2410c', border: '#a7f3d0', dot: '#f97316' },
+		completado: { bg: '#ecfdf5', fg: '#047857', border: '#a7f3d0', dot: '#10b981' },
+		realizado: { bg: '#ecfdf5', fg: '#047857', border: '#a7f3d0', dot: '#10b981' },
 		cancelado: { bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca', dot: '#ef4444' },
 		liquidado: { bg: '#f3f4f6', fg: '#374151', border: '#d1d5db', dot: '#6b7280' }
 	};
@@ -1286,7 +1286,7 @@
 					type: 'line',
 					source: 'route',
 					layout: { 'line-join': 'round', 'line-cap': 'round' },
-					paint: { 'line-color': '#ea580c', 'line-width': 5, 'line-opacity': 0.8 }
+					paint: { 'line-color': '#059669', 'line-width': 5, 'line-opacity': 0.8 }
 				});
 			}
 
@@ -1302,11 +1302,11 @@
 			cargarIncidentesNacionales();
 
 			// Markers A / B
-			const om = new mapboxgl.Marker(pinEl('#ea580c', 'A'))
+			const om = new mapboxgl.Marker(pinEl('#059669', 'A'))
 				.setLngLat([oLng, oLat])
 				.setPopup(
 					new mapboxgl.Popup({ offset: 25 }).setHTML(
-						`<div style="padding:10px;font-family:system-ui"><strong style="color:#ea580c">Origen</strong><br/><span style="font-size:12px;">${servicio.origen_especifico || servicio.origen?.nombre_municipio || '—'}</span></div>`
+						`<div style="padding:10px;font-family:system-ui"><strong style="color:#059669">Origen</strong><br/><span style="font-size:12px;">${servicio.origen_especifico || servicio.origen?.nombre_municipio || '—'}</span></div>`
 					)
 				);
 			om.addTo(map!);
@@ -1443,26 +1443,25 @@
 
 <svelte:head>
 	<title
-		>{servicio ? `Servicio ${servicio.id.slice(0, 8).toUpperCase()}` : 'Cargando...'} - Cotransmeq</title
+		>{servicio ? `Servicio ${servicio.id.slice(0, 8).toUpperCase()}` : 'Cargando...'} - Transmeralda</title
 	>
 </svelte:head>
 
-<div class="servicio-cards flex h-full w-full flex-col overflow-hidden">
+<div class="flex h-screen w-full flex-col overflow-hidden bg-gray-50" in:fade={{ duration: 400 }}>
 	{#if loading}
-		<div class="flex flex-1 items-center justify-center" style="background-color: var(--bg-base);" in:fade>
+		<div class="flex flex-1 items-center justify-center bg-white" in:fade>
 			<div class="text-center">
-				<div class="spinner mx-auto mb-4" style="width: 3rem; height: 3rem;"></div>
-				<p class="text-sm" style="color: var(--text-muted);">Cargando servicio...</p>
+				<div
+					class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"
+				></div>
+				<p class="text-sm text-gray-500">Cargando servicio...</p>
 			</div>
 		</div>
 	{:else if error}
-		<div class="flex flex-1 items-center justify-center p-6" style="background-color: var(--bg-base);" in:fade>
+		<div class="flex flex-1 items-center justify-center bg-white p-6" in:fade>
 			<div class="max-w-xs text-center">
-				<div
-					class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl"
-					style="background: rgba(220, 38, 38, 0.08);"
-				>
-					<svg class="h-6 w-6" style="color: #dc2626;" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-red-100">
+					<svg class="h-6 w-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
@@ -1471,8 +1470,11 @@
 						/>
 					</svg>
 				</div>
-				<p class="mb-4 text-sm" style="color: var(--text-secondary);">{error}</p>
-				<button on:click={() => goto('/dashboard/servicios')} class="btn-primary">
+				<p class="mb-4 text-gray-600">{error}</p>
+				<button
+					on:click={() => goto('/dashboard/servicios')}
+					class="apple-transition apple-hover rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:from-emerald-600 hover:to-emerald-700"
+				>
 					Volver
 				</button>
 			</div>
@@ -1545,24 +1547,21 @@
 		</header>
 
 		<!-- ── ÁREA SCROLLEABLE ───────────────────────────────────── -->
-		<div class="flex-1 overflow-y-auto" style="background-color: var(--bg-base);">
-			<div class="mx-auto max-w-7xl px-4 py-5 md:px-6">
+		<div class="flex-1 overflow-y-auto">
+			<div class="glass.soft-shadow mx-auto max-w-7xl px-4 py-5 md:px-6">
 				<!-- ═══ MAPA (hero) ═══ -->
 				<div
-					class="servicio-map-frame relative mb-3 overflow-hidden rounded-2xl border"
-					style="background-color: var(--bg-surface); border-color: var(--border-subtle); box-shadow: 0 4px 24px rgba(0,0,0,0.04);"
+					class="servicio-map-frame glass soft-shadow relative mb-3 overflow-hidden rounded-2xl border border-gray-200/50"
 				>
 					<div id="map" class="h-full w-full"></div>
 
 					<!-- Botón centrar -->
 					<button
 						on:click={centerRoute}
-						class="servicio-map-center-btn apple-transition absolute top-3 left-3 z-10 flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-semibold"
-						style="background-color: rgba(255, 255, 255, 0.95); border-color: var(--border-subtle); color: var(--text-primary); box-shadow: 0 4px 16px rgba(0,0,0,0.08); backdrop-filter: blur(8px);"
+						class="servicio-map-center-btn apple-transition absolute top-3 left-3 z-10 flex items-center gap-1.5 rounded-xl border border-gray-200/50 bg-white/90 px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm backdrop-blur-md hover:bg-white"
 					>
 						<svg
-							class="h-4 w-4"
-							style="color: var(--orange-600);"
+							class="h-4 w-4 text-emerald-600"
 							fill="none"
 							stroke="currentColor"
 							viewBox="0 0 24 24"
@@ -1599,14 +1598,11 @@
 
 					<!-- ─── LEYENDA INTERACTIVA (subida para no chocar con stats) ─── -->
 					<div
-						class="servicio-map-leyenda absolute bottom-3 right-3 z-10 overflow-hidden rounded-xl border"
-						style="min-width:220px; background-color: rgba(255, 255, 255, 0.95); border-color: var(--border-subtle); box-shadow: 0 4px 16px rgba(0,0,0,0.08); backdrop-filter: blur(12px);"
+						class="servicio-map-leyenda glass soft-shadow absolute bottom-3 right-3 z-10 overflow-hidden rounded-xl border border-gray-200/50"
+						style="min-width:220px;backdrop-filter:blur(12px);"
 					>
-						<div class="border-b px-3 py-2" style="border-color: var(--border-subtle);">
-							<p
-								class="font-mono-meta"
-								style="color: var(--text-muted); font-size: 0.62rem;"
-							>
+						<div class="border-b border-gray-100 px-3 py-2">
+							<p class="text-[10px] font-semibold tracking-wider text-gray-500 uppercase">
 								Puntos de interés
 							</p>
 						</div>
@@ -1615,7 +1611,7 @@
 							<!-- Origen / Destino -->
 							<div class="flex items-center gap-2 rounded-lg px-2 py-1">
 								<div
-									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full" style="background-color: var(--orange-500);"
+									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500"
 								>
 									<span style="color:#fff;font-weight:700;font-size:9px;">A</span>
 								</div>
@@ -1634,7 +1630,7 @@
 
 							<!-- Peajes -->
 							<button
-								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors leyenda-toggle"
+								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
 								class:opacity-40={!showPeajes}
 								on:click={() => (showPeajes = !showPeajes)}
 							>
@@ -1654,7 +1650,7 @@
 
 							<!-- Restaurantes -->
 							<button
-								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors leyenda-toggle"
+								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
 								class:opacity-40={!showRestaurantes}
 								on:click={() => {
 									showRestaurantes = !showRestaurantes;
@@ -1677,7 +1673,7 @@
 
 							<!-- Estaciones de servicio -->
 							<button
-								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors leyenda-toggle"
+								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
 								class:opacity-40={!showEstaciones}
 								on:click={() => {
 									showEstaciones = !showEstaciones;
@@ -1700,7 +1696,7 @@
 
 							<!-- Hospedajes -->
 							<button
-								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors leyenda-toggle"
+								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
 								class:opacity-40={!showHospedajes}
 								on:click={() => {
 									showHospedajes = !showHospedajes;
@@ -1723,7 +1719,7 @@
 
 							<!-- Incidentes / Cierres -->
 							<button
-								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors leyenda-toggle"
+								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
 								class:opacity-40={!showIncidentes}
 								on:click={() => {
 									showIncidentes = !showIncidentes;
@@ -1752,7 +1748,7 @@
 
 							<!-- Distracom -->
 							<button
-								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors leyenda-toggle"
+								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
 								class:opacity-40={!showDistracom}
 								on:click={() => (showDistracom = !showDistracom)}
 							>
@@ -1764,8 +1760,7 @@
 								<span class="flex-1 text-left text-xs font-medium text-gray-700">Distracom</span>
 								{#if distracomMarkers.length > 0}
 									<span
-										class="rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
-										style="background-color: rgba(249, 115, 22, 0.08); color: #9a3412;"
+										class="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700"
 										>{distracomMarkers.length}</span
 									>
 								{/if}
@@ -1775,7 +1770,7 @@
 
 							<!-- Tráfico en tiempo real -->
 							<button
-								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors leyenda-toggle"
+								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
 								class:opacity-40={!showTrafico}
 								on:click={toggleTrafico}
 							>
@@ -1797,7 +1792,7 @@
 
 							<!-- Riesgo deslizamientos SGC -->
 							<button
-								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors leyenda-toggle"
+								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
 								class:opacity-40={!showRiesgos}
 								on:click={toggleRiesgosSGC}
 							>
@@ -1825,10 +1820,10 @@
 				</div>
 
 				<!-- ═══ HERO RECORRIDO (protagonista #2) ═══ -->
-				<div class="servicio-hero-recorrido mb-3 rounded-2xl border p-5 md:p-6" style="background-color: var(--bg-surface); border-color: var(--border-subtle);">
+				<div class="servicio-hero-recorrido glass soft-shadow mb-3 rounded-2xl border border-gray-200/50 p-5 md:p-6">
 					<div class="mb-3 flex items-center gap-2">
 						<div
-							class="brand-gradient flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+							class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600"
 						>
 							<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -1893,14 +1888,12 @@
 				<!-- ─── CONDICIONES VIALES ─── -->
 				{#if loadingCondiciones}
 					<div
-						class="mb-3 flex items-center gap-2 rounded-xl border px-4 py-2.5"
-						style="background-color: rgba(59, 130, 246, 0.08); border-color: rgba(59, 130, 246, 0.25);"
+						class="glass mb-3 flex items-center gap-2 rounded-xl border border-blue-200/50 bg-blue-50/80 px-4 py-2.5"
 					>
 						<span
-							class="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-t-transparent"
-							style="border-color: #3b82f6; border-top-color: transparent;"
+							class="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"
 						></span>
-						<span class="text-xs font-semibold" style="color: #1d4ed8;"
+						<span class="text-xs font-semibold text-blue-700"
 							>Analizando condiciones actuales de la vía...</span
 						>
 					</div>
@@ -1909,53 +1902,45 @@
 						{#each condicionesViales as cond}
 							{@const estilos = {
 								ok: {
-									bg: 'rgba(249, 115, 22, 0.06)',
-									border: 'rgba(249, 115, 22, 0.30)',
+									bg: 'bg-emerald-50/80',
+									border: 'border-emerald-200/60',
 									icon: '✅',
-									dot: '#f97316',
-									titulo: '#7c2d12',
-									desc: '#9a3412'
+									dot: 'bg-emerald-500',
+									titulo: 'text-emerald-900',
+									desc: 'text-emerald-700'
 								},
 								moderado: {
-									bg: 'rgba(245, 158, 11, 0.08)',
-									border: 'rgba(245, 158, 11, 0.30)',
+									bg: 'bg-amber-50/80',
+									border: 'border-amber-200/60',
 									icon: '⚠️',
-									dot: '#f59e0b',
-									titulo: '#78350f',
-									desc: '#92400e'
+									dot: 'bg-amber-500',
+									titulo: 'text-amber-900',
+									desc: 'text-amber-700'
 								},
 								alto: {
-									bg: 'rgba(234, 88, 12, 0.08)',
-									border: 'rgba(234, 88, 12, 0.30)',
+									bg: 'bg-orange-50/80',
+									border: 'border-orange-200/60',
 									icon: '🔶',
-									dot: '#ea580c',
-									titulo: '#7c2d12',
-									desc: '#9a3412'
+									dot: 'bg-orange-500',
+									titulo: 'text-orange-900',
+									desc: 'text-orange-700'
 								},
 								critico: {
-									bg: 'rgba(220, 38, 38, 0.06)',
-									border: 'rgba(220, 38, 38, 0.30)',
+									bg: 'bg-red-50/80',
+									border: 'border-red-200/60',
 									icon: '🚨',
-									dot: '#dc2626',
-									titulo: '#7f1d1d',
-									desc: '#991b1b'
+									dot: 'bg-red-500',
+									titulo: 'text-red-900',
+									desc: 'text-red-700'
 								}
 							}[cond.nivel]}
-							<div
-								class="rounded-xl border px-4 py-3"
-								style="background-color: {estilos.bg}; border-color: {estilos.border}; box-shadow: 0 4px 24px rgba(0,0,0,0.04);"
-							>
+							<div class="soft-shadow rounded-xl border {estilos.border} {estilos.bg} px-4 py-3">
 								<div class="mb-1 flex items-center gap-2">
 									<span class="text-sm">{estilos.icon}</span>
-									<p class="text-xs font-bold" style="color: {estilos.titulo};">{cond.titulo}</p>
-									<div
-										class="ml-auto h-2 w-2 animate-pulse rounded-full"
-										style="background-color: {estilos.dot};"
-									></div>
+									<p class="text-xs font-bold {estilos.titulo}">{cond.titulo}</p>
+									<div class="ml-auto h-2 w-2 rounded-full {estilos.dot} animate-pulse"></div>
 								</div>
-								<p class="text-[11px] leading-relaxed" style="color: {estilos.desc};">
-									{cond.descripcion}
-								</p>
+								<p class="text-[11px] leading-relaxed {estilos.desc}">{cond.descripcion}</p>
 							</div>
 						{/each}
 					</div>
@@ -1964,44 +1949,37 @@
 				<!-- LOADING POIs -->
 				{#if loadingPOIs}
 					<div
-						class="mb-4 flex items-center gap-3 rounded-xl border px-4 py-2.5"
-						style="background-color: rgba(249, 115, 22, 0.06); border-color: rgba(249, 115, 22, 0.25); box-shadow: 0 4px 24px rgba(0,0,0,0.04);"
+						class="glass soft-shadow mb-4 flex items-center gap-3 rounded-xl border border-emerald-200/50 bg-emerald-50/80 px-4 py-2.5"
 						in:fade={{ duration: 200 }}
 						out:fade={{ duration: 200 }}
 					>
 						<div class="relative flex h-5 w-5 flex-shrink-0">
 							<span
-								class="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
-								style="background-color: var(--orange-400, #f97316);"
+								class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60"
 							></span>
 							<span
-								class="relative inline-flex h-5 w-5 animate-spin rounded-full border-2 border-t-transparent"
-								style="border-color: var(--orange-500);"
+								class="relative inline-flex h-5 w-5 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent"
 							></span>
 						</div>
 						<div class="flex min-w-0 flex-1 items-center gap-2">
-							<span class="text-sm font-semibold" style="color: #9a3412;"
+							<span class="text-sm font-semibold text-emerald-800"
 								>Buscando puntos de interés en la ruta...</span
 							>
-							<span class="hidden items-center gap-1.5 text-xs sm:flex" style="color: #c2410c;">
+							<span class="hidden items-center gap-1.5 text-xs text-emerald-700 sm:flex">
 								<span
-									class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-semibold"
-									style="background-color: rgba(249,115,22,0.08); border-color: rgba(249,115,22,0.3);"
+									class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-100/80 px-2 py-0.5 text-[10px] font-semibold"
 									>🛣️ Peajes</span
 								>
 								<span
-									class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-semibold"
-									style="background-color: rgba(249,115,22,0.08); border-color: rgba(249,115,22,0.3);"
+									class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-100/80 px-2 py-0.5 text-[10px] font-semibold"
 									>🍽️ Restaurantes</span
 								>
 								<span
-									class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-semibold"
-									style="background-color: rgba(249,115,22,0.08); border-color: rgba(249,115,22,0.3);"
+									class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-100/80 px-2 py-0.5 text-[10px] font-semibold"
 									>⛽ Est. Servicio</span
 								>
 								<span
-									class="inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-semibold"
-									style="background-color: rgba(249,115,22,0.08); border-color: rgba(249,115,22,0.3);"
+									class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-100/80 px-2 py-0.5 text-[10px] font-semibold"
 									>🏨 Hospedajes</span
 								>
 							</span>
@@ -2012,10 +1990,10 @@
 				<!-- ═══ TRES HERO CARDS: Conductor | Vehículo | Cliente ═══ -->
 				<div class="servicio-hero-grid mb-3 grid grid-cols-1 gap-3 md:grid-cols-3">
 					<!-- ─── CONDUCTOR ─── -->
-					<div class="servicio-hero-card rounded-2xl border p-4" style="background-color: var(--bg-surface); border-color: var(--border-subtle);">
+					<div class="servicio-hero-card glass soft-shadow rounded-2xl border border-gray-200/50 p-4">
 						<div class="mb-3 flex items-center gap-2">
 							<div
-								class="brand-gradient flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+								class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600"
 							>
 								<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 									<path
@@ -2038,7 +2016,7 @@
 								/>
 							{:else if servicio.conductor}
 								<div
-									class="brand-gradient servicio-hero-avatar soft-shadow mb-3 flex h-20 w-20 items-center justify-center rounded-2xl"
+									class="servicio-hero-avatar soft-shadow mb-3 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600"
 								>
 									<span class="text-2xl font-bold text-white"
 										>{servicio.conductor.nombre.charAt(0)}{servicio.conductor.apellido.charAt(
@@ -2083,10 +2061,10 @@
 
 					<!-- ─── VEHÍCULO (protagonista por la PLACA) ─── -->
 					{#if servicio.vehiculo?.placa}
-						<div class="servicio-hero-card rounded-2xl border p-4" style="background-color: var(--bg-surface); border-color: var(--border-subtle);">
+						<div class="servicio-hero-card glass soft-shadow rounded-2xl border border-gray-200/50 p-4">
 							<div class="mb-3 flex items-center gap-2">
 								<div
-									class="brand-gradient flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+									class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600"
 								>
 									<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 										<path
@@ -2131,13 +2109,13 @@
 							{/if}
 						</div>
 					{:else}
-						<div class="servicio-hero-card flex items-center justify-center rounded-2xl border p-4 text-sm" style="background-color: var(--bg-surface); border-color: var(--border-subtle); color: var(--text-very-muted);">
+						<div class="servicio-hero-card glass soft-shadow flex items-center justify-center rounded-2xl border border-gray-200/50 p-4 text-sm text-gray-400">
 							Sin vehículo asignado
 						</div>
 					{/if}
 
 					<!-- ─── CLIENTE ─── -->
-					<div class="servicio-hero-card rounded-2xl border p-4" style="background-color: var(--bg-surface); border-color: var(--border-subtle);">
+					<div class="servicio-hero-card glass soft-shadow rounded-2xl border border-gray-200/50 p-4">
 						<div class="mb-3 flex items-center gap-2">
 							<div
 								class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-amber-600"
@@ -2189,7 +2167,7 @@
 				<!-- ═══ SECCIÓN DE DETALLES: Fechas + Planilla + Condiciones ═══ -->
 				<div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
 					<!-- Fechas + Planilla + Propósito (compacto) -->
-					<div class="rounded-2xl border p-4" style="background-color: var(--bg-surface); border-color: var(--border-subtle); box-shadow: 0 4px 24px rgba(0,0,0,0.04);">
+					<div class="glass soft-shadow rounded-2xl border border-gray-200/50 p-4">
 						<div class="mb-3 flex items-center gap-2">
 							<div
 								class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-400 to-blue-600"
@@ -2255,11 +2233,11 @@
 					</div>
 
 					<!-- Condiciones del servicio (compacto) -->
-					<div class="rounded-2xl border p-4" style="background-color: var(--bg-surface); border-color: var(--border-subtle); box-shadow: 0 4px 24px rgba(0,0,0,0.04);">
+					<div class="glass soft-shadow rounded-2xl border border-gray-200/50 p-4">
 						<div class="mb-3 flex items-center justify-between gap-2">
 							<div class="flex items-center gap-2">
 								<div
-									class="brand-gradient flex h-7 w-7 shrink-0 items-center justify-center rounded-lg"
+									class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600"
 								>
 									<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 										<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
@@ -2277,14 +2255,13 @@
 							<!-- Estado conductor -->
 							<div class="servicio-cond-badge">
 								<div
-									class="h-2 w-2 rounded-full"
-									style="background-color: {estadoConductor === 'optimo'
-										? '#f97316'
+									class="h-2 w-2 rounded-full {estadoConductor === 'optimo'
+										? 'bg-emerald-500'
 										: estadoConductor === 'regular'
-											? '#f59e0b'
+											? 'bg-amber-500'
 											: estadoConductor === 'fatigado'
-												? '#ea580c'
-												: '#ef4444'};"
+												? 'bg-orange-500'
+												: 'bg-red-500'}"
 								></div>
 								<span>Conductor {estadoConductor}</span>
 							</div>
@@ -2308,11 +2285,11 @@
 								{ excelente: 5, bueno: 5, regular: 3, malo: 2 }[calificacion as 'excelente' | 'bueno' | 'regular' | 'malo'] ?? 5}
 							{@const calColor =
 								{
-									excelente: '#f97316',
-									bueno: '#f97316',
-									regular: '#f59e0b',
-									malo: '#ef4444'
-								}[calificacion as 'excelente' | 'bueno' | 'regular' | 'malo'] ?? '#f97316'}
+									excelente: 'text-emerald-600',
+									bueno: 'text-emerald-600',
+									regular: 'text-amber-500',
+									malo: 'text-red-500'
+								}[calificacion as 'excelente' | 'bueno' | 'regular' | 'malo'] ?? 'text-emerald-600'}
 							{@const calLabel =
 								{ excelente: 'Excelente', bueno: 'Bueno', regular: 'Regular', malo: 'Malo' }[
 									calificacion as 'excelente' | 'bueno' | 'regular' | 'malo'
@@ -2334,7 +2311,7 @@
 										</svg>
 									{/each}
 								</div>
-								<span class="text-xs font-semibold" style="color: {calColor};">{calLabel}</span>
+								<span class="text-xs font-semibold {calColor}">{calLabel}</span>
 							</div>
 						{/if}
 					</div>
@@ -2342,10 +2319,10 @@
 
 				<!-- Observaciones (small, full width) -->
 				{#if servicio.observaciones}
-					<div class="servicio-obs mt-3 rounded-2xl border p-4" style="background-color: var(--bg-surface); border-color: var(--border-subtle);">
+					<div class="servicio-obs glass soft-shadow mt-3 rounded-2xl border border-gray-200/50 p-4">
 						<div class="mb-2 flex items-center gap-2">
 							<div
-								class="brand-gradient flex h-6 w-6 shrink-0 items-center justify-center rounded-lg"
+								class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600"
 							>
 								<svg class="h-3.5 w-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 									<path
@@ -2483,8 +2460,8 @@
 	}
 	.servicio-icon-btn:hover:not(:disabled) {
 		background: white;
-		border-color: rgba(249, 115, 22, 0.3);
-		color: #ea580c;
+		border-color: rgba(16, 185, 129, 0.3);
+		color: #059669;
 		transform: translateY(-1px);
 	}
 	.servicio-icon-btn:disabled {
@@ -2496,12 +2473,12 @@
 		width: 40px;
 		height: 40px;
 		border-radius: 12px;
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #10b981, #059669);
 		display: none;
 		align-items: center;
 		justify-content: center;
 		color: white;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+		box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
 		flex-shrink: 0;
 	}
 	@media (min-width: 640px) {
@@ -2516,15 +2493,15 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #f97316;
-		background: rgba(249, 115, 22, 0.08);
+		color: #10b981;
+		background: rgba(16, 185, 129, 0.08);
 		padding: 0.2rem 0.55rem;
 		border-radius: 5px;
-		font-family: 'Geist', ui-monospace, SFMono-Regular, monospace;
+		font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 	}
 
 	.servicio-title {
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 		font-weight: 700;
 		font-size: 1.05rem;
 		color: #0f1f1a;
@@ -2540,7 +2517,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -2556,19 +2533,19 @@
 		gap: 0.4rem;
 		padding: 0.55rem 0.9rem;
 		border-radius: 12px;
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #10b981, #059669);
 		color: white;
-		font-family: 'Geist', system-ui, sans-serif;
+		font-family: 'Inter Tight', system-ui, sans-serif;
 		font-size: 0.78rem;
 		font-weight: 600;
 		border: none;
 		cursor: pointer;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+		box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
 		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 	}
 	.servicio-share-btn:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
+		box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
 	}
 
 	/* ── Modal compartir (sistema landing) ─────────────────────── */
@@ -2580,7 +2557,7 @@
 	}
 
 	.servicio-share-hd {
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #10b981, #059669);
 		padding: 1.1rem 1.5rem;
 		display: flex;
 		align-items: center;
@@ -2607,11 +2584,11 @@
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
 		color: rgba(255, 255, 255, 0.85);
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 	}
 
 	.servicio-share-title {
-		font-family: 'Geist', Georgia, serif;
+		font-family: 'Fraunces', Georgia, serif;
 		font-weight: 500;
 		font-size: 1.2rem;
 		color: white;
@@ -2658,7 +2635,7 @@
 		transition: all 0.2s;
 	}
 	.servicio-share-link:hover {
-		border-color: rgba(249, 115, 22, 0.3);
+		border-color: rgba(16, 185, 129, 0.3);
 		background: white;
 	}
 
@@ -2668,11 +2645,11 @@
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
 		color: #6b6b6b;
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 	}
 
 	.servicio-share-link-url {
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.85rem;
 		color: #0f1f1a;
 		font-weight: 500;
@@ -2689,22 +2666,22 @@
 		width: 100%;
 		padding: 0.7rem 1.25rem;
 		border-radius: 12px;
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #10b981, #059669);
 		color: white;
-		font-family: 'Geist', system-ui, sans-serif;
+		font-family: 'Inter Tight', system-ui, sans-serif;
 		font-size: 0.88rem;
 		font-weight: 600;
 		border: none;
 		cursor: pointer;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+		box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
 		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 	}
 	.servicio-share-cta:hover:not(:disabled) {
 		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
+		box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
 	}
 	.servicio-share-cta.copied {
-		background: #ea580c;
+		background: #059669;
 	}
 
 	/* ── Cards landing (override de .glass para servicio) ────── */
@@ -2716,12 +2693,12 @@
 		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
 	}
 	:global(.servicio-cards .glass:hover) {
-		border-color: rgba(249, 115, 22, 0.22);
+		border-color: rgba(16, 185, 129, 0.22);
 	}
 
 	/* Eyebrows dentro de cards (label tracking-wide uppercase) */
 	:global(.servicio-cards .text-\[10px\].font-semibold.tracking-wide.uppercase) {
-		font-family: 'Geist', monospace !important;
+		font-family: 'JetBrains Mono', monospace !important;
 		letter-spacing: 0.12em !important;
 		font-size: 0.65rem !important;
 		color: #6b6b6b !important;
@@ -2729,7 +2706,7 @@
 
 	/* Nombres principales dentro de cards (font-bold gray-900) */
 	:global(.servicio-cards .font-bold.text-gray-900) {
-		font-family: 'Geist', system-ui, sans-serif;
+		font-family: 'Inter Tight', system-ui, sans-serif;
 		color: #0f1f1a;
 		letter-spacing: -0.01em;
 	}
@@ -2742,19 +2719,19 @@
 
 	/* ── Botón centrar del mapa ────────────────────────────────── */
 	:global(.servicio-cards button[class*='rounded-xl border border-gray-200']:hover) {
-		border-color: rgba(249, 115, 22, 0.3);
-		color: #ea580c;
+		border-color: rgba(16, 185, 129, 0.3);
+		color: #059669;
 	}
 
 	/* ── Condiciones del servicio (badges inline) ─────────────── */
 	:global(.servicio-cards .inline-flex.items-center.gap-1.rounded-md) {
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 		letter-spacing: 0.06em;
 	}
 
 	/* ── Eyebrow del cuerpo (entre el mapa y las cards) ───────── */
 	:global(.servicio-cards .text-\[11px\].font-semibold) {
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 		letter-spacing: 0.1em;
 	}
 
@@ -2763,12 +2740,12 @@
 		width: 30px;
 		height: 30px;
 		border-radius: 10px;
-		box-shadow: 0 4px 12px rgba(249, 115, 22, 0.22);
+		box-shadow: 0 4px 12px rgba(16, 185, 129, 0.22);
 	}
 
 	/* ── Pin circular dentro del card Recorrido (A/B) ─────────── */
 	:global(.servicio-cards .h-6.w-6.items-center.justify-center.rounded-full) {
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 		font-weight: 700;
 		letter-spacing: 0.05em;
 		border: 2px solid white;
@@ -2778,16 +2755,6 @@
 	:global(#map) {
 		width: 100%;
 		height: 100%;
-	}
-
-	/* ── LEYENDA TOGGLES (hover naranja tint) ─────────────── */
-	.leyenda-toggle:hover {
-		background-color: rgba(249, 115, 22, 0.08) !important;
-	}
-	.leyenda-toggle:focus-visible {
-		background-color: rgba(249, 115, 22, 0.12) !important;
-		outline: 2px solid rgba(249, 115, 22, 0.4);
-		outline-offset: -2px;
 	}
 
 	/* ── MAPA: protagonista #1 (más grande) ──────────────────── */
@@ -2833,7 +2800,7 @@
 		gap: 0.1rem;
 	}
 	.stat-block-label {
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.6rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -2841,7 +2808,7 @@
 		color: #6b6b6b;
 	}
 	.stat-block-value {
-		font-family: 'Geist', Georgia, serif;
+		font-family: 'Fraunces', Georgia, serif;
 		font-size: 1.15rem;
 		font-weight: 600;
 		color: #0f1f1a;
@@ -2863,7 +2830,7 @@
 		content: '';
 		position: absolute;
 		inset: 0;
-		background: linear-gradient(135deg, rgba(249, 115, 22, 0.04), rgba(249, 115, 22, 0));
+		background: linear-gradient(135deg, rgba(16, 185, 129, 0.04), rgba(16, 185, 129, 0));
 		pointer-events: none;
 	}
 	.servicio-hero-route {
@@ -2891,7 +2858,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 		font-weight: 700;
 		font-size: 0.95rem;
 		color: white;
@@ -2900,7 +2867,7 @@
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 	}
 	.route-end.origin .route-pin {
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #10b981, #059669);
 	}
 	.route-end.dest .route-pin {
 		background: linear-gradient(135deg, #ef4444, #dc2626);
@@ -2910,18 +2877,18 @@
 		flex: 1;
 	}
 	.route-end-eyebrow {
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.6rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #f97316;
+		color: #10b981;
 	}
 	.route-end.dest .route-end-eyebrow {
 		color: #dc2626;
 	}
 	.route-end-text {
-		font-family: 'Geist', Georgia, serif;
+		font-family: 'Fraunces', Georgia, serif;
 		font-size: 1.15rem;
 		font-weight: 500;
 		color: #0f1f1a;
@@ -2952,7 +2919,7 @@
 	.route-line-track {
 		width: 100%;
 		height: 2px;
-		background: linear-gradient(to right, #f97316, #f59e0b, #ef4444);
+		background: linear-gradient(to right, #10b981, #f59e0b, #ef4444);
 		border-radius: 1px;
 		opacity: 0.5;
 	}
@@ -2962,20 +2929,20 @@
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.25rem 0.75rem;
-		background: rgba(249, 115, 22, 0.08);
-		border: 1px solid rgba(249, 115, 22, 0.18);
+		background: rgba(16, 185, 129, 0.08);
+		border: 1px solid rgba(16, 185, 129, 0.18);
 		border-radius: 999px;
 		white-space: nowrap;
 	}
 	.route-stat {
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.72rem;
 		font-weight: 700;
-		color: #c2410c;
+		color: #047857;
 		letter-spacing: 0.02em;
 	}
 	.route-stat-sep {
-		color: #f97316;
+		color: #10b981;
 		opacity: 0.4;
 	}
 
@@ -2990,15 +2957,15 @@
 		transition: all 0.3s var(--ease);
 	}
 	.servicio-hero-card:hover {
-		border-color: rgba(249, 115, 22, 0.25);
-		box-shadow: 0 8px 24px rgba(249, 115, 22, 0.08);
+		border-color: rgba(16, 185, 129, 0.25);
+		box-shadow: 0 8px 24px rgba(16, 185, 129, 0.08);
 		transform: translateY(-1px);
 	}
 	.servicio-hero-avatar {
-		font-family: 'Geist', system-ui, sans-serif;
+		font-family: 'Inter Tight', system-ui, sans-serif;
 	}
 	.servicio-hero-name {
-		font-family: 'Geist', system-ui, sans-serif;
+		font-family: 'Inter Tight', system-ui, sans-serif;
 		font-size: 1rem;
 		font-weight: 700;
 		color: #0f1f1a;
@@ -3011,11 +2978,11 @@
 		font-size: 0.78rem;
 		color: #6b6b6b;
 		margin: 0.2rem 0 0;
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 	}
 	.servicio-hero-sub--accent {
-		color: #c2410c;
-		font-family: 'Geist', system-ui, sans-serif;
+		color: #047857;
+		font-family: 'Inter Tight', system-ui, sans-serif;
 		font-weight: 500;
 	}
 
@@ -3027,20 +2994,20 @@
 		gap: 0.3rem;
 		padding: 0.85rem 1rem;
 		background: linear-gradient(135deg, #faf7f2, #f5f1e8);
-		border: 1.5px solid rgba(249, 115, 22, 0.3);
+		border: 1.5px solid rgba(16, 185, 129, 0.3);
 		border-radius: 14px;
 		box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
 	}
 	.servicio-placa-label {
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.55rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #f97316;
+		color: #10b981;
 	}
 	.servicio-placa {
-		font-family: 'Geist', 'Courier New', monospace;
+		font-family: 'JetBrains Mono', 'Courier New', monospace;
 		font-size: 1.7rem;
 		font-weight: 800;
 		color: #0f1f1a;
@@ -3091,8 +3058,8 @@
 		white-space: nowrap;
 	}
 	.servicio-info-val--mono {
-		font-family: 'Geist', monospace;
-		color: #c2410c;
+		font-family: 'JetBrains Mono', monospace;
+		color: #047857;
 	}
 
 	/* ── BADGES de condiciones (compacto) ──────────────────────── */
@@ -3100,7 +3067,7 @@
 		display: inline-flex;
 		align-items: center;
 		padding: 0.15rem 0.55rem;
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.6rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -3115,7 +3082,7 @@
 		align-items: center;
 		gap: 0.3rem;
 		padding: 0.25rem 0.6rem;
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -3141,9 +3108,9 @@
 		border-color: rgba(59, 130, 246, 0.25);
 	}
 	.servicio-cond-badge--emerald {
-		color: #c2410c;
-		background: rgba(249, 115, 22, 0.08);
-		border-color: rgba(249, 115, 22, 0.25);
+		color: #047857;
+		background: rgba(16, 185, 129, 0.08);
+		border-color: rgba(16, 185, 129, 0.25);
 	}
 	.servicio-cond-badge--red {
 		color: #b91c1c;

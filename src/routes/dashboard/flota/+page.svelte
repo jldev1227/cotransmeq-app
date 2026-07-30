@@ -217,7 +217,7 @@
 		switch (estado?.toUpperCase()) {
 			case 'DISPONIBLE':
 			case 'ACTIVO':
-				return '#f97316';
+				return '#10b981';
 			case 'SERVICIO':
 				return '#8b5cf6';
 			case 'MANTENIMIENTO':
@@ -260,7 +260,7 @@
 </script>
 
 <svelte:head>
-	<title>Flota — Cotransmeq</title>
+	<title>Flota — Transmeralda</title>
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col gap-4 p-6" in:fade={{ duration: 400 }}>
@@ -270,7 +270,7 @@
 			<div class="flex items-center gap-3">
 				<div
 					class="brand-gradient flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
-					style="box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);"
+					style="box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);"
 				>
 					<svg
 						class="h-5 w-5 text-white"
@@ -289,7 +289,7 @@
 						</h1>
 						<span
 							class="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
-							style="background: rgba(249, 115, 22,0.08); color: var(--emerald-800);"
+							style="background: rgba(16,185,129,0.08); color: var(--emerald-800);"
 						>
 							<span
 								class="h-1.5 w-1.5 animate-pulse rounded-full"
@@ -319,7 +319,7 @@
 							style="border-color: {mostrarOcultos
 								? 'var(--emerald-500)'
 								: 'var(--border-default)'}; background-color: {mostrarOcultos
-								? 'rgba(249, 115, 22,0.04)'
+								? 'rgba(16,185,129,0.04)'
 								: 'white'}; color: {mostrarOcultos ? 'var(--emerald-600)' : 'var(--text-muted)'};"
 						>
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
@@ -387,7 +387,7 @@
 						: 'var(--border-default)'}; color: {mostrarFiltros
 						? 'var(--emerald-700)'
 						: 'var(--text-secondary)'}; background-color: {mostrarFiltros
-						? 'rgba(249, 115, 22,0.04)'
+						? 'rgba(16,185,129,0.04)'
 						: 'white'};"
 				>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
@@ -584,7 +584,7 @@
 							class="list-card"
 							style="border-left: 4px solid {getStatusColor(v.estado)};
 								background-color: {vehiculosSeleccionados.has(v.id)
-								? 'rgba(249, 115, 22, 0.04)'
+								? 'rgba(16, 185, 129, 0.04)'
 								: 'var(--bg-surface)'};
 								border-color: {vehiculosSeleccionados.has(v.id) ? 'var(--emerald-500)' : 'var(--border-subtle)'};
 								border-left-color: {getStatusColor(v.estado)};"
@@ -599,7 +599,7 @@
 									type="checkbox"
 									checked={vehiculosSeleccionados.has(v.id)}
 									on:click|stopPropagation={(e) => toggleSeleccion(v.id, index, e)}
-									class="rounded text-orange-600 focus:ring-orange-500"
+									class="rounded text-emerald-600 focus:ring-emerald-500"
 									style="border-color: var(--border-default);"
 								/>
 							</div>
@@ -664,7 +664,7 @@
 								<button
 									on:click={() => openModal(v.id)}
 									class="apple-transition rounded-md p-1.5"
-									style="color: var(--emerald-600); background-color: rgba(249, 115, 22, 0.06);"
+									style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
 									title="Editar"
 								>
 									<svg

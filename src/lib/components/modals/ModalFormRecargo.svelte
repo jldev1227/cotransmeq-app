@@ -10,7 +10,13 @@
 		getNombreMes,
 		convertirHoraADecimal,
 		esDiaFestivo,
-		calcularRecargos as calcularRecargosHelper
+		calcularValoresMonetarios,
+		umbralesDesdeConfig,
+		calcularRecargosConContinuacion,
+		type ConfigRecargosVigente,
+		type PorcentajesRecargo,
+		type UmbralesJornada,
+		type DiaLaboralRecargo
 	} from '$lib/utils/recargosHelpers';
 	import { obtenerFestivosCompletos, esDiaFestivoColombiano } from '$lib/utils/festivosColombia';
 	import ModalNuevoVehiculo from '../servicios/ModalNuevoVehiculo.svelte';
@@ -81,14 +87,6 @@
 	let erroresHoras: { [key: string]: { inicio: string; fin: string } } = {};
 	let erroresDias: { [key: string]: string } = {};
 
-	// Constantes para cálculo de recargos
-	const HORAS_LIMITE = {
-		JORNADA_NORMAL: 10.33, // 10 horas 20 minutos - extras empiezan después de esto (día normal)
-		JORNADA_FESTIVA: 7.33, // 7 horas 20 minutos - RD fijo en domingos/festivos, extras después de esto
-		INICIO_NOCTURNO: 19,
-		FIN_NOCTURNO: 6
-	};
-
 	// Empresas que NO reconocen RNDF (Recargo Nocturno Dominical/Festivo)
 	const EMPRESAS_SIN_RNDF = [
 		'cfb258a6-448c-4469-aa71-8eeafa4530ef' // PAREX RESOURCES (COLOMBIA) AG SUCURSAL
@@ -100,15 +98,172 @@
 	$: diasFestivos = obtenerFestivosCompletos(currentYear);
 	$: festivosDelMes = diasFestivos.filter((f) => f.mes === currentMonth);
 
+	// ═══════════════════════════════════════════════════════════
+	// VIGENCIAS — Para soportar configs distintas por fecha
+	// ═══════════════════════════════════════════════════════════
+
+	// Tipos de recargo (todas las versiones) que aplican en el mes actual.
+	// Recargado cada vez que cambia mes/año/empresa.
+	let tiposVigentes: any[] = [];
+	let loadingTiposVigentes = false;
+
+	// Configs salariales que aplican en el rango de días de la planilla.
+	let configsEnRango: any[] = [];
+	let loadingConfigsRango = false;
+
+	// Cache de config vigente por fecha (clave: YYYY-MM-DD)
+	let configPorFechaCache = new Map<string, ConfigRecargosVigente | null>();
+	let tiposPorFechaCache = new Map<string, PorcentajesRecargo>();
+
+	/**
+	 * Resuelve la config salarial vigente para una fecha concreta.
+	 * Si hay varias en el rango, devuelve la que mejor coincida.
+	 */
+	function getConfigParaFecha(fecha: Date): ConfigRecargosVigente | null {
+		const key = fecha.toISOString().split('T')[0];
+		if (configPorFechaCache.has(key)) return configPorFechaCache.get(key)!;
+
+		let config: ConfigRecargosVigente | null = null;
+
+		// Buscar la config cuyo rango [vigencia_desde, vigencia_hasta] contiene la fecha
+		const candidatas = configsEnRango.filter((c: any) => {
+			const desde = new Date(c.vigencia_desde);
+			const hasta = c.vigencia_hasta ? new Date(c.vigencia_hasta) : null;
+			if (desde > fecha) return false;
+			if (hasta && hasta < fecha) return false;
+			return true;
+		});
+
+		// Prioridad: específica de empresa > base
+		const candidata =
+			candidatas.find((c: any) => c.empresa_id === formData.empresaId) ||
+			candidatas.find((c: any) => c.empresa_id === null) ||
+			null;
+
+		if (candidata) {
+			const salario = Number(candidata.salario_basico);
+			const horas = candidata.horas_mensuales_base || 240;
+			const etiqueta = candidata.vigencia_hasta
+				? `Vig. hasta ${new Date(candidata.vigencia_hasta).toISOString().split('T')[0]}`
+				: `Vig. desde ${new Date(candidata.vigencia_desde).toISOString().split('T')[0]}`;
+			// Resolver umbrales de jornada desde la config salarial de
+			// este día. Si la BD no trae los nuevos campos (back-compat),
+			// umbralesDesdeConfig usa los defaults 10.33 / 7.33.
+			const umbrales = umbralesDesdeConfig(candidata);
+			config = {
+				porcentajes: getPorcentajesParaFecha(fecha),
+				valorHora: salario / horas,
+				salarioBasico: salario,
+				horasMensualesBase: horas,
+				configuracionSalarioId: candidata.id,
+				etiqueta,
+				jornadaNormal: umbrales.jornadaNormal,
+				jornadaFestiva: umbrales.jornadaFestiva
+			};
+		}
+
+		configPorFechaCache.set(key, config);
+		return config;
+	}
+
+	/**
+	 * Resuelve los porcentajes vigentes de los 7 tipos para una fecha concreta.
+	 * Para cada codigo, toma la fila con vigencia_desde más reciente <= fecha.
+	 */
+	function getPorcentajesParaFecha(fecha: Date): PorcentajesRecargo {
+		const key = fecha.toISOString().split('T')[0];
+		const cached = tiposPorFechaCache.get(key);
+		if (cached) return cached;
+
+		const porcentajes: PorcentajesRecargo = {
+			HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RN: 0, RD: 0, RNDF: 0
+		};
+		const seen = new Set<string>();
+		const ordenados = [...tiposVigentes].sort(
+			(a: any, b: any) => new Date(b.vigencia_desde).getTime() - new Date(a.vigencia_desde).getTime()
+		);
+		for (const t of ordenados) {
+			const desde = new Date(t.vigencia_desde);
+			const hasta = t.vigencia_hasta ? new Date(t.vigencia_hasta) : null;
+			if (desde > fecha) continue;
+			if (hasta && hasta < fecha) continue;
+			if (seen.has(t.codigo)) continue;
+			seen.add(t.codigo);
+			(porcentajes as any)[t.codigo] = Number(t.porcentaje);
+		}
+		tiposPorFechaCache.set(key, porcentajes);
+		return porcentajes;
+	}
+
+	/**
+	 * Recarga las configs y tipos vigentes del rango de la planilla.
+	 * Se dispara cada vez que cambia mes/año/empresa.
+	 */
+	async function recargarVigencias() {
+		if (!diasLaborales || diasLaborales.length === 0) return;
+		// Calcular rango
+		const dias = diasLaborales
+			.filter((d) => d.dia && !d.disponibilidad)
+			.map((d) => Number(d.dia))
+			.sort((a, b) => a - b);
+		if (dias.length === 0) return;
+
+		const fechaDesde = new Date(Date.UTC(currentYear, currentMonth - 1, dias[0]));
+		const fechaHasta = new Date(Date.UTC(currentYear, currentMonth - 1, dias[dias.length - 1]));
+
+		// Reset cache
+		configPorFechaCache = new Map();
+		tiposPorFechaCache = new Map();
+
+		loadingTiposVigentes = true;
+		loadingConfigsRango = true;
+		try {
+			const [tipos, configs] = await Promise.all([
+				recargosApi.obtenerTiposRecargoVigentes({
+					fecha_desde: fechaDesde.toISOString().split('T')[0],
+					fecha_hasta: fechaHasta.toISOString().split('T')[0]
+				}),
+				recargosApi.obtenerConfigsSalariosEnRango({
+					empresa_id: formData.empresaId,
+					fecha_desde: fechaDesde.toISOString().split('T')[0],
+					fecha_hasta: fechaHasta.toISOString().split('T')[0]
+				})
+			]);
+			tiposVigentes = tipos;
+			configsEnRango = configs;
+		} catch (err) {
+			console.error('Error recargando vigencias:', err);
+		} finally {
+			loadingTiposVigentes = false;
+			loadingConfigsRango = false;
+		}
+	}
+
+	/**
+	 * Detecta si la planilla cruza un cambio de config (ej. día 14 vs día 15).
+	 */
+	$: cruzaCambioConfig = (() => {
+		if (configsEnRango.length < 2) return false;
+		const configsUsadas = new Set<string>();
+		for (const d of diasLaborales) {
+			if (!d.dia || d.disponibilidad) continue;
+			const fecha = new Date(Date.UTC(currentYear, currentMonth - 1, Number(d.dia)));
+			const cfg = getConfigParaFecha(fecha);
+			if (cfg) configsUsadas.add(cfg.configuracionSalarioId ?? cfg.etiqueta);
+		}
+		return configsUsadas.size > 1;
+	})();
+
+	// Recargar vigencias cuando cambien mes/año/empresa o se modifiquen días
+	$: if (isOpen && formData.empresaId && currentMonth && currentYear) {
+		// debounce básico
+		queueMicrotask(recargarVigencias);
+	}
+
 	// Función para obtener el máximo día del mes
 	function obtenerMaximoDiaMes(mes: number, year: number): number {
 		// El día 0 del mes siguiente es el último día del mes actual
 		return new Date(year, mes, 0).getDate();
-	}
-
-	// Función auxiliar para normalizar hora a rango 0-24
-	function normalizarHora(hora: number): number {
-		return hora % 24;
 	}
 
 	// Datos del formulario
@@ -486,299 +641,113 @@
 	}
 
 	/**
-	 * Calcula recargos de un turno continuo (puede abarcar 2 días).
-	 * Retorna un objeto con los recargos que corresponden SOLO al día solicitado.
-	 *
-	 * Lógica de continuidad:
-	 * - Si día X tiene continua_siguiente_dia=true, se arma un turno combinado
-	 *   desde hora_inicio de X hasta hora_fin de X + horas del día X+1.
-	 *   La jornada (10.33h) aplica al turno completo.
-	 *   Pero solo se retornan los recargos de las horas que pertenecen a día X.
-	 * - Si día Y es el "siguiente" de uno que continúa, se calcula el turno
-	 *   combinado desde el día anterior y se retornan solo los recargos de
-	 *   las horas que pertenecen a día Y.
-	 * - Cada fracción horaria usa el estado festivo/domingo del día calendario
-	 *   real al que pertenece (puede cambiar al cruzar medianoche).
+	 * Formatea un valor monetario corto (ej. "$1.2M", "$350K") para mostrar
+	 * al lado de las horas en las cards de totales.
 	 */
-	function calcularRecargos(dia: DiaLaboral, excluirRNDF = false) {
-		const horaInicio =
-			typeof dia.hora_inicio === 'string' ? parseFloat(dia.hora_inicio) : dia.hora_inicio || 0;
-		const horaFin = typeof dia.hora_fin === 'string' ? parseFloat(dia.hora_fin) : dia.hora_fin || 0;
-		const totalHoras = calcularTotalHoras(dia.hora_inicio, dia.hora_fin);
-
-		if (
-			!dia.dia ||
-			!dia.hora_inicio ||
-			!dia.hora_fin ||
-			totalHoras <= 0 ||
-			isNaN(horaInicio) ||
-			isNaN(horaFin)
-		) {
-			return { HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RNDF: 0, RN: 0, RD: 0 };
-		}
-
-		const currentIdx = diasLaborales.findIndex((d) => d.id === dia.id);
-
-		// Determinar si estamos en un turno continuo y cuál es el rango completo
-		let turnoInicio: number; // hora absoluta de inicio del turno combinado
-		let turnoFin: number; // hora absoluta de fin del turno combinado
-		let limiteInferior: number; // hora absoluta donde empieza "mi" día
-		let limiteSuperior: number; // hora absoluta donde termina "mi" día
-		let diaAnterior: DiaLaboral | null = null;
-		let diaSiguiente: DiaLaboral | null = null;
-		let esContinuacion = false; // true si este día es el "siguiente" de uno que continúa
-
-		// Verificar si este día es el "siguiente" de uno que continúa
-		if (currentIdx > 0) {
-			diaAnterior = diasLaborales[currentIdx - 1];
-			if (diaAnterior.continua_siguiente_dia) {
-				esContinuacion = true;
-			}
-		}
-
-		if (esContinuacion && diaAnterior) {
-			// Este día es la continuación: el turno empezó en el día anterior
-			const prevInicio =
-				typeof diaAnterior.hora_inicio === 'string'
-					? parseFloat(diaAnterior.hora_inicio)
-					: diaAnterior.hora_inicio || 0;
-			const prevFin =
-				typeof diaAnterior.hora_fin === 'string'
-					? parseFloat(diaAnterior.hora_fin)
-					: diaAnterior.hora_fin || 0;
-
-			turnoInicio = prevInicio;
-			turnoFin = prevFin + totalHoras; // prevFin + horas del día actual
-			limiteInferior = prevFin; // mi día empieza donde terminó el anterior
-			limiteSuperior = turnoFin;
-		} else if (dia.continua_siguiente_dia) {
-			// Este día continúa al siguiente: calcular turno combinado
-			turnoInicio = horaInicio;
-			turnoFin = horaFin;
-			limiteInferior = horaInicio;
-			limiteSuperior = horaFin;
-
-			if (currentIdx >= 0 && currentIdx < diasLaborales.length - 1) {
-				diaSiguiente = diasLaborales[currentIdx + 1];
-				if (diaSiguiente.hora_inicio && diaSiguiente.hora_fin) {
-					const nextHoras = calcularTotalHoras(diaSiguiente.hora_inicio, diaSiguiente.hora_fin);
-					turnoFin = horaFin + nextHoras;
-				}
-			}
-		} else {
-			// Día normal sin continuidad
-			turnoInicio = horaInicio;
-			turnoFin = horaFin;
-			limiteInferior = horaInicio;
-			limiteSuperior = horaFin;
-		}
-
-		// Datos del día actual y del otro día para determinar festivo/domingo
-		const esDomFestDia1 =
-			esContinuacion && diaAnterior
-				? diaAnterior.es_domingo || diaAnterior.es_festivo
-				: dia.es_domingo || dia.es_festivo;
-		const esDomFestDia2 = esContinuacion
-			? dia.es_domingo || dia.es_festivo
-			: diaSiguiente
-				? diaSiguiente.es_domingo || diaSiguiente.es_festivo
-				: esDomFestDia1;
-
-		// El punto de corte entre día 1 y día 2 del turno (donde termina el primer día)
-		const puntoCorte =
-			esContinuacion && diaAnterior
-				? typeof diaAnterior.hora_fin === 'string'
-					? parseFloat(diaAnterior.hora_fin)
-					: diaAnterior.hora_fin || 0
-				: horaFin;
-
-		let hed = 0,
-			hen = 0,
-			hefd = 0,
-			hefn = 0,
-			rndf = 0,
-			rn = 0,
-			rd = 0;
-
-		const umbralExtras = HORAS_LIMITE.JORNADA_NORMAL;
-
-		function esNocturna(hora: number): boolean {
-			const h = normalizarHora(hora);
-			return h >= HORAS_LIMITE.INICIO_NOCTURNO || h < HORAS_LIMITE.FIN_NOCTURNO;
-		}
-
-		// Descuento de almuerzo (12:00-13:00): aplica cuando el turno inicia antes de las 6am
-		// y cubre la franja del mediodía. Las fracciones en ese rango no cuentan para horasAcumuladas.
-		const inicioTurnoNorm = normalizarHora(turnoInicio);
-		const aplicaDescuentoAlmuerzo = inicioTurnoNorm < HORAS_LIMITE.FIN_NOCTURNO && turnoFin > 13;
-		const ALMUERZO_INICIO = 12;
-		const ALMUERZO_FIN = 13;
-
-		function esHoraAlmuerzo(hora: number): boolean {
-			if (!aplicaDescuentoAlmuerzo) return false;
-			const h = normalizarHora(hora);
-			return h >= ALMUERZO_INICIO && h < ALMUERZO_FIN;
-		}
-
-		// Recorrer TODO el turno combinado pero solo acumular recargos de "mi" día
-		let horaActual = turnoInicio;
-		let horasAcumuladas = 0;
-		let horasAlmuerzoSkipped = 0;
-
-		while (horaActual < turnoFin) {
-			const siguienteHora = Math.min(horaActual + 0.5, turnoFin);
-			const fraccion = siguienteHora - horaActual;
-
-			// Si es hora de almuerzo (12-13) y aplica descuento, saltar esta fracción
-			if (esHoraAlmuerzo(horaActual)) {
-				horasAlmuerzoSkipped += fraccion;
-				horasAcumuladas += fraccion; // 👈 esta es la línea que falta
-				horaActual = siguienteHora;
-				continue;
-			}
-
-			const nocturna = esNocturna(horaActual);
-			const esExtra = horasAcumuladas >= umbralExtras;
-
-			// Determinar si esta fracción pertenece a "mi" día
-			const esMiDia = horaActual >= limiteInferior && horaActual < limiteSuperior;
-
-			// Determinar si esta fracción es festivo/domingo según el día calendario real
-			const esDomFest = horaActual < puntoCorte ? esDomFestDia1 : esDomFestDia2;
-
-			if (esMiDia) {
-				if (esDomFest) {
-					if (esExtra) {
-						if (nocturna) {
-							hefn += fraccion;
-						} else {
-							hefd += fraccion;
-						}
-					} else {
-						const horasRestantes = umbralExtras - horasAcumuladas;
-						if (fraccion <= horasRestantes) {
-							if (nocturna) {
-								rndf += fraccion;
-							} else {
-								rd += fraccion;
-							}
-						} else {
-							const parteOrdinaria = horasRestantes;
-							const parteExtra = fraccion - parteOrdinaria;
-							if (nocturna) {
-								rndf += parteOrdinaria;
-								hefn += parteExtra;
-							} else {
-								rd += parteOrdinaria;
-								hefd += parteExtra;
-							}
-						}
-					}
-				} else {
-					if (esExtra) {
-						if (nocturna) {
-							hen += fraccion;
-						} else {
-							hed += fraccion;
-						}
-					} else {
-						const horasRestantes = umbralExtras - horasAcumuladas;
-						if (fraccion <= horasRestantes) {
-							if (nocturna) {
-								rn += fraccion;
-							}
-						} else {
-							const parteOrdinaria = horasRestantes;
-							const parteExtra = fraccion - parteOrdinaria;
-							if (nocturna) {
-								rn += parteOrdinaria;
-								hen += parteExtra;
-							} else {
-								hed += parteExtra;
-							}
-						}
-					}
-				}
-			}
-
-			horasAcumuladas += fraccion;
-			horaActual = siguienteHora;
-		}
-
-		// Post-procesamiento para días festivos/dominicales:
-		// 1. RNDF = horas nocturnas ordinarias de MADRUGADA (antes de 6am) en festivo
-		// 2. RD = min(horas_ordinarias_festivas, 7.33) - RNDF
-		// 3. Las horas nocturnas ordinarias DESPUÉS de las 19:00 no generan RNDF
-		//    (se consideran parte de la jornada normal sin recargo adicional)
-		const hayFraccionesFestivas = esDomFestDia1 || esDomFestDia2;
-		if (hayFraccionesFestivas) {
-			let rndfRecalculado = 0;
-			let rdRecalculado = 0;
-			let h = turnoInicio;
-			let hAcum = 0;
-
-			while (h < turnoFin) {
-				const sig = Math.min(h + 0.5, turnoFin);
-				const frac = sig - h;
-
-				if (esHoraAlmuerzo(h)) {
-					hAcum += frac;
-					h = sig;
-					continue;
-				}
-
-				const esMiDia = h >= limiteInferior && h < limiteSuperior;
-				const esDomFest = h < puntoCorte ? esDomFestDia1 : esDomFestDia2;
-				const esOrdinaria = hAcum < umbralExtras;
-				const horaActualNorm = normalizarHora(h);
-
-				// ✅ RNDF = madrugada (< 6am) + noche (>= 19:00)
-				const esNocturnaFestiva =
-					horaActualNorm < HORAS_LIMITE.FIN_NOCTURNO ||
-					horaActualNorm >= HORAS_LIMITE.INICIO_NOCTURNO;
-
-				if (esMiDia && esDomFest && esOrdinaria) {
-					const ordinaria = Math.min(frac, umbralExtras - hAcum);
-					if (esNocturnaFestiva) {
-						rndfRecalculado += ordinaria;
-					} else {
-						rdRecalculado += ordinaria;
-					}
-				}
-
-				hAcum += frac;
-				h = sig;
-			}
-
-			if (excluirRNDF) {
-				// PAREX: no reconoce RNDF, todo va a RD (cap 7.33)
-				rndf = 0;
-				const totalOrdinarias = rdRecalculado + rndfRecalculado;
-				rd = parseFloat(Math.min(totalOrdinarias, HORAS_LIMITE.JORNADA_FESTIVA).toFixed(2));
-			} else {
-				// ✅ RNDF independiente, RD = cap fijo 7.33 si trabajó >= 7.33h
-				rndf = parseFloat(rndfRecalculado.toFixed(2));
-				const totalOrdinarias = rdRecalculado + rndfRecalculado;
-				rd =
-					totalOrdinarias >= HORAS_LIMITE.JORNADA_FESTIVA
-						? HORAS_LIMITE.JORNADA_FESTIVA
-						: parseFloat(rdRecalculado.toFixed(2));
-			}
-		}
-
-		return {
-			HED: parseFloat(hed.toFixed(2)),
-			HEN: parseFloat(hen.toFixed(2)),
-			HEFD: parseFloat(hefd.toFixed(2)),
-			HEFN: parseFloat(hefn.toFixed(2)),
-			RNDF: parseFloat(rndf.toFixed(2)),
-			RN: parseFloat(rn.toFixed(2)),
-			RD: parseFloat(rd.toFixed(2))
-		};
+	function formatValorMonetario(valor: number): string {
+		if (!valor || valor === 0) return '';
+		if (valor >= 1_000_000) return ` · $${(valor / 1_000_000).toFixed(2)}M`;
+		if (valor >= 1_000) return ` · $${(valor / 1_000).toFixed(0)}K`;
+		return ` · $${valor.toFixed(0)}`;
 	}
 
+	/**
+	 * Wrapper de formatearCOP desde recargosHelpers.
+	 */
+	function formatearCOP(valor: number): string {
+		if (valor == null) return '—';
+		return new Intl.NumberFormat('es-CO', {
+			style: 'currency',
+			currency: 'COP',
+			minimumFractionDigits: 0,
+			maximumFractionDigits: 0
+		}).format(Math.round(valor));
+	}
+
+	/**
+	 * Devuelve la etiqueta de la config aplicable a un día concreto (para badges).
+	 */
+	function getEtiquetaConfigParaDia(diaNum: number | string): string {
+		if (!diaNum) return '';
+		const fecha = new Date(Date.UTC(currentYear, currentMonth - 1, Number(diaNum)));
+		const cfg = getConfigParaFecha(fecha);
+		if (!cfg) return '';
+		// Versión corta: ej. "Vig. 1" / "Vig. 2"
+		const idx = Array.from(configsEnRango).findIndex(
+			(c: any) => c.id === cfg.configuracionSalarioId
+		);
+		return idx >= 0 ? `Vig. ${idx + 1}` : cfg.etiqueta.slice(0, 18);
+	}
+
+	/**
+	 * Calcula el desglose monetario agrupado por configuración.
+	 * Usado en el resumen del modal cuando la planilla cruza cambios de config.
+	 */
+	function getDesglosePorConfig(): Map<
+		string,
+		{ config: ConfigRecargosVigente; dias: number[]; total: number }
+	> {
+		const desglose = new Map<
+			string,
+			{ config: ConfigRecargosVigente; dias: number[]; total: number }
+		>();
+		for (const d of diasLaborales) {
+			if (!d.dia || d.disponibilidad) continue;
+			const horasTotales = calcularTotalHoras(d.hora_inicio, d.hora_fin);
+			if (horasTotales <= 0) continue;
+
+			const recargos = calcularRecargos(d, excluirRNDF);
+			const fecha = new Date(Date.UTC(currentYear, currentMonth - 1, Number(d.dia)));
+			const cfg = getConfigParaFecha(fecha);
+			if (!cfg) continue;
+			const valores = calcularValoresMonetarios(recargos, cfg, excluirRNDF);
+
+			const key = cfg.configuracionSalarioId ?? cfg.etiqueta;
+			const existing = desglose.get(key);
+			if (existing) {
+				existing.dias.push(Number(d.dia));
+				existing.total += valores.total;
+			} else {
+				desglose.set(key, { config: cfg, dias: [Number(d.dia)], total: valores.total });
+			}
+		}
+		return desglose;
+	}
+
+	/**
+	 * Wrapper sobre `calcularRecargosConContinuacion` del helper compartido.
+	 * Mantiene la firma corta `(dia, excluirRNDF)` que usaba el modal y
+	 * le pasa por dentro los datos del scope (diasLaborales, currentMonth,
+	 * currentYear, getConfigParaFecha) que la versión pura del helper
+	 * necesita.
+	 *
+	 * La lógica del cálculo (turnos continuos, almuerzo, RD cap, HEFN
+	 * absorption, festivo, etc.) está toda en
+	 * `src/lib/utils/recargosHelpers.ts → calcularRecargosConContinuacion`
+	 * para que el backend y otras pantallas puedan reutilizarla sin
+	 * duplicarla.
+	 */
+	function calcularRecargos(dia: DiaLaboral, excluirRNDF = false) {
+		return calcularRecargosConContinuacion({
+			dia: dia as unknown as DiaLaboralRecargo,
+			diasLaborales: diasLaborales as unknown as DiaLaboralRecargo[],
+			mes: currentMonth,
+			año: currentYear,
+			getConfigParaFecha,
+			excluirRNDF
+		});
+	}
+
+
 	function calcularTotales() {
-		const totales = { totalHoras: 0, HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RNDF: 0, RN: 0, RD: 0 };
+		const totales = {
+			totalHoras: 0,
+			HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RNDF: 0, RN: 0, RD: 0,
+			// Valores monetarios (por tipo y total)
+			valorHED: 0, valorHEN: 0, valorHEFD: 0, valorHEFN: 0,
+			valorRN: 0, valorRD: 0, valorRNDF: 0,
+			valorTotal: 0
+		};
 
 		diasLaborales.forEach((dia) => {
 			// Excluir días marcados como disponible
@@ -787,7 +756,7 @@
 			if (horasTotales > 0) {
 				totales.totalHoras += horasTotales;
 
-				const recargos = calcularRecargos(dia, excluirRNDF); // ✅ pasar el flag
+				const recargos = calcularRecargos(dia, excluirRNDF);
 
 				totales.HED += recargos.HED;
 				totales.HEN += recargos.HEN;
@@ -796,6 +765,23 @@
 				totales.RNDF += recargos.RNDF;
 				totales.RN += recargos.RN;
 				totales.RD += recargos.RD;
+
+				// Calcular valor monetario con la config vigente de ESE día
+				if (dia.dia) {
+					const fecha = new Date(Date.UTC(currentYear, currentMonth - 1, Number(dia.dia)));
+					const config = getConfigParaFecha(fecha);
+					if (config) {
+						const valores = calcularValoresMonetarios(recargos, config, excluirRNDF);
+						totales.valorHED += valores.hed;
+						totales.valorHEN += valores.hen;
+						totales.valorHEFD += valores.hefd;
+						totales.valorHEFN += valores.hefn;
+						totales.valorRN += valores.rn;
+						totales.valorRD += valores.rd;
+						totales.valorRNDF += valores.rndf;
+						totales.valorTotal += valores.total;
+					}
+				}
 			}
 		});
 
@@ -3456,6 +3442,17 @@
 														{:else}
 															<span class="text-lg" title="Día normal">📆</span>
 														{/if}
+														{#if cruzaCambioConfig && dia.dia}
+															{@const etiquetaCfg = getEtiquetaConfigParaDia(dia.dia)}
+															{#if etiquetaCfg}
+																<span
+																	class="inline-flex items-center rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700"
+																	title={etiquetaCfg}
+																>
+																	{etiquetaCfg}
+																</span>
+															{/if}
+														{/if}
 													</div>
 												</td>
 
@@ -3745,6 +3742,37 @@
 								</table>
 							</div>
 
+							<!-- Alerta de cruce de config -->
+							{#if cruzaCambioConfig}
+								<div
+									class="apple-transition mt-4 flex items-start gap-3 rounded-xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 p-4"
+									role="alert"
+								>
+									<svg
+										class="mt-0.5 h-5 w-5 shrink-0 text-amber-600"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											stroke-width="2"
+											d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+										/>
+									</svg>
+									<div class="min-w-0 flex-1">
+										<h4 class="text-sm font-semibold text-amber-900">
+											Esta planilla cruza un cambio de configuración
+										</h4>
+										<p class="mt-1 text-xs text-amber-800">
+											Los días se calcularán con la config salarial y los % de recargo vigentes
+											en cada fecha. Revisa el desglose por config abajo.
+										</p>
+									</div>
+								</div>
+							{/if}
+
 							<!-- Resumen de Totales -->
 							<div class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
 								<!-- HED Card -->
@@ -3753,10 +3781,12 @@
 								>
 									<div class="mb-2 flex items-center justify-between">
 										<span class="text-xs font-medium text-orange-700">HED</span>
-										<span class="text-xs text-orange-600">25%</span>
+										<span class="text-xs text-orange-600">{cruzaCambioConfig ? '25%*' : '25%'}</span>
 									</div>
 									<div class="text-2xl font-bold text-orange-800">{totales.HED.toFixed(2)}</div>
-									<div class="mt-1 text-[10px] text-orange-600">Hora Extra Diurna</div>
+									<div class="mt-1 text-[10px] text-orange-600">
+										Hora Extra Diurna{formatValorMonetario(totales.valorHED)}
+									</div>
 								</div>
 
 								<!-- HEN Card -->
@@ -3768,7 +3798,9 @@
 										<span class="text-xs text-blue-600">75%</span>
 									</div>
 									<div class="text-2xl font-bold text-blue-800">{totales.HEN.toFixed(2)}</div>
-									<div class="mt-1 text-[10px] text-blue-600">Hora Extra Nocturna</div>
+									<div class="mt-1 text-[10px] text-blue-600">
+										Hora Extra Nocturna{formatValorMonetario(totales.valorHEN)}
+									</div>
 								</div>
 
 								<!-- HEFD Card -->
@@ -3777,10 +3809,12 @@
 								>
 									<div class="mb-2 flex items-center justify-between">
 										<span class="text-xs font-medium text-yellow-700">HEFD</span>
-										<span class="text-xs text-yellow-600">100%</span>
+										<span class="text-xs text-yellow-600">{cruzaCambioConfig ? '105/115%' : '105%'}</span>
 									</div>
 									<div class="text-2xl font-bold text-yellow-800">{totales.HEFD.toFixed(2)}</div>
-									<div class="mt-1 text-[10px] text-yellow-600">H. Extra Festiva Diurna</div>
+									<div class="mt-1 text-[10px] text-yellow-600">
+										H. Extra Festiva Diurna{formatValorMonetario(totales.valorHEFD)}
+									</div>
 								</div>
 
 								<!-- HEFN Card -->
@@ -3789,10 +3823,12 @@
 								>
 									<div class="mb-2 flex items-center justify-between">
 										<span class="text-xs font-medium text-purple-700">HEFN</span>
-										<span class="text-xs text-purple-600">150%</span>
+										<span class="text-xs text-purple-600">{cruzaCambioConfig ? '155/165%' : '155%'}</span>
 									</div>
 									<div class="text-2xl font-bold text-purple-800">{totales.HEFN.toFixed(2)}</div>
-									<div class="mt-1 text-[10px] text-purple-600">H. Extra Festiva Nocturna</div>
+									<div class="mt-1 text-[10px] text-purple-600">
+										H. Extra Festiva Nocturna{formatValorMonetario(totales.valorHEFN)}
+									</div>
 								</div>
 
 								<!-- RNDF Card -->
@@ -3801,10 +3837,12 @@
 								>
 									<div class="mb-2 flex items-center justify-between">
 										<span class="text-xs font-medium text-indigo-700">RNDF</span>
-										<span class="text-xs text-indigo-600">115%</span>
+										<span class="text-xs text-indigo-600">{cruzaCambioConfig ? '115/125%' : '115%'}</span>
 									</div>
 									<div class="text-2xl font-bold text-indigo-800">{totales.RNDF.toFixed(2)}</div>
-									<div class="mt-1 text-[10px] text-indigo-600">R. Noct. Domin./Festivo</div>
+									<div class="mt-1 text-[10px] text-indigo-600">
+										R. Noct. Domin./Festivo{formatValorMonetario(totales.valorRNDF)}
+									</div>
 								</div>
 
 								<!-- RN Card -->
@@ -3816,7 +3854,9 @@
 										<span class="text-xs text-teal-600">35%</span>
 									</div>
 									<div class="text-2xl font-bold text-teal-800">{totales.RN.toFixed(2)}</div>
-									<div class="mt-1 text-[10px] text-teal-600">Recargo Nocturno</div>
+									<div class="mt-1 text-[10px] text-teal-600">
+										Recargo Nocturno{formatValorMonetario(totales.valorRN)}
+									</div>
 								</div>
 
 								<!-- RD Card -->
@@ -3825,18 +3865,57 @@
 								>
 									<div class="mb-2 flex items-center justify-between">
 										<span class="text-xs font-medium text-red-700">RD</span>
-										<span class="text-xs text-red-600">75%</span>
+										<span class="text-xs text-red-600">{cruzaCambioConfig ? '80/90%' : '80%'}</span>
 									</div>
 									<div class="text-2xl font-bold text-red-800">{totales.RD.toFixed(2)}</div>
-									<div class="mt-1 text-[10px] text-red-600">Recargo Dominical/Festivo</div>
+									<div class="mt-1 text-[10px] text-red-600">
+										Recargo Dominical/Festivo{formatValorMonetario(totales.valorRD)}
+									</div>
 								</div>
 							</div>
 
-							<!-- Estadísticas adicionales -->
+							<!-- Desglose por configuración (cuando cruza cambio) -->
+							{#if cruzaCambioConfig}
+								{@const desglose = getDesglosePorConfig()}
+								<div class="mt-4">
+									<h4 class="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-700">
+										<svg class="h-3.5 w-3.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+										</svg>
+										DESGLOSE POR CONFIGURACIÓN
+									</h4>
+									<div class="grid gap-2 md:grid-cols-2">
+										{#each Array.from(desglose.values()) as item}
+											<div
+												class="rounded-lg border border-amber-200 bg-gradient-to-br from-amber-50/50 to-yellow-50/50 p-3"
+											>
+												<div class="flex items-start justify-between">
+													<div class="min-w-0 flex-1">
+														<p class="text-xs font-semibold text-amber-900">
+															{item.config.etiqueta}
+														</p>
+														<p class="mt-0.5 text-[10px] text-amber-700">
+															Valor hora: {formatearCOP(item.config.valorHora)} · Salario: {formatearCOP(item.config.salarioBasico)}
+														</p>
+														<p class="mt-0.5 text-[10px] text-amber-700">
+															Días: {item.dias.length > 6 ? item.dias.slice(0, 6).join(', ') + ` +${item.dias.length - 6}` : item.dias.join(', ')}
+														</p>
+													</div>
+													<p class="ml-2 whitespace-nowrap text-sm font-bold text-amber-900">
+														{formatearCOP(item.total)}
+													</p>
+												</div>
+											</div>
+										{/each}
+									</div>
+								</div>
+							{/if}
+
+							<!-- Total monetario y estadísticas -->
 							<div
-								class="flex items-center justify-between rounded-lg border border-gray-200 bg-gray-50 p-3"
+								class="mt-4 flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 md:flex-row md:items-center md:justify-between"
 							>
-								<div class="flex items-center gap-4 text-xs text-gray-600">
+								<div class="flex flex-wrap items-center gap-4 text-xs text-gray-600">
 									<div>
 										<span class="font-medium">Total Días:</span>
 										<span class="ml-1 font-bold text-gray-800">{diasLaborales.length}</span>
@@ -3849,12 +3928,18 @@
 									</div>
 									<div>
 										<span class="font-medium">Total Horas:</span>
-										<span class="ml-1 font-bold text-gray-800">{totales.totalHoras.toFixed(1)}</span
-										>
+										<span class="ml-1 font-bold text-gray-800">{totales.totalHoras.toFixed(1)}</span>
+									</div>
+									<div>
+										<span class="font-medium">Valor Total:</span>
+										<span class="ml-1 text-base font-bold text-emerald-700">
+											{formatearCOP(totales.valorTotal)}
+										</span>
 									</div>
 								</div>
 								<div class="text-[10px] text-gray-500 italic">
 									Cálculo según normativa laboral colombiana
+									{#if cruzaCambioConfig}· con vigencias por fecha{/if}
 								</div>
 							</div>
 						{/if}

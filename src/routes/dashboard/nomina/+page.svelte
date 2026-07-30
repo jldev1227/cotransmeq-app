@@ -658,7 +658,7 @@
 
 	function getPrimaEstadoColor(e: PrimaEstado): string {
 		return e === 'Pagado'
-			? 'bg-[rgba(249,115,22,0.10)] text-[var(--emerald-700)]'
+			? 'bg-[rgba(16,185,129,0.10)] text-[var(--emerald-700)]'
 			: 'bg-[rgba(245,158,11,0.10)] text-[#92400E]';
 	}
 
@@ -679,7 +679,7 @@
 		if (firmadoFlag) {
 			return {
 				label: 'Firmado',
-				classes: 'bg-[rgba(249,115,22,0.10)] text-[var(--emerald-700)]',
+				classes: 'bg-[rgba(16,185,129,0.10)] text-[var(--emerald-700)]',
 				icon: CheckCircle
 			};
 		}
@@ -1057,7 +1057,7 @@
 	}
 	function getEstadoColor(e: string) {
 		return e === 'Liquidado'
-			? 'bg-[rgba(249,115,22,0.10)] text-[var(--emerald-700)]'
+			? 'bg-[rgba(16,185,129,0.10)] text-[var(--emerald-700)]'
 			: e === 'Pendiente'
 				? 'bg-[rgba(245,158,11,0.10)] text-[#92400E]'
 				: 'bg-[var(--bg-base)] text-[var(--text-secondary)]';
@@ -1437,8 +1437,8 @@
 			{
 				label: 'Bonificaciones',
 				data: bonPorPlaca.map((d) => d.total),
-				backgroundColor: '#f97316cc',
-				borderColor: '#f97316',
+				backgroundColor: '#059669cc',
+				borderColor: '#059669',
 				borderWidth: 1,
 				borderRadius: 4
 			}
@@ -1475,8 +1475,8 @@
 		datasets: [
 			{
 				data: recPie.map((d) => d.value),
-				backgroundColor: ['#166534cc', '#f97316cc'],
-				borderColor: ['#166534', '#f97316'],
+				backgroundColor: ['#059669cc', '#f97316cc'],
+				borderColor: ['#059669', '#f97316'],
 				borderWidth: 1
 			}
 		]
@@ -1512,7 +1512,7 @@
 </script>
 
 <svelte:head>
-	<title>Nómina - Cotransmeq (NIT 901983227)</title>
+	<title>Nómina - Transmeralda</title>
 </svelte:head>
 
 <div
@@ -1578,7 +1578,7 @@
 						<p class="mt-0.5 text-[10px] text-[var(--text-very-muted)]">registros</p>
 					</div>
 					<div
-						class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(249,115,22,0.10)]"
+						class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(16,185,129,0.10)]"
 					>
 						<FileText class="h-5 w-5 text-[var(--emerald-600)]" />
 					</div>
@@ -1693,7 +1693,7 @@
 						<div class="h-4 w-px bg-[var(--border-default)]"></div>
 						<button
 							on:click={() => handleBulkToggleVisible(true)}
-							class="apple-transition flex items-center gap-1.5 rounded-lg border border-[rgba(249,115,22,0.3)] bg-[rgba(249,115,22,0.08)] px-2.5 py-1.5 text-xs font-semibold text-[var(--emerald-700)] hover:bg-[rgba(249,115,22,0.14)]"
+							class="apple-transition flex items-center gap-1.5 rounded-lg border border-[rgba(16,185,129,0.3)] bg-[rgba(16,185,129,0.08)] px-2.5 py-1.5 text-xs font-semibold text-[var(--emerald-700)] hover:bg-[rgba(16,185,129,0.14)]"
 							title="Hacer visibles en el portal"
 						>
 							<Eye class="h-3.5 w-3.5" />Mostrar
@@ -1859,7 +1859,7 @@
 							{#each liquidaciones as liq (liq.id)}
 								<tr
 									class="table-row {selectedLiquidaciones.has(liq.id)
-										? '!bg-[rgba(249,115,22,0.08)]'
+										? '!bg-[rgba(16,185,129,0.08)]'
 										: ''}"
 									on:click={() => toggleSelection(liq.id)}
 								>
@@ -1934,7 +1934,7 @@
 												handleToggleVisible(liq.id, liq.desprendible_visible ?? false)}
 											class="apple-transition inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold
 											{liq.desprendible_visible
-												? 'bg-[rgba(249,115,22,0.10)] text-[var(--emerald-700)] hover:bg-[rgba(249,115,22,0.18)]'
+												? 'bg-[rgba(16,185,129,0.10)] text-[var(--emerald-700)] hover:bg-[rgba(16,185,129,0.18)]'
 												: 'bg-[rgba(0,0,0,0.04)] text-[var(--text-muted)] hover:bg-[rgba(0,0,0,0.08)]'}"
 											title={liq.desprendible_visible
 												? 'Visible en portal - Click para ocultar'
@@ -2006,7 +2006,7 @@
 											</button>
 											<button
 												on:click|stopPropagation={() => irAEditar(liq.id)}
-												class="apple-transition rounded-md p-1.5 text-[var(--emerald-600)] hover:bg-[rgba(249,115,22,0.08)]"
+												class="apple-transition rounded-md p-1.5 text-[var(--emerald-600)] hover:bg-[rgba(16,185,129,0.08)]"
 												title="Editar"><Edit class="h-3.5 w-3.5" /></button
 											>
 											<button
@@ -2101,7 +2101,7 @@
 						<p class="stat-value">{statsPrimas.total}</p>
 					</div>
 					<div
-						class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(249,115,22,0.10)]"
+						class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(16,185,129,0.10)]"
 					>
 						<Sparkles class="h-5 w-5 text-[var(--emerald-600)]" />
 					</div>
@@ -2200,7 +2200,7 @@
 						<div class="h-4 w-px bg-[var(--border-default)]"></div>
 						<button
 							on:click={() => handleBulkTogglePrimaVisible(true)}
-							class="apple-transition flex items-center gap-1.5 rounded-lg border border-[rgba(249,115,22,0.3)] bg-[rgba(249,115,22,0.08)] px-2.5 py-1.5 text-xs font-semibold text-[var(--emerald-700)] hover:bg-[rgba(249,115,22,0.14)]"
+							class="apple-transition flex items-center gap-1.5 rounded-lg border border-[rgba(16,185,129,0.3)] bg-[rgba(16,185,129,0.08)] px-2.5 py-1.5 text-xs font-semibold text-[var(--emerald-700)] hover:bg-[rgba(16,185,129,0.14)]"
 							title="Hacer visibles en el portal"
 						>
 							<Eye class="h-3.5 w-3.5" />Mostrar
@@ -2283,7 +2283,7 @@
 								{@const firma = getPrimaFirmaInfo(p)}
 								<tr
 									class="table-row border-l-2 {selectedPrimas.has(p.id)
-										? '!border-l-[var(--emerald-500)] !bg-[rgba(249,115,22,0.08)]'
+										? '!border-l-[var(--emerald-500)] !bg-[rgba(16,185,129,0.08)]'
 										: 'border-l-transparent'}"
 								>
 									<td class="w-10 px-3 py-2.5">
@@ -2358,7 +2358,7 @@
 											<button
 												on:click={() => handleDescargarPdfPrima(p)}
 												disabled={downloadingPrimaPdf === p.id}
-												class="apple-transition rounded-md p-1.5 text-[var(--text-muted)] hover:bg-[rgba(249,115,22,0.08)] hover:text-[var(--emerald-600)] disabled:opacity-50"
+												class="apple-transition rounded-md p-1.5 text-[var(--text-muted)] hover:bg-[rgba(16,185,129,0.08)] hover:text-[var(--emerald-600)] disabled:opacity-50"
 												title="Descargar PDF de Prima"
 											>
 												{#if downloadingPrimaPdf === p.id}
@@ -2494,7 +2494,7 @@
 											type="button"
 											class={`w-full cursor-pointer px-3 py-2 text-left text-sm apple-transition ${
 												selectedIndex === i + 1
-													? 'bg-[rgba(249,115,22,0.12)] text-[var(--emerald-700)]'
+													? 'bg-[rgba(16,185,129,0.12)] text-[var(--emerald-700)]'
 													: 'hover:bg-[var(--bg-base)]'
 											}`}
 											on:mousedown={() => (filtroPlaca = p)}
@@ -2592,7 +2592,7 @@
 								class="mb-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3"
 								style="height:200px"
 							>
-								<Bar data={bonChartData} options={BAR_OPTS('Bonificaciones', '#f97316')} />
+								<Bar data={bonChartData} options={BAR_OPTS('Bonificaciones', '#059669')} />
 							</div>
 						{:else}
 							<div
@@ -3339,7 +3339,7 @@
 									>
 								{:else}
 									<span
-										class="status-pill !bg-[rgba(249,115,22,0.10)] !text-[var(--emerald-700)]"
+										class="status-pill !bg-[rgba(16,185,129,0.10)] !text-[var(--emerald-700)]"
 										>Enviado</span
 									>
 								{/if}
@@ -3402,7 +3402,7 @@
 										<td class="px-4 py-3 text-center">
 											{#if item.canSend}
 												<span
-													class="status-pill !bg-[rgba(249,115,22,0.10)] !text-[var(--emerald-700)]"
+													class="status-pill !bg-[rgba(16,185,129,0.10)] !text-[var(--emerald-700)]"
 												>
 													<span class="mr-1.5 h-1.5 w-1.5 rounded-full bg-[var(--emerald-500)]"></span>
 													Listo
@@ -3447,7 +3447,7 @@
 							on:click={confirmarEnvioDesprendibles}
 							disabled={sendingEmails || previewItems.filter((p) => p.canSend).length === 0}
 							class="apple-transition flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
-							style="background: linear-gradient(135deg, #f97316, #ea580c);"
+							style="background: linear-gradient(135deg, #10B981, #059669);"
 						>
 							{#if sendingEmails}
 								<div

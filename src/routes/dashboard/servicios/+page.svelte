@@ -554,64 +554,51 @@
 </script>
 
 <svelte:head>
-	<title>Servicios - Cotransmeq</title>
+	<title>Servicios - Transmeralda</title>
 </svelte:head>
 
 <!-- Layout raíz: columna que ocupa todo el alto disponible -->
 <div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-6" in:fade={{ duration: 400 }}>
 	<!-- ═══════════════════════════════════════════
-	     HEADER (page-card editorial)
+	     HEADER
 	     ═══════════════════════════════════════════ -->
-	<div class="page-card flex-shrink-0" style="padding: 1.25rem 1.5rem;">
+	<div class="glass soft-shadow flex-shrink-0 rounded-2xl border border-gray-200/50 p-5">
 		<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 			<!-- Título -->
 			<div class="flex items-center gap-3">
 				<div
-					class="brand-gradient flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
-					style="box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);"
+					class="soft-shadow flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600"
 				>
-					<svg
-						class="h-5 w-5 text-white"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-						stroke-width="1.8"
-					>
+					<svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
+							stroke-width="2"
 							d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
 						/>
 					</svg>
 				</div>
 				<div>
 					<div class="flex items-center gap-2">
-						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 400;">
-							Gestión de Servicios
-						</h1>
+						<h1 class="text-xl font-bold text-gray-900">Gestión de Servicios</h1>
 						{#if socketConnected}
 							<span
-								class="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
-								style="background: rgba(249, 115, 22, 0.08); color: var(--emerald-800);"
+								class="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-600"
 								in:scale={{ duration: 200 }}
 							>
-								<span
-									class="h-1.5 w-1.5 animate-pulse rounded-full"
-									style="background-color: var(--emerald-500);"
-								></span>
+								<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500"></span>
 								En vivo
 							</span>
 						{:else}
 							<span
-								class="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
-								style="background: rgba(245, 158, 11, 0.08); color: #b45309;"
+								class="flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-medium text-orange-600"
 							>
-								<span class="h-1.5 w-1.5 rounded-full" style="background-color: #f59e0b;"></span>
+								<span class="h-1.5 w-1.5 rounded-full bg-orange-500"></span>
 								Offline
 							</span>
 						{/if}
 					</div>
-					<p class="text-xs" style="color: var(--text-muted);">
+					<p class="text-xs text-gray-500">
 						Administra y monitorea todos los servicios de transporte
 					</p>
 				</div>
@@ -619,31 +606,25 @@
 
 			<!-- Búsqueda + acciones -->
 			<div class="flex flex-wrap items-center gap-2">
-				<!-- Tabs Lista / Excel / Calendario (segmented editorial) -->
+				<!-- Tabs Lista / Calendario -->
 				<div
-					class="inline-flex gap-1 rounded-xl p-1"
-					style="background-color: var(--bg-base); border: 1px solid var(--border-default);"
+					class="inline-flex gap-1 rounded-xl border border-gray-200 bg-white/80 p-1"
 					role="tablist"
 				>
 					<button
 						on:click={() => cambiarVista('lista')}
-						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold"
-						style="background-color: {vistaActiva === 'lista' ? 'white' : 'transparent'};
-							color: {vistaActiva === 'lista' ? 'var(--emerald-700)' : 'var(--text-secondary)'};
-							box-shadow: {vistaActiva === 'lista' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none'};"
+						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold
+							{vistaActiva === 'lista'
+							? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-sm'
+							: 'text-gray-600 hover:bg-gray-50'}"
 						role="tab"
 						aria-selected={vistaActiva === 'lista'}
 					>
-						<svg
-							class="h-3.5 w-3.5"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-							stroke-width="1.8"
-						>
+						<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
+								stroke-width="2"
 								d="M4 6h16M4 10h16M4 14h16M4 18h16"
 							/>
 						</svg>
@@ -651,23 +632,18 @@
 					</button>
 					<button
 						on:click={() => cambiarVista('canvas')}
-						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold"
-						style="background-color: {vistaActiva === 'canvas' ? 'white' : 'transparent'};
-							color: {vistaActiva === 'canvas' ? 'var(--emerald-700)' : 'var(--text-secondary)'};
-							box-shadow: {vistaActiva === 'canvas' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none'};"
+						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold
+						{vistaActiva === 'canvas'
+							? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-sm'
+							: 'text-gray-600 hover:bg-gray-50'}"
 						role="tab"
 						aria-selected={vistaActiva === 'canvas'}
 					>
-						<svg
-							class="h-3.5 w-3.5"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-							stroke-width="1.8"
-						>
+						<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
+								stroke-width="2"
 								d="M3.75 9.75h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5M6 5.25h12a1.5 1.5 0 011.5 1.5v12a1.5 1.5 0 01-1.5 1.5H6a1.5 1.5 0 01-1.5-1.5v-12a1.5 1.5 0 011.5-1.5z"
 							/>
 						</svg>
@@ -675,23 +651,18 @@
 					</button>
 					<button
 						on:click={() => cambiarVista('calendario')}
-						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold"
-						style="background-color: {vistaActiva === 'calendario' ? 'white' : 'transparent'};
-							color: {vistaActiva === 'calendario' ? 'var(--emerald-700)' : 'var(--text-secondary)'};
-							box-shadow: {vistaActiva === 'calendario' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none'};"
+						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold
+							{vistaActiva === 'calendario'
+							? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-sm'
+							: 'text-gray-600 hover:bg-gray-50'}"
 						role="tab"
 						aria-selected={vistaActiva === 'calendario'}
 					>
-						<svg
-							class="h-3.5 w-3.5"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-							stroke-width="1.8"
-						>
+						<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
+								stroke-width="2"
 								d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
 							/>
 						</svg>
@@ -705,20 +676,18 @@
 						type="text"
 						bind:value={busqueda}
 						placeholder="Buscar servicios..."
-						class="input-glow apple-transition w-64 rounded-xl border py-2 pr-4 pl-9 text-sm"
-						style="border-color: var(--border-default); background-color: var(--bg-surface); color: var(--text-primary);"
+						class="input-glow apple-transition w-64 rounded-xl border border-gray-200 bg-white/80 py-2 pr-4 pl-9 text-sm text-gray-900 placeholder-gray-400 focus:border-emerald-400"
 					/>
 					<svg
-						class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2"
-						style="color: var(--text-very-muted);"
+						class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400"
 						fill="none"
 						stroke="currentColor"
 						viewBox="0 0 24 24"
-						stroke-width="1.8"
 					>
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
+							stroke-width="2"
 							d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
 						/>
 					</svg>
@@ -727,38 +696,38 @@
 				<!-- Filtros -->
 				<button
 					on:click={() => (mostrarFiltros = !mostrarFiltros)}
-					class="btn-secondary"
-					style="border-color: {mostrarFiltros
-						? 'var(--emerald-500)'
-						: 'var(--border-default)'}; color: {mostrarFiltros
-						? 'var(--emerald-700)'
-						: 'var(--text-secondary)'}; background-color: {mostrarFiltros
-						? 'rgba(249, 115, 22, 0.04)'
-						: 'white'};"
+					class="apple-transition flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors
+						{mostrarFiltros
+						? 'border-emerald-300 bg-emerald-50 text-emerald-700'
+						: 'border-gray-200 bg-white text-gray-700 hover:border-emerald-200 hover:bg-emerald-50'}"
 				>
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
+							stroke-width="2"
 							d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
 						/>
 					</svg>
 					Filtros
 					{#if activeFilters.length > 0}
 						<span
-							class="flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[9px] font-bold text-white"
-							style="background-color: var(--emerald-500);"
+							class="flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[9px] font-bold text-white"
 							>{activeFilters.length}</span
 						>
 					{/if}
 				</button>
 
 				<!-- Nuevo -->
-				<button on:click={handleNuevoServicio} class="btn-primary">
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+				<button
+					on:click={handleNuevoServicio}
+					class="apple-hover apple-transition soft-shadow emerald-glow flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-4 py-2 text-sm font-semibold text-white"
+				>
+					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
+							stroke-width="2"
 							d="M12 6v6m0 0v6m0-6h6m-6 0H6"
 						/>
 					</svg>
@@ -967,26 +936,25 @@
 			in:fly={{ y: 12, duration: 400, delay: 100 }}
 		>
 			<!-- Total -->
-			<div class="stat-card">
+			<div class="glass soft-shadow rounded-xl border border-gray-200/50 p-3">
 				<div class="flex items-center justify-between">
 					<div>
-						<p class="stat-label">Total</p>
-						<p class="stat-value">{stats.total}</p>
+						<p class="text-[10px] font-medium tracking-wide text-gray-500 uppercase">Total</p>
+						<p class="text-xl font-bold text-gray-900">{stats.total}</p>
 					</div>
 					<div
-						class="flex h-7 w-7 items-center justify-center rounded-lg"
-						style="background: linear-gradient(135deg, #6b6b6b, #4a4a4a);"
+						class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-gray-400 to-gray-600"
 					>
 						<svg
 							class="h-3.5 w-3.5 text-white"
 							fill="none"
 							stroke="currentColor"
 							viewBox="0 0 24 24"
-							stroke-width="1.8"
 						>
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
+								stroke-width="2"
 								d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
 							/>
 						</svg>
@@ -997,29 +965,27 @@
 			<!-- Solicitados -->
 			<button
 				on:click={() => cambiarFiltroEstado('solicitado')}
-				class="stat-card apple-transition text-left"
-				style="border-color: {filtroEstado === 'solicitado' ? '#3b82f6' : 'var(--border-subtle)'};
-					background-color: {filtroEstado === 'solicitado' ? 'rgba(59,130,246,0.06)' : 'var(--bg-surface)'};"
+				class="glass soft-shadow apple-transition rounded-xl border p-3 text-left transition-colors hover:border-blue-200 hover:bg-blue-50/30
+					{filtroEstado === 'solicitado' ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200/50'}"
 			>
 				<div class="flex items-center justify-between">
 					<div>
-						<p class="stat-label">Solicitados</p>
-						<p class="stat-value" style="color: #2563eb;">{stats.solicitado}</p>
+						<p class="text-[10px] font-medium tracking-wide text-gray-500 uppercase">Solicitados</p>
+						<p class="text-xl font-bold text-blue-600">{stats.solicitado}</p>
 					</div>
 					<div
-						class="flex h-7 w-7 items-center justify-center rounded-lg"
-						style="background: linear-gradient(135deg, #60a5fa, #2563eb);"
+						class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-blue-400 to-blue-600"
 					>
 						<svg
 							class="h-3.5 w-3.5 text-white"
 							fill="none"
 							stroke="currentColor"
 							viewBox="0 0 24 24"
-							stroke-width="1.8"
 						>
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
+								stroke-width="2"
 								d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
 							/>
 						</svg>
@@ -1030,29 +996,27 @@
 			<!-- En Curso -->
 			<button
 				on:click={() => cambiarFiltroEstado('en_curso')}
-				class="stat-card apple-transition text-left"
-				style="border-color: {filtroEstado === 'en_curso' ? '#f59e0b' : 'var(--border-subtle)'};
-					background-color: {filtroEstado === 'en_curso' ? 'rgba(245,158,11,0.06)' : 'var(--bg-surface)'};"
+				class="glass soft-shadow apple-transition rounded-xl border p-3 text-left transition-colors hover:border-amber-200 hover:bg-amber-50/30
+					{filtroEstado === 'en_curso' ? 'border-amber-300 bg-amber-50/50' : 'border-gray-200/50'}"
 			>
 				<div class="flex items-center justify-between">
 					<div>
-						<p class="stat-label">En Curso</p>
-						<p class="stat-value" style="color: #d97706;">{stats.en_curso}</p>
+						<p class="text-[10px] font-medium tracking-wide text-gray-500 uppercase">En Curso</p>
+						<p class="text-xl font-bold text-amber-600">{stats.en_curso}</p>
 					</div>
 					<div
-						class="flex h-7 w-7 items-center justify-center rounded-lg"
-						style="background: linear-gradient(135deg, #fbbf24, #d97706);"
+						class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-amber-600"
 					>
 						<svg
 							class="h-3.5 w-3.5 text-white"
 							fill="none"
 							stroke="currentColor"
 							viewBox="0 0 24 24"
-							stroke-width="1.8"
 						>
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
+								stroke-width="2"
 								d="M13 10V3L4 14h7v7l9-11h-7z"
 							/>
 						</svg>
@@ -1063,29 +1027,29 @@
 			<!-- Planificados -->
 			<button
 				on:click={() => cambiarFiltroEstado('planificado')}
-				class="stat-card apple-transition text-left"
-				style="border-color: {filtroEstado === 'planificado' ? '#8b5cf6' : 'var(--border-subtle)'};
-					background-color: {filtroEstado === 'planificado' ? 'rgba(139,92,246,0.06)' : 'var(--bg-surface)'};"
+				class="glass soft-shadow apple-transition rounded-xl border p-3 text-left transition-colors hover:border-violet-200 hover:bg-violet-50/30
+					{filtroEstado === 'planificado' ? 'border-violet-300 bg-violet-50/50' : 'border-gray-200/50'}"
 			>
 				<div class="flex items-center justify-between">
 					<div>
-						<p class="stat-label">Planificados</p>
-						<p class="stat-value" style="color: #7c3aed;">{stats.planificado}</p>
+						<p class="text-[10px] font-medium tracking-wide text-gray-500 uppercase">
+							Planificados
+						</p>
+						<p class="text-xl font-bold text-violet-600">{stats.planificado}</p>
 					</div>
 					<div
-						class="flex h-7 w-7 items-center justify-center rounded-lg"
-						style="background: linear-gradient(135deg, #a78bfa, #7c3aed);"
+						class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-violet-400 to-violet-600"
 					>
 						<svg
 							class="h-3.5 w-3.5 text-white"
 							fill="none"
 							stroke="currentColor"
 							viewBox="0 0 24 24"
-							stroke-width="1.8"
 						>
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
+								stroke-width="2"
 								d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
 							/>
 						</svg>
@@ -1096,26 +1060,27 @@
 			<!-- Realizados -->
 			<button
 				on:click={() => cambiarFiltroEstado('realizado')}
-				class="stat-card apple-transition text-left"
-				style="border-color: {filtroEstado === 'realizado' ? 'var(--emerald-500)' : 'var(--border-subtle)'};
-					background-color: {filtroEstado === 'realizado' ? 'rgba(249,115,22,0.06)' : 'var(--bg-surface)'};"
+				class="glass soft-shadow apple-transition rounded-xl border p-3 text-left transition-colors hover:border-emerald-200 hover:bg-emerald-50/30
+					{filtroEstado === 'realizado' ? 'border-emerald-300 bg-emerald-50/50' : 'border-gray-200/50'}"
 			>
 				<div class="flex items-center justify-between">
 					<div>
-						<p class="stat-label">Realizados</p>
-						<p class="stat-value" style="color: var(--emerald-700);">{stats.realizado}</p>
+						<p class="text-[10px] font-medium tracking-wide text-gray-500 uppercase">Realizados</p>
+						<p class="text-xl font-bold text-emerald-600">{stats.realizado}</p>
 					</div>
-					<div class="brand-gradient flex h-7 w-7 items-center justify-center rounded-lg">
+					<div
+						class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600"
+					>
 						<svg
 							class="h-3.5 w-3.5 text-white"
 							fill="none"
 							stroke="currentColor"
 							viewBox="0 0 24 24"
-							stroke-width="1.8"
 						>
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
+								stroke-width="2"
 								d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
 							/>
 						</svg>
@@ -1126,29 +1091,27 @@
 			<!-- Cancelados -->
 			<button
 				on:click={() => cambiarFiltroEstado('cancelado')}
-				class="stat-card apple-transition text-left"
-				style="border-color: {filtroEstado === 'cancelado' ? '#ef4444' : 'var(--border-subtle)'};
-					background-color: {filtroEstado === 'cancelado' ? 'rgba(239,68,68,0.06)' : 'var(--bg-surface)'};"
+				class="glass soft-shadow apple-transition rounded-xl border p-3 text-left transition-colors hover:border-red-200 hover:bg-red-50/30
+					{filtroEstado === 'cancelado' ? 'border-red-300 bg-red-50/50' : 'border-gray-200/50'}"
 			>
 				<div class="flex items-center justify-between">
 					<div>
-						<p class="stat-label">Cancelados</p>
-						<p class="stat-value" style="color: #dc2626;">{stats.cancelado}</p>
+						<p class="text-[10px] font-medium tracking-wide text-gray-500 uppercase">Cancelados</p>
+						<p class="text-xl font-bold text-red-600">{stats.cancelado}</p>
 					</div>
 					<div
-						class="flex h-7 w-7 items-center justify-center rounded-lg"
-						style="background: linear-gradient(135deg, #f87171, #dc2626);"
+						class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-red-400 to-red-600"
 					>
 						<svg
 							class="h-3.5 w-3.5 text-white"
 							fill="none"
 							stroke="currentColor"
 							viewBox="0 0 24 24"
-							stroke-width="1.8"
 						>
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
+								stroke-width="2"
 								d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
 							/>
 						</svg>
@@ -1163,47 +1126,48 @@
 	     ═══════════════════════════════════════════ -->
 	{#if vistaActiva === 'lista'}
 		<div
-			class="table-card flex min-h-0 flex-1 flex-col overflow-hidden"
+			class="glass soft-shadow flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200/50"
 			in:fly={{ y: 12, duration: 400, delay: 150 }}
 		>
 			{#if loading}
 				<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12">
-					<div class="spinner" style="width: 2.5rem; height: 2.5rem;"></div>
-					<p class="text-sm" style="color: var(--text-muted);">Cargando servicios...</p>
+					<div
+						class="h-10 w-10 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"
+					></div>
+					<p class="text-sm text-gray-500">Cargando servicios...</p>
 				</div>
 			{:else if servicios.length === 0}
 				<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12">
-					<div
-						class="flex h-14 w-14 items-center justify-center rounded-2xl"
-						style="background-color: var(--bg-base);"
-					>
+					<div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100">
 						<svg
-							class="h-7 w-7"
-							style="color: var(--text-very-muted);"
+							class="h-7 w-7 text-gray-400"
 							fill="none"
 							stroke="currentColor"
 							viewBox="0 0 24 24"
-							stroke-width="1.8"
 						>
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
+								stroke-width="2"
 								d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
 							/>
 						</svg>
 					</div>
 					<div class="text-center">
-						<h3 class="font-display mb-1 text-base" style="color: var(--bg-charcoal); font-weight: 500;">
-							No hay servicios
-						</h3>
-						<p class="text-sm" style="color: var(--text-muted);">
+						<h3 class="mb-1 text-base font-semibold text-gray-900">No hay servicios</h3>
+						<p class="text-sm text-gray-500">
 							{busqueda || filtroEstado
 								? 'No se encontraron servicios con los filtros aplicados'
 								: 'Comienza creando un nuevo servicio'}
 						</p>
 					</div>
 					{#if busqueda || filtroEstado}
-						<button on:click={limpiarFiltros} class="btn-primary">Limpiar filtros</button>
+						<button
+							on:click={limpiarFiltros}
+							class="apple-transition rounded-lg bg-emerald-500 px-4 py-2 text-sm text-white hover:bg-emerald-600"
+						>
+							Limpiar filtros
+						</button>
 					{/if}
 				</div>
 			{:else}
@@ -1211,30 +1175,23 @@
 			     LEYENDA DE ESTADOS
 			     ───────────────────────────────────────── -->
 				<div
-					class="flex flex-shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 border-b px-4 py-2"
-					style="border-color: var(--border-subtle); background-color: var(--bg-base);"
+					class="flex flex-shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-gray-100 bg-gray-50/60 px-4 py-2"
 				>
-					<span
-						class="font-mono-meta"
-						style="color: var(--text-very-muted); font-size: 0.62rem;"
+					<span class="text-[10px] font-semibold tracking-wider text-gray-400 uppercase"
+						>Estados:</span
 					>
-						Estados
-					</span>
 					{#each [{ estado: 'solicitado', label: 'Solicitado' }, { estado: 'en_curso', label: 'En Curso' }, { estado: 'planificado', label: 'Planificado' }, { estado: 'realizado', label: 'Realizado' }, { estado: 'cancelado', label: 'Cancelado' }, { estado: 'liquidado', label: 'Liquidado' }] as item}
 						<button
 							on:click={() => cambiarFiltroEstado(item.estado as EstadoServicio)}
-							class="flex items-center gap-1.5 rounded-full px-2 py-0.5 transition-colors"
-							style="background-color: {filtroEstado === item.estado ? 'var(--bg-base)' : 'transparent'};
-								box-shadow: {filtroEstado === item.estado ? 'inset 0 0 0 1px var(--border-default)' : 'none'};"
+							class="flex items-center gap-1.5 rounded-full px-2 py-0.5 transition-colors hover:bg-gray-100
+							{filtroEstado === item.estado ? 'bg-gray-200/80 ring-1 ring-gray-300' : ''}"
 							title="Filtrar por {item.label}"
 						>
 							<span
 								class="h-2 w-2 flex-shrink-0 rounded-full"
 								style="background-color: {getEstadoColor(item.estado as EstadoServicio)}"
 							></span>
-							<span class="text-[10px] font-medium" style="color: var(--text-secondary);"
-								>{item.label}</span
-							>
+							<span class="text-[10px] font-medium text-gray-600">{item.label}</span>
 						</button>
 					{/each}
 					{#if filtroEstado}
@@ -1244,19 +1201,13 @@
 								paginaActual = 1;
 								cargarServicios();
 							}}
-							class="ml-auto flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
-							style="color: #dc2626;"
+							class="ml-auto flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-red-500 hover:bg-red-50"
 						>
-							<svg
-								class="h-3 w-3"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								stroke-width="1.8"
-							>
+							<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path
 									stroke-linecap="round"
 									stroke-linejoin="round"
+									stroke-width="2"
 									d="M6 18L18 6M6 6l12 12"
 								/>
 							</svg>
@@ -1288,7 +1239,7 @@
 										<div class="min-w-0 flex-1">
 											<div class="flex items-center gap-1">
 												<svg
-													class="h-3 w-3 flex-shrink-0" style="color: var(--emerald-500);"
+													class="h-3 w-3 flex-shrink-0 text-emerald-500"
 													fill="none"
 													stroke="currentColor"
 													viewBox="0 0 24 24"
@@ -1395,7 +1346,7 @@
 										<div class="flex items-center gap-0.5">
 											<button
 												on:click|stopPropagation={() => handleCompartirServicio(servicio)}
-												class="rounded-md p-1.5 transition-colors" style="color: var(--text-very-muted);"
+												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-teal-50 hover:text-teal-600"
 												title="Compartir"
 											>
 												<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1413,7 +1364,7 @@
 													servicioSeleccionado = servicio;
 													mostrarModalTicket = true;
 												}}
-												class="rounded-md p-1.5 transition-colors" style="color: var(--text-very-muted);"
+												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-purple-50 hover:text-purple-600"
 												title="Ticket"
 											>
 												<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1427,7 +1378,7 @@
 											</button>
 											<button
 												on:click|stopPropagation={() => handleEditarServicio(servicio)}
-												class="rounded-md p-1.5 transition-colors" style="color: var(--text-very-muted);"
+												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
 												title="Editar"
 											>
 												<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1441,7 +1392,7 @@
 											</button>
 											<button
 												on:click|stopPropagation={() => verDetalle(servicio.id)}
-												class="rounded-md p-1.5 transition-colors" style="color: var(--text-very-muted);"
+												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600"
 												title="Ver detalle"
 											>
 												<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1461,7 +1412,7 @@
 											</button>
 											<button
 												on:click|stopPropagation={() => handleEliminarServicio(servicio)}
-												class="rounded-md p-1.5 transition-colors" style="color: var(--text-very-muted);"
+												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
 												title="Eliminar"
 											>
 												<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1491,10 +1442,7 @@
 				<div class="hidden min-h-0 flex-1 overflow-auto lg:block">
 					<table class="w-full border-collapse text-sm">
 						<thead>
-							<tr
-								class="table-header sticky top-0 z-10"
-								style="backdrop-filter: blur(8px);"
-							>
+							<tr class="sticky top-0 z-10 border-b border-gray-200 bg-gray-50/95 backdrop-blur-sm">
 								<!-- Barra estado: siempre -->
 								<th class="w-1 p-0"></th>
 
@@ -1568,19 +1516,17 @@
 
 								<!-- Acciones: siempre, sticky -->
 								<th
-									class="sticky right-0 px-3 py-2.5 text-center text-[10px] font-semibold tracking-wider whitespace-nowrap uppercase backdrop-blur-sm"
-									style="background-color: var(--bg-base); color: var(--text-muted);"
+									class="sticky right-0 bg-gray-50/95 px-3 py-2.5 text-center text-[10px] font-semibold tracking-wider whitespace-nowrap text-gray-500 uppercase backdrop-blur-sm"
 								>
 									Acciones
 								</th>
 							</tr>
 						</thead>
 
-						<tbody style="background-color: var(--bg-surface);" class="divide-y" >
+						<tbody class="divide-y divide-gray-100 bg-white">
 							{#each servicios as servicio, index (servicio?.id || `temp-${index}`)}
 								<tr
-									class="table-row group"
-									style="border-color: var(--border-subtle);"
+									class="group transition-colors duration-100 hover:bg-emerald-50/40"
 									in:fly={{ y: 8, duration: 200, delay: index * 20 }}
 								>
 									<!-- Barra de estado lateral -->
@@ -1595,7 +1541,7 @@
 									<td class="max-w-[200px] min-w-[150px] px-3 py-2">
 										<div class="flex items-start gap-1">
 											<svg
-												class="mt-0.5 h-3.5 w-3.5 flex-shrink-0" style="color: var(--emerald-500);"
+												class="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-500"
 												fill="none"
 												stroke="currentColor"
 												viewBox="0 0 24 24"
@@ -1762,13 +1708,12 @@
 
 									<!-- Acciones sticky -->
 									<td
-										class="sticky right-0 px-2 py-2 whitespace-nowrap"
-										style="background-color: var(--bg-surface);"
+										class="sticky right-0 bg-white px-2 py-2 whitespace-nowrap group-hover:bg-emerald-50/40"
 									>
 										<div class="flex items-center justify-center gap-0.5">
 											<button
 												on:click|stopPropagation={() => handleCompartirServicio(servicio)}
-												class="rounded-md p-1.5 transition-colors" style="color: var(--text-very-muted);"
+												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-teal-50 hover:text-teal-600"
 												title="Compartir"
 											>
 												<svg
@@ -1790,7 +1735,7 @@
 													servicioSeleccionado = servicio;
 													mostrarModalTicket = true;
 												}}
-												class="rounded-md p-1.5 transition-colors" style="color: var(--text-very-muted);"
+												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-purple-50 hover:text-purple-600"
 												title="Ticket"
 											>
 												<svg
@@ -1809,7 +1754,7 @@
 											</button>
 											<button
 												on:click|stopPropagation={() => handleDescargarRutograma(servicio)}
-												class="rounded-md p-1.5 transition-colors" style="color: var(--text-very-muted);"
+												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-emerald-50 hover:text-emerald-700"
 												title="Rutograma PDF"
 											>
 												<svg
@@ -1828,7 +1773,7 @@
 											</button>
 											<button
 												on:click|stopPropagation={() => handleEditarServicio(servicio)}
-												class="rounded-md p-1.5 transition-colors" style="color: var(--text-very-muted);"
+												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
 												title="Editar"
 											>
 												<svg
@@ -1847,7 +1792,7 @@
 											</button>
 											<button
 												on:click|stopPropagation={() => verDetalle(servicio.id)}
-												class="rounded-md p-1.5 transition-colors" style="color: var(--text-very-muted);"
+												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600"
 												title="Ver detalle"
 											>
 												<svg
@@ -1872,7 +1817,7 @@
 											</button>
 											<button
 												on:click|stopPropagation={() => handleEliminarServicio(servicio)}
-												class="rounded-md p-1.5 transition-colors" style="color: var(--text-very-muted);"
+												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
 												title="Eliminar"
 											>
 												<svg
@@ -1900,48 +1845,33 @@
 				<!-- Paginación pegada al fondo -->
 				{#if totalPaginas > 1}
 					<div
-						class="flex flex-shrink-0 items-center justify-between border-t px-4 py-3"
-						style="border-color: var(--border-subtle); background-color: var(--bg-base);"
+						class="flex flex-shrink-0 items-center justify-between border-t border-gray-100 bg-gray-50/50 px-4 py-3"
 					>
-						<p class="text-xs" style="color: var(--text-muted);">
-							<span class="font-semibold" style="color: var(--text-primary);"
+						<p class="text-xs text-gray-500">
+							<span class="font-semibold text-gray-700"
 								>{(pagination.page - 1) * pagination.limit + 1}–{Math.min(
 									pagination.page * pagination.limit,
 									pagination.total
 								)}</span
 							>
-							de <span class="font-semibold" style="color: var(--text-primary);"
-								>{pagination.total}</span
-							>
-							servicios
+							de <span class="font-semibold text-gray-700">{pagination.total}</span> servicios
 						</p>
 
 						<div class="flex items-center gap-1">
 							<button
 								on:click={() => irPagina(1)}
 								disabled={pagination.page === 1 || loading}
-								class="apple-transition rounded-lg border p-1.5"
-								style="border-color: {pagination.page === 1 || loading
-									? 'var(--border-subtle)'
-									: 'var(--border-default)'};
-									background-color: {pagination.page === 1 || loading
-									? 'var(--bg-base)'
-									: 'var(--bg-surface)'};
-									color: {pagination.page === 1 || loading
-									? 'var(--text-very-muted)'
-									: 'var(--text-secondary)'};
-									cursor: {pagination.page === 1 || loading ? 'not-allowed' : 'pointer'};"
+								class="apple-transition rounded-lg border border-gray-200 p-1.5 {pagination.page ===
+									1 || loading
+									? 'cursor-not-allowed bg-gray-100 text-gray-300'
+									: 'bg-white text-gray-600 hover:border-emerald-200 hover:bg-emerald-50'}"
 								title="Primera"
 							>
-								<svg
-									class="h-3.5 w-3.5"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-									stroke-width="1.8"
+								<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
 									><path
 										stroke-linecap="round"
 										stroke-linejoin="round"
+										stroke-width="2"
 										d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
 									/></svg
 								>
@@ -1949,28 +1879,17 @@
 							<button
 								on:click={() => irPagina(pagination.page - 1)}
 								disabled={pagination.page === 1 || loading}
-								class="apple-transition rounded-lg border p-1.5"
-								style="border-color: {pagination.page === 1 || loading
-									? 'var(--border-subtle)'
-									: 'var(--border-default)'};
-									background-color: {pagination.page === 1 || loading
-									? 'var(--bg-base)'
-									: 'var(--bg-surface)'};
-									color: {pagination.page === 1 || loading
-									? 'var(--text-very-muted)'
-									: 'var(--text-secondary)'};
-									cursor: {pagination.page === 1 || loading ? 'not-allowed' : 'pointer'};"
+								class="apple-transition rounded-lg border border-gray-200 p-1.5 {pagination.page ===
+									1 || loading
+									? 'cursor-not-allowed bg-gray-100 text-gray-300'
+									: 'bg-white text-gray-600 hover:border-emerald-200 hover:bg-emerald-50'}"
 								title="Anterior"
 							>
-								<svg
-									class="h-3.5 w-3.5"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-									stroke-width="1.8"
+								<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
 									><path
 										stroke-linecap="round"
 										stroke-linejoin="round"
+										stroke-width="2"
 										d="M15 19l-7-7 7-7"
 									/></svg
 								>
@@ -1983,16 +1902,12 @@
 								<button
 									on:click={() => irPagina(pagina)}
 									disabled={loading}
-									class="apple-transition min-w-[2rem] rounded-lg border px-2 py-1 text-xs"
-									style="border-color: {pagination.page === pagina
-										? 'var(--emerald-500)'
-										: 'var(--border-default)'};
-										background-color: {pagination.page === pagina
-										? 'var(--emerald-500)'
-										: 'var(--bg-surface)'};
-										color: {pagination.page === pagina ? 'white' : 'var(--text-secondary)'};
-										font-weight: {pagination.page === pagina ? '600' : '500'};
-										opacity: {loading ? '0.5' : '1'};"
+									class="apple-transition min-w-[2rem] rounded-lg border px-2 py-1 text-xs {pagination.page ===
+									pagina
+										? 'border-emerald-500 bg-emerald-500 font-semibold text-white'
+										: 'border-gray-200 bg-white text-gray-600 hover:border-emerald-200 hover:bg-emerald-50'} {loading
+										? 'opacity-50'
+										: ''}"
 								>
 									{pagina}
 								</button>
@@ -2001,28 +1916,17 @@
 							<button
 								on:click={() => irPagina(pagination.page + 1)}
 								disabled={pagination.page === totalPaginas || loading}
-								class="apple-transition rounded-lg border p-1.5"
-								style="border-color: {pagination.page === totalPaginas || loading
-									? 'var(--border-subtle)'
-									: 'var(--border-default)'};
-									background-color: {pagination.page === totalPaginas || loading
-									? 'var(--bg-base)'
-									: 'var(--bg-surface)'};
-									color: {pagination.page === totalPaginas || loading
-									? 'var(--text-very-muted)'
-									: 'var(--text-secondary)'};
-									cursor: {pagination.page === totalPaginas || loading ? 'not-allowed' : 'pointer'};"
+								class="apple-transition rounded-lg border border-gray-200 p-1.5 {pagination.page ===
+									totalPaginas || loading
+									? 'cursor-not-allowed bg-gray-100 text-gray-300'
+									: 'bg-white text-gray-600 hover:border-emerald-200 hover:bg-emerald-50'}"
 								title="Siguiente"
 							>
-								<svg
-									class="h-3.5 w-3.5"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-									stroke-width="1.8"
+								<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
 									><path
 										stroke-linecap="round"
 										stroke-linejoin="round"
+										stroke-width="2"
 										d="M9 5l7 7-7 7"
 									/></svg
 								>
@@ -2030,28 +1934,17 @@
 							<button
 								on:click={() => irPagina(totalPaginas)}
 								disabled={pagination.page === totalPaginas || loading}
-								class="apple-transition rounded-lg border p-1.5"
-								style="border-color: {pagination.page === totalPaginas || loading
-									? 'var(--border-subtle)'
-									: 'var(--border-default)'};
-									background-color: {pagination.page === totalPaginas || loading
-									? 'var(--bg-base)'
-									: 'var(--bg-surface)'};
-									color: {pagination.page === totalPaginas || loading
-									? 'var(--text-very-muted)'
-									: 'var(--text-secondary)'};
-									cursor: {pagination.page === totalPaginas || loading ? 'not-allowed' : 'pointer'};"
+								class="apple-transition rounded-lg border border-gray-200 p-1.5 {pagination.page ===
+									totalPaginas || loading
+									? 'cursor-not-allowed bg-gray-100 text-gray-300'
+									: 'bg-white text-gray-600 hover:border-emerald-200 hover:bg-emerald-50'}"
 								title="Última"
 							>
-								<svg
-									class="h-3.5 w-3.5"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-									stroke-width="1.8"
+								<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
 									><path
 										stroke-linecap="round"
 										stroke-linejoin="round"
+										stroke-width="2"
 										d="M13 5l7 7-7 7M5 5l7 7-7 7"
 									/></svg
 								>

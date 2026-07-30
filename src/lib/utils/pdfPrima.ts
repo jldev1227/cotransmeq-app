@@ -4,12 +4,10 @@
  * datos del conductor, tiempo trabajado, tabla de valores base, valor prima, firma y
  * cuadro de elaborado/aprobado.
  *
- * Ambientado a COTRANSMEQ (paleta naranja, empresa y NIT corporativos).
- *
  * Reutiliza la firma del desprendible de nómina (firmas con presignedUrl).
  */
 import type { Prima, FirmaConUrl } from '$lib/types/nomina';
-import { obtenerLogoBase64, imageToBase64Url } from '$lib/utils/pdfUtils';
+import { imageToBase64Url } from '$lib/utils/pdfUtils';
 
 function safeValue<T>(val: T | null | undefined, def: T): T {
 	return val !== undefined && val !== null ? val : def;
@@ -73,19 +71,14 @@ function getNombreCompleto(prima: Prima): string {
 	return `${safeValue(c.nombre, '')} ${safeValue(c.apellido, '')}`.trim() || 'N/A';
 }
 
-function getCedulaConductor(prima: Prima): string {
-	const c: any = (prima as any).conductor || (prima as any).conductores;
-	return safeValue(c?.numero_identificacion || c?.cedula, '');
-}
-
 function getElaboradoPor(prima: Prima): string {
-	const u: any = (prima as any).creado_por;
+	const u = prima.creado_por;
 	if (!u) return '';
 	return `${safeValue(u.nombre, '')} ${safeValue(u.apellido, '')}`.trim();
 }
 
 function getAprobadoPor(prima: Prima): string {
-	const u: any = (prima as any).actualizado_por;
+	const u = prima.actualizado_por;
 	if (!u) return '';
 	return `${safeValue(u.nombre, '')} ${safeValue(u.apellido, '')}`.trim();
 }
@@ -94,26 +87,43 @@ export async function generarPdfPrima(
 	prima: Prima,
 	firmas: FirmaConUrl[] = []
 ): Promise<void> {
+	console.log('[pdfPrima] Iniciando generación PDF. Prima:', {
+		id: prima.id,
+		mes: prima.mes,
+		anio: prima.anio,
+		valor: prima.prima
+	});
+	console.log('[pdfPrima] Firmas recibidas:', firmas.length, firmas.map(f => ({
+		hasPresignedUrl: !!f?.presignedUrl,
+		urlLength: f?.presignedUrl?.length,
+		urlStarts: f?.presignedUrl?.substring(0, 30)
+	})));
+
 	const pdfMake = (await import('pdfmake/build/pdfmake')).default;
 	const pdfFonts = (await import('pdfmake/build/vfs_fonts')).default;
 	pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts.vfs;
 
-	const esCotransmeq = true;
+	const esCotransmeq = false;
 	const color = esCotransmeq ? '#FF9500' : '#2E8B57';
 
 	let logoBase64: string | null = null;
 	try {
-		logoBase64 = await obtenerLogoBase64(esCotransmeq, true);
+		logoBase64 = await imageToBase64Url('/assets/logo_transmeralda-264.webp');
+		console.log('[pdfPrima] Logo cargado, longitud:', logoBase64.length, 'starts:', logoBase64.substring(0, 40));
 	} catch (e) {
-		console.warn('[pdfPrima] No se pudo cargar el logo de Cotransmeq:', e);
+		console.warn('[pdfPrima] No se pudo cargar /assets/logo_transmeralda-264.webp:', e);
 	}
 
 	const codigoFormato = 'RH-FR-30';
 	const versionFormato = '1';
-	const fechaFormato = '19/09/2025';
+	const fechaFormato = '23/04/2024';
 
 	const conductorNombre = getNombreCompleto(prima);
-	const conductorCedula = getCedulaConductor(prima);
+	const conductorObj: any = (prima as any).conductor || (prima as any).conductores;
+	const conductorCedula = safeValue(
+		conductorObj?.numero_identificacion || conductorObj?.cedula,
+		''
+	);
 
 	const mes = Number(prima.mes) || 0;
 	const anio = Number(prima.anio) || new Date().getFullYear();
@@ -135,18 +145,20 @@ export async function generarPdfPrima(
 	const elaboradoPor = getElaboradoPor(prima);
 	const aprobadoPor = getAprobadoPor(prima);
 
-	const firmaInput = firmas && firmas[0];
-	// Preferir base64 que ya viene del backend (evita fetch al presignedUrl,
-	// que puede fallar por CORS cuando el portal corre en otro origen).
-	const hasFirmaBase64 = !!(firmaInput?.base64);
-	const hasFirmaPresignedUrl = !!(firmaInput?.presignedUrl);
+	const hasFirmaPresignedUrl = !!(firmas && firmas[0]?.presignedUrl);
+	console.log('[pdfPrima] Verificando firma. hasPresignedUrl:', hasFirmaPresignedUrl, 'firmasCount:', firmas?.length || 0);
 
 	let firmaBase64: string | null = null;
-	if (hasFirmaBase64) {
-		firmaBase64 = firmaInput!.base64!;
-	} else if (hasFirmaPresignedUrl) {
+	if (hasFirmaPresignedUrl) {
 		try {
-			firmaBase64 = await imageToBase64Url(firmaInput!.presignedUrl!);
+			console.log('[pdfPrima] Convirtiendo URL a base64...');
+			firmaBase64 = await imageToBase64Url(firmas[0].presignedUrl!);
+			console.log(
+				'[pdfPrima] Base64 generado, longitud:',
+				firmaBase64.length,
+				'starts:',
+				firmaBase64.substring(0, 30)
+			);
 		} catch (e) {
 			console.error('[pdfPrima] Error al procesar la firma:', e);
 			firmaBase64 = null;
@@ -166,9 +178,9 @@ export async function generarPdfPrima(
 							? [
 									{
 										image: 'logo',
-										width: 100,
+										width: 110,
 										height: 40,
-										alignment: 'center' as const,
+										alignment: 'left' as const,
 										margin: [0, 5, 0, 0]
 									}
 								]
@@ -235,7 +247,7 @@ export async function generarPdfPrima(
 		},
 
 		// ============================================================
-		// NOMBRE / C.C. / PERIODO
+		// NOMBRE / PERIODO
 		// ============================================================
 		{
 			table: {

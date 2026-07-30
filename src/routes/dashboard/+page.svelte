@@ -9,14 +9,14 @@
 </script>
 
 <svelte:head>
-	<title>Dashboard - Cotransmeq</title>
+	<title>Dashboard - Transmeralda</title>
 </svelte:head>
 
 <!-- Página de redirección a servicios -->
 <div class="flex min-h-screen items-center justify-center">
 	<div class="text-center">
 		<div
-			class="soft-shadow mx-auto mb-4 flex h-16 w-16 animate-pulse items-center justify-center rounded-2xl bg-gradient-to-br from-orange-400 to-orange-600"
+			class="soft-shadow mx-auto mb-4 flex h-16 w-16 animate-pulse items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600"
 		>
 			<svg class="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path

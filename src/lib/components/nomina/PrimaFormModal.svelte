@@ -185,8 +185,8 @@
 			<!-- Header -->
 			<div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
 				<div class="flex items-center gap-3">
-					<div class="rounded-lg bg-orange-100 p-2">
-						<Sparkles class="h-5 w-5 text-orange-600" />
+					<div class="rounded-lg bg-emerald-100 p-2">
+						<Sparkles class="h-5 w-5 text-emerald-600" />
 					</div>
 					<div>
 						<h2 class="text-lg font-semibold text-gray-900">
@@ -226,7 +226,7 @@
 						disabled={loadingConductores}
 						--border-radius="0.5rem"
 						--border="1px solid #E5E7EB"
-						--border-focused="1px solid #f97316"
+						--border-focused="1px solid #10b981"
 						--padding="0.625rem 0.875rem"
 						--height="40px"
 					/>
@@ -247,7 +247,7 @@
 						<select
 							id="mes"
 							bind:value={mes}
-							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
 						>
 							<option value={null}>— Seleccione —</option>
 							{#each MESES as m}
@@ -271,7 +271,7 @@
 							bind:value={anio}
 							min="2000"
 							max="2100"
-							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
 						/>
 						{#if errors.anio}
 							<p class="mt-1 text-xs text-red-500">{errors.anio}</p>
@@ -297,7 +297,7 @@
 							on:focus={handleCOPFocus}
 							on:blur={handleCOPBlur}
 							on:input={(e) => (primaValor = parseCOPInput(e.currentTarget.value))}
-							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
 						/>
 						{#if errors.prima}
 							<p class="mt-1 text-xs text-red-500">{errors.prima}</p>
@@ -320,7 +320,7 @@
 							on:blur={handleCOPBlur}
 							on:input={(e) =>
 								(primaPendiente = parseCOPInput(e.currentTarget.value) || null)}
-							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
 						/>
 					</div>
 				</div>
@@ -336,7 +336,7 @@
 					<select
 						id="estado"
 						bind:value={estado}
-						class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+						class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
 					>
 						<option value="Pendiente">Pendiente</option>
 						<option value="Pagado">Pagado</option>
@@ -356,7 +356,7 @@
 						bind:value={observaciones}
 						rows="3"
 						placeholder="Notas adicionales..."
-						class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+						class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
 					></textarea>
 				</div>
 
@@ -378,7 +378,7 @@
 								min="0"
 								max="365"
 								placeholder="180"
-								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
 							/>
 						</div>
 
@@ -396,7 +396,7 @@
 								on:focus={handleCOPFocus}
 								on:blur={handleCOPBlur}
 								on:input={(e) => (sueldo_basico = parseCOPInput(e.currentTarget.value) || null)}
-								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
 							/>
 						</div>
 
@@ -418,7 +418,7 @@
 								on:blur={handleCOPBlur}
 								on:input={(e) =>
 									(auxilio_transporte = parseCOPInput(e.currentTarget.value) || null)}
-								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
 							/>
 						</div>
 
@@ -439,7 +439,7 @@
 								on:focus={handleCOPFocus}
 								on:blur={handleCOPBlur}
 								on:input={(e) => (sueldo_variable = parseCOPInput(e.currentTarget.value) || null)}
-								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
 							/>
 						</div>
 
@@ -460,7 +460,7 @@
 								on:blur={handleCOPBlur}
 								on:input={(e) =>
 									(total_base_liquidacion = parseCOPInput(e.currentTarget.value) || null)}
-								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
+								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
 							/>
 						</div>
 					</div>
@@ -479,7 +479,7 @@
 				<button
 					on:click={handleSubmit}
 					disabled={loading}
-					class="flex items-center gap-2 rounded-md bg-orange-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-orange-700 disabled:opacity-50"
+					class="flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
 				>
 					{#if loading}
 						<div

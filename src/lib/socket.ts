@@ -77,7 +77,11 @@ class SocketManager {
 				this.socket.on(event, cb);
 			}
 		}
-		console.log(`[socket] re-registrados ${this.externalListeners.size} eventos con ${[...this.externalListeners.values()].reduce((s, set) => s + set.size, 0)} listeners`);
+		console.log(
+			`[socket] re-registrados ${this.externalListeners.size} eventos con ` +
+			`${[...this.externalListeners.values()].reduce((s, set) => s + set.size, 0)} listeners ` +
+			`(socket.connected=${this.socket.connected}, id=${this.socket.id})`
+		);
 	}
 
 	disconnect() {
@@ -203,9 +207,21 @@ class SocketManager {
 			this.externalListeners.set(event, new Set());
 		}
 		this.externalListeners.get(event)!.add(callback);
-		// Si el socket ya existe, registrarlo ahora
+		// Si el socket ya existe, registrarlo ahora (envuelto en un log
+		// para diagnóstico de eventos que no llegan al componente).
 		if (this.socket) {
-			this.socket.on(event, callback);
+			const wrappedCb = (data: any) => {
+				console.log(`[socket] 📨 RECIBIDO evento "${event}"`, data);
+				callback(data);
+			};
+			// Reemplazar el callback guardado con el envuelto para que
+			// el log también funcione en re-registros por reconexión.
+			this.externalListeners.get(event)!.delete(callback);
+			this.externalListeners.get(event)!.add(wrappedCb);
+			this.socket.on(event, wrappedCb);
+			console.log(`[socket] ✓ Listener registrado para "${event}" (socket.connected=${this.socket.connected})`);
+		} else {
+			console.log(`[socket] ⏳ Listener para "${event}" guardado en cola (socket aún no creado)`);
 		}
 	}
 

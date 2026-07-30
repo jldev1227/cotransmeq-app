@@ -248,7 +248,7 @@
 	const getEstadoColor = (estado: string) => {
 		switch (estado?.toUpperCase()) {
 			case 'ACTIVO':
-				return '#f97316'; // orange-500
+				return '#10b981'; // emerald-500
 			case 'INACTIVO':
 				return '#6b7280'; // gray-500
 			case 'VACACIONES':
@@ -543,7 +543,7 @@
 </script>
 
 <svelte:head>
-	<title>Conductores — Cotransmeq</title>
+	<title>Conductores — Transmeralda</title>
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col gap-4 p-6" in:fade={{ duration: 400 }}>
@@ -554,7 +554,7 @@
 			<div class="flex items-center gap-3">
 				<div
 					class="brand-gradient flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
-					style="box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);"
+					style="box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);"
 				>
 					<svg
 						class="h-5 w-5 text-white"
@@ -577,7 +577,7 @@
 						</h1>
 						<span
 							class="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
-							style="background: rgba(249, 115, 22,0.08); color: var(--emerald-800);"
+							style="background: rgba(16,185,129,0.08); color: var(--emerald-800);"
 						>
 							<span
 								class="h-1.5 w-1.5 animate-pulse rounded-full"
@@ -729,7 +729,7 @@
 						: 'var(--border-default)'}; color: {mostrarFiltros
 						? 'var(--emerald-700)'
 						: 'var(--text-secondary)'}; background-color: {mostrarFiltros
-						? 'rgba(249, 115, 22,0.04)'
+						? 'rgba(16,185,129,0.04)'
 						: 'white'};"
 				>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
@@ -895,7 +895,7 @@
 					style="border-color: {filtroEstado === 'ACTIVO'
 						? 'var(--emerald-500)'
 						: 'var(--border-subtle)'}; background-color: {filtroEstado === 'ACTIVO'
-						? 'rgba(249, 115, 22,0.04)'
+						? 'rgba(16,185,129,0.04)'
 						: 'var(--bg-surface)'};"
 				>
 					<div class="flex items-center justify-between">
@@ -1132,7 +1132,7 @@
 								class="list-card"
 								style="border-left: 4px solid {getEstadoColor(conductor.estado)};
 								background-color: {conductoresSeleccionados.has(conductor.id)
-									? 'rgba(249, 115, 22, 0.04)'
+									? 'rgba(16, 185, 129, 0.04)'
 									: 'var(--bg-surface)'};
 								border-color: {conductoresSeleccionados.has(conductor.id)
 									? 'var(--emerald-500)'
@@ -1178,7 +1178,7 @@
 									<!-- Header: nombre + status pill -->
 									<div class="mb-1 flex items-start justify-between gap-2">
 										<p
-											class="truncate text-sm leading-snug font-semibold uppercase"
+											class="truncate text-sm leading-snug font-semibold"
 											style="color: var(--text-primary);"
 										>
 											{conductor.nombre}
@@ -1260,7 +1260,7 @@
 									<button
 										on:click={() => goto(`/dashboard/conductores/${conductor.id}`)}
 										class="apple-transition rounded-md p-1.5"
-										style="color: var(--emerald-600); background-color: rgba(249, 115, 22, 0.06);"
+										style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
 										title="Ver detalle"
 									>
 										<svg
@@ -1290,7 +1290,7 @@
 												ejecutarAccionMasiva('mostrar');
 											}}
 											class="apple-transition rounded-md p-1.5"
-											style="color: var(--emerald-600); background-color: rgba(249, 115, 22, 0.06);"
+											style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
 											title="Mostrar"
 										>
 											<svg
@@ -1320,7 +1320,7 @@
 												ejecutarAccionMasiva('restaurar');
 											}}
 											class="apple-transition rounded-md p-1.5"
-											style="color: var(--emerald-600); background-color: rgba(249, 115, 22, 0.06);"
+											style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
 											title="Restaurar"
 										>
 											<svg
@@ -1717,7 +1717,7 @@
 							<h3 class="text-base font-bold text-gray-900">Eliminar permanentemente</h3>
 							{#if modalEliminar.conductor}
 								<p class="mt-0.5 text-xs text-gray-500">
-									<span class="font-semibold text-gray-700 uppercase">{modalEliminar.conductor.nombre}</span>
+									<span class="font-semibold text-gray-700">{modalEliminar.conductor.nombre}</span>
 									· CC {modalEliminar.conductor.identificacion}
 								</p>
 							{/if}
@@ -1742,7 +1742,7 @@
 				<div class="px-5 py-4">
 					{#if modalEliminar.loading}
 						<div class="flex flex-col items-center justify-center py-12 text-gray-500">
-							<svg class="h-8 w-8 animate-spin text-orange-500" fill="none" viewBox="0 0 24 24"
+							<svg class="h-8 w-8 animate-spin text-emerald-500" fill="none" viewBox="0 0 24 24"
 								><circle
 									class="opacity-25"
 									cx="12"
@@ -1784,7 +1784,7 @@
 
 							{#if totalRelaciones === 0}
 								<div
-									class="mt-3 flex items-center gap-2 rounded-lg bg-orange-50 px-3 py-2.5 text-xs text-orange-700 ring-1 ring-orange-200"
+									class="mt-3 flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2.5 text-xs text-emerald-700 ring-1 ring-emerald-200"
 								>
 									<svg
 										class="h-4 w-4 flex-shrink-0"
@@ -1988,7 +1988,7 @@
 		box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
 	}
 	.emerald-glow:hover {
-		box-shadow: 0 0 15px rgba(249, 115, 22, 0.4);
+		box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
 	}
 
 	.bulk-actions-container {
