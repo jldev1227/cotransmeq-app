@@ -378,6 +378,29 @@
 		return out;
 	})();
 
+	// Variante filtrada: solo grupos marcados como `incluir !== false`. Se usa
+	// en el resumen "Detalle por Concepto" del aside para que los recargos que
+	// el usuario desmarcó en el preview NO aparezcan en la tabla del
+	// desprendible (consistencia con el total a pagar, que ya los excluye).
+	$: previewRecargosGruposDedupIncluidos = previewRecargosGruposDedup.filter(
+		(g: any) => g.incluir !== false
+	);
+
+	// ═══════════════════════════════════════════════════════════════
+	//  MAPA DE RECARGOS PREVIOS DE LA BD
+	//  Al cargar una liquidación en modo edición, guardamos:
+	//   - Por cada recargo automático persistido: su `id` (UUID de la fila
+	//     de BD) agrupado por `origen_planilla_id` para que al re-construir
+	//     el preview podamos saber qué filas de BD corresponde a cada
+	//     origen.
+	//   - Por cada recargo manual persistido: su `id` de BD, para detectar
+	//     cuáles fueron eliminados al editar.
+	//  Esto se usa en `handleSubmit` para calcular `recargos_eliminar`,
+	//  la lista de IDs que el backend debe borrar al guardar.
+	// ═══════════════════════════════════════════════════════════════
+	let recargosPreviosPorOrigenPlanilla: Record<string, string[]> = {};
+	let recargosManualesPreviosIds: Set<string> = new Set();
+
 	// Anticipos
 	let anticipos: Array<{ id: string; valor: number; fecha: string; concepto: string }> = [];
 	let showAnticipoForm = false;
@@ -577,6 +600,26 @@
 		const recargosData = initialData.recargos || [];
 		const pernotesData = initialData.pernotes || [];
 		const mantenimientosData = initialData.mantenimientos || [];
+
+		// Capturar IDs de BD de los recargos previos para poder calcular la diff
+		// en `handleSubmit` y enviar al backend la lista de recargos a eliminar.
+		// - Automáticos: agrupar por `origen_planilla_id` (1 origen puede tener N
+		//   filas si se sobrescribió con manuales).
+		// - Manuales: Set plano de `id`.
+		recargosPreviosPorOrigenPlanilla = {};
+		recargosManualesPreviosIds = new Set();
+		for (const r of recargosData as any[]) {
+			if (r.es_automatico) {
+				if (r.origen_planilla_id && r.id) {
+					if (!recargosPreviosPorOrigenPlanilla[r.origen_planilla_id]) {
+						recargosPreviosPorOrigenPlanilla[r.origen_planilla_id] = [];
+					}
+					recargosPreviosPorOrigenPlanilla[r.origen_planilla_id].push(r.id);
+				}
+			} else {
+				if (r.id) recargosManualesPreviosIds.add(r.id);
+			}
+		}
 
 		detallesVehiculos = detallesVehiculos.map((detalle) => {
 			const vehiculoId = detalle.vehiculo.value;
@@ -1615,6 +1658,48 @@
 			).values()
 		);
 
+		// ═══════════════════════════════════════════════════════════════
+		//  RECARGOS A ELIMINAR (solo en modo edición)
+		//  El backend hace upsert de los recargos que vienen en el payload,
+		//  pero NO borra los que existían antes si no se mencionan. Para
+		//  que el "desprendible" refleje exactamente lo que el usuario ve
+		//  en el form, calculamos la diff y enviamos los IDs a borrar.
+		//
+		//  Lógica:
+		//   - Recargos automáticos (preview): si el `origen_planilla_id`
+		//     fue desmarcado (incluir === false) en el preview, eliminamos
+		//     TODAS las filas de BD asociadas a ese origen.
+		//   - Recargos manuales: si un ID previo ya no está en
+		//     `detallesLimpios[].recargos`, eliminarlo.
+		// ═══════════════════════════════════════════════════════════════
+		const recargosEliminar: string[] = [];
+		if (mode === 'edit') {
+			// Set de origen_planilla_id que el usuario MANTIENE incluidos.
+			const origenesIncluidos = new Set<string>();
+			for (const g of previewRecargosGrupos || []) {
+				if (g.incluir !== false && g.origen_planilla_id) {
+					origenesIncluidos.add(g.origen_planilla_id);
+				}
+			}
+			// Recargos automáticos cuyo origen fue desmarcado → todas sus filas de BD van a la papelera.
+			for (const [origenId, ids] of Object.entries(recargosPreviosPorOrigenPlanilla)) {
+				if (!origenesIncluidos.has(origenId)) {
+					for (const id of ids) recargosEliminar.push(id);
+				}
+			}
+
+			// Recargos manuales que el usuario quitó del form (no aparecen en detallesLimpios).
+			const idsManualesActuales = new Set<string>();
+			for (const d of detallesLimpios) {
+				for (const r of d.recargos || []) {
+					if (r.id) idsManualesActuales.add(r.id);
+				}
+			}
+			for (const id of recargosManualesPreviosIds) {
+				if (!idsManualesActuales.has(id)) recargosEliminar.push(id);
+			}
+		}
+
 		const payload = {
 			id: initialData?.id,
 			conductor_id: conductorSelected?.value,
@@ -1656,7 +1741,8 @@
 			detalles_vehiculos: detallesLimpios,
 			anticipos,
 			conceptos_adicionales,
-			recargos_preview: recargosPreviewIncluidos
+			recargos_preview: recargosPreviewIncluidos,
+			recargos_eliminar: recargosEliminar
 		};
 
 		await onSubmit(payload);
@@ -3382,7 +3468,7 @@
 													>
 												</div>
 											{/each}
-											{#each previewRecargosGruposDedup as grupo (grupo.key)}
+											{#each previewRecargosGruposDedupIncluidos as grupo (grupo.key)}
 												<div class="flex items-center justify-between">
 													<span class="text-[var(--text-secondary)]">
 														{grupo.empresa_nombre}

@@ -1,10 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import {
-		agruparPorMesVehiculoEmpresa,
-		obtenerLiquidacionPorId,
-		obtenerPreviewRecargos
-	} from '$lib/api/nomina';
+	import { obtenerLiquidacionPorId } from '$lib/api/nomina';
 	import type { Liquidacion, FirmaConUrl } from '$lib/types/nomina';
 	import { toast } from 'svelte-sonner';
 	import {
@@ -192,29 +188,24 @@
 		if (!liquidacion || generatingPdf) return;
 		try {
 			generatingPdf = true;
-			let recargosData = null;
-
-			if (liquidacion.conductor_id && liquidacion.periodo_inicio && liquidacion.periodo_fin) {
-				try {
-					const recargosRes = await obtenerPreviewRecargos(
-						liquidacion.conductor_id,
-						liquidacion.periodo_inicio,
-						liquidacion.periodo_fin
-					);
-					recargosData = recargosRes.data;
-				} catch (e) {
-					console.warn('No se pudieron cargar recargos para el PDF:', e);
-				}
-			}
-			const planillasAgrupadas = agruparPorMesVehiculoEmpresa(recargosData.planillas || []);
-			const dataParaPdf = {
-				...recargosData,
-				planillas: planillasAgrupadas
-			};
-
-
-			console.log(dataParaPdf)
-
+			// ⚠️ NO consultamos `obtenerPreviewRecargos()` aquí.
+			// Razón: ese endpoint devuelve los recargos de las planillas crudas
+			// del conductor en el período, IGNORANDO la decisión del usuario
+			// al editar la liquidación (incluir/excluir cada grupo). En
+			// `pdfDesprendible.ts` hay un fallback que, si `item.recargos`
+			// está vacío (caso normal cuando el usuario quitó todos los
+			// recargos), toma el total de las planillas y lo muestra como
+			// "Otros $XXX.XXX" en el desprendible — aunque la liquidación
+			// guardada diga `total_recargos: 0`.
+			//
+			// Para que el PDF refleje exactamente lo que está guardado:
+			//  - `item.recargos` es la fuente de verdad (viene de la BD).
+			//  - `dataParaPdf.planillas = []` evita que entre al fallback
+			//    de planillas y muestre totales viejos.
+			//  - Si en el futuro queremos detalle por día para los recargos
+			//    incluidos, hay que pasar las planillas YA FILTRADAS por los
+			//    origen_planilla_id que están efectivamente en la liquidación.
+			const dataParaPdf = { planillas: [] };
 			await generarPdfDesprendible(liquidacion, firmas, dataParaPdf);
 		} catch (error: any) {
 			console.error('Error generando PDF:', error);
