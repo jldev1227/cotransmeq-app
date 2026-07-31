@@ -209,9 +209,34 @@
 					.filter(Boolean)
 			);
 
+			// Empresas cuyos servicios se pagan como BONO APARTE al
+			// conductor (no como recargo monetario dentro de la liquidación).
+			// Sus planillas se muestran en el PDF en azul con la nota
+			// "Reconocido como bono aparte", listando solo días y horas
+			// (sin desglose HED/RN/HEN ni valor monetario).
+			//
+			// Si en el futuro se agregan más empresas a esta lista, basta
+			// con añadir el nombre aquí. La comparación es case-insensitive
+			// y por coincidencia de substring para tolerar variaciones
+			// como "GEOLAB S.A.S" vs "GEOLAB".
+			const EMPRESAS_BONO_APARTE = ['GEOLAB', 'RED SALUD', 'INGENIERIA ESPECIALIZADA'];
+			const esEmpresaBonoAparte = (p: any): boolean => {
+				const nombre = String(p?.empresa?.nombre || '').toUpperCase();
+				if (!nombre) return false;
+				return EMPRESAS_BONO_APARTE.some((e) => nombre.includes(e.toUpperCase()));
+			};
+
+			console.log('[PDF Desprendible] Iniciando generación', {
+				liquidacionId: liquidacion.id,
+				mostrar_recargos: liquidacion.mostrar_recargos,
+				origenIdsEnLiquidacionSize: origenIdsEnLiquidacion.size,
+				conductor_id: liquidacion.conductor_id,
+				periodo_inicio: liquidacion.periodo_inicio,
+				periodo_fin: liquidacion.periodo_fin
+			});
+
 			if (
 				liquidacion.mostrar_recargos &&
-				origenIdsEnLiquidacion.size > 0 &&
 				liquidacion.conductor_id &&
 				liquidacion.periodo_inicio &&
 				liquidacion.periodo_fin
@@ -232,10 +257,16 @@
 					// solo apunta a UNA. Si solo incluyéramos esa, los días del
 					// desglose no sumarían al TOTAL del recargo.
 					//
-					// Filtramos además por `dias.length > 0` y `total_valor > 0`
-					// para no incluir planillas vacías del mismo grupo
-					// (p. ej. FEPCO tiene 5 planillas en el preview, pero solo
-					// 1 tiene días con recargos).
+					// Filtramos por `dias.length > 0` para no incluir planillas
+					// totalmente vacías del mismo grupo (p. ej. FEPCO tiene 5
+					// planillas en el preview, pero solo 1 tiene días con
+					// recargos o con disponibilidad).
+					//
+					// IMPORTANTE: NO exigimos `total_valor > 0`. Una planilla
+					// puede tener `total_valor = 0` cuando TODOS sus días están
+					// marcados como disponibilidad (esos días no suman al
+					// total). Aún así deben verse en el PDF, resaltados en
+					// rojo con la nota "no reconocidos".
 					const recargoMatch = (r: any, p: any) => {
 						if (!r || !p) return false;
 						const matchVehiculo = p.vehiculo?.id === r.vehiculo_id;
@@ -244,8 +275,7 @@
 						const planillaMes = `${p.año}-${String(p.mes).padStart(2, '0')}`;
 						const matchMes = planillaMes === r.mes;
 						const tieneDias = Array.isArray(p.dias) && p.dias.length > 0;
-						const tieneValor = Number(p.total_valor || 0) > 0;
-						return matchVehiculo && matchEmpresa && matchMes && tieneDias && tieneValor;
+						return matchVehiculo && matchEmpresa && matchMes && tieneDias;
 					};
 
 					const planillasFinales: any[] = [];
@@ -258,8 +288,63 @@
 						for (const p of matches) {
 							if (planillaIdsAgregadas.has(p.planilla_id)) continue;
 							planillaIdsAgregadas.add(p.planilla_id);
+							(p as any)._categoria = 'pagar';
 							planillasFinales.push(p);
 						}
+					}
+
+					// 1.5) Planillas que NO quedaron ancladas a un recargo
+					//      guardado en el paso 1 pero que tienen días que
+					//      el usuario quiere ver en el PDF. Hay tres casos:
+					//
+					//      a) Empresa "bono aparte" (GEOLAB, RED SALUD, etc.):
+					//         sus servicios NO se pagan como recardo dentro
+					//         de la liquidación, sino como bono aparte. Se
+					//         muestran en azul con la nota "Reconocido como
+					//         bono aparte", listando solo días y horas.
+					//
+					//      b) Días con `disponibilidad = true`: el conductor
+					//         tuvo el día marcado como disponibilidad (no
+					//         suma recargo monetario). Se resaltan en rojo
+					//         con la nota "no reconocidos".
+					//
+					//      c) Días con recorrido pero sin recargo: el día
+					//         tiene `total_horas > 0` y `disponibilidad =
+					//         false`, pero no se generaron detalles de
+					//         recargo. El conductor SÍ trabajó, así que el
+					//         día debe verse aunque su valor monetario sea $0.
+					//
+					//      Esto es independiente del total de la liquidación:
+					//      la página 1 del PDF se calcula desde
+					//      `liquidacion.recargos` y no se ve afectada.
+					for (const p of todasLasPlanillas) {
+						if (planillaIdsAgregadas.has(p.planilla_id)) continue;
+						const diasVisibles = Array.isArray(p.dias) ? p.dias : [];
+						if (diasVisibles.length === 0) continue;
+
+						const esBonoAparte = esEmpresaBonoAparte(p);
+
+						const tieneDiasConDisponibilidad = diasVisibles.some(
+							(d: any) => d.disponibilidad
+						);
+						const tieneDiasConRecorridoSinRecargo = diasVisibles.some(
+							(d: any) =>
+								!d.disponibilidad &&
+								Number(d.total_horas) > 0 &&
+								(!Array.isArray(d.recargos) || d.recargos.length === 0)
+						);
+
+						// Bono aparte: SIEMPRE se incluye aunque la planilla no
+						// tenga días con disponibilidad ni recorrido sin recargo
+						// (p. ej. una planilla GEOLAB con todos sus días
+						// teniendo recargo generado).
+						if (!esBonoAparte &&
+							!tieneDiasConDisponibilidad &&
+							!tieneDiasConRecorridoSinRecargo) continue;
+
+						planillaIdsAgregadas.add(p.planilla_id);
+						(p as any)._categoria = esBonoAparte ? 'bono_aparte' : 'no_pagar';
+						planillasFinales.push(p);
 					}
 
 					// 2) Recargos SIN planilla con días (caso típico FEPCO: el
@@ -313,6 +398,13 @@
 					}
 
 					dataParaPdf = { planillas: planillasFinales };
+					console.log('[PDF Desprendible] planillasFinales construido', {
+						total: planillasFinales.length,
+						conDiasDisponibilidad: planillasFinales.filter((p) =>
+							(p.dias || []).some((d: any) => d.disponibilidad)
+						).length,
+						ids: planillasFinales.map((p) => p.planilla_id)
+					});
 				} catch (previewErr) {
 					console.warn(
 						'[PDF] No se pudo obtener preview-recargos para el desglose:',

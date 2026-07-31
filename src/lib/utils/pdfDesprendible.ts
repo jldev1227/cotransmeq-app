@@ -885,15 +885,46 @@ export async function generarPdfDesprendible(
 		// día) para que el TOTAL del PDF cuadre con el del preview.
 		const planillas: any[] = recargosData.planillas;
 
+		// Paleta de colores según la categoría de la planilla:
+		//  - 'pagar'       → naranja (color principal de la marca).
+		//  - 'bono_aparte' → azul (GEOLAB, RED SALUD, etc.; se
+		//                    reconoce como bono aparte, no como recargo).
+		//  - 'no_pagar'    → gris (caso b: días con recorrido sin
+		//                    recardo, o solo disponibilidad).
+		const COLOR_BONO_APARTE = '#1D4ED8'; // blue-700
+		const COLOR_BONO_APARTE_BG = '#DBEAFE'; // blue-100
+		const COLOR_NO_PAGAR = '#6B7280'; // gray-500
+		const COLOR_NO_PAGAR_BG = '#F3F4F6'; // gray-100
+
 		for (const planilla of planillas) {
+			const categoria: string = planilla._categoria || 'pagar';
+			const isBonoAparte = categoria === 'bono_aparte';
+			const isNoPagar = categoria === 'no_pagar';
+
+			const headerColor = isBonoAparte
+				? COLOR_BONO_APARTE
+				: isNoPagar
+					? COLOR_NO_PAGAR
+					: color;
+			const headerBg = isBonoAparte
+				? COLOR_BONO_APARTE
+				: isNoPagar
+					? COLOR_NO_PAGAR
+					: color;
+			const sectionTitle = isBonoAparte
+				? 'BONO APARTE (no remunerado como recargo)'
+				: isNoPagar
+					? 'DÍAS LABORALES (sin recargo generado)'
+					: 'HORAS EXTRAS Y RECARGOS';
+
 			// Page break before each planilla group
 			content.push({ text: '', pageBreak: 'before' as const });
 
 			// Title
 			content.push({
-				text: 'HORAS EXTRAS Y RECARGOS',
+				text: sectionTitle,
 				bold: true,
-				color,
+				color: headerColor,
 				fontSize: 13,
 				alignment: 'center' as const,
 				margin: [0, 0, 0, 10]
@@ -912,7 +943,7 @@ export async function generarPdfDesprendible(
 					margin: [0, 0, 0, 5]
 				});
 			}
-			if (hayDisponibles) {
+			if (hayDisponibles && !isBonoAparte) {
 				content.push({
 					text: 'Aviso: Los días marcados como disponibilidad no son reconocidos. Se muestran en rojo y no suman a los totales.',
 					fontSize: 9,
@@ -967,7 +998,7 @@ export async function generarPdfDesprendible(
 
 			content.push({
 				stack: headerRows,
-				fillColor: color,
+				fillColor: headerBg,
 				margin: [0, 5, 0, 0]
 				// Wrap in a table to get the green background
 			});
@@ -981,7 +1012,7 @@ export async function generarPdfDesprendible(
 						[
 							{
 								stack: headerRows,
-								fillColor: color,
+								fillColor: headerBg,
 								margin: [4, 4, 4, 4]
 							}
 						]
@@ -1010,17 +1041,30 @@ export async function generarPdfDesprendible(
 									{
 										text: [
 											{ text: 'EMPRESA: ', bold: true, fontSize: 10 },
-											{ text: planilla.empresa?.nombre || 'N/A', fontSize: 10 }
+											{ text: planilla.empresa?.nombre || 'N/A', fontSize: 10 },
+											...(isBonoAparte
+												? [
+														{
+															text: '  [BONO APARTE]',
+															bold: true,
+															fontSize: 9,
+															color: '#FFFFFF',
+															// Lo pintamos luego con un stack badge
+														}
+													]
+												: [])
 										]
 									},
 									{
-										text: `Valor/Hora Base: ${formatCurrency(valorHoraBase)}`,
+										text: isBonoAparte
+											? `Reconocido como bono aparte — valor/hora base no aplica a esta planilla en el desprendible.`
+											: `Valor/Hora Base: ${formatCurrency(valorHoraBase)}`,
 										fontSize: 10,
-										color: '#666',
+										color: isBonoAparte ? COLOR_BONO_APARTE : '#666',
 										margin: [0, 2, 0, 0]
 									}
 								],
-								fillColor: '#f9f9f9',
+								fillColor: isBonoAparte ? COLOR_BONO_APARTE_BG : '#f9f9f9',
 								margin: [4, 4, 4, 4]
 							}
 						]
@@ -1039,12 +1083,18 @@ export async function generarPdfDesprendible(
 
 			// Días laborales table
 			const dias: any[] = planilla.dias || [];
-			const headers = ['DÍA', 'HORARIO', 'HORAS', 'HED', 'RN', 'HEN', 'RD', 'RNDF', 'HEFD', 'HEFN'];
+			// Para planillas de "bono aparte" mostramos solo 3 columnas
+			// (DÍA, HORARIO, HORAS) — sin desglose HED/RN/HEN/etc.
+			const allHeaders = ['DÍA', 'HORARIO', 'HORAS', 'HED', 'RN', 'HEN', 'RD', 'RNDF', 'HEFD', 'HEFN'];
+			const headers = isBonoAparte ? allHeaders.slice(0, 3) : allHeaders;
+			const tableWidths = isBonoAparte
+				? Array(3).fill('*')
+				: Array(allHeaders.length).fill('*');
 			const headerRow = headers.map((h) => ({
 				text: h,
 				bold: true,
 				fontSize: 8,
-				color,
+				color: headerColor,
 				alignment: 'center' as const,
 				margin: [0, 3, 0, 3]
 			}));
@@ -1052,14 +1102,25 @@ export async function generarPdfDesprendible(
 			const diasRows = dias.map((dia: any, idx: number) => {
 				const esDisponible = dia.disponibilidad;
 				const esEspecial = dia.es_festivo || dia.es_domingo;
-				const bgColor = esDisponible
-					? '#FEE2E2'
-					: esEspecial
-						? '#FEF3C7'
-						: idx % 2 === 0
-							? '#ffffff'
-							: '#f9f9f9';
-				const textColor = esDisponible ? '#B91C1C' : esEspecial ? '#92400E' : '#333333';
+				// Para "bono aparte" usamos un fondo azul claro para todas
+				// las filas, manteniendo la legibilidad pero reforzando
+				// visualmente que NO es un recargo a pagar.
+				const bgColor = isBonoAparte
+					? COLOR_BONO_APARTE_BG
+					: esDisponible
+						? '#FEE2E2'
+						: esEspecial
+							? '#FEF3C7'
+							: idx % 2 === 0
+								? '#ffffff'
+								: '#f9f9f9';
+				const textColor = isBonoAparte
+					? '#1E3A8A' // blue-900
+					: esDisponible
+						? '#B91C1C'
+						: esEspecial
+							? '#92400E'
+							: '#333333';
 
 				// Extract recargos values from dia.recargos array
 				const getRecargo = (codigo: string) => {
@@ -1095,13 +1156,19 @@ export async function generarPdfDesprendible(
 
 				const fmtVal = (v: number) => (v !== 0 ? Number(v).toFixed(2) : '-');
 
-				return [
+				const baseCols = [
 					{ text: dia.dia, ...cellStyle },
 					{
 						text: `${formatHora(dia.hora_inicio)}-${formatHora(dia.hora_fin)}`,
 						...cellStyle
 					},
-					{ text: Number(dia.total_horas || 0).toFixed(2), ...cellStyle },
+					{ text: Number(dia.total_horas || 0).toFixed(2), ...cellStyle }
+				];
+
+				if (isBonoAparte) return baseCols;
+
+				return [
+					...baseCols,
 					{ text: fmtVal(hed), ...cellStyle },
 					{ text: fmtVal(rn), ...cellStyle },
 					{ text: fmtVal(hen), ...cellStyle },
@@ -1112,11 +1179,20 @@ export async function generarPdfDesprendible(
 				];
 			});
 
-			// Totals row
-			const totHoras = dias
-				.filter((d: any) => !d.disponibilidad)
-				.reduce((s: number, d: any) => s + (d.total_horas || 0), 0);
-			const totDias = dias.filter((d: any) => !d.disponibilidad).length;
+			// Totals row. Para planillas "bono aparte" el total refleja
+			// TODO el trabajo realizado (incluyendo días con
+			// disponibilidad), porque la planilla es informativa, no
+			// remunerada como recargo. Para las demás planillas se
+			// excluyen los días con disponibilidad del total (mismo
+			// criterio que el cálculo de recargos monetarios).
+			const diasParaTotal = isBonoAparte
+				? dias
+				: dias.filter((d: any) => !d.disponibilidad);
+			const totHoras = diasParaTotal.reduce(
+				(s: number, d: any) => s + (d.total_horas || 0),
+				0
+			);
+			const totDias = diasParaTotal.length;
 
 			const getTotal = (codigo: string) => {
 				return dias
@@ -1127,20 +1203,20 @@ export async function generarPdfDesprendible(
 					}, 0);
 			};
 
-			const totalesRow = [
+			const totalesRowBase = [
 				{
 					text: totDias.toString(),
 					bold: true,
 					fontSize: 8,
 					alignment: 'center' as const,
-					fillColor: colorBg,
+					fillColor: isBonoAparte ? COLOR_BONO_APARTE_BG : colorBg,
 					margin: [0, 2, 0, 2]
 				},
 				{
 					text: '-',
 					fontSize: 8,
 					alignment: 'center' as const,
-					fillColor: colorBg,
+					fillColor: isBonoAparte ? COLOR_BONO_APARTE_BG : colorBg,
 					margin: [0, 2, 0, 2]
 				},
 				{
@@ -1148,17 +1224,18 @@ export async function generarPdfDesprendible(
 					bold: true,
 					fontSize: 8,
 					alignment: 'center' as const,
-					fillColor: colorBg,
+					fillColor: isBonoAparte ? COLOR_BONO_APARTE_BG : colorBg,
 					margin: [0, 2, 0, 2]
-				},
-				...[
-					getTotal('HED'),
-					getTotal('RN'),
-					getTotal('HEN'),
-					getTotal('RD'),
+				}
+			];
+			const totalesRowRecargos = [
+				getTotal('HED'),
+				getTotal('RN'),
+				getTotal('HEN'),
+				getTotal('RD'),
 					getTotal('RNDF'),
 					getTotal('HEFD'),
-					getTotal('HEFN')
+					getTotal('HEFN'),
 				].map((v) => ({
 					text: v ? v.toFixed(2) : '0.00',
 					bold: true,
@@ -1166,13 +1243,16 @@ export async function generarPdfDesprendible(
 					alignment: 'center' as const,
 					fillColor: colorBg,
 					margin: [0, 2, 0, 2]
-				}))
-			];
+				}));
+
+			const totalesRow = isBonoAparte
+				? totalesRowBase
+				: [...totalesRowBase, ...totalesRowRecargos];
 
 			content.push({
 				table: {
 					headerRows: 1,
-					widths: Array(10).fill('*'),
+					widths: tableWidths,
 					body: [headerRow, ...diasRows, totalesRow]
 				},
 				layout: {
@@ -1187,6 +1267,48 @@ export async function generarPdfDesprendible(
 					paddingBottom: () => 1
 				}
 			});
+
+			// Para planillas "bono aparte" omitimos el desglose por tipo
+			// y la barra TOTAL: el valor monetario se reconoce como bono
+			// aparte, no como recargo dentro de esta planilla.
+			if (isBonoAparte) {
+				content.push({
+					table: {
+						widths: ['*'],
+						body: [
+							[
+								{
+									text: [
+										{
+											text: `${totDias} día(s) trabajado(s) · ${totHoras.toFixed(2)} horas  `,
+											bold: true,
+											fontSize: 10,
+											color: COLOR_BONO_APARTE
+										},
+										{
+											text: 'Reconocido como bono aparte (no remunerado como recargo en este desprendible).',
+											fontSize: 9,
+											color: '#1E3A8A'
+										}
+									],
+									fillColor: COLOR_BONO_APARTE_BG,
+									margin: [6, 6, 6, 6]
+								}
+							]
+						]
+					},
+					layout: {
+						hLineWidth: () => 0,
+						vLineWidth: () => 0,
+						paddingLeft: () => 0,
+						paddingRight: () => 0,
+						paddingTop: () => 0,
+						paddingBottom: () => 0
+					},
+					margin: [0, 6, 0, 0]
+				});
+				continue; // saltamos el desglose por tipo y la barra TOTAL
+			}
 
 			// TOTALES CONSOLIDADOS header
 			content.push({
@@ -1413,6 +1535,70 @@ export async function generarPdfDesprendible(
 						paddingBottom: () => 0
 					}
 				});
+			} else {
+				// Planilla con días pero `total_valor = 0`. Hay dos casos
+				// que debemos explicar al usuario para que la sección
+				// "TOTALES CONSOLIDADOS" no quede vacía:
+				//
+				//   a) Todos los días están marcados como disponibilidad.
+				//      Por política no se reconocen y no suman a los
+				//      recargos.
+				//
+				//   b) Hay días con recorrido (total_horas > 0) pero sin
+				//      detalles de recargo generados (p. ej. porque se
+				//      eliminaron manualmente o el cálculo automático no
+				//      detectó horas extras). El conductor SÍ trabajó pero
+				//      el valor monetario del día es $0.
+				const diasDisponibles = (dias || []).filter((d: any) => d.disponibilidad)
+					.length;
+				const diasConRecorridoSinRecargo = (dias || []).filter(
+					(d: any) =>
+						!d.disponibilidad &&
+						Number(d.total_horas) > 0 &&
+						(!Array.isArray(d.recargos) || d.recargos.length === 0)
+				).length;
+
+				if (diasDisponibles > 0 || diasConRecorridoSinRecargo > 0) {
+					const partes: any[] = [
+						{ text: 'TOTAL: $0  ', bold: true, fontSize: 10, color: '#B91C1C' }
+					];
+					if (diasDisponibles > 0) {
+						partes.push({
+							text: `${diasDisponibles} día(s) marcado(s) como disponibilidad (no reconocidos). `,
+							fontSize: 9,
+							color: '#7F1D1D'
+						});
+					}
+					if (diasConRecorridoSinRecargo > 0) {
+						partes.push({
+							text: `${diasConRecorridoSinRecargo} día(s) con recorrido pero sin recargo generado ($0). `,
+							fontSize: 9,
+							color: '#7F1D1D'
+						});
+					}
+					content.push({
+						table: {
+							widths: ['*'],
+							body: [
+								[
+									{
+										text: partes,
+										fillColor: '#FEE2E2',
+										margin: [6, 6, 6, 6]
+									}
+								]
+							]
+						},
+						layout: {
+							hLineWidth: () => 0,
+							vLineWidth: () => 0,
+							paddingLeft: () => 0,
+							paddingRight: () => 0,
+							paddingTop: () => 0,
+							paddingBottom: () => 0
+						}
+					});
+				}
 			}
 
 			// Firma on recargos page
