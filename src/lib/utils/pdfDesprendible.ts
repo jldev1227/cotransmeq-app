@@ -1179,15 +1179,19 @@ export async function generarPdfDesprendible(
 				];
 			});
 
-			// Totals row. Para planillas "bono aparte" el total refleja
-			// TODO el trabajo realizado (incluyendo días con
-			// disponibilidad), porque la planilla es informativa, no
-			// remunerada como recargo. Para las demás planillas se
-			// excluyen los días con disponibilidad del total (mismo
-			// criterio que el cálculo de recargos monetarios).
-			const diasParaTotal = isBonoAparte
-				? dias
-				: dias.filter((d: any) => !d.disponibilidad);
+			// Totals row. Para planillas "bono aparte" o "no pagar" (caso
+			// informativo: días con disponibilidad o recorrido sin
+			// recargo) el total refleja TODO el trabajo realizado
+			// (incluyendo días con disponibilidad), porque la planilla es
+			// informativa y el usuario quiere ver el total real. Solo
+			// para 'pagar' (recargos efectivamente remunerados)
+			// excluimos la disponibilidad del total — mismo criterio que
+			// el cálculo de recargos monetarios.
+			const excluirDisponibilidadDelTotal =
+				!isBonoAparte && !isNoPagar;
+			const diasParaTotal = excluirDisponibilidadDelTotal
+				? dias.filter((d: any) => !d.disponibilidad)
+				: dias;
 			const totHoras = diasParaTotal.reduce(
 				(s: number, d: any) => s + (d.total_horas || 0),
 				0
