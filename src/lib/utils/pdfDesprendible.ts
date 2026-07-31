@@ -163,10 +163,21 @@ export async function generarPdfDesprendible(
 	const disponibilidadVal = Number(safeValue(item.disponibilidad, 0));
 
 	// Recargos agrupados por empresa.
-	// Fuente: item.recargos (tabla `recargos` con ediciones manuales aplicadas).
-	// Deduplicamos por `id` porque el include de Prisma en la query de la
-	// liquidación arrastra joins 1:N (dias_laborales_planillas /
+	// Fuente ÚNICA: item.recargos (tabla `recargos` con ediciones manuales
+	// aplicadas). Deduplicamos por `id` porque el include de Prisma en la
+	// query de la liquidación arrastra joins 1:N (dias_laborales_planillas /
 	// detalles_recargos_dias) que multiplican las filas del recargo.
+	//
+	// IMPORTANTE: NO hay fallback a recargosData.planillas. Ese fallback
+	// existía para liquidaciones muy viejas donde los recargos automáticos
+	// aún no se persistían en la tabla `recargos`, pero hoy siempre se
+	// guardan (via `recargos_preview` en `crear` y `actualizar` del backend).
+	// El fallback era la raíz de un bug crítico: cuando el usuario desmarcaba
+	// todos los recargos del preview y guardaba, `item.recargos` quedaba
+	// vacío y el fallback sumaba TODAS las planillas del live preview
+	// (incluyendo las desmarcadas) → aparecían en la sumatoria de "OTROS"
+	// del PDF. Coincide con la liquidación de Transmeralda donde el
+	// `total_recargos` correcto (0) se duplicaba con recargos desmarcados.
 	let totalRecargosParex = 0;
 	let totalRecargosGeopark = 0;
 	let totalRecargosOtros = 0;
@@ -184,25 +195,18 @@ export async function generarPdfDesprendible(
 
 		for (const r of unicos.values()) {
 			const valor = Number(r.valor || 0);
+			// Respetar la marca "incluir" del preview: si el usuario desmarcó
+			// el recargo en la UI (incluir === false), excluirlo de la
+			// sumatoria de "OTROS" / PAREX / GEOPARK del desprendible. Sin
+			// este filtro, los recargos que el usuario decidió NO incluir
+			// en la liquidación seguirían apareciendo en el PDF.
+			if (r.incluir === false) continue;
 			if (r.empresa_id === PAREX_EMPRESA_ID) {
 				totalRecargosParex += valor;
 			} else if (r.empresa_id === GEOPARK_EMPRESA_ID) {
 				totalRecargosGeopark += valor;
 			} else {
 				totalRecargosOtros += valor;
-			}
-		}
-	} else if (recargosData?.planillas && recargosData.planillas.length > 0) {
-		// Fallback: si no hay item.recargos, usamos las planillas (modo legacy).
-		for (const planilla of recargosData.planillas) {
-			const empresaId = planilla.empresa?.id;
-			const planillaTotal = Number(planilla.total_valor || 0);
-			if (empresaId === PAREX_EMPRESA_ID) {
-				totalRecargosParex += planillaTotal;
-			} else if (empresaId === GEOPARK_EMPRESA_ID) {
-				totalRecargosGeopark += planillaTotal;
-			} else {
-				totalRecargosOtros += planillaTotal;
 			}
 		}
 	}
@@ -1179,15 +1183,19 @@ export async function generarPdfDesprendible(
 				];
 			});
 
-			// Totals row. Para planillas "bono aparte" el total refleja
-			// TODO el trabajo realizado (incluyendo días con
-			// disponibilidad), porque la planilla es informativa, no
-			// remunerada como recargo. Para las demás planillas se
-			// excluyen los días con disponibilidad del total (mismo
-			// criterio que el cálculo de recargos monetarios).
-			const diasParaTotal = isBonoAparte
-				? dias
-				: dias.filter((d: any) => !d.disponibilidad);
+			// Totals row. Para planillas "bono aparte" o "no pagar" (caso
+			// informativo: días con disponibilidad o recorrido sin
+			// recargo) el total refleja TODO el trabajo realizado
+			// (incluyendo días con disponibilidad), porque la planilla es
+			// informativa y el usuario quiere ver el total real. Solo
+			// para 'pagar' (recargos efectivamente remunerados)
+			// excluimos la disponibilidad del total — mismo criterio que
+			// el cálculo de recargos monetarios.
+			const excluirDisponibilidadDelTotal =
+				!isBonoAparte && !isNoPagar;
+			const diasParaTotal = excluirDisponibilidadDelTotal
+				? dias.filter((d: any) => !d.disponibilidad)
+				: dias;
 			const totHoras = diasParaTotal.reduce(
 				(s: number, d: any) => s + (d.total_horas || 0),
 				0

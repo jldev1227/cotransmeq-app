@@ -161,7 +161,7 @@
 				<div class="mobile-brand">
 					<img
 						class="mobile-logo"
-						src="/assets/logo_cotransmeq-264.webp"
+						src="/assets/logo_nombre.webp"
 						alt="Cotransmeq"
 						width="120"
 						height="40"
@@ -641,7 +641,7 @@
 		margin-bottom: 2rem;
 	}
 	.mobile-logo {
-		height: 32px;
+		height: 72px;
 		width: auto;
 		display: block;
 	}
