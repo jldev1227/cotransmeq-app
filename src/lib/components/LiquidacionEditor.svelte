@@ -3717,7 +3717,7 @@
 						</div>
 						<div class="dh-super">
 							<img
-								src="https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.webp"
+								src="https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.png"
 								alt="Supertransporte"
 							/>
 						</div>
