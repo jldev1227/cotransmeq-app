@@ -251,10 +251,43 @@
     generandoPdf = id;
     try {
       const res = await portalFetch(`/conductor-portal/desprendibles/${id}`);
-      const { liquidacion, recargos } = res.data;
-      // No cargar firmas desde S3 en el portal del conductor (evita CORS y requests innecesarias)
+      const { liquidacion, dataParaPdf, firma } = res.data;
+
+      // El backend ya devuelve `dataParaPdf` con las planillas
+      // clasificadas (`_categoria`: 'pagar' | 'bono_aparte' | 'no_pagar'),
+      // exactamente la misma estructura que arma el modal del dashboard
+      // en su frontend. GEOLAB, RED SALUD e INGENIERIA ESPECIALIZADA
+      // quedan como 'bono_aparte' (sin valor monetario en el total).
+      //
+      // Si por alguna razón el backend no lo construyó (ej. error al
+      // obtener el preview), caemos a un `dataParaPdf` vacío para no
+      // romper la generación de la página 1 del desprendible.
+      const dataParaPdfSafe: { planillas: any[] } =
+        dataParaPdf && Array.isArray(dataParaPdf.planillas)
+          ? dataParaPdf
+          : { planillas: [] };
+
+      // Convertir la firma del portal al formato `FirmaConUrl[]` que
+      // espera `pdfDesprendible.ts` (necesita `presignedUrl` y
+      // `fecha_firma`).
+      const firmas: any[] =
+        firma && firma.presignedUrl
+          ? [
+              {
+                id: '',
+                liquidacion_id: liquidacion.id,
+                conductor_id: liquidacion.conductor_id,
+                firma_url: '',
+                firma_s3_key: '',
+                fecha_firma: firma.fecha_firma || new Date().toISOString(),
+                estado: 'firmado',
+                presignedUrl: firma.presignedUrl
+              }
+            ]
+          : [];
+
       const { generarPdfDesprendible } = await import('$lib/utils/pdfDesprendible');
-      await generarPdfDesprendible(liquidacion, [], recargos);
+      await generarPdfDesprendible(liquidacion, firmas, dataParaPdfSafe);
     } catch (err: any) {
       if (err.status === 401) {
         portalSession.logout();
