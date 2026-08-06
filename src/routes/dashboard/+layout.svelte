@@ -145,7 +145,7 @@
 			<!-- Header -->
 			<Header
 				userName={user?.nombre || 'Usuario'}
-				userEmail={user?.correo || 'usuario@transmeralda.com'}
+				userEmail={user?.correo || 'usuario@cotransmeq.com'}
 				userRole={user?.area && Array.isArray(user.area) && user.area.length > 0 ? user.area.map((a: string) => AREA_LABELS[a as Area] || a).join(', ') : 'Usuario'}
 				isCollapsed={$sidebarStore}
 				showSessionTimer={false}

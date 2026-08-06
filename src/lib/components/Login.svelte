@@ -74,7 +74,7 @@
 						id="email"
 						bind:value={email}
 						on:keydown={handleKeydown}
-						placeholder="usuario@transmeralda.com"
+						placeholder="usuario@cotransmeq.com"
 						class="input-glow apple-transition w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-white placeholder-orange-300/50 focus:border-orange-400 focus:bg-black/30"
 						required
 					/>
