@@ -561,10 +561,24 @@
 	$: isAdmin = userAreas.includes('administracion');
 	$: canSeeTerceros = isAdmin || userAreas.includes('facturacion');
 
+	// ─── CMD/CTRL + P → genera PDF (intercepta el atajo nativo roto) ────
+	// El atajo nativo del navegador dispara window.print() sobre el DOM vivo
+	// de la app, que produce hojas en blanco por los wrappers del layout.
+	// Interceptamos y redirigimos al endpoint que genera el PDF correcto.
+	function handlePrintShortcut(e: KeyboardEvent) {
+		if (!e.ctrlKey && !e.metaKey) return;
+		if (e.altKey || e.shiftKey) return; // no pisar Ctrl+Shift+P, etc.
+		if (e.key !== 'p' && e.key !== 'P') return;
+		e.preventDefault();
+		// Disparar el mismo flujo que el botón del modal (respeta printSheets)
+		executePrint();
+	}
+
 	// ─── MOUNT ──────────────────────────────────────────────────
 	onMount(async () => {
 		window.addEventListener('beforeunload', handleBeforeUnload);
 		window.addEventListener('wheel', handleWheel, { passive: false });
+		window.addEventListener('keydown', handlePrintShortcut);
 
 		// Initialize viewport tracking
 		updateViewport();
@@ -607,6 +621,8 @@
 			window.removeEventListener('beforeunload', handleBeforeUnload);
 		if (typeof window !== 'undefined') window.removeEventListener('resize', updateViewport);
 		if (typeof window !== 'undefined') window.removeEventListener('wheel', handleWheel);
+		if (typeof window !== 'undefined')
+			window.removeEventListener('keydown', handlePrintShortcut);
 		if (resizeObserver) resizeObserver.disconnect();
 		if (draftTimer) clearTimeout(draftTimer);
 	});
@@ -1749,7 +1765,14 @@
 				.pdf-wrap { position: static !important; inset: auto !important; z-index: auto !important; display: block !important; overflow: visible !important; background: #fff !important; }
 				.pdf-body { padding: 0 !important; overflow: visible !important; display: block !important; background: #fff !important; }
 				.pdf-body-landscape, .pdf-body-portrait { overflow: visible !important; }
-				.page, .page-landscape, .page-liqq-portrait { transform: none !important; box-shadow: none !important; margin: 0 !important; border-radius: 0 !important; max-width: 100% !important; }
+				.page, .page-landscape, .page-liqq-portrait {
+					transform: none !important;
+					box-shadow: none !important;
+					margin: 0 !important;
+					border-radius: 0 !important;
+					width: 100% !important;
+					max-width: 100% !important;
+				}
 				.print-sheet { page-break-after: always; break-after: page; }
 				.print-sheet:last-child { page-break-after: avoid !important; break-after: avoid !important; }
 				.no-print { display: none !important; }
@@ -1779,11 +1802,12 @@
 		// que el iframe se cree en el mismo tick del gesto del usuario, si no
 		// el popup blocker puede quejarse al disparar .print())
 		(async () => {
-			// Montar las hojas seleccionadas en el DOM vivo para poder clonarlas
+			// 1) Montar las hojas seleccionadas en el DOM vivo para poder clonarlas
 			isPrinting = true;
 			await tick();
 			await waitForSheetImages();
 
+			// 2) Construir el HTML standalone
 			let html = '';
 			try {
 				html = await buildPrintableHtml();
@@ -1792,56 +1816,62 @@
 				console.error('Error construyendo HTML para impresión:', err);
 				isPrinting = false;
 				pdfLoading = false;
-				// Fallback al flujo anterior (in-app print con wrappers reseteados)
 				printWithWrapperReset();
 				return;
 			}
 
-			// Iframe off-screen con el documento aislado
-			const iframe = document.createElement('iframe');
-			iframe.setAttribute('aria-hidden', 'true');
-			iframe.style.position = 'fixed';
-			iframe.style.right = '0';
-			iframe.style.bottom = '0';
-			iframe.style.width = '0';
-			iframe.style.height = '0';
-			iframe.style.border = '0';
-			document.body.appendChild(iframe);
+			// 3) Resetear isPrinting ANTES de imprimir → la preview live vuelve
+			//    inmediatamente al sheet único (previewPage), sin importar lo
+			//    que pase con el iframe ni con los eventos del print dialog.
+			//    Esto evita que se quede el preview mostrando las 4 hojas
+			//    apiladas/recortadas si afterprint no dispara.
+			isPrinting = false;
 
-			const cleanup = () => {
-				try {
-					iframe.remove();
-				} catch {}
-				isPrinting = false;
+			// 4) Generar el PDF server-side vía Puppeteer (patrón probado en
+			//    PreviewTerceroPDF). Se acabaron las fragilidades del iframe +
+			//    contentWindow.print() (diálogo interactivo, onafterprint poco
+			//    fiable, viewport del iframe). El backend renderiza con
+			//    Puppeteer, que respeta @page liqPortrait / @page liqLandscape
+			//    gracias a preferCSSPageSize → Hoja 1 sale en Carta vertical y
+			//    Hojas 2-4 en A4 horizontal en el mismo PDF.
+			try {
+				const API_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:4000';
+				const token = localStorage.getItem('transmeralda_token') || '';
+				const filename = `liquidacion_${hdr.consecutivo || editingId || Date.now()}`;
+
+				const res = await fetch(`${API_URL}/api/pdf/from-html`, {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						...(token ? { Authorization: `Bearer ${token}` } : {})
+					},
+					body: JSON.stringify({
+						html,
+						landscape: true,
+						marginMm: 0,
+						format: 'A4',
+						filename,
+						preferCSSPageSize: true
+					})
+				});
+
+				if (!res.ok) {
+					const err = await res.json().catch(() => ({ error: res.statusText }));
+					throw new Error(err.error || 'Error generando PDF');
+				}
+
+				const blob = await res.blob();
+				const url = URL.createObjectURL(blob);
+				window.open(url, '_blank');
+				setTimeout(() => URL.revokeObjectURL(url), 60_000);
 				pdfLoading = false;
-			};
-
-			iframe.addEventListener('load', () => {
-				try {
-					iframe.contentWindow?.focus();
-					// beforeprint/afterprint del iframe: capturar para limpiar
-					const win = iframe.contentWindow as Window & {
-						onafterprint?: () => void;
-					};
-					if (win) win.onafterprint = cleanup;
-					iframe.contentWindow?.print();
-				} catch (err) {
-					console.error('Error disparando print en el iframe:', err);
-					cleanup();
-					printWithWrapperReset();
-				}
-			});
-
-			iframe.srcdoc = html;
-
-			// Safety: si el iframe no carga en 10s o el diálogo no vuelve en 5min,
-			// limpiar igual para no dejar el estado colgado
-			setTimeout(() => {
-				if (document.body.contains(iframe)) {
-					// todavía no disparó afterprint → asume fallo
-					cleanup();
-				}
-			}, 300_000);
+			} catch (err) {
+				console.error('Error generando PDF server-side, usando fallback in-app:', err);
+				pdfLoading = false;
+				// Fallback al flujo in-app con wrappers reseteados (puede tener
+				// blank pages, pero al menos algo intenta)
+				printWithWrapperReset();
+			}
 		})();
 	}
 
@@ -4749,6 +4779,17 @@
 	</div>
 {/if}
 
+<!-- ═══ OVERLAY: GENERANDO PDF (visible mientras el request al endpoint está en vuelo) ═══ -->
+{#if pdfLoading}
+	<div class="pdf-generating-overlay" role="status" aria-live="polite">
+		<div class="pdf-generating-card">
+			<div class="pdf-generating-spinner" aria-hidden="true"></div>
+			<div class="pdf-generating-title">Generando PDF…</div>
+			<div class="pdf-generating-sub">Esto puede tardar unos segundos</div>
+		</div>
+	</div>
+{/if}
+
 <!-- ═══ HISTORIAL / TRAZABILIDAD MODAL ═══ -->
 {#if historialModalOpen}
 	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
@@ -7617,6 +7658,74 @@
 		cursor: not-allowed;
 		transform: none;
 		box-shadow: none;
+	}
+
+	/* ─ GENERATING PDF OVERLAY (request en vuelo al endpoint) ─ */
+	.pdf-generating-overlay {
+		position: fixed;
+		inset: 0;
+		z-index: 9500;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: rgba(15, 31, 26, 0.45);
+		backdrop-filter: blur(6px) saturate(120%);
+		-webkit-backdrop-filter: blur(6px) saturate(120%);
+		animation: pdfGenFadeIn 0.18s ease-out;
+	}
+	@keyframes pdfGenFadeIn {
+		from {
+			opacity: 0;
+		}
+		to {
+			opacity: 1;
+		}
+	}
+	.pdf-generating-card {
+		background: #fff;
+		border-radius: 18px;
+		padding: 28px 36px;
+		min-width: 280px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 14px;
+		box-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
+		animation: pdfGenSlide 0.22s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+	}
+	@keyframes pdfGenSlide {
+		from {
+			opacity: 0;
+			transform: scale(0.94) translateY(8px);
+		}
+		to {
+			opacity: 1;
+			transform: scale(1) translateY(0);
+		}
+	}
+	.pdf-generating-spinner {
+		width: 44px;
+		height: 44px;
+		border-radius: 50%;
+		border: 3.5px solid #e2e8f0;
+		border-top-color: #0f4025;
+		animation: pdfGenSpin 0.85s linear infinite;
+	}
+	@keyframes pdfGenSpin {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+	.pdf-generating-title {
+		font-size: 16px;
+		font-weight: 800;
+		color: #0f1f1a;
+		letter-spacing: -0.01em;
+	}
+	.pdf-generating-sub {
+		font-size: 12.5px;
+		color: #6b6b6b;
+		font-weight: 500;
 	}
 
 	/* ─ SUCCESS ANIMATION ─ */
