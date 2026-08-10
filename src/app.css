@@ -1792,20 +1792,38 @@ html {
 
 /* ═══ GLOBAL PRINT STYLES ═══ */
 
-/* Page size defaults — MUST be global, Svelte scopes break @page */
+/* Page size defaults — MUST be global, Svelte scopes break @page.
+   Default portrait: evita hoja en blanco landscape al inicio.
+   Las hojas landscape usan named pages (@page liqLandscape). */
 @page {
-	size: A4 landscape;
-	margin: 6mm;
+	size: Letter portrait;
+	margin: 0;
 }
 
 @media print {
+	/* ── Default page: portrait (evita hoja en blanco landscape al inicio) ── */
+	@page {
+		size: Letter portrait;
+		margin: 0;
+	}
+
 	/* Hide all dashboard chrome */
 	body {
 		margin: 0 !important;
 		padding: 0 !important;
 		background: #fff !important;
+		height: auto !important;
+		min-height: 0 !important;
+		overflow: visible !important;
 	}
 	body > div {
+		overflow: visible !important;
+	}
+	html {
+		margin: 0 !important;
+		padding: 0 !important;
+		height: auto !important;
+		min-height: 0 !important;
 		overflow: visible !important;
 	}
 
@@ -1843,6 +1861,8 @@ html {
 		padding: 0 !important;
 		overflow: visible !important;
 		width: 100% !important;
+		height: auto !important;
+		min-height: 0 !important;
 	}
 
 	/* Parent containers should allow full-width printing */
@@ -1850,6 +1870,22 @@ html {
 	[class*='min-h-screen'] {
 		display: block !important;
 		overflow: visible !important;
+		height: auto !important;
+		min-height: 0 !important;
+	}
+
+	/* ── Reset workbook-page wrapper (Liquidación editor) ──
+	   Este wrapper tiene min-height: 100vh y display: flex que
+	   causan una hoja en blanco al inicio al imprimir. */
+	.workbook-page,
+	[class*='workbook-page'] {
+		margin: 0 !important;
+		padding: 0 !important;
+		overflow: visible !important;
+		height: auto !important;
+		min-height: 0 !important;
+		display: block !important;
+		width: 100% !important;
 	}
 
 	/* Apple transitions off for print */

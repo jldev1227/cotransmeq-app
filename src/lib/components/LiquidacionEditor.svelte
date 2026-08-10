@@ -219,6 +219,7 @@
 	// ─── PRINT STATE ────────────────────────────────────────────
 	let printModalOpen = false;
 	let isPrinting = false;
+	let pdfLoading = false;
 	let printSheets = { liquidacion: true, recargos: true, liquidador: true, terceros: true };
 
 	// ─── ZOOM STATE (persisted in sessionStorage) ──────────────
@@ -1183,10 +1184,37 @@
 		}
 	];
 
+	// ─── TIPOS DE RECARGO VIGENTES (dedupe) ────────────────────────
+	// El catálogo puede tener múltiples versiones del mismo código (p.ej.
+	// HEFD al 105% y al 115%) por cambios normativos a lo largo del tiempo.
+	// Para el liquidador (HOJA 3) usamos SOLO la versión más vigente, es
+	// decir aquella con el mayor porcentaje por cada código.
+	$: tiposRecargoVigentes = (() => {
+		const map = new Map<string, TipoRecargo>();
+		for (const t of tiposRecargo) {
+			const existing = map.get(t.codigo);
+			if (!existing || t.porcentaje > existing.porcentaje) {
+				map.set(t.codigo, t);
+			}
+		}
+		return Array.from(map.values()).sort((a, b) => a.orden_calculo - b.orden_calculo);
+	})();
+
+	$: fallbackTiposVigentes = (() => {
+		const map = new Map<string, (typeof fallbackTipos)[number]>();
+		for (const t of fallbackTipos) {
+			const existing = map.get(t.codigo);
+			if (!existing || t.porcentaje > existing.porcentaje) {
+				map.set(t.codigo, t);
+			}
+		}
+		return Array.from(map.values());
+	})();
+
 	$: liqLineas = (() => {
 		const vh = valorHora;
 		const t = recargosTotals;
-		const tipos = tiposRecargo.length > 0 ? tiposRecargo : fallbackTipos;
+		const tipos = tiposRecargoVigentes.length > 0 ? tiposRecargoVigentes : fallbackTiposVigentes;
 		const lineas: { desc: string; pct: string; vrUnit: number; horas: number; total: number }[] = [
 			{
 				desc: 'CONDUCTOR ADICIONAL',
@@ -1612,17 +1640,252 @@
 		printModalOpen = true;
 	}
 
+	// ─── PDF / PRINT PIPELINE (iframe aislado) ────────────────────
+	// Imprimir el DOM vivo es frágil: wrappers del layout (flex / overflow /
+	// min-height: 100vh), overlays fixed y reglas globales se cuelan al
+	// print y producen páginas en blanco (especialmente la primera, con la
+	// combinación de min-h-screen + workbook-page + flex + @page landscape).
+	// Además Hoja 1 es Carta vertical y las Hojas 2-4 son A4 horizontal
+	// (named pages @page liqPortrait / @page liqLandscape).
+	//
+	// Patrón: montar las hojas seleccionadas, clonar SOLO los .print-sheet
+	// en un documento standalone dentro de un <iframe> off-screen, copiar
+	// los <style> de la app y los overrides de normalización, y disparar
+	// iframe.contentWindow.print(). El iframe es totalmente independiente
+	// del DOM de la app → no hay forma de que un DIV no deseado se cuele.
+
+	/** Fetch → base64 data URL. Si falla, devuelve '' (se conserva el src original). */
+	async function getImageBase64(url: string): Promise<string> {
+		try {
+			const res = await fetch(url);
+			if (!res.ok) throw new Error(`img fetch failed: ${url}`);
+			const blob = await res.blob();
+			return await new Promise<string>((resolve, reject) => {
+				const reader = new FileReader();
+				reader.onloadend = () => resolve(reader.result as string);
+				reader.onerror = reject;
+				reader.readAsDataURL(blob);
+			});
+		} catch {
+			return '';
+		}
+	}
+
+	/** Espera a que las <img> de las hojas montadas terminen de cargar (con timeout) */
+	function waitForSheetImages(timeoutMs = 3000): Promise<void> {
+		const imgs = Array.from(
+			document.querySelectorAll('.pdf-wrap .print-sheet img')
+		) as HTMLImageElement[];
+		const pending = imgs.filter((i) => !i.complete);
+		if (!pending.length) return Promise.resolve();
+		return Promise.race([
+			Promise.all(
+				pending.map(
+					(img) =>
+						new Promise<void>((res) => {
+							img.addEventListener('load', () => res(), { once: true });
+							img.addEventListener('error', () => res(), { once: true });
+						})
+				)
+			),
+			new Promise<void>((res) => setTimeout(res, timeoutMs))
+		]).then(() => undefined);
+	}
+
+	/** Construye el HTML standalone (solo las hojas seleccionadas + estilos copiados) */
+	async function buildPrintableHtml(): Promise<string> {
+		const sheets = Array.from(
+			document.querySelectorAll('.pdf-wrap .print-sheet')
+		) as HTMLElement[];
+		if (!sheets.length) return '';
+
+		// <style> inline (incluye los estilos scoped de este componente, cuyos
+		// selectores con hash siguen aplicando porque el clone conserva las clases)
+		const inlineStyles = Array.from(document.querySelectorAll('style'))
+			.map((s) => s.textContent || '')
+			.filter(Boolean)
+			.join('\n');
+
+		// Container con solo las hojas (sin pdf-bar, estado-bar, modales, toast, etc.)
+		const container = document.createElement('div');
+		container.className = 'pdf-wrap';
+		for (const s of sheets) container.appendChild(s.cloneNode(true));
+
+		// Quitar el zoom inline de pantalla (los overrides también lo neutralizan,
+		// doble seguridad)
+		container.querySelectorAll<HTMLElement>(
+			'.page, .page-landscape, .page-liqq-portrait'
+		).forEach((p) => {
+			p.style.transform = 'none';
+		});
+
+		// Imágenes: incrustar las locales (mismo origen) como base64 para que
+		// el iframe (srcdoc ≈ about:srcdoc, sin base URL) pueda resolverlas;
+		// las externas (S3) se intentan base64 también; si CORS bloquea, se
+		// deja el src absoluto y el iframe intentará cargarlo desde su origen.
+		const localLogoData = await getImageBase64('/assets/logo_nombre.webp');
+		const s3LogoData = await getImageBase64(
+			'https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.png'
+		);
+		container.querySelectorAll('img').forEach((img) => {
+			const el = img as HTMLImageElement;
+			const src = el.getAttribute('src') || '';
+			if (!src) return;
+			if (src.includes('logo_nombre.webp') && localLogoData) {
+				el.src = localLogoData;
+			} else if (src.includes('supertransporte_logo') && s3LogoData) {
+				el.src = s3LogoData;
+			} else if (src.startsWith('/')) {
+				el.src = new URL(src, window.location.origin).href;
+			}
+		});
+
+		const title = `Liquidación ${hdr.consecutivo || ''} ${hdr.mes} ${hdr.anio}`.trim();
+
+		// Overrides de normalización para el documento aislado
+		const printOverrides = `
+			<style>
+				html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; width: 100% !important; }
+				.pdf-wrap { position: static !important; inset: auto !important; z-index: auto !important; display: block !important; overflow: visible !important; background: #fff !important; }
+				.pdf-body { padding: 0 !important; overflow: visible !important; display: block !important; background: #fff !important; }
+				.pdf-body-landscape, .pdf-body-portrait { overflow: visible !important; }
+				.page, .page-landscape, .page-liqq-portrait { transform: none !important; box-shadow: none !important; margin: 0 !important; border-radius: 0 !important; max-width: 100% !important; }
+				.print-sheet { page-break-after: always; break-after: page; }
+				.print-sheet:last-child { page-break-after: avoid !important; break-after: avoid !important; }
+				.no-print { display: none !important; }
+			</style>
+		`;
+
+		return `<!DOCTYPE html>
+<html lang="es">
+	<head>
+		<meta charset="UTF-8">
+		<title>${title}</title>
+		<style>${inlineStyles}</style>
+		${printOverrides}
+	</head>
+	<body>
+		${container.outerHTML}
+	</body>
+</html>`;
+	}
+
 	function executePrint() {
+		if (pdfLoading || printSheetCount === 0) return;
+		pdfLoading = true;
 		printModalOpen = false;
-		isPrinting = true;
-		// Wait for DOM to render all selected sheets
-		setTimeout(() => {
-			window.print();
-			// Restore after print dialog closes
-			setTimeout(() => {
+
+		// Workflow async para no bloquear el click handler (necesario para
+		// que el iframe se cree en el mismo tick del gesto del usuario, si no
+		// el popup blocker puede quejarse al disparar .print())
+		(async () => {
+			// Montar las hojas seleccionadas en el DOM vivo para poder clonarlas
+			isPrinting = true;
+			await tick();
+			await waitForSheetImages();
+
+			let html = '';
+			try {
+				html = await buildPrintableHtml();
+				if (!html) throw new Error('No se pudo construir el documento');
+			} catch (err) {
+				console.error('Error construyendo HTML para impresión:', err);
 				isPrinting = false;
-			}, 300);
-		}, 150);
+				pdfLoading = false;
+				// Fallback al flujo anterior (in-app print con wrappers reseteados)
+				printWithWrapperReset();
+				return;
+			}
+
+			// Iframe off-screen con el documento aislado
+			const iframe = document.createElement('iframe');
+			iframe.setAttribute('aria-hidden', 'true');
+			iframe.style.position = 'fixed';
+			iframe.style.right = '0';
+			iframe.style.bottom = '0';
+			iframe.style.width = '0';
+			iframe.style.height = '0';
+			iframe.style.border = '0';
+			document.body.appendChild(iframe);
+
+			const cleanup = () => {
+				try {
+					iframe.remove();
+				} catch {}
+				isPrinting = false;
+				pdfLoading = false;
+			};
+
+			iframe.addEventListener('load', () => {
+				try {
+					iframe.contentWindow?.focus();
+					// beforeprint/afterprint del iframe: capturar para limpiar
+					const win = iframe.contentWindow as Window & {
+						onafterprint?: () => void;
+					};
+					if (win) win.onafterprint = cleanup;
+					iframe.contentWindow?.print();
+				} catch (err) {
+					console.error('Error disparando print en el iframe:', err);
+					cleanup();
+					printWithWrapperReset();
+				}
+			});
+
+			iframe.srcdoc = html;
+
+			// Safety: si el iframe no carga en 10s o el diálogo no vuelve en 5min,
+			// limpiar igual para no dejar el estado colgado
+			setTimeout(() => {
+				if (document.body.contains(iframe)) {
+					// todavía no disparó afterprint → asume fallo
+					cleanup();
+				}
+			}, 300_000);
+		})();
+	}
+
+	/** Fallback: impresión in-app con los wrappers del dashboard reseteados
+	    (mantenido del intento anterior; sólo se usa si el iframe falla) */
+	function printWithWrapperReset() {
+		const main = document.querySelector('main');
+		const workbookPage = document.querySelector('.workbook-page');
+		const minScreen = document.querySelector('.min-h-screen');
+
+		const overrides: Array<[Element, string, string]> = [];
+		const applyOverride = (el: Element | null, style: string) => {
+			if (!el) return;
+			const prev = el.getAttribute('style') || '';
+			overrides.push([el, 'style', prev]);
+			el.setAttribute('style', prev + ';' + style);
+		};
+
+		applyOverride(
+			main,
+			'margin:0!important;padding:0!important;overflow:visible!important;height:auto!important;min-height:0!important'
+		);
+		applyOverride(
+			workbookPage,
+			'margin:0!important;padding:0!important;overflow:visible!important;height:auto!important;min-height:0!important;display:block!important'
+		);
+		applyOverride(
+			minScreen,
+			'margin:0!important;padding:0!important;overflow:visible!important;height:auto!important;min-height:0!important;display:block!important'
+		);
+
+		setTimeout(() => {
+			requestAnimationFrame(() => {
+				requestAnimationFrame(() => {
+					window.print();
+					setTimeout(() => {
+						for (const [el, attr, val] of overrides) {
+							if (val) el.setAttribute(attr, val);
+							else el.removeAttribute(attr);
+						}
+					}, 300);
+				});
+			});
+		}, 250);
 	}
 
 	function toggleAllSheets(checked: boolean) {
@@ -1635,13 +1898,16 @@
 	}
 
 	// ─── FIT TO VIEWPORT (one-shot zoom helper) ─────────────────
-	// A4 landscape: 297mm × 210mm → 1123px wide at 96dpi (todas las hojas son landscape)
+	// HOJA 1 es Letter vertical (8.5in = 215.9mm ancho) → ~816px @ 96dpi
+	// HOJA 2-4 son A4 horizontal (297mm ancho) → ~1122px @ 96dpi
 	const LANDSCAPE_WIDTH_PX = 297 * 3.78;
+	const PORTRAIT_WIDTH_PX = 215.9 * 3.78;
 
 	function fitToViewport() {
 		if (typeof window === 'undefined' || viewportWidth <= 0) return;
-		// Todas las hojas son A4 landscape
-		const pageWidth = LANDSCAPE_WIDTH_PX;
+		// HOJA 1 (Liquidación) es vertical; las demás (Recargos, Liquidador, Terceros) son horizontales.
+		const isPortrait = previewPage === 'liquidacion';
+		const pageWidth = isPortrait ? PORTRAIT_WIDTH_PX : LANDSCAPE_WIDTH_PX;
 		// Account for body padding (~20px on each side)
 		const padding = 40;
 		const availableWidth = Math.max(280, viewportWidth - padding);
@@ -3686,11 +3952,11 @@
 			</div>
 		{/if}
 
-		<!-- A4 LANDSCAPE — HOJA 1: LIQUIDACIÓN (horizontal, como transmeralda) -->
+		<!-- LETTER PORTRAIT — HOJA 1: LIQUIDACIÓN (vertical) -->
 		{#if (isPrinting && printSheets.liquidacion) || (!isPrinting && previewPage === 'liquidacion')}
-			<div class="pdf-body pdf-body-landscape print-sheet print-sheet-landscape">
+			<div class="pdf-body pdf-body-portrait print-sheet print-sheet-portrait">
 				<div
-					class="page page-landscape"
+					class="page-liqq-portrait"
 					style="transform: scale({pdfZoom}); transform-origin: top center;"
 				>
 					<div class="dh">
@@ -3745,13 +4011,13 @@
 					<table class="st">
 						<thead
 							><tr
-								><th style="width:6.5%">PLACA</th><th style="width:7%">FECHA<br />INICIAL</th><th
-									style="width:7%">FECHA<br />FINAL</th
-								><th style="width:22%">RECORRIDO</th><th style="width:15.5%">TIPO DE SERVICIO</th
-								><th style="width:4%">CANT.</th><th style="width:9%">VR. UNITARIO</th><th
-									style="width:9%">SUBTOTAL</th
-								><th style="width:5%">DCTO.</th><th style="width:9%">VR. FINAL</th><th
-									style="width:6%">N° PLANILLA</th
+								><th style="width:7.5%">PLACA</th><th style="width:8%">FECHA<br />INICIAL</th><th
+									style="width:8%">FECHA<br />FINAL</th
+								><th style="width:14%">RECORRIDO</th><th style="width:12.5%">TIPO DE SERVICIO</th
+								><th style="width:4%">CANT.</th><th style="width:10%">VR. UNITARIO</th><th
+									style="width:10%">SUBTOTAL</th
+								><th style="width:6%">DCTO.</th><th style="width:11%">VR. FINAL</th><th
+									style="width:9%">N° PLANILLA</th
 								></tr
 							></thead
 						>
@@ -3762,13 +4028,15 @@
 									><td><span class="placa">{fmtPlaca(row.placa)}</span></td><td class="tc"
 										>{fmtD(row.fecha_ini)}</td
 									><td class="tc">{fmtD(row.fecha_fin)}</td><td
-										style="font-size:7.2pt;line-height:1.3">{row.recorrido}</td
-									><td style="font-size:7pt">{getTipoLabel(row.tipo)}</td><td
-										class="tc"
-										style="font-weight:700">{row.cant}</td
-									><td class="mc">{COP(row.vr_unit)}</td><td class="mc">{COP(sub)}</td><td
-										class="tc">{row.dcto}%</td
-									><td class="mch">{COP(vf)}</td><td
+										class="cell-wrap"
+										style="font-size:7pt;line-height:1.3;word-break:break-word">{row.recorrido}</td
+									><td class="cell-wrap" style="font-size:6.8pt;word-break:break-word"
+										>{getTipoLabel(row.tipo)}</td
+									><td class="tc" style="font-weight:700">{row.cant}</td><td class="mc"
+										>{COP(row.vr_unit)}</td
+									><td class="mc">{COP(sub)}</td><td class="tc">{row.dcto}%</td><td class="mch"
+										>{COP(vf)}</td
+									><td
 										class="tc"
 										style="font-family:'Geist',sans-serif;font-variant-numeric:tabular-nums;font-size:7.2pt">{row.planilla}</td
 									></tr
@@ -3892,7 +4160,7 @@
 			</div>
 		{/if}
 
-		<!-- A4 LANDSCAPE — HOJA 2: RECARGOS -->
+		<!-- A4 LANDSCAPE — HOJA 2: RECARGOS (Horas) -->
 		{#if (isPrinting && printSheets.recargos) || (!isPrinting && previewPage === 'recargos')}
 			<div class="pdf-body pdf-body-landscape print-sheet print-sheet-landscape">
 				<div
@@ -3923,7 +4191,7 @@
 						</div>
 						<div class="dh-super">
 							<img
-								src="https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.webp"
+								src="https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.png"
 								alt="Supertransporte"
 							/>
 						</div>
@@ -4088,7 +4356,7 @@
 						</div>
 						<div class="dh-super">
 							<img
-								src="https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.webp"
+								src="https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.png"
 								alt="Supertransporte"
 							/>
 						</div>
@@ -4431,7 +4699,7 @@
 					<input type="checkbox" bind:checked={printSheets.liquidacion} />
 					<span class="print-check-mark"></span>
 					<span class="print-check-lbl"
-						>📄 Hoja 1 — Liquidación de Servicios <span class="print-check-tag print-tag-landscape">A4 horizontal</span
+						>📄 Hoja 1 — Liquidación de Servicios <span class="print-check-tag print-tag-portrait">Carta vertical</span
 						></span
 					>
 				</label>
@@ -4466,11 +4734,15 @@
 				>
 				<button
 					class="print-modal-btn print-modal-go"
-					disabled={printSheetCount === 0}
+					disabled={printSheetCount === 0 || pdfLoading}
 					on:click={executePrint}
 				>
-					🖨 Imprimir {printSheetCount}
-					{printSheetCount === 1 ? 'hoja' : 'hojas'}
+					{#if pdfLoading}
+						⏳ Generando PDF…
+					{:else}
+						🖨 Imprimir {printSheetCount}
+						{printSheetCount === 1 ? 'hoja' : 'hojas'}
+					{/if}
 				</button>
 			</div>
 		</div>
@@ -5666,6 +5938,146 @@
 		box-shadow: 0 8px 50px rgba(0, 0, 0, 0.3);
 		border-radius: 2px;
 	}
+	/* ─ LETTER PORTRAIT (HOJA 1 — Liquidación de Servicios) ─
+	   Letter = 8.5in × 11in = 215.9mm × 279.4mm */
+	.page-liqq-portrait {
+		background: #fff;
+		width: 215.9mm;
+		min-width: 215.9mm;
+		max-width: 215.9mm;
+		box-sizing: border-box;
+		padding: 8mm 9mm 12mm;
+		font-size: 7.6pt;
+		line-height: 1.32;
+		font-family: Arial, Helvetica, sans-serif;
+		box-shadow: 0 8px 50px rgba(0, 0, 0, 0.3);
+		border-radius: 2px;
+		overflow: hidden;
+	}
+	/* Compactar tabla principal (.st) en portrait — table-layout fixed evita que las celdas
+	   crezcan según el contenido largo y deformen la página */
+	.page-liqq-portrait .st {
+		font-size: 6.4pt;
+		table-layout: fixed;
+		width: 100%;
+	}
+	/* Por defecto todas las celdas cortan con ellipsis */
+	.page-liqq-portrait .st th,
+	.page-liqq-portrait .st td {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	/* Pero recorrido y tipo de servicio sí permiten saltos de línea */
+	.page-liqq-portrait .st td.cell-wrap {
+		white-space: normal;
+		overflow: hidden;
+		text-overflow: clip;
+		word-break: break-word;
+		line-height: 1.25;
+		vertical-align: middle;
+	}
+	.page-liqq-portrait .st th {
+		font-size: 5.8pt;
+		padding: 4px 3px;
+	}
+	.page-liqq-portrait .st td {
+		font-size: 6.4pt;
+		padding: 3px 3px;
+	}
+	.page-liqq-portrait .st tbody tr {
+		height: auto;
+		min-height: 22px;
+	}
+	.page-liqq-portrait .placa {
+		font-size: 6.8pt;
+	}
+	.page-liqq-portrait .mc,
+	.page-liqq-portrait .mch {
+		font-size: 6.4pt;
+	}
+	.page-liqq-portrait .filler td {
+		height: 24px;
+	}
+	/* Compactar doc-summary en portrait */
+	.page-liqq-portrait .doc-summary {
+		font-size: 6pt;
+		padding: 2.5mm 4mm;
+	}
+	.page-liqq-portrait .doc-summary-title {
+		font-size: 6.5pt;
+		padding-bottom: 2px;
+		margin-bottom: 3px;
+	}
+	.page-liqq-portrait .doc-summary-row {
+		font-size: 6pt;
+		gap: 4px;
+	}
+	.page-liqq-portrait .doc-summary-lbl {
+		font-size: 5.6pt;
+		min-width: 70px;
+	}
+	.page-liqq-portrait .doc-summary-val {
+		font-size: 6pt;
+	}
+	.page-liqq-portrait .doc-summary-tbl {
+		font-size: 6pt;
+	}
+	.page-liqq-portrait .doc-summary-tbl th {
+		font-size: 5.4pt;
+		padding: 1.2px 3px;
+	}
+	.page-liqq-portrait .doc-summary-tbl td {
+		font-size: 6pt;
+		padding: 1.2px 3px;
+	}
+	.page-liqq-portrait .doc-summary-totals {
+		font-size: 6pt;
+	}
+	.page-liqq-portrait .doc-summary-totals td {
+		padding: 1.2px 4px;
+	}
+	.page-liqq-portrait .doc-summary-totals .doc-summary-grand td {
+		font-size: 6.8pt;
+	}
+	.page-liqq-portrait .doc-summary-siglbl {
+		font-size: 5.4pt;
+		margin-bottom: 22px;
+	}
+	.page-liqq-portrait .doc-summary-sigline {
+		font-size: 6pt;
+	}
+	.page-liqq-portrait .doc-summary-ft {
+		font-size: 5.4pt;
+	}
+	.page-liqq-portrait .doc-summary-pernote-title {
+		font-size: 5.4pt;
+	}
+	.page-liqq-portrait .st tfoot td {
+		font-size: 6.4pt;
+	}
+	.page-liqq-portrait .dh-title {
+		padding: 5px 12px;
+	}
+	.page-liqq-portrait .dh-co {
+		font-size: 9pt;
+	}
+	.page-liqq-portrait .dh-doc {
+		font-size: 8.2pt;
+	}
+	.page-liqq-portrait .pb {
+		font-size: 7pt;
+		padding: 3px 5px;
+	}
+	.page-liqq-portrait .pclabel {
+		font-size: 6.2pt;
+	}
+	.page-liqq-portrait .pcval {
+		font-size: 7.6pt;
+	}
+	.page-liqq-portrait .pc-consec .pcval {
+		font-size: 9pt;
+	}
 
 	.dh {
 		display: grid;
@@ -6263,6 +6675,10 @@
 		align-items: center;
 		overflow-x: auto;
 	}
+	.pdf-body-portrait {
+		align-items: center;
+		overflow-x: auto;
+	}
 	.page-landscape {
 		background: #fff;
 		width: 1400px;
@@ -6832,10 +7248,48 @@
 	}
 
 	@media print {
-		/* ── A4 LANDSCAPE sin márgenes del navegador (clave para evitar páginas en blanco) ── */
+		/* ── Named pages: HOJA 1 vertical (Letter portrait), HOJA 2-4 horizontal (A4 landscape) ── */
 		@page {
+			size: Letter portrait;
+			margin: 0;
+		}
+		@page liqPortrait {
+			size: Letter portrait;
+			margin: 0;
+		}
+		@page liqLandscape {
 			size: A4 landscape;
 			margin: 0;
+		}
+
+		.print-sheet-portrait {
+			page: liqPortrait;
+		}
+		.print-sheet-landscape {
+			page: liqLandscape;
+		}
+
+		/* Cuando la función executePrint marca el documento como "liq-printing",
+		   reseteamos todos los wrappers padre para evitar la hoja en blanco al
+		   inicio y asegurar que la primera hoja empiece en page 1. */
+		:global(html.liq-printing),
+		:global(body.liq-printing) {
+			margin: 0 !important;
+			padding: 0 !important;
+			background: #fff !important;
+			overflow: visible !important;
+			height: auto !important;
+			min-height: 0 !important;
+		}
+		:global(body.liq-printing main),
+		:global(body.liq-printing .workbook-page),
+		:global(body.liq-printing .liq-printing-wrap) {
+			margin: 0 !important;
+			padding: 0 !important;
+			overflow: visible !important;
+			height: auto !important;
+			min-height: 0 !important;
+			display: block !important;
 		}
 
 		/* Hide toolbar, modals, non-print UI */
@@ -6849,20 +7303,42 @@
 		/* Make pdf-wrap static so it flows in document */
 		.pdf-wrap {
 			position: static !important;
+			inset: auto !important;
+			top: auto !important;
+			right: auto !important;
+			bottom: auto !important;
+			left: auto !important;
+			width: auto !important;
+			height: auto !important;
+			min-height: 0 !important;
 			background: #fff !important;
 			overflow: visible !important;
 			display: block !important;
+			margin: 0 !important;
+			padding: 0 !important;
 		}
 
 		/* Each sheet body flows naturally */
 		.pdf-body {
 			padding: 0 !important;
+			margin: 0 !important;
 			overflow: visible !important;
 			background: #fff !important;
 			display: block !important;
+			width: 100% !important;
+			max-width: 100% !important;
 		}
-		.pdf-body-landscape {
+		.pdf-body-landscape,
+		.pdf-body-portrait {
 			overflow-x: visible !important;
+		}
+
+		/* First sheet: ensure it starts at page 1 with no preceding break */
+		.print-sheet:first-of-type {
+			page-break-before: avoid;
+			break-before: avoid;
+			margin-top: 0 !important;
+			padding-top: 0 !important;
 		}
 
 		/* Page break after each sheet except last */
@@ -6875,17 +7351,19 @@
 			break-after: avoid;
 		}
 
-		/* A4 landscape pages (default) — idéntico a transmeralda */
-		.page {
+		/* Letter portrait page (HOJA 1 — Liquidación) */
+		.page-liqq-portrait {
 			box-shadow: none;
 			margin: 0;
 			border-radius: 0;
 			width: 100%;
-			padding: 5mm 7mm;
+			min-width: 0;
+			max-width: 100%;
+			padding: 6mm 7mm;
 			transform: none !important;
 		}
 
-		/* A4 landscape pages (recargos) — idéntico a transmeralda */
+		/* A4 landscape pages (HOJA 2-4) — idéntico a transmeralda */
 		.page-landscape {
 			box-shadow: none;
 			margin: 0;
@@ -6895,7 +7373,8 @@
 			transform: none !important;
 		}
 
-		/* legacy alias portrait */
+		/* legacy alias */
+		.page,
 		.page-portrait {
 			box-shadow: none;
 			margin: 0;
