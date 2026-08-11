@@ -1707,6 +1707,25 @@
 		}
 	}
 
+	/** Fetch de un CSS externo (link rel=stylesheet) → texto. Si falla,
+	    devuelve ''. Necesario porque en producción SvelteKit sirve los
+	    estilos scoped como archivos CSS separados (/_app/immutable/.../*.css)
+	    y NO aparecen en <style> inline del DOM. Sin esto, el PDF sale sin
+	    estilos en prod aunque funcione perfecto en local dev. */
+	async function getStylesheetText(url: string, timeoutMs = 4000): Promise<string> {
+		try {
+			const absolute = new URL(url, window.location.origin).href;
+			const res = await Promise.race([
+				fetch(absolute, { credentials: 'same-origin' }),
+				new Promise<never>((_, rej) => setTimeout(() => rej(new Error('css timeout')), timeoutMs))
+			]);
+			if (!res.ok) throw new Error(`css fetch ${res.status}: ${url}`);
+			return await res.text();
+		} catch {
+			return '';
+		}
+	}
+
 	/** Espera a que las <img> de las hojas montadas terminen de cargar (con timeout) */
 	function waitForSheetImages(timeoutMs = 3000): Promise<void> {
 		const imgs = Array.from(
@@ -1735,12 +1754,30 @@
 		) as HTMLElement[];
 		if (!sheets.length) return '';
 
-		// <style> inline (incluye los estilos scoped de este componente, cuyos
-		// selectores con hash siguen aplicando porque el clone conserva las clases)
-		const inlineStyles = Array.from(document.querySelectorAll('style'))
+		// <style> inline (incluye los estilos globales inyectados en el <head>
+		// del layout, como el @media print, glass, etc). En local dev Vite HMR
+		// también mete aquí los estilos scoped de cada componente, pero en
+		// producción SvelteKit los sirve como archivos CSS externos vía
+		// <link rel="stylesheet">, por eso los capturamos aparte abajo).
+		const inlineStyleTags = Array.from(document.querySelectorAll('style'))
 			.map((s) => s.textContent || '')
-			.filter(Boolean)
-			.join('\n');
+			.filter(Boolean);
+
+		// <link rel="stylesheet">: en producción son los chunks de SvelteKit
+		// (_app/immutable/...) con los estilos scoped de TODOS los componentes,
+		// incluyendo LiquidacionEditor (page, page-landscape, liq-v1-*,
+		// .liq-v1-services, .doc-ft, etc). Sin esto, el PDF sale sin estilos
+		// en prod. Descargamos cada uno en paralelo y los inyectamos como
+		// <style> inline en el head del documento standalone.
+		const linkHrefs = Array.from(document.querySelectorAll('link[rel="stylesheet"]'))
+			.map((l) => l.getAttribute('href'))
+			.filter((h): h is string => !!h && !h.startsWith('data:'));
+
+		const externalCss = (await Promise.all(linkHrefs.map((h) => getStylesheetText(h)))).filter(
+			Boolean
+		);
+
+		const inlineStyles = [...inlineStyleTags, ...externalCss].join('\n');
 
 		// Container con solo las hojas (sin pdf-bar, estado-bar, modales, toast, etc.)
 		const container = document.createElement('div');
