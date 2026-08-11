@@ -561,24 +561,42 @@
 	$: isAdmin = userAreas.includes('administracion');
 	$: canSeeTerceros = isAdmin || userAreas.includes('facturacion');
 
-	// ─── CMD/CTRL + P → genera PDF (intercepta el atajo nativo roto) ────
+	// ─── CMD/CTRL + P → abre el modal de impresión (intercepta el nativo) ────
 	// El atajo nativo del navegador dispara window.print() sobre el DOM vivo
 	// de la app, que produce hojas en blanco por los wrappers del layout.
-	// Interceptamos y redirigimos al endpoint que genera el PDF correcto.
+	// Interceptamos en keydown Y en beforeprint para máxima cobertura y
+	// redirigimos al modal (mismo flujo que el botón "Imprimir") para que
+	// el usuario pueda elegir qué hojas imprimir antes de generar el PDF.
 	function handlePrintShortcut(e: KeyboardEvent) {
 		if (!e.ctrlKey && !e.metaKey) return;
 		if (e.altKey || e.shiftKey) return; // no pisar Ctrl+Shift+P, etc.
 		if (e.key !== 'p' && e.key !== 'P') return;
 		e.preventDefault();
-		// Disparar el mismo flujo que el botón del modal (respeta printSheets)
-		executePrint();
+		e.stopPropagation();
+		e.stopImmediatePropagation();
+		// Solo si el modal no está ya abierto y no hay un print en curso
+		if (printModalOpen || pdfLoading || isPrinting) return;
+		// Disparar el modal (mismo flujo que el botón, respeta printSheets)
+		handlePrint();
+	}
+
+	/** Safety net: si por cualquier razón el navegador llegara a disparar
+	    el print nativo (algunos browsers lo hacen en su propio thread antes
+	    de que el keydown handler corra), lo abortamos mostrando el modal. */
+	function handleBeforePrint(e: Event) {
+		// Si el modal está abierto, dejamos pasar el print (es nuestro flujo)
+		if (printModalOpen || pdfLoading || isPrinting) return;
+		e.preventDefault();
+		e.stopImmediatePropagation();
+		handlePrint();
 	}
 
 	// ─── MOUNT ──────────────────────────────────────────────────
 	onMount(async () => {
 		window.addEventListener('beforeunload', handleBeforeUnload);
 		window.addEventListener('wheel', handleWheel, { passive: false });
-		window.addEventListener('keydown', handlePrintShortcut);
+		window.addEventListener('keydown', handlePrintShortcut, { capture: true });
+		window.addEventListener('beforeprint', handleBeforePrint, { capture: true });
 
 		// Initialize viewport tracking
 		updateViewport();
@@ -622,7 +640,9 @@
 		if (typeof window !== 'undefined') window.removeEventListener('resize', updateViewport);
 		if (typeof window !== 'undefined') window.removeEventListener('wheel', handleWheel);
 		if (typeof window !== 'undefined')
-			window.removeEventListener('keydown', handlePrintShortcut);
+			window.removeEventListener('keydown', handlePrintShortcut, { capture: true } as any);
+		if (typeof window !== 'undefined')
+			window.removeEventListener('beforeprint', handleBeforePrint, { capture: true } as any);
 		if (resizeObserver) resizeObserver.disconnect();
 		if (draftTimer) clearTimeout(draftTimer);
 	});
@@ -1866,13 +1886,53 @@
 				setTimeout(() => URL.revokeObjectURL(url), 60_000);
 				pdfLoading = false;
 			} catch (err) {
-				console.error('Error generando PDF server-side, usando fallback in-app:', err);
+				console.error(
+					'Error generando PDF server-side (¿Chromium/Puppeteer no disponible?), usando fallback in-app:',
+					err
+				);
 				pdfLoading = false;
-				// Fallback al flujo in-app con wrappers reseteados (puede tener
-				// blank pages, pero al menos algo intenta)
-				printWithWrapperReset();
+				// Fallback robusto: abrir el HTML standalone (ya construido con
+				// todos los estilos + overrides de print copiados) en una ventana
+				// nueva y disparar print() ahí. La ventana nueva NO comparte los
+				// wrappers del dashboard (.workbook-page, .min-h-screen, etc) que
+				// son los que producen las blank pages en printWithWrapperReset.
+				printStandaloneHtml(html);
 			}
 		})();
+	}
+
+	/** Fallback: abre el HTML standalone en una ventana nueva y dispara print().
+	    Se usa cuando el backend no puede generar el PDF (ej. servidor sin
+	    Chromium / Puppeteer en producción). */
+	function printStandaloneHtml(html: string) {
+		try {
+			const w = window.open('', '_blank', 'width=1024,height=768');
+			if (!w) {
+				// Bloqueador de popups: caemos al flujo legacy (puede tener blank
+				// pages, pero peor es nada)
+				printWithWrapperReset();
+				return;
+			}
+			w.document.open();
+			w.document.write(html);
+			w.document.close();
+			const trigger = () => {
+				try {
+					w.focus();
+					w.print();
+				} catch (e) {
+					console.error('Error en window.print() del fallback:', e);
+				}
+			};
+			if (w.document.readyState === 'complete') {
+				setTimeout(trigger, 300);
+			} else {
+				w.addEventListener('load', () => setTimeout(trigger, 300), { once: true });
+			}
+		} catch (e) {
+			console.error('No se pudo abrir ventana para fallback de impresión:', e);
+			printWithWrapperReset();
+		}
 	}
 
 	/** Fallback: impresión in-app con los wrappers del dashboard reseteados
@@ -4989,11 +5049,8 @@
 	</div>
 {/if}
 
-<!-- ═══════════════════════════════════════════════════════════ -->
-<!-- ESTILOS                                                      -->
-<!-- ═══════════════════════════════════════════════════════════ -->
+
 <style>
-	/* ─ CONSECUTIVO VALIDATION ─ */
 	.consec-ok {
 		border-color: #ea580c !important;
 		box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.25) !important;
@@ -7336,6 +7393,60 @@
 			transform: none !important;
 		}
 
+		/* HOJA 1 — .liq-v1 está dimensionada para A4 (210x297mm), pero la
+		   página de impresión es Letter portrait (215.9x279.4mm). El
+		   min-height: 297mm + padding 10/11/9mm + gap 7mm desbordan ~17mm
+		   y se saltan a la página 2. Compactamos padding y gap, y quitamos
+		   el min-height para que fluya dentro de la Letter portrait. */
+		.liq-v1 {
+			width: 100% !important;
+			min-height: 0 !important;
+			max-width: 100% !important;
+			padding: 4mm 6mm 5mm !important;
+			gap: 3mm !important;
+		}
+		.liq-v1-hero {
+			padding: 6px 10px !important;
+		}
+		.liq-v1-info-content {
+			padding: 6px 10px !important;
+		}
+		.liq-v1-section-title {
+			padding: 5px 8px !important;
+		}
+		.liq-v1-services th {
+			padding: 3px 3px !important;
+		}
+		.liq-v1-services td {
+			padding: 2px 3px !important;
+		}
+		.liq-v1-lower {
+			gap: 3mm !important;
+		}
+		.liq-v1-summary {
+			padding: 5px 8px !important;
+			gap: 2px !important;
+		}
+		.liq-v1-srow {
+			padding: 2px 0 !important;
+		}
+		.liq-v1-note-body {
+			padding: 6px 10px !important;
+			min-height: 14mm !important;
+		}
+		.liq-v1-sign {
+			padding: 6px 10px !important;
+			min-height: 18mm !important;
+		}
+		.liq-v1-signatures {
+			gap: 3mm !important;
+			margin-top: 2mm !important;
+		}
+		.doc-ft {
+			padding: 4px 0 !important;
+			margin-top: 2mm !important;
+		}
+
 		/* A4 landscape pages (HOJA 2-4) — idéntico a transmeralda */
 		.page-landscape {
 			box-shadow: none;
@@ -9282,7 +9393,6 @@
 		min-width: 0;
 	}
 
-	/* Atajos (hint card más compacto) */
 	.wb-card-hint {
 		display: flex;
 		align-items: center;
@@ -9333,16 +9443,10 @@
 		margin: 0 0.1rem;
 	}
 
-	/* ── Field header row (column titles) ── */
 	.wb-row-fields {
 		background: linear-gradient(180deg, rgba(249, 115, 22, 0.02), transparent);
 	}
 
-	/* ═══════════════════════════════════════════════════════════
-	   ENCABEZADO — Grid limpio con labels pequeños sobre inputs
-	   (sin columna de números, sin cells de spreadsheet)
-	   Las filas ahora viven dentro de .wb-card-body, sin card propio.
-	   ═══════════════════════════════════════════════════════════ */
 	.wb-enc-row {
 		display: flex;
 		gap: 12px;
