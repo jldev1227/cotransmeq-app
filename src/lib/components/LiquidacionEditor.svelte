@@ -3983,208 +3983,140 @@
 		{/if}
 
 		<!-- LETTER PORTRAIT — HOJA 1: LIQUIDACIÓN (vertical) -->
+		<!-- A4 HOJA 1: LIQUIDACIÓN -->
 		{#if (isPrinting && printSheets.liquidacion) || (!isPrinting && previewPage === 'liquidacion')}
-			<div class="pdf-body pdf-body-portrait print-sheet print-sheet-portrait">
-				<div
-					class="page-liqq-portrait"
-					style="transform: scale({pdfZoom}); transform-origin: top center;"
-				>
-					<div class="dh">
-						<div class="dh-logo">
-							{#if logoError}<div class="dh-logo-fallback">COTRANS<br />MEQ</div>{:else}<img
-									src="/assets/logo_nombre.webp"
-									alt="Logo"
-									on:error={() => (logoError = true)}
-									style="height:58px;width:auto;object-fit:contain"
-								/>{/if}
+			<div class="pdf-body print-sheet print-sheet-liquidacion">
+				<div class="page page-portrait liq-v1" style="transform: scale({pdfZoom}); transform-origin: top center;">
+					<section class="liq-v1-hero">
+						<div class="liq-v1-brand">
+							<div class="liq-v1-logo">
+								{#if logoError}<div class="dh-logo-fallback">COTRANS<br />MEQ</div>{:else}<img
+										src="/assets/logo.webp"
+										alt="Logo"
+										on:error={() => (logoError = true)}
+									/>{/if}
+							</div>
+							<div>
+								<div class="liq-v1-company">{hdr.empresa}</div>
+								<div class="liq-v1-title">Liquidación de Servicios</div>
+							</div>
 						</div>
-						<div class="dh-title">
-							<div class="dh-co">{hdr.empresa}</div>
-							<div class="dh-doc">LIQUIDACIÓN DE SERVICIOS</div>
+						<div class="liq-v1-docbox">
+							<div><span>Código</span><strong>OP-FR-07</strong></div>
+							<div><span>Versión</span><strong>1</strong></div>
+							<div><span>Fecha</span><strong>{new Date().toLocaleDateString('es-CO')}</strong></div>
 						</div>
-						<div class="dh-meta">
-							<table class="mt">
-								<tbody
-									><tr><td class="ml">Código:</td><td class="mv">OP-FR-07</td></tr><tr
-										><td class="ml">Versión:</td><td>2</td></tr
-									><tr><td class="ml">Fecha:</td><td>14/08/23</td></tr></tbody
-								>
-							</table>
-						</div>
-						<div class="dh-super">
-							<img
-								src="https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.png"
-								alt="Supertransporte"
-							/>
-						</div>
-					</div>
-					<div class="pb">
-						<div class="pc">
-							<span class="pclabel">MES:</span><span class="pcval">{hdr.mes}</span>
-						</div>
-						<div class="pc">
-							<span class="pclabel">AÑO</span><span class="pcval">{hdr.anio}</span>
-						</div>
-						<div class="pc" style="flex:2">
-							<span class="pclabel">CLIENTE:</span><span class="pcval"
-								>{selectedCliente?.nombre || ''}{selectedCliente?.nit
-									? ` — NIT: ${selectedCliente.nit}`
-									: ''}</span
-							>
-						</div>
-						<div class="pc pc-consec" style="flex:1.5">
-							<span class="pclabel">CONSECUTIVO LIQUIDACIÓN N°:</span><span class="pcval"
-								>&nbsp;{hdr.consecutivo}</span
-							>
-						</div>
-					</div>
-					<table class="st">
-						<thead
-							><tr
-								><th style="width:7.5%">PLACA</th><th style="width:8%">FECHA<br />INICIAL</th><th
-									style="width:8%">FECHA<br />FINAL</th
-								><th style="width:14%">RECORRIDO</th><th style="width:12.5%">TIPO DE SERVICIO</th
-								><th style="width:4%">CANT.</th><th style="width:10%">VR. UNITARIO</th><th
-									style="width:10%">SUBTOTAL</th
-								><th style="width:6%">DCTO.</th><th style="width:11%">VR. FINAL</th><th
-									style="width:9%">N° PLANILLA</th
-								></tr
-							></thead
-						>
-						<tbody>
-							{#each rows as row (row.id)}
-								{@const { sub, vf } = calcRow(row)}
-								<tr
-									><td><span class="placa">{fmtPlaca(row.placa)}</span></td><td class="tc"
-										>{fmtD(row.fecha_ini)}</td
-									><td class="tc">{fmtD(row.fecha_fin)}</td><td
-										class="cell-wrap"
-										style="font-size:7pt;line-height:1.3;word-break:break-word">{row.recorrido}</td
-									><td class="cell-wrap" style="font-size:6.8pt;word-break:break-word"
-										>{getTipoLabel(row.tipo)}</td
-									><td class="tc" style="font-weight:700">{row.cant}</td><td class="mc"
-										>{COP(row.vr_unit)}</td
-									><td class="mc">{COP(sub)}</td><td class="tc">{row.dcto}%</td><td class="mch"
-										>{COP(vf)}</td
-									><td
-										class="tc"
-										style="font-family:'Geist',sans-serif;font-variant-numeric:tabular-nums;font-size:7.2pt">{row.planilla}</td
-									></tr
-								>
-							{/each}
-							{#each Array(Math.max(0, 10 - rows.length)) as _}<tr class="filler"
-									>{#each Array(11) as __}<td></td>{/each}</tr
-								>{/each}
-						</tbody>
-						<tfoot
-							><tr
-								><td
-									colspan="9"
-									style="text-align:right;color:#ea580c;padding-right:8px;font-size:8pt;font-weight:800;text-transform:uppercase;letter-spacing:0.04em"
-									>TOTAL SERVICIOS:</td
-								><td class="mch" style="border-left:1px solid #fed7aa">{COP(totalSvc)}</td><td
-								></td></tr
-							></tfoot
-						>
-					</table>
-					<div class="doc-summary">
-						<div class="doc-summary-title">RESUMEN DEL DOCUMENTO</div>
-						<div class="doc-summary-grid">
-							<div class="doc-summary-left">
-								<div class="doc-summary-row">
-									<span class="doc-summary-lbl">Observaciones:</span>
-									<span class="doc-summary-val">{hdr.observaciones || '—'}</span>
+					</section>
+
+					<section class="liq-v1-info">
+						<div class="liq-v1-info-main">
+							<div class="liq-v1-info-content">
+								<div class="liq-v1-kicker">Cliente</div>
+								<div class="liq-v1-client">
+									{selectedCliente?.nombre || ''}
+									{selectedCliente?.nit ? ` — NIT: ${selectedCliente.nit}` : ''}
 								</div>
-								<div class="doc-summary-row">
-									<span class="doc-summary-lbl">OPERADORA:</span>
-									<span class="doc-summary-val">{hdr.operadora}</span>
-								</div>
-								{#if hdr.osi}
-									<div class="doc-summary-row">
-										<span class="doc-summary-lbl">OSI:</span>
-										<span class="doc-summary-val">{hdr.osi}</span>
+								<div class="liq-v1-meta-grid">
+									<div><span>Mes</span><strong>{hdr.mes}</strong></div>
+									<div><span>Año</span><strong>{hdr.anio}</strong></div>
+									<div><span>Operadora</span><strong>{hdr.operadora}</strong></div>
+									{#if hdr.osi}<div><span>OSI</span><strong>{hdr.osi}</strong></div>{/if}
+									<div class="liq-v1-consec">
+										<span>Consecutivo liquidación N°</span>
+										<strong>{hdr.consecutivo}</strong>
 									</div>
-								{/if}
-								<div class="doc-summary-pernote">
-									<div class="doc-summary-pernote-title">PERNOCTE</div>
-									<table class="doc-summary-tbl">
-										<thead>
-											<tr>
-												<th>Vr. Unitario</th>
-												<th>Cantidad</th>
-												<th>Total</th>
-											</tr>
-										</thead>
-										<tbody>
-											<tr>
-												<td>{COP(ext.pernote_unit)}</td>
-												<td>{ext.pernote_cant}</td>
-												<td class="doc-summary-strong">{COP(valPern)}</td>
-											</tr>
-										</tbody>
-									</table>
 								</div>
-							</div>
-							<div class="doc-summary-right">
-								<table class="doc-summary-totals">
-									<tbody>
-										<tr>
-											<td>VALOR TOTAL DEL SERVICIO SIN RECARGOS</td>
-											<td>{COP(totalSvc)}</td>
-										</tr>
-										<tr>
-											<td>VALOR TOTAL RECARGOS</td>
-											<td>{COP(valRec)}</td>
-										</tr>
-										<tr>
-											<td>PERNOCTE</td>
-											<td>{COP(valPern)}</td>
-										</tr>
-										<tr class="doc-summary-sub">
-											<td>SUBTOTAL</td>
-											<td>{COP(subtotal)}</td>
-										</tr>
-										<tr>
-											<td>IVA {ext.iva_pct}%</td>
-											<td>{COP(ivaVal)}</td>
-										</tr>
-										<tr class="doc-summary-grand">
-											<td>TOTAL SERVICIO</td>
-											<td>{COP(total)}</td>
-										</tr>
-									</tbody>
-								</table>
-							</div>
-							<div class="doc-summary-sigs">
-								<div>
-									<div class="doc-summary-siglbl"
-										>FIRMA AUTORIZADA POR CLIENTE{selectedCliente?.nombre
-											? ` — ${selectedCliente.nombre}`
-											: ''}:</div
-									>
-									<div class="doc-summary-sigline"
-										>{selectedCliente?.nombre || ''}{selectedCliente?.nit
-											? ` — NIT: ${selectedCliente.nit}`
-											: ''}</div
-									>
-								</div>
-								<div>
-									<div class="doc-summary-siglbl">FIRMA AUTORIZADA POR:</div>
-									<div class="doc-summary-sigline">&nbsp;</div>
-								</div>
-							</div>
-							<div class="doc-summary-ft">
-								<span>OP-FR-07 · Versión 2 · 14/08/23</span>
-								<span
-									>Generado el {new Date().toLocaleDateString('es-CO', {
-										day: '2-digit',
-										month: 'long',
-										year: 'numeric'
-									})}</span
-								>
-								<span>{hdr.empresa}</span>
 							</div>
 						</div>
+					</section>
+
+					<section class="liq-v1-section">
+						<div class="liq-v1-section-title">
+							<span>Detalle de servicios</span>
+							<strong>{COP(totalSvc)}</strong>
+						</div>
+						<table class="liq-v1-services">
+							<thead>
+								<tr>
+									<th>Planilla</th>
+									<th>Placa</th>
+									<th>Fechas</th>
+									<th>Recorrido / Servicio</th>
+									<th>Cant.</th>
+									<th>Vr. Unitario</th>
+									<th>Dcto.</th>
+									<th>Vr. Final</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each rows as row (row.id)}
+									{@const { sub, vf } = calcRow(row)}
+									<tr>
+										<td class="tc liq-v1-planilla">{row.planilla}</td>
+										<td><span class="placa">{fmtPlaca(row.placa)}</span></td>
+										<td class="tc">
+											<div class="liq-v1-date">{fmtD(row.fecha_ini)}</div>
+											<div class="liq-v1-date muted">{fmtD(row.fecha_fin)}</div>
+										</td>
+										<td>
+											<div class="liq-v1-route">{row.recorrido}</div>
+											<div class="liq-v1-type">{row.tipo}</div>
+										</td>
+										<td class="tc liq-v1-qty">{row.cant}</td>
+										<td class="mc">{COP(row.vr_unit)}</td>
+										<td class="tc">{row.dcto}%</td>
+										<td class="mch">{COP(vf)}</td>
+									</tr>
+								{/each}
+								{#each Array(Math.max(0, 5 - rows.length)) as _}
+									<tr class="filler">{#each Array(8) as __}<td></td>{/each}</tr>
+								{/each}
+							</tbody>
+						</table>
+					</section>
+
+					<section class="liq-v1-lower">
+						<div class="liq-v1-notes">
+							<div class="liq-v1-section-title compact">
+								<span>Observaciones</span>
+							</div>
+							<div class="liq-v1-note-body">{hdr.observaciones}</div>
+							<div class="liq-v1-pernote">
+								<div class="liq-v1-pernote-title">Pernote</div>
+								<div><span>Vr. Unitario</span><strong>{COP(ext.pernote_unit)}</strong></div>
+								<div><span>Cantidad</span><strong>{ext.pernote_cant}</strong></div>
+								<div><span>Total</span><strong>{COP(valPern)}</strong></div>
+							</div>
+						</div>
+						<div class="liq-v1-summary">
+							<div class="liq-v1-srow"><span>Valor total del servicio sin recargos</span><strong>{COP(totalSvc)}</strong></div>
+							<div class="liq-v1-srow"><span>Valor total recargos</span><strong>{COP(valRec)}</strong></div>
+							<div class="liq-v1-srow"><span>Pernote</span><strong>{COP(valPern)}</strong></div>
+							<div class="liq-v1-srow subtotal"><span>Subtotal</span><strong>{COP(subtotal)}</strong></div>
+							<div class="liq-v1-srow"><span>IVA {ext.iva_pct}%</span><strong>{COP(ivaVal)}</strong></div>
+							<div class="liq-v1-srow total"><span>Total servicio</span><strong>{COP(total)}</strong></div>
+						</div>
+					</section>
+
+					<section class="liq-v1-signatures">
+						<div class="liq-v1-sign">
+							<div>Firma autorizada por cliente {selectedCliente?.nombre ? `— ${selectedCliente.nombre}` : ''}:</div>
+							<span>{selectedCliente?.nombre || ''}{selectedCliente?.nit ? ` — NIT: ${selectedCliente.nit}` : ''}</span>
+						</div>
+						<div class="liq-v1-sign">
+							<div>Firma autorizada por:</div>
+							<span>&nbsp;</span>
+						</div>
+					</section>
+
+					<div class="doc-ft">
+						<span>OP-FR-07 · Versión 1</span><span
+							>Generado el {new Date().toLocaleDateString('es-CO', {
+								day: '2-digit',
+								month: 'long',
+								year: 'numeric'
+							})}</span
+						><span>{hdr.empresa}</span>
 					</div>
 				</div>
 			</div>
@@ -9910,4 +9842,364 @@
 			align-self: flex-start;
 		}
 	}
+
+	.liq-v1 {
+		width: 210mm;
+		min-height: 297mm;
+		max-width: none;
+		padding: 10mm 11mm 9mm;
+		display: flex;
+		flex-direction: column;
+		gap: 7mm;
+		color: #1f2937;
+	}
+	.liq-v1-hero {
+		display: grid;
+		grid-template-columns: 1fr 48mm;
+		border: 2px solid #9a3412;
+		border-radius: 8px 8px 5px 5px;
+		overflow: hidden;
+		background: linear-gradient(135deg, #fff7ed 0%, #ffffff 62%);
+	}
+	.liq-v1-brand {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 11px 14px;
+	}
+	.liq-v1-logo {
+		width: 86px;
+		height: 64px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+	}
+	.liq-v1-logo img {
+		max-width: 86px;
+		max-height: 64px;
+		object-fit: contain;
+	}
+	.liq-v1-company {
+		color: #9a3412;
+		font-size: 13pt;
+		font-weight: 900;
+		text-transform: uppercase;
+		letter-spacing: -0.02em;
+		line-height: 1.1;
+	}
+	.liq-v1-title {
+		margin-top: 3px;
+		color: #431407;
+		font-size: 11pt;
+		font-weight: 800;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+	}
+	.liq-v1-docbox {
+		border-left: 2px solid #fed7aa;
+		background: #fff;
+		display: grid;
+		grid-template-rows: repeat(3, 1fr);
+	}
+	.liq-v1-docbox div {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		padding: 5px 10px;
+		border-bottom: 1px solid #fed7aa;
+		font-size: 7.4pt;
+	}
+	.liq-v1-docbox div:last-child {
+		border-bottom: 0;
+	}
+	.liq-v1-docbox span {
+		color: #78716c;
+		font-weight: 700;
+		text-transform: uppercase;
+	}
+	.liq-v1-docbox strong {
+		color: #9a3412;
+		font-weight: 900;
+		text-align: right;
+	}
+	.liq-v1-info {
+		display: block;
+	}
+	.liq-v1-info-main,
+	.liq-v1-section,
+	.liq-v1-notes,
+	.liq-v1-summary,
+	.liq-v1-sign {
+		border: 1px solid #fed7aa;
+		border-radius: 7px;
+		background: #fff;
+		box-shadow: 0 2px 8px rgba(154, 52, 18, 0.06);
+	}
+	.liq-v1-info-main {
+		padding: 0;
+		overflow: hidden;
+	}
+	.liq-v1-info-content {
+		padding: 9px 12px;
+	}
+	.liq-v1-kicker {
+		color: #9a3412;
+		font-size: 7pt;
+		font-weight: 900;
+		text-transform: uppercase;
+		letter-spacing: 0.12em;
+	}
+	.liq-v1-client {
+		margin-top: 3px;
+		color: #111827;
+		font-size: 9.4pt;
+		font-weight: 900;
+		line-height: 1.18;
+	}
+	.liq-v1-meta-grid {
+		margin-top: 7px;
+		display: grid;
+		grid-template-columns: repeat(6, 1fr);
+		gap: 5px;
+	}
+	.liq-v1-meta-grid div {
+		background: #fff7ed;
+		border: 1px solid #ffedd5;
+		border-radius: 5px;
+		padding: 4px 6px;
+	}
+	.liq-v1-meta-grid span {
+		display: block;
+		color: #78716c;
+		font-size: 6.4pt;
+		font-weight: 700;
+		text-transform: uppercase;
+	}
+	.liq-v1-meta-grid strong {
+		display: block;
+		margin-top: 2px;
+		color: #9a3412;
+		font-size: 8pt;
+		font-weight: 900;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.liq-v1-consec {
+		background: linear-gradient(135deg, #9a3412, #c2410c) !important;
+		color: #fff;
+		border-color: #9a3412 !important;
+		border-radius: 5px;
+		grid-column: span 2;
+		padding: 8px 9px;
+		display: flex;
+		flex-direction: column;
+		justify-content: center;
+	}
+	.liq-v1-consec span {
+		font-size: 6.2pt;
+		font-weight: 800;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: #fff;
+		opacity: 0.92;
+	}
+	.liq-v1-consec strong {
+		margin-top: 4px;
+		font-family: monospace;
+		font-size: 10.5pt;
+		font-weight: 900;
+		line-height: 1;
+		color: #fff;
+	}
+	.liq-v1-section {
+		overflow: hidden;
+	}
+	.liq-v1-section-title {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		background: linear-gradient(135deg, #9a3412, #c2410c);
+		color: #fff;
+		padding: 7px 11px;
+		font-size: 8pt;
+		font-weight: 900;
+		text-transform: uppercase;
+		letter-spacing: 0.07em;
+	}
+	.liq-v1-section-title strong {
+		font-family: monospace;
+		font-size: 9pt;
+	}
+	.liq-v1-section-title.compact {
+		border-radius: 7px 7px 0 0;
+	}
+	.liq-v1-services {
+		width: 100%;
+		border-collapse: collapse;
+		table-layout: fixed;
+		font-size: 7.2pt;
+	}
+	.liq-v1-services th {
+		background: #ffedd5;
+		color: #9a3412;
+		border-bottom: 1px solid #fed7aa;
+		padding: 6px 4px;
+		font-size: 6.5pt;
+		font-weight: 900;
+		text-transform: uppercase;
+		text-align: center;
+	}
+	.liq-v1-services td {
+		border-bottom: 1px solid #f1f5f9;
+		border-right: 1px solid #f1f5f9;
+		padding: 5px 5px;
+		vertical-align: middle;
+	}
+	.liq-v1-services th:nth-child(1) { width: 17mm; }
+	.liq-v1-services th:nth-child(2) { width: 20mm; }
+	.liq-v1-services th:nth-child(3) { width: 20mm; }
+	.liq-v1-services th:nth-child(4) { width: 48mm; }
+	.liq-v1-services th:nth-child(5) { width: 13mm; }
+	.liq-v1-services th:nth-child(6) { width: 20mm; }
+	.liq-v1-services th:nth-child(7) { width: 18mm; }
+	.liq-v1-services th:nth-child(8) { width: 24mm; }
+	.liq-v1-route {
+		font-weight: 800;
+		color: #111827;
+		line-height: 1.25;
+	}
+	.liq-v1-type,
+	.liq-v1-date.muted {
+		color: #64748b;
+		font-size: 6.6pt;
+	}
+	.liq-v1-date,
+	.liq-v1-planilla {
+		font-family: monospace;
+		font-size: 6.8pt;
+	}
+	.liq-v1-qty {
+		font-weight: 900;
+		color: #9a3412;
+	}
+	.liq-v1-lower {
+		display: grid;
+		grid-template-columns: 1fr 68mm;
+		gap: 5mm;
+		align-items: stretch;
+	}
+	.liq-v1-notes {
+		overflow: hidden;
+		display: flex;
+		flex-direction: column;
+	}
+	.liq-v1-note-body {
+		min-height: 25mm;
+		padding: 10px 12px;
+		font-size: 7.4pt;
+		line-height: 1.45;
+		color: #334155;
+	}
+	.liq-v1-pernote {
+		margin: auto 10px 10px;
+		display: grid;
+		grid-template-columns: 1fr repeat(3, auto);
+		gap: 8px;
+		align-items: center;
+		border: 1px solid #fed7aa;
+		border-radius: 6px;
+		background: #fff7ed;
+		padding: 7px 9px;
+		font-size: 7pt;
+	}
+	.liq-v1-pernote-title {
+		color: #9a3412;
+		font-weight: 900;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+	}
+	.liq-v1-pernote span {
+		color: #78716c;
+		font-weight: 700;
+	}
+	.liq-v1-pernote strong {
+		margin-left: 4px;
+		color: #9a3412;
+		font-family: monospace;
+		font-weight: 900;
+	}
+	.liq-v1-summary {
+		padding: 8px 10px;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+	.liq-v1-srow {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		padding: 5px 0;
+		border-bottom: 1px solid #f1f5f9;
+		font-size: 7.5pt;
+	}
+	.liq-v1-srow span {
+		color: #475569;
+		font-weight: 700;
+	}
+	.liq-v1-srow strong {
+		font-family: monospace;
+		font-weight: 900;
+		color: #111827;
+	}
+	.liq-v1-srow.subtotal {
+		border-top: 1.5px solid #fed7aa;
+		margin-top: 2px;
+	}
+	.liq-v1-srow.total {
+		margin-top: auto;
+		border: 0;
+		border-radius: 6px;
+		background: #9a3412;
+		color: #fff;
+		padding: 8px 10px;
+	}
+	.liq-v1-srow.total span,
+	.liq-v1-srow.total strong {
+		color: #fff;
+		font-size: 9pt;
+	}
+	.liq-v1-signatures {
+		margin-top: auto;
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 5mm;
+	}
+	.liq-v1-sign {
+		min-height: 27mm;
+		padding: 10px 12px;
+		display: flex;
+		flex-direction: column;
+		justify-content: flex-end;
+	}
+	.liq-v1-sign div {
+		margin-bottom: auto;
+		color: #9a3412;
+		font-size: 7.2pt;
+		font-weight: 900;
+		text-transform: uppercase;
+		line-height: 1.35;
+	}
+	.liq-v1-sign span {
+		border-top: 1px solid #111827;
+		padding-top: 5px;
+		color: #64748b;
+		font-size: 7pt;
+		font-style: italic;
+	}
+	
 </style>
