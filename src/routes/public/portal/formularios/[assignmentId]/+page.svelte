@@ -640,7 +640,8 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
-		padding: 0.75rem 0.875rem 7rem;
+		/* Espacio para la barra de acciones y la navegación móvil. */
+		padding: 0.75rem 0.875rem 11rem;
 		max-width: 34rem;
 		margin: 0 auto;
 	}
@@ -786,7 +787,9 @@
 		position: fixed;
 		left: 0;
 		right: 0;
-		bottom: 0;
+		/* La navegación global ocupa 64 px en móvil. Sin este desplazamiento
+		   cubría por completo Guardar y Enviar. */
+		bottom: calc(64px + env(safe-area-inset-bottom, 0px));
 		z-index: 30;
 		display: flex;
 		flex-direction: column;
@@ -884,5 +887,15 @@
 
 	.estado .btn {
 		flex: 0;
+	}
+
+	@media (min-width: 769px) {
+		.runner {
+			padding-bottom: 7rem;
+		}
+
+		.pie {
+			bottom: 0;
+		}
 	}
 </style>

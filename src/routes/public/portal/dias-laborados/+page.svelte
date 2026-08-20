@@ -53,6 +53,17 @@
     { value: 'MANTENIMIENTO', label: 'Mantenimiento', color: '#dc2626', icon: '🔧' }
   ];
 
+  // Paleta rotativa para diferenciar visualmente cada tramo/recorrido del día.
+  // El índice del tramo define su color (acento lateral, número y chips).
+  const TRAMO_COLORES = ['#0EA5E9','#8B5CF6','#F59E0B','#EC4899','#14B8A6','#6366F1','#EF4444','#84CC16'];
+  function colorTramo(i: number): string {
+    return TRAMO_COLORES[i % TRAMO_COLORES.length];
+  }
+
+  // Máximo de iconos de carro dibujados en la celda del calendario.
+  // Por encima de este número se muestra "🚛 ×N" para no saturar la celda.
+  const MAX_ICONOS_DIA = 3;
+
   const DIAS_SEMANA = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
   const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                  'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -81,6 +92,17 @@
   let tramos: Segmento[] = [];
   let tramoExpandido: number | null = null;
   let soloLectura = false;
+
+  // Edición de un día ya guardado (el conductor pulsó "Editar")
+  let modoEdicion = false;
+  // Confirmación de borrado del registro completo del día
+  let confirmarEliminar = false;
+  let eliminando = false;
+  // Confirmación en línea para eliminar un tramo concreto
+  let confirmTramoIdx: number | null = null;
+  // Huella del registro al entrar en edición: sirve para no dejar un borrador
+  // "fantasma" cuando el conductor abre la edición y cierra sin tocar nada.
+  let edicionSnapshot = '';
 
   // ═══════════════════════════════
   // MOUNT
@@ -215,16 +237,79 @@
     }
   }
 
+  // ═══════════════════════════════
+  // EDICIÓN DE UN DÍA YA GUARDADO
+  // ═══════════════════════════════
+  function huellaFormulario(): string {
+    return JSON.stringify({
+      tipo: form.tipo,
+      observaciones: form.observaciones || '',
+      tramos: tramos.map(({ id, ...resto }) => resto)
+    });
+  }
+
+  function activarEdicion() {
+    if (!registros[fechaSeleccionada]) return;
+    edicionSnapshot = huellaFormulario();
+    soloLectura = false;
+    modoEdicion = true;
+    formError = '';
+    guardadoOk = false;
+    guardadoExitoso = false;
+    confirmTramoIdx = null;
+    // Abrir el primer tramo para que el conductor vea de una los campos editables
+    tramoExpandido = tramos.length > 0 ? 0 : null;
+  }
+
+  function cancelarEdicion() {
+    // Descartar los cambios locales y volver al detalle guardado en servidor
+    if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+    limpiarBorrador(fechaSeleccionada);
+    detectarBorradores();
+
+    const reg = registros[fechaSeleccionada];
+    form = reg ? { ...reg } : { fecha: fechaSeleccionada };
+    tramos = reg?.segmentos?.length
+      ? reg.segmentos.map(s => ({ ...s, id: s.id || uid() }))
+      : [tramoVacio()];
+
+    modoEdicion = false;
+    soloLectura = !!reg;
+    tramoExpandido = null;
+    confirmTramoIdx = null;
+    edicionSnapshot = '';
+    formError = '';
+  }
+
+  // ═══════════════════════════════
+  // ELIMINAR REGISTRO (con confirmación)
+  // ═══════════════════════════════
+  function pedirConfirmacionEliminar() {
+    formError = '';
+    confirmarEliminar = true;
+  }
+
+  function cancelarEliminar() {
+    confirmarEliminar = false;
+    eliminando = false;
+  }
+
   async function eliminarRegistro() {
+    if (eliminando) return;
+    eliminando = true;
+    formError = '';
     try {
       await portalFetch(`/conductor-portal/dias-laborados/registros/${fechaSeleccionada}`, { method: 'DELETE' });
       delete registros[fechaSeleccionada];
       registros = { ...registros };
       limpiarBorrador(fechaSeleccionada);
       detectarBorradores();
+      confirmarEliminar = false;
       cerrarModal();
     } catch (err: any) {
       formError = err.message || 'Error al eliminar registro';
+    } finally {
+      eliminando = false;
     }
   }
 
@@ -272,8 +357,13 @@
     // ¿Existe ya un registro guardado en el servidor para esta fecha?
     const regServidor = registros[fechaSeleccionada];
     const hayBorrador = !!cargarBorrador(fechaSeleccionada);
-    // Solo lectura si hay registro en servidor Y no hay borrador pendiente de recuperar
+    // Solo lectura si hay registro en servidor Y no hay borrador pendiente de recuperar.
+    // Desde la vista de detalle el conductor puede pulsar "Editar" para modificarlo.
     soloLectura = !!regServidor && !hayBorrador;
+    modoEdicion = !!regServidor && hayBorrador;
+    confirmarEliminar = false;
+    eliminando = false;
+    confirmTramoIdx = null;
 
     // 1) Prioridad: borrador en localStorage (anti-pérdida móvil)
     const borrador = cargarBorrador(fechaSeleccionada);
@@ -307,6 +397,13 @@
   }
 
   function cerrarModal() {
+    // Si se abrió la edición y no se cambió nada, no dejar un borrador pendiente
+    if (modoEdicion && edicionSnapshot && edicionSnapshot === huellaFormulario()) {
+      if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+      limpiarBorrador(fechaSeleccionada);
+      detectarBorradores();
+    }
+    edicionSnapshot = '';
     modalAbierto = false;
     fechaSeleccionada = '';
     form = {};
@@ -314,6 +411,10 @@
     tramoExpandido = null;
     soloLectura = false;
     guardadoExitoso = false;
+    modoEdicion = false;
+    confirmarEliminar = false;
+    eliminando = false;
+    confirmTramoIdx = null;
   }
 
   function tramoVacio(): Segmento {
@@ -349,6 +450,7 @@
       tramos = tramos.filter((_, i) => i !== idx);
     }
     tramoExpandido = null;
+    confirmTramoIdx = null;
   }
 
   function horasTramo(t: Segmento): number | null {
@@ -477,6 +579,16 @@
 
   $: tipoActual = form.tipo ? TIPOS.find(t => t.value === form.tipo) : null;
 
+  // Registro guardado en servidor para la fecha abierta (para editar / eliminar)
+  $: registroGuardado = fechaSeleccionada ? registros[fechaSeleccionada] : undefined;
+  $: tramosGuardados = registroGuardado?.segmentos?.length ?? 0;
+
+  // Nº de tramos/recorridos de un día → define cuántos carros se pintan en el calendario
+  function tramosDelDia(reg: RegistroDia | undefined): number {
+    if (!reg || reg.tipo !== 'LABORADO') return 0;
+    return reg.segmentos?.length ?? 0;
+  }
+
   // Opciones de autocomplete (precomputadas para evitar recalcular en cada keystroke)
   $: clienteOptions = clientes.map(c => ({ id: c.id, label: c.nombre }));
   $: vehiculoOptions = vehiculos.map(v => ({ id: v.id, label: v.placa, placa: v.placa }));
@@ -543,6 +655,7 @@
           {@const hoyFlag = esHoy(dia)}
           {@const fStr = fechaStr(dia)}
           {@const tieneBorrador = borradoresPendientes.has(fStr)}
+          {@const nTramos = tramosDelDia(reg)}
           <div
             class="dia-celda"
             class:registrado={!!tipo}
@@ -553,10 +666,34 @@
             on:click={() => abrirDia(dia)}
             on:keydown={(e) => e.key==='Enter' && abrirDia(dia)}
             role="button" tabindex={futuro ? -1 : 0}
-            aria-label="Día {dia}"
+            aria-label={tipo
+              ? `Día ${dia}, ${tipo.label}${nTramos > 0 ? `, ${nTramos} ${nTramos === 1 ? 'recorrido' : 'recorridos'}` : ''}`
+              : `Día ${dia}`}
           >
             <span class="dia-num">{dia}</span>
-            {#if tipo}<span class="dia-icon">{tipo.icon}</span>{/if}
+
+            {#if nTramos > 0}
+              <!-- Un carro por cada tramo/recorrido realizado ese día -->
+              <span
+                class="dia-trucks"
+                class:t1={nTramos === 1}
+                class:t2={nTramos === 2}
+                class:t3={nTramos >= 3}
+                title="{nTramos} {nTramos === 1 ? 'recorrido' : 'recorridos'}"
+              >
+                {#if nTramos <= MAX_ICONOS_DIA}
+                  {#each Array(nTramos) as _, k}
+                    <span class="dia-truck">🚛</span>
+                  {/each}
+                {:else}
+                  <span class="dia-truck">🚛</span>
+                  <span class="dia-truck-count">×{nTramos}</span>
+                {/if}
+              </span>
+            {:else if tipo}
+              <span class="dia-icon">{tipo.icon}</span>
+            {/if}
+
             {#if tieneBorrador}<span class="dia-borrador-dot" title="Borrador sin guardar (recuperado del celular)">●</span>{/if}
           </div>
         {/if}
@@ -579,7 +716,11 @@
     </div>
   </div>
 
-  <div class="hint-bottom">📅 Toca cualquier día pasado para registrar tu actividad</div>
+  <div class="hint-bottom">
+    📅 Toca cualquier día pasado para registrar o <strong>editar</strong> tu actividad
+    <br />
+    🚛 Cada carro en el día representa un recorrido (tramo) realizado
+  </div>
 </div>
 
 <!-- ═══════════════════════════════
@@ -602,7 +743,12 @@
     {#if soloLectura}
       <div class="modal-readonly-banner">
         <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-        <span>Este día ya fue registrado. Solo puedes consultarlo.</span>
+        <span>Este día ya fue registrado. Puedes editarlo o eliminarlo.</span>
+      </div>
+    {:else if modoEdicion}
+      <div class="modal-edit-banner">
+        <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+        <span>Estás editando un registro guardado. Los cambios reemplazan el registro anterior.</span>
       </div>
     {/if}
 
@@ -635,10 +781,13 @@
 
               <div class="details-tramos-list">
                 {#each tramos as t, i (t.id ?? `d-${i}`)}
-                  <div class="details-tramo">
+                  <div class="details-tramo" style="--tramo-color:{colorTramo(i)}">
                     <div class="details-tramo-head">
                       <span class="details-tramo-num">{i + 1}</span>
-                      <span class="details-tramo-title">Tramo {i + 1}</span>
+                      <span class="details-tramo-title">
+                        🚛 Tramo {i + 1}
+                        <span class="details-tramo-de">de {tramos.length}</span>
+                      </span>
                       {#if t.horas_conducidas > 0}
                         <span class="details-tramo-horas">{t.horas_conducidas}h</span>
                       {/if}
@@ -732,28 +881,36 @@
                 {#each tramos as t, i (t.id ?? `t-${i}`)}
                   {@const expandido = tramoExpandido === i}
                   {@const hrs = horasTramo(t)}
-                  <div class="tramo-card" class:expandido>
-                    <button class="tramo-header" on:click={() => tramoExpandido = expandido ? null : i} type="button">
+                  <div class="tramo-card" class:expandido style="--tramo-color:{colorTramo(i)}">
+                    <button class="tramo-header" on:click={() => { tramoExpandido = expandido ? null : i; confirmTramoIdx = null; }} type="button">
                       <span class="tramo-num">{i + 1}</span>
                       <div class="tramo-resumen">
-                        {#if t.vehiculo_placa}
-                          <span class="tramo-tag vehiculo">🚚 {t.vehiculo_placa}</span>
-                        {:else}
-                          <span class="tramo-tag muted">Sin vehículo</span>
-                        {/if}
-                        {#if t.cliente_nombre}
-                          <span class="tramo-tag cliente">🏢 {t.cliente_nombre}</span>
-                        {:else}
-                          <span class="tramo-tag muted">Sin cliente</span>
-                        {/if}
-                        {#if t.hora_inicio && t.hora_fin}
-                          <span class="tramo-tag hora">
-                            🕐 {t.hora_inicio}{#if t.inicio_dia_siguiente}<sup class="dia-sig-sup">+1</sup>{/if}–{t.hora_fin}{#if t.fin_dia_siguiente}<sup class="dia-sig-sup">+1</sup>{/if}
+                        <div class="tramo-titulo-row">
+                          <span class="tramo-titulo">
+                            🚛 Tramo {i + 1}
+                            <span class="tramo-titulo-de">de {tramos.length}</span>
                           </span>
-                        {/if}
-                        {#if t.horas_conducidas > 0}
-                          <span class="tramo-tag horas">{t.horas_conducidas}h</span>
-                        {/if}
+                          {#if t.horas_conducidas > 0}
+                            <span class="tramo-tag horas">{t.horas_conducidas}h</span>
+                          {/if}
+                        </div>
+                        <div class="tramo-tags">
+                          {#if t.vehiculo_placa}
+                            <span class="tramo-tag vehiculo">🚚 {t.vehiculo_placa}</span>
+                          {:else}
+                            <span class="tramo-tag muted">Sin vehículo</span>
+                          {/if}
+                          {#if t.cliente_nombre}
+                            <span class="tramo-tag cliente">🏢 {t.cliente_nombre}</span>
+                          {:else}
+                            <span class="tramo-tag muted">Sin cliente</span>
+                          {/if}
+                          {#if t.hora_inicio && t.hora_fin}
+                            <span class="tramo-tag hora">
+                              🕐 {t.hora_inicio}{#if t.inicio_dia_siguiente}<sup class="dia-sig-sup">+1</sup>{/if}–{t.hora_fin}{#if t.fin_dia_siguiente}<sup class="dia-sig-sup">+1</sup>{/if}
+                            </span>
+                          {/if}
+                        </div>
                       </div>
                       <span class="tramo-toggle">{expandido ? '▾' : '▸'}</span>
                     </button>
@@ -873,9 +1030,19 @@
                         <!-- Eliminar tramo (oculto en solo lectura) -->
                         {#if !soloLectura}
                           <div class="tramo-acciones">
-                            <button type="button" class="btn-tramo-del" on:click={() => eliminarTramo(i)}>
-                              🗑 Eliminar tramo
-                            </button>
+                            {#if confirmTramoIdx === i}
+                              <span class="tramo-confirm-text">¿Eliminar el tramo {i + 1}?</span>
+                              <button type="button" class="btn-tramo-cancel" on:click={() => confirmTramoIdx = null}>
+                                No
+                              </button>
+                              <button type="button" class="btn-tramo-del confirm" on:click={() => eliminarTramo(i)}>
+                                Sí, eliminar
+                              </button>
+                            {:else}
+                              <button type="button" class="btn-tramo-del" on:click={() => confirmTramoIdx = i}>
+                                🗑 Eliminar tramo
+                              </button>
+                            {/if}
                           </div>
                         {/if}
                       </div>
@@ -915,15 +1082,24 @@
 
     <div class="modal-actions">
       {#if soloLectura}
+        <button class="btn-eliminar" on:click={pedirConfirmacionEliminar} title="Eliminar registro" aria-label="Eliminar registro">🗑</button>
         <button
           class="btn-secondary-action"
           on:click={cerrarModal}
         >
           Cerrar
         </button>
+        <button class="btn-editar" on:click={activarEdicion}>
+          ✏️ Editar
+        </button>
       {:else}
-        {#if registros[fechaSeleccionada]}
-          <button class="btn-eliminar" on:click={eliminarRegistro} title="Eliminar registro">🗑</button>
+        {#if registroGuardado}
+          <button class="btn-eliminar" on:click={pedirConfirmacionEliminar} title="Eliminar registro" aria-label="Eliminar registro">🗑</button>
+        {/if}
+        {#if modoEdicion}
+          <button class="btn-secondary-action" on:click={cancelarEdicion} disabled={guardando}>
+            Cancelar
+          </button>
         {/if}
         <button
           class="btn-guardar" class:ok={guardadoOk}
@@ -934,6 +1110,8 @@
             <span class="spinner-dark"></span> Guardando...
           {:else if guardadoOk}
             ✓ Guardado
+          {:else if modoEdicion}
+            Guardar cambios
           {:else}
             Guardar registro
           {/if}
@@ -941,6 +1119,37 @@
       {/if}
     </div>
   </div>
+
+  <!-- ── Confirmación de eliminación del registro del día ── -->
+  {#if confirmarEliminar}
+    <div class="confirm-overlay" role="alertdialog" aria-modal="true" aria-labelledby="confirm-del-title">
+      <div class="confirm-card">
+        <div class="confirm-icon">🗑</div>
+        <h3 class="confirm-title" id="confirm-del-title">¿Eliminar este registro?</h3>
+        <p class="confirm-text">
+          Se eliminará el registro del <strong>{fechaLegible}</strong>{#if tramosGuardados > 0} junto con sus <strong>{tramosGuardados} {tramosGuardados === 1 ? 'tramo' : 'tramos'}</strong>{/if}.
+          Esta acción <strong>no se puede deshacer</strong>.
+        </p>
+
+        {#if formError}
+          <div class="form-error">⚠ {formError}</div>
+        {/if}
+
+        <div class="confirm-actions">
+          <button class="btn-confirm-cancel" on:click={cancelarEliminar} disabled={eliminando}>
+            Cancelar
+          </button>
+          <button class="btn-confirm-del" on:click={eliminarRegistro} disabled={eliminando}>
+            {#if eliminando}
+              <span class="spinner-dark"></span> Eliminando...
+            {:else}
+              Sí, eliminar
+            {/if}
+          </button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 {/if}
 
@@ -1768,4 +1977,284 @@
     }
     .details-tipo-name { font-size: 1.05rem; }
   }
+
+  /* ═══════════════════════════════════════
+     CARROS POR TRAMO EN LA CELDA DEL DÍA
+     Un 🚛 por recorrido realizado; a partir de
+     MAX_ICONOS_DIA se colapsa a "🚛 ×N".
+     ═══════════════════════════════════════ */
+  .dia-trucks {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+    line-height: 1;
+    max-width: 100%;
+    margin-top: -1px;
+  }
+  .dia-truck { line-height: 1; }
+  .dia-trucks.t1 .dia-truck { font-size: 0.72rem; }
+  .dia-trucks.t2 .dia-truck { font-size: 0.6rem; }
+  .dia-trucks.t3 .dia-truck { font-size: 0.5rem; }
+  .dia-truck-count {
+    font-size: 0.55rem;
+    font-weight: 800;
+    color: var(--tcolor, #ea580c);
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1;
+  }
+
+  /* ═══════════════════════════════════════
+     TRAMOS DIFERENCIADOS POR COLOR (edición)
+     Cada tramo recibe --tramo-color desde el
+     markup (paleta rotativa por índice).
+     ═══════════════════════════════════════ */
+  .tramos-list { gap: 0.65rem; }
+
+  .tramo-card {
+    border: 1px solid var(--border, #e2e8f0);
+    border-left: 5px solid var(--tramo-color, #ea580c);
+    border-radius: 12px;
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--tramo-color, #ea580c) 8%, transparent) 0%,
+      transparent 45%
+    );
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+  .tramo-card.expandido {
+    border-color: var(--border, #e2e8f0);
+    border-left-color: var(--tramo-color, #ea580c);
+    box-shadow:
+      0 0 0 2px color-mix(in srgb, var(--tramo-color, #ea580c) 22%, transparent),
+      0 4px 14px rgba(0, 0, 0, 0.06);
+  }
+  .tramo-num {
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
+    background: var(--tramo-color, #ea580c);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--tramo-color, #ea580c) 16%, transparent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+  }
+
+  .tramo-resumen {
+    flex-direction: column;
+    align-items: stretch;
+    flex-wrap: nowrap;
+    gap: 0.3rem;
+  }
+  .tramo-titulo-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+  }
+  .tramo-titulo {
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: var(--tramo-color, #ea580c);
+  }
+  .tramo-titulo-de {
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: var(--text3, #94a3b8);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-left: 0.15rem;
+  }
+  .tramo-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem;
+  }
+
+  .tramo-header:hover {
+    background: color-mix(in srgb, var(--tramo-color, #ea580c) 6%, transparent);
+  }
+  .tramo-body {
+    border-top: 1px solid color-mix(in srgb, var(--tramo-color, #ea580c) 22%, transparent);
+    background: color-mix(in srgb, var(--tramo-color, #ea580c) 4%, var(--surface2, #f8fafc));
+  }
+
+  /* Confirmación en línea al eliminar un tramo */
+  .tramo-acciones {
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .tramo-confirm-text {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #b91c1c;
+    margin-right: auto;
+  }
+  .btn-tramo-cancel {
+    font-size: 0.72rem;
+    color: var(--text2, #475569);
+    background: #fff;
+    border: 1px solid var(--border, #e2e8f0);
+    padding: 0.35rem 0.7rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-family: inherit;
+  }
+  .btn-tramo-del.confirm {
+    background: #dc2626;
+    border-color: #dc2626;
+    color: #fff;
+  }
+  .btn-tramo-del.confirm:hover { background: #b91c1c; }
+
+  /* ═══════════════════════════════════════
+     TRAMOS DIFERENCIADOS (vista de detalle)
+     ═══════════════════════════════════════ */
+  .details-tramo {
+    border-left: 5px solid var(--tramo-color, #F97316);
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--tramo-color, #F97316) 7%, #ffffff) 0%,
+      #ffffff 45%
+    );
+  }
+  .details-tramo-head {
+    border-bottom: 1px solid color-mix(in srgb, var(--tramo-color, #F97316) 28%, transparent);
+  }
+  .details-tramo-num {
+    background: var(--tramo-color, #F97316);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--tramo-color, #F97316) 16%, transparent);
+  }
+  .details-tramo-title {
+    color: var(--tramo-color, #F97316);
+    font-weight: 800;
+  }
+  .details-tramo-de {
+    font-size: 0.6rem;
+    font-weight: 700;
+    color: #6B6B6B;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-left: 0.15rem;
+  }
+
+  /* ═══════════════════════════════════════
+     EDICIÓN DE UN DÍA GUARDADO
+     ═══════════════════════════════════════ */
+  .modal-edit-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 0.7rem 1.25rem;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.14));
+    border-bottom: 1px solid rgba(245, 158, 11, 0.25);
+    color: #92400E;
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+  .modal-edit-banner svg { width: 1.05rem; height: 1.05rem; flex-shrink: 0; }
+
+  .btn-editar {
+    flex: 1;
+    padding: 0.65rem 1rem;
+    border: none;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #ea580c, #c2410c);
+    color: #fff;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    transition: all 0.15s;
+  }
+  .btn-editar:active { transform: translateY(1px); }
+  .btn-secondary-action:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  /* ═══════════════════════════════════════
+     CONFIRMACIÓN DE ELIMINACIÓN DEL DÍA
+     ═══════════════════════════════════════ */
+  .confirm-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 260;
+    background: rgba(15, 23, 42, 0.55);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.25rem;
+  }
+  .confirm-card {
+    width: 100%;
+    max-width: 360px;
+    background: var(--surface, #fff);
+    border-radius: 18px;
+    padding: 1.35rem 1.25rem 1.1rem;
+    text-align: center;
+    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+  }
+  .confirm-icon {
+    width: 52px;
+    height: 52px;
+    margin: 0 auto 0.75rem;
+    border-radius: 50%;
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+  }
+  .confirm-title {
+    margin: 0 0 0.4rem;
+    font-size: 1.02rem;
+    font-weight: 800;
+    color: var(--text, #0f172a);
+  }
+  .confirm-text {
+    margin: 0 0 1.1rem;
+    font-size: 0.84rem;
+    line-height: 1.5;
+    color: var(--text2, #475569);
+  }
+  .confirm-card .form-error {
+    text-align: left;
+    margin: 0 0 0.85rem;
+  }
+  .confirm-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+  }
+  .btn-confirm-cancel {
+    padding: 0.65rem 0.75rem;
+    border-radius: 10px;
+    border: 1px solid var(--border, #e2e8f0);
+    background: var(--surface, #fff);
+    color: var(--text2, #475569);
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+  }
+  .btn-confirm-del {
+    padding: 0.65rem 0.75rem;
+    border-radius: 10px;
+    border: none;
+    background: linear-gradient(135deg, #ef4444, #dc2626);
+    color: #fff;
+    font-family: inherit;
+    font-weight: 700;
+    font-size: 0.85rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+  }
+  .btn-confirm-cancel:disabled,
+  .btn-confirm-del:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>
