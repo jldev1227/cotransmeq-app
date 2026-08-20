@@ -1,11 +1,29 @@
 <script lang="ts">
 	import { fly, fade } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
-	import { CAMPOS, SECCIONES, TABLAS, type CampoDefinicion } from '$lib/api/sarlaftFields';
+	import {
+		CAMPOS,
+		SECCIONES,
+		TABLAS,
+		getKeysParaTipo,
+		type CampoDefinicion,
+		type TipoFormularioSarlaft as TipoFormularioCurado
+	} from '$lib/api/sarlaftFields';
+
+	import type { SarlaftFormularioDefinicion, TipoFormularioSarlaft } from '$lib/api/sarlaft';
 
 	export let respuestas: Record<string, any> = {};
 	export let tipoCliente: 'Persona Natural' | 'Persona Jurídica' | null = null;
-	export let tipoFormulario: 'cliente_proveedor' | 'accionistas' | 'personal' = 'cliente_proveedor';
+	export let tipoFormulario: TipoFormularioSarlaft = 'cliente_proveedor';
+	/** Definición del formato que envía el backend. Se usa para renderizar los
+	 *  formularios que no tienen un mapa de campos curado en `sarlaftFields.ts`
+	 *  (por ejemplo SLFT-PTEE-FR-12). */
+	export let definicion: SarlaftFormularioDefinicion | null = null;
+
+	/** Los mapas de `sarlaftFields.ts` solo cubren los tres formularios de
+	 *  conocimiento SARLAFT. Cualquier otro se pinta desde su definición. */
+	const TIPOS_CURADOS = ['cliente_proveedor', 'accionistas', 'personal'];
+	$: usarDefinicion = !TIPOS_CURADOS.includes(tipoFormulario) && !!definicion;
 
 	// ───────── Formatters ─────────
 	function formatMoneda(value: any): string {
@@ -131,18 +149,24 @@
 
 			const campos: CampoRender[] = [];
 			for (const campoId of seccion.campos) {
-				const keys = [`CLI-${campoId}`, `PER-${campoId}`, `ACC-${campoId}`];
+				// Resolver el/los ID(s) real(es) del backend según tipo de
+				// formulario y tipo de cliente.
+				// Este camino solo corre para los tres tipos curados (ver
+				// `usarDefinicion`), así que el estrechamiento es seguro.
+				const keys = getKeysParaTipo(
+					campoId,
+					tipoFormulario as TipoFormularioCurado,
+					tipoCliente
+				);
 				let value: any = undefined;
-				let defKey = '';
 				for (const k of keys) {
-					if (respuestas[k] !== undefined) {
+					if (respuestas[k] !== undefined && respuestas[k] !== null && respuestas[k] !== '') {
 						value = respuestas[k];
-						defKey = campoId;
 						break;
 					}
 				}
 				if (value === undefined) continue;
-				const def = CAMPOS[defKey];
+				const def = CAMPOS[campoId];
 				if (!def) continue;
 				campos.push({ def, value, formatted: formatValue(def, value) });
 			}
@@ -169,7 +193,78 @@
 		return result;
 	}
 
-	$: seccionesRender = buildSecciones();
+	/** Traduce el `tipo_respuesta` del backend al `TipoCampo` del renderer. */
+	function tipoCampoDesdeBackend(tipoRespuesta: string): CampoDefinicion['tipo'] {
+		switch (tipoRespuesta) {
+			case 'numerico':
+				return 'numero';
+			case 'fecha':
+				return 'fecha';
+			case 'firma':
+				return 'firma';
+			case 'seleccion_unica':
+				return 'opcion';
+			default:
+				return 'texto';
+		}
+	}
+
+	/**
+	 * Construye las secciones a partir de la definición del formato. Se usa
+	 * para los formularios individuales, que no tienen mapa curado: cada
+	 * sección del documento se pinta con sus preguntas respondidas.
+	 */
+	function buildSeccionesDesdeDefinicion(): SeccionRender[] {
+		if (!definicion) return [];
+		const result: SeccionRender[] = [];
+
+		for (const seccion of definicion.secciones) {
+			const campos: CampoRender[] = [];
+			for (const p of seccion.preguntas) {
+				// Las declaraciones informativas no llevan respuesta del usuario.
+				if (p.tipo_respuesta === 'declaracion_informativa') continue;
+				const value = respuestas[p.id];
+				if (value === undefined || value === null || value === '') continue;
+				if (Array.isArray(value) && value.length === 0) continue;
+
+				const def: CampoDefinicion = {
+					id: p.id,
+					etiqueta: p.pregunta,
+					tipo: tipoCampoDesdeBackend(p.tipo_respuesta),
+					opciones: p.opciones ?? undefined
+				};
+				// La selección múltiple llega como arreglo: se muestra como lista.
+				const formatted = Array.isArray(value)
+					? { display: value.join(' · '), type: 'text' as const }
+					: formatValue(def, value);
+				campos.push({ def, value, formatted });
+			}
+
+			if (campos.length === 0) continue;
+			result.push({
+				id: seccion.seccion,
+				titulo: seccion.seccion,
+				descripcion: seccion.nota ?? '',
+				campos,
+				tablas: []
+			});
+		}
+
+		return result;
+	}
+
+	// Se pasan las props como argumentos (aunque las funciones lean del scope)
+	// para que Svelte las registre como dependencias del bloque reactivo.
+	$: seccionesRender = construirSecciones(respuestas, definicion, tipoCliente, usarDefinicion);
+
+	function construirSecciones(
+		_respuestas: Record<string, any>,
+		_definicion: SarlaftFormularioDefinicion | null,
+		_tipoCliente: 'Persona Natural' | 'Persona Jurídica' | null,
+		_usarDefinicion: boolean
+	): SeccionRender[] {
+		return _usarDefinicion ? buildSeccionesDesdeDefinicion() : buildSecciones();
+	}
 
 	function getColorYesNo(color: 'yes' | 'no') {
 		return color === 'yes' ? 'pill-yes' : 'pill-no';
@@ -367,7 +462,7 @@
 		justify-content: space-between;
 		gap: 1rem;
 		padding: 1.1rem 1.25rem;
-		background: linear-gradient(180deg, #faf7f2 0%, white 100%);
+		background: linear-gradient(180deg, #fcfcfb 0%, white 100%);
 		border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 	}
 	.seccion-head-text {
@@ -375,7 +470,7 @@
 	}
 	.seccion-eyebrow {
 		display: inline-block;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.66rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -387,17 +482,17 @@
 		margin-bottom: 0.4rem;
 	}
 	.seccion-head h3 {
-		font-family: 'Fraunces', Georgia, serif;
+		font-family: 'Geist', system-ui, sans-serif;
 		font-size: 1.2rem;
 		font-weight: 500;
-		color: #0f1f1a;
+		color: #0f172a;
 		margin: 0 0 0.2rem;
 		letter-spacing: -0.01em;
 		line-height: 1.25;
 	}
 	.seccion-head p {
 		font-size: 0.8rem;
-		color: #6b6b6b;
+		color: #64748b;
 		margin: 0;
 		line-height: 1.5;
 	}
@@ -429,7 +524,7 @@
 		flex-direction: column;
 		gap: 0.25rem;
 		padding: 0.7rem 0.85rem;
-		background: #faf7f2;
+		background: #fcfcfb;
 		border-radius: 10px;
 		border-left: 2px solid transparent;
 		transition: all 0.2s;
@@ -448,18 +543,18 @@
 	}
 
 	.campo dt {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.66rem;
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
-		color: #6b6b6b;
+		color: #64748b;
 		margin: 0;
 	}
 	.campo dd {
 		margin: 0;
 		font-size: 0.92rem;
-		color: #1a1a1a;
+		color: #1e293b;
 		line-height: 1.4;
 	}
 
@@ -467,33 +562,33 @@
 	.valor-texto {
 		font-weight: 500;
 		word-break: break-word;
-		color: #0f1f1a;
+		color: #0f172a;
 	}
 	.valor-opcion {
 		display: inline-flex;
-		font-family: 'Inter Tight', system-ui, sans-serif;
+		font-family: 'Geist', system-ui, sans-serif;
 		font-size: 0.85rem;
 		font-weight: 600;
-		color: #0f1f1a;
+		color: #0f172a;
 	}
 	.valor-moneda {
 		font-weight: 700;
-		color: #047857;
+		color: #c2410c;
 		font-variant-numeric: tabular-nums;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.9rem;
 	}
 	.valor-numero {
 		font-weight: 600;
-		color: #0f1f1a;
+		color: #0f172a;
 		font-variant-numeric: tabular-nums;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.88rem;
 	}
 	.valor-fecha {
 		font-weight: 600;
-		color: #0f1f1a;
-		font-family: 'JetBrains Mono', monospace;
+		color: #0f172a;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.88rem;
 	}
 
@@ -502,7 +597,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.3rem;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.7rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -512,12 +607,12 @@
 		border: 1px solid;
 	}
 	.pill-yes {
-		color: #047857;
+		color: #c2410c;
 		background: rgba(249, 115, 22, 0.1);
 		border-color: rgba(249, 115, 22, 0.25);
 	}
 	.pill-no {
-		color: #4a4a4a;
+		color: #475569;
 		background: rgba(0, 0, 0, 0.04);
 		border-color: rgba(0, 0, 0, 0.08);
 	}
@@ -532,9 +627,9 @@
 		grid-column: 1 / -1;
 	}
 	.firma-imagen-wrap {
-		background: #faf7f2;
+		background: #fcfcfb;
 		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-bottom: 2px solid #1a1a1a;
+		border-bottom: 2px solid #1e293b;
 		border-radius: 8px;
 		padding: 0.75rem 1rem;
 		display: inline-block;
@@ -567,7 +662,7 @@
 		font-weight: 600;
 		text-decoration: none;
 		transition: all 0.2s;
-		font-family: 'Inter Tight', system-ui, sans-serif;
+		font-family: 'Geist', system-ui, sans-serif;
 	}
 	.firma-link:hover {
 		background: #eef2ff;
@@ -587,7 +682,7 @@
 		gap: 0.35rem;
 		padding: 0.35rem 0.65rem;
 		background: #f3f4f6;
-		color: #6b7280;
+		color: #64748b;
 		border: 1px dashed #d1d5db;
 		border-radius: 6px;
 		font-size: 0.78rem;
@@ -605,7 +700,7 @@
 		border-radius: 4px;
 		font-size: 0.65rem;
 		font-weight: 600;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
 	}
@@ -614,7 +709,7 @@
 	   TABLAS REPETIBLES
 	   ═══════════════════════════════════════════════════════════════ */
 	.tabla-bloque {
-		background: #faf7f2;
+		background: #fcfcfb;
 		border: 1px solid rgba(0, 0, 0, 0.06);
 		border-radius: 14px;
 		overflow: hidden;
@@ -650,7 +745,7 @@
 	}
 	.tabla-eyebrow {
 		display: inline-block;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -659,20 +754,20 @@
 		margin-bottom: 0.15rem;
 	}
 	.tabla-head h4 {
-		font-family: 'Fraunces', Georgia, serif;
+		font-family: 'Geist', system-ui, sans-serif;
 		font-size: 0.95rem;
 		font-weight: 500;
-		color: #0f1f1a;
+		color: #0f172a;
 		margin: 0;
 		line-height: 1.2;
 	}
 	.badge-count {
 		display: inline-flex;
 		align-items: center;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.68rem;
 		font-weight: 700;
-		color: #065f46;
+		color: #9a3412;
 		background: rgba(249, 115, 22, 0.1);
 		padding: 0.25rem 0.55rem;
 		border-radius: 5px;
@@ -693,12 +788,12 @@
 	th {
 		text-align: left;
 		padding: 0.55rem 0.85rem;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.64rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
-		color: #6b6b6b;
+		color: #64748b;
 		white-space: nowrap;
 		border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 	}
@@ -706,7 +801,7 @@
 		padding: 0.65rem 0.85rem;
 		border-top: 1px solid rgba(0, 0, 0, 0.04);
 		vertical-align: top;
-		color: #1a1a1a;
+		color: #1e293b;
 	}
 	tbody tr:hover {
 		background: rgba(249, 115, 22, 0.03);

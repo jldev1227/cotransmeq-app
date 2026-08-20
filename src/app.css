@@ -1,4 +1,8 @@
-@import 'tailwindcss';
+/* `source(".")` ancla la detección automática de clases a `src/`. Sin él,
+   Tailwind sube por el árbol buscando la raíz del proyecto y puede terminar
+   recorriendo directorios ajenos, lo que bloquea el arranque del dev server.
+   Además acelera el rebuild: solo mira código propio. */
+@import 'tailwindcss' source(".");
 
 /* ═══════════════════════════════════════════════════════════════
    FUENTES — Sistema Geist (sans única, sin serif, sin mono dedicado)

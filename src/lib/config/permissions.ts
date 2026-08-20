@@ -74,6 +74,15 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
     full: ['administracion', 'operaciones', 'hseq'],
     description: 'Salidas no conformes'
   },
+  // Espejo EXACTO de `backend-nest/src/config/permissions.ts`. Este mapa solo
+  // decide qué se PINTA; el backend lo vuelve a comprobar en cada ruta. Si los
+  // dos no coinciden, el sidebar muestra una entrada que la API rechaza con 403
+  // (o al contrario, esconde algo a quien sí puede usarlo).
+  formularios: {
+    full: ['administracion', 'hseq'],
+    read: ['operaciones'],
+    description: 'Formularios dinámicos (constructor, asignaciones y envíos)'
+  },
   nomina: {
     full: ['administracion', 'talento_humano', 'facturacion'],
     description: 'Gestión de nómina'

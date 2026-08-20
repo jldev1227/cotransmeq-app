@@ -112,6 +112,13 @@
 			href: '/dashboard/salidas-nc'
 		},
 		{
+			id: 'formularios',
+			label: 'Formularios',
+			icon: 'form-builder',
+			badge: null,
+			href: '/dashboard/formularios'
+		},
+		{
 			id: 'nomina',
 			label: 'Nómina',
 			icon: 'wallet',
@@ -215,6 +222,7 @@
 		if (pathname.startsWith('/dashboard/acciones-correctivas')) return 'acciones-correctivas';
 		if (pathname.startsWith('/dashboard/evaluaciones')) return 'evaluaciones';
 		if (pathname.startsWith('/dashboard/salidas-nc')) return 'salidas-nc';
+		if (pathname.startsWith('/dashboard/formularios')) return 'formularios';
 		if (pathname.startsWith('/dashboard/clientes')) return 'clientes';
 		if (pathname.startsWith('/dashboard/sarlaft')) return 'sarlaft';
 		if (pathname.startsWith('/dashboard/nomina')) return 'nomina';
@@ -281,6 +289,9 @@
 			'clipboard-list': `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />`,
 			'shield-check': `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />`,
 			'alert-triangle': `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />`,
+			// Cards apiladas con un "+": el constructor de formularios se arma
+			// arrastrando cards, y el icono lo dice sin depender del texto.
+			'form-builder': `<rect x="3" y="4" width="12" height="4" rx="1" stroke="currentColor" stroke-width="2" fill="none"/><rect x="3" y="10" width="12" height="4" rx="1" stroke="currentColor" stroke-width="2" fill="none"/><rect x="3" y="16" width="8" height="4" rx="1" stroke="currentColor" stroke-width="2" fill="none"/><path stroke-linecap="round" stroke-width="2" d="M18 15v6m-3-3h6" />`,
 			wallet: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />`,
 			'file-text': `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2" fill="none"/><line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" stroke-width="2"/><line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2"/><polyline points="10 9 9 9 8 9" stroke="currentColor" stroke-width="2" fill="none"/>`,
 			receipt: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6M4 4v16l2-1.5L8 20l2-1.5L12 20l2-1.5L16 20l2-1.5L20 20V4l-2 1.5L16 4l-2 1.5L12 4l-2 1.5L8 4 6 5.5 4 4z" /><circle cx="9" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="15" r="1" fill="currentColor"/>`,

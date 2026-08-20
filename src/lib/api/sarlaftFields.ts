@@ -1,8 +1,17 @@
 // Mapa completo de labels y tipos para los IDs de pregunta de los 3 formularios.
-// Esto permite renderizar las respuestas con etiquetas legibles y formateo correcto
-// (moneda, fecha, sí/no) en lugar de los IDs crudos.
+// Los IDs en este archivo son IDs LÓGICOS (sin prefijo de tipo), usados para
+// agrupar campos similares entre los 3 formularios y mostrarlos con una
+// etiqueta legible. La función `getKeyParaTipo` resuelve cada ID lógico al
+// ID real usado por el backend (CLI-*, PER-*, ACC-*) según el tipo de
+// formulario y (en clientes/proveedores) el tipo de cliente.
 
 export type TipoCampo = 'texto' | 'numero' | 'moneda' | 'fecha' | 'si_no' | 'firma' | 'tabla' | 'lista' | 'opcion' | 'porcentaje'
+
+/** Solo los tres formularios de conocimiento SARLAFT tienen mapa de campos
+ *  curado en este archivo. Los formatos individuales (ej. SLFT-PTEE-FR-12) se
+ *  renderizan en el dashboard a partir de su definición del backend. */
+export type TipoFormularioSarlaft = 'cliente_proveedor' | 'accionistas' | 'personal'
+export type TipoClienteSarlaft = 'Persona Natural' | 'Persona Jurídica' | null
 
 export interface CampoDefinicion {
   id: string
@@ -231,4 +240,102 @@ export const TABLAS: Record<string, { seccionId: string; titulo: string; campos:
   'ACC-CA__rows': { seccionId: 'composicion-accionaria', titulo: 'Composición accionaria', campos: ['CA-01', 'CA-02', 'CA-03', 'CA-04', 'CA-05', 'CA-06', 'CA-07', 'CA-08'] },
   'ACC-BF__rows': { seccionId: 'beneficiarios', titulo: 'Beneficiarios finales', campos: ['BF-01', 'BF-02', 'BF-03', 'BF-04'] },
   'ACC-CTA__rows': { seccionId: 'cuentas', titulo: 'Cuentas bancarias', campos: ['CTA-01', 'CTA-02', 'CTA-03'] }
+}
+
+/**
+ * Resuelve un ID lógico (sin prefijo) al ID real del backend según el tipo
+ * de formulario. Devuelve `null` si el ID no aplica al tipo de formulario.
+ *
+ * Para clientes/proveedores, el tipo de cliente (Persona Natural/Jurídica)
+ * determina qué prefijo usar (PN-* vs PJ-*). Si no se conoce el tipo de
+ * cliente todavía, devuelve los candidatos en orden de prioridad.
+ */
+export function getKeysParaTipo(
+  campoIdLogico: string,
+  tipo: TipoFormularioSarlaft,
+  tipoCliente: TipoClienteSarlaft = null
+): string[] {
+  const prefijo = tipo === 'cliente_proveedor' ? 'CLI' : tipo === 'accionistas' ? 'ACC' : 'PER'
+
+  // Mapeos específicos (no siguen el patrón prefijo-ID)
+  const mapEspecial: Record<string, Record<TipoFormularioSarlaft, string | string[]>> = {
+    'IG-01': {
+      cliente_proveedor: tipoCliente === 'Persona Jurídica' ? ['CLI-PJ-01', 'CLI-PN-01'] : ['CLI-PN-01', 'CLI-PJ-01'],
+      accionistas: 'ACC-EMP-01',
+      personal: 'PER-IG-01'
+    },
+    'IG-02': {
+      cliente_proveedor: tipoCliente === 'Persona Jurídica' ? ['CLI-PJ-02', 'CLI-PN-02'] : ['CLI-PN-02', 'CLI-PJ-02'],
+      accionistas: 'ACC-EMP-02',
+      personal: 'PER-IG-02'
+    },
+    'IG-03': {
+      cliente_proveedor: ['CLI-IG-03', 'CLI-DP-07'],
+      accionistas: 'ACC-IG-03',
+      personal: 'PER-IG-03'
+    },
+    'IG-04': {
+      cliente_proveedor: ['CLI-DP-07'],
+      accionistas: 'ACC-IG-04',
+      personal: 'PER-IG-04'
+    },
+    'IG-05': {
+      cliente_proveedor: ['CLI-IG-05'],
+      accionistas: 'ACC-IG-05',
+      personal: 'PER-IG-05'
+    },
+    'IG-06': {
+      cliente_proveedor: ['CLI-IG-02'],
+      accionistas: 'ACC-IG-06',
+      personal: 'PER-IG-06'
+    },
+    'DEC-04-1': {
+      cliente_proveedor: 'CLI-DEC-04-1',
+      accionistas: 'ACC-DEC-04-1',
+      personal: 'PER-DEC-04-1'
+    },
+    'DEC-04-2': {
+      cliente_proveedor: 'CLI-DEC-04-2',
+      accionistas: 'ACC-DEC-04-2',
+      personal: 'PER-DEC-04-2'
+    },
+    'DEC-04-3': {
+      cliente_proveedor: 'CLI-DEC-04-3',
+      accionistas: 'ACC-DEC-04-3',
+      personal: 'PER-DEC-04-3'
+    },
+    'DEC-04-4': {
+      cliente_proveedor: 'CLI-DEC-04-4',
+      accionistas: 'ACC-DEC-04-4',
+      personal: 'PER-DEC-04-4'
+    },
+    'ENC-04': {
+      cliente_proveedor: 'CLI-ENC-04',
+      accionistas: 'ACC-ENC-04',
+      personal: 'PER-ENC-04'
+    },
+    'ENC-03': {
+      cliente_proveedor: 'CLI-ENC-03',
+      accionistas: 'ACC-ENC-03',
+      personal: 'PER-ENC-03'
+    },
+    'ENC-02': {
+      cliente_proveedor: 'CLI-ENC-02',
+      accionistas: 'ACC-ENC-02',
+      personal: 'PER-ENC-02'
+    },
+    'ENC-01': {
+      cliente_proveedor: 'CLI-ENC-01',
+      accionistas: 'ACC-ENC-01',
+      personal: 'PER-ENC-01'
+    }
+  }
+
+  if (mapEspecial[campoIdLogico]) {
+    const v = mapEspecial[campoIdLogico][tipo]
+    return Array.isArray(v) ? v : [v]
+  }
+
+  // Default: prepender prefijo del tipo (CLI-/ACC-/PER-)
+  return [`${prefijo}-${campoIdLogico}`]
 }

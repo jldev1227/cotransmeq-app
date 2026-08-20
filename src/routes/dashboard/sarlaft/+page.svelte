@@ -152,7 +152,7 @@
 					<h1>Formularios de conocimiento</h1>
 					<p>
 						Gestión, revisión y trazabilidad de los formularios radicados por clientes, proveedores,
-						accionistas y personal vinculado a COTRANSMEQ S.A.S.
+						accionistas y personal vinculado a COTRANSMEQ S.A.S..
 					</p>
 					<div class="compliance-tags">
 						<span class="compliance-tag">Resolución 2328/2025</span>
@@ -182,7 +182,7 @@
 			</div>
 			<span class="stat-sep" aria-hidden="true">·</span>
 			<div class="stat-item">
-				<span class="stat-dot stat-dot--emerald" aria-hidden="true"></span>
+				<span class="stat-dot stat-dot--aprobado" aria-hidden="true"></span>
 				<span class="stat-label">Aprobados</span>
 				<span class="stat-value">{stats.aprobados}</span>
 			</div>
@@ -220,7 +220,7 @@
 
 		<div class="filter-group">
 			<span class="filter-label">Tipo</span>
-			{#each [{ k: 'TODOS', l: 'Todos' }, { k: 'cliente_proveedor', l: 'Cliente/Prov.' }, { k: 'accionistas', l: 'Accionistas' }, { k: 'personal', l: 'Personal' }] as f}
+			{#each [{ k: 'TODOS', l: 'Todos' }, { k: 'cliente_proveedor', l: 'Cliente/Prov.' }, { k: 'accionistas', l: 'Accionistas' }, { k: 'personal', l: 'Personal' }, { k: 'autorizacion_propietario', l: 'Autoriz. propietario' }] as f}
 				<button
 					class="chip"
 					class:chip--active={filtroTipo === f.k}
@@ -455,9 +455,9 @@
 	   ═══════════════════════════════════════════════════════════════ */
 	.sarlaft-page {
 		min-height: 100vh;
-		background: #faf7f2;
+		background: #fcfcfb;
 		font-family: 'Geist', system-ui, sans-serif;
-		color: #1a1a1a;
+		color: #1e293b;
 		padding: 1.5rem 1.25rem 3rem;
 		max-width: 1400px;
 		margin: 0 auto;
@@ -479,7 +479,7 @@
 		background: rgba(249, 115, 22, 0.08);
 		padding: 0.3rem 0.75rem;
 		border-radius: 6px;
-		font-family: 'Geist', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 	}
 	.eyebrow--center {
 		display: block;
@@ -489,12 +489,12 @@
 	}
 	h1,
 	h3 {
-		font-family: 'Geist', Georgia, serif;
-		color: #0f1f1a;
+		font-family: 'Geist', system-ui, sans-serif;
+		color: #0f172a;
 		letter-spacing: -0.01em;
 	}
 	.mono {
-		font-family: 'Geist', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 	}
 
 	/* ═══════════════════════════════════════════════════════════════
@@ -530,7 +530,7 @@
 	.hero-text p {
 		font-size: 0.92rem;
 		line-height: 1.6;
-		color: #4a4a4a;
+		color: #475569;
 		margin: 0;
 		max-width: 640px;
 	}
@@ -542,12 +542,12 @@
 	}
 	.compliance-tag {
 		display: inline-flex;
-		font-family: 'Geist', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.66rem;
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
-		color: #166534;
+		color: #9a3412;
 		background: rgba(249, 115, 22, 0.06);
 		padding: 0.25rem 0.55rem;
 		border-radius: 5px;
@@ -561,7 +561,7 @@
 		gap: 0.65rem;
 		padding-top: 1.1rem;
 		border-top: 1px solid rgba(0, 0, 0, 0.06);
-		font-family: 'Geist', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 	}
 	.stat-item {
 		display: inline-flex;
@@ -573,20 +573,20 @@
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
-		color: #6b6b6b;
+		color: #64748b;
 	}
 	.stat-value {
 		font-size: 0.95rem;
 		font-weight: 700;
-		color: #0f1f1a;
+		color: #0f172a;
 	}
 	.stat-dot {
 		width: 8px;
 		height: 8px;
 		border-radius: 50%;
 	}
-	.stat-dot--emerald {
-		background: #f97316;
+	.stat-dot--aprobado {
+		background: #22c55e;
 	}
 	.stat-dot--blue {
 		background: #3b82f6;
@@ -598,7 +598,7 @@
 		background: #ef4444;
 	}
 	.stat-sep {
-		color: #c9c4ba;
+		color: #cbd5e1;
 	}
 
 	/* ═══════════════════════════════════════════════════════════════
@@ -627,7 +627,7 @@
 		transform: translateY(-50%);
 		width: 16px;
 		height: 16px;
-		color: #9a9a9a;
+		color: #94a3b8;
 		pointer-events: none;
 	}
 	.search-input {
@@ -635,15 +635,15 @@
 		padding: 0.6rem 0.9rem 0.6rem 2.5rem;
 		font-family: inherit;
 		font-size: 0.88rem;
-		color: #1a1a1a;
-		background: #faf7f2;
+		color: #1e293b;
+		background: #fcfcfb;
 		border: 1px solid rgba(0, 0, 0, 0.08);
 		border-radius: 10px;
 		outline: none;
 		transition: all 0.2s;
 	}
 	.search-input::placeholder {
-		color: #9a9a9a;
+		color: #94a3b8;
 	}
 	.search-input:focus {
 		background: white;
@@ -655,18 +655,18 @@
 		display: flex;
 		gap: 0.3rem;
 		padding: 0.25rem;
-		background: #faf7f2;
+		background: #fcfcfb;
 		border: 1px solid rgba(0, 0, 0, 0.06);
 		border-radius: 12px;
 		flex-wrap: wrap;
 	}
 	.filter-label {
-		font-family: 'Geist', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.7rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
-		color: #6b6b6b;
+		color: #64748b;
 		padding: 0 0.4rem;
 		align-self: center;
 	}
@@ -678,7 +678,7 @@
 		font-family: inherit;
 		font-size: 0.78rem;
 		font-weight: 600;
-		color: #4a4a4a;
+		color: #475569;
 		background: transparent;
 		border: none;
 		border-radius: 8px;
@@ -686,11 +686,11 @@
 		transition: all 0.2s;
 	}
 	.chip:hover {
-		color: #0f1f1a;
+		color: #0f172a;
 	}
 	.chip--active {
 		background: white;
-		color: #166534;
+		color: #9a3412;
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 	}
 	.chip-dot {
@@ -707,7 +707,7 @@
 		font-family: inherit;
 		font-size: 0.78rem;
 		font-weight: 600;
-		color: #6b6b6b;
+		color: #64748b;
 		background: transparent;
 		border: 1px solid rgba(0, 0, 0, 0.1);
 		border-radius: 10px;
@@ -764,7 +764,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-family: 'Geist', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.85rem;
 		font-weight: 700;
 		letter-spacing: 0.04em;
@@ -775,10 +775,13 @@
 	}
 	.form-avatar--en_revision {
 		background: linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(217, 119, 6, 0.18));
-		color: #92400e;
+		color: #854d0e;
 	}
+	/* "Aprobado" conserva el verde: es un color de estado, no de marca. Coincide
+	   con ESTADO_LABELS.aprobado y con --emerald-800 (#166534) de app.css, que
+	   el sistema reserva justamente para este caso. */
 	.form-avatar--aprobado {
-		background: linear-gradient(135deg, rgba(249, 115, 22, 0.16), rgba(234, 88, 12, 0.2));
+		background: linear-gradient(135deg, rgba(34, 197, 94, 0.16), rgba(22, 101, 52, 0.2));
 		color: #166534;
 	}
 	.form-avatar--rechazado {
@@ -803,7 +806,7 @@
 	}
 	.radicado-pill {
 		display: inline-flex;
-		font-family: 'Geist', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.72rem;
 		font-weight: 700;
 		color: #f97316;
@@ -814,10 +817,10 @@
 	}
 	.codigo-pill {
 		display: inline-flex;
-		font-family: 'Geist', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.65rem;
 		font-weight: 600;
-		color: #6b6b6b;
+		color: #64748b;
 		background: rgba(0, 0, 0, 0.04);
 		padding: 0.18rem 0.5rem;
 		border-radius: 5px;
@@ -827,7 +830,7 @@
 		font-size: 1.05rem;
 		font-weight: 600;
 		margin: 0 0 0.2rem;
-		color: #0f1f1a;
+		color: #0f172a;
 		line-height: 1.3;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -835,18 +838,18 @@
 	}
 	.form-sub {
 		font-size: 0.78rem;
-		color: #6b6b6b;
+		color: #64748b;
 	}
 	.form-sep {
 		margin: 0 0.4rem;
-		color: #c9c4ba;
+		color: #cbd5e1;
 	}
 
 	.estado-pill {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
-		font-family: 'Geist', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.66rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -876,14 +879,14 @@
 		align-items: center;
 		gap: 0.4rem;
 		font-size: 0.78rem;
-		color: #6b6b6b;
+		color: #64748b;
 		min-width: 0;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 	.meta-item svg {
-		color: #9a9a9a;
+		color: #94a3b8;
 		flex-shrink: 0;
 	}
 
@@ -904,17 +907,17 @@
 		align-items: center;
 		gap: 0.4rem;
 		font-size: 0.78rem;
-		color: #4a4a4a;
+		color: #475569;
 	}
 	.form-date svg,
 	.form-docs svg {
-		color: #9a9a9a;
+		color: #94a3b8;
 	}
 	.form-date-rel {
-		color: #9a9a9a;
+		color: #94a3b8;
 	}
 	.form-docs--empty {
-		color: #9a9a9a;
+		color: #94a3b8;
 	}
 
 	.card-link {
@@ -951,11 +954,11 @@
 	}
 	.pagination-info {
 		font-size: 0.78rem;
-		color: #6b6b6b;
+		color: #64748b;
 		margin: 0;
 	}
 	.pagination-info .mono {
-		color: #0f1f1a;
+		color: #0f172a;
 		font-weight: 700;
 	}
 	.pagination-controls {
@@ -974,7 +977,7 @@
 		font-family: inherit;
 		font-size: 0.78rem;
 		font-weight: 600;
-		color: #4a4a4a;
+		color: #475569;
 		background: transparent;
 		border: 1px solid transparent;
 		border-radius: 8px;
@@ -987,8 +990,8 @@
 	}
 	.page-arrow:hover:not(:disabled),
 	.page-num:hover {
-		background: #faf7f2;
-		color: #0f1f1a;
+		background: #fcfcfb;
+		color: #0f172a;
 	}
 	.page-arrow:disabled {
 		opacity: 0.35;
@@ -1005,7 +1008,7 @@
 	}
 	.page-ellipsis {
 		padding: 0 0.4rem;
-		color: #9a9a9a;
+		color: #94a3b8;
 		font-size: 0.78rem;
 	}
 
@@ -1022,7 +1025,7 @@
 		background: white;
 		border: 1px solid rgba(0, 0, 0, 0.06);
 		border-radius: 20px;
-		color: #6b6b6b;
+		color: #64748b;
 		font-size: 0.88rem;
 	}
 	.spin-ring {
@@ -1055,7 +1058,7 @@
 	}
 	.empty-state p {
 		font-size: 0.88rem;
-		color: #4a4a4a;
+		color: #475569;
 		max-width: 480px;
 		margin: 0 0 1rem;
 		line-height: 1.55;
@@ -1143,11 +1146,11 @@
 	}
 	.btn-secondary {
 		background: white;
-		color: #1a1a1a;
+		color: #1e293b;
 		border-color: rgba(0, 0, 0, 0.12);
 	}
 	.btn-secondary:hover:not(:disabled) {
-		background: #faf7f2;
+		background: #fcfcfb;
 		border-color: rgba(0, 0, 0, 0.2);
 	}
 	.btn-secondary--sm {

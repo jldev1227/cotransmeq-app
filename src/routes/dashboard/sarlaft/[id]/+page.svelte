@@ -9,8 +9,13 @@
 		TIPO_FORMULARIO_LABELS,
 		ESTADO_LABELS,
 		TIPO_DOCUMENTO_LABELS,
+		CONTACTO_POR_TIPO,
+		waLink,
+		telLink,
+		mailtoLink,
 		type SarlaftFormularioDetalle,
-		type EstadoSarlaft
+		type EstadoSarlaft,
+		type TipoFormularioSarlaft
 	} from '$lib/api/sarlaft';
 	import SarlaftRespuestas from '$lib/sarlaft/SarlaftRespuestas.svelte';
 	import { toast } from 'svelte-sonner';
@@ -19,6 +24,8 @@
 	let isLoading = $state(true);
 	let error = $state<string | null>(null);
 	let downloading = $state<Record<string, boolean>>({});
+	let downloadingPdf = $state(false);
+	let downloadingZip = $state(false);
 
 	// Estado de edición
 	let editEstado = $state<EstadoSarlaft | ''>('');
@@ -32,6 +39,11 @@
 		if (cliIg01 === 'Persona Natural') return 'Persona Natural' as const;
 		if (cliIg01 === 'Persona Jurídica') return 'Persona Jurídica' as const;
 		return null;
+	});
+
+	const contacto = $derived.by(() => {
+		if (!detalle) return null;
+		return CONTACTO_POR_TIPO[detalle.tipo_formulario as TipoFormularioSarlaft] ?? null;
 	});
 
 	const detallesResumen = $derived.by(() => {
@@ -97,6 +109,32 @@
 			toast.error(`Error al descargar ${nombre}: ${err?.response?.data?.error || err?.message || 'Error desconocido'}`);
 		} finally {
 			downloading = { ...downloading, [documentoId]: false };
+		}
+	}
+
+	async function handleDescargarPDF() {
+		if (!detalle) return;
+		downloadingPdf = true;
+		try {
+			const filename = await sarlaftAPI.descargarPDF(detalle.id);
+			toast.success(`PDF descargado: ${filename}`);
+		} catch (err: any) {
+			toast.error(`Error al descargar PDF: ${err?.response?.data?.error || err?.message || 'Error desconocido'}`);
+		} finally {
+			downloadingPdf = false;
+		}
+	}
+
+	async function handleDescargarZip() {
+		if (!detalle) return;
+		downloadingZip = true;
+		try {
+			const filename = await sarlaftAPI.descargarEvidencia(detalle.id);
+			toast.success(`Evidencia descargada: ${filename}`);
+		} catch (err: any) {
+			toast.error(`Error al descargar evidencia: ${err?.response?.data?.error || err?.message || 'Error desconocido'}`);
+		} finally {
+			downloadingZip = false;
 		}
 	}
 
@@ -318,12 +356,93 @@
 						respuestas={detalle.respuestas}
 						{tipoCliente}
 						tipoFormulario={detalle.tipo_formulario}
+						definicion={detalle.definicion}
 					/>
 				</div>
 			</section>
 
 			<!-- COL DER: Sidebar con documentos + evaluación + metadata -->
 			<aside class="col-side">
+				<!-- Exportar / Descargar -->
+				<section class="side-card" in:fly={{ y: 12, duration: 320, delay: 40, easing: quintOut }}>
+					<header class="side-head">
+						<div>
+							<span class="eyebrow">Exportar</span>
+							<h3>Descargar evidencia</h3>
+						</div>
+					</header>
+					<div class="side-body">
+						<p class="side-help">
+							Genera el PDF con las respuestas + firma, o descarga un ZIP con todo (PDF + adjuntos originales).
+						</p>
+						<div class="export-grid">
+							<button
+								type="button"
+								class="export-btn"
+								onclick={handleDescargarPDF}
+								disabled={downloadingPdf}
+							>
+								{#if downloadingPdf}
+									<div class="spin-ring spin-ring--sm"></div>
+									Generando…
+								{:else}
+									<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+									</svg>
+									Descargar PDF
+								{/if}
+							</button>
+							<button
+								type="button"
+								class="export-btn export-btn--zip"
+								onclick={handleDescargarZip}
+								disabled={downloadingZip}
+							>
+								{#if downloadingZip}
+									<div class="spin-ring spin-ring--sm"></div>
+									Empaquetando…
+								{:else}
+									<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+										<path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
+									</svg>
+									Descargar ZIP
+								{/if}
+							</button>
+						</div>
+						{#if contacto}
+							<div class="export-contacto">
+								<span class="eyebrow eyebrow--mini">Canal de notificación</span>
+								<p class="contacto-texto">
+									Se notificó a <strong>{contacto.area_responsable}</strong>
+									{#if contacto.emails.length > 0}
+										(<span class="mono">{contacto.emails.join(', ')}</span>)
+									{/if}
+								</p>
+								<div class="contacto-actions">
+									<a class="contacto-link" href={telLink(contacto)} aria-label="Llamar al área">
+										<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+										</svg>
+										{contacto.telefono_principal}
+									</a>
+									<a class="contacto-link" href={waLink(contacto)} target="_blank" rel="noopener noreferrer" aria-label="Contactar por WhatsApp">
+										<svg fill="currentColor" viewBox="0 0 24 24" stroke="none">
+											<path d="M20.52 3.48A11.93 11.93 0 0012 0C5.37 0 0 5.37 0 12a11.94 11.94 0 001.64 6L0 24l6.18-1.62A11.93 11.93 0 0012 24c6.63 0 12-5.37 12-12 0-3.19-1.24-6.19-3.48-8.52zM12 22a9.94 9.94 0 01-5.07-1.39l-.36-.21-3.67.96.98-3.58-.23-.37A9.94 9.94 0 0112 22zm5.51-7.46c-.3-.15-1.78-.88-2.05-.98s-.47-.15-.67.15-.77.98-.95 1.18-.35.22-.65.07a8.18 8.18 0 01-2.41-1.49 9.06 9.06 0 01-1.67-2.08c-.17-.3 0-.46.13-.61s.3-.35.45-.52.2-.3.3-.5.05-.37-.02-.52-.67-1.62-.92-2.22-.49-.51-.67-.52H7.43a1.16 1.16 0 00-.85.4 3.55 3.55 0 00-1.1 2.64c0 1.55 1.13 3.05 1.29 3.27s2.22 3.4 5.4 4.77a18.5 18.5 0 001.8.67 4.34 4.34 0 002 .13 3.27 3.27 0 002.15-1.52 2.66 2.66 0 00.19-1.52c-.08-.13-.28-.21-.58-.36z"/>
+										</svg>
+										WhatsApp
+									</a>
+									<a class="contacto-link" href={mailtoLink(contacto)} aria-label="Enviar correo al área">
+										<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+											<path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+										</svg>
+										Correo
+									</a>
+								</div>
+							</div>
+						{/if}
+					</div>
+				</section>
+
 				<!-- Documentos -->
 				<section class="side-card" in:fly={{ y: 12, duration: 320, delay: 80, easing: quintOut }}>
 					<header class="side-head">
@@ -511,9 +630,9 @@
 	   ═══════════════════════════════════════════════════════════════ */
 	.sarlaft-page {
 		min-height: 100vh;
-		background: #faf7f2;
+		background: #fcfcfb;
 		font-family: 'Geist', system-ui, sans-serif;
-		color: #1a1a1a;
+		color: #1e293b;
 		padding: 1.5rem 1.25rem 3rem;
 		max-width: 1500px;
 		margin: 0 auto;
@@ -527,7 +646,7 @@
 	   ═══════════════════════════════════════════════════════════════ */
 	.eyebrow {
 		display: inline-block;
-		font-family: 'Geist', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -540,16 +659,16 @@
 	h1,
 	h2,
 	h3 {
-		font-family: 'Geist', Georgia, serif;
-		color: #0f1f1a;
+		font-family: 'Geist', system-ui, sans-serif;
+		color: #0f172a;
 		letter-spacing: -0.01em;
 	}
 	.mono {
-		font-family: 'Geist', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 	}
 	.mono--sm {
 		font-size: 0.7rem;
-		color: #6b6b6b;
+		color: #64748b;
 	}
 
 	/* ═══════════════════════════════════════════════════════════════
@@ -561,7 +680,7 @@
 		gap: 0.4rem;
 		background: none;
 		border: none;
-		color: #6b6b6b;
+		color: #64748b;
 		font-size: 0.82rem;
 		font-weight: 500;
 		cursor: pointer;
@@ -614,7 +733,7 @@
 	}
 	.radicado-pill {
 		display: inline-flex;
-		font-family: 'Geist', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.78rem;
 		font-weight: 700;
 		color: #f97316;
@@ -625,10 +744,10 @@
 	}
 	.codigo-pill {
 		display: inline-flex;
-		font-family: 'Geist', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.68rem;
 		font-weight: 600;
-		color: #6b6b6b;
+		color: #64748b;
 		background: rgba(0, 0, 0, 0.04);
 		padding: 0.25rem 0.55rem;
 		border-radius: 5px;
@@ -638,7 +757,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
-		font-family: 'Geist', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.7rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -665,7 +784,7 @@
 		align-items: center;
 		gap: 0.4rem;
 		font-size: 0.78rem;
-		color: #6b6b6b;
+		color: #64748b;
 	}
 	.meta-item {
 		display: inline-flex;
@@ -673,7 +792,7 @@
 		gap: 0.3rem;
 	}
 	.meta-item svg {
-		color: #9a9a9a;
+		color: #94a3b8;
 		flex-shrink: 0;
 	}
 	.meta-item--link {
@@ -686,7 +805,7 @@
 		text-decoration: underline;
 	}
 	.meta-sep {
-		color: #c9c4ba;
+		color: #cbd5e1;
 	}
 
 	/* Hero stats */
@@ -697,7 +816,7 @@
 		gap: 0.65rem;
 		padding-top: 1rem;
 		border-top: 1px solid rgba(0, 0, 0, 0.06);
-		font-family: 'Geist', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 	}
 	.stat-item {
 		display: inline-flex;
@@ -709,19 +828,19 @@
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
-		color: #6b6b6b;
+		color: #64748b;
 	}
 	.stat-value {
 		font-size: 0.95rem;
 		font-weight: 700;
-		color: #0f1f1a;
+		color: #0f172a;
 	}
 	.stat-value--text {
 		font-size: 0.82rem;
 		font-weight: 600;
 	}
 	.stat-sep {
-		color: #c9c4ba;
+		color: #cbd5e1;
 	}
 
 	/* ═══════════════════════════════════════════════════════════════
@@ -747,11 +866,11 @@
 		font-size: 1.3rem;
 		font-weight: 500;
 		margin: 0.4rem 0 0.25rem;
-		color: #0f1f1a;
+		color: #0f172a;
 	}
 	.col-head p {
 		font-size: 0.82rem;
-		color: #4a4a4a;
+		color: #475569;
 		margin: 0;
 		max-width: 600px;
 		line-height: 1.5;
@@ -785,14 +904,14 @@
 		justify-content: space-between;
 		gap: 0.75rem;
 		padding: 1rem 1.25rem;
-		background: linear-gradient(180deg, #faf7f2 0%, white 100%);
+		background: linear-gradient(180deg, #fcfcfb 0%, white 100%);
 		border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 	}
 	.side-head h3 {
 		font-size: 1rem;
 		font-weight: 500;
 		margin: 0.35rem 0 0;
-		color: #0f1f1a;
+		color: #0f172a;
 	}
 	.side-head--summary {
 		cursor: pointer;
@@ -804,10 +923,10 @@
 		display: none;
 	}
 	.side-head--summary:hover {
-		background: #faf7f2;
+		background: #fcfcfb;
 	}
 	.chevron {
-		color: #6b6b6b;
+		color: #64748b;
 		transition: transform 0.2s;
 		flex-shrink: 0;
 	}
@@ -819,12 +938,12 @@
 	}
 	.evaluado-por {
 		font-size: 0.7rem;
-		color: #6b6b6b;
-		font-family: 'Geist', sans-serif;
+		color: #64748b;
+		font-family: 'Geist', system-ui, sans-serif;
 		text-align: right;
 	}
 	.evaluado-por strong {
-		color: #0f1f1a;
+		color: #0f172a;
 		font-weight: 600;
 	}
 
@@ -834,12 +953,121 @@
 		flex-direction: column;
 		gap: 0.5rem;
 	}
+
+	/* ═══════════════════════════════════════════════════════════════
+	   EXPORTAR / DESCARGAR
+	   ═══════════════════════════════════════════════════════════════ */
+	.side-help {
+		font-size: 0.8rem;
+		line-height: 1.55;
+		color: #475569;
+		margin: 0 0 0.85rem;
+	}
+	.export-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.5rem;
+		margin-bottom: 0.85rem;
+	}
+	.export-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.45rem;
+		padding: 0.6rem 0.8rem;
+		background: white;
+		color: #1e293b;
+		border: 1px solid rgba(0, 0, 0, 0.12);
+		border-radius: 10px;
+		font-family: inherit;
+		font-size: 0.8rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition: all 0.2s;
+	}
+	.export-btn:hover:not(:disabled) {
+		background: #fcfcfb;
+		border-color: rgba(249, 115, 22, 0.4);
+		color: #9a3412;
+	}
+	.export-btn:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+	.export-btn svg {
+		width: 16px;
+		height: 16px;
+		color: #f97316;
+	}
+	.export-btn--zip {
+		background: rgba(249, 115, 22, 0.06);
+		border-color: rgba(249, 115, 22, 0.25);
+		color: #9a3412;
+	}
+	.export-btn--zip:hover:not(:disabled) {
+		background: rgba(249, 115, 22, 0.12);
+		border-color: #f97316;
+	}
+	.export-contacto {
+		padding: 0.7rem 0.85rem;
+		background: #fcfcfb;
+		border: 1px solid rgba(0, 0, 0, 0.05);
+		border-radius: 10px;
+	}
+	.eyebrow--mini {
+		font-size: 0.6rem !important;
+		padding: 0.15rem 0.45rem !important;
+	}
+	.contacto-texto {
+		font-size: 0.78rem;
+		color: #475569;
+		line-height: 1.55;
+		margin: 0.4rem 0 0.6rem;
+		word-break: break-word;
+	}
+	.contacto-texto strong {
+		color: #0f172a;
+		font-weight: 700;
+	}
+	.contacto-texto .mono {
+		font-size: 0.72rem;
+		color: #9a3412;
+	}
+	.contacto-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+	}
+	.contacto-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.4rem 0.7rem;
+		background: white;
+		border: 1px solid rgba(0, 0, 0, 0.08);
+		border-radius: 8px;
+		color: #1e293b;
+		text-decoration: none;
+		font-size: 0.75rem;
+		font-weight: 600;
+		transition: all 0.2s;
+	}
+	.contacto-link:hover {
+		border-color: rgba(249, 115, 22, 0.3);
+		color: #9a3412;
+		background: rgba(249, 115, 22, 0.05);
+	}
+	.contacto-link svg {
+		width: 14px;
+		height: 14px;
+		color: #f97316;
+	}
 	.doc-row {
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
 		padding: 0.75rem 0.85rem;
-		background: #faf7f2;
+		background: #fcfcfb;
 		border: 1px solid rgba(0, 0, 0, 0.05);
 		border-radius: 12px;
 		cursor: pointer;
@@ -879,12 +1107,12 @@
 	.doc-tipo {
 		font-size: 0.8rem;
 		font-weight: 600;
-		color: #0f1f1a;
+		color: #0f172a;
 		margin: 0 0 0.15rem;
 	}
 	.doc-name {
 		font-size: 0.72rem;
-		color: #4a4a4a;
+		color: #475569;
 		margin: 0 0 0.2rem;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -892,7 +1120,7 @@
 	}
 	.doc-meta {
 		font-size: 0.68rem;
-		color: #6b6b6b;
+		color: #64748b;
 		margin: 0;
 	}
 	.doc-meta .mono {
@@ -900,7 +1128,7 @@
 	}
 	.doc-sep {
 		margin: 0 0.3rem;
-		color: #c9c4ba;
+		color: #cbd5e1;
 	}
 	.doc-action {
 		flex-shrink: 0;
@@ -934,18 +1162,18 @@
 		gap: 0.5rem;
 		padding: 1.25rem 1rem;
 		text-align: center;
-		background: #faf7f2;
+		background: #fcfcfb;
 		border: 1px dashed rgba(0, 0, 0, 0.1);
 		border-radius: 12px;
 	}
 	.empty-mini svg {
 		width: 26px;
 		height: 26px;
-		color: #9a9a9a;
+		color: #94a3b8;
 	}
 	.empty-mini p {
 		font-size: 0.8rem;
-		color: #6b6b6b;
+		color: #64748b;
 		margin: 0;
 	}
 
@@ -953,10 +1181,10 @@
 	.badge-count {
 		display: inline-flex;
 		align-items: center;
-		font-family: 'Geist', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.7rem;
 		font-weight: 700;
-		color: #166534;
+		color: #9a3412;
 		background: rgba(249, 115, 22, 0.1);
 		padding: 0.25rem 0.6rem;
 		border-radius: 5px;
@@ -974,12 +1202,12 @@
 		gap: 0.35rem;
 	}
 	.field-label {
-		font-family: 'Geist', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.68rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
-		color: #6b6b6b;
+		color: #64748b;
 	}
 	.input,
 	.select {
@@ -987,15 +1215,15 @@
 		padding: 0.55rem 0.8rem;
 		font-family: inherit;
 		font-size: 0.85rem;
-		color: #1a1a1a;
-		background: #faf7f2;
+		color: #1e293b;
+		background: #fcfcfb;
 		border: 1px solid rgba(0, 0, 0, 0.1);
 		border-radius: 10px;
 		outline: none;
 		transition: all 0.2s;
 	}
 	.input::placeholder {
-		color: #9a9a9a;
+		color: #94a3b8;
 	}
 	.input:focus,
 	.select:focus {
@@ -1017,7 +1245,7 @@
 		border: 1px solid rgba(249, 115, 22, 0.15);
 		border-radius: 10px;
 		font-size: 0.78rem;
-		color: #166534;
+		color: #9a3412;
 	}
 	.eval-meta svg {
 		color: #f97316;
@@ -1045,17 +1273,17 @@
 		border-bottom: none;
 	}
 	.tech-list dt {
-		font-family: 'Geist', monospace;
+		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
-		color: #6b6b6b;
+		color: #64748b;
 	}
 	.tech-list dd {
 		margin: 0;
 		font-size: 0.78rem;
-		color: #0f1f1a;
+		color: #0f172a;
 		word-break: break-all;
 	}
 	.tech-list dd.ua {
@@ -1076,7 +1304,7 @@
 		background: white;
 		border: 1px solid rgba(0, 0, 0, 0.06);
 		border-radius: 20px;
-		color: #6b6b6b;
+		color: #64748b;
 		font-size: 0.88rem;
 	}
 	.spin-ring {
@@ -1161,11 +1389,11 @@
 	}
 	.btn-secondary {
 		background: white;
-		color: #1a1a1a;
+		color: #1e293b;
 		border-color: rgba(0, 0, 0, 0.12);
 	}
 	.btn-secondary:hover:not(:disabled) {
-		background: #faf7f2;
+		background: #fcfcfb;
 		border-color: rgba(0, 0, 0, 0.2);
 	}
 	.btn-secondary--sm {
