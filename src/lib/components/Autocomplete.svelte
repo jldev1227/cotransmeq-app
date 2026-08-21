@@ -9,7 +9,16 @@
   export let options: AutocompleteOption[] = [];
   export let placeholder: string = '🔍 Buscar...';
   export let disabled: boolean = false;
-  export let maxResults: number = 20;
+  /**
+   * Tope de opciones dibujadas. `0` = sin tope, que es el valor por defecto.
+   *
+   * Antes recortaba a 20 en las DOS ramas —con y sin búsqueda—, así que una
+   * flota de cientos de placas se veía como una lista de 20 y nada avisaba del
+   * resto: el buscador acertaba, pero abrir el desplegable mentía sobre el
+   * tamaño del catálogo. El dropdown ya tiene alto máximo y scroll, así que
+   * dibujar unos cientos de opciones no cuesta nada y no confunde.
+   */
+  export let maxResults: number = 0;
   export let dropdownZIndex: number = 9999;
   /**
    * Id y etiqueta accesible del input interno. Opcionales: quien monte el
@@ -19,6 +28,10 @@
    */
   export let inputId: string = '';
   export let ariaLabel: string = '';
+
+  /// A partir de aquí la lista ya no cabe en el alto del dropdown, así que hay
+  /// scroll y conviene decir cuántas opciones hay en total.
+  const VISIBLES_SIN_SCROLL = 6;
 
   // Estado interno (no se exporta)
   let query: string = '';
@@ -39,9 +52,13 @@
 
   // Filtro reactivo: siempre basado en `query` (lo que el usuario ve en el input)
   $: q = (query || '').toLowerCase().trim();
-  $: filtered = q
-    ? options.filter(o => (o.label || '').toLowerCase().includes(q)).slice(0, maxResults)
-    : options.slice(0, maxResults);
+  // Todas las coincidencias, sin recortar: es lo que hay que contar para poder
+  // decir la verdad sobre cuántas opciones existen.
+  $: coincidencias = q
+    ? options.filter(o => (o.label || '').toLowerCase().includes(q))
+    : options;
+  $: filtered = maxResults > 0 ? coincidencias.slice(0, maxResults) : coincidencias;
+  $: ocultas = coincidencias.length - filtered.length;
 
   $: if (filtered.length > 0 && highlighted >= filtered.length) {
     highlighted = filtered.length - 1;
@@ -338,6 +355,20 @@
           data-idx={i}
         >{@html highlightMatch(opt.label)}</button>
       {/each}
+
+      <!-- Pie fijo con el conteo. Con una lista larga, ver 15 opciones en
+           pantalla sin saber si son todas o el principio de 300 es justo lo que
+           desorienta; el número lo resuelve sin obligar a hacer scroll. -->
+      {#if ocultas > 0}
+        <div class="autocomplete-pie">
+          Mostrando {filtered.length} de {coincidencias.length} · escribe para afinar
+        </div>
+      {:else if coincidencias.length > VISIBLES_SIN_SCROLL}
+        <div class="autocomplete-pie">
+          {coincidencias.length}
+          {q ? 'coincidencias' : 'opciones'} · escribe para filtrar
+        </div>
+      {/if}
     </div>
   {:else if open && q && filtered.length === 0}
     <div
@@ -448,5 +479,17 @@
     color: var(--text3, #94a3b8);
     text-align: center;
     font-style: italic;
+  }
+  /* Pegado al fondo del dropdown: si scrollease con la lista, el conteo
+     desaparecería justo cuando la lista es larga, que es cuando sirve. */
+  .autocomplete-pie {
+    position: sticky;
+    bottom: 0;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.7rem;
+    color: var(--text3, #94a3b8);
+    text-align: center;
+    background: var(--surface, #fff);
+    border-top: 1px solid var(--border, #e2e8f0);
   }
 </style>
