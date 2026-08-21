@@ -93,15 +93,14 @@ export interface StoredAttachment {
 	state: LocalAttachmentState;
 	/** Id que asignó el servidor en `attachments/init`. */
 	serverId?: string;
-	uploadUrl?: string;
 	/**
-	 * Checksum base64 que hay que enviar en `x-amz-checksum-sha256` al subir.
+	 * URL firmada de S3 para el `PUT`.
 	 *
-	 * Va FIRMADO en `uploadUrl`, así que se guarda junto a ella y se invalida con
-	 * ella: reusar el checksum de una firma con otra da un `403` que parece un
-	 * problema de credenciales y no lo es.
+	 * Lleva el checksum izado dentro (`&x-amz-checksum-sha256=…`) y firmado, así
+	 * que no hay nada que guardar aparte ni que reenviar como cabecera: la URL es
+	 * la instrucción completa. Se invalida entera al caducar.
 	 */
-	uploadChecksum?: string;
+	uploadUrl?: string;
 	createdAt: string;
 }
 

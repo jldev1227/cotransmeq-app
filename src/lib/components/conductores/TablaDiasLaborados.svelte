@@ -36,6 +36,9 @@
 		fecha: string;
 		tipo: TipoDia;
 		observaciones: string | null;
+		/** Vehículo intervenido; solo viene lleno en días de MANTENIMIENTO. */
+		mantenimiento_vehiculo_id?: string | null;
+		mantenimiento_vehiculo_placa?: string | null;
 		created_at?: string;
 		updated_at?: string;
 		conductor: { id: string; nombre: string; apellido: string; numero_identificacion: string } | null;
@@ -1355,6 +1358,12 @@
 											style="background-color: rgba(249, 115, 22, 0.06); color: #047857; border-color: rgba(249, 115, 22, 0.25);"
 										>
 											🚚 {seg.vehiculo_placa}
+										</span>
+									{:else if reg.tipo === 'MANTENIMIENTO' && reg.mantenimiento_vehiculo_placa}
+										<!-- Un día de taller no tiene tramo, pero sí vehículo: es justo el
+											 dato por el que se consulta esta fila. -->
+										<span class="font-mono text-[10px] font-semibold" style="color: #b91c1c;">
+											🔧 {reg.mantenimiento_vehiculo_placa}
 										</span>
 									{:else}
 										<span class="text-[10px]" style="color: var(--text-very-muted);">—</span>

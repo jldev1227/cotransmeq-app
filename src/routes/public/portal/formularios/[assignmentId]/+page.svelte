@@ -53,6 +53,10 @@
 	import FormRenderer from '$lib/components/formularios/FormRenderer.svelte';
 	import EvidenceCapture from '$lib/components/formularios/EvidenceCapture.svelte';
 	import SyncStatus from '$lib/components/formularios/SyncStatus.svelte';
+	/// El mismo buscador de placas del modal de días laborados. Un desplegable
+	/// nativo obliga a recorrer toda la flota con el pulgar; aquí el conductor
+	/// teclea tres letras de su placa y listo.
+	import Autocomplete from '$lib/components/Autocomplete.svelte';
 
 	const assignmentId = $derived($page.params.assignmentId!);
 
@@ -257,6 +261,12 @@
 		}
 	}
 
+	/// Forma que espera el buscador: `label` es lo que filtra al teclear, y aquí
+	/// lo que el conductor teclea es la placa.
+	const vehiculoOptions = $derived(
+		vehiculos.map((v) => ({ id: v.id, label: v.placa, placa: v.placa }))
+	);
+
 	async function refrescarAdjuntos() {
 		if (!clientSubmissionId) return;
 		adjuntos = await attachmentsForSubmission(clientSubmissionId);
@@ -343,7 +353,7 @@
 	 * del vehículo: un preoperacional a medias con los datos de otro vehículo es
 	 * peor que uno vacío.
 	 */
-	async function cambiarVehiculo(vehicleId: string) {
+	async function cambiarVehiculo(vehicleId: string, placa?: string) {
 		const anterior = contexto.vehicleId;
 		if (anterior && anterior !== vehicleId && runner && runner.answers.size > 0) {
 			const ok = confirm(
@@ -358,7 +368,10 @@
 				if (campoVehiculo) runner.clearDependents(campoVehiculo.key);
 			}
 		}
-		contexto = { ...contexto, vehicleId };
+		/// Se guarda también la placa: el borrador vive en el teléfono y, si el
+		/// catálogo no está cargado al reabrirlo (sin señal), un id suelto no le
+		/// dice nada al conductor —ni al recibo— sobre qué vehículo eligió.
+		contexto = { ...contexto, vehicleId, vehiclePlate: placa ?? '' };
 		await guardarLocal();
 	}
 
@@ -553,22 +566,35 @@
 
 		{#if contextoRequerido.includes('vehicleId')}
 			<section class="contexto">
-				<label class="contexto__campo">
-					<span class="contexto__label">Vehículo <span class="req">*</span></span>
-					{#if vehiculos.length}
-						<select
-							class="contexto__input"
+				{#if vehiculos.length}
+					<!-- Buscador de placas, no desplegable: en una flota de decenas de
+					     vehículos el `<select>` nativo obliga a recorrer la lista entera
+					     con el pulgar. Es el mismo componente del modal de días
+					     laborados, así que el conductor ya sabe usarlo. -->
+					<div class="contexto__campo">
+						<span class="contexto__label" id="ctx-vehiculo-label">
+							Vehículo <span class="req">*</span>
+						</span>
+						<!-- Si el borrador trae una placa que ya no está en el catálogo
+						     (vehículo dado de baja), el buscador no puede resolver el id y el
+						     campo se vería vacío; el placeholder al menos deja la placa a la
+						     vista. Mismo patrón que días laborados. -->
+						<Autocomplete
+							options={vehiculoOptions}
 							value={String(contexto.vehicleId ?? '')}
-							onchange={(e) => cambiarVehiculo(e.currentTarget.value).catch(reportar)}
-						>
-							<option value="">Selecciona el vehículo…</option>
-							{#each vehiculos as v (v.id)}
-								<option value={v.id}>{v.placa}</option>
-							{/each}
-						</select>
-					{:else}
-						<!-- Sin catálogo (sin red): se acepta la placa escrita para no
-						     bloquear la captura. El servidor valida el contexto al enviar. -->
+							placeholder={String(contexto.vehiclePlate ?? '') || '🔍 Buscar placa...'}
+							inputId="ctx-vehiculo"
+							ariaLabel="Buscar la placa del vehículo"
+							on:select={(e) =>
+								cambiarVehiculo(e.detail.id, e.detail.placa ?? e.detail.label).catch(reportar)}
+							on:clear={() => cambiarVehiculo('').catch(reportar)}
+						/>
+					</div>
+				{:else}
+					<!-- Sin catálogo (sin red): se acepta la placa escrita para no
+					     bloquear la captura. El servidor valida el contexto al enviar. -->
+					<label class="contexto__campo">
+						<span class="contexto__label">Vehículo <span class="req">*</span></span>
 						<input
 							class="contexto__input"
 							placeholder="Placa del vehículo"
@@ -578,8 +604,8 @@
 						<span class="contexto__hint">
 							Sin conexión no se puede cargar la lista. Escribe la placa; se validará al enviar.
 						</span>
-					{/if}
-				</label>
+					</label>
+				{/if}
 			</section>
 		{/if}
 
@@ -772,6 +798,27 @@
 		outline: none;
 		border-color: var(--emerald-600, #059669);
 		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+	}
+
+	/* El buscador de placas viene dimensionado para el escritorio (0.9 rem, ~40 px).
+	   Aquí se diligencia de pie y con una mano: 48 px de objetivo táctil y 16 px de
+	   fuente, que es el umbral por debajo del cual iOS hace zoom al enfocar y
+	   descuadra la pantalla a media inspección. */
+	.contexto :global(.autocomplete-field) {
+		min-height: 48px;
+		font-size: 1rem;
+		border-radius: 10px;
+		border-color: var(--border-default, rgba(0, 0, 0, 0.12));
+	}
+
+	.contexto :global(.autocomplete-field:focus) {
+		border-color: var(--emerald-600, #059669);
+		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+	}
+
+	.contexto :global(.autocomplete-option) {
+		min-height: 44px;
+		font-size: 0.9375rem;
 	}
 
 	.contexto__hint {

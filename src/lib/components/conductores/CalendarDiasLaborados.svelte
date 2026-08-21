@@ -25,6 +25,9 @@
 		fecha: string;
 		tipo: TipoDia;
 		observaciones: string | null;
+		/** Vehículo intervenido; solo viene lleno en días de MANTENIMIENTO. */
+		mantenimiento_vehiculo_id?: string | null;
+		mantenimiento_vehiculo_placa?: string | null;
 		segmentos_count: number;
 		segmentos: SegmentoCalendario[];
 		conductor: { id: string; nombre: string; apellido: string; numero_identificacion: string } | null;
@@ -391,6 +394,11 @@
 												</div>
 											{/each}
 										</div>
+									{/if}
+									{#if ev.tipo === 'MANTENIMIENTO' && ev.mantenimiento_vehiculo_placa}
+										<p class="mt-1.5 font-mono text-[10px] font-semibold text-red-700">
+											🔧 {ev.mantenimiento_vehiculo_placa}
+										</p>
 									{/if}
 									{#if ev.tipo !== 'LABORADO' && ev.observaciones}
 										<p class="mt-1 truncate text-[10px] text-gray-500" title={ev.observaciones}>📝 {ev.observaciones}</p>

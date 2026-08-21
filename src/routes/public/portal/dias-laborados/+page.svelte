@@ -37,6 +37,11 @@
     fecha: string;
     tipo: TipoLabor;
     observaciones?: string | null;
+    // Vehículo intervenido. Solo aplica cuando tipo === 'MANTENIMIENTO'.
+    // Vive en el día y no en un tramo porque un mantenimiento no es un
+    // recorrido: no tiene cliente, horario ni horas conducidas.
+    mantenimiento_vehiculo_id?: string | null;
+    mantenimiento_vehiculo_placa?: string | null;
     segmentos?: Segmento[];
   }
 
@@ -160,6 +165,13 @@
   async function guardarDia() {
     formError = '';
     if (!form.tipo) { formError = 'Selecciona el tipo de jornada'; return; }
+    // Un día de mantenimiento sin placa no sirve para auditar la flota ni para
+    // cruzarlo con la orden de taller. El backend lo rechaza igual; validarlo
+    // aquí evita el viaje y le dice al conductor qué falta antes de enviar.
+    if (form.tipo === 'MANTENIMIENTO' && !form.mantenimiento_vehiculo_placa) {
+      formError = 'Indica la placa del vehículo que estuvo en mantenimiento';
+      return;
+    }
     if (form.tipo === 'LABORADO') {
       if (tramos.length === 0) { formError = 'Agrega al menos un tramo'; return; }
       for (let i = 0; i < tramos.length; i++) {
@@ -191,6 +203,13 @@
         fecha: fechaSeleccionada,
         tipo: form.tipo,
         observaciones: form.observaciones || null,
+        // Solo MANTENIMIENTO lleva vehículo. Se mandan en null para los demás
+        // tipos: si el conductor corrige un día que había marcado como
+        // mantenimiento, la placa no puede quedarse pegada al registro.
+        mantenimiento_vehiculo_id:
+          form.tipo === 'MANTENIMIENTO' ? form.mantenimiento_vehiculo_id || null : null,
+        mantenimiento_vehiculo_placa:
+          form.tipo === 'MANTENIMIENTO' ? form.mantenimiento_vehiculo_placa || null : null,
         // Solo LABORADO envía segmentos (la fuente de verdad es la tabla pivote)
         segmentos: form.tipo === 'LABORADO' ? tramosSnapshot.map(t => ({
           cliente_id: t.cliente_id,
@@ -244,6 +263,7 @@
     return JSON.stringify({
       tipo: form.tipo,
       observaciones: form.observaciones || '',
+      mantenimiento_vehiculo_placa: form.mantenimiento_vehiculo_placa || '',
       tramos: tramos.map(({ id, ...resto }) => resto)
     });
   }
@@ -371,7 +391,9 @@
       form = {
         fecha: fechaSeleccionada,
         tipo: borrador.tipo,
-        observaciones: borrador.observaciones
+        observaciones: borrador.observaciones,
+        mantenimiento_vehiculo_id: borrador.mantenimiento_vehiculo_id ?? null,
+        mantenimiento_vehiculo_placa: borrador.mantenimiento_vehiculo_placa ?? null
       };
       tramos = borrador.tramos.length > 0
         ? borrador.tramos.map(s => ({ ...s, id: s.id || uid() }))
@@ -474,6 +496,10 @@
   interface BorradorCache {
     tipo: TipoLabor;
     observaciones: string;
+    // La placa del mantenimiento también se cachea: si no, el conductor que
+    // recarga en el patio pierde justo el dato que ahora es obligatorio.
+    mantenimiento_vehiculo_id?: string | null;
+    mantenimiento_vehiculo_placa?: string | null;
     tramos: Segmento[];
     tramoExpandido: number | null;
     savedAt: number;
@@ -485,6 +511,8 @@
       const data: BorradorCache = {
         tipo: (form.tipo as TipoLabor) || 'LABORADO',
         observaciones: form.observaciones || '',
+        mantenimiento_vehiculo_id: form.mantenimiento_vehiculo_id || null,
+        mantenimiento_vehiculo_placa: form.mantenimiento_vehiculo_placa || null,
         tramos: JSON.parse(JSON.stringify(tramos)),
         tramoExpandido,
         savedAt: Date.now()
@@ -769,6 +797,19 @@
             </div>
           </div>
 
+          <!-- Vehículo intervenido (solo días de mantenimiento) -->
+          {#if form.tipo === 'MANTENIMIENTO'}
+            <div class="details-section">
+              <h3 class="details-section-title">
+                <span>🔧 Vehículo en mantenimiento</span>
+              </h3>
+              <dl class="details-grid">
+                <dt>Placa</dt>
+                <dd>{form.mantenimiento_vehiculo_placa || '—'}</dd>
+              </dl>
+            </div>
+          {/if}
+
           <!-- Tramos -->
           {#if form.tipo === 'LABORADO' && tramos.length > 0}
             <div class="details-section">
@@ -864,6 +905,40 @@
             </button>
           {/each}
         </div>
+
+        {#if form.tipo === 'MANTENIMIENTO'}
+          <!-- Mismo buscador de placa que usan los tramos de un día laborado:
+               el conductor ya sabe cómo funciona y no hay dos maneras de
+               escribir una placa en la misma pantalla. -->
+          <div class="form-section">
+            <div class="form-section-title">🔧 Vehículo en mantenimiento</div>
+            <div class="field">
+              <label class="field-label" for="mant-placa">Placa vehículo <span class="req">*</span></label>
+              <Autocomplete
+                options={vehiculoOptions}
+                value={form.mantenimiento_vehiculo_id || ''}
+                placeholder={form.mantenimiento_vehiculo_placa || '🔍 Buscar placa...'}
+                disabled={soloLectura}
+                on:select={(e) => {
+                  form.mantenimiento_vehiculo_id = e.detail.id;
+                  form.mantenimiento_vehiculo_placa = e.detail.placa || e.detail.label;
+                  formError = '';
+                }}
+                on:clear={() => {
+                  form.mantenimiento_vehiculo_id = null;
+                  form.mantenimiento_vehiculo_placa = null;
+                }}
+              />
+              {#if form.mantenimiento_vehiculo_placa}
+                <p class="field-hint">🚚 {form.mantenimiento_vehiculo_placa}</p>
+              {:else}
+                <p class="field-hint field-hint--req">
+                  Obligatorio: sin la placa no se puede saber qué vehículo estuvo en taller.
+                </p>
+              {/if}
+            </div>
+          </div>
+        {/if}
 
         {#if form.tipo === 'LABORADO'}
           <div class="form-section">
@@ -1104,7 +1179,7 @@
         <button
           class="btn-guardar" class:ok={guardadoOk}
           on:click={guardarDia}
-          disabled={guardando || !form.tipo}
+          disabled={guardando || !form.tipo || (form.tipo === 'MANTENIMIENTO' && !form.mantenimiento_vehiculo_placa)}
         >
           {#if guardando}
             <span class="spinner-dark"></span> Guardando...
@@ -1501,6 +1576,10 @@
   .field-input:focus { border-color: #ea580c; box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.1); }
   .field-textarea { resize: vertical; min-height: 50px; }
   .field-hint { font-size: 0.78rem; color: #ea580c; margin: 0.3rem 0 0; }
+  /* El campo obligatorio se marca antes de que el conductor pulse guardar:
+     enterarse del requisito por un error en rojo es peor experiencia. */
+  .field-hint--req { color: #b45309; }
+  .req { color: #dc2626; font-weight: 700; }
 
   .form-error {
     margin-top: 0.75rem;

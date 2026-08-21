@@ -227,17 +227,15 @@ export interface InitAttachmentResponse {
 	alreadyUploaded: boolean;
 	objectKey: string | null;
 	/**
-	 * SHA-256 en base64 que hay que enviar en `x-amz-checksum-sha256`.
+	 * SHA-256 en base64 con el que se firmó `uploadUrl`. Informativo.
 	 *
-	 * Lo DERIVA el backend del hexadecimal que este cliente le mandó, y viene en
-	 * la respuesta para que el navegador no tenga que convertir hex a base64: el
-	 * error clásico es enviar el base64 del TEXTO hexadecimal (64 bytes ASCII) en
-	 * vez del de los 32 bytes crudos, y S3 lo rechaza con un mensaje que no
-	 * menciona la causa.
+	 * El cliente NO tiene que hacer nada con él: ya viaja dentro de la URL
+	 * firmada (`&x-amz-checksum-sha256=…`) y S3 lo aplica desde ahí. Reenviarlo
+	 * como cabecera rompe la firma —ver `subirBinario`—, así que solo sirve para
+	 * diagnosticar.
 	 *
-	 * `null` cuando el servidor tiene el checksum nativo desactivado; en ese caso
-	 * no se envía la cabecera y la verificación la hace el backend leyendo el
-	 * objeto.
+	 * `null` cuando el servidor tiene el checksum nativo desactivado; entonces la
+	 * URL va sin él y la verificación la hace el backend leyendo el objeto.
 	 */
 	checksumSha256: string | null;
 }
@@ -429,21 +427,24 @@ export const portalFormulariosAPI = {
 	 *
 	 * Va sin cabeceras de autenticación: la firma de la URL ya autoriza, y adjuntar
 	 * el `Authorization` haría que S3 rechazara la petición.
+	 *
+	 * **No añadir cabeceras `x-amz-*` aquí.** SigV4 exige que toda cabecera
+	 * `x-amz-*` esté incluida en `X-Amz-SignedHeaders`, y la firma la genera el
+	 * backend sin conocer lo que el navegador vaya a añadir después. Una que no
+	 * esté firmada hace que S3 rechace la petición entera con
+	 * `403 AccessDenied: There were headers present in the request which were not
+	 * signed`.
+	 *
+	 * En concreto, el checksum NO se manda como cabecera. El presigner del SDK lo
+	 * iza al query string (`&x-amz-checksum-sha256=…`), firmado ahí dentro, y S3
+	 * lo aplica igual: si los bytes recibidos no producen ese digest, responde
+	 * `400 BadDigest` y rechaza la subida. Reenviarlo como cabecera no añadía
+	 * ninguna garantía —ya estaba en la URL— y rompía la firma.
 	 */
 	async subirBinario(
 		uploadUrl: string,
 		blob: Blob,
 		mimeType: string,
-		/**
-		 * Checksum que devolvió `attachments/init`, o `null`.
-		 *
-		 * Va FIRMADO en la URL: si se omite o se altera, S3 responde `403` porque la
-		 * firma no cuadra. Y si se envía correctamente pero los bytes no producen
-		 * ese digest, S3 responde `400 BadDigest` y RECHAZA la subida. Eso es lo que
-		 * hace que la verificación del backend sea real y no una comparación del
-		 * cliente contra sí mismo.
-		 */
-		checksumSha256: string | null,
 		signal?: AbortSignal
 	): Promise<void> {
 		let response: Response;
@@ -451,10 +452,7 @@ export const portalFormulariosAPI = {
 		try {
 			response = await fetch(uploadUrl, {
 				method: 'PUT',
-				headers: {
-					'Content-Type': mimeType,
-					...(checksumSha256 ? { 'x-amz-checksum-sha256': checksumSha256 } : {})
-				},
+				headers: { 'Content-Type': mimeType },
 				body: blob,
 				signal: tope.signal
 			});

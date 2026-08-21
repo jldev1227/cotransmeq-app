@@ -11,6 +11,14 @@
   export let disabled: boolean = false;
   export let maxResults: number = 20;
   export let dropdownZIndex: number = 9999;
+  /**
+   * Id y etiqueta accesible del input interno. Opcionales: quien monte el
+   * componente dentro de un `<label>` no los necesita, pero quien lo use suelto
+   * —el portal del conductor, donde la etiqueta va aparte— sí, o el campo queda
+   * sin nombre para el lector de pantalla.
+   */
+  export let inputId: string = '';
+  export let ariaLabel: string = '';
 
   // Estado interno (no se exporta)
   let query: string = '';
@@ -284,6 +292,8 @@
     <input
       bind:this={inputEl}
       type="text"
+      id={inputId || undefined}
+      aria-label={ariaLabel || undefined}
       {placeholder}
       {disabled}
       value={query}

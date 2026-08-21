@@ -404,7 +404,6 @@ async function ejecutarInit(operacion: OutboxOperation): Promise<void> {
 	await patchAttachment(clientAttachmentId, {
 		serverId: resultado.attachmentId,
 		uploadUrl: resultado.uploadUrl ?? undefined,
-		uploadChecksum: resultado.checksumSha256 ?? undefined,
 		state: resultado.alreadyUploaded ? 'UPLOADED' : 'INITIALIZED'
 	});
 }
@@ -437,32 +436,20 @@ async function ejecutarUpload(operacion: OutboxOperation): Promise<void> {
 		await patchAttachment(clientAttachmentId, {
 			serverId: resultado.attachmentId,
 			uploadUrl: resultado.uploadUrl,
-			uploadChecksum: resultado.checksumSha256 ?? undefined,
 			state: 'INITIALIZED'
 		});
-		await portalFormulariosAPI.subirBinario(
-			resultado.uploadUrl,
-			adjunto.blob,
-			adjunto.mimeType,
-			resultado.checksumSha256
-		);
+		await portalFormulariosAPI.subirBinario(resultado.uploadUrl, adjunto.blob, adjunto.mimeType);
 		return;
 	}
 
 	try {
-		await portalFormulariosAPI.subirBinario(
-			adjunto.uploadUrl,
-			adjunto.blob,
-			adjunto.mimeType,
-			adjunto.uploadChecksum ?? null
-		);
+		await portalFormulariosAPI.subirBinario(adjunto.uploadUrl, adjunto.blob, adjunto.mimeType);
 	} catch (err) {
-		/// Una URL firmada caducada devuelve 403. Se borra la URL —y su checksum, que
-		/// va firmado en ella— para que el reintento pase por `init` y pida otra.
+		/// Una URL firmada caducada devuelve 403. Se borra la URL —que lleva dentro
+		/// el checksum firmado— para que el reintento pase por `init` y pida otra.
 		if (err instanceof PortalApiError && err.code === 'UPLOAD_URL_EXPIRED') {
 			await patchAttachment(clientAttachmentId, {
 				uploadUrl: undefined,
-				uploadChecksum: undefined,
 				state: 'LOCAL'
 			});
 		}
