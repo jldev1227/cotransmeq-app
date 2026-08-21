@@ -293,7 +293,7 @@ export const CONTACTO_POR_TIPO: Record<TipoFormularioSarlaft, ContactoSarlaft> =
     area_responsable: 'Operaciones',
     telefono_principal: '+57 302 571 1858',
     telefono_wa: '573025711858',
-    correo_publico: 'operaciones.cotransmeq@hotmail.com'
+    correo_publico: 'compras.cotransmeq@hotmail.com'
   },
   accionistas: {
     emails: ['cotransmeqsarlaft@gmail.com'],
@@ -306,7 +306,7 @@ export const CONTACTO_POR_TIPO: Record<TipoFormularioSarlaft, ContactoSarlaft> =
     area_responsable: 'Talento Humano',
     telefono_principal: '+57 302 571 1858',
     telefono_wa: '573025711858',
-    correo_publico: 'operaciones.cotransmeq@hotmail.com'
+    correo_publico: 'compras.cotransmeq@hotmail.com'
   },
   autorizacion_propietario: {
     emails: ['cotransmeqsarlaft@gmail.com'],
