@@ -237,14 +237,15 @@
 	 * Solo se piden si la asignación exige `vehicleId`. Falla en silencio: sin red
 	 * el conductor puede escribir la placa a mano, y bloquear el formulario por no
 	 * poder cargar un desplegable sería absurdo en un patio sin cobertura.
+	 *
+	 * Va por `portalFormulariosAPI`, no por `apiClient`: aquel usa el token del
+	 * magic link, este el JWT del dashboard —que el conductor no tiene— y su
+	 * interceptor redirige a `/login` en el 401, tirando el borrador abierto.
 	 */
 	async function cargarVehiculos() {
 		if (!contextoRequerido.includes('vehicleId')) return;
 		try {
-			const { vehiculosAPI } = await import('$lib/api/apiClient');
-			const respuesta: any = await vehiculosAPI.getAll();
-			const cuerpo = respuesta?.data ?? respuesta;
-			const lista: any[] = Array.isArray(cuerpo) ? cuerpo : (cuerpo?.data ?? []);
+			const lista = await portalFormulariosAPI.listarVehiculos();
 			/// Ordenado por placa: el backend las devuelve en orden de creación y el
 			/// conductor busca la suya alfabéticamente, no por antigüedad del registro.
 			vehiculos = ordenarPorEtiqueta(

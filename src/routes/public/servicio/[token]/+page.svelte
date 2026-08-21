@@ -2,7 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { fade } from 'svelte/transition';
-	import { serviciosAPI } from '$lib/api/apiClient';
+	import { serviciosPublicAPI } from '$lib/api/apiClient';
 	import {
 		getEstadoText,
 		getEstadoColor,
@@ -130,7 +130,7 @@
 		try {
 			loading = true;
 			error = null;
-			const response = await serviciosAPI.getByShareToken(token);
+			const response = await serviciosPublicAPI.getByShareToken(token);
 			if (response.data.success) servicio = response.data.data;
 			else error = response.data.message || 'No se pudo cargar el servicio';
 		} catch (err: any) {

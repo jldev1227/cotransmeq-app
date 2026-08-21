@@ -155,7 +155,18 @@ apiClient.interceptors.response.use(
 		if (error.response?.status === 401 && !originalRequest._retry && !originalRequest._silent401) {
 			originalRequest._retry = true;
 
-			if (browser) {
+			/**
+			 * El portal del conductor (`/public/*`) no tiene sesión de dashboard.
+			 *
+			 * Se autentica con el token del magic link, así que cualquier petición
+			 * que se escape por este cliente sale sin `Authorization` y vuelve con
+			 * 401. Redirigir ahí sacaría al conductor del formulario que está
+			 * diligenciando por algo tan menor como un desplegable que no cargó.
+			 * El 401 se propaga y lo maneja quien llamó.
+			 */
+			const enPortalPublico = browser && window.location.pathname.startsWith('/public/');
+
+			if (browser && !enPortalPublico) {
 				localStorage.removeItem('transmeralda_token');
 				localStorage.removeItem('transmeralda_user');
 				document.cookie =
@@ -336,7 +347,25 @@ export const serviciosAPI = {
 	updateEstado: (id: string, estado: string) =>
 		apiClient.patch(`/api/servicios/${id}/estado`, { estado }),
 	delete: (id: string) => apiClient.delete(`/api/servicios/${id}`),
-	generateShareToken: (id: string) => apiClient.post(`/api/servicios/${id}/compartir`),
+	generateShareToken: (id: string) => apiClient.post(`/api/servicios/${id}/compartir`)
+};
+
+/**
+ * Superficie pública de servicios: solo el enlace compartido.
+ *
+ * Vive fuera de `serviciosAPI` a propósito. Las rutas bajo `/public/*` no
+ * tienen sesión de dashboard, y mientras el único método público colgara del
+ * mismo objeto que `getAll`, `update` o `delete`, bastaba con que alguien
+ * escribiera `serviciosAPI.` y aceptara el autocompletado para sacar una
+ * petición autenticada desde una página que nunca tendrá token. Separarlos
+ * hace que el error no se pueda escribir, en vez de confiar en que nadie lo
+ * escriba.
+ *
+ * Va por `publicApiClient`: sin cabecera `Authorization` y sin el interceptor
+ * de 401 que redirige a `/login`. El token de compartir viaja en la URL y es
+ * lo único que autoriza la lectura.
+ */
+export const serviciosPublicAPI = {
 	getByShareToken: (token: string) => publicApiClient.get(`/api/servicios/public/${token}`)
 };
 

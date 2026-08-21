@@ -260,6 +260,42 @@ export const portalFormulariosAPI = {
 	},
 
 	/**
+	 * Vehículos para las asignaciones que exigen `vehicleId`.
+	 *
+	 * Cuelga de `/conductor-portal/dias-laborados/vehiculos`, fuera de `BASE`:
+	 * el listado de vehículos no es un recurso de formularios, pero sí está
+	 * detrás del mismo `portalAuthMiddleware`, así que el token del magic link
+	 * basta.
+	 *
+	 * Lo que NO puede hacer es tirar de `vehiculosAPI` de `apiClient`: ese
+	 * cliente manda el JWT del dashboard, que en el teléfono del conductor no
+	 * existe, y su interceptor convierte el 401 en
+	 * `window.location.href = '/login'` — sacando al conductor del formulario a
+	 * medio diligenciar. Es exactamente lo que advierte la cabecera de este
+	 * módulo.
+	 *
+	 * Devuelve `[]` ante cualquier fallo: sin desplegable el conductor escribe
+	 * la placa a mano, y bloquear el formulario por no poder pintar un `select`
+	 * sería absurdo en un patio sin cobertura.
+	 */
+	async listarVehiculos(signal?: AbortSignal): Promise<Array<{ id: string; placa: string }>> {
+		const tope = conTope(signal, TIMEOUT_JSON);
+		try {
+			const response = await fetch(`${API_BASE}/api/conductor-portal/dias-laborados/vehiculos`, {
+				headers: authHeaders(),
+				signal: tope.signal
+			});
+			if (!response.ok) return [];
+			const cuerpo = await response.json();
+			return Array.isArray(cuerpo?.data) ? cuerpo.data : [];
+		} catch {
+			return [];
+		} finally {
+			tope.limpiar();
+		}
+	},
+
+	/**
 	 * Definición de una asignación, con revalidación por ETag.
 	 *
 	 * Con `etag` conocido se envía `If-None-Match` y el servidor puede responder
