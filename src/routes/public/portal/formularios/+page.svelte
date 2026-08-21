@@ -14,6 +14,7 @@
 	import {
 		allDrafts,
 		allAssignments,
+		allDefinitions,
 		allReceipts,
 		putAssignments,
 		putDefinition,
@@ -38,6 +39,48 @@
 	let reconciliando = $state(false);
 	let hoy = $state<string | null>(null);
 	let avisoCuota = $state<string | null>(null);
+
+	/**
+	 * Cola visible de la descarga inicial.
+	 *
+	 * La primera vez hay que bajar el árbol completo de cada formulario y eso son
+	 * varios segundos por datos móviles. Sin nada en pantalla el conductor cree
+	 * que la app se colgó y la mata justo antes de terminar, que es el peor
+	 * momento posible: se queda sin nada cacheado. En las sincronizaciones
+	 * siguientes las definiciones ya están y el servidor responde 304, así que
+	 * basta el rótulo general.
+	 */
+	interface ItemCola {
+		assignmentId: string;
+		code: string;
+		title: string;
+		estado: 'pendiente' | 'descargando' | 'listo' | 'error';
+	}
+
+	let cola = $state<ItemCola[]>([]);
+	let colaVisible = $state(false);
+	let temporizadorCola: ReturnType<typeof setTimeout> | null = null;
+
+	const colaHechos = $derived(cola.filter((i) => i.estado === 'listo' || i.estado === 'error').length);
+	const colaFallidos = $derived(cola.filter((i) => i.estado === 'error').length);
+	const colaPorcentaje = $derived(cola.length ? Math.round((colaHechos / cola.length) * 100) : 0);
+
+	function marcarEnCola(assignmentId: string, estado: ItemCola['estado']) {
+		const item = cola.find((i) => i.assignmentId === assignmentId);
+		if (item) item.estado = estado;
+	}
+
+	/// Se deja un instante con el 100 % pintado antes de ocultarla: una barra que
+	/// desaparece en el mismo frame en que se llena se lee como un parpadeo raro,
+	/// no como «terminó».
+	function cerrarCola(demoraMs = 900) {
+		if (temporizadorCola) clearTimeout(temporizadorCola);
+		temporizadorCola = setTimeout(() => {
+			colaVisible = false;
+			cola = [];
+			temporizadorCola = null;
+		}, demoraMs);
+	}
 
 	/** Borrador local de una asignación, si hay. */
 	function borradorDe(assignmentId: string): StoredDraft | undefined {
@@ -88,27 +131,55 @@
 				cachedAt: new Date().toISOString()
 			}));
 			await putAssignments(registros);
+			/// Pintar ya las tarjetas: el conductor ve la lista mientras corre la
+			/// descarga de definiciones, que es la parte lenta.
+			await cargarLocal();
+
+			/// Solo lo que falta va a la cola visible. Lo ya cacheado se revalida
+			/// después y en silencio, porque son 304 y no hay nada que esperar.
+			const cacheadas = new Set((await allDefinitions()).map((d) => d.versionId));
+			const offline = data.filter((c) => c.allowOffline);
+			const faltantes = offline.filter((c) => !cacheadas.has(c.versionId));
+			const revalidables = offline.filter((c) => cacheadas.has(c.versionId));
+
+			if (faltantes.length > 0) {
+				if (temporizadorCola) {
+					clearTimeout(temporizadorCola);
+					temporizadorCola = null;
+				}
+				cola = faltantes.map((c) => ({
+					assignmentId: c.assignmentId,
+					code: c.code,
+					title: c.title,
+					estado: 'pendiente' as const
+				}));
+				colaVisible = true;
+			}
 
 			/// Precarga de definiciones. Se hace en serie y no en paralelo: son
 			/// árboles grandes y diez peticiones simultáneas por datos móviles se
 			/// estorban entre sí más que ayudan.
-			for (const card of data) {
-				if (!card.allowOffline) continue;
+			for (const card of [...faltantes, ...revalidables]) {
+				marcarEnCola(card.assignmentId, 'descargando');
 				try {
 					const { notModified, etag, data: cuerpo } = await portalFormulariosAPI.definicion(
 						card.assignmentId
 					);
-					if (notModified || !cuerpo) continue;
-					await putDefinition({
-						versionId: card.versionId,
-						assignmentId: card.assignmentId,
-						definition: cuerpo.definition,
-						etag,
-						fetchedAt: new Date().toISOString()
-					});
+					if (!notModified && cuerpo) {
+						await putDefinition({
+							versionId: card.versionId,
+							assignmentId: card.assignmentId,
+							definition: cuerpo.definition,
+							etag,
+							fetchedAt: new Date().toISOString()
+						});
+					}
+					marcarEnCola(card.assignmentId, 'listo');
 				} catch {
 					/// Una definición que no se pudo precargar no rompe la lista: el
-					/// runner la pedirá al abrirla.
+					/// runner la pedirá al abrirla. Se marca para que el conductor sepa
+					/// cuál quedó sin guardar antes de salir a ruta.
+					marcarEnCola(card.assignmentId, 'error');
 				}
 			}
 
@@ -126,6 +197,9 @@
 			}
 		} finally {
 			reconciliando = false;
+			/// También cuando se cayó la red a mitad de la descarga: la cola no puede
+			/// quedarse girando para siempre.
+			if (colaVisible && !temporizadorCola) cerrarCola();
 		}
 	}
 
@@ -148,7 +222,10 @@
 		}
 	});
 
-	onDestroy(() => disconnectPortalFormsSocket());
+	onDestroy(() => {
+		disconnectPortalFormsSocket();
+		if (temporizadorCola) clearTimeout(temporizadorCola);
+	});
 
 	/// Un recibo nuevo (de esta pestaña o de otra) refresca la lista: la tarjeta
 	/// debe pasar a «entregado» sin que el conductor recargue.
@@ -197,13 +274,64 @@
 				void reconciliar();
 				wakeAll();
 			}}
-			aria-label="Actualizar la lista"
+			aria-label={reconciliando ? 'Sincronizando…' : 'Actualizar la lista'}
 		>
-			{reconciliando ? '↻…' : '↻'}
+			<span class="head__icono" class:girando={reconciliando} aria-hidden="true">↻</span>
 		</button>
 	</header>
 
 	<SyncStatus variant="panel" />
+
+	{#if colaVisible}
+		<section class="cola" aria-live="polite">
+			<div class="cola__cabeza">
+				<span class="cola__icono girando" aria-hidden="true">↻</span>
+				<div class="cola__texto">
+					<p class="cola__titulo">Descargando tus formularios…</p>
+					<p class="cola__detalle">
+						{colaHechos} de {cola.length} · quedan guardados en el teléfono para diligenciarlos sin
+						señal
+					</p>
+				</div>
+				<span class="cola__porcentaje">{colaPorcentaje}%</span>
+			</div>
+
+			<div
+				class="cola__barra"
+				role="progressbar"
+				aria-label="Progreso de la descarga"
+				aria-valuenow={colaHechos}
+				aria-valuemin="0"
+				aria-valuemax={cola.length}
+			>
+				<div class="cola__relleno" style={`width:${colaPorcentaje}%`}></div>
+			</div>
+
+			<ul class="cola__lista">
+				{#each cola as item (item.assignmentId)}
+					<li class="cola__item cola__item--{item.estado}">
+						<span class="cola__marca" aria-hidden="true">
+							{#if item.estado === 'listo'}✓{:else if item.estado === 'error'}!{:else if item.estado === 'descargando'}<span
+									class="cola__punto"
+								></span>{:else}·{/if}
+						</span>
+						<span class="cola__nombre">{item.code} · {item.title}</span>
+					</li>
+				{/each}
+			</ul>
+
+			{#if colaFallidos > 0}
+				<p class="cola__fallo">
+					{colaFallidos} formulario{colaFallidos === 1 ? '' : 's'} no se pudo guardar para uso sin
+					señal. Se intentará de nuevo; con conexión igual puedes abrirlo.
+				</p>
+			{/if}
+		</section>
+	{:else if reconciliando}
+		<p class="sincronizando" aria-live="polite">
+			<span class="girando" aria-hidden="true">↻</span> Sincronizando formularios…
+		</p>
+	{/if}
 
 	{#if avisoCuota}
 		<p class="aviso" role="alert">{avisoCuota}</p>
@@ -349,7 +477,193 @@
 	}
 
 	.head__refrescar:disabled {
-		opacity: 0.5;
+		opacity: 0.7;
+		cursor: default;
+	}
+
+	.head__icono {
+		display: block;
+		line-height: 1;
+	}
+
+	/* Una sola animación para todo lo que «está trabajando»: botón, cola y
+	   rótulo. Con movimiento reducido se queda quieta pero el texto ya dice lo
+	   que pasa, que es lo que de verdad informa. */
+	.girando {
+		display: inline-block;
+		animation: girar 1.1s linear infinite;
+	}
+
+	@keyframes girar {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.girando,
+		.cola__punto {
+			animation: none;
+		}
+	}
+
+	.sincronizando {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem;
+		font-size: 0.8125rem;
+		font-weight: 600;
+		color: var(--emerald-700, #047857);
+		background: var(--emerald-50, #ecfdf5);
+		border: 1px solid var(--emerald-200, #a7f3d0);
+		border-radius: 10px;
+	}
+
+	.cola {
+		display: flex;
+		flex-direction: column;
+		gap: 0.625rem;
+		padding: 0.875rem;
+		background: var(--bg-surface, #fff);
+		border: 1px solid var(--emerald-200, #a7f3d0);
+		border-radius: 14px;
+		box-shadow: var(--shadow-card, 0 4px 24px rgba(0, 0, 0, 0.04));
+	}
+
+	.cola__cabeza {
+		display: flex;
+		align-items: center;
+		gap: 0.625rem;
+	}
+
+	.cola__icono {
+		flex-shrink: 0;
+		width: 1.75rem;
+		height: 1.75rem;
+		display: grid;
+		place-items: center;
+		font-size: 0.9375rem;
+		color: var(--emerald-700, #047857);
+		background: var(--emerald-50, #ecfdf5);
+		border-radius: 999px;
+	}
+
+	.cola__texto {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.cola__titulo {
+		font-size: 0.875rem;
+		font-weight: 700;
+		color: var(--text-primary, #1a1a1a);
+	}
+
+	.cola__detalle {
+		margin-top: 0.125rem;
+		font-size: 0.75rem;
+		line-height: 1.4;
+		color: var(--text-muted, #6b6b6b);
+	}
+
+	.cola__porcentaje {
+		flex-shrink: 0;
+		font-family: var(--font-mono, monospace);
+		font-size: 0.8125rem;
+		font-weight: 700;
+		color: var(--emerald-700, #047857);
+	}
+
+	.cola__barra {
+		height: 8px;
+		background: var(--gray-50, #f9fafb);
+		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+		border-radius: 999px;
+		overflow: hidden;
+	}
+
+	.cola__relleno {
+		height: 100%;
+		background: var(--emerald-500, #10b981);
+		transition: width 0.25s ease;
+	}
+
+	.cola__lista {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		list-style: none;
+		/* Con muchos formatos asignados la lista no puede empujar las tarjetas
+		   fuera de la pantalla. */
+		max-height: 9.5rem;
+		overflow-y: auto;
+	}
+
+	.cola__item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-size: 0.75rem;
+		line-height: 1.35;
+		color: var(--text-very-muted, #9a9a9a);
+	}
+
+	.cola__item--descargando {
+		font-weight: 700;
+		color: var(--text-primary, #1a1a1a);
+	}
+
+	.cola__item--listo {
+		color: var(--text-muted, #6b6b6b);
+	}
+
+	.cola__item--error {
+		color: #991b1b;
+	}
+
+	.cola__marca {
+		flex-shrink: 0;
+		width: 1rem;
+		display: grid;
+		place-items: center;
+		font-weight: 700;
+	}
+
+	.cola__item--listo .cola__marca {
+		color: var(--emerald-600, #059669);
+	}
+
+	.cola__punto {
+		width: 7px;
+		height: 7px;
+		border-radius: 999px;
+		background: var(--emerald-500, #10b981);
+		animation: latir 1s ease-in-out infinite;
+	}
+
+	@keyframes latir {
+		0%,
+		100% {
+			opacity: 1;
+			transform: scale(1);
+		}
+		50% {
+			opacity: 0.35;
+			transform: scale(0.72);
+		}
+	}
+
+	.cola__nombre {
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	.cola__fallo {
+		font-size: 0.6875rem;
+		line-height: 1.4;
+		color: #991b1b;
 	}
 
 	.aviso {

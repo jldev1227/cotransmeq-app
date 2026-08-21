@@ -71,6 +71,10 @@
 	}
 
 	const edad = $derived(edadLegible(estado.oldestAgeMs));
+
+	/// El texto solo cambia de palabra; sin movimiento el conductor no distingue
+	/// «sincronizando» de «sincronizado» de un vistazo, que es como se mira esto.
+	const trabajando = $derived(estado.phase === 'syncing' || estado.phase === 'checking');
 </script>
 
 {#if variant === 'chip'}
@@ -81,16 +85,16 @@
 		title={etiqueta}
 		onclick={() => wakeAll()}
 	>
-		<span class="chip__icono" aria-hidden="true">{icono}</span>
+		<span class="chip__icono" class:girando={trabajando} aria-hidden="true">{icono}</span>
 		<span class="chip__texto">{etiqueta}</span>
 		{#if estado.pending > 0}
 			<span class="chip__conteo">{estado.pending}</span>
 		{/if}
 	</button>
 {:else}
-	<section class="panel panel--{tono}" aria-live="polite">
+	<section class="panel panel--{tono}" class:panel--trabajando={trabajando} aria-live="polite">
 		<div class="panel__fila">
-			<span class="panel__icono" aria-hidden="true">{icono}</span>
+			<span class="panel__icono" class:girando={trabajando} aria-hidden="true">{icono}</span>
 			<div class="panel__texto">
 				<p class="panel__titulo">{etiqueta}</p>
 				{#if estado.pending > 0}
@@ -214,6 +218,8 @@
 		gap: 0.625rem;
 		flex: 1;
 		min-width: 12rem;
+		/* Por encima del barrido de .panel--trabajando::after. */
+		position: relative;
 	}
 
 	.panel__icono {
@@ -254,6 +260,7 @@
 	}
 
 	.panel__accion {
+		position: relative;
 		min-height: 40px;
 		padding: 0 0.875rem;
 		font: inherit;
@@ -264,6 +271,57 @@
 		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
 		border-radius: 10px;
 		cursor: pointer;
+	}
+
+	/* Movimiento explícito mientras se sincroniza: el giro para el icono y un
+	   barrido tenue en el panel. Ambos se apagan con movimiento reducido; el
+	   texto sigue diciendo lo mismo. */
+	.girando {
+		display: inline-grid;
+		animation: girar 1.1s linear infinite;
+	}
+
+	@keyframes girar {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	.panel--trabajando {
+		position: relative;
+		overflow: hidden;
+	}
+
+	.panel--trabajando::after {
+		content: '';
+		position: absolute;
+		inset: 0;
+		background: linear-gradient(
+			90deg,
+			transparent 0%,
+			rgba(255, 255, 255, 0.55) 50%,
+			transparent 100%
+		);
+		transform: translateX(-100%);
+		animation: barrido 1.6s ease-in-out infinite;
+		pointer-events: none;
+	}
+
+	@keyframes barrido {
+		to {
+			transform: translateX(100%);
+		}
+	}
+
+	@media (prefers-reduced-motion: reduce) {
+		.girando,
+		.panel--trabajando::after {
+			animation: none;
+		}
+
+		.panel--trabajando::after {
+			display: none;
+		}
 	}
 
 	.chip:focus-visible,
