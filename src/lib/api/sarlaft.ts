@@ -287,32 +287,40 @@ export interface ContactoSarlaft {
   correo_publico?: string
 }
 
+// Espejo de `sarlaft-config.ts` del backend. Los únicos buzones autorizados
+// para recibir formularios SARLAFT + PTEE son compras.cotransmeq@hotmail.com
+// (Compras/Proveedores) y cotransmeqreportesla@gmail.com (reportes de
+// Cumplimiento), y ambos reciben todos los tipos. El `correo_publico` sí varía:
+// es el canal de dudas que se le muestra al titular. Si se edita esta tabla hay
+// que editar también la del backend, que es la que manda en el envío real.
 export const CONTACTO_POR_TIPO: Record<TipoFormularioSarlaft, ContactoSarlaft> = {
   cliente_proveedor: {
-    emails: ['compraproveedorescotransmeq@gmail.com', 'cotransmeqsarlaft@gmail.com'],
+    emails: ['compras.cotransmeq@hotmail.com', 'cotransmeqreportesla@gmail.com'],
     area_responsable: 'Operaciones',
     telefono_principal: '+57 302 571 1858',
     telefono_wa: '573025711858',
     correo_publico: 'compras.cotransmeq@hotmail.com'
   },
   accionistas: {
-    emails: ['cotransmeqsarlaft@gmail.com'],
+    emails: ['compras.cotransmeq@hotmail.com', 'cotransmeqreportesla@gmail.com'],
     area_responsable: 'Cumplimiento',
     telefono_principal: '+57 302 571 1858',
-    telefono_wa: '573025711858'
+    telefono_wa: '573025711858',
+    correo_publico: 'cotransmeqreportesla@gmail.com'
   },
   personal: {
-    emails: ['cotransmeqsarlaft@gmail.com'],
+    emails: ['compras.cotransmeq@hotmail.com', 'cotransmeqreportesla@gmail.com'],
     area_responsable: 'Talento Humano',
     telefono_principal: '+57 302 571 1858',
     telefono_wa: '573025711858',
-    correo_publico: 'compras.cotransmeq@hotmail.com'
+    correo_publico: 'cotransmeqreportesla@gmail.com'
   },
   autorizacion_propietario: {
-    emails: ['cotransmeqsarlaft@gmail.com'],
+    emails: ['compras.cotransmeq@hotmail.com', 'cotransmeqreportesla@gmail.com'],
     area_responsable: 'Cumplimiento',
     telefono_principal: '+57 302 571 1858',
-    telefono_wa: '573025711858'
+    telefono_wa: '573025711858',
+    correo_publico: 'cotransmeqreportesla@gmail.com'
   }
 }
 
