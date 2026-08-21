@@ -252,12 +252,24 @@ export async function tick(): Promise<void> {
 		 * externo (`online`, `focus`, cambio de pestaña). Desde fuera parecía que el
 		 * backup «a veces» no sincronizaba.
 		 *
-		 * No hay riesgo de bucle: el mínimo es 1 s y `claimNextOperation` solo
-		 * entrega operaciones cuyo plazo venció, así que la ronda siguiente la toma y
-		 * la resuelve.
+		 * Solo cuentan las que `claimNextOperation` podría entregar de VERDAD, y por
+		 * eso se repite aquí su filtro de dependencias (`forms-db.ts`).
+		 *
+		 * Sin ese filtro, una operación vencida pero bloqueada por su dependencia
+		 * daba espera 0 y programaba un tick a 1 s que no podía ejecutarla: nadie la
+		 * reclamaba, nadie la resolvía, y la ronda siguiente repetía el ciclo. El
+		 * resultado era un `hayConexionReal()` por segundo —una petición a la lista
+		 * completa de asignaciones— mientras el bloqueador real dormía su backoff de
+		 * minutos. Un `SUBMIT` esperando a su `UPLOAD` tiene que esperar lo que
+		 * espera el `UPLOAD`, no un segundo.
+		 *
+		 * Tampoco deja el motor sin temporizador: el bloqueador está en la misma
+		 * lista y no tiene dependencias pendientes, así que aporta su propia espera.
 		 */
+		const idsEnCola = new Set(restantes.map((o) => o.operationId));
 		const esperas = restantes
 			.filter((o) => o.state === 'RETRY' || o.state === 'PENDING')
+			.filter((o) => o.dependsOn.every((dep) => !idsEnCola.has(dep)))
 			.map((o) => Math.max(0, new Date(o.nextAttemptAt).getTime() - Date.now()));
 		if (esperas.length) programar(Math.max(1_000, Math.min(...esperas)));
 	} finally {

@@ -500,6 +500,10 @@ export const portalFormulariosAPI = {
  * portal cautivo de hotel, o con datos agotados, dice `true` y ninguna petición
  * llega. La outbox no sale a sincronizar solo porque el navegador diga que hay
  * red.
+ *
+ * Sondea `/ping`, no `BASE`. `BASE` devuelve la lista completa de asignaciones
+ * con sus borradores: gastarla —y gastar los datos del conductor— para responder
+ * un sí/no era desproporcionado, y se repite antes de CADA ronda.
  */
 export async function hayConexionReal(timeoutMs = 4000): Promise<boolean> {
 	if (!browser) return false;
@@ -510,14 +514,25 @@ export async function hayConexionReal(timeoutMs = 4000): Promise<boolean> {
 	try {
 		const session = get(portalSession);
 		if (!session?.token) return false;
-		const response = await fetch(BASE, {
+		await fetch(`${BASE}/ping`, {
 			method: 'GET',
 			headers: { Authorization: `Bearer ${session.token}` },
 			signal: controller.signal
 		});
-		/// Un 401 también prueba que hay red; el problema es la sesión, y de eso se
-		/// encarga la outbox por separado.
-		return response.ok || response.status === 401;
+		/**
+		 * Cualquier respuesta HTTP vale, sin mirar el código.
+		 *
+		 * La pregunta es «¿llega la petición al servidor?», y haber recibido una
+		 * respuesta ya la contesta: un 401 prueba que hay red y sobra sesión, y un
+		 * 404 la prueba igual si el backend aún no tiene desplegado este endpoint.
+		 * Exigir `response.ok` haría que un frontend desplegado antes que su backend
+		 * se declarara sin conexión y parase la outbox entera.
+		 *
+		 * Un portal cautivo no puede falsear esto: no puede responder por el dominio
+		 * de la API sin romper TLS, así que el `fetch` fallaría y caería en el
+		 * `catch`.
+		 */
+		return true;
 	} catch {
 		return false;
 	} finally {
