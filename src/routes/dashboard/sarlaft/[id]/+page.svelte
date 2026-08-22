@@ -138,8 +138,28 @@
 		}
 	}
 
+	/** Decisiones que cierran la evaluación. En los formatos con documento
+	 *  controlado, cada una emite una versión documental NUEVA e inmutable. */
+	const DECISIONES_FINALES = ['aprobado', 'condicionado', 'rechazado'];
+
 	async function guardarEvaluacion() {
 		if (!detalle || !editEstado) return;
+
+		// Emitir una versión documental es irreversible: la versión anterior no
+		// se sobrescribe, pero la nueva queda archivada y numerada. Se confirma
+		// antes para que no ocurra por un clic accidental en el selector.
+		if (emiteVersionDocumental) {
+			const etiqueta =
+				ESTADO_LABELS[editEstado as EstadoSarlaft]?.label ?? editEstado;
+			const versionNueva = (detalle.documentos_generados?.length ?? 0) + 1;
+			const ok = confirm(
+				`Vas a registrar el resultado "${etiqueta}" del radicado ${detalle.radicado}.\n\n` +
+					`Se emitirá la versión documental ${versionNueva} del formato, con esa casilla marcada. ` +
+					`La versión recibida no se modifica.\n\n¿Continuar?`
+			);
+			if (!ok) return;
+		}
+
 		saving = true;
 		try {
 			const actualizado = await sarlaftAPI.actualizarEvaluacion(detalle.id, {
@@ -149,12 +169,57 @@
 			});
 			detalle = { ...detalle, ...actualizado };
 			toast.success('Evaluación actualizada');
+			// El backend acaba de emitir una versión documental: se recarga el
+			// detalle para que la lista de versiones y sus hashes queden al día
+			// sin obligar al usuario a refrescar la página.
+			if (emiteVersionDocumental) {
+				try {
+					detalle = await sarlaftAPI.obtenerDetalle(detalle.id);
+				} catch {
+					/* El guardado sí ocurrió; solo no se pudo refrescar la vista. */
+				}
+			}
 		} catch (err: any) {
 			toast.error(err?.response?.data?.error || err?.message || 'Error al guardar la evaluación');
 		} finally {
 			saving = false;
 		}
 	}
+
+	/** Versiones documentales, de la más reciente a la más antigua. */
+	const documentosGenerados = $derived(detalle?.documentos_generados ?? []);
+	/** `true` si guardar con el estado elegido emitirá una versión nueva. */
+	const emiteVersionDocumental = $derived(
+		documentosGenerados.length > 0 && DECISIONES_FINALES.includes(editEstado)
+	);
+
+	let descargandoVersion = $state<Record<string, boolean>>({});
+
+	async function handleDescargarVersion(documentoId: string, version: number) {
+		if (!detalle) return;
+		descargandoVersion = { ...descargandoVersion, [documentoId]: true };
+		try {
+			const filename = await sarlaftAPI.descargarVersionDocumental(
+				detalle.id,
+				documentoId,
+				`${detalle.radicado}_v${version}.pdf`
+			);
+			toast.success(`Documento descargado: ${filename}`);
+		} catch (err: any) {
+			toast.error(
+				`Error al descargar la versión ${version}: ${err?.response?.data?.error || err?.message || 'Error desconocido'}`
+			);
+		} finally {
+			descargandoVersion = { ...descargandoVersion, [documentoId]: false };
+		}
+	}
+
+	/** Etiqueta legible del canal de entrega. */
+	const CANAL_LABELS: Record<string, string> = {
+		email_declarante: 'Copia al declarante',
+		email_interno: 'Notificación interna',
+		descarga: 'Enlace de descarga'
+	};
 
 	function formatBytes(bytes: number | string): string {
 		const n = typeof bytes === 'string' ? parseInt(bytes, 10) : bytes;
@@ -507,6 +572,97 @@
 					</div>
 				</section>
 
+				<!-- Documento generado sobre el formato controlado de la marca.
+				     Solo aparece en los formatos que lo producen; los otros
+				     cuatro siguen mostrando únicamente el PDF de respuestas. -->
+				{#if documentosGenerados.length > 0}
+					<section class="side-card" in:fly={{ y: 12, duration: 320, delay: 120, easing: quintOut }}>
+						<header class="side-head">
+							<div>
+								<span class="eyebrow">Formato controlado</span>
+								<h3>Documento generado</h3>
+							</div>
+							<span class="badge-count">{documentosGenerados.length}</span>
+						</header>
+						<div class="side-body">
+							<ul class="version-list">
+								{#each documentosGenerados as doc (doc.id)}
+									<li class="version-item">
+										<div class="version-head">
+											<span class="version-num">Versión {doc.version_documento}</span>
+											<span
+												class="version-estado"
+												class:version-recibida={doc.estado_documental === 'recibida'}
+												class:version-evaluada={doc.estado_documental === 'evaluada'}
+											>
+												{doc.estado_documental === 'recibida' ? 'Recibida' : 'Evaluada'}
+											</span>
+										</div>
+										<dl class="version-meta">
+											<div>
+												<dt>Formato</dt>
+												<dd>{doc.codigo_template} v{doc.version_template}</dd>
+											</div>
+											<div>
+												<dt>Tamaño</dt>
+												<dd>{formatBytes(doc.tamano_bytes)}</dd>
+											</div>
+											<div>
+												<dt>Emitida</dt>
+												<dd>{formatFecha(doc.created_at)}</dd>
+											</div>
+											{#if doc.generado_por}
+												<div>
+													<dt>Por</dt>
+													<dd>{doc.generado_por.nombre}</dd>
+												</div>
+											{/if}
+										</dl>
+										<div class="version-hash">
+											<span class="hash-label">SHA-256 del PDF</span>
+											<code class="mono">{doc.pdf_sha256}</code>
+										</div>
+
+										{#if doc.entregas.length > 0}
+											<ul class="entrega-list">
+												{#each doc.entregas as e (e.id)}
+													<li class="entrega-item">
+														<span class="entrega-canal">{CANAL_LABELS[e.canal] ?? e.canal}</span>
+														<span class="entrega-estado entrega-{e.estado}">{e.estado}</span>
+														{#if e.destinatario}
+															<span class="entrega-dest mono">{e.destinatario}</span>
+														{/if}
+														{#if e.provider_message_id}
+															<span class="entrega-msgid mono" title="Provider message ID">
+																{e.provider_message_id}
+															</span>
+														{/if}
+														{#if e.error_codigo}
+															<span class="entrega-error">{e.error_codigo}</span>
+														{/if}
+													</li>
+												{/each}
+											</ul>
+										{/if}
+
+										<button
+											class="btn-ghost btn-block"
+											disabled={descargandoVersion[doc.id]}
+											onclick={() => handleDescargarVersion(doc.id, doc.version_documento)}
+										>
+											{descargandoVersion[doc.id] ? 'Descargando…' : 'Descargar esta versión'}
+										</button>
+									</li>
+								{/each}
+							</ul>
+							<p class="version-nota">
+								Cada versión es inmutable. La versión 1 es la que recibió y firmó el
+								declarante; cada decisión final emite una nueva sin modificar las anteriores.
+							</p>
+						</div>
+					</section>
+				{/if}
+
 				<!-- Evaluación interna -->
 				<section class="side-card" in:fly={{ y: 12, duration: 320, delay: 140, easing: quintOut }}>
 					<header class="side-head">
@@ -529,6 +685,7 @@
 									<option value="recibido">Recibido</option>
 									<option value="en_revision">En revisión</option>
 									<option value="aprobado">Aprobado</option>
+									<option value="condicionado">Condicionado</option>
 									<option value="rechazado">Rechazado</option>
 									<option value="escalado">Escalado</option>
 								</select>
@@ -561,6 +718,13 @@
 									</svg>
 									<span>Última evaluación: <strong class="mono">{formatFecha(detalle.evaluado_at)}</strong></span>
 								</div>
+							{/if}
+
+							{#if emiteVersionDocumental}
+								<p class="eval-aviso">
+									Al guardar se emitirá una versión documental nueva con este
+									resultado marcado. La versión recibida no se modifica.
+								</p>
 							{/if}
 
 							<button class="btn-primary btn-block" disabled={saving || !editEstado} onclick={guardarEvaluacion}>
@@ -1178,6 +1342,161 @@
 	}
 
 	/* Badge count */
+	/* ── Versiones documentales de la declaración de empresa de transporte ──
+	   Estilos propios del panel nuevo. No redefinen nada existente. */
+	.version-list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+	.version-item {
+		border: 1px solid #e5e7eb;
+		border-radius: 12px;
+		padding: 12px 14px;
+	}
+	.version-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		margin-bottom: 8px;
+	}
+	.version-num {
+		font-size: 0.85rem;
+		font-weight: 700;
+	}
+	.version-estado {
+		font-size: 0.68rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		padding: 3px 8px;
+		border-radius: 999px;
+	}
+	.version-recibida {
+		background: #eff6ff;
+		color: #1e3a8a;
+		border: 1px solid #bfdbfe;
+	}
+	.version-evaluada {
+		background: #f5f3ff;
+		color: #5b21b6;
+		border: 1px solid #ddd6fe;
+	}
+	.version-meta {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+		gap: 6px 10px;
+		margin: 0 0 8px;
+	}
+	.version-meta dt {
+		font-size: 0.68rem;
+		color: #6b7280;
+	}
+	.version-meta dd {
+		margin: 0;
+		font-size: 0.78rem;
+		font-weight: 600;
+	}
+	.version-hash {
+		margin-bottom: 8px;
+	}
+	.hash-label {
+		display: block;
+		font-size: 0.68rem;
+		color: #6b7280;
+		margin-bottom: 2px;
+	}
+	.version-hash code {
+		font-size: 0.64rem;
+		word-break: break-all;
+		line-height: 1.4;
+	}
+	.entrega-list {
+		list-style: none;
+		margin: 0 0 10px;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+	.entrega-item {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+		font-size: 0.7rem;
+	}
+	.entrega-canal {
+		font-weight: 600;
+	}
+	.entrega-estado {
+		padding: 1px 6px;
+		border-radius: 999px;
+		font-weight: 700;
+		text-transform: uppercase;
+		font-size: 0.6rem;
+		letter-spacing: 0.04em;
+	}
+	.entrega-enviado,
+	.entrega-descargado {
+		background: #ecfdf5;
+		color: #065f46;
+	}
+	.entrega-pendiente {
+		background: #fffbeb;
+		color: #92400e;
+	}
+	.entrega-fallido,
+	.entrega-revocado {
+		background: #fef2f2;
+		color: #991b1b;
+	}
+	.entrega-dest,
+	.entrega-msgid {
+		color: #6b7280;
+		font-size: 0.64rem;
+		word-break: break-all;
+	}
+	.entrega-error {
+		color: #991b1b;
+		font-weight: 600;
+	}
+	.version-nota {
+		font-size: 0.7rem;
+		color: #6b7280;
+		margin: 10px 0 0;
+	}
+	.eval-aviso {
+		font-size: 0.72rem;
+		color: #92400e;
+		background: #fffbeb;
+		border: 1px solid #fde68a;
+		border-radius: 8px;
+		padding: 8px 10px;
+		margin: 0 0 10px;
+	}
+	.btn-ghost {
+		background: transparent;
+		border: 1px solid #d4d4d8;
+		border-radius: 8px;
+		padding: 7px 12px;
+		font-size: 0.78rem;
+		font-weight: 600;
+		cursor: pointer;
+		font-family: inherit;
+	}
+	.btn-ghost:hover:not(:disabled) {
+		background: #f4f4f5;
+	}
+	.btn-ghost:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+
 	.badge-count {
 		display: inline-flex;
 		align-items: center;

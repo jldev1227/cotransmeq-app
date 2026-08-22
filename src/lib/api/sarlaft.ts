@@ -5,12 +5,24 @@ function getApiBaseUrl(): string {
   return (apiClient.defaults.baseURL as string) || ''
 }
 
-export type EstadoSarlaft = 'recibido' | 'en_revision' | 'aprobado' | 'rechazado' | 'escalado'
+/** Estados administrativos.
+ *
+ *  `condicionado` es una DECISIÓN FINAL: cierra la evaluación y, en los
+ *  formatos con documento controlado, emite una versión documental nueva.
+ *  No es sinónimo de `escalado`, que deja el caso pendiente de decisión. */
+export type EstadoSarlaft =
+  | 'recibido'
+  | 'en_revision'
+  | 'aprobado'
+  | 'condicionado'
+  | 'rechazado'
+  | 'escalado'
 export type TipoFormularioSarlaft =
   | 'cliente_proveedor'
   | 'accionistas'
   | 'personal'
   | 'autorizacion_propietario'
+  | 'declaracion_empresa_transporte'
 
 export interface SarlaftDocumento {
   id: string
@@ -55,7 +67,7 @@ export interface SarlaftFormularioDefinicion {
 export interface SarlaftFormularioResumen {
   id: string
   radicado: string
-  codigo_formulario: 'GC-FR-04' | 'GC-FR-05' | 'GC-FR-06' | 'SLFT-PTEE-FR-12'
+  codigo_formulario: 'GC-FR-04' | 'GC-FR-05' | 'GC-FR-06' | 'SLFT-PTEE-FR-12' | 'GC-FOR-13'
   tipo_formulario: TipoFormularioSarlaft
   version: string
   fecha_envio: string
@@ -70,6 +82,43 @@ export interface SarlaftFormularioResumen {
   evaluado_por: { id: string; nombre: string } | null
 }
 
+/** Intento de entrega de una versión documental. Nunca trae el token de
+ *  descarga: en base de datos solo vive su hash. */
+export interface SarlaftEntregaDocumento {
+  id: string
+  canal: 'email_declarante' | 'email_interno' | 'descarga'
+  destinatario: string | null
+  estado: 'pendiente' | 'enviado' | 'fallido' | 'descargado' | 'revocado'
+  proveedor: string | null
+  provider_message_id: string | null
+  intento: number
+  error_codigo: string | null
+  expires_at: string | null
+  completed_at: string | null
+  created_at: string
+}
+
+/** Versión inmutable del PDF generado sobre el formato controlado.
+ *
+ *  La versión 1 es la `recibida` (sin resultado marcado) y nunca cambia; cada
+ *  decisión final emite una `evaluada` nueva con su propio hash. */
+export interface SarlaftDocumentoGenerado {
+  id: string
+  clase: string
+  marca: string
+  version_documento: number
+  estado_documental: 'recibida' | 'evaluada'
+  codigo_template: string
+  version_template: string
+  template_sha256: string
+  pdf_sha256: string
+  mime_type: string
+  tamano_bytes: string
+  created_at: string
+  generado_por: { id: string; nombre: string } | null
+  entregas: SarlaftEntregaDocumento[]
+}
+
 export interface SarlaftFormularioDetalle extends SarlaftFormularioResumen {
   evaluacion_concepto: string | null
   evaluacion_observaciones: string | null
@@ -82,6 +131,8 @@ export interface SarlaftFormularioDetalle extends SarlaftFormularioResumen {
   /** Null si el código de formato ya no existe en el backend. */
   definicion: SarlaftFormularioDefinicion | null
   documentos: SarlaftDocumento[]
+  /** Vacío para los formatos que no se dibujan sobre un template. */
+  documentos_generados: SarlaftDocumentoGenerado[]
   created_at: string
   updated_at: string
 }
@@ -146,6 +197,27 @@ export const sarlaftAPI = {
   },
 
   /**
+   * Descarga el binario ARCHIVADO de una versión documental concreta.
+   *
+   * No regenera nada: sirve exactamente el PDF que se entregó, que es el que
+   * corresponde al hash registrado.
+   */
+  async descargarVersionDocumental(
+    formularioId: string,
+    documentoId: string,
+    nombreSugerido?: string
+  ): Promise<string> {
+    const r = await apiClient.get<Blob>(
+      `/api/formularios-sarlaft/${formularioId}/documentos-generados/${documentoId}/pdf`,
+      { responseType: 'blob', ...{ _noRetry: true } } as any
+    )
+    const filename =
+      parseFilename(r.headers['content-disposition']) || nombreSugerido || `documento_${documentoId}.pdf`
+    triggerBrowserDownload(r.data, filename)
+    return filename
+  },
+
+  /**
    * Construye la URL del endpoint para descargar el ZIP de evidencia.
    */
   urlEvidencia(id: string): string {
@@ -206,14 +278,16 @@ export const TIPO_FORMULARIO_LABELS: Record<TipoFormularioSarlaft, string> = {
   cliente_proveedor: 'Cliente / Proveedor',
   accionistas: 'Accionistas',
   personal: 'Personal',
-  autorizacion_propietario: 'Autorización del Propietario'
+  autorizacion_propietario: 'Autorización del Propietario',
+  declaracion_empresa_transporte: 'Declaración empresa de transporte'
 }
 
 export const TIPO_FORMULARIO_CODIGOS: Record<TipoFormularioSarlaft, string> = {
   cliente_proveedor: 'GC-FR-04',
   accionistas: 'GC-FR-05',
   personal: 'GC-FR-06',
-  autorizacion_propietario: 'SLFT-PTEE-FR-12'
+  autorizacion_propietario: 'SLFT-PTEE-FR-12',
+  declaracion_empresa_transporte: 'GC-FOR-13'
 }
 
 export const ESTADO_LABELS: Record<EstadoSarlaft, { label: string; color: string; bg: string; border: string; dot: string }> = {
@@ -237,6 +311,15 @@ export const ESTADO_LABELS: Record<EstadoSarlaft, { label: string; color: string
     bg: '#ECFDF5',
     border: '#A7F3D0',
     dot: '#10B981'
+  },
+  // Ámbar propio: es una aprobación con condiciones, así que no puede leerse
+  // ni como el verde de Aprobado ni como el rojo de Rechazado.
+  condicionado: {
+    label: 'Condicionado',
+    color: '#9A3412',
+    bg: '#FFF7ED',
+    border: '#FED7AA',
+    dot: '#F97316'
   },
   rechazado: {
     label: 'Rechazado',
@@ -271,7 +354,10 @@ export const TIPO_DOCUMENTO_LABELS: Record<string, string> = {
   cert_tradicion_vehiculo: 'Certificado de tradición del vehículo',
   contrato_relacion_juridica: 'Contrato que acredita la relación jurídica',
   formulario_conocimiento_tercero: 'Formulario de conocimiento del tercero',
-  otros_anexos: 'Otros anexos'
+  otros_anexos: 'Otros anexos',
+  // Declaración de empresa de transporte (GC-FOR-13)
+  anexo_alertas: 'Documento anexo de alertas',
+  relacion_vehiculos: 'Relación de vehículos cubiertos'
 }
 
 /**
@@ -316,6 +402,13 @@ export const CONTACTO_POR_TIPO: Record<TipoFormularioSarlaft, ContactoSarlaft> =
     correo_publico: 'cotransmeqreportesla@gmail.com'
   },
   autorizacion_propietario: {
+    emails: ['compras.cotransmeq@hotmail.com', 'cotransmeqreportesla@gmail.com'],
+    area_responsable: 'Cumplimiento',
+    telefono_principal: '+57 302 571 1858',
+    telefono_wa: '573025711858',
+    correo_publico: 'cotransmeqreportesla@gmail.com'
+  },
+  declaracion_empresa_transporte: {
     emails: ['compras.cotransmeq@hotmail.com', 'cotransmeqreportesla@gmail.com'],
     area_responsable: 'Cumplimiento',
     telefono_principal: '+57 302 571 1858',

@@ -29,6 +29,10 @@
 		pendientes: items.filter((i) => i.estado === 'recibido').length,
 		enRevision: items.filter((i) => i.estado === 'en_revision').length,
 		aprobados: items.filter((i) => i.estado === 'aprobado').length,
+		// `condicionado` se cuenta aparte a propósito: sumarlo a los aprobados
+		// inflaría la métrica de aprobación con casos que quedaron sujetos a
+		// condiciones todavía no cumplidas.
+		condicionados: items.filter((i) => i.estado === 'condicionado').length,
 		rechazados: items.filter((i) => i.estado === 'rechazado').length,
 		documentos: items.reduce((acc, i) => acc + i.documentos_count, 0)
 	};
@@ -220,7 +224,7 @@
 
 		<div class="filter-group">
 			<span class="filter-label">Tipo</span>
-			{#each [{ k: 'TODOS', l: 'Todos' }, { k: 'cliente_proveedor', l: 'Cliente/Prov.' }, { k: 'accionistas', l: 'Accionistas' }, { k: 'personal', l: 'Personal' }, { k: 'autorizacion_propietario', l: 'Autoriz. propietario' }] as f}
+			{#each [{ k: 'TODOS', l: 'Todos' }, { k: 'cliente_proveedor', l: 'Cliente/Prov.' }, { k: 'accionistas', l: 'Accionistas' }, { k: 'personal', l: 'Personal' }, { k: 'autorizacion_propietario', l: 'Autoriz. propietario' }, { k: 'declaracion_empresa_transporte', l: 'Declaración empresa de transporte' }] as f}
 				<button
 					class="chip"
 					class:chip--active={filtroTipo === f.k}
@@ -233,7 +237,7 @@
 
 		<div class="filter-group">
 			<span class="filter-label">Estado</span>
-			{#each [{ k: 'TODOS', l: 'Todos' }, { k: 'recibido', l: 'Recibido' }, { k: 'en_revision', l: 'En revisión' }, { k: 'aprobado', l: 'Aprobado' }, { k: 'rechazado', l: 'Rechazado' }, { k: 'escalado', l: 'Escalado' }] as f}
+			{#each [{ k: 'TODOS', l: 'Todos' }, { k: 'recibido', l: 'Recibido' }, { k: 'en_revision', l: 'En revisión' }, { k: 'aprobado', l: 'Aprobado' }, { k: 'condicionado', l: 'Condicionado' }, { k: 'rechazado', l: 'Rechazado' }, { k: 'escalado', l: 'Escalado' }] as f}
 				<button
 					class="chip"
 					class:chip--active={filtroEstado === f.k}
