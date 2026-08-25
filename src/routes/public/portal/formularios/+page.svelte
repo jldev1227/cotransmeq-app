@@ -18,6 +18,7 @@
 		allReceipts,
 		putAssignments,
 		putDefinition,
+		placasCacheadas,
 		pruneDefinitions,
 		quotaInfo,
 		type StoredAssignment,
@@ -39,6 +40,9 @@
 	let reconciliando = $state(false);
 	let hoy = $state<string | null>(null);
 	let avisoCuota = $state<string | null>(null);
+	/// Placas por id de vehículo. Es lo único que distingue dos borradores del
+	/// mismo preoperacional, y viene de la caché para no depender de la red.
+	let placas = $state<Record<string, string>>({});
 
 	/**
 	 * Cola visible de la descarga inicial.
@@ -61,7 +65,9 @@
 	let colaVisible = $state(false);
 	let temporizadorCola: ReturnType<typeof setTimeout> | null = null;
 
-	const colaHechos = $derived(cola.filter((i) => i.estado === 'listo' || i.estado === 'error').length);
+	const colaHechos = $derived(
+		cola.filter((i) => i.estado === 'listo' || i.estado === 'error').length
+	);
 	const colaFallidos = $derived(cola.filter((i) => i.estado === 'error').length);
 	const colaPorcentaje = $derived(cola.length ? Math.round((colaHechos / cola.length) * 100) : 0);
 
@@ -82,18 +88,41 @@
 		}, demoraMs);
 	}
 
-	/** Borrador local de una asignación, si hay. */
-	function borradorDe(assignmentId: string): StoredDraft | undefined {
+	/**
+	 * TODOS los borradores locales de una asignación, del más reciente al más viejo.
+	 *
+	 * En plural a propósito: un conductor que atiende varios vehículos lleva un
+	 * preoperacional por cada uno abierto a la vez. Mostrando solo el último, los
+	 * demás quedaban inalcanzables —y uno atascado por fotos sin subir escondía
+	 * al resto.
+	 */
+	function borradoresDe(assignmentId: string): StoredDraft[] {
 		return borradores
 			.filter((d) => d.assignmentId === assignmentId)
-			.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+			.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+	}
+
+	/** Etiqueta con la que el conductor reconoce un borrador entre varios. */
+	function etiquetaBorrador(draft: StoredDraft): string {
+		const vehicleId = draft.context?.vehicleId;
+		if (typeof vehicleId === 'string' && placas[vehicleId]) return placas[vehicleId];
+		/// Sin placa cacheada se cae a la hora de inicio: no es tan reconocible como
+		/// la placa, pero distingue dos borradores del mismo día, que es lo mínimo
+		/// para no tener que abrirlos a ciegas.
+		return `Empezado ${fechaHora(draft.createdAt)}`;
 	}
 
 	async function cargarLocal() {
-		const [a, d, r] = await Promise.all([allAssignments(), allDrafts(), allReceipts()]);
+		const [a, d, r, p] = await Promise.all([
+			allAssignments(),
+			allDrafts(),
+			allReceipts(),
+			placasCacheadas()
+		]);
 		asignaciones = a;
 		borradores = d;
 		recibos = r;
+		placas = p;
 		cargandoLocal = false;
 	}
 
@@ -162,9 +191,11 @@
 			for (const card of [...faltantes, ...revalidables]) {
 				marcarEnCola(card.assignmentId, 'descargando');
 				try {
-					const { notModified, etag, data: cuerpo } = await portalFormulariosAPI.definicion(
-						card.assignmentId
-					);
+					const {
+						notModified,
+						etag,
+						data: cuerpo
+					} = await portalFormulariosAPI.definicion(card.assignmentId);
 					if (!notModified && cuerpo) {
 						await putDefinition({
 							versionId: card.versionId,
@@ -236,10 +267,19 @@
 		void reconciliar();
 	});
 
-	function abrir(a: StoredAssignment) {
-		const draft = borradorDe(a.assignmentId);
-		const query = draft ? `?draft=${draft.clientSubmissionId}` : '';
-		goto(`/public/portal/formularios/${a.assignmentId}${query}`);
+	/** Reanuda un borrador concreto. */
+	function abrirBorrador(assignmentId: string, clientSubmissionId: string) {
+		goto(`/public/portal/formularios/${assignmentId}?draft=${clientSubmissionId}`);
+	}
+
+	/**
+	 * Empieza un formulario NUEVO, aunque ya haya borradores de esa asignación.
+	 *
+	 * `nuevo=1` es imprescindible: sin él el runner reanuda el borrador existente
+	 * y era imposible diligenciar el segundo vehículo del día.
+	 */
+	function empezarNuevo(assignmentId: string) {
+		goto(`/public/portal/formularios/${assignmentId}?nuevo=1`);
 	}
 
 	function fechaHora(iso: string): string {
@@ -289,8 +329,7 @@
 				<div class="cola__texto">
 					<p class="cola__titulo">Descargando tus formularios…</p>
 					<p class="cola__detalle">
-						{colaHechos} de {cola.length} · quedan guardados en el teléfono para diligenciarlos sin
-						señal
+						{colaHechos} de {cola.length} · quedan guardados en el teléfono para diligenciarlos sin señal
 					</p>
 				</div>
 				<span class="cola__porcentaje">{colaPorcentaje}%</span>
@@ -322,8 +361,8 @@
 
 			{#if colaFallidos > 0}
 				<p class="cola__fallo">
-					{colaFallidos} formulario{colaFallidos === 1 ? '' : 's'} no se pudo guardar para uso sin
-					señal. Se intentará de nuevo; con conexión igual puedes abrirlo.
+					{colaFallidos} formulario{colaFallidos === 1 ? '' : 's'} no se pudo guardar para uso sin señal.
+					Se intentará de nuevo; con conexión igual puedes abrirlo.
 				</p>
 			{/if}
 		</section>
@@ -354,9 +393,9 @@
 				<h2 class="grupo__titulo">Por diligenciar</h2>
 				<ul class="tarjetas">
 					{#each disponibles as a (a.assignmentId)}
-						{@const draft = borradorDe(a.assignmentId)}
-						<li>
-							<button type="button" class="tarjeta" onclick={() => abrir(a)}>
+						{@const draftsDe = borradoresDe(a.assignmentId)}
+						<li class="tarjeta">
+							<div class="tarjeta__cabeza">
 								<span class="tarjeta__code">{a.code}</span>
 								<span class="tarjeta__titulo">{a.title}</span>
 								<span class="tarjeta__meta">
@@ -366,24 +405,43 @@
 									{/if}
 									{#if !a.allowOffline}· solo con conexión{/if}
 								</span>
+							</div>
 
-								{#if draft}
-									<span class="tarjeta__draft">
-										<span class="barra" aria-hidden="true">
-											<span class="barra__relleno" style={`width:${draft.progress}%`}></span>
-										</span>
-										<span class="tarjeta__draft-texto">
-											Empezado · {draft.progress}% · {fechaHora(draft.updatedAt)}
-										</span>
+							<!-- Un botón POR borrador. Antes la tarjeta entera era un solo botón
+							     que abría «el último», así que el resto de borradores existía
+							     pero no tenía dónde tocarse. -->
+							{#each draftsDe as draft (draft.clientSubmissionId)}
+								<button
+									type="button"
+									class="borrador"
+									class:borrador--bloqueado={draft.blocked}
+									onclick={() => abrirBorrador(a.assignmentId, draft.clientSubmissionId)}
+								>
+									<span class="borrador__fila">
+										<span class="borrador__etiqueta">{etiquetaBorrador(draft)}</span>
+										<span class="borrador__pct">{draft.progress}%</span>
 									</span>
+									<span class="barra" aria-hidden="true">
+										<span class="barra__relleno" style={`width:${draft.progress}%`}></span>
+									</span>
+									<span class="borrador__meta">Guardado {fechaHora(draft.updatedAt)}</span>
 									{#if draft.blocked}
 										<span class="tarjeta__bloqueado">
 											Necesita corrección: {draft.blocked.message}
 										</span>
 									{/if}
-								{:else}
-									<span class="tarjeta__accion">Empezar →</span>
-								{/if}
+								</button>
+							{/each}
+
+							<!-- Siempre presente, haya o no borradores: es lo que permite atender
+							     un segundo vehículo sin cerrar el primero. Con `ONE_PER_CONTEXT`
+							     llevar varios a la vez es el caso normal, no la excepción. -->
+							<button
+								type="button"
+								class="tarjeta__accion"
+								onclick={() => empezarNuevo(a.assignmentId)}
+							>
+								{draftsDe.length ? 'Empezar otro →' : 'Empezar →'}
 							</button>
 						</li>
 					{/each}
@@ -698,13 +756,14 @@
 		list-style: none;
 	}
 
+	/* La tarjeta ya NO es un botón: es el contenedor de N borradores más el de
+	   «Empezar otro». Cuando era un botón solo cabía una acción, y esa era la
+	   razón de fondo por la que no se podía llevar más de un formulario a la vez. */
 	.tarjeta {
 		display: flex;
 		flex-direction: column;
 		gap: 0.1875rem;
 		width: 100%;
-		/* 44 px de alto mínimo por objetivo táctil; en la práctica son más. */
-		min-height: 44px;
 		padding: 0.875rem;
 		text-align: left;
 		font: inherit;
@@ -712,14 +771,68 @@
 		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
 		border-radius: 14px;
 		box-shadow: var(--shadow-card, 0 4px 24px rgba(0, 0, 0, 0.04));
+	}
+
+	.tarjeta__cabeza {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1875rem;
+	}
+
+	/* Un borrador. Objetivo táctil holgado: se toca en movimiento, con guantes y
+	   al sol, y equivocarse abre el formulario del vehículo que no es. */
+	.borrador {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		width: 100%;
+		min-height: 44px;
+		margin-top: 0.5rem;
+		padding: 0.5rem 0.625rem;
+		font: inherit;
+		text-align: left;
+		background: #fffbeb;
+		border: 1px solid #fde68a;
+		border-radius: 10px;
 		cursor: pointer;
 	}
 
-	.tarjeta:active {
+	.borrador--bloqueado {
+		background: #fef2f2;
+		border-color: #fecaca;
+	}
+
+	.borrador:active {
 		transform: scale(0.995);
 	}
 
-	.tarjeta:focus-visible {
+	.borrador__fila {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+
+	.borrador__etiqueta {
+		font-size: 0.8125rem;
+		font-weight: 700;
+		color: var(--text-primary, #1a1a1a);
+	}
+
+	.borrador__pct {
+		font-family: var(--font-mono, monospace);
+		font-size: 0.6875rem;
+		font-weight: 700;
+		color: #92400e;
+	}
+
+	.borrador__meta {
+		font-size: 0.6875rem;
+		color: var(--text-secondary, #4a4a4a);
+	}
+
+	.borrador:focus-visible,
+	.tarjeta__accion:focus-visible {
 		outline: 2px solid var(--emerald-600, #059669);
 		outline-offset: 2px;
 	}
@@ -751,17 +864,23 @@
 	}
 
 	.tarjeta__accion {
-		margin-top: 0.375rem;
+		width: 100%;
+		min-height: 44px;
+		margin-top: 0.5rem;
+		padding: 0 0.75rem;
+		font: inherit;
 		font-size: 0.8125rem;
-		font-weight: 600;
+		font-weight: 700;
+		text-align: left;
 		color: var(--emerald-700, #047857);
+		background: var(--bg-surface, #fff);
+		border: 1px dashed var(--emerald-600, #059669);
+		border-radius: 10px;
+		cursor: pointer;
 	}
 
-	.tarjeta__draft {
-		margin-top: 0.5rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
+	.tarjeta__accion:active {
+		transform: scale(0.995);
 	}
 
 	.barra {
@@ -777,12 +896,6 @@
 		display: block;
 		height: 100%;
 		background: var(--emerald-500, #10b981);
-	}
-
-	.tarjeta__draft-texto {
-		font-size: 0.6875rem;
-		font-weight: 600;
-		color: #92400e;
 	}
 
 	.tarjeta__bloqueado {

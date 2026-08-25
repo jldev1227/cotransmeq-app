@@ -308,9 +308,7 @@ export async function getDefinition(versionId: string): Promise<StoredDefinition
 }
 
 export async function allDefinitions(): Promise<StoredDefinition[]> {
-	return tx(STORES.definitions, 'readonly', (t) =>
-		req(t.objectStore(STORES.definitions).getAll())
-	);
+	return tx(STORES.definitions, 'readonly', (t) => req(t.objectStore(STORES.definitions).getAll()));
 }
 
 /**
@@ -352,9 +350,7 @@ export async function putAssignments(records: StoredAssignment[]): Promise<void>
 }
 
 export async function allAssignments(): Promise<StoredAssignment[]> {
-	return tx(STORES.assignments, 'readonly', (t) =>
-		req(t.objectStore(STORES.assignments).getAll())
-	);
+	return tx(STORES.assignments, 'readonly', (t) => req(t.objectStore(STORES.assignments).getAll()));
 }
 
 export async function getAssignment(assignmentId: string): Promise<StoredAssignment | undefined> {
@@ -373,7 +369,9 @@ export async function getAssignment(assignmentId: string): Promise<StoredAssignm
  * zona) escribiría un `updatedAt` anterior al guardado previo, y la
  * reconciliación con el backup del servidor elegiría la versión vieja.
  */
-export async function putDraft(draft: Omit<StoredDraft, 'updatedAt'> & { updatedAt?: string }): Promise<StoredDraft> {
+export async function putDraft(
+	draft: Omit<StoredDraft, 'updatedAt'> & { updatedAt?: string }
+): Promise<StoredDraft> {
 	return tx(STORES.drafts, 'readwrite', async (t) => {
 		const store = t.objectStore(STORES.drafts);
 		const previo: StoredDraft | undefined = await req(store.get(draft.clientSubmissionId));
@@ -631,6 +629,35 @@ export async function getMeta<T>(key: string): Promise<T | undefined> {
 
 export async function setMeta(key: string, value: unknown): Promise<void> {
 	await tx(STORES.meta, 'readwrite', (t) => req(t.objectStore(STORES.meta).put({ key, value })));
+}
+
+/**
+ * Caché de placas por id de vehículo.
+ *
+ * La lista de formularios tiene que abrir SIN señal, y con varios borradores de
+ * la misma asignación lo único que los distingue es el vehículo: «3 borradores
+ * del 25-08 al 100 %» es indescifrable, «ERL863 / WDS217 / FST006» no. Pedir el
+ * catálogo por red al pintar la lista rompería el modo sin conexión, así que se
+ * cachea cuando el runner ya lo ha traído para su desplegable.
+ *
+ * Se guarda en `meta` y no en un store propio: son unas decenas de pares y no
+ * hace falta consultarlos por nada que no sea el id.
+ */
+const CLAVE_PLACAS = 'vehiculo-placas';
+
+export async function guardarPlacas(vehiculos: { id: string; placa: string }[]): Promise<void> {
+	if (vehiculos.length === 0) return;
+	/// Se FUSIONA con lo ya cacheado en vez de reemplazar: una carga parcial —o un
+	/// catálogo filtrado por asignación— no debe borrar las placas de los
+	/// borradores de otras asignaciones, que es justo lo que hay que resolver.
+	const previo = (await getMeta<Record<string, string>>(CLAVE_PLACAS)) ?? {};
+	const siguiente = { ...previo };
+	for (const v of vehiculos) if (v.id && v.placa) siguiente[v.id] = v.placa;
+	await setMeta(CLAVE_PLACAS, siguiente);
+}
+
+export async function placasCacheadas(): Promise<Record<string, string>> {
+	return (await getMeta<Record<string, string>>(CLAVE_PLACAS)) ?? {};
 }
 
 /**

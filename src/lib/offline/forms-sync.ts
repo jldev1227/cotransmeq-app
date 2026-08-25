@@ -29,13 +29,11 @@
 import { browser } from '$app/environment';
 import { get, writable } from 'svelte/store';
 import { portalSession } from '$lib/stores/portalStore';
+import { PortalApiError, hayConexionReal, portalFormulariosAPI } from '$lib/api/formularios-portal';
 import {
-	PortalApiError,
-	hayConexionReal,
-	portalFormulariosAPI
-} from '$lib/api/formularios-portal';
-import {
+	allDrafts,
 	allOperations,
+	allReceipts,
 	attachmentsForSubmission,
 	claimNextOperation,
 	deleteDraftCascade,
@@ -44,6 +42,7 @@ import {
 	getAssignment,
 	getAttachment,
 	getDraft,
+	getReceipt,
 	installationId,
 	markDraftBlocked,
 	patchAttachment,
@@ -79,7 +78,19 @@ export interface SyncState {
 	phase: SyncPhase;
 	/** Operaciones en la cola (cualquier estado). */
 	pending: number;
+	/**
+	 * Envíos distintos representados por esas operaciones.
+	 *
+	 * Un envío genera varias operaciones (un `INIT`, un `UPLOAD` y un `COMPLETE`
+	 * por foto, más el `SUBMIT`), así que contar operaciones y llamarlas «envíos»
+	 * en la pantalla exagera el problema: «7 en cola» para un preoperacional con
+	 * dos fotos. Lo que el conductor cuenta son formularios.
+	 */
+	submissions: number;
+	/** Operaciones `BLOCKED`. Para diagnóstico; la pantalla usa `blockedSubmissions`. */
 	blocked: number;
+	/** Envíos distintos con alguna operación bloqueada. */
+	blockedSubmissions: number;
 	/** Antigüedad de la operación más vieja, en ms. `null` si la cola está vacía. */
 	oldestAgeMs: number | null;
 	lastSyncAt: string | null;
@@ -89,7 +100,9 @@ export interface SyncState {
 export const syncState = writable<SyncState>({
 	phase: 'idle',
 	pending: 0,
+	submissions: 0,
 	blocked: 0,
+	blockedSubmissions: 0,
 	oldestAgeMs: null,
 	lastSyncAt: null,
 	lastError: null
@@ -99,6 +112,91 @@ export const syncState = writable<SyncState>({
 export const receiptEvents = writable<{ clientSubmissionId: string; submissionId: string } | null>(
 	null
 );
+
+// ─── Detalle de la cola ──────────────────────────────────────────────────────
+
+/**
+ * Un envío pendiente, ya identificado con nombre y apellidos.
+ *
+ * Existe porque un contador no basta. «2 necesitan corrección» no dice CUÁLES, y
+ * hasta ahora la única forma de encontrarlos era que su asignación siguiera
+ * apareciendo en la lista de formularios en estado `AVAILABLE`. Un borrador cuya
+ * asignación cambió de período, o que HSEQ retiró, quedaba contado en el panel
+ * pero sin ninguna tarjeta donde verse: el conductor leía que tenía trabajo
+ * pendiente en formularios que ni recordaba haber empezado, y no había forma de
+ * llegar a ellos ni de quitarlos.
+ */
+export interface EnvioEnCola {
+	clientSubmissionId: string;
+	assignmentId: string | null;
+	/** Código y título del formato, o `null` si ya no queda rastro para nombrarlo. */
+	code: string | null;
+	title: string | null;
+	/** Operaciones que le quedan en la cola. */
+	operaciones: number;
+	bloqueado: boolean;
+	/** Antigüedad de su operación más vieja, en ms. */
+	ageMs: number;
+	progress: number | null;
+	error: { code: string; message: string } | null;
+	/** Queda borrador local, así que se puede abrir para corregirlo. */
+	abrible: boolean;
+}
+
+/** La cola, envío a envío. Se recalcula con cada `refrescarEstado`. */
+export const colaEnvios = writable<EnvioEnCola[]>([]);
+
+async function detallarCola(operaciones: OutboxOperation[]): Promise<EnvioEnCola[]> {
+	if (operaciones.length === 0) return [];
+
+	const borradores = new Map((await allDrafts()).map((d) => [d.clientSubmissionId, d]));
+	const ahora = Date.now();
+
+	const porEnvio = new Map<string, OutboxOperation[]>();
+	for (const operacion of operaciones) {
+		const grupo = porEnvio.get(operacion.aggregateId);
+		if (grupo) grupo.push(operacion);
+		else porEnvio.set(operacion.aggregateId, [operacion]);
+	}
+
+	const envios = await Promise.all(
+		[...porEnvio].map(async ([clientSubmissionId, grupo]): Promise<EnvioEnCola> => {
+			const draft = borradores.get(clientSubmissionId);
+			/// El recibo es el plan B para ponerle nombre: si el borrador ya se borró
+			/// —envío entregado con una operación rezagada— el recibo conserva el
+			/// código y el título, y sin él la fila saldría anónima.
+			const recibo = draft ? undefined : await getReceipt(clientSubmissionId);
+			const assignmentId = draft?.assignmentId ?? recibo?.assignmentId ?? null;
+			const asignacion = assignmentId ? await getAssignment(assignmentId) : undefined;
+			const bloqueada = grupo.find((o) => o.state === 'BLOCKED');
+
+			return {
+				clientSubmissionId,
+				assignmentId,
+				code: asignacion?.code ?? recibo?.code ?? null,
+				title: asignacion?.title ?? recibo?.title ?? null,
+				operaciones: grupo.length,
+				/// El borrador y la operación pueden discrepar un instante mientras se
+				/// escriben los dos; basta con que uno lo diga para pedir atención.
+				bloqueado: Boolean(bloqueada) || Boolean(draft?.blocked),
+				ageMs: grupo.reduce((max, o) => Math.max(max, ahora - new Date(o.createdAt).getTime()), 0),
+				progress: draft?.progress ?? null,
+				error: draft?.blocked
+					? { code: draft.blocked.code, message: draft.blocked.message }
+					: bloqueada?.lastError
+						? { code: bloqueada.lastError.code, message: bloqueada.lastError.message }
+						: null,
+				abrible: Boolean(draft)
+			};
+		})
+	);
+
+	/// Lo bloqueado primero —es lo único que exige una acción del conductor— y
+	/// dentro de cada grupo lo más viejo arriba.
+	return envios.sort((a, b) =>
+		a.bloqueado !== b.bloqueado ? (a.bloqueado ? -1 : 1) : b.ageMs - a.ageMs
+	);
+}
 
 // ─── Motor ───────────────────────────────────────────────────────────────────
 
@@ -116,11 +214,16 @@ async function refrescarEstado(phase?: SyncPhase) {
 		return min === null || edad > min ? edad : min;
 	}, null);
 
+	const detalle = await detallarCola(operaciones);
+	colaEnvios.set(detalle);
+
 	syncState.update((s) => ({
 		...s,
 		...(phase ? { phase } : {}),
 		pending: operaciones.length,
+		submissions: detalle.length,
 		blocked: bloqueadas.length,
+		blockedSubmissions: detalle.filter((e) => e.bloqueado).length,
 		oldestAgeMs: masVieja
 	}));
 }
@@ -141,6 +244,10 @@ export async function startSync(): Promise<void> {
 	/// Leases huérfanos de una pestaña que se cerró a mitad de una subida: sin
 	/// esto quedarían `RUNNING` para siempre y el envío no se completaría nunca.
 	await releaseStaleLeases();
+
+	/// Antes de mirar el estado: una operación `BLOCKED` no se reintenta nunca, así
+	/// que un teléfono que ya se atascó no se cura solo por abrir el portal.
+	await purgarObsoletasTrasRecibo();
 
 	try {
 		channel = new BroadcastChannel(CHANNEL);
@@ -305,6 +412,12 @@ async function ejecutar(operacion: OutboxOperation): Promise<Resultado> {
 		/// consideren desbloqueados (`claimNextOperation` resuelve dependencias por
 		/// ausencia).
 		await deleteOperation(operacion.operationId);
+		/// Y se REINTENTA la limpieza del borrador. `ejecutarSubmit` la llama al
+		/// terminar, pero si otra operación del mismo envío seguía en cola en ese
+		/// momento, la limpieza no se hizo y nadie volvía a intentarla: el borrador
+		/// se quedaba en el teléfono con el envío ya entregado. Ahora la última
+		/// operación en terminar —sea cual sea— es la que limpia.
+		await limpiarSiCompleto(operacion.aggregateId);
 		return 'ok';
 	} catch (err) {
 		return manejarError(operacion, err);
@@ -315,7 +428,12 @@ async function manejarError(operacion: OutboxOperation, err: unknown): Promise<R
 	const error =
 		err instanceof PortalApiError
 			? err
-			: new PortalApiError('INTERNAL_ERROR', err instanceof Error ? err.message : String(err), 0, null);
+			: new PortalApiError(
+					'INTERNAL_ERROR',
+					err instanceof Error ? err.message : String(err),
+					0,
+					null
+				);
 
 	if (error.needsAuth) {
 		/// Se devuelve a `PENDING` sin gastar un intento: la sesión caducada no es
@@ -441,10 +559,14 @@ async function ejecutarUpload(operacion: OutboxOperation): Promise<void> {
 			originalName: adjunto.originalName
 		});
 		if (resultado.alreadyUploaded) {
-			await patchAttachment(clientAttachmentId, { state: 'UPLOADED', serverId: resultado.attachmentId });
+			await patchAttachment(clientAttachmentId, {
+				state: 'UPLOADED',
+				serverId: resultado.attachmentId
+			});
 			return;
 		}
-		if (!resultado.uploadUrl) throw new PortalApiError('UPLOAD_FAILED', 'Sin URL de subida.', 500, null);
+		if (!resultado.uploadUrl)
+			throw new PortalApiError('UPLOAD_FAILED', 'Sin URL de subida.', 500, null);
 		await patchAttachment(clientAttachmentId, {
 			serverId: resultado.attachmentId,
 			uploadUrl: resultado.uploadUrl,
@@ -486,7 +608,25 @@ async function ejecutarUpload(operacion: OutboxOperation): Promise<void> {
 async function ejecutarDiscard(operacion: OutboxOperation): Promise<void> {
 	const attachmentId = String(operacion.payload.attachmentId ?? '');
 	if (!attachmentId) return;
-	await portalFormulariosAPI.descartarAdjunto(attachmentId);
+	try {
+		await portalFormulariosAPI.descartarAdjunto(attachmentId);
+	} catch (err) {
+		/**
+		 * El envío ya se entregó: este descarte llegó tarde y sobra.
+		 *
+		 * El servidor hace bien en negarse —un envío entregado es inmutable— pero
+		 * para la cola NO es un fallo: si el `SUBMIT` pasó, el payload declaró la
+		 * evidencia correcta (si hubiera sobrado un adjunto, el envío se habría
+		 * rechazado con `ATTACHMENT_NOT_DECLARED`). No queda nada que descartar.
+		 *
+		 * Sin este caso, un 409 marcaba la operación `BLOCKED` y el borrador como
+		 * «Necesita corrección: El envío ya fue entregado», al 100 %, para siempre:
+		 * el conductor veía que su preoperacional había fallado cuando en realidad
+		 * estaba entregado, y no había nada que pudiera corregir.
+		 */
+		if (err instanceof PortalApiError && err.code === 'SUBMISSION_IMMUTABLE') return;
+		throw err;
+	}
 }
 
 async function ejecutarComplete(operacion: OutboxOperation): Promise<void> {
@@ -495,7 +635,12 @@ async function ejecutarComplete(operacion: OutboxOperation): Promise<void> {
 	if (!adjunto) return;
 	if (adjunto.state === 'UPLOADED') return;
 	if (!adjunto.serverId) {
-		throw new PortalApiError('ATTACHMENT_MISSING', 'El adjunto no está registrado en el servidor.', 409, null);
+		throw new PortalApiError(
+			'ATTACHMENT_MISSING',
+			'El adjunto no está registrado en el servidor.',
+			409,
+			null
+		);
 	}
 
 	await portalFormulariosAPI.completarAdjunto(adjunto.serverId, {
@@ -578,13 +723,47 @@ async function ejecutarSubmit(operacion: OutboxOperation): Promise<void> {
  *
  * El orden importa: borrar el blob con un `UPLOAD` todavía en cola dejaría al
  * envío sin su evidencia y sin forma de recuperarla.
+ *
+ * El recibo se comprueba de verdad porque ahora esto se llama tras CUALQUIER
+ * operación, no solo tras el `SUBMIT`: sin esa comprobación, terminar un
+ * `BACKUP_DRAFT` de un borrador que aún no se ha enviado borraría el trabajo del
+ * conductor.
  */
 async function limpiarSiCompleto(clientSubmissionId: string): Promise<void> {
+	const recibo = await getReceipt(clientSubmissionId);
+	if (!recibo) return;
 	const pendientes = (await allOperations()).filter(
 		(o) => o.aggregateId === clientSubmissionId && o.type !== 'SUBMIT'
 	);
 	if (pendientes.length > 0) return;
 	await deleteDraftCascade(clientSubmissionId);
+}
+
+/**
+ * Retira lo que quedó en la cola de envíos YA entregados.
+ *
+ * Recupera a los dispositivos que se quedaron atascados antes de que
+ * `ejecutarDiscard` tratara el 409 como no-op: una operación en `BLOCKED` no se
+ * reintenta nunca, así que sin esto el borrador seguiría marcado «Necesita
+ * corrección» indefinidamente aunque el envío conste entregado.
+ *
+ * Solo se purgan `BACKUP_DRAFT` y `DISCARD_ATTACHMENT`, las únicas que pierden
+ * el sentido tras la entrega. Un `INIT`/`UPLOAD`/`COMPLETE` no debería existir
+ * aquí —el `SUBMIT` exige que la evidencia esté subida— y si existiera, borrarlo
+ * dejaría un envío sin su evidencia: se deja en paz.
+ */
+async function purgarObsoletasTrasRecibo(): Promise<void> {
+	const recibos = await allReceipts();
+	if (recibos.length === 0) return;
+	const entregados = new Set(recibos.map((r) => r.clientSubmissionId));
+
+	for (const operacion of await allOperations()) {
+		if (!entregados.has(operacion.aggregateId)) continue;
+		if (operacion.type !== 'BACKUP_DRAFT' && operacion.type !== 'DISCARD_ATTACHMENT') continue;
+		await deleteOperation(operacion.operationId);
+	}
+
+	for (const clientSubmissionId of entregados) await limpiarSiCompleto(clientSubmissionId);
 }
 
 // ─── Encolado ────────────────────────────────────────────────────────────────
@@ -615,7 +794,8 @@ export async function encolarBackup(clientSubmissionId: string): Promise<void> {
 	/// la cola de operaciones que se pisan entre sí. La operación lee el borrador
 	/// vigente al ejecutarse, así que reutilizar la pendiente es correcto.
 	const yaHay = existentes.some(
-		(o) => o.type === 'BACKUP_DRAFT' && o.aggregateId === clientSubmissionId && o.state !== 'BLOCKED'
+		(o) =>
+			o.type === 'BACKUP_DRAFT' && o.aggregateId === clientSubmissionId && o.state !== 'BLOCKED'
 	);
 	if (yaHay) {
 		/// Se refresca igualmente: salir sin actualizar dejaba el chip diciendo «Todo

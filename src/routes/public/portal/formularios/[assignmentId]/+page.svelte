@@ -31,6 +31,7 @@
 		getDefinition,
 		getDraft,
 		draftsForAssignment,
+		guardarPlacas,
 		putAttachment,
 		putDefinition,
 		putDraft,
@@ -130,9 +131,7 @@
 		/// Revalidación. Si falla y ya hay definición cacheada, se sigue sin ella:
 		/// es exactamente el caso «modo avión» que el módulo tiene que soportar.
 		try {
-			const cacheada = asignacionLocal
-				? await getDefinition(asignacionLocal.versionId)
-				: undefined;
+			const cacheada = asignacionLocal ? await getDefinition(asignacionLocal.versionId) : undefined;
 			const respuesta = await portalFormulariosAPI.definicion(assignmentId, cacheada?.etag);
 			if (!respuesta.notModified && respuesta.data) {
 				definicion = respuesta.data.definition;
@@ -180,10 +179,15 @@
 		//     `clientSubmissionId` nuevo, dejando lo diligenciado huérfano en
 		//     IndexedDB. Era el fallo que hacía parecer que el guardado local no
 		//     funcionaba.
+		//  3. `?nuevo=1` — lo añade el botón «Empezar otro» de la lista. Salta la
+		//     reanudación por completo: es la ÚNICA forma de abrir un segundo
+		//     formulario de la misma asignación, y sin él un conductor con un
+		//     preoperacional a medias no podía empezar el del siguiente vehículo.
+		const forzarNuevo = $page.url.searchParams.get('nuevo') === '1';
 		const draftParam = $page.url.searchParams.get('draft');
-		let existente = draftParam ? await getDraft(draftParam) : undefined;
+		let existente = forzarNuevo ? undefined : draftParam ? await getDraft(draftParam) : undefined;
 
-		if (!existente) {
+		if (!existente && !forzarNuevo) {
 			/**
 			 * Se prefiere el que TIENE contenido, y solo después el más reciente.
 			 *
@@ -226,8 +230,11 @@
 
 			/// Igual que arriba: la URL identifica el borrador desde el primer
 			/// instante, así que una recarga inmediata reanuda este y no crea otro.
+			/// Y se RETIRA `nuevo`: si se quedara, cada recarga crearía otro borrador
+			/// vacío y el conductor iría dejando un rastro de formularios en blanco.
 			const url = new URL($page.url);
 			url.searchParams.set('draft', clientSubmissionId);
+			url.searchParams.delete('nuevo');
 			history.replaceState(history.state, '', url);
 		}
 
@@ -256,6 +263,10 @@
 				lista.map((v) => ({ id: v.id, placa: v.placa })).filter((v) => v.id && v.placa),
 				(v) => v.placa
 			);
+			/// Se cachean para la LISTA, que debe abrir sin señal: allí un borrador se
+			/// identifica por su placa, y pedir el catálogo al pintarla rompería el
+			/// modo sin conexión.
+			await guardarPlacas(vehiculos);
 		} catch {
 			vehiculos = [];
 		}
@@ -382,7 +393,8 @@
 		occurrenceId: string | null,
 		media: PreparedMedia
 	) {
-		const kind = field.type === 'SIGNATURE' ? 'SIGNATURE' : field.type === 'PHOTO' ? 'PHOTO' : 'FILE';
+		const kind =
+			field.type === 'SIGNATURE' ? 'SIGNATURE' : field.type === 'PHOTO' ? 'PHOTO' : 'FILE';
 		const clientAttachmentId = crypto.randomUUID();
 
 		await putAttachment({
@@ -441,11 +453,7 @@
 		runner?.removeAttachment(clientAttachmentId);
 
 		if (previo) {
-			await encolarDescarte(
-				previo.clientSubmissionId,
-				clientAttachmentId,
-				previo.serverId ?? null
-			);
+			await encolarDescarte(previo.clientSubmissionId, clientAttachmentId, previo.serverId ?? null);
 		}
 
 		await refrescarAdjuntos();
@@ -548,9 +556,7 @@
 			<div class="bloqueo" role="alert">
 				<p class="bloqueo__titulo">El servidor rechazó este envío</p>
 				<p class="bloqueo__cuerpo">{bloqueo.message}</p>
-				<p class="bloqueo__nota">
-					Nada se perdió: corrige lo señalado y vuelve a enviar.
-				</p>
+				<p class="bloqueo__nota">Nada se perdió: corrige lo señalado y vuelve a enviar.</p>
 				<button type="button" class="btn btn--primario" onclick={reintentar}>
 					Reintentar envío
 				</button>

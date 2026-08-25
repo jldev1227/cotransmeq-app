@@ -8,9 +8,22 @@
 	Muestra la antigüedad de lo pendiente, no solo el número. «3 pendientes» no
 	dice nada; «3 pendientes, la más vieja de hace 2 h» le dice que algo va mal y
 	que conviene buscar señal.
+
+	Y el panel NOMBRA lo pendiente. Un contador suelto —«2 necesitan corrección»—
+	deja al conductor buscando a ciegas: los borradores bloqueados solo salían en
+	la lista de formularios si su asignación seguía disponible, así que uno cuya
+	asignación cambió de período era invisible. Aquí se lista siempre, con su
+	código, su error y una salida: abrirlo o descartarlo.
 -->
 <script lang="ts">
-	import { syncState, wakeAll } from '$lib/offline/forms-sync';
+	import { goto } from '$app/navigation';
+	import {
+		colaEnvios,
+		descartarEnvio,
+		syncState,
+		wakeAll,
+		type EnvioEnCola
+	} from '$lib/offline/forms-sync';
 
 	interface Props {
 		/** Compacto para la barra superior; extendido para la pantalla de lista. */
@@ -20,6 +33,36 @@
 	let { variant = 'chip' }: Props = $props();
 
 	const estado = $derived($syncState);
+	const envios = $derived($colaEnvios);
+
+	/// Descartar borra el borrador y sus fotos sin vuelta atrás, así que se pide
+	/// confirmación. En dos toques sobre el propio botón y no con un `confirm()`:
+	/// el diálogo nativo aparece descolgado del elemento que lo disparó y, en la
+	/// lista, no deja claro CUÁL de los envíos se va a borrar.
+	let confirmando = $state<string | null>(null);
+
+	async function descartar(envio: EnvioEnCola) {
+		if (confirmando !== envio.clientSubmissionId) {
+			confirmando = envio.clientSubmissionId;
+			return;
+		}
+		confirmando = null;
+		await descartarEnvio(envio.clientSubmissionId);
+	}
+
+	function abrir(envio: EnvioEnCola) {
+		if (!envio.assignmentId) return;
+		goto(`/public/portal/formularios/${envio.assignmentId}?draft=${envio.clientSubmissionId}`);
+	}
+
+	/// Sin código ni título no queda nada reconocible, así que se muestra el tramo
+	/// final del id: es lo único que permite distinguir dos filas anónimas entre sí
+	/// y lo que sirve para reportarlo a HSEQ.
+	function nombre(envio: EnvioEnCola): string {
+		if (envio.code && envio.title) return `${envio.code} · ${envio.title}`;
+		if (envio.title) return envio.title;
+		return `Envío sin identificar · ${envio.clientSubmissionId.slice(0, 8)}`;
+	}
 
 	const etiqueta = $derived.by(() => {
 		switch (estado.phase) {
@@ -87,8 +130,8 @@
 	>
 		<span class="chip__icono" class:girando={trabajando} aria-hidden="true">{icono}</span>
 		<span class="chip__texto">{etiqueta}</span>
-		{#if estado.pending > 0}
-			<span class="chip__conteo">{estado.pending}</span>
+		{#if estado.submissions > 0}
+			<span class="chip__conteo">{estado.submissions}</span>
 		{/if}
 	</button>
 {:else}
@@ -97,15 +140,16 @@
 			<span class="panel__icono" class:girando={trabajando} aria-hidden="true">{icono}</span>
 			<div class="panel__texto">
 				<p class="panel__titulo">{etiqueta}</p>
-				{#if estado.pending > 0}
+				{#if estado.submissions > 0}
 					<p class="panel__detalle">
-						{estado.pending} operación{estado.pending === 1 ? '' : 'es'} en cola{#if edad}, la más
-							antigua {edad}{/if}.
+						{estado.submissions} envío{estado.submissions === 1 ? '' : 's'} en cola{#if edad}, el
+							más antiguo {edad}{/if}.
 					</p>
 				{/if}
-				{#if estado.blocked > 0}
+				{#if estado.blockedSubmissions > 0}
 					<p class="panel__detalle">
-						{estado.blocked} necesita{estado.blocked === 1 ? '' : 'n'} corrección antes de reenviarse.
+						{estado.blockedSubmissions} necesita{estado.blockedSubmissions === 1 ? '' : 'n'} corrección
+						antes de reenviarse.
 					</p>
 				{/if}
 				{#if estado.phase === 'offline'}
@@ -130,6 +174,53 @@
 
 		{#if estado.pending > 0 && estado.phase !== 'syncing'}
 			<button type="button" class="panel__accion" onclick={() => wakeAll()}>Intentar ahora</button>
+		{/if}
+
+		{#if envios.length > 0}
+			<ul class="envios">
+				{#each envios as envio (envio.clientSubmissionId)}
+					<li class="envio" class:envio--bloqueado={envio.bloqueado}>
+						<p class="envio__nombre">{nombre(envio)}</p>
+						<p class="envio__meta">
+							{envio.bloqueado ? 'Necesita corrección' : 'Pendiente de enviar'}
+							· {edadLegible(envio.ageMs)}
+							{#if envio.progress !== null}· {envio.progress}% diligenciado{/if}
+						</p>
+
+						{#if envio.error}
+							<p class="envio__error">
+								<span class="panel__code">{envio.error.code}</span>{envio.error.message}
+							</p>
+						{/if}
+
+						{#if !envio.abrible}
+							<!-- Sin borrador no hay nada que corregir a mano: o ya se entregó y
+							     quedó una operación rezagada, o el borrador se borró. Descartar
+							     es la única salida real, así que se dice en vez de ofrecer un
+							     botón «Abrir» que llevaría a un formulario vacío. -->
+							<p class="envio__meta">
+								Ya no queda borrador de este envío en el teléfono. Si sigue aquí tras reintentar,
+								descártalo.
+							</p>
+						{/if}
+
+						<div class="envio__acciones">
+							{#if envio.abrible && envio.assignmentId}
+								<button type="button" class="envio__boton" onclick={() => abrir(envio)}>
+									{envio.bloqueado ? 'Abrir y corregir' : 'Abrir'}
+								</button>
+							{/if}
+							<button
+								type="button"
+								class="envio__boton envio__boton--peligro"
+								onclick={() => descartar(envio)}
+							>
+								{confirmando === envio.clientSubmissionId ? '¿Seguro? Toca otra vez' : 'Descartar'}
+							</button>
+						</div>
+					</li>
+				{/each}
+			</ul>
 		{/if}
 	</section>
 {/if}
@@ -257,6 +348,80 @@
 		font-family: var(--font-mono, monospace);
 		font-weight: 700;
 		margin-right: 0.25rem;
+	}
+
+	/* La lista ocupa el ancho completo del panel, debajo de la fila de resumen. */
+	.envios {
+		flex-basis: 100%;
+		position: relative;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		margin-top: 0.125rem;
+		list-style: none;
+		padding: 0;
+	}
+
+	.envio {
+		padding: 0.5rem 0.625rem;
+		background: rgba(255, 255, 255, 0.8);
+		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.1));
+		border-left-width: 3px;
+		border-radius: 10px;
+	}
+
+	.envio--bloqueado {
+		border-left-color: #dc2626;
+	}
+
+	.envio__nombre {
+		font-size: 0.8125rem;
+		font-weight: 700;
+		color: var(--text-primary, #1a1a1a);
+	}
+
+	.envio__meta {
+		margin-top: 0.125rem;
+		font-size: 0.6875rem;
+		line-height: 1.45;
+		color: var(--text-secondary, #4a4a4a);
+	}
+
+	.envio__error {
+		margin-top: 0.25rem;
+		font-size: 0.6875rem;
+		line-height: 1.4;
+		color: #991b1b;
+	}
+
+	.envio__acciones {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.375rem;
+		margin-top: 0.5rem;
+	}
+
+	.envio__boton {
+		min-height: 36px;
+		padding: 0 0.75rem;
+		font: inherit;
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--text-primary, #1a1a1a);
+		background: rgba(255, 255, 255, 0.9);
+		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
+		border-radius: 9px;
+		cursor: pointer;
+	}
+
+	.envio__boton--peligro {
+		color: #991b1b;
+		border-color: #fecaca;
+	}
+
+	.envio__boton:focus-visible {
+		outline: 2px solid var(--emerald-600, #059669);
+		outline-offset: 2px;
 	}
 
 	.panel__accion {

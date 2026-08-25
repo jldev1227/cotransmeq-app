@@ -142,6 +142,22 @@
 			{/if}
 		</header>
 
+		{#if envio.status === 'DRAFT'}
+			<div class="borrador" role="note">
+				<p class="borrador__titulo">Borrador en curso · el conductor aún no lo ha entregado</p>
+				<p class="borrador__nota">
+					Es la última copia que el teléfono alcanzó a respaldar{#if envio.updatedAt}, del
+						{fechaHora(envio.updatedAt)}{/if}. Puede estar incompleto y NO está validado: los
+					campos obligatorios y los formatos se comprueban al enviar, así que aquí puede haber
+					valores a medio escribir.
+				</p>
+				<p class="borrador__nota">
+					La firma y las evidencias fotográficas se capturan al cerrar el formulario, de modo que lo
+					normal es que todavía no aparezcan. No sirve como registro entregado.
+				</p>
+			</div>
+		{/if}
+
 		{#if envio.status === 'VOIDED'}
 			<div class="anulado" role="note">
 				<p class="anulado__titulo">Envío anulado el {fechaHora(envio.voidedAt)}</p>
@@ -381,6 +397,28 @@
 	.chip--draft {
 		background: #fffbeb;
 		color: #92400e;
+	}
+
+	/* Ámbar y no rojo: un borrador no es un error ni una anulación, es trabajo a
+	   medias. El rojo de `.anulado` diría que algo salió mal. */
+	.borrador {
+		padding: 0.75rem 0.875rem;
+		background: #fffbeb;
+		border: 1px solid #fde68a;
+		border-radius: 12px;
+	}
+
+	.borrador__titulo {
+		font-size: 0.875rem;
+		font-weight: 700;
+		color: #92400e;
+	}
+
+	.borrador__nota {
+		margin-top: 0.375rem;
+		font-size: 0.75rem;
+		color: #92400e;
+		line-height: 1.45;
 	}
 
 	.anulado {

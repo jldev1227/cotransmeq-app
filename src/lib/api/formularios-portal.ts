@@ -15,11 +15,15 @@
 import { browser } from '$app/environment';
 import { get } from 'svelte/store';
 import { portalSession } from '$lib/stores/portalStore';
-import type { FormVersionDto, SubmissionDetailDto, SubmissionSummaryDto } from '$lib/formularios/types';
+import type {
+	FormVersionDto,
+	SubmissionDetailDto,
+	SubmissionSummaryDto
+} from '$lib/formularios/types';
 import type { DraftAnswer } from '$lib/formularios/validate-answers';
 
 const API_BASE = browser
-	? ((import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:4000')
+	? (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:4000'
 	: 'http://localhost:4000';
 
 const BASE = `${API_BASE}/api/conductor-portal/formularios`;
@@ -69,7 +73,8 @@ export class PortalApiError extends Error {
 
 function authHeaders(): Record<string, string> {
 	const session = get(portalSession);
-	if (!session?.token) throw new PortalApiError('UNAUTHORIZED', 'Sin sesión del portal.', 401, null);
+	if (!session?.token)
+		throw new PortalApiError('UNAUTHORIZED', 'Sin sesión del portal.', 401, null);
 	return { Authorization: `Bearer ${session.token}`, 'Content-Type': 'application/json' };
 }
 
@@ -125,7 +130,10 @@ function conTope(signal: AbortSignal | undefined, ms: number) {
 	};
 }
 
-async function call<T>(path: string, opts: FetchOpts = {}): Promise<{ data: T; meta: any; response: Response }> {
+async function call<T>(
+	path: string,
+	opts: FetchOpts = {}
+): Promise<{ data: T; meta: any; response: Response }> {
 	let response: Response;
 	const tope = conTope(opts.signal, opts.timeoutMs ?? TIMEOUT_JSON);
 	try {
@@ -189,12 +197,25 @@ export interface PortalAssignmentCard {
 	submittedThisPeriod: number;
 	periodKey: string | null;
 	businessDate: string;
+	/** El borrador más reciente. Se conserva por compatibilidad; usa `drafts`. */
 	draft: {
 		clientSubmissionId: string;
 		updatedAt: string;
 		progress: number;
 		context: Record<string, unknown>;
 	} | null;
+	/**
+	 * TODOS los borradores de la asignación, del más reciente al más viejo.
+	 *
+	 * Un conductor que atiende varios vehículos lleva un preoperacional por cada
+	 * uno a la vez, así que varios borradores abiertos es lo normal.
+	 */
+	drafts: {
+		clientSubmissionId: string;
+		updatedAt: string;
+		progress: number;
+		context: Record<string, unknown>;
+	}[];
 	allowOffline: boolean;
 	requiresContext: string[];
 	revision: number;

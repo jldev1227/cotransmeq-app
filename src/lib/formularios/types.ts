@@ -485,6 +485,8 @@ export interface SubmissionSummaryDto {
 	context: Record<string, unknown>;
 	startedAt: string | null;
 	submittedAt: string | null;
+	/** Última escritura. En un borrador, hasta cuándo respaldó el teléfono. */
+	updatedAt: string | null;
 	voidedAt: string | null;
 	voidReason: string | null;
 	conductor: { id: string; nombre: string; numeroIdentificacion: string | null } | null;
