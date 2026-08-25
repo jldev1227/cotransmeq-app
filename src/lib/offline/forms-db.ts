@@ -369,6 +369,27 @@ export async function getAssignment(assignmentId: string): Promise<StoredAssignm
  * zona) escribiría un `updatedAt` anterior al guardado previo, y la
  * reconciliación con el backup del servidor elegiría la versión vieja.
  */
+/**
+ * Deja un valor en una forma que el clonado estructurado acepte.
+ *
+ * IndexedDB rechaza los Proxies —y `$state` de Svelte 5 los produce— con un
+ * `DataCloneError` cuyo mensaje («#<Object> could not be cloned») no dice ni qué
+ * campo ni de dónde salió. El sitio correcto de arreglarlo es el origen, con
+ * `$state.snapshot`, pero un olvido ahí no rompe una pantalla: **congela el
+ * trabajo del conductor**. El autosave empieza a fallar en silencio y el fallo
+ * solo se hace visible varios minutos después, al firmar, con el formulario ya
+ * al 100 %.
+ *
+ * Por eso el borrador se normaliza aquí también. El coste es un `JSON` de ida y
+ * vuelta sobre datos que ya son serializables por definición —texto, números,
+ * opciones— y que en un preoperacional de 130 respuestas se mide en menos de un
+ * milisegundo. Los binarios NO pasan por aquí: viven en `attachments`, con su
+ * `Blob`, que sí es clonable y que `JSON` destruiría.
+ */
+function clonable<T>(valor: T): T {
+	return JSON.parse(JSON.stringify(valor)) as T;
+}
+
 export async function putDraft(
 	draft: Omit<StoredDraft, 'updatedAt'> & { updatedAt?: string }
 ): Promise<StoredDraft> {
@@ -380,11 +401,11 @@ export async function putDraft(
 		const anterior = previo ? new Date(previo.updatedAt).getTime() : 0;
 		const updatedAt = new Date(Math.max(ahora, anterior + 1)).toISOString();
 
-		const record: StoredDraft = {
+		const record: StoredDraft = clonable({
 			...draft,
 			createdAt: previo?.createdAt ?? draft.createdAt ?? new Date(ahora).toISOString(),
 			updatedAt
-		};
+		});
 		await req(store.put(record));
 		return record;
 	});

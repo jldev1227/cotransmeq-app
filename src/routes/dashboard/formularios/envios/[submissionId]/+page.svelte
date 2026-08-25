@@ -21,12 +21,18 @@
 		type SubmissionDetailDto
 	} from '$lib/formularios/types';
 	import FormRenderer from '$lib/components/formularios/FormRenderer.svelte';
+	import PreviewEnvioPDF from '$lib/components/formularios/PreviewEnvioPDF.svelte';
 
 	const submissionId = $derived($page.params.submissionId!);
 
 	let envio = $state<SubmissionDetailDto | null>(null);
 	let definicion = $state<FormVersionDto | null>(null);
 	let runner = $state<RunnerState | null>(null);
+
+	/// El documento manda por defecto: quien abre un envío quiere LEER el
+	/// resultado. La vista de formulario se conserva para el caso contrario —
+	/// comprobar qué vio exactamente el conductor, con el mismo renderer que él.
+	let vista = $state<'documento' | 'formulario'>('documento');
 	let cargando = $state(true);
 	let error = $state<string | null>(null);
 
@@ -79,7 +85,10 @@
 		}
 		anulando = true;
 		try {
-			const { submission, definition } = await enviosFormularioAPI.anular(submissionId, motivo.trim());
+			const { submission, definition } = await enviosFormularioAPI.anular(
+				submissionId,
+				motivo.trim()
+			);
 			envio = submission;
 			definicion = definition;
 			modalAnular = false;
@@ -93,6 +102,63 @@
 		}
 	}
 
+	/**
+	 * Los tipos de evento llegan como tokens del dominio (`ATTACHMENT_ATTACHED`).
+	 *
+	 * Son identificadores estables de la API, no texto para leer: mostrarlos tal
+	 * cual dejaba media pantalla en inglés y en mayúsculas dentro de una interfaz
+	 * en español. Se traducen aquí; el token sigue disponible en el title por si
+	 * hay que cotejarlo contra un log.
+	 */
+	const EVENTOS: Record<string, string> = {
+		CREATED: 'Borrador creado',
+		UPDATED: 'Borrador actualizado',
+		ATTACHMENT_ATTACHED: 'Evidencia adjuntada',
+		ATTACHMENT_DISCARDED: 'Evidencia descartada',
+		SUBMITTED: 'Envío entregado',
+		VOIDED: 'Envío anulado',
+		REOPENED: 'Envío reabierto'
+	};
+
+	const ACTORES: Record<string, string> = {
+		CONDUCTOR: 'Conductor',
+		USER: 'Usuario del panel',
+		SYSTEM: 'Sistema'
+	};
+
+	const CLASES_ADJUNTO: Record<string, string> = {
+		SIGNATURE: 'firma',
+		PHOTO: 'foto',
+		FILE: 'archivo'
+	};
+
+	/**
+	 * Resumen legible del payload de un evento.
+	 *
+	 * El JSON crudo se mostraba entero, incluida la `limitLockKey` —una cadena de
+	 * doscientos caracteres con cuatro UUID— que no le dice nada a nadie y empujaba
+	 * el resto fuera de la vista. Aquí solo salen los campos que un auditor usa; el
+	 * resto sigue en la base si hace falta.
+	 */
+	function resumenEvento(payload: Record<string, unknown>): string | null {
+		const partes: string[] = [];
+		if (typeof payload.kind === 'string') {
+			partes.push(CLASES_ADJUNTO[payload.kind] ?? String(payload.kind).toLowerCase());
+		}
+		if (typeof payload.byteSize === 'number') {
+			partes.push(`${(payload.byteSize / 1024).toFixed(0)} KB`);
+		}
+		if (typeof payload.answers === 'number') {
+			partes.push(`${payload.answers} respuestas`);
+		}
+		if (typeof payload.attachments === 'number') {
+			partes.push(`${payload.attachments} evidencias`);
+		}
+		if (payload.offlineCreated === true) partes.push('diligenciado sin conexión');
+		if (payload.source === 'draft-backup') partes.push('desde el respaldo del teléfono');
+		return partes.length ? partes.join(' · ') : null;
+	}
+
 	function fechaHora(iso: string | null): string {
 		if (!iso) return '—';
 		return new Date(iso).toLocaleString('es-CO', {
@@ -104,7 +170,9 @@
 		});
 	}
 
-	const adjuntosSubidos = $derived((envio?.attachments ?? []).filter((a) => a.status === 'UPLOADED'));
+	const adjuntosSubidos = $derived(
+		(envio?.attachments ?? []).filter((a) => a.status === 'UPLOADED')
+	);
 </script>
 
 <svelte:head>
@@ -147,9 +215,9 @@
 				<p class="borrador__titulo">Borrador en curso · el conductor aún no lo ha entregado</p>
 				<p class="borrador__nota">
 					Es la última copia que el teléfono alcanzó a respaldar{#if envio.updatedAt}, del
-						{fechaHora(envio.updatedAt)}{/if}. Puede estar incompleto y NO está validado: los
-					campos obligatorios y los formatos se comprueban al enviar, así que aquí puede haber
-					valores a medio escribir.
+						{fechaHora(envio.updatedAt)}{/if}. Puede estar incompleto y NO está validado: los campos
+					obligatorios y los formatos se comprueban al enviar, así que aquí puede haber valores a
+					medio escribir.
 				</p>
 				<p class="borrador__nota">
 					La firma y las evidencias fotográficas se capturan al cerrar el formulario, de modo que lo
@@ -169,75 +237,48 @@
 			</div>
 		{/if}
 
-		<section class="ficha">
-			<dl class="ficha__lista">
-				<div class="ficha__par">
-					<dt>Conductor</dt>
-					<dd>
-						{envio.conductor?.nombre ?? '—'}
-						{#if envio.conductor?.numeroIdentificacion}
-							<span class="mono">({envio.conductor.numeroIdentificacion})</span>
-						{/if}
-					</dd>
-				</div>
-				<div class="ficha__par">
-					<dt>Vehículo</dt>
-					<dd class="mono">{envio.vehiculo?.placa ?? '—'}</dd>
-				</div>
-				<div class="ficha__par">
-					<dt>Asignación</dt>
-					<dd>{envio.assignment?.name ?? '—'}</dd>
-				</div>
-				<div class="ficha__par">
-					<dt>Fecha de negocio</dt>
-					<dd class="mono">{envio.businessDate ?? '—'}</dd>
-				</div>
-				<div class="ficha__par">
-					<dt>Período</dt>
-					<dd class="mono">{envio.periodKey ?? '—'}</dd>
-				</div>
-				<div class="ficha__par">
-					<dt>Iniciado</dt>
-					<dd class="mono">{fechaHora(envio.startedAt)}</dd>
-				</div>
-				<div class="ficha__par">
-					<dt>Enviado</dt>
-					<dd class="mono">{fechaHora(envio.submittedAt)}</dd>
-				</div>
-				<div class="ficha__par">
-					<dt>ID del dispositivo</dt>
-					<dd class="mono">{String(envio.device?.installationId ?? '—')}</dd>
-				</div>
-				<div class="ficha__par">
-					<dt>Creado sin conexión</dt>
-					<dd>{envio.device?.offlineCreated ? 'Sí' : 'No'}</dd>
-				</div>
-				{#if envio.supersedesSubmissionId}
-					<div class="ficha__par">
-						<dt>Corrige a</dt>
-						<dd>
-							<a href={`/dashboard/formularios/envios/${envio.supersedesSubmissionId}`}>
-								envío anterior
-							</a>
-						</dd>
-					</div>
-				{/if}
-			</dl>
-		</section>
-
 		<section class="bloque">
-			<h2 class="bloque__titulo">Respuestas</h2>
-			<div class="respuestas">
-				<FormRenderer
-					{runner}
-					title={null}
-					instructions={definicion.instructions}
-					showErrorSummary={false}
-				/>
+			<div class="bloque__cabeza">
+				<h2 class="bloque__titulo">Respuestas</h2>
+				<div class="vistas" role="tablist" aria-label="Forma de ver las respuestas">
+					<button
+						type="button"
+						role="tab"
+						class="vistas__btn"
+						class:vistas__btn--on={vista === 'documento'}
+						aria-selected={vista === 'documento'}
+						onclick={() => (vista = 'documento')}
+					>
+						Documento
+					</button>
+					<button
+						type="button"
+						role="tab"
+						class="vistas__btn"
+						class:vistas__btn--on={vista === 'formulario'}
+						aria-selected={vista === 'formulario'}
+						onclick={() => (vista = 'formulario')}
+					>
+						Formulario
+					</button>
+				</div>
 			</div>
+
+			{#if vista === 'documento'}
+				<PreviewEnvioPDF {envio} {definicion} />
+			{:else}
+				<div class="respuestas">
+					<FormRenderer
+						{runner}
+						title={null}
+						instructions={definicion.instructions}
+						showErrorSummary={false}
+					/>
+				</div>
+			{/if}
 		</section>
 
-		{#if adjuntosSubidos.length}
+		{#if vista === 'formulario' && adjuntosSubidos.length}
 			<section class="bloque">
 				<h2 class="bloque__titulo">Evidencia ({adjuntosSubidos.length})</h2>
 				<ul class="adjuntos">
@@ -270,16 +311,81 @@
 			</section>
 		{/if}
 
+		<!-- Auditoría al final: quien abre un envío viene a leer lo que se
+		     diligenció, no a comprobar identificadores. Los metadatos y la
+		     trazabilidad quedan disponibles pero fuera del camino. -->
+		<section class="ficha">
+			<dl class="ficha__lista">
+				<div class="ficha__par">
+					<dt>Conductor</dt>
+					<dd>
+						{envio.conductor?.nombre ?? '—'}
+						{#if envio.conductor?.numeroIdentificacion}
+							<span class="mono">({envio.conductor.numeroIdentificacion})</span>
+						{/if}
+					</dd>
+				</div>
+				<div class="ficha__par">
+					<dt>Vehículo</dt>
+					<dd class="mono">{envio.vehiculo?.placa ?? '—'}</dd>
+				</div>
+				<div class="ficha__par">
+					<dt>Asignación</dt>
+					<dd>{envio.assignment?.name ?? '—'}</dd>
+				</div>
+				<div class="ficha__par">
+					<dt>Fecha operativa</dt>
+					<dd class="mono">{envio.businessDate ?? '—'}</dd>
+				</div>
+				<div class="ficha__par">
+					<dt>Período</dt>
+					<dd class="mono">{envio.periodKey ?? '—'}</dd>
+				</div>
+				<div class="ficha__par">
+					<dt>Iniciado</dt>
+					<dd class="mono">{fechaHora(envio.startedAt)}</dd>
+				</div>
+				<div class="ficha__par">
+					<dt>Entregado</dt>
+					<dd class="mono">{fechaHora(envio.submittedAt)}</dd>
+				</div>
+				<div class="ficha__par">
+					<dt>Dispositivo</dt>
+					<dd class="mono">{String(envio.device?.installationId ?? '—')}</dd>
+				</div>
+				<div class="ficha__par">
+					<dt>Diligenciado sin conexión</dt>
+					<dd>{envio.device?.offlineCreated ? 'Sí' : 'No'}</dd>
+				</div>
+				{#if envio.supersedesSubmissionId}
+					<div class="ficha__par">
+						<dt>Corrige el envío</dt>
+						<dd>
+							<a href={`/dashboard/formularios/envios/${envio.supersedesSubmissionId}`}>
+								Ver el envío anterior
+							</a>
+						</dd>
+					</div>
+				{/if}
+			</dl>
+		</section>
+
 		<section class="bloque">
 			<h2 class="bloque__titulo">Auditoría</h2>
+			<!-- Rejilla de tres columnas y no una fila con `flex-wrap`: los eventos se
+			     leen en vertical («cuándo pasó cada cosa»), y con envoltura libre la
+			     fecha caía en una posición distinta en cada fila. -->
 			<ol class="eventos">
 				{#each envio.events as evento (evento.id)}
+					{@const detalle = resumenEvento(evento.payload)}
 					<li class="evento">
-						<span class="evento__tipo">{evento.eventType}</span>
-						<span class="evento__actor">{evento.actorType}</span>
+						<span class="evento__tipo" title={evento.eventType}>
+							{EVENTOS[evento.eventType] ?? evento.eventType}
+						</span>
+						<span class="evento__actor">{ACTORES[evento.actorType] ?? evento.actorType}</span>
 						<span class="evento__fecha mono">{fechaHora(evento.createdAt)}</span>
-						{#if Object.keys(evento.payload).length}
-							<code class="evento__payload">{JSON.stringify(evento.payload)}</code>
+						{#if detalle}
+							<span class="evento__detalle">{detalle}</span>
 						{/if}
 					</li>
 				{/each}
@@ -306,7 +412,8 @@
 			<h2 class="modal__titulo" id="anular-titulo">Anular envío</h2>
 			<p class="modal__cuerpo">
 				Anular conserva todas las respuestas y adjuntos, y queda registrado con tu usuario y el
-				motivo. No reabre el registro: si hay que corregirlo, el conductor debe hacer un envío nuevo.
+				motivo. No reabre el registro: si hay que corregirlo, el conductor debe hacer un envío
+				nuevo.
 			</p>
 			<label class="campo">
 				<span class="campo__label">Motivo (mínimo 10 caracteres)</span>
@@ -332,9 +439,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.875rem;
-		padding: 1.25rem 1rem 3rem;
-		max-width: 60rem;
-		margin: 0 auto;
+		padding: 1.25rem 1.25rem 3rem;
 	}
 
 	.migas {
@@ -480,6 +585,47 @@
 		color: var(--emerald-700, #047857);
 	}
 
+	.bloque__cabeza {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+
+	.vistas {
+		display: flex;
+		gap: 0.25rem;
+		padding: 0.1875rem;
+		background: var(--gray-50, #f9fafb);
+		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+		border-radius: 10px;
+	}
+
+	.vistas__btn {
+		min-height: 32px;
+		padding: 0 0.75rem;
+		font: inherit;
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--text-secondary, #4a4a4a);
+		background: transparent;
+		border: none;
+		border-radius: 8px;
+		cursor: pointer;
+	}
+
+	.vistas__btn--on {
+		color: var(--text-primary, #1a1a1a);
+		background: var(--bg-surface, #fff);
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+	}
+
+	.vistas__btn:focus-visible {
+		outline: 2px solid var(--emerald-600, #059669);
+		outline-offset: 2px;
+	}
+
 	.bloque__titulo {
 		margin-bottom: 0.625rem;
 		font-family: var(--font-display, Georgia, serif);
@@ -545,10 +691,10 @@
 	}
 
 	.evento {
-		display: flex;
+		display: grid;
+		grid-template-columns: minmax(9rem, 12rem) minmax(6rem, 8rem) minmax(11rem, 13rem) 1fr;
 		align-items: baseline;
-		gap: 0.5rem;
-		flex-wrap: wrap;
+		gap: 0.25rem 0.75rem;
 		padding: 0.375rem 0.5rem;
 		background: var(--gray-50, #f9fafb);
 		border-radius: 6px;
@@ -567,16 +713,19 @@
 		color: var(--text-muted, #6b6b6b);
 	}
 
+	@media (max-width: 780px) {
+		.evento {
+			grid-template-columns: 1fr auto;
+		}
+	}
+
 	.evento__fecha {
 		color: var(--text-very-muted, #9a9a9a);
 	}
 
-	.evento__payload {
-		flex: 1;
-		min-width: 12rem;
-		font-family: var(--font-mono, monospace);
-		font-size: 0.6875rem;
-		color: var(--text-very-muted, #9a9a9a);
+	.evento__detalle {
+		font-size: 0.75rem;
+		color: var(--text-secondary, #4a4a4a);
 		overflow-wrap: anywhere;
 	}
 

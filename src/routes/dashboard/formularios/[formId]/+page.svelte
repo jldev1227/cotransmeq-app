@@ -16,13 +16,20 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { toast } from 'svelte-sonner';
-	import { asignacionesFormularioAPI, formulariosAPI, FormApiError } from '$lib/api/formularios';
+	import {
+		asignacionesFormularioAPI,
+		enviosFormularioAPI,
+		formulariosAPI,
+		FormApiError
+	} from '$lib/api/formularios';
 	import {
 		ASSIGNMENT_STATUS_LABELS,
 		FREQUENCY_LABELS,
 		LIMIT_POLICY_LABELS,
+		SUBMISSION_STATUS_LABELS,
 		type AssignmentDto,
-		type FormDefinitionDto
+		type FormDefinitionDto,
+		type SubmissionSummaryDto
 	} from '$lib/formularios/types';
 	import AssignmentEditor from '$lib/components/formularios/AssignmentEditor.svelte';
 
@@ -33,6 +40,18 @@
 	let cargando = $state(true);
 	let trabajando = $state(false);
 	let editorAsignacion = $state<{ versionId: string; existing?: AssignmentDto } | null>(null);
+
+	/**
+	 * Los envíos de este formato, aquí mismo.
+	 *
+	 * Antes había un botón a una pantalla de envíos filtrada. Un salto de página
+	 * para llegar a lo que uno viene a ver —quién diligenció y qué respondió— es
+	 * un salto de más: los registros son la razón de existir del formato, no un
+	 * apéndice suyo.
+	 */
+	let envios = $state<SubmissionSummaryDto[]>([]);
+	let totalEnvios = $state(0);
+	let cargandoEnvios = $state(true);
 
 	async function cargar() {
 		cargando = true;
@@ -50,7 +69,42 @@
 		}
 	}
 
-	onMount(cargar);
+	/**
+	 * Los envíos van en su propia petición, no en el `Promise.all` de arriba.
+	 *
+	 * La ficha del formato tiene que pintarse aunque el listado tarde o falle: son
+	 * dos consultas de coste muy distinto —una lee metadatos, la otra recorre
+	 * `form_submissions`— y encadenarlas dejaría la pantalla en blanco por culpa de
+	 * la lenta.
+	 */
+	async function cargarEnvios() {
+		cargandoEnvios = true;
+		try {
+			const { data, meta } = await enviosFormularioAPI.listar({ formId, limit: 25 });
+			envios = data;
+			totalEnvios = meta?.total ?? data.length;
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'No se pudieron cargar los envíos.');
+		} finally {
+			cargandoEnvios = false;
+		}
+	}
+
+	function fechaHora(iso: string | null): string {
+		if (!iso) return '—';
+		return new Date(iso).toLocaleString('es-CO', {
+			day: '2-digit',
+			month: 'short',
+			year: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
+	}
+
+	onMount(() => {
+		void cargar();
+		void cargarEnvios();
+	});
 
 	async function clonar(versionId: string, versionNumber: number) {
 		if (
@@ -109,8 +163,14 @@
 		}
 	}
 
-	async function cambiarEstadoAsignacion(a: AssignmentDto, accion: 'pausar' | 'reactivar' | 'cerrar') {
-		if (accion === 'cerrar' && !confirm('Cerrar es definitivo: la asignación no se puede reabrir. ¿Continuar?'))
+	async function cambiarEstadoAsignacion(
+		a: AssignmentDto,
+		accion: 'pausar' | 'reactivar' | 'cerrar'
+	) {
+		if (
+			accion === 'cerrar' &&
+			!confirm('Cerrar es definitivo: la asignación no se puede reabrir. ¿Continuar?')
+		)
 			return;
 		trabajando = true;
 		try {
@@ -161,12 +221,17 @@
 				<h1 class="head__titulo">{form.name}</h1>
 				{#if form.description}<p class="head__desc">{form.description}</p>{/if}
 				<p class="head__meta">
-					Área {form.ownerArea} · slug <code>{form.slug}</code> · actualizado {fecha(form.updatedAt)}
+					Área {form.ownerArea} · slug <code>{form.slug}</code> · actualizado {fecha(
+						form.updatedAt
+					)}
 				</p>
 			</div>
 			<div class="head__acciones">
 				{#if form.draftVersion}
-					<a class="btn btn--primario" href={`/dashboard/formularios/${formId}/editar/${form.draftVersion.id}`}>
+					<a
+						class="btn btn--primario"
+						href={`/dashboard/formularios/${formId}/editar/${form.draftVersion.id}`}
+					>
 						Continuar borrador v{form.draftVersion.versionNumber}
 					</a>
 				{:else if form.activeVersion}
@@ -206,10 +271,7 @@
 							<a class="btn btn--mini" href={`/dashboard/formularios/${formId}/preview/${v.id}`}>
 								Preview
 							</a>
-							<a
-								class="btn btn--mini"
-								href={`/dashboard/formularios/${formId}/editar/${v.id}`}
-							>
+							<a class="btn btn--mini" href={`/dashboard/formularios/${formId}/editar/${v.id}`}>
 								{v.status === 'DRAFT' ? 'Editar' : 'Ver estructura'}
 							</a>
 							{#if v.status === 'PUBLISHED'}
@@ -279,7 +341,9 @@
 										.length === 1
 										? ''
 										: 's'}
-									{#if a.submissionCount != null}· {a.submissionCount} envío{a.submissionCount === 1 ? '' : 's'}{/if}
+									{#if a.submissionCount != null}· {a.submissionCount} envío{a.submissionCount === 1
+											? ''
+											: 's'}{/if}
 								</p>
 								<p class="asig__vigencia">
 									{a.startsAt ? `Desde ${fecha(a.startsAt)}` : 'Sin fecha de inicio'}
@@ -335,10 +399,61 @@
 		</section>
 
 		<section class="bloque">
-			<h2 class="bloque__titulo">Envíos</h2>
-			<a class="btn btn--mini" href={`/dashboard/formularios/envios?formId=${formId}`}>
-				Ver envíos de este formulario
-			</a>
+			<div class="bloque__cabeza">
+				<h2 class="bloque__titulo">
+					Registros diligenciados
+					{#if totalEnvios > 0}<span class="cuenta">{totalEnvios}</span>{/if}
+				</h2>
+				{#if totalEnvios > envios.length}
+					<a class="btn btn--mini" href={`/dashboard/formularios/envios?formId=${formId}`}>
+						Ver los {totalEnvios} con filtros
+					</a>
+				{/if}
+			</div>
+
+			{#if cargandoEnvios}
+				<p class="vacio" aria-busy="true">Cargando registros…</p>
+			{:else if envios.length === 0}
+				<p class="vacio">
+					Todavía no hay envíos de este formato. Aparecerán aquí en cuanto un conductor entregue
+					uno.
+				</p>
+			{:else}
+				<!-- Filas, no tarjetas: son registros que se comparan entre sí, y una
+				     rejilla alineada deja leer la columna de fecha o de placa en
+				     vertical. La fila entera es el enlace al envío. -->
+				<ul class="registros">
+					<li class="registros__cab" aria-hidden="true">
+						<span>Entregado</span>
+						<span>Conductor</span>
+						<span>Vehículo</span>
+						<span>Versión</span>
+						<span>Respuestas</span>
+						<span>Estado</span>
+					</li>
+					{#each envios as envio (envio.id)}
+						<li>
+							<a class="registro" href={`/dashboard/formularios/envios/${envio.id}`}>
+								<span class="registro__fecha"
+									>{fechaHora(envio.submittedAt ?? envio.startedAt)}</span
+								>
+								<span class="registro__conductor">
+									{envio.conductor?.nombre ?? '—'}
+									{#if envio.conductor?.numeroIdentificacion}
+										<small>{envio.conductor.numeroIdentificacion}</small>
+									{/if}
+								</span>
+								<span class="mono">{envio.vehiculo?.placa ?? '—'}</span>
+								<span class="mono">v{envio.version?.versionNumber ?? '—'}</span>
+								<span class="mono">{envio.answerCount ?? '—'}</span>
+								<span class="chip chip--{envio.status.toLowerCase()}">
+									{SUBMISSION_STATUS_LABELS[envio.status]}
+								</span>
+							</a>
+						</li>
+					{/each}
+				</ul>
+			{/if}
 		</section>
 	{/if}
 </div>
@@ -365,9 +480,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1.125rem;
-		padding: 1.25rem 1rem 3rem;
-		max-width: 68rem;
-		margin: 0 auto;
+		padding: 1.25rem 1.25rem 3rem;
 	}
 
 	.migas {
@@ -446,6 +559,132 @@
 		justify-content: space-between;
 		gap: 0.5rem;
 		flex-wrap: wrap;
+	}
+
+	.bloque__cabeza {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+		margin-bottom: 0.625rem;
+	}
+
+	.cuenta {
+		margin-left: 0.375rem;
+		padding: 0.0625rem 0.375rem;
+		font-family: var(--font-mono, monospace);
+		font-size: 0.6875rem;
+		font-weight: 700;
+		color: var(--text-secondary, #4a4a4a);
+		background: var(--gray-50, #f9fafb);
+		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+		border-radius: 999px;
+	}
+
+	.vacio {
+		font-size: 0.8125rem;
+		line-height: 1.5;
+		color: var(--text-secondary, #4a4a4a);
+	}
+
+	.mono {
+		font-family: var(--font-mono, monospace);
+	}
+
+	/* Rejilla de registros. Las mismas columnas en la cabecera y en cada fila,
+	   con una variable: si cambia el reparto, cambia en los dos sitios a la vez
+	   y no se desalinean. */
+	.registros {
+		--cols: minmax(9rem, 0.9fr) minmax(11rem, 1.6fr) 6rem 4rem 6rem 7rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.1875rem;
+		list-style: none;
+		padding: 0;
+	}
+
+	.registros__cab,
+	.registro {
+		display: grid;
+		grid-template-columns: var(--cols);
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.4375rem 0.625rem;
+	}
+
+	.registros__cab {
+		font-size: 0.625rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--text-secondary, #4a4a4a);
+		border-bottom: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+	}
+
+	/* La fila entera es el enlace: un destino táctil de una fila completa no se
+	   falla, y no obliga a apuntar a un «ver» de doce píxeles. */
+	.registro {
+		font-size: 0.8125rem;
+		color: inherit;
+		text-decoration: none;
+		background: var(--bg-surface, #fff);
+		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+		border-radius: 10px;
+	}
+
+	.registro:hover {
+		border-color: var(--emerald-600, #059669);
+		background: var(--gray-50, #f9fafb);
+	}
+
+	.registro:focus-visible {
+		outline: 2px solid var(--emerald-600, #059669);
+		outline-offset: 2px;
+	}
+
+	.registro__fecha {
+		font-family: var(--font-mono, monospace);
+		font-size: 0.75rem;
+	}
+
+	.registro__conductor {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		font-weight: 600;
+	}
+
+	.registro__conductor small {
+		font-family: var(--font-mono, monospace);
+		font-size: 0.6875rem;
+		font-weight: 400;
+		color: var(--text-secondary, #4a4a4a);
+	}
+
+	.chip--submitted {
+		color: #166534;
+		background: #f0fdf4;
+		border-color: #bbf7d0;
+	}
+
+	.chip--voided {
+		color: #991b1b;
+		background: #fef2f2;
+		border-color: #fecaca;
+	}
+
+	/* Por debajo de esta anchura la rejilla de seis columnas deja de caber sin
+	   comprimir los nombres a dos letras: se apila. */
+	@media (max-width: 860px) {
+		.registros__cab {
+			display: none;
+		}
+
+		.registro {
+			grid-template-columns: 1fr auto;
+			gap: 0.25rem 0.75rem;
+		}
 	}
 
 	.bloque__titulo {

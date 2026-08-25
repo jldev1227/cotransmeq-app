@@ -339,9 +339,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
-		padding: 1.25rem 1rem 3rem;
-		max-width: 72rem;
-		margin: 0 auto;
+		padding: 1.25rem 1.25rem 3rem;
 	}
 
 	.cabecera {

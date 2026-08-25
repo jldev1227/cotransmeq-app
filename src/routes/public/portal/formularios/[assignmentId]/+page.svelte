@@ -309,15 +309,18 @@
 			clientSubmissionId,
 			assignmentId,
 			versionId: definicion.id,
-			/// `$state.snapshot` obligatorio: `contexto` es un `$state` y por tanto un
-			/// Proxy, que el clonado estructurado de IndexedDB rechaza con
-			/// `DataCloneError`. Las respuestas ya vienen planas de
-			/// `toPayloadAnswers()`.
+			/// `$state.snapshot` obligatorio en TODO lo que venga de un `$state`: son
+			/// Proxies, y el clonado estructurado de IndexedDB los rechaza con
+			/// `DataCloneError`. Aplica igual a `contexto` que a `bloqueo` —este
+			/// último se olvidó y el resultado fue que un conductor con el borrador
+			/// bloqueado no podía guardar NADA: el autosave fallaba en silencio y el
+			/// fallo solo se hacía visible al firmar. Las respuestas ya vienen planas
+			/// de `toPayloadAnswers()`, que hace su propio snapshot.
 			context: $state.snapshot(contexto),
 			answers: runner.toPayloadAnswers(),
 			progress: computeProgress(runner.validation),
 			createdAt: new Date().toISOString(),
-			...(bloqueo ? { blocked: bloqueo } : {})
+			...(bloqueo ? { blocked: $state.snapshot(bloqueo) } : {})
 		});
 	}
 

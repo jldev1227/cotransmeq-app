@@ -792,8 +792,6 @@
 		flex-direction: column;
 		gap: 0.75rem;
 		padding: 0.875rem;
-		max-width: 52rem;
-		margin: 0 auto;
 		width: 100%;
 	}
 
@@ -837,9 +835,10 @@
 		padding: 1rem 0.875rem 3rem;
 	}
 
+	/* El marco del preview NO se acota: replica el ancho real que tendrá el
+	   formulario en el dashboard, y acotarlo mentía sobre cómo se ve. */
 	.preview__marco {
-		max-width: 44rem;
-		margin: 0 auto;
+		width: 100%;
 	}
 
 	.preview__nota {

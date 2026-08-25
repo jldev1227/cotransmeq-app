@@ -276,9 +276,7 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.875rem;
-		padding: 1.25rem 1rem 3rem;
-		max-width: 68rem;
-		margin: 0 auto;
+		padding: 1.25rem 1.25rem 3rem;
 	}
 
 	.migas {
