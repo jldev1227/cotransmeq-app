@@ -27,12 +27,14 @@ export function documentoEnvioCss(): string {
    Sin esquinas redondeadas ni sombras: es un formato, no una tarjeta. */
 [data-fdoc] {
 	width: 100%;
-	padding: 0.75rem;
+	padding: 0.5rem;
 	background: #fff;
 	border: 1px solid #111;
 	color: #111;
 	font-size: 0.6875rem;
-	line-height: 1.3;
+	/* Interlineado corto a propósito: el alto de una fila ES el interlineado —no
+	   llevan relleno vertical— y con 131 ítems cada décima se paga en páginas. */
+	line-height: 1.2;
 }
 
 [data-fdoc] .cab {
@@ -61,7 +63,7 @@ export function documentoEnvioCss(): string {
 [data-fdoc] .cab__titulo {
 	display: grid;
 	place-items: center;
-	padding: 0.375rem 0.5rem;
+	padding: 0.25rem 0.5rem;
 	font-size: 0.8125rem;
 	font-weight: 800;
 	text-align: center;
@@ -101,7 +103,7 @@ export function documentoEnvioCss(): string {
 
 /* Banda de sección: el elemento que estructura todo el formato en papel. */
 [data-fdoc] .banda {
-	padding: 0.1875rem 0.4375rem;
+	padding: 0.0625rem 0.375rem;
 	font-size: 0.6875rem;
 	font-weight: 700;
 	text-transform: uppercase;
@@ -127,7 +129,7 @@ export function documentoEnvioCss(): string {
 }
 
 [data-fdoc] .ficha__par dt {
-	padding: 0.1875rem 0.375rem;
+	padding: 0 0.375rem;
 	font-size: 0.625rem;
 	font-weight: 700;
 	text-align: right;
@@ -136,7 +138,7 @@ export function documentoEnvioCss(): string {
 }
 
 [data-fdoc] .ficha__par dd {
-	padding: 0.1875rem 0.375rem;
+	padding: 0 0.375rem;
 	font-weight: 600;
 	overflow-wrap: anywhere;
 }
@@ -151,8 +153,8 @@ export function documentoEnvioCss(): string {
 
 /* ── Resumen ───────────────────────────────────────────────────────── */
 [data-fdoc] .resumen {
-	margin-top: 0.375rem;
-	padding: 0.375rem 0.5rem;
+	margin-top: 0.1875rem;
+	padding: 0.1875rem 0.4375rem;
 	background: #fffbeb;
 	border: 1px solid #111;
 	border-left: 3px solid #b45309;
@@ -186,12 +188,12 @@ export function documentoEnvioCss(): string {
 /* ── Cuerpo a dos columnas ─────────────────────────────────────────── */
 [data-fdoc] .cuerpo {
 	columns: 2;
-	column-gap: 0.5rem;
-	margin-top: 0.375rem;
+	column-gap: 0.375rem;
+	margin-top: 0.1875rem;
 }
 
 [data-fdoc] .sec {
-	margin-bottom: 0.375rem;
+	margin-bottom: 0.1875rem;
 }
 
 [data-fdoc] .sec--ancha {
@@ -203,7 +205,7 @@ export function documentoEnvioCss(): string {
 [data-fdoc] .cab-estado,
 [data-fdoc] .fila {
 	display: grid;
-	grid-template-columns: 1fr repeat(var(--n, 3), 1.6rem);
+	grid-template-columns: 1fr repeat(var(--n, 3), 1.35rem);
 	border: 1px solid #111;
 	border-top: none;
 }
@@ -216,12 +218,11 @@ export function documentoEnvioCss(): string {
 }
 
 [data-fdoc] .cab-estado__desc {
-	padding: 0.125rem 0.375rem;
+	padding: 0 0.3125rem;
 	text-align: right;
 }
 
 [data-fdoc] .cab-estado__c {
-	padding: 0.125rem;
 	text-align: center;
 	border-left: 1px solid #111;
 }
@@ -229,7 +230,7 @@ export function documentoEnvioCss(): string {
 /* La descripción va alineada a la DERECHA, pegada a sus casillas: es lo que
    hace el formato en papel y lo que permite seguir la fila sin perderse. */
 [data-fdoc] .fila__desc {
-	padding: 0.125rem 0.375rem;
+	padding: 0 0.3125rem;
 	text-align: right;
 	overflow-wrap: anywhere;
 }
@@ -274,7 +275,7 @@ export function documentoEnvioCss(): string {
 }
 
 [data-fdoc] .fila__valor {
-	padding: 0.125rem 0.375rem;
+	padding: 0 0.3125rem;
 	font-weight: 700;
 	border-left: 1px solid #cbd5e1;
 	overflow-wrap: anywhere;
@@ -476,11 +477,41 @@ export function documentoEnvioCss(): string {
 	[data-fdoc] {
 		padding: 0;
 		border: none;
-		font-size: 6.6pt;
+		/* 6pt con interlineado 1,15 deja la fila en ~2,7 mm. Con 131 ítems a dos
+		   columnas son unos 180 mm de cuerpo: el checklist entero cabe en la CARA
+		   frontal y las firmas y fotos quedan para el reverso, que es exactamente
+		   cómo se usa el formato en papel. Bajar más no gana una página y sí
+		   empieza a costar legibilidad al sol. */
+		font-size: 6pt;
+		line-height: 1.15;
 	}
 
 	[data-fdoc] .cuerpo {
-		column-gap: 4mm;
+		column-gap: 3mm;
+		/* Se llena la primera columna hasta abajo antes de pasar a la segunda, en
+		   vez del reparto equilibrado por defecto: equilibrar deja las dos a media
+		   altura y desperdicia el resto de la cara. */
+		column-fill: auto;
+	}
+
+	/* La cabecera de estados se repite una vez por sección; con diez secciones
+	   son diez repeticiones, así que se reduce a lo mínimo legible. */
+	[data-fdoc] .cab-estado {
+		font-size: 4.6pt;
+	}
+
+	[data-fdoc] .banda {
+		font-size: 5.6pt;
+	}
+
+	/* La ficha y el resumen no compiten con el checklist por el espacio. */
+	[data-fdoc] .ficha__par dt,
+	[data-fdoc] .ficha__par dd {
+		font-size: 5.6pt;
+	}
+
+	[data-fdoc] .resumen__lista {
+		font-size: 5.6pt;
 	}
 
 	[data-fdoc] .fila,
@@ -511,7 +542,9 @@ export function documentoEnvioCss(): string {
 
 @page {
 	size: letter;
-	margin: 8mm;
+	/* 6 mm es el mínimo que imprime completo una láser de oficina sin recortar.
+	   Cada milímetro recuperado aquí son dos filas más de checklist. */
+	margin: 6mm;
 }
 `;
 }
