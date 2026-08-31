@@ -1,0 +1,29 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-https://api-cotransmeq.transmeralda.com}
+        VITE_SOCKET_URL: ${VITE_SOCKET_URL:-https://api-cotransmeq.transmeralda.com}
+        VITE_MAPBOX_ACCESS_TOKEN: ${VITE_MAPBOX_ACCESS_TOKEN:-}
+        VITE_DISTRACOM_ICON_URL: ${VITE_DISTRACOM_ICON_URL:-}
+    image: frontend-cotransmeq:production
+    container_name: frontend-cotransmeq
+    restart: unless-stopped
+    cpus: 1.0
+    mem_limit: 1g
+    pids_limit: 512
+    ports:
+      - "127.0.0.1:3002:3000"
+    environment:
+      ORIGIN: https://app.cotransmeq.com
+      APP_PUBLIC_URL: https://app.cotransmeq.com
+      BACKEND_INTERNAL_URL: http://backend-cotransmeq-nest:4000
+    networks:
+      - backend
+
+networks:
+  backend:
+    external: true
+    name: backend-cotransmeq_default

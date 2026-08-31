@@ -1,0 +1,29 @@
+name: Deploy frontend to Proxmox
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cotransmeq-app-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, linux, x64, cotransmeq-ct123, cotransmeq-app]
+    timeout-minutes: 30
+    environment: production
+
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+        with:
+          clean: true
+          fetch-depth: 1
+
+      - name: Build, deploy and verify
+        run: sudo /usr/local/sbin/deploy-cotransmeq-app "$GITHUB_SHA"
