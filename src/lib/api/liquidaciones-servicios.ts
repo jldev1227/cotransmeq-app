@@ -171,6 +171,17 @@ export interface LiquidacionServicio {
 	aprobado_por?: { id: string; nombre: string; correo: string } | null;
 	items?: ItemLiquidacionServicio[];
 	total_items?: number;
+	placas?: string[];
+	/**
+	 * Factura viva de esta liquidación, embebida por `listar`.
+	 *
+	 * Opcional porque el tab clásico sigue resolviéndola aparte con
+	 * `batchFacturaInfo`. El canvas la necesita embebida: encadenar un
+	 * POST /batch-info por cada carga del histórico es un viaje de más.
+	 */
+	factura_items?: Array<{
+		factura: { id: string; numero_factura: string; estado: 'ACTIVA' | 'ANULADA' };
+	}>;
 	created_at: string;
 	updated_at: string;
 }

@@ -30,7 +30,8 @@
 		AlertCircle,
 		Calendar,
 		Hash,
-		Tag
+		Tag,
+		Table2
 	} from 'lucide-svelte';
 	import {
 		liquidacionesServiciosAPI,
@@ -948,6 +949,21 @@
 		{#if isAdmin || isOperaciones}
 			{@render tabBtn('configuracion', 'Configuración', Settings)}
 		{/if}
+
+		<!-- El canvas no es un tab: es una pantalla completa con su propio
+		     layout (sin sidebar ni header), así que abrirlo es navegar, no
+		     cambiar de pestaña. Va separado a la derecha por eso mismo. -->
+		{#if isAdmin || isFacturacion}
+			<a
+				href="/dashboard/liquidaciones-servicios/canvas"
+				class="apple-transition ml-auto inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-semibold"
+				style="background-color: var(--bg-surface); color: var(--text-muted); border: 1px solid var(--border-subtle);"
+				title="Ver el histórico como hoja de cálculo y facturar desde ahí"
+			>
+				<Table2 class="h-3.5 w-3.5" />
+				Canvas
+			</a>
+		{/if}
 	</div>
 
 	{#if facturasTab === 'liquidaciones'}
@@ -1577,7 +1593,7 @@
 													on:mouseenter={(e) => {
 														const rect = (e.target as HTMLElement).getBoundingClientRect();
 														popoverPlacasPos = { top: rect.bottom + 4, left: rect.left };
-														popoverPlacas = liq.placas;
+														popoverPlacas = liq.placas ?? [];
 														popoverPlacasVisible = true;
 													}}
 													on:mouseleave={() => {

@@ -77,8 +77,8 @@
 						</svg>
 					</div>
 				{:else if isComplete}
-					<div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-orange-100">
-						<svg class="h-5 w-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+					<div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100">
+						<svg class="h-5 w-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 							<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
 						</svg>
 					</div>
@@ -95,8 +95,8 @@
 						</svg>
 					</div>
 				{:else}
-					<div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-orange-100">
-						<svg class="h-5 w-5 animate-spin text-orange-600" fill="none" viewBox="0 0 24 24">
+					<div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-emerald-100">
+						<svg class="h-5 w-5 animate-spin text-emerald-600" fill="none" viewBox="0 0 24 24">
 							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
 							<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
 						</svg>
@@ -156,9 +156,9 @@
 					</div>
 				{:else if isComplete}
 					<!-- Completado -->
-					<div class="rounded-xl border border-orange-200 bg-orange-50 p-4">
-						<p class="text-sm font-semibold text-orange-900">Borrador listo</p>
-						<p class="mt-1 text-xs text-orange-700">
+					<div class="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+						<p class="text-sm font-semibold text-emerald-900">Borrador listo</p>
+						<p class="mt-1 text-xs text-emerald-700">
 							La liquidación se generó correctamente. Serás redirigido al editor en unos segundos.
 						</p>
 					</div>
@@ -180,11 +180,11 @@
 						<div>
 							<div class="mb-1.5 flex items-center justify-between">
 								<span class="text-xs font-medium text-gray-700">{job.currentStep}</span>
-								<span class="font-mono text-xs font-bold text-orange-700">{job.progress}%</span>
+								<span class="font-mono text-xs font-bold text-emerald-700">{job.progress}%</span>
 							</div>
-							<div class="h-2.5 overflow-hidden rounded-full bg-orange-100">
+							<div class="h-2.5 overflow-hidden rounded-full bg-emerald-100">
 								<div
-									class="h-full rounded-full bg-gradient-to-r from-orange-500 to-orange-600 transition-all duration-500 ease-out"
+									class="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-600 transition-all duration-500 ease-out"
 									style="width: {job.progress}%"
 								></div>
 							</div>
@@ -204,7 +204,7 @@
 				{#if isDismissible}
 					<button
 						type="button"
-						class="apple-transition rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-orange-600 hover:to-orange-700"
+						class="apple-transition rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-emerald-600 hover:to-emerald-700"
 						on:click={handleClose}
 					>
 						Entendido

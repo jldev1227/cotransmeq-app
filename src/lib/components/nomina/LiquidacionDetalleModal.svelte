@@ -293,54 +293,44 @@
 						}
 					}
 
-					// 1.5) Planillas que NO quedaron ancladas a un recargo
-					//      guardado en el paso 1 pero que tienen días que
-					//      el usuario quiere ver en el PDF. Hay tres casos:
+					// 1.5) Resto de planillas del preview que NO quedaron
+					//      ancladas a un recargo guardado en el paso 1.
 					//
-					//      a) Empresa "bono aparte" (GEOLAB, RED SALUD, etc.):
-					//         sus servicios NO se pagan como recardo dentro
-					//         de la liquidación, sino como bono aparte. Se
-					//         muestran en azul con la nota "Reconocido como
-					//         bono aparte", listando solo días y horas.
+					//      CRITERIO: si la planilla tiene días visibles dentro
+					//      del período, SE MUESTRA. Punto. Que un día no genere
+					//      valor monetario ($0) no significa que no haya que
+					//      reportarlo: el conductor estuvo disponible o trabajó
+					//      igual, y el desprendible es el soporte de eso.
 					//
-					//      b) Días con `disponibilidad = true`: el conductor
-					//         tuvo el día marcado como disponibilidad (no
-					//         suma recargo monetario). Se resaltan en rojo
-					//         con la nota "no reconocidos".
+					//      ⚠️ ANTES aquí había una lista blanca de tres casos
+					//      (bono aparte / días con disponibilidad / días con
+					//      recorrido sin recargo). Cualquier planilla que no
+					//      cayera en uno de ellos desaparecía del PDF sin aviso.
+					//      Eso ocultaba, entre otros:
+					//        - Planillas con recargos generados pero sin recargo
+					//          guardado en la liquidación (FEPCO en $0).
+					//        - Planillas cuyos días vienen con `total_horas` en
+					//          0 o null (la lista blanca exigía > 0).
+					//      Invertir el criterio evita tener que ampliar la lista
+					//      cada vez que aparece un caso nuevo.
 					//
-					//      c) Días con recorrido pero sin recargo: el día
-					//         tiene `total_horas > 0` y `disponibilidad =
-					//         false`, pero no se generaron detalles de
-					//         recargo. El conductor SÍ trabajó, así que el
-					//         día debe verse aunque su valor monetario sea $0.
+					//      Categoría: 'bono_aparte' para las empresas de la lista,
+					//      'no_pagar' para el resto. NUNCA 'pagar' aquí: estas
+					//      planillas no están ancladas a un recargo de la
+					//      liquidación, así que no se están remunerando. Marcarlas
+					//      'pagar' las pintaría en naranja con barra TOTAL y daría
+					//      a entender que suman al pago, rompiendo la equivalencia
+					//      "tablas naranjas = lo que se paga".
 					//
-					//      Esto es independiente del total de la liquidación:
-					//      la página 1 del PDF se calcula desde
-					//      `liquidacion.recargos` y no se ve afectada.
+					//      Esto es independiente del total de la liquidación: la
+					//      página 1 del PDF se calcula desde `liquidacion.recargos`
+					//      y no se ve afectada.
 					for (const p of todasLasPlanillas) {
 						if (planillaIdsAgregadas.has(p.planilla_id)) continue;
 						const diasVisibles = Array.isArray(p.dias) ? p.dias : [];
 						if (diasVisibles.length === 0) continue;
 
 						const esBonoAparte = esEmpresaBonoAparte(p);
-
-						const tieneDiasConDisponibilidad = diasVisibles.some(
-							(d: any) => d.disponibilidad
-						);
-						const tieneDiasConRecorridoSinRecargo = diasVisibles.some(
-							(d: any) =>
-								!d.disponibilidad &&
-								Number(d.total_horas) > 0 &&
-								(!Array.isArray(d.recargos) || d.recargos.length === 0)
-						);
-
-						// Bono aparte: SIEMPRE se incluye aunque la planilla no
-						// tenga días con disponibilidad ni recorrido sin recargo
-						// (p. ej. una planilla GEOLAB con todos sus días
-						// teniendo recargo generado).
-						if (!esBonoAparte &&
-							!tieneDiasConDisponibilidad &&
-							!tieneDiasConRecorridoSinRecargo) continue;
 
 						planillaIdsAgregadas.add(p.planilla_id);
 						(p as any)._categoria = esBonoAparte ? 'bono_aparte' : 'no_pagar';

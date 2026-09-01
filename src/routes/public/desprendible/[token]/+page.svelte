@@ -88,7 +88,16 @@
       const json = await res.json();
       const data = json.data;
       liquidacionData = data.liquidacion;
-      recargosData = data.recargos;
+      // Usar el `dataParaPdf` que arma el backend (planillas ya clasificadas
+      // y ancladas a los recargos guardados de la liquidación), NO el preview
+      // crudo de `data.recargos`: ese trae TODAS las planillas del período,
+      // incluidas las que el usuario desmarcó al liquidar, y se imprimían
+      // páginas de detalle que no respaldan ningún recargo del desprendible.
+      // Mismo criterio que el portal del conductor.
+      recargosData =
+        data.dataParaPdf && Array.isArray(data.dataParaPdf.planillas)
+          ? data.dataParaPdf
+          : { planillas: [] };
       firmaData = data.firma;
 
       // Construir firmas array para el PDF

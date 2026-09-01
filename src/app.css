@@ -4,6 +4,13 @@
    Además acelera el rebuild: solo mira código propio. */
 @import 'tailwindcss' source(".");
 
+/* Univer Sheets UI. Sin estos estilos el canvas monta pero se dibuja como
+   texto plano: menús sin caja y sin rejilla. */
+@import '@univerjs/design/lib/index.css';
+@import '@univerjs/ui/lib/index.css';
+@import '@univerjs/docs-ui/lib/index.css';
+@import '@univerjs/sheets-ui/lib/index.css';
+
 /* ═══════════════════════════════════════════════════════════════
    FUENTES — Sistema Geist (sans única, sin serif, sin mono dedicado)
    Alineado con el skill landing-cotransmeq-design-system.

@@ -101,6 +101,12 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
     limited: ['facturacion', 'contabilidad'],
     description: 'Liquidaciones de terceros (propietarios)'
   },
+
+  'liquidaciones-terceros-adicionales': {
+    full: ['administracion', 'operaciones'],
+    limited: ['facturacion', 'contabilidad'],
+    description: 'Adicionales (unificados) de cierres finales de terceros'
+  },
   pesv: {
     full: ['administracion', 'operaciones', 'contabilidad', 'facturacion', 'talento_humano', 'hseq'],
     general: true,

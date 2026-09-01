@@ -40,7 +40,7 @@
 </script>
 
 <svelte:head>
-	<title>Preview Mensual · Liquidaciones de Terceros · Transmeralda</title>
+	<title>Preview Mensual · Liquidaciones de Terceros · Cotransmeq</title>
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col" in:fade={{ duration: 300 }}>

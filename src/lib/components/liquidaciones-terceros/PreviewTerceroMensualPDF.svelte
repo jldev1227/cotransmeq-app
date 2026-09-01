@@ -123,7 +123,7 @@
 	<div class="pdf-bar no-print">
 		<div class="pdf-bar-l">
 			<img
-				src="/assets/logo_transmeralda-264.webp"
+				src="/assets/logo_nombre.webp"
 				alt=""
 				class="pb-logo"
 				onerror={(e: any) => {
@@ -223,7 +223,7 @@
 							<div class="dh-logo-fallback">TRANS<br />MERALDA</div>
 						{:else}
 							<img
-								src="/assets/logo_transmeralda-264.webp"
+								src="/assets/logo_nombre.webp"
 								alt="Logo"
 								onerror={() => (logoError = true)}
 								style="height:58px;width:auto;object-fit:contain"
@@ -231,7 +231,7 @@
 						{/if}
 					</div>
 					<div class="dh-title">
-						<div class="dh-co">TRANSPORTES Y SERVICIOS ESMERALDA S.A.S.</div>
+						<div class="dh-co">SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S</div>
 						<div class="dh-doc">CONSOLIDADO MENSUAL DE ADICIONALES PARA TERCEROS</div>
 					</div>
 					<div class="dh-meta">
@@ -312,7 +312,7 @@
 							{@const vAdmin = Number(adc.valor_admin) || 0}
 							<tr>
 								<td class="num-cell">{idx + 1}</td>
-								<td>{adc.cliente || 'TRANSMERALDA'}</td>
+								<td>{adc.cliente || 'COTRANSMEQ'}</td>
 								<td class="tc" style="font-weight:600">{fmtPlaca(adc.placa || '')}</td>
 								<td>{adc.tercero_nombre || '—'}</td>
 								<td>{adc.recorrido || '—'}</td>

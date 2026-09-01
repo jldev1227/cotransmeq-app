@@ -462,7 +462,7 @@
 	function addAdicionalRow() {
 		const nuevo: AdicionalMensual = {
 			id: crypto.randomUUID(),
-			cliente: 'TRANSMERALDA',
+			cliente: 'COTRANSMEQ',
 			placa: '',
 			tercero_nombre: '',
 			recorrido: '',
@@ -668,7 +668,7 @@
 </script>
 
 <svelte:head>
-	<title>Editar Liquidación Mensual · Transmeralda</title>
+	<title>Editar Liquidación Mensual · Cotransmeq</title>
 </svelte:head>
 
 {#if loading}
@@ -853,7 +853,7 @@
 									<tr class="row-adicional">
 										<td class="cell-row-num"><span class="badge-adc">ADC</span></td>
 										<td class="cell-cliente">
-											<strong>{adc.cliente || 'TRANSMERALDA'}</strong>
+											<strong>{adc.cliente || 'COTRANSMEQ'}</strong>
 										</td>
 										<td class="cell-placa">
 											<input

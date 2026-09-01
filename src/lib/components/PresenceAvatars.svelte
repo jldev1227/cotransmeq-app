@@ -1,14 +1,31 @@
+<!--
+  PresenceAvatars — quién está viendo esto ahora mismo.
+
+  Dos fuentes posibles:
+    · `users` como prop → la manda el consumidor (canvas anuales, que tienen
+      una `SheetSession` por libro).
+    · sin prop → cae al singleton `realtimeCollab`, para las páginas que
+      todavía lo usan (canvas del cierre final individual).
+
+  La prop existe porque `realtimeCollab` guarda la presencia en estado de
+  MÓDULO: con dos canvas abiertos en la misma pestaña, ambos mostraban la
+  misma lista, la del último que hubiera hecho join.
+-->
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import { subscribe, getState, type CollabUser } from '$lib/stores/realtimeCollab'
 
   export let maxVisible = 4
+  /** Presencia explícita. Si se pasa, ignora el store global. */
+  export let users: Array<{ id: string; name: string; mes?: number | null }> | null = null
 
-  let presence: CollabUser[] = []
+  let globalPresence: CollabUser[] = []
   let unsub: () => void
 
+  $: presence = users ?? globalPresence
+
   const AVATAR_COLORS = [
-    '#f97316', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
+    '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
     '#ec4899', '#06b6d4', '#f97316', '#6366f1', '#14b8a6',
   ]
 
@@ -25,9 +42,9 @@
   }
 
   onMount(() => {
+    if (users !== null) return
     unsub = subscribe(() => {
-      const s = getState()
-      presence = s.presence
+      globalPresence = getState().presence
     })
   })
 

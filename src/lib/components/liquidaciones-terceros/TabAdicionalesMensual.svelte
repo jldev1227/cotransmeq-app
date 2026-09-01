@@ -472,7 +472,7 @@
 </script>
 
 <svelte:head>
-	<title>Liquidaciones Mensuales de Adicionales · Transmeralda</title>
+	<title>Liquidaciones Mensuales de Adicionales · Cotransmeq</title>
 </svelte:head>
 
 <svelte:window

@@ -559,7 +559,7 @@
 </script>
 
 <svelte:head>
-	<title>Liquidaciones de Terceros · Transmeralda</title>
+	<title>Liquidaciones de Terceros · Cotransmeq</title>
 </svelte:head>
 
 <svelte:window

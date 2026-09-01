@@ -371,10 +371,11 @@ function computeTotales(item: any) {
 		totalLiquidar:
 			items.reduce((s: number, it: any) => s + (it.liquidacion_tercero?.valor_liquidar || 0), 0) +
 			adicionalesNeto,
-		totalIngresoExtraGlobal: items.reduce(
-			(s: number, it: any) => s + (it.liquidacion_tercero?.ingreso_extra_global || 0),
-			0
-		),
+		totalIngresoExtraGlobal:
+			items.reduce(
+				(s: number, it: any) => s + (it.liquidacion_tercero?.ingreso_extra_global || 0),
+				0
+			) - adicionalesNeto,
 		totalIngresosExtraAval: items.reduce(
 			(s: number, it: any) => s + (it.liquidacion_tercero?.ingresos_extra_aval || 0),
 			0
@@ -757,7 +758,12 @@ function writeMainTable(ws: any, startRow: number, item: any, totales: any): num
 			total: vLiqGross,
 			vliq: vLiqNeto,
 			planilla: '—',
-			extglobal: 0,
+			// El adicional no lo factura ningún cliente: entra RESTANDO. Va en
+			// las dos columnas de ingreso porque ING. COTRANSMEQ se lee como
+			// `ING. EXTRA GLOBAL − ING. EXTRAS AVAL`, igual que en las filas de
+			// item; con EXTRA GLOBAL en 0 la fila de TOTALES no cuadraba
+			// consigo misma.
+			extglobal: -vLiqNeto,
 			extaval: 0,
 			ingtrans: -vLiqNeto,
 			factura: '—',

@@ -15,6 +15,61 @@ export interface ConfiguracionDescuento {
 	orden: number;
 }
 
+/**
+ * Un item de `liquidacion_tercero` que PODRÍA entrar en el cierre: es de la
+ * misma placa y no está comprometido en ningún otro.
+ *
+ * Trae más de lo que la tabla del modal pinta —`porcentaje_admin`,
+ * `valor_admin`, `total_facturado`— porque son las cifras con las que el item
+ * va a aterrizar en la hoja, y verlas antes de aceptar evita la sorpresa de
+ * añadir algo que sale por un valor distinto del esperado.
+ */
+export interface ItemDisponible {
+	id: string;
+	placa: string;
+	recorrido: string;
+	fechas: string;
+	/// Periodo DEL ITEM, que puede no ser el de su liquidación de servicio.
+	mes: number | null;
+	anio: number | null;
+	tercero_id: string | null;
+	tercero_nombre: string | null;
+	/// El item va con un tercero distinto al del cierre. Legítimo —manda la
+	/// placa— pero el modal lo señala.
+	otro_tercero: boolean;
+	cliente_nombre: string;
+	liquidacion_consecutivo: string;
+	liquidacion_estado: string | null;
+	numero_planilla: string;
+	/// Puede traer varias separadas por coma: una liquidación de servicio
+	/// admite más de una factura activa.
+	numero_factura: string;
+	valor_unitario: number;
+	cantidad: number;
+	porcentaje_admin: number;
+	valor_admin: number;
+	total_facturado: number;
+	valor_liquidar: number;
+	created_at: string;
+}
+
+export interface ItemsDisponiblesResp {
+	cierre: {
+		id: string;
+		placa: string;
+		mes: number | null;
+		anio: number | null;
+		estado: string | null;
+		consecutivo: string | null;
+		editable: boolean;
+	};
+	disponibles: ItemDisponible[];
+	/// Items de la placa descartados por estar ya en un cierre vivo. Solo el
+	/// número: explica por qué la lista es más corta de lo esperado.
+	ocupados: number;
+	total: number;
+}
+
 export interface ConceptoDescuento {
 	id?: string;
 	liquidacion_tercero_id?: string;
@@ -294,6 +349,31 @@ export const liquidacionesTercerosDescuentosAPI = {
 		const response = await apiClient.patch(`/api/liquidaciones-terceros/items/${pivoteId}/aplica-impuestos`, {
 			aplica_impuestos,
 		});
+		return response.data;
+	},
+
+	// ── Items disponibles para añadir a mano ──
+	// Items de `liquidacion_tercero` de la MISMA PLACA que no están en ningún
+	// cierre vivo, de cualquier mes. Es lo que `refreshItems` no ve: aquel
+	// solo mira el periodo y el tercero del cierre.
+
+	async itemsDisponibles(liquidacionTerceroFinalId: string): Promise<ItemsDisponiblesResp> {
+		const response = await apiClient.get(
+			`/api/liquidaciones-terceros/${liquidacionTerceroFinalId}/items-disponibles`
+		);
+		return response.data;
+	},
+
+	// ── Añadir al cierre los items elegidos ──
+
+	async agregarItems(
+		liquidacionTerceroFinalId: string,
+		liquidacionTerceroIds: string[]
+	): Promise<{ ok: boolean; agregados: number; message: string }> {
+		const response = await apiClient.post(
+			`/api/liquidaciones-terceros/${liquidacionTerceroFinalId}/items-agregar`,
+			{ liquidacion_tercero_ids: liquidacionTerceroIds }
+		);
 		return response.data;
 	},
 

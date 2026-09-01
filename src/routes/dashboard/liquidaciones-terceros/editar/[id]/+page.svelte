@@ -441,14 +441,14 @@
 		: [];
 
 	/**
-	 * Array combinado de items reales + adicionales Transmeralda en una forma
+	 * Array combinado de items reales + adicionales Cotransmeq en una forma
 	 * uniforme, para poder sumarlos todos juntos en la fila de TOTALES.
 	 * - Items: pasan tal cual con `_esAdicional: false`.
 	 * - Adicionales: se mapean a la forma del item con `_esAdicional: true`.
 	 *   - `valor_liquidar` = adc.valor_liquidar (es lo que suma)
 	 *   - `total_facturado` = adc.valor_liquidar (cuenta como facturado)
 	 *   - `valor_admin`, `ingreso_extra_global`, `ingresos_extra_aval` = 0
-	 *   - `ingresoTransmeraldaDelta` = -vLiq (para que reste en ING. TRANSMERALDA)
+	 *   - `ingresoTransmeraldaDelta` = -vLiq (para que reste en ING. COTRANSMEQ)
 	 */
 	$: itemsConAdicionales = [
 		...placaItemsIncluidos.map((item) => ({ ...item, _esAdicional: false })),
@@ -933,7 +933,7 @@
 		const totalDiasDotacion = sumDiasSalarioConductores(conceptos, true);
 		const totalDiasExamen = sumDiasSalarioConductores(conceptos, true);
 		// Base para GASTOS_DIVERSOS: total facturado de items + valor_liquidar
-		// BRUTO de los adicionales Transmeralda (cada adicional cuenta como
+		// BRUTO de los adicionales Cotransmeq (cada adicional cuenta como
 		// parte del servicio que se está prestando en la liquidación).
 		const totalItemsFacturado = sumTotalItemsLiquidacionPara(itemsIncluidos);
 		const totalAdicionales = (adicionales || []).reduce(
@@ -1540,7 +1540,7 @@
 	 * Recalcula el `valor_liquidar` del cierre (items + adicionales) y lo encola
 	 * como cambio del cierre vía socket. Esto asegura que el historial de
 	 * liquidaciones muestre el valor total real (incluyendo los adicionales
-	 * Transmeralda) para TODOS los usuarios, no solo en este navegador.
+	 * Cotransmeq) para TODOS los usuarios, no solo en este navegador.
 	 *
 	 * El backend persiste los seis campos en la tabla `liquidacion_tercero_final`
 	 * y emite `row:updated:global`, que la página de historial escucha para
@@ -2083,7 +2083,7 @@
 			//
 			// IMPORTANTE: `adicionalesPorPlaca` se inicializa ANTES del ensure/recalc
 			// para que GASTOS_DIVERSOS (0,4% × Σ total facturado) considere también
-			// el valor_liquidar de los adicionales Transmeralda en su base.
+			// el valor_liquidar de los adicionales Cotransmeq en su base.
 			adicionalesPorPlaca = {
 				0: (cierre.adicionales || []).map((a: any) => ({
 					...a,
@@ -2204,7 +2204,7 @@
 </script>
 
 <svelte:head>
-	<title>Editar Liquidación · Transmeralda</title>
+	<title>Editar Liquidación · Cotransmeq</title>
 </svelte:head>
 
 {#if loading}
@@ -2480,7 +2480,7 @@
 								class:sort-active={sortKey === 'ingresoTransmeralda'}
 								on:click={() => toggleSort('ingresoTransmeralda')}
 							>
-								<span>ING. TRANSMERALDA</span><span class="sort-icon"
+								<span>ING. COTRANSMEQ</span><span class="sort-icon"
 									>{sortIcons.ingresoTransmeralda}</span
 								>
 							</th>
@@ -2561,7 +2561,7 @@
 								{@const vLiq = vLiqGross - vAdmin}
 								<tr class="row-adicional">
 									<td class="cell-row-num"><span class="badge-adc">ADC</span></td>
-									<td class="cell-cliente"><strong>{adc.cliente || 'TRANSMERALDA'}</strong></td>
+									<td class="cell-cliente"><strong>{adc.cliente || 'COTRANSMEQ'}</strong></td>
 									<td class="cell-consecutivo">—</td>
 									<td class="cell-placa">{fmtPlaca(adc.placa || currentPlaca.placa)}</td>
 									<td class="cell-nombre">{adc.tercero_nombre || currentPlaca.nombre || '—'}</td>
@@ -2718,7 +2718,7 @@
 									>{fmtCOP(
 										itemsConAdicionales.reduce((s, i) => {
 											const lt2 = i.tercero?.liquidacion_tercero;
-											// Para los adicionales, ING. TRANSMERALDA resta el vLiq
+											// Para los adicionales, ING. COTRANSMEQ resta el vLiq
 											// (representado como un número negativo en la fila).
 											if (i._esAdicional) {
 												return s - (lt2?.valor_liquidar || 0);
