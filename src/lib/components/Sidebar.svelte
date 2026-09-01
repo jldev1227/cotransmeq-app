@@ -119,6 +119,23 @@
 			href: '/dashboard/formularios'
 		},
 		{
+			/**
+			 * Entrada propia y no un enlace dentro de «Formularios».
+			 *
+			 * `formularios` es el módulo del constructor y solo lo tienen
+			 * `administracion`/`hseq`/`operaciones`. `mis-formularios` es
+			 * `general: true`, así que esta es la única entrada que ve alguien de
+			 * contabilidad o talento humano a quien le asignaron un formato —y son
+			 * exactamente las personas que necesitan llegar aquí—.
+			 */
+			id: 'mis-formularios',
+			label: 'Mis formularios',
+			/// La del check, no la del constructor: aquí se rellena, no se arma.
+			icon: 'clipboard-list',
+			badge: null,
+			href: '/dashboard/mis-formularios'
+		},
+		{
 			id: 'nomina',
 			label: 'Nómina',
 			icon: 'wallet',
@@ -222,6 +239,10 @@
 		if (pathname.startsWith('/dashboard/acciones-correctivas')) return 'acciones-correctivas';
 		if (pathname.startsWith('/dashboard/evaluaciones')) return 'evaluaciones';
 		if (pathname.startsWith('/dashboard/salidas-nc')) return 'salidas-nc';
+		/// Antes que `/dashboard/formularios`: `startsWith` no distingue prefijos
+		/// que se solapan, pero estas dos rutas no lo hacen. Se deja junto por
+		/// legibilidad.
+		if (pathname.startsWith('/dashboard/mis-formularios')) return 'mis-formularios';
 		if (pathname.startsWith('/dashboard/formularios')) return 'formularios';
 		if (pathname.startsWith('/dashboard/clientes')) return 'clientes';
 		if (pathname.startsWith('/dashboard/sarlaft')) return 'sarlaft';

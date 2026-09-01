@@ -248,7 +248,7 @@
 				<thead>
 					<tr>
 						<th scope="col">Formulario</th>
-						<th scope="col">Conductor</th>
+						<th scope="col">Diligenciado por</th>
 						<th scope="col">Vehículo</th>
 						<th scope="col">Fecha negocio</th>
 						<th scope="col">Enviado</th>
@@ -264,9 +264,16 @@
 								<span class="sub">v{envio.version?.versionNumber} · {envio.assignment?.name ?? ''}</span>
 							</td>
 							<td>
-								{envio.conductor?.nombre ?? '—'}
+								<!--
+									El autor puede ser un conductor o un usuario interno: desde que
+									una asignación alcanza a las dos poblaciones, leer solo
+									`conductor` dejaba media lista con un guion.
+								-->
+								{envio.actor?.nombre ?? '—'}
 								{#if envio.conductor?.numeroIdentificacion}
 									<span class="sub mono">{envio.conductor.numeroIdentificacion}</span>
+								{:else if envio.actor?.kind === 'USER'}
+									<span class="sub">Personal interno</span>
 								{/if}
 							</td>
 							<td class="mono">{envio.vehiculo?.placa ?? '—'}</td>

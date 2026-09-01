@@ -438,7 +438,7 @@
 									>{fechaHora(envio.submittedAt ?? envio.startedAt)}</span
 								>
 								<span class="registro__conductor">
-									{envio.conductor?.nombre ?? '—'}
+									{envio.actor?.nombre ?? '—'}
 									{#if envio.conductor?.numeroIdentificacion}
 										<small>{envio.conductor.numeroIdentificacion}</small>
 									{/if}

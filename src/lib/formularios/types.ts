@@ -364,15 +364,53 @@ export const LIMIT_POLICY_LABELS: Record<LimitPolicy, string> = {
 	ONE_PER_CONTEXT: 'Uno por período y contexto'
 };
 
-export const TARGET_TYPES = ['ALL_CONDUCTORS', 'CONDUCTOR', 'VEHICLE', 'SEDE', 'GROUP'] as const;
+/**
+ * Audiencias de una asignación. Espejo de `domain/assignments.ts`.
+ *
+ * Dos familias, y una asignación puede mezclarlas: las cinco primeras alcanzan
+ * a CONDUCTORES (portal por magic link) y las cuatro últimas a USUARIOS del
+ * dashboard. Mezclarlas es el caso normal: un formato de inspección lo
+ * diligencian los conductores y también administración, sin duplicar nada.
+ */
+export const TARGET_TYPES = [
+	'ALL_CONDUCTORS',
+	'CONDUCTOR',
+	'VEHICLE',
+	'SEDE',
+	'GROUP',
+	'ALL_USERS',
+	'USER',
+	'AREA',
+	'CARGO'
+] as const;
 export type TargetType = (typeof TARGET_TYPES)[number];
+
+/** Targets que resuelven contra conductores. */
+export const CONDUCTOR_TARGET_TYPES = [
+	'ALL_CONDUCTORS',
+	'CONDUCTOR',
+	'VEHICLE',
+	'SEDE',
+	'GROUP'
+] as const satisfies readonly TargetType[];
+
+/** Targets que resuelven contra usuarios internos. */
+export const USER_TARGET_TYPES = ['ALL_USERS', 'USER', 'AREA', 'CARGO'] as const satisfies readonly TargetType[];
+
+export function esTargetDeUsuario(type: TargetType): boolean {
+	return (USER_TARGET_TYPES as readonly string[]).includes(type);
+}
 
 export const TARGET_TYPE_LABELS: Record<TargetType, string> = {
 	ALL_CONDUCTORS: 'Todos los conductores',
 	CONDUCTOR: 'Conductor específico',
 	VEHICLE: 'Vehículo',
 	SEDE: 'Sede',
-	GROUP: 'Grupo'
+	GROUP: 'Grupo',
+	ALL_USERS: 'Todo el personal interno',
+	USER: 'Usuario específico',
+	AREA: 'Área',
+	CARGO: 'Cargo'
 };
 
 export type AssignmentStatus = 'ACTIVE' | 'PAUSED' | 'CLOSED';
@@ -390,8 +428,12 @@ export interface AssignmentTargetDto {
 	vehicleId: string | null;
 	sede: string | null;
 	groupKey: string | null;
+	usuarioId: string | null;
+	area: string | null;
+	cargo: string | null;
 	conductor: { id: string; nombre: string } | null;
 	vehiculo: { id: string; placa: string } | null;
+	usuario: { id: string; nombre: string; correo: string } | null;
 }
 
 export interface AssignmentDto {
@@ -475,7 +517,8 @@ export interface SubmissionSummaryDto {
 	clientSubmissionId: string;
 	assignmentId: string;
 	versionId: string;
-	conductorId: string;
+	conductorId: string | null;
+	usuarioId: string | null;
 	vehicleId: string | null;
 	serviceId: string | null;
 	supersedesSubmissionId: string | null;
@@ -490,6 +533,15 @@ export interface SubmissionSummaryDto {
 	voidedAt: string | null;
 	voidReason: string | null;
 	conductor: { id: string; nombre: string; numeroIdentificacion: string | null } | null;
+	usuario: { id: string; nombre: string; correo: string } | null;
+	/**
+	 * Quién diligenció, ya resuelto.
+	 *
+	 * `conductor`/`usuario` siguen ahí porque el PDF y el detalle los leen por
+	 * nombre, pero lo que debe usar código nuevo es esto: una sola forma de
+	 * preguntar «¿de quién es?» que no obliga a probar los dos campos.
+	 */
+	actor: { kind: 'CONDUCTOR' | 'USER'; id: string; nombre: string | null } | null;
 	vehiculo: { id: string; placa: string } | null;
 	assignment: { id: string; name: string; frequency: AssignmentFrequency } | null;
 	version: {

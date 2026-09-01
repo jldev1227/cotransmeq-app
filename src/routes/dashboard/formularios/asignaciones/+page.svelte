@@ -15,9 +15,11 @@
 		FREQUENCY_LABELS,
 		LIMIT_POLICY_LABELS,
 		TARGET_TYPE_LABELS,
+		esTargetDeUsuario,
 		type AssignmentDto,
 		type AssignmentStatus
 	} from '$lib/formularios/types';
+	import { AREA_LABELS, type Area } from '$lib/config/permissions';
 
 	let asignaciones = $state<AssignmentDto[]>([]);
 	let cargando = $state(true);
@@ -93,12 +95,45 @@
 
 	/** Resume la audiencia en una frase corta. */
 	function audiencia(a: AssignmentDto): string {
-		if (a.targets.some((t) => t.type === 'ALL_CONDUCTORS')) return 'Todos los conductores';
-		const porTipo = new Map<string, number>();
-		for (const t of a.targets) porTipo.set(t.type, (porTipo.get(t.type) ?? 0) + 1);
-		return [...porTipo.entries()]
-			.map(([tipo, n]) => `${n} ${TARGET_TYPE_LABELS[tipo as keyof typeof TARGET_TYPE_LABELS]}`)
-			.join(' · ');
+		/**
+		 * Se resume por FAMILIA y no en una sola lista: una asignación mixta
+		 * («todos los conductores» + «área administración») es el caso normal, y
+		 * juntarlo todo en un recuento plano —«1 Todos los conductores · 1 Área»—
+		 * oculta justo lo que hay que ver de un vistazo: a qué poblaciones
+		 * alcanza. Las áreas y cargos se enumeran por su VALOR: saber que hay
+		 * «2 Área» no responde la pregunta que trae a nadie a esta pantalla, que
+		 * es «¿por qué a esta persona no le aparece nada?».
+		 */
+		const partes: string[] = [];
+
+		const deConductor = a.targets.filter((t) => !esTargetDeUsuario(t.type));
+		if (deConductor.some((t) => t.type === 'ALL_CONDUCTORS')) {
+			partes.push('Todos los conductores');
+		} else if (deConductor.length) {
+			const porTipo = new Map<string, number>();
+			for (const t of deConductor) porTipo.set(t.type, (porTipo.get(t.type) ?? 0) + 1);
+			partes.push(
+				[...porTipo.entries()]
+					.map(([tipo, n]) => `${n} ${TARGET_TYPE_LABELS[tipo as keyof typeof TARGET_TYPE_LABELS]}`)
+					.join(', ')
+			);
+		}
+
+		const deUsuario = a.targets.filter((t) => esTargetDeUsuario(t.type));
+		if (deUsuario.some((t) => t.type === 'ALL_USERS')) {
+			partes.push('Todo el personal interno');
+		} else if (deUsuario.length) {
+			const areas = deUsuario
+				.filter((t) => t.type === 'AREA' && t.area)
+				.map((t) => AREA_LABELS[t.area as Area] ?? t.area!);
+			const cargos = deUsuario.filter((t) => t.type === 'CARGO' && t.cargo).map((t) => t.cargo!);
+			const usuarios = deUsuario.filter((t) => t.type === 'USER').length;
+			if (areas.length) partes.push(`Áreas: ${areas.join(', ')}`);
+			if (cargos.length) partes.push(`Cargos: ${cargos.join(', ')}`);
+			if (usuarios) partes.push(`${usuarios} usuario${usuarios === 1 ? '' : 's'}`);
+		}
+
+		return partes.join(' · ') || '—';
 	}
 
 	/// Una asignación ACTIVE con vigencia vencida no le aparece a nadie aunque su
