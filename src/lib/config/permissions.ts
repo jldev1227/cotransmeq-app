@@ -15,6 +15,15 @@ export const AREA_LABELS: Record<Area, string> = {
   hseq: 'HSEQ'
 }
 
+/**
+ * Lista canónica de áreas, para poblar desplegables.
+ *
+ * Se DERIVA de `AREA_LABELS` en vez de escribirse otra vez: es la misma
+ * información, y una copia menos es un sitio menos donde olvidarse al añadir
+ * un área.
+ */
+export const AREAS = Object.keys(AREA_LABELS) as Area[]
+
 export interface RoutePermission {
   full: Area[]
   read?: Area[]
@@ -82,6 +91,28 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
     full: ['administracion', 'hseq'],
     read: ['operaciones'],
     description: 'Formularios dinámicos (constructor, asignaciones y envíos)'
+  },
+
+  /**
+   * Diligenciar lo que a uno le asignaron.
+   *
+   * Módulo APARTE de `formularios` y `general: true` a propósito. `formularios`
+   * es el constructor: publicar una versión o cambiar una asignación afecta a
+   * cientos de personas y por eso solo lo tienen `administracion` y `hseq`.
+   * Rellenar un formato que alguien te asignó no tiene nada de eso, y si
+   * dependiera del mismo permiso, a un usuario de contabilidad al que HSEQ le
+   * asigna una inspección no le aparecería la pantalla —ni siquiera podría
+   * abrirla, porque el guard resuelve el módulo por el primer segmento de la
+   * ruta—.
+   *
+   * El acceso a UNA asignación concreta no lo da este permiso: lo dan los
+   * targets de la asignación, resueltos en `condicionAcceso`. Esto solo abre la
+   * puerta de la pantalla.
+   */
+  'mis-formularios': {
+    full: ['administracion', 'operaciones', 'contabilidad', 'facturacion', 'talento_humano', 'hseq'],
+    general: true,
+    description: 'Diligenciar los formularios asignados a mí'
   },
   nomina: {
     full: ['administracion', 'talento_humano', 'facturacion'],

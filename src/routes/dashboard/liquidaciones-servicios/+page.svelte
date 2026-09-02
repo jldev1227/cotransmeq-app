@@ -33,6 +33,7 @@
 		Tag,
 		Table2
 	} from 'lucide-svelte';
+	import ModalOperadoras from '$lib/components/ModalOperadoras.svelte';
 	import {
 		liquidacionesServiciosAPI,
 		getMesLabel,
@@ -207,6 +208,7 @@
 	let facturablesLoading = false;
 
 	let facturasTab: 'liquidaciones' | 'facturas' | 'configuracion' | 'terceros' = 'liquidaciones';
+	let modalOperadoras = false;
 
 	// Terceros historial
 	let tercerosItems: TerceroItemHistorial[] = [];
@@ -484,7 +486,12 @@
 		listLoading = true;
 		listError = '';
 		try {
-			const filtros: Record<string, any> = { page: listPage, limit: 15 };
+			const filtros: Record<string, any> = {
+				page: listPage,
+				limit: 15,
+				/// El backend limita los autoguardados al autor, salvo que la sesión sea administrativa.
+				incluir_no_confirmadas: true
+			};
 			if (listBusqueda) filtros.busqueda = listBusqueda;
 			if (listMes) filtros.mes = listMes;
 			if (listAnio) filtros.anio = listAnio;
@@ -1490,6 +1497,7 @@
 								{@const isNew = highlightedIds[liq.id] === 'created'}
 								{@const isUpdated = highlightedIds[liq.id] === 'updated'}
 								{@const itemsTotal = liq.total_items || 0}
+								{@const isUnconfirmed = !liq.confirmada_at}
 								<tr
 									class="table-row {isNew
 										? 'border-l-4 border-l-[var(--emerald-500)] !bg-[rgba(249, 115, 22,0.08)]'
@@ -1513,9 +1521,18 @@
 										>{getMesLabel(liq.mes)} {liq.anio}</td
 									>
 									<td class="px-4 py-3 text-center text-xs">
-										<span class="status-pill" style="background:{badge.bg};color:{badge.text}"
-											>{liq.estado}</span
-										>
+										{#if isUnconfirmed}
+											<span
+												class="status-pill"
+												style="background: rgba(245,158,11,0.14); color: #B45309;"
+												title="Existe por autoguardado, pero el usuario todavía no pulsó Guardar"
+												>Sin guardar</span
+											>
+										{:else}
+											<span class="status-pill" style="background:{badge.bg};color:{badge.text}"
+												>{liq.estado}</span
+											>
+										{/if}
 									</td>
 									<td class="px-4 py-3 text-center text-xs">
 										{#if facturaInfo}
@@ -1660,7 +1677,7 @@
 													<Edit2 class="h-3.5 w-3.5" />
 												</button>
 											{/if}
-											{#if canLiquidar && liq.estado === 'BORRADOR'}
+											{#if canLiquidar && liq.estado === 'BORRADOR' && !isUnconfirmed}
 												<button
 													class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
 													style="background: rgba(249, 115, 22,0.10); color: var(--emerald-700);"
@@ -1676,7 +1693,7 @@
 													on:click={() => cambiarEstadoLiq(liq.id, 'APROBADA')}>Aprobar</button
 												>
 											{/if}
-											{#if canAnular && liq.estado !== 'ANULADA' && liq.estado !== 'FACTURADA'}
+											{#if canAnular && !isUnconfirmed && liq.estado !== 'ANULADA' && liq.estado !== 'FACTURADA'}
 												<button
 													class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
 													style="background: rgba(220,38,38,0.08); color: #B91C1C;"
@@ -1746,6 +1763,7 @@
 						{@const facturaInfo = facturaInfoMap[liq.id]}
 						{@const isNew = highlightedIds[liq.id] === 'created'}
 						{@const isUpdated = highlightedIds[liq.id] === 'updated'}
+						{@const isUnconfirmed = !liq.confirmada_at}
 						<div
 							class="list-card flex-col items-stretch"
 							style="border-left: 4px solid {isNew
@@ -1763,9 +1781,17 @@
 									<span class="font-mono-meta text-[12px]" style="color: var(--emerald-700);"
 										>{liq.consecutivo}</span
 									>
-									<span class="status-pill" style="background:{badge.bg};color:{badge.text}"
-										>{liq.estado}</span
-									>
+									{#if isUnconfirmed}
+										<span
+											class="status-pill"
+											style="background: rgba(245,158,11,0.14); color: #B45309;"
+											>Sin guardar</span
+										>
+									{:else}
+										<span class="status-pill" style="background:{badge.bg};color:{badge.text}"
+											>{liq.estado}</span
+										>
+									{/if}
 								</div>
 								<span
 									class="font-mono-meta text-right text-[12px] font-bold"
@@ -1904,7 +1930,7 @@
 										<Edit2 class="h-3.5 w-3.5" />
 									</button>
 								{/if}
-								{#if canLiquidar && liq.estado === 'BORRADOR'}
+								{#if canLiquidar && liq.estado === 'BORRADOR' && !isUnconfirmed}
 									<button
 										class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
 										style="background: rgba(249, 115, 22,0.10); color: var(--emerald-700);"
@@ -1920,7 +1946,7 @@
 										on:click={() => cambiarEstadoLiq(liq.id, 'APROBADA')}>Aprobar</button
 									>
 								{/if}
-								{#if canAnular && liq.estado !== 'ANULADA' && liq.estado !== 'FACTURADA'}
+								{#if canAnular && !isUnconfirmed && liq.estado !== 'ANULADA' && liq.estado !== 'FACTURADA'}
 									<button
 										class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
 										style="background: rgba(220,38,38,0.08); color: #B91C1C;"
@@ -2799,18 +2825,31 @@
 			style="padding: 1.5rem 1.75rem;"
 			in:fly={{ y: 12, duration: 400, easing: quintOut }}
 		>
-			<div class="mb-5 flex items-center gap-3">
-				<div class="card-icon">
-					<Settings class="h-5 w-5 text-white" />
+			<div class="mb-5 flex items-center justify-between gap-3">
+				<div class="flex items-center gap-3">
+					<div class="card-icon">
+						<Settings class="h-5 w-5 text-white" />
+					</div>
+					<div>
+						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 400;">
+							Configuración del Liquidador
+						</h1>
+						<p class="text-xs" style="color: var(--text-muted);">
+							Parámetros base para el cálculo de servicios de transporte
+						</p>
+					</div>
 				</div>
-				<div>
-					<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 400;">
-						Configuración del Liquidador
-					</h1>
-					<p class="text-xs" style="color: var(--text-muted);">
-						Parámetros base para el cálculo de servicios de transporte
-					</p>
-				</div>
+				<!-- El catálogo de operadoras vive aquí y no en su propia pestaña
+				     porque es lo que es: un parámetro del cálculo, no una hoja de
+				     datos. Y esta pestaña ya está restringida a Administración u
+				     Operaciones, así que no hace falta repetir el guard. -->
+				<button
+					class="btn-secondary apple-transition"
+					style="padding: 0.45rem 0.9rem; font-size: 12px;"
+					on:click={() => (modalOperadoras = true)}
+				>
+					Operadoras
+				</button>
 			</div>
 
 			{#if configLoading}
@@ -3827,6 +3866,16 @@
 		</div>
 	</div>
 {/if}
+
+<!-- Catálogo de operadoras. Se abre desde la pestaña de Configuración, que ya
+     está restringida a Administración u Operaciones. `onCambios` recarga la
+     configuración para que el resto de la pantalla no se quede con la lista
+     vieja tras añadir o retirar una. -->
+<ModalOperadoras
+	open={modalOperadoras}
+	onClose={() => (modalOperadoras = false)}
+	onCambios={() => cargarConfig()}
+/>
 
 <style>
 	.page-wrap {

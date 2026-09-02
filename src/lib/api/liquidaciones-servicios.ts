@@ -18,7 +18,29 @@ export type EstadoLiquidacionServicio =
 	| 'APROBADA'
 	| 'FACTURADA'
 	| 'ANULADA';
-export type Operadora = 'PAREX' | 'GEOPARK';
+/**
+ * Operadora en el sentido de TARIFAS: selecciona qué tabla de precios aplica.
+ *
+ * Dominio cerrado y distinto del catálogo de operadoras: aquí `OTRA` no
+ * existe, porque no hay tarifas para «ninguna en concreto». Compartir un solo
+ * tipo para las dos cosas hacía que el selector de tarifas ofreciera valores
+ * que su dominio no admite.
+ */
+export type OperadoraTarifa = 'PAREX' | 'GEOPARK';
+
+/**
+ * Operadora del CATÁLOGO: a quién se le atribuye la liquidación.
+ *
+ * Antes era texto libre en la base —sin enum, sin default y sin validación en
+ * ninguna capa—, así que añadir una obligaba a tocar código en dos repos.
+ */
+export interface Operadora {
+	id: string;
+	codigo: string;
+	nombre: string;
+	activo: boolean;
+	orden: number;
+}
 
 export const TIPO_SERVICIO_LABELS: Record<TipoServicioTarifa, string> = {
   TRANSPORTE_DE_PERSONAL_EN_CAMIONETA: 'Transporte de personal en camioneta',
@@ -45,7 +67,7 @@ export const ESTADO_LIQUIDACION_LABELS: Record<
 
 export interface TarifaServicio {
 	id: string;
-	operadora: Operadora;
+	operadora: OperadoraTarifa;
 	anio: number;
 	valor_24h: number;
 	valor_12h: number;
@@ -57,7 +79,7 @@ export interface TarifaServicio {
 }
 
 export interface TarifaInput {
-	operadora: Operadora;
+	operadora: OperadoraTarifa;
 	anio: number;
 	valor_24h: number;
 	valor_12h: number;
@@ -184,6 +206,8 @@ export interface LiquidacionServicio {
 	}>;
 	created_at: string;
 	updated_at: string;
+	/** Nulo mientras la fila existe únicamente por el autoguardado del editor. */
+	confirmada_at?: string | null;
 }
 
 export interface HistorialEstado {
@@ -202,7 +226,7 @@ export interface PreviewLiquidacion {
 	cliente: { id: string; nombre: string; nit: string };
 	tarifa: {
 		id: string;
-		operadora: Operadora;
+		operadora: OperadoraTarifa;
 		anio: number;
 		valor_24h: number;
 		valor_12h: number;
@@ -297,6 +321,12 @@ export interface CrearLiquidacionInput {
 	porcentaje_iva?: number;
 	observaciones?: string;
 	osi?: string;
+	/// El editor ya enviaba `operadora` sin que estuviera declarada aquí: el
+	/// payload se asigna a una variable antes de pasarlo, así que TypeScript no
+	/// se quejaba. Ahora van las dos — el id manda, el texto es respaldo de la
+	/// transición.
+	operadora?: string | null;
+	operadora_id?: string | null;
 	valor_transporte_adicional?: number;
 	valor_recargos?: number;
 	recargos_data?: any;
@@ -361,7 +391,7 @@ function getAuthHeaders(): Record<string, string> {
 
 export const liquidacionesServiciosAPI = {
 	// ── Tarifas (operadoras) ──
-	async obtenerTarifas(operadora?: Operadora, anio?: number): Promise<TarifaServicio[]> {
+	async obtenerTarifas(operadora?: OperadoraTarifa, anio?: number): Promise<TarifaServicio[]> {
 		const params = new URLSearchParams();
 		if (operadora) params.set('operadora', operadora);
 		if (anio) params.set('anio', String(anio));
@@ -700,6 +730,205 @@ export const liquidacionesTercerosAPI = {
 		});
 		const json = await res.json();
 		if (!res.ok) throw new Error(json.error || 'Error al migrar');
+		return json;
+	}
+};
+
+/** Lo que devuelve el autoguardado. Mínimo a propósito: corre cada pocos segundos. */
+export interface RespuestaAutoguardado {
+	id: string;
+	consecutivo: string;
+	estado: EstadoLiquidacionServicio;
+	version: number;
+	updated_at: string;
+	creada: boolean;
+}
+
+/** Un 409 del autoguardado, ya desmenuzado. */
+export interface ConflictoAutoguardado {
+	/// `version`: otro guardó encima. `estado`: dejó de ser un borrador.
+	/// `borrada`: ya no existe. Cada uno se resuelve distinto, por eso el
+	/// backend los distingue en vez de devolver un 409 a secas.
+	motivo: 'version' | 'estado' | 'borrada';
+	servidor: {
+		id: string;
+		consecutivo: string;
+		estado: EstadoLiquidacionServicio;
+		version: number;
+		updated_at: string;
+		actualizado_por?: { id: string; nombre: string } | null;
+	} | null;
+}
+
+export class ErrorConflictoAutoguardado extends Error {
+	constructor(
+		message: string,
+		public conflicto: ConflictoAutoguardado
+	) {
+		super(message);
+		this.name = 'ErrorConflictoAutoguardado';
+	}
+}
+
+/**
+ * Autoguardado y borrador previo.
+ *
+ * Aparte de `liquidacionesServiciosAPI` porque no son operaciones de negocio:
+ * no notifican, no cambian de estado y no dejan rastro en el historial. Ver el
+ * porqué en `LiquidacionesServiciosController.autoguardar` del backend.
+ */
+export const autoguardadoAPI = {
+	/**
+	 * Crea o actualiza la liquidación real en BORRADOR.
+	 *
+	 * @param cliente_key clave de idempotencia, una por sesión de edición: sin
+	 * ella, dos peticiones en vuelo a la vez crean dos liquidaciones.
+	 */
+	async guardar(
+		body: CrearLiquidacionInput & {
+			cliente_key?: string | null;
+			borrador_id?: string | null;
+			base_version?: number | null;
+		}
+	): Promise<RespuestaAutoguardado> {
+		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/autoguardado`, {
+			method: 'POST',
+			headers: getAuthHeaders(),
+			body: JSON.stringify(body)
+		});
+		const json = await res.json();
+		if (res.status === 409) {
+			throw new ErrorConflictoAutoguardado(json.error || 'Conflicto', {
+				motivo: json.motivo,
+				servidor: json.servidor ?? null
+			});
+		}
+		if (!res.ok) throw new Error(json.error || 'Error al autoguardar');
+		return json;
+	},
+
+	/**
+	 * Guarda el borrador previo, el de cuando la fila todavía no puede existir.
+	 * `liquidacionId = null` es el borrador «nuevo» del usuario.
+	 */
+	async guardarDraft(liquidacionId: string | null, payload: unknown): Promise<{ ok: boolean }> {
+		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/draft`, {
+			method: 'POST',
+			headers: getAuthHeaders(),
+			body: JSON.stringify({ liquidacion_id: liquidacionId, payload })
+		});
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al guardar el borrador');
+		return json;
+	},
+
+	/** `null` si no hay borrador; no tenerlo es lo normal, no un error. */
+	async obtenerDraft(
+		liquidacionId: string | null
+	): Promise<{ payload: any; version: number; updated_at: string } | null> {
+		const ruta = liquidacionId
+			? `/api/liquidaciones-servicios/${liquidacionId}/draft`
+			: '/api/liquidaciones-servicios/draft';
+		const res = await fetch(`${API_URL}${ruta}`, { headers: getAuthHeaders() });
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al leer el borrador');
+		return json;
+	},
+
+	async eliminarDraft(liquidacionId: string | null): Promise<void> {
+		const ruta = liquidacionId
+			? `/api/liquidaciones-servicios/${liquidacionId}/draft`
+			: '/api/liquidaciones-servicios/draft';
+		await fetch(`${API_URL}${ruta}`, { method: 'DELETE', headers: getAuthHeaders() });
+	},
+
+	/**
+	 * Último intento al cerrar la pestaña.
+	 *
+	 * `keepalive` y no `sendBeacon`: el backend exige `Authorization: Bearer` en
+	 * cabecera y beacon no admite cabeceras. `keepalive` sí, y sobrevive a la
+	 * descarga del documento — con un límite de 64 KB de cuerpo, que para una
+	 * liquidación muy grande puede quedarse corto. Por eso NO es la red de
+	 * seguridad principal: lo son el debounce corto y el flush al desmontar.
+	 */
+	guardarAlSalir(body: unknown): void {
+		try {
+			void fetch(`${API_URL}/api/liquidaciones-servicios/autoguardado`, {
+				method: 'POST',
+				headers: getAuthHeaders(),
+				body: JSON.stringify(body),
+				keepalive: true
+			});
+		} catch {
+			// Cerrando la pestaña: no hay a quién avisar.
+		}
+	}
+};
+
+/**
+ * Catálogo de operadoras.
+ *
+ * Aparte de `liquidacionesServiciosAPI` porque es un catálogo propio, no una
+ * operación sobre liquidaciones — y porque su `DELETE` no siempre borra.
+ */
+export const operadorasAPI = {
+	/**
+	 * @param incluirInactivas Las retiradas. El `<select>` del editor las
+	 * necesita para no perder en silencio la operadora de una liquidación vieja
+	 * cuya operadora se retiró después.
+	 */
+	async listar(incluirInactivas = false): Promise<Operadora[]> {
+		const params = incluirInactivas ? '?incluir_inactivas=true' : '';
+		const res = await fetch(`${API_URL}/api/operadoras${params}`, {
+			headers: getAuthHeaders()
+		});
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al listar operadoras');
+		return json;
+	},
+
+	async crear(data: { codigo: string; nombre: string; orden?: number }): Promise<Operadora> {
+		const res = await fetch(`${API_URL}/api/operadoras`, {
+			method: 'POST',
+			headers: getAuthHeaders(),
+			body: JSON.stringify(data)
+		});
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al crear la operadora');
+		return json;
+	},
+
+	async actualizar(
+		id: string,
+		data: Partial<Pick<Operadora, 'codigo' | 'nombre' | 'activo' | 'orden'>>
+	): Promise<Operadora> {
+		const res = await fetch(`${API_URL}/api/operadoras/${id}`, {
+			method: 'PUT',
+			headers: getAuthHeaders(),
+			body: JSON.stringify(data)
+		});
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al actualizar la operadora');
+		return json;
+	},
+
+	/**
+	 * Borra la operadora, o la retira si ya tiene liquidaciones.
+	 *
+	 * Devuelve QUÉ hizo para que la interfaz no diga «eliminada» cuando en
+	 * realidad la desactivó: vaciar la operadora de las liquidaciones históricas
+	 * sería perder a quién se le atribuyó el servicio, así que el backend nunca
+	 * lo hace.
+	 */
+	async eliminar(
+		id: string
+	): Promise<{ accion: 'eliminada' | 'desactivada'; liquidaciones: number }> {
+		const res = await fetch(`${API_URL}/api/operadoras/${id}`, {
+			method: 'DELETE',
+			headers: getAuthHeaders()
+		});
+		const json = await res.json();
+		if (!res.ok) throw new Error(json.error || 'Error al eliminar la operadora');
 		return json;
 	}
 };

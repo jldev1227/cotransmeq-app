@@ -317,11 +317,13 @@
 		<section class="ficha">
 			<dl class="ficha__lista">
 				<div class="ficha__par">
-					<dt>Conductor</dt>
+					<dt>{envio.actor?.kind === 'USER' ? 'Diligenciado por' : 'Conductor'}</dt>
 					<dd>
-						{envio.conductor?.nombre ?? '—'}
+						{envio.actor?.nombre ?? '—'}
 						{#if envio.conductor?.numeroIdentificacion}
 							<span class="mono">({envio.conductor.numeroIdentificacion})</span>
+						{:else if envio.usuario?.correo}
+							<span class="mono">({envio.usuario.correo})</span>
 						{/if}
 					</dd>
 				</div>

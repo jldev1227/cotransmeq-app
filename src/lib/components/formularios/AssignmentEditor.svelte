@@ -16,7 +16,13 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
-	import { asignacionesFormularioAPI, FormApiError, type TargetPayload } from '$lib/api/formularios';
+	import {
+		asignacionesFormularioAPI,
+		FormApiError,
+		type AudienciaInterna,
+		type TargetPayload
+	} from '$lib/api/formularios';
+	import { AREA_LABELS, AREAS, type Area } from '$lib/config/permissions';
 	import { conductoresAPI, vehiculosAPI } from '$lib/api/apiClient';
 	import { ordenarPorEtiqueta } from '$lib/utils/ordenarOpciones';
 	import {
@@ -24,8 +30,10 @@
 		FREQUENCY_LABELS,
 		LIMIT_POLICIES,
 		LIMIT_POLICY_LABELS,
-		TARGET_TYPES,
+		CONDUCTOR_TARGET_TYPES,
+		USER_TARGET_TYPES,
 		TARGET_TYPE_LABELS,
+		esTargetDeUsuario,
 		type AssignmentDto,
 		type AssignmentFrequency,
 		type LimitPolicy,
@@ -65,13 +73,18 @@
 					conductorId: t.conductorId,
 					vehicleId: t.vehicleId,
 					sede: t.sede,
-					groupKey: t.groupKey
+					groupKey: t.groupKey,
+					usuarioId: t.usuarioId,
+					area: t.area,
+					cargo: t.cargo
 				}))
 			: [{ type: 'ALL_CONDUCTORS' }]
 	);
 
 	let conductores = $state<{ id: string; nombre: string }[]>([]);
 	let vehiculos = $state<{ id: string; placa: string }[]>([]);
+	let usuarios = $state<AudienciaInterna['usuarios']>([]);
+	let cargosConocidos = $state<string[]>([]);
 	let guardando = $state(false);
 
 	/**
@@ -96,10 +109,14 @@
 		/// Los catálogos se traen por adelantado aunque con `ALL_CONDUCTORS` no se
 		/// usen: cargarlos al cambiar de tipo produciría un desplegable vacío
 		/// durante el primer segundo.
-		const [c, v] = await Promise.all([
+		const [c, v, interna] = await Promise.all([
 			conductoresAPI.getAll({ limit: 500 }).catch(() => null),
-			vehiculosAPI.getAll().catch(() => null)
+			vehiculosAPI.getAll().catch(() => null),
+			asignacionesFormularioAPI.audienciaInterna().catch(() => null)
 		]);
+
+		usuarios = ordenarPorEtiqueta(interna?.usuarios ?? [], (u) => u.nombre);
+		cargosConocidos = interna?.cargos ?? [];
 
 		/// Los dos catálogos van ordenados A-Z por lo que se ve en el desplegable.
 		/// Elegir treinta targets de una lista sin orden es incómodo y propenso a
@@ -124,16 +141,50 @@
 			: null
 	);
 
-	/// `ALL_CONDUCTORS` no se combina con nada: si ya alcanza a todos, los demás
-	/// targets son ruido y confunden a quien lo revise después.
-	const tieneTodos = $derived(targets.some((t) => t.type === 'ALL_CONDUCTORS'));
+	/// A un conductor el vehículo se le propone solo (los que tiene asignados);
+	/// alguien de administración tendrá que buscarlo a mano en toda la flota. Es
+	/// válido, pero conviene decirlo antes de guardar y no descubrirlo al abrir
+	/// el formulario.
+	const avisoAudienciaInterna = $derived(
+		(exigeVehiculo || exigeServicio) && targets.some((t) => esTargetDeUsuario(t.type))
+			? 'Esta asignación exige contexto (vehículo o servicio) y alcanza a personal interno: tendrán que elegirlo a mano de toda la flota.'
+			: null
+	);
+
+	/**
+	 * «Todos» es excluyente SOLO dentro de su familia.
+	 *
+	 * Antes `ALL_CONDUCTORS` reemplazaba el array entero, y eso impedía
+	 * exactamente el caso para el que existen los targets de personal interno:
+	 * una asignación que alcanza a todos los conductores Y al área de
+	 * administración. Ahora `ALL_CONDUCTORS` solo anula los otros targets de
+	 * conductor, `ALL_USERS` solo los de usuario, y los dos pueden convivir —que
+	 * es la forma de decir «esto le aparece a todo el mundo».
+	 */
+	const tieneTodosConductores = $derived(targets.some((t) => t.type === 'ALL_CONDUCTORS'));
+	const tieneTodosUsuarios = $derived(targets.some((t) => t.type === 'ALL_USERS'));
+
+	function bloqueado(type: TargetType): boolean {
+		if (type === 'ALL_CONDUCTORS' || type === 'ALL_USERS') return false;
+		return esTargetDeUsuario(type) ? tieneTodosUsuarios : tieneTodosConductores;
+	}
 
 	function agregarTarget(type: TargetType) {
-		if (type === 'ALL_CONDUCTORS') {
-			targets = [{ type: 'ALL_CONDUCTORS' }];
+		const familiaDeUsuario = esTargetDeUsuario(type);
+		/// Los de la OTRA familia se conservan siempre; solo se filtra dentro de
+		/// la propia.
+		const otros = targets.filter((t) => esTargetDeUsuario(t.type) !== familiaDeUsuario);
+		const mismos = targets.filter((t) => esTargetDeUsuario(t.type) === familiaDeUsuario);
+
+		if (type === 'ALL_CONDUCTORS' || type === 'ALL_USERS') {
+			targets = [...otros, { type }];
 			return;
 		}
-		targets = [...targets.filter((t) => t.type !== 'ALL_CONDUCTORS'), { type }];
+		targets = [
+			...otros,
+			...mismos.filter((t) => t.type !== 'ALL_CONDUCTORS' && t.type !== 'ALL_USERS'),
+			{ type }
+		];
 	}
 
 	function quitarTarget(index: number) {
@@ -152,6 +203,9 @@
 			if (t.type === 'VEHICLE' && !t.vehicleId) return 'Falta elegir el vehículo de un target.';
 			if (t.type === 'SEDE' && !t.sede?.trim()) return 'Falta la sede de un target.';
 			if (t.type === 'GROUP' && !t.groupKey?.trim()) return 'Falta la clave de grupo de un target.';
+			if (t.type === 'USER' && !t.usuarioId) return 'Falta elegir el usuario de un target.';
+			if (t.type === 'AREA' && !t.area) return 'Falta elegir el área de un target.';
+			if (t.type === 'CARGO' && !t.cargo?.trim()) return 'Falta el cargo de un target.';
 		}
 		if (desde && hasta && new Date(hasta) <= new Date(desde)) {
 			return 'La fecha de fin debe ser posterior a la de inicio.';
@@ -178,7 +232,10 @@
 			conductorId: t.type === 'CONDUCTOR' ? t.conductorId : null,
 			vehicleId: t.type === 'VEHICLE' ? t.vehicleId : null,
 			sede: t.type === 'SEDE' ? t.sede?.trim() : null,
-			groupKey: t.type === 'GROUP' ? t.groupKey?.trim() : null
+			groupKey: t.type === 'GROUP' ? t.groupKey?.trim() : null,
+			usuarioId: t.type === 'USER' ? t.usuarioId : null,
+			area: t.type === 'AREA' ? t.area : null,
+			cargo: t.type === 'CARGO' ? t.cargo?.trim() : null
 		}));
 
 		guardando = true;
@@ -296,18 +353,42 @@
 			<fieldset class="grupo">
 				<legend class="campo__label">A quién le aparece</legend>
 
+				<!--
+					Dos filas de botones y no una sola lista: la separación es lo que
+					comunica que los targets de arriba y los de abajo NO compiten
+					entre sí, y que marcar ambos es una combinación normal.
+				-->
+				<p class="familia__titulo">Conductores</p>
 				<div class="tipos">
-					{#each TARGET_TYPES as type (type)}
+					{#each CONDUCTOR_TARGET_TYPES as type (type)}
 						<button
 							type="button"
 							class="tipo"
-							disabled={tieneTodos && type !== 'ALL_CONDUCTORS'}
+							disabled={bloqueado(type)}
 							onclick={() => agregarTarget(type)}
 						>
 							+ {TARGET_TYPE_LABELS[type]}
 						</button>
 					{/each}
 				</div>
+
+				<p class="familia__titulo">Personal interno</p>
+				<div class="tipos">
+					{#each USER_TARGET_TYPES as type (type)}
+						<button
+							type="button"
+							class="tipo"
+							disabled={bloqueado(type)}
+							onclick={() => agregarTarget(type)}
+						>
+							+ {TARGET_TYPE_LABELS[type]}
+						</button>
+					{/each}
+				</div>
+
+				{#if avisoAudienciaInterna}
+					<p class="aviso">{avisoAudienciaInterna}</p>
+				{/if}
 
 				<ul class="targets">
 					{#each targets as target, i (i)}
@@ -350,6 +431,44 @@
 									value={target.groupKey ?? ''}
 									oninput={(e) => actualizarTarget(i, { groupKey: e.currentTarget.value })}
 								/>
+							{:else if target.type === 'USER'}
+								<select
+									class="input input--mini"
+									value={target.usuarioId ?? ''}
+									onchange={(e) => actualizarTarget(i, { usuarioId: e.currentTarget.value || null })}
+								>
+									<option value="">Selecciona usuario…</option>
+									{#each usuarios as u (u.id)}
+										<option value={u.id}>{u.nombre}{u.cargo ? ` — ${u.cargo}` : ''}</option>
+									{/each}
+								</select>
+							{:else if target.type === 'AREA'}
+								<select
+									class="input input--mini"
+									value={target.area ?? ''}
+									onchange={(e) => actualizarTarget(i, { area: e.currentTarget.value || null })}
+								>
+									<option value="">Selecciona área…</option>
+									{#each AREAS as area (area)}
+										<option value={area}>{AREA_LABELS[area as Area]}</option>
+									{/each}
+								</select>
+							{:else if target.type === 'CARGO'}
+								<!--
+									`users.cargo` es texto libre: el `datalist` ofrece los que ya
+									existen porque un cargo escrito distinto al de la ficha del
+									usuario crea un target que no alcanza a nadie, y sin ningún
+									error visible.
+								-->
+								<input
+									class="input input--mini"
+									list="cargos-conocidos"
+									placeholder="Cargo"
+									value={target.cargo ?? ''}
+									oninput={(e) => actualizarTarget(i, { cargo: e.currentTarget.value })}
+								/>
+							{:else if target.type === 'ALL_USERS'}
+								<span class="target__nota">Alcanza a todo el personal interno activo.</span>
 							{:else}
 								<span class="target__nota">Alcanza a todos los conductores activos.</span>
 							{/if}
@@ -367,6 +486,12 @@
 						</li>
 					{/each}
 				</ul>
+
+				<datalist id="cargos-conocidos">
+					{#each cargosConocidos as cargo (cargo)}
+						<option value={cargo}></option>
+					{/each}
+				</datalist>
 			</fieldset>
 		</div>
 
@@ -522,6 +647,21 @@
 		width: 18px;
 		height: 18px;
 		accent-color: var(--emerald-600, #059669);
+	}
+
+	/* Etiqueta de familia. Pequeña y en mayúsculas: agrupa sin competir con la
+	   leyenda del fieldset, que sigue siendo «A quién le aparece». */
+	.familia__titulo {
+		margin: 0.5rem 0 0.25rem;
+		font-size: 0.7rem;
+		font-weight: 600;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--text-muted, #64748b);
+	}
+
+	.familia__titulo:first-of-type {
+		margin-top: 0;
 	}
 
 	.tipos {

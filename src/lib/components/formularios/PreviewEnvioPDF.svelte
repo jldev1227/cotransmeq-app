@@ -433,8 +433,8 @@
 		<h2 class="banda">Datos del registro</h2>
 		<dl class="ficha">
 			<div class="ficha__par">
-				<dt>Conductor</dt>
-				<dd>{envio.conductor?.nombre ?? '—'}</dd>
+				<dt>{envio.actor?.kind === 'USER' ? 'Diligenciado por' : 'Conductor'}</dt>
+				<dd>{envio.actor?.nombre ?? '—'}</dd>
 			</div>
 			<div class="ficha__par">
 				<dt>Identificación</dt>

@@ -243,6 +243,17 @@ export interface TargetPayload {
 	vehicleId?: string | null;
 	sede?: string | null;
 	groupKey?: string | null;
+	usuarioId?: string | null;
+	area?: string | null;
+	cargo?: string | null;
+}
+
+/** Catálogo para el desplegable de audiencia interna del asignador. */
+export interface AudienciaInterna {
+	usuarios: { id: string; nombre: string; correo: string; cargo: string | null; area: string[] }[];
+	/** Cargos que YA existen. Es texto libre, así que se ofrecen como sugerencia. */
+	cargos: string[];
+	areas: string[];
 }
 
 export interface AsignacionPayload {
@@ -259,6 +270,17 @@ export interface AsignacionPayload {
 }
 
 export const asignacionesFormularioAPI = {
+	/**
+	 * Usuarios internos activos y cargos existentes.
+	 *
+	 * Endpoint propio del módulo y no `usuariosAPI.listar()`: el módulo
+	 * `usuarios` es `full: ['administracion']` y quien asigna formularios suele
+	 * ser HSEQ, que recibiría un 403.
+	 */
+	audienciaInterna() {
+		return unwrap<AudienciaInterna>(apiClient.get('/api/formularios/audiencia/usuarios'));
+	},
+
 	listar(
 		params: {
 			page?: number;
