@@ -39,8 +39,15 @@ Y ejecuta `npm run check` en los dos, no solo en aquel donde escribiste.
 
 ## Ancho: aprovechar el espacio del layout
 
+> La versión operativa de esta regla vive en la skill
+> `.claude/skills/diseno-paginas/SKILL.md`, que se carga sola al crear o maquetar
+> una página. Lo de aquí es el resumen.
+
 **Los contenedores de página no llevan `max-width`.** El contenido ocupa el ancho
-que le dé el `main` del layout.
+que le dé el `main` del layout. Vale para el CSS propio y para las utilidades de
+Tailwind (`mx-auto max-w-7xl` es lo mismo escrito de otra forma), y vale para
+**todas** las piezas de la cáscara, no solo el cuerpo: `.page-header-inner`,
+`.page-main`, `.page-body` y `.page-footer-inner` se tratan igual.
 
 ```css
 /* ✗ mal */
@@ -56,6 +63,10 @@ trabaja el dashboard. Y el coste no es solo estético: en una tabla de envíos o
 un checklist de 130 ítems, el ancho desperdiciado se paga en scroll. Un
 preoperacional a tres columnas cabe en media pantalla; a una columna son ocho.
 
+Aplica a las tres zonas: `dashboard/**` (lo acota el `main` de su layout),
+`public/portal/**` (lo acota `.content` del layout del portal, que también tiene
+barra lateral en escritorio) y las públicas sueltas (las acota el viewport).
+
 Para llenar ese ancho, usa rejillas fluidas en vez de puntos de ruptura:
 
 ```css
@@ -66,10 +77,14 @@ columns: 3 20rem;   /* listas largas que fluyen, como un checklist */
 **Lo que sí conserva `max-width`:**
 
 - **Modales y diálogos** (`26rem`, `28rem`, `34rem`): son ventanas centradas, no páginas.
+- **Tarjetas de autenticación** (`AuthShell`, `.login-card`, `.auth-shell`): la
+  pantalla *es* la tarjeta; no hay contenido que ensanchar.
 - **Párrafos de texto corrido** (`44rem`): pasado ese ancho la lectura se degrada
   porque el ojo pierde el renglón. Aplica a notas y avisos, no a datos ni tablas.
-- **Controles concretos** (`12rem` en un input, `11rem` en un chip): son medidas
-  del propio control.
+- **Documentos de tamaño fijo**: una hoja A4 en pantalla mantiene su tamaño; es el
+  papel, no la página.
+- **Controles y celdas concretos** (`12rem` en un input, `160px` en una columna con
+  elipsis): son medidas del propio control.
 
 En resumen: acota por legibilidad tipográfica o porque el elemento es una ventana;
 nunca «por si acaso» en un contenedor de página.
