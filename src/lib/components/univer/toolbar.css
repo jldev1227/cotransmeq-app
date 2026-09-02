@@ -1,0 +1,309 @@
+/**
+ * Estilos compartidos del header tipo Excel que montan las páginas Univer.
+ *
+ * Centralizados aquí (en vez de en <style> scoped de UniverToolbar) para que
+ * cualquier page que monte el shell herede exactamente el mismo toolbar sin
+ * reescribir las clases. Las reglas NO están scoped — son globales a propósito.
+ */
+
+.univer-toolbar {
+	background: #1e2429;
+	padding: 10px 18px;
+	/* MÍNIMO, no altura fija: iguala el grosor de la barra al ancho del
+	   carril lateral (`UniverSideRail`), que sale de la misma variable. Como
+	   suelo y no como techo a propósito — un `height` recortaría cualquier
+	   control más alto que apareciera mañana, y esta hoja la comparten los
+	   cuatro canvas. */
+	min-height: var(--univer-header-h, 56px);
+	box-sizing: border-box;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	flex-shrink: 0;
+	box-shadow: 0 3px 16px rgba(0, 0, 0, 0.4);
+	gap: 12px;
+	/* Por encima del carril lateral (`UniverSideRail`, z-index 20) y de sus
+	   popovers. La barra es un flex item con z-index propio, así que forma su
+	   PROPIO contexto de apilado: todo lo que cuelgue de ella —el buscador de
+	   hojas, el selector de canvas— queda encerrado en esta capa por muy alto
+	   que ponga su z-index. Con 10 el carril ganaba y tapaba los desplegables
+	   que se abren hacia abajo. */
+	z-index: 40;
+}
+
+.univer-toolbar-left {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	min-width: 0;
+	flex: 1;
+}
+
+.univer-toolbar-right {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	flex-shrink: 0;
+}
+
+.univer-btn {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 7px 14px;
+	border: none;
+	border-radius: 6px;
+	font-size: 12px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.15s;
+	white-space: nowrap;
+}
+.univer-btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+
+.univer-btn-back {
+	background: rgba(255, 255, 255, 0.1);
+	color: #fff;
+	border: 1px solid rgba(255, 255, 255, 0.2);
+}
+.univer-btn-back:hover {
+	background: rgba(255, 255, 255, 0.18);
+}
+
+.univer-btn-blue {
+	background: #2563eb;
+	color: #fff;
+}
+.univer-btn-blue:hover:not(:disabled) {
+	background: #1d4ed8;
+}
+
+.univer-btn-dark {
+	background: rgba(255, 255, 255, 0.12);
+	color: #fff;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+}
+.univer-btn-dark:hover:not(:disabled) {
+	background: rgba(255, 255, 255, 0.2);
+}
+
+/* Acción principal del canvas (generar borrador, cerrar y distribuir). */
+.univer-btn-green {
+	background: #ea580c;
+	color: #fff;
+}
+.univer-btn-green:hover:not(:disabled) {
+	background: #c2410c;
+}
+
+/* ── Selectores de periodo ────────────────────────────────────────────
+   Estaban DUPLICADOS en el <style> scoped de cada canvas, así que una
+   página que usara estas clases sin copiarlas las renderizaba sin estilo:
+   el `<span>` de la etiqueta salía en color heredado sobre el fondo
+   oscuro del toolbar, es decir invisible. Aquí van una sola vez. */
+.univer-year-picker {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
+	font-size: 0.72rem;
+	font-weight: 600;
+	color: #94a3b8;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	white-space: nowrap;
+}
+
+.univer-year-picker select,
+.univer-month-picker {
+	background: #1e293b;
+	color: #e2e8f0;
+	border: 1px solid #334155;
+	border-radius: 6px;
+	padding: 0.3rem 0.5rem;
+	font-size: 0.78rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.univer-year-picker select:hover,
+.univer-month-picker:hover {
+	border-color: #475569;
+}
+
+.univer-divider {
+	width: 1px;
+	height: 24px;
+	background: rgba(255, 255, 255, 0.15);
+}
+.univer-divider-v {
+	width: 1px;
+	height: 22px;
+	background: rgba(255, 255, 255, 0.12);
+	margin: 0 2px;
+}
+
+.univer-info {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+.univer-info-title {
+	color: #fff;
+	font-weight: 700;
+	font-size: 13px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.univer-info-subtitle {
+	color: rgba(255, 255, 255, 0.55);
+	font-size: 11px;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* ─── Título: «Módulo / Hoja» ─────────────────────────────────────────
+   El nombre del módulo pesa y el de la hoja se distingue por color, no por
+   tamaño: con dos tamaños distintos en la misma línea la barra parecía tener
+   dos títulos. */
+.univer-info-sep {
+	color: rgba(255, 255, 255, 0.3);
+	font-weight: 400;
+	margin: 0 6px;
+}
+.univer-info-hoja {
+	color: rgba(255, 255, 255, 0.72);
+	font-weight: 600;
+}
+
+/* ─── Filtros aplicados ───────────────────────────────────────────────
+   Van en la barra y no solo en el desplegable de la columna porque un filtro
+   puesto en una columna que quedó fuera de la pantalla es invisible, y
+   entonces se leen doce filas creyendo que son todas las que hay.
+
+   `flex-wrap: nowrap` + scroll horizontal: con seis columnas filtradas la
+   alternativa es que la barra crezca a dos líneas y empuje el canvas. */
+.univer-filtros {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	min-width: 0;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+.univer-filtros::-webkit-scrollbar {
+	display: none;
+}
+.univer-filtro {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	flex: 0 0 auto;
+	max-width: 260px;
+	padding: 3px 4px 3px 8px;
+	border-radius: 999px;
+	background: rgba(249, 115, 22, 0.16);
+	border: 1px solid rgba(249, 115, 22, 0.32);
+	font-size: 11px;
+	line-height: 1.4;
+}
+.univer-filtro-col {
+	color: rgba(255, 255, 255, 0.62);
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+	font-size: 10px;
+	white-space: nowrap;
+}
+.univer-filtro-val {
+	color: #fff;
+	font-weight: 600;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.univer-filtro-x {
+	flex: 0 0 auto;
+	border: none;
+	background: rgba(255, 255, 255, 0.12);
+	color: rgba(255, 255, 255, 0.85);
+	border-radius: 999px;
+	width: 16px;
+	height: 16px;
+	font-size: 9px;
+	line-height: 1;
+	cursor: pointer;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+.univer-filtro-x:hover {
+	background: rgba(255, 255, 255, 0.24);
+	color: #fff;
+}
+.univer-filtro-limpiar {
+	flex: 0 0 auto;
+	border: none;
+	background: none;
+	color: rgba(255, 255, 255, 0.55);
+	font-size: 11px;
+	text-decoration: underline;
+	cursor: pointer;
+	white-space: nowrap;
+}
+.univer-filtro-limpiar:hover {
+	color: #fff;
+}
+
+.univer-badge {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 0 12px;
+	height: 32px;
+	border-radius: 6px;
+	background: rgba(255, 237, 213, 0.95);
+	border: 1px solid rgba(254, 215, 170, 0.6);
+	color: #b45309;
+	font-size: 11px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.univer-spinner-sm {
+	display: inline-block;
+	width: 12px;
+	height: 12px;
+	border: 2px solid rgba(255, 255, 255, 0.3);
+	border-top-color: #fff;
+	border-radius: 50%;
+	animation: univer-spin 0.7s linear infinite;
+}
+
+@keyframes univer-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* Responsive: en móvil comprimimos el toolbar y ocultamos el subtítulo largo */
+@media (max-width: 720px) {
+	.univer-toolbar {
+		padding: 8px 12px;
+		gap: 8px;
+	}
+	.univer-info {
+		max-width: 50vw;
+	}
+	.univer-info-subtitle {
+		display: none;
+	}
+	.univer-btn {
+		padding: 6px 10px;
+		font-size: 11px;
+	}
+}

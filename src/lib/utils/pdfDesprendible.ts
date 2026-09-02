@@ -135,15 +135,26 @@ async function imageToBase64Url(url: string): Promise<string> {
 	});
 }
 
-export async function generarPdfDesprendible(
+/** Carga pdfmake y le monta las fuentes. Solo corre en el cliente. */
+async function cargarPdfMake() {
+	const pdfMake = (await import('pdfmake/build/pdfmake')).default;
+	const pdfFonts = (await import('pdfmake/build/vfs_fonts')).default;
+	(pdfMake as any).vfs = (pdfFonts as any).pdfMake ? (pdfFonts as any).pdfMake.vfs : (pdfFonts as any).vfs;
+	return pdfMake;
+}
+
+/**
+ * Arma el `docDefinition` del desprendible SIN abrirlo.
+ *
+ * Se extrajo de `generarPdfDesprendible` para que el canvas de nomina pueda
+ * producir el mismo documento como Blob y meterlo en un ZIP. El contenido no
+ * cambia: lo unico que se movio fuera es la llamada final a `.open()`.
+ */
+export async function construirDocDefinition(
 	item: Liquidacion,
 	firmas: FirmaConUrl[] = [],
 	recargosData: any = null
-): Promise<void> {
-	// Importar pdfmake dinámicamente (solo en el cliente)
-	const pdfMake = (await import('pdfmake/build/pdfmake')).default;
-	const pdfFonts = (await import('pdfmake/build/vfs_fonts')).default;
-	pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts.vfs;
+): Promise<any> {
 
 	const color = '#EA580C';
 	const colorBg = '#FFF7ED';
@@ -1687,5 +1698,39 @@ export async function generarPdfDesprendible(
 		}
 	};
 
+	return docDefinition;
+}
+
+
+/** Abre el desprendible en una pestana nueva. */
+export async function generarPdfDesprendible(
+	item: Liquidacion,
+	firmas: FirmaConUrl[] = [],
+	recargosData: any = null
+): Promise<void> {
+	const pdfMake = await cargarPdfMake();
+	const docDefinition = await construirDocDefinition(item, firmas, recargosData);
 	pdfMake.createPdf(docDefinition).open();
+}
+
+/**
+ * El mismo desprendible, como Blob.
+ *
+ * Lo usa el export en ZIP del canvas: treinta pestanas abiertas no son una
+ * descarga masiva.
+ */
+export async function generarBlobDesprendible(
+	item: Liquidacion,
+	firmas: FirmaConUrl[] = [],
+	recargosData: any = null
+): Promise<Blob> {
+	const pdfMake = await cargarPdfMake();
+	const docDefinition = await construirDocDefinition(item, firmas, recargosData);
+	return new Promise((resolve, reject) => {
+		try {
+			pdfMake.createPdf(docDefinition).getBlob((blob: Blob) => resolve(blob));
+		} catch (e) {
+			reject(e);
+		}
+	});
 }
