@@ -747,7 +747,7 @@
 </script>
 
 <svelte:head>
-	<title>Servicios - Transmeralda</title>
+	<title>Servicios - Cotransmeq</title>
 </svelte:head>
 
 <!-- Layout raíz: columna que ocupa todo el alto disponible -->

@@ -25,7 +25,7 @@
 </script>
 
 <svelte:head>
-	<title>Nueva Liquidación - Transmeralda</title>
+	<title>Nueva Liquidación - Cotransmeq</title>
 </svelte:head>
 
 <div

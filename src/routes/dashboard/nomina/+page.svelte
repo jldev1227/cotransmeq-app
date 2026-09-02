@@ -1512,7 +1512,7 @@
 </script>
 
 <svelte:head>
-	<title>Nómina - Transmeralda</title>
+	<title>Nómina - Cotransmeq</title>
 </svelte:head>
 
 <div

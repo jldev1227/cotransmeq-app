@@ -287,7 +287,7 @@
 </script>
 
 <svelte:head>
-	<title>Directorio de Terceros · Transmeralda</title>
+	<title>Directorio de Terceros · Cotransmeq</title>
 </svelte:head>
 
 <div class="terceros-page" in:fly={{ y: 20, duration: 500, easing: quintOut }}>

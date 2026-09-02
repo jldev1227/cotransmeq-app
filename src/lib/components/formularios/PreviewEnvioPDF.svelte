@@ -74,7 +74,7 @@
 	let {
 		envio,
 		definicion,
-		empresa = 'Transmeralda S.A.S',
+		empresa = 'Cotransmeq S.A.S',
 		logo = '/assets/logo_transmeralda-264.webp'
 	}: Props = $props();
 

@@ -148,7 +148,7 @@
 	}
 </script>
 
-<svelte:head><title>Asignaciones de formularios · Transmeralda</title></svelte:head>
+<svelte:head><title>Asignaciones de formularios · Cotransmeq</title></svelte:head>
 
 <div class="pagina">
 	<header class="cabecera">

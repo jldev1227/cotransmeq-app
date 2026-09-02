@@ -91,7 +91,7 @@ const COLS: ColSpec[] = [
 	},
 	{
 		key: 'ingtrans',
-		label: 'ING. TRANSMERALDA',
+		label: 'ING. COTRANSMEQ',
 		width: 15,
 		align: 'right',
 		money: true,
@@ -312,7 +312,7 @@ export async function exportTerceroXLSX(item: any, MESES: string[]): Promise<voi
 	if (typeof window === 'undefined') return;
 	const ExcelJS = (await import('exceljs')).default;
 	const wb = new ExcelJS.Workbook();
-	wb.creator = 'Transmeralda · Liquidación de Terceros';
+	wb.creator = 'Cotransmeq · Liquidación de Terceros';
 	wb.created = new Date();
 	wb.modified = new Date();
 
@@ -415,7 +415,7 @@ function buildHeader(ws: any, wb: any, imageId: string | null): void {
 		});
 	} else {
 		// Fallback de texto si no se pudo cargar la imagen
-		logoCell.value = 'TRANSMERALDA';
+		logoCell.value = 'COTRANSMEQ';
 		logoCell.font = { name: 'Calibri', size: 12, bold: true, color: { argb: 'FFFFFFFF' } };
 		logoCell.fill = {
 			type: 'pattern',
@@ -744,7 +744,7 @@ function writeMainTable(ws: any, startRow: number, item: any, totales: any): num
 		const vLiqNeto = vLiqGross - vAdminAdc;
 		writeMainRow(ws, row, {
 			num: 'T',
-			cliente: adc.cliente || 'TRANSMERALDA',
+			cliente: adc.cliente || 'COTRANSMEQ',
 			liq: '—',
 			placa: fmtPlaca(adc.placa || item.placa || ''),
 			nombre: adc.tercero_nombre || item.tercero?.nombre_completo || '—',

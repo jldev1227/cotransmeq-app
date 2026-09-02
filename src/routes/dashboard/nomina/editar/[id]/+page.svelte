@@ -120,7 +120,7 @@
 </script>
 
 <svelte:head>
-	<title>Editar Liquidación - Transmeralda</title>
+	<title>Editar Liquidación - Cotransmeq</title>
 </svelte:head>
 
 {#if loadingData}

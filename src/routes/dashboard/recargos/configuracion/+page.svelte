@@ -296,7 +296,7 @@
 </script>
 
 <svelte:head>
-	<title>Configuración Salarios - Recargos - Transmeralda</title>
+	<title>Configuración Salarios - Recargos - Cotransmeq</title>
 </svelte:head>
 
 <div

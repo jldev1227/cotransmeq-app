@@ -9,7 +9,7 @@
 </script>
 
 <svelte:head>
-	<title>Dashboard - Transmeralda</title>
+	<title>Dashboard - Cotransmeq</title>
 </svelte:head>
 
 <!-- Página de redirección a servicios -->

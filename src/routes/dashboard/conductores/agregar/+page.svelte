@@ -167,7 +167,7 @@
 </script>
 
 <svelte:head>
-	<title>Nuevo Conductor - Transmeralda</title>
+	<title>Nuevo Conductor - Cotransmeq</title>
 </svelte:head>
 
 <div

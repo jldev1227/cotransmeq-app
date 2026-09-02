@@ -1520,7 +1520,7 @@
 </script>
 
 <svelte:head>
-	<title>Recargos - Transmeralda</title>
+	<title>Recargos - Cotransmeq</title>
 </svelte:head>
 
 <div

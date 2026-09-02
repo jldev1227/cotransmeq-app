@@ -134,7 +134,7 @@
 	}
 </script>
 
-<svelte:head><title>Envíos de formularios · Transmeralda</title></svelte:head>
+<svelte:head><title>Envíos de formularios · Cotransmeq</title></svelte:head>
 
 <div class="pagina">
 	<header class="cabecera">
