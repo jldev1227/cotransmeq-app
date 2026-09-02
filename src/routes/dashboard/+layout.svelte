@@ -11,7 +11,12 @@
 	import { isTokenExpired, getTimeUntilExpiration } from '$lib/utils/jwt';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { checkAccess, AREA_LABELS, type Area } from '$lib/config/permissions';
+	import {
+		checkAccess,
+		getAccessibleModules,
+		AREA_LABELS,
+		type Area
+	} from '$lib/config/permissions';
 
 	let mounted = false;
 	let tokenCheckInterval: ReturnType<typeof setInterval> | null = null;
@@ -54,13 +59,32 @@
 		const { allowed } = checkAccess(
 			user?.role || user?.rol,
 			user?.area,
-			moduleId
+			moduleId,
+			user?.permisos_rutas
 		);
 
 		if (!allowed) {
 			toast.error('No tienes permiso para acceder a esta sección');
-			goto('/dashboard/servicios');
+			goto(rutaDeAterrizaje());
 		}
+	}
+
+	/**
+	 * Primera ruta que el usuario sí puede abrir.
+	 *
+	 * Mandar siempre a `/dashboard/servicios` deja de valer con `permisos_rutas`:
+	 * quien tiene lista blanca puede no tener servicios, y el guard se dispararía
+	 * otra vez en el destino, encadenando toasts de error.
+	 */
+	function rutaDeAterrizaje(): string {
+		const accesibles = getAccessibleModules(
+			user?.role || user?.rol,
+			user?.area,
+			user?.permisos_rutas
+		);
+		if (accesibles['servicios']) return '/dashboard/servicios';
+		const primero = Object.keys(accesibles).find((m) => m !== 'perfil');
+		return primero ? `/dashboard/${primero}` : '/dashboard/perfil';
 	}
 
 	/**
@@ -128,7 +152,7 @@
 </script>
 
 <svelte:head>
-	<title>Dashboard - Transmeralda</title>
+	<title>Dashboard - Cotransmeq</title>
 </svelte:head>
 
 {#if mounted && user}
@@ -286,17 +310,17 @@
 		<div class="text-center">
 			<div
 				class="mx-auto mb-5 flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl"
-				style="box-shadow: 0 8px 24px rgba(16, 185, 129, 0.25);"
+				style="box-shadow: 0 8px 24px rgba(249, 115, 22, 0.25);"
 			>
 				<img
 					src="/android-chrome-192x192.png"
-					alt="Transmeralda"
+					alt="Cotransmeq"
 					class="h-full w-full object-contain"
 					width="80"
 					height="80"
 				/>
 			</div>
-			<h1 class="font-display mb-1 text-3xl" style="color: var(--bg-charcoal);">Transmeralda</h1>
+			<h1 class="font-display mb-1 text-3xl" style="color: var(--bg-charcoal);">Cotransmeq</h1>
 			<p class="text-sm" style="color: var(--text-muted);">Cargando dashboard…</p>
 		</div>
 	</div>

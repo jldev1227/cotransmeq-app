@@ -739,8 +739,6 @@
 		justify-content: space-between;
 		gap: 1rem;
 		padding: 0.85rem 1.5rem;
-		max-width: 1200px;
-		margin: 0 auto;
 		flex-wrap: wrap;
 	}
 	.header-left {
@@ -879,9 +877,7 @@
 	/* ═══ Main content ═══ */
 	.page-main {
 		flex: 1;
-		max-width: 1200px;
 		width: 100%;
-		margin: 0 auto;
 		padding: 1.5rem 1.5rem 2rem;
 	}
 
@@ -1469,8 +1465,6 @@
 		padding: 1rem 1.5rem;
 	}
 	.page-footer-inner {
-		max-width: 1200px;
-		margin: 0 auto;
 		display: flex;
 		flex-direction: column;
 		gap: 0.4rem;

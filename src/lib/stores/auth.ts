@@ -1,7 +1,8 @@
 import { writable } from 'svelte/store';
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
-import { checkAccess, type Area, type AccessLevel } from '$lib/config/permissions';
+import { checkAccess, type Area, type AccessLevel, type PermisosRutas } from '$lib/config/permissions';
+import { describirErrorApi, type MensajesPorEstado } from '$lib/utils/mensajesError';
 
 export interface UserPermisos {
 	flota: boolean;
@@ -30,6 +31,11 @@ export interface User {
 	telefono?: string;
 	ultimo_acceso?: string;
 	permisos?: UserPermisos;
+	/**
+	 * Lista blanca de módulos propia del usuario (`users.permisos_rutas`).
+	 * `null`/`{}` deja mandar al área; con claves la sustituye por completo.
+	 */
+	permisos_rutas?: PermisosRutas;
 	avatar?: string;
 }
 
@@ -46,6 +52,38 @@ const initialState: AuthState = {
 	isLoading: false,
 	error: null
 };
+
+/**
+ * Textos del login por código de estado. Se separan de los generales porque
+ * aquí un 401 significa «las credenciales están mal», no «tu sesión expiró»:
+ * el usuario todavía no tenía sesión.
+ */
+const ESTADOS_LOGIN: MensajesPorEstado = {
+	400: 'Revisa el correo y la contraseña ingresados.',
+	401: 'Correo o contraseña incorrectos.',
+	403: 'Tu usuario no tiene acceso al sistema. Contacta al administrador.',
+	404: 'El servicio de autenticación no está disponible. Contacta al administrador.',
+	422: 'Revisa el correo y la contraseña ingresados.',
+	429: 'Demasiados intentos fallidos. Espera unos minutos antes de reintentar.'
+};
+
+/**
+ * Traduce un error de la API de login a un mensaje que el usuario pueda leer
+ * en el formulario.
+ *
+ * El texto del backend se sigue prefiriendo —es quien mejor sabe qué falló—
+ * pero ahora pasa por el filtro de `describirErrorApi`, porque NestJS y Prisma
+ * rellenan ese mismo campo con sus textos por defecto en inglés (`Invalid
+ * credentials`, `Unauthorized`, `Internal server error`) y antes salían tal
+ * cual en el formulario. Cuando el texto no es presentable se cae a
+ * `ESTADOS_LOGIN`.
+ */
+export function describeLoginError(error: any): string {
+	return describirErrorApi(error, {
+		porEstado: ESTADOS_LOGIN,
+		generico: 'No se pudo iniciar sesión. Inténtalo de nuevo.'
+	});
+}
 
 function createAuthStore() {
 	const { subscribe, set, update } = writable<AuthState>(initialState);
@@ -131,9 +169,17 @@ function createAuthStore() {
 
 				const { token, user } = response.data;
 
-				// Validar que recibimos los datos necesarios
+				// Validar que recibimos los datos necesarios. La respuesta llegó
+				// (200) pero viene incompleta: no es un fallo de red, así que se
+				// resuelve aquí en vez de caer en el `catch`, que lo describiría
+				// como "no se pudo conectar con el servidor".
 				if (!token || !user) {
-					throw new Error('Respuesta del servidor incompleta');
+					update((state) => ({
+						...state,
+						isLoading: false,
+						error: 'El servidor respondió sin token de sesión. Inténtalo de nuevo.'
+					}));
+					return false;
 				}
 
 				// Guardar en localStorage y cookies
@@ -158,24 +204,10 @@ function createAuthStore() {
 			} catch (error: any) {
 				console.error('❌ Error en login:', error);
 
-				let errorMessage = 'Error al iniciar sesión';
-
-				if (error.response?.data?.error) {
-					errorMessage = error.response.data.error;
-				} else if (error.response?.data?.message) {
-					errorMessage = error.response.data.message;
-				} else if (error.response?.status === 401) {
-					errorMessage = 'Credenciales incorrectas';
-				} else if (error.response?.status === 500) {
-					errorMessage = 'Error interno del servidor';
-				} else if (!error.response) {
-					errorMessage = 'No se pudo conectar con el servidor';
-				}
-
 				update((state) => ({
 					...state,
 					isLoading: false,
-					error: errorMessage
+					error: describeLoginError(error)
 				}));
 
 				return false;
@@ -245,7 +277,7 @@ function createAuthStore() {
 			const user = currentState.user;
 			if (!user) return false;
 			
-			const { allowed } = checkAccess(user.role || user.rol, user.area, routeId);
+			const { allowed } = checkAccess(user.role || user.rol, user.area, routeId, user.permisos_rutas);
 			return allowed;
 		},
 
@@ -258,7 +290,7 @@ function createAuthStore() {
 			const user = currentState.user;
 			if (!user) return null;
 			
-			const { level } = checkAccess(user.role || user.rol, user.area, routeId);
+			const { level } = checkAccess(user.role || user.rol, user.area, routeId, user.permisos_rutas);
 			return level;
 		},
 

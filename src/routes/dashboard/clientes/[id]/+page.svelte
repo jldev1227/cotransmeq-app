@@ -221,7 +221,7 @@
 		<!-- Header con información del cliente -->
 		<div class="relative" in:fade={{ duration: 400 }}>
 			<!-- Contenedor del perfil -->
-			<div class="mx-auto max-w-7xl px-3 py-3 sm:px-4 lg:px-6">
+			<div class="px-3 py-3 sm:px-4 lg:px-6">
 				<!-- Header Card -->
 				<div class="glass rounded-xl border border-white/50 bg-white/90 p-4 backdrop-blur-lg">
 					<div class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">

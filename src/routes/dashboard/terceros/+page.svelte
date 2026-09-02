@@ -1092,8 +1092,6 @@
 		font-family: 'Inter Tight', system-ui, sans-serif;
 		color: #1a1a1a;
 		padding: 1.5rem 1.25rem 3rem;
-		max-width: 1400px;
-		margin: 0 auto;
 	}
 
 	/* ═══════════════════════════════════════════════════════════════

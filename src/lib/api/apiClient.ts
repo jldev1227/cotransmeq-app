@@ -261,8 +261,17 @@ type AxiosMethod = 'get' | 'delete' | 'head' | 'options';
 
 // Funciones de API específicas para autenticación
 export const authAPI = {
+	/**
+	 * Un 401 aquí significa "credenciales incorrectas", NO "sesión expirada".
+	 *
+	 * Sin `silent401()` el interceptor de respuesta trataba el rechazo del
+	 * login como token vencido: borraba localStorage y hacía
+	 * `window.location.href = '/login'`. Esa recarga completa destruía el
+	 * mensaje de error antes de que el usuario alcanzara a leerlo y dejaba
+	 * el formulario en blanco. El error se propaga al store, que lo traduce.
+	 */
 	login: (correo: string, password: string, rememberMe?: boolean) =>
-		apiClient.post('/api/auth/login', { correo, password, rememberMe }),
+		apiClient.post('/api/auth/login', { correo, password, rememberMe }, silent401()),
 
 	logout: () => apiClient.post('/api/auth/logout'),
 
@@ -518,3 +527,198 @@ export const bonoConfigVisualAPI = {
 };
 
 export { apiClient };
+
+// ═══════════════════════════════════════════════════════════════════
+//  Días Laborados — endpoints administrativos
+//
+//  El operador autenticado usa estos endpoints para registrar
+//  recorridos de un conductor directamente desde el dashboard
+//  (sin pasar por el portal público del conductor).
+// ═══════════════════════════════════════════════════════════════════
+
+/** Tipos de día que puede representar un patrón. */
+export type TipoDia = 'LABORADO' | 'DISPONIBLE' | 'DESCANSO' | 'MANTENIMIENTO';
+
+export interface SegmentoPatron {
+	cliente_id?: string | null;
+	cliente_nombre?: string | null;
+	vehiculo_id?: string | null;
+	vehiculo_placa?: string | null;
+	hora_inicio?: string | null;
+	hora_fin?: string | null;
+	horas_conducidas?: number | null;
+	km_inicial?: number | null;
+	km_final?: number | null;
+	pernocte?: boolean;
+	observaciones?: string | null;
+}
+
+export interface PatronRecorrido {
+	/** Tipo de día. Default 'LABORADO' si no se envía (compatibilidad). */
+	tipo?: TipoDia;
+	fechas: string[];
+	/**
+	 * Segmento/horario. Requerido cuando tipo=LABORADO o DISPONIBLE.
+	 * Opcional para DESCANSO/MANTENIMIENTO.
+	 */
+	segmento?: SegmentoPatron;
+	/**
+	 * Vehículo intervenido. OBLIGATORIO cuando tipo=MANTENIMIENTO; el backend
+	 * rechaza el patrón sin placa. No va dentro de `segmento` porque un día de
+	 * mantenimiento no genera tramo (sin cliente, horario ni horas).
+	 */
+	mantenimiento_vehiculo_id?: string | null;
+	mantenimiento_vehiculo_placa?: string | null;
+	observaciones?: string | null;
+}
+
+export interface GuardarRegistrosMasivosBody {
+	conductor_id: string;
+	mes: number;
+	anio: number;
+	patrones: PatronRecorrido[];
+}
+
+export interface ResumenRegistrosMasivos {
+	conductor_id: string;
+	conductor_nombre: string;
+	mes: number;
+	anio: number;
+	patrones_procesados: number;
+	registros_laborado_creados: number;
+	registros_descanso_creados: number;
+	registros_mantenimiento_creados: number;
+	registros_disponible_creados: number;
+	total_creados: number;
+}
+
+export interface GuardarRegistrosMasivosResponse {
+	success: boolean;
+	message: string;
+	resumen: ResumenRegistrosMasivos;
+	ids: Array<{ id: string; fecha: string; tipo: string }>;
+}
+
+export const diasLaboradosAPI = {
+	/**
+	 * Guardar recorridos de un mes completo para un conductor.
+	 * Pensado para el flujo administrativo: el operador define
+	 * patrones (placa+cliente+horario) y les asigna fechas.
+	 */
+	registrosMasivos: (body: GuardarRegistrosMasivosBody) =>
+		apiClient.post<GuardarRegistrosMasivosResponse>(
+			'/api/dias-laborados/admin/registros-masivos',
+			body
+		),
+
+	/** Listar clientes (sin paginación) para los selects del modal. */
+	listarClientes: () =>
+		apiClient.get<{ success: boolean; data: any[]; count: number }>(
+			'/api/dias-laborados/clientes'
+		),
+
+	/** Listar vehículos (sin paginación) para los selects del modal. */
+	listarVehiculos: () =>
+		apiClient.get<{ success: boolean; data: any[]; count: number }>(
+			'/api/dias-laborados/vehiculos'
+		),
+
+	/**
+	 * Editar un segmento (tramo) específico.
+	 * Solo envía los campos que se quieren modificar.
+	 */
+	editarSegmento: (
+		segmentoId: string,
+		cambios: Partial<{
+			cliente_id: string | null;
+			cliente_nombre: string | null;
+			vehiculo_id: string | null;
+			vehiculo_placa: string | null;
+			hora_inicio: string | null;
+			hora_fin: string | null;
+			horas_conducidas: number | null;
+			km_inicial: number | null;
+			km_final: number | null;
+			pernocte: boolean;
+			observaciones: string | null;
+		}>
+	) =>
+		apiClient.put<{ success: boolean; message: string; data: any }>(
+			`/api/dias-laborados/admin/segmento/${segmentoId}`,
+			cambios
+		),
+
+	/**
+	 * Soft delete de un segmento.
+	 * Marca `deleted_at`; el segmento deja de aparecer en `calendar`.
+	 * Idempotente.
+	 */
+	eliminarSegmento: (segmentoId: string) =>
+		apiClient.delete<{ success: boolean; message: string; id: string }>(
+			`/api/dias-laborados/admin/segmento/${segmentoId}`
+		),
+
+	/**
+	 * Editar metadata de un registro (día): tipo + observaciones.
+	 * Si se envía `segmento` y el tipo final es LABORADO/DISPONIBLE,
+	 * el backend crea o actualiza el primer segmento del día.
+	 * Si el tipo final es DESCANSO/MANTENIMIENTO, los segmentos
+	 * activos del día se soft-eliminan.
+	 * Si el tipo final es MANTENIMIENTO se exige la placa: mándala en
+	 * `mantenimiento_vehiculo_placa` o el backend responde 400.
+	 */
+	editarRegistro: (
+		registroId: string,
+		cambios: {
+			tipo?: 'LABORADO' | 'DISPONIBLE' | 'DESCANSO' | 'MANTENIMIENTO';
+			observaciones?: string | null;
+			mantenimiento_vehiculo_id?: string | null;
+			mantenimiento_vehiculo_placa?: string | null;
+			segmento?: {
+				cliente_id?: string | null;
+				cliente_nombre?: string | null;
+				vehiculo_id?: string | null;
+				vehiculo_placa?: string | null;
+				hora_inicio?: string | null;
+				hora_fin?: string | null;
+				horas_conducidas?: number | null;
+				km_inicial?: number | null;
+				km_final?: number | null;
+				pernocte?: boolean;
+				observaciones?: string | null;
+			} | null;
+		}
+	) =>
+		apiClient.put<{ success: boolean; message: string; data: any }>(
+			`/api/dias-laborados/admin/registro/${registroId}`,
+			cambios
+		),
+
+	/**
+	 * Soft delete de un registro (día completo).
+	 * Marca `deleted_at` en el padre y en cascada en sus segmentos activos.
+	 * Cubre el caso de días sin tramos (DESCANSO / MANTENIMIENTO).
+	 * Idempotente.
+	 */
+	eliminarRegistro: (registroId: string) =>
+		apiClient.delete<{ success: boolean; message: string; id: string }>(
+			`/api/dias-laborados/admin/registro/${registroId}`
+		)
+};
+
+// Listado liviano de conductores para alimentar <select>.
+// Devuelve SOLO activos + no ocultos, sin fotos ni joins pesados.
+export interface ConductorSelectItem {
+	id: string;
+	nombre: string;
+	apellido: string;
+	numero_identificacion: string | null;
+	estado: string;
+}
+
+export const conductoresSelectAPI = {
+	listar: () =>
+		apiClient.get<{ success: boolean; data: ConductorSelectItem[]; count: number }>(
+			'/api/conductores/select-list'
+		)
+};

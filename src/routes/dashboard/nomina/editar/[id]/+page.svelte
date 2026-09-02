@@ -137,7 +137,7 @@
 	<div
 		class="sticky top-0 z-30 border-b border-[var(--border-subtle)] bg-white/95 shadow-[var(--shadow-card)] backdrop-blur-sm"
 	>
-		<div class="mx-auto max-w-[1800px] px-4 py-3 md:px-6">
+		<div class="px-4 py-3 md:px-6">
 			<!-- Fila principal -->
 			<div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
 				<!-- Izquierda: Conductor + documento -->

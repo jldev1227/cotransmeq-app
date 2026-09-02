@@ -798,8 +798,6 @@
 		font-family: 'Geist', system-ui, sans-serif;
 		color: #1e293b;
 		padding: 1.5rem 1.25rem 3rem;
-		max-width: 1500px;
-		margin: 0 auto;
 		display: flex;
 		flex-direction: column;
 		gap: 1.25rem;

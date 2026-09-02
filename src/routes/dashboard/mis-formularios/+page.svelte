@@ -9,6 +9,11 @@
 	de contabilidad o mantenimiento a quien HSEQ le asignó un formato.
 
 	Este segmento resuelve al módulo `mis-formularios`, que es `general: true`.
+
+	La lista, con su búsqueda y sus filtros, vive en `MisFormularios.svelte`
+	porque la comparte con esa pestaña. Lo que sí es propio de esta ruta es
+	`sincronizarUrl`: aquí la query string no la disputa nadie, así que los
+	filtros pueden vivir en ella y la pantalla se comparte como enlace.
 -->
 <script lang="ts">
 	import MisFormularios from '$lib/components/formularios/MisFormularios.svelte';
@@ -24,7 +29,7 @@
 		<p class="sub">Los formatos que te asignaron y los que llevas a medias.</p>
 	</header>
 
-	<MisFormularios base="/dashboard/mis-formularios" />
+	<MisFormularios base="/dashboard/mis-formularios" sincronizarUrl />
 </div>
 
 <style>

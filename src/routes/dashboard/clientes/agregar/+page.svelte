@@ -130,7 +130,7 @@
 	class="min-h-screen p-4 md:p-8"
 	style="background-color: var(--bg-base);"
 >
-	<div class="mx-auto max-w-6xl">
+	<div>
 		<!-- Header de la página (page-card editorial) -->
 		<div class="page-card mb-8" style="padding: 1.5rem 2rem;" in:fly={{ y: -12, duration: 500, easing: quintOut }}>
 			<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

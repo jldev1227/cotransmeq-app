@@ -204,7 +204,7 @@
 			</div>
 		</div>
 	{:else if user}
-		<div class="mx-auto max-w-4xl space-y-6" in:fade={{ duration: 300 }}>
+		<div class="space-y-6" in:fade={{ duration: 300 }}>
 
 			<!-- Card: Info del usuario -->
 			<div class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">

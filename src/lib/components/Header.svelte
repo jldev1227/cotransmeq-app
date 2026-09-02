@@ -34,6 +34,7 @@
 		extractos: 'Extractos',
 		'liquidaciones-servicios': 'Liquidaciones de Servicios',
 		'liquidaciones-terceros': 'Liquidaciones de Terceros',
+		'liquidaciones-terceros-adicionales': 'Adicionales de Cierres Finales',
 		sarlaft: 'SARLAFT + PTEE',
 		pesv: 'PESV',
 		contabilidad: 'Contabilidad',
@@ -57,6 +58,8 @@
 		if (pathname.startsWith('/dashboard/nomina')) return 'nomina';
 		if (pathname.startsWith('/dashboard/extractos')) return 'extractos';
 		if (pathname.startsWith('/dashboard/liquidaciones-servicios')) return 'liquidaciones-servicios';
+		// Todas las rutas de terceros (incluidos ambos canvas anuales) mapean
+		// al único módulo de menú: `liquidaciones-terceros`.
 		if (pathname.startsWith('/dashboard/liquidaciones-terceros')) return 'liquidaciones-terceros';
 		if (pathname.startsWith('/dashboard/sarlaft')) return 'sarlaft';
 		if (pathname.startsWith('/dashboard/pesv')) return 'pesv';
@@ -304,7 +307,7 @@
 								{#if noLeidas > 0}
 									<button
 										class="apple-transition text-sm"
-										style="color: var(--emerald-600);"
+										style="color: var(--orange-600);"
 										on:click={marcarTodasLeidas}
 									>
 										Marcar todas como leídas
@@ -322,7 +325,7 @@
 								{#each notificaciones as notif (notif.id)}
 									<button
 										class="apple-transition w-full p-4 text-left {notif.leida ? '' : ''}"
-										style="border-bottom: 1px solid var(--border-subtle); background-color: {notif.leida ? 'transparent' : 'rgba(16,185,129,0.04)'};"
+										style="border-bottom: 1px solid var(--border-subtle); background-color: {notif.leida ? 'transparent' : 'rgba(249, 115, 22,0.04)'};"
 										on:click={() => handleNotifClick(notif)}
 									>
 										<div class="flex items-start gap-3">
@@ -339,7 +342,7 @@
 												</p>
 											</div>
 											{#if !notif.leida}
-												<div class="ml-2 mt-2 h-2 w-2 flex-shrink-0 rounded-full" style="background-color: var(--emerald-500);"></div>
+												<div class="ml-2 mt-2 h-2 w-2 flex-shrink-0 rounded-full" style="background-color: var(--orange-500);"></div>
 											{/if}
 										</div>
 									</button>
@@ -349,7 +352,7 @@
 						<div class="p-2" style="border-top: 1px solid var(--border-subtle);">
 							<button
 								class="apple-transition w-full rounded-xl py-2 text-center text-sm font-medium"
-								style="color: var(--emerald-600);"
+								style="color: var(--orange-600);"
 								on:click={abrirTodasNotificaciones}
 							>
 								Ver todas las notificaciones
@@ -410,7 +413,7 @@
 						in:fly={{ y: -10, duration: 200 }}
 						out:fade={{ duration: 150 }}
 					>
-						<div class="p-4" style="background: linear-gradient(135deg, rgba(16,185,129,0.04), rgba(16,185,129,0.08)); border-bottom: 1px solid var(--border-subtle);">
+						<div class="p-4" style="background: linear-gradient(135deg, rgba(249, 115, 22,0.04), rgba(249, 115, 22,0.08)); border-bottom: 1px solid var(--border-subtle);">
 							<div class="flex items-center space-x-3">
 								<div class="brand-gradient flex h-12 w-12 items-center justify-center rounded-xl" style="box-shadow: 0 4px 16px rgba(249, 115, 22, 0.25);">
 									<span class="font-display text-lg font-medium text-white">{userName.charAt(0).toUpperCase()}</span>
@@ -418,7 +421,7 @@
 								<div class="min-w-0">
 									<p class="truncate font-semibold" style="color: var(--text-primary);">{userName}</p>
 									<p class="truncate text-sm" style="color: var(--text-secondary);">{userEmail}</p>
-									<span class="mt-1 inline-block rounded-full px-2 py-0.5 text-xs" style="background: rgba(16,185,129,0.08); color: var(--emerald-800);">{userRole}</span>
+									<span class="mt-1 inline-block rounded-full px-2 py-0.5 text-xs" style="background: rgba(249, 115, 22,0.08); color: var(--orange-800);">{userRole}</span>
 								</div>
 							</div>
 						</div>
@@ -480,7 +483,7 @@
 			<div class="flex items-center justify-between px-4 pb-4" style="border-bottom: 1px solid var(--border-subtle);">
 				<h3 class="font-semibold" style="color: var(--text-primary);">Notificaciones</h3>
 				{#if noLeidas > 0}
-					<button class="apple-transition text-sm font-medium" style="color: var(--emerald-600);" on:click={marcarTodasLeidas}>Marcar todas</button>
+					<button class="apple-transition text-sm font-medium" style="color: var(--orange-600);" on:click={marcarTodasLeidas}>Marcar todas</button>
 				{/if}
 			</div>
 			<div class="flex-1 overflow-y-auto">
@@ -491,7 +494,7 @@
 					</div>
 				{:else}
 					{#each notificaciones as notif (notif.id)}
-						<button class="apple-transition w-full p-4 text-left" style="border-bottom: 1px solid var(--border-subtle); background-color: {notif.leida ? 'transparent' : 'rgba(16,185,129,0.04)'};" on:click={() => handleNotifClick(notif)}>
+						<button class="apple-transition w-full p-4 text-left" style="border-bottom: 1px solid var(--border-subtle); background-color: {notif.leida ? 'transparent' : 'rgba(249, 115, 22,0.04)'};" on:click={() => handleNotifClick(notif)}>
 							<div class="flex items-start gap-3">
 								<span class="mt-0.5 text-lg">{getNotifIcon(notif.tipo)}</span>
 								<div class="min-w-0 flex-1">
@@ -500,7 +503,7 @@
 									<p class="mt-2 text-xs" style="color: var(--text-very-muted);">{timeAgo(notif.created_at)}</p>
 								</div>
 								{#if !notif.leida}
-									<div class="ml-2 mt-2 h-2 w-2 flex-shrink-0 rounded-full" style="background-color: var(--emerald-500);"></div>
+									<div class="ml-2 mt-2 h-2 w-2 flex-shrink-0 rounded-full" style="background-color: var(--orange-500);"></div>
 								{/if}
 							</div>
 						</button>
@@ -508,7 +511,7 @@
 				{/if}
 			</div>
 			<div class="p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]" style="border-top: 1px solid var(--border-subtle);">
-				<button class="apple-transition w-full rounded-xl py-3 text-center text-sm font-medium" style="color: var(--emerald-600);" on:click={abrirTodasNotificaciones}>
+				<button class="apple-transition w-full rounded-xl py-3 text-center text-sm font-medium" style="color: var(--orange-600);" on:click={abrirTodasNotificaciones}>
 					Ver todas las notificaciones
 				</button>
 			</div>
@@ -543,7 +546,7 @@
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
 				</button>
 			</div>
-			<div class="overflow-y-auto p-4" style="background: linear-gradient(135deg, rgba(16,185,129,0.04), rgba(16,185,129,0.08));">
+			<div class="overflow-y-auto p-4" style="background: linear-gradient(135deg, rgba(249, 115, 22,0.04), rgba(249, 115, 22,0.08));">
 				<div class="flex items-center space-x-3">
 					<div class="brand-gradient flex h-12 w-12 shrink-0 items-center justify-center rounded-xl" style="box-shadow: 0 4px 16px rgba(249, 115, 22, 0.25);">
 						<span class="font-display text-lg font-medium text-white">{userName.charAt(0).toUpperCase()}</span>
@@ -551,7 +554,7 @@
 					<div class="min-w-0 flex-1">
 						<p class="truncate font-semibold" style="color: var(--text-primary);">{userName}</p>
 						<p class="truncate text-sm" style="color: var(--text-secondary);">{userEmail}</p>
-						<span class="mt-1 inline-block rounded-full px-2 py-0.5 text-xs" style="background: rgba(16,185,129,0.08); color: var(--emerald-800);">{userRole}</span>
+						<span class="mt-1 inline-block rounded-full px-2 py-0.5 text-xs" style="background: rgba(249, 115, 22,0.08); color: var(--orange-800);">{userRole}</span>
 					</div>
 				</div>
 			</div>
@@ -587,7 +590,7 @@
 				<h2 class="font-display text-lg" style="color: var(--bg-charcoal);">🔔 Todas las Notificaciones</h2>
 				<div class="flex items-center gap-2">
 					{#if noLeidas > 0}
-						<button class="rounded-lg px-3 py-1.5 text-sm font-medium" style="color: var(--emerald-600);" on:click={marcarTodasLeidas}>
+						<button class="rounded-lg px-3 py-1.5 text-sm font-medium" style="color: var(--orange-600);" on:click={marcarTodasLeidas}>
 							Marcar todas como leídas
 						</button>
 					{/if}
@@ -610,7 +613,7 @@
 					{#each allNotifs as notif (notif.id)}
 						<button
 							class="w-full px-6 py-4 text-left apple-transition"
-							style="border-bottom: 1px solid var(--border-subtle); background-color: {notif.leida ? 'transparent' : 'rgba(16,185,129,0.04)'};"
+							style="border-bottom: 1px solid var(--border-subtle); background-color: {notif.leida ? 'transparent' : 'rgba(249, 115, 22,0.04)'};"
 							on:click={() => handleNotifClick(notif)}
 						>
 							<div class="flex items-start gap-3">
@@ -619,7 +622,7 @@
 									<div class="flex items-center gap-2">
 										<p class="text-sm font-medium" style="color: var(--text-primary);">{notif.titulo}</p>
 										{#if !notif.leida}
-											<span class="h-2 w-2 flex-shrink-0 rounded-full" style="background-color: var(--emerald-500);"></span>
+											<span class="h-2 w-2 flex-shrink-0 rounded-full" style="background-color: var(--orange-500);"></span>
 										{/if}
 									</div>
 									<p class="mt-1 text-sm" style="color: var(--text-secondary);">{notif.mensaje}</p>

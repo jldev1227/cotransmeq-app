@@ -683,7 +683,7 @@
 
 /* ─── APP ──────────────────────────────────── */
 .app {
-	max-width: 680px; margin: 0 auto; padding: 1rem; min-height: 100vh;
+	padding: 1rem; min-height: 100vh;
 }
 
 /* ─── TOPBAR ───────────────────────────────── */

@@ -157,8 +157,6 @@
 		justify-content: space-between;
 		gap: 1rem;
 		padding: 1rem 1.5rem;
-		max-width: 1200px;
-		margin: 0 auto;
 		flex-wrap: wrap;
 	}
 	.page-header-left {
@@ -299,8 +297,6 @@
 	}
 
 	.page-main {
-		max-width: 1200px;
-		margin: 0 auto;
 		padding: 1.5rem 1.5rem 3rem;
 	}
 

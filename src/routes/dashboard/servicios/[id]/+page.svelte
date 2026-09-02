@@ -1548,7 +1548,7 @@
 
 		<!-- ── ÁREA SCROLLEABLE ───────────────────────────────────── -->
 		<div class="flex-1 overflow-y-auto">
-			<div class="glass.soft-shadow mx-auto max-w-7xl px-4 py-5 md:px-6">
+			<div class="glass.soft-shadow px-4 py-5 md:px-6">
 				<!-- ═══ MAPA (hero) ═══ -->
 				<div
 					class="servicio-map-frame glass soft-shadow relative mb-3 overflow-hidden rounded-2xl border border-gray-200/50"

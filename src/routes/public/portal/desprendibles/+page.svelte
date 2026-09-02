@@ -1414,8 +1414,6 @@
   }
 
   .desprendibles-page {
-    max-width: 1180px;
-    margin: 0 auto;
     padding: 0 0.5rem;
     overflow-x: auto;
     overflow-y: visible;

@@ -4,7 +4,14 @@
 
 export type AccessLevel = 'full' | 'read' | 'limited'
 
-export type Area = 'administracion' | 'operaciones' | 'contabilidad' | 'facturacion' | 'talento_humano' | 'hseq'
+export type Area =
+  | 'administracion'
+  | 'operaciones'
+  | 'contabilidad'
+  | 'facturacion'
+  | 'talento_humano'
+  | 'hseq'
+  | 'mantenimiento'
 
 export const AREA_LABELS: Record<Area, string> = {
   administracion: 'Administración',
@@ -12,15 +19,17 @@ export const AREA_LABELS: Record<Area, string> = {
   contabilidad: 'Contabilidad',
   facturacion: 'Facturación',
   talento_humano: 'Talento Humano',
-  hseq: 'HSEQ'
+  hseq: 'HSEQ',
+  mantenimiento: 'Mantenimiento'
 }
 
 /**
  * Lista canónica de áreas, para poblar desplegables.
  *
  * Se DERIVA de `AREA_LABELS` en vez de escribirse otra vez: es la misma
- * información, y una copia menos es un sitio menos donde olvidarse al añadir
- * un área.
+ * información, y el espejo del backend documenta que cuando se añadió
+ * `mantenimiento` había cuatro copias del array y tres se quedaron sin
+ * actualizar. Una copia menos es un sitio menos donde olvidarse.
  */
 export const AREAS = Object.keys(AREA_LABELS) as Area[]
 
@@ -110,7 +119,7 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
    * puerta de la pantalla.
    */
   'mis-formularios': {
-    full: ['administracion', 'operaciones', 'contabilidad', 'facturacion', 'talento_humano', 'hseq'],
+    full: ['administracion', 'operaciones', 'contabilidad', 'facturacion', 'talento_humano', 'hseq', 'mantenimiento'],
     general: true,
     description: 'Diligenciar los formularios asignados a mí'
   },
@@ -131,6 +140,11 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
     full: ['administracion', 'operaciones'],
     limited: ['facturacion', 'contabilidad'],
     description: 'Liquidaciones de terceros (propietarios)'
+  },
+  'liquidaciones-terceros-adicionales': {
+    full: ['administracion', 'operaciones'],
+    limited: ['facturacion', 'contabilidad'],
+    description: 'Adicionales (unificados) de cierres finales de terceros'
   },
   pesv: {
     full: ['administracion', 'operaciones', 'contabilidad', 'facturacion', 'talento_humano', 'hseq'],
@@ -159,14 +173,40 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   }
 }
 
+/**
+ * Permisos por ruta guardados en el propio usuario (`users.permisos_rutas`).
+ * `null` o `{}` significan «manda el área»; con al menos una clave es una lista
+ * blanca que sustituye por completo a las reglas por área.
+ */
+export type PermisosRutas = Record<string, AccessLevel> | null | undefined
+
 export function checkAccess(
   userRole: string | null | undefined,
   userAreas: Area[] | Area | null | undefined,
-  moduleId: string
+  moduleId: string,
+  rutasOverride?: PermisosRutas
 ): { allowed: boolean; level: AccessLevel | null } {
   const permission = ROUTE_PERMISSIONS[moduleId]
   if (!permission) {
     return { allowed: false, level: null }
+  }
+
+  // Lista blanca por usuario. Se resuelve ANTES que `general` a propósito: el
+  // sentido de la lista es recortar («es de mantenimiento pero solo entra a
+  // cuatro módulos, y en consulta»), así que un módulo marcado como general
+  // también queda fuera si no aparece en ella. Los administradores la ignoran
+  // para que un override mal puesto no deje el sistema sin quien lo gestione.
+  const override = rutasOverride && Object.keys(rutasOverride).length > 0 ? rutasOverride : null
+  const isAdmin = (userRole ?? '').toLowerCase() === 'admin'
+
+  if (override && !isAdmin) {
+    // El perfil propio nunca se recorta: sin él el usuario no podría ni ver ni
+    // corregir sus propios datos, y no hay forma de pedirlo desde la UI.
+    if (moduleId === 'perfil') {
+      return { allowed: true, level: 'full' }
+    }
+    const level = override[moduleId]
+    return level ? { allowed: true, level } : { allowed: false, level: null }
   }
 
   if (permission.general) {
@@ -196,11 +236,12 @@ export function checkAccess(
 
 export function getAccessibleModules(
   userRole: string | null | undefined,
-  userAreas: Area[] | Area | null | undefined
+  userAreas: Area[] | Area | null | undefined,
+  rutasOverride?: PermisosRutas
 ): Record<string, AccessLevel> {
   const modules: Record<string, AccessLevel> = {}
   for (const [moduleId] of Object.entries(ROUTE_PERMISSIONS)) {
-    const { allowed, level } = checkAccess(userRole, userAreas, moduleId)
+    const { allowed, level } = checkAccess(userRole, userAreas, moduleId, rutasOverride)
     if (allowed && level) {
       modules[moduleId] = level
     }

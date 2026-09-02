@@ -208,7 +208,7 @@
 <div class="min-h-screen bg-gradient-to-br from-gray-50 to-orange-50/30 p-4 py-12">
 	{#if isLoading}
 		<!-- Loading -->
-		<div class="mx-auto flex max-w-2xl items-center justify-center py-20">
+		<div class="flex items-center justify-center py-20">
 			<div class="text-center">
 				<svg
 					class="mx-auto h-12 w-12 animate-spin text-orange-600"
@@ -259,7 +259,7 @@
 		</div>
 	{:else}
 		<!-- Formulario -->
-		<div class="mx-auto max-w-7xl" in:fade={{ duration: 600 }}>
+		<div in:fade={{ duration: 600 }}>
 			<!-- Header con título -->
 			<div class="mb-6 text-center">
 				<div class="mb-4 flex justify-center">

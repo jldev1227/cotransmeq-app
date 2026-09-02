@@ -13,11 +13,7 @@ export type TipoServicioTarifa =
 	| 'TRANSPORTE_ADICIONAL_KM_ADICIONAL'
 	| 'TRANSPORTE_ADICIONAL_DISPONIBILIDAD';
 export type EstadoLiquidacionServicio =
-	| 'BORRADOR'
-	| 'LIQUIDADA'
-	| 'APROBADA'
-	| 'FACTURADA'
-	| 'ANULADA';
+	'BORRADOR' | 'LIQUIDADA' | 'APROBADA' | 'FACTURADA' | 'ANULADA';
 /**
  * Operadora en el sentido de TARIFAS: selecciona qué tabla de precios aplica.
  *
@@ -43,13 +39,13 @@ export interface Operadora {
 }
 
 export const TIPO_SERVICIO_LABELS: Record<TipoServicioTarifa, string> = {
-  TRANSPORTE_DE_PERSONAL_EN_CAMIONETA: 'Transporte de personal en camioneta',
-  TRANSPORTE_DE_PERSONAL_EN_BUSETA: 'Transporte de personal en buseta',
-  TRANSPORTE_DE_PERSONAL_EN_MICROBUS: 'Transporte de personal en microbús',
-  TRANSPORTE_DE_PERSONAL_EN_BUS: 'Transporte de personal en bus',
-  TRANSPORTE_ADICIONAL_HORA_ADICIONAL: 'Transporte adicional (hora adicional)',
-  TRANSPORTE_ADICIONAL_KM_ADICIONAL: 'Transporte adicional (km adicional)',
-  TRANSPORTE_ADICIONAL_DISPONIBILIDAD: 'Transporte adicional (disponibilidad)'
+	TRANSPORTE_DE_PERSONAL_EN_CAMIONETA: 'Transporte de personal en camioneta',
+	TRANSPORTE_DE_PERSONAL_EN_BUSETA: 'Transporte de personal en buseta',
+	TRANSPORTE_DE_PERSONAL_EN_MICROBUS: 'Transporte de personal en microbús',
+	TRANSPORTE_DE_PERSONAL_EN_BUS: 'Transporte de personal en bus',
+	TRANSPORTE_ADICIONAL_HORA_ADICIONAL: 'Transporte adicional (hora adicional)',
+	TRANSPORTE_ADICIONAL_KM_ADICIONAL: 'Transporte adicional (km adicional)',
+	TRANSPORTE_ADICIONAL_DISPONIBILIDAD: 'Transporte adicional (disponibilidad)'
 };
 
 export const ESTADO_LIQUIDACION_LABELS: Record<
@@ -193,6 +189,17 @@ export interface LiquidacionServicio {
 	aprobado_por?: { id: string; nombre: string; correo: string } | null;
 	items?: ItemLiquidacionServicio[];
 	total_items?: number;
+	placas?: string[];
+	/**
+	 * Factura viva de esta liquidación, embebida por `listar`.
+	 *
+	 * Opcional porque el tab clásico sigue resolviéndola aparte con
+	 * `batchFacturaInfo`. El canvas la necesita embebida: encadenar un
+	 * POST /batch-info por cada carga de ~520 filas es un viaje de más.
+	 */
+	factura_items?: Array<{
+		factura: { id: string; numero_factura: string; estado: 'ACTIVA' | 'ANULADA' };
+	}>;
 	created_at: string;
 	updated_at: string;
 	/** Nulo mientras la fila existe únicamente por el autoguardado del editor. */
@@ -272,6 +279,8 @@ export interface TipoRecargo {
 	adicional: boolean;
 	categoria: string;
 	orden_calculo: number;
+	vigencia_desde?: string | null;
+	vigencia_hasta?: string | null;
 }
 
 export interface ConfigLiquidadorServicio {
@@ -689,11 +698,30 @@ export interface TerceroItemHistorial {
 	};
 }
 
+/**
+ * Agregados del historial sobre TODOS los registros del filtro.
+ *
+ * Los calcula el servidor con el MISMO `where` de la consulta paginada. Las
+ * stat cards del tab de Terceros los usan en vez de reducir la página, que
+ * es lo que hacían antes: los totales cambiaban al paginar aunque el filtro
+ * fuera el mismo.
+ */
+export interface TerceroHistorialMetadata {
+	globalCount: number;
+	globalFacturado: number;
+	globalAdmon: number;
+	globalLiquidar: number;
+	globalIngresoEmpresa: number;
+	globalClientes: number;
+}
+
 export interface TerceroHistorialResponse {
 	items: TerceroItemHistorial[];
 	total: number;
 	totalPages: number;
 	page: number;
+	/** Opcional: un backend anterior al cambio no lo manda. */
+	metadata?: TerceroHistorialMetadata;
 }
 
 export const liquidacionesTercerosAPI = {

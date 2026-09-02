@@ -495,8 +495,6 @@
 		flex-direction: column;
 		gap: 1rem;
 		padding: 1rem 0.875rem 5rem;
-		max-width: 34rem;
-		margin: 0 auto;
 	}
 
 	.head {

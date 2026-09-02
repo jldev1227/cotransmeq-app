@@ -1440,14 +1440,6 @@
 		}
 	}
 
-	@media (min-width: 1024px) {
-		.info-scroll {
-			max-width: 980px;
-			margin: 0 auto;
-			width: 100%;
-		}
-	}
-
 	.card {
 		display: flex;
 		flex-direction: column;

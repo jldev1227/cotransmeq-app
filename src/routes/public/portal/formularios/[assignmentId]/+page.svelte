@@ -678,8 +678,6 @@
 		gap: 0.75rem;
 		/* Espacio para la barra de acciones y la navegación móvil. */
 		padding: 0.75rem 0.875rem 11rem;
-		max-width: 34rem;
-		margin: 0 auto;
 	}
 
 	.barra {

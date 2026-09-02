@@ -41,7 +41,32 @@ export interface FacturaInfoMap {
 	};
 }
 
+/**
+ * Liquidación que cambió de estado al asociarla o desasociarla de una factura.
+ * Es lo mínimo para repintar su fila: el resto de la liquidación no cambia.
+ */
+export interface LiquidacionAfectada {
+	id: string;
+	consecutivo: string;
+	estado: 'FACTURADA' | 'LIQUIDADA';
+	factura_id: string | null;
+	numero_factura: string | null;
+}
+
 // ═══ API ═══
+
+/**
+ * Agregados de la lista de facturas sobre TODOS los registros del filtro,
+ * calculados por el servidor con el mismo `where` de la consulta paginada.
+ * Las stat cards del tab de Facturas los usan en vez de reducir la página.
+ */
+export interface FacturasMetadata {
+	globalCount: number;
+	globalTotal: number;
+	globalLiquidaciones: number;
+	estadoCounts: Record<string, number>;
+	estadoTotales: Record<string, number>;
+}
 
 export const facturacionLiquidacionesAPI = {
 	async crear(data: {
@@ -66,6 +91,8 @@ export const facturacionLiquidacionesAPI = {
 		total: number;
 		totalPages: number;
 		page: number;
+		/** Opcional: un backend anterior al cambio no lo manda. */
+		metadata?: FacturasMetadata;
 	}> {
 		const res = await apiClient.get('/api/facturacion-liquidaciones', { params: filtros });
 		return res.data;
@@ -90,6 +117,47 @@ export const facturacionLiquidacionesAPI = {
 		const res = await apiClient.post<FacturaInfoMap>(
 			'/api/facturacion-liquidaciones/batch-info',
 			{ ids }
+		);
+		return res.data;
+	},
+
+	/**
+	 * Asocia liquidaciones a una factura que ya existe.
+	 *
+	 * Devuelve la factura con su `valor_total` ya recalculado por el servidor,
+	 * más la lista de liquidaciones movidas, para que el canvas repinte esas
+	 * filas sin volver a pedir el listado entero.
+	 */
+	async agregarLiquidaciones(
+		facturaId: string,
+		liquidacion_ids: string[]
+	): Promise<{
+		factura: FacturaLiquidacion;
+		liquidaciones_afectadas: LiquidacionAfectada[];
+	}> {
+		const res = await apiClient.post(
+			`/api/facturacion-liquidaciones/${facturaId}/items`,
+			{ liquidacion_ids }
+		);
+		return res.data;
+	},
+
+	/**
+	 * Quita una liquidación de su factura y la devuelve a LIQUIDADA.
+	 *
+	 * `quedo_vacia` avisa de que la factura se quedó sin liquidaciones: no se
+	 * borra sola, eso lo decide el usuario con anular + eliminar.
+	 */
+	async quitarLiquidacion(
+		facturaId: string,
+		liquidacionId: string
+	): Promise<{
+		factura: FacturaLiquidacion;
+		quedo_vacia: boolean;
+		liquidaciones_afectadas: LiquidacionAfectada[];
+	}> {
+		const res = await apiClient.delete(
+			`/api/facturacion-liquidaciones/${facturaId}/items/${liquidacionId}`
 		);
 		return res.data;
 	},

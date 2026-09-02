@@ -166,7 +166,7 @@
 <div class="min-h-screen overflow-auto bg-gradient-to-br from-gray-50 via-orange-50/30 to-orange-50/20">
   <!-- Header -->
   <header class="border-b border-orange-100 bg-white/80 backdrop-blur-md">
-    <div class="mx-auto flex max-w-2xl items-center justify-center gap-3 px-4 py-4">
+    <div class="flex items-center justify-center gap-3 px-4 py-4">
   <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 shadow-lg shadow-orange-500/30">
         <svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -179,7 +179,7 @@
     </div>
   </header>
 
-  <main class="mx-auto max-w-2xl px-4 py-8">
+  <main class="px-4 py-8">
     {#if estado === 'loading'}
       <div class="flex flex-col items-center justify-center py-24" in:fade={{ duration: 300 }}>
         <div class="relative mb-6">

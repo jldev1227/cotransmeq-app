@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
+	import { createEventDispatcher, type ComponentType } from 'svelte';
 	import { fade, fly, slide, scale } from 'svelte/transition';
 	import { cubicOut, backOut } from 'svelte/easing';
 	import { goto } from '$app/navigation';
@@ -8,6 +8,47 @@
 	import { authStore } from '$lib/stores/auth';
 	import { checkAccess, type Area } from '$lib/config/permissions';
 	import { mobileDrawerStore } from '$lib/stores/mobileDrawer';
+	import SidebarIcon, {
+		SIDEBAR_ICON_SIZE,
+		SIDEBAR_ICON_STROKE
+	} from '$lib/components/SidebarIcon.svelte';
+	/**
+	 * Iconos del sidebar.
+	 *
+	 * Regla al elegir uno: a 18 px lo que se distingue es la SILUETA, no el
+	 * detalle. Dos variantes del mismo glifo base —`ClipboardList` y
+	 * `ClipboardCheck`, `CalendarClock` y `CalendarCheck`, `Users` y `UserCog`—
+	 * son la misma mancha gris, y el usuario acaba leyendo la etiqueta cada vez,
+	 * que es tanto como no tener icono.
+	 *
+	 * Así que ninguna familia repite base: hay UN calendario, UN portapapeles,
+	 * UNA silueta de persona genérica. Cuando dos módulos caían en la misma
+	 * familia, gana el que la use de forma más literal y el otro se mueve a un
+	 * glifo que además dice mejor qué hace.
+	 */
+	import {
+		BookUser,
+		Building2,
+		Calculator,
+		CalendarCheck,
+		ChevronsLeft,
+		ClipboardPen,
+		HandCoins,
+		IdCard,
+		LayoutTemplate,
+		ListChecks,
+		ReceiptText,
+		Route,
+		ShieldCheck,
+		Timer,
+		TrafficCone,
+		TriangleAlert,
+		Truck,
+		UserCog,
+		Wallet,
+		Wrench,
+		X
+	} from 'lucide-svelte';
 
 	const dispatch = createEventDispatcher();
 
@@ -32,32 +73,49 @@
 	// Determinar sección activa basada en la URL actual
 	$: activeSection = getActiveSectionFromPath($page.url.pathname);
 
-	const menuItems = [
+	type MenuItem = {
+		id: string;
+		label: string;
+		/// Componente de `lucide-svelte`, no un nombre de icono. Antes esto era una
+		/// cadena que `getIcon()` resolvía contra un mapa de SVG escritos a mano e
+		/// inyectados con `{@html}`: un `icon` mal escrito renderizaba un hueco en
+		/// silencio. Con el componente, eso es un error de compilación.
+		icon: ComponentType;
+		badge: string | null;
+		href: string;
+	};
+
+	const menuItems: MenuItem[] = [
 		// {
 		// 	id: 'dashboard',
 		// 	label: 'Dashboard',
-		// 	icon: 'dashboard',
+		// 	icon: LayoutDashboard,
 		// 	badge: null,
 		// 	href: '/dashboard'
 		// },
 		{
 			id: 'flota',
 			label: 'Flota',
-			icon: 'truck',
+			icon: Truck,
 			badge: null,
 			href: '/dashboard/flota'
 		},
 		{
 			id: 'conductores',
 			label: 'Conductores',
-			icon: 'users',
+			/// Licencia, no «personas»: `Users` era la silueta genérica y competía
+			/// con `UserCog` de Equipo. Un conductor se identifica por su pase.
+			icon: IdCard,
 			badge: null,
 			href: '/dashboard/conductores'
 		},
 		{
 			id: 'servicios',
 			label: 'Servicios',
-			icon: 'clock',
+			/// Un reloj describía la planilla, no el servicio. `Route` es el trayecto,
+			/// que es lo que se despacha aquí, y deja el reloj libre para «Recargos»,
+			/// donde el tiempo sí es lo que se liquida.
+			icon: Route,
 			// badge: '8',
 			badge: null,
 			href: '/dashboard/servicios'
@@ -65,56 +123,71 @@
 		{
 			id: 'recargos',
 			label: 'Recargos',
-			icon: 'calendar-clock',
+			/// Un recargo es tiempo (nocturno, festivo, extra), no una fecha del
+			/// calendario. Además deja `CalendarCheck` de Asistencias como el
+			/// único calendario del menú.
+			icon: Timer,
 			badge: null,
 			href: '/dashboard/recargos'
 		},
 		{
 			id: 'clientes',
 			label: 'Clientes',
-			icon: 'building',
+			icon: Building2,
 			badge: null,
 			href: '/dashboard/clientes'
 		},
 		{
 			id: 'sarlaft',
 			label: 'SARLAFT / PTEE',
-			icon: 'document',
+			/// Lupa sobre documento: el módulo es debida diligencia sobre terceros,
+			/// no el archivo genérico que sugería el icono de documento.
+			/// SARLAFT/PTEE es cumplimiento y prevención de riesgo, no búsqueda
+			/// documental. `FileSearch` además se confundía con `FileStack`.
+			icon: ShieldCheck,
 			badge: null,
 			href: '/dashboard/sarlaft'
 		},
 		{
 			id: 'asistencias',
 			label: 'Asistencias',
-			icon: 'clipboard',
+			icon: CalendarCheck,
 			badge: null,
 			href: '/dashboard/asistencias'
 		},
 		{
 			id: 'acciones-correctivas',
 			label: 'Acciones C/P',
-			icon: 'shield-check',
+			/// Antes compartía escudo con PESV y los dos se leían como «seguridad».
+			/// Una acción correctiva es una reparación: la llave inglesa lo separa.
+			icon: Wrench,
 			badge: null,
 			href: '/dashboard/acciones-correctivas'
 		},
 		{
 			id: 'evaluaciones',
 			label: 'Evaluaciones',
-			icon: 'clipboard-list',
+			/// Lista de criterios calificados. Sin portapapeles: ese glifo queda
+			/// para «Mis formularios», que es donde de verdad se diligencia.
+			icon: ListChecks,
 			badge: null,
 			href: '/dashboard/evaluaciones'
 		},
 		{
 			id: 'salidas-nc',
 			label: 'Salidas NC',
-			icon: 'alert-triangle',
+			icon: TriangleAlert,
 			badge: null,
 			href: '/dashboard/salidas-nc'
 		},
 		{
 			id: 'formularios',
 			label: 'Formularios',
-			icon: 'form-builder',
+			/// El CONSTRUCTOR: se arman plantillas colocando bloques. Distinguirlo
+			/// de «Mis formularios» importa más que ningún otro par del menú,
+			/// porque son el mismo dominio visto desde los dos lados —quien
+			/// diseña el formato y quien lo rellena—.
+			icon: LayoutTemplate,
 			badge: null,
 			href: '/dashboard/formularios'
 		},
@@ -125,97 +198,115 @@
 			 * `formularios` es el módulo del constructor y solo lo tienen
 			 * `administracion`/`hseq`/`operaciones`. `mis-formularios` es
 			 * `general: true`, así que esta es la única entrada que ve alguien de
-			 * contabilidad o talento humano a quien le asignaron un formato —y son
+			 * contabilidad o mantenimiento a quien le asignaron un formato —y son
 			 * exactamente las personas que necesitan llegar aquí—.
 			 */
 			id: 'mis-formularios',
 			label: 'Mis formularios',
-			/// La del check, no la del constructor: aquí se rellena, no se arma.
-			icon: 'clipboard-list',
+			/// Portapapeles con PLUMA: aquí se diligencia. `ClipboardCheck` era
+			/// indistinguible del `ClipboardList` de Evaluaciones a este tamaño.
+			icon: ClipboardPen,
 			badge: null,
 			href: '/dashboard/mis-formularios'
 		},
 		{
 			id: 'nomina',
 			label: 'Nómina',
-			icon: 'wallet',
+			icon: Wallet,
 			badge: null,
 			href: '/dashboard/nomina'
 		},
 		// {
 		// 	id: 'extractos',
 		// 	label: 'Extractos',
-		// 	icon: 'file-text',
+		// 	icon: FileText,
 		// 	badge: null,
 		// 	href: '/dashboard/extractos'
 		// },
 		{
 			id: 'liquidaciones-servicios',
 			label: 'Liq. Servicios',
-			icon: 'receipt',
+			icon: ReceiptText,
 			badge: null,
+			/// Entra directo al canvas de historial, igual que «Liq. Terceros»: el
+			/// listado de `/dashboard/liquidaciones-servicios` es la capa pre-Univer
+			/// y sigue accesible por url, pero ya no es la puerta del módulo.
 			href: '/dashboard/liquidaciones-servicios'
 		},
 		{
 			id: 'liquidaciones-terceros',
 			label: 'Liq. Terceros',
-			icon: 'receipt',
+			/// «Liq. Servicios» y «Liq. Terceros» llevaban el mismo recibo, así que
+			/// colapsado el menú eran indistinguibles. Terceros es el pago que sale
+			/// hacia afuera; de ahí las monedas en la mano.
+			icon: HandCoins,
 			badge: null,
 			href: '/dashboard/liquidaciones-terceros'
 		},
+		// «Liq. Terceros — Adicionales» se eliminó del menú: el canvas de
+		// adicionales se abre desde el selector «Ir a…» del toolbar del canvas
+		// de cierres, que es a donde /dashboard/liquidaciones-terceros redirige.
+		// OJO: el moduleId `liquidaciones-terceros-adicionales` SIGUE existiendo en
+		// `config/permissions.ts` porque el `+layout@.svelte` del canvas se lo pasa
+		// a `UniverAuthGuard`, y `checkAccess` deniega todo moduleId desconocido.
 		{
 			id: 'pesv',
 			label: 'PESV',
-			icon: 'pesv-road',
+			/// Seguridad vial, no seguridad a secas: el cono lo dice sin repetir el
+			/// escudo que ya usaban «Acciones C/P».
+			icon: TrafficCone,
 			badge: null,
 			href: '/dashboard/pesv'
 		},
 		{
 			id: 'contabilidad',
 			label: 'Contabilidad',
-			icon: 'calculator',
+			icon: Calculator,
 			badge: null,
 			href: '/dashboard/contabilidad'
 		},
 		{
 			id: 'terceros',
 			label: 'Terceros',
-			icon: 'address-book',
+			icon: BookUser,
 			badge: null,
 			href: '/dashboard/terceros'
 		},
 		{
 			id: 'usuarios',
 			label: 'Equipo',
-			icon: 'user-circle',
+			/// La entrada cubre usuarios, sesiones y directorio: es administración de
+			/// cuentas, y el engranaje la distingue de «Conductores», que también son
+			/// personas pero no se gestionan aquí.
+			icon: UserCog,
 			badge: null,
 			href: '/dashboard/usuarios'
 		}
 		// {
 		// 	id: 'rutas',
 		// 	label: 'Rutas',
-		// 	icon: 'map',
+		// 	icon: Map,
 		// 	badge: null,
 		// 	href: '/dashboard/rutas'
 		// },
 		// {
 		// 	id: 'planillas',
 		// 	label: 'Planillas',
-		// 	icon: 'calendar',
+		// 	icon: Calendar,
 		// 	badge: '3',
 		// 	href: '/dashboard/planillas'
 		// }
 		// {
 		// 	id: 'reportes',
 		// 	label: 'Reportes',
-		// 	icon: 'chart',
+		// 	icon: ChartColumn,
 		// 	badge: null,
 		// 	href: '/dashboard/reportes'
 		// },
 		// {
 		// 	id: 'configuracion',
 		// 	label: 'Configuración',
-		// 	icon: 'settings',
+		// 	icon: Settings,
 		// 	badge: null,
 		// 	href: '/dashboard/configuracion'
 		// }
@@ -225,7 +316,15 @@
 	$: currentUser = $authStore.user;
 	$: filteredMenuItems = menuItems.filter((item) => {
 		if (!currentUser) return false;
-		const { allowed } = checkAccess(currentUser.role || currentUser.rol, currentUser.area, item.id);
+		// `permisos_rutas` es una lista blanca por usuario: si la tiene, manda
+		// ella y no el área. Sin pasarla aquí el menú mostraría entradas que el
+		// guard de ruta y la API rechazan un clic después.
+		const { allowed } = checkAccess(
+			currentUser.role || currentUser.rol,
+			currentUser.area,
+			item.id,
+			currentUser.permisos_rutas
+		);
 		return allowed;
 	});
 
@@ -249,6 +348,8 @@
 		if (pathname.startsWith('/dashboard/nomina')) return 'nomina';
 		// if (pathname.startsWith('/dashboard/extractos')) return 'extractos';
 		if (pathname.startsWith('/dashboard/liquidaciones-servicios')) return 'liquidaciones-servicios';
+		// Todas las rutas de terceros (incluidos ambos canvas) resaltan la
+		// única entrada del menú: «Liq. Terceros».
 		if (pathname.startsWith('/dashboard/liquidaciones-terceros')) return 'liquidaciones-terceros';
 		if (pathname.startsWith('/dashboard/sarlaft')) return 'SARLAFT + PTEE';
 		if (pathname.startsWith('/dashboard/pesv')) return 'pesv';
@@ -261,7 +362,7 @@
 		return 'servicios';
 	}
 
-	function handleMenuClick(item: (typeof menuItems)[0]) {
+	function handleMenuClick(item: MenuItem) {
 		goto(item.href);
 		dispatch('sectionChange', { section: item.id });
 
@@ -273,58 +374,6 @@
 
 	function closeDrawer() {
 		mobileDrawerStore.close();
-	}
-
-	function getIcon(iconName: string) {
-		const icons = {
-			dashboard: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2H5a2 2 0 00-2-2z" />
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 5a2 2 0 012-2h4a2 2 0 012 2v6H8V5z" />`,
-			truck: `<path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="7" cy="17" r="3" stroke="currentColor" stroke-width="2" fill="none"/><path d="M9 17h6"/><circle cx="17" cy="17" r="3" stroke="currentColor" stroke-width="2" fill="none"/>`,
-			users: `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="2" fill="none"/><path d="M16 3.128a4 4 0 0 1 0 7.744" stroke="currentColor" stroke-width="2" fill="none"/><path d="M22 21v-2a4 4 0 0 0-3-3.87" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="2" fill="none"/>`,
-			map: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />`,
-			calendar: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />`,
-			'calendar-clock': `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /><circle cx="16" cy="16" r="4" fill="currentColor" fill-opacity="0.9"/><path d="M16 14.5v1.5l1 1" stroke="white" stroke-width="1" stroke-linecap="round"/>`,
-			clock: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />`,
-			building: `
-				<rect x="4" y="2" width="16" height="20" rx="2" stroke="currentColor" stroke-width="2" fill="none"/>
-				
-				<!-- Ventanas -->
-				<rect x="7.5" y="5" width="1" height="1" fill="currentColor"/>
-				<rect x="11.5" y="5" width="1" height="1" fill="currentColor"/>
-				<rect x="15.5" y="5" width="1" height="1" fill="currentColor"/>
-
-				<rect x="7.5" y="9" width="1" height="1" fill="currentColor"/>
-				<rect x="11.5" y="9" width="1" height="1" fill="currentColor"/>
-				<rect x="15.5" y="9" width="1" height="1" fill="currentColor"/>
-
-				<rect x="7.5" y="13" width="1" height="1" fill="currentColor"/>
-				<rect x="11.5" y="13" width="1" height="1" fill="currentColor"/>
-				<rect x="15.5" y="13" width="1" height="1" fill="currentColor"/>
-
-				<!-- Puerta -->
-				<rect x="10" y="17" width="4" height="5" fill="currentColor"/>
-			`,
-			chart: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />`,
-			clipboard: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />`,
-			document: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />`,
-			'clipboard-list': `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />`,
-			'shield-check': `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />`,
-			'alert-triangle': `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />`,
-			// Cards apiladas con un "+": el constructor de formularios se arma
-			// arrastrando cards, y el icono lo dice sin depender del texto.
-			'form-builder': `<rect x="3" y="4" width="12" height="4" rx="1" stroke="currentColor" stroke-width="2" fill="none"/><rect x="3" y="10" width="12" height="4" rx="1" stroke="currentColor" stroke-width="2" fill="none"/><rect x="3" y="16" width="8" height="4" rx="1" stroke="currentColor" stroke-width="2" fill="none"/><path stroke-linecap="round" stroke-width="2" d="M18 15v6m-3-3h6" />`,
-			wallet: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />`,
-			'file-text': `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2" fill="none"/><line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" stroke-width="2"/><line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2"/><polyline points="10 9 9 9 8 9" stroke="currentColor" stroke-width="2" fill="none"/>`,
-			receipt: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6M4 4v16l2-1.5L8 20l2-1.5L12 20l2-1.5L16 20l2-1.5L20 20V4l-2 1.5L16 4l-2 1.5L12 4l-2 1.5L8 4 6 5.5 4 4z" /><circle cx="9" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="15" r="1" fill="currentColor"/>`,
-			'pesv-road': `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4m0 2v.01" />`,
-			calculator: `<rect x="4" y="2" width="16" height="20" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><line x1="8" y1="6" x2="16" y2="6" stroke="currentColor" stroke-width="2"/><line x1="8" y1="10" x2="10" y2="10" stroke="currentColor" stroke-width="2"/><line x1="14" y1="10" x2="16" y2="10" stroke="currentColor" stroke-width="2"/><line x1="8" y1="14" x2="10" y2="14" stroke="currentColor" stroke-width="2"/><line x1="14" y1="14" x2="16" y2="14" stroke="currentColor" stroke-width="2"/><line x1="8" y1="18" x2="10" y2="18" stroke="currentColor" stroke-width="2"/><line x1="14" y1="18" x2="16" y2="18" stroke="currentColor" stroke-width="2"/>`,
-			'address-book': `<rect x="4" y="2" width="16" height="20" rx="2" stroke="currentColor" stroke-width="2" fill="none"/><circle cx="12" cy="10" r="3" stroke="currentColor" stroke-width="2" fill="none"/><path d="M7 18c0-2.5 2.2-4 5-4s5 1.5 5 4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><line x1="2" y1="8" x2="4" y2="8" stroke="currentColor" stroke-width="2"/><line x1="2" y1="14" x2="4" y2="14" stroke="currentColor" stroke-width="2"/>`,
-			settings: `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-				   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />`,
-			'user-circle': `<circle cx="12" cy="8" r="4" stroke="currentColor" stroke-width="2" fill="none"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.5" fill="none" stroke-dasharray="2 0"/>`
-		};
-
-		return icons[iconName as keyof typeof icons] || '';
 	}
 </script>
 
@@ -362,26 +411,18 @@
 		<nav class="flex-1 space-y-1 overflow-y-auto p-4">
 			{#each filteredMenuItems as item, index (item.id)}
 				<button
-					class="apple-transition group relative flex w-full cursor-pointer items-center overflow-hidden rounded-xl px-3 py-2.5
+					class="apple-transition group relative flex w-full cursor-pointer items-center overflow-hidden rounded-xl py-2.5
+						{isCollapsed ? 'justify-center px-2' : 'px-3'}
 						{activeSection === item.id ? 'text-white' : 'hover:bg-white/5'}"
-					style="color: {activeSection === item.id ? '#ffffff' : 'rgba(252,252,251,0.65)'};
-						background-color: {activeSection === item.id ? 'rgba(249,115,22,0.20)' : 'transparent'};
-						border: 1px solid {activeSection === item.id ? 'rgba(249,115,22,0.40)' : 'transparent'};"
+					style="color: {activeSection === item.id ? '#ffffff' : 'rgba(240,237,230,0.65)'};
+						background-color: {activeSection === item.id ? 'rgba(16,185,129,0.18)' : 'transparent'};
+						border: 1px solid {activeSection === item.id ? 'rgba(16,185,129,0.35)' : 'transparent'};"
 					on:click={() => handleMenuClick(item)}
 					in:fly={{ x: -30, duration: 400, delay: index * 50 + 300 }}
+					title={isCollapsed ? item.label : undefined}
+					aria-label={isCollapsed ? item.label : undefined}
 				>
-					<!-- Icon -->
-					<div class="h-5 w-5 flex-shrink-0">
-						<svg
-							class="apple-transition h-5 w-5"
-							style="color: {activeSection === item.id ? 'var(--emerald-500)' : 'currentColor'};"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							{@html getIcon(item.icon)}
-						</svg>
-					</div>
+					<SidebarIcon icon={item.icon} active={activeSection === item.id} />
 
 					<!-- Label and Badge -->
 					{#if !isCollapsed}
@@ -393,7 +434,7 @@
 							{#if item.badge}
 								<span
 									class="ml-2 rounded-full px-2 py-0.5 text-xs font-semibold text-white"
-									style="background-color: var(--emerald-500);"
+									style="background-color: var(--orange-500);"
 								>
 									{item.badge}
 								</span>
@@ -403,7 +444,7 @@
 						<!-- Badge for collapsed state -->
 						<div
 							class="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full text-xs font-medium text-white"
-							style="background-color: var(--emerald-500);"
+							style="background-color: var(--orange-500);"
 						>
 							{item.badge}
 						</div>
@@ -414,24 +455,18 @@
 
 		<!-- Collapse Toggle -->
 		<div class="flex-shrink-0 p-4" style="border-top: 1px solid rgba(255,255,255,0.06);">
-		<button
-			class="apple-transition group flex w-full items-center justify-center rounded-xl px-3 py-2.5"
-			style="color: rgba(252,252,251,0.65);"
-			on:click={() => dispatch('toggleCollapse')}
-		>
-				<svg
+			<button
+				class="apple-transition group flex w-full items-center justify-center rounded-xl px-3 py-2.5"
+				style="color: rgba(240,237,230,0.65);"
+				on:click={() => dispatch('toggleCollapse')}
+				title={isCollapsed ? 'Expandir menú' : 'Contraer menú'}
+				aria-label={isCollapsed ? 'Expandir menú' : 'Contraer menú'}
+			>
+				<ChevronsLeft
 					class="apple-transition h-5 w-5 {isCollapsed ? 'rotate-180' : ''}"
-					fill="none"
-					stroke="currentColor"
-					viewBox="0 0 24 24"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="1.5"
-						d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
-					/>
-				</svg>
+					size={SIDEBAR_ICON_SIZE}
+					strokeWidth={SIDEBAR_ICON_STROKE}
+				/>
 				{#if !isCollapsed}
 					<span class="ml-3 text-sm font-medium" in:fade={{ duration: 200 }}>Contraer</span>
 				{/if}
@@ -464,71 +499,54 @@
 				style="border-bottom: 1px solid rgba(255,255,255,0.06);"
 			>
 				<div class="flex items-center space-x-3">
-			<div
-				class="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl"
-				style="box-shadow: 0 4px 16px rgba(249, 115, 22, 0.35); background-color: #0f172a;"
-			>
-				<img
-					src="/favicon-32x32.png"
-					alt="Cotransmeq"
-					class="h-full w-full object-contain"
-					width="40"
-					height="40"
-				/>
-			</div>
-			<div class="min-w-0">
-				<h2 class="truncate font-display text-lg text-white" style="font-weight: 600;">
-					Cotransmeq
-				</h2>
-				<p class="text-xs" style="color: rgba(249,115,22,0.8);">Sistema de Gestión</p>
-			</div>
+					<div
+						class="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl"
+						style="box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35); background-color: #0f172a;"
+					>
+						<img
+							src="/favicon-32x32.png"
+							alt="Cotransmeq"
+							class="h-full w-full object-contain"
+							width="40"
+							height="40"
+						/>
+					</div>
+					<div class="min-w-0">
+						<h2 class="truncate font-display text-lg text-white" style="font-weight: 400;">
+							Cotransmeq
+						</h2>
+						<p class="text-xs" style="color: rgba(16,185,129,0.7);">Sistema de Gestión</p>
+					</div>
 				</div>
 				<button
 					type="button"
 					class="apple-transition flex h-8 w-8 items-center justify-center rounded-lg"
-					style="color: rgba(252,252,251,0.65);"
+					style="color: rgba(240,237,230,0.65);"
 					on:click={closeDrawer}
 					aria-label="Cerrar menú"
 				>
-					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M6 18L18 6M6 6l12 12"
-						/>
-					</svg>
+					<X class="h-5 w-5" size={SIDEBAR_ICON_SIZE} strokeWidth={SIDEBAR_ICON_STROKE} />
 				</button>
 			</div>
 
 			<!-- Navigation Menu -->
 			<nav class="flex-1 space-y-1 overflow-y-auto p-4">
-				{#each filteredMenuItems as item, index (item.id)}
+				{#each filteredMenuItems as item (item.id)}
 					<button
 						class="apple-transition group relative flex w-full cursor-pointer items-center overflow-hidden rounded-xl px-3 py-2.5"
-						style="color: {activeSection === item.id ? '#ffffff' : 'rgba(252,252,251,0.65)'};
-							background-color: {activeSection === item.id ? 'rgba(249,115,22,0.20)' : 'transparent'};
-							border: 1px solid {activeSection === item.id ? 'rgba(249,115,22,0.40)' : 'transparent'};"
+						style="color: {activeSection === item.id ? '#ffffff' : 'rgba(240,237,230,0.65)'};
+							background-color: {activeSection === item.id ? 'rgba(16,185,129,0.18)' : 'transparent'};
+							border: 1px solid {activeSection === item.id ? 'rgba(16,185,129,0.35)' : 'transparent'};"
 						on:click={() => handleMenuClick(item)}
 					>
-						<div class="h-5 w-5 flex-shrink-0">
-							<svg
-								class="apple-transition h-5 w-5"
-								style="color: {activeSection === item.id ? 'var(--emerald-500)' : 'currentColor'};"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								{@html getIcon(item.icon)}
-							</svg>
-						</div>
+						<SidebarIcon icon={item.icon} active={activeSection === item.id} />
 
 						<div class="ml-3 flex min-w-0 flex-1 items-center justify-between">
 							<span class="truncate text-sm font-medium">{item.label}</span>
 							{#if item.badge}
 								<span
 									class="ml-2 rounded-full px-2 py-0.5 text-xs font-semibold text-white"
-									style="background-color: var(--emerald-500);"
+									style="background-color: var(--orange-500);"
 								>
 									{item.badge}
 								</span>

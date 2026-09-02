@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient';
+import type { AccessLevel } from '$lib/config/permissions';
 
 export interface Usuario {
 	id: string;
@@ -11,9 +12,26 @@ export interface Usuario {
 	activo?: boolean;
 	firma_url?: string;
 	permisos?: Record<string, boolean>;
+	/**
+	 * Lista blanca de módulos por usuario (`users.permisos_rutas`). `null` deja
+	 * mandar a las reglas por área; con claves las sustituye por completo.
+	 */
+	permisos_rutas?: Record<string, AccessLevel> | null;
 	ultimo_acceso?: string;
 	created_at?: string;
 	updated_at?: string;
+}
+
+/** Payload del alta manual: aquí la contraseña la pone quien crea, no el invitado. */
+export interface CrearUsuarioPayload {
+	nombre: string;
+	correo: string;
+	password: string;
+	telefono?: string;
+	cargo?: string;
+	role: string;
+	area: string[];
+	permisos_rutas: Record<string, AccessLevel> | null;
 }
 
 export interface Firmante {
@@ -35,7 +53,24 @@ export const usuariosAPI = {
 		return response.data;
 	},
 
-	async actualizar(id: string, data: Partial<Pick<Usuario, 'nombre' | 'correo' | 'telefono' | 'role' | 'area' | 'activo'>>): Promise<Usuario> {
+	/**
+	 * Alta manual de un usuario, con contraseña puesta por el administrador.
+	 * Convive con `/api/invitaciones`: allí la clave la elige el propio invitado.
+	 */
+	async crear(data: CrearUsuarioPayload): Promise<Usuario> {
+		const response = await apiClient.post('/api/usuarios', data);
+		return response.data;
+	},
+
+	async actualizar(
+		id: string,
+		data: Partial<
+			Pick<
+				Usuario,
+				'nombre' | 'correo' | 'telefono' | 'role' | 'cargo' | 'area' | 'activo' | 'permisos_rutas'
+			>
+		>
+	): Promise<Usuario> {
 		const response = await apiClient.put(`/api/usuarios/${id}`, data);
 		return response.data;
 	},

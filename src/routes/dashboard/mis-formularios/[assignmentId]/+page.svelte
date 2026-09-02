@@ -32,6 +32,7 @@
 	import { page } from '$app/stores';
 	import { toast } from 'svelte-sonner';
 	import { misFormulariosAPI, MisFormulariosError } from '$lib/api/mis-formularios';
+	import { invalidarMisFormularios } from '$lib/formularios/mis-formularios-cache';
 	import { vehiculosAPI } from '$lib/api/apiClient';
 	import { createRunnerState, type RunnerState } from '$lib/formularios/runner-state.svelte';
 	import { computeProgress, type DraftAnswer } from '$lib/formularios/validate-answers';
@@ -272,6 +273,9 @@
 				return;
 			}
 			guardadoEn = new Date();
+			/// La lista cachea 15 s. Sin esto, volver atrás justo después de que el
+			/// autoguardado creara el borrador enseñaría la tarjeta sin él.
+			invalidarMisFormularios();
 		} finally {
 			guardando = false;
 		}
@@ -524,6 +528,9 @@
 			toast.success(
 				resultado.idempotentReplay ? 'Este formulario ya estaba entregado.' : 'Formulario enviado.'
 			);
+			/// El envío mueve la asignación de «por diligenciar» a «completada» y le
+			/// quita el borrador: la lista cacheada ya no describe la realidad.
+			invalidarMisFormularios();
 			await goto(`/dashboard/formularios/envios/${resultado.submissionId}`);
 		} catch (err) {
 			toast.error(

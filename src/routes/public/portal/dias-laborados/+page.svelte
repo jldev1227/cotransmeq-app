@@ -1229,11 +1229,6 @@
 {/if}
 
 <style>
-  .dias-page {
-    max-width: 560px;
-    margin: 0 auto;
-  }
-
   .page-header {
     margin-bottom: 1rem;
   }
