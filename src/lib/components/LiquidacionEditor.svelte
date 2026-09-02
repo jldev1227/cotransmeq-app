@@ -1,3 +1,37 @@
+<script context="module" lang="ts">
+	import { crearColaEscritura } from '$lib/editor/canvas/cola-escritura.svelte';
+
+	/**
+	 * Cola de escritura del autoguardado, a NIVEL DE MÓDULO.
+	 *
+	 * No dentro del componente: `ModalLiquidacion` desmonta el editor al cerrar
+	 * el overlay del canvas, y el `flush()` del `onDestroy` tiene que sobrevivir
+	 * a ese desmontaje para que el último cambio llegue.
+	 *
+	 * Compartirla entre instancias es seguro porque solo puede haber UNA: el
+	 * canvas usa un único `solicitudEditor`, y el editor usa selectores
+	 * globales y una clave de borrador que dos instancias se pisarían.
+	 *
+	 * Ojo con la cabecera de `cola-escritura`: prohíbe encolar ALTAS, porque un
+	 * reintento duplicaría la fila. Aquí esa prohibición se levanta gracias al
+	 * `cliente_key`, que hace idempotente el alta en el servidor.
+	 */
+	/// El componente se engancha aquí en `onMount` y se desengancha en
+	/// `onDestroy`. Es la forma de que un objeto de módulo con runas hable con
+	/// un componente Svelte 4, que no reacciona a ellas.
+	let notificarEstadoCola:
+		| ((e: { pendientes: number; fallidas: number; ultimoGuardado: string | null }) => void)
+		| null = null;
+
+	export function suscribirEstadoCola(fn: typeof notificarEstadoCola) {
+		notificarEstadoCola = fn;
+	}
+
+	const cola = crearColaEscritura({
+		onEstado: (e) => notificarEstadoCola?.(e)
+	});
+</script>
+
 <script lang="ts">
 	import { onMount, onDestroy, tick } from 'svelte';
 	import { goto } from '$app/navigation';
@@ -6,11 +40,23 @@
 	import { authStore } from '$lib/stores/auth';
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import {
+		autoguardadoAPI,
 		liquidacionesServiciosAPI,
+		operadorasAPI,
 		type EstadoLiquidacionServicio,
+		type Operadora,
 		type TipoRecargo,
 		type HistorialEstado
 	} from '$lib/api/liquidaciones-servicios';
+	import {
+		decidirDestino,
+		decidirRestauracion,
+		hashStr
+	} from '$lib/editor/canvas/autoguardado-liquidacion';
+	import {
+		BANDERA_MIGRACION,
+		recogerBorradoresLocales
+	} from '$lib/editor/canvas/migrar-borradores-locales';
 	import { usuariosAPI, type Firmante } from '$lib/api/usuarios';
 	import { tercerosAPI, type Tercero } from '$lib/api/terceros';
 	import type { Vehiculo } from '$lib/types/nomina';
@@ -274,7 +320,11 @@
 		consecutivo: '',
 		mes: MESES[new Date().getMonth()],
 		anio: new Date().getFullYear(),
-		operadora: 'PAREX',
+		/// «OTRA» y no una operadora concreta: el campo viaja al documento y a la
+		/// facturación, así que un valor por defecto real se asocia solo si nadie
+		/// toca el select. Que falte es un hueco visible; que sobre es una
+		/// liquidación atribuida a quien no era.
+		operadora: 'OTRA',
 		observaciones: '',
 		osi: ''
 	};
@@ -314,24 +364,59 @@
 		iva_pct: 0
 	};
 
-	// ─── AUTO-SAVE DRAFT CACHE ──────────────────────────────────
-	function getDraftKey(id?: string | null): string {
-		return id ? `liq-svc-draft-${id}` : 'liq-svc-draft-new';
-	}
+	// ─── AUTOGUARDADO ───────────────────────────────────────────
+	//
+	// El borrador ya NO vive en `localStorage`. Va al servidor por dos vías,
+	// según lo que haya escrito:
+	//
+	//  · con cliente, consecutivo y alguna placa → se crea (o actualiza) la
+	//    liquidación REAL en BORRADOR, que es lo que la hace persistente y
+	//    abrible por otra persona;
+	//  · con menos que eso → a la tabla de borrador por usuario, porque
+	//    `cliente_id` y `consecutivo` son obligatorios en la base y todavía no
+	//    hay nada que insertar.
+	//
+	// `decidirDestino` es quien elige, y vive en un módulo aparte con tests.
+
 	const DEV = import.meta.env.DEV;
 	let draftTimer: ReturnType<typeof setTimeout> | null = null;
 	let draftSavedAt = '';
+	/// Suprime el autoguardado mientras se hidrata el formulario, o restaurar
+	/// dispararía un guardado de lo que se acaba de leer.
 	let draftPaused = false;
-	let draftDirty = false;
 	let lastDraftHash = '';
 	let serverSnapshot: any = null;
 	let showDraftDebug = false;
-	let draftAutoRestored = false;
 
-	function hashStr(s: string): string {
-		let h = 5381;
-		for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) >>> 0;
-		return h.toString(36);
+	/// Identidad de la fila en el servidor. `borradorId` puede existir antes de
+	/// que el usuario pulse Guardar: es la liquidación en BORRADOR ya creada.
+	let borradorId: string | null = null;
+	let borradorVersion: number | null = null;
+	/// Una por sesión de edición. Es lo que hace idempotente el alta: dos
+	/// peticiones en vuelo a la vez no conocen todavía el id que devolvió la
+	/// otra, y sin esto crearían dos liquidaciones.
+	let clienteKey: string = crypto.randomUUID();
+
+	/// Estado de la cola, copiado a `let` locales: la cola es `.svelte.ts` con
+	/// runas y este componente es Svelte 4, así que no reacciona a sus campos.
+	/// Por eso se lee por el callback `onEstado` y no directamente.
+	let autoPendientes = 0;
+	let autoFallidas = 0;
+
+	/// Barra de «tienes cambios sin guardar»: se enseña cuando el borrador y lo
+	/// que vino del servidor no coinciden, en vez de pisar uno con otro.
+	let draftPendienteDeDecidir: any = null;
+	let draftPendienteFecha = '';
+
+	/// La cola vive en el bloque de módulo. Aquí solo se copia su estado a
+	/// variables locales: el componente es Svelte 4 y no reacciona a las runas
+	/// de la cola, así que se lee por callback y no leyendo sus campos.
+	function engancharEstadoCola() {
+		suscribirEstadoCola((e) => {
+			autoPendientes = e.pendientes;
+			autoFallidas = e.fallidas;
+			if (e.ultimoGuardado) draftSavedAt = e.ultimoGuardado;
+		});
 	}
 
 	function buildDraftPayload() {
@@ -349,102 +434,92 @@
 		};
 	}
 
-	function saveDraft() {
-		if (draftPaused) return;
-		try {
-			const payload = buildDraftPayload();
-			const json = JSON.stringify(payload);
-			const h = hashStr(json);
-			if (h === lastDraftHash) return;
-			localStorage.setItem(getDraftKey(editingId), json);
-			lastDraftHash = h;
-			draftDirty = true;
-			const d = new Date();
-			draftSavedAt = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
-		} catch {
-			/* localStorage full or SSR */
-		}
+	/**
+	 * Encola el autoguardado.
+	 *
+	 * Una sola clave para toda la sesión: la cola hace coalescing por clave, así
+	 * que si se acumulan cinco cambios mientras uno está en vuelo, sale solo el
+	 * último — que es exactamente lo que se quiere de un autoguardado.
+	 */
+	function encolarAutoguardado() {
+		if (draftPaused || view !== 'editor') return;
+
+		const payload = buildDraftPayload();
+		const json = JSON.stringify(payload);
+		const h = hashStr(json);
+		/// Si nada cambió no se manda: con `localStorage` esto ahorraba bytes;
+		/// contra la red ahorra peticiones.
+		if (h === lastDraftHash) return;
+		lastDraftHash = h;
+
+		const idActual = borradorId ?? editingId;
+		const destino = decidirDestino({ ...payload, editingId: idActual });
+		if (destino === 'ninguno') return;
+
+		cola.encolar(
+			`autoguardado:${idActual ?? 'nuevo'}`,
+			async () => {
+				if (destino === 'previo') {
+					await autoguardadoAPI.guardarDraft(idActual, payload);
+					return;
+				}
+				try {
+					const r = await autoguardadoAPI.guardar({
+						...(buildPayloadLiquidacion() as any),
+						cliente_key: clienteKey,
+						borrador_id: idActual,
+						base_version: borradorVersion
+					});
+					/// Adoptar la versión que devuelve el servidor es OBLIGATORIO: sin
+					/// ella el siguiente autoguardado iría con una `base_version`
+					/// obsoleta y el servidor lo rechazaría por conflicto contra el
+					/// propio usuario.
+					borradorId = r.id;
+					borradorVersion = r.version;
+					if (!editingId) editingId = r.id;
+					if (!hdr.consecutivo) hdr.consecutivo = r.consecutivo;
+				} catch (e: any) {
+					if (e?.conflicto) {
+						manejarConflicto(e.conflicto);
+						return;
+					}
+					throw e;
+				}
+			},
+			'autoguardado de la liquidación'
+		);
 	}
 
-	function restoreDraft(forId?: string | null) {
-		try {
-			const key = getDraftKey(forId ?? editingId);
-			const raw = localStorage.getItem(key);
-			if (!raw) return false;
-			const d = JSON.parse(raw);
+	/**
+	 * Un 409 del autoguardado.
+	 *
+	 * Los tres motivos se resuelven distinto, y por eso el backend los distingue
+	 * en vez de devolver un 409 a secas. En ninguno se revierte lo que el
+	 * usuario tecleó: es la misma regla que siguen los canvas de terceros.
+	 */
+	function manejarConflicto(c: { motivo: string; servidor: any }) {
+		if (c.motivo === 'version') {
+			/// Se adopta la versión del servidor para poder seguir escribiendo.
+			borradorVersion = c.servidor?.version ?? borradorVersion;
+			saveError =
+				'Otra persona guardó cambios sobre este borrador. Lo que escribas ahora se guarda encima.';
+			return;
+		}
+		if (c.motivo === 'estado') {
 			draftPaused = true;
-
-			editingId = d.editingId ?? null;
-			estadoSeleccionado = d.estadoSeleccionado ?? 'BORRADOR';
-			selectedCliente = d.selectedCliente ?? null;
-			clienteSearch = '';
-			hdr = { ...hdr, ...d.hdr };
-			rows = (d.rows || [newRow()]).map((r: any) => ({
-				...r,
-				id: ++uid,
-				placa_dropdown: false,
-				placa_highlight: 0,
-				placa_search: ''
-			}));
-			ext = { ...ext, ...d.ext };
-			liqCfg = { ...liqCfg, ...d.liqCfg };
-			recargosRows = (d.recargosRows || []).map((r: any) => ({ ...r, id: ++uid }));
-			terceroRows = (d.terceroRows || []).map((t: any) => ({ ...t }));
-
-			setView('editor');
-			draftAutoRestored = true;
-
-			lastDraftHash = hashStr(raw);
-			setTimeout(() => {
-				draftPaused = false;
-				draftDirty = true;
-			}, 300);
-			return true;
-		} catch {
-			return false;
+			saveError = `La liquidación pasó a ${c.servidor?.estado ?? 'otro estado'} y dejó de ser un borrador. Recarga para ver la versión buena.`;
+			return;
 		}
-	}
-
-	function clearDraft(forId?: string | null) {
-		try {
-			localStorage.removeItem(getDraftKey(forId ?? editingId));
-		} catch {}
-		draftSavedAt = '';
-		draftDirty = false;
-		lastDraftHash = '';
-		draftAutoRestored = false;
-	}
-
-	/** Try to auto-restore a draft silently — returns true if restored */
-	function tryAutoRestoreDraft(forId?: string | null) {
-		try {
-			const key = getDraftKey(forId);
-			const raw = localStorage.getItem(key);
-			if (!raw) return false;
-			const d = JSON.parse(raw);
-			const age = Date.now() - (d.ts || 0);
-			if (age > 48 * 60 * 60 * 1000) {
-				clearDraft(forId);
-				return false;
-			}
-			const hasRows = d.rows && d.rows.length > 0 && d.rows.some((r: any) => r.placa);
-			const hasCliente = !!d.selectedCliente;
-			if (hasRows || hasCliente) {
-				return restoreDraft(forId);
-			} else {
-				clearDraft(forId);
-				return false;
-			}
-		} catch {
-			clearDraft(forId);
-			return false;
-		}
+		draftPaused = true;
+		saveError = 'La liquidación ya no existe. Nada de lo que escribas se está guardando.';
 	}
 
 	function scheduleDraftSave() {
 		if (draftPaused || view !== 'editor') return;
 		if (draftTimer) clearTimeout(draftTimer);
-		draftTimer = setTimeout(saveDraft, 2000);
+		/// 4 s y no 2: cada escritura a la fila real borra y recrea sus ítems, y
+		/// veinte minutos de edición a 2 s son seiscientas transacciones.
+		draftTimer = setTimeout(encolarAutoguardado, 4000);
 	}
 
 	$: if (view === 'editor' && !draftPaused) {
@@ -462,9 +537,161 @@
 		scheduleDraftSave();
 	}
 
-	function handleBeforeUnload(_e: BeforeUnloadEvent) {
-		if (view === 'editor') saveDraft();
+	/**
+	 * Último intento al cerrar la pestaña.
+	 *
+	 * Deja de ser la red de seguridad principal —lo son el debounce y el flush
+	 * al desmontar—, pero cubre el cierre a mitad de un debounce. `keepalive` y
+	 * no `sendBeacon`: el backend exige `Authorization` en cabecera y beacon no
+	 * admite cabeceras.
+	 */
+	function handleBeforeUnload(e: BeforeUnloadEvent) {
+		if (view !== 'editor' || draftPaused) return;
+		const idActual = borradorId ?? editingId;
+		if (decidirDestino({ ...buildDraftPayload(), editingId: idActual }) === 'fila') {
+			autoguardadoAPI.guardarAlSalir({
+				...(buildPayloadLiquidacion() as any),
+				cliente_key: clienteKey,
+				borrador_id: idActual,
+				base_version: borradorVersion
+			});
+		}
+		if (cola.hayPendientes()) {
+			e.preventDefault();
+			e.returnValue = '';
+		}
 	}
+
+	/** Aplica el borrador que se ofreció en la barra. */
+	function recuperarBorrador() {
+		if (!draftPendienteDeDecidir) return;
+		restoreDraft(draftPendienteDeDecidir);
+		draftPendienteDeDecidir = null;
+	}
+
+	/** Descarta el borrador y se queda con lo que trajo el servidor. */
+	async function descartarBorrador() {
+		draftPendienteDeDecidir = null;
+		try {
+			await autoguardadoAPI.eliminarDraft(borradorId ?? editId);
+		} catch {
+			// Que no se pueda borrar el borrador no debe impedir seguir trabajando.
+		}
+	}
+
+	/**
+	 * Pinta en el formulario un payload de borrador.
+	 *
+	 * Sustituye al `restoreDraft` de antes, que además de pintar decidía por su
+	 * cuenta si aplicarse. Ahora solo pinta: quién decide es
+	 * `decidirRestauracion`, y si hay duda la decide el usuario.
+	 */
+	function restoreDraft(d: any) {
+		if (!d) return;
+		draftPaused = true;
+		editingId = d.editingId ?? editingId;
+		estadoSeleccionado = d.estadoSeleccionado ?? 'BORRADOR';
+		selectedCliente = d.selectedCliente ?? selectedCliente;
+		clienteSearch = '';
+		hdr = { ...hdr, ...d.hdr };
+		rows = (d.rows || [newRow()]).map((r: any) => ({
+			...r,
+			id: ++uid,
+			placa_dropdown: false,
+			placa_highlight: 0,
+			placa_search: ''
+		}));
+		ext = { ...ext, ...d.ext };
+		liqCfg = { ...liqCfg, ...d.liqCfg };
+		recargosRows = (d.recargosRows || []).map((r: any) => ({ ...r, id: ++uid }));
+		terceroRows = (d.terceroRows || []).map((t: any) => ({ ...t }));
+		setView('editor');
+		/// Ventana anti-rebote: da tiempo a que los derivados se recalculen sin
+		/// disparar un autoguardado de lo que se acaba de pintar.
+		setTimeout(() => {
+			draftPaused = false;
+			lastDraftHash = hashStr(JSON.stringify(buildDraftPayload()));
+		}, 300);
+	}
+
+	/**
+	 * Sube al servidor los borradores que quedaron en `localStorage`.
+	 *
+	 * CÓDIGO CON FECHA DE CADUCIDAD: se borra en el release siguiente al que lo
+	 * estrene, junto con `migrar-borradores-locales.ts`. Para entonces todo
+	 * borrador local vigente ya habrá subido o habrá caducado.
+	 *
+	 * Corre ANTES de leer el borrador del servidor, para que lo que suba entre
+	 * en esa comparación en vez de quedarse fuera hasta el siguiente montaje.
+	 */
+	async function migrarBorradoresLocales() {
+		if (typeof localStorage === 'undefined') return;
+		if (localStorage.getItem(BANDERA_MIGRACION)) return;
+
+		try {
+			const { subir, borrar } = recogerBorradoresLocales(localStorage);
+
+			/// En serie y no en paralelo: son como mucho un puñado, y si el
+			/// servidor está caído prefiero fallar en el primero y conservar el
+			/// resto en local que disparar veinte peticiones a la vez.
+			for (const b of subir) {
+				try {
+					await autoguardadoAPI.guardarDraft(b.liquidacionId, b.payload);
+				} catch {
+					/// Si no sube, se pierde: es un borrador de menos de 48 h que ya
+					/// no se iba a leer de todas formas, y dejarlo en local mantiene
+					/// abierto el acceso cruzado entre usuarios del mismo equipo.
+				}
+			}
+			for (const clave of borrar) localStorage.removeItem(clave);
+			localStorage.setItem(BANDERA_MIGRACION, String(Date.now()));
+		} catch {
+			/// `localStorage` puede estar lleno o bloqueado. No es motivo para no
+			/// abrir el formulario.
+		}
+	}
+
+	/**
+	 * Lee el borrador del servidor al abrir y decide qué se pinta.
+	 *
+	 * El orden se invirtió respecto a antes: primero está lo del servidor
+	 * —`serverSnapshot` ya lo dejó puesto `cargarParaEditar`— y el borrador solo
+	 * entra si el usuario lo pide. Antes se aplicaba encima en silencio, que con
+	 * una liquidación que otro pudo tocar resucita datos viejos sin avisar.
+	 */
+	async function ofrecerBorradorDelServidor(forId?: string | null) {
+		await migrarBorradoresLocales();
+		try {
+			const draft = await autoguardadoAPI.obtenerDraft(forId ?? null);
+			if (!draft?.payload) return;
+
+			const hashDraft = hashStr(JSON.stringify(draft.payload));
+			const hashServidor = serverSnapshot ? hashStr(JSON.stringify(serverSnapshot)) : null;
+			const decision = decidirRestauracion({
+				hashServidor,
+				hashDraft,
+				tsDraft: draft.payload?.ts ?? null,
+				tsServidor: draft.updated_at ? Date.parse(draft.updated_at) : null
+			});
+
+			if (decision === 'draft') {
+				restoreDraft(draft.payload);
+				return;
+			}
+			if (decision === 'preguntar') {
+				draftPendienteDeDecidir = draft.payload;
+				draftPendienteFecha = draft.payload?.ts
+					? new Date(draft.payload.ts).toLocaleTimeString('es-CO', {
+							hour: '2-digit',
+							minute: '2-digit'
+						})
+					: '';
+			}
+		} catch {
+			/// Sin borrador se sigue con lo del servidor, que es lo correcto.
+		}
+	}
+
 
 	// ─── DEV DEBUG: Diff helper ─────────────────────────────────
 	interface DiffEntry {
@@ -594,6 +821,7 @@
 	// ─── MOUNT ──────────────────────────────────────────────────
 	onMount(async () => {
 		window.addEventListener('beforeunload', handleBeforeUnload);
+		engancharEstadoCola();
 		window.addEventListener('wheel', handleWheel, { passive: false });
 		window.addEventListener('keydown', handlePrintShortcut, { capture: true });
 		window.addEventListener('beforeprint', handleBeforePrint, { capture: true });
@@ -614,8 +842,9 @@
 			loadingLiq = true;
 			try {
 				await cargarParaEditar(editId);
-				// Auto-restore draft silently (overwrites inputs with cached values)
-				tryAutoRestoreDraft(editId);
+				/// Se OFRECE, ya no se aplica encima en silencio: con una liquidación
+				/// que otro pudo tocar, pisarla resucita datos viejos sin avisar.
+				await ofrecerBorradorDelServidor(editId);
 				if (viewMode || $page.url.searchParams.get('mode') === 'view') {
 					previewPage = 'liquidacion';
 					setView('preview');
@@ -629,8 +858,9 @@
 				loadingLiq = false;
 			}
 		} else {
-			// New — auto-restore draft silently
-			tryAutoRestoreDraft(null);
+			/// Liquidación nueva: no hay nada del servidor con qué comparar, así
+			/// que el borrador es lo único que hay y se aplica directo.
+			await ofrecerBorradorDelServidor(null);
 		}
 	});
 
@@ -644,27 +874,52 @@
 		if (typeof window !== 'undefined')
 			window.removeEventListener('beforeprint', handleBeforePrint, { capture: true } as any);
 		if (resizeObserver) resizeObserver.disconnect();
+
+		/// Antes esto solo cancelaba el temporizador, y con ello se perdía el
+		/// último cambio. Ahora se cancela, se encola lo que hubiera y se manda.
 		if (draftTimer) clearTimeout(draftTimer);
+		encolarAutoguardado();
+		/// La cola vive en el módulo, así que el `flush` sobrevive al desmontaje.
+		void cola.flush();
+		/// Y se desengancha, o el callback escribiría en variables de un
+		/// componente que ya no existe.
+		suscribirEstadoCola(null);
 	});
+
+	/// Catálogo de operadoras. Se piden TAMBIÉN las inactivas: si se retiró una
+	/// operadora después de que se usara, el <select> tiene que seguir pudiendo
+	/// mostrar la de esta liquidación, o al guardar se perdería en silencio.
+	let operadoras: Operadora[] = [];
+
+	/// Las que se ofrecen: las activas, más la actual aunque esté retirada.
+	$: operadorasVisibles = operadoras.filter(
+		(o) => o.activo || o.codigo === hdr.operadora
+	);
 
 	async function cargarCatalogos() {
 		try {
-			const [clientesRes, vehiculosRes, tiposRes, firmantesRes, tercerosRes] = await Promise.all([
-				apiClient.get<{ data: ClienteBasico[] }>('/api/empresas/basicos'),
-				apiClient.get<{ data: Vehiculo[] }>('/api/vehiculos'),
-				liquidacionesServiciosAPI.obtenerTiposRecargo(),
-				usuariosAPI.firmantes().catch(() => [] as Firmante[]),
-				tercerosAPI.listar({
-					page: 1,
-					limit: 1000
-				})
-			]);
+			const [clientesRes, vehiculosRes, tiposRes, firmantesRes, tercerosRes, operadorasRes] =
+				await Promise.all([
+					apiClient.get<{ data: ClienteBasico[] }>('/api/empresas/basicos'),
+					apiClient.get<{ data: Vehiculo[] }>('/api/vehiculos'),
+					liquidacionesServiciosAPI.obtenerTiposRecargo(),
+					usuariosAPI.firmantes().catch(() => [] as Firmante[]),
+					tercerosAPI.listar({
+						page: 1,
+						limit: 1000
+					}),
+					/// Si el catálogo falla, el <select> se queda con la operadora que
+					/// ya tenga la liquidación en vez de vaciarse: perderla al guardar
+					/// sería peor que no poder cambiarla.
+					operadorasAPI.listar(true).catch(() => [] as Operadora[])
+				]);
 			clientes = clientesRes.data?.data || [];
 			vehiculos = vehiculosRes.data?.data || [];
 			tiposRecargo = tiposRes || [];
 			firmaGerencia = firmantesRes.find((f: Firmante) => f.cargo === 'Gerencia') || null;
 			firmaFacturacion = firmantesRes.find((f: Firmante) => f.cargo === 'Facturación') || null;
 			tercerosList = tercerosRes.data || [];
+			operadoras = operadorasRes || [];
 		} catch (e) {
 			console.error('Error cargando catálogos', e);
 		}
@@ -697,7 +952,7 @@
 		try {
 			await cargarCatalogos();
 			await cargarParaEditar(editId);
-			tryAutoRestoreDraft(editId);
+			await ofrecerBorradorDelServidor(editId);
 			if (viewMode || $page.url.searchParams.get('mode') === 'view') {
 				previewPage = 'liquidacion';
 				setView('preview');
@@ -784,7 +1039,7 @@
 		hdr.anio = liq.anio || new Date().getFullYear();
 		hdr.observaciones = liq.observaciones || '';
 		hdr.osi = liq.osi || '';
-		hdr.operadora = liq.operadora || 'PAREX';
+		hdr.operadora = liq.operadora || 'OTRA';
 
 		// ── Trazabilidad state ──
 		liqEstado = liq.estado || 'BORRADOR';
@@ -1569,6 +1824,81 @@
 		}
 	}
 
+	/**
+	 * El payload que se manda al servidor, tal cual.
+	 *
+	 * Extraído de `registrarLiquidacion` para que el autoguardado mande EXACTAMENTE
+	 * lo mismo que el botón Guardar. Con dos construcciones distintas, un campo
+	 * añadido a una y no a la otra se pierde en cada autoguardado y reaparece al
+	 * guardar a mano — un fantasma imposible de reproducir.
+	 */
+	function buildPayloadLiquidacion() {
+		const mesIdx = MESES.indexOf(hdr.mes) + 1;
+		/// Antes lo garantizaba la validación de `registrarLiquidacion`, que corre
+		/// justo encima. Ahora la función también la llama el autoguardado, así
+		/// que la condición se comprueba aquí: sin cliente no hay payload que
+		/// construir, y `decidirDestino` ya impide llegar en ese caso.
+		if (!selectedCliente) throw new Error('Selecciona un cliente');
+		const clienteId = selectedCliente.id;
+		return {
+			cliente_id: clienteId,
+			consecutivo: hdr.consecutivo || undefined,
+			mes: mesIdx,
+			anio: hdr.anio,
+			items: rows.map((r, idx) => {
+				return {
+					placa: r.placa,
+					fecha_inicial: r.fecha_ini || `${hdr.anio}-${String(mesIdx).padStart(2, '0')}-01`,
+					fecha_final: r.fecha_fin || `${hdr.anio}-${String(mesIdx).padStart(2, '0')}-01`,
+					recorrido: r.recorrido || 'N/A',
+					tipo_servicio: r.tipo as TipoServicioTarifa,
+					cantidad: parseFloat(String(r.cant)) || 1,
+					valor_unitario: parseFloat(String(r.vr_unit)) || 0,
+					porcentaje_descuento: parseFloat(String(r.dcto)) || 0,
+					numero_planilla: r.planilla || undefined,
+					cantidad_pernoctes: 0,
+					valor_pernocte_unitario: 0,
+					tercero_id: terceroRows[idx]?.tercero_id || null
+				};
+			}),
+			porcentaje_iva: parseFloat(String(ext.iva_pct)) || 0,
+			observaciones: hdr.observaciones || undefined,
+			osi: hdr.osi || undefined,
+			operadora: hdr.operadora,
+			/// El id manda; el texto va de respaldo mientras dure la transición.
+			/// Si el catálogo no cargó, se manda `null` y el backend resuelve por
+			/// el texto — que es justo lo que hace `resolverOperadora`.
+			operadora_id:
+				operadoras.find((o) => o.codigo === hdr.operadora)?.id ?? null,
+			valor_transporte_adicional: 0,
+			valor_recargos: valRec,
+			valor_pernoctes: ext.pernote_unit * ext.pernote_cant,
+			valor_unitario_pernoctes: ext.pernote_unit,
+			cantidad_pernoctes: ext.pernote_cant,
+			recargos_data: {
+				rows: recargosRows,
+				liqCfg,
+				terceroRows
+			},
+			terceros_items: terceroRows.map((t, i) => {
+				const calc = terceroCalcs[i];
+				return {
+					tercero_id: t.tercero_id || null,
+					placa: t.placa,
+					recorrido: t.recorrido || 'N/A',
+					fechas: t.fechas || '',
+					valor_unitario: parseFloat(String(t.vr_unit)) || 0,
+					cantidad: parseFloat(String(t.cant)) || 0,
+					porcentaje_admin: parseFloat(String(t.pct_admin)) || 0,
+					ingreso_extra_global: calc?.extraGlobal || 0,
+					ingresos_extra_aval: parseFloat(String(t.ingresos_extra_aval)) || 0,
+					ingreso_empresa: calc?.ingresoCotransmeq || 0,
+					src_index: t.src_index ?? i
+				};
+			})
+		};
+	}
+
 	// ─── REGISTRAR / ACTUALIZAR ─────────────────────────────────
 	async function registrarLiquidacion() {
 		saveError = '';
@@ -1588,63 +1918,12 @@
 
 		saving = true;
 		try {
-			const mesIdx = MESES.indexOf(hdr.mes) + 1;
-			const payload = {
-				cliente_id: selectedCliente.id,
-				consecutivo: hdr.consecutivo || undefined,
-				mes: mesIdx,
-				anio: hdr.anio,
-				items: rows.map((r, idx) => {
-					return {
-						placa: r.placa,
-						fecha_inicial: r.fecha_ini || `${hdr.anio}-${String(mesIdx).padStart(2, '0')}-01`,
-						fecha_final: r.fecha_fin || `${hdr.anio}-${String(mesIdx).padStart(2, '0')}-01`,
-						recorrido: r.recorrido || 'N/A',
-						tipo_servicio: r.tipo as TipoServicioTarifa,
-						cantidad: parseFloat(String(r.cant)) || 1,
-						valor_unitario: parseFloat(String(r.vr_unit)) || 0,
-						porcentaje_descuento: parseFloat(String(r.dcto)) || 0,
-						numero_planilla: r.planilla || undefined,
-						cantidad_pernoctes: 0,
-						valor_pernocte_unitario: 0,
-						tercero_id: terceroRows[idx]?.tercero_id || null
-					};
-				}),
-				porcentaje_iva: parseFloat(String(ext.iva_pct)) || 0,
-				observaciones: hdr.observaciones || undefined,
-				osi: hdr.osi || undefined,
-				operadora: hdr.operadora,
-				valor_transporte_adicional: 0,
-				valor_recargos: valRec,
-				valor_pernoctes: ext.pernote_unit * ext.pernote_cant,
-				valor_unitario_pernoctes: ext.pernote_unit,
-				cantidad_pernoctes: ext.pernote_cant,
-				recargos_data: {
-					rows: recargosRows,
-					liqCfg,
-					terceroRows
-				},
-				terceros_items: terceroRows.map((t, i) => {
-					const calc = terceroCalcs[i];
-					return {
-						tercero_id: t.tercero_id || null,
-						placa: t.placa,
-						recorrido: t.recorrido || 'N/A',
-						fechas: t.fechas || '',
-						valor_unitario: parseFloat(String(t.vr_unit)) || 0,
-						cantidad: parseFloat(String(t.cant)) || 0,
-						porcentaje_admin: parseFloat(String(t.pct_admin)) || 0,
-						ingreso_extra_global: calc?.extraGlobal || 0,
-						ingresos_extra_aval: parseFloat(String(t.ingresos_extra_aval)) || 0,
-						ingreso_empresa: calc?.ingresoCotransmeq || 0,
-						src_index: t.src_index ?? i
-					};
-				})
-			};
+			const payload = buildPayloadLiquidacion();
 
 			if (editingId) {
 				await liquidacionesServiciosAPI.actualizar(editingId, payload);
-				clearDraft();
+				/// Ya está guardado de verdad: el borrador deja de ser la verdad.
+				void autoguardadoAPI.eliminarDraft(borradorId ?? editingId ?? null).catch(() => {});
 				successMsg = '¡Liquidación actualizada!';
 				successSub = 'Los cambios se guardaron correctamente';
 				showSuccessAnim = true;
@@ -1654,7 +1933,8 @@
 				}, 2200);
 			} else {
 				await liquidacionesServiciosAPI.crear(payload);
-				clearDraft();
+				/// Ya está guardado de verdad: el borrador deja de ser la verdad.
+				void autoguardadoAPI.eliminarDraft(borradorId ?? editingId ?? null).catch(() => {});
 				successMsg = '¡Liquidación creada!';
 				successSub = 'Se registró correctamente en el sistema';
 				showSuccessAnim = true;
@@ -2059,8 +2339,26 @@
 		printSheets.terceros
 	].filter(Boolean).length;
 
-	function handleCancel() {
-		clearDraft(editId);
+	/**
+	 * Cancelar.
+	 *
+	 * Si el autoguardado ya creó la fila, esa liquidación EXISTE en el servidor.
+	 * Descartarla es una decisión, no un efecto secundario de cerrar.
+	 */
+	async function handleCancel() {
+		const idCreado = borradorId;
+		if (idCreado) {
+			const seguro = confirm(
+				'Esta liquidación ya está guardada como borrador en el servidor. ¿Descartarla?'
+			);
+			if (!seguro) return;
+			try {
+				await liquidacionesServiciosAPI.eliminar(idCreado);
+			} catch {
+				// Si no se puede borrar, al menos no se deja al usuario atrapado.
+			}
+		}
+		void autoguardadoAPI.eliminarDraft(idCreado ?? editId ?? null).catch(() => {});
 		goto(BACK_URL);
 	}
 
@@ -2407,19 +2705,31 @@
 				</div>
 			</div>
 			<div class="wb-toolbar-r">
+				<!-- El indicador cuenta lo que va EN CAMINO, no solo la última hora.
+				     Con el borrador en el servidor, «Guardado 14:32» a secas no
+				     distingue «todo llegó» de «hay tres cambios esperando red». -->
 				<div
 					class="wb-draft-pill"
-					class:wb-draft-saved={draftSavedAt}
-					class:wb-draft-active={!draftSavedAt}
+					class:wb-draft-saved={draftSavedAt && autoPendientes === 0}
+					class:wb-draft-active={!draftSavedAt || autoPendientes > 0}
+					title={autoFallidas > 0
+						? `${autoFallidas} cambio(s) no se pudieron guardar`
+						: autoPendientes > 0
+							? `${autoPendientes} cambio(s) en camino`
+							: 'Todo guardado en el servidor'}
 				>
 					<span class="wb-draft-dot"></span>
 					<span class="wb-draft-label">
-						{draftSavedAt ? 'Guardado' : 'Autoguardado'}
+						{autoPendientes > 0
+							? `Guardando ${autoPendientes}…`
+							: draftSavedAt
+								? 'Guardado'
+								: 'Autoguardado'}
 					</span>
 					{#if draftSavedAt}
 						<span class="wb-draft-time">{draftSavedAt}</span>
 					{/if}
-					{#if draftAutoRestored}
+					{#if autoFallidas > 0}
 						<span class="wb-draft-restored" title="Borrador restaurado automáticamente">♻️</span>
 					{/if}
 				</div>
@@ -2526,6 +2836,24 @@
 		{/if}
 
 		<!-- ═══ WORKBOOK SCROLL AREA ═══ -->
+		{#if draftPendienteDeDecidir}
+			<!-- Antes esto no existía: el borrador se aplicaba encima de lo que
+			     acababa de traer el servidor, en silencio. Con una liquidación que
+			     otra persona pudo haber tocado, eso resucita datos viejos sin que
+			     nadie se entere — y si además se guarda, los deja escritos. -->
+			<div class="wb-draft-aviso">
+				<span>
+					Tienes cambios sin guardar{draftPendienteFecha
+						? ` de las ${draftPendienteFecha}`
+						: ''} que no coinciden con lo que hay en el servidor.
+				</span>
+				<div class="wb-draft-aviso-acc">
+					<button class="liq-btn-secondary" on:click={recuperarBorrador}>Recuperar</button>
+					<button class="liq-btn-secondary" on:click={descartarBorrador}>Descartar</button>
+				</div>
+			</div>
+		{/if}
+
 		<div class="wb-scroll-area" bind:this={wbScrollEl}>
 			<!-- svelte-ignore a11y-no-static-element-interactions -->
 			<div class="workbook" data-wb-root role="grid" tabindex="-1" on:keydown={handleWbKeydown}>
@@ -2692,10 +3020,17 @@
 							</div>
 							<div class="wb-enc-cell wb-enc-cell-flex-130">
 								<span class="wb-enc-label">Operadora</span>
+								<!-- Del catálogo, no fijo: añadir una operadora era tocar código
+								     en dos repos. Se sigue enlazando por `codigo` y no por id para no
+								     romper el borrador ni la hoja de impresión, que leen `hdr.operadora`;
+								     el id se resuelve al construir el payload. -->
 								<select bind:value={hdr.operadora}>
-									<option>PAREX</option>
-									<option>GEOPARK</option>
-									<option>OTRA</option>
+									{#if operadorasVisibles.length === 0}
+										<option value={hdr.operadora}>{hdr.operadora || '—'}</option>
+									{/if}
+									{#each operadorasVisibles as o (o.id)}
+										<option value={o.codigo}>{o.nombre}{o.activo ? '' : ' (retirada)'}</option>
+									{/each}
 								</select>
 							</div>
 							<div class="wb-enc-cell wb-enc-cell-flex-130">
@@ -5662,6 +5997,24 @@
 			transform: scale(1);
 			opacity: 1;
 		}
+	}
+
+	.wb-draft-aviso {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+		flex-shrink: 0;
+		padding: 8px 20px;
+		background: #fef3c7;
+		border-bottom: 1px solid #fcd34d;
+		font-size: 12px;
+		color: #78350f;
+	}
+	.wb-draft-aviso-acc {
+		display: flex;
+		gap: 8px;
+		flex-shrink: 0;
 	}
 
 	/* ─ DRAFT INDICATOR ─ */
