@@ -4,8 +4,9 @@
    Además acelera el rebuild: solo mira código propio. */
 @import 'tailwindcss' source(".");
 
-/* Estilos base de Univer. Van DESPUÉS de tailwind para que el reset no le
-   quite el suyo al canvas, y antes de los tokens de marca para que la paleta
+/* Univer Sheets UI. Sin estos estilos el canvas monta pero se dibuja como
+   texto plano: menús sin caja y sin rejilla. Van DESPUÉS de tailwind para que
+   su reset no se los quite, y antes de los tokens de marca para que la paleta
    naranja de cotransmeq siga ganando. */
 @import '@univerjs/design/lib/index.css';
 @import '@univerjs/ui/lib/index.css';

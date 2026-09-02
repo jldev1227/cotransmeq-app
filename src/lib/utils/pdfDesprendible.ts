@@ -299,14 +299,43 @@ export async function construirDocDefinition(
 		return [];
 	};
 
-	const cantidadPernotes =
-		item.pernotes?.reduce((t, p) => t + parseFechas(p.fechas).length, 0) || 0;
+	// Cantidad y valor de pernoctes salen SIEMPRE de las filas de la tabla
+	// `pernotes` (cantidad x valor registrado en cada fila). NO se usa el
+	// agregado `item.total_pernotes` de la liquidacion: ese campo se calcula
+	// con el valor de pernote vigente en la configuracion al momento de
+	// guardar, y deja de coincidir con lo registrado si esa configuracion
+	// cambia despues (o si la fila se corrigio a mano).
+	// Deduplicamos por `id` por si el include de Prisma repite filas.
+	const pernotesUnicos: any[] = [];
+	if (item.pernotes && item.pernotes.length > 0) {
+		const vistosPernotes = new Set<string>();
+		(item.pernotes as any[]).forEach((p, idx) => {
+			const key = p?.id ?? `sin-id-${idx}`;
+			if (vistosPernotes.has(key)) return;
+			vistosPernotes.add(key);
+			pernotesUnicos.push(p);
+		});
+	}
+
+	// `cantidad` y `fechas` deberian ir sincronizados; si falta uno usamos el otro.
+	const diasDePernote = (p: any): number => {
+		const fechas = parseFechas(p.fechas);
+		return fechas.length > 0 ? fechas.length : Number(p.cantidad) || 0;
+	};
+
+	const cantidadPernotes = pernotesUnicos.reduce((t, p) => t + diasDePernote(p), 0);
+
+	// Fallback al agregado almacenado solo si el payload no trae las filas.
+	const totalPernotes =
+		pernotesUnicos.length > 0
+			? pernotesUnicos.reduce((t, p) => t + diasDePernote(p) * (Number(p.valor) || 0), 0)
+			: Number(safeValue(item.total_pernotes, 0));
 
 	let pernoteFechasTexto = '';
-	if (item.pernotes && item.pernotes.length > 0) {
+	if (pernotesUnicos.length > 0) {
 		try {
 			const todasLasFechas: string[] = [];
-			item.pernotes.forEach((pernote) => {
+			pernotesUnicos.forEach((pernote) => {
 				const fechas = parseFechas(pernote.fechas);
 				if (fechas.length > 0) {
 					todasLasFechas.push(...fechas);
@@ -391,7 +420,7 @@ export async function construirDocDefinition(
 				style: 'valueText'
 			},
 			{
-				text: formatCurrency(item.total_pernotes || 0),
+				text: formatCurrency(totalPernotes),
 				alignment: 'center' as const,
 				style: 'valueText'
 			}
@@ -926,10 +955,18 @@ export async function construirDocDefinition(
 				: isNoPagar
 					? COLOR_NO_PAGAR
 					: color;
+			// Una planilla 'no_pagar' puede llegar con valor (tiene recargos
+			// generados pero no está anclada a un recargo de la liquidación) o
+			// sin él (días de disponibilidad, o recorrido sin recargo). El
+			// título debe distinguirlos: decir "sin recargo generado" sobre una
+			// planilla que sí los tiene es engañoso.
+			const tieneValorPlanilla = Number(planilla.total_valor || 0) > 0;
 			const sectionTitle = isBonoAparte
 				? 'BONO APARTE (no remunerado como recargo)'
 				: isNoPagar
-					? 'DÍAS LABORALES (sin recargo generado)'
+					? tieneValorPlanilla
+						? 'DÍAS LABORALES (no incluidos en esta liquidación)'
+						: 'DÍAS LABORALES (sin recargo generado)'
 					: 'HORAS EXTRAS Y RECARGOS';
 
 			// Page break before each planilla group
@@ -1530,7 +1567,7 @@ export async function construirDocDefinition(
 									color: 'white',
 									bold: true,
 									fontSize: 10,
-									fillColor: color,
+									fillColor: headerColor,
 									margin: [4, 4, 0, 4]
 								},
 								{
@@ -1538,7 +1575,7 @@ export async function construirDocDefinition(
 									color: 'white',
 									bold: true,
 									fontSize: 10,
-									fillColor: color,
+									fillColor: headerColor,
 									alignment: 'right' as const,
 									margin: [0, 4, 15, 4]
 								}
