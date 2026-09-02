@@ -7,7 +7,8 @@
 	import { sesionesAPI, type Sesion } from '$lib/api/sesiones';
 	import { apiClient } from '$lib/api/apiClient';
 	import { authStore } from '$lib/stores/auth';
-	import { AREA_LABELS, type Area } from '$lib/config/permissions';
+	import { AREA_LABELS, type Area, type AccessLevel } from '$lib/config/permissions';
+	import PermisosRutasPicker from '$lib/components/permisos/PermisosRutasPicker.svelte';
 	import { socketManager, socketUtils } from '$lib/socket';
 
 	// ─── Estado unificado ────────────────────────────────────────────────
@@ -96,6 +97,8 @@
 	let editCorreo = '';
 	let editTelefono = '';
 	let editAreas: string[] = [];
+	/// Lista blanca por ruta del usuario editado. `null` = manda el área.
+	let editPermisosRutas: Record<string, AccessLevel> | null = null;
 	let savingEdit = false;
 
 	let showConfirmModal = false;
@@ -235,6 +238,7 @@
 		editCorreo = usuario.correo;
 		editTelefono = usuario.telefono || '';
 		editAreas = Array.isArray(usuario.area) ? [...usuario.area] : usuario.area ? [usuario.area as string] : [];
+		editPermisosRutas = usuario.permisos_rutas ?? null;
 		showEditModal = true;
 	}
 	function cerrarEditModal() {
@@ -250,7 +254,13 @@
 				nombre: editNombre,
 				correo: editCorreo,
 				telefono: editTelefono,
-				area: editAreas
+				area: editAreas,
+				// `{}` y `null` significan lo mismo («manda el área»); se normaliza
+				// para no dejar objetos vacíos que luego cueste distinguir.
+				permisos_rutas:
+					editPermisosRutas && Object.keys(editPermisosRutas).length > 0
+						? editPermisosRutas
+						: null
 			});
 			usuarios = usuarios.map((u) => (u.id === updated.id ? updated : u));
 			toast.success(`${editNombre} actualizado correctamente`);
@@ -564,7 +574,7 @@
 	}
 </script>
 
-<svelte:head><title>Equipo · Transmeralda</title></svelte:head>
+<svelte:head><title>Equipo · Cotransmeq</title></svelte:head>
 
 <div class="usuarios-page" in:fly={{ y: 20, duration: 500, easing: quintOut }}>
 	<!-- ═══ HERO ═══ -->
@@ -577,7 +587,7 @@
 					</svg>
 				</div>
 				<div class="hero-text">
-					<span class="eyebrow">Equipo · Transmeralda</span>
+					<span class="eyebrow">Equipo · Cotransmeq</span>
 					<h1>Personas y accesos</h1>
 					<p>
 						Gestiona los miembros del equipo, sus áreas, permisos, sesiones activas e invitaciones
@@ -1289,7 +1299,7 @@
 		transition:fade={{ duration: 200 }}
 	>
 		<div
-			class="modal modal--md"
+			class="modal modal--lg"
 			on:click|stopPropagation
 			on:keydown|stopPropagation
 			role="dialog"
@@ -1342,6 +1352,16 @@
 							</button>
 						{/each}
 					</div>
+				</div>
+				<div class="field">
+					<span class="field-label">Permisos por ruta</span>
+					<PermisosRutasPicker
+						idPrefix="editar"
+						areas={editAreas}
+						role={editUsuario.role ?? 'usuario'}
+						valor={editPermisosRutas}
+						onchange={(v) => (editPermisosRutas = v)}
+					/>
 				</div>
 				<footer class="modal-foot">
 					<button type="button" class="btn-secondary" on:click={cerrarEditModal}>Cancelar</button>
@@ -1622,7 +1642,7 @@
 	   ═══════════════════════════════════════════════════════════════ */
 	.usuarios-page {
 		min-height: 100vh;
-		background: #faf7f2;
+		background: #fcfcfb;
 		font-family: 'Inter Tight', system-ui, sans-serif;
 		color: #1a1a1a;
 		padding: 1.5rem 1.25rem 3rem;
@@ -1640,8 +1660,8 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #10b981;
-		background: rgba(16, 185, 129, 0.08);
+		color: #f97316;
+		background: rgba(249, 115, 22, 0.08);
 		padding: 0.3rem 0.75rem;
 		border-radius: 6px;
 		font-family: 'JetBrains Mono', monospace;
@@ -1656,7 +1676,7 @@
 	h2,
 	h3 {
 		font-family: 'Fraunces', Georgia, serif;
-		color: #0f1f1a;
+		color: #0f172a;
 		letter-spacing: -0.01em;
 	}
 	.mono {
@@ -1745,7 +1765,7 @@
 	.stat-value {
 		font-size: 0.95rem;
 		font-weight: 700;
-		color: #0f1f1a;
+		color: #0f172a;
 	}
 	.stat-dot {
 		width: 8px;
@@ -1753,8 +1773,8 @@
 		border-radius: 50%;
 	}
 	.stat-dot--emerald {
-		background: #10b981;
-		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+		background: #f97316;
+		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
 	}
 	.stat-dot--amber {
 		background: #f59e0b;
@@ -1766,13 +1786,13 @@
 		color: #c9c4ba;
 	}
 	.stat-item--active {
-		color: #10b981;
+		color: #f97316;
 	}
 	.stat-item--active .stat-label {
-		color: #10b981;
+		color: #f97316;
 	}
 	.stat-item--active .stat-value {
-		color: #10b981;
+		color: #f97316;
 	}
 
 	/* ═══════════════════════════════════════════════════════════════
@@ -1843,7 +1863,7 @@
 		font-family: inherit;
 		font-size: 0.88rem;
 		color: #1a1a1a;
-		background: #faf7f2;
+		background: #fcfcfb;
 		border: 1px solid rgba(0, 0, 0, 0.08);
 		border-radius: 10px;
 		outline: none;
@@ -1854,15 +1874,15 @@
 	}
 	.search-input:focus {
 		background: white;
-		border-color: rgba(16, 185, 129, 0.4);
-		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+		border-color: rgba(249, 115, 22, 0.4);
+		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
 	}
 
 	.filter-group {
 		display: flex;
 		gap: 0.35rem;
 		padding: 0.25rem;
-		background: #faf7f2;
+		background: #fcfcfb;
 		border: 1px solid rgba(0, 0, 0, 0.06);
 		border-radius: 12px;
 	}
@@ -1882,11 +1902,11 @@
 		transition: all 0.2s;
 	}
 	.chip:hover {
-		color: #0f1f1a;
+		color: #0f172a;
 	}
 	.chip--active {
 		background: white;
-		color: #065f46;
+		color: #166534;
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 	}
 	.chip--sm {
@@ -1905,8 +1925,8 @@
 		color: #6b6b6b;
 	}
 	.chip--active .chip-count {
-		background: rgba(16, 185, 129, 0.12);
-		color: #047857;
+		background: rgba(249, 115, 22, 0.12);
+		color: #c2410c;
 	}
 	.chip-dot {
 		width: 7px;
@@ -1914,7 +1934,7 @@
 		border-radius: 50%;
 	}
 	.chip-dot--emerald {
-		background: #10b981;
+		background: #f97316;
 	}
 
 	.select {
@@ -1930,8 +1950,8 @@
 		min-width: 160px;
 	}
 	.select:focus {
-		border-color: rgba(16, 185, 129, 0.4);
-		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+		border-color: rgba(249, 115, 22, 0.4);
+		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
 	}
 
 	.clear-btn {
@@ -1988,8 +2008,8 @@
 	.user-card:hover,
 	.user-card--focus {
 		transform: translateY(-3px);
-		border-color: rgba(16, 185, 129, 0.3);
-		box-shadow: 0 12px 32px rgba(16, 185, 129, 0.12);
+		border-color: rgba(249, 115, 22, 0.3);
+		box-shadow: 0 12px 32px rgba(249, 115, 22, 0.12);
 	}
 	.user-card.status-inactive {
 		opacity: 0.78;
@@ -2009,7 +2029,7 @@
 		font-weight: 600;
 		line-height: 1.3;
 		margin: 0;
-		color: #0f1f1a;
+		color: #0f172a;
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
@@ -2021,8 +2041,8 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
-		color: #047857;
-		background: rgba(16, 185, 129, 0.1);
+		color: #c2410c;
+		background: rgba(249, 115, 22, 0.1);
 		padding: 0.1rem 0.4rem;
 		border-radius: 4px;
 	}
@@ -2052,8 +2072,8 @@
 		letter-spacing: 0.04em;
 	}
 	.avatar--online {
-		background: linear-gradient(135deg, rgba(16, 185, 129, 0.16), rgba(5, 150, 105, 0.2));
-		color: #065f46;
+		background: linear-gradient(135deg, rgba(249, 115, 22, 0.16), rgba(234, 88, 12, 0.2));
+		color: #166534;
 	}
 	.avatar--offline {
 		background: linear-gradient(135deg, rgba(75, 85, 99, 0.12), rgba(55, 65, 81, 0.16));
@@ -2073,8 +2093,8 @@
 		border: 2.5px solid white;
 	}
 	.avatar-dot--online {
-		background: #10b981;
-		box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+		background: #f97316;
+		box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2);
 		animation: pulse-online 2s ease-in-out infinite;
 	}
 	.avatar-dot--offline {
@@ -2085,10 +2105,10 @@
 	}
 	@keyframes pulse-online {
 		0%, 100% {
-			box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+			box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4);
 		}
 		50% {
-			box-shadow: 0 0 0 4px rgba(16, 185, 129, 0);
+			box-shadow: 0 0 0 4px rgba(249, 115, 22, 0);
 		}
 	}
 
@@ -2112,7 +2132,7 @@
 		cursor: not-allowed;
 	}
 	.user-status-toggle--on {
-		background: linear-gradient(135deg, #10b981, #059669);
+		background: linear-gradient(135deg, #f97316, #ea580c);
 	}
 	.user-status-toggle--off {
 		background: #d1d5db;
@@ -2182,11 +2202,11 @@
 	.user-data dd {
 		margin: 0;
 		font-size: 0.85rem;
-		color: #0f1f1a;
+		color: #0f172a;
 		font-weight: 500;
 	}
 	.last-access--online {
-		color: #047857;
+		color: #c2410c;
 		font-weight: 600;
 	}
 	.last-access--inactive {
@@ -2206,7 +2226,7 @@
 		gap: 0.4rem;
 		font-size: 0.78rem;
 		font-weight: 600;
-		color: #10b981;
+		color: #f97316;
 		background: none;
 		border: none;
 		padding: 0;
@@ -2242,9 +2262,9 @@
 		height: 14px;
 	}
 	.icon-btn:hover {
-		color: #10b981;
-		border-color: rgba(16, 185, 129, 0.3);
-		background: rgba(16, 185, 129, 0.06);
+		color: #f97316;
+		border-color: rgba(249, 115, 22, 0.3);
+		background: rgba(249, 115, 22, 0.06);
 	}
 	.icon-btn--danger:hover {
 		color: #dc2626;
@@ -2272,7 +2292,7 @@
 		transition: all 0.2s;
 	}
 	.session-card:hover {
-		border-color: rgba(16, 185, 129, 0.2);
+		border-color: rgba(249, 115, 22, 0.2);
 	}
 	.session-card--closed {
 		opacity: 0.7;
@@ -2290,8 +2310,8 @@
 		width: 40px;
 		height: 40px;
 		border-radius: 12px;
-		background: linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(5, 150, 105, 0.18));
-		color: #065f46;
+		background: linear-gradient(135deg, rgba(249, 115, 22, 0.14), rgba(234, 88, 12, 0.18));
+		color: #166534;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -2309,7 +2329,7 @@
 		border: 2.5px solid white;
 	}
 	.session-dot--active {
-		background: #10b981;
+		background: #f97316;
 	}
 	.session-dot--closed {
 		background: #9ca3af;
@@ -2326,7 +2346,7 @@
 	}
 	.session-row strong {
 		font-size: 0.92rem;
-		color: #0f1f1a;
+		color: #0f172a;
 		font-weight: 600;
 	}
 	.session-mail {
@@ -2354,10 +2374,10 @@
 		flex-shrink: 0;
 	}
 	.meta-item--emerald {
-		color: #047857;
+		color: #c2410c;
 	}
 	.meta-item--emerald svg {
-		color: #10b981;
+		color: #f97316;
 	}
 	.session-side {
 		display: flex;
@@ -2382,7 +2402,7 @@
 		width: 6px;
 		height: 6px;
 		border-radius: 50%;
-		background: #10b981;
+		background: #f97316;
 		display: inline-block;
 		margin-right: 0.35rem;
 		animation: pulse 1.5s ease-in-out infinite;
@@ -2412,7 +2432,7 @@
 		transition: all 0.2s;
 	}
 	.inv-card:hover {
-		border-color: rgba(16, 185, 129, 0.2);
+		border-color: rgba(249, 115, 22, 0.2);
 	}
 	.inv-card--expirada,
 	.inv-card--revocada,
@@ -2449,7 +2469,7 @@
 	}
 	.inv-correo {
 		font-size: 0.92rem;
-		color: #0f1f1a;
+		color: #0f172a;
 		font-weight: 600;
 	}
 	.inv-cargo {
@@ -2495,8 +2515,8 @@
 		white-space: nowrap;
 	}
 	.estado-pill--emerald {
-		color: #047857;
-		background: rgba(16, 185, 129, 0.1);
+		color: #c2410c;
+		background: rgba(249, 115, 22, 0.1);
 	}
 	.estado-pill--amber {
 		color: #b45309;
@@ -2530,8 +2550,8 @@
 	.spin-ring {
 		width: 30px;
 		height: 30px;
-		border: 2.5px solid rgba(16, 185, 129, 0.15);
-		border-top-color: #10b981;
+		border: 2.5px solid rgba(249, 115, 22, 0.15);
+		border-top-color: #f97316;
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 	}
@@ -2566,13 +2586,13 @@
 		width: 64px;
 		height: 64px;
 		border-radius: 50%;
-		background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(5, 150, 105, 0.12));
-		color: #10b981;
+		background: linear-gradient(135deg, rgba(249, 115, 22, 0.08), rgba(234, 88, 12, 0.12));
+		color: #f97316;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		margin-bottom: 0.4rem;
-		box-shadow: 0 6px 20px rgba(16, 185, 129, 0.12);
+		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.12);
 	}
 	.empty-icon svg {
 		width: 28px;
@@ -2626,13 +2646,13 @@
 		white-space: nowrap;
 	}
 	.btn-primary {
-		background: linear-gradient(135deg, #10b981, #059669);
+		background: linear-gradient(135deg, #f97316, #ea580c);
 		color: white;
-		box-shadow: 0 4px 16px rgba(16, 185, 129, 0.28);
+		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.28);
 	}
 	.btn-primary:hover:not(:disabled) {
 		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
 	}
 	.btn-primary:disabled {
 		opacity: 0.6;
@@ -2644,7 +2664,7 @@
 		border-color: rgba(0, 0, 0, 0.12);
 	}
 	.btn-secondary:hover:not(:disabled) {
-		background: #faf7f2;
+		background: #fcfcfb;
 		border-color: rgba(0, 0, 0, 0.2);
 	}
 	.btn-secondary:disabled {
@@ -2685,7 +2705,7 @@
 		gap: 0.3rem;
 		font-size: 0.75rem;
 		font-weight: 600;
-		color: #10b981;
+		color: #f97316;
 		background: none;
 		border: none;
 		padding: 0.25rem 0.4rem;
@@ -2694,7 +2714,7 @@
 		transition: all 0.2s;
 	}
 	.link-btn:hover {
-		background: rgba(16, 185, 129, 0.08);
+		background: rgba(249, 115, 22, 0.08);
 	}
 	.link-btn--danger {
 		color: #dc2626;
@@ -2736,6 +2756,14 @@
 	.modal--md {
 		max-width: 560px;
 	}
+	/* El editor de permisos por ruta es una tabla de módulo × nivel: a 560px las
+	   filas rompen en dos líneas y se pierde la lectura de un vistazo. El
+	   `margin-block: auto` evita que se corte por arriba cuando crece más que la
+	   ventana, porque el backdrop centra con flex y además hace scroll. */
+	.modal--lg {
+		max-width: 780px;
+		margin-block: auto;
+	}
 	.modal-head {
 		display: flex;
 		align-items: flex-start;
@@ -2746,13 +2774,13 @@
 		font-size: 1.4rem;
 		font-weight: 500;
 		margin: 0.35rem 0 0;
-		color: #0f1f1a;
+		color: #0f172a;
 	}
 	.modal-title {
 		font-size: 1.3rem;
 		font-weight: 500;
 		margin: 0.35rem 0 0;
-		color: #0f1f1a;
+		color: #0f172a;
 		font-family: 'Fraunces', Georgia, serif;
 	}
 	.modal-desc {
@@ -2762,7 +2790,7 @@
 		margin: 0;
 	}
 	.modal-desc strong {
-		color: #0f1f1a;
+		color: #0f172a;
 		font-weight: 600;
 	}
 	.modal-close {
@@ -2784,7 +2812,7 @@
 		height: 16px;
 	}
 	.modal-close:hover {
-		color: #0f1f1a;
+		color: #0f172a;
 		border-color: rgba(0, 0, 0, 0.2);
 	}
 	.modal-icon {
@@ -2806,9 +2834,9 @@
 		border: 1px solid rgba(220, 38, 38, 0.15);
 	}
 	.modal-icon--emerald {
-		background: linear-gradient(135deg, #10b981, #059669);
+		background: linear-gradient(135deg, #f97316, #ea580c);
 		color: white;
-		box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
+		box-shadow: 0 8px 24px rgba(249, 115, 22, 0.3);
 	}
 	.modal-form {
 		display: flex;
@@ -2844,7 +2872,7 @@
 	.field-label {
 		font-size: 0.78rem;
 		font-weight: 600;
-		color: #0f1f1a;
+		color: #0f172a;
 	}
 	.field-required {
 		color: #dc2626;
@@ -2856,7 +2884,7 @@
 		font-family: inherit;
 		font-size: 0.88rem;
 		color: #1a1a1a;
-		background: #faf7f2;
+		background: #fcfcfb;
 		border: 1px solid rgba(0, 0, 0, 0.1);
 		border-radius: 10px;
 		outline: none;
@@ -2867,8 +2895,8 @@
 	}
 	.input:focus {
 		background: white;
-		border-color: rgba(16, 185, 129, 0.4);
-		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+		border-color: rgba(249, 115, 22, 0.4);
+		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
 	}
 
 	/* Area picker (chips) */
@@ -2882,7 +2910,7 @@
 		font-size: 0.78rem;
 		font-weight: 600;
 		color: #4a4a4a;
-		background: #faf7f2;
+		background: #fcfcfb;
 		border: 1px solid rgba(0, 0, 0, 0.08);
 		padding: 0.45rem 0.85rem;
 		border-radius: 10px;
@@ -2891,12 +2919,12 @@
 	}
 	.area-pill:hover {
 		border-color: rgba(0, 0, 0, 0.15);
-		color: #0f1f1a;
+		color: #0f172a;
 	}
 	.area-pill--active {
-		background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.14));
-		color: #065f46;
-		border-color: rgba(16, 185, 129, 0.35);
+		background: linear-gradient(135deg, rgba(249, 115, 22, 0.1), rgba(234, 88, 12, 0.14));
+		color: #166534;
+		border-color: rgba(249, 115, 22, 0.35);
 	}
 
 	/* Permisos */
@@ -2905,7 +2933,7 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 0.85rem 1rem;
-		background: #faf7f2;
+		background: #fcfcfb;
 		border-radius: 12px;
 		border: 1px solid rgba(0, 0, 0, 0.06);
 	}
@@ -2947,13 +2975,13 @@
 		border-color: rgba(0, 0, 0, 0.15);
 	}
 	.perm-row--active {
-		background: linear-gradient(135deg, rgba(16, 185, 129, 0.06), rgba(5, 150, 105, 0.1));
-		border-color: rgba(16, 185, 129, 0.25);
+		background: linear-gradient(135deg, rgba(249, 115, 22, 0.06), rgba(234, 88, 12, 0.1));
+		border-color: rgba(249, 115, 22, 0.25);
 	}
 	.perm-row-label {
 		font-size: 0.85rem;
 		font-weight: 500;
-		color: #0f1f1a;
+		color: #0f172a;
 	}
 
 	/* Card icon (hero) */
@@ -2961,12 +2989,12 @@
 		width: 48px;
 		height: 48px;
 		border-radius: 14px;
-		background: linear-gradient(135deg, #10b981, #059669);
+		background: linear-gradient(135deg, #f97316, #ea580c);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		color: white;
-		box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
+		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
 	}
 	.card-icon svg {
 		width: 24px;
@@ -3004,8 +3032,8 @@
 		gap: 0.5rem;
 		padding: 0.875rem 1.25rem;
 		border-radius: 12px;
-		background: linear-gradient(135deg, rgba(16, 185, 129, 0.04), rgba(16, 185, 129, 0.01));
-		border: 1px solid rgba(16, 185, 129, 0.15);
+		background: linear-gradient(135deg, rgba(249, 115, 22, 0.04), rgba(249, 115, 22, 0.01));
+		border: 1px solid rgba(249, 115, 22, 0.15);
 		margin-bottom: 1rem;
 	}
 	.bonos-stat {
@@ -3020,8 +3048,8 @@
 		flex-shrink: 0;
 	}
 	.bonos-stat-dot--emerald {
-		background: #10b981;
-		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+		background: #f97316;
+		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
 	}
 	.bonos-stat-dot--gray {
 		background: #9ca3af;
@@ -3072,13 +3100,13 @@
 		transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 	}
 	.btn-bonos-grant {
-		background: linear-gradient(135deg, #10b981, #059669);
+		background: linear-gradient(135deg, #f97316, #ea580c);
 		color: white;
-		box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+		box-shadow: 0 2px 8px rgba(249, 115, 22, 0.25);
 	}
 	.btn-bonos-grant:hover:not(:disabled) {
 		transform: translateY(-1px);
-		box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+		box-shadow: 0 4px 14px rgba(249, 115, 22, 0.35);
 	}
 	.btn-bonos-revoke {
 		background: white;
@@ -3110,7 +3138,7 @@
 		user-select: none;
 	}
 	.bonos-select-all input {
-		accent-color: #10b981;
+		accent-color: #f97316;
 	}
 
 	.bonos-selected-count {
@@ -3118,11 +3146,11 @@
 		align-items: center;
 		padding: 0.25rem 0.625rem;
 		border-radius: 999px;
-		background: rgba(16, 185, 129, 0.08);
-		color: #047857;
+		background: rgba(249, 115, 22, 0.08);
+		color: #c2410c;
 		font-size: 0.6875rem;
 		font-weight: 600;
-		border: 1px solid rgba(16, 185, 129, 0.2);
+		border: 1px solid rgba(249, 115, 22, 0.2);
 	}
 
 	.bonos-grid {
@@ -3144,13 +3172,13 @@
 		transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 	}
 	.bonos-card:hover {
-		border-color: rgba(16, 185, 129, 0.35);
+		border-color: rgba(249, 115, 22, 0.35);
 		transform: translateY(-1px);
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
 	}
 	.bonos-card--active {
-		background: linear-gradient(135deg, rgba(16, 185, 129, 0.04), rgba(16, 185, 129, 0.01));
-		border-color: rgba(16, 185, 129, 0.35);
+		background: linear-gradient(135deg, rgba(249, 115, 22, 0.04), rgba(249, 115, 22, 0.01));
+		border-color: rgba(249, 115, 22, 0.35);
 	}
 	.bonos-card--selected {
 		background: linear-gradient(135deg, rgba(59, 130, 246, 0.06), rgba(59, 130, 246, 0.02));
@@ -3178,7 +3206,7 @@
 		position: relative;
 	}
 	.bonos-card-avatar.avatar--online {
-		background: linear-gradient(135deg, #10b981, #059669);
+		background: linear-gradient(135deg, #f97316, #ea580c);
 	}
 	.bonos-card-avatar.avatar--inactive {
 		background: linear-gradient(135deg, #9ca3af, #6b7280);
@@ -3230,9 +3258,9 @@
 		white-space: nowrap;
 	}
 	.bonos-pill--emerald {
-		background: rgba(16, 185, 129, 0.1);
-		color: #047857;
-		border: 1px solid rgba(16, 185, 129, 0.3);
+		background: rgba(249, 115, 22, 0.1);
+		color: #c2410c;
+		border: 1px solid rgba(249, 115, 22, 0.3);
 	}
 	.bonos-pill--gray {
 		background: rgba(156, 163, 175, 0.1);
@@ -3240,6 +3268,6 @@
 		border: 1px solid rgba(156, 163, 175, 0.25);
 	}
 	.bonos-pill--emerald svg {
-		color: #059669;
+		color: #ea580c;
 	}
 </style>

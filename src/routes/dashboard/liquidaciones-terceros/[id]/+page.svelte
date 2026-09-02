@@ -24,7 +24,17 @@
 	];
 
 	$: id = $page.params.id;
-	$: viewMode = $page.url.searchParams.get('mode') === 'view';
+
+	/**
+	 * Mismo criterio que `PreviewTerceroPDF`: el listado murió y el índice del
+	 * módulo redirige al canvas de cierres, así que se vuelve al canvas del
+	 * periodo de ESTA liquidación con su hoja activada. En el estado de error
+	 * `previewItem` es null y cae al canvas sin periodo, que abre el mes actual.
+	 */
+	$: backUrl =
+		previewItem?.anio && previewItem?.mes
+			? `/dashboard/liquidaciones-terceros/canvas?anio=${previewItem.anio}&mes=${previewItem.mes}&cierre=${id}`
+			: '/dashboard/liquidaciones-terceros/canvas';
 
 	let loading = true;
 	let loadError = '';
@@ -89,9 +99,7 @@
 	class:is-ready={!loading && !loadError}
 >
 	<div class="route-bar no-print">
-		<button class="back-btn" on:click={() => goto('/dashboard/liquidaciones-terceros')}>
-			← Volver al listado
-		</button>
+		<button class="back-btn" on:click={() => goto(backUrl)}> ← Volver al canvas </button>
 		{#if previewItem}
 			<div class="route-meta">
 				<strong>{previewItem.liquidacion?.consecutivo || previewItem.consecutivo || ''}</strong>
@@ -124,12 +132,10 @@
 	{:else if loadError}
 		<div class="state-box error">
 			<p>❌ {loadError}</p>
-			<button class="back-btn" on:click={() => goto('/dashboard/liquidaciones-terceros')}>
-				Volver
-			</button>
+			<button class="back-btn" on:click={() => goto(backUrl)}> Volver </button>
 		</div>
 	{:else if previewItem}
-		<PreviewTerceroPDF item={previewItem} {viewMode} />
+		<PreviewTerceroPDF item={previewItem} />
 	{/if}
 </div>
 

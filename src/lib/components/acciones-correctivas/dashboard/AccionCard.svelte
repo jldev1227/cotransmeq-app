@@ -4,7 +4,13 @@
 	import StatusBadge from './StatusBadge.svelte';
 	import CausasDots from './CausasDots.svelte';
 	import RiskDot from './RiskDot.svelte';
-	import { formatDate, isUrgent, getInitials } from '$lib/acciones-correctivas/dashboard-utils';
+	import {
+		formatDate,
+		isUrgent,
+		getInitials,
+		resumenRevision,
+		formatearDiasRelativo
+	} from '$lib/acciones-correctivas/dashboard-utils';
 	import type { AccionCorrectivaPreventiva } from '$lib/api/acciones-correctivas';
 
 	export let accion: AccionCorrectivaPreventiva;
@@ -24,11 +30,16 @@
 	$: initials = getInitials(accion.responsable_ejecucion || 'Sin asignar');
 	$: creatorInitials = getInitials(accion.usuarios?.nombre || '');
 	$: fechaFormateada = formatDate(accion.fecha_limite_cierre_accion || '');
+	$: revision = resumenRevision(accion);
+	$: proximaRevisionLabel =
+		revision.proximaFecha ? formatDate(revision.proximaFecha) : '';
+	$: revisionDiasLabel = formatearDiasRelativo(revision.diasHasta);
+	$: mostrarRevision = !isDeleted && revision.estado !== 'cerrada';
 
 	const tipoColors: Record<string, { bg: string; color: string }> = {
 		CORRECTIVA: { bg: '#fef3c7', color: '#92400e' },
 		PREVENTIVA: { bg: '#ede9fe', color: '#5b21b6' },
-		MEJORA: { bg: '#d1fae5', color: '#065f46' }
+		MEJORA: { bg: '#d1fae5', color: '#166534' }
 	};
 	$: tipoStyle = tipoColors[accion.tipo_accion_ejecutar || ''] ?? { bg: '#f3f4f6', color: '#374151' };
 
@@ -106,14 +117,39 @@
 						Eliminada: {accion.deleted_at ? new Date(accion.deleted_at).toLocaleDateString('es-CO') : ''}
 					</span>
 				{:else if fechaFormateada}
-					<span>{fechaFormateada}</span>
+					<span>Cierre: {fechaFormateada}</span>
 					{#if urgent}
 						<span class="urgente-label">vencida</span>
 					{/if}
 				{:else}
-					<span class="sin-fecha">Sin fecha</span>
+					<span class="sin-fecha">Sin fecha de cierre</span>
 				{/if}
 			</div>
+
+			{#if mostrarRevision}
+				<div
+					class="revision"
+					class:revision-vencida={revision.estado === 'vencida'}
+					class:revision-hoy={revision.estado === 'hoy'}
+					class:revision-proxima={revision.estado === 'proxima'}
+					class:revision-al-dia={revision.estado === 'al-dia'}
+					class:revision-sin={revision.estado === 'sin-actividad'}
+					title={revision.ultimaFecha
+						? `Última actividad: ${formatDate(revision.ultimaFecha)} · Cadencia de revisión cada 15 días`
+						: 'Sin actividad registrada'}
+				>
+					<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+					{#if revision.estado === 'sin-actividad'}
+						<span>Sin seguimientos</span>
+					{:else}
+						<span>Próx. revisión: <strong>{proximaRevisionLabel}</strong></span>
+						<span class="revision-tag">
+							{revisionDiasLabel}
+						</span>
+					{/if}
+				</div>
+			{/if}
+
 			<div class="responsable">
 				<div class="avatar">{initials}</div>
 				<span>{accion.responsable_ejecucion || 'Sin asignar'}</span>
@@ -350,6 +386,56 @@
 		border-radius: 4px;
 		border: 1px solid rgba(220, 38, 38, 0.18);
 	}
+
+	.revision {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		font-size: 0.72rem;
+		color: var(--text-muted);
+		font-variant-numeric: tabular-nums;
+		flex-wrap: wrap;
+	}
+	.revision strong {
+		font-weight: 600;
+		color: var(--text-secondary);
+	}
+	.revision-tag {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.58rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		padding: 0.05rem 0.4rem;
+		border-radius: 4px;
+		border: 1px solid transparent;
+		white-space: nowrap;
+	}
+	.revision-vencida { color: #b91c1c; }
+	.revision-vencida .revision-tag {
+		background: rgba(220, 38, 38, 0.08);
+		color: #b91c1c;
+		border-color: rgba(220, 38, 38, 0.22);
+	}
+	.revision-hoy { color: #b91c1c; }
+	.revision-hoy .revision-tag {
+		background: rgba(220, 38, 38, 0.1);
+		color: #b91c1c;
+		border-color: rgba(220, 38, 38, 0.28);
+	}
+	.revision-proxima { color: #b45309; }
+	.revision-proxima .revision-tag {
+		background: rgba(245, 158, 11, 0.1);
+		color: #b45309;
+		border-color: rgba(245, 158, 11, 0.28);
+	}
+	.revision-al-dia { color: var(--text-muted); }
+	.revision-al-dia .revision-tag {
+		background: rgba(34, 197, 94, 0.08);
+		color: #15803d;
+		border-color: rgba(34, 197, 94, 0.22);
+	}
+	.revision-sin { color: var(--text-muted); font-style: italic; opacity: 0.85; }
 	.responsable {
 		display: flex;
 		align-items: center;

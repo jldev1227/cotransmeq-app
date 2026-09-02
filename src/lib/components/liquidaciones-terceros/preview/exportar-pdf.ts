@@ -51,7 +51,7 @@ async function logoDataUrl(): Promise<string> {
  * exactamente igual que el de una exportación suelta. Ver `exportar-zip.ts`.
  */
 
-const SELLO_URL = '/assets/sello-firma-terceros.webp';
+const SELLO_URL = '/assets/sello-firma-terceros.jpg';
 let selloCache: string | null = null;
 
 /**

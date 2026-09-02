@@ -68,7 +68,32 @@
 	/** If true, opens directly into preview mode (from listado eye button) */
 	export let viewMode = false;
 
+	/**
+	 * Salida del editor. Si viene, el componente NO navega nunca: llama a esto y
+	 * quien lo monto decide que hacer. Es lo que permite empotrarlo en un overlay
+	 * sobre el canvas sin perder filtros, seleccion ni scroll de la hoja.
+	 */
+	export let onClose: (() => void) | null = null;
+	/**
+	 * Se llama tras un guardado con exito, con la entidad que devolvio el backend
+	 * -- no con el payload enviado: `consecutivo`, `total` y `estado` los calcula
+	 * el servidor, y una fila pintada con el payload mostraria huecos donde el
+	 * resto de filas tienen datos.
+	 */
+	export let onGuardada: ((l: any) => void) | null = null;
+
+	/// Derivado y no un prop propio: un `empotrado` que pudiera contradecir a
+	/// `onClose` dejaria el boton «Volver» sin destino.
+	$: empotrado = !!onClose;
+
 	const BACK_URL = '/dashboard/liquidaciones-servicios';
+
+	/// El editor no sabe donde vive. En una ruta suelta «volver» es navegar;
+	/// dentro del canvas es cerrar el overlay, y navegar tiraria el engine.
+	function salir() {
+		if (onClose) onClose();
+		else goto(BACK_URL);
+	}
 
 	// ─── TYPES ──────────────────────────────────────────────────
 	interface ClienteBasico {
@@ -1920,29 +1945,27 @@
 		try {
 			const payload = buildPayloadLiquidacion();
 
-			if (editingId) {
-				await liquidacionesServiciosAPI.actualizar(editingId, payload);
-				/// Ya está guardado de verdad: el borrador deja de ser la verdad.
-				void autoguardadoAPI.eliminarDraft(borradorId ?? editingId ?? null).catch(() => {});
-				successMsg = '¡Liquidación actualizada!';
-				successSub = 'Los cambios se guardaron correctamente';
-				showSuccessAnim = true;
-				setTimeout(() => {
-					showSuccessAnim = false;
-					goto(BACK_URL);
-				}, 2200);
-			} else {
-				await liquidacionesServiciosAPI.crear(payload);
-				/// Ya está guardado de verdad: el borrador deja de ser la verdad.
-				void autoguardadoAPI.eliminarDraft(borradorId ?? editingId ?? null).catch(() => {});
-				successMsg = '¡Liquidación creada!';
-				successSub = 'Se registró correctamente en el sistema';
-				showSuccessAnim = true;
-				setTimeout(() => {
-					showSuccessAnim = false;
-					goto(BACK_URL);
-				}, 2200);
-			}
+			/// Una sola rama y no dos: eran idénticas salvo dos textos, y ese
+			/// duplicado es como acabaría una capturando el retorno y la otra no.
+			const idEdicion = editingId;
+			const guardada = idEdicion
+				? await liquidacionesServiciosAPI.actualizar(idEdicion, payload)
+				: await liquidacionesServiciosAPI.crear(payload);
+			/// Ya está guardado de verdad: el borrador deja de ser la verdad.
+			void autoguardadoAPI.eliminarDraft(borradorId ?? idEdicion ?? null).catch(() => {});
+			successMsg = idEdicion ? '¡Liquidación actualizada!' : '¡Liquidación creada!';
+			successSub = idEdicion
+				? 'Los cambios se guardaron correctamente'
+				: 'Se registró correctamente en el sistema';
+			showSuccessAnim = true;
+			/// Se avisa ya, no dentro del `setTimeout`: quien nos monta tiene que
+			/// poder pintar la fila mientras el usuario todavía ve el «guardado»,
+			/// no dos segundos después con la pantalla ya cambiando.
+			onGuardada?.(guardada);
+			setTimeout(() => {
+				showSuccessAnim = false;
+				salir();
+			}, 2200);
 		} catch (err: any) {
 			saveError = err.message || 'Error al registrar';
 		} finally {
@@ -2359,7 +2382,7 @@
 			}
 		}
 		void autoguardadoAPI.eliminarDraft(idCreado ?? editId ?? null).catch(() => {});
-		goto(BACK_URL);
+		salir();
 	}
 
 	// ─── WORKBOOK KEYBOARD NAV ────────────────────────────────────
@@ -2439,7 +2462,7 @@
 						</p>
 					</div>
 				</div>
-				<button class="liq-loading-back" on:click={() => goto(BACK_URL)}>
+				<button class="liq-loading-back" on:click={() => salir()}>
 					<svg
 						width="14"
 						height="14"
@@ -2476,7 +2499,7 @@
 						<p class="liq-loading-sub">Gestión y vista previa de liquidaciones de servicios</p>
 					</div>
 				</div>
-				<button class="liq-loading-back" on:click={() => goto(BACK_URL)}>
+				<button class="liq-loading-back" on:click={() => salir()}>
 					<svg
 						width="14"
 						height="14"
@@ -2594,7 +2617,7 @@
 						<p class="liq-loading-sub">Gestión y vista previa de liquidaciones de servicios</p>
 					</div>
 				</div>
-				<button class="liq-loading-back" on:click={() => goto(BACK_URL)}>
+				<button class="liq-loading-back" on:click={() => salir()}>
 					<svg
 						width="14"
 						height="14"
@@ -2653,7 +2676,7 @@
 					>
 					<span>Reintentar</span>
 				</button>
-				<button class="liq-btn-secondary" on:click={() => goto(BACK_URL)}>
+				<button class="liq-btn-secondary" on:click={() => salir()}>
 					<svg
 						width="14"
 						height="14"
@@ -4213,7 +4236,7 @@
 						class="liq-loading-back"
 						on:click={() => {
 							if (viewMode && editId) {
-								goto(BACK_URL);
+								salir();
 							} else {
 								setView('editor');
 							}

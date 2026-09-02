@@ -58,65 +58,196 @@
 	}
 
 	// Estados locales
-	let filtroEstado: EstadoServicio | '' = '';
-	let busqueda = '';
-	let busquedaTimeout: NodeJS.Timeout;
-	let mostrarFiltros = false;
-	let mostrarModalTicket = false;
-	let mostrarModalFormServicio = false;
-	let mostrarModalConfirm = false;
-	let servicioSeleccionado: ServicioConRelaciones | null = null;
+	let filtroEstado = $state<EstadoServicio | ''>('');
+	let busqueda = $state('');
+	let busquedaTimeout: ReturnType<typeof setTimeout> | null = null;
+	let mostrarFiltros = $state(false);
+	let mostrarModalTicket = $state(false);
+	let mostrarModalFormServicio = $state(false);
+	let mostrarModalConfirm = $state(false);
+	let servicioSeleccionado = $state<ServicioConRelaciones | null>(null);
 
-	let servicioEditar: ServicioConRelaciones | null = null;
-	let servicioAEliminar: ServicioConRelaciones | null = null;
-	let inicializado = false;
+	let servicioEditar = $state<ServicioConRelaciones | null>(null);
+	let servicioAEliminar = $state<ServicioConRelaciones | null>(null);
+	let inicializado = $state(false);
 
 	type VistaActiva = 'lista' | 'calendario' | 'canvas';
 	type CampoFechaCal = 'fecha_solicitud' | 'fecha_realizacion' | 'fecha_finalizacion';
-	let vistaActiva: VistaActiva = 'lista';
-	let calMes = new Date().getMonth();
-	let calAnio = new Date().getFullYear();
-	let calCampoFecha: CampoFechaCal = 'fecha_realizacion';
+	let vistaActiva = $state<VistaActiva>('lista');
+	let calMes = $state(new Date().getMonth());
+	let calAnio = $state(new Date().getFullYear());
+	let calCampoFecha = $state<CampoFechaCal>('fecha_realizacion');
 
 	// Filtros avanzados
-	let conductorSeleccionado: string | null = null;
-	let vehiculoSeleccionado: string | null = null;
-	let clienteSeleccionado: string | null = null;
-	let filtroFechaDesde = '';
-	let filtroFechaHasta = '';
-	let campoFecha: 'fecha_solicitud' | 'fecha_realizacion' | 'created_at' | 'fecha_finalizacion' =
-		'fecha_solicitud';
-	let ordenarPor = 'fecha_solicitud';
-	let ordenDireccion: 'asc' | 'desc' = 'desc';
+	let conductorSeleccionado = $state<string | null>(null);
+	let vehiculoSeleccionado = $state<string | null>(null);
+	let clienteSeleccionado = $state<string | null>(null);
+	let filtroFechaDesde = $state('');
+	let filtroFechaHasta = $state('');
+	let campoFecha = $state<
+		'fecha_solicitud' | 'fecha_realizacion' | 'created_at' | 'fecha_finalizacion'
+	>('fecha_solicitud');
+	let ordenarPor = $state('fecha_solicitud');
+	let ordenDireccion = $state<'asc' | 'desc'>('desc');
 
 	// Paginación
-	let paginaActual = 1;
-	let itemsPorPagina = 20;
+	let paginaActual = $state(1);
+	let itemsPorPagina = $state(20);
 
 	// Estado del canvas (paginación infinita, sin límite total)
-	let canvasServicios: ServicioConRelaciones[] = [];
-	let canvasLoadingInicial = false;
-	let canvasCargandoMas = false;
-	let canvasPage = 1;
-	let canvasTotal = 0;
-	let canvasHasMore = true;
-	let canvasFetchToken = 0;
-	let canvasError: string | null = null;
-	let canvasFirmaFiltros = '';
+	let canvasServicios = $state<ServicioConRelaciones[]>([]);
+	let canvasLoadingInicial = $state(false);
+	let canvasCargandoMas = $state(false);
+	let canvasPage = $state(1);
+	let canvasTotal = $state(0);
+	let canvasHasMore = $state(true);
+	let canvasFetchToken = $state(0);
+	let canvasError = $state<string | null>(null);
+	let canvasFirmaFiltros = $state('');
 	const CANVAS_PAGE_SIZE = 20;
+	// Sort del canvas. Default: fecha_solicitud desc (equivale al endpoint).
+	// El toggle invierte la dirección sin filtrar → el count N/Total se preserva
+	// (ej. 80/1104 sigue siendo 80/1104, solo cambia el orden de los 80 cargados).
+	let canvasSortField = $state('fecha_solicitud');
+	let canvasSortDirection = $state<'asc' | 'desc'>('desc');
 
-	$: stats = $serviciosStore.stats;
-	$: servicios = $serviciosStore.servicios;
-	$: loading = $serviciosStore.loading;
-	$: socketConnected = $socketStore.connected;
-	$: pagination = $serviciosStore.pagination;
-	$: totalPaginas = pagination.totalPages;
-	$: conductores = $conductoresOptions;
-	$: vehiculos = $vehiculosOptions;
-	$: clientes = $clientesOptions;
+	// ═══ Cache del canvas: prioriza cache antes que request ═══
+	// Estructura: Map<keyCache, { data, total, ts }>
+	// Clave: `${firmaFiltros}__p${page}` (incluye TODOS los filtros + página)
+	// TTL: 60s. El refresh al hacer scroll → si la entrada existe y está
+	// fresca, sirve directo sin request (clave en la observación del usuario:
+	// "scrolling refresh que adiciona servicios debería cargarlos en cache").
+	// Los servicios YA en memoria (canvasServicios) se conservan al cambiar
+	// de página y se concatenan con el resultado cacheado/nuevo.
+	type CanvasCacheEntry = { data: ServicioConRelaciones[]; total: number; ts: number };
+	const canvasCache: Map<string, CanvasCacheEntry> = new Map();
+	// Set de keys en vuelo para deduplicar requests concurrentes (evita
+	// que 2 scrolls rápidos al mismo sentinel disparen 2 fetches iguales).
+	const canvasInflight: Set<string> = new Set();
+	const CANVAS_CACHE_TTL_MS = 60_000;
+
+	function canvasCacheKey(firma: string, page: number): string {
+		return `${firma}__p${page}`;
+	}
+
+	function canvasCacheGet(key: string): CanvasCacheEntry | null {
+		const entry = canvasCache.get(key);
+		if (!entry) return null;
+		if (Date.now() - entry.ts > CANVAS_CACHE_TTL_MS) {
+			canvasCache.delete(key);
+			return null;
+		}
+		return entry;
+	}
+
+	function canvasCachePut(key: string, data: ServicioConRelaciones[], total: number) {
+		canvasCache.set(key, { data, total, ts: Date.now() });
+		// Poda básica: si la cache crece mucho, borrar las más viejas.
+		if (canvasCache.size > 60) {
+			const ahora = Date.now();
+			for (const [k, v] of canvasCache.entries()) {
+				if (ahora - v.ts > CANVAS_CACHE_TTL_MS) canvasCache.delete(k);
+			}
+		}
+	}
+
+	function canvasCacheInvalidate() {
+		canvasCache.clear();
+		canvasInflight.clear();
+	}
+
+	// ═══ Normalized match: prioriza cache antes que request y matchea
+	// contra columnas prioritarias (NO contra SI/NO ni kilómetros).
+	// Usado como safety-net cliente: si la búsqueda del backend no filtra
+	// lo suficiente, aplicamos este filtro sobre `canvasServicios` para
+	// garantizar el comportamiento pedido por el usuario.
+	function normalizarTexto(s: string | null | undefined): string {
+		if (!s) return '';
+		return s
+			.toString()
+			.toLowerCase()
+			.normalize('NFD')
+			.replace(/[\u0300-\u036f]/g, '')
+			.replace(/\s+/g, ' ')
+			.trim();
+	}
+
+	// Columnas prioritarias para el match (en este orden lógico de importancia):
+	//   #solicitud, placa, conductor (nombre+apellido), divipol/municipio origen
+	//   y destino. NO incluye SI/NO, km inicial/final/total, ni duraciones.
+	type ServicioMatchable = Pick<
+		ServicioConRelaciones,
+		| 'id'
+		| 'numero_planilla'
+		| 'conductor'
+		| 'vehiculo'
+		| 'origen'
+		| 'destino'
+		| 'origen_especifico'
+		| 'destino_especifico'
+	> & { recargos_planillas?: any[] };
+
+	function servicioMatch(servicio: ServicioMatchable, term: string): boolean {
+		if (!term) return true;
+		const t = normalizarTexto(term);
+		if (!t) return true;
+
+		// #solicitud (short id)
+		if (servicio.id && servicio.id.slice(0, 8).toLowerCase().includes(t)) return true;
+		// planilla
+		if (servicio.numero_planilla && normalizarTexto(servicio.numero_planilla).includes(t))
+			return true;
+		// placa
+		if (servicio.vehiculo?.placa && normalizarTexto(servicio.vehiculo.placa).includes(t))
+			return true;
+		// conductor
+		const conductorTxt = `${servicio.conductor?.nombre ?? ''} ${servicio.conductor?.apellido ?? ''}`;
+		if (conductorTxt && normalizarTexto(conductorTxt).includes(t)) return true;
+		// divipol origen / municipio origen / origen específico
+		if (servicio.origen) {
+			const dep = String(servicio.origen.codigo_departamento ?? '').padStart(2, '0');
+			const mun = String(servicio.origen.codigo_municipio ?? '').padStart(5, '0');
+			const divipol = `${dep}${mun}`;
+			if (divipol.includes(t)) return true;
+			if (normalizarTexto(servicio.origen.nombre_municipio).includes(t)) return true;
+			if (normalizarTexto(servicio.origen.nombre_departamento).includes(t)) return true;
+		}
+		if (servicio.origen_especifico && normalizarTexto(servicio.origen_especifico).includes(t))
+			return true;
+		// divipol destino / municipio destino / destino específico
+		if (servicio.destino) {
+			const dep = String(servicio.destino.codigo_departamento ?? '').padStart(2, '0');
+			const mun = String(servicio.destino.codigo_municipio ?? '').padStart(5, '0');
+			const divipol = `${dep}${mun}`;
+			if (divipol.includes(t)) return true;
+			if (normalizarTexto(servicio.destino.nombre_municipio).includes(t)) return true;
+			if (normalizarTexto(servicio.destino.nombre_departamento).includes(t)) return true;
+		}
+		if (servicio.destino_especifico && normalizarTexto(servicio.destino_especifico).includes(t))
+			return true;
+		return false;
+	}
+
+	// Servicios visibles en el canvas: primero aplica el normalized match
+	// cliente si hay búsqueda (safety-net), y deduplica por id.
+	let canvasServiciosVisibles = $derived.by(() => {
+		const term = busqueda?.trim() ?? '';
+		if (!term) return canvasServicios;
+		return canvasServicios.filter((s) => servicioMatch(s, term));
+	});
+
+	let stats = $derived($serviciosStore.stats);
+	let servicios = $derived($serviciosStore.servicios);
+	let loading = $derived($serviciosStore.loading);
+	let socketConnected = $derived($socketStore.connected);
+	let pagination = $derived($serviciosStore.pagination);
+	let totalPaginas = $derived(pagination.totalPages);
+	let conductores = $derived($conductoresOptions);
+	let vehiculos = $derived($vehiculosOptions);
+	let clientes = $derived($clientesOptions);
 
 	// Filtros activos (para chips removibles del FilterDrawer)
-	$: activeFilters = [
+	let activeFilters = $derived([
 		...(filtroEstado
 			? [
 					{
@@ -176,7 +307,7 @@
 		...(busqueda.trim()
 			? [{ key: 'search', label: 'Búsqueda', value: `"${busqueda.trim()}"` }]
 			: [])
-	];
+	]);
 
 	function clearFilter(key: string) {
 		if (key === 'estado') {
@@ -211,24 +342,26 @@
 		}
 	}
 
-	$: if (browser) {
-		const urlView = $page.url.searchParams.get('view') as VistaActiva | null;
-		const urlMes = parseInt($page.url.searchParams.get('mes') || '');
-		const urlAnio = parseInt($page.url.searchParams.get('anio') || '');
-		const urlCampo = $page.url.searchParams.get('campo_fecha') as CampoFechaCal | null;
-		if (urlView === 'lista' || urlView === 'calendario' || urlView === 'canvas') {
-			vistaActiva = urlView;
+	$effect(() => {
+		if (browser) {
+			const urlView = $page.url.searchParams.get('view') as VistaActiva | null;
+			const urlMes = parseInt($page.url.searchParams.get('mes') || '');
+			const urlAnio = parseInt($page.url.searchParams.get('anio') || '');
+			const urlCampo = $page.url.searchParams.get('campo_fecha') as CampoFechaCal | null;
+			if (urlView === 'lista' || urlView === 'calendario' || urlView === 'canvas') {
+				vistaActiva = urlView;
+			}
+			if (!isNaN(urlMes) && urlMes >= 1 && urlMes <= 12) calMes = urlMes - 1;
+			if (!isNaN(urlAnio) && urlAnio >= 2020 && urlAnio <= 2100) calAnio = urlAnio;
+			if (
+				urlCampo === 'fecha_solicitud' ||
+				urlCampo === 'fecha_realizacion' ||
+				urlCampo === 'fecha_finalizacion'
+			) {
+				calCampoFecha = urlCampo;
+			}
 		}
-		if (!isNaN(urlMes) && urlMes >= 1 && urlMes <= 12) calMes = urlMes - 1;
-		if (!isNaN(urlAnio) && urlAnio >= 2020 && urlAnio <= 2100) calAnio = urlAnio;
-		if (
-			urlCampo === 'fecha_solicitud' ||
-			urlCampo === 'fecha_realizacion' ||
-			urlCampo === 'fecha_finalizacion'
-		) {
-			calCampoFecha = urlCampo;
-		}
-	}
+	});
 
 	function cambiarVista(vista: VistaActiva) {
 		vistaActiva = vista;
@@ -248,8 +381,8 @@
 			filtroFechaDesde,
 			filtroFechaHasta,
 			campoFecha,
-			ordenarPor,
-			ordenDireccion
+			ordenarPor: canvasSortField,
+			ordenDireccion: canvasSortDirection
 		});
 	}
 
@@ -264,8 +397,8 @@
 		if (conductorSeleccionado) params.set('conductor_id', conductorSeleccionado);
 		if (vehiculoSeleccionado) params.set('vehiculo_id', vehiculoSeleccionado);
 		if (clienteSeleccionado) params.set('cliente_id', clienteSeleccionado);
-		if (ordenarPor) params.set('orderBy', ordenarPor);
-		if (ordenDireccion) params.set('orderDirection', ordenDireccion);
+		if (canvasSortField) params.set('orderBy', canvasSortField);
+		if (canvasSortDirection) params.set('orderDirection', canvasSortDirection);
 		if (filtroFechaDesde) params.set('fecha_desde', filtroFechaDesde);
 		if (filtroFechaHasta) params.set('fecha_hasta', filtroFechaHasta);
 		if (filtroFechaDesde || filtroFechaHasta) params.set('campo_fecha', campoFecha);
@@ -283,7 +416,8 @@
 	async function cargarCanvasInicial() {
 		if (!browser) return;
 		const tokenActual = ++canvasFetchToken;
-		canvasFirmaFiltros = obtenerFirmaFiltrosCanvas();
+		const firma = obtenerFirmaFiltrosCanvas();
+		canvasFirmaFiltros = firma;
 		canvasServicios = [];
 		canvasPage = 1;
 		canvasTotal = 0;
@@ -291,9 +425,23 @@
 		canvasError = null;
 		canvasLoadingInicial = true;
 
+		// Cache check: prioriza cache antes que request. Si la firma+filtro+page 1
+		// ya están cacheados y frescos (TTL 60s), servimos desde cache sin request.
+		const cacheKey = canvasCacheKey(firma, 1);
+		const cached = canvasCacheGet(cacheKey);
+		if (cached) {
+			canvasServicios = [...cached.data];
+			canvasTotal = cached.total;
+			canvasPage = 2;
+			canvasHasMore = canvasServicios.length < canvasTotal;
+			canvasLoadingInicial = false;
+			return;
+		}
+
 		try {
 			const { data, total } = await fetchCanvasPage(1, tokenActual);
 			if (tokenActual !== canvasFetchToken) return;
+			canvasCachePut(canvasCacheKey(firma, 1), data, total);
 			canvasServicios = data;
 			canvasTotal = total;
 			canvasPage = 2;
@@ -313,6 +461,25 @@
 	async function cargarMasCanvas() {
 		if (!browser) return;
 		if (canvasCargandoMas || canvasLoadingInicial || !canvasHasMore) return;
+
+		const firma = canvasFirmaFiltros || obtenerFirmaFiltrosCanvas();
+		const cacheKey = canvasCacheKey(firma, canvasPage);
+
+		// Cache check + dedupe de requests concurrentes.
+		const cached = canvasCacheGet(cacheKey);
+		if (cached) {
+			const existentes = new Set(canvasServicios.map((s) => s.id));
+			const nuevos = cached.data.filter((s) => !existentes.has(s.id));
+			if (nuevos.length > 0) canvasServicios = [...canvasServicios, ...nuevos];
+			canvasTotal = cached.total || canvasTotal;
+			canvasPage += 1;
+			canvasHasMore = canvasServicios.length < canvasTotal;
+			return;
+		}
+
+		if (canvasInflight.has(cacheKey)) return;
+		canvasInflight.add(cacheKey);
+
 		const tokenActual = canvasFetchToken;
 		canvasCargandoMas = true;
 		canvasError = null;
@@ -321,6 +488,7 @@
 			const { data, total } = await fetchCanvasPage(canvasPage, tokenActual);
 			if (tokenActual !== canvasFetchToken) return;
 
+			canvasCachePut(cacheKey, data, total);
 			const existentes = new Set(canvasServicios.map((s) => s.id));
 			const nuevos = data.filter((s) => !existentes.has(s.id));
 			canvasServicios = [...canvasServicios, ...nuevos];
@@ -333,6 +501,7 @@
 			canvasError = error.message || 'Error desconocido';
 			toast.error('Error al cargar más servicios: ' + canvasError);
 		} finally {
+			canvasInflight.delete(cacheKey);
 			if (tokenActual === canvasFetchToken) {
 				canvasCargandoMas = false;
 			}
@@ -366,6 +535,26 @@
 		syncUrl();
 	}
 
+	/**
+	 * Handler del sort por columna del canvas.
+	 * - Si la columna clickeada es la misma → invierte la dirección (toggle).
+	 * - Si es otra columna → adopta esa columna con dirección default.
+	 *   Para columnas de fecha/numérico/strings, `desc` arranca con
+	 *   "mayor/más reciente primero" (consistente con el default del endpoint).
+	 *
+	 * Importante: cambiar sort NO reduce el total ni el count cargado.
+	 * Solo invierte el orden de los mismos N servicios ya en memoria + re-pide
+	 * la página 1 al backend. El footer sigue mostrando `N/Total` (mismo N).
+	 */
+	async function handleCanvasSort(field: string, direction: 'asc' | 'desc') {
+		if (canvasSortField === field && canvasSortDirection === direction) return;
+		canvasSortField = field;
+		canvasSortDirection = direction;
+		// Invalidar cache: nueva firma de filtros → nuevas keys
+		canvasCacheInvalidate();
+		await cargarCanvasInicial();
+	}
+
 	async function cargarServicios(forceRefresh = false) {
 		const params: any = {
 			page: paginaActual,
@@ -393,7 +582,9 @@
 		}, 500);
 	}
 
-	$: if (inicializado && busqueda !== undefined) handleBusquedaChange();
+	$effect(() => {
+		if (inicializado && busqueda !== undefined) handleBusquedaChange();
+	});
 
 	function handleEstadoChange() {
 		if (!inicializado) return;
@@ -415,12 +606,14 @@
 		cargarServicios();
 	}
 
-	$: if (inicializado && vistaActiva === 'canvas') {
-		const firma = obtenerFirmaFiltrosCanvas();
-		if (firma !== canvasFirmaFiltros && !canvasLoadingInicial) {
-			cargarCanvasInicial();
+	$effect(() => {
+		if (inicializado && vistaActiva === 'canvas') {
+			const firma = obtenerFirmaFiltrosCanvas();
+			if (firma !== canvasFirmaFiltros && !canvasLoadingInicial) {
+				cargarCanvasInicial();
+			}
 		}
-	}
+	});
 
 	async function irPagina(pagina: number) {
 		if (pagina >= 1 && pagina <= totalPaginas) {
@@ -612,7 +805,7 @@
 					role="tablist"
 				>
 					<button
-						on:click={() => cambiarVista('lista')}
+						onclick={() => cambiarVista('lista')}
 						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold
 							{vistaActiva === 'lista'
 							? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-sm'
@@ -631,7 +824,7 @@
 						Lista
 					</button>
 					<button
-						on:click={() => cambiarVista('canvas')}
+						onclick={() => cambiarVista('canvas')}
 						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold
 						{vistaActiva === 'canvas'
 							? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-sm'
@@ -650,7 +843,7 @@
 						Excel
 					</button>
 					<button
-						on:click={() => cambiarVista('calendario')}
+						onclick={() => cambiarVista('calendario')}
 						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold
 							{vistaActiva === 'calendario'
 							? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-sm'
@@ -675,8 +868,8 @@
 					<input
 						type="text"
 						bind:value={busqueda}
-						placeholder="Buscar servicios..."
-						class="input-glow apple-transition w-64 rounded-xl border border-gray-200 bg-white/80 py-2 pr-4 pl-9 text-sm text-gray-900 placeholder-gray-400 focus:border-emerald-400"
+						placeholder="Buscar por #solicitud, placa, conductor, divipol/municipio origen o destino…"
+						class="input-glow apple-transition w-96 max-w-full rounded-xl border border-gray-200 bg-white/80 py-2 pr-4 pl-9 text-sm text-gray-900 placeholder-gray-400 focus:border-emerald-400"
 					/>
 					<svg
 						class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400"
@@ -695,7 +888,7 @@
 
 				<!-- Filtros -->
 				<button
-					on:click={() => (mostrarFiltros = !mostrarFiltros)}
+					onclick={() => (mostrarFiltros = !mostrarFiltros)}
 					class="apple-transition flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors
 						{mostrarFiltros
 						? 'border-emerald-300 bg-emerald-50 text-emerald-700'
@@ -720,7 +913,7 @@
 
 				<!-- Nuevo -->
 				<button
-					on:click={handleNuevoServicio}
+					onclick={handleNuevoServicio}
 					class="apple-hover apple-transition soft-shadow emerald-glow flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-4 py-2 text-sm font-semibold text-white"
 				>
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -750,7 +943,7 @@
 		<div slot="chips" class="flex flex-wrap gap-1.5">
 			{#each activeFilters as chip, i (chip.key)}
 				<span class="chip-pop-in" style="animation-delay: {i * 60}ms">
-					<button class="filter-chip" on:click={() => clearFilter(chip.key)}>
+					<button class="filter-chip" onclick={() => clearFilter(chip.key)}>
 						<span style="color: var(--text-muted); font-weight: 500;">{chip.label}:</span>
 						<span>{chip.value}</span>
 						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
@@ -767,7 +960,7 @@
 					Estado del servicio
 					{#if filtroEstado}<span class="filter-field-label-hint">filtrado</span>{/if}
 				</label>
-				<select id="filtro-estado" bind:value={filtroEstado} on:change={handleEstadoChange}>
+				<select id="filtro-estado" bind:value={filtroEstado} onchange={handleEstadoChange}>
 					<option value="">Todos los estados</option>
 					<option value="solicitado">Solicitado</option>
 					<option value="en_curso">En Curso</option>
@@ -788,7 +981,6 @@
 					valor={conductorSeleccionado}
 					placeholder="Todos los conductores"
 					placeholderBusqueda="Buscar conductor por nombre o cédula…"
-					icono="user"
 					onSeleccionar={(v) => {
 						conductorSeleccionado = v;
 						handleSelectChange();
@@ -840,7 +1032,7 @@
 					{#if campoFecha !== 'fecha_solicitud'}<span class="filter-field-label-hint">filtrado</span
 						>{/if}
 				</label>
-				<select id="filtro-campo-fecha" bind:value={campoFecha} on:change={handleFechaChange}>
+				<select id="filtro-campo-fecha" bind:value={campoFecha} onchange={handleFechaChange}>
 					<option value="fecha_solicitud">Fecha de solicitud</option>
 					<option value="created_at">Fecha de creación</option>
 					<option value="fecha_realizacion">Fecha de realización</option>
@@ -858,7 +1050,7 @@
 						id="filtro-fecha-desde"
 						type="date"
 						bind:value={filtroFechaDesde}
-						on:change={handleFechaChange}
+						onchange={handleFechaChange}
 					/>
 				</div>
 				<div class="filter-field">
@@ -870,7 +1062,7 @@
 						id="filtro-fecha-hasta"
 						type="date"
 						bind:value={filtroFechaHasta}
-						on:change={handleFechaChange}
+						onchange={handleFechaChange}
 					/>
 				</div>
 			</div>
@@ -885,7 +1077,7 @@
 								>filtrado</span
 							>{/if}
 					</label>
-					<select id="filtro-ordenar-por" bind:value={ordenarPor} on:change={handleOrdenChange}>
+					<select id="filtro-ordenar-por" bind:value={ordenarPor} onchange={handleOrdenChange}>
 						<option value="fecha_solicitud">Fecha solicitud</option>
 						<option value="fecha_realizacion">Fecha realización</option>
 						<option value="estado">Estado</option>
@@ -902,7 +1094,7 @@
 					<select
 						id="filtro-orden-direccion"
 						bind:value={ordenDireccion}
-						on:change={handleOrdenChange}
+						onchange={handleOrdenChange}
 					>
 						<option value="asc">Ascendente</option>
 						<option value="desc">Descendente</option>
@@ -912,13 +1104,13 @@
 		</div>
 
 		<div slot="footer">
-			<button class="filter-clear" on:click={limpiarFiltros} disabled={activeFilters.length === 0}>
+			<button class="filter-clear" onclick={limpiarFiltros} disabled={activeFilters.length === 0}>
 				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"
 					><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg
 				>
 				Limpiar
 			</button>
-			<button class="btn-primary" on:click={() => (mostrarFiltros = false)}>
+			<button class="btn-primary" onclick={() => (mostrarFiltros = false)}>
 				Ver resultados
 				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"
 					><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-7-7l7 7-7 7" /></svg
@@ -964,7 +1156,7 @@
 
 			<!-- Solicitados -->
 			<button
-				on:click={() => cambiarFiltroEstado('solicitado')}
+				onclick={() => cambiarFiltroEstado('solicitado')}
 				class="glass soft-shadow apple-transition rounded-xl border p-3 text-left transition-colors hover:border-blue-200 hover:bg-blue-50/30
 					{filtroEstado === 'solicitado' ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200/50'}"
 			>
@@ -995,7 +1187,7 @@
 
 			<!-- En Curso -->
 			<button
-				on:click={() => cambiarFiltroEstado('en_curso')}
+				onclick={() => cambiarFiltroEstado('en_curso')}
 				class="glass soft-shadow apple-transition rounded-xl border p-3 text-left transition-colors hover:border-amber-200 hover:bg-amber-50/30
 					{filtroEstado === 'en_curso' ? 'border-amber-300 bg-amber-50/50' : 'border-gray-200/50'}"
 			>
@@ -1026,7 +1218,7 @@
 
 			<!-- Planificados -->
 			<button
-				on:click={() => cambiarFiltroEstado('planificado')}
+				onclick={() => cambiarFiltroEstado('planificado')}
 				class="glass soft-shadow apple-transition rounded-xl border p-3 text-left transition-colors hover:border-violet-200 hover:bg-violet-50/30
 					{filtroEstado === 'planificado' ? 'border-violet-300 bg-violet-50/50' : 'border-gray-200/50'}"
 			>
@@ -1059,7 +1251,7 @@
 
 			<!-- Realizados -->
 			<button
-				on:click={() => cambiarFiltroEstado('realizado')}
+				onclick={() => cambiarFiltroEstado('realizado')}
 				class="glass soft-shadow apple-transition rounded-xl border p-3 text-left transition-colors hover:border-emerald-200 hover:bg-emerald-50/30
 					{filtroEstado === 'realizado' ? 'border-emerald-300 bg-emerald-50/50' : 'border-gray-200/50'}"
 			>
@@ -1090,7 +1282,7 @@
 
 			<!-- Cancelados -->
 			<button
-				on:click={() => cambiarFiltroEstado('cancelado')}
+				onclick={() => cambiarFiltroEstado('cancelado')}
 				class="glass soft-shadow apple-transition rounded-xl border p-3 text-left transition-colors hover:border-red-200 hover:bg-red-50/30
 					{filtroEstado === 'cancelado' ? 'border-red-300 bg-red-50/50' : 'border-gray-200/50'}"
 			>
@@ -1163,7 +1355,7 @@
 					</div>
 					{#if busqueda || filtroEstado}
 						<button
-							on:click={limpiarFiltros}
+							onclick={limpiarFiltros}
 							class="apple-transition rounded-lg bg-emerald-500 px-4 py-2 text-sm text-white hover:bg-emerald-600"
 						>
 							Limpiar filtros
@@ -1182,7 +1374,7 @@
 					>
 					{#each [{ estado: 'solicitado', label: 'Solicitado' }, { estado: 'en_curso', label: 'En Curso' }, { estado: 'planificado', label: 'Planificado' }, { estado: 'realizado', label: 'Realizado' }, { estado: 'cancelado', label: 'Cancelado' }, { estado: 'liquidado', label: 'Liquidado' }] as item}
 						<button
-							on:click={() => cambiarFiltroEstado(item.estado as EstadoServicio)}
+							onclick={() => cambiarFiltroEstado(item.estado as EstadoServicio)}
 							class="flex items-center gap-1.5 rounded-full px-2 py-0.5 transition-colors hover:bg-gray-100
 							{filtroEstado === item.estado ? 'bg-gray-200/80 ring-1 ring-gray-300' : ''}"
 							title="Filtrar por {item.label}"
@@ -1196,7 +1388,7 @@
 					{/each}
 					{#if filtroEstado}
 						<button
-							on:click={() => {
+							onclick={() => {
 								filtroEstado = '';
 								paginaActual = 1;
 								cargarServicios();
@@ -1345,7 +1537,7 @@
 										<!-- Acciones mobile -->
 										<div class="flex items-center gap-0.5">
 											<button
-												on:click|stopPropagation={() => handleCompartirServicio(servicio)}
+												onclick={(e) => { e.stopPropagation(); handleCompartirServicio(servicio); }}
 												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-teal-50 hover:text-teal-600"
 												title="Compartir"
 											>
@@ -1359,7 +1551,8 @@
 												</svg>
 											</button>
 											<button
-												on:click|stopPropagation={() => {
+												onclick={(e) => {
+													e.stopPropagation();
 													console.log(servicio);
 													servicioSeleccionado = servicio;
 													mostrarModalTicket = true;
@@ -1377,7 +1570,7 @@
 												</svg>
 											</button>
 											<button
-												on:click|stopPropagation={() => handleEditarServicio(servicio)}
+												onclick={(e) => { e.stopPropagation(); handleEditarServicio(servicio); }}
 												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
 												title="Editar"
 											>
@@ -1391,7 +1584,7 @@
 												</svg>
 											</button>
 											<button
-												on:click|stopPropagation={() => verDetalle(servicio.id)}
+												onclick={(e) => { e.stopPropagation(); verDetalle(servicio.id); }}
 												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600"
 												title="Ver detalle"
 											>
@@ -1411,7 +1604,7 @@
 												</svg>
 											</button>
 											<button
-												on:click|stopPropagation={() => handleEliminarServicio(servicio)}
+												onclick={(e) => { e.stopPropagation(); handleEliminarServicio(servicio); }}
 												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
 												title="Eliminar"
 											>
@@ -1712,7 +1905,7 @@
 									>
 										<div class="flex items-center justify-center gap-0.5">
 											<button
-												on:click|stopPropagation={() => handleCompartirServicio(servicio)}
+												onclick={(e) => { e.stopPropagation(); handleCompartirServicio(servicio); }}
 												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-teal-50 hover:text-teal-600"
 												title="Compartir"
 											>
@@ -1731,7 +1924,8 @@
 												</svg>
 											</button>
 											<button
-												on:click|stopPropagation={() => {
+												onclick={(e) => {
+													e.stopPropagation();
 													servicioSeleccionado = servicio;
 													mostrarModalTicket = true;
 												}}
@@ -1753,7 +1947,7 @@
 												</svg>
 											</button>
 											<button
-												on:click|stopPropagation={() => handleDescargarRutograma(servicio)}
+												onclick={(e) => { e.stopPropagation(); handleDescargarRutograma(servicio); }}
 												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-emerald-50 hover:text-emerald-700"
 												title="Rutograma PDF"
 											>
@@ -1772,7 +1966,7 @@
 												</svg>
 											</button>
 											<button
-												on:click|stopPropagation={() => handleEditarServicio(servicio)}
+												onclick={(e) => { e.stopPropagation(); handleEditarServicio(servicio); }}
 												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
 												title="Editar"
 											>
@@ -1791,7 +1985,7 @@
 												</svg>
 											</button>
 											<button
-												on:click|stopPropagation={() => verDetalle(servicio.id)}
+												onclick={(e) => { e.stopPropagation(); verDetalle(servicio.id); }}
 												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600"
 												title="Ver detalle"
 											>
@@ -1816,7 +2010,7 @@
 												</svg>
 											</button>
 											<button
-												on:click|stopPropagation={() => handleEliminarServicio(servicio)}
+												onclick={(e) => { e.stopPropagation(); handleEliminarServicio(servicio); }}
 												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
 												title="Eliminar"
 											>
@@ -1859,7 +2053,7 @@
 
 						<div class="flex items-center gap-1">
 							<button
-								on:click={() => irPagina(1)}
+								onclick={() => irPagina(1)}
 								disabled={pagination.page === 1 || loading}
 								class="apple-transition rounded-lg border border-gray-200 p-1.5 {pagination.page ===
 									1 || loading
@@ -1877,7 +2071,7 @@
 								>
 							</button>
 							<button
-								on:click={() => irPagina(pagination.page - 1)}
+								onclick={() => irPagina(pagination.page - 1)}
 								disabled={pagination.page === 1 || loading}
 								class="apple-transition rounded-lg border border-gray-200 p-1.5 {pagination.page ===
 									1 || loading
@@ -1900,7 +2094,7 @@
 								return start + i;
 							}) as pagina}
 								<button
-									on:click={() => irPagina(pagina)}
+									onclick={() => irPagina(pagina)}
 									disabled={loading}
 									class="apple-transition min-w-[2rem] rounded-lg border px-2 py-1 text-xs {pagination.page ===
 									pagina
@@ -1914,7 +2108,7 @@
 							{/each}
 
 							<button
-								on:click={() => irPagina(pagination.page + 1)}
+								onclick={() => irPagina(pagination.page + 1)}
 								disabled={pagination.page === totalPaginas || loading}
 								class="apple-transition rounded-lg border border-gray-200 p-1.5 {pagination.page ===
 									totalPaginas || loading
@@ -1932,7 +2126,7 @@
 								>
 							</button>
 							<button
-								on:click={() => irPagina(totalPaginas)}
+								onclick={() => irPagina(totalPaginas)}
 								disabled={pagination.page === totalPaginas || loading}
 								class="apple-transition rounded-lg border border-gray-200 p-1.5 {pagination.page ===
 									totalPaginas || loading
@@ -1984,13 +2178,16 @@
 	     ═══════════════════════════════════════════ -->
 	{#if vistaActiva === 'canvas'}
 		<CanvasServicios
-			servicios={canvasServicios}
+			servicios={canvasServiciosVisibles}
 			loadingInicial={canvasLoadingInicial}
 			cargandoMas={canvasCargandoMas}
 			hasMore={canvasHasMore}
 			totalGeneral={canvasTotal}
+			sortField={canvasSortField}
+			sortDirection={canvasSortDirection}
 			onRefresh={cargarCanvasInicial}
 			onLoadMore={cargarMasCanvas}
+			onSort={handleCanvasSort}
 		/>
 	{/if}
 </div>

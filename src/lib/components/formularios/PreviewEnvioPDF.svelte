@@ -27,9 +27,20 @@
 	Cumple/No cumple, Completo/Incompleto o cualquier escala futura.
 
 	── El PDF ──
-	`window.print()` con el bloque `@media print` del final: el documento que se
-	ve ES el que se imprime. Un segundo renderizador en el servidor tendría que
-	reimplementar los diecinueve tipos de campo y divergiría de este.
+	El bloque `@media print` de `documento-envio.css.ts` manda: el documento que
+	se ve ES el que se imprime. Vale para las dos salidas —`window.print()` desde
+	el navegador y el PDF que compone Chromium en el servidor, que imprime
+	emulando el medio `print`— porque las dos parten de ESTE mismo DOM. Un
+	segundo renderizador en el servidor tendría que reimplementar los diecinueve
+	tipos de campo y divergiría de este.
+
+	── Los huecos no reservan espacio ──
+	Un campo sin responder COLAPSA a una fila de una línea en vez de dibujar su
+	bloque completo. Se colapsa y no se omite porque esto es un registro de
+	auditoría y hay que poder distinguir «se preguntó y no se respondió» de «no
+	se preguntó». La regla completa, con el porqué, está en la cabecera de
+	`documento-envio.css.ts`; aquí se aplica a los tramos `bloque`, `evidencia`,
+	`tabla` y a las firmas.
 -->
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
@@ -63,8 +74,8 @@
 	let {
 		envio,
 		definicion,
-		empresa = 'Cotransmeq S.A.S',
-		logo = '/assets/logo_nombre.webp'
+		empresa = 'Transmeralda S.A.S',
+		logo = '/assets/logo_transmeralda-264.webp'
 	}: Props = $props();
 
 	// ── Índices ──────────────────────────────────────────────────────────────
@@ -236,6 +247,16 @@
 		return a && m && d ? `${d}/${m}/${a}` : iso;
 	}
 
+	/**
+	 * Fecha y hora en reloj de 24 horas.
+	 *
+	 * `hour12: false` explícito y no el valor por defecto de `es-CO`, que da
+	 * «12:52 a. m.». Dos razones, y las dos importan aquí: la operación despacha
+	 * y cierra turnos en 24 horas —«05:52» es lo que dice la minuta contra la que
+	 * se coteja este documento— y el sufijo «a. m.» se lleva seis caracteres de
+	 * una celda de cuarto de hoja, que es justo lo que empujaba el valor a una
+	 * segunda línea y engordaba toda la fila de la ficha.
+	 */
 	function formatearFechaHora(iso: string): string {
 		const fecha = new Date(iso);
 		return Number.isNaN(fecha.getTime())
@@ -245,7 +266,8 @@
 					month: '2-digit',
 					year: 'numeric',
 					hour: '2-digit',
-					minute: '2-digit'
+					minute: '2-digit',
+					hour12: false
 				});
 	}
 
@@ -362,6 +384,19 @@
 		)
 	);
 
+	/**
+	 * Estado del envío como pastilla de color.
+	 *
+	 * Va con el mismo vocabulario cromático que los hallazgos (`marca--*`) y no
+	 * con uno propio: en la ficha, «Anulado» tiene que pesar tanto en la vista
+	 * como un ítem en MALO, porque significa que el registro no vale.
+	 */
+	const estado = $derived.by(() => {
+		if (envio.status === 'SUBMITTED') return { texto: 'Entregado', tono: 'ok' };
+		if (envio.status === 'VOIDED') return { texto: 'Anulado', tono: 'mal' };
+		return { texto: 'Borrador', tono: 'alerta' };
+	});
+
 	/// Referencia al documento vivo: el PDF se compone a partir de ESTE DOM, no de
 	/// una segunda pasada de renderizado que podría diferir de lo que se ve.
 	let documento = $state<HTMLElement | null>(null);
@@ -423,44 +458,52 @@
 				</div>
 				<div>
 					<dt>Fecha</dt>
-					<dd>{envio.businessDate ?? '—'}</dd>
+					<dd>{envio.businessDate ? formatearFecha(envio.businessDate) : '—'}</dd>
 				</div>
 			</dl>
 		</header>
 
-		<!-- Datos del registro: pares densos a varias columnas, como el bloque
-		     «DATOS Y CONTROL DE DOCUMENTOS» del FR-10. -->
+		<!-- Datos del registro: rejilla de cuatro pares por línea a todo el ancho,
+		     como el bloque «DATOS Y CONTROL DE DOCUMENTOS» del FR-10.
+
+		     El ORDEN no es decorativo: primero QUIÉN y CON QUÉ (conductor, cédula,
+		     placa), que es por donde se busca un registro, y luego CUÁNDO y BAJO
+		     QUÉ (fecha, asignación, entrega, estado). Siete pares en dos líneas
+		     exactas —el conductor ocupa dos celdas porque un nombre completo no
+		     cabe en una— así ninguna línea sale coja. -->
 		<h2 class="banda">Datos del registro</h2>
 		<dl class="ficha">
-			<div class="ficha__par">
+			<div class="ficha__par ficha__par--ancho">
 				<dt>{envio.actor?.kind === 'USER' ? 'Diligenciado por' : 'Conductor'}</dt>
 				<dd>{envio.actor?.nombre ?? '—'}</dd>
 			</div>
 			<div class="ficha__par">
 				<dt>Identificación</dt>
-				<dd>{envio.conductor?.numeroIdentificacion ?? '—'}</dd>
+				<dd class="ficha__id">{envio.conductor?.numeroIdentificacion ?? '—'}</dd>
 			</div>
 			<div class="ficha__par">
 				<dt>Placa</dt>
-				<dd>{envio.vehiculo?.placa ?? '—'}</dd>
+				<dd class="ficha__id">{envio.vehiculo?.placa ?? '—'}</dd>
 			</div>
 			<div class="ficha__par">
 				<dt>Fecha operativa</dt>
-				<dd>{envio.businessDate ?? '—'}</dd>
+				<dd class="ficha__id">
+					{envio.businessDate ? formatearFecha(envio.businessDate) : '—'}
+				</dd>
+			</div>
+			<div class="ficha__par">
+				<dt>Asignación</dt>
+				<dd>{envio.assignment?.name ?? '—'}</dd>
 			</div>
 			<div class="ficha__par">
 				<dt>Entregado</dt>
-				<dd>{envio.submittedAt ? formatearFechaHora(envio.submittedAt) : 'Sin entregar'}</dd>
+				<dd class="ficha__id">
+					{envio.submittedAt ? formatearFechaHora(envio.submittedAt) : 'Sin entregar'}
+				</dd>
 			</div>
 			<div class="ficha__par">
 				<dt>Estado</dt>
-				<dd>
-					{envio.status === 'SUBMITTED'
-						? 'Entregado'
-						: envio.status === 'VOIDED'
-							? 'Anulado'
-							: 'Borrador'}
-				</dd>
+				<dd><b class="marca marca--{estado.tono}">{estado.texto}</b></dd>
 			</div>
 		</dl>
 
@@ -549,12 +592,24 @@
 								</div>
 							{/each}
 						{:else if tramo.forma === 'bloque'}
+							<!-- Texto libre. Con contenido se dibuja el bloque; sin él colapsa a
+							     una fila de una línea (regla de altura, ver el CSS). Una docena
+							     de observaciones en blanco pasa de un tercio de página a doce
+							     renglones, y la constancia de que se preguntó se conserva. -->
 							{#each tramo.campos as field (field.id)}
 								{@const valor = valorLegible(field)}
-								<div class="parrafo">
-									<p class="parrafo__k">{field.label}</p>
-									<p class="parrafo__v" class:vacio={valor === null}>{valor ?? '—'}</p>
-								</div>
+								{#if valor === null}
+									<div class="fila fila--nota">
+										<span class="fila__desc"
+											>{field.label} <i class="vacio">· sin observaciones</i></span
+										>
+									</div>
+								{:else}
+									<div class="parrafo">
+										<p class="parrafo__k">{field.label}</p>
+										<p class="parrafo__v">{valor}</p>
+									</div>
+								{/if}
 							{/each}
 						{:else if tramo.forma === 'nota'}
 							{#each tramo.campos as field (field.id)}
@@ -588,11 +643,17 @@
 					{:else if tramo.forma === 'evidencia'}
 						{#each tramo.campos as field (field.id)}
 							{@const adjuntos = adjuntosPorCampo.get(field.id) ?? []}
-							<div class="evid">
-								<p class="parrafo__k">{field.label}</p>
-								{#if adjuntos.length === 0}
-									<p class="vacio">Sin evidencia adjunta</p>
-								{:else}
+							{#if adjuntos.length === 0}
+								<!-- Sin adjuntos no hay galería que enmarcar: una línea basta para
+								     dejar constancia de que se pidió la evidencia. -->
+								<div class="fila fila--nota">
+									<span class="fila__desc"
+										>{field.label} <i class="vacio">· sin evidencia adjunta</i></span
+									>
+								</div>
+							{:else}
+								<div class="evid">
+									<p class="parrafo__k">{field.label}</p>
 									<div class="galeria">
 										{#each adjuntos as at (at.id)}
 											{#if at.mimeType?.startsWith('image/') && at.url}
@@ -613,17 +674,23 @@
 											{/if}
 										{/each}
 									</div>
-								{/if}
-							</div>
+								</div>
+							{/if}
 						{/each}
 					{:else if tramo.forma === 'tabla'}
 						{#each tramo.campos as field (field.id)}
 							{@const filas = agruparOcurrencias(field)}
-							<div class="tabla-wrap">
-								<p class="parrafo__k">{field.label}</p>
-								{#if filas.length === 0}
-									<p class="vacio">Sin registros</p>
-								{:else}
+							{#if filas.length === 0}
+								<!-- Un repetible sin ocurrencias: la tabla sería una cabecera de
+								     columnas sin nada debajo. Colapsa igual que una observación. -->
+								<div class="fila fila--nota">
+									<span class="fila__desc"
+										>{field.label} <i class="vacio">· sin registros</i></span
+									>
+								</div>
+							{:else}
+								<div class="tabla-wrap">
+									<p class="parrafo__k">{field.label}</p>
 									<table class="tabla">
 										<thead>
 											<tr>
@@ -639,8 +706,8 @@
 											{/each}
 										</tbody>
 									</table>
-								{/if}
-							</div>
+								</div>
+							{/if}
 						{/each}
 					{:else if tramo.forma === 'escalar' || tramo.forma === 'checklist'}
 						{#each tramo.campos as field (field.id)}
@@ -651,18 +718,32 @@
 							</div>
 						{/each}
 					{:else if tramo.forma === 'bloque'}
+						<!-- Misma regla de colapso que en la columna estrecha. -->
 						{#each tramo.campos as field (field.id)}
 							{@const valor = valorLegible(field)}
-							<div class="parrafo">
-								<p class="parrafo__k">{field.label}</p>
-								<p class="parrafo__v" class:vacio={valor === null}>{valor ?? '—'}</p>
-							</div>
+							{#if valor === null}
+								<div class="fila fila--nota">
+									<span class="fila__desc"
+										>{field.label} <i class="vacio">· sin observaciones</i></span
+									>
+								</div>
+							{:else}
+								<div class="parrafo">
+									<p class="parrafo__k">{field.label}</p>
+									<p class="parrafo__v">{valor}</p>
+								</div>
+							{/if}
 						{/each}
 					{/if}
 				{/each}
 			</section>
 		{/each}
 
+		<!-- Pie. En pantalla cierra el documento; en papel el CSS lo fija al margen
+		     inferior y Chrome lo repite en TODAS las hojas, que es lo que permite
+		     identificar una hoja suelta. Lleva la identidad completa del registro
+		     —membrete, código, versión e id del envío— y deliberadamente NINGUNA
+		     numeración de páginas: el porqué está en el CSS. -->
 		<footer class="pie">
 			<span>{empresa} · {envio.version?.code ?? ''} v{envio.version?.versionNumber ?? ''}</span>
 			<span>{envio.id}</span>

@@ -51,7 +51,7 @@ export async function logoDataUrl(): Promise<string> {
 }
 
 
-const SELLO_URL = '/assets/sello-firma-terceros.webp';
+const SELLO_URL = '/assets/sello-firma-terceros.jpg';
 let selloCache: string | null = null;
 
 /**

@@ -1,35 +1,80 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, tick } from 'svelte';
+	import { get } from 'svelte/store';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { authStore } from '$lib/stores/auth';
 	import { fade, fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 
+	/** Tiempo mínimo en pantalla del loader de montaje: evita el parpadeo. */
+	const MIN_BOOT_MS = 550;
+	/**
+	 * Techo para la hidratación de sesión. `authStore.init()` refresca el perfil
+	 * contra la API; si esa llamada se cuelga no se puede dejar al usuario
+	 * mirando el loader hasta el timeout de 30s de axios.
+	 */
+	const AUTH_CHECK_TIMEOUT_MS = 3000;
+
 	let correo = '';
 	let password = '';
 	let showPassword = false;
-	let mounted = false;
 	let remember = false;
 
-	$: error = $authStore.error;
+	/** false → loader de montaje; true → formulario. */
+	let ready = false;
+	/** Sesión válida detectada: el loader se queda puesto durante el `goto`. */
+	let redirecting = false;
+	/**
+	 * Error mostrado en el formulario. Es estado LOCAL (no `$authStore.error`)
+	 * a propósito: así el mensaje sobrevive a cualquier cambio posterior del
+	 * store y solo se limpia cuando el usuario vuelve a enviar el formulario.
+	 */
+	let formError: string | null = null;
+	let errorBox: HTMLDivElement | null = null;
+
 	$: isLoading = $authStore.isLoading;
+	/**
+	 * El correo ya escrito viaja a la pantalla de recuperación: quien llega
+	 * ahí acaba de fallar el login y no tiene por qué teclearlo otra vez.
+	 */
+	$: enlaceRecuperacion = correo.trim()
+		? `/recuperar-password?correo=${encodeURIComponent(correo.trim())}`
+		: '/recuperar-password';
 	$: redirectPath = (() => {
 		const raw = $page.url.searchParams.get('redirect');
 		if (raw && raw.startsWith('/dashboard/nomina')) return null;
 		return raw;
 	})();
 
-	onMount(() => {
-		authStore.init();
+	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+	/** Destino post-login, ignorando siempre el módulo de nómina. */
+	function resolveTarget(): string {
+		let savedRedirect = localStorage.getItem('redirect_after_login');
+		if (savedRedirect?.startsWith('/dashboard/nomina')) savedRedirect = null;
+		const targetPath = redirectPath || savedRedirect || '/dashboard/servicios';
+		localStorage.removeItem('redirect_after_login');
+		return targetPath;
+	}
+
+	onMount(async () => {
+		// El loader corre mientras se hidrata la sesión. Ambas esperas van en
+		// paralelo: la comprobación real y el mínimo visual del loader.
+		const bootDelay = sleep(MIN_BOOT_MS);
+
+		// `init()` es asíncrono: sin `await` la comprobación de sesión de abajo
+		// se ejecutaba antes de que el store estuviera hidratado y nunca
+		// redirigía a un usuario ya autenticado.
+		await Promise.race([
+			authStore.init().catch(() => undefined),
+			sleep(AUTH_CHECK_TIMEOUT_MS)
+		]);
 
 		if (authStore.isAuthenticated()) {
-			let savedRedirect = localStorage.getItem('redirect_after_login');
-			if (savedRedirect?.startsWith('/dashboard/nomina')) savedRedirect = null;
-			const targetPath = redirectPath || savedRedirect || '/dashboard/servicios';
-
-			localStorage.removeItem('redirect_after_login');
-			goto(targetPath);
+			redirecting = true;
+			await bootDelay;
+			goto(resolveTarget());
 			return;
 		}
 
@@ -39,29 +84,44 @@
 			if (savedEmail) correo = savedEmail;
 		}
 
-		mounted = true;
+		await bootDelay;
+		ready = true;
 	});
 
 	async function handleLogin() {
-		if (!correo || !password) return;
+		if (isLoading) return;
+
+		// El error anterior solo se limpia al reintentar, nunca por teclear.
+		formError = null;
+
+		const correoLimpio = correo.trim();
+		if (!correoLimpio || !password) {
+			formError = 'Ingresa tu correo y tu contraseña para continuar.';
+			return;
+		}
 
 		if (remember) {
 			localStorage.setItem('remember_me', 'true');
-			localStorage.setItem('remembered_email', correo);
+			localStorage.setItem('remembered_email', correoLimpio);
 		} else {
 			localStorage.removeItem('remember_me');
 			localStorage.removeItem('remembered_email');
 		}
 
-		const success = await authStore.login(correo, password);
+		const success = await authStore.login(correoLimpio, password);
 
-		if (success) {
-			let savedRedirect = localStorage.getItem('redirect_after_login');
-			if (savedRedirect?.startsWith('/dashboard/nomina')) savedRedirect = null;
-			const targetPath = redirectPath || savedRedirect || '/dashboard/servicios';
-			localStorage.removeItem('redirect_after_login');
-			goto(targetPath);
+		if (!success) {
+			// Se muestra el detalle que devolvió la API y el formulario queda
+			// exactamente como estaba: ni se limpian `correo`/`password` ni se
+			// recarga la página, para que el usuario corrija y reintente.
+			formError =
+				get(authStore).error ?? 'No se pudo iniciar sesión. Inténtalo de nuevo.';
+			await tick();
+			errorBox?.focus();
+			return;
 		}
+
+		goto(resolveTarget());
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
@@ -70,29 +130,56 @@
 		}
 	}
 
+	function dismissError() {
+		formError = null;
+		authStore.clearError();
+	}
+
 	function togglePassword() {
 		showPassword = !showPassword;
 	}
 </script>
 
 <svelte:head>
-	<title>Iniciar sesión — Cotransmeq (NIT 901983227)</title>
+	<title>Iniciar sesión — Cotransmeq S.A.S</title>
 	<meta
 		name="description"
-		content="Acceso al sistema de gestión integral de Cotransmeq — Transporte especial de personal petrolero (NIT 901983227)."
+		content="Acceso al sistema de gestión integral de Cotransmeq S.A.S."
 	/>
 </svelte:head>
 
-{#if mounted}
-	<div class="login-page" in:fade={{ duration: 300 }}>
-		<!-- Ambient orbs (naranja + verde, sutiles) -->
+{#if !ready}
+	<!-- ═══ Loader de montaje: cubre la hidratación de sesión ═══ -->
+	<div class="boot-screen" out:fade={{ duration: 250 }}>
+		<div class="boot-inner" in:fade={{ duration: 400 }}>
+			<!-- Logo en versión oscura: el fondo del loader ya no es verde. -->
+			<img
+				class="boot-logo"
+				src="/assets/logo_transmeralda-264.webp"
+				alt="Cotransmeq S.A.S"
+				width="160"
+				height="55"
+			/>
+			<div class="boot-track" aria-hidden="true">
+				<span class="boot-fill"></span>
+			</div>
+			<p class="boot-text" role="status">
+				{redirecting ? 'Sesión activa · redirigiendo…' : 'Preparando el acceso seguro…'}
+			</p>
+		</div>
+	</div>
+{/if}
+
+{#if ready}
+	<div class="login-page" in:fade={{ duration: 300, delay: 120 }}>
+		<!-- Soft ambient orbs (sutiles, editorial) -->
 		<div class="orbs" aria-hidden="true">
 			<div class="orb orb-1"></div>
 			<div class="orb orb-2"></div>
 		</div>
 
 		<div class="login-card" in:fly={{ y: 20, duration: 500, easing: quintOut }}>
-			<!-- ═══ LEFT: Brand panel (slate editorial con tinte naranja) ═══ -->
+			<!-- ═══ LEFT: Brand panel (charcoal editorial) ═══ -->
 			<aside class="brand-panel">
 				<!-- Patrón decorativo de puntos -->
 				<div class="brand-pattern" aria-hidden="true"></div>
@@ -101,8 +188,8 @@
 					<div class="brand-mark">
 						<img
 							class="brand-logo"
-							src="/assets/logo_nombre.webp"
-							alt="Cotransmeq"
+							src="/assets/logo_transmeralda_white-264.webp"
+							alt="Cotransmeq S.A.S"
 							width="132"
 							height="45"
 						/>
@@ -110,7 +197,7 @@
 				</div>
 
 				<div class="brand-body">
-					<span class="brand-code">Sistema de Gestión · NIT 901983227</span>
+					<span class="brand-code">Sistema de Gestión · v2.0</span>
 					<h2 class="brand-title">
 						Plataforma centralizada para la operación logística
 					</h2>
@@ -161,8 +248,8 @@
 				<div class="mobile-brand">
 					<img
 						class="mobile-logo"
-						src="/assets/logo_nombre.webp"
-						alt="Cotransmeq"
+						src="/assets/logo_transmeralda-264.webp"
+						alt="Cotransmeq S.A.S"
 						width="120"
 						height="40"
 					/>
@@ -176,8 +263,15 @@
 					</p>
 				</div>
 
-				{#if error}
-					<div class="alert alert-error" in:fly={{ y: -8, duration: 250 }}>
+				{#if formError}
+					<div
+						class="alert alert-error"
+						role="alert"
+						aria-live="assertive"
+						tabindex="-1"
+						bind:this={errorBox}
+						in:fly={{ y: -8, duration: 250 }}
+					>
 						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 							<path
 								stroke-linecap="round"
@@ -185,10 +279,20 @@
 								d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
 							/>
 						</svg>
-						<div>
+						<div class="alert-body">
 							<strong>No pudimos iniciar sesión.</strong>
-							<p>{error}</p>
+							<p>{formError}</p>
 						</div>
+						<button
+							type="button"
+							class="alert-close"
+							on:click={dismissError}
+							aria-label="Cerrar mensaje de error"
+						>
+							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+							</svg>
+						</button>
 					</div>
 				{/if}
 
@@ -306,13 +410,9 @@
 							/>
 							<span class="checkbox-label">Recordarme en este dispositivo</span>
 						</label>
-						<button
-							type="button"
-							class="forgot-link"
-							disabled={isLoading}
-						>
+						<a class="forgot-link" href={enlaceRecuperacion}>
 							¿Olvidaste tu contraseña?
-						</button>
+						</a>
 					</div>
 
 					<!-- Submit -->
@@ -368,7 +468,8 @@
 				</div>
 
 				<p class="footer-copy">
-					© {new Date().getFullYear()} Cotransmeq · Puerto Gaitán, Meta · Colombia · NIT 901983227
+					© {new Date().getFullYear()} Cotransmeq S.A.S · Yopal, Casanare ·
+					Colombia
 				</p>
 			</section>
 		</div>
@@ -377,10 +478,26 @@
 
 <style>
 	/* ════════════════════════════════════════════════════════════
-	   LOGIN PAGE — Aplicación del skill landing-cotransmeq-design-system
-	   Base off-white #fcfcfb + naranja (#f97316) acento principal +
-	   verde bosque (#166534) acento secundario. Geist única. Sin serif.
+	   LOGIN PAGE — Aplicación del skill landing-transmeralda
+	   Fondo crema editorial; el verde queda como acento (botón,
+	   foco, panel de marca), nunca como lienzo.
 	   ════════════════════════════════════════════════════════════ */
+
+	/*
+	 * Paleta del fondo, compartida por el loader de montaje y la página.
+	 * Antes era un degradado verde esmeralda a pantalla completa. Se retiró:
+	 * competía con el acento de la marca dentro de la tarjeta y cada pantalla
+	 * de acceso nueva lo copiaba sin pensarlo. Las pantallas nuevas ya no lo
+	 * duplican porque comparten `$lib/components/auth/AuthShell.svelte`.
+	 */
+	.boot-screen,
+	.login-page {
+		background-color: #fcfcfb;
+		background-image:
+			radial-gradient(ellipse at 15% -10%, rgba(249, 115, 22, 0.12) 0%, transparent 55%),
+			radial-gradient(ellipse at 90% 110%, rgba(15, 31, 26, 0.07) 0%, transparent 55%);
+	}
+
 	.login-page {
 		position: relative;
 		min-height: 100vh;
@@ -388,14 +505,13 @@
 		align-items: center;
 		justify-content: center;
 		padding: 1.5rem;
-		background-color: #fcfcfb;
-		font-family: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
-		color: #0f172a;
+		font-family: 'Inter', 'Inter Tight', system-ui, sans-serif;
+		color: #1a1a1a;
 		-webkit-font-smoothing: antialiased;
 		overflow: hidden;
 	}
 
-	/* Orbes ambientales (naranja + verde, sutiles) */
+	/* Orbes ambientales sutiles (editorial, no neón) */
 	.orbs {
 		position: absolute;
 		inset: 0;
@@ -408,18 +524,95 @@
 		filter: blur(80px);
 	}
 	.orb-1 {
-		top: -8rem;
-		right: -6rem;
+		top: -10rem;
+		right: -7rem;
 		width: 28rem;
 		height: 28rem;
-		background: rgba(249, 115, 22, 0.18);
+		background: rgba(249, 115, 22, 0.12);
 	}
 	.orb-2 {
-		bottom: -10rem;
-		left: -8rem;
+		bottom: -12rem;
+		left: -9rem;
 		width: 32rem;
 		height: 32rem;
-		background: rgba(22, 101, 52, 0.12);
+		background: rgba(15, 31, 26, 0.07);
+	}
+
+	/* ════════════════════════════════════════════════════════════
+	   BOOT SCREEN — visible durante el montaje / hidratación
+	   ════════════════════════════════════════════════════════════ */
+	.boot-screen {
+		position: fixed;
+		inset: 0;
+		z-index: 50;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 1.5rem;
+		font-family: 'Inter', 'Inter Tight', system-ui, sans-serif;
+	}
+
+	.boot-inner {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1.5rem;
+	}
+
+	.boot-logo {
+		height: 55px;
+		width: auto;
+		display: block;
+		animation: boot-breathe 2.4s ease-in-out infinite;
+	}
+
+	.boot-track {
+		position: relative;
+		width: 190px;
+		height: 3px;
+		border-radius: 999px;
+		background: rgba(15, 31, 26, 0.12);
+		overflow: hidden;
+	}
+	.boot-fill {
+		position: absolute;
+		top: 0;
+		left: 0;
+		height: 100%;
+		width: 40%;
+		border-radius: 999px;
+		background: linear-gradient(90deg, rgba(249, 115, 22, 0.35), #ea580c);
+		animation: boot-slide 1.15s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+	}
+
+	.boot-text {
+		margin: 0;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.7rem;
+		font-weight: 600;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: #6b6b6b;
+	}
+
+	@keyframes boot-slide {
+		0% {
+			transform: translateX(-110%);
+		}
+		100% {
+			transform: translateX(360%);
+		}
+	}
+	@keyframes boot-breathe {
+		0%,
+		100% {
+			opacity: 0.75;
+			transform: translateY(0);
+		}
+		50% {
+			opacity: 1;
+			transform: translateY(-3px);
+		}
 	}
 
 	/* ═══ Card principal (2 columnas) ═══ */
@@ -431,11 +624,11 @@
 		width: 100%;
 		max-width: 980px;
 		background: #ffffff;
-		border: 1px solid rgba(15, 23, 42, 0.08);
+		border: 1px solid rgba(0, 0, 0, 0.08);
 		border-radius: 24px;
 		box-shadow:
-			0 1px 2px rgba(0, 0, 0, 0.04),
-			0 20px 60px rgba(15, 23, 42, 0.08);
+			0 1px 2px rgba(0, 0, 0, 0.05),
+			0 24px 60px rgba(15, 31, 26, 0.12);
 		overflow: hidden;
 	}
 	@media (min-width: 1024px) {
@@ -445,7 +638,7 @@
 	}
 
 	/* ════════════════════════════════════════════════════════════
-	   BRAND PANEL — Slate editorial (#0f172a) con tinte naranja
+	   BRAND PANEL — Charcoal editorial
 	   ════════════════════════════════════════════════════════════ */
 	.brand-panel {
 		position: relative;
@@ -454,7 +647,7 @@
 		justify-content: space-between;
 		padding: 2.75rem 2.5rem;
 		background: #0f172a;
-		color: #fcfcfb;
+		color: #f0ede6;
 		overflow: hidden;
 		isolation: isolate;
 	}
@@ -477,7 +670,7 @@
 		-webkit-mask-image: radial-gradient(ellipse at top left, black 0%, transparent 75%);
 	}
 
-	/* Detalle naranja tint superior derecho */
+	/* Detalle emerald tint superior derecho */
 	.brand-panel::before {
 		content: '';
 		position: absolute;
@@ -485,7 +678,7 @@
 		right: -6rem;
 		width: 18rem;
 		height: 18rem;
-		background: radial-gradient(circle, rgba(249, 115, 22, 0.30) 0%, transparent 70%);
+		background: radial-gradient(circle, rgba(249, 115, 22, 0.25) 0%, transparent 70%);
 		pointer-events: none;
 		z-index: -1;
 	}
@@ -513,33 +706,32 @@
 
 	.brand-code {
 		display: inline-block;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.7rem;
-		font-weight: 600;
+		font-weight: 700;
 		text-transform: uppercase;
-		letter-spacing: 0.15em;
+		letter-spacing: 0.12em;
 		color: #f97316;
-		background: rgba(249, 115, 22, 0.12);
-		padding: 0.35rem 0.8rem;
-		border-radius: 9999px;
+		background: rgba(249, 115, 22, 0.1);
+		padding: 0.3rem 0.7rem;
+		border-radius: 6px;
 		margin-bottom: 1.25rem;
-		font-variant-numeric: tabular-nums;
 	}
 
 	.brand-title {
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: 'Fraunces', Georgia, serif;
 		font-size: clamp(1.6rem, 2.4vw, 1.95rem);
-		font-weight: 600;
+		font-weight: 400;
 		line-height: 1.18;
 		letter-spacing: -0.015em;
-		color: #fcfcfb;
+		color: #f0ede6;
 		margin: 0 0 0.85rem;
 	}
 
 	.brand-desc {
 		font-size: 0.875rem;
 		line-height: 1.6;
-		color: rgba(252, 252, 251, 0.7);
+		color: rgba(240, 237, 230, 0.7);
 		margin: 0 0 1.75rem;
 	}
 
@@ -556,7 +748,7 @@
 		align-items: center;
 		gap: 0.7rem;
 		font-size: 0.8125rem;
-		color: rgba(252, 252, 251, 0.85);
+		color: rgba(240, 237, 230, 0.85);
 	}
 	.feature-mark {
 		display: inline-flex;
@@ -565,7 +757,7 @@
 		width: 22px;
 		height: 22px;
 		border-radius: 7px;
-		background: rgba(249, 115, 22, 0.20);
+		background: rgba(249, 115, 22, 0.18);
 		color: #f97316;
 		flex-shrink: 0;
 	}
@@ -580,38 +772,32 @@
 		display: flex;
 		align-items: center;
 		gap: 0.55rem;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.7rem;
-		color: rgba(252, 252, 251, 0.55);
+		color: rgba(240, 237, 230, 0.55);
 	}
 	.status-dot {
 		width: 6px;
 		height: 6px;
 		border-radius: 50%;
-		background: #22c55e;
-		box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+		background: #f97316;
+		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
 		animation: pulse 2.5s ease-in-out infinite;
 	}
 	.status-text {
 		font-weight: 600;
-		color: rgba(252, 252, 251, 0.75);
-		text-transform: uppercase;
-		letter-spacing: 0.1em;
+		color: rgba(240, 237, 230, 0.75);
 	}
 	.status-sep {
 		opacity: 0.4;
 	}
-	.status-meta {
-		text-transform: uppercase;
-		letter-spacing: 0.1em;
-	}
 	@keyframes pulse {
 		0%,
 		100% {
-			box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.18);
+			box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
 		}
 		50% {
-			box-shadow: 0 0 0 5px rgba(34, 197, 94, 0.06);
+			box-shadow: 0 0 0 5px rgba(249, 115, 22, 0.06);
 		}
 	}
 
@@ -641,7 +827,7 @@
 		margin-bottom: 2rem;
 	}
 	.mobile-logo {
-		height: 72px;
+		height: 32px;
 		width: auto;
 		display: block;
 	}
@@ -657,24 +843,24 @@
 
 	.eyebrow {
 		display: inline-block;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.7rem;
-		font-weight: 600;
+		font-weight: 700;
 		text-transform: uppercase;
-		letter-spacing: 0.15em;
+		letter-spacing: 0.12em;
 		color: #f97316;
 		background: rgba(249, 115, 22, 0.08);
-		padding: 0.35rem 0.8rem;
-		border-radius: 9999px;
+		padding: 0.3rem 0.75rem;
+		border-radius: 6px;
 		margin-bottom: 0.85rem;
 	}
 
 	.form-title {
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: 'Fraunces', Georgia, serif;
 		font-size: clamp(1.65rem, 3.6vw, 2rem);
-		font-weight: 700;
+		font-weight: 400;
 		line-height: 1.15;
-		letter-spacing: -0.02em;
+		letter-spacing: -0.015em;
 		color: #0f172a;
 		margin: 0 0 0.5rem;
 	}
@@ -682,7 +868,7 @@
 	.form-subtitle {
 		font-size: 0.9rem;
 		line-height: 1.55;
-		color: #64748b;
+		color: #4a4a4a;
 		margin: 0;
 	}
 
@@ -695,12 +881,46 @@
 		border-radius: 12px;
 		margin-bottom: 1.5rem;
 	}
+	.alert:focus {
+		outline: none;
+	}
 	.alert-error {
 		background: rgba(239, 68, 68, 0.06);
 		border: 1px solid rgba(220, 38, 38, 0.22);
 		color: #991b1b;
 	}
-	.alert-error svg {
+	.alert-body {
+		flex: 1;
+		min-width: 0;
+	}
+	.alert-close {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 24px;
+		height: 24px;
+		padding: 0;
+		margin: -0.15rem -0.35rem 0 0;
+		background: transparent;
+		border: none;
+		border-radius: 6px;
+		color: #b91c1c;
+		cursor: pointer;
+		flex-shrink: 0;
+		opacity: 0.6;
+		transition: opacity 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+	}
+	.alert-close:hover {
+		opacity: 1;
+		background: rgba(220, 38, 38, 0.08);
+	}
+	.alert-close svg {
+		width: 14px;
+		height: 14px;
+		margin: 0;
+		color: currentColor;
+	}
+	.alert-error > svg {
 		width: 20px;
 		height: 20px;
 		flex-shrink: 0;
@@ -734,7 +954,7 @@
 	}
 
 	.field-label {
-		font-size: 0.8125rem;
+		font-size: 0.78rem;
 		font-weight: 600;
 		color: #0f172a;
 		letter-spacing: -0.005em;
@@ -751,7 +971,7 @@
 		transform: translateY(-50%);
 		width: 16px;
 		height: 16px;
-		color: #94a3b8;
+		color: #9a9a9a;
 		pointer-events: none;
 		transition: color 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 	}
@@ -761,25 +981,25 @@
 		padding: 0.7rem 0.95rem 0.7rem 2.55rem;
 		font-size: 0.9rem;
 		font-family: inherit;
-		color: #0f172a;
+		color: #1a1a1a;
 		background: #ffffff;
-		border: 1px solid rgba(15, 23, 42, 0.12);
+		border: 1px solid rgba(0, 0, 0, 0.12);
 		border-radius: 12px;
 		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 	}
 	.field-input::placeholder {
-		color: #94a3b8;
+		color: #9a9a9a;
 	}
 	.field-input--with-action {
 		padding-right: 2.85rem;
 	}
 	.field-input:hover:not(:disabled) {
-		border-color: rgba(15, 23, 42, 0.20);
+		border-color: rgba(0, 0, 0, 0.2);
 	}
 	.field-input:focus {
 		outline: none;
 		border-color: #f97316;
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.10);
+		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
 	}
 	.field-input:focus + .field-action,
 	.field-control:focus-within .field-icon {
@@ -805,7 +1025,7 @@
 		background: transparent;
 		border: none;
 		border-radius: 8px;
-		color: #94a3b8;
+		color: #9a9a9a;
 		cursor: pointer;
 		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 	}
@@ -845,7 +1065,7 @@
 		appearance: none;
 		-webkit-appearance: none;
 		margin: 0;
-		border: 1.5px solid rgba(15, 23, 42, 0.24);
+		border: 1.5px solid rgba(0, 0, 0, 0.24);
 		border-radius: 4px;
 		background: #ffffff;
 		cursor: pointer;
@@ -876,9 +1096,9 @@
 		cursor: not-allowed;
 	}
 	.checkbox-label {
-		font-size: 0.8125rem;
+		font-size: 0.8rem;
 		font-weight: 500;
-		color: #64748b;
+		color: #4a4a4a;
 		transition: color 0.2s;
 	}
 	.checkbox:hover .checkbox-label {
@@ -886,7 +1106,7 @@
 	}
 
 	.forgot-link {
-		font-size: 0.8125rem;
+		font-size: 0.8rem;
 		font-weight: 600;
 		color: #f97316;
 		background: transparent;
@@ -894,38 +1114,36 @@
 		padding: 0;
 		cursor: pointer;
 		font-family: inherit;
+		text-decoration: none;
 		transition: color 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 	}
-	.forgot-link:hover:not(:disabled) {
+	.forgot-link:hover {
 		color: #ea580c;
-	}
-	.forgot-link:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
+		text-decoration: underline;
 	}
 
-	/* ═══ Submit button (gradiente naranja 135deg) ═══ */
+	/* ═══ Submit button (gradiente emerald 135deg) ═══ */
 	.btn-submit {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		width: 100%;
-		padding: 0.85rem 1.25rem;
+		padding: 0.8rem 1.25rem;
 		margin-top: 0.5rem;
 		font-family: inherit;
-		font-size: 0.9375rem;
+		font-size: 0.9rem;
 		font-weight: 600;
 		color: #ffffff;
 		background: linear-gradient(135deg, #f97316, #ea580c);
 		border: none;
 		border-radius: 12px;
 		cursor: pointer;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.30);
-		transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 	}
 	.btn-submit:hover:not(:disabled) {
-		transform: translateY(-2px);
-		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.40);
+		transform: translateY(-1px);
+		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
 	}
 	.btn-submit:active:not(:disabled) {
 		transform: translateY(0);
@@ -964,20 +1182,20 @@
 	.secure-sep {
 		flex: 1;
 		height: 1px;
-		background: rgba(15, 23, 42, 0.08);
+		background: rgba(0, 0, 0, 0.08);
 	}
 	.secure-text {
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
-		font-size: 0.6875rem;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.65rem;
 		font-weight: 600;
-		letter-spacing: 0.12em;
+		letter-spacing: 0.1em;
 		text-transform: uppercase;
-		color: #94a3b8;
+		color: #9a9a9a;
 	}
 
 	.footer-copy {
 		font-size: 0.75rem;
-		color: #94a3b8;
+		color: #9a9a9a;
 		text-align: center;
 		margin: 1rem 0 0;
 		line-height: 1.5;
@@ -996,14 +1214,29 @@
 	@media (prefers-reduced-motion: reduce) {
 		.login-card,
 		.alert,
+		.alert-close,
 		.btn-submit,
 		.field-input,
 		.field-icon,
 		.field-action,
 		.forgot-link,
-		.status-dot {
+		.boot-logo {
 			transition: none !important;
 			animation: none !important;
+		}
+		/* El loader conserva movimiento mínimo: pulso de opacidad en la barra. */
+		.boot-fill {
+			animation: boot-pulse 1.6s ease-in-out infinite;
+			width: 100%;
+		}
+		@keyframes boot-pulse {
+			0%,
+			100% {
+				opacity: 0.35;
+			}
+			50% {
+				opacity: 1;
+			}
 		}
 	}
 </style>

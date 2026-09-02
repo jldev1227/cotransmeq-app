@@ -3,6 +3,8 @@
 	import { fade, fly, slide } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import { goto } from '$app/navigation';
+	import { page } from '$app/stores';
+	import { browser } from '$app/environment';
 	import { authStore } from '$lib/stores/auth';
 	import { socketUtils } from '$lib/socket';
 	import MultiSelectFilter from '$lib/components/ui/MultiSelectFilter.svelte';
@@ -30,7 +32,8 @@
 		AlertCircle,
 		Calendar,
 		Hash,
-		Tag
+		Tag,
+		Table2
 	} from 'lucide-svelte';
 	import ModalOperadoras from '$lib/components/ModalOperadoras.svelte';
 	import {
@@ -48,8 +51,27 @@
 		type FacturaLiquidacion
 	} from '$lib/api/facturacionLiquidaciones';
 	import ModalFacturar from '$lib/components/ModalFacturar.svelte';
+	import SocketEventLogBar from '$lib/components/liquidaciones/SocketEventLogBar.svelte';
 	import { checkAccess } from '$lib/config/permissions';
-	import { each } from 'chart.js/helpers';
+	import {
+		cacheLiquidaciones,
+		necesitaFetch,
+		puedePintar,
+		comenzarFetch,
+		guardarDatos,
+		fallarFetch,
+		ensuciar,
+		verTab,
+		resetCache,
+		type TabId
+	} from '$lib/stores/liquidacionesServiciosCache';
+	import {
+		desdePayload,
+		registrar,
+		marcarVistos,
+		limpiarLog,
+		type EventoLog
+	} from '$lib/stores/socketEventLog';
 
 	const MESES = [
 		'ENERO',
@@ -103,8 +125,6 @@
 	let listAnio: number | '' = '';
 	let listSortBy = '';
 	let listSortDir: 'asc' | 'desc' = 'desc';
-	let searchInputValue = '';
-	let searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// Column header multi-select filters (server-side, Excel-style)
 	let colFilterConsecutivo: string[] = [];
@@ -131,6 +151,99 @@
 		import('$lib/api/liquidaciones-servicios').ItemLiquidacionServicio[]
 	> = {};
 	let itemsHideTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// Popover for additional consecutivos (Facturas tab)
+	let popoverConsecutivosVisible = false;
+	let popoverConsecutivos: string[] = [];
+	let popoverConsecutivosPos = { top: 0, left: 0 };
+	let popoverConsecutivosHideTimer: ReturnType<typeof setTimeout> | null = null;
+	const CONSECUTIVOS_VISIBLE_LIMIT = 5;
+
+	// ═══ URL ↔ state sync (mismo patrón que /dashboard/recargos) ═══
+	// - `hidratado` evita disparar fetch en el ciclo de hidratación desde URL.
+	// - `urlSyncTimer` debouncea la escritura a la URL (200ms).
+	// - `fetchTimers[tab]` debouncea el fetch de cada tab (350ms), uno por tab.
+	// - `last*Filter` resetea listPage/facturasPage/tercerosPage a 1 cuando cambia el filtro.
+	// - La caché (`liquidacionesServiciosCache`) evita los fetches redundantes.
+	let hidratado = false;
+	let urlSyncTimer: ReturnType<typeof setTimeout> | null = null;
+	/**
+	 * Un timer de debounce POR TAB.
+	 *
+	 * Antes había uno solo compartido por los tres reactivos de fetch. Como
+	 * cada uno hacía `clearTimeout(fetchDebounceTimer)` antes de programar
+	 * el suyo, dos tabs cuyas claves cambiaban en el mismo ciclo — cosa que
+	 * pasa al hidratar desde la URL o al limpiar filtros — se cancelaban
+	 * mutuamente y uno de los dos no llegaba a pedir nunca.
+	 */
+	const fetchTimers: Record<TabId, ReturnType<typeof setTimeout> | null> = {
+		liquidaciones: null,
+		facturas: null,
+		terceros: null,
+		configuracion: null
+	};
+	function programarFetch(tab: TabId, fn: () => void, ms = FETCH_DEBOUNCE_MS) {
+		const previo = fetchTimers[tab];
+		if (previo) clearTimeout(previo);
+		fetchTimers[tab] = setTimeout(fn, ms);
+	}
+	function cancelarFetches() {
+		for (const t of Object.keys(fetchTimers) as TabId[]) {
+			const h = fetchTimers[t];
+			if (h) clearTimeout(h);
+			fetchTimers[t] = null;
+		}
+	}
+
+	// ═══ Claves de caché ═══
+	//
+	// La firma completa de filtros + página con la que se pidió cada tab. La
+	// caché solo sirve un dato si su clave casa con la actual: 50 registros
+	// traídos con OTRO filtro son peores que un spinner.
+	//
+	// OJO: la clave de liquidaciones incluye AHORA el sort y los siete
+	// filtros de columna. Antes solo llevaba búsqueda/mes/año/placas, así
+	// que ordenar una columna o aplicar un filtro de cabecera estando ya en
+	// la página 1 no cambiaba la clave y el fetch no se disparaba nunca —
+	// la tabla se quedaba con el orden viejo hasta que tocabas otra cosa.
+	function keyLiquidaciones(): string {
+		return [
+			listBusqueda,
+			listMes,
+			listAnio,
+			listSortBy,
+			listSortDir,
+			colFilterConsecutivo.join(','),
+			colFilterCliente.join(','),
+			colFilterPeriodo.join(','),
+			colFilterEstado.join(','),
+			colFilterFactura.join(','),
+			colFilterLiquidador.join(','),
+			colFilterPlacas.join(','),
+			listPage
+		].join('|');
+	}
+	function keyFacturas(): string {
+		return [facturasBusqueda, facturasEstado, facturasPage].join('|');
+	}
+	function keyTerceros(): string {
+		return [tercerosBusqueda, tercerosMes, tercerosAnio, tercerosPlaca, tercerosPage].join('|');
+	}
+	function keyDeTab(tab: TabId): string {
+		if (tab === 'facturas') return keyFacturas();
+		if (tab === 'terceros') return keyTerceros();
+		if (tab === 'configuracion') return 'config';
+		return keyLiquidaciones();
+	}
+	const URL_SYNC_DEBOUNCE_MS = 200;
+	const FETCH_DEBOUNCE_MS = 350;
+	// Firma de FILTROS (sin página) de cada tab, solo para detectar cuándo
+	// hay que volver a la página 1. La cuenta de "qué se pidió por última
+	// vez" ya la lleva la caché (`key` + `fetchedAt`), así que los antiguos
+	// `lastFetched*` sobran.
+	let lastLiquidacionesFilter = '';
+	let lastFacturasFilter = '';
+	let lastTercerosFilter = '';
 
 	// Unique values for column filters (from ALL records via metadata)
 	$: uniqueConsecutivos = listMetadata.consecutivos || [];
@@ -209,6 +322,35 @@
 	let facturasTab: 'liquidaciones' | 'facturas' | 'configuracion' | 'terceros' = 'liquidaciones';
 	let modalOperadoras = false;
 
+	/**
+	 * Agregados de Terceros sobre TODOS los registros del filtro.
+	 *
+	 * Antes las stat cards se calculaban con `tercerosItems.reduce(...)`, es
+	 * decir sobre la PÁGINA (limit 50). "Total Facturado" era el de 50 filas
+	 * y cambiaba al pasar de página — que es justo lo que delataba el fallo.
+	 * El tab de Liquidaciones ya lo resolvía en el servidor vía `metadata`;
+	 * esto lo empareja con el mismo `where` de la consulta paginada.
+	 */
+	const TERCEROS_METADATA_VACIA = {
+		globalCount: 0,
+		globalFacturado: 0,
+		globalAdmon: 0,
+		globalLiquidar: 0,
+		globalIngresoEmpresa: 0,
+		globalClientes: 0
+	};
+	let tercerosMetadata = { ...TERCEROS_METADATA_VACIA };
+
+	/** Ídem para Facturas, que tenía el mismo problema con `facturas.reduce`. */
+	const FACTURAS_METADATA_VACIA = {
+		globalCount: 0,
+		globalTotal: 0,
+		globalLiquidaciones: 0,
+		estadoCounts: {} as Record<string, number>,
+		estadoTotales: {} as Record<string, number>
+	};
+	let facturasMetadata = { ...FACTURAS_METADATA_VACIA };
+
 	// Terceros historial
 	let tercerosItems: TerceroItemHistorial[] = [];
 	let tercerosLoading = false;
@@ -219,7 +361,6 @@
 	let tercerosMes: number | '' = '';
 	let tercerosAnio: number | '' = new Date().getFullYear();
 	let tercerosPlaca = '';
-	let tercerosPlacaDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 	let facturas: FacturaLiquidacion[] = [];
 	let facturasLoading = false;
 	let facturasPage = 1;
@@ -255,8 +396,12 @@
 	$: configValorHoraAuto =
 		configForm.salario_basico > 0 ? +(configForm.salario_basico / 235).toFixed(4) : 0;
 
-	async function cargarConfig() {
-		configLoading = true;
+	async function cargarConfig(forzar = false) {
+		// La config es un único registro y cambia muy de vez en cuando, así
+		// que basta con no repedirla si ya está en caché y limpia.
+		if (!forzar && !necesitaFetch('configuracion', 'config')) return;
+		configLoading = !puedePintar('configuracion', 'config');
+		comenzarFetch('configuracion');
 		try {
 			const d = await liquidacionesServiciosAPI.obtenerConfigLiquidador();
 			configData = d;
@@ -270,8 +415,11 @@
 				pct_admin: d.pct_admin,
 				prueba_covid: d.prueba_covid
 			};
+			guardarDatos('configuracion', 'config', d);
 		} catch (e: any) {
-			alert(e.message || 'Error cargando config');
+			// Sin `alert()`: con el prefetch de los 4 tabs al montar, un
+			// backend caído disparaba un modal bloqueante por cada tab.
+			fallarFetch('configuracion', e?.message || 'Error cargando configuración');
 		} finally {
 			configLoading = false;
 		}
@@ -291,8 +439,21 @@
 	}
 
 	// ─── Terceros historial ───
-	async function cargarTerceros() {
-		tercerosLoading = true;
+	/**
+	 * `forzar` salta la caché. Lo usan el botón de recarga manual y los
+	 * handlers de socket cuando el tab está a la vista.
+	 */
+	async function cargarTerceros(forzar = false) {
+		const key = keyTerceros();
+		if (!forzar && !necesitaFetch('terceros', key)) return;
+
+		// Solo se enseña spinner si NO hay nada que pintar de esta misma
+		// clave. Si lo hay (dato viejo o marcado sucio), la tabla se queda
+		// visible y se revalida por detrás: parpadear una tabla que ya
+		// estaba bien es peor que mostrarla un segundo desactualizada.
+		const pintable = puedePintar('terceros', key);
+		tercerosLoading = !pintable;
+		comenzarFetch('terceros');
 		try {
 			const filtros: Record<string, string | number> = { page: tercerosPage, limit: 50 };
 			if (tercerosBusqueda) filtros.busqueda = tercerosBusqueda;
@@ -303,26 +464,35 @@
 			tercerosItems = r.items;
 			tercerosTotal = r.total;
 			tercerosTotalPages = r.totalPages;
+			// Agregados sobre TODOS los registros del filtro, no sobre la
+			// página. Ver `tercerosMetadata`.
+			tercerosMetadata = { ...TERCEROS_METADATA_VACIA, ...(r.metadata ?? {}) };
+			guardarDatos('terceros', key, {
+				items: r.items,
+				total: r.total,
+				totalPages: r.totalPages,
+				metadata: tercerosMetadata
+			});
 		} catch (e: any) {
-			alert(e.message || 'Error cargando historial terceros');
+			// Antes esto era un `alert()` que bloqueaba la página entera por
+			// un fallo de red de un tab que quizá ni estaba visible — y con
+			// el prefetch de los 4 tabs al montar serían hasta 4 alerts
+			// seguidos. Ahora el error queda en la caché y se pinta en el tab.
+			fallarFetch('terceros', e?.message || 'Error cargando historial de terceros');
 		} finally {
 			tercerosLoading = false;
 		}
 	}
 	function filtrarTerceros() {
+		// Reset a página 1; el fetch lo dispara el reactivo `lastTercerosFilter`.
 		tercerosPage = 1;
-		cargarTerceros();
 	}
 	function onTercerosPlacaInput(value: string) {
+		// Update directo al state; el reactivo per-tab debouncea el fetch.
 		tercerosPlaca = value;
-		if (tercerosPlacaDebounceTimer) clearTimeout(tercerosPlacaDebounceTimer);
-		tercerosPlacaDebounceTimer = setTimeout(() => {
-			filtrarTerceros();
-		}, 400);
 	}
 	function irPaginaTerceros(p: number) {
 		tercerosPage = p;
-		cargarTerceros();
 	}
 
 	let highlightedIds: Record<string, 'created' | 'updated'> = {};
@@ -342,7 +512,8 @@
 	$: accessResult = checkAccess(
 		$authStore.user?.role,
 		$authStore.user?.area,
-		'liquidaciones-servicios'
+		'liquidaciones-servicios',
+		$authStore.user?.permisos_rutas
 	);
 	$: isFull = accessResult.level === 'full';
 	$: isLimited = accessResult.level === 'limited';
@@ -363,35 +534,47 @@
 	let logoError = false;
 
 	onMount(async () => {
-		const params = new URLSearchParams(window.location.search);
-		const urlTab = params.get('tab');
-		const urlBusqueda = params.get('busqueda') || '';
-		const urlMes = params.get('mes');
-		const urlAnio = params.get('anio');
-		const urlPlacas = params.get('placas');
+		// 1) Hidratar state desde URL (deep-link friendly).
+		hidratarDesdeUrl();
 
-		if (urlTab === 'facturas') facturasTab = 'facturas';
-		else if (urlTab === 'terceros') facturasTab = 'terceros';
-		else if (urlTab === 'configuracion') facturasTab = 'configuracion';
-		else facturasTab = 'liquidaciones';
+		// 2) Sembrar los keys de los reactivos per-tab con el state actual,
+		//    para que el primer reactive-run no dispare fetches espurios
+		//    cuando `hidratado` pase a `true`. El fetch inicial lo hacemos
+		//    explícitamente abajo (cargarListado/Facturas/Terceros).
+		lastLiquidacionesFilter = keyLiquidaciones().split('|').slice(0, -1).join('|');
+		lastFacturasFilter = keyFacturas().split('|').slice(0, -1).join('|');
+		lastTercerosFilter = keyTerceros().split('|').slice(0, -1).join('|');
 
-		listBusqueda = urlBusqueda;
-		searchInputValue = urlBusqueda;
-		if (urlMes) listMes = urlMes;
-		if (urlAnio) listAnio = Number(urlAnio);
-		if (urlPlacas) colFilterPlacas = urlPlacas.split(',').filter(Boolean);
+		// 3) Prefetch de LOS CUATRO tabs en paralelo.
+		//
+		//    Antes solo se cargaba el tab activo, así que cambiar de pestaña
+		//    siempre costaba una petición y una espera; y si recargabas en
+		//    Facturas y saltabas a Terceros, Terceros salía vacío hasta que
+		//    su reactivo disparaba otro fetch.
+		//
+		//    `allSettled` y no `all`: si un tab falla (permisos, backend a
+		//    medias) los otros tres tienen que quedar servidos igual. Cada
+		//    `cargar*` ya captura su propio error y lo deja en la caché, así
+		//    que aquí no hay nada que manejar — pero `allSettled` protege de
+		//    un rechazo inesperado que abortaría el resto.
+		//
+		//    Se espera al conjunto para que `hidratado = true` ocurra con
+		//    todas las claves ya sembradas; si no, los reactivos verían
+		//    claves a medio poblar y dispararían un segundo round de fetches.
+		verTab(facturasTab);
+		await Promise.allSettled([cargarListado(), cargarFacturas(), cargarTerceros(), cargarConfig()]);
 
-		if (facturasTab === 'liquidaciones') await cargarListado();
-		if (facturasTab === 'facturas') cargarFacturas();
-		if (facturasTab === 'terceros') cargarTerceros();
-		if (facturasTab === 'configuracion') cargarConfig();
-
+		// 4) Suscribir sockets.
 		socketUtils.on('liquidacion-servicio-created', handleSocketCreated);
 		socketUtils.on('liquidacion-servicio-updated', handleSocketUpdated);
 		socketUtils.on('liquidacion-servicio-deleted', handleSocketDeleted);
 		socketUtils.on('liquidacion-servicio-facturada', handleSocketFacturada);
 		socketUtils.on('facturacion-created', handleSocketFacturacionCreated);
 		socketUtils.on('facturacion-anulada', handleSocketFacturacionAnulada);
+		socketUtils.on('liquidacion-tercero-updated', handleSocketTerceroUpdated);
+
+		// 5) Habilitar reactivos de URL-sync + fetch (orden crítico).
+		hidratado = true;
 	});
 
 	onDestroy(() => {
@@ -401,41 +584,111 @@
 		socketUtils.off('liquidacion-servicio-facturada', handleSocketFacturada);
 		socketUtils.off('facturacion-created', handleSocketFacturacionCreated);
 		socketUtils.off('facturacion-anulada', handleSocketFacturacionAnulada);
+		socketUtils.off('liquidacion-tercero-updated', handleSocketTerceroUpdated);
 		Object.values(highlightTimers).forEach((t) => clearTimeout(t));
-		if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-		if (tercerosPlacaDebounceTimer) clearTimeout(tercerosPlacaDebounceTimer);
+		// La caché y el feed son de ESTA visita a la página: si el usuario
+		// se va y vuelve, queremos datos frescos y un feed limpio, no los
+		// eventos de hace media hora.
+		resetCache();
+		limpiarLog();
+		cancelarFetches();
 		if (itemsHideTimer) clearTimeout(itemsHideTimer);
+		if (popoverConsecutivosHideTimer) clearTimeout(popoverConsecutivosHideTimer);
+		if (urlSyncTimer) clearTimeout(urlSyncTimer);
 	});
+
+	/**
+	 * Registra el evento en el feed e invalida la caché del tab afectado.
+	 *
+	 * Es el punto único por el que pasa TODO evento de socket, para que no
+	 * haya un tab que se invalide y otro que no según quién escribiera el
+	 * handler.
+	 *
+	 * Devuelve el evento normalizado (o `null` si era propio / sin sobre),
+	 * por si quien llama quiere condicionar el resaltado de fila.
+	 */
+	function procesarEvento(data: any, scope: TabId): EventoLog | null {
+		const evt = desdePayload(data, scope);
+		const destino: TabId = evt?.scope ?? scope;
+		const visible = facturasTab === destino;
+
+		// Los eventos que causa uno mismo no se anuncian: el servidor emite
+		// a todos los clientes incluido el emisor, y decirle "creaste LS-045"
+		// a quien acaba de pulsar Guardar es ruido puro.
+		const propio = !!evt && !!$authStore.user && evt.actor === ($authStore.user.nombre ?? '');
+		const registrado = registrar(evt, propio);
+
+		// La caché se ensucia SIEMPRE, también con los eventos propios: la
+		// acción cambió datos del servidor (totales, metadata, paginación)
+		// que este cliente no puede recalcular solo.
+		ensuciar(destino, visible);
+		return registrado;
+	}
+
+	/**
+	 * Refetchea el tab si está a la vista; si no, se queda sucio y con badge
+	 * y se resolverá al entrar. Es lo que evita pedir tres listados por un
+	 * evento que solo afecta a uno.
+	 */
+	function refrescarSiVisible(tab: TabId) {
+		if (facturasTab !== tab) return;
+		if (tab === 'liquidaciones') cargarListado(true);
+		else if (tab === 'facturas') cargarFacturas(true);
+		else if (tab === 'terceros') cargarTerceros(true);
+		else if (tab === 'configuracion') cargarConfig(true);
+	}
 
 	function handleSocketCreated(data: any) {
 		if (!data?.id) return;
+		procesarEvento(data, 'liquidaciones');
 		const mapped = mapLiquidacionFromSocket(data);
 		if (mapped) {
+			// Inserción optimista para que la fila aparezca ya. El refetch
+			// de fondo la reordena y corrige los totales.
 			liquidaciones = [mapped, ...liquidaciones];
 			listTotal += 1;
 			addHighlight(data.id, 'created');
 		}
+		refrescarSiVisible('liquidaciones');
 	}
 
 	function handleSocketUpdated(data: any) {
 		if (!data?.id) return;
+		procesarEvento(data, 'liquidaciones');
 		const mapped = mapLiquidacionFromSocket(data);
 		if (mapped) {
 			const idx = liquidaciones.findIndex((l) => l.id === data.id);
 			if (idx >= 0) {
 				liquidaciones[idx] = mapped;
 				liquidaciones = [...liquidaciones];
+				// Un cambio de estado se resalta como 'updated' en la tabla:
+				// el matiz de "solo cambió el estado" lo aporta el feed, y
+				// duplicarlo en la fila sería redundante.
 				addHighlight(data.id, 'updated');
-			} else {
-				cargarListado();
 			}
 		}
+		// Se refetchea aunque la fila no esté en la página actual: puede
+		// haber entrado o salido del filtro, y los contadores por estado de
+		// las stat cards cambian igual.
+		refrescarSiVisible('liquidaciones');
 	}
 
 	function handleSocketDeleted(data: any) {
 		if (!data?.id) return;
+		procesarEvento(data, 'liquidaciones');
 		liquidaciones = liquidaciones.filter((l) => l.id !== data.id);
 		listTotal = Math.max(0, listTotal - 1);
+		refrescarSiVisible('liquidaciones');
+	}
+
+	/**
+	 * Terceros. Este evento no existía: el módulo del backend no emitía
+	 * nada, así que guardar los terceros de una liquidación no llegaba a
+	 * los demás usuarios y el tab solo se enteraba recargando a mano.
+	 */
+	function handleSocketTerceroUpdated(data: any) {
+		procesarEvento(data, 'terceros');
+		refrescarSiVisible('terceros');
 	}
 
 	function mapLiquidacionFromSocket(d: any): LiquidacionServicio | null {
@@ -454,15 +707,23 @@
 		};
 	}
 
-	function handleSocketFacturacionCreated(_data: any) {
-		if (facturasTab === 'facturas') cargarFacturas();
+	// Antes estos dos descartaban el evento si el tab de Facturas no estaba
+	// abierto: la factura se creaba, nadie se enteraba, y al entrar al tab
+	// se veía la lista vieja. Ahora el tab queda sucio y con badge.
+	function handleSocketFacturacionCreated(data: any) {
+		procesarEvento(data, 'facturas');
+		refrescarSiVisible('facturas');
 	}
-	function handleSocketFacturacionAnulada(_data: any) {
-		if (facturasTab === 'facturas') cargarFacturas();
+	function handleSocketFacturacionAnulada(data: any) {
+		procesarEvento(data, 'facturas');
+		refrescarSiVisible('facturas');
 	}
 
 	function handleSocketFacturada(data: any) {
 		if (!data?.id) return;
+		// Facturar mueve el estado de la liquidación: el evento va con
+		// scope 'liquidaciones' desde el servidor.
+		procesarEvento(data, 'liquidaciones');
 		const idx = liquidaciones.findIndex((l) => l.id === data.id);
 		if (idx >= 0) {
 			liquidaciones[idx] = { ...liquidaciones[idx], estado: data.estado };
@@ -479,11 +740,17 @@
 			}
 			addHighlight(data.id, 'updated');
 		}
+		refrescarSiVisible('liquidaciones');
 	}
 
-	async function cargarListado() {
-		listLoading = true;
+	async function cargarListado(forzar = false) {
+		const key = keyLiquidaciones();
+		if (!forzar && !necesitaFetch('liquidaciones', key)) return;
+
+		const pintable = puedePintar('liquidaciones', key);
+		listLoading = !pintable;
 		listError = '';
+		comenzarFetch('liquidaciones');
 		try {
 			const filtros: Record<string, any> = {
 				page: listPage,
@@ -544,8 +811,15 @@
 					estados: [],
 					...res.metadata
 				};
+			guardarDatos('liquidaciones', key, {
+				liquidaciones: res.liquidaciones,
+				total: res.total,
+				totalPages: res.totalPages,
+				metadata: listMetadata
+			});
 		} catch (err: any) {
 			listError = err.message || 'Error al cargar liquidaciones';
+			fallarFetch('liquidaciones', listError);
 		} finally {
 			listLoading = false;
 			cargarFacturaInfo();
@@ -616,56 +890,174 @@
 		}
 	}
 
-	function filtrar() {
-		listPage = 1;
-		updateUrl();
-		cargarListado();
+	function mostrarPopoverConsecutivos(e: Event, fac: FacturaLiquidacion) {
+		if (popoverConsecutivosHideTimer) {
+			clearTimeout(popoverConsecutivosHideTimer);
+			popoverConsecutivosHideTimer = null;
+		}
+		const target = e.currentTarget as HTMLElement;
+		const rect = target.getBoundingClientRect();
+		popoverConsecutivosPos = {
+			top: rect.bottom + 6,
+			left: Math.max(8, Math.min(rect.left, window.innerWidth - 320))
+		};
+		popoverConsecutivos = fac.items
+			.slice(CONSECUTIVOS_VISIBLE_LIMIT)
+			.map((f) => f.liquidacion?.consecutivo || '')
+			.filter(Boolean);
+		popoverConsecutivosVisible = true;
 	}
-	function onSearchInput(value: string) {
-		searchInputValue = value;
-		if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-		searchDebounceTimer = setTimeout(() => {
-			listBusqueda = searchInputValue;
-			updateUrl();
-			filtrar();
-		}, 400);
+
+	function ocultarPopoverConsecutivos() {
+		popoverConsecutivosHideTimer = setTimeout(() => {
+			popoverConsecutivosVisible = false;
+		}, 120);
 	}
-	function onSearchKeyDown(e: KeyboardEvent) {
-		if (e.key === 'Enter') {
-			if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
-			listBusqueda = searchInputValue;
-			filtrar();
+
+	function mantenerPopoverConsecutivos() {
+		if (popoverConsecutivosHideTimer) {
+			clearTimeout(popoverConsecutivosHideTimer);
+			popoverConsecutivosHideTimer = null;
 		}
 	}
-	function resetUrlParams() {
-		window.history.replaceState({}, '', window.location.pathname);
+
+	function filtrar() {
+		// Reset a página 1; el fetch lo dispara el reactivo `lastLiquidacionesFilter`.
+		listPage = 1;
 	}
-	function updateUrl() {
-		const params = new URLSearchParams(window.location.search);
+	function onSearchKeyDown(e: KeyboardEvent) {
+		// Enter → saltea el debounce del fetch (UX).
+		if (e.key === 'Enter') {
+			const t = fetchTimers.liquidaciones;
+			if (t) clearTimeout(t);
+			cargarListado(true);
+		}
+	}
+
+	/**
+	 * Escribe el estado del tab activo en la URL via `goto(..., { replaceState })`.
+	 * Mismo patrón que /dashboard/recargos: la URL refleja la intención del usuario
+	 * y permite deep-linking. El reactivo `browser && hidratado` dispara esto
+	 * con debounce 200ms cada vez que cambia cualquier input compartido.
+	 */
+	function syncUrl() {
+		if (!browser) return;
+		const params = new URLSearchParams();
 		if (facturasTab !== 'liquidaciones') params.set('tab', facturasTab);
-		else params.delete('tab');
-		if (listBusqueda) params.set('busqueda', listBusqueda);
-		else params.delete('busqueda');
-		if (listMes) params.set('mes', listMes);
-		else params.delete('mes');
-		if (listAnio) params.set('anio', String(listAnio));
-		if (colFilterPlacas.length) params.set('placas', colFilterPlacas.join(','));
-		else params.delete('placas');
+
+		if (facturasTab === 'liquidaciones') {
+			const s = listBusqueda.trim();
+			if (s) params.set('busqueda', s);
+			if (listMes) params.set('mes', listMes);
+			if (listAnio) params.set('anio', String(listAnio));
+			if (colFilterPlacas.length) params.set('placas', colFilterPlacas.join(','));
+		} else if (facturasTab === 'facturas') {
+			const s = facturasBusqueda.trim();
+			if (s) params.set('busqueda', s);
+			if (facturasEstado) params.set('estado', facturasEstado);
+		} else if (facturasTab === 'terceros') {
+			const s = tercerosBusqueda.trim();
+			if (s) params.set('busqueda', s);
+			if (tercerosMes !== '') params.set('mes', String(tercerosMes));
+			if (tercerosAnio !== '') params.set('anio', String(tercerosAnio));
+			if (tercerosPlaca) params.set('placa', tercerosPlaca);
+		}
+
 		const qs = params.toString();
-		window.history.replaceState({}, '', qs ? `?${qs}` : window.location.pathname);
+		const target = qs
+			? `/dashboard/liquidaciones-servicios?${qs}`
+			: '/dashboard/liquidaciones-servicios';
+		goto(target, { replaceState: true, noScroll: true, keepFocus: true });
 	}
-	function cambiarTab(
-		id: 'liquidaciones' | 'facturas' | 'terceros' | 'configuracion'
-	) {
+
+	/**
+	 * Lee los search params del tab activo y los aplica al state correspondiente.
+	 * Llamada una sola vez en `onMount` antes de marcar `hidratado = true`
+	 * (el flag evita que los reactivos de URL-sync / fetch disparen un loop).
+	 */
+	function hidratarDesdeUrl() {
+		if (!browser) return;
+		const params = $page.url.searchParams;
+
+		const urlTab = params.get('tab');
+		if (urlTab === 'facturas') facturasTab = 'facturas';
+		else if (urlTab === 'terceros') facturasTab = 'terceros';
+		else if (urlTab === 'configuracion') facturasTab = 'configuracion';
+		else facturasTab = 'liquidaciones';
+
+		const urlBusqueda = params.get('busqueda') || '';
+		const urlMes = params.get('mes');
+		const urlAnio = params.get('anio');
+
+		if (facturasTab === 'liquidaciones') {
+			if (urlBusqueda) listBusqueda = urlBusqueda;
+			if (urlMes) listMes = urlMes;
+			if (urlAnio) listAnio = Number(urlAnio);
+			const urlPlacas = params.get('placas');
+			if (urlPlacas) colFilterPlacas = urlPlacas.split(',').filter(Boolean);
+		} else if (facturasTab === 'facturas') {
+			if (urlBusqueda) facturasBusqueda = urlBusqueda;
+			const urlEstado = params.get('estado');
+			if (urlEstado === 'ACTIVA' || urlEstado === 'ANULADA') {
+				facturasEstado = urlEstado;
+			}
+		} else if (facturasTab === 'terceros') {
+			if (urlBusqueda) tercerosBusqueda = urlBusqueda;
+			if (urlMes) {
+				const m = parseInt(urlMes, 10);
+				if (Number.isFinite(m) && m >= 1 && m <= 12) tercerosMes = m;
+			}
+			if (urlAnio) {
+				const y = parseInt(urlAnio, 10);
+				if (Number.isFinite(y) && y >= 2020 && y <= 2100) tercerosAnio = y;
+			}
+			const urlPlaca = params.get('placa');
+			if (urlPlaca) tercerosPlaca = urlPlaca;
+		}
+	}
+	function cambiarTab(id: 'liquidaciones' | 'facturas' | 'terceros' | 'configuracion') {
+		// La URL la sincroniza el reactivo `browser && hidratado`; la
+		// revalidación del tab, el reactivo de cambio de tab. Aquí solo se
+		// mueve el state.
 		facturasTab = id;
-		updateUrl();
-		if (id === 'facturas') cargarFacturas();
-		if (id === 'terceros') cargarTerceros();
-		if (id === 'configuracion') cargarConfig();
 	}
+	/**
+	 * Salta a lo que anuncia un evento del feed.
+	 *
+	 * Cambia al tab afectado y, si es una liquidación, abre su detalle. No
+	 * se intenta llevar al usuario a la PÁGINA donde está la fila: con
+	 * filtros y orden activos puede no estar en ninguna, y una búsqueda
+	 * fallida sería peor que abrir el detalle directo.
+	 */
+	function irAEvento(evt: EventoLog) {
+		if (evt.scope && evt.scope !== facturasTab) {
+			cambiarTab(evt.scope);
+		}
+		if (evt.scope === 'liquidaciones' && evt.entidadId && evt.tipo !== 'deleted') {
+			verDetalle(evt.entidadId);
+		}
+	}
+
+	/**
+	 * Recarga manual del tab activo, saltándose la caché.
+	 *
+	 * Con TTL de 60s y revalidación por socket rara vez hace falta, pero un
+	 * usuario que sospecha que ve algo viejo necesita una salida que no sea
+	 * F5 — recargar la página entera pierde filtros, scroll y el feed.
+	 */
+	function recargarTabActivo() {
+		const tab = facturasTab;
+		const t = fetchTimers[tab];
+		if (t) clearTimeout(t);
+		if (tab === 'liquidaciones') cargarListado(true);
+		else if (tab === 'facturas') cargarFacturas(true);
+		else if (tab === 'terceros') cargarTerceros(true);
+		else cargarConfig(true);
+	}
+
 	function irPagina(p: number) {
+		// El fetch lo dispara el reactivo per-tab.
 		listPage = p;
-		cargarListado();
 	}
 
 	function toggleSort(col: string) {
@@ -834,8 +1226,13 @@
 		facturarModalOpen = false;
 	}
 
-	async function cargarFacturas() {
-		facturasLoading = true;
+	async function cargarFacturas(forzar = false) {
+		const key = keyFacturas();
+		if (!forzar && !necesitaFetch('facturas', key)) return;
+
+		const pintable = puedePintar('facturas', key);
+		facturasLoading = !pintable;
+		comenzarFetch('facturas');
 		try {
 			const res = await facturacionLiquidacionesAPI.listar({
 				page: facturasPage,
@@ -847,20 +1244,28 @@
 			facturasTotal = res.total;
 			facturasTotalPages = res.totalPages;
 			facturasPage = res.page;
-		} catch {
-			facturas = [];
+			facturasMetadata = { ...FACTURAS_METADATA_VACIA, ...(res.metadata ?? {}) };
+			guardarDatos('facturas', key, {
+				facturas: res.facturas,
+				total: res.total,
+				totalPages: res.totalPages,
+				metadata: facturasMetadata
+			});
+		} catch (e: any) {
+			// No se vacía `facturas`: si ya había tabla, dejarla puesta con
+			// el aviso es mejor que borrarla por un fallo de red.
+			fallarFetch('facturas', e?.message || 'Error cargando facturas');
 		} finally {
 			facturasLoading = false;
 		}
 	}
 
 	function filtrarFacturas() {
+		// Reset a página 1; el fetch lo dispara el reactivo `lastFacturasFilter`.
 		facturasPage = 1;
-		cargarFacturas();
 	}
 	function irPaginaFacturas(p: number) {
 		facturasPage = p;
-		cargarFacturas();
 	}
 
 	async function verDetalleFactura(id: string) {
@@ -913,6 +1318,122 @@
 			eliminandoFactura = false;
 		}
 	}
+
+	// ═══════════════════════════════════════════════════════════════════════
+	// Reactivos URL-sync + fetch per-tab (mismo patrón que /dashboard/recargos)
+	// ═══════════════════════════════════════════════════════════════════════
+
+	// 1) URL sync: se dispara con CUALQUIER cambio de state compartido
+	//    (debounced 200ms para no martillar goto en cada tecla).
+	$: if (browser && hidratado) {
+		void facturasTab;
+		void listBusqueda;
+		void listMes;
+		void listAnio;
+		void colFilterPlacas;
+		void facturasBusqueda;
+		void facturasEstado;
+		void tercerosBusqueda;
+		void tercerosMes;
+		void tercerosAnio;
+		void tercerosPlaca;
+
+		if (urlSyncTimer) clearTimeout(urlSyncTimer);
+		urlSyncTimer = setTimeout(syncUrl, URL_SYNC_DEBOUNCE_MS);
+	}
+
+	// 2) Fetch por tab.
+	//
+	//    Cada uno con SU propio timer (`fetchTimers[tab]`): antes los tres
+	//    compartían uno y se cancelaban entre sí cuando dos claves cambiaban
+	//    en el mismo ciclo.
+	//
+	//    `cargar*` decide sola si hay que ir al servidor consultando la
+	//    caché, así que el reactivo ya no necesita llevar la cuenta de qué
+	//    fue lo último que pidió — esa era la función de los `lastFetched*`.
+	//    Aquí solo queda el reseteo de página al cambiar de filtro y el
+	//    debounce del tecleo.
+
+	//    ⚠️ Las dependencias de un bloque `$:` las deduce el compilador de
+	//    las variables que aparecen EN EL BLOQUE, no de las que lee una
+	//    función llamada desde él. Por eso cada reactivo enumera sus
+	//    filtros con `void` antes de construir la clave: si solo llamara a
+	//    `keyLiquidaciones()`, el bloque no dependería de `listBusqueda` ni
+	//    de los filtros de columna y no volvería a correr al cambiarlos.
+
+	// 2a) Liquidaciones.
+	$: if (browser && hidratado) {
+		void listBusqueda;
+		void listMes;
+		void listAnio;
+		void listSortBy;
+		void listSortDir;
+		void colFilterConsecutivo;
+		void colFilterCliente;
+		void colFilterPeriodo;
+		void colFilterEstado;
+		void colFilterFactura;
+		void colFilterLiquidador;
+		void colFilterPlacas;
+		void listPage;
+
+		const filterKey = keyLiquidaciones().split('|').slice(0, -1).join('|');
+		if (filterKey !== lastLiquidacionesFilter) {
+			lastLiquidacionesFilter = filterKey;
+			listPage = 1;
+		}
+		programarFetch('liquidaciones', () => cargarListado());
+	}
+
+	// 2b) Facturas.
+	$: if (browser && hidratado) {
+		void facturasBusqueda;
+		void facturasEstado;
+		void facturasPage;
+
+		const filterKey = keyFacturas().split('|').slice(0, -1).join('|');
+		if (filterKey !== lastFacturasFilter) {
+			lastFacturasFilter = filterKey;
+			facturasPage = 1;
+		}
+		programarFetch('facturas', () => cargarFacturas());
+	}
+
+	// 2c) Terceros.
+	$: if (browser && hidratado) {
+		void tercerosBusqueda;
+		void tercerosMes;
+		void tercerosAnio;
+		void tercerosPlaca;
+		void tercerosPage;
+
+		const filterKey = keyTerceros().split('|').slice(0, -1).join('|');
+		if (filterKey !== lastTercerosFilter) {
+			lastTercerosFilter = filterKey;
+			tercerosPage = 1;
+		}
+		programarFetch('terceros', () => cargarTerceros());
+	}
+
+	// 3) Al cambiar de tab: apagar su badge, marcar sus eventos como vistos
+	//    y revalidar si hace falta. El fetch NO pasa por el debounce: el
+	//    usuario acaba de pedir ver ese tab.
+	$: if (browser && hidratado && facturasTab) {
+		verTab(facturasTab);
+		marcarVistos(facturasTab);
+		if (facturasTab === 'liquidaciones') cargarListado();
+		else if (facturasTab === 'facturas') cargarFacturas();
+		else if (facturasTab === 'terceros') cargarTerceros();
+		else if (facturasTab === 'configuracion') cargarConfig();
+	}
+
+	// Badges de pestaña: eventos llegados mientras el tab no estaba a la vista.
+	$: pendientesPorTab = {
+		liquidaciones: $cacheLiquidaciones.liquidaciones.pendientes,
+		facturas: $cacheLiquidaciones.facturas.pendientes,
+		terceros: $cacheLiquidaciones.terceros.pendientes,
+		configuracion: $cacheLiquidaciones.configuracion.pendientes
+	};
 </script>
 
 <svelte:head>
@@ -937,13 +1458,21 @@
 				style="background-color: {facturasTab === id
 					? 'rgba(249, 115, 22,0.10)'
 					: 'var(--bg-surface)'}; color: {facturasTab === id
-					? 'var(--emerald-700)'
+					? 'var(--orange-700)'
 					: 'var(--text-muted)'}; border: 1px solid {facturasTab === id
 					? 'rgba(249, 115, 22,0.30)'
 					: 'var(--border-subtle)'};"
 			>
 				<svelte:component this={icon} class="h-3.5 w-3.5" />
 				{label}
+				<!-- Eventos llegados mientras este tab NO estaba a la vista.
+				     Es lo que avisa de que hay algo nuevo sin obligar a
+				     refetchear los cuatro tabs por cada socket. -->
+				{#if pendientesPorTab[id] > 0 && facturasTab !== id}
+					<span class="tab-badge" title="{pendientesPorTab[id]} cambio(s) sin ver">
+						{pendientesPorTab[id]}
+					</span>
+				{/if}
 			</button>
 		{/snippet}
 
@@ -955,6 +1484,38 @@
 		{#if isAdmin || isOperaciones}
 			{@render tabBtn('configuracion', 'Configuración', Settings)}
 		{/if}
+
+		<!-- El canvas no es un tab: es una pantalla completa con su propio
+		     layout (sin sidebar ni header), así que abrirlo es navegar, no
+		     cambiar de pestaña. Va separado a la derecha por eso mismo. -->
+		{#if isAdmin || isFacturacion}
+			<a
+				href="/dashboard/liquidaciones-servicios/canvas"
+				class="apple-transition ml-auto inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-semibold"
+				style="background-color: var(--bg-surface); color: var(--text-muted); border: 1px solid var(--border-subtle);"
+				title="Ver el histórico como hoja de cálculo y facturar desde ahí"
+			>
+				<Table2 class="h-3.5 w-3.5" />
+				Canvas
+			</a>
+		{/if}
+	</div>
+
+	<!-- Feed de eventos de socket. Vive fuera del `{#if}` de tabs a
+	     propósito: un evento de Facturas tiene que verse aunque estés en
+	     Liquidaciones, que es justo lo que antes se perdía. -->
+	<div class="flex items-start gap-2">
+		<div class="min-w-0 flex-1">
+			<SocketEventLogBar onVer={irAEvento} />
+		</div>
+		<button
+			class="recargar-btn"
+			on:click={recargarTabActivo}
+			title="Volver a leer este tab desde el servidor"
+			aria-label="Recargar"
+		>
+			<RotateCcw class="h-3.5 w-3.5" />
+		</button>
 	</div>
 
 	{#if facturasTab === 'liquidaciones'}
@@ -980,11 +1541,11 @@
 							</h1>
 							<span
 								class="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
-								style="background: rgba(249, 115, 22,0.08); color: var(--emerald-800);"
+								style="background: rgba(249, 115, 22,0.08); color: var(--orange-800);"
 							>
 								<span
 									class="h-1.5 w-1.5 animate-pulse rounded-full"
-									style="background-color: var(--emerald-500);"
+									style="background-color: var(--orange-500);"
 								></span>
 								En vivo
 							</span>
@@ -1012,7 +1573,7 @@
 					</span>
 					<span
 						class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
-						style="background: rgba(249, 115, 22,0.10); color: var(--emerald-700); border: 1px solid rgba(249, 115, 22,0.30);"
+						style="background: rgba(249, 115, 22,0.10); color: var(--orange-700); border: 1px solid rgba(249, 115, 22,0.30);"
 					>
 						<span class="h-1.5 w-1.5 rounded-full bg-orange-500"></span>
 						{listMetadata.estadoCounts['APROBADA'] || 0} Aprobadas
@@ -1074,8 +1635,7 @@
 					<input
 						id="liq-search"
 						type="search"
-						bind:value={searchInputValue}
-						on:input={(e) => onSearchInput((e.target as HTMLInputElement).value)}
+						bind:value={listBusqueda}
 						on:keydown={onSearchKeyDown}
 						placeholder="Consecutivo, cliente, placa…"
 					/>
@@ -1100,7 +1660,6 @@
 					<button
 						class="filter-clear"
 						on:click={() => {
-							searchInputValue = '';
 							listBusqueda = '';
 							listMes = '';
 							listAnio = '';
@@ -1192,7 +1751,7 @@
 				</div>
 				<div class="stat-card">
 					<p class="stat-label">Aprobadas</p>
-					<p class="stat-value" style="color: var(--emerald-600);">
+					<p class="stat-value" style="color: var(--orange-600);">
 						{showFiltered ? filteredAprobada : m.estadoCounts['APROBADA'] || 0}
 					</p>
 					{#if showFiltered}<p
@@ -1248,7 +1807,7 @@
 						class="flex h-16 w-16 items-center justify-center rounded-2xl"
 						style="background: rgba(249, 115, 22,0.08);"
 					>
-						<FileText class="h-7 w-7" style="color: var(--emerald-500);" />
+						<FileText class="h-7 w-7" style="color: var(--orange-500);" />
 					</div>
 					<div class="text-center">
 						<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 400;">
@@ -1484,13 +2043,13 @@
 								{@const isUnconfirmed = !liq.confirmada_at}
 								<tr
 									class="table-row {isNew
-										? 'border-l-4 border-l-[var(--emerald-500)] !bg-[rgba(249, 115, 22,0.08)]'
+										? 'border-l-4 border-l-[var(--orange-500)] !bg-[rgba(249, 115, 22,0.08)]'
 										: ''} {isUpdated
 										? 'border-l-4 border-l-[#2563EB] !bg-[rgba(37,99,235,0.08)]'
 										: ''}"
 								>
 									<td class="px-4 py-3 text-left text-xs">
-										<span class="font-mono-meta text-[12px]" style="color: var(--emerald-700);">
+										<span class="font-mono-meta text-[12px]" style="color: var(--orange-700);">
 											{liq.consecutivo}
 										</span>
 									</td>
@@ -1533,7 +2092,7 @@
 										{#if liq.tercero_liquidado}
 											<span
 												class="font-mono-meta inline-block rounded-md px-2 py-0.5 text-[10px]"
-												style="background: rgba(249, 115, 22,0.10); color: var(--emerald-700);"
+												style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
 												>Sí</span
 											>
 										{:else}
@@ -1545,7 +2104,7 @@
 									</td>
 									<td
 										class="font-mono-meta px-4 py-3 text-right text-[12px] font-bold"
-										style="color: var(--emerald-700);">{COP(liq.total || 0)}</td
+										style="color: var(--orange-700);">{COP(liq.total || 0)}</td
 									>
 									<td class="px-4 py-3 text-center text-[11px]">
 										{#if itemsTotal === 0}
@@ -1562,7 +2121,7 @@
 											>
 												<span
 													class="font-mono-meta inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold"
-													style="background: rgba(249, 115, 22,0.08); color: var(--emerald-700);"
+													style="background: rgba(249, 115, 22,0.08); color: var(--orange-700);"
 												>
 													<Hash class="h-3 w-3" />
 													{itemsTotal}
@@ -1590,11 +2149,11 @@
 											<div class="relative inline-block">
 												<span
 													class="font-mono-meta apple-transition inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-0.5 text-[10px]"
-													style="background: rgba(249, 115, 22,0.08); color: var(--emerald-700);"
+													style="background: rgba(249, 115, 22,0.08); color: var(--orange-700);"
 													on:mouseenter={(e) => {
 														const rect = (e.target as HTMLElement).getBoundingClientRect();
 														popoverPlacasPos = { top: rect.bottom + 4, left: rect.left };
-														popoverPlacas = liq.placas;
+														popoverPlacas = liq.placas ?? [];
 														popoverPlacasVisible = true;
 													}}
 													on:mouseleave={() => {
@@ -1664,7 +2223,7 @@
 											{#if canLiquidar && liq.estado === 'BORRADOR' && !isUnconfirmed}
 												<button
 													class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
-													style="background: rgba(249, 115, 22,0.10); color: var(--emerald-700);"
+													style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
 													disabled={estadoChanging}
 													on:click={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>Liquidar</button
 												>
@@ -1672,7 +2231,7 @@
 											{#if canAprobar && liq.estado === 'LIQUIDADA'}
 												<button
 													class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
-													style="background: rgba(249, 115, 22,0.10); color: var(--emerald-700);"
+													style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
 													disabled={estadoChanging}
 													on:click={() => cambiarEstadoLiq(liq.id, 'APROBADA')}>Aprobar</button
 												>
@@ -1751,7 +2310,7 @@
 						<div
 							class="list-card flex-col items-stretch"
 							style="border-left: 4px solid {isNew
-								? 'var(--emerald-500)'
+								? 'var(--orange-500)'
 								: isUpdated
 									? '#2563EB'
 									: 'var(--border-subtle)'};"
@@ -1762,14 +2321,13 @@
 								style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 0.6rem; margin-bottom: 0.6rem;"
 							>
 								<div class="flex items-center gap-2">
-									<span class="font-mono-meta text-[12px]" style="color: var(--emerald-700);"
+									<span class="font-mono-meta text-[12px]" style="color: var(--orange-700);"
 										>{liq.consecutivo}</span
 									>
 									{#if isUnconfirmed}
 										<span
 											class="status-pill"
-											style="background: rgba(245,158,11,0.14); color: #B45309;"
-											>Sin guardar</span
+											style="background: rgba(245,158,11,0.14); color: #B45309;">Sin guardar</span
 										>
 									{:else}
 										<span class="status-pill" style="background:{badge.bg};color:{badge.text}"
@@ -1779,7 +2337,7 @@
 								</div>
 								<span
 									class="font-mono-meta text-right text-[12px] font-bold"
-									style="color: var(--emerald-700);">{COP(liq.total || 0)}</span
+									style="color: var(--orange-700);">{COP(liq.total || 0)}</span
 								>
 							</div>
 							<!-- Card body -->
@@ -1826,7 +2384,7 @@
 									{#if liq.tercero_liquidado}
 										<span
 											class="font-mono-meta inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px]"
-											style="background: rgba(249, 115, 22,0.10); color: var(--emerald-700);"
+											style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
 										>
 											<CheckCircle2 class="h-3 w-3" />
 											Sí
@@ -1841,28 +2399,28 @@
 										</span>
 									{/if}
 								</div>
-							<div class="flex items-center justify-between">
-								<span class="font-mono-meta text-[10px]" style="color: var(--text-very-muted);"
-									>ITEMS</span
-								>
-								<div class="flex items-center gap-1">
-									<span
-										class="font-mono-meta inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
-										style="background: rgba(249, 115, 22,0.10); color: var(--emerald-700);"
+								<div class="flex items-center justify-between">
+									<span class="font-mono-meta text-[10px]" style="color: var(--text-very-muted);"
+										>ITEMS</span
 									>
-										<Hash class="h-3 w-3" />
-										{liq.total_items || 0}
-									</span>
-									{#if (liq.total_items || 0) > 4}
+									<div class="flex items-center gap-1">
 										<span
-											class="font-mono-meta inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold"
-											style="background: rgba(37,99,235,0.10); color: #2563eb; border: 1px dashed rgba(37,99,235,0.30);"
+											class="font-mono-meta inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
+											style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
 										>
-											+{(liq.total_items || 0) - 4}
+											<Hash class="h-3 w-3" />
+											{liq.total_items || 0}
 										</span>
-									{/if}
+										{#if (liq.total_items || 0) > 4}
+											<span
+												class="font-mono-meta inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold"
+												style="background: rgba(37,99,235,0.10); color: #2563eb; border: 1px dashed rgba(37,99,235,0.30);"
+											>
+												+{(liq.total_items || 0) - 4}
+											</span>
+										{/if}
+									</div>
 								</div>
-							</div>
 								<div class="flex items-center justify-between">
 									<span class="font-mono-meta text-[10px]" style="color: var(--text-very-muted);"
 										>LIQUIDADOR</span
@@ -1898,7 +2456,7 @@
 							>
 								<button
 									class="apple-transition rounded-md p-1.5"
-									style="color: var(--emerald-700); background: rgba(249, 115, 22,0.08);"
+									style="color: var(--orange-700); background: rgba(249, 115, 22,0.08);"
 									title="Ver"
 									on:click={() => irVerLiquidacion(liq.id)}
 								>
@@ -1917,7 +2475,7 @@
 								{#if canLiquidar && liq.estado === 'BORRADOR' && !isUnconfirmed}
 									<button
 										class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
-										style="background: rgba(249, 115, 22,0.10); color: var(--emerald-700);"
+										style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
 										disabled={estadoChanging}
 										on:click={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>Liquidar</button
 									>
@@ -1925,7 +2483,7 @@
 								{#if canAprobar && liq.estado === 'LIQUIDADA'}
 									<button
 										class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
-										style="background: rgba(249, 115, 22,0.10); color: var(--emerald-700);"
+										style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
 										disabled={estadoChanging}
 										on:click={() => cambiarEstadoLiq(liq.id, 'APROBADA')}>Aprobar</button
 									>
@@ -2015,7 +2573,7 @@
 								on:click={() => irPagina(i + 1)}
 								class="apple-transition font-mono-meta min-w-[32px] rounded-lg px-2.5 py-1 text-[11px] font-semibold"
 								style="background: {listPage === i + 1
-									? 'var(--emerald-500)'
+									? 'var(--orange-500)'
 									: 'transparent'}; color: {listPage === i + 1
 									? 'white'
 									: 'var(--text-secondary)'};">{i + 1}</button
@@ -2080,7 +2638,7 @@
 					</p>
 					<span
 						class="font-mono-meta rounded-full px-1.5 py-0.5 text-[9px] font-bold"
-						style="background: rgba(249, 115, 22,0.10); color: var(--emerald-700);"
+						style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
 					>
 						{popoverItems.length}
 					</span>
@@ -2102,7 +2660,7 @@
 							>
 								<span
 									class="font-mono-meta inline-flex h-5 min-w-[24px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold"
-									style="background: rgba(249, 115, 22,0.10); color: var(--emerald-700);"
+									style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
 								>
 									{idx + 1}
 								</span>
@@ -2110,11 +2668,10 @@
 									<div class="flex items-center gap-1.5">
 										<span
 											class="font-mono-meta text-[11px] font-bold"
-											style="color: var(--emerald-700);">{it.placa}</span
+											style="color: var(--orange-700);">{it.placa}</span
 										>
-										<span
-											class="font-mono-meta text-[9px]"
-											style="color: var(--text-very-muted);">·</span
+										<span class="font-mono-meta text-[9px]" style="color: var(--text-very-muted);"
+											>·</span
 										>
 										<span
 											class="font-mono-meta truncate text-[10px]"
@@ -2125,13 +2682,11 @@
 										</span>
 									</div>
 									<div class="flex items-center gap-1.5">
-										<span
-											class="font-mono-meta text-[9px]"
-											style="color: var(--text-very-muted);">{it.tipo_servicio}</span
+										<span class="font-mono-meta text-[9px]" style="color: var(--text-very-muted);"
+											>{it.tipo_servicio}</span
 										>
-										<span
-											class="font-mono-meta text-[9px]"
-											style="color: var(--text-very-muted);">·</span
+										<span class="font-mono-meta text-[9px]" style="color: var(--text-very-muted);"
+											>·</span
 										>
 										<span
 											class="font-mono-meta text-[9px] font-semibold"
@@ -2188,13 +2743,12 @@
 						id="fac-search"
 						type="text"
 						bind:value={facturasBusqueda}
-						on:input={filtrarFacturas}
 						placeholder="N° factura, cliente…"
 					/>
 				</div>
 				<div class="filter-field">
 					<label class="filter-field-label" for="fac-estado">Estado</label>
-					<select id="fac-estado" bind:value={facturasEstado} on:change={filtrarFacturas}>
+					<select id="fac-estado" bind:value={facturasEstado}>
 						<option value="">Todos los estados</option>
 						<option value="ACTIVA">Activa</option>
 						<option value="ANULADA">Anulada</option>
@@ -2218,12 +2772,11 @@
 			{/if}
 		</div>
 
-		<!-- Stats Cards -->
+		<!-- Stats Cards.
+		     Igual que en Terceros: los valores vienen de `facturasMetadata`
+		     (servidor, todos los registros del filtro) y no de
+		     `facturas.reduce(...)`, que solo veía las 15 de la página. -->
 		{#if !facturasLoading && facturas.length > 0}
-			{@const totalValor = facturas.reduce((s, f) => s + (f.valor_total || 0), 0)}
-			{@const countActiva = facturas.filter((f) => f.estado === 'ACTIVA').length}
-			{@const countAnulada = facturas.filter((f) => f.estado === 'ANULADA').length}
-			{@const totalLiqs = facturas.reduce((s, f) => s + (f.items?.length || 0), 0)}
 			<div
 				class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4"
 				in:fly={{ y: 8, duration: 400, delay: 150, easing: quintOut }}
@@ -2234,20 +2787,27 @@
 						class="stat-value font-mono-meta"
 						style="font-size: 1.05rem; color: var(--bg-charcoal);"
 					>
-						{COP(totalValor)}
+						{COP(facturasMetadata.globalTotal)}
 					</p>
+					<p class="stat-sub">{facturasMetadata.globalCount} factura(s)</p>
 				</div>
 				<div class="stat-card">
 					<p class="stat-label">Liquidaciones</p>
-					<p class="stat-value" style="color: var(--bg-charcoal);">{totalLiqs}</p>
+					<p class="stat-value" style="color: var(--bg-charcoal);">
+						{facturasMetadata.globalLiquidaciones}
+					</p>
 				</div>
 				<div class="stat-card">
 					<p class="stat-label">Activas</p>
-					<p class="stat-value" style="color: var(--emerald-600);">{countActiva}</p>
+					<p class="stat-value" style="color: var(--orange-600);">
+						{facturasMetadata.estadoCounts.ACTIVA ?? 0}
+					</p>
 				</div>
 				<div class="stat-card">
 					<p class="stat-label">Anuladas</p>
-					<p class="stat-value" style="color: #DC2626;">{countAnulada}</p>
+					<p class="stat-value" style="color: #DC2626;">
+						{facturasMetadata.estadoCounts.ANULADA ?? 0}
+					</p>
 				</div>
 			</div>
 		{/if}
@@ -2267,7 +2827,7 @@
 						class="flex h-16 w-16 items-center justify-center rounded-2xl"
 						style="background: rgba(249, 115, 22,0.08);"
 					>
-						<Receipt class="h-7 w-7" style="color: var(--emerald-500);" />
+						<Receipt class="h-7 w-7" style="color: var(--orange-500);" />
 					</div>
 					<div class="text-center">
 						<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 400;">
@@ -2313,26 +2873,47 @@
 											: '—'}</td
 									>
 									<td
-										class="font-mono-meta px-4 py-3 text-center text-[11px] space-x-2"
-										style="color: var(--text-secondary);"
+										class="font-mono-meta px-4 py-3 text-center text-[11px]"
+										style="color: var(--text-secondary); max-width: 360px;"
 									>
-										{#each fac.items as f}
-											<span
-												class="status-pill"
-												style="background: #dbeafe; color: #2563eb;"
-												>{f.liquidacion?.consecutivo}</span
-											>
-										{/each}
+										<div class="flex flex-wrap items-center justify-center gap-1.5">
+											{#each fac.items.slice(0, CONSECUTIVOS_VISIBLE_LIMIT) as f}
+												<span class="status-pill" style="background: #dbeafe; color: #2563eb;"
+													>{f.liquidacion?.consecutivo}</span
+												>
+											{/each}
+											{#if fac.items.length > CONSECUTIVOS_VISIBLE_LIMIT}
+												<div
+													class="relative inline-block"
+													role="button"
+													tabindex="0"
+													on:mouseenter={(e) => mostrarPopoverConsecutivos(e, fac)}
+													on:mouseleave={ocultarPopoverConsecutivos}
+													on:focus={(e) => mostrarPopoverConsecutivos(e, fac)}
+													on:blur={ocultarPopoverConsecutivos}
+												>
+													<span
+														class="status-pill apple-transition inline-flex cursor-pointer items-center gap-1 font-bold"
+														style="background: rgba(37,99,235,0.08); color: #2563eb; border: 1px dashed rgba(37,99,235,0.40);"
+														title="Ver {fac.items.length -
+															CONSECUTIVOS_VISIBLE_LIMIT} liquidaciones adicionales"
+													>
+														<Plus class="h-3 w-3" />
+														{fac.items.length - CONSECUTIVOS_VISIBLE_LIMIT}
+													</span>
+												</div>
+											{/if}
+										</div>
 									</td>
 									<td
 										class="font-mono-meta px-4 py-3 text-right text-[12px] font-bold"
-										style="color: var(--emerald-700);">{COP(fac.valor_total || 0)}</td
+										style="color: var(--orange-700);">{COP(fac.valor_total || 0)}</td
 									>
 									<td class="px-4 py-3 text-center text-xs">
 										{#if fac.estado === 'ACTIVA'}
 											<span
 												class="status-pill"
-												style="background: rgba(249, 115, 22,0.10); color: var(--emerald-700);"
+												style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
 												>Activa</span
 											>
 										{:else}
@@ -2384,6 +2965,36 @@
 						</tbody>
 					</table>
 				</div>
+
+				<!-- Consecutivos popover (additional liquidaciones) -->
+				{#if popoverConsecutivosVisible}
+					<div
+						role="tooltip"
+						class="fixed z-50 rounded-lg p-2.5"
+						style="top:{popoverConsecutivosPos.top}px;left:{popoverConsecutivosPos.left}px; min-width: 200px; max-width: 320px; max-height: 320px; overflow-y: auto; background: var(--bg-surface); border: 1px solid var(--border-default); box-shadow: var(--shadow-card-hover);"
+						on:mouseenter={mantenerPopoverConsecutivos}
+						on:mouseleave={ocultarPopoverConsecutivos}
+					>
+						<div class="mb-1.5 flex items-center justify-between px-1">
+							<p class="font-mono-meta text-[10px]" style="color: var(--text-very-muted);">
+								Liquidaciones adicionales
+							</p>
+							<span
+								class="font-mono-meta rounded-full px-1.5 py-0.5 text-[9px] font-bold"
+								style="background: rgba(37,99,235,0.10); color: #2563eb;"
+							>
+								{popoverConsecutivos.length}
+							</span>
+						</div>
+						<div class="flex flex-wrap gap-1.5 px-1">
+							{#each popoverConsecutivos as consecutivo}
+								<span class="status-pill" style="background: #dbeafe; color: #2563eb;">
+									{consecutivo}
+								</span>
+							{/each}
+						</div>
+					</div>
+				{/if}
 			{/if}
 
 			<!-- Pagination -->
@@ -2410,7 +3021,7 @@
 								on:click={() => irPaginaFacturas(i + 1)}
 								class="apple-transition font-mono-meta min-w-[32px] rounded-lg px-2.5 py-1 text-[11px] font-semibold"
 								style="background: {facturasPage === i + 1
-									? 'var(--emerald-500)'
+									? 'var(--orange-500)'
 									: 'transparent'}; color: {facturasPage === i + 1
 									? 'white'
 									: 'var(--text-secondary)'};">{i + 1}</button
@@ -2472,26 +3083,13 @@
 						id="ter-search"
 						type="search"
 						bind:value={tercerosBusqueda}
-						on:keydown={(e) => e.key === 'Enter' && filtrarTerceros()}
 						placeholder="Consecutivo, tercero, recorrido…"
 					/>
 				</div>
 				<div class="filter-field">
 					<label class="filter-field-label" for="ter-placa">Placa</label>
 					<div class="relative">
-						<input
-							id="ter-placa"
-							type="text"
-							value={tercerosPlaca}
-							on:input={(e) => onTercerosPlacaInput((e.target as HTMLInputElement).value)}
-							on:keydown={(e) => {
-								if (e.key === 'Enter') {
-									if (tercerosPlacaDebounceTimer) clearTimeout(tercerosPlacaDebounceTimer);
-									filtrarTerceros();
-								}
-							}}
-							placeholder="ABC123"
-						/>
+						<input id="ter-placa" type="text" bind:value={tercerosPlaca} placeholder="ABC123" />
 						{#if tercerosLoading}
 							<div class="absolute top-1/2 right-3 -translate-y-1/2">
 								<div class="spinner" style="width: 1rem; height: 1rem; border-width: 2px;"></div>
@@ -2501,17 +3099,9 @@
 				</div>
 				<div class="filter-field">
 					<label class="filter-field-label" for="ter-mes">Mes</label>
-					<select
-						id="ter-mes"
-						value={tercerosMes === '' ? '' : String(tercerosMes)}
-						on:change={(e) => {
-							const v = (e.target as HTMLSelectElement).value;
-							tercerosMes = v === '' ? '' : parseInt(v);
-							filtrarTerceros();
-						}}
-					>
+					<select id="ter-mes" bind:value={tercerosMes}>
 						<option value="">Todos los meses</option>
-						{#each MESES as m, i}<option value={String(i + 1)}>{m}</option>{/each}
+						{#each MESES as m, i}<option value={i + 1}>{m}</option>{/each}
 					</select>
 				</div>
 				<div class="filter-field">
@@ -2520,7 +3110,6 @@
 						id="ter-anio"
 						type="number"
 						bind:value={tercerosAnio}
-						on:change={filtrarTerceros}
 						min="2020"
 						max="2030"
 						placeholder="2026"
@@ -2544,7 +3133,11 @@
 			</div>
 		</div>
 
-		<!-- Stats Panel Terceros -->
+		<!-- Stats Panel Terceros.
+		     Los valores salen de `tercerosMetadata`, que el servidor calcula
+		     sobre TODOS los registros del filtro. Antes eran
+		     `tercerosItems.reduce(...)`, o sea la PÁGINA (limit 50): las
+		     cifras cambiaban al paginar aunque el filtro fuera el mismo. -->
 		{#if !tercerosLoading && tercerosItems.length > 0}
 			<div
 				class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
@@ -2552,33 +3145,38 @@
 			>
 				<div class="stat-card">
 					<p class="stat-label">Registros</p>
-					<p class="stat-value" style="color: var(--bg-charcoal);">{tercerosItems.length}</p>
+					<p class="stat-value" style="color: var(--bg-charcoal);">
+						{tercerosMetadata.globalCount}
+					</p>
+					<p class="stat-sub">
+						{tercerosItems.length} en esta página · {tercerosMetadata.globalClientes} cliente(s)
+					</p>
 				</div>
 				<div class="stat-card">
 					<p class="stat-label">Total Facturado</p>
 					<p class="stat-value font-mono-meta" style="font-size: 1.05rem; color: #2563EB;">
-						{COP(tercerosItems.reduce((s, i) => s + i.total_facturado, 0))}
+						{COP(tercerosMetadata.globalFacturado)}
 					</p>
 				</div>
 				<div class="stat-card">
 					<p class="stat-label">Admon Total</p>
 					<p class="stat-value font-mono-meta" style="font-size: 1.05rem; color: #B45309;">
-						{COP(tercerosItems.reduce((s, i) => s + i.valor_admin, 0))}
+						{COP(tercerosMetadata.globalAdmon)}
 					</p>
 				</div>
 				<div class="stat-card">
 					<p class="stat-label">V/Liquidar</p>
 					<p
 						class="stat-value font-mono-meta"
-						style="font-size: 1.05rem; color: var(--emerald-600);"
+						style="font-size: 1.05rem; color: var(--orange-600);"
 					>
-						{COP(tercerosItems.reduce((s, i) => s + i.valor_liquidar, 0))}
+						{COP(tercerosMetadata.globalLiquidar)}
 					</p>
 				</div>
 				<div class="stat-card">
 					<p class="stat-label">Ing. Cotransmeq</p>
 					<p class="stat-value font-mono-meta" style="font-size: 1.05rem; color: #7E22CE;">
-						{COP(tercerosItems.reduce((s, i) => s + i.ingreso_empresa, 0))}
+						{COP(tercerosMetadata.globalIngresoEmpresa)}
 					</p>
 				</div>
 			</div>
@@ -2599,7 +3197,7 @@
 						class="flex h-16 w-16 items-center justify-center rounded-2xl"
 						style="background: rgba(249, 115, 22,0.08);"
 					>
-						<Users class="h-7 w-7" style="color: var(--emerald-500);" />
+						<Users class="h-7 w-7" style="color: var(--orange-500);" />
 					</div>
 					<div class="text-center">
 						<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 400;">
@@ -2643,7 +3241,7 @@
 									<td class="px-3 py-2 text-left text-xs">
 										<span
 											class="font-mono-meta text-[12px] font-bold"
-											style="color: var(--emerald-700);"
+											style="color: var(--orange-700);"
 											>{item.liquidacion?.consecutivo || '—'}</span
 										>
 									</td>
@@ -2690,17 +3288,17 @@
 									>
 									<td
 										class="font-mono-meta px-3 py-2 text-right text-[11px] font-bold"
-										style="color: var(--emerald-700);">{COP(item.valor_liquidar)}</td
+										style="color: var(--orange-700);">{COP(item.valor_liquidar)}</td
 									>
 									<td
 										class="font-mono-meta px-3 py-2 text-right text-[11px] font-bold"
-										style="color: var(--emerald-700);">{COP(item.ingreso_empresa)}</td
+										style="color: var(--orange-700);">{COP(item.ingreso_empresa)}</td
 									>
 									<td class="px-3 py-2 text-center text-xs">
 										{#if numFactura}
 											<span
 												class="font-mono-meta inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px]"
-												style="background: rgba(249, 115, 22,0.10); color: var(--emerald-700);"
+												style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
 											>
 												<Receipt class="h-3 w-3" />
 												{numFactura}
@@ -2724,27 +3322,27 @@
 								</td>
 								<td
 									class="font-mono-meta px-3 py-2 text-right text-[11px] font-bold"
-									style="color: var(--emerald-800);"
+									style="color: var(--orange-800);"
 									>{COP(tercerosItems.reduce((s, i) => s + i.valor_unitario, 0))}</td
 								>
 								<td
 									class="font-mono-meta px-3 py-2 text-right text-[11px] font-bold"
-									style="color: var(--emerald-800);"
+									style="color: var(--orange-800);"
 									>{COP(tercerosItems.reduce((s, i) => s + i.total_facturado, 0))}</td
 								>
 								<td
 									class="font-mono-meta px-3 py-2 text-right text-[11px] font-bold"
-									style="color: var(--emerald-800);"
+									style="color: var(--orange-800);"
 									>{COP(tercerosItems.reduce((s, i) => s + i.valor_admin, 0))}</td
 								>
 								<td
 									class="font-mono-meta px-3 py-2 text-right text-[11px] font-bold"
-									style="color: var(--emerald-800);"
+									style="color: var(--orange-800);"
 									>{COP(tercerosItems.reduce((s, i) => s + i.valor_liquidar, 0))}</td
 								>
 								<td
 									class="font-mono-meta px-3 py-2 text-right text-[11px] font-bold"
-									style="color: var(--emerald-800);"
+									style="color: var(--orange-800);"
 									>{COP(tercerosItems.reduce((s, i) => s + i.ingreso_empresa, 0))}</td
 								>
 								<td class="px-3 py-2"></td>
@@ -2779,7 +3377,7 @@
 								on:click={() => irPaginaTerceros(i + 1)}
 								class="apple-transition font-mono-meta min-w-[32px] rounded-lg px-2.5 py-1 text-[11px] font-semibold"
 								style="background: {tercerosPage === i + 1
-									? 'var(--emerald-500)'
+									? 'var(--orange-500)'
 									: 'transparent'}; color: {tercerosPage === i + 1
 									? 'white'
 									: 'var(--text-secondary)'};">{i + 1}</button
@@ -2966,7 +3564,7 @@
 		<div class="modal-box">
 			<div class="modal-hd">
 				<div class="flex items-center gap-2">
-					<FileText class="h-4 w-4" style="color: var(--emerald-500);" />
+					<FileText class="h-4 w-4" style="color: var(--orange-500);" />
 					<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 500;">
 						{detailLiq?.consecutivo || 'Detalle'}
 					</h3>
@@ -3014,7 +3612,7 @@
 							<div class="det-label">Consecutivo</div>
 							<div
 								class="det-value font-mono-meta"
-								style="color: var(--emerald-700); font-size: 0.9rem;"
+								style="color: var(--orange-700); font-size: 0.9rem;"
 							>
 								{detailLiq.consecutivo}
 							</div>
@@ -3088,7 +3686,7 @@
 										<tr>
 											<td
 												class="font-mono-meta"
-												style="color: var(--emerald-700); font-weight: 700;">{it.placa}</td
+												style="color: var(--orange-700); font-weight: 700;">{it.placa}</td
 											>
 											<td
 												>{it.fecha_inicial
@@ -3106,7 +3704,7 @@
 											<td class="mc">{COP(it.valor_unitario)}</td>
 											<td class="mc">{COP(it.subtotal || it.cantidad * it.valor_unitario)}</td>
 											<td class="text-center">{it.porcentaje_descuento || 0}%</td>
-											<td class="mc" style="color: var(--emerald-700); font-weight: 700;">
+											<td class="mc" style="color: var(--orange-700); font-weight: 700;">
 												{COP(it.valor_final || it.subtotal || it.cantidad * it.valor_unitario)}
 											</td>
 										</tr>
@@ -3250,7 +3848,7 @@
 				<div class="confirm-data">
 					<div>
 						<dt>Consecutivo</dt>
-						<dd class="font-mono-meta" style="color: var(--emerald-700);">
+						<dd class="font-mono-meta" style="color: var(--orange-700);">
 							{deleteTargetLiq.consecutivo}
 						</dd>
 					</div>
@@ -3260,7 +3858,7 @@
 					</div>
 					<div>
 						<dt>Total</dt>
-						<dd class="font-mono-meta" style="color: var(--emerald-700);">
+						<dd class="font-mono-meta" style="color: var(--orange-700);">
 							{COP(deleteTargetLiq.total || 0)}
 						</dd>
 					</div>
@@ -3718,9 +4316,9 @@
 		<div class="modal-box" style="max-width:720px">
 			<div class="modal-hd">
 				<div class="flex items-center gap-2">
-					<History class="h-4 w-4" style="color: var(--emerald-500);" />
+					<History class="h-4 w-4" style="color: var(--orange-500);" />
 					<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 500;">
-						Historial — <span class="font-mono-meta" style="color: var(--emerald-700);"
+						Historial — <span class="font-mono-meta" style="color: var(--orange-700);"
 							>#{historialLiqConsecutivo}</span
 						>
 					</h3>
@@ -3858,7 +4456,7 @@
 <ModalOperadoras
 	open={modalOperadoras}
 	onClose={() => (modalOperadoras = false)}
-	onCambios={() => cargarConfig()}
+	onCambios={() => cargarConfig(true)}
 />
 
 <style>
@@ -3867,19 +4465,66 @@
 		min-height: 100%;
 	}
 
-	/* ── Modales (estructura landing-cotransmeq) ─────────── */
+	.recargar-btn {
+		flex: none;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2rem;
+		height: 2rem;
+		margin-bottom: 0.75rem;
+		border-radius: 0.5rem;
+		background: var(--bg-surface);
+		border: 1px solid var(--border-subtle);
+		color: var(--text-muted);
+		cursor: pointer;
+		transition:
+			color 0.15s ease,
+			background 0.15s ease;
+	}
+	.recargar-btn:hover {
+		color: var(--bg-charcoal);
+		background: rgba(0, 0, 0, 0.03);
+	}
+
+	/* ── Badge de eventos pendientes en la pestaña ────────── */
+	.tab-badge {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 1.05rem;
+		height: 1.05rem;
+		padding: 0 0.25rem;
+		border-radius: 9999px;
+		background: var(--orange-600);
+		color: #fff;
+		font-size: 0.625rem;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+		line-height: 1;
+	}
+
+	/* Segunda línea de una stat card: contexto del número de arriba
+	   (cuántos hay en esta página, cuántos clientes…). */
+	.stat-sub {
+		margin-top: 0.15rem;
+		font-size: 0.65rem;
+		color: var(--text-muted);
+	}
+
+	/* ── Modales (estructura) ─────────────────────────────── */
 	.modal-bg {
 		position: fixed;
 		inset: 0;
-		background: linear-gradient(135deg, rgba(15, 23, 42, 0.45), rgba(10, 20, 16, 0.6));
-		backdrop-filter: blur(8px) saturate(120%);
-		-webkit-backdrop-filter: blur(8px) saturate(120%);
+		background: rgba(15, 31, 26, 0.55);
+		backdrop-filter: blur(6px);
+		-webkit-backdrop-filter: blur(6px);
 		z-index: 100;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		padding: 1.25rem;
-		animation: modalFadeIn 0.2s var(--ease-apple, cubic-bezier(0.25, 0.46, 0.45, 0.94));
+		animation: modalFadeIn 0.25s var(--ease-apple, cubic-bezier(0.25, 0.46, 0.45, 0.94));
 	}
 	@keyframes modalFadeIn {
 		from {
@@ -3891,20 +4536,18 @@
 	}
 	.modal-box {
 		background: var(--bg-surface);
-		border-radius: 24px;
+		border-radius: 20px;
 		max-width: 900px;
 		width: 100%;
 		max-height: 90vh;
 		overflow-y: auto;
-		box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
+		box-shadow: 0 24px 60px rgba(0, 0, 0, 0.25);
 		border: 1px solid var(--border-subtle);
-		animation: modalSlideUp 0.4s var(--ease-apple, cubic-bezier(0.25, 0.46, 0.45, 0.94));
-		display: flex;
-		flex-direction: column;
+		animation: modalSlideUp 0.3s var(--ease-apple, cubic-bezier(0.25, 0.46, 0.45, 0.94));
 	}
 	@keyframes modalSlideUp {
 		from {
-			transform: translateY(20px);
+			transform: translateY(12px);
 			opacity: 0;
 		}
 		to {
@@ -3913,19 +4556,15 @@
 		}
 	}
 	.modal-hd {
-		padding: 1.25rem 1.5rem;
+		padding: 1.1rem 1.5rem;
 		border-bottom: 1px solid var(--border-subtle);
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.75rem;
-		background: linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-base) 100%);
-		flex-shrink: 0;
 	}
 	.modal-body {
 		padding: 1.25rem 1.5rem;
-		flex: 1;
-		min-height: 0;
 	}
 
 	/* ── Modal: Detalle de Factura (sistema landing) ─────── */
@@ -3948,29 +4587,27 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: var(--emerald-500);
+		color: #f97316;
 		background: rgba(249, 115, 22, 0.08);
 		padding: 0.2rem 0.55rem;
 		border-radius: 5px;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 	}
 
 	.factura-detail-title {
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
-		font-weight: 600;
+		font-family: 'Fraunces', Georgia, serif;
+		font-weight: 500;
 		font-size: 1.2rem;
 		color: var(--bg-charcoal);
 		line-height: 1.2;
 		margin: 0.2rem 0 0;
-		letter-spacing: -0.01em;
 	}
 
 	.factura-detail-num {
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: 'JetBrains Mono', monospace;
 		font-weight: 700;
-		color: var(--emerald-500);
+		color: #7e22ce;
 		letter-spacing: 0.05em;
-		font-variant-numeric: tabular-nums;
 	}
 
 	.factura-detail-num--inline {
@@ -3993,7 +4630,7 @@
 
 	.factura-detail-label {
 		display: block;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -4008,7 +4645,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.68rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -4019,7 +4656,7 @@
 	}
 	.factura-detail-badge--ok {
 		background: rgba(249, 115, 22, 0.1);
-		color: var(--emerald-700);
+		color: var(--orange-700);
 		border-color: rgba(249, 115, 22, 0.3);
 	}
 	.factura-detail-badge--anulada {
@@ -4029,13 +4666,12 @@
 	}
 
 	.factura-detail-total {
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
-		font-weight: 700;
+		font-family: 'Fraunces', Georgia, serif;
+		font-weight: 500;
 		font-size: 1.45rem;
-		color: var(--emerald-700);
+		color: #166534;
 		margin: 0.15rem 0 0;
 		line-height: 1.1;
-		letter-spacing: -0.01em;
 	}
 
 	/* Data grid */
@@ -4089,7 +4725,7 @@
 		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.68rem;
 		font-weight: 700;
-		color: var(--emerald-700);
+		color: var(--orange-700);
 		background: rgba(249, 115, 22, 0.08);
 		padding: 0.2rem 0.55rem;
 		border-radius: 5px;
@@ -4113,7 +4749,7 @@
 	.factura-detail-tbl thead {
 		position: sticky;
 		top: 0;
-		background: #faf7f2;
+		background: #fcfcfb;
 		z-index: 1;
 	}
 	.factura-detail-tbl th {
@@ -4141,7 +4777,7 @@
 	.factura-detail-tbl-num {
 		font-family: 'JetBrains Mono', monospace;
 		font-weight: 700;
-		color: var(--emerald-700);
+		color: var(--orange-700);
 		letter-spacing: 0.05em;
 	}
 	.factura-detail-tbl-meta {
@@ -4153,7 +4789,7 @@
 	.factura-detail-tbl-amount {
 		font-family: 'JetBrains Mono', monospace;
 		font-weight: 700;
-		color: var(--emerald-700);
+		color: var(--orange-700);
 	}
 
 	/* ── Detalle de liquidación (grid + celdas) ──────────── */
@@ -4270,7 +4906,7 @@
 	.det-total-row.main {
 		font-size: 0.95rem;
 		font-weight: 700;
-		color: var(--emerald-700);
+		color: var(--orange-700);
 		padding-top: 0.55rem;
 		border-top: 1px solid var(--border-subtle);
 		margin-top: 0.4rem;

@@ -10,6 +10,11 @@
 	} from '$lib/api/acciones-correctivas';
 	import KpiCard from '$lib/components/acciones-correctivas/dashboard/KpiCard.svelte';
 	import AccionCard from '$lib/components/acciones-correctivas/dashboard/AccionCard.svelte';
+	import {
+		resumenRevision,
+		formatearDiasRelativo,
+		formatDate as formatDateCorta
+	} from '$lib/acciones-correctivas/dashboard-utils';
 
 	const FILTERS: { label: string; value: ActionStatusGlobal | '' }[] = [
 		{ label: 'Todas', value: '' },
@@ -17,6 +22,12 @@
 		{ label: 'Vencidas', value: 'VENCIDA' },
 		{ label: 'Cumplidas', value: 'CUMPLIDA' }
 	];
+
+	type FiltroRevision = '' | 'vencidas' | 'proximas';
+	let filtroRevision: FiltroRevision = '';
+	let expandirVencidas = false;
+	let expandirProximas = false;
+	const REVISIONES_PANEL_LIMITE = 5;
 
 	let acciones: AccionCorrectivaPreventiva[] = [];
 	let isLoading = true;
@@ -30,8 +41,6 @@
 	let activeFilter: ActionStatusGlobal | '' = '';
 	let searchInput = '';
 	let debounceTimer: any;
-
-	$: filteredAcciones = acciones;
 
 	$: accionCounts = (() => {
 		let enProceso = 0;
@@ -51,6 +60,58 @@
 			}
 		});
 		return { enProceso, vencida, cumplida, proxVencer, total: acciones.length };
+	})();
+
+	type AccionConRevision = AccionCorrectivaPreventiva & {
+		_revision: ReturnType<typeof resumenRevision>;
+	};
+
+	$: revisiones = (() => {
+		const map = new Map<string, AccionConRevision>();
+		acciones.forEach((a) => {
+			map.set(a.id, { ...a, _revision: resumenRevision(a) });
+		});
+		return map;
+	})();
+
+	$: revisionCounts = (() => {
+		let vencida = 0;
+		let hoy = 0;
+		let proxima = 0;
+		let alDia = 0;
+		let sinActividad = 0;
+		revisiones.forEach((a) => {
+			switch (a._revision.estado) {
+				case 'vencida': vencida++; break;
+				case 'hoy': hoy++; break;
+				case 'proxima': proxima++; break;
+				case 'al-dia': alDia++; break;
+				case 'sin-actividad': sinActividad++; break;
+			}
+		});
+		return { vencida, hoy, proxima, alDia, sinActividad, totalRevision: vencida + hoy + proxima + alDia + sinActividad };
+	})();
+
+	$: revisionesVencidas = Array.from(revisiones.values())
+		.filter((a) => a._revision.estado === 'vencida' || a._revision.estado === 'hoy')
+		.sort((a, b) => (a._revision.diasHasta ?? 0) - (b._revision.diasHasta ?? 0));
+
+	$: revisionesProximas = Array.from(revisiones.values())
+		.filter((a) => a._revision.estado === 'proxima' || a._revision.estado === 'al-dia' || a._revision.estado === 'sin-actividad')
+		.sort((a, b) => (a._revision.diasHasta ?? 999) - (b._revision.diasHasta ?? 999));
+
+	$: filteredAcciones = (() => {
+		if (!filtroRevision) return acciones;
+		return acciones.filter((a) => {
+			const r = resumenRevision(a);
+			if (filtroRevision === 'vencidas') {
+				return r.estado === 'vencida' || r.estado === 'hoy';
+			}
+			if (filtroRevision === 'proximas') {
+				return r.estado === 'proxima' || r.estado === 'al-dia' || r.estado === 'sin-actividad';
+			}
+			return true;
+		});
 	})();
 
 	$: tipoCounts = (() => {
@@ -104,6 +165,14 @@
 			value: accionCounts.cumplida,
 			sub: `${accionCounts.total > 0 ? Math.round((accionCounts.cumplida / accionCounts.total) * 100) : 0}%`,
 			color: '#22c55e'
+		},
+		{
+			label: 'Rev. vencidas',
+			value: revisionCounts.vencida + revisionCounts.hoy,
+			sub: revisionCounts.vencida + revisionCounts.hoy > 0
+				? 'requieren seguimiento'
+				: 'al día con seguimientos',
+			color: '#dc2626'
 		}
 	];
 
@@ -122,10 +191,15 @@
 		cargarAcciones();
 	}
 
+	function setRevisionFilter(value: FiltroRevision) {
+		filtroRevision = filtroRevision === value ? '' : value;
+	}
+
 	function clearFilters() {
 		search = '';
 		searchInput = '';
 		activeFilter = '';
+		filtroRevision = '';
 		updateUrl();
 		cargarAcciones();
 	}
@@ -143,6 +217,8 @@
 			});
 			acciones = resultado.acciones;
 			total = resultado.total;
+			expandirVencidas = false;
+			expandirProximas = false;
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Error al cargar las acciones';
 			toast.error(message);
@@ -299,6 +375,108 @@
 			</section>
 		{/if}
 
+		{#if !isLoading && !showDeleted && (revisionesVencidas.length > 0 || revisionesProximas.length > 0)}
+			<section class="revisiones-panel" aria-label="Revisiones pendientes y próximas">
+				<div class="revisiones-col revisiones-col-vencidas">
+					<header class="revisiones-col-head">
+						<div class="revisiones-col-title">
+							<span class="revisiones-dot dot-vencida" aria-hidden="true"></span>
+							<h3>Vencidas de revisión</h3>
+						</div>
+						<span class="revisiones-count">{revisionesVencidas.length}</span>
+					</header>
+					<p class="revisiones-help">
+						Acciones cuya última actividad tiene más de 15 días. Se debió haber registrado un seguimiento antes de hoy.
+					</p>
+					<div class="revisiones-list">
+						{#each (expandirVencidas ? revisionesVencidas : revisionesVencidas.slice(0, REVISIONES_PANEL_LIMITE)) as acc (acc.id)}
+							<button
+								class="revision-item revision-item-vencida"
+								on:click={() => goto(`/dashboard/acciones-correctivas/${acc.id}`)}
+								title="Ir al detalle"
+							>
+								<div class="revision-item-head">
+									<span class="revision-item-num">{acc.accion_numero}</span>
+									<span class="revision-item-tag revision-item-tag-vencida">
+										{formatearDiasRelativo(acc._revision.diasHasta)}
+									</span>
+								</div>
+								<div class="revision-item-meta">
+									<span class="revision-item-resp">{acc.responsable_ejecucion || 'Sin asignar'}</span>
+									<span class="revision-item-sep">·</span>
+									<span>Última: {acc._revision.ultimaFecha ? formatDateCorta(acc._revision.ultimaFecha) : '—'}</span>
+								</div>
+							</button>
+						{/each}
+						{#if revisionesVencidas.length > REVISIONES_PANEL_LIMITE}
+							<button
+								class="revisiones-more"
+								on:click={() => (expandirVencidas = !expandirVencidas)}
+								aria-expanded={expandirVencidas}
+							>
+								{#if expandirVencidas}
+									Ver menos
+								{:else}
+									Ver {revisionesVencidas.length - REVISIONES_PANEL_LIMITE} más
+								{/if}
+							</button>
+						{/if}
+					</div>
+				</div>
+
+				<div class="revisiones-col revisiones-col-proximas">
+					<header class="revisiones-col-head">
+						<div class="revisiones-col-title">
+							<span class="revisiones-dot dot-proxima" aria-hidden="true"></span>
+							<h3>Próximas revisiones</h3>
+						</div>
+						<span class="revisiones-count">{revisionesProximas.length}</span>
+					</header>
+					<p class="revisiones-help">
+						Acciones cuya próxima revisión cae en los siguientes días. Planifica el seguimiento antes de que se venza.
+					</p>
+					<div class="revisiones-list">
+						{#each (expandirProximas ? revisionesProximas : revisionesProximas.slice(0, REVISIONES_PANEL_LIMITE)) as acc (acc.id)}
+							<button
+								class="revision-item revision-item-{acc._revision.estado === 'sin-actividad' ? 'sin' : 'proxima'}"
+								on:click={() => goto(`/dashboard/acciones-correctivas/${acc.id}`)}
+								title="Ir al detalle"
+							>
+								<div class="revision-item-head">
+									<span class="revision-item-num">{acc.accion_numero}</span>
+									<span class="revision-item-tag revision-item-tag-{acc._revision.estado === 'sin-actividad' ? 'sin' : 'proxima'}">
+										{#if acc._revision.estado === 'sin-actividad'}
+											Sin actividad
+										{:else}
+											{formatearDiasRelativo(acc._revision.diasHasta)}
+										{/if}
+									</span>
+								</div>
+								<div class="revision-item-meta">
+									<span class="revision-item-resp">{acc.responsable_ejecucion || 'Sin asignar'}</span>
+									<span class="revision-item-sep">·</span>
+									<span>Próx.: {acc._revision.proximaFecha ? formatDateCorta(acc._revision.proximaFecha) : '—'}</span>
+								</div>
+							</button>
+						{/each}
+						{#if revisionesProximas.length > REVISIONES_PANEL_LIMITE}
+							<button
+								class="revisiones-more"
+								on:click={() => (expandirProximas = !expandirProximas)}
+								aria-expanded={expandirProximas}
+							>
+								{#if expandirProximas}
+									Ver menos
+								{:else}
+									Ver {revisionesProximas.length - REVISIONES_PANEL_LIMITE} más
+								{/if}
+							</button>
+						{/if}
+					</div>
+				</div>
+			</section>
+		{/if}
+
 		{#if !isLoading && !showDeleted && acciones.length > 0 && causasStats.total > 0}
 			<section class="causa-stats-row" aria-label="Estado de causas">
 				<div class="causa-stat-card">
@@ -378,6 +556,35 @@
 					</button>
 				{/each}
 			</nav>
+
+			<nav class="pills pills-revision" aria-label="Filtros de revisión">
+				<button
+					class="pill pill-revision"
+					class:pill-active-vencida={filtroRevision === 'vencidas'}
+					class:pill-active={filtroRevision === 'vencidas'}
+					on:click={() => setRevisionFilter('vencidas')}
+					aria-pressed={filtroRevision === 'vencidas'}
+					title="Mostrar solo acciones con seguimiento vencido"
+				>
+					Rev. vencidas
+					{#if revisionCounts.vencida + revisionCounts.hoy > 0}
+						<span class="pill-count">{revisionCounts.vencida + revisionCounts.hoy}</span>
+					{/if}
+				</button>
+				<button
+					class="pill pill-revision"
+					class:pill-active-proxima={filtroRevision === 'proximas'}
+					class:pill-active={filtroRevision === 'proximas'}
+					on:click={() => setRevisionFilter('proximas')}
+					aria-pressed={filtroRevision === 'proximas'}
+					title="Mostrar acciones con revisión próxima o al día"
+				>
+					Rev. próximas
+					{#if revisionCounts.proxima + revisionCounts.alDia + revisionCounts.sinActividad > 0}
+						<span class="pill-count">{revisionCounts.proxima + revisionCounts.alDia + revisionCounts.sinActividad}</span>
+					{/if}
+				</button>
+			</nav>
 			{/if}
 		</div>
 
@@ -385,8 +592,16 @@
 			{#if isLoading}
 				<span>Cargando...</span>
 			{:else}
-				<span>{showDeleted ? '🗑️ Papelera: ' : ''}{acciones.length} acción{acciones.length !== 1 ? 'es' : ''} encontrada{acciones.length !== 1 ? 's' : ''}</span>
-				{#if search || activeFilter}
+				<span>
+					{#if showDeleted}
+						🗑️ Papelera:
+					{:else if filtroRevision}
+						{filteredAcciones.length} de {acciones.length} acción{acciones.length !== 1 ? 'es' : ''} (filtro: {filtroRevision === 'vencidas' ? 'rev. vencidas' : 'rev. próximas'})
+					{:else}
+						{acciones.length} acción{acciones.length !== 1 ? 'es' : ''} encontrada{acciones.length !== 1 ? 's' : ''}
+					{/if}
+				</span>
+				{#if search || activeFilter || filtroRevision}
 					<button class="reset-btn" on:click={clearFilters}>
 						Limpiar filtros
 					</button>
@@ -403,12 +618,18 @@
 			{:else if acciones.length === 0}
 				<div class="empty" role="status">
 					<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-					<p>{showDeleted ? 'No hay acciones en la papelera' : search || activeFilter ? 'Sin resultados para los filtros aplicados' : 'No hay acciones registradas'}</p>
-					{#if !search && !activeFilter && !showDeleted}
+					<p>{showDeleted ? 'No hay acciones en la papelera' : search || activeFilter || filtroRevision ? 'Sin resultados para los filtros aplicados' : 'No hay acciones registradas'}</p>
+					{#if !search && !activeFilter && !filtroRevision && !showDeleted}
 						<button class="btn-primary" on:click={() => goto('/dashboard/acciones-correctivas/crear')}>
 							Crear primera acción
 						</button>
 					{/if}
+				</div>
+			{:else if filteredAcciones.length === 0}
+				<div class="empty" role="status">
+					<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+					<p>No hay acciones con el filtro de revisión aplicado</p>
+					<button class="reset-btn" on:click={() => (filtroRevision = '')}>Quitar filtro de revisión</button>
 				</div>
 			{:else}
 				<div class="grid" transition:fly={{ y: 12, duration: 400 }}>
@@ -433,11 +654,11 @@
 <style>
 	.dash-wrapper {
 		--surface: #fff;
-		--surface-hover: #faf7f2;
+		--surface-hover: #fcfcfb;
 		--border: rgba(0, 0, 0, 0.08);
 		--border-default: rgba(0, 0, 0, 0.12);
 		--border-hover: rgba(0, 0, 0, 0.2);
-		--text-primary: #0f1f1a;
+		--text-primary: #0f172a;
 		--text-secondary: #4a4a4a;
 		--text-muted: #6b6b6b;
 		--accent: #f97316;
@@ -446,7 +667,7 @@
 		--accent-ring: rgba(249, 115, 22, 0.15);
 		--tag-bg: rgba(0, 0, 0, 0.05);
 		--avatar-bg: rgba(0, 0, 0, 0.05);
-		--avatar-color: #0f1f1a;
+		--avatar-color: #0f172a;
 		--ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
 	}
 	.dash {
@@ -505,7 +726,7 @@
 	}
 	.eyebrow {
 		display: inline-block;
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -517,7 +738,7 @@
 		margin-bottom: 0.35rem;
 	}
 	h1 {
-		font-family: 'Geist', Georgia, serif;
+		font-family: 'Fraunces', Georgia, serif;
 		font-size: 1.4rem;
 		font-weight: 500;
 		color: var(--text-primary);
@@ -593,7 +814,7 @@
 	.dot-cumplida { background: #22c55e; }
 	.causa-stat-info { display: flex; flex-direction: column; min-width: 0; }
 	.causa-stat-label {
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.62rem;
 		font-weight: 700;
 		color: var(--text-muted);
@@ -601,7 +822,7 @@
 		letter-spacing: 0.08em;
 	}
 	.causa-stat-value {
-		font-family: 'Geist', Georgia, serif;
+		font-family: 'Fraunces', Georgia, serif;
 		font-size: 1.25rem;
 		font-weight: 500;
 		color: var(--text-primary);
@@ -623,7 +844,7 @@
 	}
 	.tipo-item { display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 140px; }
 	.tipo-name {
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -643,7 +864,7 @@
 	.tipo-preventiva { background: #6366f1; }
 	.tipo-mejora { background: #22c55e; }
 	.tipo-count {
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.75rem;
 		font-weight: 700;
 		color: var(--text-primary);
@@ -692,7 +913,7 @@
 
 	.pills { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 	.pill {
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.7rem;
 		font-weight: 600;
 		padding: 0.4rem 0.8rem;
@@ -726,9 +947,209 @@
 		border-radius: 8px;
 		padding: 0.1rem 0.4rem;
 		line-height: 1.4;
-		font-family: 'Geist', monospace;
+		font-family: 'JetBrains Mono', monospace;
 	}
 	.pill-active .pill-count { background: rgba(249, 115, 22, 0.2); color: var(--accent-hover); }
+	.pills-revision {
+		margin-left: auto;
+		padding-left: 0.6rem;
+		border-left: 1px dashed var(--border-default);
+	}
+	.pill-active-vencida {
+		background: rgba(220, 38, 38, 0.06);
+		border-color: rgba(220, 38, 38, 0.35);
+		color: #b91c1c;
+	}
+	.pill-active-vencida .pill-count {
+		background: rgba(220, 38, 38, 0.14);
+		color: #b91c1c;
+	}
+	.pill-active-proxima {
+		background: rgba(245, 158, 11, 0.06);
+		border-color: rgba(245, 158, 11, 0.4);
+		color: #b45309;
+	}
+	.pill-active-proxima .pill-count {
+		background: rgba(245, 158, 11, 0.18);
+		color: #b45309;
+	}
+
+	.revisiones-panel {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.85rem;
+	}
+	.revisiones-col {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 14px;
+		padding: 1rem 1.1rem 1.1rem;
+		display: flex;
+		flex-direction: column;
+		gap: 0.65rem;
+		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+		min-width: 0;
+	}
+	.revisiones-col-vencidas { border-color: rgba(220, 38, 38, 0.18); }
+	.revisiones-col-proximas { border-color: rgba(245, 158, 11, 0.22); }
+	.revisiones-col-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+	.revisiones-col-title {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.revisiones-col-title h3 {
+		font-family: 'Fraunces', Georgia, serif;
+		font-size: 0.95rem;
+		font-weight: 500;
+		color: var(--text-primary);
+		margin: 0;
+		letter-spacing: -0.01em;
+	}
+	.revisiones-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+	}
+	.dot-vencida { background: #ef4444; box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18); }
+	.dot-proxima { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2); }
+	.revisiones-count {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.7rem;
+		font-weight: 700;
+		background: rgba(0, 0, 0, 0.06);
+		color: var(--text-muted);
+		padding: 0.15rem 0.55rem;
+		border-radius: 8px;
+	}
+	.revisiones-col-vencidas .revisiones-count {
+		background: rgba(220, 38, 38, 0.08);
+		color: #b91c1c;
+	}
+	.revisiones-col-proximas .revisiones-count {
+		background: rgba(245, 158, 11, 0.1);
+		color: #b45309;
+	}
+	.revisiones-help {
+		font-size: 0.72rem;
+		color: var(--text-muted);
+		margin: 0;
+		line-height: 1.45;
+	}
+	.revisiones-list {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+	.revision-item {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		padding: 0.55rem 0.7rem;
+		background: var(--bg);
+		border: 1px solid var(--border);
+		border-radius: 10px;
+		text-align: left;
+		font-family: inherit;
+		cursor: pointer;
+		transition: all 0.18s var(--ease);
+		color: var(--text-primary);
+		min-width: 0;
+	}
+	.revision-item:hover {
+		transform: translateY(-1px);
+		border-color: var(--border-hover);
+	}
+	.revision-item-vencida:hover {
+		border-color: rgba(220, 38, 38, 0.4);
+		box-shadow: 0 4px 12px rgba(220, 38, 38, 0.1);
+	}
+	.revision-item-proxima:hover {
+		border-color: rgba(245, 158, 11, 0.5);
+		box-shadow: 0 4px 12px rgba(245, 158, 11, 0.12);
+	}
+	.revision-item-sin:hover {
+		border-color: var(--border-hover);
+	}
+	.revision-item-head {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+	.revision-item-num {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.78rem;
+		font-weight: 700;
+		color: var(--text-primary);
+		letter-spacing: 0.02em;
+	}
+	.revision-item-tag {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.6rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.05em;
+		padding: 0.1rem 0.5rem;
+		border-radius: 6px;
+		white-space: nowrap;
+	}
+	.revision-item-tag-vencida {
+		background: rgba(220, 38, 38, 0.08);
+		color: #b91c1c;
+		border: 1px solid rgba(220, 38, 38, 0.22);
+	}
+	.revision-item-tag-proxima {
+		background: rgba(245, 158, 11, 0.1);
+		color: #b45309;
+		border: 1px solid rgba(245, 158, 11, 0.28);
+	}
+	.revision-item-tag-sin {
+		background: rgba(0, 0, 0, 0.05);
+		color: var(--text-muted);
+		border: 1px solid var(--border-default);
+	}
+	.revision-item-meta {
+		font-size: 0.72rem;
+		color: var(--text-muted);
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		overflow: hidden;
+		white-space: nowrap;
+	}
+	.revision-item-resp {
+		font-weight: 600;
+		color: var(--text-secondary);
+		max-width: 50%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.revision-item-sep { opacity: 0.5; }
+	.revisiones-more {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.68rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		background: transparent;
+		border: 1px dashed var(--border-default);
+		border-radius: 10px;
+		padding: 0.5rem 0.6rem;
+		color: var(--text-muted);
+		cursor: pointer;
+		transition: all 0.2s var(--ease);
+	}
+	.revisiones-more:hover {
+		color: var(--accent-hover);
+		border-color: rgba(249, 115, 22, 0.35);
+		background: var(--accent-bg);
+	}
 
 	.results-info {
 		display: flex;
@@ -789,6 +1210,13 @@
 		.kpi-row,
 		.causa-stats-row {
 			grid-template-columns: repeat(2, 1fr);
+		}
+		.revisiones-panel { grid-template-columns: 1fr; }
+		.pills-revision {
+			margin-left: 0;
+			padding-left: 0;
+			border-left: none;
+			width: 100%;
 		}
 	}
 </style>

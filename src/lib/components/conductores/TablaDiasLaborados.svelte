@@ -5,12 +5,18 @@
 		apiClient,
 		bonosAPI,
 		bonoConfigVisualAPI,
+		diasLaboradosAPI,
 		type BonoConfigVisualItem,
 		type BonoPlanilla
 	} from '$lib/api/apiClient';
 	import { socketUtils } from '$lib/socket';
 	import { toast } from 'svelte-sonner';
 	import ModalConfigBonos from './ModalConfigBonos.svelte';
+	import ModalRegistrarRecorridos from './ModalRegistrarRecorridos.svelte';
+	import ModalEditarSegmento from './ModalEditarSegmento.svelte';
+	import ModalConfirmarEliminarSegmento from './ModalConfirmarEliminarSegmento.svelte';
+	import ModalEditarRegistro from './ModalEditarRegistro.svelte';
+	import ModalConfirmarEliminarRegistro from './ModalConfirmarEliminarRegistro.svelte';
 
 	export type TipoDia = 'LABORADO' | 'DISPONIBLE' | 'DESCANSO' | 'MANTENIMIENTO';
 
@@ -24,6 +30,8 @@
 		vehiculo_placa: string;
 		hora_inicio: string;
 		hora_fin: string;
+		inicio_dia_siguiente?: boolean;
+		fin_dia_siguiente?: boolean;
 		horas_conducidas: number;
 		km_inicial?: number | null;
 		km_final?: number | null;
@@ -79,6 +87,7 @@
 	let filtroPlaca = $state<string>('');
 	let filtroCliente = $state<string>('');
 	let filtroRecorrido = $state<string>('');
+	let filtroTipo = $state<TipoDia | ''>('');
 	let filtroHoraDesde = $state<string>('');
 	let filtroHoraHasta = $state<string>('');
 	let searchTerm = $state<string>('');
@@ -99,6 +108,15 @@
 
 	// Modal de configuración de visibilidad
 	let modalConfigOpen = $state(false);
+
+	// Modal de registro masivo de recorridos (admin)
+	// El modal carga su propia lista de TODOS los conductores activos
+	// (no depende del filtro de la tabla), para poder registrar
+	// recorridos de conductores que aún no tienen días en el rango.
+	let modalRegistrarOpen = $state(false);
+	function abrirModalRegistrar() {
+		modalRegistrarOpen = true;
+	}
 
 	// Año a usar para pedir las configs visibles. Por defecto el del rango
 	// (si todos los meses son del mismo año); si no, el año actual.
@@ -423,7 +441,8 @@
 
 		const filas: FilaTabla[] = [];
 		for (const r of registros) {
-			if (r.tipo !== 'LABORADO') continue;
+			// Filtro por tipo (laborado, descanso, mantenimiento, disponible)
+			if (filtroTipo && r.tipo !== filtroTipo) continue;
 			const fechaMs = toLocalDate(r.fecha).getTime();
 			if (fechaMs < desdeT || fechaMs > hastaT) continue;
 			if (filtroConductor && r.conductor?.id !== filtroConductor) continue;
@@ -558,7 +577,15 @@
 			(s, f) => s + valorPagarTotal(f.registro.id, f.segmento?.id ?? null),
 			0
 		);
-		return { diasUnicos, totalRecorridos, totalHoras, totalChecks, totalPagar };
+		// Breakdown por tipo de día (sobre los REGISTROS únicos, no las filas)
+		const porTipo = { LABORADO: 0, DESCANSO: 0, MANTENIMIENTO: 0, DISPONIBLE: 0 } as Record<TipoDia, number>;
+		const seenPorTipo = new Set<string>();
+		for (const f of filasFiltradas) {
+			if (seenPorTipo.has(f.registro.id)) continue;
+			seenPorTipo.add(f.registro.id);
+			porTipo[f.registro.tipo] = (porTipo[f.registro.tipo] ?? 0) + 1;
+		}
+		return { diasUnicos, totalRecorridos, totalHoras, totalChecks, totalPagar, porTipo };
 	});
 
 	// Cambios pendientes: diferencia entre estado local y BD
@@ -603,6 +630,22 @@
 		'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
 		'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
 	];
+
+	// Paleta por tipo de día. Mismas convenciones que CalendarDiasLaborados
+	// para que el "recorrido" y el "calendario" se lean igual.
+	const COLOR_POR_TIPO: Record<TipoDia, { bg: string; text: string; border: string; dot: string; label: string; leftBar: string }> = {
+		LABORADO:      { bg: '#ea580c15', text: '#c2410c', border: '#ea580c40', dot: '#ea580c', label: 'Laborado',      leftBar: '#ea580c' },
+		DISPONIBLE:    { bg: '#2563eb15', text: '#1d4ed8', border: '#2563eb40', dot: '#2563eb', label: 'Disponible',    leftBar: '#2563eb' },
+		DESCANSO:      { bg: '#d9770615', text: '#b45309', border: '#d9770640', dot: '#d97706', label: 'Descanso',      leftBar: '#d97706' },
+		MANTENIMIENTO: { bg: '#dc262615', text: '#b91c1c', border: '#dc262640', dot: '#dc2626', label: 'Mantenimiento', leftBar: '#dc2626' }
+	};
+
+	// Orden estable para iterar tipos (en UI: chips, dropdowns, leyenda)
+	const TIPOS_ORDENADOS: TipoDia[] = ['LABORADO', 'DESCANSO', 'MANTENIMIENTO', 'DISPONIBLE'];
+
+	function colorForTipo(t: TipoDia) {
+		return COLOR_POR_TIPO[t] || COLOR_POR_TIPO.LABORADO;
+	}
 
 	function toLocalDate(fecha: string | Date): Date {
 		let s: string;
@@ -686,6 +729,7 @@
 		filtroPlaca = '';
 		filtroCliente = '';
 		filtroRecorrido = '';
+		filtroTipo = '';
 		filtroHoraDesde = '';
 		filtroHoraHasta = '';
 		searchTerm = '';
@@ -698,6 +742,7 @@
 			filtroPlaca && 'Placa',
 			filtroCliente && 'Cliente',
 			filtroRecorrido && 'Recorrido',
+			filtroTipo && 'Tipo',
 			(filtroHoraDesde || filtroHoraHasta) && 'Intervalo hora',
 			searchTerm.trim() && 'Búsqueda'
 		].filter(Boolean).length
@@ -731,9 +776,7 @@
 
 	// Ancho estimado de cada columna del canvas
 	const COL_ANCHOS = {
-		fecha: 130,
 		conductor: 230,
-		orden: 50,
 		placa: 100,
 		cliente: 230,
 		horario: 110,
@@ -741,14 +784,13 @@
 		km: 120,
 		pernocte: 80,
 		bono: 110,
-		valorPagar: 200
+		valorPagar: 200,
+		acciones: 90
 	};
 
 	const totalAnchoTabla = $derived.by(() => {
 		const base =
-			COL_ANCHOS.fecha +
 			COL_ANCHOS.conductor +
-			COL_ANCHOS.orden +
 			COL_ANCHOS.placa +
 			COL_ANCHOS.cliente +
 			COL_ANCHOS.horario +
@@ -756,7 +798,198 @@
 			COL_ANCHOS.km +
 			COL_ANCHOS.pernocte
 		const bonos = configsActivas.length * COL_ANCHOS.bono;
-		return base + bonos + COL_ANCHOS.valorPagar;
+		return base + bonos + COL_ANCHOS.valorPagar + COL_ANCHOS.acciones;
+	});
+
+	// ═══════════════════════════════════════════
+	// ACCIONES: editar / eliminar segmento o registro
+	//
+	// El canvas muestra una fila por cada tramo. Una fila SIN
+	// segmento (placeholder) representa un día entero sin tramos
+	// (DESCANSO / MANTENIMIENTO / DISPONIBLE sin segmento). Las
+	// acciones de cada fila se resuelven así:
+	//
+	//   • fila con segmento  → editar/eliminar el segmento
+	//   • fila sin segmento  → editar/eliminar el registro padre
+	//
+	// Esto cubre los 4 tipos (LABORADO, DISPONIBLE, DESCANSO,
+	// MANTENIMIENTO) con la misma UI de action buttons.
+	// ═══════════════════════════════════════════
+	interface SegmentoAccion {
+		id: string;
+		registro_dia_id: string;
+		orden: number;
+		cliente_id: string | null;
+		cliente_nombre: string | null;
+		vehiculo_id: string | null;
+		vehiculo_placa: string | null;
+		hora_inicio: string | null;
+		hora_fin: string | null;
+		horas_conducidas: number | null;
+		km_inicial: number | null;
+		km_final: number | null;
+		pernocte: boolean;
+		observaciones: string | null;
+	}
+
+	interface RegistroAccion {
+		id: string;
+		fecha: string;
+		tipo: TipoDia;
+		observaciones: string | null;
+		// Vehículo intervenido; solo viene lleno en los días de MANTENIMIENTO.
+		mantenimiento_vehiculo_id?: string | null;
+		mantenimiento_vehiculo_placa?: string | null;
+		segmentos_count: number;
+		conductor: RegistroTabla['conductor'];
+	}
+
+	let segmentoAEditar = $state<SegmentoAccion | null>(null);
+	let registroParaEditarSegmento = $state<RegistroTabla | null>(null);
+	let segmentoAEliminar = $state<SegmentoAccion | null>(null);
+	let registroParaEliminarSegmento = $state<RegistroTabla | null>(null);
+
+	let registroAEditar = $state<RegistroAccion | null>(null);
+	let registroAEliminar = $state<RegistroAccion | null>(null);
+
+	let pernocteToggling = $state<string | null>(null);
+
+	// Normaliza la fecha que viene del backend (puede ser ISO datetime
+	// 'YYYY-MM-DDTHH:MM:SS.sssZ') a 'YYYY-MM-DD' para que los modales
+	// la puedan formatear sin errores.
+	function fechaSoloDia(fecha: string | Date): string {
+		return String(fecha).split('T')[0];
+	}
+
+	function abrirEditar(fila: FilaTabla) {
+		if (fila.segmento) {
+			segmentoAEditar = { ...fila.segmento } as SegmentoAccion;
+			registroParaEditarSegmento = fila.registro;
+		} else {
+			registroAEditar = {
+				id: fila.registro.id,
+				fecha: fechaSoloDia(fila.registro.fecha),
+				tipo: fila.registro.tipo,
+				observaciones: fila.registro.observaciones,
+				mantenimiento_vehiculo_id: fila.registro.mantenimiento_vehiculo_id ?? null,
+				mantenimiento_vehiculo_placa: fila.registro.mantenimiento_vehiculo_placa ?? null,
+				segmentos_count: (fila.registro.segmentos || []).length,
+				conductor: fila.registro.conductor
+			};
+		}
+	}
+	function cerrarEditar() {
+		segmentoAEditar = null;
+		registroParaEditarSegmento = null;
+		registroAEditar = null;
+	}
+	function abrirEliminar(fila: FilaTabla) {
+		if (fila.segmento) {
+			segmentoAEliminar = { ...fila.segmento } as SegmentoAccion;
+			registroParaEliminarSegmento = fila.registro;
+		} else {
+			registroAEliminar = {
+				id: fila.registro.id,
+				fecha: fechaSoloDia(fila.registro.fecha),
+				tipo: fila.registro.tipo,
+				observaciones: fila.registro.observaciones,
+				segmentos_count: (fila.registro.segmentos || []).length,
+				conductor: fila.registro.conductor
+			};
+		}
+	}
+	function cerrarEliminar() {
+		segmentoAEliminar = null;
+		registroParaEliminarSegmento = null;
+		registroAEliminar = null;
+	}
+
+	async function togglePernocte(fila: FilaTabla) {
+		if (!fila.segmento) return;
+		const segId = fila.segmento.id;
+		if (pernocteToggling === segId) return;
+		pernocteToggling = segId;
+		try {
+			const nuevoValor = !fila.segmento.pernocte;
+			// Actualización optimista local
+			fila.segmento.pernocte = nuevoValor;
+			const res = await diasLaboradosAPI.editarSegmento(segId, { pernocte: nuevoValor });
+			if (!res.data?.success) {
+				// Revertir si el backend rechaza
+				fila.segmento.pernocte = !nuevoValor;
+				toast.error(res.data?.message || 'No se pudo actualizar pernocte');
+			}
+		} catch (err: any) {
+			// Revertir en error
+			if (fila.segmento) fila.segmento.pernocte = !fila.segmento.pernocte;
+			toast.error(err?.response?.data?.message || err?.message || 'Error al actualizar pernocte');
+		} finally {
+			pernocteToggling = null;
+		}
+	}
+
+	function onSegmentoEditado(_segActualizado: any) {
+		// Refresca desde el backend para que se recalculen los bonos y stats
+		cargarDatos();
+		cargarBonosPersistidos();
+	}
+	function onSegmentoEliminado() {
+		cargarDatos();
+		cargarBonosPersistidos();
+	}
+	function onRegistroEditado() {
+		cargarDatos();
+		cargarBonosPersistidos();
+	}
+	function onRegistroEliminado() {
+		cargarDatos();
+		cargarBonosPersistidos();
+	}
+
+	// ═══════════════════════════════════════════
+	// GROUPING: filas agrupadas por (fecha + tipo)
+	// Dentro de cada grupo se ordenan por conductor.
+	// ═══════════════════════════════════════════
+	function keyGrupo(fecha: string, tipo: string): string {
+		return `${fecha}__${tipo}`;
+	}
+	interface GrupoTabla {
+		fecha: string;
+		tipo: TipoDia;
+		filas: FilaTabla[];
+	}
+	let filasAgrupadas = $derived.by<GrupoTabla[]>(() => {
+		const ordenTipo: Record<TipoDia, number> = {
+			LABORADO: 0,
+			DISPONIBLE: 1,
+			DESCANSO: 2,
+			MANTENIMIENTO: 3
+		};
+		const map = new Map<string, GrupoTabla>();
+		for (const f of filasPaginadas) {
+			const k = keyGrupo(f.registro.fecha, f.registro.tipo);
+			if (!map.has(k)) {
+				map.set(k, { fecha: f.registro.fecha, tipo: f.registro.tipo, filas: [] });
+			}
+			map.get(k)!.filas.push(f);
+		}
+		const grupos = Array.from(map.values());
+		// Orden: por fecha desc, dentro del mismo dia por tipo (ordenTipo)
+		grupos.sort((a, b) => {
+			if (a.fecha !== b.fecha) return a.fecha < b.fecha ? 1 : -1;
+			return (ordenTipo[a.tipo] ?? 99) - (ordenTipo[b.tipo] ?? 99);
+		});
+		// Dentro de cada grupo: por conductor (apellido, nombre)
+		for (const g of grupos) {
+			g.filas.sort((a, b) => {
+				const ca = a.registro.conductor;
+				const cb = b.registro.conductor;
+				const aKey = ca ? `${ca.apellido ?? ''} ${ca.nombre ?? ''}`.trim().toLowerCase() : 'zzz';
+				const bKey = cb ? `${cb.apellido ?? ''} ${cb.nombre ?? ''}`.trim().toLowerCase() : 'zzz';
+				return aKey.localeCompare(bKey);
+			});
+		}
+		return grupos;
 	});
 </script>
 
@@ -776,7 +1009,7 @@
 				{#if filtrosActivos > 0}
 					<span
 						class="flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1.5 text-[9px] font-bold text-white"
-						style="background-color: var(--emerald-500);"
+						style="background-color: var(--orange-500);"
 					>
 						{filtrosActivos}
 					</span>
@@ -784,7 +1017,7 @@
 				{#if configsActivas.length > 0}
 					<span
 						class="ml-1 inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-semibold"
-						style="color: #047857;"
+						style="color: #c2410c;"
 					>
 						{configsActivas.length}/{totalConfigsDisponibles} visibles
 					</span>
@@ -819,6 +1052,18 @@
 					/>
 				</div>
 				<button
+					type="button"
+					onclick={abrirModalRegistrar}
+					class="apple-transition inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:opacity-95"
+					style="background: linear-gradient(135deg, #ea580c, #c2410c); box-shadow: 0 2px 6px rgba(249, 115, 22,0.25);"
+					title="Registrar recorridos de un mes completo para un conductor (masivo)"
+				>
+					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
+						><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg
+					>
+					Registrar recorridos
+				</button>
+				<button
 					onclick={() => cargarDatos()}
 					class="apple-transition flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium hover:bg-gray-50"
 					style="color: var(--text-secondary);"
@@ -834,7 +1079,7 @@
 					class="apple-hover apple-transition flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
 					style="background: {cambiosPendientes.total > 0
 						? 'linear-gradient(135deg, #f59e0b, #d97706)'
-						: 'linear-gradient(135deg, var(--emerald-500), var(--emerald-600))'};"
+						: 'linear-gradient(135deg, var(--orange-500), var(--orange-600))'};"
 					title={!canManageBonos
 						? 'No tienes el permiso bonos-planilla'
 						: cambiosPendientes.total === 0
@@ -883,7 +1128,7 @@
 			</div>
 		</div>
 
-		<div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+		<div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-9">
 			<label class="block">
 				<span class="mb-0.5 block text-[9px] font-semibold uppercase tracking-wide" style="color: var(--text-muted);">
 					Desde
@@ -916,6 +1161,21 @@
 					{#each opcionesConductores as o}
 						<option value={o.value}>{o.label}</option>
 					{/each}
+				</select>
+			</label>
+			<label class="block">
+				<span class="mb-0.5 block text-[9px] font-semibold uppercase tracking-wide" style="color: var(--text-muted);">
+					Tipo
+				</span>
+				<select
+					bind:value={filtroTipo}
+					class="apple-transition w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs"
+				>
+					<option value="">Todos</option>
+					<option value="LABORADO">🟢 Laborado</option>
+					<option value="DESCANSO">🟠 Descanso</option>
+					<option value="MANTENIMIENTO">🔴 Mantenimiento</option>
+					<option value="DISPONIBLE">🔵 Disponible</option>
 				</select>
 			</label>
 			<label class="block">
@@ -1039,11 +1299,11 @@
 				</p>
 			{/if}
 		</div>
-		<div class="glass soft-shadow rounded-xl border border-orange-200/50 p-3" style="border-top: 3px solid #047857">
+		<div class="glass soft-shadow rounded-xl border border-orange-200/50 p-3" style="border-top: 3px solid #c2410c">
 			<p class="text-[10px] font-medium uppercase tracking-wide" style="color: var(--text-muted);">
 				Total a pagar
 			</p>
-			<p class="mt-0.5 text-xl font-bold tabular-nums" style="color: #047857;">
+			<p class="mt-0.5 text-xl font-bold tabular-nums" style="color: #c2410c;">
 				${formatCOP(stats.totalPagar)}
 			</p>
 			<p class="text-[9px] font-medium" style="color: var(--text-muted);">
@@ -1088,7 +1348,7 @@
 			{#each configsActivas as cfg (cfg.id)}
 				<span
 					class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold"
-					style="background: rgba(249, 115, 22, 0.06); color: #047857; border-color: rgba(249, 115, 22, 0.25);"
+					style="background: rgba(249, 115, 22, 0.06); color: #c2410c; border-color: rgba(249, 115, 22, 0.25);"
 					title={cfg.nombre}
 				>
 					{cfg.nombre} · ${formatCOP(Number(cfg.valor) || 0)}
@@ -1135,7 +1395,7 @@
 	>
 		<!-- Header del canvas -->
 		<div
-			class="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[rgba(0,0,0,0.06)] bg-[#FAF7F2] px-5 py-3"
+			class="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-5 py-3"
 		>
 			<div class="flex items-center gap-3">
 				<span class="eyebrow">Modo Canvas · Recorridos</span>
@@ -1214,67 +1474,55 @@
 					<thead class="sticky top-0 z-20">
 						<tr>
 							<th
-								class="border-b border-r border-[rgba(0,0,0,0.08)] bg-white px-3 py-2.5 text-left align-bottom"
-								style="min-width: {COL_ANCHOS.fecha}px;"
-							>
-								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#6B6B6B]">Fecha</span>
-							</th>
-							<th
-								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#FAF7F2] px-3 py-2.5 text-left align-bottom"
+								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-3 py-2.5 text-left align-bottom"
 								style="min-width: {COL_ANCHOS.conductor}px;"
 							>
 								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#6B6B6B]">Conductor</span>
 							</th>
 							<th
-								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#FAF7F2] px-3 py-2.5 text-center align-bottom"
-								style="min-width: {COL_ANCHOS.orden}px;"
-							>
-								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#6B6B6B]">#</span>
-							</th>
-							<th
-								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#FAF7F2] px-3 py-2.5 text-left align-bottom"
+								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-3 py-2.5 text-left align-bottom"
 								style="min-width: {COL_ANCHOS.placa}px;"
 							>
 								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#6B6B6B]">Placa</span>
 							</th>
 							<th
-								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#FAF7F2] px-3 py-2.5 text-left align-bottom"
+								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-3 py-2.5 text-left align-bottom"
 								style="min-width: {COL_ANCHOS.cliente}px;"
 							>
 								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#6B6B6B]">Cliente / Recorrido</span>
 							</th>
 							<th
-								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#FAF7F2] px-3 py-2.5 text-left align-bottom"
+								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-3 py-2.5 text-left align-bottom"
 								style="min-width: {COL_ANCHOS.horario}px;"
 							>
 								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#6B6B6B]">Horario</span>
 							</th>
 							<th
-								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#FAF7F2] px-3 py-2.5 text-right align-bottom"
+								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-3 py-2.5 text-right align-bottom"
 								style="min-width: {COL_ANCHOS.horas}px;"
 							>
 								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#6B6B6B]">Horas</span>
 							</th>
 							<th
-								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#FAF7F2] px-3 py-2.5 text-right align-bottom"
+								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-3 py-2.5 text-right align-bottom"
 								style="min-width: {COL_ANCHOS.km}px;"
 							>
 								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#6B6B6B]">KM</span>
 							</th>
 							<th
-								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#FAF7F2] px-3 py-2.5 text-center align-bottom"
+								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-3 py-2.5 text-center align-bottom"
 								style="min-width: {COL_ANCHOS.pernocte}px;"
 							>
 								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#6B6B6B]">Pernocte</span>
 							</th>
 							{#each configsActivas as cfg (cfg.id)}
 								<th
-									class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#FAF7F2] px-2 py-2.5 text-center align-bottom"
+									class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-2 py-2.5 text-center align-bottom"
 									style="min-width: {COL_ANCHOS.bono}px;"
 									title={cfg.nombre}
 								>
 									<div class="flex flex-col items-center gap-0.5">
-										<span class="font-mono-meta text-[9px] uppercase tracking-wide text-[#047857]">
+										<span class="font-mono-meta text-[9px] uppercase tracking-wide text-[#c2410c]">
 											{cfg.nombre}
 										</span>
 										<span class="font-mono-meta text-[9px] text-[#6B6B6B]" style="text-transform: none;">
@@ -1284,220 +1532,344 @@
 								</th>
 							{/each}
 							<th
-								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#FAF7F2] px-3 py-2.5 text-left align-bottom"
+								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-3 py-2.5 text-left align-bottom"
 								style="min-width: {COL_ANCHOS.valorPagar}px;"
 							>
-								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#047857]">
+								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#c2410c]">
 									Valor a pagar
+								</span>
+							</th>
+							<th
+								class="border-b border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-2 py-2.5 text-center align-bottom"
+								style="min-width: {COL_ANCHOS.acciones}px;"
+							>
+								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#6B6B6B]">
+									Acciones
 								</span>
 							</th>
 						</tr>
 					</thead>
 
 					<tbody>
-						{#each filasPaginadas as fila, idx (fila.segmento?.id ?? `placeholder-${fila.registro.id}`)}
-							{@const reg = fila.registro}
-							{@const seg = fila.segmento}
-							{@const segId = seg?.id ?? null}
-							{@const fLarga = formatFechaLarga(reg.fecha)}
-							{@const textoValor = valorPagarTexto(reg.id, segId)}
-							{@const totalValor = valorPagarTotal(reg.id, segId)}
-							{@const tieneBono = totalValor > 0}
-							<tr
-								class="border-b border-[rgba(0,0,0,0.04)] align-top"
-								style="background-color: {tieneBono ? 'rgba(249, 115, 22, 0.04)' : 'white'};"
-								in:fade={{ duration: 150, delay: Math.min(idx * 8, 200) }}
-							>
-								<!-- Fecha (sticky left) -->
+						{#each filasAgrupadas as grupo (keyGrupo(grupo.fecha, grupo.tipo))}
+							{@const tc = colorForTipo(grupo.tipo)}
+							{@const fLargaGrupo = formatFechaLarga(grupo.fecha)}
+							<!-- THEAD de grupo: fecha + tipo -->
+							<tr>
 								<td
-									class="border-r border-[rgba(0,0,0,0.08)] px-3 py-2 align-top"
-									style="min-width: {COL_ANCHOS.fecha}px; background-color: {tieneBono ? 'rgba(249, 115, 22, 0.04)' : 'white'};"
+									colspan={7 + configsActivas.length + 2}
+									class="border-b border-[rgba(0,0,0,0.06)] px-3 py-2"
+									style="background: linear-gradient(90deg, {tc.bg} 0%, rgba(255,255,255,0.6) 100%); box-shadow: inset 4px 0 0 0 {tc.leftBar};"
 								>
-									<p class="text-xs font-semibold capitalize" style="color: var(--text-primary);">
-										{fLarga.diaSemana}
-									</p>
-									<p class="text-[11px] font-medium tabular-nums" style="color: var(--text-secondary);">
-										{fLarga.dia} {fLarga.mes.slice(0, 3)} {fLarga.anio}
-									</p>
-								</td>
-								<!-- Conductor -->
-								<td
-									class="border-r border-[rgba(0,0,0,0.04)] px-3 py-2 align-top"
-									style="min-width: {COL_ANCHOS.conductor}px;"
-								>
-									<p class="truncate text-xs font-semibold" style="color: var(--text-primary);" title={nombreConductor(reg.conductor)}>
-										{nombreConductor(reg.conductor)}
-									</p>
-									{#if reg.conductor?.numero_identificacion}
-										<p class="font-mono text-[9px]" style="color: var(--text-very-muted);">
-											CC {reg.conductor.numero_identificacion}
-										</p>
-									{/if}
-								</td>
-								<!-- # tramo -->
-								<td
-									class="border-r border-[rgba(0,0,0,0.04)] px-3 py-2 text-center align-top"
-									style="min-width: {COL_ANCHOS.orden}px;"
-								>
-									{#if seg}
-										<span class="font-mono text-[10px] font-semibold" style="color: var(--text-very-muted);">
-											#{seg.orden}
-										</span>
-									{:else}
-										<span class="font-mono text-[10px]" style="color: var(--text-very-muted);">—</span>
-									{/if}
-								</td>
-								<!-- Placa -->
-								<td
-									class="border-r border-[rgba(0,0,0,0.04)] px-3 py-2 align-top"
-									style="min-width: {COL_ANCHOS.placa}px;"
-								>
-									{#if seg}
+									<div class="flex items-center gap-3">
 										<span
-											class="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold"
-											style="background-color: rgba(249, 115, 22, 0.06); color: #047857; border-color: rgba(249, 115, 22, 0.25);"
+											class="inline-flex h-6 w-6 items-center justify-center rounded-md"
+											style="background-color: {tc.dot}; color: white;"
+											title={tc.label}
 										>
-											🚚 {seg.vehiculo_placa}
+											<svg
+												class="h-3.5 w-3.5"
+												fill="none"
+												stroke="currentColor"
+												viewBox="0 0 24 24"
+												stroke-width="2"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+												/>
+											</svg>
 										</span>
-									{:else if reg.tipo === 'MANTENIMIENTO' && reg.mantenimiento_vehiculo_placa}
-										<!-- Un día de taller no tiene tramo, pero sí vehículo: es justo el
-											 dato por el que se consulta esta fila. -->
-										<span class="font-mono text-[10px] font-semibold" style="color: #b91c1c;">
-											🔧 {reg.mantenimiento_vehiculo_placa}
-										</span>
-									{:else}
-										<span class="text-[10px]" style="color: var(--text-very-muted);">—</span>
-									{/if}
-								</td>
-								<!-- Cliente -->
-								<td
-									class="border-r border-[rgba(0,0,0,0.04)] px-3 py-2 align-top"
-									style="min-width: {COL_ANCHOS.cliente}px; max-width: 220px;"
-								>
-									{#if seg}
-										<p class="truncate text-xs font-medium" style="color: var(--text-primary);" title={seg.cliente_nombre || ''}>
-											{seg.cliente_nombre || '—'}
-										</p>
-									{:else}
-										<span class="inline-flex items-center gap-1.5 text-[10px] font-semibold italic" style="color: #b45309;">
-											Sin tramos registrados
-										</span>
-									{/if}
-								</td>
-								<!-- Horario -->
-								<td
-									class="border-r border-[rgba(0,0,0,0.04)] px-3 py-2 align-top"
-									style="min-width: {COL_ANCHOS.horario}px;"
-								>
-									{#if seg}
-										<p class="font-mono text-[11px] font-semibold tabular-nums" style="color: var(--text-primary);">
-											{seg.hora_inicio}–{seg.hora_fin}
-										</p>
-									{:else}
-										<span class="text-[10px]" style="color: var(--text-very-muted);">—</span>
-									{/if}
-								</td>
-								<!-- Horas -->
-								<td
-									class="border-r border-[rgba(0,0,0,0.04)] px-3 py-2 text-right align-top"
-									style="min-width: {COL_ANCHOS.horas}px;"
-								>
-									{#if seg}
-										<p class="text-xs font-bold tabular-nums" style="color: var(--text-primary);">
-											{Number(seg.horas_conducidas || 0).toFixed(1)}h
-										</p>
-									{:else}
-										<p class="text-xs" style="color: var(--text-very-muted);">—</p>
-									{/if}
-								</td>
-								<!-- KM (inicial → final) -->
-								<td
-									class="border-r border-[rgba(0,0,0,0.04)] px-3 py-2 text-right align-top"
-									style="min-width: {COL_ANCHOS.km}px;"
-								>
-									{#if seg && (seg.km_inicial != null || seg.km_final != null)}
-										<p class="font-mono text-[10px] font-semibold tabular-nums" style="color: var(--text-secondary);">
-											{seg.km_inicial != null ? formatCOP(seg.km_inicial) : '—'}
-										</p>
-										<p class="font-mono text-[10px] tabular-nums" style="color: var(--text-very-muted);">
-											→
-										</p>
-										<p class="font-mono text-[10px] font-semibold tabular-nums" style="color: var(--text-primary);">
-											{seg.km_final != null ? formatCOP(seg.km_final) : '—'}
-										</p>
-									{:else}
-										<p class="text-[10px]" style="color: var(--text-very-muted);">—</p>
-									{/if}
-								</td>
-								<!-- Pernocte -->
-								<td
-									class="border-r border-[rgba(0,0,0,0.04)] px-3 py-2 text-center align-top"
-									style="min-width: {COL_ANCHOS.pernocte}px;"
-								>
-									{#if seg}
+										<div class="flex flex-col">
+											<span
+												class="font-mono text-[10px] font-bold uppercase tracking-wider"
+												style="color: {tc.text};"
+											>
+												{tc.label}
+											</span>
+											<span class="text-sm font-semibold capitalize" style="color: var(--bg-charcoal);">
+												{fLargaGrupo.diaSemana} · {fLargaGrupo.dia} de {fLargaGrupo.mes} de {fLargaGrupo.anio}
+											</span>
+										</div>
 										<span
-											class="inline-block rounded px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wider"
-											style:background-color={seg.pernocte ? 'rgba(194, 65, 12, 0.10)' : 'rgba(107, 114, 128, 0.10)'}
-											style:color={seg.pernocte ? '#c2410c' : '#4b5563'}
+											class="ml-auto font-mono text-[10px] tabular-nums"
+											style="color: var(--text-very-muted);"
 										>
-											{seg.pernocte ? 'SÍ' : 'NO'}
+											{grupo.filas.length} recorrido{grupo.filas.length === 1 ? '' : 's'}
 										</span>
-									{:else}
-										<span class="text-[10px]" style="color: var(--text-very-muted);">—</span>
-									{/if}
-								</td>
-								<!-- Columnas dinámicas: 1 por config activa -->
-								{#each configsActivas as cfg (cfg.id)}
-									{@const checked = isChecked(cfg.id, reg.id, segId)}
-									<td
-										class="border-r border-[rgba(0,0,0,0.04)] px-2 py-2 text-center align-top"
-										style="min-width: {COL_ANCHOS.bono}px;"
-									>
-										<button
-											type="button"
-											onclick={() => toggleBono(cfg.id, reg.id, segId)}
-											disabled={!canManageBonos}
-											class="apple-transition inline-flex h-6 w-6 items-center justify-center rounded-md border-2 disabled:cursor-not-allowed disabled:opacity-60"
-											style:background-color={checked ? '#f97316' : 'white'}
-											style:border-color={checked ? '#f97316' : '#d1d5db'}
-											style:color={checked ? 'white' : 'transparent'}
-											aria-label="Aplicar bono: {cfg.nombre}"
-											title={canManageBonos
-												? `Aplicar ${cfg.nombre} ($${formatCOP(Number(cfg.valor) || 0)})`
-												: 'Solo lectura: no tienes el permiso bonos-planilla'}
-										>
-											{#if checked}
-												<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-												</svg>
-											{/if}
-										</button>
-									</td>
-								{/each}
-								<!-- Valor a pagar -->
-								<td
-									class="border-r border-[rgba(0,0,0,0.04)] px-3 py-2 align-top"
-									style="min-width: {COL_ANCHOS.valorPagar}px;"
-								>
-									{#if textoValor === '—'}
-										<span class="text-[#C7C7C7]">—</span>
-									{:else}
-										<p
-											class="font-mono text-[11px] font-semibold tabular-nums leading-tight"
-											style="color: #047857;"
-											title={textoValor}
-										>
-											{textoValor}
-										</p>
-										{#if textoValor.includes('+')}
-											{@const count = textoValor.split('+').length}
-											<p class="font-mono text-[9px] tabular-nums" style="color: var(--text-very-muted);">
-												{count} ítem{count === 1 ? '' : 's'}
-											</p>
-										{/if}
-									{/if}
+									</div>
 								</td>
 							</tr>
+							{#each grupo.filas as fila, idx (fila.segmento?.id ?? `placeholder-${fila.registro.id}`)}
+								{@const reg = fila.registro}
+								{@const seg = fila.segmento}
+								{@const segId = seg?.id ?? null}
+								{@const textoValor = valorPagarTexto(reg.id, segId)}
+								{@const totalValor = valorPagarTotal(reg.id, segId)}
+								{@const tieneBono = totalValor > 0}
+								{@const tipoColor = colorForTipo(reg.tipo)}
+								{@const esLaborado = reg.tipo === 'LABORADO'}
+								<tr
+									class="border-b border-[rgba(0,0,0,0.04)] align-top"
+									style="background-color: {tieneBono ? 'rgba(249, 115, 22, 0.04)' : 'white'};
+										box-shadow: inset 4px 0 0 0 {tipoColor.leftBar};"
+									in:fade={{ duration: 150, delay: Math.min(idx * 8, 200) }}
+								>
+									<!-- Conductor -->
+									<td
+										class="border-r border-[rgba(0,0,0,0.04)] px-3 py-2 align-top"
+										style="min-width: {COL_ANCHOS.conductor}px;"
+									>
+										<p class="truncate text-xs font-semibold" style="color: var(--text-primary);" title={nombreConductor(reg.conductor)}>
+											{nombreConductor(reg.conductor)}
+										</p>
+										{#if reg.conductor?.numero_identificacion}
+											<p class="font-mono text-[9px]" style="color: var(--text-very-muted);">
+												CC {reg.conductor.numero_identificacion}
+											</p>
+										{/if}
+									</td>
+									<!-- Placa -->
+									<td
+										class="border-r border-[rgba(0,0,0,0.04)] px-3 py-2 align-top"
+										style="min-width: {COL_ANCHOS.placa}px;"
+									>
+										{#if seg}
+											<span
+												class="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold"
+												style="background-color: rgba(249, 115, 22, 0.06); color: #c2410c; border-color: rgba(249, 115, 22, 0.25);"
+											>
+												🚚 {seg.vehiculo_placa}
+											</span>
+										{:else if reg.tipo === 'MANTENIMIENTO' && reg.mantenimiento_vehiculo_placa}
+											<!-- Un día de taller no tiene tramo, pero sí vehículo: es justo el
+												 dato por el que se consulta esta fila. -->
+											<span
+												class="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold"
+												style="background-color: rgba(220, 38, 38, 0.06); color: #b91c1c; border-color: rgba(220, 38, 38, 0.25);"
+											>
+												🔧 {reg.mantenimiento_vehiculo_placa}
+											</span>
+										{:else}
+											<span class="text-[10px]" style="color: var(--text-very-muted);">—</span>
+										{/if}
+									</td>
+									<!-- Cliente -->
+									<td
+										class="border-r border-[rgba(0,0,0,0.04)] px-3 py-2 align-top"
+										style="min-width: {COL_ANCHOS.cliente}px; max-width: 220px;"
+									>
+										{#if seg}
+											<p class="truncate text-xs font-medium" style="color: var(--text-primary);" title={seg.cliente_nombre || ''}>
+												{seg.cliente_nombre || '—'}
+											</p>
+										{:else if !esLaborado}
+											{#if reg.observaciones}
+												<p class="truncate text-[11px] italic" style="color: {tipoColor.text};" title={reg.observaciones}>
+													📝 {reg.observaciones}
+												</p>
+											{:else}
+												<span class="inline-flex items-center gap-1.5 text-[10px] font-semibold italic" style="color: {tipoColor.text};">
+													Sin observaciones
+												</span>
+											{/if}
+										{:else}
+											<span class="inline-flex items-center gap-1.5 text-[10px] font-semibold italic" style="color: #b45309;">
+												Sin tramos registrados
+											</span>
+										{/if}
+									</td>
+									<!-- Horario -->
+									<td
+										class="border-r border-[rgba(0,0,0,0.04)] px-3 py-2 align-top"
+										style="min-width: {COL_ANCHOS.horario}px;"
+									>
+										{#if seg}
+											<p class="font-mono text-[11px] font-semibold tabular-nums" style="color: var(--text-primary);">
+												{seg.hora_inicio}–{seg.hora_fin}
+											</p>
+										{:else}
+											<span class="text-[10px]" style="color: var(--text-very-muted);">—</span>
+										{/if}
+									</td>
+									<!-- Horas -->
+									<td
+										class="border-r border-[rgba(0,0,0,0.04)] px-3 py-2 text-right align-top"
+										style="min-width: {COL_ANCHOS.horas}px;"
+									>
+										{#if seg}
+											<p class="text-xs font-bold tabular-nums" style="color: var(--text-primary);">
+												{Number(seg.horas_conducidas || 0).toFixed(1)}h
+											</p>
+										{:else}
+											<p class="text-xs" style="color: var(--text-very-muted);">—</p>
+										{/if}
+									</td>
+									<!-- KM (inicial → final) -->
+									<td
+										class="border-r border-[rgba(0,0,0,0.04)] px-3 py-2 text-right align-top"
+										style="min-width: {COL_ANCHOS.km}px;"
+									>
+										{#if seg && (seg.km_inicial != null || seg.km_final != null)}
+											<p class="font-mono text-[10px] font-semibold tabular-nums" style="color: var(--text-secondary);">
+												{seg.km_inicial != null ? formatCOP(seg.km_inicial) : '—'}
+											</p>
+											<p class="font-mono text-[10px] tabular-nums" style="color: var(--text-very-muted);">
+												→
+											</p>
+											<p class="font-mono text-[10px] font-semibold tabular-nums" style="color: var(--text-primary);">
+												{seg.km_final != null ? formatCOP(seg.km_final) : '—'}
+											</p>
+										{:else}
+											<p class="text-[10px]" style="color: var(--text-very-muted);">—</p>
+										{/if}
+									</td>
+									<!-- Pernocte (toggle estilo bono, color azul) -->
+									<td
+										class="border-r border-[rgba(0,0,0,0.04)] px-2 py-2 text-center align-top"
+										style="min-width: {COL_ANCHOS.pernocte}px; {esLaborado ? '' : 'background-color: rgba(0,0,0,0.02);'}"
+									>
+										{#if seg}
+											<button
+												type="button"
+												onclick={() => togglePernocte(fila)}
+												disabled={!esLaborado || pernocteToggling === segId}
+												class="apple-transition inline-flex h-6 w-6 items-center justify-center rounded-md border-2 disabled:cursor-not-allowed disabled:opacity-60"
+												style:background-color={seg.pernocte ? '#3b82f6' : 'white'}
+												style:border-color={seg.pernocte ? '#3b82f6' : '#bfdbfe'}
+												style:color={seg.pernocte ? 'white' : 'transparent'}
+												aria-label="Toggle pernocte"
+												title={esLaborado
+													? (seg.pernocte ? 'Pernocte: SÍ (click para quitar)' : 'Pernocte: NO (click para marcar)')
+													: 'Pernocte solo aplica a días laborados'}
+											>
+												{#if pernocteToggling === segId}
+													<svg class="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
+														<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25" />
+														<path d="M4 12a8 8 0 018-8v0" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+													</svg>
+												{:else if seg.pernocte}
+													<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+													</svg>
+												{/if}
+											</button>
+										{:else}
+											<span class="text-[10px]" style="color: var(--text-very-muted);">—</span>
+										{/if}
+									</td>
+									<!-- Columnas dinámicas: 1 por config activa -->
+									{#each configsActivas as cfg (cfg.id)}
+										{@const checked = isChecked(cfg.id, reg.id, segId)}
+										<td
+											class="border-r border-[rgba(0,0,0,0.04)] px-2 py-2 text-center align-top"
+											style="min-width: {COL_ANCHOS.bono}px; {esLaborado ? '' : 'background-color: rgba(0,0,0,0.02);'}"
+										>
+											<button
+												type="button"
+												onclick={() => toggleBono(cfg.id, reg.id, segId)}
+												disabled={!canManageBonos || !esLaborado}
+												class="apple-transition inline-flex h-6 w-6 items-center justify-center rounded-md border-2 disabled:cursor-not-allowed disabled:opacity-60"
+												style:background-color={checked ? '#f97316' : 'white'}
+												style:border-color={checked ? '#f97316' : '#d1d5db'}
+												style:color={checked ? 'white' : 'transparent'}
+												aria-label="Aplicar bono: {cfg.nombre}"
+												title={!esLaborado
+													? 'Los bonos solo aplican a días laborados'
+													: canManageBonos
+														? `Aplicar ${cfg.nombre} ($${formatCOP(Number(cfg.valor) || 0)})`
+														: 'Solo lectura: no tienes el permiso bonos-planilla'}
+											>
+												{#if checked}
+													<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
+														<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+													</svg>
+												{/if}
+											</button>
+										</td>
+									{/each}
+									<!-- Valor a pagar -->
+									<td
+										class="border-r border-[rgba(0,0,0,0.04)] px-3 py-2 align-top"
+										style="min-width: {COL_ANCHOS.valorPagar}px;"
+									>
+										{#if textoValor === '—'}
+											<span class="text-[#C7C7C7]">—</span>
+										{:else}
+											<p
+												class="font-mono text-[11px] font-semibold tabular-nums leading-tight"
+												style="color: #c2410c;"
+												title={textoValor}
+											>
+												{textoValor}
+											</p>
+											{#if textoValor.includes('+')}
+												{@const count = textoValor.split('+').length}
+												<p class="font-mono text-[9px] tabular-nums" style="color: var(--text-very-muted);">
+													{count} ítem{count === 1 ? '' : 's'}
+												</p>
+											{/if}
+										{/if}
+									</td>
+									<!-- Acciones: editar / eliminar (disponibles para TODO tipo de fila) -->
+									<td
+										class="px-2 py-2 align-top"
+										style="min-width: {COL_ANCHOS.acciones}px;"
+									>
+										<div class="flex items-center justify-center gap-1">
+											<button
+												type="button"
+												onclick={() => abrirEditar(fila)}
+												class="apple-transition inline-flex h-7 w-7 items-center justify-center rounded-md"
+												style="color: #1d4ed8; background-color: rgba(59, 130, 246, 0.08);"
+												aria-label={seg ? 'Editar recorrido' : 'Editar día'}
+												title={seg
+													? 'Editar recorrido (tramo)'
+													: `Editar día (${reg.tipo.toLowerCase()})`}
+											>
+												<svg
+													class="h-3.5 w-3.5"
+													fill="none"
+													stroke="currentColor"
+													viewBox="0 0 24 24"
+													stroke-width="1.8"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
+													/>
+												</svg>
+											</button>
+											<button
+												type="button"
+												onclick={() => abrirEliminar(fila)}
+												class="apple-transition inline-flex h-7 w-7 items-center justify-center rounded-md"
+												style="color: #dc2626; background-color: rgba(220, 38, 38, 0.06);"
+												aria-label={seg ? 'Eliminar recorrido' : 'Eliminar día completo'}
+												title={seg
+													? 'Eliminar recorrido (soft delete del tramo)'
+													: `Eliminar día completo (${reg.tipo.toLowerCase()})`}
+											>
+												<svg
+													class="h-3.5 w-3.5"
+													fill="none"
+													stroke="currentColor"
+													viewBox="0 0 24 24"
+													stroke-width="1.8"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+													/>
+												</svg>
+											</button>
+										</div>
+									</td>
+								</tr>
+							{/each}
 						{/each}
 					</tbody>
 				</table>
@@ -1505,16 +1877,23 @@
 
 			<!-- Footer del canvas -->
 			<div
-				class="flex flex-shrink-0 items-center justify-between border-t border-[rgba(0,0,0,0.06)] bg-[#FAF7F2] px-5 py-2.5"
+				class="flex flex-shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-1.5 border-t border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-5 py-2.5"
 			>
+				<!-- Breakdown por tipo (chips de colores) -->
+				<div class="flex flex-wrap items-center gap-1.5">
+					{#each TIPOS_ORDENADOS as t (t)}
+						{@const tc = colorForTipo(t)}
+						<span
+							class="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wider"
+							style="background-color: {tc.bg}; border-color: {tc.border}; color: {tc.text};"
+						>
+							<span class="h-1.5 w-1.5 rounded-full" style="background-color: {tc.dot};"></span>
+							{tc.label} · {stats.porTipo[t] ?? 0}
+						</span>
+					{/each}
+				</div>
 				<p
-					class="font-mono-meta text-[10px] text-[#6B6B6B]"
-					style="text-transform: none; letter-spacing: 0.04em;"
-				>
-					Modo Canvas · {configsActivas.length}/{totalConfigsDisponibles} columna{configsActivas.length === 1 ? '' : 's'} de bonos · scroll horizontal
-				</p>
-				<p
-					class="font-mono-meta text-[10px] text-[#10B981]"
+					class="font-mono-meta text-[10px] text-[#f97316]"
 					style="text-transform: none; letter-spacing: 0.04em;"
 				>
 					{filasPaginadas.length}/{filasFiltradas.length} recorridos · Total a pagar: ${formatCOP(stats.totalPagar)}
@@ -1559,8 +1938,8 @@
 							<button
 								onclick={() => irPagina(p)}
 								class="apple-transition min-w-[1.75rem] rounded-lg border px-2 py-0.5 text-[11px] font-semibold"
-								style:border-color={pagination.page === p ? 'var(--emerald-500)' : 'var(--border-default)'}
-								style:background-color={pagination.page === p ? 'var(--emerald-500)' : 'white'}
+								style:border-color={pagination.page === p ? 'var(--orange-500)' : 'var(--border-default)'}
+								style:background-color={pagination.page === p ? 'var(--orange-500)' : 'white'}
 								style:color={pagination.page === p ? 'white' : 'var(--text-secondary)'}
 							>
 								{p}
@@ -1590,5 +1969,67 @@
 		{canManageBonos}
 		onclose={() => (modalConfigOpen = false)}
 		onsaved={onConfigBonosSaved}
+	/>
+
+	<!-- ═══ MODAL: registro masivo de recorridos ═══ -->
+	<ModalRegistrarRecorridos
+		open={modalRegistrarOpen}
+		conductorIdInicial={filtroConductor || conductorIdInicial}
+		onclose={() => (modalRegistrarOpen = false)}
+		onsaved={() => {
+			// Forzar recarga de la tabla de días
+			refreshKey = (refreshKey ?? 0) + 1;
+			cargarDatos();
+		}}
+	/>
+
+	<!-- ═══ MODAL: editar un recorrido específico (tramo) ═══ -->
+	<ModalEditarSegmento
+		open={segmentoAEditar !== null}
+		segmento={segmentoAEditar}
+		registro={registroParaEditarSegmento}
+		onclose={cerrarEditar}
+		onsaved={onSegmentoEditado}
+	/>
+
+	<!-- ═══ MODAL: confirmación de soft-delete de un recorrido ═══ -->
+	<ModalConfirmarEliminarSegmento
+		open={segmentoAEliminar !== null}
+		segmento={segmentoAEliminar}
+		registro={registroParaEliminarSegmento}
+		onclose={cerrarEliminar}
+		onsaved={onSegmentoEliminado}
+	/>
+
+	<!-- ═══ MODAL: editar día (metadata del registro) — para filas sin segmento ═══ -->
+	<ModalEditarRegistro
+		open={registroAEditar !== null}
+		registroId={registroAEditar?.id ?? null}
+		fecha={registroAEditar?.fecha ?? ''}
+		tipoInicial={registroAEditar?.tipo ?? 'DESCANSO'}
+		observacionesIniciales={registroAEditar?.observaciones ?? null}
+		conductorLabel={registroAEditar
+			? `${registroAEditar.conductor?.nombre ?? ''} ${registroAEditar.conductor?.apellido ?? ''}`.trim() ||
+				'—'
+			: '—'}
+		segmentoInicial={registroAEditar && (registroAEditar.segmentos_count ?? 0) > 0
+			? null
+			: null}
+		mantenimientoInicial={registroAEditar
+			? {
+					vehiculo_id: registroAEditar.mantenimiento_vehiculo_id ?? null,
+					vehiculo_placa: registroAEditar.mantenimiento_vehiculo_placa ?? null
+				}
+			: null}
+		onclose={cerrarEditar}
+		onsaved={onRegistroEditado}
+	/>
+
+	<!-- ═══ MODAL: confirmación de soft-delete del día completo ═══ -->
+	<ModalConfirmarEliminarRegistro
+		open={registroAEliminar !== null}
+		registro={registroAEliminar}
+		onclose={cerrarEliminar}
+		onsaved={onRegistroEliminado}
 	/>
 </div>

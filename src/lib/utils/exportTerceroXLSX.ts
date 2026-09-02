@@ -15,7 +15,7 @@
 //
 // Se carga `exceljs` con `import()` dinámico para code-splitting (la librería pesa ~1MB).
 
-import logoUrl from '$lib/assets/transmeralda-logo.png';
+import logoUrl from '$lib/assets/cotransmeq-logo.webp';
 
 const HEADER_BG = 'FF0F4025';
 const HEADER_TEXT = 'FFFFFFFF';
@@ -270,7 +270,7 @@ function getTerceroInfo(item: any) {
 
 /**
  * Carga el logo principal (PNG) que Vite resuelve desde
- * `src/lib/assets/transmeralda-logo.png` y lo devuelve como base64 sin prefijo
+ * `src/lib/assets/cotransmeq-logo.webp` y lo devuelve como base64 sin prefijo
  * `data:image/png;base64,` para embeberlo con ExcelJS.
  *
  * Retorna `null` si falla (SSR, fetch, FileReader, etc.) — el header se renderiza
