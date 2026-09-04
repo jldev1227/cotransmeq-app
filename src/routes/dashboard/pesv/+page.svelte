@@ -1,2957 +1,1155 @@
 <script lang="ts">
-	import { onMount, onDestroy, untrack } from 'svelte';
+	/**
+	 * Centro de cumplimiento PESV.
+	 *
+	 * Esta ruta es un ORQUESTADOR: resuelve período, permisos y navegación, y
+	 * delega cada vista en su componente. Antes era un único archivo de casi tres
+	 * mil líneas con gráficas, tabla y modales mezclados; cualquier cambio en una
+	 * parte obligaba a leerlo entero.
+	 *
+	 * Siete vistas: resumen, matriz de los 24 pasos, indicadores, operación
+	 * segura, documentos, plan anual y contratos/FUEC. Más `historico`, que
+	 * conserva la tabla de registros diarios del panel anterior **en solo
+	 * lectura**: la información no se pierde, pero el registro manual de
+	 * preoperacional ya no se ofrece porque Formularios Dinámicos es la fuente
+	 * oficial y dos caminos de captura significan dos verdades.
+	 *
+	 * La URL es la fuente de verdad de los filtros (`src/lib/listing/`): vista,
+	 * período, panel, estado y búsqueda viajan en ella, así que recargar, volver
+	 * atrás o compartir un enlace llevan al mismo sitio.
+	 */
 	import { browser } from '$app/environment';
 	import { page } from '$app/state';
-	import { texto, numero, opcion, leerDeParams, contarActivos, limpiar, firma } from '$lib/listing/filtros';
+	import { untrack } from 'svelte';
+	import { firma, leerDeParams, numero, opcion, texto } from '$lib/listing/filtros';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
-	import { coincide } from '$lib/listing/texto';
-	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
-	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
-	import { fade, fly } from 'svelte/transition';
 	import { toast } from '$lib/stores/toast';
-	import { socketUtils } from '$lib/socket';
-	import Select from 'svelte-select';
+
+	import BandejaEvidencias from '$lib/components/pesv/BandejaEvidencias.svelte';
+	import DetalleIndicador from '$lib/components/pesv/DetalleIndicador.svelte';
+	import DetallePasoDialogo from '$lib/components/pesv/DetallePaso.svelte';
+	import EstadoPanel from '$lib/components/pesv/EstadoPanel.svelte';
+	import MatrizPasos from '$lib/components/pesv/MatrizPasos.svelte';
+	import PanelOperacion from '$lib/components/pesv/PanelOperacion.svelte';
+	import PlanAnual from '$lib/components/pesv/PlanAnual.svelte';
+	import ResumenCumplimiento from '$lib/components/pesv/ResumenCumplimiento.svelte';
+	import TablaCoberturaFuec from '$lib/components/pesv/TablaCoberturaFuec.svelte';
+	import TablaDocumentos from '$lib/components/pesv/TablaDocumentos.svelte';
+	import TarjetaIndicador from '$lib/components/pesv/TarjetaIndicador.svelte';
+
 	import {
-		obtenerDashboardPesv,
-		obtenerOpcionesPesv,
-		crearOActualizarExceso,
-		eliminarExceso,
-		obtenerExcesos,
-		crearOActualizarPreoperacional,
-		eliminarPreoperacional,
-		obtenerPreoperacionales,
-		obtenerRegistrosDiarios,
-		actualizarRegistroDiaPesv
-	} from '$lib/api/pesv';
-	import {
-		listarActividadesPesv,
-		crearActividadPesv,
-		actualizarActividadPesv,
-		eliminarActividadPesv,
-		obtenerSiguienteNumero,
-		obtenerEstadisticasPesv
-	} from '$lib/api/actividadesPesv';
-	import { usuariosAPI, type Usuario } from '$lib/api/usuarios';
+		crearCiclo,
+		importarExtractos,
+		listarEvidencias,
+		listarFormaciones,
+		listarMetas,
+		listarProgramas,
+		listarRiesgos,
+		obtenerCoberturaFuec,
+		obtenerCumplimiento,
+		obtenerDetallePaso,
+		obtenerDocumentos,
+		obtenerIndicadores,
+		obtenerOperacion,
+		obtenerPermisos,
+		obtenerResumen,
+		revisarDocumento
+	} from '$lib/api/pesv-centro';
+	import { listarActividadesPesv } from '$lib/api/actividadesPesv';
+	import { obtenerRegistrosDiarios } from '$lib/api/pesv';
+	import type { ActividadPesv } from '$lib/types/actividadesPesv';
+	import type { RegistroDiarioPesv } from '$lib/types/pesv';
 	import type {
-		PesvDashboardData,
-		PesvFilterOptions,
-		ExcesoVelocidad,
-		Preoperacional,
-		ChartItem,
-		RegistroDiarioPesv
-	} from '$lib/types/pesv';
-	import type {
-		ActividadPesv,
-		ActividadPesvFormData,
-		ActividadPesvEstado,
-		ActividadPesvPrioridad,
-		ActividadPesvFrecuencia,
-		ActividadPesvEstadisticas
-	} from '$lib/types/actividadesPesv';
+		DetallePaso,
+		EvidenciaBandeja,
+		FormacionPesv,
+		MetaPesv,
+		PermisosPesv,
+		ProgramaPesv,
+		RespuestaCobertura,
+		RespuestaCumplimiento,
+		RespuestaDocumentos,
+		RespuestaOperacion,
+		ResultadoIndicador,
+		ResumenPesv,
+		RiesgoPesv
+	} from '$lib/types/pesv-centro';
+	import { formatearInstante } from '$lib/components/pesv/estados';
 
-	// Chart.js
-	import { Chart, registerables } from 'chart.js';
-	import { Bar } from 'svelte-chartjs';
-	Chart.register(...registerables);
+	type Vista =
+		| 'resumen'
+		| 'matriz'
+		| 'indicadores'
+		| 'operacion'
+		| 'documentos'
+		| 'plan'
+		| 'contratos'
+		| 'historico';
 
-	// ==================== STATE ====================
-	let loading = $state(true);
-	let dashboardData = $state<PesvDashboardData | null>(null);
-	let filterOptions = $state<PesvFilterOptions | null>(null);
+	const VISTAS: Array<{ id: Vista; etiqueta: string; descripcion: string }> = [
+		{ id: 'resumen', etiqueta: 'Resumen', descripcion: 'Avance global y alertas accionables' },
+		{ id: 'matriz', etiqueta: '24 pasos', descripcion: 'Matriz normativa y evidencias' },
+		{
+			id: 'indicadores',
+			etiqueta: 'Indicadores',
+			descripcion: 'Las 13 fichas con fórmula y procedencia'
+		},
+		{
+			id: 'operacion',
+			etiqueta: 'Operación segura',
+			descripcion: 'Inspecciones, velocidad, mantenimiento y siniestros'
+		},
+		{ id: 'documentos', etiqueta: 'Documentos', descripcion: 'Vencimientos y estado de revisión' },
+		{
+			id: 'plan',
+			etiqueta: 'Plan anual',
+			descripcion: 'Actividades, metas, programas y formación'
+		},
+		{
+			id: 'contratos',
+			etiqueta: 'Contratos y FUEC',
+			descripcion: 'Cobertura contractual por servicio'
+		},
+		{
+			id: 'historico',
+			etiqueta: 'Histórico',
+			descripcion: 'Registros del panel anterior, en solo lectura'
+		}
+	];
 
-	// View toggle: 'dashboard' | 'tabla' | 'actividades'
+	const hoy = new Date();
 
-	// Table state
-	let registrosDiarios = $state<RegistroDiarioPesv[]>([]);
-	let loadingRegistros = $state(false);
 	/**
-	 * Filtros de la página, y con ellos la URL.
+	 * Definiciones de filtro.
 	 *
-	 * Esta ruta no tocaba `searchParams`: la vista, el mes, los tres filtros de
-	 * la tabla, la búsqueda y la página vivían solo en memoria. Recargar
-	 * devolvía al panel del mes en curso y no había forma de enlazar a una
-	 * tabla concreta.
-	 *
-	 * El mes, el año y los tres identificadores los resuelve el servidor; la
-	 * búsqueda y la página son locales sobre lo que ya llegó.
+	 * Los valores por defecto NO se escriben en la URL: una URL limpia y una con
+	 * todos los defectos describen el mismo estado.
 	 */
-	const currentDate = new Date();
-	type VistaPesv = 'dashboard' | 'tabla' | 'actividades';
 	const DEFS = {
-		vista: opcion<VistaPesv>('dashboard'),
-		mes: numero(currentDate.getMonth() + 1),
-		anio: numero(currentDate.getFullYear()),
-		conductor: texto(),
-		vehiculo: texto(),
-		cliente: texto(),
-		q: texto(),
-		pagina: numero(1)
+		vista: opcion<Vista>('resumen'),
+		anio: numero(hoy.getFullYear()),
+		trimestre: numero(0),
+		mes: numero(0),
+		panel: texto(),
+		estado: texto(),
+		estadoEvidencia: texto(),
+		estadoVigencia: texto(),
+		ambito: texto(),
+		fase: texto(),
+		area: texto(),
+		indicador: texto(),
+		paso: numero(0),
+		mias: opcion('no'),
+		q: texto()
 	};
+
 	const estadoUrl = crearEstadoUrl(DEFS);
-	let filtros = $state(leerDeParams(DEFS, new URLSearchParams(browser ? window.location.search : '')));
-
-	// Autocomplete search state
-	let conductorSearch = $state('');
-	let placaSearch = $state('');
-	let clienteSearch = $state('');
-	let conductorDropdownOpen = $state(false);
-	let placaDropdownOpen = $state(false);
-	let clienteDropdownOpen = $state(false);
-
-	// Edit modal
-	let mostrarModalEdicion = $state(false);
-	let editingRegistro = $state<RegistroDiarioPesv | null>(null);
-	let editForm = $state({
-		horas_sueno: null as number | null,
-		excesos_velocidad_dia: 0,
-		siniestros: 0,
-		siniestros_detalle: '' as string
-	});
-	let savingEdit = $state(false);
-
-	const pageSize = 25;
-
-	const meses = [
-		{ value: 1, label: 'Enero' }, { value: 2, label: 'Febrero' },
-		{ value: 3, label: 'Marzo' }, { value: 4, label: 'Abril' },
-		{ value: 5, label: 'Mayo' }, { value: 6, label: 'Junio' },
-		{ value: 7, label: 'Julio' }, { value: 8, label: 'Agosto' },
-		{ value: 9, label: 'Septiembre' }, { value: 10, label: 'Octubre' },
-		{ value: 11, label: 'Noviembre' }, { value: 12, label: 'Diciembre' },
-	];
-	const anios = Array.from({ length: 5 }, (_, i) => {
-		const y = currentDate.getFullYear() - i;
-		return { value: y, label: y.toString() };
-	});
-
-	// Modal states
-	let mostrarModalExceso = $state(false);
-	let mostrarModalPreop = $state(false);
-	let excesosList = $state<ExcesoVelocidad[]>([]);
-	let preopList = $state<Preoperacional[]>([]);
-
-	// Exceso form
-	let excesoForm = $state({
-		conductor_id: '',
-		vehiculo_id: '',
-		mes: currentDate.getMonth() + 1,
-		anio: currentDate.getFullYear(),
-		cantidad: 0,
-		observaciones: ''
-	});
-
-	// Preoperacional form
-	let preopForm = $state({
-		conductor_id: '',
-		vehiculo_id: '',
-		fecha: new Date().toISOString().split('T')[0],
-		realizado: true,
-		observaciones: ''
-	});
-
-	// ==================== CHART COLORS ====================
-	const chartColors = [
-		'#ea580c', '#f97316', '#34d399', '#6ee7b7', '#bbf7d0',
-		'#c2410c', '#166534', '#064e3b', '#0d9488', '#14b8a6'
-	];
-	const chartBorderColors = [
-		'#c2410c', '#ea580c', '#f97316', '#34d399', '#6ee7b7',
-		'#166534', '#064e3b', '#166534', '#0f766e', '#0d9488'
-	];
-
-	// ==================== ACTIVIDADES STATE ====================
-	let actLoading = $state(false);
-	let actActividades = $state<ActividadPesv[]>([]);
-	let actTotal = $state(0);
-	let actTotalPages = $state(1);
-	let actCurrentPage = $state(1);
-	let actUsuarios = $state<Usuario[]>([]);
-	let actEstadisticas = $state<ActividadPesvEstadisticas | null>(null);
-	let actVistaInterna = $state<'listado' | 'calendario'>('listado');
-	let actFiltroAnio = $state(new Date().getFullYear());
-	let actFiltroEstado = $state('');
-	let actFiltroPrioridad = $state('');
-	let actFiltroFrecuencia = $state('');
-	let actFiltroSearch = $state('');
-	let actSearchTimeout: ReturnType<typeof setTimeout>;
-	let actShowModal = $state(false);
-	let actModalMode = $state<'crear' | 'editar' | 'ver'>('crear');
-	let actEditingId = $state<string | null>(null);
-	let actSaving = $state(false);
-	let actForm = $state<ActividadPesvFormData>(getEmptyActForm());
-	let actShowDeleteModal = $state(false);
-	let actDeletingId = $state<string | null>(null);
-	let actDeletingName = $state('');
-	let actDeleting = $state(false);
-	let actCalMes = $state(new Date().getMonth());
-	let actCalAnio = $state(new Date().getFullYear());
-	let actDataLoaded = false;
-
-	const ACT_ESTADOS: { value: ActividadPesvEstado; label: string; color: string; bg: string }[] = [
-		{ value: 'PENDIENTE', label: 'Pendiente', color: 'text-yellow-700', bg: 'bg-yellow-100' },
-		{ value: 'EN_PROGRESO', label: 'En Progreso', color: 'text-blue-700', bg: 'bg-blue-100' },
-		{ value: 'COMPLETADA', label: 'Completada', color: 'text-green-700', bg: 'bg-green-100' },
-		{ value: 'VENCIDA', label: 'Vencida', color: 'text-red-700', bg: 'bg-red-100' },
-		{ value: 'CANCELADA', label: 'Cancelada', color: 'text-gray-700', bg: 'bg-gray-100' }
-	];
-	const ACT_PRIORIDADES: { value: ActividadPesvPrioridad; label: string; color: string; bg: string }[] = [
-		{ value: 'BAJA', label: 'Baja', color: 'text-gray-600', bg: 'bg-gray-100' },
-		{ value: 'MEDIA', label: 'Media', color: 'text-blue-600', bg: 'bg-blue-100' },
-		{ value: 'ALTA', label: 'Alta', color: 'text-orange-600', bg: 'bg-orange-100' },
-		{ value: 'CRITICA', label: 'Crítica', color: 'text-red-600', bg: 'bg-red-100' }
-	];
-	const ACT_FRECUENCIAS: { value: ActividadPesvFrecuencia; label: string }[] = [
-		{ value: 'UNICA', label: 'Única' },
-		{ value: 'DIARIA', label: 'Diaria' },
-		{ value: 'SEMANAL', label: 'Semanal' },
-		{ value: 'QUINCENAL', label: 'Quincenal' },
-		{ value: 'MENSUAL', label: 'Mensual' },
-		{ value: 'BIMESTRAL', label: 'Bimestral' },
-		{ value: 'TRIMESTRAL', label: 'Trimestral' },
-		{ value: 'SEMESTRAL', label: 'Semestral' },
-		{ value: 'ANUAL', label: 'Anual' }
-	];
-	const ACT_MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-
-	function getEmptyActForm(): ActividadPesvFormData {
-		return {
-			numero: 1,
-			unidad_programa: '',
-			actividad: '',
-			alcance: '',
-			recursos: '',
-			responsable_planeacion: '',
-			metodo_seguimiento: '',
-			frecuencia: 'ANUAL',
-			fecha_limite: '',
-			responsable_ejecucion_id: '',
-			estado: 'PENDIENTE',
-			prioridad: 'BAJA',
-			fecha_ejecucion: '',
-			observacion: '',
-			anio: new Date().getFullYear()
-		};
-	}
-
-	// ==================== CHART DATA BUILDERS ====================
-	function buildBarChartData(items: ChartItem[], label: string, maxItems = 8) {
-		const sliced = items.slice(0, maxItems);
-		return {
-			labels: sliced.map(i => truncateLabel(i.label, 18)),
-			datasets: [{
-				label,
-				data: sliced.map(i => i.value),
-				backgroundColor: chartColors.slice(0, sliced.length),
-				borderColor: chartBorderColors.slice(0, sliced.length),
-				borderWidth: 1,
-				borderRadius: 8,
-				barPercentage: 0.7,
-			}]
-		};
-	}
-
-	function buildHorizontalBarData(items: ChartItem[], label: string, maxItems = 8) {
-		const sliced = items.slice(0, maxItems);
-		return {
-			labels: sliced.map(i => truncateLabel(i.label, 22)),
-			datasets: [{
-				label,
-				data: sliced.map(i => i.value),
-				backgroundColor: chartColors.slice(0, sliced.length),
-				borderColor: chartBorderColors.slice(0, sliced.length),
-				borderWidth: 1,
-				borderRadius: 6,
-				barPercentage: 0.65,
-			}]
-		};
-	}
-
-	function truncateLabel(label: string, maxLen: number) {
-		return label.length > maxLen ? label.substring(0, maxLen) + '…' : label;
-	}
-
-	// Chart options
-	const barOptions = {
-		responsive: true,
-		maintainAspectRatio: false,
-		plugins: {
-			legend: { display: false },
-			tooltip: {
-				backgroundColor: 'rgba(0,0,0,0.8)',
-				titleFont: { size: 13 },
-				bodyFont: { size: 12 },
-				padding: 12,
-				cornerRadius: 8,
-			}
-		},
-		scales: {
-			y: {
-				beginAtZero: true,
-				ticks: { precision: 0, font: { size: 11 } },
-				grid: { color: 'rgba(0,0,0,0.05)' }
-			},
-			x: {
-				ticks: { font: { size: 10 }, maxRotation: 45, minRotation: 0 },
-				grid: { display: false }
-			}
-		}
-	};
-
-	const horizontalBarOptions = {
-		responsive: true,
-		maintainAspectRatio: false,
-		indexAxis: 'y' as const,
-		plugins: {
-			legend: { display: false },
-			tooltip: {
-				backgroundColor: 'rgba(0,0,0,0.8)',
-				titleFont: { size: 13 },
-				bodyFont: { size: 12 },
-				padding: 12,
-				cornerRadius: 8,
-			}
-		},
-		scales: {
-			x: {
-				beginAtZero: true,
-				ticks: { precision: 0, font: { size: 11 } },
-				grid: { color: 'rgba(0,0,0,0.05)' }
-			},
-			y: {
-				ticks: { font: { size: 11 } },
-				grid: { display: false }
-			}
-		}
-	};
-
-	// ==================== LIFECYCLE ====================
-	onMount(async () => {
-		await Promise.all([cargarDashboard(), cargarOpciones()]);
-
-		/// Si se llega directo a la tabla, hay que traerla: el efecto que sigue
-		/// a `firmaTabla` solo reacciona a CAMBIOS, y aquí no ha cambiado nada.
-		if (filtros.vista === 'tabla') await cargarRegistrosDiarios();
-
-		/// El freno se suelta después de la primera carga, o los dos efectos
-		/// pedirían de nuevo lo que se acaba de traer.
-		montado = true;
-
-		// Socket listeners for actividades
-		socketUtils.on('actividad-pesv-created', handleActSocketEvent);
-		socketUtils.on('actividad-pesv-updated', handleActSocketEvent);
-		socketUtils.on('actividad-pesv-deleted', handleActSocketEvent);
-	});
-
-	onDestroy(() => {
-		socketUtils.off('actividad-pesv-created', handleActSocketEvent);
-		socketUtils.off('actividad-pesv-updated', handleActSocketEvent);
-		socketUtils.off('actividad-pesv-deleted', handleActSocketEvent);
-	});
-
-	function handleActSocketEvent() {
-		cargarActActividades();
-		cargarActEstadisticas();
-	}
-
-	async function cargarDashboard() {
-		loading = true;
-		try {
-			const res = await obtenerDashboardPesv({ mes: filtros.mes, anio: filtros.anio });
-			dashboardData = res.data;
-		} catch (error: any) {
-			toast.error('Error cargando dashboard PESV');
-			console.error(error);
-		} finally {
-			loading = false;
-		}
-	}
-
-	async function cargarOpciones() {
-		try {
-			const res = await obtenerOpcionesPesv();
-			filterOptions = res.data;
-		} catch (error: any) {
-			console.error('Error cargando opciones:', error);
-		}
-	}
-
-	/**
-	 * Un solo sitio decide cuándo se vuelve a pedir al servidor.
-	 *
-	 * Antes lo pedían el selector de mes, los tres desplegables de la tabla, el
-	 * botón de limpiar y el cambio de vista, cada uno por su cuenta y con sus
-	 * propias condiciones. Aquí se separan las dos consultas por lo que
-	 * realmente depende de cada una: el panel solo del periodo, la tabla del
-	 * periodo Y de los tres identificadores.
-	 */
-	const firmaPeriodo = $derived(`${filtros.mes}-${filtros.anio}`);
-	const firmaTabla = $derived(
-		`${filtros.mes}-${filtros.anio}|${filtros.conductor}|${filtros.vehiculo}|${filtros.cliente}`
+	let filtros = $state(
+		leerDeParams(DEFS, new URLSearchParams(browser ? window.location.search : ''))
 	);
-	let montado = false;
 
 	$effect(() => {
-		void firmaPeriodo;
-		if (!montado) return;
-		void cargarDashboard();
-	});
-
-	$effect(() => {
-		void firmaTabla;
-		if (!montado) return;
-		/// Solo si la tabla está a la vista o ya se cargó una vez: cambiar de mes
-		/// desde el panel no tiene por qué traerse unos registros que nadie mira.
-		///
-		/// Las dos condiciones van dentro de `untrack` A PROPÓSITO. Sin ello el
-		/// efecto se suscribe a `registrosDiarios`, que es justo lo que la carga
-		/// modifica: pedir → llegan datos → volver a pedir, sin fin. Congelaba
-		/// la pestaña.
-		const debeCargar = untrack(
-			() => filtros.vista === 'tabla' || registrosDiarios.length > 0
-		);
-		if (!debeCargar) return;
-		void cargarRegistrosDiarios();
-	});
-
-	/// Los filtros a la URL. `escribir` no navega si ya dice lo mismo, que es lo
-	/// que impide que este efecto se realimente.
-	$effect(() => {
+		/// Depende de la FIRMA, no del objeto: un `$state` es un proxy y leer el
+		/// objeto no suscribe a sus propiedades, así que `void filtros` dejaría la
+		/// URL congelada mientras la vista sí cambia.
 		void firma(DEFS, filtros);
 		if (!browser) return;
-		estadoUrl.escribir(untrack(() => page.url), untrack(() => filtros));
+		estadoUrl.escribir(
+			untrack(() => page.url),
+			untrack(() => filtros)
+		);
 	});
 
-	/**
-	 * Las etiquetas de los tres desplegables.
-	 *
-	 * Se derivan del catálogo en vez de fijarse al elegir. Al llegar por enlace
-	 * con `?conductor=<uuid>` no había ningún clic que las pusiera: el filtro
-	 * estaba activo y el campo seguía diciendo «Conductor…», sin señal de que
-	 * la tabla venía recortada.
-	 */
-	const conductorLabel = $derived.by(() => {
-		const c = filterOptions?.conductores.find((x) => x.id === filtros.conductor);
-		return c ? `${c.nombre} ${c.apellido}` : '';
-	});
-	const placaLabel = $derived(
-		filterOptions?.vehiculos.find((v) => v.id === filtros.vehiculo)?.placa ?? ''
-	);
-	const clienteLabel = $derived(
-		filterOptions?.clientes.find((c) => c.id === filtros.cliente)?.nombre ?? ''
-	);
+	// ── Estado de carga por vista ────────────────────────────────────────
 
-	/// Cuántos filtros de la tabla hay puestos. La vista, el periodo y la
-	/// página quedan fuera: no son filtros.
-	const NO_SON_FILTROS = ['vista', 'mes', 'anio', 'pagina'] as const;
-	const filtrosActivos = $derived(contarActivos(DEFS, filtros, [...NO_SON_FILTROS]));
+	let permisos = $state<PermisosPesv | null>(null);
+	let errorPermisos = $state<string | null>(null);
 
-	function handleTablaFilterChange() {
-		/// Lo dispara el efecto de `firmaTabla`; se conserva el nombre porque lo
-		/// llaman nueve sitios del marcado.
-		filtros.pagina = 1;
+	let resumen = $state<ResumenPesv | null>(null);
+	let cargandoResumen = $state(false);
+	let errorResumen = $state<string | null>(null);
+
+	let cumplimiento = $state<RespuestaCumplimiento | null>(null);
+	let cargandoMatriz = $state(false);
+	let errorMatriz = $state<string | null>(null);
+
+	let evidencias = $state<EvidenciaBandeja[]>([]);
+	let cargandoEvidencias = $state(false);
+	let errorEvidencias = $state<string | null>(null);
+
+	let indicadores = $state<ResultadoIndicador[]>([]);
+	let cargandoIndicadores = $state(false);
+	let errorIndicadores = $state<string | null>(null);
+
+	let operacion = $state<RespuestaOperacion | null>(null);
+	let cargandoOperacion = $state(false);
+	let errorOperacion = $state<string | null>(null);
+
+	let documentos = $state<RespuestaDocumentos | null>(null);
+	let cargandoDocumentos = $state(false);
+	let errorDocumentos = $state<string | null>(null);
+
+	let cobertura = $state<RespuestaCobertura | null>(null);
+	let cargandoCobertura = $state(false);
+	let errorCobertura = $state<string | null>(null);
+
+	let actividades = $state<ActividadPesv[]>([]);
+	let metas = $state<MetaPesv[]>([]);
+	let programas = $state<ProgramaPesv[]>([]);
+	let formaciones = $state<FormacionPesv[]>([]);
+	let riesgos = $state<RiesgoPesv[]>([]);
+	let cargandoPlan = $state(false);
+	let errorPlan = $state<string | null>(null);
+
+	let historico = $state<RegistroDiarioPesv[]>([]);
+	let cargandoHistorico = $state(false);
+	let errorHistorico = $state<string | null>(null);
+
+	let pasoAbierto = $state<DetallePaso | null>(null);
+	let indicadorAbierto = $state<ResultadoIndicador | null>(null);
+	let creandoCiclo = $state(false);
+
+	/// Un `AbortController` por vista: cambiar de período mientras una consulta
+	/// está en vuelo cancela la anterior, y así una respuesta lenta no pisa a la
+	/// que el usuario acaba de pedir.
+	const controladores = new Map<string, AbortController>();
+
+	function controlador(clave: string): AbortSignal {
+		controladores.get(clave)?.abort();
+		const nuevo = new AbortController();
+		controladores.set(clave, nuevo);
+		return nuevo.signal;
 	}
 
-	// ==================== EXCESOS MODAL ====================
-	async function abrirModalExcesos() {
-		mostrarModalExceso = true;
-		excesoForm.mes = filtros.mes;
-		excesoForm.anio = filtros.anio;
-		await cargarExcesos();
+	function esCancelacion(error: unknown): boolean {
+		const e = error as { name?: string; code?: string };
+		return e?.name === 'CanceledError' || e?.name === 'AbortError' || e?.code === 'ERR_CANCELED';
 	}
 
-	async function cargarExcesos() {
-		try {
-			const res = await obtenerExcesos({ mes: excesoForm.mes, anio: excesoForm.anio });
-			excesosList = res.data;
-		} catch (e: any) {
-			toast.error('Error cargando excesos');
-		}
-	}
-
-	async function guardarExceso() {
-		if (!excesoForm.conductor_id || !excesoForm.vehiculo_id || excesoForm.cantidad < 0) {
-			toast.error('Completa todos los campos');
-			return;
-		}
-		try {
-			await crearOActualizarExceso(excesoForm);
-			toast.success('Exceso guardado correctamente');
-			await cargarExcesos();
-			excesoForm.conductor_id = '';
-			excesoForm.vehiculo_id = '';
-			excesoForm.cantidad = 0;
-			excesoForm.observaciones = '';
-		} catch (e: any) {
-			toast.error('Error guardando exceso');
-		}
-	}
-
-	async function borrarExceso(id: string) {
-		if (!confirm('¿Eliminar este registro de excesos?')) return;
-		try {
-			await eliminarExceso(id);
-			toast.success('Exceso eliminado');
-			await cargarExcesos();
-		} catch (e: any) {
-			toast.error('Error eliminando exceso');
-		}
-	}
-
-	// ==================== PREOPERACIONALES MODAL ====================
-	async function abrirModalPreop() {
-		mostrarModalPreop = true;
-		await cargarPreops();
-	}
-
-	async function cargarPreops() {
-		try {
-			const res = await obtenerPreoperacionales({ mes: filtros.mes, anio: filtros.anio });
-			preopList = res.data;
-		} catch (e: any) {
-			toast.error('Error cargando preoperacionales');
-		}
-	}
-
-	async function guardarPreop() {
-		if (!preopForm.conductor_id || !preopForm.vehiculo_id || !preopForm.fecha) {
-			toast.error('Completa todos los campos');
-			return;
-		}
-		try {
-			await crearOActualizarPreoperacional(preopForm);
-			toast.success('Preoperacional guardado');
-			await cargarPreops();
-			preopForm.conductor_id = '';
-			preopForm.vehiculo_id = '';
-			preopForm.fecha = new Date().toISOString().split('T')[0];
-			preopForm.realizado = true;
-			preopForm.observaciones = '';
-		} catch (e: any) {
-			toast.error('Error guardando preoperacional');
-		}
-	}
-
-	async function borrarPreop(id: string) {
-		if (!confirm('¿Eliminar este registro?')) return;
-		try {
-			await eliminarPreoperacional(id);
-			toast.success('Preoperacional eliminado');
-			await cargarPreops();
-		} catch (e: any) {
-			toast.error('Error eliminando preoperacional');
-		}
-	}
-
-	// ==================== HELPERS ====================
-	function getMesLabel(mes: number) {
-		return meses.find(m => m.value === mes)?.label || '';
-	}
-
-	function formatFecha(fecha: string) {
-		try {
-			const d = new Date(fecha + 'T12:00:00');
-			return d.toLocaleDateString('es-CO', { weekday: 'short', day: 'numeric', month: 'short' });
-		} catch { return fecha; }
-	}
-
-	function formatHoras(horas: number) {
-		if (!horas) return '0h';
-		const h = Math.floor(horas);
-		const m = Math.round((horas - h) * 60);
-		return m > 0 ? `${h}h ${m}m` : `${h}h`;
-	}
-
-	// ==================== REGISTROS DIARIOS (TABLA) ====================
-	async function cargarRegistrosDiarios() {
-		loadingRegistros = true;
-		try {
-			const filters: any = { mes: filtros.mes, anio: filtros.anio };
-			if (filtros.conductor) filters.conductor_id = filtros.conductor;
-			if (filtros.vehiculo) filters.vehiculo_id = filtros.vehiculo;
-			if (filtros.cliente) filters.cliente_id = filtros.cliente;
-			const res = await obtenerRegistrosDiarios(filters);
-			registrosDiarios = res.data;
-			/// Aquí NO se vuelve a la página 1: esta función también corre en la
-			/// carga inicial, y hacerlo se llevaba por delante el `?pagina=3` de
-			/// un enlace guardado. De eso se encarga el efecto de más abajo, que
-			/// solo actúa cuando los filtros CAMBIAN.
-		} catch (error: any) {
-			toast.error('Error cargando registros diarios');
-			console.error(error);
-		} finally {
-			loadingRegistros = false;
-		}
-	}
-
-	function cambiarVista(vista: VistaPesv) {
-		filtros.vista = vista;
-		if (vista === 'tabla' && registrosDiarios.length === 0) {
-			void cargarRegistrosDiarios();
-		}
-		if (vista === 'actividades' && !actDataLoaded) {
-			actLoading = true;
-			Promise.all([cargarActActividades(), cargarActUsuarios(), cargarActEstadisticas()]).then(() => {
-				actLoading = false;
-				actDataLoaded = true;
-			});
-		}
-	}
-
-	async function togglePreoperacional(registro: RegistroDiarioPesv) {
-		const nuevoValor = !registro.preoperacional_realizado;
-		try {
-			await actualizarRegistroDiaPesv(registro.id, { preoperacional_realizado: nuevoValor });
-			registro.preoperacional_realizado = nuevoValor;
-			registrosDiarios = registrosDiarios;
-			toast.success(nuevoValor ? 'Preoperacional marcado ✓' : 'Preoperacional desmarcado');
-		} catch (e: any) {
-			toast.error('Error actualizando preoperacional');
-		}
-	}
-
-	function abrirModalEdicion(registro: RegistroDiarioPesv) {
-		editingRegistro = registro;
-		editForm = {
-			horas_sueno: registro.horas_sueno,
-			excesos_velocidad_dia: registro.excesos_velocidad_dia || 0,
-			siniestros: registro.siniestros || 0,
-			siniestros_detalle: registro.siniestros_detalle || ''
+	function mensaje(error: unknown, respaldo: string): string {
+		const e = error as {
+			response?: { data?: { error?: { message?: string } } };
+			message?: string;
 		};
-		mostrarModalEdicion = true;
+		return e?.response?.data?.error?.message ?? e?.message ?? respaldo;
 	}
 
-	async function guardarEdicion() {
-		if (!editingRegistro) return;
-		savingEdit = true;
+	/** Período actual, con 0 como «no filtrado». */
+	const periodo = $derived({
+		anio: filtros.anio,
+		trimestre: filtros.trimestre || null,
+		mes: filtros.mes || null
+	});
+
+	// ── Cargas ───────────────────────────────────────────────────────────
+
+	$effect(() => {
+		if (!browser) return;
+		void cargarPermisos();
+	});
+
+	async function cargarPermisos() {
 		try {
-			await actualizarRegistroDiaPesv(editingRegistro.id, {
-				horas_sueno: editForm.horas_sueno,
-				excesos_velocidad_dia: editForm.excesos_velocidad_dia,
-				siniestros: editForm.siniestros,
-				siniestros_detalle: editForm.siniestros_detalle || null
-			});
-			// Update local data
-			const idx = registrosDiarios.findIndex(r => r.id === editingRegistro!.id);
-			if (idx >= 0) {
-				registrosDiarios[idx].horas_sueno = editForm.horas_sueno;
-				registrosDiarios[idx].excesos_velocidad_dia = editForm.excesos_velocidad_dia;
-				registrosDiarios[idx].siniestros = editForm.siniestros;
-				registrosDiarios[idx].siniestros_detalle = editForm.siniestros_detalle || null;
-				registrosDiarios = registrosDiarios;
-			}
-			toast.success('Registro actualizado correctamente');
-			mostrarModalEdicion = false;
-			editingRegistro = null;
-		} catch (e: any) {
-			toast.error('Error guardando cambios');
-		} finally {
-			savingEdit = false;
+			permisos = await obtenerPermisos(controlador('permisos'));
+			errorPermisos = null;
+		} catch (error) {
+			if (esCancelacion(error)) return;
+			errorPermisos = mensaje(error, 'No se pudieron consultar sus permisos sobre el módulo.');
 		}
 	}
 
 	/**
-	 * Limpia los filtros de la tabla y deja el periodo.
+	 * Carga solo la vista visible.
 	 *
-	 * El mes y el año no son filtros: eligen QUÉ se pide. Borrarlos mandaría al
-	 * usuario al mes en curso, que es otra consulta, no «ver todo».
-	 * `limpiar` ya vacía la búsqueda y la página; lo de aquí es el texto suelto
-	 * de los tres autocompletados, que no vive en la URL.
+	 * Cada vista carga por su cuenta y su skeleton no bloquea la ruta entera: el
+	 * resumen ya se ve mientras la matriz sigue viniendo.
 	 */
-	function limpiarFiltrosTabla() {
-		filtros = limpiar(DEFS, filtros, ['vista', 'mes', 'anio']);
-		conductorSearch = '';
-		placaSearch = '';
-		clienteSearch = '';
+	$effect(() => {
+		if (!browser) return;
+		const vista = filtros.vista;
+		const p = { anio: filtros.anio, trimestre: filtros.trimestre, mes: filtros.mes };
+		void p;
+
+		switch (vista) {
+			case 'resumen':
+				void cargarResumen();
+				break;
+			case 'matriz':
+				void cargarMatriz();
+				void cargarEvidencias();
+				break;
+			case 'indicadores':
+				void cargarIndicadores();
+				break;
+			case 'operacion':
+				void cargarOperacion();
+				break;
+			case 'documentos':
+				void cargarDocumentos();
+				break;
+			case 'plan':
+				void cargarPlan();
+				break;
+			case 'contratos':
+				void cargarCobertura();
+				break;
+			case 'historico':
+				void cargarHistorico();
+				break;
+		}
+	});
+
+	async function cargarResumen() {
+		cargandoResumen = true;
+		errorResumen = null;
+		try {
+			resumen = await obtenerResumen(periodo, controlador('resumen'));
+		} catch (error) {
+			if (esCancelacion(error)) return;
+			errorResumen = mensaje(error, 'No se pudo cargar el resumen del período.');
+		} finally {
+			cargandoResumen = false;
+		}
 	}
 
-	// ==================== ACTIVIDADES FUNCTIONS ====================
-	async function cargarActActividades() {
+	async function cargarMatriz() {
+		cargandoMatriz = true;
+		errorMatriz = null;
 		try {
-			const res = await listarActividadesPesv({
-				page: actCurrentPage,
-				limit: 50,
-				anio: actFiltroAnio || undefined,
-				estado: actFiltroEstado || undefined,
-				prioridad: actFiltroPrioridad || undefined,
-				frecuencia: actFiltroFrecuencia || undefined,
-				search: actFiltroSearch || undefined
+			cumplimiento = await obtenerCumplimiento(
+				{
+					anio: filtros.anio,
+					fase: filtros.fase || undefined,
+					estado: filtros.estado || undefined,
+					area: filtros.area || undefined,
+					q: filtros.q || undefined
+				},
+				controlador('matriz')
+			);
+		} catch (error) {
+			if (esCancelacion(error)) return;
+			cumplimiento = null;
+			errorMatriz = mensaje(error, 'No se pudo cargar la matriz de cumplimiento.');
+		} finally {
+			cargandoMatriz = false;
+		}
+	}
+
+	async function cargarEvidencias() {
+		cargandoEvidencias = true;
+		errorEvidencias = null;
+		try {
+			evidencias = await listarEvidencias(
+				{
+					anio: filtros.anio,
+					estado: filtros.estadoEvidencia || undefined,
+					mias: filtros.mias === 'si'
+				},
+				controlador('evidencias')
+			);
+		} catch (error) {
+			if (esCancelacion(error)) return;
+			evidencias = [];
+			errorEvidencias = mensaje(error, 'No se pudo cargar la bandeja de evidencias.');
+		} finally {
+			cargandoEvidencias = false;
+		}
+	}
+
+	async function cargarIndicadores() {
+		cargandoIndicadores = true;
+		errorIndicadores = null;
+		try {
+			const respuesta = await obtenerIndicadores(periodo, controlador('indicadores'));
+			indicadores = respuesta.indicadores;
+		} catch (error) {
+			if (esCancelacion(error)) return;
+			indicadores = [];
+			errorIndicadores = mensaje(error, 'No se pudieron calcular los indicadores.');
+		} finally {
+			cargandoIndicadores = false;
+		}
+	}
+
+	async function cargarOperacion() {
+		cargandoOperacion = true;
+		errorOperacion = null;
+		try {
+			operacion = await obtenerOperacion(periodo, controlador('operacion'));
+		} catch (error) {
+			if (esCancelacion(error)) return;
+			operacion = null;
+			errorOperacion = mensaje(error, 'No se pudo cargar la operación del período.');
+		} finally {
+			cargandoOperacion = false;
+		}
+	}
+
+	async function cargarDocumentos() {
+		cargandoDocumentos = true;
+		errorDocumentos = null;
+		try {
+			documentos = await obtenerDocumentos(
+				{
+					ambito: filtros.ambito || undefined,
+					estadoVigencia: filtros.estadoVigencia || undefined,
+					q: filtros.q || undefined
+				},
+				controlador('documentos')
+			);
+		} catch (error) {
+			if (esCancelacion(error)) return;
+			documentos = null;
+			errorDocumentos = mensaje(error, 'No se pudieron cargar los vencimientos documentales.');
+		} finally {
+			cargandoDocumentos = false;
+		}
+	}
+
+	async function cargarCobertura() {
+		cargandoCobertura = true;
+		errorCobertura = null;
+		try {
+			cobertura = await obtenerCoberturaFuec(
+				{ ...periodo, estado: filtros.estado || undefined },
+				controlador('cobertura')
+			);
+		} catch (error) {
+			if (esCancelacion(error)) return;
+			cobertura = null;
+			errorCobertura = mensaje(error, 'No se pudo evaluar la cobertura contractual.');
+		} finally {
+			cargandoCobertura = false;
+		}
+	}
+
+	async function cargarPlan() {
+		cargandoPlan = true;
+		errorPlan = null;
+		const senal = controlador('plan');
+		try {
+			/// Las actividades vienen del módulo que ya existía; el resto, del
+			/// centro. Se piden en paralelo: son independientes.
+			const [act, met, prog, form, ries] = await Promise.all([
+				listarActividadesPesv({
+					anio: filtros.anio,
+					estado: filtros.estado || undefined,
+					limit: 500
+				}),
+				listarMetas(filtros.anio, senal).catch(() => [] as MetaPesv[]),
+				listarProgramas(filtros.anio, senal).catch(() => [] as ProgramaPesv[]),
+				listarFormaciones(filtros.anio, senal).catch(() => [] as FormacionPesv[]),
+				listarRiesgos(filtros.anio, senal).catch(() => [] as RiesgoPesv[])
+			]);
+			actividades = act.actividades ?? [];
+			metas = met;
+			programas = prog;
+			formaciones = form;
+			riesgos = ries;
+		} catch (error) {
+			if (esCancelacion(error)) return;
+			errorPlan = mensaje(error, 'No se pudo cargar el plan anual.');
+		} finally {
+			cargandoPlan = false;
+		}
+	}
+
+	async function cargarHistorico() {
+		cargandoHistorico = true;
+		errorHistorico = null;
+		try {
+			const respuesta = await obtenerRegistrosDiarios({
+				mes: filtros.mes || hoy.getMonth() + 1,
+				anio: filtros.anio
 			});
-			actActividades = res.actividades;
-			actTotal = res.total;
-			actTotalPages = res.totalPages;
-		} catch (e) {
-			console.error(e);
-			toast.error('Error al cargar actividades');
-		}
-	}
-
-	async function cargarActUsuarios() {
-		try {
-			actUsuarios = await usuariosAPI.listar();
-		} catch (e) {
-			console.error(e);
-		}
-	}
-
-	async function cargarActEstadisticas() {
-		try {
-			actEstadisticas = await obtenerEstadisticasPesv(actFiltroAnio || undefined);
-		} catch (e) {
-			console.error(e);
-		}
-	}
-
-	function actAplicarFiltros() {
-		actCurrentPage = 1;
-		cargarActActividades();
-		cargarActEstadisticas();
-	}
-
-	function actLimpiarFiltros() {
-		actFiltroAnio = new Date().getFullYear();
-		actFiltroEstado = '';
-		actFiltroPrioridad = '';
-		actFiltroFrecuencia = '';
-		actFiltroSearch = '';
-		actAplicarFiltros();
-	}
-
-	function actHandleSearch() {
-		clearTimeout(actSearchTimeout);
-		actSearchTimeout = setTimeout(() => actAplicarFiltros(), 400);
-	}
-
-	function actCambiarPagina(p: number) {
-		if (p < 1 || p > actTotalPages) return;
-		actCurrentPage = p;
-		cargarActActividades();
-	}
-
-	async function actAbrirCrear() {
-		actModalMode = 'crear';
-		actForm = getEmptyActForm();
-		try {
-			actForm.numero = await obtenerSiguienteNumero(actFiltroAnio || undefined);
-		} catch (e) { /* keep default */ }
-		actForm.anio = actFiltroAnio || new Date().getFullYear();
-		actEditingId = null;
-		actShowModal = true;
-	}
-
-	function actAbrirEditar(act: ActividadPesv) {
-		actModalMode = 'editar';
-		actEditingId = act.id;
-		actForm = {
-			numero: act.numero,
-			unidad_programa: act.unidad_programa,
-			actividad: act.actividad,
-			alcance: act.alcance || '',
-			recursos: act.recursos || '',
-			responsable_planeacion: act.responsable_planeacion || '',
-			metodo_seguimiento: act.metodo_seguimiento || '',
-			frecuencia: act.frecuencia,
-			fecha_limite: act.fecha_limite ? act.fecha_limite.substring(0, 10) : '',
-			responsable_ejecucion_id: act.responsable_ejecucion_id || '',
-			estado: act.estado,
-			prioridad: act.prioridad,
-			fecha_ejecucion: act.fecha_ejecucion ? act.fecha_ejecucion.substring(0, 10) : '',
-			observacion: act.observacion || '',
-			anio: act.anio
-		};
-		actShowModal = true;
-	}
-
-	function actAbrirVer(act: ActividadPesv) {
-		actAbrirEditar(act);
-		actModalMode = 'ver';
-	}
-
-	async function actGuardar() {
-		if (!actForm.actividad.trim()) {
-			toast.error('El nombre de la actividad es requerido');
-			return;
-		}
-		if (!actForm.unidad_programa.trim()) {
-			toast.error('La unidad/programa es requerida');
-			return;
-		}
-		actSaving = true;
-		try {
-			if (actModalMode === 'crear') {
-				await crearActividadPesv(actForm);
-				toast.success('Actividad creada exitosamente');
-			} else {
-				await actualizarActividadPesv(actEditingId!, actForm);
-				toast.success('Actividad actualizada exitosamente');
-			}
-			actShowModal = false;
-			await cargarActActividades();
-			await cargarActEstadisticas();
-		} catch (e: any) {
-			toast.error(e?.response?.data?.error || 'Error al guardar');
+			historico = respuesta.data ?? [];
+		} catch (error) {
+			if (esCancelacion(error)) return;
+			historico = [];
+			errorHistorico = mensaje(error, 'No se pudieron cargar los registros históricos.');
 		} finally {
-			actSaving = false;
+			cargandoHistorico = false;
 		}
 	}
 
-	function actConfirmarEliminar(act: ActividadPesv) {
-		actDeletingId = act.id;
-		actDeletingName = act.actividad;
-		actShowDeleteModal = true;
+	// ── Acciones ─────────────────────────────────────────────────────────
+
+	function irA(vista: string, extra: Record<string, string> = {}) {
+		filtros = { ...filtros, vista: vista as Vista, ...(extra as Partial<typeof filtros>) };
 	}
 
-	async function actEjecutarEliminar() {
-		if (!actDeletingId) return;
-		actDeleting = true;
+	async function abrirPaso(paso: number) {
 		try {
-			await eliminarActividadPesv(actDeletingId);
-			toast.success('Actividad eliminada');
-			actShowDeleteModal = false;
-			actDeletingId = null;
-			await cargarActActividades();
-			await cargarActEstadisticas();
-		} catch (e: any) {
-			toast.error(e?.response?.data?.error || 'Error al eliminar');
+			pasoAbierto = await obtenerDetallePaso(paso, filtros.anio);
+			filtros = { ...filtros, paso };
+		} catch (error) {
+			toast.error(mensaje(error, 'No se pudo abrir el detalle del paso.'));
+		}
+	}
+
+	function cerrarPaso() {
+		pasoAbierto = null;
+		filtros = { ...filtros, paso: 0 };
+	}
+
+	async function refrescarPaso() {
+		if (!pasoAbierto) return;
+		const numeroPaso = pasoAbierto.stepNumber;
+		pasoAbierto = await obtenerDetallePaso(numeroPaso, filtros.anio);
+		await cargarMatriz();
+		await cargarEvidencias();
+	}
+
+	function abrirIndicador(codigo: string) {
+		indicadorAbierto = indicadores.find((i) => i.code === codigo) ?? null;
+		filtros = { ...filtros, indicador: codigo };
+	}
+
+	function cerrarIndicador() {
+		indicadorAbierto = null;
+		filtros = { ...filtros, indicador: '' };
+	}
+
+	async function crearCicloDelAnio() {
+		if (creandoCiclo) return;
+		creandoCiclo = true;
+		try {
+			await crearCiclo({ anio: filtros.anio });
+			toast.success(
+				`Ciclo ${filtros.anio} creado con los 24 pasos en estado pendiente. Ninguno nace cumplido.`
+			);
+			await cargarResumen();
+		} catch (error) {
+			toast.error(mensaje(error, 'No se pudo crear el ciclo.'));
 		} finally {
-			actDeleting = false;
+			creandoCiclo = false;
 		}
 	}
 
-	function getActEstadoInfo(estado: string) {
-		return ACT_ESTADOS.find(e => e.value === estado) || ACT_ESTADOS[0];
-	}
-
-	function getActPrioridadInfo(prioridad: string) {
-		return ACT_PRIORIDADES.find(p => p.value === prioridad) || ACT_PRIORIDADES[0];
-	}
-
-	function getActFrecuenciaLabel(f: string) {
-		return ACT_FRECUENCIAS.find(x => x.value === f)?.label || f;
-	}
-
-	function actFormatDate(d: string | null): string {
-		if (!d) return '—';
-		return new Date(d).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
-	}
-
-	// Calendar
-	function getActCalendarDays(mes: number, anio: number): (number | null)[] {
-		const firstDay = new Date(anio, mes, 1).getDay();
-		const daysInMonth = new Date(anio, mes + 1, 0).getDate();
-		const days: (number | null)[] = [];
-		for (let i = 0; i < firstDay; i++) days.push(null);
-		for (let i = 1; i <= daysInMonth; i++) days.push(i);
-		return days;
-	}
-
-	function actividadAppearsOnDay(act: ActividadPesv, day: number): boolean {
-		const targetDate = new Date(actCalAnio, actCalMes, day);
-		const anchor = act.fecha_limite ? new Date(act.fecha_limite) : (act.fecha_ejecucion ? new Date(act.fecha_ejecucion) : null);
-		if (!anchor) return false;
-		const anchorDate = new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate());
-		const target = new Date(targetDate.getFullYear(), targetDate.getMonth(), targetDate.getDate());
-		if (target < anchorDate) return false;
-		const diffMs = target.getTime() - anchorDate.getTime();
-		const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
-		switch (act.frecuencia) {
-			case 'UNICA': return diffDays === 0;
-			case 'DIARIA': return true;
-			case 'SEMANAL': return diffDays % 7 === 0;
-			case 'QUINCENAL': return diffDays % 14 === 0;
-			case 'MENSUAL':
-				if (target.getDate() !== anchorDate.getDate()) return false;
-				return target >= anchorDate;
-			case 'BIMESTRAL': {
-				if (target.getDate() !== anchorDate.getDate()) return false;
-				const mDiff = (target.getFullYear() - anchorDate.getFullYear()) * 12 + (target.getMonth() - anchorDate.getMonth());
-				return mDiff >= 0 && mDiff % 2 === 0;
-			}
-			case 'TRIMESTRAL': {
-				if (target.getDate() !== anchorDate.getDate()) return false;
-				const mDiff = (target.getFullYear() - anchorDate.getFullYear()) * 12 + (target.getMonth() - anchorDate.getMonth());
-				return mDiff >= 0 && mDiff % 3 === 0;
-			}
-			case 'SEMESTRAL': {
-				if (target.getDate() !== anchorDate.getDate()) return false;
-				const mDiff = (target.getFullYear() - anchorDate.getFullYear()) * 12 + (target.getMonth() - anchorDate.getMonth());
-				return mDiff >= 0 && mDiff % 6 === 0;
-			}
-			case 'ANUAL':
-				return target.getMonth() === anchorDate.getMonth() && target.getDate() === anchorDate.getDate();
-			default: return false;
+	async function revisarDoc(id: string, decision: 'APROBADO' | 'RECHAZADO') {
+		let observacion: string | undefined;
+		if (decision === 'RECHAZADO') {
+			/// Un rechazo exige observación —el servidor lo comprueba— así que se
+			/// pide antes de mandarlo y no se descubre con un 422.
+			const escrita = window.prompt('Motivo del rechazo (obligatorio):');
+			if (!escrita?.trim()) return;
+			observacion = escrita.trim();
+		}
+		try {
+			await revisarDocumento(id, decision, observacion);
+			toast.success(decision === 'APROBADO' ? 'Documento aprobado.' : 'Documento rechazado.');
+			await cargarDocumentos();
+		} catch (error) {
+			toast.error(mensaje(error, 'No se pudo registrar la decisión.'));
 		}
 	}
 
-	function getActividadesForDay(day: number): ActividadPesv[] {
-		return actActividades.filter(a => actividadAppearsOnDay(a, day));
+	async function ejecutarImportacion() {
+		try {
+			const informe = await importarExtractos({ simulacion: true });
+			toast.success(
+				`Simulación: ${informe.filasLeidas} filas leídas, ${informe.importadas} se importarían, ` +
+					`${informe.yaExistian} ya existen y ${informe.aConciliacion} irían a conciliación.`
+			);
+		} catch (error) {
+			toast.error(mensaje(error, 'No se pudo simular la importación.'));
+		}
 	}
 
-	function actPrevMonth() {
-		if (actCalMes === 0) { actCalMes = 11; actCalAnio--; }
-		else actCalMes--;
-	}
+	const MESES = [
+		'Todos los meses',
+		'Enero',
+		'Febrero',
+		'Marzo',
+		'Abril',
+		'Mayo',
+		'Junio',
+		'Julio',
+		'Agosto',
+		'Septiembre',
+		'Octubre',
+		'Noviembre',
+		'Diciembre'
+	];
 
-	function actNextMonth() {
-		if (actCalMes === 11) { actCalMes = 0; actCalAnio++; }
-		else actCalMes++;
-	}
-
-	function actIrHoy() {
-		actCalMes = new Date().getMonth();
-		actCalAnio = new Date().getFullYear();
-	}
-
-	// ==================== REACTIVE (TABLE) ====================
-	/// `coincide` exige todas las palabras en cualquiera de los campos y pasa
-	/// por alto las tildes. El `includes` anterior era de un solo término y
-	/// literal: buscar el nombre y el apellido de un conductor no daba nada.
-	const registrosFiltrados = $derived(
-		registrosDiarios.filter((r) =>
-			coincide(filtros.q, [
-				r.conductor.nombre,
-				r.vehiculo.placa,
-				r.cliente.nombre,
-				r.origen,
-				r.destino
-			])
+	const anios = $derived(
+		Array.from({ length: 6 }, (_, i) => hoy.getFullYear() - 4 + i).filter(
+			(a) => a <= hoy.getFullYear() + 1
 		)
 	);
-
-	const registrosPaginados = $derived(registrosFiltrados.slice((filtros.pagina - 1) * pageSize, filtros.pagina * pageSize));
-
-	/**
-	 * Vuelve a la página 1 cuando cambia lo que se está mirando.
-	 *
-	 * La clave arranca con los valores iniciales, no vacía: si no, la primera
-	 * pasada la vería «cambiada» y descartaría la página que venía en la URL.
-	 */
-	function claveFiltros(f: typeof filtros): string {
-		return [f.conductor, f.vehiculo, f.cliente, f.q, f.mes, f.anio].join('|');
-	}
-	let ultimaClave = untrack(() => claveFiltros(filtros));
-	const claveActual = $derived(claveFiltros(filtros));
-	$effect(() => {
-		if (claveActual === ultimaClave) return;
-		ultimaClave = claveActual;
-		filtros.pagina = 1;
-	});
-
-	/**
-	 * Si la página queda fuera de rango, salta a la última.
-	 *
-	 * La búsqueda es local: no pasa por `cargarRegistrosDiarios`, que es donde
-	 * se volvía a la página 1. Sin esto, buscar desde la página 3 dejaba la
-	 * cabecera diciendo «3 registros» sobre una tabla vacía, porque el corte
-	 * caía más allá del final.
-	 *
-	 * El guardia de carga evita que un enlace con `?pagina=3` se recorte a 1
-	 * antes de que lleguen los datos, cuando la lista aún está vacía.
-	 */
-	$effect(() => {
-		if (loadingRegistros || registrosDiarios.length === 0) return;
-		const ultima = Math.max(1, Math.ceil(registrosFiltrados.length / pageSize));
-		if (filtros.pagina > ultima) filtros.pagina = ultima;
-	});
-
-	// Reactive autocomplete filtered lists
-	const conductoresFiltrados = $derived(filterOptions
-		? filterOptions.conductores.filter(c => {
-			if (!conductorSearch) return true;
-			const q = conductorSearch.toLowerCase();
-			return `${c.nombre} ${c.apellido}`.toLowerCase().includes(q) || (c.numero_identificacion || '').toLowerCase().includes(q);
-		}).slice(0, 15)
-		: []);
-
-	const vehiculosFiltrados = $derived(filterOptions
-		? filterOptions.vehiculos.filter(v => {
-			if (!placaSearch) return true;
-			const q = placaSearch.toLowerCase();
-			return v.placa.toLowerCase().includes(q) || (v.marca || '').toLowerCase().includes(q) || (v.modelo || '').toLowerCase().includes(q);
-		}).slice(0, 15)
-		: []);
-
-	const clientesFiltrados = $derived(filterOptions
-		? filterOptions.clientes.filter(c => {
-			if (!clienteSearch) return true;
-			return c.nombre.toLowerCase().includes(clienteSearch.toLowerCase());
-		}).slice(0, 15)
-		: []);
-
-	// Reactive chart data
-	const vehiculosDiasData = $derived(dashboardData ? buildBarChartData(dashboardData.charts.vehiculosMasDiasTrabajados, 'Días Trabajados') : null);
-	const conductoresDiasData = $derived(dashboardData ? buildHorizontalBarData(dashboardData.charts.conductoresMasDiasTrabajados, 'Días Trabajados') : null);
-	const clientesDiasData = $derived(dashboardData ? buildHorizontalBarData(dashboardData.charts.clientesMasDiasTrabajados, 'Días Trabajados') : null);
-	const preoperacionalesData = $derived(dashboardData ? buildBarChartData(dashboardData.charts.vehiculosMasPreoperacionales, 'Preoperacionales') : null);
-	const excesosData = $derived(dashboardData ? buildBarChartData(dashboardData.charts.excesosVelocidadPorConductor, 'Excesos') : null);
-
-	// Actividades calendar reactive
-	const actCalDays = $derived(getActCalendarDays(actCalMes, actCalAnio));
 </script>
 
 <svelte:head>
-	<title>PESV - Dashboard</title>
+	<title>PESV · Centro de cumplimiento</title>
 </svelte:head>
 
-<div class="p-6 space-y-6 min-h-screen">
-	<!-- Header -->
-	<div class="mb-2" in:fade={{ duration: 600, delay: 100 }}>
-		<h1 class="text-2xl font-bold text-gray-900 mb-1">Dashboard PESV</h1>
-		<p class="text-gray-500 text-sm">Plan Estratégico de Seguridad Vial — Indicadores y análisis del periodo</p>
-	</div>
-
-	<!-- Filters Bar -->
-	<div
-		class="glass rounded-2xl p-4 border border-gray-200/50 flex flex-wrap items-center gap-4"
-		in:fly={{ y: -10, duration: 500, delay: 150 }}
-	>
-		<div class="flex items-center gap-2">
-			<svg class="w-5 h-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-			</svg>
-			<span class="text-sm font-medium text-gray-700">Periodo:</span>
-		</div>
-
-		<select
-			bind:value={filtros.mes}
-			class="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
-		>
-			{#each meses as m}
-				<option value={m.value}>{m.label}</option>
-			{/each}
-		</select>
-
-		<select
-			bind:value={filtros.anio}
-			class="px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all"
-		>
-			{#each anios as a}
-				<option value={a.value}>{a.label}</option>
-			{/each}
-		</select>
-
-		<div class="flex-1"></div>
-
-		<!-- Action buttons -->
-		<button
-			onclick={abrirModalExcesos}
-			class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl text-sm font-medium hover:from-red-600 hover:to-red-700 transition-all shadow-sm hover:shadow-md"
-		>
-			<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-			</svg>
-			Excesos Velocidad
-		</button>
-
-		<button
-			onclick={abrirModalPreop}
-			class="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl text-sm font-medium hover:from-orange-600 hover:to-orange-700 transition-all shadow-sm hover:shadow-md"
-		>
-			<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-			</svg>
-			Preoperacionales
-		</button>
-	</div>
-
-	<!-- Tab Switcher -->
-	<div class="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit" in:fade={{ duration: 400, delay: 200 }}>
-		<button
-			onclick={() => cambiarVista('dashboard')}
-			class="px-5 py-2 rounded-lg text-sm font-medium transition-all duration-200 {filtros.vista === 'dashboard' ? 'bg-white text-orange-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}"
-		>
-			<span class="flex items-center gap-2">
-				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-				</svg>
-				Dashboard
-			</span>
-		</button>
-		<button
-			onclick={() => cambiarVista('tabla')}
-			class="px-5 py-2 rounded-lg text-sm font-medium transition-all duration-200 {filtros.vista === 'tabla' ? 'bg-white text-orange-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}"
-		>
-			<span class="flex items-center gap-2">
-				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-				</svg>
-				Formato Diario
-			</span>
-		</button>
-		<button
-			onclick={() => cambiarVista('actividades')}
-			class="px-5 py-2 rounded-lg text-sm font-medium transition-all duration-200 {filtros.vista === 'actividades' ? 'bg-white text-orange-700 shadow-sm' : 'text-gray-500 hover:text-gray-700'}"
-		>
-			<span class="flex items-center gap-2">
-				<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-				</svg>
-				Actividades
-			</span>
-		</button>
-	</div>
-
-	{#if filtros.vista === 'dashboard'}
-	{#if loading}
-		<!-- Loading state -->
-		<div class="p-12 flex flex-col items-center justify-center" in:fade={{ duration: 300 }}>
-			<div class="relative">
-				<div class="w-16 h-16 border-4 border-orange-200 rounded-full animate-spin border-t-orange-600"></div>
-				<div class="absolute inset-0 flex items-center justify-center">
-					<svg class="w-6 h-6 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-					</svg>
-				</div>
-			</div>
-			<p class="mt-4 text-gray-500 text-sm">Cargando indicadores PESV...</p>
-		</div>
-	{:else if dashboardData}
-		<!-- KPI Cards -->
-		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5" in:fade={{ duration: 600, delay: 200 }}>
-			<!-- Conductores Activos -->
-			<div class="glass rounded-2xl p-5 border border-blue-200/50 group cursor-default relative overflow-hidden hover:shadow-lg transition-all duration-300">
-				<div class="absolute top-0 right-0 w-28 h-28 opacity-5">
-					<div class="w-full h-full bg-gradient-to-br from-blue-400 to-blue-600 rounded-full transform translate-x-8 -translate-y-8"></div>
-				</div>
-				<div class="flex items-center space-x-3 mb-3 relative z-10">
-					<div class="w-11 h-11 bg-gradient-to-br from-blue-400 to-blue-600 rounded-xl flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
-						<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a4 4 0 11-8 0 4 4 0 018 0z" />
-						</svg>
-					</div>
-					<div>
-						<h3 class="text-gray-900 font-semibold text-sm">Conductores</h3>
-						<p class="text-gray-500 text-xs">{getMesLabel(filtros.mes)} {filtros.anio}</p>
-					</div>
-				</div>
-				<div class="text-3xl font-bold text-gray-900">{dashboardData.kpis.totalConductores.toLocaleString()}</div>
-			</div>
-
-			<!-- Vehículos -->
-			<div class="glass rounded-2xl p-5 border border-orange-200/50 group cursor-default relative overflow-hidden hover:shadow-lg transition-all duration-300">
-				<div class="absolute top-0 right-0 w-28 h-28 opacity-5">
-					<div class="w-full h-full bg-gradient-to-br from-orange-400 to-orange-600 rounded-full transform translate-x-8 -translate-y-8"></div>
-				</div>
-				<div class="flex items-center space-x-3 mb-3 relative z-10">
-					<div class="w-11 h-11 bg-gradient-to-br from-orange-400 to-orange-600 rounded-xl flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
-						<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
-						</svg>
-					</div>
-					<div>
-						<h3 class="text-gray-900 font-semibold text-sm">Vehículos</h3>
-						<p class="text-gray-500 text-xs">{getMesLabel(filtros.mes)} {filtros.anio}</p>
-					</div>
-				</div>
-				<div class="text-3xl font-bold text-gray-900">{dashboardData.kpis.totalVehiculos.toLocaleString()}</div>
-			</div>
-
-			<!-- Servicios del mes -->
-			<div class="glass rounded-2xl p-5 border border-purple-200/50 group cursor-default relative overflow-hidden hover:shadow-lg transition-all duration-300">
-				<div class="absolute top-0 right-0 w-28 h-28 opacity-5">
-					<div class="w-full h-full bg-gradient-to-br from-purple-400 to-purple-600 rounded-full transform translate-x-8 -translate-y-8"></div>
-				</div>
-				<div class="flex items-center space-x-3 mb-3 relative z-10">
-					<div class="w-11 h-11 bg-gradient-to-br from-purple-400 to-purple-600 rounded-xl flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
-						<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-						</svg>
-					</div>
-					<div>
-						<h3 class="text-gray-900 font-semibold text-sm">Servicios</h3>
-						<p class="text-gray-500 text-xs">{getMesLabel(filtros.mes)} {filtros.anio}</p>
-					</div>
-				</div>
-				<div class="text-3xl font-bold text-gray-900">
-					{dashboardData.kpis.totalServicios.toLocaleString()}
-					<span class="text-sm font-normal text-orange-600 ml-1">({dashboardData.kpis.totalServiciosRealizados} realizados)</span>
-				</div>
-			</div>
-
-			<!-- Excesos de velocidad -->
-			<div class="glass rounded-2xl p-5 border border-orange-200/50 group cursor-default relative overflow-hidden hover:shadow-lg transition-all duration-300">
-				<div class="absolute top-0 right-0 w-28 h-28 opacity-5">
-					<div class="w-full h-full bg-gradient-to-br from-orange-400 to-orange-600 rounded-full transform translate-x-8 -translate-y-8"></div>
-				</div>
-				<div class="flex items-center space-x-3 mb-3 relative z-10">
-					<div class="w-11 h-11 bg-gradient-to-br from-orange-400 to-orange-600 rounded-xl flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
-						<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
-						</svg>
-					</div>
-					<div>
-						<h3 class="text-gray-900 font-semibold text-sm">Excesos Velocidad</h3>
-						<p class="text-gray-500 text-xs">Registrados</p>
-					</div>
-				</div>
-				<div class="text-3xl font-bold text-gray-900">{dashboardData.kpis.totalExcesos}</div>
-			</div>
-		</div>
-
-		<!-- Second row KPIs -->
-		<div class="grid grid-cols-1 sm:grid-cols-2 gap-5" in:fade={{ duration: 600, delay: 300 }}>
-			<!-- Preoperacionales -->
-			<div class="glass rounded-2xl p-5 border border-orange-200/50 group cursor-default relative overflow-hidden hover:shadow-lg transition-all duration-300">
-				<div class="absolute top-0 right-0 w-28 h-28 opacity-5">
-					<div class="w-full h-full bg-gradient-to-br from-orange-400 to-teal-600 rounded-full transform translate-x-8 -translate-y-8"></div>
-				</div>
-				<div class="flex items-center justify-between">
-					<div class="flex items-center space-x-3 relative z-10">
-						<div class="w-11 h-11 bg-gradient-to-br from-orange-400 to-teal-600 rounded-xl flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
-							<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-							</svg>
-						</div>
-						<div>
-							<h3 class="text-gray-900 font-semibold text-sm">Preoperacionales Realizados</h3>
-							<p class="text-gray-500 text-xs">Este mes</p>
-						</div>
-					</div>
-					<div class="text-right">
-						<div class="text-3xl font-bold text-gray-900">{dashboardData.kpis.totalPreoperacionales}</div>
-					</div>
-				</div>
-			</div>
-
-			<!-- Porcentaje preoperacional -->
-			<div class="glass rounded-2xl p-5 border border-blue-200/50 group cursor-default relative overflow-hidden hover:shadow-lg transition-all duration-300">
-				<div class="absolute top-0 right-0 w-28 h-28 opacity-5">
-					<div class="w-full h-full bg-gradient-to-br from-blue-400 to-indigo-600 rounded-full transform translate-x-8 -translate-y-8"></div>
-				</div>
-				<div class="flex items-center justify-between">
-					<div class="flex items-center space-x-3 relative z-10">
-						<div class="w-11 h-11 bg-gradient-to-br from-blue-400 to-indigo-600 rounded-xl flex items-center justify-center shadow-sm group-hover:scale-105 transition-transform">
-							<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
-							</svg>
-						</div>
-						<div>
-							<h3 class="text-gray-900 font-semibold text-sm">Cumplimiento Preoperacional</h3>
-							<p class="text-gray-500 text-xs">% estimado del mes</p>
-						</div>
-					</div>
-					<div class="text-right">
-						<div class="text-3xl font-bold" class:text-orange-600={dashboardData.kpis.porcentajePreoperacional >= 70} class:text-orange-500={dashboardData.kpis.porcentajePreoperacional >= 40 && dashboardData.kpis.porcentajePreoperacional < 70} class:text-red-500={dashboardData.kpis.porcentajePreoperacional < 40}>
-							{dashboardData.kpis.porcentajePreoperacional}%
-						</div>
-					</div>
-				</div>
-				<!-- Progress bar -->
-				<div class="mt-3 w-full bg-gray-200 rounded-full h-2">
-					<div
-						class="h-2 rounded-full transition-all duration-700"
-						class:bg-orange-500={dashboardData.kpis.porcentajePreoperacional >= 70}
-						class:bg-orange-400={dashboardData.kpis.porcentajePreoperacional >= 40 && dashboardData.kpis.porcentajePreoperacional < 70}
-						class:bg-red-400={dashboardData.kpis.porcentajePreoperacional < 40}
-						style="width: {dashboardData.kpis.porcentajePreoperacional}%"
-					></div>
-				</div>
-			</div>
-		</div>
-
-		<!-- Charts Grid -->
-		<div class="grid grid-cols-1 lg:grid-cols-2 gap-6" in:fly={{ y: 20, duration: 600, delay: 400 }}>
-			<!-- Vehículos con más servicios -->
-			<div class="glass rounded-2xl p-6 border border-gray-200/50">
-				<div class="flex items-center gap-3 mb-5">
-					<div class="w-9 h-9 bg-gradient-to-br from-orange-400 to-orange-600 rounded-lg flex items-center justify-center">
-						<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
-						</svg>
-					</div>
-					<div>
-						<h3 class="text-base font-semibold text-gray-900">Vehículos con más Días Trabajados</h3>
-						<p class="text-xs text-gray-500">Top 8 del periodo (planillas)</p>
-					</div>
-				</div>
-				<div class="h-72">
-					{#if vehiculosDiasData && dashboardData.charts.vehiculosMasDiasTrabajados.length > 0}
-						<Bar data={vehiculosDiasData} options={barOptions} />
-					{:else}
-						<div class="h-full flex items-center justify-center bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-xl">
-							<p class="text-gray-400 text-sm">Sin datos para este periodo</p>
-						</div>
-					{/if}
-				</div>
-			</div>
-
-			<!-- Conductores con más servicios -->
-			<div class="glass rounded-2xl p-6 border border-gray-200/50">
-				<div class="flex items-center gap-3 mb-5">
-					<div class="w-9 h-9 bg-gradient-to-br from-blue-400 to-blue-600 rounded-lg flex items-center justify-center">
-						<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1z" />
-						</svg>
-					</div>
-					<div>
-						<h3 class="text-base font-semibold text-gray-900">Conductores con más Días Trabajados</h3>
-						<p class="text-xs text-gray-500">Top 8 del periodo (planillas)</p>
-					</div>
-				</div>
-				<div class="h-72">
-					{#if conductoresDiasData && dashboardData.charts.conductoresMasDiasTrabajados.length > 0}
-						<Bar data={conductoresDiasData} options={horizontalBarOptions} />
-					{:else}
-						<div class="h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-xl">
-							<p class="text-gray-400 text-sm">Sin datos para este periodo</p>
-						</div>
-					{/if}
-				</div>
-			</div>
-
-			<!-- Clientes con más servicios realizados -->
-			<div class="glass rounded-2xl p-6 border border-gray-200/50">
-				<div class="flex items-center gap-3 mb-5">
-					<div class="w-9 h-9 bg-gradient-to-br from-purple-400 to-purple-600 rounded-lg flex items-center justify-center">
-						<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-						</svg>
-					</div>
-					<div>
-						<h3 class="text-base font-semibold text-gray-900">Clientes con más Días Trabajados</h3>
-						<p class="text-xs text-gray-500">Top 8 del periodo (planillas)</p>
-					</div>
-				</div>
-				<div class="h-72">
-					{#if clientesDiasData && dashboardData.charts.clientesMasDiasTrabajados.length > 0}
-						<Bar data={clientesDiasData} options={horizontalBarOptions} />
-					{:else}
-						<div class="h-full flex items-center justify-center bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-xl">
-							<p class="text-gray-400 text-sm">Sin datos para este periodo</p>
-						</div>
-					{/if}
-				</div>
-			</div>
-
-			<!-- Vehículos con más preoperacionales -->
-			<div class="glass rounded-2xl p-6 border border-gray-200/50">
-				<div class="flex items-center gap-3 mb-5">
-					<div class="w-9 h-9 bg-gradient-to-br from-teal-400 to-teal-600 rounded-lg flex items-center justify-center">
-						<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-						</svg>
-					</div>
-					<div>
-						<h3 class="text-base font-semibold text-gray-900">Vehículos con más Preoperacionales</h3>
-						<p class="text-xs text-gray-500">Inspecciones realizadas</p>
-					</div>
-				</div>
-				<div class="h-72">
-					{#if preoperacionalesData && dashboardData.charts.vehiculosMasPreoperacionales.length > 0}
-						<Bar data={preoperacionalesData} options={barOptions} />
-					{:else}
-						<div class="h-full flex items-center justify-center bg-gradient-to-br from-teal-50 to-teal-100/50 rounded-xl">
-							<p class="text-gray-400 text-sm">Sin datos para este periodo</p>
-						</div>
-					{/if}
-				</div>
-			</div>
-
-			<!-- Excesos de velocidad por conductor -->
-			<div class="glass rounded-2xl p-6 border border-gray-200/50">
-				<div class="flex items-center gap-3 mb-5">
-					<div class="w-9 h-9 bg-gradient-to-br from-red-400 to-red-600 rounded-lg flex items-center justify-center">
-						<svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-						</svg>
-					</div>
-					<div>
-						<h3 class="text-base font-semibold text-gray-900">Excesos de Velocidad por Conductor</h3>
-						<p class="text-xs text-gray-500">Registros del periodo</p>
-					</div>
-				</div>
-				<div class="h-72">
-					{#if excesosData && dashboardData.charts.excesosVelocidadPorConductor.length > 0}
-						<Bar data={excesosData} options={barOptions} />
-					{:else}
-						<div class="h-full flex items-center justify-center bg-gradient-to-br from-red-50 to-red-100/50 rounded-xl">
-							<p class="text-gray-400 text-sm">Sin excesos registrados este periodo</p>
-						</div>
-					{/if}
-				</div>
-			</div>
-		</div>
-	{/if}
-	<!-- end dashboard if/else -->
-
-	{:else if filtros.vista === 'tabla'}
-	<!-- ==================== TABLE VIEW ==================== -->
-	<div class="space-y-4" in:fade={{ duration: 400 }}>
-		<!-- Table Filters -->
-		<div class="glass rounded-2xl p-4 border border-gray-200/50">
-			<div class="space-y-3">
-				<!-- Búsqueda. Es local sobre lo que ya llegó del servidor: los
-				     tres desplegables de abajo sí vuelven a pedir. -->
-				<BuscadorLista
-					bind:valor={filtros.q}
-					onBuscar={(termino) => (filtros.q = termino)}
-					placeholder="Buscar conductor, placa, cliente, origen..."
-				/>
-
-				<!-- Filter row -->
-				<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-
-				<!-- Conductor filter -->
-				{#if filterOptions}
-					<!-- Conductor autocomplete -->
-					<div class="relative w-full">
-						<div class="relative">
-							<svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-							</svg>
-							<input
-								type="text"
-								bind:value={conductorSearch}
-								onfocus={() => { conductorDropdownOpen = true; }}
-								onblur={() => { setTimeout(() => { conductorDropdownOpen = false; conductorSearch = ''; }, 150); }}
-								oninput={() => { conductorDropdownOpen = true; if (filtros.conductor) { filtros.conductor = ''; handleTablaFilterChange(); } }}
-								placeholder={conductorLabel || 'Conductor...'}
-								class="w-full pl-8 pr-7 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all {filtros.conductor ? 'border-orange-400 bg-orange-50/40' : 'border-gray-200'}"
-							/>
-							{#if filtros.conductor}
-								<button
-									onclick={() => { filtros.conductor = ''; conductorSearch = ''; handleTablaFilterChange(); }}
-									class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
-									title="Limpiar conductor"
-								>✕</button>
-							{/if}
-						</div>
-						{#if conductorDropdownOpen && conductoresFiltrados.length > 0}
-							<div class="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
-								{#each conductoresFiltrados as c}
-									<button
-										onmousedown={(e) => {
-							e.preventDefault();
-											filtros.conductor = c.id;
-											conductorSearch = '';
-											conductorDropdownOpen = false;
-											handleTablaFilterChange();
-										}}
-										class="w-full px-3 py-2 text-left text-sm hover:bg-orange-50 transition-colors flex items-center gap-2 {filtros.conductor === c.id ? 'bg-orange-50 text-orange-700 font-medium' : 'text-gray-700'}"
-									>
-										<span class="truncate">{c.nombre} {c.apellido}</span>
-										{#if c.numero_identificacion}
-											<span class="text-xs text-gray-400 ml-auto flex-shrink-0">{c.numero_identificacion}</span>
-										{/if}
-									</button>
-								{/each}
-							</div>
-						{/if}
-					</div>
-
-					<!-- Placa autocomplete -->
-					<div class="relative w-full">
-						<div class="relative">
-							<svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z" />
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10m10 0h4m-4 0H9m4 0a2 2 0 110 4 2 2 0 010-4z" />
-							</svg>
-							<input
-								type="text"
-								bind:value={placaSearch}
-								onfocus={() => { placaDropdownOpen = true; }}
-								onblur={() => { setTimeout(() => { placaDropdownOpen = false; placaSearch = ''; }, 150); }}
-								oninput={() => { placaDropdownOpen = true; if (filtros.vehiculo) { filtros.vehiculo = ''; handleTablaFilterChange(); } }}
-								placeholder={placaLabel || 'Placa...'}
-								class="w-full pl-8 pr-7 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all {filtros.vehiculo ? 'border-orange-400 bg-orange-50/40' : 'border-gray-200'}"
-							/>
-							{#if filtros.vehiculo}
-								<button
-									onclick={() => { filtros.vehiculo = ''; placaSearch = ''; handleTablaFilterChange(); }}
-									class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
-									title="Limpiar placa"
-								>✕</button>
-							{/if}
-						</div>
-						{#if placaDropdownOpen && vehiculosFiltrados.length > 0}
-							<div class="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
-								{#each vehiculosFiltrados as v}
-									<button
-										onmousedown={(e) => {
-							e.preventDefault();
-											filtros.vehiculo = v.id;
-											placaSearch = '';
-											placaDropdownOpen = false;
-											handleTablaFilterChange();
-										}}
-										class="w-full px-3 py-2 text-left text-sm hover:bg-orange-50 transition-colors {filtros.vehiculo === v.id ? 'bg-orange-50 text-orange-700 font-medium' : 'text-gray-700'}"
-									>
-										<span class="font-mono">{v.placa}</span>
-										{#if v.marca || v.modelo}
-											<span class="text-xs text-gray-400 ml-2">{v.marca || ''} {v.modelo || ''}</span>
-										{/if}
-									</button>
-								{/each}
-							</div>
-						{/if}
-					</div>
-
-					<!-- Cliente autocomplete -->
-					<div class="relative w-full">
-						<div class="relative">
-							<svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-							</svg>
-							<input
-								type="text"
-								bind:value={clienteSearch}
-								onfocus={() => { clienteDropdownOpen = true; }}
-								onblur={() => { setTimeout(() => { clienteDropdownOpen = false; clienteSearch = ''; }, 150); }}
-								oninput={() => { clienteDropdownOpen = true; if (filtros.cliente) { filtros.cliente = ''; handleTablaFilterChange(); } }}
-								placeholder={clienteLabel || 'Cliente...'}
-								class="w-full pl-8 pr-7 py-2 bg-white border rounded-xl text-sm focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition-all {filtros.cliente ? 'border-orange-400 bg-orange-50/40' : 'border-gray-200'}"
-							/>
-							{#if filtros.cliente}
-								<button
-									onclick={() => { filtros.cliente = ''; clienteSearch = ''; handleTablaFilterChange(); }}
-									class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 transition-colors"
-									title="Limpiar cliente"
-								>✕</button>
-							{/if}
-						</div>
-						{#if clienteDropdownOpen && clientesFiltrados.length > 0}
-							<div class="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
-								{#each clientesFiltrados as c}
-									<button
-										onmousedown={(e) => {
-							e.preventDefault();
-											filtros.cliente = c.id;
-											clienteSearch = '';
-											clienteDropdownOpen = false;
-											handleTablaFilterChange();
-										}}
-										class="w-full px-3 py-2 text-left text-sm hover:bg-orange-50 transition-colors truncate {filtros.cliente === c.id ? 'bg-orange-50 text-orange-700 font-medium' : 'text-gray-700'}"
-									>
-										{c.nombre}
-									</button>
-								{/each}
-							</div>
-						{/if}
-					</div>
+<div class="pagina">
+	<header class="cabecera">
+		<div class="titulo-zona">
+			<h1>Plan Estratégico de Seguridad Vial</h1>
+			<p class="subtitulo">
+				Centro de cumplimiento y trazabilidad · nivel <strong>Avanzado</strong> · 24 pasos y 13
+				indicadores
+				{#if resumen?.ciclo}
+					· ciclo {resumen.ciclo.anio} ({resumen.ciclo.estado.toLowerCase()})
+					{#if resumen.ciclo.lider}· líder: {resumen.ciclo.lider}{/if}
 				{/if}
-				</div>
-
-				{#if filtrosActivos > 0}
-					<div class="flex justify-end">
-						<button
-							onclick={limpiarFiltrosTabla}
-							class="px-3 py-2 text-xs text-gray-500 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-							title="Limpiar filtros"
-						>
-							✕ Limpiar filtros
-						</button>
-					</div>
-				{/if}
-			</div>
-			<div class="mt-2 flex items-center justify-between">
-				<p class="text-xs text-gray-400">{registrosFiltrados.length} registros · {getMesLabel(filtros.mes)} {filtros.anio}</p>
-			</div>
-		</div>
-
-		<!-- Table -->
-		{#if loadingRegistros}
-			<div class="p-12 flex flex-col items-center justify-center">
-				<div class="w-12 h-12 border-4 border-orange-200 rounded-full animate-spin border-t-orange-600"></div>
-				<p class="mt-3 text-gray-500 text-sm">Cargando registros diarios...</p>
-			</div>
-		{:else if registrosFiltrados.length === 0}
-			<div class="glass rounded-2xl p-12 border border-gray-200/50 text-center">
-				<svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-				</svg>
-				<p class="text-gray-400 text-sm">No hay registros diarios para este periodo</p>
-				<p class="text-gray-300 text-xs mt-1">Ajusta los filtros o el periodo seleccionado</p>
-			</div>
-		{:else}
-			<div class="glass rounded-2xl border border-gray-200/50 overflow-hidden">
-				<div class="overflow-x-auto">
-					<table class="w-full text-sm">
-						<thead>
-							<tr class="bg-gradient-to-r from-orange-50 to-teal-50 border-b border-gray-200">
-								<th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Día</th>
-								<th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Conductor</th>
-								<th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Placa</th>
-								<th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Cliente</th>
-								<th class="px-3 py-3 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Origen / Destino</th>
-								<th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Servicios</th>
-								<th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">T. Conducción</th>
-								<th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">T. Disponib.</th>
-								<th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Horas Sueño</th>
-								<th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Excesos Vel.</th>
-								<th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Preop.</th>
-								<th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Siniestros</th>
-								<th class="px-3 py-3 text-center text-xs font-semibold text-gray-600 uppercase tracking-wider">Acciones</th>
-							</tr>
-						</thead>
-						<tbody class="divide-y divide-gray-100">
-							{#each registrosPaginados as registro, i}
-								<tr class="hover:bg-orange-50/30 transition-colors {i % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}">
-									<!-- Día -->
-									<td class="px-3 py-2.5">
-										<div class="flex flex-col">
-											<span class="font-semibold text-gray-900">{registro.dia}</span>
-											<span class="text-[10px] text-gray-400">{formatFecha(registro.fecha)}</span>
-										</div>
-									</td>
-									<!-- Conductor -->
-									<td class="px-3 py-2.5">
-										<div class="flex flex-col">
-											<span class="font-medium text-gray-800 text-xs">{registro.conductor.nombre}</span>
-											{#if registro.conductor.numero_identificacion}
-												<span class="text-[10px] text-gray-400">{registro.conductor.numero_identificacion}</span>
-											{/if}
-										</div>
-									</td>
-									<!-- Placa -->
-									<td class="px-3 py-2.5">
-										<span class="inline-flex items-center px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 text-xs font-mono font-semibold">
-											{registro.vehiculo.placa}
-										</span>
-									</td>
-									<!-- Cliente -->
-									<td class="px-3 py-2.5 max-w-[150px]">
-										<span class="text-xs text-gray-700 truncate block">{registro.cliente.nombre || '—'}</span>
-									</td>
-									<!-- Origen / Destino -->
-									<td class="px-3 py-2.5 max-w-[180px]">
-										{#if registro.origen || registro.destino}
-											<div class="flex flex-col text-xs">
-												<span class="text-gray-600 truncate">{registro.origen || '—'}</span>
-												<span class="text-[10px] text-gray-400">→ {registro.destino || '—'}</span>
-											</div>
-										{:else}
-											<span class="text-gray-300 text-xs">—</span>
-										{/if}
-									</td>
-									<!-- N° Servicios -->
-									<td class="px-3 py-2.5 text-center">
-										<span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-purple-50 text-purple-700 text-xs font-bold">
-											{registro.num_servicios}
-										</span>
-									</td>
-									<!-- Tiempo Conducción -->
-									<td class="px-3 py-2.5 text-center">
-										<span class="text-xs text-gray-700">{formatHoras(registro.tiempo_conduccion)}</span>
-									</td>
-									<!-- Tiempo Disponibilidad -->
-									<td class="px-3 py-2.5 text-center">
-										<span class="text-xs text-gray-500">{formatHoras(registro.tiempo_disponibilidad)}</span>
-									</td>
-									<!-- Horas Sueño -->
-									<td class="px-3 py-2.5 text-center">
-										{#if registro.horas_sueno !== null && registro.horas_sueno !== undefined}
-											<span class="text-xs font-medium {registro.horas_sueno < 6 ? 'text-red-600' : registro.horas_sueno < 8 ? 'text-orange-500' : 'text-orange-600'}">
-												{registro.horas_sueno}h
-											</span>
-										{:else}
-											<span class="text-gray-300 text-xs">—</span>
-										{/if}
-									</td>
-									<!-- Excesos Velocidad -->
-									<td class="px-3 py-2.5 text-center">
-										{#if registro.excesos_velocidad_dia > 0}
-											<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-red-50 text-red-600 text-xs font-bold">
-												{registro.excesos_velocidad_dia}
-											</span>
-										{:else}
-											<span class="text-orange-500 text-xs">0</span>
-										{/if}
-									</td>
-									<!-- Preoperacional Toggle -->
-									<td class="px-3 py-2.5 text-center">
-										<button
-											onclick={() => togglePreoperacional(registro)}
-											class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-1 {registro.preoperacional_realizado ? 'bg-orange-500' : 'bg-gray-300'}"
-											title={registro.preoperacional_realizado ? 'Preoperacional realizado' : 'Preoperacional no realizado'}
-										>
-											<span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform duration-200 {registro.preoperacional_realizado ? 'translate-x-[18px]' : 'translate-x-[3px]'}"></span>
-										</button>
-									</td>
-									<!-- Siniestros -->
-									<td class="px-3 py-2.5 text-center">
-										{#if registro.siniestros > 0}
-											<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-orange-50 text-orange-600 text-xs font-bold" title={registro.siniestros_detalle || ''}>
-												{registro.siniestros}
-											</span>
-										{:else}
-											<span class="text-orange-500 text-xs">0</span>
-										{/if}
-									</td>
-									<!-- Acciones -->
-									<td class="px-3 py-2.5 text-center">
-										<button
-											onclick={() => abrirModalEdicion(registro)}
-											class="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
-											title="Editar registro PESV"
-										>
-											<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-											</svg>
-										</button>
-									</td>
-								</tr>
-							{/each}
-						</tbody>
-					</table>
-				</div>
-
-				<!-- Paginación. El bloque anterior calculaba a mano una ventana de
-				     siete botones con tres condiciones; `PaginadorLista` lo hace
-				     igual en todas las listas y añade los saltos a los extremos. -->
-				<PaginadorLista
-					pagina={filtros.pagina}
-					total={registrosFiltrados.length}
-					porPagina={pageSize}
-					nombreItems="registros"
-					cargando={loadingRegistros}
-					onCambiar={(p) => (filtros.pagina = p)}
-				/>
-			</div>
-		{/if}
-	</div>
-	{:else if filtros.vista === 'actividades'}
-	<!-- ==================== ACTIVIDADES VIEW ==================== -->
-	<div class="actividades-pesv-section" in:fade={{ duration: 300 }}>
-		<!-- Header -->
-		<div class="act-page-header">
-			<div class="act-header-left">
-				<div>
-					<h2 class="act-title">📋 Actividades</h2>
-					<p class="act-subtitle">Plan Estratégico de Seguridad Vial — {actFiltroAnio}</p>
-				</div>
-			</div>
-			<div class="act-header-actions">
-				<div class="act-vista-toggle">
-					<button class:active={actVistaInterna === 'listado'} onclick={() => actVistaInterna = 'listado'}>
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
-						Listado
-					</button>
-					<button class:active={actVistaInterna === 'calendario'} onclick={() => actVistaInterna = 'calendario'}>
-						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-						Calendario
-					</button>
-				</div>
-				<button class="act-btn-primary" onclick={actAbrirCrear}>
-					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
-					Nueva Actividad
-				</button>
-			</div>
-		</div>
-
-		<!-- KPIs -->
-		{#if actEstadisticas}
-			<div class="act-kpis-row" in:fly={{ y: 20, duration: 300, delay: 100 }}>
-				<div class="act-kpi-card">
-					<span class="act-kpi-icon">📊</span>
-					<div class="act-kpi-info">
-						<span class="act-kpi-value">{actEstadisticas.total}</span>
-						<span class="act-kpi-label">Total</span>
-					</div>
-				</div>
-				<div class="act-kpi-card">
-					<span class="act-kpi-icon">⏳</span>
-					<div class="act-kpi-info">
-						<span class="act-kpi-value">{actEstadisticas.porEstado?.PENDIENTE || 0}</span>
-						<span class="act-kpi-label">Pendientes</span>
-					</div>
-				</div>
-				<div class="act-kpi-card">
-					<span class="act-kpi-icon">🔄</span>
-					<div class="act-kpi-info">
-						<span class="act-kpi-value">{actEstadisticas.porEstado?.EN_PROGRESO || 0}</span>
-						<span class="act-kpi-label">En Progreso</span>
-					</div>
-				</div>
-				<div class="act-kpi-card">
-					<span class="act-kpi-icon">✅</span>
-					<div class="act-kpi-info">
-						<span class="act-kpi-value">{actEstadisticas.porEstado?.COMPLETADA || 0}</span>
-						<span class="act-kpi-label">Completadas</span>
-					</div>
-				</div>
-				<div class="act-kpi-card">
-					<span class="act-kpi-icon">⚠️</span>
-					<div class="act-kpi-info">
-						<span class="act-kpi-value">{actEstadisticas.porEstado?.VENCIDA || 0}</span>
-						<span class="act-kpi-label">Vencidas</span>
-					</div>
-				</div>
-			</div>
-		{/if}
-
-		<!-- Filtros -->
-		<div class="act-filtros-bar" in:fly={{ y: 20, duration: 300, delay: 150 }}>
-			<div class="act-filtro-group">
-				<input type="number" bind:value={actFiltroAnio} placeholder="Año" min="2020" max="2030" class="act-input-sm" onchange={actAplicarFiltros} />
-			</div>
-			<div class="act-filtro-group">
-				<select bind:value={actFiltroEstado} class="act-input-sm" onchange={actAplicarFiltros}>
-					<option value="">Todos los estados</option>
-					{#each ACT_ESTADOS as e}
-						<option value={e.value}>{e.label}</option>
-					{/each}
-				</select>
-			</div>
-			<div class="act-filtro-group">
-				<select bind:value={actFiltroPrioridad} class="act-input-sm" onchange={actAplicarFiltros}>
-					<option value="">Todas las prioridades</option>
-					{#each ACT_PRIORIDADES as p}
-						<option value={p.value}>{p.label}</option>
-					{/each}
-				</select>
-			</div>
-			<div class="act-filtro-group">
-				<select bind:value={actFiltroFrecuencia} class="act-input-sm" onchange={actAplicarFiltros}>
-					<option value="">Todas las frecuencias</option>
-					{#each ACT_FRECUENCIAS as f}
-						<option value={f.value}>{f.label}</option>
-					{/each}
-				</select>
-			</div>
-			<div class="act-filtro-group act-search-group">
-				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
-				<input type="text" bind:value={actFiltroSearch} placeholder="Buscar actividad..." class="act-input-sm" oninput={actHandleSearch} />
-			</div>
-			{#if actFiltroEstado || actFiltroPrioridad || actFiltroFrecuencia || actFiltroSearch}
-				<button class="act-btn-clear" onclick={actLimpiarFiltros}>✕ Limpiar</button>
+			</p>
+			{#if resumen}
+				<p class="corte">Datos al {formatearInstante(resumen.fechaCorte)}</p>
 			{/if}
 		</div>
 
-		<!-- Content -->
-		{#if actLoading}
-			<div class="act-loading-state">
-				<div class="act-spinner"></div>
-				<p>Cargando actividades...</p>
-			</div>
-		{:else if actVistaInterna === 'listado'}
-			<!-- TABLA -->
-			<div class="act-table-container" in:fade={{ duration: 200 }}>
-				{#if actActividades.length === 0}
-					<div class="act-empty-state">
-						<span class="act-empty-icon">📋</span>
-						<p>No se encontraron actividades</p>
-						<button class="act-btn-primary" onclick={actAbrirCrear}>Crear primera actividad</button>
-					</div>
+		<div class="periodo-selector">
+			<label>
+				<span>Año</span>
+				<select bind:value={filtros.anio}>
+					{#each anios as a (a)}
+						<option value={a}>{a}</option>
+					{/each}
+				</select>
+			</label>
+			<label>
+				<span>Trimestre</span>
+				<select bind:value={filtros.trimestre}>
+					<option value={0}>Todo el año</option>
+					<option value={1}>T1</option>
+					<option value={2}>T2</option>
+					<option value={3}>T3</option>
+					<option value={4}>T4</option>
+				</select>
+			</label>
+			<label>
+				<span>Mes</span>
+				<select bind:value={filtros.mes}>
+					{#each MESES as m, i (m)}
+						<option value={i}>{m}</option>
+					{/each}
+				</select>
+			</label>
+		</div>
+	</header>
+
+	{#if errorPermisos}
+		<EstadoPanel
+			tipo="error"
+			mensaje={errorPermisos}
+			accion="Reintentar"
+			onAccion={cargarPermisos}
+		/>
+	{:else if !permisos}
+		<EstadoPanel tipo="cargando" mensaje="Comprobando sus permisos sobre el módulo…" />
+	{:else}
+		{#if permisos.nivel === 'read'}
+			<p class="aviso-permiso" role="note">
+				Su nivel de acceso es de <strong>consulta</strong>. Aportar evidencia, registrar operación y
+				gestionar el ciclo corresponden a otras áreas.
+			</p>
+		{:else if !permisos.puedeRevisar}
+			<p class="aviso-permiso" role="note">
+				Puede aportar evidencia y registrar operación. La <strong>aprobación</strong> de evidencia corresponde
+				a HSEQ o Administración.
+			</p>
+		{/if}
+
+		<nav class="vistas" aria-label="Vistas del centro PESV">
+			{#each VISTAS as v (v.id)}
+				<button
+					type="button"
+					class:activa={filtros.vista === v.id}
+					aria-current={filtros.vista === v.id ? 'page' : undefined}
+					title={v.descripcion}
+					onclick={() => irA(v.id)}
+				>
+					{v.etiqueta}
+				</button>
+			{/each}
+		</nav>
+
+		<main class="contenido">
+			{#if filtros.vista === 'resumen'}
+				{#if cargandoResumen && !resumen}
+					<EstadoPanel tipo="cargando" mensaje="Consolidando el período…" />
+				{:else if errorResumen}
+					<EstadoPanel
+						tipo="error"
+						mensaje={errorResumen}
+						accion="Reintentar"
+						onAccion={cargarResumen}
+					/>
+				{:else if resumen}
+					<ResumenCumplimiento
+						{resumen}
+						onIrA={irA}
+						onCrearCiclo={crearCicloDelAnio}
+						puedeGestionar={permisos.puedeGestionar}
+					/>
+				{/if}
+			{:else if filtros.vista === 'matriz'}
+				{#if errorMatriz}
+					<EstadoPanel
+						tipo="error"
+						mensaje={errorMatriz}
+						accion="Reintentar"
+						onAccion={cargarMatriz}
+					/>
 				{:else}
-					<div class="act-table-scroll">
-						<table class="act-table">
-							<thead>
-								<tr>
-									<th class="act-w-16">#</th>
-									<th>Actividad</th>
-									<th>Unidad/Programa</th>
-									<th>Frecuencia</th>
-									<th>Responsable</th>
-									<th>Estado</th>
-									<th>Prioridad</th>
-									<th>Fecha Límite</th>
-									<th class="act-w-28">Acciones</th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each actActividades as act (act.id)}
-									<tr in:fade={{ duration: 150 }}>
-										<td class="font-mono text-center">{act.numero}</td>
-										<td class="font-medium act-max-w-xs act-truncate" title={act.actividad}>{act.actividad}</td>
-										<td class="act-max-w-xs act-truncate" title={act.unidad_programa}>{act.unidad_programa}</td>
-										<td><span class="act-badge act-badge-neutral">{getActFrecuenciaLabel(act.frecuencia)}</span></td>
-										<td>{act.responsable_ejecucion?.nombre || '—'}</td>
-										<td>
-											<span class="act-badge {getActEstadoInfo(act.estado).bg} {getActEstadoInfo(act.estado).color}">{getActEstadoInfo(act.estado).label}</span>
-										</td>
-										<td>
-											<span class="act-badge {getActPrioridadInfo(act.prioridad).bg} {getActPrioridadInfo(act.prioridad).color}">{getActPrioridadInfo(act.prioridad).label}</span>
-										</td>
-										<td class="text-sm">{actFormatDate(act.fecha_limite)}</td>
-										<td>
-											<div class="act-action-buttons">
-												<button class="act-btn-icon" title="Ver" onclick={() => actAbrirVer(act)}>👁️</button>
-												<button class="act-btn-icon" title="Editar" onclick={() => actAbrirEditar(act)}>✏️</button>
-												<button class="act-btn-icon act-delete" title="Eliminar" onclick={() => actConfirmarEliminar(act)}>🗑️</button>
-											</div>
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
+					<div class="filtros-matriz">
+						<label>
+							<span>Fase</span>
+							<select bind:value={filtros.fase}>
+								<option value="">Todas las fases</option>
+								<option value="PLANIFICACION">Planificación</option>
+								<option value="IMPLEMENTACION">Implementación</option>
+								<option value="SEGUIMIENTO">Seguimiento</option>
+								<option value="MEJORA">Mejora</option>
+							</select>
+						</label>
+						<label>
+							<span>Estado</span>
+							<select bind:value={filtros.estado}>
+								<option value="">Todos los estados</option>
+								<option value="PENDIENTE">Pendiente</option>
+								<option value="EN_PROGRESO">En progreso</option>
+								<option value="EN_REVISION">En revisión</option>
+								<option value="CUMPLE">Cumple</option>
+								<option value="NO_CUMPLE">No cumple</option>
+								<option value="NO_APLICA">No aplica</option>
+							</select>
+						</label>
+						<label>
+							<span>Área responsable</span>
+							<select bind:value={filtros.area}>
+								<option value="">Todas las áreas</option>
+								<option value="administracion">Administración</option>
+								<option value="operaciones">Operaciones</option>
+								<option value="hseq">HSEQ</option>
+								<option value="mantenimiento">Mantenimiento</option>
+								<option value="talento_humano">Talento Humano</option>
+							</select>
+						</label>
+						<label class="buscador">
+							<span>Buscar</span>
+							<input
+								type="search"
+								bind:value={filtros.q}
+								placeholder="Nombre o descripción del paso"
+							/>
+						</label>
 					</div>
 
-					<!-- Paginación -->
-					{#if actTotalPages > 1}
-						<div class="act-pagination">
-							<span class="act-pagination-info">Mostrando {actActividades.length} de {actTotal}</span>
-							<div class="act-pagination-controls">
-								<button disabled={actCurrentPage === 1} onclick={() => actCambiarPagina(actCurrentPage - 1)}>←</button>
-								{#each Array.from({ length: actTotalPages }, (_, i) => i + 1) as p}
-									<button class:active={p === actCurrentPage} onclick={() => actCambiarPagina(p)}>{p}</button>
-								{/each}
-								<button disabled={actCurrentPage === actTotalPages} onclick={() => actCambiarPagina(actCurrentPage + 1)}>→</button>
-							</div>
+					{#if cumplimiento}
+						<MatrizPasos
+							filas={cumplimiento.filas}
+							resumen={cumplimiento.resumen}
+							cargando={cargandoMatriz}
+							onAbrirPaso={abrirPaso}
+						/>
+					{:else if cargandoMatriz}
+						<EstadoPanel tipo="cargando" mensaje="Cargando la matriz…" />
+					{/if}
+
+					<BandejaEvidencias
+						{evidencias}
+						cargando={cargandoEvidencias}
+						error={errorEvidencias}
+						{permisos}
+						filtroEstado={filtros.estadoEvidencia}
+						soloMias={filtros.mias === 'si'}
+						onFiltrar={(cambio) => {
+							filtros = {
+								...filtros,
+								...(cambio.estadoEvidencia !== undefined
+									? { estadoEvidencia: cambio.estadoEvidencia }
+									: {}),
+								...(cambio.mias !== undefined ? { mias: cambio.mias ? 'si' : 'no' } : {})
+							};
+							void cargarEvidencias();
+						}}
+						onAbrirPaso={abrirPaso}
+						onReintentar={cargarEvidencias}
+					/>
+				{/if}
+			{:else if filtros.vista === 'indicadores'}
+				{#if cargandoIndicadores && indicadores.length === 0}
+					<EstadoPanel tipo="cargando" mensaje="Calculando los 13 indicadores…" />
+				{:else if errorIndicadores}
+					<EstadoPanel
+						tipo="error"
+						mensaje={errorIndicadores}
+						accion="Reintentar"
+						onAccion={cargarIndicadores}
+					/>
+				{:else}
+					<div class="rejilla-indicadores">
+						{#each indicadores as i (i.code)}
+							<TarjetaIndicador indicador={i} onAbrir={abrirIndicador} />
+						{/each}
+					</div>
+				{/if}
+			{:else if filtros.vista === 'operacion'}
+				<PanelOperacion
+					datos={operacion}
+					cargando={cargandoOperacion}
+					error={errorOperacion}
+					panel={filtros.panel || 'inspecciones'}
+					{permisos}
+					onPanel={(p) => (filtros = { ...filtros, panel: p })}
+					onReintentar={cargarOperacion}
+				/>
+			{:else if filtros.vista === 'documentos'}
+				<TablaDocumentos
+					datos={documentos}
+					cargando={cargandoDocumentos}
+					error={errorDocumentos}
+					{permisos}
+					filtroVigencia={filtros.estadoVigencia}
+					filtroAmbito={filtros.ambito}
+					onFiltrar={(cambio) => {
+						filtros = { ...filtros, ...cambio };
+						void cargarDocumentos();
+					}}
+					onRevisar={revisarDoc}
+					onReintentar={cargarDocumentos}
+				/>
+			{:else if filtros.vista === 'plan'}
+				<PlanAnual
+					{actividades}
+					{metas}
+					{programas}
+					{formaciones}
+					{riesgos}
+					cargando={cargandoPlan}
+					error={errorPlan}
+					panel={filtros.panel || 'actividades'}
+					filtroEstado={filtros.estado}
+					{permisos}
+					onPanel={(p) => (filtros = { ...filtros, panel: p })}
+					onFiltrarEstado={(e) => {
+						filtros = { ...filtros, estado: e };
+						void cargarPlan();
+					}}
+					onReintentar={cargarPlan}
+				/>
+			{:else if filtros.vista === 'contratos'}
+				<TablaCoberturaFuec
+					datos={cobertura}
+					cargando={cargandoCobertura}
+					error={errorCobertura}
+					filtroEstado={filtros.estado}
+					{permisos}
+					onFiltrar={(e) => {
+						filtros = { ...filtros, estado: e };
+						void cargarCobertura();
+					}}
+					onReintentar={cargarCobertura}
+					onImportar={ejecutarImportacion}
+				/>
+			{:else if filtros.vista === 'historico'}
+				<section class="historico">
+					<p class="aviso-historico" role="note">
+						Registros del panel PESV anterior. Se conservan íntegros como referencia histórica y
+						<strong>ya no admiten edición</strong>: el preoperacional se registra en Formularios
+						Dinámicos, los siniestros y los excesos de velocidad tienen su propio registro
+						estructurado en «Operación segura». Un segundo camino de captura crearía dos verdades
+						sobre el mismo hecho.
+					</p>
+
+					{#if cargandoHistorico}
+						<EstadoPanel tipo="cargando" mensaje="Cargando registros diarios…" />
+					{:else if errorHistorico}
+						<EstadoPanel
+							tipo="error"
+							mensaje={errorHistorico}
+							accion="Reintentar"
+							onAccion={cargarHistorico}
+						/>
+					{:else if historico.length === 0}
+						<EstadoPanel
+							tipo="vacio"
+							titulo="Sin registros"
+							mensaje="No hay registros diarios para el mes y año seleccionados."
+						/>
+					{:else}
+						<div class="tabla-scroll">
+							<table>
+								<caption class="sr-only">
+									Registros diarios PESV del panel anterior, en solo lectura
+								</caption>
+								<thead>
+									<tr>
+										<th scope="col">Fecha</th>
+										<th scope="col">Conductor</th>
+										<th scope="col">Vehículo</th>
+										<th scope="col">Cliente</th>
+										<th scope="col">Conducción</th>
+										<th scope="col">Sueño</th>
+										<th scope="col">Excesos</th>
+										<th scope="col">Preoperacional</th>
+										<th scope="col">Siniestros</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each historico as r (r.id)}
+										<tr>
+											<td class="tab">{r.fecha}</td>
+											<td>{r.conductor.nombre}</td>
+											<td class="placa">{r.vehiculo.placa}</td>
+											<td>{r.cliente.nombre}</td>
+											<td class="tab">{r.tiempo_conduccion} h</td>
+											<td class="tab">{r.horas_sueno ?? '—'}</td>
+											<td class="tab">{r.excesos_velocidad_dia}</td>
+											<td>{r.preoperacional_realizado ? 'Sí' : 'No'}</td>
+											<td class="tab">
+												{r.siniestros}
+												{#if r.siniestros_detalle}
+													<span class="sub">{r.siniestros_detalle}</span>
+												{/if}
+											</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
 						</div>
 					{/if}
-				{/if}
-			</div>
-
-		{:else}
-			<!-- CALENDARIO -->
-			<div class="act-calendar-container" in:fade={{ duration: 200 }}>
-				<div class="act-calendar-header">
-					<button class="act-btn-cal-nav" onclick={actPrevMonth}>←</button>
-					<h2>{ACT_MESES[actCalMes]} {actCalAnio}</h2>
-					<button class="act-btn-cal-nav" onclick={actNextMonth}>→</button>
-					<button class="act-btn-cal-today" onclick={actIrHoy}>Hoy</button>
-				</div>
-				<div class="act-calendar-grid">
-					<div class="act-cal-day-header">Dom</div>
-					<div class="act-cal-day-header">Lun</div>
-					<div class="act-cal-day-header">Mar</div>
-					<div class="act-cal-day-header">Mié</div>
-					<div class="act-cal-day-header">Jue</div>
-					<div class="act-cal-day-header">Vie</div>
-					<div class="act-cal-day-header">Sáb</div>
-
-					{#each actCalDays as day}
-						{@const dayActs = day ? getActividadesForDay(day) : []}
-						<div class="act-cal-cell" class:empty={!day} class:today={day === new Date().getDate() && actCalMes === new Date().getMonth() && actCalAnio === new Date().getFullYear()}>
-							{#if day}
-								<span class="act-cal-day-num">{day}</span>
-								{#each dayActs.slice(0, 3) as act}
-									<button
-										class="act-cal-event {getActEstadoInfo(act.estado).bg}"
-										title="{act.actividad} — {getActEstadoInfo(act.estado).label}"
-										onclick={() => actAbrirVer(act)}
-									>
-										{act.actividad.substring(0, 18)}{act.actividad.length > 18 ? '…' : ''}
-									</button>
-								{/each}
-								{#if dayActs.length > 3}
-									<span class="act-cal-more">+{dayActs.length - 3} más</span>
-								{/if}
-							{/if}
-						</div>
-					{/each}
-				</div>
-			</div>
-		{/if}
-	</div>
+				</section>
+			{/if}
+		</main>
 	{/if}
-	<!-- end filtros.vista -->
 </div>
 
-<!-- ==================== MODAL EDICIÓN REGISTRO PESV ==================== -->
-{#if mostrarModalEdicion && editingRegistro}
-	<div class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" transition:fade={{ duration: 200 }}>
-		<div
-			class="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden"
-			in:fly={{ y: 30, duration: 300 }}
-		>
-			<!-- Header -->
-			<div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-orange-50 to-teal-50">
-				<div class="flex items-center gap-3">
-					<div class="w-10 h-10 bg-gradient-to-br from-orange-400 to-orange-600 rounded-xl flex items-center justify-center">
-						<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-						</svg>
-					</div>
-					<div>
-						<h2 class="text-lg font-bold text-gray-900">Editar Registro PESV</h2>
-						<p class="text-xs text-gray-500">
-							{editingRegistro.conductor.nombre} · {editingRegistro.vehiculo.placa} · Día {editingRegistro.dia}
-						</p>
-					</div>
-				</div>
-				<button onclick={() => { mostrarModalEdicion = false; editingRegistro = null; }} class="p-2 hover:bg-gray-100 rounded-xl transition-colors" title="Cerrar">
-					<svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</div>
-
-			<div class="p-6 space-y-5">
-				<!-- Horas de sueño -->
-				<div>
-					<label for="edit-horas-sueno" class="block text-sm font-medium text-gray-700 mb-1">
-						Horas de sueño
-					</label>
-					<div class="flex items-center gap-3">
-						<input
-							id="edit-horas-sueno"
-							type="number"
-							bind:value={editForm.horas_sueno}
-							min="0"
-							max="24"
-							step="0.5"
-							class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-400 focus:border-orange-400"
-							placeholder="Ej: 7.5"
-						/>
-						<button
-							onclick={() => editForm.horas_sueno = null}
-							class="px-2 py-2 text-xs text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors whitespace-nowrap"
-							title="Sin dato"
-						>
-							✕
-						</button>
-					</div>
-					{#if editForm.horas_sueno !== null && editForm.horas_sueno !== undefined}
-						<p class="text-xs mt-1 {editForm.horas_sueno < 6 ? 'text-red-500' : editForm.horas_sueno < 8 ? 'text-orange-500' : 'text-orange-600'}">
-							{editForm.horas_sueno < 6 ? '⚠️ Menos de 6 horas — riesgo de fatiga' : editForm.horas_sueno < 8 ? '⚡ Aceptable pero mejorable' : '✓ Descanso adecuado'}
-						</p>
-					{/if}
-				</div>
-
-				<!-- Excesos de velocidad -->
-				<div>
-					<label for="edit-excesos" class="block text-sm font-medium text-gray-700 mb-1">
-						Excesos de velocidad del día
-					</label>
-					<input
-						id="edit-excesos"
-						type="number"
-						bind:value={editForm.excesos_velocidad_dia}
-						min="0"
-						class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-red-400 focus:border-red-400"
-						placeholder="0"
-					/>
-				</div>
-
-				<!-- Siniestros -->
-				<div>
-					<label for="edit-siniestros" class="block text-sm font-medium text-gray-700 mb-1">
-						N° de siniestros
-					</label>
-					<input
-						id="edit-siniestros"
-						type="number"
-						bind:value={editForm.siniestros}
-						min="0"
-						class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-400 focus:border-orange-400"
-						placeholder="0"
-					/>
-				</div>
-
-				<!-- Detalle siniestros -->
-				{#if editForm.siniestros > 0}
-					<div in:fly={{ y: 10, duration: 200 }}>
-						<label for="edit-siniestros-detalle" class="block text-sm font-medium text-gray-700 mb-1">
-							Detalle del siniestro
-						</label>
-						<textarea
-							id="edit-siniestros-detalle"
-							bind:value={editForm.siniestros_detalle}
-							rows="3"
-							class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-400 focus:border-orange-400 resize-none"
-							placeholder="Describe brevemente lo ocurrido..."
-						></textarea>
-					</div>
-				{/if}
-
-				<!-- Actions -->
-				<div class="flex justify-end gap-3 pt-2">
-					<button
-						onclick={() => { mostrarModalEdicion = false; editingRegistro = null; }}
-						class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 hover:bg-gray-100 rounded-xl transition-colors"
-					>
-						Cancelar
-					</button>
-					<button
-						onclick={guardarEdicion}
-						disabled={savingEdit}
-						class="px-5 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl text-sm font-medium hover:from-orange-600 hover:to-orange-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-					>
-						{#if savingEdit}
-							<span class="flex items-center gap-2">
-								<svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-									<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-									<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
-								</svg>
-								Guardando...
-							</span>
-						{:else}
-							Guardar Cambios
-						{/if}
-					</button>
-				</div>
-			</div>
-		</div>
-	</div>
-{/if}
-{#if mostrarModalExceso}
-	<div class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" transition:fade={{ duration: 200 }}>
-		<div
-			class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
-			in:fly={{ y: 30, duration: 300 }}
-		>
-			<!-- Header -->
-			<div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-red-50 to-orange-50">
-				<div class="flex items-center gap-3">
-					<div class="w-10 h-10 bg-gradient-to-br from-red-400 to-red-600 rounded-xl flex items-center justify-center">
-						<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-						</svg>
-					</div>
-					<div>
-						<h2 class="text-lg font-bold text-gray-900">Excesos de Velocidad</h2>
-						<p class="text-xs text-gray-500">Registrar excesos por conductor y vehículo</p>
-					</div>
-				</div>
-				<button onclick={() => { mostrarModalExceso = false; cargarDashboard(); }} class="p-2 hover:bg-gray-100 rounded-xl transition-colors" aria-label="Cerrar modal">
-					<svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</div>
-
-			<div class="flex-1 overflow-y-auto p-6 space-y-5">
-				<!-- Form -->
-				<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-					<div>
-						<p class="block text-sm font-medium text-gray-700 mb-1">Conductor</p>
-						{#if filterOptions}
-							<Select
-								items={filterOptions.conductores.map(c => ({ value: c.id, label: `${c.nombre} ${c.apellido} - ${c.numero_identificacion}` }))}
-								placeholder="Seleccionar conductor..."
-								on:change={(e) => excesoForm.conductor_id = e.detail?.value || ''}
-								on:clear={() => excesoForm.conductor_id = ''}
-								--border-radius="0.75rem"
-								--height="42px"
-								--font-size="0.875rem"
-							/>
-						{/if}
-					</div>
-					<div>
-						<p class="block text-sm font-medium text-gray-700 mb-1">Vehículo</p>
-						{#if filterOptions}
-							<Select
-								items={filterOptions.vehiculos.map(v => ({ value: v.id, label: `${v.placa} - ${v.marca || ''} ${v.modelo || ''}`.trim() }))}
-								placeholder="Seleccionar vehículo..."
-								on:change={(e) => excesoForm.vehiculo_id = e.detail?.value || ''}
-								on:clear={() => excesoForm.vehiculo_id = ''}
-								--border-radius="0.75rem"
-								--height="42px"
-								--font-size="0.875rem"
-							/>
-						{/if}
-					</div>
-					<div>
-						<label for="exceso-cantidad" class="block text-sm font-medium text-gray-700 mb-1">Cantidad de excesos</label>
-						<input
-							id="exceso-cantidad"
-							type="number"
-							bind:value={excesoForm.cantidad}
-							min="0"
-							class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-red-400 focus:border-red-400"
-							placeholder="0"
-						/>
-					</div>
-					<div>
-						<label for="exceso-observaciones" class="block text-sm font-medium text-gray-700 mb-1">Observaciones</label>
-						<input
-							id="exceso-observaciones"
-							type="text"
-							bind:value={excesoForm.observaciones}
-							class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-red-400 focus:border-red-400"
-							placeholder="Opcional"
-						/>
-					</div>
-				</div>
-				<button
-					onclick={guardarExceso}
-					class="px-5 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl text-sm font-medium hover:from-red-600 hover:to-red-700 transition-all shadow-sm"
-				>
-					Guardar Exceso
-				</button>
-
-				<!-- List -->
-				{#if excesosList.length > 0}
-					<div class="border-t border-gray-100 pt-4">
-						<h4 class="text-sm font-semibold text-gray-700 mb-3">Registros ({getMesLabel(excesoForm.mes)} {excesoForm.anio})</h4>
-						<div class="space-y-2 max-h-60 overflow-y-auto">
-							{#each excesosList as exceso}
-								<div class="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-									<div class="flex-1">
-										<p class="text-sm font-medium text-gray-900">
-											{exceso.conductor ? `${exceso.conductor.nombre} ${exceso.conductor.apellido}` : 'N/A'}
-											<span class="text-gray-400 mx-1">·</span>
-											<span class="text-gray-600">{exceso.vehiculo?.placa || 'N/A'}</span>
-										</p>
-										<p class="text-xs text-gray-500">
-											{exceso.cantidad} exceso(s)
-											{#if exceso.observaciones} — {exceso.observaciones}{/if}
-										</p>
-									</div>
-									<button
-										onclick={() => borrarExceso(exceso.id)}
-										class="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-										aria-label="Eliminar exceso"
-									>
-										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-										</svg>
-									</button>
-								</div>
-							{/each}
-						</div>
-					</div>
-				{/if}
-			</div>
-		</div>
-	</div>
+{#if pasoAbierto && permisos}
+	<DetallePasoDialogo
+		detalle={pasoAbierto}
+		anio={filtros.anio}
+		{permisos}
+		onCerrar={cerrarPaso}
+		onCambio={refrescarPaso}
+	/>
 {/if}
 
-<!-- ==================== MODAL PREOPERACIONALES ==================== -->
-{#if mostrarModalPreop}
-	<div class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4" transition:fade={{ duration: 200 }}>
-		<div
-			class="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
-			in:fly={{ y: 30, duration: 300 }}
-		>
-			<!-- Header -->
-			<div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-gradient-to-r from-orange-50 to-teal-50">
-				<div class="flex items-center gap-3">
-					<div class="w-10 h-10 bg-gradient-to-br from-orange-400 to-teal-600 rounded-xl flex items-center justify-center">
-						<svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-						</svg>
-					</div>
-					<div>
-						<h2 class="text-lg font-bold text-gray-900">Inspecciones Preoperacionales</h2>
-						<p class="text-xs text-gray-500">Registrar inspecciones diarias por vehículo</p>
-					</div>
-				</div>
-				<button onclick={() => { mostrarModalPreop = false; cargarDashboard(); }} class="p-2 hover:bg-gray-100 rounded-xl transition-colors" aria-label="Cerrar modal">
-					<svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</div>
-
-			<div class="flex-1 overflow-y-auto p-6 space-y-5">
-			<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-				<div>
-					<p class="block text-sm font-medium text-gray-700 mb-1">Conductor</p>
-						{#if filterOptions}
-							<Select
-								items={filterOptions.conductores.map(c => ({ value: c.id, label: `${c.nombre} ${c.apellido} - ${c.numero_identificacion}` }))}
-								placeholder="Seleccionar conductor..."
-								on:change={(e) => preopForm.conductor_id = e.detail?.value || ''}
-								on:clear={() => preopForm.conductor_id = ''}
-								--border-radius="0.75rem"
-								--height="42px"
-								--font-size="0.875rem"
-							/>
-						{/if}
-					</div>
-					<div>
-						<p class="block text-sm font-medium text-gray-700 mb-1">Vehículo</p>
-						{#if filterOptions}
-							<Select
-								items={filterOptions.vehiculos.map(v => ({ value: v.id, label: `${v.placa} - ${v.marca || ''} ${v.modelo || ''}`.trim() }))}
-								placeholder="Seleccionar vehículo..."
-								on:change={(e) => preopForm.vehiculo_id = e.detail?.value || ''}
-								on:clear={() => preopForm.vehiculo_id = ''}
-								--border-radius="0.75rem"
-								--height="42px"
-								--font-size="0.875rem"
-							/>
-						{/if}
-					</div>
-					<div>
-						<label for="preop-fecha" class="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
-						<input
-							id="preop-fecha"
-							type="date"
-							bind:value={preopForm.fecha}
-							class="w-full px-3 py-2 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-orange-400 focus:border-orange-400"
-						/>
-					</div>
-					<div>
-						<p class="block text-sm font-medium text-gray-700 mb-1">¿Realizado?</p>
-						<label for="preop-realizado" class="inline-flex items-center gap-2 mt-1.5">
-							<input id="preop-realizado" type="checkbox" bind:checked={preopForm.realizado} class="w-5 h-5 rounded-lg border-gray-300 text-orange-600 focus:ring-orange-500" />
-							<span class="text-sm text-gray-700">{preopForm.realizado ? 'Sí, realizado' : 'No realizado'}</span>
-						</label>
-					</div>
-				</div>
-				<div>
-					<label for="preop-observaciones" class="block text-sm font-medium text-gray-700 mb-1">Observaciones</label>
-					<input
-						id="preop-observaciones"
-						type="text"
-						bind:value={preopForm.observaciones}
-						placeholder="Opcional"
-						/>
-					</div>
-				<button
-					onclick={guardarPreop}
-					class="px-5 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl text-sm font-medium hover:from-orange-600 hover:to-orange-700 transition-all shadow-sm"
-				>
-					Guardar Preoperacional
-				</button>
-
-				<!-- List -->
-				{#if preopList.length > 0}
-					<div class="border-t border-gray-100 pt-4">
-						<h4 class="text-sm font-semibold text-gray-700 mb-3">Registros ({getMesLabel(filtros.mes)} {filtros.anio})</h4>
-						<div class="space-y-2 max-h-60 overflow-y-auto">
-							{#each preopList as preop}
-								<div class="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-									<div class="flex-1">
-										<p class="text-sm font-medium text-gray-900">
-											{preop.conductor ? `${preop.conductor.nombre} ${preop.conductor.apellido}` : 'N/A'}
-											<span class="text-gray-400 mx-1">·</span>
-											<span class="text-gray-600">{preop.vehiculo?.placa || 'N/A'}</span>
-										</p>
-								<p class="text-xs text-gray-500">
-											{new Date(preop.fecha).toLocaleDateString('es-CO')}
-											<span class="mx-1">—</span>
-											{#if preop.realizado}
-												<span class="text-orange-600 font-medium">✓ Realizado</span>
-											{:else}
-												<span class="text-red-500 font-medium">✗ No realizado</span>
-											{/if}
-											{#if preop.observaciones} — {preop.observaciones}{/if}
-										</p>
-									</div>
-									<button
-										onclick={() => borrarPreop(preop.id)}
-										class="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-										aria-label="Eliminar preoperacional"
-									>
-										<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-										</svg>
-									</button>
-								</div>
-							{/each}
-						</div>
-					</div>
-				{/if}
-			</div>
-		</div>
-	</div>
-{/if}
-
-<!-- ==================== MODAL CREAR/EDITAR ACTIVIDAD ==================== -->
-{#if actShowModal}
-	<div class="act-modal-overlay" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => { if (e.target === e.currentTarget) actShowModal = false; }} onkeydown={e => e.key === 'Escape' && (actShowModal = false)} transition:fade={{ duration: 200 }}>
-		<div class="act-modal-content act-modal-xl" in:fly={{ y: 30, duration: 300 }}>
-			<div class="act-modal-header">
-				<h2>{actModalMode === 'crear' ? '➕ Nueva Actividad' : actModalMode === 'editar' ? '✏️ Editar Actividad' : '👁️ Detalle Actividad'}</h2>
-				<button class="act-btn-close" onclick={() => actShowModal = false}>✕</button>
-			</div>
-
-			<div class="act-modal-body">
-				<div class="act-form-grid">
-					<!-- Row 1 -->
-					<div class="act-form-group act-fg-w-20">
-						<label for="act-numero">Nº</label>
-						<input id="act-numero" type="number" bind:value={actForm.numero} disabled={actModalMode === 'ver'} class="act-input" />
-					</div>
-					<div class="act-form-group act-fg-flex-1">
-						<label for="act-actividad">Actividad *</label>
-						<input id="act-actividad" type="text" bind:value={actForm.actividad} disabled={actModalMode === 'ver'} class="act-input" placeholder="Nombre de la actividad" />
-					</div>
-					<div class="act-form-group act-fg-w-28">
-						<label for="act-anio">Año</label>
-						<input id="act-anio" type="number" bind:value={actForm.anio} disabled={actModalMode === 'ver'} class="act-input" />
-					</div>
-
-					<!-- Row 2 -->
-					<div class="act-form-group act-fg-flex-1">
-						<label for="act-unidad-programa">Unidad/Programa *</label>
-						<input id="act-unidad-programa" type="text" bind:value={actForm.unidad_programa} disabled={actModalMode === 'ver'} class="act-input" placeholder="Ej: Fortalecimiento en la gestión institucional" />
-					</div>
-					<div class="act-form-group act-fg-flex-1">
-						<label for="act-alcance">Alcance</label>
-						<input id="act-alcance" type="text" bind:value={actForm.alcance} disabled={actModalMode === 'ver'} class="act-input" placeholder="Alcance de la actividad" />
-					</div>
-
-					<!-- Row 3 -->
-					<div class="act-form-group act-fg-flex-1">
-						<label for="act-recursos">Recursos</label>
-						<input id="act-recursos" type="text" bind:value={actForm.recursos} disabled={actModalMode === 'ver'} class="act-input" placeholder="Recursos necesarios" />
-					</div>
-					<div class="act-form-group act-fg-flex-1">
-						<label for="act-responsable-planeacion">Responsable Planeación</label>
-						<input id="act-responsable-planeacion" type="text" bind:value={actForm.responsable_planeacion} disabled={actModalMode === 'ver'} class="act-input" placeholder="Responsable de planeación" />
-					</div>
-
-					<!-- Row 4 -->
-					<div class="act-form-group act-fg-flex-1">
-						<label for="act-metodo-seguimiento">Método de Seguimiento</label>
-						<input id="act-metodo-seguimiento" type="text" bind:value={actForm.metodo_seguimiento} disabled={actModalMode === 'ver'} class="act-input" placeholder="Método de seguimiento" />
-					</div>
-					<div class="act-form-group act-fg-w-40">
-						<label for="act-frecuencia">Frecuencia</label>
-						<select id="act-frecuencia" bind:value={actForm.frecuencia} disabled={actModalMode === 'ver'} class="act-input">
-							{#each ACT_FRECUENCIAS as f}
-								<option value={f.value}>{f.label}</option>
-							{/each}
-						</select>
-					</div>
-
-					<!-- Row 5 -->
-					<div class="act-form-group act-fg-flex-1">
-						<label for="act-responsable-ejecucion">Responsable Ejecución</label>
-						<select id="act-responsable-ejecucion" bind:value={actForm.responsable_ejecucion_id} disabled={actModalMode === 'ver'} class="act-input">
-							<option value="">— Sin asignar —</option>
-							{#each actUsuarios as u}
-								<option value={u.id}>{u.nombre}</option>
-							{/each}
-						</select>
-					</div>
-					<div class="act-form-group act-fg-w-36">
-						<label for="act-fecha-limite">Fecha Límite</label>
-						<input id="act-fecha-limite" type="date" bind:value={actForm.fecha_limite} disabled={actModalMode === 'ver'} class="act-input" />
-					</div>
-					<div class="act-form-group act-fg-w-36">
-						<label for="act-fecha-ejecucion">Fecha Ejecución</label>
-						<input id="act-fecha-ejecucion" type="date" bind:value={actForm.fecha_ejecucion} disabled={actModalMode === 'ver'} class="act-input" />
-					</div>
-
-					<!-- Row 6 -->
-					<div class="act-form-group act-fg-w-32">
-						<label for="act-estado">Estado</label>
-						<select id="act-estado" bind:value={actForm.estado} disabled={actModalMode === 'ver'} class="act-input">
-							{#each ACT_ESTADOS as e}
-								<option value={e.value}>{e.label}</option>
-							{/each}
-						</select>
-					</div>
-					<div class="act-form-group act-fg-w-32">
-						<label for="act-prioridad">Prioridad</label>
-						<select id="act-prioridad" bind:value={actForm.prioridad} disabled={actModalMode === 'ver'} class="act-input">
-							{#each ACT_PRIORIDADES as p}
-								<option value={p.value}>{p.label}</option>
-							{/each}
-						</select>
-					</div>
-
-					<!-- Row 7 -->
-					<div class="act-form-group act-fg-full-width">
-						<label for="act-observacion">Observación</label>
-						<textarea id="act-observacion" bind:value={actForm.observacion} disabled={actModalMode === 'ver'} class="act-input" rows="3" placeholder="Observaciones..."></textarea>
-					</div>
-				</div>
-			</div>
-
-			<div class="act-modal-footer">
-				{#if actModalMode === 'ver'}
-					<button class="act-btn-secondary" onclick={() => { actModalMode = 'editar' }}>✏️ Editar</button>
-				{:else}
-					<button class="act-btn-secondary" onclick={() => actShowModal = false}>Cancelar</button>
-					<button class="act-btn-primary" onclick={actGuardar} disabled={actSaving}>
-						{#if actSaving}
-							<div class="act-spinner-sm"></div> Guardando...
-						{:else}
-							💾 {actModalMode === 'crear' ? 'Crear' : 'Guardar'}
-						{/if}
-					</button>
-				{/if}
-			</div>
-		</div>
-	</div>
-{/if}
-
-<!-- ==================== MODAL DELETE ACTIVIDAD ==================== -->
-{#if actShowDeleteModal}
-	<div class="act-modal-overlay" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => { if (e.target === e.currentTarget) actShowDeleteModal = false; }} onkeydown={e => e.key === 'Escape' && (actShowDeleteModal = false)} transition:fade={{ duration: 150 }}>
-		<div class="act-modal-content act-modal-sm" in:fly={{ y: 20, duration: 200 }}>
-			<div class="act-modal-header act-delete-header">
-				<h2>🗑️ Eliminar Actividad</h2>
-				<button class="act-btn-close" onclick={() => actShowDeleteModal = false}>✕</button>
-			</div>
-			<div class="act-modal-body text-center">
-				<p class="text-gray-700">¿Estás seguro de eliminar la actividad:</p>
-				<p class="font-semibold text-lg mt-2">"{actDeletingName}"</p>
-				<p class="text-sm text-gray-500 mt-2">Esta acción no se puede deshacer.</p>
-			</div>
-			<div class="act-modal-footer" style="justify-content: center; gap: 0.75rem;">
-				<button class="act-btn-secondary" onclick={() => actShowDeleteModal = false}>Cancelar</button>
-				<button class="act-btn-danger" onclick={actEjecutarEliminar} disabled={actDeleting}>
-					{#if actDeleting}
-						Eliminando...
-					{:else}
-						Sí, eliminar
-					{/if}
-				</button>
-			</div>
-		</div>
-	</div>
+{#if indicadorAbierto}
+	<DetalleIndicador indicador={indicadorAbierto} onCerrar={cerrarIndicador} />
 {/if}
 
 <style>
-	/* ==================== ACTIVIDADES STYLES ==================== */
-	.actividades-pesv-section { margin-top: 0; }
-
-	.act-page-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		margin-bottom: 1.5rem;
-		flex-wrap: wrap;
-		gap: 1rem;
-	}
-	.act-header-left { display: flex; align-items: center; gap: 0.75rem; }
-	.act-title { font-size: 1.5rem; font-weight: 700; color: #111; margin: 0; }
-	.act-subtitle { font-size: 0.85rem; color: #6b7280; margin: 0; }
-	.act-header-actions { display: flex; align-items: center; gap: 0.75rem; }
-
-	.act-vista-toggle {
-		display: flex;
-		border: 1px solid #e5e7eb;
-		border-radius: 0.75rem;
-		overflow: hidden;
-		background: white;
-	}
-	.act-vista-toggle button {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-		padding: 0.5rem 0.875rem;
-		font-size: 0.8rem;
-		font-weight: 500;
-		border: none;
-		background: transparent;
-		color: #6b7280;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.act-vista-toggle button svg { width: 1rem; height: 1rem; }
-	.act-vista-toggle button.active { background: #f97316; color: white; }
-
-	.act-btn-primary {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-		padding: 0.5rem 1rem;
-		background: #f97316;
-		color: white;
-		border: none;
-		border-radius: 0.75rem;
-		font-size: 0.85rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.act-btn-primary:hover { background: #ea580c; }
-	.act-btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-	.act-btn-primary svg { width: 1rem; height: 1rem; }
-
-	.act-btn-secondary {
-		padding: 0.5rem 1rem;
-		background: #f3f4f6;
-		color: #374151;
-		border: 1px solid #e5e7eb;
-		border-radius: 0.75rem;
-		font-size: 0.85rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.act-btn-secondary:hover { background: #e5e7eb; }
-
-	.act-btn-danger {
-		padding: 0.5rem 1rem;
-		background: #ef4444;
-		color: white;
-		border: none;
-		border-radius: 0.75rem;
-		font-size: 0.85rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.act-btn-danger:hover { background: #dc2626; }
-	.act-btn-danger:disabled { opacity: 0.6; cursor: not-allowed; }
-
-	.act-btn-clear {
-		padding: 0.375rem 0.75rem;
-		background: transparent;
-		color: #ef4444;
-		border: 1px solid #fecaca;
-		border-radius: 0.5rem;
-		font-size: 0.8rem;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.act-btn-clear:hover { background: #fef2f2; }
-
-	/* KPIs */
-	.act-kpis-row {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-		gap: 0.75rem;
-		margin-bottom: 1.25rem;
-	}
-	.act-kpi-card {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		padding: 1rem 1.25rem;
-		background: white;
-		border: 1px solid #e5e7eb;
-		border-radius: 1rem;
-		box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-	}
-	.act-kpi-icon { font-size: 1.5rem; }
-	.act-kpi-value { font-size: 1.5rem; font-weight: 700; color: #111; display: block; }
-	.act-kpi-label { font-size: 0.75rem; color: #6b7280; }
-
-	/* Filtros */
-	.act-filtros-bar {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.5rem;
-		align-items: center;
-		margin-bottom: 1rem;
-		padding: 0.75rem 1rem;
-		background: white;
-		border: 1px solid #e5e7eb;
-		border-radius: 1rem;
-	}
-	.act-filtro-group { position: relative; }
-	.act-search-group {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-		flex: 1;
-		min-width: 180px;
-	}
-	.act-search-group svg { width: 1rem; height: 1rem; color: #9ca3af; flex-shrink: 0; }
-	.act-input-sm {
-		padding: 0.375rem 0.625rem;
-		border: 1px solid #e5e7eb;
-		border-radius: 0.5rem;
-		font-size: 0.8rem;
-		background: white;
-		outline: none;
-		transition: border-color 0.2s;
-	}
-	.act-input-sm:focus { border-color: #f97316; }
-	.act-search-group .act-input-sm { border: none; flex: 1; }
-
-	/* Table */
-	.act-table-container {
-		background: white;
-		border: 1px solid #e5e7eb;
-		border-radius: 1rem;
-		overflow: hidden;
-	}
-	.act-table-scroll { overflow-x: auto; }
-	.act-table { width: 100%; border-collapse: collapse; }
-	.act-table thead { background: #f9fafb; }
-	.act-table th {
-		padding: 0.75rem 0.75rem;
-		text-align: left;
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: #6b7280;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		border-bottom: 1px solid #e5e7eb;
-		white-space: nowrap;
-	}
-	.act-table td {
-		padding: 0.625rem 0.75rem;
-		font-size: 0.8rem;
-		color: #374151;
-		border-bottom: 1px solid #f3f4f6;
-		white-space: nowrap;
-	}
-	.act-table tr:hover { background: #f0fdf4; }
-	.act-w-16 { width: 4rem; }
-	.act-w-28 { width: 7rem; }
-	.act-max-w-xs { max-width: 12rem; }
-	.act-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-	/* Badges */
-	.act-badge {
-		display: inline-flex;
-		align-items: center;
-		padding: 0.2rem 0.5rem;
-		border-radius: 0.375rem;
-		font-size: 0.7rem;
-		font-weight: 600;
-		white-space: nowrap;
-	}
-	.act-badge-neutral { background: #f3f4f6; color: #4b5563; }
-
-	/* Action buttons */
-	.act-action-buttons { display: flex; gap: 0.25rem; }
-	.act-btn-icon {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 1.75rem;
-		height: 1.75rem;
-		border: none;
-		border-radius: 0.5rem;
-		background: transparent;
-		cursor: pointer;
-		font-size: 0.85rem;
-		transition: background 0.2s;
-	}
-	.act-btn-icon:hover { background: #f3f4f6; }
-	.act-btn-icon.act-delete:hover { background: #fef2f2; }
-
-	/* Pagination */
-	.act-pagination {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 0.75rem 1rem;
-		border-top: 1px solid #e5e7eb;
-	}
-	.act-pagination-info { font-size: 0.8rem; color: #6b7280; }
-	.act-pagination-controls { display: flex; gap: 0.25rem; }
-	.act-pagination-controls button {
-		padding: 0.375rem 0.625rem;
-		border: 1px solid #e5e7eb;
-		border-radius: 0.5rem;
-		background: white;
-		color: #374151;
-		font-size: 0.8rem;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.act-pagination-controls button.active { background: #f97316; color: white; border-color: #f97316; }
-	.act-pagination-controls button:disabled { opacity: 0.4; cursor: not-allowed; }
-
-	/* Calendar */
-	.act-calendar-container {
-		background: white;
-		border: 1px solid #e5e7eb;
-		border-radius: 1rem;
-		padding: 1.25rem;
-	}
-	.act-calendar-header {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		margin-bottom: 1rem;
-	}
-	.act-calendar-header h2 {
-		font-size: 1.2rem;
-		font-weight: 600;
-		color: #111;
-		min-width: 12rem;
-		text-align: center;
-		margin: 0;
-	}
-	.act-btn-cal-nav {
-		padding: 0.375rem 0.75rem;
-		border: 1px solid #e5e7eb;
-		border-radius: 0.5rem;
-		background: white;
-		cursor: pointer;
-		font-size: 1rem;
-		transition: all 0.2s;
-	}
-	.act-btn-cal-nav:hover { background: #f3f4f6; }
-	.act-btn-cal-today {
-		padding: 0.375rem 0.75rem;
-		border: 1px solid #f97316;
-		border-radius: 0.5rem;
-		background: #f0fdf4;
-		color: #ea580c;
-		font-size: 0.8rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.act-btn-cal-today:hover { background: #d1fae5; }
-	.act-calendar-grid {
-		display: grid;
-		grid-template-columns: repeat(7, 1fr);
-		border: 1px solid #e5e7eb;
-		border-radius: 0.75rem;
-		overflow: hidden;
-	}
-	.act-cal-day-header {
-		padding: 0.5rem;
-		text-align: center;
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: #6b7280;
-		background: #f9fafb;
-		border-bottom: 1px solid #e5e7eb;
-	}
-	.act-cal-cell {
-		min-height: 6rem;
-		padding: 0.375rem;
-		border-right: 1px solid #f3f4f6;
-		border-bottom: 1px solid #f3f4f6;
-		position: relative;
-	}
-	.act-cal-cell.empty { background: #fafafa; }
-	.act-cal-cell.today { background: #f0fdf4; }
-	.act-cal-day-num {
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: #374151;
-		display: block;
-		margin-bottom: 2px;
-	}
-	.act-cal-event {
-		display: block;
-		width: 100%;
-		padding: 1px 4px;
-		border: none;
-		border-radius: 3px;
-		font-size: 0.6rem;
-		text-align: left;
-		cursor: pointer;
-		margin-bottom: 1px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-		transition: opacity 0.2s;
-	}
-	.act-cal-event:hover { opacity: 0.8; }
-	.act-cal-more {
-		font-size: 0.6rem;
-		color: #6b7280;
-		display: block;
-	}
-
-	/* Modal */
-	.act-modal-overlay {
-		position: fixed;
-		inset: 0;
-		background: rgba(0, 0, 0, 0.5);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 1000;
-		padding: 1rem;
-	}
-	.act-modal-content {
-		background: white;
-		border-radius: 1.25rem;
-		width: 100%;
-		max-height: 90vh;
+	/* Sin `max-width` ni `margin: 0 auto`: el ancho lo acota el `main` del
+	   layout del dashboard. Acotar otra vez aquí deja franjas muertas a los
+	   lados justo donde se trabaja, y en una matriz de 24 filas con siete
+	   columnas eso se paga en scroll. */
+	.pagina {
+		padding: 1.25rem 1.25rem 3rem;
 		display: flex;
 		flex-direction: column;
-		box-shadow: 0 25px 50px rgba(0,0,0,0.15);
-	}
-	.act-modal-xl { max-width: 56rem; }
-	.act-modal-sm { max-width: 28rem; }
-	.act-modal-header {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		padding: 1.25rem 1.5rem;
-		border-bottom: 1px solid #e5e7eb;
-	}
-	.act-modal-header h2 { font-size: 1.1rem; font-weight: 600; color: #111; margin: 0; }
-	.act-delete-header { background: #fef2f2; }
-	.act-btn-close {
-		width: 2rem;
-		height: 2rem;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border: none;
-		border-radius: 0.5rem;
-		background: transparent;
-		font-size: 1.1rem;
-		color: #6b7280;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.act-btn-close:hover { background: #f3f4f6; color: #111; }
-	.act-modal-body {
-		padding: 1.25rem 1.5rem;
-		overflow-y: auto;
-	}
-	.act-modal-footer {
-		display: flex;
-		justify-content: flex-end;
-		gap: 0.5rem;
-		padding: 1rem 1.5rem;
-		border-top: 1px solid #e5e7eb;
+		gap: 1.25rem;
 	}
 
-	/* Form */
-	.act-form-grid {
+	.cabecera {
 		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 1.5rem;
 		flex-wrap: wrap;
-		gap: 0.75rem;
 	}
-	.act-form-group {
+
+	h1 {
+		margin: 0;
+		font-size: 1.375rem;
+		font-weight: 700;
+		color: #0f172a;
+	}
+
+	.subtitulo {
+		margin: 0.25rem 0 0;
+		font-size: 0.875rem;
+		color: #475569;
+		max-width: 44rem;
+	}
+
+	.corte {
+		margin: 0.25rem 0 0;
+		font-size: 0.75rem;
+		color: #94a3b8;
+	}
+
+	.periodo-selector {
+		display: flex;
+		gap: 0.625rem;
+		flex-wrap: wrap;
+	}
+
+	.periodo-selector label,
+	.filtros-matriz label {
 		display: flex;
 		flex-direction: column;
 		gap: 0.25rem;
-	}
-	.act-form-group label {
 		font-size: 0.75rem;
-		font-weight: 600;
-		color: #6b7280;
+		color: #475569;
 	}
-	.act-fg-full-width { width: 100%; }
-	.act-fg-flex-1 { flex: 1; min-width: 200px; }
-	.act-fg-w-20 { width: 5rem; }
-	.act-fg-w-28 { width: 7rem; }
-	.act-fg-w-32 { width: 8rem; }
-	.act-fg-w-36 { width: 9rem; }
-	.act-fg-w-40 { width: 10rem; }
 
-	.act-input {
-		padding: 0.5rem 0.625rem;
-		border: 1px solid #e5e7eb;
+	select,
+	input[type='search'] {
+		border: 1px solid #cbd5e1;
 		border-radius: 0.5rem;
-		font-size: 0.85rem;
-		background: white;
-		outline: none;
-		transition: border-color 0.2s;
-		width: 100%;
+		padding: 0.5rem 0.625rem;
+		font-size: 0.875rem;
+		min-height: 2.75rem;
+		background: #ffffff;
+		color: #0f172a;
+		/* Medida del propio control. */
+		min-width: 9rem;
 	}
-	.act-input:focus { border-color: #f97316; box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1); }
-	.act-input:disabled { background: #f9fafb; color: #6b7280; }
-	textarea.act-input { resize: vertical; }
 
-	/* Empty / Loading */
-	.act-loading-state, .act-empty-state {
+	.buscador input {
+		min-width: 16rem;
+	}
+
+	.aviso-permiso {
+		margin: 0;
+		padding: 0.625rem 0.875rem;
+		background: #eff6ff;
+		border: 1px solid #bfdbfe;
+		border-radius: 0.625rem;
+		font-size: 0.8125rem;
+		color: #1e40af;
+		max-width: 44rem;
+	}
+
+	.vistas {
+		display: flex;
+		gap: 0.25rem;
+		flex-wrap: wrap;
+		padding: 0.25rem;
+		background: #f1f5f9;
+		border-radius: 0.75rem;
+		width: fit-content;
+	}
+
+	.vistas button {
+		padding: 0.5rem 1rem;
+		border: none;
+		background: transparent;
+		border-radius: 0.5rem;
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: #475569;
+		cursor: pointer;
+		min-height: 2.75rem;
+	}
+
+	.vistas button:hover {
+		color: #0f172a;
+	}
+
+	.vistas button.activa {
+		background: #ffffff;
+		color: #0f172a;
+		box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
+	}
+
+	.contenido {
 		display: flex;
 		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		padding: 4rem 2rem;
-		color: #6b7280;
-		gap: 0.75rem;
+		gap: 1.25rem;
 	}
-	.act-empty-icon { font-size: 3rem; }
-	.act-spinner {
-		width: 2rem;
-		height: 2rem;
-		border: 3px solid #e5e7eb;
-		border-top-color: #f97316;
-		border-radius: 50%;
-		animation: act-spin 0.7s linear infinite;
-	}
-	.act-spinner-sm {
-		display: inline-block;
-		width: 1rem;
-		height: 1rem;
-		border: 2px solid rgba(255,255,255,0.3);
-		border-top-color: white;
-		border-radius: 50%;
-		animation: act-spin 0.6s linear infinite;
-	}
-	@keyframes act-spin { to { transform: rotate(360deg); } }
 
-	/* Responsive */
-	@media (max-width: 768px) {
-		.act-page-header { flex-direction: column; align-items: flex-start; }
-		.act-header-actions { width: 100%; justify-content: space-between; }
-		.act-filtros-bar { flex-direction: column; }
-		.act-filtro-group { width: 100%; }
-		.act-search-group { width: 100%; }
-		.act-input-sm { width: 100%; }
-		.act-kpis-row { grid-template-columns: repeat(2, 1fr); }
-		.act-fg-flex-1 { min-width: 100%; }
-		.act-fg-w-20, .act-fg-w-28, .act-fg-w-32,
-		.act-fg-w-36, .act-fg-w-40 { width: 100%; }
+	.filtros-matriz {
+		display: flex;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+
+	.rejilla-indicadores {
+		display: grid;
+		/* Rejilla fluida: se adapta al ancho real del `main`, que cambia cuando
+		   la barra lateral se colapsa. */
+		grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
+		gap: 0.875rem;
+	}
+
+	.historico {
+		display: flex;
+		flex-direction: column;
+		gap: 0.875rem;
+	}
+
+	.aviso-historico {
+		margin: 0;
+		padding: 0.75rem 0.875rem;
+		background: #f8fafc;
+		border: 1px solid #cbd5e1;
+		border-radius: 0.625rem;
+		font-size: 0.8125rem;
+		color: #475569;
+		max-width: 44rem;
+	}
+
+	.tabla-scroll {
+		overflow-x: auto;
+		border: 1px solid #e2e8f0;
+		border-radius: 0.75rem;
+		background: #ffffff;
+	}
+
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.8125rem;
+		min-width: 55rem;
+	}
+
+	thead th {
+		position: sticky;
+		top: 0;
+		background: #f8fafc;
+		text-align: left;
+		font-size: 0.6875rem;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		color: #64748b;
+		padding: 0.625rem 0.75rem;
+		border-bottom: 1px solid #e2e8f0;
+		white-space: nowrap;
+	}
+
+	tbody td {
+		padding: 0.625rem 0.75rem;
+		border-bottom: 1px solid #f1f5f9;
+		vertical-align: top;
+	}
+
+	.tab {
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+	}
+
+	.placa {
+		font-weight: 600;
+	}
+
+	.sub {
+		display: block;
+		font-size: 0.75rem;
+		color: #64748b;
+	}
+
+	button:focus-visible,
+	select:focus-visible,
+	input:focus-visible {
+		outline: 2px solid #0f172a;
+		outline-offset: 2px;
+		border-radius: 0.25rem;
+	}
+
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border-width: 0;
 	}
 </style>
