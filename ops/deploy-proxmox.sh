@@ -9,6 +9,8 @@ readonly COMPOSE_FILE="${SOURCE_DIR}/compose.proxmox.yml"
 readonly CONTAINER="frontend-cotransmeq"
 readonly PRODUCTION_IMAGE="frontend-cotransmeq:production"
 readonly RELEASE_IMAGE="frontend-cotransmeq:${EXPECTED_SHA}"
+readonly GLOBAL_LOCK_DIR="/mnt/proxmox-deploy-lock"
+readonly GLOBAL_LOCK="${GLOBAL_LOCK_DIR}/production-build.lock"
 
 if [[ ! "${EXPECTED_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
 	echo "El commit recibido no es un SHA completo válido." >&2
@@ -20,11 +22,18 @@ if [[ "$(git -C "${SOURCE_DIR}" rev-parse HEAD)" != "${EXPECTED_SHA}" ]]; then
 	exit 65
 fi
 
-exec 9>/run/lock/deploy-cotransmeq-app.lock
-flock -n 9 || {
-	echo "Ya existe otro despliegue de cotransmeq-app en ejecución." >&2
+if ! mountpoint -q "${GLOBAL_LOCK_DIR}"; then
+	echo "El lock global de Proxmox no está montado en ${GLOBAL_LOCK_DIR}." >&2
+	exit 78
+fi
+
+echo "Esperando turno global de compilación en Proxmox..."
+exec 9>"${GLOBAL_LOCK}"
+flock -w 3600 9 || {
+	echo "No fue posible obtener el turno global en 60 minutos." >&2
 	exit 75
 }
+echo "Turno global adquirido; iniciando cotransmeq-app."
 
 set -a
 # shellcheck source=/dev/null
