@@ -2155,21 +2155,19 @@
 		});
 
 		// Imágenes: incrustar las locales (mismo origen) como base64 para que
-		// el iframe (srcdoc ≈ about:srcdoc, sin base URL) pueda resolverlas;
-		// las externas (S3) se intentan base64 también; si CORS bloquea, se
-		// deja el src absoluto y el iframe intentará cargarlo desde su origen.
+		// el iframe (srcdoc ≈ about:srcdoc, sin base URL) pueda resolverlas.
+		// El sello de Supertransporte también sale de `static/`: colgaba del
+		// bucket de Transmeralda y ese origen ajeno podía fallar por CORS.
 		const localLogoData = await getImageBase64('/assets/logo_nombre.webp');
-		const s3LogoData = await getImageBase64(
-			'https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.png'
-		);
+		const superLogoData = await getImageBase64('/assets/super_transporte.png');
 		container.querySelectorAll('img').forEach((img) => {
 			const el = img as HTMLImageElement;
 			const src = el.getAttribute('src') || '';
 			if (!src) return;
 			if (src.includes('logo_nombre.webp') && localLogoData) {
 				el.src = localLogoData;
-			} else if (src.includes('supertransporte_logo') && s3LogoData) {
-				el.src = s3LogoData;
+			} else if (src.includes('super_transporte') && superLogoData) {
+				el.src = superLogoData;
 			} else if (src.startsWith('/')) {
 				el.src = new URL(src, window.location.origin).href;
 			}
@@ -4667,7 +4665,7 @@
 						</div>
 						<div class="dh-super">
 							<img
-								src="https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.png"
+								src="/assets/super_transporte.png"
 								alt="Supertransporte"
 							/>
 						</div>
@@ -4832,7 +4830,7 @@
 						</div>
 						<div class="dh-super">
 							<img
-								src="https://transmeralda.s3.us-east-2.amazonaws.com/assets/supertransporte_logo.png"
+								src="/assets/super_transporte.png"
 								alt="Supertransporte"
 							/>
 						</div>

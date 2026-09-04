@@ -16,7 +16,7 @@ import DocumentoHoja from './DocumentoHoja.svelte';
 import { cargarSeleccion, type ScopePreview } from './columnas';
 import type { DocumentoPreview } from './tipos';
 
-const LOGO_URL = '/assets/logo_transmeralda-264.webp';
+const LOGO_URL = '/assets/logo_nombre.webp';
 
 /** Ancho del lienzo. El mismo que usa el preview; el PDF lo reescala con `@page`. */
 export const ANCHO_LIENZO = 2480;

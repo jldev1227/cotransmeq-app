@@ -85,11 +85,11 @@
 	<div class="header">
 		<div class="header-logo">
 			{#if logoRoto}
-				<div class="fallback">TRANS<br />MERALDA</div>
+				<div class="fallback">COTRANS<br />MEQ</div>
 			{:else}
 				<img
-					src="/assets/logo_transmeralda-264.webp"
-					alt="Cotransmeq"
+					src="/assets/logo_nombre.webp"
+					alt="Cotransmeq S.A.S"
 					onerror={() => (logoRoto = true)}
 				/>
 			{/if}

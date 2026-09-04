@@ -12,7 +12,7 @@
 import { liquidacionesTercerosCanvasPdfAPI } from '$lib/api/liquidaciones-terceros-canvas-pdf';
 import { documentoCss } from './documento.css';
 
-const LOGO_URL = '/assets/logo_transmeralda-264.webp';
+const LOGO_URL = '/assets/logo_nombre.webp';
 
 let logoCache: string | null = null;
 
