@@ -20,12 +20,17 @@
 		type FormVersionDto,
 		type SubmissionDetailDto
 	} from '$lib/formularios/types';
+	import { fechaDeFormularioDe } from '$lib/formularios/fecha-diligenciamiento';
 	import FormRenderer from '$lib/components/formularios/FormRenderer.svelte';
 	import PreviewEnvioPDF from '$lib/components/formularios/PreviewEnvioPDF.svelte';
 
 	const submissionId = $derived($page.params.submissionId!);
 
 	let envio = $state<SubmissionDetailDto | null>(null);
+
+	/// Cuándo se empezó el formulario. `null` en los envíos anteriores a que el
+	/// campo existiera, que es un dato en sí: no se inventa ninguna.
+	const fechaDelFormulario = $derived(fechaDeFormularioDe(envio?.context));
 	let definicion = $state<FormVersionDto | null>(null);
 	let runner = $state<RunnerState | null>(null);
 
@@ -338,6 +343,13 @@
 				<div class="ficha__par">
 					<dt>Fecha operativa</dt>
 					<dd class="mono">{envio.businessDate ?? '—'}</dd>
+				</div>
+				<div class="ficha__par">
+					<!-- Cuándo se EMPEZÓ, al lado de la fecha con la que cuenta el
+					     servidor. Difieren en el turno que cruza la medianoche y en el
+					     formulario diligenciado sin señal que se entrega días después. -->
+					<dt>Fecha formulario</dt>
+					<dd class="mono">{fechaDelFormulario ?? '—'}</dd>
 				</div>
 				<div class="ficha__par">
 					<dt>Período</dt>

@@ -19,6 +19,7 @@
 	import { getReceipt, operationsFor, type StoredReceipt } from '$lib/offline/forms-db';
 	import { receiptEvents, syncState, wakeAll } from '$lib/offline/forms-sync';
 	import { createRunnerState, type RunnerState } from '$lib/formularios/runner-state.svelte';
+	import { fechaDeFormularioDe } from '$lib/formularios/fecha-diligenciamiento';
 	import type { FormVersionDto, SubmissionDetailDto } from '$lib/formularios/types';
 	import FormRenderer from '$lib/components/formularios/FormRenderer.svelte';
 	import SyncStatus from '$lib/components/formularios/SyncStatus.svelte';
@@ -29,6 +30,10 @@
 
 	let recibo = $state<StoredReceipt | null>(null);
 	let envio = $state<SubmissionDetailDto | null>(null);
+
+	/// Cuándo se empezó el formulario. Solo la trae el envío ya sincronizado; el
+	/// recibo local no guarda el contexto.
+	const fechaDelFormulario = $derived(fechaDeFormularioDe(envio?.context));
 	let definicion = $state<FormVersionDto | null>(null);
 	let runner = $state<RunnerState | null>(null);
 	let operacionesRestantes = $state(0);
@@ -189,6 +194,14 @@
 					<dt>Fecha de negocio</dt>
 					<dd class="mono">{envio?.businessDate ?? recibo?.businessDate ?? '—'}</dd>
 				</div>
+				{#if fechaDelFormulario}
+					<!-- Solo si la trae: los envíos anteriores a este campo no la tienen
+					     y una casilla vacía en el recibo del conductor solo confunde. -->
+					<div>
+						<dt>Fecha del formulario</dt>
+						<dd class="mono">{fechaDelFormulario}</dd>
+					</div>
+				{/if}
 				<div>
 					<dt>Enviado</dt>
 					<dd class="mono">{fechaHora(envio?.submittedAt ?? recibo?.submittedAt ?? null)}</dd>

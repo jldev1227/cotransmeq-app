@@ -29,6 +29,10 @@ export default defineConfig({
 		globals: true,
 		environment: 'node',
 		include: ['tests/**/*.test.ts'],
+		// Los módulos del portal se importan como si estuvieran en el navegador
+		// (`browser: true` en el doble de `$app/environment`) y algunos leen
+		// `localStorage` al cargarse. Sin este doble, importarlos falla.
+		setupFiles: ['./tests/dobles/almacenamiento.ts'],
 		// Univer y ExcelJS son pesados de cargar; el arranque de un worker por
 		// archivo cuesta más que ejecutar toda la suite en uno.
 		pool: 'threads',

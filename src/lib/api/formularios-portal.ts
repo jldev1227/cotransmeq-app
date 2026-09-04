@@ -359,6 +359,10 @@ export const portalFormulariosAPI = {
 			context?: Record<string, unknown>;
 			answers: DraftAnswer[];
 			progress?: number;
+			/// Cuándo se abrió el formulario en ESTE dispositivo. De aquí sale la
+			/// fecha del formulario: sin este dato el servidor solo sabe cuándo
+			/// recibió el backup, que sin señal puede ser días después.
+			startedAt?: string;
 			device?: Record<string, unknown>;
 		},
 		signal?: AbortSignal

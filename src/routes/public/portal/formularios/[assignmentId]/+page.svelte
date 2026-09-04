@@ -48,6 +48,7 @@
 	} from '$lib/offline/forms-sync';
 	import { createRunnerState, type RunnerState } from '$lib/formularios/runner-state.svelte';
 	import { computeProgress } from '$lib/formularios/validate-answers';
+	import { fechaLocalDe, formatearFechaCorta } from '$lib/formularios/fecha-diligenciamiento';
 	import type { FormVersionDto } from '$lib/formularios/types';
 	import type { PreparedMedia } from '$lib/offline/forms-media';
 	import { ordenarPorEtiqueta } from '$lib/utils/ordenarOpciones';
@@ -80,6 +81,9 @@
 	let adjuntos = $state<StoredAttachment[]>([]);
 	let bytesAdjuntos = $state(0);
 	let bloqueo = $state<StoredDraft['blocked'] | null>(null);
+	/// Cuándo se abrió este formulario en el teléfono. De aquí sale la fecha que
+	/// se muestra, y es lo que el envío le reporta al servidor como `startedAt`.
+	let inicioLocal = $state<string>('');
 
 	let cargando = $state(true);
 	let error = $state<string | null>(null);
@@ -237,6 +241,11 @@
 			url.searchParams.delete('nuevo');
 			history.replaceState(history.state, '', url);
 		}
+
+		/// La fecha del formulario NO se guarda aquí: la pone el servidor desde
+		/// `started_at`. En el teléfono se muestra la del borrador local, que es el
+		/// mismo instante visto desde este lado y lo único que se sabe sin red.
+		inicioLocal = (await getDraft(clientSubmissionId))?.createdAt ?? new Date().toISOString();
 
 		await refrescarAdjuntos();
 		await cargarVehiculos();
@@ -573,8 +582,19 @@
 			</p>
 		{/if}
 
-		{#if contextoRequerido.includes('vehicleId')}
-			<section class="contexto">
+		<!-- Cabecera de contexto. La fecha va SIEMPRE —todo formulario declara
+		     cuándo se diligenció— y la placa solo si la asignación la pide. -->
+		<section class="contexto">
+			<!-- Dato, no campo: la fecha es la del momento en que se abrió el
+			     formulario y no se teclea. Se muestra porque el conductor firma un
+			     documento y tiene derecho a ver con qué fecha queda. -->
+			<div class="contexto__campo">
+				<span class="contexto__label">Fecha del formulario</span>
+				<output class="contexto__dato">{formatearFechaCorta(fechaLocalDe(inicioLocal))}</output>
+				<span class="contexto__hint">Se toma de cuando abriste el formulario.</span>
+			</div>
+
+			{#if contextoRequerido.includes('vehicleId')}
 				{#if vehiculos.length}
 					<!-- Buscador de placas, no desplegable: en una flota de decenas de
 					     vehículos el `<select>` nativo obliga a recorrer la lista entera
@@ -615,8 +635,8 @@
 						</span>
 					</label>
 				{/if}
-			</section>
-		{/if}
+			{/if}
+		</section>
 
 		<main class="cuerpo">
 			<FormRenderer
@@ -788,6 +808,20 @@
 
 	.req {
 		color: #dc2626;
+	}
+
+	.contexto__dato {
+		display: block;
+		min-height: 48px;
+		padding: 0.5rem 0.75rem;
+		font: inherit;
+		font-size: 1rem;
+		font-variant-numeric: tabular-nums;
+		/* Fondo plano y sin borde de caja: parece dato, no casilla. Con el mismo
+		   borde que los campos de al lado, el conductor intenta escribir en él. */
+		background: var(--bg-subtle, rgba(0, 0, 0, 0.03));
+		border-radius: 10px;
+		line-height: 2;
 	}
 
 	.contexto__input {

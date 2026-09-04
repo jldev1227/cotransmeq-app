@@ -36,6 +36,11 @@
 	import { vehiculosAPI } from '$lib/api/apiClient';
 	import { createRunnerState, type RunnerState } from '$lib/formularios/runner-state.svelte';
 	import { computeProgress, type DraftAnswer } from '$lib/formularios/validate-answers';
+	import {
+		fechaDeFormularioDe,
+		fechaLocalDe,
+		formatearFechaCorta
+	} from '$lib/formularios/fecha-diligenciamiento';
 	import type { FormVersionDto } from '$lib/formularios/types';
 	import type { PreparedMedia } from '$lib/offline/forms-media';
 	import { ordenarPorEtiqueta } from '$lib/utils/ordenarOpciones';
@@ -573,8 +578,19 @@
 			<a class="btn" href="/dashboard/mis-formularios">Volver</a>
 		</div>
 	{:else}
-		{#if contextoRequerido.includes('vehicleId')}
-			<section class="contexto">
+		<!-- La fecha va SIEMPRE; la placa solo si la asignación la pide. -->
+		<section class="contexto">
+			<!-- Dato, no campo: la fecha sale de cuando se abrió el formulario. Un
+			     borrador reanudado ya la trae del servidor; uno nuevo se acaba de
+			     abrir, así que es hoy. -->
+			<div class="contexto__campo">
+				<span class="contexto__label">Fecha del formulario</span>
+				<output class="contexto__dato">
+					{formatearFechaCorta(fechaDeFormularioDe(contexto) ?? fechaLocalDe())}
+				</output>
+			</div>
+
+			{#if contextoRequerido.includes('vehicleId')}
 				<div class="contexto__campo">
 					<span class="contexto__label">Vehículo <span class="req">*</span></span>
 					{#if vehiculos.length}
@@ -599,8 +615,8 @@
 						/>
 					{/if}
 				</div>
-			</section>
-		{/if}
+			{/if}
+		</section>
 
 		<main class="cuerpo">
 			<FormRenderer
@@ -738,6 +754,20 @@
 
 	.req {
 		color: var(--red-600, #dc2626);
+	}
+
+	.contexto__dato {
+		display: block;
+		min-height: 48px;
+		padding: 0.5rem 0.75rem;
+		font: inherit;
+		font-size: 1rem;
+		font-variant-numeric: tabular-nums;
+		/* Fondo plano y sin borde de caja: parece dato, no casilla. Con el mismo
+		   borde que los campos de al lado, el conductor intenta escribir en él. */
+		background: var(--bg-subtle, rgba(0, 0, 0, 0.03));
+		border-radius: 10px;
+		line-height: 2;
 	}
 
 	.contexto__input {
