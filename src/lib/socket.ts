@@ -135,60 +135,37 @@ class SocketManager {
 			}
 		});
 
-		this.socket.on('unauthorized', (error) => {
-			console.error('Socket no autorizado:', error);
-			authStore.logout();
-		});
+		/// Aquí había un listener de `unauthorized` que llamaba a
+		/// `authStore.logout()`. El backend NO emite ese evento nunca: cuando
+		/// rechaza un handshake lo hace con un error del middleware, que llega
+		/// como `connect_error` — el de arriba. Así que era código muerto, y de
+		/// los peligrosos: cualquier evento de dominio que llegara a llamarse
+		/// `unauthorized` habría cerrado la sesión de todo el mundo.
+		///
+		/// Cuando `SOCKET_AUTH_MODE` pase a `enforce`, el rechazo por token
+		/// inválido llegará por `connect_error` con el mensaje
+		/// «unauthorized: token inválido». Ahí habrá que decidir si eso debe
+		/// cerrar la sesión; hoy solo cuenta como intento fallido de conexión.
 
 		// Eventos globales de la aplicación
 		this.setupApplicationEvents();
 	}
 
 	private setupApplicationEvents() {
-		if (!this.socket) return;
-
-		// Eventos de servicios
-		this.socket.on('servicio-actualizado', (data) => {
-			console.log('Servicio actualizado:', data);
-			// Aquí podrías actualizar stores específicos o disparar notificaciones
-		});
-
-		this.socket.on('servicio-creado', (data) => {
-			console.log('Nuevo servicio creado:', data);
-		});
-
-		// Eventos de vehículos
-		this.socket.on('vehiculo-ubicacion', (data) => {
-			console.log('Ubicación de vehículo actualizada:', data);
-		});
-
-		this.socket.on('vehiculo-estado', (data) => {
-			console.log('Estado de vehículo actualizado:', data);
-		});
-
-		// Eventos de conductores
-		this.socket.on('conductor-estado', (data) => {
-			console.log('Estado de conductor actualizado:', data);
-		});
-
-		// Notificaciones generales
-		this.socket.on('notificacion', (data) => {
-			console.log('Nueva notificación:', data);
-			// Aquí podrías mostrar una notificación toast
-		});
-
-		// Liquidaciones de servicios
-		this.socket.on('liquidacion-servicio-created', (data) => {
-			console.log('Liquidación de servicio creada:', data);
-		});
-
-		this.socket.on('liquidacion-servicio-updated', (data) => {
-			console.log('Liquidación de servicio actualizada:', data);
-		});
-
-		this.socket.on('liquidacion-servicio-deleted', (data) => {
-			console.log('Liquidación de servicio eliminada:', data);
-		});
+		/// Vacío a propósito.
+		///
+		/// Aquí había doce listeners permanentes que solo hacían `console.log`.
+		/// Seis de ellos —`servicio-actualizado`, `servicio-creado`,
+		/// `vehiculo-ubicacion`, `vehiculo-estado`, `conductor-estado` y
+		/// `notificacion`— escuchaban eventos que el backend NUNCA ha emitido:
+		/// los nombres reales son otros. Los otros seis duplicaban lo que ya
+		/// hacen los stores y las páginas, y como nunca se daban de baja
+		/// registraban cada evento del sistema en la consola de todos.
+		///
+		/// Quien necesite reaccionar a un evento lo hace desde su store o su
+		/// página, con su propio alta y baja. El contrato de eventos
+		/// (`tests/contrato-eventos`) impide que vuelvan a aparecer listeners
+		/// de eventos inexistentes sin que nadie se entere.
 	}
 
 	// Métodos públicos para emitir eventos
@@ -200,44 +177,81 @@ class SocketManager {
 		}
 	}
 
-	// Método para escuchar eventos específicos desde componentes
-	on(event: string, callback: (data: any) => void) {
-		// Guardar el listener para re-registrarlo si el socket se (re)crea
+	/**
+	 * Escucha un evento y **devuelve la función para dejar de escucharlo**.
+	 *
+	 * Usar esa función es la forma fiable de darse de baja:
+	 *
+	 * ```ts
+	 * $effect(() => socketUtils.on('servicio:creado', alCrear))
+	 * ```
+	 *
+	 * Antes el callback se envolvía en otro que hacía `console.log` y era el
+	 * ENVUELTO el que se registraba y se guardaba, mientras `off(evento, cb)`
+	 * intentaba borrar el original. Ni el `Set.delete` ni el `socket.off`
+	 * encontraban nada, así que **ningún `off` daba de baja nada**: las quince
+	 * páginas que llamaban a `off` en su `onDestroy` parecían correctas y
+	 * acumulaban un listener más en cada visita. Tras N visitas a una página,
+	 * su handler corría N veces por evento.
+	 *
+	 * Se registra el callback tal cual. El log por evento se retiró: escribía
+	 * en consola CADA evento del sistema, y para diagnosticar ya está
+	 * `stores/socketEventLog.ts`.
+	 */
+	on(event: string, callback: (data: any) => void): () => void {
 		if (!this.externalListeners.has(event)) {
 			this.externalListeners.set(event, new Set());
 		}
+		// Se guarda para poder re-registrarlo si el socket se (re)crea.
 		this.externalListeners.get(event)!.add(callback);
-		// Si el socket ya existe, registrarlo ahora (envuelto en un log
-		// para diagnóstico de eventos que no llegan al componente).
-		if (this.socket) {
-			const wrappedCb = (data: any) => {
-				console.log(`[socket] 📨 RECIBIDO evento "${event}"`, data);
-				callback(data);
-			};
-			// Reemplazar el callback guardado con el envuelto para que
-			// el log también funcione en re-registros por reconexión.
-			this.externalListeners.get(event)!.delete(callback);
-			this.externalListeners.get(event)!.add(wrappedCb);
-			this.socket.on(event, wrappedCb);
-			console.log(`[socket] ✓ Listener registrado para "${event}" (socket.connected=${this.socket.connected})`);
-		} else {
-			console.log(`[socket] ⏳ Listener para "${event}" guardado en cola (socket aún no creado)`);
-		}
+		this.socket?.on(event, callback);
+
+		return () => this.off(event, callback);
 	}
 
-	// Método para dejar de escuchar eventos
+	/**
+	 * Deja de escuchar.
+	 *
+	 * Sin `callback` quita TODOS los listeners de ese evento, incluidos los de
+	 * otros módulos que comparten este socket. Eso ya causó un fallo real:
+	 * salir de `/dashboard/conductores` mataba el listener de
+	 * `dias-laborados:registro-actualizado` que necesitaba
+	 * `TablaDiasLaborados.svelte`, y la tabla dejaba de actualizarse sin que
+	 * nada avisara. Por eso ahora deja rastro en consola: pásale el callback,
+	 * o mejor usa la función que devuelve `on()`.
+	 */
 	off(event: string, callback?: (data: any) => void) {
-		if (callback && this.externalListeners.has(event)) {
-			this.externalListeners.get(event)!.delete(callback);
+		if (callback) {
+			this.externalListeners.get(event)?.delete(callback);
+			this.socket?.off(event, callback);
+			return;
 		}
-		if (this.socket) {
-			this.socket.off(event, callback);
-		}
+
+		console.warn(
+			`[socket] off('${event}') sin handler: se dan de baja TODOS los ` +
+				`listeners de ese evento, incluidos los de otros módulos. ` +
+				`Pasa el callback o usa la función que devuelve on().`
+		);
+		this.externalListeners.delete(event);
+		this.socket?.off(event);
 	}
 
 	// Método para obtener el estado de conexión
 	isConnected(): boolean {
 		return this.socket?.connected || false;
+	}
+
+	/**
+	 * Id de la conexión actual, o `null` si no hay ninguna.
+	 *
+	 * Hace falta para las operaciones cuyo progreso el backend manda a un
+	 * socket concreto en vez de a un room —la generación del ZIP de
+	 * desprendibles es el caso—: el cliente tiene que decir a qué conexión
+	 * quiere que le hablen. Cambia en cada reconexión, así que se pide en el
+	 * momento de lanzar la operación y no se guarda.
+	 */
+	getSocketId(): string | null {
+		return this.socket?.id ?? null;
 	}
 }
 
@@ -247,7 +261,10 @@ export const socketManager = new SocketManager();
 // Funciones de conveniencia para usar en componentes
 export const socketUtils = {
 	emit: (event: string, data?: any) => socketManager.emit(event, data),
-	on: (event: string, callback: (data: any) => void) => socketManager.on(event, callback),
+	/** Devuelve la función de baja; úsala en vez de `off`. */
+	on: (event: string, callback: (data: any) => void): (() => void) =>
+		socketManager.on(event, callback),
 	off: (event: string, callback?: (data: any) => void) => socketManager.off(event, callback),
-	isConnected: () => socketManager.isConnected()
+	isConnected: () => socketManager.isConnected(),
+	getSocketId: () => socketManager.getSocketId()
 };

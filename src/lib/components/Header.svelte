@@ -37,7 +37,7 @@
 		'liquidaciones-terceros-adicionales': 'Adicionales de Cierres Finales',
 		sarlaft: 'SARLAFT + PTEE',
 		pesv: 'PESV',
-		contabilidad: 'Contabilidad',
+		certificados: 'Certificados Tributarios',
 		terceros: 'Terceros',
 		usuarios: 'Equipo',
 		perfil: 'Perfil',
@@ -63,7 +63,7 @@
 		if (pathname.startsWith('/dashboard/liquidaciones-terceros')) return 'liquidaciones-terceros';
 		if (pathname.startsWith('/dashboard/sarlaft')) return 'sarlaft';
 		if (pathname.startsWith('/dashboard/pesv')) return 'pesv';
-		if (pathname.startsWith('/dashboard/contabilidad')) return 'contabilidad';
+		if (pathname.startsWith('/dashboard/certificados')) return 'certificados';
 		if (pathname.startsWith('/dashboard/terceros')) return 'terceros';
 		if (pathname.startsWith('/dashboard/usuarios')) return 'usuarios';
 		if (pathname.startsWith('/dashboard/sesiones')) return 'usuarios';

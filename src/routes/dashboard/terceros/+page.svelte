@@ -1,8 +1,20 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { page } from '$app/state';
+	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+	import { crearListingStore } from '$lib/listing/listingStore';
+	import { crearEstadoUrl } from '$lib/listing/urlState';
+	import {
+		firma,
+		limpiar as limpiarFiltrosDe,
+		numero,
+		opcion,
+		texto,
+		type DefinicionesFiltros
+	} from '$lib/listing/filtros';
 	import { fade, fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
-	import { tercerosAPI, type Tercero, type TerceroPagination, type TerceroCounts } from '$lib/api/terceros';
+	import { tercerosAPI, type Tercero, type TerceroCounts } from '$lib/api/terceros';
 
 	const REGIMENES: Record<string, string> = {
 		SIMPLIFICADO: 'Simplificado',
@@ -10,7 +22,7 @@
 		GRAN_CONTRIBUYENTE: 'Gran Contribuyente',
 		NO_RESPONSABLE: 'No Responsable',
 		AUTORRETENEDOR: 'Autorretenedor',
-		ORDINARIO: 'Ordinario',
+		ORDINARIO: 'Ordinario'
 	};
 
 	const REGIMEN_SHORT: Record<string, string> = {
@@ -19,27 +31,49 @@
 		GRAN_CONTRIBUYENTE: 'Gran Contrib.',
 		NO_RESPONSABLE: 'No Responsable',
 		AUTORRETENEDOR: 'Autorretenedor',
-		ORDINARIO: 'Ordinario',
+		ORDINARIO: 'Ordinario'
 	};
 
-	let terceros: Tercero[] = [];
-	let pagination: TerceroPagination = { page: 1, limit: 12, total: 0, pages: 0, hasNext: false, hasPrev: false };
-	let counts: TerceroCounts = { total: 0, personas: 0, empresas: 0 };
-	let isLoading = false;
-	let error: string | null = null;
-	let searchTerm = '';
-	let filtroTipo: 'TODOS' | 'PERSONA' | 'EMPRESA' = 'TODOS';
-	let searchTimeout: ReturnType<typeof setTimeout>;
-	let sortBy: 'nombre_completo' | 'identificacion' | 'created_at' = 'nombre_completo';
-	let sortOrder: 'asc' | 'desc' = 'asc';
+	/**
+	 * Filtros de la página, en la URL.
+	 *
+	 * Búsqueda, tipo, orden y página se resuelven en servidor —el endpoint ya
+	 * acepta `search`, `tipo_persona`, `sortBy`, `sortOrder`, `page`—, así que
+	 * la firma de caché los incluye todos: cualquiera cambia lo que se pide.
+	 */
+	interface FiltrosTerceros {
+		q: string;
+		tipo: string;
+		orden: string;
+		dir: string;
+		pagina: number;
+	}
+
+	const POR_PAGINA = 24;
+
+	const DEFS: DefinicionesFiltros<FiltrosTerceros> = {
+		q: texto(),
+		tipo: opcion('TODOS'),
+		orden: opcion('nombre_completo'),
+		dir: opcion('asc'),
+		pagina: numero(1)
+	};
+
+	const estadoUrl = crearEstadoUrl(DEFS);
+	const listaTerceros = crearListingStore<Tercero>();
+
+	let filtros = $state<FiltrosTerceros>(estadoUrl.leerInicial());
+
+	let terceros = $state<Tercero[]>([]);
+	let counts = $state<TerceroCounts>({ total: 0, personas: 0, empresas: 0 });
 
 	// Modal state
-	let showModal = false;
-	let editingTercero: Tercero | null = null;
-	let isSaving = false;
-	let modalError: string | null = null;
+	let showModal = $state(false);
+	let editingTercero = $state<Tercero | null>(null);
+	let isSaving = $state(false);
+	let modalError = $state<string | null>(null);
 
-	let form = resetForm();
+	let form = $state(resetForm());
 
 	function resetForm() {
 		return {
@@ -50,119 +84,112 @@
 			direccion: '',
 			tipo_persona: 'PERSONA' as 'PERSONA' | 'EMPRESA',
 			regimen: '' as string,
-			notas: '',
+			notas: ''
 		};
 	}
 
-	let showDeleteModal = false;
-	let terceroToDelete: Tercero | null = null;
+	let showDeleteModal = $state(false);
+	let terceroToDelete = $state<Tercero | null>(null);
 
-	let showImportModal = false;
-	let isImporting = false;
-	let importResult: { importados: number; duplicados: number; total: number } | null = null;
+	let showImportModal = $state(false);
+	let isImporting = $state(false);
+	let importResult = $state<{ importados: number; duplicados: number; total: number } | null>(null);
 
-	let showDetail = false;
-	let detailTercero: Tercero | null = null;
+	let showDetail = $state(false);
+	let detailTercero = $state<Tercero | null>(null);
 
-	$: hasActiveFilter = searchTerm.trim() !== '' || filtroTipo !== 'TODOS';
+	const hasActiveFilter = $derived(filtros.q.trim() !== '' || filtros.tipo !== 'TODOS');
 
-	$: {
-		if (typeof searchTerm === 'string') handleSearch();
+	async function traerTerceros(): Promise<{ items: Tercero[]; total: number }> {
+		const params: any = {
+			page: filtros.pagina,
+			limit: POR_PAGINA,
+			sortBy: filtros.orden,
+			sortOrder: filtros.dir
+		};
+		if (filtros.q.trim()) params.search = filtros.q.trim();
+		if (filtros.tipo !== 'TODOS') params.tipo_persona = filtros.tipo;
+
+		const response = await tercerosAPI.listar(params);
+		/// Los contadores vienen del servidor y cuentan TODO, no la página
+		/// actual: son el resumen del directorio, no del filtro.
+		if (response.counts) counts = response.counts;
+
+		const items = response.data || [];
+		return { items, total: response.pagination?.total ?? items.length };
 	}
 
-	onMount(() => {
-		loadTerceros();
+	const firmaDatos = $derived(firma(DEFS, filtros));
+
+	async function cargar(forzar = false) {
+		if (forzar) listaTerceros.invalidar();
+		await listaTerceros.cargar(firmaDatos, traerTerceros);
+	}
+
+	/// Cambiar cualquier filtro vuelve a la primera página: quedarse en la 7
+	/// de un resultado que ahora tiene 2 muestra una tabla vacía.
+	function ponerFiltro<K extends keyof FiltrosTerceros>(clave: K, valor: FiltrosTerceros[K]) {
+		filtros = { ...filtros, [clave]: valor, pagina: 1 };
+	}
+
+	function irPagina(pagina: number) {
+		filtros = { ...filtros, pagina };
+	}
+
+	$effect(() => {
+		estadoUrl.escribir(page.url, filtros);
 	});
 
-	async function loadTerceros(page = 1) {
-		isLoading = true;
-		error = null;
-		try {
-			const params: any = { page, limit: pagination.limit, sortBy, sortOrder };
-			if (searchTerm?.trim()) params.search = searchTerm.trim();
-			if (filtroTipo !== 'TODOS') params.tipo_persona = filtroTipo;
+	$effect(() => {
+		void firmaDatos;
+		void cargar();
+	});
 
-			const response = await tercerosAPI.listar(params);
-			terceros = response.data || [];
-			if (response.pagination) pagination = response.pagination;
-			if (response.counts) counts = response.counts;
-		} catch (err: any) {
-			error = err.response?.data?.message || err.message || 'Error al cargar terceros';
-		} finally {
-			isLoading = false;
-		}
-	}
+	/// Estado de la LISTA, que lo gobierna el store.
+	const cargandoLista = $derived($listaTerceros._?.cargando ?? false);
+	const errorLista = $derived($listaTerceros._?.error || null);
 
-	function handleSearch() {
-		if (searchTimeout) clearTimeout(searchTimeout);
-		searchTimeout = setTimeout(() => {
-			pagination.page = 1;
-			loadTerceros(1);
-		}, 400);
-	}
+	/// Estado de las OPERACIONES —eliminar, importar—, que antes reutilizaban
+	/// las variables de la lista: un borrado en curso ponía el spinner de
+	/// «cargando terceros» y su error borraba el de la carga.
+	let operando = $state(false);
+	let errorOperacion = $state<string | null>(null);
 
-	function handleFilterChange() {
-		pagination.page = 1;
-		loadTerceros(1);
-	}
+	/// Lo que el marcado sigue llamando `isLoading` y `error`: cualquiera de
+	/// las dos cosas deja la interfaz ocupada o con un aviso.
+	const isLoading = $derived(cargandoLista || operando);
+	const error = $derived(errorOperacion ?? errorLista);
+	const totalTerceros = $derived($listaTerceros._?.total ?? 0);
+
+	$effect(() => {
+		terceros = $listaTerceros._?.items ?? [];
+	});
 
 	function clearFilters() {
-		searchTerm = '';
-		filtroTipo = 'TODOS';
-		pagination.page = 1;
-		loadTerceros(1);
+		filtros = limpiarFiltrosDe(DEFS, filtros);
 	}
 
-	function toggleSort(field: typeof sortBy) {
-		if (sortBy === field) {
-			sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+	/// El orden también viaja en la URL: compartir «terceros por identificación
+	/// descendente» reproduce esa vista, no la de por defecto.
+	function toggleSort(field: string) {
+		if (filtros.orden === field) {
+			ponerFiltro('dir', filtros.dir === 'asc' ? 'desc' : 'asc');
 		} else {
-			sortBy = field;
-			sortOrder = 'asc';
+			filtros = { ...filtros, orden: field, dir: 'asc', pagina: 1 };
 		}
-		pagination.page = 1;
-		loadTerceros(1);
 	}
 
-	function goToPage(page: number) {
-		if (page >= 1 && page <= pagination.pages && page !== pagination.page) loadTerceros(page);
-	}
-	function previousPage() {
-		if (pagination.hasPrev) goToPage(pagination.page - 1);
-	}
-	function nextPage() {
-		if (pagination.hasNext) goToPage(pagination.page + 1);
-	}
-
-	function getPageNumbers(): (number | string)[] {
-		const pages: (number | string)[] = [];
-		const current = pagination.page;
-		const total = pagination.pages;
-		if (total <= 7) {
-			for (let i = 1; i <= total; i++) pages.push(i);
-			return pages;
-		}
-		pages.push(1);
-		let start = Math.max(2, current - 1);
-		let end = Math.min(total - 1, current + 1);
-		if (current <= 3) {
-			start = 2;
-			end = 4;
-		}
-		if (current >= total - 2) {
-			start = total - 3;
-			end = total - 1;
-		}
-		if (start > 2) pages.push('…');
-		for (let i = start; i <= end; i++) pages.push(i);
-		if (end < total - 1) pages.push('…');
-		pages.push(total);
-		return pages;
-	}
+	/// `previousPage`, `nextPage` y `getPageNumbers` los reemplaza
+	/// `PaginadorLista`, que trae la misma ventana de páginas y estaba copiada
+	/// a mano en conductores, clientes, servicios, sarlaft y aquí.
 
 	function initials(name: string): string {
-		if (!name) return '?';
-		const parts = name.trim().split(/\s+/);
+		/// El corte es sobre el nombre ya recortado: `!name` deja pasar una
+		/// cadena de espacios, y esa devolvía iniciales vacías —un círculo mudo
+		/// en la ficha— en vez de la interrogación.
+		const limpio = name?.trim();
+		if (!limpio) return '?';
+		const parts = limpio.split(/\s+/);
 		if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
 		return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 	}
@@ -186,7 +213,7 @@
 			direccion: t.direccion || '',
 			tipo_persona: t.tipo_persona,
 			regimen: t.regimen || '',
-			notas: t.notas || '',
+			notas: t.notas || ''
 		};
 		modalError = null;
 		showModal = true;
@@ -214,7 +241,7 @@
 				direccion: form.direccion.trim() || null,
 				tipo_persona: form.tipo_persona,
 				regimen: form.regimen || null,
-				notas: form.notas.trim() || null,
+				notas: form.notas.trim() || null
 			};
 
 			if (editingTercero) {
@@ -223,7 +250,7 @@
 				await tercerosAPI.crear(payload);
 			}
 			closeModal();
-			loadTerceros(pagination.page);
+			cargar(true);
 		} catch (err: any) {
 			modalError = err.response?.data?.message || err.message || 'Error al guardar';
 		} finally {
@@ -244,15 +271,15 @@
 
 	async function deleteTercero() {
 		if (!terceroToDelete) return;
-		isLoading = true;
+		operando = true;
 		try {
 			await tercerosAPI.eliminar(terceroToDelete.id);
 			closeDeleteModal();
-			loadTerceros(pagination.page);
+			cargar(true);
 		} catch (err: any) {
-			error = err.response?.data?.message || err.message || 'Error al eliminar';
+			errorOperacion = err.response?.data?.message || err.message || 'Error al eliminar';
 		} finally {
-			isLoading = false;
+			operando = false;
 		}
 	}
 
@@ -266,9 +293,9 @@
 		isImporting = true;
 		try {
 			importResult = await tercerosAPI.importarDesdeVehiculos();
-			loadTerceros(1);
+			cargar(true);
 		} catch (err: any) {
-			error = err.response?.data?.message || err.message || 'Error al importar';
+			errorOperacion = err.response?.data?.message || err.message || 'Error al importar';
 			showImportModal = false;
 		} finally {
 			isImporting = false;
@@ -291,33 +318,40 @@
 </svelte:head>
 
 <div class="terceros-page" in:fly={{ y: 20, duration: 500, easing: quintOut }}>
-	<!-- ═══ HEADER EDITORIAL ═══ -->
-	<header class="page-hero" in:fade={{ duration: 400 }}>
-		<div class="hero-inner">
-			<div class="hero-left">
-				<div class="card-icon hero-icon">
+	<!-- ═══ BARRA DE PÁGINA ═══
+	     Título, acciones y filtros en un solo bloque. Antes eran dos tarjetas
+	     apiladas —un hero editorial con párrafo y una franja de stats, más una
+	     barra de filtros aparte— que gastaban ~340 px antes de la primera
+	     tarjeta. Los contadores no se pierden: viven ahora dentro de los chips
+	     de tipo, que es donde además se usan para filtrar.
+	-->
+	<header class="page-toolbar" in:fade={{ duration: 400 }}>
+		<div class="toolbar-top">
+			<div class="toolbar-title">
+				<div class="card-icon-sm" aria-hidden="true">
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"
+						/>
 					</svg>
 				</div>
-				<div class="hero-text">
-					<span class="eyebrow">Directorio · Terceros</span>
-					<h1>Propietarios y empresas</h1>
-					<p>
-						Gestiona el directorio de personas naturales y jurídicas vinculadas a la operación
-						de transporte. Importa desde la flota o crea registros manualmente.
-					</p>
-				</div>
+				<h1>Propietarios y empresas</h1>
 			</div>
 
-			<div class="hero-actions">
-				<button class="btn-secondary" on:click={openImportModal} title="Importar desde vehículos">
+			<div class="toolbar-actions">
+				<button class="btn-secondary" onclick={openImportModal} title="Importar desde vehículos">
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+						/>
 					</svg>
 					Importar
 				</button>
-				<button class="btn-primary" on:click={openCreateModal}>
+				<button class="btn-primary" onclick={openCreateModal}>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
 					</svg>
@@ -326,125 +360,125 @@
 			</div>
 		</div>
 
-		<!-- Stats inline -->
-		<div class="hero-stats">
-			<div class="stat-item">
-				<span class="stat-label">Total</span>
-				<span class="stat-value">{counts.total}</span>
+		<div class="toolbar-filters">
+			<div class="search-wrap">
+				<BuscadorLista
+					valor={filtros.q}
+					onBuscar={(termino) => ponerFiltro('q', termino)}
+					placeholder="Buscar por nombre, identificación, teléfono o correo…"
+					etiqueta="Buscar terceros"
+				/>
 			</div>
-			<span class="stat-sep" aria-hidden="true">·</span>
-			<div class="stat-item">
-				<span class="stat-dot stat-dot--emerald" aria-hidden="true"></span>
-				<span class="stat-label">Personas</span>
-				<span class="stat-value">{counts.personas}</span>
+
+			<div class="filter-group">
+				<button
+					class="chip"
+					class:chip--active={filtros.tipo === 'TODOS'}
+					onclick={() => ponerFiltro('tipo', 'TODOS')}
+				>
+					Todos
+					<span class="chip-count">{counts.total}</span>
+				</button>
+				<button
+					class="chip"
+					class:chip--active={filtros.tipo === 'PERSONA'}
+					onclick={() => ponerFiltro('tipo', 'PERSONA')}
+				>
+					<span class="stat-dot stat-dot--persona" aria-hidden="true"></span>
+					Personas
+					<span class="chip-count">{counts.personas}</span>
+				</button>
+				<button
+					class="chip"
+					class:chip--active={filtros.tipo === 'EMPRESA'}
+					onclick={() => ponerFiltro('tipo', 'EMPRESA')}
+				>
+					<span class="stat-dot stat-dot--empresa" aria-hidden="true"></span>
+					Empresas
+					<span class="chip-count">{counts.empresas}</span>
+				</button>
 			</div>
-			<span class="stat-sep" aria-hidden="true">·</span>
-			<div class="stat-item">
-				<span class="stat-dot stat-dot--amber" aria-hidden="true"></span>
-				<span class="stat-label">Empresas</span>
-				<span class="stat-value">{counts.empresas}</span>
+
+			<div class="sort-group">
+				<span class="sort-label">Ordenar</span>
+				<button
+					class="sort-btn"
+					class:sort-btn--active={filtros.orden === 'nombre_completo'}
+					onclick={() => toggleSort('nombre_completo')}
+				>
+					Nombre
+					{#if filtros.orden === 'nombre_completo'}
+						<svg
+							class="h-3 w-3"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+							stroke-width="2.4"
+						>
+							{#if filtros.dir === 'asc'}
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M4.5 15.75l7.5-7.5 7.5 7.5"
+								/>
+							{:else}
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M19.5 8.25l-7.5 7.5-7.5-7.5"
+								/>
+							{/if}
+						</svg>
+					{/if}
+				</button>
+				<button
+					class="sort-btn"
+					class:sort-btn--active={filtros.orden === 'created_at'}
+					onclick={() => toggleSort('created_at')}
+				>
+					Reciente
+					{#if filtros.orden === 'created_at'}
+						<svg
+							class="h-3 w-3"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+							stroke-width="2.4"
+						>
+							{#if filtros.dir === 'asc'}
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M4.5 15.75l7.5-7.5 7.5 7.5"
+								/>
+							{:else}
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M19.5 8.25l-7.5 7.5-7.5-7.5"
+								/>
+							{/if}
+						</svg>
+					{/if}
+				</button>
 			</div>
+
 			{#if hasActiveFilter}
-				<span class="stat-sep" aria-hidden="true">·</span>
-				<div class="stat-item stat-item--active">
-					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+				<button class="clear-btn" onclick={clearFilters}>
+					<svg
+						class="h-3.5 w-3.5"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+						stroke-width="2"
+					>
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 					</svg>
-					<span class="stat-label">{pagination.total} resultado{pagination.total !== 1 ? 's' : ''}</span>
-				</div>
+					Limpiar
+				</button>
 			{/if}
 		</div>
 	</header>
-
-	<!-- ═══ FILTROS ═══ -->
-	<div class="filters-bar" in:fade={{ duration: 400, delay: 80 }}>
-		<div class="search-wrap">
-			<svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-				<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-			</svg>
-			<input
-				type="text"
-				bind:value={searchTerm}
-				placeholder="Buscar por nombre, identificación, teléfono o correo…"
-				class="search-input"
-			/>
-		</div>
-
-		<div class="filter-group">
-			<button
-				class="chip"
-				class:chip--active={filtroTipo === 'TODOS'}
-				on:click={() => { filtroTipo = 'TODOS'; handleFilterChange(); }}
-			>
-				Todos
-			</button>
-			<button
-				class="chip"
-				class:chip--active={filtroTipo === 'PERSONA'}
-				on:click={() => { filtroTipo = 'PERSONA'; handleFilterChange(); }}
-			>
-				<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-				</svg>
-				Personas
-			</button>
-			<button
-				class="chip"
-				class:chip--active={filtroTipo === 'EMPRESA'}
-				on:click={() => { filtroTipo = 'EMPRESA'; handleFilterChange(); }}
-			>
-				<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
-				</svg>
-				Empresas
-			</button>
-		</div>
-
-		<div class="sort-group">
-			<span class="sort-label">Ordenar</span>
-			<button
-				class="sort-btn"
-				class:sort-btn--active={sortBy === 'nombre_completo'}
-				on:click={() => toggleSort('nombre_completo')}
-			>
-				Nombre
-				{#if sortBy === 'nombre_completo'}
-					<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.4">
-						{#if sortOrder === 'asc'}
-							<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
-						{:else}
-							<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-						{/if}
-					</svg>
-				{/if}
-			</button>
-			<button
-				class="sort-btn"
-				class:sort-btn--active={sortBy === 'created_at'}
-				on:click={() => toggleSort('created_at')}
-			>
-				Reciente
-				{#if sortBy === 'created_at'}
-					<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.4">
-						{#if sortOrder === 'asc'}
-							<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
-						{:else}
-							<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-						{/if}
-					</svg>
-				{/if}
-			</button>
-		</div>
-
-		{#if hasActiveFilter}
-			<button class="clear-btn" on:click={clearFilters}>
-				<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-				</svg>
-				Limpiar
-			</button>
-		{/if}
-	</div>
 
 	<!-- ═══ CONTENIDO ═══ -->
 	{#if isLoading && terceros.length === 0}
@@ -455,32 +489,44 @@
 	{:else if error && terceros.length === 0}
 		<div class="alert alert-error" in:fade>
 			<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-				<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+				<path
+					stroke-linecap="round"
+					stroke-linejoin="round"
+					d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+				/>
 			</svg>
 			<div class="alert-body">
 				<strong>No pudimos cargar el directorio.</strong>
 				<span>{error}</span>
 			</div>
-			<button class="btn-secondary" on:click={() => loadTerceros()}>Reintentar</button>
+			<button class="btn-secondary" onclick={() => cargar(true)}>Reintentar</button>
 		</div>
 	{:else if terceros.length === 0}
 		<div class="empty-state" in:fade>
 			<div class="empty-icon">
 				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.4">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"
+					/>
 				</svg>
 			</div>
 			<span class="eyebrow eyebrow--center">Sin registros</span>
 			<h2>No hay terceros en el directorio</h2>
 			<p>Importa los propietarios de tu flota o crea un tercero manualmente para empezar.</p>
 			<div class="empty-cta">
-				<button class="btn-secondary" on:click={openImportModal}>
+				<button class="btn-secondary" onclick={openImportModal}>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+						/>
 					</svg>
 					Importar desde flota
 				</button>
-				<button class="btn-primary" on:click={openCreateModal}>
+				<button class="btn-primary" onclick={openCreateModal}>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
 					</svg>
@@ -492,29 +538,54 @@
 		<!-- ── LISTA DE CARDS ── -->
 		<div class="cards-grid" in:fade={{ duration: 400, delay: 120 }}>
 			{#each terceros as t, idx (t.id)}
-			<div
-				class="tercero-card"
-				on:click={() => openDetail(t)}
-				on:keydown={(e) => (e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), openDetail(t))}
-				role="button"
-				tabindex="0"
-				in:fly={{ y: 14, duration: 320, delay: idx * 35, easing: quintOut }}
-			>
+				<!-- `nombre_completo` es NOT NULL en la base, pero NOT NULL admite la
+				     cadena vacía: esas fichas salían con el título en blanco y el
+				     avatar mudo, sin nada que indicara de quién eran. -->
+				{@const nombre = t.nombre_completo?.trim() || 'Sin nombre'}
+				<div
+					class="tercero-card"
+					onclick={() => openDetail(t)}
+					onkeydown={(e) =>
+						(e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), openDetail(t))}
+					role="button"
+					tabindex="0"
+					in:fly={{ y: 14, duration: 320, delay: idx * 35, easing: quintOut }}
+				>
 					<header class="card-head">
 						<div class="avatar avatar--{t.tipo_persona.toLowerCase()}">
-							<span>{initials(t.nombre_completo)}</span>
+							<span>{t.nombre_completo?.trim() ? initials(nombre) : '?'}</span>
 						</div>
 						<div class="card-head-text">
-							<h3>{t.nombre_completo}</h3>
+							<h3 class:valor-vacio={!t.nombre_completo?.trim()}>{nombre}</h3>
 							<span class="tipo-pill tipo-pill--{t.tipo_persona.toLowerCase()}">
 								{#if t.tipo_persona === 'EMPRESA'}
-									<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+									<svg
+										class="h-3 w-3"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+										stroke-width="2.2"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"
+										/>
 									</svg>
 									Empresa
 								{:else}
-									<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+									<svg
+										class="h-3 w-3"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+										stroke-width="2.2"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
+										/>
 									</svg>
 									Persona
 								{/if}
@@ -523,23 +594,51 @@
 					</header>
 
 					<dl class="card-data">
-						{#if t.identificacion}
-							<div class="data-row">
-								<dt>
-									<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5zM6 10.5h.008v.008H6V10.5zm0 3h.008v.008H6V13.5zm0 3h.008v.008H6V16.5z" />
-									</svg>
-									{t.tipo_persona === 'EMPRESA' ? 'NIT' : 'Cédula'}
-								</dt>
+						<!-- La identificación se pinta siempre, aunque falte. Es lo que
+						     distingue a un tercero de otro, así que su ausencia es un dato
+						     —una ficha a medio llenar— y no un motivo para ocultar la fila.
+						     Además garantiza que el `<dl>` nunca quede vacío: al ir entre
+						     dos bordes, vacío dejaba una banda hueca y descuadraba el pie
+						     respecto a las fichas vecinas. -->
+						<div class="data-row">
+							<dt>
+								<svg
+									class="h-3 w-3"
+									fill="none"
+									stroke="currentColor"
+									viewBox="0 0 24 24"
+									stroke-width="2"
+								>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5zM6 10.5h.008v.008H6V10.5zm0 3h.008v.008H6V13.5zm0 3h.008v.008H6V16.5z"
+									/>
+								</svg>
+								{t.tipo_persona === 'EMPRESA' ? 'NIT' : 'Cédula'}
+							</dt>
+							{#if t.identificacion}
 								<dd class="mono">{t.identificacion}</dd>
-							</div>
-						{/if}
+							{:else}
+								<dd class="valor-vacio">Sin registrar</dd>
+							{/if}
+						</div>
 
 						{#if t.regimen}
 							<div class="data-row">
 								<dt>
-									<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-11.302 0c1.413-.074 2.86-.18 4.302-.323a48.4 48.4 0 014.302.323 1.866 1.866 0 011.976 2.192M12 3v1.5M12 21v-1.5" />
+									<svg
+										class="h-3 w-3"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+										stroke-width="2"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-11.302 0c1.413-.074 2.86-.18 4.302-.323a48.4 48.4 0 014.302.323 1.866 1.866 0 011.976 2.192M12 3v1.5M12 21v-1.5"
+										/>
 									</svg>
 									Régimen
 								</dt>
@@ -550,8 +649,18 @@
 						{#if t.telefono}
 							<div class="data-row">
 								<dt>
-									<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+									<svg
+										class="h-3 w-3"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+										stroke-width="2"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"
+										/>
 									</svg>
 									Teléfono
 								</dt>
@@ -562,13 +671,30 @@
 						{#if t.correo}
 							<div class="data-row data-row--truncate">
 								<dt>
-									<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
+									<svg
+										class="h-3 w-3"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+										stroke-width="2"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
+										/>
 									</svg>
 									Correo
 								</dt>
 								<dd class="truncate">{t.correo}</dd>
 							</div>
+						{/if}
+
+						<!-- Sin teléfono ni correo no hay forma de contactar al tercero.
+						     Decirlo es más útil que dejar el hueco: distingue «no tiene»
+						     de «no cargó todavía». -->
+						{#if !t.telefono && !t.correo}
+							<p class="sin-contacto">Sin teléfono ni correo</p>
 						{/if}
 					</dl>
 
@@ -576,19 +702,27 @@
 						<span class="card-link">
 							Ver detalle
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
+								/>
 							</svg>
 						</span>
-						<div class="card-actions" on:click|stopPropagation role="presentation">
+						<div class="card-actions" onclick={(e) => e.stopPropagation()} role="presentation">
 							<button
 								type="button"
 								class="icon-btn"
 								title="Editar"
 								aria-label="Editar {t.nombre_completo}"
-								on:click={(e) => openEditModal(t, e)}
+								onclick={(e) => openEditModal(t, e)}
 							>
 								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
+									/>
 								</svg>
 							</button>
 							<button
@@ -596,67 +730,31 @@
 								class="icon-btn icon-btn--danger"
 								title="Eliminar"
 								aria-label="Eliminar {t.nombre_completo}"
-								on:click={(e) => openDeleteModal(t, e)}
+								onclick={(e) => openDeleteModal(t, e)}
 							>
 								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+									/>
 								</svg>
 							</button>
-				</div>
-			</footer>
+						</div>
+					</footer>
 				</div>
 			{/each}
 		</div>
 
 		<!-- ── PAGINACIÓN ── -->
-		{#if pagination.pages > 1}
-			<nav class="pagination" in:fade={{ duration: 300, delay: 200 }} aria-label="Paginación del directorio">
-				<p class="pagination-info">
-					<span class="mono">
-						{(pagination.page - 1) * pagination.limit + 1}–{Math.min(
-							pagination.page * pagination.limit,
-							pagination.total
-						)}
-					</span>
-					de <span class="mono">{pagination.total}</span>
-				</p>
-				<div class="pagination-controls">
-					<button
-						class="page-arrow"
-						on:click={previousPage}
-						disabled={!pagination.hasPrev}
-						aria-label="Página anterior"
-					>
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-						</svg>
-					</button>
-					{#each getPageNumbers() as p}
-						{#if typeof p === 'number'}
-							<button
-								class="page-num"
-								class:page-num--active={p === pagination.page}
-								on:click={() => goToPage(p)}
-							>
-								{p}
-							</button>
-						{:else}
-							<span class="page-ellipsis">{p}</span>
-						{/if}
-					{/each}
-					<button
-						class="page-arrow"
-						on:click={nextPage}
-						disabled={!pagination.hasNext}
-						aria-label="Página siguiente"
-					>
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-						</svg>
-					</button>
-				</div>
-			</nav>
-		{/if}
+		<PaginadorLista
+			pagina={filtros.pagina}
+			total={totalTerceros}
+			porPagina={POR_PAGINA}
+			cargando={isLoading}
+			nombreItems="terceros"
+			onCambiar={irPagina}
+		/>
 	{/if}
 </div>
 
@@ -666,15 +764,15 @@
 {#if showModal}
 	<div
 		class="modal-backdrop"
-		on:click={closeModal}
-		on:keydown={(e) => e.key === 'Escape' && closeModal()}
+		onclick={closeModal}
+		onkeydown={(e) => e.key === 'Escape' && closeModal()}
 		role="presentation"
 		transition:fade={{ duration: 200 }}
 	>
 		<div
 			class="modal modal--md"
-			on:click|stopPropagation
-			on:keydown|stopPropagation
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
 			role="dialog"
 			tabindex="-1"
 			aria-modal="true"
@@ -688,7 +786,7 @@
 						{editingTercero ? 'Editar tercero' : 'Nuevo tercero'}
 					</h2>
 				</div>
-				<button class="modal-close" on:click={closeModal} aria-label="Cerrar">
+				<button class="modal-close" onclick={closeModal} aria-label="Cerrar">
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 					</svg>
@@ -698,13 +796,23 @@
 			{#if modalError}
 				<div class="alert alert-error" in:fly={{ y: -8, duration: 240 }}>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+						/>
 					</svg>
 					<strong>{modalError}</strong>
 				</div>
 			{/if}
 
-			<form on:submit|preventDefault={saveTercero} class="modal-form">
+			<form
+				onsubmit={(e) => {
+					e.preventDefault();
+					saveTercero();
+				}}
+				class="modal-form"
+			>
 				<!-- Tipo persona -->
 				<div class="field">
 					<span class="field-label">Tipo de tercero</span>
@@ -714,10 +822,14 @@
 							class="seg"
 							class:seg--active={form.tipo_persona === 'PERSONA'}
 							class:seg--persona={form.tipo_persona === 'PERSONA'}
-							on:click={() => (form.tipo_persona = 'PERSONA')}
+							onclick={() => (form.tipo_persona = 'PERSONA')}
 						>
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
+								/>
 							</svg>
 							Persona natural
 						</button>
@@ -726,10 +838,14 @@
 							class="seg"
 							class:seg--active={form.tipo_persona === 'EMPRESA'}
 							class:seg--empresa={form.tipo_persona === 'EMPRESA'}
-							on:click={() => (form.tipo_persona = 'EMPRESA')}
+							onclick={() => (form.tipo_persona = 'EMPRESA')}
 						>
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"
+								/>
 							</svg>
 							Empresa
 						</button>
@@ -747,7 +863,9 @@
 						bind:value={form.nombre_completo}
 						required
 						class="input"
-						placeholder={form.tipo_persona === 'EMPRESA' ? 'Transportes del Valle S.A.S.' : 'Juan Carlos Pérez'}
+						placeholder={form.tipo_persona === 'EMPRESA'
+							? 'Transportes del Valle S.A.S.'
+							: 'Juan Carlos Pérez'}
 					/>
 				</div>
 
@@ -821,11 +939,18 @@
 				</div>
 
 				<footer class="modal-foot">
-					<button type="button" class="btn-secondary" on:click={closeModal}>Cancelar</button>
+					<button type="button" class="btn-secondary" onclick={closeModal}>Cancelar</button>
 					<button type="submit" class="btn-primary" disabled={isSaving}>
 						{#if isSaving}
 							<svg class="spin" viewBox="0 0 24 24" fill="none">
-								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25" />
+								<circle
+									cx="12"
+									cy="12"
+									r="10"
+									stroke="currentColor"
+									stroke-width="3"
+									opacity="0.25"
+								/>
 								<path
 									d="M4 12a8 8 0 018-8v0"
 									stroke="currentColor"
@@ -853,15 +978,15 @@
 {#if showDetail && detailTercero}
 	<div
 		class="modal-backdrop"
-		on:click={closeDetail}
-		on:keydown={(e) => e.key === 'Escape' && closeDetail()}
+		onclick={closeDetail}
+		onkeydown={(e) => e.key === 'Escape' && closeDetail()}
 		role="presentation"
 		transition:fade={{ duration: 200 }}
 	>
 		<div
 			class="modal modal--md"
-			on:click|stopPropagation
-			on:keydown|stopPropagation
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
 			role="dialog"
 			tabindex="-1"
 			aria-modal="true"
@@ -873,9 +998,11 @@
 					<span class="eyebrow">
 						{detailTercero.tipo_persona === 'EMPRESA' ? 'Empresa' : 'Persona natural'}
 					</span>
-					<h2 id="tercero-detail-title">{detailTercero.nombre_completo}</h2>
+					<h2 id="tercero-detail-title" class:valor-vacio={!detailTercero.nombre_completo?.trim()}>
+						{detailTercero.nombre_completo?.trim() || 'Sin nombre'}
+					</h2>
 				</div>
-				<button class="modal-close" on:click={closeDetail} aria-label="Cerrar">
+				<button class="modal-close" onclick={closeDetail} aria-label="Cerrar">
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 					</svg>
@@ -883,12 +1010,14 @@
 			</header>
 
 			<dl class="detail-data">
-				{#if detailTercero.identificacion}
-					<div>
-						<dt>{detailTercero.tipo_persona === 'EMPRESA' ? 'NIT' : 'Cédula'}</dt>
+				<div>
+					<dt>{detailTercero.tipo_persona === 'EMPRESA' ? 'NIT' : 'Cédula'}</dt>
+					{#if detailTercero.identificacion}
 						<dd class="mono">{detailTercero.identificacion}</dd>
-					</div>
-				{/if}
+					{:else}
+						<dd class="valor-vacio">Sin registrar</dd>
+					{/if}
+				</div>
 				{#if detailTercero.regimen}
 					<div>
 						<dt>Régimen fiscal</dt>
@@ -919,7 +1048,7 @@
 						{new Date(detailTercero.created_at).toLocaleDateString('es-CO', {
 							year: 'numeric',
 							month: 'long',
-							day: 'numeric',
+							day: 'numeric'
 						})}
 					</dd>
 				</div>
@@ -934,7 +1063,7 @@
 			<footer class="modal-foot">
 				<button
 					class="btn-secondary"
-					on:click={(e) => {
+					onclick={(e) => {
 						if (detailTercero) {
 							closeDetail();
 							openEditModal(detailTercero, e);
@@ -942,11 +1071,15 @@
 					}}
 				>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
+						/>
 					</svg>
 					Editar
 				</button>
-				<button class="btn-primary" on:click={closeDetail}>Cerrar</button>
+				<button class="btn-primary" onclick={closeDetail}>Cerrar</button>
 			</footer>
 		</div>
 	</div>
@@ -958,15 +1091,15 @@
 {#if showDeleteModal && terceroToDelete}
 	<div
 		class="modal-backdrop"
-		on:click={closeDeleteModal}
-		on:keydown={(e) => e.key === 'Escape' && closeDeleteModal()}
+		onclick={closeDeleteModal}
+		onkeydown={(e) => e.key === 'Escape' && closeDeleteModal()}
 		role="presentation"
 		transition:fade={{ duration: 200 }}
 	>
 		<div
 			class="modal modal--sm"
-			on:click|stopPropagation
-			on:keydown|stopPropagation
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
 			role="alertdialog"
 			tabindex="-1"
 			aria-modal="true"
@@ -975,7 +1108,11 @@
 		>
 			<div class="danger-icon" aria-hidden="true">
 				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+					/>
 				</svg>
 			</div>
 			<span class="eyebrow eyebrow--danger">Acción irreversible</span>
@@ -985,10 +1122,14 @@
 				<strong>{terceroToDelete.nombre_completo}</strong>? Esta acción no se puede deshacer.
 			</p>
 			<footer class="modal-foot">
-				<button class="btn-secondary" on:click={closeDeleteModal}>Cancelar</button>
-				<button class="btn-danger" on:click={deleteTercero}>
+				<button class="btn-secondary" onclick={closeDeleteModal}>Cancelar</button>
+				<button class="btn-danger" onclick={deleteTercero}>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+						/>
 					</svg>
 					Sí, eliminar
 				</button>
@@ -1003,15 +1144,15 @@
 {#if showImportModal}
 	<div
 		class="modal-backdrop"
-		on:click={() => (showImportModal = false)}
-		on:keydown={(e) => e.key === 'Escape' && (showImportModal = false)}
+		onclick={() => (showImportModal = false)}
+		onkeydown={(e) => e.key === 'Escape' && (showImportModal = false)}
 		role="presentation"
 		transition:fade={{ duration: 200 }}
 	>
 		<div
 			class="modal modal--sm"
-			on:click|stopPropagation
-			on:keydown|stopPropagation
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
 			role="dialog"
 			tabindex="-1"
 			aria-modal="true"
@@ -1021,7 +1162,11 @@
 			{#if importResult}
 				<div class="confirm-icon" aria-hidden="true">
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+						/>
 					</svg>
 				</div>
 				<span class="eyebrow eyebrow--center">Importación</span>
@@ -1041,12 +1186,16 @@
 					</div>
 				</dl>
 				<footer class="modal-foot">
-					<button class="btn-primary" on:click={() => (showImportModal = false)}>Cerrar</button>
+					<button class="btn-primary" onclick={() => (showImportModal = false)}>Cerrar</button>
 				</footer>
 			{:else}
 				<div class="import-icon" aria-hidden="true">
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"
+						/>
 					</svg>
 				</div>
 				<span class="eyebrow eyebrow--center">Importar desde flota</span>
@@ -1056,11 +1205,18 @@
 					vehicular y los crearemos como terceros. Los duplicados serán omitidos automáticamente.
 				</p>
 				<footer class="modal-foot">
-					<button class="btn-secondary" on:click={() => (showImportModal = false)}>Cancelar</button>
-					<button class="btn-primary" on:click={importFromVehiculos} disabled={isImporting}>
+					<button class="btn-secondary" onclick={() => (showImportModal = false)}>Cancelar</button>
+					<button class="btn-primary" onclick={importFromVehiculos} disabled={isImporting}>
 						{#if isImporting}
 							<svg class="spin" viewBox="0 0 24 24" fill="none">
-								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25" />
+								<circle
+									cx="12"
+									cy="12"
+									r="10"
+									stroke="currentColor"
+									stroke-width="3"
+									opacity="0.25"
+								/>
 								<path
 									d="M4 12a8 8 0 018-8v0"
 									stroke="currentColor"
@@ -1071,7 +1227,11 @@
 							Importando…
 						{:else}
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"
+								/>
 							</svg>
 							Importar ahora
 						{/if}
@@ -1088,7 +1248,7 @@
 	   ═══════════════════════════════════════════════════════════════ */
 	.terceros-page {
 		min-height: 100vh;
-		background: #faf7f2;
+		background: #fcfcfb;
 		font-family: 'Inter Tight', system-ui, sans-serif;
 		color: #1a1a1a;
 		padding: 1.5rem 1.25rem 3rem;
@@ -1103,8 +1263,8 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #10b981;
-		background: rgba(16, 185, 129, 0.08);
+		color: #f97316;
+		background: rgba(249, 115, 22, 0.08);
 		padding: 0.3rem 0.75rem;
 		border-radius: 6px;
 		font-family: 'JetBrains Mono', monospace;
@@ -1124,7 +1284,7 @@
 	h2,
 	h3 {
 		font-family: 'Fraunces', Georgia, serif;
-		color: #0f1f1a;
+		color: #0f172a;
 		letter-spacing: -0.01em;
 	}
 
@@ -1133,121 +1293,82 @@
 	}
 
 	/* ═══════════════════════════════════════════════════════════════
-	   HERO / HEADER
+	   BARRA DE PÁGINA — título, acciones y filtros en un solo bloque
 	   ═══════════════════════════════════════════════════════════════ */
-	.page-hero {
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.06);
-		border-radius: 24px;
-		padding: 1.75rem 1.75rem 1.25rem;
-		margin-bottom: 1.25rem;
-		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
-	}
-	.hero-inner {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 1.5rem;
-		margin-bottom: 1.5rem;
-	}
-	.hero-left {
-		display: flex;
-		gap: 1rem;
-		align-items: flex-start;
-		flex: 1;
-		min-width: 280px;
-	}
-	.hero-icon {
-		flex-shrink: 0;
-	}
-	.hero-text {
+	.page-toolbar {
+		background: var(--bg-surface);
+		border: 1px solid var(--border-subtle);
+		border-radius: 16px;
+		padding: 0.85rem 1rem;
+		margin-bottom: 1rem;
 		display: flex;
 		flex-direction: column;
-		gap: 0.4rem;
+		gap: 0.75rem;
+		box-shadow: var(--shadow-card);
 	}
-	.hero-text h1 {
-		font-size: clamp(1.6rem, 3.5vw, 2.1rem);
+	.toolbar-top {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+	.toolbar-title {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		min-width: 0;
+	}
+	.toolbar-title h1 {
+		font-size: 1.25rem;
 		font-weight: 500;
-		line-height: 1.15;
+		line-height: 1.2;
 		margin: 0;
 	}
-	.hero-text p {
-		font-size: 0.92rem;
-		line-height: 1.6;
-		color: #4a4a4a;
-		margin: 0;
-		max-width: 540px;
-	}
-	.hero-actions {
+	.toolbar-actions {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.6rem;
 		flex-shrink: 0;
 	}
-
-	.hero-stats {
+	.toolbar-filters {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.65rem;
-		padding-top: 1.1rem;
-		border-top: 1px solid rgba(0, 0, 0, 0.06);
+		gap: 0.75rem;
+		padding-top: 0.75rem;
+		border-top: 1px solid var(--border-subtle);
+	}
+
+	/* El contador vive dentro del chip que filtra por ese mismo tipo. Antes
+	   era una franja de stats aparte, que repetía la palabra «Personas» a
+	   dos centímetros del chip «Personas» y no se podía pulsar. */
+	.chip-count {
 		font-family: 'JetBrains Mono', monospace;
-	}
-	.stat-item {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.45rem;
-	}
-	.stat-label {
-		font-size: 0.72rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: #6b6b6b;
-	}
-	.stat-value {
-		font-size: 0.95rem;
+		font-size: 0.7rem;
 		font-weight: 700;
-		color: #0f1f1a;
+		color: var(--text-muted);
+	}
+	/* El contador toma el color del chip activo en vez de fijar un tono propio:
+	   así no hay que mantener una pareja de verdes por repo. */
+	.chip--active .chip-count {
+		color: inherit;
 	}
 	.stat-dot {
 		width: 8px;
 		height: 8px;
 		border-radius: 50%;
+		flex-shrink: 0;
 	}
-	.stat-dot--emerald {
-		background: #10b981;
+	/* Literal y no `var(--emerald-500)`: en cotransmeq ese token es naranja,
+	   pero esta pantalla es verde en los dos repos. */
+	.stat-dot--persona {
+		background: #f97316;
 	}
-	.stat-dot--amber {
-		background: #f59e0b;
-	}
-	.stat-sep {
-		color: #c9c4ba;
-	}
-	.stat-item--active .stat-label {
-		color: #10b981;
-	}
-	.stat-item--active {
-		color: #10b981;
+	.stat-dot--empresa {
+		background: #3b82f6;
 	}
 
-	/* ═══════════════════════════════════════════════════════════════
-	   FILTROS
-	   ═══════════════════════════════════════════════════════════════ */
-	.filters-bar {
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.06);
-		border-radius: 16px;
-		padding: 0.85rem;
-		margin-bottom: 1.25rem;
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.75rem;
-		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
-	}
 	.search-wrap {
 		position: relative;
 		flex: 1;
@@ -1269,7 +1390,7 @@
 		font-family: inherit;
 		font-size: 0.88rem;
 		color: #1a1a1a;
-		background: #faf7f2;
+		background: #fcfcfb;
 		border: 1px solid rgba(0, 0, 0, 0.08);
 		border-radius: 10px;
 		outline: none;
@@ -1280,15 +1401,15 @@
 	}
 	.search-input:focus {
 		background: white;
-		border-color: rgba(16, 185, 129, 0.4);
-		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+		border-color: rgba(249, 115, 22, 0.4);
+		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
 	}
 
 	.filter-group {
 		display: flex;
 		gap: 0.35rem;
 		padding: 0.25rem;
-		background: #faf7f2;
+		background: #fcfcfb;
 		border: 1px solid rgba(0, 0, 0, 0.06);
 		border-radius: 12px;
 	}
@@ -1308,11 +1429,11 @@
 		transition: all 0.2s;
 	}
 	.chip:hover {
-		color: #0f1f1a;
+		color: #0f172a;
 	}
 	.chip--active {
 		background: white;
-		color: #065f46;
+		color: #166534;
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 	}
 
@@ -1346,13 +1467,13 @@
 		transition: all 0.2s;
 	}
 	.sort-btn:hover {
-		color: #0f1f1a;
+		color: #0f172a;
 		background: rgba(0, 0, 0, 0.03);
 	}
 	.sort-btn--active {
-		color: #065f46;
-		background: rgba(16, 185, 129, 0.08);
-		border-color: rgba(16, 185, 129, 0.15);
+		color: #166534;
+		background: rgba(249, 115, 22, 0.08);
+		border-color: rgba(249, 115, 22, 0.15);
 	}
 
 	.clear-btn {
@@ -1379,25 +1500,13 @@
 	/* ═══════════════════════════════════════════════════════════════
 	   LIST CARDS (grid)
 	   ═══════════════════════════════════════════════════════════════ */
+	/* Rejilla fluida en vez de cuatro puntos de ruptura: el ancho real del
+	   `main` cambia al colapsar la barra lateral, y una cascada de `@media`
+	   se queda clavada en 4 columnas justo cuando sobra sitio para 6. */
 	.cards-grid {
 		display: grid;
-		grid-template-columns: 1fr;
+		grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
 		gap: 1.1rem;
-	}
-	@media (min-width: 640px) {
-		.cards-grid {
-			grid-template-columns: repeat(2, 1fr);
-		}
-	}
-	@media (min-width: 1024px) {
-		.cards-grid {
-			grid-template-columns: repeat(3, 1fr);
-		}
-	}
-	@media (min-width: 1280px) {
-		.cards-grid {
-			grid-template-columns: repeat(4, 1fr);
-		}
 	}
 
 	.tercero-card {
@@ -1419,8 +1528,8 @@
 	.tercero-card:hover,
 	.tercero-card:focus-visible {
 		transform: translateY(-3px);
-		border-color: rgba(16, 185, 129, 0.3);
-		box-shadow: 0 12px 32px rgba(16, 185, 129, 0.12);
+		border-color: rgba(249, 115, 22, 0.3);
+		box-shadow: 0 12px 32px rgba(249, 115, 22, 0.12);
 	}
 
 	.card-head {
@@ -1440,7 +1549,7 @@
 		font-weight: 600;
 		line-height: 1.3;
 		margin: 0;
-		color: #0f1f1a;
+		color: #0f172a;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		display: -webkit-box;
@@ -1463,12 +1572,12 @@
 		letter-spacing: 0.04em;
 	}
 	.avatar--persona {
-		background: linear-gradient(135deg, rgba(16, 185, 129, 0.14), rgba(5, 150, 105, 0.18));
-		color: #065f46;
+		background: linear-gradient(135deg, rgba(249, 115, 22, 0.14), rgba(234, 88, 12, 0.18));
+		color: #166534;
 	}
 	.avatar--empresa {
-		background: linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(217, 119, 6, 0.18));
-		color: #92400e;
+		background: linear-gradient(135deg, rgba(59, 130, 246, 0.14), rgba(37, 99, 235, 0.18));
+		color: #1e40af;
 	}
 
 	.tipo-pill {
@@ -1485,12 +1594,12 @@
 		width: fit-content;
 	}
 	.tipo-pill--persona {
-		background: rgba(16, 185, 129, 0.08);
-		color: #047857;
+		background: rgba(249, 115, 22, 0.08);
+		color: #c2410c;
 	}
 	.tipo-pill--empresa {
-		background: rgba(245, 158, 11, 0.1);
-		color: #b45309;
+		background: rgba(59, 130, 246, 0.1);
+		color: #1d4ed8;
 	}
 
 	.card-data {
@@ -1501,6 +1610,23 @@
 		padding: 0.85rem 0;
 		border-top: 1px solid rgba(0, 0, 0, 0.06);
 		border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+		/* Absorbe el alto sobrante para que el pie quede abajo. La rejilla ya
+		   estira todas las fichas de una fila a la misma altura, pero sin esto
+		   el «Ver detalle» de una ficha con un solo dato subía a media tarjeta
+		   y no cuadraba con el de al lado. */
+		flex: 1;
+	}
+
+	/* Dato que falta: se lee como ausencia, no como valor. */
+	.valor-vacio {
+		color: #9a9a9a;
+		font-style: italic;
+	}
+	.sin-contacto {
+		margin: 0;
+		font-size: 0.75rem;
+		color: #9a9a9a;
+		font-style: italic;
 	}
 	.data-row {
 		display: grid;
@@ -1529,7 +1655,7 @@
 	.data-row dd {
 		margin: 0;
 		font-size: 0.85rem;
-		color: #0f1f1a;
+		color: #0f172a;
 		font-weight: 500;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -1551,7 +1677,7 @@
 		gap: 0.4rem;
 		font-size: 0.78rem;
 		font-weight: 600;
-		color: #10b981;
+		color: #f97316;
 		transition: gap 0.2s;
 	}
 	.card-link svg {
@@ -1584,9 +1710,9 @@
 		height: 14px;
 	}
 	.icon-btn:hover {
-		color: #10b981;
-		border-color: rgba(16, 185, 129, 0.3);
-		background: rgba(16, 185, 129, 0.06);
+		color: #f97316;
+		border-color: rgba(249, 115, 22, 0.3);
+		background: rgba(249, 115, 22, 0.06);
 	}
 	.icon-btn--danger:hover {
 		color: #dc2626;
@@ -1615,7 +1741,7 @@
 		margin: 0;
 	}
 	.pagination-info .mono {
-		color: #0f1f1a;
+		color: #0f172a;
 		font-weight: 700;
 	}
 	.pagination-controls {
@@ -1647,20 +1773,20 @@
 	}
 	.page-arrow:hover:not(:disabled),
 	.page-num:hover {
-		background: #faf7f2;
-		color: #0f1f1a;
+		background: #fcfcfb;
+		color: #0f172a;
 	}
 	.page-arrow:disabled {
 		opacity: 0.35;
 		cursor: not-allowed;
 	}
 	.page-num--active {
-		background: linear-gradient(135deg, #10b981, #059669);
+		background: linear-gradient(135deg, #f97316, #ea580c);
 		color: white;
-		box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+		box-shadow: 0 2px 8px rgba(249, 115, 22, 0.3);
 	}
 	.page-num--active:hover {
-		background: linear-gradient(135deg, #10b981, #059669);
+		background: linear-gradient(135deg, #f97316, #ea580c);
 		color: white;
 	}
 	.page-ellipsis {
@@ -1688,8 +1814,8 @@
 	.spin-ring {
 		width: 32px;
 		height: 32px;
-		border: 2.5px solid rgba(16, 185, 129, 0.15);
-		border-top-color: #10b981;
+		border: 2.5px solid rgba(249, 115, 22, 0.15);
+		border-top-color: #f97316;
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 	}
@@ -1727,13 +1853,13 @@
 		width: 72px;
 		height: 72px;
 		border-radius: 50%;
-		background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(5, 150, 105, 0.12));
-		color: #10b981;
+		background: linear-gradient(135deg, rgba(249, 115, 22, 0.08), rgba(234, 88, 12, 0.12));
+		color: #f97316;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		margin-bottom: 0.5rem;
-		box-shadow: 0 6px 20px rgba(16, 185, 129, 0.12);
+		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.12);
 	}
 	.empty-icon svg {
 		width: 32px;
@@ -1805,13 +1931,13 @@
 		white-space: nowrap;
 	}
 	.btn-primary {
-		background: linear-gradient(135deg, #10b981, #059669);
+		background: linear-gradient(135deg, #f97316, #ea580c);
 		color: white;
-		box-shadow: 0 4px 16px rgba(16, 185, 129, 0.28);
+		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.28);
 	}
 	.btn-primary:hover:not(:disabled) {
 		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
 	}
 	.btn-primary:disabled {
 		opacity: 0.6;
@@ -1830,7 +1956,7 @@
 		border-color: rgba(0, 0, 0, 0.12);
 	}
 	.btn-secondary:hover:not(:disabled) {
-		background: #faf7f2;
+		background: #fcfcfb;
 		border-color: rgba(0, 0, 0, 0.2);
 	}
 
@@ -1894,7 +2020,7 @@
 		font-size: 1.4rem;
 		font-weight: 500;
 		margin: 0.35rem 0 0;
-		color: #0f1f1a;
+		color: #0f172a;
 	}
 	.modal-close {
 		flex-shrink: 0;
@@ -1915,7 +2041,7 @@
 		height: 16px;
 	}
 	.modal-close:hover {
-		color: #0f1f1a;
+		color: #0f172a;
 		border-color: rgba(0, 0, 0, 0.2);
 	}
 
@@ -1926,7 +2052,7 @@
 		margin: 0;
 	}
 	.modal-desc strong {
-		color: #0f1f1a;
+		color: #0f172a;
 		font-weight: 600;
 	}
 
@@ -1954,7 +2080,7 @@
 	.field-label {
 		font-size: 0.78rem;
 		font-weight: 600;
-		color: #0f1f1a;
+		color: #0f172a;
 	}
 	.field-required {
 		color: #dc2626;
@@ -1966,7 +2092,7 @@
 		font-family: inherit;
 		font-size: 0.88rem;
 		color: #1a1a1a;
-		background: #faf7f2;
+		background: #fcfcfb;
 		border: 1px solid rgba(0, 0, 0, 0.1);
 		border-radius: 10px;
 		outline: none;
@@ -1977,8 +2103,8 @@
 	}
 	.input:focus {
 		background: white;
-		border-color: rgba(16, 185, 129, 0.4);
-		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+		border-color: rgba(249, 115, 22, 0.4);
+		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
 	}
 	textarea.input {
 		resize: vertical;
@@ -2000,7 +2126,7 @@
 		font-family: inherit;
 		font-size: 0.85rem;
 		font-weight: 600;
-		background: #faf7f2;
+		background: #fcfcfb;
 		color: #4a4a4a;
 		border: 1px solid rgba(0, 0, 0, 0.08);
 		border-radius: 12px;
@@ -2012,18 +2138,18 @@
 		height: 16px;
 	}
 	.seg:hover {
-		color: #0f1f1a;
+		color: #0f172a;
 		border-color: rgba(0, 0, 0, 0.15);
 	}
 	.seg--active.seg--persona {
-		background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.14));
-		color: #065f46;
-		border-color: rgba(16, 185, 129, 0.35);
+		background: linear-gradient(135deg, rgba(249, 115, 22, 0.1), rgba(234, 88, 12, 0.14));
+		color: #166534;
+		border-color: rgba(249, 115, 22, 0.35);
 	}
 	.seg--active.seg--empresa {
-		background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(217, 119, 6, 0.14));
-		color: #92400e;
-		border-color: rgba(245, 158, 11, 0.35);
+		background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.14));
+		color: #1e40af;
+		border-color: rgba(59, 130, 246, 0.35);
 	}
 
 	.modal-foot {
@@ -2039,7 +2165,7 @@
 
 	/* Detalle */
 	.detail-data {
-		background: #faf7f2;
+		background: #fcfcfb;
 		border-radius: 14px;
 		padding: 1rem 1.15rem;
 		margin: 0;
@@ -2069,11 +2195,11 @@
 	.detail-data dd {
 		margin: 0;
 		font-size: 0.92rem;
-		color: #0f1f1a;
+		color: #0f172a;
 		font-weight: 500;
 	}
 	.detail-data dd a {
-		color: #10b981;
+		color: #f97316;
 		text-decoration: none;
 	}
 	.detail-data dd a:hover {
@@ -2085,13 +2211,13 @@
 		width: 64px;
 		height: 64px;
 		border-radius: 50%;
-		background: linear-gradient(135deg, #10b981, #059669);
+		background: linear-gradient(135deg, #f97316, #ea580c);
 		color: white;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		margin: 0 auto 0.5rem;
-		box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
+		box-shadow: 0 8px 24px rgba(249, 115, 22, 0.3);
 	}
 	.confirm-icon svg {
 		width: 30px;
@@ -2119,13 +2245,13 @@
 		width: 56px;
 		height: 56px;
 		border-radius: 16px;
-		background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.16));
-		color: #065f46;
+		background: linear-gradient(135deg, rgba(249, 115, 22, 0.1), rgba(234, 88, 12, 0.16));
+		color: #166534;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		margin: 0 auto 0.5rem;
-		box-shadow: 0 4px 16px rgba(16, 185, 129, 0.18);
+		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.18);
 	}
 	.import-icon svg {
 		width: 26px;
@@ -2133,7 +2259,7 @@
 	}
 
 	.result-list {
-		background: #faf7f2;
+		background: #fcfcfb;
 		border-radius: 12px;
 		padding: 0.85rem 1rem;
 		margin: 0;
@@ -2160,19 +2286,19 @@
 		margin: 0;
 		font-size: 0.95rem;
 		font-weight: 700;
-		color: #0f1f1a;
+		color: #0f172a;
 	}
 
 	.card-icon {
 		width: 48px;
 		height: 48px;
 		border-radius: 14px;
-		background: linear-gradient(135deg, #10b981, #059669);
+		background: linear-gradient(135deg, #f97316, #ea580c);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		color: white;
-		box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
+		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
 	}
 	.card-icon svg {
 		width: 24px;

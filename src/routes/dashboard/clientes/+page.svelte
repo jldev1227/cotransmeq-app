@@ -7,6 +7,20 @@
 	import { authStore } from '$lib/stores/auth';
 	import { toast } from 'svelte-sonner';
 	import FilterDrawer from '$lib/components/ui/FilterDrawer.svelte';
+	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+	import { page } from '$app/state';
+	import { crearListingStore } from '$lib/listing/listingStore';
+	import { crearEstadoUrl } from '$lib/listing/urlState';
+	import {
+		contarActivos,
+		firma,
+		limpiar as limpiarFiltrosDe,
+		numero,
+		opcion,
+		texto,
+		type DefinicionesFiltros
+	} from '$lib/listing/filtros';
 
 	const TipoCliente = {
 		EMPRESA: 'EMPRESA',
@@ -32,24 +46,45 @@
 		deletedAt?: string | null;
 	}
 
-	let clientes: Cliente[] = [];
-	let pagination = { page: 1, limit: 20, total: 0, pages: 1 };
-	let isLoading = true;
-	let error: string | null = null;
-	let filtroTipo: TipoCliente | 'TODOS' = 'TODOS';
-	let searchTerm = '';
-	let searchTimeout: ReturnType<typeof setTimeout> | null = null;
-	let mostrarOcultos = false;
-	let mostrarFiltros = false;
+	/**
+	 * Filtros de la página.
+	 *
+	 * A diferencia de flota, aquí TODO se resuelve en servidor: el endpoint ya
+	 * acepta `search`, `tipo`, `page` y `limit`. Por eso la firma de caché los
+	 * incluye a todos —cambiar cualquiera implica pedir otra cosa— y la
+	 * búsqueda va con retardo, para no lanzar una petición por letra.
+	 */
+	interface FiltrosClientes {
+		q: string;
+		tipo: string;
+		/** `activos` | `ocultos`. */
+		vista: string;
+		pagina: number;
+	}
 
-	let showDeleteModal = false;
-	let clienteToDelete: Cliente | null = null;
+	const POR_PAGINA = 20;
+
+	const DEFS: DefinicionesFiltros<FiltrosClientes> = {
+		q: texto(),
+		tipo: opcion('TODOS'),
+		vista: opcion('activos'),
+		pagina: numero(1)
+	};
+
+	const estadoUrl = crearEstadoUrl(DEFS);
+	const listaClientes = crearListingStore<Cliente>();
+
+	let filtros = $state<FiltrosClientes>(estadoUrl.leer(page.url));
+	let mostrarFiltros = $state(false);
+
+	let showDeleteModal = $state(false);
+	let clienteToDelete = $state<Cliente | null>(null);
 
 	// Estados para modo selección
-	let clientesSeleccionados = new Set<string>();
+	let clientesSeleccionados = $state(new Set<string>());
 	let ultimoSeleccionadoIndex: number | null = null;
-	let shiftPressed = false;
-	let procesandoMasivo = false;
+	let shiftPressed = $state(false);
+	let procesandoMasivo = $state(false);
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Shift') shiftPressed = true;
@@ -99,21 +134,15 @@
 		procesandoMasivo = true;
 
 		try {
-			const response = await fetch(`${import.meta.env.VITE_API_URL}/api/clientes/masivo`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					Authorization: `Bearer ${localStorage.getItem('token')}`
-				},
-				body: JSON.stringify({ ids, accion })
-			});
-
-			const data = await response.json();
+			/// Por `apiClient` y no por `fetch`: además de la clave de token
+			/// correcta, trae reintento, deduplicación y manejo del 401.
+			const respuesta = await clientesAPI.operacionesMasivas(ids, accion);
+			const data = respuesta.data;
 			if (data.success) {
 				toast.success(data.message);
 				clientesSeleccionados.clear();
 				clientesSeleccionados = clientesSeleccionados;
-				loadClientes();
+				cargar(true);
 			} else {
 				toast.error(data.message || 'Error al ejecutar acción masiva');
 			}
@@ -124,101 +153,99 @@
 		}
 	}
 
-	$: isAdmin = $authStore.user?.rol === 'admin' || $authStore.user?.role === 'admin';
-	$: isOperaciones = $authStore.user?.area?.includes('operaciones');
-	$: isTalentoHumano = $authStore.user?.area?.includes('talento_humano');
-	$: canAccessSpecialViews = isAdmin || isOperaciones || isTalentoHumano;
+	const isAdmin = $derived(
+		$authStore.user?.rol === 'admin' || $authStore.user?.role === 'admin'
+	);
+	const isOperaciones = $derived($authStore.user?.area?.includes('operaciones'));
+	const isTalentoHumano = $derived($authStore.user?.area?.includes('talento_humano'));
+	const canAccessSpecialViews = $derived(isAdmin || isOperaciones || isTalentoHumano);
 
 	// Filtros activos (para chips removibles)
 	const TIPO_LABELS: Record<string, string> = {
 		EMPRESA: 'Empresa',
 		PERSONA_NATURAL: 'Persona Natural'
 	};
-	$: activeFilters = [
-		...(filtroTipo !== 'TODOS'
-			? [{ key: 'tipo', label: 'Tipo', value: TIPO_LABELS[filtroTipo] ?? filtroTipo }]
+	const activeFilters = $derived([
+		...(filtros.tipo !== 'TODOS'
+			? [{ key: 'tipo', label: 'Tipo', value: TIPO_LABELS[filtros.tipo] ?? filtros.tipo }]
 			: []),
-		...(mostrarOcultos ? [{ key: 'ocultos', label: 'Visibilidad', value: 'Ocultos' }] : []),
-		...(searchTerm.trim()
-			? [{ key: 'search', label: 'Búsqueda', value: `"${searchTerm.trim()}"` }]
-			: [])
-	];
+		...(filtros.vista === 'ocultos'
+			? [{ key: 'vista', label: 'Visibilidad', value: 'Ocultos' }]
+			: []),
+		...(filtros.q.trim() ? [{ key: 'q', label: 'Búsqueda', value: `"${filtros.q.trim()}"` }] : [])
+	]);
+
+	/// La página no cuenta como filtro y la búsqueda tiene su propio campo.
+	const numFiltrosActivos = $derived(contarActivos(DEFS, filtros, ['q', 'pagina']));
 
 	function clearFilter(key: string) {
-		if (key === 'tipo') {
-			filtroTipo = 'TODOS';
-			loadClientes();
-		}
-		if (key === 'ocultos') {
-			mostrarOcultos = false;
-			loadClientes();
-		}
-		if (key === 'search') {
-			searchTerm = '';
-			loadClientes();
-		}
+		ponerFiltro(key as keyof FiltrosClientes, DEFS[key as keyof FiltrosClientes].porDefecto as never);
 	}
 
-	$: stats = {
-		total: pagination.total || clientes.length,
+	const clientes = $derived($listaClientes._?.items ?? []);
+	const isLoading = $derived($listaClientes._?.cargando ?? false);
+	const error = $derived($listaClientes._?.error || null);
+	const totalClientes = $derived($listaClientes._?.total ?? 0);
+
+	const stats = $derived({
+		total: totalClientes || clientes.length,
 		empresas: clientes.filter((c) => c.tipo === TipoCliente.EMPRESA).length,
 		personas: clientes.filter((c) => c.tipo === TipoCliente.PERSONA_NATURAL).length,
 		conOSI: clientes.filter((c) => c.requiere_osi).length,
 		conRecargos: clientes.filter((c) => c.paga_recargos).length
-	};
+	});
 
-	async function loadClientes() {
-		isLoading = true;
-		error = null;
-		try {
-			const response = await (mostrarOcultos
-				? fetch(`${import.meta.env.VITE_API_URL}/api/clientes/ocultos`, {
-						headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-					}).then((r) => r.json())
-				: clientesAPI.getAll({
-						page: pagination.page,
-						limit: pagination.limit,
-						search: searchTerm.trim() || undefined,
-						tipo: filtroTipo !== 'TODOS' ? filtroTipo : undefined
-					}));
+	/**
+	 * Trae una página del servidor.
+	 *
+	 * La rama de ocultos usaba `fetch` crudo sin pasar `search`, `tipo` ni
+	 * `page`, y luego forzaba `pages = 1`: al activar «Ver ocultos» se perdían
+	 * en silencio la búsqueda, el filtro de tipo y la paginación entera. Ahora
+	 * las dos ramas mandan lo mismo.
+	 */
+	async function traerClientes(): Promise<{ items: Cliente[]; total: number }> {
+		const params = {
+			page: filtros.pagina,
+			limit: POR_PAGINA,
+			search: filtros.q.trim() || undefined,
+			tipo: filtros.tipo !== 'TODOS' ? filtros.tipo : undefined
+		};
 
-			if (response.data?.success || Array.isArray(response.data)) {
-				clientes = response.data.data || response.data || [];
-				if (response.data.pagination) pagination = response.data.pagination;
-				else {
-					pagination.total = clientes.length;
-					pagination.pages = 1;
-				}
-			}
-		} catch (err: any) {
-			error = err.message || 'Error al cargar los clientes';
-			if (error) toast.error(error);
-		} finally {
-			isLoading = false;
-		}
+		const res =
+			filtros.vista === 'ocultos'
+				? await clientesAPI.getOcultos(params)
+				: await clientesAPI.getAll(params);
+
+		const cuerpo = res.data ?? {};
+		const items: Cliente[] = cuerpo.data ?? (Array.isArray(cuerpo) ? cuerpo : []);
+		return { items, total: cuerpo.pagination?.total ?? items.length };
 	}
 
-	function handleSearch() {
-		if (searchTimeout) clearTimeout(searchTimeout);
-		searchTimeout = setTimeout(() => {
-			pagination.page = 1;
-			loadClientes();
-		}, 400);
+	/// Aquí sí entran todos los filtros: cualquiera de ellos cambia lo que el
+	/// servidor devuelve, así que la caché de una combinación no vale para otra.
+	const firmaDatos = $derived(firma(DEFS, filtros));
+
+	async function cargar(forzar = false) {
+		if (forzar) listaClientes.invalidar();
+		await listaClientes.cargar(firmaDatos, traerClientes);
 	}
 
 	function limpiarFiltros() {
-		searchTerm = '';
-		filtroTipo = 'TODOS';
-		mostrarOcultos = false;
-		pagination.page = 1;
-		loadClientes();
+		filtros = limpiarFiltrosDe(DEFS, filtros);
 	}
 
-	async function irPagina(pagina: number) {
-		if (pagina >= 1 && pagina <= pagination.pages) {
-			pagination.page = pagina;
-			await loadClientes();
-		}
+	function irPagina(pagina: number) {
+		filtros = { ...filtros, pagina };
+	}
+
+	/**
+	 * Cambia un filtro y vuelve a la primera página.
+	 *
+	 * Sin esto, filtrar estando en la página 7 de un listado que pasa a tener
+	 * 2 deja una tabla vacía sin explicación.
+	 */
+	function ponerFiltro<K extends keyof FiltrosClientes>(clave: K, valor: FiltrosClientes[K]) {
+		filtros = { ...filtros, [clave]: valor, pagina: 1 };
 	}
 
 	function openDeleteModal(cliente: Cliente) {
@@ -234,7 +261,7 @@
 			});
 			toast.success('Cliente eliminado');
 			showDeleteModal = false;
-			loadClientes();
+			cargar(true);
 		} catch (err) {
 			toast.error('Error al eliminar');
 		}
@@ -244,19 +271,49 @@
 		return tipo === TipoCliente.EMPRESA ? '#3b82f6' : '#10b981';
 	}
 
+	$effect(() => {
+		estadoUrl.escribir(page.url, filtros);
+	});
+
+	$effect(() => {
+		void firmaDatos;
+		void cargar();
+	});
+
+	/**
+	 * Corrige una página que se quedó fuera de rango.
+	 *
+	 * Pasa al abrir un enlace guardado cuya página ya no existe —porque el
+	 * filtro devuelve menos resultados que entonces, o porque se borraron
+	 * registros—. Sin esto se ve una lista vacía sin ninguna explicación, que
+	 * parece un error de la aplicación.
+	 */
+	$effect(() => {
+		const ultima = Math.max(1, Math.ceil(totalClientes / POR_PAGINA));
+		if (!isLoading && totalClientes > 0 && filtros.pagina > ultima) {
+			filtros = { ...filtros, pagina: ultima };
+		}
+	});
+
 	onMount(() => {
-		loadClientes();
-		socketUtils.on('cliente:created', loadClientes);
-		socketUtils.on('cliente:updated', loadClientes);
-		socketUtils.on('cliente:deleted', loadClientes);
+		/// Estos tres eventos no existían en el backend hasta ahora: el módulo
+		/// emitía `cliente:oculto` y `clientes:actualizacion-masiva`, así que
+		/// crear o editar un cliente no le llegaba a nadie más.
+		const bajas = [
+			socketUtils.on('cliente:created', () => cargar(true)),
+			socketUtils.on('cliente:updated', () => cargar(true)),
+			socketUtils.on('cliente:deleted', () => cargar(true))
+		];
+
 		window.addEventListener('keydown', handleKeydown);
 		window.addEventListener('keyup', handleKeyup);
+
+		return () => {
+			for (const baja of bajas) baja();
+		};
 	});
 
 	onDestroy(() => {
-		socketUtils.off('cliente:created', loadClientes);
-		socketUtils.off('cliente:updated', loadClientes);
-		socketUtils.off('cliente:deleted', loadClientes);
 		window.removeEventListener('keydown', handleKeydown);
 		window.removeEventListener('keyup', handleKeyup);
 	});
@@ -317,17 +374,15 @@
 				{#if canAccessSpecialViews}
 					<div class="mr-1 flex items-center gap-1">
 						<button
-							on:click={() => {
-								mostrarOcultos = !mostrarOcultos;
-								loadClientes();
-							}}
-							title={mostrarOcultos ? 'Ver Activos' : 'Ver Ocultos'}
+							onclick={() =>
+								ponerFiltro('vista', filtros.vista === 'ocultos' ? 'activos' : 'ocultos')}
+							title={filtros.vista === 'ocultos' ? 'Ver Activos' : 'Ver Ocultos'}
 							class="btn-icon"
-							style="border-color: {mostrarOcultos
+							style="border-color: {filtros.vista === 'ocultos'
 								? 'var(--emerald-500)'
-								: 'var(--border-default)'}; background-color: {mostrarOcultos
+								: 'var(--border-default)'}; background-color: {filtros.vista === 'ocultos'
 								? 'rgba(16,185,129,0.04)'
-								: 'white'}; color: {mostrarOcultos ? 'var(--emerald-600)' : 'var(--text-muted)'};"
+								: 'white'}; color: {filtros.vista === 'ocultos' ? 'var(--emerald-600)' : 'var(--text-muted)'};"
 						>
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 								<path
@@ -341,34 +396,18 @@
 				{/if}
 
 				<!-- Búsqueda -->
-				<div class="relative">
-					<input
-						type="text"
-						bind:value={searchTerm}
-						on:input={handleSearch}
+				<div class="w-64">
+					<BuscadorLista
+						valor={filtros.q}
+						onBuscar={(termino) => ponerFiltro('q', termino)}
 						placeholder="Buscar clientes…"
-						class="input-glow apple-transition w-64 rounded-xl border py-2 pr-4 pl-9 text-sm"
-						style="border-color: var(--border-default); background-color: var(--bg-surface); color: var(--text-primary);"
+						etiqueta="Buscar clientes"
 					/>
-					<svg
-						class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2"
-						style="color: var(--text-very-muted);"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-						stroke-width="1.8"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-						/>
-					</svg>
 				</div>
 
 				<!-- Filtros -->
 				<button
-					on:click={() => (mostrarFiltros = !mostrarFiltros)}
+					onclick={() => (mostrarFiltros = !mostrarFiltros)}
 					class="btn-secondary"
 					style="border-color: {mostrarFiltros
 						? 'var(--emerald-500)'
@@ -386,7 +425,7 @@
 						/>
 					</svg>
 					Filtros
-					{#if filtroTipo !== 'TODOS' || mostrarOcultos}
+					{#if numFiltrosActivos > 0}
 						<span
 							class="flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white"
 							style="background-color: var(--emerald-500);">!</span
@@ -395,7 +434,7 @@
 				</button>
 
 				<!-- Nuevo -->
-				<button on:click={() => goto('/dashboard/clientes/agregar')} class="btn-primary">
+				<button onclick={() => goto('/dashboard/clientes/agregar')} class="btn-primary">
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
 					</svg>
@@ -417,7 +456,7 @@
 			<div slot="chips" class="flex flex-wrap gap-1.5">
 				{#each activeFilters as chip, i (chip.key)}
 					<span class="chip-pop-in" style="animation-delay: {i * 60}ms">
-						<button class="filter-chip" on:click={() => clearFilter(chip.key)}>
+						<button class="filter-chip" onclick={() => clearFilter(chip.key)}>
 							<span style="color: var(--text-muted); font-weight: 500;">{chip.label}:</span>
 							<span>{chip.value}</span>
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
@@ -436,9 +475,13 @@
 				<div class="filter-field">
 					<label for="filtro-tipo" class="filter-field-label">
 						Tipo de cliente
-						{#if filtroTipo !== 'TODOS'}<span class="filter-field-label-hint">filtrado</span>{/if}
+						{#if filtros.tipo !== 'TODOS'}<span class="filter-field-label-hint">filtrado</span>{/if}
 					</label>
-					<select id="filtro-tipo" bind:value={filtroTipo} on:change={loadClientes}>
+					<select
+						id="filtro-tipo"
+						value={filtros.tipo}
+						onchange={(e) => ponerFiltro('tipo', e.currentTarget.value)}
+					>
 						<option value="TODOS">Todos los tipos</option>
 						<option value={TipoCliente.EMPRESA}>Empresa</option>
 						<option value={TipoCliente.PERSONA_NATURAL}>Persona Natural</option>
@@ -448,18 +491,15 @@
 				<div class="filter-field">
 					<label for="filtro-visibilidad" class="filter-field-label">
 						Visibilidad
-						{#if mostrarOcultos}<span class="filter-field-label-hint">filtrado</span>{/if}
+						{#if filtros.vista !== 'activos'}<span class="filter-field-label-hint">filtrado</span
+							>{/if}
 					</label>
 					<select
 						id="filtro-visibilidad"
-						value={mostrarOcultos ? 'ocultos' : 'todos'}
-						on:change={(e) => {
-							const v = (e.currentTarget as HTMLSelectElement).value;
-							mostrarOcultos = v === 'ocultos';
-							loadClientes();
-						}}
+						value={filtros.vista}
+						onchange={(e) => ponerFiltro('vista', e.currentTarget.value)}
 					>
-						<option value="todos">Activos</option>
+						<option value="activos">Activos</option>
 						<option value="ocultos" disabled={!canAccessSpecialViews}>Solo ocultos</option>
 					</select>
 				</div>
@@ -467,14 +507,13 @@
 				<div class="filter-field">
 					<label for="filtro-busqueda" class="filter-field-label">
 						Búsqueda por nombre, NIT o correo
-						{#if searchTerm.trim()}<span class="filter-field-label-hint">filtrado</span>{/if}
+						{#if filtros.q.trim()}<span class="filter-field-label-hint">filtrado</span>{/if}
 					</label>
-					<input
-						id="filtro-busqueda"
-						type="text"
-						bind:value={searchTerm}
-						on:input={handleSearch}
+					<BuscadorLista
+						valor={filtros.q}
+						onBuscar={(termino) => ponerFiltro('q', termino)}
 						placeholder="Ej. Transportes Norte, 900.123.456…"
+						etiqueta="Buscar clientes por nombre, NIT o correo"
 					/>
 				</div>
 			</div>
@@ -482,7 +521,7 @@
 			<div slot="footer">
 				<button
 					class="filter-clear"
-					on:click={limpiarFiltros}
+					onclick={limpiarFiltros}
 					disabled={activeFilters.length === 0}
 				>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"
@@ -490,7 +529,7 @@
 					>
 					Limpiar
 				</button>
-				<button class="btn-primary" on:click={() => (mostrarFiltros = false)}>
+				<button class="btn-primary" onclick={() => (mostrarFiltros = false)}>
 					Ver resultados
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"
 						><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-7-7l7 7-7 7" /></svg
@@ -564,7 +603,7 @@
 					</h3>
 					<p class="text-sm" style="color: var(--text-muted);">No se encontraron resultados</p>
 				</div>
-				<button on:click={limpiarFiltros} class="btn-primary">Limpiar filtros</button>
+				<button onclick={limpiarFiltros} class="btn-primary">Limpiar filtros</button>
 			</div>
 		{:else}
 			<!-- Cards grid: 1 col mobile, 2 sm, 3 lg, 4 xl -->
@@ -580,7 +619,7 @@
 								border-color: {clientesSeleccionados.has(cliente.id) ? 'var(--emerald-500)' : 'var(--border-subtle)'};
 								border-left-color: {getTipoColor(cliente.tipo)};"
 							in:fly={{ y: 8, duration: 200, delay: Math.min(index * 20, 200) }}
-							on:click={(e) => toggleSeleccion(cliente.id, index, e)}
+							onclick={(e) => toggleSeleccion(cliente.id, index, e)}
 							role="button"
 							tabindex="0"
 						>
@@ -589,7 +628,10 @@
 								<input
 									type="checkbox"
 									checked={clientesSeleccionados.has(cliente.id)}
-									on:click|stopPropagation={(e) => toggleSeleccion(cliente.id, index, e)}
+									onclick={(e) => {
+										e.stopPropagation();
+										toggleSeleccion(cliente.id, index, e);
+									}}
 									class="rounded text-emerald-600 focus:ring-emerald-500"
 									style="border-color: var(--border-default);"
 								/>
@@ -685,9 +727,13 @@
 							</div>
 
 							<!-- Actions (vertical) -->
-							<div class="flex flex-shrink-0 flex-col gap-1" on:click|stopPropagation>
+							<div
+								class="flex flex-shrink-0 flex-col gap-1"
+								onclick={(e) => e.stopPropagation()}
+								role="presentation"
+							>
 								<button
-									on:click={() => goto(`/dashboard/clientes/${cliente.id}`)}
+									onclick={() => goto(`/dashboard/clientes/${cliente.id}`)}
 									class="apple-transition rounded-md p-1.5"
 									style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
 									title="Ver detalle"
@@ -712,7 +758,7 @@
 									</svg>
 								</button>
 								<button
-									on:click={() => openDeleteModal(cliente)}
+									onclick={() => openDeleteModal(cliente)}
 									class="apple-transition rounded-md p-1.5"
 									style="color: #dc2626; background-color: rgba(220, 38, 38, 0.06);"
 									title="Eliminar"
@@ -738,77 +784,14 @@
 			</div>
 
 			<!-- Paginación -->
-			{#if pagination.pages > 1}
-				<div
-					class="flex flex-shrink-0 items-center justify-between px-4 py-3"
-					style="border-top: 1px solid var(--border-subtle); background-color: var(--bg-base);"
-				>
-					<p class="text-xs" style="color: var(--text-muted);">
-						Mostrando <span class="font-semibold" style="color: var(--text-primary);"
-							>{(pagination.page - 1) * pagination.limit + 1}–{Math.min(
-								pagination.page * pagination.limit,
-								pagination.total
-							)}</span
-						>
-						de
-						<span class="font-semibold" style="color: var(--text-primary);">{pagination.total}</span>
-						clientes
-					</p>
-					<div class="flex items-center gap-1">
-						<button
-							on:click={() => irPagina(pagination.page - 1)}
-							disabled={pagination.page === 1 || isLoading}
-							class="apple-transition rounded-lg border p-1.5"
-							style="border-color: var(--border-default); color: {pagination.page === 1 ||
-							isLoading
-								? 'var(--text-very-muted)'
-								: 'var(--text-secondary)'}; background-color: {pagination.page === 1 || isLoading
-								? 'var(--bg-base)'
-								: 'white'}; cursor: {pagination.page === 1 || isLoading
-								? 'not-allowed'
-								: 'pointer'};"
-						>
-							<svg
-								class="h-3.5 w-3.5"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								stroke-width="1.8"
-								><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg
-							>
-						</button>
-						<span
-							class="px-2 text-xs font-semibold"
-							style="color: var(--text-primary);"
-						>
-							{pagination.page} / {pagination.pages}
-						</span>
-						<button
-							on:click={() => irPagina(pagination.page + 1)}
-							disabled={pagination.page === pagination.pages || isLoading}
-							class="apple-transition rounded-lg border p-1.5"
-							style="border-color: var(--border-default); color: {pagination.page ===
-							pagination.pages || isLoading
-								? 'var(--text-very-muted)'
-								: 'var(--text-secondary)'}; background-color: {pagination.page ===
-							pagination.pages || isLoading
-								? 'var(--bg-base)'
-								: 'white'}; cursor: {pagination.page === pagination.pages || isLoading
-								? 'not-allowed'
-								: 'pointer'};"
-						>
-							<svg
-								class="h-3.5 w-3.5"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								stroke-width="1.8"
-								><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg
-							>
-						</button>
-					</div>
-				</div>
-			{/if}
+			<PaginadorLista
+				pagina={filtros.pagina}
+				total={totalClientes}
+				porPagina={POR_PAGINA}
+				cargando={isLoading}
+				nombreItems="clientes"
+				onCambiar={irPagina}
+			/>
 		{/if}
 	</div>
 
@@ -828,7 +811,7 @@
 				</span>
 				<div class="flex gap-1.5">
 					<button
-						on:click={() => ejecutarAccionMasiva('ocultar')}
+						onclick={() => ejecutarAccionMasiva('ocultar')}
 						disabled={procesandoMasivo}
 						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
 						style="background-color: rgba(255,255,255,0.08);"
@@ -849,7 +832,7 @@
 						Ocultar
 					</button>
 					<button
-						on:click={() => ejecutarAccionMasiva('eliminar')}
+						onclick={() => ejecutarAccionMasiva('eliminar')}
 						disabled={procesandoMasivo}
 						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
 						style="background-color: rgba(220,38,38,0.85);"
@@ -871,7 +854,7 @@
 					</button>
 				</div>
 				<button
-					on:click={() => {
+					onclick={() => {
 						clientesSeleccionados.clear();
 						clientesSeleccionados = clientesSeleccionados;
 					}}
@@ -900,12 +883,12 @@
 		class="fixed inset-0 z-50 cursor-default border-0 p-0"
 		style="background: linear-gradient(135deg, rgba(15, 31, 26, 0.40), rgba(10, 20, 16, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
 		aria-label="Cerrar modal"
-		on:click={() => (showDeleteModal = false)}
+		onclick={() => (showDeleteModal = false)}
 	></button>
 
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center p-4"
-		on:keydown={(e) => e.key === 'Escape' && (showDeleteModal = false)}
+		onkeydown={(e) => e.key === 'Escape' && (showDeleteModal = false)}
 		role="dialog"
 		aria-modal="true"
 	>
@@ -951,14 +934,14 @@
 			</p>
 			<div class="flex gap-2">
 				<button
-					on:click={() => (showDeleteModal = false)}
+					onclick={() => (showDeleteModal = false)}
 					class="btn-secondary flex-1"
 					style="justify-content: center;"
 				>
 					Cancelar
 				</button>
 				<button
-					on:click={confirmDelete}
+					onclick={confirmDelete}
 					class="flex-1 rounded-xl px-4 py-2 text-sm font-semibold text-white"
 					style="background-color: #dc2626;"
 				>

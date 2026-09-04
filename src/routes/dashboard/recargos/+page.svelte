@@ -1,7 +1,6 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
-	import { page } from '$app/stores';
-	import { goto } from '$app/navigation';
+	import { onMount, onDestroy, untrack } from 'svelte';
+	import { page } from '$app/state';
 	import { browser } from '$app/environment';
 	import { recargosStore, valoresPagarByRecargoStore, bulkRecalcStore } from '$lib/stores/recargos';
 	import { authStore } from '$lib/stores/auth';
@@ -30,47 +29,64 @@
 	import { toast } from 'svelte-sonner';
 	import MultiSelectFilter from '$lib/components/ui/MultiSelectFilter.svelte';
 	import ModalConfirmarRestaurar from '$lib/components/modals/ModalConfirmarRestaurar.svelte';
+	import { texto, numero, opcion, lista, leerDeParams, contarActivos, limpiar } from '$lib/listing/filtros';
+	import { crearEstadoUrl } from '$lib/listing/urlState';
+	import { coincide } from '$lib/listing/texto';
+	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+
+	/**
+	 * Filtros de la página, y con ellos la URL.
+	 *
+	 * Se conservan los nombres de parámetro que ya usaba (`search`, `mes`,
+	 * `anio`) porque el canvas de servicios enlaza aquí con ellos; cambiarlos
+	 * habría roto esos enlaces en silencio. Lo nuevo son los cinco filtros de
+	 * lista, la página y el tamaño de página, que antes no viajaban.
+	 *
+	 * El tope de 200 por página no es estético: el backend limita a 200 por
+	 * consulta, y pedir miles de registros era el origen de las peticiones de
+	 * 7-23 s que aparecían en consola.
+	 */
+	const DEFS = {
+		search: texto(),
+		mes: numero(new Date().getMonth() + 1),
+		anio: numero(new Date().getFullYear()),
+		conductor: lista(),
+		vehiculo: lista(),
+		empresa: lista(),
+		estado: lista(),
+		planilla: lista(),
+		/// Propio de cotransmeq: si el recargo vino importado de Transmeralda.
+		importado: opcion<'all' | 'si' | 'no'>('all'),
+		pagina: numero(1),
+		porPagina: numero(50)
+	};
+	const estadoUrl = crearEstadoUrl(DEFS);
+
+	let filtros = $state(leerDeParams(DEFS, new URLSearchParams(browser ? window.location.search : '')));
 
 	// State
-	let searchTerm = '';
-	let selectedRows = new Set<string>();
-	let selectedMonth = new Date().getMonth() + 1;
-	let selectedYear = new Date().getFullYear();
-	let currentPage = 1;
-	// Máximo 200: el backend limita a 200 por query. No hay opción "Todas"
-	// porque pedir miles de registros al backend era el origen de los
-	// requests de 7-23s que veías en consola.
-	let itemsPerPageSelect: string = '50';
-	let itemsPerPage = 50;
-	let sortField = '';
-	let sortDirection: 'asc' | 'desc' = 'asc';
-
-	let columns: any[] = [];
+	let selectedRows = $state(new Set<string>());
+	let sortField = $state('');
+	let sortDirection : 'asc' | 'desc' = $state('asc');
 
 	// Highlight states - para resaltar recargos nuevos o actualizados
-	let recentlyCreated = new Set<string>();
-	let recentlyUpdated = new Set<string>();
+	let recentlyCreated = $state(new Set<string>());
+	let recentlyUpdated = $state(new Set<string>());
 
-	// Filters
-	let conductorFilter: string[] = [];
-	let vehiculoFilter: string[] = [];
-	let empresaFilter: string[] = [];
-	let estadoFilter: string[] = [];
-	let planillaFilter: string[] = []; // ← solo agregar esta
-	let importedFilter: 'all' | 'si' | 'no' = 'all';
 
 	// Modal states
-	let modalFormIsOpen = false;
-	let modalViewIsOpen = false;
-	let modalDeleteIsOpen = false;
-	let modalEstadoIsOpen = false;
-	let modalRestaurarIsOpen = false;
-	let modalImportarTransmeraldaIsOpen = false;
-	let selectedRecargoId: string | null = null;
-	let deleteLoading = false;
-	let restoredLoading = false;
-	let estadoLoading = false;
-	let reporteLoading = false;
+	let modalFormIsOpen = $state(false);
+	let modalViewIsOpen = $state(false);
+	let modalDeleteIsOpen = $state(false);
+	let modalEstadoIsOpen = $state(false);
+	let modalRestaurarIsOpen = $state(false);
+	let modalImportarTransmeraldaIsOpen = $state(false);
+	let selectedRecargoId : string | null = $state(null);
+	let deleteLoading = $state(false);
+	let restoredLoading = $state(false);
+	let estadoLoading = $state(false);
+	let reporteLoading = $state(false);
 
 	// ═══ Popover TM (badge "TM" en columna numero_planilla) ═══
 	// El popover NO puede vivir dentro del `overflow-x-auto` de la tabla
@@ -84,7 +100,7 @@
 		left: number;
 		recargo: any | null;
 	};
-	let tmPopover: TmPopoverState = { visible: false, top: 0, left: 0, recargo: null };
+	let tmPopover: TmPopoverState = $state({ visible: false, top: 0, left: 0, recargo: null });
 
 	function showTmPopover(e: MouseEvent, recargo: any) {
 		const target = e.currentTarget as HTMLElement;
@@ -123,12 +139,12 @@
 	// actualiza desde 3 lugares: la respuesta HTTP de create/update, el
 	// payload de los sockets `recargo-creado` / `recargo-actualizado` /
 	// `recargo-recalculado`, y el preview endpoint (vía `cargarPreviewParaRecargos`).
-	$: valoresPagarByRecargo = $valoresPagarByRecargoStore;
+	const valoresPagarByRecargo = $derived($valoresPagarByRecargoStore);
 	// Conjunto de recargos cuya petición de preview está en vuelo (para mostrar spinner).
-	let recargosCargandoValor: Set<string> = new Set();
+	let recargosCargandoValor : Set<string> = $state(new Set());
 	// Conjunto de recargos para los que ya se intentó cargar y no aparecieron
 	// en el preview (sin recargos monetizables en el período).
-	let recargosSinValor: Set<string> = new Set();
+	let recargosSinValor : Set<string> = $state(new Set());
 
 	function fmtCOP(v: number | null | undefined): string {
 		const n = Number(v) || 0;
@@ -211,47 +227,47 @@
 	}
 
 	// listado de eliminados
-	let verEliminados = false;
+	let verEliminados = $state(false);
 
 	// User role checks
-	$: user = $authStore.user;
-	$: isKilometrajeRole = user?.role === 'kilometraje';
-	$: isConsultaRole = user?.role === 'consulta';
-	$: isReadOnly = isConsultaRole;
+	const user = $derived($authStore.user);
+	const isKilometrajeRole = $derived(user?.role === 'kilometraje');
+	const isConsultaRole = $derived(user?.role === 'consulta');
+	const isReadOnly = $derived(isConsultaRole);
 
 	// Store data
-	$: recargos = $recargosStore.recargos;
-	$: loading = $recargosStore.loading;
-	$: error = $recargosStore.error;
-	$: pagination = $recargosStore.pagination;
+	const recargos = $derived($recargosStore.recargos);
+	const loading = $derived($recargosStore.loading);
+	const error = $derived($recargosStore.error);
+	const pagination = $derived($recargosStore.pagination);
 
 	// Columns dinámicas según mes/año
-	$: daysInMonth = getDaysInMonth(selectedMonth, selectedYear);
+	const daysInMonth = $derived(getDaysInMonth(filtros.mes, filtros.anio));
 	// Días festivos del mes/año seleccionado (array de números: ej. [1, 6, 19, ...])
-	$: diasFestivosMes = obtenerFestivosCompletos(selectedYear)
-		.filter((f) => f.mes === selectedMonth)
-		.map((f) => f.dia);
-	$: uniqueEmpresas = [
+	const diasFestivosMes = $derived(obtenerFestivosCompletos(filtros.anio)
+		.filter((f) => f.mes === filtros.mes)
+		.map((f) => f.dia));
+	const uniqueEmpresas = $derived([
 		...new Set(recargos.map((r) => r.empresa?.nombre).filter((n): n is string => Boolean(n)))
-	].sort();
-	$: uniqueConductores = [
+	].sort());
+	const uniqueConductores = $derived([
 		...new Set(
 			recargos
 				.map((r) => `${r.conductor?.nombre || ''} ${r.conductor?.apellido || ''}`.trim())
 				.filter(Boolean)
 		)
-	].sort();
-	$: uniqueVehiculos = [
+	].sort());
+	const uniqueVehiculos = $derived([
 		...new Set(recargos.map((r) => r.vehiculo?.placa).filter((v): v is string => Boolean(v)))
-	].sort();
-	$: uniqueEstados = [...new Set(recargos.map((r) => r.estado).filter(Boolean))];
-	$: uniquePlanillas = [
+	].sort());
+	const uniqueEstados = $derived([...new Set(recargos.map((r) => r.estado).filter(Boolean))]);
+	const uniquePlanillas = $derived([
 		...new Set(recargos.map((r) => r.numero_planilla).filter((p): p is string => Boolean(p)))
-	].sort();
+	].sort());
 
-	$: dayColumns = Array.from({ length: daysInMonth }, (_, i) => {
+	const dayColumns = $derived(Array.from({ length: daysInMonth }, (_, i) => {
 		const day = i + 1;
-		const isSunday = esDomingo(day, selectedMonth, selectedYear);
+		const isSunday = esDomingo(day, filtros.mes, filtros.anio);
 		const isFestivo = diasFestivosMes.includes(day);
 
 		return {
@@ -264,7 +280,7 @@
 			bgColor: isFestivo ? 'bg-orange-50' : isSunday ? 'bg-red-50' : '',
 			width: '60px'
 		};
-	});
+	}));
 
 	// Columnas fijas
 	// `stickyLeft` = offset acumulado desde el borde izquierdo para que
@@ -362,95 +378,131 @@
 	];
 
 	// Todas las columnas
-	$: columns = [...fixedColumns, ...dayColumns, ...totalColumns];
+	const columns: any[] = $derived([...fixedColumns, ...dayColumns, ...totalColumns]);
 
 	// Filtered data
-	$: filteredRecargos = recargos.filter((recargo) => {
-		// Search term
-		if (searchTerm) {
-			const term = searchTerm.toLowerCase();
-			const conductor =
-				`${recargo.conductor?.nombre || ''} ${recargo.conductor?.apellido || ''}`.toLowerCase();
-			const vehiculo = recargo.vehiculo?.placa?.toLowerCase() || '';
-			const empresa = recargo.empresa?.nombre?.toLowerCase() || '';
-			const planilla = recargo.numero_planilla?.toLowerCase() || '';
-
-			if (
-				!conductor.includes(term) &&
-				!vehiculo.includes(term) &&
-				!empresa.includes(term) &&
-				!planilla.includes(term)
-			) {
-				return false;
-			}
+	const filteredRecargos = $derived(recargos.filter((recargo) => {
+		/// `coincide` exige todas las palabras en cualquiera de los campos y
+		/// pasa por alto las tildes, así que «munoz alaskan» encuentra a Muñoz
+		/// con esa placa. El `includes` anterior era de una sola palabra y
+		/// literal: teclear el nombre y el apellido no encontraba nada.
+		if (
+			!coincide(filtros.search, [
+				`${recargo.conductor?.nombre || ''} ${recargo.conductor?.apellido || ''}`,
+				recargo.vehiculo?.placa,
+				recargo.empresa?.nombre,
+				recargo.numero_planilla
+			])
+		) {
+			return false;
 		}
 
 		// Filtros específicos
-		if (conductorFilter.length > 0) {
+		if (filtros.conductor.length > 0) {
 			const nombre =
 				`${recargo.conductor?.nombre || ''} ${recargo.conductor?.apellido || ''}`.trim();
-			if (!conductorFilter.includes(nombre)) return false;
+			if (!filtros.conductor.includes(nombre)) return false;
 		}
 
-		if (planillaFilter.length > 0) {
-			if (!planillaFilter.includes(recargo?.numero_planilla ?? '')) return false;
+		if (filtros.planilla.length > 0) {
+			if (!filtros.planilla.includes(recargo?.numero_planilla ?? '')) return false;
 		}
 
-		if (vehiculoFilter.length > 0) {
-			if (!vehiculoFilter.includes(recargo.vehiculo?.placa ?? '')) return false;
+		if (filtros.vehiculo.length > 0) {
+			if (!filtros.vehiculo.includes(recargo.vehiculo?.placa ?? '')) return false;
 		}
 
-		if (empresaFilter.length > 0) {
-			if (!empresaFilter.includes(recargo.empresa?.nombre ?? '')) return false;
+		if (filtros.empresa.length > 0) {
+			if (!filtros.empresa.includes(recargo.empresa?.nombre ?? '')) return false;
 		}
-		if (estadoFilter.length > 0) {
-			if (!estadoFilter.includes(recargo.estado)) return false;
+		if (filtros.estado.length > 0) {
+			if (!filtros.estado.includes(recargo.estado)) return false;
 		}
-
-		if (
-			planillaFilter.length > 0 &&
-			recargo.numero_planilla != null &&
-			!planillaFilter.includes(recargo.numero_planilla)
-		)
-			return false;
 
 		return true;
-	});
+	}));
+
+	/**
+	 * Cuántos filtros están puestos, ignorando mes, año y tamaño de página.
+	 *
+	 * Esos tres no son «filtros» para el usuario: el mes y el año eligen QUÉ
+	 * periodo se pide al servidor —limpiarlos lo mandaría al mes actual, que es
+	 * otra consulta— y el tamaño de página es una preferencia de la vista.
+	 */
+	const NO_SON_FILTROS = ['mes', 'anio', 'porPagina', 'pagina'] as const;
+	const filtrosActivos = $derived(contarActivos(DEFS, filtros, [...NO_SON_FILTROS]));
+
+	function limpiarFiltros() {
+		const habiaImportado = filtros.importado !== 'all';
+		filtros = limpiar(DEFS, filtros, [...NO_SON_FILTROS]);
+		/// El de importados lo resuelve el servidor: dejarlo en «Todos» en el
+		/// selector sin volver a pedir habría mostrado la lista recortada bajo
+		/// un filtro que ya no aparece puesto.
+		if (habiaImportado) void handleImportedFilterChange();
+	}
 
 	// Paginated data
-	$: itemsPerPage = parseInt(itemsPerPageSelect);
-	$: totalPages = Math.max(1, Math.ceil(filteredRecargos.length / itemsPerPage));
-	$: paginatedRecargos = filteredRecargos.slice(
-		(currentPage - 1) * itemsPerPage,
-		currentPage * itemsPerPage
-	);
+	const totalPages = $derived(Math.max(1, Math.ceil(filteredRecargos.length / filtros.porPagina)));
+	const paginatedRecargos = $derived(filteredRecargos.slice(
+		(filtros.pagina - 1) * filtros.porPagina,
+		filtros.pagina * filtros.porPagina
+	));
 
-	// Reset a página 1 cuando cambian los filtros, el tamaño de página o el mes/año.
-	// (el reactive "if (currentPage > totalPages)" es el seguro secundario
-	// por si la página actual ya no existe tras reducir filtros).
-	let lastItemsPerPage = itemsPerPage;
-	let lastSearchKey = '';
-	let lastMesAnio = '';
-	$: searchKey = `${searchTerm}|${conductorFilter.join(',')}|${vehiculoFilter.join(',')}|${empresaFilter.join(',')}|${estadoFilter.join(',')}|${planillaFilter.join(',')}|${importedFilter}`;
-	$: mesAnioKey = `${selectedMonth}-${selectedYear}`;
-	$: {
+	/**
+	 * Vuelve a la página 1 cuando cambia lo que se está mirando.
+	 *
+	 * Las claves arrancan con los valores iniciales, no vacías: si no, la
+	 * primera pasada las vería «cambiadas» y borraría la página que venía en la
+	 * URL. Antes daba igual porque la página no viajaba; ahora `?pagina=3`
+	 * tiene que sobrevivir a la carga.
+	 */
+	function claveFiltros(f: typeof filtros): string {
+		return [
+			f.search,
+			f.conductor.join(','),
+			f.vehiculo.join(','),
+			f.empresa.join(','),
+			f.estado.join(','),
+			f.planilla.join(','),
+			f.importado
+		].join('|');
+	}
+	/// `untrack` porque esto es una foto del arranque, no una dependencia: si
+	/// siguiera a `filtros`, las tres claves cambiarían a la vez que aquello
+	/// con lo que se comparan y la comparación nunca detectaría nada.
+	let lastItemsPerPage = untrack(() => filtros.porPagina);
+	let lastSearchKey = untrack(() => claveFiltros(filtros));
+	let lastMesAnio = untrack(() => `${filtros.mes}-${filtros.anio}`);
+	const searchKey = $derived(claveFiltros(filtros));
+	const mesAnioKey = $derived(`${filtros.mes}-${filtros.anio}`);
+	$effect(() => {
 		const filtersChanged = searchKey !== lastSearchKey;
-		const pageSizeChanged = itemsPerPage !== lastItemsPerPage;
+		const pageSizeChanged = filtros.porPagina !== lastItemsPerPage;
 		const monthChanged = mesAnioKey !== lastMesAnio;
 		if (filtersChanged || pageSizeChanged || monthChanged) {
 			lastSearchKey = searchKey;
-			lastItemsPerPage = itemsPerPage;
+			lastItemsPerPage = filtros.porPagina;
 			lastMesAnio = mesAnioKey;
-			currentPage = 1;
+			filtros.pagina = 1;
 		}
-	}
+	});
 
-	// Si el filtro reduce los resultados y la página actual queda fuera de rango,
-	// saltar a la última página disponible. Evita "página vacía" al filtrar.
-	$: if (currentPage > totalPages) currentPage = totalPages;
+	/**
+	 * Si el filtro deja la página actual fuera de rango, salta a la última.
+	 * Evita la «página vacía» al filtrar.
+	 *
+	 * El guardia de carga NO es decorativo: mientras el mes viaja, la lista
+	 * está vacía y `totalPages` vale 1, así que sin él un enlace con
+	 * `?pagina=3` se recortaba a la 1 antes de que llegara el primer dato y la
+	 * página nunca se restauraba.
+	 */
+	$effect(() => {
+		if (loading || recargos.length === 0) return;
+		if (filtros.pagina > totalPages) filtros.pagina = totalPages;
+	});
 
 	// Totals row
-	$: totalsRow = {
+	const totalsRow = $derived({
 		id: 'TOTAL',
 		empresa: { nombre: 'TOTAL' },
 		numero_planilla: '',
@@ -465,10 +517,10 @@
 		total_rn: filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_rn), 0),
 		total_rd: filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_rd), 0),
 		dias_laborales: filteredRecargos.flatMap((r) => r.dias_laborales || [])
-	};
+	});
 
 	// Stats reactivos — se actualizan con búsqueda y filtros
-	$: stats = (() => {
+	const stats = $derived.by(() => {
 		const totalPlanillas = filteredRecargos.length;
 		const totalDiasServicio = filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_dias), 0);
 		const totalHoras = filteredRecargos.reduce((sum, r) => sum + toNumber(r.total_horas), 0);
@@ -504,7 +556,7 @@
 			totalExtras,
 			totalRecargos
 		};
-	})();
+	});
 
 	// Total a Pagar (stat card). Se toma de `meta.total_valor_pagar` que
 	// el backend calcula en el mismo `list` agregándo TODOS los recargos
@@ -512,13 +564,13 @@
 	// Esto es coherente con el resto de stat cards que también se
 	// derivan del filtro: el backend lo recalcula cada vez que cambia
 	// mes/año o cualquier filtro del query.
-	$: totalValorPagar = $recargosStore.meta?.total_valor_pagar ?? 0;
+	const totalValorPagar = $derived($recargosStore.meta?.total_valor_pagar ?? 0);
 
 	// Dispara la carga del preview monetario para cada (conductor, mes, año)
 	// presente en `paginatedRecargos`. Agrupa por la cache key para no repetir
 	// requests cuando varios recargos visibles comparten conductor y período.
 	let lastPreviewSig = '';
-	$: {
+	$effect(() => {
 		const grupos = new Map<string, string[]>();
 		for (const r of paginatedRecargos) {
 			if (!r?.conductor?.id) continue;
@@ -540,37 +592,41 @@
 				}
 			}
 		}
-	}
+	});
 
 	// Handlers
 	function handleMonthChange(increment: number) {
-		selectedMonth += increment;
-		if (selectedMonth > 12) {
-			selectedMonth = 1;
-			selectedYear++;
-		} else if (selectedMonth < 1) {
-			selectedMonth = 12;
-			selectedYear--;
+		filtros.mes += increment;
+		if (filtros.mes > 12) {
+			filtros.mes = 1;
+			filtros.anio++;
+		} else if (filtros.mes < 1) {
+			filtros.mes = 12;
+			filtros.anio--;
 		}
-		// El fetch lo dispara la reactiva `selectedMonth/Year → setMesYAño`
+		// El fetch lo dispara la reactiva `filtros.mes/Year → setMesYAño`
 	}
 
+	/**
+	 * Selección de filas.
+	 *
+	 * Se crea un `Set` nuevo en cada cambio en vez de mutar el que había y
+	 * reasignárselo a sí mismo. Ese truco —`selectedRows = selectedRows`—
+	 * funcionaba en Svelte 4, pero aquí la asignación de la MISMA referencia no
+	 * repinta nada: las casillas se habrían quedado clavadas.
+	 */
 	function handleSelectAll() {
-		if (selectedRows.size === paginatedRecargos.length) {
-			selectedRows.clear();
-		} else {
-			selectedRows = new Set(paginatedRecargos.map((r) => r.id));
-		}
-		selectedRows = selectedRows; // Trigger reactivity
+		selectedRows =
+			selectedRows.size === paginatedRecargos.length
+				? new Set()
+				: new Set(paginatedRecargos.map((r) => r.id));
 	}
 
 	function handleSelectRow(id: string) {
-		if (selectedRows.has(id)) {
-			selectedRows.delete(id);
-		} else {
-			selectedRows.add(id);
-		}
-		selectedRows = selectedRows; // Trigger reactivity
+		const siguiente = new Set(selectedRows);
+		if (siguiente.has(id)) siguiente.delete(id);
+		else siguiente.add(id);
+		selectedRows = siguiente;
 	}
 
 	function handleUnselectRow() {
@@ -614,8 +670,7 @@
 			}
 
 			// Limpiar selección
-			selectedRows.clear();
-			selectedRows = selectedRows;
+			selectedRows = new Set();
 
 			// Recargar datos
 			await recargosStore.fetchRecargos();
@@ -648,8 +703,7 @@
 			}
 
 			// Limpiar selección
-			selectedRows.clear();
-			selectedRows = selectedRows;
+			selectedRows = new Set();
 
 			// Recargar datos
 			await recargosStore.fetchRecargos();
@@ -684,8 +738,7 @@
 			);
 
 			// Limpiar selección
-			selectedRows.clear();
-			selectedRows = selectedRows;
+			selectedRows = new Set();
 
 			// Recargar datos
 			await recargosStore.fetchRecargos();
@@ -988,7 +1041,7 @@
 	async function getReportePdf() {
 		reporteLoading = true;
 		try {
-			await recargosApi.reportePdf(selectedMonth, selectedYear);
+			await recargosApi.reportePdf(filtros.mes, filtros.anio);
 		} catch (e) {
 			console.error('Error obteniendo reporte:', e);
 			toast.error('No se pudo obtener reporte. Intenta de nuevo.');
@@ -1004,7 +1057,7 @@
 	 */
 	async function handleImportedFilterChange() {
 		await recargosStore.aplicarFiltros({
-			imported_from_transmeralda: importedFilter
+			imported_from_transmeralda: filtros.importado
 		});
 	}
 
@@ -1018,27 +1071,17 @@
 		// NO await: que el resto del onMount siga en paralelo.
 		void reanudarBulkRecalc();
 
-		// Hidratar estado desde URL search params
-		// (permite deep-link desde el canvas de servicios, ej. /recargos?search=PL-001&mes=1&anio=2024)
-		if (browser) {
-			const params = $page.url.searchParams;
-			const searchParam = params.get('search');
-			const mesParam = params.get('mes');
-			const anioParam = params.get('anio') ?? params.get('año');
-
-			if (searchParam) searchTerm = searchParam;
-			if (mesParam) {
-				const m = parseInt(mesParam, 10);
-				if (Number.isFinite(m) && m >= 1 && m <= 12) selectedMonth = m;
-			}
-			if (anioParam) {
-				const y = parseInt(anioParam, 10);
-				if (Number.isFinite(y) && y >= 2020 && y <= 2100) selectedYear = y;
-			}
-		}
-
-		// Habilitar la reactiva (dispara URL sync + fetch inicial con los valores finales)
+		/// Los filtros ya vienen leídos de la URL en la declaración: hacerlo aquí
+		/// era tarde. Solo queda soltar el freno del fetch, que espera a que la
+		/// página esté montada para no pedir dos veces el mismo mes.
 		mesAnioInicializado = true;
+
+		/// «Importado de Transmeralda» lo resuelve el servidor, no el filtrado
+		/// local. Si viene en la URL hay que aplicarlo aquí: pintarlo solo en
+		/// el selector habría mostrado «Sí» sobre la lista sin filtrar.
+		if (filtros.importado !== 'all') {
+			await handleImportedFilterChange();
+		}
 	});
 
 	// Cleanup socket listeners on destroy
@@ -1093,8 +1136,7 @@
 
 	function handleRecargoCreado(data: any) {
 		// Agregar a la lista de recientes
-		recentlyCreated.add(data.recargoId);
-		recentlyCreated = recentlyCreated;
+		recentlyCreated = new Set([...recentlyCreated, data.recargoId]);
 
 		// Si el backend envió el valor a pagar, inyectarlo directo al mapa.
 		aplicarValorPagarDelSocket(data.recargoId, data.valor_pagar);
@@ -1104,15 +1146,13 @@
 
 		// Remover el highlight después de 5 segundos
 		setTimeout(() => {
-			recentlyCreated.delete(data.recargoId);
-			recentlyCreated = recentlyCreated;
+			recentlyCreated = new Set([...recentlyCreated].filter((x) => x !== data.recargoId));
 		}, 5000);
 	}
 
 	function handleRecargoActualizado(data: any) {
 		// Agregar a la lista de recientes
-		recentlyUpdated.add(data.recargoId);
-		recentlyUpdated = recentlyUpdated;
+		recentlyUpdated = new Set([...recentlyUpdated, data.recargoId]);
 
 		// Si el backend envió el valor a pagar, inyectarlo directo al mapa.
 		aplicarValorPagarDelSocket(data.recargoId, data.valor_pagar);
@@ -1122,8 +1162,7 @@
 
 		// Remover el highlight después de 5 segundos
 		setTimeout(() => {
-			recentlyUpdated.delete(data.recargoId);
-			recentlyUpdated = recentlyUpdated;
+			recentlyUpdated = new Set([...recentlyUpdated].filter((x) => x !== data.recargoId));
 		}, 5000);
 	}
 
@@ -1166,29 +1205,28 @@
 	// resume tras recarga de página vía localStorage + GET status.
 	// ═══════════════════════════════════════════════════════════
 
-	$: bulkRecalc = $bulkRecalcStore;
-	$: bulkRecalcRunning = bulkRecalc?.status === 'running';
-	$: bulkRecalcProgress =
-		bulkRecalc && bulkRecalc.total > 0
+	const bulkRecalc = $derived($bulkRecalcStore);
+	const bulkRecalcRunning = $derived(bulkRecalc?.status === 'running');
+	const bulkRecalcProgress = $derived(bulkRecalc && bulkRecalc.total > 0
 			? Math.round((bulkRecalc.processed / bulkRecalc.total) * 100)
-			: 0;
+			: 0);
 
 	// Si hay un bulk activo, deshabilitar el resto de acciones
 	// sensibles: cambio de mes/año, búsqueda, y creación de nuevo
 	// recargo (no queremos que el usuario navegue y pierda la cola).
-	$: bloqueoPorRecalc = bulkRecalcRunning;
+	const bloqueoPorRecalc = $derived(bulkRecalcRunning);
 
 	// Pulse sobre las filas seleccionadas: el backend emite el id
 	// procesado en cada progress event, así que el pulse se apaga
 	// para ese id y se mantiene en los que aún están pendientes.
-	$: idsEnPulso = (() => {
+	const idsEnPulso = $derived.by(() => {
 		if (!bulkRecalc) return new Set<string>();
 		if (!bulkRecalcRunning) return new Set<string>();
 		// Todos los que aún no terminaron (no están en completedIds)
 		const enProgreso = new Set(bulkRecalc.ids);
 		for (const done of bulkRecalc.completedIds) enProgreso.delete(done);
 		return enProgreso;
-	})();
+	});
 
 	/**
 	 * Handler del botón "Recalcular" del header. Lanza el bulk en el
@@ -1350,7 +1388,7 @@
 			bulkRecalcPolling = null;
 		}
 	}
-	$: {
+	$effect(() => {
 		if (bulkRecalcRunning && !bulkRecalcWatchdog) {
 			bulkRecalcWatchdog = setInterval(() => {
 				const local = $bulkRecalcStore;
@@ -1443,12 +1481,12 @@
 			bulkRecalcWatchdog = null;
 			stopBulkRecalcPolling();
 		}
-	}
+	});
 
 	// Reactivo: sincroniza la URL con el estado del filtro y luego dispara el fetch
 	// (orden garantizado: primero URL → luego request, como pediste)
 	// (el flag mesAnioInicializado evita un doble fetch al hidratar desde URL en onMount)
-	let mesAnioInicializado = false;
+	let mesAnioInicializado = $state(false);
 	let urlSyncTimer: ReturnType<typeof setTimeout> | null = null;
 	// Debounce del fetch: evita disparar 1 request por mes cuando el usuario
 	// navega rápido con prev/next (ej. julio→enero = 1 request, no 6).
@@ -1461,44 +1499,50 @@
 
 	// Track del último mes/año que disparó fetch. El `search` es local
 	// (filtra `recargos` en cliente) → no necesita fetch al backend. Solo
-	// `selectedMonth` / `selectedYear` cambian el query string del server.
+	// `filtros.mes` / `filtros.anio` cambian el query string del server.
 	// Sin este guard, cada keystroke del search disparaba un setMesYAño
 	// → abort del fetch anterior → "se queda cargando infinitamente"
 	// combinado con el retry del apiClient.
 	let lastFetchedMesAnio = '';
 
-	function syncUrl() {
-		if (!browser) return;
-		const params = new URLSearchParams();
-		const s = searchTerm.trim();
-		if (s) params.set('search', s);
-		if (selectedMonth) params.set('mes', String(selectedMonth));
-		if (selectedYear) params.set('anio', String(selectedYear));
-		const qs = params.toString();
-		const target = qs ? `/dashboard/recargos?${qs}` : '/dashboard/recargos';
-		goto(target, { replaceState: true, noScroll: true, keepFocus: true });
-	}
+	/**
+	 * Los filtros a la URL.
+	 *
+	 * Antes esto era un `goto` a mano que solo llevaba `search`, `mes` y
+	 * `anio`, y que reconstruía la ruta a pelo: cualquier parámetro ajeno
+	 * —el `?conductor=<id>` con el que se llega desde un detalle— se perdía al
+	 * teclear. `escribir` conserva lo ajeno y no navega si la URL ya dice lo
+	 * mismo, que es lo que impide que este bloque se realimente.
+	 *
+	 * El retardo se mantiene porque los cinco filtros de lista se aplican de
+	 * golpe al cerrar el desplegable y no conviene una navegación por clic.
+	 */
+	/**
+	 * La cadena de consulta que describe los filtros actuales.
+	 *
+	 * El efecto depende de ESTO y no de `filtros`. En Svelte 5 `filtros` es un
+	 * proxy: leer el objeto no suscribe a sus propiedades, así que un `void
+	 * filtros` —que en modo legacy bastaba— deja el efecto sin disparar y la
+	 * URL congelada mientras la lista sí se filtra.
+	 */
+	const consultaFiltros = $derived(estadoUrl.aParams(filtros).toString());
 
-	// 1) URL sync: se dispara con CUALQUIER cambio de searchTerm/mes/año
-	// (debounced 200ms para no martillar goto en cada tecla). El search
-	// es local → el URL refleja la intención del usuario sin fetches extra.
-	$: if (browser && mesAnioInicializado) {
-		// Svelte 4 dep tracking: referenciar las vars para que el bloque
-		// se re-ejecute cuando cambien.
-		void searchTerm;
-		void selectedMonth;
-		void selectedYear;
-
+	$effect(() => {
+		void consultaFiltros;
+		if (!browser || !mesAnioInicializado) return;
 		if (urlSyncTimer) clearTimeout(urlSyncTimer);
-		urlSyncTimer = setTimeout(syncUrl, URL_SYNC_DEBOUNCE_MS);
-	}
+		urlSyncTimer = setTimeout(
+			() => estadoUrl.escribir(untrack(() => page.url), untrack(() => filtros)),
+			URL_SYNC_DEBOUNCE_MS
+		);
+	});
 
 	// 2) Fetch: SOLO se dispara cuando cambia mes/año (no en cada keystroke
 	// del search). El `lastFetchedMesAnio` evita fetches redundantes cuando
 	// el usuario ya está en el mismo mes/año y solo está tipeando el search.
-	$: {
-		if (browser && mesAnioInicializado && selectedMonth && selectedYear) {
-			const currentKey = `${selectedMonth}-${selectedYear}`;
+	$effect(() => {
+		if (browser && mesAnioInicializado && filtros.mes && filtros.anio) {
+			const currentKey = `${filtros.mes}-${filtros.anio}`;
 			if (currentKey !== lastFetchedMesAnio) {
 				if (fetchDebounceTimer) clearTimeout(fetchDebounceTimer);
 				fetchDebounceTimer = setTimeout(() => {
@@ -1509,14 +1553,14 @@
 					// encargará. Pero marcamos `lastFetchedMesAnio` solo
 					// cuando realmente se dispara el fetch, para no
 					// "comer" un cambio legítimo.
-					if (currentKey === `${selectedMonth}-${selectedYear}`) {
+					if (currentKey === `${filtros.mes}-${filtros.anio}`) {
 						lastFetchedMesAnio = currentKey;
-						recargosStore.setMesYAño(selectedMonth, selectedYear);
+						recargosStore.setMesYAño(filtros.mes, filtros.anio);
 					}
 				}, FETCH_DEBOUNCE_MS);
 			}
 		}
-	}
+	});
 </script>
 
 <svelte:head>
@@ -1592,7 +1636,7 @@
 					</div>
 				{:else}
 					<button
-						on:click={handleRecalcularSeleccionados}
+						onclick={handleRecalcularSeleccionados}
 						class="apple-transition flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold text-white"
 						style="background: linear-gradient(135deg, #4F46E5, #4338CA); box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25);"
 						title="Recalcula los {selectedRows.size} recargo(s) seleccionado(s) con la config salarial y los % de tipos vigentes por día"
@@ -1623,7 +1667,7 @@
 				class:pointer-events-none={bloqueoPorRecalc}
 			>
 				<button
-					on:click={() => handleMonthChange(-1)}
+					onclick={() => handleMonthChange(-1)}
 					aria-label="Mes anterior"
 					class="apple-transition flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--bg-base)] hover:text-[var(--emerald-500)]"
 				>
@@ -1639,7 +1683,7 @@
 
 				<div class="flex items-center gap-2">
 					<select
-						bind:value={selectedMonth}
+						bind:value={filtros.mes}
 						class="input-glow h-9 rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm font-medium"
 					>
 						{#each Array.from({ length: 12 }, (_, i) => i + 1) as mes}
@@ -1649,14 +1693,14 @@
 
 					<input
 						type="number"
-						bind:value={selectedYear}
+						bind:value={filtros.anio}
 						class="input-glow h-9 w-20 rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm font-medium"
 						min="2020"
 						max="2030"
 					/>
 				</div>
 				<button
-					on:click={() => !bloqueoPorRecalc && handleMonthChange(1)}
+					onclick={() => !bloqueoPorRecalc && handleMonthChange(1)}
 					disabled={bloqueoPorRecalc}
 					aria-label="Mes siguiente"
 					class="apple-transition flex h-8 w-8 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-[var(--bg-base)] hover:text-[var(--emerald-500)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
@@ -1694,7 +1738,7 @@
 			<!-- Botón Crear -->
 			{#if !isKilometrajeRole && !isReadOnly}
 				<button
-					on:click={handleOpenFormModal}
+					onclick={handleOpenFormModal}
 					disabled={bloqueoPorRecalc}
 					class="btn-primary apple-transition disabled:cursor-not-allowed disabled:opacity-40"
 					title={bloqueoPorRecalc
@@ -1713,7 +1757,7 @@
 				</button>
 				<!-- svelte-ignore a11y_consider_explicit_label -->
 				<button
-					on:click={getReportePdf}
+					onclick={getReportePdf}
 					class="btn-icon apple-transition"
 					title="Descargar reporte PDF"
 				>
@@ -1726,11 +1770,11 @@
 				</button>
 				<!-- Botón Importar desde Transmeralda (después del PDF) -->
 				<button
-					on:click={() => (modalImportarTransmeraldaIsOpen = true)}
+					onclick={() => (modalImportarTransmeraldaIsOpen = true)}
 					disabled={bloqueoPorRecalc}
 					class="apple-transition flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
 					style="background: linear-gradient(135deg, #047857, #065F46); box-shadow: 0 2px 6px rgba(6, 95, 70, 0.25);"
-					title="Importar recargos desde Transmeralda (mismo schema, otra base de datos) para {getNombreMes(selectedMonth)} {selectedYear}"
+					title="Importar recargos desde Transmeralda (mismo schema, otra base de datos) para {getNombreMes(filtros.mes)} {filtros.anio}"
 				>
 					<svg
 						class="h-4 w-4"
@@ -1756,31 +1800,17 @@
 		<!-- Search -->
 		<div class="flex-1">
 			<div class="relative">
-				<input
-					type="text"
-					bind:value={searchTerm}
+				<BuscadorLista
+					bind:valor={filtros.search}
+					onBuscar={(termino) => (filtros.search = termino)}
 					placeholder="Buscar por conductor, vehículo, empresa o planilla..."
-					class="input-glow h-10 w-full rounded-xl border border-[var(--border-default)] bg-white px-4 pl-10 pr-10 text-sm"
 				/>
-				<svg
-					class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-[var(--text-very-muted)]"
-					fill="none"
-					stroke="currentColor"
-					viewBox="0 0 24 24"
-				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-					/>
-				</svg>
-				<!-- Indicador de carga inline: el usuario puede seguir
-				     tipeando mientras el server responde. El filtrado es
-				     local e instantáneo. -->
+				<!-- El indicador de carga NO deshabilita el campo: el filtrado es
+				     local, así que se puede seguir escribiendo mientras llega el
+				     mes del servidor y los resultados aparecen filtrados de una. -->
 				{#if loading}
 					<div
-						class="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2"
+						class="pointer-events-none absolute top-1/2 right-9 -translate-y-1/2"
 						title="Cargando datos del servidor…"
 					>
 						<svg
@@ -1811,8 +1841,8 @@
 
 		<!-- Filtro: Solo importados de Transmeralda (después del search) -->
 		<select
-			bind:value={importedFilter}
-			on:change={handleImportedFilterChange}
+			bind:value={filtros.importado}
+			onchange={handleImportedFilterChange}
 			disabled={bloqueoPorRecalc}
 			class="input-glow h-10 rounded-xl border border-[var(--border-default)] bg-white px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50"
 			style="min-width: 200px;"
@@ -1826,14 +1856,14 @@
 		{#if !verEliminados}
 			<!-- Listar eliminadas -->
 			<button
-				on:click={handleListDeleted}
+				onclick={handleListDeleted}
 				class="apple-transition flex items-center gap-2 rounded-xl border border-[rgba(239,68,68,0.25)] bg-[rgba(239,68,68,0.06)] px-4 py-2.5 text-sm font-semibold text-[#991B1B] hover:bg-[rgba(239,68,68,0.12)]"
 			>
 				Ver eliminados
 			</button>
 		{:else}
 			<!-- Ver activos -->
-			<button on:click={handleListActivos} class="btn-primary apple-transition">
+			<button onclick={handleListActivos} class="btn-primary apple-transition">
 				Ver Activos
 			</button>
 		{/if}
@@ -1843,12 +1873,12 @@
 			{#if !verEliminados}
 				{#if selectedRows.size > 0}
 					<button
-						on:click={handleUnselectRow}
+						onclick={handleUnselectRow}
 						class="apple-transition rounded-xl border border-[var(--border-default)] bg-white px-4 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-base)]"
 						>Deseleccionar</button
 					>
 					<button
-						on:click={handleCopySelectedRows}
+						onclick={handleCopySelectedRows}
 						class="apple-transition rounded-xl bg-[var(--bg-charcoal)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--bg-charcoal-deep)]"
 					>
 						Copiar seleccionados
@@ -1861,7 +1891,7 @@
 							>{selectedRows.size} sel.</span
 						>
 						<button
-							on:click={() => (modalEstadoIsOpen = true)}
+							onclick={() => (modalEstadoIsOpen = true)}
 							class="btn-primary apple-transition"
 						>
 							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1875,7 +1905,7 @@
 							Cambiar estado
 						</button>
 						<button
-							on:click={handleDeleteSelected}
+							onclick={handleDeleteSelected}
 							class="apple-transition rounded-xl bg-[#DC2626] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#B91C1C]"
 						>
 							Eliminar
@@ -1884,7 +1914,7 @@
 				{/if}
 			{:else if selectedRows.size > 0}
 				<button
-					on:click={() => (modalRestaurarIsOpen = true)}
+					onclick={() => (modalRestaurarIsOpen = true)}
 					class="apple-transition flex cursor-pointer items-center gap-1.5 rounded-xl border border-[rgba(16,185,129,0.3)] bg-[var(--emerald-500)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--emerald-600)]"
 				>
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1907,13 +1937,16 @@
 				>
 				<select
 					id="items-per-page-select"
-					bind:value={itemsPerPageSelect}
+					bind:value={filtros.porPagina}
 					class="input-glow h-9 rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm font-semibold"
 				>
-					<option value="200">200</option>
-					<option value="100">100</option>
-					<option value="50">50</option>
-					<option value="20">20</option>
+					<!-- Valores numéricos, no cadenas: el tamaño de página viaja
+					     en la URL y `parseInt` sobre un `<option value="50">`
+					     era el paso intermedio que ya no hace falta. -->
+					<option value={200}>200</option>
+					<option value={100}>100</option>
+					<option value={50}>50</option>
+					<option value={20}>20</option>
 				</select>
 			</div>
 		</div>
@@ -2181,13 +2214,23 @@
 					<span class="inline-block h-2.5 w-2.5 rounded-full bg-[#EF4444]"></span>
 					RD <strong class="text-[var(--text-primary)]">{stats.totalRD.toFixed(1)}</strong>
 				</span>
-				{#if searchTerm || conductorFilter.length > 0 || vehiculoFilter.length > 0 || planillaFilter.length > 0 || empresaFilter.length > 0 || estadoFilter.length > 0}
+				{#if filtrosActivos > 0}
 					<span class="text-[var(--text-very-muted)]">|</span>
 					<span
 						class="font-mono-meta rounded-md bg-[rgba(245,158,11,0.10)] px-2 py-0.5 text-[0.65rem] text-[#92400E]"
 					>
 						Filtrado: {filteredRecargos.length} / {recargos.length}
 					</span>
+					<!-- Con seis filtros puestos a la vez, quitarlos uno a uno era
+					     el único camino de vuelta. -->
+					<button
+						type="button"
+						onclick={limpiarFiltros}
+						class="apple-transition font-mono-meta rounded-md border border-[var(--border-default)] px-2 py-0.5 text-[0.65rem] text-[var(--text-secondary)] hover:bg-[var(--bg-base)]"
+					>
+						Limpiar {filtrosActivos}
+						{filtrosActivos === 1 ? 'filtro' : 'filtros'}
+					</button>
 				{/if}
 			</div>
 		</div>
@@ -2234,7 +2277,7 @@
 				</span>
 
 				<button
-					on:click={handleListActivos}
+					onclick={handleListActivos}
 					class="apple-transition ml-1 rounded-full px-2.5 py-1 text-[11px] font-semibold"
 					style="background:#92400e; color:#fef3c7;"
 					title="Volver a ver activos"
@@ -2293,7 +2336,7 @@
 			<div class="flex h-96 flex-col items-center justify-center gap-3">
 				<p class="text-[#991B1B]">{error}</p>
 				<button
-					on:click={() => recargosStore.fetchRecargos()}
+					onclick={() => recargosStore.fetchRecargos()}
 					class="apple-transition rounded-xl border border-[var(--border-default)] bg-white px-4 py-2 text-sm font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-base)]"
 				>
 					Reintentar
@@ -2331,7 +2374,7 @@
 											type="checkbox"
 											checked={selectedRows.size === paginatedRecargos.length &&
 												paginatedRecargos.length > 0}
-											on:change={handleSelectAll}
+											onchange={handleSelectAll}
 											class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--border-default)] accent-[var(--emerald-500)]"
 										/>
 									{:else}
@@ -2339,42 +2382,35 @@
 									{/if}
 									{#if column.key === 'empresa'}
 										<MultiSelectFilter
-											bind:selected={empresaFilter}
+											bind:selected={filtros.empresa}
 											options={uniqueEmpresas}
 											placeholder="Todas"
 											searchable
 										/>
 									{:else if column.key === 'numero_planilla'}
 										<MultiSelectFilter
-											bind:selected={planillaFilter}
+											bind:selected={filtros.planilla}
 											options={uniquePlanillas}
 											placeholder="Todos"
 											searchable
 										/>
 									{:else if column.key === 'conductor'}
 										<MultiSelectFilter
-											bind:selected={conductorFilter}
+											bind:selected={filtros.conductor}
 											options={uniqueConductores}
 											placeholder="Todos"
 											searchable
 										/>
 									{:else if column.key === 'vehiculo'}
 										<MultiSelectFilter
-											bind:selected={vehiculoFilter}
+											bind:selected={filtros.vehiculo}
 											options={uniqueVehiculos}
 											placeholder="Todos"
 											searchable
 										/>
-									{:else if column.key === 'numero_planilla'}
-										<input
-											type="text"
-											bind:value={planillaFilter}
-											placeholder="Filtrar..."
-											class="input-glow mt-1 w-full rounded border border-[var(--border-default)] bg-white px-1.5 py-0.5 text-[11px]"
-										/>
 									{:else if column.key === 'estado'}
 										<MultiSelectFilter
-											bind:selected={estadoFilter}
+											bind:selected={filtros.estado}
 											options={uniqueEstados}
 											placeholder="Todos"
 											labelFn={getEstadoLabel}
@@ -2406,7 +2442,7 @@
 								{isDeleted ? 'border-l-4 border-l-[#EF4444] bg-[rgba(239,68,68,0.04)] opacity-75' : ''}
 								{isRecalcing ? 'bulk-recalc-pulse' : ''}"
 								transition:fade={{ duration: 200 }}
-								on:click={() => handleSelectRow(recargo.id)}
+								onclick={() => handleSelectRow(recargo.id)}
 							>
 								{#each columns as column, index}
 									<td
@@ -2442,8 +2478,8 @@
 												<input
 													type="checkbox"
 													checked={selectedRows.has(recargo.id)}
-													on:click|stopPropagation
-													on:change={() => handleSelectRow(recargo.id)}
+													onclick={(e) => e.stopPropagation()}
+													onchange={() => handleSelectRow(recargo.id)}
 													class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--border-default)] accent-[var(--emerald-500)]"
 												/>
 											</div>
@@ -2523,7 +2559,10 @@
 										{:else if column.key === 'acciones'}
 											<div class="flex gap-1">
 												<button
-													on:click|stopPropagation={() => handleViewRecargo(recargo.id)}
+													onclick={(e) => {
+												e.stopPropagation();
+												handleViewRecargo(recargo.id);
+											}}
 													class="apple-transition rounded-md p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-base)] hover:text-[var(--emerald-600)]"
 													title="Ver detalles"
 												>
@@ -2549,7 +2588,10 @@
 												</button>
 												{#if !isReadOnly}
 													<button
-														on:click|stopPropagation={() => handleEditRecargo(recargo.id)}
+														onclick={(e) => {
+												e.stopPropagation();
+												handleEditRecargo(recargo.id);
+											}}
 														class="apple-transition rounded-md p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-base)] hover:text-[var(--emerald-600)]"
 														title="Editar"
 													>
@@ -2576,8 +2618,8 @@
 												>
 											{#if recargo.imported_from_transmeralda}
 												<span
-													on:mouseenter={(e) => showTmPopover(e, recargo)}
-													on:mouseleave={hideTmPopover}
+													onmouseenter={(e) => showTmPopover(e, recargo)}
+													onmouseleave={hideTmPopover}
 													class="inline-flex cursor-help items-center gap-0.5 rounded-md px-1.5 py-0.5"
 													style="font-size: 0.55rem; font-weight: 700; color: #FFFFFF; background: linear-gradient(135deg, #047857, #065F46); border: 1px solid #065F46; letter-spacing: 0.05em; line-height: 1.3;"
 													aria-label="Planilla trasladada desde Transmeralda"
@@ -2651,63 +2693,29 @@
 		{/if}
 	</div>
 
-	<!-- Pagination — siempre se muestra cuando hay datos, incluso si cabe en 1 página,
-	     para que el usuario sepa el total y pueda ajustar itemsPerPage -->
+	<!-- Paginación. El bloque anterior pintaba un botón por página: con 1200
+	     recargos a 20 por página eran sesenta botones en una fila envuelta.
+	     `PaginadorLista` muestra cinco alrededor de la actual, más los saltos
+	     al principio y al final. -->
 	{#if !loading && filteredRecargos.length > 0}
-		<div
-			class="mt-4 flex flex-col gap-3 rounded-xl border border-[var(--border-subtle)] bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-		>
-			<div class="text-xs text-[var(--text-secondary)]">
-				{#if filteredRecargos.length > itemsPerPage}
-					Mostrando
-					<span class="font-semibold text-[var(--text-primary)]"
-						>{(currentPage - 1) * itemsPerPage + 1}</span
-					>
-					a
-					<span class="font-semibold text-[var(--text-primary)]"
-						>{Math.min(currentPage * itemsPerPage, filteredRecargos.length)}</span
-					>
-					de
-				{:else}
-					Mostrando
-				{/if}
-				<span class="font-semibold text-[var(--text-primary)]">{filteredRecargos.length}</span>
-				recargos
-				{#if totalPages > 1}
-					· página {currentPage} de {totalPages}
-				{/if}
-			</div>
-
+		<div class="mt-4 overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-white">
 			{#if totalPages > 1}
-				<div class="flex flex-wrap items-center gap-1.5">
-					<button
-						on:click={() => (currentPage = Math.max(1, currentPage - 1))}
-						disabled={currentPage === 1}
-						class="apple-transition rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-base)] disabled:cursor-not-allowed disabled:opacity-40"
-					>
-						‹ Anterior
-					</button>
-					{#each Array.from({ length: totalPages }, (_, i) => i + 1) as p}
-						<button
-							on:click={() => (currentPage = p)}
-							class="apple-transition min-w-[2rem] rounded-lg border px-2.5 py-1.5 text-sm font-semibold"
-							style="border-color: {currentPage === p
-								? 'var(--emerald-500)'
-								: 'var(--border-default)'};
-								background-color: {currentPage === p ? 'var(--emerald-500)' : 'white'};
-								color: {currentPage === p ? 'white' : 'var(--text-secondary)'};"
-						>
-							{p}
-						</button>
-					{/each}
-					<button
-						on:click={() => (currentPage = Math.min(totalPages, currentPage + 1))}
-						disabled={currentPage >= totalPages}
-						class="apple-transition rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-base)] disabled:cursor-not-allowed disabled:opacity-40"
-					>
-						Siguiente ›
-					</button>
-				</div>
+				<PaginadorLista
+					pagina={filtros.pagina}
+					total={filteredRecargos.length}
+					porPagina={filtros.porPagina}
+					nombreItems="recargos"
+					cargando={loading}
+					onCambiar={(p) => (filtros.pagina = p)}
+				/>
+			{:else}
+				<!-- Con una sola página el paginador se esconde, pero el total
+				     sigue siendo útil para saber cuánto recortó el filtro. -->
+				<p class="px-4 py-3 text-xs text-[var(--text-secondary)]">
+					Mostrando
+					<span class="font-semibold text-[var(--text-primary)]">{filteredRecargos.length}</span>
+					recargos
+				</p>
 			{/if}
 		</div>
 	{/if}
@@ -2722,8 +2730,8 @@
 	<ModalFormRecargo
 		bind:isOpen={modalFormIsOpen}
 		recargoId={selectedRecargoId}
-		currentMonth={selectedMonth}
-		currentYear={selectedYear}
+		currentMonth={filtros.mes}
+		currentYear={filtros.anio}
 		on:close={() => {
 			modalFormIsOpen = false;
 			selectedRecargoId = null;
@@ -2768,8 +2776,8 @@
 {#if modalImportarTransmeraldaIsOpen}
 	<ModalImportarTransmeralda
 		bind:isOpen={modalImportarTransmeraldaIsOpen}
-		mes={selectedMonth}
-		año={selectedYear}
+		mes={filtros.mes}
+		año={filtros.anio}
 		on:imported={handleTransmeraldaImported}
 		on:cancel={() => (modalImportarTransmeraldaIsOpen = false)}
 	/>

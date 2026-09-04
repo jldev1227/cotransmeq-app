@@ -9,6 +9,19 @@
 	import ModalFormVehiculo from '$lib/components/vehiculos/ModalFormVehiculo.svelte';
 	import ModalConfirmDelete from '$lib/components/vehiculos/ModalConfirmDelete.svelte';
 	import FilterDrawer from '$lib/components/ui/FilterDrawer.svelte';
+	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import { page } from '$app/state';
+	import { crearListingStore } from '$lib/listing/listingStore';
+	import { crearEstadoUrl } from '$lib/listing/urlState';
+	import { coincide } from '$lib/listing/texto';
+	import {
+		contarActivos,
+		firma,
+		limpiar as limpiarFiltrosDe,
+		opcion,
+		texto,
+		type DefinicionesFiltros
+	} from '$lib/listing/filtros';
 
 	interface Vehiculo {
 		id: string;
@@ -25,27 +38,42 @@
 		oculto?: boolean;
 	}
 
-	let vehiculos: Vehiculo[] = [];
-	let isLoading = true;
-	let error: string | null = null;
-	let searchTerm = '';
-	let estadoFilter = 'todos';
-	let searchTimeout: ReturnType<typeof setTimeout> | null = null;
-	let mostrarFiltros = false;
-	let mostrarOcultos = false;
-	let showDeleted = false;
-	let vehiculosEliminados: Vehiculo[] = [];
+	/**
+	 * Filtros de la página, declarados una vez.
+	 *
+	 * Viven en la URL: así una vista filtrada se puede pegar en un chat, el
+	 * botón de atrás deshace el último filtro y recargar no pierde nada. Antes
+	 * esta página no tocaba `searchParams` en absoluto.
+	 */
+	interface FiltrosFlota {
+		q: string;
+		estado: string;
+		/** `activos` | `ocultos` | `papelera`: cada una pega a un endpoint. */
+		vista: string;
+	}
 
-	let isModalOpen = false;
-	let selectedVehiculoId: string | null = null;
-	let isDeleteModalOpen = false;
-	let vehiculoToDelete: Vehiculo | null = null;
+	const DEFS: DefinicionesFiltros<FiltrosFlota> = {
+		q: texto(),
+		estado: opcion('todos'),
+		vista: opcion('activos')
+	};
+
+	const estadoUrl = crearEstadoUrl(DEFS);
+	const listaVehiculos = crearListingStore<Vehiculo>();
+
+	let filtros = $state<FiltrosFlota>(estadoUrl.leer(page.url));
+	let mostrarFiltros = $state(false);
+
+	let isModalOpen = $state(false);
+	let selectedVehiculoId = $state<string | null>(null);
+	let isDeleteModalOpen = $state(false);
+	let vehiculoToDelete = $state<Vehiculo | null>(null);
 
 	// Estados para modo selección
-	let vehiculosSeleccionados = new Set<string>();
+	let vehiculosSeleccionados = $state(new Set<string>());
 	let ultimoSeleccionadoIndex: number | null = null;
-	let shiftPressed = false;
-	let procesandoMasivo = false;
+	let shiftPressed = $state(false);
+	let procesandoMasivo = $state(false);
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Shift') shiftPressed = true;
@@ -95,21 +123,15 @@
 		procesandoMasivo = true;
 
 		try {
-			const response = await fetch(`${import.meta.env.VITE_API_URL}/api/vehiculos/masivo`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					Authorization: `Bearer ${localStorage.getItem('token')}`
-				},
-				body: JSON.stringify({ ids, accion })
-			});
-
-			const data = await response.json();
+			/// Por `apiClient` y no por `fetch`: además de la clave de token
+			/// correcta, trae reintento, deduplicación y manejo del 401.
+			const respuesta = await vehiculosAPI.operacionesMasivas(ids, accion);
+			const data = respuesta.data;
 			if (data.success) {
 				toast.success(data.message);
 				vehiculosSeleccionados.clear();
 				vehiculosSeleccionados = vehiculosSeleccionados;
-				loadVehiculos();
+				cargar(true);
 			} else {
 				toast.error(data.message || 'Error al ejecutar acción masiva');
 			}
@@ -120,10 +142,12 @@
 		}
 	}
 
-	$: isAdmin = $authStore.user?.rol === 'admin' || $authStore.user?.role === 'admin';
-	$: isOperaciones = $authStore.user?.area?.includes('operaciones');
-	$: isTalentoHumano = $authStore.user?.area?.includes('talento_humano');
-	$: canAccessSpecialViews = isAdmin || isOperaciones || isTalentoHumano;
+	const isAdmin = $derived(
+		$authStore.user?.rol === 'admin' || $authStore.user?.role === 'admin'
+	);
+	const isOperaciones = $derived($authStore.user?.area?.includes('operaciones'));
+	const isTalentoHumano = $derived($authStore.user?.area?.includes('talento_humano'));
+	const canAccessSpecialViews = $derived(isAdmin || isOperaciones || isTalentoHumano);
 
 	// Filtros activos (para chips removibles) — solo los distintos del default
 	const ESTADOS_LABELS: Record<string, string> = {
@@ -132,37 +156,77 @@
 		mantenimiento: 'Mantenimiento',
 		inactivo: 'Inactivo'
 	};
-	$: activeFilters = [
-		...(estadoFilter !== 'todos'
-			? [{ key: 'estado', label: 'Estado', value: ESTADOS_LABELS[estadoFilter] ?? estadoFilter }]
+	const VISTAS_LABELS: Record<string, string> = {
+		ocultos: 'Ocultos',
+		papelera: 'Papelera'
+	};
+
+	const activeFilters = $derived([
+		...(filtros.estado !== 'todos'
+			? [
+					{
+						key: 'estado',
+						label: 'Estado',
+						value: ESTADOS_LABELS[filtros.estado] ?? filtros.estado
+					}
+				]
 			: []),
-		...(mostrarOcultos ? [{ key: 'ocultos', label: 'Visibilidad', value: 'Ocultos' }] : []),
-		...(showDeleted ? [{ key: 'papelera', label: 'Visibilidad', value: 'Papelera' }] : []),
-		...(searchTerm.trim()
-			? [{ key: 'search', label: 'Búsqueda', value: `"${searchTerm.trim()}"` }]
-			: [])
-	];
+		...(filtros.vista !== 'activos'
+			? [{ key: 'vista', label: 'Visibilidad', value: VISTAS_LABELS[filtros.vista] }]
+			: []),
+		...(filtros.q.trim() ? [{ key: 'q', label: 'Búsqueda', value: `"${filtros.q.trim()}"` }] : [])
+	]);
+
+	/// El contador del panel no cuenta la búsqueda: tiene su propio campo a la
+	/// vista y sumarla haría parecer que hay un filtro escondido.
+	const numFiltrosActivos = $derived(contarActivos(DEFS, filtros, ['q']));
 
 	function clearFilter(key: string) {
-		if (key === 'estado') {
-			estadoFilter = 'todos';
-			loadVehiculos();
-		}
-		if (key === 'ocultos') {
-			mostrarOcultos = false;
-			loadVehiculos();
-		}
-		if (key === 'papelera') {
-			showDeleted = false;
-			loadVehiculos();
-		}
-		if (key === 'search') {
-			searchTerm = '';
-			loadVehiculos();
-		}
+		filtros = { ...filtros, [key]: DEFS[key as keyof FiltrosFlota].porDefecto };
 	}
 
-	$: stats = {
+	/**
+	 * Lo que hay cargado del servidor, sin filtrar en cliente.
+	 *
+	 * `?? []` porque el store devuelve `null` mientras no ha habido ninguna
+	 * carga correcta, que es distinto de «cargado y vacío».
+	 */
+	const vehiculos = $derived($listaVehiculos._?.items ?? []);
+	const isLoading = $derived($listaVehiculos._?.cargando ?? false);
+	const error = $derived($listaVehiculos._?.error || null);
+
+	/**
+	 * Lo que se pinta: búsqueda y estado se aplican aquí, en memoria.
+	 *
+	 * La búsqueda de esta página NO funcionaba: `handleSearch` disparaba un
+	 * refetch tras 400 ms, pero ni `loadVehiculos` usaba el término ni
+	 * `vehiculosAPI.getAll` aceptaba parámetros. Teclear en el buscador
+	 * recargaba la misma lista completa una y otra vez.
+	 */
+	const vehiculosVisibles = $derived(
+		vehiculos.filter((v) => {
+			if (filtros.estado !== 'todos') {
+				const suyo = (v.estado ?? '').toUpperCase();
+				const buscado = filtros.estado.toUpperCase();
+				const equivalentes =
+					buscado === 'DISPONIBLE' ? ['DISPONIBLE', 'ACTIVO'] : [buscado, buscado.replace('_', ' ')];
+				if (!equivalentes.includes(suyo)) return false;
+			}
+			return coincide(filtros.q, [
+				v.placa,
+				v.marca,
+				v.modelo,
+				v.linea,
+				v.color,
+				v.clase_vehiculo,
+				v.conductores ? `${v.conductores.nombre} ${v.conductores.apellido}` : ''
+			]);
+		})
+	);
+
+	/// Las tarjetas de resumen cuentan sobre TODO lo cargado, no sobre lo
+	/// filtrado: son el estado de la flota, no del filtro puesto.
+	const stats = $derived({
 		total: vehiculos.length,
 		disponible: vehiculos.filter((v) => ['DISPONIBLE', 'ACTIVO'].includes(v.estado?.toUpperCase()))
 			.length,
@@ -172,45 +236,49 @@
 		noDisponible: vehiculos.filter((v) =>
 			['NO_DISPONIBLE', 'NO DISPONIBLE'].includes(v.estado?.toUpperCase())
 		).length
-	};
+	});
 
-	async function loadVehiculos() {
-		isLoading = true;
-		error = null;
-		try {
-			if (showDeleted) {
-				const res = await vehiculosAPI.getDeleted();
-				vehiculos = res.data.data || [];
-				return;
-			}
-
-			const endpoint = mostrarOcultos ? '/api/vehiculos/ocultos' : '/api/vehiculos';
-			const response = await (mostrarOcultos
-				? fetch(`${import.meta.env.VITE_API_URL}${endpoint}`, {
-						headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-					}).then((r) => r.json())
-				: vehiculosAPI.getAll());
-
-			vehiculos = response.data?.data || response.data || [];
-		} catch (err: any) {
-			error = err.message || 'Error al cargar vehículos';
-			if (error) toast.error(error);
-		} finally {
-			isLoading = false;
+	/**
+	 * Trae la lista del servidor.
+	 *
+	 * Solo la VISTA cambia de endpoint; la búsqueda y el estado se resuelven en
+	 * cliente, porque la flota es un catálogo acotado y traerla entera una vez
+	 * es más rápido que ir al servidor con cada tecla. Si algún día crece, se
+	 * cambia esta función por una que mande los filtros y el resto de la página
+	 * sigue igual: ese es el motivo de que la firma incluya todos los filtros.
+	 */
+	async function traerVehiculos(): Promise<{ items: Vehiculo[] }> {
+		if (filtros.vista === 'papelera') {
+			const res = await vehiculosAPI.getDeleted();
+			return { items: res.data.data || [] };
 		}
+
+		if (filtros.vista === 'ocultos') {
+			const res = await vehiculosAPI.getOcultos();
+			return { items: res.data?.data || res.data || [] };
+		}
+
+		const res = await vehiculosAPI.getAll();
+		return { items: res.data?.data || res.data || [] };
 	}
 
-	function handleSearch() {
-		if (searchTimeout) clearTimeout(searchTimeout);
-		searchTimeout = setTimeout(() => loadVehiculos(), 400);
+	/**
+	 * Firma de caché.
+	 *
+	 * Solo entra `vista`: es lo único que cambia lo que pide el servidor. Si
+	 * `q` o `estado` entraran aquí, escribir en el buscador invalidaría la
+	 * caché y provocaría una petición por letra, que es justo lo que se evita
+	 * filtrando en cliente.
+	 */
+	const firmaDatos = $derived(firma(DEFS, { ...filtros, q: '', estado: 'todos' }));
+
+	async function cargar(forzar = false) {
+		if (forzar) listaVehiculos.invalidar();
+		await listaVehiculos.cargar(firmaDatos, traerVehiculos);
 	}
 
 	function limpiarFiltros() {
-		searchTerm = '';
-		estadoFilter = 'todos';
-		mostrarOcultos = false;
-		showDeleted = false;
-		loadVehiculos();
+		filtros = limpiarFiltrosDe(DEFS, filtros);
 	}
 
 	function getStatusColor(estado: string) {
@@ -241,19 +309,46 @@
 		isDeleteModalOpen = true;
 	}
 
+	/**
+	 * Filtros → URL.
+	 *
+	 * Con `goto`, no con `history.replaceState`: así `page.url` refleja de
+	 * verdad lo que hay en la barra de direcciones.
+	 */
+	$effect(() => {
+		estadoUrl.escribir(page.url, filtros);
+	});
+
+	/**
+	 * Carga cuando cambia lo que el servidor tiene que devolver.
+	 *
+	 * Depende de `firmaDatos`, no de `filtros`: teclear en el buscador cambia
+	 * los filtros pero no la firma, así que no dispara ninguna petición.
+	 */
+	$effect(() => {
+		void firmaDatos;
+		void cargar();
+	});
+
 	onMount(() => {
-		loadVehiculos();
-		socketUtils.on('vehiculo-creado', loadVehiculos);
-		socketUtils.on('vehiculo-actualizado', loadVehiculos);
-		socketUtils.on('vehiculo-eliminado', loadVehiculos);
+		/// Un evento de socket marca la lista para revalidar en vez de recargar
+		/// a ciegas. Antes los tres apuntaban a `loadVehiculos`, así que cada
+		/// cambio de cualquier usuario provocaba una petición completa aquí.
+		const bajas = [
+			socketUtils.on('vehiculo-creado', () => cargar(true)),
+			socketUtils.on('vehiculo-actualizado', () => cargar(true)),
+			socketUtils.on('vehiculo-eliminado', () => cargar(true))
+		];
+
 		window.addEventListener('keydown', handleKeydown);
 		window.addEventListener('keyup', handleKeyup);
+
+		return () => {
+			for (const baja of bajas) baja();
+		};
 	});
 
 	onDestroy(() => {
-		socketUtils.off('vehiculo-creado', loadVehiculos);
-		socketUtils.off('vehiculo-actualizado', loadVehiculos);
-		socketUtils.off('vehiculo-eliminado', loadVehiculos);
 		window.removeEventListener('keydown', handleKeydown);
 		window.removeEventListener('keyup', handleKeyup);
 	});
@@ -309,18 +404,18 @@
 				{#if canAccessSpecialViews}
 					<div class="mr-1 flex items-center gap-1">
 						<button
-							on:click={() => {
-								mostrarOcultos = !mostrarOcultos;
-								showDeleted = false;
-								loadVehiculos();
-							}}
-							title={mostrarOcultos ? 'Ver Activos' : 'Ver Ocultos'}
+							onclick={() =>
+								(filtros = {
+									...filtros,
+									vista: filtros.vista === 'ocultos' ? 'activos' : 'ocultos'
+								})}
+							title={filtros.vista === 'ocultos' ? 'Ver Activos' : 'Ver Ocultos'}
 							class="apple-transition btn-icon"
-							style="border-color: {mostrarOcultos
+							style="border-color: {filtros.vista === 'ocultos'
 								? 'var(--emerald-500)'
-								: 'var(--border-default)'}; background-color: {mostrarOcultos
+								: 'var(--border-default)'}; background-color: {filtros.vista === 'ocultos'
 								? 'rgba(16,185,129,0.04)'
-								: 'white'}; color: {mostrarOcultos ? 'var(--emerald-600)' : 'var(--text-muted)'};"
+								: 'white'}; color: {filtros.vista === 'ocultos' ? 'var(--emerald-600)' : 'var(--text-muted)'};"
 						>
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 								<path
@@ -331,18 +426,18 @@
 							</svg>
 						</button>
 						<button
-							on:click={() => {
-								showDeleted = !showDeleted;
-								mostrarOcultos = false;
-								loadVehiculos();
-							}}
-							title={showDeleted ? 'Ver Activos' : 'Ver Papelera'}
+							onclick={() =>
+								(filtros = {
+									...filtros,
+									vista: filtros.vista === 'papelera' ? 'activos' : 'papelera'
+								})}
+							title={filtros.vista === 'papelera' ? 'Ver Activos' : 'Ver Papelera'}
 							class="apple-transition btn-icon"
-							style="border-color: {showDeleted
+							style="border-color: {filtros.vista === 'papelera'
 								? '#dc2626'
-								: 'var(--border-default)'}; background-color: {showDeleted
+								: 'var(--border-default)'}; background-color: {filtros.vista === 'papelera'
 								? 'rgba(220,38,38,0.04)'
-								: 'white'}; color: {showDeleted ? '#dc2626' : 'var(--text-muted)'};"
+								: 'white'}; color: {filtros.vista === 'papelera' ? '#dc2626' : 'var(--text-muted)'};"
 						>
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 								<path
@@ -355,32 +450,16 @@
 					</div>
 				{/if}
 
-				<div class="relative">
-					<input
-						type="text"
-						bind:value={searchTerm}
-						on:input={handleSearch}
+				<div class="w-64">
+					<BuscadorLista
+						bind:valor={filtros.q}
+						onBuscar={(termino) => (filtros = { ...filtros, q: termino })}
 						placeholder="Placa, marca…"
-						class="input-glow apple-transition w-64 rounded-xl border py-2 pr-4 pl-9 text-sm"
-						style="border-color: var(--border-default); background-color: var(--bg-surface); color: var(--text-primary);"
+						etiqueta="Buscar vehículos"
 					/>
-					<svg
-						class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2"
-						style="color: var(--text-very-muted);"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-						stroke-width="1.8"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-						/>
-					</svg>
 				</div>
 				<button
-					on:click={() => (mostrarFiltros = !mostrarFiltros)}
+					onclick={() => (mostrarFiltros = !mostrarFiltros)}
 					class="btn-secondary"
 					style="border-color: {mostrarFiltros
 						? 'var(--emerald-500)'
@@ -399,7 +478,7 @@
 					</svg>
 					Filtros
 				</button>
-				<button on:click={() => openModal()} class="btn-primary">
+				<button onclick={() => openModal()} class="btn-primary">
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
 					</svg>
@@ -421,7 +500,7 @@
 			<div slot="chips" class="flex flex-wrap gap-1.5">
 				{#each activeFilters as chip, i (chip.key)}
 					<span class="chip-pop-in" style="animation-delay: {i * 60}ms">
-						<button class="filter-chip" on:click={() => clearFilter(chip.key)}>
+						<button class="filter-chip" onclick={() => clearFilter(chip.key)}>
 							<span style="color: var(--text-muted); font-weight: 500;">{chip.label}:</span>
 							<span>{chip.value}</span>
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
@@ -440,9 +519,10 @@
 				<div class="filter-field">
 					<label for="filtro-estado" class="filter-field-label">
 						Estado del vehículo
-						{#if estadoFilter !== 'todos'}<span class="filter-field-label-hint">filtrado</span>{/if}
+						{#if filtros.estado !== 'todos'}<span class="filter-field-label-hint">filtrado</span
+							>{/if}
 					</label>
-					<select id="filtro-estado" bind:value={estadoFilter} on:change={loadVehiculos}>
+					<select id="filtro-estado" bind:value={filtros.estado}>
 						<option value="todos">Todos los estados</option>
 						<option value="disponible">Disponible</option>
 						<option value="servicio">En Servicio</option>
@@ -454,20 +534,11 @@
 				<div class="filter-field">
 					<label for="filtro-visibilidad" class="filter-field-label">
 						Visibilidad
-						{#if mostrarOcultos || showDeleted}<span class="filter-field-label-hint">filtrado</span
+						{#if filtros.vista !== 'activos'}<span class="filter-field-label-hint">filtrado</span
 							>{/if}
 					</label>
-					<select
-						id="filtro-visibilidad"
-						value={mostrarOcultos ? 'ocultos' : showDeleted ? 'papelera' : 'todos'}
-						on:change={(e) => {
-							const v = (e.currentTarget as HTMLSelectElement).value;
-							mostrarOcultos = v === 'ocultos';
-							showDeleted = v === 'papelera';
-							loadVehiculos();
-						}}
-					>
-						<option value="todos">Activos y ocultos</option>
+					<select id="filtro-visibilidad" bind:value={filtros.vista}>
+						<option value="activos">Activos y ocultos</option>
 						<option value="ocultos" disabled={!canAccessSpecialViews}>Solo ocultos</option>
 						<option value="papelera" disabled={!canAccessSpecialViews}>Papelera</option>
 					</select>
@@ -476,13 +547,12 @@
 				<div class="filter-field">
 					<label for="filtro-busqueda" class="filter-field-label">
 						Búsqueda por placa o marca
-						{#if searchTerm.trim()}<span class="filter-field-label-hint">filtrado</span>{/if}
+						{#if filtros.q.trim()}<span class="filter-field-label-hint">filtrado</span>{/if}
 					</label>
 					<input
 						id="filtro-busqueda"
 						type="text"
-						bind:value={searchTerm}
-						on:input={handleSearch}
+						bind:value={filtros.q}
 						placeholder="Ej. ABC-123, Chevrolet…"
 					/>
 				</div>
@@ -491,7 +561,7 @@
 			<div slot="footer">
 				<button
 					class="filter-clear"
-					on:click={limpiarFiltros}
+					onclick={limpiarFiltros}
 					disabled={activeFilters.length === 0}
 				>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"
@@ -499,7 +569,7 @@
 					>
 					Limpiar
 				</button>
-				<button class="btn-primary" on:click={() => (mostrarFiltros = false)}>
+				<button class="btn-primary" onclick={() => (mostrarFiltros = false)}>
 					Ver resultados
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"
 						><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-7-7l7 7-7 7" /></svg
@@ -573,13 +643,13 @@
 					</h3>
 					<p class="text-sm" style="color: var(--text-muted);">No se encontraron resultados</p>
 				</div>
-				<button on:click={limpiarFiltros} class="btn-primary">Limpiar filtros</button>
+				<button onclick={limpiarFiltros} class="btn-primary">Limpiar filtros</button>
 			</div>
 		{:else}
 			<!-- Cards grid: 1 col mobile, 2 sm, 3 lg, 4 xl -->
 			<div class="min-h-0 flex-1 overflow-y-auto p-3">
 				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-					{#each vehiculos as v, index (v.id)}
+					{#each vehiculosVisibles as v, index (v.id)}
 						<article
 							class="list-card"
 							style="border-left: 4px solid {getStatusColor(v.estado)};
@@ -589,7 +659,7 @@
 								border-color: {vehiculosSeleccionados.has(v.id) ? 'var(--emerald-500)' : 'var(--border-subtle)'};
 								border-left-color: {getStatusColor(v.estado)};"
 							in:fly={{ y: 8, duration: 200, delay: Math.min(index * 20, 200) }}
-							on:click={(e) => toggleSeleccion(v.id, index, e)}
+							onclick={(e) => toggleSeleccion(v.id, index, e)}
 							role="button"
 							tabindex="0"
 						>
@@ -598,7 +668,10 @@
 								<input
 									type="checkbox"
 									checked={vehiculosSeleccionados.has(v.id)}
-									on:click|stopPropagation={(e) => toggleSeleccion(v.id, index, e)}
+									onclick={(e) => {
+										e.stopPropagation();
+										toggleSeleccion(v.id, index, e);
+									}}
 									class="rounded text-emerald-600 focus:ring-emerald-500"
 									style="border-color: var(--border-default);"
 								/>
@@ -660,9 +733,13 @@
 							</div>
 
 							<!-- Actions (vertical) -->
-							<div class="flex flex-shrink-0 flex-col gap-1" on:click|stopPropagation>
+							<div
+								class="flex flex-shrink-0 flex-col gap-1"
+								onclick={(e) => e.stopPropagation()}
+								role="presentation"
+							>
 								<button
-									on:click={() => openModal(v.id)}
+									onclick={() => openModal(v.id)}
 									class="apple-transition rounded-md p-1.5"
 									style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
 									title="Editar"
@@ -682,7 +759,7 @@
 									</svg>
 								</button>
 								<button
-									on:click={() => openDeleteModal(v)}
+									onclick={() => openDeleteModal(v)}
 									class="apple-transition rounded-md p-1.5"
 									style="color: #dc2626; background-color: rgba(220, 38, 38, 0.06);"
 									title="Eliminar"
@@ -725,7 +802,7 @@
 				</span>
 				<div class="flex gap-1.5">
 					<button
-						on:click={() => ejecutarAccionMasiva('ocultar')}
+						onclick={() => ejecutarAccionMasiva('ocultar')}
 						disabled={procesandoMasivo}
 						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
 						style="background-color: rgba(255,255,255,0.08);"
@@ -746,7 +823,7 @@
 						Ocultar
 					</button>
 					<button
-						on:click={() => ejecutarAccionMasiva('eliminar')}
+						onclick={() => ejecutarAccionMasiva('eliminar')}
 						disabled={procesandoMasivo}
 						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
 						style="background-color: rgba(220,38,38,0.85);"
@@ -768,7 +845,7 @@
 					</button>
 				</div>
 				<button
-					on:click={() => {
+					onclick={() => {
 						vehiculosSeleccionados.clear();
 						vehiculosSeleccionados = vehiculosSeleccionados;
 					}}
@@ -794,13 +871,13 @@
 	bind:isOpen={isModalOpen}
 	vehiculoId={selectedVehiculoId}
 	on:close={() => (isModalOpen = false)}
-	on:success={loadVehiculos}
+	on:success={() => cargar(true)}
 />
 <ModalConfirmDelete
 	bind:isOpen={isDeleteModalOpen}
 	vehiculo={vehiculoToDelete}
 	on:close={() => (isDeleteModalOpen = false)}
-	on:success={loadVehiculos}
+	on:success={() => cargar(true)}
 />
 
 <style>

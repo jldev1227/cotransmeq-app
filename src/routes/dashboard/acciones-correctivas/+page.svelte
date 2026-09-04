@@ -1,4 +1,14 @@
 <script lang="ts">
+	import { page } from '$app/state';
+	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import { crearEstadoUrl } from '$lib/listing/urlState';
+	import {
+		bandera,
+		limpiar as limpiarFiltrosDe,
+		opcion,
+		texto,
+		type DefinicionesFiltros
+	} from '$lib/listing/filtros';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { fade, fly } from 'svelte/transition';
@@ -24,25 +34,46 @@
 	];
 
 	type FiltroRevision = '' | 'vencidas' | 'proximas';
-	let filtroRevision: FiltroRevision = '';
-	let expandirVencidas = false;
-	let expandirProximas = false;
+	let expandirVencidas = $state(false);
+	let expandirProximas = $state(false);
 	const REVISIONES_PANEL_LIMITE = 5;
 
-	let acciones: AccionCorrectivaPreventiva[] = [];
-	let isLoading = true;
+	let acciones = $state<AccionCorrectivaPreventiva[]>([]);
+	let isLoading = $state(true);
 	let total = 0;
-	let highlightId: string | null = null;
+	let highlightId = $state<string | null>(null);
 	let highlightTimer: any;
-	let showDeleted = false;
-	let loadingState: { id: string; action: 'duplicar' | 'eliminar' | 'restaurar' | 'eliminar-permanente' | 'pdf' } | null = null;
+	let loadingState = $state<{ id: string; action: 'duplicar' | 'eliminar' | 'restaurar' | 'eliminar-permanente' | 'pdf' } | null>(null);
 
-	let search = '';
-	let activeFilter: ActionStatusGlobal | '' = '';
-	let searchInput = '';
-	let debounceTimer: any;
+	/**
+	 * Filtros en la URL.
+	 *
+	 * Los nombres `search` y `estado` son los que esta página ya usaba, para no
+	 * romper enlaces guardados. `revision` y `eliminadas` son nuevos: hasta
+	 * ahora se perdían al recargar.
+	 */
+	interface FiltrosAcciones {
+		search: string;
+		estado: string;
+		revision: string;
+		eliminadas: boolean;
+	}
 
-	$: accionCounts = (() => {
+	const DEFS: DefinicionesFiltros<FiltrosAcciones> = {
+		search: texto(),
+		estado: opcion(''),
+		revision: opcion(''),
+		eliminadas: bandera(false)
+	};
+
+	const estadoUrl = crearEstadoUrl(DEFS);
+	let filtros = $state<FiltrosAcciones>(estadoUrl.leer(page.url));
+
+	/// Atajos de lectura, para no reescribir todo el marcado de golpe.
+	const search = $derived(filtros.search);
+	const activeFilter = $derived(filtros.estado as ActionStatusGlobal | '');
+
+	const accionCounts = $derived.by(() => {
 		let enProceso = 0;
 		let vencida = 0;
 		let cumplida = 0;
@@ -60,21 +91,21 @@
 			}
 		});
 		return { enProceso, vencida, cumplida, proxVencer, total: acciones.length };
-	})();
+	});
 
 	type AccionConRevision = AccionCorrectivaPreventiva & {
 		_revision: ReturnType<typeof resumenRevision>;
 	};
 
-	$: revisiones = (() => {
+	const revisiones = $derived.by(() => {
 		const map = new Map<string, AccionConRevision>();
 		acciones.forEach((a) => {
 			map.set(a.id, { ...a, _revision: resumenRevision(a) });
 		});
 		return map;
-	})();
+	});
 
-	$: revisionCounts = (() => {
+	const revisionCounts = $derived.by(() => {
 		let vencida = 0;
 		let hoy = 0;
 		let proxima = 0;
@@ -90,40 +121,40 @@
 			}
 		});
 		return { vencida, hoy, proxima, alDia, sinActividad, totalRevision: vencida + hoy + proxima + alDia + sinActividad };
-	})();
+	});
 
-	$: revisionesVencidas = Array.from(revisiones.values())
+	const revisionesVencidas = $derived(Array.from(revisiones.values())
 		.filter((a) => a._revision.estado === 'vencida' || a._revision.estado === 'hoy')
-		.sort((a, b) => (a._revision.diasHasta ?? 0) - (b._revision.diasHasta ?? 0));
+		.sort((a, b) => (a._revision.diasHasta ?? 0) - (b._revision.diasHasta ?? 0)));
 
-	$: revisionesProximas = Array.from(revisiones.values())
+	const revisionesProximas = $derived(Array.from(revisiones.values())
 		.filter((a) => a._revision.estado === 'proxima' || a._revision.estado === 'al-dia' || a._revision.estado === 'sin-actividad')
-		.sort((a, b) => (a._revision.diasHasta ?? 999) - (b._revision.diasHasta ?? 999));
+		.sort((a, b) => (a._revision.diasHasta ?? 999) - (b._revision.diasHasta ?? 999)));
 
-	$: filteredAcciones = (() => {
-		if (!filtroRevision) return acciones;
+	const filteredAcciones = $derived.by(() => {
+		if (!filtros.revision) return acciones;
 		return acciones.filter((a) => {
 			const r = resumenRevision(a);
-			if (filtroRevision === 'vencidas') {
+			if (filtros.revision === 'vencidas') {
 				return r.estado === 'vencida' || r.estado === 'hoy';
 			}
-			if (filtroRevision === 'proximas') {
+			if (filtros.revision === 'proximas') {
 				return r.estado === 'proxima' || r.estado === 'al-dia' || r.estado === 'sin-actividad';
 			}
 			return true;
 		});
-	})();
+	});
 
-	$: tipoCounts = (() => {
+	const tipoCounts = $derived.by(() => {
 		const counts: Record<string, number> = {};
 		acciones.forEach(a => {
 			const tipo = a.tipo_accion_ejecutar || 'Sin tipo';
 			counts[tipo] = (counts[tipo] || 0) + 1;
 		});
 		return counts;
-	})();
+	});
 
-	$: causasStats = (() => {
+	const causasStats = $derived.by(() => {
 		let enProceso = 0;
 		let vencida = 0;
 		let cumplida = 0;
@@ -139,9 +170,9 @@
 			}
 		});
 		return { enProceso, vencida, cumplida, total };
-	})();
+	});
 
-	$: kpis = [
+	const kpis = $derived([
 		{
 			label: 'Total',
 			value: accionCounts.total,
@@ -174,35 +205,29 @@
 				: 'al día con seguimientos',
 			color: '#dc2626'
 		}
-	];
-
-	function debounceSearch() {
-		clearTimeout(debounceTimer);
-		debounceTimer = setTimeout(() => {
-			search = searchInput;
-			updateUrl();
-			cargarAcciones();
-		}, 300);
-	}
+		]);
 
 	function setFilter(value: ActionStatusGlobal | '') {
-		activeFilter = value;
-		updateUrl();
-		cargarAcciones();
+		ponerFiltro('estado', value);
 	}
 
 	function setRevisionFilter(value: FiltroRevision) {
-		filtroRevision = filtroRevision === value ? '' : value;
+		/// Pulsar el filtro activo lo quita; es un conmutador.
+		ponerFiltro('revision', filtros.revision === value ? '' : value);
 	}
 
 	function clearFilters() {
-		search = '';
-		searchInput = '';
-		activeFilter = '';
-		filtroRevision = '';
-		updateUrl();
-		cargarAcciones();
+		filtros = limpiarFiltrosDe(DEFS, filtros);
 	}
+
+	/// La recarga la dispara el cambio de filtros, no cada handler: así no hay
+	/// que acordarse de llamarla en cada sitio nuevo.
+	$effect(() => {
+		void filtros.search;
+		void filtros.estado;
+		void filtros.eliminadas;
+		cargarAcciones();
+	});
 
 	async function cargarAcciones() {
 		isLoading = true;
@@ -213,7 +238,7 @@
 				sortOrder: 'desc',
 				...(search && { busqueda: search }),
 				...(activeFilter && { estado_global: activeFilter }),
-				...(showDeleted && { incluir_eliminados: true })
+				...(filtros.eliminadas && { incluir_eliminados: true })
 			});
 			acciones = resultado.acciones;
 			total = resultado.total;
@@ -229,28 +254,29 @@
 	}
 
 	function toggleDeleted() {
-		showDeleted = !showDeleted;
-		cargarAcciones();
+		ponerFiltro('eliminadas', !filtros.eliminadas);
 	}
 
-	onMount(async () => {
-		const params = new URLSearchParams(window.location.search);
-		const urlSearch = params.get('search') || '';
-		const urlEstado = params.get('estado') || '';
+	/// La papelera también viaja en la URL: antes se perdía al recargar y el
+	/// usuario volvía a la vista normal sin entender por qué.
+	const showDeleted = $derived(filtros.eliminadas);
 
-		search = urlSearch;
-		searchInput = urlSearch;
-		activeFilter = urlEstado as ActionStatusGlobal | '';
+	/// Ya no hace falta leer la URL en `onMount`: `filtros` se inicializa desde
+	/// ella, y el efecto de carga se dispara solo.
 
-		await cargarAcciones();
+	/**
+	 * Filtros → URL.
+	 *
+	 * Con `goto`, no con `window.history.replaceState`. Aquel cambiaba la barra
+	 * de direcciones pero NO el store `page` de SvelteKit, así que cualquier
+	 * lógica que consultara `$page.url` leía la URL de carga, no la actual.
+	 */
+	$effect(() => {
+		estadoUrl.escribir(page.url, filtros);
 	});
 
-	function updateUrl() {
-		const params = new URLSearchParams();
-		if (search) params.set('search', search);
-		if (activeFilter) params.set('estado', activeFilter);
-		const qs = params.toString();
-		window.history.replaceState({}, '', qs ? `?${qs}` : window.location.pathname);
+	function ponerFiltro<K extends keyof FiltrosAcciones>(clave: K, valor: FiltrosAcciones[K]) {
+		filtros = { ...filtros, [clave]: valor };
 	}
 
 	async function handleDuplicar(event: CustomEvent<{ id: string }>) {
@@ -354,13 +380,13 @@
 				<button
 					class="btn-trash-toggle"
 					class:btn-trash-active={showDeleted}
-					on:click={toggleDeleted}
+					onclick={toggleDeleted}
 					aria-label="Ver papelera"
 				>
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
 					<span>Papelera</span>
 				</button>
-				<button class="btn-primary" on:click={() => goto('/dashboard/acciones-correctivas/crear')} aria-label="Crear nueva acción">
+				<button class="btn-primary" onclick={() => goto('/dashboard/acciones-correctivas/crear')} aria-label="Crear nueva acción">
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 					Nueva acción
 				</button>
@@ -392,7 +418,7 @@
 						{#each (expandirVencidas ? revisionesVencidas : revisionesVencidas.slice(0, REVISIONES_PANEL_LIMITE)) as acc (acc.id)}
 							<button
 								class="revision-item revision-item-vencida"
-								on:click={() => goto(`/dashboard/acciones-correctivas/${acc.id}`)}
+								onclick={() => goto(`/dashboard/acciones-correctivas/${acc.id}`)}
 								title="Ir al detalle"
 							>
 								<div class="revision-item-head">
@@ -411,7 +437,7 @@
 						{#if revisionesVencidas.length > REVISIONES_PANEL_LIMITE}
 							<button
 								class="revisiones-more"
-								on:click={() => (expandirVencidas = !expandirVencidas)}
+								onclick={() => (expandirVencidas = !expandirVencidas)}
 								aria-expanded={expandirVencidas}
 							>
 								{#if expandirVencidas}
@@ -439,7 +465,7 @@
 						{#each (expandirProximas ? revisionesProximas : revisionesProximas.slice(0, REVISIONES_PANEL_LIMITE)) as acc (acc.id)}
 							<button
 								class="revision-item revision-item-{acc._revision.estado === 'sin-actividad' ? 'sin' : 'proxima'}"
-								on:click={() => goto(`/dashboard/acciones-correctivas/${acc.id}`)}
+								onclick={() => goto(`/dashboard/acciones-correctivas/${acc.id}`)}
 								title="Ir al detalle"
 							>
 								<div class="revision-item-head">
@@ -462,7 +488,7 @@
 						{#if revisionesProximas.length > REVISIONES_PANEL_LIMITE}
 							<button
 								class="revisiones-more"
-								on:click={() => (expandirProximas = !expandirProximas)}
+								onclick={() => (expandirProximas = !expandirProximas)}
 								aria-expanded={expandirProximas}
 							>
 								{#if expandirProximas}
@@ -524,13 +550,13 @@
 
 		<div class="filter-bar" role="search">
 			<div class="search-wrap">
-				<svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-				<input
-					type="search"
-					placeholder={showDeleted ? 'Buscar en papelera…' : 'Buscar por número, descripción, responsable…'}
-					bind:value={searchInput}
-					on:input={debounceSearch}
-					aria-label="Buscar acciones"
+				<BuscadorLista
+					valor={filtros.search}
+					onBuscar={(termino) => ponerFiltro('search', termino)}
+					placeholder={showDeleted
+						? 'Buscar en papelera…'
+						: 'Buscar por número, descripción, responsable…'}
+					etiqueta="Buscar acciones"
 				/>
 			</div>
 
@@ -540,7 +566,7 @@
 					<button
 						class="pill"
 						class:pill-active={activeFilter === f.value}
-						on:click={() => setFilter(f.value)}
+						onclick={() => setFilter(f.value)}
 						aria-pressed={activeFilter === f.value}
 					>
 						{f.label}
@@ -560,10 +586,10 @@
 			<nav class="pills pills-revision" aria-label="Filtros de revisión">
 				<button
 					class="pill pill-revision"
-					class:pill-active-vencida={filtroRevision === 'vencidas'}
-					class:pill-active={filtroRevision === 'vencidas'}
-					on:click={() => setRevisionFilter('vencidas')}
-					aria-pressed={filtroRevision === 'vencidas'}
+					class:pill-active-vencida={filtros.revision === 'vencidas'}
+					class:pill-active={filtros.revision === 'vencidas'}
+					onclick={() => setRevisionFilter('vencidas')}
+					aria-pressed={filtros.revision === 'vencidas'}
 					title="Mostrar solo acciones con seguimiento vencido"
 				>
 					Rev. vencidas
@@ -573,10 +599,10 @@
 				</button>
 				<button
 					class="pill pill-revision"
-					class:pill-active-proxima={filtroRevision === 'proximas'}
-					class:pill-active={filtroRevision === 'proximas'}
-					on:click={() => setRevisionFilter('proximas')}
-					aria-pressed={filtroRevision === 'proximas'}
+					class:pill-active-proxima={filtros.revision === 'proximas'}
+					class:pill-active={filtros.revision === 'proximas'}
+					onclick={() => setRevisionFilter('proximas')}
+					aria-pressed={filtros.revision === 'proximas'}
 					title="Mostrar acciones con revisión próxima o al día"
 				>
 					Rev. próximas
@@ -595,14 +621,14 @@
 				<span>
 					{#if showDeleted}
 						🗑️ Papelera:
-					{:else if filtroRevision}
-						{filteredAcciones.length} de {acciones.length} acción{acciones.length !== 1 ? 'es' : ''} (filtro: {filtroRevision === 'vencidas' ? 'rev. vencidas' : 'rev. próximas'})
+					{:else if filtros.revision}
+						{filteredAcciones.length} de {acciones.length} acción{acciones.length !== 1 ? 'es' : ''} (filtro: {filtros.revision === 'vencidas' ? 'rev. vencidas' : 'rev. próximas'})
 					{:else}
 						{acciones.length} acción{acciones.length !== 1 ? 'es' : ''} encontrada{acciones.length !== 1 ? 's' : ''}
 					{/if}
 				</span>
-				{#if search || activeFilter || filtroRevision}
-					<button class="reset-btn" on:click={clearFilters}>
+				{#if search || activeFilter || filtros.revision}
+					<button class="reset-btn" onclick={clearFilters}>
 						Limpiar filtros
 					</button>
 				{/if}
@@ -618,9 +644,9 @@
 			{:else if acciones.length === 0}
 				<div class="empty" role="status">
 					<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-					<p>{showDeleted ? 'No hay acciones en la papelera' : search || activeFilter || filtroRevision ? 'Sin resultados para los filtros aplicados' : 'No hay acciones registradas'}</p>
-					{#if !search && !activeFilter && !filtroRevision && !showDeleted}
-						<button class="btn-primary" on:click={() => goto('/dashboard/acciones-correctivas/crear')}>
+					<p>{showDeleted ? 'No hay acciones en la papelera' : search || activeFilter || filtros.revision ? 'Sin resultados para los filtros aplicados' : 'No hay acciones registradas'}</p>
+					{#if !search && !activeFilter && !filtros.revision && !showDeleted}
+						<button class="btn-primary" onclick={() => goto('/dashboard/acciones-correctivas/crear')}>
 							Crear primera acción
 						</button>
 					{/if}
@@ -629,7 +655,7 @@
 				<div class="empty" role="status">
 					<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
 					<p>No hay acciones con el filtro de revisión aplicado</p>
-					<button class="reset-btn" on:click={() => (filtroRevision = '')}>Quitar filtro de revisión</button>
+					<button class="reset-btn" onclick={() => (filtros.revision = '')}>Quitar filtro de revisión</button>
 				</div>
 			{:else}
 				<div class="grid" transition:fly={{ y: 12, duration: 400 }}>

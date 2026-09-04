@@ -129,6 +129,21 @@ html {
 	--emerald-800: #166534;
 	--emerald-deep: #14532d;
 
+	/* Alias de la paleta de marca.
+	   El dashboard usa `--orange-*` en 96 sitios (Sidebar, Header, tablas de
+	   días laborados, liquidaciones de servicios…), pero esos tokens solo
+	   estaban definidos dentro de `public/portal/**`. Fuera de ahí no resolvían,
+	   así que esos badges, puntos e iconos se pintaban sin color en lugar de
+	   naranja. Son alias de `--emerald-*` —que en este repo ya son naranjas— y
+	   no copias, para que la marca tenga una sola fuente de verdad.
+	   Ojo: la definición del portal da a `--orange-700`/`--orange-800` valores
+	   verdes (#047857 / #065f46), resto de un renombrado a medias. Allí sigue
+	   mandando la suya porque está en un ámbito más específico. */
+	--orange-500: var(--emerald-500);
+	--orange-600: var(--emerald-600);
+	--orange-700: var(--emerald-700);
+	--orange-800: var(--emerald-800);
+
 	/* Base off-white casi-blanca */
 	--bg-base: #fcfcfb;
 	--bg-surface: #ffffff;

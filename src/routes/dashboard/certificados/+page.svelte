@@ -3,7 +3,7 @@
 </script>
 
 <svelte:head>
-	<title>Certificados Tributarios — Contabilidad</title>
+	<title>Certificados Tributarios · Cotransmeq</title>
 </svelte:head>
 
 <CertificadosAdmin />

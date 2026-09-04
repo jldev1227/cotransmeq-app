@@ -15,10 +15,7 @@
 		repintando
 	} from '$lib/editor/univer/cell-permission-nomina';
 	import { attachCellChangeNomina } from '$lib/editor/univer/adapters/cell-change-nomina';
-	import {
-		clearNominaBindings,
-		getNominaCellFor
-	} from '$lib/editor/business/nomina-cell-binding';
+	import { clearNominaBindings, getNominaCellFor } from '$lib/editor/business/nomina-cell-binding';
 	import {
 		accionesDisponibles,
 		claseBadgeEstado,
@@ -31,10 +28,7 @@
 		suprimirEco,
 		aplicarCeldaRemota
 	} from '$lib/editor/univer/apply-remote-patch';
-	import {
-		createSheetSession,
-		type SheetSession
-	} from '$lib/editor/canvas/sheet-session.svelte';
+	import { createSheetSession, type SheetSession } from '$lib/editor/canvas/sheet-session.svelte';
 
 	import {
 		documentoNomina,
@@ -55,6 +49,8 @@
 	import { crearZip } from '$lib/components/liquidaciones-terceros/preview/zip';
 	import SnapshotPanel from '$lib/components/univer/SnapshotPanel.svelte';
 	import UniverToolbar from '$lib/components/univer/UniverToolbar.svelte';
+	import SelectorCanvasNomina from '$lib/components/univer/SelectorCanvasNomina.svelte';
+	import GenerarBorradoresNominaModal from '$lib/components/nomina/GenerarBorradoresNominaModal.svelte';
 	import UniverCanvasHost from '$lib/components/univer/UniverCanvasHost.svelte';
 	import UniverSideRail, { type RailItem } from '$lib/components/univer/UniverSideRail.svelte';
 	import UniverActionOverlay from '$lib/components/univer/UniverActionOverlay.svelte';
@@ -62,8 +58,18 @@
 	import { authStore } from '$lib/stores/auth';
 
 	const MESES = [
-		'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO',
-		'JULIO', 'AGOSTO', 'SEPTIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'
+		'ENERO',
+		'FEBRERO',
+		'MARZO',
+		'ABRIL',
+		'MAYO',
+		'JUNIO',
+		'JULIO',
+		'AGOSTO',
+		'SEPTIEMBRE',
+		'OCTUBRE',
+		'NOVIEMBRE',
+		'DICIEMBRE'
 	];
 
 	const formatCOP = (v: number) =>
@@ -120,7 +126,6 @@
 	let acciones = $derived<AccionEstado[]>(
 		hojaActiva ? accionesDisponibles(hojaActiva.estado, areas) : []
 	);
-
 
 	function syncUrl() {
 		const url = new URL(window.location.href);
@@ -519,7 +524,9 @@
 	}
 
 	function volver() {
-		goto('/dashboard/nomina');
+		/// Al dashboard, no al listado: `/dashboard/nomina` ahora redirige a
+		/// este mismo canvas, así que apuntar ahí sería un bucle.
+		goto('/dashboard');
 	}
 
 	// ─── Carril ────────────────────────────────────────────
@@ -549,9 +556,10 @@
 			icon: iconoPreview,
 			onSelect: verDesprendible,
 			disabled: !!accionEnCurso || !hojaActiva?.liquidacionId,
-			disabledHint: hojaActiva && !hojaActiva.liquidacionId
-				? 'Este conductor todavía no tiene liquidación en el periodo.'
-				: undefined
+			disabledHint:
+				hojaActiva && !hojaActiva.liquidacionId
+					? 'Este conductor todavía no tiene liquidación en el periodo.'
+					: undefined
 		},
 		{
 			id: 'excel',
@@ -627,6 +635,21 @@
 		void loadInicial();
 	});
 
+	/**
+	 * Gancho del «Ir a…»: antes de saltar a otro canvas hay que soltar la
+	 * sesión colaborativa. Sin esto el socket sigue vivo y el avatar de quien
+	 * se fue se queda pegado en la hoja para los demás.
+	 */
+	/// Generación de borradores en lote. Sustituye al viaje por el formulario:
+	/// se eligen los conductores y el servidor genera, persiste y anuncia.
+	let mostrarGenerar = $state(false);
+
+	function antesDeSalir(): boolean {
+		session?.dispose();
+		session = null;
+		return true;
+	}
+
 	onDestroy(() => {
 		session?.dispose();
 		teardownEngine();
@@ -694,7 +717,10 @@
 	<!-- Calculadora: liquidar es hacer las cuentas. -->
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
 		<rect x="5" y="3" width="14" height="18" rx="2" />
-		<path stroke-linecap="round" d="M8 7h8M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h4" />
+		<path
+			stroke-linecap="round"
+			d="M8 7h8M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h4"
+		/>
 	</svg>
 {/snippet}
 
@@ -741,7 +767,8 @@
 <UniverToolbar
 	title="NÓMINA"
 	hoja={hojaActiva?.nombre ?? ''}
-	subtitle="{datos?.etiqueta ?? ''}  ·  {datos?.hojas.length ?? 0} conductor(es)  ·  {conPlanilla} con planilla{sinPlanilla
+	subtitle="{datos?.etiqueta ?? ''}  ·  {datos?.hojas.length ??
+		0} conductor(es)  ·  {conPlanilla} con planilla{sinPlanilla
 		? `  ·  ${sinPlanilla} sin planilla`
 		: ''}  ·  Σ neto ${formatCOP(totalNeto)}"
 	onBack={volver}
@@ -815,6 +842,20 @@
 		{/if}
 
 		<span class="univer-divider-v"></span>
+
+		<button
+			class="univer-btn"
+			onclick={() => (mostrarGenerar = true)}
+			title="Generar borradores de este periodo"
+		>
+			Generar borradores
+		</button>
+
+		<span class="univer-divider-v"></span>
+
+		<SelectorCanvasNomina actual="liquidaciones" {anio} {mes} onSalir={antesDeSalir} />
+
+		<span class="univer-divider-v"></span>
 		<PresenceAvatars users={presencia} />
 		{#if !conectado}
 			<span class="univer-badge" title="Los cambios no se están guardando">Sin conexión</span>
@@ -854,6 +895,16 @@
 	onClose={() => (historialAbierto = false)}
 	onReverted={() => loadInicial()}
 />
+
+{#if mostrarGenerar}
+	<GenerarBorradoresNominaModal
+		{anio}
+		{mes}
+		{corte}
+		onClose={() => (mostrarGenerar = false)}
+		onTerminado={() => void loadInicial()}
+	/>
+{/if}
 
 <style>
 	/* Fila: canvas elástico + carril. `min-width: 0` es obligatorio: sin él el

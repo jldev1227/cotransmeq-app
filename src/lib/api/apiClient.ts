@@ -318,6 +318,24 @@ export const vehiculosAPI = {
 	update: (id: string, data: any) => apiClient.put(`/api/vehiculos/${id}`, data),
 	delete: (id: string) => apiClient.delete(`/api/vehiculos/${id}`),
 	getDeleted: () => apiClient.get('/api/vehiculos/deleted/list'),
+	/**
+	 * Vehículos ocultos.
+	 *
+	 * La página de flota llamaba a este endpoint con un `fetch` crudo y
+	 * `localStorage.getItem('token')`, saltándose `apiClient` —y con él el
+	 * reintento, la deduplicación de peticiones y el manejo del 401— además de
+	 * usar una clave de token distinta a la del resto de la aplicación.
+	 */
+	getOcultos: () => apiClient.get('/api/vehiculos/ocultos'),
+	/**
+	 * Acciones sobre varios vehículos a la vez.
+	 *
+	 * La página lo llamaba con `fetch` y `localStorage.getItem('token')`, pero
+	 * la clave real es `transmeralda_token`: ese `getItem` devolvía `null` y la
+	 * petición salía con `Authorization: Bearer null`.
+	 */
+	operacionesMasivas: (ids: string[], accion: string) =>
+		apiClient.post('/api/vehiculos/masivo', { ids, accion }),
 	restore: (id: string) => apiClient.post(`/api/vehiculos/${id}/restore`)
 };
 
@@ -384,7 +402,18 @@ export const clientesAPI = {
 	create: (data: any) => apiClient.post('/api/clientes', data),
 	update: (id: string, data: any) => apiClient.put(`/api/clientes/${id}`, data),
 	delete: (id: string) => apiClient.delete(`/api/clientes/${id}`),
-	updateTipo: (id: string, tipo: string) => apiClient.patch(`/api/clientes/${id}/tipo`, { tipo })
+	updateTipo: (id: string, tipo: string) => apiClient.patch(`/api/clientes/${id}/tipo`, { tipo }),
+	/**
+	 * Clientes ocultos.
+	 *
+	 * Igual que en vehículos, la página lo pedía con `fetch` crudo y
+	 * `localStorage.getItem('token')`, saltándose `apiClient` y perdiendo por
+	 * el camino la búsqueda, el tipo y la paginación.
+	 */
+	getOcultos: (params?: any) => apiClient.get('/api/clientes/ocultos', { params }),
+	/** Ver la nota de `vehiculosAPI.operacionesMasivas`: mismo fallo de token. */
+	operacionesMasivas: (ids: string[], accion: string) =>
+		apiClient.post('/api/clientes/masivo', { ids, accion })
 };
 
 export const extractosAPI = {

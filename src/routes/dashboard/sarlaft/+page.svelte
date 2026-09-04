@@ -1,4 +1,15 @@
 <script lang="ts">
+	import { page } from '$app/state';
+	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+	import { crearEstadoUrl } from '$lib/listing/urlState';
+	import {
+		limpiar as limpiarFiltrosDe,
+		numero,
+		opcion,
+		texto,
+		type DefinicionesFiltros
+	} from '$lib/listing/filtros';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { fly, fade } from 'svelte/transition';
@@ -14,17 +25,51 @@
 	} from '$lib/api/sarlaft';
 	import { toast } from 'svelte-sonner';
 
-	let items: SarlaftFormularioResumen[] = [];
-	let pagination = { page: 1, limit: 20, total: 0, pages: 1 };
-	let isLoading = true;
-	let error: string | null = null;
+	let items = $state<SarlaftFormularioResumen[]>([]);
+	let pagination = $state({ page: 1, limit: 20, total: 0, pages: 1 });
+	let isLoading = $state(true);
+	let error = $state<string | null>(null);
 
-	let searchTerm = '';
-	let searchTimeout: ReturnType<typeof setTimeout> | null = null;
-	let filtroTipo: TipoFormularioSarlaft | 'TODOS' = 'TODOS';
-	let filtroEstado: EstadoSarlaft | 'TODOS' = 'TODOS';
+	/**
+	 * Filtros en la URL.
+	 *
+	 * Búsqueda, tipo, estado y página se resuelven en servidor, así que todos
+	 * entran en la firma y la búsqueda va con el retardo compartido —antes eran
+	 * 350 ms propios, uno más de los siete valores que había en el proyecto—.
+	 */
+	interface FiltrosSarlaft {
+		q: string;
+		tipo: string;
+		estado: string;
+		pagina: number;
+	}
 
-	$: stats = {
+	const POR_PAGINA = 20;
+
+	const DEFS: DefinicionesFiltros<FiltrosSarlaft> = {
+		q: texto(),
+		tipo: opcion('TODOS'),
+		estado: opcion('TODOS'),
+		pagina: numero(1)
+	};
+
+	const estadoUrl = crearEstadoUrl(DEFS);
+	let filtros = $state<FiltrosSarlaft>(estadoUrl.leer(page.url));
+
+	$effect(() => {
+		estadoUrl.escribir(page.url, filtros);
+	});
+
+	$effect(() => {
+		void filtros;
+		load();
+	});
+
+	function ponerFiltro<K extends keyof FiltrosSarlaft>(clave: K, valor: FiltrosSarlaft[K]) {
+		filtros = { ...filtros, [clave]: valor, pagina: 1 };
+	}
+
+	const stats = $derived({
 		total: pagination.total,
 		pendientes: items.filter((i) => i.estado === 'recibido').length,
 		enRevision: items.filter((i) => i.estado === 'en_revision').length,
@@ -35,18 +80,20 @@
 		condicionados: items.filter((i) => i.estado === 'condicionado').length,
 		rechazados: items.filter((i) => i.estado === 'rechazado').length,
 		documentos: items.reduce((acc, i) => acc + i.documentos_count, 0)
-	};
+		});
 
-	$: hasActiveFilter = searchTerm.trim() !== '' || filtroTipo !== 'TODOS' || filtroEstado !== 'TODOS';
+	const hasActiveFilter = $derived(
+		filtros.q.trim() !== '' || filtros.tipo !== 'TODOS' || filtros.estado !== 'TODOS'
+	);
 
 	async function load() {
 		isLoading = true;
 		error = null;
 		try {
-			const params: any = { page: pagination.page, limit: pagination.limit };
-			if (searchTerm.trim()) params.search = searchTerm.trim();
-			if (filtroTipo !== 'TODOS') params.tipo_formulario = filtroTipo;
-			if (filtroEstado !== 'TODOS') params.estado = filtroEstado;
+			const params: any = { page: filtros.pagina, limit: POR_PAGINA };
+			if (filtros.q.trim()) params.search = filtros.q.trim();
+			if (filtros.tipo !== 'TODOS') params.tipo_formulario = filtros.tipo;
+			if (filtros.estado !== 'TODOS') params.estado = filtros.estado;
 			const data = await sarlaftAPI.listar(params);
 			items = data.items;
 			pagination = data.pagination;
@@ -62,38 +109,27 @@
 		}
 	}
 
-	function onSearchInput() {
-		if (searchTimeout) clearTimeout(searchTimeout);
-		searchTimeout = setTimeout(() => {
-			pagination.page = 1;
-			load();
-		}, 350);
+	/// El retardo lo pone `BuscadorLista`; aquí solo se recibe el término ya
+	/// reposado.
+	function onSearchInput(termino: string) {
+		ponerFiltro('q', termino);
 	}
 
+	/// La recarga la dispara el efecto que observa `filtros`.
 	function setTipo(t: TipoFormularioSarlaft | 'TODOS') {
-		filtroTipo = t;
-		pagination.page = 1;
-		load();
+		ponerFiltro('tipo', t);
 	}
 
 	function setEstado(e: EstadoSarlaft | 'TODOS') {
-		filtroEstado = e;
-		pagination.page = 1;
-		load();
+		ponerFiltro('estado', e);
 	}
 
 	function limpiarFiltros() {
-		searchTerm = '';
-		filtroTipo = 'TODOS';
-		filtroEstado = 'TODOS';
-		pagination.page = 1;
-		load();
+		filtros = limpiarFiltrosDe(DEFS, filtros);
 	}
 
 	function irAPagina(p: number) {
-		if (p < 1 || p > pagination.pages) return;
-		pagination.page = p;
-		load();
+		filtros = { ...filtros, pagina: p };
 	}
 
 	function verDetalle(id: string) {
@@ -210,15 +246,11 @@
 	<!-- ═══ FILTROS ═══ -->
 	<div class="filters-bar" in:fade={{ duration: 400, delay: 100 }}>
 		<div class="search-wrap">
-			<svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-				<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-			</svg>
-			<input
-				type="text"
-				bind:value={searchTerm}
-				oninput={onSearchInput}
+			<BuscadorLista
+				valor={filtros.q}
+				onBuscar={onSearchInput}
 				placeholder="Buscar por radicado, nombre, cédula o correo…"
-				class="search-input"
+				etiqueta="Buscar formularios SARLAFT"
 			/>
 		</div>
 
@@ -227,8 +259,8 @@
 			{#each [{ k: 'TODOS', l: 'Todos' }, { k: 'cliente_proveedor', l: 'Cliente/Prov.' }, { k: 'accionistas', l: 'Accionistas' }, { k: 'personal', l: 'Personal' }, { k: 'autorizacion_propietario', l: 'Autoriz. propietario' }, { k: 'declaracion_empresa_transporte', l: 'Declaración empresa de transporte' }] as f}
 				<button
 					class="chip"
-					class:chip--active={filtroTipo === f.k}
-					onclick={() => setTipo(f.k as typeof filtroTipo)}
+					class:chip--active={filtros.tipo === f.k}
+					onclick={() => setTipo(f.k as TipoFormularioSarlaft | 'TODOS')}
 				>
 					{f.l}
 				</button>
@@ -240,8 +272,8 @@
 			{#each [{ k: 'TODOS', l: 'Todos' }, { k: 'recibido', l: 'Recibido' }, { k: 'en_revision', l: 'En revisión' }, { k: 'aprobado', l: 'Aprobado' }, { k: 'condicionado', l: 'Condicionado' }, { k: 'rechazado', l: 'Rechazado' }, { k: 'escalado', l: 'Escalado' }] as f}
 				<button
 					class="chip"
-					class:chip--active={filtroEstado === f.k}
-					onclick={() => setEstado(f.k as typeof filtroEstado)}
+					class:chip--active={filtros.estado === f.k}
+					onclick={() => setEstado(f.k as EstadoSarlaft | 'TODOS')}
 				>
 					{#if f.k !== 'TODOS'}
 						<span
@@ -401,55 +433,14 @@
 		</div>
 
 		<!-- Paginación -->
-		{#if pagination.pages > 1}
-			<nav class="pagination" aria-label="Paginación de formularios">
-				<p class="pagination-info">
-					<span class="mono">
-						{(pagination.page - 1) * pagination.limit + 1}–{Math.min(
-							pagination.page * pagination.limit,
-							pagination.total
-						)}
-					</span>
-					de <span class="mono">{pagination.total}</span>
-				</p>
-				<div class="pagination-controls">
-					<button
-						class="page-arrow"
-						onclick={() => irAPagina(pagination.page - 1)}
-						disabled={pagination.page === 1}
-						aria-label="Página anterior"
-					>
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-						</svg>
-					</button>
-					{#each Array(pagination.pages) as _, i}
-						{@const p = i + 1}
-						{#if p === pagination.page || p === 1 || p === pagination.pages || Math.abs(p - pagination.page) <= 1}
-							<button
-								class="page-num"
-								class:page-num--active={p === pagination.page}
-								onclick={() => irAPagina(p)}
-							>
-								{p}
-							</button>
-						{:else if p === pagination.page - 2 || p === pagination.page + 2}
-							<span class="page-ellipsis">…</span>
-						{/if}
-					{/each}
-					<button
-						class="page-arrow"
-						onclick={() => irAPagina(pagination.page + 1)}
-						disabled={pagination.page === pagination.pages}
-						aria-label="Página siguiente"
-					>
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-						</svg>
-					</button>
-				</div>
-			</nav>
-		{/if}
+		<PaginadorLista
+			pagina={filtros.pagina}
+			total={pagination.total}
+			porPagina={POR_PAGINA}
+			cargando={isLoading}
+			nombreItems="formularios"
+			onCambiar={irAPagina}
+		/>
 	{/if}
 </div>
 

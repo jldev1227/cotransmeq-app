@@ -62,6 +62,12 @@ const CACHE_DURATION = 5 * 60 * 1000;
 function createServiciosStore() {
 	const { subscribe, set, update } = writable<ServiciosState>(initialState);
 
+	/// Funciones de baja de los listeners de socket, en el orden en que se
+	/// dieron de alta. Guardarlas es lo que permite quitar EXACTAMENTE los
+	/// nuestros: `socketUtils.off('evento')` sin handler se llevaba por
+	/// delante los de cualquier otro módulo suscrito al mismo evento.
+	let bajasSocket: Array<() => void> = [];
+
 	return {
 		subscribe,
 
@@ -498,17 +504,22 @@ function createServiciosStore() {
 		configurarSocket(): void {
 			if (!browser) return;
 
+			/// Idempotente: sin esto, dos llamadas seguidas (una navegación de
+			/// ida y vuelta, por ejemplo) dejaban los listeners duplicados y
+			/// cada evento aplicaba el parche dos veces.
+			this.limpiarSocket();
+
 			// Servicio creado
-			socketUtils.on('servicio:creado', (data: ServicioConRelaciones) => {
+			bajasSocket.push(socketUtils.on('servicio:creado', (data: ServicioConRelaciones) => {
 				update((state) => ({
 					...state,
 					servicios: [data, ...state.servicios],
 					cacheTimestamp: Date.now() // Actualizar timestamp del caché
 				}));
-			});
+			}));
 
 			// Servicio actualizado
-			socketUtils.on('servicio:actualizado', (data: ServicioConRelaciones) => {
+			bajasSocket.push(socketUtils.on('servicio:actualizado', (data: ServicioConRelaciones) => {
 				update((state) => ({
 					...state,
 					servicios: state.servicios.map((s) => (s.id === data.id ? data : s)),
@@ -516,10 +527,10 @@ function createServiciosStore() {
 						state.servicioSeleccionado?.id === data.id ? data : state.servicioSeleccionado,
 					cacheTimestamp: Date.now() // Actualizar timestamp del caché
 				}));
-			});
+			}));
 
 			// Estado actualizado
-			socketUtils.on(
+			bajasSocket.push(socketUtils.on(
 				'servicio:estado-actualizado',
 				(data: { servicio: ServicioConRelaciones; estadoAnterior: EstadoServicio }) => {
 					update((state) => ({
@@ -532,10 +543,10 @@ function createServiciosStore() {
 						cacheTimestamp: Date.now() // Actualizar timestamp del caché
 					}));
 				}
-			);
+			));
 
 			// Planilla asignada
-			socketUtils.on(
+			bajasSocket.push(socketUtils.on(
 				'servicio:numero-planilla-actualizado',
 				(data: { id: string; servicio: ServicioConRelaciones }) => {
 					update((state) => ({
@@ -548,19 +559,19 @@ function createServiciosStore() {
 						cacheTimestamp: Date.now() // Actualizar timestamp del caché
 					}));
 				}
-			);
+			));
 
 			// Servicio cancelado
-			socketUtils.on('servicio:cancelado', (data: ServicioConRelaciones) => {
+			bajasSocket.push(socketUtils.on('servicio:cancelado', (data: ServicioConRelaciones) => {
 				update((state) => ({
 					...state,
 					servicios: state.servicios.filter((s) => s.id !== data.id),
 					cacheTimestamp: Date.now() // Actualizar timestamp del caché
 				}));
-			});
+			}));
 
 			// Servicio eliminado
-			socketUtils.on('servicio:eliminado', (data: { id: string }) => {
+			bajasSocket.push(socketUtils.on('servicio:eliminado', (data: { id: string }) => {
 				update((state) => ({
 					...state,
 					servicios: state.servicios.filter((s) => s.id !== data.id),
@@ -568,19 +579,19 @@ function createServiciosStore() {
 						state.servicioSeleccionado?.id === data.id ? null : state.servicioSeleccionado,
 					cacheTimestamp: Date.now() // Actualizar timestamp del caché
 				}));
-			});
+			}));
 		},
 
 		// Limpiar listeners de Socket.IO
 		limpiarSocket(): void {
 			if (!browser) return;
 
-			socketUtils.off('servicio:creado');
-			socketUtils.off('servicio:actualizado');
-			socketUtils.off('servicio:estado-actualizado');
-			socketUtils.off('servicio:numero-planilla-actualizado');
-			socketUtils.off('servicio:cancelado');
-			socketUtils.off('servicio:eliminado');
+			/// Se ejecutan las bajas guardadas al suscribir, que quitan
+			/// exactamente nuestros listeners. Antes esto llamaba a
+			/// `socketUtils.off('evento')` sin handler, lo que daba de baja
+			/// también los de cualquier otro módulo suscrito al mismo evento.
+			for (const baja of bajasSocket) baja();
+			bajasSocket = [];
 		},
 
 		// ==================== INICIALIZACIÓN ====================

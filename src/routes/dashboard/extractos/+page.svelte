@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import {
 		vehiculosAPI,
@@ -8,6 +8,12 @@
 		extractosAPI
 	} from '$lib/api/apiClient';
 	import { toast } from 'svelte-sonner';
+	import { browser } from '$app/environment';
+	import { page } from '$app/state';
+	import { texto, numero, opcion, leerDeParams, contarActivos, limpiar, firma } from '$lib/listing/filtros';
+	import { crearEstadoUrl } from '$lib/listing/urlState';
+	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 
 	// =====================
 	// INTERFACES
@@ -109,38 +115,49 @@
 	// TABS
 	// =====================
 	type TabId = 'historial' | 'crear';
-	let activeTab: TabId = 'historial';
 
 	// =====================
 	// STATE - HISTORIAL
 	// =====================
-	let extractosHistoricos: ExtractoHistorico[] = [];
-	let matches: MatchesData | null = null;
-	let loadingHistorial = false;
-	let loadingMatches = false;
-	let syncing = false;
-	let pagination = {
+	let extractosHistoricos : ExtractoHistorico[] = $state([]);
+	let matches : MatchesData | null = $state(null);
+	let loadingHistorial = $state(false);
+	let loadingMatches = $state(false);
+	let syncing = $state(false);
+	let pagination = $state({
 		page: 1,
 		limit: 50,
 		total: 0,
 		pages: 0,
 		hasNext: false,
 		hasPrev: false
-	};
+	});
 
-	// Filters
-	let searchTerm = '';
-	let filterContratante = '';
-	let filterPlaca = '';
-	let filterConductor = '';
-	let searchTimeout: ReturnType<typeof setTimeout>;
+	/**
+	 * Filtros de la página, y con ellos la URL.
+	 *
+	 * Esta ruta no tocaba `searchParams` en absoluto: los cuatro campos, la
+	 * página y hasta la pestaña vivían solo en memoria, así que recargar
+	 * devolvía al historial sin filtros y no había forma de compartir una
+	 * búsqueda. Los cuatro los resuelve el servidor.
+	 */
+	const DEFS = {
+		q: texto(),
+		contratante: texto(),
+		placa: texto(),
+		conductor: texto(),
+		pagina: numero(1),
+		tab: opcion<TabId>('historial')
+	};
+	const estadoUrl = crearEstadoUrl(DEFS);
+	let filtros = $state(leerDeParams(DEFS, new URLSearchParams(browser ? window.location.search : '')));
 
 	// =====================
 	// STATE - CREAR
 	// =====================
-	let generatingPdf = false;
+	let generatingPdf = $state(false);
 
-	let extracto: ExtractoData = {
+	let extracto : ExtractoData = $state({
 		numero_contrato: '',
 		numero_extracto: '',
 		codigo_formato: 'OP-FR-04',
@@ -167,58 +184,57 @@
 		responsable_cedula: '',
 		responsable_telefono: '',
 		responsable_direccion: ''
-	};
+	});
 
-	let clientes: Cliente[] = [];
-	let vehiculos: Vehiculo[] = [];
-	let conductoresList: Conductor[] = [];
+	let clientes : Cliente[] = $state([]);
+	let vehiculos : Vehiculo[] = $state([]);
+	let conductoresList : Conductor[] = $state([]);
 
-	let clienteSearch = '';
-	let vehiculoSearch = '';
-	let conductorSearch: string[] = ['', '', ''];
-	let showClienteDropdown = false;
-	let showVehiculoDropdown = false;
-	let showConductorDropdown: boolean[] = [false, false, false];
+	let clienteSearch = $state('');
+	let vehiculoSearch = $state('');
+	let conductorSearch : string[] = $state(['', '', '']);
+	let showClienteDropdown = $state(false);
+	let showVehiculoDropdown = $state(false);
+	let showConductorDropdown : boolean[] = $state([false, false, false]);
 
-	let extractosGenerados: {
+	let extractosGenerados : {
 		fecha: string;
 		contrato: string;
 		contratante: string;
 		placa: string;
-	}[] = [];
+	}[] = $state([]);
 
-	let showPdfModal = false;
+	let showPdfModal = $state(false);
 
 	// =====================
 	// COMPUTED
 	// =====================
-	$: clientesFiltrados = clientes.filter(
+	const clientesFiltrados = $derived(clientes.filter(
 		(c) =>
 			c.nombre?.toLowerCase().includes(clienteSearch.toLowerCase()) ||
 			c.nit?.toLowerCase().includes(clienteSearch.toLowerCase())
-	);
+	));
 
-	$: vehiculosFiltrados = vehiculos.filter(
+	const vehiculosFiltrados = $derived(vehiculos.filter(
 		(v) =>
 			v.placa?.toLowerCase().includes(vehiculoSearch.toLowerCase()) ||
 			v.marca?.toLowerCase().includes(vehiculoSearch.toLowerCase()) ||
 			v.linea?.toLowerCase().includes(vehiculoSearch.toLowerCase())
-	);
+	));
 
-	$: conductoresFiltradosPor = (index: number) =>
+	const conductoresFiltradosPor = $derived((index: number) =>
 		conductoresList.filter(
 			(c) =>
 				`${c.nombre} ${c.apellido}`
 					.toLowerCase()
 					.includes(conductorSearch[index]?.toLowerCase() || '') ||
 				c.numero_identificacion?.includes(conductorSearch[index] || '')
-		);
+		));
 
-	$: formValid =
-		extracto.numero_contrato.trim() !== '' &&
+	const formValid = $derived(extracto.numero_contrato.trim() !== '' &&
 		extracto.contratante_nombre.trim() !== '' &&
 		extracto.placa.trim() !== '' &&
-		extracto.conductores[0].nombre.trim() !== '';
+		extracto.conductores[0].nombre.trim() !== '');
 
 	// =====================
 	// MATCHING HELPERS
@@ -272,12 +288,16 @@
 	// =====================
 	onMount(async () => {
 		await Promise.all([loadHistorial(), syncAndLoadMatches(), loadFormData(), loadNextConsecutivo()]);
+		/// Se suelta el freno DESPUÉS de la primera carga: el efecto que sigue a
+		/// la firma se dispararía en el primer render y pediría el historial dos
+		/// veces a la vez.
+		montado = true;
 	});
 
 	// =====================
 	// DATA LOADING
 	// =====================
-	let nextConsecutivo: number | null = null;
+	let nextConsecutivo : number | null = $state(null);
 
 	async function loadNextConsecutivo() {
 		try {
@@ -292,14 +312,14 @@
 		}
 	}
 
-	async function loadHistorial(page = 1) {
+	async function loadHistorial() {
 		loadingHistorial = true;
 		try {
-			const params: Record<string, any> = { page, limit: pagination.limit };
-			if (searchTerm) params.search = searchTerm;
-			if (filterContratante) params.contratante = filterContratante;
-			if (filterPlaca) params.placa = filterPlaca;
-			if (filterConductor) params.conductor = filterConductor;
+			const params: Record<string, any> = { page: filtros.pagina, limit: pagination.limit };
+			if (filtros.q) params.search = filtros.q;
+			if (filtros.contratante) params.contratante = filtros.contratante;
+			if (filtros.placa) params.placa = filtros.placa;
+			if (filtros.conductor) params.conductor = filtros.conductor;
 
 			const res = await extractosAPI.getAll(params);
 			extractosHistoricos = res.data?.data || [];
@@ -366,20 +386,62 @@
 		}
 	}
 
-	function handleSearch() {
-		clearTimeout(searchTimeout);
-		searchTimeout = setTimeout(() => {
-			loadHistorial(1);
-		}, 400);
-	}
+	/**
+	 * Cuántos filtros hay puestos. La pestaña y la página no cuentan: una no es
+	 * un filtro y la otra es dónde estás dentro del resultado.
+	 */
+	const NO_SON_FILTROS = ['pagina', 'tab'] as const;
+	const filtrosActivos = $derived(contarActivos(DEFS, filtros, [...NO_SON_FILTROS]));
 
 	function clearFilters() {
-		searchTerm = '';
-		filterContratante = '';
-		filterPlaca = '';
-		filterConductor = '';
-		loadHistorial(1);
+		filtros = limpiar(DEFS, filtros, ['tab']);
 	}
+
+	/**
+	 * Un solo sitio decide cuándo se vuelve a pedir el historial.
+	 *
+	 * Antes cada uno de los cuatro campos llamaba a `handleSearch`, que
+	 * rearmaba su propio `setTimeout` de 400 ms, y además `clearFilters` y el
+	 * paginador pedían por su cuenta. Ahora el disparo es la firma de los
+	 * filtros: cambie lo que cambie —incluida la página— se pide una vez.
+	 */
+	const firmaConsulta = $derived(
+		firma(DEFS, { ...filtros, tab: 'historial' as TabId })
+	);
+	let montado = false;
+	let temporizadorConsulta: ReturnType<typeof setTimeout> | null = null;
+
+	$effect(() => {
+		void firmaConsulta;
+		if (!montado) return;
+		if (temporizadorConsulta) clearTimeout(temporizadorConsulta);
+		temporizadorConsulta = setTimeout(() => void loadHistorial(), 300);
+	});
+
+	/**
+	 * Vuelve a la página 1 cuando cambian los filtros.
+	 *
+	 * La clave arranca con el valor inicial y no vacía: si no, la primera
+	 * pasada la vería «cambiada» y descartaría la página que venía en la URL.
+	 */
+	function claveFiltros(f: typeof filtros): string {
+		return [f.q, f.contratante, f.placa, f.conductor].join('|');
+	}
+	let ultimaClave = untrack(() => claveFiltros(filtros));
+	const claveActual = $derived(claveFiltros(filtros));
+	$effect(() => {
+		if (claveActual === ultimaClave) return;
+		ultimaClave = claveActual;
+		filtros.pagina = 1;
+	});
+
+	/// Los filtros a la URL. `escribir` no navega si ya dice lo mismo, que es
+	/// lo que impide que este efecto se realimente.
+	$effect(() => {
+		void firma(DEFS, filtros);
+		if (!browser) return;
+		estadoUrl.escribir(untrack(() => page.url), untrack(() => filtros));
+	});
 
 	// =====================
 	// TABLE ACTIONS
@@ -531,7 +593,7 @@
 			}
 		}
 
-		activeTab = 'crear';
+		filtros.tab = 'crear';
 		toast.success(`Extracto ${ext.consecutivo} cargado en el formulario`);
 	}
 
@@ -1174,7 +1236,8 @@
 
 				// Reload next consecutivo and historial
 				await loadNextConsecutivo();
-				await loadHistorial(1);
+				filtros.pagina = 1;
+				await loadHistorial();
 			} catch (saveErr: any) {
 				console.error('Error guardando extracto:', saveErr);
 				toast.error('PDF generado pero error al guardar en historial');
@@ -1251,7 +1314,7 @@
 	<title>Extractos · Cotransmeq</title>
 </svelte:head>
 
-<svelte:window on:click={handleClickOutside} />
+<svelte:window onclick={handleClickOutside} />
 
 <div
 	class="min-h-screen p-4 lg:p-6"
@@ -1283,11 +1346,11 @@
 			<div class="flex rounded-xl border border-gray-200 bg-gray-100 p-1">
 				<button
 					type="button"
-					class="rounded-lg px-4 py-2 text-sm font-medium transition-all {activeTab ===
+					class="rounded-lg px-4 py-2 text-sm font-medium transition-all {filtros.tab ===
 					'historial'
 						? 'bg-white text-orange-700 shadow-sm'
 						: 'text-gray-500 hover:text-gray-700'}"
-					on:click={() => (activeTab = 'historial')}
+					onclick={() => (filtros.tab = 'historial')}
 				>
 					<svg
 						class="mr-1.5 inline h-4 w-4"
@@ -1306,11 +1369,11 @@
 				</button>
 				<button
 					type="button"
-					class="rounded-lg px-4 py-2 text-sm font-medium transition-all {activeTab ===
+					class="rounded-lg px-4 py-2 text-sm font-medium transition-all {filtros.tab ===
 					'crear'
 						? 'bg-white text-orange-700 shadow-sm'
 						: 'text-gray-500 hover:text-gray-700'}"
-					on:click={() => (activeTab = 'crear')}
+					onclick={() => (filtros.tab = 'crear')}
 				>
 					<svg
 						class="mr-1.5 inline h-4 w-4"
@@ -1375,7 +1438,7 @@
 	{/if}
 
 	<!-- ================= TAB: HISTORIAL ================= -->
-	{#if activeTab === 'historial'}
+	{#if filtros.tab === 'historial'}
 		<div in:fade={{ duration: 200 }}>
 			<!-- Filters -->
 			<div class="glass mb-4 rounded-2xl border border-gray-200/50 p-4">
@@ -1386,13 +1449,10 @@
 							class="mb-1 block text-[10px] font-medium uppercase text-gray-500"
 							>Buscar</label
 						>
-						<input
-							id="search"
-							type="text"
-							bind:value={searchTerm}
-							on:input={handleSearch}
+						<BuscadorLista
+							bind:valor={filtros.q}
+							onBuscar={(termino) => (filtros.q = termino)}
 							placeholder="Nº, contratante, placa, conductor, ruta..."
-							class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
 						/>
 					</div>
 					<div>
@@ -1404,8 +1464,7 @@
 						<input
 							id="f_contratante"
 							type="text"
-							bind:value={filterContratante}
-							on:input={handleSearch}
+							bind:value={filtros.contratante}
 							placeholder="Nombre empresa..."
 							class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
 						/>
@@ -1419,8 +1478,7 @@
 						<input
 							id="f_placa"
 							type="text"
-							bind:value={filterPlaca}
-							on:input={handleSearch}
+							bind:value={filtros.placa}
 							placeholder="ABC123"
 							class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-sm uppercase text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
 						/>
@@ -1435,16 +1493,15 @@
 							<input
 								id="f_conductor"
 								type="text"
-								bind:value={filterConductor}
-								on:input={handleSearch}
+								bind:value={filtros.conductor}
 								placeholder="Nombre..."
 								class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
 							/>
-							{#if searchTerm || filterContratante || filterPlaca || filterConductor}
+							{#if filtrosActivos > 0}
 								<button
 									type="button"
 									class="flex-shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
-									on:click={clearFilters}
+									onclick={clearFilters}
 									title="Limpiar filtros"
 								>
 									✕
@@ -1693,7 +1750,7 @@
 												type="button"
 												class="rounded-lg bg-orange-50 p-1.5 text-orange-600 transition hover:bg-orange-100 hover:text-orange-700"
 												title="Cargar en formulario y generar PDF"
-												on:click={() => fillFromHistorical(ext)}
+												onclick={() => fillFromHistorical(ext)}
 											>
 												<svg
 													class="h-4 w-4"
@@ -1716,40 +1773,16 @@
 						</table>
 					</div>
 
-					<!-- Pagination -->
-					<div
-						class="flex items-center justify-between border-t border-gray-200 px-4 py-3"
-					>
-						<div class="text-xs text-gray-500">
-							Mostrando {(pagination.page - 1) * pagination.limit + 1} - {Math.min(
-								pagination.page * pagination.limit,
-								pagination.total
-							)} de {pagination.total.toLocaleString()}
-						</div>
-						<div class="flex items-center gap-2">
-							<button
-								type="button"
-								class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-600 transition hover:bg-gray-50 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-30"
-								disabled={!pagination.hasPrev}
-								on:click={() => loadHistorial(pagination.page - 1)}
-							>
-								← Anterior
-							</button>
-							<span
-								class="rounded-lg bg-orange-100 px-3 py-1.5 text-xs font-medium text-orange-700"
-							>
-								{pagination.page} / {pagination.pages}
-							</span>
-							<button
-								type="button"
-								class="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-600 transition hover:bg-gray-50 hover:text-gray-900 disabled:cursor-not-allowed disabled:opacity-30"
-								disabled={!pagination.hasNext}
-								on:click={() => loadHistorial(pagination.page + 1)}
-							>
-								Siguiente →
-							</button>
-						</div>
-					</div>
+					<!-- Paginación. Antes eran «Anterior/Siguiente» y un «3 / 12»:
+					     no se podía saltar a una página concreta. -->
+					<PaginadorLista
+						pagina={pagination.page}
+						total={pagination.total}
+						porPagina={pagination.limit}
+						nombreItems="extractos"
+						cargando={loadingHistorial}
+						onCambiar={(p) => (filtros.pagina = p)}
+					/>
 				{/if}
 			</div>
 
@@ -1770,14 +1803,14 @@
 	{/if}
 
 	<!-- ================= TAB: CREAR ================= -->
-	{#if activeTab === 'crear'}
+	{#if filtros.tab === 'crear'}
 		<div in:fade={{ duration: 200 }}>
 			<!-- Action Bar -->
 			<div class="mb-5 flex items-center justify-end gap-3">
 				<button
 					type="button"
 					class="rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-600 transition-all hover:bg-gray-50 hover:text-gray-900"
-					on:click={resetForm}
+					onclick={resetForm}
 				>
 					<svg
 						class="mr-2 inline h-4 w-4"
@@ -1797,7 +1830,7 @@
 				<button
 					type="button"
 					class="rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-orange-500/25 transition-all hover:from-orange-400 hover:to-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
-					on:click={generatePDF}
+					onclick={generatePDF}
 					disabled={!formValid || generatingPdf}
 				>
 					{#if generatingPdf}
@@ -1936,8 +1969,8 @@
 									id="cliente_search"
 									type="text"
 									bind:value={clienteSearch}
-									on:focus={() => (showClienteDropdown = true)}
-									on:input={() => (showClienteDropdown = true)}
+									onfocus={() => (showClienteDropdown = true)}
+									oninput={() => (showClienteDropdown = true)}
 									placeholder="Escriba nombre o NIT..."
 									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
 									autocomplete="off"
@@ -1951,7 +1984,10 @@
 											<button
 												type="button"
 												class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-orange-50 hover:text-gray-900"
-												on:click|stopPropagation={() => selectCliente(cliente)}
+												onclick={(e) => {
+													e.stopPropagation();
+													selectCliente(cliente);
+												}}
 											>
 												<span class="truncate font-medium">{cliente.nombre}</span>
 												<span class="ml-auto text-xs text-white/40"
@@ -2119,8 +2155,8 @@
 									id="vehiculo_search"
 									type="text"
 									bind:value={vehiculoSearch}
-									on:focus={() => (showVehiculoDropdown = true)}
-									on:input={() => (showVehiculoDropdown = true)}
+									onfocus={() => (showVehiculoDropdown = true)}
+									oninput={() => (showVehiculoDropdown = true)}
 									placeholder="Escriba placa o marca..."
 									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
 									autocomplete="off"
@@ -2134,7 +2170,10 @@
 											<button
 												type="button"
 												class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-orange-50 hover:text-gray-900"
-												on:click|stopPropagation={() => selectVehiculo(vehiculo)}
+												onclick={(e) => {
+													e.stopPropagation();
+													selectVehiculo(vehiculo);
+												}}
 											>
 												<span class="font-mono font-bold text-orange-300"
 													>{vehiculo.placa}</span
@@ -2259,7 +2298,7 @@
 										<button
 											type="button"
 											class="text-xs text-red-400/60 transition hover:text-red-400"
-											on:click={() => clearConductor(i)}>Limpiar</button
+											onclick={() => clearConductor(i)}>Limpiar</button
 										>
 									{/if}
 								</div>
@@ -2274,11 +2313,11 @@
 											id="conductor_{i}"
 											type="text"
 											bind:value={conductorSearch[i]}
-											on:focus={() => {
+											onfocus={() => {
 												showConductorDropdown[i] = true;
 												showConductorDropdown = [...showConductorDropdown];
 											}}
-											on:input={() => {
+											oninput={() => {
 												showConductorDropdown[i] = true;
 												showConductorDropdown = [...showConductorDropdown];
 											}}
@@ -2295,8 +2334,10 @@
 													<button
 														type="button"
 														class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-orange-50 hover:text-gray-900"
-														on:click|stopPropagation={() =>
-															selectConductor(conductor, i)}
+														onclick={(e) => {
+															e.stopPropagation();
+															selectConductor(conductor, i);
+														}}
 													>
 														<span class="truncate font-medium"
 															>{conductor.nombre} {conductor.apellido}</span
@@ -2503,7 +2544,7 @@
 
 						<button
 							type="button"
-							on:click={() => (showPdfModal = true)}
+							onclick={() => (showPdfModal = true)}
 							class="w-full rounded-xl bg-orange-600 px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-orange-700 hover:shadow-lg active:scale-[0.98] flex items-center justify-center gap-2"
 						>
 							<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2521,11 +2562,13 @@
 
 <!-- MODAL: Vista Previa PDF -->
 {#if showPdfModal}
-	<!-- svelte-ignore a11y-click-events-have-key-events -->
-	<!-- svelte-ignore a11y-no-static-element-interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events -->
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-		on:click|self={() => (showPdfModal = false)}
+		onclick={(e) => {
+			if (e.target === e.currentTarget) showPdfModal = false;
+		}}
 		transition:fade={{ duration: 200 }}
 	>
 		<div
@@ -2542,7 +2585,7 @@
 				</h2>
 				<button
 					type="button"
-					on:click={() => (showPdfModal = false)}
+					onclick={() => (showPdfModal = false)}
 					class="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
 					aria-label="Cerrar vista previa"
 				>
@@ -2819,7 +2862,7 @@
 			<div class="sticky bottom-0 flex items-center justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-3 rounded-b-2xl">
 				<button
 					type="button"
-					on:click={() => (showPdfModal = false)}
+					onclick={() => (showPdfModal = false)}
 					class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
 				>
 					Cerrar

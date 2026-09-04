@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { page } from '$app/stores';
+	import { page as pageState } from '$app/state';
 	import { browser } from '$app/environment';
 	import { fade, fly, scale } from 'svelte/transition';
 	import { serviciosStore, serviciosPorEstado } from '$lib/stores/servicios';
@@ -28,6 +28,9 @@
 	import { toast } from '$lib/stores/toast';
 	import SelectBuscable from '$lib/components/common/SelectBuscable.svelte';
 	import FilterDrawer from '$lib/components/ui/FilterDrawer.svelte';
+	import { socketUtils } from '$lib/socket';
+	import { crearEstadoUrl } from '$lib/listing/urlState';
+	import { numero, opcion, texto, type DefinicionesFiltros } from '$lib/listing/filtros';
 
 	// Labels para los chips removibles del FilterDrawer
 	const ESTADO_SERVICIO_LABELS: Record<string, string> = {
@@ -56,6 +59,57 @@
 		if (!id) return '';
 		return opciones.find((o: any) => o.value === id)?.label ?? '';
 	}
+
+	/**
+	 * Filtros de la página, declarados una vez.
+	 *
+	 * Los nombres `view`, `mes`, `anio` y `campo_fecha` son los que la página
+	 * ya escribía —eran los ÚNICOS que llegaban a la URL— y se conservan para
+	 * no romper enlaces guardados. El resto es nuevo: hasta ahora la búsqueda,
+	 * el estado, los filtros avanzados, el orden y la página no salían de la
+	 * memoria, así que una vista filtrada no se podía compartir ni sobrevivía a
+	 * una recarga.
+	 */
+	interface FiltrosServicios {
+		view: string;
+		q: string;
+		estado: string;
+		conductor: string;
+		vehiculo: string;
+		cliente: string;
+		desde: string;
+		hasta: string;
+		campo: string;
+		orden: string;
+		dir: string;
+		pagina: number;
+		/** Solo tienen sentido en la vista de calendario. */
+		mes: number;
+		anio: number;
+		campo_fecha: string;
+	}
+
+	const HOY = new Date();
+
+	const DEFS: DefinicionesFiltros<FiltrosServicios> = {
+		view: opcion('lista'),
+		q: texto(),
+		estado: opcion(''),
+		conductor: texto(),
+		vehiculo: texto(),
+		cliente: texto(),
+		desde: texto(),
+		hasta: texto(),
+		campo: opcion('fecha_solicitud'),
+		orden: opcion('fecha_solicitud'),
+		dir: opcion('desc'),
+		pagina: numero(1),
+		mes: numero(HOY.getMonth() + 1),
+		anio: numero(HOY.getFullYear()),
+		campo_fecha: opcion('fecha_realizacion')
+	};
+
+	const estadoUrl = crearEstadoUrl(DEFS);
 
 	// Estados locales
 	let filtroEstado = $state<EstadoServicio | ''>('');
@@ -342,26 +396,57 @@
 		}
 	}
 
-	$effect(() => {
-		if (browser) {
-			const urlView = $page.url.searchParams.get('view') as VistaActiva | null;
-			const urlMes = parseInt($page.url.searchParams.get('mes') || '');
-			const urlAnio = parseInt($page.url.searchParams.get('anio') || '');
-			const urlCampo = $page.url.searchParams.get('campo_fecha') as CampoFechaCal | null;
-			if (urlView === 'lista' || urlView === 'calendario' || urlView === 'canvas') {
-				vistaActiva = urlView;
-			}
-			if (!isNaN(urlMes) && urlMes >= 1 && urlMes <= 12) calMes = urlMes - 1;
-			if (!isNaN(urlAnio) && urlAnio >= 2020 && urlAnio <= 2100) calAnio = urlAnio;
-			if (
-				urlCampo === 'fecha_solicitud' ||
-				urlCampo === 'fecha_realizacion' ||
-				urlCampo === 'fecha_finalizacion'
-			) {
-				calCampoFecha = urlCampo;
-			}
+	/**
+	 * Restaura el estado que describe la URL.
+	 *
+	 * Se hace UNA sola vez, al montar. Antes esto vivía en un `$effect` que
+	 * reaccionaba a cada cambio de `pageState.url` — y como la propia página
+	 * escribe la URL, el efecto volvía a leerla y podía pisar lo que el usuario
+	 * acababa de tocar.
+	 */
+	function restaurarDesdeUrl() {
+		if (!browser) return;
+		/// Se lee de `window.location` y no de `pageState.url`: esto corre en el
+		/// cuerpo del componente, durante la hidratación, y ahí `pageState` aún
+		/// puede no reflejar la URL con la que se abrió la página. La del
+		/// navegador siempre es la correcta y esta lectura ocurre una sola vez.
+		const f = estadoUrl.leer(new URL(window.location.href));
+
+		if (f.view === 'lista' || f.view === 'calendario' || f.view === 'canvas') {
+			vistaActiva = f.view;
 		}
-	});
+		busqueda = f.q;
+		filtroEstado = f.estado as EstadoServicio | '';
+		conductorSeleccionado = f.conductor || null;
+		vehiculoSeleccionado = f.vehiculo || null;
+		clienteSeleccionado = f.cliente || null;
+		filtroFechaDesde = f.desde;
+		filtroFechaHasta = f.hasta;
+		campoFecha = f.campo as typeof campoFecha;
+		ordenarPor = f.orden;
+		ordenDireccion = f.dir === 'asc' ? 'asc' : 'desc';
+		paginaActual = Math.max(1, f.pagina);
+
+		if (f.mes >= 1 && f.mes <= 12) calMes = f.mes - 1;
+		if (f.anio >= 2020 && f.anio <= 2100) calAnio = f.anio;
+		if (
+			f.campo_fecha === 'fecha_solicitud' ||
+			f.campo_fecha === 'fecha_realizacion' ||
+			f.campo_fecha === 'fecha_finalizacion'
+		) {
+			calCampoFecha = f.campo_fecha as CampoFechaCal;
+		}
+	}
+
+	/**
+	 * Se restaura AQUÍ, en el cuerpo del componente, y no en `onMount`.
+	 *
+	 * Los efectos corren después del primer render pero antes de `onMount`, así
+	 * que con la restauración en `onMount` el efecto que escribe la URL se
+	 * adelantaba: veía los filtros vacíos y reescribía la barra de direcciones
+	 * sin ellos. Abrir un enlace con `?q=algo` lo borraba antes de leerlo.
+	 */
+	restaurarDesdeUrl();
 
 	function cambiarVista(vista: VistaActiva) {
 		vistaActiva = vista;
@@ -508,21 +593,47 @@
 		}
 	}
 
+	/**
+	 * Estado actual de la página como conjunto de filtros.
+	 *
+	 * Antes solo llegaban a la URL `view`, `mes`, `anio` y `campo_fecha`: el
+	 * resto —búsqueda, estado, conductor, vehículo, cliente, rango de fechas,
+	 * orden y página— se quedaba en memoria, así que una vista filtrada no se
+	 * podía compartir ni sobrevivía a una recarga.
+	 */
+	const filtrosActuales = $derived<FiltrosServicios>({
+		view: vistaActiva,
+		q: busqueda,
+		estado: filtroEstado,
+		conductor: conductorSeleccionado ?? '',
+		vehiculo: vehiculoSeleccionado ?? '',
+		cliente: clienteSeleccionado ?? '',
+		desde: filtroFechaDesde,
+		hasta: filtroFechaHasta,
+		campo: campoFecha,
+		orden: ordenarPor,
+		dir: ordenDireccion,
+		pagina: paginaActual,
+		mes: calMes + 1,
+		anio: calAnio,
+		campo_fecha: calCampoFecha
+	});
+
+	/// Un único punto de escritura. `syncUrl()` se conserva como nombre porque
+	/// lo llaman una docena de sitios del marcado.
 	function syncUrl() {
 		if (!browser) return;
-		const params = new URLSearchParams($page.url.searchParams);
-		params.set('view', vistaActiva);
-		if (vistaActiva === 'calendario') {
-			params.set('mes', String(calMes + 1));
-			params.set('anio', String(calAnio));
-			params.set('campo_fecha', calCampoFecha);
-		} else {
-			params.delete('mes');
-			params.delete('anio');
-			params.delete('campo_fecha');
-		}
-		goto(`?${params.toString()}`, { replaceState: true, noScroll: true, keepFocus: true });
+		/// La URL actual se lee con `untrack` a propósito: sin él, este efecto
+		/// dependería de `pageState.url` — que él mismo acaba de escribir— y se
+		/// reejecutaría en cada navegación, provocando un render de más
+		/// mientras el usuario todavía está escribiendo en el buscador.
+		untrack(() => estadoUrl.escribir(pageState.url, filtrosActuales));
 	}
+
+	$effect(() => {
+		void filtrosActuales;
+		syncUrl();
+	});
 
 	function onCalMesAnioChange(nuevoMes: number, nuevoAnio: number) {
 		calMes = nuevoMes;
@@ -627,9 +738,37 @@
 		await recursos.cargarTodos();
 		inicializado = true;
 		await cargarServicios();
+
+		if (vistaActiva === 'canvas') cargarCanvasInicial();
+
+		/**
+		 * El caché del canvas también tiene que enterarse de los cambios.
+		 *
+		 * `serviciosStore` parchea SU lista cuando llega un evento, pero el
+		 * canvas mantiene su propia copia con un TTL de 60 s y nadie la
+		 * invalidaba: durante hasta un minuto el canvas mostraba un servicio ya
+		 * cancelado, o no mostraba uno recién creado, mientras la vista de lista
+		 * —la misma pantalla— ya estaba al día.
+		 */
+		const alCambiarUnServicio = () => {
+			canvasCacheInvalidate();
+			if (vistaActiva === 'canvas') cargarCanvasInicial();
+		};
+
+		bajasSocket = [
+			socketUtils.on('servicio:creado', alCambiarUnServicio),
+			socketUtils.on('servicio:actualizado', alCambiarUnServicio),
+			socketUtils.on('servicio:estado-actualizado', alCambiarUnServicio),
+			socketUtils.on('servicio:cancelado', alCambiarUnServicio),
+			socketUtils.on('servicio:eliminado', alCambiarUnServicio)
+		];
 	});
 
+	let bajasSocket: Array<() => void> = [];
+
 	onDestroy(() => {
+		for (const baja of bajasSocket) baja();
+		bajasSocket = [];
 		serviciosStore.limpiarSocket();
 	});
 

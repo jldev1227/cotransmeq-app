@@ -229,7 +229,17 @@
 
 	let uid = 0;
 	const newRow = () => ({
+		/// Contador local, solo para la `key` del `{#each}`. NO es el id del
+		/// servidor: se reasigna en cada hidratación.
 		id: ++uid,
+		/// Id real del ítem en la base. `null` mientras la fila no se ha
+		/// guardado nunca. Es lo primero que usa el backend para reconciliar.
+		server_id: null as string | null,
+		/// Identificador estable que ponemos nosotros a las filas nuevas, para
+		/// que el backend pueda reconocerlas antes de que tengan `server_id`.
+		/// Sin esto habría que correlacionar por posición, y la posición cambia
+		/// en cuanto alguien arrastra una fila.
+		client_key: crypto.randomUUID(),
 		placa: '',
 		placa_search: '',
 		placa_dropdown: false,
@@ -409,6 +419,11 @@
 	/// Suprime el autoguardado mientras se hidrata el formulario, o restaurar
 	/// dispararía un guardado de lo que se acaba de leer.
 	let draftPaused = false;
+	/// Falso hasta que la hidratación termina. Ver `autoguardadoSeguro()`.
+	let hidratado = false;
+	/// Si la liquidación cargada traía ítems. Es lo que distingue «el usuario
+	/// vació la tabla» de «todavía no ha cargado».
+	let teniaItems = false;
 	let lastDraftHash = '';
 	let serverSnapshot: any = null;
 	let showDraftDebug = false;
@@ -466,8 +481,30 @@
 	 * que si se acumulan cinco cambios mientras uno está en vuelo, sale solo el
 	 * último — que es exactamente lo que se quiere de un autoguardado.
 	 */
+	/**
+	 * ¿El estado actual está lo bastante formado para autoguardarlo?
+	 *
+	 * Un autoguardado que llega con la lista de filas vacía casi nunca es «el
+	 * usuario borró todas las filas»: es un estado a medio hidratar, una carga
+	 * que aún no terminó o una respuesta que llegó tarde. Antes eso bastaba
+	 * para vaciar la liquidación, porque el backend borraba los ítems y creaba
+	 * los del payload —ninguno—.
+	 *
+	 * El backend también lo rechaza (`rechazarVaciadoTotal`), pero conviene no
+	 * mandarlo siquiera: así el usuario no ve un error por algo que no hizo.
+	 *
+	 * Vaciar de verdad se hace desde «guardar» explícito, que no pasa por aquí.
+	 */
+	function autoguardadoSeguro(): boolean {
+		if (!hidratado) return false;
+		/// Tenía filas y ahora no llega ninguna: no se manda.
+		if (teniaItems && rows.length === 0) return false;
+		return true;
+	}
+
 	function encolarAutoguardado() {
 		if (draftPaused || view !== 'editor') return;
+		if (!autoguardadoSeguro()) return;
 
 		const payload = buildDraftPayload();
 		const json = JSON.stringify(payload);
@@ -572,6 +609,10 @@
 	 */
 	function handleBeforeUnload(e: BeforeUnloadEvent) {
 		if (view !== 'editor' || draftPaused) return;
+		/// Cerrar la pestaña con el estado a medio cargar no debe vaciar la
+		/// liquidación: es el caso más difícil de diagnosticar después, porque
+		/// no queda ni la pestaña donde ocurrió.
+		if (!autoguardadoSeguro()) return;
 		const idActual = borradorId ?? editingId;
 		if (decidirDestino({ ...buildDraftPayload(), editingId: idActual }) === 'fila') {
 			autoguardadoAPI.guardarAlSalir({
@@ -622,6 +663,11 @@
 		rows = (d.rows || [newRow()]).map((r: any) => ({
 			...r,
 			id: ++uid,
+			/// Se CONSERVAN entre hidrataciones. Antes se perdían y el backend
+			/// no tenía forma de saber qué fila era cuál, así que borraba todas
+			/// y las recreaba: cada guardado destruía los ítems anteriores.
+			server_id: r.server_id ?? r.id_servidor ?? null,
+			client_key: r.client_key ?? crypto.randomUUID(),
 			placa_dropdown: false,
 			placa_highlight: 0,
 			placa_search: ''
@@ -633,8 +679,10 @@
 		setView('editor');
 		/// Ventana anti-rebote: da tiempo a que los derivados se recalculen sin
 		/// disparar un autoguardado de lo que se acaba de pintar.
+		teniaItems = rows.length > 0;
 		setTimeout(() => {
 			draftPaused = false;
+			hidratado = true;
 			lastDraftHash = hashStr(JSON.stringify(buildDraftPayload()));
 		}, 300);
 	}
@@ -1089,6 +1137,13 @@
 		if (liq.items && liq.items.length > 0) {
 			rows = liq.items.map((it) => ({
 				id: ++uid,
+				/// AQUÍ estaba la raíz del problema en el cliente: se leían los
+				/// ítems del servidor y se tiraba su `id`, quedándose solo con
+				/// el contador local. Al guardar, el backend no podía saber qué
+				/// fila era cuál, así que borraba todas y recreaba — y con ello
+				/// se perdía la trazabilidad de cada ítem.
+				server_id: (it as any).id ?? null,
+				client_key: (it as any).client_key ?? crypto.randomUUID(),
 				placa: it.placa || '',
 				placa_search: '',
 				placa_dropdown: false,
@@ -1872,6 +1927,10 @@
 			anio: hdr.anio,
 			items: rows.map((r, idx) => {
 				return {
+					/// El backend reconcilia por `id` y, si no lo hay, por
+					/// `client_key`. Nunca por posición.
+					id: r.server_id ?? undefined,
+					client_key: r.client_key,
 					placa: r.placa,
 					fecha_inicial: r.fecha_ini || `${hdr.anio}-${String(mesIdx).padStart(2, '0')}-01`,
 					fecha_final: r.fecha_fin || `${hdr.anio}-${String(mesIdx).padStart(2, '0')}-01`,
