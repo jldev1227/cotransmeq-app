@@ -18,9 +18,17 @@
 	un cambio ya está en la calle cuando no lo está.
 -->
 <script lang="ts">
+	import { page } from '$app/state';
+	import { crearEstadoUrl } from '$lib/listing/urlState';
+	import {
+		bandera,
+		numero,
+		opcion,
+		texto,
+		type DefinicionesFiltros
+	} from '$lib/listing/filtros';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
-	import { page } from '$app/stores';
 	import { toast } from 'svelte-sonner';
 	import {
 		asignacionesFormularioAPI,
@@ -269,16 +277,21 @@
 		/// La pestaña y los filtros viven en la URL: así el enlace «ver los envíos
 		/// de esta asignación» sigue siendo un enlace, y la pantalla se puede
 		/// compartir tal cual está.
-		const params = $page.url.searchParams;
-		const vistaUrl = params.get('vista');
-		vista = VISTAS.includes(vistaUrl as Vista) ? (vistaUrl as Vista) : 'catalogo';
-		filtroFormId = params.get('formId') ?? '';
-		filtroVersionId = params.get('versionId') ?? '';
-		filtroAssignmentId = params.get('assignmentId') ?? '';
-		filtroEstado = (params.get('estado') as SubmissionStatus | null) ?? '';
-		filtroBusqueda = params.get('q') ?? '';
-		filtroDesde = params.get('desde') ?? '';
-		filtroHasta = params.get('hasta') ?? '';
+		const desdeUrl = estadoUrl.leer(page.url);
+		vista = VISTAS.includes(desdeUrl.vista as Vista) ? (desdeUrl.vista as Vista) : 'catalogo';
+		filtroFormId = desdeUrl.formId;
+		filtroVersionId = desdeUrl.versionId;
+		filtroAssignmentId = desdeUrl.assignmentId;
+		filtroEstado = desdeUrl.estado as SubmissionStatus | '';
+		filtroBusqueda = desdeUrl.q;
+		filtroDesde = desdeUrl.desde;
+		filtroHasta = desdeUrl.hasta;
+
+		/// Lo que faltaba: el catálogo también restaura su estado. Antes se
+		/// perdían al recargar y la pantalla volvía sin filtrar.
+		busqueda = desdeUrl.cat_q;
+		pagina = Math.max(1, desdeUrl.cat_pagina);
+		incluirArchivados = desdeUrl.archivados;
 
 		void cargar();
 		void cargarMetricas();
@@ -300,26 +313,70 @@
 
 	// ── Sincronía con la URL ───────────────────────────────────────────────────
 
+	/**
+	 * Estado completo de la página como filtros.
+	 *
+	 * La vista de ENVÍOS ya viajaba en la URL —y bien—. Lo que faltaba era el
+	 * CATÁLOGO: su búsqueda, su página y el conmutador de archivados se
+	 * quedaban en memoria, así que recargar el catálogo filtrado lo devolvía
+	 * sin filtrar.
+	 *
+	 * Los nombres de los parámetros que ya existían no se tocan, para no romper
+	 * enlaces guardados.
+	 */
+	const DEFS_URL: DefinicionesFiltros<{
+		vista: string;
+		formId: string;
+		versionId: string;
+		assignmentId: string;
+		estado: string;
+		q: string;
+		desde: string;
+		hasta: string;
+		cat_q: string;
+		cat_pagina: number;
+		archivados: boolean;
+	}> = {
+		vista: opcion('catalogo'),
+		formId: texto(),
+		versionId: texto(),
+		assignmentId: texto(),
+		estado: opcion(''),
+		q: texto(),
+		desde: texto(),
+		hasta: texto(),
+		/// Prefijados para no chocar con los de la vista de envíos, que usan
+		/// `q` a secas.
+		cat_q: texto(),
+		cat_pagina: numero(1),
+		archivados: bandera(false)
+	};
+
+	const estadoUrl = crearEstadoUrl(DEFS_URL);
+
 	function sincronizarUrl() {
-		const params = new URLSearchParams();
-		if (vista !== 'catalogo') params.set('vista', vista);
-		if (filtroFormId) params.set('formId', filtroFormId);
-		if (filtroVersionId) params.set('versionId', filtroVersionId);
-		if (filtroAssignmentId) params.set('assignmentId', filtroAssignmentId);
-		if (filtroEstado) params.set('estado', filtroEstado);
-		if (filtroBusqueda.trim()) params.set('q', filtroBusqueda.trim());
-		if (filtroDesde) params.set('desde', filtroDesde);
-		if (filtroHasta) params.set('hasta', filtroHasta);
-		const query = params.toString();
-		/// `replaceState`: cambiar de pestaña o de filtro no es un destino nuevo, y
-		/// apilar una entrada por pulsación convertiría el «atrás» del navegador en
-		/// un deshacer de filtros.
-		void goto(query ? `?${query}` : '/dashboard/formularios', {
-			replaceState: true,
-			noScroll: true,
-			keepFocus: true
+		estadoUrl.escribir(page.url, {
+			vista,
+			formId: filtroFormId,
+			versionId: filtroVersionId,
+			assignmentId: filtroAssignmentId,
+			estado: filtroEstado,
+			q: filtroBusqueda.trim(),
+			desde: filtroDesde,
+			hasta: filtroHasta,
+			cat_q: busqueda.trim(),
+			cat_pagina: pagina,
+			archivados: incluirArchivados
 		});
 	}
+
+	/// El catálogo también sincroniza: antes solo lo hacían los envíos.
+	$effect(() => {
+		void busqueda;
+		void pagina;
+		void incluirArchivados;
+		sincronizarUrl();
+	});
 
 	function cambiarVista(destino: Vista) {
 		vista = destino;

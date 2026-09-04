@@ -43,7 +43,13 @@
 		: '/recuperar-password';
 	$: redirectPath = (() => {
 		const raw = $page.url.searchParams.get('redirect');
-		if (raw && raw.startsWith('/dashboard/nomina')) return null;
+		/// Solo rutas internas. `//otro.host` es una URL absoluta para el
+		/// navegador aunque empiece por barra, así que un `redirect` fabricado
+		/// podría sacar al usuario del sitio justo después de que se
+		/// autentique. Ahora el destino lleva también la cadena de consulta,
+		/// así que la comprobación importa más que antes.
+		if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return null;
+		if (raw.startsWith('/dashboard/nomina')) return null;
 		return raw;
 	})();
 

@@ -112,6 +112,10 @@
 		}
 	}
 
+	/// La función de baja que devuelve `on()`. Antes se llamaba a
+	/// `off('sesion-cerrada')` sin handler, que quita los listeners de todos.
+	let bajaSesionCerrada: (() => void) | undefined;
+
 	onMount(() => {
 		// Inicializar auth store
 		authStore.init();
@@ -126,7 +130,7 @@
 		}, 60000);
 
 		// Escuchar cierre de sesión remoto
-		socketManager.on('sesion-cerrada', (data: { motivo: string }) => {
+		bajaSesionCerrada = socketManager.on('sesion-cerrada', (data: { motivo: string }) => {
 			mostrarSesionCerrada(data?.motivo || 'Tu sesión fue cerrada por un administrador.');
 		});
 	});
@@ -134,7 +138,7 @@
 	onDestroy(() => {
 		if (tokenCheckInterval) clearInterval(tokenCheckInterval);
 		if (sesionCerradaTimer) clearInterval(sesionCerradaTimer);
-		socketManager.off('sesion-cerrada');
+		bajaSesionCerrada?.();
 	});
 
 	function handleSectionChange(event: CustomEvent) {

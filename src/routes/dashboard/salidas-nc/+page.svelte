@@ -1,4 +1,15 @@
 <script lang="ts">
+	import { page as pageState } from '$app/state';
+	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+	import { crearEstadoUrl } from '$lib/listing/urlState';
+	import {
+		limpiar as limpiarFiltrosDe,
+		numero,
+		opcion,
+		texto,
+		type DefinicionesFiltros
+	} from '$lib/listing/filtros';
 	import { onMount } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { toast } from 'svelte-sonner';
@@ -25,33 +36,67 @@
 	import { conductoresAPI, clientesAPI, vehiculosAPI } from '$lib/api/apiClient';
 
 	// ── Estado ──
-	let salidas: SalidaNoConforme[] = [];
-	let estadisticas: EstadisticasSNC | null = null;
-	let isLoading = true;
-	let isLoadingStats = true;
+	let salidas = $state<SalidaNoConforme[]>([]);
+	let estadisticas = $state<EstadisticasSNC | null>(null);
+	let isLoading = $state(true);
+	let isLoadingStats = $state(true);
 
-	// Paginación
-	let page = 1;
-	let limit = 10;
-	let total = 0;
+	let total = $state(0);
 	let totalPages = 0;
 
-	// Filtros
-	let busqueda = '';
-	let clasificacionFiltro: ClasificacionNC | '' = '';
-	let estadoFiltro: EstadoSNC | '' = '';
-	let tipoDeteccionFiltro: TipoDeteccion | '' = '';
-	let fechaDesde = '';
-	let fechaHasta = '';
+	/**
+	 * Filtros en la URL.
+	 *
+	 * Seis filtros que hasta ahora no salían de la memoria: recargar la página
+	 * los perdía todos. Y la búsqueda no tenía retardo: cada tecla lanzaba una
+	 * petición al servidor.
+	 */
+	interface FiltrosSalidas {
+		q: string;
+		clasificacion: string;
+		estado: string;
+		deteccion: string;
+		desde: string;
+		hasta: string;
+		pagina: number;
+	}
+
+	const POR_PAGINA = 10;
+
+	const DEFS: DefinicionesFiltros<FiltrosSalidas> = {
+		q: texto(),
+		clasificacion: opcion(''),
+		estado: opcion(''),
+		deteccion: opcion(''),
+		desde: texto(),
+		hasta: texto(),
+		pagina: numero(1)
+	};
+
+	const estadoUrl = crearEstadoUrl(DEFS);
+	let filtros = $state<FiltrosSalidas>(estadoUrl.leer(pageState.url));
+
+	$effect(() => {
+		estadoUrl.escribir(pageState.url, filtros);
+	});
+
+	$effect(() => {
+		void filtros;
+		cargarSalidas();
+	});
+
+	function ponerFiltro<K extends keyof FiltrosSalidas>(clave: K, valor: FiltrosSalidas[K]) {
+		filtros = { ...filtros, [clave]: valor, pagina: 1 };
+	}
 
 	// Modal formulario
-	let showModal = false;
-	let modoEdicion = false;
+	let showModal = $state(false);
+	let modoEdicion = $state(false);
 	let salidaEditar: SalidaNoConforme | null = null;
 
 	// Modal eliminar
-	let showDeleteModal = false;
-	let salidaEliminar: { id: string; numero: number } | null = null;
+	let showDeleteModal = $state(false);
+	let salidaEliminar = $state<{ id: string; numero: number } | null>(null);
 
 	// Datos para selectores
 	let conductores: any[] = [];
@@ -59,7 +104,7 @@
 	let vehiculos: any[] = [];
 
 	// ── Form data ──
-	let form = resetForm();
+	let form = $state(resetForm());
 
 	function resetForm() {
 		return {
@@ -104,8 +149,8 @@
 		};
 	}
 
-	let siguienteNumero = 1;
-	let isSaving = false;
+	let siguienteNumero = $state(1);
+	let isSaving = $state(false);
 
 	onMount(async () => {
 		await Promise.all([cargarSalidas(), cargarEstadisticas(), cargarDatosSelectores()]);
@@ -129,18 +174,18 @@
 	async function cargarSalidas() {
 		isLoading = true;
 		try {
-			const filtros: FiltrosSalidasNC = {
-				page,
-				limit,
-				...(busqueda && { busqueda }),
-				...(clasificacionFiltro && { clasificacion_nc: clasificacionFiltro }),
-				...(estadoFiltro && { estado: estadoFiltro }),
-				...(tipoDeteccionFiltro && { tipo_deteccion: tipoDeteccionFiltro }),
-				...(fechaDesde && { fecha_desde: fechaDesde }),
-				...(fechaHasta && { fecha_hasta: fechaHasta })
+			const parametros: FiltrosSalidasNC = {
+				page: filtros.pagina,
+				limit: POR_PAGINA,
+				...(filtros.q && { busqueda: filtros.q }),
+				...(filtros.clasificacion && { clasificacion_nc: filtros.clasificacion as ClasificacionNC }),
+				...(filtros.estado && { estado: filtros.estado as EstadoSNC }),
+				...(filtros.deteccion && { tipo_deteccion: filtros.deteccion as TipoDeteccion }),
+				...(filtros.desde && { fecha_desde: filtros.desde }),
+				...(filtros.hasta && { fecha_hasta: filtros.hasta })
 			};
 
-			const res = await salidasNCAPI.listar(filtros);
+			const res = await salidasNCAPI.listar(parametros);
 			salidas = res.salidas;
 			total = res.total;
 			totalPages = res.totalPages;
@@ -164,25 +209,18 @@
 		}
 	}
 
+	/// La recarga la dispara el efecto que observa `filtros`; estas funciones
+	/// solo cambian el estado.
 	function aplicarFiltros() {
-		page = 1;
-		cargarSalidas();
+		filtros = { ...filtros, pagina: 1 };
 	}
 
 	function limpiarFiltros() {
-		busqueda = '';
-		clasificacionFiltro = '';
-		estadoFiltro = '';
-		tipoDeteccionFiltro = '';
-		fechaDesde = '';
-		fechaHasta = '';
-		page = 1;
-		cargarSalidas();
+		filtros = limpiarFiltrosDe(DEFS, filtros);
 	}
 
 	function cambiarPagina(p: number) {
-		page = p;
-		cargarSalidas();
+		filtros = { ...filtros, pagina: p };
 	}
 
 	async function abrirModalCrear() {
@@ -442,11 +480,11 @@
 				<div class="flex items-center justify-between">
 					<div>
 						<p class="mb-1 text-sm text-gray-600">Cerradas</p>
-						<p class="text-3xl font-bold text-orange-600">
+						<p class="text-3xl font-bold text-emerald-600">
 							{estadisticas.porEstado.find((e) => e.estado === 'CERRADA')?.count ?? 0}
 						</p>
 					</div>
-					<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-orange-400 to-orange-600 shadow-lg shadow-orange-500/30">
+					<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-500/30">
 						<svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
 						</svg>
@@ -461,18 +499,17 @@
 		<div class="mb-4 flex flex-col gap-4 lg:flex-row">
 			<!-- Búsqueda -->
 			<div class="flex-1">
-				<input
-					type="text"
-					bind:value={busqueda}
-					placeholder="Buscar por conductor, placa, descripción, área..."
-					class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20"
-					on:keypress={(e) => e.key === 'Enter' && aplicarFiltros()}
+				<BuscadorLista
+					valor={filtros.q}
+					onBuscar={(termino) => ponerFiltro('q', termino)}
+					placeholder="Buscar por conductor, placa, descripción, área…"
+					etiqueta="Buscar salidas no conformes"
 				/>
 			</div>
 
 			<!-- Botón Nueva SNC -->
 			<button
-				on:click={abrirModalCrear}
+				onclick={abrirModalCrear}
 				class="apple-transition flex items-center gap-2 rounded-lg bg-gradient-to-r from-red-500 to-red-600 px-6 py-2.5 whitespace-nowrap text-white shadow-lg shadow-red-500/30 hover:from-red-600 hover:to-red-700"
 			>
 				<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -486,7 +523,8 @@
 		<div class="mb-4 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-5">
 			<div>
 				<label for="clasificacionFiltro" class="mb-1.5 block text-sm font-medium text-gray-700">Clasificación</label>
-				<select id="clasificacionFiltro" bind:value={clasificacionFiltro} class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50">
+				<select id="clasificacionFiltro" value={filtros.clasificacion}
+					onchange={(e) => ponerFiltro('clasificacion', e.currentTarget.value)} class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-emerald-500/50">
 					<option value="">Todas</option>
 					{#each Object.entries(CLASIFICACION_LABELS) as [val, info]}
 						<option value={val}>{info.label}</option>
@@ -496,7 +534,8 @@
 
 			<div>
 				<label for="estadoFiltro" class="mb-1.5 block text-sm font-medium text-gray-700">Estado</label>
-				<select id="estadoFiltro" bind:value={estadoFiltro} class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50">
+				<select id="estadoFiltro" value={filtros.estado}
+					onchange={(e) => ponerFiltro('estado', e.currentTarget.value)} class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-emerald-500/50">
 					<option value="">Todos</option>
 					{#each Object.entries(ESTADO_SNC_LABELS) as [val, info]}
 						<option value={val}>{info.label}</option>
@@ -506,7 +545,8 @@
 
 			<div>
 				<label for="tipoDeteccionFiltro" class="mb-1.5 block text-sm font-medium text-gray-700">Tipo Detección</label>
-				<select id="tipoDeteccionFiltro" bind:value={tipoDeteccionFiltro} class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50">
+				<select id="tipoDeteccionFiltro" value={filtros.deteccion}
+					onchange={(e) => ponerFiltro('deteccion', e.currentTarget.value)} class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-emerald-500/50">
 					<option value="">Todos</option>
 					{#each Object.entries(TIPO_DETECCION_LABELS) as [val, label]}
 						<option value={val}>{label}</option>
@@ -516,20 +556,22 @@
 
 			<div>
 				<label for="fechaDesde" class="mb-1.5 block text-sm font-medium text-gray-700">Desde</label>
-				<input id="fechaDesde" type="date" bind:value={fechaDesde} class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50" />
+				<input id="fechaDesde" type="date" value={filtros.desde}
+					onchange={(e) => ponerFiltro('desde', e.currentTarget.value)} class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-emerald-500/50" />
 			</div>
 
 			<div>
 				<label for="fechaHasta" class="mb-1.5 block text-sm font-medium text-gray-700">Hasta</label>
-				<input id="fechaHasta" type="date" bind:value={fechaHasta} class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-orange-500/50" />
+				<input id="fechaHasta" type="date" value={filtros.hasta}
+					onchange={(e) => ponerFiltro('hasta', e.currentTarget.value)} class="apple-transition w-full rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-900 focus:ring-2 focus:ring-emerald-500/50" />
 			</div>
 		</div>
 
 		<div class="flex gap-3">
-			<button on:click={aplicarFiltros} class="apple-transition rounded-lg bg-gray-900 px-5 py-2 text-sm font-medium text-white hover:bg-gray-800">
+			<button onclick={aplicarFiltros} class="apple-transition rounded-lg bg-gray-900 px-5 py-2 text-sm font-medium text-white hover:bg-gray-800">
 				Aplicar Filtros
 			</button>
-			<button on:click={limpiarFiltros} class="apple-transition rounded-lg border border-gray-200 bg-white px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+			<button onclick={limpiarFiltros} class="apple-transition rounded-lg border border-gray-200 bg-white px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
 				Limpiar
 			</button>
 		</div>
@@ -539,7 +581,7 @@
 	<div class="glass overflow-hidden rounded-xl border border-gray-200" in:fly={{ y: 20, delay: 600 }}>
 		{#if isLoading}
 			<div class="flex items-center justify-center py-20">
-				<div class="h-8 w-8 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"></div>
+				<div class="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
 				<span class="ml-3 text-gray-500">Cargando...</span>
 			</div>
 		{:else if salidas.length === 0}
@@ -548,7 +590,7 @@
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
 				</svg>
 				<p class="mt-4 text-gray-500">No hay salidas no conformes registradas</p>
-				<button on:click={abrirModalCrear} class="mt-4 rounded-lg bg-red-500 px-4 py-2 text-sm text-white hover:bg-red-600">
+				<button onclick={abrirModalCrear} class="mt-4 rounded-lg bg-red-500 px-4 py-2 text-sm text-white hover:bg-red-600">
 					Registrar primera SNC
 				</button>
 			</div>
@@ -610,8 +652,8 @@
 								<td class="px-4 py-3 text-center">
 									<div class="flex items-center justify-center gap-1">
 										<button
-											on:click={() => descargarPDF(salida.id, salida.numero_snc)}
-											class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-orange-50 hover:text-orange-600"
+											onclick={() => descargarPDF(salida.id, salida.numero_snc)}
+											class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-green-50 hover:text-green-600"
 											title="Descargar PDF"
 										>
 											<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -619,7 +661,7 @@
 											</svg>
 										</button>
 										<button
-											on:click={() => abrirModalEditar(salida)}
+											onclick={() => abrirModalEditar(salida)}
 											class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
 											title="Editar"
 										>
@@ -628,7 +670,7 @@
 											</svg>
 										</button>
 										<button
-											on:click={() => abrirModalEliminar(salida.id, salida.numero_snc)}
+											onclick={() => abrirModalEliminar(salida.id, salida.numero_snc)}
 											class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
 											title="Eliminar"
 										>
@@ -644,43 +686,16 @@
 				</table>
 			</div>
 
-			<!-- Paginación -->
-			{#if totalPages > 1}
-				<div class="flex items-center justify-between border-t border-gray-200 bg-gray-50/50 px-6 py-3">
-					<p class="text-sm text-gray-500">
-						Mostrando {(page - 1) * limit + 1} - {Math.min(page * limit, total)} de {total}
-					</p>
-					<div class="flex gap-1">
-						<button
-							on:click={() => cambiarPagina(page - 1)}
-							disabled={page <= 1}
-							class="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-40"
-						>
-							Anterior
-						</button>
-						{#each Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-							const start = Math.max(1, page - 2);
-							return start + i;
-						}).filter((p) => p <= totalPages) as p}
-							<button
-								on:click={() => cambiarPagina(p)}
-								class="rounded-lg px-3 py-1.5 text-sm font-medium {p === page
-									? 'bg-red-500 text-white'
-									: 'border border-gray-200 text-gray-700 hover:bg-gray-100'}"
-							>
-								{p}
-							</button>
-						{/each}
-						<button
-							on:click={() => cambiarPagina(page + 1)}
-							disabled={page >= totalPages}
-							class="rounded-lg border border-gray-200 px-3 py-1.5 text-sm text-gray-700 hover:bg-gray-100 disabled:opacity-40"
-						>
-							Siguiente
-						</button>
-					</div>
-				</div>
-			{/if}
+			<!-- Paginación: el bloque manual que había aquí lo reemplaza el
+			     componente compartido, que trae la misma ventana de páginas. -->
+			<PaginadorLista
+				pagina={filtros.pagina}
+				{total}
+				porPagina={POR_PAGINA}
+				cargando={isLoading}
+				nombreItems="salidas"
+				onCambiar={cambiarPagina}
+			/>
 		{/if}
 	</div>
 </div>
@@ -695,7 +710,7 @@
 			class="relative flex w-full max-w-4xl flex-col rounded-2xl bg-white shadow-2xl"
 			style="max-height: 90vh;"
 			in:fly={{ y: 30, duration: 300 }}
-			on:click|stopPropagation
+			onclick={(e) => e.stopPropagation()}
 		>
 			<!-- Header del modal -->
 			<div class="flex shrink-0 items-center justify-between rounded-t-2xl border-b border-gray-200 bg-gradient-to-r from-red-500 to-red-600 px-8 py-5">
@@ -707,7 +722,7 @@
 						SNC-{String(siguienteNumero).padStart(4, '0')}
 					</p>
 				</div>
-				<button on:click={cerrarModal} aria-label="Cerrar" class="rounded-lg p-2 text-white/80 transition-colors hover:bg-white/20 hover:text-white">
+				<button onclick={cerrarModal} aria-label="Cerrar" class="rounded-lg p-2 text-white/80 transition-colors hover:bg-white/20 hover:text-white">
 					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
 					</svg>
@@ -1071,8 +1086,8 @@
 						<label class="mb-2 block text-sm font-medium text-gray-700">¿Cumple requisitos después del tratamiento?</label>
 						<div class="flex gap-6">
 							<label class="flex cursor-pointer items-center gap-2">
-								<input type="radio" bind:group={form.cumple_requisitos} value="SI" class="h-4 w-4 border-gray-300 text-orange-600 focus:ring-orange-500" />
-								<span class="text-sm font-medium text-orange-700">✅ Sí — Cierre de la SNC</span>
+								<input type="radio" bind:group={form.cumple_requisitos} value="SI" class="h-4 w-4 border-gray-300 text-green-600 focus:ring-green-500" />
+								<span class="text-sm font-medium text-green-700">✅ Sí — Cierre de la SNC</span>
 							</label>
 							<label class="flex cursor-pointer items-center gap-2">
 								<input type="radio" bind:group={form.cumple_requisitos} value="NO" class="h-4 w-4 border-gray-300 text-red-600 focus:ring-red-500" />
@@ -1081,7 +1096,7 @@
 						</div>
 
 						{#if form.cumple_requisitos === 'SI'}
-							<div class="mt-2 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800" transition:fly={{ y: -5, duration: 200 }}>
+							<div class="mt-2 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800" transition:fly={{ y: -5, duration: 200 }}>
 								✅ La salida no conforme será <strong>cerrada</strong>. El servicio cumple con los requisitos especificados.
 							</div>
 						{:else if form.cumple_requisitos === 'NO'}
@@ -1111,11 +1126,11 @@
 
 			<!-- Footer del modal -->
 			<div class="flex shrink-0 items-center justify-end gap-3 rounded-b-2xl border-t border-gray-200 bg-gray-50 px-8 py-4">
-				<button on:click={cerrarModal} class="rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50">
+				<button onclick={cerrarModal} class="rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50">
 					Cancelar
 				</button>
 				<button
-					on:click={guardar}
+					onclick={guardar}
 					disabled={isSaving}
 					class="apple-transition flex items-center gap-2 rounded-lg bg-gradient-to-r from-red-500 to-red-600 px-6 py-2.5 text-sm font-medium text-white shadow-lg shadow-red-500/30 hover:from-red-600 hover:to-red-700 disabled:opacity-50"
 				>
@@ -1147,10 +1162,10 @@
 				</div>
 			</div>
 			<div class="flex justify-end gap-3">
-				<button on:click={() => { showDeleteModal = false; salidaEliminar = null; }} class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+				<button onclick={() => { showDeleteModal = false; salidaEliminar = null; }} class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
 					Cancelar
 				</button>
-				<button on:click={confirmarEliminacion} class="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600">
+				<button onclick={confirmarEliminacion} class="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600">
 					Eliminar
 				</button>
 			</div>

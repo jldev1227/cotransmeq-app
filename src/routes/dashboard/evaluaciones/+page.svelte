@@ -4,40 +4,61 @@
 	import { fade, fly } from 'svelte/transition';
 	import { getEvaluaciones, deleteEvaluacion, type Evaluacion, type Pregunta } from '$lib/api/evaluaciones';
 	import DataTable from '$lib/components/ui/data-table/DataTable.svelte';
+	import { page } from '$app/state';
+	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import { crearEstadoUrl } from '$lib/listing/urlState';
+	import { numero, opcion, texto, type DefinicionesFiltros } from '$lib/listing/filtros';
+
+	/**
+	 * Filtros en la URL: búsqueda, orden y página.
+	 *
+	 * Todo se resuelve en servidor —el endpoint acepta `search`, `sortBy`,
+	 * `sortOrder`, `page`—, así que la búsqueda va con retardo para no lanzar
+	 * una petición por tecla.
+	 */
+	interface FiltrosEvaluaciones {
+		q: string;
+		orden: string;
+		dir: string;
+		pagina: number;
+	}
+
+	const POR_PAGINA = 10;
+
+	const DEFS: DefinicionesFiltros<FiltrosEvaluaciones> = {
+		q: texto(),
+		orden: opcion('created_at'),
+		dir: opcion('desc'),
+		pagina: numero(1)
+	};
+
+	const estadoUrl = crearEstadoUrl(DEFS);
+	let filtros = $state<FiltrosEvaluaciones>(estadoUrl.leer(page.url));
 
 	let evaluaciones = $state<Evaluacion[]>([]);
 	let isLoading = $state(false);
 	let totalRows = $state(0);
-	let currentPage = $state(1);
-	let pageSize = $state(10);
-	let sortBy = $state<'titulo' | 'created_at'>('created_at');
-	let sortOrder = $state<'asc' | 'desc'>('desc');
 
-	let searchInput = $state('');
-	let searchQuery = $state('');
-	let debounceTimer: ReturnType<typeof setTimeout>;
-
-	onMount(() => {
-		loadEvaluaciones();
+	$effect(() => {
+		estadoUrl.escribir(page.url, filtros);
 	});
 
-	function debounceSearch() {
-		clearTimeout(debounceTimer);
-		debounceTimer = setTimeout(() => {
-			searchQuery = searchInput;
-			currentPage = 1;
-		}, 300);
+	function ponerFiltro<K extends keyof FiltrosEvaluaciones>(
+		clave: K,
+		valor: FiltrosEvaluaciones[K]
+	) {
+		filtros = { ...filtros, [clave]: valor, pagina: 1 };
 	}
 
 	async function loadEvaluaciones() {
 		isLoading = true;
 		try {
 			const response = await getEvaluaciones({
-				page: currentPage,
-				limit: pageSize,
-				search: searchQuery || undefined,
-				sortBy,
-				sortOrder
+				page: filtros.pagina,
+				limit: POR_PAGINA,
+				search: filtros.q || undefined,
+				sortBy: filtros.orden as 'titulo' | 'created_at',
+				sortOrder: filtros.dir as 'asc' | 'desc'
 			});
 
 			if (response.success) {
@@ -52,27 +73,22 @@
 	}
 
 	$effect(() => {
-		searchQuery;
-		sortBy;
-		sortOrder;
-		currentPage;
+		/// Depende de los filtros completos: cualquiera de ellos cambia lo que
+		/// el servidor devuelve.
+		void filtros;
 		loadEvaluaciones();
 	});
 
 	function handleSort(field: string, order: 'asc' | 'desc') {
-		sortBy = field as 'titulo' | 'created_at';
-		sortOrder = order;
-		currentPage = 1;
+		filtros = { ...filtros, orden: field, dir: order, pagina: 1 };
 	}
 
-	function handlePageChange(page: number) {
-		currentPage = page;
+	function handlePageChange(pagina: number) {
+		filtros = { ...filtros, pagina };
 	}
 
 	function clearSearch() {
-		searchInput = '';
-		searchQuery = '';
-		currentPage = 1;
+		ponerFiltro('q', '');
 	}
 
 	function navigateToCrear() {
@@ -146,7 +162,7 @@
 					<p class="header-sub">Sistema de gestión · {new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
 				</div>
 			</div>
-			<button class="btn-primary" on:click={navigateToCrear} aria-label="Crear nueva evaluación">
+			<button class="btn-primary" onclick={navigateToCrear} aria-label="Crear nueva evaluación">
 				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
 					<line x1="12" y1="5" x2="12" y2="19" />
 					<line x1="5" y1="12" x2="19" y2="12" />
@@ -161,12 +177,11 @@
 					<circle cx="11" cy="11" r="8" />
 					<line x1="21" y1="21" x2="16.65" y2="16.65" />
 				</svg>
-				<input
-					type="search"
-					placeholder="Buscar evaluación..."
-					bind:value={searchInput}
-					on:input={debounceSearch}
-					aria-label="Buscar evaluaciones"
+				<BuscadorLista
+					valor={filtros.q}
+					onBuscar={(termino) => ponerFiltro('q', termino)}
+					placeholder="Buscar evaluación…"
+					etiqueta="Buscar evaluaciones"
 				/>
 			</div>
 		</div>
@@ -176,8 +191,8 @@
 				<span>Cargando...</span>
 			{:else}
 				<span>{totalRows} resultado{totalRows !== 1 ? 's' : ''} encontrado{totalRows !== 1 ? 's' : ''}</span>
-				{#if searchQuery}
-					<button class="reset-btn" on:click={clearSearch}>
+				{#if filtros.q}
+					<button class="reset-btn" onclick={clearSearch}>
 						Limpiar búsqueda
 					</button>
 				{/if}
@@ -274,8 +289,8 @@
 				]}
 				{isLoading}
 				{totalRows}
-				{currentPage}
-				{pageSize}
+				currentPage={filtros.pagina}
+				pageSize={POR_PAGINA}
 				onPageChange={handlePageChange}
 				onSortChange={handleSort}
 				onRowClick={(row) => {
@@ -291,8 +306,8 @@
 						handleDelete(ev.id, ev.titulo || '');
 					}
 				}}
-				emptyMessage={searchQuery ? 'Sin resultados para la búsqueda' : 'No hay evaluaciones creadas'}
-				emptyActionLabel={!searchQuery ? 'Crear primera evaluación' : undefined}
+				emptyMessage={filtros.q ? 'Sin resultados para la búsqueda' : 'No hay evaluaciones creadas'}
+				emptyActionLabel={!filtros.q ? 'Crear primera evaluación' : undefined}
 				onEmptyAction={navigateToCrear}
 			/>
 		</div>
@@ -309,9 +324,9 @@
 						<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
 						<polyline points="14 2 14 8 20 8" />
 					</svg>
-					<p>{searchQuery ? 'Sin resultados para la búsqueda' : 'No hay evaluaciones creadas'}</p>
-					{#if !searchQuery}
-						<button class="btn-primary" on:click={navigateToCrear}>
+					<p>{filtros.q ? 'Sin resultados para la búsqueda' : 'No hay evaluaciones creadas'}</p>
+					{#if !filtros.q}
+						<button class="btn-primary" onclick={navigateToCrear}>
 							Crear primera evaluación
 						</button>
 					{/if}
@@ -319,7 +334,7 @@
 			{:else}
 				<div class="cards-grid">
 					{#each evaluaciones as ev (ev.id)}
-						<div class="m-card" on:click={() => navigateToDetalle(ev.id)}>
+						<div class="m-card" onclick={() => navigateToDetalle(ev.id)}>
 							<div class="m-card-header">
 								<div class="m-card-title-row">
 									<span class="m-card-title">{ev.titulo}</span>

@@ -52,7 +52,14 @@ export const handle: Handle = async ({ event, resolve }) => {
 
 	if (isProtectedRoute) {
 		if (!token) {
-			throw redirect(302, `/login?redirect=${encodeURIComponent(url.pathname)}`);
+			/// Se conserva la cadena de consulta, no solo la ruta.
+			///
+			/// Con `url.pathname` a secas, cualquier enlace con filtros
+			/// —`/dashboard/flota?q=renault`— perdía el `?q=` al pasar por el
+			/// login, y quien lo abría sin sesión caliente aterrizaba en la
+			/// lista completa sin saber por qué. Justo el caso para el que se
+			/// puso todo el estado en la URL.
+			throw redirect(302, `/login?redirect=${encodeURIComponent(url.pathname + url.search)}`);
 		}
 
 		const payload = decodeJwtPayload(token);

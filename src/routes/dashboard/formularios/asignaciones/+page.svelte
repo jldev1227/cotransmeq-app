@@ -7,6 +7,11 @@
 	qué a este conductor no le aparece nada?».
 -->
 <script lang="ts">
+	import { page } from '$app/state';
+	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+	import { crearEstadoUrl } from '$lib/listing/urlState';
+	import { numero, opcion, texto, type DefinicionesFiltros } from '$lib/listing/filtros';
 	import { onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { asignacionesFormularioAPI, FormApiError } from '$lib/api/formularios';
@@ -24,22 +29,50 @@
 	let asignaciones = $state<AssignmentDto[]>([]);
 	let cargando = $state(true);
 	let trabajando = $state(false);
-	let filtroEstado = $state<AssignmentStatus | ''>('ACTIVE');
-	let busqueda = $state('');
-	let pagina = $state(1);
 	let totalPages = $state(1);
 	let total = $state(0);
 
-	let timerBusqueda: ReturnType<typeof setTimeout> | null = null;
+	/**
+	 * Filtros en la URL.
+	 *
+	 * El estado por defecto es `ACTIVE`: la vista útil es la de asignaciones
+	 * vigentes. Al ser el valor por defecto no se escribe en la URL, así que
+	 * un enlace limpio abre esa misma vista.
+	 */
+	interface FiltrosAsignaciones {
+		estado: string;
+		q: string;
+		pagina: number;
+	}
+
+	const POR_PAGINA = 25;
+
+	const DEFS: DefinicionesFiltros<FiltrosAsignaciones> = {
+		estado: opcion('ACTIVE'),
+		q: texto(),
+		pagina: numero(1)
+	};
+
+	const estadoUrl = crearEstadoUrl(DEFS);
+	let filtros = $state<FiltrosAsignaciones>(estadoUrl.leer(page.url));
+
+	$effect(() => {
+		estadoUrl.escribir(page.url, filtros);
+	});
+
+	$effect(() => {
+		void filtros;
+		cargar();
+	});
 
 	async function cargar() {
 		cargando = true;
 		try {
 			const { data, meta } = await asignacionesFormularioAPI.listar({
-				page: pagina,
-				limit: 25,
-				status: filtroEstado || undefined,
-				search: busqueda.trim() || undefined
+				page: filtros.pagina,
+				limit: POR_PAGINA,
+				status: (filtros.estado || undefined) as AssignmentStatus | undefined,
+				search: filtros.q.trim() || undefined
 			});
 			asignaciones = data;
 			total = meta.total ?? 0;
@@ -51,13 +84,9 @@
 		}
 	}
 
-	onMount(cargar);
-
+	/// El retardo lo pone `BuscadorLista`; la recarga la dispara el efecto.
 	function onBuscar(valor: string) {
-		busqueda = valor;
-		pagina = 1;
-		if (timerBusqueda) clearTimeout(timerBusqueda);
-		timerBusqueda = setTimeout(cargar, 350);
+		filtros = { ...filtros, q: valor, pagina: 1 };
 	}
 
 	async function cambiarEstado(a: AssignmentDto, accion: 'pausar' | 'reactivar' | 'cerrar') {
@@ -168,24 +197,20 @@
 	<div class="filtros">
 		<label class="filtro filtro--ancho">
 			<span class="filtro__label">Buscar</span>
-			<input
-				class="input"
-				type="search"
+			<BuscadorLista
+				valor={filtros.q}
+				onBuscar={onBuscar}
 				placeholder="Nombre de la asignación…"
-				value={busqueda}
-				oninput={(e) => onBuscar(e.currentTarget.value)}
+				etiqueta="Buscar asignaciones"
 			/>
 		</label>
 		<label class="filtro">
 			<span class="filtro__label">Estado</span>
 			<select
 				class="input"
-				value={filtroEstado}
-				onchange={(e) => {
-					filtroEstado = e.currentTarget.value as AssignmentStatus | '';
-					pagina = 1;
-					void cargar();
-				}}
+				value={filtros.estado}
+				onchange={(e) =>
+					(filtros = { ...filtros, estado: e.currentTarget.value, pagina: 1 })}
 			>
 				<option value="">Todos</option>
 				<option value="ACTIVE">Activas</option>
@@ -276,33 +301,14 @@
 			{/each}
 		</ul>
 
-		{#if totalPages > 1}
-			<nav class="paginacion" aria-label="Paginación de asignaciones">
-				<button
-					type="button"
-					class="btn btn--mini"
-					disabled={pagina <= 1}
-					onclick={() => {
-						pagina -= 1;
-						void cargar();
-					}}
-				>
-					Anterior
-				</button>
-				<span class="paginacion__estado">Página {pagina} de {totalPages}</span>
-				<button
-					type="button"
-					class="btn btn--mini"
-					disabled={pagina >= totalPages}
-					onclick={() => {
-						pagina += 1;
-						void cargar();
-					}}
-				>
-					Siguiente
-				</button>
-			</nav>
-		{/if}
+		<PaginadorLista
+			pagina={filtros.pagina}
+			{total}
+			porPagina={POR_PAGINA}
+			cargando={cargando}
+			nombreItems="asignaciones"
+			onCambiar={(p) => (filtros = { ...filtros, pagina: p })}
+		/>
 	{/if}
 </div>
 

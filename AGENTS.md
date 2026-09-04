@@ -126,6 +126,85 @@ npx svelte-check --tsconfig ./tsconfig.json --output machine 2>&1 | grep -i "<tu
 Si `node_modules/.bin/prettier` da «Permission denied», invócalo por Node:
 `node node_modules/prettier/bin/prettier.cjs --write <archivo>`.
 
+## Listados: la URL es la fuente de verdad
+
+Toda página con filtros, tabla o lista usa el núcleo de `src/lib/listing/`. No
+inventes otro: veintitrés páginas crecieron cada una por su cuenta y ninguna se
+comportaba igual al recargar, al volver atrás o al compartir un enlace.
+
+```ts
+const DEFS = { q: texto(), estado: opcion('todos'), pagina: numero(1) };
+const estadoUrl = crearEstadoUrl(DEFS);
+let filtros = $state(estadoUrl.leerInicial());
+
+$effect(() => {
+  void firma(DEFS, filtros);            // ← depende de la FIRMA, no del objeto
+  if (!browser) return;
+  estadoUrl.escribir(untrack(() => page.url), untrack(() => filtros));
+});
+```
+
+**Siempre con `goto`, nunca con `history.replaceState`**: lo segundo cambia la
+barra de direcciones pero no `page.url`, y el código que compara contra ella
+decide con una URL obsoleta.
+
+**Los valores por defecto no se escriben.** Una URL limpia y una con todos los
+defectos describen el mismo estado.
+
+`page` viene de `$app/state`, no de `$app/stores`: el store legacy no propaga
+bien en modo runes.
+
+### Componentes compartidos
+
+`BuscadorLista` (retardo unificado de 300 ms) y `PaginadorLista` (ventana de
+cinco páginas). Antes había ~25 debounces a mano con siete valores distintos y un
+`utils/debounce.ts` completo que **no importaba nadie**.
+
+Para filtrar en cliente, `coincide()` de `listing/texto.ts`: exige todas las
+palabras en cualquier campo y pasa por alto las tildes. Un `includes` literal no
+encuentra a alguien tecleando su nombre y su apellido.
+
+### Tres trampas de runes que ya han mordido
+
+**Un `$state` es un proxy: leer el objeto no suscribe a sus propiedades.** `void
+filtros` bastaba en modo legacy; aquí deja el efecto sin disparar y la URL
+congelada mientras la lista sí se filtra. Depende de una `$derived` que lea los
+campos.
+
+**Los `Set` y `Map` no se proxifican.** `selectedRows.add(id); selectedRows =
+selectedRows` no repinta nada: asignar la misma referencia no es un cambio. Crea
+uno nuevo:
+
+```ts
+const siguiente = new Set(selectedRows);
+siguiente.has(id) ? siguiente.delete(id) : siguiente.add(id);
+selectedRows = siguiente;
+```
+
+**Un tipo anotado sobre la variable estrecha a `never`.** `let x: T | null =
+$state(null)` hace que TypeScript infiera del valor inicial. El genérico va en el
+rune: `$state<T | null>(null)`.
+
+### Al restaurar la página desde la URL
+
+Un `?pagina=3` se recorta a 1 si el recorte de rango corre mientras la lista está
+vacía —`totalPages` vale 1 antes del primer dato—. Guarda ese efecto con
+`if (loading || datos.length === 0) return`.
+
+Y las claves con las que comparas para volver a la página 1 arrancan con los
+valores iniciales, no vacías: si no, la primera pasada las ve «cambiadas» y borra
+la página que venía en la URL.
+
+### El guardia de sesión conserva la consulta
+
+`hooks.server.ts` redirige a `/login?redirect=<pathname + search>`. Con solo el
+`pathname`, cualquier enlace filtrado perdía sus filtros al pasar por el login, y
+quien lo abría sin sesión caliente aterrizaba en la lista completa sin saber por
+qué. Es justo el caso para el que todo esto existe: compartir una vista.
+
+`e2e/listados-url.spec.ts` lo fija: abre cada ruta con filtros, comprueba que
+siguen ahí, **recarga** y vuelve a comprobar.
+
 ## Portal del conductor: offline primero
 
 `src/routes/public/portal/**` lo usa un conductor en un patio sin cobertura, con

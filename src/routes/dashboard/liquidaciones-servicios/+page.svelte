@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
 	import { fade, fly, slide } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import { goto } from '$app/navigation';
@@ -113,50 +113,50 @@
 		input.value = fmtCOP(raw);
 	}
 
-	let liquidaciones: LiquidacionServicio[] = [];
-	let listLoading = false;
-	let listError = '';
-	let listPage = 1;
-	let listTotalPages = 1;
-	let listTotal = 0;
-	let listBusqueda = '';
-	let listEstado: EstadoLiquidacionServicio | '' = '';
-	let listMes: string | '' = '';
-	let listAnio: number | '' = '';
-	let listSortBy = '';
-	let listSortDir: 'asc' | 'desc' = 'desc';
+	let liquidaciones = $state<LiquidacionServicio[]>([]);
+	let listLoading = $state(false);
+	let listError = $state('');
+	let listPage = $state(1);
+	let listTotalPages = $state(1);
+	let listTotal = $state(0);
+	let listBusqueda = $state('');
+	let listEstado = $state<EstadoLiquidacionServicio | ''>('');
+	let listMes = $state<string | ''>('');
+	let listAnio = $state<number | ''>('');
+	let listSortBy = $state('');
+	let listSortDir = $state<'asc' | 'desc'>('desc');
 
 	// Column header multi-select filters (server-side, Excel-style)
-	let colFilterConsecutivo: string[] = [];
-	let colFilterCliente: string[] = [];
-	let colFilterPeriodo: string[] = [];
-	let colFilterEstado: string[] = [];
-	let colFilterFactura: string[] = [];
-	let colFilterLiquidador: string[] = [];
-	let colFilterPlacas: string[] = [];
+	let colFilterConsecutivo = $state<string[]>([]);
+	let colFilterCliente = $state<string[]>([]);
+	let colFilterPeriodo = $state<string[]>([]);
+	let colFilterEstado = $state<string[]>([]);
+	let colFilterFactura = $state<string[]>([]);
+	let colFilterLiquidador = $state<string[]>([]);
+	let colFilterPlacas = $state<string[]>([]);
 
 	// Popover for placas
-	let popoverPlacasVisible = false;
-	let popoverPlacas: string[] = [];
-	let popoverPlacasPos = { top: 0, left: 0 };
+	let popoverPlacasVisible = $state(false);
+	let popoverPlacas = $state<string[]>([]);
+	let popoverPlacasPos = $state({ top: 0, left: 0 });
 
 	// Popover for items (lazy loaded per liquidacion)
-	let popoverItemsVisible = false;
-	let popoverItems: import('$lib/api/liquidaciones-servicios').ItemLiquidacionServicio[] = [];
-	let popoverItemsPos = { top: 0, left: 0 };
-	let popoverItemsLiqId = '';
-	let popoverItemsLoading = false;
+	let popoverItemsVisible = $state(false);
+	let popoverItems = $state<import('$lib/api/liquidaciones-servicios').ItemLiquidacionServicio[]>([]);
+	let popoverItemsPos = $state({ top: 0, left: 0 });
+	let popoverItemsLiqId = $state('');
+	let popoverItemsLoading = $state(false);
 	const itemsCache: Record<
 		string,
 		import('$lib/api/liquidaciones-servicios').ItemLiquidacionServicio[]
 	> = {};
-	let itemsHideTimer: ReturnType<typeof setTimeout> | null = null;
+	let itemsHideTimer = $state<ReturnType<typeof setTimeout> | null>(null);
 
 	// Popover for additional consecutivos (Facturas tab)
-	let popoverConsecutivosVisible = false;
-	let popoverConsecutivos: string[] = [];
-	let popoverConsecutivosPos = { top: 0, left: 0 };
-	let popoverConsecutivosHideTimer: ReturnType<typeof setTimeout> | null = null;
+	let popoverConsecutivosVisible = $state(false);
+	let popoverConsecutivos = $state<string[]>([]);
+	let popoverConsecutivosPos = $state({ top: 0, left: 0 });
+	let popoverConsecutivosHideTimer = $state<ReturnType<typeof setTimeout> | null>(null);
 	const CONSECUTIVOS_VISIBLE_LIMIT = 5;
 
 	// ═══ URL ↔ state sync (mismo patrón que /dashboard/recargos) ═══
@@ -165,7 +165,7 @@
 	// - `fetchTimers[tab]` debouncea el fetch de cada tab (350ms), uno por tab.
 	// - `last*Filter` resetea listPage/facturasPage/tercerosPage a 1 cuando cambia el filtro.
 	// - La caché (`liquidacionesServiciosCache`) evita los fetches redundantes.
-	let hidratado = false;
+	let hidratado = $state(false);
 	let urlSyncTimer: ReturnType<typeof setTimeout> | null = null;
 	/**
 	 * Un timer de debounce POR TAB.
@@ -246,28 +246,20 @@
 	let lastTercerosFilter = '';
 
 	// Unique values for column filters (from ALL records via metadata)
-	$: uniqueConsecutivos = listMetadata.consecutivos || [];
-	$: uniqueClientes = listMetadata.clientes.map((c) => c.nombre);
-	$: uniquePeriodos = (listMetadata.periodos || []).map((p) => `${getMesLabel(p.mes)} ${p.anio}`);
-	$: uniqueEstados = listMetadata.estados || [];
-	$: uniqueFacturas = listMetadata.facturas || [];
-	$: uniqueLiquidadores = listMetadata.liquidadores.map((l) => l.nombre);
-	$: uniquePlacas = listMetadata.placas || [];
 
 	// filteredLiquidaciones = liquidaciones (filtering is now server-side)
-	$: filteredLiquidaciones = liquidaciones;
+	const filteredLiquidaciones = $derived(liquidaciones);
 
-	$: hasColumnFilter =
-		colFilterConsecutivo.length > 0 ||
+	const hasColumnFilter = $derived(colFilterConsecutivo.length > 0 ||
 		colFilterCliente.length > 0 ||
 		colFilterPeriodo.length > 0 ||
 		colFilterEstado.length > 0 ||
 		colFilterFactura.length > 0 ||
 		colFilterLiquidador.length > 0 ||
-		colFilterPlacas.length > 0;
+		colFilterPlacas.length > 0);
 
 	// Metadata from API
-	let listMetadata: {
+	let listMetadata = $state<{
 		globalTotal: number;
 		globalCount: number;
 		estadoCounts: Record<string, number>;
@@ -278,7 +270,7 @@
 		facturas: string[];
 		estados: string[];
 		placas: string[];
-	} = {
+	}>({
 		globalTotal: 0,
 		globalCount: 0,
 		estadoCounts: {},
@@ -289,38 +281,38 @@
 		facturas: [],
 		estados: [],
 		placas: []
-	};
+	});
 
-	$: hasActiveFilter = !!(listBusqueda || hasColumnFilter);
+	const hasActiveFilter = $derived(!!(listBusqueda || hasColumnFilter));
 
-	let detailModal = false;
-	let detailLoading = false;
-	let detailLiq: LiquidacionServicio | null = null;
+	let detailModal = $state(false);
+	let detailLoading = $state(false);
+	let detailLiq = $state<LiquidacionServicio | null>(null);
 
-	let deleteModalOpen = false;
-	let deleteTargetLiq: LiquidacionServicio | null = null;
-	let deleting = false;
+	let deleteModalOpen = $state(false);
+	let deleteTargetLiq = $state<LiquidacionServicio | null>(null);
+	let deleting = $state(false);
 
-	let anularModalOpen = false;
-	let anularTargetId = '';
-	let anularMotivo = '';
-	let estadoChanging = false;
+	let anularModalOpen = $state(false);
+	let anularTargetId = $state('');
+	let anularMotivo = $state('');
+	let estadoChanging = $state(false);
 
 	// Historial
-	let historialModalOpen = false;
-	let historialLoading = false;
-	let historialData: import('$lib/api/liquidaciones-servicios').HistorialEstado[] = [];
-	let historialLiqConsecutivo = '';
-	let historialExpandedId: string | null = null;
+	let historialModalOpen = $state(false);
+	let historialLoading = $state(false);
+	let historialData = $state<import('$lib/api/liquidaciones-servicios').HistorialEstado[]>([]);
+	let historialLiqConsecutivo = $state('');
+	let historialExpandedId = $state<string | null>(null);
 
-	let facturarModalOpen = false;
-	let facturarPreselected: string[] = [];
-	let facturaInfoMap: FacturaInfoMap = {};
-	let facturablesParaFacturar: LiquidacionServicio[] = [];
-	let facturablesLoading = false;
+	let facturarModalOpen = $state(false);
+	let facturarPreselected = $state<string[]>([]);
+	let facturaInfoMap = $state<FacturaInfoMap>({});
+	let facturablesParaFacturar = $state<LiquidacionServicio[]>([]);
+	let facturablesLoading = $state(false);
 
-	let facturasTab: 'liquidaciones' | 'facturas' | 'configuracion' | 'terceros' = 'liquidaciones';
-	let modalOperadoras = false;
+	let facturasTab = $state<'liquidaciones' | 'facturas' | 'configuracion' | 'terceros'>('liquidaciones');
+	let modalOperadoras = $state(false);
 
 	/**
 	 * Agregados de Terceros sobre TODOS los registros del filtro.
@@ -339,7 +331,15 @@
 		globalIngresoEmpresa: 0,
 		globalClientes: 0
 	};
-	let tercerosMetadata = { ...TERCEROS_METADATA_VACIA };
+
+	const uniqueConsecutivos = $derived(listMetadata.consecutivos || []);
+	const uniqueClientes = $derived(listMetadata.clientes.map((c) => c.nombre));
+	const uniquePeriodos = $derived((listMetadata.periodos || []).map((p) => `${getMesLabel(p.mes)} ${p.anio}`));
+	const uniqueEstados = $derived(listMetadata.estados || []);
+	const uniqueFacturas = $derived(listMetadata.facturas || []);
+	const uniqueLiquidadores = $derived(listMetadata.liquidadores.map((l) => l.nombre));
+	const uniquePlacas = $derived(listMetadata.placas || []);
+	let tercerosMetadata = $state({ ...TERCEROS_METADATA_VACIA });
 
 	/** Ídem para Facturas, que tenía el mismo problema con `facturas.reduce`. */
 	const FACTURAS_METADATA_VACIA = {
@@ -349,41 +349,41 @@
 		estadoCounts: {} as Record<string, number>,
 		estadoTotales: {} as Record<string, number>
 	};
-	let facturasMetadata = { ...FACTURAS_METADATA_VACIA };
+	let facturasMetadata = $state({ ...FACTURAS_METADATA_VACIA });
 
 	// Terceros historial
-	let tercerosItems: TerceroItemHistorial[] = [];
-	let tercerosLoading = false;
-	let tercerosPage = 1;
-	let tercerosTotalPages = 1;
-	let tercerosTotal = 0;
-	let tercerosBusqueda = '';
-	let tercerosMes: number | '' = '';
-	let tercerosAnio: number | '' = new Date().getFullYear();
-	let tercerosPlaca = '';
-	let facturas: FacturaLiquidacion[] = [];
-	let facturasLoading = false;
-	let facturasPage = 1;
-	let facturasTotalPages = 1;
-	let facturasTotal = 0;
-	let facturasBusqueda = '';
-	let facturasEstado: '' | 'ACTIVA' | 'ANULADA' = '';
+	let tercerosItems = $state<TerceroItemHistorial[]>([]);
+	let tercerosLoading = $state(false);
+	let tercerosPage = $state(1);
+	let tercerosTotalPages = $state(1);
+	let tercerosTotal = $state(0);
+	let tercerosBusqueda = $state('');
+	let tercerosMes = $state<number | ''>('');
+	let tercerosAnio = $state<number | ''>(new Date().getFullYear());
+	let tercerosPlaca = $state('');
+	let facturas = $state<FacturaLiquidacion[]>([]);
+	let facturasLoading = $state(false);
+	let facturasPage = $state(1);
+	let facturasTotalPages = $state(1);
+	let facturasTotal = $state(0);
+	let facturasBusqueda = $state('');
+	let facturasEstado = $state<'' | 'ACTIVA' | 'ANULADA'>('');
 
-	let anularFacturaModalOpen = false;
-	let anularFacturaTarget: FacturaLiquidacion | null = null;
-	let anularFacturaMotivo = '';
-	let eliminarFacturaModalOpen = false;
-	let eliminarFacturaTarget: FacturaLiquidacion | null = null;
-	let eliminandoFactura = false;
-	let anulandoFactura = false;
+	let anularFacturaModalOpen = $state(false);
+	let anularFacturaTarget = $state<FacturaLiquidacion | null>(null);
+	let anularFacturaMotivo = $state('');
+	let eliminarFacturaModalOpen = $state(false);
+	let eliminarFacturaTarget = $state<FacturaLiquidacion | null>(null);
+	let eliminandoFactura = $state(false);
+	let anulandoFactura = $state(false);
 
-	let detalleFactura: FacturaLiquidacion | null = null;
+	let detalleFactura = $state<FacturaLiquidacion | null>(null);
 
 	/* ── Config liquidador servicio ── */
-	let configLoading = false;
-	let configSaving = false;
-	let configData: ConfigLiquidadorServicio | null = null;
-	let configForm = {
+	let configLoading = $state(false);
+	let configSaving = $state(false);
+	let configData = $state<ConfigLiquidadorServicio | null>(null);
+	let configForm = $state({
 		salario_basico: 0,
 		cargo: 'Conductor',
 		valor_hora_override: 0,
@@ -392,9 +392,8 @@
 		pct_prestaciones: 0,
 		pct_admin: 0,
 		prueba_covid: 0
-	};
-	$: configValorHoraAuto =
-		configForm.salario_basico > 0 ? +(configForm.salario_basico / 235).toFixed(4) : 0;
+	});
+	const configValorHoraAuto = $derived(configForm.salario_basico > 0 ? +(configForm.salario_basico / 235).toFixed(4) : 0);
 
 	async function cargarConfig(forzar = false) {
 		// La config es un único registro y cambia muy de vez en cuando, así
@@ -495,7 +494,7 @@
 		tercerosPage = p;
 	}
 
-	let highlightedIds: Record<string, 'created' | 'updated'> = {};
+	let highlightedIds = $state<Record<string, 'created' | 'updated'>>({});
 	const highlightTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 
 	function addHighlight(id: string, type: 'created' | 'updated') {
@@ -509,29 +508,29 @@
 		}, 8000);
 	}
 
-	$: accessResult = checkAccess(
+	const accessResult = $derived(checkAccess(
 		$authStore.user?.role,
 		$authStore.user?.area,
 		'liquidaciones-servicios',
 		$authStore.user?.permisos_rutas
-	);
-	$: isFull = accessResult.level === 'full';
-	$: isLimited = accessResult.level === 'limited';
-	$: userAreas = Array.isArray($authStore.user?.area)
+	));
+	const isFull = $derived(accessResult.level === 'full');
+	const isLimited = $derived(accessResult.level === 'limited');
+	const userAreas = $derived(Array.isArray($authStore.user?.area)
 		? $authStore.user.area
 		: $authStore.user?.area
 			? [$authStore.user.area]
-			: [];
-	$: isAdmin = userAreas.includes('administracion');
-	$: isFacturacion = userAreas.includes('facturacion');
-	$: isOperaciones = userAreas.includes('operaciones');
-	$: canLiquidar = isFull; // admin + operaciones: borrador → liquidada
-	$: canAprobar = isAdmin; // solo admin: liquidada → aprobada
-	$: canAnular = isAdmin; // solo admin: anular liquidaciones
-	$: canRevertirABorrador = isFull; // admin + operaciones: liquidada → borrador
-	$: canRevertirALiquidada = isAdmin; // solo admin: aprobada → liquidada
+			: []);
+	const isAdmin = $derived(userAreas.includes('administracion'));
+	const isFacturacion = $derived(userAreas.includes('facturacion'));
+	const isOperaciones = $derived(userAreas.includes('operaciones'));
+	const canLiquidar = $derived(isFull); // admin + operaciones: borrador → liquidada
+	const canAprobar = $derived(isAdmin); // solo admin: liquidada → aprobada
+	const canAnular = $derived(isAdmin); // solo admin: anular liquidaciones
+	const canRevertirABorrador = $derived(isFull); // admin + operaciones: liquidada → borrador
+	const canRevertirALiquidada = $derived(isAdmin); // solo admin: aprobada → liquidada
 
-	let logoError = false;
+	let logoError = $state(false);
 
 	onMount(async () => {
 		// 1) Hidratar state desde URL (deep-link friendly).
@@ -804,12 +803,15 @@
 			listTotalPages = res.totalPages;
 			listPage = res.page;
 			if (res.metadata)
+				/// El servidor no siempre manda las cuatro listas de la cabecera;
+				/// las que falten quedan vacías en vez de `undefined`, que
+				/// reventaría los `.map` de los desplegables.
 				listMetadata = {
-					consecutivos: [],
-					periodos: [],
-					facturas: [],
-					estados: [],
-					...res.metadata
+					...res.metadata,
+					consecutivos: res.metadata.consecutivos ?? [],
+					periodos: res.metadata.periodos ?? [],
+					facturas: res.metadata.facturas ?? [],
+					estados: res.metadata.estados ?? []
 				};
 			guardarDatos('liquidaciones', key, {
 				liquidaciones: res.liquidaciones,
@@ -950,17 +952,33 @@
 			if (s) params.set('busqueda', s);
 			if (listMes) params.set('mes', listMes);
 			if (listAnio) params.set('anio', String(listAnio));
+			/// Los SIETE filtros de cabecera, no solo las placas. Antes seis de
+			/// ellos se perdían al compartir el enlace: quien lo abría veía otra
+			/// tabla y ninguna señal de por qué.
+			if (colFilterConsecutivo.length) params.set('consecutivos', colFilterConsecutivo.join(','));
+			if (colFilterCliente.length) params.set('clientes', colFilterCliente.join(','));
+			if (colFilterPeriodo.length) params.set('periodos', colFilterPeriodo.join(','));
+			if (colFilterEstado.length) params.set('estados', colFilterEstado.join(','));
+			if (colFilterFactura.length) params.set('facturas', colFilterFactura.join(','));
+			if (colFilterLiquidador.length) params.set('liquidadores', colFilterLiquidador.join(','));
 			if (colFilterPlacas.length) params.set('placas', colFilterPlacas.join(','));
+			if (listSortBy) {
+				params.set('orden', listSortBy);
+				params.set('dir', listSortDir);
+			}
+			if (listPage > 1) params.set('pagina', String(listPage));
 		} else if (facturasTab === 'facturas') {
 			const s = facturasBusqueda.trim();
 			if (s) params.set('busqueda', s);
 			if (facturasEstado) params.set('estado', facturasEstado);
+			if (facturasPage > 1) params.set('pagina', String(facturasPage));
 		} else if (facturasTab === 'terceros') {
 			const s = tercerosBusqueda.trim();
 			if (s) params.set('busqueda', s);
 			if (tercerosMes !== '') params.set('mes', String(tercerosMes));
 			if (tercerosAnio !== '') params.set('anio', String(tercerosAnio));
 			if (tercerosPlaca) params.set('placa', tercerosPlaca);
+			if (tercerosPage > 1) params.set('pagina', String(tercerosPage));
 		}
 
 		const qs = params.toString();
@@ -989,18 +1007,38 @@
 		const urlMes = params.get('mes');
 		const urlAnio = params.get('anio');
 
+		/// Página del tab activo. El nombre se comparte entre pestañas, igual
+		/// que `busqueda` y `mes`: cada una lee la suya.
+		const urlPagina = Number(params.get('pagina'));
+		const paginaValida = Number.isFinite(urlPagina) && urlPagina >= 1 ? urlPagina : 1;
+
+		const lista = (clave: string): string[] =>
+			(params.get(clave) || '').split(',').filter(Boolean);
+
 		if (facturasTab === 'liquidaciones') {
 			if (urlBusqueda) listBusqueda = urlBusqueda;
 			if (urlMes) listMes = urlMes;
 			if (urlAnio) listAnio = Number(urlAnio);
-			const urlPlacas = params.get('placas');
-			if (urlPlacas) colFilterPlacas = urlPlacas.split(',').filter(Boolean);
+			colFilterConsecutivo = lista('consecutivos');
+			colFilterCliente = lista('clientes');
+			colFilterPeriodo = lista('periodos');
+			colFilterEstado = lista('estados');
+			colFilterFactura = lista('facturas');
+			colFilterLiquidador = lista('liquidadores');
+			colFilterPlacas = lista('placas');
+			const urlOrden = params.get('orden');
+			if (urlOrden) {
+				listSortBy = urlOrden;
+				listSortDir = params.get('dir') === 'asc' ? 'asc' : 'desc';
+			}
+			listPage = paginaValida;
 		} else if (facturasTab === 'facturas') {
 			if (urlBusqueda) facturasBusqueda = urlBusqueda;
 			const urlEstado = params.get('estado');
 			if (urlEstado === 'ACTIVA' || urlEstado === 'ANULADA') {
 				facturasEstado = urlEstado;
 			}
+			facturasPage = paginaValida;
 		} else if (facturasTab === 'terceros') {
 			if (urlBusqueda) tercerosBusqueda = urlBusqueda;
 			if (urlMes) {
@@ -1013,6 +1051,7 @@
 			}
 			const urlPlaca = params.get('placa');
 			if (urlPlaca) tercerosPlaca = urlPlaca;
+			tercerosPage = paginaValida;
 		}
 	}
 	function cambiarTab(id: 'liquidaciones' | 'facturas' | 'terceros' | 'configuracion') {
@@ -1325,12 +1364,24 @@
 
 	// 1) URL sync: se dispara con CUALQUIER cambio de state compartido
 	//    (debounced 200ms para no martillar goto en cada tecla).
-	$: if (browser && hidratado) {
+	$effect(() => {
+		if (browser && hidratado) {
 		void facturasTab;
 		void listBusqueda;
 		void listMes;
 		void listAnio;
+		void colFilterConsecutivo;
+		void colFilterCliente;
+		void colFilterPeriodo;
+		void colFilterEstado;
+		void colFilterFactura;
+		void colFilterLiquidador;
 		void colFilterPlacas;
+		void listSortBy;
+		void listSortDir;
+		void listPage;
+		void facturasPage;
+		void tercerosPage;
 		void facturasBusqueda;
 		void facturasEstado;
 		void tercerosBusqueda;
@@ -1341,6 +1392,7 @@
 		if (urlSyncTimer) clearTimeout(urlSyncTimer);
 		urlSyncTimer = setTimeout(syncUrl, URL_SYNC_DEBOUNCE_MS);
 	}
+	});
 
 	// 2) Fetch por tab.
 	//
@@ -1362,7 +1414,8 @@
 	//    de los filtros de columna y no volvería a correr al cambiarlos.
 
 	// 2a) Liquidaciones.
-	$: if (browser && hidratado) {
+	$effect(() => {
+		if (browser && hidratado) {
 		void listBusqueda;
 		void listMes;
 		void listAnio;
@@ -1384,9 +1437,11 @@
 		}
 		programarFetch('liquidaciones', () => cargarListado());
 	}
+	});
 
 	// 2b) Facturas.
-	$: if (browser && hidratado) {
+	$effect(() => {
+		if (browser && hidratado) {
 		void facturasBusqueda;
 		void facturasEstado;
 		void facturasPage;
@@ -1398,9 +1453,11 @@
 		}
 		programarFetch('facturas', () => cargarFacturas());
 	}
+	});
 
 	// 2c) Terceros.
-	$: if (browser && hidratado) {
+	$effect(() => {
+		if (browser && hidratado) {
 		void tercerosBusqueda;
 		void tercerosMes;
 		void tercerosAnio;
@@ -1414,26 +1471,34 @@
 		}
 		programarFetch('terceros', () => cargarTerceros());
 	}
+	});
 
 	// 3) Al cambiar de tab: apagar su badge, marcar sus eventos como vistos
 	//    y revalidar si hace falta. El fetch NO pasa por el debounce: el
 	//    usuario acaba de pedir ver ese tab.
-	$: if (browser && hidratado && facturasTab) {
-		verTab(facturasTab);
-		marcarVistos(facturasTab);
-		if (facturasTab === 'liquidaciones') cargarListado();
-		else if (facturasTab === 'facturas') cargarFacturas();
-		else if (facturasTab === 'terceros') cargarTerceros();
-		else if (facturasTab === 'configuracion') cargarConfig();
-	}
+	$effect(() => {
+		const tab = facturasTab;
+		if (!browser || !hidratado) return;
+		/// Todo dentro de `untrack`: estas funciones leen y escriben las mismas
+		/// listas, y un efecto suscrito a lo que él mismo provoca no para nunca.
+		/// La única dependencia legítima aquí es la pestaña.
+		untrack(() => {
+			verTab(tab);
+			marcarVistos(tab);
+			if (tab === 'liquidaciones') void cargarListado();
+			else if (tab === 'facturas') void cargarFacturas();
+			else if (tab === 'terceros') void cargarTerceros();
+			else if (tab === 'configuracion') void cargarConfig();
+		});
+	});
 
 	// Badges de pestaña: eventos llegados mientras el tab no estaba a la vista.
-	$: pendientesPorTab = {
+	const pendientesPorTab = $derived({
 		liquidaciones: $cacheLiquidaciones.liquidaciones.pendientes,
 		facturas: $cacheLiquidaciones.facturas.pendientes,
 		terceros: $cacheLiquidaciones.terceros.pendientes,
 		configuracion: $cacheLiquidaciones.configuracion.pendientes
-	};
+	});
 </script>
 
 <svelte:head>
@@ -1452,8 +1517,9 @@
 			label: string,
 			icon: any
 		)}
+			{@const Icono = icon}
 			<button
-				on:click={() => cambiarTab(id)}
+				onclick={() => cambiarTab(id)}
 				class="apple-transition inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-semibold"
 				style="background-color: {facturasTab === id
 					? 'rgba(249, 115, 22,0.10)'
@@ -1463,7 +1529,7 @@
 					? 'rgba(249, 115, 22,0.30)'
 					: 'var(--border-subtle)'};"
 			>
-				<svelte:component this={icon} class="h-3.5 w-3.5" />
+				<Icono class="h-3.5 w-3.5" />
 				{label}
 				<!-- Eventos llegados mientras este tab NO estaba a la vista.
 				     Es lo que avisa de que hay algo nuevo sin obligar a
@@ -1510,7 +1576,7 @@
 		</div>
 		<button
 			class="recargar-btn"
-			on:click={recargarTabActivo}
+			onclick={recargarTabActivo}
 			title="Volver a leer este tab desde el servidor"
 			aria-label="Recargar"
 		>
@@ -1599,7 +1665,7 @@
 				<div class="flex items-center gap-2 xl:shrink-0">
 					{#if (isFull || isLimited) && (isFacturacion || isAdmin)}
 						<button
-							on:click={abrirModalFacturar}
+							onclick={abrirModalFacturar}
 							class="btn-secondary apple-transition flex-1 xl:flex-none"
 						>
 							<Receipt class="h-4 w-4" />
@@ -1608,7 +1674,7 @@
 					{/if}
 					{#if isFull}
 						<button
-							on:click={irNuevaLiquidacion}
+							onclick={irNuevaLiquidacion}
 							class="btn-primary apple-transition flex-1 xl:flex-none"
 						>
 							<Plus class="h-4 w-4" />
@@ -1636,20 +1702,20 @@
 						id="liq-search"
 						type="search"
 						bind:value={listBusqueda}
-						on:keydown={onSearchKeyDown}
+						onkeydown={onSearchKeyDown}
 						placeholder="Consecutivo, cliente, placa…"
 					/>
 				</div>
 				<div class="filter-field">
 					<label class="filter-field-label" for="liq-mes">Mes</label>
-					<select id="liq-mes" bind:value={listMes} on:change={filtrar}>
+					<select id="liq-mes" bind:value={listMes} onchange={filtrar}>
 						<option value="">Todos los meses</option>
 						{#each MESES as m}<option value={m}>{m}</option>{/each}
 					</select>
 				</div>
 				<div class="filter-field">
 					<label class="filter-field-label" for="liq-anio">Año</label>
-					<select id="liq-anio" bind:value={listAnio} on:change={filtrar}>
+					<select id="liq-anio" bind:value={listAnio} onchange={filtrar}>
 						<option value="">Todos los años</option>
 						{#each YEARS as y}<option value={y}>{y}</option>{/each}
 					</select>
@@ -1659,7 +1725,7 @@
 				<div class="filter-actions">
 					<button
 						class="filter-clear"
-						on:click={() => {
+						onclick={() => {
 							listBusqueda = '';
 							listMes = '';
 							listAnio = '';
@@ -1791,7 +1857,7 @@
 					<div class="flex-1">
 						<p class="text-sm font-semibold">{listError}</p>
 						<button
-							on:click={() => cargarListado()}
+							onclick={() => cargarListado()}
 							class="apple-transition mt-2 rounded-lg px-3 py-1.5 text-xs font-semibold"
 							style="background: rgba(220,38,38,0.10); color: #991B1B;">Reintentar</button
 						>
@@ -1818,7 +1884,7 @@
 						</p>
 					</div>
 					{#if isFull}
-						<button on:click={irNuevaLiquidacion} class="btn-primary apple-transition">
+						<button onclick={irNuevaLiquidacion} class="btn-primary apple-transition">
 							<Plus class="h-4 w-4" />
 							Nueva Liquidación
 						</button>
@@ -1835,7 +1901,7 @@
 										<button
 											type="button"
 											class="group apple-transition inline-flex items-center gap-1 hover:text-[var(--text-primary)]"
-											on:click={() => toggleSort('consecutivo')}
+											onclick={() => toggleSort('consecutivo')}
 										>
 											Consecutivo
 											<span
@@ -1865,7 +1931,7 @@
 										<button
 											type="button"
 											class="group apple-transition inline-flex items-center gap-1 hover:text-[var(--text-primary)]"
-											on:click={() => toggleSort('cliente')}
+											onclick={() => toggleSort('cliente')}
 										>
 											Cliente
 											<span
@@ -1895,7 +1961,7 @@
 										<button
 											type="button"
 											class="group apple-transition inline-flex items-center gap-1 hover:text-[var(--text-primary)]"
-											on:click={() => toggleSort('periodo')}
+											onclick={() => toggleSort('periodo')}
 										>
 											Periodo
 											<span
@@ -1924,7 +1990,7 @@
 										<button
 											type="button"
 											class="group apple-transition inline-flex items-center gap-1 hover:text-[var(--text-primary)]"
-											on:click={() => toggleSort('estado')}
+											onclick={() => toggleSort('estado')}
 										>
 											Estado
 											<span
@@ -1967,7 +2033,7 @@
 									<button
 										type="button"
 										class="group apple-transition inline-flex w-full cursor-pointer items-center justify-end gap-1 text-right select-none hover:text-[var(--text-primary)]"
-										on:click={() => toggleSort('total')}
+										onclick={() => toggleSort('total')}
 									>
 										Total
 										<span
@@ -2014,7 +2080,7 @@
 									<button
 										type="button"
 										class="group apple-transition inline-flex cursor-pointer items-center gap-1 select-none hover:text-[var(--text-primary)]"
-										on:click={() => toggleSort('fecha')}
+										onclick={() => toggleSort('fecha')}
 									>
 										Fecha
 										<span
@@ -2110,14 +2176,15 @@
 										{#if itemsTotal === 0}
 											<span class="font-mono-meta" style="color: var(--text-very-muted);">—</span>
 										{:else}
+											<!-- svelte-ignore a11y_no_static_element_interactions -->
 											<div
 												class="relative inline-flex items-center gap-1"
 												role="button"
 												tabindex="0"
-												on:mouseenter={(e) => mostrarPopoverItems(e, liq.id)}
-												on:mouseleave={ocultarPopoverItems}
-												on:focus={(e) => mostrarPopoverItems(e, liq.id)}
-												on:blur={ocultarPopoverItems}
+												onmouseenter={(e) => mostrarPopoverItems(e, liq.id)}
+												onmouseleave={ocultarPopoverItems}
+												onfocus={(e) => mostrarPopoverItems(e, liq.id)}
+												onblur={ocultarPopoverItems}
 											>
 												<span
 													class="font-mono-meta inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold"
@@ -2147,16 +2214,17 @@
 									<td class="px-4 py-3 text-left text-xs">
 										{#if liq.placas && liq.placas.length > 0}
 											<div class="relative inline-block">
+												<!-- svelte-ignore a11y_no_static_element_interactions -->
 												<span
 													class="font-mono-meta apple-transition inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-0.5 text-[10px]"
 													style="background: rgba(249, 115, 22,0.08); color: var(--orange-700);"
-													on:mouseenter={(e) => {
+													onmouseenter={(e) => {
 														const rect = (e.target as HTMLElement).getBoundingClientRect();
 														popoverPlacasPos = { top: rect.bottom + 4, left: rect.left };
 														popoverPlacas = liq.placas ?? [];
 														popoverPlacasVisible = true;
 													}}
-													on:mouseleave={() => {
+													onmouseleave={() => {
 														popoverPlacasVisible = false;
 													}}
 												>
@@ -2206,7 +2274,7 @@
 												class="apple-transition rounded-lg p-1.5 transition-colors hover:bg-[rgba(249, 115, 22,0.08)]"
 												style="color: var(--text-muted);"
 												title="Ver"
-												on:click={() => irVerLiquidacion(liq.id)}
+												onclick={() => irVerLiquidacion(liq.id)}
 											>
 												<Eye class="h-3.5 w-3.5" />
 											</button>
@@ -2215,7 +2283,7 @@
 													class="apple-transition rounded-lg p-1.5 transition-colors hover:bg-[rgba(37,99,235,0.08)]"
 													style="color: var(--text-muted);"
 													title="Editar"
-													on:click={() => irEditarLiquidacion(liq.id)}
+													onclick={() => irEditarLiquidacion(liq.id)}
 												>
 													<Edit2 class="h-3.5 w-3.5" />
 												</button>
@@ -2225,7 +2293,7 @@
 													class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
 													style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
 													disabled={estadoChanging}
-													on:click={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>Liquidar</button
+													onclick={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>Liquidar</button
 												>
 											{/if}
 											{#if canAprobar && liq.estado === 'LIQUIDADA'}
@@ -2233,7 +2301,7 @@
 													class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
 													style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
 													disabled={estadoChanging}
-													on:click={() => cambiarEstadoLiq(liq.id, 'APROBADA')}>Aprobar</button
+													onclick={() => cambiarEstadoLiq(liq.id, 'APROBADA')}>Aprobar</button
 												>
 											{/if}
 											{#if canAnular && !isUnconfirmed && liq.estado !== 'ANULADA' && liq.estado !== 'FACTURADA'}
@@ -2241,7 +2309,7 @@
 													class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
 													style="background: rgba(220,38,38,0.08); color: #B91C1C;"
 													disabled={estadoChanging}
-													on:click={() => abrirAnularModal(liq.id)}>Anular</button
+													onclick={() => abrirAnularModal(liq.id)}>Anular</button
 												>
 											{/if}
 											{#if isAdmin && liq.estado === 'ANULADA'}
@@ -2249,7 +2317,7 @@
 													class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
 													style="background: rgba(245,158,11,0.10); color: #B45309;"
 													disabled={estadoChanging}
-													on:click={() => cambiarEstadoLiq(liq.id, 'BORRADOR')}>Revertir</button
+													onclick={() => cambiarEstadoLiq(liq.id, 'BORRADOR')}>Revertir</button
 												>
 											{/if}
 											{#if canRevertirABorrador && liq.estado === 'LIQUIDADA'}
@@ -2257,7 +2325,7 @@
 													class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
 													style="background: rgba(245,158,11,0.10); color: #B45309;"
 													disabled={estadoChanging}
-													on:click={() => cambiarEstadoLiq(liq.id, 'BORRADOR')}>Borrador</button
+													onclick={() => cambiarEstadoLiq(liq.id, 'BORRADOR')}>Borrador</button
 												>
 											{/if}
 											{#if canRevertirALiquidada && liq.estado === 'APROBADA'}
@@ -2265,7 +2333,7 @@
 													class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
 													style="background: rgba(245,158,11,0.10); color: #B45309;"
 													disabled={estadoChanging}
-													on:click={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>Liquidada</button
+													onclick={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>Liquidada</button
 												>
 											{/if}
 											{#if isFull && liq.estado === 'BORRADOR'}
@@ -2273,7 +2341,7 @@
 													class="apple-transition rounded-lg p-1.5 transition-colors hover:bg-[rgba(220,38,38,0.08)]"
 													style="color: var(--text-muted);"
 													title="Eliminar"
-													on:click={() => {
+													onclick={() => {
 														deleteTargetLiq = liq;
 														deleteModalOpen = true;
 													}}
@@ -2286,7 +2354,7 @@
 													class="apple-transition rounded-lg p-1.5 transition-colors hover:bg-[rgba(0,0,0,0.04)]"
 													style="color: var(--text-muted);"
 													title="Historial"
-													on:click={() => abrirHistorial(liq.id, liq.consecutivo)}
+													onclick={() => abrirHistorial(liq.id, liq.consecutivo)}
 												>
 													<History class="h-3.5 w-3.5" />
 												</button>
@@ -2458,7 +2526,7 @@
 									class="apple-transition rounded-md p-1.5"
 									style="color: var(--orange-700); background: rgba(249, 115, 22,0.08);"
 									title="Ver"
-									on:click={() => irVerLiquidacion(liq.id)}
+									onclick={() => irVerLiquidacion(liq.id)}
 								>
 									<Eye class="h-3.5 w-3.5" />
 								</button>
@@ -2467,7 +2535,7 @@
 										class="apple-transition rounded-md p-1.5"
 										style="color: #2563EB; background: rgba(37,99,235,0.08);"
 										title="Editar"
-										on:click={() => irEditarLiquidacion(liq.id)}
+										onclick={() => irEditarLiquidacion(liq.id)}
 									>
 										<Edit2 class="h-3.5 w-3.5" />
 									</button>
@@ -2477,7 +2545,7 @@
 										class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
 										style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
 										disabled={estadoChanging}
-										on:click={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>Liquidar</button
+										onclick={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>Liquidar</button
 									>
 								{/if}
 								{#if canAprobar && liq.estado === 'LIQUIDADA'}
@@ -2485,7 +2553,7 @@
 										class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
 										style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
 										disabled={estadoChanging}
-										on:click={() => cambiarEstadoLiq(liq.id, 'APROBADA')}>Aprobar</button
+										onclick={() => cambiarEstadoLiq(liq.id, 'APROBADA')}>Aprobar</button
 									>
 								{/if}
 								{#if canAnular && !isUnconfirmed && liq.estado !== 'ANULADA' && liq.estado !== 'FACTURADA'}
@@ -2493,7 +2561,7 @@
 										class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
 										style="background: rgba(220,38,38,0.08); color: #B91C1C;"
 										disabled={estadoChanging}
-										on:click={() => abrirAnularModal(liq.id)}>Anular</button
+										onclick={() => abrirAnularModal(liq.id)}>Anular</button
 									>
 								{/if}
 								{#if isAdmin && liq.estado === 'ANULADA'}
@@ -2501,7 +2569,7 @@
 										class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
 										style="background: rgba(245,158,11,0.10); color: #B45309;"
 										disabled={estadoChanging}
-										on:click={() => cambiarEstadoLiq(liq.id, 'BORRADOR')}>Revertir</button
+										onclick={() => cambiarEstadoLiq(liq.id, 'BORRADOR')}>Revertir</button
 									>
 								{/if}
 								{#if canRevertirABorrador && liq.estado === 'LIQUIDADA'}
@@ -2509,7 +2577,7 @@
 										class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
 										style="background: rgba(245,158,11,0.10); color: #B45309;"
 										disabled={estadoChanging}
-										on:click={() => cambiarEstadoLiq(liq.id, 'BORRADOR')}>Borrador</button
+										onclick={() => cambiarEstadoLiq(liq.id, 'BORRADOR')}>Borrador</button
 									>
 								{/if}
 								{#if canRevertirALiquidada && liq.estado === 'APROBADA'}
@@ -2517,7 +2585,7 @@
 										class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
 										style="background: rgba(245,158,11,0.10); color: #B45309;"
 										disabled={estadoChanging}
-										on:click={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>Liquidada</button
+										onclick={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>Liquidada</button
 									>
 								{/if}
 								{#if isFull && liq.estado === 'BORRADOR'}
@@ -2525,7 +2593,7 @@
 										class="apple-transition rounded-md p-1.5"
 										style="color: #DC2626; background: rgba(220,38,38,0.08);"
 										title="Eliminar"
-										on:click={() => {
+										onclick={() => {
 											deleteTargetLiq = liq;
 											deleteModalOpen = true;
 										}}
@@ -2538,7 +2606,7 @@
 										class="apple-transition rounded-md p-1.5"
 										style="color: var(--text-muted); background: rgba(0,0,0,0.04);"
 										title="Historial"
-										on:click={() => abrirHistorial(liq.id, liq.consecutivo)}
+										onclick={() => abrirHistorial(liq.id, liq.consecutivo)}
 									>
 										<History class="h-3.5 w-3.5" />
 									</button>
@@ -2560,7 +2628,7 @@
 					</p>
 					<div class="flex items-center gap-1">
 						<button
-							on:click={() => irPagina(listPage - 1)}
+							onclick={() => irPagina(listPage - 1)}
 							disabled={listPage <= 1}
 							aria-label="Página anterior"
 							class="apple-transition rounded-lg p-1.5 disabled:opacity-40"
@@ -2570,7 +2638,7 @@
 						</button>
 						{#each Array(Math.min(listTotalPages, 10)) as _, i}
 							<button
-								on:click={() => irPagina(i + 1)}
+								onclick={() => irPagina(i + 1)}
 								class="apple-transition font-mono-meta min-w-[32px] rounded-lg px-2.5 py-1 text-[11px] font-semibold"
 								style="background: {listPage === i + 1
 									? 'var(--orange-500)'
@@ -2584,7 +2652,7 @@
 								style="color: var(--text-very-muted);">…</span
 							>{/if}
 						<button
-							on:click={() => irPagina(listPage + 1)}
+							onclick={() => irPagina(listPage + 1)}
 							disabled={listPage >= listTotalPages}
 							aria-label="Página siguiente"
 							class="apple-transition rounded-lg p-1.5 disabled:opacity-40"
@@ -2599,13 +2667,14 @@
 
 		<!-- Placas popover -->
 		{#if popoverPlacasVisible}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				class="fixed z-50 rounded-lg p-2"
 				style="top:{popoverPlacasPos.top}px;left:{popoverPlacasPos.left}px; background: var(--bg-surface); border: 1px solid var(--border-default); box-shadow: var(--shadow-card-hover);"
-				on:mouseenter={() => {
+				onmouseenter={() => {
 					popoverPlacasVisible = true;
 				}}
-				on:mouseleave={() => {
+				onmouseleave={() => {
 					popoverPlacasVisible = false;
 				}}
 			>
@@ -2625,12 +2694,13 @@
 
 		<!-- Items popover (lazy loaded) -->
 		{#if popoverItemsVisible}
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				role="tooltip"
 				class="fixed z-50 rounded-lg p-2.5"
 				style="top:{popoverItemsPos.top}px;left:{popoverItemsPos.left}px; min-width: 320px; max-width: 420px; max-height: 360px; overflow-y: auto; background: var(--bg-surface); border: 1px solid var(--border-default); box-shadow: var(--shadow-card-hover);"
-				on:mouseenter={mantenerPopoverItems}
-				on:mouseleave={ocultarPopoverItems}
+				onmouseenter={mantenerPopoverItems}
+				onmouseleave={ocultarPopoverItems}
 			>
 				<div class="mb-1.5 flex items-center justify-between px-1">
 					<p class="font-mono-meta text-[10px]" style="color: var(--text-very-muted);">
@@ -2759,7 +2829,7 @@
 				<div class="filter-actions">
 					<button
 						class="filter-clear"
-						on:click={() => {
+						onclick={() => {
 							facturasBusqueda = '';
 							facturasEstado = '';
 							filtrarFacturas();
@@ -2883,14 +2953,15 @@
 												>
 											{/each}
 											{#if fac.items.length > CONSECUTIVOS_VISIBLE_LIMIT}
+												<!-- svelte-ignore a11y_no_static_element_interactions -->
 												<div
 													class="relative inline-block"
 													role="button"
 													tabindex="0"
-													on:mouseenter={(e) => mostrarPopoverConsecutivos(e, fac)}
-													on:mouseleave={ocultarPopoverConsecutivos}
-													on:focus={(e) => mostrarPopoverConsecutivos(e, fac)}
-													on:blur={ocultarPopoverConsecutivos}
+													onmouseenter={(e) => mostrarPopoverConsecutivos(e, fac)}
+													onmouseleave={ocultarPopoverConsecutivos}
+													onfocus={(e) => mostrarPopoverConsecutivos(e, fac)}
+													onblur={ocultarPopoverConsecutivos}
 												>
 													<span
 														class="status-pill apple-transition inline-flex cursor-pointer items-center gap-1 font-bold"
@@ -2937,7 +3008,7 @@
 												class="apple-transition rounded-lg p-1.5 transition-colors hover:bg-[rgba(249, 115, 22,0.08)]"
 												style="color: var(--text-muted);"
 												title="Ver detalle"
-												on:click={() => verDetalleFactura(fac.id)}
+												onclick={() => verDetalleFactura(fac.id)}
 											>
 												<Eye class="h-3.5 w-3.5" />
 											</button>
@@ -2945,7 +3016,7 @@
 												<button
 													class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
 													style="background: rgba(220,38,38,0.08); color: #B91C1C;"
-													on:click={() => abrirAnularFactura(fac)}>Anular</button
+													onclick={() => abrirAnularFactura(fac)}>Anular</button
 												>
 											{/if}
 											{#if fac.estado === 'ANULADA' && (isAdmin || isFacturacion)}
@@ -2953,7 +3024,7 @@
 													class="apple-transition rounded-lg p-1.5 transition-colors hover:bg-[rgba(220,38,38,0.08)]"
 													style="color: var(--text-muted);"
 													title="Eliminar"
-													on:click={() => abrirEliminarFactura(fac)}
+													onclick={() => abrirEliminarFactura(fac)}
 												>
 													<Trash2 class="h-3.5 w-3.5" />
 												</button>
@@ -2968,12 +3039,13 @@
 
 				<!-- Consecutivos popover (additional liquidaciones) -->
 				{#if popoverConsecutivosVisible}
+					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<div
 						role="tooltip"
 						class="fixed z-50 rounded-lg p-2.5"
 						style="top:{popoverConsecutivosPos.top}px;left:{popoverConsecutivosPos.left}px; min-width: 200px; max-width: 320px; max-height: 320px; overflow-y: auto; background: var(--bg-surface); border: 1px solid var(--border-default); box-shadow: var(--shadow-card-hover);"
-						on:mouseenter={mantenerPopoverConsecutivos}
-						on:mouseleave={ocultarPopoverConsecutivos}
+						onmouseenter={mantenerPopoverConsecutivos}
+						onmouseleave={ocultarPopoverConsecutivos}
 					>
 						<div class="mb-1.5 flex items-center justify-between px-1">
 							<p class="font-mono-meta text-[10px]" style="color: var(--text-very-muted);">
@@ -3009,7 +3081,7 @@
 					<div class="flex items-center gap-1">
 						<button
 							disabled={facturasPage <= 1}
-							on:click={() => irPaginaFacturas(facturasPage - 1)}
+							onclick={() => irPaginaFacturas(facturasPage - 1)}
 							aria-label="Página anterior"
 							class="apple-transition rounded-lg p-1.5 disabled:opacity-40"
 							style="color: var(--text-muted);"
@@ -3018,7 +3090,7 @@
 						</button>
 						{#each Array(Math.min(facturasTotalPages, 10)) as _, i}
 							<button
-								on:click={() => irPaginaFacturas(i + 1)}
+								onclick={() => irPaginaFacturas(i + 1)}
 								class="apple-transition font-mono-meta min-w-[32px] rounded-lg px-2.5 py-1 text-[11px] font-semibold"
 								style="background: {facturasPage === i + 1
 									? 'var(--orange-500)'
@@ -3033,7 +3105,7 @@
 							>{/if}
 						<button
 							disabled={facturasPage >= facturasTotalPages}
-							on:click={() => irPaginaFacturas(facturasPage + 1)}
+							onclick={() => irPaginaFacturas(facturasPage + 1)}
 							aria-label="Página siguiente"
 							class="apple-transition rounded-lg p-1.5 disabled:opacity-40"
 							style="color: var(--text-muted);"
@@ -3119,7 +3191,7 @@
 			<div class="filter-actions">
 				<button
 					class="filter-clear"
-					on:click={() => {
+					onclick={() => {
 						tercerosBusqueda = '';
 						tercerosPlaca = '';
 						tercerosMes = '';
@@ -3365,7 +3437,7 @@
 					<div class="flex items-center gap-1">
 						<button
 							disabled={tercerosPage <= 1}
-							on:click={() => irPaginaTerceros(tercerosPage - 1)}
+							onclick={() => irPaginaTerceros(tercerosPage - 1)}
 							aria-label="Página anterior"
 							class="apple-transition rounded-lg p-1.5 disabled:opacity-40"
 							style="color: var(--text-muted);"
@@ -3374,7 +3446,7 @@
 						</button>
 						{#each Array(Math.min(tercerosTotalPages, 10)) as _, i}
 							<button
-								on:click={() => irPaginaTerceros(i + 1)}
+								onclick={() => irPaginaTerceros(i + 1)}
 								class="apple-transition font-mono-meta min-w-[32px] rounded-lg px-2.5 py-1 text-[11px] font-semibold"
 								style="background: {tercerosPage === i + 1
 									? 'var(--orange-500)'
@@ -3389,7 +3461,7 @@
 							>{/if}
 						<button
 							disabled={tercerosPage >= tercerosTotalPages}
-							on:click={() => irPaginaTerceros(tercerosPage + 1)}
+							onclick={() => irPaginaTerceros(tercerosPage + 1)}
 							aria-label="Página siguiente"
 							class="apple-transition rounded-lg p-1.5 disabled:opacity-40"
 							style="color: var(--text-muted);"
@@ -3428,7 +3500,7 @@
 				<button
 					class="btn-secondary apple-transition"
 					style="padding: 0.45rem 0.9rem; font-size: 12px;"
-					on:click={() => (modalOperadoras = true)}
+					onclick={() => (modalOperadoras = true)}
 				>
 					Operadoras
 				</button>
@@ -3446,8 +3518,8 @@
 							id="cfg-salario-basico"
 							type="text"
 							value={fmtCOP(configForm.salario_basico)}
-							on:focus={handleCOPFocus}
-							on:blur={(e) => handleCOPBlur(e, 'salario_basico')}
+							onfocus={handleCOPFocus}
+							onblur={(e) => handleCOPBlur(e, 'salario_basico')}
 							inputmode="numeric"
 							placeholder="0"
 						/>
@@ -3468,8 +3540,8 @@
 							id="cfg-valor-hora"
 							type="text"
 							value={fmtCOP(configForm.valor_hora_override)}
-							on:focus={handleCOPFocus}
-							on:blur={(e) => handleCOPBlur(e, 'valor_hora_override')}
+							onfocus={handleCOPFocus}
+							onblur={(e) => handleCOPBlur(e, 'valor_hora_override')}
 							inputmode="numeric"
 							placeholder="0"
 						/>
@@ -3483,8 +3555,8 @@
 							id="cfg-conductor-adicional"
 							type="text"
 							value={fmtCOP(configForm.conductor_adicional)}
-							on:focus={handleCOPFocus}
-							on:blur={(e) => handleCOPBlur(e, 'conductor_adicional')}
+							onfocus={handleCOPFocus}
+							onblur={(e) => handleCOPBlur(e, 'conductor_adicional')}
 							inputmode="numeric"
 							placeholder="0"
 						/>
@@ -3525,8 +3597,8 @@
 							id="cfg-prueba-covid"
 							type="text"
 							value={fmtCOP(configForm.prueba_covid)}
-							on:focus={handleCOPFocus}
-							on:blur={(e) => handleCOPBlur(e, 'prueba_covid')}
+							onfocus={handleCOPFocus}
+							onblur={(e) => handleCOPBlur(e, 'prueba_covid')}
 							inputmode="numeric"
 							placeholder="0"
 						/>
@@ -3540,7 +3612,7 @@
 				>
 					<button
 						class="btn-primary apple-transition"
-						on:click={guardarConfig}
+						onclick={guardarConfig}
 						disabled={configSaving}
 					>
 						{#if configSaving}
@@ -3559,8 +3631,8 @@
 
 <!-- DETAIL MODAL -->
 {#if detailModal}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div class="modal-bg" on:click|self={cerrarDetalle}>
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+	<div class="modal-bg" onclick={(e) => { if (e.target === e.currentTarget) cerrarDetalle(); }}>
 		<div class="modal-box">
 			<div class="modal-hd">
 				<div class="flex items-center gap-2">
@@ -3574,7 +3646,7 @@
 						<button
 							class="btn-secondary apple-transition"
 							style="padding: 0.4rem 0.85rem; font-size: 11px;"
-							on:click={() => {
+							onclick={() => {
 								cerrarDetalle();
 								if (detailLiq) irEditarLiquidacion(detailLiq.id);
 							}}
@@ -3587,7 +3659,7 @@
 						<button
 							class="btn-primary apple-transition"
 							style="padding: 0.4rem 0.85rem; font-size: 11px;"
-							on:click={() => {
+							onclick={() => {
 								cerrarDetalle();
 								if (detailLiq) irVerLiquidacion(detailLiq.id);
 							}}
@@ -3596,7 +3668,7 @@
 							Ver
 						</button>
 					{/if}
-					<button class="btn-icon" on:click={cerrarDetalle}>
+					<button class="btn-icon" onclick={cerrarDetalle}>
 						<X class="h-3.5 w-3.5" />
 					</button>
 				</div>
@@ -3742,7 +3814,7 @@
 							<button
 								class="btn-primary apple-transition"
 								style="padding: 0.45rem 0.95rem; font-size: 12px;"
-								on:click={() => detailLiq && cambiarEstado(detailLiq.id, 'LIQUIDADA')}
+								onclick={() => detailLiq && cambiarEstado(detailLiq.id, 'LIQUIDADA')}
 							>
 								<CheckCircle2 class="h-3.5 w-3.5" />
 								Liquidar
@@ -3752,7 +3824,7 @@
 							<button
 								class="btn-primary apple-transition"
 								style="padding: 0.45rem 0.95rem; font-size: 12px;"
-								on:click={() => detailLiq && cambiarEstado(detailLiq.id, 'APROBADA')}
+								onclick={() => detailLiq && cambiarEstado(detailLiq.id, 'APROBADA')}
 							>
 								<CheckCircle2 class="h-3.5 w-3.5" />
 								Aprobar
@@ -3762,7 +3834,7 @@
 							<button
 								class="apple-transition"
 								style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.95rem; border-radius: 12px; background: rgba(220,38,38,0.08); color: #B91C1C; border: 1px solid rgba(220,38,38,0.20); font-size: 12px; font-weight: 600;"
-								on:click={() => detailLiq && abrirAnularModal(detailLiq.id)}
+								onclick={() => detailLiq && abrirAnularModal(detailLiq.id)}
 							>
 								<Ban class="h-3.5 w-3.5" />
 								Anular
@@ -3772,7 +3844,7 @@
 							<button
 								class="apple-transition"
 								style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.95rem; border-radius: 12px; background: rgba(245,158,11,0.10); color: #B45309; border: 1px solid rgba(245,158,11,0.20); font-size: 12px; font-weight: 600;"
-								on:click={() => detailLiq && cambiarEstado(detailLiq.id, 'BORRADOR')}
+								onclick={() => detailLiq && cambiarEstado(detailLiq.id, 'BORRADOR')}
 							>
 								<RotateCcw class="h-3.5 w-3.5" />
 								Revertir
@@ -3782,7 +3854,7 @@
 							<button
 								class="apple-transition"
 								style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.95rem; border-radius: 12px; background: rgba(245,158,11,0.10); color: #B45309; border: 1px solid rgba(245,158,11,0.20); font-size: 12px; font-weight: 600;"
-								on:click={() => detailLiq && cambiarEstado(detailLiq.id, 'BORRADOR')}
+								onclick={() => detailLiq && cambiarEstado(detailLiq.id, 'BORRADOR')}
 							>
 								<RotateCcw class="h-3.5 w-3.5" />
 								A Borrador
@@ -3792,7 +3864,7 @@
 							<button
 								class="apple-transition"
 								style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.95rem; border-radius: 12px; background: rgba(245,158,11,0.10); color: #B45309; border: 1px solid rgba(245,158,11,0.20); font-size: 12px; font-weight: 600;"
-								on:click={() => detailLiq && cambiarEstado(detailLiq.id, 'LIQUIDADA')}
+								onclick={() => detailLiq && cambiarEstado(detailLiq.id, 'LIQUIDADA')}
 							>
 								<RotateCcw class="h-3.5 w-3.5" />
 								A Liquidada
@@ -3807,10 +3879,11 @@
 
 <!-- MODAL: ELIMINAR LIQUIDACION -->
 {#if deleteModalOpen && deleteTargetLiq}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div
 		class="modal-bg"
-		on:click|self={() => {
+		onclick={(e) => {
+			if (e.target !== e.currentTarget) return;
 			deleteModalOpen = false;
 			deleteTargetLiq = null;
 		}}
@@ -3825,7 +3898,7 @@
 				</div>
 				<button
 					class="btn-icon"
-					on:click={() => {
+					onclick={() => {
 						deleteModalOpen = false;
 						deleteTargetLiq = null;
 					}}
@@ -3870,7 +3943,7 @@
 				<div class="flex justify-end gap-2">
 					<button
 						class="btn-secondary apple-transition"
-						on:click={() => {
+						onclick={() => {
 							deleteModalOpen = false;
 							deleteTargetLiq = null;
 						}}>Cancelar</button
@@ -3879,7 +3952,7 @@
 						class="apple-transition inline-flex items-center gap-1.5"
 						style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.55rem 1.1rem; border-radius: 12px; background: #DC2626; color: white; font-size: 0.85rem; font-weight: 600; box-shadow: 0 4px 16px rgba(220,38,38,0.30); border: none;"
 						disabled={deleting}
-						on:click={() => deleteTargetLiq && eliminarLiq(deleteTargetLiq.id)}
+						onclick={() => deleteTargetLiq && eliminarLiq(deleteTargetLiq.id)}
 					>
 						{#if deleting}
 							<div
@@ -3900,8 +3973,8 @@
 
 <!-- MODAL: ANULAR LIQUIDACION -->
 {#if anularModalOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div class="modal-bg" on:click|self={() => (anularModalOpen = false)}>
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+	<div class="modal-bg" onclick={(e) => { if (e.target === e.currentTarget) anularModalOpen = false; }}>
 		<div class="modal-box" style="max-width:480px">
 			<div class="modal-hd">
 				<div class="flex items-center gap-2">
@@ -3910,7 +3983,7 @@
 						Anular Liquidación
 					</h3>
 				</div>
-				<button class="btn-icon" on:click={() => (anularModalOpen = false)}>
+				<button class="btn-icon" onclick={() => (anularModalOpen = false)}>
 					<X class="h-3.5 w-3.5" />
 				</button>
 			</div>
@@ -3935,7 +4008,7 @@
 					style="border-color: var(--border-default); background: var(--bg-surface); resize: vertical; font-family: inherit;"
 				></textarea>
 				<div class="mt-4 flex justify-end gap-2">
-					<button class="btn-secondary apple-transition" on:click={() => (anularModalOpen = false)}
+					<button class="btn-secondary apple-transition" onclick={() => (anularModalOpen = false)}
 						>Cancelar</button
 					>
 					<button
@@ -3945,7 +4018,7 @@
 							? '0.5'
 							: '1'};"
 						disabled={!anularMotivo.trim() || estadoChanging}
-						on:click={confirmarAnulacion}
+						onclick={confirmarAnulacion}
 					>
 						{#if estadoChanging}
 							<div
@@ -3966,8 +4039,8 @@
 
 <!-- MODAL: DETALLE FACTURA -->
 {#if detalleFactura}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div class="modal-bg" on:click|self={() => (detalleFactura = null)}>
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+	<div class="modal-bg" onclick={(e) => { if (e.target === e.currentTarget) detalleFactura = null; }}>
 		<div class="modal-box factura-detail-modal" style="max-width:680px">
 			<!-- Header -->
 			<div class="modal-hd">
@@ -3983,7 +4056,7 @@
 						</h3>
 					</div>
 				</div>
-				<button class="btn-icon" on:click={() => (detalleFactura = null)} aria-label="Cerrar">
+				<button class="btn-icon" onclick={() => (detalleFactura = null)} aria-label="Cerrar">
 					<X class="h-3.5 w-3.5" />
 				</button>
 			</div>
@@ -4115,7 +4188,7 @@
 
 				<!-- Footer actions -->
 				<div class="mt-5 flex justify-end">
-					<button class="btn-secondary apple-transition" on:click={() => (detalleFactura = null)}
+					<button class="btn-secondary apple-transition" onclick={() => (detalleFactura = null)}
 						>Cerrar</button
 					>
 				</div>
@@ -4126,10 +4199,11 @@
 
 <!-- MODAL: ANULAR FACTURA -->
 {#if anularFacturaModalOpen && anularFacturaTarget}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div
 		class="modal-bg"
-		on:click|self={() => {
+		onclick={(e) => {
+			if (e.target !== e.currentTarget) return;
 			anularFacturaModalOpen = false;
 			anularFacturaTarget = null;
 		}}
@@ -4144,7 +4218,7 @@
 				</div>
 				<button
 					class="btn-icon"
-					on:click={() => {
+					onclick={() => {
 						anularFacturaModalOpen = false;
 						anularFacturaTarget = null;
 					}}
@@ -4187,7 +4261,7 @@
 				<div class="mt-4 flex justify-end gap-2">
 					<button
 						class="btn-secondary apple-transition"
-						on:click={() => {
+						onclick={() => {
 							anularFacturaModalOpen = false;
 							anularFacturaTarget = null;
 						}}>Cancelar</button
@@ -4199,7 +4273,7 @@
 							? '0.5'
 							: '1'};"
 						disabled={!anularFacturaMotivo.trim() || anulandoFactura}
-						on:click={confirmarAnularFactura}
+						onclick={confirmarAnularFactura}
 					>
 						{#if anulandoFactura}
 							<div
@@ -4220,10 +4294,11 @@
 
 <!-- MODAL: ELIMINAR FACTURA -->
 {#if eliminarFacturaModalOpen && eliminarFacturaTarget}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
 	<div
 		class="modal-bg"
-		on:click|self={() => {
+		onclick={(e) => {
+			if (e.target !== e.currentTarget) return;
 			eliminarFacturaModalOpen = false;
 			eliminarFacturaTarget = null;
 		}}
@@ -4238,7 +4313,7 @@
 				</div>
 				<button
 					class="btn-icon"
-					on:click={() => {
+					onclick={() => {
 						eliminarFacturaModalOpen = false;
 						eliminarFacturaTarget = null;
 					}}
@@ -4270,7 +4345,7 @@
 				<div class="flex justify-end gap-2">
 					<button
 						class="btn-secondary apple-transition"
-						on:click={() => {
+						onclick={() => {
 							eliminarFacturaModalOpen = false;
 							eliminarFacturaTarget = null;
 						}}>Cancelar</button
@@ -4281,7 +4356,7 @@
 							? '0.5'
 							: '1'};"
 						disabled={eliminandoFactura}
-						on:click={confirmarEliminarFactura}
+						onclick={confirmarEliminarFactura}
 					>
 						{#if eliminandoFactura}
 							<div
@@ -4312,7 +4387,7 @@
 
 <!-- MODAL: HISTORIAL DE MODIFICACIONES -->
 {#if historialModalOpen}
-	<div class="modal-bg" on:click|self={() => (historialModalOpen = false)}>
+	<div class="modal-bg" onclick={(e) => { if (e.target === e.currentTarget) historialModalOpen = false; }}>
 		<div class="modal-box" style="max-width:720px">
 			<div class="modal-hd">
 				<div class="flex items-center gap-2">
@@ -4323,7 +4398,7 @@
 						>
 					</h3>
 				</div>
-				<button class="btn-icon" on:click={() => (historialModalOpen = false)}>
+				<button class="btn-icon" onclick={() => (historialModalOpen = false)}>
 					<X class="h-3.5 w-3.5" />
 				</button>
 			</div>
@@ -4388,7 +4463,7 @@
 										<button
 											class="btn-ghost apple-transition"
 											style="font-size: 11px; margin-top: 0.35rem;"
-											on:click={() =>
+											onclick={() =>
 												(historialExpandedId = historialExpandedId === entry.id ? null : entry.id)}
 										>
 											{historialExpandedId === entry.id ? '▼ Ocultar snapshot' : '▶ Ver snapshot'}

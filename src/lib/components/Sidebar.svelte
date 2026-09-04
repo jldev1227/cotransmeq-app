@@ -214,7 +214,8 @@
 			label: 'Nómina',
 			icon: Wallet,
 			badge: null,
-			href: '/dashboard/nomina'
+			/// El módulo ya no tiene listado: su puerta es el canvas.
+			href: '/dashboard/nomina/canvas'
 		},
 		// {
 		// 	id: 'extractos',
@@ -259,11 +260,11 @@
 			href: '/dashboard/pesv'
 		},
 		{
-			id: 'contabilidad',
-			label: 'Contabilidad',
+			id: 'certificados',
+			label: 'Certificados',
 			icon: Calculator,
 			badge: null,
-			href: '/dashboard/contabilidad'
+			href: '/dashboard/certificados'
 		},
 		{
 			id: 'terceros',
@@ -353,7 +354,7 @@
 		if (pathname.startsWith('/dashboard/liquidaciones-terceros')) return 'liquidaciones-terceros';
 		if (pathname.startsWith('/dashboard/sarlaft')) return 'SARLAFT + PTEE';
 		if (pathname.startsWith('/dashboard/pesv')) return 'pesv';
-		if (pathname.startsWith('/dashboard/contabilidad')) return 'contabilidad';
+		if (pathname.startsWith('/dashboard/certificados')) return 'certificados';
 		if (pathname.startsWith('/dashboard/terceros')) return 'terceros';
 		if (pathname.startsWith('/dashboard/usuarios')) return 'usuarios';
 		if (pathname.startsWith('/dashboard/sesiones')) return 'usuarios';
@@ -415,8 +416,8 @@
 						{isCollapsed ? 'justify-center px-2' : 'px-3'}
 						{activeSection === item.id ? 'text-white' : 'hover:bg-white/5'}"
 					style="color: {activeSection === item.id ? '#ffffff' : 'rgba(240,237,230,0.65)'};
-						background-color: {activeSection === item.id ? 'rgba(16,185,129,0.18)' : 'transparent'};
-						border: 1px solid {activeSection === item.id ? 'rgba(16,185,129,0.35)' : 'transparent'};"
+						background-color: {activeSection === item.id ? 'rgba(249,115,22,0.18)' : 'transparent'};
+						border: 1px solid {activeSection === item.id ? 'rgba(249,115,22,0.35)' : 'transparent'};"
 					on:click={() => handleMenuClick(item)}
 					in:fly={{ x: -30, duration: 400, delay: index * 50 + 300 }}
 					title={isCollapsed ? item.label : undefined}
@@ -501,7 +502,7 @@
 				<div class="flex items-center space-x-3">
 					<div
 						class="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl"
-						style="box-shadow: 0 4px 16px rgba(16, 185, 129, 0.35); background-color: #0f172a;"
+						style="box-shadow: 0 4px 16px rgba(249, 115, 22, 0.35); background-color: #0f172a;"
 					>
 						<img
 							src="/favicon-32x32.png"
@@ -515,7 +516,7 @@
 						<h2 class="truncate font-display text-lg text-white" style="font-weight: 400;">
 							Cotransmeq
 						</h2>
-						<p class="text-xs" style="color: rgba(16,185,129,0.7);">Sistema de Gestión</p>
+						<p class="text-xs" style="color: rgba(249,115,22,0.7);">Sistema de Gestión</p>
 					</div>
 				</div>
 				<button
@@ -535,8 +536,8 @@
 					<button
 						class="apple-transition group relative flex w-full cursor-pointer items-center overflow-hidden rounded-xl px-3 py-2.5"
 						style="color: {activeSection === item.id ? '#ffffff' : 'rgba(240,237,230,0.65)'};
-							background-color: {activeSection === item.id ? 'rgba(16,185,129,0.18)' : 'transparent'};
-							border: 1px solid {activeSection === item.id ? 'rgba(16,185,129,0.35)' : 'transparent'};"
+							background-color: {activeSection === item.id ? 'rgba(249,115,22,0.18)' : 'transparent'};
+							border: 1px solid {activeSection === item.id ? 'rgba(249,115,22,0.35)' : 'transparent'};"
 						on:click={() => handleMenuClick(item)}
 					>
 						<SidebarIcon icon={item.icon} active={activeSection === item.id} />

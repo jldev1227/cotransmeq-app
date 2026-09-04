@@ -1,4 +1,15 @@
 <script lang="ts">
+	import { page } from '$app/state';
+	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+	import { crearEstadoUrl } from '$lib/listing/urlState';
+	import {
+		limpiar as limpiarFiltrosDe,
+		numero,
+		opcion,
+		texto,
+		type DefinicionesFiltros
+	} from '$lib/listing/filtros';
 	import { onMount, onDestroy } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { toast } from '$lib/stores/toast';
@@ -22,43 +33,81 @@
 	} from '$lib/types/actividadesPesv';
 
 	// ==================== STATE ====================
-	let loading = true;
-	let actividades: ActividadPesv[] = [];
-	let total = 0;
+	let loading = $state(true);
+	let actividades = $state<ActividadPesv[]>([]);
+	let total = $state(0);
 	let totalPages = 1;
-	let currentPage = 1;
-	let usuarios: Usuario[] = [];
-	let estadisticas: ActividadPesvEstadisticas | null = null;
+	let usuarios = $state<Usuario[]>([]);
+	let estadisticas = $state<ActividadPesvEstadisticas | null>(null);
 
 	// Vista
-	let vistaActiva: 'listado' | 'calendario' = 'listado';
+	let vistaActiva = $state<'listado' | 'calendario'>('listado');
 
 	// Filtros
-	let filtroAnio = new Date().getFullYear();
-	let filtroEstado = '';
-	let filtroPrioridad = '';
-	let filtroFrecuencia = '';
-	let filtroSearch = '';
-	let searchTimeout: ReturnType<typeof setTimeout>;
+	/**
+	 * Filtros en la URL.
+	 *
+	 * Cinco filtros que se perdían al recargar, incluido el AÑO — que en un
+	 * plan anual es el que más se comparte: «mira las actividades de 2025».
+	 */
+	interface FiltrosActividades {
+		anio: number;
+		estado: string;
+		prioridad: string;
+		frecuencia: string;
+		q: string;
+		pagina: number;
+	}
+
+	const ANIO_ACTUAL = new Date().getFullYear();
+
+	const DEFS: DefinicionesFiltros<FiltrosActividades> = {
+		anio: numero(ANIO_ACTUAL),
+		estado: opcion(''),
+		prioridad: opcion(''),
+		frecuencia: opcion(''),
+		q: texto(),
+		pagina: numero(1)
+	};
+
+	const estadoUrl = crearEstadoUrl(DEFS);
+	let filtros = $state<FiltrosActividades>(estadoUrl.leer(page.url));
+
+	$effect(() => {
+		estadoUrl.escribir(page.url, filtros);
+	});
+
+	$effect(() => {
+		void filtros;
+		cargarActividades();
+		cargarEstadisticas();
+	});
+
+	function ponerFiltro<K extends keyof FiltrosActividades>(
+		clave: K,
+		valor: FiltrosActividades[K]
+	) {
+		filtros = { ...filtros, [clave]: valor, pagina: 1 };
+	}
 
 	// Modal
-	let showModal = false;
-	let modalMode: 'crear' | 'editar' | 'ver' = 'crear';
+	let showModal = $state(false);
+	let modalMode = $state<'crear' | 'editar' | 'ver'>('crear');
 	let editingId: string | null = null;
-	let saving = false;
+	let saving = $state(false);
 
 	// Form
-	let form: ActividadPesvFormData = getEmptyForm();
+	let form = $state<ActividadPesvFormData>(getEmptyForm());
 
 	// Delete
-	let showDeleteModal = false;
+	let showDeleteModal = $state(false);
 	let deletingId: string | null = null;
-	let deletingName = '';
-	let deleting = false;
+	let deletingName = $state('');
+	let deleting = $state(false);
 
 	// Calendario
-	let calMes = new Date().getMonth();
-	let calAnio = new Date().getFullYear();
+	let calMes = $state(new Date().getMonth());
+	let calAnio = $state(new Date().getFullYear());
 
 	// Constants
 	const ESTADOS: { value: ActividadPesvEstado; label: string; color: string; bg: string }[] = [
@@ -132,13 +181,13 @@
 	async function cargarActividades() {
 		try {
 			const res = await listarActividadesPesv({
-				page: currentPage,
+				page: filtros.pagina,
 				limit: 50,
-				anio: filtroAnio || undefined,
-				estado: filtroEstado || undefined,
-				prioridad: filtroPrioridad || undefined,
-				frecuencia: filtroFrecuencia || undefined,
-				search: filtroSearch || undefined
+				anio: filtros.anio || undefined,
+				estado: filtros.estado || undefined,
+				prioridad: filtros.prioridad || undefined,
+				frecuencia: filtros.frecuencia || undefined,
+				search: filtros.q || undefined
 			});
 			actividades = res.actividades;
 			total = res.total;
@@ -159,37 +208,28 @@
 
 	async function cargarEstadisticas() {
 		try {
-			estadisticas = await obtenerEstadisticasPesv(filtroAnio || undefined);
+			estadisticas = await obtenerEstadisticasPesv(filtros.anio || undefined);
 		} catch (e) {
 			console.error(e);
 		}
 	}
 
 	// ==================== FILTERS ====================
+	/// Las recargas las dispara el efecto que observa `filtros`.
 	function aplicarFiltros() {
-		currentPage = 1;
-		cargarActividades();
-		cargarEstadisticas();
+		filtros = { ...filtros, pagina: 1 };
 	}
 
 	function limpiarFiltros() {
-		filtroAnio = new Date().getFullYear();
-		filtroEstado = '';
-		filtroPrioridad = '';
-		filtroFrecuencia = '';
-		filtroSearch = '';
-		aplicarFiltros();
+		filtros = limpiarFiltrosDe(DEFS, filtros);
 	}
 
-	function handleSearch() {
-		clearTimeout(searchTimeout);
-		searchTimeout = setTimeout(() => aplicarFiltros(), 400);
+	function handleSearch(termino: string) {
+		ponerFiltro('q', termino);
 	}
 
 	function cambiarPagina(p: number) {
-		if (p < 1 || p > totalPages) return;
-		currentPage = p;
-		cargarActividades();
+		filtros = { ...filtros, pagina: p };
 	}
 
 	// ==================== MODAL ====================
@@ -197,9 +237,9 @@
 		modalMode = 'crear';
 		form = getEmptyForm();
 		try {
-			form.numero = await obtenerSiguienteNumero(filtroAnio || undefined);
+			form.numero = await obtenerSiguienteNumero(filtros.anio || undefined);
 		} catch (e) { /* keep default */ }
-		form.anio = filtroAnio || new Date().getFullYear();
+		form.anio = filtros.anio || ANIO_ACTUAL;
 		editingId = null;
 		showModal = true;
 	}
@@ -304,7 +344,7 @@
 	}
 
 	// ==================== CALENDARIO ====================
-	$: calDays = getCalendarDays(calMes, calAnio);
+	const calDays = $derived(getCalendarDays(calMes, calAnio));
 
 	function getCalendarDays(mes: number, anio: number): (number | null)[] {
 		const firstDay = new Date(anio, mes, 1).getDay();
@@ -399,21 +439,21 @@
 		<div class="header-left">
 			<div>
 				<h1>📋 Actividades</h1>
-				<p class="subtitle">Plan Estratégico de Seguridad Vial — {filtroAnio}</p>
+				<p class="subtitle">Plan Estratégico de Seguridad Vial — {filtros.anio}</p>
 			</div>
 		</div>
 		<div class="header-actions">
 			<div class="vista-toggle">
-				<button class:active={vistaActiva === 'listado'} on:click={() => vistaActiva = 'listado'}>
+				<button class:active={vistaActiva === 'listado'} onclick={() => vistaActiva = 'listado'}>
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
 					Listado
 				</button>
-				<button class:active={vistaActiva === 'calendario'} on:click={() => vistaActiva = 'calendario'}>
+				<button class:active={vistaActiva === 'calendario'} onclick={() => vistaActiva = 'calendario'}>
 					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
 					Calendario
 				</button>
 			</div>
-			<button class="btn-primary" on:click={abrirCrear}>
+			<button class="btn-primary" onclick={abrirCrear}>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
 				Nueva Actividad
 			</button>
@@ -464,10 +504,22 @@
 	<!-- Filtros -->
 	<div class="filtros-bar" in:fly={{ y: 20, duration: 300, delay: 150 }}>
 		<div class="filtro-group">
-			<input type="number" bind:value={filtroAnio} placeholder="Año" min="2020" max="2030" class="input-sm" on:change={aplicarFiltros} />
+			<input
+				type="number"
+				value={filtros.anio}
+				onchange={(e) => ponerFiltro('anio', Number(e.currentTarget.value) || ANIO_ACTUAL)}
+				placeholder="Año"
+				min="2020"
+				max="2030"
+				class="input-sm"
+			/>
 		</div>
 		<div class="filtro-group">
-			<select bind:value={filtroEstado} class="input-sm" on:change={aplicarFiltros}>
+			<select
+				value={filtros.estado}
+				onchange={(e) => ponerFiltro('estado', e.currentTarget.value)}
+				class="input-sm"
+			>
 				<option value="">Todos los estados</option>
 				{#each ESTADOS as e}
 					<option value={e.value}>{e.label}</option>
@@ -475,7 +527,11 @@
 			</select>
 		</div>
 		<div class="filtro-group">
-			<select bind:value={filtroPrioridad} class="input-sm" on:change={aplicarFiltros}>
+			<select
+				value={filtros.prioridad}
+				onchange={(e) => ponerFiltro('prioridad', e.currentTarget.value)}
+				class="input-sm"
+			>
 				<option value="">Todas las prioridades</option>
 				{#each PRIORIDADES as p}
 					<option value={p.value}>{p.label}</option>
@@ -483,7 +539,11 @@
 			</select>
 		</div>
 		<div class="filtro-group">
-			<select bind:value={filtroFrecuencia} class="input-sm" on:change={aplicarFiltros}>
+			<select
+				value={filtros.frecuencia}
+				onchange={(e) => ponerFiltro('frecuencia', e.currentTarget.value)}
+				class="input-sm"
+			>
 				<option value="">Todas las frecuencias</option>
 				{#each FRECUENCIAS as f}
 					<option value={f.value}>{f.label}</option>
@@ -492,10 +552,15 @@
 		</div>
 		<div class="filtro-group search-group">
 			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.3-4.3"/></svg>
-			<input type="text" bind:value={filtroSearch} placeholder="Buscar actividad..." class="input-sm" on:input={handleSearch} />
+			<BuscadorLista
+				valor={filtros.q}
+				onBuscar={handleSearch}
+				placeholder="Buscar actividad…"
+				etiqueta="Buscar actividades PESV"
+			/>
 		</div>
-		{#if filtroEstado || filtroPrioridad || filtroFrecuencia || filtroSearch}
-			<button class="btn-clear" on:click={limpiarFiltros}>✕ Limpiar</button>
+		{#if filtros.estado || filtros.prioridad || filtros.frecuencia || filtros.q}
+			<button class="btn-clear" onclick={limpiarFiltros}>✕ Limpiar</button>
 		{/if}
 	</div>
 
@@ -512,7 +577,7 @@
 				<div class="empty-state">
 					<span class="empty-icon">📋</span>
 					<p>No se encontraron actividades</p>
-					<button class="btn-primary" on:click={abrirCrear}>Crear primera actividad</button>
+					<button class="btn-primary" onclick={abrirCrear}>Crear primera actividad</button>
 				</div>
 			{:else}
 				<div class="table-scroll">
@@ -547,9 +612,9 @@
 									<td class="text-sm">{formatDate(act.fecha_limite)}</td>
 									<td>
 										<div class="action-buttons">
-											<button class="btn-icon" title="Ver" on:click={() => abrirVer(act)}>👁️</button>
-											<button class="btn-icon" title="Editar" on:click={() => abrirEditar(act)}>✏️</button>
-											<button class="btn-icon delete" title="Eliminar" on:click={() => confirmarEliminar(act)}>🗑️</button>
+											<button class="btn-icon" title="Ver" onclick={() => abrirVer(act)}>👁️</button>
+											<button class="btn-icon" title="Editar" onclick={() => abrirEditar(act)}>✏️</button>
+											<button class="btn-icon delete" title="Eliminar" onclick={() => confirmarEliminar(act)}>🗑️</button>
 										</div>
 									</td>
 								</tr>
@@ -558,19 +623,17 @@
 					</table>
 				</div>
 
-				<!-- Paginación -->
-				{#if totalPages > 1}
-					<div class="pagination">
-						<span class="pagination-info">Mostrando {actividades.length} de {total}</span>
-						<div class="pagination-controls">
-							<button disabled={currentPage === 1} on:click={() => cambiarPagina(currentPage - 1)}>←</button>
-							{#each Array.from({ length: totalPages }, (_, i) => i + 1) as p}
-								<button class:active={p === currentPage} on:click={() => cambiarPagina(p)}>{p}</button>
-							{/each}
-							<button disabled={currentPage === totalPages} on:click={() => cambiarPagina(currentPage + 1)}>→</button>
-						</div>
-					</div>
-				{/if}
+				<!-- Paginación: el bloque manual lo reemplaza el componente
+				     compartido, que además acota la ventana de páginas —el de
+				     aquí pintaba un botón por página, sin límite. -->
+				<PaginadorLista
+					pagina={filtros.pagina}
+					{total}
+					porPagina={20}
+					cargando={loading}
+					nombreItems="actividades"
+					onCambiar={cambiarPagina}
+				/>
 			{/if}
 		</div>
 
@@ -578,10 +641,10 @@
 		<!-- CALENDARIO -->
 		<div class="calendar-container" in:fade={{ duration: 200 }}>
 			<div class="calendar-header">
-				<button class="btn-cal-nav" on:click={prevMonth}>←</button>
+				<button class="btn-cal-nav" onclick={prevMonth}>←</button>
 				<h2>{MESES[calMes]} {calAnio}</h2>
-				<button class="btn-cal-nav" on:click={nextMonth}>→</button>
-				<button class="btn-cal-today" on:click={irHoy}>Hoy</button>
+				<button class="btn-cal-nav" onclick={nextMonth}>→</button>
+				<button class="btn-cal-today" onclick={irHoy}>Hoy</button>
 			</div>
 			<div class="calendar-grid">
 				<div class="cal-day-header">Dom</div>
@@ -601,7 +664,7 @@
 								<button
 									class="cal-event {getEstadoInfo(act.estado).bg}"
 									title="{act.actividad} — {getEstadoInfo(act.estado).label}"
-									on:click={() => abrirVer(act)}
+									onclick={() => abrirVer(act)}
 								>
 									{act.actividad.substring(0, 18)}{act.actividad.length > 18 ? '…' : ''}
 								</button>
@@ -620,11 +683,11 @@
 <!-- ==================== MODAL CREAR/EDITAR ==================== -->
 {#if showModal}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="modal-overlay" role="dialog" tabindex="-1" on:click|self={() => showModal = false} on:keydown={e => e.key === 'Escape' && (showModal = false)} transition:fade={{ duration: 200 }}>
+	<div class="modal-overlay" role="dialog" tabindex="-1" onclick={(e) => { if (e.target === e.currentTarget) showModal = false; }} onkeydown={e => e.key === 'Escape' && (showModal = false)} transition:fade={{ duration: 200 }}>
 		<div class="modal-content modal-xl" in:fly={{ y: 30, duration: 300 }}>
 			<div class="modal-header">
 				<h2>{modalMode === 'crear' ? '➕ Nueva Actividad' : modalMode === 'editar' ? '✏️ Editar Actividad' : '👁️ Detalle Actividad'}</h2>
-				<button class="btn-close" on:click={() => showModal = false}>✕</button>
+				<button class="btn-close" onclick={() => showModal = false}>✕</button>
 			</div>
 
 		<div class="modal-body">
@@ -737,9 +800,9 @@
 
 		<div class="modal-footer">
 			{#if modalMode === 'ver'}
-				<button class="btn-secondary" on:click={() => { modalMode = 'editar' }}>✏️ Editar</button>
+				<button class="btn-secondary" onclick={() => { modalMode = 'editar' }}>✏️ Editar</button>
 			{:else}
-				<button class="btn-primary" on:click={guardar} disabled={saving}>
+				<button class="btn-primary" onclick={guardar} disabled={saving}>
 					{#if saving}
 						<div class="spinner-sm"></div> Guardando...
 					{:else}
@@ -755,11 +818,11 @@
 <!-- ==================== MODAL DELETE ==================== -->
 {#if showDeleteModal}
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div class="modal-overlay" role="dialog" tabindex="-1" on:click|self={() => showDeleteModal = false} on:keydown={e => e.key === 'Escape' && (showDeleteModal = false)} transition:fade={{ duration: 150 }}>
+	<div class="modal-overlay" role="dialog" tabindex="-1" onclick={(e) => { if (e.target === e.currentTarget) showDeleteModal = false; }} onkeydown={e => e.key === 'Escape' && (showDeleteModal = false)} transition:fade={{ duration: 150 }}>
 		<div class="modal-content modal-sm" in:fly={{ y: 20, duration: 200 }}>
 			<div class="modal-header delete-header">
 				<h2>🗑️ Eliminar Actividad</h2>
-				<button class="btn-close" on:click={() => showDeleteModal = false}>✕</button>
+				<button class="btn-close" onclick={() => showDeleteModal = false}>✕</button>
 			</div>
 			<div class="modal-body text-center">
 				<p class="text-gray-700">¿Estás seguro de eliminar la actividad:</p>
@@ -767,8 +830,8 @@
 				<p class="text-sm text-gray-500 mt-2">Esta acción no se puede deshacer.</p>
 			</div>
 			<div class="modal-footer justify-center gap-3">
-				<button class="btn-secondary" on:click={() => showDeleteModal = false}>Cancelar</button>
-				<button class="btn-danger" on:click={ejecutarEliminar} disabled={deleting}>
+				<button class="btn-secondary" onclick={() => showDeleteModal = false}>Cancelar</button>
+				<button class="btn-danger" onclick={ejecutarEliminar} disabled={deleting}>
 					{#if deleting}
 						Eliminando...
 					{:else}

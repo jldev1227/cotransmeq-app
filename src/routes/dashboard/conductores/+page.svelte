@@ -3,13 +3,26 @@
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
 	import { fly, fade, scale } from 'svelte/transition';
-	import { page } from '$app/stores';
+	import { page as pageState } from '$app/state';
 	import { conductoresAPI } from '$lib/api/apiClient';
 	import { socketUtils } from '$lib/socket';
 	import { authStore } from '$lib/stores/auth';
 	import { toast } from 'svelte-sonner';
 	import TablaDiasLaborados from '$lib/components/conductores/TablaDiasLaborados.svelte';
 	import FilterDrawer from '$lib/components/ui/FilterDrawer.svelte';
+	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+	import { crearListingStore } from '$lib/listing/listingStore';
+	import { crearEstadoUrl } from '$lib/listing/urlState';
+	import {
+		contarActivos,
+		firma,
+		limpiar as limpiarFiltrosDe,
+		numero,
+		opcion,
+		texto,
+		type DefinicionesFiltros
+	} from '$lib/listing/filtros';
 
 	type VistaActual = 'ACTIVOS' | 'OCULTOS' | 'PAPELERA';
 	type EstadoConductor =
@@ -41,24 +54,56 @@
 		oculto?: boolean;
 	}
 
-	let vistaActual: VistaActual = 'ACTIVOS';
 	type VistaTab = 'lista' | 'calendario';
-	let vistaTab: VistaTab = 'lista';
-	let conductores: Conductor[] = [];
-	let isLoading = true;
-	let error: string | null = null;
-	let searchTerm = '';
-	let filtroEstado: EstadoConductor = 'TODOS';
-	let filtroSede: 'TODOS' | 'YOPAL' | 'VILLANUEVA' = 'TODOS';
-	let searchTimeout: ReturnType<typeof setTimeout> | null = null;
-	let mostrarFiltros = false;
 
-	$: isAdmin = $authStore.user?.role === 'admin' || $authStore.user?.rol === 'admin';
-	$: isOperaciones = $authStore.user?.area?.includes('operaciones');
-	$: isTalentoHumano = $authStore.user?.area?.includes('talento_humano');
-	$: canAccessSpecialViews = isAdmin || isOperaciones || isTalentoHumano;
+	/**
+	 * Filtros de la página.
+	 *
+	 * Los nombres de los parámetros son los que esta página ya usaba —`vista`,
+	 * `q`, `estado`, `sede`, `vista_lista`— para no romper los enlaces que la
+	 * gente tenga guardados. `pagina` es nuevo: antes no viajaba en la URL, así
+	 * que compartir una vista siempre devolvía a la primera página.
+	 */
+	interface FiltrosConductores {
+		/** Pestaña: `lista` | `calendario`. */
+		vista: string;
+		q: string;
+		estado: string;
+		sede: string;
+		/** `ACTIVOS` | `OCULTOS` | `PAPELERA`. */
+		vista_lista: string;
+		pagina: number;
+	}
+
+	const POR_PAGINA = 20;
+
+	const DEFS: DefinicionesFiltros<FiltrosConductores> = {
+		vista: opcion('lista'),
+		q: texto(),
+		estado: opcion('TODOS'),
+		sede: opcion('TODOS'),
+		vista_lista: opcion('ACTIVOS'),
+		pagina: numero(1)
+	};
+
+	const estadoUrl = crearEstadoUrl(DEFS);
+	const listaConductores = crearListingStore<Conductor>();
+
+	let filtros = $state<FiltrosConductores>(estadoUrl.leer(pageState.url));
+	let mostrarFiltros = $state(false);
+
+	/// Atajos de lectura, para no cambiar todo el marcado de golpe.
+	const vistaActual = $derived(filtros.vista_lista as VistaActual);
+	const vistaTab = $derived(filtros.vista as VistaTab);
+
+	const isAdmin = $derived(
+		$authStore.user?.role === 'admin' || $authStore.user?.rol === 'admin'
+	);
+	const isOperaciones = $derived($authStore.user?.area?.includes('operaciones'));
+	const isTalentoHumano = $derived($authStore.user?.area?.includes('talento_humano'));
+	const canAccessSpecialViews = $derived(isAdmin || isOperaciones || isTalentoHumano);
 	// Permiso individual para gestionar bonos de planilla (no por área)
-	$: canManageBonos = $authStore.user?.permisos?.['bonos-planilla'] === true;
+	const canManageBonos = $derived($authStore.user?.permisos?.['bonos-planilla'] === true);
 
 	// ══════════════════════════════════════════════════════
 	//  URL PARAMS: sincroniza el estado del page con la URL
@@ -73,77 +118,29 @@
 	//    ?conductor=<id>   → cuando se navega desde un conductor
 	//                        específico al tab de recorridos
 	// ══════════════════════════════════════════════════════
-	function readUrlParams() {
-		if (!browser) return;
-		const url = $page.url;
-		const p = url.searchParams;
-
-		const vistaParam = p.get('vista');
-		if (vistaParam === 'lista' || vistaParam === 'calendario') vistaTab = vistaParam;
-
-		const qParam = p.get('q');
-		if (qParam !== null) searchTerm = qParam;
-
-		const estadoParam = p.get('estado');
-		if (
-			estadoParam === 'TODOS' ||
-			estadoParam === 'ACTIVO' ||
-			estadoParam === 'INACTIVO' ||
-			estadoParam === 'VACACIONES' ||
-			estadoParam === 'INCAPACITADO' ||
-			estadoParam === 'RETIRADO'
-		) {
-			filtroEstado = estadoParam;
-		}
-
-		const sedeParam = p.get('sede');
-		if (sedeParam === 'TODOS' || sedeParam === 'YOPAL' || sedeParam === 'VILLANUEVA') {
-			filtroSede = sedeParam;
-		}
-
-		const vistaLista = p.get('vista_lista');
-		if (vistaLista === 'ACTIVOS' || vistaLista === 'OCULTOS' || vistaLista === 'PAPELERA') {
-			vistaActual = vistaLista;
-		}
-	}
-
-	function syncUrlParams() {
-		if (!browser) return;
-		const p = new URLSearchParams();
-		if (vistaTab !== 'lista') p.set('vista', vistaTab);
-		if (searchTerm.trim()) p.set('q', searchTerm.trim());
-		if (filtroEstado !== 'TODOS') p.set('estado', filtroEstado);
-		if (filtroSede !== 'TODOS') p.set('sede', filtroSede);
-		if (vistaActual !== 'ACTIVOS') p.set('vista_lista', vistaActual);
-
-		const qs = p.toString();
-		const newUrl = qs ? `${$page.url.pathname}?${qs}` : $page.url.pathname;
-		// Usar replaceState para no llenar el history con cada keystroke
-		try {
-			window.history.replaceState(window.history.state, '', newUrl);
-		} catch {
-			// Fallback silencioso
-		}
-	}
-
-	// Lee los params una sola vez al montar
-	let urlParamsRead = false;
-	onMount(() => {
-		readUrlParams();
-		urlParamsRead = true;
+	/**
+	 * Filtros → URL.
+	 *
+	 * Aquí había un `readUrlParams()`/`syncUrlParams()` escritos a mano que
+	 * escribían con `window.history.replaceState`. Eso cambia la barra de
+	 * direcciones pero NO el store `page` de SvelteKit, así que `$page.url` se
+	 * quedaba siempre con la URL de carga — y `cambiarVista()` decidía si
+	 * conservar los filtros consultando esa URL obsoleta.
+	 */
+	$effect(() => {
+		estadoUrl.escribir(pageState.url, filtros);
 	});
 
-	// Sincroniza la URL cuando cambian los filtros (sin disparar recarga)
-	$: if (browser && urlParamsRead) syncUrlParams();
-
 	// Leer conductor_id del URL para pasarlo a TablaDiasLaborados
-	$: urlConductorId = $page.url.searchParams.get('conductor') || '';
+	/// Parámetro ajeno a los filtros: lo pone quien abre el detalle de un
+	/// conductor. El núcleo lo conserva al reescribir la URL.
+	const urlConductorId = $derived(pageState.url.searchParams.get('conductor') || '');
 
 	// Estados para modo selección
-	let conductoresSeleccionados = new Set<string>();
+	let conductoresSeleccionados = $state(new Set<string>());
 	let ultimoSeleccionadoIndex: number | null = null;
-	let shiftPressed = false;
-	let procesandoMasivo = false;
+	let shiftPressed = $state(false);
+	let procesandoMasivo = $state(false);
 
 	// Modal de eliminación permanente con preview de relaciones
 	interface RelacionConductor {
@@ -162,14 +159,19 @@
 		conductor: { id: string; nombre: string; identificacion: string; en_papelera: boolean } | null;
 		error: string;
 	}
-	let modalEliminar: ModalEliminar | null = null;
-	let confirmacionTexto = '';
+	let modalEliminar = $state<ModalEliminar | null>(null);
+	let confirmacionTexto = $state('');
 
-	$: totalRelaciones = modalEliminar?.relaciones?.reduce((s, r) => s + r.cantidad, 0) ?? 0;
-	$: relacionesBloqueantes =
-		modalEliminar?.relaciones?.filter((r) => r.bloquea && r.cantidad > 0) ?? [];
-	$: relacionesInfo = modalEliminar?.relaciones?.filter((r) => r.cantidad > 0 && !r.bloquea) ?? [];
-	$: confirmacionValida = confirmacionTexto.trim().toUpperCase() === 'ELIMINAR';
+	const totalRelaciones = $derived(
+		modalEliminar?.relaciones?.reduce((s, r) => s + r.cantidad, 0) ?? 0
+	);
+	const relacionesBloqueantes = $derived(
+		modalEliminar?.relaciones?.filter((r) => r.bloquea && r.cantidad > 0) ?? []
+	);
+	const relacionesInfo = $derived(
+		modalEliminar?.relaciones?.filter((r) => r.cantidad > 0 && !r.bloquea) ?? []
+	);
+	const confirmacionValida = $derived(confirmacionTexto.trim().toUpperCase() === 'ELIMINAR');
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (e.key === 'Shift') shiftPressed = true;
@@ -179,21 +181,19 @@
 		if (e.key === 'Shift') shiftPressed = false;
 	}
 
-	let pagination = {
-		page: 1,
-		limit: 20,
-		pages: 1,
-		total: 0
-	};
+	const conductores = $derived($listaConductores._?.items ?? []);
+	const isLoading = $derived($listaConductores._?.cargando ?? false);
+	const error = $derived($listaConductores._?.error || null);
+	const totalConductores = $derived($listaConductores._?.total ?? 0);
 
-	let stats = {
+	let stats = $state({
 		total: 0,
 		activos: 0,
 		inactivos: 0,
 		vacaciones: 0,
 		incapacitados: 0,
 		retirados: 0
-	};
+	});
 
 	const formatDate = (dateStr?: string | null) => {
 		if (!dateStr) return '—';
@@ -214,35 +214,31 @@
 		INCAPACITADO: 'Incapacitado',
 		RETIRADO: 'Retirado'
 	};
-	$: activeFilters = [
-		...(filtroEstado !== 'TODOS'
+	const activeFilters = $derived([
+		...(filtros.estado !== 'TODOS'
 			? [
 					{
 						key: 'estado',
 						label: 'Estado',
-						value: ESTADO_FILTER_LABELS[filtroEstado] ?? filtroEstado
+						value: ESTADO_FILTER_LABELS[filtros.estado] ?? filtros.estado
 					}
 				]
 			: []),
-		...(filtroSede !== 'TODOS' ? [{ key: 'sede', label: 'Sede', value: filtroSede }] : []),
-		...(searchTerm.trim()
-			? [{ key: 'search', label: 'Búsqueda', value: `"${searchTerm.trim()}"` }]
-			: [])
-	];
+		...(filtros.sede !== 'TODOS' ? [{ key: 'sede', label: 'Sede', value: filtros.sede }] : []),
+		...(filtros.q.trim() ? [{ key: 'q', label: 'Búsqueda', value: `"${filtros.q.trim()}"` }] : [])
+	]);
+
+	/// El contador del panel ignora la búsqueda, la pestaña y la página: no son
+	/// «filtros» a ojos de quien abre el panel.
+	const numFiltrosActivos = $derived(
+		contarActivos(DEFS, filtros, ['q', 'pagina', 'vista', 'vista_lista'])
+	);
 
 	function clearFilter(key: string) {
-		if (key === 'estado') {
-			filtroEstado = 'TODOS';
-			loadConductores();
-		}
-		if (key === 'sede') {
-			filtroSede = 'TODOS';
-			loadConductores();
-		}
-		if (key === 'search') {
-			searchTerm = '';
-			loadConductores();
-		}
+		ponerFiltro(
+			key as keyof FiltrosConductores,
+			DEFS[key as keyof FiltrosConductores].porDefecto as never
+		);
 	}
 
 	const getEstadoColor = (estado: string) => {
@@ -279,45 +275,39 @@
 		}
 	};
 
-	async function loadConductores(forceRefresh = false) {
-		isLoading = true;
-		error = null;
-		if (forceRefresh) {
-			conductoresSeleccionados.clear();
-			conductoresSeleccionados = conductoresSeleccionados;
+	async function traerConductores(): Promise<{ items: Conductor[]; total: number }> {
+		const params = {
+			page: filtros.pagina,
+			limit: POR_PAGINA,
+			search: filtros.q,
+			estado: filtros.estado !== 'TODOS' ? filtros.estado : undefined,
+			sede_trabajo: filtros.sede !== 'TODOS' ? filtros.sede : undefined
+		};
+
+		const response =
+			filtros.vista_lista === 'OCULTOS'
+				? await conductoresAPI.getOcultos(params)
+				: filtros.vista_lista === 'PAPELERA'
+					? await conductoresAPI.getPapelera(params)
+					: await conductoresAPI.getAll(params);
+
+		if (!response?.data?.success) {
+			throw new Error('Error en el formato de respuesta del servidor');
 		}
 
-		try {
-			let response;
-			const params = {
-				page: pagination.page,
-				limit: pagination.limit,
-				search: searchTerm,
-				estado: filtroEstado !== 'TODOS' ? filtroEstado : undefined,
-				sede_trabajo: filtroSede !== 'TODOS' ? filtroSede : undefined
-			};
+		const items: Conductor[] = response.data.data || response.data.conductores || [];
+		const total = response.data.pagination?.total ?? items.length;
 
-			if (vistaActual === 'ACTIVOS') {
-				response = await conductoresAPI.getAll(params);
-			} else if (vistaActual === 'OCULTOS') {
-				response = await conductoresAPI.getOcultos(params);
-			} else if (vistaActual === 'PAPELERA') {
-				response = await conductoresAPI.getPapelera(params);
-			}
-
-			if (response?.data?.success) {
-				conductores = response.data.data || response.data.conductores || [];
-				pagination.total = response.data.pagination?.total || conductores.length;
-				pagination.pages = response.data.pagination?.totalPages || 1;
-
-				// Actualizar stats (esto debería venir del backend idealmente, pero calculamos local para consistencia UI)
-				if (
-					vistaActual === 'ACTIVOS' &&
-					!searchTerm &&
-					filtroEstado === 'TODOS' &&
-					filtroSede === 'TODOS'
-				) {
-					stats.total = pagination.total;
+		/// Las tarjetas de resumen solo se recalculan en la vista sin filtrar:
+		/// con un filtro puesto contarían lo devuelto, no la plantilla real.
+		if (
+			filtros.vista_lista === 'ACTIVOS' &&
+			!filtros.q &&
+			filtros.estado === 'TODOS' &&
+			filtros.sede === 'TODOS'
+		) {
+			const conductores = items;
+			stats.total = total;
 					stats.activos = conductores.filter((c) => c.estado?.toUpperCase() === 'ACTIVO').length;
 					stats.inactivos = conductores.filter(
 						(c) => c.estado?.toUpperCase() === 'INACTIVO'
@@ -328,42 +318,45 @@
 					stats.incapacitados = conductores.filter(
 						(c) => c.estado?.toUpperCase() === 'INCAPACITADO'
 					).length;
-					stats.retirados = conductores.filter(
-						(c) => c.estado?.toUpperCase() === 'RETIRADO'
-					).length;
-				}
-			} else {
-				throw new Error('Error en el formato de respuesta del servidor');
-			}
-		} catch (err: any) {
-			console.error('Error cargando conductores:', err);
-			error = err.message || 'Error al cargar conductores';
-			if (error) toast.error(error);
-		} finally {
-			isLoading = false;
+			stats.retirados = conductores.filter(
+				(c) => c.estado?.toUpperCase() === 'RETIRADO'
+			).length;
 		}
+
+		return { items, total };
 	}
 
-	const handleSearch = () => {
-		if (searchTimeout) clearTimeout(searchTimeout);
-		// Sync URL inmediatamente para que la búsqueda sea compartible
-		syncUrlParams();
-		searchTimeout = setTimeout(() => {
-			pagination.page = 1;
-			loadConductores();
-		}, 400);
-	};
+	/// Todos los filtros entran en la firma: el listado es de servidor, así que
+	/// cualquiera de ellos cambia lo que se pide.
+	const firmaDatos = $derived(firma(DEFS, filtros));
 
+	async function cargar(forzar = false) {
+		if (forzar) {
+			listaConductores.invalidar();
+			conductoresSeleccionados = new Set();
+		}
+		await listaConductores.cargar(firmaDatos, traerConductores);
+	}
+
+	function ponerFiltro<K extends keyof FiltrosConductores>(
+		clave: K,
+		valor: FiltrosConductores[K]
+	) {
+		filtros = { ...filtros, [clave]: valor, pagina: 1 };
+	}
+
+	/**
+	 * Cambia entre activos, ocultos y papelera.
+	 *
+	 * Los demás filtros se CONSERVAN. Antes se reseteaban salvo que vinieran en
+	 * la URL, pero esa comprobación miraba `$page.url`, que nunca reflejaba lo
+	 * escrito con `history.replaceState`: en la práctica siempre leía la URL de
+	 * carga. Conservarlos es además lo menos sorprendente — si estoy buscando
+	 * «juan» y voy a papelera, quiero los «juan» de papelera.
+	 */
 	function cambiarVista(nuevaVista: VistaActual) {
-		if (vistaActual === nuevaVista) return;
-		vistaActual = nuevaVista;
-		pagination.page = 1;
-		// Solo resetea los filtros cuando se cambia desde la UI; respeta los
-		// que vinieron del URL
-		if (!browser || !$page.url.searchParams.has('q')) searchTerm = '';
-		if (!browser || !$page.url.searchParams.has('estado')) filtroEstado = 'TODOS';
-		if (!browser || !$page.url.searchParams.has('sede')) filtroSede = 'TODOS';
-		loadConductores(true);
+		if (filtros.vista_lista === nuevaVista) return;
+		ponerFiltro('vista_lista', nuevaVista);
 	}
 
 	function toggleSeleccion(id: string, index: number, event: MouseEvent | TouchEvent | any) {
@@ -409,7 +402,7 @@
 			const response = await conductoresAPI.masivo(ids, accion);
 			if (response.data.success) {
 				toast.success(response.data.message);
-				loadConductores(true);
+				cargar(true);
 			}
 		} catch (err: any) {
 			toast.error('Error al ejecutar acción masiva');
@@ -442,7 +435,7 @@
 			await conductoresAPI.eliminarPermanente(modalEliminar.id, forzar);
 			toast.success('Conductor eliminado permanentemente');
 			cerrarModalEliminar();
-			loadConductores(true);
+			cargar(true);
 		} catch (err: any) {
 			modalEliminar.procesando = false;
 			modalEliminar.error = err.response?.data?.message || 'Error al eliminar permanentemente';
@@ -454,25 +447,31 @@
 		confirmacionTexto = '';
 	}
 
-	async function irPagina(pagina: number) {
-		if (pagina >= 1 && pagina <= pagination.pages) {
-			pagination.page = pagina;
-			await loadConductores();
-		}
+	function irPagina(pagina: number) {
+		filtros = { ...filtros, pagina };
 	}
 
 	function limpiarFiltros() {
-		searchTerm = '';
-		filtroEstado = 'TODOS';
-		filtroSede = 'TODOS';
-		pagination.page = 1;
-		loadConductores(true);
+		/// Se conservan la pestaña y la vista: limpiar filtros no debería
+		/// sacarte del calendario ni de la papelera.
+		filtros = limpiarFiltrosDe(DEFS, filtros, ['vista', 'vista_lista']);
 	}
+
+	/**
+	 * Corrige una página que se quedó fuera de rango, por ejemplo al abrir un
+	 * enlace guardado cuyo filtro ahora devuelve menos resultados.
+	 */
+	$effect(() => {
+		const ultima = Math.max(1, Math.ceil(totalConductores / POR_PAGINA));
+		if (!isLoading && totalConductores > 0 && filtros.pagina > ultima) {
+			filtros = { ...filtros, pagina: ultima };
+		}
+	});
 
 	// ═══════════════════════════════
 	// SOCKET: refrescar calendario y tabla en tiempo real
 	// ═══════════════════════════════
-	let tablaRefreshKey = 0;
+	let tablaRefreshKey = $state(0);
 	let calendarRefreshKey = 0;
 
 	function notificarWeb(titulo: string, cuerpo: string, tag = 'dias-laborados') {
@@ -519,16 +518,22 @@
 
 		// Si el registro es del mes actual de la tabla, recargar
 		if (vistaTab === 'lista') {
-			loadConductores(true);
+			cargar(true);
 		}
 	}
 
 
 
+	let bajasSocket: Array<() => void> = [];
+
+	$effect(() => {
+		void firmaDatos;
+		void cargar();
+	});
+
 	onMount(() => {
-		loadConductores();
-		socketUtils.on('conductores:actualizacion-masiva', () => loadConductores(true));
-		socketUtils.on('dias-laborados:registro-actualizado', handleRegistroActualizado);
+		bajasSocket.push(socketUtils.on('conductores:actualizacion-masiva', () => cargar(true)));
+		bajasSocket.push(socketUtils.on('dias-laborados:registro-actualizado', handleRegistroActualizado));
 
 		// Pedir permiso para notificaciones web (silencioso, no molesta)
 		if (browser && typeof Notification !== 'undefined' && Notification.permission === 'default') {
@@ -537,8 +542,12 @@
 	});
 
 	onDestroy(() => {
-		socketUtils.off('conductores:actualizacion-masiva');
-		socketUtils.off('dias-laborados:registro-actualizado');
+		/// Se dan de baja solo NUESTROS listeners. El `off('evento')` que había
+		/// aquí se llevaba por delante el de `dias-laborados:registro-actualizado`
+		/// de TablaDiasLaborados.svelte, que dejaba de actualizarse al salir de
+		/// esta página sin que nada lo avisara.
+		for (const baja of bajasSocket) baja();
+		bajasSocket = [];
 	});
 </script>
 
@@ -601,7 +610,7 @@
 					role="tablist"
 				>
 					<button
-						on:click={() => (vistaTab = 'lista')}
+						onclick={() => ponerFiltro('vista', 'lista')}
 						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold"
 						style="background-color: {vistaTab === 'lista' ? 'white' : 'transparent'};
 							color: {vistaTab === 'lista' ? 'var(--emerald-700)' : 'var(--text-secondary)'};
@@ -625,7 +634,7 @@
 						Lista
 					</button>
 					<button
-						on:click={() => (vistaTab = 'calendario')}
+						onclick={() => ponerFiltro('vista', 'calendario')}
 						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold"
 						style="background-color: {vistaTab === 'calendario' ? 'white' : 'transparent'};
 							color: {vistaTab === 'calendario' ? 'var(--emerald-700)' : 'var(--text-secondary)'};
@@ -654,7 +663,7 @@
 				{#if canAccessSpecialViews}
 					<div class="mr-1 flex items-center gap-1">
 						<button
-							on:click={() => cambiarVista(vistaActual === 'OCULTOS' ? 'ACTIVOS' : 'OCULTOS')}
+							onclick={() => cambiarVista(vistaActual === 'OCULTOS' ? 'ACTIVOS' : 'OCULTOS')}
 							title={vistaActual === 'OCULTOS' ? 'Ver Activos' : 'Ver Ocultos'}
 							class="btn-icon"
 							style="border-color: {vistaActual === 'OCULTOS'
@@ -672,7 +681,7 @@
 							</svg>
 						</button>
 						<button
-							on:click={() => cambiarVista(vistaActual === 'PAPELERA' ? 'ACTIVOS' : 'PAPELERA')}
+							onclick={() => cambiarVista(vistaActual === 'PAPELERA' ? 'ACTIVOS' : 'PAPELERA')}
 							title={vistaActual === 'PAPELERA' ? 'Ver Activos' : 'Ver Papelera'}
 							class="btn-icon"
 							style="border-color: {vistaActual === 'PAPELERA'
@@ -695,34 +704,18 @@
 			<!-- Acciones del LISTADO (solo visibles en tab 'lista') -->
 			{#if vistaTab === 'lista'}
 				<!-- Búsqueda -->
-				<div class="relative">
-					<input
-						type="text"
-						bind:value={searchTerm}
-						on:input={handleSearch}
+				<div class="w-64">
+					<BuscadorLista
+						valor={filtros.q}
+						onBuscar={(termino) => ponerFiltro('q', termino)}
 						placeholder="Buscar conductores…"
-						class="input-glow apple-transition w-64 rounded-xl border py-2 pr-4 pl-9 text-sm"
-						style="border-color: var(--border-default); background-color: var(--bg-surface); color: var(--text-primary);"
+						etiqueta="Buscar conductores"
 					/>
-					<svg
-						class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2"
-						style="color: var(--text-very-muted);"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-						stroke-width="1.8"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-						/>
-					</svg>
 				</div>
 
 				<!-- Filtros -->
 				<button
-					on:click={() => (mostrarFiltros = !mostrarFiltros)}
+					onclick={() => (mostrarFiltros = !mostrarFiltros)}
 					class="btn-secondary"
 					style="border-color: {mostrarFiltros
 						? 'var(--emerald-500)'
@@ -740,7 +733,7 @@
 						/>
 					</svg>
 					Filtros
-					{#if filtroEstado !== 'TODOS' || filtroSede !== 'TODOS'}
+					{#if numFiltrosActivos > 0}
 						<span
 							class="flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white"
 							style="background-color: var(--emerald-500);">!</span
@@ -749,7 +742,7 @@
 				</button>
 
 				<!-- Nuevo -->
-				<button on:click={() => goto('/dashboard/conductores/agregar')} class="btn-primary">
+				<button onclick={() => goto('/dashboard/conductores/agregar')} class="btn-primary">
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
 					</svg>
@@ -772,7 +765,7 @@
 			<div slot="chips" class="flex flex-wrap gap-1.5">
 				{#each activeFilters as chip, i (chip.key)}
 					<span class="chip-pop-in" style="animation-delay: {i * 60}ms">
-						<button class="filter-chip" on:click={() => clearFilter(chip.key)}>
+						<button class="filter-chip" onclick={() => clearFilter(chip.key)}>
 							<span style="color: var(--text-muted); font-weight: 500;">{chip.label}:</span>
 							<span>{chip.value}</span>
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
@@ -791,9 +784,14 @@
 				<div class="filter-field">
 					<label for="filtro-estado" class="filter-field-label">
 						Estado del conductor
-						{#if filtroEstado !== 'TODOS'}<span class="filter-field-label-hint">filtrado</span>{/if}
+						{#if filtros.estado !== 'TODOS'}<span class="filter-field-label-hint">filtrado</span
+							>{/if}
 					</label>
-					<select id="filtro-estado" bind:value={filtroEstado} on:change={() => loadConductores()}>
+					<select
+						id="filtro-estado"
+						value={filtros.estado}
+						onchange={(e) => ponerFiltro('estado', e.currentTarget.value)}
+					>
 						<option value="TODOS">Todos los estados</option>
 						<option value="ACTIVO">Activo</option>
 						<option value="INACTIVO">Inactivo</option>
@@ -806,9 +804,13 @@
 				<div class="filter-field">
 					<label for="filtro-sede" class="filter-field-label">
 						Sede de trabajo
-						{#if filtroSede !== 'TODOS'}<span class="filter-field-label-hint">filtrado</span>{/if}
+						{#if filtros.sede !== 'TODOS'}<span class="filter-field-label-hint">filtrado</span>{/if}
 					</label>
-					<select id="filtro-sede" bind:value={filtroSede} on:change={() => loadConductores()}>
+					<select
+						id="filtro-sede"
+						value={filtros.sede}
+						onchange={(e) => ponerFiltro('sede', e.currentTarget.value)}
+					>
 						<option value="TODOS">Todas las sedes</option>
 						<option value="YOPAL">Yopal</option>
 						<option value="VILLANUEVA">Villanueva</option>
@@ -818,14 +820,13 @@
 				<div class="filter-field">
 					<label for="filtro-busqueda" class="filter-field-label">
 						Búsqueda por nombre o identificación
-						{#if searchTerm.trim()}<span class="filter-field-label-hint">filtrado</span>{/if}
+						{#if filtros.q.trim()}<span class="filter-field-label-hint">filtrado</span>{/if}
 					</label>
-					<input
-						id="filtro-busqueda"
-						type="text"
-						bind:value={searchTerm}
-						on:input={handleSearch}
+					<BuscadorLista
+						valor={filtros.q}
+						onBuscar={(termino) => ponerFiltro('q', termino)}
 						placeholder="Ej. Juan Pérez, 1234567890…"
+						etiqueta="Buscar conductores por nombre o identificación"
 					/>
 				</div>
 			</div>
@@ -833,7 +834,7 @@
 			<div slot="footer">
 				<button
 					class="filter-clear"
-					on:click={limpiarFiltros}
+					onclick={limpiarFiltros}
 					disabled={activeFilters.length === 0}
 				>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"
@@ -841,7 +842,7 @@
 					>
 					Limpiar
 				</button>
-				<button class="btn-primary" on:click={() => (mostrarFiltros = false)}>
+				<button class="btn-primary" onclick={() => (mostrarFiltros = false)}>
 					Ver resultados
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"
 						><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14m-7-7l7 7-7 7" /></svg
@@ -887,14 +888,11 @@
 				</div>
 				<!-- Activos -->
 				<button
-					on:click={() => {
-						filtroEstado = 'ACTIVO';
-						loadConductores();
-					}}
+					onclick={() => ponerFiltro('estado', 'ACTIVO')}
 					class="stat-card apple-transition text-left"
-					style="border-color: {filtroEstado === 'ACTIVO'
+					style="border-color: {filtros.estado === 'ACTIVO'
 						? 'var(--emerald-500)'
-						: 'var(--border-subtle)'}; background-color: {filtroEstado === 'ACTIVO'
+						: 'var(--border-subtle)'}; background-color: {filtros.estado === 'ACTIVO'
 						? 'rgba(16,185,129,0.04)'
 						: 'var(--bg-surface)'};"
 				>
@@ -925,14 +923,11 @@
 				</button>
 				<!-- Inactivos -->
 				<button
-					on:click={() => {
-						filtroEstado = 'INACTIVO';
-						loadConductores();
-					}}
+					onclick={() => ponerFiltro('estado', 'INACTIVO')}
 					class="stat-card apple-transition text-left"
-					style="border-color: {filtroEstado === 'INACTIVO'
+					style="border-color: {filtros.estado === 'INACTIVO'
 						? '#6b6b6b'
-						: 'var(--border-subtle)'}; background-color: {filtroEstado === 'INACTIVO'
+						: 'var(--border-subtle)'}; background-color: {filtros.estado === 'INACTIVO'
 						? 'rgba(107,107,107,0.04)'
 						: 'var(--bg-surface)'};"
 				>
@@ -963,14 +958,11 @@
 				</button>
 				<!-- Vacaciones -->
 				<button
-					on:click={() => {
-						filtroEstado = 'VACACIONES';
-						loadConductores();
-					}}
+					onclick={() => ponerFiltro('estado', 'VACACIONES')}
 					class="stat-card apple-transition text-left"
-					style="border-color: {filtroEstado === 'VACACIONES'
+					style="border-color: {filtros.estado === 'VACACIONES'
 						? '#3b82f6'
-						: 'var(--border-subtle)'}; background-color: {filtroEstado === 'VACACIONES'
+						: 'var(--border-subtle)'}; background-color: {filtros.estado === 'VACACIONES'
 						? 'rgba(59,130,246,0.04)'
 						: 'var(--bg-surface)'};"
 				>
@@ -1001,14 +993,11 @@
 				</button>
 				<!-- Incapacitados -->
 				<button
-					on:click={() => {
-						filtroEstado = 'INCAPACITADO';
-						loadConductores();
-					}}
+					onclick={() => ponerFiltro('estado', 'INCAPACITADO')}
 					class="stat-card apple-transition text-left"
-					style="border-color: {filtroEstado === 'INCAPACITADO'
+					style="border-color: {filtros.estado === 'INCAPACITADO'
 						? '#f59e0b'
-						: 'var(--border-subtle)'}; background-color: {filtroEstado === 'INCAPACITADO'
+						: 'var(--border-subtle)'}; background-color: {filtros.estado === 'INCAPACITADO'
 						? 'rgba(245,158,11,0.04)'
 						: 'var(--bg-surface)'};"
 				>
@@ -1039,14 +1028,11 @@
 				</button>
 				<!-- Retirados -->
 				<button
-					on:click={() => {
-						filtroEstado = 'RETIRADO';
-						loadConductores();
-					}}
+					onclick={() => ponerFiltro('estado', 'RETIRADO')}
 					class="stat-card apple-transition text-left"
-					style="border-color: {filtroEstado === 'RETIRADO'
+					style="border-color: {filtros.estado === 'RETIRADO'
 						? '#dc2626'
-						: 'var(--border-subtle)'}; background-color: {filtroEstado === 'RETIRADO'
+						: 'var(--border-subtle)'}; background-color: {filtros.estado === 'RETIRADO'
 						? 'rgba(220,38,38,0.04)'
 						: 'var(--bg-surface)'};"
 				>
@@ -1114,13 +1100,13 @@
 							No hay conductores
 						</h3>
 						<p class="text-sm" style="color: var(--text-muted);">
-							{searchTerm || filtroEstado !== 'TODOS'
+							{filtros.q || filtros.estado !== 'TODOS'
 								? 'No se encontraron resultados con los filtros aplicados'
 								: 'Comienza registrando un nuevo conductor'}
 						</p>
 					</div>
-					{#if searchTerm || filtroEstado !== 'TODOS'}
-						<button on:click={limpiarFiltros} class="btn-primary">Limpiar filtros</button>
+					{#if filtros.q || filtros.estado !== 'TODOS'}
+						<button onclick={limpiarFiltros} class="btn-primary">Limpiar filtros</button>
 					{/if}
 				</div>
 			{:else}
@@ -1139,7 +1125,7 @@
 									: 'var(--border-subtle)'};
 								border-left-color: {getEstadoColor(conductor.estado)};"
 								in:fly={{ y: 8, duration: 200, delay: Math.min(index * 20, 200) }}
-								on:click={(e) => toggleSeleccion(conductor.id, index, e)}
+								onclick={(e) => toggleSeleccion(conductor.id, index, e)}
 								role="button"
 								tabindex="0"
 							>
@@ -1235,9 +1221,9 @@
 								</div>
 
 								<!-- Actions (vertical) -->
-								<div class="flex flex-shrink-0 flex-col gap-1" on:click|stopPropagation>
+								<div class="flex flex-shrink-0 flex-col gap-1" onclick={(e) => e.stopPropagation()} role="presentation">
 									<button
-										on:click={() => goto(`/dashboard/conductores?vista=calendario&conductor=${conductor.id}`)}
+										onclick={() => goto(`/dashboard/conductores?vista=calendario&conductor=${conductor.id}`)}
 										class="apple-transition rounded-md p-1.5"
 										style="color: #1d4ed8; background-color: rgba(59, 130, 246, 0.08);"
 										title="Ver recorridos / bonos de planilla"
@@ -1258,7 +1244,7 @@
 										</svg>
 									</button>
 									<button
-										on:click={() => goto(`/dashboard/conductores/${conductor.id}`)}
+										onclick={() => goto(`/dashboard/conductores/${conductor.id}`)}
 										class="apple-transition rounded-md p-1.5"
 										style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
 										title="Ver detalle"
@@ -1284,7 +1270,7 @@
 									</button>
 									{#if vistaActual === 'OCULTOS'}
 										<button
-											on:click={() => {
+											onclick={() => {
 												conductoresSeleccionados.clear();
 												conductoresSeleccionados.add(conductor.id);
 												ejecutarAccionMasiva('mostrar');
@@ -1314,7 +1300,7 @@
 										</button>
 									{:else if vistaActual === 'PAPELERA'}
 										<button
-											on:click={() => {
+											onclick={() => {
 												conductoresSeleccionados.clear();
 												conductoresSeleccionados.add(conductor.id);
 												ejecutarAccionMasiva('restaurar');
@@ -1338,7 +1324,7 @@
 											</svg>
 										</button>
 										<button
-											on:click={() => eliminarPermanente(conductor.id)}
+											onclick={() => eliminarPermanente(conductor.id)}
 											class="apple-transition rounded-md p-1.5"
 											style="color: #dc2626; background-color: rgba(220, 38, 38, 0.06);"
 											title="Eliminar Permanente"
@@ -1359,7 +1345,7 @@
 										</button>
 									{:else}
 										<button
-											on:click={() => {
+											onclick={() => {
 												conductoresSeleccionados.clear();
 												conductoresSeleccionados.add(conductor.id);
 												ejecutarAccionMasiva('ocultar');
@@ -1390,144 +1376,14 @@
 				</div>
 
 				<!-- Paginación -->
-				{#if pagination.pages > 1}
-					<div
-						class="flex flex-shrink-0 items-center justify-between px-4 py-3"
-						style="border-top: 1px solid var(--border-subtle); background-color: var(--bg-base);"
-					>
-						<p class="text-xs" style="color: var(--text-muted);">
-							Mostrando <span class="font-semibold" style="color: var(--text-primary);"
-								>{(pagination.page - 1) * pagination.limit + 1}–{Math.min(
-									pagination.page * pagination.limit,
-									pagination.total
-								)}</span
-							>
-							de
-							<span class="font-semibold" style="color: var(--text-primary);"
-								>{pagination.total}</span
-							> conductores
-						</p>
-						<div class="flex items-center gap-1">
-							<button
-								on:click={() => irPagina(1)}
-								disabled={pagination.page === 1 || isLoading}
-								class="apple-transition rounded-lg border p-1.5"
-								style="border-color: var(--border-default); color: {pagination.page === 1 ||
-								isLoading
-									? 'var(--text-very-muted)'
-									: 'var(--text-secondary)'}; background-color: {pagination.page === 1 || isLoading
-									? 'var(--bg-base)'
-									: 'white'}; cursor: {pagination.page === 1 || isLoading
-									? 'not-allowed'
-									: 'pointer'};"
-							>
-								<svg
-									class="h-3.5 w-3.5"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-									stroke-width="1.8"
-									><path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
-									/></svg
-								>
-							</button>
-							<button
-								on:click={() => irPagina(pagination.page - 1)}
-								disabled={pagination.page === 1 || isLoading}
-								class="apple-transition rounded-lg border p-1.5"
-								style="border-color: var(--border-default); color: {pagination.page === 1 ||
-								isLoading
-									? 'var(--text-very-muted)'
-									: 'var(--text-secondary)'}; background-color: {pagination.page === 1 || isLoading
-									? 'var(--bg-base)'
-									: 'white'}; cursor: {pagination.page === 1 || isLoading
-									? 'not-allowed'
-									: 'pointer'};"
-							>
-								<svg
-									class="h-3.5 w-3.5"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-									stroke-width="1.8"
-									><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg
-								>
-							</button>
-							{#each Array.from({ length: Math.min(5, pagination.pages) }, (_, i) => {
-								const start = Math.max(1, Math.min(pagination.page - 2, pagination.pages - 4));
-								return start + i;
-							}) as pagina}
-								<button
-									on:click={() => irPagina(pagina)}
-									disabled={isLoading}
-									class="apple-transition min-w-[2rem] rounded-lg border px-2 py-1 text-xs"
-									style="border-color: {pagination.page === pagina
-										? 'var(--emerald-500)'
-										: 'var(--border-default)'}; background-color: {pagination.page === pagina
-										? 'var(--emerald-500)'
-										: 'white'}; color: {pagination.page === pagina
-										? 'white'
-										: 'var(--text-secondary)'}; font-weight: {pagination.page === pagina
-										? '600'
-										: '500'};">{pagina}</button
-								>
-							{/each}
-							<button
-								on:click={() => irPagina(pagination.page + 1)}
-								disabled={pagination.page === pagination.pages || isLoading}
-								class="apple-transition rounded-lg border p-1.5"
-								style="border-color: var(--border-default); color: {pagination.page ===
-									pagination.pages || isLoading
-									? 'var(--text-very-muted)'
-									: 'var(--text-secondary)'}; background-color: {pagination.page ===
-									pagination.pages || isLoading
-									? 'var(--bg-base)'
-									: 'white'}; cursor: {pagination.page === pagination.pages || isLoading
-									? 'not-allowed'
-									: 'pointer'};"
-							>
-								<svg
-									class="h-3.5 w-3.5"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-									stroke-width="1.8"
-									><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg
-								>
-							</button>
-							<button
-								on:click={() => irPagina(pagination.pages)}
-								disabled={pagination.page === pagination.pages || isLoading}
-								class="apple-transition rounded-lg border p-1.5"
-								style="border-color: var(--border-default); color: {pagination.page ===
-									pagination.pages || isLoading
-									? 'var(--text-very-muted)'
-									: 'var(--text-secondary)'}; background-color: {pagination.page ===
-									pagination.pages || isLoading
-									? 'var(--bg-base)'
-									: 'white'}; cursor: {pagination.page === pagination.pages || isLoading
-									? 'not-allowed'
-									: 'pointer'};"
-							>
-								<svg
-									class="h-3.5 w-3.5"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-									stroke-width="1.8"
-									><path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M13 5l7 7-7 7M5 5l7 7-7 7"
-									/></svg
-								>
-							</button>
-						</div>
-					</div>
-				{/if}
+				<PaginadorLista
+					pagina={filtros.pagina}
+					total={totalConductores}
+					porPagina={POR_PAGINA}
+					cargando={isLoading}
+					nombreItems="conductores"
+					onCambiar={irPagina}
+				/>
 			{/if}
 		</div>
 	{/if}
@@ -1558,7 +1414,7 @@
 				<div class="flex gap-1.5">
 					{#if vistaActual === 'ACTIVOS'}
 						<button
-							on:click={() => ejecutarAccionMasiva('ocultar')}
+							onclick={() => ejecutarAccionMasiva('ocultar')}
 							disabled={procesandoMasivo}
 							class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
 							style="background-color: rgba(255,255,255,0.08);"
@@ -1578,7 +1434,7 @@
 							Ocultar
 						</button>
 						<button
-							on:click={() => ejecutarAccionMasiva('eliminar')}
+							onclick={() => ejecutarAccionMasiva('eliminar')}
 							disabled={procesandoMasivo}
 							class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
 							style="background-color: rgba(220,38,38,0.85);"
@@ -1599,7 +1455,7 @@
 						</button>
 					{:else if vistaActual === 'OCULTOS'}
 						<button
-							on:click={() => ejecutarAccionMasiva('mostrar')}
+							onclick={() => ejecutarAccionMasiva('mostrar')}
 							disabled={procesandoMasivo}
 							class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
 							style="background-color: var(--emerald-600);"
@@ -1624,7 +1480,7 @@
 						</button>
 					{:else if vistaActual === 'PAPELERA'}
 						<button
-							on:click={() => ejecutarAccionMasiva('restaurar')}
+							onclick={() => ejecutarAccionMasiva('restaurar')}
 							disabled={procesandoMasivo}
 							class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
 							style="background-color: var(--emerald-600);"
@@ -1646,7 +1502,7 @@
 					{/if}
 				</div>
 				<button
-					on:click={() => {
+					onclick={() => {
 						conductoresSeleccionados.clear();
 						conductoresSeleccionados = conductoresSeleccionados;
 					}}
@@ -1674,14 +1530,14 @@
 			class="fixed inset-0 z-[100] cursor-default border-0 p-0"
 			style="background: linear-gradient(135deg, rgba(15, 31, 26, 0.40), rgba(10, 20, 16, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
 			aria-label="Cerrar modal"
-			on:click={cerrarModalEliminar}
+			onclick={cerrarModalEliminar}
 		></button>
 
 		<div
 			class="fixed inset-0 z-[100] flex items-center justify-center p-4"
 			role="dialog"
 			aria-modal="true"
-			on:keydown={(e) => e.key === 'Escape' && cerrarModalEliminar()}
+			onkeydown={(e) => e.key === 'Escape' && cerrarModalEliminar()}
 		>
 			<div
 				class="w-full max-w-xl"
@@ -1724,7 +1580,7 @@
 						</div>
 					</div>
 					<button
-						on:click={cerrarModalEliminar}
+						onclick={cerrarModalEliminar}
 						class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
 					>
 						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"
@@ -1934,13 +1790,13 @@
 					class="sticky bottom-0 flex items-center justify-end gap-2 border-t border-gray-100 bg-gray-50 px-5 py-3"
 				>
 					<button
-						on:click={cerrarModalEliminar}
+						onclick={cerrarModalEliminar}
 						class="rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-xs font-semibold text-gray-700 transition-colors hover:bg-gray-50"
 					>
 						Cancelar
 					</button>
 					<button
-						on:click={() => confirmarEliminarPermanente(true)}
+						onclick={() => confirmarEliminarPermanente(true)}
 						disabled={!confirmacionValida || modalEliminar.loading || modalEliminar.procesando}
 						class="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm transition-all hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-40"
 					>

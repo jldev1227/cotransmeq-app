@@ -1,5 +1,12 @@
 <script lang="ts">
-	import { onMount, onDestroy } from 'svelte';
+	import { browser } from '$app/environment';
+	import { page } from '$app/state';
+	import { texto, opcion, numero, contarActivos, limpiar, firma } from '$lib/listing/filtros';
+	import { crearEstadoUrl } from '$lib/listing/urlState';
+	import { coincide } from '$lib/listing/texto';
+	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+	import { onMount, onDestroy, untrack } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import { toast } from 'svelte-sonner';
@@ -12,60 +19,167 @@
 	import { socketManager, socketUtils } from '$lib/socket';
 
 	// ─── Estado unificado ────────────────────────────────────────────────
-	let usuarios: Usuario[] = [];
-	let loading = true;
-	let onlineIds = new Set<string>();
-	let searchTerm = '';
-	let filterArea = '';
-	let filterStatus: 'TODOS' | 'ACTIVOS' | 'INACTIVOS' | 'EN_LINEA' = 'TODOS';
-	let searchTimeout: ReturnType<typeof setTimeout>;
+	let usuarios = $state<Usuario[]>([]);
+	let loading = $state(true);
+	let onlineIds = $state(new Set<string>());
+	/**
+	 * Filtros de la página, y con ellos la URL.
+	 *
+	 * Esta ruta no tocaba `searchParams`: ni la búsqueda, ni el área, ni el
+	 * estado, ni nada de la sección de sesiones. Recargar lo devolvía todo a
+	 * cero y no había forma de enlazar «los usuarios de operaciones que están
+	 * inactivos», que es justo lo que se comparte por chat.
+	 *
+	 * Todo se filtra en cliente: la lista de usuarios llega entera.
+	 */
+	type EstadoUsuario = 'TODOS' | 'ACTIVOS' | 'INACTIVOS' | 'EN_LINEA';
+	type FiltroSesion = 'activas' | 'cerradas' | 'todas';
+	type FiltroBonos = 'TODOS' | 'CON_PERMISO' | 'SIN_PERMISO';
+	type TabUsuarios = 'equipo' | 'sesiones' | 'invitaciones' | 'permisos';
 
-	$: filteredUsuarios = usuarios.filter((u) => {
-		if (searchTerm) {
-			const t = searchTerm.toLowerCase();
-			if (
-				!u.nombre.toLowerCase().includes(t) &&
-				!u.correo.toLowerCase().includes(t) &&
-				!(u.cargo ?? '').toLowerCase().includes(t)
-			)
-				return false;
-		}
-		if (filterArea && !(Array.isArray(u.area) && u.area.includes(filterArea))) return false;
-		if (filterStatus === 'ACTIVOS' && u.activo === false) return false;
-		if (filterStatus === 'INACTIVOS' && u.activo !== false) return false;
-		if (filterStatus === 'EN_LINEA' && !onlineIds.has(u.id)) return false;
-		return true;
+	const TABS: Array<{ key: TabUsuarios; label: string }> = [
+		{ key: 'equipo', label: 'Equipo' },
+		{ key: 'sesiones', label: 'Sesiones' },
+		{ key: 'invitaciones', label: 'Invitaciones' },
+		{ key: 'permisos', label: 'Permisos' }
+	];
+
+	const DEFS = {
+		/// La pestaña es un filtro más: sin ella en la URL, «mándame las
+		/// sesiones cerradas de Fulano» no se puede enlazar.
+		tab: opcion<TabUsuarios>('equipo'),
+		q: texto(),
+		area: texto(),
+		estado: opcion<EstadoUsuario>('TODOS'),
+		/// Sesiones
+		sesion: opcion<FiltroSesion>('activas'),
+		qSesion: texto(),
+		usuario: texto(),
+		paginaSesiones: numero(1),
+		/// Permiso de bonos
+		qBonos: texto(),
+		bonos: opcion<FiltroBonos>('TODOS')
+	};
+	const estadoUrl = crearEstadoUrl(DEFS);
+	/// `leerInicial()` y no `leerDeParams(page.url)`: durante la hidratación
+	/// `page` puede no reflejar todavía la URL con la que se abrió la pestaña,
+	/// y el efecto que escribe la URL borraría los filtros del enlace antes de
+	/// que nadie los leyera.
+	let filtros = $state(estadoUrl.leerInicial());
+
+	/// Los filtros a la URL. `escribir` no navega si ya dice lo mismo, que es lo
+	/// que impide que este efecto se realimente.
+	$effect(() => {
+		void firma(DEFS, filtros);
+		if (!browser) return;
+		estadoUrl.escribir(
+			untrack(() => page.url),
+			untrack(() => filtros)
+		);
 	});
 
-	$: currentUser = $authStore.user;
-	$: enLineaCount = usuarios.filter((u) => onlineIds.has(u.id)).length;
-	$: activosCount = usuarios.filter((u) => u.activo !== false).length;
-	$: inactivosCount = usuarios.filter((u) => u.activo === false).length;
+	/**
+	 * Cambia de pestaña.
+	 *
+	 * Limpia la selección de bonos al salir de Permisos: la barra de acciones
+	 * masivas mostraría «3 seleccionados» sobre una lista que ya no se ve, y
+	 * al volver operaría sobre gente que el usuario ya no recuerda haber
+	 * marcado.
+	 */
+	function cambiarTab(tab: TabUsuarios) {
+		filtros.tab = tab;
+		if (tab !== 'permisos') bonosSeleccionados = new Set();
+	}
+
+	/// Cuántos filtros de usuarios hay puestos. Los de la sección de sesiones
+	/// van aparte: tienen su propio botón de limpiar.
+	const filtrosActivos = $derived(
+		contarActivos(DEFS, filtros, [
+			'tab',
+			'sesion',
+			'qSesion',
+			'usuario',
+			'paginaSesiones',
+			'qBonos',
+			'bonos'
+		])
+	);
+
+	const filteredUsuarios = $derived(
+		usuarios.filter((u) => {
+			/// `coincide` exige todas las palabras en cualquiera de los campos y pasa
+			/// por alto las tildes: «julian lopez» encuentra a Julián López, que con
+			/// el `includes` literal anterior no aparecía.
+			if (!coincide(filtros.q, [u.nombre, u.correo, u.cargo])) return false;
+			if (filtros.area && !(Array.isArray(u.area) && u.area.includes(filtros.area))) return false;
+			if (filtros.estado === 'ACTIVOS' && u.activo === false) return false;
+			if (filtros.estado === 'INACTIVOS' && u.activo !== false) return false;
+			if (filtros.estado === 'EN_LINEA' && !onlineIds.has(u.id)) return false;
+			return true;
+		})
+	);
+
+	const currentUser = $derived($authStore.user);
+	const enLineaCount = $derived(usuarios.filter((u) => onlineIds.has(u.id)).length);
+	const activosCount = $derived(usuarios.filter((u) => u.activo !== false).length);
+	const inactivosCount = $derived(usuarios.filter((u) => u.activo === false).length);
 
 	// ─── Sesiones ────────────────────────────────────────────────────────
-	let sesiones: Sesion[] = [];
-	let loadingSesiones = true;
-	let filtroSesion: 'activas' | 'cerradas' | 'todas' = 'activas';
-	let searchSesion = '';
-	let sesionSectionOpen = true;
-	let sesionesFocusUsuarioId: string | null = null;
+	let sesiones = $state<Sesion[]>([]);
+	let loadingSesiones = $state(true);
 
-	$: sesionesVisibles = sesiones.filter((s) => {
-		if (filtroSesion === 'activas' && !s.is_active) return false;
-		if (filtroSesion === 'cerradas' && s.is_active) return false;
-		if (sesionesFocusUsuarioId && s.usuario_id !== sesionesFocusUsuarioId) return false;
-		if (searchSesion) {
-			const t = searchSesion.toLowerCase();
-			if (
-				!s.usuario?.nombre?.toLowerCase().includes(t) &&
-				!s.usuario?.correo?.toLowerCase().includes(t) &&
-				!(s.ip ?? '').includes(t)
-			)
-				return false;
-		}
-		return true;
+	/**
+	 * Cuántas sesiones se traen y cuántas se pintan de golpe.
+	 *
+	 * `GET /sesiones` acepta `limit` pero ni `page` ni `skip`, así que el
+	 * recorte se hace aquí. El tope importa: los contadores («N activas») se
+	 * calculan sobre lo traído, de modo que si el backend devuelve justo
+	 * `LIMITE_SESIONES` la cifra puede quedarse corta — por eso se avisa en
+	 * pantalla en vez de dejar que mienta en silencio.
+	 */
+	const LIMITE_SESIONES = 200;
+	const POR_PAGINA_SESIONES = 20;
+
+	const sesionesVisibles = $derived(
+		sesiones.filter((s) => {
+			if (filtros.sesion === 'activas' && !s.is_active) return false;
+			if (filtros.sesion === 'cerradas' && s.is_active) return false;
+			if (filtros.usuario && s.usuario_id !== filtros.usuario) return false;
+			if (!coincide(filtros.qSesion, [s.usuario?.nombre, s.usuario?.correo, s.ip])) return false;
+			return true;
+		})
+	);
+	const activasCount = $derived(sesiones.filter((s) => s.is_active).length);
+	const sesionesTruncadas = $derived(sesiones.length >= LIMITE_SESIONES);
+
+	const sesionesPaginadas = $derived(
+		sesionesVisibles.slice(
+			(filtros.paginaSesiones - 1) * POR_PAGINA_SESIONES,
+			filtros.paginaSesiones * POR_PAGINA_SESIONES
+		)
+	);
+
+	/// Volver a la primera página cuando cambia lo que se está filtrando.
+	/// La clave arranca con los valores que traía la URL, no vacía: si no, la
+	/// primera pasada los vería «cambiados» y borraría el `?paginaSesiones=3`
+	/// del enlace que acaban de abrir.
+	let claveSesiones = untrack(() => `${filtros.sesion}|${filtros.qSesion}|${filtros.usuario}`);
+	$effect(() => {
+		const clave = `${filtros.sesion}|${filtros.qSesion}|${filtros.usuario}`;
+		if (clave === claveSesiones) return;
+		claveSesiones = clave;
+		filtros.paginaSesiones = 1;
 	});
-	$: activasCount = sesiones.filter((s) => s.is_active).length;
+
+	/// Recorte al rango válido. Guardado por `loadingSesiones` y por la lista
+	/// vacía: sin eso, un `?paginaSesiones=3` se recorta a 1 porque antes del
+	/// primer dato el total de páginas vale 1.
+	$effect(() => {
+		if (loadingSesiones || sesiones.length === 0) return;
+		const totalPaginas = Math.max(1, Math.ceil(sesionesVisibles.length / POR_PAGINA_SESIONES));
+		if (filtros.paginaSesiones > totalPaginas) filtros.paginaSesiones = totalPaginas;
+		if (filtros.paginaSesiones < 1) filtros.paginaSesiones = 1;
+	});
 
 	// ─── Invitaciones ────────────────────────────────────────────────────
 	interface Invitacion {
@@ -78,40 +192,39 @@
 		created_at: string;
 		invitado_por: { id: string; nombre: string };
 	}
-	let invitaciones: Invitacion[] = [];
-	let loadingInv = true;
-	let modalInvAbierto = false;
-	let enviandoInv = false;
-	let formCorreo = '';
-	let formAreas: string[] = [];
-	let formCargo = '';
-	let errorInv = '';
-	let invSectionOpen = true;
+	let invitaciones = $state<Invitacion[]>([]);
+	let loadingInv = $state(true);
+	let modalInvAbierto = $state(false);
+	let enviandoInv = $state(false);
+	let formCorreo = $state('');
+	let formAreas = $state<string[]>([]);
+	let formCargo = $state('');
+	let errorInv = $state('');
 
-	$: invitacionesPendientes = invitaciones.filter((i) => i.estado === 'pendiente');
+	const invitacionesPendientes = $derived(invitaciones.filter((i) => i.estado === 'pendiente'));
 
 	// ─── Modales CRUD ───────────────────────────────────────────────────
-	let showEditModal = false;
-	let editUsuario: Usuario | null = null;
-	let editNombre = '';
-	let editCorreo = '';
-	let editTelefono = '';
-	let editAreas: string[] = [];
+	let showEditModal = $state(false);
+	let editUsuario = $state<Usuario | null>(null);
+	let editNombre = $state('');
+	let editCorreo = $state('');
+	let editTelefono = $state('');
+	let editAreas = $state<string[]>([]);
 	/// Lista blanca por ruta del usuario editado. `null` = manda el área.
-	let editPermisosRutas: Record<string, AccessLevel> | null = null;
-	let savingEdit = false;
+	let editPermisosRutas = $state<Record<string, AccessLevel> | null>(null);
+	let savingEdit = $state(false);
 
-	let showConfirmModal = false;
-	let confirmUsuario: Usuario | null = null;
-	let confirmAction: 'disable' | 'enable' = 'disable';
-	let savingToggle = false;
+	let showConfirmModal = $state(false);
+	let confirmUsuario = $state<Usuario | null>(null);
+	let confirmAction = $state<'disable' | 'enable'>('disable');
+	let savingToggle = $state(false);
 
-	let showPermisosModal = false;
-	let permisosUsuario: Usuario | null = null;
-	let savingPermisos = false;
+	let showPermisosModal = $state(false);
+	let permisosUsuario = $state<Usuario | null>(null);
+	let savingPermisos = $state(false);
 
-	let detailUsuario: Usuario | null = null;
-	let detailSesiones: Sesion[] = [];
+	let detailUsuario = $state<Usuario | null>(null);
+	let detailSesiones = $state<Sesion[]>([]);
 
 	const modulosDisponibles = [
 		{ id: 'flota', label: 'Flota' },
@@ -127,12 +240,16 @@
 	];
 
 	// ─── Carga inicial ───────────────────────────────────────────────────
+	/// Función de baja; antes se usaba `off('usuario-deshabilitado')` sin
+	/// handler, que da de baja también los listeners de otros módulos.
+	let bajaDeshabilitado: (() => void) | undefined;
+
 	onMount(async () => {
 		await Promise.all([cargarUsuarios(), cargarSesiones(), cargarInvitaciones()]);
 		const user = $authStore.user;
 		if (user?.id) socketUtils.emit('join-dashboard', user.id);
 		socketUtils.on('usuarios-online', onOnline);
-		socketManager.on('usuario-deshabilitado', (data: any) => {
+		bajaDeshabilitado = socketManager.on('usuario-deshabilitado', (data: any) => {
 			if (data?.usuarioId === currentUser?.id) {
 				toast.error('Tu cuenta ha sido deshabilitada');
 				setTimeout(() => authStore.logout(), 1500);
@@ -143,7 +260,7 @@
 	onDestroy(() => {
 		socketUtils.emit('leave-dashboard');
 		socketUtils.off('usuarios-online', onOnline);
-		socketManager.off('usuario-deshabilitado');
+		bajaDeshabilitado?.();
 	});
 
 	function onOnline(ids: string[]) {
@@ -237,7 +354,11 @@
 		editNombre = usuario.nombre;
 		editCorreo = usuario.correo;
 		editTelefono = usuario.telefono || '';
-		editAreas = Array.isArray(usuario.area) ? [...usuario.area] : usuario.area ? [usuario.area as string] : [];
+		editAreas = Array.isArray(usuario.area)
+			? [...usuario.area]
+			: usuario.area
+				? [usuario.area as string]
+				: [];
 		editPermisosRutas = usuario.permisos_rutas ?? null;
 		showEditModal = true;
 	}
@@ -258,9 +379,7 @@
 				// `{}` y `null` significan lo mismo («manda el área»); se normaliza
 				// para no dejar objetos vacíos que luego cueste distinguir.
 				permisos_rutas:
-					editPermisosRutas && Object.keys(editPermisosRutas).length > 0
-						? editPermisosRutas
-						: null
+					editPermisosRutas && Object.keys(editPermisosRutas).length > 0 ? editPermisosRutas : null
 			});
 			usuarios = usuarios.map((u) => (u.id === updated.id ? updated : u));
 			toast.success(`${editNombre} actualizado correctamente`);
@@ -298,9 +417,7 @@
 						: s
 				);
 			}
-			toast.success(
-				`${confirmUsuario.nombre} ${nuevoEstado ? 'habilitado' : 'deshabilitado'}`
-			);
+			toast.success(`${confirmUsuario.nombre} ${nuevoEstado ? 'habilitado' : 'deshabilitado'}`);
 			cerrarConfirmModal();
 		} catch {
 			toast.error('Error al cambiar estado del usuario');
@@ -338,7 +455,10 @@
 		if (!permisosUsuario?.permisos) return;
 		savingPermisos = true;
 		try {
-			const updated = await usuariosAPI.actualizarPermisos(permisosUsuario.id, permisosUsuario.permisos);
+			const updated = await usuariosAPI.actualizarPermisos(
+				permisosUsuario.id,
+				permisosUsuario.permisos
+			);
 			usuarios = usuarios.map((u) => (u.id === updated.id ? updated : u));
 			if (currentUser && permisosUsuario.id === currentUser.id)
 				authStore.updateUserPermisos(permisosUsuario.permisos as any);
@@ -355,14 +475,13 @@
 	function verDetalleUsuario(usuario: Usuario) {
 		detailUsuario = usuario;
 		detailSesiones = sesiones.filter((s) => s.usuario_id === usuario.id);
-		sesionesFocusUsuarioId = usuario.id;
-		setTimeout(() => {
-			const el = document.getElementById('sesiones-section');
-			if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-		}, 80);
+		filtros.usuario = usuario.id;
+		/// Otro usuario, otra lista: la página en la que estábamos no aplica.
+		filtros.paginaSesiones = 1;
+		filtros.tab = 'sesiones';
 	}
 	function limpiarFocoSesiones() {
-		sesionesFocusUsuarioId = null;
+		filtros.usuario = '';
 		detailUsuario = null;
 	}
 
@@ -370,7 +489,7 @@
 	async function cargarSesiones() {
 		try {
 			loadingSesiones = true;
-			sesiones = await sesionesAPI.listar({ limit: 200 });
+			sesiones = await sesionesAPI.listar({ limit: LIMITE_SESIONES });
 		} catch {
 			toast.error('Error al cargar las sesiones');
 		} finally {
@@ -467,7 +586,11 @@
 	}
 	async function reenviarInvitacion(inv: Invitacion) {
 		try {
-			await apiClient.post('/api/invitaciones', { correo: inv.correo, area: inv.area, cargo: inv.cargo });
+			await apiClient.post('/api/invitaciones', {
+				correo: inv.correo,
+				area: inv.area,
+				cargo: inv.cargo
+			});
 			toast.success(`Invitación reenviada a ${inv.correo}`);
 			cargarInvitaciones();
 		} catch (e: any) {
@@ -477,55 +600,61 @@
 
 	// ─── Permiso individual: bonos de planilla ───────────────────
 	// Estado: lista de usuarios con el permiso otorgado (o no)
-	let bonosSearch = '';
-	let bonosFilter: 'TODOS' | 'CON_PERMISO' | 'SIN_PERMISO' = 'TODOS';
-	let bonosSeleccionados = new Set<string>();
-	let guardandoBonos = false;
+	let bonosSeleccionados = $state(new Set<string>());
+	let guardandoBonos = $state(false);
 
-	$: isAdminUser =
+	const isAdminUser = $derived(
 		$authStore.user?.role === 'admin' ||
-		$authStore.user?.rol === 'admin' ||
-		((Array.isArray($authStore.user?.area)
-			? ($authStore.user!.area as string[])
-			: []
-		) as string[]).includes('administracion');
+			$authStore.user?.rol === 'admin' ||
+			(
+				(Array.isArray($authStore.user?.area)
+					? ($authStore.user!.area as string[])
+					: []) as string[]
+			).includes('administracion')
+	);
 
-	$: usuariosBonos = usuarios
-		.filter((u) => {
-			if (bonosSearch) {
-				const t = bonosSearch.toLowerCase();
-				if (
-					!u.nombre.toLowerCase().includes(t) &&
-					!u.correo.toLowerCase().includes(t) &&
-					!(u.cargo ?? '').toLowerCase().includes(t)
-				)
-					return false;
-			}
-			const has = hasBonosPlanilla(u);
-			if (bonosFilter === 'CON_PERMISO' && !has) return false;
-			if (bonosFilter === 'SIN_PERMISO' && has) return false;
-			return true;
-		})
-		.sort((a, b) => {
-			// Los que tienen permiso van primero
-			const ha = hasBonosPlanilla(a) ? 1 : 0;
-			const hb = hasBonosPlanilla(b) ? 1 : 0;
-			if (hb !== ha) return hb - ha;
-			return a.nombre.localeCompare(b.nombre);
-		});
+	const usuariosBonos = $derived(
+		usuarios
+			.filter((u) => {
+				/// `coincide` en vez de tres `includes`: exige todas las palabras en
+				/// cualquiera de los campos y pasa por alto las tildes, igual que
+				/// el buscador de la pestaña Equipo.
+				if (!coincide(filtros.qBonos, [u.nombre, u.correo, u.cargo])) return false;
+				const has = hasBonosPlanilla(u);
+				if (filtros.bonos === 'CON_PERMISO' && !has) return false;
+				if (filtros.bonos === 'SIN_PERMISO' && has) return false;
+				return true;
+			})
+			.sort((a, b) => {
+				// Los que tienen permiso van primero
+				const ha = hasBonosPlanilla(a) ? 1 : 0;
+				const hb = hasBonosPlanilla(b) ? 1 : 0;
+				if (hb !== ha) return hb - ha;
+				return a.nombre.localeCompare(b.nombre);
+			})
+	);
 
-	$: totalConPermiso = usuarios.filter((u) => hasBonosPlanilla(u)).length;
-	$: totalSinPermiso = usuarios.length - totalConPermiso;
+	const totalConPermiso = $derived(usuarios.filter((u) => hasBonosPlanilla(u)).length);
+	const totalSinPermiso = $derived(usuarios.length - totalConPermiso);
 
+	/**
+	 * Selección de usuarios para el permiso de bonos.
+	 *
+	 * Se crea un `Set` nuevo en cada cambio en vez de mutar el que había y
+	 * reasignárselo a sí mismo. Ese truco —`x = x`— funcionaba en Svelte 4,
+	 * pero aquí asignar la MISMA referencia no repinta: las casillas y el
+	 * contador «N seleccionados» se habrían quedado clavados.
+	 */
 	function toggleSeleccionBonos(userId: string) {
-		if (bonosSeleccionados.has(userId)) bonosSeleccionados.delete(userId);
-		else bonosSeleccionados.add(userId);
-		bonosSeleccionados = bonosSeleccionados;
+		const siguiente = new Set(bonosSeleccionados);
+		if (siguiente.has(userId)) siguiente.delete(userId);
+		else siguiente.add(userId);
+		bonosSeleccionados = siguiente;
 	}
 
 	function seleccionarTodosBonos() {
 		if (bonosSeleccionados.size === usuariosBonos.length) {
-			bonosSeleccionados.clear();
+			bonosSeleccionados = new Set();
 		} else {
 			bonosSeleccionados = new Set(usuariosBonos.map((u) => u.id));
 		}
@@ -563,8 +692,7 @@
 					? `Permiso otorgado a ${updates.length} usuario${updates.length !== 1 ? 's' : ''}`
 					: `Permiso revocado a ${updates.length} usuario${updates.length !== 1 ? 's' : ''}`
 			);
-			bonosSeleccionados.clear();
-			bonosSeleccionados = bonosSeleccionados;
+			bonosSeleccionados = new Set();
 		} catch (err: any) {
 			const msg = err?.response?.data?.error || 'Error al actualizar el permiso';
 			toast.error(msg);
@@ -577,714 +705,832 @@
 <svelte:head><title>Equipo · Cotransmeq</title></svelte:head>
 
 <div class="usuarios-page" in:fly={{ y: 20, duration: 500, easing: quintOut }}>
-	<!-- ═══ HERO ═══ -->
-	<header class="page-hero" in:fade={{ duration: 400 }}>
-		<div class="hero-inner">
-			<div class="hero-left">
-				<div class="card-icon hero-icon" aria-hidden="true">
+	<!-- ═══ BARRA DE PÁGINA ═══
+	     Título, acciones y pestañas. Antes era un hero editorial con párrafo y
+	     una franja de seis métricas: ~250 px que empujaban el contenido fuera
+	     de pantalla. Las métricas no se pierden — Total/En línea/Activos/
+	     Inactivos son los contadores de los chips de Equipo, y Sesiones e
+	     Invitaciones son los badges de sus pestañas, que es donde el número
+	     sirve para decidir adónde ir.
+	-->
+	<header class="page-toolbar" in:fade={{ duration: 400 }}>
+		<div class="toolbar-top">
+			<div class="toolbar-title">
+				<div class="card-icon-sm" aria-hidden="true">
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"
+						/>
 					</svg>
 				</div>
-				<div class="hero-text">
-					<span class="eyebrow">Equipo · Cotransmeq</span>
-					<h1>Personas y accesos</h1>
-					<p>
-						Gestiona los miembros del equipo, sus áreas, permisos, sesiones activas e invitaciones
-						pendientes desde un solo lugar.
-					</p>
-				</div>
+				<h1>Personas y accesos</h1>
 			</div>
-			<div class="hero-actions">
-				<button class="btn-secondary" on:click={cargarUsuarios}>
+
+			<div class="toolbar-actions">
+				<button class="btn-secondary" onclick={cargarUsuarios}>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+						/>
 					</svg>
 					Recargar
 				</button>
-				<button class="btn-primary" on:click={abrirModalInv}>
+				<button class="btn-primary" onclick={abrirModalInv}>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z"
+						/>
 					</svg>
 					Invitar usuario
 				</button>
 			</div>
 		</div>
 
-		<div class="hero-stats">
-			<div class="stat-item">
-				<span class="stat-label">Total</span>
-				<span class="stat-value">{usuarios.length}</span>
-			</div>
-			<span class="stat-sep">·</span>
-			<div class="stat-item">
-				<span class="stat-dot stat-dot--emerald" aria-hidden="true"></span>
-				<span class="stat-label">En línea</span>
-				<span class="stat-value">{enLineaCount}</span>
-			</div>
-			<span class="stat-sep">·</span>
-			<div class="stat-item">
-				<span class="stat-dot stat-dot--amber" aria-hidden="true"></span>
-				<span class="stat-label">Activos</span>
-				<span class="stat-value">{activosCount}</span>
-			</div>
-			<span class="stat-sep">·</span>
-			<div class="stat-item">
-				<span class="stat-dot stat-dot--red" aria-hidden="true"></span>
-				<span class="stat-label">Inactivos</span>
-				<span class="stat-value">{inactivosCount}</span>
-			</div>
-			<span class="stat-sep">·</span>
-			<div class="stat-item">
-				<svg class="h-3.5 w-3.5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-				</svg>
-				<span class="stat-label">Sesiones</span>
-				<span class="stat-value">{activasCount}</span>
-			</div>
-			<span class="stat-sep">·</span>
-			<div class="stat-item" class:stat-item--active={invitacionesPendientes.length > 0}>
-				<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-				</svg>
-				<span class="stat-label">Invitaciones</span>
-				<span class="stat-value">{invitacionesPendientes.length}</span>
-			</div>
+		<div class="tabs" role="tablist" aria-label="Secciones de equipo">
+			{#each TABS as t (t.key)}
+				{@const badge =
+					t.key === 'sesiones'
+						? activasCount
+						: t.key === 'invitaciones'
+							? invitacionesPendientes.length
+							: 0}
+				<button
+					class="tab"
+					class:tab--active={filtros.tab === t.key}
+					role="tab"
+					aria-selected={filtros.tab === t.key}
+					onclick={() => cambiarTab(t.key)}
+				>
+					{t.label}
+					{#if badge > 0}<span class="tab-badge">{badge}</span>{/if}
+				</button>
+			{/each}
 		</div>
 	</header>
 
-	<!-- ═══ FILTROS / EQUIPO ═══ -->
-	<section class="section">
-		<header class="section-head">
-			<div>
-				<span class="eyebrow">01 · Equipo</span>
-				<h2>Miembros del equipo</h2>
-				<p>Listado completo con estado, áreas y acciones rápidas. Haz clic en una tarjeta para ver sus sesiones.</p>
-			</div>
-		</header>
-
-		<div class="filters-bar">
-			<div class="search-wrap">
-				<svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-				</svg>
-				<input
-					type="text"
-					bind:value={searchTerm}
-					placeholder="Buscar por nombre, correo o cargo…"
-					class="search-input"
-				/>
-			</div>
-
-			<div class="filter-group">
-				{#each [{ k: 'TODOS', l: 'Todos' }, { k: 'EN_LINEA', l: 'En línea' }, { k: 'ACTIVOS', l: 'Activos' }, { k: 'INACTIVOS', l: 'Inactivos' }] as f}
-					<button
-						class="chip"
-						class:chip--active={filterStatus === f.k}
-						on:click={() => (filterStatus = f.k as typeof filterStatus)}
-					>
-						{#if f.k === 'EN_LINEA'}<span class="chip-dot chip-dot--emerald" aria-hidden="true"></span>{/if}
-						{f.l}
-					</button>
-				{/each}
-			</div>
-
-			<select bind:value={filterArea} class="select">
-				<option value="">Todas las áreas</option>
-				{#each Object.entries(AREA_LABELS) as [key, label]}
-					<option value={key}>{label}</option>
-				{/each}
-			</select>
-
-			{#if searchTerm || filterArea || filterStatus !== 'TODOS'}
-				<button
-					class="clear-btn"
-					on:click={() => {
-						searchTerm = '';
-						filterArea = '';
-						filterStatus = 'TODOS';
-					}}
-				>
-					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-					Limpiar
-				</button>
-			{/if}
-		</div>
-
-		{#if loading}
-			<div class="state-block">
-				<div class="spin-ring" aria-hidden="true"></div>
-				<p>Cargando equipo…</p>
-			</div>
-		{:else if filteredUsuarios.length === 0}
-			<div class="empty-state" in:fade>
-				<div class="empty-icon" aria-hidden="true">
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.4">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
-					</svg>
-				</div>
-				<h3>Sin resultados</h3>
-				<p>Ajusta los filtros o invita a un nuevo miembro al equipo.</p>
-				<button class="btn-primary" on:click={abrirModalInv}>
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-					</svg>
-					Invitar usuario
-				</button>
-			</div>
-		{:else}
-			<div class="users-grid">
-				{#each filteredUsuarios as u, idx (u.id)}
-					{@const status = statusOf(u)}
-					<article
-						class="user-card status-{status}"
-						class:user-card--focus={detailUsuario?.id === u.id}
-						in:fly={{ y: 12, duration: 300, delay: Math.min(idx * 25, 350), easing: quintOut }}
-					>
-						<header class="user-head">
-							<div class="avatar avatar--{status}">
-								<span>{initials(u.nombre)}</span>
-								<span class="avatar-dot avatar-dot--{status}" aria-hidden="true"></span>
-							</div>
-							<div class="user-head-text">
-								<h3>
-									{u.nombre}
-									{#if u.id === currentUser?.id}<span class="badge-self">tú</span>{/if}
-								</h3>
-								<span class="user-email">{u.correo}</span>
-							</div>
-							<button
-								type="button"
-								class="user-status-toggle"
-								class:user-status-toggle--on={u.activo !== false}
-								class:user-status-toggle--off={u.activo === false}
-								title={u.activo !== false ? 'Deshabilitar usuario' : 'Habilitar usuario'}
-								aria-label={u.activo !== false ? 'Deshabilitar' : 'Habilitar'}
-								disabled={u.id === currentUser?.id}
-								on:click={(e) => abrirConfirmToggle(u, e)}
-							>
-								<span class="user-status-knob"></span>
-							</button>
-						</header>
-
-						{#if u.area && u.area.length}
-							<div class="user-areas">
-								{#each u.area as a}
-									<span class="area-chip">{AREA_LABELS[a as Area] ?? a}</span>
-								{/each}
-							</div>
-						{:else}
-							<div class="user-areas"><span class="muted">Sin área asignada</span></div>
-						{/if}
-
-						<dl class="user-data">
-							<div>
-								<dt>Cargo</dt>
-								<dd>{u.cargo ?? '—'}</dd>
-							</div>
-							<div>
-								<dt>Último acceso</dt>
-								<dd class="last-access last-access--{status}">{lastAccess(u)}</dd>
-							</div>
-						</dl>
-
-						<footer class="user-foot">
-							<button class="user-link" on:click={() => verDetalleUsuario(u)}>
-								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-								</svg>
-								Ver sesiones
-							</button>
-							<div class="user-actions">
-								<button
-									type="button"
-									class="icon-btn"
-									title="Editar"
-									aria-label="Editar {u.nombre}"
-									on:click={(e) => abrirEditModal(u, e)}
-								>
-									<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-									</svg>
-								</button>
-								<button
-									type="button"
-									class="icon-btn"
-									title="Permisos"
-									aria-label="Permisos de {u.nombre}"
-									on:click={(e) => abrirPermisos(u, e)}
-								>
-									<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
-									</svg>
-								</button>
-							</div>
-						</footer>
-					</article>
-				{/each}
-			</div>
-		{/if}
-	</section>
-
-	<!-- ═══ SESIONES ═══ -->
-	<section class="section" id="sesiones-section">
-		<header class="section-head">
-			<div class="section-head-left">
-				<div>
-					<span class="eyebrow">02 · Sesiones</span>
-					<h2>
-						{#if detailUsuario}Sesiones de {detailUsuario.nombre}{:else}Sesiones{/if}
-					</h2>
-					<p>
-						{#if detailUsuario}
-							Vista filtrada por usuario. <button class="link-btn" on:click={limpiarFocoSesiones}>Ver todas</button>
-						{:else}
-							Monitorea y cierra sesiones activas. Cambia entre activas, cerradas o todas.
-						{/if}
-					</p>
-				</div>
-			</div>
-			<div class="section-head-right">
-				{#if detailUsuario}
-					<button
-						class="btn-secondary btn-secondary--sm"
-						on:click={() => cerrarTodasUsuario(detailUsuario!.id, detailUsuario!.nombre)}
-						disabled={!detailSesiones.some((s) => s.is_active)}
-					>
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-						</svg>
-						Cerrar todas
-					</button>
-				{/if}
-			</div>
-		</header>
-
-		<div class="filters-bar">
-			<div class="search-wrap">
-				<svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-				</svg>
-				<input
-					type="text"
-					bind:value={searchSesion}
-					placeholder="Buscar por usuario, correo o IP…"
-					class="search-input"
-				/>
-			</div>
-
-			<div class="filter-group">
-				{#each [{ k: 'activas', l: 'Activas', n: activasCount }, { k: 'cerradas', l: 'Cerradas', n: sesiones.length - activasCount }, { k: 'todas', l: 'Todas', n: sesiones.length }] as f}
-					<button
-						class="chip"
-						class:chip--active={filtroSesion === f.k}
-						on:click={() => (filtroSesion = f.k as typeof filtroSesion)}
-					>
-						{f.l}
-						<span class="chip-count">{f.n}</span>
-					</button>
-				{/each}
-			</div>
-		</div>
-
-		{#if loadingSesiones}
-			<div class="state-block">
-				<div class="spin-ring" aria-hidden="true"></div>
-				<p>Cargando sesiones…</p>
-			</div>
-		{:else if sesionesVisibles.length === 0}
-			<div class="state-block" in:fade>
-				<p>
-					{filtroSesion === 'activas'
-						? 'No hay sesiones activas en este momento.'
-						: 'No hay sesiones que coincidan con los filtros.'}
-				</p>
-			</div>
-		{:else}
-			<div class="sessions-list">
-				{#each sesionesVisibles as s, i (s.id)}
-					<div
-						class="session-card session-card--{s.is_active ? 'active' : 'closed'}"
-						in:fly={{ y: 8, duration: 220, delay: Math.min(i * 18, 280), easing: quintOut }}
-					>
-						<div class="session-main">
-							<div class="session-avatar">
-								{initials(s.usuario?.nombre || '?')}
-								<span class="session-dot session-dot--{s.is_active ? 'active' : 'closed'}" aria-hidden="true"></span>
-							</div>
-							<div class="session-text">
-								<div class="session-row">
-									<strong>{s.usuario?.nombre || '—'}</strong>
-									<span class="session-mail">{s.usuario?.correo ?? ''}</span>
-								</div>
-								<div class="session-meta">
-									<span class="meta-item">
-										<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25" />
-										</svg>
-										{parseBrowser(s.user_agent)}
-									</span>
-									{#if parseOS(s.user_agent)}
-										<span class="meta-item">
-											<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21" />
-											</svg>
-											{parseOS(s.user_agent)}
-										</span>
-									{/if}
-									{#if s.ip}
-										<span class="meta-item">
-											<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
-											</svg>
-											<span class="mono">{s.ip}</span>
-										</span>
-									{/if}
-									{#if s.remember_me}
-										<span class="meta-item meta-item--emerald" title="Sesión persistente (recordar sesión)">
-											<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" />
-											</svg>
-											persistente
-										</span>
-									{/if}
-								</div>
-							</div>
-						</div>
-
-						<div class="session-side">
-							<div class="session-time">
-								{#if s.is_active}
-									<span class="estado-pill estado-pill--emerald">
-										<span class="pulse-dot" aria-hidden="true"></span>Activa
-									</span>
-									<small>Inicio: {formatDate(s.created_at)}</small>
-									<small>Última act.: {formatDate(s.last_activity)}</small>
-								{:else}
-									<span class="estado-pill estado-pill--gray">Cerrada</span>
-									<small>Duración: {s.duracion_texto || '—'}</small>
-									{#if s.closed_at}<small>Cerrada: {formatDate(s.closed_at)}</small>{/if}
-								{/if}
-							</div>
-							{#if s.is_active}
-								<button
-									class="icon-btn icon-btn--danger"
-									title="Cerrar esta sesión"
-									aria-label="Cerrar sesión de {s.usuario?.nombre}"
-									on:click={() => cerrarSesion(s.id)}
-								>
-									<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M5.636 5.636a9 9 0 1012.728 0M12 3v9" />
-									</svg>
-								</button>
-							{/if}
-						</div>
-					</div>
-				{/each}
-			</div>
-		{/if}
-	</section>
-
-	<!-- ═══ PERMISO DE BONOS — Planilla de días laborados ═══ -->
-	<section class="section">
-		<header class="section-head">
-			<div>
-				<span class="eyebrow">04 · Permiso especial</span>
-				<h2>Permiso de bonos — planilla de días laborados</h2>
-				<p>
-					Otorga o revoca el permiso individual <strong>bonos-planilla</strong> a uno o
-					varios usuarios. Solo quienes tengan este permiso activo pueden marcar y
-					guardar bonos (alimentación, día doble, día trabajado) en el tab
-					<em>Recorridos</em> de la página de Conductores. Los demás usuarios siguen
-					pudiendo ver los bonos ya otorgados (modo solo lectura).
-				</p>
-			</div>
-		</header>
-
-		{#if !isAdminUser}
-			<div class="alert-block">
-				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-				</svg>
-				<p>
-					Esta sección solo es visible para administradores. Si necesitas gestionar
-					este permiso, contacta a un administrador del sistema.
-				</p>
-			</div>
-		{:else}
-			<!-- Resumen -->
-			<div class="bonos-stats">
-				<div class="bonos-stat">
-					<span class="bonos-stat-dot bonos-stat-dot--emerald"></span>
-					<div>
-						<span class="bonos-stat-label">Con permiso</span>
-						<span class="bonos-stat-value">{totalConPermiso}</span>
-					</div>
-				</div>
-				<span class="bonos-stat-sep">·</span>
-				<div class="bonos-stat">
-					<span class="bonos-stat-dot bonos-stat-dot--gray"></span>
-					<div>
-						<span class="bonos-stat-label">Sin permiso</span>
-						<span class="bonos-stat-value">{totalSinPermiso}</span>
-					</div>
-				</div>
-				<span class="bonos-stat-sep">·</span>
-				<div class="bonos-stat">
-					<div>
-						<span class="bonos-stat-label">Total equipo</span>
-						<span class="bonos-stat-value">{usuarios.length}</span>
-					</div>
-				</div>
-			</div>
-
-			<!-- Filtros y acciones masivas -->
+	{#if filtros.tab === 'equipo'}
+		<section class="section">
 			<div class="filters-bar">
-				<div class="search-wrap">
-					<svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-					</svg>
-					<input
-						type="text"
-						bind:value={bonosSearch}
-						placeholder="Buscar usuario por nombre, correo o cargo…"
-						class="search-input"
-					/>
-				</div>
+				<BuscadorLista
+					bind:valor={filtros.q}
+					onBuscar={(termino) => (filtros.q = termino)}
+					placeholder="Buscar por nombre, correo o cargo…"
+				/>
 
+				<!-- El contador va dentro del chip que filtra por ese mismo estado.
+				     Antes vivía en una franja aparte del hero, que repetía la
+				     palabra «Activos» a dos centímetros del chip «Activos» y no
+				     se podía pulsar. -->
 				<div class="filter-group">
-					{#each [{ k: 'TODOS', l: 'Todos' }, { k: 'CON_PERMISO', l: 'Con permiso' }, { k: 'SIN_PERMISO', l: 'Sin permiso' }] as f}
+					{#each [{ k: 'TODOS', l: 'Todos', n: usuarios.length }, { k: 'EN_LINEA', l: 'En línea', n: enLineaCount }, { k: 'ACTIVOS', l: 'Activos', n: activosCount }, { k: 'INACTIVOS', l: 'Inactivos', n: inactivosCount }] as f}
 						<button
 							class="chip"
-							class:chip--active={bonosFilter === f.k}
-							on:click={() => (bonosFilter = f.k as typeof bonosFilter)}
+							class:chip--active={filtros.estado === f.k}
+							onclick={() => (filtros.estado = f.k as typeof filtros.estado)}
 						>
-							{#if f.k === 'CON_PERMISO'}<span class="chip-dot chip-dot--emerald" aria-hidden="true"></span>{/if}
+							{#if f.k === 'EN_LINEA'}<span class="chip-dot chip-dot--emerald" aria-hidden="true"
+								></span>{/if}
 							{f.l}
+							<span class="chip-count">{f.n}</span>
 						</button>
 					{/each}
 				</div>
 
-				{#if bonosSeleccionados.size > 0}
-					<span class="bonos-selected-count">
-						{bonosSeleccionados.size} seleccionado{bonosSeleccionados.size !== 1 ? 's' : ''}
-					</span>
+				<select bind:value={filtros.area} class="select">
+					<option value="">Todas las áreas</option>
+					{#each Object.entries(AREA_LABELS) as [key, label]}
+						<option value={key}>{label}</option>
+					{/each}
+				</select>
+
+				{#if filtrosActivos > 0}
 					<button
-						class="btn-secondary btn-secondary--sm"
-						disabled={guardandoBonos}
-						on:click={() => (bonosSeleccionados = new Set())}
+						class="clear-btn"
+						onclick={() =>
+							(filtros = limpiar(DEFS, filtros, [
+								'tab',
+								'sesion',
+								'qSesion',
+								'usuario',
+								'paginaSesiones',
+								'qBonos',
+								'bonos'
+							]))}
 					>
-						<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-						Limpiar selección
+						<svg
+							class="h-3.5 w-3.5"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+							stroke-width="2"
+						>
+							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+						</svg>
+						Limpiar
 					</button>
 				{/if}
 			</div>
 
-			<!-- Acciones masivas (siempre visibles, pero se aplican a la selección o al filtro) -->
-			<div class="bonos-bulk-actions">
-				<button
-					type="button"
-					class="btn-bonos-grant"
-					disabled={guardandoBonos}
-					on:click={() => setBonosPlanilla(true)}
-				>
-					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-					</svg>
-					Otorgar permiso
-					{#if bonosSeleccionados.size > 0}
-						<span class="bonos-btn-count">({bonosSeleccionados.size})</span>
-					{:else if usuariosBonos.length > 0}
-						<span class="bonos-btn-count">({usuariosBonos.length} del filtro)</span>
-					{/if}
-				</button>
-				<button
-					type="button"
-					class="btn-bonos-revoke"
-					disabled={guardandoBonos}
-					on:click={() => setBonosPlanilla(false)}
-				>
-					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
-					</svg>
-					Revocar permiso
-					{#if bonosSeleccionados.size > 0}
-						<span class="bonos-btn-count">({bonosSeleccionados.size})</span>
-					{:else if usuariosBonos.length > 0}
-						<span class="bonos-btn-count">({usuariosBonos.length} del filtro)</span>
-					{/if}
-				</button>
-
-				<label class="bonos-select-all">
-					<input
-						type="checkbox"
-						checked={bonosSeleccionados.size > 0 && bonosSeleccionados.size === usuariosBonos.length}
-						indeterminate={bonosSeleccionados.size > 0 && bonosSeleccionados.size < usuariosBonos.length}
-						on:change={seleccionarTodosBonos}
-					/>
-					<span>Seleccionar todos los del filtro</span>
-				</label>
-			</div>
-
-			<!-- Lista de usuarios con su estado de permiso -->
 			{#if loading}
 				<div class="state-block">
 					<div class="spin-ring" aria-hidden="true"></div>
 					<p>Cargando equipo…</p>
 				</div>
-			{:else if usuariosBonos.length === 0}
-				<div class="state-block" in:fade>
-					<p>No hay usuarios que coincidan con los filtros.</p>
+			{:else if filteredUsuarios.length === 0}
+				<div class="empty-state" in:fade>
+					<div class="empty-icon" aria-hidden="true">
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.4">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"
+							/>
+						</svg>
+					</div>
+					<h3>Sin resultados</h3>
+					<p>Ajusta los filtros o invita a un nuevo miembro al equipo.</p>
+					<button class="btn-primary" onclick={abrirModalInv}>
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+						</svg>
+						Invitar usuario
+					</button>
 				</div>
 			{:else}
-				<div class="bonos-grid">
-					{#each usuariosBonos as u, i (u.id)}
-						{@const hasPerm = hasBonosPlanilla(u)}
-						{@const isSel = bonosSeleccionados.has(u.id)}
-						<label
-							class="bonos-card"
-							class:bonos-card--active={hasPerm}
-							class:bonos-card--selected={isSel}
-							in:fly={{ y: 6, duration: 220, delay: Math.min(i * 18, 240), easing: quintOut }}
+				<div class="users-grid">
+					{#each filteredUsuarios as u, idx (u.id)}
+						{@const status = statusOf(u)}
+						<article
+							class="user-card status-{status}"
+							class:user-card--focus={detailUsuario?.id === u.id}
+							in:fly={{ y: 12, duration: 300, delay: Math.min(idx * 25, 350), easing: quintOut }}
 						>
-							<input
-								type="checkbox"
-								checked={isSel}
-								on:change={() => toggleSeleccionBonos(u.id)}
-								class="bonos-card-check"
-							/>
-							<div class="bonos-card-avatar avatar avatar--{u.activo === false ? 'inactive' : 'online'}">
-								<span>{initials(u.nombre)}</span>
-							</div>
-							<div class="bonos-card-text">
-								<div class="bonos-card-row">
-									<strong>{u.nombre}</strong>
-									{#if u.id === currentUser?.id}<span class="badge-self">tú</span>{/if}
+							<header class="user-head">
+								<div class="avatar avatar--{status}">
+									<span>{initials(u.nombre)}</span>
+									<span class="avatar-dot avatar-dot--{status}" aria-hidden="true"></span>
 								</div>
-								<span class="bonos-card-mail">{u.correo}</span>
-								{#if u.cargo}<span class="bonos-card-cargo">{u.cargo}</span>{/if}
-							</div>
-							<div class="bonos-card-state">
-								{#if hasPerm}
-									<span class="bonos-pill bonos-pill--emerald">
-										<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+								<div class="user-head-text">
+									<h3>
+										{u.nombre}
+										{#if u.id === currentUser?.id}<span class="badge-self">tú</span>{/if}
+									</h3>
+									<span class="user-email">{u.correo}</span>
+								</div>
+								<button
+									type="button"
+									class="user-status-toggle"
+									class:user-status-toggle--on={u.activo !== false}
+									class:user-status-toggle--off={u.activo === false}
+									title={u.activo !== false ? 'Deshabilitar usuario' : 'Habilitar usuario'}
+									aria-label={u.activo !== false ? 'Deshabilitar' : 'Habilitar'}
+									disabled={u.id === currentUser?.id}
+									onclick={(e) => abrirConfirmToggle(u, e)}
+								>
+									<span class="user-status-knob"></span>
+								</button>
+							</header>
+
+							{#if u.area && u.area.length}
+								<div class="user-areas">
+									{#each u.area as a}
+										<span class="area-chip">{AREA_LABELS[a as Area] ?? a}</span>
+									{/each}
+								</div>
+							{:else}
+								<div class="user-areas"><span class="muted">Sin área asignada</span></div>
+							{/if}
+
+							<dl class="user-data">
+								<div>
+									<dt>Cargo</dt>
+									<dd>{u.cargo ?? '—'}</dd>
+								</div>
+								<div>
+									<dt>Último acceso</dt>
+									<dd class="last-access last-access--{status}">{lastAccess(u)}</dd>
+								</div>
+							</dl>
+
+							<footer class="user-foot">
+								<button class="user-link" onclick={() => verDetalleUsuario(u)}>
+									<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
+										/>
+									</svg>
+									Ver sesiones
+								</button>
+								<div class="user-actions">
+									<button
+										type="button"
+										class="icon-btn"
+										title="Editar"
+										aria-label="Editar {u.nombre}"
+										onclick={(e) => abrirEditModal(u, e)}
+									>
+										<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
+											/>
 										</svg>
-										Con permiso
-									</span>
-								{:else}
-									<span class="bonos-pill bonos-pill--gray">Sin permiso</span>
-								{/if}
-							</div>
-						</label>
+									</button>
+									<button
+										type="button"
+										class="icon-btn"
+										title="Permisos"
+										aria-label="Permisos de {u.nombre}"
+										onclick={(e) => abrirPermisos(u, e)}
+									>
+										<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
+											/>
+										</svg>
+									</button>
+								</div>
+							</footer>
+						</article>
 					{/each}
 				</div>
 			{/if}
-		{/if}
-	</section>
+		</section>
+	{/if}
 
-	<!-- ═══ INVITACIONES ═══ -->
-	<section class="section">
-		<header class="section-head">
-			<div>
-				<span class="eyebrow">03 · Invitaciones</span>
-				<h2>Invitaciones enviadas</h2>
-				<p>
-					{invitacionesPendientes.length} pendiente{invitacionesPendientes.length !== 1 ? 's' : ''}.
-					Reenvía o revoca según sea necesario.
-				</p>
-			</div>
-			<div class="section-head-right">
-				<button class="btn-primary" on:click={abrirModalInv}>
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-					</svg>
-					Nueva invitación
-				</button>
-			</div>
-		</header>
-
-		{#if loadingInv}
-			<div class="state-block">
-				<div class="spin-ring" aria-hidden="true"></div>
-				<p>Cargando invitaciones…</p>
-			</div>
-		{:else if invitaciones.length === 0}
-			<div class="empty-state" in:fade>
-				<div class="empty-icon" aria-hidden="true">
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.4">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-					</svg>
-				</div>
-				<h3>Sin invitaciones enviadas</h3>
-				<p>Invita a nuevos miembros por correo electrónico con sus áreas asignadas.</p>
-				<button class="btn-primary" on:click={abrirModalInv}>
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-					</svg>
-					Enviar primera invitación
-				</button>
-			</div>
-		{:else}
-			<div class="inv-list">
-				{#each invitaciones as inv, i (inv.id)}
-					<div
-						class="inv-card inv-card--{inv.estado}"
-						in:fly={{ y: 8, duration: 220, delay: Math.min(i * 20, 300), easing: quintOut }}
+	{#if filtros.tab === 'sesiones'}
+		<section class="section">
+			{#if detailUsuario}
+				<div class="foco-usuario">
+					<p>
+						Sesiones de <strong>{detailUsuario.nombre}</strong>.
+						<button class="link-btn" onclick={limpiarFocoSesiones}>Ver todas</button>
+					</p>
+					<button
+						class="btn-secondary btn-secondary--sm"
+						onclick={() => cerrarTodasUsuario(detailUsuario!.id, detailUsuario!.nombre)}
+						disabled={!detailSesiones.some((s) => s.is_active)}
 					>
-						<div class="inv-main">
-							<div class="inv-icon" aria-hidden="true">
-								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-								</svg>
-							</div>
-							<div class="inv-text">
-								<strong class="inv-correo">{inv.correo}</strong>
-								{#if inv.cargo}<span class="inv-cargo">{inv.cargo}</span>{/if}
-								<div class="inv-areas">
-									{#each inv.area as a}
-										<span class="area-chip area-chip--sm">{AREA_LABELS[a as Area] ?? a}</span>
-									{/each}
-								</div>
-								<small class="inv-by">
-									Enviada por {inv.invitado_por?.nombre ?? '—'} · {formatDate(inv.created_at)}
-								</small>
-							</div>
-						</div>
-						<div class="inv-side">
-							<span class="estado-pill {estadoInvBadge(inv.estado)}">{inv.estado}</span>
-							{#if inv.estado === 'pendiente'}
-								<div class="inv-actions">
-									<button
-										class="link-btn"
-										title="Reenviar invitación"
-										on:click={() => reenviarInvitacion(inv)}
-									>
-										<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-										</svg>
-										Reenviar
-									</button>
-									<button
-										class="link-btn link-btn--danger"
-										title="Revocar invitación"
-										on:click={() => revocarInvitacion(inv.id)}
-									>
-										<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-										</svg>
-										Revocar
-									</button>
-								</div>
-							{/if}
-						</div>
-					</div>
-				{/each}
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+							/>
+						</svg>
+						Cerrar todas
+					</button>
+				</div>
+			{/if}
+
+			{#if sesionesTruncadas}
+				<p class="tab-nota tab-nota--aviso">
+					Se muestran las {LIMITE_SESIONES} sesiones más recientes. Los contadores se calculan sobre ellas,
+					así que puede haber más de las que se ven.
+				</p>
+			{/if}
+
+			<div class="filters-bar">
+				<BuscadorLista
+					bind:valor={filtros.qSesion}
+					onBuscar={(termino) => (filtros.qSesion = termino)}
+					placeholder="Buscar por usuario, correo o IP…"
+				/>
+
+				<div class="filter-group">
+					{#each [{ k: 'activas', l: 'Activas', n: activasCount }, { k: 'cerradas', l: 'Cerradas', n: sesiones.length - activasCount }, { k: 'todas', l: 'Todas', n: sesiones.length }] as f}
+						<button
+							class="chip"
+							class:chip--active={filtros.sesion === f.k}
+							onclick={() => (filtros.sesion = f.k as typeof filtros.sesion)}
+						>
+							{f.l}
+							<span class="chip-count">{f.n}</span>
+						</button>
+					{/each}
+				</div>
 			</div>
-		{/if}
-	</section>
+
+			{#if loadingSesiones}
+				<div class="state-block">
+					<div class="spin-ring" aria-hidden="true"></div>
+					<p>Cargando sesiones…</p>
+				</div>
+			{:else if sesionesVisibles.length === 0}
+				<div class="state-block" in:fade>
+					<p>
+						{filtros.sesion === 'activas'
+							? 'No hay sesiones activas en este momento.'
+							: 'No hay sesiones que coincidan con los filtros.'}
+					</p>
+				</div>
+			{:else}
+				<div class="sessions-list">
+					{#each sesionesPaginadas as s, i (s.id)}
+						<div
+							class="session-card session-card--{s.is_active ? 'active' : 'closed'}"
+							in:fly={{ y: 8, duration: 220, delay: Math.min(i * 18, 280), easing: quintOut }}
+						>
+							<div class="session-main">
+								<div class="session-avatar">
+									{initials(s.usuario?.nombre || '?')}
+									<span
+										class="session-dot session-dot--{s.is_active ? 'active' : 'closed'}"
+										aria-hidden="true"
+									></span>
+								</div>
+								<div class="session-text">
+									<div class="session-row">
+										<strong>{s.usuario?.nombre || '—'}</strong>
+										<span class="session-mail">{s.usuario?.correo ?? ''}</span>
+									</div>
+									<div class="session-meta">
+										{#if s.usuario?.area}
+											<span class="meta-item">
+												<svg
+													class="h-3 w-3"
+													fill="none"
+													stroke="currentColor"
+													viewBox="0 0 24 24"
+													stroke-width="2"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"
+													/>
+												</svg>
+												{AREA_LABELS[s.usuario.area as Area] ?? s.usuario.area}
+											</span>
+										{/if}
+										<span class="meta-item">
+											<svg
+												class="h-3 w-3"
+												fill="none"
+												stroke="currentColor"
+												viewBox="0 0 24 24"
+												stroke-width="2"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25"
+												/>
+											</svg>
+											{parseBrowser(s.user_agent)}
+										</span>
+										{#if parseOS(s.user_agent)}
+											<span class="meta-item">
+												<svg
+													class="h-3 w-3"
+													fill="none"
+													stroke="currentColor"
+													viewBox="0 0 24 24"
+													stroke-width="2"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21"
+													/>
+												</svg>
+												{parseOS(s.user_agent)}
+											</span>
+										{/if}
+										{#if s.ip}
+											<span class="meta-item">
+												<svg
+													class="h-3 w-3"
+													fill="none"
+													stroke="currentColor"
+													viewBox="0 0 24 24"
+													stroke-width="2"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418"
+													/>
+												</svg>
+												<span class="mono">{s.ip}</span>
+											</span>
+										{/if}
+										{#if s.remember_me}
+											<span
+												class="meta-item meta-item--emerald"
+												title="Sesión persistente (recordar sesión)"
+											>
+												<svg
+													class="h-3 w-3"
+													fill="none"
+													stroke="currentColor"
+													viewBox="0 0 24 24"
+													stroke-width="2"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"
+													/>
+												</svg>
+												persistente
+											</span>
+										{/if}
+									</div>
+								</div>
+							</div>
+
+							<div class="session-side">
+								<div class="session-time">
+									{#if s.is_active}
+										<span class="estado-pill estado-pill--emerald">
+											<span class="pulse-dot" aria-hidden="true"></span>Activa
+										</span>
+										<small>Inicio: {formatDate(s.created_at)}</small>
+										<small>Última act.: {formatDate(s.last_activity)}</small>
+										<!-- Duración y expiración las mostraba la tabla de
+									     `/dashboard/sesiones`, que ahora redirige aquí. -->
+										<small>Duración: {s.duracion_texto || '—'}</small>
+										<small>Expira: {formatDate(s.token_expiry)}</small>
+									{:else}
+										<span class="estado-pill estado-pill--gray">Cerrada</span>
+										<small>Duración: {s.duracion_texto || '—'}</small>
+										{#if s.closed_at}<small>Cerrada: {formatDate(s.closed_at)}</small>{/if}
+									{/if}
+								</div>
+								{#if s.is_active}
+									<button
+										class="icon-btn icon-btn--danger"
+										title="Cerrar esta sesión"
+										aria-label="Cerrar sesión de {s.usuario?.nombre}"
+										onclick={() => cerrarSesion(s.id)}
+									>
+										<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="M5.636 5.636a9 9 0 1012.728 0M12 3v9"
+											/>
+										</svg>
+									</button>
+								{/if}
+							</div>
+						</div>
+					{/each}
+				</div>
+
+				<PaginadorLista
+					pagina={filtros.paginaSesiones}
+					total={sesionesVisibles.length}
+					porPagina={POR_PAGINA_SESIONES}
+					onCambiar={(p) => (filtros.paginaSesiones = p)}
+					cargando={loadingSesiones}
+					nombreItems="sesiones"
+				/>
+			{/if}
+		</section>
+	{/if}
+
+	{#if filtros.tab === 'permisos'}
+		<section class="section">
+			<p class="tab-nota">
+				Otorga o revoca el permiso individual <strong>bonos-planilla</strong> a uno o varios
+				usuarios. Solo quienes tengan este permiso activo pueden marcar y guardar bonos
+				(alimentación, día doble, día trabajado) en el tab
+				<em>Recorridos</em> de la página de Conductores. Los demás usuarios siguen pudiendo ver los bonos
+				ya otorgados (modo solo lectura).
+			</p>
+
+			{#if !isAdminUser}
+				<div class="alert-block">
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
+						/>
+					</svg>
+					<p>
+						Esta sección solo es visible para administradores. Si necesitas gestionar este permiso,
+						contacta a un administrador del sistema.
+					</p>
+				</div>
+			{:else}
+				<!-- Los tres números que había aquí (Con permiso / Sin permiso /
+			     Total equipo) son ahora los contadores de los chips: la misma
+			     cifra, en el control que filtra por ella. -->
+				<div class="filters-bar">
+					<BuscadorLista
+						bind:valor={filtros.qBonos}
+						onBuscar={(termino) => (filtros.qBonos = termino)}
+						placeholder="Buscar usuario por nombre, correo o cargo…"
+						etiqueta="Buscar usuarios por permiso de bonos"
+					/>
+
+					<div class="filter-group">
+						{#each [{ k: 'TODOS', l: 'Todos', n: usuarios.length }, { k: 'CON_PERMISO', l: 'Con permiso', n: totalConPermiso }, { k: 'SIN_PERMISO', l: 'Sin permiso', n: totalSinPermiso }] as f}
+							<button
+								class="chip"
+								class:chip--active={filtros.bonos === f.k}
+								onclick={() => (filtros.bonos = f.k as typeof filtros.bonos)}
+							>
+								{#if f.k === 'CON_PERMISO'}<span
+										class="chip-dot chip-dot--emerald"
+										aria-hidden="true"
+									></span>{/if}
+								{f.l}
+								<span class="chip-count">{f.n}</span>
+							</button>
+						{/each}
+					</div>
+
+					{#if bonosSeleccionados.size > 0}
+						<span class="bonos-selected-count">
+							{bonosSeleccionados.size} seleccionado{bonosSeleccionados.size !== 1 ? 's' : ''}
+						</span>
+						<button
+							class="btn-secondary btn-secondary--sm"
+							disabled={guardandoBonos}
+							onclick={() => (bonosSeleccionados = new Set())}
+						>
+							<svg
+								class="h-3.5 w-3.5"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+								stroke-width="2"
+								><path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M6 18L18 6M6 6l12 12"
+								/></svg
+							>
+							Limpiar selección
+						</button>
+					{/if}
+				</div>
+
+				<!-- Acciones masivas (siempre visibles, pero se aplican a la selección o al filtro) -->
+				<div class="bonos-bulk-actions">
+					<button
+						type="button"
+						class="btn-bonos-grant"
+						disabled={guardandoBonos}
+						onclick={() => setBonosPlanilla(true)}
+					>
+						<svg
+							class="h-3.5 w-3.5"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+							stroke-width="2"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+							/>
+						</svg>
+						Otorgar permiso
+						{#if bonosSeleccionados.size > 0}
+							<span class="bonos-btn-count">({bonosSeleccionados.size})</span>
+						{:else if usuariosBonos.length > 0}
+							<span class="bonos-btn-count">({usuariosBonos.length} del filtro)</span>
+						{/if}
+					</button>
+					<button
+						type="button"
+						class="btn-bonos-revoke"
+						disabled={guardandoBonos}
+						onclick={() => setBonosPlanilla(false)}
+					>
+						<svg
+							class="h-3.5 w-3.5"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+							stroke-width="2"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+							/>
+						</svg>
+						Revocar permiso
+						{#if bonosSeleccionados.size > 0}
+							<span class="bonos-btn-count">({bonosSeleccionados.size})</span>
+						{:else if usuariosBonos.length > 0}
+							<span class="bonos-btn-count">({usuariosBonos.length} del filtro)</span>
+						{/if}
+					</button>
+
+					<label class="bonos-select-all">
+						<input
+							type="checkbox"
+							checked={bonosSeleccionados.size > 0 &&
+								bonosSeleccionados.size === usuariosBonos.length}
+							indeterminate={bonosSeleccionados.size > 0 &&
+								bonosSeleccionados.size < usuariosBonos.length}
+							onchange={seleccionarTodosBonos}
+						/>
+						<span>Seleccionar todos los del filtro</span>
+					</label>
+				</div>
+
+				<!-- Lista de usuarios con su estado de permiso -->
+				{#if loading}
+					<div class="state-block">
+						<div class="spin-ring" aria-hidden="true"></div>
+						<p>Cargando equipo…</p>
+					</div>
+				{:else if usuariosBonos.length === 0}
+					<div class="state-block" in:fade>
+						<p>No hay usuarios que coincidan con los filtros.</p>
+					</div>
+				{:else}
+					<div class="bonos-grid">
+						{#each usuariosBonos as u, i (u.id)}
+							{@const hasPerm = hasBonosPlanilla(u)}
+							{@const isSel = bonosSeleccionados.has(u.id)}
+							<label
+								class="bonos-card"
+								class:bonos-card--active={hasPerm}
+								class:bonos-card--selected={isSel}
+								in:fly={{ y: 6, duration: 220, delay: Math.min(i * 18, 240), easing: quintOut }}
+							>
+								<input
+									type="checkbox"
+									checked={isSel}
+									onchange={() => toggleSeleccionBonos(u.id)}
+									class="bonos-card-check"
+								/>
+								<div
+									class="bonos-card-avatar avatar avatar--{u.activo === false
+										? 'inactive'
+										: 'online'}"
+								>
+									<span>{initials(u.nombre)}</span>
+								</div>
+								<div class="bonos-card-text">
+									<div class="bonos-card-row">
+										<strong>{u.nombre}</strong>
+										{#if u.id === currentUser?.id}<span class="badge-self">tú</span>{/if}
+									</div>
+									<span class="bonos-card-mail">{u.correo}</span>
+									{#if u.cargo}<span class="bonos-card-cargo">{u.cargo}</span>{/if}
+								</div>
+								<div class="bonos-card-state">
+									{#if hasPerm}
+										<span class="bonos-pill bonos-pill--emerald">
+											<svg
+												class="h-3 w-3"
+												fill="none"
+												stroke="currentColor"
+												viewBox="0 0 24 24"
+												stroke-width="2.5"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													d="M4.5 12.75l6 6 9-13.5"
+												/>
+											</svg>
+											Con permiso
+										</span>
+									{:else}
+										<span class="bonos-pill bonos-pill--gray">Sin permiso</span>
+									{/if}
+								</div>
+							</label>
+						{/each}
+					</div>
+				{/if}
+			{/if}
+		</section>
+	{/if}
+
+	{#if filtros.tab === 'invitaciones'}
+		<section class="section">
+			{#if loadingInv}
+				<div class="state-block">
+					<div class="spin-ring" aria-hidden="true"></div>
+					<p>Cargando invitaciones…</p>
+				</div>
+			{:else if invitaciones.length === 0}
+				<div class="empty-state" in:fade>
+					<div class="empty-icon" aria-hidden="true">
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.4">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
+							/>
+						</svg>
+					</div>
+					<h3>Sin invitaciones enviadas</h3>
+					<p>Invita a nuevos miembros por correo electrónico con sus áreas asignadas.</p>
+					<button class="btn-primary" onclick={abrirModalInv}>
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+						</svg>
+						Enviar primera invitación
+					</button>
+				</div>
+			{:else}
+				<div class="inv-list">
+					{#each invitaciones as inv, i (inv.id)}
+						<div
+							class="inv-card inv-card--{inv.estado}"
+							in:fly={{ y: 8, duration: 220, delay: Math.min(i * 20, 300), easing: quintOut }}
+						>
+							<div class="inv-main">
+								<div class="inv-icon" aria-hidden="true">
+									<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
+										/>
+									</svg>
+								</div>
+								<div class="inv-text">
+									<strong class="inv-correo">{inv.correo}</strong>
+									{#if inv.cargo}<span class="inv-cargo">{inv.cargo}</span>{/if}
+									<div class="inv-areas">
+										{#each inv.area as a}
+											<span class="area-chip area-chip--sm">{AREA_LABELS[a as Area] ?? a}</span>
+										{/each}
+									</div>
+									<small class="inv-by">
+										Enviada por {inv.invitado_por?.nombre ?? '—'} · {formatDate(inv.created_at)}
+									</small>
+								</div>
+							</div>
+							<div class="inv-side">
+								<span class="estado-pill {estadoInvBadge(inv.estado)}">{inv.estado}</span>
+								{#if inv.estado === 'pendiente'}
+									<div class="inv-actions">
+										<button
+											class="link-btn"
+											title="Reenviar invitación"
+											onclick={() => reenviarInvitacion(inv)}
+										>
+											<svg
+												class="h-3.5 w-3.5"
+												fill="none"
+												stroke="currentColor"
+												viewBox="0 0 24 24"
+												stroke-width="2"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+												/>
+											</svg>
+											Reenviar
+										</button>
+										<button
+											class="link-btn link-btn--danger"
+											title="Revocar invitación"
+											onclick={() => revocarInvitacion(inv.id)}
+										>
+											<svg
+												class="h-3.5 w-3.5"
+												fill="none"
+												stroke="currentColor"
+												viewBox="0 0 24 24"
+												stroke-width="2"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													d="M6 18L18 6M6 6l12 12"
+												/>
+											</svg>
+											Revocar
+										</button>
+									</div>
+								{/if}
+							</div>
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</section>
+	{/if}
 </div>
 
 <!-- ══════════════════════════════════════════════════════════════════════
@@ -1293,15 +1539,15 @@
 {#if showEditModal && editUsuario}
 	<div
 		class="modal-backdrop"
-		on:click={cerrarEditModal}
-		on:keydown={(e) => e.key === 'Escape' && cerrarEditModal()}
+		onclick={cerrarEditModal}
+		onkeydown={(e) => e.key === 'Escape' && cerrarEditModal()}
 		role="presentation"
 		transition:fade={{ duration: 200 }}
 	>
 		<div
 			class="modal modal--lg"
-			on:click|stopPropagation
-			on:keydown|stopPropagation
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
 			role="dialog"
 			tabindex="-1"
 			aria-modal="true"
@@ -1313,14 +1559,20 @@
 					<span class="eyebrow">Editar miembro</span>
 					<h2 id="edit-user-title">Editar usuario</h2>
 				</div>
-				<button class="modal-close" on:click={cerrarEditModal} aria-label="Cerrar">
+				<button class="modal-close" onclick={cerrarEditModal} aria-label="Cerrar">
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 					</svg>
 				</button>
 			</header>
 
-			<form on:submit|preventDefault={guardarEdit} class="modal-form">
+			<form
+				onsubmit={(e) => {
+					e.preventDefault();
+					guardarEdit();
+				}}
+				class="modal-form"
+			>
 				<div class="field">
 					<label for="edit-nombre" class="field-label">Nombre completo</label>
 					<input id="edit-nombre" type="text" bind:value={editNombre} required class="input" />
@@ -1332,7 +1584,13 @@
 					</div>
 					<div class="field">
 						<label for="edit-telefono" class="field-label">Teléfono</label>
-						<input id="edit-telefono" type="tel" bind:value={editTelefono} class="input" placeholder="3001234567" />
+						<input
+							id="edit-telefono"
+							type="tel"
+							bind:value={editTelefono}
+							class="input"
+							placeholder="3001234567"
+						/>
 					</div>
 				</div>
 				<div class="field">
@@ -1343,7 +1601,7 @@
 								type="button"
 								class="area-pill"
 								class:area-pill--active={editAreas.includes(key)}
-								on:click={() =>
+								onclick={() =>
 									(editAreas = editAreas.includes(key)
 										? editAreas.filter((a) => a !== key)
 										: [...editAreas, key])}
@@ -1364,12 +1622,24 @@
 					/>
 				</div>
 				<footer class="modal-foot">
-					<button type="button" class="btn-secondary" on:click={cerrarEditModal}>Cancelar</button>
+					<button type="button" class="btn-secondary" onclick={cerrarEditModal}>Cancelar</button>
 					<button type="submit" class="btn-primary" disabled={savingEdit}>
 						{#if savingEdit}
 							<svg class="spin" viewBox="0 0 24 24" fill="none">
-								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25" />
-								<path d="M4 12a8 8 0 018-8v0" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+								<circle
+									cx="12"
+									cy="12"
+									r="10"
+									stroke="currentColor"
+									stroke-width="3"
+									opacity="0.25"
+								/>
+								<path
+									d="M4 12a8 8 0 018-8v0"
+									stroke="currentColor"
+									stroke-width="3"
+									stroke-linecap="round"
+								/>
 							</svg>
 							Guardando…
 						{:else}
@@ -1391,15 +1661,15 @@
 {#if showConfirmModal && confirmUsuario}
 	<div
 		class="modal-backdrop"
-		on:click={cerrarConfirmModal}
-		on:keydown={(e) => e.key === 'Escape' && cerrarConfirmModal()}
+		onclick={cerrarConfirmModal}
+		onkeydown={(e) => e.key === 'Escape' && cerrarConfirmModal()}
 		role="presentation"
 		transition:fade={{ duration: 200 }}
 	>
 		<div
 			class="modal modal--sm"
-			on:click|stopPropagation
-			on:keydown|stopPropagation
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
 			role="alertdialog"
 			tabindex="-1"
 			aria-modal="true"
@@ -1414,11 +1684,19 @@
 			>
 				{#if confirmAction === 'disable'}
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
+						/>
 					</svg>
 				{:else}
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+						/>
 					</svg>
 				{/if}
 			</div>
@@ -1438,16 +1716,28 @@
 				{/if}
 			</p>
 			<footer class="modal-foot">
-				<button class="btn-secondary" on:click={cerrarConfirmModal}>Cancelar</button>
+				<button class="btn-secondary" onclick={cerrarConfirmModal}>Cancelar</button>
 				<button
 					class={confirmAction === 'disable' ? 'btn-danger' : 'btn-primary'}
 					disabled={savingToggle}
-					on:click={confirmarToggle}
+					onclick={confirmarToggle}
 				>
 					{#if savingToggle}
 						<svg class="spin" viewBox="0 0 24 24" fill="none">
-							<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25" />
-							<path d="M4 12a8 8 0 018-8v0" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+							<circle
+								cx="12"
+								cy="12"
+								r="10"
+								stroke="currentColor"
+								stroke-width="3"
+								opacity="0.25"
+							/>
+							<path
+								d="M4 12a8 8 0 018-8v0"
+								stroke="currentColor"
+								stroke-width="3"
+								stroke-linecap="round"
+							/>
 						</svg>
 					{/if}
 					{confirmAction === 'disable' ? 'Sí, deshabilitar' : 'Sí, habilitar'}
@@ -1463,15 +1753,15 @@
 {#if showPermisosModal && permisosUsuario}
 	<div
 		class="modal-backdrop"
-		on:click={cerrarPermisosModal}
-		on:keydown={(e) => e.key === 'Escape' && cerrarPermisosModal()}
+		onclick={cerrarPermisosModal}
+		onkeydown={(e) => e.key === 'Escape' && cerrarPermisosModal()}
 		role="presentation"
 		transition:fade={{ duration: 200 }}
 	>
 		<div
 			class="modal modal--md"
-			on:click|stopPropagation
-			on:keydown|stopPropagation
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
 			role="dialog"
 			tabindex="-1"
 			aria-modal="true"
@@ -1483,7 +1773,7 @@
 					<span class="eyebrow">Permisos por módulo</span>
 					<h2 id="permisos-title">{permisosUsuario.nombre}</h2>
 				</div>
-				<button class="modal-close" on:click={cerrarPermisosModal} aria-label="Cerrar">
+				<button class="modal-close" onclick={cerrarPermisosModal} aria-label="Cerrar">
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 					</svg>
@@ -1493,8 +1783,12 @@
 			<div class="perm-bulk">
 				<span class="perm-bulk-label">Acciones rápidas</span>
 				<div class="perm-bulk-btns">
-					<button type="button" class="chip chip--sm" on:click={() => toggleTodos(true)}>Habilitar todos</button>
-					<button type="button" class="chip chip--sm" on:click={() => toggleTodos(false)}>Deshabilitar todos</button>
+					<button type="button" class="chip chip--sm" onclick={() => toggleTodos(true)}
+						>Habilitar todos</button
+					>
+					<button type="button" class="chip chip--sm" onclick={() => toggleTodos(false)}
+						>Deshabilitar todos</button
+					>
 				</div>
 			</div>
 
@@ -1505,10 +1799,15 @@
 						type="button"
 						class="perm-row"
 						class:perm-row--active={activo}
-						on:click={() => togglePermiso(modulo.id)}
+						onclick={() => togglePermiso(modulo.id)}
 					>
 						<span class="perm-row-label">{modulo.label}</span>
-						<span class="user-status-toggle" class:user-status-toggle--on={activo} class:user-status-toggle--off={!activo} aria-hidden="true">
+						<span
+							class="user-status-toggle"
+							class:user-status-toggle--on={activo}
+							class:user-status-toggle--off={!activo}
+							aria-hidden="true"
+						>
 							<span class="user-status-knob"></span>
 						</span>
 					</button>
@@ -1516,12 +1815,24 @@
 			</div>
 
 			<footer class="modal-foot">
-				<button class="btn-secondary" on:click={cerrarPermisosModal}>Cancelar</button>
-				<button class="btn-primary" disabled={savingPermisos} on:click={guardarPermisos}>
+				<button class="btn-secondary" onclick={cerrarPermisosModal}>Cancelar</button>
+				<button class="btn-primary" disabled={savingPermisos} onclick={guardarPermisos}>
 					{#if savingPermisos}
 						<svg class="spin" viewBox="0 0 24 24" fill="none">
-							<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25" />
-							<path d="M4 12a8 8 0 018-8v0" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+							<circle
+								cx="12"
+								cy="12"
+								r="10"
+								stroke="currentColor"
+								stroke-width="3"
+								opacity="0.25"
+							/>
+							<path
+								d="M4 12a8 8 0 018-8v0"
+								stroke="currentColor"
+								stroke-width="3"
+								stroke-linecap="round"
+							/>
 						</svg>
 					{/if}
 					Guardar permisos
@@ -1537,15 +1848,15 @@
 {#if modalInvAbierto}
 	<div
 		class="modal-backdrop"
-		on:click={() => (modalInvAbierto = false)}
-		on:keydown={(e) => e.key === 'Escape' && (modalInvAbierto = false)}
+		onclick={() => (modalInvAbierto = false)}
+		onkeydown={(e) => e.key === 'Escape' && (modalInvAbierto = false)}
 		role="presentation"
 		transition:fade={{ duration: 200 }}
 	>
 		<div
 			class="modal modal--md"
-			on:click|stopPropagation
-			on:keydown|stopPropagation
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
 			role="dialog"
 			tabindex="-1"
 			aria-modal="true"
@@ -1557,14 +1868,20 @@
 					<span class="eyebrow">Nueva invitación</span>
 					<h2 id="invite-title">Invitar usuario</h2>
 				</div>
-				<button class="modal-close" on:click={() => (modalInvAbierto = false)} aria-label="Cerrar">
+				<button class="modal-close" onclick={() => (modalInvAbierto = false)} aria-label="Cerrar">
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
 					</svg>
 				</button>
 			</header>
 
-			<form on:submit|preventDefault={enviarInvitacion} class="modal-form">
+			<form
+				onsubmit={(e) => {
+					e.preventDefault();
+					enviarInvitacion();
+				}}
+				class="modal-form"
+			>
 				<div class="field">
 					<label for="inv-correo" class="field-label">
 						Correo electrónico <span class="field-required">*</span>
@@ -1578,7 +1895,9 @@
 					/>
 				</div>
 				<div class="field">
-					<label for="inv-cargo" class="field-label">Cargo <span class="muted-inline">(opcional)</span></label>
+					<label for="inv-cargo" class="field-label"
+						>Cargo <span class="muted-inline">(opcional)</span></label
+					>
 					<input
 						id="inv-cargo"
 						type="text"
@@ -1597,7 +1916,7 @@
 								type="button"
 								class="area-pill"
 								class:area-pill--active={formAreas.includes(key)}
-								on:click={() => toggleAreaInv(key)}
+								onclick={() => toggleAreaInv(key)}
 							>
 								{label}
 							</button>
@@ -1608,24 +1927,46 @@
 				{#if errorInv}
 					<div class="alert alert-error" in:fly={{ y: -8, duration: 200 }}>
 						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+							/>
 						</svg>
 						<strong>{errorInv}</strong>
 					</div>
 				{/if}
 
 				<footer class="modal-foot">
-					<button type="button" class="btn-secondary" on:click={() => (modalInvAbierto = false)}>Cancelar</button>
+					<button type="button" class="btn-secondary" onclick={() => (modalInvAbierto = false)}
+						>Cancelar</button
+					>
 					<button type="submit" class="btn-primary" disabled={enviandoInv}>
 						{#if enviandoInv}
 							<svg class="spin" viewBox="0 0 24 24" fill="none">
-								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25" />
-								<path d="M4 12a8 8 0 018-8v0" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+								<circle
+									cx="12"
+									cy="12"
+									r="10"
+									stroke="currentColor"
+									stroke-width="3"
+									opacity="0.25"
+								/>
+								<path
+									d="M4 12a8 8 0 018-8v0"
+									stroke="currentColor"
+									stroke-width="3"
+									stroke-linecap="round"
+								/>
 							</svg>
 							Enviando…
 						{:else}
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
+								/>
 							</svg>
 							Enviar invitación
 						{/if}
@@ -1693,141 +2034,143 @@
 	}
 
 	/* ═══════════════════════════════════════════════════════════════
-	   HERO
+	   BARRA DE PÁGINA — título, acciones y pestañas
 	   ═══════════════════════════════════════════════════════════════ */
-	.page-hero {
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.06);
-		border-radius: 24px;
-		padding: 1.75rem 1.75rem 1.25rem;
-		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
-	}
-	.hero-inner {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 1.5rem;
-		margin-bottom: 1.5rem;
-	}
-	.hero-left {
-		display: flex;
-		gap: 1rem;
-		align-items: flex-start;
-		flex: 1;
-		min-width: 280px;
-	}
-	.hero-text {
+	.page-toolbar {
+		background: var(--bg-surface);
+		border: 1px solid var(--border-subtle);
+		border-radius: 16px;
+		padding: 0.85rem 1rem;
 		display: flex;
 		flex-direction: column;
-		gap: 0.4rem;
+		gap: 0.75rem;
+		box-shadow: var(--shadow-card);
 	}
-	.hero-text h1 {
-		font-size: clamp(1.6rem, 3.5vw, 2.1rem);
+	.toolbar-top {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+	.toolbar-title {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		min-width: 0;
+	}
+	.toolbar-title h1 {
+		font-size: 1.25rem;
 		font-weight: 500;
-		line-height: 1.15;
+		line-height: 1.2;
 		margin: 0;
 	}
-	.hero-text p {
-		font-size: 0.92rem;
-		line-height: 1.6;
-		color: #4a4a4a;
-		margin: 0;
-		max-width: 540px;
-	}
-	.hero-actions {
+	.toolbar-actions {
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.6rem;
 		flex-shrink: 0;
 	}
-	.hero-stats {
+
+	/* ═══════════════════════════════════════════════════════════════
+	   PESTAÑAS
+	   ═══════════════════════════════════════════════════════════════ */
+	.tabs {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem;
+		padding-top: 0.75rem;
+		border-top: 1px solid var(--border-subtle);
+	}
+	.tab {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.45rem 0.9rem;
+		font-family: inherit;
+		font-size: 0.82rem;
+		font-weight: 600;
+		color: var(--text-muted);
+		background: transparent;
+		border: none;
+		border-radius: 9px;
+		cursor: pointer;
+		transition: all 0.2s var(--ease-apple);
+	}
+	.tab:not(.tab--active):hover {
+		color: var(--text-primary);
+		background: var(--bg-base);
+	}
+	/* `:not(.tab--active)` arriba y no un `.tab--active` a secas: `.tab:hover`
+	   pesa más que `.tab--active` en especificidad, así que pasar el ratón por
+	   encima de la pestaña abierta la despintaba y parecía que se había
+	   cerrado. */
+	.tab--active {
+		background: var(--bg-charcoal);
+		color: #fff;
+	}
+	/* El badge avisa de cuántas sesiones activas o invitaciones pendientes hay
+	   sin tener que entrar a mirar: por eso esas dos cifras siguen estando en
+	   la cáscara y no dentro de su propia pestaña. */
+	.tab-badge {
+		min-width: 1.15rem;
+		padding: 0 0.35rem;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.65rem;
+		font-weight: 700;
+		line-height: 1.15rem;
+		text-align: center;
+		border-radius: 999px;
+		background: rgba(249, 115, 22, 0.14);
+		color: var(--emerald-700);
+	}
+	.tab--active .tab-badge {
+		background: rgba(255, 255, 255, 0.18);
+		color: #fff;
+	}
+
+	/* Nota de pestaña: es texto corrido, por eso sí lleva tope de ancho. */
+	.tab-nota {
+		font-size: 0.85rem;
+		line-height: 1.5;
+		color: var(--text-secondary);
+		margin: 0;
+		max-width: 44rem;
+	}
+	.tab-nota--aviso {
+		padding: 0.6rem 0.85rem;
+		border-radius: 10px;
+		background: rgba(245, 158, 11, 0.08);
+		border: 1px solid rgba(245, 158, 11, 0.22);
+		color: #92400e;
+	}
+
+	/* Barra de foco: aparece al llegar desde «ver sesiones» de una tarjeta. */
+	.foco-usuario {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.65rem;
-		padding-top: 1.1rem;
-		border-top: 1px solid rgba(0, 0, 0, 0.06);
-		font-family: 'JetBrains Mono', monospace;
+		justify-content: space-between;
+		gap: 0.75rem;
+		padding: 0.6rem 0.85rem;
+		border-radius: 12px;
+		background: rgba(249, 115, 22, 0.06);
+		border: 1px solid rgba(249, 115, 22, 0.2);
 	}
-	.stat-item {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.45rem;
-	}
-	.stat-label {
-		font-size: 0.72rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: #6b6b6b;
-	}
-	.stat-value {
-		font-size: 0.95rem;
-		font-weight: 700;
-		color: #0f172a;
-	}
-	.stat-dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-	}
-	.stat-dot--emerald {
-		background: #f97316;
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
-	}
-	.stat-dot--amber {
-		background: #f59e0b;
-	}
-	.stat-dot--red {
-		background: #ef4444;
-	}
-	.stat-sep {
-		color: #c9c4ba;
-	}
-	.stat-item--active {
-		color: #f97316;
-	}
-	.stat-item--active .stat-label {
-		color: #f97316;
-	}
-	.stat-item--active .stat-value {
-		color: #f97316;
+	.foco-usuario p {
+		margin: 0;
+		font-size: 0.85rem;
+		color: var(--text-secondary);
 	}
 
 	/* ═══════════════════════════════════════════════════════════════
-	   SECTION HEAD (numbered)
+	   SECCIÓN — cuerpo de cada pestaña
 	   ═══════════════════════════════════════════════════════════════ */
 	.section {
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
 	}
-	.section-head {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 1rem;
-	}
-	.section-head h2 {
-		font-size: 1.4rem;
-		font-weight: 500;
-		margin: 0.35rem 0 0.25rem;
-	}
-	.section-head p {
-		font-size: 0.85rem;
-		color: #4a4a4a;
-		margin: 0;
-		max-width: 540px;
-		line-height: 1.5;
-	}
-	.section-head-right {
-		display: flex;
-		gap: 0.5rem;
-		align-items: center;
-	}
-
 	/* ═══════════════════════════════════════════════════════════════
 	   FILTERS BAR
 	   ═══════════════════════════════════════════════════════════════ */
@@ -1978,20 +2321,13 @@
 	/* ═══════════════════════════════════════════════════════════════
 	   USERS GRID
 	   ═══════════════════════════════════════════════════════════════ */
+	/* Rejilla fluida en vez de dos puntos de ruptura: el ancho real del `main`
+	   cambia al colapsar la barra lateral, y la cascada de `@media` se quedaba
+	   clavada en 3 columnas justo cuando sobraba sitio para 5. */
 	.users-grid {
 		display: grid;
-		grid-template-columns: 1fr;
+		grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
 		gap: 1.1rem;
-	}
-	@media (min-width: 640px) {
-		.users-grid {
-			grid-template-columns: repeat(2, 1fr);
-		}
-	}
-	@media (min-width: 1024px) {
-		.users-grid {
-			grid-template-columns: repeat(3, 1fr);
-		}
 	}
 
 	.user-card {
@@ -2104,7 +2440,8 @@
 		background: #ef4444;
 	}
 	@keyframes pulse-online {
-		0%, 100% {
+		0%,
+		100% {
 			box-shadow: 0 0 0 0 rgba(249, 115, 22, 0.4);
 		}
 		50% {
@@ -2408,8 +2745,13 @@
 		animation: pulse 1.5s ease-in-out infinite;
 	}
 	@keyframes pulse {
-		0%, 100% { opacity: 1; }
-		50% { opacity: 0.4; }
+		0%,
+		100% {
+			opacity: 1;
+		}
+		50% {
+			opacity: 0.4;
+		}
 	}
 
 	/* ═══════════════════════════════════════════════════════════════
@@ -2556,7 +2898,9 @@
 		animation: spin 0.8s linear infinite;
 	}
 	@keyframes spin {
-		to { transform: rotate(360deg); }
+		to {
+			transform: rotate(360deg);
+		}
 	}
 	.empty-state {
 		display: flex;
@@ -3024,54 +3368,6 @@
 		margin: 0;
 		font-size: 0.8125rem;
 		line-height: 1.5;
-	}
-
-	.bonos-stats {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.875rem 1.25rem;
-		border-radius: 12px;
-		background: linear-gradient(135deg, rgba(249, 115, 22, 0.04), rgba(249, 115, 22, 0.01));
-		border: 1px solid rgba(249, 115, 22, 0.15);
-		margin-bottom: 1rem;
-	}
-	.bonos-stat {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-	.bonos-stat-dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		flex-shrink: 0;
-	}
-	.bonos-stat-dot--emerald {
-		background: #f97316;
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
-	}
-	.bonos-stat-dot--gray {
-		background: #9ca3af;
-	}
-	.bonos-stat-label {
-		display: block;
-		font-size: 0.6875rem;
-		font-weight: 500;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		color: var(--text-muted, #6b7280);
-	}
-	.bonos-stat-value {
-		display: block;
-		font-size: 1.125rem;
-		font-weight: 600;
-		color: var(--bg-charcoal, #1a1a1a);
-		line-height: 1.1;
-	}
-	.bonos-stat-sep {
-		color: var(--text-very-muted, #d1d5db);
-		font-size: 0.875rem;
 	}
 
 	.bonos-bulk-actions {

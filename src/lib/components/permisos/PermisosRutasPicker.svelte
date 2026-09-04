@@ -62,7 +62,7 @@
 		'liquidaciones-terceros': 'Liq. de terceros',
 		'liquidaciones-terceros-adicionales': 'Liq. terceros — adicionales',
 		pesv: 'PESV',
-		contabilidad: 'Contabilidad',
+		certificados: 'Certificados tributarios',
 		terceros: 'Terceros',
 		usuarios: 'Usuarios del sistema',
 		sesiones: 'Sesiones',

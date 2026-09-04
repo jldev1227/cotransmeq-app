@@ -205,3 +205,80 @@ export const nominaEnviosAPI = {
 		>;
 	}
 };
+
+// ═══════════════════════════════════════════════════════════════
+// GENERACIÓN DE BORRADORES EN LOTE
+// ═══════════════════════════════════════════════════════════════
+
+export interface ConductorPrevio {
+	conductor_id: string;
+	nombre: string;
+	cedula: string | null;
+	dias: number;
+	placas: string[];
+	/** `null` = no hay nada guardado: generar aquí crea, no reemplaza. */
+	liquidacion_id: string | null;
+	estado: string | null;
+	sueldo_estimado: number;
+	avisos: string[];
+}
+
+export interface PrevioBorradores {
+	anio: number;
+	mes: number;
+	etiqueta: string;
+	desde: string | null;
+	hasta: string | null;
+	conductores: ConductorPrevio[];
+}
+
+export interface BorradorNominaItem {
+	conductorId: string;
+	nombre: string;
+	estado: 'creado' | 'reemplazado' | 'omitido' | 'error';
+	motivo?: string;
+	liquidacionId?: string;
+	sueldoTotal?: number;
+}
+
+export interface BorradorNominaJob {
+	jobId: string;
+	status: 'queued' | 'running' | 'complete' | 'error' | 'cancelled' | 'locked';
+	progress: number;
+	currentStep: string;
+	processed: number;
+	total: number;
+	items: BorradorNominaItem[];
+	error?: string;
+}
+
+export const nominaBorradoresAPI = {
+	/** Lo que hay que ver antes de lanzar: quién ya tiene y quién no tiene días. */
+	async previo(anio: number, mes: number, corte?: number): Promise<PrevioBorradores> {
+		const { data } = await apiClient.get('/api/nomina/borradores/previo', {
+			params: { anio, mes, ...(corte != null ? { corte } : {}) }
+		});
+		return data;
+	},
+
+	async generar(payload: {
+		anio: number;
+		mes: number;
+		corte?: number | null;
+		conductor_ids: string[];
+		sobrescribir?: string[];
+	}): Promise<{ job_id: string; status: string; total: number }> {
+		const { data } = await apiClient.post('/api/nomina/borradores/generar', payload);
+		return data;
+	},
+
+	async estado(jobId: string): Promise<BorradorNominaJob> {
+		const { data } = await apiClient.get(`/api/nomina/borradores/status/${jobId}`);
+		return data;
+	},
+
+	async cancelar(jobId: string): Promise<{ cancelado: boolean; nota?: string }> {
+		const { data } = await apiClient.delete(`/api/nomina/borradores/job/${jobId}`);
+		return data;
+	}
+};

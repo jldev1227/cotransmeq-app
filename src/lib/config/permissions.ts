@@ -151,9 +151,9 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
     general: true,
     description: 'Plan Estratégico de Seguridad Vial'
   },
-  contabilidad: {
+  certificados: {
     full: ['administracion', 'contabilidad'],
-    description: 'Módulo de contabilidad'
+    description: 'Certificados tributarios de terceros'
   },
   terceros: {
     full: ['administracion', 'contabilidad', 'talento_humano', 'facturacion', 'operaciones'],

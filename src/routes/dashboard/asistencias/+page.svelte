@@ -1,4 +1,14 @@
 <script lang="ts">
+	import { page } from '$app/state';
+	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import { crearEstadoUrl } from '$lib/listing/urlState';
+	import {
+		numero,
+		opcion,
+		texto,
+		valoresPorDefecto,
+		type DefinicionesFiltros
+	} from '$lib/listing/filtros';
 	import { onMount, onDestroy, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { fade } from 'svelte/transition';
@@ -25,20 +35,50 @@
 	let isDeletingFormulario = $state(false);
 	let isDownloading = $state(false);
 	let totalRows = $state(0);
-	let currentPage = $state(1);
-	let pageSize = $state(10);
-	let sortBy = $state<'fecha' | 'tematica' | 'respuestas'>('fecha');
-	let sortOrder = $state<'asc' | 'desc'>('desc');
 
-	let searchInput = $state('');
-	let searchQuery = $state('');
-	let activeFilter = $state<'all' | 'activo' | 'inactivo'>('all');
-	let debounceTimer: ReturnType<typeof setTimeout>;
+	/**
+	 * Filtros en la URL: búsqueda, estado, orden y página.
+	 *
+	 * Todo se resuelve en servidor, así que la firma incluye los cuatro y la
+	 * búsqueda va con el retardo compartido.
+	 */
+	interface FiltrosAsistencias {
+		q: string;
+		estado: string;
+		orden: string;
+		dir: string;
+		pagina: number;
+	}
+
+	const POR_PAGINA = 10;
+
+	const DEFS: DefinicionesFiltros<FiltrosAsistencias> = {
+		q: texto(),
+		estado: opcion('all'),
+		orden: opcion('fecha'),
+		dir: opcion('desc'),
+		pagina: numero(1)
+	};
+
+	const estadoUrl = crearEstadoUrl(DEFS);
+	const DEFS_VACIOS = valoresPorDefecto(DEFS);
+	let filtros = $state<FiltrosAsistencias>(estadoUrl.leer(page.url));
+
+	$effect(() => {
+		estadoUrl.escribir(page.url, filtros);
+	});
+
+	function ponerFiltro<K extends keyof FiltrosAsistencias>(
+		clave: K,
+		valor: FiltrosAsistencias[K]
+	) {
+		filtros = { ...filtros, [clave]: valor, pagina: 1 };
+	}
 
 	let selectedIds = $state<Set<string>>(new Set());
 	let isSelectingAll = $state(false);
 	let progressToastId: string | number | undefined;
-	let progressJobId: string | null = null;
+	let progressJobId = $state<string | null>(null);
 	const activeJobs = new Set<string>();
 
 	const onFormularioCreated = ({ formulario }: any) => {
@@ -109,12 +149,12 @@
 		isLoading = true;
 		try {
 			const response = await asistenciasAPI.obtenerFormularios({
-				page: currentPage,
-				limit: pageSize,
-				search: searchQuery || undefined,
-				filterActivo: activeFilter,
-				sortBy,
-				sortOrder
+				page: filtros.pagina,
+				limit: POR_PAGINA,
+				search: filtros.q || undefined,
+				filterActivo: filtros.estado as 'all' | 'activo' | 'inactivo',
+				sortBy: filtros.orden as 'fecha' | 'tematica' | 'respuestas',
+				sortOrder: filtros.dir as 'asc' | 'desc'
 			});
 
 			if (response && response.data) {
@@ -130,53 +170,38 @@
 	}
 
 	$effect(() => {
-		searchQuery;
-		activeFilter;
-		sortBy;
-		sortOrder;
-		currentPage;
-		pageSize;
+		/// Un solo objeto: cualquiera de sus campos cambia lo que se pide.
+		void filtros;
 		untrack(() => {
 			cargarFormularios();
 		});
 	});
 
-	function debounceSearch() {
-		clearTimeout(debounceTimer);
-		debounceTimer = setTimeout(() => {
-			searchQuery = searchInput;
-			currentPage = 1;
-			selectedIds = new Set();
-			isSelectingAll = false;
-		}, 300);
+	/// Cambiar un filtro limpia la selección (`limpiarSeleccion`, más abajo):
+	/// las filas marcadas ya no están necesariamente en pantalla, y una acción
+	/// masiva sobre ellas sorprendería a quien creía haberlas perdido de vista.
+	function buscar(termino: string) {
+		ponerFiltro('q', termino);
+		limpiarSeleccion();
 	}
 
 	function setFilter(value: 'all' | 'activo' | 'inactivo') {
-		activeFilter = value;
-		currentPage = 1;
-		selectedIds = new Set();
-		isSelectingAll = false;
+		ponerFiltro('estado', value);
+		limpiarSeleccion();
 	}
 
 	function clearFilters() {
-		searchInput = '';
-		searchQuery = '';
-		activeFilter = 'all';
-		currentPage = 1;
-		selectedIds = new Set();
-		isSelectingAll = false;
+		filtros = { ...DEFS_VACIOS };
+		limpiarSeleccion();
 	}
 
 	function handleSort(field: string, order: 'asc' | 'desc') {
-		sortBy = field as 'fecha' | 'tematica' | 'respuestas';
-		sortOrder = order;
-		currentPage = 1;
-		selectedIds = new Set();
-		isSelectingAll = false;
+		filtros = { ...filtros, orden: field, dir: order, pagina: 1 };
+		limpiarSeleccion();
 	}
 
-	function handlePageChange(page: number) {
-		currentPage = page;
+	function handlePageChange(pagina: number) {
+		filtros = { ...filtros, pagina };
 	}
 
 	function handleSelectionChange(newSelected: Set<string | number>) {
@@ -188,8 +213,8 @@
 		isSelectingAll = true;
 		try {
 			const all = await asistenciasAPI.obtenerTodosLosIds({
-				filterActivo: activeFilter,
-				search: searchQuery || undefined
+				filterActivo: filtros.estado as 'all' | 'activo' | 'inactivo',
+				search: filtros.q || undefined
 			});
 			selectedIds = new Set(all);
 			toast.success(`${all.length} formularios seleccionados`);
@@ -238,8 +263,8 @@
 		});
 		try {
 			const blob = await asistenciasAPI.exportarTodasPDFs({
-				filterActivo: activeFilter,
-				search: searchQuery || undefined,
+				filterActivo: filtros.estado as 'all' | 'activo' | 'inactivo',
+				search: filtros.q || undefined,
 				jobId: progressJobId
 			});
 
@@ -432,12 +457,11 @@
 					<circle cx="11" cy="11" r="8" />
 					<line x1="21" y1="21" x2="16.65" y2="16.65" />
 				</svg>
-				<input
-					type="search"
-					placeholder="Buscar por temática, lugar, instructor..."
-					bind:value={searchInput}
-					oninput={debounceSearch}
-					aria-label="Buscar formularios"
+				<BuscadorLista
+					valor={filtros.q}
+					onBuscar={buscar}
+					placeholder="Buscar formulario…"
+					etiqueta="Buscar formularios de asistencia"
 				/>
 			</div>
 
@@ -445,9 +469,9 @@
 				{#each FILTERS as f (f.label)}
 					<button
 						class="pill"
-						class:pill-active={activeFilter === f.value}
+						class:pill-active={filtros.estado === f.value}
 						onclick={() => setFilter(f.value)}
-						aria-pressed={activeFilter === f.value}
+						aria-pressed={filtros.estado === f.value}
 					>
 						{f.label}
 						{#if f.value === 'activo'}
@@ -465,7 +489,7 @@
 				<span>Cargando...</span>
 			{:else}
 				<span>{totalRows} formulario{totalRows !== 1 ? 's' : ''} encontrado{totalRows !== 1 ? 's' : ''}</span>
-				{#if searchQuery || activeFilter !== 'all'}
+				{#if filtros.q || filtros.estado !== 'all'}
 					<button class="reset-btn" onclick={clearFilters}>
 						Limpiar filtros
 					</button>
@@ -573,8 +597,8 @@
 				]}
 				isLoading={isLoading}
 				totalRows={totalRows}
-				currentPage={currentPage}
-				pageSize={pageSize}
+				currentPage={filtros.pagina}
+				pageSize={POR_PAGINA}
 				selectable={true}
 				selectedIds={selectedIds}
 				onSelectionChange={handleSelectionChange}
@@ -595,8 +619,8 @@
 						eliminarFormulario(f);
 					}
 				}}
-				emptyMessage={searchQuery || activeFilter !== 'all' ? 'Sin resultados para los filtros aplicados' : 'No hay formularios creados'}
-				emptyActionLabel={!searchQuery && activeFilter === 'all' ? 'Crear primer formulario' : undefined}
+				emptyMessage={filtros.q || filtros.estado !== 'all' ? 'Sin resultados para los filtros aplicados' : 'No hay formularios creados'}
+				emptyActionLabel={!filtros.q && filtros.estado === 'all' ? 'Crear primer formulario' : undefined}
 				onEmptyAction={openCreateModal}
 			/>
 		</div>
@@ -613,8 +637,8 @@
 						<path d="M9 11l3 3L22 4" />
 						<path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
 					</svg>
-					<p>{searchQuery || activeFilter !== 'all' ? 'Sin resultados para los filtros aplicados' : 'No hay formularios creados'}</p>
-					{#if !searchQuery && activeFilter === 'all'}
+					<p>{filtros.q || filtros.estado !== 'all' ? 'Sin resultados para los filtros aplicados' : 'No hay formularios creados'}</p>
+					{#if !filtros.q && filtros.estado === 'all'}
 						<button class="btn-primary" onclick={openCreateModal}>
 							Crear primer formulario
 						</button>

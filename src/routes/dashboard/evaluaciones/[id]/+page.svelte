@@ -4,7 +4,7 @@
 	import { page } from '$app/stores';
 	import { fade, fly } from 'svelte/transition';
 	import { toast } from 'svelte-sonner';
-	import { io, type Socket } from 'socket.io-client';
+	import { socketUtils } from '$lib/socket';
 
 	interface Evaluacion {
 		id: string;
@@ -64,7 +64,6 @@
 	let isLoadingResultados = false;
 	let error: string | null = null;
 	let showResultados = true;
-	let socket: Socket | null = null;
 	let nuevosResultadosCount = 0;
 	let resultadoSeleccionado: Resultado | null = null;
 	let showModalDetalle = false;
@@ -78,31 +77,25 @@
 	});
 
 	onDestroy(() => {
-		if (socket) {
-			socket.disconnect();
-		}
+		/// Además de darse de baja, hay que SALIR del room: sin esto el servidor
+		/// seguía contando esta pestaña como presente en la evaluación.
+		socketUtils.emit('leave-evaluacion', evaluacionId);
+		bajaNuevaRespuesta?.();
 	});
 
+	/// Antes esta página abría su PROPIA conexión con `io(...)`, sin token y sin
+	/// darse de baja de nada: cada visita dejaba un socket más contra el
+	/// servidor. Ahora usa el cliente compartido, que ya está autenticado.
+	let bajaNuevaRespuesta: (() => void) | undefined;
+
 	function initSocket() {
-		socket = io(import.meta.env.VITE_API_URL, {
-			transports: ['websocket', 'polling']
-		});
+		socketUtils.emit('join-evaluacion', evaluacionId);
 
-		socket.on('connect', () => {
-			console.log('Socket conectado');
-			// Unirse a la sala de esta evaluación
-			socket?.emit('join-evaluacion', evaluacionId);
-		});
-
-		socket.on('nueva-respuesta', (data: Resultado) => {
+		bajaNuevaRespuesta = socketUtils.on('nueva-respuesta', (data: Resultado) => {
 			// Agregar al inicio del array
 			resultados = [data, ...resultados];
 			nuevosResultadosCount++;
 			toast.success(`Nueva respuesta de ${data.nombre_completo}`);
-		});
-
-		socket.on('disconnect', () => {
-			console.log('Socket desconectado');
 		});
 	}
 

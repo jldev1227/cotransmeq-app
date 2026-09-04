@@ -67,7 +67,7 @@ export interface SarlaftFormularioDefinicion {
 export interface SarlaftFormularioResumen {
   id: string
   radicado: string
-  codigo_formulario: 'GC-FR-04' | 'GC-FR-05' | 'GC-FR-06' | 'SLFT-PTEE-FR-12' | 'GC-FOR-13'
+  codigo_formulario: 'SLFT-PTEE-FR-04' | 'SLFT-PTEE-FR-05' | 'SLFT-PTEE-FR-06' | 'SLFT-PTEE-FR-12' | 'GC-FOR-13'
   tipo_formulario: TipoFormularioSarlaft
   version: string
   fecha_envio: string
@@ -283,9 +283,9 @@ export const TIPO_FORMULARIO_LABELS: Record<TipoFormularioSarlaft, string> = {
 }
 
 export const TIPO_FORMULARIO_CODIGOS: Record<TipoFormularioSarlaft, string> = {
-  cliente_proveedor: 'GC-FR-04',
-  accionistas: 'GC-FR-05',
-  personal: 'GC-FR-06',
+  cliente_proveedor: 'SLFT-PTEE-FR-04',
+  accionistas: 'SLFT-PTEE-FR-05',
+  personal: 'SLFT-PTEE-FR-06',
   autorizacion_propietario: 'SLFT-PTEE-FR-12',
   declaracion_empresa_transporte: 'GC-FOR-13'
 }
@@ -338,7 +338,7 @@ export const ESTADO_LABELS: Record<EstadoSarlaft, { label: string; color: string
 }
 
 export const TIPO_DOCUMENTO_LABELS: Record<string, string> = {
-  // SARLAFT (GC-FR-04 / 05 / 06)
+  // SARLAFT (SLFT-PTEE-FR-04 / 05 / 06)
   cedula_representante: 'Cédula de ciudadanía',
   rut: 'RUT actualizado',
   certificado_existencia: 'Certificado de existencia',
