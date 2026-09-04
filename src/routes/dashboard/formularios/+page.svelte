@@ -28,6 +28,7 @@
 		type DefinicionesFiltros
 	} from '$lib/listing/filtros';
 	import { onMount } from 'svelte';
+	import { fechaDeFormularioDe } from '$lib/formularios/fecha-diligenciamiento';
 	import { goto } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
 	import {
@@ -980,7 +981,10 @@
 								<th scope="col">Formulario</th>
 								<th scope="col">Diligenciado por</th>
 								<th scope="col">Vehículo</th>
-								<th scope="col">Fecha negocio</th>
+								<!-- Cuándo se diligenció, que es la fecha del documento. Ojo: los
+								     filtros Desde/Hasta siguen consultando por `business_date`, la
+								     fecha con la que el servidor cuenta los períodos. -->
+								<th scope="col">Fecha formulario</th>
 								<th scope="col">Enviado</th>
 								<th scope="col">Estado</th>
 								<th scope="col"><span class="sr-only">Acciones</span></th>
@@ -1010,7 +1014,9 @@
 										{/if}
 									</td>
 									<td class="mono">{envio.vehiculo?.placa ?? '—'}</td>
-									<td class="mono">{envio.businessDate ?? '—'}</td>
+									<td class="mono">
+										{fechaDeFormularioDe(envio.context) ?? envio.businessDate ?? '—'}
+									</td>
 									<td class="mono">{fechaHora(envio.submittedAt)}</td>
 									<td>
 										<span class="chip chip--{envio.status.toLowerCase()}">

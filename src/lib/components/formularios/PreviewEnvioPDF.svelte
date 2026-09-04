@@ -44,6 +44,7 @@
 -->
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
+	import { fechaDeFormularioDe } from '$lib/formularios/fecha-diligenciamiento';
 	import { documentoEnvioCss } from './documento-envio.css';
 	import { exportarPdfEnvio } from './exportar-pdf-envio';
 	import type {
@@ -77,6 +78,18 @@
 		empresa = 'Cotransmeq S.A.S',
 		logo = '/assets/logo_transmeralda-264.webp'
 	}: Props = $props();
+
+	/**
+	 * Fecha de la cabecera.
+	 *
+	 * La del formulario —cuándo se empezó a diligenciar—, con la operativa de
+	 * respaldo: los envíos anteriores a que el campo existiera no la traen, y una
+	 * casilla «Fecha» en blanco en un documento firmado es peor que una fecha
+	 * calculada.
+	 */
+	const fechaDeCabecera = $derived(
+		fechaDeFormularioDe(envio.context) ?? envio.businessDate ?? null
+	);
 
 	// ── Índices ──────────────────────────────────────────────────────────────
 
@@ -457,8 +470,12 @@
 					<dd>{envio.version?.versionNumber ?? '—'}</dd>
 				</div>
 				<div>
+					<!-- La fecha del FORMULARIO, no la operativa: en un formato en papel
+					     la casilla «Fecha» es la del día en que se diligenció. La
+					     operativa sigue en el bloque de datos del registro, que es donde
+					     se audita. -->
 					<dt>Fecha</dt>
-					<dd>{envio.businessDate ? formatearFecha(envio.businessDate) : '—'}</dd>
+					<dd>{fechaDeCabecera ? formatearFecha(fechaDeCabecera) : '—'}</dd>
 				</div>
 			</dl>
 		</header>

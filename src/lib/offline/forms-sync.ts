@@ -11,8 +11,10 @@
  *
  *  2. **Las dependencias se respetan.** El `SUBMIT` depende de los
  *     `COMPLETE_ATTACHMENT`, que dependen de los `UPLOAD`, que dependen de los
- *     `INIT`. Sin ese orden, el servidor rechazaría el envío con
- *     `ATTACHMENT_MISSING` y el conductor vería un fallo que no es suyo.
+ *     `INIT`, que dependen del `BACKUP_DRAFT` que crea el envío en el servidor.
+ *     Sin ese orden, el servidor rechazaría el envío con `ATTACHMENT_MISSING`
+ *     —o el adjunto con `SUBMISSION_NOT_FOUND`— y el conductor vería un fallo
+ *     que no es suyo.
  *
  *  3. **`navigator.onLine` no basta.** Antes de cada ronda se confirma
  *     conectividad con una petición real: en un portal cautivo `onLine` es `true`
@@ -42,6 +44,7 @@ import {
 	getAssignment,
 	getAttachment,
 	getDraft,
+	getMeta,
 	getReceipt,
 	installationId,
 	markDraftBlocked,
@@ -248,6 +251,7 @@ export async function startSync(): Promise<void> {
 	/// Antes de mirar el estado: una operación `BLOCKED` no se reintenta nunca, así
 	/// que un teléfono que ya se atascó no se cura solo por abrir el portal.
 	await purgarObsoletasTrasRecibo();
+	await rescatarBloqueadosSinBorrador();
 
 	try {
 		channel = new BroadcastChannel(CHANNEL);
@@ -491,25 +495,80 @@ async function manejarError(operacion: OutboxOperation, err: unknown): Promise<R
 
 // ─── Ejecutores ──────────────────────────────────────────────────────────────
 
+/** Sube el borrador tal como está en el dispositivo. Crea la fila si no existe. */
+async function subirBorrador(draft: StoredDraft) {
+	return portalFormulariosAPI.guardarBorrador(draft.clientSubmissionId, {
+		assignmentId: draft.assignmentId,
+		versionId: draft.versionId,
+		context: draft.context,
+		answers: draft.answers,
+		progress: draft.progress,
+		startedAt: draft.createdAt,
+		device: { installationId: owner }
+	});
+}
+
 async function ejecutarBackup(operacion: OutboxOperation): Promise<void> {
 	const draft = await getDraft(operacion.aggregateId);
 	/// El borrador puede haberse enviado o descartado mientras la operación
 	/// esperaba: no es un error, simplemente ya no hay nada que respaldar.
 	if (!draft) return;
 
-	const resultado = await portalFormulariosAPI.guardarBorrador(draft.clientSubmissionId, {
-		assignmentId: draft.assignmentId,
-		versionId: draft.versionId,
-		context: draft.context,
-		answers: draft.answers,
-		progress: draft.progress,
-		device: { installationId: owner }
-	});
+	const resultado = await subirBorrador(draft);
 
 	/// El servidor avisa de que ese `clientSubmissionId` ya está entregado: la
 	/// outbox venía retrasada. Se limpia lo local en vez de insistir.
 	if (resultado?.alreadySubmitted) {
 		await limpiarSiCompleto(draft.clientSubmissionId);
+	}
+}
+
+/**
+ * `init` del adjunto, creando el borrador en el servidor si allí no existe.
+ *
+ * La cadena ya pone un `BACKUP_DRAFT` por delante, así que en un envío encolado
+ * por esta versión esto no debería activarse nunca. Existe por dos casos que el
+ * orden no cubre:
+ *
+ *  - Teléfonos con una cadena VIEJA en cola, encolada antes de que existiera la
+ *    cabeza. Sin esto habría que pedirle al conductor que reenviara a mano un
+ *    formulario que ya dio por entregado.
+ *  - La fila existió y desapareció: borrador descartado desde otro dispositivo,
+ *    restauración de la base, o el front apuntando a otro backend.
+ *
+ * Un solo reintento. Si después de crear el borrador el `init` insiste en que no
+ * existe, el problema no es de orden y repetir solo gastaría datos.
+ */
+async function iniciarAdjuntoAsegurando(adjunto: StoredAttachment) {
+	const peticion = () =>
+		portalFormulariosAPI.iniciarAdjunto({
+			clientSubmissionId: adjunto.clientSubmissionId,
+			clientAttachmentId: adjunto.clientAttachmentId,
+			fieldId: adjunto.fieldId,
+			occurrenceId: adjunto.occurrenceId,
+			kind: adjunto.kind,
+			mimeType: adjunto.mimeType,
+			byteSize: adjunto.byteSize,
+			sha256: adjunto.sha256,
+			originalName: adjunto.originalName
+		});
+
+	try {
+		return await peticion();
+	} catch (err) {
+		if (!(err instanceof PortalApiError) || err.code !== 'SUBMISSION_NOT_FOUND') throw err;
+
+		const draft = await getDraft(adjunto.clientSubmissionId);
+		/// Sin borrador local no hay nada que crear: el 404 es la verdad.
+		if (!draft) throw err;
+
+		const guardado = await subirBorrador(draft);
+		/// El backup dice «ya entregado» y el `init` decía «no existe». Son
+		/// incompatibles, así que hay algo más roto que el orden: se deja el error
+		/// original, que es el que describe lo que de verdad falló.
+		if (guardado?.alreadySubmitted) throw err;
+
+		return peticion();
 	}
 }
 
@@ -519,17 +578,7 @@ async function ejecutarInit(operacion: OutboxOperation): Promise<void> {
 	if (!adjunto) return;
 	if (adjunto.state === 'UPLOADED') return;
 
-	const resultado = await portalFormulariosAPI.iniciarAdjunto({
-		clientSubmissionId: adjunto.clientSubmissionId,
-		clientAttachmentId: adjunto.clientAttachmentId,
-		fieldId: adjunto.fieldId,
-		occurrenceId: adjunto.occurrenceId,
-		kind: adjunto.kind,
-		mimeType: adjunto.mimeType,
-		byteSize: adjunto.byteSize,
-		sha256: adjunto.sha256,
-		originalName: adjunto.originalName
-	});
+	const resultado = await iniciarAdjuntoAsegurando(adjunto);
 
 	await patchAttachment(clientAttachmentId, {
 		serverId: resultado.attachmentId,
@@ -547,17 +596,7 @@ async function ejecutarUpload(operacion: OutboxOperation): Promise<void> {
 	if (!adjunto.uploadUrl) {
 		/// El `INIT` no llegó a guardar la URL (o caducó). Se pide otra en vez de
 		/// dar el adjunto por perdido.
-		const resultado = await portalFormulariosAPI.iniciarAdjunto({
-			clientSubmissionId: adjunto.clientSubmissionId,
-			clientAttachmentId: adjunto.clientAttachmentId,
-			fieldId: adjunto.fieldId,
-			occurrenceId: adjunto.occurrenceId,
-			kind: adjunto.kind,
-			mimeType: adjunto.mimeType,
-			byteSize: adjunto.byteSize,
-			sha256: adjunto.sha256,
-			originalName: adjunto.originalName
-		});
+		const resultado = await iniciarAdjuntoAsegurando(adjunto);
 		if (resultado.alreadyUploaded) {
 			await patchAttachment(clientAttachmentId, {
 				state: 'UPLOADED',
@@ -740,6 +779,44 @@ async function limpiarSiCompleto(clientSubmissionId: string): Promise<void> {
 }
 
 /**
+ * Devuelve a la cola los envíos atascados por el orden viejo de la cadena.
+ *
+ * Hasta esta versión, la cadena del envío empezaba por el `INIT` del primer
+ * adjunto y el `SUBMIT` —el único paso que crea el envío en el servidor cuando
+ * no hubo backup— iba al final. Un formulario diligenciado sin señal se atascaba
+ * en el primer `INIT` con `SUBMISSION_NOT_FOUND`, un 404 que la cola marca
+ * `BLOCKED` para siempre.
+ *
+ * Esos teléfonos ya tienen la cadena vieja escrita en IndexedDB y nada la
+ * reescribe. Se desbloquean una vez: `iniciarAdjuntoAsegurando` crea el borrador
+ * que falta y la cadena termina sola. Si vuelve a fallar, será con el error de
+ * verdad —una asignación que ya no le corresponde, una versión nueva— y ese sí
+ * describe algo que alguien puede arreglar.
+ *
+ * Una sola vez por instalación: si tras el rescate el envío se vuelve a bloquear,
+ * repetirlo en cada arranque escondería el error nuevo detrás del viejo.
+ */
+const CLAVE_RESCATE = 'rescate-borrador-ausente-v1';
+
+async function rescatarBloqueadosSinBorrador(): Promise<void> {
+	if (await getMeta<boolean>(CLAVE_RESCATE)) return;
+
+	for (const operacion of await allOperations()) {
+		if (operacion.state !== 'BLOCKED') continue;
+		if (operacion.lastError?.code !== 'SUBMISSION_NOT_FOUND') continue;
+		await patchOperation(operacion.operationId, {
+			state: 'PENDING',
+			attempts: 0,
+			nextAttemptAt: new Date().toISOString(),
+			lastError: undefined
+		});
+		await markDraftBlocked(operacion.aggregateId, null);
+	}
+
+	await setMeta(CLAVE_RESCATE, true);
+}
+
+/**
  * Retira lo que quedó en la cola de envíos YA entregados.
  *
  * Recupera a los dispositivos que se quedaron atascados antes de que
@@ -879,36 +956,56 @@ export async function encolarDescarte(
 }
 
 /**
- * Encola el envío final con toda su cadena de adjuntos.
+ * Construye la cadena de operaciones de un envío.
  *
- * Se construye la cadena completa de una vez —`INIT → UPLOAD → COMPLETE` por
- * adjunto, y `SUBMIT` dependiendo de todos los `COMPLETE`— porque así el orden
- * queda escrito en IndexedDB. Si se encolara sobre la marcha, un cierre de la app
- * entre dos pasos dejaría la cadena incompleta.
+ * Pura y exportada porque el ORDEN de esta cadena es lo que decide si un envío
+ * llega entero, y es justo lo que no se puede comprobar a ojo mirando el
+ * IndexedDB de un teléfono.
+ *
+ * La cabeza es un `BACKUP_DRAFT` del que dependen todos los `INIT_ATTACHMENT`.
+ * No es cosmético: la fila del envío en el servidor solo la crean el backup o el
+ * `SUBMIT`, y el `SUBMIT` va al FINAL. Sin esa cabeza, un formulario
+ * diligenciado sin señal —o enviado antes de que el autoguardado al servidor
+ * llegara a correr— empieza por un `INIT` contra un envío que el servidor no
+ * conoce y recibe `SUBMISSION_NOT_FOUND`: «Guarda el borrador antes de subir
+ * evidencia». Un 404 que la cola NO reintenta, que deja el borrador en
+ * «Necesita corrección» y que el conductor no puede corregir desde ninguna
+ * pantalla, porque lo que falta no es un dato suyo sino un paso de la cola.
  */
-export async function encolarEnvio(
-	draft: StoredDraft,
-	adjuntos: StoredAttachment[],
-	opciones: { offlineCreated?: boolean } = {}
-): Promise<void> {
+export function construirCadenaEnvio(entrada: {
+	clientSubmissionId: string;
+	adjuntos: StoredAttachment[];
+	descartesPendientes: string[];
+	offlineCreated: boolean;
+}): OutboxOperation[] {
+	const { clientSubmissionId, adjuntos, descartesPendientes, offlineCreated } = entrada;
 	const operaciones: OutboxOperation[] = [];
 	const completes: string[] = [];
 
-	for (const adjunto of adjuntos) {
-		if (adjunto.state === 'UPLOADED') continue;
+	const porSubir = adjuntos.filter((a) => a.state !== 'UPLOADED');
 
-		const init = nuevaOperacion('INIT_ATTACHMENT', draft.clientSubmissionId, {
-			clientAttachmentId: adjunto.clientAttachmentId
-		});
+	/// Sin evidencia que subir no hace falta cabeza: el `SUBMIT` crea la fila si
+	/// no existe, y un backup de más es un viaje de red contra los datos móviles
+	/// del conductor para escribir lo que el `SUBMIT` va a escribir igual.
+	const cabeza = porSubir.length ? nuevaOperacion('BACKUP_DRAFT', clientSubmissionId, {}) : null;
+	if (cabeza) operaciones.push(cabeza);
+
+	for (const adjunto of porSubir) {
+		const init = nuevaOperacion(
+			'INIT_ATTACHMENT',
+			clientSubmissionId,
+			{ clientAttachmentId: adjunto.clientAttachmentId },
+			cabeza ? [cabeza.operationId] : []
+		);
 		const upload = nuevaOperacion(
 			'UPLOAD_ATTACHMENT',
-			draft.clientSubmissionId,
+			clientSubmissionId,
 			{ clientAttachmentId: adjunto.clientAttachmentId },
 			[init.operationId]
 		);
 		const complete = nuevaOperacion(
 			'COMPLETE_ATTACHMENT',
-			draft.clientSubmissionId,
+			clientSubmissionId,
 			{ clientAttachmentId: adjunto.clientAttachmentId },
 			[upload.operationId]
 		);
@@ -924,27 +1021,48 @@ export async function encolarEnvio(
 	 * llegaría con una foto que el conductor ya quitó y respondería
 	 * `ATTACHMENT_NOT_DECLARED`.
 	 */
-	const enCola = await allOperations();
-	const descartes = enCola
-		.filter(
-			(o) =>
-				o.type === 'DISCARD_ATTACHMENT' &&
-				o.aggregateId === draft.clientSubmissionId &&
-				o.state !== 'BLOCKED'
-		)
-		.map((o) => o.operationId);
-
 	operaciones.push(
-		nuevaOperacion(
-			'SUBMIT',
-			draft.clientSubmissionId,
-			{ offlineCreated: Boolean(opciones.offlineCreated) },
-			[...completes, ...descartes]
-		)
+		nuevaOperacion('SUBMIT', clientSubmissionId, { offlineCreated }, [
+			...completes,
+			...descartesPendientes
+		])
 	);
 
-	/// El backup pendiente del mismo envío se retira: el `SUBMIT` va a escribir
-	/// las mismas respuestas y con más autoridad.
+	return operaciones;
+}
+
+/**
+ * Encola el envío final con toda su cadena de adjuntos.
+ *
+ * Se construye la cadena completa de una vez porque así el orden queda escrito
+ * en IndexedDB. Si se encolara sobre la marcha, un cierre de la app entre dos
+ * pasos dejaría la cadena incompleta.
+ */
+export async function encolarEnvio(
+	draft: StoredDraft,
+	adjuntos: StoredAttachment[],
+	opciones: { offlineCreated?: boolean } = {}
+): Promise<void> {
+	const enCola = await allOperations();
+
+	const operaciones = construirCadenaEnvio({
+		clientSubmissionId: draft.clientSubmissionId,
+		adjuntos,
+		descartesPendientes: enCola
+			.filter(
+				(o) =>
+					o.type === 'DISCARD_ATTACHMENT' &&
+					o.aggregateId === draft.clientSubmissionId &&
+					o.state !== 'BLOCKED'
+			)
+			.map((o) => o.operationId),
+		offlineCreated: Boolean(opciones.offlineCreated)
+	});
+
+	/// Los backups que ya estaban en cola se retiran: la cadena nueva trae el
+	/// suyo —o no lo necesita— y dos backups del mismo borrador escriben dos
+	/// veces lo mismo. Se van también los `BLOCKED`: el de la cadena nueva sale
+	/// `PENDING`, que es lo que permite reintentar un envío que se atascó.
 	for (const previa of enCola) {
 		if (previa.aggregateId === draft.clientSubmissionId && previa.type === 'BACKUP_DRAFT') {
 			await deleteOperation(previa.operationId);
@@ -990,4 +1108,17 @@ export async function descartarEnvio(clientSubmissionId: string): Promise<void> 
 	await refrescarEstado();
 }
 
-export const syncInternals = { siguienteEspera, BACKOFF_MS, CHANNEL };
+/**
+ * Lo que la suite necesita alcanzar sin arrancar el motor.
+ *
+ * `iniciarAdjuntoAsegurando` está aquí y no exportado a secas porque no es API
+ * del módulo —nadie fuera debe pedir una URL de subida por su cuenta— pero sí es
+ * la red de seguridad de los teléfonos con una cadena vieja en cola, y esa hay
+ * que poder probarla.
+ */
+export const syncInternals = {
+	siguienteEspera,
+	BACKOFF_MS,
+	CHANNEL,
+	iniciarAdjuntoAsegurando
+};
