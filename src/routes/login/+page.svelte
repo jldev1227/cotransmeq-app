@@ -161,10 +161,10 @@
 			<!-- Logo en versión oscura: el fondo del loader ya no es verde. -->
 			<img
 				class="boot-logo"
-				src="/assets/logo_transmeralda-264.webp"
+				src="/assets/logo_nombre.webp"
 				alt="Cotransmeq S.A.S"
-				width="160"
-				height="55"
+				width="177"
+				height="113"
 			/>
 			<div class="boot-track" aria-hidden="true">
 				<span class="boot-fill"></span>
@@ -194,10 +194,10 @@
 					<div class="brand-mark">
 						<img
 							class="brand-logo"
-							src="/assets/logo_transmeralda_white-264.webp"
+							src="/assets/logo_nombre_white.webp"
 							alt="Cotransmeq S.A.S"
-							width="132"
-							height="45"
+							width="177"
+							height="113"
 						/>
 					</div>
 				</div>
@@ -254,10 +254,10 @@
 				<div class="mobile-brand">
 					<img
 						class="mobile-logo"
-						src="/assets/logo_transmeralda-264.webp"
+						src="/assets/logo_nombre.webp"
 						alt="Cotransmeq S.A.S"
-						width="120"
-						height="40"
+						width="177"
+						height="113"
 					/>
 				</div>
 

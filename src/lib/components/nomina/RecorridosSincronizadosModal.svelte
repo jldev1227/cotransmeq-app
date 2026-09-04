@@ -439,7 +439,7 @@
 			aria-label="Reporte de recorridos del período"
 			transition:fly={{ y: 20, duration: 320, easing: quintOut }}
 		>
-			<!-- ═══ HEADER editorial estilo landing-transmeralda ═══ -->
+			<!-- ═══ HEADER editorial ═══ -->
 			<div
 				class="flex-shrink-0"
 				style="background-color: #FFFFFF; border-bottom: 1px solid rgba(0, 0, 0, 0.08);"
@@ -452,8 +452,8 @@
 					<!-- Logo + eyebrow -->
 					<div class="flex items-center gap-3">
 						<img
-							src="/assets/logo_transmeralda-264.webp"
-							alt="Logo"
+							src="/assets/logo_nombre.webp"
+							alt="Cotransmeq S.A.S"
 							class="h-12 w-auto object-contain"
 							onerror={(e: any) => (e.currentTarget.style.display = 'none')}
 						/>

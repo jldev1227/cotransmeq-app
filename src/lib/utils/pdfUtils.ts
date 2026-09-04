@@ -24,9 +24,13 @@ export async function imageToBase64(url: string): Promise<string> {
 }
 
 /**
- * Obtiene el logo correspondiente según si es Cotransmeq o Transmeralda
- * - Transmeralda: /assets/logo.webp
- * - Cotransmeq: /assets/logo_nombre.webp
+ * Logo de cabecera para los PDF de nómina.
+ *
+ * Este repo NO tiene arte de Transmeralda: las dos ramas son de Cotransmeq y
+ * lo único que cambia es la pieza. `logo.webp` es el símbolo suelto (el
+ * caballo, 1200x675) y `logo_nombre.webp` la marca con razón social
+ * (177x113): al elegir hay que mirar el `width`/`height` del nodo de pdfmake,
+ * porque las proporciones no son las mismas y forzar ambas deforma la imagen.
  */
 export async function obtenerLogoBase64(esCotransmeq: boolean): Promise<string | null> {
 	try {

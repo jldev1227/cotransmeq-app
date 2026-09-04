@@ -76,7 +76,7 @@
 		envio,
 		definicion,
 		empresa = 'Cotransmeq S.A.S',
-		logo = '/assets/logo_transmeralda-264.webp'
+		logo = '/assets/logo_nombre.webp'
 	}: Props = $props();
 
 	/**

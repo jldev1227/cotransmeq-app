@@ -244,3 +244,22 @@ opciones (`emerald`, `red`, `amber`, `gray`), nunca de los literales `B`/`M`/`NA
 Así un formato nuevo se ve bien el día que se publica y sigue funcionando con
 cualquier escala que HSEQ invente. No introduzcas plantillas por formato: cada
 formato nuevo nacería roto hasta que alguien lo maquete.
+
+## Logotipos
+
+`static/assets/` solo tiene arte de Cotransmeq y ningún archivo se llama como el
+del gemelo. Al portar un componente desde transmeralda hay que traducir la ruta,
+porque una ruta que no existe **no da error**: sale un hueco.
+
+| transmeralda | cotransmeq | cuándo |
+| --- | --- | --- |
+| `logo_transmeralda-264.webp` | `logo_nombre.webp` | fondo claro; lleva la razón social |
+| `logo_transmeralda_white-264.webp` | `logo_nombre_white.webp` | fondo oscuro |
+| — | `logo.webp` | solo el símbolo (el caballo), sin nombre |
+
+Las proporciones **no** coinciden: la marca de transmeralda es 264x80 y la de
+Cotransmeq 177x113. Un `width`/`height` heredado del original la aplasta; usa
+`object-fit: contain` en HTML y `fit: [w, h]` en pdfmake/pdfkit.
+
+Nada del frontend debe colgar del bucket `transmeralda` de S3: el sello de
+Supertransporte está en `static/assets/super_transporte.png`.

@@ -47,10 +47,10 @@
 			<div class="brand-head">
 				<img
 					class="brand-logo"
-					src="/assets/logo_cotransmeq_white-264.webp"
+					src="/assets/logo_nombre_white.webp"
 					alt="Cotransmeq S.A.S"
-					width="132"
-					height="45"
+					width="177"
+					height="113"
 				/>
 			</div>
 
@@ -103,10 +103,10 @@
 			<div class="mobile-brand">
 				<img
 					class="mobile-logo"
-					src="/assets/logo_cotransmeq-264.webp"
+					src="/assets/logo_nombre.webp"
 					alt="Cotransmeq S.A.S"
-					width="120"
-					height="40"
+					width="177"
+					height="113"
 				/>
 			</div>
 

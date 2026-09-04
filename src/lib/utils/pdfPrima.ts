@@ -106,12 +106,15 @@ export async function generarPdfPrima(
 	const esCotransmeq = false;
 	const color = esCotransmeq ? '#FF9500' : '#2E8B57';
 
+	// Logotipo de Cotransmeq con razón social. `logo.webp` es solo el símbolo
+	// (el caballo) y en una cabecera de nómina se lee como un adorno sin marca.
+	const LOGO_URL = '/assets/logo_nombre.webp';
 	let logoBase64: string | null = null;
 	try {
-		logoBase64 = await imageToBase64Url('/assets/logo_transmeralda-264.webp');
+		logoBase64 = await imageToBase64Url(LOGO_URL);
 		console.log('[pdfPrima] Logo cargado, longitud:', logoBase64.length, 'starts:', logoBase64.substring(0, 40));
 	} catch (e) {
-		console.warn('[pdfPrima] No se pudo cargar /assets/logo_transmeralda-264.webp:', e);
+		console.warn(`[pdfPrima] No se pudo cargar ${LOGO_URL}:`, e);
 	}
 
 	const codigoFormato = 'RH-FR-30';
@@ -178,8 +181,7 @@ export async function generarPdfPrima(
 							? [
 									{
 										image: 'logo',
-										width: 110,
-										height: 40,
+										fit: [110, 46],
 										alignment: 'left' as const,
 										margin: [0, 5, 0, 0]
 									}
