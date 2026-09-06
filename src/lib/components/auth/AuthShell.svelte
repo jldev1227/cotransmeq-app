@@ -27,9 +27,33 @@
 		children: Snippet;
 		/** Pie opcional bajo el separador (enlaces de vuelta, ayuda…). */
 		pie?: Snippet;
+		/**
+		 * Texto del panel de marca. Tiene valores por defecto porque nació para
+		 * la recuperación de contraseña; cualquier otra pantalla que use este
+		 * marco (invitación, alta…) debe pasar los suyos, o el panel izquierdo
+		 * hablará de restablecer contraseñas en un sitio donde no aplica.
+		 */
+		marcaCodigo?: string;
+		marcaTitulo?: string;
+		marcaDesc?: string;
+		marcaPuntos?: string[];
 	}
 
-	let { eyebrow, titulo, subtitulo, children, pie }: Props = $props();
+	let {
+		eyebrow,
+		titulo,
+		subtitulo,
+		children,
+		pie,
+		marcaCodigo = 'Acceso · Cuenta',
+		marcaTitulo = 'Tu cuenta, bajo tu control',
+		marcaDesc = 'La contraseña se restablece con un enlace que solo llega a tu correo corporativo y caduca a los 30 minutos.',
+		marcaPuntos = [
+			'Enlace de un solo uso',
+			'Válido durante 30 minutos',
+			'Tu contraseña anterior sigue activa hasta que la cambies'
+		]
+	}: Props = $props();
 </script>
 
 <div class="auth-page" in:fade={{ duration: 300 }}>
@@ -55,38 +79,21 @@
 			</div>
 
 			<div class="brand-body">
-				<span class="brand-code">Acceso · Cuenta</span>
-				<h2 class="brand-title">Tu cuenta, bajo tu control</h2>
-				<p class="brand-desc">
-					La contraseña se restablece con un enlace que solo llega a tu correo
-					corporativo y caduca a los 30 minutos.
-				</p>
+				<span class="brand-code">{marcaCodigo}</span>
+				<h2 class="brand-title">{marcaTitulo}</h2>
+				<p class="brand-desc">{marcaDesc}</p>
 
 				<ul class="brand-features">
-					<li>
-						<span class="feature-mark">
-							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
+					{#each marcaPuntos as punto (punto)}
+						<li>
+							<span class="feature-mark">
+								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
 							</svg>
-						</span>
-						Enlace de un solo uso
-					</li>
-					<li>
-						<span class="feature-mark">
-							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-							</svg>
-						</span>
-						Válido durante 30 minutos
-					</li>
-					<li>
-						<span class="feature-mark">
-							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-							</svg>
-						</span>
-						Tu contraseña anterior sigue activa hasta que la cambies
-					</li>
+							</span>
+							{punto}
+						</li>
+					{/each}
 				</ul>
 			</div>
 
