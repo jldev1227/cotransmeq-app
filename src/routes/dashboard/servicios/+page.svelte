@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { page as pageState } from '$app/state';
 	import { browser } from '$app/environment';
-	import { fade, fly, scale } from 'svelte/transition';
+	import { fade, fly } from 'svelte/transition';
 	import { serviciosStore, serviciosPorEstado } from '$lib/stores/servicios';
 	import {
 		recursos,
@@ -11,7 +11,6 @@
 		vehiculosOptions,
 		clientesOptions
 	} from '$lib/stores/recursos';
-	import { socketStore } from '$lib/socket';
 	import {
 		getEstadoText,
 		getEstadoColor,
@@ -293,7 +292,6 @@
 	let stats = $derived($serviciosStore.stats);
 	let servicios = $derived($serviciosStore.servicios);
 	let loading = $derived($serviciosStore.loading);
-	let socketConnected = $derived($socketStore.connected);
 	let pagination = $derived($serviciosStore.pagination);
 	let totalPaginas = $derived(pagination.totalPages);
 	let conductores = $derived($conductoresOptions);
@@ -911,24 +909,11 @@
 					</svg>
 				</div>
 				<div>
+					<!-- El estado del socket lo dice el header, junto al nombre de la
+					     sección. Aquí había otro chip «En vivo»/«Offline» que
+					     aparecía a diez centímetros del suyo diciendo lo mismo. -->
 					<div class="flex items-center gap-2">
 						<h1 class="text-xl font-bold text-gray-900">Gestión de Servicios</h1>
-						{#if socketConnected}
-							<span
-								class="flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-600"
-								in:scale={{ duration: 200 }}
-							>
-								<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500"></span>
-								En vivo
-							</span>
-						{:else}
-							<span
-								class="flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-medium text-orange-600"
-							>
-								<span class="h-1.5 w-1.5 rounded-full bg-orange-500"></span>
-								Offline
-							</span>
-						{/if}
 					</div>
 					<p class="text-xs text-gray-500">
 						Administra y monitorea todos los servicios de transporte

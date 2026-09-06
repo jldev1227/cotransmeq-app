@@ -24,9 +24,20 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 /** Socket falso que registra altas y bajas como lo haría socket.io. */
 const manejadores = new Map<string, Set<(data: unknown) => void>>()
 
+/**
+ * El Manager de socket.io (`socket.io`), donde vive el backoff.
+ * `SocketManager` se suscribe ahí a `reconnect_attempt` y `reconnect_failed`.
+ */
+const managerFalso = {
+	on: vi.fn(),
+	reconnection: vi.fn()
+}
+
 const socketFalso = {
 	connected: true,
 	id: 'socket-de-prueba',
+	io: managerFalso,
+	connect: vi.fn(),
 	on(evento: string, cb: (data: unknown) => void) {
 		if (!manejadores.has(evento)) manejadores.set(evento, new Set())
 		manejadores.get(evento)!.add(cb)

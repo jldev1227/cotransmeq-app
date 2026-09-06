@@ -43,7 +43,16 @@
 
 	// Reactive declarations
 	$: user = $authStore.user;
-	$: isConnected = $socketStore.connected;
+	/// El aviso ya no se enciende con cualquier `!connected`.
+	///
+	/// Antes lo hacía, así que el parpadeo normal del primer handshake pintaba
+	/// «Sin conexión» durante medio segundo en cada carga, y —lo importante— un
+	/// corte de dos segundos se veía exactamente igual que un cliente muerto
+	/// para siempre. Ahora se distingue: `reconectando` es informativo y se
+	/// arregla solo; `rechazado` necesita que alguien haga algo.
+	$: estadoSocket = $socketStore.estado;
+	$: intentosSocket = $socketStore.intentos;
+	$: avisoSocket = estadoSocket === 'reconectando' || estadoSocket === 'rechazado';
 	$: token = $authStore.token;
 
 	// Guard reactivo: verificar permisos al cambiar de ruta
@@ -192,10 +201,14 @@
 		</div>
 	</div>
 
-	<!-- ═══ TOAST PERSISTENTE — Conexión en tiempo real (top-center) ═══ -->
-	{#if !isConnected}
+	<!-- ═══ TOAST — Conexión en tiempo real, SOLO móvil ═══
+	     En md+ esto lo dice el indicador del header, junto al nombre de la
+	     sección: allí se ve siempre y no tapa contenido. En móvil el header no
+	     tiene ancho para el indicador, así que ahí se mantiene el toast. -->
+	{#if avisoSocket}
+		{@const rechazado = estadoSocket === 'rechazado'}
 		<div
-			class="pointer-events-none fixed left-1/2 top-[68px] z-[9998] -translate-x-1/2 px-4"
+			class="pointer-events-none fixed left-1/2 top-[68px] z-[9998] -translate-x-1/2 px-4 md:hidden"
 			role="status"
 			aria-live="polite"
 			in:fly={{ y: -16, duration: 320, easing: quintOut }}
@@ -203,36 +216,68 @@
 		>
 			<div
 				class="apple-transition pointer-events-auto flex max-w-[92vw] items-center gap-3 rounded-full px-4 py-2 backdrop-blur-md"
-				style="background:rgba(254,243,199,0.92); border:1px solid rgba(245,158,11,0.35); box-shadow:0 8px 28px rgba(245,158,11,0.18), 0 2px 8px rgba(0,0,0,0.04);"
+				style={rechazado
+					? 'background:rgba(254,226,226,0.92); border:1px solid rgba(239,68,68,0.35); box-shadow:0 8px 28px rgba(239,68,68,0.18), 0 2px 8px rgba(0,0,0,0.04);'
+					: 'background:rgba(254,243,199,0.92); border:1px solid rgba(245,158,11,0.35); box-shadow:0 8px 28px rgba(245,158,11,0.18), 0 2px 8px rgba(0,0,0,0.04);'}
 			>
 				<!-- Ping dot (sin SVG grande) -->
 				<span class="relative flex h-2.5 w-2.5 flex-shrink-0" aria-hidden="true">
+					<!-- El latido solo mientras se reintenta: si está rechazado no
+					     hay nada en marcha y animarlo miente sobre lo que pasa. -->
+					{#if !rechazado}
+						<span
+							class="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75"
+							style="background:#f59e0b"
+						></span>
+					{/if}
 					<span
-						class="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75"
-						style="background:#f59e0b"
-					></span>
-					<span class="relative inline-flex h-2.5 w-2.5 rounded-full" style="background:#d97706"
+						class="relative inline-flex h-2.5 w-2.5 rounded-full"
+						style={rechazado ? 'background:#dc2626' : 'background:#d97706'}
 					></span>
 				</span>
 
 				<!-- Texto principal — Inter Tight con jerarquía clara -->
 				<span
 					class="font-mono text-[10px] font-bold uppercase tracking-[0.12em]"
-					style="color:#92400e"
+					style={rechazado ? 'color:#991b1b' : 'color:#92400e'}
 				>
-					Sin conexión
+					{rechazado ? 'Sin conexión' : 'Reconectando'}
 				</span>
 				<span
 					class="hidden h-3 w-px sm:inline-block"
-					style="background:rgba(146,64,14,0.25)"
+					style={rechazado ? 'background:rgba(153,27,27,0.25)' : 'background:rgba(146,64,14,0.25)'}
 					aria-hidden="true"
 				></span>
-				<span class="hidden text-[12.5px] font-medium sm:inline" style="color:#78350f">
-					Conexión en tiempo real no disponible — algunas funciones pueden estar limitadas
-				</span>
-				<span class="text-[12.5px] font-medium sm:hidden" style="color:#78350f">
-					Sin conexión en tiempo real
-				</span>
+				{#if rechazado}
+					<span class="hidden text-[12.5px] font-medium sm:inline" style="color:#7f1d1d">
+						Tu sesión no es válida para la conexión en tiempo real — vuelve a iniciar sesión
+					</span>
+					<span class="text-[12.5px] font-medium sm:hidden" style="color:#7f1d1d">
+						Sesión no válida
+					</span>
+				{:else}
+					<span class="hidden text-[12.5px] font-medium sm:inline" style="color:#78350f">
+						Se perdió la conexión en tiempo real — reintentando
+						{intentosSocket > 0 ? `(intento ${intentosSocket})` : ''}
+					</span>
+					<span class="text-[12.5px] font-medium sm:hidden" style="color:#78350f">
+						Reintentando conexión
+					</span>
+				{/if}
+
+				<!-- Salida manual: el reintento automático no se para nunca, pero
+				     esperar diez segundos al siguiente hueco del backoff cuando
+				     sabes que el servidor ya volvió es innecesario. -->
+				<button
+					type="button"
+					class="apple-transition flex-shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold hover:opacity-80"
+					style={rechazado
+						? 'background:rgba(153,27,27,0.10); color:#7f1d1d'
+						: 'background:rgba(146,64,14,0.10); color:#78350f'}
+					on:click={() => socketManager.reconectar()}
+				>
+					Reintentar
+				</button>
 			</div>
 		</div>
 	{/if}

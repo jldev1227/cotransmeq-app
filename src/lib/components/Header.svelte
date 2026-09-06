@@ -6,7 +6,7 @@
 	import SessionTimer from './SessionTimer.svelte';
 	import { notificacionesStore } from '$lib/stores/notificaciones';
 	import { authStore } from '$lib/stores/auth';
-	import { socketUtils } from '$lib/socket';
+	import { socketUtils, socketStore, socketManager } from '$lib/socket';
 	import { notificacionesApi } from '$lib/api/notificaciones';
 	import { mobileDrawerStore } from '$lib/stores/mobileDrawer';
 	import { sidebarStore } from '$lib/stores/sidebar';
@@ -73,6 +73,60 @@
 	}
 
 	$: pageTitle = PAGE_LABELS[getActiveSectionFromPath($page.url.pathname)] || 'Dashboard';
+
+	// ═══ Estado de la conexión en tiempo real ═══
+	//
+	// Vive aquí y no en un aviso flotante porque en escritorio y tablet el
+	// header solo llevaba el nombre de la sección y dejaba media barra vacía,
+	// mientras el estado del socket se anunciaba con un toast centrado que
+	// tapaba contenido. Junto al título se ve siempre, sin robar sitio.
+	//
+	// El toast sigue existiendo en `dashboard/+layout.svelte` para móvil, donde
+	// el header va justo de ancho y no cabe este indicador.
+	$: socketEstado = $socketStore.estado;
+	$: socketIntentos = $socketStore.intentos;
+	$: socketProblema = socketEstado === 'reconectando' || socketEstado === 'rechazado';
+
+	/// Colores de semáforo escritos a mano y NO tomados de la paleta.
+	///
+	/// `--emerald-*` se remapea a naranja en cotransmeq: correcto para la marca,
+	/// equivocado para un estado. Verde/ámbar/rojo significan lo mismo en los
+	/// dos productos y tienen que verse igual.
+	$: socketColor =
+		socketEstado === 'conectado'
+			? '#059669'
+			: socketEstado === 'reconectando'
+				? '#d97706'
+				: socketEstado === 'rechazado'
+					? '#dc2626'
+					: '#94a3b8';
+
+	$: socketTexto =
+		socketEstado === 'conectado'
+			? 'En vivo'
+			: socketEstado === 'conectando'
+				? 'Conectando'
+				: socketEstado === 'reconectando'
+					? 'Reconectando'
+					: socketEstado === 'rechazado'
+						? 'Sin conexión'
+						: '';
+
+	/// El detalle largo va al `title`: el chip se mantiene en una línea y quien
+	/// necesite saber qué pasa lo tiene a un hover, sin desplazar el header.
+	$: socketDetalle =
+		socketEstado === 'conectado'
+			? $socketStore.ultimaConexion
+				? `Conexión en tiempo real activa desde las ${new Date($socketStore.ultimaConexion).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}`
+				: 'Conexión en tiempo real activa'
+			: socketEstado === 'conectando'
+				? 'Estableciendo la conexión en tiempo real...'
+				: socketEstado === 'reconectando'
+					? 'Se perdió la conexión en tiempo real. Se reintenta solo; los cambios de otros usuarios pueden tardar en aparecer.'
+					: socketEstado === 'rechazado'
+						? ($socketStore.error ??
+							'Tu sesión no es válida para la conexión en tiempo real. Vuelve a iniciar sesión.')
+						: '';
 
 	let showUserMenu = false;
 	let showNotifications = false;
@@ -269,6 +323,58 @@
 			</button>
 
 			<h1 class="font-display truncate text-xl md:text-2xl" style="color: var(--bg-charcoal); font-weight: 700;">{pageTitle}</h1>
+
+			<!-- ═══ Conexión en tiempo real — solo md+ (en móvil lo cubre el toast del layout) ═══ -->
+			{#if socketEstado !== 'inactivo'}
+				<div
+					class="ml-1 hidden shrink-0 items-center gap-2 border-l pl-3 md:flex"
+					style="border-color: var(--border-subtle);"
+					role="status"
+					aria-live="polite"
+					title={socketDetalle}
+				>
+					<span class="relative flex h-2 w-2" aria-hidden="true">
+						<!-- El latido solo mientras se reintenta de verdad: animarlo
+						     en cualquier otro estado miente sobre lo que ocurre. -->
+						{#if socketEstado === 'reconectando'}
+							<span
+								class="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75"
+								style="background:{socketColor}"
+							></span>
+						{/if}
+						<span
+							class="relative inline-flex h-2 w-2 rounded-full"
+							style="background:{socketColor}"
+						></span>
+					</span>
+
+					<span
+						class="whitespace-nowrap text-[12px] font-medium"
+						style="color:{socketProblema ? socketColor : 'var(--text-secondary)'}"
+					>
+						{socketTexto}{#if socketEstado === 'reconectando' && socketIntentos > 0}<span
+								class="hidden lg:inline"
+								style="opacity:0.75"
+							>
+								· intento {socketIntentos}</span
+							>{/if}
+					</span>
+
+					<!-- Salida manual: el reintento automático no se para nunca, pero
+					     esperar al siguiente hueco del backoff cuando sabes que el
+					     servidor ya volvió es innecesario. -->
+					{#if socketProblema}
+						<button
+							type="button"
+							class="apple-transition rounded-full px-2 py-0.5 text-[11px] font-semibold hover:opacity-70"
+							style="background:{socketColor}1A; color:{socketColor}"
+							on:click={() => socketManager.reconectar()}
+						>
+							Reintentar
+						</button>
+					{/if}
+				</div>
+			{/if}
 		</div>
 
 		<!-- Right Section -->

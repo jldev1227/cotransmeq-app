@@ -29,6 +29,13 @@ export default defineConfig({
 		globals: true,
 		environment: 'node',
 		include: ['tests/**/*.test.ts'],
+		// `tests/integracion` levanta servidores de verdad y provoca caídas de
+		// más de veinte segundos: es lo que hace que sirva de algo, y lo que lo
+		// hace inaceptable en la suite de cada guardado. Se corre aparte con
+		// `npm run test:reconexion`.
+		// (`**/node_modules/**` va explícito porque declarar `exclude` sustituye
+		// la lista por defecto de vitest, no se suma a ella.)
+		exclude: ['**/node_modules/**', 'tests/integracion/**'],
 		// Los módulos del portal se importan como si estuvieran en el navegador
 		// (`browser: true` en el doble de `$app/environment`) y algunos leen
 		// `localStorage` al cargarse. Sin este doble, importarlos falla.

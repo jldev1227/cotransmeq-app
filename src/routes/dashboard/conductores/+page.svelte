@@ -584,16 +584,9 @@
 						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 400;">
 							Gestión de Conductores
 						</h1>
-						<span
-							class="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
-							style="background: rgba(16,185,129,0.08); color: var(--emerald-800);"
-						>
-							<span
-								class="h-1.5 w-1.5 animate-pulse rounded-full"
-								style="background-color: var(--emerald-500);"
-							></span>
-							En vivo
-						</span>
+						<!-- Aquí había un chip «En vivo» pintado a mano, sin mirar el socket:
+						     decía «En vivo» también con la conexión caída. El estado real lo
+						     muestra el header, junto al nombre de la sección. -->
 					</div>
 					<p class="text-xs" style="color: var(--text-muted);">
 						Administra y supervisa todo el personal de conducción

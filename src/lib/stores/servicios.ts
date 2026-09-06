@@ -68,6 +68,13 @@ function createServiciosStore() {
 	/// delante los de cualquier otro módulo suscrito al mismo evento.
 	let bajasSocket: Array<() => void> = [];
 
+	/// Últimos filtros con los que se pidió la lista.
+	///
+	/// Se guardan para poder repetir EXACTAMENTE esa consulta al reconectar.
+	/// Recargar sin ellos devolvería al usuario a la página 1 sin filtros, que
+	/// es peor que dejarle los datos viejos.
+	let ultimosParams: BuscarServiciosParams | undefined;
+
 	return {
 		subscribe,
 
@@ -78,6 +85,7 @@ function createServiciosStore() {
 			// SIEMPRE hacer el request cuando cambian los parámetros (incluyendo la página)
 			// El caché no debe bloquear las peticiones con diferentes parámetros
 
+			ultimosParams = params;
 			update((state) => ({ ...state, loading: true, error: null }));
 
 			try {
@@ -508,6 +516,22 @@ function createServiciosStore() {
 			/// ida y vuelta, por ejemplo) dejaban los listeners duplicados y
 			/// cada evento aplicaba el parche dos veces.
 			this.limpiarSocket();
+
+			/// Resincronizar al volver la conexión.
+			///
+			/// Los seis listeners de abajo aplican parches incrementales sobre
+			/// la lista: si el socket estuvo caído, esos parches no llegaron y no
+			/// hay forma de recuperarlos. Reconectar dejaba la pantalla diciendo
+			/// «conectado» con datos de hace diez minutos, que es peor que un
+			/// aviso de desconexión porque nadie sospecha nada. Se repite la
+			/// última consulta tal cual, con sus filtros y su página.
+			bajasSocket.push(
+				socketUtils.onReconnect(() => {
+					if (!get({ subscribe }).isInitialized) return;
+					void this.obtenerServicios(ultimosParams, true);
+					void this.obtenerStats();
+				})
+			);
 
 			// Servicio creado
 			bajasSocket.push(socketUtils.on('servicio:creado', (data: ServicioConRelaciones) => {
