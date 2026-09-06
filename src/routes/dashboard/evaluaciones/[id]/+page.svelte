@@ -65,8 +65,15 @@
 	let error: string | null = null;
 	let showResultados = true;
 	let nuevosResultadosCount = 0;
+	/**
+	 * Respuesta que se está mirando en detalle.
+	 *
+	 * Con valor, la página CAMBIA a la vista de detalle en vez de abrir un
+	 * modal. El modal era de 4xl con las respuestas en un tercio de su ancho:
+	 * en una evaluación de veinte preguntas eso obligaba a hacer scroll dentro
+	 * de una ventana que ya estaba dentro de otra pantalla con scroll.
+	 */
 	let resultadoSeleccionado: Resultado | null = null;
-	let showModalDetalle = false;
 
 	$: evaluacionId = $page.params.id;
 
@@ -146,11 +153,12 @@
 
 	function verDetalleResultado(resultado: Resultado) {
 		resultadoSeleccionado = resultado;
-		showModalDetalle = true;
+		// Al abrir un detalle desde media página desplazada, el contenido nuevo
+		// empieza fuera de la vista y parece que no ha pasado nada.
+		if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
 	}
 
-	function cerrarModalDetalle() {
-		showModalDetalle = false;
+	function cerrarDetalleResultado() {
 		resultadoSeleccionado = null;
 	}
 
@@ -342,27 +350,49 @@
 	<title>{evaluacion?.titulo || 'Evaluación'} - Cotransmeq</title>
 </svelte:head>
 
-<div class="space-y-6 p-6">
-	<!-- Header -->
-	<div class="flex items-center justify-between">
-		<div class="flex items-center gap-4">
+<div class="pagina">
+	<!-- ═══ HERO EDITORIAL ═══
+	     Antes era un `<h1>` de Tailwind con un botón gris al lado. Mismo
+	     patrón que la lista, SARLAFT y salidas-NC: identidad a la izquierda,
+	     acciones a la derecha, rejilla fluida sin puntos de ruptura. -->
+	<header class="page-hero">
+		<div class="hero-left">
 			<button
 				on:click={() => goto('/dashboard/evaluaciones')}
-				class="apple-transition rounded-lg bg-gray-200 p-2 text-gray-700 hover:bg-gray-300"
+				class="hero-volver"
 				aria-label="Volver a evaluaciones"
 			>
-				<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M15 19l-7-7 7-7"
-					/>
+				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
 				</svg>
 			</button>
-			<div>
-				<h1 class="text-3xl font-bold text-gray-900">{evaluacion?.titulo || 'Cargando...'}</h1>
-				<p class="text-gray-600">Detalle de la evaluación</p>
+			<div class="hero-text">
+				<span class="eyebrow">Formación · Evaluación</span>
+				<h1>{evaluacion?.titulo || 'Cargando…'}</h1>
+				{#if evaluacion?.descripcion}
+					<p>{evaluacion.descripcion}</p>
+				{/if}
+				{#if evaluacion}
+					<div class="hero-stats">
+						<span class="stat-item">
+							<span class="stat-label">Preguntas</span>
+							<span class="stat-value">{evaluacion.preguntas.length}</span>
+						</span>
+						<span class="stat-item">
+							<span class="stat-label">Puntos</span>
+							<span class="stat-value">{calcularPuntajeTotal()}</span>
+						</span>
+						<span class="stat-item">
+							<span class="stat-label">Respuestas</span>
+							<span class="stat-value">{resultados.length}</span>
+						</span>
+						{#if evaluacion.requiere_firma}
+							<span class="stat-item stat-item--firma">
+								<span class="stat-label">Requiere firma</span>
+							</span>
+						{/if}
+					</div>
+				{/if}
 			</div>
 		</div>
 
@@ -370,7 +400,7 @@
 			<div class="flex flex-wrap gap-1.5">
   <button
     on:click={exportarPDF}
-    class="apple-transition inline-flex items-center gap-1.5 rounded-md bg-red-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600"
+    class="btn-accion"
     title="Exportar resultados a PDF"
   >
     <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -382,7 +412,7 @@
 
   <button
     on:click={exportarPDFTodos}
-    class="apple-transition inline-flex items-center gap-1.5 rounded-md bg-red-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-600"
+    class="btn-accion"
     title="Exportar todos los resultados"
   >
     <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -394,7 +424,7 @@
 
   <button
     on:click={() => goto(`/dashboard/evaluaciones/${evaluacionId}/editar`)}
-    class="apple-transition inline-flex items-center gap-1.5 rounded-md bg-orange-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-600"
+    class="btn-accion"
     title="Editar evaluación"
   >
     <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -406,7 +436,7 @@
 
   <button
     on:click={generarEnlacePublico}
-    class="apple-transition inline-flex items-center gap-1.5 rounded-md bg-sky-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-600"
+    class="btn-accion"
     title="Copiar enlace público"
   >
     <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -418,7 +448,7 @@
 
   <button
     on:click={eliminarEvaluacion}
-    class="apple-transition inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-500 hover:bg-red-50"
+    class="btn-accion btn-accion--peligro"
     title="Eliminar evaluación"
   >
     <svg class="h-3.5 w-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -429,7 +459,7 @@
   </button>
 </div>
 		{/if}
-	</div>
+	</header>
 
 	{#if isLoading}
 		<div class="flex items-center justify-center py-12">
@@ -445,57 +475,206 @@
 			<p class="text-red-600">{error}</p>
 		</div>
 	{:else if evaluacion}
+		{#if resultadoSeleccionado}
+			<!-- ═══ DETALLE DE UNA RESPUESTA — a ancho completo ═══
+			     Antes esto era un modal `max-w-4xl` con las respuestas metidas en
+			     un tercio de su ancho. El ancho de la pantalla estaba ahí, sin
+			     usar, mientras el contenido que de verdad importa —qué contestó
+			     cada uno— se leía por una rendija con scroll propio. -->
+			<div class="space-y-6" in:fade={{ duration: 200 }}>
+				<div class="glass flex flex-wrap items-center gap-4 rounded-2xl border border-gray-200/50 p-5">
+					<button
+						on:click={cerrarDetalleResultado}
+						class="rounded-lg p-2 text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700"
+						aria-label="Volver a la evaluación"
+					>
+						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+						</svg>
+					</button>
+
+					<div class="min-w-0 flex-1">
+						<p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Respuesta de</p>
+						<h2 class="truncate text-xl font-bold text-gray-900">
+							{resultadoSeleccionado.nombre_completo}
+						</h2>
+						<p class="text-xs text-gray-500">
+							{resultadoSeleccionado.cargo} · {resultadoSeleccionado.numero_documento} · {formatDate(
+								resultadoSeleccionado.created_at
+							)}
+						</p>
+					</div>
+
+					<!-- El puntaje va en la barra, no en una tarjeta gigante de una
+					     columna lateral: es un dato, no una sección. -->
+					<div
+						class="rounded-xl px-4 py-2 text-center {resultadoSeleccionado.puntaje_total >=
+						calcularPuntajeTotal() * 0.7
+							? 'bg-green-50 text-green-800'
+							: resultadoSeleccionado.puntaje_total >= calcularPuntajeTotal() * 0.5
+								? 'bg-yellow-50 text-yellow-800'
+								: 'bg-red-50 text-red-800'}"
+					>
+						<span class="text-2xl font-bold">{resultadoSeleccionado.puntaje_total}</span>
+						<span class="text-sm font-medium">/ {calcularPuntajeTotal()} pts</span>
+					</div>
+
+					<button
+						on:click={() => exportarPDFIndividual(resultadoSeleccionado!.id)}
+						class="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-600"
+					>
+						Exportar PDF
+					</button>
+				</div>
+
+				{#if resultadoSeleccionado.firma}
+					<div class="glass overflow-hidden rounded-2xl border border-gray-200/50">
+						<div class="border-b border-gray-100 px-5 py-3">
+							<h3 class="text-sm font-semibold text-gray-900">Firma</h3>
+						</div>
+						<div class="p-4">
+							<img
+								src={resultadoSeleccionado.firma}
+								alt="Firma de {resultadoSeleccionado.nombre_completo}"
+								class="max-h-40 rounded-lg border border-gray-200 bg-gray-50"
+							/>
+						</div>
+					</div>
+				{/if}
+
+				<div class="glass overflow-hidden rounded-2xl border border-gray-200/50">
+					<div class="flex items-center justify-between border-b border-gray-100 px-5 py-3">
+						<h3 class="text-sm font-semibold text-gray-900">Respuestas detalladas</h3>
+						<span class="text-xs text-gray-500">
+							{resultadoSeleccionado.respuestas.length} preguntas
+						</span>
+					</div>
+
+					<!-- Rejilla fluida, no una columna: en una evaluación de veinte
+					     preguntas la lista en columna única es kilométrica, y con
+					     `auto-fit` se adapta sola al ancho real del `main` cuando la
+					     barra lateral se colapsa, sin puntos de ruptura que mantener. -->
+					<div
+						class="grid gap-4 p-5 [grid-template-columns:repeat(auto-fit,minmax(min(100%,26rem),1fr))]"
+					>
+				{#each resultadoSeleccionado.respuestas as respuesta, index}
+					{#if respuesta.pregunta}
+						<div class="rounded-lg border border-gray-200 bg-white p-4">
+							<div class="mb-3 flex items-start justify-between">
+								<div class="flex-1">
+									<div class="mb-2 flex items-center gap-2">
+										<span class="font-bold text-gray-700">#{index + 1}</span>
+										<span class="rounded-full px-2 py-1 text-xs font-semibold {getTipoColor(respuesta.pregunta.tipo)}">
+											{getTipoLabel(respuesta.pregunta.tipo)}
+										</span>
+										<span class="rounded-full {respuesta.puntaje === respuesta.pregunta.puntaje ? 'bg-green-100 text-green-800' : respuesta.puntaje > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'} px-2 py-1 text-xs font-semibold">
+											{respuesta.puntaje} / {respuesta.pregunta.puntaje} pts
+										</span>
+									</div>
+									<p class="font-medium text-gray-900">{respuesta.pregunta.texto}</p>
+								</div>
+							</div>
+
+							<div class="rounded-lg bg-gray-50 p-3">
+								<p class="mb-1 text-xs font-semibold text-gray-600">Respuesta del usuario:</p>
+								{#if respuesta.pregunta.tipo === 'TEXTO'}
+									<p class="text-sm text-gray-900">{respuesta.valor_texto || 'Sin respuesta'}</p>
+									<p class="mt-2 text-xs italic text-blue-600">✨ Esta respuesta fue evaluada por IA</p>
+								{:else if respuesta.pregunta.tipo === 'NUMERICA'}
+									<p class="text-sm font-semibold text-gray-900">{respuesta.valor_numero ?? respuesta.valor_texto ?? 'Sin respuesta'}</p>
+									{#if respuesta.pregunta.respuestaCorrecta !== undefined && respuesta.pregunta.respuestaCorrecta !== null}
+										<p class="mt-1 text-xs text-gray-600">Respuesta correcta: {respuesta.pregunta.respuestaCorrecta}</p>
+									{/if}
+								{:else if respuesta.pregunta.tipo === 'RELACION'}
+									{@const relaciones = Array.isArray(respuesta.relacion) ? respuesta.relacion : []}
+									{#if relaciones.length > 0}
+										<div class="space-y-1">
+											{#each relaciones as rel}
+												<div class="flex items-center gap-2 text-sm">
+													<span class="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">{rel.izq}</span>
+													<svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+													</svg>
+													<span class="rounded bg-purple-100 px-2 py-1 text-xs font-medium text-purple-800">{rel.der}</span>
+												</div>
+											{/each}
+										</div>
+									{:else}
+										<p class="text-sm text-gray-500">Sin respuesta</p>
+									{/if}
+								{:else if respuesta.pregunta.tipo === 'VERDADERO_FALSO'}
+									{@const respuestaUsuario = respuesta.valor_numero}
+									{@const respuestaCorrectaVF = respuesta.pregunta.respuestaCorrecta}
+									{@const esCorrectoVF = typeof respuestaUsuario === 'number' && respuestaCorrectaVF !== null && respuestaCorrectaVF !== undefined && respuestaUsuario === respuestaCorrectaVF}
+									{#if typeof respuestaUsuario === 'number'}
+										<div class="flex items-center gap-3">
+											<div class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold {esCorrectoVF ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">
+												{#if esCorrectoVF}
+													<svg class="h-5 w-5 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+														<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+													</svg>
+												{:else}
+													<svg class="h-5 w-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+														<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+													</svg>
+												{/if}
+												{respuestaUsuario === 1 ? 'Verdadero' : 'Falso'}
+											</div>
+											{#if !esCorrectoVF && respuestaCorrectaVF !== null && respuestaCorrectaVF !== undefined}
+												<span class="text-xs text-gray-500">
+													Respuesta correcta: <span class="font-semibold text-green-700">{respuestaCorrectaVF === 1 ? 'Verdadero' : 'Falso'}</span>
+												</span>
+											{/if}
+										</div>
+									{:else}
+										<p class="text-sm text-gray-500">Sin respuesta</p>
+									{/if}
+								{:else}
+									<!-- OPCION_UNICA / OPCION_MULTIPLE -->
+									{@const selectedIds = Array.isArray(respuesta.opcionesIds) ? respuesta.opcionesIds : []}
+									{#if selectedIds.length > 0}
+										<div class="space-y-1">
+											{#each respuesta.pregunta.opciones as opcion}
+												{@const fueSeleccionada = selectedIds.includes(opcion.id)}
+												{#if fueSeleccionada}
+													<div class="flex items-center gap-2 text-sm">
+														{#if opcion.esCorrecta}
+															<svg class="h-4 w-4 text-green-600" fill="currentColor" viewBox="0 0 20 20">
+																<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+															</svg>
+														{:else}
+															<svg class="h-4 w-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
+																<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+															</svg>
+														{/if}
+														<span class:text-green-700={opcion.esCorrecta} class:font-semibold={opcion.esCorrecta} class:text-red-700={!opcion.esCorrecta}>
+															{opcion.texto}
+														</span>
+													</div>
+												{/if}
+											{/each}
+										</div>
+									{:else}
+										<p class="text-sm text-gray-500">Sin respuesta</p>
+									{/if}
+								{/if}
+							</div>
+						</div>
+					{/if}
+				{/each}
+					</div>
+				</div>
+			</div>
+		{:else}
 		<!-- Layout de 2 columnas -->
 		<div class="grid grid-cols-1 gap-6 xl:grid-cols-3">
 			<!-- Columna izquierda: Info y Preguntas -->
 			<div class="space-y-6 xl:col-span-2">
-				<!-- Información básica -->
-				<div class="glass rounded-2xl border border-gray-200/50 p-6" in:fade>
-					<div class="mb-4 flex items-center gap-4">
-						<div class="flex flex-wrap gap-3">
-							<div class="rounded-lg bg-orange-50 px-4 py-2">
-								<span class="text-2xl font-bold text-orange-600">
-									{evaluacion.preguntas.length}
-								</span>
-								<span class="ml-2 text-sm text-gray-600">Preguntas</span>
-							</div>
-							<div class="rounded-lg bg-blue-50 px-4 py-2">
-								<span class="text-2xl font-bold text-blue-600">
-									{calcularPuntajeTotal()}
-								</span>
-								<span class="ml-2 text-sm text-gray-600">Puntos</span>
-							</div>
-							{#if evaluacion.requiere_firma}
-								<div class="rounded-lg bg-purple-50 px-4 py-2">
-									<svg
-										class="inline h-5 w-5 text-purple-600"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-										/>
-									</svg>
-									<span class="ml-2 text-sm font-semibold text-purple-600">Requiere Firma</span>
-								</div>
-							{/if}
-							<div class="rounded-lg bg-orange-50 px-4 py-2">
-								<span class="text-2xl font-bold text-orange-600">
-									{resultados.length}
-								</span>
-								<span class="ml-2 text-sm text-gray-600">Respuestas</span>
-							</div>
-						</div>
-					</div>
-
-					{#if evaluacion.descripcion}
-						<p class="text-gray-600">{evaluacion.descripcion}</p>
-					{/if}
-				</div>
+				<!-- La tarjeta de «Información básica» que había aquí se fue al hero.
+				     Tenía cuatro cifras en cuatro tarjetas de colores distintos
+				     —esmeralda, azul, morado, naranja— y debajo repetía la MISMA
+				     descripción que ya sale en la cabecera. Cuatro números no
+				     necesitan una tarjeta cada uno. -->
 
 				<!-- Preguntas -->
 				<div class="glass rounded-2xl border border-gray-200/50 p-6" in:fade={{ delay: 100 }}>
@@ -663,18 +842,30 @@
 										<span>{resultado.numero_documento}</span>
 										<span>{formatDate(resultado.created_at)}</span>
 									</div>
-									<button
-										on:click={() => verDetalleResultado(resultado)}
-										class="mt-2 w-full rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-orange-600"
-									>
-										Ver Detalles
-									</button>
-									<button
-										on:click={() => exportarPDFIndividual(resultado.id)}
-										class="mt-2 w-full rounded-lg bg-blue-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-600"
-									>
-										Exportar PDF
-									</button>
+									<!-- Dos botones a todo el ancho por resultado eran 38 botones
+									     grandes en una evaluación de 19 respuestas, apilados en una
+									     columna estrecha. La fila entera abre el detalle y el PDF
+									     queda como acción secundaria. -->
+									<div class="res-acciones">
+										<button
+											on:click={() => verDetalleResultado(resultado)}
+											class="res-btn res-btn--principal"
+										>
+											Ver respuestas
+										</button>
+										<button
+											on:click={() => exportarPDFIndividual(resultado.id)}
+											class="res-btn"
+											title="Exportar esta respuesta a PDF"
+											aria-label="Exportar a PDF la respuesta de {resultado.nombre_completo}"
+										>
+											<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+												<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+												<polyline points="7 10 12 15 17 10" />
+												<line x1="12" y1="15" x2="12" y2="3" />
+											</svg>
+										</button>
+									</div>
 								</div>
 							{/each}
 						</div>
@@ -688,249 +879,235 @@
 				</div>
 			</div>
 		</div>
+		{/if}
 	{/if}
 </div>
 
-<!-- Modal de Detalle de Resultado -->
-{#if showModalDetalle && resultadoSeleccionado && evaluacion}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-		role="button"
-		tabindex="0"
-		on:click={cerrarModalDetalle}
-		on:keydown={(e) => e.key === 'Escape' && cerrarModalDetalle()}
-		transition:fade
-	>
-		<div
-			class="max-h-[35rem] w-full max-w-4xl overflow-y-auto rounded-2xl bg-white shadow-2xl"
-			role="dialog"
-			aria-modal="true"
-			tabindex="-1"
-			on:click|stopPropagation
-			on:keydown|stopPropagation
-			transition:fly={{ y: 50, duration: 300 }}
-		>
-			<!-- Header -->
-			<div class="sticky top-0 z-10 bg-gradient-to-r from-orange-500 to-teal-600 px-6 py-6">
-				<div class="flex items-start justify-between">
-					<div class="flex-1">
-					<h2 class="mb-2 text-2xl font-bold text-white">
-						{resultadoSeleccionado.nombre_completo}
-					</h2>
-					<div class="flex flex-wrap gap-2 text-sm text-orange-50">
-							<span>{resultadoSeleccionado.cargo}</span>
-						</div>
-					</div>
-					<button
-						on:click={cerrarModalDetalle}
-						class="rounded-lg bg-white/20 p-2 text-white backdrop-blur-sm transition-colors hover:bg-white/30"
-						aria-label="Cerrar modal"
-					>
-					>
-						<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M6 18L18 6M6 6l12 12"
-							/>
-						</svg>
-					</button>
-				</div>
-			</div>
+<style>
+	/* ═══════════════════════════════════════════════════════════════
+	   HERO
+	   ═══════════════════════════════════════════════════════════════
+	   Mismas medidas que la lista de evaluaciones, SARLAFT y salidas-NC. La
+	   rejilla es fluida a propósito: el ancho que manda es el del `main` del
+	   layout, que cambia al colapsar la barra lateral, y un punto de ruptura
+	   atado al viewport se desincroniza de él. */
+	.page-hero {
+		background: #fff;
+		border: 1px solid #e5e7eb;
+		border-radius: 24px;
+		padding: 1.35rem 1.5rem;
+		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
 
-			<!-- Layout de 2 columnas -->
-			<div class="grid grid-cols-1 gap-6 p-6 lg:grid-cols-3">
-				<!-- Columna Izquierda: Info General -->
-				<div class="space-y-4 lg:col-span-1">
-					<!-- Puntaje -->
-					<div class="rounded-xl border border-orange-200 bg-gradient-to-br from-orange-50 to-teal-50 p-6 text-center">
-						<div class="mb-2 inline-flex h-16 w-16 items-center justify-center rounded-full bg-orange-100">
-							<svg class="h-8 w-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-							</svg>
-						</div>
-						<p class="mb-2 text-sm font-medium text-orange-700">Puntaje Total</p>
-					<p class="mb-2 text-5xl font-bold text-orange-600">{resultadoSeleccionado.puntaje_total}</p>
-					<div class="text-orange-700">
-						<span class="text-lg font-semibold">de {calcularPuntajeTotal()}</span>
-						<span class="text-sm"> puntos</span>
-					</div>
-					<div class="mt-4">
-						<div class="mb-2 h-2 overflow-hidden rounded-full bg-orange-200">
-							<div class="h-full bg-orange-600 transition-all" style="width: {((resultadoSeleccionado.puntaje_total / calcularPuntajeTotal()) * 100)}%"></div>
-						</div>
-						<p class="text-sm font-semibold text-orange-700">{((resultadoSeleccionado.puntaje_total / calcularPuntajeTotal()) * 100).toFixed(1)}%</p>
-					</div>
-				</div>					<!-- Información de Contacto -->
-					<div class="overflow-hidden rounded-xl border border-gray-200 bg-white">
-						<div class="bg-gradient-to-r from-orange-500 to-teal-500 px-4 py-3">
-							<h3 class="flex items-center gap-2 text-lg font-bold text-white">
-								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-								</svg>
-								Información de Contacto
-							</h3>
-						</div>
-						<div class="space-y-3 p-4">
-							<div class="border-b border-gray-100 pb-3">
-								<p class="text-xs text-gray-500">Correo</p>
-								<p class="font-medium text-gray-900">{resultadoSeleccionado.correo}</p>
-							</div>
-							<div class="border-b border-gray-100 pb-3">
-								<p class="text-xs text-gray-500">Teléfono</p>
-								<p class="font-medium text-gray-900">{resultadoSeleccionado.telefono}</p>
-							</div>
-							<div>
-								<p class="text-xs text-gray-500">Lugar del Proceso</p>
-								<p class="font-medium text-gray-900">{resultadoSeleccionado.lugar_proceso}</p>
-							</div>
-						</div>
-					</div>
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+		align-items: center;
+		gap: 1.1rem 2rem;
+	}
+	.hero-left {
+		display: flex;
+		gap: 0.85rem;
+		align-items: flex-start;
+	}
+	.hero-volver {
+		flex-shrink: 0;
+		width: 40px;
+		height: 40px;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		border: 1px solid #e5e7eb;
+		background: #f9fafb;
+		border-radius: 12px;
+		color: #4b5563;
+		cursor: pointer;
+		transition: background-color 0.15s, color 0.15s;
+	}
+	.hero-volver:hover {
+		background: #f3f4f6;
+		color: #111827;
+	}
+	.hero-volver svg {
+		width: 18px;
+		height: 18px;
+	}
+	.hero-text {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+		flex: 1;
+		min-width: 0;
+	}
+	/* `.eyebrow` es `inline-block`, pero como hijo de un flex en columna lo
+	   estira el `align-items: stretch` por defecto. */
+	.hero-text .eyebrow {
+		align-self: flex-start;
+		display: inline-block;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.7rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.12em;
+		color: #f97316;
+		background: #ffedd5;
+		padding: 0.3rem 0.75rem;
+		border-radius: 6px;
+	}
+	.hero-text h1 {
+		font-family: 'Fraunces', Georgia, serif;
+		font-size: clamp(1.4rem, 3vw, 1.9rem);
+		font-weight: 500;
+		line-height: 1.2;
+		letter-spacing: -0.01em;
+		color: #111827;
+		margin: 0;
+	}
+	/* ═══════════════════════════════════════════════════════════════
+	   CÁSCARA DE PÁGINA
+	   ═══════════════════════════════════════════════════════════════
+	   Las mismas medidas que la lista, SARLAFT y salidas-NC. Antes era un
+	   `space-y-6 p-6` de Tailwind sobre fondo blanco: la pantalla no se
+	   parecía ni a su propia lista. */
+	.pagina {
+		min-height: 100vh;
+		background: #faf7f2;
+		font-family: 'Inter Tight', system-ui, sans-serif;
+		padding: 1.5rem 1.25rem 3rem;
+		display: flex;
+		flex-direction: column;
+		gap: 1.25rem;
+	}
 
-					<!-- Firma -->
-					{#if resultadoSeleccionado.firma}
-						<div class="overflow-hidden rounded-xl border border-gray-200 bg-white">
-							<div class="bg-gradient-to-r from-orange-500 to-teal-500 px-4 py-3">
-								<h3 class="flex items-center gap-2 text-lg font-bold text-white">
-									<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-									</svg>
-									Firma Digital
-								</h3>
-							</div>
-							<div class="p-4">
-								<img src={resultadoSeleccionado.firma} alt="Firma" class="w-full rounded-lg border border-gray-200 bg-gray-50" />
-							</div>
-						</div>
-					{/if}
-				</div>
+	/* Las cifras de la evaluación, en el hero y en pastillas mono: es el
+	   mismo lenguaje que usan SARLAFT y salidas-NC para lo mismo. */
+	.hero-stats {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		margin-top: 0.35rem;
+		font-family: 'JetBrains Mono', monospace;
+	}
+	.stat-item {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		padding: 0.3rem 0.6rem;
+		background: #f9fafb;
+		border: 1px solid #e5e7eb;
+		border-radius: 9px;
+	}
+	.stat-item--firma {
+		background: #ede9fe;
+		border-color: #ddd6fe;
+	}
+	.stat-item--firma .stat-label {
+		color: #6d28d9;
+	}
+	.stat-label {
+		font-size: 0.7rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: #6b7280;
+	}
+	.stat-value {
+		font-size: 0.9rem;
+		font-weight: 700;
+		color: #111827;
+	}
 
-				<!-- Columna Derecha: Respuestas Detalladas -->
-				<div class="lg:col-span-2">
-					<div class="overflow-hidden rounded-xl border border-gray-200 bg-white">
-						<div class="bg-gradient-to-r from-orange-500 to-teal-500 px-6 py-4">
-							<h3 class="flex items-center gap-2 text-lg font-bold text-white">
-								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-								</svg>
-								Respuestas Detalladas
-								<span class="ml-auto text-sm font-normal text-orange-100">
-									{resultadoSeleccionado.respuestas.length} preguntas
-								</span>
-							</h3>
-						</div>
+	/* ═══════════════════════════════════════════════════════════════
+	   ACCIONES DE LA CABECERA
+	   ═══════════════════════════════════════════════════════════════
+	   Eran cinco botones sólidos en cinco colores —rojo, rojo, verde, azul y
+	   rojo—: una barra de semáforos donde ninguna acción destacaba sobre las
+	   demás. Ahora todas son secundarias salvo la destructiva, que es la
+	   única que merece un color. */
+	.btn-accion {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.4rem 0.7rem;
+		font-family: inherit;
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: #374151;
+		background: #fff;
+		border: 1px solid #e5e7eb;
+		border-radius: 9px;
+		cursor: pointer;
+		white-space: nowrap;
+		transition: background-color 0.15s, border-color 0.15s, color 0.15s;
+	}
+	.btn-accion:hover {
+		background: #f9fafb;
+		border-color: #d1d5db;
+		color: #111827;
+	}
+	.btn-accion :global(svg) {
+		width: 0.85rem;
+		height: 0.85rem;
+		flex-shrink: 0;
+	}
+	.btn-accion--peligro {
+		color: #dc2626;
+		border-color: #fecaca;
+	}
+	.btn-accion--peligro:hover {
+		background: #fef2f2;
+		border-color: #fca5a5;
+		color: #b91c1c;
+	}
 
-						<div class="space-y-4 p-6">
-							{#each resultadoSeleccionado.respuestas as respuesta, index}
-								{#if respuesta.pregunta}
-									<div class="rounded-lg border border-gray-200 bg-white p-4">
-										<div class="mb-3 flex items-start justify-between">
-											<div class="flex-1">
-												<div class="mb-2 flex items-center gap-2">
-													<span class="font-bold text-gray-700">#{index + 1}</span>
-													<span class="rounded-full px-2 py-1 text-xs font-semibold {getTipoColor(respuesta.pregunta.tipo)}">
-														{getTipoLabel(respuesta.pregunta.tipo)}
-													</span>
-													<span class="rounded-full {respuesta.puntaje === respuesta.pregunta.puntaje ? 'bg-orange-100 text-orange-800' : respuesta.puntaje > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'} px-2 py-1 text-xs font-semibold">
-														{respuesta.puntaje} / {respuesta.pregunta.puntaje} pts
-													</span>
-												</div>
-												<p class="font-medium text-gray-900">{respuesta.pregunta.texto}</p>
-											</div>
-										</div>
+	/* ═══════════════════════════════════════════════════════════════
+	   RESULTADOS RECIENTES
+	   ═══════════════════════════════════════════════════════════════ */
+	.res-acciones {
+		display: flex;
+		align-items: center;
+		gap: 0.35rem;
+		margin-top: 0.5rem;
+	}
+	.res-btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.3rem;
+		padding: 0.35rem 0.6rem;
+		font-family: inherit;
+		font-size: 0.72rem;
+		font-weight: 600;
+		color: #4b5563;
+		background: #fff;
+		border: 1px solid #e5e7eb;
+		border-radius: 8px;
+		cursor: pointer;
+		transition: background-color 0.15s, color 0.15s;
+	}
+	.res-btn svg {
+		width: 0.85rem;
+		height: 0.85rem;
+	}
+	.res-btn:hover {
+		background: #f3f4f6;
+		color: #111827;
+	}
+	.res-btn--principal {
+		flex: 1;
+		background: #ffedd5;
+		border-color: #fed7aa;
+		color: #9a3412;
+	}
+	.res-btn--principal:hover {
+		background: #fed7aa;
+		color: #7c2d12;
+	}
 
-										<div class="rounded-lg bg-gray-50 p-3">
-											<p class="mb-1 text-xs font-semibold text-gray-600">Respuesta del usuario:</p>
-											{#if respuesta.pregunta.tipo === 'TEXTO'}
-												<p class="text-sm text-gray-900">{respuesta.valor_texto || 'Sin respuesta'}</p>
-												<p class="mt-2 text-xs italic text-blue-600">✨ Esta respuesta fue evaluada por IA</p>
-											{:else if respuesta.pregunta.tipo === 'NUMERICA'}
-												<p class="text-sm font-semibold text-gray-900">{respuesta.valor_numero ?? respuesta.valor_texto ?? 'Sin respuesta'}</p>
-												{#if respuesta.pregunta.respuestaCorrecta !== undefined && respuesta.pregunta.respuestaCorrecta !== null}
-													<p class="mt-1 text-xs text-gray-600">Respuesta correcta: {respuesta.pregunta.respuestaCorrecta}</p>
-												{/if}
-											{:else if respuesta.pregunta.tipo === 'RELACION'}
-												{@const relaciones = Array.isArray(respuesta.relacion) ? respuesta.relacion : []}
-												{#if relaciones.length > 0}
-													<div class="space-y-1">
-														{#each relaciones as rel}
-															<div class="flex items-center gap-2 text-sm">
-																<span class="rounded bg-blue-100 px-2 py-1 text-xs font-medium text-blue-800">{rel.izq}</span>
-																<svg class="h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-																	<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-																</svg>
-																<span class="rounded bg-purple-100 px-2 py-1 text-xs font-medium text-purple-800">{rel.der}</span>
-															</div>
-														{/each}
-													</div>
-												{:else}
-													<p class="text-sm text-gray-500">Sin respuesta</p>
-												{/if}
-											{:else if respuesta.pregunta.tipo === 'VERDADERO_FALSO'}
-												{@const respuestaUsuario = respuesta.valor_numero}
-												{@const respuestaCorrectaVF = respuesta.pregunta.respuestaCorrecta}
-												{@const esCorrectoVF = typeof respuestaUsuario === 'number' && respuestaCorrectaVF !== null && respuestaCorrectaVF !== undefined && respuestaUsuario === respuestaCorrectaVF}
-												{#if typeof respuestaUsuario === 'number'}
-													<div class="flex items-center gap-3">
-														<div class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold {esCorrectoVF ? 'bg-orange-100 text-orange-800' : 'bg-red-100 text-red-800'}">
-															{#if esCorrectoVF}
-																<svg class="h-5 w-5 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
-																	<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-																</svg>
-															{:else}
-																<svg class="h-5 w-5 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-																	<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-																</svg>
-															{/if}
-															{respuestaUsuario === 1 ? 'Verdadero' : 'Falso'}
-														</div>
-														{#if !esCorrectoVF && respuestaCorrectaVF !== null && respuestaCorrectaVF !== undefined}
-															<span class="text-xs text-gray-500">
-																Respuesta correcta: <span class="font-semibold text-orange-700">{respuestaCorrectaVF === 1 ? 'Verdadero' : 'Falso'}</span>
-															</span>
-														{/if}
-													</div>
-												{:else}
-													<p class="text-sm text-gray-500">Sin respuesta</p>
-												{/if}
-											{:else}
-												<!-- OPCION_UNICA / OPCION_MULTIPLE -->
-												{@const selectedIds = Array.isArray(respuesta.opcionesIds) ? respuesta.opcionesIds : []}
-												{#if selectedIds.length > 0}
-													<div class="space-y-1">
-														{#each respuesta.pregunta.opciones as opcion}
-															{@const fueSeleccionada = selectedIds.includes(opcion.id)}
-															{#if fueSeleccionada}
-																<div class="flex items-center gap-2 text-sm">
-																	{#if opcion.esCorrecta}
-																		<svg class="h-4 w-4 text-orange-600" fill="currentColor" viewBox="0 0 20 20">
-																			<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
-																		</svg>
-																	{:else}
-																		<svg class="h-4 w-4 text-red-600" fill="currentColor" viewBox="0 0 20 20">
-																			<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
-																		</svg>
-																	{/if}
-																	<span class:text-orange-700={opcion.esCorrecta} class:font-semibold={opcion.esCorrecta} class:text-red-700={!opcion.esCorrecta}>
-																		{opcion.texto}
-																	</span>
-																</div>
-															{/if}
-														{/each}
-													</div>
-												{:else}
-													<p class="text-sm text-gray-500">Sin respuesta</p>
-												{/if}
-											{/if}
-										</div>
-									</div>
-								{/if}
-							{/each}
-						</div>
-					</div>
-				</div>
-			</div>
-		</div>
-	</div>
-{/if}
+	.hero-text p {
+		font-size: 0.88rem;
+		line-height: 1.55;
+		color: #4b5563;
+		margin: 0;
+		/* Tope de legibilidad; con dos columnas manda la columna. */
+		max-width: 44rem;
+	}
+</style>

@@ -3,7 +3,8 @@
 	import { goto } from '$app/navigation';
 	import { fade, fly } from 'svelte/transition';
 	import { getEvaluaciones, deleteEvaluacion, type Evaluacion, type Pregunta } from '$lib/api/evaluaciones';
-	import DataTable from '$lib/components/ui/data-table/DataTable.svelte';
+	import TablaLista from '$lib/components/listing/TablaLista.svelte';
+	import type { ColumnDef, SortingState } from '@tanstack/table-core';
 	import { page } from '$app/state';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
@@ -34,6 +35,48 @@
 
 	const estadoUrl = crearEstadoUrl(DEFS);
 	let filtros = $state<FiltrosEvaluaciones>(estadoUrl.leer(page.url));
+
+	/**
+	 * Columnas de la tabla.
+	 *
+	 * Solo `titulo` y `created_at` son ordenables: son los dos únicos campos
+	 * que acepta el backend en `sortBy` (ver su lista blanca). Las demás
+	 * —número de preguntas, puntos, tipos— se calculan a partir de las
+	 * preguntas y no existen como columna que Prisma pueda ordenar, así que
+	 * van `enableSorting: false` y su cabecera NO se pinta como pulsable.
+	 */
+	const COLUMNAS: ColumnDef<Evaluacion, any>[] = [
+		// El título necesita suelo propio: sin `size` el resto de columnas se
+		// lo comían y quedaba en cuatro renglones por fila.
+		{ id: 'titulo', accessorKey: 'titulo', header: 'Evaluación', size: 340 },
+		{ id: 'tipos', header: 'Tipos de pregunta', enableSorting: false, size: 170 },
+		{ id: 'preguntas', header: 'Preguntas', enableSorting: false, size: 90 },
+		{ id: 'puntos', header: 'Puntos', enableSorting: false, size: 80 },
+		{ id: 'firma', header: 'Firma', enableSorting: false, size: 80 },
+		{ id: 'created_at', accessorKey: 'created_at', header: 'Creada', size: 120 },
+		{ id: 'acciones', header: 'Acciones', enableSorting: false, size: 90 }
+	];
+
+	/// `orden`/`dir` ya viajaban en la URL y ya se mandaban al backend; lo que
+	/// no había era forma de cambiarlos desde la interfaz. La cabecera de la
+	/// tabla es ahora ese control.
+	const ordenTabla = $derived<SortingState>(
+		filtros.orden ? [{ id: filtros.orden, desc: filtros.dir === 'desc' }] : []
+	);
+
+	function aplicarOrden(nuevo: SortingState) {
+		const primero = nuevo[0];
+		filtros = {
+			...filtros,
+			// Sin orden se vuelve al natural: lo más reciente arriba.
+			orden: primero?.id ?? 'created_at',
+			dir: primero ? (primero.desc ? 'desc' : 'asc') : 'desc',
+			pagina: 1
+		};
+	}
+
+
+
 
 	let evaluaciones = $state<Evaluacion[]>([]);
 	let isLoading = $state(false);
@@ -149,170 +192,87 @@
 <svelte:head><title>Evaluaciones - Cotransmeq</title></svelte:head>
 
 <div class="dash-wrapper" in:fade={{ duration: 400 }}>
-	<div class="dash">
-		<header class="header">
-			<div class="header-left">
-				<div class="logo-mark" aria-hidden="true">
-					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+		<!-- ═══ HERO EDITORIAL ═══
+		     Antes era una cabecera propia de esta pantalla —`.header` con su
+		     `.logo-mark`— que no se parecía a ninguna otra del dashboard. Mismo
+		     patrón que SARLAFT y salidas-NC: identidad a la izquierda, cifras a
+		     la derecha, en paralelo y con rejilla fluida. -->
+		<header class="page-hero">
+			<div class="hero-left">
+				<div class="hero-icon" aria-hidden="true">
+					<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
 						<path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
 					</svg>
 				</div>
-				<div>
-					<h1>Evaluaciones</h1>
-					<p class="header-sub">Sistema de gestión · {new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+				<div class="hero-text">
+					<span class="eyebrow">Formación · Evaluaciones</span>
+					<h1>Evaluaciones de conocimiento</h1>
+					<p>
+						Diseño, publicación y seguimiento de las evaluaciones aplicadas al personal,
+						con el detalle de lo que respondió cada evaluado.
+					</p>
 				</div>
 			</div>
-			<button class="btn-primary" onclick={navigateToCrear} aria-label="Crear nueva evaluación">
-				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-					<line x1="12" y1="5" x2="12" y2="19" />
-					<line x1="5" y1="12" x2="19" y2="12" />
-				</svg>
-				Nueva Evaluación
-			</button>
+
+			<div class="hero-derecha">
+				<div class="hero-stats">
+					<div class="stat-item">
+						<span class="stat-label">Evaluaciones</span>
+						<span class="stat-value">{totalRows}</span>
+					</div>
+				</div>
+				<button class="btn-primary" onclick={navigateToCrear} aria-label="Crear nueva evaluación">
+					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+						<line x1="12" y1="5" x2="12" y2="19" />
+						<line x1="5" y1="12" x2="19" y2="12" />
+					</svg>
+					Nueva evaluación
+				</button>
+			</div>
 		</header>
 
-		<div class="filter-bar" role="search">
+		<!-- Buscador y recuento en una MISMA tarjeta.
+		     Antes el buscador flotaba directamente sobre el fondo de la página y
+		     el «N resultados» era un texto suelto debajo: dos elementos sin
+		     contenedor entre dos tarjetas, que es lo que hacía que la pantalla
+		     no se leyera como el resto del dashboard. -->
+		<div class="filtros-bar" role="search">
 			<div class="search-wrap">
-				<svg class="search-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-					<circle cx="11" cy="11" r="8" />
-					<line x1="21" y1="21" x2="16.65" y2="16.65" />
-				</svg>
 				<BuscadorLista
 					valor={filtros.q}
 					onBuscar={(termino) => ponerFiltro('q', termino)}
-					placeholder="Buscar evaluación…"
+					placeholder="Buscar por título o descripción…"
 					etiqueta="Buscar evaluaciones"
 				/>
 			</div>
-		</div>
 
-		<div class="results-info" aria-live="polite" aria-atomic="true">
-			{#if isLoading}
-				<span>Cargando...</span>
-			{:else}
-				<span>{totalRows} resultado{totalRows !== 1 ? 's' : ''} encontrado{totalRows !== 1 ? 's' : ''}</span>
+			<div class="filtros-meta" aria-live="polite" aria-atomic="true">
+				{#if isLoading}
+					<span class="filtros-conteo">Cargando…</span>
+				{:else}
+					<span class="filtros-conteo">
+						{totalRows} evaluaci{totalRows === 1 ? 'ón' : 'ones'}
+					</span>
+				{/if}
 				{#if filtros.q}
-					<button class="reset-btn" onclick={clearSearch}>
-						Limpiar búsqueda
+					<button class="clear-btn" onclick={clearSearch}>
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+							<line x1="18" y1="6" x2="6" y2="18" />
+							<line x1="6" y1="6" x2="18" y2="18" />
+						</svg>
+						Limpiar
 					</button>
 				{/if}
-			{/if}
+			</div>
 		</div>
 
-		<div class="desktop-only">
-			<DataTable
-				data={evaluaciones}
-				columns={[
-					{
-						key: 'titulo',
-						label: 'Evaluación',
-						sortable: true,
-						render: (ev: Evaluacion) => {
-							if (!ev) return '<span class="text-muted">Sin datos</span>';
-							const titulo = ev.titulo || 'Sin título';
-							const desc = ev.descripcion ? `<p class="td-desc">${ev.descripcion}</p>` : '';
-							return `<div class="cell-titulo"><span class="td-title td-title-truncate">${titulo}</span>${desc}</div>`;
-						}
-					},
-					{
-						key: 'requiere_firma',
-						label: 'Firma',
-						align: 'center',
-						render: (ev: Evaluacion) => {
-							if (!ev) return '';
-							return ev.requiere_firma
-								? '<span class="badge-firma">Firma</span>'
-								: '<span class="text-muted">No</span>';
-						}
-					},
-					{
-						key: 'preguntas',
-						label: 'Preguntas',
-						align: 'center',
-						render: (ev: Evaluacion) => {
-							const count = ev?.preguntas?.length ?? 0;
-							return `<span class="num-badge">${count}</span>`;
-						}
-					},
-					{
-						key: 'puntaje',
-						label: 'Puntaje',
-						align: 'center',
-						render: (ev: Evaluacion) => {
-							const total = ev ? calcularPuntajeTotal(ev) : 0;
-							return `<span class="num-badge blue">${total}</span>`;
-						}
-					},
-					{
-						key: 'tipos',
-						label: 'Tipos',
-						render: (ev: Evaluacion) => {
-							if (!ev?.preguntas?.length) return '<span class="text-muted">-</span>';
-							const tipos = [...new Set(ev.preguntas.map((p: Pregunta) => p.tipo))];
-							const chips = tipos.map((t: string) => `<span class="chip ${getTipoColor(t)}">${getTipoLabel(t)}</span>`).join('');
-							return `<div class="chips-wrap">${chips}</div>`;
-						}
-					},
-					{
-						key: 'created_at',
-						label: 'Creada',
-						sortable: true,
-						render: (ev: Evaluacion) => {
-							const date = ev?.created_at ? formatDate(ev.created_at) : '-';
-							return `<span class="td-date">${date}</span>`;
-						}
-					},
-					{
-						key: 'acciones',
-						label: 'Acciones',
-						align: 'right',
-						render: (ev: Evaluacion) => {
-							if (!ev?.id) return '';
-							return `
-								<div class="actions-wrap">
-									<button class="action-btn view" title="Ver" data-action="view">
-										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-											<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-											<circle cx="12" cy="12" r="3" />
-										</svg>
-									</button>
-									<button class="action-btn delete" title="Eliminar" data-action="delete">
-										<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-											<polyline points="3 6 5 6 21 6" />
-											<path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-										</svg>
-									</button>
-								</div>
-							`;
-						}
-					}
-				]}
-				{isLoading}
-				{totalRows}
-				currentPage={filtros.pagina}
-				pageSize={POR_PAGINA}
-				onPageChange={handlePageChange}
-				onSortChange={handleSort}
-				onRowClick={(row) => {
-					const ev = row as Evaluacion;
-					if (ev?.id) navigateToDetalle(ev.id);
-				}}
-				onAction={(action, row) => {
-					if (!row) return;
-					const ev = row as Evaluacion;
-					if (action === 'view') {
-						navigateToDetalle(ev.id);
-					} else if (action === 'delete') {
-						handleDelete(ev.id, ev.titulo || '');
-					}
-				}}
-				emptyMessage={filtros.q ? 'Sin resultados para la búsqueda' : 'No hay evaluaciones creadas'}
-				emptyActionLabel={!filtros.q ? 'Crear primera evaluación' : undefined}
-				onEmptyAction={navigateToCrear}
-			/>
-		</div>
-
-		<div class="mobile-only">
+		<!-- Una sola vista. Antes había dos: `.desktop-only` con un `DataTable`
+		     y `.mobile-only` con tarjetas, cada una con sus propias columnas y
+		     su propio render. Mantener dos listados del mismo dato es cómo se
+		     acaba con una tabla que sabe ordenar y unas tarjetas que no.
+		     `TablaLista` desplaza en horizontal cuando no cabe, que es lo que
+		     resolvía el corte por ancho. -->
+		<div class="listado">
 			{#if isLoading}
 				<div class="empty" role="status">
 					<div class="spinner"></div>
@@ -332,45 +292,93 @@
 					{/if}
 				</div>
 			{:else}
-				<div class="cards-grid">
-					{#each evaluaciones as ev (ev.id)}
-						<div class="m-card" onclick={() => navigateToDetalle(ev.id)}>
-							<div class="m-card-header">
-								<div class="m-card-title-row">
-									<span class="m-card-title">{ev.titulo}</span>
-									{#if ev.requiere_firma}
-										<span class="badge-firma">Firma</span>
+				<div class="tabla-envoltorio">
+					<TablaLista
+						columnas={COLUMNAS}
+						datos={evaluaciones}
+						claveFila={(f) => f.id}
+						orden={ordenTabla}
+						onOrdenar={aplicarOrden}
+						onFila={(f) => navigateToDetalle(f.id)}
+						etiqueta="Evaluaciones registradas"
+					>
+						{#snippet celda({ columnaId, fila, valor })}
+							{#if columnaId === 'titulo'}
+								<div class="c-titulo">
+									<span class="c-titulo-txt">{fila.titulo}</span>
+									{#if fila.descripcion}
+										<span class="c-desc">{fila.descripcion}</span>
 									{/if}
 								</div>
-								{#if ev.descripcion}
-									<p class="m-card-desc">{ev.descripcion}</p>
+							{:else if columnaId === 'tipos'}
+								<div class="chips-wrap">
+									{#each [...new Set(fila.preguntas.map((p) => p.tipo))] as tipo}
+										<span class="chip {getTipoColor(tipo)}">{getTipoLabel(tipo)}</span>
+									{/each}
+								</div>
+							{:else if columnaId === 'preguntas'}
+								<span class="num-badge">{fila.preguntas.length}</span>
+							{:else if columnaId === 'puntos'}
+								<span class="num-badge blue">{calcularPuntajeTotal(fila)}</span>
+							{:else if columnaId === 'firma'}
+								{#if fila.requiere_firma}
+									<span class="badge-firma">Firma</span>
+								{:else}
+									<span class="c-nulo">—</span>
 								{/if}
-							</div>
-							<div class="m-card-stats">
-								<div class="m-stat">
-									<span class="num-badge">{ev.preguntas.length}</span>
-									<span class="m-stat-label">Preguntas</span>
+							{:else if columnaId === 'created_at'}
+								<span class="mono">{formatDate(fila.created_at)}</span>
+							{:else if columnaId === 'acciones'}
+								<!-- `stopPropagation` obligatorio: la fila entera navega al
+								     detalle, y sin esto pulsar «Eliminar» abriría además la
+								     evaluación que se está intentando borrar. -->
+								<div class="acciones">
+									<button
+										class="accion accion--ver"
+										title="Ver"
+										aria-label="Ver la evaluación {fila.titulo}"
+										onclick={(e) => { e.stopPropagation(); navigateToDetalle(fila.id); }}
+									>
+										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+											<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+											<circle cx="12" cy="12" r="3" />
+										</svg>
+									</button>
+									<button
+										class="accion accion--eliminar"
+										title="Eliminar"
+										aria-label="Eliminar la evaluación {fila.titulo}"
+										onclick={(e) => { e.stopPropagation(); handleDelete(fila.id, fila.titulo || ''); }}
+									>
+										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+											<polyline points="3 6 5 6 21 6" />
+											<path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
+										</svg>
+									</button>
 								</div>
-								<div class="m-stat">
-									<span class="num-badge blue">{calcularPuntajeTotal(ev)}</span>
-									<span class="m-stat-label">Puntos</span>
-								</div>
-								<div class="m-stat-date">{formatDate(ev.created_at)}</div>
-							</div>
-							<div class="chips-wrap m-chips">
-								{#each [...new Set(ev.preguntas.map((p) => p.tipo))] as tipo}
-									<span class="chip {getTipoColor(tipo)}">{getTipoLabel(tipo)}</span>
-								{/each}
-							</div>
-						</div>
-					{/each}
+							{:else}
+								{valor ?? ''}
+							{/if}
+						{/snippet}
+					</TablaLista>
 				</div>
 			{/if}
-		</div>
 	</div>
 </div>
 
 <style>
+	/* ═══════════════════════════════════════════════════════════════
+	   CÁSCARA DE PÁGINA
+	   ═══════════════════════════════════════════════════════════════
+	   Mismas medidas que SARLAFT y salidas-NC: fondo crema, 1.5rem de aire
+	   arriba y a los lados, 1.25rem entre tarjetas. Antes eran 2rem/2.5rem y
+	   sin fondo propio, así que esta pantalla respiraba distinto que sus
+	   vecinas aunque el contenido fuera el mismo.
+
+	   Había además un `.dash` anidado dentro de `.dash-wrapper` que no hacía
+	   nada: se quitó, y el `gap` vive donde están las tarjetas.
+
+	   Sin `max-width`: el ancho ya lo acota el `main` del layout. */
 	.dash-wrapper {
 		--surface: #fff;
 		--surface-hover: #f9fafb;
@@ -381,56 +389,130 @@
 		--text-muted: #6b7280;
 		--accent: #f97316;
 		--accent-hover: #ea580c;
-		--accent-bg: #d1fae5;
-	}
+		--accent-bg: #ffedd5;
 
-	.dash {
-		padding: 2rem 2.5rem 4rem;
+		min-height: 100vh;
+		background: #faf7f2;
+		font-family: 'Inter Tight', system-ui, sans-serif;
+		color: var(--text-primary);
+		padding: 1.5rem 1.25rem 3rem;
 		display: flex;
 		flex-direction: column;
 		gap: 1.25rem;
 	}
 
-	.header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 16px;
-		padding-bottom: 1rem;
-		border-bottom: 1px solid var(--border);
-		flex-wrap: wrap;
-	}
+	/* ═══════════════════════════════════════════════════════════════
+	   HERO
+	   ═══════════════════════════════════════════════════════════════
+	   Sustituye a la cabecera propia de esta pantalla (`.header` con su
+	   `.logo-mark`), que no se parecía a ninguna otra del dashboard. Mismas
+	   medidas y misma rejilla fluida que SARLAFT y salidas-NC: el ancho que
+	   manda es el del `main`, que cambia al colapsar la barra lateral, así
+	   que `auto-fit` y no puntos de ruptura. */
+	.page-hero {
+		background: var(--surface);
+		border: 1px solid var(--border);
+		border-radius: 24px;
+		padding: 1.35rem 1.5rem;
+		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
 
-	.header-left {
-		display: flex;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
 		align-items: center;
-		gap: 12px;
+		gap: 1.1rem 2rem;
 	}
-
-	.logo-mark {
-		width: 40px;
-		height: 40px;
-		background: var(--accent-bg);
-		color: var(--accent);
-		border-radius: 10px;
+	.hero-left {
+		display: flex;
+		gap: 1rem;
+		align-items: flex-start;
+	}
+	.hero-icon {
+		width: 48px;
+		height: 48px;
+		flex-shrink: 0;
+		border-radius: 14px;
+		background: linear-gradient(135deg, var(--accent), var(--accent-hover));
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		flex-shrink: 0;
+		color: #fff;
+		box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
 	}
-
-	h1 {
-		font-size: 1.2rem;
+	.hero-icon svg {
+		width: 24px;
+		height: 24px;
+	}
+	.hero-text {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		flex: 1;
+		min-width: 0;
+	}
+	/* `.eyebrow` es `inline-block`, pero como hijo de un flex en columna lo
+	   estira el `align-items: stretch` por defecto. */
+	.hero-text .eyebrow {
+		align-self: flex-start;
+		display: inline-block;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.7rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.12em;
+		color: var(--accent);
+		background: var(--accent-bg);
+		padding: 0.3rem 0.75rem;
+		border-radius: 6px;
+	}
+	.hero-text h1 {
+		font-family: 'Fraunces', Georgia, serif;
+		font-size: clamp(1.6rem, 3.5vw, 2.1rem);
+		font-weight: 500;
+		line-height: 1.15;
+		letter-spacing: -0.01em;
+		color: var(--text-primary);
+		margin: 0;
+	}
+	.hero-text p {
+		font-size: 0.92rem;
+		line-height: 1.6;
+		color: var(--text-secondary);
+		margin: 0;
+		/* Tope de legibilidad; con dos columnas manda la columna. */
+		max-width: 44rem;
+	}
+	.hero-derecha {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.75rem;
+	}
+	.hero-stats {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		font-family: 'JetBrains Mono', monospace;
+	}
+	.stat-item {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		padding: 0.3rem 0.6rem;
+		background: var(--surface-hover);
+		border: 1px solid var(--border);
+		border-radius: 9px;
+	}
+	.stat-label {
+		font-size: 0.72rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--text-muted);
+	}
+	.stat-value {
+		font-size: 0.95rem;
 		font-weight: 700;
 		color: var(--text-primary);
-		letter-spacing: -0.02em;
-		line-height: 1.2;
-	}
-
-	.header-sub {
-		font-size: 11px;
-		color: var(--text-muted);
-		margin-top: 2px;
 	}
 
 	.btn-primary {
@@ -459,196 +541,62 @@
 		transform: scale(0.98);
 	}
 
-	.filter-bar {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		flex-wrap: wrap;
-	}
-
-	.search-wrap {
-		position: relative;
-		display: flex;
-		align-items: center;
-		flex: 1;
-		min-width: 200px;
-		max-width: 400px;
-	}
-
-	.search-icon {
-		position: absolute;
-		left: 12px;
-		color: var(--text-muted);
-		pointer-events: none;
-	}
-
-	.search-wrap input {
-		width: 100%;
-		padding: 9px 12px 9px 36px;
-		font-size: 13px;
+	.filtros-bar {
 		background: var(--surface);
 		border: 1px solid var(--border);
-		border-radius: 8px;
-		color: var(--text-primary);
-		font-family: inherit;
-		outline: none;
-		transition: border-color 0.15s, box-shadow 0.15s;
-	}
-
-	.search-wrap input:focus {
-		border-color: var(--accent);
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
-	}
-
-	.search-wrap input::placeholder {
-		color: var(--text-muted);
-	}
-
-	.results-info {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		font-size: 12px;
-		color: var(--text-muted);
-	}
-
-	.reset-btn {
-		background: none;
-		border: none;
-		color: var(--accent);
-		font-size: 12px;
-		font-weight: 500;
-		cursor: pointer;
-		padding: 0;
-		font-family: inherit;
-	}
-
-	.reset-btn:hover {
-		text-decoration: underline;
-	}
-
-	/* Cell styles */
-	:global(.cell-titulo) {
-		display: flex;
-		flex-direction: column;
-		gap: 2px;
-	}
-
-	:global(.td-title) {
-		font-weight: 600;
-		color: var(--text-primary);
-	}
-
-	:global(.td-title-truncate) {
-		display: block;
-		max-width: 400px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	:global(.td-desc) {
-		font-size: 11px;
-		color: var(--text-muted);
-		margin: 0;
-		max-width: 300px;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	:global(.td-date) {
-		color: var(--text-muted);
-		font-size: 12px;
-	}
-
-	:global(.num-badge) {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		min-width: 28px;
-		height: 24px;
-		padding: 0 8px;
-		font-size: 12px;
-		font-weight: 600;
-		background: #ecfdf5;
-		color: #ea580c;
-		border-radius: 6px;
-	}
-
-	:global(.num-badge.blue) {
-		background: #eff6ff;
-		color: #2563eb;
-	}
-
-	:global(.badge-firma) {
-		display: inline-flex;
-		align-items: center;
-		padding: 2px 6px;
-		font-size: 10px;
-		font-weight: 600;
-		background: #f3e8ff;
-		color: #7c3aed;
-		border-radius: 4px;
-	}
-
-	:global(.chips-wrap) {
+		border-radius: 16px;
+		padding: 0.85rem;
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px;
+		align-items: center;
+		gap: 0.75rem;
+		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
 	}
-
-	:global(.chip) {
-		font-size: 10px;
-		font-weight: 600;
-		padding: 2px 6px;
-		border-radius: 4px;
+	.search-wrap {
+		position: relative;
+		flex: 1;
+		min-width: 240px;
 	}
-
-	:global(.chip-blue) { background: #dbeafe; color: #1d4ed8; }
-	:global(.chip-purple) { background: #ede9fe; color: #6d28d9; }
-	:global(.chip-green) { background: #dcfce7; color: #15803d; }
-	:global(.chip-orange) { background: #ffedd5; color: #c2410c; }
-	:global(.chip-pink) { background: #fce7f3; color: #be185d; }
-	:global(.chip-teal) { background: #ccfbf1; color: #0f766e; }
-	:global(.chip-gray) { background: #f3f4f6; color: #4b5563; }
-
-	:global(.actions-wrap) {
-		display: inline-flex;
-		gap: 4px;
-	}
-
-	:global(.action-btn) {
+	.filtros-meta {
 		display: inline-flex;
 		align-items: center;
-		justify-content: center;
-		width: 28px;
-		height: 28px;
-		border: none;
-		border-radius: 6px;
+		gap: 0.6rem;
+		margin-left: auto;
+	}
+	.filtros-conteo {
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.72rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: var(--text-muted);
+		white-space: nowrap;
+	}
+	.clear-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.45rem 0.75rem;
+		font-family: inherit;
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: var(--text-muted);
+		background: transparent;
+		border: 1px solid var(--border);
+		border-radius: 10px;
 		cursor: pointer;
-		transition: all 0.15s;
+		transition: color 0.2s, border-color 0.2s, background-color 0.2s;
 	}
-
-	:global(.action-btn.view) {
-		background: #ecfdf5;
-		color: #ea580c;
+	.clear-btn svg {
+		width: 0.85rem;
+		height: 0.85rem;
 	}
-
-	:global(.action-btn.view:hover) {
-		background: #d1fae5;
-	}
-
-	:global(.action-btn.delete) {
-		background: #fef2f2;
+	.clear-btn:hover {
 		color: #dc2626;
+		border-color: rgba(220, 38, 38, 0.3);
+		background: rgba(220, 38, 38, 0.04);
 	}
 
-	:global(.action-btn.delete:hover) {
-		background: #fee2e2;
-	}
-
-	/* Empty & spinner */
 	.empty {
 		display: flex;
 		flex-direction: column;
@@ -686,89 +634,135 @@
 	}
 
 	/* Responsive */
-	.desktop-only { display: block; }
-	.mobile-only { display: none; }
-
-	@media (max-width: 767px) {
-		.dash {
-			padding: 1.25rem 1rem 2rem;
-		}
-		.desktop-only { display: none; }
-		.mobile-only { display: block; }
+	.acciones {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 0.15rem;
+	}
+	.accion {
+		display: inline-flex;
+		padding: 0.35rem;
+		border: none;
+		background: transparent;
+		border-radius: 8px;
+		color: var(--text-muted);
+		cursor: pointer;
+		transition: background-color 0.15s, color 0.15s;
+	}
+	.accion svg {
+		width: 1rem;
+		height: 1rem;
+	}
+	.accion--ver:hover {
+		background: var(--accent-bg);
+		color: var(--accent-hover);
+	}
+	.accion--eliminar:hover {
+		background: #fef2f2;
+		color: #dc2626;
 	}
 
 	/* Mobile cards */
-	.cards-grid {
+
+	/* Mobile cards */
+	/* ═══════════════════════════════════════════════════════════════
+	   PASTILLAS
+	   ═══════════════════════════════════════════════════════════════
+	   Estaban declaradas con `:global(...)` porque el `DataTable` pintaba las
+	   celdas como cadenas de HTML y el CSS con ámbito no las alcanzaba. Ahora
+	   que las celdas son markup de Svelte de verdad, el ámbito normal basta
+	   —y así dejan de filtrarse al resto de la aplicación—. */
+	.chips-wrap {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+	}
+	.chip {
+		font-size: 10px;
+		font-weight: 600;
+		padding: 2px 6px;
+		border-radius: 4px;
+		white-space: nowrap;
+	}
+	.chip-blue { background: #dbeafe; color: #1d4ed8; }
+	.chip-purple { background: #ede9fe; color: #6d28d9; }
+	.chip-green { background: #dcfce7; color: #15803d; }
+	.chip-orange { background: #ffedd5; color: #c2410c; }
+	.chip-pink { background: #fce7f3; color: #be185d; }
+	.chip-teal { background: #ccfbf1; color: #0f766e; }
+	.chip-gray { background: #f3f4f6; color: #4b5563; }
+
+	.num-badge {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 26px;
+		padding: 2px 7px;
+		border-radius: 6px;
+		background: var(--accent-bg);
+		color: var(--accent-hover);
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.75rem;
+		font-weight: 700;
+	}
+	.num-badge.blue {
+		background: #dbeafe;
+		color: #1d4ed8;
+	}
+	.badge-firma {
+		display: inline-flex;
+		padding: 2px 7px;
+		border-radius: 6px;
+		background: #ede9fe;
+		color: #6d28d9;
+		font-size: 0.68rem;
+		font-weight: 600;
+	}
+
+	/* ═══════════════════════════════════════════════════════════════
+	   CELDAS DE LA TABLA
+	   ═══════════════════════════════════════════════════════════════
+	   Aquí estaba `.cards-grid` con `.m-card*`: una tarjeta por evaluación,
+	   con su título, su descripción y tres cifras. Cuatro datos por tarjeta y
+	   dos evaluaciones por pantalla. La tabla los pone en una fila. */
+	.tabla-envoltorio {
+		--tl-fondo: var(--surface);
+		--tl-borde: var(--border);
+		--tl-th-fondo: var(--surface-hover);
+		--tl-th-color: var(--text-muted);
+		--tl-th-color-hover: var(--text-primary);
+		--tl-td-color: var(--text-primary);
+		--tl-td-suave: var(--text-muted);
+		--tl-mono: 'JetBrains Mono', monospace;
+		--tl-acento: var(--accent);
+		--tl-fila-hover: var(--surface-hover);
+	}
+	.c-titulo {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
+		gap: 0.15rem;
+		min-width: 0;
 	}
-
-	.m-card {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 12px;
-		padding: 16px;
-		cursor: pointer;
-		transition: all 0.15s;
-	}
-
-	.m-card:hover {
-		border-color: var(--accent);
-	}
-
-	.m-card-header {
-		margin-bottom: 12px;
-	}
-
-	.m-card-title-row {
-		display: flex;
-		align-items: flex-start;
-		gap: 8px;
-		flex-wrap: wrap;
-	}
-
-	.m-card-title {
+	.c-titulo-txt {
 		font-weight: 600;
-		font-size: 14px;
 		color: var(--text-primary);
-		flex: 1;
 	}
-
-	.m-card-desc {
-		font-size: 12px;
+	/* Dos líneas y corta: en el listado la descripción orienta, no se lee
+	   entera; para eso está el detalle. */
+	.c-desc {
+		font-size: 0.75rem;
 		color: var(--text-muted);
-		margin: 4px 0 0;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
 	}
-
-	.m-card-stats {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		padding: 10px 0;
-		border-top: 1px solid #f3f4f6;
-		border-bottom: 1px solid #f3f4f6;
-		margin-bottom: 10px;
-	}
-
-	.m-stat {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-	}
-
-	.m-stat-label {
-		font-size: 11px;
+	.c-nulo {
 		color: var(--text-muted);
 	}
-
-	.m-stat-date {
-		margin-left: auto;
-		font-size: 11px;
-		color: var(--text-muted);
-	}
-
-	.m-chips {
-		margin: 0;
+	.mono {
+		font-family: 'JetBrains Mono', monospace;
 	}
 </style>
