@@ -2,6 +2,8 @@
 	import { page } from '$app/state';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+	import TablaLista from '$lib/components/listing/TablaLista.svelte';
+	import type { ColumnDef, SortingState } from '@tanstack/table-core';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
 	import {
 		limpiar as limpiarFiltrosDe,
@@ -42,6 +44,11 @@
 		tipo: string;
 		estado: string;
 		pagina: number;
+		/// El orden va en la URL como todo lo demás: se resuelve en servidor
+		/// (la lista está paginada), así que forma parte de la consulta y un
+		/// enlace compartido tiene que reproducir lo que el otro estaba viendo.
+		orden: string;
+		direccion: string;
 	}
 
 	const POR_PAGINA = 20;
@@ -50,7 +57,9 @@
 		q: texto(),
 		tipo: opcion('TODOS'),
 		estado: opcion('TODOS'),
-		pagina: numero(1)
+		pagina: numero(1),
+		orden: opcion('fecha_envio'),
+		direccion: opcion('desc')
 	};
 
 	const estadoUrl = crearEstadoUrl(DEFS);
@@ -82,6 +91,47 @@
 		documentos: items.reduce((acc, i) => acc + i.documentos_count, 0)
 		});
 
+	/**
+	 * Columnas de la tabla.
+	 *
+	 * `id` coincide con el nombre del campo que acepta el backend en `orden`
+	 * (ver la lista blanca de `listarAdmin`): así la cabecera pulsada y el
+	 * criterio de la consulta son literalmente lo mismo y no hace falta un
+	 * mapa intermedio que se desincronice.
+	 *
+	 * `contacto` y `documento` no se pueden ordenar porque juntan dos campos;
+	 * marcarlas `enableSorting: false` es lo que hace que su cabecera NO se
+	 * pinte como pulsable, en vez de prometer algo que el servidor no hace.
+	 */
+	const COLUMNAS: ColumnDef<SarlaftFormularioResumen, any>[] = [
+		{ id: 'radicado', accessorKey: 'radicado', header: 'Radicado', size: 190 },
+		{ id: 'nombre_completo', accessorKey: 'nombre_completo', header: 'Nombre' },
+		{ id: 'tipo_formulario', accessorKey: 'tipo_formulario', header: 'Tipo', size: 170 },
+		{ id: 'documento', header: 'Documento', enableSorting: false, size: 150 },
+		{ id: 'contacto', header: 'Contacto', enableSorting: false, size: 230 },
+		{ id: 'documentos_count', accessorKey: 'documentos_count', header: 'Docs', enableSorting: false, size: 70 },
+		{ id: 'estado', accessorKey: 'estado', header: 'Estado', size: 140 },
+		{ id: 'fecha_envio', accessorKey: 'fecha_envio', header: 'Enviado', size: 160 }
+	];
+
+	/// Traducción en los dos sentidos entre el estado de TanStack y los dos
+	/// campos planos que viajan en la URL y en la consulta.
+	const ordenTabla = $derived<SortingState>(
+		filtros.orden ? [{ id: filtros.orden, desc: filtros.direccion === 'desc' }] : []
+	);
+
+	function aplicarOrden(nuevo: SortingState) {
+		const primero = nuevo[0];
+		filtros = {
+			...filtros,
+			// Quitar el orden vuelve al natural de la pantalla: lo último
+			// recibido arriba, que es como se lee un buzón de trámites.
+			orden: primero?.id ?? 'fecha_envio',
+			direccion: primero ? (primero.desc ? 'desc' : 'asc') : 'desc',
+			pagina: 1
+		};
+	}
+
 	const hasActiveFilter = $derived(
 		filtros.q.trim() !== '' || filtros.tipo !== 'TODOS' || filtros.estado !== 'TODOS'
 	);
@@ -90,7 +140,12 @@
 		isLoading = true;
 		error = null;
 		try {
-			const params: any = { page: filtros.pagina, limit: POR_PAGINA };
+			const params: any = {
+				page: filtros.pagina,
+				limit: POR_PAGINA,
+				orden: filtros.orden,
+				direccion: filtros.direccion
+			};
 			if (filtros.q.trim()) params.search = filtros.q.trim();
 			if (filtros.tipo !== 'TODOS') params.tipo_formulario = filtros.tipo;
 			if (filtros.estado !== 'TODOS') params.estado = filtros.estado;
@@ -157,13 +212,6 @@
 		return formatFechaCorta(iso);
 	}
 
-	function initials(name: string | null): string {
-		if (!name) return '?';
-		const parts = name.trim().split(/\s+/);
-		if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
-		return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-	}
-
 	onMount(() => {
 		load();
 	});
@@ -203,36 +251,34 @@
 			</div>
 		</div>
 
+		<!-- Los separadores «·» que había entre cifras se retiraron: ahora cada
+		     dato es una pastilla y, al envolverse en la columna estrecha, los
+		     puntos quedaban colgando al final de las líneas. -->
 		<div class="hero-stats">
 			<div class="stat-item">
 				<span class="stat-label">Total</span>
 				<span class="stat-value">{stats.total}</span>
 			</div>
-			<span class="stat-sep" aria-hidden="true">·</span>
 			<div class="stat-item">
 				<span class="stat-dot stat-dot--blue" aria-hidden="true"></span>
 				<span class="stat-label">Recibidos</span>
 				<span class="stat-value">{stats.pendientes}</span>
 			</div>
-			<span class="stat-sep" aria-hidden="true">·</span>
 			<div class="stat-item">
 				<span class="stat-dot stat-dot--amber" aria-hidden="true"></span>
 				<span class="stat-label">En revisión</span>
 				<span class="stat-value">{stats.enRevision}</span>
 			</div>
-			<span class="stat-sep" aria-hidden="true">·</span>
 			<div class="stat-item">
 				<span class="stat-dot stat-dot--aprobado" aria-hidden="true"></span>
 				<span class="stat-label">Aprobados</span>
 				<span class="stat-value">{stats.aprobados}</span>
 			</div>
-			<span class="stat-sep" aria-hidden="true">·</span>
 			<div class="stat-item">
 				<span class="stat-dot stat-dot--red" aria-hidden="true"></span>
 				<span class="stat-label">Rechazados</span>
 				<span class="stat-value">{stats.rechazados}</span>
 			</div>
-			<span class="stat-sep" aria-hidden="true">·</span>
 			<div class="stat-item">
 				<svg class="h-3.5 w-3.5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 					<path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
@@ -342,94 +388,64 @@
 			{/if}
 		</div>
 	{:else}
-		<div class="cards-list">
-			{#each items as item, idx (item.id)}
-				{@const estado = ESTADO_LABELS[item.estado]}
-				<button
-					type="button"
-					class="form-card"
-					onclick={() => verDetalle(item.id)}
-					in:fly={{ y: 12, duration: 280, delay: Math.min(idx * 30, 350), easing: quintOut }}
-				>
-					<header class="form-head">
-						<div class="form-avatar form-avatar--{item.estado}">
-							<span>{initials(item.nombre_completo)}</span>
+		<!-- El envoltorio existe para pasarle a la tabla compartida la piel de
+		     esta pantalla por custom properties, sin tocar su CSS. -->
+		<div class="tabla-envoltorio">
+			<TablaLista
+				columnas={COLUMNAS}
+				datos={items}
+				claveFila={(f) => f.id}
+				orden={ordenTabla}
+				onOrdenar={aplicarOrden}
+				onFila={(f) => verDetalle(f.id)}
+				etiqueta="Formularios SARLAFT recibidos"
+			>
+				{#snippet celda({ columnaId, fila, valor })}
+					{#if columnaId === 'radicado'}
+						<div class="c-radicado">
+							<span class="radicado-pill">{fila.radicado}</span>
+							<span class="codigo-pill">{fila.codigo_formulario} · v{fila.version}</span>
 						</div>
-						<div class="form-head-text">
-							<div class="form-head-row">
-								<span class="radicado-pill">{item.radicado}</span>
-								<span class="codigo-pill">{item.codigo_formulario} · v{item.version}</span>
-							</div>
-							<h3>{item.nombre_completo ?? 'Sin nombre'}</h3>
-							<span class="form-sub">
-								{TIPO_FORMULARIO_LABELS[item.tipo_formulario]}
-								{#if item.tipo_documento || item.numero_documento}
-									<span class="form-sep">·</span>
-									<span class="mono">{item.tipo_documento ?? 'Doc'}: {item.numero_documento ?? '—'}</span>
-								{/if}
-							</span>
+					{:else if columnaId === 'nombre_completo'}
+						<span class="c-nombre">{fila.nombre_completo ?? 'Sin nombre'}</span>
+					{:else if columnaId === 'tipo_formulario'}
+						<span class="c-tipo">{TIPO_FORMULARIO_LABELS[fila.tipo_formulario]}</span>
+					{:else if columnaId === 'documento'}
+						{#if fila.numero_documento}
+							<span class="mono c-doc">{fila.tipo_documento ?? 'Doc'} {fila.numero_documento}</span>
+						{:else}
+							<span class="c-nulo">—</span>
+						{/if}
+					{:else if columnaId === 'contacto'}
+						<div class="c-contacto">
+							<span class="mono">{fila.correo ?? '—'}</span>
+							{#if fila.telefono}<span class="mono c-nulo">{fila.telefono}</span>{/if}
 						</div>
+					{:else if columnaId === 'documentos_count'}
+						{#if fila.documentos_count > 0}
+							<span class="mono c-docs">{fila.documentos_count}</span>
+						{:else}
+							<span class="c-nulo">—</span>
+						{/if}
+					{:else if columnaId === 'estado'}
+						{@const e = ESTADO_LABELS[fila.estado]}
 						<span
 							class="estado-pill"
-							style="background-color: {estado.bg}; color: {estado.color}; border-color: {estado.border}"
+							style="background-color: {e.bg}; color: {e.color}; border-color: {e.border}"
 						>
-							<span class="estado-dot" style="background-color: {estado.dot}"></span>
-							{estado.label}
+							<span class="estado-dot" style="background-color: {e.dot}"></span>
+							{e.label}
 						</span>
-					</header>
-
-					<div class="form-meta">
-						<div class="meta-item">
-							<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-							</svg>
-							<span class="mono">{item.correo ?? '—'}</span>
+					{:else if columnaId === 'fecha_envio'}
+						<div class="c-fecha">
+							<span class="mono">{formatFechaCorta(fila.fecha_envio)}</span>
+							<span class="c-nulo">{tiempoRelativo(fila.fecha_envio)}</span>
 						</div>
-						{#if item.telefono}
-							<div class="meta-item">
-								<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
-								</svg>
-								<span class="mono">{item.telefono}</span>
-							</div>
-						{/if}
-					</div>
-
-					<footer class="form-foot">
-						<div class="form-foot-left">
-							<div class="form-date">
-								<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-								</svg>
-								<span class="mono">{formatFechaCorta(item.fecha_envio)}</span>
-								<span class="form-date-rel">· {tiempoRelativo(item.fecha_envio)}</span>
-							</div>
-							{#if item.documentos_count > 0}
-								<div class="form-docs">
-									<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
-									</svg>
-									<span class="mono">{item.documentos_count}</span>
-									<span>documento{item.documentos_count !== 1 ? 's' : ''}</span>
-								</div>
-							{:else}
-								<div class="form-docs form-docs--empty">
-									<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
-									</svg>
-									<span>Sin documentos</span>
-								</div>
-							{/if}
-						</div>
-						<span class="card-link">
-							Abrir
-							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-							</svg>
-						</span>
-					</footer>
-				</button>
-			{/each}
+					{:else}
+						{valor ?? ''}
+					{/if}
+				{/snippet}
+			</TablaLista>
 		</div>
 
 		<!-- Paginación -->
@@ -497,11 +513,26 @@
 		background: white;
 		border: 1px solid rgba(0, 0, 0, 0.06);
 		border-radius: 24px;
-		padding: 1.75rem;
+		padding: 1.35rem 1.5rem;
 		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
-	}
-	.hero-inner {
-		margin-bottom: 1.5rem;
+
+		/* Texto y cifras EN PARALELO, no apilados.
+		 *
+		 * Antes el hero era una columna: bloque de título arriba y una fila de
+		 * estadísticas debajo, separadas por una línea. En escritorio eso
+		 * gastaba casi un tercio de la altura visible de la página en cabecera
+		 * mientras la mitad derecha de la tarjeta quedaba vacía.
+		 *
+		 * La rejilla es fluida y NO lleva `@media`: el ancho que importa es el
+		 * del `<main>` del layout, que cambia cuando la barra lateral se
+		 * colapsa. Un punto de ruptura atado al viewport se desincroniza de ese
+		 * ancho; `auto-fit` no. Con `min(100%, 26rem)` cae a una sola columna en
+		 * cuanto no caben dos de 26rem, sin desbordar en móvil.
+		 */
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+		align-items: center;
+		gap: 1.1rem 2rem;
 	}
 	.hero-left {
 		display: flex;
@@ -513,6 +544,14 @@
 		flex-direction: column;
 		gap: 0.5rem;
 		flex: 1;
+		min-width: 0;
+	}
+	/* `.eyebrow` es `inline-block`, pero como hijo de un flex en columna lo
+	   estira el `align-items: stretch` por defecto: la pastilla naranja llegaba
+	   hasta el borde de la columna en vez de ceñirse a su texto. Se nota mucho
+	   más desde que la columna es la mitad de la tarjeta y no toda. */
+	.hero-text .eyebrow {
+		align-self: flex-start;
 	}
 	.hero-text h1 {
 		font-size: clamp(1.6rem, 3.5vw, 2.1rem);
@@ -525,7 +564,13 @@
 		line-height: 1.6;
 		color: #475569;
 		margin: 0;
-		max-width: 640px;
+		/* 640px capaba la descripción muy por debajo del ancho disponible y
+		   dejaba hueco muerto a su derecha. El tope se sube al límite de
+		   legibilidad (44rem): con dos columnas es la propia columna la que
+		   manda y este valor no llega a morder; solo actúa cuando la rejilla
+		   cae a una columna ancha, que es justo donde un renglón larguísimo
+		   haría perder la línea al leer. */
+		max-width: 44rem;
 	}
 	.compliance-tags {
 		display: flex;
@@ -551,15 +596,22 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.65rem;
-		padding-top: 1.1rem;
-		border-top: 1px solid rgba(0, 0, 0, 0.06);
+		gap: 0.4rem;
 		font-family: 'Geist', ui-monospace, monospace;
 	}
+	/* La línea superior que separaba las cifras del texto se fue con el
+	   apilado: al ponerse en paralelo ya no hay nada arriba de lo que
+	   separarlas, y un borde a media tarjeta quedaba suelto. Cada dato se
+	   delimita ahora por sí mismo, que además hace legible el envolvido en la
+	   columna estrecha. */
 	.stat-item {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.45rem;
+		padding: 0.3rem 0.6rem;
+		background: #fcfcfb;
+		border: 1px solid rgba(0, 0, 0, 0.05);
+		border-radius: 9px;
 	}
 	.stat-label {
 		font-size: 0.72rem;
@@ -590,10 +642,6 @@
 	.stat-dot--red {
 		background: #ef4444;
 	}
-	.stat-sep {
-		color: #cbd5e1;
-	}
-
 	/* ═══════════════════════════════════════════════════════════════
 	   FILTERS BAR
 	   ═══════════════════════════════════════════════════════════════ */
@@ -613,37 +661,6 @@
 		flex: 1;
 		min-width: 240px;
 	}
-	.search-icon {
-		position: absolute;
-		left: 0.9rem;
-		top: 50%;
-		transform: translateY(-50%);
-		width: 16px;
-		height: 16px;
-		color: #94a3b8;
-		pointer-events: none;
-	}
-	.search-input {
-		width: 100%;
-		padding: 0.6rem 0.9rem 0.6rem 2.5rem;
-		font-family: inherit;
-		font-size: 0.88rem;
-		color: #1e293b;
-		background: #fcfcfb;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 10px;
-		outline: none;
-		transition: all 0.2s;
-	}
-	.search-input::placeholder {
-		color: #94a3b8;
-	}
-	.search-input:focus {
-		background: white;
-		border-color: rgba(249, 115, 22, 0.4);
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
-	}
-
 	.filter-group {
 		display: flex;
 		gap: 0.3rem;
@@ -714,88 +731,34 @@
 	}
 
 	/* ═══════════════════════════════════════════════════════════════
-	   FORM CARDS LIST
-	   ═══════════════════════════════════════════════════════════════ */
-	.cards-list {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-	}
-	.form-card {
-		display: flex;
-		flex-direction: column;
-		gap: 0.85rem;
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 18px;
-		padding: 1.1rem 1.25rem;
-		cursor: pointer;
-		text-align: left;
-		font-family: inherit;
-		color: inherit;
-		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
-		transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-	}
-	.form-card:hover,
-	.form-card:focus-visible {
-		transform: translateY(-2px);
-		border-color: rgba(249, 115, 22, 0.3);
-		box-shadow: 0 10px 28px rgba(249, 115, 22, 0.1);
-		outline: none;
+	   CELDAS DE LA TABLA
+	   ═══════════════════════════════════════════════════════════════
+	   Aquí había el CSS de las tarjetas: `.form-card`, `.form-head`,
+	   `.form-meta`, `.form-foot` y los cinco `.form-avatar--<estado>` del
+	   círculo con las iniciales del nombre. Una tarjeta por registro gastaba
+	   media pantalla en cuatro datos y el avatar no aportaba información: era
+	   una inicial calculada, no una foto ni un identificador.
+
+	   Se conservan las pastillas —radicado, código y estado— porque siguen
+	   usándose dentro de las celdas. */
+	.tabla-envoltorio {
+		/* La tabla es un componente compartido y neutro; la piel de esta
+		   pantalla se le pasa por custom properties en vez de tocar su CSS. */
+		--tl-th-fondo: #fcfcfb;
+		--tl-th-color: #64748b;
+		--tl-th-color-hover: #0f172a;
+		--tl-td-color: #1e293b;
+		--tl-td-suave: #64748b;
+		--tl-mono: 'Geist', ui-monospace, monospace;
+		--tl-acento: #f97316;
+		--tl-fila-hover: rgba(249, 115, 22, 0.04);
 	}
 
-	.form-head {
+	.c-radicado {
 		display: flex;
+		flex-direction: column;
 		align-items: flex-start;
-		gap: 0.85rem;
-	}
-	.form-avatar {
-		flex-shrink: 0;
-		width: 44px;
-		height: 44px;
-		border-radius: 14px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-family: 'Geist', ui-monospace, monospace;
-		font-size: 0.85rem;
-		font-weight: 700;
-		letter-spacing: 0.04em;
-	}
-	.form-avatar--recibido {
-		background: linear-gradient(135deg, rgba(59, 130, 246, 0.14), rgba(37, 99, 235, 0.18));
-		color: #1e40af;
-	}
-	.form-avatar--en_revision {
-		background: linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(217, 119, 6, 0.18));
-		color: #854d0e;
-	}
-	/* "Aprobado" conserva el verde: es un color de estado, no de marca. Coincide
-	   con ESTADO_LABELS.aprobado y con --emerald-800 (#166534) de app.css, que
-	   el sistema reserva justamente para este caso. */
-	.form-avatar--aprobado {
-		background: linear-gradient(135deg, rgba(34, 197, 94, 0.16), rgba(22, 101, 52, 0.2));
-		color: #166534;
-	}
-	.form-avatar--rechazado {
-		background: linear-gradient(135deg, rgba(239, 68, 68, 0.14), rgba(220, 38, 38, 0.18));
-		color: #991b1b;
-	}
-	.form-avatar--escalado {
-		background: linear-gradient(135deg, rgba(139, 92, 246, 0.14), rgba(124, 58, 237, 0.18));
-		color: #5b21b6;
-	}
-
-	.form-head-text {
-		flex: 1;
-		min-width: 0;
-	}
-	.form-head-row {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.4rem;
-		margin-bottom: 0.3rem;
+		gap: 0.2rem;
 	}
 	.radicado-pill {
 		display: inline-flex;
@@ -807,35 +770,55 @@
 		padding: 0.18rem 0.55rem;
 		border-radius: 5px;
 		letter-spacing: 0.04em;
+		/* Un radicado partido en cuatro renglones deja de ser un identificador
+		   legible y dispara la altura de la fila. Si no cabe, que la tabla
+		   desplace en horizontal: para eso tiene su propio contenedor. */
+		white-space: nowrap;
 	}
 	.codigo-pill {
 		display: inline-flex;
 		font-family: 'Geist', ui-monospace, monospace;
-		font-size: 0.65rem;
+		font-size: 0.62rem;
 		font-weight: 600;
 		color: #64748b;
 		background: rgba(0, 0, 0, 0.04);
-		padding: 0.18rem 0.5rem;
+		padding: 0.15rem 0.45rem;
 		border-radius: 5px;
 		letter-spacing: 0.04em;
+		white-space: nowrap;
 	}
-	.form-head-text h3 {
-		font-size: 1.05rem;
+
+	.c-nombre {
 		font-weight: 600;
-		margin: 0 0 0.2rem;
 		color: #0f172a;
-		line-height: 1.3;
+	}
+	.c-tipo,
+	.c-doc {
+		font-size: 0.78rem;
+		color: #475569;
+		white-space: nowrap;
+	}
+	.c-nulo {
+		color: #94a3b8;
+	}
+	.c-docs {
+		font-weight: 700;
+		color: #0f172a;
+	}
+	/* Correo y teléfono apilados: en una sola línea el correo obliga a una
+	   columna larguísima y empuja el resto de la tabla al scroll horizontal. */
+	.c-contacto,
+	.c-fecha {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+		font-size: 0.75rem;
+	}
+	.c-contacto span,
+	.c-fecha span {
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-	}
-	.form-sub {
-		font-size: 0.78rem;
-		color: #64748b;
-	}
-	.form-sep {
-		margin: 0 0.4rem;
-		color: #cbd5e1;
 	}
 
 	.estado-pill {
@@ -843,15 +826,14 @@
 		align-items: center;
 		gap: 0.4rem;
 		font-family: 'Geist', ui-monospace, monospace;
-		font-size: 0.66rem;
+		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
-		padding: 0.25rem 0.55rem;
+		padding: 0.25rem 0.5rem;
 		border-radius: 5px;
 		border: 1px solid;
 		white-space: nowrap;
-		flex-shrink: 0;
 	}
 	.estado-dot {
 		width: 6px;
@@ -859,152 +841,7 @@
 		border-radius: 50%;
 	}
 
-	.form-meta {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 1rem;
-		padding: 0.6rem 0;
-		border-top: 1px solid rgba(0, 0, 0, 0.06);
-		border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-	}
-	.meta-item {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		font-size: 0.78rem;
-		color: #64748b;
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.meta-item svg {
-		color: #94a3b8;
-		flex-shrink: 0;
-	}
-
-	.form-foot {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
-	}
-	.form-foot-left {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 1rem;
-	}
-	.form-date,
-	.form-docs {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		font-size: 0.78rem;
-		color: #475569;
-	}
-	.form-date svg,
-	.form-docs svg {
-		color: #94a3b8;
-	}
-	.form-date-rel {
-		color: #94a3b8;
-	}
-	.form-docs--empty {
-		color: #94a3b8;
-	}
-
-	.card-link {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		font-size: 0.78rem;
-		font-weight: 600;
-		color: #f97316;
-		transition: gap 0.2s;
-	}
-	.card-link svg {
-		width: 14px;
-		height: 14px;
-	}
-	.form-card:hover .card-link {
-		gap: 0.65rem;
-	}
-
 	/* ═══════════════════════════════════════════════════════════════
-	   PAGINATION
-	   ═══════════════════════════════════════════════════════════════ */
-	.pagination {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		margin-top: 0.5rem;
-		padding: 0.85rem 1.25rem;
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.06);
-		border-radius: 14px;
-	}
-	.pagination-info {
-		font-size: 0.78rem;
-		color: #64748b;
-		margin: 0;
-	}
-	.pagination-info .mono {
-		color: #0f172a;
-		font-weight: 700;
-	}
-	.pagination-controls {
-		display: flex;
-		align-items: center;
-		gap: 0.3rem;
-	}
-	.page-arrow,
-	.page-num {
-		min-width: 32px;
-		height: 32px;
-		padding: 0 0.5rem;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		font-family: inherit;
-		font-size: 0.78rem;
-		font-weight: 600;
-		color: #475569;
-		background: transparent;
-		border: 1px solid transparent;
-		border-radius: 8px;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.page-arrow svg {
-		width: 14px;
-		height: 14px;
-	}
-	.page-arrow:hover:not(:disabled),
-	.page-num:hover {
-		background: #fcfcfb;
-		color: #0f172a;
-	}
-	.page-arrow:disabled {
-		opacity: 0.35;
-		cursor: not-allowed;
-	}
-	.page-num--active {
-		background: linear-gradient(135deg, #f97316, #ea580c);
-		color: white;
-		box-shadow: 0 2px 8px rgba(249, 115, 22, 0.3);
-	}
-	.page-num--active:hover {
-		background: linear-gradient(135deg, #f97316, #ea580c);
-		color: white;
-	}
-	.page-ellipsis {
-		padding: 0 0.4rem;
-		color: #94a3b8;
-		font-size: 0.78rem;
-	}
-
 	/* ═══════════════════════════════════════════════════════════════
 	   ESTADOS GENERALES
 	   ═══════════════════════════════════════════════════════════════ */
@@ -1112,7 +949,6 @@
 	/* ═══════════════════════════════════════════════════════════════
 	   BOTONES
 	   ═══════════════════════════════════════════════════════════════ */
-	.btn-primary,
 	.btn-secondary {
 		display: inline-flex;
 		align-items: center;
@@ -1127,15 +963,6 @@
 		transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 		border: 1px solid transparent;
 		white-space: nowrap;
-	}
-	.btn-primary {
-		background: linear-gradient(135deg, #f97316, #ea580c);
-		color: white;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.28);
-	}
-	.btn-primary:hover:not(:disabled) {
-		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
 	}
 	.btn-secondary {
 		background: white;

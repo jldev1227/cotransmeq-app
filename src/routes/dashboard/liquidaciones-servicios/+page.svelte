@@ -52,6 +52,7 @@
 	} from '$lib/api/facturacionLiquidaciones';
 	import ModalFacturar from '$lib/components/ModalFacturar.svelte';
 	import SocketEventLogBar from '$lib/components/liquidaciones/SocketEventLogBar.svelte';
+	import AccionesDropdown, { type AccionMenu } from '$lib/components/AccionesDropdown.svelte';
 	import { checkAccess } from '$lib/config/permissions';
 	import {
 		cacheLiquidaciones,
@@ -296,7 +297,21 @@
 	let anularModalOpen = $state(false);
 	let anularTargetId = $state('');
 	let anularMotivo = $state('');
-	let estadoChanging = $state(false);
+	/**
+	 * Cambios de estado en vuelo, por liquidación: `id → estado destino`.
+	 *
+	 * Antes era un único booleano global. Con él, pulsar «Aprobar» en una fila
+	 * deshabilitaba los botones de TODAS —y, peor, no había forma de pintar el
+	 * spinner en la fila correcta—, así que el usuario se quedaba mirando sin
+	 * saber si su clic había hecho algo. La respuesta del servidor tarda lo que
+	 * tarda; lo que no puede es no verse.
+	 *
+	 * Guardar el estado destino y no un booleano permite además rotular el
+	 * ítem («Aprobando…») en vez de un genérico «cargando».
+	 */
+	let estadoEnCurso = $state<Record<string, EstadoLiquidacionServicio>>({});
+	/** Eliminaciones en vuelo, misma idea. */
+	let eliminandoIds = $state<Record<string, true>>({});
 
 	// Historial
 	let historialModalOpen = $state(false);
@@ -1077,23 +1092,6 @@
 		}
 	}
 
-	/**
-	 * Recarga manual del tab activo, saltándose la caché.
-	 *
-	 * Con TTL de 60s y revalidación por socket rara vez hace falta, pero un
-	 * usuario que sospecha que ve algo viejo necesita una salida que no sea
-	 * F5 — recargar la página entera pierde filtros, scroll y el feed.
-	 */
-	function recargarTabActivo() {
-		const tab = facturasTab;
-		const t = fetchTimers[tab];
-		if (t) clearTimeout(t);
-		if (tab === 'liquidaciones') cargarListado(true);
-		else if (tab === 'facturas') cargarFacturas(true);
-		else if (tab === 'terceros') cargarTerceros(true);
-		else cargarConfig(true);
-	}
-
 	function irPagina(p: number) {
 		// El fetch lo dispara el reactivo per-tab.
 		listPage = p;
@@ -1142,7 +1140,9 @@
 	}
 
 	async function eliminarLiq(id: string) {
+		if (eliminandoIds[id]) return;
 		deleting = true;
+		eliminandoIds = { ...eliminandoIds, [id]: true };
 		try {
 			await liquidacionesServiciosAPI.eliminar(id);
 			deleteModalOpen = false;
@@ -1151,6 +1151,8 @@
 			alert(err.message || 'Error');
 		} finally {
 			deleting = false;
+			const { [id]: _, ...resto } = eliminandoIds;
+			eliminandoIds = resto;
 		}
 	}
 
@@ -1176,12 +1178,137 @@
 		nuevoEstado: EstadoLiquidacionServicio,
 		motivo?: string
 	) {
-		estadoChanging = true;
+		/// Segundo clic mientras el primero viaja: se ignora. El `disabled` del
+		/// botón ya lo evita en la UI, pero esta ruta también la llaman el modal
+		/// de anulación y el teclado, y una petición repetida aquí significa dos
+		/// entradas en el historial de la liquidación.
+		if (estadoEnCurso[id]) return;
+
+		estadoEnCurso = { ...estadoEnCurso, [id]: nuevoEstado };
 		try {
 			await cambiarEstado(id, nuevoEstado, motivo);
 		} finally {
-			estadoChanging = false;
+			const { [id]: _, ...resto } = estadoEnCurso;
+			estadoEnCurso = resto;
 		}
+	}
+
+	/**
+	 * Acciones del menú de una fila.
+	 *
+	 * Se arma aquí y no en el markup porque las mismas acciones se pintan en la
+	 * tabla de escritorio y en las tarjetas de móvil; tenerlas duplicadas en dos
+	 * bloques de plantilla fue como la vista de móvil se quedó sin «Historial».
+	 */
+	function accionesDeLiquidacion(liq: LiquidacionServicio): AccionMenu[] {
+		const isUnconfirmed = !liq.confirmada_at;
+		const enCurso = estadoEnCurso[liq.id];
+		const ocupada = Boolean(enCurso) || Boolean(eliminandoIds[liq.id]);
+		const items: AccionMenu[] = [];
+
+		// ── Destacadas: lo que se busca primero ──
+		items.push({
+			id: 'ver',
+			etiqueta: 'Ver liquidación',
+			icono: Eye,
+			tono: 'ver',
+			destacada: true,
+			onSelect: () => irVerLiquidacion(liq.id)
+		});
+
+		if (isFull && (liq.estado === 'BORRADOR' || (isAdmin && liq.estado === 'LIQUIDADA'))) {
+			items.push({
+				id: 'editar',
+				etiqueta: 'Editar',
+				icono: Edit2,
+				tono: 'editar',
+				destacada: true,
+				onSelect: () => irEditarLiquidacion(liq.id)
+			});
+		}
+
+		if (isFull && liq.estado === 'BORRADOR') {
+			items.push({
+				id: 'eliminar',
+				etiqueta: 'Eliminar',
+				icono: Trash2,
+				tono: 'eliminar',
+				destacada: true,
+				deshabilitada: ocupada,
+				onSelect: () => {
+					deleteTargetLiq = liq;
+					deleteModalOpen = true;
+				}
+			});
+		}
+
+		// ── Cambios de estado ──
+		/// `cerrarAlSeleccionar: false` a propósito: el menú se queda abierto
+		/// con el spinner puesto hasta que el servidor contesta. Cerrarlo al
+		/// pulsar devolvía al usuario a la tabla sin ninguna señal de que algo
+		/// estuviera pasando, que es justo la queja.
+		const estado = (
+			id: string,
+			etiqueta: string,
+			destino: EstadoLiquidacionServicio,
+			tono: 'aprobar' | 'aviso',
+			primero = false
+		): AccionMenu => ({
+			id,
+			etiqueta: enCurso === destino ? `${etiqueta}…` : etiqueta,
+			tono,
+			cargando: enCurso === destino,
+			deshabilitada: ocupada && enCurso !== destino,
+			motivoBloqueo: 'Hay otro cambio de estado en curso',
+			separadorAntes: primero,
+			cerrarAlSeleccionar: false,
+			onSelect: () => cambiarEstadoLiq(liq.id, destino)
+		});
+
+		let primeroDeEstados = true;
+		const agregar = (a: AccionMenu) => {
+			a.separadorAntes = primeroDeEstados;
+			primeroDeEstados = false;
+			items.push(a);
+		};
+
+		if (canLiquidar && liq.estado === 'BORRADOR' && !isUnconfirmed) {
+			agregar(estado('liquidar', 'Liquidar', 'LIQUIDADA', 'aprobar'));
+		}
+		if (canAprobar && liq.estado === 'LIQUIDADA') {
+			agregar(estado('aprobar', 'Aprobar', 'APROBADA', 'aprobar'));
+		}
+		if (canRevertirABorrador && liq.estado === 'LIQUIDADA') {
+			agregar(estado('a-borrador', 'Devolver a borrador', 'BORRADOR', 'aviso'));
+		}
+		if (canRevertirALiquidada && liq.estado === 'APROBADA') {
+			agregar(estado('a-liquidada', 'Devolver a liquidada', 'LIQUIDADA', 'aviso'));
+		}
+		if (isAdmin && liq.estado === 'ANULADA') {
+			agregar(estado('reactivar', 'Reactivar (a borrador)', 'BORRADOR', 'aviso'));
+		}
+		if (canAnular && !isUnconfirmed && liq.estado !== 'ANULADA' && liq.estado !== 'FACTURADA') {
+			agregar({
+				id: 'anular',
+				etiqueta: 'Anular',
+				tono: 'aviso',
+				deshabilitada: ocupada,
+				motivoBloqueo: 'Hay otro cambio de estado en curso',
+				onSelect: () => abrirAnularModal(liq.id)
+			});
+		}
+
+		if (isAdmin) {
+			items.push({
+				id: 'historial',
+				etiqueta: 'Historial',
+				icono: History,
+				separadorAntes: true,
+				onSelect: () => abrirHistorial(liq.id, liq.consecutivo)
+			});
+		}
+
+		return items;
 	}
 
 	function abrirAnularModal(id: string) {
@@ -1570,18 +1697,13 @@
 	<!-- Feed de eventos de socket. Vive fuera del `{#if}` de tabs a
 	     propósito: un evento de Facturas tiene que verse aunque estés en
 	     Liquidaciones, que es justo lo que antes se perdía. -->
+	<!-- Sin botón de recargar: el listado se revalida solo por socket
+	     (`liquidacion-servicio-created/updated/deleted`), así que el botón
+	     solo servía para repetir una petición que ya se había hecho sola. -->
 	<div class="flex items-start gap-2">
 		<div class="min-w-0 flex-1">
 			<SocketEventLogBar onVer={irAEvento} />
 		</div>
-		<button
-			class="recargar-btn"
-			onclick={recargarTabActivo}
-			title="Volver a leer este tab desde el servidor"
-			aria-label="Recargar"
-		>
-			<RotateCcw class="h-3.5 w-3.5" />
-		</button>
 	</div>
 
 	{#if facturasTab === 'liquidaciones'}
@@ -1605,16 +1727,9 @@
 							>
 								Liquidaciones de Servicios
 							</h1>
-							<span
-								class="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium"
-								style="background: rgba(249, 115, 22,0.08); color: var(--orange-800);"
-							>
-								<span
-									class="h-1.5 w-1.5 animate-pulse rounded-full"
-									style="background-color: var(--orange-500);"
-								></span>
-								En vivo
-							</span>
+							<!-- Aquí había un chip «En vivo» pintado a mano, sin mirar el socket:
+							     decía «En vivo» también con la conexión caída. El estado real lo
+							     muestra el header, junto al nombre de la sección. -->
 						</div>
 						<p class="text-xs" style="color: var(--text-muted);">
 							Gestión y seguimiento de liquidaciones de servicios de transporte
@@ -2269,96 +2384,11 @@
 										</span>
 									</td>
 									<td class="px-4 py-3 text-center whitespace-nowrap">
-										<div class="flex items-center justify-center gap-1">
-											<button
-												class="apple-transition rounded-lg p-1.5 transition-colors hover:bg-[rgba(249, 115, 22,0.08)]"
-												style="color: var(--text-muted);"
-												title="Ver"
-												onclick={() => irVerLiquidacion(liq.id)}
-											>
-												<Eye class="h-3.5 w-3.5" />
-											</button>
-											{#if isFull && (liq.estado === 'BORRADOR' || (isAdmin && liq.estado === 'LIQUIDADA'))}
-												<button
-													class="apple-transition rounded-lg p-1.5 transition-colors hover:bg-[rgba(37,99,235,0.08)]"
-													style="color: var(--text-muted);"
-													title="Editar"
-													onclick={() => irEditarLiquidacion(liq.id)}
-												>
-													<Edit2 class="h-3.5 w-3.5" />
-												</button>
-											{/if}
-											{#if canLiquidar && liq.estado === 'BORRADOR' && !isUnconfirmed}
-												<button
-													class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
-													style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
-													disabled={estadoChanging}
-													onclick={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>Liquidar</button
-												>
-											{/if}
-											{#if canAprobar && liq.estado === 'LIQUIDADA'}
-												<button
-													class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
-													style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
-													disabled={estadoChanging}
-													onclick={() => cambiarEstadoLiq(liq.id, 'APROBADA')}>Aprobar</button
-												>
-											{/if}
-											{#if canAnular && !isUnconfirmed && liq.estado !== 'ANULADA' && liq.estado !== 'FACTURADA'}
-												<button
-													class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
-													style="background: rgba(220,38,38,0.08); color: #B91C1C;"
-													disabled={estadoChanging}
-													onclick={() => abrirAnularModal(liq.id)}>Anular</button
-												>
-											{/if}
-											{#if isAdmin && liq.estado === 'ANULADA'}
-												<button
-													class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
-													style="background: rgba(245,158,11,0.10); color: #B45309;"
-													disabled={estadoChanging}
-													onclick={() => cambiarEstadoLiq(liq.id, 'BORRADOR')}>Revertir</button
-												>
-											{/if}
-											{#if canRevertirABorrador && liq.estado === 'LIQUIDADA'}
-												<button
-													class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
-													style="background: rgba(245,158,11,0.10); color: #B45309;"
-													disabled={estadoChanging}
-													onclick={() => cambiarEstadoLiq(liq.id, 'BORRADOR')}>Borrador</button
-												>
-											{/if}
-											{#if canRevertirALiquidada && liq.estado === 'APROBADA'}
-												<button
-													class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
-													style="background: rgba(245,158,11,0.10); color: #B45309;"
-													disabled={estadoChanging}
-													onclick={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>Liquidada</button
-												>
-											{/if}
-											{#if isFull && liq.estado === 'BORRADOR'}
-												<button
-													class="apple-transition rounded-lg p-1.5 transition-colors hover:bg-[rgba(220,38,38,0.08)]"
-													style="color: var(--text-muted);"
-													title="Eliminar"
-													onclick={() => {
-														deleteTargetLiq = liq;
-														deleteModalOpen = true;
-													}}
-												>
-													<Trash2 class="h-3.5 w-3.5" />
-												</button>
-											{/if}
-											{#if isAdmin}
-												<button
-													class="apple-transition rounded-lg p-1.5 transition-colors hover:bg-[rgba(0,0,0,0.04)]"
-													style="color: var(--text-muted);"
-													title="Historial"
-													onclick={() => abrirHistorial(liq.id, liq.consecutivo)}
-												>
-													<History class="h-3.5 w-3.5" />
-												</button>
-											{/if}
+										<div class="flex items-center justify-center">
+											<AccionesDropdown
+												etiqueta="Acciones de {liq.consecutivo}"
+												acciones={accionesDeLiquidacion(liq)}
+											/>
 										</div>
 									</td>
 								</tr>
@@ -2517,100 +2547,17 @@
 									</span>
 								</div>
 							</div>
-							<!-- Card actions -->
+							<!-- Card actions: el mismo menú que la tabla. Antes eran dos
+							     listas de botones distintas y la de móvil se quedaba atrás
+							     cada vez que se tocaba la otra. -->
 							<div
-								class="mt-2 flex flex-wrap items-center gap-1"
+								class="mt-2 flex items-center justify-end"
 								style="border-top: 1px solid var(--border-subtle); padding-top: 0.6rem;"
 							>
-								<button
-									class="apple-transition rounded-md p-1.5"
-									style="color: var(--orange-700); background: rgba(249, 115, 22,0.08);"
-									title="Ver"
-									onclick={() => irVerLiquidacion(liq.id)}
-								>
-									<Eye class="h-3.5 w-3.5" />
-								</button>
-								{#if isFull && (liq.estado === 'BORRADOR' || (isAdmin && liq.estado === 'LIQUIDADA'))}
-									<button
-										class="apple-transition rounded-md p-1.5"
-										style="color: #2563EB; background: rgba(37,99,235,0.08);"
-										title="Editar"
-										onclick={() => irEditarLiquidacion(liq.id)}
-									>
-										<Edit2 class="h-3.5 w-3.5" />
-									</button>
-								{/if}
-								{#if canLiquidar && liq.estado === 'BORRADOR' && !isUnconfirmed}
-									<button
-										class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
-										style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
-										disabled={estadoChanging}
-										onclick={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>Liquidar</button
-									>
-								{/if}
-								{#if canAprobar && liq.estado === 'LIQUIDADA'}
-									<button
-										class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
-										style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
-										disabled={estadoChanging}
-										onclick={() => cambiarEstadoLiq(liq.id, 'APROBADA')}>Aprobar</button
-									>
-								{/if}
-								{#if canAnular && !isUnconfirmed && liq.estado !== 'ANULADA' && liq.estado !== 'FACTURADA'}
-									<button
-										class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
-										style="background: rgba(220,38,38,0.08); color: #B91C1C;"
-										disabled={estadoChanging}
-										onclick={() => abrirAnularModal(liq.id)}>Anular</button
-									>
-								{/if}
-								{#if isAdmin && liq.estado === 'ANULADA'}
-									<button
-										class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
-										style="background: rgba(245,158,11,0.10); color: #B45309;"
-										disabled={estadoChanging}
-										onclick={() => cambiarEstadoLiq(liq.id, 'BORRADOR')}>Revertir</button
-									>
-								{/if}
-								{#if canRevertirABorrador && liq.estado === 'LIQUIDADA'}
-									<button
-										class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
-										style="background: rgba(245,158,11,0.10); color: #B45309;"
-										disabled={estadoChanging}
-										onclick={() => cambiarEstadoLiq(liq.id, 'BORRADOR')}>Borrador</button
-									>
-								{/if}
-								{#if canRevertirALiquidada && liq.estado === 'APROBADA'}
-									<button
-										class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
-										style="background: rgba(245,158,11,0.10); color: #B45309;"
-										disabled={estadoChanging}
-										onclick={() => cambiarEstadoLiq(liq.id, 'LIQUIDADA')}>Liquidada</button
-									>
-								{/if}
-								{#if isFull && liq.estado === 'BORRADOR'}
-									<button
-										class="apple-transition rounded-md p-1.5"
-										style="color: #DC2626; background: rgba(220,38,38,0.08);"
-										title="Eliminar"
-										onclick={() => {
-											deleteTargetLiq = liq;
-											deleteModalOpen = true;
-										}}
-									>
-										<Trash2 class="h-3.5 w-3.5" />
-									</button>
-								{/if}
-								{#if isAdmin}
-									<button
-										class="apple-transition rounded-md p-1.5"
-										style="color: var(--text-muted); background: rgba(0,0,0,0.04);"
-										title="Historial"
-										onclick={() => abrirHistorial(liq.id, liq.consecutivo)}
-									>
-										<History class="h-3.5 w-3.5" />
-									</button>
-								{/if}
+								<AccionesDropdown
+									etiqueta="Acciones de {liq.consecutivo}"
+									acciones={accionesDeLiquidacion(liq)}
+								/>
 							</div>
 						</div>
 					{/each}
@@ -4014,13 +3961,13 @@
 					<button
 						class="apple-transition inline-flex items-center gap-1.5"
 						style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.55rem 1.1rem; border-radius: 12px; background: #DC2626; color: white; font-size: 0.85rem; font-weight: 600; box-shadow: 0 4px 16px rgba(220,38,38,0.30); border: none; opacity: {!anularMotivo.trim() ||
-						estadoChanging
+						Boolean(estadoEnCurso[anularTargetId])
 							? '0.5'
 							: '1'};"
-						disabled={!anularMotivo.trim() || estadoChanging}
+						disabled={!anularMotivo.trim() || Boolean(estadoEnCurso[anularTargetId])}
 						onclick={confirmarAnulacion}
 					>
-						{#if estadoChanging}
+						{#if estadoEnCurso[anularTargetId]}
 							<div
 								class="spinner"
 								style="width: 0.9rem; height: 0.9rem; border-width: 2px; border-top-color: white;"
@@ -4540,27 +4487,6 @@
 		min-height: 100%;
 	}
 
-	.recargar-btn {
-		flex: none;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 2rem;
-		height: 2rem;
-		margin-bottom: 0.75rem;
-		border-radius: 0.5rem;
-		background: var(--bg-surface);
-		border: 1px solid var(--border-subtle);
-		color: var(--text-muted);
-		cursor: pointer;
-		transition:
-			color 0.15s ease,
-			background 0.15s ease;
-	}
-	.recargar-btn:hover {
-		color: var(--bg-charcoal);
-		background: rgba(0, 0, 0, 0.03);
-	}
 
 	/* ── Badge de eventos pendientes en la pestaña ────────── */
 	.tab-badge {

@@ -2,6 +2,8 @@
 	import { page as pageState } from '$app/state';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+	import TablaLista from '$lib/components/listing/TablaLista.svelte';
+	import type { ColumnDef, SortingState } from '@tanstack/table-core';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
 	import {
 		limpiar as limpiarFiltrosDe,
@@ -59,6 +61,10 @@
 		desde: string;
 		hasta: string;
 		pagina: number;
+		/// El orden se resuelve en servidor (la lista está paginada), así que
+		/// forma parte de la consulta y viaja en la URL con el resto.
+		orden: string;
+		direccion: string;
 	}
 
 	const POR_PAGINA = 10;
@@ -70,7 +76,9 @@
 		deteccion: opcion(''),
 		desde: texto(),
 		hasta: texto(),
-		pagina: numero(1)
+		pagina: numero(1),
+		orden: opcion('numero_snc'),
+		direccion: opcion('desc')
 	};
 
 	const estadoUrl = crearEstadoUrl(DEFS);
@@ -176,6 +184,8 @@
 		try {
 			const parametros: FiltrosSalidasNC = {
 				page: filtros.pagina,
+				sortBy: filtros.orden,
+				sortOrder: filtros.direccion as 'asc' | 'desc',
 				limit: POR_PAGINA,
 				...(filtros.q && { busqueda: filtros.q }),
 				...(filtros.clasificacion && { clasificacion_nc: filtros.clasificacion as ClasificacionNC }),
@@ -211,8 +221,43 @@
 
 	/// La recarga la dispara el efecto que observa `filtros`; estas funciones
 	/// solo cambian el estado.
-	function aplicarFiltros() {
-		filtros = { ...filtros, pagina: 1 };
+	/**
+	 * Columnas de la tabla.
+	 *
+	 * Los `id` de las ordenables coinciden con los nombres que acepta el
+	 * backend en `sortBy` (ver su lista blanca): la cabecera pulsada y el
+	 * criterio de la consulta son literalmente lo mismo.
+	 *
+	 * `conductor`, `vehículo`, `tipo` y `acciones` van `enableSorting: false`
+	 * —juntan campos o no son datos— y por eso su cabecera NO se pinta como
+	 * pulsable: no se promete un orden que el servidor no hace.
+	 */
+	const COLUMNAS: ColumnDef<SalidaNoConforme, any>[] = [
+		{ id: 'numero_snc', accessorKey: 'numero_snc', header: 'N° SNC', size: 110 },
+		{ id: 'fecha_deteccion', accessorKey: 'fecha_deteccion', header: 'Detección', size: 110 },
+		{ id: 'detectado_por', accessorKey: 'detectado_por', header: 'Detectado por', size: 150 },
+		{ id: 'conductor', header: 'Conductor', enableSorting: false, size: 180 },
+		{ id: 'vehiculo_placa', header: 'Vehículo', enableSorting: false, size: 100 },
+		{ id: 'clasificacion_nc', accessorKey: 'clasificacion_nc', header: 'Clasificación', size: 120 },
+		{ id: 'tipo_salida_nc', header: 'Tipo de salida', enableSorting: false, size: 200 },
+		{ id: 'estado', accessorKey: 'estado', header: 'Estado', size: 120 },
+		{ id: 'acciones', header: 'Acciones', enableSorting: false, size: 110 }
+	];
+
+	const ordenTabla = $derived<SortingState>(
+		filtros.orden ? [{ id: filtros.orden, desc: filtros.direccion === 'desc' }] : []
+	);
+
+	function aplicarOrden(nuevo: SortingState) {
+		const primero = nuevo[0];
+		filtros = {
+			...filtros,
+			// Quitar el orden vuelve al natural: el consecutivo más alto arriba,
+			// que es la SNC más reciente.
+			orden: primero?.id ?? 'numero_snc',
+			direccion: primero ? (primero.desc ? 'desc' : 'asc') : 'desc',
+			pagina: 1
+		};
 	}
 
 	function limpiarFiltros() {
@@ -417,86 +462,69 @@
 </svelte:head>
 
 <div class="p-6">
-	<!-- Header -->
-	<div class="mb-6" in:fade={{ duration: 400 }}>
-		<h1 class="mb-2 text-2xl font-bold text-gray-900">Salidas No Conformes</h1>
-		<p class="text-gray-600">Registro y control de salidas no conformes (ISO 8.7.2)</p>
-	</div>
-
-	<!-- Estadísticas -->
-	{#if !isLoadingStats && estadisticas}
-		<div class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4" transition:fade>
-			<!-- Total -->
-			<div class="glass rounded-xl border border-gray-200 p-5" in:fly={{ y: 20, delay: 100 }}>
-				<div class="flex items-center justify-between">
-					<div>
-						<p class="mb-1 text-sm text-gray-600">Total SNC</p>
-						<p class="text-3xl font-bold text-gray-900">{estadisticas.total}</p>
-					</div>
-					<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-slate-400 to-slate-600 shadow-lg shadow-slate-500/30">
-						<svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-						</svg>
-					</div>
-				</div>
+	<!-- ═══ HERO EDITORIAL ═══
+	     Antes esto era un `<h1>` suelto y, debajo, cuatro tarjetas de 12rem con
+	     un icono cada una: media pantalla para cuatro números, y ninguna
+	     relación visual con el resto del dashboard. Mismo patrón que SARLAFT:
+	     identidad a la izquierda, cifras a la derecha, en paralelo. -->
+	<header class="page-hero" in:fade={{ duration: 400 }}>
+		<div class="hero-left">
+			<div class="hero-icon" aria-hidden="true">
+				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+				</svg>
 			</div>
-
-			<!-- Abiertas -->
-			<div class="glass rounded-xl border border-gray-200 p-5" in:fly={{ y: 20, delay: 200 }}>
-				<div class="flex items-center justify-between">
-					<div>
-						<p class="mb-1 text-sm text-gray-600">Abiertas</p>
-						<p class="text-3xl font-bold text-red-600">
-							{estadisticas.porEstado.find((e) => e.estado === 'ABIERTA')?.count ?? 0}
-						</p>
-					</div>
-					<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-red-400 to-red-600 shadow-lg shadow-red-500/30">
-						<svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-						</svg>
-					</div>
-				</div>
-			</div>
-
-			<!-- En Tratamiento -->
-			<div class="glass rounded-xl border border-gray-200 p-5" in:fly={{ y: 20, delay: 300 }}>
-				<div class="flex items-center justify-between">
-					<div>
-						<p class="mb-1 text-sm text-gray-600">En Tratamiento</p>
-						<p class="text-3xl font-bold text-yellow-600">
-							{estadisticas.porEstado.find((e) => e.estado === 'EN_TRATAMIENTO')?.count ?? 0}
-						</p>
-					</div>
-					<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-yellow-400 to-yellow-600 shadow-lg shadow-yellow-500/30">
-						<svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-						</svg>
-					</div>
-				</div>
-			</div>
-
-			<!-- Cerradas -->
-			<div class="glass rounded-xl border border-gray-200 p-5" in:fly={{ y: 20, delay: 400 }}>
-				<div class="flex items-center justify-between">
-					<div>
-						<p class="mb-1 text-sm text-gray-600">Cerradas</p>
-						<p class="text-3xl font-bold text-emerald-600">
-							{estadisticas.porEstado.find((e) => e.estado === 'CERRADA')?.count ?? 0}
-						</p>
-					</div>
-					<div class="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-500/30">
-						<svg class="h-6 w-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-						</svg>
-					</div>
+			<div class="hero-text">
+				<span class="eyebrow">Calidad · ISO 9001:2015</span>
+				<h1>Salidas no conformes</h1>
+				<p>
+					Registro, tratamiento y verificación de las salidas no conformes del servicio,
+					según la cláusula 8.7 del sistema de gestión de calidad.
+				</p>
+				<div class="compliance-tags">
+					<span class="compliance-tag">ISO 8.7.1</span>
+					<span class="compliance-tag">ISO 8.7.2</span>
 				</div>
 			</div>
 		</div>
-	{/if}
+
+		{#if !isLoadingStats && estadisticas}
+			<div class="hero-stats" transition:fade>
+				<div class="stat-item">
+					<span class="stat-label">Total</span>
+					<span class="stat-value">{estadisticas.total}</span>
+				</div>
+				<div class="stat-item">
+					<span class="stat-dot stat-dot--rojo" aria-hidden="true"></span>
+					<span class="stat-label">Abiertas</span>
+					<span class="stat-value">
+						{estadisticas.porEstado.find((e) => e.estado === 'ABIERTA')?.count ?? 0}
+					</span>
+				</div>
+				<div class="stat-item">
+					<span class="stat-dot stat-dot--ambar" aria-hidden="true"></span>
+					<span class="stat-label">En tratamiento</span>
+					<span class="stat-value">
+						{estadisticas.porEstado.find((e) => e.estado === 'EN_TRATAMIENTO')?.count ?? 0}
+					</span>
+				</div>
+				<div class="stat-item">
+					<span class="stat-dot stat-dot--verde" aria-hidden="true"></span>
+					<span class="stat-label">Cerradas</span>
+					<span class="stat-value">
+						{estadisticas.porEstado.find((e) => e.estado === 'CERRADA')?.count ?? 0}
+					</span>
+				</div>
+			</div>
+		{/if}
+	</header>
 
 	<!-- Filtros y Controles -->
 	<div class="glass mb-6 rounded-xl border border-gray-200 p-6" in:fly={{ y: 20, delay: 500 }}>
-		<div class="mb-4 flex flex-col gap-4 lg:flex-row">
+		<!-- `sm:` y no `lg:`: hasta 1024px el botón caía debajo y se estiraba a
+		     todo el ancho, una barra roja que dominaba la pantalla por encima
+		     del propio listado. -->
+		<div class="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
 			<!-- Búsqueda -->
 			<div class="flex-1">
 				<BuscadorLista
@@ -510,7 +538,7 @@
 			<!-- Botón Nueva SNC -->
 			<button
 				onclick={abrirModalCrear}
-				class="apple-transition flex items-center gap-2 rounded-lg bg-gradient-to-r from-red-500 to-red-600 px-6 py-2.5 whitespace-nowrap text-white shadow-lg shadow-red-500/30 hover:from-red-600 hover:to-red-700"
+				class="apple-transition flex shrink-0 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-red-500 to-red-600 px-5 py-2.5 whitespace-nowrap text-white shadow-lg shadow-red-500/30 hover:from-red-600 hover:to-red-700"
 			>
 				<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -567,12 +595,14 @@
 			</div>
 		</div>
 
+		<!-- Aquí había un botón «Aplicar Filtros». No aplicaba nada: el efecto
+		     que observa `filtros` ya recarga en cuanto cambia cualquiera de
+		     ellos, así que el botón solo volvía a poner la página en 1. Peor
+		     que inútil: hacía creer que hasta pulsarlo la lista no estaba
+		     filtrada. -->
 		<div class="flex gap-3">
-			<button onclick={aplicarFiltros} class="apple-transition rounded-lg bg-gray-900 px-5 py-2 text-sm font-medium text-white hover:bg-gray-800">
-				Aplicar Filtros
-			</button>
 			<button onclick={limpiarFiltros} class="apple-transition rounded-lg border border-gray-200 bg-white px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
-				Limpiar
+				Limpiar filtros
 			</button>
 		</div>
 	</div>
@@ -595,95 +625,91 @@
 				</button>
 			</div>
 		{:else}
-			<div class="overflow-x-auto">
-				<table class="w-full text-sm">
-					<thead>
-						<tr class="border-b border-gray-200 bg-gray-50/80">
-							<th class="px-4 py-3 text-left font-semibold text-gray-700">N° SNC</th>
-							<th class="px-4 py-3 text-left font-semibold text-gray-700">Fecha</th>
-							<th class="px-4 py-3 text-left font-semibold text-gray-700">Detectado por</th>
-							<th class="px-4 py-3 text-left font-semibold text-gray-700">Conductor</th>
-							<th class="px-4 py-3 text-left font-semibold text-gray-700">Vehículo</th>
-							<th class="px-4 py-3 text-left font-semibold text-gray-700">Clasificación</th>
-							<th class="px-4 py-3 text-left font-semibold text-gray-700">Tipo Salida</th>
-							<th class="px-4 py-3 text-left font-semibold text-gray-700">Estado</th>
-							<th class="px-4 py-3 text-center font-semibold text-gray-700">Acciones</th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each salidas as salida, i}
-							<tr
-								class="border-b border-gray-100 transition-colors hover:bg-gray-50/60"
-								in:fly={{ y: 10, delay: i * 30 }}
+			<div class="tabla-envoltorio">
+				<TablaLista
+				columnas={COLUMNAS}
+				datos={salidas}
+				claveFila={(f) => f.id}
+				orden={ordenTabla}
+				onOrdenar={aplicarOrden}
+				etiqueta="Salidas no conformes registradas"
+			>
+				{#snippet celda({ columnaId, fila, valor })}
+					{#if columnaId === 'numero_snc'}
+						<span class="snc-num">SNC-{String(fila.numero_snc).padStart(4, '0')}</span>
+					{:else if columnaId === 'fecha_deteccion'}
+						<span class="mono">{formatearFecha(fila.fecha_deteccion)}</span>
+					{:else if columnaId === 'detectado_por'}
+						{fila.detectado_por}
+					{:else if columnaId === 'conductor'}
+						{#if fila.conductor_nombre}
+							<div class="c-apilada">
+								<span>{fila.conductor_nombre}</span>
+								{#if fila.conductor_cedula}
+									<span class="c-nulo mono">CC {fila.conductor_cedula}</span>
+								{/if}
+							</div>
+						{:else}
+							<span class="c-nulo">—</span>
+						{/if}
+					{:else if columnaId === 'vehiculo_placa'}
+						{#if fila.vehiculo_placa}
+							<span class="mono">{fila.vehiculo_placa}</span>
+						{:else}
+							<span class="c-nulo">—</span>
+						{/if}
+					{:else if columnaId === 'clasificacion_nc'}
+						<span class="pastilla {getClasificacionBadge(fila.clasificacion_nc)}">
+							{CLASIFICACION_LABELS[fila.clasificacion_nc]?.label || fila.clasificacion_nc}
+						</span>
+					{:else if columnaId === 'tipo_salida_nc'}
+						<!-- Completo en el `title`: recortarlo a 25 caracteres con
+						     `substring` dejaba etiquetas cortadas a media palabra. -->
+						<span class="c-tipo" title={TIPO_SALIDA_NC_LABELS[fila.tipo_salida_nc]}>
+							{TIPO_SALIDA_NC_LABELS[fila.tipo_salida_nc] || fila.tipo_salida_nc}
+						</span>
+					{:else if columnaId === 'estado'}
+						<span class="pastilla {getEstadoBadge(fila.estado)}">
+							{ESTADO_SNC_LABELS[fila.estado]?.label || fila.estado}
+						</span>
+					{:else if columnaId === 'acciones'}
+						<div class="acciones">
+							<button
+								onclick={() => descargarPDF(fila.id, fila.numero_snc)}
+								class="accion accion--pdf"
+								title="Descargar PDF"
+								aria-label="Descargar PDF de la SNC {fila.numero_snc}"
 							>
-								<td class="px-4 py-3">
-									<span class="font-mono font-bold text-gray-900">SNC-{String(salida.numero_snc).padStart(4, '0')}</span>
-								</td>
-								<td class="px-4 py-3 text-gray-600">{formatearFecha(salida.fecha_deteccion)}</td>
-								<td class="px-4 py-3 text-gray-700">{salida.detectado_por}</td>
-								<td class="px-4 py-3 text-gray-700">
-									{#if salida.conductor_nombre}
-										<div class="text-sm font-medium">{salida.conductor_nombre}</div>
-										{#if salida.conductor_cedula}
-											<div class="text-xs text-gray-400">CC {salida.conductor_cedula}</div>
-										{/if}
-									{:else}
-										<span class="text-gray-400">—</span>
-									{/if}
-								</td>
-								<td class="px-4 py-3 text-gray-700">
-									{salida.vehiculo_placa || '—'}
-								</td>
-								<td class="px-4 py-3">
-									<span class="inline-block rounded-full px-2.5 py-1 text-xs font-semibold {getClasificacionBadge(salida.clasificacion_nc)}">
-										{CLASIFICACION_LABELS[salida.clasificacion_nc]?.label || salida.clasificacion_nc}
-									</span>
-								</td>
-								<td class="px-4 py-3">
-									<span class="text-xs text-gray-600" title={TIPO_SALIDA_NC_LABELS[salida.tipo_salida_nc]}>
-										{TIPO_SALIDA_NC_LABELS[salida.tipo_salida_nc]?.substring(0, 25) || salida.tipo_salida_nc}
-									</span>
-								</td>
-								<td class="px-4 py-3">
-									<span class="inline-block rounded-full px-2.5 py-1 text-xs font-semibold {getEstadoBadge(salida.estado)}">
-										{ESTADO_SNC_LABELS[salida.estado]?.label || salida.estado}
-									</span>
-								</td>
-								<td class="px-4 py-3 text-center">
-									<div class="flex items-center justify-center gap-1">
-										<button
-											onclick={() => descargarPDF(salida.id, salida.numero_snc)}
-											class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-green-50 hover:text-green-600"
-											title="Descargar PDF"
-										>
-											<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-											</svg>
-										</button>
-										<button
-											onclick={() => abrirModalEditar(salida)}
-											class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
-											title="Editar"
-										>
-											<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-											</svg>
-										</button>
-										<button
-											onclick={() => abrirModalEliminar(salida.id, salida.numero_snc)}
-											class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
-											title="Eliminar"
-										>
-											<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-											</svg>
-										</button>
-									</div>
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
+								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+								</svg>
+							</button>
+							<button
+								onclick={() => abrirModalEditar(fila)}
+								class="accion accion--editar"
+								title="Editar"
+								aria-label="Editar la SNC {fila.numero_snc}"
+							>
+								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+								</svg>
+							</button>
+							<button
+								onclick={() => abrirModalEliminar(fila.id, fila.numero_snc)}
+								class="accion accion--eliminar"
+								title="Eliminar"
+								aria-label="Eliminar la SNC {fila.numero_snc}"
+							>
+								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+								</svg>
+							</button>
+						</div>
+					{:else}
+						{valor ?? ''}
+					{/if}
+				{/snippet}
+				</TablaLista>
 			</div>
 
 			<!-- Paginación: el bloque manual que había aquí lo reemplaza el
@@ -1172,3 +1198,242 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	/* ═══════════════════════════════════════════════════════════════
+	   HERO
+	   ═══════════════════════════════════════════════════════════════
+	   Mismo patrón y mismas medidas que el hero de SARLAFT: las dos
+	   pantallas son listados de registros de calidad y no había razón para
+	   que se vieran distintas. Lo que cambia es el acento —aquí rojo, que es
+	   el color del registro de no conformidad— y las etiquetas normativas.
+
+	   La rejilla es fluida y NO lleva `@media`: el ancho que importa es el
+	   del `<main>` del layout, que cambia cuando la barra lateral se colapsa.
+	   Con `min(100%, 26rem)` cae a una columna en cuanto no caben dos. */
+	.page-hero {
+		background: white;
+		border: 1px solid rgba(0, 0, 0, 0.06);
+		border-radius: 24px;
+		padding: 1.35rem 1.5rem;
+		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+		margin-bottom: 1.5rem;
+
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 26rem), 1fr));
+		align-items: center;
+		gap: 1.1rem 2rem;
+	}
+	.hero-left {
+		display: flex;
+		gap: 1rem;
+		align-items: flex-start;
+	}
+	.hero-icon {
+		width: 48px;
+		height: 48px;
+		flex-shrink: 0;
+		border-radius: 14px;
+		background: linear-gradient(135deg, #ef4444, #b91c1c);
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		color: white;
+		box-shadow: 0 4px 16px rgba(220, 38, 38, 0.3);
+	}
+	.hero-icon svg {
+		width: 24px;
+		height: 24px;
+	}
+	.hero-text {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		flex: 1;
+		min-width: 0;
+	}
+	/* `.eyebrow` es `inline-block`, pero como hijo de un flex en columna lo
+	   estira el `align-items: stretch` por defecto y la pastilla llegaba
+	   hasta el borde de la columna en vez de ceñirse a su texto. */
+	.hero-text .eyebrow {
+		align-self: flex-start;
+		display: inline-block;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.7rem;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.12em;
+		color: #dc2626;
+		background: rgba(220, 38, 38, 0.08);
+		padding: 0.3rem 0.75rem;
+		border-radius: 6px;
+	}
+	.hero-text h1 {
+		font-family: 'Fraunces', Georgia, serif;
+		font-size: clamp(1.6rem, 3.5vw, 2.1rem);
+		font-weight: 500;
+		line-height: 1.15;
+		letter-spacing: -0.01em;
+		color: #0f172a;
+		margin: 0;
+	}
+	.hero-text p {
+		font-size: 0.92rem;
+		line-height: 1.6;
+		color: #475569;
+		margin: 0;
+		/* Tope de legibilidad, no de maquetación: con dos columnas manda la
+		   columna y este valor no llega a morder. */
+		max-width: 44rem;
+	}
+	.compliance-tags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+		margin-top: 0.4rem;
+	}
+	.compliance-tag {
+		display: inline-flex;
+		font-family: 'JetBrains Mono', monospace;
+		font-size: 0.66rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
+		color: #991b1b;
+		background: rgba(220, 38, 38, 0.06);
+		padding: 0.25rem 0.55rem;
+		border-radius: 5px;
+		border: 1px solid rgba(220, 38, 38, 0.15);
+	}
+
+	/* Cada cifra se delimita sola: así el envolvido en la columna estrecha
+	   se lee, y no hace falta una línea divisoria que en paralelo quedaría
+	   suelta a media tarjeta. */
+	.hero-stats {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem;
+		font-family: 'JetBrains Mono', monospace;
+	}
+	.stat-item {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		padding: 0.3rem 0.6rem;
+		background: #fafafa;
+		border: 1px solid rgba(0, 0, 0, 0.05);
+		border-radius: 9px;
+	}
+	.stat-label {
+		font-size: 0.72rem;
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.08em;
+		color: #64748b;
+	}
+	.stat-value {
+		font-size: 0.95rem;
+		font-weight: 700;
+		color: #0f172a;
+	}
+	/* Semáforo: rojo/ámbar/verde con su significado de siempre. No son
+	   colores de marca y por eso no siguen el remapeo de cotransmeq. */
+	.stat-dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+	}
+	.stat-dot--rojo {
+		background: #ef4444;
+	}
+	.stat-dot--ambar {
+		background: #f59e0b;
+	}
+	.stat-dot--verde {
+		background: #22c55e;
+	}
+	/* ═══════════════════════════════════════════════════════════════
+	   CELDAS DE LA TABLA
+	   ═══════════════════════════════════════════════════════════════ */
+	.tabla-envoltorio {
+		/* La tabla es un componente compartido y neutro; la piel de esta
+		   pantalla se le pasa por custom properties, no tocando su CSS. */
+		--tl-th-fondo: #fafafa;
+		--tl-th-color: #64748b;
+		--tl-th-color-hover: #0f172a;
+		--tl-td-color: #1e293b;
+		--tl-td-suave: #64748b;
+		--tl-mono: 'JetBrains Mono', monospace;
+		--tl-acento: #dc2626;
+		--tl-fila-hover: rgba(220, 38, 38, 0.03);
+	}
+	.mono {
+		font-family: 'JetBrains Mono', monospace;
+	}
+	.snc-num {
+		font-family: 'JetBrains Mono', monospace;
+		font-weight: 700;
+		color: #0f172a;
+		white-space: nowrap;
+	}
+	.c-apilada {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+		font-size: 0.78rem;
+	}
+	.c-nulo {
+		color: #94a3b8;
+	}
+	.c-tipo {
+		display: block;
+		font-size: 0.75rem;
+		color: #475569;
+		/* El texto completo está en el `title`. Antes se recortaba con
+		   `substring(0, 25)`, que parte palabras por la mitad. */
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.pastilla {
+		display: inline-block;
+		border-radius: 999px;
+		padding: 0.15rem 0.55rem;
+		font-size: 0.68rem;
+		font-weight: 600;
+		white-space: nowrap;
+	}
+
+	.acciones {
+		display: flex;
+		align-items: center;
+		gap: 0.15rem;
+	}
+	.accion {
+		display: inline-flex;
+		padding: 0.35rem;
+		border: none;
+		background: transparent;
+		border-radius: 8px;
+		color: #94a3b8;
+		cursor: pointer;
+		transition: color 0.15s, background-color 0.15s;
+	}
+	.accion svg {
+		width: 1rem;
+		height: 1rem;
+	}
+	.accion--pdf:hover {
+		background: #f0fdf4;
+		color: #16a34a;
+	}
+	.accion--editar:hover {
+		background: #eff6ff;
+		color: #2563eb;
+	}
+	.accion--eliminar:hover {
+		background: #fef2f2;
+		color: #dc2626;
+	}
+</style>
