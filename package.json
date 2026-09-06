@@ -13,7 +13,8 @@
     "prepare": "svelte-kit sync || echo ''",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:reconexion": "vitest run --config vitest.integracion.config.ts"
   },
   "devDependencies": {
     "@eslint/compat": "^1.4.0",
@@ -34,6 +35,7 @@
     "prettier": "^3.6.2",
     "prettier-plugin-svelte": "^3.4.0",
     "prettier-plugin-tailwindcss": "^0.6.14",
+    "socket.io": "^4.8.3",
     "svelte": "^5.39.5",
     "svelte-check": "^4.3.2",
     "tailwindcss": "^4.1.13",
@@ -50,6 +52,7 @@
     "@fingerprintjs/fingerprintjs": "^5.0.1",
     "@iconify/svelte": "^5.1.0",
     "@mapbox/mapbox-gl-geocoder": "^5.1.2",
+    "@tanstack/table-core": "^8.21.3",
     "@types/adm-zip": "^0.5.8",
     "@univerjs/core": "^0.25.1",
     "@univerjs/design": "^0.25.1",
