@@ -86,12 +86,31 @@
 		}, 300);
 	}
 
+	/**
+	 * Certificado que se está viendo en el panel derecho.
+	 *
+	 * Es una copia del elemento de la lista, no un índice: la lista se
+	 * reemplaza entera al recargar los certificados del tercero y un índice
+	 * apuntaría a otro documento sin que nada avisara.
+	 */
+	let certPreview: TerceroWithCerts['certificados_archivo'][number] | null = $state(null);
+
+	/** Extensiones que el navegador pinta como imagen; el resto va al visor. */
+	function esImagen(filename: string): boolean {
+		return /\.(png|jpe?g|gif|webp|avif)$/i.test(filename);
+	}
+
 	async function verCertificados(tercero: TerceroWithCerts) {
 		selectedTercero = tercero;
+		certPreview = null;
 		try {
 			isLoadingCerts = true;
 			const res = await certificadosTerceroAPI.getCertificadosByTercero(tercero.id);
 			selectedTercero = { ...tercero, certificados_archivo: res.data.certificados ?? [] };
+			/// Se abre el primero solo: entrar a un tercero y encontrarse el
+			/// panel vacío obliga a un clic que no aporta nada, y en la práctica
+			/// el que se quiere ver casi siempre es el más reciente.
+			certPreview = selectedTercero.certificados_archivo?.[0] ?? null;
 		} catch (err: any) {
 			toast.error('Error al cargar certificados', { description: err?.response?.data?.error ?? err?.message });
 		} finally {
@@ -101,6 +120,7 @@
 
 	function cerrarDetalle() {
 		selectedTercero = null;
+		certPreview = null;
 	}
 
 	async function syncS3() {
@@ -366,7 +386,9 @@
 
 	<div class="flex flex-1 flex-col gap-4 overflow-hidden">
 		{#if selectedTercero}
-			<div class="glass soft-shadow flex flex-col overflow-hidden rounded-2xl border border-gray-200/50">
+			<div
+				class="glass soft-shadow flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200/50"
+			>
 				<div class="flex items-center justify-between border-b border-gray-100 px-5 py-3">
 					<div class="flex items-center gap-3">
 						<button onclick={cerrarDetalle} class="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700">
@@ -394,21 +416,45 @@
 					</div>
 				</div>
 
-				<div class="flex-1 overflow-auto p-4">
+				<!-- Índice a la izquierda, documento a la derecha.
+				     Antes esto era una lista de filas con un icono de descarga:
+				     para ver QUÉ decía un certificado había que bajarlo, abrirlo
+				     fuera y volver. Con veinte certificados por tercero eso son
+				     veinte descargas para comprobar un dato. -->
+				<!-- El suelo es relativo al viewport porque `flex-1` no crece: la cadena
+				     de `h-full` del layout no llega hasta aquí y el visor se quedaba en
+				     464 px dentro de una pantalla de 1238. El `max()` evita el efecto
+				     contrario en portátiles bajos, donde `100vh - 17rem` sería ridículo. -->
+				<div
+					class="flex min-h-0 flex-1 flex-col overflow-hidden lg:min-h-[max(28rem,calc(100vh-17rem))] lg:flex-row"
+				>
 					{#if isLoadingCerts}
-						<div class="flex items-center justify-center py-12">
+						<div class="flex flex-1 items-center justify-center py-12">
 							<div class="h-8 w-8 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"></div>
 						</div>
 					{:else if !selectedTercero.certificados_archivo || selectedTercero.certificados_archivo.length === 0}
-						<div class="flex flex-col items-center justify-center py-12 text-center">
+						<div class="flex flex-1 flex-col items-center justify-center py-12 text-center">
 							<p class="text-sm font-semibold text-gray-900">Sin certificados</p>
 							<p class="text-xs text-gray-500">Este tercero no tiene certificados cargados</p>
 						</div>
 					{:else}
-						<div class="space-y-2">
+						<!-- Índice de certificados -->
+						<div
+							class="shrink-0 space-y-2 overflow-auto border-gray-100 p-3 lg:w-72 lg:border-r"
+						>
 							{#each selectedTercero.certificados_archivo as cert (cert.id)}
-								<div class="flex items-center gap-3 rounded-xl border border-gray-200 bg-white p-3">
-									<div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-orange-600">
+								{@const activo = certPreview?.id === cert.id}
+								<button
+									type="button"
+									onclick={() => (certPreview = cert)}
+									class="flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-colors {activo
+										? 'border-orange-300 bg-orange-50/60'
+										: 'border-gray-200 bg-white hover:bg-gray-50'}"
+									aria-current={activo ? 'true' : undefined}
+								>
+									<div
+										class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-orange-400 to-orange-600"
+									>
 										<span class="text-xs font-bold text-white">{cert.anio}</span>
 									</div>
 									<div class="min-w-0 flex-1">
@@ -417,15 +463,85 @@
 											{formatTipo(cert.tipo_certificado?.codigo || cert.tipo)} · NIT {cert.nit}
 										</p>
 									</div>
-									{#if cert.url}
-										<a href={cert.url} target="_blank" rel="noopener noreferrer" class="rounded-md p-1.5 text-orange-600 hover:bg-orange-50" title="Descargar">
-											<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-												<path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-											</svg>
-										</a>
+								</button>
+							{/each}
+						</div>
+
+						<!-- Documento -->
+						<div class="flex min-h-0 min-w-0 flex-1 flex-col bg-gray-50">
+							{#if certPreview}
+								<div
+									class="flex items-center justify-between gap-3 border-b border-gray-100 bg-white px-4 py-2"
+								>
+									<div class="min-w-0">
+										<p class="truncate text-xs font-semibold text-gray-900">{certPreview.filename}</p>
+										<p class="text-[10px] text-gray-500">
+											{formatTipo(certPreview.tipo_certificado?.codigo || certPreview.tipo)} · {certPreview.anio}
+										</p>
+									</div>
+									{#if certPreview.url}
+										<div class="flex shrink-0 items-center gap-1">
+											<a
+												href={certPreview.url}
+												target="_blank"
+												rel="noopener noreferrer"
+												class="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+												title="Abrir en una pestaña"
+											>
+												<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+												</svg>
+											</a>
+											<a
+												href={certPreview.url}
+												download={certPreview.filename}
+												class="rounded-md p-1.5 text-orange-600 hover:bg-orange-50"
+												title="Descargar"
+											>
+												<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+													<path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+												</svg>
+											</a>
+										</div>
 									{/if}
 								</div>
-							{/each}
+
+								{#if certPreview.url}
+									{#if esImagen(certPreview.filename)}
+										<div class="min-h-0 flex-1 overflow-auto p-4">
+											<img
+												src={certPreview.url}
+												alt={`Certificado ${certPreview.filename}`}
+												class="mx-auto max-w-full rounded-lg border border-gray-200 bg-white shadow-sm"
+											/>
+										</div>
+									{:else}
+										<!-- `key` fuerza a recrear el iframe al cambiar de documento:
+										     reutilizarlo dejaba el visor mostrando el PDF anterior
+										     durante la carga del siguiente. -->
+										{#key certPreview.id}
+											<iframe
+												src={certPreview.url}
+												title={`Certificado ${certPreview.filename}`}
+												class="min-h-0 w-full flex-1 border-0"
+											></iframe>
+										{/key}
+									{/if}
+								{:else}
+									<!-- La URL la firma S3 y caduca; `url: null` es lo que
+									     devuelve el backend cuando no pudo firmarla. -->
+									<div class="flex flex-1 flex-col items-center justify-center gap-1 p-8 text-center">
+										<p class="text-sm font-semibold text-gray-900">No se pudo abrir el archivo</p>
+										<p class="text-xs text-gray-500">
+											El enlace firmado no está disponible. Recarga el listado para pedir uno nuevo.
+										</p>
+									</div>
+								{/if}
+							{:else}
+								<div class="flex flex-1 items-center justify-center p-8 text-center">
+									<p class="text-xs text-gray-500">Elige un certificado para verlo aquí</p>
+								</div>
+							{/if}
 						</div>
 					{/if}
 				</div>
