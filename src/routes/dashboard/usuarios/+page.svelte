@@ -44,6 +44,29 @@
 		{ key: 'permisos', label: 'Permisos' }
 	];
 
+	/**
+	 * Roles que ofrece el alta manual. Son los valores del enum
+	 * `enum_users_role` del backend; el label es solo para leerlos.
+	 *
+	 * El rol NO reemplaza a las áreas: quien decide a qué módulos entra
+	 * alguien es `area` (y, si se afina, `permisos_rutas`). Aquí se elige
+	 * porque `POST /api/usuarios` lo acepta y su default —`usuario`— no
+	 * siempre es el que toca.
+	 */
+	const ROLES: Array<{ value: string; label: string }> = [
+		{ value: 'usuario', label: 'Usuario' },
+		{ value: 'admin', label: 'Administrador' },
+		{ value: 'liquidador', label: 'Liquidador' },
+		{ value: 'facturador', label: 'Facturador' },
+		{ value: 'aprobador', label: 'Aprobador' },
+		{ value: 'gestor_flota', label: 'Gestor de flota' },
+		{ value: 'gestor_nomina', label: 'Gestor de nómina' },
+		{ value: 'gestor_servicio', label: 'Gestor de servicios' },
+		{ value: 'gestor_planillas', label: 'Gestor de planillas' },
+		{ value: 'kilometraje', label: 'Kilometraje' },
+		{ value: 'consulta', label: 'Consulta' }
+	];
+
 	const DEFS = {
 		/// La pestaña es un filtro más: sin ella en la URL, «mándame las
 		/// sesiones cerradas de Fulano» no se puede enlazar.
@@ -202,6 +225,28 @@
 	let errorInv = $state('');
 
 	const invitacionesPendientes = $derived(invitaciones.filter((i) => i.estado === 'pendiente'));
+
+	// ─── Alta manual ─────────────────────────────────────────────────────
+	// Alternativa a la invitación: en vez de mandar un correo y esperar a que
+	// la persona elija su contraseña, se la crea aquí ya lista. Hace falta
+	// para quien no tiene correo corporativo, para quien tiene que poder
+	// entrar hoy, y para no depender de que un correo no caiga en spam.
+	//
+	// Va contra `POST /api/usuarios`, que ya existía en el backend (con
+	// `authMiddleware + requireAdmin`) pero no tenía ninguna pantalla que lo
+	// usara: el alta manual solo se podía hacer con curl.
+	let modalNuevoAbierto = $state(false);
+	let creandoNuevo = $state(false);
+	let nuevoNombre = $state('');
+	let nuevoCorreo = $state('');
+	let nuevoPassword = $state('');
+	let nuevoPasswordConfirm = $state('');
+	let nuevoTelefono = $state('');
+	let nuevoCargo = $state('');
+	let nuevoRole = $state('usuario');
+	let nuevoAreas = $state<string[]>([]);
+	let verPasswordNuevo = $state(false);
+	let errorNuevo = $state('');
 
 	// ─── Modales CRUD ───────────────────────────────────────────────────
 	let showEditModal = $state(false);
@@ -598,6 +643,76 @@
 		}
 	}
 
+	// ─── Alta manual ────────────────────────────────────────────────────
+	function abrirModalNuevo() {
+		nuevoNombre = '';
+		nuevoCorreo = '';
+		nuevoPassword = '';
+		nuevoPasswordConfirm = '';
+		nuevoTelefono = '';
+		nuevoCargo = '';
+		nuevoRole = 'usuario';
+		nuevoAreas = [];
+		verPasswordNuevo = false;
+		errorNuevo = '';
+		modalNuevoAbierto = true;
+	}
+	function toggleAreaNuevo(v: string) {
+		nuevoAreas = nuevoAreas.includes(v) ? nuevoAreas.filter((a) => a !== v) : [...nuevoAreas, v];
+	}
+	async function crearUsuario() {
+		errorNuevo = '';
+
+		// Las mismas reglas que aplica `createUsuarioSchema` en el backend. Se
+		// repiten aquí para avisar sin ir y volver, no para sustituirlo: el
+		// backend las vuelve a aplicar porque esta pantalla no es la única
+		// forma de llegar a la ruta.
+		if (nuevoNombre.trim().length < 2) {
+			errorNuevo = 'El nombre debe tener al menos 2 caracteres';
+			return;
+		}
+		if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(nuevoCorreo.trim())) {
+			errorNuevo = 'Ingresa un correo electrónico válido';
+			return;
+		}
+		if (nuevoPassword.length < 6) {
+			errorNuevo = 'La contraseña debe tener al menos 6 caracteres';
+			return;
+		}
+		if (nuevoPassword !== nuevoPasswordConfirm) {
+			errorNuevo = 'Las contraseñas no coinciden';
+			return;
+		}
+		if (nuevoAreas.length === 0) {
+			errorNuevo = 'Selecciona al menos un área';
+			return;
+		}
+
+		try {
+			creandoNuevo = true;
+			await apiClient.post('/api/usuarios', {
+				nombre: nuevoNombre.trim(),
+				correo: nuevoCorreo.trim().toLowerCase(),
+				password: nuevoPassword,
+				telefono: nuevoTelefono.trim() || undefined,
+				cargo: nuevoCargo.trim() || undefined,
+				role: nuevoRole,
+				area: nuevoAreas
+			});
+			toast.success(`Usuario ${nuevoNombre.trim()} creado`);
+			modalNuevoAbierto = false;
+			cargarUsuarios();
+		} catch (e: any) {
+			// El 409 de correo duplicado trae el detalle en `message`; el 400 de
+			// zod, en `error`. Sin este orden el duplicado sale como «Datos
+			// inválidos», que no dice cuál es el problema.
+			errorNuevo =
+				e?.response?.data?.message || e?.response?.data?.error || 'No se pudo crear el usuario';
+		} finally {
+			creandoNuevo = false;
+		}
+	}
+
 	// ─── Permiso individual: bonos de planilla ───────────────────
 	// Estado: lista de usuarios con el permiso otorgado (o no)
 	let bonosSeleccionados = $state(new Set<string>());
@@ -729,15 +844,15 @@
 			</div>
 
 			<div class="toolbar-actions">
-				<button class="btn-secondary" onclick={cargarUsuarios}>
+				<button class="btn-secondary" onclick={abrirModalNuevo}>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
-							d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
+							d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z"
 						/>
 					</svg>
-					Recargar
+					Nuevo usuario
 				</button>
 				<button class="btn-primary" onclick={abrirModalInv}>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
@@ -1969,6 +2084,201 @@
 								/>
 							</svg>
 							Enviar invitación
+						{/if}
+					</button>
+				</footer>
+			</form>
+		</div>
+	</div>
+{/if}
+
+{#if modalNuevoAbierto}
+	<div
+		class="modal-backdrop"
+		onclick={() => (modalNuevoAbierto = false)}
+		onkeydown={(e) => e.key === 'Escape' && (modalNuevoAbierto = false)}
+		role="presentation"
+		transition:fade={{ duration: 200 }}
+	>
+		<div
+			class="modal modal--md"
+			onclick={(e) => e.stopPropagation()}
+			onkeydown={(e) => e.stopPropagation()}
+			role="dialog"
+			tabindex="-1"
+			aria-modal="true"
+			aria-labelledby="nuevo-title"
+			transition:fly={{ y: 24, duration: 280, easing: quintOut }}
+		>
+			<header class="modal-head">
+				<div>
+					<span class="eyebrow">Alta manual</span>
+					<h2 id="nuevo-title">Nuevo usuario</h2>
+				</div>
+				<button class="modal-close" onclick={() => (modalNuevoAbierto = false)} aria-label="Cerrar">
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				</button>
+			</header>
+
+			<form
+				onsubmit={(e) => {
+					e.preventDefault();
+					crearUsuario();
+				}}
+				class="modal-form"
+			>
+				<p class="modal-nota">
+					La cuenta queda creada y lista para entrar con la contraseña que escribas aquí. No se
+					envía ningún correo: díselo tú. Si prefieres que la elija esa persona, usa
+					<strong>Invitar usuario</strong>.
+				</p>
+
+				<div class="field">
+					<label for="nuevo-nombre" class="field-label">
+						Nombre completo <span class="field-required">*</span>
+					</label>
+					<input
+						id="nuevo-nombre"
+						type="text"
+						bind:value={nuevoNombre}
+						class="input"
+						autocomplete="off"
+						placeholder="Ej: María Fernanda Ríos"
+					/>
+				</div>
+
+				<div class="field">
+					<label for="nuevo-correo" class="field-label">
+						Correo electrónico <span class="field-required">*</span>
+					</label>
+					<input
+						id="nuevo-correo"
+						type="email"
+						bind:value={nuevoCorreo}
+						class="input"
+						autocomplete="off"
+						placeholder="usuario@empresa.com"
+					/>
+				</div>
+
+				<div class="field-row">
+					<div class="field">
+						<label for="nuevo-password" class="field-label">
+							Contraseña <span class="field-required">*</span>
+						</label>
+						<input
+							id="nuevo-password"
+							type={verPasswordNuevo ? 'text' : 'password'}
+							bind:value={nuevoPassword}
+							class="input"
+							autocomplete="new-password"
+							placeholder="Mínimo 6 caracteres"
+						/>
+					</div>
+					<div class="field">
+						<label for="nuevo-password-2" class="field-label">
+							Confirmar <span class="field-required">*</span>
+						</label>
+						<input
+							id="nuevo-password-2"
+							type={verPasswordNuevo ? 'text' : 'password'}
+							bind:value={nuevoPasswordConfirm}
+							class="input"
+							autocomplete="new-password"
+							placeholder="Repite la contraseña"
+						/>
+					</div>
+				</div>
+				<label class="check-inline">
+					<input type="checkbox" bind:checked={verPasswordNuevo} />
+					Ver contraseña
+				</label>
+
+				<div class="field-row">
+					<div class="field">
+						<label for="nuevo-telefono" class="field-label"
+							>Teléfono <span class="muted-inline">(opcional)</span></label
+						>
+						<input
+							id="nuevo-telefono"
+							type="tel"
+							bind:value={nuevoTelefono}
+							class="input"
+							placeholder="Ej: 320 000 0000"
+						/>
+					</div>
+					<div class="field">
+						<label for="nuevo-cargo" class="field-label"
+							>Cargo <span class="muted-inline">(opcional)</span></label
+						>
+						<input
+							id="nuevo-cargo"
+							type="text"
+							bind:value={nuevoCargo}
+							class="input"
+							placeholder="Ej: Coordinador de operaciones"
+						/>
+					</div>
+				</div>
+
+				<div class="field">
+					<label for="nuevo-role" class="field-label">Rol</label>
+					<select id="nuevo-role" bind:value={nuevoRole} class="input">
+						{#each ROLES as r (r.value)}
+							<option value={r.value}>{r.label}</option>
+						{/each}
+					</select>
+				</div>
+
+				<div class="field">
+					<span class="field-label">
+						Áreas <span class="field-required">*</span>
+					</span>
+					<div class="area-picker">
+						{#each Object.entries(AREA_LABELS) as [key, label]}
+							<button
+								type="button"
+								class="area-pill"
+								class:area-pill--active={nuevoAreas.includes(key)}
+								onclick={() => toggleAreaNuevo(key)}
+							>
+								{label}
+							</button>
+						{/each}
+					</div>
+				</div>
+
+				{#if errorNuevo}
+					<div class="alert alert-error" in:fly={{ y: -8, duration: 200 }}>
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+							/>
+						</svg>
+						<strong>{errorNuevo}</strong>
+					</div>
+				{/if}
+
+				<footer class="modal-foot">
+					<button type="button" class="btn-secondary" onclick={() => (modalNuevoAbierto = false)}
+						>Cancelar</button
+					>
+					<button type="submit" class="btn-primary" disabled={creandoNuevo}>
+						{#if creandoNuevo}
+							<svg class="spin" viewBox="0 0 24 24" fill="none">
+								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25" />
+								<path d="M4 12a8 8 0 018-8v0" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+							</svg>
+							Creando…
+						{:else}
+							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+							</svg>
+							Crear usuario
 						{/if}
 					</button>
 				</footer>
@@ -3565,5 +3875,44 @@
 	}
 	.bonos-pill--emerald svg {
 		color: #ea580c;
+	}
+
+	/* Nota explicativa dentro del modal de alta manual: dice en una línea en
+	   qué se diferencia de invitar, que es la duda que aparece al abrirlo. */
+	.modal-nota {
+		margin: 0;
+		padding: 0.7rem 0.85rem;
+		font-size: 0.8rem;
+		line-height: 1.55;
+		color: #4a4a4a;
+		background: rgba(0, 0, 0, 0.025);
+		border: 1px solid rgba(0, 0, 0, 0.07);
+		border-radius: 10px;
+	}
+	/* Dos campos por fila; en móvil se apilan solos. */
+	.field-row {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 0.85rem;
+	}
+	@media (max-width: 560px) {
+		.field-row {
+			grid-template-columns: 1fr;
+		}
+	}
+	.check-inline {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		margin-top: -0.35rem;
+		font-size: 0.8rem;
+		color: #4a4a4a;
+		cursor: pointer;
+		user-select: none;
+	}
+	.check-inline input {
+		width: 0.95rem;
+		height: 0.95rem;
+		cursor: pointer;
 	}
 </style>
