@@ -3,7 +3,7 @@
 	 * Generación de borradores de cierres finales desde el canvas.
 	 *
 	 * Sustituye al viaje por el formulario: aquí se eligen las liquidaciones
-	 * de servicio del periodo y las placas, y el job del servidor genera,
+	 * de servicio y las placas, y el job del servidor genera,
 	 * **persiste** y anuncia cada hoja según la va creando. El canvas las va
 	 * insertando en su sitio alfabético sin recargar.
 	 *
@@ -39,6 +39,8 @@
 		cliente: string;
 		estado: string;
 		total: number;
+		mes: number;
+		anio: number;
 	}
 
 	let cargando = $state(true);
@@ -46,6 +48,91 @@
 	let liquidaciones = $state<LiqFila[]>([]);
 	let seleccionadas = $state<Set<string>>(new Set());
 	let busqueda = $state('');
+
+	/**
+	 * Filtro de periodo de la lista. `0` es "todos".
+	 *
+	 * Arranca abierto a propósito: el cierre de un mes se alimenta a veces de
+	 * liquidaciones facturadas en un mes POSTERIOR, y con la lista atada al
+	 * periodo del canvas esas no se podían elegir —ni se veía que existieran—.
+	 * El periodo del cierre lo sigue fijando el canvas, no lo elegido aquí.
+	 */
+	let filtroAnio = $state(0);
+	let filtroMes = $state(0);
+
+	const MESES = [
+		'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+		'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+	];
+	const MESES_CORTO = [
+		'ene', 'feb', 'mar', 'abr', 'may', 'jun',
+		'jul', 'ago', 'sep', 'oct', 'nov', 'dic'
+	];
+
+	/** Años presentes en los datos, del más reciente al más viejo. */
+	const aniosDisponibles = $derived(
+		[...new Set(liquidaciones.map((l) => l.anio))].sort((a, b) => b - a)
+	);
+
+	/**
+	 * Meses ofrecidos: los que existen en el año elegido. Ofrecer los 12
+	 * dejaría elegir combinaciones que siempre dan lista vacía.
+	 *
+	 * El mes del canvas es la excepción y va siempre: sin él, el atajo
+	 * «Periodo del canvas» sobre un mes todavía sin liquidaciones dejaba el
+	 * `<select>` en blanco, porque no había opción que casara con su valor.
+	 */
+	const mesesDisponibles = $derived.by(() => {
+		const meses = new Set(
+			liquidaciones
+				.filter((l) => filtroAnio === 0 || l.anio === filtroAnio)
+				.map((l) => l.mes)
+		);
+		if (filtroAnio === 0 || filtroAnio === anio) meses.add(mes);
+		return [...meses].sort((a, b) => b - a);
+	});
+
+	const hayFiltroPeriodo = $derived(filtroAnio !== 0 || filtroMes !== 0);
+	const hayFiltro = $derived(hayFiltroPeriodo || busqueda.trim() !== '');
+
+	/**
+	 * Cambiar de año no debe dejar puesto un mes que ese año no tiene: la
+	 * lista saldría vacía sin que nada explique por qué.
+	 *
+	 * El año nuevo se lee del `<select>` y no de `filtroAnio` porque el
+	 * `bind:value` y este `onchange` corren en el mismo evento, y no está
+	 * garantizado cuál escribe primero.
+	 */
+	function alCambiarAnio(e: Event) {
+		const nuevoAnio = Number((e.currentTarget as HTMLSelectElement).value) || 0;
+		filtroAnio = nuevoAnio;
+		if (filtroMes === 0) return;
+		/// El mes del canvas se conserva aunque no tenga filas: es una
+		/// elección legítima, no una combinación imposible.
+		if ((nuevoAnio === 0 || nuevoAnio === anio) && filtroMes === mes) return;
+		const hayMes = liquidaciones.some(
+			(l) => (nuevoAnio === 0 || l.anio === nuevoAnio) && l.mes === filtroMes
+		);
+		if (!hayMes) filtroMes = 0;
+	}
+
+	function verPeriodoDelCanvas() {
+		filtroAnio = anio;
+		filtroMes = mes;
+	}
+
+	function verTodosLosPeriodos() {
+		filtroAnio = 0;
+		filtroMes = 0;
+	}
+
+	function etiquetaPeriodo(l: { mes: number; anio: number }): string {
+		return `${MESES_CORTO[l.mes - 1] ?? l.mes} ${l.anio}`;
+	}
+
+	function esDelCanvas(l: { mes: number; anio: number }): boolean {
+		return l.mes === mes && l.anio === anio;
+	}
 
 	/** Sin tildes y en minúsculas: buscar «peñalosa» o «penalosa» da igual. */
 	function plegar(s: string): string {
@@ -56,12 +143,17 @@
 	}
 
 	/**
-	 * Orden de la lista: cliente A-Z y, dentro de cada cliente, su consecutivo
-	 * A-Z. `numeric` para que LS-2 quede antes que LS-10 y no al revés.
+	 * Orden de la lista: periodo más reciente primero y, dentro de cada
+	 * periodo, cliente A-Z y su consecutivo A-Z. El periodo va primero porque
+	 * ahora la lista mezcla meses: mezclados sin agrupar, el mismo cliente
+	 * aparece repetido sin que se vea a qué mes pertenece cada fila.
+	 * `numeric` para que LS-2 quede antes que LS-10 y no al revés.
 	 */
 	const liquidacionesOrdenadas = $derived(
 		[...liquidaciones].sort(
 			(a, b) =>
+				b.anio - a.anio ||
+				b.mes - a.mes ||
 				a.cliente.localeCompare(b.cliente, 'es', { sensitivity: 'base' }) ||
 				a.consecutivo.localeCompare(b.consecutivo, 'es', {
 					numeric: true,
@@ -70,16 +162,39 @@
 		)
 	);
 
+	/** Periodo elegido en los selectores; `0` no filtra. */
+	const liquidacionesDelPeriodo = $derived(
+		liquidacionesOrdenadas.filter(
+			(l) =>
+				(filtroAnio === 0 || l.anio === filtroAnio) &&
+				(filtroMes === 0 || l.mes === filtroMes)
+		)
+	);
+
 	/** Filtro de texto libre: todos los términos han de aparecer en la fila. */
 	const liquidacionesVisibles = $derived.by(() => {
 		const q = plegar(busqueda).trim();
-		if (!q) return liquidacionesOrdenadas;
+		if (!q) return liquidacionesDelPeriodo;
 		const terminos = q.split(/\s+/);
-		return liquidacionesOrdenadas.filter((l) => {
-			const heno = plegar(`${l.consecutivo} ${l.cliente} ${l.estado}`);
+		return liquidacionesDelPeriodo.filter((l) => {
+			/// El periodo entra en el heno en sus tres formas —«julio»,
+			/// «jul» y «07/2026»— para que se pueda buscar por mes a secas.
+			const periodo = `${MESES[l.mes - 1] ?? ''} ${MESES_CORTO[l.mes - 1] ?? ''} ${String(
+				l.mes
+			).padStart(2, '0')}/${l.anio} ${l.anio}`;
+			const heno = plegar(`${l.consecutivo} ${l.cliente} ${l.estado} ${periodo}`);
 			return terminos.every((t) => heno.includes(t));
 		});
 	});
+
+	/**
+	 * Elegidas que no son del periodo del canvas. No es un error —es justo lo
+	 * que este filtro habilita— pero conviene decirlo: el cierre se guarda
+	 * igualmente en el periodo del canvas.
+	 */
+	const elegidasDeOtroPeriodo = $derived(
+		liquidaciones.filter((l) => seleccionadas.has(l.id) && !esDelCanvas(l)).length
+	);
 
 	const visiblesSeleccionadas = $derived(
 		liquidacionesVisibles.filter((l) => seleccionadas.has(l.id)).length
@@ -147,13 +262,17 @@
 			// sobraban no aparecían y "seleccionar todas" no las incluía:
 			// faltaban cierres sin que nada lo dijera. Se recorren las páginas
 			// hasta agotarlas.
+			//
+			// Ya NO se filtra por `mes`/`anio`: se traen todos los periodos y
+			// el filtro se hace en el cliente. Son unos cientos de filas —un
+			// puñado de páginas— y a cambio el usuario puede meter en el
+			// cierre liquidaciones de meses posteriores, que antes no existían
+			// para este modal.
 			const PAGINA = 200;
 			const filas: LiqFila[] = [];
 			let pagina = 1;
 			for (;;) {
 				const r = await liquidacionesServiciosAPI.listar({
-					mes,
-					anio,
 					limit: PAGINA,
 					page: pagina
 				});
@@ -164,7 +283,9 @@
 						consecutivo: l.consecutivo,
 						cliente: l.cliente?.nombre ?? '—',
 						estado: l.estado,
-						total: Number(l.total) || 0
+						total: Number(l.total) || 0,
+						mes: Number(l.mes) || 0,
+						anio: Number(l.anio) || 0
 					}))
 				);
 				// `totalPages` es la señal buena; el corte por lote corto es el
@@ -177,7 +298,7 @@
 			}
 			liquidaciones = filas;
 		} catch (e: any) {
-			errorCarga = e?.message || 'No se pudieron cargar las liquidaciones del periodo';
+			errorCarga = e?.message || 'No se pudieron cargar las liquidaciones';
 		} finally {
 			cargando = false;
 		}
@@ -464,21 +585,55 @@
 			<!-- ── Formulario ───────────────────────────────────────────── -->
 			<section class="gbm-body">
 				{#if cargando}
-					<p class="gbm-nota">Cargando liquidaciones de {String(mes).padStart(2, '0')}/{anio}…</p>
+					<p class="gbm-nota">Cargando liquidaciones de todos los periodos…</p>
 				{:else if errorCarga}
 					<div class="gbm-aviso gbm-aviso-rojo">{errorCarga}</div>
 				{:else if liquidaciones.length === 0}
 					<div class="gbm-aviso gbm-aviso-ambar">
-						No hay liquidaciones de servicio en este periodo. Sin ellas no hay nada
+						No hay ninguna liquidación de servicio registrada. Sin ellas no hay nada
 						que liquidar a terceros.
 					</div>
 				{:else}
 					<h3 class="gbm-h3">1 · Liquidaciones de servicio</h3>
 
+					<div class="gbm-periodo-filtros">
+						<label>
+							<span>Año</span>
+							<select bind:value={filtroAnio} onchange={alCambiarAnio}>
+								<option value={0}>Todos</option>
+								{#each aniosDisponibles as a (a)}
+									<option value={a}>{a}</option>
+								{/each}
+							</select>
+						</label>
+						<label>
+							<span>Mes</span>
+							<select bind:value={filtroMes}>
+								<option value={0}>Todos</option>
+								{#each mesesDisponibles as m (m)}
+									<option value={m}>{MESES[m - 1]}</option>
+								{/each}
+							</select>
+						</label>
+						<button
+							type="button"
+							class="gbm-periodo-atajo"
+							onclick={verPeriodoDelCanvas}
+							disabled={filtroAnio === anio && filtroMes === mes}
+						>
+							Periodo del canvas
+						</button>
+						{#if hayFiltroPeriodo}
+							<button type="button" class="gbm-periodo-atajo" onclick={verTodosLosPeriodos}>
+								Todos los periodos
+							</button>
+						{/if}
+					</div>
+
 					<input
 						class="gbm-buscador"
 						type="search"
-						placeholder="Buscar por consecutivo, cliente o estado…"
+						placeholder="Buscar por consecutivo, cliente, estado o mes…"
 						aria-label="Buscar liquidaciones"
 						bind:value={busqueda}
 					/>
@@ -493,7 +648,7 @@
 								onchange={(e) => todasLasLiquidaciones(e.currentTarget.checked)}
 							/>
 							<span>
-								Seleccionar todas{busqueda.trim() ? ' las visibles' : ''}
+								Seleccionar todas{hayFiltro ? ' las visibles' : ''}
 							</span>
 						</label>
 						<span class="gbm-nota">
@@ -502,8 +657,23 @@
 						</span>
 					</div>
 
+					{#if elegidasDeOtroPeriodo > 0}
+						<p class="gbm-nota gbm-nota-mezcla">
+							{elegidasDeOtroPeriodo} de las elegidas
+							{elegidasDeOtroPeriodo === 1 ? 'es' : 'son'} de otro periodo. Sus placas
+							entran igual, y el cierre se guarda en
+							{String(mes).padStart(2, '0')}/{anio}.
+						</p>
+					{/if}
+
 					{#if liquidacionesVisibles.length === 0}
-						<p class="gbm-nota">Ninguna liquidación coincide con «{busqueda}».</p>
+						<p class="gbm-nota">
+							{#if busqueda.trim()}
+								Ninguna liquidación coincide con «{busqueda}».
+							{:else}
+								No hay liquidaciones en el periodo elegido.
+							{/if}
+						</p>
 					{:else}
 						<ul class="gbm-lista gbm-lista-liqs">
 							{#each liquidacionesVisibles as l (l.id)}
@@ -515,6 +685,15 @@
 											onchange={() => alternarLiquidacion(l.id)}
 										/>
 										<span class="gbm-cons">{l.consecutivo}</span>
+										<span
+											class="gbm-periodo-badge"
+											class:gbm-periodo-badge-canvas={esDelCanvas(l)}
+											title={esDelCanvas(l)
+												? 'Periodo del canvas'
+												: 'Otro periodo: el cierre se guarda igualmente en el del canvas'}
+										>
+											{etiquetaPeriodo(l)}
+										</span>
 										<span class="gbm-cliente">{l.cliente}</span>
 										<span class="gbm-estado {claseBadgeEstado(l.estado)}">{l.estado}</span>
 										<span class="gbm-total">${fmtCOP(l.total)}</span>
@@ -786,6 +965,74 @@
 		font-variant-numeric: tabular-nums;
 		color: #0f172a;
 		font-weight: 600;
+	}
+
+	.gbm-periodo-filtros {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 8px;
+		margin-bottom: 8px;
+	}
+	.gbm-periodo-filtros label {
+		display: flex;
+		align-items: center;
+		gap: 5px;
+		font-size: 11.5px;
+		font-weight: 600;
+		color: #334155;
+	}
+	.gbm-periodo-filtros select {
+		border: 1px solid #cbd5e1;
+		border-radius: 6px;
+		padding: 4px 8px;
+		font: inherit;
+		font-size: 12px;
+		background: #fff;
+		cursor: pointer;
+	}
+	.gbm-periodo-filtros select:focus {
+		outline: 2px solid #ea580c;
+		outline-offset: -1px;
+		border-color: #ea580c;
+	}
+	.gbm-periodo-atajo {
+		border: 1px solid #cbd5e1;
+		background: #fff;
+		border-radius: 6px;
+		padding: 4px 9px;
+		font-size: 11px;
+		font-weight: 600;
+		color: #334155;
+		cursor: pointer;
+	}
+	.gbm-periodo-atajo:disabled {
+		opacity: 0.45;
+		cursor: default;
+	}
+
+	.gbm-periodo-badge {
+		padding: 2px 7px;
+		border-radius: 999px;
+		font-size: 9.5px;
+		font-weight: 700;
+		white-space: nowrap;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		background: #f1f5f9;
+		color: #64748b;
+		border: 1px solid #e2e8f0;
+	}
+	/* El periodo del canvas se distingue de un vistazo: la lista ya no es
+	   toda del mismo mes. */
+	.gbm-periodo-badge-canvas {
+		background: #ea580c;
+		color: #fff;
+		border-color: #ea580c;
+	}
+
+	.gbm-nota-mezcla {
+		margin: 0 0 6px;
 	}
 
 	.gbm-acciones-mini {

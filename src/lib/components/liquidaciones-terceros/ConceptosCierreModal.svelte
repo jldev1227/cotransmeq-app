@@ -114,9 +114,9 @@
 	 * forma de devolverlos — antes, quitar un item era irreversible desde
 	 * cualquier interfaz.
 	 */
-	let quitados = $state<Array<{ id: string; cliente: string; recorrido: string; valor: number }>>(
-		[]
-	);
+	let quitados = $state<
+		Array<{ id: string; cliente: string; recorrido: string; fechas: string; valor: number }>
+	>([]);
 	let cargandoQuitados = $state(false);
 
 	async function cargarQuitados() {
@@ -131,6 +131,7 @@
 					id: i.id,
 					cliente: i.liquidacion_tercero?.liquidacion?.cliente?.nombre ?? '',
 					recorrido: i.liquidacion_tercero?.recorrido ?? '',
+					fechas: i.liquidacion_tercero?.fechas ?? '',
 					valor: Number(i.liquidacion_tercero?.valor_liquidar ?? 0)
 				}));
 		} catch (e: any) {
@@ -363,6 +364,7 @@
 						<tr>
 							<th>Cliente</th>
 							<th>Recorrido</th>
+							<th>Fechas</th>
 							<th class="cxm-num">V/liquidar</th>
 							<th></th>
 						</tr>
@@ -372,6 +374,7 @@
 							<tr>
 								<td>{it.cliente_nombre || '—'}</td>
 								<td>{it.recorrido || '—'}</td>
+								<td class="cxm-fechas" title={it.fechas || ''}>{it.fechas || '—'}</td>
 								<td class="cxm-num cxm-total">${formatCOP(Number(it.valor_liquidar))}</td>
 								<td class="cxm-num">
 									<button
@@ -403,6 +406,7 @@
 								<tr>
 									<td>{q.cliente || '—'}</td>
 									<td>{q.recorrido || '—'}</td>
+									<td class="cxm-fechas" title={q.fechas || ''}>{q.fechas || '—'}</td>
 									<td class="cxm-num">${formatCOP(q.valor)}</td>
 									<td class="cxm-num">
 										<button
@@ -764,6 +768,20 @@
 		font-weight: 700;
 		color: #0f172a;
 	}
+	/**
+	 * `fechas` es texto libre y hay valores largos de verdad
+	 * («6.7.8.9.10.13.14.15.16.17.20.21.22.23 ABR»). Se recorta con puntos
+	 * suspensivos y el valor entero queda en el `title`: dejarlo crecer
+	 * empujaba el resto de columnas fuera del modal.
+	 */
+	.cxm-fechas {
+		max-width: 150px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: #475569;
+	}
+
 	.cxm-auto {
 		display: inline-block;
 		margin-left: 6px;
