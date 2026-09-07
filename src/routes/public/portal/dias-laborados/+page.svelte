@@ -493,7 +493,20 @@
     return `dias-laborados:bor:${cid}:${fecha}`;
   }
 
+  /// Versión del formato del borrador. Subirla invalida los guardados en el
+  /// teléfono.
+  ///
+  /// v2: hasta el 2026-09-07 el listado del mes devolvía también los tramos
+  /// retirados (le faltaba `deleted_at: null` a la consulta de segmentos del
+  /// portal). Un conductor que pulsó «Editar» viendo esos tramos fantasma los
+  /// tiene en `localStorage`, y `abrirDia` da PRIORIDAD al borrador sobre el
+  /// servidor: sin invalidarlos, el arreglo del backend no se notaría en su
+  /// teléfono y al guardar los resucitaría como tramos vivos.
+  const BORRADOR_VERSION = 2;
+
   interface BorradorCache {
+    /// Ausente en los borradores anteriores a v2: `cargarBorrador` los descarta.
+    v?: number;
     tipo: TipoLabor;
     observaciones: string;
     // La placa del mantenimiento también se cachea: si no, el conductor que
@@ -509,6 +522,7 @@
     if (!browser || !fechaSeleccionada) return;
     try {
       const data: BorradorCache = {
+        v: BORRADOR_VERSION,
         tipo: (form.tipo as TipoLabor) || 'LABORADO',
         observaciones: form.observaciones || '',
         mantenimiento_vehiculo_id: form.mantenimiento_vehiculo_id || null,
@@ -527,6 +541,12 @@
       const raw = localStorage.getItem(cacheKey(fecha));
       if (!raw) return null;
       const data = JSON.parse(raw) as BorradorCache;
+      // Descartar los de un formato anterior. Va ANTES del corte por edad
+      // porque un borrador v1 reciente es justo el peligroso.
+      if (data.v !== BORRADOR_VERSION) {
+        localStorage.removeItem(cacheKey(fecha));
+        return null;
+      }
       // Descartar borradores con más de 7 días
       if (Date.now() - (data.savedAt || 0) > 7 * 24 * 3600 * 1000) {
         localStorage.removeItem(cacheKey(fecha));
@@ -563,13 +583,18 @@
     const set = new Set<string>();
     const cid = $portalSession?.conductor?.id || 'anon';
     const prefix = `dias-laborados:bor:${cid}:`;
+    /// Recolectar las claves ANTES de leerlas: `cargarBorrador` borra las
+    /// caducadas y las de formato viejo, y quitar una entrada reindexa
+    /// `localStorage`, así que recorrerlo por índice mientras se modifica se
+    /// salta entradas.
+    const claves: string[] = [];
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i);
-      if (k && k.startsWith(prefix)) {
-        const fecha = k.replace(prefix, '');
-        const data = cargarBorrador(fecha);
-        if (data) set.add(fecha);
-      }
+      if (k && k.startsWith(prefix)) claves.push(k);
+    }
+    for (const k of claves) {
+      const fecha = k.slice(prefix.length);
+      if (cargarBorrador(fecha)) set.add(fecha);
     }
     borradoresPendientes = set;
   }
