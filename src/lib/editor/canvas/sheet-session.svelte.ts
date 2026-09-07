@@ -151,6 +151,18 @@ export interface SheetSessionOptions {
 	 */
 	onSheetAdded?: (e: { cierre: any; by: { id: string; name: string } }) => void;
 	/**
+	 * Una hoja SALIÓ del libro: alguien retiró el cierre (soft delete).
+	 *
+	 * Inverso de `onSheetAdded`. Reaccionar no es opcional: el servidor
+	 * rechaza los patches sobre un cierre retirado, así que un cliente que
+	 * conserve la pestaña editable teclea y recibe un error por cada celda.
+	 */
+	onSheetRemoved?: (e: {
+		cierre_id: string;
+		placa: string | null;
+		by: { id: string; name: string };
+	}) => void;
+	/**
 	 * Alguien cambió el COLOR de una pestaña (solo `cierres-finales`).
 	 *
 	 * Va aparte de `onEstadoChanged` porque el color no cambia lo que se
@@ -350,6 +362,17 @@ export function createSheetSession(opts: SheetSessionOptions): SheetSession {
 		opts.onSheetAdded?.({ cierre: e.cierre, by: e.by ?? { id: '', name: '' } });
 	};
 
+	const onSheetRemoved = (e: any) => {
+		if (e?.scope !== scope || Number(e?.anio) !== anio) return;
+		if (requiereMes(scope) && Number(e?.mes) !== mes) return;
+		if (!e?.cierre_id) return;
+		opts.onSheetRemoved?.({
+			cierre_id: e.cierre_id,
+			placa: e.placa ?? null,
+			by: e.by ?? { id: '', name: '' }
+		});
+	};
+
 	const onColorChanged = (e: any) => {
 		if (e?.scope !== scope || Number(e?.anio) !== anio) return;
 		if (requiereMes(scope) && Number(e?.mes) !== mes) return;
@@ -401,6 +424,7 @@ export function createSheetSession(opts: SheetSessionOptions): SheetSession {
 	bind('sheet:reverted', onReverted);
 	bind('sheet:estado-changed', onEstadoChanged);
 	bind('sheet:sheet-added', onSheetAdded);
+	bind('sheet:sheet-removed', onSheetRemoved);
 	bind('sheet:hoja-color', onColorChanged);
 
 	socket.emit('sheet:join', { scope, anio, mes, user });
@@ -473,6 +497,7 @@ export function createSheetSession(opts: SheetSessionOptions): SheetSession {
 			socket.off('sheet:reverted', onReverted);
 			socket.off('sheet:estado-changed', onEstadoChanged);
 			socket.off('sheet:sheet-added', onSheetAdded);
+			socket.off('sheet:sheet-removed', onSheetRemoved);
 			socket.off('sheet:hoja-color', onColorChanged);
 			socket.off('connect', onConnect);
 			socket.off('disconnect', onDisconnect);

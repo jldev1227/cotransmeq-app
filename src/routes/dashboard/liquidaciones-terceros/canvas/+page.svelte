@@ -72,6 +72,7 @@
 	import SelectorCanvasTerceros from '$lib/components/univer/SelectorCanvasTerceros.svelte';
 	import CierreEstadoHeader from '$lib/components/liquidaciones-terceros/CierreEstadoHeader.svelte';
 	import GenerarBorradoresModal from '$lib/components/liquidaciones-terceros/GenerarBorradoresModal.svelte';
+	import EliminarCierreModal from '$lib/components/liquidaciones-terceros/EliminarCierreModal.svelte';
 	import ConductoresCierreModal from '$lib/components/liquidaciones-terceros/ConductoresCierreModal.svelte';
 	import PropietariosCierreModal from '$lib/components/liquidaciones-terceros/PropietariosCierreModal.svelte';
 	import ConceptosCierreModal from '$lib/components/liquidaciones-terceros/ConceptosCierreModal.svelte';
@@ -974,6 +975,17 @@
 			onSheetAdded: ({ cierre, by }) => {
 				void insertarHojaNueva(cierre as CierreHoja, by?.name);
 			},
+			onSheetRemoved: ({ cierre_id, placa, by }) => {
+				// El evento va a todo el room, emisor incluido. Quien borró ya
+				// retiró la hoja en `eliminarCierreActivo`, y `retirarHojaDelLibro`
+				// sale solo si el cierre ya no está en el índice: el eco no
+				// remonta el libro por segunda vez.
+				if (!indice.some((c) => c.id === cierre_id)) return;
+				const quien = by?.id && by.id !== $authStore.user?.id ? by.name : null;
+				void retirarHojaDelLibro(cierre_id).then(() => {
+					if (quien) toast.info(`${quien} eliminó el cierre de ${placa ?? ''}`);
+				});
+			},
 			onInvalidate: ({ cierreId }) => {
 				// El eco de nuestro propio cambio: ya lo estamos aplicando.
 				if (cierreId && refrescandoCierres.has(cierreId)) return;
@@ -1094,9 +1106,9 @@
 
 	// ─── Acciones del carril lateral ───────────────────────
 	//
-	// Las dos que hay aquí llaman a endpoints que YA EXISTÍAN y que se
-	// quedaron sin invocar cuando se retiró el editor tabular. No son
-	// funcionalidad nueva del servidor: son el disparador que faltaba.
+	// Todas llaman a endpoints que YA EXISTÍAN y que se quedaron sin
+	// invocar cuando se retiró el editor tabular. No son funcionalidad
+	// nueva del servidor: son el disparador que faltaba.
 
 	/**
 	 * Acción del carril que está corriendo ahora mismo, o `null`.
@@ -1135,6 +1147,12 @@
 
 	let modalConductores = $state(false);
 	let modalPropietarios = $state(false);
+	/// Cierre cuyo borrado está pendiente de confirmar, o `null`.
+	/// Guarda el objeto y no el id porque el modal necesita placa y
+	/// consecutivo para decir QUÉ se va a retirar, y tras el borrado la hoja
+	/// ya no está en `indice` de donde sacarlos.
+	let cierreAEliminar = $state<CierreHoja | null>(null);
+	let eliminando = $state(false);
 	let modalConceptos = $state(false);
 	let modalTraerItems = $state(false);
 	/// Hubo altas o bajas mientras el modal de conceptos estuvo abierto, así que
@@ -1331,6 +1349,91 @@
 			}
 		);
 	}
+
+	/**
+	 * Quita una hoja del libro y del modelo local.
+	 *
+	 * REMONTA. `ctx` sabe insertar y reconstruir hojas, pero no retirarlas:
+	 * la sheet bar y los bindings de celda se construyen a partir de
+	 * `indice`, así que la única forma consistente de que la pestaña
+	 * desaparezca es rehacer el libro sin ella.
+	 *
+	 * Reelegir la hoja activa va ANTES del remonte: si el cierre retirado
+	 * era el activo, `cierreActivo` apuntaría a una hoja que ya no existe y
+	 * el libro montaría sin selección.
+	 */
+	async function retirarHojaDelLibro(cierreId: string) {
+		if (!indice.some((c) => c.id === cierreId)) return;
+
+		const idx = indice.findIndex((c) => c.id === cierreId);
+		const quedan = indice.filter((c) => c.id !== cierreId);
+
+		if (cierreActivo === cierreId) {
+			/// La vecina de la derecha, o la de la izquierda si era la última.
+			/// Es el comportamiento de cualquier editor con pestañas y evita
+			/// que borrar la última hoja deje el canvas en blanco.
+			cierreActivo = quedan.length ? (quedan[Math.min(idx, quedan.length - 1)]?.id ?? null) : null;
+		}
+
+		indice = quedan;
+		const { [cierreId]: _fuera, ...resto } = detalles;
+		detalles = resto;
+
+		await remountEngine();
+	}
+
+	/**
+	 * Retira el cierre activo (soft delete) tras confirmación.
+	 *
+	 * El endpoint YA EXISTÍA —`DELETE /liquidaciones-terceros/:id`, que marca
+	 * `deleted_at` en el cierre, sus items y sus conceptos— y se quedó sin
+	 * invocar: no había forma de deshacer una generación de borradores
+	 * equivocada salvo entrar a la base. El servidor rechaza APROBADA y
+	 * FACTURADA, y el carril solo ofrece la acción sobre hojas editables.
+	 */
+	async function eliminarCierreActivo() {
+		const cierre = cierreAEliminar;
+		if (!cierre || eliminando) return;
+
+		eliminando = true;
+		try {
+			await conOverlay(
+				{
+					titulo: 'Eliminando cierre',
+					detalle: `${cierre.placa} · ${periodDisplay}. Se retira la hoja con sus items y conceptos.`
+				},
+				async () => {
+					const r = await liquidacionesTercerosDescuentosAPI.softDelete(cierre.id);
+					cierreAEliminar = null;
+					await retirarHojaDelLibro(cierre.id);
+					toast.success(`Cierre de ${cierre.placa} eliminado`, {
+						description:
+							`${r.items_eliminados} item(s) y ${r.conceptos_eliminados} concepto(s) retirados. ` +
+							'Queda marcado, no borrado: contabilidad puede recuperarlo.'
+					});
+				}
+			);
+		} catch (e: any) {
+			console.error('[cierres-canvas] eliminarCierreActivo', e);
+			toast.error(`No se pudo eliminar el cierre de ${cierre.placa}`, {
+				description:
+					e?.response?.data?.error || e?.response?.data?.message || e?.message || 'Error desconocido',
+				duration: 9000
+			});
+		} finally {
+			eliminando = false;
+		}
+	}
+
+	/// Eliminar exige `full`, el mismo nivel que pide `puedeEscribir` en la
+	/// ruta. Con `read` o `limited` el carril ni ofrece la acción: mostrarla
+	/// para que el servidor devuelva 403 al pulsar es peor que no mostrarla.
+	/// `$authStore.user` va leído a propósito: `getAccessLevel` consulta el
+	/// store por suscripción manual, así que sin tocar `$authStore` aquí el
+	/// derived no se recalcularía al cambiar la sesión.
+	const puedeEliminar = $derived(
+		!!$authStore.user && authStore.getAccessLevel('liquidaciones-terceros') === 'full'
+	);
 
 	/// Una hoja solo acepta escrituras mientras es BORRADOR; el servidor
 	/// rechaza el resto. El carril lo refleja apagando sus acciones.
@@ -1853,6 +1956,23 @@
 	</svg>
 {/snippet}
 
+{#snippet icoEliminar()}
+	<svg
+		width="15"
+		height="15"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="1.8"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+	>
+		<path d="M4 7h16M10 11v6M14 11v6" />
+		<path d="M6 7l1 12.5A1.5 1.5 0 008.5 21h7a1.5 1.5 0 001.5-1.5L18 7" />
+		<path d="M9 7V4.5A1.5 1.5 0 0110.5 3h3A1.5 1.5 0 0115 4.5V7" />
+	</svg>
+{/snippet}
+
 {#snippet icoEstado()}
 	<svg
 		width="15"
@@ -2040,6 +2160,18 @@
 				onSelect: () => (modalBorradores = true)
 			},
 			{
+				id: 'eliminar',
+				label: 'Eliminar este cierre',
+				hint: `Retira la hoja de ${cierreActivoObj?.placa ?? 'la placa'} del periodo, con sus items y conceptos. Queda marcada, no borrada: se puede recuperar.`,
+				icon: icoEliminar,
+				tone: 'red',
+				disabled: !puedeEliminar || !hojaEditable || !detalleActivo || !!accionEnCurso,
+				disabledHint: !puedeEliminar
+					? 'Necesitas permiso de administración sobre liquidaciones de terceros.'
+					: motivoBloqueo,
+				onSelect: () => (cierreAEliminar = cierreActivoObj)
+			},
+			{
 				id: 'estado',
 				label: 'Estado de la hoja',
 				icon: icoEstado,
@@ -2201,6 +2333,17 @@
 		{indice}
 		{detalles}
 		onClose={() => (modalEnvios = false)}
+	/>
+{/if}
+
+{#if cierreAEliminar}
+	<EliminarCierreModal
+		cierre={cierreAEliminar}
+		{anio}
+		{mes}
+		enCurso={eliminando}
+		onConfirm={eliminarCierreActivo}
+		onClose={() => (cierreAEliminar = null)}
 	/>
 {/if}
 
