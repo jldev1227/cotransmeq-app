@@ -15,11 +15,12 @@
 	import { adicionalesSnapshotsAPI, type SnapshotResumen, type SnapshotDiff } from '$lib/api/liquidaciones-terceros-adicionales-snapshots';
 	import { liquidacionesTercerosOcasionalAPI } from '$lib/api/liquidaciones-terceros-ocasional';
 	import { nominaCanvasAPI } from '$lib/api/nomina-canvas';
+	import { recorridosSnapshotsAPI } from '$lib/api/recorridos-canvas';
 	import { toast } from 'svelte-sonner';
 
 	interface Props {
 		open: boolean;
-		scope: 'adicionales' | 'ocasional' | 'nomina';
+		scope: 'adicionales' | 'ocasional' | 'nomina' | 'recorridos';
 		anio: number;
 		mes: number;
 		/** Obligatorio cuando `scope === 'ocasional'`. */
@@ -62,6 +63,8 @@
 				snapshots = await adicionalesSnapshotsAPI.listar(a, m);
 			} else if (scope === 'nomina') {
 				snapshots = (await nominaCanvasAPI.listarSnapshots(a, m)) as any;
+			} else if (scope === 'recorridos') {
+				snapshots = (await recorridosSnapshotsAPI.listar(a, m)) as any;
 			} else if (cid) {
 				snapshots = (await liquidacionesTercerosOcasionalAPI.listarSnapshots(cid)) as any;
 			} else {
@@ -82,6 +85,33 @@
 		// automáticas no se calcula, así que se pide bajo demanda.
 		if (s.diff && s.diff.length) {
 			diff = { fields: s.diff };
+			return;
+		}
+		if (scope === 'recorridos') {
+			cargandoDiff = true;
+			try {
+				const d = await recorridosSnapshotsAPI.diff(s.id);
+				// El diff de recorridos llega como lista de cambios por fila; el
+				// panel pinta Campo / Antes / Después, así que se aplana aquí en
+				// vez de darle otra forma al panel.
+				// `path` es la CLAVE del `{#each}` del panel, así que tiene que ser
+				// único: dos recorridos del mismo día con el mismo campo tocado
+				// darían la misma etiqueta y Svelte aborta el render por claves
+				// duplicadas. Por eso lleva el id de la fila delante, aunque solo
+				// se muestre la parte legible.
+				diff = {
+					fields: d.cambios.map((c: any, i: number) => ({
+						path: `${i + 1}. ${c.fecha ?? ''} · ${c.campo ?? c.tipo ?? 'fila'}`,
+						anterior: Array.isArray(c.antes) ? c.antes.join(', ') : (c.antes ?? ''),
+						nuevo: Array.isArray(c.ahora) ? c.ahora.join(', ') : (c.ahora ?? '')
+					}))
+				} as any;
+			} catch (e) {
+				console.warn('[snapshot-panel] diff de recorridos falló', e);
+				diff = { fields: [] } as any;
+			} finally {
+				cargandoDiff = false;
+			}
 			return;
 		}
 		if (scope !== 'adicionales' && scope !== 'nomina') return;
@@ -169,6 +199,19 @@
 					toast.warning(
 						`${r.omitidas.length} liquidación(es) se omitieron por estar en estado bloqueado: ` +
 							r.omitidas.map((c) => `${c.nombre} (${c.estado})`).join(', '),
+						{ duration: 10000 }
+					);
+				}
+			} else if (scope === 'recorridos') {
+				const r = await recorridosSnapshotsAPI.revertir(s.id);
+				toast.success(
+					`Restaurada la versión ${s.version}: ${r.filasRestauradas} fila(s).`
+				);
+				if (r.fallidas?.length) {
+					// Se revierte una transacción POR HOJA: si una falla, las demás
+					// sí volvieron atrás, y el usuario tiene que saber cuáles no.
+					toast.warning(
+						`${r.fallidas.length} conductor(es) no se pudieron restaurar.`,
 						{ duration: 10000 }
 					);
 				}
@@ -373,8 +416,8 @@
 	}
 	.snap-btn:hover:not(:disabled) { background: #f8fafc; }
 	.snap-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-	.snap-btn-primary { background: #ea580c; border-color: #ea580c; color: #fff; }
-	.snap-btn-primary:hover:not(:disabled) { background: #c2410c; }
+	.snap-btn-primary { background: #059669; border-color: #059669; color: #fff; }
+	.snap-btn-primary:hover:not(:disabled) { background: #047857; }
 	.snap-btn-danger { background: #b91c1c; border-color: #b91c1c; color: #fff; }
 	.snap-btn-danger:hover:not(:disabled) { background: #991b1b; }
 
@@ -399,7 +442,7 @@
 		cursor: pointer;
 	}
 	.snap-item:hover { background: #f8fafc; }
-	.snap-item-active { background: #f0fdf4; }
+	.snap-item-active { background: #ecfdf5; }
 	.snap-version { font-size: 12px; font-weight: 700; color: #0f172a; }
 	.snap-origen {
 		align-self: flex-start;
@@ -412,7 +455,7 @@
 		background: rgba(0, 0, 0, 0.06);
 		color: #475569;
 	}
-	.snap-origen-manual { background: rgba(249, 115, 22, 0.12); color: #c2410c; }
+	.snap-origen-manual { background: rgba(16, 185, 129, 0.12); color: #047857; }
 	.snap-origen-revert { background: rgba(185, 28, 28, 0.10); color: #b91c1c; }
 	.snap-meta { font-size: 11px; color: #64748b; }
 
@@ -438,7 +481,7 @@
 	.snap-diff td { padding: 5px 8px; border-bottom: 1px solid rgba(0, 0, 0, 0.04); vertical-align: top; }
 	.snap-path { font-family: monospace; color: #334155; word-break: break-all; }
 	.snap-antes { color: #b91c1c; text-decoration: line-through; }
-	.snap-despues { color: #c2410c; font-weight: 600; }
+	.snap-despues { color: #047857; font-weight: 600; }
 
 	.snap-msg { padding: 16px 18px; font-size: 12.5px; color: #64748b; }
 	.snap-msg-error { color: #b91c1c; }

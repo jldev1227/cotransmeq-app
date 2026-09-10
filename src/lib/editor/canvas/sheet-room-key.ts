@@ -13,6 +13,8 @@
  *  · `cierres-finales`           → libro de PERIODO, room por AÑO:MES.
  *  · `nomina`                    → libro de PERIODO (una hoja por conductor),
  *    room por AÑO:MES, por la misma razón que `cierres-finales`.
+ *  · `recorridos`                → libro de PERIODO (una hoja por conductor),
+ *    room por AÑO:MES, por la misma razón que `nomina`.
  *  · `servicios-historial`       → HISTÓRICO completo, room GLOBAL: el
  *    filtro de año del canvas es una vista, no un libro distinto, y dos
  *    usuarios mirando años distintos deben verse entre sí. El `anio` se
@@ -28,13 +30,15 @@ export type SheetScope =
 	| 'cierres-finales'
 	| 'ingresos'
 	| 'servicios-historial'
-	| 'nomina';
+	| 'nomina'
+	| 'recorridos';
 
 /** Scopes cuyo libro es un periodo y por tanto exigen `mes`. */
 export function requiereMes(scope: SheetScope): boolean {
 	// `nomina` es un libro de PERIODO igual que `cierres-finales`: una hoja
 	// por conductor del mes, así que el room lleva mes.
-	return scope === 'cierres-finales' || scope === 'nomina';
+	// `recorridos` es igual: una hoja por conductor del mes.
+	return scope === 'cierres-finales' || scope === 'nomina' || scope === 'recorridos';
 }
 
 export function sheetRoomKey(

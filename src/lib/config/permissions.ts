@@ -160,6 +160,25 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
 		full: ['administracion', 'operaciones'],
 		description: 'Extractos de operaciones'
 	},
+	// El canvas de RECORRIDOS es un módulo aparte de `conductores` a propósito.
+	// `conductores` es `general: true` (cualquier área autenticada tiene `full`),
+	// y eso vale para consultar la ficha de un conductor, pero no para reescribir
+	// sus recorridos: la hoja alimenta los bonos y el pernocte que acaban en la
+	// nómina, así que editarla es una operación contable, no una consulta.
+	//
+	//  - `full` Administración y Operaciones: editan tramos, horarios, cliente,
+	//           placa, pernocte y marcan bonos.
+	//  - `read` el resto: abren el canvas y exportan, pero cada celda rechaza la
+	//           escritura.
+	//
+	// Espejo EXACTO de `backend-cotransmeq/src/config/permissions.ts`. Si aquí y
+	// allí no coinciden, el sidebar muestra una entrada que la API rechaza con 403.
+	recorridos: {
+		full: ['administracion', 'operaciones'],
+		read: ['contabilidad', 'facturacion', 'talento_humano', 'hseq', 'mantenimiento'],
+		description: 'Canvas de recorridos y bonos de planilla'
+	},
+
 	'liquidaciones-servicios': {
 		full: ['administracion', 'operaciones'],
 		limited: ['facturacion'],

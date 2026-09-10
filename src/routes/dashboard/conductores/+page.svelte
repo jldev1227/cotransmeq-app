@@ -346,6 +346,27 @@
 	}
 
 	/**
+	 * Abre el canvas de recorridos.
+	 *
+	 * Es una RUTA aparte y no una vista embebida porque el canvas de Univer
+	 * necesita la ventana entera: montado dentro del layout del dashboard, el
+	 * `position: fixed` de su shell queda encajado en un contenedor con padding
+	 * y la hoja sale recortada.
+	 *
+	 * La tabla clásica sigue existiendo en `?vista=calendario` para quien la
+	 * tenga guardada, pero ya no hay botón que lleve a ella.
+	 */
+	function irAlCanvasDeRecorridos(conductorId?: string) {
+		// Sin fechas: el canvas abre el corte 21→20 vivo, que es lo que
+		// Operaciones está trabajando. Desde ahí se cambia con los selectores.
+		const params = new URLSearchParams();
+		// El canvas abre la hoja de este conductor en vez de la primera.
+		if (conductorId) params.set('conductor', conductorId);
+		const query = params.toString();
+		goto(`/dashboard/conductores/recorridos${query ? `?${query}` : ''}`);
+	}
+
+	/**
 	 * Cambia entre activos, ocultos y papelera.
 	 *
 	 * Los demás filtros se CONSERVAN. Antes se reseteaban salvo que vinieran en
@@ -627,7 +648,7 @@
 						Lista
 					</button>
 					<button
-						onclick={() => ponerFiltro('vista', 'calendario')}
+						onclick={() => irAlCanvasDeRecorridos()}
 						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold"
 						style="background-color: {vistaTab === 'calendario' ? 'white' : 'transparent'};
 							color: {vistaTab === 'calendario' ? 'var(--emerald-700)' : 'var(--text-secondary)'};
@@ -1216,7 +1237,7 @@
 								<!-- Actions (vertical) -->
 								<div class="flex flex-shrink-0 flex-col gap-1" onclick={(e) => e.stopPropagation()} role="presentation">
 									<button
-										onclick={() => goto(`/dashboard/conductores?vista=calendario&conductor=${conductor.id}`)}
+										onclick={() => irAlCanvasDeRecorridos(conductor.id)}
 										class="apple-transition rounded-md p-1.5"
 										style="color: #1d4ed8; background-color: rgba(59, 130, 246, 0.08);"
 										title="Ver recorridos / bonos de planilla"

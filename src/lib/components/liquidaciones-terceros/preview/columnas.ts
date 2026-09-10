@@ -18,7 +18,13 @@
 
 import type { ColumnaPreview } from './tipos';
 
-export type ScopePreview = 'cierres' | 'adicionales' | 'ocasional' | 'ingresos' | 'nomina';
+export type ScopePreview =
+	| 'cierres'
+	| 'adicionales'
+	| 'ocasional'
+	| 'ingresos'
+	| 'nomina'
+	| 'recorridos';
 
 /** Nombre legible del canvas. Sale en el título del documento. */
 export const TITULO_SCOPE: Record<ScopePreview, string> = {
@@ -26,7 +32,8 @@ export const TITULO_SCOPE: Record<ScopePreview, string> = {
 	adicionales: 'ADICIONALES DE CIERRES FINALES',
 	ocasional: 'LIQUIDACION OCASIONAL DE TERCEROS',
 	ingresos: 'INGRESOS RECIBIDOS PARA TERCEROS',
-	nomina: 'DESPRENDIBLE DE NOMINA'
+	nomina: 'DESPRENDIBLE DE NOMINA',
+	recorridos: 'RELACION DE RECORRIDOS Y BONOS'
 };
 
 // ─── Catálogos ────────────────────────────────────────────────────────
@@ -221,12 +228,30 @@ const COLUMNAS_NOMINA: ColumnaPreview[] = [
 	}
 ];
 
+/**
+ * Catálogo mínimo de recorridos. Las columnas reales las declara cada bloque,
+ * porque las de bono cambian con la configuración del año.
+ */
+const COLUMNAS_RECORRIDOS: ColumnaPreview[] = [
+	{ key: 'fecha', label: 'Fecha', tipo: 'texto', peso: 6, fija: true },
+	{ key: 'placa', label: 'Placa', tipo: 'placa', peso: 5, fija: true },
+	{ key: 'cliente', label: 'Cliente / recorrido', tipo: 'texto', peso: 16 }
+];
+
 export const CATALOGO: Record<ScopePreview, ColumnaPreview[]> = {
 	cierres: COLUMNAS_CIERRES,
 	adicionales: COLUMNAS_ADICIONALES,
 	ocasional: COLUMNAS_OCASIONAL,
 	ingresos: COLUMNAS_INGRESOS,
-	nomina: COLUMNAS_NOMINA
+	nomina: COLUMNAS_NOMINA,
+	/**
+	 * El canvas de recorridos NO usa el catálogo para su tabla: sus columnas de
+	 * bono son dinámicas (dependen de `bono_config_visual` del año), y un
+	 * catálogo estático no puede declararlas. La tabla viaja como BLOQUE, que
+	 * lleva columnas propias. Esta entrada existe porque `CATALOGO` está
+	 * indexado por `ScopePreview` y el selector la necesita para no romperse.
+	 */
+	recorridos: COLUMNAS_RECORRIDOS
 };
 
 // ─── Selección ────────────────────────────────────────────────────────

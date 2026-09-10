@@ -77,6 +77,13 @@ export interface SheetPatchApplied extends SheetPatch {
 	items?: any[];
 	/** Totales del cierre recalculados. Solo en cierres finales. */
 	totales?: Record<string, number>;
+	/**
+	 * Campos que el servidor resolvió por su cuenta. Solo en `recorridos`:
+	 * teclear el nombre de un cliente hace que el servidor resuelva también su
+	 * id, y la placa igual, así que el resto de la sala necesita el valor ya
+	 * resuelto y no el texto que se escribió.
+	 */
+	derivados?: Record<string, unknown>;
 	/** Cierre al que pertenece el cambio. Solo en cierres finales. */
 	cierre_id?: string;
 	epoch: number;
@@ -108,6 +115,7 @@ export interface SheetSessionOptions {
 		rows?: any[];
 		items?: any[];
 		totales?: Record<string, number>;
+		derivados?: Record<string, unknown>;
 	}) => void;
 	/**
 	 * Cambio de geometría (alta/baja de filas, guardado en lote): hay que releer.
