@@ -57,6 +57,7 @@ const SET_RANGE_VALUES = 'sheet.command.set-range-values';
  */
 const SET_WORKSHEET_ACTIVE = 'sheet.operation.set-worksheet-active';
 const SET_TAB_COLOR = 'sheet.command.set-tab-color';
+const REMOVE_ROW = 'sheet.command.remove-row';
 /**
  * Borrar con Supr NO pasa por `set-range-values`: Univer emite su propio
  * comando. Sin escucharlo, la nota desaparecía de la pantalla pero no se
@@ -75,12 +76,15 @@ const CLEAR_ALL = 'sheet.command.clear-selection-all';
  * `set-worksheet-active` no está en la lista: con N placas, cambiar de hoja
  * es la navegación principal.
  */
+// `remove-row` NO está en esta lista: eliminar una fila de item es una acción
+// legítima —el equivalente del borrado que ya existe en el canvas de
+// ocasionales— y la maneja `onRemoveRow`. Insertar filas sigue prohibido: no
+// hay entidad a la que colgarla y desplaza los bindings de todo lo de abajo.
 const COMANDOS_ESTRUCTURALES = new Set<string>([
 	'sheet.command.insert-row',
 	'sheet.command.insert-row-before',
 	'sheet.command.insert-row-after',
 	'sheet.command.insert-row-by-range',
-	'sheet.command.remove-row',
 	'sheet.command.delete-row',
 	'sheet.command.insert-col',
 	'sheet.command.insert-col-before',
@@ -113,7 +117,6 @@ const REQUIEREN_REPARACION = new Set<string>([
 	'sheet.command.insert-row-before',
 	'sheet.command.insert-row-after',
 	'sheet.command.insert-row-by-range',
-	'sheet.command.remove-row',
 	'sheet.command.delete-row',
 	'sheet.command.insert-col',
 	'sheet.command.insert-col-before',
@@ -208,6 +211,14 @@ export interface CierresAdapterContext {
 	 * el libro se reconstruye desde las tablas y no desde el DOM.
 	 */
 	onColorHoja?: (cierreId: string, color: string | null) => void;
+	/**
+	 * El usuario eliminó filas de ITEM de la hoja.
+	 *
+	 * Llega con los `pivoteId` resueltos: el adapter sabe traducir fila a
+	 * entidad —tiene el mapa de anclas— y la página no. Ella se encarga de
+	 * pedir el soft-delete y de rehacer la hoja sin esas filas.
+	 */
+	onItemsEliminados?: (cierreId: string, pivoteIds: string[]) => void;
 }
 
 export function attachCierresCellChangeAdapter(ctx: CierresAdapterContext): () => void {
@@ -331,6 +342,69 @@ export function attachCierresCellChangeAdapter(ctx: CierresAdapterContext): () =
 		}
 	};
 	disposables.push(ctx.commandService.onCommandExecuted(onClear));
+
+	/**
+	 * Eliminar filas de ITEM de la hoja.
+	 *
+	 * Calcado del canvas de ocasionales (`cell-change-ocasional.ts`): la fila
+	 * se resuelve a su entidad por el mapa de anclas y quien decide qué hacer
+	 * con ella es la página.
+	 *
+	 * Va en `beforeCommandExecuted` y no en `onCommandExecuted` a propósito:
+	 * DESPUÉS de borrar, las filas del rango ya no significan lo mismo que el
+	 * mapa de anclas y se resolvería el item equivocado. Antes, los dos hablan
+	 * del mismo layout.
+	 *
+	 * No se veta: el borrado es lo que el usuario pidió. Basta con enterarse a
+	 * tiempo de QUÉ se está borrando. Las filas que no son de item —cabeceras,
+	 * totales, bloques de conceptos— se ignoran, y si el rango no contiene
+	 * ninguna no pasa nada.
+	 */
+	const onRemoveRow = (info: Readonly<ICommandInfo>) => {
+		if (info.id !== REMOVE_ROW) return;
+		if (ctx.isApplyingRemote?.()) return;
+
+		const params = (info.params ?? {}) as {
+			unitId?: string;
+			subUnitId?: string;
+			range?: IRange;
+			ranges?: IRange[];
+		};
+		if (params.unitId && params.unitId !== ctx.unitId) return;
+
+		const wb = ctx.getWorkbook() as any;
+		const hoja = params.subUnitId
+			? wb?.getSheetBySheetId?.(params.subUnitId)
+			: wb?.getActiveSheet?.();
+		const subUnitId = params.subUnitId ?? hoja?.getSheetId?.();
+		if (!subUnitId) return;
+		const cierreId = ctx.resolveCierre(subUnitId);
+		if (!cierreId) return;
+
+		// Univer acepta el rango por parámetro o, si no viene, borra la
+		// selección viva (ver `RemoveRowCommand` en @univerjs/sheets).
+		const rangos: IRange[] = params.ranges?.length
+			? params.ranges
+			: params.range
+				? [params.range]
+				: [hoja?.getActiveRange?.()?.getRange?.()].filter(Boolean);
+		if (!rangos.length) return;
+
+		const ids = new Set<string>();
+		for (const rango of rangos) {
+			for (let r = rango.startRow; r <= rango.endRow; r++) {
+				// Columna 0: cualquiera de la fila sirve, el ancla de item es de
+				// fila entera. La 0 es la que menos se mueve si mañana cambian
+				// las columnas de la tabla.
+				const ancla = anclaDe(ctx.unitId, subUnitId, r, 0);
+				if (ancla?.tipo === 'item' && ancla.ref) ids.add(ancla.ref);
+			}
+		}
+		if (ids.size === 0) return;
+
+		ctx.onItemsEliminados?.(cierreId, [...ids]);
+	};
+	disposables.push(ctx.commandService.beforeCommandExecuted(onRemoveRow));
 
 	return () => {
 		for (const d of disposables) {

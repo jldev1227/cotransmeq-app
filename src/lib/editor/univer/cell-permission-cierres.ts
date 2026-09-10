@@ -80,21 +80,24 @@ const REMOVE_SHEET = new Set([
  * eso. Ahora se bloquea de verdad y se dice dónde está el botón que sí
  * funciona.
  */
+//
+// QUITAR filas ya NO está aquí. Eliminar una fila de item es una acción
+// legítima —el equivalente del borrado del canvas de ocasionales—: el adapter
+// la traduce a un soft-delete del item y la página rehace la hoja. Solo se
+// prohíbe INSERTAR, que no tiene entidad a la que colgarse y desplaza los
+// bindings de todo lo que queda debajo.
 const ESTRUCTURA_FILAS = new Set([
 	'sheet.command.insert-row',
 	'sheet.command.insert-row-before',
 	'sheet.command.insert-row-after',
 	'sheet.command.insert-row-by-range',
-	'sheet.command.remove-row',
-	'sheet.command.remove-row-confirm',
 	// La MUTACIÓN, además del comando. Medido: `insert-row-by-range` se
 	// saltaba el chequeo a nivel de comando —devolvía `true` y la fila entraba
 	// igual, desplazando el contenido sin llevarse las combinaciones—, así que
 	// bloquear solo los comandos dejaba abierta justo la vía del menú
 	// contextual. Es el mismo doble cierre que ya usaba `remove-sheet`, y de
 	// paso cubre el deshacer.
-	'sheet.mutation.insert-row',
-	'sheet.mutation.remove-row'
+	'sheet.mutation.insert-row'
 ]);
 
 const ESTRUCTURA_COLUMNAS = new Set([
@@ -174,7 +177,7 @@ export function installCierresCellPermission(
 
 			if (ESTRUCTURA_FILAS.has(id)) {
 				opts.onBloqueado?.({
-					titulo: 'No se pueden insertar ni borrar filas en la hoja',
+					titulo: 'No se pueden insertar filas en la hoja',
 					detalle:
 						'Una fila insertada aquí no tiene identidad en la base, así que lo ' +
 						'que escribas en ella no se guarda. Usa los botones del carril de la ' +

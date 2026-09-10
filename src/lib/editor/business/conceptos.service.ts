@@ -26,13 +26,78 @@ export const ORDEN_GASTOS_CANONICO: Record<string, number> = {
 export const CONCEPTOS_CALCULADOS_AUTO = new Set([
   'DOTACION',
   'EXAMEN_MEDICO',
-  'GASTOS_DIVERSOS'
+  'GASTOS_DIVERSOS',
+  // PAPELERIA entró aquí cuando dejó de ser una tarifa única: ahora depende
+  // del `valor_liquidar` del cierre y de la config del periodo. Estar en este
+  // Set es lo que hace que teclear encima la desenganche del recálculo.
+  'PAPELERIA'
 ]);
+
+/**
+ * Valores de partida de los gastos calculados de UN periodo.
+ *
+ * ESPEJO de `ConfigGastosPeriodo` en
+ * `backend-nest/src/modules/liquidaciones-terceros-descuentos/reglas-conceptos.ts`.
+ * Duplicado a propósito —dos builds, sin paquete compartido—: si los dos
+ * cálculos divergen, el usuario ve un número en el canvas y otro en el PDF.
+ */
+export interface ConfigGastosPeriodo {
+  /** Puntos porcentuales: 0.4 es 0,4 %. */
+  pct_gastos_diversos: number;
+  fijo_gastos_diversos: number;
+  papeleria_alta: number;
+  papeleria_baja: number;
+  papeleria_umbral: number;
+}
 
 export const VALOR_DOTACION = 3985;
 export const VALOR_EXAMEN_MEDICO = 2882;
 export const TARIFA_FIJA_GASTOS_DIVERSOS = 20000;
 export const PORCENTAJE_GASTO_POR_ITEM = 0.004;
+
+/** Lo que rigió antes de que la config por periodo existiera. */
+export const CONFIG_GASTOS_FALLBACK: ConfigGastosPeriodo = {
+  pct_gastos_diversos: PORCENTAJE_GASTO_POR_ITEM * 100,
+  fijo_gastos_diversos: TARIFA_FIJA_GASTOS_DIVERSOS,
+  papeleria_alta: 25000,
+  papeleria_baja: 20000,
+  papeleria_umbral: 1000000
+};
+
+/**
+ * GASTOS_DIVERSOS = fijo + pct % × (Σ TOTAL items + Σ bruto adicionales).
+ *
+ * El porcentaje se redondea ANTES de sumar el fijo, como en el cálculo de
+ * siempre: moverlo al final cambiaría en un peso importes ya liquidados.
+ */
+export function importeGastosDiversos(
+  config: ConfigGastosPeriodo,
+  baseFacturada: number
+): number {
+  return (
+    config.fijo_gastos_diversos +
+    Math.round((baseFacturada * config.pct_gastos_diversos) / 100)
+  );
+}
+
+/**
+ * PAPELERIA es una tarifa por tramo, no una fórmula.
+ *
+ * El umbral mira `valor_liquidar` —la suma de los items, ANTES de descuentos—
+ * y no el total a pagar: papelería es ella misma un descuento, así que sobre
+ * el total oscilaría sin llegar a un valor estable.
+ *
+ * Estrictamente MAYOR que el umbral: «más de un millón» deja fuera el millón
+ * exacto.
+ */
+export function importePapeleria(
+  config: ConfigGastosPeriodo,
+  valorLiquidar: number
+): number {
+  return valorLiquidar > config.papeleria_umbral
+    ? config.papeleria_alta
+    : config.papeleria_baja;
+}
 
 export const ORDEN_BASE_GASTO = 5000;
 export const ORDEN_BASE_GASTO_NO_CANONICO =
@@ -109,17 +174,25 @@ export function ensureDefaultGastosOperativos(
   return applyGastosOrdenCanonico(out, items, adicionalesBruto);
 }
 
-/** Recalcula los 3 gastos automáticos respetando override manual. */
+/**
+ * Recalcula los gastos automáticos respetando el override manual.
+ *
+ * `config` y `valorLiquidar` son opcionales: sin ellos se usa el fallback y
+ * PAPELERIA se queda como esté, que es como se comportaba antes de que la
+ * tarifa dependiera del periodo.
+ */
 export function recalcularGastosOperativosAutomaticos(
   conceptos: ConceptoDescuento[],
   items: Array<{ total_facturado: number }>,
   adicionales: Array<{ valor_unitario: number; cantidad: number }>,
-  propietarios: Record<string, boolean>
+  propietarios: Record<string, boolean>,
+  config: ConfigGastosPeriodo = CONFIG_GASTOS_FALLBACK,
+  valorLiquidar?: number
 ): ConceptoDescuento[] {
   const adicionalesBruto = sumAdicionalesBruto(adicionales as any);
   const totalDias = sumDiasSalario(conceptos, propietarios);
   const totalItems = sumTotalFacturadoItems(items) + adicionalesBruto;
-  const porcentajeUnitario = Math.round(totalItems * PORCENTAJE_GASTO_POR_ITEM);
+  const unitDiversos = importeGastosDiversos(config, totalItems);
 
   return conceptos.map((c) => {
     if (c.tipo !== 'GASTO_OPERATIVO') return c;
@@ -143,14 +216,20 @@ export function recalcularGastosOperativosAutomaticos(
       };
     }
     if (c.concepto === 'GASTOS_DIVERSOS') {
-      const newUnit = TARIFA_FIJA_GASTOS_DIVERSOS + porcentajeUnitario;
       return {
         ...c,
         dias: 1,
-        valor_unitario: newUnit,
-        valor_total: newUnit,
+        valor_unitario: unitDiversos,
+        valor_total: unitDiversos,
         calculado: true
       };
+    }
+    if (c.concepto === 'PAPELERIA') {
+      // Sin `valorLiquidar` no hay forma de decidir el tramo, y elegir uno al
+      // azar sería peor que dejarlo: se respeta el valor vigente.
+      if (valorLiquidar == null) return c;
+      const unit = importePapeleria(config, valorLiquidar);
+      return { ...c, dias: 1, valor_unitario: unit, valor_total: unit, calculado: true };
     }
     return c;
   });

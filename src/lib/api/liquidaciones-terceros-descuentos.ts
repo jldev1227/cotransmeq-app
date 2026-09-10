@@ -887,4 +887,49 @@ async obtenerPorId(liquidacionTerceroId: string, opts: { includeDeleted?: boolea
 		const response = await apiClient.post(`/api/liquidaciones-terceros/${liquidacionId}/snapshots/${snapshotId}/revertir`);
 		return response.data;
 	},
+
+	// ── Config de gastos del PERIODO ──
+	//
+	// Valores de partida de papelería y gastos diversos, por mes. El GET nunca
+	// da 404: un periodo sin configurar responde con los valores de respaldo y
+	// `configurado: false`.
+
+	async obtenerConfigGastos(anio: number, mes: number): Promise<ConfigGastosPeriodoDetalle> {
+		const response = await apiClient.get('/api/liquidaciones-terceros/config-gastos', {
+			params: { anio, mes },
+		});
+		return response.data;
+	},
+
+	async guardarConfigGastos(
+		anio: number,
+		mes: number,
+		valores: Partial<ConfigGastosPeriodoDetalle>,
+	): Promise<ConfigGastosPeriodoDetalle> {
+		const response = await apiClient.put('/api/liquidaciones-terceros/config-gastos', {
+			anio,
+			mes,
+			...valores,
+		});
+		return response.data;
+	},
 };
+
+export interface ConfigGastosPeriodoDetalle {
+	anio: number;
+	mes: number;
+	/**
+	 * `false` cuando el periodo no tiene fila y llegan los valores de respaldo.
+	 * El modal lo usa para avisar de que nadie ha configurado ese mes, en vez
+	 * de enseñar los números como si estuvieran revisados.
+	 */
+	configurado: boolean;
+	/** Puntos porcentuales: 0.4 es 0,4 %. */
+	pct_gastos_diversos: number;
+	fijo_gastos_diversos: number;
+	papeleria_alta: number;
+	papeleria_baja: number;
+	papeleria_umbral: number;
+	actualizado_por_id?: string | null;
+	updated_at?: string | null;
+}

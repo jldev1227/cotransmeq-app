@@ -76,6 +76,7 @@
 	import ConductoresCierreModal from '$lib/components/liquidaciones-terceros/ConductoresCierreModal.svelte';
 	import PropietariosCierreModal from '$lib/components/liquidaciones-terceros/PropietariosCierreModal.svelte';
 	import ConceptosCierreModal from '$lib/components/liquidaciones-terceros/ConceptosCierreModal.svelte';
+	import ModalConfigGastosPeriodo from '$lib/components/univer/ModalConfigGastosPeriodo.svelte';
 	import ItemsDisponiblesModal from '$lib/components/liquidaciones-terceros/ItemsDisponiblesModal.svelte';
 	import PreviewCanvasModal from '$lib/components/liquidaciones-terceros/preview/PreviewCanvasModal.svelte';
 	import EnviosCierresModal from '$lib/components/liquidaciones-terceros/envios/EnviosCierresModal.svelte';
@@ -547,7 +548,7 @@
 					 * mismo truco que usa el canvas de ingresos.
 					 */
 					onEstructural: () => {
-						toast.warning('No se pueden insertar ni borrar filas en la hoja', {
+						toast.warning('No se pueden insertar filas en la hoja', {
 							id: 'cierres-estructura-bloqueada',
 							description:
 								'Se ha deshecho el cambio. Usa los botones del carril de la derecha ' +
@@ -556,6 +557,9 @@
 							duration: 9000
 						});
 						setTimeout(() => void remountEngine(), 0);
+					},
+					onItemsEliminados: (cierreId, pivoteIds) => {
+						void quitarItemsDelCierre(cierreId, pivoteIds);
 					},
 					onHojaActiva: (cierreId) => {
 						if (cierreId === cierreActivo) return;
@@ -1154,6 +1158,7 @@
 	let cierreAEliminar = $state<CierreHoja | null>(null);
 	let eliminando = $state(false);
 	let modalConceptos = $state(false);
+	let modalConfigGastos = $state(false);
 	let modalTraerItems = $state(false);
 	/// Hubo altas o bajas mientras el modal de conceptos estuvo abierto, así que
 	/// al cerrarlo hay que remontar el libro una vez.
@@ -1188,6 +1193,50 @@
 	 * indicador de carga. Un canvas en blanco sin explicación se lee como una
 	 * pantalla rota, y con el overlay se lee como lo que es.
 	 */
+	/**
+	 * Quita items del cierre desde la hoja (tecla Suprimir / menú contextual).
+	 *
+	 * Es el borrado que ya existía en el canvas de ocasionales, traído aquí. El
+	 * item NO se borra: se marca con `deleted_at` por el endpoint que ya usaba
+	 * el modal (`toggleExcluirItem`), así que se puede devolver desde el tab
+	 * ITEM sin regenerar el borrador.
+	 *
+	 * Se remonta al terminar y no antes: Univer ya ha quitado la fila de la
+	 * vista, pero los bindings de todo lo que queda debajo apuntan a la fila
+	 * anterior. Rehacer la hoja desde el modelo es lo único que los recoloca —y
+	 * de paso trae los totales y los impuestos ya recalculados por el servidor.
+	 */
+	async function quitarItemsDelCierre(cierreId: string, pivoteIds: string[]) {
+		if (!pivoteIds.length) return;
+		try {
+			await conOverlay(
+				{
+					titulo: pivoteIds.length === 1 ? 'Quitando el item' : 'Quitando items',
+					detalle: 'Se marcan como retirados y se rehacen impuestos y totales.'
+				},
+				async () => {
+					// Secuencial y no en paralelo: cada baja recalcula los totales
+					// del MISMO cierre, y en paralelo la última carrera gana.
+					for (const id of pivoteIds) {
+						await liquidacionesTercerosDescuentosAPI.toggleExcluirItem(id, true);
+					}
+					await recargarCierre(cierreId);
+				}
+			);
+			toast.success(
+				pivoteIds.length === 1 ? 'Item quitado del cierre.' : `${pivoteIds.length} items quitados.`,
+				{ description: 'Puedes devolverlos desde «Filas del cierre» → Items.' }
+			);
+		} catch (e: any) {
+			toast.error('No se pudo quitar el item', {
+				description: e?.response?.data?.error || e?.message || ''
+			});
+			// La hoja ya perdió la fila en pantalla aunque el servidor la
+			// conserve: sin remontar, lo que se ve miente.
+			await remountEngine();
+		}
+	}
+
 	async function recargarCierre(cierreId: string, opts: { remontar?: boolean } = {}) {
 		// `remontar: false` refresca SOLO el modelo. Lo usa el modal de gastos y
 		// anticipos, donde se añaden filas en tanda: remontar el libro en cada
@@ -1829,6 +1878,15 @@
 	</svg>
 {/snippet}
 
+{#snippet icoConfigGastos()}
+	<!-- Etiqueta de precio: tarifa configurable. -->
+	<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+		<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-7.2-7.2A2 2 0 0 1 3 12V4a1 1 0 0 1 1-1h8a2 2 0 0 1 1.4.6l7.2 7.2a2 2 0 0 1 0 2.6z" />
+		<circle cx="7.5" cy="7.5" r="1.2" />
+		<path d="M11 16.5 16.5 11" />
+	</svg>
+{/snippet}
+
 {#snippet icoTraerItems()}
 	<!-- Bandeja con flecha ENTRANDO. No se reutiliza `icoConcepto` —la rejilla
 	     con el «+»— porque las dos acciones viven seguidas en el carril y a
@@ -2093,6 +2151,17 @@
 				onSelect: () => (modalConceptos = true)
 			},
 			{
+				id: 'config-gastos',
+				label: 'Gastos del periodo',
+				hint: 'Tarifas de papelería y gastos diversos con las que nacen los borradores de este mes.',
+				icon: icoConfigGastos,
+				// No depende de que haya hoja activa: es configuración del MES, y
+				// tiene sentido revisarla justo antes de generar, cuando todavía no
+				// hay ningún cierre abierto.
+				disabled: !!accionEnCurso,
+				onSelect: () => (modalConfigGastos = true)
+			},
+			{
 				id: 'traer-items',
 				label: 'Traer items',
 				hint: `Buscar items de liquidación de ${cierreActivoObj?.placa ?? 'la placa'} que no estén en ningún cierre —de cualquier mes, anterior o posterior— y añadirlos a esta hoja sin regenerar el borrador.`,
@@ -2261,6 +2330,14 @@
 	/>
 {/if}
 
+<ModalConfigGastosPeriodo
+	open={modalConfigGastos}
+	{anio}
+	{mes}
+	periodo={periodDisplay}
+	onClose={() => (modalConfigGastos = false)}
+/>
+
 {#if modalConceptos && cierreActivoObj && detalleActivo}
 	<ConceptosCierreModal
 		cierreId={cierreActivoObj.id}
@@ -2270,6 +2347,9 @@
 		adicionales={detalleActivo.adicionales}
 		items={detalleActivo.items}
 		terceroNombre={cierreActivoObj.tercero_nombre}
+		{anio}
+		{mes}
+		valorLiquidar={Number(detalleActivo.hoja.valor_liquidar) || 0}
 		onClose={async () => {
 			modalConceptos = false;
 			// El remonte se hace UNA vez, al cerrar: las altas de dentro solo

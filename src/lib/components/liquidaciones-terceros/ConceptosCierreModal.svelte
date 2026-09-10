@@ -24,6 +24,12 @@
 		type ConceptoDescuento
 	} from '$lib/api/liquidaciones-terceros-descuentos';
 	import { liquidacionesTercerosAdicionalesAPI } from '$lib/api/liquidaciones-terceros-adicionales';
+	import {
+		CONFIG_GASTOS_FALLBACK,
+		importeGastosDiversos,
+		importePapeleria,
+		type ConfigGastosPeriodo
+	} from '$lib/editor/business/conceptos.service';
 	import type { AdicionalCierre, ItemCierre } from '$lib/editor/builders/cierres-finales.builder';
 
 	interface Props {
@@ -44,6 +50,18 @@
 		items: ItemCierre[];
 		/// Tercero del cierre, para heredarlo en el adicional que se cree.
 		terceroNombre?: string | null;
+		/// Periodo del cierre. Decide qué configuración de gastos se aplica.
+		anio: number;
+		mes: number;
+		/**
+		 * `valor_liquidar` del cierre. Es lo que decide el tramo de papelería.
+		 *
+		 * Llega como prop y no se deriva de `items` a propósito: el cierre lo
+		 * tiene ya calculado y sumar aquí los items volvería a abrir la pregunta
+		 * de si los adicionales entran, que es justo lo que `totales-cierre.ts`
+		 * resolvió de una vez en el servidor.
+		 */
+		valorLiquidar: number;
 		onClose: () => void;
 		/// Tras un cambio: la page recarga el cierre y remonta la hoja.
 		onCambiado: (r: { accion: 'add' | 'remove'; concepto: string }) => void | Promise<void>;
@@ -57,6 +75,9 @@
 		adicionales,
 		items,
 		terceroNombre = null,
+		anio,
+		mes,
+		valorLiquidar,
 		onClose,
 		onCambiado
 	}: Props = $props();
@@ -67,7 +88,7 @@
 	 * Los tres gastos que se calculan solos no se pueden borrar ni duplicar.
 	 * Espejo de `CONCEPTOS_CALCULADOS_AUTO` en el servidor.
 	 */
-	const AUTOMATICOS = new Set(['DOTACION', 'EXAMEN_MEDICO', 'GASTOS_DIVERSOS']);
+	const AUTOMATICOS = new Set(['DOTACION', 'EXAMEN_MEDICO', 'GASTOS_DIVERSOS', 'PAPELERIA']);
 
 	let seccion = $state<Seccion>('GASTO_OPERATIVO');
 	let nombre = $state('');
@@ -105,6 +126,94 @@
 		(conceptos ?? []).filter((c) => c.tipo === 'ANTICIPO').length
 	);
 	const cuentaAdicionales = $derived((adicionales ?? []).length);
+
+	// ── Gastos calculados que le faltan al cierre ────────────────────────
+	//
+	// Un borrador generado antes de que la siembra existiera no tiene papelería
+	// ni gastos diversos: en julio de 2026, 40 de 41 cierres. Regenerarlo para
+	// conseguirlos perdería lo tecleado, así que se ofrecen aquí, con el
+	// importe ya resuelto para que se vea QUÉ se va a aplicar antes de pulsar.
+
+	let configGastos = $state<ConfigGastosPeriodo>(CONFIG_GASTOS_FALLBACK);
+	let aplicandoSugeridos = $state(false);
+
+	$effect(() => {
+		// El periodo no cambia mientras el modal está abierto, pero la config
+		// sí puede haberse editado desde el otro modal, así que se relee al
+		// abrir en vez de cachearla en la page.
+		let vivo = true;
+		liquidacionesTercerosDescuentosAPI
+			.obtenerConfigGastos(anio, mes)
+			.then((c) => {
+				if (vivo) configGastos = c;
+			})
+			.catch(() => {
+				// Sin config se usa el respaldo, que es lo que rigió siempre. No
+				// se avisa: el usuario no pidió la config, pidió sus gastos.
+			});
+		return () => {
+			vivo = false;
+		};
+	});
+
+	/** Base de gastos diversos: Σ TOTAL de los items + Σ bruto de adicionales. */
+	const baseFacturada = $derived(
+		(items ?? []).reduce((s, i) => s + (Number(i.total_facturado) || 0), 0) +
+			(adicionales ?? []).reduce(
+				(s, a) => s + (Number(a.valor_unitario) || 0) * (Number(a.cantidad) || 0),
+				0
+			)
+	);
+
+	const sugeridos = $derived.by(() => {
+		const presentes = new Set(
+			(conceptos ?? []).filter((c) => c.tipo === 'GASTO_OPERATIVO').map((c) => c.concepto)
+		);
+		const out: Array<{ concepto: string; valor: number; nota: string }> = [];
+		if (!presentes.has('PAPELERIA')) {
+			out.push({
+				concepto: 'PAPELERIA',
+				valor: importePapeleria(configGastos, valorLiquidar),
+				nota:
+					valorLiquidar > configGastos.papeleria_umbral
+						? `v/liquidar supera $${formatCOP(configGastos.papeleria_umbral)}`
+						: `v/liquidar no supera $${formatCOP(configGastos.papeleria_umbral)}`
+			});
+		}
+		if (!presentes.has('GASTOS_DIVERSOS')) {
+			out.push({
+				concepto: 'GASTOS_DIVERSOS',
+				valor: importeGastosDiversos(configGastos, baseFacturada),
+				nota: `$${formatCOP(configGastos.fijo_gastos_diversos)} + ${configGastos.pct_gastos_diversos}% de $${formatCOP(baseFacturada)}`
+			});
+		}
+		return out;
+	});
+
+	async function aplicarSugeridos() {
+		if (aplicandoSugeridos || sugeridos.length === 0) return;
+		aplicandoSugeridos = true;
+		error = '';
+		try {
+			// Uno a uno y no en lote: `agregarConceptoFila` es el único camino que
+			// crea la fila con su `orden` canónico y recalcula los totales del
+			// cierre. Son dos filas como mucho.
+			for (const g of sugeridos) {
+				await liquidacionesTercerosDescuentosAPI.agregarConceptoFila(cierreId, {
+					tipo: 'GASTO_OPERATIVO',
+					concepto: g.concepto,
+					dias: 1,
+					valor_unitario: g.valor,
+					observaciones: null
+				});
+			}
+			await onCambiado({ accion: 'add', concepto: sugeridos.map((g) => g.concepto).join(' y ') });
+		} catch (e: any) {
+			error = e?.response?.data?.error || e?.message || 'Error desconocido';
+		} finally {
+			aplicandoSugeridos = false;
+		}
+	}
 
 	/**
 	 * Items QUITADOS del cierre.
@@ -469,13 +578,48 @@
 						</tfoot>
 					</table>
 				{/if}
-			{:else if filas.length === 0}
-				<p class="cxm-vacio">
-					{seccion === 'ANTICIPO'
-						? 'Sin anticipos. Añade el primero abajo.'
-						: 'Sin gastos. Añade el primero abajo.'}
-				</p>
 			{:else}
+				{#if seccion === 'GASTO_OPERATIVO' && sugeridos.length > 0}
+					<!--
+						Los gastos calculados que le faltan al cierre, con su importe ya
+						resuelto. Se enseñan ANTES de aplicarlos porque son dinero: quien
+						liquida tiene que poder ver de dónde sale cada número —el tramo de
+						papelería, la base de gastos diversos— y no fiarse de un botón.
+					-->
+					<div class="cxm-sug">
+						<div class="cxm-sug-cab">
+							<span class="cxm-sug-tit">
+								{sugeridos.length === 1
+									? 'Falta un gasto calculado'
+									: 'Faltan gastos calculados'}
+							</span>
+							<button
+								class="cxm-sug-btn"
+								type="button"
+								onclick={aplicarSugeridos}
+								disabled={aplicandoSugeridos}
+							>
+								{aplicandoSugeridos ? 'Aplicando…' : 'Aplicar'}
+							</button>
+						</div>
+						<ul class="cxm-sug-lista">
+							{#each sugeridos as g (g.concepto)}
+								<li>
+									<span class="cxm-sug-nom">{etiqueta(g.concepto)}</span>
+									<span class="cxm-sug-val">${formatCOP(g.valor)}</span>
+									<span class="cxm-sug-nota">{g.nota}</span>
+								</li>
+							{/each}
+						</ul>
+					</div>
+				{/if}
+				{#if filas.length === 0}
+					<p class="cxm-vacio">
+						{seccion === 'ANTICIPO'
+							? 'Sin anticipos. Añade el primero abajo.'
+							: 'Sin gastos. Añade el primero abajo.'}
+					</p>
+				{:else}
 				<table class="cxm-tabla">
 					<thead>
 						<tr>
@@ -521,6 +665,7 @@
 						</tr>
 					</tfoot>
 				</table>
+				{/if}
 			{/if}
 		</div>
 
@@ -909,6 +1054,71 @@
 		margin: 10px 2px;
 		font-size: 12.5px;
 		color: #64748b;
+	}
+
+	/* Gastos calculados que le faltan al cierre. Ámbar y no rojo: no es un
+	   error, es algo que se puede completar de un clic. */
+	.cxm-sug {
+		margin: 4px 2px 12px;
+		border: 1px solid #fcd34d;
+		background: #fffbeb;
+		border-radius: 10px;
+		padding: 10px 12px;
+	}
+	.cxm-sug-cab {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+	}
+	.cxm-sug-tit {
+		font-size: 12.5px;
+		font-weight: 700;
+		color: #92400e;
+	}
+	.cxm-sug-btn {
+		border: 1px solid #b45309;
+		background: #b45309;
+		color: #fff;
+		font-size: 12px;
+		font-weight: 600;
+		border-radius: 8px;
+		padding: 5px 14px;
+		cursor: pointer;
+	}
+	.cxm-sug-btn:hover:not(:disabled) {
+		background: #92400e;
+	}
+	.cxm-sug-btn:disabled {
+		opacity: 0.55;
+		cursor: not-allowed;
+	}
+	.cxm-sug-lista {
+		list-style: none;
+		margin: 8px 0 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+	.cxm-sug-lista li {
+		display: flex;
+		align-items: baseline;
+		gap: 8px;
+		font-size: 12px;
+	}
+	.cxm-sug-nom {
+		font-weight: 600;
+		color: #78350f;
+		min-width: 130px;
+	}
+	.cxm-sug-val {
+		font-variant-numeric: tabular-nums;
+		font-weight: 700;
+		color: #78350f;
+	}
+	.cxm-sug-nota {
+		color: #a16207;
 	}
 	.cxm-aviso {
 		margin: 8px 0 0;
