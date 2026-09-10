@@ -51,25 +51,32 @@
 		}
 	}
 
+	/// La selección va por `candidato_id`, NO por `tercero_id`.
+	///
+	/// Los items sin tercero asignado llegan con `tercero_id: ''` agrupados por
+	/// placa: son candidatos distintos que comparten ese valor. Con el id del
+	/// tercero como clave, marcar uno marcaba todos los «(sin tercero)» a la vez
+	/// —y la lista ni siquiera llegaba a pintarse, porque `{#each}` la lleva
+	/// como clave y Svelte aborta el bloque entero al ver claves repetidas—.
 	function toggle(t: TerceroCandidato) {
-		if (selected.has(t.tercero_id)) {
-			selected.delete(t.tercero_id);
+		if (selected.has(t.candidato_id)) {
+			selected.delete(t.candidato_id);
 		} else {
-			selected.add(t.tercero_id);
+			selected.add(t.candidato_id);
 		}
 		selected = new Set(selected);
 	}
 
 	function toggleAll() {
-		if (terceros.every((t) => selected.has(t.tercero_id))) {
+		if (terceros.every((t) => selected.has(t.candidato_id))) {
 			selected = new Set();
 		} else {
-			selected = new Set(terceros.map((t) => t.tercero_id));
+			selected = new Set(terceros.map((t) => t.candidato_id));
 		}
 	}
 
 	function handleConfirm() {
-		const picked = terceros.filter((t) => selected.has(t.tercero_id));
+		const picked = terceros.filter((t) => selected.has(t.candidato_id));
 		onConfirm(picked);
 		onClose();
 	}
@@ -203,13 +210,13 @@
 								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
 								</svg>
-								{terceros.every((t) => selected.has(t.tercero_id))
+								{terceros.every((t) => selected.has(t.candidato_id))
 									? 'Deseleccionar todos'
 									: 'Seleccionar todos'}
 							</button>
 						{/if}
-						{#each terceros as t (t.tercero_id)}
-							{@const isSelected = selected.has(t.tercero_id)}
+						{#each terceros as t (t.candidato_id)}
+							{@const isSelected = selected.has(t.candidato_id)}
 							{@const hasBlocked = t.cierres_bloqueados > 0}
 							<button
 								class="flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors {isSelected
@@ -251,7 +258,9 @@
 										{/if}
 										<span>
 											<span class="font-medium text-gray-600">Placas:</span>
-											{t.placas.join(', ')}
+											<!-- Un item puede no tener placa registrada; sin este
+											     texto la etiqueta quedaba colgando vacía. -->
+											{t.placas.filter(Boolean).join(', ') || '(sin placa)'}
 										</span>
 										<span>
 											<span class="font-medium text-gray-600">Cierres:</span>

@@ -209,6 +209,15 @@ export interface PreviewDataOcasional {
 }
 
 export interface TerceroCandidato {
+	/**
+	 * Identidad del candidato dentro de la respuesta. Es la clave de lista y de
+	 * selección del modal.
+	 *
+	 * NO uses `tercero_id` para eso: los items sin tercero llegan con
+	 * `tercero_id: ''` y se agrupan por placa, de modo que varios candidatos
+	 * distintos comparten ese valor.
+	 */
+	candidato_id: string;
 	tercero_id: string;
 	tercero_nombre: string;
 	tercero_documento: string | null;

@@ -718,7 +718,15 @@
 		generando = true;
 		try {
 			const tercerosFiltro = seleccionados?.length
-				? seleccionados.flatMap((t) => [t.tercero_id, ...t.placas])
+				? seleccionados.flatMap((t) =>
+						// Los candidatos «(sin tercero)» traen `tercero_id: ''`, y el
+						// backend manda al carril de placas todo lo que no sea un UUID.
+						// Colar esa cadena vacía ahí hacía que seleccionar UNA placa
+						// huérfana arrastrara además todos los items sin placa, que son
+						// los únicos que casan con `placa: ''`. De esos candidatos va
+						// solo su placa.
+						t.tercero_id ? [t.tercero_id, ...t.placas] : t.placas
+					)
 				: undefined;
 
 			const r = await liquidacionesTercerosOcasionalAPI.generarBorrador({
