@@ -90,6 +90,9 @@ function itemsDeDetalle(d: any): ItemCierre[] {
 				ingreso_extra_global: num(lt.ingreso_extra_global),
 				ingresos_extra_aval: num(lt.ingresos_extra_aval),
 				numero_factura: txt(it.facturas),
+				// El servidor ya aplicó la regla —anulada solo si no hay
+				// vigente—; aquí no se decide nada, solo se transporta.
+				factura_anulada: it.factura_anulada === true,
 				// `!== false`, no `=== true`: los items antiguos tienen el
 				// campo a NULL y el servidor los cuenta como marcados. Usar
 				// `=== true` los mostraría como excluidos de la base imponible

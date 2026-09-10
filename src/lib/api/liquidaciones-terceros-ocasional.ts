@@ -95,6 +95,11 @@ export interface ItemOcasional {
 	ingresos_extra_aval?: number;
 	ingreso_empresa?: number;
 	numero_factura?: string | null;
+	/// `numero_factura` corresponde a una factura ANULADA y la liquidación no
+	/// tiene ninguna vigente que la reemplace. Lo resuelve el servidor en cada
+	/// lectura, porque el número que el item guarda es un snapshot del momento
+	/// en que se generó el borrador y puede haber envejecido. Pinta la celda.
+	factura_anulada?: boolean;
 	aplica_impuestos?: boolean;
 	excluido?: boolean;
 	orden?: number;

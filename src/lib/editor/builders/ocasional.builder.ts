@@ -60,6 +60,8 @@ import { GASTOS_VEHICULO } from '../business/costos-laborales';
 const GREEN = '#0F4025';
 const GREEN_DARK = '#166534';
 const RED = '#B91C1C';
+/// Fondo de la celda de una factura anulada sin reemplazo.
+const RED_SOFT = '#FEE2E2';
 const AMBER = '#B45309';
 const BLUE = '#1D4ED8';
 const TEXT_DARK = '#0F172A';
@@ -407,7 +409,16 @@ export function buildOcasionalSheet(input: OcasionalSheetInput): any {
 			} else {
 				set(cellData)(r, 17, '', base);
 			}
-			set(cellData)(r, 18, it.numero_factura || '', base);
+			/// Factura anulada sin reemplazo: fondo rojo. El número se enseña
+			/// igual —es el rastro de por qué el item quedó sin facturar—, pero
+			/// tiene que cantar entre las filas de la hoja. Un item refacturado
+			/// NO se pinta: ahí el servidor ya devolvió la factura nueva.
+			set(cellData)(
+				r,
+				18,
+				it.numero_factura || '',
+				it.factura_anulada ? { ...base, cl: { rgb: RED }, bl: 1, bg: { rgb: RED_SOFT } } : base
+			);
 			// La 19 es editable: aplica_impuestos (toggle).
 			// Se escribe SÍ/NO y no un booleano: Univer pintaba "true"/"false"
 			// literal, y además el pie de la tabla usa SUMIF contra el texto

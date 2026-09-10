@@ -211,6 +211,16 @@ export interface ItemCierre {
 	ingresos_extra_aval: number;
 	numero_factura: string;
 	/**
+	 * El número de `numero_factura` corresponde a una factura ANULADA y la
+	 * liquidación no tiene ninguna vigente que la reemplace.
+	 *
+	 * Solo entonces: si hubo refacturación, `numero_factura` trae ya la nueva
+	 * y esto va en `false`. Es lo único que distingue «esta liquidación nunca
+	 * se facturó» —celda vacía— de «se facturó y se anuló», que antes se veían
+	 * igual porque el servidor no mandaba el número anulado.
+	 */
+	factura_anulada: boolean;
+	/**
 	 * Si el item entra en la base imponible de RETENCION ICA, AVISOS y
 	 * BOMBERIL.
 	 *
@@ -749,7 +759,16 @@ export function buildCierreFinalSheet(
 		set(row, COL.ING_EXTRA_GLOBAL, n(it.ingreso_extra_global), z ? moneyZebra : money);
 		set(row, COL.ING_EXTRAS_AVAL, n(it.ingresos_extra_aval), z ? moneyZebra : money);
 		set(row, COL.ING_TRANSMERALDA, ingresoTransmeralda, z ? totalFactZebra : totalFact);
-		set(row, COL.FACTURA, it.numero_factura, text);
+		/// Factura anulada sin reemplazo: fondo rojo. El número se enseña
+		/// igual —es el rastro de por qué el item quedó sin facturar—, pero
+		/// tiene que cantar a simple vista entre las decenas de filas de la
+		/// hoja. Un item refacturado NO se pinta: ahí manda la factura nueva.
+		set(
+			row,
+			COL.FACTURA,
+			it.numero_factura,
+			it.factura_anulada ? { ...text, cl: { rgb: RED }, bl: 1, bg: { rgb: RED_SOFT } } : text
+		);
 
 		// ── Columna de acción ──
 		// El VALOR sigue siendo la cadena SÍ/NO aunque el engine le cuelgue
