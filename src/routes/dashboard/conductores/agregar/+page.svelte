@@ -3,6 +3,7 @@
 	import { fly, scale, fade } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import { conductoresAPI } from '$lib/api/apiClient';
+	import { normalizarNombrePersona } from '$lib/utils/nombre-persona';
 	import { toast } from 'svelte-sonner';
 
 	// Estados posibles del conductor
@@ -59,6 +60,12 @@
 	// Función para validar el formulario
 	function validateForm() {
 		errors = {};
+
+		// Se normalizan ANTES de validar: así lo que se envía es exactamente lo
+		// que el servidor va a guardar, y el usuario no ve cambiar su nombre
+		// después de pulsar Guardar. El backend lo normaliza igualmente.
+		formData.nombre = normalizarNombrePersona(formData.nombre);
+		formData.apellido = normalizarNombrePersona(formData.apellido);
 
 		if (!formData.nombre.trim()) {
 			errors.nombre = 'El nombre es requerido';
@@ -254,10 +261,10 @@
 						id="nombre"
 						type="text"
 						bind:value={formData.nombre}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 {errors.nombre
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm uppercase focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 {errors.nombre
 							? 'border-red-500'
 							: ''}"
-						placeholder="Ej: Juan"
+						placeholder="EJ: JUAN"
 					/>
 					{#if errors.nombre}
 						<p class="mt-1 text-xs text-red-600">{errors.nombre}</p>
@@ -273,10 +280,10 @@
 						id="apellido"
 						type="text"
 						bind:value={formData.apellido}
-						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 {errors.apellido
+						class="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm uppercase focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 {errors.apellido
 							? 'border-red-500'
 							: ''}"
-						placeholder="Ej: Pérez"
+						placeholder="EJ: PÉREZ"
 					/>
 					{#if errors.apellido}
 						<p class="mt-1 text-xs text-red-600">{errors.apellido}</p>

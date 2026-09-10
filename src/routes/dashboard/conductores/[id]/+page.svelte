@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { fade, fly } from 'svelte/transition';
+	import { normalizarNombrePersona } from '$lib/utils/nombre-persona';
 	import { quintOut } from 'svelte/easing';
 	import Cropper, { type OnCropCompleteEvent } from 'svelte-easy-crop';
 	import { conductoresAPI } from '$lib/api/apiClient';
@@ -337,6 +338,11 @@
 
 	function validateForm(data: ConductorForm): Partial<Record<keyof ConductorForm, string>> {
 		const errors: Partial<Record<keyof ConductorForm, string>> = {};
+		// Se normalizan ANTES de validar: así lo que se envía es exactamente lo
+		// que el servidor va a guardar, y el usuario no ve cambiar su nombre
+		// después de pulsar Guardar. El backend lo normaliza igualmente.
+		data.nombre = normalizarNombrePersona(data.nombre);
+		data.apellido = normalizarNombrePersona(data.apellido);
 		if (!data.nombre.trim()) errors.nombre = 'El nombre es obligatorio';
 		if (!data.apellido.trim()) errors.apellido = 'El apellido es obligatorio';
 		if (!data.numero_identificacion.trim()) {
@@ -1424,8 +1430,8 @@
 										id="nombre"
 										type="text"
 										bind:value={formData.nombre}
-										placeholder="Juan"
-										class="block-input"
+										placeholder="JUAN"
+										class="block-input uppercase"
 										class:input-error={fieldError('nombre')}
 									/>
 								{:else}
@@ -1447,8 +1453,8 @@
 										id="apellido"
 										type="text"
 										bind:value={formData.apellido}
-										placeholder="Pérez"
-										class="block-input"
+										placeholder="PÉREZ"
+										class="block-input uppercase"
 										class:input-error={fieldError('apellido')}
 									/>
 								{:else}
