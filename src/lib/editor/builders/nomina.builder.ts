@@ -88,6 +88,25 @@ export interface TarifaDTO {
 	valorHora: number;
 	horas: number;
 	valor: number;
+	/** Índice dentro de `HojaNominaDTO.tramos`. Ausente en payloads viejos. */
+	tramo?: number;
+}
+
+/**
+ * Un tramo del corte con una misma configuración salarial y tarifas.
+ *
+ * Casi siempre hay uno. Hay dos cuando el corte cruza un cambio de vigencia
+ * —el 21-jun → 20-jul de 2026 cruza la Ley 2466— y entonces el bloque de
+ * configuración se pinta partido, con su propia base y sus propias tarifas
+ * por tramo, porque una sola fila de RD no puede decir 80 % y 90 % a la vez.
+ */
+export interface TramoVigenciaDTO {
+	desde: string;
+	hasta: string;
+	etiqueta: string;
+	salarioBasico: number;
+	horasMensualesBase: number;
+	valorHora: number;
 }
 
 export interface BloqueEmpresaDTO {
@@ -124,6 +143,8 @@ export interface HojaNominaDTO {
 	placas: string[];
 	dias: DiaHojaDTO[];
 	tarifas: TarifaDTO[];
+	/** Ausente en payloads viejos: entonces se pinta un tramo único. */
+	tramos?: TramoVigenciaDTO[];
 	bloquesEmpresa: BloqueEmpresaDTO[];
 	salarioBasico: number;
 	valorHora: number;
@@ -790,58 +811,101 @@ function zonaConfiguracion(args: {
 	merge(r, c0, r, c0 + 5);
 	r++;
 
-	// Base de cálculo, que es lo que hace comprensible todo lo de abajo.
-	const baseInfo: [string, number, string | undefined][] = [
-		['Salario básico', hoja.salarioBasico, FMT_COP],
-		// Las horas van sin patrón (ver FMT_HORAS).
-		['Horas mensuales base', hoja.horasMensualesBase, FMT_HORAS],
-		['Valor hora', hoja.valorHora, FMT_COP]
-	];
-	for (const [rotulo, valor, fmt] of baseInfo) {
-		set(r, c0, { v: rotulo, s: etiqueta() });
-		merge(r, c0, r, c0 + 2);
-		set(r, c0 + 3, {
-			v: redondear(valor),
-			s: { ...derivada(), ht: HorizontalAlign.RIGHT, ...(fmt ? { n: { pattern: fmt } } : {}) }
-		});
-		merge(r, c0 + 3, r, c0 + 5);
-		r++;
-	}
-	r++;
-
-	const cabeceras = ['RECARGO', '%', 'VALOR HORA', 'HORAS MES', 'VALOR'];
-	cabeceras.forEach((t, i) => {
-		const c = i === 0 ? c0 : c0 + i + 1;
-		set(r, c, { v: t, s: cabecera('#1E4D33') });
-		if (i === 0) merge(r, c0, r, c0 + 1);
-	});
-	r++;
-
-	const primeraTarifa = r;
-	for (const codigo of ORDEN_RECARGOS) {
-		const t = hoja.tarifas.find((x) => x.codigo === codigo);
-		if (!t) continue;
-		set(r, c0, {
-			v: t.nombre,
-			s: { ...base(), bg: { rgb: t.color }, cl: { rgb: contraste(t.color) }, bl: 1, fs: 9 }
-		});
-		merge(r, c0, r, c0 + 1);
-		set(r, c0 + 2, { v: t.porcentaje, s: { ...derivada(), ht: HorizontalAlign.CENTER, n: { pattern: FMT_PCT } } });
-		set(r, c0 + 3, { v: redondear(t.valorHora), s: { ...derivada(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } } });
-		set(r, c0 + 4, { v: redondear(t.horas), s: { ...derivada(), ht: HorizontalAlign.RIGHT, ...(FMT_HORAS ? { n: { pattern: FMT_HORAS } } : {}) } });
-		set(r, c0 + 5, { v: t.valor, s: { ...derivada(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } } });
-		r++;
-	}
+	// UN SUB-BLOQUE POR TRAMO DE VIGENCIA.
+	//
+	// Con un tramo —lo normal— esto pinta exactamente la tabla de siempre. Con
+	// dos, que es lo que pasa cuando el corte cruza un cambio de ley (el
+	// 21-jun → 20-jul de 2026 cruza la Ley 2466), se pinta dos veces: cada
+	// mitad con su propia base y sus propias tarifas. Antes había una sola
+	// tabla con la configuración del CIERRE, así que los días de junio salían
+	// valorados a 210 h base y RD al 90 %.
+	const tramos: TramoVigenciaDTO[] = hoja.tramos?.length
+		? hoja.tramos
+		: [
+				{
+					desde: '',
+					hasta: '',
+					etiqueta: '',
+					salarioBasico: hoja.salarioBasico,
+					horasMensualesBase: hoja.horasMensualesBase,
+					valorHora: hoja.valorHora
+				}
+			];
+	const partido = tramos.length > 1;
 
 	const L = (c: number) => colLetra(c);
+	/** Rangos de filas de tarifa, para que TOTALES sume los dos sub-bloques. */
+	const rangos: [number, number][] = [];
+
+	tramos.forEach((tr, iTramo) => {
+		// El rótulo del tramo solo aparece cuando hay más de uno: si no, sería
+		// ruido repitiendo el periodo que ya está en el título de la pestaña.
+		if (partido) {
+			set(r, c0, { v: tr.etiqueta, s: cabecera('#1E4D33') });
+			merge(r, c0, r, c0 + 5);
+			r++;
+		}
+
+		// Base de cálculo, que es lo que hace comprensible todo lo de abajo.
+		const baseInfo: [string, number, string | undefined][] = [
+			['Salario básico', tr.salarioBasico, FMT_COP],
+			// Las horas van sin patrón (ver FMT_HORAS).
+			['Horas mensuales base', tr.horasMensualesBase, FMT_HORAS],
+			['Valor hora', tr.valorHora, FMT_COP]
+		];
+		for (const [rotulo, valor, fmt] of baseInfo) {
+			set(r, c0, { v: rotulo, s: etiqueta() });
+			merge(r, c0, r, c0 + 2);
+			set(r, c0 + 3, {
+				v: redondear(valor),
+				s: { ...derivada(), ht: HorizontalAlign.RIGHT, ...(fmt ? { n: { pattern: fmt } } : {}) }
+			});
+			merge(r, c0 + 3, r, c0 + 5);
+			r++;
+		}
+		r++;
+
+		const cabeceras = ['RECARGO', '%', 'VALOR HORA', 'HORAS MES', 'VALOR'];
+		cabeceras.forEach((t, i) => {
+			const c = i === 0 ? c0 : c0 + i + 1;
+			set(r, c, { v: t, s: cabecera('#1E4D33') });
+			if (i === 0) merge(r, c0, r, c0 + 1);
+		});
+		r++;
+
+		const primeraTarifa = r;
+		for (const codigo of ORDEN_RECARGOS) {
+			// `tramo ?? 0` deja pasar los payloads viejos, que no lo traían.
+			const t = hoja.tarifas.find((x) => x.codigo === codigo && (x.tramo ?? 0) === iTramo);
+			if (!t) continue;
+			set(r, c0, {
+				v: t.nombre,
+				s: { ...base(), bg: { rgb: t.color }, cl: { rgb: contraste(t.color) }, bl: 1, fs: 9 }
+			});
+			merge(r, c0, r, c0 + 1);
+			set(r, c0 + 2, { v: t.porcentaje, s: { ...derivada(), ht: HorizontalAlign.CENTER, n: { pattern: FMT_PCT } } });
+			set(r, c0 + 3, { v: redondear(t.valorHora), s: { ...derivada(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } } });
+			set(r, c0 + 4, { v: redondear(t.horas), s: { ...derivada(), ht: HorizontalAlign.RIGHT, ...(FMT_HORAS ? { n: { pattern: FMT_HORAS } } : {}) } });
+			set(r, c0 + 5, { v: t.valor, s: { ...derivada(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } } });
+			r++;
+		}
+		if (r > primeraTarifa) rangos.push([primeraTarifa + 1, r]);
+	});
+
+	// Con dos tramos el SUM lleva dos rangos: `=SUM(S30:S36,S41:S47)`.
+	const sumaDe = (c: number) =>
+		rangos.length
+			? `=SUM(${rangos.map(([a, b]) => `${L(c)}${a}:${L(c)}${b}`).join(',')})`
+			: '=0';
+
 	set(r, c0, { v: 'TOTALES', s: totales() });
 	merge(r, c0, r, c0 + 3);
 	set(r, c0 + 4, {
-		f: `=SUM(${L(c0 + 4)}${primeraTarifa + 1}:${L(c0 + 4)}${r})`,
+		f: sumaDe(c0 + 4),
 		s: { ...totales(), ht: HorizontalAlign.RIGHT, ...(FMT_HORAS ? { n: { pattern: FMT_HORAS } } : {}) }
 	});
 	set(r, c0 + 5, {
-		f: `=SUM(${L(c0 + 5)}${primeraTarifa + 1}:${L(c0 + 5)}${r})`,
+		f: sumaDe(c0 + 5),
 		s: { ...totales(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } }
 	});
 

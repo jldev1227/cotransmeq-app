@@ -84,16 +84,28 @@ export function documentoNomina(o: {
 	const totalDeducido = hoja.deducciones.reduce((s, c) => s + (c.valor ?? 0), 0);
 
 	// ── Bloque: acumulado por tipo de recargo ───────────────────────────
+	//
+	// Un corte que cruza un cambio de vigencia trae DOS filas del mismo
+	// recargo, una por tramo (RD al 80 % hasta el 14-jul y al 90 % desde el
+	// 15). Sin el rótulo del tramo el desprendible mostraría «RECARGO
+	// DOMINICAL FESTIVO» dos veces con cifras distintas y sin explicar por qué.
+	const tramos = hoja.tramos ?? [];
+	const partido = tramos.length > 1;
+	const rotuloTramo = (i: number | undefined) =>
+		partido && tramos[i ?? 0] ? ` · ${tramos[i ?? 0].etiqueta}` : '';
+
 	const bloqueTarifas: BloquePreview = {
 		id: 'tarifas',
 		titulo: 'RECARGOS Y HORAS EXTRAS DEL PERIODO',
-		subtitulo: `Valor hora ${COP(hoja.valorHora)} · ${hoja.horasMensualesBase} h/mes`,
+		subtitulo: partido
+			? tramos.map((t) => `${t.etiqueta}: ${COP(t.valorHora)} · ${t.horasMensualesBase} h/mes`).join('  |  ')
+			: `Valor hora ${COP(hoja.valorHora)} · ${hoja.horasMensualesBase} h/mes`,
 		columnas: COLS_TARIFA,
 		filas: hoja.tarifas
 			.filter((x) => x.horas > 0)
 			.map((x) => ({
 				celdas: {
-					recargo: x.nombre,
+					recargo: `${x.nombre}${rotuloTramo(x.tramo)}`,
 					pct: x.porcentaje,
 					valorHora: x.valorHora,
 					horas: redondear(x.horas),
