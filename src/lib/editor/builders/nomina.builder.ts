@@ -51,6 +51,14 @@ export interface DiaPeriodoDTO {
 	nombreDia: string;
 	esDomingo: boolean;
 	indice: number;
+	/**
+	 * Repetición de la fecha: 0 es la primera columna del día.
+	 *
+	 * Una fecha abre más de una columna cuando ALGÚN conductor del libro tuvo
+	 * dos servicios ese día. Es lo que permite ocultar por hoja las que ese
+	 * conductor no usa. Ausente en snapshots viejos, que se pintan enteros.
+	 */
+	ocurrencia?: number;
 }
 
 export interface SemanaDTO {
@@ -72,6 +80,8 @@ export interface DiaHojaDTO {
 	empresa: string | null;
 	empresaId: string | null;
 	empresaColor: string | null;
+	placa?: string | null;
+	placaColor?: string | null;
 }
 
 export interface ClienteNominaDTO {
@@ -137,10 +147,26 @@ export interface HojaNominaDTO {
 	estado: string;
 	nombre: string;
 	cedula: string | null;
+	/**
+	 * Correo del conductor: es a donde va el desprendible.
+	 *
+	 * Opcional porque un snapshot capturado antes de que este campo existiera no
+	 * lo trae, y esas versiones se siguen pudiendo abrir.
+	 */
+	correo?: string | null;
 	cargo: string;
 	nombreHoja: string;
 	tipoVehiculo: string | null;
 	placas: string[];
+	/** Placas del periodo con su color. Ausente en snapshots viejos. */
+	placasUsadas?: { placa: string; color: string }[];
+	/** `PAREX`, `GEOPARK`, `PAREX, GEOPARK` o `VILLANUEVA`. Ausente en snapshots viejos. */
+	tipoNomina?: string;
+	/** Bonos × placa. Ausente en snapshots viejos. */
+	matrizBonos?: {
+		placas: { placa: string; color: string }[];
+		filas: { nombre: string; valorUnitario: number; cantidades: number[]; total: number }[];
+	};
 	dias: DiaHojaDTO[];
 	tarifas: TarifaDTO[];
 	/** Ausente en payloads viejos: entonces se pinta un tramo único. */
@@ -174,32 +200,71 @@ export interface PeriodoNominaDTO {
 
 // ─── Geometría ────────────────────────────────────────────────────────
 
-/** Columnas fijas de la izquierda. Nunca índices crudos en el código. */
+/**
+ * Columnas fijas de la izquierda. Nunca índices crudos en el código.
+ *
+ * SIN COLUMNA «#»: numeraba las hojas del libro (1…25), pero cada hoja tiene
+ * UN conductor y su número ya está en la pestaña y en el selector. Dentro de la
+ * hoja no ordenaba nada ni se podía cotejar contra nada — era una columna de
+ * 32 px repitiendo un dato que no se usa.
+ *
+ * SIN COLUMNA «TIPO DE VEHICULO»: decía «CAMIONETA» para un conductor que usó
+ * cinco vehículos distintos, así que era el tipo del ÚLTIMO y no del periodo.
+ * Con las placas en la leyenda —cada una con su color, y el color repetido bajo
+ * cada día— el tipo es información que se deduce de la placa y ocupaba 118 px
+ * fijos para repetir siempre lo mismo.
+ *
+ * `ROTULOS` se llamaba `PLACA_FIN` de cuando ahí vivía la columna de placas.
+ */
 export const COL = {
-	NUM: 0,
-	NOMBRE: 1,
-	CEDULA: 2,
-	CARGO: 3,
-	VEHICULO: 4,
-	PLACA: 5,
-	PLACA_FIN: 6,
+	NOMBRE: 0,
+	CEDULA: 1,
+	CARGO: 2,
+	/**
+	 * Final del merge del cargo.
+	 *
+	 * Las columnas 3 y 4 son las que ocupaban TIPO DE VEHICULO y PLACA. NO se
+	 * eliminan de la rejilla, solo dejan de tener cabecera propia: las zonas de
+	 * abajo —configuración, tarifas, desprendible— se apoyan en que el bloque
+	 * izquierdo mida 718 px, porque un ancho es de la COLUMNA ENTERA y no se
+	 * pueden ensanchar las de día para compensar. Quitarlas de verdad dejaba la
+	 * tabla de recargos sobre columnas de 46 px, con «$105,007» recortado.
+	 *
+	 * Así que el cargo se extiende sobre ellas y el ancho total no se mueve.
+	 */
+	CARGO_FIN: 4,
+	/**
+	 * Dos columnas de aire entre la tabla de bonos y la de días.
+	 *
+	 * Pegadas, las dos tablas se leían como una sola rejilla y la mirada saltaba
+	 * de «Bono oficina» a «HORA INICIO» sin que nada dijera que son cosas
+	 * distintas. Aquí arriba están en blanco; ABAJO no se desperdician: la
+	 * primera es la columna de importes del bloque de configuración —por eso
+	 * mide 104 px y no 20—, y es también la razón de que el aire caiga en este
+	 * punto y no en otro.
+	 */
+	AIRE0: 5,
+	AIRE1: 6,
+	/** Dónde van los rótulos de las filas del bloque de días. */
+	ROTULOS: 7,
 	/** Primera columna de día. */
-	DIA0: 7
+	DIA0: 8
 } as const;
 
 /** Filas de la zona A, 0-indexadas. */
 const FILA = {
-	CAB_MES: 1,
-	CAB_MES_FIN: 2,
-	CAB_DIA: 3,
-	CAB_NOMBRE_DIA: 4,
-	TURNO: 5,
-	INICIO: 6,
-	FIN: 7,
-	HORAS: 8,
-	DISPONIBILIDAD: 9,
+	/// Arranca en 0: la hoja dejaba la fila 1 en blanco sin que nada la usara.
+	CAB_MES: 0,
+	CAB_MES_FIN: 1,
+	CAB_DIA: 2,
+	CAB_NOMBRE_DIA: 3,
+	TURNO: 4,
+	INICIO: 5,
+	FIN: 6,
+	HORAS: 7,
+	DISPONIBILIDAD: 8,
 	/** Primera de las siete filas de recargo. */
-	RECARGO0: 10,
+	RECARGO0: 9,
 	/**
 	 * Cliente del día. Antes llevaba el NOMBRE de la empresa, pero con 31
 	 * columnas de 46px no cabía —salía «FIPETRO», «TRANSMERAL»— y encima
@@ -207,13 +272,32 @@ const FILA = {
 	 * solo se rellena con el color del cliente y quién es cada color lo dice
 	 * la leyenda de la fila 21.
 	 */
-	CLIENTE_DIA: 17,
-	TOTALES_TURNO: 19,
-	LEYENDA: 20
+	/**
+	 * Dos filas en blanco antes.
+	 *
+	 * Las siete de recargo y las dos de color —cliente y placa— son cosas
+	 * distintas: arriba son HORAS y abajo son CLAVES de color. Pegadas se leían
+	 * como una sola tabla de nueve filas y la vista no encontraba dónde termina
+	 * una y empieza la otra.
+	 */
+	CLIENTE_DIA: 18,
+	/**
+	 * Placa del día, justo debajo del cliente.
+	 *
+	 * Ocupa la fila 18 (0-indexada), que ya estaba libre entre el cliente y los
+	 * totales — no desplaza nada de lo de abajo. Igual que el cliente, la celda
+	 * solo lleva COLOR: la placa completa no cabe en 46 px y quién es cada color
+	 * lo dice la leyenda de la izquierda.
+	 */
+	PLACA_DIA: 19,
+	/// Otras dos en blanco: los totales y la leyenda cierran el bloque de días,
+	/// no forman parte de él.
+	TOTALES_TURNO: 22,
+	LEYENDA: 23
 } as const;
 
 /** Primera fila de la mitad inferior (config, empresas, jornada, desprendible). */
-const FILA_INFERIOR = 22;
+const FILA_INFERIOR = 25;
 
 /** Orden de las siete filas de recargo, el mismo del Excel. */
 export const ORDEN_RECARGOS: CodigoRecargo[] = ['RN', 'HEN', 'HED', 'HEFD', 'HEFN', 'RD', 'RNDF'];
@@ -230,11 +314,16 @@ export const ORDEN_RECARGOS: CodigoRecargo[] = ['RN', 'HEN', 'HED', 'HEFD', 'HEF
  * que hace el Excel y lo único que no deforma la rejilla.
  */
 const ZONA = {
-	CONFIG_C0: 1, // B — columnas propias, no son de día
+	/**
+	 * A — el bloque izquierdo entero, que son 718 px repartidos en seis
+	 * columnas. Era la 1 cuando delante había una columna «#» de 32 px; al
+	 * quitarla, todo se corrió un índice.
+	 */
+	CONFIG_C0: 0,
 	/** Arrancaba en la 13 y dejaba un hueco muerto entre el bloque de
-	 *  configuración (que acaba en la 6) y esta zona. */
-	JORNADA_C0: 9,
-	DESPRENDIBLE_C0: 24
+	 *  configuración (que acaba en la 5) y esta zona. */
+	JORNADA_C0: 10,
+	DESPRENDIBLE_C0: 25
 } as const;
 
 /** Celdas que ocupa cada campo de las zonas inferiores. */
@@ -291,6 +380,10 @@ const FMT_COP = '"$"#,##0;[Red]-"$"#,##0';
  */
 const FMT_HORAS = undefined;
 const FMT_PCT = '0.00"%"';
+
+/** Verde secundario de las cabeceras de tabla; el mismo que usa el bloque de
+ *  configuración de abajo, para que las dos tablas se lean como hermanas. */
+const SUBCAB = '#1E4D33';
 
 const base = (): IStyleData => ({
 	bd: allBorders(),
@@ -466,7 +559,7 @@ function construirHoja(args: {
 	// Índice por columna de los días con planilla, para no buscar en bucle.
 	const porIndice = new Map<number, DiaHojaDTO>(hoja.dias.map((d) => [d.indice, d]));
 
-	zonaDias({ dias, hoja, porIndice, set, merge, indice, dto, festivos });
+	zonaDias({ dias, hoja, porIndice, set, merge, dto, festivos });
 
 	// Un día que la ley marca como festivo pero la planilla no, se paga como
 	// día normal: sin RD ni RNDF. Es dinero, y no salta por ningún lado.
@@ -487,21 +580,55 @@ function construirHoja(args: {
 
 	const rowCount = Math.max(finEmpresas, finDesprendible) + 3;
 
-	const columnData: Record<number, { w: number }> = {};
-	columnData[COL.NUM] = { w: 32 };
+	const columnData: Record<number, { w: number; hd?: BooleanNumber }> = {};
 	columnData[COL.NOMBRE] = { w: 210 };
 	columnData[COL.CEDULA] = { w: 100 };
 	columnData[COL.CARGO] = { w: 90 };
-	columnData[COL.VEHICULO] = { w: 118 };
-	columnData[COL.PLACA] = { w: 96 };
+	// Sin cabecera propia, pero con su ancho: es lo que mantiene el bloque
+	// izquierdo en 718 px y, con él, la tabla de recargos de abajo legible.
+	columnData[COL.CARGO + 1] = { w: 118 };
+	columnData[COL.CARGO_FIN] = { w: 96 };
+	// Las dos de aire, iguales. La primera NO es solo aire: abajo es la columna
+	// de importes del bloque de configuración («$105.007»), y de ahí salen sus
+	// 104 px. La segunda los copia para que el hueco entre las dos tablas se lea
+	// como una banda pareja y no como una columna ancha seguida de una rendija.
+	columnData[COL.AIRE0] = { w: 104 };
+	columnData[COL.AIRE1] = { w: 104 };
 	// Aquí van los rótulos de las filas del bloque de días («DISPONIBILIDAD»,
-	// «EMPRESA») y, más abajo, los nombres largos de recargo.
-	columnData[COL.PLACA_FIN] = { w: 104 };
+	// «CLIENTE», «PLACA») y, más abajo, los nombres largos de recargo.
+	columnData[COL.ROTULOS] = { w: 104 };
 	// TODAS las columnas de día miden lo mismo, sin excepción. Las zonas de
 	// abajo comparten estas columnas y ganan sitio combinando celdas, nunca
 	// ensanchándolas: un ancho es de la columna entera y deformaría la
 	// cuadrícula de días de arriba.
 	for (let c = COL.DIA0; c < numColumnas; c++) columnData[c] = { w: ANCHO_COL_DIA };
+
+	/**
+	 * Las columnas repetidas que ESTE conductor no usa se ocultan.
+	 *
+	 * La rejilla se dimensiona mirando a TODOS los conductores: si uno solo hace
+	 * turno partido el 5 de julio —`17:00→24:00` más `00:00→06:00`, dos registros
+	 * reales para la misma fecha—, el 5 de julio abre dos columnas en las 25
+	 * hojas, y en las otras 24 la segunda queda vacía. Medido en el corte de
+	 * julio de 2026: 18 columnas extra sobre 30 fechas, y una hoja usa de media
+	 * 14 de las 48. La de Pulido Niño usaba 1.
+	 *
+	 * Se OCULTAN en vez de rehacer la rejilla por hoja: los índices de columna
+	 * son los mismos en todo el libro y de ellos cuelgan las fórmulas de totales
+	 * y los rangos de semana del control de jornada. Cambiarlos por hoja
+	 * obligaría a recalcular ambos por separado para no ganar nada que el
+	 * usuario pueda notar.
+	 *
+	 * La primera columna de cada fecha (`ocurrencia === 0`) NO se oculta nunca,
+	 * aunque el conductor no trabajara ese día: el calendario del periodo tiene
+	 * que verse completo, con sus huecos.
+	 */
+	for (const d of dias) {
+		if ((d.ocurrencia ?? 0) === 0) continue;
+		if (porIndice.has(d.indice)) continue;
+		const c = COL.DIA0 + d.indice;
+		columnData[c] = { w: ANCHO_COL_DIA, hd: BooleanNumber.TRUE };
+	}
 
 	cerrarBordesDeCombinadas(cellData, mergeData);
 	rellenarBordesVacios(cellData, rowCount, numColumnas, mergeData);
@@ -563,37 +690,36 @@ function zonaDias(args: {
 	porIndice: Map<number, DiaHojaDTO>;
 	set: (r: number, c: number, cell: ICellData) => void;
 	merge: (r1: number, c1: number, r2: number, c2: number) => void;
-	indice: number;
 	dto: PeriodoNominaDTO;
 	festivos: Set<string>;
 }) {
-	const { dias, hoja, porIndice, set, merge, indice, dto, festivos } = args;
+	const { dias, hoja, porIndice, set, merge, dto, festivos } = args;
 
 	// Cabecera izquierda: rótulos arriba (filas 1-4), datos debajo (5-8).
 	const rotulos: [number, string][] = [
-		[COL.NUM, '#'],
 		[COL.NOMBRE, 'NOMBRES Y APELLIDOS'],
 		[COL.CEDULA, 'CEDULA'],
-		[COL.CARGO, 'CARGO'],
-		[COL.VEHICULO, 'TIPO DE VEHICULO'],
-		[COL.PLACA, 'PLACA']
+		// Ni PLACA ni TIPO DE VEHICULO. La primera apilaba las cinco placas de un
+		// conductor en una celda —«PPQ491, LLQ895, SIN-PLACA, TSS965, POP128»—
+		// que no cabía y no decía CUÁNDO se usó cada una; la segunda repetía el
+		// tipo del último vehículo como si fuera el del periodo. Las dos las
+		// sustituye la leyenda de la izquierda, con un color por placa que se
+		// repite bajo cada día.
+		[COL.CARGO, 'CARGO']
 	];
 	for (const [c, texto] of rotulos) {
 		set(FILA.CAB_MES, c, { v: texto, s: cabecera() });
-		merge(FILA.CAB_MES, c, FILA.CAB_NOMBRE_DIA, c === COL.PLACA ? COL.PLACA_FIN : c);
+		merge(FILA.CAB_MES, c, FILA.CAB_NOMBRE_DIA, c === COL.CARGO ? COL.CARGO_FIN : c);
 	}
 
 	const datos: [number, ICellData][] = [
-		[COL.NUM, { v: indice, s: { ...base(), ht: HorizontalAlign.CENTER } }],
 		[COL.NOMBRE, comoTexto({ v: hoja.nombre, s: { ...base(), bl: 1 } })],
 		[COL.CEDULA, comoTexto({ v: hoja.cedula ?? '', s: base() })],
-		[COL.CARGO, comoTexto({ v: hoja.cargo, s: base() })],
-		[COL.VEHICULO, comoTexto({ v: hoja.tipoVehiculo ?? '', s: base() })],
-		[COL.PLACA, comoTexto({ v: hoja.placas.join(', '), s: base() })]
+		[COL.CARGO, comoTexto({ v: hoja.cargo, s: base() })]
 	];
 	for (const [c, cell] of datos) {
 		set(FILA.TURNO, c, cell);
-		merge(FILA.TURNO, c, FILA.HORAS, c === COL.PLACA ? COL.PLACA_FIN : c);
+		merge(FILA.TURNO, c, FILA.HORAS, c === COL.CARGO ? COL.CARGO_FIN : c);
 	}
 
 	// Fila de mes: un merge por tramo de mes seguido.
@@ -609,22 +735,57 @@ function zonaDias(args: {
 		tramoInicio = i;
 	}
 
-	// Rótulos de las filas 5-17, en la columna de la placa (ya libre ahí).
+	/**
+	 * Rótulos de fila.
+	 *
+	 * Sin HORA INICIO / HORA FIN / TOTAL HORAS / DISPONIBILIDAD: sus filas son
+	 * las cuatro primeras y se leen solas —«06:00», «18:00», «12», «DISP»—, así
+	 * que el rótulo repetía lo evidente y ocupaba el único hueco de la hoja con
+	 * ancho suficiente para un dato de cabecera. Ahí va ahora la nómina.
+	 *
+	 * Los que quedan SÍ hacen falta: un color sin nombre no significa nada, y
+	 * los códigos de recargo son siglas.
+	 */
 	const rotulosFila: [number, string][] = [
-		[FILA.TURNO, 'TURNO'],
-		[FILA.INICIO, 'HORA INICIO'],
-		[FILA.FIN, 'HORA FIN'],
-		[FILA.HORAS, 'TOTAL HORAS'],
-		[FILA.DISPONIBILIDAD, 'DISPONIBILIDAD'],
-		[FILA.CLIENTE_DIA, 'CLIENTE']
+		[FILA.CLIENTE_DIA, 'CLIENTE'],
+		[FILA.PLACA_DIA, 'PLACA']
 	];
 	for (const [r, texto] of rotulosFila) {
-		if (r === FILA.TURNO) continue; // ocupado por los datos del conductor
-		set(r, COL.PLACA_FIN, { v: texto, s: etiqueta() });
+		set(r, COL.ROTULOS, { v: texto, s: etiqueta() });
+	}
+
+	// ── Nómina a la que pertenece el conductor en este periodo ───────────
+	//
+	// Ocupa las tres columnas que quedaron libres (F-H) por encima de la tabla
+	// de bonos: es el hueco con más ancho de la hoja y estaba en blanco. Debajo
+	// sigue siendo el aire que separa las dos tablas.
+	const nomina = hoja.tipoNomina ?? '';
+	if (nomina) {
+		set(FILA.CAB_MES, COL.AIRE0, { v: 'NÓMINA', s: cabecera() });
+		merge(FILA.CAB_MES, COL.AIRE0, FILA.CAB_NOMBRE_DIA, COL.ROTULOS);
+		set(FILA.TURNO, COL.AIRE0, {
+			v: nomina,
+			s: {
+				...base(),
+				bl: 1,
+				fs: nomina.length > 14 ? 10 : 12,
+				ht: HorizontalAlign.CENTER,
+				// Villanueva es el caso por defecto y va en gris; Parex y Geopark
+				// se resaltan porque son los que cambian el cálculo del ajuste.
+				...(nomina === 'VILLANUEVA'
+					? { cl: { rgb: MUTED } }
+					: { bg: { rgb: '#ECFDF5' }, cl: { rgb: '#065F46' } })
+			}
+		});
+		/// Hasta HORAS y no hasta DISPONIBILIDAD: esa última fila es del bloque
+		/// de días —lleva el «DISP» de cada jornada— y el merge la partía por la
+		/// mitad, rompiendo la rejilla. Así el bloque de nómina queda a la misma
+		/// altura exacta que el del conductor, que también acaba en HORAS.
+		merge(FILA.TURNO, COL.AIRE0, FILA.HORAS, COL.ROTULOS);
 	}
 	ORDEN_RECARGOS.forEach((codigo, i) => {
 		const tarifa = hoja.tarifas.find((t) => t.codigo === codigo);
-		set(FILA.RECARGO0 + i, COL.PLACA_FIN, {
+		set(FILA.RECARGO0 + i, COL.ROTULOS, {
 			v: codigo,
 			s: {
 				...etiqueta(),
@@ -726,6 +887,17 @@ function zonaDias(args: {
 				s: { ...base(), bg: { rgb: dh.empresaColor } }
 			});
 		}
+
+		// Y debajo, la placa de ESE día. Misma regla que el cliente —color y no
+		// texto—, con la leyenda de la izquierda diciendo cuál es cuál. Juntas,
+		// las dos filas contestan de un vistazo «¿para quién y con qué vehículo
+		// trabajó cada día?», que antes había que reconstruir a mano.
+		if (dh.placaColor) {
+			set(FILA.PLACA_DIA, c, {
+				v: '',
+				s: { ...base(), bg: { rgb: dh.placaColor } }
+			});
+		}
 	}
 
 	// Total de horas del periodo, con fórmula viva: si alguien corrige una
@@ -733,7 +905,7 @@ function zonaDias(args: {
 	const cIni = colLetra(COL.DIA0);
 	const cFin = colLetra(COL.DIA0 + dias.length - 1);
 	set(FILA.TOTALES_TURNO, COL.NOMBRE, { v: 'TOTAL HORAS DEL PERIODO', s: etiqueta() });
-	merge(FILA.TOTALES_TURNO, COL.NOMBRE, FILA.TOTALES_TURNO, COL.PLACA_FIN);
+	merge(FILA.TOTALES_TURNO, COL.NOMBRE, FILA.TOTALES_TURNO, COL.ROTULOS);
 	set(FILA.TOTALES_TURNO, COL.DIA0, {
 		f: `=SUM(${cIni}${FILA.HORAS + 1}:${cFin}${FILA.HORAS + 1})`,
 		s: { ...totales(), ht: HorizontalAlign.LEFT, ...(FMT_HORAS ? { n: { pattern: FMT_HORAS } } : {}) }
@@ -741,6 +913,165 @@ function zonaDias(args: {
 	merge(FILA.TOTALES_TURNO, COL.DIA0, FILA.TOTALES_TURNO, COL.DIA0 + 3);
 
 	leyendaClientes({ hoja, set, merge });
+	leyendaPlacas({ hoja, set, merge });
+}
+
+/**
+ * Placas del periodo, en el hueco que dejan las filas de recargo.
+ *
+ * Las filas 11-18 tenían las columnas B-E vacías: los datos del conductor
+ * ocupan solo hasta la fila 9 y los rótulos de recargo viven en la columna G.
+ * Ocho filas de ancho útil sin usar, justo al lado de lo que hay que mirar.
+ *
+ * Ahí van las placas, una por fila, con su cuadro de color — el mismo que se
+ * repite bajo cada día en la fila 19. Es lo que sustituye a la vieja columna
+ * PLACA de la cabecera, que apilaba «PPQ491, LLQ895, SIN-PLACA, TSS965,
+ * POP128» en una celda de dos columnas.
+ *
+ * Si hay más placas que filas disponibles, la última dice cuántas quedan fuera
+ * en vez de desbordarse sobre los totales.
+ */
+function leyendaPlacas(args: {
+	hoja: HojaNominaDTO;
+	set: (r: number, c: number, cell: ICellData) => void;
+	merge: (r1: number, c1: number, r2: number, c2: number) => void;
+}) {
+	const { hoja, set, merge } = args;
+	const placas = hoja.placasUsadas ?? [];
+	if (!placas.length) return;
+
+	/// El bloque libre: de la primera fila de recargo a la de la placa.
+	const PRIMERA = FILA.RECARGO0;
+	/// Hasta la fila anterior a la separación: la tabla de bonos vive en las
+	/// columnas A-E y podría seguir bajando, pero cruzar la banda en blanco la
+	/// haría parecer parte del bloque de cliente y placa.
+	const ULTIMA = FILA.CLIENTE_DIA - 1;
+	/// Cinco columnas (A-E): una para el rótulo y cuatro para placas. Es un tope
+	/// de la rejilla, no una decisión — un ancho es de la COLUMNA ENTERA y meter
+	/// más aquí correría las de día y descuadraría las zonas de abajo.
+	const COLS_PLACA = COL.CARGO_FIN - COL.NOMBRE;
+
+	const matriz = hoja.matrizBonos;
+
+	// ── Sin bonos: la lista simple, que es lo que da sentido a los colores ──
+	if (!matriz?.filas.length) {
+		set(PRIMERA, COL.NOMBRE, {
+			v: placas.length === 1 ? 'VEHÍCULO DEL PERIODO' : 'VEHÍCULOS DEL PERIODO',
+			s: cabecera()
+		});
+		merge(PRIMERA, COL.NOMBRE, PRIMERA, COL.CARGO_FIN);
+
+		const cabida = ULTIMA - PRIMERA;
+		placas.slice(0, cabida).forEach((p, i) => {
+			const r = PRIMERA + 1 + i;
+			set(r, COL.NOMBRE, {
+				v: p.placa,
+				s: { ...base(), bg: { rgb: p.color }, cl: { rgb: contraste(p.color) }, bl: 1, ht: HorizontalAlign.CENTER, fs: 9 }
+			});
+			merge(r, COL.NOMBRE, r, COL.CARGO_FIN);
+		});
+		return;
+	}
+
+	/**
+	 * Solo entran las placas CON bonos.
+	 *
+	 * Antes se anunciaban las descartadas con un «(+3)» que no significaba nada
+	 * para quien lo leía: eran placas a cero en todas las filas, o sea columnas
+	 * vacías. Lo que sí merece aviso es lo contrario —una placa que TIENE bonos
+	 * y no cabe—, y eso es lo que se dice abajo con todas las letras.
+	 */
+	const conBonos = matriz.placas
+		.map((p, i) => ({ ...p, i, suma: matriz.filas.reduce((t, f) => t + (f.cantidades[i] ?? 0), 0) }))
+		.filter((p) => p.suma > 0)
+		.sort((a, b) => b.suma - a.suma);
+	const visibles = conBonos.slice(0, COLS_PLACA);
+	const omitidas = conBonos.slice(COLS_PLACA);
+
+	// ── Título ────────────────────────────────────────────────────────────
+	set(PRIMERA, COL.NOMBRE, { v: 'BONOS POR VEHÍCULO', s: cabecera() });
+	merge(PRIMERA, COL.NOMBRE, PRIMERA, COL.CARGO_FIN);
+
+	// ── Cabecera de columnas ──────────────────────────────────────────────
+	const FILA_CAB = PRIMERA + 1;
+	set(FILA_CAB, COL.NOMBRE, {
+		v: 'BONO · VALOR UNITARIO',
+		s: { ...cabecera(SUBCAB), ht: HorizontalAlign.LEFT, fs: 9 }
+	});
+	visibles.forEach((p, k) => {
+		set(FILA_CAB, COL.NOMBRE + 1 + k, {
+			// La placa conserva SU color también aquí: es la misma clave que se
+			// repite bajo cada día en la fila 19, y romperla obligaría a
+			// aprenderse dos códigos para lo mismo.
+			v: p.placa,
+			s: { ...base(), bg: { rgb: p.color }, cl: { rgb: contraste(p.color) }, bl: 1, ht: HorizontalAlign.CENTER, fs: 8 }
+		});
+	});
+	/// Las columnas de placa que sobran se cierran igual: sin esto la tabla
+	/// termina en un borde a media altura y parece cortada.
+	for (let k = visibles.length; k < COLS_PLACA; k++) {
+		set(FILA_CAB, COL.NOMBRE + 1 + k, { v: '', s: cabecera(SUBCAB) });
+	}
+
+	// ── Cuerpo: una fila por bono ─────────────────────────────────────────
+	const filasCabida = ULTIMA - FILA_CAB - (omitidas.length ? 1 : 0);
+	matriz.filas.slice(0, filasCabida).forEach((f, i) => {
+		const r = FILA_CAB + 1 + i;
+		const zebra = i % 2 === 1;
+		set(r, COL.NOMBRE, {
+			v: `${f.nombre}  ·  ${formatoCOP(f.valorUnitario)}`,
+			s: { ...(zebra ? derivada() : base()), ht: HorizontalAlign.LEFT, fs: 8 }
+		});
+		visibles.forEach((p, k) => {
+			const n = f.cantidades[p.i] ?? 0;
+			set(r, COL.NOMBRE + 1 + k, {
+				// Un cero se deja en blanco: la tabla tiene más ceros que datos y
+				// llenarla de ceros esconde lo que sí pasó.
+				v: n > 0 ? n : '',
+				s: {
+					...(zebra ? derivada() : base()),
+					ht: HorizontalAlign.CENTER,
+					fs: 9,
+					...(n > 0 ? { bl: 1 } : {})
+				}
+			});
+		});
+		for (let k = visibles.length; k < COLS_PLACA; k++) {
+			set(r, COL.NOMBRE + 1 + k, { v: '', s: zebra ? derivada() : base() });
+		}
+	});
+
+	// ── Pie: totales por placa ────────────────────────────────────────────
+	const filasPintadas = Math.min(matriz.filas.length, filasCabida);
+	const rTotal = FILA_CAB + 1 + filasPintadas;
+	if (rTotal <= ULTIMA) {
+		set(rTotal, COL.NOMBRE, { v: 'TOTAL BONOS', s: { ...totales(), ht: HorizontalAlign.LEFT, fs: 8 } });
+		visibles.forEach((p, k) => {
+			const suma = matriz.filas.reduce((t, f) => t + (f.cantidades[p.i] ?? 0), 0);
+			set(rTotal, COL.NOMBRE + 1 + k, {
+				v: suma > 0 ? suma : '',
+				s: { ...totales(), ht: HorizontalAlign.CENTER, fs: 9 }
+			});
+		});
+		for (let k = visibles.length; k < COLS_PLACA; k++) {
+			set(rTotal, COL.NOMBRE + 1 + k, { v: '', s: totales() });
+		}
+	}
+
+	// ── Aviso SOLO si se queda fuera una placa que sí tiene bonos ──────────
+	if (omitidas.length) {
+		const r = Math.min(rTotal + 1, ULTIMA);
+		set(r, COL.NOMBRE, {
+			v: `Con bonos y sin columna: ${omitidas.map((p) => p.placa).join(', ')}`,
+			s: { ...base(), ht: HorizontalAlign.LEFT, fs: 8, cl: { rgb: FESTIVO_TEXTO }, bg: { rgb: FESTIVO_BG } }
+		});
+		merge(r, COL.NOMBRE, r, COL.CARGO_FIN);
+	}
+}
+
+/** `$26.061` — el precio unitario del bono, corto para que quepa en la celda. */
+function formatoCOP(n: number): string {
+	return `$${Math.round(n).toLocaleString('es-CO')}`;
 }
 
 /**
