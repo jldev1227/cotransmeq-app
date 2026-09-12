@@ -345,6 +345,58 @@
 		return tramos;
 	}
 
+	/**
+	 * Reparte una sección de firmas en BLOQUES DE FIRMANTE.
+	 *
+	 * El formato las escribe como una lista: firma de quien entrega, su nombre,
+	 * su cédula, firma de quien recibe, su nombre, su cédula. Renderizado tal
+	 * cual, el acta pide seis renglones apilados y las dos rúbricas quedan a
+	 * media página una de otra, cuando en el papel van lado a lado —es un acta
+	 * de entrega: las dos partes firman enfrentadas—.
+	 *
+	 * El corte es por ORDEN, no por el texto de las etiquetas: cada firma abre un
+	 * bloque y lo que viene detrás le pertenece hasta la firma siguiente. Así
+	 * funciona con «quien entrega / quien recibe», con «conductor / supervisor» y
+	 * con cualquier pareja que se le ocurra a quien diseñe el formato, sin que
+	 * haya que enseñarle nombres al renderizador.
+	 *
+	 * Las galerías y las tablas CIERRAN el bloque en vez de entrar en él: una
+	 * rejilla de fotos dentro de media columna deja de ser legible, y nada dice
+	 * que un anexo colocado detrás de una firma sea de ese firmante.
+	 */
+	type Tramo = { forma: Forma; campos: FormFieldDto[] };
+
+	function bloquesDeFirma(section: FormSectionDto): {
+		previos: Tramo[];
+		bloques: { firma: FormFieldDto; extras: Tramo[] }[];
+		posteriores: Tramo[];
+	} {
+		const previos: Tramo[] = [];
+		const bloques: { firma: FormFieldDto; extras: Tramo[] }[] = [];
+		const posteriores: Tramo[] = [];
+		/// Una vez cerrado por una galería o una tabla no se vuelve a abrir: lo que
+		/// sigue es contenido de la sección, no del último firmante.
+		let cerrado = false;
+
+		for (const tramo of tramosDe(section)) {
+			if (tramo.forma === 'firma' && !cerrado) {
+				/// Cada campo su bloque: dos firmas seguidas sin nada en medio son dos
+				/// columnas, no una celda con dos rúbricas.
+				for (const campo of tramo.campos) bloques.push({ firma: campo, extras: [] });
+			} else if (tramo.forma === 'evidencia' || tramo.forma === 'tabla') {
+				cerrado = bloques.length > 0;
+				(cerrado ? posteriores : previos).push(tramo);
+			} else if (cerrado) {
+				posteriores.push(tramo);
+			} else if (bloques.length === 0) {
+				previos.push(tramo);
+			} else {
+				bloques[bloques.length - 1].extras.push(tramo);
+			}
+		}
+		return { previos, bloques, posteriores };
+	}
+
 	const secciones = $derived((definicion.sections ?? []).filter((s) => camposDe(s).length > 0));
 
 	/// Las secciones se reparten en dos columnas paralelas —como el FR-10— salvo
@@ -355,6 +407,39 @@
 			const forma = formaDe(f);
 			return forma === 'firma' || forma === 'evidencia' || forma === 'tabla';
 		});
+	}
+
+	/**
+	 * De las anchas, cuáles necesitan de verdad el ancho ENTERO.
+	 *
+	 * «Ancha» solo quería decir «no cabe en la columna estrecha del cuerpo», y con
+	 * eso todas se apilaban a lo largo de la hoja ocupando una banda completa cada
+	 * una. Medido en un acta real: cuatro bandas de 1751 px de ancho para ocupar
+	 * 45, 171, 30 y 135 px de alto — la última página salía a menos de la mitad.
+	 *
+	 * Lo entero lo necesitan dos cosas: una TABLA con filas, porque sus columnas
+	 * ya vienen apretadas, y las FIRMAS, que llevan dentro su propia rejilla de
+	 * dos columnas y partirlas otra vez las dejaría en cuatro celdas ilegibles.
+	 * Una galería de fotos, en cambio, se lee igual de bien a media hoja.
+	 */
+	/// A partir de aquí una galería rinde más a ancho completo que a media hoja:
+	/// en media hoja caben tres por fila, así que cinco fotos pasan a dos filas
+	/// —más alto del que ahorra compartir la fila con la sección de al lado—.
+	const FOTOS_PARA_ANCHO_COMPLETO = 5;
+
+	function anchaCompleta(section: FormSectionDto): boolean {
+		let fotos = 0;
+		for (const f of camposDe(section)) {
+			const forma = formaDe(f);
+			if (forma === 'firma') return true;
+			if (forma === 'tabla' && agruparOcurrencias(f).length > 0) return true;
+			if (forma === 'evidencia') {
+				fotos += (adjuntosPorCampo.get(f.id) ?? []).filter((a) =>
+					a.mimeType?.startsWith('image/')
+				).length;
+			}
+		}
+		return fotos >= FOTOS_PARA_ANCHO_COMPLETO;
 	}
 
 	const seccionesEstrechas = $derived(secciones.filter((s) => !seccionAncha(s)));
@@ -638,123 +723,138 @@
 			{/each}
 		</div>
 
-		<!-- Firmas, evidencia y tablas: ancho completo. -->
-		{#each seccionesAnchas as section (section.id)}
-			<section class="sec sec--ancha">
-				<h2 class="banda">{section.title}</h2>
-				{#each tramosDe(section) as tramo}
-					{#if tramo.forma === 'firma'}
-						<div class="firmas">
-							{#each tramo.campos as field (field.id)}
-								{@const adjuntos = adjuntosPorCampo.get(field.id) ?? []}
-								<figure class="firma">
-									{#if adjuntos.length && adjuntos[0].url}
-										<img class="firma__img" src={adjuntos[0].url} alt="Firma de {field.label}" />
-									{:else}
-										<div class="firma__falta">Sin firma registrada</div>
-									{/if}
-									<figcaption class="firma__pie">{field.label}</figcaption>
-								</figure>
+		<!-- Firmas, evidencia y tablas: fuera del cuerpo a dos columnas porque no
+		     caben en una columna estrecha, pero emparejadas entre sí para no gastar
+		     una banda entera por bloque. Solo las tablas con filas y las firmas
+		     ocupan el ancho completo. -->
+		<div class="anchas">
+			{#each seccionesAnchas as section (section.id)}
+				{@const grupos = bloquesDeFirma(section)}
+				<section class="sec sec--ancha" class:sec--completa={anchaCompleta(section)}>
+					<h2 class="banda">{section.title}</h2>
+
+					{#each grupos.previos as tramo}{@render tramoAncho(tramo)}{/each}
+
+					{#if grupos.bloques.length}
+						<!-- Una columna por firmante: la rúbrica y los datos de quien la
+					     estampó viajan juntos, como en el papel. -->
+						<div class="firmantes">
+							{#each grupos.bloques as bloque (bloque.firma.id)}
+								{@const adjuntos = adjuntosPorCampo.get(bloque.firma.id) ?? []}
+								<div class="firmante">
+									<figure class="firma">
+										{#if adjuntos.length && adjuntos[0].url}
+											<!-- El `alt` es la etiqueta a secas: el campo ya se llama
+										     «Firma de quien entrega» y anteponerle «Firma de» daba
+										     «Firma de Firma de quien entrega» a quien lo lee con
+										     lector de pantalla. -->
+											<img class="firma__img" src={adjuntos[0].url} alt={bloque.firma.label} />
+										{:else}
+											<div class="firma__falta">Sin firma registrada</div>
+										{/if}
+										<figcaption class="firma__pie">{bloque.firma.label}</figcaption>
+									</figure>
+									{#each bloque.extras as tramo}{@render tramoAncho(tramo)}{/each}
+								</div>
 							{/each}
 						</div>
-					{:else if tramo.forma === 'evidencia'}
-						{#each tramo.campos as field (field.id)}
-							{@const adjuntos = adjuntosPorCampo.get(field.id) ?? []}
-							{#if adjuntos.length === 0}
-								<!-- Sin adjuntos no hay galería que enmarcar: una línea basta para
+					{/if}
+
+					{#each grupos.posteriores as tramo}{@render tramoAncho(tramo)}{/each}
+				</section>
+			{/each}
+		</div>
+
+		<!-- La cadena de formas vive en un snippet porque se usa en dos sitios: el
+		     flujo normal de la sección y el interior de cada bloque de firmante. -->
+		{#snippet tramoAncho(tramo: Tramo)}
+			{#if tramo.forma === 'evidencia'}
+				{#each tramo.campos as field (field.id)}
+					{@const adjuntos = adjuntosPorCampo.get(field.id) ?? []}
+					{#if adjuntos.length === 0}
+						<!-- Sin adjuntos no hay galería que enmarcar: una línea basta para
 								     dejar constancia de que se pidió la evidencia. -->
-								<div class="fila fila--nota">
-									<span class="fila__desc"
-										>{field.label} <i class="vacio">· sin evidencia adjunta</i></span
-									>
-								</div>
-							{:else}
-								<div class="evid">
-									<p class="parrafo__k">{field.label}</p>
-									<div class="galeria">
-										{#each adjuntos as at (at.id)}
-											{#if at.mimeType?.startsWith('image/') && at.url}
-												<figure class="foto">
-													<img
-														class="foto__img"
-														src={at.url}
-														alt={at.originalName ?? field.label}
-													/>
-												</figure>
-											{:else}
-												<!-- Un PDF adjunto no se puede incrustar en el impreso; se
+						<div class="fila fila--nota">
+							<span class="fila__desc"
+								>{field.label} <i class="vacio">· sin evidencia adjunta</i></span
+							>
+						</div>
+					{:else}
+						<div class="evid">
+							<p class="parrafo__k">{field.label}</p>
+							<div class="galeria">
+								{#each adjuntos as at (at.id)}
+									{#if at.mimeType?.startsWith('image/') && at.url}
+										<figure class="foto">
+											<img class="foto__img" src={at.url} alt={at.originalName ?? field.label} />
+										</figure>
+									{:else}
+										<!-- Un PDF adjunto no se puede incrustar en el impreso; se
 												     deja constancia de que existe. -->
-												<div class="archivo">
-													<b>{at.originalName ?? 'Archivo'}</b>
-													<span>{at.mimeType}</span>
-												</div>
-											{/if}
-										{/each}
-									</div>
-								</div>
-							{/if}
-						{/each}
-					{:else if tramo.forma === 'tabla'}
-						{#each tramo.campos as field (field.id)}
-							{@const filas = agruparOcurrencias(field)}
-							{#if filas.length === 0}
-								<!-- Un repetible sin ocurrencias: la tabla sería una cabecera de
-								     columnas sin nada debajo. Colapsa igual que una observación. -->
-								<div class="fila fila--nota">
-									<span class="fila__desc"
-										>{field.label} <i class="vacio">· sin registros</i></span
-									>
-								</div>
-							{:else}
-								<div class="tabla-wrap">
-									<p class="parrafo__k">{field.label}</p>
-									<table class="tabla">
-										<thead>
-											<tr>
-												{#each field.children as hijo (hijo.id)}<th>{hijo.label}</th>{/each}
-											</tr>
-										</thead>
-										<tbody>
-											{#each filas as fila}
-												<tr>
-													{#each field.children as hijo (hijo.id)}<td>{fila[hijo.id] ?? '—'}</td
-														>{/each}
-												</tr>
-											{/each}
-										</tbody>
-									</table>
-								</div>
-							{/if}
-						{/each}
-					{:else if tramo.forma === 'escalar' || tramo.forma === 'checklist'}
-						{#each tramo.campos as field (field.id)}
-							{@const valor = valorLegible(field)}
-							<div class="fila fila--libre">
-								<span class="fila__desc">{field.label}</span>
-								<span class="fila__valor" class:vacio={valor === null}>{valor ?? '—'}</span>
+										<div class="archivo">
+											<b>{at.originalName ?? 'Archivo'}</b>
+											<span>{at.mimeType}</span>
+										</div>
+									{/if}
+								{/each}
 							</div>
-						{/each}
-					{:else if tramo.forma === 'bloque'}
-						<!-- Misma regla de colapso que en la columna estrecha. -->
-						{#each tramo.campos as field (field.id)}
-							{@const valor = valorLegible(field)}
-							{#if valor === null}
-								<div class="fila fila--nota">
-									<span class="fila__desc"
-										>{field.label} <i class="vacio">· sin observaciones</i></span
-									>
-								</div>
-							{:else}
-								<div class="parrafo">
-									<p class="parrafo__k">{field.label}</p>
-									<p class="parrafo__v">{valor}</p>
-								</div>
-							{/if}
-						{/each}
+						</div>
 					{/if}
 				{/each}
-			</section>
-		{/each}
+			{:else if tramo.forma === 'tabla'}
+				{#each tramo.campos as field (field.id)}
+					{@const filas = agruparOcurrencias(field)}
+					{#if filas.length === 0}
+						<!-- Un repetible sin ocurrencias: la tabla sería una cabecera de
+								     columnas sin nada debajo. Colapsa igual que una observación. -->
+						<div class="fila fila--nota">
+							<span class="fila__desc">{field.label} <i class="vacio">· sin registros</i></span>
+						</div>
+					{:else}
+						<div class="tabla-wrap">
+							<p class="parrafo__k">{field.label}</p>
+							<table class="tabla">
+								<thead>
+									<tr>
+										{#each field.children as hijo (hijo.id)}<th>{hijo.label}</th>{/each}
+									</tr>
+								</thead>
+								<tbody>
+									{#each filas as fila}
+										<tr>
+											{#each field.children as hijo (hijo.id)}<td>{fila[hijo.id] ?? '—'}</td>{/each}
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+					{/if}
+				{/each}
+			{:else if tramo.forma === 'escalar' || tramo.forma === 'checklist'}
+				{#each tramo.campos as field (field.id)}
+					{@const valor = valorLegible(field)}
+					<div class="fila fila--libre">
+						<span class="fila__desc">{field.label}</span>
+						<span class="fila__valor" class:vacio={valor === null}>{valor ?? '—'}</span>
+					</div>
+				{/each}
+			{:else if tramo.forma === 'bloque'}
+				<!-- Misma regla de colapso que en la columna estrecha. -->
+				{#each tramo.campos as field (field.id)}
+					{@const valor = valorLegible(field)}
+					{#if valor === null}
+						<div class="fila fila--nota">
+							<span class="fila__desc">{field.label} <i class="vacio">· sin observaciones</i></span>
+						</div>
+					{:else}
+						<div class="parrafo">
+							<p class="parrafo__k">{field.label}</p>
+							<p class="parrafo__v">{valor}</p>
+						</div>
+					{/if}
+				{/each}
+			{/if}
+		{/snippet}
 
 		<!-- Pie. En pantalla cierra el documento; en papel el CSS lo fija al margen
 		     inferior y Chrome lo repite en TODAS las hojas, que es lo que permite
