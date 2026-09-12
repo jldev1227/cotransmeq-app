@@ -1,6 +1,6 @@
 <script lang="ts">
 	/**
-	 * Canvas de INGRESOS DE COTRANSMEQ.
+	 * Canvas de INGRESOS DE TRANSMERALDA.
 	 *
 	 * Réplica de las hojas «OTROS INGRESOS <MES>» y «ADICIONALES <MES>» del
 	 * formato GAF-FR-11. El libro tiene SOLO las DOS hojas del mes que se está
@@ -116,6 +116,9 @@
 		nombreArchivoHoja
 	} from '$lib/components/liquidaciones-terceros/preview/formato';
 	import { toast } from 'svelte-sonner';
+	/// Iconografía compartida de los canvas: la misma acción, el mismo
+	/// dibujo en todas las pantallas. Ver `iconos-canvas.svelte`.
+	import { icoCorreo, icoRecargar } from '$lib/components/univer/iconos-canvas.svelte';
 
 	const MESES = [
 		'ENERO',
@@ -1264,11 +1267,11 @@
 </script>
 
 <svelte:head>
-	<title>Ingresos Cotransmeq {anio} (canvas) · Cotransmeq</title>
+	<title>Ingresos Transmeralda {anio} (canvas) · Transmeralda</title>
 </svelte:head>
 
 <UniverToolbar
-	title="INGRESOS DE COTRANSMEQ: {periodDisplay}"
+	title="INGRESOS DE TRANSMERALDA: {periodDisplay}"
 	hoja={hojaActiva}
 	subtitle="{serviciosCount} servicio(s)  ·  {marcadosCount} en adicionales{negativosCount
 		? `  ·  ${negativosCount} en negativo`
@@ -1420,28 +1423,6 @@
 	</svg>
 {/snippet}
 
-{#snippet icoCorreoEnv()}
-	<svg
-		width="15"
-		height="15"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="1.8"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-	>
-		<rect x="3" y="5" width="18" height="14" rx="2.5" />
-		<path d="M3.5 7l8.5 6 8.5-6" />
-	</svg>
-{/snippet}
-
-{#snippet icoRecargar()}
-	<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-		<path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-	</svg>
-{/snippet}
-
 <div class="ing-body">
 	<div class="ing-canvas">
 		<UniverCanvasHost
@@ -1455,7 +1436,7 @@
 	</div>
 
 	<UniverSideRail
-		ariaLabel="Acciones de ingresos de Cotransmeq"
+		ariaLabel="Acciones de ingresos de Transmeralda"
 		items={[
 			{
 				id: 'filas',
@@ -1495,7 +1476,7 @@
 				id: 'envio',
 				label: 'Enviar por correo',
 				hint: `Enviar por correo el PDF de ${HOJAS_INGRESOS[hojaActiva].titulo} de ${periodDisplay}, con destinatario y copias escritos a mano, mensaje y adjuntos adicionales. Sale a nombre de contabilidad y deja constancia de a quién y cuándo se envió.`,
-				icon: icoCorreoEnv,
+				icon: icoCorreo,
 				disabled: loading || !!loadError || serviciosCount === 0,
 				disabledHint: serviciosCount === 0 ? 'El mes no tiene servicios.' : 'El mes todavía se está cargando.',
 				onSelect: () => (envioAbierto = true)

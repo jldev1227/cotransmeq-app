@@ -74,6 +74,9 @@
 	} from '$lib/api/facturacionLiquidaciones';
 	import { authStore } from '$lib/stores/auth';
 	import { checkAccess } from '$lib/config/permissions';
+	/// Iconografía compartida de los canvas: la misma acción, el mismo
+	/// dibujo en todas las pantallas. Ver `iconos-canvas.svelte`.
+	import { icoExcel, icoRecargar, icoVer } from '$lib/components/univer/iconos-canvas.svelte';
 	import {
 		createHistorialSession,
 		type HistorialSession,
@@ -1395,7 +1398,7 @@
 					seleccionLiq.length === 1
 						? `Abre el preview de ${seleccionLiq[0].consecutivo}.`
 						: 'También se abre pulsando 👁 VER en la primera columna.',
-				icon: icoOjo,
+				icon: icoVer,
 				disabled: seleccionLiq.length !== 1 || !!solicitudEditor,
 				disabledHint:
 					seleccionLiq.length === 0
@@ -1668,13 +1671,6 @@
 	</svg>
 {/snippet}
 
-{#snippet icoOjo()}
-	<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-		<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
-		<circle cx="12" cy="12" r="3" />
-	</svg>
-{/snippet}
-
 {#snippet icoAprobar()}
 	<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 		<path d="M22 11.1V12a10 10 0 1 1-5.9-9.1" />
@@ -1698,13 +1694,6 @@
 	</svg>
 {/snippet}
 
-{#snippet icoRecargar()}
-	<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-		<path d="M21 12a9 9 0 1 1-3-6.7" />
-		<path d="M21 3v6h-6" />
-	</svg>
-{/snippet}
-
 {#snippet icoFactura()}
 	<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
 		<path d="M4 2v20l3-2 3 2 3-2 3 2 3-2V2l-3 2-3-2-3 2-3-2Z" />
@@ -1724,14 +1713,6 @@
 		<path d="M18.8 12.2 20 11a5 5 0 0 0-7-7l-1.2 1.2" />
 		<path d="M5.2 11.8 4 13a5 5 0 0 0 7 7l1.2-1.2" />
 		<path d="M2 2l20 20" />
-	</svg>
-{/snippet}
-
-{#snippet icoExcel()}
-	<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-		<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
-		<path d="M14 2v6h6" />
-		<path d="m9 13 6 5M15 13l-6 5" />
 	</svg>
 {/snippet}
 
@@ -1866,8 +1847,8 @@
 		cursor: pointer;
 	}
 	.hs-facturas button:hover:not(:disabled) {
-		background: #f0fdf4;
-		border-color: #bbf7d0;
+		background: #ecfdf5;
+		border-color: #a7f3d0;
 	}
 	.hs-facturas button:disabled {
 		opacity: 0.5;
@@ -1876,7 +1857,7 @@
 	.hs-factura-num {
 		font-size: 12px;
 		font-weight: 700;
-		color: #166534;
+		color: #065f46;
 	}
 	.hs-factura-meta {
 		font-size: 11px;

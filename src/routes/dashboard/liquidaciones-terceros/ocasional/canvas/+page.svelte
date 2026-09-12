@@ -66,6 +66,9 @@
 		nombreArchivoHoja
 	} from '$lib/components/liquidaciones-terceros/preview/formato';
 	import { toast } from 'svelte-sonner';
+	/// Iconografía compartida de los canvas: la misma acción, el mismo
+	/// dibujo en todas las pantallas. Ver `iconos-canvas.svelte`.
+	import { icoCorreo, icoExcel, icoHistorial, icoRecargar, icoVer, icoZip } from '$lib/components/univer/iconos-canvas.svelte';
 
 	const MESES = [
 		'ENERO',
@@ -1164,7 +1167,7 @@
 </script>
 
 <svelte:head>
-	<title>Liquidaciones ocasionales {anio} (canvas) · Cotransmeq</title>
+	<title>Liquidaciones ocasionales {anio} (canvas) · Transmeralda</title>
 </svelte:head>
 
 <UniverToolbar
@@ -1274,12 +1277,6 @@
 	/>
 {/if}
 
-{#snippet icoRefrescar()}
-	<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-		<path d="M1 4v6h6" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-	</svg>
-{/snippet}
-
 {#snippet icoFilas()}
 	<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
 		<path d="M13.5 16.875h6.75M16.875 13.5v6.75" />
@@ -1301,21 +1298,6 @@
 	</svg>
 {/snippet}
 
-{#snippet icoHistorial()}
-	<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-		<path d="M12 8v4l3 2" />
-		<path d="M3.05 11a9 9 0 1 1 .5 4" />
-		<path d="M3 4v5h5" />
-	</svg>
-{/snippet}
-
-{#snippet icoOjo()}
-	<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-		<path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-		<path d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-	</svg>
-{/snippet}
-
 {#snippet icoDocumento()}
 	<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
 		<path d="M14.25 3.75v3.75a1.5 1.5 0 001.5 1.5h3.75" />
@@ -1326,36 +1308,6 @@
 {#snippet icoCerrar()}
 	<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
 		<path d="M20 6L9 17l-5-5" />
-	</svg>
-{/snippet}
-
-{#snippet icoCorreoEnv()}
-	<svg
-		width="15"
-		height="15"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="1.8"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-	>
-		<rect x="3" y="5" width="18" height="14" rx="2.5" />
-		<path d="M3.5 7l8.5 6 8.5-6" />
-	</svg>
-{/snippet}
-
-{#snippet icoZip()}
-	<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-		<path d="M4.5 6.75A2.25 2.25 0 016.75 4.5h3.129c.53 0 1.039.21 1.414.586l1.121 1.121c.375.375.884.586 1.414.586h3.522A2.25 2.25 0 0119.5 9.043v8.207a2.25 2.25 0 01-2.25 2.25H6.75a2.25 2.25 0 01-2.25-2.25V6.75z" />
-		<path d="M12 9.5v1M12 12v1M12 14.5v1.25" />
-	</svg>
-{/snippet}
-
-{#snippet icoExcel()}
-	<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-		<rect x="3.5" y="4" width="17" height="16" rx="2" />
-		<path d="M3.5 9.5h17M3.5 15h17M9.5 4v16M15 4v16" />
 	</svg>
 {/snippet}
 
@@ -1380,7 +1332,7 @@
 				hint: cabeceraActiva
 					? `Traer a ${periodDisplay} los servicios del MISMO mes que se volvieron elegibles después de generar el borrador. Para los de otros meses, «Traer items».`
 					: `${periodDisplay} no tiene borrador todavía. Genéralo a partir de los servicios del mes cuya placa no tenga cierre final.`,
-				icon: icoRefrescar,
+				icon: icoRecargar,
 				tone: cabeceraActiva ? 'default' : 'green',
 				busy: cabeceraActiva ? refrescando : generando,
 				onSelect: () => (cabeceraActiva ? refrescarMes() : (modalTercerosOpen = true))
@@ -1409,7 +1361,7 @@
 				id: 'preview',
 				label: 'Vista previa',
 				hint: `Ver el documento de ${periodDisplay} con lo que hay en pantalla y exportarlo a PDF.`,
-				icon: icoOjo,
+				icon: icoVer,
 				onSelect: () => (previewAbierto = true)
 			},
 			{
@@ -1448,7 +1400,7 @@
 				id: 'envio',
 				label: 'Enviar por correo',
 				hint: `Enviar por correo el PDF de ${periodDisplay}, con destinatario y copias escritos a mano, mensaje y adjuntos adicionales. Sale a nombre de contabilidad y deja constancia de a quién y cuándo se envió.`,
-				icon: icoCorreoEnv,
+				icon: icoCorreo,
 				disabled: !datosMesActivo || (!cabeceraActiva && !datosMesActivo.items.length && !datosMesActivo.adicionales.length),
 				disabledHint: `${periodDisplay} no tiene datos que enviar.`,
 				onSelect: () => (envioAbierto = true)

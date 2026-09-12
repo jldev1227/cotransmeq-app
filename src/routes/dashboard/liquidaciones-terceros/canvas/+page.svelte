@@ -94,6 +94,9 @@
 	import { connectSocket } from '$lib/socketClient';
 	import { authStore } from '$lib/stores/auth';
 	import { toast } from 'svelte-sonner';
+	/// Iconografía compartida de los canvas: la misma acción, el mismo
+	/// dibujo en todas las pantallas. Ver `iconos-canvas.svelte`.
+	import { icoBorradores, icoCorreo, icoExcel, icoVer, icoZip } from '$lib/components/univer/iconos-canvas.svelte';
 
 	const MESES = [
 		'ENERO',
@@ -1731,7 +1734,7 @@
 <svelte:window onbeforeunload={avisarSiPendiente} />
 
 <svelte:head>
-	<title>Cierres finales {periodDisplay} (canvas) · Cotransmeq</title>
+	<title>Cierres finales {periodDisplay} (canvas) · Transmeralda</title>
 </svelte:head>
 
 <UniverToolbar
@@ -1928,92 +1931,6 @@
 	</svg>
 {/snippet}
 
-{#snippet icoOjo()}
-	<svg
-		width="15"
-		height="15"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="1.8"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-	>
-		<path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-		<path
-			d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-		/>
-	</svg>
-{/snippet}
-
-{#snippet icoExcel()}
-	<svg
-		width="15"
-		height="15"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="1.8"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-	>
-		<rect x="3.5" y="4" width="17" height="16" rx="2" />
-		<path d="M3.5 9.5h17M3.5 15h17M9.5 4v16M15 4v16" />
-	</svg>
-{/snippet}
-
-{#snippet icoZip()}
-	<svg
-		width="15"
-		height="15"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="1.8"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-	>
-		<path
-			d="M4.5 6.75A2.25 2.25 0 016.75 4.5h3.129c.53 0 1.039.21 1.414.586l1.121 1.121c.375.375.884.586 1.414.586h3.522A2.25 2.25 0 0119.5 9.043v8.207a2.25 2.25 0 01-2.25 2.25H6.75a2.25 2.25 0 01-2.25-2.25V6.75z"
-		/>
-		<path d="M12 9.5v1M12 12v1M12 14.5v1.25" />
-	</svg>
-{/snippet}
-
-{#snippet icoCorreo()}
-	<svg
-		width="15"
-		height="15"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="1.8"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-	>
-		<rect x="3" y="5" width="18" height="14" rx="2.5" />
-		<path d="M3.5 7l8.5 6 8.5-6" />
-	</svg>
-{/snippet}
-
-{#snippet icoBorradores()}
-	<svg
-		width="15"
-		height="15"
-		viewBox="0 0 24 24"
-		fill="none"
-		stroke="currentColor"
-		stroke-width="1.8"
-		stroke-linecap="round"
-		stroke-linejoin="round"
-	>
-		<path d="M12 9v6M15 12H9" />
-		<path
-			d="M19.5 14.25v5.25a1.5 1.5 0 01-1.5 1.5H6a1.5 1.5 0 01-1.5-1.5V4.5A1.5 1.5 0 016 3h6.75L19.5 9.75v4.5z"
-		/>
-	</svg>
-{/snippet}
-
 {#snippet icoEliminar()}
 	<svg
 		width="15"
@@ -2184,7 +2101,7 @@
 				id: 'preview',
 				label: 'Vista previa',
 				hint: `Ver la hoja de ${cierreActivoObj?.placa ?? ''} tal y como está ahora y exportarla a PDF.`,
-				icon: icoOjo,
+				icon: icoVer,
 				disabled: !detalleActivo,
 				disabledHint: 'La hoja activa todavía se está cargando.',
 				onSelect: () => (previewAbierto = true)
