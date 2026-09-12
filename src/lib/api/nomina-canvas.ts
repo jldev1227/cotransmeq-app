@@ -203,6 +203,28 @@ export const nominaEnviosAPI = {
 				pruebas: number;
 			}
 		>;
+	},
+
+	/**
+	 * Todos los intentos de UNA liquidación, del más reciente al más antiguo.
+	 *
+	 * `estadoPeriodo` da el resumen —último acierto, último fallo— que basta para
+	 * pintar la marca; esto es el detalle que hace falta cuando alguien pregunta
+	 * «¿cuántas veces se le mandó y a qué correo?».
+	 */
+	async historial(liquidacionId: string) {
+		const { data } = await apiClient.get(`/api/nomina/envios/liquidacion/${liquidacionId}`);
+		return data as Array<{
+			id: string;
+			estado: string;
+			email_destino: string;
+			asunto: string;
+			error: string | null;
+			es_prueba: boolean;
+			enviado_por: string | null;
+			enviado_at: string | null;
+			created_at: string;
+		}>;
 	}
 };
 
