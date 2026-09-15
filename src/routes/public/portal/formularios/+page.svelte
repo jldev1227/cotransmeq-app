@@ -25,13 +25,7 @@
 		type StoredDraft,
 		type StoredReceipt
 	} from '$lib/offline/forms-db';
-	import {
-		descartarBorrador,
-		receiptEvents,
-		startSync,
-		syncState,
-		wakeAll
-	} from '$lib/offline/forms-sync';
+	import { receiptEvents, startSync, syncState, wakeAll } from '$lib/offline/forms-sync';
 	import {
 		connectPortalFormsSocket,
 		disconnectPortalFormsSocket
@@ -279,41 +273,6 @@
 	}
 
 	/**
-	 * Borrador cuyo descarte está pendiente de confirmar.
-	 *
-	 * Confirmación en dos toques y no un `confirm()` del navegador: el diálogo
-	 * nativo bloquea el hilo, en algunos WebView de Android no aparece siquiera, y
-	 * aquí se toca en movimiento y con guantes. El segundo toque cae en un botón
-	 * distinto y separado del de reanudar, que es lo que evita descartar el
-	 * formulario del vehículo equivocado.
-	 */
-	let confirmandoDescarte = $state<string | null>(null);
-	let descartando = $state<string | null>(null);
-
-	/**
-	 * Descarta un borrador abierto por error.
-	 *
-	 * Se va de la pantalla al instante: el borrado local no depende de la red, y
-	 * la petición al servidor viaja por la cola —que ya sabe esperar a que vuelva
-	 * la señal—. Es lo que permite descartar en un patio sin cobertura, que es
-	 * donde más falta hace.
-	 */
-	async function descartar(clientSubmissionId: string) {
-		descartando = clientSubmissionId;
-		try {
-			await descartarBorrador(clientSubmissionId);
-			await cargarLocal();
-			toast.success('Borrador descartado.');
-		} catch (err) {
-			console.error('[portal] no se pudo descartar el borrador', err);
-			toast.error('No se pudo descartar el borrador. Inténtalo de nuevo.');
-		} finally {
-			descartando = null;
-			confirmandoDescarte = null;
-		}
-	}
-
-	/**
 	 * Empieza un formulario NUEVO, aunque ya haya borradores de esa asignación.
 	 *
 	 * `nuevo=1` es imprescindible: sin él el runner reanuda el borrador existente
@@ -451,63 +410,29 @@
 							<!-- Un botón POR borrador. Antes la tarjeta entera era un solo botón
 							     que abría «el último», así que el resto de borradores existía
 							     pero no tenía dónde tocarse. -->
+							<!-- El descarte vive DENTRO del formulario, junto a Guardar: aquí
+							     entre tarjetas quedaba demasiado apretado para el pulgar. -->
 							{#each draftsDe as draft (draft.clientSubmissionId)}
-								<div class="borrador-grupo">
-									<button
-										type="button"
-										class="borrador"
-										class:borrador--bloqueado={draft.blocked}
-										onclick={() => abrirBorrador(a.assignmentId, draft.clientSubmissionId)}
-									>
-										<span class="borrador__fila">
-											<span class="borrador__etiqueta">{etiquetaBorrador(draft)}</span>
-											<span class="borrador__pct">{draft.progress}%</span>
+								<button
+									type="button"
+									class="borrador"
+									class:borrador--bloqueado={draft.blocked}
+									onclick={() => abrirBorrador(a.assignmentId, draft.clientSubmissionId)}
+								>
+									<span class="borrador__fila">
+										<span class="borrador__etiqueta">{etiquetaBorrador(draft)}</span>
+										<span class="borrador__pct">{draft.progress}%</span>
+									</span>
+									<span class="barra" aria-hidden="true">
+										<span class="barra__relleno" style={`width:${draft.progress}%`}></span>
+									</span>
+									<span class="borrador__meta">Guardado {fechaHora(draft.updatedAt)}</span>
+									{#if draft.blocked}
+										<span class="tarjeta__bloqueado">
+											Necesita corrección: {draft.blocked.message}
 										</span>
-										<span class="barra" aria-hidden="true">
-											<span class="barra__relleno" style={`width:${draft.progress}%`}></span>
-										</span>
-										<span class="borrador__meta">Guardado {fechaHora(draft.updatedAt)}</span>
-										{#if draft.blocked}
-											<span class="tarjeta__bloqueado">
-												Necesita corrección: {draft.blocked.message}
-											</span>
-										{/if}
-									</button>
-
-									<!-- Descartar. Abrir un formulario ya crea el borrador, así que
-									     entrar a mirar y salirse dejaba una tarjeta a medias que no
-									     había forma de quitar, ni siquiera de días anteriores. -->
-									{#if confirmandoDescarte === draft.clientSubmissionId}
-										<div class="descarte" role="group" aria-label="Confirmar descarte">
-											<span class="descarte__pregunta">
-												¿Descartar «{etiquetaBorrador(draft)}»? No se envía nada.
-											</span>
-											<button
-												type="button"
-												class="descarte__boton"
-												onclick={() => (confirmandoDescarte = null)}
-											>
-												Conservar
-											</button>
-											<button
-												type="button"
-												class="descarte__boton descarte__boton--si"
-												disabled={descartando === draft.clientSubmissionId}
-												onclick={() => descartar(draft.clientSubmissionId)}
-											>
-												{descartando === draft.clientSubmissionId ? 'Descartando…' : 'Sí, descartar'}
-											</button>
-										</div>
-									{:else}
-										<button
-											type="button"
-											class="borrador__descartar"
-											onclick={() => (confirmandoDescarte = draft.clientSubmissionId)}
-										>
-											Descartar
-										</button>
 									{/if}
-								</div>
+								</button>
 							{/each}
 
 							<!-- Siempre presente, haya o no borradores: es lo que permite atender
@@ -875,73 +800,6 @@
 	.borrador--bloqueado {
 		background: #fef2f2;
 		border-color: #fecaca;
-	}
-
-	/* El borrador y su acción de descarte. Anidar un botón dentro de otro no es
-	   HTML válido, así que el contenedor los pone uno debajo del otro. */
-	.borrador-grupo {
-		display: flex;
-		flex-direction: column;
-	}
-
-	/* Deliberadamente discreto y alineado a la derecha: descartar es la acción
-	   rara y no debe competir por el pulgar con la de reanudar, que es la que se
-	   usa todos los días. Aun así conserva 44 px de alto tocable. */
-	.borrador__descartar {
-		align-self: flex-end;
-		min-height: 44px;
-		padding: 0 0.5rem;
-		font: inherit;
-		font-size: 0.75rem;
-		color: var(--text-secondary, #4a4a4a);
-		text-decoration: underline;
-		background: none;
-		border: none;
-		cursor: pointer;
-	}
-
-	.descarte {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: flex-end;
-		gap: 0.375rem;
-		padding: 0.375rem 0;
-	}
-
-	.descarte__pregunta {
-		flex: 1 1 100%;
-		font-size: 0.75rem;
-		color: var(--text-secondary, #4a4a4a);
-	}
-
-	.descarte__boton {
-		min-height: 44px;
-		padding: 0 0.75rem;
-		font: inherit;
-		font-size: 0.75rem;
-		font-weight: 700;
-		background: var(--bg-surface, #fff);
-		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.12));
-		border-radius: 8px;
-		cursor: pointer;
-	}
-
-	.descarte__boton--si {
-		color: #b91c1c;
-		border-color: #fecaca;
-		background: #fef2f2;
-	}
-
-	.descarte__boton:disabled {
-		opacity: 0.6;
-		cursor: default;
-	}
-
-	.borrador__descartar:focus-visible,
-	.descarte__boton:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
-		outline-offset: 2px;
 	}
 
 	.borrador:active {
