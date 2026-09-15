@@ -44,6 +44,7 @@
 	let modalAnular = $state(false);
 	let motivo = $state('');
 	let anulando = $state(false);
+	let descartando = $state(false);
 
 	async function cargar() {
 		cargando = true;
@@ -108,6 +109,48 @@
 	}
 
 	/**
+	 * Descarta el borrador, o deshace el descarte.
+	 *
+	 * Solo aplica a `DRAFT`. Abrir un formulario ya crea la fila, así que hay
+	 * borradores que nadie llegó a diligenciar y que no debían quedarse en el
+	 * explorador; descartar los retira sin destruir nada —respuestas, evidencia y
+	 * bitácora siguen ahí— y por eso se puede restaurar.
+	 *
+	 * Nada de esto vale para un envío ENTREGADO: ese se anula, con motivo.
+	 */
+	async function descartar() {
+		if (!confirm('¿Descartar este borrador?\n\nDeja de aparecer en el explorador y se puede restaurar.')) {
+			return;
+		}
+		descartando = true;
+		try {
+			await enviosFormularioAPI.descartar(submissionId);
+			await cargar();
+			toast.success('Borrador descartado. Se puede restaurar desde aquí.');
+		} catch (err) {
+			if (err instanceof FormApiError) toast.error(err.message);
+			else toast.error('No se pudo descartar el borrador.');
+		} finally {
+			descartando = false;
+		}
+	}
+
+	async function restaurar() {
+		descartando = true;
+		try {
+			const { submission, definition } = await enviosFormularioAPI.restaurar(submissionId);
+			envio = submission;
+			definicion = definition;
+			toast.success('Borrador restaurado.');
+		} catch (err) {
+			if (err instanceof FormApiError) toast.error(err.message);
+			else toast.error('No se pudo restaurar el borrador.');
+		} finally {
+			descartando = false;
+		}
+	}
+
+	/**
 	 * Los tipos de evento llegan como tokens del dominio (`ATTACHMENT_ATTACHED`).
 	 *
 	 * Son identificadores estables de la API, no texto para leer: mostrarlos tal
@@ -122,7 +165,9 @@
 		ATTACHMENT_DISCARDED: 'Evidencia descartada',
 		SUBMITTED: 'Envío entregado',
 		VOIDED: 'Envío anulado',
-		REOPENED: 'Envío reabierto'
+		REOPENED: 'Envío reabierto',
+		DISCARDED: 'Borrador descartado',
+		RESTORED: 'Borrador restaurado'
 	};
 
 	const ACTORES: Record<string, string> = {
@@ -212,8 +257,27 @@
 				<button type="button" class="btn btn--peligro" onclick={() => (modalAnular = true)}>
 					Anular envío
 				</button>
+			{:else if envio.status === 'DRAFT' && !envio.deletedAt}
+				<button type="button" class="btn btn--peligro" disabled={descartando} onclick={descartar}>
+					{descartando ? 'Descartando…' : 'Descartar borrador'}
+				</button>
 			{/if}
 		</header>
+
+		{#if envio.deletedAt}
+			<!-- Gris y no rojo: descartar no es un incidente, es limpieza. El rojo de
+			     `.anulado` diría que algo salió mal con un documento entregado. -->
+			<div class="descartado" role="note">
+				<p class="descartado__titulo">Borrador descartado el {fechaHora(envio.deletedAt)}</p>
+				<p class="descartado__nota">
+					No aparece en el explorador ni cuenta en los indicadores. No se ha destruido nada: las
+					respuestas, la evidencia y la bitácora siguen aquí, y quién lo descartó está más abajo.
+				</p>
+				<button type="button" class="btn btn--mini" disabled={descartando} onclick={restaurar}>
+					{descartando ? 'Restaurando…' : 'Restaurar borrador'}
+				</button>
+			</div>
+		{/if}
 
 		{#if envio.status === 'DRAFT'}
 			<div class="borrador" role="note">
@@ -545,6 +609,29 @@
 		background: #fef2f2;
 		border: 1px solid #fecaca;
 		border-radius: 12px;
+	}
+
+	.descartado {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.375rem;
+		padding: 0.75rem 0.875rem;
+		background: var(--gray-50, #f9fafb);
+		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
+		border-radius: 12px;
+	}
+
+	.descartado__titulo {
+		font-size: 0.875rem;
+		font-weight: 700;
+		color: var(--text-primary, #1a1a1a);
+	}
+
+	.descartado__nota {
+		font-size: 0.75rem;
+		color: var(--text-secondary, #4a4a4a);
+		line-height: 1.45;
 	}
 
 	.anulado__titulo {

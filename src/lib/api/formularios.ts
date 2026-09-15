@@ -339,6 +339,8 @@ export interface FiltrosEnvios {
 	status?: SubmissionStatus;
 	businessDateFrom?: string;
 	businessDateTo?: string;
+	/** `true` trae también los descartados, que por defecto no se listan. */
+	includeDeleted?: boolean;
 }
 
 export const enviosFormularioAPI = {
@@ -362,6 +364,25 @@ export const enviosFormularioAPI = {
 	anular(id: string, reason: string) {
 		return unwrap<{ submission: SubmissionDetailDto; definition: FormVersionDto }>(
 			apiClient.post(`/api/formularios/submissions/${id}/void`, { reason })
+		);
+	},
+
+	/**
+	 * Descarta un BORRADOR. No sirve para un envío entregado: eso es `anular`.
+	 *
+	 * Es borrado lógico —la fila, sus respuestas y su evidencia siguen ahí— y por
+	 * eso `restaurar` puede deshacerlo. Lo que cambia es que deja de listarse y
+	 * de contar en indicadores.
+	 */
+	descartar(id: string) {
+		return unwrap<{ id: string; deleted: boolean; alreadyGone: boolean; deletedAt: string }>(
+			apiClient.delete(`/api/formularios/submissions/${id}`)
+		);
+	},
+
+	restaurar(id: string) {
+		return unwrap<{ submission: SubmissionDetailDto; definition: FormVersionDto }>(
+			apiClient.post(`/api/formularios/submissions/${id}/restore`)
 		);
 	},
 

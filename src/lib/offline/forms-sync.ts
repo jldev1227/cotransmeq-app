@@ -162,6 +162,23 @@ async function detallarCola(operaciones: OutboxOperation[]): Promise<EnvioEnCola
 		else porEnvio.set(operacion.aggregateId, [operacion]);
 	}
 
+	/**
+	 * Un envío que solo tiene pendiente su DESCARTE no es un envío en cola.
+	 *
+	 * El conductor ya lo quitó y su borrador ya no existe en el teléfono, así que
+	 * esta lista lo pintaría sin código ni título: «Envío sin identificar», con un
+	 * botón para reintentar algo que para él no existe. Lo que queda pendiente es
+	 * una petición de borrado, y eso no es trabajo suyo ni información que le
+	 * sirva.
+	 *
+	 * La operación sigue en la cola y se ejecuta igual; lo único que se oculta es
+	 * la fila.
+	 */
+	for (const [clientSubmissionId, grupo] of porEnvio) {
+		if (grupo.every((o) => o.type === 'DISCARD_DRAFT')) porEnvio.delete(clientSubmissionId);
+	}
+	if (porEnvio.size === 0) return [];
+
 	const envios = await Promise.all(
 		[...porEnvio].map(async ([clientSubmissionId, grupo]): Promise<EnvioEnCola> => {
 			const draft = borradores.get(clientSubmissionId);
@@ -408,6 +425,9 @@ async function ejecutar(operacion: OutboxOperation): Promise<Resultado> {
 			case 'DISCARD_ATTACHMENT':
 				await ejecutarDiscard(operacion);
 				break;
+			case 'DISCARD_DRAFT':
+				await ejecutarDescarteBorrador(operacion);
+				break;
 			case 'SUBMIT':
 				await ejecutarSubmit(operacion);
 				break;
@@ -459,6 +479,24 @@ async function manejarError(operacion: OutboxOperation, err: unknown): Promise<R
 			leaseUntil: undefined
 		});
 		return 'offline';
+	}
+
+	/**
+	 * El servidor dice que ese borrador está descartado.
+	 *
+	 * Llega cuando se descartó desde OTRO sitio —otro teléfono, el explorador del
+	 * dashboard— y esta cola todavía no se había enterado. No hay nada que
+	 * corregir, así que bloquear el borrador sería pedirle al conductor que
+	 * arregle algo que ya no existe: se retira todo lo local y se acabó.
+	 *
+	 * Va antes que el bloqueo por 4xx porque `SUBMISSION_DISCARDED` es un 409 y
+	 * caería ahí, que es exactamente el «Necesita corrección» para siempre que se
+	 * quiere evitar.
+	 */
+	if (error.code === 'SUBMISSION_DISCARDED') {
+		await purgarEnvioLocal(operacion.aggregateId);
+		await refrescarEstado();
+		return 'ok';
 	}
 
 	if (!error.retryable) {
@@ -664,6 +702,33 @@ async function ejecutarDiscard(operacion: OutboxOperation): Promise<void> {
 		 * estaba entregado, y no había nada que pudiera corregir.
 		 */
 		if (err instanceof PortalApiError && err.code === 'SUBMISSION_IMMUTABLE') return;
+		throw err;
+	}
+}
+
+/**
+ * Retira el borrador del servidor.
+ *
+ * Lo local ya no existe cuando esto corre: `descartarBorrador()` lo borra antes
+ * de encolar, para que la tarjeta desaparezca en el acto y sin depender de la
+ * red. Aquí solo queda el otro lado.
+ */
+async function ejecutarDescarteBorrador(operacion: OutboxOperation): Promise<void> {
+	try {
+		await portalFormulariosAPI.descartarBorrador(operacion.aggregateId);
+	} catch (err) {
+		if (!(err instanceof PortalApiError)) throw err;
+		/// Ya estaba descartado: es el reintento de algo que funcionó.
+		if (err.code === 'SUBMISSION_DISCARDED') return;
+		/**
+		 * Se entregó antes de que este descarte llegara.
+		 *
+		 * El servidor hace bien en negarse —un envío entregado no se borra, se
+		 * anula— y para la cola no es un fallo que nadie pueda arreglar: el
+		 * formulario está entregado, que es mejor desenlace que el que el conductor
+		 * pedía. Insistir solo dejaría la operación bloqueada para siempre.
+		 */
+		if (err.code === 'SUBMISSION_IMMUTABLE') return;
 		throw err;
 	}
 }
@@ -1098,14 +1163,56 @@ export async function reintentarBloqueado(clientSubmissionId: string): Promise<v
 	wakeAll();
 }
 
-/** Descarta la cola de un envío. Solo desde una acción explícita del usuario. */
-export async function descartarEnvio(clientSubmissionId: string): Promise<void> {
+/**
+ * Borra del dispositivo todo rastro de un envío: su cola, su borrador y sus
+ * adjuntos.
+ *
+ * No toca el servidor. Quien llama decide qué hacer con el otro lado, que no es
+ * lo mismo en los dos casos que usan esto: al descartar a propósito hay que
+ * pedirle al servidor que lo retire, y al enterarse de que YA está descartado no
+ * hay nada que pedir.
+ */
+async function purgarEnvioLocal(clientSubmissionId: string): Promise<void> {
 	const operaciones = await allOperations();
 	for (const operacion of operaciones) {
 		if (operacion.aggregateId === clientSubmissionId) await deleteOperation(operacion.operationId);
 	}
 	await deleteDraftCascade(clientSubmissionId);
+}
+
+/** Descarta la cola de un envío. Solo desde una acción explícita del usuario. */
+export async function descartarEnvio(clientSubmissionId: string): Promise<void> {
+	await purgarEnvioLocal(clientSubmissionId);
 	await refrescarEstado();
+}
+
+/**
+ * Descarta un borrador: aquí y en el servidor.
+ *
+ * ── Por qué se borra lo local ANTES de hablar con el servidor ───────────────
+ *
+ * Porque el portal pinta los borradores de IndexedDB, no los del servidor, y
+ * porque se diligencia en patios sin cobertura. Si el borrado local esperara a
+ * la respuesta, descartar sin señal no haría nada visible y el conductor
+ * volvería a ver la tarjeta que acaba de quitar. Se borra ya y el servidor se
+ * entera cuando se pueda, que es para lo que existe la cola.
+ *
+ * La operación se encola SIEMPRE, aunque haya señal: es una petición diminuta y
+ * la cola ya sabe reintentar, esperar a que vuelva la red y sobrevivir a que
+ * cierren la app. Hacerla aquí a pelo significaría perderla si el `fetch` falla
+ * justo en ese momento, y el borrador quedaría vivo en el servidor para siempre
+ * sin que nadie volviera a intentarlo.
+ *
+ * Si el borrador nunca llegó a subirse, el servidor responde que no hay nada que
+ * borrar y la operación termina igual de bien.
+ */
+export async function descartarBorrador(clientSubmissionId: string): Promise<void> {
+	await purgarEnvioLocal(clientSubmissionId);
+	await enqueueMany([nuevaOperacion('DISCARD_DRAFT', clientSubmissionId, {})]);
+	await refrescarEstado();
+	/// Se intenta ya, sin esperar al ciclo: mientras el servidor no se entere, el
+	/// borrador sigue contando en el explorador del dashboard.
+	void tick();
 }
 
 /**
@@ -1120,5 +1227,9 @@ export const syncInternals = {
 	siguienteEspera,
 	BACKOFF_MS,
 	CHANNEL,
-	iniciarAdjuntoAsegurando
+	iniciarAdjuntoAsegurando,
+	/// Los dos errores que este ejecutor se traga —«ya estaba descartado» y «ya se
+	/// entregó»— son la diferencia entre una operación que termina y una que se
+	/// queda BLOQUEADA para siempre, y eso no se ve mirando el código.
+	ejecutarDescarteBorrador
 };
