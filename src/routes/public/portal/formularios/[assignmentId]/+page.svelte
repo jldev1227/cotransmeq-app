@@ -40,6 +40,7 @@
 		type StoredDraft
 	} from '$lib/offline/forms-db';
 	import {
+		descartarBorrador,
 		encolarBackup,
 		encolarDescarte,
 		encolarEnvio,
@@ -348,6 +349,43 @@
 		if (avisoFalloLocal) return;
 		avisoFalloLocal = true;
 		toast.error('No se pudo guardar en este teléfono. Revisa el almacenamiento disponible.');
+	}
+
+	// ── Descarte ─────────────────────────────────────────────────────────────
+
+	/**
+	 * Modal propio y no un `confirm()` del navegador: el diálogo nativo bloquea
+	 * el hilo y en algunos WebView de Android no aparece siquiera. El botón vive
+	 * junto a Guardar —en el listado quedaba apretado entre las tarjetas—.
+	 */
+	let confirmandoDescarte = $state(false);
+	let descartando = $state(false);
+
+	async function descartar() {
+		if (!clientSubmissionId || descartando) return;
+		descartando = true;
+		const id = clientSubmissionId;
+		/// Neutralizar el autosave ANTES de borrar: un tick rezagado del guardado
+		/// local re-crearía en IndexedDB el borrador recién descartado. Vaciar el
+		/// id apaga `guardarLocal()` y el backup, que empiezan comprobándolo.
+		clientSubmissionId = '';
+		if (timerLocal) {
+			clearTimeout(timerLocal);
+			timerLocal = null;
+		}
+		try {
+			await descartarBorrador(id);
+			toast.success('Borrador descartado.');
+			await goto('/public/portal/formularios');
+		} catch (err) {
+			/// El borrador sigue existiendo: se reactiva el guardado normal.
+			clientSubmissionId = id;
+			console.error('[runner] no se pudo descartar el borrador', err);
+			toast.error('No se pudo descartar el borrador. Inténtalo de nuevo.');
+		} finally {
+			descartando = false;
+			confirmandoDescarte = false;
+		}
 	}
 
 	function programarGuardado() {
@@ -674,6 +712,13 @@
 			<div class="pie__acciones">
 				<button
 					type="button"
+					class="btn btn--descartar"
+					onclick={() => (confirmandoDescarte = true)}
+				>
+					Descartar
+				</button>
+				<button
+					type="button"
 					class="btn"
 					onclick={async () => {
 						await guardarLocal();
@@ -688,6 +733,35 @@
 				</button>
 			</div>
 		</footer>
+
+		{#if confirmandoDescarte}
+			<div
+				class="descarte-modal"
+				role="dialog"
+				aria-modal="true"
+				aria-labelledby="descarte-titulo"
+			>
+				<div class="descarte-modal__caja">
+					<h2 id="descarte-titulo" class="descarte-modal__titulo">¿Descartar este borrador?</h2>
+					<p class="descarte-modal__texto">
+						Se borra de este teléfono y no se envía nada. Esta acción no se puede deshacer.
+					</p>
+					<div class="descarte-modal__acciones">
+						<button type="button" class="btn" onclick={() => (confirmandoDescarte = false)}>
+							Conservar
+						</button>
+						<button
+							type="button"
+							class="btn btn--descartar"
+							disabled={descartando}
+							onclick={descartar}
+						>
+							{descartando ? 'Descartando…' : 'Sí, descartar'}
+						</button>
+					</div>
+				</div>
+			</div>
+		{/if}
 	{/if}
 </div>
 
@@ -948,6 +1022,57 @@
 		color: #fff;
 		background: var(--emerald-600, #059669);
 		border-color: var(--emerald-600, #059669);
+	}
+
+	/* Descartar es la acción rara: en rojo suave y sin crecer, para que Guardar
+	   y Enviar sigan siendo los que se llevan el pulgar. */
+	.btn--descartar {
+		flex: 0 0 auto;
+		color: #b91c1c;
+		background: #fef2f2;
+		border-color: #fecaca;
+	}
+
+	.descarte-modal {
+		position: fixed;
+		inset: 0;
+		z-index: 40;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 1rem;
+		background: rgba(0, 0, 0, 0.45);
+	}
+
+	.descarte-modal__caja {
+		width: 100%;
+		max-width: 22rem;
+		padding: 1.25rem;
+		background: var(--bg-surface, #fff);
+		border-radius: 16px;
+		box-shadow: 0 20px 45px rgba(0, 0, 0, 0.25);
+	}
+
+	.descarte-modal__titulo {
+		margin: 0 0 0.5rem;
+		font-size: 1.0625rem;
+		font-weight: 700;
+	}
+
+	.descarte-modal__texto {
+		margin: 0 0 1rem;
+		font-size: 0.875rem;
+		color: var(--text-secondary, #4a4a4a);
+	}
+
+	.descarte-modal__acciones {
+		display: flex;
+		gap: 0.5rem;
+	}
+
+	/* Dentro del modal los dos botones sí comparten el ancho por igual. */
+	.descarte-modal__acciones .btn--descartar {
+		flex: 1;
 	}
 
 	.btn:disabled {
