@@ -1424,7 +1424,8 @@
 		recargosRows = recargosRows.map((r) => {
 			if (r.id !== rowId) return r;
 			const newDays = [...r.days];
-			newDays[dayIdx] = parseFloat(val.replace(',', '.')) || 0;
+			const parsed = parseFloat(val.replace(',', '.')) || 0;
+			newDays[dayIdx] = Number(parsed.toFixed(2));
 			const updated = { ...r, days: newDays };
 			recalcRecargoRow(updated);
 			return updated;
@@ -1435,7 +1436,8 @@
 		recargosRows = recargosRows.map((r) => {
 			if (r.id !== rowId) return r;
 			if (['hed', 'hen', 'hefd', 'hefn', 'rndf', 'rn', 'rd'].includes(field)) {
-				return { ...r, [field]: parseFloat(val.replace(',', '.')) || 0 };
+				const parsed = parseFloat(val.replace(',', '.')) || 0;
+				return { ...r, [field]: Number(parsed.toFixed(2)) };
 			}
 			return { ...r, [field]: val };
 		});
@@ -3382,60 +3384,124 @@
 
 										{#each Array(31) as _, j}
 											<div class="wb-cell wb-cell-day" data-cell-key={`rec-${row.id}-d${j}`}>
-												<span>{row.days[j] ?? ''}</span>
+												<input
+													type="number"
+													step="0.01"
+													min="0"
+													value={row.days[j] ? Number(row.days[j]).toFixed(2) : ''}
+													on:focus={(e) => e.currentTarget.select()}
+													on:input={(e) =>
+														updRecargoDay(row.id, j, e.currentTarget.value)}
+												/>
 											</div>
 										{/each}
 
-										<div class="wb-cell wb-cell-money wb-cell-calc">{row.total.toFixed(1)}</div>
-										<div class="wb-cell wb-cell-money wb-cell-calc">{row.promedio.toFixed(1)}</div>
+										<div class="wb-cell wb-cell-money wb-cell-calc">{row.total.toFixed(2)}</div>
+										<div class="wb-cell wb-cell-money wb-cell-calc">{row.promedio.toFixed(2)}</div>
 
 										<div
 											class="wb-cell wb-cell-money wb-cell-num"
 											data-cell-key={`rec-${row.id}-hed`}
 										>
-											<span>{row.hed ?? ''}</span>
+											<input
+												type="number"
+												step="0.01"
+												min="0"
+												value={row.hed ? Number(row.hed).toFixed(2) : ''}
+												on:focus={(e) => e.currentTarget.select()}
+												on:input={(e) =>
+													updRecargoField(row.id, 'hed', e.currentTarget.value)}
+											/>
 										</div>
 
 										<div
 											class="wb-cell wb-cell-money wb-cell-num"
 											data-cell-key={`rec-${row.id}-hen`}
 										>
-											<span>{row.hen ?? ''}</span>
+											<input
+												type="number"
+												step="0.01"
+												min="0"
+												value={row.hen ? Number(row.hen).toFixed(2) : ''}
+												on:focus={(e) => e.currentTarget.select()}
+												on:input={(e) =>
+													updRecargoField(row.id, 'hen', e.currentTarget.value)}
+											/>
 										</div>
 
 										<div
 											class="wb-cell wb-cell-money wb-cell-num"
 											data-cell-key={`rec-${row.id}-hefd`}
 										>
-											<span>{row.hefd ?? ''}</span>
+											<input
+												type="number"
+												step="0.01"
+												min="0"
+												value={row.hefd ? Number(row.hefd).toFixed(2) : ''}
+												on:focus={(e) => e.currentTarget.select()}
+												on:input={(e) =>
+													updRecargoField(row.id, 'hefd', e.currentTarget.value)}
+											/>
 										</div>
 
 										<div
 											class="wb-cell wb-cell-money wb-cell-num"
 											data-cell-key={`rec-${row.id}-hefn`}
 										>
-											<span>{row.hefn ?? ''}</span>
+											<input
+												type="number"
+												step="0.01"
+												min="0"
+												value={row.hefn ? Number(row.hefn).toFixed(2) : ''}
+												on:focus={(e) => e.currentTarget.select()}
+												on:input={(e) =>
+													updRecargoField(row.id, 'hefn', e.currentTarget.value)}
+											/>
 										</div>
 
 										<div
 											class="wb-cell wb-cell-money wb-cell-num"
 											data-cell-key={`rec-${row.id}-rndf`}
 										>
-											<span>{row.rndf ?? ''}</span>
+											<input
+												type="number"
+												step="0.01"
+												min="0"
+												value={row.rndf ? Number(row.rndf).toFixed(2) : ''}
+												on:focus={(e) => e.currentTarget.select()}
+												on:input={(e) =>
+													updRecargoField(row.id, 'rndf', e.currentTarget.value)}
+											/>
 										</div>
 
 										<div
 											class="wb-cell wb-cell-money wb-cell-num"
 											data-cell-key={`rec-${row.id}-rn`}
 										>
-											<span>{row.rn ?? ''}</span>
+											<input
+												type="number"
+												step="0.01"
+												min="0"
+												value={row.rn ? Number(row.rn).toFixed(2) : ''}
+												on:focus={(e) => e.currentTarget.select()}
+												on:input={(e) =>
+													updRecargoField(row.id, 'rn', e.currentTarget.value)}
+											/>
 										</div>
 
 										<div
 											class="wb-cell wb-cell-money wb-cell-num"
 											data-cell-key={`rec-${row.id}-rd`}
 										>
-											<span>{row.rd ?? ''}</span>
+											<input
+												type="number"
+												step="0.01"
+												min="0"
+												value={row.rd ? Number(row.rd).toFixed(2) : ''}
+												on:focus={(e) => e.currentTarget.select()}
+												on:input={(e) =>
+													updRecargoField(row.id, 'rd', e.currentTarget.value)}
+											/>
 										</div>
 									</div>
 								{/each}
@@ -3463,11 +3529,11 @@
 									<div class="wb-cell wb-cell-wide"></div>
 									{#each Array(31) as _, i}
 										<div class="wb-cell wb-cell-day">
-											<b>{recargosTotals.days[i].toFixed(1)}</b>
+											<b>{recargosTotals.days[i].toFixed(2)}</b>
 										</div>
 									{/each}
 									<div class="wb-cell wb-cell-money wb-cell-calc-strong">
-										<b>{recargosTotals.total.toFixed(1)}</b>
+										<b>{recargosTotals.total.toFixed(2)}</b>
 									</div>
 									<div class="wb-cell wb-cell-money"></div>
 									<div class="wb-cell wb-cell-money wb-cell-calc">
@@ -9601,6 +9667,17 @@
 	.wb-row-terceros .wb-cell-num {
 		width: 95px;
 		flex: 0 0 95px;
+	}
+
+	/* ③ Recargos (Hoja 2) — celdas con inputs editables +20% (días 44→53, money/num 72→86) */
+	.wb-row-recargos .wb-cell-day {
+		width: 80px;
+		flex: 0 0 80px;
+	}
+	.wb-row-recargos .wb-cell-money,
+	.wb-row-recargos .wb-cell-num {
+		width: 86px;
+		flex: 0 0 86px;
 	}
 
 	/* ④ Liquidador de recargos — columnas más anchas */
