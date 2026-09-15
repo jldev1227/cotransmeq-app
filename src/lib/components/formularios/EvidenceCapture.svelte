@@ -294,12 +294,17 @@
 				</div>
 			{/if}
 		{:else}
+			<!-- Sin `capture`. Estaba en `environment` para las fotos, y eso no es una
+			     preferencia: el móvil abre la cámara directamente y no deja llegar al
+			     carrete. Quien ya tenía la foto tomada —o volvía a completar el
+			     formulario más tarde— no podía adjuntarla. Sin el atributo, el selector
+			     del sistema ofrece cámara Y galería, y `prepararFoto()` comprime y
+			     recodifica igual venga de donde venga. -->
 			<input
 				class="oculto"
 				type="file"
 				bind:this={inputEl}
 				accept={aceptaMime}
-				capture={field.type === 'PHOTO' ? 'environment' : undefined}
 				multiple={maxFiles > 1}
 				onchange={onArchivoElegido}
 			/>

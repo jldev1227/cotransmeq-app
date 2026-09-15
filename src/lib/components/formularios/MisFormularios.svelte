@@ -33,7 +33,8 @@
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
-	import { MisFormulariosError } from '$lib/api/mis-formularios';
+	import { toast } from 'svelte-sonner';
+	import { MisFormulariosError, misFormulariosAPI } from '$lib/api/mis-formularios';
 	import type { PortalAssignmentCard, PortalListMeta } from '$lib/api/formularios-portal';
 	import { cargarLista, listaCacheada } from '$lib/formularios/mis-formularios-cache';
 	import {
@@ -84,6 +85,35 @@
 	/// llegue mientras vuela, así que no se puede abortar sin romperle la carga
 	/// al otro; lo que sí se puede es no aplicar una respuesta tardía.
 	let vivo = true;
+
+	/// Borrador cuyo descarte está en vuelo. Bloquea su botón para que un doble
+	/// toque no mande dos peticiones.
+	let descartando = $state<string | null>(null);
+
+	/**
+	 * Descarta un borrador propio.
+	 *
+	 * Este runner NO tiene almacenamiento local —a diferencia del portal, que
+	 * lleva outbox e IndexedDB—, así que aquí basta con pedírselo al servidor y
+	 * recargar la lista. El borrado es lógico: lo escrito no se destruye.
+	 */
+	async function descartar(clientSubmissionId: string, etiqueta: string) {
+		if (!confirm(`¿Descartar el borrador de ${etiqueta}?`)) return;
+		descartando = clientSubmissionId;
+		try {
+			await misFormulariosAPI.descartarBorrador(clientSubmissionId);
+			/// `forzar`: la caché acaba de quedarse obsoleta y sin esto la tarjeta
+			/// descartada seguiría en pantalla hasta que caducara sola.
+			await cargar({ forzar: true });
+			toast.success('Borrador descartado.');
+		} catch (err) {
+			toast.error(
+				err instanceof MisFormulariosError ? err.message : 'No se pudo descartar el borrador.'
+			);
+		} finally {
+			descartando = null;
+		}
+	}
 
 	async function cargar({ forzar = false } = {}) {
 		if (forzar || asignaciones.length) revalidando = true;
@@ -409,10 +439,21 @@
 						{#if a.drafts.length}
 							<ul class="borradores">
 								{#each a.drafts as d (d.clientSubmissionId)}
-									<li>
+									<li class="borrador-fila">
 										<a class="borrador" href="{base}/{a.assignmentId}?draft={d.clientSubmissionId}">
 											Continuar borrador · {d.progress}% · {haceCuanto(d.updatedAt)}
 										</a>
+										<!-- Abrir el formulario ya crea el borrador, así que entrar a
+										     mirar y salirse dejaba una tarjeta a medias sin forma de
+										     quitarla. Discreto: descartar es la acción rara. -->
+										<button
+											type="button"
+											class="borrador__descartar"
+											disabled={descartando === d.clientSubmissionId}
+											onclick={() => descartar(d.clientSubmissionId, a.title)}
+										>
+											{descartando === d.clientSubmissionId ? '…' : 'Descartar'}
+										</button>
 									</li>
 								{/each}
 							</ul>
@@ -633,6 +674,41 @@
 		color: var(--amber-800, #92400e);
 		background: #fffbeb;
 		border: 1px solid #fde68a;
+	}
+
+	.borrador-fila {
+		display: flex;
+		align-items: stretch;
+		gap: 0.25rem;
+	}
+
+	/* El enlace se queda con todo el ancho sobrante: continuar es lo que se hace
+	   todos los días y descartar lo excepcional. */
+	.borrador-fila .borrador {
+		flex: 1;
+	}
+
+	.borrador__descartar {
+		flex: 0 0 auto;
+		padding: 0 0.625rem;
+		font: inherit;
+		font-size: 0.75rem;
+		color: var(--text-muted, #64748b);
+		background: none;
+		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+		border-radius: 8px;
+		cursor: pointer;
+	}
+
+	.borrador__descartar:hover:not(:disabled) {
+		color: #b91c1c;
+		background: #fef2f2;
+		border-color: #fecaca;
+	}
+
+	.borrador__descartar:disabled {
+		opacity: 0.6;
+		cursor: default;
 	}
 
 	.tarjeta__accion {

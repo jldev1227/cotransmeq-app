@@ -117,6 +117,20 @@ export type OutboxType =
 	 * inicializada dejaría el envío bloqueado para siempre.
 	 */
 	| 'DISCARD_ATTACHMENT'
+	/**
+	 * Retira del servidor un borrador que el conductor descartó.
+	 *
+	 * Lo local se borra en el acto —la tarjeta tiene que desaparecer aunque no
+	 * haya señal, que es donde se diligencia— y esta operación se encarga del
+	 * otro lado. Sin ella, el borrador seguiría vivo en el servidor: invisible
+	 * para el conductor, pero contándose en el explorador del dashboard y en los
+	 * indicadores, que es justo el montón de formularios «abiertos» del que se
+	 * venía.
+	 *
+	 * El `DELETE` del servidor es un borrado LÓGICO e idempotente, así que
+	 * repetirlo no rompe nada.
+	 */
+	| 'DISCARD_DRAFT'
 	| 'SUBMIT';
 
 export type OutboxState = 'PENDING' | 'RUNNING' | 'RETRY' | 'BLOCKED';

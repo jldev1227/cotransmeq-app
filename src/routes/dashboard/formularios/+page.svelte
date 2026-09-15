@@ -71,6 +71,17 @@
 	let cargando = $state(true);
 	let busqueda = $state('');
 	let incluirArchivados = $state(false);
+	/**
+	 * «Ver descartados» de la vista de ENVÍOS.
+	 *
+	 * Apagado por defecto: un borrador descartado no es un envío y no tiene por
+	 * qué estorbar en la lista. Existe porque el borrado es lógico —la fila y su
+	 * evidencia siguen ahí— y sin esta casilla, deshacer un descarte por error
+	 * obligaría a bajar a SQL.
+	 */
+	let verDescartados = $state(false);
+	/** Envío cuyo descarte o restauración está en vuelo. Bloquea su botón. */
+	let envioEnAccion = $state<string | null>(null);
 	let pagina = $state(1);
 	let totalPages = $state(1);
 	let total = $state(0);
@@ -255,8 +266,47 @@
 			status: filtroEstado || undefined,
 			search: filtroBusqueda.trim() || undefined,
 			businessDateFrom: filtroDesde || undefined,
-			businessDateTo: filtroHasta || undefined
+			businessDateTo: filtroHasta || undefined,
+			includeDeleted: verDescartados || undefined
 		};
+	}
+
+	/**
+	 * Descarta un borrador desde el explorador.
+	 *
+	 * Aquí y no solo en el portal porque quien diligenció puede haber perdido el
+	 * acceso —un magic link vencido, un usuario dado de baja— y esos borradores
+	 * se quedaban en la lista sin forma de retirarlos que no fuera un script
+	 * contra la base.
+	 */
+	async function descartarEnvio(envio: SubmissionSummaryDto) {
+		const quien = envio.actor?.nombre ?? 'alguien';
+		const etiqueta = `${envio.version?.code ?? 'el formulario'} de ${quien}`;
+		if (!confirm(`¿Descartar el borrador ${etiqueta}?\n\nSe puede restaurar después.`)) return;
+
+		envioEnAccion = envio.id;
+		try {
+			await enviosFormularioAPI.descartar(envio.id);
+			toast.success('Borrador descartado.');
+			await Promise.all([cargarEnvios(), cargarMetricas()]);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'No se pudo descartar el borrador.');
+		} finally {
+			envioEnAccion = null;
+		}
+	}
+
+	async function restaurarEnvio(envio: SubmissionSummaryDto) {
+		envioEnAccion = envio.id;
+		try {
+			await enviosFormularioAPI.restaurar(envio.id);
+			toast.success('Borrador restaurado.');
+			await Promise.all([cargarEnvios(), cargarMetricas()]);
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'No se pudo restaurar el borrador.');
+		} finally {
+			envioEnAccion = null;
+		}
 	}
 
 	async function cargarEnvios() {
@@ -293,6 +343,7 @@
 		busqueda = desdeUrl.cat_q;
 		pagina = Math.max(1, desdeUrl.cat_pagina);
 		incluirArchivados = desdeUrl.archivados;
+		verDescartados = desdeUrl.descartados;
 
 		void cargar();
 		void cargarMetricas();
@@ -337,6 +388,7 @@
 		cat_q: string;
 		cat_pagina: number;
 		archivados: boolean;
+		descartados: boolean;
 	}> = {
 		vista: opcion('catalogo'),
 		formId: texto(),
@@ -350,7 +402,8 @@
 		/// `q` a secas.
 		cat_q: texto(),
 		cat_pagina: numero(1),
-		archivados: bandera(false)
+		archivados: bandera(false),
+		descartados: bandera(false)
 	};
 
 	const estadoUrl = crearEstadoUrl(DEFS_URL);
@@ -367,7 +420,8 @@
 			hasta: filtroHasta,
 			cat_q: busqueda.trim(),
 			cat_pagina: pagina,
-			archivados: incluirArchivados
+			archivados: incluirArchivados,
+			descartados: verDescartados
 		});
 	}
 
@@ -409,6 +463,7 @@
 		filtroBusqueda = '';
 		filtroDesde = '';
 		filtroHasta = '';
+		verDescartados = false;
 		paginaEnvios = 1;
 		sincronizarUrl();
 		void cargarEnvios();
@@ -422,7 +477,8 @@
 			filtroEstado ||
 			filtroBusqueda ||
 			filtroDesde ||
-			filtroHasta
+			filtroHasta ||
+			verDescartados
 		)
 	);
 
@@ -956,6 +1012,18 @@
 				{/if}
 
 				<div class="barra-envios__acciones">
+					<!-- Un borrador descartado no es un envío, así que por defecto no está.
+					     La casilla existe para poder encontrarlo y restaurarlo: el borrado
+					     es lógico y sin esto, deshacerlo pediría SQL. -->
+					<label class="filtros__check">
+						<input
+							type="checkbox"
+							checked={verDescartados}
+							onchange={(e) =>
+								cambiarFiltroEnvios(() => (verDescartados = e.currentTarget.checked))}
+						/>
+						Ver descartados
+					</label>
 					{#if hayFiltrosEnvios}
 						<button type="button" class="btn btn--mini" onclick={limpiarFiltrosEnvios}>
 							Limpiar filtros
@@ -992,7 +1060,10 @@
 						</thead>
 						<tbody>
 							{#each envios as envio (envio.id)}
-								<tr class:fila--anulada={envio.status === 'VOIDED'}>
+								<tr
+									class:fila--anulada={envio.status === 'VOIDED'}
+									class:fila--descartada={Boolean(envio.deletedAt)}
+								>
 									<td>
 										<span class="mono">{envio.version?.code ?? '—'}</span>
 										<span class="sub">
@@ -1022,11 +1093,40 @@
 										<span class="chip chip--{envio.status.toLowerCase()}">
 											{SUBMISSION_STATUS_LABELS[envio.status]}
 										</span>
+										{#if envio.deletedAt}
+											<!-- Se muestra JUNTO al estado, no en su lugar: descartar no
+											     cambia el estado del envío, lo retira. Un borrador
+											     descartado sigue siendo un borrador. -->
+											<span class="chip chip--descartado">Descartado</span>
+										{/if}
 									</td>
 									<td>
-										<a class="btn btn--mini" href={`/dashboard/formularios/envios/${envio.id}`}>
-											Ver
-										</a>
+										<div class="acciones-fila">
+											<a class="btn btn--mini" href={`/dashboard/formularios/envios/${envio.id}`}>
+												Ver
+											</a>
+											{#if envio.deletedAt}
+												<button
+													type="button"
+													class="btn btn--mini"
+													disabled={envioEnAccion === envio.id}
+													onclick={() => restaurarEnvio(envio)}
+												>
+													{envioEnAccion === envio.id ? '…' : 'Restaurar'}
+												</button>
+											{:else if envio.status === 'DRAFT'}
+												<!-- Solo borradores. Un envío entregado se ANULA, con motivo
+												     y desde su detalle: no se hace desaparecer de la lista. -->
+												<button
+													type="button"
+													class="btn btn--mini btn--peligro"
+													disabled={envioEnAccion === envio.id}
+													onclick={() => descartarEnvio(envio)}
+												>
+													{envioEnAccion === envio.id ? '…' : 'Descartar'}
+												</button>
+											{/if}
+										</div>
 									</td>
 								</tr>
 							{/each}
@@ -1496,6 +1596,19 @@
 		background: #fef2f2;
 	}
 
+	/* Atenuada y no tachada: el contenido sigue siendo legible —hace falta para
+	   decidir si se restaura— pero la fila no compite con las vivas. */
+	.fila--descartada {
+		background: var(--gray-50, #f9fafb);
+		opacity: 0.65;
+	}
+
+	.acciones-fila {
+		display: flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+
 	.mono {
 		font-family: var(--font-mono, monospace);
 		font-size: 0.75rem;
@@ -1533,6 +1646,12 @@
 	.chip--draft {
 		background: #fffbeb;
 		color: #92400e;
+	}
+
+	.chip--descartado {
+		margin-left: 0.25rem;
+		background: var(--gray-100, #f3f4f6);
+		color: var(--text-secondary, #4a4a4a);
 	}
 
 	.btn {

@@ -532,6 +532,18 @@ export interface SubmissionSummaryDto {
 	updatedAt: string | null;
 	voidedAt: string | null;
 	voidReason: string | null;
+	/**
+	 * Descartado, y cuándo.
+	 *
+	 * Solo lo llevan los BORRADORES que alguien retiró: abrir un formulario ya
+	 * crea la fila, así que hace falta poder quitar la que se abrió por error. Es
+	 * otra cosa que `voidedAt`, que retira la validez de un envío ENTREGADO
+	 * conservándolo.
+	 *
+	 * `undefined` cuando la consulta no lo pidió; `null` es «vivo». El explorador
+	 * los oculta salvo que se marque «Ver descartados».
+	 */
+	deletedAt?: string | null;
 	conductor: { id: string; nombre: string; numeroIdentificacion: string | null } | null;
 	usuario: { id: string; nombre: string; correo: string } | null;
 	/**
