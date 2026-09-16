@@ -3,11 +3,65 @@
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { portalSession, isAuthenticated, conductorNombre, conductorCedula, diasRestantes } from '$lib/stores/portalStore';
+  import { startSync, wakeAll } from '$lib/offline/forms-sync';
   import '../../../app.css';
 
   const LOGO_SRC = '/assets/logo_nombre.webp';
 
   let mobileMenuOpen = false;
+
+  /**
+   * Mantiene viva la outbox en TODO el portal y adopta builds nuevos sin cortar
+   * una inspección a mitad de una respuesta.
+   *
+   * El service worker activa la versión nueva enseguida, pero el JavaScript de
+   * una pestaña abierta sigue siendo el anterior hasta recargar. Se espera a 30 s
+   * sin interacción: para entonces el autosave de 250 ms ya terminó y el original
+   * está en IndexedDB. Si la pestaña está oculta, se actualiza de inmediato.
+   */
+  onMount(() => {
+    const INACTIVIDAD_PARA_ACTUALIZAR_MS = 30_000;
+    let ultimaActividad = Date.now();
+    let actualizacionPendiente = false;
+    let recargando = false;
+
+    const registrarActividad = () => (ultimaActividad = Date.now());
+    const adoptarActualizacion = () => {
+      if (!actualizacionPendiente || recargando) return;
+      const inactivo = Date.now() - ultimaActividad >= INACTIVIDAD_PARA_ACTUALIZAR_MS;
+      if (document.visibilityState !== 'hidden' && !inactivo) return;
+      recargando = true;
+      window.location.reload();
+    };
+    const alCambiarWorker = () => {
+      actualizacionPendiente = true;
+      adoptarActualizacion();
+    };
+
+    for (const evento of ['pointerdown', 'keydown', 'input', 'touchstart'] as const) {
+      window.addEventListener(evento, registrarActividad, { passive: true });
+    }
+    navigator.serviceWorker?.addEventListener('controllerchange', alCambiarWorker);
+    const vigilanciaActualizacion = window.setInterval(adoptarActualizacion, 5_000);
+
+    /// El layout persiste entre `/portal` y sus páginas hijas. Suscribirse a la
+    /// sesión cubre también el login que ocurre después del primer montaje.
+    const desuscribirSesion = portalSession.subscribe((sesion) => {
+      if (!sesion) return;
+      void startSync()
+        .then(() => wakeAll())
+        .catch((err) => console.error('[portal] no se pudo iniciar la sincronización', err));
+    });
+
+    return () => {
+      desuscribirSesion();
+      window.clearInterval(vigilanciaActualizacion);
+      navigator.serviceWorker?.removeEventListener('controllerchange', alCambiarWorker);
+      for (const evento of ['pointerdown', 'keydown', 'input', 'touchstart'] as const) {
+        window.removeEventListener(evento, registrarActividad);
+      }
+    };
+  });
 
   const navItems = [
     {

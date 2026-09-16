@@ -147,7 +147,7 @@ export interface OutboxOperation {
 	attempts: number;
 	nextAttemptAt: string;
 	createdAt: string;
-	lastError?: { code: string; message: string; retryable: boolean };
+	lastError?: { code: string; message: string; retryable: boolean; details?: unknown };
 	/** Lease de la pestaña que la está ejecutando. ISO; caduca. */
 	leaseUntil?: string;
 	leaseOwner?: string;

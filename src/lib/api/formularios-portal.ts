@@ -350,6 +350,22 @@ export const portalFormulariosAPI = {
 		return data;
 	},
 
+	/**
+	 * Copia de seguridad de un borrador por el id que generó el teléfono.
+	 *
+	 * Solo se usa como red de rescate: IndexedDB sigue siendo la fuente de verdad.
+	 * Si el navegador conserva la outbox pero perdió el borrador, esta copia permite
+	 * reconstruir las respuestas y forzar el envío sin pedirle al conductor que lo
+	 * diligencie otra vez.
+	 */
+	async borrador(clientSubmissionId: string) {
+		const { data } = await call<{
+			submission: SubmissionDetailDto;
+			definition: FormVersionDto;
+		}>(`/drafts/${encodeURIComponent(clientSubmissionId)}`);
+		return data;
+	},
+
 	/** Backup del borrador. Sin adjuntos binarios: solo texto y opciones. */
 	async guardarBorrador(
 		clientSubmissionId: string,

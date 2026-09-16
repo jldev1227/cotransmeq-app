@@ -50,6 +50,8 @@ import {
 	markDraftBlocked,
 	patchAttachment,
 	patchOperation,
+	putAttachment,
+	putDraft,
 	putReceipt,
 	releaseStaleLeases,
 	setMeta,
@@ -59,6 +61,16 @@ import {
 } from './forms-db';
 
 const CHANNEL = 'transmeralda-forms-sync';
+
+/// El `UPLOAD` puede tardar hasta 120 s. Un lease más corto permitiría que otra
+/// pestaña reclamara la misma foto mientras la primera todavía la está subiendo.
+const LEASE_MS = 180_000;
+
+/// Red de seguridad contra despertares perdidos y pestañas que llevan horas
+/// abiertas. Los eventos de foco/online siguen dando la respuesta inmediata.
+const INTERVALO_VIGILANCIA_MS = 60_000;
+
+const ERROR_PROTOCOLO = 'VALIDATION_ERROR';
 
 /**
  * Backoff con jitter: 1 s, 2 s, 4 s, 8 s, 30 s y tope de 5 minutos.
@@ -94,6 +106,8 @@ export interface SyncState {
 	blocked: number;
 	/** Envíos distintos con alguna operación bloqueada. */
 	blockedSubmissions: number;
+	/** Bloqueados por el contrato HTTP, no por una respuesta del conductor. */
+	technicalSubmissions: number;
 	/** Antigüedad de la operación más vieja, en ms. `null` si la cola está vacía. */
 	oldestAgeMs: number | null;
 	lastSyncAt: string | null;
@@ -106,6 +120,7 @@ export const syncState = writable<SyncState>({
 	submissions: 0,
 	blocked: 0,
 	blockedSubmissions: 0,
+	technicalSubmissions: 0,
 	oldestAgeMs: null,
 	lastSyncAt: null,
 	lastError: null
@@ -141,7 +156,9 @@ export interface EnvioEnCola {
 	/** Antigüedad de su operación más vieja, en ms. */
 	ageMs: number;
 	progress: number | null;
-	error: { code: string; message: string } | null;
+	error: { code: string; message: string; details?: unknown } | null;
+	/** Es una incompatibilidad del cliente/servidor; el conductor no la corrige. */
+	tecnico: boolean;
 	/** Queda borrador local, así que se puede abrir para corregirlo. */
 	abrible: boolean;
 }
@@ -189,6 +206,19 @@ async function detallarCola(operaciones: OutboxOperation[]): Promise<EnvioEnCola
 			const assignmentId = draft?.assignmentId ?? recibo?.assignmentId ?? null;
 			const asignacion = assignmentId ? await getAssignment(assignmentId) : undefined;
 			const bloqueada = grupo.find((o) => o.state === 'BLOCKED');
+			const error = draft?.blocked
+				? {
+						code: draft.blocked.code,
+						message: draft.blocked.message,
+						details: draft.blocked.details
+					}
+				: bloqueada?.lastError
+					? {
+							code: bloqueada.lastError.code,
+							message: bloqueada.lastError.message,
+							details: bloqueada.lastError.details
+						}
+					: null;
 
 			return {
 				clientSubmissionId,
@@ -201,11 +231,8 @@ async function detallarCola(operaciones: OutboxOperation[]): Promise<EnvioEnCola
 				bloqueado: Boolean(bloqueada) || Boolean(draft?.blocked),
 				ageMs: grupo.reduce((max, o) => Math.max(max, ahora - new Date(o.createdAt).getTime()), 0),
 				progress: draft?.progress ?? null,
-				error: draft?.blocked
-					? { code: draft.blocked.code, message: draft.blocked.message }
-					: bloqueada?.lastError
-						? { code: bloqueada.lastError.code, message: bloqueada.lastError.message }
-						: null,
+				error,
+				tecnico: error?.code === ERROR_PROTOCOLO,
 				abrible: Boolean(draft)
 			};
 		})
@@ -224,6 +251,7 @@ let owner: string | null = null;
 let channel: BroadcastChannel | null = null;
 let corriendo = false;
 let timerProximo: ReturnType<typeof setTimeout> | null = null;
+let timerVigilancia: ReturnType<typeof setInterval> | null = null;
 let arrancado = false;
 
 async function refrescarEstado(phase?: SyncPhase) {
@@ -244,6 +272,7 @@ async function refrescarEstado(phase?: SyncPhase) {
 		submissions: detalle.length,
 		blocked: bloqueadas.length,
 		blockedSubmissions: detalle.filter((e) => e.bloqueado).length,
+		technicalSubmissions: detalle.filter((e) => e.bloqueado && e.tecnico).length,
 		oldestAgeMs: masVieja
 	}));
 }
@@ -269,6 +298,7 @@ export async function startSync(): Promise<void> {
 	/// que un teléfono que ya se atascó no se cura solo por abrir el portal.
 	await purgarObsoletasTrasRecibo();
 	await rescatarBloqueadosSinBorrador();
+	await repararBloqueosTecnicos();
 
 	try {
 		channel = new BroadcastChannel(CHANNEL);
@@ -288,6 +318,11 @@ export async function startSync(): Promise<void> {
 	document.addEventListener('visibilitychange', () => {
 		if (document.visibilityState === 'visible') despertar();
 	});
+
+	/// Safari puede congelar temporizadores durante horas; al volver, el evento de
+	/// visibilidad despierta de inmediato. Mientras la pantalla siga activa, este
+	/// pulso rescata cualquier operación cuyo despertar se haya perdido.
+	timerVigilancia ??= setInterval(despertar, INTERVALO_VIGILANCIA_MS);
 
 	await refrescarEstado();
 	void tick();
@@ -320,6 +355,9 @@ export async function tick(): Promise<void> {
 
 	corriendo = true;
 	try {
+		/// Una pestaña puede haber muerto después de escribir `RUNNING`. Liberar aquí,
+		/// además de al arranque, cura el caso sin exigir una recarga completa.
+		await releaseStaleLeases();
 		const operaciones = await allOperations();
 		const elegibles = operaciones.filter((o) => o.state === 'PENDING' || o.state === 'RETRY');
 		if (elegibles.length === 0) {
@@ -342,7 +380,7 @@ export async function tick(): Promise<void> {
 		await refrescarEstado('syncing');
 
 		for (;;) {
-			const operacion = await claimNextOperation(owner!);
+			const operacion = await claimNextOperation(owner!, LEASE_MS);
 			if (!operacion) break;
 			const resultado = await ejecutar(operacion);
 			if (resultado === 'auth') {
@@ -406,6 +444,221 @@ export async function tick(): Promise<void> {
 }
 
 type Resultado = 'ok' | 'retry' | 'blocked' | 'auth' | 'offline';
+
+const MARCA_RESCATE_PROTOCOLO = 'schemaRecoveryAttempts';
+
+type ResultadoRescate = 'requeued' | 'submitted' | 'obsolete' | 'not-recovered';
+
+/** Número de reconstrucciones automáticas que ya sufrió esta cadena. */
+function rescatesDe(operacion: OutboxOperation): number {
+	const valor = Number(operacion.payload[MARCA_RESCATE_PROTOCOLO] ?? 0);
+	return Number.isFinite(valor) && valor > 0 ? Math.floor(valor) : 0;
+}
+
+/**
+ * Restaura en IndexedDB el backup del servidor cuando desapareció el borrador.
+ *
+ * Es un salvavidas, no una segunda fuente de verdad: solo se llama si la outbox
+ * sigue viva y `getDraft()` ya no encuentra nada. Los adjuntos que el servidor
+ * confirmó como `UPLOADED` se pueden reconstruir sin el blob; los incompletos no,
+ * y se devuelven para descartarlos antes del reenvío.
+ */
+async function restaurarBorradorServidor(
+	clientSubmissionId: string
+): Promise<{ estado: 'draft'; descartes: string[] } | { estado: 'submitted' }> {
+	const { submission, definition } = await portalFormulariosAPI.borrador(clientSubmissionId);
+
+	if (submission.status !== 'DRAFT') {
+		await putReceipt({
+			clientSubmissionId,
+			submissionId: submission.id,
+			assignmentId: submission.assignmentId,
+			code: submission.version?.code ?? '',
+			title: submission.version?.title ?? definition.title ?? '',
+			businessDate: submission.businessDate ?? new Date().toISOString().slice(0, 10),
+			periodKey: submission.periodKey,
+			submittedAt: submission.submittedAt ?? submission.updatedAt ?? new Date().toISOString(),
+			idempotentReplay: true,
+			receivedAt: new Date().toISOString()
+		});
+		await purgarEnvioLocal(clientSubmissionId);
+
+		const evento = { clientSubmissionId, submissionId: submission.id };
+		receiptEvents.set(evento);
+		channel?.postMessage({ type: 'receipt', payload: evento });
+		return { estado: 'submitted' };
+	}
+
+	const progresoCrudo = Number(submission.device?.progress ?? 0);
+	const progress = Number.isFinite(progresoCrudo)
+		? Math.max(0, Math.min(100, Math.round(progresoCrudo)))
+		: 0;
+	const createdAt = submission.startedAt ?? submission.updatedAt ?? new Date().toISOString();
+
+	await putDraft({
+		clientSubmissionId,
+		assignmentId: submission.assignmentId,
+		versionId: submission.versionId,
+		context: submission.context ?? {},
+		answers: submission.answers.map((answer) => ({
+			fieldId: answer.fieldId,
+			occurrenceId: answer.occurrenceId,
+			rowIndex: answer.rowIndex,
+			value: answer.value,
+			optionValues: answer.optionValues
+		})),
+		progress,
+		createdAt
+	});
+
+	const descartes: string[] = [];
+	for (const remoto of submission.attachments) {
+		const local = await getAttachment(remoto.clientAttachmentId);
+		if (local) {
+			if (remoto.status === 'UPLOADED') {
+				await patchAttachment(local.clientAttachmentId, {
+					serverId: remoto.id,
+					state: 'UPLOADED'
+				});
+			}
+			continue;
+		}
+
+		const fieldId = String(remoto.metadata?.fieldId ?? '');
+		const occurrenceId = remoto.metadata?.occurrenceId;
+		if (remoto.status === 'UPLOADED' && fieldId && remoto.byteSize != null && remoto.byteSize > 0) {
+			await putAttachment({
+				clientAttachmentId: remoto.clientAttachmentId,
+				clientSubmissionId,
+				fieldId,
+				occurrenceId: typeof occurrenceId === 'string' ? occurrenceId : null,
+				kind: remoto.kind,
+				mimeType: remoto.mimeType,
+				byteSize: remoto.byteSize,
+				sha256: remoto.sha256,
+				originalName: remoto.originalName,
+				/// El binario ya está verificado en el servidor; la cadena no vuelve a
+				/// leerlo porque `state === 'UPLOADED'`.
+				blob: new Blob([]),
+				state: 'UPLOADED',
+				serverId: remoto.id,
+				createdAt: remoto.createdAt ?? new Date().toISOString()
+			});
+		} else {
+			/// Un adjunto remoto incompleto sin blob local jamás podrá terminar. Se
+			/// retira antes del SUBMIT para que no provoque ATTACHMENT_NOT_DECLARED.
+			descartes.push(remoto.id);
+		}
+	}
+
+	return { estado: 'draft', descartes };
+}
+
+/**
+ * Sustituye una cadena dañada por otra derivada de las fuentes locales vigentes.
+ *
+ * No recicla ids de operación ni dependencias antiguas. Esa es la parte
+ * «drástica»: si una versión vieja dejó un grafo incompleto, parchear solo la
+ * operación que falló conserva el daño; reconstruirlo vuelve a establecer
+ * `BACKUP → INIT → UPLOAD → COMPLETE → SUBMIT` de una vez.
+ */
+async function reconstruirCadena(
+	clientSubmissionId: string,
+	intentoRescate: number,
+	descartesServidor: string[] = []
+): Promise<boolean> {
+	const draft = await getDraft(clientSubmissionId);
+	if (!draft) return false;
+
+	const todas = await allOperations();
+	const anteriores = todas.filter((o) => o.aggregateId === clientSubmissionId);
+	const esEnvioFinal = anteriores.some(
+		(o) =>
+			o.type === 'SUBMIT' ||
+			o.type === 'INIT_ATTACHMENT' ||
+			o.type === 'UPLOAD_ATTACHMENT' ||
+			o.type === 'COMPLETE_ATTACHMENT'
+	);
+	const offlineCreated = Boolean(
+		anteriores.find((o) => o.type === 'SUBMIT')?.payload.offlineCreated
+	);
+
+	const idsDescarte = new Set<string>(descartesServidor);
+	for (const anterior of anteriores) {
+		if (anterior.type !== 'DISCARD_ATTACHMENT') continue;
+		const id = String(anterior.payload.attachmentId ?? '');
+		if (id) idsDescarte.add(id);
+	}
+
+	for (const anterior of anteriores) await deleteOperation(anterior.operationId);
+
+	const marcar = (operacion: OutboxOperation): OutboxOperation => ({
+		...operacion,
+		payload: { ...operacion.payload, [MARCA_RESCATE_PROTOCOLO]: intentoRescate }
+	});
+	const descartes = [...idsDescarte].map((attachmentId) =>
+		marcar(nuevaOperacion('DISCARD_ATTACHMENT', clientSubmissionId, { attachmentId }))
+	);
+
+	let nuevas: OutboxOperation[];
+	if (esEnvioFinal) {
+		const adjuntos = await attachmentsForSubmission(clientSubmissionId);
+		nuevas = [
+			...descartes,
+			...construirCadenaEnvio({
+				clientSubmissionId,
+				adjuntos,
+				descartesPendientes: descartes.map((o) => o.operationId),
+				offlineCreated
+			}).map(marcar)
+		];
+	} else {
+		/// Era solo un autosave: recuperarlo no autoriza a entregar un formulario
+		/// que el conductor todavía no había enviado.
+		nuevas = [...descartes, marcar(nuevaOperacion('BACKUP_DRAFT', clientSubmissionId, {}))];
+	}
+
+	await enqueueMany(nuevas);
+	await markDraftBlocked(clientSubmissionId, null);
+	await refrescarEstado();
+	return true;
+}
+
+async function rescatarErrorProtocolo(
+	operacion: OutboxOperation,
+	forzar = false
+): Promise<ResultadoRescate> {
+	const rescates = rescatesDe(operacion);
+	if (!forzar && rescates >= 1) return 'not-recovered';
+
+	let descartesServidor: string[] = [];
+	if (!(await getDraft(operacion.aggregateId))) {
+		try {
+			const restaurado = await restaurarBorradorServidor(operacion.aggregateId);
+			if (restaurado.estado === 'submitted') {
+				await refrescarEstado();
+				return 'submitted';
+			}
+			descartesServidor = restaurado.descartes;
+		} catch (err) {
+			if (err instanceof PortalApiError && err.code === 'SUBMISSION_NOT_FOUND') {
+				/// Sin original local ni backup remoto no existe nada que el conductor
+				/// pueda arreglar. Mantener la fila sería solo ruido permanente.
+				await purgarEnvioLocal(operacion.aggregateId);
+				await refrescarEstado();
+				return 'obsolete';
+			}
+			throw err;
+		}
+	}
+
+	const reconstruida = await reconstruirCadena(
+		operacion.aggregateId,
+		forzar ? 0 : rescates + 1,
+		descartesServidor
+	);
+	return reconstruida ? 'requeued' : 'not-recovered';
+}
 
 async function ejecutar(operacion: OutboxOperation): Promise<Resultado> {
 	try {
@@ -499,15 +752,63 @@ async function manejarError(operacion: OutboxOperation, err: unknown): Promise<R
 		return 'ok';
 	}
 
+	/**
+	 * Un `VALIDATION_ERROR` de estas rutas describe el SOBRE HTTP, no las reglas
+	 * del formulario. El conductor no puede corregir un UUID, una dependencia de
+	 * outbox o un contrato viejo. Se reconstruye la cadena una sola vez con el
+	 * código vigente; repetir sin límite escondería un bug permanente.
+	 */
+	if (error.code === ERROR_PROTOCOLO) {
+		try {
+			const rescate = await rescatarErrorProtocolo(operacion);
+			if (rescate === 'requeued') return 'retry';
+			if (rescate === 'submitted' || rescate === 'obsolete') return 'ok';
+		} catch (rescateError) {
+			if (rescateError instanceof PortalApiError && rescateError.needsAuth) {
+				await patchOperation(operacion.operationId, {
+					state: 'PENDING',
+					leaseOwner: undefined,
+					leaseUntil: undefined,
+					lastError: {
+						code: rescateError.code,
+						message: rescateError.message,
+						retryable: true,
+						details: rescateError.details
+					}
+				});
+				return 'auth';
+			}
+			if (
+				rescateError instanceof PortalApiError &&
+				(rescateError.code === 'NETWORK_ERROR' || rescateError.code === 'ABORTED')
+			) {
+				await patchOperation(operacion.operationId, {
+					state: 'PENDING',
+					leaseOwner: undefined,
+					leaseUntil: undefined
+				});
+				return 'offline';
+			}
+			/// El error original trae las rutas exactas rechazadas y es más útil en
+			/// pantalla que un fallo secundario del intento de rescate.
+			console.error('[forms-sync] no se pudo reconstruir el envío', rescateError);
+		}
+	}
+
 	if (!error.retryable) {
-		/// 4xx de validación o de límite: no se reintenta. El borrador queda
-		/// bloqueado y editable con el detalle, para que el conductor corrija.
+		/// Los errores de dominio quedan editables; el error de protocolo se pinta
+		/// como reparación técnica, nunca como una corrección del conductor.
 		await patchOperation(operacion.operationId, {
 			state: 'BLOCKED',
 			attempts: operacion.attempts + 1,
 			leaseOwner: undefined,
 			leaseUntil: undefined,
-			lastError: { code: error.code, message: error.message, retryable: false }
+			lastError: {
+				code: error.code,
+				message: error.message,
+				retryable: false,
+				details: error.details
+			}
 		});
 		await markDraftBlocked(operacion.aggregateId, {
 			code: error.code,
@@ -525,7 +826,12 @@ async function manejarError(operacion: OutboxOperation, err: unknown): Promise<R
 		nextAttemptAt: new Date(Date.now() + siguienteEspera(intentos)).toISOString(),
 		leaseOwner: undefined,
 		leaseUntil: undefined,
-		lastError: { code: error.code, message: error.message, retryable: true }
+		lastError: {
+			code: error.code,
+			message: error.message,
+			retryable: true,
+			details: error.details
+		}
 	});
 	syncState.update((s) => ({ ...s, lastError: { code: error.code, message: error.message } }));
 	return 'retry';
@@ -841,6 +1147,32 @@ async function limpiarSiCompleto(clientSubmissionId: string): Promise<void> {
 	);
 	if (pendientes.length > 0) return;
 	await deleteDraftCascade(clientSubmissionId);
+}
+
+/**
+ * Rescata las filas que quedaron `BLOCKED` con el cliente anterior.
+ *
+ * La marca viaja en la cadena nueva: si el payload vigente vuelve a ser
+ * rechazado, no entra en un ciclo de reconstrucciones en cada arranque. El botón
+ * explícito de la interfaz sí permite otro intento después de desplegar un fix.
+ */
+async function repararBloqueosTecnicos(): Promise<void> {
+	const vistos = new Set<string>();
+	for (const operacion of await allOperations()) {
+		if (operacion.state !== 'BLOCKED') continue;
+		if (operacion.lastError?.code !== ERROR_PROTOCOLO) continue;
+		if (rescatesDe(operacion) >= 1) continue;
+		if (vistos.has(operacion.aggregateId)) continue;
+		vistos.add(operacion.aggregateId);
+
+		try {
+			await rescatarErrorProtocolo(operacion);
+		} catch (err) {
+			/// Estar sin señal al arrancar es normal. Se conserva intacto y el usuario
+			/// puede repararlo desde el panel cuando recupere conexión.
+			console.warn('[forms-sync] rescate técnico pendiente', err);
+		}
+	}
 }
 
 /**
@@ -1164,6 +1496,26 @@ export async function reintentarBloqueado(clientSubmissionId: string): Promise<v
 }
 
 /**
+ * Fuerza la reconstrucción de un envío rechazado por el contrato HTTP.
+ *
+ * Si el borrador local desapareció, primero intenta restaurar la copia del
+ * servidor. Devuelve el desenlace para que la interfaz pueda explicar si se
+ * reencoló, si ya constaba entregado o si no quedaba original en ningún lado.
+ */
+export async function repararYReenviar(clientSubmissionId: string): Promise<ResultadoRescate> {
+	const operaciones = (await allOperations()).filter((o) => o.aggregateId === clientSubmissionId);
+	const operacion =
+		operaciones.find((o) => o.state === 'BLOCKED' && o.lastError?.code === ERROR_PROTOCOLO) ??
+		operaciones[0];
+	if (!operacion) return 'obsolete';
+
+	const resultado = await rescatarErrorProtocolo(operacion, true);
+	await refrescarEstado();
+	if (resultado === 'requeued') wakeAll();
+	return resultado;
+}
+
+/**
  * Borra del dispositivo todo rastro de un envío: su cola, su borrador y sus
  * adjuntos.
  *
@@ -1228,6 +1580,10 @@ export const syncInternals = {
 	BACKOFF_MS,
 	CHANNEL,
 	iniciarAdjuntoAsegurando,
+	/// Fuerza en pruebas el mismo `VALIDATION_ERROR` que llega ocasionalmente en
+	/// producción y permite comprobar el estado FINAL de la outbox, no solo una
+	/// clasificación aislada del error.
+	manejarError,
 	/// Los dos errores que este ejecutor se traga —«ya estaba descartado» y «ya se
 	/// entregó»— son la diferencia entre una operación que termina y una que se
 	/// queda BLOQUEADA para siempre, y eso no se ve mirando el código.

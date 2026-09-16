@@ -17,9 +17,12 @@
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { toast } from 'svelte-sonner';
+	import { portalSession } from '$lib/stores/portalStore';
 	import {
 		colaEnvios,
 		descartarEnvio,
+		repararYReenviar,
 		syncState,
 		wakeAll,
 		type EnvioEnCola
@@ -40,6 +43,7 @@
 	/// el diálogo nativo aparece descolgado del elemento que lo disparó y, en la
 	/// lista, no deja claro CUÁL de los envíos se va a borrar.
 	let confirmando = $state<string | null>(null);
+	let reparando = $state<string | null>(null);
 
 	async function descartar(envio: EnvioEnCola) {
 		if (confirmando !== envio.clientSubmissionId) {
@@ -53,6 +57,46 @@
 	function abrir(envio: EnvioEnCola) {
 		if (!envio.assignmentId) return;
 		goto(`/public/portal/formularios/${envio.assignmentId}?draft=${envio.clientSubmissionId}`);
+	}
+
+	function intentarAhora() {
+		if (estado.phase === 'paused-auth') {
+			portalSession.logout();
+			void goto('/public/portal');
+			return;
+		}
+		wakeAll();
+	}
+
+	async function reparar(envio: EnvioEnCola) {
+		if (reparando) return;
+		reparando = envio.clientSubmissionId;
+		try {
+			const resultado = await repararYReenviar(envio.clientSubmissionId);
+			if (resultado === 'requeued') toast.success('Envío reconstruido. Se está enviando de nuevo.');
+			else if (resultado === 'submitted')
+				toast.success('El servidor confirmó que ya estaba entregado.');
+			else if (resultado === 'obsolete') {
+				toast.info('No quedaba una copia recuperable; se retiró la alerta obsoleta.');
+			}
+		} catch (err) {
+			console.error('[sync-status] no se pudo reparar el envío', err);
+			toast.error('No se pudo reparar ahora. Se conservará para intentarlo con conexión.');
+		} finally {
+			reparando = null;
+		}
+	}
+
+	function detalleTecnico(envio: EnvioEnCola): string | null {
+		const detalles = envio.error?.details;
+		if (!Array.isArray(detalles)) return null;
+		const partes = detalles.slice(0, 3).map((detalle) => {
+			if (!detalle || typeof detalle !== 'object') return String(detalle);
+			const item = detalle as { path?: unknown; message?: unknown };
+			const path = typeof item.path === 'string' && item.path ? `${item.path}: ` : '';
+			return `${path}${String(item.message ?? 'dato inválido')}`;
+		});
+		return partes.length ? partes.join(' · ') : null;
 	}
 
 	/// Sin código ni título no queda nada reconocible, así que se muestra el tramo
@@ -75,6 +119,10 @@
 			case 'paused-auth':
 				return 'Sesión vencida · vuelve a entrar';
 			case 'blocked':
+				if (estado.technicalSubmissions === estado.blockedSubmissions) {
+					return 'Hay envíos pendientes de reparación';
+				}
+				if (estado.technicalSubmissions > 0) return 'Hay envíos pendientes de atención';
 				return 'Hay envíos que necesitan corrección';
 			default:
 				return estado.pending > 0 ? 'Pendiente de enviar' : 'Todo sincronizado';
@@ -126,7 +174,7 @@
 		class="chip chip--{tono}"
 		aria-live="polite"
 		title={etiqueta}
-		onclick={() => wakeAll()}
+		onclick={intentarAhora}
 	>
 		<span class="chip__icono" class:girando={trabajando} aria-hidden="true">{icono}</span>
 		<span class="chip__texto">{etiqueta}</span>
@@ -146,10 +194,19 @@
 							más antiguo {edad}{/if}.
 					</p>
 				{/if}
-				{#if estado.blockedSubmissions > 0}
+				{#if estado.blockedSubmissions - estado.technicalSubmissions > 0}
 					<p class="panel__detalle">
-						{estado.blockedSubmissions} necesita{estado.blockedSubmissions === 1 ? '' : 'n'} corrección
-						antes de reenviarse.
+						{estado.blockedSubmissions - estado.technicalSubmissions} necesita{estado.blockedSubmissions -
+							estado.technicalSubmissions ===
+						1
+							? ''
+							: 'n'} corrección antes de reenviarse.
+					</p>
+				{/if}
+				{#if estado.technicalSubmissions > 0}
+					<p class="panel__detalle">
+						{estado.technicalSubmissions} se reparará{estado.technicalSubmissions === 1 ? '' : 'n'}
+						reconstruyendo su cola y, si hace falta, desde la copia del servidor.
 					</p>
 				{/if}
 				{#if estado.phase === 'offline'}
@@ -173,7 +230,9 @@
 		</div>
 
 		{#if estado.pending > 0 && estado.phase !== 'syncing'}
-			<button type="button" class="panel__accion" onclick={() => wakeAll()}>Intentar ahora</button>
+			<button type="button" class="panel__accion" onclick={intentarAhora}>
+				{estado.phase === 'paused-auth' ? 'Volver a entrar' : 'Intentar ahora'}
+			</button>
 		{/if}
 
 		{#if envios.length > 0}
@@ -182,7 +241,11 @@
 					<li class="envio" class:envio--bloqueado={envio.bloqueado}>
 						<p class="envio__nombre">{nombre(envio)}</p>
 						<p class="envio__meta">
-							{envio.bloqueado ? 'Necesita corrección' : 'Pendiente de enviar'}
+							{envio.bloqueado
+								? envio.tecnico
+									? 'Necesita reparación técnica'
+									: 'Necesita corrección'
+								: 'Pendiente de enviar'}
 							· {edadLegible(envio.ageMs)}
 							{#if envio.progress !== null}· {envio.progress}% diligenciado{/if}
 						</p>
@@ -191,6 +254,9 @@
 							<p class="envio__error">
 								<span class="panel__code">{envio.error.code}</span>{envio.error.message}
 							</p>
+							{#if detalleTecnico(envio)}
+								<p class="envio__meta">Detalle: {detalleTecnico(envio)}</p>
+							{/if}
 						{/if}
 
 						{#if !envio.abrible}
@@ -199,13 +265,23 @@
 							     es la única salida real, así que se dice en vez de ofrecer un
 							     botón «Abrir» que llevaría a un formulario vacío. -->
 							<p class="envio__meta">
-								Ya no queda borrador de este envío en el teléfono. Si sigue aquí tras reintentar,
-								descártalo.
+								{envio.tecnico
+									? 'No queda el original local. Reparar intentará restaurar la copia del servidor.'
+									: 'Ya no queda borrador de este envío en el teléfono. Si sigue aquí tras reintentar, descártalo.'}
 							</p>
 						{/if}
 
 						<div class="envio__acciones">
-							{#if envio.abrible && envio.assignmentId}
+							{#if envio.tecnico}
+								<button
+									type="button"
+									class="envio__boton"
+									disabled={reparando !== null}
+									onclick={() => reparar(envio)}
+								>
+									{reparando === envio.clientSubmissionId ? 'Reparando…' : 'Reparar y reenviar'}
+								</button>
+							{:else if envio.abrible && envio.assignmentId}
 								<button type="button" class="envio__boton" onclick={() => abrir(envio)}>
 									{envio.bloqueado ? 'Abrir y corregir' : 'Abrir'}
 								</button>
