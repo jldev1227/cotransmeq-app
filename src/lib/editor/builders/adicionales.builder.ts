@@ -1180,3 +1180,5 @@ const COLUMN_WIDTHS = [
 ];
 
 const COLUMN_COUNT = HEADERS_ITEMS.length;
+/// Columnas de la tabla de items, para el rango del autofiltro del engine.
+export const ADICIONALES_TOTAL_COLUMNS = COLUMN_COUNT;

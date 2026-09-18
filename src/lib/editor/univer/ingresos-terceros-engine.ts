@@ -1,5 +1,5 @@
 /**
- * Engine Univer del canvas **INGRESOS DE COTRANSMEQ**. Wrapper minimal sobre
+ * Engine Univer del canvas **INGRESOS DE TRANSMERALDA**. Wrapper minimal sobre
  * `createLiquidacionEngine` que pasa el libro del MES que arma
  * `buildIngresosMesWorkbook`.
  *
@@ -41,6 +41,7 @@ import {
 	adicionalesSheetId,
 	buildIngresosMesWorkbook,
 	COL_INCLUIR,
+	COLS_INGRESOS,
 	COLORES_INCLUIR,
 	COLS_RESALTADO,
 	fondoFilaIngresos,
@@ -49,6 +50,7 @@ import {
 	type GeometriaIncluirMes
 } from '../builders/ingresos-terceros.builder';
 import { activarHoja } from './activar-hoja';
+import { crearAutofiltros } from './autofiltro';
 import { CHECKBOX_NO, CHECKBOX_SI, colgarCheckboxSiNo, hayValidacionDeDatos } from './checkbox-si-no';
 import { ICommandService, type IRange } from '@univerjs/core';
 import { SetRowHiddenMutation, SetRowVisibleMutation } from '@univerjs/sheets';
@@ -164,6 +166,9 @@ export function createIngresosEngine(
 		// La columna INCLUIR se marca con un checkbox, no escribiendo. Ver
 		// `colgarCheckboxIncluir` más abajo.
 		dataValidation: true,
+		// Autofiltro en la cabecera de INGRESOS: con cientos de servicios al mes
+		// hay que poder quedarse con una placa o un cliente para marcar.
+		filtros: true,
 		footer: {
 			// Con 24 hojas la sheet bar es la navegación principal.
 			sheetBar: true,
@@ -175,6 +180,22 @@ export function createIngresosEngine(
 
 	const ctx = createLiquidacionEngine(engineOpts);
 	colgarCheckboxIncluir(ctx, sheetIdPorMes, rangoIncluirPorMes);
+
+	// SOLO en la hoja de INGRESOS. La de ADICIONALES esconde ella misma las
+	// filas no marcadas (`rowData.hd`) y `sincronizarIncluir` las muestra y
+	// oculta en vivo; un autofiltro encima las volvería a enseñar al limpiarlo,
+	// porque para Univer «quitar el filtro» es mostrar todo lo que ocultó.
+	// `rangoIncluirPorMes` ya es la tabla de items: solo existe cuando hay filas.
+	crearAutofiltros(
+		ctx,
+		Object.entries(rangoIncluirPorMes).map(([mes, rango]) => ({
+			sheetId: sheetIdPorMes[Number(mes)],
+			filaCabecera: 0,
+			ultimaFila: rango.hasta,
+			columnas: COLS_INGRESOS
+		})),
+		'ingresos-engine'
+	);
 
 	// Índices inversos sheetId → mes y sheetId → hoja, para reflejar en la URL
 	// lo que el usuario elige desde la sheet bar de Univer. Las dos hojas del
