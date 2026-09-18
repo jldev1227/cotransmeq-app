@@ -521,6 +521,21 @@
 							valor
 						});
 					},
+					/**
+					 * El adapter tuvo que tirar una edición porque no supo la
+					 * versión de la entidad. Antes solo quedaba en la consola:
+					 * el usuario veía su número en la celda y no entendía por
+					 * qué el preview seguía con el anterior.
+					 */
+					onDescartado: ({ field }) => {
+						toast.error('Ese cambio no se ha guardado', {
+							id: 'cierres-cambio-descartado',
+							description:
+								`No se pudo confirmar la versión de la fila, así que "${field}" ` +
+								'no se envió al servidor. Recarga la hoja y vuelve a escribirlo.',
+							duration: 9000
+						});
+					},
 					onCambios: (cambios) => {
 						for (const c of cambios) {
 							marcarPendiente(c.entityId);
@@ -1677,6 +1692,64 @@
 	}
 
 	/**
+	 * Espera a que no quede nada por confirmar: la cola HTTP y los patches
+	 * en vuelo por socket.
+	 *
+	 * NO usa `cola.flush()` a propósito: esa espera a que el mapa se vacíe, y
+	 * una escritura que agotó sus reintentos se queda dentro marcada como
+	 * fallida, así que `flush()` no resolvería nunca. `totalPendientes` solo
+	 * cuenta lo que todavía puede confirmarse.
+	 *
+	 * El tope existe porque esto bloquea una navegación: pasado ese punto
+	 * algo va mal —red caída, un patch rechazado— y es mejor decirlo que
+	 * dejar al usuario mirando un aviso que no se va.
+	 */
+	async function esperarSinPendientes(topeMs = 10_000): Promise<boolean> {
+		const hasta = Date.now() + topeMs;
+		while (totalPendientes > 0 && Date.now() < hasta) {
+			await new Promise((r) => setTimeout(r, 100));
+		}
+		return totalPendientes === 0;
+	}
+
+	/**
+	 * Abre la VISTA PREVIA PDF de la hoja activa, que vive en otra ruta.
+	 *
+	 * Ese papel lo compone el servidor con lo que hay EN LA BASE, no con el
+	 * detalle en memoria. Por eso hay que esperar a que se confirme lo
+	 * pendiente antes de navegar: salir con la cola a medias enseñaba una
+	 * liquidación que no era la de la pantalla, y el usuario no tenía forma
+	 * de saber que estaba mirando números viejos.
+	 *
+	 * Además cierra la sesión colaborativa. La opción vive en el `extra` del
+	 * selector, y esa rama se saltaba `antesDeSalir`: se navegaba fuera del
+	 * canvas dejando la sesión del periodo abierta.
+	 */
+	async function abrirVistaPreviaPdf() {
+		if (!cierreActivo) return;
+		const destino = `/dashboard/liquidaciones-terceros/${cierreActivo}?mode=view`;
+
+		if (totalPendientes > 0) {
+			const aviso = toast.loading('Confirmando los cambios antes de abrir la vista previa…');
+			const limpio = await esperarSinPendientes();
+			toast.dismiss(aviso);
+			if (
+				!limpio &&
+				!confirm(
+					'Hay cambios que el servidor no ha confirmado. La vista previa PDF ' +
+						'muestra lo GUARDADO, así que no los verá. ¿Abrirla igualmente?'
+				)
+			) {
+				return;
+			}
+		}
+
+		session?.dispose();
+		session = null;
+		void goto(destino);
+	}
+
+	/**
 	 * La URL manda: si su periodo no es el cargado, se recarga.
 	 *
 	 * Cubre las tres formas de llegar a un periodo —los selectores del
@@ -1778,8 +1851,10 @@
 				value: 'preview',
 				label: 'Vista previa PDF (hoja activa)',
 				disabled: !cierreActivo,
-				onSelect: () =>
-					cierreActivo && goto(`/dashboard/liquidaciones-terceros/${cierreActivo}?mode=view`)
+				// Ver `abrirVistaPreviaPdf`: espera lo pendiente y cierra la
+				// sesión, dos cosas que esta rama del selector no hace por su
+				// cuenta.
+				onSelect: () => void abrirVistaPreviaPdf()
 			}}
 		/>
 
@@ -2365,17 +2440,20 @@
 				);
 			}
 		}}
-		onCambiado={async ({ accion, concepto }) => {
+		onCambiado={async ({ accion, concepto, mensaje }) => {
 			// El modal se queda ABIERTO: los gastos se meten en tanda y cerrarlo
 			// en cada alta obligaría a reabrirlo por cada fila. Solo se refresca
 			// el MODELO —así la tabla del modal se repinta con la fila nueva— y
 			// el libro se remonta al cerrar.
 			hayCambiosDeConceptos = true;
 			await recargarCierre(cierreActivoObj.id, { remontar: false });
+			// `mensaje` lo trae el traslado de items, que no es un alta ni una
+			// baja: dice a dónde fue el item.
 			toast.success(
-				accion === 'add'
-					? `${concepto.replace(/_/g, ' ')} añadido a ${cierreActivoObj.placa}`
-					: `${concepto.replace(/_/g, ' ')} eliminado de ${cierreActivoObj.placa}`
+				mensaje ??
+					(accion === 'add'
+						? `${concepto.replace(/_/g, ' ')} añadido a ${cierreActivoObj.placa}`
+						: `${concepto.replace(/_/g, ' ')} eliminado de ${cierreActivoObj.placa}`)
 			);
 		}}
 	/>
