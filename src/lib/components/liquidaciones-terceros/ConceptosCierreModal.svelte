@@ -21,7 +21,8 @@
 
 	import {
 		liquidacionesTercerosDescuentosAPI,
-		type ConceptoDescuento
+		type ConceptoDescuento,
+		type DestinoTrasladoItem
 	} from '$lib/api/liquidaciones-terceros-descuentos';
 	import { liquidacionesTercerosAdicionalesAPI } from '$lib/api/liquidaciones-terceros-adicionales';
 	import {
@@ -63,8 +64,14 @@
 		 */
 		valorLiquidar: number;
 		onClose: () => void;
-		/// Tras un cambio: la page recarga el cierre y remonta la hoja.
-		onCambiado: (r: { accion: 'add' | 'remove'; concepto: string }) => void | Promise<void>;
+		/// Tras un cambio: la page recarga el cierre y remonta la hoja. `mensaje`
+		/// sustituye al toast genérico de alta/baja cuando la operación es otra
+		/// cosa (un traslado dice a dónde fue el item).
+		onCambiado: (r: {
+			accion: 'add' | 'remove';
+			concepto: string;
+			mensaje?: string;
+		}) => void | Promise<void>;
 	}
 
 	let {
@@ -223,10 +230,26 @@
 	 * forma de devolverlos — antes, quitar un item era irreversible desde
 	 * cualquier interfaz.
 	 */
-	let quitados = $state<
-		Array<{ id: string; cliente: string; recorrido: string; fechas: string; valor: number }>
-	>([]);
+	interface Quitado {
+		id: string;
+		cliente: string;
+		recorrido: string;
+		fechas: string;
+		valor: number;
+		/**
+		 * A dónde se TRASLADÓ al quitarlo, o `null` si solo se quitó. Un
+		 * trasladado vuelve con «Devolver al cierre», que además lo saca del
+		 * otro documento; el «Devolver» a secas lo rechaza el servidor.
+		 */
+		trasladado_a: DestinoTrasladoItem | null;
+	}
+	let quitados = $state<Quitado[]>([]);
 	let cargandoQuitados = $state(false);
+
+	const ETIQUETA_DESTINO: Record<DestinoTrasladoItem, string> = {
+		OCASIONAL: 'Ocasional',
+		INGRESOS: 'Ingresos'
+	};
 
 	async function cargarQuitados() {
 		cargandoQuitados = true;
@@ -241,7 +264,11 @@
 					cliente: i.liquidacion_tercero?.liquidacion?.cliente?.nombre ?? '',
 					recorrido: i.liquidacion_tercero?.recorrido ?? '',
 					fechas: i.liquidacion_tercero?.fechas ?? '',
-					valor: Number(i.liquidacion_tercero?.valor_liquidar ?? 0)
+					valor: Number(i.liquidacion_tercero?.valor_liquidar ?? 0),
+					trasladado_a:
+						i.trasladado_a === 'OCASIONAL' || i.trasladado_a === 'INGRESOS'
+							? i.trasladado_a
+							: null
 				}));
 		} catch (e: any) {
 			error = e?.response?.data?.error || e?.message || 'No se pudieron leer los items quitados';
@@ -265,19 +292,82 @@
 		}
 	}
 
-	async function devolverItem(q: { id: string; recorrido: string }) {
+	async function devolverItem(q: Quitado) {
 		if (trabajando) return;
 		trabajando = true;
 		error = '';
 		try {
-			await liquidacionesTercerosDescuentosAPI.toggleExcluirItem(q.id, false);
-			await onCambiado({ accion: 'add', concepto: q.recorrido || 'item' });
+			if (q.trasladado_a) {
+				// Deshace los DOS lados: saca el item del ocasional / apaga el
+				// INCLUIR de ingresos, y reactiva el pivote.
+				await liquidacionesTercerosDescuentosAPI.revertirTrasladoItem(q.id);
+				await onCambiado({
+					accion: 'add',
+					concepto: q.recorrido || 'item',
+					mensaje: `${q.recorrido || 'Item'} devuelto a ${placa} desde ${ETIQUETA_DESTINO[q.trasladado_a].toLowerCase()}`
+				});
+			} else {
+				await liquidacionesTercerosDescuentosAPI.toggleExcluirItem(q.id, false);
+				await onCambiado({ accion: 'add', concepto: q.recorrido || 'item' });
+			}
 			await cargarQuitados();
 		} catch (e: any) {
 			error = e?.response?.data?.error || e?.message || 'Error desconocido';
 		} finally {
 			trabajando = false;
 		}
+	}
+
+	const MESES_CORTOS = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
+
+	/**
+	 * TRASLADAR un item a otro documento del mismo tercero.
+	 *
+	 * OCASIONAL: entra como item de la liquidación ocasional del periodo del
+	 * cierre (se crea vacía si no existe). INGRESOS: su fila de la hoja de
+	 * ingresos queda marcada INCLUIR y baja a ADICIONALES. En los dos casos el
+	 * item se quita del cierre —si se quedara en ambos se pagaría dos veces— y
+	 * pasa a «Quitados» con la marca de a dónde fue, desde donde se devuelve.
+	 */
+	async function trasladarItem(it: ItemCierre, destino: DestinoTrasladoItem) {
+		if (trabajando) return;
+		trabajando = true;
+		error = '';
+		try {
+			const r = await liquidacionesTercerosDescuentosAPI.trasladarItem(it.pivoteId, destino);
+			const info = r?.destino_info ?? {};
+			const donde =
+				destino === 'OCASIONAL'
+					? `ocasional ${info.consecutivo ?? ''}${info.creada ? ' (recién creado)' : ''}`.trim()
+					: `ingresos ${MESES_CORTOS[(info.mes ?? mes) - 1] ?? ''} ${info.anio ?? anio}`.trim();
+			await onCambiado({
+				accion: 'remove',
+				concepto: it.recorrido || 'item',
+				mensaje: `${it.recorrido || 'Item'} trasladado de ${placa} a ${donde}`
+			});
+			await cargarQuitados();
+		} catch (e: any) {
+			error = e?.response?.data?.error || e?.message || 'Error desconocido';
+		} finally {
+			trabajando = false;
+		}
+	}
+
+	/**
+	 * Por qué un item NO puede ir a ingresos, o `null` si puede. Espejo de las
+	 * validaciones de `marcarIncluirDesdeCierre`: la hoja de ingresos solo
+	 * lista servicios facturados que dejaron ingreso a Transmeralda, así que un
+	 * item que no cumpla tendría la fila marcada y nadie la vería. Se decide
+	 * aquí para deshabilitar el botón con el motivo, en vez de dejar pulsar y
+	 * devolver el error.
+	 */
+	function motivoSinIngresos(it: ItemCierre): string | null {
+		const ingresoEmpresa =
+			(Number(it.ingreso_extra_global) || 0) - (Number(it.ingresos_extra_aval) || 0);
+		if (ingresoEmpresa === 0) return 'Sin ingreso de Transmeralda: no tiene fila en la hoja de ingresos.';
+		if (!it.numero_factura || it.factura_anulada)
+			return 'Sin factura activa: la hoja de ingresos solo lista servicios facturados.';
+		return null;
 	}
 
 	function irASeccion(s: Seccion) {
@@ -475,16 +565,40 @@
 							<th>Recorrido</th>
 							<th>Fechas</th>
 							<th class="cxm-num">V/liquidar</th>
+							<th class="cxm-num">Trasladar a</th>
 							<th></th>
 						</tr>
 					</thead>
 					<tbody>
 						{#each items ?? [] as it (it.pivoteId)}
+							{@const sinIngresos = motivoSinIngresos(it)}
 							<tr>
 								<td>{it.cliente_nombre || '—'}</td>
 								<td>{it.recorrido || '—'}</td>
 								<td class="cxm-fechas" title={it.fechas || ''}>{it.fechas || '—'}</td>
 								<td class="cxm-num cxm-total">${formatCOP(Number(it.valor_liquidar))}</td>
+								<td class="cxm-num">
+									<!--
+										Los dos destinos a los que puede irse un item que es de la placa
+										pero no se paga por el cierre. Van al lado de la × y no dentro de
+										un menú: son dos, y quien liquida los pulsa muchas veces por hoja.
+									-->
+									<span class="cxm-mover">
+										<button
+											class="cxm-mover-btn"
+											onclick={() => trasladarItem(it, 'OCASIONAL')}
+											disabled={trabajando}
+											title="Trasladar a la liquidación OCASIONAL del periodo: entra allí como item y se quita del cierre. Se devuelve desde «Quitados»."
+										>Ocasional</button>
+										<button
+											class="cxm-mover-btn"
+											onclick={() => trasladarItem(it, 'INGRESOS')}
+											disabled={trabajando || !!sinIngresos}
+											title={sinIngresos ??
+												'Trasladar a INGRESOS: su fila de la hoja de ingresos queda marcada INCLUIR (baja a ADICIONALES) y se quita del cierre. Se devuelve desde «Quitados».'}
+										>Ingresos</button>
+									</span>
+								</td>
 								<td class="cxm-num">
 									<button
 										class="cxm-quitar"
@@ -498,6 +612,12 @@
 						{/each}
 					</tbody>
 				</table>
+				<p class="cxm-nota">
+					<strong>Ocasional</strong> lo lleva a la liquidación ocasional de {periodo} (se crea
+					si no existe). <strong>Ingresos</strong> marca INCLUIR en su fila de la hoja de
+					ingresos, en el mes de su liquidación de servicio, para que baje a ADICIONALES. En
+					ambos casos deja de sumar aquí y se puede devolver desde «Quitados».
+				</p>
 
 				<h4 class="cxm-sub2">
 					Quitados del cierre
@@ -505,8 +625,8 @@
 				</h4>
 				{#if quitados.length === 0}
 					<p class="cxm-vacio">
-						Ninguno. Un item quitado deja de sumar al valor a liquidar y de la hoja
-						desaparece su fila; aquí es donde se devuelve.
+						Ninguno. Un item quitado o trasladado deja de sumar al valor a liquidar y de
+						la hoja desaparece su fila; aquí es donde se devuelve.
 					</p>
 				{:else}
 					<table class="cxm-tabla">
@@ -514,7 +634,18 @@
 							{#each quitados as q (q.id)}
 								<tr>
 									<td>{q.cliente || '—'}</td>
-									<td>{q.recorrido || '—'}</td>
+									<td>
+										{q.recorrido || '—'}
+										{#if q.trasladado_a}
+											<span
+												class="cxm-destino"
+												class:cxm-destino-ing={q.trasladado_a === 'INGRESOS'}
+												title={q.trasladado_a === 'OCASIONAL'
+													? 'Está como item en la liquidación ocasional del periodo.'
+													: 'Su fila de la hoja de ingresos está marcada INCLUIR.'}
+											>{ETIQUETA_DESTINO[q.trasladado_a]}</span>
+										{/if}
+									</td>
 									<td class="cxm-fechas" title={q.fechas || ''}>{q.fechas || '—'}</td>
 									<td class="cxm-num">${formatCOP(q.valor)}</td>
 									<td class="cxm-num">
@@ -522,7 +653,10 @@
 											class="cxm-devolver"
 											onclick={() => devolverItem(q)}
 											disabled={trabajando}
-										>Devolver</button>
+											title={q.trasladado_a
+												? `Lo saca de ${ETIQUETA_DESTINO[q.trasladado_a].toLowerCase()} y vuelve a sumar en el cierre.`
+												: 'Vuelve a sumar en el cierre.'}
+										>{q.trasladado_a ? 'Devolver al cierre' : 'Devolver'}</button>
 									</td>
 								</tr>
 							{/each}
@@ -785,7 +919,10 @@
 		color: #0f172a;
 		border-radius: 12px;
 		width: 100%;
-		max-width: 660px;
+		/* 860 y no 660: la pestaña Items lleva ahora cliente, recorrido, fechas,
+		   importe, los dos destinos de traslado y la ×. A 660 el recorrido se
+		   partía en tres líneas y los botones caían fuera de la fila. */
+		max-width: 860px;
 		max-height: 88vh;
 		display: flex;
 		flex-direction: column;
@@ -954,6 +1091,53 @@
 	.cxm-quitar:disabled {
 		opacity: 0.3;
 		cursor: not-allowed;
+	}
+	/* Los dos destinos de traslado, pegados como un grupo. Neutros y no
+	   verdes: no son la acción principal de la fila, y a dos por fila el verde
+	   competiría con el «Devolver» de abajo. */
+	.cxm-mover {
+		display: inline-flex;
+		gap: 4px;
+		white-space: nowrap;
+	}
+	.cxm-mover-btn {
+		border: 1px solid #cbd5e1;
+		border-radius: 6px;
+		background: #fff;
+		padding: 3px 8px;
+		font-size: 11px;
+		font-weight: 700;
+		font-family: inherit;
+		color: #334155;
+		cursor: pointer;
+	}
+	.cxm-mover-btn:hover:not(:disabled) {
+		background: #f1f5f9;
+		border-color: #94a3b8;
+		color: #0f172a;
+	}
+	.cxm-mover-btn:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+	/* A dónde fue un item trasladado. Azul para ocasional y ámbar para
+	   ingresos, para distinguirlos de un vistazo. */
+	.cxm-destino {
+		display: inline-block;
+		margin-left: 6px;
+		padding: 1px 6px;
+		border-radius: 999px;
+		background: #eff6ff;
+		color: #1d4ed8;
+		font-size: 9.5px;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.03em;
+		vertical-align: middle;
+	}
+	.cxm-destino-ing {
+		background: #fffbeb;
+		color: #b45309;
 	}
 	.cxm-devolver {
 		border: 1px solid #cbd5e1;

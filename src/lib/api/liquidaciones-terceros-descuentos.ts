@@ -5,6 +5,9 @@ import type { CierreHoja } from '$lib/editor/builders/cierres-finales-identidad'
 // TYPES
 // ═══════════════════════════════════════════════════════════════
 
+/// A dónde puede trasladarse un item del pivote de un cierre.
+export type DestinoTrasladoItem = 'OCASIONAL' | 'INGRESOS';
+
 export interface ConfiguracionDescuento {
 	id: string;
 	categoria: 'PRESTACION_SOCIAL' | 'SEGURIDAD_SOCIAL' | 'IMPUESTO';
@@ -157,7 +160,7 @@ export interface GenerarBorradorResult {
 /// Se persiste en liquidacion_tercero_final.adicionales y se muestra como
 /// última fila de la tabla de items en la UI y en el PDF preview.
 /// El valor_unitario * cantidad se SUMA al valor_liquidar del cierre y queda
-/// como ingreso negativo para Cotransmeq (columna ingreso_empresa).
+/// como ingreso negativo para Transmeralda (columna ingreso_empresa).
 /// Si `aplica_impuestos: false`, el adicional NO entra en la base de
 /// RETENCION_ICA, AVISOS_TABLEROS, SOBRETASA_BOMBERIL ni RETENCION_FUENTE.
 export interface AdicionalTransmeralda {
@@ -760,6 +763,34 @@ async obtenerPorId(liquidacionTerceroId: string, opts: { includeDeleted?: boolea
 		const response = await apiClient.patch(`/api/liquidaciones-terceros/items/${pivoteId}/excluir`, {
 			excluir,
 		});
+		return response.data;
+	},
+
+	// ── Trasladar un item del pivote a OCASIONAL / INGRESOS, y deshacerlo ──
+	//
+	// Quita el item del cierre y lo mete en el otro documento en UNA sola
+	// operación: como item de la liquidación ocasional del periodo del cierre,
+	// o marcado INCLUIR en la hoja de ingresos (baja a ADICIONALES). El pivote
+	// queda con `trasladado_a`, y `revertirTrasladoItem` deshace los dos lados;
+	// `toggleExcluirItem(false)` lo rechaza para un trasladado.
+
+	async trasladarItem(
+		pivoteId: string,
+		destino: DestinoTrasladoItem
+	): Promise<{ ok: boolean; destino: DestinoTrasladoItem; destino_info: any; cierre: any }> {
+		const response = await apiClient.post(
+			`/api/liquidaciones-terceros/items/${pivoteId}/trasladar`,
+			{ destino }
+		);
+		return response.data;
+	},
+
+	async revertirTrasladoItem(
+		pivoteId: string
+	): Promise<{ ok: boolean; destino: DestinoTrasladoItem; destino_info: any; cierre: any }> {
+		const response = await apiClient.post(
+			`/api/liquidaciones-terceros/items/${pivoteId}/revertir-traslado`
+		);
 		return response.data;
 	},
 
