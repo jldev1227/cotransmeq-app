@@ -28,9 +28,11 @@ export type { EngineContext };
 import {
 	buildOcasionalAnualWorkbook,
 	ocasionalSheetId,
+	OCASIONAL_TOTAL_COLUMNS,
 	type OcasionalMesInput
 } from '../builders/ocasional.builder';
 import { activarHoja } from './activar-hoja';
+import { crearAutofiltros } from './autofiltro';
 
 export type { OcasionalMesInput };
 
@@ -67,6 +69,9 @@ export function createOcasionalEngine(
 	const engineOpts: EngineOptions = {
 		container: opts.container,
 		workbookData: workbook,
+		// Autofiltro en la cabecera de la tabla de items: filtrar por placa,
+		// cliente o # LIQ es lo primero que se hace sobre un mes largo.
+		filtros: true,
 		footer: {
 			// Con 12 hojas la sheet bar es la navegación principal entre meses.
 			sheetBar: true,
@@ -77,6 +82,22 @@ export function createOcasionalEngine(
 	};
 
 	const ctx = createLiquidacionEngine(engineOpts);
+
+	// El rango del autofiltro sale de los datos: el builder pinta la cabecera
+	// de items en la fila 0 y UNA fila por item desde la 1. Un mes sin cabecera
+	// (hoja placeholder) o sin items queda sin desplegable a propósito.
+	crearAutofiltros(
+		ctx,
+		opts.meses
+			.filter((m) => m.cabecera)
+			.map((m) => ({
+				sheetId: sheetIdPorMes[m.mes],
+				filaCabecera: 0,
+				ultimaFila: (m.items ?? []).length,
+				columnas: OCASIONAL_TOTAL_COLUMNS
+			})),
+		'ocasional-engine'
+	);
 
 	const mesPorSheetId = new Map<string, number>();
 	for (const [mes, sheetId] of Object.entries(sheetIdPorMes)) {

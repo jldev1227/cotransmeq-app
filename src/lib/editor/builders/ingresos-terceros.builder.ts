@@ -1,5 +1,5 @@
 /**
- * Builder del workbook Univer del canvas **INGRESOS DE COTRANSMEQ**.
+ * Builder del workbook Univer del canvas **INGRESOS DE TRANSMERALDA**.
  *
  * Réplica de las hojas «OTROS INGRESOS <MES>» y «ADICIONALES <MES>» del
  * formato GAF-FR-11, incluida la aritmética: las fórmulas de aquí son las del
@@ -27,7 +27,7 @@
  *   DESCRIPCION ← recorrido del item
  *   FECHAS      ← fechas del servicio
  *   PLACA       ← placa del vehículo; es además la clave de ORDEN de la tabla
- *   V/UNIDAD    ← `ingreso_empresa` (lo que dejó el servicio a Cotransmeq)
+ *   V/UNIDAD    ← `ingreso_empresa` (lo que dejó el servicio a Transmeralda)
  *   CANT        ← editable (1 por defecto)
  *   ADMON       ← fórmula: % de administración sobre el TOTAL
  *   TOTAL       ← fórmula: V/UNIDAD × CANT
@@ -219,8 +219,10 @@ const HEADER_INCLUIR = 'INCLUIR';
 const COLUMN_WIDTHS = [300, 260, 120, 100, 130, 65, 120, 130, 130, 95];
 
 /// Columnas por hoja. La de INGRESOS lleva una más: la de INCLUIR.
-const COLS_INGRESOS = 10;
-const COLS_ADICIONALES = 9;
+/// Columnas de cada hoja. Se exportan para que el engine declare el rango del
+/// autofiltro sobre la tabla completa.
+export const COLS_INGRESOS = 10;
+export const COLS_ADICIONALES = 9;
 
 /// Índices de columna, para no repartir números sueltos por el fichero.
 ///
@@ -256,7 +258,7 @@ export const COL_INCLUIR: number = COL.INCLUIR;
  * sitios es garantizar que un día dejen de coincidir.
  */
 export const COLORES_INCLUIR = {
-	si: { fondo: '#f0fdf4', texto: GREEN_DARK },
+	si: { fondo: '#ECFDF5', texto: GREEN_DARK },
 	no: { fondo: '#F8FAFC', texto: MUTED }
 } as const;
 
@@ -826,7 +828,7 @@ function construirHoja(input: HojaInput): HojaSalida {
 			0,
 			hayFilas
 				? 'Ningún servicio marcado con INCLUIR en la hoja del mes'
-				: 'Sin ingresos de Cotransmeq en este mes',
+				: 'Sin ingresos de Transmeralda en este mes',
 			aviso
 		);
 		merge(r, 0, numCols - 1);
@@ -1148,7 +1150,7 @@ function construirHoja(input: HojaInput): HojaSalida {
 			estiloValor: valorStyle
 		});
 		filaTotalFinal = escribirLinea({
-			etiqueta: `TOTAL INGRESO COTRANSMEQ ${MESES[input.mes - 1]} ${input.anio}`,
+			etiqueta: `TOTAL INGRESO TRANSMERALDA ${MESES[input.mes - 1]} ${input.anio}`,
 			colValor: COL.V_LIQUIDAR,
 			formula: `=${ref(COL.V_LIQUIDAR, filaPorPagar)}-${ref(COL.V_LIQUIDAR, filaDiversos)}`,
 			valor: (tot as any).totalIngresoTransmeralda ?? 0,
@@ -1367,7 +1369,7 @@ export function buildIngresosMesWorkbook(input: IngresosMesInput): {
 
 	const workbook: IWorkbookData = {
 		id: unitId,
-		name: `Ingresos Cotransmeq ${MESES[mes - 1]} ${anio}`,
+		name: `Ingresos Transmeralda ${MESES[mes - 1]} ${anio}`,
 		appVersion: '0.25.1',
 		locale: LocaleType.ES_ES,
 		styles: {},

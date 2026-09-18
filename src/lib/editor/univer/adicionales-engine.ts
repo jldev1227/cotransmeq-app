@@ -18,9 +18,11 @@ import {
 export type { EngineContext };
 import {
 	buildAdicionalesAnualWorkbook,
-	adicionalesSheetId
+	adicionalesSheetId,
+	ADICIONALES_TOTAL_COLUMNS
 } from '../builders/adicionales.builder';
 import { activarHoja } from './activar-hoja';
+import { crearAutofiltros } from './autofiltro';
 
 export interface AdicionalesEngineOptions {
 	container: HTMLElement;
@@ -59,6 +61,9 @@ export function createAdicionalesEngine(
 	const engineOpts: EngineOptions = {
 		container: opts.container,
 		workbookData: workbook,
+		// Autofiltro en la cabecera de la tabla de items: filtrar por placa o
+		// por tercero es lo primero que se hace sobre un mes con muchas filas.
+		filtros: true,
 		footer: {
 			// Con 12 hojas la sheet bar es la navegación principal entre meses.
 			sheetBar: true,
@@ -69,6 +74,21 @@ export function createAdicionalesEngine(
 	};
 
 	const ctx = createLiquidacionEngine(engineOpts);
+
+	// El rango del autofiltro sale de los datos y no de la hoja: el builder
+	// pinta la cabecera en la fila 0 y UNA fila por item desde la 1, así que la
+	// última fila de items es el número de items. Un mes sin items queda sin
+	// desplegable a propósito (ver `crearAutofiltros`).
+	crearAutofiltros(
+		ctx,
+		Object.entries(sheetIdPorMes).map(([mes, sheetId]) => ({
+			sheetId,
+			filaCabecera: 0,
+			ultimaFila: (opts.itemsPorMes[Number(mes)] ?? []).length,
+			columnas: ADICIONALES_TOTAL_COLUMNS
+		})),
+		'adicionales-engine'
+	);
 
 	// Índice inverso sheetId → mes, para que el adapter resuelva a qué mes
 	// pertenece un `set-range-values` sin depender de la hoja activa.
