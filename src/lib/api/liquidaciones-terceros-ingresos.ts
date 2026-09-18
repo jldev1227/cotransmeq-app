@@ -5,7 +5,7 @@ import { apiClient } from './apiClient';
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * Item de tercero que dejó ingreso a Cotransmeq, con su cliente y
+ * Item de tercero que dejó ingreso a Transmeralda, con su cliente y
  * periodo ya resueltos. Mismo shape que el backend (`IngresoTerceroRow`).
  *
  * El `id` es el UUID real de la fila en `liquidacion_tercero`. La vista es
@@ -49,8 +49,16 @@ export interface IngresoTerceroRow {
 	 * no rompa el tipo; `esAdicional()` lo trata como `SERVICIO`.
 	 */
 	origen?: 'SERVICIO' | 'ADICIONAL';
-	/// Solo en `ADICIONAL`: consecutivo del cierre del que viene.
+	/// Consecutivo del cierre del que viene: en `ADICIONAL`, el cierre de la
+	/// fila; en un `SERVICIO` trasladado, el cierre que lo mandó aquí.
 	cierre_consecutivo?: string | null;
+	/**
+	 * `SERVICIO` que un cierre de placa TRASLADÓ a esta hoja. Su
+	 * `ingreso_empresa` es su `valor_liquidar` —lo que el cierre le habría
+	 * pagado al tercero—, ya neto de administración: se calcula como un
+	 * ADICIONAL (`llegaNeto()`), pero en positivo porque lo factura un cliente.
+	 */
+	trasladado_de_cierre?: boolean;
 }
 
 /**

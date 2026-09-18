@@ -1,5 +1,5 @@
 /**
- * Reglas de negocio del canvas de INGRESOS DE COTRANSMEQ.
+ * Reglas de negocio del canvas de INGRESOS DE TRANSMERALDA.
  *
  * Aquí vive lo que las dos hojas —«OTROS INGRESOS» y «ADICIONALES»— tienen en
  * común y que ni el builder ni la page deberían reimplementar por su cuenta:
@@ -426,6 +426,17 @@ export function esAdicional(item: IngresoTerceroRow): boolean {
 	return item.origen === 'ADICIONAL';
 }
 
+/**
+ * `true` si el importe de la fila YA es lo neto del tercero: un adicional de
+ * cierre o un servicio trasladado desde un cierre (`valor_liquidar`, con su
+ * administración descontada en la placa). Ni lleva otro % de administración
+ * ni se le aplica el % de ganancia al bajar a ADICIONALES. Espejo de
+ * `llegaNeto` en el servicio de ingresos del backend.
+ */
+export function llegaNeto(item: IngresoTerceroRow): boolean {
+	return esAdicional(item) || item.trasladado_de_cierre === true;
+}
+
 export function indexarFilas(
 	filas: FilaIngresoEstado[]
 ): Map<string, FilaIngresoEstado> {
@@ -458,7 +469,7 @@ export function pctAdmonDeFila(
 	pct: PorcentajesIngresos,
 	hoja: HojaIngreso
 ): number {
-	if (esAdicional(item)) return 0;
+	if (llegaNeto(item)) return 0;
 	return hoja === 'INGRESOS'
 		? (estado?.pct_admon_ingresos ?? pct.admonIngresos)
 		: (estado?.pct_admon_adicional ?? pct.admonAdicionales);
@@ -515,7 +526,7 @@ export function vUnidadAdicional(
 	//
 	// Sigue admitiendo override a mano (`valor_unitario_adicional`, arriba):
 	// esa salida es la del Excel de referencia y vale para los dos orígenes.
-	if (esAdicional(item)) return Number(item.ingreso_empresa) || 0;
+	if (llegaNeto(item)) return Number(item.ingreso_empresa) || 0;
 
 	const ganancia = estado?.pct_ganancia ?? pct.gananciaAdicionales;
 	return ((Number(item.ingreso_empresa) || 0) * ganancia) / 100;
