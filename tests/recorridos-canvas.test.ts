@@ -352,14 +352,12 @@ describe('adapter de ediciones', () => {
 			onCambios: (c) => cambios.push(...c)
 		});
 
-		// El comando tal y como lo emite la casilla: sin unitId ni subUnitId.
+		// La MUTACIÓN que deja el clic en la casilla: sin unitId ni subUnitId
+		// del libro (el comando los resuelve contra la hoja activa).
 		for (const fn of listeners) {
 			fn({
-				id: 'sheet.command.set-range-values',
-				params: {
-					range: { startRow: 3, endRow: 3, startColumn: COL_BONO_INICIO, endColumn: COL_BONO_INICIO },
-					value: { 3: { [COL_BONO_INICIO]: { v: 'SÍ' } } }
-				}
+				id: 'sheet.mutation.set-range-values',
+				params: { cellValue: { 3: { [COL_BONO_INICIO]: { v: 'SÍ' } } } }
 			});
 		}
 
@@ -416,11 +414,11 @@ describe('adapter de ediciones', () => {
 
 		for (const fn of listeners) {
 			fn({
-				id: 'sheet.command.set-range-values',
+				id: 'sheet.mutation.set-range-values',
 				params: {
 					unitId,
 					subUnitId: sheetId,
-					range: { startRow: 3, endRow: 3, startColumn: COL.HORA_INI, endColumn: COL.HORA_INI }
+					cellValue: { 3: { [COL.HORA_INI]: { v: '07:00' } } }
 				}
 			});
 		}

@@ -77,6 +77,14 @@ const INSERT_ROW_MUTATION = 'sheet.mutation.insert-row';
 const REMOVE_ROWS_MUTATION = 'sheet.mutation.remove-rows';
 const AUTO_FILL = 'sheet.command.auto-fill';
 const REFILL = 'sheet.command.refill';
+/// Las variantes de pegado que escriben valores. Tras pegar, Univer deja
+/// seleccionado el bloque pegado: ese es el rango a repintar.
+const PEGADOS = new Set([
+	'sheet.command.paste',
+	'sheet.command.paste-value',
+	'sheet.command.optional-paste',
+	'sheet.command.paste-besides-border'
+]);
 
 /** Prefijo del id local de una fila insertada y aún sin guardar. */
 export const PREFIJO_FILA_NUEVA = 'nueva:';
@@ -381,22 +389,34 @@ export function crearRecorridosEngine(opts: {
 	 * guardadas, se pide a la página que repinte desde el modelo.
 	 */
 	const onAutorrelleno = (info: Readonly<ICommandInfo>) => {
-		if (info.id !== AUTO_FILL && info.id !== REFILL) return;
+		const esPegado = PEGADOS.has(info.id);
+		if (info.id !== AUTO_FILL && info.id !== REFILL && !esPegado) return;
 		const params = (info.params ?? {}) as {
 			unitId?: string;
 			subUnitId?: string;
-			sourceRange?: { startRow: number; endRow: number; startColumn: number; endColumn: number };
-			targetRange?: { startRow: number; endRow: number; startColumn: number; endColumn: number };
+			targetRange?: { startRow: number; endRow: number };
 		};
 		if (params.unitId && params.unitId !== libro.unitId) return;
 		const wbActivo = ctx.fUniver.getActiveWorkbook() as any;
 		if (!params.unitId && wbActivo?.getId?.() !== libro.unitId) return;
-		const sheetId = params.subUnitId ?? wbActivo?.getActiveSheet?.()?.getSheetId?.();
+		const hojaActivaFacade = wbActivo?.getActiveSheet?.();
+		const sheetId = params.subUnitId ?? hojaActivaFacade?.getSheetId?.();
 		const z = sheetId ? zonas.get(sheetId) : undefined;
-		if (!sheetId || !z || !params.targetRange) return;
+		if (!sheetId || !z) return;
 
-		const desde = Math.max(params.targetRange.startRow, z.desde);
-		const hasta = Math.min(params.targetRange.endRow, z.hasta);
+		/// Pegado: el bloque pegado queda seleccionado; ese es el rango.
+		let bloque: { startRow: number; endRow: number } | undefined = params.targetRange;
+		if (esPegado) {
+			try {
+				bloque = hojaActivaFacade?.getSelection?.()?.getActiveRange?.()?.getRange?.();
+			} catch {
+				bloque = undefined;
+			}
+		}
+		if (!bloque) return;
+
+		const desde = Math.max(bloque.startRow, z.desde);
+		const hasta = Math.min(bloque.endRow, z.hasta);
 		if (hasta < desde) return;
 
 		/// En la siguiente tarea: el adapter de la página aún está procesando el
