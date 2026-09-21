@@ -26,6 +26,10 @@ import {
 	getRecorridoBinding
 } from '$lib/editor/business/recorridos-cell-binding';
 import { installRecorridosCellChangeAdapter } from '$lib/editor/univer/adapters/cell-change-recorridos';
+import { IDENTIDAD } from '$lib/editor/builders/identidad-empresa';
+import { installRecorridosCellPermission } from '$lib/editor/univer/cell-permission-recorridos';
+import { ICommandService, IUniverInstanceService } from '@univerjs/core';
+import { SheetInterceptorService, SheetsSelectionsService } from '@univerjs/sheets';
 import { documentoRecorridos } from '$lib/components/liquidaciones-terceros/preview/datos/recorridos.doc';
 
 /**
@@ -181,8 +185,8 @@ describe('builder del canvas de recorridos', () => {
 		// APELLIDO primero: es como se busca a una persona en una lista.
 		expect(hoja.cellData[0][0].v).toContain('PEREZ JUAN');
 		expect(hoja.cellData[0][0].v).toContain('C.C. 123');
-		// Blanco sobre verde, como el título de hoja de cierres.
-		expect(hoja.cellData[0][0].s.bg.rgb).toBe('#0F4025');
+		// Blanco sobre el color de marca, como el título de hoja de cierres.
+		expect(hoja.cellData[0][0].s.bg.rgb).toBe(IDENTIDAD.colores.fuerte);
 		expect(hoja.cellData[0][0].s.cl.rgb).toBe('#FFFFFF');
 
 		// La banda del formato lleva marca, nombre y código.
@@ -197,15 +201,20 @@ describe('builder del canvas de recorridos', () => {
 		expect(hoja.cellData[1][0].v).toContain('SOLO CONSULTA');
 	});
 
-	it('usa el verde de Transmeralda, no el gris del Excel', () => {
+	it('usa el color de marca DEL REPO, no el gris del Excel ni el de la otra empresa', () => {
 		// El OP-FR-03 es una guía de columnas, no una plantilla que calcar: su
 		// encabezado gris es el de un Excel de oficina. La identidad es la misma
 		// de los canvas de cierres, servicios y nómina.
+		//
+		// Se compara contra `IDENTIDAD` y no contra un hex escrito a mano: este
+		// archivo es idéntico en los dos repos, y con el verde literal dentro
+		// pasaba en transmeralda y obligaba a que cotransmeq se pintara del
+		// color de la otra empresa para no fallar.
 		const libro = buildLibroRecorridos(dtoDePrueba(), { editable: true });
 		const hoja = libro.workbook.sheets['conductor-c1'] as any;
 
 		const cabecera = hoja.cellData[anclas(libro).cabecera][COL.FECHA].s;
-		expect(cabecera.bg.rgb).toBe('#0F4025');
+		expect(cabecera.bg.rgb).toBe(IDENTIDAD.colores.fuerte);
 		expect(cabecera.cl.rgb).toBe('#FFFFFF');
 
 		// Ni una sola celda pintada con el gris del formato original.
@@ -493,5 +502,115 @@ describe('documento del preview', () => {
 		const doc = documentoRecorridos(dto);
 		const resumen = doc.secciones[1].bloques![0];
 		expect(resumen.filas.map((f) => (f.celdas as any).placa)).not.toContain('(sin placa)');
+	});
+});
+
+describe('guarda de permisos: el clic en la casilla', () => {
+	/**
+	 * EL MISMO BUG HISTÓRICO, EN EL OTRO LADO.
+	 *
+	 * El adapter aprendió que la casilla despacha el comando sin `unitId` ni
+	 * `subUnitId`; la guarda de permisos no. Exigía `params.subUnitId` y, al no
+	 * encontrarlo, abortaba con «escritura sin hoja»: el clic moría ahí, sin
+	 * aviso —la rama ni siquiera llamaba a `onBloqueado`—, y las casillas de
+	 * pernocte y de cada bono no se marcaban ni se desmarcaban.
+	 */
+	function montar(opciones: { editable?: boolean } = {}) {
+		const unitId = 'workbook-recorridos-2026-08';
+		const sheetId = 'conductor-c1';
+		clearRecorridoBindings(unitId);
+		setRecorridoBindings(unitId, sheetId, [
+			{
+				r: 3,
+				c: COL.PERNOCTE,
+				binding: {
+					tipoFila: 'segmento',
+					entityId: 's1',
+					field: 'pernocte',
+					conductorId: 'c1',
+					registroDiaId: 'd1'
+				}
+			}
+		]);
+
+		const guardas: Array<(info: any) => void> = [];
+		const workbook = {
+			getUnitId: () => unitId,
+			getActiveSheet: () => ({ getSheetId: () => sheetId })
+		};
+		/// Los tokens se comparan por IDENTIDAD y no por nombre: los
+		/// identificadores de Univer no exponen un `name` estable y buscar por
+		/// cadena hacía que el doble devolviera el servicio equivocado.
+		const injector = {
+			get: (token: unknown) => {
+				if (token === SheetInterceptorService) {
+					return { interceptBeforeCommand: () => ({ dispose: () => {} }) };
+				}
+				if (token === IUniverInstanceService) {
+					return { getUnit: () => workbook, getCurrentUnitOfType: () => workbook };
+				}
+				if (token === SheetsSelectionsService) {
+					return { getCurrentSelections: () => [] };
+				}
+				if (token === ICommandService) {
+					return {
+						beforeCommandExecuted: (fn: (info: any) => void) => {
+							guardas.push(fn);
+							return { dispose: () => {} };
+						}
+					};
+				}
+				throw new Error(`doble de injector: token inesperado ${String(token)}`);
+			}
+		};
+
+		const avisos: Array<{ titulo: string }> = [];
+		installRecorridosCellPermission({ __getInjector: () => injector } as never, {
+			unitId,
+			editable: opciones.editable ?? true,
+			onBloqueado: (a) => avisos.push(a)
+		});
+
+		const disparar = (params: Record<string, unknown>) => {
+			for (const g of guardas) g({ id: 'sheet.command.set-range-values', params });
+		};
+		return { disparar, avisos, unitId };
+	}
+
+	it('pasa aunque el comando no traiga unitId ni subUnitId', () => {
+		const { disparar, unitId } = montar();
+		expect(() =>
+			// El comando tal y como lo emite la casilla de validación de datos.
+			disparar({
+				range: { startRow: 3, endRow: 3, startColumn: COL.PERNOCTE, endColumn: COL.PERNOCTE },
+				value: { 3: { [COL.PERNOCTE]: { v: 'SÍ' } } }
+			})
+		).not.toThrow();
+		clearRecorridoBindings(unitId);
+	});
+
+	it('sigue cortando una celda derivada aunque falten los ids', () => {
+		const { disparar, avisos, unitId } = montar();
+		expect(() =>
+			// `VALOR A PAGAR` se calcula: no tiene binding y no se escribe.
+			disparar({
+				range: { startRow: 3, endRow: 3, startColumn: COL.FECHA, endColumn: COL.FECHA },
+				value: { 3: { [COL.FECHA]: { v: '2026-08-02' } } }
+			})
+		).toThrow();
+		expect(avisos.at(-1)?.titulo).toBe('Esta celda no se edita aquí');
+		clearRecorridoBindings(unitId);
+	});
+
+	it('sigue cortando a quien solo puede consultar', () => {
+		const { disparar, avisos, unitId } = montar({ editable: false });
+		expect(() =>
+			disparar({
+				range: { startRow: 3, endRow: 3, startColumn: COL.PERNOCTE, endColumn: COL.PERNOCTE },
+				value: { 3: { [COL.PERNOCTE]: { v: 'SÍ' } } }
+			})
+		).toThrow();
+		expect(avisos.at(-1)?.titulo).toBe('Solo puedes consultar');
+		clearRecorridoBindings(unitId);
 	});
 });
