@@ -186,8 +186,13 @@ export function colFirma(bonos: BonoColumna[]): number {
 
 const DIAS_SEMANA = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
 
-const GREEN = '#0F4025';
-const GREEN_DARK = '#166534';
+/**
+ * Tonos de MARCA. Salen de `identidad-empresa.ts`, el único archivo que
+ * diverge entre los dos repos: escritos aquí, el canvas de Cotransmeq se
+ * pintaba con el verde de Transmeralda.
+ */
+const GREEN = IDENTIDAD.colores.fuerte;
+const GREEN_DARK = IDENTIDAD.colores.acento;
 const GREEN_SOFT = '#DCFCE7';
 const TEXT_DARK = '#0F172A';
 const MUTED = '#475569';
@@ -257,7 +262,7 @@ export function estiloCasilla(marcada: boolean, z = false): IStyleData {
 		ht: HorizontalAlign.CENTER,
 		bd: bordes(),
 		cl: { rgb: marcada ? GREEN_DARK : GRIS_BLOQUEADO },
-		bg: { rgb: marcada ? '#ECFDF5' : z ? ZEBRA_BG : BLANCO }
+		bg: { rgb: marcada ? IDENTIDAD.colores.acentoTenue : z ? ZEBRA_BG : BLANCO }
 	} as IStyleData;
 }
 
