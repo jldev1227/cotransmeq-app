@@ -124,7 +124,13 @@ export interface SheetSessionOptions {
 	 * llamador no puede distinguir «relee este cierre» de «relee el periodo
 	 * entero», y acababa recargándolo todo por un bloque de conductor.
 	 */
-	onInvalidate?: (i: { mes: number; cierreId?: string | null; accion?: string }) => void;
+	onInvalidate?: (i: {
+		mes: number;
+		cierreId?: string | null;
+		accion?: string;
+		/** Quién lo provocó, cuando el servidor lo sabe. Para no recargarse uno mismo. */
+		by?: string | null;
+	}) => void;
 	/** Conflicto de versión: el servidor manda su valor actual. */
 	onConflict?: (c: {
 		entity_id: string;
@@ -353,7 +359,8 @@ export function createSheetSession(opts: SheetSessionOptions): SheetSession {
 		opts.onInvalidate?.({
 			mes: Number(i.mes),
 			cierreId: i.cierre_id ?? null,
-			accion: i.accion
+			accion: i.accion,
+			by: i.by ?? null
 		});
 	};
 

@@ -22,7 +22,7 @@
 	import { ESCALA_PREVIEW } from '$lib/styles/pdf-tokens';
 	import { documentoCss } from './documento.css';
 	import { cargarSeleccion, guardarSeleccion, type ScopePreview } from './columnas';
-	import { exportarPdfDocumento } from './exportar-pdf';
+	import { exportarPdfCompuesto, exportarPdfDocumento } from './exportar-pdf';
 	import DocumentoHoja from './DocumentoHoja.svelte';
 	import SelectorColumnasPreview from './SelectorColumnasPreview.svelte';
 	import type { DocumentoPreview } from './tipos';
@@ -47,6 +47,34 @@
 		/** Id de la pestaña activa, de `pestanas`. */
 		pestanaActiva?: string;
 		onPestana?: (id: string) => void;
+		/**
+		 * Documentos hermanos que se NAVEGAN de uno en uno: «3 / 42 · NOMBRE».
+		 *
+		 * Para cuando son demasiados para pestañas —un conductor por hoja en el
+		 * consolidado de recorridos—. En pantalla solo está el visible; las
+		 * flechas del teclado pasan página.
+		 */
+		paginador?: {
+			indice: number;
+			total: number;
+			etiqueta: string;
+			onIr: (indice: number) => void;
+		};
+		/**
+		 * Un segundo botón de exportación para un documento que NO es el visible:
+		 * el consolidado de todos los conductores desde el preview paginado. Se
+		 * compone fuera de pantalla y se abre igual que el visible.
+		 */
+		exportarTodo?: { documento: DocumentoPreview; etiqueta: string };
+		/**
+		 * Versión para PAPEL del documento visible, si difiere del que se enseña.
+		 *
+		 * El preview y el PDF son el mismo documento, pero no siempre con el
+		 * mismo reparto de columnas: en pantalla sobra ancho y en papel no. Si
+		 * viene, «Exportar» compone ESTE fuera de pantalla en vez de clonar el
+		 * DOM visible.
+		 */
+		documentoPdf?: DocumentoPreview;
 		onClose: () => void;
 	}
 
@@ -57,6 +85,9 @@
 		pestanas,
 		pestanaActiva,
 		onPestana,
+		paginador,
+		exportarTodo,
+		documentoPdf,
 		onClose
 	}: Props = $props();
 
@@ -79,6 +110,7 @@
 	let zoom = $state(0.6);
 	let altoEscalado = $state(1200);
 	let docEl: HTMLElement | null = $state(null);
+	let rootEl: HTMLElement | null = $state(null);
 	let exportando = $state(false);
 
 	function aplicarSeleccion(keys: string[]) {
@@ -136,6 +168,36 @@
 
 	function onKey(e: KeyboardEvent) {
 		if (e.key === 'Escape') onClose();
+		if (!paginador) return;
+		// Pasar página con el teclado, salvo que el foco esté en un control DEL
+		// PREVIEW (el selector de columnas, por ejemplo). El foco suele seguir
+		// en el botón del carril que abrió el modal: ese no cuenta.
+		const objetivo = e.target as HTMLElement | null;
+		if (rootEl?.contains(objetivo) && objetivo?.closest?.('input, select, textarea, button')) return;
+		if (e.key === 'ArrowRight' || e.key === 'PageDown') paginador.onIr(paginador.indice + 1);
+		if (e.key === 'ArrowLeft' || e.key === 'PageUp') paginador.onIr(paginador.indice - 1);
+	}
+
+	let exportandoTodo = $state(false);
+
+	async function exportarTodos() {
+		if (!exportarTodo || exportandoTodo) return;
+		exportandoTodo = true;
+		try {
+			await exportarPdfCompuesto(
+				scope,
+				exportarTodo.documento,
+				exportarTodo.documento.nombreArchivo,
+				seleccion
+			);
+		} catch (e: any) {
+			console.error('[preview-canvas] export PDF (todos)', e);
+			toast.error('No se pudo generar el PDF de todos', {
+				description: e?.message || 'Error desconocido'
+			});
+		} finally {
+			exportandoTodo = false;
+		}
 	}
 
 	// ─── Exportación ───────────────────────────────────────
@@ -147,7 +209,11 @@
 		}
 		exportando = true;
 		try {
-			await exportarPdfDocumento(docEl, documento.nombreArchivo);
+			if (documentoPdf) {
+				await exportarPdfCompuesto(scope, documentoPdf, documentoPdf.nombreArchivo, seleccion);
+			} else {
+				await exportarPdfDocumento(docEl, documento.nombreArchivo);
+			}
 		} catch (e: any) {
 			console.error('[preview-canvas] export PDF', e);
 			toast.error('No se pudo generar el PDF', {
@@ -179,7 +245,7 @@
      CSS con hashes de scope de Svelte no serviría allí. -->
 {@html `<style>${CSS_DOC}</style>`}
 
-<div class="prev-root">
+<div class="prev-root" bind:this={rootEl}>
 	<!-- ── BARRA ── -->
 	<div class="prev-bar no-print">
 		<div class="prev-bar-l">
@@ -202,6 +268,29 @@
 							{p.label}
 						</button>
 					{/each}
+				</div>
+			{/if}
+
+			{#if paginador && paginador.total > 1}
+				<div class="prev-pager" aria-label="Conductor del documento">
+					<button
+						onclick={() => paginador?.onIr(paginador.indice - 1)}
+						disabled={paginador.indice <= 0}
+						title="Anterior (←)"
+						aria-label="Anterior"
+					>
+						‹
+					</button>
+					<span class="prev-pager-pos">{paginador.indice + 1} / {paginador.total}</span>
+					<span class="prev-pager-nombre" title={paginador.etiqueta}>{paginador.etiqueta}</span>
+					<button
+						onclick={() => paginador?.onIr(paginador.indice + 1)}
+						disabled={paginador.indice >= paginador.total - 1}
+						title="Siguiente (→)"
+						aria-label="Siguiente"
+					>
+						›
+					</button>
 				</div>
 			{/if}
 
@@ -234,9 +323,34 @@
 							d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
 						/>
 					</svg>
-					Exportar PDF
+					{exportarTodo ? 'Exportar este' : 'Exportar PDF'}
 				{/if}
 			</button>
+
+			{#if exportarTodo}
+				<button class="prev-btn prev-btn-pdf" onclick={exportarTodos} disabled={exportandoTodo}>
+					{#if exportandoTodo}
+						<span class="prev-spinner" aria-hidden="true"></span>
+						Generando PDF…
+					{:else}
+						<svg
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M8 7V5a2 2 0 012-2h9a2 2 0 012 2v9a2 2 0 01-2 2h-2M5 8h9a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2v-9a2 2 0 012-2z"
+							/>
+						</svg>
+						{exportarTodo.etiqueta}
+					{/if}
+				</button>
+			{/if}
 
 			<button class="prev-btn" onclick={onClose} title="Cerrar el preview (Esc)">
 				<svg
@@ -343,6 +457,51 @@
 	.prev-tabs button.activa {
 		background: rgba(255, 255, 255, 0.92);
 		color: #0f172a;
+	}
+	/* Paginador del consolidado: un documento por conductor, de uno en uno. */
+	.prev-pager {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+		padding: 2px;
+		border-radius: 7px;
+		background: rgba(255, 255, 255, 0.08);
+		border: 1px solid rgba(255, 255, 255, 0.14);
+		max-width: 340px;
+	}
+	.prev-pager button {
+		width: 26px;
+		height: 24px;
+		border: none;
+		background: none;
+		color: #fff;
+		font-size: 16px;
+		line-height: 1;
+		border-radius: 5px;
+		cursor: pointer;
+	}
+	.prev-pager button:hover:not(:disabled) {
+		background: rgba(255, 255, 255, 0.16);
+	}
+	.prev-pager button:disabled {
+		opacity: 0.35;
+		cursor: default;
+	}
+	.prev-pager-pos {
+		color: rgba(255, 255, 255, 0.85);
+		font-size: 11px;
+		font-family: 'SF Mono', 'JetBrains Mono', monospace;
+		white-space: nowrap;
+	}
+	.prev-pager-nombre {
+		color: #fff;
+		font-size: 12px;
+		font-weight: 600;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		min-width: 0;
+		padding: 0 4px;
 	}
 	.prev-zoom {
 		display: flex;

@@ -31,6 +31,7 @@ import { ICommandService, IUniverInstanceService } from '@univerjs/core';
 import { SheetInterceptorService, SheetsSelectionsService } from '@univerjs/sheets';
 import {
 	documentoRecorridos,
+	hojasParaZip,
 	bloqueResumenPorPlaca
 } from '$lib/components/liquidaciones-terceros/preview/datos/recorridos.doc';
 
@@ -274,6 +275,23 @@ describe('builder del canvas de recorridos', () => {
 		expect(tipos[0].binding.tipoFila).toBe('dia');
 	});
 
+	/**
+	 * La casilla PERNOTE se pinta en TODAS las filas, así que tiene que poder
+	 * marcarse en todas. Antes solo estaba enlazada en los recorridos, y como
+	 * los días sin recorrido son más de la mitad de un corte, la mayoría de los
+	 * clics morían contra la guarda con «esta celda no se edita aquí».
+	 */
+	it('el pernocte se puede marcar en las filas de día Y en las de recorrido', () => {
+		const libro = buildLibroRecorridos(dtoDePrueba(), { editable: true });
+		const seeds = libro.bindingsPorHoja['conductor-c1'];
+		const pernoctes = seeds.filter((s) => s.binding.field === 'pernocte');
+		const tipos = new Set(pernoctes.map((s) => s.binding.tipoFila));
+		expect(tipos.has('segmento')).toBe(true);
+		expect(tipos.has('dia')).toBe(true);
+		// Una por fila: la columna es la misma en todas.
+		expect(new Set(pernoctes.map((s) => s.c))).toEqual(new Set([COL.PERNOCTE]));
+	});
+
 	it('suma el valor de los bonos marcados', () => {
 		const dto = dtoDePrueba();
 		const f = dto.hojas[0].filas[1]; // los dos bonos
@@ -510,9 +528,22 @@ describe('documento del preview', () => {
 		expect(tabla.partible).toBe(true);
 		expect(tabla.denso).toBe(true);
 
-		// El tipo de día va abreviado: «DESCANSO» no cabía en su columna y se
-		// derramaba sobre la placa de al lado.
-		expect((tabla.filas[0].celdas as any).tipo).toBe('LAB');
+		// En PANTALLA sin abreviar: Operaciones prefirió columnas de texto
+		// más estrechas a descifrar «LAB» / «DISP».
+		expect((tabla.filas[0].celdas as any).tipo).toBe('LABORADO');
+		const anchoDe = (cols: any[], key: string) => cols.find((c) => c.key === key)?.peso;
+		expect(anchoDe(tabla.columnas, 'descripcion')).toBe(9.9);
+		expect(anchoDe(tabla.columnas, 'cliente')).toBe(8.7);
+
+		// En PDF se conserva el reparto desplegado: descripción y cliente
+		// anchos y el tipo abreviado, para no mover el recuento de páginas.
+		const pdf = documentoRecorridos(dto, 'c1', 'pdf').secciones[0].bloques![0];
+		expect((pdf.filas[0].celdas as any).tipo).toBe('LAB');
+		expect(anchoDe(pdf.columnas, 'descripcion')).toBe(19.8);
+		expect(anchoDe(pdf.columnas, 'cliente')).toBe(17.4);
+		expect(anchoDe(pdf.columnas, 'tipo')).toBe(5);
+		// El ZIP va al papel.
+		expect((hojasParaZip(dto)[0].documento.secciones[0].bloques![0].filas[0].celdas as any).tipo).toBe('LAB');
 
 		// El papel de UN conductor no lleva resumen ni pie de firmas: entre los
 		// dos se iban noventa milímetros, y con ellos la tercera hoja.

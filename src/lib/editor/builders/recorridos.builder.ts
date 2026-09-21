@@ -35,10 +35,7 @@ import { BorderStyleTypes, type IBorderData, type IBorderStyleData } from '@univ
 import { IDENTIDAD } from './identidad-empresa';
 import { rellenarBordesVacios } from './relleno-bordes';
 import { conductorSheetId, recorridosUnitId } from './recorridos-identidad';
-import type {
-	RecorridoBinding,
-	RecorridoBindingSeed
-} from '../business/recorridos-cell-binding';
+import type { RecorridoBindingSeed } from '../business/recorridos-cell-binding';
 
 // ─── Tipos del DTO que sirve el backend ───────────────────────────────
 
@@ -231,6 +228,27 @@ const centrado = (z: boolean): IStyleData =>
 const derecha = (z: boolean): IStyleData =>
 	({ ...celda(z), ht: HorizontalAlign.RIGHT }) as IStyleData;
 
+/**
+ * Formato de la columna de horas: «6 horas», «6.5 horas», «1 hora».
+ *
+ * Es FORMATO NUMÉRICO, no texto: el valor de la celda sigue siendo el número,
+ * así que el binding, el backend y el PDF no se enteran, y sumar la columna
+ * sigue funcionando. La palabra la pone Univer al pintar. Quien teclea «6
+ * horas» también entra: el backend lo lee como 6 y devuelve el número.
+ */
+export const FORMATO_HORAS = '[=1]General" hora";General" horas"';
+
+const horas = (z: boolean): IStyleData =>
+	({ ...derecha(z), n: { pattern: FORMATO_HORAS } }) as IStyleData;
+
+/**
+ * Fondo de una fila BORRADOR: insertada en el canvas y aún sin guardar.
+ *
+ * Ámbar suave, el mismo tono del contador del carril. Se quita al vincularla:
+ * el color dice «esto todavía no está en el servidor».
+ */
+export const BORRADOR_BG = '#FEF3C7';
+
 const moneda = (z: boolean): IStyleData =>
 	({
 		...celda(z),
@@ -240,7 +258,7 @@ const moneda = (z: boolean): IStyleData =>
 		n: { pattern: '"$"#,##0' }
 	}) as IStyleData;
 
-const estiloTipo = (tipo: string, z: boolean): IStyleData =>
+export const estiloTipo = (tipo: string, z: boolean): IStyleData =>
 	({ ...centrado(z), bl: 1, cl: { rgb: COLOR_TIPO[tipo] ?? TEXT_DARK } }) as IStyleData;
 
 /**
@@ -344,6 +362,152 @@ export interface HojaConstruida {
 	bindings: RecorridoBindingSeed[];
 	/** Rango de filas de datos, para colgar las casillas. */
 	rangoFilas: { desde: number; hasta: number } | null;
+	/**
+	 * Primera fila que ocuparían los datos, aunque no haya ninguno. La usa el
+	 * engine para saber dónde puede insertar el usuario en una hoja vacía.
+	 */
+	filaInicioDatos: number;
+}
+
+/**
+ * Las celdas de una fila de datos EN BLANCO, con los estilos de sus vecinas.
+ *
+ * Es lo que se pinta en una fila que el usuario acaba de insertar: Univer copia
+ * los estilos de la fila de encima, pero copiaría también el verde de una
+ * casilla marcada o el color del tipo de día, y la fila nueva parecería llena.
+ * Aquí sale limpia, con las casillas en NO y el valor a pagar en cero.
+ */
+export function celdasFilaVacia(
+	bonos: BonoColumna[],
+	opts: { borrador?: boolean; z?: boolean } = {}
+): Record<number, ICellData> {
+	const z = opts.z ?? false;
+	/// `bg: null` y no «sin bg»: Univer FUSIONA el estilo nuevo con el que ya
+	/// tiene la celda, así que omitir el fondo dejaría el ámbar del borrador
+	/// pegado a la fila ya guardada. Un `null` explícito sí lo quita.
+	const bg = opts.borrador ? { bg: { rgb: BORRADOR_BG } } : z ? {} : { bg: null };
+	/// Resets explícitos por lo mismo: la fila puede haber heredado negrita,
+	/// ajuste de texto o un formato numérico de la fila copiada. `null` quita
+	/// la propiedad; omitirla la dejaría.
+	const reset = { bl: 0, it: 0, tb: null, vt: null, n: null } as Partial<IStyleData>;
+	const con = (s: IStyleData): IStyleData => ({ ...reset, ...s, ...bg }) as IStyleData;
+	const texto = (v: string | number, s: IStyleData): ICellData => ({
+		v,
+		t: typeof v === 'number' ? CellValueType.NUMBER : CellValueType.STRING,
+		s: con(s)
+	});
+
+	const out: Record<number, ICellData> = {
+		[COL.ITEM]: texto(opts.borrador ? '+' : '', centrado(z)),
+		[COL.FECHA]: texto('', centrado(z)),
+		[COL.DIA_SEMANA]: texto('', centrado(z)),
+		[COL.TIPO]: texto('', centrado(z)),
+		[COL.PLACA]: texto('', centrado(z)),
+		[COL.DESCRIPCION]: texto('', celda(z)),
+		[COL.HORA_INI]: texto('', centrado(z)),
+		[COL.HORA_FIN]: texto('', centrado(z)),
+		[COL.HORAS]: texto('', horas(z)),
+		[COL.PERNOCTE]: texto(CASILLA_NO, estiloCasilla(false, z)),
+		[COL.CLIENTE]: texto('', celda(z)),
+		[COL.KM_INI]: texto('', derecha(z)),
+		[COL.KM_FIN]: texto('', derecha(z))
+	};
+	bonos.forEach((_, k) => {
+		out[COL_BONO_INICIO + k] = texto(CASILLA_NO, estiloCasilla(false, z));
+	});
+	out[colValorPagar(bonos)] = texto(0, moneda(z));
+	if (opts.borrador) {
+		for (const c of Object.values(out)) c.s = con(c.s as IStyleData);
+	}
+	return out;
+}
+
+/**
+ * Bindings de una fila BORRADOR: las mismas columnas editables que un
+ * recorrido, más el tipo de día, para que el usuario pueda escribir cualquiera
+ * de las dos clases de fila y el canvas decida al guardar.
+ *
+ * Los bonos también: se marcan en el borrador y viajan con el alta.
+ */
+export function bindingsFilaNueva(
+	r: number,
+	entityId: string,
+	conductorId: string,
+	bonos: BonoColumna[]
+): RecorridoBindingSeed[] {
+	const comun = { tipoFila: 'nueva' as const, entityId, conductorId, registroDiaId: '' };
+	const campos: Array<[number, string]> = [
+		[COL.FECHA, 'fecha'],
+		[COL.TIPO, 'tipo_dia'],
+		[COL.PLACA, 'vehiculo_placa'],
+		[COL.DESCRIPCION, 'observaciones'],
+		[COL.HORA_INI, 'hora_inicio'],
+		[COL.HORA_FIN, 'hora_fin'],
+		[COL.HORAS, 'horas_conducidas'],
+		[COL.PERNOCTE, 'pernocte'],
+		[COL.CLIENTE, 'cliente_nombre'],
+		[COL.KM_INI, 'km_inicial'],
+		[COL.KM_FIN, 'km_final']
+	];
+	const seeds = campos.map(([c, field]) => ({ r, c, binding: { ...comun, field } }));
+	bonos.forEach((b, k) =>
+		seeds.push({ r, c: COL_BONO_INICIO + k, binding: { ...comun, field: `bono:${b.config_id}` } })
+	);
+	return seeds;
+}
+
+/**
+ * Bindings de una fila ya GUARDADA, por su `FilaRecorrido`.
+ *
+ * Es la misma regla que aplica el builder al montar —qué columnas se editan en
+ * un recorrido y cuáles en un día—, sacada a una función para que una fila
+ * vinculada tras insertarla quede exactamente igual que sus vecinas.
+ */
+export function bindingsDeFila(
+	r: number,
+	f: FilaRecorrido,
+	conductorId: string,
+	bonos: BonoColumna[]
+): RecorridoBindingSeed[] {
+	const comun = {
+		tipoFila: f.tipo_fila,
+		entityId: f.segmento_id ?? f.registro_dia_id,
+		conductorId,
+		registroDiaId: f.registro_dia_id
+	};
+	const seeds: RecorridoBindingSeed[] = [];
+	const bind = (c: number, field: string) => seeds.push({ r, c, binding: { ...comun, field } });
+
+	/// La FECHA se edita en las dos clases de fila. Es la del DÍA: moverla en
+	/// un recorrido mueve la jornada entera con sus demás tramos, y el
+	/// servidor devuelve cuáles para repintarlos.
+	bind(COL.FECHA, 'fecha');
+	if (f.tipo_fila === 'dia') bind(COL.TIPO, 'tipo_dia');
+
+	if (f.tipo_fila === 'segmento') {
+		bind(COL.PLACA, 'vehiculo_placa');
+		bind(COL.DESCRIPCION, 'observaciones');
+		bind(COL.HORA_INI, 'hora_inicio');
+		bind(COL.HORA_FIN, 'hora_fin');
+		bind(COL.HORAS, 'horas_conducidas');
+		bind(COL.PERNOCTE, 'pernocte');
+		bind(COL.CLIENTE, 'cliente_nombre');
+		bind(COL.KM_INI, 'km_inicial');
+		bind(COL.KM_FIN, 'km_final');
+	} else {
+		bind(COL.DESCRIPCION, 'observaciones');
+		/// PERNOCTE también en las filas de DÍA.
+		///
+		/// Son los días sin recorrido —disponibilidad, descanso—, y en un
+		/// corte son más de la mitad de las filas. La casilla se pintaba en
+		/// todas pero solo tenía binding en los recorridos, así que en la
+		/// mayoría el clic moría contra la guarda con un «esta celda no se
+		/// edita aquí». El valor va a la columna `pernocte` del día, que es
+		/// donde vive cuando no hay tramo al que colgarlo.
+		bind(COL.PERNOCTE, 'pernocte');
+	}
+	bonos.forEach((b, k) => bind(COL_BONO_INICIO + k, `bono:${b.config_id}`));
+	return seeds;
 }
 
 
@@ -390,17 +554,9 @@ export function buildHojaRecorridos(opts: {
 		mergeData.push({ startRow: r, endRow: r, startColumn: 0, endColumn: nCols - 1 } as IRange);
 	};
 
-	/**
-	 * Registra el binding de una celda editable.
-	 *
-	 * En una hoja de solo lectura NO se registra ninguno: el interceptor de
-	 * permisos es default-deny, así que sin bindings la hoja entera queda
-	 * bloqueada sin necesidad de una segunda regla que mantener en paralelo.
-	 */
-	const bind = (r: number, c: number, binding: RecorridoBinding) => {
-		if (!editable) return;
-		bindings.push({ r, c, binding });
-	};
+	/// En una hoja de solo lectura NO se registra ningún binding: el interceptor
+	/// de permisos es default-deny, así que sin bindings la hoja entera queda
+	/// bloqueada sin necesidad de una segunda regla que mantener en paralelo.
 
 	let row = 0;
 
@@ -463,49 +619,29 @@ export function buildHojaRecorridos(opts: {
 		const z = indiceDeDia(hoja.filas, i) % 2 === 1;
 
 		rowData[row] = { h: 22 };
-		const idFila = f.segmento_id ?? f.registro_dia_id;
-		const comun = {
-			tipoFila: f.tipo_fila,
-			entityId: idFila,
-			conductorId: hoja.conductor_id,
-			registroDiaId: f.registro_dia_id
-		};
 
 		set(row, COL.ITEM, i + 1, centrado(z));
 		set(row, COL.FECHA, f.fecha, centrado(z));
 		set(row, COL.DIA_SEMANA, diaSemana(f.fecha), centrado(z));
 		set(row, COL.TIPO, f.tipo_dia, estiloTipo(f.tipo_dia, z));
-		if (f.tipo_fila === 'dia') bind(row, COL.TIPO, { ...comun, field: 'tipo_dia' });
-
 		set(row, COL.PLACA, f.vehiculo_placa ?? '', centrado(z));
 		set(row, COL.DESCRIPCION, f.observaciones ?? '', celda(z));
 		set(row, COL.HORA_INI, horaConMarca(f.hora_inicio, f.inicio_dia_siguiente), centrado(z));
 		set(row, COL.HORA_FIN, horaConMarca(f.hora_fin, f.fin_dia_siguiente), centrado(z));
-		set(row, COL.HORAS, f.horas_conducidas, derecha(z));
+		set(row, COL.HORAS, f.horas_conducidas, horas(z));
 		set(row, COL.PERNOCTE, comoCasilla(f.pernocte), estiloCasilla(f.pernocte, z));
 		set(row, COL.CLIENTE, f.cliente_nombre ?? '', celda(z));
 		set(row, COL.KM_INI, f.km_inicial ?? '', derecha(z));
 		set(row, COL.KM_FIN, f.km_final ?? '', derecha(z));
 
-		if (f.tipo_fila === 'segmento') {
-			bind(row, COL.PLACA, { ...comun, field: 'vehiculo_placa' });
-			bind(row, COL.DESCRIPCION, { ...comun, field: 'observaciones' });
-			bind(row, COL.HORA_INI, { ...comun, field: 'hora_inicio' });
-			bind(row, COL.HORA_FIN, { ...comun, field: 'hora_fin' });
-			bind(row, COL.HORAS, { ...comun, field: 'horas_conducidas' });
-			bind(row, COL.PERNOCTE, { ...comun, field: 'pernocte' });
-			bind(row, COL.CLIENTE, { ...comun, field: 'cliente_nombre' });
-			bind(row, COL.KM_INI, { ...comun, field: 'km_inicial' });
-			bind(row, COL.KM_FIN, { ...comun, field: 'km_final' });
-		} else {
-			bind(row, COL.DESCRIPCION, { ...comun, field: 'observaciones' });
-		}
-
 		bonos.forEach((b, k) => {
 			const marcado = f.bonos?.[b.config_id] === true;
 			set(row, COL_BONO_INICIO + k, comoCasilla(marcado), estiloCasilla(marcado, z));
-			bind(row, COL_BONO_INICIO + k, { ...comun, field: `bono:${b.config_id}` });
 		});
+
+		/// Qué se edita en cada fila lo decide `bindingsDeFila`, compartido con
+		/// la vinculación de las filas insertadas en el canvas.
+		if (editable) bindings.push(...bindingsDeFila(row, f, hoja.conductor_id, bonos));
 
 		// Derivada: la suma de los bonos marcados. La pinta el canvas y la
 		// repinta el servidor al confirmar el patch; nadie la teclea.
@@ -518,20 +654,21 @@ export function buildHojaRecorridos(opts: {
 	const ultimaFila = row - 1;
 
 	// ═══ PIE ═════════════════════════════════════════════════════════
-	if (hayFilas) {
-		for (let c = 0; c < nCols; c++) set(row, c, '', PIE);
-		set(row, COL.DESCRIPCION, 'TOTAL EN BONOS DEL PERIODO', PIE_ETIQUETA);
-		// `SUBTOTAL(109,…)` y no `SUM` para que el pie siga al autofiltro: si el
-		// usuario filtra por una placa, el total debe cuadrar con lo que ve.
-		cellData[row][colTotal] = {
-			v: 0,
-			t: CellValueType.NUMBER,
-			f: `=SUBTOTAL(109,${letra(colTotal)}${primeraFila + 1}:${letra(colTotal)}${ultimaFila + 1})`,
-			s: PIE
-		};
-		rowData[row] = { h: 26 };
-		row++;
-	}
+	// SIEMPRE, también sin filas: el pie es el tope de la zona donde el usuario
+	// puede insertar, y su fórmula se reescribe al insertar o eliminar. En una
+	// hoja vacía suma la única fila en blanco que hay debajo de la cabecera.
+	for (let c = 0; c < nCols; c++) set(row, c, '', PIE);
+	set(row, COL.DESCRIPCION, 'TOTAL EN BONOS DEL PERIODO', PIE_ETIQUETA);
+	cellData[row][colTotal] = {
+		v: 0,
+		t: CellValueType.NUMBER,
+		/// Sin filas no hay fórmula: apuntaría a sí misma. El engine la pone
+		/// en cuanto se inserta la primera.
+		...(hayFilas ? { f: formulaPie(colTotal, primeraFila, ultimaFila) } : {}),
+		s: PIE
+	};
+	rowData[row] = { h: 26 };
+	row++;
 
 	// Colchón para que la hoja no acabe a ras del dato.
 	const totalFilas = Math.max(row + FILAS_COLCHON, 30);
@@ -574,9 +711,24 @@ export function buildHojaRecorridos(opts: {
 	return {
 		sheet,
 		bindings,
-		rangoFilas: hayFilas ? { desde: primeraFila, hasta: ultimaFila } : null
+		rangoFilas: hayFilas ? { desde: primeraFila, hasta: ultimaFila } : null,
+		filaInicioDatos: primeraFila
 	};
 }
+
+/**
+ * Fórmula del pie de totales. `SUBTOTAL(109,…)` y no `SUM` para que el pie siga
+ * al autofiltro: si el usuario filtra por una placa, el total debe cuadrar con
+ * lo que ve. Exportada porque el engine la reescribe al insertar o eliminar
+ * filas: Excel —y Univer— no extienden un rango cuando se inserta justo debajo
+ * de su última fila.
+ */
+export function formulaPie(colTotal: number, primeraFila: number, ultimaFila: number): string {
+	return `=SUBTOTAL(109,${letra(colTotal)}${primeraFila + 1}:${letra(colTotal)}${ultimaFila + 1})`;
+}
+
+/** Estilo del pie, para repintar la celda de la fórmula. */
+export { PIE as ESTILO_PIE };
 
 // ─── Workbook completo ────────────────────────────────────────────────
 
@@ -586,6 +738,8 @@ export interface LibroRecorridos {
 	sheetIdPorConductor: Record<string, string>;
 	bindingsPorHoja: Record<string, RecorridoBindingSeed[]>;
 	rangoPorHoja: Record<string, { desde: number; hasta: number } | null>;
+	/** Primera fila de datos de cada hoja, aunque esté vacía. */
+	inicioDatosPorHoja: Record<string, number>;
 }
 
 /**
@@ -608,10 +762,11 @@ export function buildLibroRecorridos(
 	const sheetIdPorConductor: Record<string, string> = {};
 	const bindingsPorHoja: Record<string, RecorridoBindingSeed[]> = {};
 	const rangoPorHoja: Record<string, { desde: number; hasta: number } | null> = {};
+	const inicioDatosPorHoja: Record<string, number> = {};
 
 	for (const hoja of dto.hojas) {
 		const sheetId = conductorSheetId(hoja.conductor_id);
-		const { sheet, bindings, rangoFilas } = buildHojaRecorridos({
+		const { sheet, bindings, rangoFilas, filaInicioDatos } = buildHojaRecorridos({
 			sheetId,
 			sheetName: hoja.nombre_hoja,
 			hoja,
@@ -625,6 +780,7 @@ export function buildLibroRecorridos(
 		sheetIdPorConductor[hoja.conductor_id] = sheetId;
 		bindingsPorHoja[sheetId] = bindings;
 		rangoPorHoja[sheetId] = rangoFilas;
+		inicioDatosPorHoja[sheetId] = filaInicioDatos;
 	}
 
 	// Un libro sin hojas revienta Univer. Con el periodo vacío se monta una
@@ -644,7 +800,7 @@ export function buildLibroRecorridos(
 		sheets
 	} as IWorkbookData;
 
-	return { workbook, unitId, sheetIdPorConductor, bindingsPorHoja, rangoPorHoja };
+	return { workbook, unitId, sheetIdPorConductor, bindingsPorHoja, rangoPorHoja, inicioDatosPorHoja };
 }
 
 function hojaVacia(etiqueta: string) {
@@ -654,7 +810,7 @@ function hojaVacia(etiqueta: string) {
 		},
 		1: {
 			0: {
-				v: 'Registra recorridos desde la ficha del conductor, o cambia de mes en la barra superior.',
+				v: 'Registra el primer día desde la ficha del conductor, o cambia de corte en la barra superior.',
 				t: CellValueType.STRING,
 				s: { fs: 10, cl: { rgb: MUTED } } as IStyleData
 			}
@@ -706,8 +862,14 @@ function indiceDeDia(filas: FilaRecorrido[], hasta: number): number {
 	return n;
 }
 
-/** `YYYY-MM-DD` → «LUN». Se leen los componentes en crudo, sin zona horaria. */
-function diaSemana(iso: string): string {
+/**
+ * `YYYY-MM-DD` → «LUN». Se leen los componentes en crudo, sin zona horaria.
+ *
+ * Exportada: el engine la usa para rellenar la columna DÍA cuando el usuario
+ * escribe una fecha, que es la única celda derivada que cambia con una
+ * edición local.
+ */
+export function diaSemana(iso: string): string {
 	const [a, m, d] = iso.split('-').map(Number);
 	if (!a || !m || !d) return '';
 	return DIAS_SEMANA[new Date(Date.UTC(a, m - 1, d)).getUTCDay()] ?? '';
