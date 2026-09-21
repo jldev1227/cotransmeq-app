@@ -52,6 +52,7 @@ import {
 } from '@univerjs/core';
 import { SheetInterceptorService, SheetsSelectionsService } from '@univerjs/sheets';
 import { getRecorridoBinding } from '../business/recorridos-cell-binding';
+import { rellenado } from './adapters/cell-change-recorridos';
 
 const SET_RANGE_VALUES = 'sheet.command.set-range-values';
 const SET_CELL_EDIT_VISIBLE = 'sheet.operation.set-cell-edit-visible';
@@ -186,6 +187,16 @@ export interface RecorridosPermissionOptions {
 	 * baja de filas.
 	 */
 	zonaDeDatos?: (sheetId: string) => ZonaDeDatos | null;
+	/**
+	 * Columnas CALCULADAS de la tabla (`#`, día de la semana, valor a pagar).
+	 *
+	 * Solo las consulta el autorrelleno: arrastrar un bloque de columnas hacia
+	 * abajo —fecha, día, tipo, placa, descripción, como se hace en Excel— pasa
+	 * por encima de ellas, y rechazarlo entero por eso dejaba al usuario sin
+	 * la forma más natural de cargar varias filas. Lo que el arrastre escriba
+	 * en ellas lo repinta el engine justo después.
+	 */
+	columnasDerivadas?: (sheetId: string) => Set<number>;
 	/** Aviso ya redactado. Por callback, para no depender de la capa de UI. */
 	onBloqueado?: (aviso: { titulo: string; detalle: string }) => void;
 }
@@ -272,8 +283,10 @@ export function installRecorridosCellPermission(
 		const rangos: IRange[] = params.range
 			? [params.range as IRange]
 			: params.targetRange
-				? /// Autorrelleno: lo que se escribe es el DESTINO del arrastre.
-					[params.targetRange as IRange]
+				? /// Autorrelleno: lo que se escribe es el DESTINO del arrastre SIN el
+					/// origen, que no cambia. Con el origen dentro, arrastrar desde una
+					/// fila de día —cuya placa no se edita— se rechazaba entero.
+					rellenado(params.sourceRange as IRange | undefined, params.targetRange as IRange)
 				: Array.isArray(params.ranges) && params.ranges.length
 					? (params.ranges as IRange[])
 					: (selecciones.getCurrentSelections() ?? [])
@@ -345,8 +358,19 @@ export function installRecorridosCellPermission(
 	const rangoEditable = (
 		sheetId: string,
 		rangos: IRange[],
-		params: Record<string, any>
+		params: Record<string, any>,
+		id?: string
 	): boolean => {
+		/// En el autorrelleno, una celda calculada dentro de la zona de datos
+		/// también pasa: se repinta después. Fuera de la zona (cabecera, pie), no.
+		const esAutorrelleno = id === 'sheet.command.auto-fill' || id === 'sheet.command.refill';
+		const zona = esAutorrelleno ? (opts.zonaDeDatos?.(sheetId) ?? null) : null;
+		const derivadas = esAutorrelleno ? (opts.columnasDerivadas?.(sheetId) ?? null) : null;
+		const admitida = (row: number, col: number): boolean => {
+			if (esCeldaEditable(sheetId, row, col)) return true;
+			if (!zona || zona.vacia || !derivadas) return false;
+			return row >= zona.desde && row <= zona.hasta && derivadas.has(col);
+		};
 		if (!rangos.length) {
 			// Sin rango explícito (`set-range-values` con `value` indexado por
 			// fila/columna): se recorren las claves del objeto.
@@ -378,7 +402,7 @@ export function installRecorridosCellPermission(
 			if ((endRow - startRow + 1) * (endColumn - startColumn + 1) > 2000) return false;
 			for (let row = startRow; row <= endRow; row++) {
 				for (let col = startColumn; col <= endColumn; col++) {
-					if (!esCeldaEditable(sheetId, row, col)) return false;
+					if (!admitida(row, col)) return false;
 				}
 			}
 		}
@@ -451,7 +475,7 @@ export function installRecorridosCellPermission(
 			/// ignora. Lanzar aquí abortaría escrituras de otro canvas montado a
 			/// la vez.
 			if (!objetivo) return;
-			if (!rangoEditable(objetivo.sheetId, objetivo.rangos, params)) {
+			if (!rangoEditable(objetivo.sheetId, objetivo.rangos, params, id)) {
 				opts.onBloqueado?.(AVISO_DERIVADA);
 				throw new CustomCommandExecutionError('[recorridos] celda derivada');
 			}

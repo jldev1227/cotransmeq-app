@@ -56,6 +56,7 @@
 	import { documentoRecorridos, hojasParaZip } from '$lib/components/liquidaciones-terceros/preview/datos/recorridos.doc';
 	import { exportarZipPdfs } from '$lib/components/liquidaciones-terceros/preview/exportar-zip';
 	import {
+		faltantesDeBorrador,
 		fechaDesdeCelda,
 		horaDesdeCelda,
 		horasDesdeCelda,
@@ -248,7 +249,13 @@
 						id: 'recorridos-fila-nueva'
 					});
 				},
-				onFilasEliminadas: (e) => void eliminarFilas(e.filas)
+				onFilasEliminadas: (e) => void eliminarFilas(e.filas),
+				onRepintarFilas: (ids) => {
+					for (const id of ids) {
+						const fila = filaPorId.get(id);
+						if (fila) ctx?.pintarFila(id, fila);
+					}
+				}
 			});
 
 			if (token !== mountToken) {
@@ -619,6 +626,27 @@
 	}
 
 	/**
+	 * Dice qué le falta a la fila para guardarse, en un solo aviso que se va
+	 * reemplazando. Una fila con «+» que no se guarda y no explica por qué es
+	 * una fila que se queda así: el usuario no tiene por qué saber la regla.
+	 */
+	function orientarBorrador(b: Borrador) {
+		const faltan = faltantesDeBorrador(b.valores);
+		if (!faltan.length) return;
+		const tipo = String(b.valores.tipo_dia ?? '').trim().toUpperCase();
+		toast.info(
+			tipo === 'LABORADO' || faltan.some((f) => f.startsWith('la placa') || f.includes('hora'))
+				? 'Un día LABORADO es un recorrido: lleva placa y horario'
+				: 'Fila sin guardar todavía',
+			{
+				description: `Falta ${faltan.join(', ')}. Se guarda sola al completarla.`,
+				id: 'recorridos-borrador-falta',
+				duration: 6000
+			}
+		);
+	}
+
+	/**
 	 * ¿Tiene el borrador lo mínimo para ser una fila?
 	 *
 	 * Espejo de `clasificarFilaNueva` en el servidor: fecha y, o bien el trío
@@ -637,26 +665,35 @@
 
 	async function intentarGuardarBorrador(entityId: string) {
 		const b = borradores.get(entityId);
-		if (!b || b.guardando || !borradorCompleto(b) || !dto) return;
+		if (!b || b.guardando || !dto) return;
+		if (!borradorCompleto(b)) {
+			orientarBorrador(b);
+			return;
+		}
 		b.guardando = true;
 		ultimaEstructuraPropia = Date.now();
+		/// Foto de lo que viaja: lo que el usuario escriba MIENTRAS se guarda
+		/// (la descripción, justo después del tipo) no entra en el alta y se
+		/// manda después como patch sobre la fila ya guardada.
+		const enviados: Record<string, unknown> = { ...b.valores };
+		const bonosEnviados = new Set(b.bonos);
 		try {
 			const r = await recorridosCanvasAPI.crearFila({
 				conductor_id: b.conductorId,
 				desde: corte.desde,
 				hasta: corte.hasta,
-				fecha: String(b.valores.fecha),
-				tipo_dia: (b.valores.tipo_dia as string) ?? null,
-				vehiculo_placa: (b.valores.vehiculo_placa as string) ?? null,
-				hora_inicio: (b.valores.hora_inicio as string) ?? null,
-				hora_fin: (b.valores.hora_fin as string) ?? null,
-				horas_conducidas: (b.valores.horas_conducidas as number) ?? null,
-				cliente_nombre: (b.valores.cliente_nombre as string) ?? null,
-				km_inicial: (b.valores.km_inicial as number) ?? null,
-				km_final: (b.valores.km_final as number) ?? null,
-				pernocte: (b.valores.pernocte as string) ?? null,
-				observaciones: (b.valores.observaciones as string) ?? null,
-				bonos: [...b.bonos]
+				fecha: String(enviados.fecha),
+				tipo_dia: (enviados.tipo_dia as string) ?? null,
+				vehiculo_placa: (enviados.vehiculo_placa as string) ?? null,
+				hora_inicio: (enviados.hora_inicio as string) ?? null,
+				hora_fin: (enviados.hora_fin as string) ?? null,
+				horas_conducidas: (enviados.horas_conducidas as number) ?? null,
+				cliente_nombre: (enviados.cliente_nombre as string) ?? null,
+				km_inicial: (enviados.km_inicial as number) ?? null,
+				km_final: (enviados.km_final as number) ?? null,
+				pernocte: (enviados.pernocte as string) ?? null,
+				observaciones: (enviados.observaciones as string) ?? null,
+				bonos: [...bonosEnviados]
 			});
 
 			borradores.delete(entityId);
@@ -669,6 +706,34 @@
 			if (hoja) insertarOrdenada(hoja.filas, fila);
 			notificarDto();
 			ctx?.vincularFila(entityId, fila);
+
+			// Lo tecleado durante el alta, como patches normales sobre la fila.
+			const rezagados: CambioRecorrido[] = [];
+			for (const [campo, valor] of Object.entries(b.valores)) {
+				if (enviados[campo] === valor) continue;
+				rezagados.push({
+					tipoFila: fila.tipo_fila,
+					entityId: id,
+					field: campo,
+					value: valor as string | number | boolean | null,
+					baseVersion: fila.version,
+					conductorId: b.conductorId,
+					registroDiaId: fila.registro_dia_id
+				});
+			}
+			for (const bono of b.bonos) {
+				if (bonosEnviados.has(bono)) continue;
+				rezagados.push({
+					tipoFila: fila.tipo_fila,
+					entityId: id,
+					field: `bono:${bono}`,
+					value: 'SÍ',
+					baseVersion: fila.version,
+					conductorId: b.conductorId,
+					registroDiaId: fila.registro_dia_id
+				});
+			}
+			if (rezagados.length) enviarCambios(rezagados);
 
 			toast.success(fila.tipo_fila === 'segmento' ? 'Recorrido guardado' : 'Día guardado', {
 				description: `${fila.fecha}${fila.vehiculo_placa ? ` · ${fila.vehiculo_placa}` : ''}`,

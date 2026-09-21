@@ -32,6 +32,7 @@ import {
 	shiftRecorridoBindings
 } from '$lib/editor/business/recorridos-cell-binding';
 import {
+	faltantesDeBorrador,
 	fechaDesdeCelda,
 	horaDesdeCelda,
 	horasDesdeCelda,
@@ -245,7 +246,21 @@ describe('guarda: insertar y eliminar solo dentro de la tabla', () => {
 	const unitId = 'u-guarda';
 	const sheetId = 'conductor-c1';
 
-	function montarGuarda(zona: { desde: number; hasta: number; vacia?: boolean } | null, seleccion: { startRow: number; endRow: number }) {
+	function montarGuarda(
+		zona: { desde: number; hasta: number; vacia?: boolean } | null,
+		seleccion: { startRow: number; endRow: number },
+		extra: { bindings?: Array<{ r: number; c: number }>; derivadas?: number[] } = {}
+	) {
+		clearRecorridoBindings(unitId);
+		setRecorridoBindings(
+			unitId,
+			sheetId,
+			(extra.bindings ?? []).map(({ r, c }) => ({
+				r,
+				c,
+				binding: { tipoFila: 'nueva' as const, entityId: `nueva:${r}`, field: 'fecha', conductorId: 'c1', registroDiaId: '' }
+			}))
+		);
 		const antes: Array<(info: any) => void> = [];
 		const bloqueos: string[] = [];
 		const injector = {
@@ -285,6 +300,7 @@ describe('guarda: insertar y eliminar solo dentro de la tabla', () => {
 			unitId,
 			editable: true,
 			zonaDeDatos: () => zona,
+			columnasDerivadas: () => new Set(extra.derivadas ?? []),
 			onBloqueado: (a) => bloqueos.push(a.titulo)
 		});
 		const ejecutar = (id: string, params: Record<string, unknown> = {}) => {
@@ -400,5 +416,91 @@ describe('tirador de relleno (arrastrar una fecha hacia abajo)', () => {
 			['nueva:b', '2026-09-20']
 		]);
 		clearRecorridoBindings(unitId);
+	});
+});
+
+describe('arrastre en bloque por encima de columnas calculadas', () => {
+	it('el autorrelleno pasa por DÍA y # dentro de la tabla; un pegado normal no', () => {
+		const unitId = 'u-guarda';
+		const sheetId = 'conductor-c1';
+		const zona = { desde: 4, hasta: 10 };
+		const bindings = [5, 6].flatMap((r) => [COL.FECHA, COL.TIPO].map((c) => ({ r, c })));
+		const derivadas = [COL.ITEM, COL.DIA_SEMANA];
+		const rango = { startRow: 4, endRow: 6, startColumn: COL.FECHA, endColumn: COL.TIPO };
+
+		// Se reutiliza el doble de la guarda del bloque anterior.
+		const listeners: Array<(info: any) => void> = [];
+		const injector = {
+			get(token: unknown) {
+				if (token === ICommandService) {
+					return {
+						beforeCommandExecuted: (fn: any) => {
+							listeners.push(fn);
+							return { dispose() {} };
+						},
+						onCommandExecuted: () => ({ dispose() {} })
+					};
+				}
+				if (token === SheetInterceptorService) return { interceptBeforeCommand: () => ({ dispose() {} }) };
+				if (token === IUniverInstanceService) {
+					const libro = { getUnitId: () => unitId, getActiveSheet: () => ({ getSheetId: () => sheetId }) };
+					return { getUnit: () => libro, getCurrentUnitOfType: () => libro };
+				}
+				if (token === SheetsSelectionsService) return { getCurrentSelections: () => [] };
+				throw new Error('token desconocido');
+			}
+		};
+		clearRecorridoBindings(unitId);
+		setRecorridoBindings(
+			unitId,
+			sheetId,
+			bindings.map(({ r, c }) => ({ r, c, binding: { tipoFila: 'nueva' as const, entityId: `nueva:${r}`, field: 'x', conductorId: 'c1', registroDiaId: '' } }))
+		);
+		installRecorridosCellPermission({ __getInjector: () => injector } as never, {
+			unitId,
+			editable: true,
+			zonaDeDatos: () => zona,
+			columnasDerivadas: () => new Set(derivadas)
+		});
+		const ejecutar = (id: string, params: Record<string, unknown>) => {
+			for (const fn of listeners) fn({ id, params });
+		};
+
+		// Fila 4 (origen, guardada en la vida real) no tiene binding en este
+		// doble: para el test el origen también es borrador.
+		setRecorridoBindings(unitId, sheetId, [COL.FECHA, COL.TIPO].map((c) => ({ r: 4, c, binding: { tipoFila: 'nueva' as const, entityId: 'nueva:4', field: 'x', conductorId: 'c1', registroDiaId: '' } })));
+
+		// Arrastre fecha..tipo (incluye DÍA): pasa.
+		expect(() => ejecutar('sheet.command.auto-fill', { sourceRange: { ...rango, endRow: 4 }, targetRange: rango })).not.toThrow();
+		// El mismo bloque como pegado: DÍA no tiene binding y se rechaza entero.
+		expect(() => ejecutar('sheet.command.paste', { range: rango })).toThrow();
+		// Arrastre que se sale de la tabla (hasta el pie): no pasa.
+		expect(() => ejecutar('sheet.command.auto-fill', { sourceRange: { ...rango, endRow: 4 }, targetRange: { ...rango, endRow: 11 } })).toThrow();
+		clearRecorridoBindings(unitId);
+	});
+});
+
+describe('qué le falta a una fila insertada', () => {
+	it('dice lo que falta en palabras, según lo que ya tenga', () => {
+		expect(faltantesDeBorrador({})).toEqual([
+			'la fecha',
+			'el tipo de día (DISPONIBLE, DESCANSO o MANTENIMIENTO), o placa y horario si es un recorrido'
+		]);
+		// Con fecha y tipo que no sea LABORADO no falta nada: se guarda.
+		expect(faltantesDeBorrador({ fecha: '2026-09-10', tipo_dia: 'disponible' })).toEqual([]);
+		// LABORADO es un recorrido: exige placa y horario.
+		expect(faltantesDeBorrador({ fecha: '2026-09-10', tipo_dia: 'LABORADO' })).toEqual([
+			'la placa',
+			'la hora inicial',
+			'la hora final'
+		]);
+		// Con placa ya es un recorrido aunque no diga tipo: le falta el horario.
+		expect(faltantesDeBorrador({ fecha: '2026-09-10', vehiculo_placa: 'FST006' })).toEqual([
+			'la hora inicial',
+			'la hora final'
+		]);
+		expect(faltantesDeBorrador({ fecha: '2026-09-10', tipo_dia: 'MANTENIMIENTO' })).toEqual([
+			'la placa del vehículo en mantenimiento'
+		]);
 	});
 });
