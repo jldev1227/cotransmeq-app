@@ -85,3 +85,35 @@ export function placaDesdeCelda(v: unknown): string {
 		.replace(/\s+/g, '')
 		.trim();
 }
+
+/**
+ * Qué le falta a una fila insertada para poder guardarse. Vacío = completa.
+ *
+ * Espejo de `clasificarFilaNueva` en el servidor: fecha y, o bien el trío
+ * placa/inicio/fin (recorrido, día LABORADO), o bien un tipo de día que no sea
+ * LABORADO (MANTENIMIENTO además con placa). Devuelve lo que falta en palabras
+ * para decírselo al usuario: una fila con «+» que no se guarda y no dice por
+ * qué es una fila que se queda así.
+ */
+export function faltantesDeBorrador(v: Record<string, unknown>): string[] {
+	const faltan: string[] = [];
+	if (!v.fecha) faltan.push('la fecha');
+	const tipo = String(v.tipo_dia ?? '')
+		.trim()
+		.toUpperCase();
+	const tieneTramo = !!(v.vehiculo_placa || v.hora_inicio || v.hora_fin);
+
+	if (tipo === 'MANTENIMIENTO') {
+		if (!v.vehiculo_placa) faltan.push('la placa del vehículo en mantenimiento');
+		return faltan;
+	}
+	if (tieneTramo || tipo === 'LABORADO') {
+		// Es (o quiere ser) un recorrido: placa y horario completos.
+		if (!v.vehiculo_placa) faltan.push('la placa');
+		if (!v.hora_inicio) faltan.push('la hora inicial');
+		if (!v.hora_fin) faltan.push('la hora final');
+		return faltan;
+	}
+	if (!tipo) faltan.push('el tipo de día (DISPONIBLE, DESCANSO o MANTENIMIENTO), o placa y horario si es un recorrido');
+	return faltan;
+}

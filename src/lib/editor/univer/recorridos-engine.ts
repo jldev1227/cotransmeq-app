@@ -67,6 +67,8 @@ import { activarHoja, hojaActiva } from './activar-hoja';
 
 const INSERT_ROW_MUTATION = 'sheet.mutation.insert-row';
 const REMOVE_ROWS_MUTATION = 'sheet.mutation.remove-rows';
+const AUTO_FILL = 'sheet.command.auto-fill';
+const REFILL = 'sheet.command.refill';
 
 /** Prefijo del id local de una fila insertada y aún sin guardar. */
 export const PREFIJO_FILA_NUEVA = 'nueva:';
@@ -107,6 +109,11 @@ export function crearRecorridosEngine(opts: {
 	onFilaNueva?: (e: { sheetId: string; conductorId: string; row: number; entityId: string }) => void;
 	/** El usuario eliminó filas: Univer ya las quitó de la hoja. */
 	onFilasEliminadas?: (e: { sheetId: string; conductorId: string; filas: FilaEliminada[] }) => void;
+	/**
+	 * Un arrastre pasó por encima de filas GUARDADAS: la página las repinta
+	 * desde su modelo, que es la única fuente de las celdas calculadas.
+	 */
+	onRepintarFilas?: (entityIds: string[]) => void;
 }): RecorridosEngineContext {
 	const { container, dto, editable } = opts;
 
@@ -183,10 +190,13 @@ export function crearRecorridosEngine(opts: {
 		console.warn('[recorridos-engine] sin validación de datos: pernocte y bonos quedan como texto');
 	}
 
+	const columnasDerivadas = new Set<number>([COL.ITEM, COL.DIA_SEMANA, colTotal]);
+
 	const desinstalarPermisos = installRecorridosCellPermission(ctx.univer, {
 		unitId: libro.unitId,
 		editable,
 		zonaDeDatos,
+		columnasDerivadas: () => columnasDerivadas,
 		onBloqueado: opts.onBloqueado
 	});
 
@@ -349,6 +359,59 @@ export function crearRecorridosEngine(opts: {
 	};
 	const disposableFilas = commandService.onCommandExecuted(onMutacionDeFila);
 
+	/**
+	 * Tras un ARRASTRE, las celdas calculadas vuelven a decir la verdad.
+	 *
+	 * El tirador escribe series en todo el bloque, también en `#` (1, 2, 3…
+	 * desplazados), en el día de la semana (copiado) y en el valor a pagar. Se
+	 * renumera, se recalcula el día desde la fecha de cada fila y, en las filas
+	 * guardadas, se pide a la página que repinte desde el modelo.
+	 */
+	const onAutorrelleno = (info: Readonly<ICommandInfo>) => {
+		if (info.id !== AUTO_FILL && info.id !== REFILL) return;
+		const params = (info.params ?? {}) as {
+			unitId?: string;
+			subUnitId?: string;
+			targetRange?: { startRow: number; endRow: number };
+		};
+		if (params.unitId && params.unitId !== libro.unitId) return;
+		const wbActivo = ctx.fUniver.getActiveWorkbook() as any;
+		if (!params.unitId && wbActivo?.getId?.() !== libro.unitId) return;
+		const sheetId = params.subUnitId ?? wbActivo?.getActiveSheet?.()?.getSheetId?.();
+		const z = sheetId ? zonas.get(sheetId) : undefined;
+		if (!sheetId || !z || !params.targetRange) return;
+
+		const desde = Math.max(params.targetRange.startRow, z.desde);
+		const hasta = Math.min(params.targetRange.endRow, z.hasta);
+		if (hasta < desde) return;
+
+		/// En la siguiente tarea: el adapter de la página aún está procesando el
+		/// mismo comando y puede rechazar una fecha (la repone); el día tiene que
+		/// calcularse sobre lo que quede al final.
+		setTimeout(() => {
+			const hoja = hojaDe(sheetId);
+			const guardadas: string[] = [];
+			for (let r = desde; r <= hasta; r++) {
+				const b = getRecorridoBindingsDeFila(libro.unitId, sheetId, r)[0]?.binding;
+				if (b && b.tipoFila !== 'nueva') {
+					guardadas.push(b.entityId);
+					continue;
+				}
+				let fecha = '';
+				try {
+					fecha = String(hoja?.getRange?.(r, COL.FECHA)?.getRawValue?.() ?? hoja?.getRange?.(r, COL.FECHA)?.getValue?.() ?? '');
+				} catch {
+					fecha = '';
+				}
+				escribir(sheetId, r, COL.DIA_SEMANA, diaSemana(fecha));
+				escribir(sheetId, r, colTotal, 0);
+			}
+			renumerar(sheetId);
+			if (guardadas.length) opts.onRepintarFilas?.(guardadas);
+		}, 0);
+	};
+	const disposableAutorrelleno = commandService.onCommandExecuted(onAutorrelleno);
+
 	const engine: RecorridosEngineContext = {
 		...ctx,
 		sheetIdPorConductor: libro.sheetIdPorConductor,
@@ -440,7 +503,7 @@ export function crearRecorridosEngine(opts: {
 		hojaActivaId: () => hojaActiva(ctx),
 
 		dispose() {
-			for (const d of [disposableFilas]) {
+			for (const d of [disposableFilas, disposableAutorrelleno]) {
 				try {
 					d.dispose();
 				} catch {
