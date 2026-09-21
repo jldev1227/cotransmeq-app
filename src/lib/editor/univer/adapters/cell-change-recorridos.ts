@@ -17,6 +17,18 @@
  *  · Para saber en qué hoja está el usuario hay que escuchar la OPERACIÓN
  *    `sheet.operation.set-worksheet-active`, no el comando `…activate`: el
  *    `subUnitId` de este último puede venir vacío.
+ *
+ * ── POR QUÉ SE ESCUCHA LA MUTACIÓN Y NO EL COMANDO ───────────────────────
+ *
+ * Teclear, marcar una casilla y borrar con Supr despachan el COMANDO
+ * `set-range-values`; pegar (Ctrl+V), el tirador de relleno y deshacer NO:
+ * escriben la MUTACIÓN `sheet.mutation.set-range-values` por dentro. Con el
+ * comando como fuente, copiar el tipo de día de una fila y pegarlo en otra se
+ * veía en pantalla y no llegaba ni al borrador ni al servidor. La mutación es
+ * el único punto por el que pasa TODA escritura, así que es la fuente. Los
+ * repintados del propio canvas también son mutaciones, y se distinguen con
+ * `isApplyingRemote()`; el relleno se trata aparte porque sus valores se
+ * corrigen antes de leerlos.
  */
 
 import type { ICommandInfo, ICommandService, IRange } from '@univerjs/core';
@@ -26,10 +38,8 @@ import {
 	type TipoFilaRecorrido
 } from '../../business/recorridos-cell-binding';
 
-const SET_RANGE_VALUES = 'sheet.command.set-range-values';
+const SET_RANGE_VALUES_MUTATION = 'sheet.mutation.set-range-values';
 const SET_WORKSHEET_ACTIVE = 'sheet.operation.set-worksheet-active';
-const CLEAR_CONTENT = 'sheet.command.clear-selection-content';
-const CLEAR_ALL = 'sheet.command.clear-selection-all';
 const AUTO_FILL = 'sheet.command.auto-fill';
 const REFILL = 'sheet.command.refill';
 
@@ -111,6 +121,41 @@ function leerValor(
 	return null;
 }
 
+function procesarCeldas(
+	ctx: RecorridosAdapterContext,
+	sheetId: string,
+	celdas: Array<{ r: number; c: number }>
+) {
+	const conductorId = ctx.resolveConductor(sheetId);
+	if (!conductorId) return;
+
+	const sheet = (ctx.getWorkbook() as any)?.getSheetBySheetId?.(sheetId);
+	const cambios: CambioRecorrido[] = [];
+
+	for (const { r, c } of celdas) {
+		const binding = getRecorridoBinding(ctx.unitId, sheetId, r, c);
+		// Sin binding la celda no es de dominio: o es calculada (el engine la
+		// repinta) o el interceptor de permisos ya la habrá rechazado.
+		if (!binding) continue;
+		if (binding.derived) continue;
+
+		const baseVersion = ctx.versionDe(binding.entityId);
+		if (baseVersion == null) continue;
+
+		cambios.push({
+			tipoFila: binding.tipoFila,
+			entityId: binding.entityId,
+			field: binding.field,
+			value: leerValor(sheet, r, c, undefined, undefined),
+			baseVersion,
+			conductorId: binding.conductorId,
+			registroDiaId: binding.registroDiaId
+		});
+	}
+
+	if (cambios.length) ctx.onCambios(cambios);
+}
+
 function procesarRango(
 	ctx: RecorridosAdapterContext,
 	sheetId: string,
@@ -118,36 +163,12 @@ function procesarRango(
 	valorCrudo: unknown
 ) {
 	if (!rango) return;
-	const conductorId = ctx.resolveConductor(sheetId);
-	if (!conductorId) return;
-
-	const sheet = (ctx.getWorkbook() as any)?.getSheetBySheetId?.(sheetId);
-	const cambios: CambioRecorrido[] = [];
-
+	void valorCrudo;
+	const celdas: Array<{ r: number; c: number }> = [];
 	for (let r = rango.startRow; r <= rango.endRow; r++) {
-		for (let c = rango.startColumn; c <= rango.endColumn; c++) {
-			const binding = getRecorridoBinding(ctx.unitId, sheetId, r, c);
-			// Sin binding la celda no es de dominio; el interceptor de permisos ya
-			// la habrá rechazado, así que aquí solo hay que ignorarla.
-			if (!binding) continue;
-			if (binding.derived) continue;
-
-			const baseVersion = ctx.versionDe(binding.entityId);
-			if (baseVersion == null) continue;
-
-			cambios.push({
-				tipoFila: binding.tipoFila,
-				entityId: binding.entityId,
-				field: binding.field,
-				value: leerValor(sheet, r, c, rango, valorCrudo),
-				baseVersion,
-				conductorId: binding.conductorId,
-				registroDiaId: binding.registroDiaId
-			});
-		}
+		for (let c = rango.startColumn; c <= rango.endColumn; c++) celdas.push({ r, c });
 	}
-
-	if (cambios.length) ctx.onCambios(cambios);
+	procesarCeldas(ctx, sheetId, celdas);
 }
 
 /**
@@ -187,62 +208,50 @@ export function installRecorridosCellChangeAdapter(
 	};
 	disposables.push(ctx.commandService.onCommandExecuted(onHoja));
 
-	const onValor = (info: Readonly<ICommandInfo>) => {
-		if (info.id !== SET_RANGE_VALUES) return;
-		if (ctx.isApplyingRemote?.()) return;
-		if (!info.params) return;
-		const params = info.params as {
-			unitId?: string;
-			subUnitId?: string;
-			range?: IRange;
-			value?: any;
-		};
-		const objetivo = objetivoDeComando(ctx, params.unitId, params.subUnitId);
-		if (!objetivo) return;
-		// Sin `range` el comando actúa sobre la selección viva —así lo resuelve
-		// Univer—, así que hay que leerla del libro para saber qué se tocó.
-		const rango =
-			params.range ??
-			(ctx.getWorkbook() as any)
-				?.getSheetBySheetId?.(objetivo.subUnitId)
-				?.getActiveRange?.()
-				?.getRange?.();
-		procesarRango(ctx, objetivo.subUnitId, rango, params.value);
-	};
-	disposables.push(ctx.commandService.onCommandExecuted(onValor));
+	/// Mientras el tirador rellena, sus mutaciones se ignoran: los valores se
+	/// corrigen y se leen al terminar el comando (ver `onAutoFill`).
+	let dentroDeRelleno = 0;
+	/// Opcional: los dobles de prueba no lo implementan.
+	const antes = (ctx.commandService as { beforeCommandExecuted?: ICommandService['beforeCommandExecuted'] })
+		.beforeCommandExecuted;
+	if (antes) {
+		disposables.push(
+			antes.call(ctx.commandService, (info) => {
+				if (info.id === AUTO_FILL || info.id === REFILL) dentroDeRelleno++;
+			})
+		);
+	}
 
 	/**
-	 * Borrado de contenido (Supr / «Borrar contenido»).
-	 *
-	 * Vaciar una celda de recorrido es un cambio de dato como cualquier otro
-	 * —una hora que se quita, un kilometraje que no se conocía—, así que va por
-	 * el mismo camino con valor vacío.
+	 * Toda escritura de celdas, venga de donde venga: teclear, casilla, Supr,
+	 * pegar, deshacer. Se procesan solo las celdas que traen VALOR (`v` o `f`):
+	 * una mutación de solo estilo —la copia de formato al insertar una fila,
+	 * «pegar solo formato»— no es un cambio de dato.
 	 */
-	const onClear = (info: Readonly<ICommandInfo>) => {
-		if (info.id !== CLEAR_CONTENT && info.id !== CLEAR_ALL) return;
+	const onMutacion = (info: Readonly<ICommandInfo>) => {
+		if (info.id !== SET_RANGE_VALUES_MUTATION) return;
 		if (ctx.isApplyingRemote?.()) return;
+		if (dentroDeRelleno > 0) return;
 		const params = (info.params ?? {}) as {
 			unitId?: string;
 			subUnitId?: string;
-			ranges?: IRange[];
+			cellValue?: Record<string, Record<string, any>>;
 		};
+		if (!params.cellValue) return;
 		const objetivo = objetivoDeComando(ctx, params.unitId, params.subUnitId);
 		if (!objetivo) return;
 
-		const rangos =
-			params.ranges ??
-			[
-				(ctx.getWorkbook() as any)
-					?.getSheetBySheetId?.(objetivo.subUnitId)
-					?.getActiveRange?.()
-					?.getRange?.()
-			].filter(Boolean);
-
-		for (const rango of rangos as IRange[]) {
-			procesarRango(ctx, objetivo.subUnitId, rango, undefined);
+		const celdas: Array<{ r: number; c: number }> = [];
+		for (const [rStr, fila] of Object.entries(params.cellValue)) {
+			for (const [cStr, celda] of Object.entries(fila ?? {})) {
+				if (!celda || typeof celda !== 'object') continue;
+				if (!('v' in celda) && !('f' in celda) && !('p' in celda)) continue;
+				celdas.push({ r: Number(rStr), c: Number(cStr) });
+			}
 		}
+		if (celdas.length) procesarCeldas(ctx, objetivo.subUnitId, celdas);
 	};
-	disposables.push(ctx.commandService.onCommandExecuted(onClear));
+	disposables.push(ctx.commandService.onCommandExecuted(onMutacion));
 
 	/**
 	 * TIRADOR de relleno (arrastrar la esquina de la selección hacia abajo).
@@ -256,6 +265,7 @@ export function installRecorridosCellChangeAdapter(
 	 */
 	const onAutoFill = (info: Readonly<ICommandInfo>) => {
 		if (info.id !== AUTO_FILL && info.id !== REFILL) return;
+		dentroDeRelleno = Math.max(0, dentroDeRelleno - 1);
 		if (ctx.isApplyingRemote?.()) return;
 		const params = (info.params ?? {}) as {
 			unitId?: string;
