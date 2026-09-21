@@ -35,10 +35,13 @@
 import {
 	CustomCommandExecutionError,
 	ICommandService,
+	IUniverInstanceService,
+	UniverInstanceType,
 	type ICommandInfo,
+	type IRange,
 	type Univer
 } from '@univerjs/core';
-import { SheetInterceptorService } from '@univerjs/sheets';
+import { SheetInterceptorService, SheetsSelectionsService } from '@univerjs/sheets';
 import { getRecorridoBinding } from '../business/recorridos-cell-binding';
 
 const SET_RANGE_VALUES = 'sheet.command.set-range-values';
@@ -170,6 +173,47 @@ export function installRecorridosCellPermission(
 	const injector = univer.__getInjector();
 	const interceptor = injector.get(SheetInterceptorService);
 	const commandService = injector.get(ICommandService);
+	const instancias = injector.get(IUniverInstanceService);
+	const selecciones = injector.get(SheetsSelectionsService);
+
+	/**
+	 * Hoja y rangos que toca un comando, resueltos como los resuelve Univer.
+	 *
+	 * Los comandos que nacen de un CLIC EN LA CASILLA —pernocte y cada bono—
+	 * llegan sin `unitId` ni `subUnitId`: `sheets-data-validation-ui` despacha
+	 * `SetRangeValuesCommand` con `{ range, value }` y nada más, y el propio
+	 * comando los resuelve después contra la hoja activa. Lo mismo pasa con un
+	 * Supr sobre la selección viva, que llega sin `ranges`.
+	 *
+	 * Denegar por «faltan los ids» es exactamente lo que dejaba las casillas
+	 * muertas: el clic se abortaba aquí, en silencio y sin aviso, y la casilla
+	 * ni se marcaba ni se desmarcaba. El adapter de cambios ya hacía este mismo
+	 * fallback —lo documenta en su cabecera—; esta guarda se había quedado sin
+	 * él, y el canvas de ingresos lo avisa en su propio comentario.
+	 */
+	const objetivoDe = (
+		params: Record<string, any>
+	): { sheetId: string; rangos: IRange[] } | null => {
+		const libro: any = params.unitId
+			? instancias.getUnit(params.unitId, UniverInstanceType.UNIVER_SHEET)
+			: instancias.getCurrentUnitOfType(UniverInstanceType.UNIVER_SHEET);
+		/// Otro libro (o ninguno): no es asunto de este permission.
+		if (!libro || libro.getUnitId?.() !== opts.unitId) return null;
+
+		const sheetId: string | undefined =
+			params.subUnitId ?? params.sheetId ?? libro.getActiveSheet?.()?.getSheetId?.();
+		if (!sheetId) return null;
+
+		const rangos: IRange[] = params.range
+			? [params.range as IRange]
+			: Array.isArray(params.ranges) && params.ranges.length
+				? (params.ranges as IRange[])
+				: (selecciones.getCurrentSelections() ?? [])
+						.map((s: any) => s.range)
+						.filter(Boolean);
+
+		return { sheetId, rangos };
+	};
 
 	const esCeldaEditable = (sheetId: string, r: number, c: number): boolean =>
 		!!getRecorridoBinding(opts.unitId, sheetId, r, c);
@@ -181,13 +225,11 @@ export function installRecorridosCellPermission(
 	 * y medio fuera se rechaza entero: aplicarlo a medias dejaría al usuario con
 	 * la mitad de lo que pegó y sin saber qué mitad.
 	 */
-	const rangoEditable = (sheetId: string, params: Record<string, any>): boolean => {
-		const rangos: any[] = params?.range
-			? [params.range]
-			: Array.isArray(params?.ranges)
-				? params.ranges
-				: [];
-
+	const rangoEditable = (
+		sheetId: string,
+		rangos: IRange[],
+		params: Record<string, any>
+	): boolean => {
 		if (!rangos.length) {
 			// Sin rango explícito (`set-range-values` con `value` indexado por
 			// fila/columna): se recorren las claves del objeto.
@@ -237,7 +279,6 @@ export function installRecorridosCellPermission(
 		if (repintandoAhora) return;
 		const id = info.id;
 		const params = (info.params ?? {}) as Record<string, any>;
-		const sheetId: string | undefined = params.subUnitId ?? params.sheetId;
 
 		if (id === SET_CELL_EDIT_VISIBLE) {
 			/// Dejar pasar el cierre evita que un editor abierto por otra vía se
@@ -263,8 +304,12 @@ export function installRecorridosCellPermission(
 				opts.onBloqueado?.(AVISO_SOLO_LECTURA);
 				throw new CustomCommandExecutionError('[recorridos] solo lectura');
 			}
-			if (!sheetId) throw new CustomCommandExecutionError('[recorridos] escritura sin hoja');
-			if (!rangoEditable(sheetId, params)) {
+			const objetivo = objetivoDe(params);
+			/// Sin objetivo el comando no es de este libro: no se bloquea, se
+			/// ignora. Lanzar aquí abortaría escrituras de otro canvas montado a
+			/// la vez.
+			if (!objetivo) return;
+			if (!rangoEditable(objetivo.sheetId, objetivo.rangos, params)) {
 				opts.onBloqueado?.(AVISO_DERIVADA);
 				throw new CustomCommandExecutionError('[recorridos] celda derivada');
 			}
