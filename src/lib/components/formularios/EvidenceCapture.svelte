@@ -52,32 +52,6 @@
 	let trazando = false;
 	let hayTrazo = $state(false);
 
-	/**
-	 * ¿Se oculta el botón de cámara?
-	 *
-	 * Solo en un escritorio, donde `capture` se ignora y el botón abriría el mismo
-	 * diálogo de archivos que «Elegir de galería»: dos botones para lo mismo.
-	 *
-	 * La pregunta está formulada al revés a propósito. Preguntar «¿es táctil?» y
-	 * esconder la cámara cuando la respuesta no llega falla del lado caro: basta
-	 * un WebView embebido, un navegador en «modo escritorio» o una consulta que no
-	 * responda como se espera para dejar al conductor con un único botón que abre
-	 * la galería —justo el problema que esto venía a resolver—. Al revés, el caso
-	 * degradado es un escritorio con un botón de más, que no le cuesta nada a
-	 * nadie. Por eso arranca en `true` y solo se apaga cuando el navegador AFIRMA
-	 * ser un escritorio: puntero fino Y hover, las dos cosas, que es lo que
-	 * ningún teléfono cumple.
-	 *
-	 * Se resuelve en un efecto y no en un `$derived` porque en SSR no hay
-	 * `window`. El valor inicial es el mismo en servidor y cliente, así que la
-	 * hidratación coincide y el ajuste ocurre después, ya montado.
-	 */
-	let conCamara = $state(true);
-
-	$effect(() => {
-		const esEscritorio = window.matchMedia?.('(pointer: fine) and (hover: hover)')?.matches ?? false;
-		conCamara = !esEscritorio;
-	});
 
 	/**
 	 * Comprueba el tope por borrador ANTES de guardar.
@@ -359,34 +333,34 @@
 				multiple={maxFiles > 1}
 				onchange={onArchivoElegido}
 			/>
+			<!-- Los dos botones SIEMPRE, sin detectar el dispositivo. Hubo una
+			     heurística (`pointer: coarse`, luego `pointer: fine and hover`) para
+			     ahorrarse el botón de cámara en escritorio, y el remedio salió peor:
+			     cualquier navegador que no conteste lo esperado —un WebView, un móvil
+			     en «modo escritorio», un portátil táctil— decide por el conductor y lo
+			     deja con un único botón que abre la galería, que es exactamente el
+			     problema que este componente vino a resolver. La asimetría manda: un
+			     botón de más en un escritorio no le cuesta nada a nadie; un botón de
+			     menos en el teléfono es un conductor que no puede documentar la fuga
+			     que está mirando. En escritorio «Tomar foto» abre el diálogo de
+			     archivos, porque `capture` se ignora ahí. -->
 			<div class="acciones">
-				{#if conCamara}
-					<button
-						type="button"
-						class="boton"
-						disabled={procesando}
-						onclick={() => camaraEl?.click()}
-					>
-						📷 Tomar foto
-					</button>
-					<button
-						type="button"
-						class="boton boton--plano"
-						disabled={procesando}
-						onclick={() => selectorEl?.click()}
-					>
-						🖼️ Elegir de galería
-					</button>
-				{:else}
-					<button
-						type="button"
-						class="boton"
-						disabled={procesando}
-						onclick={() => selectorEl?.click()}
-					>
-						🖼️ Elegir foto
-					</button>
-				{/if}
+				<button
+					type="button"
+					class="boton"
+					disabled={procesando}
+					onclick={() => camaraEl?.click()}
+				>
+					📷 Tomar foto
+				</button>
+				<button
+					type="button"
+					class="boton boton--plano"
+					disabled={procesando}
+					onclick={() => selectorEl?.click()}
+				>
+					🖼️ Elegir de galería
+				</button>
 			</div>
 			<p class="hint">
 				{#if procesando}
