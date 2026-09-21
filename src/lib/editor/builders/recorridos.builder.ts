@@ -120,7 +120,7 @@ export const FORMATO = {
 
 /**
  * Columnas fijas, en el orden del OP-FR-03. Las de bono van justo después y
- * son dinámicas; el valor a pagar y la firma cierran la tabla.
+ * son dinámicas; el valor a pagar cierra la tabla.
  *
  * `DIA` y `TIPO` no están en el papel: se añaden porque sin ellas no se
  * distingue un día de descanso de uno laborado, y el canvas —a diferencia del
@@ -149,7 +149,6 @@ export const COL_BONO_INICIO = 13;
 const ANCHOS_FIJOS = [42, 92, 46, 108, 108, 300, 88, 88, 132, 84, 190, 78, 78];
 const ANCHO_BONO = 118;
 const ANCHO_TOTAL = 112;
-const ANCHO_FIRMA = 132;
 
 /**
  * Las filas de cabecera NO son constantes: una hoja de solo consulta añade la
@@ -161,16 +160,12 @@ const ANCHO_FIRMA = 132;
 const FILAS_COLCHON = 6;
 
 export function totalColumnas(bonos: BonoColumna[]): number {
-	// Fijas + una por bono + valor a pagar + firma.
-	return COL_BONO_INICIO + bonos.length + 2;
+	// Fijas + una por bono + valor a pagar.
+	return COL_BONO_INICIO + bonos.length + 1;
 }
 
 export function colValorPagar(bonos: BonoColumna[]): number {
 	return COL_BONO_INICIO + bonos.length;
-}
-
-export function colFirma(bonos: BonoColumna[]): number {
-	return COL_BONO_INICIO + bonos.length + 1;
 }
 
 // ─── Estilos ──────────────────────────────────────────────────────────
@@ -365,7 +360,6 @@ export function buildHojaRecorridos(opts: {
 
 	const nCols = totalColumnas(bonos);
 	const colTotal = colValorPagar(bonos);
-	const colFirmaOps = colFirma(bonos);
 
 	// `cellData`, `rowData` y `columnData` se crean DENTRO de cada hoja: Univer
 	// muta `columnData` in-place al redimensionar, y compartir el objeto entre
@@ -379,7 +373,6 @@ export function buildHojaRecorridos(opts: {
 	for (let c = 0; c < COL_BONO_INICIO; c++) colData[c] = { w: ANCHOS_FIJOS[c] };
 	for (let i = 0; i < bonos.length; i++) colData[COL_BONO_INICIO + i] = { w: ANCHO_BONO };
 	colData[colTotal] = { w: ANCHO_TOTAL };
-	colData[colFirmaOps] = { w: ANCHO_FIRMA };
 
 	const set = (r: number, c: number, v: string | number, s?: IStyleData) => {
 		if (!cellData[r]) cellData[r] = {};
@@ -413,9 +406,9 @@ export function buildHojaRecorridos(opts: {
 
 	// ═══ TÍTULO DE LA HOJA ═══════════════════════════════════════════
 	// El nombre de pestaña va truncado a 31 caracteres, así que el nombre
-	// completo del conductor solo se puede leer aquí. APELLIDO primero, que es
-	// como se busca a una persona en una lista.
-	const nombreCompleto = `${hoja.apellido} ${hoja.nombre}`.replace(/\s+/g, ' ').trim();
+	// completo del conductor solo se puede leer aquí. NOMBRE y luego apellido,
+	// como se presenta una persona.
+	const nombreCompleto = `${hoja.nombre} ${hoja.apellido}`.replace(/\s+/g, ' ').trim();
 	const cedula = hoja.numero_identificacion ? `C.C. ${hoja.numero_identificacion}` : 'SIN CÉDULA';
 	banda(row, `${nombreCompleto}  ·  ${cedula}  ·  ${etiqueta.toUpperCase()}`, TITULO_HOJA);
 	rowData[row] = { h: 30 };
@@ -456,7 +449,6 @@ export function buildHojaRecorridos(opts: {
 	set(row, COL.KM_FIN, 'KM FINAL', CABECERA);
 	bonos.forEach((b, i) => set(row, COL_BONO_INICIO + i, b.nombre.toUpperCase(), CABECERA));
 	set(row, colTotal, 'VALOR A PAGAR', CABECERA);
-	set(row, colFirmaOps, 'FIRMA OPERACIONES', CABECERA);
 	// 40 y no 34: los nombres de bono ocupan tres líneas con el ancho de
 	// columna y la última se cortaba a media letra.
 	rowData[row] = { h: 40 };
@@ -518,8 +510,6 @@ export function buildHojaRecorridos(opts: {
 		// Derivada: la suma de los bonos marcados. La pinta el canvas y la
 		// repinta el servidor al confirmar el patch; nadie la teclea.
 		set(row, colTotal, valorFila(f, bonos), moneda(z));
-		// En blanco: es la casilla del formato donde Operaciones firma el papel.
-		set(row, colFirmaOps, '', centrado(z));
 
 		row++;
 	});

@@ -41,10 +41,19 @@ const cada = (sufijo: string) => TABLAS.map((t) => `${t} ${sufijo}`).join(',\n')
  *   porque dibuja sobre un lienzo mucho más ancho que una carta.
  * @param conPagina emite la regla `@page`. Solo en el PDF: en el preview
  *   no hace nada y ensucia el `<style>` inyectado.
+ *
+ *   Los márgenes van justos a propósito: el documento es una tabla ancha y
+ *   cada milímetro de margen es ancho que se le quita a las columnas o alto
+ *   que se le quita a las filas. Arriba y a los lados se aprieta —el encabezado
+ *   y la rejilla ya traen su propio marco, así que no hay nada que proteger—;
+ *   abajo se mantienen 6mm para que la última fila no quede a ras del filo.
+ *
+ *   Toda impresora reserva un área no imprimible de unos 4-5mm; por debajo de
+ *   eso el borde de la rejilla empezaría a recortarse.
  */
 export function documentoCss(escala = 1, conPagina = false): string {
 	return `
-${conPagina ? '@page { size: letter landscape; margin: 8mm 8mm 6mm; }' : ''}
+${conPagina ? '@page { size: letter landscape; margin: 4.5mm 7.2mm 6mm; }' : ''}
 
 /* ── Tokens ─────────────────────────────────────────────────────────
    Espejo de pdf-tokens.ts, verificado por pdf-tokens.spec.ts. */
@@ -76,6 +85,10 @@ ${conPagina ? '@page { size: letter landscape; margin: 8mm 8mm 6mm; }' : ''}
   justify-content: center;
 }
 .doc .header-logo img { height: 38px; width: auto; object-fit: contain; }
+/* CONTROL DÍAS LABORADOS PERSONAL lleva el logo un 10% menor: su encabezado se
+   repite en cada conductor del consolidado, y ahí cada milímetro de alto se
+   paga tantas veces como hojas tenga el documento. */
+.doc.doc-recorridos .header-logo img { height: 34px; }
 .doc .header-logo .fallback {
   font-weight: 900;
   font-size: var(--tpdf-fs-head);
@@ -310,6 +323,91 @@ ${cada('td.pos')} { color: var(--tpdf-verde-texto); }
   break-inside: avoid;
   page-break-inside: avoid;
 }
+/* Un bloque más alto que la hoja NO se puede mantener entero: al intentarlo
+   se empuja a la página siguiente, se parte igual y la primera queda en
+   blanco. Fluye, pero sin romper una fila por la mitad; el thead ya está
+   declarado como table-header-group, así que la cabecera se repite.
+   (Ojo: dentro de este literal no se pueden usar acentos graves.) */
+.doc .bloque-partible,
+.doc .bloque-partible .bloque-tbl {
+  break-inside: auto;
+  page-break-inside: auto;
+}
+.doc .bloque-partible tbody tr {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* Tabla DENSA: para las de muchas filas y muchas columnas, donde el documento
+   se mide en hojas y no en holgura. No se toca el token global porque el resto
+   de documentos del preview —liquidaciones, cierres— se leen de otra manera y
+   no tienen este problema de longitud.
+
+   El cuerpo se queda en su tamaño normal: lo que se recorta es el AIRE
+   vertical, que es donde estaba el desperdicio. Bajar también la letra fue el
+   primer intento, y sobra desde que el resumen y el pie de firmas salieron del
+   papel del conductor: con esos noventa milímetros de vuelta, las filas caben
+   legibles. Una tabla de recorridos se lee dato a dato, no de un vistazo, y
+   media hoja ahorrada no compensa forzar la vista de quien la revisa. */
+.doc .bloque-denso .bloque-tbl th,
+.doc .bloque-denso .bloque-tbl td {
+  padding-top: 2px;
+  padding-bottom: 2px;
+  line-height: 1.15;
+}
+.doc .bloque-denso .bloque-tbl th { font-size: var(--tpdf-fs-micro); }
+
+/*
+ * PAUTA: todas las filas miden lo mismo como mínimo, tengan dato o no.
+ *
+ * Una celda vacía no tiene texto que la levante, así que los renglones que
+ * sobran del formato quedaban en hilos de dos milímetros —justo los renglones
+ * que existen para escribir a mano encima—. Con height sobre una fila de tabla
+ * el navegador lo trata como MÍNIMO: las filas cuya descripción ocupa dos
+ * líneas siguen creciendo, y las vacías dejan de colapsar. El resultado es una
+ * tabla pautada, como la hoja impresa.
+ * (Ojo: dentro de este literal no se pueden usar acentos graves.)
+ */
+.doc .bloque-denso .bloque-tbl tbody tr,
+.doc .bloque-denso .bloque-tbl tbody td {
+  height: 4.8mm;
+}
+
+/*
+ * La cabecera del bloque y su tabla, como UNA pieza.
+ *
+ * Entre las dos había una línea que las leía como dos cosas apiladas: arriba
+ * el nombre del conductor, abajo una tabla suya. Son lo mismo —el encabezado
+ * de esa tabla—, y quitando el filo se ve así. La franja de color del lateral
+ * sigue recorriendo las dos, que es lo que las une a la vista.
+ *
+ * Solo en la tabla densa —la de recorridos—: el resto de documentos del
+ * preview apilan varios bloques pequeños por página y ahí la línea sí separa
+ * cosas distintas.
+ */
+.doc .bloque-denso .bloque-head {
+  border-bottom: 0;
+  padding-bottom: 2px;
+}
+
+/*
+ * Sección sin título: la tabla arranca pegada al encabezado del documento.
+ *
+ * El aire de arriba existe para separar UNA sección de la anterior. Cuando la
+ * sección no se anuncia —la de recorridos, que es la hoja entera— ese aire no
+ * separa nada: deja un hueco entre el marco del encabezado y la tabla que se
+ * lee como una grieta.
+ */
+.doc .sec-sin-titulo {
+  margin-top: 3px;
+}
+
+.doc .sec-sin-titulo .bloques {
+  margin-top: 0;
+}
+/* Sin partir palabras en la cabecera: es preferible que un rotulo se corte por
+   el espacio a que aparezca CONDUCCIO / N. */
+.doc .bloque-denso .bloque-tbl th { overflow-wrap: normal; word-break: keep-all; }
 .doc .bloque-head {
   padding: var(--tpdf-pad-y) var(--tpdf-pad-x);
   background: var(--tpdf-interno-bg);

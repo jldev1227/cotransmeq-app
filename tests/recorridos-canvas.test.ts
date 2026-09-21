@@ -14,7 +14,6 @@ import {
 	COL_BONO_INICIO,
 	totalColumnas,
 	colValorPagar,
-	colFirma,
 	valorFila,
 	FORMATO,
 	COLOR_PESTANA_BORRADOR,
@@ -30,7 +29,10 @@ import { IDENTIDAD } from '$lib/editor/builders/identidad-empresa';
 import { installRecorridosCellPermission } from '$lib/editor/univer/cell-permission-recorridos';
 import { ICommandService, IUniverInstanceService } from '@univerjs/core';
 import { SheetInterceptorService, SheetsSelectionsService } from '@univerjs/sheets';
-import { documentoRecorridos } from '$lib/components/liquidaciones-terceros/preview/datos/recorridos.doc';
+import {
+	documentoRecorridos,
+	bloqueResumenPorPlaca
+} from '$lib/components/liquidaciones-terceros/preview/datos/recorridos.doc';
 
 /**
  * Las filas de cabecera no son fijas —una hoja de solo consulta añade su banda
@@ -152,19 +154,19 @@ describe('builder del canvas de recorridos', () => {
 		expect([...fechas]).toEqual([...fechas].sort());
 	});
 
-	it('crea una columna por bono visible, más valor a pagar y firma', () => {
+	it('crea una columna por bono visible, más valor a pagar, y NADA después', () => {
 		const dto = dtoDePrueba();
 		const libro = buildLibroRecorridos(dto, { editable: true });
 		const hoja = libro.workbook.sheets['conductor-c1'] as any;
 
-		// Las dos de cierre son del formato OP-FR-03: el valor que se paga y la
-		// casilla donde Operaciones firma el papel.
+		// «Valor a pagar» cierra la tabla. La casilla de FIRMA OPERACIONES del
+		// papel se quitó: iba siempre vacía y estrechaba al resto.
 		const { cabecera } = anclas(libro);
-		expect(totalColumnas(dto.bonos)).toBe(COL_BONO_INICIO + 2 + 2);
+		expect(totalColumnas(dto.bonos)).toBe(COL_BONO_INICIO + 2 + 1);
 		expect(hoja.cellData[cabecera][COL_BONO_INICIO].v).toBe('BONO DE ALIMENTACIÓN');
 		expect(hoja.cellData[cabecera][COL_BONO_INICIO + 1].v).toBe('BONO DÍA TRABAJADO DOBLE');
 		expect(hoja.cellData[cabecera][colValorPagar(dto.bonos)].v).toBe('VALOR A PAGAR');
-		expect(hoja.cellData[cabecera][colFirma(dto.bonos)].v).toBe('FIRMA OPERACIONES');
+		expect(colValorPagar(dto.bonos)).toBe(totalColumnas(dto.bonos) - 1);
 	});
 
 	it('marca la casilla con SÍ/NO según el bono', () => {
@@ -182,8 +184,8 @@ describe('builder del canvas de recorridos', () => {
 		const libro = buildLibroRecorridos(dtoDePrueba(), { editable: true });
 		const hoja = libro.workbook.sheets['conductor-c1'] as any;
 
-		// APELLIDO primero: es como se busca a una persona en una lista.
-		expect(hoja.cellData[0][0].v).toContain('PEREZ JUAN');
+		// NOMBRE y luego apellido, igual que en el PDF y en la pestaña.
+		expect(hoja.cellData[0][0].v).toContain('JUAN PEREZ');
 		expect(hoja.cellData[0][0].v).toContain('C.C. 123');
 		// Blanco sobre el color de marca, como el título de hoja de cierres.
 		expect(hoja.cellData[0][0].s.bg.rgb).toBe(IDENTIDAD.colores.fuerte);
@@ -451,9 +453,11 @@ describe('documento del preview', () => {
 	});
 
 	it('resume los bonos por placa y por mes', () => {
+		// Ya no viaja dentro del PDF —ni en el papel del conductor ni en el
+		// consolidado—, pero el conteo por vehículo es el que se factura, así
+		// que la función se conserva y se sigue fijando aquí.
 		const dto = dtoDePrueba();
-		const doc = documentoRecorridos(dto);
-		const resumen = doc.secciones[1].bloques![0];
+		const resumen = bloqueResumenPorPlaca(dto, dto.hojas);
 
 		const porPlaca = Object.fromEntries(
 			resumen.filas.map((f) => [(f.celdas as any).placa, f.celdas as any])
@@ -471,7 +475,7 @@ describe('documento del preview', () => {
 		expect(porPlaca['ABC123'][`n_${BONO_DOBLE}`]).toBe('');
 	});
 
-	it('sigue el formato OP-FR-03: rótulos, código y columna de firma', () => {
+	it('sigue el formato OP-FR-03: rótulos y código, sin las dos columnas de cierre', () => {
 		const dto = dtoDePrueba();
 		const doc = documentoRecorridos(dto, 'c1');
 
@@ -484,23 +488,109 @@ describe('documento del preview', () => {
 
 		const tabla = doc.secciones[0].bloques![0];
 		const etiquetas = tabla.columnas.map((c) => c.label);
-		expect(etiquetas).toContain('Descripción de la Labor / Recorrido');
-		expect(etiquetas).toContain('Tiempo Total de Conducción en la Jornada');
-		expect(etiquetas).toContain('Pernote SI / NO');
-		// La casilla que Operaciones firma en el papel: existe y va vacía.
-		expect(etiquetas.at(-1)).toBe('Firma Operaciones');
-		expect((tabla.filas[0].celdas as any).firma).toBe('');
+		// Rótulos CORTOS: la cabecera se repite en cada página impresa y su alto
+		// lo fija la etiqueta más larga, así que un nombre kilométrico engorda
+		// las quince columnas a la vez. «Tiempo Total de Conducción en la
+		// Jornada» salía en cinco líneas, partiendo «CONDUCCIÓ / N».
+		expect(etiquetas).toContain('Descripción de la labor / recorrido');
+		expect(etiquetas).toContain('Horas');
+		expect(etiquetas).toContain('Pernocte');
 
-		// APELLIDO primero, igual que en la pestaña del canvas.
-		expect(tabla.titulo).toBe('Nombre Conductor: PEREZ JUAN');
+		// Pero el nombre del formato NO se pierde: viaja en `titulo`, que el
+		// preview enseña al pasar el ratón por la cabecera.
+		const horas = tabla.columnas.find((c) => c.key === 'horas');
+		expect(horas?.titulo).toBe('Tiempo total de conducción en la jornada');
+
+		// La fecha va corta y en UNA línea: en ISO no cabía en su columna y se
+		// partía en dos, doblando el alto de todas las filas.
+		expect((tabla.filas[0].celdas as any).fecha).toMatch(/^\d{2}\/\d{2}\/\d{2}$/);
+
+		// La tabla puede fluir entre páginas: mantenerla entera empujaba una
+		// hoja en blanco por delante y la partía igual.
+		expect(tabla.partible).toBe(true);
+		expect(tabla.denso).toBe(true);
+
+		// El tipo de día va abreviado: «DESCANSO» no cabía en su columna y se
+		// derramaba sobre la placa de al lado.
+		expect((tabla.filas[0].celdas as any).tipo).toBe('LAB');
+
+		// El papel de UN conductor no lleva resumen ni pie de firmas: entre los
+		// dos se iban noventa milímetros, y con ellos la tercera hoja.
+		expect(doc.secciones).toHaveLength(1);
+		expect(doc.firmas).toBe(false);
+		// Ni «Valor a pagar» ni «Firma Operaciones»: la primera repetía la suma
+		// de unas columnas de bono que ya llevan su importe —y el total sigue en
+		// el pie del bloque—, y la segunda iba vacía por definición. En
+		// horizontal, cada columna de más estrecha a todas las demás.
+		expect(etiquetas).not.toContain('Valor a pagar');
+		expect(etiquetas).not.toContain('Firma Operaciones');
+		expect(etiquetas.at(-1)).toBe('Bono día trabajado doble');
+		// El total del conductor no se pierde: vive en el pie.
+		expect(tabla.pie?.label).toBe('Total en bonos');
+
+		// NOMBRE y luego apellido, igual que en la pestaña del canvas.
+		expect(tabla.titulo).toBe('Nombre conductor: JUAN PEREZ');
 		expect(tabla.subtitulo).toBe('C.C.: 123');
+
+		// El corte va en la MISMA fila que el nombre, no en una banda propia:
+		// esa banda era una fila entera, repetida en cada conductor.
+		expect(tabla.etiqueta).toBe('Corte: 21 Jun — 20 Jul 2026');
+		expect(doc.periodo).toEqual([]);
+	});
+
+	it('el consolidado son las MISMAS planillas: sin resumen, firmas ni pie', () => {
+		// No es otro documento: son las hojas de siempre, una detrás de otra y
+		// cada una lista para arrancarse y entregarse.
+		const doc = documentoRecorridos(dtoDePrueba());
+		expect(doc.secciones.every((s) => s.id.startsWith('recorridos-'))).toBe(true);
+		expect(doc.firmas).toBe(false);
+		expect(doc.piePagina).toBe(false);
+		// Y por eso cada conductor repite el encabezado al abrir hoja.
+		expect(doc.repetirEncabezado).toBe(true);
+	});
+
+	it('la planilla de un conductor no repite encabezado: solo tiene uno', () => {
+		const doc = documentoRecorridos(dtoDePrueba(), 'c1');
+		expect(doc.repetirEncabezado).toBe(false);
+	});
+
+	it('completa la tabla hasta los 31 renglones del formato', () => {
+		// El OP-FR-03 es una hoja de 31 líneas que se entrega con las que
+		// sobran en blanco. Con tres recorridos quedaba un recorte flotando.
+		const dto = dtoDePrueba();
+		const doc = documentoRecorridos(dto, 'c1');
+		const tabla = doc.secciones[0].bloques![0];
+		expect(tabla.filas.length).toBe(31);
+		// Las de relleno van vacías del todo, ni el consecutivo, para que no se
+		// confundan con un recorrido registrado en blanco.
+		expect((tabla.filas[30].celdas as any).n).toBe('');
+		expect((tabla.filas[30].celdas as any).fecha).toBe('');
+	});
+
+	it('en el consolidado, cada conductor abre hoja', () => {
+		// Una planilla que empieza a media página debajo de la anterior no se
+		// puede arrancar y repartir, que es para lo que se imprime.
+		const dto = dtoDePrueba();
+		const segundo = {
+			...dto.hojas[0],
+			conductor_id: 'c2',
+			nombre: 'ANA',
+			apellido: 'GOMEZ'
+		};
+		const doc = documentoRecorridos({ ...dto, hojas: [dto.hojas[0], segundo] } as never);
+		const deConductores = doc.secciones.filter((s) => s.id.startsWith('recorridos-'));
+		expect(deConductores).toHaveLength(2);
+		// La primera no salta —ya está al principio—; la siguiente sí.
+		expect(deConductores[0].saltoDePagina).toBe(false);
+		expect(deConductores[1].saltoDePagina).toBe(true);
+		// El rótulo de sección no se repite encima de cada conductor.
+		expect(deConductores[1].titulo).toBe('');
 	});
 
 	it('no lista placas sin ningún bono en el mes', () => {
 		const dto = dtoDePrueba();
 		// El día de descanso no tiene placa ni bonos: no debe aparecer.
-		const doc = documentoRecorridos(dto);
-		const resumen = doc.secciones[1].bloques![0];
+		const resumen = bloqueResumenPorPlaca(dto, dto.hojas);
 		expect(resumen.filas.map((f) => (f.celdas as any).placa)).not.toContain('(sin placa)');
 	});
 });
