@@ -224,6 +224,15 @@ export function createLiquidacionEngine(opts: EngineOptions): EngineContext {
         footer: opts.footer ?? false,
         // Mantenemos lo útil para edición de celdas.
         contextMenu: true,
+        // Sin la marca verde de «número almacenado como texto» ni su aviso al
+        // pasar el ratón: nuestras fechas y horas son TEXTO a propósito
+        // («2026-09-20», «07:30» —el backend las espera así—), y Univer las
+        // señalaba todas como error en cada fila del canvas de recorridos.
+        // Las dos variantes: la de sheets-ui (texto que parece número) y la
+        // de numfmt (celdas con formato de texto).
+        sheets: { disableForceStringMark: true, disableForceStringAlert: true },
+        disableTextFormatMark: true,
+        disableTextFormatAlert: true,
         formulaBar: true,
         statusBarStatistic: true,
         // Worker requerido por el preset (fórmulas, numfmt en background).

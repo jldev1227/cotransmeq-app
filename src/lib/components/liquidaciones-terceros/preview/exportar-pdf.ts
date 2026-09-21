@@ -11,8 +11,11 @@
 
 import { liquidacionesTercerosCanvasPdfAPI } from '$lib/api/liquidaciones-terceros-canvas-pdf';
 import { documentoCss } from './documento.css';
+import { componerHojasHtml } from './componer-hojas';
+import type { ScopePreview } from './columnas';
+import type { DocumentoPreview } from './tipos';
 
-const LOGO_URL = '/assets/logo_nombre.webp';
+const LOGO_URL = '/assets/logo_transmeralda-264.webp';
 
 let logoCache: string | null = null;
 
@@ -51,7 +54,7 @@ async function logoDataUrl(): Promise<string> {
  * exactamente igual que el de una exportación suelta. Ver `exportar-zip.ts`.
  */
 
-const SELLO_URL = '/assets/sello-firma-terceros.jpg';
+const SELLO_URL = '/assets/sello-firma-terceros.webp';
 let selloCache: string | null = null;
 
 /**
@@ -166,5 +169,34 @@ export async function exportarPdfDocumento(doc: HTMLElement, nombreArchivo: stri
 	window.open(url, '_blank');
 	// El visor ya tiene el blob cargado pasado un minuto; retenerlo más solo
 	// consume memoria de la pestaña que abrió el preview.
+	setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+/**
+ * Renderiza un documento que NO está montado en pantalla y lo abre.
+ *
+ * Es lo que usa el preview paginado del consolidado: en pantalla hay un solo
+ * conductor —montar los cuarenta a la vez es lo que dejaba el navegador sin
+ * responder—, pero el PDF que se exporta es el de todos. Se compone fuera de
+ * la vista con la misma maquinaria del ZIP, hoja por hoja, y se manda a
+ * Chromium como un solo cuerpo.
+ */
+export async function exportarPdfCompuesto(
+	scope: ScopePreview,
+	documento: DocumentoPreview,
+	nombreArchivo: string,
+	seleccion?: string[]
+): Promise<void> {
+	const { documentos, fallidas } = await componerHojasHtml(
+		scope,
+		[{ documento, nombreArchivo }],
+		{ seleccion }
+	);
+	if (!documentos.length) {
+		throw new Error(`No se pudo componer el documento${fallidas.length ? ` (${fallidas.join(', ')})` : ''}.`);
+	}
+	const blob = await renderizarPdf(documentos[0].html, nombreArchivo);
+	const url = URL.createObjectURL(blob);
+	window.open(url, '_blank');
 	setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }

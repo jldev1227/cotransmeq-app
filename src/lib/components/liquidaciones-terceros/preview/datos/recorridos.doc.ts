@@ -55,27 +55,47 @@ import type {
  * donde el preview lo enseña al pasar el ratón: el dato y su significado no se
  * pierden, solo dejan de ocupar media hoja.
  */
-function columnasBase(): ColumnaPreview[] {
+/**
+ * Dónde se va a ver el documento.
+ *
+ * `pantalla` es el preview del canvas; `pdf` es lo que sale de Chromium: la
+ * exportación de uno, la de todos y el ZIP. Son el MISMO documento con dos
+ * repartos de columna, porque en pantalla sobra ancho y en papel no:
+ *
+ *  · En PANTALLA descripción y cliente van a la mitad y el tipo de día se
+ *    lee entero («MANTENIMIENTO»): se está revisando, y descifrar «MANT» o
+ *    ver una descripción de tres líneas estorba más que ayuda.
+ *  · En PDF se mantiene el reparto que ya estaba desplegado y aprobado: la
+ *    descripción y el cliente anchos —para que un nombre de empresa no se
+ *    parta— y el tipo abreviado para que quepa en su columna sin comerse
+ *    ancho. Cambiarlo movía el recuento de páginas de cada conductor.
+ */
+export type DestinoDocumento = 'pantalla' | 'pdf';
+
+function columnasBase(destino: DestinoDocumento): ColumnaPreview[] {
+	const pdf = destino === 'pdf';
 	return [
 		{ key: 'n', label: '#', tipo: 'numero', peso: 2, fija: true },
 		{ key: 'fecha', label: 'Fecha', tipo: 'texto', peso: 5, fija: true },
 		{ key: 'dia', label: 'Día', tipo: 'texto', peso: 3 },
-		{ key: 'tipo', label: 'Tipo', tipo: 'texto', peso: 5 },
+		/// En pantalla, 6,5: lo justo para «MANTENIMIENTO» entero a cuerpo
+		/// micro. En PDF va abreviado y le basta con 5.
+		{ key: 'tipo', label: 'Tipo', tipo: 'texto', peso: pdf ? 5 : 6.5 },
 		{ key: 'placa', label: 'Placa', tipo: 'placa', peso: 6 },
 		{
 			key: 'descripcion',
 			/*
-			 * 19,8 = 22 menos un 10%, cedido a CLIENTE.
+			 * PDF: 19,8 = 22 menos un 10%, cedido a CLIENTE. Se paga: la
+			 * descripción larga pasa de dos líneas a tres en casi todas las
+			 * filas, y un conductor con 45 recorridos deja de caber en dos
+			 * hojas. Decisión tomada a sabiendas —los nombres de empresa
+			 * importan más que apretar el recuento de páginas—.
 			 *
-			 * Se paga: con este ancho la descripción larga pasa de dos líneas a
-			 * tres en casi todas las filas, y el documento de un conductor con
-			 * 45 recorridos deja de caber en dos hojas. Es una decisión tomada
-			 * a sabiendas —los nombres de empresa importan más que apretar el
-			 * recuento de páginas—, no un descuido.
+			 * Pantalla: la MITAD. Ahí no hay páginas que cuidar.
 			 */
 			label: 'Descripción de la labor / recorrido',
 			tipo: 'texto',
-			peso: 19.8
+			peso: pdf ? 19.8 : 9.9
 		},
 		{ key: 'hora_ini', label: 'Inicio', tipo: 'texto', peso: 4 },
 		{ key: 'hora_fin', label: 'Fin', tipo: 'texto', peso: 4 },
@@ -87,7 +107,8 @@ function columnasBase(): ColumnaPreview[] {
 			peso: 4
 		},
 		{ key: 'pernocte', label: 'Pernocte', tipo: 'texto', peso: 5 },
-		{ key: 'cliente', label: 'Cliente', tipo: 'texto', peso: 17.4 }
+		/// Pantalla: la mitad, por lo mismo que la descripción.
+		{ key: 'cliente', label: 'Cliente', tipo: 'texto', peso: pdf ? 17.4 : 8.7 }
 	];
 }
 
@@ -113,13 +134,13 @@ function columnasDeBono(bonos: BonoColumna[]): ColumnaPreview[] {
 const DIAS = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
 
 /**
- * Tipo de día abreviado.
+ * Tipo de día abreviado, solo para el PDF.
  *
- * «DESCANSO» no cabe en su columna y se derramaba sobre la placa de al lado
- * («DESCANSOFST-006»). Ensanchar la columna obliga a estrechar otra, y la única
- * con holgura es la descripción: al quitarle dos unidades, más filas pasaban a
- * tres líneas y el documento ganaba una hoja entera. Sale más barato acortar el
- * DATO, que además se lee igual de bien bajo un rótulo que ya dice «Tipo».
+ * «DESCANSO» no cabe en su columna del papel y se derramaba sobre la placa de
+ * al lado («DESCANSOFST-006»). Ensanchar la columna obliga a estrechar otra, y
+ * la única con holgura es la descripción: al quitarle dos unidades, más filas
+ * pasaban a tres líneas y el documento ganaba una hoja entera. Sale más barato
+ * acortar el DATO, que se lee igual bajo un rótulo que ya dice «Tipo».
  */
 const TIPO_CORTO: Record<string, string> = {
 	LABORADO: 'LAB',
@@ -161,7 +182,8 @@ function totalFila(f: FilaRecorrido, bonos: BonoColumna[]): number {
 function bloqueRecorridos(
 	hoja: HojaRecorridos,
 	bonos: BonoColumna[],
-	etiquetaCorte: string
+	etiquetaCorte: string,
+	destino: DestinoDocumento
 ): BloquePreview {
 	/**
 	 * Ni «Valor a pagar» ni «Firma Operaciones».
@@ -176,7 +198,7 @@ function bloqueRecorridos(
 	 * firma iba vacía por definición, así que gastaba ancho para no decir nada
 	 * —el documento ya lleva su firma al pie—.
 	 */
-	const columnas = [...columnasBase(), ...columnasDeBono(bonos)];
+	const columnas = [...columnasBase(destino), ...columnasDeBono(bonos)];
 
 	const filas: FilaPreview[] = hoja.filas.map((f, i) => {
 		const celdas: Record<string, unknown> = {
@@ -186,7 +208,8 @@ function bloqueRecorridos(
 			// del corte ya está en la cabecera del documento.
 			fecha: fechaCorta(f.fecha),
 			dia: diaSemana(f.fecha),
-			tipo: TIPO_CORTO[f.tipo_dia] ?? f.tipo_dia,
+			/// Entero en pantalla; abreviado en el papel, donde no cabe.
+			tipo: destino === 'pdf' ? (TIPO_CORTO[f.tipo_dia] ?? f.tipo_dia) : f.tipo_dia,
 			placa: f.vehiculo_placa ?? '',
 			// «Descripción de la Labor / Recorrido» del formato: es la
 			// observación del tramo, que es donde se escribe a mano el recorrido.
@@ -364,7 +387,8 @@ function meta(dto: RecorridosPeriodoDTO) {
  */
 export function documentoRecorridos(
 	dto: RecorridosPeriodoDTO,
-	conductorId?: string | null
+	conductorId?: string | null,
+	destino: DestinoDocumento = 'pantalla'
 ): DocumentoPreview {
 	const hojas = conductorId
 		? dto.hojas.filter((h) => h.conductor_id === conductorId)
@@ -392,7 +416,7 @@ export function documentoRecorridos(
 		titulo: '',
 		columnas: [],
 		filas: [],
-		bloques: [bloqueRecorridos(h, dto.bonos, dto.etiqueta)],
+		bloques: [bloqueRecorridos(h, dto.bonos, dto.etiqueta, destino)],
 		bloquesPorFila: 1,
 		saltoDePagina: i > 0
 	}));
@@ -434,10 +458,10 @@ export function documentoRecorridos(
 	} as DocumentoPreview;
 }
 
-/** Un documento por conductor, para el ZIP. */
+/** Un documento por conductor, para el ZIP. Van al papel: reparto de PDF. */
 export function hojasParaZip(dto: RecorridosPeriodoDTO) {
 	return dto.hojas.map((h) => ({
-		documento: documentoRecorridos(dto, h.conductor_id),
+		documento: documentoRecorridos(dto, h.conductor_id, 'pdf'),
 		nombreArchivo: `${h.apellido} ${h.nombre} ${dto.desde} a ${dto.hasta}`
 			.replace(/\s+/g, ' ')
 			.trim()

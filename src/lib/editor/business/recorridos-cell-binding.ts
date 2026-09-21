@@ -20,12 +20,21 @@
  * Clave inversa:  `unitId:entityId:field`  → `sheetId:r:c`
  */
 
-export type TipoFilaRecorrido = 'segmento' | 'dia';
+/**
+ * `nueva` es una fila que el usuario INSERTÓ en el canvas y todavía no existe
+ * en el servidor: sus celdas escriben en un borrador local hasta que la fila
+ * tiene lo mínimo para guardarse. Entonces se vincula y pasa a ser `segmento`
+ * o `dia` como las demás.
+ */
+export type TipoFilaRecorrido = 'segmento' | 'dia' | 'nueva';
 
 export interface RecorridoBinding {
 	/** Qué tabla toca el patch. */
 	tipoFila: TipoFilaRecorrido;
-	/** UUID del segmento, o del día cuando la fila no tiene recorridos. */
+	/**
+	 * UUID del segmento, o del día cuando la fila no tiene recorridos. En una
+	 * fila `nueva`, un id local `nueva:<uuid>` que solo conoce este cliente.
+	 */
 	entityId: string;
 	/** Campo del modelo, o `bono:<config_id>` para una casilla de bono. */
 	field: string;
@@ -169,6 +178,69 @@ export function clearRecorridoBindings(unitId?: string, sheetId?: string): void 
 	// remota escribiría en la celda equivocada.
 	for (const rk of huerfanos) {
 		if (rk.startsWith(reversePrefix)) reverse.delete(rk);
+	}
+}
+
+/** Bindings de UNA fila, con su columna. */
+export function getRecorridoBindingsDeFila(
+	unitId: string,
+	sheetId: string,
+	r: number
+): Array<{ c: number; binding: RecorridoBinding }> {
+	const prefijo = `${unitId}:${sheetId}:${r}:`;
+	const out: Array<{ c: number; binding: RecorridoBinding }> = [];
+	for (const [k, b] of store.entries()) {
+		if (!k.startsWith(prefijo)) continue;
+		out.push({ c: Number(k.slice(prefijo.length)), binding: b });
+	}
+	return out;
+}
+
+/**
+ * Desplaza los bindings de una hoja cuando Univer inserta o elimina filas.
+ *
+ * Los bindings van por POSICIÓN: tras insertar dos filas encima de la 10, lo
+ * que estaba en la 10 vive en la 12, y sin este desplazamiento el siguiente
+ * patch remoto pintaría en la celda equivocada. Es la razón por la que la
+ * estructura estuvo bloqueada hasta ahora.
+ *
+ * `delta > 0` inserta `delta` filas ANTES de `desdeFila` (todo lo que estaba en
+ * `>= desdeFila` baja). `delta < 0` elimina las filas `[desdeFila, desdeFila -
+ * delta)`: sus bindings se descartan y lo de debajo sube.
+ */
+export function shiftRecorridoBindings(
+	unitId: string,
+	sheetId: string,
+	desdeFila: number,
+	delta: number
+): void {
+	if (delta === 0) return;
+	const prefijo = `${unitId}:${sheetId}:`;
+	const movidos: Array<{ r: number; c: number; binding: RecorridoBinding }> = [];
+
+	for (const k of Array.from(store.keys())) {
+		if (!k.startsWith(prefijo)) continue;
+		const resto = k.slice(prefijo.length);
+		const sep = resto.indexOf(':');
+		const r = Number(resto.slice(0, sep));
+		const c = Number(resto.slice(sep + 1));
+		if (r < desdeFila) continue;
+		const b = store.get(k)!;
+		store.delete(k);
+		reverse.delete(reverseKey(unitId, b.entityId, b.field));
+		// Fila eliminada: se descarta. Las demás se reubican.
+		if (delta < 0 && r < desdeFila - delta) continue;
+		movidos.push({ r: r + delta, c, binding: b });
+	}
+
+	for (const m of movidos) setRecorridoBinding(unitId, sheetId, m.r, m.c, m.binding);
+}
+
+/** Quita los bindings de una fila (al vincular un borrador o retirar una fila). */
+export function clearRecorridoBindingsDeFila(unitId: string, sheetId: string, r: number): void {
+	for (const { c, binding } of getRecorridoBindingsDeFila(unitId, sheetId, r)) {
+		store.delete(cellKey(unitId, sheetId, r, c));
+		reverse.delete(reverseKey(unitId, binding.entityId, binding.field));
 	}
 }
 

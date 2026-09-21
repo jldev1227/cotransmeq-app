@@ -1,13 +1,39 @@
 import { apiClient } from './apiClient';
-import type { RecorridosPeriodoDTO, BonoColumna } from '$lib/editor/builders/recorridos.builder';
+import type {
+	RecorridosPeriodoDTO,
+	BonoColumna,
+	FilaRecorrido
+} from '$lib/editor/builders/recorridos.builder';
 
 /**
  * Canvas de recorridos.
  *
- * Solo LECTURA: las escrituras del canvas viajan por socket (`sheet:patch`),
- * donde el backend vuelve a comprobar el área. Aquí quedan el libro del
- * periodo, las columnas de bono y los snapshots.
+ * Las escrituras CELDA A CELDA viajan por socket (`sheet:patch`), donde el
+ * backend vuelve a comprobar el área. Por aquí van el libro del periodo, las
+ * columnas de bono, los snapshots y las dos operaciones que cambian la
+ * geometría de una hoja —alta y baja de filas—, que devuelven una fila entera
+ * y no caben en un acuse por celda.
  */
+
+/** Lo que se manda al dar de alta una fila insertada en el canvas. */
+export interface FilaNuevaBody {
+	conductor_id: string;
+	desde: string;
+	hasta: string;
+	fecha: string;
+	tipo_dia?: string | null;
+	vehiculo_placa?: string | null;
+	hora_inicio?: string | null;
+	hora_fin?: string | null;
+	horas_conducidas?: string | number | null;
+	cliente_nombre?: string | null;
+	km_inicial?: string | number | null;
+	km_final?: string | number | null;
+	pernocte?: boolean | string | null;
+	observaciones?: string | null;
+	/** `config_id` de los bonos marcados en el borrador. */
+	bonos?: string[];
+}
 export const recorridosCanvasAPI = {
 	/**
 	 * El libro completo de un CORTE.
@@ -39,6 +65,39 @@ export const recorridosCanvasAPI = {
 	async bonos(anio: number): Promise<{ anio: number; bonos: BonoColumna[] }> {
 		const { data } = await apiClient.get('/api/recorridos/canvas/bonos', { params: { anio } });
 		return data as { anio: number; bonos: BonoColumna[] };
+	},
+
+	/** Placas de la flota, para validar en el canvas antes de enviar. */
+	async placas(): Promise<Array<{ id: string; placa: string }>> {
+		const { data } = await apiClient.get('/api/recorridos/canvas/placas');
+		return (data?.placas ?? []) as Array<{ id: string; placa: string }>;
+	},
+
+	/**
+	 * Alta de una fila insertada. `recargar` avisa de que el cambio va más
+	 * allá de esa fila (un día sin recorridos que recibe el primero).
+	 */
+	async crearFila(body: FilaNuevaBody): Promise<{ fila: FilaRecorrido; recargar: boolean }> {
+		const { data } = await apiClient.post('/api/recorridos/canvas/filas', body);
+		return data as { fila: FilaRecorrido; recargar: boolean };
+	},
+
+	/** Baja lógica de una fila eliminada en el canvas. */
+	async eliminarFila(opts: {
+		tipo: 'segmento' | 'dia';
+		id: string;
+		baseVersion: number | null;
+		desde: string;
+		hasta: string;
+	}): Promise<{ eliminado: 'segmento' | 'dia'; registro_dia_id: string }> {
+		const { data } = await apiClient.delete(`/api/recorridos/canvas/filas/${opts.tipo}/${opts.id}`, {
+			params: {
+				desde: opts.desde,
+				hasta: opts.hasta,
+				...(opts.baseVersion != null ? { base_version: opts.baseVersion } : {})
+			}
+		});
+		return data as { eliminado: 'segmento' | 'dia'; registro_dia_id: string };
 	}
 };
 

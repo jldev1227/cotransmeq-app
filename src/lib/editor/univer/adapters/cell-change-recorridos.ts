@@ -30,6 +30,8 @@ const SET_RANGE_VALUES = 'sheet.command.set-range-values';
 const SET_WORKSHEET_ACTIVE = 'sheet.operation.set-worksheet-active';
 const CLEAR_CONTENT = 'sheet.command.clear-selection-content';
 const CLEAR_ALL = 'sheet.command.clear-selection-all';
+const AUTO_FILL = 'sheet.command.auto-fill';
+const REFILL = 'sheet.command.refill';
 
 /** Un cambio listo para viajar como patch. */
 export interface CambioRecorrido {
@@ -52,7 +54,9 @@ export interface RecorridosAdapterContext {
 	 * Versión actual de una fila, para el compare-and-swap.
 	 *
 	 * La resuelve la página desde su modelo. Si devuelve `null` el cambio se
-	 * descarta: emitir sin `base_version` sería volver al last-write-wins.
+	 * descarta: emitir sin `base_version` sería volver al last-write-wins. Para
+	 * una fila `nueva` —un borrador local— devuelve `0`: no hay CAS que hacer
+	 * porque no viaja como patch, se acumula hasta guardarla.
 	 */
 	versionDe: (entityId: string) => number | null;
 	onCambios: (cambios: CambioRecorrido[]) => void;
@@ -139,6 +143,29 @@ function procesarRango(
 	if (cambios.length) ctx.onCambios(cambios);
 }
 
+/**
+ * Celdas que el autorrelleno ESCRIBIÓ: el destino sin el origen. El destino
+ * de Univer incluye al origen, y puede crecer hacia abajo, arriba, derecha o
+ * izquierda; se devuelven las franjas nuevas.
+ */
+export function rellenado(origen: IRange | undefined, destino: IRange): IRange[] {
+	if (!origen) return [destino];
+	const franjas: IRange[] = [];
+	if (destino.endRow > origen.endRow) {
+		franjas.push({ ...destino, startRow: origen.endRow + 1 });
+	}
+	if (destino.startRow < origen.startRow) {
+		franjas.push({ ...destino, endRow: origen.startRow - 1 });
+	}
+	if (destino.endColumn > origen.endColumn) {
+		franjas.push({ ...destino, startColumn: origen.endColumn + 1, startRow: origen.startRow, endRow: origen.endRow });
+	}
+	if (destino.startColumn < origen.startColumn) {
+		franjas.push({ ...destino, endColumn: origen.startColumn - 1, startRow: origen.startRow, endRow: origen.endRow });
+	}
+	return franjas;
+}
+
 export function installRecorridosCellChangeAdapter(
 	ctx: RecorridosAdapterContext
 ): () => void {
@@ -209,6 +236,34 @@ export function installRecorridosCellChangeAdapter(
 		}
 	};
 	disposables.push(ctx.commandService.onCommandExecuted(onClear));
+
+	/**
+	 * TIRADOR de relleno (arrastrar la esquina de la selección hacia abajo).
+	 *
+	 * Univer no despacha `set-range-values` al rellenar: escribe las celdas por
+	 * mutación directa dentro de `auto-fill`. Sin escucharlo, arrastrar una
+	 * fecha sobre siete filas insertadas las pintaba en pantalla y no llegaba
+	 * ni al borrador ni al servidor: ni día de la semana ni guardado.
+	 *
+	 * Se procesa el DESTINO menos el ORIGEN: el origen no cambió.
+	 */
+	const onAutoFill = (info: Readonly<ICommandInfo>) => {
+		if (info.id !== AUTO_FILL && info.id !== REFILL) return;
+		if (ctx.isApplyingRemote?.()) return;
+		const params = (info.params ?? {}) as {
+			unitId?: string;
+			subUnitId?: string;
+			sourceRange?: IRange;
+			targetRange?: IRange;
+		};
+		if (!params.targetRange) return;
+		const objetivo = objetivoDeComando(ctx, params.unitId, params.subUnitId);
+		if (!objetivo) return;
+		for (const rango of rellenado(params.sourceRange, params.targetRange)) {
+			procesarRango(ctx, objetivo.subUnitId, rango, undefined);
+		}
+	};
+	disposables.push(ctx.commandService.onCommandExecuted(onAutoFill));
 
 	return () => {
 		for (const d of disposables) {
