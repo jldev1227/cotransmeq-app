@@ -44,6 +44,16 @@ export interface ColumnaPreview {
 	defecto?: boolean;
 	/** Ayuda del selector de columnas. */
 	nota?: string;
+	/**
+	 * Nombre COMPLETO de la columna, cuando el rótulo va abreviado para que
+	 * quepa. Se enseña al pasar el ratón por la cabecera.
+	 *
+	 * La cabecera se repite en cada página impresa y su alto lo fija el rótulo
+	 * más largo, así que un nombre de formato kilométrico engorda todas las
+	 * columnas a la vez. Con esto el rótulo puede ser corto sin perder el
+	 * nombre oficial.
+	 */
+	titulo?: string;
 }
 
 /** Celda con formato ya decidido por el adaptador, saltándose el tipo. */
@@ -126,6 +136,26 @@ export interface BloquePreview {
 	/** Qué decir cuando el bloque no tiene filas. */
 	vacio?: string;
 	/**
+	 * El bloque PUEDE partirse entre páginas.
+	 *
+	 * Por defecto un bloque no se parte, para que un total no acabe huérfano en
+	 * la hoja siguiente. Eso vale mientras quepa en una página: un bloque más
+	 * alto que la hoja —la tabla de un conductor con sesenta recorridos— empuja
+	 * la página entera en blanco y se parte igual, así que se pierde una hoja
+	 * para nada. Con esto se le permite fluir; las FILAS siguen sin partirse y
+	 * la cabecera se repite arriba de cada página.
+	 */
+	partible?: boolean;
+	/**
+	 * Tabla DENSA: cuerpo un punto menor y menos aire entre filas.
+	 *
+	 * Para los bloques cuya medida de calidad es cuántas hojas ocupan —la
+	 * tabla de recorridos de un corte son sesenta filas por quince columnas—.
+	 * No se cambia el token global porque el resto de documentos no tienen ese
+	 * problema y se leen mejor con el aire de siempre.
+	 */
+	denso?: boolean;
+	/**
 	 * 'completo' hace que el bloque ocupe TODA la fila de la rejilla
 	 * (grid-column 1/-1), sin importar `bloquesPorFila`. Para bloques con
 	 * protagonismo: el resumen de la sección o un pago interno por concepto.
@@ -178,6 +208,24 @@ export interface DocumentoPreview extends MetaDocumento {
 	resumen?: LineaResumen[];
 	/** `false` en documentos internos que nadie firma. */
 	firmas?: boolean;
+	/**
+	 * Pie del documento con la marca, la fecha de generación y la razón social.
+	 *
+	 * Va UNA vez, al final del documento, no en cada página. `false` donde el
+	 * papel se mide en hojas: son tres líneas de cortesía que no dicen nada que
+	 * el encabezado no diga ya —la marca está en el logo y el periodo en la
+	 * banda del corte— y, cuando la última página va justa, son ellas las que
+	 * obligan a abrir una más.
+	 */
+	piePagina?: boolean;
+	/**
+	 * Repetir el encabezado al abrir cada sección que salta de página.
+	 *
+	 * Para el consolidado del periodo: la hoja de cada conductor se arranca y
+	 * se entrega por separado, y sin logo, código de formato ni banda del corte
+	 * no se sabe de qué papel es. En un documento de una sola planilla sobra.
+	 */
+	repetirEncabezado?: boolean;
 	/**
 	 * Estampar el sello de la empresa sobre la línea de LIQUIDADO POR.
 	 *

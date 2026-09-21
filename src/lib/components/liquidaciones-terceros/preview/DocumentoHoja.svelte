@@ -80,8 +80,13 @@
 	});
 </script>
 
-<div class="doc" bind:this={el} style={estilo}>
-	<!-- Header editorial -->
+<!--
+	Encabezado del documento: logo, razón social, código del formato y banda del
+	periodo. Va en un snippet porque el consolidado del periodo lo REPITE al
+	empezar cada conductor: esa hoja se arranca y se entrega por separado, y sin
+	encabezado no se sabe de qué formato ni de qué corte es.
+-->
+{#snippet encabezado()}
 	<div class="header">
 		<div class="header-logo">
 			{#if logoRoto}
@@ -109,7 +114,6 @@
 		</div>
 	</div>
 
-	<!-- Banda de periodo -->
 	{#if documento.periodo.length}
 		<div class="period">
 			{#each documento.periodo as p (p.label)}
@@ -119,16 +123,38 @@
 			{/each}
 		</div>
 	{/if}
+{/snippet}
+
+<!--
+	La clase del SCOPE permite afinar un documento concreto sin tocar a los
+	demás: todos comparten esta plantilla y su hoja de estilos.
+-->
+<div class="doc doc-{scope}" bind:this={el} style={estilo}>
+	{@render encabezado()}
 
 	<!-- Secciones -->
 	{#each documento.secciones as sec (sec.id)}
 		{@const cols = columnasDe(sec)}
 		{@const pesos = anchos(cols)}
-		<div class="sec" class:page-break-before={sec.saltoDePagina}>
-			<div class="sec-title">
-				<span>{sec.titulo}</span>
-				{#if sec.nota}<span class="sec-nota">{sec.nota}</span>{/if}
-			</div>
+		<div
+			class="sec"
+			class:page-break-before={sec.saltoDePagina}
+			class:sec-sin-titulo={!sec.titulo && !sec.nota}
+		>
+			{#if documento.repetirEncabezado && sec.saltoDePagina}
+				{@render encabezado()}
+			{/if}
+			<!--
+				Sin título NO se pinta la caja: vacía seguía ocupando su alto y su
+				margen, y dejaba un hueco entre el encabezado del documento y la
+				tabla que parecía un error de maquetación.
+			-->
+			{#if sec.titulo || sec.nota}
+				<div class="sec-title">
+					<span>{sec.titulo}</span>
+					{#if sec.nota}<span class="sec-nota">{sec.nota}</span>{/if}
+				</div>
+			{/if}
 
 			{#if sec.columnas.length === 0}
 				<!-- Sección sin tabla: solo su bloque clave/valor (los
@@ -147,7 +173,7 @@
 					<thead>
 						<tr>
 							{#each cols as c (c.key)}
-								<th class:col-internal={c.interna}>{c.label}</th>
+								<th class:col-internal={c.interna} title={c.titulo ?? null}>{c.label}</th>
 							{/each}
 						</tr>
 					</thead>
@@ -190,6 +216,8 @@
 						<div
 							class="bloque bloque-{b.variante ?? 'neutro'}"
 							class:bloque-full={b.ancho === 'completo'}
+							class:bloque-partible={b.partible}
+							class:bloque-denso={b.denso}
 						>
 							{#if b.titulo || b.subtitulo || b.etiqueta}
 								<div class="bloque-head">
@@ -209,7 +237,7 @@
 									</colgroup>
 									<thead>
 										<tr>
-											{#each b.columnas as c (c.key)}<th>{c.label}</th>{/each}
+											{#each b.columnas as c (c.key)}<th title={c.titulo ?? null}>{c.label}</th>{/each}
 										</tr>
 									</thead>
 									<tbody>
@@ -304,9 +332,11 @@
 		</div>
 	{/if}
 
+	{#if documento.piePagina !== false}
 	<div class="doc-ft">
 		<span class="code">COTRANSMEQ</span>
 		<span>Generado el {hoy}</span>
 		<span>Transportes y Servicios Esmeralda S.A.S.</span>
 	</div>
+	{/if}
 </div>
