@@ -53,21 +53,30 @@
 	let hayTrazo = $state(false);
 
 	/**
-	 * ¿Tiene sentido ofrecer el botón de cámara?
+	 * ¿Se oculta el botón de cámara?
 	 *
-	 * Los navegadores de escritorio ignoran `capture`: allí el botón abriría el
-	 * mismo diálogo de archivos que «Elegir de galería» y serían dos botones para
-	 * lo mismo. `pointer: coarse` es la señal fiable de dedo —teléfono o tablet,
-	 * Android o iOS— sin mirar el user agent, que miente.
+	 * Solo en un escritorio, donde `capture` se ignora y el botón abriría el mismo
+	 * diálogo de archivos que «Elegir de galería»: dos botones para lo mismo.
+	 *
+	 * La pregunta está formulada al revés a propósito. Preguntar «¿es táctil?» y
+	 * esconder la cámara cuando la respuesta no llega falla del lado caro: basta
+	 * un WebView embebido, un navegador en «modo escritorio» o una consulta que no
+	 * responda como se espera para dejar al conductor con un único botón que abre
+	 * la galería —justo el problema que esto venía a resolver—. Al revés, el caso
+	 * degradado es un escritorio con un botón de más, que no le cuesta nada a
+	 * nadie. Por eso arranca en `true` y solo se apaga cuando el navegador AFIRMA
+	 * ser un escritorio: puntero fino Y hover, las dos cosas, que es lo que
+	 * ningún teléfono cumple.
 	 *
 	 * Se resuelve en un efecto y no en un `$derived` porque en SSR no hay
-	 * `window`: calcularlo durante el render dejaría el HTML del servidor (sin
-	 * botón de cámara) distinto del del cliente y rompería la hidratación.
+	 * `window`. El valor inicial es el mismo en servidor y cliente, así que la
+	 * hidratación coincide y el ajuste ocurre después, ya montado.
 	 */
-	let conCamara = $state(false);
+	let conCamara = $state(true);
 
 	$effect(() => {
-		conCamara = window.matchMedia?.('(pointer: coarse)')?.matches ?? false;
+		const esEscritorio = window.matchMedia?.('(pointer: fine) and (hover: hover)')?.matches ?? false;
+		conCamara = !esEscritorio;
 	});
 
 	/**
