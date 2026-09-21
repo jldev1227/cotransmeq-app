@@ -117,3 +117,47 @@ export function faltantesDeBorrador(v: Record<string, unknown>): string[] {
 	if (!tipo) faltan.push('el tipo de día (DISPONIBLE, DESCANSO o MANTENIMIENTO), o placa y horario si es un recorrido');
 	return faltan;
 }
+
+/** `YYYY-MM-DD` desplazado `dias` días (puede ser negativo), sin zona horaria. */
+export function sumarDias(iso: string, dias: number): string {
+	const [a, m, d] = iso.split('-').map(Number);
+	return new Date(Date.UTC(a, m - 1, d + dias)).toISOString().slice(0, 10);
+}
+
+/**
+ * Serie de fechas para el TIRADOR de relleno, como la haría Excel.
+ *
+ * Univer trata «2026-09-01» como texto con un número al final y, al arrastrar
+ * hacia arriba, produce «2026-09-00» y sigue restando; hacia abajo pasa del 31.
+ * Aquí la serie es de días de verdad: continúa con el paso que llevan las
+ * fechas del origen (una sola fecha → un día) y cruza el cambio de mes.
+ *
+ * @param origen fechas del rango arrastrado, de arriba abajo (las no válidas se ignoran).
+ * @param n      cuántas celdas hay que rellenar.
+ * @param hacia  `abajo` continúa tras la última; `arriba` retrocede antes de la primera.
+ * @returns las `n` fechas en orden de FILA (de arriba abajo), o `null` si el
+ *   origen no tiene ninguna fecha.
+ */
+export function serieDeFechas(
+	origen: Array<string | null>,
+	n: number,
+	hacia: 'abajo' | 'arriba'
+): string[] | null {
+	const validas = origen.filter((f): f is string => !!f);
+	if (!validas.length || n <= 0) return null;
+	const paso =
+		validas.length >= 2
+			? Math.round(
+					(Date.parse(`${validas[validas.length - 1]}T00:00:00Z`) -
+						Date.parse(`${validas[validas.length - 2]}T00:00:00Z`)) /
+						86_400_000
+				) || 1
+			: 1;
+	if (hacia === 'abajo') {
+		const base = validas[validas.length - 1];
+		return Array.from({ length: n }, (_, i) => sumarDias(base, paso * (i + 1)));
+	}
+	const base = validas[0];
+	// De arriba abajo: la más lejana primero.
+	return Array.from({ length: n }, (_, i) => sumarDias(base, -paso * (n - i)));
+}
