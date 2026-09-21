@@ -328,15 +328,24 @@ export function createSheetSession(opts: SheetSessionOptions): SheetSession {
 	const onAck = (a: any) => {
 		resolverEnVuelo(a?.request_id);
 		if (!a?.entity_id) return;
-		opts.onAck?.({
-			entity_id: a.entity_id,
-			field: a.field,
-			version: Number(a.version),
-			row: a.row,
-			rows: a.rows,
-			items: a.items,
-			totales: a.totales
-		});
+		/**
+		 * Se reenvía el acuse ENTERO, no una copia campo a campo.
+		 *
+		 * Esta copia enumeraba los campos a mano y se dejaba `derivados`, que el
+		 * tipo de `onAck` sí declara. Al ser opcional, TypeScript no dijo nada y
+		 * el campo llegaba del servidor para morir aquí. El canvas de recorridos
+		 * es el único que lo consume —de ahí salen el bono recién marcado y el
+		 * `VALOR A PAGAR` de la fila—, así que el síntoma era que marcar una
+		 * casilla propia no recalculaba el total hasta recargar, mientras que el
+		 * cambio de OTRO usuario sí: `sheet:patch:applied` reenvía el payload
+		 * entero y no pasa por esta función.
+		 *
+		 * Con el spread, un campo nuevo del servidor llega solo. Solo se quita
+		 * `request_id`, que es fontanería de la correlación y ya se consumió
+		 * arriba, y se normaliza `version` a número.
+		 */
+		const { request_id: _ignorado, ...resto } = a;
+		opts.onAck?.({ ...resto, version: Number(a.version) });
 	};
 
 	const onInvalidate = (i: any) => {
