@@ -104,6 +104,16 @@
 	let modalBonos = $state(false);
 	let panelVersiones = $state(false);
 	let previewAbierto = $state(false);
+	/**
+	 * Qué entra en el PDF: la hoja que se está mirando o el periodo entero.
+	 *
+	 * Son dos documentos distintos, no el mismo filtrado. El de un conductor es
+	 * su planilla —se imprime, se firma y se le entrega— y por eso va sin
+	 * resumen ni firmas ni pie. El del periodo es el consolidado de
+	 * Operaciones: lleva a todos los conductores, uno detrás de otro, y ahí sí
+	 * tienen sentido el resumen por placa y el pie de firmas.
+	 */
+	let alcancePreview = $state<'hoja' | 'todos'>('hoja');
 	let accionEnCurso = $state<{ titulo: string; detalle?: string } | null>(null);
 	let conductorActivo = $state<string | null>(null);
 
@@ -396,8 +406,19 @@
 	}
 
 	const documentoPreview = $derived.by(() =>
-		dto ? documentoRecorridos(dto, conductorActivo) : null
+		dto ? documentoRecorridos(dto, alcancePreview === 'todos' ? null : conductorActivo) : null
 	);
+
+	/** Nombre del conductor de la hoja abierta, para los rótulos del menú. */
+	const nombreConductorActivo = $derived.by(() => {
+		const hoja = dto?.hojas.find((h) => h.conductor_id === conductorActivo);
+		return hoja ? `${hoja.nombre} ${hoja.apellido}`.replace(/\s+/g, ' ').trim() : '';
+	});
+
+	function abrirPreview(alcance: 'hoja' | 'todos') {
+		alcancePreview = alcance;
+		previewAbierto = true;
+	}
 
 	async function exportarZip() {
 		if (!dto) return;
@@ -488,12 +509,23 @@
 		},
 		{
 			id: 'preview',
-			label: 'Vista previa PDF',
-			hint: 'El documento tal y como saldrá impreso, con el resumen de bonos.',
+			label: 'PDF de esta hoja',
+			hint: nombreConductorActivo
+				? `Solo ${nombreConductorActivo}, tal y como saldrá impreso.`
+				: 'Solo el conductor abierto, tal y como saldrá impreso.',
 			icon: iconoPreview,
 			disabled: !dto?.hojas.length,
 			disabledHint: 'No hay recorridos en este periodo.',
-			onSelect: () => (previewAbierto = true)
+			onSelect: () => abrirPreview('hoja')
+		},
+		{
+			id: 'preview-todos',
+			label: 'PDF de todos los conductores',
+			hint: `Un solo documento con los ${dto?.hojas.length ?? 0} del periodo, uno tras otro, con el resumen por placa al final.`,
+			icon: iconoPreview,
+			disabled: !dto?.hojas.length,
+			disabledHint: 'No hay recorridos en este periodo.',
+			onSelect: () => abrirPreview('todos')
 		},
 		{
 			id: 'zip',
@@ -605,24 +637,27 @@
 			El corte, no un mes: los recorridos se liquidan del 21 al 20. Las dos
 			fechas son libres y se aplican a TODAS las hojas del libro.
 		-->
-		<label class="univer-year-picker">
-			<span>Desde</span>
-			<input
-				type="date"
-				value={corte.desde}
-				max={corte.hasta}
-				onchange={(e) => cambiarCorte({ desde: e.currentTarget.value })}
-			/>
-		</label>
-		<label class="univer-year-picker">
-			<span>Hasta</span>
-			<input
-				type="date"
-				value={corte.hasta}
-				min={corte.desde}
-				onchange={(e) => cambiarCorte({ hasta: e.currentTarget.value })}
-			/>
-		</label>
+		<div class="univer-rango">
+			<label class="univer-year-picker">
+				<span>Desde</span>
+				<input
+					type="date"
+					value={corte.desde}
+					max={corte.hasta}
+					onchange={(e) => cambiarCorte({ desde: e.currentTarget.value })}
+				/>
+			</label>
+			<span class="univer-rango__sep" aria-hidden="true">—</span>
+			<label class="univer-year-picker">
+				<span>Hasta</span>
+				<input
+					type="date"
+					value={corte.hasta}
+					min={corte.desde}
+					onchange={(e) => cambiarCorte({ hasta: e.currentTarget.value })}
+				/>
+			</label>
+		</div>
 		<button
 			type="button"
 			class="univer-btn"
@@ -707,7 +742,9 @@
 	<PreviewCanvasModal
 		scope="recorridos"
 		documento={documentoPreview}
-		subtitulo={dto?.etiqueta ?? ''}
+		subtitulo={alcancePreview === 'todos'
+			? `${dto?.etiqueta ?? ''} · todos los conductores`
+			: `${dto?.etiqueta ?? ''}${nombreConductorActivo ? ` · ${nombreConductorActivo}` : ''}`}
 		onClose={() => (previewAbierto = false)}
 	/>
 {/if}

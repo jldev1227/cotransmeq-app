@@ -133,6 +133,71 @@
 	border-color: #475569;
 }
 
+/*
+ * Rango de fechas: los dos campos leídos como UN control.
+ *
+ * Sueltos en la barra parecían dos ajustes sin relación, y además caían con el
+ * estilo por defecto del navegador —fondo claro, icono de calendario negro—
+ * sobre una barra oscura, que es lo que desentonaba. El contenedor pone el
+ * marco y el fondo; los campos van transparentes dentro.
+ */
+.univer-rango {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.4rem;
+	padding: 0.15rem 0.5rem;
+	background: #1e293b;
+	border: 1px solid #334155;
+	border-radius: 8px;
+}
+
+.univer-rango:hover {
+	border-color: #475569;
+}
+
+.univer-rango .univer-year-picker {
+	gap: 0.3rem;
+}
+
+.univer-rango input[type='date'] {
+	/*
+	 * `color-scheme: dark` es lo que aclara el icono del calendario y pinta el
+	 * desplegable nativo en oscuro. Se prefiere a invertir el icono con un
+	 * filtro: el filtro solo vale para WebKit y deja el desplegable en blanco.
+	 */
+	color-scheme: dark;
+	background: transparent;
+	color: #e2e8f0;
+	border: 0;
+	border-radius: 4px;
+	padding: 0.2rem 0.15rem;
+	font: inherit;
+	font-size: 0.78rem;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.univer-rango input[type='date']::-webkit-calendar-picker-indicator {
+	opacity: 0.65;
+	cursor: pointer;
+}
+
+.univer-rango input[type='date']::-webkit-calendar-picker-indicator:hover {
+	opacity: 1;
+}
+
+.univer-rango input[type='date']:focus-visible {
+	outline: 2px solid #64748b;
+	outline-offset: 1px;
+}
+
+/* El guion que une las dos fechas: es del rango, no de ninguna de las dos. */
+.univer-rango__sep {
+	color: #64748b;
+	font-size: 0.78rem;
+	font-weight: 600;
+}
+
 .univer-divider {
 	width: 1px;
 	height: 24px;
