@@ -43,7 +43,9 @@
 		RecorridosPeriodoDTO
 	} from '$lib/editor/builders/recorridos.builder';
 	import {
+		corteAnterior,
 		cortePorDefecto,
+		corteSiguiente,
 		etiquetaCorte,
 		esFechaValida,
 		periodoDeCorte,
@@ -377,9 +379,20 @@
 		});
 	}
 
-	/** Vuelve al corte 21→20 vivo. */
+	/** Vuelve al corte 21→20 que toca hoy. */
 	function corteVivo() {
 		cambiarCorte(cortePorDefecto());
+	}
+
+	/// Saltar de corte en corte sin teclear fechas: llegar al corte anterior
+	/// obligaba a escribir las dos, y escribir «20» donde iba «21» deja un
+	/// libro que parece el de siempre con un día de menos.
+	function irCorteAnterior() {
+		cambiarCorte(corteAnterior(corte));
+	}
+
+	function irCorteSiguiente() {
+		cambiarCorte(corteSiguiente(corte));
 	}
 
 	const documentoPreview = $derived.by(() =>
@@ -612,11 +625,29 @@
 		</label>
 		<button
 			type="button"
+			class="univer-btn"
+			onclick={irCorteAnterior}
+			title="Corte anterior"
+			aria-label="Corte anterior"
+		>
+			‹
+		</button>
+		<button
+			type="button"
 			class="univer-btn univer-btn-dark"
 			onclick={corteVivo}
-			title="Volver al corte 21 → 20 en curso"
+			title="Volver al corte 21 → 20 que se está trabajando"
 		>
 			Corte actual
+		</button>
+		<button
+			type="button"
+			class="univer-btn"
+			onclick={irCorteSiguiente}
+			title="Corte siguiente"
+			aria-label="Corte siguiente"
+		>
+			›
 		</button>
 
 		{#if !puedeEditar}
