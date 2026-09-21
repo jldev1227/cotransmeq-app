@@ -62,6 +62,13 @@ export interface RecorridosAdapterContext {
 	onCambios: (cambios: CambioRecorrido[]) => void;
 	onHojaActiva?: (conductorId: string) => void;
 	isApplyingRemote?: () => boolean;
+	/**
+	 * Antes de leer lo que escribió el TIRADOR: ocasión de corregir la serie
+	 * en la hoja (las fechas, que Univer rellena como texto con número). Va
+	 * aquí y no en un listener aparte porque el orden entre listeners del
+	 * mismo comando no está garantizado, y se leía la serie sin corregir.
+	 */
+	antesDeRelleno?: (sheetId: string, origen: IRange | undefined, destino: IRange) => void;
 }
 
 /**
@@ -259,6 +266,7 @@ export function installRecorridosCellChangeAdapter(
 		if (!params.targetRange) return;
 		const objetivo = objetivoDeComando(ctx, params.unitId, params.subUnitId);
 		if (!objetivo) return;
+		ctx.antesDeRelleno?.(objetivo.subUnitId, params.sourceRange, params.targetRange);
 		for (const rango of rellenado(params.sourceRange, params.targetRange)) {
 			procesarRango(ctx, objetivo.subUnitId, rango, undefined);
 		}

@@ -282,6 +282,7 @@
 				versionDe: (entityId) =>
 					entityId.startsWith(PREFIJO_FILA_NUEVA) ? 0 : (filaPorId.get(entityId)?.version ?? null),
 				onCambios: enviarCambios,
+				antesDeRelleno: (sheetId, origen, destino) => engine.corregirRelleno(sheetId, origen, destino),
 				onHojaActiva: (conductorId) => {
 					conductorActivo = conductorId;
 					sincronizarUrl();
@@ -634,8 +635,11 @@
 		const faltan = faltantesDeBorrador(b.valores);
 		if (!faltan.length) return;
 		const tipo = String(b.valores.tipo_dia ?? '').trim().toUpperCase();
+		const esRecorrido =
+			tipo === 'LABORADO' ||
+			!!(b.valores.vehiculo_placa || b.valores.hora_inicio || b.valores.hora_fin);
 		toast.info(
-			tipo === 'LABORADO' || faltan.some((f) => f.startsWith('la placa') || f.includes('hora'))
+			esRecorrido
 				? 'Un día LABORADO es un recorrido: lleva placa y horario'
 				: 'Fila sin guardar todavía',
 			{

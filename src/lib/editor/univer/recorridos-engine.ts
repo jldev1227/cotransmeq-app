@@ -25,7 +25,13 @@
  * sería una mentira en pantalla.
  */
 
-import { ICommandService, IUndoRedoService, LocaleType, type ICommandInfo } from '@univerjs/core';
+import {
+	ICommandService,
+	IUndoRedoService,
+	LocaleType,
+	type ICommandInfo,
+	type IRange
+} from '@univerjs/core';
 import { createLiquidacionEngine, disposeEngine, type EngineContext } from './engine';
 import { colgarCheckboxSiNo, hayValidacionDeDatos } from './checkbox-si-no';
 import {
@@ -63,6 +69,8 @@ import {
 	type RecorridosPeriodoDTO
 } from '../builders/recorridos.builder';
 import { conductorIdDeSheetId } from '../builders/recorridos-identidad';
+import { fechaDesdeCelda, serieDeFechas } from '../business/recorridos-celdas';
+import { rellenado } from './adapters/cell-change-recorridos';
 import { activarHoja, hojaActiva } from './activar-hoja';
 
 const INSERT_ROW_MUTATION = 'sheet.mutation.insert-row';
@@ -96,6 +104,11 @@ export interface RecorridosEngineContext extends EngineContext {
 	vincularFila: (entityId: string, fila: FilaRecorrido) => void;
 	/** Fila de una entidad (o borrador) en su hoja, si se conoce. */
 	posicionDe: (entityId: string) => { sheetId: string; row: number } | null;
+	/**
+	 * Reescribe las fechas que acaba de rellenar el tirador como serie de días.
+	 * Lo llama el adapter ANTES de leer el relleno (ver `antesDeRelleno`).
+	 */
+	corregirRelleno: (sheetId: string, origen: IRange | undefined, destino: IRange) => void;
 	activar: (conductorId: string) => void;
 	hojaActivaId: () => string | null;
 }
@@ -372,7 +385,8 @@ export function crearRecorridosEngine(opts: {
 		const params = (info.params ?? {}) as {
 			unitId?: string;
 			subUnitId?: string;
-			targetRange?: { startRow: number; endRow: number };
+			sourceRange?: { startRow: number; endRow: number; startColumn: number; endColumn: number };
+			targetRange?: { startRow: number; endRow: number; startColumn: number; endColumn: number };
 		};
 		if (params.unitId && params.unitId !== libro.unitId) return;
 		const wbActivo = ctx.fUniver.getActiveWorkbook() as any;
@@ -397,13 +411,16 @@ export function crearRecorridosEngine(opts: {
 					guardadas.push(b.entityId);
 					continue;
 				}
-				let fecha = '';
+				/// `getValue()` y no el crudo: Univer convierte una fecha escrita en
+				/// serial con formato `yyyy-mm-dd`, y el crudo es ese número. El
+				/// formateado vuelve a ser «2026-09-09», que es lo que se entiende.
+				let fecha: string | null = null;
 				try {
-					fecha = String(hoja?.getRange?.(r, COL.FECHA)?.getRawValue?.() ?? hoja?.getRange?.(r, COL.FECHA)?.getValue?.() ?? '');
+					fecha = fechaDesdeCelda(hoja?.getRange?.(r, COL.FECHA)?.getValue?.());
 				} catch {
-					fecha = '';
+					fecha = null;
 				}
-				escribir(sheetId, r, COL.DIA_SEMANA, diaSemana(fecha));
+				escribir(sheetId, r, COL.DIA_SEMANA, fecha ? diaSemana(fecha) : '');
 				escribir(sheetId, r, colTotal, 0);
 			}
 			renumerar(sheetId);
@@ -411,6 +428,61 @@ export function crearRecorridosEngine(opts: {
 		}, 0);
 	};
 	const disposableAutorrelleno = commandService.onCommandExecuted(onAutorrelleno);
+
+	/**
+	 * La FECHA arrastrada sigue una serie de días, como en Excel.
+	 *
+	 * Univer ve «2026-09-01» como texto con un número al final: hacia arriba
+	 * escribe «2026-09-00» y sigue restando, y hacia abajo pasa del 31. Se
+	 * reescriben las fechas rellenadas con la serie correcta —cruzando el mes—
+	 * antes de que el adapter las lea (él mismo lo llama). Las que se salen
+	 * del corte se dejan en blanco y se avisa una vez: el arrastre llega hasta
+	 * donde el corte permite.
+	 */
+	const corregirSerieDeFechas = (
+		sheetId: string,
+		origen: IRange | undefined,
+		destino: IRange
+	) => {
+		const z = zonas.get(sheetId);
+		if (!origen || !z) return;
+		if (destino.startColumn > COL.FECHA || destino.endColumn < COL.FECHA) return;
+		// Solo el arrastre VERTICAL: en horizontal la fecha no se copia a otra columna.
+		if (destino.startRow === origen.startRow && destino.endRow === origen.endRow) return;
+		const hoja = hojaDe(sheetId);
+		const leer = (r: number) => {
+			try {
+				return fechaDesdeCelda(hoja?.getRange?.(r, COL.FECHA)?.getValue?.());
+			} catch {
+				return null;
+			}
+		};
+		const fechasOrigen: Array<string | null> = [];
+		for (let r = origen.startRow; r <= origen.endRow; r++) fechasOrigen.push(leer(r));
+
+		let fueraDelCorte = 0;
+		for (const franja of rellenado(origen, destino)) {
+			if (franja.startColumn > COL.FECHA || franja.endColumn < COL.FECHA) continue;
+			const hacia = franja.startRow > origen.endRow ? 'abajo' : 'arriba';
+			const n = franja.endRow - franja.startRow + 1;
+			const serie = serieDeFechas(fechasOrigen, n, hacia);
+			if (!serie) continue;
+			for (let i = 0; i < n; i++) {
+				const r = franja.startRow + i;
+				if (r < z.desde || r > z.hasta) continue;
+				const fecha = serie[i];
+				const cabe = fecha >= dto.desde && fecha <= dto.hasta;
+				if (!cabe) fueraDelCorte++;
+				escribir(sheetId, r, COL.FECHA, cabe ? fecha : '');
+			}
+		}
+		if (fueraDelCorte) {
+			opts.onBloqueado?.({
+				titulo: 'El arrastre se detuvo en el límite del corte',
+				detalle: `${fueraDelCorte} fila(s) quedaron sin fecha porque caían fuera de ${dto.desde} a ${dto.hasta}. Cambia de corte si necesitas esos días.`
+			});
+		}
+	};
 
 	const engine: RecorridosEngineContext = {
 		...ctx,
@@ -488,6 +560,10 @@ export function crearRecorridosEngine(opts: {
 			renumerar(celda.sheetId);
 		},
 
+		corregirRelleno(sheetId, origen, destino) {
+			corregirSerieDeFechas(sheetId, origen, destino);
+		},
+
 		posicionDe(entityId) {
 			const celda =
 				getRecorridoCellFor(libro.unitId, entityId, 'fecha') ??
@@ -515,7 +591,10 @@ export function crearRecorridosEngine(opts: {
 			} catch {
 				/* noop */
 			}
-			clearRecorridoBindings(libro.unitId);
+			/// Los bindings NO se purgan aquí: los purga el engine que se monte
+			/// después, al nacer. Si este `dispose` corriera tras el montaje del
+			/// siguiente para el mismo periodo —pasa con la recarga en caliente
+			/// de desarrollo—, le borraría los suyos y la hoja quedaría muda.
 			disposeEngine(ctx.univer, ctx.fUniver, ctx.unitId, container);
 		}
 	};

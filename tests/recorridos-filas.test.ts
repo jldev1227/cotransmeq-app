@@ -33,6 +33,8 @@ import {
 } from '$lib/editor/business/recorridos-cell-binding';
 import {
 	faltantesDeBorrador,
+	serieDeFechas,
+	sumarDias,
 	fechaDesdeCelda,
 	horaDesdeCelda,
 	horasDesdeCelda,
@@ -411,6 +413,8 @@ describe('tirador de relleno (arrastrar una fecha hacia abajo)', () => {
 			});
 		}
 		// Dos filas nuevas rellenadas; el origen (fila 33) no cambió y no viaja.
+		// (El gancho `antesDeRelleno` se ejercita en la página; aquí basta con
+		// que el adapter lea lo que hay en la hoja.)
 		expect(cambios.map((c) => [c.entityId, c.value])).toEqual([
 			['nueva:a', '2026-09-19'],
 			['nueva:b', '2026-09-20']
@@ -502,5 +506,22 @@ describe('qué le falta a una fila insertada', () => {
 		expect(faltantesDeBorrador({ fecha: '2026-09-10', tipo_dia: 'MANTENIMIENTO' })).toEqual([
 			'la placa del vehículo en mantenimiento'
 		]);
+	});
+});
+
+describe('serie de fechas al arrastrar', () => {
+	it('cruza el cambio de mes en las dos direcciones, día a día', () => {
+		expect(sumarDias('2026-09-01', -1)).toBe('2026-08-31');
+		expect(sumarDias('2026-08-31', 1)).toBe('2026-09-01');
+		// Hacia abajo desde el 30 de agosto: 31, 1, 2.
+		expect(serieDeFechas(['2026-08-30'], 3, 'abajo')).toEqual(['2026-08-31', '2026-09-01', '2026-09-02']);
+		// Hacia arriba desde el 1 de septiembre: en orden de fila, la más lejana primero.
+		expect(serieDeFechas(['2026-09-01'], 3, 'arriba')).toEqual(['2026-08-29', '2026-08-30', '2026-08-31']);
+	});
+
+	it('continúa el paso del origen (dos fechas) y falla limpio sin fechas', () => {
+		expect(serieDeFechas(['2026-09-01', '2026-09-03'], 2, 'abajo')).toEqual(['2026-09-05', '2026-09-07']);
+		expect(serieDeFechas([null, ''], 2, 'abajo')).toBeNull();
+		expect(serieDeFechas(['2026-09-01'], 0, 'abajo')).toBeNull();
 	});
 });
