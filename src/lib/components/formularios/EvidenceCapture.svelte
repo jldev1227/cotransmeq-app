@@ -44,10 +44,31 @@
 
 	let procesando = $state(false);
 	let firmando = $state(false);
-	let inputEl = $state<HTMLInputElement | null>(null);
+	/// Dos inputs y no uno: el de la cámara y el del selector del sistema. El
+	/// porqué está en el bloque de la plantilla, junto a los botones.
+	let camaraEl = $state<HTMLInputElement | null>(null);
+	let selectorEl = $state<HTMLInputElement | null>(null);
 	let canvasEl = $state<HTMLCanvasElement | null>(null);
 	let trazando = false;
 	let hayTrazo = $state(false);
+
+	/**
+	 * ¿Tiene sentido ofrecer el botón de cámara?
+	 *
+	 * Los navegadores de escritorio ignoran `capture`: allí el botón abriría el
+	 * mismo diálogo de archivos que «Elegir de galería» y serían dos botones para
+	 * lo mismo. `pointer: coarse` es la señal fiable de dedo —teléfono o tablet,
+	 * Android o iOS— sin mirar el user agent, que miente.
+	 *
+	 * Se resuelve en un efecto y no en un `$derived` porque en SSR no hay
+	 * `window`: calcularlo durante el render dejaría el HTML del servidor (sin
+	 * botón de cámara) distinto del del cliente y rompería la hidratación.
+	 */
+	let conCamara = $state(false);
+
+	$effect(() => {
+		conCamara = window.matchMedia?.('(pointer: coarse)')?.matches ?? false;
+	});
 
 	/**
 	 * Comprueba el tope por borrador ANTES de guardar.
@@ -293,17 +314,86 @@
 					</div>
 				</div>
 			{/if}
-		{:else}
-			<!-- Sin `capture`. Estaba en `environment` para las fotos, y eso no es una
-			     preferencia: el móvil abre la cámara directamente y no deja llegar al
-			     carrete. Quien ya tenía la foto tomada —o volvía a completar el
-			     formulario más tarde— no podía adjuntarla. Sin el atributo, el selector
-			     del sistema ofrece cámara Y galería, y `prepararFoto()` comprime y
-			     recodifica igual venga de donde venga. -->
+		{:else if field.type === 'PHOTO'}
+			<!-- Cámara y galería como dos botones, cada uno con su input. Con un solo
+			     input pasaba una de dos cosas y ninguna servía: con
+			     `capture="environment"` el móvil abría la cámara y no dejaba llegar al
+			     carrete —quien ya tenía la foto tomada, o retomaba el formulario más
+			     tarde, no podía adjuntarla—; y sin `capture` la decisión queda en manos
+			     del sistema, que en iOS no ofrece «Tomar foto» de forma fiable cuando
+			     `accept` es una lista de MIME concretos y deja al conductor solo con la
+			     galería. Con dos botones elige el conductor, y elige igual en iOS que
+			     en Android.
+
+			     Los `accept` son distintos a propósito. El de cámara es `image/*`
+			     porque la foto recién tomada llega como JPEG en ambos sistemas y una
+			     lista estricta solo añade formas de que el intent no se ofrezca. El del
+			     carrete mantiene la lista estricta porque es justo lo que hace que iOS
+			     convierta a JPEG las fotos HEIC en vez de entregar el HEIC crudo.
+
+			     El de cámara no lleva `multiple`: la cámara devuelve una foto por
+			     disparo. `prepararFoto()` comprime, reorienta y rehace el hash igual
+			     venga de donde venga. -->
 			<input
 				class="oculto"
 				type="file"
-				bind:this={inputEl}
+				bind:this={camaraEl}
+				accept="image/*"
+				capture="environment"
+				onchange={onArchivoElegido}
+			/>
+			<input
+				class="oculto"
+				type="file"
+				bind:this={selectorEl}
+				accept={aceptaMime}
+				multiple={maxFiles > 1}
+				onchange={onArchivoElegido}
+			/>
+			<div class="acciones">
+				{#if conCamara}
+					<button
+						type="button"
+						class="boton"
+						disabled={procesando}
+						onclick={() => camaraEl?.click()}
+					>
+						📷 Tomar foto
+					</button>
+					<button
+						type="button"
+						class="boton boton--plano"
+						disabled={procesando}
+						onclick={() => selectorEl?.click()}
+					>
+						🖼️ Elegir de galería
+					</button>
+				{:else}
+					<button
+						type="button"
+						class="boton"
+						disabled={procesando}
+						onclick={() => selectorEl?.click()}
+					>
+						🖼️ Elegir foto
+					</button>
+				{/if}
+			</div>
+			<p class="hint">
+				{#if procesando}
+					Procesando la foto…
+				{:else}
+					Se comprime en el teléfono antes de guardarla (máx. {ATTACHMENT_LIMITS.photoMaxEdge} px).
+					{#if maxFiles > 1}
+						Hasta {maxFiles} fotos.
+					{/if}
+				{/if}
+			</p>
+		{:else}
+			<input
+				class="oculto"
+				type="file"
+				bind:this={selectorEl}
 				accept={aceptaMime}
 				multiple={maxFiles > 1}
 				onchange={onArchivoElegido}
@@ -312,20 +402,12 @@
 				type="button"
 				class="boton"
 				disabled={procesando}
-				onclick={() => inputEl?.click()}
+				onclick={() => selectorEl?.click()}
 			>
-				{procesando
-					? 'Procesando…'
-					: field.type === 'PHOTO'
-						? '📷 Tomar o elegir foto'
-						: '📎 Adjuntar archivo'}
+				{procesando ? 'Procesando…' : '📎 Adjuntar archivo'}
 			</button>
 			<p class="hint">
-				{#if field.type === 'PHOTO'}
-					Se comprime en el teléfono antes de guardarla (máx. {ATTACHMENT_LIMITS.photoMaxEdge} px).
-				{:else}
-					PDF o imagen, hasta {bytesLegibles(ATTACHMENT_LIMITS.maxFileBytes)}.
-				{/if}
+				PDF o imagen, hasta {bytesLegibles(ATTACHMENT_LIMITS.maxFileBytes)}.
 				{#if maxFiles > 1}
 					Hasta {maxFiles} archivos.
 				{/if}
@@ -408,6 +490,16 @@
 		border: 1px solid #fecaca;
 		border-radius: 8px;
 		cursor: pointer;
+	}
+
+	.acciones {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.acciones .boton {
+		align-self: auto;
 	}
 
 	.boton {
