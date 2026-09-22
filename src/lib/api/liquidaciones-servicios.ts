@@ -9,6 +9,7 @@ export type TipoServicioTarifa =
 	| 'TRANSPORTE_DE_PERSONAL_EN_BUSETA'
 	| 'TRANSPORTE_DE_PERSONAL_EN_MICROBUS'
 	| 'TRANSPORTE_DE_PERSONAL_EN_BUS'
+	| 'TRANSPORTE_DE_HERRAMIENTA_EN_CAMIONETA_DOBLE_CABINA'
 	| 'TRANSPORTE_ADICIONAL_HORA_ADICIONAL'
 	| 'TRANSPORTE_ADICIONAL_KM_ADICIONAL'
 	| 'TRANSPORTE_ADICIONAL_DISPONIBILIDAD';
@@ -43,6 +44,7 @@ export const TIPO_SERVICIO_LABELS: Record<TipoServicioTarifa, string> = {
 	TRANSPORTE_DE_PERSONAL_EN_BUSETA: 'Transporte de personal en buseta',
 	TRANSPORTE_DE_PERSONAL_EN_MICROBUS: 'Transporte de personal en microbús',
 	TRANSPORTE_DE_PERSONAL_EN_BUS: 'Transporte de personal en bus',
+	TRANSPORTE_DE_HERRAMIENTA_EN_CAMIONETA_DOBLE_CABINA: 'Transporte de herramienta en camioneta doble cabina',
 	TRANSPORTE_ADICIONAL_HORA_ADICIONAL: 'Transporte adicional (hora adicional)',
 	TRANSPORTE_ADICIONAL_KM_ADICIONAL: 'Transporte adicional (km adicional)',
 	TRANSPORTE_ADICIONAL_DISPONIBILIDAD: 'Transporte adicional (disponibilidad)'
