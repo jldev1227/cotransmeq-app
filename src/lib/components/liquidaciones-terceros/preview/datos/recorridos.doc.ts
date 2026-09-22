@@ -390,9 +390,11 @@ export function documentoRecorridos(
 	conductorId?: string | null,
 	destino: DestinoDocumento = 'pantalla'
 ): DocumentoPreview {
+	/// Una hoja concreta se imprime aunque esté vacía: es la planilla en
+	/// blanco del conductor. El consolidado, no: solo quien tiene recorridos.
 	const hojas = conductorId
 		? dto.hojas.filter((h) => h.conductor_id === conductorId)
-		: dto.hojas;
+		: hojasConFilas(dto);
 
 	/**
 	 * Una SECCIÓN por conductor, y cada una abre hoja.
@@ -458,9 +460,20 @@ export function documentoRecorridos(
 	} as DocumentoPreview;
 }
 
+/**
+ * Las hojas que van al papel: solo las que tienen algún recorrido.
+ *
+ * El libro trae una hoja por conductor en nómina, tenga o no días en el
+ * corte; imprimir la planilla vacía de cada uno hincharía el consolidado y
+ * el ZIP con páginas en blanco.
+ */
+export function hojasConFilas(dto: RecorridosPeriodoDTO) {
+	return dto.hojas.filter((h) => h.filas.length > 0);
+}
+
 /** Un documento por conductor, para el ZIP. Van al papel: reparto de PDF. */
 export function hojasParaZip(dto: RecorridosPeriodoDTO) {
-	return dto.hojas.map((h) => ({
+	return hojasConFilas(dto).map((h) => ({
 		documento: documentoRecorridos(dto, h.conductor_id, 'pdf'),
 		nombreArchivo: `${h.apellido} ${h.nombre} ${dto.desde} a ${dto.hasta}`
 			.replace(/\s+/g, ' ')

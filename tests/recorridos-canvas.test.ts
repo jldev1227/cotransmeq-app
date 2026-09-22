@@ -31,6 +31,7 @@ import { ICommandService, IUniverInstanceService } from '@univerjs/core';
 import { SheetInterceptorService, SheetsSelectionsService } from '@univerjs/sheets';
 import {
 	documentoRecorridos,
+	hojasConFilas,
 	hojasParaZip,
 	bloqueResumenPorPlaca
 } from '$lib/components/liquidaciones-terceros/preview/datos/recorridos.doc';
@@ -576,6 +577,21 @@ describe('documento del preview', () => {
 		expect(doc.piePagina).toBe(false);
 		// Y por eso cada conductor repite el encabezado al abrir hoja.
 		expect(doc.repetirEncabezado).toBe(true);
+	});
+
+	it('el consolidado y el ZIP omiten a los conductores sin recorridos; su planilla sola sí sale', () => {
+		// El libro trae una hoja por conductor en nómina aunque no tenga días
+		// en el corte; al papel solo va quien tiene algo que imprimir.
+		const dto = dtoDePrueba();
+		const vacio = { ...dto.hojas[0], conductor_id: 'c-vacio', nombre: 'ANA', apellido: 'LOPEZ', nombre_hoja: 'LOPEZ ANA', filas: [] };
+		const conVacio = { ...dto, hojas: [vacio, ...dto.hojas] } as RecorridosPeriodoDTO;
+		expect(hojasConFilas(conVacio).map((h) => h.conductor_id)).toEqual(dto.hojas.map((h) => h.conductor_id));
+		expect(documentoRecorridos(conVacio).secciones.map((s) => s.id)).not.toContain('recorridos-c-vacio');
+		expect(hojasParaZip(conVacio).map((h) => h.nombreArchivo)).not.toContain(`LOPEZ ANA ${dto.desde} a ${dto.hasta}`);
+		// La planilla en blanco de ese conductor sí se puede previsualizar sola.
+		const sola = documentoRecorridos(conVacio, 'c-vacio');
+		expect(sola.secciones).toHaveLength(1);
+		expect(sola.secciones[0].id).toBe('recorridos-c-vacio');
 	});
 
 	it('la planilla de un conductor no repite encabezado: solo tiene uno', () => {
