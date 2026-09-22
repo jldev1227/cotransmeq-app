@@ -29,6 +29,7 @@ import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core';
 import { UniverSheetsDataValidationPreset } from '@univerjs/preset-sheets-data-validation';
 import { UniverSheetsFilterPreset } from '@univerjs/preset-sheets-filter';
 import { anclarEditorDeCelda } from './anclar-editor-celda';
+import { instalarParcheSubmenusContextuales } from './parche-submenus-contextuales';
 import UniverPresetSheetsCoreEsES from '@univerjs/preset-sheets-core/locales/es-ES';
 import UniverPresetSheetsDataValidationEsES from '@univerjs/preset-sheets-data-validation/locales/es-ES';
 import UniverPresetSheetsFilterEsES from '@univerjs/preset-sheets-filter/locales/es-ES';
@@ -151,6 +152,9 @@ export interface EngineOptions {
 
 export function createLiquidacionEngine(opts: EngineOptions): EngineContext {
   console.log('[editor] createLiquidacionEngine (preset) START');
+  // Una vez por página, para todos los canvas: el menú contextual de Univer
+  // deja submenús ocultos al volver sobre un ítem (ver el módulo).
+  instalarParcheSubmenusContextuales();
   const locale = opts.locale ?? LocaleType.ES_ES;
 
   // ── Worker RPC para fórmulas/numfmt en background ──────────────────
