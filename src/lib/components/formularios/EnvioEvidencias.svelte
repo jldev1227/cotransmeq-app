@@ -260,13 +260,208 @@
 	let ampliada = $state<AttachmentDto | null>(null);
 
 	const imagenes = $derived(adjuntos.filter(esImagen));
+	const indice = $derived(ampliada ? imagenes.indexOf(ampliada) : -1);
+
+	/**
+	 * Zoom y paneo.
+	 *
+	 * Una evidencia no se revisa mirándola entera: se revisa buscando el número
+	 * de un extintor, la fecha de una revisión o el rayón de un guardabarros.
+	 * Con la imagen ajustada a la pantalla y sin acercamiento había que
+	 * descargarla y abrirla en el visor del sistema operativo para leer nada —el
+	 * panel servía para comprobar que la foto existe, no para mirarla—.
+	 *
+	 * `escala` multiplica; `pan` desplaza en píxeles de pantalla desde el centro.
+	 */
+	const ESCALA_MAX = 8;
+	let escala = $state(1);
+	let pan = $state({ x: 0, y: 0 });
+	let marcoEl = $state<HTMLElement | null>(null);
+	let imgEl = $state<HTMLImageElement | null>(null);
+
+	/// `cargando` arranca en true en cada imagen: la anterior no debe quedarse
+	/// pintada mientras baja la siguiente, que era lo que hacía parecer que las
+	/// flechas no respondían en conexiones lentas.
+	let cargando = $state(true);
+	let fallo = $state(false);
+
+	function reiniciarVista() {
+		escala = 1;
+		pan = { x: 0, y: 0 };
+	}
+
+	/**
+	 * Cuánto puede desplazarse la imagen sin dejar hueco.
+	 *
+	 * Se calcula contra el tamaño REAL pintado, no contra el del marco: con
+	 * `object-fit: contain` una foto vertical dentro de un marco apaisado ocupa
+	 * una fracción del ancho, y limitar con el marco la dejaba arrastrarse hasta
+	 * salirse de la vista.
+	 */
+	function limites(): { x: number; y: number } {
+		const marco = marcoEl?.getBoundingClientRect();
+		const img = imgEl;
+		if (!marco || !img?.naturalWidth || !img.naturalHeight) return { x: 0, y: 0 };
+		const ajuste = Math.min(marco.width / img.naturalWidth, marco.height / img.naturalHeight);
+		const ancho = img.naturalWidth * ajuste * escala;
+		const alto = img.naturalHeight * ajuste * escala;
+		return {
+			x: Math.max(0, (ancho - marco.width) / 2),
+			y: Math.max(0, (alto - marco.height) / 2)
+		};
+	}
+
+	function acotarPan() {
+		const l = limites();
+		pan = {
+			x: Math.min(l.x, Math.max(-l.x, pan.x)),
+			y: Math.min(l.y, Math.max(-l.y, pan.y))
+		};
+	}
+
+	/**
+	 * Cambia el zoom dejando quieto el punto que está bajo el cursor.
+	 *
+	 * Sin esto, acercar siempre tira hacia el centro: el detalle que se quería
+	 * mirar se escapa del borde y hay que perseguirlo arrastrando. Con el ancla
+	 * en el puntero, la rueda acerca «hacia donde estoy mirando».
+	 */
+	function zoomEn(nueva: number, clienteX?: number, clienteY?: number) {
+		const destino = Math.min(ESCALA_MAX, Math.max(1, nueva));
+		const marco = marcoEl?.getBoundingClientRect();
+		if (marco && clienteX !== undefined && clienteY !== undefined) {
+			const px = clienteX - marco.left - marco.width / 2;
+			const py = clienteY - marco.top - marco.height / 2;
+			const razon = destino / escala;
+			pan = { x: px - (px - pan.x) * razon, y: py - (py - pan.y) * razon };
+		}
+		escala = destino;
+		if (destino === 1) pan = { x: 0, y: 0 };
+		else acotarPan();
+	}
+
+	/// Arrastre con Pointer Events: cubre ratón, lápiz y dedo con un solo camino,
+	/// y `setPointerCapture` mantiene el seguimiento aunque el puntero se salga
+	/// del marco a media pasada.
+	let arrastre: { x: number; y: number; panX: number; panY: number } | null = $state(null);
+
+	function empezarArrastre(e: PointerEvent) {
+		if (escala <= 1) return;
+		arrastre = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y };
+		(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+	}
+
+	function seguirArrastre(e: PointerEvent) {
+		if (!arrastre) return;
+		pan = { x: arrastre.panX + (e.clientX - arrastre.x), y: arrastre.panY + (e.clientY - arrastre.y) };
+		acotarPan();
+	}
+
+	function soltarArrastre() {
+		arrastre = null;
+	}
+
+	/// Deslizar para cambiar de imagen, solo sin zoom: con la imagen acercada el
+	/// gesto horizontal es paneo, y robárselo para navegar haría imposible mirar
+	/// el lado derecho de una foto en un teléfono.
+	let tocandoEn: { x: number; y: number } | null = null;
+
+	function tocarInicio(e: TouchEvent) {
+		if (escala > 1 || e.touches.length !== 1) return;
+		tocandoEn = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+	}
+
+	function tocarFin(e: TouchEvent) {
+		if (!tocandoEn || imagenes.length < 2) return;
+		const t = e.changedTouches[0];
+		const dx = t.clientX - tocandoEn.x;
+		const dy = t.clientY - tocandoEn.y;
+		tocandoEn = null;
+		/// El umbral horizontal evita que un scroll torpe cambie de evidencia.
+		if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) mover(dx < 0 ? 1 : -1);
+	}
+
+	/// Foco: se guarda quién abrió el visor para devolvérselo al cerrar. Sin esto
+	/// el teclado vuelve al principio del documento y hay que recorrer la página
+	/// entera para llegar a la siguiente evidencia.
+	let disparador: HTMLElement | null = null;
+	let dialogoEl = $state<HTMLElement | null>(null);
+
+	function abrir(adjunto: AttachmentDto, origen?: Event) {
+		disparador = (origen?.currentTarget as HTMLElement) ?? null;
+		ampliada = adjunto;
+		cargando = true;
+		fallo = false;
+		reiniciarVista();
+	}
+
+	function cerrar() {
+		ampliada = null;
+		reiniciarVista();
+		disparador?.focus();
+		disparador = null;
+	}
 
 	function mover(paso: number) {
-		if (!ampliada) return;
+		if (!ampliada || imagenes.length === 0) return;
 		const i = imagenes.indexOf(ampliada);
 		if (i === -1) return;
 		const siguiente = imagenes[(i + paso + imagenes.length) % imagenes.length];
-		if (siguiente) ampliada = siguiente;
+		if (!siguiente || siguiente === ampliada) return;
+		ampliada = siguiente;
+		cargando = true;
+		fallo = false;
+		reiniciarVista();
+	}
+
+	function irA(adjunto: AttachmentDto) {
+		if (adjunto === ampliada) return;
+		ampliada = adjunto;
+		cargando = true;
+		fallo = false;
+		reiniciarVista();
+	}
+
+	/// Mientras el visor está abierto la página de detrás no se mueve: rodar la
+	/// rueda para acercar dejaba el envío scrolleado en otro sitio al cerrar.
+	$effect(() => {
+		if (!ampliada) return;
+		const previo = document.body.style.overflow;
+		document.body.style.overflow = 'hidden';
+		return () => {
+			document.body.style.overflow = previo;
+		};
+	});
+
+	/// El foco entra al diálogo al abrirse para que Escape, flechas y Tab operen
+	/// sobre el visor y no sobre la página que quedó debajo.
+	$effect(() => {
+		if (ampliada && dialogoEl) dialogoEl.focus();
+	});
+
+	/**
+	 * Tab circula DENTRO del visor.
+	 *
+	 * Es un `aria-modal`, así que dejar que el tabulador se escape a la página de
+	 * detrás contradice lo que se le anuncia al lector de pantalla: el usuario
+	 * acaba navegando controles que no puede ver.
+	 */
+	function atraparTab(e: KeyboardEvent) {
+		if (e.key !== 'Tab' || !dialogoEl) return;
+		const focos = dialogoEl.querySelectorAll<HTMLElement>(
+			'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+		);
+		if (!focos.length) return;
+		const primero = focos[0];
+		const ultimo = focos[focos.length - 1];
+		const activo = document.activeElement;
+		if (e.shiftKey && (activo === primero || activo === dialogoEl)) {
+			e.preventDefault();
+			ultimo.focus();
+		} else if (!e.shiftKey && activo === ultimo) {
+			e.preventDefault();
+			primero.focus();
+		}
 	}
 </script>
 
@@ -301,7 +496,7 @@
 						<button
 							type="button"
 							class="tarjeta__lienzo tarjeta__lienzo--pulsable"
-							onclick={() => (ampliada = adjunto)}
+							onclick={(e) => abrir(adjunto, e)}
 							title="Ampliar"
 						>
 							<img
@@ -360,14 +555,28 @@
 <svelte:window
 	onkeydown={(e) => {
 		if (!ampliada) return;
-		if (e.key === 'Escape') ampliada = null;
+		if (e.key === 'Escape') cerrar();
 		else if (e.key === 'ArrowLeft') mover(-1);
 		else if (e.key === 'ArrowRight') mover(1);
+		/// `+`, `-` y `0` son los atajos de zoom de cualquier visor; `0` ajusta.
+		else if (e.key === '+' || e.key === '=') zoomEn(escala * 1.4);
+		else if (e.key === '-' || e.key === '_') zoomEn(escala / 1.4);
+		else if (e.key === '0') reiniciarVista();
 	}}
 />
 
 {#if ampliada}
-	<div class="evidencia-visor" role="dialog" aria-modal="true" aria-label="Evidencia ampliada">
+	{@const titulo = pregunta(ampliada) ?? CLASES[ampliada.kind] ?? 'Evidencia'}
+	<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+	<div
+		class="evidencia-visor"
+		role="dialog"
+		aria-modal="true"
+		aria-label={`${titulo}${imagenes.length > 1 ? ` · ${indice + 1} de ${imagenes.length}` : ''}`}
+		tabindex="-1"
+		bind:this={dialogoEl}
+		onkeydown={atraparTab}
+	>
 		<!-- El fondo es un `button` real y no un `div` con `onclick`: cerrar
 		     pulsando fuera debe funcionar también con teclado y con lector de
 		     pantalla, y así no hace falta silenciar reglas de accesibilidad. -->
@@ -375,39 +584,165 @@
 			type="button"
 			class="evidencia-visor__fondo"
 			aria-label="Cerrar la evidencia ampliada"
-			onclick={() => (ampliada = null)}
+			onclick={cerrar}
 		></button>
 
 		<div class="evidencia-visor__barra">
-			<span class="evidencia-visor__nombre">
-				{pregunta(ampliada) ?? CLASES[ampliada.kind] ?? 'Evidencia'}
-			</span>
+			<div class="evidencia-visor__id">
+				<span class="evidencia-visor__nombre">{titulo}</span>
+				<!-- Tipo, tamaño y hash: son los datos con los que un auditor coteja
+				     la evidencia contra la bitácora, y obligaban a cerrar el visor
+				     para leerlos en la tarjeta. -->
+				<span class="evidencia-visor__meta mono">
+					{CLASES[ampliada.kind] ?? ampliada.kind} · {tamano(ampliada.byteSize)} ·
+					{ampliada.sha256.slice(0, 10)}…
+				</span>
+			</div>
+
 			<div class="evidencia-visor__acciones">
 				{#if imagenes.length > 1}
-					<button type="button" class="btn btn--mini" onclick={() => mover(-1)}>‹ Anterior</button>
-					<button type="button" class="btn btn--mini" onclick={() => mover(1)}>Siguiente ›</button>
+					<span class="evidencia-visor__contador mono">{indice + 1} / {imagenes.length}</span>
 				{/if}
+				<div class="evidencia-visor__zoom" role="group" aria-label="Zoom">
+					<button
+						type="button"
+						class="btn btn--mini btn--visor"
+						aria-label="Alejar"
+						disabled={escala <= 1}
+						onclick={() => zoomEn(escala / 1.4)}>−</button
+					>
+					<!-- El porcentaje es también el botón de «ajustar»: es donde la gente
+					     ya mira para saber a cuánto está, y ahorra un control más. -->
+					<button
+						type="button"
+						class="btn btn--mini btn--visor evidencia-visor__nivel"
+						aria-label="Ajustar a la pantalla"
+						title="Ajustar a la pantalla"
+						disabled={escala === 1 && pan.x === 0 && pan.y === 0}
+						onclick={reiniciarVista}>{Math.round(escala * 100)}%</button
+					>
+					<button
+						type="button"
+						class="btn btn--mini btn--visor"
+						aria-label="Acercar"
+						disabled={escala >= ESCALA_MAX}
+						onclick={() => zoomEn(escala * 1.4)}>+</button
+					>
+				</div>
+				<a
+					class="btn btn--mini btn--visor"
+					href={ampliada.url}
+					target="_blank"
+					rel="noopener noreferrer">Abrir</a
+				>
 				<button
 					type="button"
 					class="btn btn--mini btn--primario"
+					disabled={enCurso(ampliada.id)}
 					onclick={() => ampliada && descargar(ampliada)}
 				>
-					Descargar
+					{descargando.includes(ampliada.id) ? 'Descargando…' : 'Descargar'}
 				</button>
-				<button type="button" class="btn btn--mini" onclick={() => (ampliada = null)}>Cerrar</button>
+				<button type="button" class="btn btn--mini btn--visor" onclick={cerrar}>Cerrar</button>
 			</div>
 		</div>
 
-		<div
-			class="evidencia-visor__marco"
-			class:evidencia-visor__marco--firma={ampliada.kind === 'SIGNATURE'}
-		>
-			<img
-				class="evidencia-visor__img"
-				src={ampliada.url}
-				alt={pregunta(ampliada) ?? 'Evidencia ampliada'}
-			/>
+		<div class="evidencia-visor__escena">
+			{#if imagenes.length > 1}
+				<!-- Flechas grandes pegadas a los bordes en vez de dos botones pequeños
+				     arriba: el ojo ya está en la imagen, y ahí es donde la mano busca
+				     el control para pasar a la siguiente. -->
+				<button
+					type="button"
+					class="evidencia-visor__flecha evidencia-visor__flecha--izq"
+					aria-label="Evidencia anterior"
+					onclick={() => mover(-1)}>‹</button
+				>
+				<button
+					type="button"
+					class="evidencia-visor__flecha evidencia-visor__flecha--der"
+					aria-label="Evidencia siguiente"
+					onclick={() => mover(1)}>›</button
+				>
+			{/if}
+
+			<!-- svelte-ignore a11y_no_static_element_interactions -->
+			<div
+				class="evidencia-visor__marco"
+				class:evidencia-visor__marco--firma={ampliada.kind === 'SIGNATURE'}
+				class:evidencia-visor__marco--agarrable={escala > 1}
+				class:evidencia-visor__marco--agarrando={!!arrastre}
+				bind:this={marcoEl}
+				onwheel={(e) => {
+					e.preventDefault();
+					zoomEn(escala * (e.deltaY < 0 ? 1.18 : 1 / 1.18), e.clientX, e.clientY);
+				}}
+				ondblclick={(e) => (escala > 1 ? reiniciarVista() : zoomEn(2.5, e.clientX, e.clientY))}
+				onpointerdown={empezarArrastre}
+				onpointermove={seguirArrastre}
+				onpointerup={soltarArrastre}
+				onpointercancel={soltarArrastre}
+				ontouchstart={tocarInicio}
+				ontouchend={tocarFin}
+			>
+				{#if cargando && !fallo}
+					<p class="evidencia-visor__aviso" aria-live="polite">Cargando la evidencia…</p>
+				{/if}
+
+				{#if fallo}
+					<!-- Antes aquí quedaba el icono de imagen rota del navegador, que no
+					     dice cuál de los dos problemas es. El enlace firmado de S3 caduca
+					     y tiene arreglo —recargar pide uno nuevo—, así que se nombra. -->
+					<div class="evidencia-visor__aviso evidencia-visor__aviso--error" role="alert">
+						<p>No se pudo mostrar esta evidencia.</p>
+						<p class="evidencia-visor__pista">
+							Lo normal es que el enlace firmado del archivo haya caducado. Recarga la página para
+							pedir uno nuevo; si sigue fallando, usa «Abrir».
+						</p>
+					</div>
+				{:else}
+					<img
+						class="evidencia-visor__img"
+						class:evidencia-visor__img--oculta={cargando}
+						bind:this={imgEl}
+						src={ampliada.url}
+						alt={titulo}
+						draggable="false"
+						style={`transform: translate(${pan.x}px, ${pan.y}px) scale(${escala});`}
+						onload={() => {
+							cargando = false;
+							fallo = false;
+						}}
+						onerror={() => {
+							cargando = false;
+							fallo = true;
+						}}
+					/>
+				{/if}
+			</div>
 		</div>
+
+		{#if imagenes.length > 1}
+			<!-- Tira de miniaturas: con siete fotos, llegar a la quinta costaba
+			     cuatro pulsaciones de «Siguiente» sin saber qué venía. Aquí se ve el
+			     conjunto y se salta directo. -->
+			<div class="evidencia-visor__tira" role="tablist" aria-label="Evidencias del envío">
+				{#each imagenes as img (img.id)}
+					<button
+						type="button"
+						role="tab"
+						class="evidencia-visor__mini"
+						class:evidencia-visor__mini--activa={img === ampliada}
+						aria-selected={img === ampliada}
+						aria-label={pregunta(img) ?? CLASES[img.kind] ?? 'Evidencia'}
+						title={pregunta(img) ?? CLASES[img.kind] ?? 'Evidencia'}
+						onclick={() => irA(img)}
+					>
+						<img src={img.url} alt="" loading="lazy" />
+					</button>
+				{/each}
+			</div>
+		{/if}
 	</div>
 {/if}
 
@@ -591,7 +926,11 @@
 		flex-direction: column;
 		gap: 0.75rem;
 		padding: 1rem;
-		background: rgba(9, 18, 15, 0.88);
+		/* Casi opaco. Con 0.88 el formulario de detrás seguía siendo legible y
+		   competía con la evidencia: en una foto oscura —un bajo de chasis, una
+		   toma de noche— el texto del documento se colaba entre los negros y
+		   costaba distinguir qué era la foto y qué la página. */
+		background: rgba(9, 18, 15, 0.95);
 	}
 
 	.evidencia-visor__fondo {
@@ -612,16 +951,127 @@
 		flex-wrap: wrap;
 	}
 
+	/* `min-width: 0` para que el nombre largo de una pregunta se recorte en vez
+	   de empujar los controles fuera de la barra. */
+	.evidencia-visor__id {
+		display: flex;
+		min-width: 0;
+		flex-direction: column;
+		gap: 0.0625rem;
+	}
+
 	.evidencia-visor__nombre {
 		font-size: 0.875rem;
 		font-weight: 600;
 		color: #fff;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+
+	.evidencia-visor__meta {
+		color: rgba(255, 255, 255, 0.62);
 	}
 
 	.evidencia-visor__acciones {
 		display: flex;
+		align-items: center;
 		gap: 0.375rem;
 		flex-wrap: wrap;
+	}
+
+	.evidencia-visor__contador {
+		color: rgba(255, 255, 255, 0.72);
+		font-variant-numeric: tabular-nums;
+	}
+
+	/* Los tres controles de zoom van pegados como un solo bloque: son una misma
+	   operación y separarlos los confundía con las acciones del archivo. */
+	.evidencia-visor__zoom {
+		display: flex;
+	}
+
+	.evidencia-visor__zoom .btn {
+		border-radius: 0;
+		margin-left: -1px;
+	}
+
+	.evidencia-visor__zoom .btn:first-child {
+		border-radius: 10px 0 0 10px;
+		margin-left: 0;
+	}
+
+	.evidencia-visor__zoom .btn:last-child {
+		border-radius: 0 10px 10px 0;
+	}
+
+	/* Ancho fijo y cifras tabulares: sin esto el bloque entero da un salto cada
+	   vez que el porcentaje pasa de 100 a 140 y de 140 a 196. */
+	.evidencia-visor__nivel {
+		min-width: 4.25rem;
+		font-variant-numeric: tabular-nums;
+	}
+
+	/* Botonera sobre un velo oscuro: los `.btn` blancos de la página deslumbran
+	   y compiten con la imagen, que es lo que hay que mirar. */
+	.btn--visor {
+		color: #fff;
+		background: rgba(255, 255, 255, 0.12);
+		border-color: rgba(255, 255, 255, 0.22);
+	}
+
+	.btn--visor:hover:not(:disabled) {
+		background: rgba(255, 255, 255, 0.2);
+	}
+
+	/* El foco se marca en blanco y no con el verde de la marca: sobre el velo
+	   oscuro el blanco es el único que se ve con seguridad, y de paso esta regla
+	   es idéntica en los dos repos. */
+	.evidencia-visor :global(.btn:focus-visible),
+	.evidencia-visor__mini:focus-visible,
+	.evidencia-visor__flecha:focus-visible {
+		outline: 2px solid #fff;
+		outline-offset: 2px;
+	}
+
+	/* La escena es la que absorbe el alto sobrante; el marco vive dentro para
+	   que las flechas puedan colgarse de sus bordes sin taparse con la barra ni
+	   con la tira de miniaturas. */
+	.evidencia-visor__escena {
+		position: relative;
+		flex: 1;
+		min-height: 0;
+	}
+
+	.evidencia-visor__flecha {
+		position: absolute;
+		top: 50%;
+		z-index: 2;
+		display: grid;
+		place-items: center;
+		width: 2.75rem;
+		height: 2.75rem;
+		padding: 0;
+		font-size: 1.5rem;
+		line-height: 1;
+		color: #fff;
+		background: rgba(9, 18, 15, 0.6);
+		border: 1px solid rgba(255, 255, 255, 0.22);
+		border-radius: 50%;
+		transform: translateY(-50%);
+		cursor: pointer;
+	}
+
+	.evidencia-visor__flecha:hover {
+		background: rgba(9, 18, 15, 0.85);
+	}
+
+	.evidencia-visor__flecha--izq {
+		left: 0.5rem;
+	}
+
+	.evidencia-visor__flecha--der {
+		right: 0.5rem;
 	}
 
 
@@ -635,17 +1085,41 @@
 	   a los lados, por donde se colaba el dashboard de detrás. Pintando el marco,
 	   el sobrante es velo y no página. */
 	.evidencia-visor__marco {
-		position: relative;
-		flex: 1;
-		min-height: 0;
+		position: absolute;
+		inset: 0;
+		/* Recorta lo que se sale al acercar: sin esto la imagen ampliada se pinta
+		   por encima de la barra y de las miniaturas. */
+		overflow: hidden;
 		background: rgba(9, 18, 15, 0.92);
 		border-radius: 10px;
+		/* El navegador no debe quedarse con el gesto: sin esto, arrastrar sobre la
+		   imagen acercada dispara el scroll de la página en vez de panear. */
+		touch-action: none;
+	}
+
+	.evidencia-visor__marco--agarrable {
+		cursor: grab;
+	}
+
+	.evidencia-visor__marco--agarrando {
+		cursor: grabbing;
 	}
 
 	/* Blanco SOLO detrás de una firma: es trazo oscuro sobre PNG transparente y
 	   sobre el velo del visor sería invisible. Una foto ya trae su propio fondo
-	   y sobre blanco quedaría recortada por un rectángulo enorme. */
+	   y sobre blanco quedaría recortada por un rectángulo enorme.
+
+	   Y ACOTADO: una firma es un trazo apaisado de pocos cientos de píxeles, así
+	   que a pantalla completa se convertía en una pared blanca de 1900×770 con
+	   una rúbrica gigante y pixelada en medio, que además apagaba la barra y las
+	   miniaturas por contraste. Como tarjeta centrada se lee como lo que es —un
+	   papel firmado— y el velo oscuro sigue haciendo de fondo. El `margin: auto`
+	   con `inset: 0` la centra en los dos ejes. */
 	.evidencia-visor__marco--firma {
+		inset: 0;
+		width: min(100%, 54rem);
+		height: min(100%, 17rem);
+		margin: auto;
 		background: #fff;
 	}
 
@@ -660,6 +1134,102 @@
 		height: 100%;
 		object-fit: contain;
 		border-radius: 10px;
+		/* El zoom va en `transform` y no en `width`: no reflota el documento, lo
+		   acelera la GPU y el arrastre sigue al dedo sin tirones. */
+		transform-origin: center;
+		will-change: transform;
+		user-select: none;
+		-webkit-user-drag: none;
+	}
+
+	/* Sin transición mientras se arrastra: interpolar cada paso del paneo hace
+	   que la imagen persiga al puntero con retraso. */
+	.evidencia-visor__marco:not(.evidencia-visor__marco--agarrando) .evidencia-visor__img {
+		transition: transform 0.12s ease-out;
+	}
+
+	/* Oculta pero presente: si se desmontara, `bind:this` perdería el elemento y
+	   `limites()` no podría medir la imagen recién cargada. */
+	.evidencia-visor__img--oculta {
+		opacity: 0;
+	}
+
+	.evidencia-visor__aviso {
+		position: absolute;
+		inset: 0;
+		z-index: 1;
+		display: grid;
+		place-content: center;
+		gap: 0.375rem;
+		padding: 1.5rem;
+		text-align: center;
+		font-size: 0.875rem;
+		color: rgba(255, 255, 255, 0.75);
+	}
+
+	.evidencia-visor__aviso--error {
+		color: #fecaca;
+	}
+
+	/* Tope de lectura, que es una de las excepciones: es texto corrido dentro de
+	   una ventana, no el contenedor de una página. */
+	.evidencia-visor__pista {
+		max-width: 34rem;
+		font-size: 0.8125rem;
+		line-height: 1.5;
+		color: rgba(255, 255, 255, 0.6);
+	}
+
+	/* La tira lleva su propio panel: las miniaturas de fotos oscuras al 55 % se
+	   confundían con el velo y parecía que solo había una evidencia. */
+	.evidencia-visor__tira {
+		position: relative;
+		display: flex;
+		gap: 0.375rem;
+		overflow-x: auto;
+		padding: 0.375rem;
+		background: rgba(255, 255, 255, 0.07);
+		border-radius: 10px;
+		scrollbar-width: thin;
+	}
+
+	.evidencia-visor__mini {
+		flex: 0 0 auto;
+		width: 3.5rem;
+		height: 3.5rem;
+		padding: 0;
+		overflow: hidden;
+		background: rgba(255, 255, 255, 0.06);
+		border: 2px solid transparent;
+		border-radius: 8px;
+		cursor: pointer;
+		/* Apagadas, pero poco: a 0.55 las fotos oscuras desaparecían contra el velo
+		   y la tira parecía tener una sola evidencia. Quien distingue la actual es
+		   el borde blanco; la opacidad solo acompaña. */
+		opacity: 0.72;
+	}
+
+	.evidencia-visor__mini:hover {
+		opacity: 0.95;
+	}
+
+	.evidencia-visor__mini--activa {
+		border-color: #fff;
+		opacity: 1;
+	}
+
+	.evidencia-visor__mini img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+	}
+
+	/* En pantallas cortas la tira se come el alto de la imagen, que es lo único
+	   que importa; y el hover del ratón no existe en táctil. */
+	@media (max-height: 560px) {
+		.evidencia-visor__tira {
+			display: none;
+		}
 	}
 
 

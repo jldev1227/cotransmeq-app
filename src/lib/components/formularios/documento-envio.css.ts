@@ -552,14 +552,64 @@ export function documentoEnvioCss(): string {
 }
 
 /* ── Firmas y evidencia ────────────────────────────────────────────── */
-[data-fdoc] .firmas {
+/* DOS COLUMNAS FIJAS, una por firmante.
+   No \`auto-fit\`: con dos firmantes daba lo mismo, pero con tres repartía
+   3×1 en pantalla ancha y 1×3 en papel, así que el acta no se parecía a su
+   propia impresión. Un acta de entrega enfrenta a las partes —quien entrega a
+   la izquierda, quien recibe a la derecha—; eso es una regla del documento, no
+   del ancho disponible. */
+/* Las secciones que no caben en la columna estrecha se emparejan entre ellas.
+   Antes cada una gastaba una banda completa de ancho de hoja para ocupar entre
+   30 y 171 px de alto, y la última página del acta salía a menos de la mitad. */
+[data-fdoc] .anchas {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-	gap: 0.5rem;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.1875rem 0.375rem;
+	/* \`start\`: una sección corta no se estira hasta igualar a la de al lado,
+	   que dejaría un marco vacío colgando bajo su último renglón. */
+	align-items: start;
+}
+
+[data-fdoc] .sec--completa {
+	grid-column: 1 / -1;
+}
+
+/* En un teléfono el documento ya se lee estrecho; dos columnas de secciones
+   encima lo partirían en celdas de nada. Solo en pantalla: en papel el ancho
+   es siempre el de la hoja y las dos columnas se mantienen. */
+@media screen and (max-width: 640px) {
+	[data-fdoc] .anchas {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+[data-fdoc] .firmantes {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.5rem 0.75rem;
 	padding: 0.375rem;
 	border: 1px solid #111;
 	border-top: none;
 	break-inside: avoid;
+}
+
+/* Cada columna: la rúbrica arriba y debajo los datos de quien firmó. \`start\`
+   y no \`stretch\` para que una columna con menos campos no estire su firma
+   hasta descuadrarla respecto a la de al lado. */
+[data-fdoc] .firmante {
+	display: flex;
+	flex-direction: column;
+	align-self: start;
+	break-inside: avoid;
+}
+
+/* Las filas de nombre y cédula pierden su marco dentro de la columna: ahí
+   dentro son el pie de la firma, no renglones de un listado. \`.fila\` trae
+   borde a izquierda, derecha y abajo, y dentro de la columna esos tres trazos
+   quedaban como ticks sueltos flotando junto al filete de la firma. La caja ya
+   la pone \`.firmantes\`. */
+[data-fdoc] .firmante .fila {
+	border: none;
 }
 
 [data-fdoc] .firma {
@@ -617,9 +667,20 @@ export function documentoEnvioCss(): string {
 	width: calc(100% - 0.5rem);
 }
 
+/* \`auto-fit\` y no \`auto-fill\`: con \`auto-fill\` la rejilla RESERVA todas las
+   pistas que quepan aunque estén vacías. Medido en un acta con una sola foto:
+   trece pistas de 130 px para una imagen, o sea el 92 % de la banda en blanco.
+   Con \`auto-fit\` las vacías se colapsan.
+
+   Y con tope de 8rem, que es el tamaño que la foto ya tenía: al colapsarse las
+   pistas vacías, la única que queda se comería todo el ancho disponible, y una
+   foto de matrícula pasaría a ocupar media hoja —justo lo contrario de ahorrar
+   espacio—. 8rem es tamaño de contacto, que es para lo que sirve aquí:
+   comprobar que la evidencia está y de qué es. Quien necesite el detalle la
+   abre en el visor o descarga el archivo. */
 [data-fdoc] .galeria {
 	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
+	grid-template-columns: repeat(auto-fit, minmax(6rem, 8rem));
 	gap: 0.25rem;
 }
 
@@ -785,7 +846,8 @@ export function documentoEnvioCss(): string {
 	[data-fdoc] .cab-estado,
 	[data-fdoc] .parrafo,
 	[data-fdoc] .nota,
-	[data-fdoc] .firmas,
+	[data-fdoc] .firmantes,
+	[data-fdoc] .firmante,
 	[data-fdoc] .firma,
 	[data-fdoc] .foto,
 	[data-fdoc] .evid,

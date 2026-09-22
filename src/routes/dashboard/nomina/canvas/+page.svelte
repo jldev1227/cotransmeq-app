@@ -50,6 +50,20 @@
 	import SnapshotPanel from '$lib/components/univer/SnapshotPanel.svelte';
 	import UniverToolbar from '$lib/components/univer/UniverToolbar.svelte';
 	import SelectorCanvasNomina from '$lib/components/univer/SelectorCanvasNomina.svelte';
+	import SelectorHojaNomina from '$lib/components/univer/SelectorHojaNomina.svelte';
+	import ModalEnviarDesprendibles from '$lib/components/univer/ModalEnviarDesprendibles.svelte';
+	/// Iconos COMPARTIDOS por todos los canvas. Los propios de nómina —liquidar,
+	/// aprobar, pagar…— se siguen declarando abajo: son de este dominio.
+	import {
+		icoVer,
+		icoExcel,
+		icoZip,
+		icoCorreo,
+		icoHistorial,
+		icoRecargar,
+		icoVersion,
+		icoBorradores
+	} from '$lib/components/univer/iconos-canvas.svelte';
 	import GenerarBorradoresNominaModal from '$lib/components/nomina/GenerarBorradoresNominaModal.svelte';
 	import UniverCanvasHost from '$lib/components/univer/UniverCanvasHost.svelte';
 	import UniverSideRail, { type RailItem } from '$lib/components/univer/UniverSideRail.svelte';
@@ -99,10 +113,48 @@
 
 	let datos = $state<PeriodoNominaDTO | null>(null);
 	let conductorActivo = $state<string | null>(null);
+
+	/**
+	 * Hoja pedida por la URL.
+	 *
+	 * El enlace llevaba solo el PERIODO (`anio`, `mes`, `desde`), así que abría
+	 * siempre en la primera hoja del libro: no había forma de mandarle a nadie
+	 * «mira la nómina de este conductor» ni de que recargar la página te dejara
+	 * donde estabas. Con veinticinco hojas eso es volver a buscar en el selector
+	 * cada vez.
+	 *
+	 * Se acepta `liquidacion` —que es lo que se tiene a mano viniendo del listado
+	 * de liquidaciones— y `conductor` como alternativa, porque una hoja sin
+	 * borrador generado todavía NO tiene liquidación y aun así hay que poder
+	 * enlazarla.
+	 */
+	const liquidacionPedida = $page.url.searchParams.get('liquidacion');
+	const conductorPedido = $page.url.searchParams.get('conductor');
 	let accionEnCurso = $state<{ titulo: string; detalle?: string } | null>(null);
 	let presencia = $state<{ id: string; name: string }[]>([]);
 	let conectado = $state(true);
 	let historialAbierto = $state(false);
+
+	/**
+	 * `liquidacion_id → resumen de envío`, para marcar en el selector quién ya
+	 * recibió su desprendible.
+	 *
+	 * El backend lo registra desde que existe el módulo —la propia firma del
+	 * servicio dice «para pintar el estado en el canvas»— pero nadie lo pedía,
+	 * así que «¿a quién ya se le mandó?» solo se podía responder mirando la
+	 * base. Se carga aparte del periodo y sin bloquear: si falla, el canvas
+	 * sigue funcionando y solo se pierde la marca.
+	 */
+	let envios = $state<Record<string, any>>({});
+	let mostrarEnviar = $state(false);
+
+	async function cargarEnvios() {
+		try {
+			envios = await nominaEnviosAPI.estadoPeriodo(anio, mes);
+		} catch {
+			envios = {};
+		}
+	}
 
 	/**
 	 * Token de montaje. `mountEngineNow` es async, así que dos cambios de
@@ -132,8 +184,32 @@
 		url.searchParams.set('anio', String(anio));
 		url.searchParams.set('mes', String(mes));
 		url.searchParams.set('desde', String(corte));
+
+		/// Se escribe la liquidación cuando la hay y el conductor cuando no: así
+		/// la URL siempre identifica la hoja abierta, tenga borrador o no. Y se
+		/// borra la otra, para no dejar dos identificadores que puedan discrepar
+		/// después de cambiar de periodo.
+		if (hojaActiva?.liquidacionId) {
+			url.searchParams.set('liquidacion', hojaActiva.liquidacionId);
+			url.searchParams.delete('conductor');
+		} else if (hojaActiva?.conductorId) {
+			url.searchParams.set('conductor', hojaActiva.conductorId);
+			url.searchParams.delete('liquidacion');
+		}
+
 		window.history.replaceState({}, '', url);
 	}
+
+	/// `replaceState` y no `goto`: cambiar de hoja no es navegar —no debe llenar
+	/// el historial de veinticinco entradas ni remontar la página—, pero la barra
+	/// de direcciones sí tiene que poder copiarse en cualquier momento.
+	///
+	/// Un `$effect` y no una llamada dentro de `irAConductor()`: a la hoja activa
+	/// también se llega pulsando la pestaña del propio Univer, y ese camino no
+	/// pasa por el selector.
+	$effect(() => {
+		if (hojaActiva) syncUrl();
+	});
 
 	// ─── Carga ─────────────────────────────────────────────
 	async function loadInicial() {
@@ -142,8 +218,23 @@
 		try {
 			datos = await nominaCanvasAPI.periodo(anio, mes, corte);
 			if (!conductorActivo && datos.hojas.length) {
-				conductorActivo = datos.hojas[0].conductorId;
+				/// La hoja de la URL solo manda en la PRIMERA carga. Al cambiar de
+				/// periodo el conductor sigue seleccionado por su cuenta, y si no
+				/// existe en el periodo nuevo se cae a la primera hoja —lo que ya
+				/// pasaba— en vez de quedarse en un identificador de otro mes.
+				const pedida =
+					(liquidacionPedida &&
+						datos.hojas.find((h) => h.liquidacionId === liquidacionPedida)) ||
+					(conductorPedido && datos.hojas.find((h) => h.conductorId === conductorPedido)) ||
+					null;
+				if (!pedida && (liquidacionPedida || conductorPedido)) {
+					toast.info('La hoja del enlace no está en este periodo; se abrió la primera.');
+				}
+				conductorActivo = (pedida ?? datos.hojas[0]).conductorId;
 			}
+			/// Sin `await`: la marca de envío es información de apoyo, y esperarla
+			/// retrasaría el montaje del canvas por algo que no bloquea a nadie.
+			void cargarEnvios();
 			for (const aviso of datos.avisos) toast.warning(aviso, { duration: 8000 });
 			await remountEngine();
 		} catch (e: any) {
@@ -485,42 +576,26 @@
 	/**
 	 * Envía los desprendibles del periodo.
 	 *
-	 * Solo se mandan las liquidaciones que ya están LIQUIDADA o más allá: un
-	 * borrador todavía puede cambiar, y un desprendible que llega al
-	 * conductor y luego cambia es peor que uno que llega tarde.
+	 * Solo se mandan las APROBADAS (y las PAGADAS, que ya pasaron por ahí).
+	 *
+	 * Antes bastaba con no ser BORRADOR ni ANULADA, así que entraban también las
+	 * LIQUIDADA — y ese es justo el estado que todavía admite volver atrás:
+	 * `LIQUIDADA → BORRADOR` está en las transiciones permitidas. Mandar en
+	 * LIQUIDADA es mandar algo que aún puede cambiar, y un desprendible que
+	 * llega al conductor y luego cambia es peor que uno que llega tarde.
+	 * APROBADA es el primer estado que la propia máquina considera bloqueado
+	 * (`ESTADOS_BLOQUEADOS`), y por eso es el que vale como «ya se puede mandar».
 	 */
-	async function enviarDesprendibles() {
+	/**
+	 * Abre el modal de envío.
+	 *
+	 * El filtro de estado y la selección viven DENTRO del modal: quién entra y
+	 * quién no es parte de lo que hay que poder revisar antes de mandar, no algo
+	 * que se decida antes de enseñar la pantalla.
+	 */
+	function enviarDesprendibles() {
 		if (!datos) return;
-		const enviables = datos.hojas.filter(
-			(h) => h.liquidacionId && h.estado !== 'BORRADOR' && h.estado !== 'ANULADA'
-		);
-		if (!enviables.length) {
-			toast.warning('No hay desprendibles listos para enviar.', {
-				description: 'Liquida primero las hojas que quieras mandar.'
-			});
-			return;
-		}
-
-		const sinCorreo = datos.hojas.length - enviables.length;
-		const confirma = window.confirm(
-			`Se enviará el desprendible de ${datos.etiqueta} a ${enviables.length} conductor(es).` +
-				(sinCorreo ? `\n\n${sinCorreo} hoja(s) se quedan fuera por estado.` : '') +
-				'\n\n¿Continuar?'
-		);
-		if (!confirma) return;
-
-		await conOverlay('Encolando los envíos', `${enviables.length} desprendible(s)`, async () => {
-			const r = await nominaEnviosAPI.encolar({
-				anio,
-				mes,
-				items: enviables.map((h) => ({ liquidacion_id: h.liquidacionId! })),
-				asunto: 'Tu desprendible de nómina — {PERIODO}'
-			});
-			toast.success(`${r.total} envío(s) en cola.`, {
-				description: 'El progreso llega solo; puedes seguir trabajando.',
-				duration: 8000
-			});
-		});
+		mostrarEnviar = true;
 	}
 
 	function volver() {
@@ -535,7 +610,7 @@
 			id: 'recargar',
 			label: 'Recalcular periodo',
 			hint: 'Vuelve a leer las planillas y rehace todas las hojas.',
-			icon: iconoRecargar,
+			icon: icoRecargar,
 			onSelect: recargar,
 			disabled: !!accionEnCurso
 		},
@@ -543,7 +618,7 @@
 			id: 'version',
 			label: 'Guardar versión',
 			hint: 'Captura el libro entero para poder volver a este punto.',
-			icon: iconoVersion,
+			icon: icoVersion,
 			onSelect: guardarVersion,
 			disabled: !!accionEnCurso
 		},
@@ -553,7 +628,7 @@
 			hint: hojaActiva
 				? `Abre el desprendible de ${hojaActiva.nombre}, el mismo que recibe el conductor.`
 				: 'Abre una hoja primero',
-			icon: iconoPreview,
+			icon: icoVer,
 			onSelect: verDesprendible,
 			disabled: !!accionEnCurso || !hojaActiva?.liquidacionId,
 			disabledHint:
@@ -565,7 +640,7 @@
 			id: 'excel',
 			label: 'Exportar a Excel',
 			hint: 'Un libro con una hoja por conductor.',
-			icon: iconoExcel,
+			icon: icoExcel,
 			onSelect: exportarExcel,
 			disabled: !!accionEnCurso || !datos?.hojas.length
 		},
@@ -573,15 +648,24 @@
 			id: 'zip',
 			label: 'Descargar los desprendibles',
 			hint: 'Un PDF por conductor, todos en un ZIP.',
-			icon: iconoZip,
+			icon: icoZip,
 			onSelect: exportarZip,
 			disabled: !!accionEnCurso || !datos?.hojas.length
+		},
+		{
+			id: 'generar',
+			label: 'Generar borradores',
+			hint: 'Crea la liquidación de los conductores que aún no la tienen.',
+			icon: icoBorradores,
+			tone: 'green' as const,
+			onSelect: () => (mostrarGenerar = true),
+			disabled: !!accionEnCurso
 		},
 		{
 			id: 'enviar',
 			label: 'Enviar desprendibles',
 			hint: 'Manda el PDF por correo a cada conductor y deja constancia.',
-			icon: iconoEnviar,
+			icon: icoCorreo,
 			tone: 'blue' as const,
 			onSelect: enviarDesprendibles,
 			disabled: !!accionEnCurso || !datos?.hojas.length
@@ -590,7 +674,7 @@
 			id: 'historial',
 			label: 'Versiones del periodo',
 			hint: 'Ver y restaurar versiones guardadas.',
-			icon: iconoHistorial,
+			icon: icoHistorial,
 			onSelect: () => (historialAbierto = true),
 			disabled: !!accionEnCurso
 		},
@@ -656,62 +740,6 @@
 		limpiarCacheDesprendibles();
 	});
 </script>
-
-{#snippet iconoRecargar()}
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-		<path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h5M20 20v-5h-5" />
-		<path
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			d="M20 9A8 8 0 006.3 6.3L4 9m0 6a8 8 0 0013.7 2.7L20 15"
-		/>
-	</svg>
-{/snippet}
-
-{#snippet iconoVersion()}
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-		<path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 2" />
-		<circle cx="12" cy="12" r="9" />
-	</svg>
-{/snippet}
-
-{#snippet iconoPreview()}
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-		<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-		<path
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			d="M2.5 12C3.7 7.9 7.5 5 12 5s8.3 2.9 9.5 7c-1.2 4.1-5 7-9.5 7s-8.3-2.9-9.5-7z"
-		/>
-	</svg>
-{/snippet}
-
-{#snippet iconoExcel()}
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-		<rect x="4" y="3" width="16" height="18" rx="2" />
-		<path stroke-linecap="round" d="M9 8l6 8M15 8l-6 8" />
-	</svg>
-{/snippet}
-
-{#snippet iconoZip()}
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-		<path stroke-linecap="round" stroke-linejoin="round" d="M12 3v12m0 0l-4-4m4 4l4-4" />
-		<path stroke-linecap="round" d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
-	</svg>
-{/snippet}
-
-{#snippet iconoEnviar()}
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-		<path stroke-linecap="round" stroke-linejoin="round" d="M3 11l18-8-8 18-2-8-8-2z" />
-	</svg>
-{/snippet}
-
-{#snippet iconoHistorial()}
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-		<path stroke-linecap="round" stroke-linejoin="round" d="M3 12a9 9 0 109-9 9 9 0 00-7.6 4.2" />
-		<path stroke-linecap="round" stroke-linejoin="round" d="M3 4v4h4M12 7v5l3 2" />
-	</svg>
-{/snippet}
 
 {#snippet iconoLiquidar()}
 	<!-- Calculadora: liquidar es hacer las cuentas. -->
@@ -817,17 +845,24 @@
 			</select>
 		</label>
 
+		<!-- Buscador y no `<select>`: con 25 conductores el desplegable nativo
+		     obliga a recorrer la lista entera, no busca por cédula y no puede
+		     enseñar ni el estado ni si el desprendible ya salió. Es el mismo
+		     componente que el canvas de cierres usa para las placas. -->
 		{#if datos?.hojas.length}
-			<select
-				class="univer-month-picker"
-				value={conductorActivo}
-				onchange={(e) => irAConductor((e.currentTarget as HTMLSelectElement).value)}
-				title="Ir al conductor"
-			>
-				{#each datos.hojas as h (h.conductorId)}
-					<option value={h.conductorId}>{h.nombre}</option>
-				{/each}
-			</select>
+			<SelectorHojaNomina
+				hojas={datos.hojas.map((h) => ({
+					conductorId: h.conductorId,
+					liquidacionId: h.liquidacionId,
+					nombre: h.nombre,
+					cedula: h.cedula,
+					estado: h.estado,
+					dias: h.dias.length
+				}))}
+				activo={conductorActivo}
+				{envios}
+				onSeleccionar={irAConductor}
+			/>
 		{/if}
 
 		{#if hojaActiva}
@@ -841,16 +876,12 @@
 			{/if}
 		{/if}
 
-		<span class="univer-divider-v"></span>
-
-		<button
-			class="univer-btn"
-			onclick={() => (mostrarGenerar = true)}
-			title="Generar borradores de este periodo"
-		>
-			Generar borradores
-		</button>
-
+		<!-- «Generar borradores» vivía aquí y se fue al CARRIL, con el resto de
+		     acciones. En la barra era el único botón que ejecutaba algo —lo demás
+		     es contexto: periodo, hoja, estado— y encima competía por un espacio
+		     que `.univer-shell-header` recorta sin scrollbar. La regla del canvas
+		     de cierres ya era esa: «las ACCIONES viven en el carril de la derecha;
+		     aquí solo queda el CONTEXTO». -->
 		<span class="univer-divider-v"></span>
 
 		<SelectorCanvasNomina actual="liquidaciones" {anio} {mes} onSalir={antesDeSalir} />
@@ -895,6 +926,24 @@
 	onClose={() => (historialAbierto = false)}
 	onReverted={() => loadInicial()}
 />
+
+{#if mostrarEnviar && datos}
+	<ModalEnviarDesprendibles
+		hojas={datos.hojas
+			.map((h) => ({
+				liquidacionId: h.liquidacionId,
+				nombre: h.nombre,
+				correo: h.correo ?? null,
+				estado: h.estado
+			}))}
+		{envios}
+		etiquetaPeriodo={datos.etiqueta}
+		{anio}
+		{mes}
+		onCerrar={() => (mostrarEnviar = false)}
+		onEnviado={cargarEnvios}
+	/>
+{/if}
 
 {#if mostrarGenerar}
 	<GenerarBorradoresNominaModal
