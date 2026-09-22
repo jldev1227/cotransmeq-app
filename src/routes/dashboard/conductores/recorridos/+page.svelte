@@ -52,7 +52,12 @@
 	} from '$lib/editor/univer/adapters/cell-change-recorridos';
 	import { estaRepintando } from '$lib/editor/univer/cell-permission-recorridos';
 	import { createSheetSession, type SheetSession } from '$lib/editor/canvas/sheet-session.svelte';
-	import { conductorIdDeSheetId } from '$lib/editor/builders/recorridos-identidad';
+	import {
+		conductorIdDeSheetId,
+		ordenAlfabetico,
+		posicionDeInsercion
+	} from '$lib/editor/builders/recorridos-identidad';
+	import { conductoresSelectAPI, type ConductorSelectItem } from '$lib/api/apiClient';
 	import {
 		documentoRecorridos,
 		hojasConFilas,
@@ -165,6 +170,21 @@
 	 */
 	let placasValidas = new Set<string>();
 
+	/**
+	 * Hojas abiertas A MANO para conductores en nómina que aún no tienen días
+	 * en el corte. Viven solo en esta sesión: en cuanto se guarda su primera
+	 * fila, el servidor ya trae al conductor y la hoja deja de ser «extra». Se
+	 * vacían al cambiar de corte.
+	 */
+	let hojasExtra: HojaRecorridos[] = [];
+	let claveHojasExtra = '';
+	/** Conductor que se abre al terminar el montaje que él mismo provocó. */
+	let abrirTrasMontar: string | null = null;
+	/** Conductores en nómina, para el selector de «Añadir conductor». */
+	let nomina = $state.raw<ConductorSelectItem[]>([]);
+	let cargandoNomina = $state(false);
+	let busquedaConductor = $state('');
+
 	interface Borrador {
 		sheetId: string;
 		row: number;
@@ -219,7 +239,7 @@
 		previos.clear();
 
 		try {
-			const d = await recorridosCanvasAPI.periodo({ ...corte });
+			const d = conHojasExtra(await recorridosCanvasAPI.periodo({ ...corte }));
 			if (token !== mountToken) return;
 
 			dto = d;
@@ -299,10 +319,10 @@
 
 			// Si se llegó desde la ficha de un conductor, se abre SU hoja; si esa
 			// persona no tiene recorridos este mes, se cae a la primera.
+			const querido = abrirTrasMontar ?? conductorInicial;
+			abrirTrasMontar = null;
 			const pedido =
-				conductorInicial && d.hojas.some((h) => h.conductor_id === conductorInicial)
-					? conductorInicial
-					: null;
+				querido && d.hojas.some((h) => h.conductor_id === querido) ? querido : null;
 			conductorActivo = pedido ?? d.hojas[0]?.conductor_id ?? null;
 			/// La URL queda diciendo qué se está mirando, aunque se entrara sin
 			/// parámetros: así recargar, compartir el enlace o volver con el
@@ -315,12 +335,116 @@
 			}
 			abrirSesion();
 			void cargarPlacas();
+			void cargarNomina();
 		} catch (e: any) {
 			if (token !== mountToken) return;
 			errorCarga = e?.response?.data?.error ?? e?.message ?? 'No se pudo cargar el periodo';
 		} finally {
 			if (token === mountToken) cargando = false;
 		}
+	}
+
+	/**
+	 * Mezcla en el DTO las hojas abiertas a mano, en su sitio alfabético.
+	 *
+	 * Las que el servidor ya trae —porque se les guardó una fila— dejan de
+	 * ser extra: si no, al recargar habría dos hojas del mismo conductor.
+	 */
+	function conHojasExtra(d: RecorridosPeriodoDTO): RecorridosPeriodoDTO {
+		const clave = `${d.desde}_${d.hasta}`;
+		if (clave !== claveHojasExtra) {
+			hojasExtra = [];
+			claveHojasExtra = clave;
+		}
+		hojasExtra = hojasExtra.filter((x) => !d.hojas.some((h) => h.conductor_id === x.conductor_id));
+		if (!hojasExtra.length) return d;
+		const hojas = [...d.hojas];
+		for (const x of hojasExtra) hojas.splice(posicionDeInsercion(hojas, x), 0, x);
+		return { ...d, hojas };
+	}
+
+	async function cargarNomina() {
+		if (!puedeEditar || nomina.length) return;
+		cargandoNomina = true;
+		try {
+			const r = await conductoresSelectAPI.listar();
+			/// `select-list` ya deja fuera inactivos, retirados y suspendidos; a un
+			/// desvinculado tampoco se le van a registrar recorridos.
+			nomina = (r.data?.data ?? []).filter((c) => c.estado !== 'desvinculado');
+		} catch (e) {
+			console.warn('[recorridos] no se pudo cargar la nómina de conductores', e);
+		} finally {
+			cargandoNomina = false;
+		}
+	}
+
+	/** Conductores en nómina que todavía no tienen hoja en este corte. */
+	const candidatos = $derived.by(() => {
+		const enLibro = new Set(dto?.hojas.map((h) => h.conductor_id) ?? []);
+		const q = busquedaConductor.trim().toLowerCase();
+		return nomina
+			.filter((c) => !enLibro.has(c.id))
+			.filter(
+				(c) =>
+					!q ||
+					`${c.nombre} ${c.apellido} ${c.numero_identificacion ?? ''}`.toLowerCase().includes(q)
+			)
+			.sort((a, b) => ordenAlfabetico(a).localeCompare(ordenAlfabetico(b), 'es'));
+	});
+
+	/** Espejo de `nombreHojaConductor` del servidor: mismo nombre de pestaña. */
+	function nombreHoja(c: { nombre: string; apellido: string }): string {
+		const crudo = `${c.nombre} ${c.apellido}`
+			.replace(/[:\\/?*[\]]/g, ' ')
+			.replace(/\s+/g, ' ')
+			.trim();
+		return (crudo || 'SIN NOMBRE').slice(0, 31);
+	}
+
+	/**
+	 * Abre una hoja vacía para un conductor sin días en el corte.
+	 *
+	 * El libro se vuelve a montar con la hoja en su sitio: es lo mismo que
+	 * hace recargar, y evita meter una hoja en caliente en un engine que
+	 * tiene zonas, bindings y casillas colgadas por hoja. Por eso no se
+	 * puede con filas sin guardar: el montaje las descartaría.
+	 */
+	async function agregarConductor(c: ConductorSelectItem) {
+		if (borradores.size > 0 || pendientes > 0) {
+			toast.warning('Hay cambios sin guardar', {
+				description:
+					'Completa o elimina las filas sin guardar y espera a que termine de guardar: el libro se vuelve a montar.',
+				id: 'recorridos-conductor-bloqueado'
+			});
+			return;
+		}
+		if (hojaDe(c.id)) {
+			ctx?.activar(c.id);
+			return;
+		}
+		hojasExtra = [
+			...hojasExtra,
+			{
+				conductor_id: c.id,
+				nombre: c.nombre,
+				apellido: c.apellido,
+				numero_identificacion: c.numero_identificacion,
+				nombre_hoja: nombreHoja(c),
+				filas: []
+			}
+		];
+		abrirTrasMontar = c.id;
+		busquedaConductor = '';
+		/// El carril cierra su flyout con Escape; no expone otra forma de
+		/// hacerlo desde fuera, y dejarlo abierto sobre el libro recién montado
+		/// tapa la hoja que se acaba de pedir.
+		window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+		await montar();
+		toast.success(`${c.nombre} ${c.apellido} ya tiene hoja en este corte`, {
+			description:
+				'Inserta una fila encima del pie para registrar su primer día. Al guardarla, la hoja se conserva.',
+			id: 'recorridos-conductor-anadido'
+		});
 	}
 
 	async function cargarPlacas() {
@@ -1052,6 +1176,18 @@
 			onSelect: () => (modalBonos = true)
 		},
 		{
+			id: 'conductor',
+			label: 'Añadir conductor al corte',
+			hint: 'Abre una hoja vacía para un conductor en nómina que aún no tiene recorridos en este corte.',
+			icon: iconoConductor,
+			disabled: !puedeEditar || !dto,
+			disabledHint: !puedeEditar
+				? 'Añadir conductores requiere acceso completo a recorridos.'
+				: 'Espera a que cargue el periodo.',
+			panel: panelConductor,
+			panelWidth: 340
+		},
+		{
 			id: 'preview',
 			label: 'PDF de esta hoja',
 			hint: nombreConductorActivo
@@ -1115,6 +1251,56 @@
 	la fuente del sistema, no heredaban el color del botón ni el estado
 	deshabilitado, y cada plataforma los dibujaba de un tamaño distinto.
 -->
+{#snippet iconoConductor()}
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+		<path stroke-linecap="round" stroke-linejoin="round" d="M15 19.5v-1a4 4 0 00-4-4H6a4 4 0 00-4 4v1" />
+		<circle cx="8.5" cy="8" r="3.5" />
+		<path stroke-linecap="round" stroke-linejoin="round" d="M19 8v6M16 11h6" />
+	</svg>
+{/snippet}
+
+{#snippet panelConductor()}
+	<div class="rc-panel">
+		<p class="rc-panel-intro">
+			En nómina sin hoja en este corte: <strong>{candidatos.length}</strong>
+		</p>
+		<input
+			class="rc-buscar"
+			type="search"
+			placeholder="Buscar por nombre o cédula…"
+			bind:value={busquedaConductor}
+			onfocus={() => void cargarNomina()}
+		/>
+		{#if cargandoNomina && !nomina.length}
+			<p class="rc-panel-nota">Cargando conductores…</p>
+		{:else if !nomina.length}
+			<button class="univer-btn univer-btn-blue" onclick={() => void cargarNomina()}>
+				Cargar conductores
+			</button>
+		{:else if candidatos.length === 0}
+			<p class="rc-panel-nota">
+				{busquedaConductor.trim()
+					? `Nadie en nómina coincide con «${busquedaConductor.trim()}».`
+					: 'Todos los conductores en nómina ya tienen hoja en este corte.'}
+			</p>
+		{:else}
+			<ul class="rc-lista">
+				{#each candidatos.slice(0, 40) as c (c.id)}
+					<li>
+						<button onclick={() => void agregarConductor(c)} disabled={!!accionEnCurso || cargando}>
+							<span class="rc-nombre">{c.apellido} {c.nombre}</span>
+							<span class="rc-meta">C.C. {c.numero_identificacion ?? '—'} · {c.estado}</span>
+						</button>
+					</li>
+				{/each}
+			</ul>
+			{#if candidatos.length > 40}
+				<p class="rc-panel-nota">Se muestran 40 de {candidatos.length}. Afina la búsqueda.</p>
+			{/if}
+		{/if}
+	</div>
+{/snippet}
+
 {#snippet iconoBonos()}
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
 		<path
@@ -1221,7 +1407,7 @@
 		</div>
 		<button
 			type="button"
-			class="univer-btn"
+			class="univer-btn univer-btn-dark rc-corte-nav"
 			onclick={irCorteAnterior}
 			title="Corte anterior"
 			aria-label="Corte anterior"
@@ -1238,7 +1424,7 @@
 		</button>
 		<button
 			type="button"
-			class="univer-btn"
+			class="univer-btn univer-btn-dark rc-corte-nav"
 			onclick={irCorteSiguiente}
 			title="Corte siguiente"
 			aria-label="Corte siguiente"
@@ -1334,5 +1520,77 @@
 	}
 	.inerte {
 		pointer-events: none;
+	}
+
+	/* Flechas de corte anterior/siguiente: `.univer-btn` a secas no pinta ni
+	   fondo ni color, y sobre la barra oscura el glifo era casi invisible. */
+	.rc-corte-nav {
+		padding: 4px 10px;
+		font-size: 18px;
+		line-height: 1;
+	}
+
+	/* ─── Selector «Añadir conductor» ────────────────────────────────── */
+	.rc-panel {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.rc-panel-intro {
+		margin: 0;
+		font-size: 12px;
+		color: #475569;
+	}
+	.rc-panel-nota {
+		margin: 0;
+		font-size: 11px;
+		color: #64748b;
+	}
+	.rc-buscar {
+		height: 30px;
+		border: 1px solid #cbd5e1;
+		border-radius: 6px;
+		padding: 0 8px;
+		font-size: 12px;
+	}
+	.rc-lista {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		max-height: 280px;
+		overflow-y: auto;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.rc-lista button {
+		width: 100%;
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 1px;
+		padding: 6px 8px;
+		border: 1px solid transparent;
+		border-radius: 6px;
+		background: transparent;
+		text-align: left;
+		cursor: pointer;
+	}
+	.rc-lista button:hover:not(:disabled) {
+		background: #f1f5f9;
+		border-color: #cbd5e1;
+	}
+	.rc-lista button:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.rc-nombre {
+		font-size: 12px;
+		font-weight: 700;
+		color: #0f172a;
+	}
+	.rc-meta {
+		font-size: 11px;
+		color: #64748b;
 	}
 </style>
