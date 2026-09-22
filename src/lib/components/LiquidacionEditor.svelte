@@ -4642,7 +4642,7 @@
 										</td>
 										<td>
 											<div class="liq-v1-route">{row.recorrido}</div>
-											<div class="liq-v1-type">{row.tipo}</div>
+											<div class="liq-v1-type">{getTipoLabel(row.tipo)}</div>
 										</td>
 										<td class="tc liq-v1-qty">{row.cant}</td>
 										<td class="mc">{COP(row.vr_unit)}</td>
@@ -10722,6 +10722,12 @@
 	.liq-v1-services th:nth-child(6) { width: 20mm; }
 	.liq-v1-services th:nth-child(7) { width: 18mm; }
 	.liq-v1-services th:nth-child(8) { width: 24mm; }
+	/* Sin esto, un recorrido o tipo sin espacios se sale de la celda (table-layout: fixed). */
+	.liq-v1-route,
+	.liq-v1-type {
+		overflow-wrap: anywhere;
+		word-break: break-word;
+	}
 	.liq-v1-route {
 		font-weight: 800;
 		color: #111827;
