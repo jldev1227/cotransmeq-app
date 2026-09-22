@@ -373,9 +373,15 @@ export function crearRecorridosEngine(opts: {
 		}
 		shiftRecorridoBindings(libro.unitId, sheetId, startRow, -n);
 		z.hasta -= n;
-		renumerar(sheetId);
-		reescribirPie(sheetId);
-		cerrarHistorial();
+		/// También en la siguiente tarea: tras quitar las filas, el propio
+		/// comando de Univer reescribe las referencias de las fórmulas, y al
+		/// borrar la ÚLTIMA fila deja el `SUBTOTAL` del pie en `#REF!`. Escrito
+		/// aquí, el cero se perdía debajo de esa reescritura.
+		setTimeout(() => {
+			renumerar(sheetId);
+			reescribirPie(sheetId);
+			cerrarHistorial();
+		}, 0);
 		if (filas.length) opts.onFilasEliminadas?.({ sheetId, conductorId, filas });
 	};
 	const disposableFilas = commandService.onCommandExecuted(onMutacionDeFila);

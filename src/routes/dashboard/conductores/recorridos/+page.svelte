@@ -53,7 +53,11 @@
 	import { estaRepintando } from '$lib/editor/univer/cell-permission-recorridos';
 	import { createSheetSession, type SheetSession } from '$lib/editor/canvas/sheet-session.svelte';
 	import { conductorIdDeSheetId } from '$lib/editor/builders/recorridos-identidad';
-	import { documentoRecorridos, hojasParaZip } from '$lib/components/liquidaciones-terceros/preview/datos/recorridos.doc';
+	import {
+		documentoRecorridos,
+		hojasConFilas,
+		hojasParaZip
+	} from '$lib/components/liquidaciones-terceros/preview/datos/recorridos.doc';
 	import { exportarZipPdfs } from '$lib/components/liquidaciones-terceros/preview/exportar-zip';
 	import {
 		faltantesDeBorrador,
@@ -898,12 +902,23 @@
 
 	// ── Preview ───────────────────────────────────────────────────────
 
-	/** Conductor que enseña el preview: el activo, o el paginado en «todos». */
+	/**
+	 * Las hojas que se pueden imprimir: solo los conductores con recorridos.
+	 * El libro trae también a los que están en nómina sin días en el corte,
+	 * y esos no tienen nada que llevar al papel.
+	 */
+	const hojasImprimibles = $derived(dto ? hojasConFilas(dto) : []);
+
+	/**
+	 * Conductor que enseña el preview: el activo, o el paginado en «todos».
+	 * «Esta hoja» se abre aunque esté vacía: es la planilla en blanco.
+	 */
 	const conductorPreview = $derived.by(() => {
 		if (!dto?.hojas.length) return null;
 		if (alcancePreview === 'hoja') return conductorActivo;
-		const i = Math.min(Math.max(previewIndice, 0), dto.hojas.length - 1);
-		return dto.hojas[i]?.conductor_id ?? null;
+		if (!hojasImprimibles.length) return null;
+		const i = Math.min(Math.max(previewIndice, 0), hojasImprimibles.length - 1);
+		return hojasImprimibles[i]?.conductor_id ?? null;
 	});
 
 	const documentoPreview = $derived.by(() =>
@@ -927,13 +942,13 @@
 	const nombreConductorActivo = $derived(nombreDe(conductorActivo));
 
 	const paginadorPreview = $derived.by(() => {
-		if (alcancePreview !== 'todos' || !dto?.hojas.length) return undefined;
-		const total = dto.hojas.length;
+		if (alcancePreview !== 'todos' || !hojasImprimibles.length) return undefined;
+		const total = hojasImprimibles.length;
 		const indice = Math.min(Math.max(previewIndice, 0), total - 1);
 		return {
 			indice,
 			total,
-			etiqueta: nombreDe(dto.hojas[indice]?.conductor_id ?? null),
+			etiqueta: nombreDe(hojasImprimibles[indice]?.conductor_id ?? null),
 			onIr: (i: number) => {
 				previewIndice = Math.min(Math.max(i, 0), total - 1);
 			}
@@ -942,8 +957,8 @@
 
 	function abrirPreview(alcance: 'hoja' | 'todos') {
 		alcancePreview = alcance;
-		if (alcance === 'todos' && dto) {
-			const i = dto.hojas.findIndex((h) => h.conductor_id === conductorActivo);
+		if (alcance === 'todos') {
+			const i = hojasImprimibles.findIndex((h) => h.conductor_id === conductorActivo);
 			previewIndice = i >= 0 ? i : 0;
 		}
 		previewAbierto = true;
@@ -1043,25 +1058,26 @@
 				? `Solo ${nombreConductorActivo}, tal y como saldrá impreso.`
 				: 'Solo el conductor abierto, tal y como saldrá impreso.',
 			icon: iconoPreview,
-			disabled: !dto?.hojas.length,
-			disabledHint: 'No hay recorridos en este periodo.',
+			disabled: !dto?.hojas.length || !conductorActivo,
+			disabledHint: 'No hay ningún conductor en este periodo.',
 			onSelect: () => abrirPreview('hoja')
 		},
 		{
 			id: 'preview-todos',
 			label: 'PDF de todos los conductores',
-			hint: `Se navega conductor por conductor (${dto?.hojas.length ?? 0} en el periodo) y se exporta uno o el consolidado completo.`,
+			hint: `Se navega conductor por conductor (${hojasImprimibles.length} con recorridos) y se exporta uno o el consolidado completo.`,
 			icon: iconoPreviewTodos,
-			disabled: !dto?.hojas.length,
-			disabledHint: 'No hay recorridos en este periodo.',
+			disabled: !hojasImprimibles.length,
+			disabledHint: 'Ningún conductor tiene recorridos en este periodo.',
 			onSelect: () => abrirPreview('todos')
 		},
 		{
 			id: 'zip',
 			label: 'Exportar ZIP',
-			hint: 'Un PDF por conductor, empaquetados.',
+			hint: 'Un PDF por conductor con recorridos, empaquetados.',
 			icon: iconoZip,
-			disabled: !dto?.hojas.length,
+			disabled: !hojasImprimibles.length,
+			disabledHint: 'Ningún conductor tiene recorridos en este periodo.',
 			onSelect: () => void exportarZip()
 		},
 		{ type: 'sep', id: 's1' },
@@ -1171,7 +1187,7 @@
 <UniverToolbar
 	title="Recorridos"
 	subtitle={dto
-		? `${dto.etiqueta} · ${dto.hojas.length} conductores · ${dto.hojas.reduce((n, h) => n + h.filas.length, 0)} filas${borradoresPendientes ? ` · ${borradoresPendientes} sin guardar` : ''}`
+		? `${dto.etiqueta} · ${hojasImprimibles.length} de ${dto.hojas.length} conductores con recorridos · ${dto.hojas.reduce((n, h) => n + h.filas.length, 0)} filas${borradoresPendientes ? ` · ${borradoresPendientes} sin guardar` : ''}`
 		: `${etiquetaCorte(corte)} · cargando…`}
 	onBack={() => goto('/dashboard/conductores')}
 	backLabel="Conductores"
@@ -1293,7 +1309,7 @@
 		paginador={paginadorPreview}
 		documentoPdf={documentoPdfHoja ?? undefined}
 		exportarTodo={alcancePreview === 'todos' && documentoTodos
-			? { documento: documentoTodos, etiqueta: `Exportar todos (${dto?.hojas.length ?? 0})` }
+			? { documento: documentoTodos, etiqueta: `Exportar todos (${hojasImprimibles.length})` }
 			: undefined}
 		onClose={() => (previewAbierto = false)}
 	/>
