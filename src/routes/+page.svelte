@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { authStore } from '$lib/stores/auth';
+	import { PORTAL_LOGIN, esDispositivoDelPortal } from '$lib/stores/portalStore';
 	import { fade } from 'svelte/transition';
 
 	let mounted = false;
@@ -13,6 +14,10 @@
 		// Verificar autenticación y redirigir apropiadamente
 		if (authStore.isAuthenticated()) {
 			goto('/dashboard');
+		} else if (esDispositivoDelPortal()) {
+			/// El acceso directo de la PWA y «escribir el dominio» caen aquí: un
+			/// conductor no tiene por qué ver el login administrativo.
+			goto(PORTAL_LOGIN);
 		} else {
 			goto('/login');
 		}

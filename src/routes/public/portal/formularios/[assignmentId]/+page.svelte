@@ -22,6 +22,7 @@
 	import { page } from '$app/stores';
 	import { toast } from 'svelte-sonner';
 	import { portalFormulariosAPI, PortalApiError } from '$lib/api/formularios-portal';
+	import { expirarSesionPortal } from '$lib/stores/portalStore';
 	import {
 		attachmentsForSubmission,
 		deleteAttachment,
@@ -156,6 +157,9 @@
 		} catch (err) {
 			if (!definicion) {
 				if (err instanceof PortalApiError && err.needsAuth) {
+					/// Solo se llega aquí sin definición cacheada: no hay borrador abierto
+					/// que perder, y quedarse mirando el error no da salida.
+					void expirarSesionPortal();
 					throw new Error('Tu sesión venció. Solicita un enlace nuevo para continuar.');
 				}
 				if (err instanceof PortalApiError && err.code === 'NETWORK_ERROR') {

@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import { PORTAL_LOGIN, olvidarDispositivoDelPortal } from './portalStore';
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
 import { checkAccess, type Area, type AccessLevel, type PermisosRutas } from '$lib/config/permissions';
@@ -186,6 +187,7 @@ function createAuthStore() {
 				if (browser) {
 					localStorage.setItem('transmeralda_token', token);
 					localStorage.setItem('transmeralda_user', JSON.stringify(user));
+					olvidarDispositivoDelPortal();
 
 					// Guardar también en cookies para que el servidor pueda acceder
 					document.cookie = `transmeralda_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Strict`;
@@ -230,8 +232,15 @@ function createAuthStore() {
 			set(initialState);
 
 			if (redirectToLogin && browser) {
-				// Guardar la URL actual para redirigir después del login
 				const currentPath = window.location.pathname;
+				/// En el portal del conductor no hay sesión administrativa que cerrar:
+				/// mandarlo a `/login` lo dejaba en una pantalla ajena. Su login es el
+				/// del portal.
+				if (currentPath.startsWith('/public/')) {
+					goto(PORTAL_LOGIN);
+					return;
+				}
+				// Guardar la URL actual para redirigir después del login
 				if (currentPath !== '/login') {
 					localStorage.setItem('redirect_after_login', currentPath);
 				}

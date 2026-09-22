@@ -11,6 +11,7 @@
 	import { goto } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
 	import { portalFormulariosAPI, PortalApiError } from '$lib/api/formularios-portal';
+	import { expirarSesionPortal } from '$lib/stores/portalStore';
 	import {
 		allDrafts,
 		allAssignments,
@@ -219,6 +220,7 @@
 		} catch (err) {
 			if (err instanceof PortalApiError && err.needsAuth) {
 				toast.error('Tu sesión venció. Solicita un enlace nuevo; tus datos están a salvo.');
+				void expirarSesionPortal();
 			} else if (err instanceof PortalApiError && err.code === 'NETWORK_ERROR') {
 				/// Silencio deliberado: la lista local ya está en pantalla y el chip de
 				/// sincronización comunica el estado. Un toast por cada fallo de red

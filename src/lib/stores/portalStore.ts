@@ -1,7 +1,22 @@
 import { writable, derived, get } from 'svelte/store';
 import { browser } from '$app/environment';
+import { goto } from '$app/navigation';
 
 const STORAGE_KEY = 'transmeralda_portal_token';
+
+/** Login del portal del conductor: destino de TODO cierre de sesión del portal. */
+export const PORTAL_LOGIN = '/public/portal';
+
+/**
+ * Marca «en este dispositivo entra un conductor».
+ *
+ * Se escribe al iniciar sesión en el portal y sobrevive al logout y a la
+ * caducidad del token: es lo que permite que `/` y `/login` devuelvan al
+ * conductor a SU login cuando un fallo de la API o del frontend lo saca del
+ * portal. Solo la borra un login administrativo, porque ese sí prueba que el
+ * dispositivo no es (solo) de un conductor.
+ */
+const HOME_KEY = 'transmeralda_portal_home';
 
 export interface PortalSession {
   token: string;
@@ -39,7 +54,10 @@ function createPortalStore() {
   return {
     subscribe,
     login(session: PortalSession) {
-      if (browser) localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+      if (browser) {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+        localStorage.setItem(HOME_KEY, '1');
+      }
       set(session);
     },
     logout() {
@@ -54,6 +72,36 @@ function createPortalStore() {
 export const portalSession = createPortalStore();
 
 export const isAuthenticated = derived(portalSession, ($s) => !!$s);
+
+export function esDispositivoDelPortal(): boolean {
+  if (!browser) return false;
+  try {
+    return localStorage.getItem(HOME_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** La llama el login administrativo: ese dispositivo ya no se trata como de conductor. */
+export function olvidarDispositivoDelPortal(): void {
+  if (!browser) return;
+  try {
+    localStorage.removeItem(HOME_KEY);
+  } catch {
+    /* sin almacenamiento no hay marca que borrar */
+  }
+}
+
+/**
+ * Cierra la sesión del portal y lleva a su login. Nunca a `/login`.
+ *
+ * `replaceState` para que «atrás» no devuelva a la pantalla que acaba de
+ * rechazar la sesión.
+ */
+export function expirarSesionPortal(): Promise<void> {
+  portalSession.logout();
+  return goto(PORTAL_LOGIN, { replaceState: true });
+}
 
 export const conductorNombre = derived(portalSession, ($s) =>
   $s ? `${$s.conductor.nombre} ${$s.conductor.apellido}` : ''

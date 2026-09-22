@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { authStore } from '$lib/stores/auth';
+	import { PORTAL_LOGIN, esDispositivoDelPortal } from '$lib/stores/portalStore';
 	import { fade, fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 
@@ -81,6 +82,15 @@
 			redirecting = true;
 			await bootDelay;
 			goto(resolveTarget());
+			return;
+		}
+
+		/// `/login` es adonde acaba cualquier fallo de sesión, venga de donde venga.
+		/// Un dispositivo de conductor sin sesión administrativa vuelve a SU login;
+		/// `?admin=1` deja entrar a quien sí venga a administrar desde ese teléfono.
+		if (esDispositivoDelPortal() && $page.url.searchParams.get('admin') !== '1') {
+			redirecting = true;
+			await goto(PORTAL_LOGIN, { replaceState: true });
 			return;
 		}
 
