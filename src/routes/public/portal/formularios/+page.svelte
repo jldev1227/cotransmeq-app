@@ -11,7 +11,7 @@
 	import { goto } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
 	import { portalFormulariosAPI, PortalApiError } from '$lib/api/formularios-portal';
-	import { expirarSesionPortal } from '$lib/stores/portalStore';
+	import { expirarSesionPortal, portalSession } from '$lib/stores/portalStore';
 	import {
 		allDrafts,
 		allAssignments,
@@ -31,12 +31,32 @@
 		connectPortalFormsSocket,
 		disconnectPortalFormsSocket
 	} from '$lib/offline/forms-portal-socket';
-	import { FREQUENCY_LABELS, type AssignmentFrequency } from '$lib/formularios/types';
+	import {
+		FREQUENCY_LABELS,
+		type AssignmentFrequency,
+		type SubmissionSummaryDto
+	} from '$lib/formularios/types';
 	import SyncStatus from '$lib/components/formularios/SyncStatus.svelte';
+	import PortalPage from '$lib/components/portal/PortalPage.svelte';
+	import PortalHeader from '$lib/components/portal/PortalHeader.svelte';
+	import PortalSection from '$lib/components/portal/PortalSection.svelte';
 
 	let asignaciones = $state<StoredAssignment[]>([]);
 	let borradores = $state<StoredDraft[]>([]);
 	let recibos = $state<StoredReceipt[]>([]);
+	/**
+	 * Historial que confirma el servidor.
+	 *
+	 * `null` mientras no haya respondido ni una vez en esta sesión; entonces —y
+	 * solo entonces— se cae a los recibos locales. Una vez contestó, manda él:
+	 * es la única fuente que prueba que el envío está guardado de verdad, y no
+	 * solo en este teléfono.
+	 */
+	let enviosServidor = $state<SubmissionSummaryDto[] | null>(null);
+
+	/// Cuántos envíos recientes se muestran. El mismo tope para el servidor y para
+	/// el teléfono, para que la sección no cambie de tamaño al perder cobertura.
+	const LIMITE_ENVIOS = 8;
 	let cargandoLocal = $state(true);
 	let reconciliando = $state(false);
 	let hoy = $state<string | null>(null);
@@ -114,10 +134,13 @@
 	}
 
 	async function cargarLocal() {
+		/// Los recibos se piden por conductor: IndexedDB es del origen, no de la
+		/// sesión, y sin acotar salían también los de quien usó antes el móvil.
+		const conductorId = $portalSession?.conductor.id ?? '';
 		const [a, d, r, p] = await Promise.all([
 			allAssignments(),
 			allDrafts(),
-			allReceipts(),
+			allReceipts(conductorId),
 			placasCacheadas()
 		]);
 		asignaciones = a;
@@ -125,6 +148,29 @@
 		recibos = r;
 		placas = p;
 		cargandoLocal = false;
+	}
+
+	/**
+	 * Trae del servidor los envíos ya confirmados de ESTE conductor.
+	 *
+	 * Es lo que da la certeza que el recibo local no puede dar: el recibo prueba
+	 * que el teléfono recibió un acuse, pero solo esta lista prueba que la fila
+	 * sigue en la base. Un envío hecho desde otro teléfono, o después de que el
+	 * navegador perdiera su almacenamiento, únicamente aparece por aquí.
+	 *
+	 * Un fallo NO vacía lo que ya se había traído: quedarse con el último
+	 * historial bueno es mejor que dejar la sección en blanco al primer bache de
+	 * cobertura.
+	 */
+	async function cargarHistorial() {
+		try {
+			const { data } = await portalFormulariosAPI.historial({ limit: LIMITE_ENVIOS });
+			enviosServidor = data;
+		} catch (err) {
+			if (err instanceof PortalApiError && err.needsAuth) throw err;
+			/// Sin red se sigue con lo que haya: si nunca respondió, `enviosServidor`
+			/// continúa en `null` y la sección cae a los recibos de este teléfono.
+		}
 	}
 
 	/**
@@ -139,7 +185,12 @@
 		if (reconciliando) return;
 		reconciliando = true;
 		try {
-			const { data, meta } = await portalFormulariosAPI.listar();
+			const [{ data, meta }] = await Promise.all([
+				portalFormulariosAPI.listar(),
+				/// En paralelo: son dos lecturas independientes y en datos móviles
+				/// encadenarlas se nota.
+				cargarHistorial()
+			]);
 			hoy = meta?.today ?? null;
 
 			const registros: StoredAssignment[] = data.map((card) => ({
@@ -245,7 +296,12 @@
 		/// que es la autoridad. Los payloads llevan ids, no datos.
 		connectPortalFormsSocket({
 			onInvalidateList: () => void reconciliar(),
-			onSubmissionChanged: () => void cargarLocal()
+			onSubmissionChanged: () => {
+				void cargarLocal();
+				/// Una anulación hecha desde el dashboard llega por aquí: el envío
+				/// sigue en la lista, pero tiene que dejar de leerse como entregado.
+				void cargarHistorial();
+			}
 		});
 
 		const info = await quotaInfo();
@@ -284,7 +340,8 @@
 		goto(`/public/portal/formularios/${assignmentId}?nuevo=1`);
 	}
 
-	function fechaHora(iso: string): string {
+	function fechaHora(iso: string | null): string {
+		if (!iso) return '—';
 		return new Date(iso).toLocaleString('es-CO', {
 			day: '2-digit',
 			month: 'short',
@@ -295,34 +352,78 @@
 
 	const disponibles = $derived(asignaciones.filter((a) => a.dueState === 'AVAILABLE'));
 	const completados = $derived(asignaciones.filter((a) => a.dueState !== 'AVAILABLE'));
-	const recibosRecientes = $derived(
-		[...recibos].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt)).slice(0, 8)
-	);
+	/**
+	 * Un renglón de «Últimos envíos», venga del servidor o del teléfono.
+	 *
+	 * `confirmado` es la diferencia que importa de cara al conductor: si el
+	 * servidor lo respondió, el envío está guardado y punto; si solo lo tiene
+	 * este teléfono, es un acuse que todavía no se ha podido contrastar.
+	 */
+	interface EnvioReciente {
+		key: string;
+		/// `null` en un recibo local sin id de servidor: no hay detalle que abrir.
+		submissionId: string | null;
+		code: string;
+		title: string;
+		submittedAt: string | null;
+		anulado: boolean;
+		confirmado: boolean;
+	}
+
+	const enviosRecientes = $derived.by((): EnvioReciente[] => {
+		/// El servidor manda en cuanto contesta una vez. Ya viene ordenado por
+		/// `submitted_at` descendente y recortado a `LIMITE_ENVIOS`.
+		if (enviosServidor) {
+			return enviosServidor.map((e) => ({
+				key: e.id,
+				submissionId: e.id,
+				code: e.version?.code ?? '',
+				title: e.version?.title ?? '',
+				submittedAt: e.submittedAt,
+				anulado: e.status === 'VOIDED',
+				confirmado: true
+			}));
+		}
+
+		/// Sin respuesta del servidor en toda la sesión: se pinta lo que guardó el
+		/// teléfono, que es justo para lo que existe el recibo local.
+		return [...recibos]
+			.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))
+			.slice(0, LIMITE_ENVIOS)
+			.map((r) => ({
+				key: r.clientSubmissionId,
+				submissionId: r.submissionId || null,
+				code: r.code,
+				title: r.title,
+				submittedAt: r.submittedAt,
+				anulado: false,
+				confirmado: false
+			}));
+	});
 </script>
 
 <svelte:head><title>Formularios · Portal del Conductor</title></svelte:head>
 
-<div class="pagina">
-	<header class="head">
-		<div>
-			<h1 class="head__titulo">Formularios</h1>
-			{#if hoy}<p class="head__fecha">Hoy: {hoy}</p>{/if}
-		</div>
-		<button
-			type="button"
-			class="head__refrescar"
-			disabled={reconciliando}
-			onclick={() => {
-				void reconciliar();
-				wakeAll();
-			}}
-			aria-label={reconciliando ? 'Sincronizando…' : 'Actualizar la lista'}
-		>
-			<span class="head__icono" class:girando={reconciliando} aria-hidden="true">↻</span>
-		</button>
-	</header>
-
-	<SyncStatus variant="panel" />
+<PortalPage>
+	<PortalHeader titulo="Formularios" meta={hoy ? `Hoy: ${hoy}` : null}>
+		{#snippet acciones()}
+			<!-- El estado de sincronización ya no ocupa una franja entera: vive aquí
+			     como chip y se despliega solo si hay algo que atender. -->
+			<SyncStatus variant="control" />
+			<button
+				type="button"
+				class="refrescar"
+				disabled={reconciliando}
+				onclick={() => {
+					void reconciliar();
+					wakeAll();
+				}}
+				aria-label={reconciliando ? 'Sincronizando…' : 'Actualizar la lista'}
+			>
+				<span class:girando={reconciliando} aria-hidden="true">↻</span>
+			</button>
+		{/snippet}
+	</PortalHeader>
 
 	{#if colaVisible}
 		<section class="cola" aria-live="polite">
@@ -391,8 +492,7 @@
 		</div>
 	{:else}
 		{#if disponibles.length}
-			<section class="grupo">
-				<h2 class="grupo__titulo">Por diligenciar</h2>
+			<PortalSection titulo="Por diligenciar">
 				<ul class="tarjetas">
 					{#each disponibles as a (a.assignmentId)}
 						{@const draftsDe = borradoresDe(a.assignmentId)}
@@ -450,12 +550,11 @@
 						</li>
 					{/each}
 				</ul>
-			</section>
+			</PortalSection>
 		{/if}
 
 		{#if completados.length}
-			<section class="grupo">
-				<h2 class="grupo__titulo">Ya entregados en este período</h2>
+			<PortalSection titulo="Ya entregados en este período">
 				<ul class="tarjetas">
 					{#each completados as a (a.assignmentId)}
 						<li>
@@ -471,58 +570,53 @@
 						</li>
 					{/each}
 				</ul>
-			</section>
+			</PortalSection>
 		{/if}
 	{/if}
 
-	{#if recibosRecientes.length}
-		<section class="grupo">
-			<h2 class="grupo__titulo">Últimos envíos</h2>
+	{#if enviosRecientes.length}
+		<PortalSection
+			titulo="Últimos envíos"
+			tono="historial"
+			meta={enviosServidor ? "confirmados por el servidor" : "sin confirmar"}
+		>
+			{#if !enviosServidor}
+				<p class="recibos__aviso">
+					Sin conexión: esto es lo que guardó este teléfono. Se confirmará con el servidor
+					cuando vuelva la señal.
+				</p>
+			{/if}
 			<ul class="recibos">
-				{#each recibosRecientes as recibo (recibo.clientSubmissionId)}
+				{#each enviosRecientes as envio (envio.key)}
 					<li>
-						<a class="recibo" href={`/public/portal/formularios/envios/${recibo.submissionId}`}>
-							<span class="recibo__code">{recibo.code || 'Formulario'}</span>
-							<span class="recibo__titulo">{recibo.title}</span>
-							<span class="recibo__fecha">{fechaHora(recibo.submittedAt)}</span>
-						</a>
+						{#if envio.submissionId}
+							<a class="recibo" href={`/public/portal/formularios/envios/${envio.submissionId}`}>
+								<span class="recibo__code">
+									{envio.code || 'Formulario'}
+									{#if envio.anulado}<span class="recibo__anulado">Anulado</span>{/if}
+								</span>
+								<span class="recibo__titulo">{envio.title}</span>
+								<span class="recibo__fecha">{fechaHora(envio.submittedAt)}</span>
+							</a>
+						{:else}
+							<!-- Recibo local sin id de servidor: no hay detalle que abrir todavía. -->
+							<div class="recibo recibo--sin-detalle">
+								<span class="recibo__code">{envio.code || 'Formulario'}</span>
+								<span class="recibo__titulo">{envio.title}</span>
+								<span class="recibo__fecha">{fechaHora(envio.submittedAt)}</span>
+							</div>
+						{/if}
 					</li>
 				{/each}
 			</ul>
-		</section>
+		</PortalSection>
 	{/if}
-</div>
+</PortalPage>
 
 <style>
-	.pagina {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-		padding: 1rem 0.875rem 5rem;
-	}
-
-	.head {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 0.75rem;
-	}
-
-	.head__titulo {
-		font-family: var(--font-display, Georgia, serif);
-		font-size: 1.5rem;
-		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
-	}
-
-	.head__fecha {
-		margin-top: 0.125rem;
-		font-family: var(--font-mono, monospace);
-		font-size: 0.75rem;
-		color: var(--text-very-muted, #9a9a9a);
-	}
-
-	.head__refrescar {
+	/* Único control de la cabecera además del chip. Objetivo táctil de 44 px: se
+	   toca en movimiento, que es la razón por la que no se encogió al simplificar. */
+	.refrescar {
 		width: 44px;
 		height: 44px;
 		display: grid;
@@ -536,15 +630,20 @@
 		cursor: pointer;
 	}
 
+	.refrescar:disabled {
+		opacity: 0.6;
+	}
+
+
+
+
+
+
 	.head__refrescar:disabled {
 		opacity: 0.7;
 		cursor: default;
 	}
 
-	.head__icono {
-		display: block;
-		line-height: 1;
-	}
 
 	/* Una sola animación para todo lo que «está trabajando»: botón, cola y
 	   rótulo. Con movimiento reducido se queda quieta pero el texto ya dice lo
@@ -736,19 +835,7 @@
 		border-radius: 10px;
 	}
 
-	.grupo {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-	}
 
-	.grupo__titulo {
-		font-size: 0.6875rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-muted, #6b6b6b);
-	}
 
 	.tarjetas,
 	.recibos {
@@ -929,11 +1016,31 @@
 		min-height: 44px;
 	}
 
+	.recibo--sin-detalle {
+		opacity: 0.75;
+	}
 	.recibo__code {
+		display: flex;
+		align-items: center;
+		gap: 0.375rem;
 		font-family: var(--font-mono, monospace);
 		font-size: 0.625rem;
 		font-weight: 700;
 		color: var(--emerald-700, #047857);
+	}
+	.recibo__anulado {
+		padding: 0.0625rem 0.3125rem;
+		border-radius: 999px;
+		background: rgba(220, 38, 38, 0.1);
+		color: #b91c1c;
+		font-size: 0.5625rem;
+		letter-spacing: 0.04em;
+	}
+	.recibos__aviso {
+		margin-bottom: 0.5rem;
+		font-size: 0.6875rem;
+		line-height: 1.35;
+		color: var(--text-muted, #6b6b6b);
 	}
 
 	.recibo__titulo {

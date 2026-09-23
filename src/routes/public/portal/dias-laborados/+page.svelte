@@ -9,6 +9,7 @@
   }
   import Autocomplete from '$lib/components/Autocomplete.svelte';
   import TimePicker from '$lib/components/TimePicker.svelte';
+  import { etiquetaOffsetDias } from '$lib/utils/dias-offset';
 
   // ═══════════════════════════════
   // TIPOS
@@ -23,13 +24,14 @@
     vehiculo_placa: string;
     hora_inicio: string;
     hora_fin: string;
-    inicio_dia_siguiente?: boolean;
-    fin_dia_siguiente?: boolean;
+    dias_offset_inicio: number;
+    dias_offset_fin: number;
     horas_conducidas: number;
     km_inicial?: number | null;
     km_final?: number | null;
     pernocte?: boolean;
-    observaciones?: string | null;
+    /// Qué se transportó en este tramo. Obligatoria.
+    descripcion_servicio: string;
   }
 
   interface RegistroDia {
@@ -179,15 +181,19 @@
         if (!t.vehiculo_placa) { formError = `Tramo ${i + 1}: indica la placa`; return; }
         if (!t.hora_inicio)    { formError = `Tramo ${i + 1}: hora de inicio`; return; }
         if (!t.hora_fin)       { formError = `Tramo ${i + 1}: hora de fin`; return; }
+        if (!(t.descripcion_servicio || '').trim()) {
+          formError = `Tramo ${i + 1}: describe el servicio`; return;
+        }
         if (!t.horas_conducidas || Number(t.horas_conducidas) <= 0) {
           formError = `Tramo ${i + 1}: horas conducidas`; return;
         }
         const inicioMins = t.hora_inicio.split(':').reduce((a, v) => a * 60 + Number(v), 0)
-                          + (t.inicio_dia_siguiente ? 24 * 60 : 0);
+                          + (t.dias_offset_inicio || 0) * 24 * 60;
         const finMins    = t.hora_fin.split(':').reduce((a, v) => a * 60 + Number(v), 0)
-                          + (t.fin_dia_siguiente ? 24 * 60 : 0);
+                          + (t.dias_offset_fin || 0) * 24 * 60;
         if (finMins <= inicioMins) {
-          formError = `Tramo ${i + 1}: la hora fin debe ser mayor a la inicio`; return;
+          formError = `Tramo ${i + 1}: la hora de fin debe ser posterior a la de inicio. Si terminaste pasada la medianoche, elige la hora en el grupo «día siguiente».`;
+          return;
         }
       }
     }
@@ -218,13 +224,13 @@
           vehiculo_placa: t.vehiculo_placa,
           hora_inicio: t.hora_inicio,
           hora_fin: t.hora_fin,
-          inicio_dia_siguiente: t.inicio_dia_siguiente === true,
-          fin_dia_siguiente: t.fin_dia_siguiente === true,
+          dias_offset_inicio: t.dias_offset_inicio || 0,
+          dias_offset_fin: t.dias_offset_fin || 0,
           horas_conducidas: Number(t.horas_conducidas) || 0,
           km_inicial: t.km_inicial != null && String(t.km_inicial) !== '' ? Number(t.km_inicial) : null,
           km_final: t.km_final != null && String(t.km_final) !== '' ? Number(t.km_final) : null,
           pernocte: t.pernocte === true,
-          observaciones: t.observaciones || null
+          descripcion_servicio: (t.descripcion_servicio || '').trim()
         })) : []
       };
 
@@ -448,13 +454,13 @@
       vehiculo_placa: '',
       hora_inicio: '',
       hora_fin: '',
-      inicio_dia_siguiente: false,
-      fin_dia_siguiente: false,
+      dias_offset_inicio: 0,
+      dias_offset_fin: 0,
       horas_conducidas: 0,
       km_inicial: null,
       km_final: null,
       pernocte: false,
-      observaciones: null
+      descripcion_servicio: ''
     };
   }
 
@@ -477,9 +483,9 @@
 
   function horasTramo(t: Segmento): number | null {
     if (!t.hora_inicio || !t.hora_fin) return null;
-    const toMins = (h: string, next: boolean) =>
-      h.split(':').reduce((a, v) => a * 60 + Number(v), 0) + (next ? 24 * 60 : 0);
-    const mins = toMins(t.hora_fin, !!t.fin_dia_siguiente) - toMins(t.hora_inicio, !!t.inicio_dia_siguiente);
+    const toMins = (h: string, dias: number) =>
+      h.split(':').reduce((a, v) => a * 60 + Number(v), 0) + dias * 24 * 60;
+    const mins = toMins(t.hora_fin, t.dias_offset_fin || 0) - toMins(t.hora_inicio, t.dias_offset_inicio || 0);
     return mins > 0 ? +(mins / 60).toFixed(1) : null;
   }
 
@@ -502,7 +508,15 @@
   /// tiene en `localStorage`, y `abrirDia` da PRIORIDAD al borrador sobre el
   /// servidor: sin invalidarlos, el arreglo del backend no se notaría en su
   /// teléfono y al guardar los resucitaría como tramos vivos.
-  const BORRADOR_VERSION = 2;
+  /// v3: el tramo pasó de `observaciones` opcional a `descripcion_servicio`
+  /// obligatoria. Un borrador v2 no la trae, y al enviarlo el servidor lo
+  /// rechazaría sin que el conductor entienda por qué: se descarta.
+  /// v3: el tramo pasó de `observaciones` opcional a `descripcion_servicio`
+  /// obligatoria. v4: los booleanos de día siguiente pasaron a ser un número de
+  /// días. Un borrador viejo no encaja en ninguno de los dos casos, y al
+  /// enviarlo el servidor lo rechazaría sin que el conductor entienda por qué:
+  /// se descarta.
+  const BORRADOR_VERSION = 4;
 
   interface BorradorCache {
     /// Ausente en los borradores anteriores a v2: `cargarBorrador` los descarta.
@@ -645,15 +659,13 @@
   // Opciones de autocomplete (precomputadas para evitar recalcular en cada keystroke)
   $: clienteOptions = clientes.map(c => ({ id: c.id, label: c.nombre }));
   $: vehiculoOptions = vehiculos.map(v => ({ id: v.id, label: v.placa, placa: v.placa }));
+  import PortalHeader from '$lib/components/portal/PortalHeader.svelte';
 </script>
 
 <div class="dias-page">
   <!-- Header -->
-  <div class="page-header">
-    <div>
-      <h1 class="page-title">📅 Días Laborados</h1>
-      <p class="page-sub">Registra tu actividad diaria</p>
-    </div>
+  <div class="cabecera">
+    <PortalHeader titulo="Días Laborados" meta="Registra tu actividad diaria" />
   </div>
 
   <!-- Stats -->
@@ -869,7 +881,10 @@
                       <dt>Horario</dt>
                       <dd>
                         {#if t.hora_inicio && t.hora_fin}
-                          {t.hora_inicio}{#if t.inicio_dia_siguiente}<span class="dia-sig-inline">+1</span>{/if} – {t.hora_fin}{#if t.fin_dia_siguiente}<span class="dia-sig-inline">+1</span>{/if}
+                          {t.hora_inicio} – {t.hora_fin}{#if (t.dias_offset_fin || 0) > (t.dias_offset_inicio || 0)}
+                            <span class="dia-sig-inline"
+                              >termina {etiquetaOffsetDias(t.dias_offset_fin, fechaSeleccionada)}</span
+                            >{/if}
                         {:else}
                           —
                         {/if}
@@ -882,9 +897,9 @@
                         </dd>
                       {/if}
 
-                      {#if t.observaciones}
-                        <dt>Observaciones</dt>
-                        <dd>{t.observaciones}</dd>
+                      {#if t.descripcion_servicio}
+                        <dt>Servicio</dt>
+                        <dd>{t.descripcion_servicio}</dd>
                       {/if}
                     </dl>
 
@@ -1007,7 +1022,10 @@
                           {/if}
                           {#if t.hora_inicio && t.hora_fin}
                             <span class="tramo-tag hora">
-                              🕐 {t.hora_inicio}{#if t.inicio_dia_siguiente}<sup class="dia-sig-sup">+1</sup>{/if}–{t.hora_fin}{#if t.fin_dia_siguiente}<sup class="dia-sig-sup">+1</sup>{/if}
+                              🕐 {t.hora_inicio}–{t.hora_fin}{#if (t.dias_offset_fin || 0) > (t.dias_offset_inicio || 0)}
+                                <span class="dia-sig-sup"
+                                  >termina {etiquetaOffsetDias(t.dias_offset_fin, fechaSeleccionada)}</span
+                                >{/if}
                             </span>
                           {/if}
                         </div>
@@ -1022,7 +1040,8 @@
                             <label class="field-label">Hora inicio</label>
                             <TimePicker
                               bind:value={t.hora_inicio}
-                              bind:dayOffset={t.inicio_dia_siguiente}
+                              bind:diasOffset={t.dias_offset_inicio}
+                              fechaBase={fechaSeleccionada}
                               disabled={soloLectura}
                               placeholder="Inicio" />
                           </div>
@@ -1030,7 +1049,8 @@
                             <label class="field-label">Hora fin</label>
                             <TimePicker
                               bind:value={t.hora_fin}
-                              bind:dayOffset={t.fin_dia_siguiente}
+                              bind:diasOffset={t.dias_offset_fin}
+                              fechaBase={fechaSeleccionada}
                               disabled={soloLectura}
                               placeholder="Fin" />
                           </div>
@@ -1088,6 +1108,19 @@
                           />
                           <span>🌙 Pernocté (requirió pasar la noche fuera)</span>
                         </label>
+
+                        <!-- Descripción del servicio. Obligatoria: es lo que dice
+                             QUÉ se transportó en este tramo. -->
+                        <div class="field" style="margin-top:.65rem">
+                          <label class="field-label">Descripción del servicio *</label>
+                          <textarea
+                            class="field-input field-textarea"
+                            bind:value={t.descripcion_servicio}
+                            rows="2"
+                            placeholder="Qué transportaste y hacia dónde"
+                            disabled={soloLectura}
+                          ></textarea>
+                        </div>
 
                         <!-- Cliente -->
                         <div class="field" style="margin-top:.65rem">
@@ -1254,22 +1287,15 @@
 {/if}
 
 <style>
-  .page-header {
-    margin-bottom: 1rem;
-  }
-  .page-title {
-    font-size: 1.35rem;
-    font-weight: 800;
-    margin: 0;
-    color: var(--text, #0f172a);
-  }
-  .page-sub {
-    font-size: 0.82rem;
-    color: var(--text3, #94a3b8);
-    margin: 0.2rem 0 0;
-  }
 
   /* ── Stats ── */
+  /* Mismo ritmo vertical que el resto de bloques de la página: la cabecera
+     compartida no trae margen propio porque en `PortalPage` el hueco lo pone
+     el `gap` del contenedor, y aquí no hay tal contenedor. */
+  .cabecera {
+    margin-bottom: 1rem;
+  }
+
   .stats-row {
     display: grid;
     grid-template-columns: repeat(5, 1fr);

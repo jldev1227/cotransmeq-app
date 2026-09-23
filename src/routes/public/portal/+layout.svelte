@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { portalSession, isAuthenticated, conductorNombre, conductorCedula, diasRestantes } from '$lib/stores/portalStore';
   import { startSync, wakeAll } from '$lib/offline/forms-sync';
+  import { clearAll, hayTrabajoPendiente } from '$lib/offline/forms-db';
   import '../../../app.css';
 
   const LOGO_SRC = '/assets/logo_nombre.webp';
@@ -95,7 +96,25 @@
 
   $: currentPath = $page.url.pathname;
 
-  function cerrarSesion() {
+  /**
+   * Cierre de sesión DELIBERADO: el único sitio que puede vaciar lo local.
+   *
+   * No se hace dentro de `portalSession.logout()` a propósito. Ese método lo
+   * llaman también los manejadores de 401 de medio portal, y un token vencido a
+   * mitad de una inspección borraría el trabajo que todavía no salió del móvil.
+   *
+   * Aun aquí se pregunta antes: mientras queden borradores u operaciones en la
+   * outbox no se borra nada, porque el dispositivo es la única copia. Lo que se
+   * limpia es la caché de lectura —recibos, asignaciones, definiciones—, que es
+   * lo que se le quedaba al siguiente conductor que entrara.
+   */
+  async function cerrarSesion() {
+    try {
+      if (!(await hayTrabajoPendiente())) await clearAll();
+    } catch {
+      /// Sin almacenamiento local no hay nada que limpiar, y desde luego no es
+      /// motivo para dejar al conductor atrapado en la sesión.
+    }
     portalSession.logout();
     goto('/public/portal');
   }

@@ -4,6 +4,7 @@
 	import { toast } from 'svelte-sonner';
 	import { diasLaboradosAPI, type TipoDia, type SegmentoPatron } from '$lib/api/apiClient';
 	import TimePicker from '$lib/components/TimePicker.svelte';
+	import { etiquetaOffsetDias } from '$lib/utils/dias-offset';
 	import Autocomplete from '$lib/components/Autocomplete.svelte';
 
 	export interface SegmentoExistente {
@@ -18,9 +19,9 @@
 		km_inicial: number | null;
 		km_final: number | null;
 		pernocte: boolean;
-		inicio_dia_siguiente?: boolean;
-		fin_dia_siguiente?: boolean;
-		observaciones: string | null;
+		dias_offset_inicio?: number;
+		dias_offset_fin?: number;
+		descripcion_servicio: string;
 	}
 
 	type Props = {
@@ -63,13 +64,13 @@
 		vehiculo_placa: string;
 		hora_inicio: string;
 		hora_fin: string;
-		inicio_dia_siguiente: boolean;
-		fin_dia_siguiente: boolean;
+		dias_offset_inicio: number;
+		dias_offset_fin: number;
 		horas_conducidas: number;
 		km_inicial: number | null;
 		km_final: number | null;
 		pernocte: boolean;
-		observaciones: string | null;
+		descripcion_servicio: string;
 	}
 
 	function uid(): string {
@@ -85,13 +86,13 @@
 			vehiculo_placa: '',
 			hora_inicio: '',
 			hora_fin: '',
-			inicio_dia_siguiente: false,
-			fin_dia_siguiente: false,
+			dias_offset_inicio: 0,
+			dias_offset_fin: 0,
 			horas_conducidas: 0,
 			km_inicial: null,
 			km_final: null,
 			pernocte: false,
-			observaciones: null
+			descripcion_servicio: ''
 		};
 	}
 
@@ -142,13 +143,13 @@
 					vehiculo_placa: segmentoInicial.vehiculo_placa ?? '',
 					hora_inicio: segmentoInicial.hora_inicio ?? '',
 					hora_fin: segmentoInicial.hora_fin ?? '',
-					inicio_dia_siguiente: segmentoInicial.inicio_dia_siguiente ?? false,
-					fin_dia_siguiente: segmentoInicial.fin_dia_siguiente ?? false,
+					dias_offset_inicio: segmentoInicial.dias_offset_inicio ?? 0,
+					dias_offset_fin: segmentoInicial.dias_offset_fin ?? 0,
 					horas_conducidas: Number(segmentoInicial.horas_conducidas) || 0,
 					km_inicial: segmentoInicial.km_inicial ?? null,
 					km_final: segmentoInicial.km_final ?? null,
 					pernocte: segmentoInicial.pernocte ?? false,
-					observaciones: segmentoInicial.observaciones ?? null
+					descripcion_servicio: segmentoInicial.descripcion_servicio ?? ''
 				}
 			];
 		} else {
@@ -181,13 +182,23 @@
 
 	function horasTramo(t: SegmentoForm): number | null {
 		if (!t.hora_inicio || !t.hora_fin) return null;
-		const toMins = (h: string, next: boolean) =>
-			h.split(':').reduce((a, v) => a * 60 + Number(v), 0) + (next ? 24 * 60 : 0);
-		const mins = toMins(t.hora_fin, !!t.fin_dia_siguiente) - toMins(t.hora_inicio, !!t.inicio_dia_siguiente);
+		const toMins = (h: string, dias: number) =>
+			h.split(':').reduce((a, v) => a * 60 + Number(v), 0) + dias * 24 * 60;
+		const mins = toMins(t.hora_fin, t.dias_offset_fin) - toMins(t.hora_inicio, t.dias_offset_inicio);
 		return mins > 0 ? +(mins / 60).toFixed(1) : null;
 	}
 
 	const esLaborado = $derived(form.tipo === 'LABORADO');
+	/// Declarado ANTES de `tipoActual`, que lo lee: un `const` no se iza, y
+	/// tenerlo debajo hacía que el `$derived` se evaluara contra una variable
+	/// todavía sin asignar.
+	const TIPOS: { value: TipoDia; label: string; color: string; icon: string }[] = [
+		{ value: 'LABORADO', label: 'Día Laborado', color: '#ea580c', icon: '🚛' },
+		{ value: 'DISPONIBLE', label: 'Disponible', color: '#2563eb', icon: '✅' },
+		{ value: 'DESCANSO', label: 'Descanso', color: '#d97706', icon: '🌙' },
+		{ value: 'MANTENIMIENTO', label: 'Mantenimiento', color: '#dc2626', icon: '🔧' }
+	];
+
 	const esMantenimiento = $derived(form.tipo === 'MANTENIMIENTO');
 	const tipoActual = $derived(
 		form.tipo
@@ -215,12 +226,6 @@
 		});
 	});
 
-	const TIPOS: { value: TipoDia; label: string; color: string; icon: string }[] = [
-		{ value: 'LABORADO', label: 'Día Laborado', color: '#ea580c', icon: '🚛' },
-		{ value: 'DISPONIBLE', label: 'Disponible', color: '#2563eb', icon: '✅' },
-		{ value: 'DESCANSO', label: 'Descanso', color: '#d97706', icon: '🌙' },
-		{ value: 'MANTENIMIENTO', label: 'Mantenimiento', color: '#dc2626', icon: '🔧' }
-	];
 
 	const clienteOptions = $derived(clientes.map((c) => ({ id: c.id, label: c.nombre })));
 	const vehiculoOptions = $derived(
@@ -246,12 +251,15 @@
 				if (!t.horas_conducidas || Number(t.horas_conducidas) <= 0) {
 					return `Tramo ${i + 1}: horas conducidas`;
 				}
-				const toMins = (h: string, next: boolean) =>
-					h.split(':').reduce((a, v) => a * 60 + Number(v), 0) + (next ? 24 * 60 : 0);
-				const inicioMins = toMins(t.hora_inicio, !!t.inicio_dia_siguiente);
-				const finMins = toMins(t.hora_fin, !!t.fin_dia_siguiente);
+				if (!t.descripcion_servicio.trim()) {
+					return `Tramo ${i + 1}: describe el servicio`;
+				}
+				const toMins = (h: string, dias: number) =>
+					h.split(':').reduce((a, v) => a * 60 + Number(v), 0) + dias * 24 * 60;
+				const inicioMins = toMins(t.hora_inicio, t.dias_offset_inicio);
+				const finMins = toMins(t.hora_fin, t.dias_offset_fin);
 				if (finMins <= inicioMins) {
-					return `Tramo ${i + 1}: la hora fin debe ser posterior a la inicio (usa el +1 si cruza medianoche)`;
+					return `Tramo ${i + 1}: la hora de fin debe ser posterior a la de inicio. Si el turno termina pasada la medianoche, elige la hora en el grupo «día siguiente».`;
 				}
 			}
 		}
@@ -294,13 +302,13 @@
 					vehiculo_placa: t.vehiculo_placa,
 					hora_inicio: t.hora_inicio,
 					hora_fin: t.hora_fin,
-					inicio_dia_siguiente: t.inicio_dia_siguiente === true,
-					fin_dia_siguiente: t.fin_dia_siguiente === true,
+					dias_offset_inicio: t.dias_offset_inicio ?? 0,
+					dias_offset_fin: t.dias_offset_fin ?? 0,
 					horas_conducidas: Number(t.horas_conducidas) || 0,
 					km_inicial: t.km_inicial != null && String(t.km_inicial) !== '' ? Number(t.km_inicial) : null,
 					km_final: t.km_final != null && String(t.km_final) !== '' ? Number(t.km_final) : null,
 					pernocte: t.pernocte === true,
-					observaciones: t.observaciones || null
+					descripcion_servicio: t.descripcion_servicio.trim()
 				};
 			}
 			const res = await diasLaboradosAPI.editarRegistro(registroId, payload);
@@ -503,7 +511,10 @@
 											{/if}
 											{#if t.hora_inicio && t.hora_fin}
 												<span class="tramo-tag hora">
-													🕐 {t.hora_inicio}{#if t.inicio_dia_siguiente}<sup class="dia-sig-sup">+1</sup>{/if}–{t.hora_fin}{#if t.fin_dia_siguiente}<sup class="dia-sig-sup">+1</sup>{/if}
+													🕐 {t.hora_inicio}–{t.hora_fin}{#if t.dias_offset_fin > t.dias_offset_inicio}
+														<span class="dia-sig-sup"
+															>termina {etiquetaOffsetDias(t.dias_offset_fin, fecha)}</span
+														>{/if}
 												</span>
 											{/if}
 											{#if t.horas_conducidas > 0}
@@ -521,7 +532,8 @@
 													<TimePicker
 														id="hi-{t.id}"
 														bind:value={t.hora_inicio}
-														bind:dayOffset={t.inicio_dia_siguiente}
+														bind:diasOffset={t.dias_offset_inicio}
+										fechaBase={fecha}
 														placeholder="Inicio"
 													/>
 												</div>
@@ -530,7 +542,8 @@
 													<TimePicker
 														id="hf-{t.id}"
 														bind:value={t.hora_fin}
-														bind:dayOffset={t.fin_dia_siguiente}
+														bind:diasOffset={t.dias_offset_fin}
+										fechaBase={fecha}
 														placeholder="Fin"
 													/>
 												</div>
@@ -634,15 +647,17 @@
 												/>
 											</div>
 
-											<!-- Observaciones del tramo -->
+											<!-- Descripción del servicio del tramo. Obligatoria: es lo
+											     que dice QUÉ se transportó. La nota libre de la jornada
+											     sigue estando en el bloque del día. -->
 											<div class="field" style="margin-top:.65rem">
-												<label class="field-label" for="obs-{t.id}">Observaciones del tramo</label>
+												<label class="field-label" for="desc-{t.id}">Descripción del servicio *</label>
 												<textarea
-													id="obs-{t.id}"
+													id="desc-{t.id}"
 													class="field-input field-textarea"
-													bind:value={t.observaciones}
+													bind:value={t.descripcion_servicio}
 													rows="2"
-													placeholder="Notas del tramo…"
+													placeholder="Qué se transportó y hacia dónde"
 												></textarea>
 											</div>
 

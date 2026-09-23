@@ -73,6 +73,9 @@
 		km_final: number | null;
 		pernocte: boolean;
 		observaciones: string;
+		/// Del TRAMO, no del día: qué se transportó. Obligatoria en los tipos que
+		/// generan tramo (LABORADO y DISPONIBLE); los otros dos no lo usan.
+		descripcion_servicio: string;
 		fechas: Set<string>;
 	}
 
@@ -89,6 +92,12 @@
 
 	// Devuelve la "configuración de campos" según el tipo de patrón.
 	// Centraliza la lógica de qué se muestra en el form.
+	/// Qué tipos de día generan un tramo. DESCANSO y MANTENIMIENTO no: son días
+	/// sin recorrido y todo lo suyo vive en el registro del día.
+	function creaTramo(t: TipoDia): boolean {
+		return t === 'LABORADO' || t === 'DISPONIBLE';
+	}
+
 	function camposParaTipo(t: TipoDia) {
 		switch (t) {
 			case 'LABORADO':
@@ -415,6 +424,7 @@
 			km_final: null,
 			pernocte: false,
 			observaciones: '',
+			descripcion_servicio: '',
 			fechas: new Set()
 		};
 		// Si el tipo no requiere horario, lo dejamos en strings vacíos
@@ -711,6 +721,12 @@
 					errores.push(`Patrón "${labelPatron(p)}" hora fin <= inicio`);
 				}
 			}
+			/// Solo LABORADO y DISPONIBLE crean tramo, y el tramo no puede nacer
+			/// sin descripción: la columna es NOT NULL. Se avisa aquí para no
+			/// mandar el lote entero y que lo rechace el servidor.
+			if (creaTramo(p.tipo) && !p.descripcion_servicio.trim()) {
+				errores.push(`Patrón "${labelPatron(p)}" sin descripción del servicio`);
+			}
 		}
 		return {
 			totalPatrones: patrones.filter((p) => p.fechas.size > 0).length,
@@ -791,7 +807,7 @@
 								seg.km_final = p.km_final;
 							}
 							seg.pernocte = defaults.requierePernocte ? p.pernocte : false;
-							seg.observaciones = p.observaciones || null;
+							seg.descripcion_servicio = p.descripcion_servicio.trim();
 							base.segmento = seg;
 						}
 						return base;
@@ -1535,6 +1551,24 @@
 								</label>
 							{/if}
 						</div>
+						{#if creaTramo(p.tipo)}
+							<!-- Del TRAMO. Va separada de las observaciones del día porque
+							     son cosas distintas: esta dice QUÉ se transportó y es
+							     obligatoria; la de abajo es una nota libre de la jornada. -->
+							<label class="block">
+								<span class="mb-0.5 block text-[9px] font-semibold uppercase tracking-wide" style="color: var(--text-muted);">
+									Descripción del servicio *
+								</span>
+								<textarea
+									value={p.descripcion_servicio}
+									oninput={(e) => actualizarPatron(p.idLocal, { descripcion_servicio: (e.currentTarget as HTMLTextAreaElement).value })}
+									rows={2}
+									placeholder="Qué se transportó y hacia dónde"
+									class="w-full rounded-lg border px-2 py-1.5 text-[11px]"
+									style="border-color: {p.descripcion_servicio.trim() ? 'var(--border-default)' : '#dc2626'}; background: var(--bg-surface);"
+								></textarea>
+							</label>
+						{/if}
 						<label class="block">
 							<span class="mb-0.5 block text-[9px] font-semibold uppercase tracking-wide" style="color: var(--text-muted);">
 								Observaciones {p.tipo === 'DESCANSO' || p.tipo === 'MANTENIMIENTO' ? '' : '(opcional)'}

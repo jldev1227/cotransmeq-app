@@ -29,8 +29,12 @@
 	} from '$lib/offline/forms-sync';
 
 	interface Props {
-		/** Compacto para la barra superior; extendido para la pantalla de lista. */
-		variant?: 'chip' | 'panel';
+		/**
+		 * - `chip`: solo el estado, para la barra de una pantalla de trabajo.
+		 * - `control`: el chip de la cabecera, que despliega el detalle al tocarlo.
+		 * - `panel`: el detalle siempre abierto.
+		 */
+		variant?: 'chip' | 'control' | 'panel';
 	}
 
 	let { variant = 'chip' }: Props = $props();
@@ -166,24 +170,24 @@
 	/// El texto solo cambia de palabra; sin movimiento el conductor no distingue
 	/// «sincronizando» de «sincronizado» de un vistazo, que es como se mira esto.
 	const trabajando = $derived(estado.phase === 'syncing' || estado.phase === 'checking');
+
+	/**
+	 * Apertura del detalle en la variante `control`.
+	 *
+	 * `null` es «decide el estado»: cerrado salvo que haya algo bloqueado, porque
+	 * un envío que necesita corrección no puede quedarse escondido detrás de un
+	 * toque —es trabajo del conductor que no llegó y que solo se rescata desde
+	 * aquí—. En cuanto lo abre o lo cierra a mano, manda su decisión.
+	 */
+	let abiertoManual = $state<boolean | null>(null);
+	const abierto = $derived(abiertoManual ?? estado.phase === 'blocked');
 </script>
 
-{#if variant === 'chip'}
-	<button
-		type="button"
-		class="chip chip--{tono}"
-		aria-live="polite"
-		title={etiqueta}
-		onclick={intentarAhora}
-	>
-		<span class="chip__icono" class:girando={trabajando} aria-hidden="true">{icono}</span>
-		<span class="chip__texto">{etiqueta}</span>
-		{#if estado.submissions > 0}
-			<span class="chip__conteo">{estado.submissions}</span>
-		{/if}
-	</button>
-{:else}
-	<section class="panel panel--{tono}" class:panel--trabajando={trabajando} aria-live="polite">
+
+<!-- El detalle es el MISMO en el panel y en el chip desplegable. Se define una
+     vez: son las acciones de rescate de un envío bloqueado y no pueden
+     divergir entre una pantalla y otra. -->
+{#snippet detalle()}
 		<div class="panel__fila">
 			<span class="panel__icono" class:girando={trabajando} aria-hidden="true">{icono}</span>
 			<div class="panel__texto">
@@ -298,10 +302,92 @@
 				{/each}
 			</ul>
 		{/if}
+{/snippet}
+
+{#if variant === 'control'}
+	<div class="control">
+		<button
+			type="button"
+			class="chip chip--{tono}"
+			aria-live="polite"
+			aria-expanded={abierto}
+			title={etiqueta}
+			onclick={() => (abiertoManual = !abierto)}
+		>
+			<span class="chip__icono" class:girando={trabajando} aria-hidden="true">{icono}</span>
+			<span class="chip__texto">{etiqueta}</span>
+			{#if estado.submissions > 0}
+				<span class="chip__conteo">{estado.submissions}</span>
+			{/if}
+			<span class="chip__flecha" class:chip__flecha--abierta={abierto} aria-hidden="true">▾</span>
+		</button>
+
+		{#if abierto}
+			<div class="control__detalle control__detalle--{tono}">
+				{@render detalle()}
+			</div>
+		{/if}
+	</div>
+{:else if variant === 'chip'}
+	<button
+		type="button"
+		class="chip chip--{tono}"
+		aria-live="polite"
+		title={etiqueta}
+		onclick={intentarAhora}
+	>
+		<span class="chip__icono" class:girando={trabajando} aria-hidden="true">{icono}</span>
+		<span class="chip__texto">{etiqueta}</span>
+		{#if estado.submissions > 0}
+			<span class="chip__conteo">{estado.submissions}</span>
+		{/if}
+	</button>
+{:else}
+	<section class="panel panel--{tono}" class:panel--trabajando={trabajando} aria-live="polite">
+		{@render detalle()}
 	</section>
 {/if}
 
+
 <style>
+	/* ── Chip desplegable de la cabecera ─────────────────────────────────────
+	   El detalle se ancla al chip y flota sobre el contenido: empujar la página
+	   hacia abajo cada vez que cambia el estado de la cola movería las tarjetas
+	   bajo el pulgar del conductor justo cuando va a tocar una. */
+	.control {
+		position: relative;
+	}
+
+	.chip__flecha {
+		font-size: 0.625rem;
+		line-height: 1;
+		transition: transform 0.15s var(--ease, ease);
+	}
+
+	.chip__flecha--abierta {
+		transform: rotate(180deg);
+	}
+
+	.control__detalle {
+		position: absolute;
+		top: calc(100% + 0.375rem);
+		right: 0;
+		z-index: 20;
+		width: min(20rem, calc(100vw - 1.75rem));
+		max-height: min(60vh, 28rem);
+		overflow-y: auto;
+		padding: 0.75rem;
+		text-align: left;
+		background: var(--bg-surface, #fff);
+		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
+		border-radius: 14px;
+		box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+	}
+
+	.control__detalle--error {
+		border-color: rgba(220, 38, 38, 0.35);
+	}
+
 	.chip {
 		display: inline-flex;
 		align-items: center;
