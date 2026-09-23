@@ -233,7 +233,20 @@
 	const user = $derived($authStore.user);
 	const isKilometrajeRole = $derived(user?.role === 'kilometraje');
 	const isConsultaRole = $derived(user?.role === 'consulta');
-	const isReadOnly = $derived(isConsultaRole);
+	/**
+	 * Sólo lectura si el ROL es `consulta` —como siempre— o si el NIVEL sobre el
+	 * módulo `recargos` no llega a `full`.
+	 *
+	 * Faltaba la segunda mitad: `permisos_rutas` puede dejar a alguien en
+	 * «Consulta» sobre recargos sin cambiarle el rol, y la pantalla le seguía
+	 * ofreciendo crear planillas, editarlas, borrarlas y tocar las
+	 * configuraciones de salarios. Es `!== 'full'` y no `=== 'read'` para que
+	 * `limited` o un nivel nuevo tampoco escriban por defecto.
+	 */
+	const puedeEditarRecargos = $derived(
+		!!$authStore.user && authStore.getAccessLevel('recargos') === 'full'
+	);
+	const isReadOnly = $derived(isConsultaRole || !puedeEditarRecargos);
 
 	// Store data
 	const recargos = $derived($recargosStore.recargos);
@@ -1912,7 +1925,7 @@
 						</button>
 					</div>
 				{/if}
-			{:else if selectedRows.size > 0}
+			{:else if selectedRows.size > 0 && !isReadOnly}
 				<button
 					onclick={() => (modalRestaurarIsOpen = true)}
 					class="apple-transition flex cursor-pointer items-center gap-1.5 rounded-xl border border-[rgba(16,185,129,0.3)] bg-[var(--emerald-500)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--emerald-600)]"
