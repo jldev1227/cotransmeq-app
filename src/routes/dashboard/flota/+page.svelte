@@ -52,6 +52,16 @@
 		vista: string;
 	}
 
+	// ── Permisos ──────────────────────────────────────────────────────
+	// `Consulta` (`read`) entra a la pantalla pero no escribe. Se lee
+	// `$authStore` a propósito para que el derived se recalcule cuando la
+	// sesión termine de hidratarse. El backend aplica lo mismo sobre las
+	// rutas de escritura de `flota`; esto sólo evita ofrecer un botón
+	// que iba a devolver 403.
+	const puedeEditar = $derived(
+		!!$authStore.user && authStore.getAccessLevel('flota') === 'full'
+	);
+
 	const DEFS: DefinicionesFiltros<FiltrosFlota> = {
 		q: texto(),
 		estado: opcion('todos'),
@@ -471,12 +481,14 @@
 					</svg>
 					Filtros
 				</button>
-				<button onclick={() => openModal()} class="btn-primary">
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-					</svg>
-					Registrar Vehículo
-				</button>
+				{#if puedeEditar}
+					<button onclick={() => openModal()} class="btn-primary">
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+						</svg>
+						Registrar Vehículo
+					</button>
+				{/if}
 			</div>
 		</div>
 
@@ -731,26 +743,28 @@
 								onclick={(e) => e.stopPropagation()}
 								role="presentation"
 							>
-								<button
-									onclick={() => openModal(v.id)}
-									class="apple-transition rounded-md p-1.5"
-									style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
-									title="Editar"
-								>
-									<svg
-										class="h-3.5 w-3.5"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-										stroke-width="1.8"
+								{#if puedeEditar}
+									<button
+										onclick={() => openModal(v.id)}
+										class="apple-transition rounded-md p-1.5"
+										style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
+										title="Editar"
 									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-2.828 0L9 13zm-4 6h16"
-										/>
-									</svg>
-								</button>
+										<svg
+											class="h-3.5 w-3.5"
+											fill="none"
+											stroke="currentColor"
+											viewBox="0 0 24 24"
+											stroke-width="1.8"
+										>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-2.828 0L9 13zm-4 6h16"
+											/>
+										</svg>
+									</button>
+								{/if}
 								<button
 									onclick={() => openDeleteModal(v)}
 									class="apple-transition rounded-md p-1.5"
@@ -794,48 +808,52 @@
 					{vehiculosSeleccionados.size} seleccionados
 				</span>
 				<div class="flex gap-1.5">
-					<button
-						onclick={() => ejecutarAccionMasiva('ocultar')}
-						disabled={procesandoMasivo}
-						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
-						style="background-color: rgba(255,255,255,0.08);"
-					>
-						<svg
-							class="h-3.5 w-3.5"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-							stroke-width="1.8"
+					{#if puedeEditar}
+						<button
+							onclick={() => ejecutarAccionMasiva('ocultar')}
+							disabled={procesandoMasivo}
+							class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
+							style="background-color: rgba(255,255,255,0.08);"
 						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
-							/>
-						</svg>
-						Ocultar
-					</button>
-					<button
-						onclick={() => ejecutarAccionMasiva('eliminar')}
-						disabled={procesandoMasivo}
-						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
-						style="background-color: rgba(220,38,38,0.85);"
-					>
-						<svg
-							class="h-3.5 w-3.5"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-							stroke-width="1.8"
+							<svg
+								class="h-3.5 w-3.5"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+								stroke-width="1.8"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
+								/>
+							</svg>
+							Ocultar
+						</button>
+					{/if}
+					{#if puedeEditar}
+						<button
+							onclick={() => ejecutarAccionMasiva('eliminar')}
+							disabled={procesandoMasivo}
+							class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
+							style="background-color: rgba(220,38,38,0.85);"
 						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-							/>
-						</svg>
-						Papelera
-					</button>
+							<svg
+								class="h-3.5 w-3.5"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+								stroke-width="1.8"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+								/>
+							</svg>
+							Papelera
+						</button>
+					{/if}
 				</div>
 				<button
 					onclick={() => {
