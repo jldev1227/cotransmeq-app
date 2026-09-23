@@ -15,14 +15,14 @@
 		vehiculo_placa: string | null;
 		hora_inicio: string | null;
 		hora_fin: string | null;
-		inicio_dia_siguiente?: boolean;
-		fin_dia_siguiente?: boolean;
+		dias_offset_inicio?: number;
+		dias_offset_fin?: number;
 		horas_conducidas: number | null;
 		km_inicial: number | null;
 		km_final: number | null;
 		pernocte: boolean;
 		orden: number;
-		observaciones: string | null;
+		descripcion_servicio: string;
 	}
 
 	export interface RegistroContexto {
@@ -49,13 +49,13 @@
 	let vehiculoPlaca = $state<string>('');
 	let horaInicio = $state<string>('');
 	let horaFin = $state<string>('');
-	let inicioDiaSiguiente = $state<boolean>(false);
-	let finDiaSiguiente = $state<boolean>(false);
+	let diasOffsetInicio = $state<number>(0);
+	let diasOffsetFin = $state<number>(0);
 	let horasConducidas = $state<number>(0);
 	let kmInicial = $state<number | null>(null);
 	let kmFinal = $state<number | null>(null);
 	let pernocte = $state<boolean>(false);
-	let observaciones = $state<string>('');
+	let descripcionServicio = $state<string>('');
 	let guardando = $state<boolean>(false);
 	let errorMsg = $state<string>('');
 
@@ -87,13 +87,13 @@
 		vehiculoPlaca = segmento.vehiculo_placa ?? '';
 		horaInicio = segmento.hora_inicio ?? '';
 		horaFin = segmento.hora_fin ?? '';
-		inicioDiaSiguiente = segmento.inicio_dia_siguiente ?? false;
-		finDiaSiguiente = segmento.fin_dia_siguiente ?? false;
+		diasOffsetInicio = segmento.dias_offset_inicio ?? 0;
+		diasOffsetFin = segmento.dias_offset_fin ?? 0;
 		horasConducidas = Number(segmento.horas_conducidas) || 0;
 		kmInicial = segmento.km_inicial ?? null;
 		kmFinal = segmento.km_final ?? null;
 		pernocte = segmento.pernocte ?? false;
-		observaciones = segmento.observaciones ?? '';
+		descripcionServicio = segmento.descripcion_servicio ?? '';
 		errorMsg = '';
 	}
 
@@ -125,16 +125,22 @@
 			return 'KM final debe ser mayor o igual a KM inicial';
 		}
 		if (horaInicio && horaFin) {
-			const toMins = (h: string, next: boolean) =>
-				h.split(':').reduce((a, v) => a * 60 + Number(v), 0) + (next ? 24 * 60 : 0);
-			const inicioMins = toMins(horaInicio, inicioDiaSiguiente);
-			const finMins = toMins(horaFin, finDiaSiguiente);
+			const toMins = (h: string, dias: number) =>
+				h.split(':').reduce((a, v) => a * 60 + Number(v), 0) + dias * 24 * 60;
+			const inicioMins = toMins(horaInicio, diasOffsetInicio);
+			const finMins = toMins(horaFin, diasOffsetFin);
 			if (finMins <= inicioMins) {
-				return 'Hora fin debe ser posterior a hora inicio (usa el +1 si cruza medianoche)';
+				return 'La hora de fin debe ser posterior a la de inicio. Si el turno termina pasada la medianoche, elige la hora en el grupo «día siguiente».';
 			}
 		}
 		if (horasConducidas < 0 || horasConducidas > 24) {
 			return 'Horas conducidas debe estar entre 0 y 24';
+		}
+		/// Un tramo sin describir no se puede guardar: la columna es NOT NULL y,
+		/// sobre todo, una fila que no dice qué se transportó no sirve para
+		/// liquidar ni para responderle a un cliente.
+		if (!descripcionServicio.trim()) {
+			return 'Describe el servicio de este tramo';
 		}
 		return null;
 	}
@@ -149,23 +155,20 @@
 		errorMsg = '';
 		guardando = true;
 		try {
-			const payload: Partial<SegmentoPatron> & {
-				inicio_dia_siguiente?: boolean;
-				fin_dia_siguiente?: boolean;
-			} = {
+			const payload: Partial<SegmentoPatron> = {
 				cliente_id: clienteId,
 				cliente_nombre: clienteNombre || null,
 				vehiculo_id: vehiculoId,
 				vehiculo_placa: vehiculoPlaca || null,
 				hora_inicio: horaInicio || null,
 				hora_fin: horaFin || null,
-				inicio_dia_siguiente: inicioDiaSiguiente,
-				fin_dia_siguiente: finDiaSiguiente,
+				dias_offset_inicio: diasOffsetInicio,
+				dias_offset_fin: diasOffsetFin,
 				horas_conducidas: horasConducidas,
 				km_inicial: kmInicial,
 				km_final: kmFinal,
 				pernocte,
-				observaciones: observaciones || null
+				descripcion_servicio: descripcionServicio.trim()
 			};
 			const res = await diasLaboradosAPI.editarSegmento(segmento.id, payload);
 			if (res.data?.success) {
@@ -225,12 +228,12 @@
 			<!-- Header -->
 			<header
 				class="flex flex-shrink-0 items-start justify-between gap-3 border-b border-gray-200 px-5 py-4"
-				style="background: linear-gradient(135deg, #f0fdf4, #d1fae5);"
+				style="background: linear-gradient(135deg, #ecfdf5, #d1fae5);"
 			>
 				<div class="flex items-start gap-3">
 					<div
 						class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl"
-						style="background: linear-gradient(135deg, #ea580c, #c2410c); box-shadow: 0 4px 12px rgba(249, 115, 22,0.25);"
+						style="background: linear-gradient(135deg, #059669, #047857); box-shadow: 0 4px 12px rgba(16,185,129,0.25);"
 					>
 						<svg
 							class="h-5 w-5 text-white"
@@ -249,7 +252,7 @@
 					<div>
 						<p
 							class="font-mono text-[10px] font-semibold uppercase tracking-wider"
-							style="color: #c2410c;"
+							style="color: #047857;"
 						>
 							Editar recorrido
 						</p>
@@ -340,7 +343,8 @@
 						</span>
 						<TimePicker
 							bind:value={horaInicio}
-							bind:dayOffset={inicioDiaSiguiente}
+							bind:diasOffset={diasOffsetInicio}
+							fechaBase={registro?.fecha ?? null}
 							placeholder="Inicio"
 						/>
 					</label>
@@ -355,7 +359,8 @@
 						</span>
 						<TimePicker
 							bind:value={horaFin}
-							bind:dayOffset={finDiaSiguiente}
+							bind:diasOffset={diasOffsetFin}
+							fechaBase={registro?.fecha ?? null}
 							placeholder="Fin"
 						/>
 					</label>
@@ -384,7 +389,7 @@
 						<input
 							type="checkbox"
 							bind:checked={pernocte}
-							class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+							class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
 						/>
 						<span class="text-xs" style="color: var(--text-secondary);">
 							Pernocte (noche fuera de casa)
@@ -435,19 +440,20 @@
 						/>
 					</label>
 
-					<!-- Observaciones (full width) -->
+					<!-- Descripción del servicio (full width). Obligatoria. -->
 					<label class="block sm:col-span-2">
 						<span
 							class="mb-1 block text-[10px] font-semibold uppercase tracking-wide"
 							style="color: var(--text-muted);"
 						>
-							Observaciones
+							Descripción del servicio *
 						</span>
 						<textarea
-							bind:value={observaciones}
+							bind:value={descripcionServicio}
 							rows="2"
-							placeholder="Notas del tramo (opcional)…"
-							class="apple-transition w-full rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs"
+							placeholder="Qué se transportó y hacia dónde"
+							class="apple-transition w-full rounded-lg border bg-white px-2.5 py-2 text-xs"
+							style="border-color: {descripcionServicio.trim() ? '#e5e7eb' : '#dc2626'};"
 						></textarea>
 					</label>
 				</div>
@@ -491,7 +497,7 @@
 					onclick={guardar}
 					disabled={guardando}
 					class="apple-transition inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
-					style="background: linear-gradient(135deg, #ea580c, #c2410c); box-shadow: 0 2px 6px rgba(249, 115, 22,0.25);"
+					style="background: linear-gradient(135deg, #059669, #047857); box-shadow: 0 2px 6px rgba(16,185,129,0.25);"
 				>
 					{#if guardando}
 						<svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">

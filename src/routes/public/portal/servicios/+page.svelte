@@ -114,6 +114,7 @@
 		}
 		await cargar();
 	});
+	import PortalHeader from '$lib/components/portal/PortalHeader.svelte';
 </script>
 
 <svelte:head>
@@ -130,27 +131,25 @@
 >
 	<!-- ─── HEADER ─── -->
 	<header class="page-header">
-		<div class="header-row">
-			<div class="header-info">
-				<p class="header-eyebrow">Hola, {$conductorNombre.split(' ')[0] || 'Conductor'}</p>
-				<h1 class="header-title">Mis servicios</h1>
-			</div>
-			<button
-				class="refresh-btn"
-				class:spinning={refreshing}
-				on:click={handleRefresh}
-				aria-label="Actualizar"
-				disabled={refreshing}
-			>
-				<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-					/>
-				</svg>
-			</button>
-		</div>
+		<PortalHeader titulo="Mis servicios" meta={`Hola, ${$conductorNombre.split(' ')[0] || 'Conductor'}`}>
+			{#snippet acciones()}
+				<button
+					class="refresh-btn"
+					class:spinning={refreshing}
+					on:click={handleRefresh}
+					aria-label="Actualizar"
+					disabled={refreshing}
+				>
+					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+						/>
+					</svg>
+				</button>
+			{/snippet}
+		</PortalHeader>
 
 		<!-- Search -->
 		<label class="search-wrap">
@@ -364,30 +363,8 @@
 		border-bottom: 1px solid #e5e7eb;
 	}
 
-	.header-row {
-		display: flex;
-		align-items: flex-end;
-		justify-content: space-between;
-		gap: 0.5rem;
-		min-width: 0;
-	}
 
-	.header-eyebrow {
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: #ea580c;
-		margin: 0;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-	}
 
-	.header-title {
-		font-size: 1.5rem;
-		font-weight: 800;
-		color: #0f172a;
-		margin: 0.1rem 0 0;
-		line-height: 1.1;
-	}
 
 	.refresh-btn {
 		width: 40px;
@@ -850,9 +827,6 @@
 		}
 		.page-body {
 			padding: 1.25rem 1.5rem;
-		}
-		.header-title {
-			font-size: 1.75rem;
 		}
 		.servicios-list {
 			display: grid;

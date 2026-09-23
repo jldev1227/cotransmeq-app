@@ -30,13 +30,13 @@
 		vehiculo_placa: string;
 		hora_inicio: string;
 		hora_fin: string;
-		inicio_dia_siguiente?: boolean;
-		fin_dia_siguiente?: boolean;
+		dias_offset_inicio?: number;
+		dias_offset_fin?: number;
 		horas_conducidas: number;
 		km_inicial?: number | null;
 		km_final?: number | null;
 		pernocte?: boolean | null;
-		observaciones: string | null;
+		descripcion_servicio: string;
 	}
 
 	export interface RegistroTabla {
@@ -829,7 +829,7 @@
 		km_inicial: number | null;
 		km_final: number | null;
 		pernocte: boolean;
-		observaciones: string | null;
+		descripcion_servicio: string;
 	}
 
 	interface RegistroAccion {

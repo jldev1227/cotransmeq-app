@@ -35,7 +35,7 @@ import { PortalApiError, hayConexionReal, portalFormulariosAPI } from '$lib/api/
 import {
 	allDrafts,
 	allOperations,
-	allReceipts,
+	allReceiptsAnyConductor,
 	attachmentsForSubmission,
 	claimNextOperation,
 	deleteDraftCascade,
@@ -340,6 +340,17 @@ function programar(ms: number) {
 }
 
 /**
+ * Conductor de la sesión activa, para marcar los recibos que se guardan.
+ *
+ * Solo se llama desde caminos que ya exigieron sesión (`tick()` corta antes sin
+ * token), así que la cadena vacía es una red por si acaso: un recibo sin dueño no
+ * se le muestra a nadie, que es preferible a mostrárselo al conductor equivocado.
+ */
+function conductorActual(): string {
+	return get(portalSession)?.conductor.id ?? '';
+}
+
+/**
  * Una ronda de sincronización.
  *
  * Procesa operaciones hasta que no queda ninguna elegible, y reprograma según la
@@ -471,6 +482,7 @@ async function restaurarBorradorServidor(
 	if (submission.status !== 'DRAFT') {
 		await putReceipt({
 			clientSubmissionId,
+			conductorId: conductorActual(),
 			submissionId: submission.id,
 			assignmentId: submission.assignmentId,
 			code: submission.version?.code ?? '',
@@ -1106,6 +1118,7 @@ async function ejecutarSubmit(operacion: OutboxOperation): Promise<void> {
 
 	await putReceipt({
 		clientSubmissionId: draft.clientSubmissionId,
+		conductorId: conductorActual(),
 		submissionId: resultado.submissionId,
 		assignmentId: draft.assignmentId,
 		code: assignment?.code ?? '',
@@ -1227,7 +1240,7 @@ async function rescatarBloqueadosSinBorrador(): Promise<void> {
  * dejaría un envío sin su evidencia: se deja en paz.
  */
 async function purgarObsoletasTrasRecibo(): Promise<void> {
-	const recibos = await allReceipts();
+	const recibos = await allReceiptsAnyConductor();
 	if (recibos.length === 0) return;
 	const entregados = new Set(recibos.map((r) => r.clientSubmissionId));
 

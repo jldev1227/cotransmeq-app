@@ -20,7 +20,7 @@ import type { FormVersionDto } from '$lib/formularios/types';
 import type { DraftAnswer } from '$lib/formularios/validate-answers';
 
 const DB_NAME = 'transmeralda_forms_v1';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export const STORES = {
 	definitions: 'definitions',
@@ -155,6 +155,16 @@ export interface OutboxOperation {
 
 export interface StoredReceipt {
 	clientSubmissionId: string;
+	/**
+	 * Conductor que entregó el envío.
+	 *
+	 * IndexedDB vive en el origen, no en la sesión: sin esta columna los recibos
+	 * de quien usó antes el dispositivo se mezclan con los del conductor actual, y
+	 * al abrirlos el servidor responde `SUBMISSION_NOT_FOUND` porque filtra por
+	 * dueño. Es el mismo motivo por el que tampoco sirve confiar en que el
+	 * dispositivo sea de una sola persona.
+	 */
+	conductorId: string;
 	submissionId: string;
 	assignmentId: string;
 	code: string;
@@ -218,6 +228,12 @@ export function openFormsDb(): Promise<IDBDatabase> {
 			}
 			if (!db.objectStoreNames.contains(STORES.receipts)) {
 				db.createObjectStore(STORES.receipts, { keyPath: 'clientSubmissionId' });
+			} else if (request.transaction) {
+				/// v1 → v2: los recibos viejos no guardan `conductorId`, así que no hay
+				/// forma de saber de quién son ni contra qué backend se emitieron. Se
+				/// vacían una sola vez. No se pierde trabajo: un recibo es el acuse de
+				/// algo YA entregado al servidor, no un borrador pendiente.
+				request.transaction.objectStore(STORES.receipts).clear();
 			}
 			if (!db.objectStoreNames.contains(STORES.meta)) {
 				db.createObjectStore(STORES.meta, { keyPath: 'key' });
@@ -649,7 +665,25 @@ export async function getReceipt(clientSubmissionId: string): Promise<StoredRece
 	);
 }
 
-export async function allReceipts(): Promise<StoredReceipt[]> {
+/**
+ * Recibos del conductor indicado.
+ *
+ * El filtro es obligatorio a propósito: un `getAll()` pelado es lo que hacía que
+ * «Últimos envíos» mostrara los de la sesión anterior.
+ */
+export async function allReceipts(conductorId: string): Promise<StoredReceipt[]> {
+	const todos = await allReceiptsAnyConductor();
+	return todos.filter((r) => r.conductorId === conductorId);
+}
+
+/**
+ * Todos los recibos, sin mirar de quién son.
+ *
+ * Solo para el barrido interno de la outbox: ahí la pregunta es «¿este
+ * `clientSubmissionId` ya se entregó?», y eso no depende de quién lo entregara.
+ * Para PINTAR recibos siempre `allReceipts(conductorId)`.
+ */
+export async function allReceiptsAnyConductor(): Promise<StoredReceipt[]> {
 	return tx(STORES.receipts, 'readonly', (t) => req(t.objectStore(STORES.receipts).getAll()));
 }
 
@@ -752,6 +786,18 @@ export async function requestPersistence(): Promise<boolean> {
 	} catch {
 		return false;
 	}
+}
+
+/**
+ * ¿Queda trabajo del conductor sin entregar al servidor?
+ *
+ * Es la guarda de `clearAll()`. Un borrador a medias o una operación en la outbox
+ * son horas de inspección que solo existen en este dispositivo: mientras haya
+ * algo de eso, cerrar sesión no puede borrar nada.
+ */
+export async function hayTrabajoPendiente(): Promise<boolean> {
+	const [borradores, operaciones] = await Promise.all([allDrafts(), allOperations()]);
+	return borradores.length > 0 || operaciones.length > 0;
 }
 
 /** Borra todo lo local. Solo al cerrar sesión de forma explícita. */

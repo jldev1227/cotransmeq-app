@@ -1,8 +1,34 @@
+<!--
+  Selector de hora con el día al que pertenece.
+
+  Antes mostraba un «+1» y ya: no decía +1 qué —¿una hora? ¿un día?— ni de qué
+  fecha. Ahora cada opción se lee entera («06:00 · día siguiente (jue 24 sep)»),
+  que es lo que el conductor necesita para no registrar el turno un día corrido.
+
+  `diasOffset` es un número, no una bandera: la columna dejó de ser booleana en
+  `20260923120000_offset_dias_tramo` justamente para poder escribir esto.
+-->
 <script lang="ts">
+  import { MAX_OFFSET_DIAS, etiquetaOffsetDias, horaConOffset } from '$lib/utils/dias-offset';
+
   export let value: string = '';
-  export let dayOffset: boolean = false;
+  export let diasOffset: number = 0;
+  /**
+   * Id del `<select>`, para el `for` de la etiqueta de al lado.
+   *
+   * Los modales ya lo pasaban; el componente no lo declaraba, así que se perdía
+   * y la etiqueta quedaba sin asociar: tocarla no enfocaba el campo y un lector
+   * de pantalla no sabía de qué era.
+   */
+  export let id: string | undefined = undefined;
   export let disabled: boolean = false;
   export let placeholder: string = 'Seleccionar hora';
+  /**
+   * Fecha del día laborado (`YYYY-MM-DD`), para poder decir la fecha concreta
+   * en vez de «día siguiente» a secas. Opcional: sin ella el texto sigue
+   * siendo correcto, solo menos preciso.
+   */
+  export let fechaBase: string | null = null;
 
   const TIMES: string[] = (() => {
     const arr: string[] = [];
@@ -14,26 +40,29 @@
     return arr;
   })();
 
-  $: encodedValue = value ? `${value}|${dayOffset ? 1 : 0}` : '';
+  const OFFSETS: number[] = Array.from({ length: MAX_OFFSET_DIAS + 1 }, (_, i) => i);
+
+  $: offsetNormalizado = Math.max(0, Math.min(MAX_OFFSET_DIAS, Math.trunc(Number(diasOffset) || 0)));
+  $: encodedValue = value ? `${value}|${offsetNormalizado}` : '';
   $: hasValue = !!value;
-  $: isNextDay = dayOffset === true;
+  $: otroDia = offsetNormalizado > 0;
   $: legacyValue = value && !TIMES.includes(value) ? value : null;
 
   function handleChange(e: Event) {
     const raw = (e.target as HTMLSelectElement).value;
     if (!raw) {
       value = '';
-      dayOffset = false;
+      diasOffset = 0;
       return;
     }
     const sep = raw.lastIndexOf('|');
     if (sep < 0) {
       value = raw;
-      dayOffset = false;
+      diasOffset = 0;
       return;
     }
     value = raw.slice(0, sep);
-    dayOffset = raw.slice(sep + 1) === '1';
+    diasOffset = Number(raw.slice(sep + 1)) || 0;
   }
 
   function clearValue(e: Event) {
@@ -41,21 +70,21 @@
     e.stopPropagation();
     if (disabled) return;
     value = '';
-    dayOffset = false;
+    diasOffset = 0;
   }
 </script>
 
-<div class="time-picker" class:disabled class:has-value={hasValue} class:next-day={isNextDay}>
+<div class="time-picker" class:disabled class:has-value={hasValue} class:next-day={otroDia}>
   <svg class="time-picker-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
     <circle cx="12" cy="12" r="9" />
     <path stroke-linecap="round" d="M12 7v5l3 2" />
   </svg>
 
-  {#if isNextDay}
-    <span class="next-day-badge" title="Día siguiente">+1</span>
-  {/if}
-
+  <!-- Sin insignia: el día va en el texto de la propia opción, que es lo único
+       que se sigue viendo con el desplegable cerrado. Una insignia «+1» encima
+       del campo era justamente lo que no se entendía. -->
   <select
+    {id}
     class="time-picker-select"
     {disabled}
     value={encodedValue}
@@ -68,14 +97,20 @@
     {#if legacyValue}
       <option value={legacyValue}>⚠ {legacyValue} (valor existente)</option>
     {/if}
-    {#each TIMES as opt (opt)}
-      <option value={`${opt}|0`}>{opt}</option>
+    {#each OFFSETS as dias (dias)}
+      {@const etiqueta = etiquetaOffsetDias(dias, fechaBase)}
+      {#if dias === 0}
+        {#each TIMES as opt (opt)}
+          <option value={`${opt}|0`}>{opt}</option>
+        {/each}
+      {:else}
+        <optgroup label={`─── ${etiqueta} ───`}>
+          {#each TIMES as opt (`${opt}|${dias}`)}
+            <option value={`${opt}|${dias}`}>{horaConOffset(opt, dias, fechaBase)}</option>
+          {/each}
+        </optgroup>
+      {/if}
     {/each}
-    <optgroup label="─── Día siguiente (+1) ───">
-      {#each TIMES as opt (`${opt}|1`)}
-        <option value={`${opt}|1`}>{opt}</option>
-      {/each}
-    </optgroup>
   </select>
 
   {#if hasValue && !disabled}
@@ -149,24 +184,6 @@
   }
   .time-picker.next-day.has-value .time-picker-icon {
     color: #f59e0b;
-  }
-  .next-day-badge {
-    position: absolute;
-    left: 2.05rem;
-    z-index: 2;
-    font-size: 0.6rem;
-    font-weight: 800;
-    color: #fff;
-    background: #f59e0b;
-    padding: 1px 5px;
-    border-radius: 6px;
-    letter-spacing: 0.02em;
-    line-height: 1.3;
-    pointer-events: none;
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
-  }
-  .time-picker.next-day .time-picker-select {
-    padding-left: 3.2rem;
   }
   .time-picker-chevron {
     position: absolute;

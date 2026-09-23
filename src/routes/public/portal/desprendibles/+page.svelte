@@ -712,23 +712,25 @@
       });
     }
   });
+  import PortalHeader from '$lib/components/portal/PortalHeader.svelte';
 </script>
 
 <div class="desprendibles-page">
   <!-- ═══ Header ═══ -->
-  <div class="page-header">
-    <div class="page-header-text">
-      <span class="eyebrow">Portal del conductor</span>
-      <h1 class="page-title">Desprendibles y Primas</h1>
-      <p class="page-sub">Consulta, firma y descarga tus comprobantes de nómina y liquidaciones de prima.</p>
-    </div>
-    <button class="btn-refresh" on:click={cargarDesprendibles} disabled={loading} title="Actualizar">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class:spinning={loading}>
-        <polyline points="23 4 23 10 17 10"/>
-        <polyline points="1 20 1 14 7 14"/>
-        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-      </svg>
-    </button>
+  <!-- El párrafo explicativo que había aquí se fue: empujaba las pestañas y el
+       primer desprendible fuera de la primera pantalla del teléfono. -->
+  <div class="cabecera">
+  <PortalHeader titulo="Desprendibles y Primas">
+    {#snippet acciones()}
+      <button class="btn-refresh" on:click={cargarDesprendibles} disabled={loading} title="Actualizar">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class:spinning={loading}>
+          <polyline points="23 4 23 10 17 10"/>
+          <polyline points="1 20 1 14 7 14"/>
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+        </svg>
+      </button>
+    {/snippet}
+  </PortalHeader>
   </div>
 
   <!-- ═══ Tabs ═══ -->
@@ -1426,20 +1428,6 @@
   :global(.portal-app-overflow) { overflow: visible !important; }
 
   /* ═══ Header ═══ */
-  .page-header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 0.85rem;
-    margin-bottom: 1.25rem;
-    padding-bottom: 1rem;
-    border-bottom: 1px solid var(--border);
-  }
-  .page-header-text {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
   .eyebrow {
     display: inline-block;
     align-self: flex-start;
@@ -1453,21 +1441,6 @@
     padding: 0.2rem 0.6rem;
     border-radius: 5px;
     margin-bottom: 0.4rem;
-  }
-  .page-title {
-    font-family: 'Fraunces', Georgia, serif;
-    font-size: 1.45rem;
-    font-weight: 500;
-    margin: 0;
-    color: var(--text-primary);
-    letter-spacing: -0.015em;
-    line-height: 1.2;
-  }
-  .page-sub {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    margin: 0.25rem 0 0;
-    line-height: 1.45;
   }
   .meta-mono {
     font-family: 'JetBrains Mono', monospace;
@@ -2276,6 +2249,13 @@
   @keyframes spin { to { transform: rotate(360deg); } }
 
   /* ═══ TABS (Desprendibles | Primas) ═══ */
+  /* Mismo ritmo vertical que las pestañas: la cabecera compartida no trae
+     margen propio porque en `PortalPage` el hueco lo pone el `gap` del
+     contenedor, y aquí no hay tal contenedor. */
+  .cabecera {
+    margin-bottom: 1.25rem;
+  }
+
   .portal-tabs {
     display: flex;
     gap: 0.4rem;
@@ -2347,7 +2327,6 @@
   @media (max-width: 639px) {
     .table-wrap { display: none; }
     .mobile-cards { display: flex; }
-    .page-title { font-size: 1.15rem; }
     .modal-content { max-width: 100%; }
     .success-title { font-size: 1.4rem; }
     .success-icon-wrap { width: 100px; height: 100px; }

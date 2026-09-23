@@ -87,13 +87,13 @@ function dtoDePrueba(): RecorridosPeriodoDTO {
 						vehiculo_placa: null,
 						hora_inicio: null,
 						hora_fin: null,
-						inicio_dia_siguiente: false,
-						fin_dia_siguiente: false,
+						dias_offset_inicio: 0,
+						dias_offset_fin: 0,
 						horas_conducidas: 0,
 						km_inicial: null,
 						km_final: null,
 						pernocte: false,
-						observaciones: null,
+						descripcion: null,
 						bonos: {}
 					}
 				]
@@ -124,13 +124,13 @@ function fila(o: {
 		vehiculo_placa: o.placa,
 		hora_inicio: '06:00',
 		hora_fin: '18:00',
-		inicio_dia_siguiente: false,
-		fin_dia_siguiente: false,
+		dias_offset_inicio: 0,
+		dias_offset_fin: 0,
 		horas_conducidas: 12,
 		km_inicial: 100,
 		km_final: 200,
 		pernocte: false,
-		observaciones: null,
+		descripcion: null,
 		bonos: o.bonos
 	};
 }

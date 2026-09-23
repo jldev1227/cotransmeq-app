@@ -60,13 +60,15 @@ export interface FilaRecorrido {
 	vehiculo_placa: string | null;
 	hora_inicio: string | null;
 	hora_fin: string | null;
-	inicio_dia_siguiente: boolean;
-	fin_dia_siguiente: boolean;
+	/** Días de desfase de cada extremo: 0 mismo día, 1 el siguiente. */
+	dias_offset_inicio: number;
+	dias_offset_fin: number;
 	horas_conducidas: number;
 	km_inicial: number | null;
 	km_final: number | null;
 	pernocte: boolean;
-	observaciones: string | null;
+	/** Lo que se lee en la columna DESCRIPCIÓN, sea del tramo o del día. */
+	descripcion: string | null;
 	bonos: Record<string, boolean>;
 }
 
@@ -440,7 +442,7 @@ export function bindingsFilaNueva(
 		[COL.FECHA, 'fecha'],
 		[COL.TIPO, 'tipo_dia'],
 		[COL.PLACA, 'vehiculo_placa'],
-		[COL.DESCRIPCION, 'observaciones'],
+		[COL.DESCRIPCION, 'descripcion'],
 		[COL.HORA_INI, 'hora_inicio'],
 		[COL.HORA_FIN, 'hora_fin'],
 		[COL.HORAS, 'horas_conducidas'],
@@ -486,7 +488,9 @@ export function bindingsDeFila(
 
 	if (f.tipo_fila === 'segmento') {
 		bind(COL.PLACA, 'vehiculo_placa');
-		bind(COL.DESCRIPCION, 'observaciones');
+		/// Mismo sitio en la hoja, columna distinta en la base: en un tramo es la
+		/// descripción del servicio, y es obligatoria.
+		bind(COL.DESCRIPCION, 'descripcion_servicio');
 		bind(COL.HORA_INI, 'hora_inicio');
 		bind(COL.HORA_FIN, 'hora_fin');
 		bind(COL.HORAS, 'horas_conducidas');
@@ -595,7 +599,7 @@ export function buildHojaRecorridos(opts: {
 	set(row, COL.DIA_SEMANA, 'DÍA', CABECERA);
 	set(row, COL.TIPO, 'TIPO DE DÍA', CABECERA);
 	set(row, COL.PLACA, 'PLACA', CABECERA);
-	set(row, COL.DESCRIPCION, 'DESCRIPCIÓN DE LA LABOR / RECORRIDO', CABECERA);
+	set(row, COL.DESCRIPCION, 'DESCRIPCIÓN DEL SERVICIO', CABECERA);
 	set(row, COL.HORA_INI, 'HORA INICIAL', CABECERA);
 	set(row, COL.HORA_FIN, 'HORA FINAL', CABECERA);
 	set(row, COL.HORAS, 'TIEMPO DE CONDUCCIÓN', CABECERA);
@@ -625,9 +629,9 @@ export function buildHojaRecorridos(opts: {
 		set(row, COL.DIA_SEMANA, diaSemana(f.fecha), centrado(z));
 		set(row, COL.TIPO, f.tipo_dia, estiloTipo(f.tipo_dia, z));
 		set(row, COL.PLACA, f.vehiculo_placa ?? '', centrado(z));
-		set(row, COL.DESCRIPCION, f.observaciones ?? '', celda(z));
-		set(row, COL.HORA_INI, horaConMarca(f.hora_inicio, f.inicio_dia_siguiente), centrado(z));
-		set(row, COL.HORA_FIN, horaConMarca(f.hora_fin, f.fin_dia_siguiente), centrado(z));
+		set(row, COL.DESCRIPCION, f.descripcion ?? '', celda(z));
+		set(row, COL.HORA_INI, horaConDia(f.hora_inicio, f.dias_offset_inicio), centrado(z));
+		set(row, COL.HORA_FIN, horaConDia(f.hora_fin, f.dias_offset_fin), centrado(z));
 		set(row, COL.HORAS, f.horas_conducidas, horas(z));
 		set(row, COL.PERNOCTE, comoCasilla(f.pernocte), estiloCasilla(f.pernocte, z));
 		set(row, COL.CLIENTE, f.cliente_nombre ?? '', celda(z));
@@ -875,10 +879,19 @@ export function diaSemana(iso: string): string {
 	return DIAS_SEMANA[new Date(Date.UTC(a, m - 1, d)).getUTCDay()] ?? '';
 }
 
-/** Marca `+1` en la hora que cae al día siguiente (turno pasada medianoche). */
-function horaConMarca(hora: string | null, diaSiguiente: boolean): string {
+/**
+ * La hora, y de qué día es cuando no es el del registro.
+ *
+ * En la celda no cabe la fecha completa —la columna es estrecha y son cientos
+ * de filas—, así que se abrevia a «(día sig.)» / «(+2 días)». Sigue siendo
+ * legible, que es lo que el «+1» a secas no era: nadie sabía si era una hora
+ * más, un día más o el día anterior.
+ */
+function horaConDia(hora: string | null, diasOffset: number): string {
 	if (!hora) return '';
-	return diaSiguiente ? `${hora} +1` : hora;
+	const n = Math.max(0, Math.trunc(Number(diasOffset) || 0));
+	if (n === 0) return hora;
+	return n === 1 ? `${hora} (día sig.)` : `${hora} (+${n} días)`;
 }
 
 function letra(c: number): string {

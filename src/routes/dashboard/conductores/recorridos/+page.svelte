@@ -824,7 +824,7 @@
 				km_inicial: (enviados.km_inicial as number) ?? null,
 				km_final: (enviados.km_final as number) ?? null,
 				pernocte: (enviados.pernocte as string) ?? null,
-				observaciones: (enviados.observaciones as string) ?? null,
+				descripcion: (enviados.descripcion as string) ?? null,
 				bonos: [...bonosEnviados]
 			});
 

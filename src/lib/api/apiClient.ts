@@ -579,7 +579,25 @@ export interface SegmentoPatron {
 	km_inicial?: number | null;
 	km_final?: number | null;
 	pernocte?: boolean;
-	observaciones?: string | null;
+	/**
+	 * Qué se transportó en el tramo. Obligatoria al crear uno.
+	 *
+	 * Opcional en el tipo porque el mismo objeto sirve para ediciones parciales
+	 * —cambiar solo el kilometraje— donde no hace falta reenviarla. Lo que el
+	 * backend rechaza es mandarla vacía.
+	 */
+	descripcion_servicio?: string;
+	/**
+	 * Días de desfase de cada extremo: 0 mismo día, 1 el siguiente, tope 2.
+	 *
+	 * Faltaban en este tipo y por eso los modales que sí los mandaban tenían que
+	 * ensanchar el tipo a mano. La causa de fondo era el backend: la carga por
+	 * lote no los aceptaba, así que un turno nocturno cargado en lote se
+	 * guardaba como si terminara el mismo día. Ahora las cuatro rutas los
+	 * admiten y el tipo puede declararlos.
+	 */
+	dias_offset_inicio?: number;
+	dias_offset_fin?: number;
 }
 
 export interface PatronRecorrido {

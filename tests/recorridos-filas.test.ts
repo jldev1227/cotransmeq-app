@@ -87,13 +87,13 @@ function recorrido(segmento_id: string, fecha: string) {
 		vehiculo_placa: 'FST006',
 		hora_inicio: '06:00',
 		hora_fin: '18:00',
-		inicio_dia_siguiente: false,
-		fin_dia_siguiente: false,
+		dias_offset_inicio: 0,
+		dias_offset_fin: 0,
 		horas_conducidas: 6,
 		km_inicial: null,
 		km_final: null,
 		pernocte: false,
-		observaciones: null,
+		descripcion: null,
 		bonos: {}
 	};
 }

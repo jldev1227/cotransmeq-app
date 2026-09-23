@@ -211,9 +211,10 @@ function bloqueRecorridos(
 			/// Entero en pantalla; abreviado en el papel, donde no cabe.
 			tipo: destino === 'pdf' ? (TIPO_CORTO[f.tipo_dia] ?? f.tipo_dia) : f.tipo_dia,
 			placa: f.vehiculo_placa ?? '',
-			// «Descripción de la Labor / Recorrido» del formato: es la
-			// observación del tramo, que es donde se escribe a mano el recorrido.
-			descripcion: f.observaciones ?? '',
+			// «Descripción del servicio» del formato: qué se transportó en el
+			// tramo. En una fila de DÍA la misma columna lleva la observación
+			// libre del día, y el DTO ya las unifica.
+			descripcion: f.descripcion ?? '',
 			cliente: f.cliente_nombre ?? '',
 			hora_ini: f.hora_inicio ?? '',
 			hora_fin: f.hora_fin ?? '',

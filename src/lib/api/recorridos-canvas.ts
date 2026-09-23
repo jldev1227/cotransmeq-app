@@ -30,7 +30,14 @@ export interface FilaNuevaBody {
 	km_inicial?: string | number | null;
 	km_final?: string | number | null;
 	pernocte?: boolean | string | null;
-	observaciones?: string | null;
+	/**
+	 * Lo tecleado en la columna DESCRIPCIÓN.
+	 *
+	 * El servidor decide a qué columna va según lo que resulte ser la fila: a
+	 * `descripcion_servicio` del tramo si es un recorrido —donde es
+	 * obligatoria— o a las observaciones del día si no lo es.
+	 */
+	descripcion?: string | null;
 	/** `config_id` de los bonos marcados en el borrador. */
 	bonos?: string[];
 }
