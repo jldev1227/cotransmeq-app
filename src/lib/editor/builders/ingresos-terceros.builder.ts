@@ -96,6 +96,8 @@ import {
 	type PorcentajesIngresos
 } from '../business/ingresos-transmeralda';
 import { CHECKBOX_SI, CHECKBOX_NO } from '../univer/checkbox-si-no';
+import { IDENTIDAD } from './identidad-empresa';
+import { contraste } from './colores-canvas';
 import type {
 	ConceptoIngreso,
 	EstadoIngresoMes,
@@ -117,8 +119,17 @@ export const FILAS_ANOTABLES = 40;
  */
 export const PRIMERA_FILA_ITEMS = 1;
 
-const GREEN = '#0F4025';
-const GREEN_DARK = '#166534';
+/**
+ * Tonos de MARCA. Salen de `identidad-empresa.ts`, el único archivo que
+ * diverge entre `transmeralda` y `cotransmeq`: en verde para una y en naranja
+ * para la otra. Los nombres se conservan —`GREEN`, `GREEN_DARK`— porque los
+ * usa medio archivo y renombrarlos ensuciaría el `diff` entre repos sin
+ * cambiar nada de lo que se ve.
+ */
+const GREEN: string = IDENTIDAD.colores.fuerte;
+/** La marca usada COMO TEXTO sobre fondo claro: importes y totales. */
+const TEXTO_MARCA: string = IDENTIDAD.colores.textoMarca;
+const GREEN_DARK: string = IDENTIDAD.colores.acento;
 const RED = '#B91C1C';
 const AMBER = '#B45309';
 const BLUE = '#1D4ED8';
@@ -140,7 +151,7 @@ const EDITABLE_BG = '#EFF6FF';
  * misma decisión no puede pintarse de dos azules según cuánto ocupe.
  */
 const AZUL_PRIORIDAD = '#BFDBFE';
-const VERDE_INCLUIDA = '#BBF7D0';
+const VERDE_INCLUIDA: string = IDENTIDAD.colores.incluida;
 /// Fondo de una fila de ADICIONAL. Ámbar y no verde: el verde ya significa
 /// «marcada con INCLUIR» en esta misma tabla, y un adicional puede estar
 /// marcado o no. Son dos cosas distintas y no pueden compartir color.
@@ -258,7 +269,7 @@ export const COL_INCLUIR: number = COL.INCLUIR;
  * sitios es garantizar que un día dejen de coincidir.
  */
 export const COLORES_INCLUIR = {
-	si: { fondo: '#ECFDF5', texto: GREEN_DARK },
+	si: { fondo: IDENTIDAD.colores.acentoTenue, texto: TEXTO_MARCA },
 	no: { fondo: '#F8FAFC', texto: MUTED }
 } as const;
 
@@ -403,7 +414,7 @@ function construirHoja(input: HojaInput): HojaSalida {
 	const headerStyle: IStyleData = {
 		fs: 10,
 		bl: 1,
-		cl: { rgb: '#FFFFFF' },
+		cl: { rgb: contraste(GREEN) },
 		bg: { rgb: GREEN },
 		ht: HorizontalAlign.CENTER,
 		bd: bordes()
@@ -482,7 +493,7 @@ function construirHoja(input: HojaInput): HojaSalida {
 	const banda = (bg: string): IStyleData => ({
 		fs: 11,
 		bl: 1,
-		cl: { rgb: '#FFFFFF' },
+		cl: { rgb: contraste(bg) },
 		bg: { rgb: bg },
 		ht: HorizontalAlign.CENTER,
 		bd: bordes()
@@ -494,7 +505,7 @@ function construirHoja(input: HojaInput): HojaSalida {
 		({
 			fs: 13,
 			bl: 1,
-			cl: { rgb: '#FFFFFF' },
+			cl: { rgb: contraste(bg) },
 			bg: { rgb: bg },
 			bd: bordes(),
 			ht: HorizontalAlign.RIGHT,
@@ -1131,7 +1142,7 @@ function construirHoja(input: HojaInput): HojaSalida {
 		colValor: COL.V_LIQUIDAR,
 		formula: `=${ref(COL.V_LIQUIDAR, filaBaseDescuentos)}-${ref(COL.V_LIQUIDAR, filaTotalDescuentosFinal)}`,
 		valor: tot.transportePorPagar,
-		estiloEtiqueta: cierreEtiqueta('#DCFCE7', GREEN_DARK),
+		estiloEtiqueta: cierreEtiqueta(IDENTIDAD.colores.suave, TEXTO_MARCA),
 		estiloValor: cierreStyle(GREEN_DARK),
 		alto: 28
 	});
@@ -1154,7 +1165,7 @@ function construirHoja(input: HojaInput): HojaSalida {
 			colValor: COL.V_LIQUIDAR,
 			formula: `=${ref(COL.V_LIQUIDAR, filaPorPagar)}-${ref(COL.V_LIQUIDAR, filaDiversos)}`,
 			valor: (tot as any).totalIngresoTransmeralda ?? 0,
-			estiloEtiqueta: cierreEtiqueta('#0F4025', '#FFFFFF'),
+			estiloEtiqueta: cierreEtiqueta(GREEN, contraste(GREEN)),
 			estiloValor: cierreStyle(GREEN),
 			alto: 30
 		});
@@ -1164,7 +1175,7 @@ function construirHoja(input: HojaInput): HojaSalida {
 			colValor: COL.V_LIQUIDAR,
 			formula: `=${ref(COL.V_LIQUIDAR, filaPorPagar)}`,
 			valor: tot.transportePorPagar,
-			estiloEtiqueta: cierreEtiqueta('#0F4025', '#FFFFFF'),
+			estiloEtiqueta: cierreEtiqueta(GREEN, contraste(GREEN)),
 			estiloValor: cierreStyle(GREEN),
 			alto: 30
 		});

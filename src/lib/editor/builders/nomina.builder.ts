@@ -33,7 +33,20 @@ import {
 	type IWorkbookData,
 	type IWorksheetData
 } from '@univerjs/core';
-import { allBorders, colLetra, comoTexto, GREEN, MUTED, TEXT_DARK, TOTALES_BG } from './historial-comun';
+import {
+	allBorders,
+	CABECERA_BG,
+	colLetra,
+	comoTexto,
+	contraste,
+	GREEN,
+	MUTED,
+	TEXT_DARK,
+	TEXTO_MARCA,
+	TEXTO_MARCA_FUERTE,
+	TINTE,
+	TOTALES_BG
+} from './historial-comun';
 import { rellenarBordesVacios } from './relleno-bordes';
 import { setNominaBinding, type NominaBinding } from '../business/nomina-cell-binding';
 import { obtenerFestivosCompletos } from '$lib/utils/festivosColombia';
@@ -82,6 +95,12 @@ export interface DiaHojaDTO {
 	empresaColor: string | null;
 	placa?: string | null;
 	placaColor?: string | null;
+	/// Cuál de los servicios del día es. Ausente en payloads viejos: entonces
+	/// es el primero.
+	ocurrencia?: number;
+	/// `true` cuando el día viene de la COPIA de la liquidación y por tanto se
+	/// puede teclear. Ausente en payloads anteriores al borrador editable.
+	propio?: boolean;
 }
 
 export interface ClienteNominaDTO {
@@ -96,10 +115,23 @@ export interface TarifaDTO {
 	color: string;
 	porcentaje: number;
 	valorHora: number;
+	/** Horas que se PAGAN: las de la planilla, o las corregidas a mano. */
 	horas: number;
+	/**
+	 * Lo que dicen las planillas. Ausente en payloads anteriores a los ajustes
+	 * de horas, donde `horas` es siempre la cifra de la planilla.
+	 */
+	horasPlanilla?: number;
+	/** `true` si estas horas están corregidas a mano. */
+	ajustada?: boolean;
 	valor: number;
 	/** Índice dentro de `HojaNominaDTO.tramos`. Ausente en payloads viejos. */
 	tramo?: number;
+	/// Valor hora e importe sobre CADA base del tramo, alineados con
+	/// `TramoVigenciaDTO.bases`. Ausentes en payloads anteriores a las tarifas
+	/// por empresa, donde solo existe la base general.
+	valorHoraPorBase?: number[];
+	valorPorBase?: number[];
 }
 
 /**
@@ -117,6 +149,9 @@ export interface TramoVigenciaDTO {
 	salarioBasico: number;
 	horasMensualesBase: number;
 	valorHora: number;
+	/// Bases salariales vigentes en el tramo, la general primero. Ausente en
+	/// payloads viejos: entonces solo se pinta la columna de siempre.
+	bases?: { empresaId: string | null; nombre: string; salarioBasico: number; valorHora: number }[];
 }
 
 export interface BloqueEmpresaDTO {
@@ -138,6 +173,9 @@ export interface ConceptoDTO {
 	cantidad: number | null;
 	valor: number;
 	editable: boolean;
+	/// Fila que solo es un rótulo de sección («OTROS»). Ausente en payloads
+	/// viejos, donde no existía.
+	seccion?: boolean;
 }
 
 export interface HojaNominaDTO {
@@ -162,10 +200,30 @@ export interface HojaNominaDTO {
 	placasUsadas?: { placa: string; color: string }[];
 	/** `PAREX`, `GEOPARK`, `PAREX, GEOPARK` o `VILLANUEVA`. Ausente en snapshots viejos. */
 	tipoNomina?: string;
-	/** Bonos × placa. Ausente en snapshots viejos. */
+	/** Bonos × placa × mes. Ausente en snapshots viejos. */
 	matrizBonos?: {
-		placas: { placa: string; color: string }[];
-		filas: { nombre: string; valorUnitario: number; cantidades: number[]; total: number }[];
+		/// `vehiculoId` falta en los snapshots anteriores a la edición: sin él la
+		/// celda no se puede direccionar y se pinta de solo lectura.
+		placas: { placa: string; color: string; vehiculoId?: string | null }[];
+		/// Meses del corte, `YYYY-MM`. Ausente en snapshots viejos, que traen un
+		/// total por placa en vez del desglose.
+		meses?: string[];
+		filas: {
+			nombre: string;
+			valorUnitario: number;
+			/// `number[][]` (placa × mes) desde el desglose por mes; los snapshots
+			/// viejos traen `number[]`, un total por placa. `cantidadesDe()`
+			/// admite las dos formas.
+			cantidades: number[][] | number[];
+			total: number;
+			/// Las tres siguientes faltan en los snapshots anteriores al cruce con
+			/// recorridos. Sin ellas el bloque se pinta como siempre, con la
+			/// cantidad de la liquidación a secas.
+			cantidadesRecorridos?: number[][] | number[];
+			totalRecorridos?: number;
+			descuadra?: boolean;
+		}[];
+		hayRecorridos?: boolean;
 	};
 	dias: DiaHojaDTO[];
 	tarifas: TarifaDTO[];
@@ -178,6 +236,15 @@ export interface HojaNominaDTO {
 	totalHorasMes: number;
 	repartoDesprendible: { codigo: CodigoRecargo; horas: number; valor: number }[];
 	repartoDisponibilidad: { codigo: CodigoRecargo; horas: number; valor: number }[];
+	/// Fechas, días y salario de vacaciones. Ausente en payloads viejos, donde
+	/// el bloque no se pinta.
+	vacaciones?: {
+		desde: string | null;
+		hasta: string | null;
+		dias: number;
+		salarioBase: number;
+		salarioHeredado: boolean;
+	};
 	devengos: ConceptoDTO[];
 	deducciones: ConceptoDTO[];
 	totales: Record<string, number>;
@@ -296,6 +363,120 @@ const FILA = {
 	LEYENDA: 23
 } as const;
 
+// ─── Fórmulas vivas sobre la rejilla de días ──────────────────────────
+//
+// POR QUÉ EXISTEN. Las horas de cada día se teclean —son la copia que el
+// borrador hizo de las planillas— y de ellas sale TODO el dinero de recargos
+// de la hoja: la tabla de tarifas, el desglose por empresa, el reparto entre
+// desprendible y disponibilidad, y las siete líneas de OTROS del
+// desprendible. Hasta ahora esas cifras se pintaban como números fijos
+// calculados en el servidor, así que corregir una hora dejaba la hoja
+// diciendo dos cosas a la vez —el día nuevo arriba, el importe viejo abajo—
+// hasta que alguien recargara.
+//
+// Con fórmulas, el recálculo es el de una hoja de cálculo: instantáneo, sin
+// ida y vuelta al servidor y auditable —se puede pinchar la celda y ver de
+// dónde sale. El servidor sigue siendo el que manda: al recargar, sus cifras
+// vuelven a pintar las mismas celdas. Lo que esto quita es la ventana en la
+// que las dos no coincidían.
+//
+// LO QUE NO SE PUEDE EXPRESAR ASÍ. Un recargo con las horas corregidas a mano
+// («ajustada») lleva en el desprendible un desplazamiento que el servidor
+// aplica sobre el agregado, y un agregado no sabe a qué día tocarle. Esas
+// filas se siguen pintando con la cifra del servidor.
+
+/** Fila 1-indexada donde la rejilla de días guarda las horas de `codigo`. */
+function filaDelRecargo(codigo: CodigoRecargo): number {
+	return FILA.RECARGO0 + ORDEN_RECARGOS.indexOf(codigo) + 1;
+}
+
+/**
+ * Las columnas dadas como referencias de una fila: `[8,9,10,12] → "I10:K10,M10"`.
+ *
+ * Se compactan los tramos seguidos porque un corte tiene entre 30 y 50
+ * columnas de día: enumerarlas una a una daría fórmulas de 400 caracteres
+ * donde casi siempre basta con un rango.
+ */
+function refsDeColumnas(columnas: number[], fila: number): string {
+	const orden = [...new Set(columnas)].sort((a, b) => a - b);
+	const trozos: string[] = [];
+	for (let i = 0; i < orden.length; ) {
+		let j = i;
+		while (j + 1 < orden.length && orden[j + 1] === orden[j] + 1) j++;
+		const primera = `${colLetra(orden[i])}${fila}`;
+		trozos.push(i === j ? primera : `${primera}:${colLetra(orden[j])}${fila}`);
+		i = j + 1;
+	}
+	return trozos.join(',');
+}
+
+/** `=SUM(...)` de las horas de `codigo` en esas columnas de día. */
+function formulaHoras(codigo: CodigoRecargo, columnas: number[]): string | null {
+	const refs = refsDeColumnas(columnas, filaDelRecargo(codigo));
+	return refs ? `=SUM(${refs})` : null;
+}
+
+/**
+ * `=ROUND(SUM(...)*tarifa+SUM(...)*tarifa,0)`.
+ *
+ * UN GRUPO POR TRAMO. Cuando el corte cruza un cambio de vigencia, el mismo
+ * recargo vale distinto antes y después: sumar todas las horas y multiplicar
+ * una sola vez es lo que pagaba junio a precio de julio. Con un tramo —lo
+ * normal— sale un único `SUM(...)*tarifa`.
+ */
+function formulaImporte(
+	codigo: CodigoRecargo,
+	grupos: { columnas: number[]; valorHora: number }[]
+): string | null {
+	const fila = filaDelRecargo(codigo);
+	const terminos = grupos
+		.map((g) => ({ refs: refsDeColumnas(g.columnas, fila), vh: g.valorHora }))
+		.filter((t) => t.refs)
+		.map((t) => `SUM(${t.refs})*${t.vh}`);
+	return terminos.length ? `=ROUND(${terminos.join('+')},0)` : null;
+}
+
+/**
+ * Tramo de vigencia al que pertenece una fecha ISO.
+ *
+ * Las fechas van en `YYYY-MM-DD`, que se ordena igual como texto que como
+ * fecha, así que no hace falta construir `Date` para compararlas.
+ */
+function tramoDeFecha(tramos: TramoVigenciaDTO[] | undefined, fecha: string): number {
+	if (!tramos?.length) return 0;
+	const i = tramos.findIndex((t) => !t.desde || (fecha >= t.desde && fecha <= t.hasta));
+	return i >= 0 ? i : tramos.length - 1;
+}
+
+/**
+ * Los días agrupados por tramo, cada grupo con la tarifa de SU tramo.
+ *
+ * Es lo que come `formulaImporte`. Los códigos con las horas corregidas a
+ * mano se excluyen antes de llamar aquí: su importe no sale de los días.
+ */
+function gruposPorTramo(
+	hoja: HojaNominaDTO,
+	codigo: CodigoRecargo,
+	dias: DiaHojaDTO[]
+): { columnas: number[]; valorHora: number }[] {
+	const porTramo = new Map<number, number[]>();
+	for (const d of dias) {
+		const i = tramoDeFecha(hoja.tramos, d.fecha);
+		(porTramo.get(i) ?? porTramo.set(i, []).get(i)!).push(COL.DIA0 + d.indice);
+	}
+	return [...porTramo.entries()]
+		.map(([i, columnas]) => {
+			const t = hoja.tarifas.find((x) => x.codigo === codigo && (x.tramo ?? 0) === i);
+			return { columnas, valorHora: t?.valorHora ?? 0 };
+		})
+		.filter((g) => g.valorHora > 0);
+}
+
+/** Códigos cuyas horas se corrigieron a mano: su dinero no sale de los días. */
+function codigosAjustados(hoja: HojaNominaDTO): Set<CodigoRecargo> {
+	return new Set(hoja.tarifas.filter((t) => t.ajustada === true).map((t) => t.codigo));
+}
+
 /** Primera fila de la mitad inferior (config, empresas, jornada, desprendible). */
 const FILA_INFERIOR = 25;
 
@@ -328,6 +509,15 @@ const ZONA = {
 
 /** Celdas que ocupa cada campo de las zonas inferiores. */
 const SPAN = {
+	/**
+	 * Rótulo y valor del bloque de vacaciones.
+	 *
+	 * Copian el ancho de la columna de concepto del desprendible y el de
+	 * cantidad + valor juntos: el bloque va DEBAJO, y con otros anchos las dos
+	 * tablas quedarían desalineadas una sobre otra.
+	 */
+	VAC_ROTULO: 6,
+	VAC_VALOR: 3,
 	/** Rótulo de una fila de topes / semana. */
 	JORNADA_LABEL: 5,
 	/** Su valor. */
@@ -381,9 +571,9 @@ const FMT_COP = '"$"#,##0;[Red]-"$"#,##0';
 const FMT_HORAS = undefined;
 const FMT_PCT = '0.00"%"';
 
-/** Verde secundario de las cabeceras de tabla; el mismo que usa el bloque de
- *  configuración de abajo, para que las dos tablas se lean como hermanas. */
-const SUBCAB = '#1E4D33';
+/** Cabecera de tabla; el mismo tono que usa el bloque de configuración de
+ *  abajo, para que las dos tablas se lean como hermanas. */
+const SUBCAB = CABECERA_BG;
 
 const base = (): IStyleData => ({
 	bd: allBorders(),
@@ -392,10 +582,18 @@ const base = (): IStyleData => ({
 	fs: 10
 });
 
+/**
+ * Banda de cabecera. El texto lo decide el FONDO, no una constante.
+ *
+ * Esta misma función pinta las bandas de marca —verde oscuro en Transmeralda,
+ * naranja claro en Cotransmeq— y también el ámbar del festivo y el rojo del
+ * domingo. Con `#FFFFFF` clavado, el rótulo de Cotransmeq quedaba ilegible
+ * sobre su propio naranja.
+ */
 const cabecera = (bg = GREEN): IStyleData => ({
 	...base(),
 	bg: { rgb: bg },
-	cl: { rgb: '#FFFFFF' },
+	cl: { rgb: contraste(bg) },
 	bl: 1,
 	ht: HorizontalAlign.CENTER
 });
@@ -559,7 +757,7 @@ function construirHoja(args: {
 	// Índice por columna de los días con planilla, para no buscar en bucle.
 	const porIndice = new Map<number, DiaHojaDTO>(hoja.dias.map((d) => [d.indice, d]));
 
-	zonaDias({ dias, hoja, porIndice, set, merge, dto, festivos });
+	zonaDias({ dias, hoja, porIndice, set, merge, dto, festivos, bind });
 
 	// Un día que la ley marca como festivo pero la planilla no, se paga como
 	// día normal: sin RD ni RNDF. Es dinero, y no salta por ningún lado.
@@ -573,10 +771,10 @@ function construirHoja(args: {
 				'Esos días se liquidaron como ordinarios, sin recargo dominical ni festivo.'
 		);
 	}
-	const finConfig = zonaConfiguracion({ hoja, set, merge });
+	const finConfig = zonaConfiguracion({ hoja, dias, set, merge, bind });
 	const finEmpresas = zonaEmpresas({ hoja, set, merge, desdeFila: finConfig + 2 });
-	zonaJornada({ dto, hoja, set, merge });
-	const finDesprendible = zonaDesprendible({ hoja, set, merge, bind, avisos: avisosHoja });
+	const reparto = zonaJornada({ dto, hoja, set, merge });
+	const finDesprendible = zonaDesprendible({ hoja, set, merge, bind, avisos: avisosHoja, reparto });
 
 	const rowCount = Math.max(finEmpresas, finDesprendible) + 3;
 
@@ -692,8 +890,11 @@ function zonaDias(args: {
 	merge: (r1: number, c1: number, r2: number, c2: number) => void;
 	dto: PeriodoNominaDTO;
 	festivos: Set<string>;
+	/// Lo necesita `leyendaPlacas`: las celdas de la matriz de bonos se teclean
+	/// y sin binding el permiso de celda las bloquea.
+	bind: (r: number, c: number, binding: NominaBinding) => void;
 }) {
-	const { dias, hoja, porIndice, set, merge, dto, festivos } = args;
+	const { dias, hoja, porIndice, set, merge, dto, festivos, bind } = args;
 
 	// Cabecera izquierda: rótulos arriba (filas 1-4), datos debajo (5-8).
 	const rotulos: [number, string][] = [
@@ -774,7 +975,7 @@ function zonaDias(args: {
 				// se resaltan porque son los que cambian el cálculo del ajuste.
 				...(nomina === 'VILLANUEVA'
 					? { cl: { rgb: MUTED } }
-					: { bg: { rgb: '#ECFDF5' }, cl: { rgb: '#065F46' } })
+					: { bg: { rgb: TINTE }, cl: { rgb: TEXTO_MARCA_FUERTE } })
 			}
 		});
 		/// Hasta HORAS y no hasta DISPONIBILIDAD: esa última fila es del bloque
@@ -818,7 +1019,7 @@ function zonaDias(args: {
 		});
 		set(FILA.CAB_NOMBRE_DIA, c, {
 			v: d.nombreDia.slice(0, 3),
-			s: { ...cabecera(festivo ? '#92400E' : domingo ? '#991B1B' : '#1E4D33'), fs: 9 }
+			s: { ...cabecera(festivo ? '#92400E' : domingo ? '#991B1B' : SUBCAB), fs: 9 }
 		});
 
 		if (!dh) {
@@ -861,6 +1062,16 @@ function zonaDias(args: {
 		// cuando tiene horas de ese tipo — igual que en el Excel, donde el
 		// color es lo que deja ver de un vistazo qué clase de recargo hubo.
 		const tieneAlguno = ORDEN_RECARGOS.some((cod) => (dh.horas[cod] ?? 0) > 0);
+		/**
+		 * Las horas de cada día SE TECLEAN cuando el día es de la copia.
+		 *
+		 * El borrador tiene sus propios días desde que se genera, así que
+		 * corregir una hora aquí ya no toca `recargos_planillas`. Un día que
+		 * todavía se deriva de la planilla —liquidaciones anteriores a la copia,
+		 * u hojas sin borrador— sigue siendo de solo lectura: no hay fila que
+		 * escribir.
+		 */
+		const diaEditable = Boolean(dh.propio && hoja.liquidacionId);
 		ORDEN_RECARGOS.forEach((codigo, i) => {
 			const h = dh.horas[codigo] ?? 0;
 			const tarifa = hoja.tarifas.find((t) => t.codigo === codigo);
@@ -877,6 +1088,17 @@ function zonaDias(args: {
 					fs: 9
 				}
 			});
+			if (diaEditable) {
+				bind(FILA.RECARGO0 + i, c, {
+					entityType: 'liquidacion',
+					entityId: hoja.liquidacionId!,
+					// La celda se identifica por FECHA y OCURRENCIA, no por la
+					// columna: la rejilla es global al libro y se corre cuando
+					// otro conductor abre una columna nueva.
+					field: `dia|${dh.fecha}|${dh.ocurrencia ?? 0}|${codigo}`,
+					conductorId: hoja.conductorId
+				});
+			}
 		});
 
 		// Solo el COLOR del cliente, sin texto: el nombre no cabe en 46px y ya
@@ -913,7 +1135,7 @@ function zonaDias(args: {
 	merge(FILA.TOTALES_TURNO, COL.DIA0, FILA.TOTALES_TURNO, COL.DIA0 + 3);
 
 	leyendaClientes({ hoja, set, merge });
-	leyendaPlacas({ hoja, set, merge });
+	leyendaPlacas({ hoja, set, merge, bind });
 }
 
 /**
@@ -935,8 +1157,9 @@ function leyendaPlacas(args: {
 	hoja: HojaNominaDTO;
 	set: (r: number, c: number, cell: ICellData) => void;
 	merge: (r1: number, c1: number, r2: number, c2: number) => void;
+	bind: (r: number, c: number, binding: NominaBinding) => void;
 }) {
-	const { hoja, set, merge } = args;
+	const { hoja, set, merge, bind } = args;
 	const placas = hoja.placasUsadas ?? [];
 	if (!placas.length) return;
 
@@ -946,10 +1169,10 @@ function leyendaPlacas(args: {
 	/// columnas A-E y podría seguir bajando, pero cruzar la banda en blanco la
 	/// haría parecer parte del bloque de cliente y placa.
 	const ULTIMA = FILA.CLIENTE_DIA - 1;
-	/// Cinco columnas (A-E): una para el rótulo y cuatro para placas. Es un tope
-	/// de la rejilla, no una decisión — un ancho es de la COLUMNA ENTERA y meter
-	/// más aquí correría las de día y descuadraría las zonas de abajo.
-	const COLS_PLACA = COL.CARGO_FIN - COL.NOMBRE;
+	/// Cuatro columnas (B-E) para los datos. Es un tope de la rejilla, no una
+	/// decisión — un ancho es de la COLUMNA ENTERA y meter más aquí correría
+	/// las de día y descuadraría las zonas de abajo.
+	const COLS_DATO = COL.CARGO_FIN - COL.NOMBRE;
 
 	const matriz = hoja.matrizBonos;
 
@@ -974,47 +1197,120 @@ function leyendaPlacas(args: {
 	}
 
 	/**
+	 * Meses del corte: son las SUBCOLUMNAS de cada placa.
+	 *
+	 * Un corte 21→20 cruza dos, y hacen falta separados porque la celda se
+	 * edita: `bonificaciones.values` guarda `[{ mes, quantity }]` y con un solo
+	 * número no se sabría a cuál de los dos va lo que alguien teclea.
+	 *
+	 * El `['']` de reserva es para los snapshots anteriores a este desglose,
+	 * que traen un total por placa y ningún mes: se pintan en una sola columna
+	 * y, al no tener mes al que escribir, sin binding.
+	 */
+	const meses = matriz.meses?.length ? matriz.meses : [''];
+	const conMeses = Boolean(matriz.meses?.length);
+
+	/** Cantidades de una fila en una placa, tolerando el formato viejo. */
+	const cantidadesDe = (celdas: unknown, i: number): number[] => {
+		const fila = (celdas as any)?.[i];
+		if (Array.isArray(fila)) return fila as number[];
+		return [Number(fila ?? 0)];
+	};
+
+	/**
 	 * Solo entran las placas CON bonos.
 	 *
-	 * Antes se anunciaban las descartadas con un «(+3)» que no significaba nada
-	 * para quien lo leía: eran placas a cero en todas las filas, o sea columnas
-	 * vacías. Lo que sí merece aviso es lo contrario —una placa que TIENE bonos
-	 * y no cabe—, y eso es lo que se dice abajo con todas las letras.
+	 * La suma cuenta las dos fuentes: una placa que solo tiene bonos MARCADOS
+	 * EN RECORRIDOS —y ninguno en la liquidación— es justo la que hay que ver,
+	 * y mirando solo `cantidades` se quedaba fuera por venir a cero.
 	 */
+	const total = (fila: number[]) => fila.reduce((s, n) => s + n, 0);
 	const conBonos = matriz.placas
-		.map((p, i) => ({ ...p, i, suma: matriz.filas.reduce((t, f) => t + (f.cantidades[i] ?? 0), 0) }))
+		.map((p, i) => ({
+			...p,
+			i,
+			suma: matriz.filas.reduce(
+				(t, f) =>
+					t + total(cantidadesDe(f.cantidades, i)) + total(cantidadesDe(f.cantidadesRecorridos, i)),
+				0
+			)
+		}))
 		.filter((p) => p.suma > 0)
 		.sort((a, b) => b.suma - a.suma);
-	const visibles = conBonos.slice(0, COLS_PLACA);
-	const omitidas = conBonos.slice(COLS_PLACA);
 
-	// ── Título ────────────────────────────────────────────────────────────
+	/// Cada placa ocupa una columna POR MES, así que con dos meses caben dos
+	/// placas donde antes cabían cuatro. Es el precio de poder editar mes a mes.
+	const maxPlacas = Math.max(1, Math.floor(COLS_DATO / meses.length));
+	const visibles = conBonos.slice(0, maxPlacas);
+	const omitidas = conBonos.slice(maxPlacas);
+
+	/**
+	 * Solo se compara si el conductor tiene ALGO marcado en recorridos.
+	 *
+	 * Sin esta guarda, el caso corriente —nadie le ha marcado bonos en el canvas
+	 * de recorridos— pintaría toda la tabla en amarillo contra una columna de
+	 * ceros, que se lee como «la nómina está mal» cuando lo que pasa es que no
+	 * hay con qué contrastar.
+	 */
+	const comparar = matriz.hayRecorridos === true;
+
+	/// Columna de la subcelda (placa k, mes j).
+	const colDe = (k: number, j: number) => COL.NOMBRE + 1 + k * meses.length + j;
+
+	// ── Cabecera: el título comparte fila con las placas ──────────────────
+	//
+	// Antes el título tenía su propia fila. Con la fila de meses añadida ya no
+	// cabían las cinco de bono, el total y las notas, y la nota del descuadre
+	// —que es lo accionable— era lo primero en caerse.
 	set(PRIMERA, COL.NOMBRE, { v: 'BONOS POR VEHÍCULO', s: cabecera() });
-	merge(PRIMERA, COL.NOMBRE, PRIMERA, COL.CARGO_FIN);
+	visibles.forEach((p, k) => {
+		// La placa conserva SU color también aquí: es la misma clave que se
+		// repite bajo cada día en la fila 19, y romperla obligaría a aprenderse
+		// dos códigos para lo mismo.
+		const estilo = {
+			...base(),
+			bg: { rgb: p.color },
+			cl: { rgb: contraste(p.color) },
+			bl: 1,
+			ht: HorizontalAlign.CENTER,
+			fs: 8
+		};
+		set(PRIMERA, colDe(k, 0), { v: p.placa, s: estilo });
+		for (let j = 1; j < meses.length; j++) set(PRIMERA, colDe(k, j), { v: '', s: estilo });
+		if (meses.length > 1) merge(PRIMERA, colDe(k, 0), PRIMERA, colDe(k, meses.length - 1));
+	});
+	for (let c = colDe(visibles.length, 0); c <= COL.CARGO_FIN; c++) {
+		set(PRIMERA, c, { v: '', s: cabecera() });
+	}
 
-	// ── Cabecera de columnas ──────────────────────────────────────────────
+	// ── Subcabecera: el mes de cada columna ───────────────────────────────
 	const FILA_CAB = PRIMERA + 1;
 	set(FILA_CAB, COL.NOMBRE, {
 		v: 'BONO · VALOR UNITARIO',
 		s: { ...cabecera(SUBCAB), ht: HorizontalAlign.LEFT, fs: 9 }
 	});
 	visibles.forEach((p, k) => {
-		set(FILA_CAB, COL.NOMBRE + 1 + k, {
-			// La placa conserva SU color también aquí: es la misma clave que se
-			// repite bajo cada día en la fila 19, y romperla obligaría a
-			// aprenderse dos códigos para lo mismo.
-			v: p.placa,
-			s: { ...base(), bg: { rgb: p.color }, cl: { rgb: contraste(p.color) }, bl: 1, ht: HorizontalAlign.CENTER, fs: 8 }
+		meses.forEach((m, j) => {
+			set(FILA_CAB, colDe(k, j), {
+				v: etiquetaMes(m),
+				s: { ...cabecera(SUBCAB), ht: HorizontalAlign.CENTER, fs: 8 }
+			});
 		});
 	});
-	/// Las columnas de placa que sobran se cierran igual: sin esto la tabla
-	/// termina en un borde a media altura y parece cortada.
-	for (let k = visibles.length; k < COLS_PLACA; k++) {
-		set(FILA_CAB, COL.NOMBRE + 1 + k, { v: '', s: cabecera(SUBCAB) });
+	/// Las columnas que sobran se cierran igual: sin esto la tabla termina en un
+	/// borde a media altura y parece cortada.
+	for (let c = colDe(visibles.length, 0); c <= COL.CARGO_FIN; c++) {
+		set(FILA_CAB, c, { v: '', s: cabecera(SUBCAB) });
 	}
 
+	/// Se reserva sitio para las notas del pie antes de repartir filas de bono:
+	/// si no, la última nota se comería la fila de TOTAL BONOS o se saldría del
+	/// bloque y caería sobre la banda en blanco.
+	const hayDescuadre = comparar && matriz.filas.some((f) => f.descuadra);
+	const notasPie = (hayDescuadre ? 1 : 0) + (omitidas.length ? 1 : 0);
+	const filasCabida = ULTIMA - FILA_CAB - notasPie;
+
 	// ── Cuerpo: una fila por bono ─────────────────────────────────────────
-	const filasCabida = ULTIMA - FILA_CAB - (omitidas.length ? 1 : 0);
 	matriz.filas.slice(0, filasCabida).forEach((f, i) => {
 		const r = FILA_CAB + 1 + i;
 		const zebra = i % 2 === 1;
@@ -1023,50 +1319,97 @@ function leyendaPlacas(args: {
 			s: { ...(zebra ? derivada() : base()), ht: HorizontalAlign.LEFT, fs: 8 }
 		});
 		visibles.forEach((p, k) => {
-			const n = f.cantidades[p.i] ?? 0;
-			set(r, COL.NOMBRE + 1 + k, {
-				// Un cero se deja en blanco: la tabla tiene más ceros que datos y
-				// llenarla de ceros esconde lo que sí pasó.
-				v: n > 0 ? n : '',
-				s: {
-					...(zebra ? derivada() : base()),
-					ht: HorizontalAlign.CENTER,
-					fs: 9,
-					...(n > 0 ? { bl: 1 } : {})
+			const cant = cantidadesDe(f.cantidades, p.i);
+			const rec = cantidadesDe(f.cantidadesRecorridos, p.i);
+			meses.forEach((m, j) => {
+				const n = cant[j] ?? 0;
+				const nRec = rec[j] ?? 0;
+				const difiere = comparar && n !== nRec;
+				/// Editable solo si se puede direccionar la fila de
+				/// `bonificaciones`: hace falta liquidación, vehículo y mes. La
+				/// columna «sin placa» no tiene vehículo y por eso no se toca.
+				const editableAqui = Boolean(conMeses && hoja.liquidacionId && p.vehiculoId);
+				const fondo = editableAqui ? editable() : zebra ? derivada() : base();
+				set(r, colDe(k, j), {
+					// Un cero se deja en blanco: la tabla tiene más ceros que datos
+					// y llenarla de ceros esconde lo que sí pasó. Pero un cero que
+					// DIFIERE de recorridos sí se escribe: «0 → 3» es el descuadre
+					// más grave que hay y en blanco sería el más invisible.
+					v: difiere ? `${n} → ${nRec}` : n > 0 ? n : '',
+					s: {
+						...fondo,
+						ht: HorizontalAlign.CENTER,
+						fs: difiere ? 8 : 9,
+						...(n > 0 || difiere ? { bl: 1 } : {}),
+						...(difiere ? { bg: { rgb: FESTIVO_BG }, cl: { rgb: FESTIVO_TEXTO } } : {})
+					}
+				});
+				if (editableAqui) {
+					bind(r, colDe(k, j), {
+						entityType: 'liquidacion',
+						entityId: hoja.liquidacionId!,
+						field: `bono|${p.vehiculoId}|${m}|${f.nombre}`,
+						conductorId: hoja.conductorId
+					});
 				}
 			});
 		});
-		for (let k = visibles.length; k < COLS_PLACA; k++) {
-			set(r, COL.NOMBRE + 1 + k, { v: '', s: zebra ? derivada() : base() });
+		for (let c = colDe(visibles.length, 0); c <= COL.CARGO_FIN; c++) {
+			set(r, c, { v: '', s: zebra ? derivada() : base() });
 		}
 	});
 
-	// ── Pie: totales por placa ────────────────────────────────────────────
+	// ── Pie: totales por placa y mes ──────────────────────────────────────
 	const filasPintadas = Math.min(matriz.filas.length, filasCabida);
 	const rTotal = FILA_CAB + 1 + filasPintadas;
 	if (rTotal <= ULTIMA) {
 		set(rTotal, COL.NOMBRE, { v: 'TOTAL BONOS', s: { ...totales(), ht: HorizontalAlign.LEFT, fs: 8 } });
 		visibles.forEach((p, k) => {
-			const suma = matriz.filas.reduce((t, f) => t + (f.cantidades[p.i] ?? 0), 0);
-			set(rTotal, COL.NOMBRE + 1 + k, {
-				v: suma > 0 ? suma : '',
-				s: { ...totales(), ht: HorizontalAlign.CENTER, fs: 9 }
+			meses.forEach((m, j) => {
+				const suma = matriz.filas.reduce((t, f) => t + (cantidadesDe(f.cantidades, p.i)[j] ?? 0), 0);
+				set(rTotal, colDe(k, j), {
+					v: suma > 0 ? suma : '',
+					s: { ...totales(), ht: HorizontalAlign.CENTER, fs: 9 }
+				});
 			});
 		});
-		for (let k = visibles.length; k < COLS_PLACA; k++) {
-			set(rTotal, COL.NOMBRE + 1 + k, { v: '', s: totales() });
+		for (let c = colDe(visibles.length, 0); c <= COL.CARGO_FIN; c++) {
+			set(rTotal, c, { v: '', s: totales() });
 		}
+	}
+
+	/// Las dos notas del pie comparten las filas que queden, en orden: primero
+	/// el descuadre, que es accionable, y después las placas sin columna.
+	let rNota = rTotal + 1;
+	const nota = (texto: string) => {
+		if (rNota > ULTIMA) return;
+		set(rNota, COL.NOMBRE, {
+			v: texto,
+			s: { ...base(), ht: HorizontalAlign.LEFT, fs: 8, cl: { rgb: FESTIVO_TEXTO }, bg: { rgb: FESTIVO_BG } }
+		});
+		merge(rNota, COL.NOMBRE, rNota, COL.CARGO_FIN);
+		rNota++;
+	};
+
+	// ── Aviso de descuadre con lo marcado en recorridos ────────────────────
+	//
+	// Sin esta línea, un «14 → 16» en una celda amarilla no dice de dónde sale
+	// el segundo número.
+	if (hayDescuadre) {
+		nota('liquidación → marcado en recorridos');
 	}
 
 	// ── Aviso SOLO si se queda fuera una placa que sí tiene bonos ──────────
 	if (omitidas.length) {
-		const r = Math.min(rTotal + 1, ULTIMA);
-		set(r, COL.NOMBRE, {
-			v: `Con bonos y sin columna: ${omitidas.map((p) => p.placa).join(', ')}`,
-			s: { ...base(), ht: HorizontalAlign.LEFT, fs: 8, cl: { rgb: FESTIVO_TEXTO }, bg: { rgb: FESTIVO_BG } }
-		});
-		merge(r, COL.NOMBRE, r, COL.CARGO_FIN);
+		nota(`Con bonos y sin columna: ${omitidas.map((p) => p.placa).join(', ')}`);
 	}
+}
+
+/** `2026-08` → `AGO`. Cabe en una columna de 105 px, que el mes entero no. */
+function etiquetaMes(mes: string): string {
+	const MESES = ['ENE', 'FEB', 'MAR', 'ABR', 'MAY', 'JUN', 'JUL', 'AGO', 'SEP', 'OCT', 'NOV', 'DIC'];
+	const n = Number(mes.slice(5, 7));
+	return MESES[n - 1] ?? mes;
 }
 
 /** `$26.061` — el precio unitario del bono, corto para que quepa en la celda. */
@@ -1131,10 +1474,17 @@ function nombreCortoCliente(nombre: string): string {
 
 function zonaConfiguracion(args: {
 	hoja: HojaNominaDTO;
+	/// La rejilla del libro, para que HORAS MES sume las columnas de su tramo.
+	dias: DiaPeriodoDTO[];
 	set: (r: number, c: number, cell: ICellData) => void;
 	merge: (r1: number, c1: number, r2: number, c2: number) => void;
+	/// Las horas de recargo se corrigen a mano desde aquí; sin binding el
+	/// permiso de celda las bloquea por defecto.
+	bind: (r: number, c: number, binding: NominaBinding) => void;
 }): number {
-	const { hoja, set, merge } = args;
+	const { hoja, dias, set, merge, bind } = args;
+	/** Ajustes pintados, para la nota de debajo de la tabla. */
+	const ajustes: string[] = [];
 	const c0 = ZONA.CONFIG_C0;
 	let r = FILA_INFERIOR;
 
@@ -1168,11 +1518,26 @@ function zonaConfiguracion(args: {
 	/** Rangos de filas de tarifa, para que TOTALES sume los dos sub-bloques. */
 	const rangos: [number, number][] = [];
 
+	/**
+	 * Columnas de empresa: se fijan con las bases del PRIMER tramo y valen para
+	 * todos.
+	 *
+	 * Una columna es de la tabla entera, no de un sub-bloque: si cada tramo
+	 * eligiera las suyas, con dos tramos la misma columna diría «PAREX» arriba
+	 * y «GEOPARK» abajo. Los valores de cada tramo se buscan después por
+	 * `empresaId`, no por posición, para que un tramo al que le falte una
+	 * empresa deje su celda vacía en vez de correr las demás.
+	 */
+	const CUPO_BASES = ZONA.JORNADA_C0 - (ZONA.CONFIG_C0 + 6);
+	const basesColumnas = (tramos[0]?.bases ?? [])
+		.filter((b) => b.empresaId)
+		.slice(0, Math.max(0, CUPO_BASES));
+
 	tramos.forEach((tr, iTramo) => {
 		// El rótulo del tramo solo aparece cuando hay más de uno: si no, sería
 		// ruido repitiendo el periodo que ya está en el título de la pestaña.
 		if (partido) {
-			set(r, c0, { v: tr.etiqueta, s: cabecera('#1E4D33') });
+			set(r, c0, { v: tr.etiqueta, s: cabecera(SUBCAB) });
 			merge(r, c0, r, c0 + 5);
 			r++;
 		}
@@ -1196,11 +1561,46 @@ function zonaConfiguracion(args: {
 		}
 		r++;
 
+		/**
+		 * Columnas extra: el MISMO recargo valorado con la base salarial de cada
+		 * cliente que tiene configuración propia.
+		 *
+		 * Un conductor que trabaja con Parex genera el recargo sobre un básico de
+		 * 2.358.897 y no sobre los 1.750.905 de la general, y hasta ahora esa
+		 * segunda cifra no se veía por ningún lado: había que sacarla del Excel.
+		 * Caben porque entre el bloque de configuración (termina en la columna 5)
+		 * y el de jornada (empieza en la 10) hay cuatro columnas libres.
+		 */
+		/**
+		 * Columnas de día que caen dentro de ESTE tramo: son las que suma
+		 * HORAS MES. Con un tramo único son todas.
+		 */
+		const columnasTramo = dias
+			.filter((d) => !tr.desde || (d.fecha >= tr.desde && d.fecha <= tr.hasta))
+			.map((d) => COL.DIA0 + d.indice);
+
+		const extra = basesColumnas;
+		/** Dónde está cada columna dentro de las bases de ESTE tramo. */
+		const indiceEnTramo = extra.map((b) =>
+			(tr.bases ?? []).findIndex((x) => x.empresaId === b.empresaId)
+		);
+
 		const cabeceras = ['RECARGO', '%', 'VALOR HORA', 'HORAS MES', 'VALOR'];
 		cabeceras.forEach((t, i) => {
 			const c = i === 0 ? c0 : c0 + i + 1;
-			set(r, c, { v: t, s: cabecera('#1E4D33') });
+			set(r, c, { v: t, s: cabecera(SUBCAB) });
 			if (i === 0) merge(r, c0, r, c0 + 1);
+		});
+		extra.forEach((b, i) => {
+			set(r, c0 + 6 + i, {
+				// El nombre entero no cabe en 104 px; la primera palabra basta para
+				// distinguir «PAREX» de «SERTECPET».
+				// Sin `fs` propio: `base()` fija 10 y estas columnas tienen que
+				// leerse igual que VALOR, que está justo al lado. Con 8 se veían
+				// como una nota al pie de la tabla en vez de como otra columna.
+				v: `$ ${b.nombre.split(/\s+/)[0].slice(0, 12)}`,
+				s: cabecera('#3F3F46')
+			});
 		});
 		r++;
 
@@ -1216,8 +1616,73 @@ function zonaConfiguracion(args: {
 			merge(r, c0, r, c0 + 1);
 			set(r, c0 + 2, { v: t.porcentaje, s: { ...derivada(), ht: HorizontalAlign.CENTER, n: { pattern: FMT_PCT } } });
 			set(r, c0 + 3, { v: redondear(t.valorHora), s: { ...derivada(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } } });
-			set(r, c0 + 4, { v: redondear(t.horas), s: { ...derivada(), ht: HorizontalAlign.RIGHT, ...(FMT_HORAS ? { n: { pattern: FMT_HORAS } } : {}) } });
-			set(r, c0 + 5, { v: t.valor, s: { ...derivada(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } } });
+			/**
+			 * HORAS MES se teclea, y por eso sigue siendo un NÚMERO aunque esté
+			 * ajustada.
+			 *
+			 * Aquí no cabe el «30 → 32» que sí usan los bonos: esta columna la
+			 * suma la fila TOTALES con un `=SUM()`, y una celda de texto cuenta
+			 * como cero y descuadraría el total. Así que la celda lleva la cifra
+			 * que se paga, se resalta en ámbar cuando viene de un ajuste, y el
+			 * valor de la planilla se dice en la nota de debajo de la tabla.
+			 */
+			const ajustada = t.ajustada === true;
+			if (ajustada) {
+				ajustes.push(`${t.codigo} ${redondear(t.horasPlanilla ?? t.horas)} → ${redondear(t.horas)}`);
+			}
+			/**
+			 * Sin ajuste, HORAS MES es la SUMA VIVA de las columnas de día del
+			 * tramo: corregir una hora arriba mueve esta celda, y con ella
+			 * VALOR, las columnas de empresa y los TOTALES, sin recargar.
+			 *
+			 * Con ajuste sigue siendo el número tecleado. Las dos cosas conviven
+			 * sin contradecirse porque teclear encima de una fórmula la sustituye
+			 * —que es exactamente lo que significa ajustar— y el patch
+			 * `horas|tramo|codigo` que sale de ahí la vuelve ámbar al recargar.
+			 */
+			const estiloHoras: IStyleData = {
+				...(ajustada ? base() : derivada()),
+				ht: HorizontalAlign.RIGHT,
+				...(FMT_HORAS ? { n: { pattern: FMT_HORAS } } : {}),
+				...(ajustada ? { bg: { rgb: FESTIVO_BG }, cl: { rgb: FESTIVO_TEXTO }, bl: 1 } : {})
+			};
+			const fHoras = ajustada ? null : formulaHoras(t.codigo, columnasTramo);
+			set(r, c0 + 4, fHoras ? { f: fHoras, s: estiloHoras } : { v: redondear(t.horas), s: estiloHoras });
+			if (hoja.liquidacionId) {
+				bind(r, c0 + 4, {
+					entityType: 'liquidacion',
+					entityId: hoja.liquidacionId,
+					field: `horas|${iTramo}|${t.codigo}`,
+					conductorId: hoja.conductorId
+				});
+			}
+			/**
+			 * VALOR y las columnas de empresa cuelgan de HORAS MES, no del
+			 * número que mandó el servidor: así el importe sigue a las horas
+			 * vengan de donde vengan —de los días o de un ajuste tecleado— y no
+			 * hay forma de que la fila diga 32 horas y cobre 30.
+			 *
+			 * VALOR apunta a la celda de VALOR HORA que tiene al lado, que es lo
+			 * que hace el Excel y deja la cuenta a la vista. Las columnas de
+			 * empresa llevan su tarifa dentro de la fórmula porque ninguna celda
+			 * la enseña: son el mismo recargo sobre la base de ese cliente.
+			 */
+			const refHoras = `${L(c0 + 4)}${r + 1}`;
+			set(r, c0 + 5, {
+				f: `=ROUND(${refHoras}*${L(c0 + 3)}${r + 1},0)`,
+				s: { ...derivada(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } }
+			});
+			/// El índice +1 salta la base general, que ya es la columna VALOR.
+			extra.forEach((_, i) => {
+				const j = indiceEnTramo[i];
+				const vhBase = j >= 0 ? (t.valorHoraPorBase?.[j] ?? null) : null;
+				const estilo = { ...derivada(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } };
+				set(
+					r,
+					c0 + 6 + i,
+					vhBase ? { f: `=ROUND(${refHoras}*${vhBase},0)`, s: estilo } : { v: '', s: estilo }
+				);
+			});
 			r++;
 		}
 		if (r > primeraTarifa) rangos.push([primeraTarifa + 1, r]);
@@ -1239,6 +1704,29 @@ function zonaConfiguracion(args: {
 		f: sumaDe(c0 + 5),
 		s: { ...totales(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } }
 	});
+	/// Las columnas de empresa se totalizan igual que VALOR: sin esto, la fila
+	/// TOTALES se cortaba a media tabla y las dos cifras que se comparan con el
+	/// Excel —lo que costaría a tarifa de cada cliente— había que sumarlas a
+	/// mano.
+	basesColumnas.forEach((_, i) => {
+		set(r, c0 + 6 + i, {
+			f: sumaDe(c0 + 6 + i),
+			s: { ...totales(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } }
+		});
+	});
+
+	// ── Qué decía la planilla antes del ajuste ────────────────────────────
+	//
+	// Sin esta línea, una celda ámbar dice que alguien tocó las horas pero no
+	// cuántas había, y deshacer el ajuste sería a ciegas.
+	if (ajustes.length) {
+		r++;
+		set(r, c0, {
+			v: `Horas ajustadas a mano (planilla → pagado): ${ajustes.join(' · ')}. Vacía la celda para volver a la planilla.`,
+			s: { ...base(), fs: 8, cl: { rgb: FESTIVO_TEXTO }, bg: { rgb: FESTIVO_BG } }
+		});
+		merge(r, c0, r, c0 + 5);
+	}
 
 	return r;
 }
@@ -1254,6 +1742,7 @@ function zonaEmpresas(args: {
 	const { hoja, set, merge, desdeFila } = args;
 	const c0 = ZONA.CONFIG_C0;
 	let r = desdeFila;
+	const ajustados = codigosAjustados(hoja);
 
 	set(r, c0, { v: 'RECARGOS Y HORAS EXTRAS POR EMPRESA', s: cabecera() });
 	merge(r, c0, r, c0 + 5);
@@ -1268,12 +1757,28 @@ function zonaEmpresas(args: {
 	// Un bloque por (empresa, mes). En el Excel esto estaba limitado a siete
 	// bloques fijos; aquí se generan los que haya.
 	for (const b of hoja.bloquesEmpresa) {
-		set(r, c0, { v: b.empresa, s: cabecera('#1E4D33') });
+		set(r, c0, { v: b.empresa, s: cabecera(SUBCAB) });
 		merge(r, c0, r, c0 + 3);
 		// Los días agrupados en texto: «7, 13 AL 19 DE AGOSTO DE 2026».
-		set(r, c0 + 4, { v: b.textoDias, s: { ...cabecera('#1E4D33'), ht: HorizontalAlign.LEFT, fs: 9 } });
+		set(r, c0 + 4, { v: b.textoDias, s: { ...cabecera(SUBCAB), ht: HorizontalAlign.LEFT, fs: 9 } });
 		merge(r, c0 + 4, r, c0 + 5);
 		r++;
+
+		/**
+		 * Los días de ESTE bloque: los de esta empresa dentro de su mes.
+		 *
+		 * Se cruza por `empresaId` y por el mes de la fecha, que es la misma
+		 * pareja con la que el servidor agrupa. Un bloque es (empresa, mes), así
+		 * que FEPCO aparece dos veces en un corte que cruza dos meses y cada
+		 * copia suma solo sus columnas.
+		 */
+		const diasDelBloque = hoja.dias.filter(
+			(d) =>
+				d.empresaId === b.empresaId &&
+				Number(d.fecha.slice(0, 4)) === b.anio &&
+				Number(d.fecha.slice(5, 7)) === b.mes
+		);
+		const columnasBloque = diasDelBloque.map((d) => COL.DIA0 + d.indice);
 
 		const primera = r;
 		for (const linea of b.lineas) {
@@ -1284,14 +1789,21 @@ function zonaEmpresas(args: {
 				v: '',
 				s: { ...base(), bg: { rgb: t?.color ?? '#E2E8F0' } }
 			});
-			set(r, c0 + 4, {
-				v: redondear(linea.horas),
-				s: { ...derivada(), ht: HorizontalAlign.RIGHT, ...(FMT_HORAS ? { n: { pattern: FMT_HORAS } } : {}) }
-			});
-			set(r, c0 + 5, {
-				v: linea.valor,
-				s: { ...derivada(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } }
-			});
+			/// Un código con las horas corregidas a mano no sale de los días:
+			/// el ajuste es un agregado y no sabe a qué empresa tocarle.
+			const vivo = !ajustados.has(linea.codigo);
+			const fHoras = vivo ? formulaHoras(linea.codigo, columnasBloque) : null;
+			const fValor = vivo
+				? formulaImporte(linea.codigo, gruposPorTramo(hoja, linea.codigo, diasDelBloque))
+				: null;
+			const estiloHoras = {
+				...derivada(),
+				ht: HorizontalAlign.RIGHT,
+				...(FMT_HORAS ? { n: { pattern: FMT_HORAS } } : {})
+			};
+			const estiloValor = { ...derivada(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } };
+			set(r, c0 + 4, fHoras ? { f: fHoras, s: estiloHoras } : { v: redondear(linea.horas), s: estiloHoras });
+			set(r, c0 + 5, fValor ? { f: fValor, s: estiloValor } : { v: linea.valor, s: estiloValor });
 			r++;
 		}
 
@@ -1314,12 +1826,27 @@ function zonaEmpresas(args: {
 
 // ─── Zona D: control de jornada ───────────────────────────────────────
 
+/**
+ * Dónde quedó cada cifra del reparto, para que el desprendible apunte a ellas
+ * en vez de repetir el número.
+ *
+ * Las siete líneas de OTROS del desprendible SON el reparto de desprendible:
+ * mismas horas, mismo importe. Pintarlas dos veces con dos números fijos era
+ * dejar abierta la puerta a que dijeran cosas distintas.
+ */
+interface CeldasReparto {
+	/** `codigo → { horas, valor }`, en referencias de celda («N40», «P40»). */
+	porCodigo: Map<CodigoRecargo, { horas: string; valor: string }>;
+	/** Total de la columna de disponibilidad, que es la línea DISPONIBILIDAD MES. */
+	totalDisponibilidad: string;
+}
+
 function zonaJornada(args: {
 	dto: PeriodoNominaDTO;
 	hoja: HojaNominaDTO;
 	set: (r: number, c: number, cell: ICellData) => void;
 	merge: (r1: number, c1: number, r2: number, c2: number) => void;
-}) {
+}): CeldasReparto {
 	const { dto, hoja, set, merge } = args;
 	const c0 = ZONA.JORNADA_C0;
 	let r = FILA_INFERIOR;
@@ -1349,11 +1876,53 @@ function zonaJornada(args: {
 		});
 		r++;
 	}
+
+	/**
+	 * Extras del trabajador contra el tope, y el margen que queda.
+	 *
+	 * Los tres topes de arriba son constantes de la ley; sin contrastarlos con
+	 * lo que esta persona lleva acumulado no dicen nada de ESTA hoja. El Excel
+	 * lo resuelve con dos filas (`TOTAL HORAS EXTRAS EN EL MES - TRABAJADOR` y
+	 * `DIFERENCIA DE HORAS EXTRAS`) y es de lo primero que se mira, porque
+	 * pasarse del tope es un problema legal, no de cuadre.
+	 *
+	 * Solo cuentan las CUATRO clases de hora extra. Los recargos (RN, RD, RNDF)
+	 * no son horas extra: son el mismo tiempo pagado con recargo, y sumarlos
+	 * daría un exceso que no existe.
+	 */
+	const CODIGOS_EXTRA: CodigoRecargo[] = ['HEN', 'HED', 'HEFD', 'HEFN'];
+	const horasExtra = (hoja.tarifas ?? [])
+		.filter((x) => CODIGOS_EXTRA.includes(x.codigo))
+		.reduce((s, x) => s + (x.horas ?? 0), 0);
+	const margen = dto.topes.horasExtrasMes - horasExtra;
+
+	let cx = campo(r, c0, SPAN.JORNADA_LABEL, { v: 'Horas extras del trabajador', s: etiqueta() });
+	campo(r, cx, SPAN.JORNADA_VALOR, {
+		v: redondear(horasExtra),
+		s: { ...derivada(), ht: HorizontalAlign.RIGHT }
+	});
 	r++;
 
-	let c = campo(r, c0, SPAN.JORNADA_LABEL, { v: 'SEMANA', s: cabecera('#1E4D33') });
+	cx = campo(r, c0, SPAN.JORNADA_LABEL, { v: 'Margen hasta el tope', s: etiqueta() });
+	campo(r, cx, SPAN.JORNADA_VALOR, {
+		v: redondear(margen),
+		s: {
+			...derivada(),
+			ht: HorizontalAlign.RIGHT,
+			bl: 1,
+			/// En rojo cuando se pasó del tope. Un número negativo entre otros
+			/// positivos se lee como un dato más si no cambia de color.
+			...(margen < 0
+				? { bg: { rgb: '#FEE2E2' }, cl: { rgb: '#991B1B' } }
+				: { cl: { rgb: TEXTO_MARCA } })
+		}
+	});
+	r++;
+	r++;
+
+	let c = campo(r, c0, SPAN.JORNADA_LABEL, { v: 'SEMANA', s: cabecera(SUBCAB) });
 	const colHoras = c;
-	campo(r, c, SPAN.JORNADA_VALOR, { v: 'HORAS', s: cabecera('#1E4D33') });
+	campo(r, c, SPAN.JORNADA_VALOR, { v: 'HORAS', s: cabecera(SUBCAB) });
 	r++;
 
 	const primera = r;
@@ -1379,16 +1948,26 @@ function zonaJornada(args: {
 
 	// Reparto entre lo que se paga en el desprendible y lo que se imputa a
 	// disponibilidad. Es la parte central del Excel (cols N-S).
-	c = campo(r, c0, SPAN.REPARTO_COD, { v: 'RECARGO', s: cabecera('#1E4D33') });
+	c = campo(r, c0, SPAN.REPARTO_COD, { v: 'RECARGO', s: cabecera(SUBCAB) });
 	const colDespH = c;
-	c = campo(r, c, SPAN.REPARTO_HORAS, { v: 'DESPRENDIBLE', s: cabecera('#1E4D33') });
+	c = campo(r, c, SPAN.REPARTO_HORAS, { v: 'DESPRENDIBLE', s: cabecera(SUBCAB) });
 	const colDespV = c;
-	c = campo(r, c, SPAN.REPARTO_VALOR, { v: '$', s: cabecera('#1E4D33') });
+	c = campo(r, c, SPAN.REPARTO_VALOR, { v: '$', s: cabecera(SUBCAB) });
 	const colDispH = c;
-	c = campo(r, c, SPAN.REPARTO_HORAS, { v: 'DISPONIBILIDAD', s: cabecera('#1E4D33') });
+	c = campo(r, c, SPAN.REPARTO_HORAS, { v: 'DISPONIBILIDAD', s: cabecera(SUBCAB) });
 	const colDispV = c;
-	campo(r, c, SPAN.REPARTO_VALOR, { v: '$', s: cabecera('#1E4D33') });
+	campo(r, c, SPAN.REPARTO_VALOR, { v: '$', s: cabecera(SUBCAB) });
 	r++;
+
+	/**
+	 * El reparto sale del DÍA: si está marcado como standby, sus horas van a
+	 * disponibilidad; si no, al desprendible. Es el mismo criterio que aplica
+	 * el servidor, así que las dos columnas se pueden sumar aquí mismo.
+	 */
+	const ajustados = codigosAjustados(hoja);
+	const diasDesprendible = hoja.dias.filter((d) => !d.disponibilidad);
+	const diasDisponibilidad = hoja.dias.filter((d) => d.disponibilidad);
+	const porCodigo = new Map<CodigoRecargo, { horas: string; valor: string }>();
 
 	const primeraReparto = r;
 	for (const codigo of ORDEN_RECARGOS) {
@@ -1396,6 +1975,9 @@ function zonaJornada(args: {
 		const disp = hoja.repartoDisponibilidad.find((x) => x.codigo === codigo);
 		const t = hoja.tarifas.find((x) => x.codigo === codigo);
 		const colorTipo = t?.color ?? '#E2E8F0';
+		/// Con las horas corregidas a mano el servidor desplaza el importe del
+		/// desprendible sobre el agregado, y eso no se deduce de los días.
+		const vivo = !ajustados.has(codigo);
 
 		campo(r, c0, SPAN.REPARTO_COD, {
 			v: codigo,
@@ -1407,21 +1989,38 @@ function zonaJornada(args: {
 				ht: HorizontalAlign.CENTER
 			}
 		});
-		campo(r, colDespH, SPAN.REPARTO_HORAS, {
-			v: redondear(desp?.horas ?? 0),
-			s: { ...derivada(), ht: HorizontalAlign.RIGHT }
-		});
-		campo(r, colDespV, SPAN.REPARTO_VALOR, {
-			v: desp?.valor ?? 0,
-			s: { ...derivada(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } }
-		});
-		campo(r, colDispH, SPAN.REPARTO_HORAS, {
-			v: redondear(disp?.horas ?? 0),
-			s: { ...derivada(), ht: HorizontalAlign.RIGHT }
-		});
-		campo(r, colDispV, SPAN.REPARTO_VALOR, {
-			v: disp?.valor ?? 0,
-			s: { ...derivada(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } }
+		const numero = { ...derivada(), ht: HorizontalAlign.RIGHT };
+		const moneda = { ...derivada(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } };
+		const celda = (formula: string | null, valor: number, s: IStyleData): ICellData =>
+			vivo && formula ? { f: formula, s } : { v: valor, s };
+
+		campo(
+			r,
+			colDespH,
+			SPAN.REPARTO_HORAS,
+			celda(formulaHoras(codigo, diasDesprendible.map((d) => COL.DIA0 + d.indice)), redondear(desp?.horas ?? 0), numero)
+		);
+		campo(
+			r,
+			colDespV,
+			SPAN.REPARTO_VALOR,
+			celda(formulaImporte(codigo, gruposPorTramo(hoja, codigo, diasDesprendible)), desp?.valor ?? 0, moneda)
+		);
+		campo(
+			r,
+			colDispH,
+			SPAN.REPARTO_HORAS,
+			celda(formulaHoras(codigo, diasDisponibilidad.map((d) => COL.DIA0 + d.indice)), redondear(disp?.horas ?? 0), numero)
+		);
+		campo(
+			r,
+			colDispV,
+			SPAN.REPARTO_VALOR,
+			celda(formulaImporte(codigo, gruposPorTramo(hoja, codigo, diasDisponibilidad)), disp?.valor ?? 0, moneda)
+		);
+		porCodigo.set(codigo, {
+			horas: `${L(colDespH)}${r + 1}`,
+			valor: `${L(colDespV)}${r + 1}`
 		});
 		r++;
 	}
@@ -1442,6 +2041,8 @@ function zonaJornada(args: {
 			}
 		});
 	}
+
+	return { porCodigo, totalDisponibilidad: `${L(colDispV)}${r + 1}` };
 }
 
 // ─── Zona E: desprendible ─────────────────────────────────────────────
@@ -1453,8 +2054,11 @@ function zonaDesprendible(args: {
 	bind: (r: number, c: number, binding: NominaBinding) => void;
 	/** Los de la hoja más los que detecta el builder (festivos sin marcar). */
 	avisos: string[];
+	/// Dónde quedaron las cifras del reparto: las siete líneas de OTROS son
+	/// esas mismas y apuntan ahí en vez de repetir el número.
+	reparto: CeldasReparto;
 }): number {
-	const { hoja, set, merge, bind, avisos } = args;
+	const { hoja, set, merge, bind, avisos, reparto } = args;
 	const c0 = ZONA.DESPRENDIBLE_C0;
 	const L = (c: number) => colLetra(c);
 	let r = FILA_INFERIOR;
@@ -1479,9 +2083,9 @@ function zonaDesprendible(args: {
 	});
 	r++;
 
-	campo(r, c0, SPAN.DESP_CONCEPTO, { v: 'DEVENGOS', s: cabecera('#1E4D33') });
-	campo(r, colDevCant, SPAN.DESP_CANT, { v: 'CANT.', s: cabecera('#1E4D33') });
-	campo(r, colDevValor, SPAN.DESP_VALOR, { v: 'VALOR', s: cabecera('#1E4D33') });
+	campo(r, c0, SPAN.DESP_CONCEPTO, { v: 'DEVENGOS', s: cabecera(SUBCAB) });
+	campo(r, colDevCant, SPAN.DESP_CANT, { v: 'CANT.', s: cabecera(SUBCAB) });
+	campo(r, colDevValor, SPAN.DESP_VALOR, { v: 'VALOR', s: cabecera(SUBCAB) });
 	campo(r, colDedConcepto, SPAN.DESP_DED_CONCEPTO, {
 		v: 'DEDUCCIONES',
 		s: cabecera('#7F1D1D')
@@ -1490,21 +2094,58 @@ function zonaDesprendible(args: {
 	r++;
 
 	const primeraDevengo = r;
+	/** Fila del rótulo OTROS, para colgar de ella el subtotal de recargos. */
+	let marcaOtros = -1;
+	/**
+	 * Primera y última fila del bloque de bonos y pernotes.
+	 *
+	 * Se apuntan mientras se pinta y no se calculan aparte: el bloque no tiene
+	 * un rótulo que lo abra —van seguidos sin más— y contarlo por separado
+	 * obligaría a repetir aquí las reglas de qué línea entra en él.
+	 */
+	let primeraBonif = -1;
+	let ultimaBonif = -1;
+	/** ¿Hay pernotes dentro del bloque? Decide el rótulo del subtotal. */
+	let hayPernotes = false;
 	const filas = Math.max(hoja.devengos.length, hoja.deducciones.length);
 
 	for (let i = 0; i < filas; i++) {
 		const dev = hoja.devengos[i];
 		const ded = hoja.deducciones[i];
 
-		if (dev) {
+		if (dev?.seccion) {
+			// Rótulo a lo ancho de las tres columnas de devengos: no lleva
+			// cantidad ni valor y no debe parecer una línea más.
+			campo(r, c0, SPAN.DESP_CONCEPTO + SPAN.DESP_CANT + SPAN.DESP_VALOR, {
+				v: dev.nombre,
+				s: { ...cabecera(SUBCAB), ht: HorizontalAlign.CENTER, fs: 9 }
+			});
+			marcaOtros = r;
+		} else if (dev) {
+			if (dev.clave.startsWith('bono:') || dev.clave.startsWith('pernote:')) {
+				if (primeraBonif < 0) primeraBonif = r;
+				ultimaBonif = r;
+				if (dev.clave.startsWith('pernote:')) hayPernotes = true;
+			}
 			const estilo = dev.editable ? editable() : derivada();
 			campo(r, c0, SPAN.DESP_CONCEPTO, { v: dev.nombre, s: { ...base(), fs: 9 } });
+			/**
+			 * Las líneas de recargo y la de disponibilidad APUNTAN al reparto,
+			 * que ya suma los días. Así corregir una hora arriba baja hasta el
+			 * TOTAL OTROS, el total devengado y el neto, que son sumas vivas
+			 * sobre estas mismas celdas.
+			 *
+			 * `refDeConcepto` devuelve `null` para todo lo demás —salario,
+			 * bonos, deducciones—, que no sale de los días y se sigue pintando
+			 * con la cifra del servidor.
+			 */
+			const ref = refDeConcepto(dev.clave, reparto);
 			campo(r, colDevCant, SPAN.DESP_CANT, {
-				v: dev.cantidad ?? '',
+				...(ref?.horas ? { f: `=${ref.horas}` } : { v: dev.cantidad ?? '' }),
 				s: { ...estilo, ht: HorizontalAlign.CENTER }
 			});
 			campo(r, colDevValor, SPAN.DESP_VALOR, {
-				v: Math.round(dev.valor),
+				...(ref?.valor ? { f: `=${ref.valor}` } : { v: Math.round(dev.valor) }),
 				s: { ...estilo, ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } }
 			});
 			// Solo se registra binding en lo que de verdad se teclea. El resto
@@ -1551,6 +2192,77 @@ function zonaDesprendible(args: {
 	}
 	const ultimaFila = r - 1;
 
+	/**
+	 * Subtotal del bloque de bonos y pernotes.
+	 *
+	 * Mismo sitio y misma forma que el de OTROS: fusionado en la columna de
+	 * deducciones, al lado de las líneas que resume. Es una suma VIVA sobre sus
+	 * propias filas, no `totales.totalBonificaciones`, para que no pueda decir
+	 * una cosa distinta de lo que tiene al lado cuando alguien edita una
+	 * cantidad.
+	 *
+	 * Solo se pinta si el bloque empieza DEBAJO de la última deducción: con
+	 * pocos devengos antes, la celda fusionada se comería ANTICIPOS. Es raro
+	 * —hacen falta al menos tres líneas por encima— pero el daño sería
+	 * silencioso.
+	 *
+	 * El rótulo distingue si hay pernotes dentro: van intercalados con los
+	 * bonos por subperiodo, así que el subtotal los abarca, y llamarlo «total
+	 * bonificaciones» a secas mentiría sobre lo que suma.
+	 */
+	const ultimaDeduccion = primeraDevengo + Math.max(hoja.deducciones.length, 1) - 1;
+	if (primeraBonif > ultimaDeduccion && ultimaBonif >= primeraBonif) {
+		campo(primeraBonif, colDedConcepto, SPAN.DESP_DED_CONCEPTO, {
+			v: hayPernotes ? 'TOTAL BONIF. + PERNOTES' : 'TOTAL BONIFICACIONES',
+			s: { ...base(), fs: 8, bl: 1, vt: VerticalAlign.MIDDLE }
+		});
+		merge(primeraBonif, colDedConcepto, ultimaBonif, colDedConcepto + SPAN.DESP_DED_CONCEPTO - 1);
+		campo(primeraBonif, colDedValor, SPAN.DESP_VALOR, {
+			f: `=SUM(${L(colDevValor)}${primeraBonif + 1}:${L(colDevValor)}${ultimaBonif + 1})`,
+			s: {
+				...derivada(),
+				ht: HorizontalAlign.RIGHT,
+				vt: VerticalAlign.MIDDLE,
+				bl: 1,
+				n: { pattern: FMT_COP }
+			}
+		});
+		merge(primeraBonif, colDedValor, ultimaBonif, colDedValor + SPAN.DESP_VALOR - 1);
+	}
+
+	/**
+	 * Subtotal de OTROS, en una celda fusionada al lado de sus líneas.
+	 *
+	 * Es lo que hace el Excel: las siete filas de recargo más disponibilidad no
+	 * se suman en ningún sitio visible, y esa cifra —lo que el periodo pagó de
+	 * recargos— es de las que más se miran. Va en la columna de deducciones
+	 * porque debajo de ANTICIPOS no hay nada, y fusionada a lo alto del bloque
+	 * para que se lea como el total de ESAS filas y no como una línea más.
+	 *
+	 * La fórmula es viva, como los totales: ajustar unas horas mueve el
+	 * subtotal sin esperar al servidor.
+	 */
+	if (marcaOtros >= 0 && ultimaFila > marcaOtros) {
+		const desde = marcaOtros + 2; // +1 por la fila del rótulo, +1 por ser 1-indexado
+		const hasta = ultimaFila + 1;
+		campo(marcaOtros + 1, colDedConcepto, SPAN.DESP_DED_CONCEPTO, {
+			v: 'TOTAL OTROS',
+			s: { ...base(), fs: 9, bl: 1, vt: VerticalAlign.MIDDLE }
+		});
+		merge(marcaOtros + 1, colDedConcepto, ultimaFila, colDedConcepto + SPAN.DESP_DED_CONCEPTO - 1);
+		campo(marcaOtros + 1, colDedValor, SPAN.DESP_VALOR, {
+			f: `=SUM(${L(colDevValor)}${desde}:${L(colDevValor)}${hasta})`,
+			s: {
+				...derivada(),
+				ht: HorizontalAlign.RIGHT,
+				vt: VerticalAlign.MIDDLE,
+				bl: 1,
+				n: { pattern: FMT_COP }
+			}
+		});
+		merge(marcaOtros + 1, colDedValor, ultimaFila, colDedValor + SPAN.DESP_VALOR - 1);
+	}
+
 	// Totales con fórmula viva: si se edita un concepto, el neto se mueve sin
 	// esperar al servidor. El servidor recalcula igual y manda el suyo, pero
 	// mientras tanto la hoja no miente.
@@ -1563,8 +2275,18 @@ function zonaDesprendible(args: {
 		v: 'TOTAL DEDUCCIONES',
 		s: { ...totales(), fs: 9 }
 	});
+	/**
+	 * Las deducciones se suman SOLO sobre sus propias filas.
+	 *
+	 * Antes barría la columna entera hasta el final del bloque, y ahí abajo
+	 * vive el subtotal de OTROS —va en esta columna porque debajo de ANTICIPOS
+	 * queda sitio—, así que se colaba en el total: las deducciones salían
+	 * infladas con los recargos y el neto, corto en esa misma cifra. La
+	 * columna de devengos sí puede barrerse entera, porque todo lo que hay en
+	 * ella son devengos.
+	 */
 	campo(r, colDedValor, SPAN.DESP_VALOR, {
-		f: `=SUM(${L(colDedValor)}${primeraDevengo + 1}:${L(colDedValor)}${ultimaFila + 1})`,
+		f: `=SUM(${L(colDedValor)}${primeraDevengo + 1}:${L(colDedValor)}${primeraDevengo + Math.max(hoja.deducciones.length, 1)})`,
 		s: {
 			...totales(),
 			ht: HorizontalAlign.RIGHT,
@@ -1595,6 +2317,75 @@ function zonaDesprendible(args: {
 	});
 	r++;
 
+	/**
+	 * VACACIONES: las dos fechas, los días que salen de ellas y el salario.
+	 *
+	 * DEBAJO del desprendible y no dentro: no es un concepto más, son los datos
+	 * de los que sale UNA de sus líneas. Dentro habría que robarle filas a los
+	 * devengos y la fila VACACIONES quedaría separada de sus propias fechas.
+	 *
+	 * Al lado tampoco: ahí caía en columnas que la hoja ni siquiera declaraba
+	 * —Univer no avisa, simplemente no las dibuja— y obligaba a ensanchar la
+	 * rejilla para una tabla de cuatro filas. Abajo reutiliza las columnas que
+	 * ya están en pantalla y queda alineada con lo que explica.
+	 *
+	 * Los DÍAS no se teclean: son la resta de las fechas, con el día de inicio
+	 * incluido. Dejarlos editables permitiría guardar un número que contradiga
+	 * a las fechas que tiene al lado, y entonces ninguno de los dos sirve para
+	 * justificar nada.
+	 */
+	const vac = hoja.vacaciones;
+	if (vac) {
+		r++;
+		campo(r, c0, SPAN.VAC_ROTULO + SPAN.VAC_VALOR, { v: 'VACACIONES', s: cabecera() });
+		r++;
+
+		const filaVac = (
+			rotulo: string,
+			valor: string | number,
+			campoBd: string | null,
+			formato?: string
+		) => {
+			campo(r, c0, SPAN.VAC_ROTULO, { v: rotulo, s: { ...base(), fs: 9 } });
+			campo(r, c0 + SPAN.VAC_ROTULO, SPAN.VAC_VALOR, {
+				v: valor,
+				s: {
+					...(campoBd ? editable() : derivada()),
+					ht: campoBd === null ? HorizontalAlign.CENTER : HorizontalAlign.RIGHT,
+					...(formato ? { n: { pattern: formato } } : {})
+				}
+			});
+			if (campoBd && hoja.liquidacionId) {
+				bind(r, c0 + SPAN.VAC_ROTULO, {
+					entityType: 'liquidacion',
+					entityId: hoja.liquidacionId,
+					field: campoBd,
+					conductorId: hoja.conductorId
+				});
+			}
+			r++;
+		};
+
+		// Las fechas van como TEXTO `AAAA-MM-DD`, que es como las guarda y las
+		// espera el servidor. Con formato de fecha de Univer, la celda
+		// devolvería un serial y el patch lo rechazaría.
+		filaVac('FECHA INICIO', vac.desde ?? '', 'periodo_start_vacaciones');
+		filaVac('FECHA FIN', vac.hasta ?? '', 'periodo_end_vacaciones');
+		filaVac('DÍAS', vac.dias || '', null);
+		filaVac(
+			vac.salarioHeredado ? 'SALARIO (del básico)' : 'SALARIO VACACIONES',
+			Math.round(vac.salarioBase),
+			'salario_vacaciones',
+			FMT_COP
+		);
+
+		campo(r, c0, SPAN.VAC_ROTULO + SPAN.VAC_VALOR, {
+			v: 'Los días incluyen el de inicio. El valor es salario ÷ 30 × días.',
+			s: { ...base(), fs: 8, cl: { rgb: '#6B7280' } }
+		});
+		r++;
+	}
+
 	// Avisos de la hoja, si los hay. Van aquí y no en un toast porque son de
 	// esta hoja concreta y el usuario está mirando treinta.
 	if (avisos.length) {
@@ -1618,7 +2409,39 @@ function zonaDesprendible(args: {
  * `null` significa que el importe no se teclea directamente (sale de una
  * cantidad, de las planillas o de otra tabla).
  */
+/**
+ * La celda del reparto de la que sale este concepto del desprendible, si sale
+ * de ahí.
+ *
+ * `recargo:<CODIGO>` son las siete líneas de OTROS y `disponibilidad` es la
+ * columna entera de standby. Un código con las horas corregidas a mano no
+ * está en el mapa —el reparto lo dejó estático— y entonces la línea se pinta
+ * con la cifra del servidor, que es la buena.
+ */
+function refDeConcepto(
+	clave: string,
+	reparto: CeldasReparto
+): { horas?: string; valor?: string } | null {
+	if (clave === 'disponibilidad') return { valor: reparto.totalDisponibilidad };
+	if (!clave.startsWith('recargo:')) return null;
+	return reparto.porCodigo.get(clave.slice('recargo:'.length) as CodigoRecargo) ?? null;
+}
+
 function campoDeConcepto(clave: string): string | null {
+	/**
+	 * Los conceptos adicionales no son una columna sino un elemento del Json
+	 * `conceptos_adicionales`, y se direccionan POR NOMBRE —igual que los
+	 * bonos de la matriz—: el índice se corre en cuanto se borra uno de en
+	 * medio y el binding inverso acabaría repintando la fila equivocada.
+	 *
+	 * La clave llega como `adicional:<nombre>` y el nombre puede traer `:`
+	 * dentro, así que se corta por el PRIMER separador y el resto es el
+	 * nombre entero.
+	 */
+	if (clave.startsWith('adicional:')) {
+		const nombre = clave.slice('adicional:'.length).trim();
+		return nombre ? `adicional|${nombre}` : null;
+	}
 	switch (clave) {
 		case 'vacaciones':
 			return 'total_vacaciones';
@@ -1748,19 +2571,3 @@ function redondear(n: number): number {
 	return Math.round(n * 100) / 100;
 }
 
-/**
- * Texto blanco o negro según lo oscuro que sea el fondo. Los colores de
- * recargo vienen de los Excel y van del amarillo al morado oscuro; con un
- * color de texto fijo, la mitad quedaría ilegible.
- */
-function contraste(hex: string): string {
-	const c = hex.replace('#', '');
-	if (c.length !== 6) return TEXT_DARK;
-	const r = parseInt(c.slice(0, 2), 16);
-	const g = parseInt(c.slice(2, 4), 16);
-	const b = parseInt(c.slice(4, 6), 16);
-	// Luminancia relativa, redondeada: no hace falta más precisión para
-	// decidir entre dos colores.
-	const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-	return lum > 0.6 ? TEXT_DARK : '#FFFFFF';
-}

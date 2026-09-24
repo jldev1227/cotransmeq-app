@@ -914,7 +914,14 @@ export function documentoCierre(o: {
 			{ label: 'Placa', valor: fmtPlaca(hoja.placa) },
 			{ label: 'Consecutivo', valor: hoja.consecutivo || '—' },
 			{ label: 'Estado', valor: hoja.estado || '' },
-			{ label: 'Tercero', valor: hoja.tercero_nombre || '—' }
+			{ label: 'Tercero', valor: hoja.tercero_nombre || '—' },
+			// CC o NIT según la ficha, igual que el PDF del correo: rotular
+			// «CC» el NIT de una empresa en un documento que se entrega y se
+			// archiva no es un matiz de estilo.
+			{
+				label: hoja.tercero_tipo_persona === 'EMPRESA' ? 'NIT' : 'CC',
+				valor: hoja.tercero_identificacion || '—'
+			}
 		],
 		secciones,
 		resumen,

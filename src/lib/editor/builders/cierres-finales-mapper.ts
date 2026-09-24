@@ -49,6 +49,11 @@ function hojaDeDetalle(d: any): CierreHoja {
 		placa: txt(d.placa),
 		tercero_id: d.tercero_id ?? null,
 		tercero_nombre,
+		// El detalle ya trae la ficha del tercero; sin esto la cabecera
+		// perdía la identificación al recargar UNA hoja, que es cuando el
+		// índice no la fusiona encima.
+		tercero_identificacion: d.tercero?.identificacion ?? null,
+		tercero_tipo_persona: d.tercero?.tipo_persona ?? null,
 		estado: txt(d.estado) || 'BORRADOR',
 		es_multi_propietario: d.es_multi_propietario === true,
 		total_pagar: num(d.total_pagar),

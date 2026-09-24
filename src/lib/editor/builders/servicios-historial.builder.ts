@@ -46,23 +46,7 @@ import {
 	type TerceroItemHistorial,
 	TERCEROS_SHEET_ID
 } from './servicios-historial-terceros.builder';
-import {
-	GREEN,
-	TEXT_DARK,
-	MUTED,
-	TOTALES_BG,
-	ZEBRA_BG,
-	RED,
-	GRIS_BLOQUEADO,
-	AZUL_ACCION,
-	comoEnlace,
-	comoTexto,
-	allBorders,
-	fechaCorta,
-	fechaDeCalendario,
-	colLetra,
-	MESES_CORTOS as MESES
-} from './historial-comun';
+import { allBorders, AZUL_ACCION, colLetra, comoEnlace, comoTexto, contraste, fechaCorta, fechaDeCalendario, GREEN, GRIS_BLOQUEADO, MESES_CORTOS as MESES, MUTED, RED, TEXT_DARK, TOTALES_BG, ZEBRA_BG } from './historial-comun';
 
 // Re-export para los consumidores históricos (excel builder, page).
 export { allBorders, fechaCorta, fechaDeCalendario, colLetra };
@@ -412,7 +396,7 @@ export function bloqueLiquidacion(
 const HEADER_STYLE: IStyleData = {
 	fs: 10,
 	bl: 1,
-	cl: { rgb: '#FFFFFF' },
+	cl: { rgb: contraste(GREEN) },
 	bg: { rgb: GREEN },
 	ht: HorizontalAlign.CENTER,
 	bd: allBorders()

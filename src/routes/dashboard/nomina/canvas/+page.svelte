@@ -4,7 +4,8 @@
 	import { page } from '$app/stores';
 	import { toast } from 'svelte-sonner';
 
-	import { nominaCanvasAPI, nominaEnviosAPI, type PeriodoNominaDTO } from '$lib/api/nomina-canvas';
+	import { nominaCanvasAPI, nominaEnviosAPI, type PeriodoNominaDTO, nominaBorradoresAPI } from '$lib/api/nomina-canvas';
+	import { nominaSheetId } from '$lib/editor/builders/nomina.builder';
 	import {
 		createNominaEngine,
 		disposeEngine,
@@ -65,10 +66,12 @@
 		icoBorradores
 	} from '$lib/components/univer/iconos-canvas.svelte';
 	import GenerarBorradoresNominaModal from '$lib/components/nomina/GenerarBorradoresNominaModal.svelte';
+	import ConceptosAdicionalesModal from '$lib/components/nomina/ConceptosAdicionalesModal.svelte';
 	import UniverCanvasHost from '$lib/components/univer/UniverCanvasHost.svelte';
 	import UniverSideRail, { type RailItem } from '$lib/components/univer/UniverSideRail.svelte';
 	import UniverActionOverlay from '$lib/components/univer/UniverActionOverlay.svelte';
 	import PresenceAvatars from '$lib/components/PresenceAvatars.svelte';
+	import AutosaveIndicator from '$lib/components/AutosaveIndicator.svelte';
 	import { authStore } from '$lib/stores/auth';
 
 	const MESES = [
@@ -136,6 +139,22 @@
 	let historialAbierto = $state(false);
 
 	/**
+	 * Escrituras en vuelo y escrituras perdidas, para el indicador de guardado.
+	 *
+	 * Este canvas no tiene botón de guardar: cada celda sale sola por socket en
+	 * cuanto se sale de ella. Sin contador, la única señal de que el cambio
+	 * llegó era que no apareciera un toast de error, que es pedirle al usuario
+	 * que deduzca el éxito de la ausencia de un fallo. `pendientes` sube al
+	 * emitir y baja con el acuse, el conflicto o el abandono; `fallidas` cuenta
+	 * lo que el servidor rechazó o nunca acusó.
+	 */
+	let pendientes = $state(0);
+	let fallidas = $state(0);
+	/// Hora del último acuse. Propia y no la del store de `realtimeCollab`,
+	/// que es de módulo y traería la del canvas por el que se pasó antes.
+	let ultimoGuardado = $state<string | null>(null);
+
+	/**
 	 * `liquidacion_id → resumen de envío`, para marcar en el selector quién ya
 	 * recibió su desprendible.
 	 *
@@ -179,6 +198,204 @@
 		hojaActiva ? accionesDisponibles(hojaActiva.estado, areas) : []
 	);
 
+	// ─── Conceptos adicionales ─────────────────────────────
+	/**
+	 * El alta y la baja de conceptos adicionales viven en un modal y no en una
+	 * celda: añadirlos AÑADE UNA FILA al desprendible, y una hoja de cálculo
+	 * no tiene dónde teclear «una fila más». Cambiar el importe de uno que ya
+	 * existe sí se hace en su celda, que está bindeada como el resto.
+	 */
+	let mostrarAdicionales = $state(false);
+
+	/**
+	 * Los conceptos de la hoja abierta, leídos de sus propios devengos.
+	 *
+	 * No hay un campo aparte en el DTO a propósito: el desprendible ya los
+	 * trae y duplicarlos daría dos listas que podrían decir cosas distintas.
+	 * El rótulo se pinta en MAYÚSCULAS, que es también como viaja en el campo
+	 * del patch (el servidor compara sin distinguir mayúsculas).
+	 */
+	let conceptosAdicionales = $derived(
+		(hojaActiva?.devengos ?? [])
+			.filter((d) => d.clave.startsWith('adicional:'))
+			.map((d) => ({ nombre: d.nombre, valor: d.valor }))
+	);
+
+	/**
+	 * Altas y bajas en vuelo, por campo.
+	 *
+	 * Sirve para distinguir en el acuse lo que CAMBIÓ LA GEOMETRÍA —una fila
+	 * más o una menos, que obliga a rehacer la hoja— de un simple retoque del
+	 * importe en la celda, que el canvas ya tiene pintado. Sin esta distinción
+	 * cada tecleo en una celda de concepto remontaría el libro entero.
+	 */
+	const adicionalesEnVuelo = new Set<string>();
+
+	function motivoBloqueoAdicionales(): string {
+		if (!hojaActiva) return 'Abre la hoja de un conductor primero.';
+		if (!hojaActiva.liquidacionId)
+			return 'Este conductor todavía no tiene liquidación en el periodo.';
+		if (ESTADOS_BLOQUEADOS.includes(hojaActiva.estado))
+			return `La liquidación está en ${hojaActiva.estado}. Devuélvela a LIQUIDADA para editarla.`;
+		return '';
+	}
+
+	// ─── Bonos: recálculo con rebote y restauración desde recorridos ──────
+	/**
+	 * Editar una celda de bono NO se puede repintar celda a celda.
+	 *
+	 * El servidor recalcula y devuelve los totales, pero lo que cambia en la
+	 * hoja es media zona: `TOTAL BONOS` de la matriz, las líneas de bono del
+	 * desprendible —que pueden nacer, irse a cero o partirse en dos cuando el
+	 * corte cruza dos meses—, el subtotal de bonificaciones, el devengado y el
+	 * neto. Antes no se repintaba nada: la cabecera de la página sí movía su
+	 * total y la hoja seguía enseñando las cifras viejas, o sea la misma
+	 * pantalla diciendo dos cosas.
+	 *
+	 * Tampoco sirve una fórmula viva contra la matriz, que es como se resuelven
+	 * las líneas de recargo: la celda de un bono descuadrado contiene el TEXTO
+	 * `«2 → 5»` y `SUM` lo leería como cero, y una placa que se queda sin
+	 * columna por ancho no estaría en el rango.
+	 *
+	 * Así que se relee el periodo, CON REBOTE: recorrer los meses de un bono
+	 * son varias ediciones seguidas y remontar el libro en cada una sería
+	 * insoportable. Se espera a que pare el tecleo y se rehace una sola vez.
+	 */
+	const REBOTE_RECALCULO_MS = 800;
+	/// Tope de esperas por patches en vuelo (~8 s). Ver `pedirRecalculo`.
+	const MAX_ESPERAS_RECALCULO = 10;
+	let recalculoPendiente = $state(false);
+	let temporizadorRecalculo: ReturnType<typeof setTimeout> | null = null;
+	let esperasRecalculo = 0;
+
+	function pedirRecalculo() {
+		recalculoPendiente = true;
+		if (temporizadorRecalculo) clearTimeout(temporizadorRecalculo);
+		temporizadorRecalculo = setTimeout(() => {
+			temporizadorRecalculo = null;
+			/**
+			 * Con algo todavía en vuelo se espera otra vuelta: releer ahora
+			 * traería del servidor un estado ANTERIOR al que el usuario ya ve
+			 * escrito en la celda, y la hoja daría un salto atrás.
+			 *
+			 * Pero con tope. `pendientes` lo bajan el acuse, el conflicto y el
+			 * fallo, así que en condiciones normales drena solo; si por lo que
+			 * sea se quedara clavado en uno, sin este límite el temporizador se
+			 * reprogramaría cada 800 ms para siempre y la hoja NUNCA se
+			 * refrescaría — el mismo síntoma que esto viene a arreglar.
+			 */
+			if (pendientes > 0 && esperasRecalculo < MAX_ESPERAS_RECALCULO) {
+				esperasRecalculo++;
+				pedirRecalculo();
+				return;
+			}
+			esperasRecalculo = 0;
+			recalculoPendiente = false;
+			void loadInicial();
+		}, REBOTE_RECALCULO_MS);
+	}
+
+	function cancelarRecalculo() {
+		if (temporizadorRecalculo) clearTimeout(temporizadorRecalculo);
+		temporizadorRecalculo = null;
+		esperasRecalculo = 0;
+		recalculoPendiente = false;
+	}
+
+	/**
+	 * Celdas de bono con cifra PROPIA de la liquidación distinta de lo marcado.
+	 *
+	 * Una celda que salió de recorridos se copió tal cual, así que por
+	 * construcción coincide: que difiera significa que alguien la tecleó. Es lo
+	 * que se va a perder al restaurar, y por eso se cuenta antes de preguntar.
+	 */
+	let celdasDescuadradas = $derived.by(() => {
+		const m = hojaActiva?.matrizBonos;
+		if (!m?.filas.length || m.hayRecorridos !== true) return 0;
+		const fila = (celdas: unknown, i: number): number[] => {
+			const f = (celdas as any)?.[i];
+			return Array.isArray(f) ? (f as number[]) : [Number(f ?? 0)];
+		};
+		let n = 0;
+		for (const f of m.filas) {
+			for (let i = 0; i < m.placas.length; i++) {
+				const cant = fila(f.cantidades, i);
+				const rec = fila(f.cantidadesRecorridos, i);
+				const largo = Math.max(cant.length, rec.length);
+				for (let j = 0; j < largo; j++) if ((cant[j] ?? 0) !== (rec[j] ?? 0)) n++;
+			}
+		}
+		return n;
+	});
+
+	let rehaciendoBonos = $state(false);
+
+	/**
+	 * Vuelve a montar los bonos de la hoja desde lo marcado en recorridos.
+	 *
+	 * Pisa a propósito, así que se pregunta antes DICIENDO CUÁNTO se pierde: un
+	 * «¿seguro?» que no dice qué se lleva por delante no es una confirmación,
+	 * es un trámite.
+	 */
+	async function rehacerBonos() {
+		const hoja = hojaActiva;
+		if (!hoja?.liquidacionId || rehaciendoBonos) return;
+		if (!hoja.matrizBonos?.hayRecorridos) {
+			toast.warning('Este conductor no tiene bonos marcados en recorridos.', {
+				description: 'No hay de dónde restaurarlos.'
+			});
+			return;
+		}
+		const n = celdasDescuadradas;
+		const ok = confirm(
+			`Se vuelven a montar los bonos de ${hoja.nombre} desde lo marcado en recorridos.\n\n` +
+				(n
+					? `Se pierden las cantidades tecleadas a mano en ${n} ${n === 1 ? 'celda que se separó' : 'celdas que se separaron'}.`
+					: 'Ahora mismo ninguna celda se ha separado de lo marcado, así que no debería cambiar nada.') +
+				'\n\nEl precio unitario de cada bono no se toca; las vacaciones y el resto del desprendible tampoco.'
+		);
+		if (!ok) return;
+
+		/// Lo que venga por rebote sobra: esto recarga igual y con datos más
+		/// nuevos que los de la edición que lo programó.
+		cancelarRecalculo();
+		rehaciendoBonos = true;
+		await conOverlay('Restaurando bonos', hoja.nombre, async () => {
+			const r = await nominaBorradoresAPI.rehacerBonos(hoja.liquidacionId!, { anio, mes, corte });
+			await loadInicial();
+			toast.success(
+				r.celdas
+					? `${hoja.nombre}: ${r.celdas} ${r.celdas === 1 ? 'celda restaurada' : 'celdas restauradas'}${r.creadas ? ` · ${r.creadas} ${r.creadas === 1 ? 'bono nuevo' : 'bonos nuevos'}` : ''}.`
+					: `${hoja.nombre}: los bonos ya coincidían con recorridos.`
+			);
+		});
+		rehaciendoBonos = false;
+	}
+
+	/** Manda el alta/baja por el socket. `valor: null` es la baja. */
+	function patchAdicional(nombre: string, valor: number | null) {
+		const hoja = hojaActiva;
+		if (!hoja?.liquidacionId) {
+			toast.warning('Este conductor todavía no tiene liquidación en el periodo.');
+			return;
+		}
+		if (!session) {
+			toast.error('Sin conexión con el servidor: el cambio no se guardó.');
+			return;
+		}
+		const field = `adicional|${nombre}`;
+		adicionalesEnVuelo.add(field);
+		pendientes++;
+		session.enviarPatch({
+			mes,
+			entity_type: 'liquidacion',
+			entity_id: hoja.liquidacionId,
+			field,
+			value: valor,
+			base_version: hoja.version
+		});
+	}
+
 	function syncUrl() {
 		const url = new URL(window.location.href);
 		url.searchParams.set('anio', String(anio));
@@ -211,10 +428,121 @@
 		if (hojaActiva) syncUrl();
 	});
 
+	/**
+	 * Crea el borrador de la hoja que se está mirando.
+	 *
+	 * Una hoja SIN liquidación es de solo lectura entera: los bonos, los días
+	 * de salario, las vacaciones y las horas de recargo se guardan todos contra
+	 * una fila de `liquidaciones`, y sin ella no hay a qué atar la celda. El
+	 * síntoma —«no me deja editar»— es idéntico al de un permiso denegado y no
+	 * había forma de salir del atasco desde el canvas.
+	 *
+	 * Reutiliza el mismo endpoint que «Generar borradores» con un solo
+	 * conductor: crear aquí una vía paralela significaría dos sitios donde
+	 * decidir cuántos días lleva un borrador o de dónde salen sus bonos.
+	 */
+	let creandoBorrador = $state(false);
+
+	async function crearBorradorDeLaHoja() {
+		const hoja = hojaActiva;
+		if (!hoja || hoja.liquidacionId || creandoBorrador) return;
+		creandoBorrador = true;
+		try {
+			const r = await nominaBorradoresAPI.generar({
+				anio,
+				mes,
+				corte,
+				conductor_ids: [hoja.conductorId]
+			});
+
+			/// Un solo conductor tarda milésimas, pero el endpoint es una COLA y
+			/// responde antes de terminar. Se espera al job en vez de recargar a
+			/// ciegas: sin esto, el periodo se recargaría antes de que la fila
+			/// exista y la hoja seguiría saliendo de solo lectura.
+			/**
+			 * Se espera al job Y SE MIRA SU RESULTADO.
+			 *
+			 * Un job puede terminar «complete» habiendo OMITIDO al conductor —el
+			 * generador se salta a quien no tiene planillas en el periodo— y dar
+			 * por bueno el `complete` decía «borrador creado» sin haber creado
+			 * nada: la hoja seguía de solo lectura y el botón ahí, sin explicar
+			 * por qué.
+			 */
+			let creado = false;
+			let motivo = '';
+			for (let i = 0; i < 40; i++) {
+				const job = await nominaBorradoresAPI.estado(r.job_id);
+				if (job.status === 'complete' || job.status === 'error' || job.status === 'cancelled') {
+					if (job.status !== 'complete') {
+						toast.error(job.error || 'No se pudo crear el borrador.');
+						return;
+					}
+					const item = job.items?.find((x) => x.conductorId === hoja.conductorId);
+					creado = item?.estado === 'creado' || item?.estado === 'reemplazado';
+					motivo = item?.motivo ?? '';
+					break;
+				}
+				await new Promise((s) => setTimeout(s, 150));
+			}
+
+			if (!creado) {
+				toast.warning(motivo || 'El generador no creó el borrador de esta hoja.');
+				return;
+			}
+
+			await loadInicial();
+			toast.success(`Borrador creado para ${hoja.nombre}.`);
+		} catch (e: any) {
+			toast.error(e?.response?.data?.error || 'No se pudo crear el borrador.');
+		} finally {
+			creandoBorrador = false;
+		}
+	}
+
+	/**
+	 * Vuelve a traer los días de la hoja desde las planillas.
+	 *
+	 * El borrador tiene COPIA PROPIA de los días: se hizo al generarlo y desde
+	 * entonces vive aparte, para poder corregir horas sin tocar la planilla que
+	 * se le cobra al cliente. Esto sirve para lo contrario — cuando alguien
+	 * cargó días nuevos en Recargos y hay que volver a partir de ahí.
+	 *
+	 * Se pregunta antes porque DESCARTA las correcciones manuales de los días:
+	 * es el sentido del botón, pero no algo que se deba descubrir después.
+	 */
+	let refrescandoDias = $state(false);
+
+	async function refrescarDiasDeLaHoja() {
+		const hoja = hojaActiva;
+		if (!hoja?.liquidacionId || refrescandoDias) return;
+		const ok = confirm(
+			`Se volverán a traer los días de ${hoja.nombre} desde las planillas.\n\n` +
+				'Las horas que hayas corregido a mano en los días se pierden. Los bonos, ' +
+				'las vacaciones y el resto del desprendible no se tocan.'
+		);
+		if (!ok) return;
+
+		refrescandoDias = true;
+		try {
+			const res = await nominaBorradoresAPI.refrescarDias(hoja.liquidacionId, { anio, mes, corte });
+			await loadInicial();
+			toast.success(`Días actualizados desde las planillas (${res.dias}).`);
+		} catch (e: any) {
+			toast.error(e?.response?.data?.error || 'No se pudieron actualizar los días.');
+		} finally {
+			refrescandoDias = false;
+		}
+	}
+
 	// ─── Carga ─────────────────────────────────────────────
 	async function loadInicial() {
 		loading = true;
 		loadError = '';
+		/// Releer el periodo trae lo que hay en el servidor, así que lo que se
+		/// quedó sin guardar ya no está en pantalla: dejar el contador en pie
+		/// diría «tienes cambios sin guardar» señalando a celdas que muestran
+		/// justo el valor del servidor.
+		fallidas = 0;
 		try {
 			datos = await nominaCanvasAPI.periodo(anio, mes, corte);
 			if (!conductorActivo && datos.hojas.length) {
@@ -261,12 +589,22 @@
 				return;
 			}
 			ctx = nuevo;
+			/// Solo en desarrollo: un asidero para probar el canvas desde la
+			/// consola —y desde Playwright— sin pasar por el ratón. Univer pinta
+			/// en un `<canvas>`, así que sin esto no hay forma de escribir en una
+			/// celda desde fuera. Mismo patrón que el canvas de recorridos.
+			if (import.meta.env.DEV) (window as any).__nominaEngine = nuevo;
 
 			canvasDisposers.push(
 				installNominaCellPermission(nuevo.univer, {
 					unitId: nuevo.unitId,
 					estadoPorHoja: () => nuevo.estadoPorHoja(),
 					estadosBloqueados: ESTADOS_BLOQUEADOS,
+					/// La hoja del canvas conoce su liquidación; el permiso de celda
+					/// no, y sin ese dato su aviso manda a corregir la planilla
+					/// cuando lo que falta es el borrador.
+					sinLiquidacion: (sheetId: string) =>
+						!datos?.hojas.find((h) => nominaSheetId(h.conductorId) === sheetId)?.liquidacionId,
 					onBloqueado: ({ titulo, detalle }) =>
 						toast.warning(titulo, { description: detalle, duration: 7000 })
 				})
@@ -300,7 +638,12 @@
 							toast.error('No se pudo guardar: recarga el periodo.');
 							return;
 						}
-						session?.enviarPatch({
+						if (!session) {
+							toast.error('Sin conexión con el servidor: el cambio no se guardó.');
+							return;
+						}
+						pendientes++;
+						session.enviarPatch({
 							mes,
 							entity_type: 'liquidacion',
 							entity_id: binding.entityId,
@@ -346,8 +689,9 @@
 	// ─── Cambios de periodo ────────────────────────────────
 	async function cambiarPeriodo(nuevoAnio: number, nuevoMes: number, nuevoCorte: number) {
 		// Otro periodo, otras liquidaciones: la caché de desprendibles del
-		// anterior ya no vale.
+		// anterior ya no vale, y el rebote pendiente apuntaba al libro viejo.
 		limpiarCacheDesprendibles();
+		cancelarRecalculo();
 		anio = nuevoAnio;
 		mes = nuevoMes;
 		corte = nuevoCorte;
@@ -363,7 +707,13 @@
 
 	// ─── Sesión colaborativa ───────────────────────────────
 	function conectarSesion() {
+		/// `dispose` limpia los temporizadores de acuse, así que los patches que
+		/// estuvieran en vuelo no volverán a avisar de nada: sin este reinicio el
+		/// contador se quedaría clavado en «Guardando 2…» para siempre.
 		session?.dispose();
+		pendientes = 0;
+		fallidas = 0;
+		ultimoGuardado = null;
 		const user = ($authStore as any)?.user;
 		if (!user?.id) return;
 
@@ -379,17 +729,38 @@
 			// recalculados. Sin fusionar la versión, el siguiente patch de esa
 			// misma liquidación iría con una `base_version` vieja y el servidor
 			// lo rechazaría por conflicto contra el propio usuario.
-			onAck: ({ entity_id, version, totales }) => {
+			onAck: ({ entity_id, field, version, totales }) => {
+				pendientes = Math.max(0, pendientes - 1);
+				ultimoGuardado = new Date().toISOString();
 				const hoja = datos?.hojas.find((h) => h.liquidacionId === entity_id);
-				if (!hoja) return;
-				hoja.version = version;
-				if (totales) hoja.totales = totales as any;
+				if (hoja) {
+					hoja.version = version;
+					if (totales) hoja.totales = totales as any;
+				}
+				/// Un alta o una baja de concepto adicional CAMBIA LA GEOMETRÍA del
+				/// desprendible: hay una fila más o una menos y todo lo que va
+				/// debajo se corre. Repintar una celda no sirve; hay que rehacer la
+				/// hoja. Solo se recarga por eso: el retoque del importe en la
+				/// celda no entra en `adicionalesEnVuelo` y no remonta nada.
+				if (adicionalesEnVuelo.delete(String(field))) void loadInicial();
+
+				/// Un bono editado mueve media hoja —`TOTAL BONOS`, las líneas del
+				/// desprendible, el subtotal, el devengado y el neto— y ninguna de
+				/// esas celdas es fórmula viva. Se relee, pero con rebote: ver
+				/// `pedirRecalculo`.
+				if (String(field ?? '').startsWith('bono|')) pedirRecalculo();
 			},
 
 			onRemotePatch: (p) => {
 				if (!ctx) return;
 				const destino = getNominaCellFor(ctx.unitId, String(p.entity_id), String(p.field));
-				if (!destino) return;
+				/// Un concepto adicional SIN celda es uno que acaba de nacer (o que
+				/// acaban de quitar) en otro navegador: la fila no existe en esta
+				/// hoja, así que no hay nada que repintar y toca releer el periodo.
+				if (!destino) {
+					if (String(p.field).startsWith('adicional|')) void loadInicial();
+					return;
+				}
 				// `aplicarCeldaRemota` marca la ventana de eco: sin ella, esta
 				// escritura dispararía el adapter y volvería al emisor en bucle.
 				aplicarCeldaRemota(ctx, destino, p.value as any);
@@ -398,6 +769,7 @@
 			},
 
 			onConflict: ({ entity_id, server_row }) => {
+				pendientes = Math.max(0, pendientes - 1);
 				const hoja = datos?.hojas.find((h) => h.liquidacionId === entity_id);
 				toast.warning('Otra persona cambió esta liquidación', {
 					description: hoja
@@ -410,6 +782,8 @@
 			},
 
 			onPatchFallido: ({ error, motivo }) => {
+				pendientes = Math.max(0, pendientes - 1);
+				fallidas++;
 				toast.error(motivo === 'timeout' ? 'El cambio no llegó al servidor' : 'Cambio rechazado', {
 					description: error || 'Vuelve a intentarlo; si sigue, recarga el periodo.',
 					duration: 9000
@@ -662,6 +1036,40 @@
 			disabled: !!accionEnCurso
 		},
 		{
+			id: 'rehacer-bonos',
+			label: 'Rehacer bonos desde recorridos',
+			hint: hojaActiva?.matrizBonos?.hayRecorridos
+				? celdasDescuadradas
+					? `Descarta las ${celdasDescuadradas} celdas tecleadas a mano y vuelve a lo marcado en los tramos.`
+					: 'Vuelve a montar los bonos desde los tramos. Ahora mismo ya coinciden.'
+				: 'Este conductor no tiene bonos marcados en recorridos.',
+			icon: iconoRehacerBonos,
+			badge: celdasDescuadradas || null,
+			onSelect: rehacerBonos,
+			disabled:
+				!!accionEnCurso ||
+				rehaciendoBonos ||
+				!hojaActiva?.liquidacionId ||
+				!hojaActiva?.matrizBonos?.hayRecorridos,
+			disabledHint: !hojaActiva?.liquidacionId
+				? 'Este conductor todavía no tiene liquidación en el periodo.'
+				: !hojaActiva?.matrizBonos?.hayRecorridos
+					? 'No hay bonos marcados en recorridos de los que partir.'
+					: undefined
+		},
+		{
+			id: 'adicionales',
+			label: 'Conceptos adicionales',
+			hint: hojaActiva
+				? `Bonos y ajustes pactados a mano de ${hojaActiva.nombre}. Van debajo de AUXILIO DE TRANSPORTE.`
+				: 'Abre la hoja de un conductor primero',
+			icon: iconoAdicional,
+			badge: conceptosAdicionales.length || null,
+			onSelect: () => (mostrarAdicionales = true),
+			disabled: !!accionEnCurso || !hojaActiva?.liquidacionId,
+			disabledHint: motivoBloqueoAdicionales() || undefined
+		},
+		{
 			id: 'enviar',
 			label: 'Enviar desprendibles',
 			hint: 'Manda el PDF por correo a cada conductor y deja constancia.',
@@ -735,11 +1143,42 @@
 	}
 
 	onDestroy(() => {
+		/// El rebote sobrevive al desmontaje si no se corta: dispararía
+		/// `loadInicial` sobre un componente que ya no está.
+		cancelarRecalculo();
 		session?.dispose();
 		teardownEngine();
 		limpiarCacheDesprendibles();
 	});
 </script>
+
+{#snippet iconoRehacerBonos()}
+	<!-- Flecha de vuelta sobre una rejilla: las cantidades de la tabla regresan
+	     a lo que dicen los tramos. -->
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+		<path
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			d="M20.5 12a8 8 0 1 1-2.6-5.9"
+		/>
+		<path stroke-linecap="round" stroke-linejoin="round" d="M20.5 3v4.2h-4.2" />
+		<path stroke-linecap="round" d="M8.5 12h7M12 8.5v7" opacity="0.45" />
+	</svg>
+{/snippet}
+
+{#snippet iconoAdicional()}
+	<!-- Etiqueta con un «+»: un concepto que se añade al desprendible y lleva
+	     rótulo propio. -->
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+		<path
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			d="M3 12.5V5a2 2 0 0 1 2-2h7.5a2 2 0 0 1 1.41.59l6.5 6.5a2 2 0 0 1 0 2.82l-7.5 7.5a2 2 0 0 1-2.82 0L3.6 13.9"
+		/>
+		<circle cx="7.5" cy="7.5" r="1.1" fill="currentColor" stroke="none" />
+		<path stroke-linecap="round" d="M11 12h5M13.5 9.5v5" />
+	</svg>
+{/snippet}
 
 {#snippet iconoLiquidar()}
 	<!-- Calculadora: liquidar es hacer las cuentas. -->
@@ -789,7 +1228,7 @@
 {/snippet}
 
 <svelte:head>
-	<title>Nómina {MESES[mes - 1]} {anio} (canvas) · Cotransmeq</title>
+	<title>Nómina {MESES[mes - 1]} {anio} (canvas) · Transmeralda</title>
 </svelte:head>
 
 <UniverToolbar
@@ -874,6 +1313,36 @@
 					solo lectura
 				</span>
 			{/if}
+			<!--
+				Sin liquidación no hay dónde guardar nada, así que la hoja es de
+				solo lectura aunque su estado diga BORRADOR. El botón lo dice y lo
+				resuelve en el sitio, en vez de mandar a «Generar borradores».
+			-->
+			{#if hojaActiva.liquidacionId}
+				<!--
+					Solo con borrador: sin liquidación no hay copia que refrescar.
+				-->
+				<button
+					type="button"
+					class="btn-refrescar-dias"
+					onclick={refrescarDiasDeLaHoja}
+					disabled={refrescandoDias}
+					title="Vuelve a traer los días desde las planillas. Descarta las horas corregidas a mano."
+				>
+					{refrescandoDias ? 'Actualizando…' : 'Actualizar días'}
+				</button>
+			{/if}
+			{#if !hojaActiva.liquidacionId}
+				<button
+					type="button"
+					class="btn-crear-borrador"
+					onclick={crearBorradorDeLaHoja}
+					disabled={creandoBorrador}
+					title="Esta hoja todavía no tiene liquidación: nada se puede editar hasta crearla"
+				>
+					{creandoBorrador ? 'Creando…' : 'Crear borrador'}
+				</button>
+			{/if}
 		{/if}
 
 		<!-- «Generar borradores» vivía aquí y se fue al CARRIL, con el resto de
@@ -887,10 +1356,25 @@
 		<SelectorCanvasNomina actual="liquidaciones" {anio} {mes} onSalir={antesDeSalir} />
 
 		<span class="univer-divider-v"></span>
-		<PresenceAvatars users={presencia} />
-		{#if !conectado}
-			<span class="univer-badge" title="Los cambios no se están guardando">Sin conexión</span>
+		<!--
+			El «Sin conexión» que había aquí lo dice ya el indicador, que además
+			distingue las tres situaciones que ese badge metía en una: hay algo
+			guardándose, todo está guardado, o hay cambios que se perdieron.
+		-->
+		<AutosaveIndicator {pendientes} {fallidas} {conectado} {ultimoGuardado} />
+		<!--
+			El rebote del recálculo, a la vista.
+			Sin esto, entre que se confirma una celda de bono y la hoja se rehace
+			hay casi un segundo en el que el desprendible de abajo enseña cifras
+			viejas y nada dice que estén a punto de cambiar.
+		-->
+		{#if recalculoPendiente}
+			<span class="nom-recalculo" title="Los bonos cambiaron: la hoja se rehace al parar de editar">
+				<span class="nom-recalculo-punto"></span>
+				Recalculando…
+			</span>
 		{/if}
+		<PresenceAvatars users={presencia} />
 	{/snippet}
 </UniverToolbar>
 
@@ -945,6 +1429,19 @@
 	/>
 {/if}
 
+{#if mostrarAdicionales && hojaActiva}
+	<ConceptosAdicionalesModal
+		nombreHoja={hojaActiva.nombre}
+		conceptos={conceptosAdicionales}
+		bloqueada={!!motivoBloqueoAdicionales()}
+		motivoBloqueo={motivoBloqueoAdicionales()}
+		guardando={pendientes > 0}
+		onAgregar={(nombre, valor) => patchAdicional(nombre, valor)}
+		onEliminar={(nombre) => patchAdicional(nombre, null)}
+		onClose={() => (mostrarAdicionales = false)}
+	/>
+{/if}
+
 {#if mostrarGenerar}
 	<GenerarBorradoresNominaModal
 		{anio}
@@ -956,6 +1453,42 @@
 {/if}
 
 <style>
+	/* Aviso de recálculo pendiente. Discreto a propósito: informa de una espera
+	   de menos de un segundo y no debe competir con el indicador de guardado
+	   que tiene al lado. */
+	.nom-recalculo {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		font-size: 0.7rem;
+		color: var(--text-muted, #777);
+		white-space: nowrap;
+	}
+	.nom-recalculo-punto {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: #b45309;
+		animation: nom-latido 1s ease-in-out infinite;
+	}
+	@keyframes nom-latido {
+		0%,
+		100% {
+			opacity: 0.35;
+		}
+		50% {
+			opacity: 1;
+		}
+	}
+	/* Quien pide menos movimiento no necesita un punto latiendo para entender
+	   que algo está en curso: el texto ya lo dice. */
+	@media (prefers-reduced-motion: reduce) {
+		.nom-recalculo-punto {
+			animation: none;
+			opacity: 0.8;
+		}
+	}
+
 	/* Fila: canvas elástico + carril. `min-width: 0` es obligatorio: sin él el
 	   `width:100%` del host le gana al `flex` y empuja el carril fuera de la
 	   pantalla. */
@@ -989,5 +1522,54 @@
 		letter-spacing: 0.02em;
 		white-space: nowrap;
 		box-shadow: inset 0 0 0 1px currentColor;
+	}
+
+	/**
+	 * Botón de «crear borrador»: ámbar, no verde.
+	 *
+	 * Verde diría «todo en orden» justo donde hay algo pendiente, y en esta
+	 * cabecera compite con el badge de estado. El ámbar es el mismo que usa la
+	 * hoja para lo que requiere atención.
+	 */
+	.btn-crear-borrador {
+		border: 1px solid #fcd34d;
+		background: #fffbeb;
+		color: #92400e;
+		font-size: 0.7rem;
+		font-weight: 700;
+		padding: 0.15rem 0.55rem;
+		border-radius: 6px;
+		white-space: nowrap;
+		cursor: pointer;
+		transition: background 0.15s ease;
+	}
+	.btn-crear-borrador:hover:not(:disabled) {
+		background: #fef3c7;
+	}
+	.btn-crear-borrador:disabled {
+		opacity: 0.6;
+		cursor: default;
+	}
+
+	/* Sobrio, no ámbar: refrescar es rutina, no una alerta. El ámbar está
+	   reservado a «falta el borrador», que sí bloquea. */
+	.btn-refrescar-dias {
+		border: 1px solid var(--border-default);
+		background: #ffffff;
+		color: var(--text-secondary);
+		font-size: 0.7rem;
+		font-weight: 600;
+		padding: 0.15rem 0.55rem;
+		border-radius: 6px;
+		white-space: nowrap;
+		cursor: pointer;
+		transition: background 0.15s ease;
+	}
+	.btn-refrescar-dias:hover:not(:disabled) {
+		background: var(--bg-base);
+	}
+	.btn-refrescar-dias:disabled {
+		opacity: 0.6;
+		cursor: default;
 	}
 </style>

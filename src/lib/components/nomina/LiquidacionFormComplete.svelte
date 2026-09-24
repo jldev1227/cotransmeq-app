@@ -135,6 +135,16 @@
 			value: number;
 			values: Array<{ mes: string; quantity: number }>;
 			vehiculo_id: string;
+			/**
+			 * `configuraciones_liquidacion.id` del que salió este bono.
+			 *
+			 * Es lo que permite casar con los bonos de recorridos sin pasar por
+			 * el nombre. No se guarda: `bonificaciones` no tiene la columna y el
+			 * backend solo lee `name`, `value` y `values`, así que viaja en el
+			 * payload y se ignora. `null` en los bonos de liquidaciones viejas
+			 * cuyo nombre ya no está en la configuración del año.
+			 */
+			config_liquidacion_id: string | null;
 		}>;
 		mantenimientos: Array<{
 			values: Array<{ mes: string; quantity: number }>;
@@ -270,18 +280,45 @@
 				return;
 			}
 
-			// Indexar para match rápido:
-			//   - por nombre de config: mapa de nombre lowercase → items
-			//   - por vehiculo_id + mes → conteo
-			interface Clave {
-				vehiculoId: string;
-				configNombre: string;
-				mes: string;
+			/**
+			 * Los bonos se casan por `configuraciones_liquidacion.id`, no por
+			 * nombre.
+			 *
+			 * El emparejamiento por nombre en minúsculas perdía cualquier bono al
+			 * que se le hubiera retocado el rótulo entre el año en que se marcó y
+			 * el año que se está liquidando, en silencio y sin avisar de nada.
+			 *
+			 * El nombre sigue como RESPALDO, y no por comodidad: las configs no se
+			 * enlazan entre años —cada año tiene su propia fila, con su propio id
+			 * y sin columna que las relacione— y el formulario solo carga las del
+			 * año de `periodo_inicio`. En un corte que cruza fin de año (21-dic →
+			 * 20-ene) los bonos de diciembre apuntan al id del año anterior, que
+			 * no está en la lista cargada; ahí el nombre es lo único que queda.
+			 * Así el id gana cuando sirve y nunca se pierde lo que antes sí casaba.
+			 */
+			const claveNombre = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ');
+			const idsCargados = new Set(
+				configuracion.map((c: any) => c?.id).filter((id: any): id is string => Boolean(id))
+			);
+			const configIdPorNombre = new Map<string, string>();
+			for (const c of configuracion) {
+				if (c?.id && c?.nombre) configIdPorNombre.set(claveNombre(String(c.nombre)), c.id);
 			}
+
+			/** Id de config del año liquidado al que pertenece un bono de recorridos. */
+			const resolverConfigId = (bono: any): string | null => {
+				const id = bono.config_liquidacion_id ?? bono.config_liquidacion?.id ?? null;
+				if (id && idsCargados.has(id)) return id;
+				const nombre = bono.config_liquidacion?.nombre;
+				return nombre ? configIdPorNombre.get(claveNombre(String(nombre))) ?? null : null;
+			};
+
+			// Indexar para match rápido: por vehiculo_id + config + mes → conteo
 			const counts = new Map<string, number>();
 			const porConfig = new Map<string, number>();
 			const porVehiculo = new Map<string, number>();
 			let itemsConsiderados = 0;
+			let sinConfigEnElAnio = 0;
 
 			for (const bono of bonos) {
 				const configNombre = bono.config_liquidacion?.nombre?.trim();
@@ -291,13 +328,27 @@
 					// No se puede asociar (ej: bono sin segmento) — lo saltamos
 					continue;
 				}
+				const configId = resolverConfigId(bono);
+				if (!configId) {
+					// Ni por id ni por nombre: su configuración no existe en el año
+					// que se liquida. Antes desaparecía sin dejar rastro.
+					sinConfigEnElAnio++;
+					continue;
+				}
 				const fechaOnly = fechaStr.length > 10 ? fechaStr.substring(0, 10) : fechaStr;
 				const mes = fechaOnly.substring(0, 7); // "YYYY-MM"
-				const key = `${vehiculoId}|${configNombre.toLowerCase()}|${mes}`;
+				const key = `${vehiculoId}|${configId}|${mes}`;
 				counts.set(key, (counts.get(key) || 0) + 1);
 				porConfig.set(configNombre, (porConfig.get(configNombre) || 0) + 1);
 				porVehiculo.set(vehiculoId, (porVehiculo.get(vehiculoId) || 0) + 1);
 				itemsConsiderados++;
+			}
+
+			if (sinConfigEnElAnio > 0) {
+				toast.warning(
+					`${sinConfigEnElAnio} bono(s) marcados en recorridos no tienen configuración en este año`,
+					{ description: 'No se sincronizaron. Revisa la configuración de liquidación del período.' }
+				);
 			}
 
 			if (itemsConsiderados === 0) {
@@ -313,7 +364,7 @@
 				const vehiculoId = detalle.vehiculo.value;
 				const bonosActualizados = detalle.bonos.map((bono) => {
 					const valuesActualizados = bono.values.map((val) => {
-						const key = `${vehiculoId}|${bono.name.toLowerCase()}|${val.mes}`;
+						const key = `${vehiculoId}|${bono.config_liquidacion_id ?? ''}|${val.mes}`;
 						const q = counts.get(key) || 0;
 						if (q > 0) {
 							aplicados += q;
@@ -874,7 +925,8 @@
 						name: bono.nombre,
 						value: Number(bono.valor || 0),
 						values: mesesRange.map((mes) => ({ mes, quantity: 0 })),
-						vehiculo_id: vehiculo.value
+						vehiculo_id: vehiculo.value,
+						config_liquidacion_id: bono.id ?? null
 					}));
 				} else if (mesesRange.length > 0) {
 					// Sincronizar values con mesesRange preservando cantidades del usuario.
@@ -919,7 +971,8 @@
 				name: bono.nombre,
 				value: Number(bono.valor || 0),
 				values: mesesRange.map((mes) => ({ mes, quantity: 0 })),
-				vehiculo_id: vehiculo.value
+				vehiculo_id: vehiculo.value,
+				config_liquidacion_id: bono.id ?? null
 			}));
 
 			// Crear mantenimientos solo si hay meses definidos

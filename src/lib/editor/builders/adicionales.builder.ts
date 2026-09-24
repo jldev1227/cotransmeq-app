@@ -48,9 +48,20 @@ import {
 import { rellenarBordesVacios } from './relleno-bordes';
 import type { AdicionalListado } from '$lib/api/liquidaciones-terceros-adicionales';
 import { setAdicionalesBinding } from '../business/adicionales-cell-binding';
+import { IDENTIDAD } from './identidad-empresa';
+import { contraste } from './colores-canvas';
 
-const GREEN = '#0F4025';
-const GREEN_DARK = '#166534';
+/**
+ * Tonos de MARCA. Salen de `identidad-empresa.ts`, el único archivo que
+ * diverge entre `transmeralda` y `cotransmeq`: en verde para una y en naranja
+ * para la otra. Los nombres se conservan —`GREEN`, `GREEN_DARK`— porque los
+ * usa medio archivo y renombrarlos ensuciaría el `diff` entre repos sin
+ * cambiar nada de lo que se ve.
+ */
+const GREEN: string = IDENTIDAD.colores.fuerte;
+/** La marca usada COMO TEXTO sobre fondo claro: importes y totales. */
+const TEXTO_MARCA: string = IDENTIDAD.colores.textoMarca;
+const GREEN_DARK: string = IDENTIDAD.colores.acento;
 const RED = '#B91C1C';
 const AMBER = '#B45309';
 const AMBER_SOFT = '#FFEDD5';
@@ -146,7 +157,7 @@ export function buildAdicionalesSheet(input: AdicionalesSheetInput): any {
 	const headerStyle: IStyleData = {
 		fs: 10,
 		bl: 1,
-		cl: { rgb: '#FFFFFF' },
+		cl: { rgb: contraste(GREEN) },
 		bg: { rgb: GREEN },
 		ht: HorizontalAlign.CENTER,
 		bd: allBorders()
@@ -203,7 +214,7 @@ export function buildAdicionalesSheet(input: AdicionalesSheetInput): any {
 	const nominaHeaderBand: IStyleData = {
 		fs: 11,
 		bl: 1,
-		cl: { rgb: '#FFFFFF' },
+		cl: { rgb: contraste(GREEN_DARK) },
 		bg: { rgb: GREEN_DARK },
 		ht: HorizontalAlign.CENTER,
 		bd: allBorders()
@@ -211,7 +222,7 @@ export function buildAdicionalesSheet(input: AdicionalesSheetInput): any {
 	const nominaSubHeader: IStyleData = {
 		fs: 10,
 		bl: 1,
-		cl: { rgb: GREEN_DARK },
+		cl: { rgb: TEXTO_MARCA },
 		bg: { rgb: SUBTLE_BG },
 		bd: allBorders(),
 		ht: HorizontalAlign.LEFT
@@ -219,7 +230,7 @@ export function buildAdicionalesSheet(input: AdicionalesSheetInput): any {
 	const conductorHeader: IStyleData = {
 		fs: 10,
 		bl: 1,
-		cl: { rgb: GREEN },
+		cl: { rgb: TEXTO_MARCA },
 		bg: { rgb: SUBTLE_BG },
 		bd: allBorders()
 	};
@@ -228,7 +239,7 @@ export function buildAdicionalesSheet(input: AdicionalesSheetInput): any {
 		fs: 9,
 		it: 1,
 		bl: 1,
-		cl: { rgb: GREEN },
+		cl: { rgb: TEXTO_MARCA },
 		bg: { rgb: SUBTLE_BG },
 		bd: allBorders()
 	};
@@ -270,15 +281,15 @@ export function buildAdicionalesSheet(input: AdicionalesSheetInput): any {
 	const greenTotalLabel: IStyleData = {
 		fs: 12,
 		bl: 1,
-		cl: { rgb: GREEN_DARK },
-		bg: { rgb: '#DCFCE7' },
+		cl: { rgb: TEXTO_MARCA },
+		bg: { rgb: IDENTIDAD.colores.suave },
 		bd: allBorders(),
 		ht: HorizontalAlign.LEFT
 	};
 	const greenTotalValue: IStyleData = {
 		fs: 14,
 		bl: 1,
-		cl: { rgb: '#FFFFFF' },
+		cl: { rgb: contraste(GREEN_DARK) },
 		bg: { rgb: GREEN_DARK },
 		bd: allBorders(),
 		n: { pattern: '"$"#,##0' },

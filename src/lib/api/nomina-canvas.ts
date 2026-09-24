@@ -294,6 +294,41 @@ export const nominaBorradoresAPI = {
 		return data;
 	},
 
+	/**
+	 * Vuelve a copiar los días de una liquidación desde las planillas.
+	 *
+	 * Descarta las correcciones manuales de los días —a eso se viene— y deja
+	 * intactos bonos, vacaciones y el resto del desprendible.
+	 */
+	async refrescarDias(
+		liquidacionId: string,
+		payload: { anio: number; mes: number; corte?: number | null }
+	): Promise<{ dias: number }> {
+		const { data } = await apiClient.post(
+			`/api/nomina/borradores/${liquidacionId}/refrescar-dias`,
+			payload
+		);
+		return data;
+	},
+
+	/**
+	 * Vuelve a montar los bonos de una liquidación desde lo marcado en
+	 * recorridos.
+	 *
+	 * PISA las cantidades tecleadas a mano en el canvas: es el deshacer del
+	 * ámbar `n → m`. El precio unitario de una fila que ya existe no se toca.
+	 */
+	async rehacerBonos(
+		liquidacionId: string,
+		payload: { anio: number; mes: number; corte?: number | null }
+	): Promise<{ creadas: number; celdas: number }> {
+		const { data } = await apiClient.post(
+			`/api/nomina/borradores/${liquidacionId}/rehacer-bonos`,
+			payload
+		);
+		return data;
+	},
+
 	async estado(jobId: string): Promise<BorradorNominaJob> {
 		const { data } = await apiClient.get(`/api/nomina/borradores/status/${jobId}`);
 		return data;

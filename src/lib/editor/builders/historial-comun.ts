@@ -18,11 +18,45 @@ import {
 	type ICellData,
 	type IStyleData
 } from '@univerjs/core';
+import { IDENTIDAD } from './identidad-empresa';
+import { contraste, TEXTO_OSCURO } from './colores-canvas';
+
+export { contraste };
 
 // ─── Paleta (la misma de los canvas de terceros) ──────────────────────
+//
+// Los tonos de MARCA salen de `identidad-empresa.ts`, que es el único archivo
+// que diverge entre `transmeralda` y `cotransmeq`. Antes estaban escritos
+// aquí —verdes— y en cada builder por su cuenta, así que los canvas de
+// Cotransmeq se pintaban con la identidad de la otra empresa: naranja en la
+// aplicación y verde Transmeralda en cuanto se abría una hoja.
+//
+// Lo que NO es marca —el gris bloqueado, la zebra, el rojo, el azul de
+// acción— se queda escrito aquí: es lenguaje de la hoja y no cambia de una
+// empresa a otra.
 
-export const GREEN = '#0F4025';
-export const TEXT_DARK = '#0F172A';
+/** Banda de título. Se llama `GREEN` por historia; en Cotransmeq es naranja. */
+export const GREEN: string = IDENTIDAD.colores.fuerte;
+/** Cabecera de columnas, un punto por debajo del título. */
+export const CABECERA_BG: string = IDENTIDAD.colores.cabecera;
+/** Banda de sección y subcabeceras. */
+export const ACENTO: string = IDENTIDAD.colores.acento;
+/** Banda de concepto, el nivel más claro. */
+export const ACENTO_MEDIO: string = IDENTIDAD.colores.acentoMedio;
+/** Fondo de fila destacada o casilla marcada. */
+export const SUAVE: string = IDENTIDAD.colores.suave;
+/** Fondo de bloque, apenas teñido. */
+export const TINTE: string = IDENTIDAD.colores.tinte;
+/** El mismo tinte, un punto más frío. */
+export const ACENTO_TENUE: string = IDENTIDAD.colores.acentoTenue;
+/** Fondo de una fila incluida en el cálculo. */
+export const INCLUIDA: string = IDENTIDAD.colores.incluida;
+/** La marca usada COMO TEXTO sobre fondo claro: importes, totales. */
+export const TEXTO_MARCA: string = IDENTIDAD.colores.textoMarca;
+/** Igual, cuando hace falta más peso. */
+export const TEXTO_MARCA_FUERTE: string = IDENTIDAD.colores.textoMarcaFuerte;
+
+export const TEXT_DARK = TEXTO_OSCURO;
 export const MUTED = '#475569';
 export const TOTALES_BG = '#E2E8F0';
 export const ZEBRA_BG = '#F8FAFC';

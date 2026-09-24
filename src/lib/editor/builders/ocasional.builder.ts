@@ -56,9 +56,20 @@ import { setOcasionalBinding } from '../business/ocasional-cell-binding';
 import { recomputeTaxes, ensureImpuestos } from '../business/ocasional-taxes';
 import { alcanceOcasional } from '../business/id-sintetico';
 import { GASTOS_VEHICULO } from '../business/costos-laborales';
+import { IDENTIDAD } from './identidad-empresa';
+import { contraste } from './colores-canvas';
 
-const GREEN = '#0F4025';
-const GREEN_DARK = '#166534';
+/**
+ * Tonos de MARCA. Salen de `identidad-empresa.ts`, el único archivo que
+ * diverge entre `transmeralda` y `cotransmeq`: en verde para una y en naranja
+ * para la otra. Los nombres se conservan —`GREEN`, `GREEN_DARK`— porque los
+ * usa medio archivo y renombrarlos ensuciaría el `diff` entre repos sin
+ * cambiar nada de lo que se ve.
+ */
+const GREEN: string = IDENTIDAD.colores.fuerte;
+/** La marca usada COMO TEXTO sobre fondo claro: importes y totales. */
+const TEXTO_MARCA: string = IDENTIDAD.colores.textoMarca;
+const GREEN_DARK: string = IDENTIDAD.colores.acento;
 const RED = '#B91C1C';
 /// Fondo de la celda de una factura anulada sin reemplazo.
 const RED_SOFT = '#FEE2E2';
@@ -172,7 +183,7 @@ export function buildOcasionalSheet(input: OcasionalSheetInput): any {
 	const headerStyle: IStyleData = {
 		fs: 10,
 		bl: 1,
-		cl: { rgb: '#FFFFFF' },
+		cl: { rgb: contraste(GREEN) },
 		bg: { rgb: GREEN },
 		ht: HorizontalAlign.CENTER,
 		bd: allBorders()
@@ -202,8 +213,8 @@ export function buildOcasionalSheet(input: OcasionalSheetInput): any {
 		...cellBase,
 		bl: 1,
 		ht: HorizontalAlign.CENTER,
-		cl: { rgb: GREEN_DARK },
-		bg: { rgb: '#f0fdf4' }
+		cl: { rgb: TEXTO_MARCA },
+		bg: { rgb: IDENTIDAD.colores.acentoTenue }
 	} as any;
 	const accionNo: IStyleData = {
 		...cellBase,
@@ -614,8 +625,8 @@ export function buildOcasionalSheet(input: OcasionalSheetInput): any {
 			{
 				fs: 11,
 				bl: 1,
-				cl: { rgb: GREEN_DARK },
-				bg: { rgb: '#DCFCE7' },
+				cl: { rgb: TEXTO_MARCA },
+				bg: { rgb: IDENTIDAD.colores.suave },
 				bd: allBorders(),
 				n: { pattern: '"$"#,##0' },
 				ht: HorizontalAlign.RIGHT
@@ -637,7 +648,7 @@ export function buildOcasionalSheet(input: OcasionalSheetInput): any {
 		const nominaHeaderBand: IStyleData = {
 			fs: 11,
 			bl: 1,
-			cl: { rgb: '#FFFFFF' },
+			cl: { rgb: contraste(GREEN_DARK) },
 			bg: { rgb: GREEN_DARK },
 			ht: HorizontalAlign.CENTER,
 			bd: allBorders()
@@ -645,7 +656,7 @@ export function buildOcasionalSheet(input: OcasionalSheetInput): any {
 		const nominaSubHeader: IStyleData = {
 			fs: 10,
 			bl: 1,
-			cl: { rgb: GREEN_DARK },
+			cl: { rgb: TEXTO_MARCA },
 			bg: { rgb: SUBTLE_BG },
 			bd: allBorders(),
 			ht: HorizontalAlign.LEFT
@@ -653,7 +664,7 @@ export function buildOcasionalSheet(input: OcasionalSheetInput): any {
 		const conductorHeader: IStyleData = {
 			fs: 10,
 			bl: 1,
-			cl: { rgb: GREEN },
+			cl: { rgb: TEXTO_MARCA },
 			bg: { rgb: SUBTLE_BG },
 			bd: allBorders()
 		};
@@ -670,7 +681,7 @@ export function buildOcasionalSheet(input: OcasionalSheetInput): any {
 			fs: 9,
 			it: 1,
 			bl: 1,
-			cl: { rgb: GREEN },
+			cl: { rgb: TEXTO_MARCA },
 			bg: { rgb: SUBTLE_BG },
 			bd: allBorders()
 		};
@@ -1540,8 +1551,8 @@ export function buildOcasionalSheet(input: OcasionalSheetInput): any {
 		set(cellData)(tr, 0, 'TOTAL A PAGAR', {
 			fs: 12,
 			bl: 1,
-			cl: { rgb: GREEN_DARK },
-			bg: { rgb: '#DCFCE7' },
+			cl: { rgb: TEXTO_MARCA },
+			bg: { rgb: IDENTIDAD.colores.suave },
 			bd: allBorders(),
 			ht: HorizontalAlign.LEFT
 		});
@@ -1558,8 +1569,8 @@ export function buildOcasionalSheet(input: OcasionalSheetInput): any {
 				s: {
 					fs: 12,
 					bl: 1,
-					cl: { rgb: GREEN_DARK },
-					bg: { rgb: '#DCFCE7' },
+					cl: { rgb: TEXTO_MARCA },
+					bg: { rgb: IDENTIDAD.colores.suave },
 					bd: allBorders()
 				}
 			};
@@ -1580,7 +1591,7 @@ export function buildOcasionalSheet(input: OcasionalSheetInput): any {
 			{
 				fs: 14,
 				bl: 1,
-				cl: { rgb: '#FFFFFF' },
+				cl: { rgb: contraste(GREEN_DARK) },
 				bg: { rgb: GREEN_DARK },
 				bd: allBorders(),
 				n: { pattern: '"$"#,##0' },

@@ -53,11 +53,14 @@
 	let errorMsg: string | null = null;
 	let selectedIds = new Set<string>();
 	let mostrarNoImportables = false;
+	/** Texto del buscador. Filtra solo lo que se VE, nunca lo seleccionado. */
+	let busqueda = '';
 
 	$: if (isOpen) {
 		selectedIds = new Set();
 		preview = null;
 		errorMsg = null;
+		busqueda = '';
 		mostrarNoImportables = false;
 		void cargarPreview();
 	}
@@ -127,18 +130,69 @@
 		selectedIds = selectedIds;
 	}
 
+	/**
+	 * Marca o desmarca las importables VISIBLES, sin tocar el resto.
+	 *
+	 * Antes reemplazaba la selección entera. Con un buscador eso sería una
+	 * trampa: filtras, pulsas «seleccionar todo» y pierdes en silencio lo que
+	 * habías marcado con el filtro anterior. Ahora suma y resta sobre lo que
+	 * se ve, y lo elegido bajo otra búsqueda sigue ahí.
+	 */
 	function toggleSelectAll() {
 		if (!preview) return;
-		const importables = preview.planillas.filter(
-			(p) => !p.ya_importado && p.motivo_no_importable === null
-		);
-		const allSelected = importables.every((p) => selectedIds.has(p.source_id));
-		if (allSelected) {
-			selectedIds = new Set();
+		const proximo = new Set(selectedIds);
+		if (todasVisiblesSeleccionadas) {
+			for (const p of importablesVisibles) proximo.delete(p.source_id);
 		} else {
-			selectedIds = new Set(importables.map((p) => p.source_id));
+			for (const p of importablesVisibles) proximo.add(p.source_id);
 		}
+		selectedIds = proximo;
 	}
+
+	/**
+	 * Normaliza para buscar: sin tildes, sin mayúsculas y sin puntuación.
+	 *
+	 * Las placas se teclean «QLR-098» y se guardan «QLR098»; las cédulas llevan
+	 * puntos; y nadie escribe «SALDAÑA» con la eñe correcta a la primera. Sin
+	 * esto, el buscador falla justo en los casos en que más se usa.
+	 */
+	const normalizar = (s: unknown) =>
+		String(s ?? '')
+			.toLowerCase()
+			.normalize('NFD')
+			.replace(/[\u0300-\u036f]/g, '')
+			.replace(/[^a-z0-9]/g, '');
+
+	/** Los campos por los que tiene sentido buscar una planilla. */
+	const textoDe = (p: any) =>
+		normalizar(
+			[
+				p.conductor_nombre,
+				p.conductor_identificacion,
+				p.vehiculo_placa,
+				p.numero_planilla,
+				p.empresa_nombre
+			].join(' ')
+		);
+
+	$: terminos = normalizar(busqueda);
+	$: planillasFiltradas = !preview
+		? []
+		: terminos
+			? preview.planillas.filter((p) => textoDe(p).includes(terminos))
+			: preview.planillas;
+
+	/**
+	 * Importables DE LO QUE SE VE. Es lo que gobierna la casilla de cabecera:
+	 * con un filtro puesto, «seleccionar todo» tiene que significar «todo esto»
+	 * y no «las 200 de debajo que no estoy mirando».
+	 */
+	$: importablesVisibles = planillasFiltradas.filter(
+		(p) => !p.ya_importado && p.motivo_no_importable === null
+	);
+	$: todasVisiblesSeleccionadas =
+		importablesVisibles.length > 0 &&
+		importablesVisibles.every((p) => selectedIds.has(p.source_id));
 
 	$: importablesCount =
 		preview?.planillas.filter(
@@ -428,6 +482,48 @@
 					class="flex flex-wrap items-center justify-between gap-2 border-b px-6 py-2.5"
 					style="border-color: var(--border-subtle);"
 				>
+					<!--
+						Buscador. Filtra en cliente porque el preview ya trae la lista
+						entera: pedirla otra vez al servidor por cada tecla sería un
+						viaje a la base de Transmeralda para algo que ya está aquí.
+					-->
+					<div class="relative flex-1" style="min-width: 220px; max-width: 340px;">
+						<svg
+							class="pointer-events-none absolute top-1/2 left-2.5 h-3.5 w-3.5 -translate-y-1/2"
+							style="color: var(--text-very-muted);"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+							aria-hidden="true"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								stroke-width="2"
+								d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"
+							/>
+						</svg>
+						<input
+							type="search"
+							bind:value={busqueda}
+							placeholder="Buscar conductor, cédula, placa, planilla o empresa"
+							class="w-full rounded-lg border border-[var(--border-default)] bg-white py-1.5 pr-7 pl-8 text-xs apple-transition focus:border-[#f97316] focus:outline-none"
+							style="color: var(--text-primary);"
+						/>
+						{#if busqueda}
+							<button
+								type="button"
+								on:click={() => (busqueda = '')}
+								class="absolute top-1/2 right-2 -translate-y-1/2 text-xs"
+								style="color: var(--text-very-muted);"
+								title="Limpiar búsqueda"
+								aria-label="Limpiar búsqueda"
+							>
+								✕
+							</button>
+						{/if}
+					</div>
+
 					<!-- Toggle mostrar tachadas -->
 					{#if preview && preview.filtradas_por_conductor_inactivo > 0}
 						<label
@@ -540,11 +636,10 @@
 											class="px-3 py-2.5"
 											style="width: 40px; text-align: center;"
 										>
-											{#if importablesCount > 0}
+											{#if importablesVisibles.length > 0}
 												<input
 													type="checkbox"
-													checked={selectedIds.size === importablesCount &&
-														importablesCount > 0}
+													checked={todasVisiblesSeleccionadas}
 													on:change={toggleSelectAll}
 													class="h-3.5 w-3.5 cursor-pointer rounded"
 													style="accent-color: #f97316;"
@@ -560,7 +655,7 @@
 									</tr>
 								</thead>
 								<tbody>
-									{#each preview.planillas as p, i (p.source_id)}
+									{#each planillasFiltradas as p, i (p.source_id)}
 										{@const noImportable = !!p.motivo_no_importable}
 										{@const importada = p.ya_importado}
 										{@const deshabilitada =
@@ -729,16 +824,29 @@
 															d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
 														/>
 													</svg>
+													<!--
+														Con el buscador puesto, «no hay planillas en TM» sería
+														mentira y mandaría a revisar el mes equivocado.
+													-->
 													<p
 														style="color: var(--text-muted); font-weight: 500;"
 													>
-														No hay planillas en Transmeralda para {meses[mes]}
-														{año}
+														{#if busqueda}
+															Ninguna planilla coincide con «{busqueda}»
+														{:else}
+															No hay planillas en Transmeralda para {meses[mes]}
+															{año}
+														{/if}
 													</p>
 													<p
 														style="color: var(--text-very-muted); font-size: 0.75rem;"
 													>
-														Verificá que el mes/año tenga recargos cargados en TM.
+														{#if busqueda}
+															Hay {preview?.planillas.length ?? 0} planillas en este mes.
+															Probá con otro texto o limpiá la búsqueda.
+														{:else}
+															Verificá que el mes/año tenga recargos cargados en TM.
+														{/if}
 													</p>
 												</div>
 											</td>

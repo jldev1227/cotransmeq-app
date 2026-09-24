@@ -185,9 +185,11 @@ const DIAS_SEMANA = ['DOM', 'LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB'];
  * diverge entre los dos repos: escritos aquí, el canvas de Cotransmeq se
  * pintaba con el verde de Transmeralda.
  */
-const GREEN = IDENTIDAD.colores.fuerte;
-const GREEN_DARK = IDENTIDAD.colores.acento;
-const GREEN_SOFT = '#DCFCE7';
+const GREEN: string = IDENTIDAD.colores.fuerte;
+/** La marca usada COMO TEXTO sobre fondo claro: importes y totales. */
+const TEXTO_MARCA: string = IDENTIDAD.colores.textoMarca;
+const GREEN_DARK: string = IDENTIDAD.colores.acento;
+const GREEN_SOFT: string = IDENTIDAD.colores.suave;
 const TEXT_DARK = '#0F172A';
 const MUTED = '#475569';
 const SUBTLE_BG = '#F1F5F9';
@@ -255,7 +257,7 @@ const moneda = (z: boolean): IStyleData =>
 	({
 		...celda(z),
 		bl: 1,
-		cl: { rgb: GREEN_DARK },
+		cl: { rgb: TEXTO_MARCA },
 		ht: HorizontalAlign.RIGHT,
 		n: { pattern: '"$"#,##0' }
 	}) as IStyleData;

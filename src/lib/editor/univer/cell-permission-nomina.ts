@@ -135,16 +135,45 @@ export interface NominaPermissionOptions {
 	estadoPorHoja: () => Record<string, string>;
 	/** Estados en los que la hoja entera es de solo lectura. */
 	estadosBloqueados: string[];
+	/**
+	 * ¿Esta hoja carece de liquidación?
+	 *
+	 * Sin ella NADA se puede escribir —todo lo editable se guarda contra una
+	 * fila de `liquidaciones`— y el aviso genérico manda a corregir la planilla,
+	 * que no es el problema. Opcional: si no se pasa, se avisa como siempre.
+	 */
+	sinLiquidacion?: (sheetId: string) => boolean;
 	/** Aviso ya redactado. Por callback, para no depender de la capa de UI. */
 	onBloqueado?: (aviso: { titulo: string; detalle: string }) => void;
 }
 
+/**
+ * El aviso de celda no editable.
+ *
+ * Decía «los días, las horas y los recargos vienen de las planillas: corrígelos
+ * allí». Dejó de ser verdad: las horas de recargo SÍ se corrigen en el canvas
+ * desde que existe `ajustes_horas_recargo`, y los bonos y los días también.
+ * Seguir diciéndolo mandaba a editar la planilla —el documento de origen, que
+ * no hay que tocar— para algo que se arregla dos columnas más allá.
+ *
+ * Ahora dice dónde SÍ se edita cada cosa. Es más largo de lo que suele
+ * admitirse en un toast, pero la alternativa era dejar a alguien buscando.
+ */
 const AVISO_DERIVADA = {
-	titulo: 'Esta celda no se edita aquí',
+	titulo: 'Esta celda es un rótulo o un cálculo',
 	detalle:
-		'Los días, las horas y los recargos vienen de las planillas del ' +
-		'conductor. Para corregirlos, edita la planilla en Recargos; el ' +
-		'canvas se actualiza solo.'
+		'Las horas de recargo se corrigen en la columna HORAS MES, sobre la fila ' +
+		'de su color. Los bonos, en BONOS POR VEHÍCULO. Los días de salario y las ' +
+		'vacaciones, en el desprendible. El resto sale de las planillas.'
+} as const;
+
+/** Cuando la hoja todavía no tiene liquidación no hay dónde guardar nada. */
+const AVISO_SIN_LIQUIDACION = {
+	titulo: 'Esta hoja aún no tiene borrador',
+	detalle:
+		'Sin liquidación no hay dónde guardar los cambios, así que la hoja entera ' +
+		'es de solo lectura. Pulsa «Crear borrador» en la cabecera y podrás editar ' +
+		'bonos, días, vacaciones y horas de recargo.'
 } as const;
 
 const avisoBloqueada = (estado: string) => ({
@@ -264,7 +293,11 @@ export function installNominaCellPermission(
 			}
 
 			if (!rangoEditable(sheetId, params)) {
-				opts.onBloqueado?.(AVISO_DERIVADA);
+				/// Sin liquidación NINGUNA celda tiene binding, así que el aviso de
+				/// «celda derivada» saldría en toda la hoja y mandaría a buscar el
+				/// problema donde no está.
+				const sinLiq = sheetId ? opts.sinLiquidacion?.(sheetId) === true : false;
+				opts.onBloqueado?.(sinLiq ? AVISO_SIN_LIQUIDACION : AVISO_DERIVADA);
 				throw new CustomCommandExecutionError('[nomina] celda derivada');
 			}
 		}

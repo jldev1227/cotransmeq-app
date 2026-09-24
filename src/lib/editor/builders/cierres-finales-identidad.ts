@@ -28,6 +28,14 @@ export interface CierreHoja {
 	 * desde un detalle suelto (recarga de un cierre) no lo traen.
 	 */
 	tercero_correo?: string | null;
+	/**
+	 * Cédula o NIT del tercero. Va a la cabecera del documento (preview y
+	 * PDF). Opcional por el mismo motivo que `tercero_correo`: una hoja
+	 * reconstruida desde un detalle suelto puede no traerlo.
+	 */
+	tercero_identificacion?: string | null;
+	/** `PERSONA` | `EMPRESA`. Decide si el papel rotula CC o NIT. */
+	tercero_tipo_persona?: string | null;
 	estado: string;
 	es_multi_propietario: boolean;
 	total_pagar: number;

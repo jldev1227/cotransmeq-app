@@ -16,18 +16,7 @@ import {
 } from '@univerjs/core';
 import type { FacturaLiquidacion } from '$lib/api/facturacionLiquidaciones';
 
-import {
-	GREEN,
-	TEXT_DARK,
-	MUTED,
-	TOTALES_BG,
-	ZEBRA_BG,
-	allBorders,
-	fechaCorta,
-	colLetra,
-	comoEnlace,
-	comoTexto
-} from './historial-comun';
+import { allBorders, colLetra, comoEnlace, comoTexto, contraste, fechaCorta, GREEN, MUTED, TEXT_DARK, TOTALES_BG, ZEBRA_BG } from './historial-comun';
 
 export const FACTURAS_SHEET_ID = 'hoja-facturas';
 
@@ -144,7 +133,7 @@ export function buildFacturasSheet(facturas: FacturaLiquidacion[]): FacturasShee
 	const headerStyle: IStyleData = {
 		fs: 10,
 		bl: 1,
-		cl: { rgb: '#FFFFFF' },
+		cl: { rgb: contraste(GREEN) },
 		bg: { rgb: GREEN },
 		ht: HorizontalAlign.CENTER,
 		bd: allBorders()

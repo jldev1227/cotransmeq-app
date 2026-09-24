@@ -17,18 +17,7 @@ import {
 import type { TerceroItemHistorial } from '$lib/api/liquidaciones-servicios';
 export type { TerceroItemHistorial };
 
-import {
-	GREEN,
-	TEXT_DARK,
-	MUTED,
-	TOTALES_BG,
-	ZEBRA_BG,
-	allBorders,
-	colLetra,
-	comoEnlace,
-	comoTexto,
-	MESES_CORTOS as MESES
-} from './historial-comun';
+import { allBorders, colLetra, comoEnlace, comoTexto, contraste, GREEN, MESES_CORTOS as MESES, MUTED, TEXT_DARK, TOTALES_BG, ZEBRA_BG } from './historial-comun';
 
 export const TERCEROS_SHEET_ID = 'hoja-terceros';
 
@@ -69,7 +58,7 @@ const HEADERS = [
 	'% ADMIN',
 	'ADMON $',
 	'V/LIQUIDAR',
-	'ING. COTRANSMEQ',
+	'ING. TRANSMERALDA',
 	'N° FACTURA',
 	'PERIODO'
 ];
@@ -102,7 +91,7 @@ export function buildTercerosSheet(items: TerceroItemHistorial[]): TercerosSheet
 	const headerStyle: IStyleData = {
 		fs: 10,
 		bl: 1,
-		cl: { rgb: '#FFFFFF' },
+		cl: { rgb: contraste(GREEN) },
 		bg: { rgb: GREEN },
 		ht: HorizontalAlign.CENTER,
 		bd: allBorders()

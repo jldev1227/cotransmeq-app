@@ -181,6 +181,18 @@ export interface CierresAdapterContext {
 	/** Cambios detectados en una edición. */
 	onCambios?: (cambios: CambioCelda[]) => void;
 	/**
+	 * Una edición se descartó SIN emitir nada y sin que el usuario pueda
+	 * notarlo: `versionDe` no supo decir la versión de esa entidad.
+	 *
+	 * Era un `console.warn` y nada más. En pantalla el número tecleado se
+	 * queda ahí —Univer ya lo pintó— pero no viaja al servidor, así que la
+	 * hoja pasa a decir una cosa y la liquidación guardada otra: ni el
+	 * preview del canvas ni la vista previa PDF enseñan ese valor, y no hay
+	 * forma de saber por qué. Avisar es lo mínimo; quien lo reciba decide si
+	 * además repinta la celda desde el modelo.
+	 */
+	onDescartado?: (d: { cierreId: string; entityType: string; entityId: string; field: string }) => void;
+	/**
 	 * El usuario escribió en la ZONA LIBRE: una anotación, no un campo de la
 	 * base de datos. No lleva `base_version` de entidad ni cascadea a totales.
 	 *
@@ -481,6 +493,16 @@ function procesarRango(
 					`[cierres-adapter] sin versión para ${binding.entityType}:${binding.entityId}; ` +
 						'se descarta el cambio en vez de emitirlo sin compare-and-swap'
 				);
+				// Descartar es lo correcto —sin `base_version` no hay
+				// compare-and-swap— pero hacerlo EN SILENCIO no: la celda se
+				// queda con el valor tecleado y ninguna vista previa lo
+				// refleja, porque nunca llegó a ser un dato.
+				ctx.onDescartado?.({
+					cierreId: binding.cierreId,
+					entityType: binding.entityType,
+					entityId: binding.entityId,
+					field: binding.field
+				});
 				continue;
 			}
 

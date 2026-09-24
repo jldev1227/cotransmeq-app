@@ -19,14 +19,37 @@
   export let conectado: boolean = true
   export let onReintentar: (() => void) | null = null
 
+  /**
+   * Cuándo guardó ESTE libro por última vez.
+   *
+   * `realtimeCollab` es un singleton de módulo: su `lastSavedAt` sobrevive a
+   * la navegación, así que un canvas que no lo usa —los que van por
+   * `sheet-session`: nómina, recorridos— enseñaría la hora de guardado del
+   * canvas anterior. Pasando esta prop el indicador usa la del llamador.
+   * Sin pasarla (`undefined`) sigue leyendo el store, que es lo que hacen
+   * los canvas que sí escriben por `realtimeCollab`.
+   */
+  export let ultimoGuardado: string | null | undefined = undefined
+
   let saveStatus: SaveStatus = 'idle'
   let lastSavedAt: string | null = null
   let unsub: () => void
 
-  $: detallado = pendientes !== null
+  /**
+   * Reloj propio para que el «hace 2m» avance solo.
+   *
+   * `timeAgo` se calcula al pintar, y en reposo no hay nada que dispare un
+   * repintado: el indicador se quedaba clavado en «justo ahora» durante toda
+   * la sesión, que es peor que no poner la hora.
+   */
+  let ahora = Date.now()
+  let reloj: ReturnType<typeof setInterval> | undefined
 
-  function timeAgo(iso: string): string {
-    const diff = Date.now() - new Date(iso).getTime()
+  $: detallado = pendientes !== null
+  $: guardadoEn = ultimoGuardado !== undefined ? ultimoGuardado : lastSavedAt
+
+  function timeAgo(iso: string, ref: number): string {
+    const diff = ref - new Date(iso).getTime()
     const s = Math.floor(diff / 1000)
     if (s < 5) return 'justo ahora'
     if (s < 60) return `hace ${s}s`
@@ -35,6 +58,7 @@
   }
 
   onMount(() => {
+    reloj = setInterval(() => (ahora = Date.now()), 20_000)
     unsub = subscribe(() => {
       const s = getState()
       saveStatus = s.saveStatus
@@ -44,6 +68,7 @@
 
   onDestroy(() => {
     unsub?.()
+    if (reloj) clearInterval(reloj)
   })
 </script>
 
@@ -64,7 +89,7 @@
     {:else}
       <span class="dot dot-saved"></span>
       <span class="label">
-        Todo guardado{lastSavedAt ? ` · ${timeAgo(lastSavedAt)}` : ''}
+        Todo guardado{guardadoEn ? ` · ${timeAgo(guardadoEn, ahora)}` : ''}
       </span>
     {/if}
   {:else if saveStatus === 'editing'}
@@ -75,7 +100,7 @@
     <span class="label">Guardando...</span>
   {:else if saveStatus === 'saved' && lastSavedAt}
     <span class="dot dot-saved"></span>
-    <span class="label">Guardado {timeAgo(lastSavedAt)}</span>
+    <span class="label">Guardado {timeAgo(lastSavedAt, ahora)}</span>
   {:else if saveStatus === 'error'}
     <span class="dot dot-error"></span>
     <span class="label">Error al guardar</span>

@@ -15,6 +15,9 @@
  *     la celda tiene `numFmt`, `getCellData().v` devuelve el texto YA
  *     formateado: `Number("$8,303")` es `NaN`, y un `|| 0` lo convertiría en
  *     un CERO que viaja a la base de datos.
+ *
+ *  3. Las coordenadas salen de `params.range`, NO de las claves de
+ *     `params.value`. Ver `celdasTocadas`.
  */
 
 import type { FUniver } from '@univerjs/core/facade';
@@ -77,48 +80,41 @@ export function attachCellChangeNomina(opts: CellChangeNominaOptions): () => voi
 		const sheetId: string | undefined = params.subUnitId ?? params.sheetId;
 		if (!sheetId) return;
 
-		const value = params.value;
-		if (!value || typeof value !== 'object') return;
+		for (const { row, column } of celdasTocadas(params)) {
+			const binding = getNominaBinding(unitId, sheetId, row, column);
+			// Sin binding no hay campo que actualizar. No debería llegar
+			// aquí —el permiso de celda lo corta antes—, pero el adapter no
+			// depende de eso: si mañana se afloja el permiso, esto sigue
+			// sin inventarse un destino.
+			if (!binding) continue;
 
-		for (const [rStr, fila] of Object.entries(value as Record<string, any>)) {
-			const row = Number(rStr);
-			for (const [cStr] of Object.entries(fila ?? {})) {
-				const column = Number(cStr);
-				const binding = getNominaBinding(unitId, sheetId, row, column);
-				// Sin binding no hay campo que actualizar. No debería llegar
-				// aquí —el permiso de celda lo corta antes—, pero el adapter no
-				// depende de eso: si mañana se afloja el permiso, esto sigue
-				// sin inventarse un destino.
-				if (!binding) continue;
+			// Se lee de la HOJA y no de `params.value`: lo que llega en el
+			// comando puede ser el texto tecleado sin normalizar, mientras
+			// que la celda ya tiene aplicado el formato.
+			const crudo = leerCrudo(fUniver, unitId, sheetId, row, column);
 
-				// Se lee de la HOJA y no de `params.value`: lo que llega en el
-				// comando puede ser el texto tecleado sin normalizar, mientras
-				// que la celda ya tiene aplicado el formato.
-				const crudo = leerCrudo(fUniver, unitId, sheetId, row, column);
-
-				let valor: number | string | null;
-				if (CAMPOS_TEXTO.has(binding.field)) {
-					valor = crudo === null || crudo === undefined ? '' : String(crudo);
-				} else {
-					// `numeroDeCelda` devuelve `null` —y no cero— cuando lo que
-					// hay no es un número: con `numFmt`, `getCellData().v` trae
-					// el texto ya formateado y `Number("$8,303")` es `NaN`. Un
-					// `|| 0` mandaría un CERO a la base de datos.
-					const n = numeroDeCelda(crudo);
-					if (n === null) {
-						const vacia = crudo === null || crudo === undefined || String(crudo).trim() === '';
-						if (!vacia) {
-							opts.onValorInvalido?.({ campo: binding.field, texto: String(crudo) });
-							continue;
-						}
-						valor = 0;
-					} else {
-						valor = n;
+			let valor: number | string | null;
+			if (CAMPOS_TEXTO.has(binding.field)) {
+				valor = crudo === null || crudo === undefined ? '' : String(crudo);
+			} else {
+				// `numeroDeCelda` devuelve `null` —y no cero— cuando lo que
+				// hay no es un número: con `numFmt`, `getCellData().v` trae
+				// el texto ya formateado y `Number("$8,303")` es `NaN`. Un
+				// `|| 0` mandaría un CERO a la base de datos.
+				const n = numeroDeCelda(crudo);
+				if (n === null) {
+					const vacia = crudo === null || crudo === undefined || String(crudo).trim() === '';
+					if (!vacia) {
+						opts.onValorInvalido?.({ campo: binding.field, texto: String(crudo) });
+						continue;
 					}
+					valor = 0;
+				} else {
+					valor = n;
 				}
-
-				onPatch({ binding, valor, sheetId, row, column });
 			}
+
+			onPatch({ binding, valor, sheetId, row, column });
 		}
 	});
 
@@ -129,6 +125,77 @@ export function attachCellChangeNomina(opts: CellChangeNominaOptions): () => voi
 			/* noop */
 		}
 	};
+}
+
+/**
+ * Qué celdas tocó un `set-range-values`.
+ *
+ * LAS COORDENADAS ESTÁN EN `range`, NO EN `value`. `SetRangeValuesCommand`
+ * admite dos formas para `value`: una MATRIZ indexada por fila y columna, y
+ * una ÚNICA `ICellData` que se aplica a todo el rango. El editor de celda usa
+ * la segunda —al confirmar con Enter manda
+ * `{ range: {startRow:12,…,startColumn:42,…}, value: { v: 4, p: null, f: null } }`—
+ * y la primera no aparece en la edición normal.
+ *
+ * Este adapter recorría `Object.entries(params.value)` dando por hecho la
+ * matriz. Con la forma de una sola celda eso recorría las claves de la propia
+ * `ICellData`: `Number('v')` es `NaN`, ninguna coordenada casaba con un
+ * binding y NO SE EMITÍA NINGÚN PATCH. El efecto era el peor posible —la celda
+ * aceptaba el número, se pintaba, no salía ningún aviso y al recargar volvía
+ * el valor viejo— porque el permiso de celda sí mira `params.range` y dejaba
+ * pasar la escritura. Los canvas de terceros nunca lo sufrieron: recorren el
+ * rango desde el principio.
+ *
+ * Se recorre el rango y el valor se lee de la hoja (`leerCrudo`), así que la
+ * forma de `value` deja de importar. Se mantiene el camino de la matriz para
+ * las escrituras que sí la usan (un pegado con celdas distintas).
+ */
+function* celdasTocadas(
+	params: Record<string, any>
+): Generator<{ row: number; column: number }> {
+	const rangos: any[] = params.range
+		? [params.range]
+		: Array.isArray(params.ranges)
+			? params.ranges
+			: [];
+
+	if (rangos.length) {
+		for (const r of rangos) {
+			const { startRow, endRow, startColumn, endColumn } = r ?? {};
+			/// Un rango descomunal —seleccionar la columna entera— no se recorre
+			/// celda a celda. No hay ninguna zona editable de ese tamaño, así que
+			/// serían un millón de vueltas para no encontrar ni un binding. El
+			/// permiso de celda ya lo corta antes; esto es por si se afloja.
+			if ((endRow - startRow + 1) * (endColumn - startColumn + 1) > 2000) continue;
+			if (
+				!Number.isFinite(startRow) ||
+				!Number.isFinite(endRow) ||
+				!Number.isFinite(startColumn) ||
+				!Number.isFinite(endColumn)
+			) {
+				continue;
+			}
+			for (let row = startRow; row <= endRow; row++) {
+				for (let column = startColumn; column <= endColumn; column++) {
+					yield { row, column };
+				}
+			}
+		}
+		return;
+	}
+
+	// Sin rango: la forma de matriz, indexada por fila y columna.
+	const value = params.value;
+	if (!value || typeof value !== 'object') return;
+	for (const [rStr, fila] of Object.entries(value as Record<string, any>)) {
+		const row = Number(rStr);
+		if (!Number.isInteger(row)) continue;
+		for (const cStr of Object.keys(fila ?? {})) {
+			const column = Number(cStr);
+			if (!Number.isInteger(column)) continue;
+			yield { row, column };
+		}
+	}
 }
 
 /** El `v` crudo de la celda, tal cual lo devuelve Univer. */

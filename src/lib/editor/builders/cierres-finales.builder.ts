@@ -74,17 +74,28 @@ import {
 } from './cierres-finales-identidad';
 import { colorDeHoja } from './cierres-finales-estado';
 import { repartirValor } from '../business/reparto-propietarios';
+import { IDENTIDAD } from './identidad-empresa';
+import { contraste } from './colores-canvas';
 
 // ─── Paleta y constantes de layout ────────────────────────────────────
 
-const GREEN = '#0F4025';
-const GREEN_DARK = '#166534';
+/**
+ * Tonos de MARCA. Salen de `identidad-empresa.ts`, el único archivo que
+ * diverge entre `transmeralda` y `cotransmeq`: en verde para una y en naranja
+ * para la otra. Los nombres se conservan —`GREEN`, `GREEN_DARK`— porque los
+ * usa medio archivo y renombrarlos ensuciaría el `diff` entre repos sin
+ * cambiar nada de lo que se ve.
+ */
+const GREEN: string = IDENTIDAD.colores.fuerte;
+/** La marca usada COMO TEXTO sobre fondo claro: importes y totales. */
+const TEXTO_MARCA: string = IDENTIDAD.colores.textoMarca;
+const GREEN_DARK: string = IDENTIDAD.colores.acento;
 /// Verde más claro, reservado a los PAGOS INTERNOS POR CONCEPTO (abonos a
 /// crédito y similares). No comparte tono con la nómina ni con el total en
 /// verde oscuro: es dinero que se destina a un concepto, no un egreso.
-const GREEN_MID = '#15803D';
-const GREEN_SOFT = '#DCFCE7';
-const GREEN_TINT = '#F0FDF4';
+const GREEN_MID: string = IDENTIDAD.colores.acentoMedio;
+const GREEN_SOFT: string = IDENTIDAD.colores.suave;
+const GREEN_TINT: string = IDENTIDAD.colores.tinte;
 const TEXT_DARK = '#0F172A';
 const MUTED = '#475569';
 const SUBTLE_BG = '#F1F5F9';
@@ -97,8 +108,8 @@ const BLUE_SOFT = '#DBEAFE';
 const RED_SOFT = '#FEE2E2';
 const GRIS_BLOQUEADO = '#94A3B8';
 /// Fondo de las filas de ADICIONAL dentro de la tabla de items.
-const ADIC_BG = '#f0fdf4';
-const ADIC_BADGE_BG = '#DCFCE7';
+const ADIC_BG: string = IDENTIDAD.colores.acentoTenue;
+const ADIC_BADGE_BG = GREEN_SOFT;
 
 /**
  * Índices de columna de la tabla de ITEMS, por nombre.
@@ -404,7 +415,7 @@ export function estiloAplicaImpuestos(aplica: boolean): IStyleData {
 		ht: HorizontalAlign.CENTER,
 		bd: bordesCompletos(),
 		cl: { rgb: aplica ? GREEN_DARK : RED },
-		bg: { rgb: aplica ? '#f0fdf4' : RED_SOFT }
+		bg: { rgb: aplica ? ADIC_BG : RED_SOFT }
 	} as any;
 }
 
@@ -459,7 +470,7 @@ export function buildCierreFinalSheet(
 	});
 
 	const headerStyle: IStyleData = {
-		fs: 10, bl: 1, cl: { rgb: '#FFFFFF' }, bg: { rgb: GREEN },
+		fs: 10, bl: 1, cl: { rgb: contraste(GREEN) }, bg: { rgb: GREEN },
 		ht: HorizontalAlign.CENTER, bd: allBorders()
 	};
 	const cellBase: IStyleData = { fs: 10, cl: { rgb: TEXT_DARK }, bd: allBorders() };
@@ -477,8 +488,8 @@ export function buildCierreFinalSheet(
 	// `estiloAplicaImpuestos`.
 	const accionSi = estiloAplicaImpuestos(true);
 	const accionNo = estiloAplicaImpuestos(false);
-	const vliq: IStyleData = { ...cellBase, bl: 1, cl: { rgb: GREEN_DARK }, n: { pattern: '"$"#,##0' } } as any;
-	const vliqZebra: IStyleData = { ...cellZebra, bl: 1, cl: { rgb: GREEN_DARK }, n: { pattern: '"$"#,##0' } } as any;
+	const vliq: IStyleData = { ...cellBase, bl: 1, cl: { rgb: TEXTO_MARCA }, n: { pattern: '"$"#,##0' } } as any;
+	const vliqZebra: IStyleData = { ...cellZebra, bl: 1, cl: { rgb: TEXTO_MARCA }, n: { pattern: '"$"#,##0' } } as any;
 	const totalFact: IStyleData = { ...cellBase, bl: 1, n: { pattern: '"$"#,##0' } } as any;
 	const totalFactZebra: IStyleData = { ...cellZebra, bl: 1, n: { pattern: '"$"#,##0' } } as any;
 	const cant: IStyleData = { ...cellBase, ht: HorizontalAlign.RIGHT };
@@ -493,7 +504,7 @@ export function buildCierreFinalSheet(
 	// dentro del bloque de adicionales lo volvería a partir en dos.
 	const adicBase: IStyleData = { ...cellBase, bg: { rgb: ADIC_BG } };
 	const adicBadge: IStyleData = {
-		...adicBase, bl: 1, cl: { rgb: GREEN_DARK }, bg: { rgb: ADIC_BADGE_BG }
+		...adicBase, bl: 1, cl: { rgb: TEXTO_MARCA }, bg: { rgb: ADIC_BADGE_BG }
 	};
 	const adicMoney: IStyleData = { ...adicBase, n: { pattern: '"$"#,##0' } } as any;
 	const adicCant: IStyleData = { ...adicBase, ht: HorizontalAlign.RIGHT };
@@ -502,7 +513,7 @@ export function buildCierreFinalSheet(
 	} as any;
 	const adicTotal: IStyleData = { ...adicBase, bl: 1, n: { pattern: '"$"#,##0' } } as any;
 	const adicVliq: IStyleData = {
-		...adicBase, bl: 1, cl: { rgb: GREEN_DARK }, n: { pattern: '"$"#,##0' }
+		...adicBase, bl: 1, cl: { rgb: TEXTO_MARCA }, n: { pattern: '"$"#,##0' }
 	} as any;
 	// Los ingresos de una fila de adicional van en NEGATIVO. En rojo, como
 	// ADMON $, porque es lo que la hoja resta y no lo que suma.
@@ -516,7 +527,7 @@ export function buildCierreFinalSheet(
 	} as any;
 
 	const tituloHoja: IStyleData = {
-		fs: 13, bl: 1, cl: { rgb: '#FFFFFF' }, bg: { rgb: GREEN },
+		fs: 13, bl: 1, cl: { rgb: contraste(GREEN) }, bg: { rgb: GREEN },
 		ht: HorizontalAlign.LEFT, bd: allBorders()
 	};
 	const avisoBloqueo: IStyleData = {
@@ -525,7 +536,7 @@ export function buildCierreFinalSheet(
 	};
 
 	const banda = (bg: string): IStyleData => ({
-		fs: 11, bl: 1, cl: { rgb: '#FFFFFF' }, bg: { rgb: bg },
+		fs: 11, bl: 1, cl: { rgb: contraste(bg) }, bg: { rgb: bg },
 		ht: HorizontalAlign.CENTER, bd: allBorders()
 	});
 	const subHeader = (fg: string, bg: string): IStyleData => ({
@@ -541,7 +552,7 @@ export function buildCierreFinalSheet(
 	// avisos de la cascada (suma ≠ 100%), que ya son ámbar.
 	const coproBand = banda('#B45309');
 
-	const nominaSubHeader = subHeader(GREEN_DARK, SUBTLE_BG);
+	const nominaSubHeader = subHeader(TEXTO_MARCA, SUBTLE_BG);
 	const gastosSubHeader = subHeader(AMBER, AMBER_SOFT);
 	const anticiposSubHeader = subHeader(BLUE, BLUE_SOFT);
 	const impuestosSubHeader = subHeader(RED, RED_SOFT);
@@ -551,26 +562,26 @@ export function buildCierreFinalSheet(
 	// significa "aviso": gastos y suma de participaciones ≠ 100%) ni el verde
 	// oscuro del neto a pagar, porque este dinero no sale de caja.
 	const conceptoBand = banda(GREEN_MID);
-	const conceptoSubHeader = subHeader(GREEN_MID, GREEN_SOFT);
+	const conceptoSubHeader = subHeader(TEXTO_MARCA, GREEN_SOFT);
 	const conceptoFila: IStyleData = {
 		fs: 10, cl: { rgb: TEXT_DARK }, bg: { rgb: GREEN_TINT }, bd: allBorders()
 	};
 	const conceptoFilaFuerte: IStyleData = {
-		...conceptoFila, bl: 1, cl: { rgb: GREEN_DARK }
+		...conceptoFila, bl: 1, cl: { rgb: TEXTO_MARCA }
 	};
 	const conceptoFilaNota: IStyleData = {
 		fs: 9, it: 1, cl: { rgb: MUTED }, bg: { rgb: GREEN_TINT }, bd: allBorders()
 	};
 	const conceptoPie: IStyleData = {
-		fs: 9, it: 1, cl: { rgb: GREEN_MID }, bg: { rgb: GREEN_TINT }, bd: allBorders()
+		fs: 9, it: 1, cl: { rgb: TEXTO_MARCA }, bg: { rgb: GREEN_TINT }, bd: allBorders()
 	};
 
 	const conductorHeader: IStyleData = {
-		fs: 10, bl: 1, cl: { rgb: GREEN }, bg: { rgb: SUBTLE_BG }, bd: allBorders()
+		fs: 10, bl: 1, cl: { rgb: TEXTO_MARCA }, bg: { rgb: SUBTLE_BG }, bd: allBorders()
 	};
 	const nominaCellBase: IStyleData = { fs: 10, cl: { rgb: TEXT_DARK }, bd: allBorders() };
 	const nominaCatStyle: IStyleData = {
-		fs: 9, it: 1, bl: 1, cl: { rgb: GREEN }, bg: { rgb: SUBTLE_BG }, bd: allBorders()
+		fs: 9, it: 1, bl: 1, cl: { rgb: TEXTO_MARCA }, bg: { rgb: SUBTLE_BG }, bd: allBorders()
 	};
 	const nominaTfStyle: IStyleData = {
 		fs: 10, bl: 1, cl: { rgb: TEXT_DARK }, bg: { rgb: TOTALES_BG },
@@ -589,11 +600,11 @@ export function buildCierreFinalSheet(
 		bd: allBorders(), n: { pattern: '"$"#,##0' }, ht: HorizontalAlign.RIGHT
 	} as any;
 	const greenTotalLabel: IStyleData = {
-		fs: 12, bl: 1, cl: { rgb: GREEN_DARK }, bg: { rgb: '#DCFCE7' },
+		fs: 12, bl: 1, cl: { rgb: TEXTO_MARCA }, bg: { rgb: GREEN_SOFT },
 		bd: allBorders(), ht: HorizontalAlign.LEFT
 	};
 	const greenTotalValue: IStyleData = {
-		fs: 14, bl: 1, cl: { rgb: '#FFFFFF' }, bg: { rgb: GREEN_DARK },
+		fs: 14, bl: 1, cl: { rgb: contraste(GREEN_DARK) }, bg: { rgb: GREEN_DARK },
 		bd: allBorders(), n: { pattern: '"$"#,##0' }, ht: HorizontalAlign.RIGHT
 	} as any;
 
@@ -1695,11 +1706,11 @@ export function buildCierreFinalSheet(
 			});
 			row++;
 
-			etiquetaMatriz(row, '(=) VALOR A PAGAR', { ...secTfStyle, cl: { rgb: GREEN_DARK } } as any);
+			etiquetaMatriz(row, '(=) VALOR A PAGAR', { ...secTfStyle, cl: { rgb: TEXTO_MARCA } } as any);
 			conRetenciones.forEach((p, i) => {
 				const pagar = (facturarMap.get(p.id) ?? 0) - impuestosDe(p.id);
 				set(row, COL_PRIMER_COPRO + i, pagar, {
-					...secTfStyle, cl: { rgb: GREEN_DARK }, bl: 1, ...moneda
+					...secTfStyle, cl: { rgb: TEXTO_MARCA }, bl: 1, ...moneda
 				} as any);
 			});
 			row++;
