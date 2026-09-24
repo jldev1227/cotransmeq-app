@@ -19,6 +19,7 @@
 	 */
 	import { onDestroy } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import { permiteReemplazar } from '$lib/editor/builders/nomina-estado';
 	import {
 		nominaBorradoresAPI,
 		type ConductorPrevio,
@@ -74,6 +75,11 @@
 	const conDias = $derived(conductores.filter((c) => c.dias > 0));
 	const conLiquidacion = $derived(conductores.filter((c) => c.liquidacion_id));
 	const sinDias = $derived(conductores.filter((c) => c.dias === 0));
+	/// Ya liquidadas, aprobadas, pagadas o anuladas: se listan para que se vea
+	/// que existen, pero no se ofrece rehacerlas.
+	const noReemplazables = $derived(
+		conductores.filter((c) => c.liquidacion_id && !permiteReemplazar(c.estado ?? ''))
+	);
 
 	async function cargar() {
 		try {
@@ -83,15 +89,19 @@
 			conductores = r.conductores;
 			etiqueta = r.etiqueta;
 			ventana = { desde: r.desde, hasta: r.hasta };
-			// Marcados por defecto: los que tienen días y no tienen nada
-			// guardado. Los demás se piden a mano.
-			marcados = new Set(
-				r.conductores
-					/// `nomina` NO entra aquí: quien trabajó en el corte y no tiene
-					/// liquidación se marca solo, tenga el flag o no.
-					.filter((c) => c.dias > 0 && !c.liquidacion_id)
-					.map((c) => c.conductor_id)
-			);
+			/**
+			 * NADIE VIENE MARCADO.
+			 *
+			 * Antes se premarcaba a quien tuviera días y no tuviera liquidación.
+			 * Con 31 conductores en la lista eso es un botón que dice «Generar 8
+			 * borradores» nada más abrir, y generar es escribir: quien abría el
+			 * modal solo para mirar quién tenía qué se encontraba a un clic de
+			 * crear ocho liquidaciones que no había pedido.
+			 *
+			 * La selección se hace a mano, siempre. Es una pantalla que se abre
+			 * pocas veces y en la que equivocarse cuesta caro.
+			 */
+			marcados = new Set();
 		} catch (e: any) {
 			errorCarga = e?.response?.data?.error || 'No se pudo leer el periodo.';
 		} finally {
@@ -274,9 +284,16 @@
 			<div class="cuerpo">
 				{#if conLiquidacion.length}
 					<div class="aviso aviso--warn">
-						<strong>{conLiquidacion.length} conductor(es) ya tienen liquidación</strong> en este periodo.
-						Van desmarcados: marca «reemplazar» solo en quien quieras regenerar, y ten en cuenta que eso
-						sobrescribe lo guardado.
+						<strong>{conLiquidacion.length} ya tienen liquidación</strong> en este periodo. Solo se
+						puede rehacer la de quien siga en BORRADOR, y marcando «reemplazar» se sobrescribe lo
+						guardado.
+						{#if noReemplazables.length === 1}
+							La que ya está liquidada, aprobada, pagada o anulada solo enseña su estado: para
+							rehacerla hay que devolverla a BORRADOR.
+						{:else if noReemplazables.length}
+							Las {noReemplazables.length} que ya están liquidadas, aprobadas, pagadas o anuladas
+							solo enseñan su estado: para rehacerlas hay que devolverlas a BORRADOR.
+						{/if}
 					</div>
 				{/if}
 				{#if sinDias.length}
@@ -305,8 +322,8 @@
 								{#if c.placas.length}· {c.placas.join(', ')}{/if}
 							</span>
 
-							{#if c.liquidacion_id}
-								<label class="chk chk--reemplazo" title="Sobrescribe la liquidación guardada">
+							{#if c.liquidacion_id && permiteReemplazar(c.estado ?? '')}
+								<label class="chk chk--reemplazo" title="Sobrescribe el borrador guardado">
 									<input
 										type="checkbox"
 										checked={reemplazar.has(c.conductor_id)}
@@ -314,6 +331,16 @@
 									/>
 									<span class="pill pill--warn">{c.estado} · reemplazar</span>
 								</label>
+							{:else if c.liquidacion_id}
+								<!--
+									Ya liquidada, aprobada, pagada o anulada: se enseña el estado
+									pero NO la casilla. Rehacerla reescribiría todos los totales y
+									devolvería el estado a BORRADOR, o sea que se perdería la
+									aprobación y las cifras ya revisadas.
+								-->
+								<span class="pill pill--fija" title="No se puede rehacer: devuélvela a BORRADOR primero">
+									{c.estado}
+								</span>
 							{:else}
 								<span class="estimado">{money(c.sueldo_estimado)}</span>
 							{/if}
@@ -334,6 +361,14 @@
 </div>
 
 <style>
+	/* El estado de una liquidación que NO se puede rehacer. Gris y sin casilla:
+	   no hay nada que decidir aquí, es información. */
+	.pill--fija {
+		background: rgba(100, 116, 139, 0.14);
+		color: #475569;
+		font-weight: 500;
+	}
+
 	.fondo {
 		position: fixed;
 		inset: 0;

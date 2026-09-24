@@ -373,6 +373,53 @@
 		rehaciendoBonos = false;
 	}
 
+	// ─── Retirar el borrador de la hoja ───────────────────
+	/**
+	 * SOLO BORRADOR, y con doble confirmación escrita.
+	 *
+	 * Es la acción más destructiva del carril: se lleva la liquidación entera
+	 * del conductor en este corte. Marca la fila y NO toca las tablas hijas
+	 * —ahí está la firma del conductor sobre su desprendible—, así que es
+	 * reversible en la base, pero desde la pantalla no hay «deshacer».
+	 *
+	 * Una liquidación ya liquidada, aprobada, pagada o anulada no se toca desde
+	 * aquí: para dejarla sin efecto está ANULAR, que pide motivo y deja
+	 * historial. Borrarla sería perder la decisión sin rastro.
+	 */
+	let eliminandoBorrador = $state(false);
+
+	async function eliminarBorradorDeLaHoja() {
+		const hoja = hojaActiva;
+		if (!hoja?.liquidacionId || eliminandoBorrador) return;
+		if (hoja.estado !== 'BORRADOR') {
+			toast.warning(`La liquidación está en ${hoja.estado}.`, {
+				description:
+					'Solo se elimina un borrador. Para dejarla sin efecto, anúlala: eso pide motivo y deja historial.'
+			});
+			return;
+		}
+
+		const ok = confirm(
+			`Se retira el borrador de ${hoja.nombre} del corte ${datos?.etiqueta ?? ''}.\n\n` +
+				'Se pierde lo que lleve tecleado: días corregidos, bonos, vacaciones y conceptos ' +
+				'adicionales. Su hoja queda de solo lectura, y desaparece del libro si el conductor ' +
+				'no entra por su cuenta en la nómina del periodo.\n\n' +
+				'Se puede volver a generar, partiendo otra vez de las planillas.'
+		);
+		if (!ok) return;
+
+		eliminandoBorrador = true;
+		await conOverlay('Eliminando borrador', hoja.nombre, async () => {
+			await nominaBorradoresAPI.eliminarBorrador(hoja.liquidacionId!, { anio, mes, corte });
+			/// El conductor activo NO se toca: su hoja sigue en el libro, ahora
+			/// sin liquidación y de solo lectura, con el botón «Crear borrador»
+			/// en la barra. Soltarlo haría saltar a otra pestaña sin motivo.
+			await loadInicial();
+			toast.success(`Borrador de ${hoja.nombre} eliminado.`);
+		});
+		eliminandoBorrador = false;
+	}
+
 	/** Manda el alta/baja por el socket. `valor: null` es la baja. */
 	function patchAdicional(nombre: string, valor: number | null) {
 		const hoja = hojaActiva;
@@ -1052,6 +1099,26 @@
 			disabled: !!accionEnCurso
 		},
 		{
+			id: 'eliminar-borrador',
+			label: 'Eliminar borrador',
+			hint: hojaActiva
+				? `Retira la liquidación de ${hojaActiva.nombre} en este corte. Solo si sigue en BORRADOR.`
+				: 'Abre la hoja de un conductor primero',
+			icon: iconoEliminarBorrador,
+			tone: 'red' as const,
+			onSelect: eliminarBorradorDeLaHoja,
+			disabled:
+				!!accionEnCurso ||
+				eliminandoBorrador ||
+				!hojaActiva?.liquidacionId ||
+				hojaActiva?.estado !== 'BORRADOR',
+			disabledHint: !hojaActiva?.liquidacionId
+				? 'Este conductor todavía no tiene liquidación en el periodo.'
+				: hojaActiva?.estado !== 'BORRADOR'
+					? `Está en ${hojaActiva?.estado}. Solo se elimina un borrador; para dejarla sin efecto, anúlala.`
+					: undefined
+		},
+		{
 			id: 'rehacer-bonos',
 			label: 'Rehacer bonos desde recorridos',
 			hint: hojaActiva?.matrizBonos?.hayRecorridos
@@ -1167,6 +1234,16 @@
 		limpiarCacheDesprendibles();
 	});
 </script>
+
+{#snippet iconoEliminarBorrador()}
+	<!-- Papelera sobre una hoja: se retira el documento, no una celda. -->
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+		<path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16" />
+		<path stroke-linecap="round" stroke-linejoin="round" d="M9.5 7V5.2A1.2 1.2 0 0 1 10.7 4h2.6a1.2 1.2 0 0 1 1.2 1.2V7" />
+		<path stroke-linecap="round" stroke-linejoin="round" d="M6.2 7l.8 12a1.6 1.6 0 0 0 1.6 1.5h6.8A1.6 1.6 0 0 0 17 19l.8-12" />
+		<path stroke-linecap="round" d="M10.2 11v6M13.8 11v6" />
+	</svg>
+{/snippet}
 
 {#snippet iconoRehacerBonos()}
 	<!-- Flecha de vuelta sobre una rejilla: las cantidades de la tabla regresan

@@ -326,6 +326,22 @@ export const nominaBorradoresAPI = {
 	 * PISA las cantidades tecleadas a mano en el canvas: es el deshacer del
 	 * ámbar `n → m`. El precio unitario de una fila que ya existe no se toca.
 	 */
+	/**
+	 * Retira el borrador de una hoja. Solo funciona en BORRADOR.
+	 *
+	 * Marca la liquidación y NO toca las tablas hijas: ahí vive la firma del
+	 * conductor sobre su desprendible.
+	 */
+	async eliminarBorrador(
+		liquidacionId: string,
+		payload: { anio: number; mes: number; corte?: number | null }
+	): Promise<{ ok: true; conductor_id: string | null }> {
+		const { data } = await apiClient.delete(`/api/nomina/liquidaciones/${liquidacionId}`, {
+			data: payload
+		});
+		return data;
+	},
+
 	async rehacerBonos(
 		liquidacionId: string,
 		payload: { anio: number; mes: number; corte?: number | null }
