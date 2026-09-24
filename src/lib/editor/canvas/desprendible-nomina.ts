@@ -15,12 +15,8 @@
  * El precio es que hay que pedir la liquidación completa por cada conductor;
  * de ahí la caché y el ritmo secuencial del ZIP.
  */
-import {
-	obtenerLiquidacionPorId,
-	obtenerFirmasPorLiquidacion,
-	obtenerPreviewRecargos,
-	agruparPorMesVehiculoEmpresa
-} from '$lib/api/nomina';
+import { obtenerLiquidacionPorId, obtenerFirmasPorLiquidacion } from '$lib/api/nomina';
+import { nominaBorradoresAPI } from '$lib/api/nomina-canvas';
 import {
 	generarPdfDesprendible,
 	generarBlobDesprendible
@@ -55,20 +51,39 @@ export async function cargarDatosDesprendible(
 	const liquidacion = (respuesta as any)?.data ?? respuesta;
 	if (!liquidacion) throw new Error('No se pudo cargar la liquidación.');
 
-	// Las firmas y el preview de recargos son OPCIONALES: sin firma el
-	// desprendible sale sin ella, y sin preview sale sin las páginas de
+	/**
+	 * EL PERIODO SALE DE LA PROPIA LIQUIDACIÓN, no de la pantalla.
+	 *
+	 * Un corte 21→20 se nombra por el mes en que TERMINA —el 21-ago/20-sep es
+	 * «septiembre»— y el día de corte es el del inicio. Derivarlo aquí evita
+	 * arrastrar tres parámetros por toda la cadena, y sobre todo evita que el
+	 * ZIP pida un conductor con el corte de otro.
+	 */
+	const fin = String(liquidacion.periodo_fin ?? liquidacion.periodo_end ?? '');
+	const ini = String(liquidacion.periodo_inicio ?? liquidacion.periodo_start ?? '');
+	const anio = Number(fin.slice(0, 4));
+	const mes = Number(fin.slice(5, 7));
+	const corte = Number(ini.slice(8, 10));
+
+	// Las firmas y las tablas de recargo son OPCIONALES: sin firma el
+	// desprendible sale sin ella, y sin tablas sale sin las páginas de
 	// detalle. Ninguna de las dos debe impedir generar el documento.
 	const [firmas, recargosData] = await Promise.all([
 		obtenerFirmasPorLiquidacion(liquidacionId)
 			.then((r: any) => r?.data ?? r ?? [])
 			.catch(() => []),
-		liquidacion.conductor_id && liquidacion.periodo_inicio && liquidacion.periodo_fin
-			? obtenerPreviewRecargos(
-					liquidacion.conductor_id,
-					liquidacion.periodo_inicio,
-					liquidacion.periodo_fin
-				)
-					.then((r: any) => r?.data ?? null)
+		/**
+		 * DESDE EL CANVAS, no desde las planillas.
+		 *
+		 * Antes llamaba a `obtenerPreviewRecargos`, que lee
+		 * `recargos_planillas`. El canvas paga desde su copia del corte
+		 * (`liquidaciones_dias`), que es la que se edita en la hoja, así que
+		 * en cuanto alguien corregía una hora el comprobante contradecía al
+		 * canvas: en WILSON, $1.056.277 impresos contra $1.381.964 pagados.
+		 */
+		Number.isInteger(anio) && Number.isInteger(mes)
+			? nominaBorradoresAPI
+					.desprendibleData(liquidacionId, { anio, mes, corte: corte || null })
 					.catch(() => null)
 			: Promise.resolve(null)
 	]);
@@ -76,10 +91,7 @@ export async function cargarDatosDesprendible(
 	const datos: DatosDesprendible = {
 		liquidacion,
 		firmas: Array.isArray(firmas) ? firmas : [],
-		recargosData: {
-			...(recargosData ?? {}),
-			planillas: agruparPorMesVehiculoEmpresa(recargosData?.planillas ?? [])
-		}
+		recargosData: { ...(recargosData ?? {}), planillas: recargosData?.planillas ?? [] }
 	};
 	cache.set(liquidacionId, datos);
 	return datos;

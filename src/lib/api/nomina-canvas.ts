@@ -353,6 +353,40 @@ export const nominaBorradoresAPI = {
 		return data;
 	},
 
+	/**
+	 * Las tablas de recargo del desprendible, construidas desde el canvas.
+	 *
+	 * Sustituye a `obtenerPreviewRecargos`, que las sacaba de las planillas:
+	 * el canvas paga desde su copia del corte, y en cuanto alguien corrige una
+	 * hora en la hoja las dos fuentes dejan de coincidir.
+	 */
+	async desprendibleData(
+		liquidacionId: string,
+		params: { anio: number; mes: number; corte?: number | null }
+	): Promise<{ planillas: any[]; total_recargos: number }> {
+		const { data } = await apiClient.get(
+			`/api/nomina/liquidaciones/${liquidacionId}/desprendible-data`,
+			{ params: { anio: params.anio, mes: params.mes, corte: params.corte ?? undefined } }
+		);
+		return data;
+	},
+
+	/**
+	 * Rehace las filas de `recargos` de una hoja desde sus planillas, y siembra
+	 * los bonos si la liquidación no tiene ninguno. Es lo que hace que el
+	 * desprendible deje de enseñar «Otros $ 0».
+	 */
+	async repararRecargos(
+		liquidacionId: string,
+		payload: { anio: number; mes: number; corte?: number | null }
+	): Promise<{ filas: number; total: number; sinAtribuir: number; bonos: number }> {
+		const { data } = await apiClient.post(
+			`/api/nomina/borradores/${liquidacionId}/reparar-recargos`,
+			payload
+		);
+		return data;
+	},
+
 	async estado(jobId: string): Promise<BorradorNominaJob> {
 		const { data } = await apiClient.get(`/api/nomina/borradores/status/${jobId}`);
 		return data;

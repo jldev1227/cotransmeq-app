@@ -249,6 +249,12 @@ export interface HojaNominaDTO {
 	deducciones: ConceptoDTO[];
 	totales: Record<string, number>;
 	clientes: ClienteNominaDTO[];
+	/**
+	 * La liquidación tiene recargos pero ninguna FILA en `recargos`, que es de
+	 * donde el desprendible los suma. En ese estado el comprobante del conductor
+	 * sale con «Otros … $ 0». Opcional: los payloads viejos no lo traen.
+	 */
+	sinFilasDeRecargos?: boolean;
 	avisos: string[];
 }
 
@@ -1837,8 +1843,14 @@ function zonaEmpresas(args: {
 interface CeldasReparto {
 	/** `codigo → { horas, valor }`, en referencias de celda («N40», «P40»). */
 	porCodigo: Map<CodigoRecargo, { horas: string; valor: string }>;
-	/** Total de la columna de disponibilidad, que es la línea DISPONIBILIDAD MES. */
-	totalDisponibilidad: string;
+	/**
+	 * Aquí vivía `totalDisponibilidad`, la celda del total de la columna de
+	 * standby, a la que apuntaba la línea DISPONIBILIDAD MES del desprendible.
+	 * Se quitó porque ese total vale cero siempre —un día de disponibilidad no
+	 * genera recargos, así que no hay horas que valorar— y la línea enseñaba
+	 * $0 aunque la liquidación tuviera su importe. El importe se teclea y sale
+	 * de `liquidaciones.disponibilidad`; la columna de HORAS sigue en su sitio.
+	 */
 }
 
 function zonaJornada(args: {
@@ -2042,7 +2054,7 @@ function zonaJornada(args: {
 		});
 	}
 
-	return { porCodigo, totalDisponibilidad: `${L(colDispV)}${r + 1}` };
+	return { porCodigo };
 }
 
 // ─── Zona E: desprendible ─────────────────────────────────────────────
@@ -2107,6 +2119,15 @@ function zonaDesprendible(args: {
 	let ultimaBonif = -1;
 	/** ¿Hay pernotes dentro del bloque? Decide el rótulo del subtotal. */
 	let hayPernotes = false;
+	/**
+	 * Fila de DISPONIBILIDAD MES, si la hay.
+	 *
+	 * Se apunta al pintarla y no se deduce de la posición: está la última del
+	 * bloque de OTROS por cómo las ordena el servidor, pero los dos totales
+	 * que dependen de ella —el subtotal de OTROS y el DEVENGADO— cambiarían de
+	 * significado en silencio si mañana se añade una línea detrás.
+	 */
+	let filaDisponibilidad = -1;
 	const filas = Math.max(hoja.devengos.length, hoja.deducciones.length);
 
 	for (let i = 0; i < filas; i++) {
@@ -2122,6 +2143,7 @@ function zonaDesprendible(args: {
 			});
 			marcaOtros = r;
 		} else if (dev) {
+			if (dev.clave === 'disponibilidad') filaDisponibilidad = r;
 			if (dev.clave.startsWith('bono:') || dev.clave.startsWith('pernote:')) {
 				if (primeraBonif < 0) primeraBonif = r;
 				ultimaBonif = r;
@@ -2231,6 +2253,42 @@ function zonaDesprendible(args: {
 	}
 
 	/**
+	 * DISPONIBILIDAD CONSUME DE OTROS: no es dinero nuevo.
+	 *
+	 * Lo que se imputa a disponibilidad sale de la misma bolsa de recargos, y
+	 * así lo presenta el desprendible: resta de «Otros» y aparece como su
+	 * propia línea, de modo que las dos cifras juntas siguen siendo el total
+	 * de recargos. En la hoja eso se traduce en dos ajustes:
+	 *
+	 *   • TOTAL OTROS  = recargos − disponibilidad.
+	 *   • TOTAL DEVENGADO no puede sumar las dos, o pagaría dos veces el mismo
+	 *     peso. Resta lo consumido, que es como decir que cuenta los recargos
+	 *     enteros y la disponibilidad ninguna vez.
+	 *
+	 * `MIN(disponibilidad, recargos)` acota el consumo a lo que hay en la
+	 * bolsa. Si alguien teclea más de lo que existe, TOTAL OTROS queda en cero
+	 * y el DEVENGADO conserva los recargos completos: el exceso se ve en la
+	 * línea —que sigue enseñando lo tecleado— en vez de desaparecer restando
+	 * de otra cosa.
+	 *
+	 * El desprendible reparte el sobrante entre PAREX y GEOPARK, que en el
+	 * canvas no son bolsas aparte: aquí las siete líneas de recargo son todas
+	 * las empresas juntas.
+	 */
+	/// Última línea de recargo: la de encima de DISPONIBILIDAD, o la última
+	/// del bloque si no la hay. En 1-indexado, que es como se escriben las
+	/// fórmulas.
+	const ultimoRecargo = filaDisponibilidad >= 0 ? filaDisponibilidad : ultimaFila + 1;
+	const hayRecargos = marcaOtros >= 0 && ultimoRecargo >= marcaOtros + 2;
+	const rangoOtros = hayRecargos
+		? `SUM(${L(colDevValor)}${marcaOtros + 2}:${L(colDevValor)}${ultimoRecargo})`
+		: '0';
+	const celdaDisp = filaDisponibilidad >= 0 ? `${L(colDevValor)}${filaDisponibilidad + 1}` : null;
+	/// Lo que la disponibilidad se lleva de la bolsa, nunca más de lo que hay.
+	const consumido = celdaDisp ? `MIN(${celdaDisp},${rangoOtros})` : null;
+	const sumaOtros = consumido ? `${rangoOtros}-${consumido}` : rangoOtros;
+
+	/**
 	 * Subtotal de OTROS, en una celda fusionada al lado de sus líneas.
 	 *
 	 * Es lo que hace el Excel: las siete filas de recargo más disponibilidad no
@@ -2251,7 +2309,7 @@ function zonaDesprendible(args: {
 		});
 		merge(marcaOtros + 1, colDedConcepto, ultimaFila, colDedConcepto + SPAN.DESP_DED_CONCEPTO - 1);
 		campo(marcaOtros + 1, colDedValor, SPAN.DESP_VALOR, {
-			f: `=SUM(${L(colDevValor)}${desde}:${L(colDevValor)}${hasta})`,
+			f: `=${sumaOtros}`,
 			s: {
 				...derivada(),
 				ht: HorizontalAlign.RIGHT,
@@ -2268,7 +2326,9 @@ function zonaDesprendible(args: {
 	// mientras tanto la hoja no miente.
 	campo(r, c0, SPAN.DESP_CONCEPTO + SPAN.DESP_CANT, { v: 'TOTAL DEVENGADO', s: totales() });
 	campo(r, colDevValor, SPAN.DESP_VALOR, {
-		f: `=SUM(${L(colDevValor)}${primeraDevengo + 1}:${L(colDevValor)}${ultimaFila + 1})`,
+		f: `=SUM(${L(colDevValor)}${primeraDevengo + 1}:${L(colDevValor)}${ultimaFila + 1})${
+			consumido ? `-${consumido}` : ''
+		}`,
 		s: { ...totales(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } }
 	});
 	campo(r, colDedConcepto, SPAN.DESP_DED_CONCEPTO, {
@@ -2413,16 +2473,20 @@ function zonaDesprendible(args: {
  * La celda del reparto de la que sale este concepto del desprendible, si sale
  * de ahí.
  *
- * `recargo:<CODIGO>` son las siete líneas de OTROS y `disponibilidad` es la
- * columna entera de standby. Un código con las horas corregidas a mano no
- * está en el mapa —el reparto lo dejó estático— y entonces la línea se pinta
- * con la cifra del servidor, que es la buena.
+ * `recargo:<CODIGO>` son las siete líneas de OTROS. Un código con las horas
+ * corregidas a mano no está en el mapa —el reparto lo dejó estático— y
+ * entonces la línea se pinta con la cifra del servidor, que es la buena.
+ *
+ * DISPONIBILIDAD MES estuvo aquí, apuntando a la columna de standby del
+ * reparto. Esa columna vale cero siempre —un día de disponibilidad no genera
+ * recargos, así que no tiene horas que valorar— y la línea enseñaba $0 aunque
+ * la liquidación tuviera su importe guardado. Ahora es una celda que se
+ * teclea y se guarda en `liquidaciones.disponibilidad`.
  */
 function refDeConcepto(
 	clave: string,
 	reparto: CeldasReparto
 ): { horas?: string; valor?: string } | null {
-	if (clave === 'disponibilidad') return { valor: reparto.totalDisponibilidad };
 	if (!clave.startsWith('recargo:')) return null;
 	return reparto.porCodigo.get(clave.slice('recargo:'.length) as CodigoRecargo) ?? null;
 }
@@ -2447,6 +2511,10 @@ function campoDeConcepto(clave: string): string | null {
 			return 'total_vacaciones';
 		case 'ajuste_salarial':
 			return 'ajuste_salarial';
+		/// Se teclea: no se deriva de nada. Es lo que se imputa a
+		/// disponibilidad de la bolsa de OTROS.
+		case 'disponibilidad':
+			return 'disponibilidad';
 		default:
 			return null;
 	}

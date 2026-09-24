@@ -373,6 +373,56 @@
 		rehaciendoBonos = false;
 	}
 
+	// ─── Rehacer las filas de recargos de la hoja ─────────
+	/**
+	 * Escribe en `recargos` lo que el desprendible necesita para no salir en cero.
+	 *
+	 * POR QUÉ HACE FALTA UN BOTÓN: el comprobante no lee la columna
+	 * `total_recargos` de la liquidación, sino las FILAS de la tabla `recargos`.
+	 * El generador de borradores escribía la columna y ninguna fila, así que el
+	 * PDF del conductor salía con «Otros … $ 0» y el neto corto en todos los
+	 * recargos del mes. Los borradores nuevos ya nacen con sus filas; esto es
+	 * para los que se crearon antes.
+	 *
+	 * NO PREGUNTA, a diferencia de «Rehacer bonos»: no pisa nada. Los recargos
+	 * escritos a mano se quedan, los bonos solo se siembran si no hay ninguno y
+	 * los días ni se miran. Lo único que cambia es que aparece lo que faltaba.
+	 */
+	let rehaciendoRecargos = $state(false);
+
+	async function repararRecargos() {
+		const hoja = hojaActiva;
+		if (!hoja?.liquidacionId || rehaciendoRecargos) return;
+
+		cancelarRecalculo();
+		rehaciendoRecargos = true;
+		await conOverlay('Rehaciendo recargos', hoja.nombre, async () => {
+			const r = await nominaBorradoresAPI.repararRecargos(hoja.liquidacionId!, {
+				anio,
+				mes,
+				corte
+			});
+			await loadInicial();
+			const partes: string[] = [];
+			if (r.filas) partes.push(`${r.filas} ${r.filas === 1 ? 'fila' : 'filas'} de recargo`);
+			if (r.bonos) partes.push(`${r.bonos} ${r.bonos === 1 ? 'bono' : 'bonos'}`);
+			if (partes.length) {
+				toast.success(`${hoja.nombre}: ${partes.join(' y ')} en el desprendible.`, {
+					description: r.total
+						? `Suman $ ${formatCOP(r.total)}, el mismo total que ya tenía la liquidación.`
+						: undefined
+				});
+			} else {
+				toast.info(`${hoja.nombre}: no había nada que rehacer.`, {
+					description: r.sinAtribuir
+						? `Quedan $ ${formatCOP(r.sinAtribuir)} sin poder repartir: el corte no tiene días con recargo valorado.`
+						: 'El desprendible ya tenía sus recargos.'
+				});
+			}
+		});
+		rehaciendoRecargos = false;
+	}
+
 	// ─── Retirar el borrador de la hoja ───────────────────
 	/**
 	 * SOLO BORRADOR, y con doble confirmación escrita.
@@ -1119,6 +1169,29 @@
 					: undefined
 		},
 		{
+			id: 'reparar-recargos',
+			label: 'Rehacer recargos',
+			hint: hojaActiva?.sinFilasDeRecargos
+				? 'El desprendible de esta hoja saldría con los recargos en CERO. Esto los escribe desde las planillas.'
+				: 'Vuelve a escribir las filas de recargo del desprendible desde las planillas del corte.',
+			icon: iconoRehacerRecargos,
+			/// El punto solo se enciende cuando el comprobante está roto: es la
+			/// única forma de ver desde el carril que ESTA hoja necesita el botón.
+			badge: hojaActiva?.sinFilasDeRecargos ? '!' : null,
+			tone: hojaActiva?.sinFilasDeRecargos ? ('blue' as const) : undefined,
+			onSelect: repararRecargos,
+			disabled:
+				!!accionEnCurso ||
+				rehaciendoRecargos ||
+				!hojaActiva?.liquidacionId ||
+				!esEditable(hojaActiva?.estado ?? ''),
+			disabledHint: !hojaActiva?.liquidacionId
+				? 'Este conductor todavía no tiene liquidación en el periodo.'
+				: !esEditable(hojaActiva?.estado ?? '')
+					? `Está en ${hojaActiva?.estado} y esto cambia su neto. Devuélvela a LIQUIDADA para repararla.`
+					: undefined
+		},
+		{
 			id: 'rehacer-bonos',
 			label: 'Rehacer bonos desde recorridos',
 			hint: hojaActiva?.matrizBonos?.hayRecorridos
@@ -1242,6 +1315,26 @@
 		<path stroke-linecap="round" stroke-linejoin="round" d="M9.5 7V5.2A1.2 1.2 0 0 1 10.7 4h2.6a1.2 1.2 0 0 1 1.2 1.2V7" />
 		<path stroke-linecap="round" stroke-linejoin="round" d="M6.2 7l.8 12a1.6 1.6 0 0 0 1.6 1.5h6.8A1.6 1.6 0 0 0 17 19l.8-12" />
 		<path stroke-linecap="round" d="M10.2 11v6M13.8 11v6" />
+	</svg>
+{/snippet}
+
+{#snippet iconoRehacerRecargos()}
+	<!-- Documento con una flecha de vuelta: el desprendible recupera las líneas
+	     que le faltaban. -->
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+		<path
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4"
+		/>
+		<path stroke-linecap="round" stroke-linejoin="round" d="M14 3l5 5v3" />
+		<path stroke-linecap="round" d="M8 8h3M8 12h5" opacity="0.5" />
+		<path
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			d="M20.5 18.5a3.5 3.5 0 1 1-1-2.45"
+		/>
+		<path stroke-linecap="round" stroke-linejoin="round" d="M20.8 13.6v2.6h-2.6" />
 	</svg>
 {/snippet}
 
