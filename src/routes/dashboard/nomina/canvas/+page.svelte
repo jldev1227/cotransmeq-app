@@ -22,6 +22,7 @@
 		claseBadgeEstado,
 		esEditable,
 		ESTADOS_BLOQUEADOS,
+		permiteRefrescarDias,
 		type AccionEstado
 	} from '$lib/editor/builders/nomina-estado';
 	import {
@@ -515,6 +516,21 @@
 	async function refrescarDiasDeLaHoja() {
 		const hoja = hojaActiva;
 		if (!hoja?.liquidacionId || refrescandoDias) return;
+		/**
+		 * La misma regla que el servidor, repetida aquí a propósito.
+		 *
+		 * El botón ya no se pinta fuera de BORRADOR, así que esto no debería
+		 * alcanzarse nunca; está para que la función no dependa de quién la
+		 * llame. Si un día se invoca desde un atajo, desde la consola o desde
+		 * otro sitio de la barra, la petición destructiva sigue sin salir.
+		 */
+		if (!permiteRefrescarDias(hoja.estado)) {
+			toast.warning(`La liquidación está en ${hoja.estado}.`, {
+				description:
+					'Sus días ya no se vuelven a traer de las planillas. Devuélvela a BORRADOR si de verdad hay que rehacerlos.'
+			});
+			return;
+		}
 		const ok = confirm(
 			`Se volverán a traer los días de ${hoja.nombre} desde las planillas.\n\n` +
 				'Las horas que hayas corregido a mano en los días se pierden. Los bonos, ' +
@@ -1318,10 +1334,22 @@
 				solo lectura aunque su estado diga BORRADOR. El botón lo dice y lo
 				resuelve en el sitio, en vez de mandar a «Generar borradores».
 			-->
-			{#if hojaActiva.liquidacionId}
-				<!--
-					Solo con borrador: sin liquidación no hay copia que refrescar.
-				-->
+			<!--
+				«Actualizar días» SOLO EN BORRADOR.
+
+				Dos condiciones, y cada una dice algo distinto: sin liquidación no
+				hay copia que refrescar, y a partir de LIQUIDADA no se debe. Esto
+				último es más estricto que el «solo lectura» de la insignia —en
+				LIQUIDADA la hoja se sigue editando— porque el botón no edita: tira
+				la copia del corte y la rehace desde las planillas, con las horas
+				corregidas a mano dentro.
+
+				Se OCULTA en vez de deshabilitarse. Un botón apagado invita a
+				buscar cómo encenderlo, y aquí la respuesta sería «devuelve la
+				liquidación a BORRADOR», que es exactamente lo que no se quiere
+				sugerir desde una barra. La insignia de al lado ya dice el estado.
+			-->
+			{#if hojaActiva.liquidacionId && permiteRefrescarDias(hojaActiva.estado)}
 				<button
 					type="button"
 					class="btn-refrescar-dias"
