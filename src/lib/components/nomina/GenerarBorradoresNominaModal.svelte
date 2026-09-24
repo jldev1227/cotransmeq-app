@@ -57,6 +57,20 @@
 	let terminado = $state(false);
 	let sondeo: ReturnType<typeof setInterval> | null = null;
 
+	/**
+	 * `conductores.nomina` NO SE MIRA EN ESTE MODAL. Ni para listar, ni para
+	 * preseleccionar, ni para rotular.
+	 *
+	 * Es un booleano con `default(false)`, sin auditoría y sin motivo guardado,
+	 * y nadie lo mantiene: había conductores que entraron el mismo día, con el
+	 * mismo cargo y la misma sede, uno con el flag y otro sin él. Aquí la
+	 * pregunta es «¿a quién puedo generarle un borrador?», y a eso responden
+	 * los días del corte, no ese campo.
+	 *
+	 * `previo` sigue mandando `en_nomina` en la respuesta por si un día hay que
+	 * enseñarlo donde corresponde —la ficha del conductor—, pero esta pantalla
+	 * lo ignora a propósito.
+	 */
 	const conDias = $derived(conductores.filter((c) => c.dias > 0));
 	const conLiquidacion = $derived(conductores.filter((c) => c.liquidacion_id));
 	const sinDias = $derived(conductores.filter((c) => c.dias === 0));
@@ -72,7 +86,11 @@
 			// Marcados por defecto: los que tienen días y no tienen nada
 			// guardado. Los demás se piden a mano.
 			marcados = new Set(
-				r.conductores.filter((c) => c.dias > 0 && !c.liquidacion_id).map((c) => c.conductor_id)
+				r.conductores
+					/// `nomina` NO entra aquí: quien trabajó en el corte y no tiene
+					/// liquidación se marca solo, tenga el flag o no.
+					.filter((c) => c.dias > 0 && !c.liquidacion_id)
+					.map((c) => c.conductor_id)
 			);
 		} catch (e: any) {
 			errorCarga = e?.response?.data?.error || 'No se pudo leer el periodo.';
@@ -263,8 +281,10 @@
 				{/if}
 				{#if sinDias.length}
 					<div class="aviso">
-						<strong>{sinDias.length} sin días en el periodo.</strong> Su borrador saldría en cero, así
-						que también nacen desmarcados.
+						<strong>{sinDias.length} sin días en el periodo.</strong> No saldrían en cero: el borrador
+						se crea con el mes comercial —básico y auxilio completos— y los recargos en cero, porque
+						su planilla no ha llegado o está vacía. Nacen desmarcados por eso; si marcas a alguien,
+						se le genera igual y los días se traen después con «Actualizar días».
 					</div>
 				{/if}
 

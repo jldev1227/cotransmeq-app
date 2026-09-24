@@ -236,6 +236,14 @@ export interface ConductorPrevio {
 	conductor_id: string;
 	nombre: string;
 	cedula: string | null;
+	/**
+	 * `conductores.nomina`. `false` = trabaja pero no está marcado para nómina.
+	 *
+	 * Opcional porque una respuesta anterior a este campo no lo trae, y
+	 * entonces se da por bueno: quien ya salía en la lista es que estaba en
+	 * nómina.
+	 */
+	en_nomina?: boolean;
 	dias: number;
 	placas: string[];
 	/** `null` = no hay nada guardado: generar aquí crea, no reemplaza. */
