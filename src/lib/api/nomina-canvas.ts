@@ -244,6 +244,18 @@ export interface ConductorPrevio {
 	 * nómina.
 	 */
 	en_nomina?: boolean;
+	/**
+	 * Estado OPERATIVO del conductor (activo / programado / servicio /
+	 * disponible / inactivo / desvinculado). NO es un estado laboral: un
+	 * `programado` o `en servicio` está trabajando y cobra igual.
+	 */
+	estado_conductor?: string | null;
+	/**
+	 * `false` = no tiene planilla ni liquidación en el corte, así que no se le
+	 * calculó nada: la fila es solo el nombre y el estimado no significa nada.
+	 * Son los que antes no se listaban.
+	 */
+	con_datos?: boolean;
 	dias: number;
 	placas: string[];
 	/** `null` = no hay nada guardado: generar aquí crea, no reemplaza. */

@@ -541,77 +541,6 @@
 	});
 
 	/**
-	 * Crea el borrador de la hoja que se está mirando.
-	 *
-	 * Una hoja SIN liquidación es de solo lectura entera: los bonos, los días
-	 * de salario, las vacaciones y las horas de recargo se guardan todos contra
-	 * una fila de `liquidaciones`, y sin ella no hay a qué atar la celda. El
-	 * síntoma —«no me deja editar»— es idéntico al de un permiso denegado y no
-	 * había forma de salir del atasco desde el canvas.
-	 *
-	 * Reutiliza el mismo endpoint que «Generar borradores» con un solo
-	 * conductor: crear aquí una vía paralela significaría dos sitios donde
-	 * decidir cuántos días lleva un borrador o de dónde salen sus bonos.
-	 */
-	let creandoBorrador = $state(false);
-
-	async function crearBorradorDeLaHoja() {
-		const hoja = hojaActiva;
-		if (!hoja || hoja.liquidacionId || creandoBorrador) return;
-		creandoBorrador = true;
-		try {
-			const r = await nominaBorradoresAPI.generar({
-				anio,
-				mes,
-				corte,
-				conductor_ids: [hoja.conductorId]
-			});
-
-			/// Un solo conductor tarda milésimas, pero el endpoint es una COLA y
-			/// responde antes de terminar. Se espera al job en vez de recargar a
-			/// ciegas: sin esto, el periodo se recargaría antes de que la fila
-			/// exista y la hoja seguiría saliendo de solo lectura.
-			/**
-			 * Se espera al job Y SE MIRA SU RESULTADO.
-			 *
-			 * Un job puede terminar «complete» habiendo OMITIDO al conductor —el
-			 * generador se salta a quien no tiene planillas en el periodo— y dar
-			 * por bueno el `complete` decía «borrador creado» sin haber creado
-			 * nada: la hoja seguía de solo lectura y el botón ahí, sin explicar
-			 * por qué.
-			 */
-			let creado = false;
-			let motivo = '';
-			for (let i = 0; i < 40; i++) {
-				const job = await nominaBorradoresAPI.estado(r.job_id);
-				if (job.status === 'complete' || job.status === 'error' || job.status === 'cancelled') {
-					if (job.status !== 'complete') {
-						toast.error(job.error || 'No se pudo crear el borrador.');
-						return;
-					}
-					const item = job.items?.find((x) => x.conductorId === hoja.conductorId);
-					creado = item?.estado === 'creado' || item?.estado === 'reemplazado';
-					motivo = item?.motivo ?? '';
-					break;
-				}
-				await new Promise((s) => setTimeout(s, 150));
-			}
-
-			if (!creado) {
-				toast.warning(motivo || 'El generador no creó el borrador de esta hoja.');
-				return;
-			}
-
-			await loadInicial();
-			toast.success(`Borrador creado para ${hoja.nombre}.`);
-		} catch (e: any) {
-			toast.error(e?.response?.data?.error || 'No se pudo crear el borrador.');
-		} finally {
-			creandoBorrador = false;
-		}
-	}
-
-	/**
 	 * Vuelve a traer los días de la hoja desde las planillas.
 	 *
 	 * El borrador tiene COPIA PROPIA de los días: se hizo al generarlo y desde
@@ -1575,17 +1504,6 @@
 					{refrescandoDias ? 'Actualizando…' : 'Actualizar días'}
 				</button>
 			{/if}
-			{#if !hojaActiva.liquidacionId}
-				<button
-					type="button"
-					class="btn-crear-borrador"
-					onclick={crearBorradorDeLaHoja}
-					disabled={creandoBorrador}
-					title="Esta hoja todavía no tiene liquidación: nada se puede editar hasta crearla"
-				>
-					{creandoBorrador ? 'Creando…' : 'Crear borrador'}
-				</button>
-			{/if}
 		{/if}
 
 		<!-- «Generar borradores» vivía aquí y se fue al CARRIL, con el resto de
@@ -1636,6 +1554,28 @@
 			onRetry={loadInicial}
 			errorLabel="Reintentar"
 		/>
+
+		<!--
+			Periodo sin una sola liquidación: antes esto era un libro de pestañas
+			vacías de solo lectura, una por conductor. Ahora el libro no se dibuja
+			y se dice por qué, con el único botón que hace algo desde aquí.
+
+			Va SUPERPUESTO y no en lugar del host: el contenedor de Univer tiene
+			que seguir montado —el motor se ata a él al cargar el periodo— o
+			generar los borradores dejaría el canvas en blanco hasta recargar.
+		-->
+		{#if !loading && !loadError && datos && !datos.hojas.length}
+			<div class="nom-vacio">
+				<h2>Sin liquidaciones en {datos.etiqueta}</h2>
+				<p>
+					El canvas edita las liquidaciones del periodo; todavía no hay ninguna. Generar los
+					borradores crea una por conductor y entonces aparecen aquí sus hojas.
+				</p>
+				<button type="button" class="btn-crear-borrador" onclick={() => (mostrarGenerar = true)}>
+					Generar borradores
+				</button>
+			</div>
+		{/if}
 	</div>
 
 	<UniverSideRail ariaLabel="Acciones de nómina" items={railItems} />
@@ -1745,12 +1685,44 @@
 		   que cubrir canvas Y carril. */
 		position: relative;
 	}
+	.nom-vacio {
+		position: absolute;
+		inset: 0;
+		/* Por encima del lienzo de Univer, que va a `z-index: 8` dentro de este
+		   mismo contexto de apilado: con menos, la rejilla vacía se pintaba
+		   encima del cartel. */
+		z-index: 10;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.6rem;
+		padding: 2rem;
+		text-align: center;
+		background: var(--bg-base, #f8fafc);
+	}
+	.nom-vacio h2 {
+		margin: 0;
+		font-size: 1rem;
+		font-weight: 700;
+		color: var(--text-primary, #0f172a);
+	}
+	.nom-vacio p {
+		margin: 0;
+		max-width: 46ch;
+		font-size: 0.85rem;
+		line-height: 1.5;
+		color: var(--text-secondary, #475569);
+	}
+
 	.nom-canvas {
 		flex: 1 1 auto;
 		min-width: 0;
 		min-height: 0;
 		display: flex;
 		flex-direction: column;
+		/* Ancla de `.nom-vacio`, que se superpone al host sin desmontarlo. */
+		position: relative;
 	}
 
 	/* La insignia de estado. El resto de controles de la barra vienen de

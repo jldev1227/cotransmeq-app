@@ -74,12 +74,53 @@
 	 */
 	const conDias = $derived(conductores.filter((c) => c.dias > 0));
 	const conLiquidacion = $derived(conductores.filter((c) => c.liquidacion_id));
-	const sinDias = $derived(conductores.filter((c) => c.dias === 0));
+	/**
+	 * Sin días PERO dentro del periodo: su planilla no llegó o está vacía.
+	 *
+	 * No es lo mismo que `sinDatos`, y mezclarlos rompía el aviso: los que no
+	 * tienen nada en el corte también marcan `dias === 0` y son ciento y pico,
+	 * así que el aviso pasaba a decir «140 sin días en el periodo» —cierto y
+	 * completamente inútil—.
+	 */
+	const sinDias = $derived(conductores.filter((c) => c.con_datos !== false && c.dias === 0));
+	/// Ni planilla ni liquidación en el corte: el servidor no les calculó nada.
+	const sinDatos = $derived(conductores.filter((c) => c.con_datos === false));
 	/// Ya liquidadas, aprobadas, pagadas o anuladas: se listan para que se vea
 	/// que existen, pero no se ofrece rehacerlas.
 	const noReemplazables = $derived(
 		conductores.filter((c) => c.liquidacion_id && !permiteReemplazar(c.estado ?? ''))
 	);
+
+	let busqueda = $state('');
+
+	function normalizar(t: string): string {
+		// Sin acentos y sin separadores: «MUNOZ» encuentra «MUÑOZ» y
+		// «17390608» encuentra «17.390.608». Mismo criterio que el selector
+		// de hoja del canvas.
+		return (t || '')
+			.toUpperCase()
+			.normalize('NFD')
+			.replace(/[\u0300-\u036f]/g, '')
+			.replace(/[^A-Z0-9]/g, '');
+	}
+
+	/**
+	 * La lista es ahora la empresa entera, así que sin buscador no se
+	 * encuentra a nadie: con ciento setenta filas, dar con un reingreso
+	 * concreto es bajar a ciegas.
+	 */
+	const visibles = $derived.by(() => {
+		const q = normalizar(busqueda);
+		if (!q) return conductores;
+		return conductores.filter(
+			(c) => normalizar(c.nombre).includes(q) || normalizar(c.cedula ?? '').includes(q)
+		);
+	});
+
+	/** ¿Está trabajando? Los otros estados se rotulan para no confundir. */
+	function estaOperativo(estado: string | null | undefined): boolean {
+		return !!estado && !['inactivo', 'desvinculado'].includes(estado.toLowerCase());
+	}
 
 	async function cargar() {
 		try {
@@ -291,22 +332,46 @@
 							La que ya está liquidada, aprobada, pagada o anulada solo enseña su estado: para
 							rehacerla hay que devolverla a BORRADOR.
 						{:else if noReemplazables.length}
-							Las {noReemplazables.length} que ya están liquidadas, aprobadas, pagadas o anuladas
-							solo enseñan su estado: para rehacerlas hay que devolverlas a BORRADOR.
+							Las {noReemplazables.length} que ya están liquidadas, aprobadas, pagadas o anuladas solo
+							enseñan su estado: para rehacerlas hay que devolverlas a BORRADOR.
 						{/if}
+					</div>
+				{/if}
+				{#if sinDatos.length}
+					<div class="aviso">
+						<strong>{sinDatos.length} sin planillas ni liquidación en el corte.</strong> Se listan igual
+						—antes no aparecían— porque son a quienes hay que poder generar cuando alguien reingresa o
+						su estado quedó mal puesto. Van sin estimación y desmarcados; generarles un borrador crea
+						el mes comercial completo.
 					</div>
 				{/if}
 				{#if sinDias.length}
 					<div class="aviso">
 						<strong>{sinDias.length} sin días en el periodo.</strong> No saldrían en cero: el borrador
-						se crea con el mes comercial —básico y auxilio completos— y los recargos en cero, porque
-						su planilla no ha llegado o está vacía. Nacen desmarcados por eso; si marcas a alguien,
-						se le genera igual y los días se traen después con «Actualizar días».
+						se crea con el mes comercial —básico y auxilio completos— y los recargos en cero, porque su
+						planilla no ha llegado o está vacía. Nacen desmarcados por eso; si marcas a alguien, se le
+						genera igual y los días se traen después con «Actualizar días».
 					</div>
 				{/if}
 
+				<div class="buscador">
+					<input
+						type="search"
+						bind:value={busqueda}
+						placeholder="Buscar por nombre o cédula…"
+						aria-label="Buscar conductor"
+					/>
+					<span class="buscador-cuenta">
+						{visibles.length} de {conductores.length}
+					</span>
+				</div>
+
+				{#if !visibles.length}
+					<p class="vacio">Ningún conductor coincide con «{busqueda}».</p>
+				{/if}
+
 				<ul class="lista">
-					{#each conductores as c (c.conductor_id)}
+					{#each visibles as c (c.conductor_id)}
 						<li class="fila fila--sel" class:fila--gris={c.dias === 0}>
 							<label class="chk">
 								<input
@@ -315,11 +380,22 @@
 									onchange={() => alternar(c.conductor_id)}
 								/>
 								<span class="nombre">{c.nombre}</span>
+								{#if !estaOperativo(c.estado_conductor)}
+									<!-- Rotulado, no escondido: es justo a quien se viene a buscar
+									     cuando alguien reingresa o el estado quedó mal puesto. -->
+									<span class="pill pill--gris" title="Estado operativo del conductor">
+										{c.estado_conductor ?? 'sin estado'}
+									</span>
+								{/if}
 							</label>
 
 							<span class="meta">
-								{c.dias} día{c.dias === 1 ? '' : 's'}
-								{#if c.placas.length}· {c.placas.join(', ')}{/if}
+								{#if c.con_datos === false}
+									sin planillas ni liquidación en el corte
+								{:else}
+									{c.dias} día{c.dias === 1 ? '' : 's'}
+									{#if c.placas.length}· {c.placas.join(', ')}{/if}
+								{/if}
 							</span>
 
 							{#if c.liquidacion_id && permiteReemplazar(c.estado ?? '')}
@@ -338,9 +414,17 @@
 									devolvería el estado a BORRADOR, o sea que se perdería la
 									aprobación y las cifras ya revisadas.
 								-->
-								<span class="pill pill--fija" title="No se puede rehacer: devuélvela a BORRADOR primero">
+								<span
+									class="pill pill--fija"
+									title="No se puede rehacer: devuélvela a BORRADOR primero"
+								>
 									{c.estado}
 								</span>
+							{:else if c.con_datos === false}
+								<!-- Sin datos del corte no hay estimación que enseñar; poner «$0»
+								     diría que se le va a pagar cero, y lo que se le generaría es el
+								     mes comercial completo. -->
+								<span class="estimado estimado--nd">—</span>
 							{:else}
 								<span class="estimado">{money(c.sueldo_estimado)}</span>
 							{/if}
@@ -363,6 +447,11 @@
 <style>
 	/* El estado de una liquidación que NO se puede rehacer. Gris y sin casilla:
 	   no hay nada que decidir aquí, es información. */
+	.pill--gris {
+		background: rgba(100, 116, 139, 0.14);
+		color: #64748b;
+		font-weight: 600;
+	}
 	.pill--fija {
 		background: rgba(100, 116, 139, 0.14);
 		color: #475569;
@@ -491,6 +580,43 @@
 		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.8rem;
 		color: var(--text-secondary);
+	}
+	.estimado--nd {
+		color: var(--text-muted);
+	}
+
+	.buscador {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		position: sticky;
+		top: 0;
+		z-index: 1;
+		padding: 0.5rem 0 0.6rem;
+		background: var(--bg-surface, #fff);
+	}
+	.buscador input {
+		flex: 1;
+		padding: 0.45rem 0.6rem;
+		border: 1px solid var(--border-color, #e2e8f0);
+		border-radius: 6px;
+		font-size: 0.8rem;
+	}
+	.buscador input:focus {
+		outline: 2px solid var(--emerald-500, #10b981);
+		outline-offset: -1px;
+	}
+	.buscador-cuenta {
+		font-size: 0.7rem;
+		font-variant-numeric: tabular-nums;
+		color: var(--text-muted);
+		white-space: nowrap;
+	}
+
+	.vacio {
+		margin: 0.75rem 0;
+		font-size: 0.8rem;
+		color: var(--text-muted);
 	}
 	.detalle {
 		margin-left: auto;

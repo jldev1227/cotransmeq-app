@@ -754,7 +754,9 @@ function hojaVacia(dto: PeriodoNominaDTO): Partial<IWorksheetData> {
 	const cellData: Record<number, Record<number, ICellData>> = {
 		1: {
 			1: {
-				v: `No hay conductores en nómina para ${dto.etiqueta}.`,
+				// Ya no es «no hay conductores»: el libro son las LIQUIDACIONES del
+				// periodo, y que no haya ninguna no dice nada de la plantilla.
+				v: `No hay liquidaciones en ${dto.etiqueta}.`,
 				s: { ...base(), bl: 1 }
 			}
 		}
