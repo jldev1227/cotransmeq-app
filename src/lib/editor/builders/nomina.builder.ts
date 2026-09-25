@@ -660,6 +660,16 @@ const FESTIVO_BG = '#FEF3C7';
 const FESTIVO_TEXTO = '#92400E';
 const FESTIVO_CABECERA = '#B45309';
 
+/**
+ * Cabecera de la columna de un SEGUNDO servicio de la misma fecha.
+ *
+ * Gris pizarra, fuera de la paleta de la marca a propósito: no es un día del
+ * calendario sino una columna de desdoble, y tiene que distinguirse de un
+ * lunes cualquiera sin competir con el ámbar del festivo ni con el rojo del
+ * domingo, que sí son información del día.
+ */
+const SERVICIO_EXTRA = '#64748B';
+
 const DERIVADA_BG = '#F8FAFC';
 const derivada = (): IStyleData => ({ ...base(), bg: { rgb: DERIVADA_BG } });
 
@@ -846,31 +856,25 @@ function construirHoja(args: {
 	for (let c = COL.DIA0; c < numColumnas; c++) columnData[c] = { w: ANCHO_COL_DIA };
 
 	/**
-	 * Las columnas repetidas que ESTE conductor no usa se ocultan.
+	 * AQUÍ NO SE OCULTA NINGUNA COLUMNA, y es una decisión, no un olvido.
 	 *
-	 * La rejilla se dimensiona mirando a TODOS los conductores: si uno solo hace
-	 * turno partido el 5 de julio —`17:00→24:00` más `00:00→06:00`, dos registros
-	 * reales para la misma fecha—, el 5 de julio abre dos columnas en las 25
-	 * hojas, y en las otras 24 la segunda queda vacía. Medido en el corte de
-	 * julio de 2026: 18 columnas extra sobre 30 fechas, y una hoja usa de media
-	 * 14 de las 48. La de Pulido Niño usaba 1.
+	 * Se ocultaban las columnas repetidas que la hoja no usaba. La rejilla se
+	 * dimensiona mirando a TODOS los conductores —si uno solo hace turno
+	 * partido el 5 de julio, esa fecha abre dos columnas en las 25 hojas y en
+	 * 24 la segunda queda vacía—, así que parecía limpio esconderlas.
 	 *
-	 * Se OCULTAN en vez de rehacer la rejilla por hoja: los índices de columna
-	 * son los mismos en todo el libro y de ellos cuelgan las fórmulas de totales
-	 * y los rangos de semana del control de jornada. Cambiarlos por hoja
-	 * obligaría a recalcular ambos por separado para no ganar nada que el
-	 * usuario pueda notar.
+	 * NO LO ERA: `hd` esconde la columna ENTERA, y por debajo de la rejilla de
+	 * días pasan las zonas de abajo. El desprendible ocupa de la 25 a la 38 y
+	 * esas son también columnas de día. Medido en el corte de julio de 2026 de
+	 * transmeralda: 18 columnas ocultables, y SIETE de ellas —26, 28, 30, 32,
+	 * 34, 36 y 38— caen dentro del desprendible. O sea que esconder los huecos
+	 * de arriba borraba trozos del desprendible de abajo: la columna de
+	 * concepto partida, media columna de VALOR, el rótulo de deducciones.
 	 *
-	 * La primera columna de cada fecha (`ocurrencia === 0`) NO se oculta nunca,
-	 * aunque el conductor no trabajara ese día: el calendario del periodo tiene
-	 * que verse completo, con sus huecos.
+	 * El precio de no ocultarlas es ver las columnas vacías de las fechas que
+	 * otro conductor repitió. Se marcan en la cabecera (`2.º SERVICIO`) para
+	 * que no se lean como un día repetido, que es exactamente como se leían.
 	 */
-	for (const d of dias) {
-		if ((d.ocurrencia ?? 0) === 0) continue;
-		if (porIndice.has(d.indice)) continue;
-		const c = COL.DIA0 + d.indice;
-		columnData[c] = { w: ANCHO_COL_DIA, hd: BooleanNumber.TRUE };
-	}
 
 	cerrarBordesDeCombinadas(cellData, mergeData);
 	rellenarBordesVacios(cellData, rowCount, numColumnas, mergeData);
@@ -1057,13 +1061,31 @@ function zonaDias(args: {
 				? { ...base(), bg: { rgb: FESTIVO_BG }, cl: { rgb: FESTIVO_TEXTO } }
 				: derivada();
 
+		/**
+		 * Segundo (o tercer) servicio de la MISMA fecha.
+		 *
+		 * Repetía el número del día y las tres letras del nombre —«5 / MAR»
+		 * otra vez— y no había forma de distinguirlo de un día duplicado por
+		 * error, que es como se leía: un día sin hora de inicio ni de fin y sin
+		 * ninguna razón aparente para existir. La razón es que OTRO conductor
+		 * hizo turno partido esa fecha y la rejilla de columnas es común al
+		 * libro entero.
+		 *
+		 * El número del día se conserva —la columna sigue siendo del día 5— y
+		 * lo que cambia es la segunda línea, que es donde iba la información
+		 * repetida.
+		 */
+		const repetida = (d.ocurrencia ?? 0) > 0;
 		set(FILA.CAB_DIA, c, {
 			v: d.dia,
 			s: { ...cabecera(festivo ? FESTIVO_CABECERA : domingo ? '#7F1D1D' : GREEN), fs: 10 }
 		});
 		set(FILA.CAB_NOMBRE_DIA, c, {
-			v: d.nombreDia.slice(0, 3),
-			s: { ...cabecera(festivo ? '#92400E' : domingo ? '#991B1B' : SUBCAB), fs: 9 }
+			v: repetida ? `${(d.ocurrencia ?? 0) + 1}.º SERV` : d.nombreDia.slice(0, 3),
+			s: {
+				...cabecera(repetida ? SERVICIO_EXTRA : festivo ? '#92400E' : domingo ? '#991B1B' : SUBCAB),
+				fs: repetida ? 7 : 9
+			}
 		});
 
 		if (!dh) {
