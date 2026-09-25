@@ -31,6 +31,43 @@ export const TRANSICIONES: Record<string, EstadoNomina[]> = {
 	ANULADA: []
 };
 
+/**
+ * Transiciones que SOLO ejecuta Administración, ADEMÁS de las de `TRANSICIONES`.
+ *
+ * La matriz base es casi un camino de ida: de LIQUIDADA se baja a BORRADOR y de
+ * APROBADA a LIQUIDADA, pero PAGADA no tenía vuelta —su única salida era
+ * ANULADA—. Y una hoja se marca pagada por error igual que cualquier otra cosa:
+ * el único arreglo era anularla y rehacer la liquidación entera, perdiendo por
+ * el camino todo lo que ya estaba revisado.
+ *
+ * Va aparte y no dentro de `TRANSICIONES` para que la matriz base siga
+ * describiendo el flujo NORMAL: esto es la puerta de atrás, no el camino. Quien
+ * no sea Administración no la ve ni la puede usar —los dos guards de
+ * `transicionesPermitidas` ya lo impedían— y el servidor valida contra la misma
+ * unión que el cliente pinta.
+ *
+ * ANULADA sigue fuera: anular es una decisión con motivo escrito y resucitarla
+ * dejaría ese motivo colgando de una liquidación viva.
+ *
+ * ESPEJO de `backend-nest/src/modules/nomina-canvas/nomina-estado.service.ts`.
+ */
+export const TRANSICIONES_ADMIN: Record<string, EstadoNomina[]> = {
+	PAGADA: ['APROBADA']
+};
+
+/**
+ * Destinos que EXISTEN desde `estadoActual`, con o sin la puerta de atrás.
+ *
+ * Responde «¿esta transición está en el mapa?», no «¿puede este usuario
+ * hacerla?». De lo segundo se encargan los guards.
+ */
+export function destinosPosibles(estadoActual: string, admin: boolean): EstadoNomina[] {
+	const base = TRANSICIONES[estadoActual] ?? [];
+	if (!admin) return base;
+	const extra = (TRANSICIONES_ADMIN[estadoActual] ?? []).filter((e) => !base.includes(e));
+	return [...base, ...extra];
+}
+
 export const ESTADOS_QUE_EXIGEN_ADMIN: EstadoNomina[] = ['APROBADA', 'PAGADA'];
 export const ESTADOS_BLOQUEADOS: string[] = ['APROBADA', 'PAGADA', 'ANULADA'];
 
@@ -88,8 +125,8 @@ export function transicionesPermitidas(
 	areas: string[] | string | null | undefined
 ): EstadoNomina[] {
 	const admin = esAdmin(areas);
-	const posibles = TRANSICIONES[estadoActual] ?? [];
 	if (ESTADOS_BLOQUEADOS.includes(estadoActual) && !admin) return [];
+	const posibles = destinosPosibles(estadoActual, admin);
 	return admin ? posibles : posibles.filter((e) => !ESTADOS_QUE_EXIGEN_ADMIN.includes(e));
 }
 
@@ -98,15 +135,57 @@ export interface AccionEstado {
 	etiqueta: string;
 	tono: 'primario' | 'neutro' | 'peligro';
 	exigeMotivo: boolean;
+	/** Va hacia atrás en el flujo: no adelanta el documento, deshace un paso. */
+	reversion: boolean;
 }
 
-/** Cómo se llama cada transición en la barra. El verbo, no el estado. */
+/**
+ * Posición de cada estado en el flujo.
+ *
+ * Sirve solo para saber si una transición AVANZA o DESHACE, porque ni el verbo
+ * ni el tono se pueden deducir del destino a secas: `APROBADA → LIQUIDADA`
+ * decía «Liquidar» —como si quedara algo por calcular— cuando lo que hace es
+ * retirar una aprobación, y se pintaba en verde como el avance.
+ *
+ * ANULADA queda fuera del orden (9): anular no adelanta ni deshace, y su tono
+ * es siempre el de peligro.
+ */
+const ORDEN: Record<EstadoNomina, number> = {
+	BORRADOR: 0,
+	LIQUIDADA: 1,
+	APROBADA: 2,
+	PAGADA: 3,
+	ANULADA: 9
+};
+
+/** ¿La transición deshace un paso del flujo en vez de adelantarlo? */
+export function esReversion(estadoActual: string, destino: EstadoNomina): boolean {
+	const desde = ORDEN[estadoActual as EstadoNomina];
+	return destino !== 'ANULADA' && desde != null && ORDEN[destino] < desde;
+}
+
+/**
+ * Cómo se llama cada transición cuando AVANZA. El verbo, no el estado.
+ *
+ * `BORRADOR` no tiene avance posible —es el primer estado del flujo—, así que
+ * su entrada aquí no se usa nunca: volver a borrador siempre es reversión y la
+ * etiqueta la arma `accionesDisponibles` con `EN_MINUSCULA`.
+ */
 const ETIQUETA: Record<EstadoNomina, string> = {
 	BORRADOR: 'Devolver a borrador',
 	LIQUIDADA: 'Liquidar',
 	APROBADA: 'Aprobar',
 	PAGADA: 'Marcar pagada',
 	ANULADA: 'Anular'
+};
+
+/** El estado tal como se lee dentro de «Devolver a …». */
+const EN_MINUSCULA: Record<EstadoNomina, string> = {
+	BORRADOR: 'borrador',
+	LIQUIDADA: 'liquidada',
+	APROBADA: 'aprobada',
+	PAGADA: 'pagada',
+	ANULADA: 'anulada'
 };
 
 const TONO: Record<EstadoNomina, AccionEstado['tono']> = {
@@ -121,12 +200,19 @@ export function accionesDisponibles(
 	estadoActual: string,
 	areas: string[] | string | null | undefined
 ): AccionEstado[] {
-	return transicionesPermitidas(estadoActual, areas).map((estado) => ({
-		estado,
-		etiqueta: ETIQUETA[estado],
-		tono: TONO[estado],
-		exigeMotivo: ESTADOS_QUE_EXIGEN_MOTIVO.includes(estado)
-	}));
+	return transicionesPermitidas(estadoActual, areas).map((estado) => {
+		const reversion = esReversion(estadoActual, estado);
+		return {
+			estado,
+			// Deshacer no se anuncia con el verbo del avance: «Devolver a aprobada»
+			// dice que se retira el pago, «Aprobar» diría que falta aprobarla.
+			etiqueta: reversion ? `Devolver a ${EN_MINUSCULA[estado]}` : ETIQUETA[estado],
+			// Y tampoco en verde: una reversión no es el camino, es el arreglo.
+			tono: reversion ? 'neutro' : TONO[estado],
+			exigeMotivo: ESTADOS_QUE_EXIGEN_MOTIVO.includes(estado),
+			reversion
+		};
+	});
 }
 
 /** Color de la pestaña del canvas. */

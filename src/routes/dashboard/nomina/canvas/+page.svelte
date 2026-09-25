@@ -4,7 +4,13 @@
 	import { page } from '$app/stores';
 	import { toast } from 'svelte-sonner';
 
-	import { nominaCanvasAPI, nominaEnviosAPI, type PeriodoNominaDTO, nominaBorradoresAPI } from '$lib/api/nomina-canvas';
+	import {
+		nominaCanvasAPI,
+		nominaEnviosAPI,
+		type PeriodoNominaDTO,
+		type CambioEstado,
+		nominaBorradoresAPI
+	} from '$lib/api/nomina-canvas';
 	import { nominaSheetId } from '$lib/editor/builders/nomina.builder';
 	import {
 		createNominaEngine,
@@ -18,7 +24,6 @@
 	import { attachCellChangeNomina } from '$lib/editor/univer/adapters/cell-change-nomina';
 	import { clearNominaBindings, getNominaCellFor } from '$lib/editor/business/nomina-cell-binding';
 	import {
-		accionesDisponibles,
 		claseBadgeEstado,
 		esEditable,
 		ESTADOS_BLOQUEADOS,
@@ -67,6 +72,7 @@
 		icoBorradores
 	} from '$lib/components/univer/iconos-canvas.svelte';
 	import GenerarBorradoresNominaModal from '$lib/components/nomina/GenerarBorradoresNominaModal.svelte';
+	import NominaEstadoPanel from '$lib/components/nomina/NominaEstadoPanel.svelte';
 	import ConceptosAdicionalesModal from '$lib/components/nomina/ConceptosAdicionalesModal.svelte';
 	import UniverCanvasHost from '$lib/components/univer/UniverCanvasHost.svelte';
 	import UniverSideRail, { type RailItem } from '$lib/components/univer/UniverSideRail.svelte';
@@ -195,8 +201,16 @@
 	let conPlanilla = $derived((datos?.hojas ?? []).filter((h) => h.dias.length > 0).length);
 	let sinPlanilla = $derived((datos?.hojas.length ?? 0) - conPlanilla);
 	let areas = $derived(($authStore as any)?.user?.area ?? null);
-	let acciones = $derived<AccionEstado[]>(
-		hojaActiva ? accionesDisponibles(hojaActiva.estado, areas) : []
+	/**
+	 * Las hojas del periodo que siguen en BORRADOR.
+	 *
+	 * Con liquidación: sin ella no hay estado que mover, y el conductor que
+	 * todavía no la tiene aparece igualmente como BORRADOR en el índice.
+	 */
+	let borradoresDelPeriodo = $derived(
+		(datos?.hojas ?? [])
+			.filter((h) => h.liquidacionId && h.estado === 'BORRADOR')
+			.map((h) => ({ liquidacionId: h.liquidacionId!, nombre: h.nombre }))
 	);
 
 	// ─── Conceptos adicionales ─────────────────────────────
@@ -953,6 +967,27 @@
 		});
 	}
 
+	/**
+	 * Aplica lo que cambió el lote de estados.
+	 *
+	 * El servidor devuelve el parte hoja por hoja —el lote NO es atómico—, así
+	 * que aquí se toca solo lo que confirmó. Releer el periodo entero sería más
+	 * corto de escribir y peor: son 25 hojas y el libro se remontaría para
+	 * cambiar una palabra en cada pestaña.
+	 */
+	function aplicarCambiosDeLote(cambios: CambioEstado[]) {
+		if (!cambios.length) return;
+		const porId = new Map(cambios.map((c) => [c.id, c]));
+		for (const hoja of datos?.hojas ?? []) {
+			const c = hoja.liquidacionId ? porId.get(hoja.liquidacionId) : undefined;
+			if (!c) continue;
+			hoja.estado = c.estado;
+			hoja.version = c.version;
+			ctx?.aplicarEstado(hoja.conductorId, c.estado);
+		}
+		toast.success(`${cambios.length} liquidación(es) en LIQUIDADA.`);
+	}
+
 	async function guardarVersion() {
 		await conOverlay('Guardando versión', datos?.etiqueta, async () => {
 			const r = await nominaCanvasAPI.capturarSnapshot(anio, mes, corte);
@@ -1243,38 +1278,32 @@
 			disabled: !!accionEnCurso
 		},
 		{ type: 'sep' },
-		...acciones.map((a) => ({
-			id: `estado-${a.estado}`,
-			label: a.etiqueta,
-			hint: hojaActiva ? `${hojaActiva.nombre} · ${hojaActiva.estado}` : '',
-			// Un icono por acción, no uno para todas: con el mismo visto bueno
-			// en «Liquidar», «Aprobar» y «Devolver a borrador» el carril pedía
-			// leer el popover para saber cuál era cuál.
-			icon: ICONO_ESTADO[a.estado],
-			tone: a.tono === 'peligro' ? ('red' as const) : ('green' as const),
-			onSelect: () => cambiarEstado(a),
-			disabled: !!accionEnCurso || !hojaActiva?.liquidacionId,
-			disabledHint: !hojaActiva?.liquidacionId
-				? 'Este conductor todavía no tiene liquidación en el periodo.'
-				: undefined
-		}))
+		/**
+		 * UN icono para todo el estado, no uno por transición.
+		 *
+		 * Antes cada acción disponible era su propio botón, así que el final
+		 * del carril cambiaba de longitud y de contenido con cada conductor
+		 * —tres iconos en una LIQUIDADA, uno en una PAGADA, ninguno en una
+		 * ANULADA— y las acciones de debajo se movían de sitio. Un icono fijo
+		 * que abre el desplegable mantiene el carril quieto, que es lo único
+		 * que hace que un icono sirva de ancla.
+		 */
+		{
+			id: 'estado',
+			label: 'Estado de la hoja',
+			hint: hojaActiva
+				? `${hojaActiva.nombre} · ${hojaActiva.estado}`
+				: 'Liquidar, aprobar, pagar o anular la hoja abierta.',
+			icon: iconoEstado,
+			/// Los borradores que quedan por liquidar en el periodo: es lo único
+			/// del bloque de estado que hay que ver sin abrir el panel.
+			badge: borradoresDelPeriodo.length || null,
+			panel: panelEstado,
+			panelTone: 'dark' as const,
+			panelWidth: 300,
+			disabled: !!accionEnCurso
+		}
 	]);
-
-	/**
-	 * Icono por estado destino. Cada acción tiene el suyo:
-	 *   LIQUIDADA → calculadora (se hacen las cuentas)
-	 *   APROBADA  → sello de visto bueno
-	 *   PAGADA    → billete
-	 *   BORRADOR  → flecha de vuelta atrás
-	 *   ANULADA   → prohibido
-	 */
-	const ICONO_ESTADO: Record<string, any> = $derived({
-		LIQUIDADA: iconoLiquidar,
-		APROBADA: iconoAprobar,
-		PAGADA: iconoPagar,
-		BORRADOR: iconoDevolver,
-		ANULADA: iconoAnular
-	});
 
 	// ─── Ciclo de vida ─────────────────────────────────────
 	onMount(() => {
@@ -1312,8 +1341,16 @@
 	<!-- Papelera sobre una hoja: se retira el documento, no una celda. -->
 	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
 		<path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16" />
-		<path stroke-linecap="round" stroke-linejoin="round" d="M9.5 7V5.2A1.2 1.2 0 0 1 10.7 4h2.6a1.2 1.2 0 0 1 1.2 1.2V7" />
-		<path stroke-linecap="round" stroke-linejoin="round" d="M6.2 7l.8 12a1.6 1.6 0 0 0 1.6 1.5h6.8A1.6 1.6 0 0 0 17 19l.8-12" />
+		<path
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			d="M9.5 7V5.2A1.2 1.2 0 0 1 10.7 4h2.6a1.2 1.2 0 0 1 1.2 1.2V7"
+		/>
+		<path
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			d="M6.2 7l.8 12a1.6 1.6 0 0 0 1.6 1.5h6.8A1.6 1.6 0 0 0 17 19l.8-12"
+		/>
 		<path stroke-linecap="round" d="M10.2 11v6M13.8 11v6" />
 	</svg>
 {/snippet}
@@ -1366,51 +1403,41 @@
 	</svg>
 {/snippet}
 
-{#snippet iconoLiquidar()}
-	<!-- Calculadora: liquidar es hacer las cuentas. -->
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-		<rect x="5" y="3" width="14" height="18" rx="2" />
+<!-- El icono del bloque de estado. Los de cada transición —calculadora,
+     sello, billete, flecha de vuelta, prohibido— se fueron con ellas a
+     `NominaEstadoPanel`: son parte del vocabulario de estados, no de esta
+     página. -->
+{#snippet iconoEstado()}
+	<svg
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="1.8"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+	>
+		<path d="M9 12.75L11.25 15 15 9.75" />
 		<path
-			stroke-linecap="round"
-			d="M8 7h8M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h4"
+			d="M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z"
 		/>
 	</svg>
 {/snippet}
 
-{#snippet iconoAprobar()}
-	<!-- Sello: aprobar congela el documento. -->
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-		<path
-			stroke-linecap="round"
-			stroke-linejoin="round"
-			d="M12 3l2.5 1.6 3-.3 1 2.8 2.4 1.8-1.3 2.7 1.3 2.7-2.4 1.8-1 2.8-3-.3L12 20l-2.5-1.6-3 .3-1-2.8L3.1 14l1.3-2.7L3.1 8.6l2.4-1.8 1-2.8 3 .3z"
-		/>
-		<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4" />
-	</svg>
-{/snippet}
-
-{#snippet iconoPagar()}
-	<!-- Billete: pagada es que el dinero salió. -->
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-		<rect x="2" y="6" width="20" height="12" rx="2" />
-		<circle cx="12" cy="12" r="2.5" />
-		<path stroke-linecap="round" d="M6 12h.01M18 12h.01" />
-	</svg>
-{/snippet}
-
-{#snippet iconoDevolver()}
-	<!-- Flecha de vuelta: devolver a borrador es deshacer. -->
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-		<path stroke-linecap="round" stroke-linejoin="round" d="M9 14l-5-5 5-5" />
-		<path stroke-linecap="round" stroke-linejoin="round" d="M4 9h10a6 6 0 010 12H8" />
-	</svg>
-{/snippet}
-
-{#snippet iconoAnular()}
-	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
-		<circle cx="12" cy="12" r="9" />
-		<path stroke-linecap="round" d="M6 6l12 12" />
-	</svg>
+{#snippet panelEstado()}
+	<NominaEstadoPanel
+		hoja={hojaActiva
+			? {
+					liquidacionId: hojaActiva.liquidacionId,
+					nombre: hojaActiva.nombre,
+					estado: hojaActiva.estado
+				}
+			: null}
+		{areas}
+		borradores={borradoresDelPeriodo}
+		periodo={datos?.etiqueta ?? `${MESES[mes - 1]} ${anio}`}
+		onAccion={cambiarEstado}
+		onLoteCambiado={aplicarCambiosDeLote}
+	/>
 {/snippet}
 
 <svelte:head>
