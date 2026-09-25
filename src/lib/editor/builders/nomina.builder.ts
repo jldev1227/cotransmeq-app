@@ -2394,6 +2394,20 @@ function zonaDesprendible(args: {
 		}
 
 		if (ded) {
+			/**
+			 * LAS DEDUCCIONES TAMBIÉN SE TECLEAN, cuando lo dice el servidor.
+			 *
+			 * Esta columna se pintaba entera de solo lectura y sin un solo
+			 * binding, así que `ded.editable` —que el servidor manda a `true`
+			 * para los anticipos— no lo miraba nadie: escribir el valor en la
+			 * celda lo rechazaba el permiso, y el rechazo se lee igual que un
+			 * problema de permisos. No había forma de meter un anticipo desde
+			 * el canvas.
+			 *
+			 * La salud y la pensión siguen sin tocarse: salen de un porcentaje
+			 * sobre la base y el servidor las manda con `editable: false`.
+			 */
+			const campoDed = ded.editable && hoja.liquidacionId ? campoDeConcepto(ded.clave) : null;
 			campo(r, colDedConcepto, SPAN.DESP_DED_CONCEPTO, {
 				v: ded.nombre,
 				s: { ...base(), fs: 9 }
@@ -2401,12 +2415,20 @@ function zonaDesprendible(args: {
 			campo(r, colDedValor, SPAN.DESP_VALOR, {
 				v: Math.round(ded.valor),
 				s: {
-					...derivada(),
+					...(campoDed ? editable() : derivada()),
 					ht: HorizontalAlign.RIGHT,
 					n: { pattern: FMT_COP },
 					cl: { rgb: '#B91C1C' }
 				}
 			});
+			if (campoDed) {
+				bind(r, colDedValor, {
+					entityType: 'liquidacion',
+					entityId: hoja.liquidacionId!,
+					field: campoDed,
+					conductorId: hoja.conductorId
+				});
+			}
 		}
 
 		r++;
@@ -2714,6 +2736,16 @@ function campoDeConcepto(clave: string): string | null {
 		/// disponibilidad de la bolsa de OTROS.
 		case 'disponibilidad':
 			return 'disponibilidad';
+		/**
+		 * El total de anticipos, que es una DEDUCCIÓN.
+		 *
+		 * Apunta a la columna `total_anticipos` y no a la tabla `anticipos`:
+		 * esa es el detalle de dónde salió la cifra —y el resto de la
+		 * aplicación ya lee la columna—, mientras que lo que el desprendible
+		 * descuenta es la cifra.
+		 */
+		case 'anticipos':
+			return 'total_anticipos';
 		default:
 			return null;
 	}
