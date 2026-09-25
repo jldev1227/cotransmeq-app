@@ -248,3 +248,56 @@ export function claseBadgeEstado(estado: string): string {
 export function esEditable(estado: string): boolean {
 	return !ESTADOS_BLOQUEADOS.includes(estado);
 }
+
+/** Clave del grupo de hojas que todavía no tienen liquidación. */
+export const SIN_LIQUIDACION = '__SIN_LIQUIDACION__';
+
+/** Una hoja del periodo, vista por el recuento. */
+export interface HojaContable {
+	liquidacionId: string | null;
+	estado: string;
+}
+
+/** Un grupo del recuento, en el orden en que se pinta. */
+export interface GrupoEstado {
+	clave: string;
+	n: number;
+}
+
+/**
+ * Cuántas hojas del periodo hay en cada estado, en el orden del flujo.
+ *
+ * **«SIN LIQUIDACIÓN» VA APARTE, y es la razón de que esto no sea un `groupBy`
+ * de tres líneas.** El servidor manda `estado_flujo ?? 'BORRADOR'`, así que un
+ * conductor al que todavía no se le ha creado la liquidación llega
+ * indistinguible de un borrador de verdad. Sumarlos diría «23 borradores»
+ * donde solo hay uno, y los otros 22 no se arreglan liquidando —no existen—
+ * sino con «Generar borradores».
+ *
+ * Los grupos SUMAN el total de hojas: un estado que el vocabulario no conozca
+ * se devuelve igual, al final. Callarlo descuadraría la cuenta sin dejar
+ * rastro de por qué.
+ */
+export function conteoPorEstado(hojas: HojaContable[]): GrupoEstado[] {
+	let sinLiquidacion = 0;
+	const porEstado = new Map<string, number>();
+	for (const h of hojas) {
+		if (!h.liquidacionId) {
+			sinLiquidacion++;
+			continue;
+		}
+		porEstado.set(h.estado, (porEstado.get(h.estado) ?? 0) + 1);
+	}
+
+	const grupos: GrupoEstado[] = ESTADOS_VALIDOS.filter((e) => porEstado.has(e)).map((e) => ({
+		clave: e,
+		n: porEstado.get(e)!
+	}));
+
+	for (const [clave, n] of porEstado) {
+		if (!ESTADOS_VALIDOS.includes(clave as EstadoNomina)) grupos.push({ clave, n });
+	}
+
+	if (sinLiquidacion) grupos.push({ clave: SIN_LIQUIDACION, n: sinLiquidacion });
+	return grupos;
+}

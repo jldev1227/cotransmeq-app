@@ -1451,6 +1451,7 @@
 			: null}
 		{areas}
 		borradores={borradoresDelPeriodo}
+		hojas={datos?.hojas.map((h) => ({ liquidacionId: h.liquidacionId, estado: h.estado })) ?? []}
 		periodo={datos?.etiqueta ?? `${MESES[mes - 1]} ${anio}`}
 		onAccion={cambiarEstado}
 		onLoteCambiado={aplicarCambiosDeLote}

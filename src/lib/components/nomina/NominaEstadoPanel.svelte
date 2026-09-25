@@ -29,6 +29,8 @@
 	import {
 		accionesDisponibles,
 		claseBadgeEstado,
+		conteoPorEstado,
+		SIN_LIQUIDACION,
 		type AccionEstado
 	} from '$lib/editor/builders/nomina-estado';
 
@@ -44,6 +46,12 @@
 		nombre: string;
 	}
 
+	/** Lo mínimo de cada hoja del periodo para contarlas por estado. */
+	interface HojaDelPeriodo {
+		liquidacionId: string | null;
+		estado: string;
+	}
+
 	interface Props {
 		/** Hoja activa. `null` mientras el libro carga o si no hay hojas. */
 		hoja: HojaActiva | null;
@@ -51,6 +59,11 @@
 		areas: string | string[] | null | undefined;
 		/** Las hojas del periodo en BORRADOR. Vacío = no se ofrece el lote. */
 		borradores: Borrador[];
+		/**
+		 * TODAS las hojas del periodo, para el recuento por estado de la cabecera.
+		 * Vacío mientras el libro carga: entonces no se pinta nada.
+		 */
+		hojas: HojaDelPeriodo[];
 		/** Cómo se llama el periodo en los diálogos («21 jul – 20 ago 2026»). */
 		periodo: string;
 		/** Ejecuta la transición sobre la hoja activa. La página pone el overlay. */
@@ -59,10 +72,58 @@
 		onLoteCambiado?: (cambios: CambioEstado[]) => void;
 	}
 
-	let { hoja, areas, borradores, periodo, onAccion, onLoteCambiado }: Props = $props();
+	let { hoja, areas, borradores, hojas, periodo, onAccion, onLoteCambiado }: Props = $props();
 
 	const acciones = $derived<AccionEstado[]>(
 		hoja?.liquidacionId ? accionesDisponibles(hoja.estado, areas) : []
+	);
+
+	/**
+	 * Color del chip SOBRE FONDO OSCURO.
+	 *
+	 * `claseBadgeEstado` no vale aquí y hay que decirlo: son clases pensadas
+	 * para fondo claro, y PAGADA es `text-emerald-900` (#064E3B) sobre un 10%
+	 * de opacidad. En este panel eso desaparece —y es justo el estado que uno
+	 * viene a mirar—. Los tonos son los de la PESTAÑA de cada hoja
+	 * (`COLOR_HOJA_POR_ESTADO`) aclarados hasta que se leen aquí, así que la
+	 * asociación color→estado sigue siendo la misma del libro.
+	 *
+	 * PAGADA va RELLENA en vez de en contorno: es el final del recorrido y
+	 * «aprobada» y «pagada» en dos verdes de contorno se confunden de un
+	 * vistazo, que es la única forma en que se mira esto.
+	 */
+	const CHIP: Record<string, { color: string; fondo: string }> = {
+		BORRADOR: { color: '#CBD5E1', fondo: 'rgba(255, 255, 255, 0.1)' },
+		LIQUIDADA: { color: '#7DD3FC', fondo: 'rgba(14, 165, 233, 0.16)' },
+		APROBADA: { color: '#86EFAC', fondo: 'rgba(22, 163, 74, 0.2)' },
+		PAGADA: { color: '#06281B', fondo: '#34D399' },
+		ANULADA: { color: '#FCA5A5', fondo: 'rgba(185, 28, 28, 0.24)' }
+	};
+
+	const CHIP_DESCONOCIDO = { color: '#CBD5E1', fondo: 'rgba(255, 255, 255, 0.1)' };
+
+	// «Sin liquidación» no es un estado, así que no lleva el color de ninguno:
+	// apenas un contorno, que pone `.nep-tally-sin`.
+	CHIP[SIN_LIQUIDACION] = { color: 'rgba(255, 255, 255, 0.6)', fondo: 'transparent' };
+
+	/**
+	 * Los chips del recuento: `conteoPorEstado` decide QUÉ se cuenta —incluido
+	 * el grupo aparte de las hojas sin liquidación— y aquí solo se les pone
+	 * nombre y color.
+	 *
+	 * Responde la pregunta de cerrar un periodo —«¿cuántas quedan sin
+	 * aprobar?»— que no se podía hacer en ninguna parte del canvas: la insignia
+	 * de la barra es de la hoja abierta, el chip del selector cuenta
+	 * DESPRENDIBLES ENVIADOS (de ahí que diga 0/24 con una hoja ya pagada) y el
+	 * badge del carril solo cuenta borradores. Había que abrir el selector y
+	 * recorrer las 24 a ojo.
+	 */
+	const conteo = $derived(
+		conteoPorEstado(hojas).map((g) => ({
+			...g,
+			etiqueta: g.clave === SIN_LIQUIDACION ? 'sin liquidación' : g.clave.toLowerCase(),
+			...(CHIP[g.clave] ?? CHIP_DESCONOCIDO)
+		}))
 	);
 
 	let enviando = $state(false);
@@ -170,7 +231,34 @@
 	{#if hoja}
 		<div class="nep-head">
 			<span class="nep-nombre">{hoja.nombre}</span>
-			<span class="nep-badge {claseBadgeEstado(hoja.estado)}">{hoja.estado}</span>
+			<!-- Mismo motivo que los chips de abajo: la insignia clara se apagaba
+			     sobre este panel, y PAGADA era la peor de todas. -->
+			<span
+				class="nep-badge"
+				style="color: {(CHIP[hoja.estado] ?? CHIP_DESCONOCIDO).color}; background: {(
+					CHIP[hoja.estado] ?? CHIP_DESCONOCIDO
+				).fondo};"
+			>
+				{hoja.estado}
+			</span>
+		</div>
+	{/if}
+
+	<!-- El recuento del PERIODO, no de la hoja: va fuera del `{#if hoja}` porque
+	     sigue sirviendo con el libro abierto y ninguna hoja seleccionada. -->
+	{#if conteo.length}
+		<div class="nep-tally">
+			{#each conteo as c (c.clave)}
+				<span
+					class="nep-tally-chip"
+					class:nep-tally-sin={c.clave === SIN_LIQUIDACION}
+					style="color: {c.color}; background: {c.fondo};"
+					title="{c.n} de {hojas.length} hojas del periodo"
+				>
+					<b>{c.n}</b>
+					{c.etiqueta}
+				</span>
+			{/each}
 		</div>
 	{/if}
 
@@ -439,6 +527,31 @@
 		font-size: 10px;
 		font-weight: 700;
 		letter-spacing: 0.04em;
+	}
+
+	.nep-tally {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+		padding: 0 4px 8px;
+		margin-bottom: 4px;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+	}
+	.nep-tally-chip {
+		padding: 1px 7px;
+		border-radius: 999px;
+		font-size: 10px;
+		font-weight: 600;
+		letter-spacing: 0.02em;
+		font-variant-numeric: tabular-nums;
+	}
+	.nep-tally-chip b {
+		font-weight: 800;
+	}
+	/* «Sin liquidación» no es un estado, así que no lleva el color de ninguno:
+	   apenas un contorno sobre el panel oscuro. */
+	.nep-tally-sin {
+		box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22);
 	}
 
 	.nep-vacio {

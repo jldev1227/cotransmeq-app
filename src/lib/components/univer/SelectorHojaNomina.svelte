@@ -157,8 +157,25 @@
 		</svg>
 		<span class="shn-actual">{activoObj ? activoObj.nombre : 'Buscar conductor'}</span>
 		<!-- «enviadas / total»: es el dato que se quiere de un vistazo cuando se
-		     está cerrando un periodo, y ahorra abrir el panel para contarlas. -->
+		     está cerrando un periodo, y ahorra abrir el panel para contarlas.
+
+		     El SOBRE no es decoración. Un «0/25» a secas, pegado a la insignia de
+		     estado de la hoja, se lee como un contador de estados —«¿no hay
+		     ninguna pagada?»—, y lo único que lo desmentía era el `title`, que
+		     obliga a parar el ratón encima para descubrirlo. -->
 		<span class="shn-cuenta" title="{enviadas} de {hojas.length} con desprendible enviado">
+			<svg
+				width="10"
+				height="10"
+				viewBox="0 0 24 24"
+				fill="none"
+				stroke="currentColor"
+				stroke-width="2.4"
+				aria-hidden="true"
+			>
+				<rect x="2.5" y="5" width="19" height="14" rx="2" />
+				<path stroke-linecap="round" stroke-linejoin="round" d="M3.5 7.5l8.5 5.5 8.5-5.5" />
+			</svg>
 			{enviadas}/{hojas.length}
 		</span>
 	</button>
@@ -246,6 +263,9 @@
 		white-space: nowrap;
 	}
 	.shn-cuenta {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
 		background: rgba(255, 255, 255, 0.18);
 		border-radius: 999px;
 		padding: 1px 7px;
