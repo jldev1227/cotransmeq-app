@@ -707,7 +707,19 @@ export async function construirDocDefinition(
 		]
 	];
 
-	if (item.anticipos && item.anticipos.length > 0) {
+	/**
+	 * LA LÍNEA SALE POR EL TOTAL, NO POR SUS HIJOS.
+	 *
+	 * Se condicionaba a `anticipos.length > 0` —las filas de detalle— pero lo
+	 * que imprimía era `total_anticipos`. Una liquidación con total y sin
+	 * detalle, que es lo normal cuando el anticipo se teclea en el canvas, se
+	 * quedaba SIN la línea mientras el neto sí la descontaba: un desprendible
+	 * cuyas deducciones no suman lo que dice restar, con la diferencia
+	 * inexplicada en contra del conductor.
+	 *
+	 * El detalle, si lo hay, sigue colgando debajo.
+	 */
+	if (Number(item.total_anticipos) > 0 || (item.anticipos?.length ?? 0) > 0) {
 		deduccionesBody.push([
 			{ text: 'Anticipos' },
 			{
@@ -717,7 +729,7 @@ export async function construirDocDefinition(
 			}
 		]);
 
-		item.anticipos.forEach((a) => {
+		(item.anticipos ?? []).forEach((a) => {
 			const conceptoTexto = a.concepto || a.observaciones || '';
 			deduccionesBody.push([
 				{

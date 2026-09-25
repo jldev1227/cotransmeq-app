@@ -418,7 +418,12 @@
 				{ text: fmt(item.pension), color: '#e60f0f', alignment: 'right' as const }
 			]
 		];
-		if (item.anticipos && item.anticipos.length > 0) {
+		/**
+		 * Por el TOTAL, no por sus hijos: ver el mismo punto en
+		 * `pdfDesprendible.ts`. Aquí importa más, porque este es el que abre el
+		 * conductor desde el enlace que le llega.
+		 */
+		if (Number(item.total_anticipos) > 0 || (item.anticipos?.length ?? 0) > 0) {
 			deduccionesBody.push([
 				{ text: 'Anticipos' },
 				{
