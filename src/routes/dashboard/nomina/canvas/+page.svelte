@@ -755,7 +755,20 @@
 							session?.setHojaActiva(mes, sheetId);
 						}
 					},
-					onPatch: ({ binding, valor }) => {
+					onPatch: ({ binding, valor, sheetId, row, column }) => {
+						/**
+						 * El color de la franja de recargos es parte del dato, así que
+						 * se repinta ANTES de saber si el servidor acepta: quien teclea
+						 * una hora tiene que ver el bloque de color en el acto, igual
+						 * que ve el número. Si el patch se rechaza, el aviso manda a
+						 * recargar y el builder vuelve a decidir el color desde cero.
+						 *
+						 * En un microtask porque esto corre DENTRO del manejador del
+						 * comando que acaba de escribir la celda, y pintar ahí mismo
+						 * sería despachar un comando de Univer desde dentro de otro.
+						 */
+						queueMicrotask(() => ctx?.repintarRecargosDelDia(sheetId, row, column));
+
 						const hoja = datos?.hojas.find((h) => h.liquidacionId === binding.entityId);
 						// Sin hoja no hay `version` que mandar, y sin versión el
 						// compare-and-swap no compara nada: el servidor
@@ -891,6 +904,10 @@
 				// `aplicarCeldaRemota` marca la ventana de eco: sin ella, esta
 				// escritura dispararía el adapter y volvería al emisor en bucle.
 				aplicarCeldaRemota(ctx, destino, p.value as any);
+				/// Y el color de la franja, por lo mismo que en la edición propia:
+				/// si no, la hora del otro llega sin su bloque y las dos pantallas
+				/// enseñan el mismo día de distinto color.
+				ctx.repintarRecargosDelDia(destino.sheetId, destino.row, destino.column);
 				const hoja = datos?.hojas.find((h) => h.liquidacionId === p.entity_id);
 				if (hoja && typeof p.version === 'number') hoja.version = p.version;
 			},

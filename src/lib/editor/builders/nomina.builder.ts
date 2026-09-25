@@ -324,6 +324,19 @@ export const COL = {
 	DIA0: 8
 } as const;
 
+/**
+ * Traduce una fila de la hoja al código de recargo que le toca, o `null` si esa
+ * fila no es de la rejilla de recargos.
+ *
+ * Lo necesita quien reacciona a una edición y solo tiene coordenadas —el
+ * adapter da fila y columna, no el campo—, para no volver a construir el libro
+ * ni clavar el 9 de `FILA.RECARGO0` en otro archivo.
+ */
+export function recargoDeFila(fila: number): CodigoRecargo | null {
+	const i = fila - FILA.RECARGO0;
+	return i >= 0 && i < ORDEN_RECARGOS.length ? ORDEN_RECARGOS[i] : null;
+}
+
 /** Filas de la zona A, 0-indexadas. */
 const FILA = {
 	/// Arranca en 0: la hoja dejaba la fila 1 en blanco sin que nada la usara.
@@ -488,6 +501,29 @@ const FILA_INFERIOR = 25;
 
 /** Orden de las siete filas de recargo, el mismo del Excel. */
 export const ORDEN_RECARGOS: CodigoRecargo[] = ['RN', 'HEN', 'HED', 'HEFD', 'HEFN', 'RD', 'RNDF'];
+
+/** Gris de relleno cuando la tarifa no trae color. */
+export const COLOR_RECARGO_NEUTRO = '#E2E8F0';
+
+/**
+ * Color de cada una de las siete franjas de recargo.
+ *
+ * Existe porque el color se pinta en TRES momentos: el rótulo de la fila, la
+ * celda de cada día al construir el libro, y el repintado VIVO cuando alguien
+ * teclea una hora (`repintarRecargosDelDia`, en el engine). Con la búsqueda
+ * suelta en cada sitio, ese tercero nacía ya con su propia copia de la regla.
+ *
+ * Se queda con la PRIMERA tarifa de cada código: un corte partido en tramos de
+ * vigencia trae el mismo código repetido con distinta tarifa, pero el color es
+ * del tipo de recargo, no del tramo.
+ */
+export function coloresDeRecargos(hoja: HojaNominaDTO): Record<CodigoRecargo, string> {
+	const colores = {} as Record<CodigoRecargo, string>;
+	for (const codigo of ORDEN_RECARGOS) {
+		colores[codigo] = hoja.tarifas.find((t) => t.codigo === codigo)?.color ?? COLOR_RECARGO_NEUTRO;
+	}
+	return colores;
+}
 
 /**
  * Columnas de las zonas inferiores. Se apoyan en que, por debajo de la fila
@@ -990,15 +1026,15 @@ function zonaDias(args: {
 		/// altura exacta que el del conductor, que también acaba en HORAS.
 		merge(FILA.TURNO, COL.AIRE0, FILA.HORAS, COL.ROTULOS);
 	}
+	const colorRecargo = coloresDeRecargos(hoja);
 	ORDEN_RECARGOS.forEach((codigo, i) => {
-		const tarifa = hoja.tarifas.find((t) => t.codigo === codigo);
 		set(FILA.RECARGO0 + i, COL.ROTULOS, {
 			v: codigo,
 			s: {
 				...etiqueta(),
-				bg: { rgb: tarifa?.color ?? '#E2E8F0' },
+				bg: { rgb: colorRecargo[codigo] },
 				ht: HorizontalAlign.CENTER,
-				cl: { rgb: contraste(tarifa?.color ?? '#E2E8F0') }
+				cl: { rgb: contraste(colorRecargo[codigo]) }
 			}
 		});
 	});
@@ -1080,8 +1116,7 @@ function zonaDias(args: {
 		const diaEditable = Boolean(dh.propio && hoja.liquidacionId);
 		ORDEN_RECARGOS.forEach((codigo, i) => {
 			const h = dh.horas[codigo] ?? 0;
-			const tarifa = hoja.tarifas.find((t) => t.codigo === codigo);
-			const color = tarifa?.color ?? '#E2E8F0';
+			const color = colorRecargo[codigo];
 			set(FILA.RECARGO0 + i, c, {
 				v: h > 0 ? redondear(h) : '',
 				s: {
