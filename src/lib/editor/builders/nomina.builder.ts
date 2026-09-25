@@ -173,6 +173,15 @@ export interface ConceptoDTO {
 	cantidad: number | null;
 	valor: number;
 	editable: boolean;
+	/**
+	 * Importe MENSUAL que este concepto prorratea entre 30.
+	 *
+	 * Con él, la celda de VALOR se escribe como fórmula —«base entre 30 por la
+	 * cantidad»— y cambiar los días en la columna CANT. mueve el importe en el
+	 * acto, sin esperar al servidor. Ausente en los conceptos que se teclean
+	 * enteros y en el auxilio cuando la liquidación lo tiene descontado.
+	 */
+	baseMensual?: number;
 	/// Fila que solo es un rótulo de sección («OTROS»). Ausente en payloads
 	/// viejos, donde no existía.
 	seccion?: boolean;
@@ -231,6 +240,18 @@ export interface HojaNominaDTO {
 	tramos?: TramoVigenciaDTO[];
 	bloquesEmpresa: BloqueEmpresaDTO[];
 	salarioBasico: number;
+	/**
+	 * Básico con el que se liquida el DESPRENDIBLE: el de la liquidación, o el
+	 * de la ficha del conductor mientras aquella no fije el suyo.
+	 *
+	 * Aparte de `salarioBasico`, que es el de la configuración de la EMPRESA y
+	 * de donde salen el valor hora y los siete recargos. Opcional porque un
+	 * snapshot anterior a la columna no lo trae, y entonces se cae al de la
+	 * empresa, que es lo que esas versiones enseñaban.
+	 */
+	salarioBasicoDesprendible?: number;
+	/** `true` = lo fijó esta liquidación; `false` = viene del conductor. */
+	salarioBasicoFijado?: boolean;
 	valorHora: number;
 	horasMensualesBase: number;
 	totalHorasMes: number;
@@ -825,14 +846,28 @@ function construirHoja(args: {
 				'Esos días se liquidaron como ordinarios, sin recargo dominical ni festivo.'
 		);
 	}
-	const finConfig = zonaConfiguracion({ hoja, dias, set, merge, bind });
+	const { fin: finConfig, celdaSalarioBasico } = zonaConfiguracion({
+		hoja,
+		dias,
+		set,
+		merge,
+		bind
+	});
 	const finEmpresas = zonaEmpresas({ hoja, set, merge, desdeFila: finConfig + 2 });
 	const reparto = zonaJornada({ dto, hoja, set, merge });
-	const finDesprendible = zonaDesprendible({ hoja, set, merge, bind, avisos: avisosHoja, reparto });
+	const finDesprendible = zonaDesprendible({
+		hoja,
+		set,
+		merge,
+		bind,
+		avisos: avisosHoja,
+		reparto,
+		celdaSalarioBasico
+	});
 
 	const rowCount = Math.max(finEmpresas, finDesprendible) + 3;
 
-	const columnData: Record<number, { w: number; hd?: BooleanNumber }> = {};
+	const columnData: Record<number, { w: number }> = {};
 	columnData[COL.NOMBRE] = { w: 210 };
 	columnData[COL.CEDULA] = { w: 100 };
 	columnData[COL.CARGO] = { w: 90 };
@@ -1546,7 +1581,7 @@ function zonaConfiguracion(args: {
 	/// Las horas de recargo se corrigen a mano desde aquí; sin binding el
 	/// permiso de celda las bloquea por defecto.
 	bind: (r: number, c: number, binding: NominaBinding) => void;
-}): number {
+}): { fin: number; celdaSalarioBasico: string | null } {
 	const { hoja, dias, set, merge, bind } = args;
 	/** Ajustes pintados, para la nota de debajo de la tabla. */
 	const ajustes: string[] = [];
@@ -1582,6 +1617,14 @@ function zonaConfiguracion(args: {
 	const L = (c: number) => colLetra(c);
 	/** Rangos de filas de tarifa, para que TOTALES sume los dos sub-bloques. */
 	const rangos: [number, number][] = [];
+	/**
+	 * Dirección A1 de la celda del básico, para que el desprendible escriba su
+	 * SALARIO como fórmula contra ella en vez de repetir la cifra.
+	 *
+	 * `null` en una hoja sin liquidación —no hay nada que teclear— y el
+	 * desprendible cae entonces en el importe del servidor.
+	 */
+	let celdaSalarioBasico: string | null = null;
 
 	/**
 	 * Columnas de empresa: se fijan con las bases del PRIMER tramo y valen para
@@ -1607,21 +1650,71 @@ function zonaConfiguracion(args: {
 			r++;
 		}
 
-		// Base de cálculo, que es lo que hace comprensible todo lo de abajo.
-		const baseInfo: [string, number, string | undefined][] = [
-			['Salario básico', tr.salarioBasico, FMT_COP],
+		/**
+		 * Base de cálculo, que es lo que hace comprensible todo lo de abajo.
+		 *
+		 * EL «SALARIO BÁSICO» DE AQUÍ ES EL DEL DESPRENDIBLE Y SE TECLEA.
+		 *
+		 * Antes enseñaba el de `configuraciones_salario` —la base de la
+		 * empresa— mientras el desprendible dividía entre 30 el de la ficha del
+		 * conductor. Eran dos cifras distintas con el mismo nombre, y la de
+		 * arriba no se podía tocar: para subirle el sueldo a una persona en un
+		 * corte había que editar su ficha, con lo que se movía cualquier otro
+		 * corte que se reabriera.
+		 *
+		 * El VALOR HORA sigue saliendo de la configuración de la empresa, y con
+		 * él los siete recargos: el básico de una persona no re-precia la hora
+		 * extra de la tabla. Por eso, cuando las dos cifras dejan de coincidir,
+		 * se pinta la de la empresa en su propia fila: si no, la división
+		 * `básico / horas` no daría el valor hora de al lado y la tabla
+		 * parecería mal sumada.
+		 */
+		const basicoDesprendible = hoja.salarioBasicoDesprendible ?? tr.salarioBasico;
+		const difiereDeLaEmpresa = redondear(basicoDesprendible) !== redondear(tr.salarioBasico);
+
+		const baseInfo: [string, number, string | undefined, boolean][] = [
+			['Salario básico', basicoDesprendible, FMT_COP, true],
+			...(difiereDeLaEmpresa
+				? ([['Base de recargos (empresa)', tr.salarioBasico, FMT_COP, false]] as [
+						string,
+						number,
+						string | undefined,
+						boolean
+					][])
+				: []),
 			// Las horas van sin patrón (ver FMT_HORAS).
-			['Horas mensuales base', tr.horasMensualesBase, FMT_HORAS],
-			['Valor hora', tr.valorHora, FMT_COP]
+			['Horas mensuales base', tr.horasMensualesBase, FMT_HORAS, false],
+			['Valor hora', tr.valorHora, FMT_COP, false]
 		];
-		for (const [rotulo, valor, fmt] of baseInfo) {
+		for (const [rotulo, valor, fmt, esBasico] of baseInfo) {
+			/**
+			 * Se teclea SOLO en el primer tramo.
+			 *
+			 * El básico es uno por liquidación y los tramos son subperiodos de
+			 * la misma: dos celdas editables escribirían el mismo campo y la
+			 * segunda pisaría a la primera sin que se viera cuál ganó.
+			 */
+			const editaAqui = esBasico && iTramo === 0 && !!hoja.liquidacionId;
 			set(r, c0, { v: rotulo, s: etiqueta() });
 			merge(r, c0, r, c0 + 2);
 			set(r, c0 + 3, {
 				v: redondear(valor),
-				s: { ...derivada(), ht: HorizontalAlign.RIGHT, ...(fmt ? { n: { pattern: fmt } } : {}) }
+				s: {
+					...(editaAqui ? editable() : derivada()),
+					ht: HorizontalAlign.RIGHT,
+					...(fmt ? { n: { pattern: fmt } } : {})
+				}
 			});
 			merge(r, c0 + 3, r, c0 + 5);
+			if (editaAqui) {
+				celdaSalarioBasico = `${L(c0 + 3)}${r + 1}`;
+				bind(r, c0 + 3, {
+					entityType: 'liquidacion',
+					entityId: hoja.liquidacionId!,
+					field: 'salario_basico',
+					conductorId: hoja.conductorId
+				});
+			}
 			r++;
 		}
 		r++;
@@ -1793,7 +1886,7 @@ function zonaConfiguracion(args: {
 		merge(r, c0, r, c0 + 5);
 	}
 
-	return r;
+	return { fin: r, celdaSalarioBasico };
 }
 
 // ─── Zona C: desglose por empresa ─────────────────────────────────────
@@ -2128,8 +2221,16 @@ function zonaDesprendible(args: {
 	/// Dónde quedaron las cifras del reparto: las siete líneas de OTROS son
 	/// esas mismas y apuntan ahí en vez de repetir el número.
 	reparto: CeldasReparto;
+	/**
+	 * Dirección A1 del básico editable del bloque de recargos.
+	 *
+	 * El SALARIO se escribe contra ella —«básico entre 30 por los días»— para
+	 * que corregir el sueldo arriba se vea abajo sin ir y volver al servidor.
+	 * `null` en una hoja sin liquidación, donde no hay celda que teclear.
+	 */
+	celdaSalarioBasico: string | null;
 }): number {
-	const { hoja, set, merge, bind, avisos, reparto } = args;
+	const { hoja, set, merge, bind, avisos, reparto, celdaSalarioBasico } = args;
 	const c0 = ZONA.DESPRENDIBLE_C0;
 	const L = (c: number) => colLetra(c);
 	let r = FILA_INFERIOR;
@@ -2225,9 +2326,48 @@ function zonaDesprendible(args: {
 				...(ref?.horas ? { f: `=${ref.horas}` } : { v: dev.cantidad ?? '' }),
 				s: { ...estilo, ht: HorizontalAlign.CENTER }
 			});
+
+			/**
+			 * VALOR = BASE ENTRE 30 POR LA CANTIDAD, escrito como fórmula.
+			 *
+			 * Era la cifra que devolvió el servidor, así que cambiar los días en
+			 * la columna CANT. dejaba el importe viejo al lado hasta que volvía
+			 * la respuesta: un segundo largo en el que el desprendible enseñaba
+			 * catorce días cobrando quince. Ahora la hoja lo recalcula sola y el
+			 * servidor confirma después.
+			 *
+			 * El SALARIO apunta a la CELDA del básico, no a su número: por eso
+			 * corregir el sueldo arriba baja hasta aquí. El auxilio no tiene
+			 * celda propia —su base es un parámetro de la empresa— y lleva la
+			 * cifra dentro de la fórmula.
+			 *
+			 * `ROUND` porque el importe se guarda en pesos: sin él, la celda
+			 * enseña los decimales de dividir entre 30 y no cuadra con el total.
+			 */
+			const baseSalario = dev.clave === 'salario' ? celdaSalarioBasico : null;
+			// `baseProrrateo` y no `base`: ese nombre ya es el estilo de celda.
+			const baseProrrateo =
+				baseSalario ?? (dev.baseMensual != null ? String(dev.baseMensual) : null);
+			const celdaCant = `${L(colDevCant)}${r + 1}`;
+			const formulaValor =
+				!ref?.valor && baseProrrateo && dev.baseMensual != null
+					? `=ROUND(${baseProrrateo}/30*${celdaCant},0)`
+					: null;
+
 			campo(r, colDevValor, SPAN.DESP_VALOR, {
-				...(ref?.valor ? { f: `=${ref.valor}` } : { v: Math.round(dev.valor) }),
-				s: { ...estilo, ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } }
+				...(ref?.valor
+					? { f: `=${ref.valor}` }
+					: formulaValor
+						? { f: formulaValor }
+						: { v: Math.round(dev.valor) }),
+				s: {
+					// Con fórmula la celda YA NO SE TECLEA: sale de la cantidad de
+					// al lado y del básico de arriba. Pintarla de editable invitaba
+					// a escribir un importe que el permiso rechaza sin explicar.
+					...(formulaValor ? derivada() : estilo),
+					ht: HorizontalAlign.RIGHT,
+					n: { pattern: FMT_COP }
+				}
 			});
 			// Solo se registra binding en lo que de verdad se teclea. El resto
 			// queda sin entrada y el permiso de celda lo bloquea por defecto.

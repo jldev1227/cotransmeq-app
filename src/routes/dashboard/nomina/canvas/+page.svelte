@@ -276,6 +276,18 @@
 	 * son varias ediciones seguidas y remontar el libro en cada una sería
 	 * insoportable. Se espera a que pare el tecleo y se rehace una sola vez.
 	 */
+	/**
+	 * Campos cuyo cambio obliga a releer el periodo.
+	 *
+	 * Son los que entran en el cálculo del servidor más allá de su propia
+	 * celda: el básico y los días prorrateados arrastran deducciones y neto.
+	 */
+	const CAMPOS_QUE_REHACEN_LA_HOJA = new Set([
+		'salario_basico',
+		'dias_laborados',
+		'dias_laborados_villanueva'
+	]);
+
 	const REBOTE_RECALCULO_MS = 800;
 	/// Tope de esperas por patches en vuelo (~8 s). Ver `pedirRecalculo`.
 	const MAX_ESPERAS_RECALCULO = 10;
@@ -818,6 +830,15 @@
 				/// esas celdas es fórmula viva. Se relee, pero con rebote: ver
 				/// `pedirRecalculo`.
 				if (String(field ?? '').startsWith('bono|')) pedirRecalculo();
+
+				/**
+				 * El básico y los días prorrateados mueven lo mismo, y por la misma
+				 * razón: el desprendible ya recalcula SALARIO y AUXILIO solo —son
+				 * fórmulas contra la celda de cantidad— pero la salud, la pensión y
+				 * el neto los calcula el servidor y se quedarían con la cifra
+				 * vieja al lado de un devengado nuevo.
+				 */
+				if (CAMPOS_QUE_REHACEN_LA_HOJA.has(String(field ?? ''))) pedirRecalculo();
 			},
 
 			onRemotePatch: (p) => {
