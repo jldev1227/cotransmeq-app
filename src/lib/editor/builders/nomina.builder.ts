@@ -182,6 +182,16 @@ export interface ConceptoDTO {
 	 * enteros y en el auxilio cuando la liquidación lo tiene descontado.
 	 */
 	baseMensual?: number;
+	/**
+	 * Cantidad desde la que el concepto se paga ENTERO, sin prorratear.
+	 *
+	 * Solo lo trae la NIVELACIÓN DE SALARIO: con 17 días de Villanueva o más se
+	 * paga la diferencia completa del mes. La fórmula tiene que respetarlo o la
+	 * celda enseñaría menos de lo que el servidor guarda al teclear 20 días.
+	 * Ausente en todo lo demás —y en los snapshots anteriores al bono—, que
+	 * prorratean siempre.
+	 */
+	umbralCompleto?: number;
 	/// Fila que solo es un rótulo de sección («OTROS»). Ausente en payloads
 	/// viejos, donde no existía.
 	seccion?: boolean;
@@ -497,7 +507,19 @@ function tramoDeFecha(tramos: TramoVigenciaDTO[] | undefined, fecha: string): nu
 function gruposPorTramo(
 	hoja: HojaNominaDTO,
 	codigo: CodigoRecargo,
-	dias: DiaHojaDTO[]
+	dias: DiaHojaDTO[],
+	/**
+	 * Cliente sobre cuya base salarial se valora, o `null` para la general.
+	 *
+	 * El desglose POR EMPRESA tiene que pagar a la tarifa del cliente: PAREX
+	 * liquida sobre 2.358.897 y no sobre los 1.750.905 de la general. Sin esto,
+	 * el bloque de PAREX salía valorado a la tarifa de la empresa y contradecía
+	 * a la columna «$ PAREX» de la tabla de arriba, que sí usa la base propia.
+	 *
+	 * Un cliente sin `configuraciones_salario` propia —la mayoría— no aparece
+	 * en `bases` y se queda con la general, que es lo que le corresponde.
+	 */
+	empresaId: string | null = null
 ): { columnas: number[]; valorHora: number }[] {
 	const porTramo = new Map<number, number[]>();
 	for (const d of dias) {
@@ -507,7 +529,15 @@ function gruposPorTramo(
 	return [...porTramo.entries()]
 		.map(([i, columnas]) => {
 			const t = hoja.tarifas.find((x) => x.codigo === codigo && (x.tramo ?? 0) === i);
-			return { columnas, valorHora: t?.valorHora ?? 0 };
+			/// `valorHoraPorBase` va alineado con `tramos[i].bases`, así que el
+			/// índice de la base ES el índice de la tarifa. Se busca por
+			/// `empresaId` y no por posición para que un tramo al que le falte
+			/// una empresa caiga en la general en vez de coger la de al lado.
+			const iBase = empresaId
+				? (hoja.tramos?.[i]?.bases ?? []).findIndex((b) => b.empresaId === empresaId)
+				: -1;
+			const vhEmpresa = iBase >= 0 ? t?.valorHoraPorBase?.[iBase] : undefined;
+			return { columnas, valorHora: vhEmpresa ?? t?.valorHora ?? 0 };
 		})
 		.filter((g) => g.valorHora > 0);
 }
@@ -1952,7 +1982,11 @@ function zonaEmpresas(args: {
 			const vivo = !ajustados.has(linea.codigo);
 			const fHoras = vivo ? formulaHoras(linea.codigo, columnasBloque) : null;
 			const fValor = vivo
-				? formulaImporte(linea.codigo, gruposPorTramo(hoja, linea.codigo, diasDelBloque))
+				? formulaImporte(
+						linea.codigo,
+						/// A la tarifa de ESTE cliente, no a la general: es su bloque.
+						gruposPorTramo(hoja, linea.codigo, diasDelBloque, b.empresaId)
+					)
 				: null;
 			const estiloHoras = {
 				...derivada(),
@@ -2269,6 +2303,45 @@ function zonaDesprendible(args: {
 	/** Fila del rótulo OTROS, para colgar de ella el subtotal de recargos. */
 	let marcaOtros = -1;
 	/**
+	 * Los bloques de PAREX y GEOPARK, cada uno con sus siete líneas.
+	 *
+	 * El desprendible imprime tres tablas de recargo, no una: OTROS con el resto
+	 * de clientes y estas dos aparte. Son disjuntas —OTROS ya llega restado del
+	 * servidor—, así que TOTAL DEVENGADO las suma todas sin contar nada dos
+	 * veces. Cada una lleva su propio TOTAL al lado, como OTROS.
+	 *
+	 * Solo existen cuando ese cliente puso horas: el servidor no manda la
+	 * sección si el reparto está a cero.
+	 */
+	const bloquesCliente: { nombre: string; rotulo: number; primera: number; ultima: number }[] = [];
+	/**
+	 * Los días de cada cliente con bloque propio.
+	 *
+	 * POR NOMBRE y no por id, igual que el servidor: los `NOMINA_EMPRESA_*_ID`
+	 * no están puestos en ningún entorno y en la tabla conviven dos «GEOPARK
+	 * COLOMBIA S.A.S» —uno con punto final y otro sin él— que por id serían dos
+	 * empresas y por nómina son la misma. Las dos reglas TIENEN que coincidir o
+	 * la hoja repartiría distinto de lo que el servidor mandó.
+	 */
+	const diasPorCubo = new Map<string, DiaHojaDTO[]>([
+		['PAREX', []],
+		['GEOPARK', []]
+	]);
+	for (const d of hoja.dias) {
+		if (d.disponibilidad) continue;
+		const n = (d.empresa ?? '').toUpperCase();
+		if (n.includes('PAREX')) diasPorCubo.get('PAREX')!.push(d);
+		else if (n.includes('GEOPARK')) diasPorCubo.get('GEOPARK')!.push(d);
+	}
+	/** `recargo:PAREX:HED` → `PAREX`; `recargo:HED` y el resto → `null`. */
+	const cuboDeClave = (clave: string): string | null => {
+		const partes = clave.split(':');
+		return partes.length === 3 && partes[0] === 'recargo' ? partes[1] : null;
+	};
+	/** Fila de cada línea, para restar los cubos de OTROS al cerrar la zona. */
+	const filasOtros = new Map<CodigoRecargo, number>();
+	const filasCubo = new Map<string, number>();
+	/**
 	 * Primera y última fila del bloque de bonos y pernotes.
 	 *
 	 * Se apuntan mientras se pinta y no se calculan aparte: el bloque no tiene
@@ -2301,9 +2374,18 @@ function zonaDesprendible(args: {
 				v: dev.nombre,
 				s: { ...cabecera(SUBCAB), ht: HorizontalAlign.CENTER, fs: 9 }
 			});
-			marcaOtros = r;
+			/// `seccion:otros` es la de siempre y lleva la disponibilidad; las
+			/// otras son los bloques de cliente, que van a su propia lista.
+			if (dev.clave === 'seccion:otros' || !dev.clave.startsWith('seccion:')) marcaOtros = r;
+			else bloquesCliente.push({ nombre: dev.nombre, rotulo: r, primera: -1, ultima: -1 });
 		} else if (dev) {
 			if (dev.clave === 'disponibilidad') filaDisponibilidad = r;
+			/// Las líneas que siguen a un rótulo de cliente son suyas.
+			const bloque = bloquesCliente[bloquesCliente.length - 1];
+			if (bloque && dev.clave.startsWith('recargo:') && dev.clave.split(':').length === 3) {
+				if (bloque.primera < 0) bloque.primera = r;
+				bloque.ultima = r;
+			}
 			if (dev.clave.startsWith('bono:') || dev.clave.startsWith('pernote:')) {
 				if (primeraBonif < 0) primeraBonif = r;
 				ultimaBonif = r;
@@ -2321,9 +2403,44 @@ function zonaDesprendible(args: {
 			 * bonos, deducciones—, que no sale de los días y se sigue pintando
 			 * con la cifra del servidor.
 			 */
+			/**
+			 * Las líneas de un bloque de cliente cuelgan de SUS columnas de día.
+			 *
+			 * No pueden apuntar al reparto: ahí solo hay una cifra por código,
+			 * la de todos los clientes juntos. Se construye la misma fórmula que
+			 * usa el reparto pero restringida a los días de ese cliente, así que
+			 * corregir una hora sigue moviendo su bloque, su total y el neto.
+			 *
+			 * A TARIFA GENERAL, igual que el reparto: esto es lo que se paga. La
+			 * base propia del cliente manda en el desglose POR EMPRESA de arriba,
+			 * que responde a otra pregunta.
+			 */
+			const cubo = cuboDeClave(dev.clave);
+			const diasDelCubo = cubo ? diasPorCubo.get(cubo) ?? [] : [];
+			/// Igual que el reparto, que también valora por días aunque el código
+			/// tenga las horas corregidas a mano. Las dos zonas tienen que usar
+			/// el mismo criterio: OTROS se define como el reparto MENOS estas
+			/// celdas, así que si una fuera por días y la otra por la cifra del
+			/// servidor, la resta no cuadraría.
+			const codigoCubo = cubo ? (dev.clave.split(':')[2] as CodigoRecargo) : null;
+			if (cubo && codigoCubo) filasCubo.set(`${cubo}|${codigoCubo}`, r);
+			if (!cubo && dev.clave.startsWith('recargo:')) {
+				filasOtros.set(dev.clave.slice('recargo:'.length) as CodigoRecargo, r);
+			}
+
 			const ref = refDeConcepto(dev.clave, reparto);
+			const fHorasCubo = codigoCubo
+				? formulaHoras(
+						codigoCubo,
+						diasDelCubo.map((d) => COL.DIA0 + d.indice)
+					)
+				: null;
 			campo(r, colDevCant, SPAN.DESP_CANT, {
-				...(ref?.horas ? { f: `=${ref.horas}` } : { v: dev.cantidad ?? '' }),
+				...(fHorasCubo
+					? { f: fHorasCubo }
+					: ref?.horas
+						? { f: `=${ref.horas}` }
+						: { v: dev.cantidad ?? '' }),
 				s: { ...estilo, ht: HorizontalAlign.CENTER }
 			});
 
@@ -2349,17 +2466,33 @@ function zonaDesprendible(args: {
 			const baseProrrateo =
 				baseSalario ?? (dev.baseMensual != null ? String(dev.baseMensual) : null);
 			const celdaCant = `${L(colDevCant)}${r + 1}`;
+			/**
+			 * Con TOPE la fórmula lleva el `IF` dentro.
+			 *
+			 * La nivelación de salario se prorratea hasta los 16 días de
+			 * Villanueva y desde los 17 se paga entera. Sin el `IF`, teclear 20
+			 * enseñaba dos tercios del bono y el servidor guardaba el completo:
+			 * la hoja y el desprendible decían cifras distintas del mismo
+			 * concepto hasta que alguien comparaba los dos papeles.
+			 */
 			const formulaValor =
 				!ref?.valor && baseProrrateo && dev.baseMensual != null
-					? `=ROUND(${baseProrrateo}/30*${celdaCant},0)`
+					? dev.umbralCompleto
+						? `=ROUND(IF(${celdaCant}>=${dev.umbralCompleto},${baseProrrateo},${baseProrrateo}/30*${celdaCant}),0)`
+						: `=ROUND(${baseProrrateo}/30*${celdaCant},0)`
 					: null;
 
+			const fValorCubo = codigoCubo
+				? formulaImporte(codigoCubo, gruposPorTramo(hoja, codigoCubo, diasDelCubo))
+				: null;
 			campo(r, colDevValor, SPAN.DESP_VALOR, {
-				...(ref?.valor
-					? { f: `=${ref.valor}` }
-					: formulaValor
-						? { f: formulaValor }
-						: { v: Math.round(dev.valor) }),
+				...(fValorCubo
+					? { f: fValorCubo }
+					: ref?.valor
+						? { f: `=${ref.valor}` }
+						: formulaValor
+							? { f: formulaValor }
+							: { v: Math.round(dev.valor) }),
 				s: {
 					// Con fórmula la celda YA NO SE TECLEA: sale de la cantidad de
 					// al lado y del básico de arriba. Pintarla de editable invitaba
@@ -2372,7 +2505,17 @@ function zonaDesprendible(args: {
 			// Solo se registra binding en lo que de verdad se teclea. El resto
 			// queda sin entrada y el permiso de celda lo bloquea por defecto.
 			if (dev.editable && hoja.liquidacionId) {
-				const campoValor = campoDeConcepto(dev.clave);
+				/**
+				 * CON FÓRMULA NO SE REGISTRA BINDING.
+				 *
+				 * La celda ya sale de la cantidad de al lado, y el importe es
+				 * derivado: el recálculo del servidor lo reescribe desde los días
+				 * en cuanto se guarda cualquier cosa. Registrarlo dejaba pasar un
+				 * número tecleado que se perdía en el viaje siguiente, sin decir
+				 * que se había perdido. Es la NIVELACIÓN DE SALARIO: los días son
+				 * el dato, el bono su consecuencia.
+				 */
+				const campoValor = formulaValor ? null : campoDeConcepto(dev.clave);
 				if (campoValor) {
 					bind(r, colDevValor, {
 						entityType: 'liquidacion',
@@ -2492,14 +2635,21 @@ function zonaDesprendible(args: {
 	 * línea —que sigue enseñando lo tecleado— en vez de desaparecer restando
 	 * de otra cosa.
 	 *
-	 * El desprendible reparte el sobrante entre PAREX y GEOPARK, que en el
-	 * canvas no son bolsas aparte: aquí las siete líneas de recargo son todas
-	 * las empresas juntas.
+	 * La disponibilidad se descuenta SOLO de OTROS. PAREX y GEOPARK tienen sus
+	 * propios bloques más abajo y su total es el suyo entero: la bolsa de
+	 * standby es del periodo, no de un cliente, y el papel la descuenta también
+	 * de un único sitio.
 	 */
-	/// Última línea de recargo: la de encima de DISPONIBILIDAD, o la última
-	/// del bloque si no la hay. En 1-indexado, que es como se escriben las
+	/// Última línea de recargo de OTROS: la de encima de DISPONIBILIDAD. Sin
+	/// ella —snapshots viejos—, la de encima del primer bloque de cliente, o la
+	/// última del desprendible. En 1-indexado, que es como se escriben las
 	/// fórmulas.
-	const ultimoRecargo = filaDisponibilidad >= 0 ? filaDisponibilidad : ultimaFila + 1;
+	const ultimoRecargo =
+		filaDisponibilidad >= 0
+			? filaDisponibilidad
+			: bloquesCliente.length
+				? bloquesCliente[0].rotulo
+				: ultimaFila + 1;
 	const hayRecargos = marcaOtros >= 0 && ultimoRecargo >= marcaOtros + 2;
 	const rangoOtros = hayRecargos
 		? `SUM(${L(colDevValor)}${marcaOtros + 2}:${L(colDevValor)}${ultimoRecargo})`
@@ -2521,16 +2671,25 @@ function zonaDesprendible(args: {
 	 * La fórmula es viva, como los totales: ajustar unas horas mueve el
 	 * subtotal sin esperar al servidor.
 	 */
-	if (marcaOtros >= 0 && ultimaFila > marcaOtros) {
-		const desde = marcaOtros + 2; // +1 por la fila del rótulo, +1 por ser 1-indexado
-		const hasta = ultimaFila + 1;
-		campo(marcaOtros + 1, colDedConcepto, SPAN.DESP_DED_CONCEPTO, {
-			v: 'TOTAL OTROS',
+	/**
+	 * Subtotal en la banda de deducciones, fusionado a lo alto de SUS filas.
+	 *
+	 * El de OTROS llega hasta donde empieza el primer bloque de cliente, no
+	 * hasta el final del desprendible: si barriera hasta abajo se comería las
+	 * filas de PAREX y GEOPARK y diría ser el total de unas líneas que no son
+	 * suyas.
+	 */
+	const subtotal = (rotulo: string, desde: number, hasta: number, formula: string) => {
+		if (desde < 0 || hasta < desde) return;
+		campo(desde, colDedConcepto, SPAN.DESP_DED_CONCEPTO, {
+			v: rotulo,
 			s: { ...base(), fs: 9, bl: 1, vt: VerticalAlign.MIDDLE }
 		});
-		merge(marcaOtros + 1, colDedConcepto, ultimaFila, colDedConcepto + SPAN.DESP_DED_CONCEPTO - 1);
-		campo(marcaOtros + 1, colDedValor, SPAN.DESP_VALOR, {
-			f: `=${sumaOtros}`,
+		if (hasta > desde) {
+			merge(desde, colDedConcepto, hasta, colDedConcepto + SPAN.DESP_DED_CONCEPTO - 1);
+		}
+		campo(desde, colDedValor, SPAN.DESP_VALOR, {
+			f: formula,
 			s: {
 				...derivada(),
 				ht: HorizontalAlign.RIGHT,
@@ -2539,7 +2698,59 @@ function zonaDesprendible(args: {
 				n: { pattern: FMT_COP }
 			}
 		});
-		merge(marcaOtros + 1, colDedValor, ultimaFila, colDedValor + SPAN.DESP_VALOR - 1);
+		if (hasta > desde) {
+			merge(desde, colDedValor, hasta, colDedValor + SPAN.DESP_VALOR - 1);
+		}
+	};
+
+	if (marcaOtros >= 0 && ultimaFila > marcaOtros) {
+		/// El bloque de OTROS acaba donde empieza el primero de cliente.
+		const finBloqueOtros = bloquesCliente.length ? bloquesCliente[0].rotulo - 1 : ultimaFila;
+		subtotal('TOTAL OTROS', marcaOtros + 1, finBloqueOtros, `=${sumaOtros}`);
+	}
+
+	for (const b of bloquesCliente) {
+		if (b.primera < 0) continue;
+		subtotal(
+			`TOTAL ${b.nombre.replace(/^RECARGOS\s+/i, '')}`,
+			b.rotulo + 1,
+			b.ultima,
+			`=SUM(${L(colDevValor)}${b.primera + 1}:${L(colDevValor)}${b.ultima + 1})`
+		);
+	}
+
+	/**
+	 * OTROS ES EL RESTO, también en la hoja.
+	 *
+	 * Sus líneas apuntan al reparto, que suma TODAS las empresas. Ahora PAREX y
+	 * GEOPARK tienen bloque propio unas filas más abajo, así que la línea de
+	 * OTROS tiene que restarlos o las mismas horas se contarían dos veces y el
+	 * TOTAL DEVENGADO saldría inflado en esa cifra.
+	 *
+	 * Se reescribe AQUÍ y no dentro del bucle porque las filas de los bloques
+	 * de cliente todavía no existían cuando se pintó OTROS. Restar celdas y no
+	 * números mantiene viva toda la cadena: corregir una hora de PAREX baja su
+	 * bloque, sube el de OTROS en lo mismo y deja el devengado quieto.
+	 */
+	for (const [codigo, fila] of filasOtros) {
+		const restas = [...diasPorCubo.keys()]
+			.map((cubo) => filasCubo.get(`${cubo}|${codigo}`))
+			.filter((f): f is number => f !== undefined);
+		if (!restas.length) continue;
+		const menos = (col: number) => restas.map((f) => `-${L(col)}${f + 1}`).join('');
+		const ref = refDeConcepto(`recargo:${codigo}`, reparto);
+		if (ref?.horas) {
+			set(fila, colDevCant, {
+				f: `=${ref.horas}${menos(colDevCant)}`,
+				s: { ...derivada(), ht: HorizontalAlign.CENTER }
+			});
+		}
+		if (ref?.valor) {
+			set(fila, colDevValor, {
+				f: `=${ref.valor}${menos(colDevValor)}`,
+				s: { ...derivada(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } }
+			});
+		}
 	}
 
 	// Totales con fórmula viva: si se edita un concepto, el neto se mueve sin
