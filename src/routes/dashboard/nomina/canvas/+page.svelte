@@ -282,14 +282,22 @@
 	 * Son los que entran en el cálculo del servidor más allá de su propia
 	 * celda: el básico y los días prorrateados arrastran deducciones y neto.
 	 */
-	const CAMPOS_QUE_REHACEN_LA_HOJA = new Set([
-		'salario_basico',
-		'dias_laborados',
-		'dias_laborados_villanueva',
-		/// Decide qué parte de la nivelación cotiza: mueve la base prestacional,
-		/// la salud, la pensión y el neto, y ninguno de los cuatro es fórmula.
-		'dias_ajuste_deducciones'
-	]);
+	const CAMPOS_QUE_REHACEN_LA_HOJA = new Set(['salario_basico', 'dias_laborados']);
+	/**
+	 * `dias_laborados_villanueva` y `dias_ajuste_deducciones` ESTUVIERON AQUÍ.
+	 *
+	 * Remontar el libro por mover un número de días hacía parpadear el canvas y
+	 * perder el sitio, justo mientras se está tecleando. Salieron cuando la
+	 * BASE PRESTACIONAL, la salud y la pensión dejaron de ser cifras del
+	 * servidor y pasaron a ser fórmulas sobre esas mismas celdas: ahora la hoja
+	 * se mueve sola y el servidor confirma en el siguiente viaje.
+	 *
+	 * Las tres casillas de ajuste tampoco están, por lo mismo.
+	 *
+	 * `salario_basico` y `dias_laborados` SÍ se quedan: arrastran el salario
+	 * devengado, el auxilio, los bonos prorrateados y el reparto, que son más
+	 * celdas de las que una fórmula puede cubrir sin duplicar medio cálculo.
+	 */
 
 	const REBOTE_RECALCULO_MS = 800;
 	/// Tope de esperas por patches en vuelo (~8 s). Ver `pedirRecalculo`.

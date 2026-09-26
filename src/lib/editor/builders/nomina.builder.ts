@@ -281,6 +281,18 @@ export interface HojaNominaDTO {
 	aplicaAjusteParex?: boolean;
 	aplicaAjusteGeopark?: boolean;
 	ajusteRecargosCompletos?: boolean;
+	/**
+	 * Lo que la hoja necesita para calcular la BASE PRESTACIONAL sola.
+	 *
+	 * La base y las dos deducciones son fórmulas sobre los días de nivelación,
+	 * los días que van a la base y las tres casillas. Ausentes en snapshots
+	 * viejos, donde las tres celdas se quedan con la cifra del servidor.
+	 */
+	salarioVillanueva?: number;
+	porcentajeSalud?: number;
+	porcentajePension?: number;
+	descontarSaludSalario?: boolean;
+	descontarPensionSalario?: boolean;
 	valorHora: number;
 	horasMensualesBase: number;
 	totalHorasMes: number;
@@ -2404,6 +2416,18 @@ function zonaDesprendible(args: {
 	const filasOtros = new Map<CodigoRecargo, number>();
 	const filasCubo = new Map<string, number>();
 	/**
+	 * Celdas de las que cuelga la BASE PRESTACIONAL.
+	 *
+	 * Se apuntan mientras se pinta: la fórmula no se puede escribir hasta
+	 * conocer las filas de los recargos y de las casillas, que van más abajo.
+	 */
+	let celdaSalarioDevengado: string | null = null;
+	let celdaVacaciones: string | null = null;
+	let celdaDiasVillanueva: string | null = null;
+	let celdaDiasBase: string | null = null;
+	let filaSalud = -1;
+	let filaPension = -1;
+	/**
 	 * Primera y última fila del bloque de bonos y pernotes.
 	 *
 	 * Se apuntan mientras se pinta y no se calculan aparte: el bloque no tiene
@@ -2500,6 +2524,10 @@ function zonaDesprendible(args: {
 			if (!cubo && dev.clave.startsWith('recargo:')) {
 				filasOtros.set(dev.clave.slice('recargo:'.length) as CodigoRecargo, r);
 			}
+
+			if (dev.clave === 'salario') celdaSalarioDevengado = `${L(colDevValor)}${r + 1}`;
+			if (dev.clave === 'vacaciones') celdaVacaciones = `${L(colDevValor)}${r + 1}`;
+			if (dev.clave === 'ajuste_salarial') celdaDiasVillanueva = `${L(colDevCant)}${r + 1}`;
 
 			const ref = refDeConcepto(dev.clave, reparto);
 			const fHorasCubo = codigoCubo
@@ -2624,6 +2652,10 @@ function zonaDesprendible(args: {
 			 * sobre la base y el servidor las manda con `editable: false`.
 			 */
 			const campoDed = ded.editable && hoja.liquidacionId ? campoDeConcepto(ded.clave) : null;
+			/// Se apuntan para reescribirlas como porcentaje sobre la base al
+			/// cerrar la zona: la base todavía no existe cuando se pintan.
+			if (ded.clave === 'salud') filaSalud = r;
+			if (ded.clave === 'pension') filaPension = r;
 			campo(r, colDedConcepto, SPAN.DESP_DED_CONCEPTO, {
 				v: ded.nombre,
 				s: { ...base(), fs: 9 }
@@ -2907,6 +2939,10 @@ function zonaDesprendible(args: {
 		v: 'BASE PRESTACIONAL',
 		s: etiqueta()
 	});
+	/// La FÓRMULA se escribe al cerrar la zona: necesita la fila de los días
+	/// que van a la base y las tres casillas, que van más abajo.
+	const filaBase = r;
+	const celdaBase = `${L(colDevValor)}${r + 1}`;
 	campo(r, colDevValor, SPAN.DESP_VALOR, {
 		v: Math.round(hoja.totales.baseCalculo ?? 0),
 		s: { ...derivada(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } }
@@ -2931,6 +2967,7 @@ function zonaDesprendible(args: {
 			v: 'DÍAS DE NIVELACIÓN A LA BASE (vacío = todos)',
 			s: { ...base(), fs: 9, cl: { rgb: MUTED } }
 		});
+		celdaDiasBase = `${L(colDevValor)}${r + 1}`;
 		campo(r, colDevValor, SPAN.DESP_VALOR, {
 			v: hoja.diasAjusteDeducciones ?? '',
 			s: { ...editable(), ht: HorizontalAlign.CENTER }
@@ -3094,6 +3131,114 @@ function zonaDesprendible(args: {
 			});
 			r++;
 		}
+	}
+
+	/**
+	 * BASE PRESTACIONAL, VIVA.
+	 *
+	 * Era la cifra que mandó el servidor, así que cambiar los días de
+	 * nivelación o los que van a la base obligaba a releer el periodo entero y
+	 * REMONTAR EL LIBRO: el canvas parpadeaba y se perdía el sitio, por mover
+	 * un número. Ahora la hoja la calcula sola, como ya hacían el salario, el
+	 * subtotal de OTROS, el devengado y el neto; el servidor recalcula igual y
+	 * confirma en el siguiente viaje.
+	 *
+	 * Reproduce `baseIbc` de `liquidar.ts`, y SOLO esa suma:
+	 *
+	 *     salario devengado + vacaciones + parte del ajuste + recargos que cotizan
+	 *
+	 * · La parte del ajuste es la diferencia a nivelar —«Salario villanueva»
+	 *   menos el básico, nunca negativa— prorrateada por los días que se le
+	 *   manden a la base. VACÍO NO ES CERO: vacío vale por el mes entero.
+	 *   Y solo cuenta si hay días de Villanueva, que es el interruptor del bono.
+	 * · Los recargos entran al 100 % según las tres casillas: el «completo» se
+	 *   lleva TODOS los del corte y manda sobre los otros dos.
+	 *
+	 * Se suman las filas BRUTAS de cada bloque y no sus TOTALES, porque el
+	 * total ya lleva restada la disponibilidad imputada y el IBC se calcula
+	 * antes de eso.
+	 *
+	 * Sin los parámetros —un snapshot viejo— se queda la cifra del servidor.
+	 */
+	const rangoValor = (desde: number, hasta: number) =>
+		`SUM(${L(colDevValor)}${desde + 1}:${L(colDevValor)}${hasta + 1})`;
+	const filasOtrosOrdenadas = [...filasOtros.values()].sort((a, b) => a - b);
+	const sumaOtrosBruta = filasOtrosOrdenadas.length
+		? rangoValor(filasOtrosOrdenadas[0], filasOtrosOrdenadas[filasOtrosOrdenadas.length - 1])
+		: '0';
+	const sumaDeCubo = (nombre: string) => {
+		const b = bloquesCliente.find((x) => x.nombre.toUpperCase().includes(nombre));
+		return b && b.primera >= 0 ? rangoValor(b.primera, b.ultima) : '0';
+	};
+	const sumaParex = sumaDeCubo('PAREX');
+	const sumaGeopark = sumaDeCubo('GEOPARK');
+	const colCasilla = L(c0 + SPAN.VAC_ROTULO);
+	const casilla = (i: number) =>
+		filaCheckbox ? `${colCasilla}${filaCheckbox.desde + 1 + i}` : null;
+	const [cbParex, cbGeopark, cbCompleto] = [casilla(0), casilla(1), casilla(2)];
+
+	let formulaBase: string | null = null;
+	if (
+		celdaSalarioDevengado &&
+		celdaSalarioBasico &&
+		celdaDiasVillanueva &&
+		celdaDiasBase &&
+		hoja.salarioVillanueva != null
+	) {
+		const ajusteCompleto = `MAX(0,${hoja.salarioVillanueva}-${celdaSalarioBasico})`;
+		const parteAjuste =
+			`IF(${celdaDiasVillanueva}>0,` +
+			`IF(${celdaDiasBase}="",${ajusteCompleto},${ajusteCompleto}/30*${celdaDiasBase}),0)`;
+		const todos = `(${sumaOtrosBruta}+${sumaParex}+${sumaGeopark})`;
+		const porCasillas =
+			cbParex && cbGeopark && cbCompleto
+				? `IF(${cbCompleto}="${CHECKBOX_SI}",${todos},IF(${cbParex}="${CHECKBOX_SI}",${sumaParex},0))` +
+					`+IF(${cbGeopark}="${CHECKBOX_SI}",${sumaGeopark},0)`
+				: '0';
+		const ibc = `${celdaSalarioDevengado}+${celdaVacaciones ?? 0}+${parteAjuste}+${porCasillas}`;
+		/// Las dos palancas de «descontar sobre el salario» son fijas por
+		/// liquidación —no se tocan en la hoja—, así que se resuelven aquí.
+		const soloSalud = hoja.descontarSaludSalario === true;
+		const soloPension = hoja.descontarPensionSalario === true;
+		const cuerpo =
+			soloSalud && soloPension
+				? celdaSalarioBasico
+				: soloSalud || soloPension
+					? `MAX(${celdaSalarioBasico},${ibc})`
+					: ibc;
+		formulaBase = `=ROUND(${cuerpo},0)`;
+	}
+
+	if (formulaBase) {
+		set(filaBase, colDevValor, {
+			f: formulaBase,
+			s: { ...derivada(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } }
+		});
+	}
+
+	/**
+	 * SALUD y PENSIÓN, colgadas de la base.
+	 *
+	 * Cada una lleva su propio interruptor: una puede ir por el IBC y la otra
+	 * por el básico pelado. Como los dos son fijos por liquidación, se resuelve
+	 * aquí cuál es su base y la celda solo aplica el porcentaje.
+	 */
+	if (formulaBase && hoja.porcentajeSalud != null && hoja.porcentajePension != null) {
+		const deduccion = (fila: number, pct: number, sobreSalario: boolean) => {
+			if (fila < 0) return;
+			const sobre = sobreSalario ? celdaSalarioBasico : celdaBase;
+			set(fila, colDedValor, {
+				f: `=ROUND(${pct}/100*${sobre},0)`,
+				s: {
+					...derivada(),
+					ht: HorizontalAlign.RIGHT,
+					n: { pattern: FMT_COP },
+					cl: { rgb: '#B91C1C' }
+				}
+			});
+		};
+		deduccion(filaSalud, hoja.porcentajeSalud, hoja.descontarSaludSalario === true);
+		deduccion(filaPension, hoja.porcentajePension, hoja.descontarPensionSalario === true);
 	}
 
 	return { fin: r, checkbox: filaCheckbox };
