@@ -55,21 +55,33 @@ export interface CellChangeNominaOptions {
 }
 
 /**
- * Campos que se guardan como TEXTO. El resto son números y se leen con
- * `numeroDeCelda()`.
- */
-const CAMPOS_TEXTO = new Set(['observaciones']);
-
-/**
- * Campos que se marcan con una CASILLA y viajan como texto.
+ * Campos que NO son un número y viajan como TEXTO.
  *
- * El checkbox de Univer no guarda un booleano: guarda la cadena con la que se
- * construyó su regla —`SÍ` / `NO`—, y es esa cadena la que hay que mandar. Sin
- * esta lista caían en la rama numérica, `numeroDeCelda('SÍ')` daba `null` y la
- * marca se rechazaba con un «no es un número» que no venía a cuento. El backend
- * los valida como `flag` y acepta además `SI`, `S`, `X`, `1` y `TRUE`.
+ * El resto se lee con `numeroDeCelda()`, que devuelve `null` —y no cero—
+ * cuando lo que hay no es una cifra, y entonces la celda se rechaza con un
+ * «no es un número». Eso es lo correcto para un importe y un desastre para
+ * todo lo demás: una FECHA (`2026-09-01`) y una CASILLA (`SÍ`) caían ahí y no
+ * se guardaban nunca, sin más rastro que un aviso que no venía a cuento.
+ *
+ * Las fechas de vacaciones llevaban así desde que la zona existe.
+ *
+ * Son tres familias:
+ *   · texto libre — `observaciones`;
+ *   · fechas `AAAA-MM-DD`, que el backend valida como `fecha` y que van como
+ *     texto a propósito: con formato de fecha de Univer la celda devolvería un
+ *     serial;
+ *   · casillas, cuyo valor es la cadena con la que se construyó la regla del
+ *     checkbox (`SÍ` / `NO`), no un booleano.
  */
-const CAMPOS_CASILLA = new Set([
+const CAMPOS_TEXTO = new Set([
+	'observaciones',
+
+	'periodo_start_vacaciones',
+	'periodo_end_vacaciones',
+	'periodo_start_licencia',
+	'periodo_end_licencia',
+
+	'aplica_licencia',
 	'aplica_ajuste_parex',
 	'aplica_ajuste_geopark',
 	'ajuste_parex_recargos_completos'
@@ -121,7 +133,7 @@ export function attachCellChangeNomina(opts: CellChangeNominaOptions): () => voi
 			const crudo = leerCrudo(fUniver, unitId, sheetId, row, column);
 
 			let valor: number | string | null;
-			if (CAMPOS_TEXTO.has(binding.field) || CAMPOS_CASILLA.has(binding.field)) {
+			if (CAMPOS_TEXTO.has(binding.field)) {
 				valor = crudo === null || crudo === undefined ? '' : String(crudo);
 			} else {
 				// `numeroDeCelda` devuelve `null` —y no cero— cuando lo que
