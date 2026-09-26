@@ -79,6 +79,10 @@ export function createNominaEngine(opts: NominaEngineOptions): NominaEngineConte
 	const engineOpts: EngineOptions = {
 		container: opts.container,
 		workbookData: workbook,
+		/// Para los interruptores del ajuste de recargos: sin el preset no
+		/// existe `newDataValidation` y las casillas se quedan como texto
+		/// SÍ/NO. Es opt-in porque el plugin añade su propia UI.
+		dataValidation: true,
 		footer: {
 			// Con una hoja por conductor, la barra de pestañas ES la navegación.
 			sheetBar: true,

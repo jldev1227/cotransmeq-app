@@ -3059,7 +3059,10 @@ function zonaDesprendible(args: {
 		];
 		for (const [rotulo, marcado, campoBd] of interruptores) {
 			campo(r, c0, SPAN.VAC_ROTULO, { v: rotulo, s: { ...base(), fs: 9 } });
-			campo(r, c0 + SPAN.VAC_ROTULO, SPAN.VAC_VALOR, {
+			/// SIN COMBINAR: la regla de validación se cuelga de una columna, y
+			/// sobre una celda combinada el checkbox no se dibuja. Las dos
+			/// columnas que quedan a la derecha se dejan vacías a propósito.
+			campo(r, c0 + SPAN.VAC_ROTULO, 1, {
 				v: marcado ? CHECKBOX_SI : CHECKBOX_NO,
 				s: { ...editable(), ht: HorizontalAlign.CENTER }
 			});

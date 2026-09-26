@@ -60,6 +60,21 @@ export interface CellChangeNominaOptions {
  */
 const CAMPOS_TEXTO = new Set(['observaciones']);
 
+/**
+ * Campos que se marcan con una CASILLA y viajan como texto.
+ *
+ * El checkbox de Univer no guarda un booleano: guarda la cadena con la que se
+ * construyó su regla —`SÍ` / `NO`—, y es esa cadena la que hay que mandar. Sin
+ * esta lista caían en la rama numérica, `numeroDeCelda('SÍ')` daba `null` y la
+ * marca se rechazaba con un «no es un número» que no venía a cuento. El backend
+ * los valida como `flag` y acepta además `SI`, `S`, `X`, `1` y `TRUE`.
+ */
+const CAMPOS_CASILLA = new Set([
+	'aplica_ajuste_parex',
+	'aplica_ajuste_geopark',
+	'ajuste_parex_recargos_completos'
+]);
+
 export function attachCellChangeNomina(opts: CellChangeNominaOptions): () => void {
 	const { fUniver, unitId, onPatch } = opts;
 
@@ -94,7 +109,7 @@ export function attachCellChangeNomina(opts: CellChangeNominaOptions): () => voi
 			const crudo = leerCrudo(fUniver, unitId, sheetId, row, column);
 
 			let valor: number | string | null;
-			if (CAMPOS_TEXTO.has(binding.field)) {
+			if (CAMPOS_TEXTO.has(binding.field) || CAMPOS_CASILLA.has(binding.field)) {
 				valor = crudo === null || crudo === undefined ? '' : String(crudo);
 			} else {
 				// `numeroDeCelda` devuelve `null` —y no cero— cuando lo que
