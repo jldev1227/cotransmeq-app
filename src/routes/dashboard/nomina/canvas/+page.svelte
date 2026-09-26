@@ -285,7 +285,10 @@
 	const CAMPOS_QUE_REHACEN_LA_HOJA = new Set([
 		'salario_basico',
 		'dias_laborados',
-		'dias_laborados_villanueva'
+		'dias_laborados_villanueva',
+		/// Decide qué parte de la nivelación cotiza: mueve la base prestacional,
+		/// la salud, la pensión y el neto, y ninguno de los cuatro es fórmula.
+		'dias_ajuste_deducciones'
 	]);
 
 	const REBOTE_RECALCULO_MS = 800;

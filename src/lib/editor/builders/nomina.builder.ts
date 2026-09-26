@@ -262,6 +262,14 @@ export interface HojaNominaDTO {
 	salarioBasicoDesprendible?: number;
 	/** `true` = lo fijó esta liquidación; `false` = viene del conductor. */
 	salarioBasicoFijado?: boolean;
+	/**
+	 * Días de la NIVELACIÓN DE SALARIO que entran en la base prestacional.
+	 *
+	 * `null` es «sin decidir» y vale por el ajuste ENTERO del mes; `0` es una
+	 * decisión: nada del bono cotiza. Ausente en snapshots viejos, donde la
+	 * celda no existía y la base siempre llevaba el ajuste completo.
+	 */
+	diasAjusteDeducciones?: number | null;
 	valorHora: number;
 	horasMensualesBase: number;
 	totalHorasMes: number;
@@ -2789,6 +2797,29 @@ function zonaDesprendible(args: {
 	const filaTotales = r;
 	r++;
 
+	/**
+	 * BASE PRESTACIONAL, con los DÍAS que se le mandan de la nivelación.
+	 *
+	 * Cuánto del bono de nivelación cotiza varía por persona y por mes: a veces
+	 * los 30 días, a veces ninguno. La columna que lo decide
+	 * —`dias_ajuste_deducciones`— existía y solo la enseñaba el formulario de
+	 * liquidaciones, así que desde el canvas la base siempre se llevaba el
+	 * ajuste entero y había que salir a otra pantalla para corregirlo.
+	 *
+	 * Va en la columna CANT. de esta misma fila y no en una tabla aparte: es el
+	 * mismo par «cantidad → valor» de todas las líneas de arriba, y deja los
+	 * días pegados a la cifra que explican en vez de a tres filas de distancia.
+	 *
+	 * VACÍO NO ES CERO. Vacío es «sin decidir» y vale por el ajuste completo
+	 * del mes; un 0 tecleado dice que el bono no cotiza. El patch conserva esa
+	 * diferencia —es el único campo que manda `null` en vez de 0 al borrarlo—,
+	 * así que la celda se deja en blanco cuando el campo es nulo.
+	 *
+	 * El importe NO es fórmula: la base mezcla salario devengado, vacaciones,
+	 * la fracción del ajuste y los recargos de PAREX/Geopark según sus
+	 * interruptores. Se recalcula en el servidor, y por eso este campo rehace
+	 * la hoja al guardarse.
+	 */
 	campo(r, c0, SPAN.DESP_CONCEPTO + SPAN.DESP_CANT, {
 		v: 'BASE PRESTACIONAL',
 		s: etiqueta()
@@ -2798,6 +2829,37 @@ function zonaDesprendible(args: {
 		s: { ...derivada(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } }
 	});
 	r++;
+
+	if (hoja.liquidacionId) {
+		/**
+		 * FILA PROPIA Y CON RÓTULO, no una celda suelta.
+		 *
+		 * Estuvo en la columna CANT. de BASE PRESTACIONAL, que es donde el resto
+		 * del desprendible pone las cantidades. Pero esa celda está VACÍA
+		 * mientras nadie decide —vacío es «todos los días», que es el caso
+		 * normal—, y una celda en blanco sin rótulo al lado de un total no se
+		 * lee como un campo: se lee como un hueco. No se encontraba.
+		 *
+		 * El rótulo lleva la regla dentro porque es la que se olvida: VACÍO NO
+		 * ES CERO. Vacío vale por el ajuste entero del mes; un 0 tecleado dice
+		 * que el bono no cotiza, y son dos decisiones distintas.
+		 */
+		campo(r, c0, SPAN.DESP_CONCEPTO + SPAN.DESP_CANT, {
+			v: 'DÍAS DE NIVELACIÓN A LA BASE (vacío = todos)',
+			s: { ...base(), fs: 9, cl: { rgb: MUTED } }
+		});
+		campo(r, colDevValor, SPAN.DESP_VALOR, {
+			v: hoja.diasAjusteDeducciones ?? '',
+			s: { ...editable(), ht: HorizontalAlign.CENTER }
+		});
+		bind(r, colDevValor, {
+			entityType: 'liquidacion',
+			entityId: hoja.liquidacionId,
+			field: 'dias_ajuste_deducciones',
+			conductorId: hoja.conductorId
+		});
+		r++;
+	}
 
 	campo(r, c0, SPAN.DESP_CONCEPTO + SPAN.DESP_CANT, {
 		v: 'NETO A PAGAR',
