@@ -307,6 +307,20 @@ export interface HojaNominaDTO {
 		salarioBase: number;
 		salarioHeredado: boolean;
 	};
+	/**
+	 * Licencia de maternidad o paternidad: su interruptor y sus dos fechas.
+	 *
+	 * Los días salen de restarlas, con el de inicio incluido, y el importe del
+	 * básico: por eso ninguno de los dos se teclea. Ausente en payloads viejos,
+	 * donde el bloque no se pinta.
+	 */
+	licencia?: {
+		aplica: boolean;
+		desde: string | null;
+		hasta: string | null;
+		dias: number;
+		salarioBase: number;
+	};
 	devengos: ConceptoDTO[];
 	deducciones: ConceptoDTO[];
 	totales: Record<string, number>;
@@ -793,7 +807,9 @@ export interface ResultadoBuild {
 	/** `sheetId → conductorId`, para resolver el destino de un comando. */
 	conductorPorSheetId: Record<string, string>;
 	/// `sheetId → rango de los interruptores`, para colgarles el checkbox.
-	checkboxPorSheetId: Record<string, RangoCheckboxNomina>;
+	/// Varios rangos por hoja: los tres interruptores de ajuste y la casilla
+	/// de la licencia, que están en bloques distintos.
+	checkboxPorSheetId: Record<string, RangoCheckboxNomina[]>;
 }
 
 export function buildNominaWorkbook(dto: PeriodoNominaDTO): ResultadoBuild {
@@ -823,7 +839,7 @@ export function buildNominaWorkbook(dto: PeriodoNominaDTO): ResultadoBuild {
 	const sheetOrder: string[] = [];
 	const sheetIdPorConductor: Record<string, string> = {};
 	/// Lo rellena `construirHoja`: dónde quedaron las tres casillas de ajuste.
-	const checkboxPorSheetId: Record<string, RangoCheckboxNomina> = {};
+	const checkboxPorSheetId: Record<string, RangoCheckboxNomina[]> = {};
 	const conductorPorSheetId: Record<string, string> = {};
 
 	dto.hojas.forEach((hoja, i) => {
@@ -902,7 +918,9 @@ function construirHoja(args: {
 	/// Mapa que rellena esta función: dónde quedaron las casillas de ajuste,
 	/// para que el engine les cuelgue el checkbox. Se pasa en vez de devolverlo
 	/// porque el retorno es la hoja que espera Univer.
-	checkboxPorSheetId: Record<string, RangoCheckboxNomina>;
+	/// Varios rangos por hoja: los tres interruptores de ajuste y la casilla
+	/// de la licencia, que están en bloques distintos.
+	checkboxPorSheetId: Record<string, RangoCheckboxNomina[]>;
 }): Partial<IWorksheetData> {
 	const { dto, hoja, indice, sheetId, unitId, numColumnas, festivos } = args;
 	const dias = dto.periodo.dias;
@@ -946,7 +964,7 @@ function construirHoja(args: {
 	});
 	const finEmpresas = zonaEmpresas({ hoja, set, merge, desdeFila: finConfig + 2 });
 	const reparto = zonaJornada({ dto, hoja, set, merge });
-	const { fin: finDesprendible, checkbox: rangoCheckbox } = zonaDesprendible({
+	const { fin: finDesprendible, checkbox: rangosCheckbox } = zonaDesprendible({
 		hoja,
 		set,
 		merge,
@@ -956,7 +974,7 @@ function construirHoja(args: {
 		celdaSalarioBasico
 	});
 
-	if (rangoCheckbox) args.checkboxPorSheetId[sheetId] = rangoCheckbox;
+	if (rangosCheckbox.length) args.checkboxPorSheetId[sheetId] = rangosCheckbox;
 
 	const rowCount = Math.max(finEmpresas, finDesprendible) + 3;
 
@@ -2326,11 +2344,13 @@ function zonaDesprendible(args: {
 	 * `null` en una hoja sin liquidación, donde no hay celda que teclear.
 	 */
 	celdaSalarioBasico: string | null;
-}): { fin: number; checkbox: RangoCheckboxNomina | null } {
+}): { fin: number; checkbox: RangoCheckboxNomina[] } {
 	const { hoja, set, merge, bind, avisos, reparto, celdaSalarioBasico } = args;
 	/// Rango de las tres casillas de ajuste, para que el engine les cuelgue el
 	/// checkbox de Univer. `null` en una hoja sin liquidación, que no las pinta.
 	let filaCheckbox: RangoCheckboxNomina | null = null;
+	/// Fila de la casilla de licencia, para colgarle también el checkbox.
+	let filaCasillaLicencia = -1;
 	const c0 = ZONA.DESPRENDIBLE_C0;
 	const L = (c: number) => colLetra(c);
 	let r = FILA_INFERIOR;
@@ -2423,6 +2443,8 @@ function zonaDesprendible(args: {
 	 */
 	let celdaSalarioDevengado: string | null = null;
 	let celdaVacaciones: string | null = null;
+	/// La licencia COTIZA: entra en la base prestacional como un devengo más.
+	let celdaLicencia: string | null = null;
 	let celdaDiasVillanueva: string | null = null;
 	let celdaDiasBase: string | null = null;
 	let filaSalud = -1;
@@ -2527,6 +2549,7 @@ function zonaDesprendible(args: {
 
 			if (dev.clave === 'salario') celdaSalarioDevengado = `${L(colDevValor)}${r + 1}`;
 			if (dev.clave === 'vacaciones') celdaVacaciones = `${L(colDevValor)}${r + 1}`;
+			if (dev.clave === 'licencia') celdaLicencia = `${L(colDevValor)}${r + 1}`;
 			if (dev.clave === 'ajuste_salarial') celdaDiasVillanueva = `${L(colDevCant)}${r + 1}`;
 
 			const ref = refDeConcepto(dev.clave, reparto);
@@ -3061,6 +3084,77 @@ function zonaDesprendible(args: {
 	}
 
 	/**
+	 * LICENCIA DE MATERNIDAD O PATERNIDAD.
+	 *
+	 * Debajo de las vacaciones y antes del ajuste de recargos, porque se teclea
+	 * igual que ellas: una casilla y dos fechas. Los DÍAS no se teclean —son la
+	 * resta de las fechas, con el de inicio incluido— y el importe tampoco:
+	 * sale del básico entre 30 por esos días. Dejarlos editables permitiría
+	 * guardar un número que contradiga a las fechas que tiene al lado.
+	 *
+	 * La casilla va ARRIBA del bloque: es lo que decide si la línea aparece en
+	 * el desprendible, y se puede apagar sin borrar las fechas.
+	 *
+	 * El rótulo del devengo —maternidad, paternidad o las dos— lo decide el
+	 * servidor con el género de la ficha; aquí solo se pintan los datos.
+	 */
+	const lic = hoja.licencia;
+	if (lic && hoja.liquidacionId) {
+		r++;
+		campo(r, c0, SPAN.VAC_ROTULO + SPAN.VAC_VALOR, { v: 'LICENCIA', s: cabecera() });
+		r++;
+		filaCasillaLicencia = r;
+		campo(r, c0, SPAN.VAC_ROTULO, {
+			v: 'Aplica licencia',
+			s: { ...base(), fs: 9 }
+		});
+		/// Sin combinar, como las otras casillas: sobre una celda combinada el
+		/// checkbox no se dibuja. Ver `checkbox-si-no.ts`.
+		campo(r, c0 + SPAN.VAC_ROTULO, 1, {
+			v: lic.aplica ? CHECKBOX_SI : CHECKBOX_NO,
+			s: { ...editable(), ht: HorizontalAlign.CENTER }
+		});
+		bind(r, c0 + SPAN.VAC_ROTULO, {
+			entityType: 'liquidacion',
+			entityId: hoja.liquidacionId,
+			field: 'aplica_licencia',
+			conductorId: hoja.conductorId
+		});
+		r++;
+
+		const filaLic = (rotulo: string, valor: string | number, campoBd: string | null) => {
+			campo(r, c0, SPAN.VAC_ROTULO, { v: rotulo, s: { ...base(), fs: 9 } });
+			campo(r, c0 + SPAN.VAC_ROTULO, SPAN.VAC_VALOR, {
+				v: valor,
+				s: {
+					...(campoBd ? editable() : derivada()),
+					ht: campoBd ? HorizontalAlign.RIGHT : HorizontalAlign.CENTER
+				}
+			});
+			if (campoBd) {
+				bind(r, c0 + SPAN.VAC_ROTULO, {
+					entityType: 'liquidacion',
+					entityId: hoja.liquidacionId!,
+					field: campoBd,
+					conductorId: hoja.conductorId
+				});
+			}
+			r++;
+		};
+		/// Las fechas van como TEXTO `AAAA-MM-DD`: con formato de fecha de Univer
+		/// la celda devolvería un serial y el patch lo rechazaría.
+		filaLic('FECHA INICIO', lic.desde ?? '', 'periodo_start_licencia');
+		filaLic('FECHA FIN', lic.hasta ?? '', 'periodo_end_licencia');
+		filaLic('DÍAS', lic.dias || '', null);
+
+		campo(r, c0, SPAN.VAC_ROTULO + SPAN.VAC_VALOR, {
+			v: 'Los días incluyen el de inicio. El valor es el básico ÷ 30 × días, y cotiza.',
+			s: { ...base(), fs: 8, cl: { rgb: '#6B7280' } }
+		});
+		r++;
+	}
+
+	/**
 	 * AJUSTE DE RECARGOS: los tres interruptores, como casillas.
 	 *
 	 * Deciden qué recargos entran en la BASE PRESTACIONAL. Hasta ahora «¿aplica
@@ -3195,7 +3289,9 @@ function zonaDesprendible(args: {
 				? `IF(${cbCompleto}="${CHECKBOX_SI}",${todos},IF(${cbParex}="${CHECKBOX_SI}",${sumaParex},0))` +
 					`+IF(${cbGeopark}="${CHECKBOX_SI}",${sumaGeopark},0)`
 				: '0';
-		const ibc = `${celdaSalarioDevengado}+${celdaVacaciones ?? 0}+${parteAjuste}+${porCasillas}`;
+		const ibc =
+			`${celdaSalarioDevengado}+${celdaVacaciones ?? 0}+${celdaLicencia ?? 0}` +
+			`+${parteAjuste}+${porCasillas}`;
 		/// Las dos palancas de «descontar sobre el salario» son fijas por
 		/// liquidación —no se tocan en la hoja—, así que se resuelven aquí.
 		const soloSalud = hoja.descontarSaludSalario === true;
@@ -3241,7 +3337,18 @@ function zonaDesprendible(args: {
 		deduccion(filaPension, hoja.porcentajePension, hoja.descontarPensionSalario === true);
 	}
 
-	return { fin: r, checkbox: filaCheckbox };
+	/// Los dos bloques con casilla: los tres interruptores de ajuste y la
+	/// licencia. Van juntos para que el engine les cuelgue el checkbox de una.
+	const rangos: RangoCheckboxNomina[] = [];
+	if (filaCheckbox) rangos.push(filaCheckbox);
+	if (filaCasillaLicencia >= 0) {
+		rangos.push({
+			columna: c0 + SPAN.VAC_ROTULO,
+			desde: filaCasillaLicencia,
+			hasta: filaCasillaLicencia
+		});
+	}
+	return { fin: r, checkbox: rangos };
 }
 
 /**

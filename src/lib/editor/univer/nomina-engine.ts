@@ -212,11 +212,13 @@ export function createNominaEngine(opts: NominaEngineOptions): NominaEngineConte
 	 * texto SÍ/NO, que se sigue pudiendo escribir: un checkbox que falta es un
 	 * incordio, no motivo para dejar el canvas sin montar.
 	 */
-	for (const [sheetId, rango] of Object.entries(checkboxPorSheetId)) {
-		colgarCheckboxSiNo(ctx.fUniver, sheetId, [rango.columna], {
-			desde: rango.desde,
-			hasta: rango.hasta
-		});
+	for (const [sheetId, rangos] of Object.entries(checkboxPorSheetId)) {
+		for (const rango of rangos) {
+			colgarCheckboxSiNo(ctx.fUniver, sheetId, [rango.columna], {
+				desde: rango.desde,
+				hasta: rango.hasta
+			});
+		}
 	}
 
 	if (opts.conductorActivo) activarConductor(opts.conductorActivo);
