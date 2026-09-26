@@ -33,6 +33,7 @@ import { clearNominaBindings } from '../business/nomina-cell-binding';
 import { repintando } from './cell-permission-nomina';
 import { suprimirEco } from './apply-remote-patch';
 import { numeroDeCelda } from '../business/numero-de-celda';
+import { colgarCheckboxSiNo } from './checkbox-si-no';
 
 export interface NominaEngineOptions {
 	container: HTMLElement;
@@ -70,7 +71,8 @@ export function createNominaEngine(opts: NominaEngineOptions): NominaEngineConte
 	const unitIdPrevio = `nomina-${opts.periodo.anio}-${opts.periodo.mes}`;
 	clearNominaBindings(unitIdPrevio);
 
-	const { workbook, unitId, sheetIdPorConductor, conductorPorSheetId } = buildNominaWorkbook(
+	const { workbook, unitId, sheetIdPorConductor, conductorPorSheetId, checkboxPorSheetId } =
+		buildNominaWorkbook(
 		opts.periodo
 	);
 
@@ -192,6 +194,26 @@ export function createNominaEngine(opts: NominaEngineOptions): NominaEngineConte
 			return false;
 		}
 	};
+
+	/**
+	 * Los tres interruptores del ajuste de recargos, como casillas.
+	 *
+	 * La celda guarda `SÍ` / `NO` y el checkbox solo cambia cómo se PINTA: el
+	 * clic despacha `SetRangeValuesCommand` con el valor contrario, que es el
+	 * mismo comando que ya interceptan el permiso de celda y el adaptador de
+	 * cambios. Por eso marcar con el ratón persiste por el camino de siempre.
+	 * Ver `checkbox-si-no.ts`.
+	 *
+	 * Si el preset de validación no estuviera cargado, la celda se queda como
+	 * texto SÍ/NO, que se sigue pudiendo escribir: un checkbox que falta es un
+	 * incordio, no motivo para dejar el canvas sin montar.
+	 */
+	for (const [sheetId, rango] of Object.entries(checkboxPorSheetId)) {
+		colgarCheckboxSiNo(ctx.fUniver, sheetId, [rango.columna], {
+			desde: rango.desde,
+			hasta: rango.hasta
+		});
+	}
 
 	if (opts.conductorActivo) activarConductor(opts.conductorActivo);
 

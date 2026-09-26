@@ -48,6 +48,7 @@ import {
 	TOTALES_BG
 } from './historial-comun';
 import { rellenarBordesVacios } from './relleno-bordes';
+import { CHECKBOX_SI, CHECKBOX_NO } from '../univer/checkbox-si-no';
 import { setNominaBinding, type NominaBinding } from '../business/nomina-cell-binding';
 import { obtenerFestivosCompletos } from '$lib/utils/festivosColombia';
 
@@ -270,6 +271,16 @@ export interface HojaNominaDTO {
 	 * celda no existía y la base siempre llevaba el ajuste completo.
 	 */
 	diasAjusteDeducciones?: number | null;
+	/**
+	 * Los tres interruptores del ajuste de recargos, que se marcan en la hoja.
+	 *
+	 * Deciden qué recargos entran en la base prestacional: el de PAREX, el de
+	 * GEOPARK, o TODOS los del corte con el completo. Ausentes en snapshots
+	 * anteriores a que la hoja los dejara marcar, donde salen sin marcar.
+	 */
+	aplicaAjusteParex?: boolean;
+	aplicaAjusteGeopark?: boolean;
+	ajusteRecargosCompletos?: boolean;
 	valorHora: number;
 	horasMensualesBase: number;
 	totalHorasMes: number;
@@ -755,6 +766,13 @@ export function nominaSheetId(conductorId: string): string {
 	return `nomina-${conductorId}`;
 }
 
+/** Dónde cuelga el engine el checkbox de los interruptores de ajuste. */
+export interface RangoCheckboxNomina {
+	columna: number;
+	desde: number;
+	hasta: number;
+}
+
 export interface ResultadoBuild {
 	workbook: IWorkbookData;
 	unitId: string;
@@ -762,6 +780,8 @@ export interface ResultadoBuild {
 	sheetIdPorConductor: Record<string, string>;
 	/** `sheetId → conductorId`, para resolver el destino de un comando. */
 	conductorPorSheetId: Record<string, string>;
+	/// `sheetId → rango de los interruptores`, para colgarles el checkbox.
+	checkboxPorSheetId: Record<string, RangoCheckboxNomina>;
 }
 
 export function buildNominaWorkbook(dto: PeriodoNominaDTO): ResultadoBuild {
@@ -790,6 +810,8 @@ export function buildNominaWorkbook(dto: PeriodoNominaDTO): ResultadoBuild {
 	const sheets: Record<string, Partial<IWorksheetData>> = {};
 	const sheetOrder: string[] = [];
 	const sheetIdPorConductor: Record<string, string> = {};
+	/// Lo rellena `construirHoja`: dónde quedaron las tres casillas de ajuste.
+	const checkboxPorSheetId: Record<string, RangoCheckboxNomina> = {};
 	const conductorPorSheetId: Record<string, string> = {};
 
 	dto.hojas.forEach((hoja, i) => {
@@ -804,7 +826,8 @@ export function buildNominaWorkbook(dto: PeriodoNominaDTO): ResultadoBuild {
 			sheetId,
 			unitId,
 			numColumnas,
-			festivos
+			festivos,
+			checkboxPorSheetId
 		});
 	});
 
@@ -828,6 +851,7 @@ export function buildNominaWorkbook(dto: PeriodoNominaDTO): ResultadoBuild {
 		} as IWorkbookData,
 		unitId,
 		sheetIdPorConductor,
+		checkboxPorSheetId,
 		conductorPorSheetId
 	};
 }
@@ -863,6 +887,10 @@ function construirHoja(args: {
 	numColumnas: number;
 	/** Fechas ISO festivas del periodo. */
 	festivos: Set<string>;
+	/// Mapa que rellena esta función: dónde quedaron las casillas de ajuste,
+	/// para que el engine les cuelgue el checkbox. Se pasa en vez de devolverlo
+	/// porque el retorno es la hoja que espera Univer.
+	checkboxPorSheetId: Record<string, RangoCheckboxNomina>;
 }): Partial<IWorksheetData> {
 	const { dto, hoja, indice, sheetId, unitId, numColumnas, festivos } = args;
 	const dias = dto.periodo.dias;
@@ -906,7 +934,7 @@ function construirHoja(args: {
 	});
 	const finEmpresas = zonaEmpresas({ hoja, set, merge, desdeFila: finConfig + 2 });
 	const reparto = zonaJornada({ dto, hoja, set, merge });
-	const finDesprendible = zonaDesprendible({
+	const { fin: finDesprendible, checkbox: rangoCheckbox } = zonaDesprendible({
 		hoja,
 		set,
 		merge,
@@ -915,6 +943,8 @@ function construirHoja(args: {
 		reparto,
 		celdaSalarioBasico
 	});
+
+	if (rangoCheckbox) args.checkboxPorSheetId[sheetId] = rangoCheckbox;
 
 	const rowCount = Math.max(finEmpresas, finDesprendible) + 3;
 
@@ -2284,8 +2314,11 @@ function zonaDesprendible(args: {
 	 * `null` en una hoja sin liquidación, donde no hay celda que teclear.
 	 */
 	celdaSalarioBasico: string | null;
-}): number {
+}): { fin: number; checkbox: RangoCheckboxNomina | null } {
 	const { hoja, set, merge, bind, avisos, reparto, celdaSalarioBasico } = args;
+	/// Rango de las tres casillas de ajuste, para que el engine les cuelgue el
+	/// checkbox de Univer. `null` en una hoja sin liquidación, que no las pinta.
+	let filaCheckbox: RangoCheckboxNomina | null = null;
 	const c0 = ZONA.DESPRENDIBLE_C0;
 	const L = (c: number) => colLetra(c);
 	let r = FILA_INFERIOR;
@@ -2990,6 +3023,61 @@ function zonaDesprendible(args: {
 		r++;
 	}
 
+	/**
+	 * AJUSTE DE RECARGOS: los tres interruptores, como casillas.
+	 *
+	 * Deciden qué recargos entran en la BASE PRESTACIONAL. Hasta ahora «¿aplica
+	 * el de PAREX?» se deducía de que su importe fuera mayor que cero, y ese
+	 * importe solo lo escribe el cálculo cuando el interruptor ya está puesto:
+	 * un círculo cerrado que dejaba a los borradores del canvas sin forma de
+	 * encenderlo. En esta base, 83 de 148 liquidaciones con recargos de PAREX
+	 * lo tenían apagado.
+	 *
+	 * COMPLETO manda sobre los otros dos: mete TODOS los recargos del corte
+	 * —OTROS, PAREX y GEOPARK—, y por eso va el último y lo dice su rótulo.
+	 *
+	 * Se guardan como `SÍ` / `NO` y no como booleano porque es lo que guarda el
+	 * checkbox de Univer: la regla se construye con esas dos cadenas y es su
+	 * texto el que viaja en el patch. Ver `checkbox-si-no.ts`.
+	 */
+	if (hoja.liquidacionId) {
+		r++;
+		campo(r, c0, SPAN.VAC_ROTULO + SPAN.VAC_VALOR, {
+			v: 'AJUSTE DE RECARGOS A LA BASE',
+			s: cabecera()
+		});
+		r++;
+		filaCheckbox = { columna: c0 + SPAN.VAC_ROTULO, desde: r, hasta: r + 2 };
+		const interruptores: [string, boolean, string][] = [
+			['Ajuste PAREX', !!hoja.aplicaAjusteParex, 'aplica_ajuste_parex'],
+			['Ajuste GEOPARK', !!hoja.aplicaAjusteGeopark, 'aplica_ajuste_geopark'],
+			[
+				'Ajuste completo (OTROS + PAREX + GEOPARK)',
+				!!hoja.ajusteRecargosCompletos,
+				'ajuste_parex_recargos_completos'
+			]
+		];
+		for (const [rotulo, marcado, campoBd] of interruptores) {
+			campo(r, c0, SPAN.VAC_ROTULO, { v: rotulo, s: { ...base(), fs: 9 } });
+			campo(r, c0 + SPAN.VAC_ROTULO, SPAN.VAC_VALOR, {
+				v: marcado ? CHECKBOX_SI : CHECKBOX_NO,
+				s: { ...editable(), ht: HorizontalAlign.CENTER }
+			});
+			bind(r, c0 + SPAN.VAC_ROTULO, {
+				entityType: 'liquidacion',
+				entityId: hoja.liquidacionId,
+				field: campoBd,
+				conductorId: hoja.conductorId
+			});
+			r++;
+		}
+		campo(r, c0, SPAN.VAC_ROTULO + SPAN.VAC_VALOR, {
+			v: 'Marcar hace que esos recargos coticen: sube la base, la salud y la pensión.',
+			s: { ...base(), fs: 8, cl: { rgb: '#6B7280' } }
+		});
+		r++;
+	}
+
 	// Avisos de la hoja, si los hay. Van aquí y no en un toast porque son de
 	// esta hoja concreta y el usuario está mirando treinta.
 	if (avisos.length) {
@@ -3005,7 +3093,7 @@ function zonaDesprendible(args: {
 		}
 	}
 
-	return r;
+	return { fin: r, checkbox: filaCheckbox };
 }
 
 /**
