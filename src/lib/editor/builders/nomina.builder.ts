@@ -529,25 +529,38 @@ function gruposPorTramo(
 	 */
 	empresaId: string | null = null
 ): { columnas: number[]; valorHora: number }[] {
-	const porTramo = new Map<number, number[]>();
+	/**
+	 * Se agrupa por (TRAMO, BASE DEL CLIENTE), no solo por tramo.
+	 *
+	 * Un corte mezcla días de varios clientes y cada uno puede tener su propia
+	 * `configuraciones_salario`: una hora extra diurna de GEOPARK vale 13.831 y
+	 * la general 10.422. Es lo que hace `recargos.service` al valorar las
+	 * planillas —«específica de la empresa > base»— y lo que queda guardado en
+	 * `valor_hora_calculado`, así que agrupar solo por tramo y multiplicar por
+	 * la tarifa general pagaba de menos esos días.
+	 *
+	 * `empresaId` fuerza una base para TODOS los días; sin él manda la del día,
+	 * que es lo correcto cuando la lista viene mezclada.
+	 */
+	const grupos = new Map<string, { columnas: number[]; valorHora: number }>();
 	for (const d of dias) {
 		const i = tramoDeFecha(hoja.tramos, d.fecha);
-		(porTramo.get(i) ?? porTramo.set(i, []).get(i)!).push(COL.DIA0 + d.indice);
+		const t = hoja.tarifas.find((x) => x.codigo === codigo && (x.tramo ?? 0) === i);
+		/// `valorHoraPorBase` va alineado con `tramos[i].bases`, así que el
+		/// índice de la base ES el índice de la tarifa. Se busca por `empresaId`
+		/// y no por posición para que un tramo al que le falte una empresa caiga
+		/// en la general en vez de coger la de al lado.
+		const dueño = empresaId ?? d.empresaId ?? null;
+		const iBase = dueño
+			? (hoja.tramos?.[i]?.bases ?? []).findIndex((b) => b.empresaId === dueño)
+			: -1;
+		const valorHora = (iBase >= 0 ? t?.valorHoraPorBase?.[iBase] : undefined) ?? t?.valorHora ?? 0;
+		const clave = `${i}|${valorHora}`;
+		const ya = grupos.get(clave);
+		if (ya) ya.columnas.push(COL.DIA0 + d.indice);
+		else grupos.set(clave, { columnas: [COL.DIA0 + d.indice], valorHora });
 	}
-	return [...porTramo.entries()]
-		.map(([i, columnas]) => {
-			const t = hoja.tarifas.find((x) => x.codigo === codigo && (x.tramo ?? 0) === i);
-			/// `valorHoraPorBase` va alineado con `tramos[i].bases`, así que el
-			/// índice de la base ES el índice de la tarifa. Se busca por
-			/// `empresaId` y no por posición para que un tramo al que le falte
-			/// una empresa caiga en la general en vez de coger la de al lado.
-			const iBase = empresaId
-				? (hoja.tramos?.[i]?.bases ?? []).findIndex((b) => b.empresaId === empresaId)
-				: -1;
-			const vhEmpresa = iBase >= 0 ? t?.valorHoraPorBase?.[iBase] : undefined;
-			return { columnas, valorHora: vhEmpresa ?? t?.valorHora ?? 0 };
-		})
-		.filter((g) => g.valorHora > 0);
+	return [...grupos.values()].filter((g) => g.valorHora > 0);
 }
 
 /** Códigos cuyas horas se corrigieron a mano: su dinero no sale de los días. */
@@ -2321,7 +2334,15 @@ function zonaDesprendible(args: {
 	 * Solo existen cuando ese cliente puso horas: el servidor no manda la
 	 * sección si el reparto está a cero.
 	 */
-	const bloquesCliente: { nombre: string; rotulo: number; primera: number; ultima: number }[] = [];
+	const bloquesCliente: {
+		nombre: string;
+		rotulo: number;
+		primera: number;
+		ultima: number;
+		/// Fila de SU DISPONIBILIDAD MES, que se resta de su propio total. `-1`
+		/// en payloads anteriores a que cada bloque tuviera la suya.
+		disponibilidad: number;
+	}[] = [];
 	/**
 	 * Los días de cada cliente con bloque propio.
 	 *
@@ -2385,15 +2406,26 @@ function zonaDesprendible(args: {
 			/// `seccion:otros` es la de siempre y lleva la disponibilidad; las
 			/// otras son los bloques de cliente, que van a su propia lista.
 			if (dev.clave === 'seccion:otros' || !dev.clave.startsWith('seccion:')) marcaOtros = r;
-			else bloquesCliente.push({ nombre: dev.nombre, rotulo: r, primera: -1, ultima: -1 });
+			else {
+				bloquesCliente.push({
+					nombre: dev.nombre,
+					rotulo: r,
+					primera: -1,
+					ultima: -1,
+					disponibilidad: -1
+				});
+			}
 		} else if (dev) {
 			if (dev.clave === 'disponibilidad') filaDisponibilidad = r;
-			/// Las líneas que siguen a un rótulo de cliente son suyas.
+			/// Las líneas que siguen a un rótulo de cliente son suyas. La
+			/// disponibilidad se apunta aparte: no es un recargo más, es lo que
+			/// se descuenta de ellos.
 			const bloque = bloquesCliente[bloquesCliente.length - 1];
 			if (bloque && dev.clave.startsWith('recargo:') && dev.clave.split(':').length === 3) {
 				if (bloque.primera < 0) bloque.primera = r;
 				bloque.ultima = r;
 			}
+			if (bloque && dev.clave.startsWith('disponibilidad:')) bloque.disponibilidad = r;
 			if (dev.clave.startsWith('bono:') || dev.clave.startsWith('pernote:')) {
 				if (primeraBonif < 0) primeraBonif = r;
 				ultimaBonif = r;
@@ -2717,13 +2749,27 @@ function zonaDesprendible(args: {
 		subtotal('TOTAL OTROS', marcaOtros + 1, finBloqueOtros, `=${sumaOtros}`);
 	}
 
+	/**
+	 * CADA BLOQUE RESTA LA SUYA.
+	 *
+	 * La disponibilidad era una sola cifra del corte y se descontaba entera de
+	 * OTROS, así que el desprendible enseñaba en una línea la suma de las tres.
+	 * Ahora cada cliente con bloque propio tiene la suya y sale de su propio
+	 * total, con el mismo `MIN` que OTROS: lo imputado nunca puede pasar de lo
+	 * que hay en esa bolsa.
+	 */
+	const consumidosCliente: string[] = [];
 	for (const b of bloquesCliente) {
 		if (b.primera < 0) continue;
+		const suma = `SUM(${L(colDevValor)}${b.primera + 1}:${L(colDevValor)}${b.ultima + 1})`;
+		const celda = b.disponibilidad >= 0 ? `${L(colDevValor)}${b.disponibilidad + 1}` : null;
+		const consumido = celda ? `MIN(${celda},${suma})` : null;
+		if (consumido) consumidosCliente.push(consumido);
 		subtotal(
 			`TOTAL ${b.nombre.replace(/^RECARGOS\s+/i, '')}`,
 			b.rotulo + 1,
-			b.ultima,
-			`=SUM(${L(colDevValor)}${b.primera + 1}:${L(colDevValor)}${b.ultima + 1})`
+			Math.max(b.ultima, b.disponibilidad),
+			`=${suma}${consumido ? `-${consumido}` : ''}`
 		);
 	}
 
@@ -2765,9 +2811,13 @@ function zonaDesprendible(args: {
 	// esperar al servidor. El servidor recalcula igual y manda el suyo, pero
 	// mientras tanto la hoja no miente.
 	campo(r, c0, SPAN.DESP_CONCEPTO + SPAN.DESP_CANT, { v: 'TOTAL DEVENGADO', s: totales() });
+	/// Se resta LO CONSUMIDO DE CADA BLOQUE, no solo lo de OTROS: la línea de
+	/// disponibilidad de cada uno suma en este rango, y sin restarla el
+	/// devengado pagaría dos veces el mismo peso.
+	const consumidoTotal = [consumido, ...consumidosCliente].filter(Boolean) as string[];
 	campo(r, colDevValor, SPAN.DESP_VALOR, {
 		f: `=SUM(${L(colDevValor)}${primeraDevengo + 1}:${L(colDevValor)}${ultimaFila + 1})${
-			consumido ? `-${consumido}` : ''
+			consumidoTotal.map((c) => `-${c}`).join('')
 		}`,
 		s: { ...totales(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } }
 	});
@@ -3009,6 +3059,13 @@ function campoDeConcepto(clave: string): string | null {
 		/// disponibilidad de la bolsa de OTROS.
 		case 'disponibilidad':
 			return 'disponibilidad';
+		/// Y una por bloque de cliente: `disponibilidad:PAREX` escribe en
+		/// `disponibilidad_parex`. Antes era una sola cifra para el corte entero
+		/// y el desprendible enseñaba la suma de las tres en una línea.
+		case 'disponibilidad:PAREX':
+			return 'disponibilidad_parex';
+		case 'disponibilidad:GEOPARK':
+			return 'disponibilidad_geopark';
 		/**
 		 * El total de anticipos, que es una DEDUCCIÓN.
 		 *

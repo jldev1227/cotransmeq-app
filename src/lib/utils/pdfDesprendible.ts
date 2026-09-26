@@ -224,28 +224,29 @@ export async function construirDocDefinition(
 	const hayRecargosParex = totalRecargosParex > 0;
 	const hayRecargosGeopark = totalRecargosGeopark > 0;
 
-	// Restar disponibilidad del valor MAYOR entre Otros, PAREX y GEOPARK.
-	// Si la disponibilidad excede al mayor, el remanente baja al siguiente mayor.
-	if (disponibilidadVal > 0) {
-		const categorias = [
-			{ key: 'otros', valor: totalRecargosOtros },
-			{ key: 'parex', valor: totalRecargosParex },
-			{ key: 'geopark', valor: totalRecargosGeopark }
-		].sort((a, b) => b.valor - a.valor);
-
-		let restante = disponibilidadVal;
-		for (const cat of categorias) {
-			if (restante <= 0) break;
-			if (cat.valor <= 0) continue;
-			const descuento = Math.min(cat.valor, restante);
-			cat.valor -= descuento;
-			restante -= descuento;
-		}
-
-		totalRecargosOtros = categorias.find((c) => c.key === 'otros')!.valor;
-		totalRecargosParex = categorias.find((c) => c.key === 'parex')!.valor;
-		totalRecargosGeopark = categorias.find((c) => c.key === 'geopark')!.valor;
-	}
+	// CADA BLOQUE DESCUENTA LA SUYA.
+	//
+	// Había una sola `disponibilidad` para todo el corte y este documento la
+	// restaba del cubo MAYOR, bajando al siguiente si sobraba. Era un reparto
+	// inventado por el papel —el dato no decía de quién era— y además cada
+	// generador se lo inventaba distinto: el que sale por correo empezaba por
+	// PAREX en vez de por el mayor, así que el mismo mes podía imprimirse con
+	// dos repartos según por dónde se pidiera.
+	//
+	// Ahora cada cliente con bloque propio tiene su columna y se descuenta de su
+	// propia bolsa. `disponibilidad` es la de OTROS, que es lo que venía siendo
+	// en las liquidaciones sin PAREX ni GEOPARK.
+	const imputar = (bolsa: number, imputado: number) =>
+		bolsa - Math.min(Math.max(0, bolsa), Math.max(0, imputado));
+	totalRecargosOtros = imputar(totalRecargosOtros, disponibilidadVal);
+	totalRecargosParex = imputar(
+		totalRecargosParex,
+		Number(safeValue((item as any).disponibilidad_parex, 0))
+	);
+	totalRecargosGeopark = imputar(
+		totalRecargosGeopark,
+		Number(safeValue((item as any).disponibilidad_geopark, 0))
+	);
 
 	console.log('DEBUG RECARGOS', {
 		disponibilidadVal,
