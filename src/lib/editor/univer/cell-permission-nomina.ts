@@ -37,6 +37,8 @@
 import {
 	CustomCommandExecutionError,
 	ICommandService,
+	IUniverInstanceService,
+	UniverInstanceType,
 	type ICommandInfo,
 	type Univer
 } from '@univerjs/core';
@@ -190,6 +192,31 @@ export function installNominaCellPermission(
 	const injector = univer.__getInjector();
 	const interceptor = injector.get(SheetInterceptorService);
 	const commandService = injector.get(ICommandService);
+	const instancias = injector.get(IUniverInstanceService);
+
+	/**
+	 * La hoja que toca un comando, RESUELTA COMO LA RESUELVE UNIVER.
+	 *
+	 * Los comandos que nacen de un CLIC EN LA CASILLA llegan sin `unitId` ni
+	 * `subUnitId`: `sheets-data-validation-ui` despacha `SetRangeValuesCommand`
+	 * con `{ range, value }` y nada más, y el propio comando los resuelve
+	 * después contra la hoja activa.
+	 *
+	 * Denegar por «faltan los ids» es exactamente lo que dejaba las casillas
+	 * MUERTAS: el clic se abortaba aquí, en silencio y sin aviso, y la casilla
+	 * ni se marcaba ni se desmarcaba. Es el mismo fallback que ya tienen el
+	 * permiso de recorridos y el de ingresos, documentado allí.
+	 */
+	const hojaDe = (params: Record<string, any>): string | undefined => {
+		const explicito: string | undefined = params.subUnitId ?? params.sheetId;
+		if (explicito) return explicito;
+		const libro: any = params.unitId
+			? instancias.getUnit(params.unitId, UniverInstanceType.UNIVER_SHEET)
+			: instancias.getCurrentUnitOfType(UniverInstanceType.UNIVER_SHEET);
+		/// Otro libro (o ninguno): no es asunto de este permiso.
+		if (!libro || libro.getUnitId?.() !== opts.unitId) return undefined;
+		return libro.getActiveSheet?.()?.getSheetId?.();
+	};
 
 	/** Estado de la hoja a la que apunta un comando, o `null` si no se sabe. */
 	const estadoDeHoja = (sheetId: string | undefined): string | null => {
@@ -261,7 +288,7 @@ export function installNominaCellPermission(
 		if (repintandoAhora) return;
 		const id = info.id;
 		const params = (info.params ?? {}) as Record<string, any>;
-		const sheetId: string | undefined = params.subUnitId ?? params.sheetId;
+		const sheetId: string | undefined = hojaDe(params);
 
 		if (id === SET_CELL_EDIT_VISIBLE) {
 			/// Dejar pasar el cierre evita que un editor abierto por otra vía

@@ -92,7 +92,19 @@ export function attachCellChangeNomina(opts: CellChangeNominaOptions): () => voi
 
 		const params = (command.params ?? {}) as Record<string, any>;
 		if (params.unitId && params.unitId !== unitId) return;
-		const sheetId: string | undefined = params.subUnitId ?? params.sheetId;
+		/**
+		 * La hoja, con FALLBACK A LA ACTIVA.
+		 *
+		 * Un clic en una casilla llega sin `unitId` ni `subUnitId`:
+		 * `sheets-data-validation-ui` despacha `SetRangeValuesCommand` con
+		 * `{ range, value }` y nada más, y el comando los resuelve después
+		 * contra la hoja activa. Cortar aquí por «no sé de qué hoja es» dejaba
+		 * la casilla marcándose en pantalla y sin guardarse en ningún sitio.
+		 */
+		const sheetId: string | undefined =
+			params.subUnitId ??
+			params.sheetId ??
+			fUniver.getUniverSheet?.(unitId)?.getActiveSheet?.()?.getSheetId?.();
 		if (!sheetId) return;
 
 		for (const { row, column } of celdasTocadas(params)) {
