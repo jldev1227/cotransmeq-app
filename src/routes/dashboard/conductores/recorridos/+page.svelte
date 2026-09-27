@@ -35,6 +35,7 @@
 	import PresenceAvatars from '$lib/components/PresenceAvatars.svelte';
 	import AutosaveIndicator from '$lib/components/AutosaveIndicator.svelte';
 	import ModalConfigBonos from '$lib/components/conductores/ModalConfigBonos.svelte';
+	import SelectorHojaConductor from '$lib/components/conductores/SelectorHojaConductor.svelte';
 	import SnapshotPanel from '$lib/components/univer/SnapshotPanel.svelte';
 	import PreviewCanvasModal from '$lib/components/liquidaciones-terceros/preview/PreviewCanvasModal.svelte';
 
@@ -1288,7 +1289,7 @@
 				{#each candidatos.slice(0, 40) as c (c.id)}
 					<li>
 						<button onclick={() => void agregarConductor(c)} disabled={!!accionEnCurso || cargando}>
-							<span class="rc-nombre">{c.apellido} {c.nombre}</span>
+							<span class="rc-nombre">{c.nombre} {c.apellido}</span>
 							<span class="rc-meta">C.C. {c.numero_identificacion ?? '—'} · {c.estado}</span>
 						</button>
 					</li>
@@ -1435,6 +1436,17 @@
 		{#if !puedeEditar}
 			<span class="univer-badge" title="Tu área tiene acceso de consulta">Solo consulta</span>
 		{/if}
+
+		<span class="univer-divider-v"></span>
+
+		<!-- La sheet bar de Univer no basta con un corte de 80 conductores:
+		     nombres truncados a 31 caracteres y arrastre horizontal hasta el
+		     final del abecedario. Este buscador es el mismo de cierres. -->
+		<SelectorHojaConductor
+			hojas={dto?.hojas ?? []}
+			activo={conductorActivo}
+			onSeleccionar={(id) => ctx?.activar(id)}
+		/>
 
 		<span class="univer-divider-v"></span>
 		<AutosaveIndicator {pendientes} {fallidas} {conectado} />
