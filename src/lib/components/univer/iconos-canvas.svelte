@@ -32,6 +32,7 @@
 		icoExcel,
 		icoZip,
 		icoCorreo,
+		icoCampana,
 		icoHistorial,
 		icoRecargar,
 		icoVersion,
@@ -116,6 +117,22 @@
 	>
 		<rect x="3" y="5" width="18" height="14" rx="2.5" />
 		<path d="M3.5 7l8.5 6 8.5-6" />
+	</svg>
+{/snippet}
+
+{#snippet icoCampana()}
+	<svg
+		width="15"
+		height="15"
+		viewBox="0 0 24 24"
+		fill="none"
+		stroke="currentColor"
+		stroke-width="1.8"
+		stroke-linecap="round"
+		stroke-linejoin="round"
+	>
+		<path d="M18 8a6 6 0 10-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9" />
+		<path d="M10 21h4" />
 	</svg>
 {/snippet}
 

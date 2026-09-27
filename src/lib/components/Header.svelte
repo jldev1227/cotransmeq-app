@@ -225,6 +225,21 @@
 		if (notif.referencia_id) {
 			if (notif.referencia_tipo === 'actividad_pesv') {
 				goto('/dashboard/pesv');
+			} else if (notif.referencia_tipo?.startsWith('nomina_desprendible_firmado')) {
+				const [, anio, mes, desde] = notif.referencia_tipo.split(':');
+				const params = new URLSearchParams({
+					liquidacion: notif.referencia_id,
+					preview: '1'
+				});
+				if (anio && mes && desde) {
+					params.set('anio', anio);
+					params.set('mes', mes);
+					params.set('desde', desde);
+				}
+				// Recarga completa a propósito: si el usuario ya tenía abierto este
+				// mismo canvas, SvelteKit conservaría el componente y su caché podría
+				// seguir mostrando el PDF anterior a la firma.
+				window.location.assign(`/dashboard/nomina/canvas?${params.toString()}`);
 			} else if (notif.tipo.startsWith('LIQUIDACION_')) {
 				goto('/dashboard/liquidaciones-servicios');
 			}

@@ -228,6 +228,28 @@ export const nominaEnviosAPI = {
 	}
 };
 
+export const nominaNotificacionesAPI = {
+	/** Envía exclusivamente push/in-app; no genera correos ni usa Resend. */
+	async enviar(params: { anio: number; mes: number; liquidacionIds: string[] }) {
+		const { data } = await apiClient.post('/api/nomina/notificaciones', {
+			anio: params.anio,
+			mes: params.mes,
+			liquidacion_ids: params.liquidacionIds
+		});
+		return data as {
+			total: number;
+			enviadas: number;
+			sin_dispositivo: number;
+			resultados: Array<{
+				liquidacion_id: string;
+				conductor: string;
+				estado: 'ENVIADA' | 'SIN_DISPOSITIVO' | 'ERROR' | 'OMITIDA';
+				error?: string;
+			}>;
+		};
+	}
+};
+
 // ═══════════════════════════════════════════════════════════════
 // GENERACIÓN DE BORRADORES EN LOTE
 // ═══════════════════════════════════════════════════════════════

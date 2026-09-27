@@ -59,6 +59,7 @@
 	import SelectorCanvasNomina from '$lib/components/univer/SelectorCanvasNomina.svelte';
 	import SelectorHojaNomina from '$lib/components/univer/SelectorHojaNomina.svelte';
 	import ModalEnviarDesprendibles from '$lib/components/univer/ModalEnviarDesprendibles.svelte';
+	import ModalNotificarNomina from '$lib/components/univer/ModalNotificarNomina.svelte';
 	/// Iconos COMPARTIDOS por todos los canvas. Los propios de nómina —liquidar,
 	/// aprobar, pagar…— se siguen declarando abajo: son de este dominio.
 	import {
@@ -66,6 +67,7 @@
 		icoExcel,
 		icoZip,
 		icoCorreo,
+		icoCampana,
 		icoHistorial,
 		icoRecargar,
 		icoVersion,
@@ -140,6 +142,10 @@
 	 */
 	const liquidacionPedida = $page.url.searchParams.get('liquidacion');
 	const conductorPedido = $page.url.searchParams.get('conductor');
+	const abrirPreviewPedido = $page.url.searchParams.get('preview') === '1';
+	let previewAutomaticoConsumido = false;
+	let previewFirmadoUrl = $state<string | null>(null);
+	let previewFirmadoNombre = $state('Desprendible firmado');
 	let accionEnCurso = $state<{ titulo: string; detalle?: string } | null>(null);
 	let presencia = $state<{ id: string; name: string }[]>([]);
 	let conectado = $state(true);
@@ -173,6 +179,7 @@
 	 */
 	let envios = $state<Record<string, any>>({});
 	let mostrarEnviar = $state(false);
+	let mostrarNotificar = $state(false);
 
 	async function cargarEnvios() {
 		try {
@@ -644,6 +651,13 @@
 			void cargarEnvios();
 			for (const aviso of datos.avisos) toast.warning(aviso, { duration: 8000 });
 			await remountEngine();
+			if (abrirPreviewPedido && liquidacionPedida && !previewAutomaticoConsumido) {
+				const hoja = datos.hojas.find((item) => item.liquidacionId === liquidacionPedida);
+				if (hoja?.liquidacionId) {
+					previewAutomaticoConsumido = true;
+					await abrirPreviewFirmado(hoja);
+				}
+			}
 		} catch (e: any) {
 			loadError = e?.response?.data?.error || e?.message || 'No se pudo cargar el periodo.';
 		} finally {
@@ -993,6 +1007,23 @@
 		});
 	}
 
+	async function abrirPreviewFirmado(hoja: NonNullable<typeof hojaActiva>) {
+		await conOverlay('Generando el desprendible firmado', hoja.nombre, async () => {
+			// La notificación significa que la firma acaba de cambiar: nunca se
+			// debe servir aquí el blob que el canvas pudiera tener en memoria.
+			limpiarCacheDesprendibles();
+			const blob = await blobDesprendible(hoja.liquidacionId!);
+			if (previewFirmadoUrl) URL.revokeObjectURL(previewFirmadoUrl);
+			previewFirmadoUrl = URL.createObjectURL(blob);
+			previewFirmadoNombre = `Desprendible firmado · ${hoja.nombre}`;
+		});
+	}
+
+	function cerrarPreviewFirmado() {
+		if (previewFirmadoUrl) URL.revokeObjectURL(previewFirmadoUrl);
+		previewFirmadoUrl = null;
+	}
+
 	async function exportarExcel() {
 		if (!datos?.hojas.length) {
 			toast.warning('No hay conductores en el periodo.');
@@ -1096,6 +1127,11 @@
 	function enviarDesprendibles() {
 		if (!datos) return;
 		mostrarEnviar = true;
+	}
+
+	function notificarEnApp() {
+		if (!datos) return;
+		mostrarNotificar = true;
 	}
 
 	function volver() {
@@ -1248,6 +1284,15 @@
 			disabled: !!accionEnCurso || !datos?.hojas.length
 		},
 		{
+			id: 'notificar-app',
+			label: 'Notificar en app',
+			hint: 'Avisa por push que el desprendible pagado está listo para firmar y consultar.',
+			icon: icoCampana,
+			tone: 'blue' as const,
+			onSelect: notificarEnApp,
+			disabled: !!accionEnCurso || !datos?.hojas.some((h) => h.estado === 'PAGADA')
+		},
+		{
 			id: 'historial',
 			label: 'Versiones del periodo',
 			hint: 'Ver y restaurar versiones guardadas.',
@@ -1312,6 +1357,7 @@
 		session?.dispose();
 		teardownEngine();
 		limpiarCacheDesprendibles();
+		cerrarPreviewFirmado();
 	});
 </script>
 
@@ -1420,7 +1466,7 @@
 {/snippet}
 
 <svelte:head>
-	<title>Nómina {MESES[mes - 1]} {anio} (canvas) · Transmeralda</title>
+	<title>Nómina {MESES[mes - 1]} {anio} (canvas) · Cotransmeq</title>
 </svelte:head>
 
 <UniverToolbar
@@ -1644,6 +1690,20 @@
 	/>
 {/if}
 
+{#if mostrarNotificar && datos}
+	<ModalNotificarNomina
+		hojas={datos.hojas.map((h) => ({
+			liquidacionId: h.liquidacionId,
+			nombre: h.nombre,
+			estado: h.estado
+		}))}
+		etiquetaPeriodo={datos.etiqueta}
+		{anio}
+		{mes}
+		onCerrar={() => (mostrarNotificar = false)}
+	/>
+{/if}
+
 {#if mostrarAdicionales && hojaActiva}
 	<ConceptosAdicionalesModal
 		nombreHoja={hojaActiva.nombre}
@@ -1665,6 +1725,21 @@
 		onClose={() => (mostrarGenerar = false)}
 		onTerminado={() => void loadInicial()}
 	/>
+{/if}
+
+{#if previewFirmadoUrl}
+	<div class="fixed inset-0 z-[100] flex flex-col bg-slate-950/75 p-3 backdrop-blur-sm md:p-6" role="dialog" aria-modal="true" aria-label={previewFirmadoNombre}>
+		<div class="mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+			<header class="flex items-center justify-between gap-4 border-b border-slate-200 px-4 py-3 md:px-5">
+				<div class="min-w-0">
+					<p class="text-[10px] font-bold tracking-[0.16em] text-emerald-700">FIRMA RECIBIDA</p>
+					<h2 class="truncate text-base font-bold text-slate-900">{previewFirmadoNombre}</h2>
+				</div>
+				<button class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" onclick={cerrarPreviewFirmado}>Cerrar</button>
+			</header>
+			<iframe class="min-h-0 flex-1 bg-slate-100" src={previewFirmadoUrl} title={previewFirmadoNombre}></iframe>
+		</div>
+	</div>
 {/if}
 
 <style>
