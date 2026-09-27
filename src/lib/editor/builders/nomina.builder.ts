@@ -1380,10 +1380,13 @@ function leyendaPlacas(args: {
 	/// columnas A-E y podría seguir bajando, pero cruzar la banda en blanco la
 	/// haría parecer parte del bloque de cliente y placa.
 	const ULTIMA = FILA.CLIENTE_DIA - 1;
-	/// Cuatro columnas (B-E) para los datos. Es un tope de la rejilla, no una
-	/// decisión — un ancho es de la COLUMNA ENTERA y meter más aquí correría
-	/// las de día y descuadraría las zonas de abajo.
-	const COLS_DATO = COL.CARGO_FIN - COL.NOMBRE;
+	/// Tres columnas (C-E) para los datos: el rótulo ocupa A-B.
+	///
+	/// Es un tope de la rejilla, no una decisión — un ancho es de la COLUMNA
+	/// ENTERA y meter más aquí correría las de día y descuadraría las zonas de
+	/// abajo. A cambio de esa tercera placa, el rótulo gana los 100 px de B,
+	/// que es donde ahora cabe el mes junto al nombre del bono.
+	const COLS_DATO = COL.CARGO_FIN - COL.CEDULA;
 
 	const matriz = hoja.matrizBonos;
 
@@ -1449,9 +1452,14 @@ function leyendaPlacas(args: {
 		.filter((p) => p.suma > 0)
 		.sort((a, b) => b.suma - a.suma);
 
-	/// Cada placa ocupa una columna POR MES, así que con dos meses caben dos
-	/// placas donde antes cabían cuatro. Es el precio de poder editar mes a mes.
-	const maxPlacas = Math.max(1, Math.floor(COLS_DATO / meses.length));
+	/// Una columna por placa, y el MES EN LA FILA.
+	///
+	/// Antes cada placa gastaba una columna por mes, y como el corte 21→20
+	/// siempre cruza dos, nunca cabían más de dos placas: quien condujo tres
+	/// vehículos veía siempre la nota de «con bonos y sin columna». Bajando el
+	/// mes al rótulo de la fila caben las tres y se sigue pudiendo editar mes a
+	/// mes, que es lo que se habría perdido sumándolos en una sola cifra.
+	const maxPlacas = COLS_DATO;
 	const visibles = conBonos.slice(0, maxPlacas);
 	const omitidas = conBonos.slice(maxPlacas);
 
@@ -1465,126 +1473,132 @@ function leyendaPlacas(args: {
 	 */
 	const comparar = matriz.hayRecorridos === true;
 
-	/// Columna de la subcelda (placa k, mes j).
-	const colDe = (k: number, j: number) => COL.NOMBRE + 1 + k * meses.length + j;
+	/// Columna de la placa k: C, D o E. El rótulo se queda con A-B.
+	const colDe = (k: number) => COL.CEDULA + 1 + k;
+	/// El rótulo de cada fila ocupa A-B. Se combina en TODAS las filas del
+	/// bloque —cabecera, bonos, total y notas— o la tabla queda con una rejilla
+	/// partida a media altura en la columna B.
+	const rotulo = (r: number) => merge(r, COL.NOMBRE, r, COL.CEDULA);
+	/**
+	 * Una fila por BONO y MES.
+	 *
+	 * `bonificaciones.values` guarda `[{ mes, quantity }]`, así que la celda
+	 * editable tiene que poder decir a qué mes escribe. Cuando el snapshot es
+	 * anterior al desglose (`meses` es `['']`) sale una sola fila por bono, sin
+	 * mes en el rótulo y sin binding.
+	 */
+	const filasBono = matriz.filas.flatMap((f, i) =>
+		meses.map((m, j) => ({ f, m, j, grupo: i }))
+	);
 
 	// ── Cabecera: el título comparte fila con las placas ──────────────────
 	//
-	// Antes el título tenía su propia fila. Con la fila de meses añadida ya no
-	// cabían las cinco de bono, el total y las notas, y la nota del descuadre
-	// —que es lo accionable— era lo primero en caerse.
+	// Ya no hay fila de meses debajo: el mes viaja en el rótulo de cada fila de
+	// bono. Esa fila liberada es la que permite que quepan dos tipos de bono
+	// con sus dos meses sin comerse el TOTAL ni las notas.
 	set(PRIMERA, COL.NOMBRE, { v: 'BONOS POR VEHÍCULO', s: cabecera() });
+	set(PRIMERA, COL.CEDULA, { v: '', s: cabecera() });
+	rotulo(PRIMERA);
 	visibles.forEach((p, k) => {
 		// La placa conserva SU color también aquí: es la misma clave que se
 		// repite bajo cada día en la fila 19, y romperla obligaría a aprenderse
 		// dos códigos para lo mismo.
-		const estilo = {
-			...base(),
-			bg: { rgb: p.color },
-			cl: { rgb: contraste(p.color) },
-			bl: 1,
-			ht: HorizontalAlign.CENTER,
-			fs: 8
-		};
-		set(PRIMERA, colDe(k, 0), { v: p.placa, s: estilo });
-		for (let j = 1; j < meses.length; j++) set(PRIMERA, colDe(k, j), { v: '', s: estilo });
-		if (meses.length > 1) merge(PRIMERA, colDe(k, 0), PRIMERA, colDe(k, meses.length - 1));
-	});
-	for (let c = colDe(visibles.length, 0); c <= COL.CARGO_FIN; c++) {
-		set(PRIMERA, c, { v: '', s: cabecera() });
-	}
-
-	// ── Subcabecera: el mes de cada columna ───────────────────────────────
-	const FILA_CAB = PRIMERA + 1;
-	set(FILA_CAB, COL.NOMBRE, {
-		v: 'BONO · VALOR UNITARIO',
-		s: { ...cabecera(SUBCAB), ht: HorizontalAlign.LEFT, fs: 9 }
-	});
-	visibles.forEach((p, k) => {
-		meses.forEach((m, j) => {
-			set(FILA_CAB, colDe(k, j), {
-				v: etiquetaMes(m),
-				s: { ...cabecera(SUBCAB), ht: HorizontalAlign.CENTER, fs: 8 }
-			});
+		set(PRIMERA, colDe(k), {
+			v: p.placa,
+			s: {
+				...base(),
+				bg: { rgb: p.color },
+				cl: { rgb: contraste(p.color) },
+				bl: 1,
+				ht: HorizontalAlign.CENTER,
+				fs: 8
+			}
 		});
 	});
 	/// Las columnas que sobran se cierran igual: sin esto la tabla termina en un
 	/// borde a media altura y parece cortada.
-	for (let c = colDe(visibles.length, 0); c <= COL.CARGO_FIN; c++) {
-		set(FILA_CAB, c, { v: '', s: cabecera(SUBCAB) });
+	for (let c = colDe(visibles.length); c <= COL.CARGO_FIN; c++) {
+		set(PRIMERA, c, { v: '', s: cabecera() });
 	}
 
 	/// Se reserva sitio para las notas del pie antes de repartir filas de bono:
 	/// si no, la última nota se comería la fila de TOTAL BONOS o se saldría del
-	/// bloque y caería sobre la banda en blanco.
+	/// bloque y caería sobre la banda en blanco. El `- 1` es la fila de TOTAL.
 	const hayDescuadre = comparar && matriz.filas.some((f) => f.descuadra);
 	const notasPie = (hayDescuadre ? 1 : 0) + (omitidas.length ? 1 : 0);
-	const filasCabida = ULTIMA - FILA_CAB - notasPie;
+	const filasCabida = Math.max(0, ULTIMA - PRIMERA - 1 - notasPie);
 
-	// ── Cuerpo: una fila por bono ─────────────────────────────────────────
-	matriz.filas.slice(0, filasCabida).forEach((f, i) => {
-		const r = FILA_CAB + 1 + i;
-		const zebra = i % 2 === 1;
+	// ── Cuerpo: una fila por bono y mes ───────────────────────────────────
+	filasBono.slice(0, filasCabida).forEach(({ f, m, j, grupo }, i) => {
+		const r = PRIMERA + 1 + i;
+		/// La zebra va por BONO y no por fila: los dos meses de un mismo bono
+		/// comparten fondo y se leen como un bloque, que es lo que son.
+		const zebra = grupo % 2 === 1;
 		set(r, COL.NOMBRE, {
-			v: `${f.nombre}  ·  ${formatoCOP(f.valorUnitario)}`,
+			v: conMeses
+				? `${f.nombre}  ·  ${formatoCOP(f.valorUnitario)}  ·  ${etiquetaMes(m)}`
+				: `${f.nombre}  ·  ${formatoCOP(f.valorUnitario)}`,
 			s: { ...(zebra ? derivada() : base()), ht: HorizontalAlign.LEFT, fs: 8 }
 		});
+		set(r, COL.CEDULA, { v: '', s: zebra ? derivada() : base() });
+		rotulo(r);
 		visibles.forEach((p, k) => {
-			const cant = cantidadesDe(f.cantidades, p.i);
-			const rec = cantidadesDe(f.cantidadesRecorridos, p.i);
-			meses.forEach((m, j) => {
-				const n = cant[j] ?? 0;
-				const nRec = rec[j] ?? 0;
-				const difiere = comparar && n !== nRec;
-				/// Editable solo si se puede direccionar la fila de
-				/// `bonificaciones`: hace falta liquidación, vehículo y mes. La
-				/// columna «sin placa» no tiene vehículo y por eso no se toca.
-				const editableAqui = Boolean(conMeses && hoja.liquidacionId && p.vehiculoId);
-				const fondo = editableAqui ? editable() : zebra ? derivada() : base();
-				set(r, colDe(k, j), {
-					// Un cero se deja en blanco: la tabla tiene más ceros que datos
-					// y llenarla de ceros esconde lo que sí pasó. Pero un cero que
-					// DIFIERE de recorridos sí se escribe: «0 → 3» es el descuadre
-					// más grave que hay y en blanco sería el más invisible.
-					v: difiere ? `${n} → ${nRec}` : n > 0 ? n : '',
-					s: {
-						...fondo,
-						ht: HorizontalAlign.CENTER,
-						fs: difiere ? 8 : 9,
-						...(n > 0 || difiere ? { bl: 1 } : {}),
-						...(difiere ? { bg: { rgb: FESTIVO_BG }, cl: { rgb: FESTIVO_TEXTO } } : {})
-					}
-				});
-				if (editableAqui) {
-					bind(r, colDe(k, j), {
-						entityType: 'liquidacion',
-						entityId: hoja.liquidacionId!,
-						field: `bono|${p.vehiculoId}|${m}|${f.nombre}`,
-						conductorId: hoja.conductorId
-					});
+			const n = cantidadesDe(f.cantidades, p.i)[j] ?? 0;
+			const nRec = cantidadesDe(f.cantidadesRecorridos, p.i)[j] ?? 0;
+			const difiere = comparar && n !== nRec;
+			/// Editable solo si se puede direccionar la fila de
+			/// `bonificaciones`: hace falta liquidación, vehículo y mes. La
+			/// columna «sin placa» no tiene vehículo y por eso no se toca.
+			const editableAqui = Boolean(conMeses && hoja.liquidacionId && p.vehiculoId);
+			const fondo = editableAqui ? editable() : zebra ? derivada() : base();
+			set(r, colDe(k), {
+				// Un cero se deja en blanco: la tabla tiene más ceros que datos
+				// y llenarla de ceros esconde lo que sí pasó. Pero un cero que
+				// DIFIERE de recorridos sí se escribe: «0 → 3» es el descuadre
+				// más grave que hay y en blanco sería el más invisible.
+				v: difiere ? `${n} → ${nRec}` : n > 0 ? n : '',
+				s: {
+					...fondo,
+					ht: HorizontalAlign.CENTER,
+					fs: difiere ? 8 : 9,
+					...(n > 0 || difiere ? { bl: 1 } : {}),
+					...(difiere ? { bg: { rgb: FESTIVO_BG }, cl: { rgb: FESTIVO_TEXTO } } : {})
 				}
 			});
+			if (editableAqui) {
+				bind(r, colDe(k), {
+					entityType: 'liquidacion',
+					entityId: hoja.liquidacionId!,
+					field: `bono|${p.vehiculoId}|${m}|${f.nombre}`,
+					conductorId: hoja.conductorId
+				});
+			}
 		});
-		for (let c = colDe(visibles.length, 0); c <= COL.CARGO_FIN; c++) {
+		for (let c = colDe(visibles.length); c <= COL.CARGO_FIN; c++) {
 			set(r, c, { v: '', s: zebra ? derivada() : base() });
 		}
 	});
 
 	// ── Pie: totales por placa y mes ──────────────────────────────────────
-	const filasPintadas = Math.min(matriz.filas.length, filasCabida);
-	const rTotal = FILA_CAB + 1 + filasPintadas;
+	const filasPintadas = Math.min(filasBono.length, filasCabida);
+	const rTotal = PRIMERA + 1 + filasPintadas;
 	if (rTotal <= ULTIMA) {
 		set(rTotal, COL.NOMBRE, { v: 'TOTAL BONOS', s: { ...totales(), ht: HorizontalAlign.LEFT, fs: 8 } });
+		set(rTotal, COL.CEDULA, { v: '', s: totales() });
+		rotulo(rTotal);
 		visibles.forEach((p, k) => {
-			meses.forEach((m, j) => {
-				const suma = matriz.filas.reduce((t, f) => t + (cantidadesDe(f.cantidades, p.i)[j] ?? 0), 0);
-				set(rTotal, colDe(k, j), {
-					v: suma > 0 ? suma : '',
-					s: { ...totales(), ht: HorizontalAlign.CENTER, fs: 9 }
-				});
+			/// El total de la placa suma TODOS los meses, no solo los pintados:
+			/// con la columna única, partirlo por mes ya no tendría dónde ir.
+			const suma = matriz.filas.reduce(
+				(t, f) => t + cantidadesDe(f.cantidades, p.i).reduce((a, n) => a + (n ?? 0), 0),
+				0
+			);
+			set(rTotal, colDe(k), {
+				v: suma > 0 ? suma : '',
+				s: { ...totales(), ht: HorizontalAlign.CENTER, fs: 9 }
 			});
 		});
-		for (let c = colDe(visibles.length, 0); c <= COL.CARGO_FIN; c++) {
+		for (let c = colDe(visibles.length); c <= COL.CARGO_FIN; c++) {
 			set(rTotal, c, { v: '', s: totales() });
 		}
 	}
@@ -1598,6 +1612,11 @@ function leyendaPlacas(args: {
 			v: texto,
 			s: { ...base(), ht: HorizontalAlign.LEFT, fs: 8, cl: { rgb: FESTIVO_TEXTO }, bg: { rgb: FESTIVO_BG } }
 		});
+		/// La nota sí cruza de A a E: es texto suelto, no una fila de la tabla,
+		/// y partirla en A-B dejaría el aviso cortado a los 310 px.
+		for (let c = COL.NOMBRE + 1; c <= COL.CARGO_FIN; c++) {
+			set(rNota, c, { v: '', s: { ...base(), bg: { rgb: FESTIVO_BG } } });
+		}
 		merge(rNota, COL.NOMBRE, rNota, COL.CARGO_FIN);
 		rNota++;
 	};
