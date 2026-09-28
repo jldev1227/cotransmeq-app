@@ -37,6 +37,7 @@ import {
 	allBorders,
 	CABECERA_BG,
 	colLetra,
+	COLOR_TIPO_DIA,
 	comoTexto,
 	contraste,
 	GREEN,
@@ -102,6 +103,25 @@ export interface DiaHojaDTO {
 	/// `true` cuando el día viene de la COPIA de la liquidación y por tanto se
 	/// puede teclear. Ausente en payloads anteriores al borrador editable.
 	propio?: boolean;
+}
+
+/**
+ * Un día del corte que NO genera recargos.
+ *
+ * La `inicial` es lo que se pinta en la celda del día, que mide 46 px: ahí no
+ * cabe «MANTENIMIENTO» ni nada que se le parezca.
+ *
+ *     D   DISPONIBLE      DE  DESCANSO
+ *     M   MANTENIMIENTO   V   VACACIONES
+ */
+export interface ConceptoDiaDTO {
+	/** `YYYY-MM-DD`. */
+	fecha: string;
+	inicial: 'D' | 'DE' | 'M' | 'V';
+	/** Nombre completo, para el desprendible. */
+	etiqueta: string;
+	/** Observación del conductor, o placa del taller. */
+	detalle: string | null;
 }
 
 export interface ClienteNominaDTO {
@@ -292,6 +312,14 @@ export interface HojaNominaDTO {
 	 * Ausente en snapshots anteriores al interruptor; ahí vale `true`.
 	 */
 	mostrarRecargos?: boolean;
+	/**
+	 * Descanso, disponibilidad, mantenimiento y vacaciones del corte.
+	 *
+	 * Un día de estos no produce planilla, así que su columna salía en blanco
+	 * —indistinguible de «no hay dato»— aunque el conductor lo hubiera
+	 * registrado en el portal. Ausente en snapshots anteriores.
+	 */
+	conceptosDia?: ConceptoDiaDTO[];
 	/**
 	 * Lo que la hoja necesita para calcular la BASE PRESTACIONAL sola.
 	 *
@@ -1101,6 +1129,16 @@ function zonaDias(args: {
 }) {
 	const { dias, hoja, porIndice, set, merge, dto, festivos, bind } = args;
 
+	/**
+	 * `YYYY-MM-DD → concepto` para los días que no generan recargos.
+	 *
+	 * Se indexa por FECHA y no por índice de columna porque estos días no
+	 * vienen de una planilla: no tienen `indice`, solo el día del calendario.
+	 */
+	const conceptoPorFecha = new Map<string, ConceptoDiaDTO>(
+		(hoja.conceptosDia ?? []).map((c) => [c.fecha, c])
+	);
+
 	// Cabecera izquierda: rótulos arriba (filas 1-4), datos debajo (5-8).
 	const rotulos: [number, string][] = [
 		[COL.NOMBRE, 'NOMBRES Y APELLIDOS'],
@@ -1245,13 +1283,63 @@ function zonaDias(args: {
 			}
 		});
 
+		/**
+		 * La inicial del concepto del día, si lo hay.
+		 *
+		 * Va en la fila del turno, que es la única casilla de UNA letra que ya
+		 * existía: escribir «MANTENIMIENTO» obligaría a ensanchar la columna y
+		 * con ella las treinta y una del corte.
+		 *
+		 * Se pinta ANTES del `continue` a propósito: los días de descanso,
+		 * disponibilidad y taller no tienen planilla, así que si se dejara
+		 * abajo no se pintaría ninguno — que es justo el caso que esto viene a
+		 * resolver.
+		 */
+		/// Solo en la PRIMERA columna de la fecha. La rejilla de columnas es
+		/// global al libro: si CUALQUIER conductor hizo dos servicios el día 10,
+		/// ese día abre dos columnas para todos, y el concepto se pintaría dos
+		/// veces en la hoja de quien ese día estuvo disponible. A DAYRO le salían
+		/// 18 «D» donde hay 14 días.
+		const concepto = repetida ? undefined : conceptoPorFecha.get(d.fecha);
+		if (concepto) {
+			set(FILA.TURNO, c, {
+				v: concepto.inicial,
+				s: {
+					...celdaDia(),
+					ht: HorizontalAlign.CENTER,
+					bl: 1,
+					cl: { rgb: COLOR_TIPO_DIA[concepto.etiqueta] ?? MUTED },
+					/// «DE» son dos caracteres en una celda de 46 px: un punto menos
+					/// de cuerpo evita que se corte.
+					fs: concepto.inicial.length > 1 ? 8 : 9
+				}
+			});
+		}
+
 		if (!dh) {
-			// Día sin planilla: se deja en blanco, no en cero. Un cero diría
-			// «trabajó cero horas» y lo que pasa es que no hay dato.
+			// Día sin planilla: el resto se deja en blanco, no en cero. Un cero
+			// diría «trabajó cero horas» y lo que pasa es que no hay dato. La
+			// inicial del concepto, si la había, ya quedó puesta arriba.
 			continue;
 		}
 
-		set(FILA.TURNO, c, { v: 'T', s: { ...celdaDia(), ht: HorizontalAlign.CENTER } });
+		/// Un día con planilla lleva «T» salvo que además traiga concepto —un
+		/// día de vacaciones con horas registradas, por ejemplo—: ahí manda el
+		/// concepto, que es lo que explica la contradicción.
+		if (!concepto) {
+			/// «L» de LABORADO, no «T». La «T» era de «turno» y no decía nada: en
+			/// una fila donde ahora conviven D, DE, M y V, el día trabajado tiene
+			/// que nombrarse igual que los demás.
+			set(FILA.TURNO, c, {
+				v: 'L',
+				s: {
+					...celdaDia(),
+					ht: HorizontalAlign.CENTER,
+					bl: 1,
+					cl: { rgb: COLOR_TIPO_DIA.LABORADO }
+				}
+			});
+		}
 		set(FILA.INICIO, c, {
 			v: horaTexto(dh.horaInicio),
 			s: { ...celdaDia(), ht: HorizontalAlign.CENTER, fs: 9 }

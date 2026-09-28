@@ -56,6 +56,32 @@ export const TEXTO_MARCA: string = IDENTIDAD.colores.textoMarca;
 /** Igual, cuando hace falta más peso. */
 export const TEXTO_MARCA_FUERTE: string = IDENTIDAD.colores.textoMarcaFuerte;
 
+/**
+ * Color del TIPO DE DÍA, el mismo lenguaje que el canvas de recorridos.
+ *
+ * El color ES el dato: en una fila de treinta y siete columnas de una letra,
+ * distinguir «D» de «DE» leyendo carácter a carácter no es viable. Son los
+ * tonos que ya usa `recorridos.builder.ts` para la misma cosa, para que un día
+ * disponible se vea azul en los dos canvas.
+ *
+ * ⚠️ LABORADO NO USA `acento`. Recorridos pinta ese tipo con
+ * `IDENTIDAD.colores.acento`, que en Transmeralda es un verde oscuro legible
+ * pero en Cotransmeq es `#FDBA74` —un naranja CLARO, pensado como fondo—, y
+ * como texto sobre celda blanca no se lee. Aquí se usa el tono de marca que la
+ * identidad declara PARA TEXTO, que es lo que esto es.
+ *
+ * VACACIONES no existe en recorridos: no es un día que el conductor registre,
+ * sale del rango de la liquidación. El morado es el único que no choca con los
+ * otros cuatro.
+ */
+export const COLOR_TIPO_DIA: Record<string, string> = {
+	LABORADO: IDENTIDAD.colores.textoMarcaFuerte,
+	DISPONIBLE: '#1D4ED8',
+	DESCANSO: '#475569',
+	MANTENIMIENTO: '#B45309',
+	VACACIONES: '#7E22CE'
+};
+
 export const TEXT_DARK = TEXTO_OSCURO;
 export const MUTED = '#475569';
 export const TOTALES_BG = '#E2E8F0';

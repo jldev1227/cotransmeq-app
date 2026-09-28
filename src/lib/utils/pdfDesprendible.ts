@@ -1725,6 +1725,189 @@ export async function construirDocDefinition(
 		}
 	}
 
+	// ============================================================
+	// DÍAS SIN RECARGO DEL CORTE
+	// ============================================================
+	//
+	// Descanso, disponibilidad, mantenimiento y vacaciones: días que el
+	// conductor registró en el portal —o que caen en su periodo de
+	// vacaciones— y que NO generan horas extras ni recargos.
+	//
+	// Va en su propia tabla y no dentro de la de una planilla porque no
+	// pertenecen a ninguna: no tienen empresa, ni vehículo, ni horas. Meterlos
+	// ahí obligaría a elegir a cuál colgarlos y dejaría siete columnas de
+	// recargo en guiones.
+	//
+	// Repite la maqueta de las tablas de recargo —título, cabecera verde con
+	// conductor y cédula, y la misma retícula gris— para que se lea como una
+	// página más del mismo documento y no como un añadido.
+	//
+	// ⚠️ NO LLEVAN HORARIO, y no es que falte el dato: el portal solo lo pide
+	// cuando el día es LABORADO. Por eso la tercera columna es el DETALLE —la
+	// observación del conductor, o la placa del taller— y no una hora que
+	// habría que inventar.
+	//
+	// Fuera del `if` de las planillas a propósito: un conductor que pasó el
+	// corte entero de descanso no tiene ninguna planilla, y es justo a quien
+	// más le hace falta ver estos días impresos.
+	const diasSinRecargo: any[] = Array.isArray((recargosData as any)?.dias_sin_recargo)
+		? (recargosData as any).dias_sin_recargo
+		: [];
+
+	if (diasSinRecargo.length > 0 && item.mostrar_recargos) {
+		content.push({ text: '', pageBreak: 'before' as const });
+
+		content.push({
+			text: 'DÍAS SIN RECARGO DEL CORTE',
+			bold: true,
+			color,
+			fontSize: 13,
+			alignment: 'center' as const,
+			margin: [0, 0, 0, 10]
+		});
+
+		content.push({
+			text: 'Aviso: Estos días no generan horas extras ni recargos. No suman a los totales del desprendible.',
+			fontSize: 9,
+			color: '#B91C1C',
+			bold: true,
+			margin: [0, 0, 0, 5]
+		});
+
+		// Cabecera verde, igual que la de cada planilla.
+		const cabeceraSinRecargo: any[] = [
+			{
+				columns: [
+					{
+						text: `CONDUCTOR: ${conductorNombre}`,
+						color: 'white',
+						bold: true,
+						fontSize: 9
+					},
+					{
+						text: `C.C.: ${conductorCedula}`,
+						color: 'white',
+						fontSize: 9,
+						alignment: 'right' as const
+					}
+				],
+				margin: [0, 0, 0, 2]
+			},
+			{
+				columns: [
+					{
+						text: 'DÍAS SIN RECARGO',
+						color: 'white',
+						bold: true,
+						fontSize: 10
+					},
+					{
+						text: `${diasSinRecargo.length} ${diasSinRecargo.length === 1 ? 'DÍA' : 'DÍAS'}`,
+						color: 'white',
+						bold: true,
+						fontSize: 10,
+						alignment: 'right' as const
+					}
+				]
+			}
+		];
+
+		content.push({
+			table: {
+				widths: ['*'],
+				body: [[{ stack: cabeceraSinRecargo, fillColor: color, margin: [4, 4, 4, 4] }]]
+			},
+			layout: {
+				hLineWidth: () => 0,
+				vLineWidth: () => 0,
+				paddingLeft: () => 0,
+				paddingRight: () => 0,
+				paddingTop: () => 0,
+				paddingBottom: () => 0
+			},
+			margin: [0, 5, 0, 0]
+		});
+
+		const diaDeLaSemana = (fecha: string): string => {
+			const d = new Date(`${fecha}T12:00:00`);
+			if (Number.isNaN(d.getTime())) return '';
+			return d.toLocaleDateString('es-CO', { weekday: 'short' }).replace('.', '').toUpperCase();
+		};
+
+		const cabeceraFilas = ['DÍA', 'CONCEPTO', 'DETALLE'].map((h) => ({
+			text: h,
+			bold: true,
+			fontSize: 8,
+			color,
+			alignment: 'center' as const,
+			margin: [0, 3, 0, 3]
+		}));
+
+		const filasSinRecargo = diasSinRecargo.map((d: any, idx: number) => {
+			const fondo = idx % 2 === 0 ? '#ffffff' : '#f9f9f9';
+			const celda = (texto: string, alineacion: 'left' | 'center', negrita = false) => ({
+				text: texto,
+				bold: negrita,
+				fontSize: 8,
+				color: '#333333',
+				alignment: alineacion,
+				fillColor: fondo,
+				margin: [0, 2, 0, 2]
+			});
+			const semana = diaDeLaSemana(String(d.fecha ?? ''));
+			return [
+				celda(`${d.dia ?? ''}${semana ? ` ${semana}` : ''}`, 'center', true),
+				celda(String(d.etiqueta ?? ''), 'center'),
+				celda(String(d.detalle ?? '-'), 'left')
+			];
+		});
+
+		const totalSinRecargo = [
+			{
+				text: `${diasSinRecargo.length}`,
+				bold: true,
+				fontSize: 8,
+				alignment: 'center' as const,
+				fillColor: colorBg,
+				margin: [0, 2, 0, 2]
+			},
+			{
+				text: 'TOTAL DÍAS',
+				bold: true,
+				fontSize: 8,
+				alignment: 'center' as const,
+				fillColor: colorBg,
+				margin: [0, 2, 0, 2]
+			},
+			{
+				text: 'No suman a los totales',
+				fontSize: 8,
+				alignment: 'left' as const,
+				fillColor: colorBg,
+				margin: [0, 2, 0, 2]
+			}
+		];
+
+		content.push({
+			table: {
+				headerRows: 1,
+				widths: [60, 110, '*'],
+				body: [cabeceraFilas, ...filasSinRecargo, totalSinRecargo]
+			},
+			layout: {
+				hLineWidth: (i: number, node: any) =>
+					i === 0 || i === 1 || i === node.table.body.length ? 1 : 0.5,
+				vLineWidth: () => 0.5,
+				hLineColor: () => '#E0E0E0',
+				vLineColor: () => '#E0E0E0',
+				paddingLeft: () => 2,
+				paddingRight: () => 2,
+				paddingTop: () => 1,
+				paddingBottom: () => 1
+			}
+		});
+	}
+
 	const docDefinition: any = {
 		pageSize: 'A4',
 		pageMargins: [40, 30, 40, 30],
