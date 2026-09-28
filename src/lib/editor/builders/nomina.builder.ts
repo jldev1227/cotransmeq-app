@@ -282,6 +282,17 @@ export interface HojaNominaDTO {
 	aplicaAjusteGeopark?: boolean;
 	ajusteRecargosCompletos?: boolean;
 	/**
+	 * Si el desprendible de esta liquidación imprime las tablas de recargos:
+	 * la segunda página, con el desglose hora a hora de cada planilla.
+	 *
+	 * Es `mostrar_recargos` de la liquidación y por defecto vale `true`. Se
+	 * cambia desde el carril del canvas y solo afecta al papel: los recargos
+	 * siguen pagándose y sumando al devengado de la primera página.
+	 *
+	 * Ausente en snapshots anteriores al interruptor; ahí vale `true`.
+	 */
+	mostrarRecargos?: boolean;
+	/**
 	 * Lo que la hoja necesita para calcular la BASE PRESTACIONAL sola.
 	 *
 	 * La base y las dos deducciones son fórmulas sobre los días de nivelación,

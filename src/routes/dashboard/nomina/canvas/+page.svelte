@@ -11,6 +11,7 @@
 		type CambioEstado,
 		nominaBorradoresAPI
 	} from '$lib/api/nomina-canvas';
+	import { toggleDesprendibleTablasVisible } from '$lib/api/nomina';
 	import { nominaSheetId } from '$lib/editor/builders/nomina.builder';
 	import {
 		createNominaEngine,
@@ -219,6 +220,21 @@
 			.filter((h) => h.liquidacionId && h.estado === 'BORRADOR')
 			.map((h) => ({ liquidacionId: h.liquidacionId!, nombre: h.nombre }))
 	);
+
+	// ─── Tablas de recargos del desprendible ───────────────
+	/**
+	 * `mostrar_recargos` es NOT NULL con default `true`, así que la ausencia
+	 * del campo —un snapshot viejo, una hoja sin liquidación— se lee como
+	 * encendido: es lo que el desprendible venía haciendo.
+	 */
+	let hojasConLiquidacion = $derived(
+		(datos?.hojas ?? []).filter((h) => h.liquidacionId)
+	);
+	let hojasSinTablas = $derived(
+		hojasConLiquidacion.filter((h) => h.mostrarRecargos === false)
+	);
+	let tablasEnHojaActiva = $derived(hojaActiva?.mostrarRecargos !== false);
+	let cambiandoTablas = $state(false);
 
 	// ─── Conceptos adicionales ─────────────────────────────
 	/**
@@ -1134,6 +1150,62 @@
 		mostrarNotificar = true;
 	}
 
+	/**
+	 * Enciende o apaga las tablas de recargos de unas liquidaciones.
+	 *
+	 * Va por REST y no por el socket del canvas aunque `mostrar_recargos` esté
+	 * registrado como `flag` parcheable: no es una celda de la hoja, así que no
+	 * hay nada que repintar, y el endpoint en lote ya existía desde que esto se
+	 * cambiaba desde el listado. Un patch por conductor sobre treinta hojas
+	 * serían treinta idas al servidor para el mismo efecto.
+	 *
+	 * Lo que sí hay que hacer después es soltar la caché de desprendibles: si
+	 * no, la vista previa seguiría dando el PDF con las tablas que se acaban de
+	 * quitar.
+	 */
+	async function cambiarTablasRecargos(ids: string[], visible: boolean, detalle: string) {
+		if (!ids.length || cambiandoTablas) return;
+		cambiandoTablas = true;
+		await conOverlay(
+			visible ? 'Mostrando las tablas de recargos' : 'Ocultando las tablas de recargos',
+			detalle,
+			async () => {
+				await toggleDesprendibleTablasVisible(ids, visible);
+				limpiarCacheDesprendibles();
+				await loadInicial();
+				const cuantas = ids.length === 1 ? detalle : `${ids.length} desprendibles`;
+				toast.success(
+					visible
+						? `${cuantas}: el desglose de recargos vuelve al desprendible.`
+						: `${cuantas}: el desprendible sale sin el desglose de recargos.`,
+					{ description: 'No cambia lo que se paga: los recargos siguen en el devengado.' }
+				);
+			}
+		);
+		cambiandoTablas = false;
+	}
+
+	function alternarTablasDeLaHoja() {
+		const hoja = hojaActiva;
+		if (!hoja?.liquidacionId) return;
+		void cambiarTablasRecargos([hoja.liquidacionId], !tablasEnHojaActiva, hoja.nombre);
+	}
+
+	function tablasEnTodoElPeriodo(visible: boolean) {
+		const ids = hojasConLiquidacion
+			.filter((h) => (h.mostrarRecargos !== false) !== visible)
+			.map((h) => h.liquidacionId!);
+		if (!ids.length) {
+			toast.info(
+				visible
+					? 'Todas las hojas del periodo ya imprimen el desglose.'
+					: 'Ninguna hoja del periodo imprime ya el desglose.'
+			);
+			return;
+		}
+		void cambiarTablasRecargos(ids, visible, `${ids.length} hojas del periodo`);
+	}
+
 	function volver() {
 		/// Al dashboard, no al listado: `/dashboard/nomina` ahora redirige a
 		/// este mismo canvas, así que apuntar ahí sería un bucle.
@@ -1171,6 +1243,22 @@
 				hojaActiva && !hojaActiva.liquidacionId
 					? 'Este conductor todavía no tiene liquidación en el periodo.'
 					: undefined
+		},
+		{
+			id: 'tablas-recargos',
+			label: 'Tablas de recargos',
+			hint: hojaActiva?.liquidacionId
+				? tablasEnHojaActiva
+					? `El desprendible de ${hojaActiva.nombre} lleva el desglose de recargos.`
+					: `El desprendible de ${hojaActiva.nombre} sale SIN el desglose de recargos.`
+				: 'Decide si el desprendible imprime el desglose de recargos.',
+			icon: iconoTablasRecargos,
+			/// Cuántas hojas del periodo salen sin el desglose. Sin esto, apagarlo
+			/// en una hoja y olvidarlo no se ve desde ningún sitio.
+			badge: hojasSinTablas.length || null,
+			panel: panelTablasRecargos,
+			panelWidth: 320,
+			disabled: !!accionEnCurso
 		},
 		{
 			id: 'excel',
@@ -1445,6 +1533,90 @@
 			d="M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z"
 		/>
 	</svg>
+{/snippet}
+
+{#snippet iconoTablasRecargos()}
+	<!-- Una tabla con una barra diagonal: el desglose que puede no imprimirse. -->
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+		<rect x="3" y="4" width="18" height="16" rx="2" stroke-linejoin="round" />
+		<path stroke-linecap="round" d="M3 9h18" />
+		<path stroke-linecap="round" d="M9 9v11" opacity="0.6" />
+		<path stroke-linecap="round" d="M4 20L20 4" />
+	</svg>
+{/snippet}
+
+<!--
+	Panel de las tablas de recargos.
+
+	Dos alcances a la vez a propósito: el conductor que se está mirando y el
+	periodo entero. Cuando un cliente no quiere el desglose no lo quiere para
+	uno, lo quiere para todos; pero el caso de una sola hoja existe —un
+	conductor que pidió su detalle— y obligar a recorrer treinta hojas para
+	eso sería peor que el problema que esto resuelve.
+-->
+{#snippet panelTablasRecargos()}
+	<div class="trec">
+		<p class="trec-intro">
+			El desglose hora a hora de cada planilla, que va en la segunda página del
+			desprendible. Apagarlo <strong>no cambia lo que se paga</strong>: los
+			recargos siguen sumando en la primera página.
+		</p>
+
+		<div class="trec-bloque">
+			<span class="trec-titulo">Hoja abierta</span>
+			{#if hojaActiva?.liquidacionId}
+				<button
+					type="button"
+					class="trec-fila"
+					role="switch"
+					aria-checked={tablasEnHojaActiva}
+					disabled={cambiandoTablas || !!accionEnCurso}
+					onclick={alternarTablasDeLaHoja}
+				>
+					<span class="trec-nombre">{hojaActiva.nombre}</span>
+					<span class="trec-switch" class:on={tablasEnHojaActiva}>
+						<span class="trec-bola"></span>
+					</span>
+				</button>
+				<span class="trec-estado">
+					{tablasEnHojaActiva ? 'Imprime el desglose' : 'Sale sin el desglose'}
+				</span>
+			{:else}
+				<span class="trec-vacio">
+					Este conductor todavía no tiene liquidación en el periodo.
+				</span>
+			{/if}
+		</div>
+
+		<div class="trec-bloque">
+			<span class="trec-titulo">
+				Todo el periodo · {hojasConLiquidacion.length}
+				{hojasConLiquidacion.length === 1 ? 'hoja' : 'hojas'}
+			</span>
+			<div class="trec-botones">
+				<button
+					type="button"
+					disabled={cambiandoTablas || !!accionEnCurso || !hojasConLiquidacion.length}
+					onclick={() => tablasEnTodoElPeriodo(false)}
+				>
+					Ocultar en todas
+				</button>
+				<button
+					type="button"
+					disabled={cambiandoTablas || !!accionEnCurso || !hojasConLiquidacion.length}
+					onclick={() => tablasEnTodoElPeriodo(true)}
+				>
+					Mostrar en todas
+				</button>
+			</div>
+			{#if hojasSinTablas.length}
+				<span class="trec-estado">
+					{hojasSinTablas.length}
+					{hojasSinTablas.length === 1 ? 'hoja sale' : 'hojas salen'} sin el desglose.
+				</span>
+			{/if}
+		</div>
+	</div>
 {/snippet}
 
 {#snippet panelEstado()}
@@ -1893,5 +2065,136 @@
 	.btn-refrescar-dias:disabled {
 		opacity: 0.6;
 		cursor: default;
+	}
+
+	/* ─── Panel de tablas de recargos ─────────────────────────────────────
+	   Es un flyout de 320px sobre el canvas, así que todo va apretado: el
+	   texto explicativo es lo único que puede ocupar dos líneas. El acento
+	   del interruptor es el de la marca, igual que el `tone: 'green'` del
+	   carril, que en cotransmeq es naranja. */
+	.trec {
+		display: flex;
+		flex-direction: column;
+		gap: 0.85rem;
+	}
+	.trec-intro {
+		margin: 0;
+		font-size: 0.72rem;
+		line-height: 1.45;
+		color: var(--text-muted, #666);
+	}
+	.trec-intro strong {
+		color: var(--text, #1f2937);
+		font-weight: 600;
+	}
+	.trec-bloque {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+	}
+	.trec-titulo {
+		font-size: 0.62rem;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--text-muted, #8a8a8a);
+	}
+	.trec-fila {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		width: 100%;
+		padding: 0.45rem 0.6rem;
+		border: 1px solid var(--border, #e5e7eb);
+		border-radius: 8px;
+		background: #fff;
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+	.trec-fila:hover:not(:disabled) {
+		border-color: #ea580c;
+	}
+	.trec-fila:disabled {
+		opacity: 0.55;
+		cursor: not-allowed;
+	}
+	.trec-nombre {
+		flex: 1 1 auto;
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: var(--text, #1f2937);
+	}
+	/* Interruptor dibujado a mano: un <input type=checkbox> con apariencia de
+	   switch arrastra el estilo del navegador y aquí conviven Chrome y Safari.
+	   El botón ya lleva role="switch" y aria-checked, así que para un lector
+	   de pantalla esto es un interruptor de verdad. */
+	.trec-switch {
+		flex: 0 0 auto;
+		position: relative;
+		width: 32px;
+		height: 18px;
+		border-radius: 999px;
+		background: #cbd5e1;
+		transition: background 0.15s ease;
+	}
+	.trec-switch.on {
+		background: #ea580c;
+	}
+	.trec-bola {
+		position: absolute;
+		top: 2px;
+		left: 2px;
+		width: 14px;
+		height: 14px;
+		border-radius: 50%;
+		background: #fff;
+		transition: transform 0.15s ease;
+	}
+	.trec-switch.on .trec-bola {
+		transform: translateX(14px);
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.trec-switch,
+		.trec-bola {
+			transition: none;
+		}
+	}
+	.trec-estado {
+		font-size: 0.68rem;
+		color: var(--text-muted, #777);
+	}
+	.trec-vacio {
+		font-size: 0.72rem;
+		line-height: 1.4;
+		color: var(--text-muted, #777);
+	}
+	.trec-botones {
+		display: flex;
+		gap: 0.4rem;
+	}
+	.trec-botones button {
+		flex: 1 1 0;
+		padding: 0.4rem 0.3rem;
+		border: 1px solid var(--border, #e5e7eb);
+		border-radius: 8px;
+		background: #fff;
+		font-size: 0.72rem;
+		font-weight: 600;
+		color: var(--text, #1f2937);
+		cursor: pointer;
+	}
+	.trec-botones button:hover:not(:disabled) {
+		border-color: #ea580c;
+		color: #c2410c;
+	}
+	.trec-botones button:disabled {
+		opacity: 0.55;
+		cursor: not-allowed;
 	}
 </style>
