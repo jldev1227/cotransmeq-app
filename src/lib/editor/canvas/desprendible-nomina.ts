@@ -15,12 +15,12 @@
  * El precio es que hay que pedir la liquidación completa por cada conductor;
  * de ahí la caché y el ritmo secuencial del ZIP.
  */
-import {
-	downloadSinglePayslipPdf,
-	obtenerLiquidacionPorId,
-	obtenerFirmasPorLiquidacion
-} from '$lib/api/nomina';
+import { obtenerLiquidacionPorId, obtenerFirmasPorLiquidacion } from '$lib/api/nomina';
 import { nominaBorradoresAPI } from '$lib/api/nomina-canvas';
+import {
+	generarPdfDesprendible,
+	generarBlobDesprendible
+} from '$lib/utils/pdfDesprendible';
 
 export interface DatosDesprendible {
 	liquidacion: any;
@@ -41,7 +41,9 @@ export function limpiarCacheDesprendibles(): void {
 }
 
 /** Todo lo que `pdfDesprendible` necesita para una liquidación. */
-export async function cargarDatosDesprendible(liquidacionId: string): Promise<DatosDesprendible> {
+export async function cargarDatosDesprendible(
+	liquidacionId: string
+): Promise<DatosDesprendible> {
 	const enCache = cache.get(liquidacionId);
 	if (enCache) return enCache;
 
@@ -97,31 +99,12 @@ export async function cargarDatosDesprendible(liquidacionId: string): Promise<Da
 
 /** Abre el desprendible en una pestaña. Es la vista previa Y la descarga. */
 export async function abrirDesprendible(liquidacionId: string): Promise<void> {
-	const popup = typeof window !== 'undefined' ? window.open('about:blank', '_blank') : null;
-	try {
-		const blob = await blobDesprendible(liquidacionId);
-		const url = URL.createObjectURL(blob);
-		if (popup) {
-			popup.location.href = url;
-		} else {
-			const link = document.createElement('a');
-			link.href = url;
-			link.target = '_blank';
-			link.rel = 'noopener';
-			link.click();
-		}
-		window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-	} catch (error) {
-		popup?.close();
-		throw error;
-	}
+	const { liquidacion, firmas, recargosData } = await cargarDatosDesprendible(liquidacionId);
+	await generarPdfDesprendible(liquidacion, firmas, recargosData);
 }
 
-/**
- * El PDF canónico generado por backend. Web, ZIP, correo y app móvil ya no
- * mantienen maquetas distintas para la misma liquidación.
- */
+/** El mismo desprendible como Blob, para meterlo en el ZIP. */
 export async function blobDesprendible(liquidacionId: string): Promise<Blob> {
-	const bytes = await downloadSinglePayslipPdf(liquidacionId);
-	return new Blob([bytes], { type: 'application/pdf' });
+	const { liquidacion, firmas, recargosData } = await cargarDatosDesprendible(liquidacionId);
+	return generarBlobDesprendible(liquidacion, firmas, recargosData);
 }

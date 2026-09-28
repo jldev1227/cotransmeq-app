@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { page } from '$app/stores';
   import { fade, fly, scale } from 'svelte/transition';
+  import { generarPdfDesprendible } from '$lib/utils/pdfDesprendible';
 
   type PageState = 'loading' | 'error' | 'firma' | 'firmando' | 'generando-pdf' | 'listo';
   let estado: PageState = 'loading';
@@ -9,6 +10,9 @@
 
   // Data from backend
   let tokenData: any = null;
+  let liquidacionData: any = null;
+  let recargosData: any = null;
+  let firmaData: any = null;
 
   // Canvas para firma
   let canvas: HTMLCanvasElement;
@@ -72,7 +76,7 @@
     try {
       estado = 'generando-pdf';
       const base = getApiBase();
-      const res = await fetch(`${base}/api/desprendible-firma/${token}/pdf`);
+      const res = await fetch(`${base}/api/desprendible-firma/${token}/datos`);
       
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
@@ -81,9 +85,28 @@
         return;
       }
 
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      window.location.assign(url);
+      const json = await res.json();
+      const data = json.data;
+      liquidacionData = data.liquidacion;
+      // Usar el `dataParaPdf` que arma el backend (planillas ya clasificadas
+      // y ancladas a los recargos guardados de la liquidación), NO el preview
+      // crudo de `data.recargos`: ese trae TODAS las planillas del período,
+      // incluidas las que el usuario desmarcó al liquidar, y se imprimían
+      // páginas de detalle que no respaldan ningún recargo del desprendible.
+      // Mismo criterio que el portal del conductor.
+      recargosData =
+        data.dataParaPdf && Array.isArray(data.dataParaPdf.planillas)
+          ? data.dataParaPdf
+          : { planillas: [] };
+      firmaData = data.firma;
+
+      // Construir firmas array para el PDF
+      const firmasArr = firmaData?.presignedUrl 
+        ? [{ presignedUrl: firmaData.presignedUrl }] 
+        : [];
+
+      // Generar PDF usando la misma función del desprendible
+      await generarPdfDesprendible(liquidacionData, firmasArr as any, recargosData);
       estado = 'listo';
     } catch (err: any) {
       errorMessage = 'Error al generar el desprendible. Intente de nuevo.';
@@ -385,6 +408,11 @@
           </button>
         </div>
 
+        {#if firmaData?.fecha_firma}
+          <p class="mt-4 text-center text-xs text-gray-400">
+            Firmado el {new Date(firmaData.fecha_firma).toLocaleString('es-CO')}
+          </p>
+        {/if}
       </div>
     {/if}
   </main>

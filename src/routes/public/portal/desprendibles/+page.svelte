@@ -4,7 +4,7 @@
   import { page } from '$app/stores';
   import { fade, fly, scale } from 'svelte/transition';
   import { elasticOut } from 'svelte/easing';
-  import { portalSession, isAuthenticated, portalFetch, portalFetchBlob } from '$lib/stores/portalStore';
+  import { portalSession, isAuthenticated, portalFetch } from '$lib/stores/portalStore';
 
   interface Desprendible {
     id: string;
@@ -249,21 +249,46 @@
 
   async function verDesprendible(id: string) {
     generandoPdf = id;
-    const popup = window.open('about:blank', '_blank');
     try {
-      const blob = await portalFetchBlob(`/conductor-portal/desprendibles/${id}/pdf`);
-      const url = URL.createObjectURL(blob);
-      if (popup) popup.location.href = url;
-      else {
-        const link = document.createElement('a');
-        link.href = url;
-        link.target = '_blank';
-        link.rel = 'noopener';
-        link.click();
-      }
-      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      const res = await portalFetch(`/conductor-portal/desprendibles/${id}`);
+      const { liquidacion, dataParaPdf, firma } = res.data;
+
+      // El backend ya devuelve `dataParaPdf` con las planillas
+      // clasificadas (`_categoria`: 'pagar' | 'bono_aparte' | 'no_pagar'),
+      // exactamente la misma estructura que arma el modal del dashboard
+      // en su frontend. GEOLAB, RED SALUD e INGENIERIA ESPECIALIZADA
+      // quedan como 'bono_aparte' (sin valor monetario en el total).
+      //
+      // Si por alguna razón el backend no lo construyó (ej. error al
+      // obtener el preview), caemos a un `dataParaPdf` vacío para no
+      // romper la generación de la página 1 del desprendible.
+      const dataParaPdfSafe: { planillas: any[] } =
+        dataParaPdf && Array.isArray(dataParaPdf.planillas)
+          ? dataParaPdf
+          : { planillas: [] };
+
+      // Convertir la firma del portal al formato `FirmaConUrl[]` que
+      // espera `pdfDesprendible.ts` (necesita `presignedUrl` y
+      // `fecha_firma`).
+      const firmas: any[] =
+        firma && firma.presignedUrl
+          ? [
+              {
+                id: '',
+                liquidacion_id: liquidacion.id,
+                conductor_id: liquidacion.conductor_id,
+                firma_url: '',
+                firma_s3_key: '',
+                fecha_firma: firma.fecha_firma || new Date().toISOString(),
+                estado: 'firmado',
+                presignedUrl: firma.presignedUrl
+              }
+            ]
+          : [];
+
+      const { generarPdfDesprendible } = await import('$lib/utils/pdfDesprendible');
+      await generarPdfDesprendible(liquidacion, firmas, dataParaPdfSafe);
     } catch (err: any) {
-      popup?.close();
       if (err.status === 401) {
         portalSession.logout();
         goto('/public/portal');
@@ -1349,7 +1374,7 @@
 {/if}
 
 <style>
-  /* ═══ TOKENS — portal editorial Cotransmeq ═══ */
+  /* ═══ TOKENS — landing-transmeralda editorial ═══ */
   .desprendibles-page {
     --bg: #faf7f2;
     --surface: #ffffff;
