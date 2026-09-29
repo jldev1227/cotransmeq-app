@@ -103,6 +103,13 @@ export interface DiaHojaDTO {
 	/// `true` cuando el día viene de la COPIA de la liquidación y por tanto se
 	/// puede teclear. Ausente en payloads anteriores al borrador editable.
 	propio?: boolean;
+	/// Marcas del desprendible (`liquidaciones.marcas_dias`). `oculto`: no sale
+	/// en las tablas de recargos. `noSuma`: sale, pero no se paga — sus horas
+	/// quedan fuera de TODAS las fórmulas de dinero, como hace el servidor.
+	oculto?: boolean;
+	noSuma?: boolean;
+	/// Lo que valen sus horas de recargo a la tarifa de su cliente.
+	valorRecargos?: number;
 }
 
 /**
@@ -359,6 +366,9 @@ export interface HojaNominaDTO {
 		hasta: string | null;
 		dias: number;
 		salarioBase: number;
+		/// `true` mientras la liquidación no fije `salario_licencia`: entonces
+		/// se liquida sobre el básico. Opcional por los payloads viejos.
+		salarioHeredado?: boolean;
 	};
 	devengos: ConceptoDTO[];
 	deducciones: ConceptoDTO[];
@@ -1275,11 +1285,34 @@ function zonaDias(args: {
 			v: d.dia,
 			s: { ...cabecera(festivo ? FESTIVO_CABECERA : domingo ? '#7F1D1D' : GREEN), fs: 10 }
 		});
+		/**
+		 * Las MARCAS del desprendible se leen en la cabecera del día, en gris:
+		 * sin esto, un día que no suma se ve igual que los demás y el total de
+		 * abajo parece corto sin razón. Se gestionan desde el modal del carril.
+		 */
+		const diaHoja = porIndice.get(d.indice);
+		const marca = diaHoja?.noSuma
+			? diaHoja.oculto
+				? 'FUERA'
+				: 'NO SUMA'
+			: diaHoja?.oculto
+				? 'OCULTO'
+				: null;
 		set(FILA.CAB_NOMBRE_DIA, c, {
-			v: repetida ? `${(d.ocurrencia ?? 0) + 1}.º SERV` : d.nombreDia.slice(0, 3),
+			v: marca ?? (repetida ? `${(d.ocurrencia ?? 0) + 1}.º SERV` : d.nombreDia.slice(0, 3)),
 			s: {
-				...cabecera(repetida ? SERVICIO_EXTRA : festivo ? '#92400E' : domingo ? '#991B1B' : SUBCAB),
-				fs: repetida ? 7 : 9
+				...cabecera(
+					marca
+						? '#6B7280'
+						: repetida
+							? SERVICIO_EXTRA
+							: festivo
+								? '#92400E'
+								: domingo
+									? '#991B1B'
+									: SUBCAB
+				),
+				fs: marca || repetida ? 7 : 9
 			}
 		});
 
@@ -1962,7 +1995,11 @@ function zonaConfiguracion(args: {
 		 * Columnas de día que caen dentro de ESTE tramo: son las que suma
 		 * HORAS MES. Con un tramo único son todas.
 		 */
+		const columnasNoSuman = new Set(hoja.dias.filter((x) => x.noSuma).map((x) => x.indice));
 		const columnasTramo = dias
+			/// Un día «no suma» tampoco cuenta aquí: el servidor lo saca de las
+			/// horas del tramo, y de ellas cuelgan VALOR y el ajuste manual.
+			.filter((d) => !columnasNoSuman.has(d.indice))
 			.filter((d) => !tr.desde || (d.fecha >= tr.desde && d.fecha <= tr.hasta))
 			.map((d) => COL.DIA0 + d.indice);
 
@@ -2159,8 +2196,12 @@ function zonaEmpresas(args: {
 		 * que FEPCO aparece dos veces en un corte que cruza dos meses y cada
 		 * copia suma solo sus columnas.
 		 */
+		/// Los ocultos y los que no suman no entran en sus fórmulas: el servidor
+		/// ya los sacó del bloque, y el bloque es dinero de ese cliente.
 		const diasDelBloque = hoja.dias.filter(
 			(d) =>
+				!d.oculto &&
+				!d.noSuma &&
 				d.empresaId === b.empresaId &&
 				Number(d.fecha.slice(0, 4)) === b.anio &&
 				Number(d.fecha.slice(5, 7)) === b.mes
@@ -2362,8 +2403,10 @@ function zonaJornada(args: {
 	 * el servidor, así que las dos columnas se pueden sumar aquí mismo.
 	 */
 	const ajustados = codigosAjustados(hoja);
-	const diasDesprendible = hoja.dias.filter((d) => !d.disponibilidad);
-	const diasDisponibilidad = hoja.dias.filter((d) => d.disponibilidad);
+	/// Los días marcados «no sumar» no van a ninguna de las dos columnas: no se
+	/// pagan ni como recargo ni como disponibilidad.
+	const diasDesprendible = hoja.dias.filter((d) => !d.disponibilidad && !d.noSuma);
+	const diasDisponibilidad = hoja.dias.filter((d) => d.disponibilidad && !d.noSuma);
 	const porCodigo = new Map<CodigoRecargo, { horas: string; valor: string }>();
 
 	const primeraReparto = r;
@@ -2540,7 +2583,7 @@ function zonaDesprendible(args: {
 		['GEOPARK', []]
 	]);
 	for (const d of hoja.dias) {
-		if (d.disponibilidad) continue;
+		if (d.disponibilidad || d.noSuma) continue;
 		const n = (d.empresa ?? '').toUpperCase();
 		if (n.includes('PAREX')) diasPorCubo.get('PAREX')!.push(d);
 		else if (n.includes('GEOPARK')) diasPorCubo.get('GEOPARK')!.push(d);
@@ -3240,13 +3283,19 @@ function zonaDesprendible(args: {
 		});
 		r++;
 
-		const filaLic = (rotulo: string, valor: string | number, campoBd: string | null) => {
+		const filaLic = (
+			rotulo: string,
+			valor: string | number,
+			campoBd: string | null,
+			formato?: string
+		) => {
 			campo(r, c0, SPAN.VAC_ROTULO, { v: rotulo, s: { ...base(), fs: 9 } });
 			campo(r, c0 + SPAN.VAC_ROTULO, SPAN.VAC_VALOR, {
 				v: valor,
 				s: {
 					...(campoBd ? editable() : derivada()),
-					ht: campoBd ? HorizontalAlign.RIGHT : HorizontalAlign.CENTER
+					ht: campoBd ? HorizontalAlign.RIGHT : HorizontalAlign.CENTER,
+					...(formato ? { n: { pattern: formato } } : {})
 				}
 			});
 			if (campoBd) {
@@ -3264,9 +3313,17 @@ function zonaDesprendible(args: {
 		filaLic('FECHA INICIO', lic.desde ?? '', 'periodo_start_licencia');
 		filaLic('FECHA FIN', lic.hasta ?? '', 'periodo_end_licencia');
 		filaLic('DÍAS', lic.dias || '', null);
+		/// Igual que en vacaciones: vacío o cero es «del básico», y el rótulo
+		/// lo dice para que no parezca un salario tecleado.
+		filaLic(
+			lic.salarioHeredado !== false ? 'SALARIO (del básico)' : 'SALARIO LICENCIA',
+			Math.round(lic.salarioBase),
+			'salario_licencia',
+			FMT_COP
+		);
 
 		campo(r, c0, SPAN.VAC_ROTULO + SPAN.VAC_VALOR, {
-			v: 'Los días incluyen el de inicio. El valor es el básico ÷ 30 × días, y cotiza.',
+			v: 'Los días incluyen el de inicio. El valor es salario ÷ 30 × días, y cotiza.',
 			s: { ...base(), fs: 8, cl: { rgb: '#6B7280' } }
 		});
 		r++;

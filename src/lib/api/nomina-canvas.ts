@@ -421,6 +421,30 @@ export const nominaBorradoresAPI = {
 		return data;
 	},
 
+	/**
+	 * Guarda las marcas por día del desprendible (ocultar / no sumar). Manda el
+	 * mapa ENTERO: lo que no va, queda desmarcado. Si cambian los días que no
+	 * suman, el servidor rehace los recargos y el neto; `recargos` lo cuenta.
+	 */
+	async guardarMarcasDias(
+		liquidacionId: string,
+		payload: {
+			anio: number;
+			mes: number;
+			corte?: number | null;
+			marcas: Record<string, { ocultar: boolean; noSumar: boolean }>;
+		}
+	): Promise<{
+		marcas: Record<string, { ocultar: boolean; noSumar: boolean }>;
+		recargos: { filas: number; total: number; sinAtribuir: number } | null;
+	}> {
+		const { data } = await apiClient.put(
+			`/api/nomina/liquidaciones/${liquidacionId}/marcas-dias`,
+			payload
+		);
+		return data;
+	},
+
 	async estado(jobId: string): Promise<BorradorNominaJob> {
 		const { data } = await apiClient.get(`/api/nomina/borradores/status/${jobId}`);
 		return data;

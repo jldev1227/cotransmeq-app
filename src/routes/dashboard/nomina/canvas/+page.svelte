@@ -77,6 +77,8 @@
 	import GenerarBorradoresNominaModal from '$lib/components/nomina/GenerarBorradoresNominaModal.svelte';
 	import NominaEstadoPanel from '$lib/components/nomina/NominaEstadoPanel.svelte';
 	import ConceptosAdicionalesModal from '$lib/components/nomina/ConceptosAdicionalesModal.svelte';
+	import DiasDesprendibleModal from '$lib/components/nomina/DiasDesprendibleModal.svelte';
+	import type { MarcasDias } from '$lib/utils/marcasDias';
 	import UniverCanvasHost from '$lib/components/univer/UniverCanvasHost.svelte';
 	import UniverSideRail, { type RailItem } from '$lib/components/univer/UniverSideRail.svelte';
 	import UniverActionOverlay from '$lib/components/univer/UniverActionOverlay.svelte';
@@ -481,6 +483,47 @@
 			}
 		});
 		rehaciendoRecargos = false;
+	}
+
+	// ─── Días en el desprendible (ocultar / no sumar) ───────
+	/**
+	 * Las marcas se guardan de una vez y el servidor decide si hay dinero que
+	 * mover: si cambian los días que no suman, rehace los recargos y el neto.
+	 * En cualquier caso la hoja se relee entera: la cabecera de cada día marcado,
+	 * las fórmulas de reparto y los bloques por empresa cambian de geometría.
+	 */
+	let mostrarDiasDesprendible = $state(false);
+	let guardandoMarcas = $state(false);
+	const diasMarcados = $derived(
+		(hojaActiva?.dias ?? []).filter((d) => d.oculto || d.noSuma).length
+	);
+
+	async function guardarMarcasDias(marcas: MarcasDias) {
+		const hoja = hojaActiva;
+		if (!hoja?.liquidacionId || guardandoMarcas) return;
+		cancelarRecalculo();
+		guardandoMarcas = true;
+		try {
+			const r = await nominaBorradoresAPI.guardarMarcasDias(hoja.liquidacionId, {
+				anio,
+				mes,
+				corte,
+				marcas
+			});
+			mostrarDiasDesprendible = false;
+			await loadInicial();
+			toast.success(`${hoja.nombre}: días del desprendible guardados.`, {
+				description: r.recargos
+					? `Se rehicieron los recargos: ahora suman $ ${formatCOP(r.recargos.total)}.`
+					: 'Los recargos no cambian.'
+			});
+		} catch (e: any) {
+			toast.error('No se pudieron guardar los días del desprendible.', {
+				description: e?.response?.data?.error ?? e?.message
+			});
+		} finally {
+			guardandoMarcas = false;
+		}
 	}
 
 	// ─── Retirar el borrador de la hoja ───────────────────
@@ -1351,6 +1394,18 @@
 					: undefined
 		},
 		{
+			id: 'dias-desprendible',
+			label: 'Días en el desprendible',
+			hint: hojaActiva
+				? `Qué días de ${hojaActiva.nombre} salen en las tablas de recargos y cuáles se pagan.`
+				: 'Abre la hoja de un conductor primero',
+			icon: iconoDiasDesprendible,
+			badge: diasMarcados || null,
+			onSelect: () => (mostrarDiasDesprendible = true),
+			disabled: !!accionEnCurso || guardandoMarcas || !hojaActiva?.liquidacionId,
+			disabledHint: motivoBloqueoAdicionales() || undefined
+		},
+		{
 			id: 'adicionales',
 			label: 'Conceptos adicionales',
 			hint: hojaActiva
@@ -1464,6 +1519,20 @@
 			d="M6.2 7l.8 12a1.6 1.6 0 0 0 1.6 1.5h6.8A1.6 1.6 0 0 0 17 19l.8-12"
 		/>
 		<path stroke-linecap="round" d="M10.2 11v6M13.8 11v6" />
+	</svg>
+{/snippet}
+
+{#snippet iconoDiasDesprendible()}
+	<!-- Calendario con un ojo: qué días se ven en el desprendible. -->
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+		<rect x="3.5" y="5" width="17" height="15" rx="2" />
+		<path stroke-linecap="round" d="M3.5 9.5h17M8 3v4M16 3v4" />
+		<path
+			stroke-linecap="round"
+			stroke-linejoin="round"
+			d="M7 15s1.8-2.6 5-2.6 5 2.6 5 2.6-1.8 2.6-5 2.6S7 15 7 15z"
+		/>
+		<circle cx="12" cy="15" r="1" />
 	</svg>
 {/snippet}
 
@@ -1873,6 +1942,18 @@
 		{anio}
 		{mes}
 		onCerrar={() => (mostrarNotificar = false)}
+	/>
+{/if}
+
+{#if mostrarDiasDesprendible && hojaActiva}
+	<DiasDesprendibleModal
+		nombreHoja={hojaActiva.nombre}
+		dias={hojaActiva.dias}
+		bloqueada={!!motivoBloqueoAdicionales()}
+		motivoBloqueo={motivoBloqueoAdicionales()}
+		guardando={guardandoMarcas}
+		onGuardar={guardarMarcasDias}
+		onClose={() => (mostrarDiasDesprendible = false)}
 	/>
 {/if}
 
