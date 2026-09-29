@@ -4,6 +4,28 @@ import type { EstadoNomina } from '$lib/editor/builders/nomina-estado';
 
 export type { PeriodoNominaDTO };
 
+/**
+ * Qué libro se pide: por CORTE (`anio`/`mes`/`corte`) o por RANGO específico
+ * (`inicio`/`fin`, AAAA-MM-DD, los dos incluidos). Con rango, `anio`/`mes`
+ * quedan solo como la llave del libro (sala del socket).
+ */
+export interface RefPeriodo {
+	anio: number;
+	mes: number;
+	corte?: number | null;
+	inicio?: string;
+	fin?: string;
+}
+
+export interface RangoPeriodo {
+	desde: string;
+	hasta: string;
+}
+
+/** Los query params del rango, si lo hay. `desde` ya es el día de corte. */
+const paramsRango = (rango?: RangoPeriodo | null) =>
+	rango ? { inicio: rango.desde, fin: rango.hasta } : {};
+
 export interface ResumenPeriodo {
 	anio: number;
 	mes: number;
@@ -45,9 +67,14 @@ export interface ResultadoRevertir {
 
 export const nominaCanvasAPI = {
 	/** El libro entero del periodo. `corte` es el día de inicio (21 por defecto). */
-	async periodo(anio: number, mes: number, corte?: number): Promise<PeriodoNominaDTO> {
+	async periodo(
+		anio: number,
+		mes: number,
+		corte?: number,
+		rango?: RangoPeriodo | null
+	): Promise<PeriodoNominaDTO> {
 		const { data } = await apiClient.get('/api/nomina/canvas', {
-			params: { anio, mes, ...(corte != null ? { desde: corte } : {}) }
+			params: { anio, mes, ...(corte != null ? { desde: corte } : {}), ...paramsRango(rango) }
 		});
 		return data as PeriodoNominaDTO;
 	},
@@ -318,9 +345,14 @@ export interface BorradorNominaJob {
 
 export const nominaBorradoresAPI = {
 	/** Lo que hay que ver antes de lanzar: quién ya tiene y quién no tiene días. */
-	async previo(anio: number, mes: number, corte?: number): Promise<PrevioBorradores> {
+	async previo(
+		anio: number,
+		mes: number,
+		corte?: number,
+		rango?: RangoPeriodo | null
+	): Promise<PrevioBorradores> {
 		const { data } = await apiClient.get('/api/nomina/borradores/previo', {
-			params: { anio, mes, ...(corte != null ? { corte } : {}) }
+			params: { anio, mes, ...(corte != null ? { corte } : {}), ...paramsRango(rango) }
 		});
 		return data;
 	},
@@ -329,6 +361,8 @@ export const nominaBorradoresAPI = {
 		anio: number;
 		mes: number;
 		corte?: number | null;
+		inicio?: string;
+		fin?: string;
 		conductor_ids: string[];
 		sobrescribir?: string[];
 	}): Promise<{ job_id: string; status: string; total: number }> {
@@ -344,7 +378,7 @@ export const nominaBorradoresAPI = {
 	 */
 	async refrescarDias(
 		liquidacionId: string,
-		payload: { anio: number; mes: number; corte?: number | null }
+		payload: RefPeriodo
 	): Promise<{ dias: number }> {
 		const { data } = await apiClient.post(
 			`/api/nomina/borradores/${liquidacionId}/refrescar-dias`,
@@ -368,7 +402,7 @@ export const nominaBorradoresAPI = {
 	 */
 	async eliminarBorrador(
 		liquidacionId: string,
-		payload: { anio: number; mes: number; corte?: number | null }
+		payload: RefPeriodo
 	): Promise<{ ok: true; conductor_id: string | null }> {
 		const { data } = await apiClient.delete(`/api/nomina/liquidaciones/${liquidacionId}`, {
 			data: payload
@@ -378,7 +412,7 @@ export const nominaBorradoresAPI = {
 
 	async rehacerBonos(
 		liquidacionId: string,
-		payload: { anio: number; mes: number; corte?: number | null }
+		payload: RefPeriodo
 	): Promise<{ creadas: number; celdas: number }> {
 		const { data } = await apiClient.post(
 			`/api/nomina/borradores/${liquidacionId}/rehacer-bonos`,
@@ -396,11 +430,19 @@ export const nominaBorradoresAPI = {
 	 */
 	async desprendibleData(
 		liquidacionId: string,
-		params: { anio: number; mes: number; corte?: number | null }
+		params: RefPeriodo
 	): Promise<{ planillas: any[]; total_recargos: number }> {
 		const { data } = await apiClient.get(
 			`/api/nomina/liquidaciones/${liquidacionId}/desprendible-data`,
-			{ params: { anio: params.anio, mes: params.mes, corte: params.corte ?? undefined } }
+			{
+				params: {
+					anio: params.anio,
+					mes: params.mes,
+					corte: params.corte ?? undefined,
+					inicio: params.inicio,
+					fin: params.fin
+				}
+			}
 		);
 		return data;
 	},
@@ -412,7 +454,7 @@ export const nominaBorradoresAPI = {
 	 */
 	async repararRecargos(
 		liquidacionId: string,
-		payload: { anio: number; mes: number; corte?: number | null }
+		payload: RefPeriodo
 	): Promise<{ filas: number; total: number; sinAtribuir: number; bonos: number }> {
 		const { data } = await apiClient.post(
 			`/api/nomina/borradores/${liquidacionId}/reparar-recargos`,
@@ -428,10 +470,7 @@ export const nominaBorradoresAPI = {
 	 */
 	async guardarMarcasDias(
 		liquidacionId: string,
-		payload: {
-			anio: number;
-			mes: number;
-			corte?: number | null;
+		payload: RefPeriodo & {
 			marcas: Record<string, { ocultar: boolean; noSumar: boolean }>;
 		}
 	): Promise<{
@@ -442,6 +481,23 @@ export const nominaBorradoresAPI = {
 			`/api/nomina/liquidaciones/${liquidacionId}/marcas-dias`,
 			payload
 		);
+		return data;
+	},
+
+	/**
+	 * Cambia el periodo del desprendible de una liquidación (sus fechas). El
+	 * servidor rehace los recargos con la ventana nueva y recalcula el neto;
+	 * con `ajustarDias` pone además los días comerciales del rango.
+	 */
+	async cambiarPeriodo(
+		liquidacionId: string,
+		payload: { inicio: string; fin: string; ajustarDias: boolean }
+	): Promise<{
+		periodo: RangoPeriodo;
+		diasLaborados: number | null;
+		recargos: { filas: number; total: number; sinAtribuir: number } | null;
+	}> {
+		const { data } = await apiClient.put(`/api/nomina/liquidaciones/${liquidacionId}/periodo`, payload);
 		return data;
 	},
 

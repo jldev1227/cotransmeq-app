@@ -30,12 +30,15 @@
 		anio: number;
 		mes: number;
 		corte?: number | null;
+		/// Rango específico en vez del corte: los borradores nacen con esas
+		/// fechas y con sus días comerciales (21→30 son 10).
+		rango?: { desde: string; hasta: string } | null;
 		onClose: () => void;
 		/** Se llama al terminar, para que el canvas recargue el periodo. */
 		onTerminado?: () => void;
 	}
 
-	let { anio, mes, corte = null, onClose, onTerminado }: Props = $props();
+	let { anio, mes, corte = null, rango = null, onClose, onTerminado }: Props = $props();
 
 	let cargando = $state(true);
 	let errorCarga = $state('');
@@ -126,7 +129,7 @@
 		try {
 			cargando = true;
 			errorCarga = '';
-			const r = await nominaBorradoresAPI.previo(anio, mes, corte ?? undefined);
+			const r = await nominaBorradoresAPI.previo(anio, mes, corte ?? undefined, rango);
 			conductores = r.conductores;
 			etiqueta = r.etiqueta;
 			ventana = { desde: r.desde, hasta: r.hasta };
@@ -185,6 +188,7 @@
 				anio,
 				mes,
 				corte,
+				...(rango ? { inicio: rango.desde, fin: rango.hasta } : {}),
 				conductor_ids: [...marcados],
 				sobrescribir: [...reemplazar]
 			});

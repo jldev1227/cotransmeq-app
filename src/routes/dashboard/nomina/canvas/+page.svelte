@@ -78,6 +78,7 @@
 	import NominaEstadoPanel from '$lib/components/nomina/NominaEstadoPanel.svelte';
 	import ConceptosAdicionalesModal from '$lib/components/nomina/ConceptosAdicionalesModal.svelte';
 	import DiasDesprendibleModal from '$lib/components/nomina/DiasDesprendibleModal.svelte';
+	import PeriodoDesprendibleModal from '$lib/components/nomina/PeriodoDesprendibleModal.svelte';
 	import type { MarcasDias } from '$lib/utils/marcasDias';
 	import UniverCanvasHost from '$lib/components/univer/UniverCanvasHost.svelte';
 	import UniverSideRail, { type RailItem } from '$lib/components/univer/UniverSideRail.svelte';
@@ -118,6 +119,33 @@
 	 * a la vista y editable en vez de clavado en el código.
 	 */
 	let corte = $state(Number($page.url.searchParams.get('desde')) || 21);
+
+	/**
+	 * RANGO ESPECÍFICO en vez del corte, o `null` para liquidar por corte.
+	 *
+	 * Para lo que no cabe en un 21→20: un retiro del 21 al 30, un ingreso a
+	 * mitad de periodo. Con rango el libro son exactamente esos días, sus hojas
+	 * son las liquidaciones que CABEN dentro, y los borradores nacen con esas
+	 * fechas y sus días comerciales. `anio`/`mes` siguen siendo la llave del
+	 * libro (sala del socket), y se toman del mes en que termina el rango.
+	 */
+	const FECHA_ISO = /^\d{4}-\d{2}-\d{2}$/;
+	const MAX_DIAS_RANGO = 62;
+	function rangoDeUrl(): { desde: string; hasta: string } | null {
+		const a = $page.url.searchParams.get('inicio') ?? '';
+		const b = $page.url.searchParams.get('fin') ?? '';
+		return FECHA_ISO.test(a) && FECHA_ISO.test(b) && a <= b ? { desde: a, hasta: b } : null;
+	}
+	let rango = $state<{ desde: string; hasta: string } | null>(rangoDeUrl());
+	/// Lo que viaja a cada llamada del carril: el periodo tal como está en
+	/// pantalla, corte o rango. Una sola fuente para no olvidar el rango en
+	/// ninguna.
+	const refPeriodo = () => ({
+		anio,
+		mes,
+		corte,
+		...(rango ? { inicio: rango.desde, fin: rango.hasta } : {})
+	});
 
 	let loading = $state(true);
 	let loadError = $state('');
@@ -424,7 +452,7 @@
 		cancelarRecalculo();
 		rehaciendoBonos = true;
 		await conOverlay('Restaurando bonos', hoja.nombre, async () => {
-			const r = await nominaBorradoresAPI.rehacerBonos(hoja.liquidacionId!, { anio, mes, corte });
+			const r = await nominaBorradoresAPI.rehacerBonos(hoja.liquidacionId!, refPeriodo());
 			await loadInicial();
 			toast.success(
 				r.celdas
@@ -459,11 +487,7 @@
 		cancelarRecalculo();
 		rehaciendoRecargos = true;
 		await conOverlay('Rehaciendo recargos', hoja.nombre, async () => {
-			const r = await nominaBorradoresAPI.repararRecargos(hoja.liquidacionId!, {
-				anio,
-				mes,
-				corte
-			});
+			const r = await nominaBorradoresAPI.repararRecargos(hoja.liquidacionId!, refPeriodo());
 			await loadInicial();
 			const partes: string[] = [];
 			if (r.filas) partes.push(`${r.filas} ${r.filas === 1 ? 'fila' : 'filas'} de recargo`);
@@ -505,9 +529,7 @@
 		guardandoMarcas = true;
 		try {
 			const r = await nominaBorradoresAPI.guardarMarcasDias(hoja.liquidacionId, {
-				anio,
-				mes,
-				corte,
+				...refPeriodo(),
 				marcas
 			});
 			mostrarDiasDesprendible = false;
@@ -523,6 +545,45 @@
 			});
 		} finally {
 			guardandoMarcas = false;
+		}
+	}
+
+	// ─── Periodo del desprendible (fechas de la liquidación) ───
+	/**
+	 * Cambia las fechas que imprime el comprobante de la hoja abierta. El
+	 * servidor rehace recargos y neto con la ventana nueva; aquí, si esas fechas
+	 * no son las del libro, se reabre el libro en modo RANGO con ellas para que
+	 * la hoja calcule con los mismos días que va a imprimir.
+	 */
+	let mostrarPeriodo = $state(false);
+	let guardandoPeriodo = $state(false);
+
+	async function guardarPeriodo(p: { inicio: string; fin: string; ajustarDias: boolean }) {
+		const hoja = hojaActiva;
+		if (!hoja?.liquidacionId || guardandoPeriodo) return;
+		cancelarRecalculo();
+		guardandoPeriodo = true;
+		try {
+			const r = await nominaBorradoresAPI.cambiarPeriodo(hoja.liquidacionId, p);
+			mostrarPeriodo = false;
+			toast.success(`${hoja.nombre}: periodo del ${p.inicio} al ${p.fin}.`, {
+				description: [
+					r.diasLaborados != null ? `${r.diasLaborados} días laborados` : null,
+					r.recargos ? `recargos rehechos: $ ${formatCOP(r.recargos.total)}` : null
+				]
+					.filter(Boolean)
+					.join(' · ')
+			});
+			const dias = datos?.periodo.dias ?? [];
+			const libro = { desde: dias[0]?.fecha, hasta: dias[dias.length - 1]?.fecha };
+			if (libro.desde === p.inicio && libro.hasta === p.fin) await loadInicial();
+			else await cambiarRango({ desde: p.inicio, hasta: p.fin });
+		} catch (e: any) {
+			toast.error('No se pudo cambiar el periodo.', {
+				description: e?.response?.data?.error ?? e?.message
+			});
+		} finally {
+			guardandoPeriodo = false;
 		}
 	}
 
@@ -563,7 +624,7 @@
 
 		eliminandoBorrador = true;
 		await conOverlay('Eliminando borrador', hoja.nombre, async () => {
-			await nominaBorradoresAPI.eliminarBorrador(hoja.liquidacionId!, { anio, mes, corte });
+			await nominaBorradoresAPI.eliminarBorrador(hoja.liquidacionId!, refPeriodo());
 			/// El conductor activo NO se toca: su hoja sigue en el libro, ahora
 			/// sin liquidación y de solo lectura, con el botón «Crear borrador»
 			/// en la barra. Soltarlo haría saltar a otra pestaña sin motivo.
@@ -602,6 +663,13 @@
 		url.searchParams.set('anio', String(anio));
 		url.searchParams.set('mes', String(mes));
 		url.searchParams.set('desde', String(corte));
+		if (rango) {
+			url.searchParams.set('inicio', rango.desde);
+			url.searchParams.set('fin', rango.hasta);
+		} else {
+			url.searchParams.delete('inicio');
+			url.searchParams.delete('fin');
+		}
 
 		/// Se escribe la liquidación cuando la hay y el conductor cuando no: así
 		/// la URL siempre identifica la hoja abierta, tenga borrador o no. Y se
@@ -669,7 +737,7 @@
 
 		refrescandoDias = true;
 		try {
-			const res = await nominaBorradoresAPI.refrescarDias(hoja.liquidacionId, { anio, mes, corte });
+			const res = await nominaBorradoresAPI.refrescarDias(hoja.liquidacionId, refPeriodo());
 			await loadInicial();
 			toast.success(`Días actualizados desde las planillas (${res.dias}).`);
 		} catch (e: any) {
@@ -689,7 +757,7 @@
 		/// justo el valor del servidor.
 		fallidas = 0;
 		try {
-			datos = await nominaCanvasAPI.periodo(anio, mes, corte);
+			datos = await nominaCanvasAPI.periodo(anio, mes, corte, rango);
 			if (!conductorActivo && datos.hojas.length) {
 				/// La hoja de la URL solo manda en la PRIMERA carga. Al cambiar de
 				/// periodo el conductor sigue seleccionado por su cuenta, y si no
@@ -860,9 +928,49 @@
 		anio = nuevoAnio;
 		mes = nuevoMes;
 		corte = nuevoCorte;
+		/// Elegir año, mes o corte es volver a liquidar por corte.
+		rango = null;
 		syncUrl();
 		conectarSesion();
 		await loadInicial();
+	}
+
+	/**
+	 * Aplica un rango específico. Valida aquí para no pedir un libro que el
+	 * servidor va a rechazar: fechas en orden y hasta `MAX_DIAS_RANGO` días.
+	 */
+	async function cambiarRango(nuevo: { desde: string; hasta: string }) {
+		if (!FECHA_ISO.test(nuevo.desde) || !FECHA_ISO.test(nuevo.hasta)) return;
+		if (nuevo.desde > nuevo.hasta) {
+			toast.warning('La fecha inicial tiene que ser anterior a la final.');
+			return;
+		}
+		const dias =
+			(Date.parse(`${nuevo.hasta}T00:00:00Z`) - Date.parse(`${nuevo.desde}T00:00:00Z`)) /
+				86400000 +
+			1;
+		if (dias > MAX_DIAS_RANGO) {
+			toast.warning(`Un rango puede tener como mucho ${MAX_DIAS_RANGO} días.`);
+			return;
+		}
+		limpiarCacheDesprendibles();
+		cancelarRecalculo();
+		rango = { ...nuevo };
+		/// La llave del libro es el mes en que TERMINA, como en un corte.
+		anio = Number(nuevo.hasta.slice(0, 4));
+		mes = Number(nuevo.hasta.slice(5, 7));
+		syncUrl();
+		conectarSesion();
+		await loadInicial();
+	}
+
+	/// Pasar a «Rango» arranca con las fechas del libro abierto, para ajustar
+	/// solo el extremo que cambia en vez de teclear las dos.
+	function activarRango() {
+		const dias = datos?.periodo.dias ?? [];
+		const desde = dias[0]?.fecha;
+		const hasta = dias[dias.length - 1]?.fecha;
+		if (desde && hasta) void cambiarRango({ desde, hasta });
 	}
 
 	function irAConductor(conductorId: string) {
@@ -1271,7 +1379,10 @@
 			hint: 'Captura el libro entero para poder volver a este punto.',
 			icon: icoVersion,
 			onSelect: guardarVersion,
-			disabled: !!accionEnCurso
+			/// El historial de versiones es por corte: un libro por rango se
+			/// compararía y revertiría contra el del corte, que es otro libro.
+			disabled: !!accionEnCurso || !!rango,
+			disabledHint: rango ? 'Las versiones se guardan por corte, no por rango.' : undefined
 		},
 		{
 			id: 'preview',
@@ -1392,6 +1503,17 @@
 				: !hojaActiva?.matrizBonos?.hayRecorridos
 					? 'No hay bonos marcados en recorridos de los que partir.'
 					: undefined
+		},
+		{
+			id: 'periodo-desprendible',
+			label: 'Periodo del desprendible',
+			hint: hojaActiva?.periodoLiquidacion
+				? `Fechas del comprobante de ${hojaActiva.nombre}: ${hojaActiva.periodoLiquidacion.desde} → ${hojaActiva.periodoLiquidacion.hasta}.`
+				: 'Abre la hoja de un conductor primero',
+			icon: iconoPeriodoDesprendible,
+			onSelect: () => (mostrarPeriodo = true),
+			disabled: !!accionEnCurso || guardandoPeriodo || !hojaActiva?.liquidacionId,
+			disabledHint: motivoBloqueoAdicionales() || undefined
 		},
 		{
 			id: 'dias-desprendible',
@@ -1519,6 +1641,15 @@
 			d="M6.2 7l.8 12a1.6 1.6 0 0 0 1.6 1.5h6.8A1.6 1.6 0 0 0 17 19l.8-12"
 		/>
 		<path stroke-linecap="round" d="M10.2 11v6M13.8 11v6" />
+	</svg>
+{/snippet}
+
+{#snippet iconoPeriodoDesprendible()}
+	<!-- Calendario con dos marcas: el inicio y el fin del comprobante. -->
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+		<rect x="3.5" y="5" width="17" height="15" rx="2" />
+		<path stroke-linecap="round" d="M3.5 9.5h17M8 3v4M16 3v4" />
+		<path stroke-linecap="round" stroke-linejoin="round" d="M7.5 14.5h9M7.5 14.5l1.8-1.8M7.5 14.5l1.8 1.8M16.5 14.5l-1.8-1.8M16.5 14.5l-1.8 1.8" />
 	</svg>
 {/snippet}
 
@@ -1722,46 +1853,91 @@
 	inerte={!!accionEnCurso}
 >
 	{#snippet actions()}
-		<label class="univer-year-picker">
-			<span>Año</span>
+		<!--
+			Por CORTE (año, mes y día de inicio) o por RANGO específico (dos
+			fechas). El rango es para lo que no se liquida por corte: un retiro
+			del 21 al 30, un ingreso a mitad de periodo.
+		-->
+		<label class="univer-year-picker" title="Cómo se define el periodo del libro">
+			<span>Periodo</span>
 			<select
-				value={anio}
-				onchange={(e) =>
-					cambiarPeriodo(Number((e.currentTarget as HTMLSelectElement).value), mes, corte)}
+				value={rango ? 'rango' : 'corte'}
+				onchange={(e) => {
+					if ((e.currentTarget as HTMLSelectElement).value === 'rango') activarRango();
+					else void cambiarPeriodo(anio, mes, corte);
+				}}
 			>
-				{#each anios as a (a)}
-					<option value={a}>{a}</option>
-				{/each}
+				<option value="corte">Corte</option>
+				<option value="rango">Rango</option>
 			</select>
 		</label>
 
-		<select
-			class="univer-month-picker"
-			value={mes}
-			onchange={(e) =>
-				cambiarPeriodo(anio, Number((e.currentTarget as HTMLSelectElement).value), corte)}
-			title="Mes de nómina"
-		>
-			{#each MESES as nombre, i (nombre)}
-				<option value={i + 1}>{nombre}</option>
-			{/each}
-		</select>
+		{#if rango}
+			<div class="univer-rango" title="Días que se liquidan, los dos incluidos">
+				<label class="univer-year-picker">
+					<span>Desde</span>
+					<input
+						type="date"
+						value={rango.desde}
+						max={rango.hasta}
+						onchange={(e) =>
+							void cambiarRango({ desde: e.currentTarget.value, hasta: rango!.hasta })}
+					/>
+				</label>
+				<span class="univer-rango__sep" aria-hidden="true">—</span>
+				<label class="univer-year-picker">
+					<span>Hasta</span>
+					<input
+						type="date"
+						value={rango.hasta}
+						min={rango.desde}
+						onchange={(e) =>
+							void cambiarRango({ desde: rango!.desde, hasta: e.currentTarget.value })}
+					/>
+				</label>
+			</div>
+		{:else}
+			<label class="univer-year-picker">
+				<span>Año</span>
+				<select
+					value={anio}
+					onchange={(e) =>
+						cambiarPeriodo(Number((e.currentTarget as HTMLSelectElement).value), mes, corte)}
+				>
+					{#each anios as a (a)}
+						<option value={a}>{a}</option>
+					{/each}
+				</select>
+			</label>
 
-		<!-- El corte va a la vista porque el 21→20 está deducido de los Excel,
-		     no de una regla escrita: si algún mes se liquida distinto, se
-		     cambia aquí en vez de tocar código. -->
-		<label class="univer-year-picker" title="Día en que empieza el periodo">
-			<span>Corte</span>
 			<select
-				value={corte}
+				class="univer-month-picker"
+				value={mes}
 				onchange={(e) =>
-					cambiarPeriodo(anio, mes, Number((e.currentTarget as HTMLSelectElement).value))}
+					cambiarPeriodo(anio, Number((e.currentTarget as HTMLSelectElement).value), corte)}
+				title="Mes de nómina"
 			>
-				{#each [1, 15, 16, 20, 21, 25, 26] as d (d)}
-					<option value={d}>{d}</option>
+				{#each MESES as nombre, i (nombre)}
+					<option value={i + 1}>{nombre}</option>
 				{/each}
 			</select>
-		</label>
+
+			<!-- El corte va a la vista porque el 21→20 está deducido de los Excel,
+			     no de una regla escrita: si algún mes se liquida distinto, se
+			     cambia aquí en vez de tocar código. -->
+			<label class="univer-year-picker" title="Día en que empieza el periodo">
+				<span>Corte</span>
+				<select
+					value={corte}
+					onchange={(e) =>
+						cambiarPeriodo(anio, mes, Number((e.currentTarget as HTMLSelectElement).value))}
+				>
+					{#each [1, 15, 16, 20, 21, 25, 26] as d (d)}
+						<option value={d}>{d}</option>
+					{/each}
+				</select>
+			</label>
+		{/if}
 
 		<!-- Buscador y no `<select>`: con 25 conductores el desplegable nativo
 		     obliga a recorrer la lista entera, no busca por cédula y no puede
@@ -1945,6 +2121,20 @@
 	/>
 {/if}
 
+{#if mostrarPeriodo && hojaActiva?.periodoLiquidacion}
+	<PeriodoDesprendibleModal
+		nombreHoja={hojaActiva.nombre}
+		desde={hojaActiva.periodoLiquidacion.desde}
+		hasta={hojaActiva.periodoLiquidacion.hasta}
+		diasLaboradosActuales={hojaActiva.devengos.find((d) => d.clave === 'salario')?.cantidad ?? null}
+		bloqueada={!!motivoBloqueoAdicionales()}
+		motivoBloqueo={motivoBloqueoAdicionales()}
+		guardando={guardandoPeriodo}
+		onGuardar={guardarPeriodo}
+		onClose={() => (mostrarPeriodo = false)}
+	/>
+{/if}
+
 {#if mostrarDiasDesprendible && hojaActiva}
 	<DiasDesprendibleModal
 		nombreHoja={hojaActiva.nombre}
@@ -1975,6 +2165,7 @@
 		{anio}
 		{mes}
 		{corte}
+		{rango}
 		onClose={() => (mostrarGenerar = false)}
 		onTerminado={() => void loadInicial()}
 	/>
