@@ -201,7 +201,8 @@ export function filaTotalesNoSuma(dias: any[]): any[][] {
 
 /**
  * Consolidado de los días que no suman: la misma tabla por tipo de recargo que
- * TOTALES CONSOLIDADOS, en gris, y una barra con lo que NO entra al neto.
+ * TOTALES CONSOLIDADOS, en gris, y una barra con lo que se reconoce por otro
+ * concepto: no es recargo, pero tampoco se pierde.
  */
 export function bloqueNoSuman(dias: any[]): any[] {
 	const ns = diasNoSuman(dias);
@@ -259,7 +260,7 @@ export function bloqueNoSuman(dias: any[]): any[] {
 			margin: [0, 10, 0, 2]
 		},
 		{
-			text: 'Se muestran para que se vea su valor; no se suman a los recargos ni al neto a pagar.',
+			text: 'No se suman a los recargos, pero se reconocen por otro concepto.',
 			fontSize: 8,
 			color: GRIS_NO_SUMA,
 			alignment: 'center' as const,
@@ -288,7 +289,7 @@ export function bloqueNoSuman(dias: any[]): any[] {
 				widths: ['*', 'auto'],
 				body: [
 					[
-						{ text: 'NO SUMA AL NETO', bold: true, fontSize: 10, color: '#FFFFFF', fillColor: '#9CA3AF', margin: [4, 4, 0, 4] },
+						{ text: 'RECONOCIDO POR OTRO CONCEPTO', bold: true, fontSize: 10, color: '#FFFFFF', fillColor: '#9CA3AF', margin: [4, 4, 0, 4] },
 						{
 							text: formatCurrency(total),
 							bold: true,
@@ -1186,7 +1187,7 @@ export async function construirDocDefinition(
 
 			if (hayNoSuman) {
 				content.push({
-					text: 'Aviso: Los días en gris no suman a los totales ni al neto; su valor se detalla al final, como referencia.',
+					text: 'Aviso: Los días en gris no suman a los recargos; se reconocen por otro concepto y su valor se detalla al final.',
 					fontSize: 9,
 					color: '#6B7280',
 					bold: true,
