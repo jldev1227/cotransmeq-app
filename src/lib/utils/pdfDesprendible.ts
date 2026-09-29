@@ -4,6 +4,7 @@
  */
 import type { Liquidacion, FirmaConUrl } from '$lib/types/nomina';
 import { obtenerLogoBase64 } from '$lib/utils/pdfUtils';
+import { aplicarMarcasDias, leerMarcasDias } from '$lib/utils/marcasDias';
 
 const PAREX_EMPRESA_ID = 'cfb258a6-448c-4469-aa71-8eeafa4530ef';
 const GEOPARK_EMPRESA_ID = 'eea5eda5-1b60-45a0-b4c7-606a8c908ff9';
@@ -940,7 +941,16 @@ export async function construirDocDefinition(
 		// No descartamos planillas sin `dias`: el modal puede enviar
 		// planillas sintéticas (total_valor > 0 pero sin desglose por
 		// día) para que el TOTAL del PDF cuadre con el del preview.
-		const planillas: any[] = recargosData.planillas;
+		//
+		// Las MARCAS del canvas (`marcas_dias`): los días ocultos se van y los
+		// que no suman quedan en gris y fuera de los totales. Una planilla que
+		// tenía días y se quedó sin ninguno se cae; la sintética, que nunca los
+		// tuvo, se queda.
+		const planillasOrigen: any[] = recargosData.planillas;
+		const planillas: any[] = aplicarMarcasDias(
+			planillasOrigen,
+			leerMarcasDias((item as any).marcas_dias)
+		).filter((p: any, i: number) => (p.dias?.length ?? 0) > 0 || !planillasOrigen[i]?.dias?.length);
 
 		// Paleta de colores según la categoría de la planilla:
 		//  - 'pagar'       → naranja (color principal de la marca).
@@ -998,6 +1008,7 @@ export async function construirDocDefinition(
 			// Avisos
 			const hayFestivosODomingos = planilla.dias?.some((d: any) => d.es_festivo || d.es_domingo);
 			const hayDisponibles = planilla.dias?.some((d: any) => d.disponibilidad);
+			const hayNoSuman = planilla.dias?.some((d: any) => d.no_suma && !d.disponibilidad);
 
 			if (hayFestivosODomingos) {
 				content.push({
@@ -1013,6 +1024,16 @@ export async function construirDocDefinition(
 					text: 'Aviso: Los días marcados como disponibilidad no son reconocidos. Se muestran en rojo y no suman a los totales.',
 					fontSize: 9,
 					color: '#B91C1C',
+					bold: true,
+					margin: [0, 0, 0, 5]
+				});
+			}
+
+			if (hayNoSuman) {
+				content.push({
+					text: 'Aviso: Los días en gris se muestran como referencia y no suman a los totales.',
+					fontSize: 9,
+					color: '#6B7280',
 					bold: true,
 					margin: [0, 0, 0, 5]
 				});
@@ -1167,6 +1188,8 @@ export async function construirDocDefinition(
 			const diasRows = dias.map((dia: any, idx: number) => {
 				const esDisponible = dia.disponibilidad;
 				const esEspecial = dia.es_festivo || dia.es_domingo;
+				/// Marcado «no sumar» en el canvas: se ve, pero no cuenta.
+				const noSuma = !!dia.no_suma && !esDisponible;
 				// Para "bono aparte" usamos un fondo azul claro para todas
 				// las filas, manteniendo la legibilidad pero reforzando
 				// visualmente que NO es un recargo a pagar.
@@ -1174,7 +1197,9 @@ export async function construirDocDefinition(
 					? COLOR_BONO_APARTE_BG
 					: esDisponible
 						? '#FEE2E2'
-						: esEspecial
+						: noSuma
+							? '#F3F4F6'
+							: esEspecial
 							? '#FEF3C7'
 							: idx % 2 === 0
 								? '#ffffff'
@@ -1183,9 +1208,11 @@ export async function construirDocDefinition(
 					? '#1E3A8A' // blue-900
 					: esDisponible
 						? '#B91C1C'
-						: esEspecial
-							? '#92400E'
-							: '#333333';
+						: noSuma
+							? '#9CA3AF'
+							: esEspecial
+								? '#92400E'
+								: '#333333';
 
 				// Extract recargos values from dia.recargos array
 				const getRecargo = (codigo: string) => {
@@ -1254,9 +1281,10 @@ export async function construirDocDefinition(
 			// el cálculo de recargos monetarios.
 			const excluirDisponibilidadDelTotal =
 				!isBonoAparte && !isNoPagar;
-			const diasParaTotal = excluirDisponibilidadDelTotal
-				? dias.filter((d: any) => !d.disponibilidad)
-				: dias;
+			/// Los marcados «no sumar» quedan fuera del total en cualquier categoría.
+			const diasParaTotal = (
+				excluirDisponibilidadDelTotal ? dias.filter((d: any) => !d.disponibilidad) : dias
+			).filter((d: any) => !d.no_suma);
 			const totHoras = diasParaTotal.reduce(
 				(s: number, d: any) => s + (d.total_horas || 0),
 				0
@@ -1265,7 +1293,7 @@ export async function construirDocDefinition(
 
 			const getTotal = (codigo: string) => {
 				return dias
-					.filter((d: any) => !d.disponibilidad)
+					.filter((d: any) => !d.disponibilidad && !d.no_suma)
 					.reduce((s: number, d: any) => {
 						const r = d.recargos?.find((rc: any) => rc.tipo_codigo === codigo);
 						return s + (r ? r.horas : 0);
@@ -1424,7 +1452,7 @@ export async function construirDocDefinition(
 			> = {};
 
 			for (const dia of dias) {
-				if (dia.disponibilidad) continue;
+				if (dia.disponibilidad || dia.no_suma) continue;
 				for (const rec of dia.recargos || []) {
 					if (!tiposMap[rec.tipo_codigo]) {
 						tiposMap[rec.tipo_codigo] = {

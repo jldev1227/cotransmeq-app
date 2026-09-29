@@ -286,6 +286,8 @@ export interface Liquidacion {
 
 	// Visibilidad de tabla recargos conductor
 	mostrar_recargos?: boolean;
+	/// Marcas por día del desprendible, hechas en el canvas. Ver `utils/marcasDias.ts`.
+	marcas_dias?: Record<string, { ocultar: boolean; noSumar: boolean }> | null;
 }
 
 // ==================== CONFIGURACIÓN ====================
