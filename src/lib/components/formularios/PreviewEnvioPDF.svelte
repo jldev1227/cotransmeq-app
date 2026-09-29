@@ -226,9 +226,11 @@
 	/**
 	 * Valor ya legible para persona.
 	 *
-	 * `null` cuando no hay respuesta, que NO es lo mismo que una respuesta vacía:
-	 * el documento lo marca y eso es información auditable, no un hueco que
-	 * disimular.
+	 * `null` cuando no hay respuesta, que NO es lo mismo que una respuesta vacía.
+	 * Qué hace el documento con ese `null` depende de la forma del campo: un
+	 * escalar o un checklist lo MARCAN con un guión —ahí el hueco es información
+	 * auditable— y el texto libre lo OMITE, porque una observación en blanco no
+	 * dice nada que el ítem al que acompaña no diga ya.
 	 */
 	function valorLegible(field: FormFieldDto): string | null {
 		const respuesta = respuestaDe(field);
@@ -345,6 +347,12 @@
 		return tramos;
 	}
 
+	/// De un tramo de texto libre, los campos que llegaron ESCRITOS. El resto no
+	/// se imprime (ver `valorLegible`).
+	function conTexto(campos: FormFieldDto[]): FormFieldDto[] {
+		return campos.filter((f) => valorLegible(f) !== null);
+	}
+
 	/**
 	 * Reparte una sección de firmas en BLOQUES DE FIRMANTE.
 	 *
@@ -397,7 +405,21 @@
 		return { previos, bloques, posteriores };
 	}
 
-	const secciones = $derived((definicion.sections ?? []).filter((s) => camposDe(s).length > 0));
+	/**
+	 * ¿La sección llega a imprimir alguna fila?
+	 *
+	 * Todas las formas dejan rastro aunque vengan sin responder —el checklist su
+	 * fila, el escalar su guión, la tabla y la galería su línea de «sin»— salvo el
+	 * TEXTO LIBRE, que desde que las observaciones vacías no se imprimen puede no
+	 * aportar nada. Una sección que solo llevaba observaciones y llegó entera en
+	 * blanco quedaría reducida a su banda de título, anunciando un contenido que
+	 * no existe; mejor no imprimirla.
+	 */
+	function seccionImprime(section: FormSectionDto): boolean {
+		return camposDe(section).some((f) => formaDe(f) !== 'bloque' || valorLegible(f) !== null);
+	}
+
+	const secciones = $derived((definicion.sections ?? []).filter(seccionImprime));
 
 	/// Las secciones se reparten en dos columnas paralelas —como el FR-10— salvo
 	/// las que llevan firmas, evidencia o tablas, que necesitan el ancho completo
@@ -694,24 +716,17 @@
 								</div>
 							{/each}
 						{:else if tramo.forma === 'bloque'}
-							<!-- Texto libre. Con contenido se dibuja el bloque; sin él colapsa a
-							     una fila de una línea (regla de altura, ver el CSS). Una docena
-							     de observaciones en blanco pasa de un tercio de página a doce
-							     renglones, y la constancia de que se preguntó se conserva. -->
-							{#each tramo.campos as field (field.id)}
-								{@const valor = valorLegible(field)}
-								{#if valor === null}
-									<div class="fila fila--nota">
-										<span class="fila__desc"
-											>{field.label} <i class="vacio">· sin observaciones</i></span
-										>
-									</div>
-								{:else}
-									<div class="parrafo">
-										<p class="parrafo__k">{field.label}</p>
-										<p class="parrafo__v">{valor}</p>
-									</div>
-								{/if}
+							<!-- Texto libre. Solo se imprime el que tiene contenido: en un
+							     preoperacional conforme las observaciones van casi todas en
+							     blanco, y antes cada una gastaba su renglón para decir que no
+							     decía nada —decenas de líneas y hojas de más—. La constancia de
+							     que se preguntó la da el FORMATO, que es versionado y queda
+							     identificado en el pie; lo que se escribió lo da esta página. -->
+							{#each conTexto(tramo.campos) as field (field.id)}
+								<div class="parrafo">
+									<p class="parrafo__k">{field.label}</p>
+									<p class="parrafo__v">{valorLegible(field)}</p>
+								</div>
 							{/each}
 						{:else if tramo.forma === 'nota'}
 							{#each tramo.campos as field (field.id)}
@@ -839,19 +854,13 @@
 					</div>
 				{/each}
 			{:else if tramo.forma === 'bloque'}
-				<!-- Misma regla de colapso que en la columna estrecha. -->
-				{#each tramo.campos as field (field.id)}
-					{@const valor = valorLegible(field)}
-					{#if valor === null}
-						<div class="fila fila--nota">
-							<span class="fila__desc">{field.label} <i class="vacio">· sin observaciones</i></span>
-						</div>
-					{:else}
-						<div class="parrafo">
-							<p class="parrafo__k">{field.label}</p>
-							<p class="parrafo__v">{valor}</p>
-						</div>
-					{/if}
+				<!-- Misma regla que en la columna estrecha: la observación en blanco no
+				     se imprime. -->
+				{#each conTexto(tramo.campos) as field (field.id)}
+					<div class="parrafo">
+						<p class="parrafo__k">{field.label}</p>
+						<p class="parrafo__v">{valorLegible(field)}</p>
+					</div>
 				{/each}
 			{/if}
 		{/snippet}
