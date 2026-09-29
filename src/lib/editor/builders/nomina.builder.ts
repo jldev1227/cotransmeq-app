@@ -380,6 +380,9 @@ export interface HojaNominaDTO {
 	 * sale con «Otros … $ 0». Opcional: los payloads viejos no lo traen.
 	 */
 	sinFilasDeRecargos?: boolean;
+	/// Fechas de la LIQUIDACIÓN, que son las que imprime el desprendible. Pueden
+	/// no coincidir con las del libro. Opcional: payloads viejos no lo traen.
+	periodoLiquidacion?: { desde: string; hasta: string } | null;
 	avisos: string[];
 }
 
@@ -387,6 +390,8 @@ export interface PeriodoNominaDTO {
 	anio: number;
 	mes: number;
 	corte: number;
+	/// Rango específico con el que se construyó, o `null` si es por corte.
+	rango?: { desde: string; hasta: string } | null;
 	etiqueta: string;
 	periodo: { dias: DiaPeriodoDTO[]; semanas: SemanaDTO[] };
 	disponibilidad: { horasBase: number; horasDescuento: number };
@@ -1020,7 +1025,11 @@ function construirHoja(args: {
 		bind,
 		avisos: avisosHoja,
 		reparto,
-		celdaSalarioBasico
+		celdaSalarioBasico,
+		ventanaLibro: {
+			desde: dto.periodo.dias[0]?.fecha ?? '',
+			hasta: dto.periodo.dias[dto.periodo.dias.length - 1]?.fecha ?? ''
+		}
 	});
 
 	if (rangosCheckbox.length) args.checkboxPorSheetId[sheetId] = rangosCheckbox;
@@ -2505,8 +2514,11 @@ function zonaDesprendible(args: {
 	 * `null` en una hoja sin liquidación, donde no hay celda que teclear.
 	 */
 	celdaSalarioBasico: string | null;
+	/// Primer y último día del libro abierto, para señalar la hoja cuyo
+	/// periodo del desprendible no coincide con él.
+	ventanaLibro: { desde: string; hasta: string };
 }): { fin: number; checkbox: RangoCheckboxNomina[] } {
-	const { hoja, set, merge, bind, avisos, reparto, celdaSalarioBasico } = args;
+	const { hoja, set, merge, bind, avisos, reparto, celdaSalarioBasico, ventanaLibro } = args;
 	/// Rango de las tres casillas de ajuste, para que el engine les cuelgue el
 	/// checkbox de Univer. `null` en una hoja sin liquidación, que no las pinta.
 	let filaCheckbox: RangoCheckboxNomina | null = null;
@@ -3192,6 +3204,48 @@ function zonaDesprendible(args: {
 	 * a las fechas que tiene al lado, y entonces ninguno de los dos sirve para
 	 * justificar nada.
 	 */
+	/**
+	 * PERIODO DEL DESPRENDIBLE: las fechas que imprime el comprobante.
+	 *
+	 * Son las de la LIQUIDACIÓN, no las del libro, y aquí solo se leen: se
+	 * cambian con «Periodo del desprendible» en el carril, porque moverlas
+	 * rehace los recargos y el neto —dos celdas sueltas dejarían un estado
+	 * intermedio, con la inicial ya movida y la final todavía no—.
+	 *
+	 * En ámbar cuando no coinciden con el libro abierto: la hoja está
+	 * calculando con una ventana y el papel dirá otra.
+	 */
+	const per = hoja.periodoLiquidacion;
+	if (per?.desde && per?.hasta) {
+		const distinto = per.desde !== ventanaLibro.desde || per.hasta !== ventanaLibro.hasta;
+		const estiloFecha: IStyleData = {
+			...derivada(),
+			ht: HorizontalAlign.RIGHT,
+			...(distinto ? { bg: { rgb: FESTIVO_BG }, cl: { rgb: FESTIVO_TEXTO }, bl: 1 } : {})
+		};
+		r++;
+		campo(r, c0, SPAN.VAC_ROTULO + SPAN.VAC_VALOR, {
+			v: 'PERIODO DEL DESPRENDIBLE',
+			s: cabecera()
+		});
+		r++;
+		for (const [rotulo, valor] of [
+			['FECHA INICIO', per.desde],
+			['FECHA FIN', per.hasta]
+		] as const) {
+			campo(r, c0, SPAN.VAC_ROTULO, { v: rotulo, s: { ...base(), fs: 9 } });
+			campo(r, c0 + SPAN.VAC_ROTULO, SPAN.VAC_VALOR, { v: valor, s: estiloFecha });
+			r++;
+		}
+		campo(r, c0, SPAN.VAC_ROTULO + SPAN.VAC_VALOR, {
+			v: distinto
+				? `No coincide con el libro (${ventanaLibro.desde} → ${ventanaLibro.hasta}). Ábrelo en modo Rango con estas fechas.`
+				: 'Se cambia en «Periodo del desprendible», en el carril.',
+			s: { ...base(), fs: 8, cl: { rgb: distinto ? FESTIVO_TEXTO : '#6B7280' } }
+		});
+		r++;
+	}
+
 	const vac = hoja.vacaciones;
 	if (vac) {
 		r++;

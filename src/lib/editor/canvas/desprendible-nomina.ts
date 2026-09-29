@@ -64,6 +64,17 @@ export async function cargarDatosDesprendible(
 	const anio = Number(fin.slice(0, 4));
 	const mes = Number(fin.slice(5, 7));
 	const corte = Number(ini.slice(8, 10));
+	/**
+	 * Y se pide su RANGO EXACTO, no el corte que se deduce de él.
+	 *
+	 * Deducir el corte del día de inicio solo vale para un 21→20: una
+	 * liquidación de retiro del 21 al 30 de septiembre pedía el libro
+	 * 21-ago → 20-sep y no aparecía en él. Con el rango, una liquidación normal
+	 * da el mismo calendario que su corte, y una a medida da el suyo.
+	 */
+	const iso = /^\d{4}-\d{2}-\d{2}/;
+	const rango =
+		iso.test(ini) && iso.test(fin) ? { inicio: ini.slice(0, 10), fin: fin.slice(0, 10) } : {};
 
 	// Las firmas y las tablas de recargo son OPCIONALES: sin firma el
 	// desprendible sale sin ella, y sin tablas sale sin las páginas de
@@ -83,7 +94,7 @@ export async function cargarDatosDesprendible(
 		 */
 		Number.isInteger(anio) && Number.isInteger(mes)
 			? nominaBorradoresAPI
-					.desprendibleData(liquidacionId, { anio, mes, corte: corte || null })
+					.desprendibleData(liquidacionId, { anio, mes, corte: corte || null, ...rango })
 					.catch(() => null)
 			: Promise.resolve(null)
 	]);
