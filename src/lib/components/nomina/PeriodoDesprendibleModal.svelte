@@ -19,6 +19,9 @@
 		desde: string;
 		hasta: string;
 		diasLaboradosActuales: number | null;
+		/// Fechas con las que arranca el formulario, si no son las guardadas
+		/// (el rango de la barra). `desde`/`hasta` siguen siendo «Ahora».
+		propuesto?: { desde: string; hasta: string } | null;
 		bloqueada?: boolean;
 		motivoBloqueo?: string;
 		guardando?: boolean;
@@ -31,6 +34,7 @@
 		desde,
 		hasta,
 		diasLaboradosActuales,
+		propuesto = null,
 		bloqueada = false,
 		motivoBloqueo = '',
 		guardando = false,
@@ -45,8 +49,8 @@
 	let sembrado = false;
 	$effect(() => {
 		if (sembrado) return;
-		inicio = desde;
-		fin = hasta;
+		inicio = propuesto?.desde ?? desde;
+		fin = propuesto?.hasta ?? hasta;
 		sembrado = true;
 	});
 

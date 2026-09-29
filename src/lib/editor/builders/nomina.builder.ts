@@ -3239,7 +3239,7 @@ function zonaDesprendible(args: {
 		}
 		campo(r, c0, SPAN.VAC_ROTULO + SPAN.VAC_VALOR, {
 			v: distinto
-				? `No coincide con el libro (${ventanaLibro.desde} → ${ventanaLibro.hasta}). Ábrelo en modo Rango con estas fechas.`
+				? `Es lo que imprime el desprendible y no coincide con el libro (${ventanaLibro.desde} → ${ventanaLibro.hasta}). Guárdalo con «Periodo del desprendible».`
 				: 'Se cambia en «Periodo del desprendible», en el carril.',
 			s: { ...base(), fs: 8, cl: { rgb: distinto ? FESTIVO_TEXTO : '#6B7280' } }
 		});

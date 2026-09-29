@@ -557,6 +557,28 @@
 	 */
 	let mostrarPeriodo = $state(false);
 	let guardandoPeriodo = $state(false);
+	/// Fechas con las que se abre el modal. `null` = las guardadas. Desde la
+	/// barra en modo Rango se abre con el rango del libro: es lo que se quiere
+	/// guardar cuando alguien eligió ese rango para liquidar.
+	let periodoPropuesto = $state<{ desde: string; hasta: string } | null>(null);
+
+	/**
+	 * ¿El desprendible de la hoja abierta imprime otras fechas que el rango de
+	 * la barra? Es lo que enciende «Guardar rango en el desprendible»: el rango
+	 * de la barra solo decide qué días MIRA el canvas; lo que imprime el
+	 * comprobante son las fechas de la liquidación.
+	 */
+	const rangoSinGuardar = $derived(
+		!!rango &&
+			!!hojaActiva?.periodoLiquidacion &&
+			(hojaActiva.periodoLiquidacion.desde !== rango.desde ||
+				hojaActiva.periodoLiquidacion.hasta !== rango.hasta)
+	);
+
+	function abrirPeriodo(propuesto: { desde: string; hasta: string } | null = null) {
+		periodoPropuesto = propuesto;
+		mostrarPeriodo = true;
+	}
 
 	async function guardarPeriodo(p: { inicio: string; fin: string; ajustarDias: boolean }) {
 		const hoja = hojaActiva;
@@ -566,6 +588,10 @@
 		try {
 			const r = await nominaBorradoresAPI.cambiarPeriodo(hoja.liquidacionId, p);
 			mostrarPeriodo = false;
+			/// El PDF en caché lleva las fechas viejas. Solo se vaciaba al cambiar
+			/// de rango, así que guardar el mismo rango del libro dejaba el
+			/// desprendible anterior.
+			limpiarCacheDesprendibles();
 			toast.success(`${hoja.nombre}: periodo del ${p.inicio} al ${p.fin}.`, {
 				description: [
 					r.diasLaborados != null ? `${r.diasLaborados} días laborados` : null,
@@ -1511,7 +1537,9 @@
 				? `Fechas del comprobante de ${hojaActiva.nombre}: ${hojaActiva.periodoLiquidacion.desde} → ${hojaActiva.periodoLiquidacion.hasta}.`
 				: 'Abre la hoja de un conductor primero',
 			icon: iconoPeriodoDesprendible,
-			onSelect: () => (mostrarPeriodo = true),
+			badge: rangoSinGuardar ? '!' : null,
+			tone: rangoSinGuardar ? ('blue' as const) : undefined,
+			onSelect: () => abrirPeriodo(rangoSinGuardar ? rango : null),
 			disabled: !!accionEnCurso || guardandoPeriodo || !hojaActiva?.liquidacionId,
 			disabledHint: motivoBloqueoAdicionales() || undefined
 		},
@@ -1896,6 +1924,23 @@
 					/>
 				</label>
 			</div>
+			<!--
+				El rango de la barra solo decide qué días MIRA el canvas; el
+				desprendible imprime las fechas de la liquidación. Sin este botón no
+				había forma de adivinar que hacía falta guardarlo aparte.
+			-->
+			{#if rangoSinGuardar}
+				<button
+					type="button"
+					class="univer-btn univer-btn-blue"
+					onclick={() => abrirPeriodo(rango)}
+					disabled={!!accionEnCurso || guardandoPeriodo || !!motivoBloqueoAdicionales()}
+					title={motivoBloqueoAdicionales() ||
+						`El desprendible de ${hojaActiva?.nombre} imprime ${hojaActiva?.periodoLiquidacion?.desde} → ${hojaActiva?.periodoLiquidacion?.hasta}`}
+				>
+					Guardar rango en el desprendible
+				</button>
+			{/if}
 		{:else}
 			<label class="univer-year-picker">
 				<span>Año</span>
@@ -2126,12 +2171,16 @@
 		nombreHoja={hojaActiva.nombre}
 		desde={hojaActiva.periodoLiquidacion.desde}
 		hasta={hojaActiva.periodoLiquidacion.hasta}
+		propuesto={periodoPropuesto}
 		diasLaboradosActuales={hojaActiva.devengos.find((d) => d.clave === 'salario')?.cantidad ?? null}
 		bloqueada={!!motivoBloqueoAdicionales()}
 		motivoBloqueo={motivoBloqueoAdicionales()}
 		guardando={guardandoPeriodo}
 		onGuardar={guardarPeriodo}
-		onClose={() => (mostrarPeriodo = false)}
+		onClose={() => {
+			mostrarPeriodo = false;
+			periodoPropuesto = null;
+		}}
 	/>
 {/if}
 
