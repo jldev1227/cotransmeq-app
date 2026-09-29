@@ -107,6 +107,22 @@ function formatearRango(inicio: string, fin: string): string {
  * Calcula la diferencia en días entre dos fechas (inclusiva: cuenta ambos extremos)
  * Ej: del 1 al 5 = 5 días (1, 2, 3, 4, 5)
  */
+/**
+ * «Licencia de maternidad», «de paternidad» o las dos, por la inicial del
+ * género de la ficha. Misma regla que `rotuloLicencia` del canvas: sin género
+ * no se adivina.
+ */
+function rotuloLicencia(genero: string | null | undefined): string {
+	const g = String(genero ?? '')
+		.trim()
+		.toUpperCase()
+		.normalize('NFD')
+		.replace(/[\u0300-\u036f]/g, '');
+	if (g.startsWith('F')) return 'Licencia de maternidad';
+	if (g.startsWith('M')) return 'Licencia de paternidad';
+	return 'Licencia de maternidad / paternidad';
+}
+
 function obtenerDiferenciaDias(startStr: string, endStr: string): number {
 	try {
 		const start = new Date(startStr + 'T00:00:00');
@@ -631,6 +647,33 @@ export async function construirDocDefinition(
 					{ text: diasIncapacidad, width: 'auto' },
 					{
 						text: formatCurrency(item.valor_incapacidad),
+						color,
+						alignment: 'right' as const,
+						width: '*'
+					}
+				]
+			}
+		]);
+	}
+
+	/**
+	 * LICENCIA DE MATERNIDAD O PATERNIDAD (si hay): se paga y cotiza como el
+	 * salario, así que va con los devengos del empleado y no en el resumen.
+	 * Faltaba: el neto la llevaba dentro y el comprobante no decía de dónde
+	 * salía esa cifra. El rótulo sigue la misma regla que el canvas: por el
+	 * género de la ficha, y con las dos palabras si no lo tiene.
+	 */
+	if (Number(safeValue((item as any).total_licencia, 0)) > 0) {
+		const ini = String((item as any).periodo_start_licencia ?? '').slice(0, 10);
+		const fin = String((item as any).periodo_end_licencia ?? '').slice(0, 10);
+		const diasLicencia = ini && fin ? `${obtenerDiferenciaDias(ini, fin)} días` : '-';
+		empleadoBody.push([
+			{ text: rotuloLicencia((item.conductor as any)?.genero) },
+			{
+				columns: [
+					{ text: diasLicencia, width: 'auto' },
+					{
+						text: formatCurrency((item as any).total_licencia),
 						color,
 						alignment: 'right' as const,
 						width: '*'
