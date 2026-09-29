@@ -2259,6 +2259,42 @@ function zonaEmpresas(args: {
 			f: `=SUM(${L(c0 + 5)}${primera + 1}:${L(c0 + 5)}${r})`,
 			s: { ...totales(), ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } }
 		});
+
+		/**
+		 * Los días del bloque marcados «NO SUMAR»: fuera del TOTAL de arriba y
+		 * del neto, pero con su valor a la vista. Sin esta fila un bloque cuyos
+		 * días no suman salía entero en ceros y no había forma de saber cuánto
+		 * se estaba dejando de pagar. Cifra del servidor —a la tarifa de su
+		 * cliente—, no fórmula: no es dinero de la hoja, es una referencia.
+		 */
+		const noSumanBloque = hoja.dias.filter(
+			(d) =>
+				d.noSuma &&
+				!d.oculto &&
+				!d.disponibilidad &&
+				d.empresaId === b.empresaId &&
+				Number(d.fecha.slice(0, 4)) === b.anio &&
+				Number(d.fecha.slice(5, 7)) === b.mes
+		);
+		if (noSumanBloque.length) {
+			r++;
+			const gris: IStyleData = { ...base(), fs: 9, cl: { rgb: '#6B7280' }, bg: { rgb: '#F3F4F6' }, it: 1 };
+			const horasNs = noSumanBloque.reduce(
+				(acc, d) => acc + Object.values(d.horas ?? {}).reduce((x, h) => x + (h ?? 0), 0),
+				0
+			);
+			const valorNs = noSumanBloque.reduce((acc, d) => acc + (d.valorRecargos ?? 0), 0);
+			set(r, c0, {
+				v: `NO SUMA · REFERENCIA (${noSumanBloque.length} ${noSumanBloque.length === 1 ? 'día' : 'días'})`,
+				s: gris
+			});
+			merge(r, c0, r, c0 + 3);
+			set(r, c0 + 4, {
+				v: redondear(horasNs),
+				s: { ...gris, ht: HorizontalAlign.RIGHT, ...(FMT_HORAS ? { n: { pattern: FMT_HORAS } } : {}) }
+			});
+			set(r, c0 + 5, { v: Math.round(valorNs), s: { ...gris, ht: HorizontalAlign.RIGHT, n: { pattern: FMT_COP } } });
+		}
 		r += 2;
 	}
 

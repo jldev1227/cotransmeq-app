@@ -151,6 +151,161 @@ async function cargarPdfMake() {
  * producir el mismo documento como Blob y meterlo en un ZIP. El contenido no
  * cambia: lo unico que se movio fuera es la llamada final a `.open()`.
  */
+// ─── Días marcados «no sumar» (`marcas_dias`) ────────────────────────────
+//
+// Se imprimen en la tabla de días —en gris— y NO entran en sus totales ni en
+// el neto. Pero su VALOR tiene que verse: si no, el conductor ve horas que no
+// sabe cuánto valen ni por qué no se le pagan, y una tabla cuyos días son
+// todos «no sumar» salía entera en ceros. Por eso llevan su propia fila de
+// totales y su propio consolidado, rotulados como referencia.
+
+const GRIS_NO_SUMA = '#6B7280';
+const FONDO_NO_SUMA = '#F3F4F6';
+const CODIGOS_TABLA = ['HED', 'RN', 'HEN', 'RD', 'RNDF', 'HEFD', 'HEFN'];
+
+/** Los días que no suman, sin los de disponibilidad (esos ya no suman por otra vía). */
+function diasNoSuman(dias: any[]): any[] {
+	return dias.filter((d: any) => d.no_suma && !d.disponibilidad);
+}
+
+/** Fila «NO SUMA» bajo los totales de la tabla de días: días y horas por tipo. */
+export function filaTotalesNoSuma(dias: any[]): any[][] {
+	const ns = diasNoSuman(dias);
+	if (!ns.length) return [];
+	const celda = (text: string, bold = false) => ({
+		text,
+		bold,
+		fontSize: 8,
+		alignment: 'center' as const,
+		color: GRIS_NO_SUMA,
+		fillColor: FONDO_NO_SUMA,
+		margin: [0, 2, 0, 2]
+	});
+	const horasDe = (codigo: string) =>
+		ns.reduce((s: number, d: any) => {
+			const r = d.recargos?.find((rc: any) => rc.tipo_codigo === codigo);
+			return s + (r ? Number(r.horas) || 0 : 0);
+		}, 0);
+	return [
+		[
+			celda(`${ns.length}`, true),
+			celda('NO SUMA', true),
+			celda(ns.reduce((s: number, d: any) => s + (Number(d.total_horas) || 0), 0).toFixed(2), true),
+			...CODIGOS_TABLA.map((c) => {
+				const h = horasDe(c);
+				return celda(h ? h.toFixed(2) : '-');
+			})
+		]
+	];
+}
+
+/**
+ * Consolidado de los días que no suman: la misma tabla por tipo de recargo que
+ * TOTALES CONSOLIDADOS, en gris, y una barra con lo que NO entra al neto.
+ */
+export function bloqueNoSuman(dias: any[]): any[] {
+	const ns = diasNoSuman(dias);
+	const tipos = new Map<
+		string,
+		{ codigo: string; nombre: string; porcentaje: number; base: number; calc: number; horas: number; valor: number }
+	>();
+	for (const d of ns) {
+		for (const r of d.recargos || []) {
+			const k = `${r.tipo_codigo}@${r.porcentaje}`;
+			const t = tipos.get(k) ?? {
+				codigo: r.tipo_codigo,
+				nombre: String(r.tipo_nombre ?? r.tipo_codigo),
+				porcentaje: Number(r.porcentaje) || 0,
+				base: Number(r.valor_hora_base) || 0,
+				calc: Number(r.valor_hora_calculada) || 0,
+				horas: 0,
+				valor: 0
+			};
+			t.horas += Number(r.horas) || 0;
+			t.valor += Number(r.valor_total) || 0;
+			tipos.set(k, t);
+		}
+	}
+	if (!tipos.size) return [];
+	const lista = [...tipos.values()].sort((a, b) => a.porcentaje - b.porcentaje);
+	const total = lista.reduce((s, t) => s + t.valor, 0);
+	const txt = (text: string, extra: Record<string, unknown> = {}) => ({
+		text,
+		fontSize: 9,
+		color: GRIS_NO_SUMA,
+		alignment: 'center' as const,
+		margin: [0, 2, 0, 2],
+		...extra
+	});
+	const cabecera = ['TIPO RECARGO', '%', 'V/BASE', 'V/+ %', 'CANTIDAD', 'VALOR'].map((h, i) =>
+		txt(h, { bold: true, fontSize: 8, alignment: i === 0 ? ('left' as const) : ('center' as const), margin: [i === 0 ? 2 : 0, 3, 0, 3] })
+	);
+	const filas = lista.map((t) => [
+		txt(`${t.nombre.toUpperCase()} - ${t.codigo}`, { alignment: 'left' as const, margin: [2, 2, 0, 2] }),
+		txt(`${t.porcentaje}%`),
+		txt(formatCurrency(t.base)),
+		txt(formatCurrency(t.calc)),
+		txt(t.horas.toFixed(2)),
+		txt(formatCurrency(t.valor), { bold: true })
+	]);
+	return [
+		{
+			text: 'DÍAS QUE NO SUMAN · REFERENCIA',
+			bold: true,
+			fontSize: 10,
+			color: GRIS_NO_SUMA,
+			alignment: 'center' as const,
+			fillColor: FONDO_NO_SUMA,
+			margin: [0, 10, 0, 2]
+		},
+		{
+			text: 'Se muestran para que se vea su valor; no se suman a los recargos ni al neto a pagar.',
+			fontSize: 8,
+			color: GRIS_NO_SUMA,
+			alignment: 'center' as const,
+			margin: [0, 0, 0, 4]
+		},
+		{
+			table: {
+				headerRows: 1,
+				widths: ['35%', '10%', '13%', '13%', '13%', '16%'],
+				body: [cabecera, ...filas]
+			},
+			layout: {
+				hLineWidth: (i: number, node: any) => (i === 0 || i === 1 || i === node.table.body.length ? 1 : 0.5),
+				vLineWidth: () => 0.5,
+				hLineColor: () => '#E5E7EB',
+				vLineColor: () => '#E5E7EB',
+				paddingLeft: () => 2,
+				paddingRight: () => 2,
+				paddingTop: () => 1,
+				paddingBottom: () => 1,
+				fillColor: (rowIndex: number) => (rowIndex === 0 ? FONDO_NO_SUMA : null)
+			}
+		},
+		{
+			table: {
+				widths: ['*', 'auto'],
+				body: [
+					[
+						{ text: 'NO SUMA AL NETO', bold: true, fontSize: 10, color: '#FFFFFF', fillColor: '#9CA3AF', margin: [4, 4, 0, 4] },
+						{
+							text: formatCurrency(total),
+							bold: true,
+							fontSize: 10,
+							color: '#FFFFFF',
+							fillColor: '#9CA3AF',
+							alignment: 'right' as const,
+							margin: [0, 4, 15, 4]
+						}
+					]
+				]
+			},
+			layout: 'noBorders'
+		}
+	];
+}
+
 export async function construirDocDefinition(
 	item: Liquidacion,
 	firmas: FirmaConUrl[] = [],
@@ -1031,7 +1186,7 @@ export async function construirDocDefinition(
 
 			if (hayNoSuman) {
 				content.push({
-					text: 'Aviso: Los días en gris se muestran como referencia y no suman a los totales.',
+					text: 'Aviso: Los días en gris no suman a los totales ni al neto; su valor se detalla al final, como referencia.',
 					fontSize: 9,
 					color: '#6B7280',
 					bold: true,
@@ -1310,7 +1465,8 @@ export async function construirDocDefinition(
 					margin: [0, 2, 0, 2]
 				},
 				{
-					text: '-',
+					/// Con días «no sumar» debajo, la fila dice qué es: lo que SUMA.
+					text: hayNoSuman ? 'SUMA' : '-',
 					fontSize: 8,
 					alignment: 'center' as const,
 					fillColor: isBonoAparte ? COLOR_BONO_APARTE_BG : colorBg,
@@ -1350,7 +1506,7 @@ export async function construirDocDefinition(
 				table: {
 					headerRows: 1,
 					widths: tableWidths,
-					body: [headerRow, ...diasRows, totalesRow]
+					body: [headerRow, ...diasRows, totalesRow, ...filaTotalesNoSuma(dias)]
 				},
 				layout: {
 					hLineWidth: (i: number, node: any) =>
@@ -1697,6 +1853,9 @@ export async function construirDocDefinition(
 					});
 				}
 			}
+
+			// Los días marcados «no sumar»: su valor, aparte y en gris.
+			content.push(...bloqueNoSuman(dias));
 
 			// Firma on recargos page
 			if (firmas && firmas[0]?.presignedUrl) {
