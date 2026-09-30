@@ -10,6 +10,7 @@
 	import { sidebarStore } from '$lib/stores/sidebar';
 	import distracomLocations from '$lib/data/distracomlocations';
 	import { quintOut } from 'svelte/easing';
+	import EjecucionConductor from '$lib/components/servicios/EjecucionConductor.svelte';
 
 	const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
 	const OVERPASS_API = 'https://overpass-api.de/api/interpreter';
@@ -2316,6 +2317,9 @@
 						{/if}
 					</div>
 				</div>
+
+				<!-- Ejecución del conductor (inicio/liberación desde la app) -->
+				<EjecucionConductor servicioId={servicio.id} estado={servicio.estado} />
 
 				<!-- Observaciones (small, full width) -->
 				{#if servicio.observaciones}

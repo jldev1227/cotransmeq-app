@@ -15,7 +15,7 @@
  * El precio es que hay que pedir la liquidación completa por cada conductor;
  * de ahí la caché y el ritmo secuencial del ZIP.
  */
-import { obtenerLiquidacionPorId, obtenerFirmasPorLiquidacion } from '$lib/api/nomina';
+import { obtenerLiquidacionPorId } from '$lib/api/nomina';
 import { nominaBorradoresAPI } from '$lib/api/nomina-canvas';
 import {
 	generarPdfDesprendible,
@@ -79,10 +79,19 @@ export async function cargarDatosDesprendible(
 	// Las firmas y las tablas de recargo son OPCIONALES: sin firma el
 	// desprendible sale sin ella, y sin tablas sale sin las páginas de
 	// detalle. Ninguna de las dos debe impedir generar el documento.
-	const [firmas, recargosData] = await Promise.all([
-		obtenerFirmasPorLiquidacion(liquidacionId)
-			.then((r: any) => r?.data ?? r ?? [])
-			.catch(() => []),
+	/**
+	 * LA FIRMA SALE DE LA PROPIA LIQUIDACIÓN.
+	 *
+	 * Antes se pedía a `/api/firmas/liquidacion/:id`, una ruta que el backend
+	 * no tiene: respondía 404, el `.catch` la convertía en `[]` y el
+	 * desprendible del canvas salía SIEMPRE sin firma, sin avisar. La
+	 * liquidación ya trae `firmas_desprendibles` con la imagen en base64 (y la
+	 * de una prima del mismo periodo como respaldo), que es lo que se usa ahora.
+	 */
+	const firmas = ((liquidacion as any).firmas_desprendibles ?? []).filter(
+		(f: any) => f?.presignedUrl && f.firma_url !== 'pending' && f.firma_url !== ''
+	);
+	const [recargosData] = await Promise.all([
 		/**
 		 * DESDE EL CANVAS, no desde las planillas.
 		 *

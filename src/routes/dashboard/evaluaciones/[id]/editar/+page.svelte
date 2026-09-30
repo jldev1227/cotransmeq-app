@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import { fade } from 'svelte/transition';
 	import { onMount } from 'svelte';
+	import { authHeaders } from '$lib/api/evaluaciones';
 
 	type TipoPregunta =
 		| 'OPCION_UNICA'
@@ -54,7 +55,8 @@
 		error = null;
 		try {
 			const response = await fetch(
-				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}`
+				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}`,
+				{ headers: authHeaders() }
 			);
 			const data = await response.json();
 			if (data.success) {
@@ -227,7 +229,7 @@
 				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}`,
 				{
 					method: 'PUT',
-					headers: { 'Content-Type': 'application/json' },
+					headers: { 'Content-Type': 'application/json', ...authHeaders() },
 					body: JSON.stringify({
 						titulo,
 						descripcion: descripcion.trim() || null,

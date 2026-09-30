@@ -1,11 +1,17 @@
-import axios from 'axios';
+// Rutas de administración: exigen sesión. `apiClient` agrega el token y
+// maneja el 401 igual que el resto del dashboard.
+import { browser } from '$app/environment';
+import { apiClient as api } from './apiClient';
 
-const API_URL = import.meta.env.VITE_API_URL;
-
-const api = axios.create({
-	baseURL: API_URL,
-	headers: { 'Content-Type': 'application/json' }
-});
+/**
+ * Cabecera de sesión para las páginas del dashboard que llaman a estas rutas
+ * con `fetch` (descargas de PDF/ZIP, carga y edición). Mismo token que usa
+ * `apiClient`.
+ */
+export function authHeaders(): Record<string, string> {
+	const token = browser ? localStorage.getItem('transmeralda_token') : null;
+	return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 export interface Evaluacion {
 	id: string;

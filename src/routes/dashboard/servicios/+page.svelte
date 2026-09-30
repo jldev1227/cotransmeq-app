@@ -1623,6 +1623,19 @@
 										>
 											{getEstadoText(servicio.estado)}
 										</span>
+										{#if servicio.ejecucion?.iniciado_at}
+											<span
+												class="inline-flex flex-shrink-0 items-center gap-0.5 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700"
+												title={servicio.ejecucion.liberado_at
+													? 'Iniciado y liberado por el conductor desde la app'
+													: 'Iniciado por el conductor desde la app'}
+											>
+												<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
+													><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg
+												>
+												{servicio.ejecucion.liberado_at ? 'Liberado' : 'Iniciado'}
+											</span>
+										{/if}
 									</div>
 
 									<!-- Fila 2: Cliente + Valor -->
@@ -1926,6 +1939,23 @@
 															'Sin destino'}
 													</p>
 												</div>
+												{#if servicio.ejecucion?.iniciado_at}
+													<div class="mt-1 flex">
+														{#if servicio.ejecucion?.iniciado_at}
+															<span
+																class="inline-flex flex-shrink-0 items-center gap-0.5 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700"
+																title={servicio.ejecucion.liberado_at
+																	? 'Iniciado y liberado por el conductor desde la app'
+																	: 'Iniciado por el conductor desde la app'}
+															>
+																<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
+																	><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg
+																>
+																{servicio.ejecucion.liberado_at ? 'Liberado' : 'Iniciado'}
+															</span>
+														{/if}
+													</div>
+												{/if}
 											</div>
 										</div>
 									</td>

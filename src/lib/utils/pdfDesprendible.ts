@@ -2190,11 +2190,26 @@ export async function generarBlobDesprendible(
 ): Promise<Blob> {
 	const pdfMake = await cargarPdfMake();
 	const docDefinition = await construirDocDefinition(item, firmas, recargosData);
-	return new Promise((resolve, reject) => {
-		try {
-			pdfMake.createPdf(docDefinition).getBlob((blob: Blob) => resolve(blob));
-		} catch (e) {
-			reject(e);
-		}
-	});
+	/// pdfmake 0.3 devuelve una promesa y IGNORA el callback. Con la forma
+	/// antigua —`getBlob((blob) => resolve(blob))`— la promesa no se resolvía
+	/// nunca y la exportación en ZIP del canvas se quedaba colgada.
+	return pdfMake.createPdf(docDefinition).getBlob();
+}
+
+/**
+ * El mismo desprendible, en base64.
+ *
+ * Lo usa la página que imprime el PDF de la app móvil: Puppeteer la abre desde
+ * el backend y recoge este base64 tal cual, así que el móvil recibe
+ * EXACTAMENTE el documento del canvas, sin una segunda maqueta.
+ */
+export async function generarBase64Desprendible(
+	item: Liquidacion,
+	firmas: FirmaConUrl[] = [],
+	recargosData: any = null
+): Promise<string> {
+	const pdfMake = await cargarPdfMake();
+	const docDefinition = await construirDocDefinition(item, firmas, recargosData);
+	/// pdfmake 0.3: promesa, sin callback (ver `generarBlobDesprendible`).
+	return pdfMake.createPdf(docDefinition).getBase64();
 }

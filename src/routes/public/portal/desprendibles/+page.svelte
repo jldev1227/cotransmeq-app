@@ -250,44 +250,15 @@
   async function verDesprendible(id: string) {
     generandoPdf = id;
     try {
-      const res = await portalFetch(`/conductor-portal/desprendibles/${id}`);
-      const { liquidacion, dataParaPdf, firma } = res.data;
-
-      // El backend ya devuelve `dataParaPdf` con las planillas
-      // clasificadas (`_categoria`: 'pagar' | 'bono_aparte' | 'no_pagar'),
-      // exactamente la misma estructura que arma el modal del dashboard
-      // en su frontend. GEOLAB, RED SALUD e INGENIERIA ESPECIALIZADA
-      // quedan como 'bono_aparte' (sin valor monetario en el total).
-      //
-      // Si por alguna razón el backend no lo construyó (ej. error al
-      // obtener el preview), caemos a un `dataParaPdf` vacío para no
-      // romper la generación de la página 1 del desprendible.
-      const dataParaPdfSafe: { planillas: any[] } =
-        dataParaPdf && Array.isArray(dataParaPdf.planillas)
-          ? dataParaPdf
-          : { planillas: [] };
-
-      // Convertir la firma del portal al formato `FirmaConUrl[]` que
-      // espera `pdfDesprendible.ts` (necesita `presignedUrl` y
-      // `fecha_firma`).
-      const firmas: any[] =
-        firma && firma.presignedUrl
-          ? [
-              {
-                id: '',
-                liquidacion_id: liquidacion.id,
-                conductor_id: liquidacion.conductor_id,
-                firma_url: '',
-                firma_s3_key: '',
-                fecha_firma: firma.fecha_firma || new Date().toISOString(),
-                estado: 'firmado',
-                presignedUrl: firma.presignedUrl
-              }
-            ]
-          : [];
-
+      /// Los MISMOS datos que usa el canvas de nómina: recargos de la hoja del
+      /// canvas y la firma de la liquidación, ya en base64 desde el backend.
+      /// Antes el portal armaba los suyos (`dataParaPdf` con su propia
+      /// clasificación de planillas), y el desprendible que veía el conductor
+      /// no era el que salía del canvas.
+      const res = await portalFetch(`/conductor-portal/desprendibles/${id}/datos`);
+      const { liquidacion, firmas, recargosData } = res.data;
       const { generarPdfDesprendible } = await import('$lib/utils/pdfDesprendible');
-      await generarPdfDesprendible(liquidacion, firmas, dataParaPdfSafe);
+      await generarPdfDesprendible(liquidacion, firmas, recargosData);
     } catch (err: any) {
       if (err.status === 401) {
         portalSession.logout();
