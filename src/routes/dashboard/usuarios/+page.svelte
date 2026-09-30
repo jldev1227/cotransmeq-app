@@ -6,6 +6,12 @@
 	import { coincide } from '$lib/listing/texto';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+	import TablaLista from '$lib/components/listing/TablaLista.svelte';
+	import CeldaIdentidad from '$lib/components/listing/CeldaIdentidad.svelte';
+	import AccionesFila from '$lib/components/listing/AccionesFila.svelte';
+	import { mascota } from '$lib/mascot';
+	import { Clock, Pencil, ShieldCheck } from 'lucide-svelte';
+	import type { ColumnDef } from '@tanstack/table-core';
 	import { onMount, onDestroy, untrack } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
@@ -330,6 +336,17 @@
 		if (parts.length === 1) return parts[0].substring(0, 2).toUpperCase();
 		return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 	}
+
+	const COLUMNAS_EQUIPO: ColumnDef<Usuario, any>[] = [
+		{ id: 'usuario', header: 'Usuario', accessorKey: 'nombre', enableSorting: false },
+		{ id: 'areas', header: 'Áreas', enableSorting: false, size: 200 },
+		{ id: 'cargo', header: 'Cargo', enableSorting: false, size: 170 },
+		{ id: 'acceso', header: 'Último acceso', enableSorting: false, size: 170 },
+		{ id: 'habilitado', header: 'Habilitado', enableSorting: false, size: 110 },
+		{ id: 'acciones', header: '', enableSorting: false, size: 130 }
+	];
+
+	const STATUS_COLOR = { online: '#16a34a', offline: '#94a3b8', inactive: '#b42318' } as const;
 
 	function statusOf(u: Usuario): 'online' | 'inactive' | 'offline' {
 		if (u.activo === false) return 'inactive';
@@ -978,107 +995,100 @@
 					</button>
 				</div>
 			{:else}
-				<div class="users-grid">
-					{#each filteredUsuarios as u, idx (u.id)}
-						{@const status = statusOf(u)}
-						<article
-							class="user-card status-{status}"
-							class:user-card--focus={detailUsuario?.id === u.id}
-							in:fly={{ y: 12, duration: 300, delay: Math.min(idx * 25, 350), easing: quintOut }}
-						>
-							<header class="user-head">
-								<div class="avatar avatar--{status}">
-									<span>{initials(u.nombre)}</span>
-									<span class="avatar-dot avatar-dot--{status}" aria-hidden="true"></span>
+				<div class="dir-lista" in:fade={{ duration: 300 }}>
+					<TablaLista
+						columnas={COLUMNAS_EQUIPO}
+						datos={filteredUsuarios}
+						claveFila={(u) => u.id}
+						onFila={(u) => verDetalleUsuario(u)}
+						etiqueta="Miembros del equipo"
+					>
+						{#snippet celda({ columnaId, fila: u })}
+							{@const status = statusOf(u)}
+							{#if columnaId === 'usuario'}
+								<div class="flex items-center gap-2">
+									<CeldaIdentidad
+										titulo={u.nombre}
+										subtitulo={u.correo}
+										iniciales={initials(u.nombre)}
+										punto={STATUS_COLOR[status]}
+										tono={status === 'inactive' ? '#94a3b8' : undefined}
+									/>
+									{#if u.id === currentUser?.id}<span class="badge-self">tú</span>{/if}
 								</div>
-								<div class="user-head-text">
-									<h3>
-										{u.nombre}
-										{#if u.id === currentUser?.id}<span class="badge-self">tú</span>{/if}
-									</h3>
-									<span class="user-email">{u.correo}</span>
+							{:else if columnaId === 'areas'}
+								{#if u.area && u.area.length}
+									<div class="dir-celda">
+										<span>{u.area.map((a) => AREA_LABELS[a as Area] ?? a).join(' · ')}</span>
+									</div>
+								{:else}
+									<span class="dir-nulo">Sin área asignada</span>
+								{/if}
+							{:else if columnaId === 'cargo'}
+								{#if u.cargo}
+									<span class="dir-celda">{u.cargo}</span>
+								{:else}
+									<span class="dir-nulo">—</span>
+								{/if}
+							{:else if columnaId === 'acceso'}
+								<div class="dir-celda dir-celda--fecha">
+									<span style="color: {status === 'online' ? 'var(--emerald-700)' : 'inherit'}">
+										{status === 'online' ? 'En línea' : lastAccess(u)}
+									</span>
+									{#if status === 'online'}<small>{lastAccess(u)}</small>{/if}
 								</div>
-								<button
-									type="button"
-									class="user-status-toggle"
-									class:user-status-toggle--on={u.activo !== false}
-									class:user-status-toggle--off={u.activo === false}
-									title={u.activo !== false ? 'Deshabilitar usuario' : 'Habilitar usuario'}
-									aria-label={u.activo !== false ? 'Deshabilitar' : 'Habilitar'}
-									disabled={u.id === currentUser?.id}
-									onclick={(e) => abrirConfirmToggle(u, e)}
-								>
-									<span class="user-status-knob"></span>
-								</button>
-							</header>
-
-							{#if u.area && u.area.length}
-								<div class="user-areas">
-									{#each u.area as a}
-										<span class="area-chip">{AREA_LABELS[a as Area] ?? a}</span>
-									{/each}
+							{:else if columnaId === 'habilitado'}
+								<!-- El interruptor no abre el detalle: solo cambia el estado. -->
+								<!-- svelte-ignore a11y_no_static_element_interactions -->
+								<div onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()}>
+									<button
+										type="button"
+										class="user-status-toggle"
+										class:user-status-toggle--on={u.activo !== false}
+										class:user-status-toggle--off={u.activo === false}
+										title={u.activo !== false ? 'Deshabilitar usuario' : 'Habilitar usuario'}
+										aria-label={u.activo !== false ? 'Deshabilitar' : 'Habilitar'}
+										disabled={u.id === currentUser?.id}
+										onclick={(e) => abrirConfirmToggle(u, e)}
+									>
+										<span class="user-status-knob"></span>
+									</button>
 								</div>
-							{:else}
-								<div class="user-areas"><span class="muted">Sin área asignada</span></div>
+							{:else if columnaId === 'acciones'}
+								<AccionesFila
+									acciones={[
+										{
+											id: 'sesiones',
+											etiqueta: 'Ver sesiones',
+											icono: Clock,
+											onClick: () => verDetalleUsuario(u)
+										},
+										{
+											id: 'editar',
+											etiqueta: 'Editar',
+											icono: Pencil,
+											onClick: () => abrirEditModal(u)
+										},
+										{
+											id: 'permisos',
+											etiqueta: 'Permisos',
+											icono: ShieldCheck,
+											onClick: () => abrirPermisos(u)
+										}
+									]}
+								/>
 							{/if}
+						{/snippet}
 
-							<dl class="user-data">
-								<div>
-									<dt>Cargo</dt>
-									<dd>{u.cargo ?? '—'}</dd>
-								</div>
-								<div>
-									<dt>Último acceso</dt>
-									<dd class="last-access last-access--{status}">{lastAccess(u)}</dd>
-								</div>
-							</dl>
-
-							<footer class="user-foot">
-								<button class="user-link" onclick={() => verDetalleUsuario(u)}>
-									<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
-										/>
-									</svg>
-									Ver sesiones
-								</button>
-								<div class="user-actions">
-									<button
-										type="button"
-										class="icon-btn"
-										title="Editar"
-										aria-label="Editar {u.nombre}"
-										onclick={(e) => abrirEditModal(u, e)}
-									>
-										<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
-											/>
-										</svg>
-									</button>
-									<button
-										type="button"
-										class="icon-btn"
-										title="Permisos"
-										aria-label="Permisos de {u.nombre}"
-										onclick={(e) => abrirPermisos(u, e)}
-									>
-										<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
-											/>
-										</svg>
-									</button>
-								</div>
-							</footer>
-						</article>
-					{/each}
+						{#snippet vacio()}
+							{@const img = mascota('vacio')}
+							<div class="dir-vacio">
+								<img src={img.src} alt={img.alt} width="418" height="418" />
+								<h3>Sin resultados</h3>
+								<p>Ajusta los filtros o invita a un nuevo miembro al equipo.</p>
+							</div>
+						{/snippet}
+					</TablaLista>
 				</div>
 			{/if}
 		</section>
@@ -2270,8 +2280,20 @@
 					<button type="submit" class="btn-primary" disabled={creandoNuevo}>
 						{#if creandoNuevo}
 							<svg class="spin" viewBox="0 0 24 24" fill="none">
-								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25" />
-								<path d="M4 12a8 8 0 018-8v0" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+								<circle
+									cx="12"
+									cy="12"
+									r="10"
+									stroke="currentColor"
+									stroke-width="3"
+									opacity="0.25"
+								/>
+								<path
+									d="M4 12a8 8 0 018-8v0"
+									stroke="currentColor"
+									stroke-width="3"
+									stroke-linecap="round"
+								/>
 							</svg>
 							Creando…
 						{:else}
@@ -2311,7 +2333,7 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #ea580c;
+		color: #16a34a;
 		background: rgba(234, 88, 12, 0.08);
 		padding: 0.3rem 0.75rem;
 		border-radius: 6px;
@@ -2332,10 +2354,6 @@
 	}
 	.mono {
 		font-family: var(--font-sans);
-	}
-	.muted {
-		color: #94a3b8;
-		font-size: 0.82rem;
 	}
 	.muted-inline {
 		color: #94a3b8;
@@ -2495,41 +2513,6 @@
 		gap: 0.75rem;
 		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
 	}
-	.search-wrap {
-		position: relative;
-		flex: 1;
-		min-width: 240px;
-	}
-	.search-icon {
-		position: absolute;
-		left: 0.9rem;
-		top: 50%;
-		transform: translateY(-50%);
-		width: 16px;
-		height: 16px;
-		color: #94a3b8;
-		pointer-events: none;
-	}
-	.search-input {
-		width: 100%;
-		padding: 0.6rem 0.9rem 0.6rem 2.5rem;
-		font-family: inherit;
-		font-size: 0.88rem;
-		color: #0f172a;
-		background: #fcfcfb;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 10px;
-		outline: none;
-		transition: all 0.2s;
-	}
-	.search-input::placeholder {
-		color: #94a3b8;
-	}
-	.search-input:focus {
-		background: white;
-		border-color: rgba(234, 88, 12, 0.4);
-		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1);
-	}
 
 	.filter-group {
 		display: flex;
@@ -2547,7 +2530,7 @@
 		font-family: inherit;
 		font-size: 0.78rem;
 		font-weight: 600;
-		color: #334155;
+		color: #33423d;
 		background: transparent;
 		border: none;
 		border-radius: 8px;
@@ -2559,7 +2542,7 @@
 	}
 	.chip--active {
 		background: white;
-		color: #166534;
+		color: #014339;
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 	}
 	.chip--sm {
@@ -2579,7 +2562,7 @@
 	}
 	.chip--active .chip-count {
 		background: rgba(234, 88, 12, 0.12);
-		color: #9a3412;
+		color: #075c49;
 	}
 	.chip-dot {
 		width: 7px;
@@ -2587,7 +2570,7 @@
 		border-radius: 50%;
 	}
 	.chip-dot--emerald {
-		background: #ea580c;
+		background: #16a34a;
 	}
 
 	.select {
@@ -2627,79 +2610,16 @@
 		border-color: rgba(220, 38, 38, 0.3);
 		background: rgba(220, 38, 38, 0.04);
 	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   USERS GRID
-	   ═══════════════════════════════════════════════════════════════ */
-	/* Rejilla fluida en vez de dos puntos de ruptura: el ancho real del `main`
-	   cambia al colapsar la barra lateral, y la cascada de `@media` se quedaba
-	   clavada en 3 columnas justo cuando sobraba sitio para 5. */
-	.users-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(19rem, 1fr));
-		gap: 1.1rem;
-	}
-
-	.user-card {
-		display: flex;
-		flex-direction: column;
-		gap: 0.9rem;
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 20px;
-		padding: 1.25rem;
-		transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
-	}
-	.user-card:hover,
-	.user-card--focus {
-		transform: translateY(-3px);
-		border-color: rgba(234, 88, 12, 0.3);
-		box-shadow: 0 12px 32px rgba(234, 88, 12, 0.12);
-	}
-	.user-card.status-inactive {
-		opacity: 0.78;
-	}
-
-	.user-head {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.75rem;
-	}
-	.user-head-text {
-		flex: 1;
-		min-width: 0;
-	}
-	.user-head-text h3 {
-		font-size: 1.02rem;
-		font-weight: 600;
-		line-height: 1.3;
-		margin: 0;
-		color: #0f172a;
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-		flex-wrap: wrap;
-	}
 	.badge-self {
 		font-family: var(--font-sans);
 		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
-		color: #9a3412;
+		color: #075c49;
 		background: rgba(234, 88, 12, 0.1);
 		padding: 0.1rem 0.4rem;
 		border-radius: 4px;
-	}
-	.user-email {
-		display: block;
-		font-size: 0.78rem;
-		color: #64748b;
-		margin-top: 0.2rem;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
 	}
 
 	/* Avatar */
@@ -2716,38 +2636,6 @@
 		font-size: 0.85rem;
 		font-weight: 700;
 		letter-spacing: 0.04em;
-	}
-	.avatar--online {
-		background: linear-gradient(135deg, rgba(234, 88, 12, 0.16), rgba(234, 88, 12, 0.2));
-		color: #166534;
-	}
-	.avatar--offline {
-		background: linear-gradient(135deg, rgba(75, 85, 99, 0.12), rgba(55, 65, 81, 0.16));
-		color: #374151;
-	}
-	.avatar--inactive {
-		background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(220, 38, 38, 0.14));
-		color: #b91c1c;
-	}
-	.avatar-dot {
-		position: absolute;
-		bottom: -1px;
-		right: -1px;
-		width: 12px;
-		height: 12px;
-		border-radius: 50%;
-		border: 2.5px solid white;
-	}
-	.avatar-dot--online {
-		background: #ea580c;
-		box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.2);
-		animation: pulse-online 2s ease-in-out infinite;
-	}
-	.avatar-dot--offline {
-		background: #9ca3af;
-	}
-	.avatar-dot--inactive {
-		background: #ef4444;
 	}
 	@keyframes pulse-online {
 		0%,
@@ -2779,7 +2667,7 @@
 		cursor: not-allowed;
 	}
 	.user-status-toggle--on {
-		background: linear-gradient(135deg, #ea580c, #c2410c);
+		background: linear-gradient(135deg, #16a34a, #087a57);
 	}
 	.user-status-toggle--off {
 		background: #d1d5db;
@@ -2797,13 +2685,6 @@
 	.user-status-toggle--on .user-status-knob {
 		transform: translateX(16px);
 	}
-
-	/* Areas */
-	.user-areas {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.3rem;
-	}
 	.area-chip {
 		font-family: var(--font-sans);
 		font-size: 0.66rem;
@@ -2818,78 +2699,6 @@
 	.area-chip--sm {
 		font-size: 0.62rem;
 		padding: 0.15rem 0.4rem;
-	}
-
-	/* Data */
-	.user-data {
-		display: flex;
-		flex-direction: column;
-		gap: 0.45rem;
-		margin: 0;
-		padding: 0.7rem 0;
-		border-top: 1px solid rgba(0, 0, 0, 0.06);
-		border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-	}
-	.user-data > div {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.82rem;
-	}
-	.user-data dt {
-		font-size: 0.7rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: #64748b;
-		font-family: var(--font-sans);
-		margin: 0;
-	}
-	.user-data dd {
-		margin: 0;
-		font-size: 0.85rem;
-		color: #0f172a;
-		font-weight: 500;
-	}
-	.last-access--online {
-		color: #9a3412;
-		font-weight: 600;
-	}
-	.last-access--inactive {
-		color: #b91c1c;
-	}
-
-	/* Footer */
-	.user-foot {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.5rem;
-	}
-	.user-link {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		font-size: 0.78rem;
-		font-weight: 600;
-		color: #ea580c;
-		background: none;
-		border: none;
-		padding: 0;
-		cursor: pointer;
-		transition: gap 0.2s;
-	}
-	.user-link svg {
-		width: 14px;
-		height: 14px;
-	}
-	.user-card:hover .user-link {
-		gap: 0.6rem;
-	}
-	.user-actions {
-		display: flex;
-		gap: 0.25rem;
 	}
 	.icon-btn {
 		width: 30px;
@@ -2909,7 +2718,7 @@
 		height: 14px;
 	}
 	.icon-btn:hover {
-		color: #ea580c;
+		color: #16a34a;
 		border-color: rgba(234, 88, 12, 0.3);
 		background: rgba(234, 88, 12, 0.06);
 	}
@@ -2941,9 +2750,6 @@
 	.session-card:hover {
 		border-color: rgba(234, 88, 12, 0.2);
 	}
-	.session-card--closed {
-		opacity: 0.7;
-	}
 	.session-main {
 		display: flex;
 		align-items: center;
@@ -2957,8 +2763,8 @@
 		width: 40px;
 		height: 40px;
 		border-radius: 12px;
-		background: linear-gradient(135deg, rgba(234, 88, 12, 0.14), rgba(234, 88, 12, 0.18));
-		color: #166534;
+		background: linear-gradient(135deg, rgba(234, 88, 12, 0.14), rgba(8, 122, 87, 0.18));
+		color: #014339;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -2974,12 +2780,6 @@
 		height: 11px;
 		border-radius: 50%;
 		border: 2.5px solid white;
-	}
-	.session-dot--active {
-		background: #ea580c;
-	}
-	.session-dot--closed {
-		background: #9ca3af;
 	}
 	.session-text {
 		flex: 1;
@@ -3021,10 +2821,10 @@
 		flex-shrink: 0;
 	}
 	.meta-item--emerald {
-		color: #9a3412;
+		color: #075c49;
 	}
 	.meta-item--emerald svg {
-		color: #ea580c;
+		color: #16a34a;
 	}
 	.session-side {
 		display: flex;
@@ -3049,7 +2849,7 @@
 		width: 6px;
 		height: 6px;
 		border-radius: 50%;
-		background: #ea580c;
+		background: #16a34a;
 		display: inline-block;
 		margin-right: 0.35rem;
 		animation: pulse 1.5s ease-in-out infinite;
@@ -3086,11 +2886,6 @@
 	.inv-card:hover {
 		border-color: rgba(234, 88, 12, 0.2);
 	}
-	.inv-card--expirada,
-	.inv-card--revocada,
-	.inv-card--reemplazada {
-		opacity: 0.65;
-	}
 	.inv-main {
 		display: flex;
 		align-items: flex-start;
@@ -3126,7 +2921,7 @@
 	}
 	.inv-cargo {
 		font-size: 0.78rem;
-		color: #334155;
+		color: #33423d;
 	}
 	.inv-areas {
 		display: flex;
@@ -3167,7 +2962,7 @@
 		white-space: nowrap;
 	}
 	.estado-pill--emerald {
-		color: #9a3412;
+		color: #075c49;
 		background: rgba(234, 88, 12, 0.1);
 	}
 	.estado-pill--amber {
@@ -3203,7 +2998,7 @@
 		width: 30px;
 		height: 30px;
 		border: 2.5px solid rgba(234, 88, 12, 0.15);
-		border-top-color: #ea580c;
+		border-top-color: #16a34a;
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 	}
@@ -3231,7 +3026,7 @@
 	}
 	.empty-state p {
 		font-size: 0.88rem;
-		color: #334155;
+		color: #33423d;
 		max-width: 420px;
 		margin: 0 0 1rem;
 		line-height: 1.55;
@@ -3240,8 +3035,8 @@
 		width: 64px;
 		height: 64px;
 		border-radius: 50%;
-		background: linear-gradient(135deg, rgba(234, 88, 12, 0.08), rgba(234, 88, 12, 0.12));
-		color: #ea580c;
+		background: linear-gradient(135deg, rgba(234, 88, 12, 0.08), rgba(8, 122, 87, 0.12));
+		color: #16a34a;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -3300,7 +3095,7 @@
 		white-space: nowrap;
 	}
 	.btn-primary {
-		background: linear-gradient(135deg, #ea580c, #c2410c);
+		background: linear-gradient(135deg, #16a34a, #087a57);
 		color: white;
 		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.28);
 	}
@@ -3359,7 +3154,7 @@
 		gap: 0.3rem;
 		font-size: 0.75rem;
 		font-weight: 600;
-		color: #ea580c;
+		color: #16a34a;
 		background: none;
 		border: none;
 		padding: 0.25rem 0.4rem;
@@ -3441,7 +3236,7 @@
 	.modal-desc {
 		font-size: 0.9rem;
 		line-height: 1.6;
-		color: #334155;
+		color: #33423d;
 		margin: 0;
 	}
 	.modal-desc strong {
@@ -3489,7 +3284,7 @@
 		border: 1px solid rgba(220, 38, 38, 0.15);
 	}
 	.modal-icon--emerald {
-		background: linear-gradient(135deg, #ea580c, #c2410c);
+		background: linear-gradient(135deg, #16a34a, #087a57);
 		color: white;
 		box-shadow: 0 8px 24px rgba(234, 88, 12, 0.3);
 	}
@@ -3564,7 +3359,7 @@
 		font-family: var(--font-sans);
 		font-size: 0.78rem;
 		font-weight: 600;
-		color: #334155;
+		color: #33423d;
 		background: #fcfcfb;
 		border: 1px solid rgba(0, 0, 0, 0.08);
 		padding: 0.45rem 0.85rem;
@@ -3577,8 +3372,8 @@
 		color: #0f172a;
 	}
 	.area-pill--active {
-		background: linear-gradient(135deg, rgba(234, 88, 12, 0.1), rgba(234, 88, 12, 0.14));
-		color: #166534;
+		background: linear-gradient(135deg, rgba(234, 88, 12, 0.1), rgba(8, 122, 87, 0.14));
+		color: #014339;
 		border-color: rgba(234, 88, 12, 0.35);
 	}
 
@@ -3630,30 +3425,13 @@
 		border-color: rgba(0, 0, 0, 0.15);
 	}
 	.perm-row--active {
-		background: linear-gradient(135deg, rgba(234, 88, 12, 0.06), rgba(234, 88, 12, 0.1));
+		background: linear-gradient(135deg, rgba(234, 88, 12, 0.06), rgba(8, 122, 87, 0.1));
 		border-color: rgba(234, 88, 12, 0.25);
 	}
 	.perm-row-label {
 		font-size: 0.85rem;
 		font-weight: 500;
 		color: #0f172a;
-	}
-
-	/* Card icon (hero) */
-	.card-icon {
-		width: 48px;
-		height: 48px;
-		border-radius: 14px;
-		background: linear-gradient(135deg, #ea580c, #c2410c);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		color: white;
-		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.3);
-	}
-	.card-icon svg {
-		width: 24px;
-		height: 24px;
 	}
 
 	/* ═══════════════════════════════════════════════════════════════
@@ -3707,7 +3485,7 @@
 		transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 	}
 	.btn-bonos-grant {
-		background: linear-gradient(135deg, #ea580c, #c2410c);
+		background: linear-gradient(135deg, #16a34a, #087a57);
 		color: white;
 		box-shadow: 0 2px 8px rgba(234, 88, 12, 0.25);
 	}
@@ -3745,7 +3523,7 @@
 		user-select: none;
 	}
 	.bonos-select-all input {
-		accent-color: #ea580c;
+		accent-color: #16a34a;
 	}
 
 	.bonos-selected-count {
@@ -3754,7 +3532,7 @@
 		padding: 0.25rem 0.625rem;
 		border-radius: 999px;
 		background: rgba(234, 88, 12, 0.08);
-		color: #9a3412;
+		color: #075c49;
 		font-size: 0.6875rem;
 		font-weight: 600;
 		border: 1px solid rgba(234, 88, 12, 0.2);
@@ -3813,7 +3591,7 @@
 		position: relative;
 	}
 	.bonos-card-avatar.avatar--online {
-		background: linear-gradient(135deg, #ea580c, #c2410c);
+		background: linear-gradient(135deg, #16a34a, #087a57);
 	}
 	.bonos-card-avatar.avatar--inactive {
 		background: linear-gradient(135deg, #9ca3af, #6b7280);
@@ -3866,7 +3644,7 @@
 	}
 	.bonos-pill--emerald {
 		background: rgba(234, 88, 12, 0.1);
-		color: #9a3412;
+		color: #075c49;
 		border: 1px solid rgba(234, 88, 12, 0.3);
 	}
 	.bonos-pill--gray {
@@ -3875,7 +3653,7 @@
 		border: 1px solid rgba(156, 163, 175, 0.25);
 	}
 	.bonos-pill--emerald svg {
-		color: #c2410c;
+		color: #087a57;
 	}
 
 	/* Nota explicativa dentro del modal de alta manual: dice en una línea en
@@ -3885,7 +3663,7 @@
 		padding: 0.7rem 0.85rem;
 		font-size: 0.8rem;
 		line-height: 1.55;
-		color: #334155;
+		color: #33423d;
 		background: rgba(0, 0, 0, 0.025);
 		border: 1px solid rgba(0, 0, 0, 0.07);
 		border-radius: 10px;
@@ -3907,7 +3685,7 @@
 		gap: 0.45rem;
 		margin-top: -0.35rem;
 		font-size: 0.8rem;
-		color: #334155;
+		color: #33423d;
 		cursor: pointer;
 		user-select: none;
 	}

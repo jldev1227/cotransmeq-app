@@ -253,10 +253,11 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 16px;
-		padding: 1rem 1.1rem;
+		padding: 0.85rem 0.95rem;
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
+		gap: 0.6rem;
+		min-width: 0;
 		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 		cursor: default;
 		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
@@ -315,7 +316,8 @@
 		letter-spacing: 0.02em;
 	}
 
-	.tags { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+	/* Una sola línea: la segunda etiqueta se corta antes que abrir otra fila. */
+	.tags { display: flex; flex-wrap: nowrap; gap: 0.3rem; min-width: 0; }
 	.tag {
 		font-family: var(--font-sans);
 		font-size: 0.62rem;
@@ -324,19 +326,27 @@
 		border-radius: 5px;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		flex-shrink: 1;
+		min-width: 0;
 	}
+	.tag:first-child { flex-shrink: 0; }
 	.tag-neutral { background: var(--tag-bg); color: var(--text-muted); }
 
 	.description {
 		font-size: 0.82rem;
 		color: var(--text-secondary);
-		line-height: 1.55;
+		line-height: 1.5;
 		display: -webkit-box;
-		-webkit-line-clamp: 3;
-		line-clamp: 3;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
 		-webkit-box-orient: vertical;
 		overflow: hidden;
-		flex: 1;
+		/* Sin `flex: 1`: estirada para rellenar, el recorte a dos líneas dejaba
+		   de aplicar y la descripción crecía hasta cuatro. */
+		flex: none;
 	}
 
 	.card-meta { display: flex; align-items: center; gap: 0.4rem; }
@@ -348,13 +358,17 @@
 		color: var(--text-muted);
 	}
 
+	/* El pie va en columna: los datos arriba y las acciones en una fila
+	   propia a todo el ancho. Antes competían por el mismo renglón y, en
+	   tarjetas estrechas, los iconos aplastaban al responsable. */
 	.card-footer {
 		border-top: 1px solid var(--border);
-		padding-top: 0.75rem;
+		padding-top: 0.65rem;
 		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.5rem;
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0.6rem;
+		margin-top: auto;
 	}
 	.footer-left { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
 	.fecha {
@@ -483,10 +497,11 @@
 		font-size: 0.5rem;
 	}
 
-	.actions { display: flex; gap: 0.25rem; flex-shrink: 0; }
+	.actions { display: flex; gap: 0.3rem; flex-shrink: 0; }
 	.act-btn {
-		width: 30px;
-		height: 30px;
+		flex: 1;
+		min-width: 0;
+		height: 32px;
 		display: flex;
 		align-items: center;
 		justify-content: center;

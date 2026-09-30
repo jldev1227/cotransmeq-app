@@ -850,6 +850,9 @@ html {
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
+	.dir-celda--fecha {
+		white-space: nowrap;
+	}
 	.dir-nulo {
 		color: var(--text-very-muted);
 		font-style: italic;

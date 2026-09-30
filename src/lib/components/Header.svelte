@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import SessionTimer from './SessionTimer.svelte';
+	import BuscadorModulos from './BuscadorModulos.svelte';
 	import { notificacionesStore } from '$lib/stores/notificaciones';
 	import { authStore } from '$lib/stores/auth';
 	import { socketUtils, socketStore, socketManager } from '$lib/socket';
@@ -317,7 +318,7 @@
 >
 	<div class="flex h-full items-center justify-between gap-3 px-4 md:px-6 lg:pl-6">
 		<!-- Left cluster: burger (mobile/tablet) + title -->
-		<div class="flex min-w-0 flex-1 items-center gap-2" in:fade={{ duration: 600, delay: 400 }}>
+		<div class="flex min-w-0 flex-1 items-center gap-2 lg:flex-none lg:basis-72 xl:basis-80" in:fade={{ duration: 600, delay: 400 }}>
 			<!-- Burger menu (mobile/tablet only) — profesonal, dentro del flow -->
 			<button
 				type="button"
@@ -390,6 +391,12 @@
 					{/if}
 				</div>
 			{/if}
+		</div>
+
+		<!-- Centro (solo escritorio): «Ir a…», el buscador de módulos. Antes esta
+		     franja quedaba vacía entre el título y el usuario. -->
+		<div class="hidden min-w-0 flex-1 justify-center px-4 lg:flex" in:fade={{ duration: 600, delay: 450 }}>
+			<BuscadorModulos />
 		</div>
 
 		<!-- Right Section -->

@@ -3,6 +3,14 @@
 	import { authStore } from '$lib/stores/auth';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+	import TablaLista from '$lib/components/listing/TablaLista.svelte';
+	import CeldaIdentidad from '$lib/components/listing/CeldaIdentidad.svelte';
+	import AccionesFila from '$lib/components/listing/AccionesFila.svelte';
+	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
+	import SegmentosFiltro from '$lib/components/listing/SegmentosFiltro.svelte';
+	import { mascota } from '$lib/mascot';
+	import { Eye, Pencil, Trash2 } from 'lucide-svelte';
+	import type { ColumnDef, SortingState } from '@tanstack/table-core';
 	import { crearListingStore } from '$lib/listing/listingStore';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
 	import {
@@ -182,6 +190,49 @@
 
 	/// El orden también viaja en la URL: compartir «terceros por identificación
 	/// descendente» reproduce esa vista, no la de por defecto.
+	const COLUMNAS: ColumnDef<Tercero, any>[] = [
+		{ id: 'nombre_completo', header: 'Tercero', accessorKey: 'nombre_completo' },
+		{ id: 'tipo', header: 'Tipo · Régimen', enableSorting: false, size: 190 },
+		{ id: 'identificacion', header: 'Identificación', enableSorting: false, size: 160 },
+		{ id: 'contacto', header: 'Contacto', enableSorting: false },
+		{ id: 'created_at', header: 'Registrado', accessorKey: 'created_at', size: 160 },
+		{ id: 'acciones', header: '', enableSorting: false, size: 130 }
+	];
+
+	const SEGMENTOS_TIPO = [
+		{ valor: 'TODOS', etiqueta: 'Todos' },
+		{ valor: 'PERSONA', etiqueta: 'Personas', punto: '#16a34a' },
+		{ valor: 'EMPRESA', etiqueta: 'Empresas', punto: '#f59e0b' }
+	];
+
+	const conteos = $derived([
+		{ clave: 'TODOS', etiqueta: 'Total', valor: counts.total },
+		{ clave: 'PERSONA', etiqueta: 'Personas', valor: counts.personas, color: '#16a34a' },
+		{ clave: 'EMPRESA', etiqueta: 'Empresas', valor: counts.empresas, color: '#f59e0b' }
+	]);
+
+	/// El orden lo manda la cabecera de la tabla y sigue viajando en la URL.
+	const ordenTabla = $derived<SortingState>(
+		filtros.orden ? [{ id: filtros.orden, desc: filtros.dir === 'desc' }] : []
+	);
+
+	function aplicarOrden(nuevo: SortingState) {
+		const primero = nuevo[0];
+		filtros = {
+			...filtros,
+			orden: primero?.id ?? 'nombre_completo',
+			dir: primero ? (primero.desc ? 'desc' : 'asc') : 'asc',
+			pagina: 1
+		};
+	}
+
+	function formatFecha(d?: string | null) {
+		if (!d) return '—';
+		const f = new Date(d);
+		if (Number.isNaN(f.getTime())) return '—';
+		return f.toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+	}
+
 	function toggleSort(field: string) {
 		if (filtros.orden === field) {
 			ponerFiltro('dir', filtros.dir === 'asc' ? 'desc' : 'asc');
@@ -328,180 +379,65 @@
 	<title>Directorio de Terceros · Cotransmeq</title>
 </svelte:head>
 
-<div class="terceros-page" in:fly={{ y: 20, duration: 500, easing: quintOut }}>
-	<!-- ═══ BARRA DE PÁGINA ═══
-	     Título, acciones y filtros en un solo bloque. Antes eran dos tarjetas
-	     apiladas —un hero editorial con párrafo y una franja de stats, más una
-	     barra de filtros aparte— que gastaban ~340 px antes de la primera
-	     tarjeta. Los contadores no se pierden: viven ahora dentro de los chips
-	     de tipo, que es donde además se usan para filtrar.
-	-->
-	<header class="page-toolbar" in:fade={{ duration: 400 }}>
-		<div class="toolbar-top">
-			<div class="toolbar-title">
-				<div class="card-icon-sm" aria-hidden="true">
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"
-						/>
-					</svg>
-				</div>
-				<h1>Propietarios y empresas</h1>
-			</div>
-
-			<div class="toolbar-actions">
-				{#if puedeEditar}
-					<button class="btn-secondary" onclick={openImportModal} title="Importar desde vehículos">
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-							/>
-						</svg>
-						Importar
-					</button>
-				{/if}
-				{#if puedeEditar}
-					<button class="btn-primary" onclick={openCreateModal}>
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-						</svg>
-						Nuevo tercero
-					</button>
-				{/if}
+<div class="dir-pagina" in:fade={{ duration: 400 }}>
+	<!-- ── CABECERA: título, conteos y acciones ─────────────── -->
+	<header class="page-card dir-cabecera" style="padding: 1.25rem 1.5rem;">
+		<div class="dir-cabecera-texto">
+			<h1 class="dir-titulo">Terceros</h1>
+			<p class="dir-desc">Propietarios y empresas con los que se liquida.</p>
+			<div class="dir-conteos">
+				<ResumenConteos
+					{conteos}
+					activo={filtros.tipo === 'TODOS' ? null : filtros.tipo}
+					onElegir={(clave) => ponerFiltro('tipo', filtros.tipo === clave ? 'TODOS' : clave)}
+				/>
 			</div>
 		</div>
 
-		<div class="toolbar-filters">
-			<div class="search-wrap">
-				<BuscadorLista
-					valor={filtros.q}
-					onBuscar={(termino) => ponerFiltro('q', termino)}
-					placeholder="Buscar por nombre, identificación, teléfono o correo…"
-					etiqueta="Buscar terceros"
-				/>
-			</div>
-
-			<div class="filter-group">
-				<button
-					class="chip"
-					class:chip--active={filtros.tipo === 'TODOS'}
-					onclick={() => ponerFiltro('tipo', 'TODOS')}
-				>
-					Todos
-					<span class="chip-count">{counts.total}</span>
-				</button>
-				<button
-					class="chip"
-					class:chip--active={filtros.tipo === 'PERSONA'}
-					onclick={() => ponerFiltro('tipo', 'PERSONA')}
-				>
-					<span class="stat-dot stat-dot--persona" aria-hidden="true"></span>
-					Personas
-					<span class="chip-count">{counts.personas}</span>
-				</button>
-				<button
-					class="chip"
-					class:chip--active={filtros.tipo === 'EMPRESA'}
-					onclick={() => ponerFiltro('tipo', 'EMPRESA')}
-				>
-					<span class="stat-dot stat-dot--empresa" aria-hidden="true"></span>
-					Empresas
-					<span class="chip-count">{counts.empresas}</span>
-				</button>
-			</div>
-
-			<div class="sort-group">
-				<span class="sort-label">Ordenar</span>
-				<button
-					class="sort-btn"
-					class:sort-btn--active={filtros.orden === 'nombre_completo'}
-					onclick={() => toggleSort('nombre_completo')}
-				>
-					Nombre
-					{#if filtros.orden === 'nombre_completo'}
-						<svg
-							class="h-3 w-3"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-							stroke-width="2.4"
-						>
-							{#if filtros.dir === 'asc'}
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M4.5 15.75l7.5-7.5 7.5 7.5"
-								/>
-							{:else}
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M19.5 8.25l-7.5 7.5-7.5-7.5"
-								/>
-							{/if}
-						</svg>
-					{/if}
-				</button>
-				<button
-					class="sort-btn"
-					class:sort-btn--active={filtros.orden === 'created_at'}
-					onclick={() => toggleSort('created_at')}
-				>
-					Reciente
-					{#if filtros.orden === 'created_at'}
-						<svg
-							class="h-3 w-3"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-							stroke-width="2.4"
-						>
-							{#if filtros.dir === 'asc'}
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M4.5 15.75l7.5-7.5 7.5 7.5"
-								/>
-							{:else}
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M19.5 8.25l-7.5 7.5-7.5-7.5"
-								/>
-							{/if}
-						</svg>
-					{/if}
-				</button>
-			</div>
-
-			{#if hasActiveFilter}
-				<button class="clear-btn" onclick={clearFilters}>
-					<svg
-						class="h-3.5 w-3.5"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-						stroke-width="2"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+		<div class="dir-cabecera-acciones">
+			{#if puedeEditar}
+				<button class="btn-secondary" onclick={openImportModal} title="Importar desde vehículos">
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+						/>
 					</svg>
-					Limpiar
+					Importar
+				</button>
+				<button class="btn-primary" onclick={openCreateModal}>
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+					</svg>
+					Nuevo tercero
 				</button>
 			{/if}
 		</div>
 	</header>
 
-	<!-- ═══ CONTENIDO ═══ -->
-	{#if isLoading && terceros.length === 0}
-		<div class="state-block" in:fade>
-			<div class="spin-ring" aria-hidden="true"></div>
-			<p>Cargando directorio…</p>
+	<!-- ── FILTROS A LA VISTA: buscador + tipo ───────────────── -->
+	<div class="dir-filtros" in:fly={{ y: 12, duration: 400, delay: 100 }}>
+		<div class="dir-filtros-buscador">
+			<BuscadorLista
+				valor={filtros.q}
+				onBuscar={(termino) => ponerFiltro('q', termino)}
+				placeholder="Nombre, identificación, teléfono o correo…"
+				etiqueta="Buscar terceros"
+			/>
 		</div>
-	{:else if error && terceros.length === 0}
+		<SegmentosFiltro
+			etiqueta="Tipo"
+			opciones={SEGMENTOS_TIPO}
+			valor={filtros.tipo}
+			onCambiar={(v) => ponerFiltro('tipo', v)}
+		/>
+		{#if hasActiveFilter}
+			<button class="btn-secondary" onclick={clearFilters}>Limpiar</button>
+		{/if}
+	</div>
+
+	{#if error && terceros.length === 0}
 		<div class="alert alert-error" in:fade>
 			<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 				<path
@@ -516,268 +452,115 @@
 			</div>
 			<button class="btn-secondary" onclick={() => cargar(true)}>Reintentar</button>
 		</div>
-	{:else if terceros.length === 0}
-		<div class="empty-state" in:fade>
-			<div class="empty-icon">
-				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.4">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z"
-					/>
-				</svg>
-			</div>
-			<span class="eyebrow eyebrow--center">Sin registros</span>
-			<h2>No hay terceros en el directorio</h2>
-			<p>Importa los propietarios de tu flota o crea un tercero manualmente para empezar.</p>
-			<div class="empty-cta">
-				{#if puedeEditar}
-					<button class="btn-secondary" onclick={openImportModal}>
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
-							/>
-						</svg>
-						Importar desde flota
-					</button>
-				{/if}
-				{#if puedeEditar}
-					<button class="btn-primary" onclick={openCreateModal}>
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-						</svg>
-						Crear tercero
-					</button>
-				{/if}
-			</div>
-		</div>
 	{:else}
-		<!-- ── LISTA DE CARDS ── -->
-		<div class="cards-grid" in:fade={{ duration: 400, delay: 120 }}>
-			{#each terceros as t, idx (t.id)}
-				<!-- `nombre_completo` es NOT NULL en la base, pero NOT NULL admite la
-				     cadena vacía: esas fichas salían con el título en blanco y el
-				     avatar mudo, sin nada que indicara de quién eran. -->
-				{@const nombre = t.nombre_completo?.trim() || 'Sin nombre'}
-				<div
-					class="tercero-card"
-					onclick={() => openDetail(t)}
-					onkeydown={(e) =>
-						(e.key === 'Enter' || e.key === ' ') && (e.preventDefault(), openDetail(t))}
-					role="button"
-					tabindex="0"
-					in:fly={{ y: 14, duration: 320, delay: idx * 35, easing: quintOut }}
+		<!-- ── LISTA ───────────────────────────────────────────── -->
+		<div class="dir-lista" in:fly={{ y: 12, duration: 400, delay: 150 }}>
+			<div class="dir-lista-scroll">
+				<TablaLista
+					columnas={COLUMNAS}
+					datos={terceros}
+					claveFila={(t) => t.id}
+					cargando={isLoading && terceros.length === 0}
+					orden={ordenTabla}
+					onOrdenar={aplicarOrden}
+					onFila={(t) => openDetail(t)}
+					etiqueta="Directorio de terceros"
 				>
-					<header class="card-head">
-						<div class="avatar avatar--{t.tipo_persona.toLowerCase()}">
-							<span>{t.nombre_completo?.trim() ? initials(nombre) : '?'}</span>
-						</div>
-						<div class="card-head-text">
-							<h3 class:valor-vacio={!t.nombre_completo?.trim()}>{nombre}</h3>
-							<span class="tipo-pill tipo-pill--{t.tipo_persona.toLowerCase()}">
-								{#if t.tipo_persona === 'EMPRESA'}
-									<svg
-										class="h-3 w-3"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-										stroke-width="2.2"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"
-										/>
-									</svg>
-									Empresa
+					{#snippet celda({ columnaId, fila: t })}
+						{@const nombre = t.nombre_completo?.trim() || 'Sin nombre'}
+						{#if columnaId === 'nombre_completo'}
+							<CeldaIdentidad
+								titulo={nombre}
+								subtitulo={t.direccion || undefined}
+								iniciales={t.nombre_completo?.trim() ? initials(nombre) : '?'}
+								tono={t.tipo_persona === 'EMPRESA' ? '#b45309' : undefined}
+							/>
+						{:else if columnaId === 'tipo'}
+							<div class="dir-celda">
+								<span>{t.tipo_persona === 'EMPRESA' ? 'Empresa' : 'Persona'}</span>
+								{#if t.regimen}<small>{REGIMEN_SHORT[t.regimen] || t.regimen}</small>{/if}
+							</div>
+						{:else if columnaId === 'identificacion'}
+							<div class="dir-celda">
+								{#if t.identificacion}
+									<span>{t.identificacion}</span>
 								{:else}
-									<svg
-										class="h-3 w-3"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-										stroke-width="2.2"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-										/>
-									</svg>
-									Persona
+									<span class="dir-nulo">Sin registrar</span>
 								{/if}
-							</span>
-						</div>
-					</header>
-
-					<dl class="card-data">
-						<!-- La identificación se pinta siempre, aunque falte. Es lo que
-						     distingue a un tercero de otro, así que su ausencia es un dato
-						     —una ficha a medio llenar— y no un motivo para ocultar la fila.
-						     Además garantiza que el `<dl>` nunca quede vacío: al ir entre
-						     dos bordes, vacío dejaba una banda hueca y descuadraba el pie
-						     respecto a las fichas vecinas. -->
-						<div class="data-row">
-							<dt>
-								<svg
-									class="h-3 w-3"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-									stroke-width="2"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5zM6 10.5h.008v.008H6V10.5zm0 3h.008v.008H6V13.5zm0 3h.008v.008H6V16.5z"
-									/>
-								</svg>
-								{t.tipo_persona === 'EMPRESA' ? 'NIT' : 'Cédula'}
-							</dt>
-							{#if t.identificacion}
-								<dd class="mono">{t.identificacion}</dd>
+								<small>{t.tipo_persona === 'EMPRESA' ? 'NIT' : 'Cédula'}</small>
+							</div>
+						{:else if columnaId === 'contacto'}
+							{#if t.telefono || t.correo}
+								<div class="dir-celda">
+									{#if t.telefono}<span>{t.telefono}</span>{/if}
+									{#if t.correo}<small>{t.correo}</small>{/if}
+								</div>
 							{:else}
-								<dd class="valor-vacio">Sin registrar</dd>
+								<span class="dir-nulo">Sin teléfono ni correo</span>
+							{/if}
+						{:else if columnaId === 'created_at'}
+							<span class="dir-celda dir-celda--fecha">{formatFecha(t.created_at)}</span>
+						{:else if columnaId === 'acciones'}
+							<AccionesFila
+								acciones={[
+									{ id: 'ver', etiqueta: 'Ver detalle', icono: Eye, onClick: () => openDetail(t) },
+									{
+										id: 'editar',
+										etiqueta: 'Editar',
+										icono: Pencil,
+										onClick: () => openEditModal(t),
+										oculta: !puedeEditar
+									},
+									{
+										id: 'eliminar',
+										etiqueta: 'Eliminar',
+										icono: Trash2,
+										onClick: () => {
+											terceroToDelete = t;
+											showDeleteModal = true;
+										},
+										peligrosa: true,
+										oculta: !puedeEditar
+									}
+								]}
+							/>
+						{/if}
+					{/snippet}
+
+					{#snippet vacio()}
+						{@const img = mascota('vacio')}
+						<div class="dir-vacio">
+							<img src={img.src} alt={img.alt} width="418" height="418" />
+							<h3>No hay terceros en el directorio</h3>
+							<p>
+								{hasActiveFilter
+									? 'No se encontraron terceros con los filtros aplicados.'
+									: 'Importa los propietarios de tu flota o crea un tercero manualmente para empezar.'}
+							</p>
+							{#if hasActiveFilter}
+								<button class="btn-secondary" onclick={clearFilters}>Limpiar filtros</button>
+							{:else if puedeEditar}
+								<div class="flex flex-wrap justify-center gap-2">
+									<button class="btn-secondary" onclick={openImportModal}
+										>Importar desde flota</button
+									>
+									<button class="btn-primary" onclick={openCreateModal}>Crear tercero</button>
+								</div>
 							{/if}
 						</div>
+					{/snippet}
+				</TablaLista>
+			</div>
 
-						{#if t.regimen}
-							<div class="data-row">
-								<dt>
-									<svg
-										class="h-3 w-3"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-										stroke-width="2"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-11.302 0c1.413-.074 2.86-.18 4.302-.323a48.4 48.4 0 014.302.323 1.866 1.866 0 011.976 2.192M12 3v1.5M12 21v-1.5"
-										/>
-									</svg>
-									Régimen
-								</dt>
-								<dd>{REGIMEN_SHORT[t.regimen] || t.regimen}</dd>
-							</div>
-						{/if}
-
-						{#if t.telefono}
-							<div class="data-row">
-								<dt>
-									<svg
-										class="h-3 w-3"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-										stroke-width="2"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"
-										/>
-									</svg>
-									Teléfono
-								</dt>
-								<dd class="mono">{t.telefono}</dd>
-							</div>
-						{/if}
-
-						{#if t.correo}
-							<div class="data-row data-row--truncate">
-								<dt>
-									<svg
-										class="h-3 w-3"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-										stroke-width="2"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
-										/>
-									</svg>
-									Correo
-								</dt>
-								<dd class="truncate">{t.correo}</dd>
-							</div>
-						{/if}
-
-						<!-- Sin teléfono ni correo no hay forma de contactar al tercero.
-						     Decirlo es más útil que dejar el hueco: distingue «no tiene»
-						     de «no cargó todavía». -->
-						{#if !t.telefono && !t.correo}
-							<p class="sin-contacto">Sin teléfono ni correo</p>
-						{/if}
-					</dl>
-
-					<footer class="card-foot">
-						<span class="card-link">
-							Ver detalle
-							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"
-								/>
-							</svg>
-						</span>
-						<div class="card-actions" onclick={(e) => e.stopPropagation()} role="presentation">
-							{#if puedeEditar}
-								<button
-									type="button"
-									class="icon-btn"
-									title="Editar"
-									aria-label="Editar {t.nombre_completo}"
-									onclick={(e) => openEditModal(t, e)}
-								>
-									<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
-										/>
-									</svg>
-								</button>
-							{/if}
-							{#if puedeEditar}
-								<button
-									type="button"
-									class="icon-btn icon-btn--danger"
-									title="Eliminar"
-									aria-label="Eliminar {t.nombre_completo}"
-									onclick={(e) => openDeleteModal(t, e)}
-								>
-									<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
-										/>
-									</svg>
-								</button>
-							{/if}
-						</div>
-					</footer>
-				</div>
-			{/each}
+			<PaginadorLista
+				pagina={filtros.pagina}
+				total={totalTerceros}
+				porPagina={POR_PAGINA}
+				cargando={isLoading}
+				nombreItems="terceros"
+				onCambiar={irPagina}
+			/>
 		</div>
-
-		<!-- ── PAGINACIÓN ── -->
-		<PaginadorLista
-			pagina={filtros.pagina}
-			total={totalTerceros}
-			porPagina={POR_PAGINA}
-			cargando={isLoading}
-			nombreItems="terceros"
-			onCambiar={irPagina}
-		/>
 	{/if}
 </div>
 
@@ -1273,17 +1056,6 @@
 
 <style>
 	/* ═══════════════════════════════════════════════════════════════
-	   PAGE BASE — fondo cálido + tipografía editorial
-	   ═══════════════════════════════════════════════════════════════ */
-	.terceros-page {
-		min-height: 100vh;
-		background: #fcfcfb;
-		font-family: var(--font-sans);
-		color: #0f172a;
-		padding: 1.5rem 1.25rem 3rem;
-	}
-
-	/* ═══════════════════════════════════════════════════════════════
 	   EYEBROW + TIPOGRAFÍA EDITORIAL
 	   ═══════════════════════════════════════════════════════════════ */
 	.eyebrow {
@@ -1292,7 +1064,7 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #ea580c;
+		color: #16a34a;
 		background: rgba(234, 88, 12, 0.08);
 		padding: 0.3rem 0.75rem;
 		border-radius: 6px;
@@ -1321,432 +1093,13 @@
 		font-family: var(--font-sans);
 	}
 
-	/* ═══════════════════════════════════════════════════════════════
-	   BARRA DE PÁGINA — título, acciones y filtros en un solo bloque
-	   ═══════════════════════════════════════════════════════════════ */
-	.page-toolbar {
-		background: var(--bg-surface);
-		border: 1px solid var(--border-subtle);
-		border-radius: 16px;
-		padding: 0.85rem 1rem;
-		margin-bottom: 1rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-		box-shadow: var(--shadow-card);
-	}
-	.toolbar-top {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
-	}
-	.toolbar-title {
-		display: flex;
-		align-items: center;
-		gap: 0.65rem;
-		min-width: 0;
-	}
-	.toolbar-title h1 {
-		font-size: 1.25rem;
-		font-weight: 500;
-		line-height: 1.2;
-		margin: 0;
-	}
-	.toolbar-actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.6rem;
-		flex-shrink: 0;
-	}
-	.toolbar-filters {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.75rem;
-		padding-top: 0.75rem;
-		border-top: 1px solid var(--border-subtle);
-	}
-
-	/* El contador vive dentro del chip que filtra por ese mismo tipo. Antes
-	   era una franja de stats aparte, que repetía la palabra «Personas» a
-	   dos centímetros del chip «Personas» y no se podía pulsar. */
-	.chip-count {
-		font-family: var(--font-sans);
-		font-size: 0.7rem;
-		font-weight: 700;
-		color: var(--text-muted);
-	}
-	/* El contador toma el color del chip activo en vez de fijar un tono propio:
-	   así no hay que mantener una pareja de verdes por repo. */
-	.chip--active .chip-count {
-		color: inherit;
-	}
-	.stat-dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
-		flex-shrink: 0;
-	}
-	/* Literal y no `var(--emerald-500)`: en cotransmeq ese token es naranja,
-	   pero esta pantalla es verde en los dos repos. */
-	.stat-dot--persona {
-		background: #ea580c;
-	}
-	.stat-dot--empresa {
-		background: #3b82f6;
-	}
-
-	.search-wrap {
-		position: relative;
-		flex: 1;
-		min-width: 240px;
-	}
-	.search-icon {
-		position: absolute;
-		left: 0.9rem;
-		top: 50%;
-		transform: translateY(-50%);
-		width: 16px;
-		height: 16px;
-		color: #94a3b8;
-		pointer-events: none;
-	}
-	.search-input {
-		width: 100%;
-		padding: 0.6rem 0.9rem 0.6rem 2.5rem;
-		font-family: inherit;
-		font-size: 0.88rem;
-		color: #0f172a;
-		background: #fcfcfb;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 10px;
-		outline: none;
-		transition: all 0.2s;
-	}
-	.search-input::placeholder {
-		color: #94a3b8;
-	}
-	.search-input:focus {
-		background: white;
-		border-color: rgba(234, 88, 12, 0.4);
-		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1);
-	}
-
-	.filter-group {
-		display: flex;
-		gap: 0.35rem;
-		padding: 0.25rem;
-		background: #fcfcfb;
-		border: 1px solid rgba(0, 0, 0, 0.06);
-		border-radius: 12px;
-	}
-	.chip {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.35rem;
-		padding: 0.4rem 0.8rem;
-		font-family: inherit;
-		font-size: 0.78rem;
-		font-weight: 600;
-		color: #334155;
-		background: transparent;
-		border: none;
-		border-radius: 8px;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.chip:hover {
-		color: #0f172a;
-	}
-	.chip--active {
-		background: white;
-		color: #166534;
-		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-	}
-
-	.sort-group {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding-left: 0.25rem;
-	}
-	.sort-label {
-		font-size: 0.72rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: #64748b;
-		font-family: var(--font-sans);
-	}
-	.sort-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
-		padding: 0.4rem 0.7rem;
-		font-family: inherit;
-		font-size: 0.78rem;
-		font-weight: 600;
-		color: #64748b;
-		background: transparent;
-		border: 1px solid transparent;
-		border-radius: 8px;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.sort-btn:hover {
-		color: #0f172a;
-		background: rgba(0, 0, 0, 0.03);
-	}
-	.sort-btn--active {
-		color: #166534;
-		background: rgba(234, 88, 12, 0.08);
-		border-color: rgba(234, 88, 12, 0.15);
-	}
-
-	.clear-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.35rem;
-		padding: 0.45rem 0.75rem;
-		font-family: inherit;
-		font-size: 0.78rem;
-		font-weight: 600;
-		color: #64748b;
-		background: transparent;
-		border: 1px solid rgba(0, 0, 0, 0.1);
-		border-radius: 10px;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.clear-btn:hover {
-		color: #dc2626;
-		border-color: rgba(220, 38, 38, 0.3);
-		background: rgba(220, 38, 38, 0.04);
-	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   LIST CARDS (grid)
-	   ═══════════════════════════════════════════════════════════════ */
-	/* Rejilla fluida en vez de cuatro puntos de ruptura: el ancho real del
-	   `main` cambia al colapsar la barra lateral, y una cascada de `@media`
-	   se queda clavada en 4 columnas justo cuando sobra sitio para 6. */
-	.cards-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
-		gap: 1.1rem;
-	}
-
-	.tercero-card {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 20px;
-		padding: 1.25rem;
-		cursor: pointer;
-		text-align: left;
-		font-family: inherit;
-		color: inherit;
-		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
-		transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-		outline: none;
-	}
-	.tercero-card:hover,
-	.tercero-card:focus-visible {
-		transform: translateY(-3px);
-		border-color: rgba(234, 88, 12, 0.3);
-		box-shadow: 0 12px 32px rgba(234, 88, 12, 0.12);
-	}
-
-	.card-head {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.75rem;
-	}
-	.card-head-text {
-		flex: 1;
-		min-width: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.3rem;
-	}
-	.card-head-text h3 {
-		font-size: 1.02rem;
-		font-weight: 600;
-		line-height: 1.3;
-		margin: 0;
-		color: #0f172a;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		line-clamp: 2;
-		-webkit-box-orient: vertical;
-	}
-
-	.avatar {
-		flex-shrink: 0;
-		width: 44px;
-		height: 44px;
-		border-radius: 14px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-family: var(--font-sans);
-		font-size: 0.85rem;
-		font-weight: 700;
-		letter-spacing: 0.04em;
-	}
-	.avatar--persona {
-		background: linear-gradient(135deg, rgba(234, 88, 12, 0.14), rgba(234, 88, 12, 0.18));
-		color: #166534;
-	}
-	.avatar--empresa {
-		background: linear-gradient(135deg, rgba(59, 130, 246, 0.14), rgba(37, 99, 235, 0.18));
-		color: #1e40af;
-	}
-
-	.tipo-pill {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
-		padding: 0.2rem 0.55rem;
-		font-family: var(--font-sans);
-		font-size: 0.65rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		border-radius: 5px;
-		width: fit-content;
-	}
-	.tipo-pill--persona {
-		background: rgba(234, 88, 12, 0.08);
-		color: #9a3412;
-	}
-	.tipo-pill--empresa {
-		background: rgba(59, 130, 246, 0.1);
-		color: #1d4ed8;
-	}
-
-	.card-data {
-		display: flex;
-		flex-direction: column;
-		gap: 0.55rem;
-		margin: 0;
-		padding: 0.85rem 0;
-		border-top: 1px solid rgba(0, 0, 0, 0.06);
-		border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-		/* Absorbe el alto sobrante para que el pie quede abajo. La rejilla ya
-		   estira todas las fichas de una fila a la misma altura, pero sin esto
-		   el «Ver detalle» de una ficha con un solo dato subía a media tarjeta
-		   y no cuadraba con el de al lado. */
-		flex: 1;
-	}
-
 	/* Dato que falta: se lee como ausencia, no como valor. */
 	.valor-vacio {
 		color: #94a3b8;
 		font-style: italic;
 	}
-	.sin-contacto {
-		margin: 0;
-		font-size: 0.75rem;
-		color: #94a3b8;
-		font-style: italic;
-	}
-	.data-row {
-		display: grid;
-		grid-template-columns: 100px 1fr;
-		align-items: center;
-		gap: 0.6rem;
-		font-size: 0.82rem;
-		min-height: 22px;
-	}
-	.data-row dt {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
-		font-size: 0.7rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: #64748b;
-		font-family: var(--font-sans);
-		margin: 0;
-	}
-	.data-row dt svg {
-		color: #94a3b8;
-		flex-shrink: 0;
-	}
-	.data-row dd {
-		margin: 0;
-		font-size: 0.85rem;
-		color: #0f172a;
-		font-weight: 500;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
 	.data-row dd.mono {
 		font-size: 0.78rem;
-	}
-
-	.card-foot {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.5rem;
-	}
-	.card-link {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		font-size: 0.78rem;
-		font-weight: 600;
-		color: #ea580c;
-		transition: gap 0.2s;
-	}
-	.card-link svg {
-		width: 14px;
-		height: 14px;
-	}
-	.tercero-card:hover .card-link {
-		gap: 0.65rem;
-	}
-
-	.card-actions {
-		display: flex;
-		gap: 0.25rem;
-	}
-	.icon-btn {
-		width: 30px;
-		height: 30px;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		background: transparent;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 8px;
-		color: #64748b;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.icon-btn svg {
-		width: 14px;
-		height: 14px;
-	}
-	.icon-btn:hover {
-		color: #ea580c;
-		border-color: rgba(234, 88, 12, 0.3);
-		background: rgba(234, 88, 12, 0.06);
-	}
-	.icon-btn--danger:hover {
-		color: #dc2626;
-		border-color: rgba(220, 38, 38, 0.3);
-		background: rgba(220, 38, 38, 0.06);
 	}
 
 	/* ═══════════════════════════════════════════════════════════════
@@ -1764,142 +1117,14 @@
 		border: 1px solid rgba(0, 0, 0, 0.06);
 		border-radius: 14px;
 	}
-	.pagination-info {
-		font-size: 0.78rem;
-		color: #64748b;
-		margin: 0;
-	}
 	.pagination-info .mono {
 		color: #0f172a;
 		font-weight: 700;
-	}
-	.pagination-controls {
-		display: flex;
-		align-items: center;
-		gap: 0.3rem;
-	}
-	.page-arrow,
-	.page-num {
-		min-width: 32px;
-		height: 32px;
-		padding: 0 0.5rem;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		font-family: inherit;
-		font-size: 0.78rem;
-		font-weight: 600;
-		color: #334155;
-		background: transparent;
-		border: 1px solid transparent;
-		border-radius: 8px;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.page-arrow svg {
-		width: 14px;
-		height: 14px;
-	}
-	.page-arrow:hover:not(:disabled),
-	.page-num:hover {
-		background: #fcfcfb;
-		color: #0f172a;
-	}
-	.page-arrow:disabled {
-		opacity: 0.35;
-		cursor: not-allowed;
-	}
-	.page-num--active {
-		background: linear-gradient(135deg, #ea580c, #c2410c);
-		color: white;
-		box-shadow: 0 2px 8px rgba(234, 88, 12, 0.3);
-	}
-	.page-num--active:hover {
-		background: linear-gradient(135deg, #ea580c, #c2410c);
-		color: white;
-	}
-	.page-ellipsis {
-		padding: 0 0.4rem;
-		color: #94a3b8;
-		font-size: 0.78rem;
-	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   ESTADOS (loading / error / empty)
-	   ═══════════════════════════════════════════════════════════════ */
-	.state-block {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 0.85rem;
-		padding: 4rem 1.5rem;
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.06);
-		border-radius: 20px;
-		color: #64748b;
-		font-size: 0.88rem;
-	}
-	.spin-ring {
-		width: 32px;
-		height: 32px;
-		border: 2.5px solid rgba(234, 88, 12, 0.15);
-		border-top-color: #ea580c;
-		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
 	}
 	@keyframes spin {
 		to {
 			transform: rotate(360deg);
 		}
-	}
-
-	.empty-state {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 0.75rem;
-		padding: 4rem 1.5rem;
-		background: white;
-		border: 1px dashed rgba(0, 0, 0, 0.12);
-		border-radius: 24px;
-		text-align: center;
-	}
-	.empty-state h2 {
-		font-size: 1.4rem;
-		font-weight: 500;
-		margin: 0.25rem 0 0;
-	}
-	.empty-state p {
-		font-size: 0.9rem;
-		color: #334155;
-		max-width: 420px;
-		margin: 0;
-		line-height: 1.6;
-	}
-	.empty-icon {
-		width: 72px;
-		height: 72px;
-		border-radius: 50%;
-		background: linear-gradient(135deg, rgba(234, 88, 12, 0.08), rgba(234, 88, 12, 0.12));
-		color: #ea580c;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		margin-bottom: 0.5rem;
-		box-shadow: 0 6px 20px rgba(234, 88, 12, 0.12);
-	}
-	.empty-icon svg {
-		width: 32px;
-		height: 32px;
-	}
-	.empty-cta {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.6rem;
-		justify-content: center;
-		margin-top: 1rem;
 	}
 
 	/* ═══════════════════════════════════════════════════════════════
@@ -1960,7 +1185,7 @@
 		white-space: nowrap;
 	}
 	.btn-primary {
-		background: linear-gradient(135deg, #ea580c, #c2410c);
+		background: linear-gradient(135deg, #16a34a, #087a57);
 		color: white;
 		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.28);
 	}
@@ -2077,7 +1302,7 @@
 	.modal-desc {
 		font-size: 0.9rem;
 		line-height: 1.6;
-		color: #334155;
+		color: #33423d;
 		margin: 0;
 	}
 	.modal-desc strong {
@@ -2156,7 +1381,7 @@
 		font-size: 0.85rem;
 		font-weight: 600;
 		background: #fcfcfb;
-		color: #334155;
+		color: #33423d;
 		border: 1px solid rgba(0, 0, 0, 0.08);
 		border-radius: 12px;
 		cursor: pointer;
@@ -2171,14 +1396,14 @@
 		border-color: rgba(0, 0, 0, 0.15);
 	}
 	.seg--active.seg--persona {
-		background: linear-gradient(135deg, rgba(234, 88, 12, 0.1), rgba(234, 88, 12, 0.14));
-		color: #166534;
+		background: linear-gradient(135deg, rgba(234, 88, 12, 0.1), rgba(8, 122, 87, 0.14));
+		color: #014339;
 		border-color: rgba(234, 88, 12, 0.35);
 	}
 	.seg--active.seg--empresa {
-		background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(37, 99, 235, 0.14));
-		color: #1e40af;
-		border-color: rgba(59, 130, 246, 0.35);
+		background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(217, 119, 6, 0.14));
+		color: #92400e;
+		border-color: rgba(245, 158, 11, 0.35);
 	}
 
 	.modal-foot {
@@ -2228,7 +1453,7 @@
 		font-weight: 500;
 	}
 	.detail-data dd a {
-		color: #ea580c;
+		color: #16a34a;
 		text-decoration: none;
 	}
 	.detail-data dd a:hover {
@@ -2240,7 +1465,7 @@
 		width: 64px;
 		height: 64px;
 		border-radius: 50%;
-		background: linear-gradient(135deg, #ea580c, #c2410c);
+		background: linear-gradient(135deg, #16a34a, #087a57);
 		color: white;
 		display: flex;
 		align-items: center;
@@ -2274,8 +1499,8 @@
 		width: 56px;
 		height: 56px;
 		border-radius: 16px;
-		background: linear-gradient(135deg, rgba(234, 88, 12, 0.1), rgba(234, 88, 12, 0.16));
-		color: #166534;
+		background: linear-gradient(135deg, rgba(234, 88, 12, 0.1), rgba(8, 122, 87, 0.16));
+		color: #014339;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -2316,21 +1541,5 @@
 		font-size: 0.95rem;
 		font-weight: 700;
 		color: #0f172a;
-	}
-
-	.card-icon {
-		width: 48px;
-		height: 48px;
-		border-radius: 14px;
-		background: linear-gradient(135deg, #ea580c, #c2410c);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		color: white;
-		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.3);
-	}
-	.card-icon svg {
-		width: 24px;
-		height: 24px;
 	}
 </style>
