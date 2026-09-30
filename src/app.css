@@ -728,6 +728,143 @@ html {
 		font-weight: 700;
 	}
 
+	/* ─── Directorio (lista de registros) ─────────────
+	   Cabecera con título, conteos y acciones; una fila de filtros; y la
+	   lista compartida `TablaLista`. Lo usan Flota, Clientes y Conductores. */
+	.dir-pagina {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		height: 100%;
+		min-height: 0;
+		padding: 1.5rem;
+	}
+	.dir-cabecera {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 1rem 1.5rem;
+		flex-shrink: 0;
+	}
+	.dir-cabecera-texto {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		min-width: 0;
+	}
+	.dir-titulo {
+		font-family: var(--font-display);
+		font-size: 1.6rem;
+		font-weight: 800;
+		letter-spacing: -0.025em;
+		line-height: 1.15;
+		color: var(--text-primary);
+		margin: 0;
+	}
+	.dir-desc {
+		font-size: 0.85rem;
+		color: var(--text-muted);
+		margin: 0;
+	}
+	.dir-conteos {
+		margin-top: 0.5rem;
+	}
+	.dir-cabecera-acciones {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem;
+		flex-shrink: 0;
+	}
+	@media (max-width: 640px) {
+		.dir-cabecera-acciones {
+			width: 100%;
+		}
+		.dir-cabecera-acciones .btn-primary {
+			flex: 1 1 100%;
+			justify-content: center;
+		}
+	}
+	.dir-filtros {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.6rem;
+		flex-shrink: 0;
+	}
+	.dir-filtros-buscador {
+		flex: 1 1 260px;
+		min-width: 220px;
+	}
+	.dir-lista {
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+		flex: 1;
+	}
+	.dir-lista-scroll {
+		min-height: 0;
+		flex: 1;
+		overflow-y: auto;
+	}
+	.dir-vacio {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 2.5rem 1rem;
+		text-align: center;
+	}
+	.dir-vacio img {
+		width: 9rem;
+		height: 9rem;
+		object-fit: contain;
+	}
+	.dir-vacio h3 {
+		font-family: var(--font-display);
+		font-size: 1.15rem;
+		font-weight: 800;
+		letter-spacing: -0.02em;
+		color: var(--text-primary);
+		margin: 0;
+	}
+	.dir-vacio p {
+		font-size: 0.85rem;
+		color: var(--text-muted);
+		margin: 0;
+		max-width: 28rem;
+	}
+	.dir-celda {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		min-width: 0;
+		font-size: 0.85rem;
+		color: var(--text-primary);
+	}
+	.dir-celda small {
+		font-size: 0.76rem;
+		color: var(--text-muted);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.dir-nulo {
+		color: var(--text-very-muted);
+		font-style: italic;
+	}
+	.dir-check {
+		display: inline-flex;
+		align-items: center;
+		margin-right: 0.35rem;
+	}
+	.dir-check input {
+		width: 16px;
+		height: 16px;
+		accent-color: var(--emerald-500);
+	}
+
 	/* ─── Cards de página (header de sección) ────────── */
 	.page-card {
 		background: var(--bg-surface);

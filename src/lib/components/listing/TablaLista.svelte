@@ -223,7 +223,13 @@
 							role={onFila ? 'button' : undefined}
 						>
 							{#each fila.getVisibleCells() as cell (cell.id)}
-								<td class="tl-td">
+								<td
+									class="tl-td"
+									class:tl-td--acciones={cell.column.id === 'acciones'}
+									data-etiqueta={typeof cell.column.columnDef.header === 'string'
+										? cell.column.columnDef.header
+										: ''}
+								>
 									{#if celda}
 										{@render celda({
 											columnaId: cell.column.id,
@@ -249,8 +255,8 @@
 	   naranja) y cada pantalla puede afinarlo sin tocar este archivo. */
 	.tl-marco {
 		background: var(--tl-fondo, white);
-		border: 1px solid var(--tl-borde, rgba(0, 0, 0, 0.06));
-		border-radius: var(--tl-radio, 16px);
+		border: 1px solid var(--tl-borde, var(--border-subtle, rgba(0, 0, 0, 0.06)));
+		border-radius: var(--tl-radio, 22px);
 		box-shadow: var(--tl-sombra, 0 4px 24px rgba(0, 0, 0, 0.04));
 		overflow: hidden;
 	}
@@ -269,14 +275,14 @@
 		z-index: 1;
 		text-align: left;
 		white-space: nowrap;
-		padding: 0.65rem 0.9rem;
-		background: var(--tl-th-fondo, #fcfcfb);
-		border-bottom: 1px solid var(--tl-borde, rgba(0, 0, 0, 0.06));
-		font-family: var(--tl-mono, 'JetBrains Mono', monospace);
-		font-size: 0.68rem;
+		padding: 0.7rem 1.1rem;
+		background: var(--tl-th-fondo, var(--bg-base, #fcfcfb));
+		border-bottom: 1px solid var(--tl-borde, var(--border-subtle, rgba(0, 0, 0, 0.06)));
+		font-family: var(--tl-mono, var(--font-sans));
+		font-size: 0.66rem;
 		font-weight: 700;
 		text-transform: uppercase;
-		letter-spacing: 0.08em;
+		letter-spacing: 0.1em;
 		color: var(--tl-th-color, #64748b);
 	}
 	.tl-th-btn {
@@ -304,7 +310,7 @@
 	}
 
 	.tl-tr {
-		border-bottom: 1px solid var(--tl-borde, rgba(0, 0, 0, 0.05));
+		border-bottom: 1px solid var(--tl-borde, var(--border-subtle, rgba(0, 0, 0, 0.05)));
 	}
 	.tl-tr:last-child {
 		border-bottom: none;
@@ -315,7 +321,7 @@
 	}
 	.tl-tr--pulsable:hover,
 	.tl-tr--pulsable:focus-visible {
-		background: var(--tl-fila-hover, rgba(0, 0, 0, 0.02));
+		background: var(--tl-fila-hover, var(--au-bg, rgba(0, 0, 0, 0.02)));
 		outline: none;
 	}
 	.tl-tr--pulsable:focus-visible {
@@ -323,9 +329,62 @@
 	}
 
 	.tl-td {
-		padding: 0.6rem 0.9rem;
+		padding: 0.75rem 1.1rem;
+		height: 64px;
 		vertical-align: middle;
 		color: var(--tl-td-color, #0f172a);
+	}
+	.tl-td--acciones {
+		text-align: right;
+	}
+
+	/* ── Móvil: cada fila se apila como una tarjeta ──
+	   La celda de identidad va arriba a todo el ancho; el resto lleva su
+	   etiqueta de columna delante; las acciones, a la derecha del título. */
+	@media (max-width: 767.98px) {
+		.tl-tabla,
+		.tl-tabla tbody,
+		.tl-tr {
+			display: block;
+		}
+		.tl-tabla thead {
+			display: none;
+		}
+		.tl-tr {
+			position: relative;
+			padding: 0.85rem 1rem 0.85rem;
+		}
+		.tl-td {
+			display: flex;
+			align-items: center;
+			gap: 0.75rem;
+			height: auto;
+			padding: 0.2rem 0;
+			font-size: 0.85rem;
+		}
+		.tl-td:first-child {
+			/* Deja sitio a las acciones, que van en la esquina superior derecha. */
+			padding-right: 7.5rem;
+			margin-bottom: 0.35rem;
+		}
+		.tl-td:not(:first-child):not(.tl-td--acciones)::before {
+			content: attr(data-etiqueta);
+			flex: 0 0 6.5rem;
+			font-size: 0.62rem;
+			font-weight: 700;
+			letter-spacing: 0.1em;
+			text-transform: uppercase;
+			color: var(--text-very-muted, #94a3b8);
+		}
+		.tl-td--acciones {
+			position: absolute;
+			top: 0.6rem;
+			right: 0.5rem;
+			padding: 0;
+		}
+		.tl-td .tl-esqueleto {
+			width: 100%;
+		}
 	}
 	.tl-vacio {
 		padding: 3rem 1rem;
