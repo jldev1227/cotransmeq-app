@@ -184,7 +184,10 @@ function diasNoSuman(dias: any[]): any[] {
 	return dias.filter((d: any) => d.no_suma && !d.disponibilidad);
 }
 
-/** Fila «NO SUMA» bajo los totales de la tabla de días: días y horas por tipo. */
+/** «1 día», «13 días»: el recuento de las filas SUMAN / NO SUMAN. */
+export const rotuloDias = (n: number): string => `${n} ${n === 1 ? 'día' : 'días'}`;
+
+/** Fila «NO SUMAN» bajo los totales de la tabla de días: días y horas por tipo. */
 export function filaTotalesNoSuma(dias: any[]): any[][] {
 	const ns = diasNoSuman(dias);
 	if (!ns.length) return [];
@@ -204,8 +207,8 @@ export function filaTotalesNoSuma(dias: any[]): any[][] {
 		}, 0);
 	return [
 		[
-			celda(`${ns.length}`, true),
-			celda('NO SUMA', true),
+			celda('NO SUMAN', true),
+			celda(rotuloDias(ns.length), true),
 			celda(ns.reduce((s: number, d: any) => s + (Number(d.total_horas) || 0), 0).toFixed(2), true),
 			...CODIGOS_TABLA.map((c) => {
 				const h = horasDe(c);
@@ -1501,7 +1504,10 @@ export async function construirDocDefinition(
 
 			const totalesRowBase = [
 				{
-					text: totDias.toString(),
+					/// Con días «no sumar» debajo, la fila dice qué es y el
+					/// recuento va como «N días»: un número suelto en la columna
+					/// DÍA se leía como una fecha («13 SUMA» = «el 13 suma»).
+					text: hayNoSuman ? 'SUMAN' : totDias.toString(),
 					bold: true,
 					fontSize: 8,
 					alignment: 'center' as const,
@@ -1509,8 +1515,7 @@ export async function construirDocDefinition(
 					margin: [0, 2, 0, 2]
 				},
 				{
-					/// Con días «no sumar» debajo, la fila dice qué es: lo que SUMA.
-					text: hayNoSuman ? 'SUMA' : '-',
+					text: hayNoSuman ? rotuloDias(totDias) : '-',
 					fontSize: 8,
 					alignment: 'center' as const,
 					fillColor: isBonoAparte ? COLOR_BONO_APARTE_BG : colorBg,
