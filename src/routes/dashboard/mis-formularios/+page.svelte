@@ -20,41 +20,12 @@
 </script>
 
 <svelte:head>
-	<title>Mis formularios</title>
+	<title>Mis formularios — Cotransmeq</title>
 </svelte:head>
 
-<div class="pagina">
-	<header class="cabecera">
-		<h1 class="titulo">Mis formularios</h1>
-		<p class="sub">Los formatos que te asignaron y los que llevas a medias.</p>
-	</header>
-
-	<MisFormularios base="/dashboard/mis-formularios" sincronizarUrl />
+<!-- La cabecera con el saludo, la mascota y las cifras la pinta el propio
+     componente (`conCabecera`): así la pestaña de /dashboard/formularios, que
+     comparte la lista, no la duplica. -->
+<div class="dir-pagina">
+	<MisFormularios base="/dashboard/mis-formularios" sincronizarUrl conCabecera />
 </div>
-
-<style>
-	.pagina {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-		padding: 1rem;
-	}
-
-	.cabecera {
-		display: flex;
-		flex-direction: column;
-		gap: 0.125rem;
-	}
-
-	.titulo {
-		margin: 0;
-		font-size: 1.25rem;
-		font-weight: 600;
-	}
-
-	.sub {
-		margin: 0;
-		font-size: 0.85rem;
-		color: var(--text-muted, #64748b);
-	}
-</style>

@@ -31,6 +31,8 @@
 		'acciones-correctivas': 'Acciones Correctivas',
 		evaluaciones: 'Evaluaciones',
 		'salidas-nc': 'Salidas No Conformidades',
+		formularios: 'Formularios',
+		'mis-formularios': 'Mis formularios',
 		nomina: 'Nómina',
 		extractos: 'Extractos',
 		'liquidaciones-servicios': 'Liquidaciones de Servicios',
@@ -55,6 +57,9 @@
 		if (pathname.startsWith('/dashboard/acciones-correctivas')) return 'acciones-correctivas';
 		if (pathname.startsWith('/dashboard/evaluaciones')) return 'evaluaciones';
 		if (pathname.startsWith('/dashboard/salidas-nc')) return 'salidas-nc';
+		/// Antes que `formularios`: los dos prefijos empiezan igual.
+		if (pathname.startsWith('/dashboard/mis-formularios')) return 'mis-formularios';
+		if (pathname.startsWith('/dashboard/formularios')) return 'formularios';
 		if (pathname.startsWith('/dashboard/clientes')) return 'clientes';
 		if (pathname.startsWith('/dashboard/nomina')) return 'nomina';
 		if (pathname.startsWith('/dashboard/extractos')) return 'extractos';
