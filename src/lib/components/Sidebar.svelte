@@ -1,12 +1,11 @@
 <script lang="ts">
 	import { createEventDispatcher } from 'svelte';
-	import { fade, fly, slide, scale } from 'svelte/transition';
-	import { cubicOut, backOut } from 'svelte/easing';
+	import { fade, fly } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { onMount } from 'svelte';
 	import { authStore } from '$lib/stores/auth';
-	import { checkAccess, AREA_LABELS, type Area } from '$lib/config/permissions';
+	import { checkAccess } from '$lib/config/permissions';
 	import { mobileDrawerStore } from '$lib/stores/mobileDrawer';
 	import { MENU_ITEMS, type MenuItem } from '$lib/config/menu';
 	import SidebarIcon, {
@@ -14,6 +13,7 @@
 		SIDEBAR_ICON_STROKE
 	} from '$lib/components/SidebarIcon.svelte';
 	import { ChevronsLeft } from 'lucide-svelte';
+	import SidebarCabecera from '$lib/components/SidebarCabecera.svelte';
 
 	const dispatch = createEventDispatcher();
 
@@ -102,37 +102,6 @@
 	function closeDrawer() {
 		mobileDrawerStore.close();
 	}
-
-	/// La cabecera del cajón es la del menú de la app móvil: saludo, primer
-	/// nombre, fecha de hoy y el área, sobre el verde de marca. No lleva botón
-	/// de cerrar: el cajón se cierra tocando el fondo, como en cualquier cajón.
-	function primerNombre(nombre: string | undefined | null): string {
-		const primero = (nombre ?? '').trim().split(/\s+/)[0] ?? '';
-		return primero
-			? primero.charAt(0).toLocaleUpperCase('es') + primero.slice(1).toLocaleLowerCase('es')
-			: 'Equipo';
-	}
-
-	function saludo(hora: number): string {
-		if (hora < 12) return 'Buenos días';
-		if (hora < 19) return 'Buenas tardes';
-		return 'Buenas noches';
-	}
-
-	$: hoy = (() => {
-		const t = new Date().toLocaleDateString('es-CO', {
-			weekday: 'long',
-			day: 'numeric',
-			month: 'long'
-		});
-		return t.charAt(0).toLocaleUpperCase('es') + t.slice(1);
-	})();
-
-	$: areasUsuario = (() => {
-		const a = currentUser?.area as unknown;
-		const lista = Array.isArray(a) ? a : a ? [a] : [];
-		return lista.map((x) => AREA_LABELS[x as Area] ?? String(x));
-	})();
 </script>
 
 <!-- Desktop Sidebar (lg+) — fondo charcoal profundo (no glass) -->
@@ -144,26 +113,8 @@
 	style="background-color: var(--bg-charcoal-deep); border-right: 1px solid rgba(255,255,255,0.06);"
 >
 	<div class="relative flex h-full flex-col">
-		<!-- Logo Area — más editorial, padding generoso -->
-		<div
-			class="flex-shrink-0"
-			style="border-bottom: 1px solid rgba(255,255,255,0.06);"
-			in:fade={{ duration: 600, delay: 200 }}
-		>
-			<div class="flex items-center space-x-3">
-				<div class="flex h-16 w-full flex-shrink-0 items-center justify-center overflow-hidden">
-					<img
-						src="/assets/logo_nombre.webp"
-						alt="Cotransmeq"
-						class="h-full w-3/3 max-w-[80px] object-contain"
-						width="40"
-						height="40"
-						in:scale={{ duration: 400, start: 0.7, opacity: 0, easing: backOut }}
-						out:scale={{ duration: 200, start: 0.85, opacity: 0, easing: cubicOut }}
-					/>
-				</div>
-			</div>
-		</div>
+		<!-- Cabecera: la del menú de la app móvil; compacta con el menú contraído -->
+		<SidebarCabecera usuario={currentUser} compacta={isCollapsed} />
 
 		<!-- Navigation Menu -->
 		<nav class="flex-1 space-y-1 overflow-y-auto p-4">
@@ -251,24 +202,8 @@
 			class="relative flex h-full flex-col"
 			style="background-color: var(--bg-charcoal-deep); border-right: 1px solid rgba(255,255,255,0.06);"
 		>
-			<!-- Cabecera: la del menú de la app móvil. Sin botón de cerrar. -->
-			<div class="cajon-cabecera">
-				<span class="cajon-orbe cajon-orbe--grande" aria-hidden="true"></span>
-				<span class="cajon-orbe cajon-orbe--chico" aria-hidden="true"></span>
-				<div class="cajon-copy">
-					<span class="cajon-eyebrow">Sistema de gestión</span>
-					<span class="cajon-saludo">{saludo(new Date().getHours())},</span>
-					<span class="cajon-nombre">{primerNombre(currentUser?.nombre)}</span>
-					<span class="cajon-hoy">{hoy}</span>
-					{#if areasUsuario.length}
-						<span class="cajon-areas">
-							{#each areasUsuario as area (area)}
-								<span class="cajon-area">{area}</span>
-							{/each}
-						</span>
-					{/if}
-				</div>
-			</div>
+			<!-- Cabecera: la del menú de la app móvil. Sin botón de cerrar: el fondo cierra. -->
+			<SidebarCabecera usuario={currentUser} conSafeArea />
 
 			<!-- Navigation Menu -->
 			<nav class="flex-1 space-y-1 overflow-y-auto p-4">
@@ -299,81 +234,3 @@
 		</div>
 	</div>
 {/if}
-
-<style>
-	/* ── Cabecera del cajón móvil ── */
-	.cajon-cabecera {
-		position: relative;
-		overflow: hidden;
-		flex-shrink: 0;
-		padding: calc(env(safe-area-inset-top, 0px) + 1.35rem) 1.35rem 1.35rem;
-		background: linear-gradient(160deg, var(--au-dark-2) 0%, var(--au-dark) 100%);
-	}
-	.cajon-orbe {
-		position: absolute;
-		border-radius: 999px;
-		background: rgba(255, 255, 255, 0.07);
-	}
-	.cajon-orbe--grande {
-		width: 150px;
-		height: 150px;
-		right: -40px;
-		top: -60px;
-	}
-	.cajon-orbe--chico {
-		width: 70px;
-		height: 70px;
-		left: -22px;
-		bottom: -30px;
-	}
-	.cajon-copy {
-		position: relative;
-		z-index: 1;
-		display: flex;
-		flex-direction: column;
-		gap: 1px;
-	}
-	.cajon-eyebrow {
-		margin-bottom: 6px;
-		font-size: 0.58rem;
-		font-weight: 900;
-		letter-spacing: 0.13em;
-		text-transform: uppercase;
-		color: var(--au-eyebrow);
-	}
-	.cajon-saludo {
-		font-size: 0.82rem;
-		font-weight: 600;
-		color: rgba(255, 255, 255, 0.8);
-	}
-	.cajon-nombre {
-		font-size: 1.4rem;
-		font-weight: 900;
-		letter-spacing: -0.02em;
-		line-height: 1.15;
-		color: #fff;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.cajon-hoy {
-		margin-top: 6px;
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: rgba(255, 255, 255, 0.75);
-	}
-	.cajon-areas {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 4px;
-		margin-top: 8px;
-	}
-	.cajon-area {
-		padding: 3px 9px;
-		border-radius: 999px;
-		background: rgba(255, 255, 255, 0.12);
-		font-size: 0.68rem;
-		font-weight: 700;
-		color: #fff;
-	}
-</style>
