@@ -1586,7 +1586,7 @@
 	in:fly={{ y: 20, duration: 500, easing: quintOut }}
 >
 	<!-- Header -->
-	<div class="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+	<div class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 		<div>
 			<span class="eyebrow mb-2.5">DASHBOARD / RECARGOS</span>
 			<h1
@@ -1599,7 +1599,9 @@
 			</p>
 		</div>
 
-		<div class="flex items-center gap-2">
+		<!-- `flex-wrap`: en móvil el selector de mes va en su propia línea y los
+		     botones debajo; antes esta fila desbordaba la pantalla. -->
+		<div class="flex flex-wrap items-center gap-2">
 			<!-- Botón Recalcular (bulk de los seleccionados) -->
 			{#if !isKilometrajeRole && !isReadOnly && selectedRows.size > 0}
 				{#if bulkRecalcRunning}
@@ -1675,7 +1677,7 @@
 
 			<!-- Navegación Mes/Año -->
 			<div
-				class="flex items-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-white p-1.5"
+				class="flex w-full items-center gap-2 rounded-xl border border-[var(--border-subtle)] bg-white p-1.5 sm:w-auto"
 				class:opacity-50={bloqueoPorRecalc}
 				class:pointer-events-none={bloqueoPorRecalc}
 			>
@@ -1694,10 +1696,10 @@
 					</svg>
 				</button>
 
-				<div class="flex items-center gap-2">
+				<div class="flex min-w-0 flex-1 items-center gap-2">
 					<select
 						bind:value={filtros.mes}
-						class="input-glow h-9 rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm font-medium"
+						class="input-glow h-9 min-w-0 flex-1 rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm font-medium sm:flex-none"
 					>
 						{#each Array.from({ length: 12 }, (_, i) => i + 1) as mes}
 							<option value={mes}>{getNombreMes(mes)}</option>
@@ -1730,7 +1732,7 @@
 			</div>
 
 			<!-- Botón Configuración -->
-			<a href="/dashboard/recargos/configuracion" class="btn-secondary apple-transition">
+			<a href="/dashboard/recargos/configuracion" class="btn-secondary apple-transition flex-1 justify-center whitespace-nowrap sm:flex-none">
 				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path
 						stroke-linecap="round"
@@ -1753,7 +1755,7 @@
 				<button
 					onclick={handleOpenFormModal}
 					disabled={bloqueoPorRecalc}
-					class="btn-primary apple-transition disabled:cursor-not-allowed disabled:opacity-40"
+					class="btn-primary apple-transition flex-1 justify-center whitespace-nowrap disabled:cursor-not-allowed disabled:opacity-40 sm:flex-none"
 					title={bloqueoPorRecalc
 						? 'Esperá a que termine el recálculo bulk'
 						: 'Crear nuevo recargo'}
@@ -1967,230 +1969,41 @@
 
 	<!-- Stats Panel -->
 	{#if !loading && filteredRecargos.length > 0}
-		<div
-			class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5 xl:grid-cols-8"
-			transition:fade={{ duration: 200 }}
-		>
-			<!-- Planillas -->
-			<div class="stat-card">
-				<div class="flex items-center gap-2">
-					<div
-						class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--bg-base)]"
-					>
-						<svg
-							class="h-4 w-4 text-[var(--text-secondary)]"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="1.8"
-								d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-							/>
-						</svg>
-					</div>
-					<div class="min-w-0 flex-1">
-						<p class="stat-label">Planillas</p>
-						<p class="stat-value">{stats.totalPlanillas}</p>
-					</div>
-				</div>
+		<!-- Cifras del mes en una sola franja. Antes eran ocho tarjetas con
+		     icono que ocupaban una fila entera en escritorio y cuatro en móvil;
+		     aquí cada cifra es etiqueta + número y el total va destacado. -->
+		<div class="rec-cifras page-card mb-4" transition:fade={{ duration: 200 }}>
+			<div class="rec-cifra">
+				<span class="rec-cifra-label">Planillas</span>
+				<span class="rec-cifra-valor">{stats.totalPlanillas}</span>
 			</div>
-
-			<!-- Días de servicio -->
-			<div class="stat-card">
-				<div class="flex items-center gap-2">
-					<div
-						class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(22, 163, 74,0.10)]"
-					>
-						<svg
-							class="h-4 w-4 text-[var(--emerald-600)]"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="1.8"
-								d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-							/>
-						</svg>
-					</div>
-					<div class="min-w-0 flex-1">
-						<p class="stat-label">Días servicio</p>
-						<p class="stat-value">{stats.totalDiasServicio}</p>
-					</div>
-				</div>
+			<div class="rec-cifra">
+				<span class="rec-cifra-label">Días servicio</span>
+				<span class="rec-cifra-valor">{stats.totalDiasServicio}</span>
 			</div>
-
-			<!-- Horas totales -->
-			<div class="stat-card">
-				<div class="flex items-center gap-2">
-					<div
-						class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(59,130,246,0.10)]"
-					>
-						<svg
-							class="h-4 w-4 text-[#2563EB]"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="1.8"
-								d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-							/>
-						</svg>
-					</div>
-					<div class="min-w-0 flex-1">
-						<p class="stat-label">Horas totales</p>
-						<p class="stat-value">{stats.totalHoras.toFixed(1)}</p>
-					</div>
-				</div>
+			<div class="rec-cifra">
+				<span class="rec-cifra-label">Horas totales</span>
+				<span class="rec-cifra-valor">{stats.totalHoras.toFixed(1)}</span>
 			</div>
-
-			<!-- Horas ordinarias -->
-			<div class="stat-card">
-				<div class="flex items-center gap-2">
-					<div
-						class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(99,102,241,0.10)]"
-					>
-						<svg
-							class="h-4 w-4 text-[#4F46E5]"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="1.8"
-								d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-							/>
-						</svg>
-					</div>
-					<div class="min-w-0 flex-1">
-						<p class="stat-label">Ordinarias</p>
-						<p class="stat-value">{stats.totalOrdinarias.toFixed(1)}</p>
-					</div>
-				</div>
+			<div class="rec-cifra">
+				<span class="rec-cifra-label">Ordinarias</span>
+				<span class="rec-cifra-valor">{stats.totalOrdinarias.toFixed(1)}</span>
 			</div>
-
-			<!-- KM recorridos -->
-			<div class="stat-card">
-				<div class="flex items-center gap-2">
-					<div
-						class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(6,182,212,0.10)]"
-					>
-						<svg
-							class="h-4 w-4 text-[#0891B2]"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="1.8"
-								d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-							/>
-						</svg>
-					</div>
-					<div class="min-w-0 flex-1">
-						<p class="stat-label">KM recorridos</p>
-						<p class="stat-value">{stats.totalKm.toFixed(1)}</p>
-					</div>
-				</div>
+			<div class="rec-cifra">
+				<span class="rec-cifra-label">KM recorridos</span>
+				<span class="rec-cifra-valor">{stats.totalKm.toFixed(1)}</span>
 			</div>
-
-			<!-- Total Extras -->
-			<div class="stat-card">
-				<div class="flex items-center gap-2">
-					<div
-						class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(245,158,11,0.10)]"
-					>
-						<svg
-							class="h-4 w-4 text-[#D97706]"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="1.8"
-								d="M13 10V3L4 14h7v7l9-11h-7z"
-							/>
-						</svg>
-					</div>
-					<div class="min-w-0 flex-1">
-						<p class="stat-label">H. Extras</p>
-						<p class="stat-value">{stats.totalExtras.toFixed(1)}</p>
-					</div>
-				</div>
+			<div class="rec-cifra">
+				<span class="rec-cifra-label">H. extras</span>
+				<span class="rec-cifra-valor">{stats.totalExtras.toFixed(1)}</span>
 			</div>
-
-			<!-- Total Recargos -->
-			<div class="stat-card">
-				<div class="flex items-center gap-2">
-					<div
-						class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(168,85,247,0.10)]"
-					>
-						<svg
-							class="h-4 w-4 text-[#9333EA]"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="1.8"
-								d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"
-							/>
-						</svg>
-					</div>
-					<div class="min-w-0 flex-1">
-						<p class="stat-label">Recargos (RN+RD)</p>
-						<p class="stat-value">{stats.totalRecargos.toFixed(1)}</p>
-					</div>
-				</div>
+			<div class="rec-cifra">
+				<span class="rec-cifra-label" title="Recargo nocturno + recargo dominical">Recargos RN+RD</span>
+				<span class="rec-cifra-valor">{stats.totalRecargos.toFixed(1)}</span>
 			</div>
-
-			<!-- Total a Pagar (suma del valor monetario de los recargos visibles) -->
-			<div
-				class="stat-card"
-				style="background: linear-gradient(135deg, rgba(22, 163, 74,0.08), rgba(21, 128, 61,0.04)); border-color: rgba(22, 163, 74,0.25);"
-			>
-				<div class="flex items-center gap-2">
-					<div
-						class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg"
-						style="background: linear-gradient(135deg, #16a34a, #15803d); box-shadow: 0 2px 6px rgba(22, 163, 74,0.25);"
-					>
-						<svg
-							class="h-4 w-4 text-white"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-							stroke-width="1.8"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-							/>
-						</svg>
-					</div>
-					<div class="min-w-0 flex-1">
-						<p class="stat-label">Total a Pagar</p>
-						<p class="stat-value" style="color: #166534; font-size: 1.1rem;">
-							{fmtCOP(totalValorPagar)}
-						</p>
-					</div>
-				</div>
+			<div class="rec-cifra rec-cifra--total">
+				<span class="rec-cifra-label">Total a pagar</span>
+				<span class="rec-cifra-valor">{fmtCOP(totalValorPagar)}</span>
 			</div>
 		</div>
 
@@ -2357,7 +2170,7 @@
 			</div>
 		{:else}
 			<div
-				class="overflow-x-auto transition-opacity duration-200"
+				class="rec-tabla overflow-x-auto transition-opacity duration-200"
 				class:opacity-60={loading}
 				class:pointer-events-none={loading}
 			>
@@ -2847,6 +2660,84 @@
 {/if}
 
 <style>
+	/* ── Cifras del mes ── */
+	.rec-cifras {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: stretch;
+		gap: 0.25rem 0;
+		padding: 0.5rem 0.75rem;
+	}
+	.rec-cifra {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+		flex: 1 1 8rem;
+		min-width: 0;
+		padding: 0.4rem 0.75rem;
+		border-left: 1px solid var(--border-subtle);
+	}
+	.rec-cifra:first-child {
+		border-left: none;
+	}
+	.rec-cifra-label {
+		font-size: 0.62rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.rec-cifra-valor {
+		font-size: 1.1rem;
+		font-weight: 800;
+		letter-spacing: -0.02em;
+		line-height: 1.2;
+		color: var(--text-primary);
+		white-space: nowrap;
+	}
+	.rec-cifra--total {
+		flex-basis: 11rem;
+		border-radius: 12px;
+		background: var(--au-tint);
+		border-left: none;
+	}
+	.rec-cifra--total .rec-cifra-label,
+	.rec-cifra--total .rec-cifra-valor {
+		color: var(--emerald-800);
+	}
+	@media (max-width: 640px) {
+		.rec-cifras {
+			padding: 0.35rem 0.5rem;
+		}
+		.rec-cifra {
+			flex-basis: 45%;
+			padding: 0.35rem 0.6rem;
+		}
+		/* En dos columnas la línea izquierda solo aparece en la segunda. */
+		.rec-cifra:nth-child(odd) {
+			border-left: none;
+		}
+		.rec-cifra--total {
+			flex-basis: 100%;
+		}
+	}
+
+	/* ── Tabla en móvil: sin columnas ni cabecera pegadas ──
+	   Con la cabecera y cinco columnas fijas, en una pantalla de 390 px no
+	   quedaba sitio para el contenido: se desplazaba sobre sí mismo y no se
+	   podía leer. El desplazamiento horizontal normal es lo que funciona. */
+	@media (max-width: 767.98px) {
+		.rec-tabla :global(thead),
+		.rec-tabla :global(th),
+		.rec-tabla :global(td),
+		.rec-tabla :global(tr) {
+			position: static !important;
+		}
+	}
+
 	/* Pulse para filas que están siendo recalculadas en bulk.
 	 * El tinte indigo matchea el color del botón "Recalcular" y de
 	 * la barra de progreso para que sea consistente con el flujo. */
