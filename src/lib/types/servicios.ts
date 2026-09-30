@@ -197,6 +197,13 @@ export interface ServicioConRelaciones extends Servicio {
 	creador_id?: string;
 	cancelacion?: Cancelacion;
 	recargos_planillas?: RecargoPlanillaResumen[];
+	/** Inicio/liberación por el conductor desde la app (solo en el listado). */
+	ejecucion?: {
+		iniciado_at: string | null;
+		liberado_at: string | null;
+		iniciado_diferido: boolean;
+		liberado_diferido: boolean;
+	} | null;
 }
 
 // ==================== DTOs ====================
