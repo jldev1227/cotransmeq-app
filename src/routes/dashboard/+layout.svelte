@@ -289,7 +289,7 @@
 		<button
 			type="button"
 			class="fixed inset-0 z-[9999] cursor-default border-0 p-0"
-			style="background: linear-gradient(135deg, rgba(15, 31, 26, 0.40), rgba(10, 20, 16, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
+			style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.40), rgba(20, 83, 45, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
 			aria-label="Cerrar modal"
 			transition:fade={{ duration: 200 }}
 		></button>

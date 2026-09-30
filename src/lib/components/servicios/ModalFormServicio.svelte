@@ -442,7 +442,7 @@
 	<button
 		type="button"
 		class="fixed inset-0 z-50 cursor-default border-0 p-4"
-		style="background: linear-gradient(135deg, rgba(15, 31, 26, 0.40), rgba(10, 20, 16, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
+		style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.40), rgba(20, 83, 45, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
 		aria-label="Cerrar modal"
 		on:click={handleClose}
 		transition:fade={{ duration: 200, easing: quintOut }}
@@ -470,7 +470,7 @@
 					<div class="flex items-center gap-3">
 						<div
 							class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
-							style="background: linear-gradient(135deg, #f97316, #ea580c); box-shadow: 0 6px 16px rgba(249, 115, 22, 0.30);"
+							style="background: linear-gradient(135deg, #ea580c, #c2410c); box-shadow: 0 6px 16px rgba(234, 88, 12, 0.30);"
 						>
 							<svg
 								class="h-5 w-5 text-white"
@@ -490,14 +490,14 @@
 							<div class="flex items-center gap-2">
 								<p
 									class="font-mono-meta inline-block rounded-md px-2 py-0.5 text-[10px]"
-									style="color: var(--emerald-500); background: rgba(249, 115, 22, 0.08); letter-spacing: 0.12em;"
+									style="color: var(--emerald-500); background: rgba(234, 88, 12, 0.08); letter-spacing: 0.12em;"
 								>
 									{isEditing ? (isReadOnly ? 'DETALLE' : 'EDICIÓN') : 'NUEVO REGISTRO'}
 								</p>
 								{#if isEditing && servicio}
 									<span
 										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
-										style="background-color: rgba(249, 115, 22, 0.10); color: var(--emerald-800); border: 1px solid rgba(249, 115, 22, 0.25);"
+										style="background-color: rgba(234, 88, 12, 0.10); color: var(--emerald-800); border: 1px solid rgba(234, 88, 12, 0.25);"
 									>
 										{servicio.estado.replace('_', ' ').toUpperCase()}
 									</span>
@@ -505,7 +505,7 @@
 							</div>
 							<h2
 								class="mt-1 font-display text-2xl"
-								style="color: var(--bg-charcoal); font-weight: 500;"
+								style="color: var(--bg-charcoal); font-weight: 800;"
 							>
 								{#if isEditing}
 									{isReadOnly ? 'Detalles del Servicio' : 'Editar Servicio'}
@@ -1414,18 +1414,18 @@
 	}
 
 	:global(.overflow-y-auto::-webkit-scrollbar-thumb) {
-		background: linear-gradient(to bottom, #f97316, #ea580c);
+		background: linear-gradient(to bottom, #ea580c, #c2410c);
 		border-radius: 10px;
 		transition: background 0.3s ease;
 	}
 
 	:global(.overflow-y-auto::-webkit-scrollbar-thumb:hover) {
-		background: linear-gradient(to bottom, #ea580c, #047857);
+		background: linear-gradient(to bottom, #c2410c, #166534);
 	}
 
 	/* Para Firefox */
 	:global(.overflow-y-auto) {
 		scrollbar-width: thin;
-		scrollbar-color: #f97316 #f1f5f9;
+		scrollbar-color: #ea580c #f1f5f9;
 	}
 </style>

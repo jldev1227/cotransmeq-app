@@ -55,7 +55,7 @@
 	let fetchToken = 0;
 
 	const COLOR_POR_TIPO: Record<TipoDia, { bg: string; text: string; border: string; dot: string; label: string }> = {
-		LABORADO:      { bg: '#ea580c15', text: '#047857', border: '#ea580c40', dot: '#ea580c', label: 'Laborado' },
+		LABORADO:      { bg: '#c2410c15', text: '#166534', border: '#c2410c40', dot: '#c2410c', label: 'Laborado' },
 		DISPONIBLE:    { bg: '#2563eb15', text: '#1d4ed8', border: '#2563eb40', dot: '#2563eb', label: 'Disponible' },
 		DESCANSO:      { bg: '#d9770615', text: '#b45309', border: '#d9770640', dot: '#d97706', label: 'Descanso' },
 		MANTENIMIENTO: { bg: '#dc262615', text: '#b91c1c', border: '#dc262640', dot: '#dc2626', label: 'Mantenimiento' }
@@ -191,7 +191,7 @@
 			<p class="text-[9px] text-gray-400">{MESES[mes]} {anio}</p>
 		</div>
 
-		<div class="glass soft-shadow rounded-xl border border-orange-200/50 p-2.5" style="border-top: 3px solid #ea580c">
+		<div class="glass soft-shadow rounded-xl border border-orange-200/50 p-2.5" style="border-top: 3px solid #c2410c">
 			<p class="text-[9px] font-medium uppercase tracking-wide text-gray-500">Laborados</p>
 			<p class="mt-0.5 text-lg font-bold text-orange-600 tabular-nums">{statsMes.laborados}</p>
 		</div>
@@ -247,7 +247,7 @@
 							</button>
 						</div>
 						<div class="flex flex-wrap items-center gap-2 text-[10px] text-gray-500">
-							<span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full" style="background:#ea580c"></span> Laborado</span>
+							<span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full" style="background:#c2410c"></span> Laborado</span>
 							<span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full" style="background:#2563eb"></span> Disponible</span>
 							<span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full" style="background:#d97706"></span> Descanso</span>
 							<span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full" style="background:#dc2626"></span> Mant.</span>

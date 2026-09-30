@@ -118,10 +118,10 @@
 		z-index: 90;
 		background: radial-gradient(
 				ellipse at top right,
-				rgba(249, 115, 22, 0.12) 0%,
+				rgba(234, 88, 12, 0.12) 0%,
 				transparent 50%
 			),
-			linear-gradient(135deg, rgba(15, 31, 26, 0.55) 0%, rgba(10, 20, 16, 0.65) 100%);
+			linear-gradient(135deg, rgba(15, 23, 42, 0.55) 0%, rgba(20, 83, 45, 0.65) 100%);
 		backdrop-filter: blur(8px) saturate(120%);
 		-webkit-backdrop-filter: blur(8px) saturate(120%);
 		border: none;
@@ -143,8 +143,8 @@
 		border-top-left-radius: 24px;
 		border-bottom-left-radius: 24px;
 		box-shadow:
-			-16px 0 48px rgba(15, 31, 26, 0.18),
-			-4px 0 16px rgba(15, 31, 26, 0.08),
+			-16px 0 48px rgba(15, 23, 42, 0.18),
+			-4px 0 16px rgba(15, 23, 42, 0.08),
 			inset 1px 0 0 rgba(255, 255, 255, 0.5);
 		overflow: hidden;
 		will-change: transform, opacity;
@@ -161,7 +161,7 @@
 		background: linear-gradient(
 			180deg,
 			transparent 0%,
-			rgba(249, 115, 22, 0.3) 50%,
+			rgba(234, 88, 12, 0.3) 50%,
 			transparent 100%
 		);
 		pointer-events: none;
@@ -190,11 +190,11 @@
 		height: 6px;
 		border-radius: 50%;
 		background-color: var(--emerald-500);
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
+		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.15);
 		animation: dot-pulse 2.4s var(--ease-apple) infinite;
 	}
 	:global(.drawer-eyebrow-text) {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.7rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -202,9 +202,9 @@
 		color: var(--emerald-700);
 	}
 	:global(.drawer-title) {
-		font-family: 'Fraunces', 'Georgia', serif;
+		font-family: var(--font-display);
 		font-size: 1.6rem;
-		font-weight: 400;
+		font-weight: 800;
 		line-height: 1.2;
 		color: var(--bg-charcoal);
 		margin: 0 0 0.25rem;
@@ -253,11 +253,11 @@
 	/* ═══ Animaciones globales del componente ═══ */
 	@keyframes dot-pulse {
 		0%, 100% {
-			box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
+			box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.15);
 			transform: scale(1);
 		}
 		50% {
-			box-shadow: 0 0 0 5px rgba(249, 115, 22, 0.05);
+			box-shadow: 0 0 0 5px rgba(234, 88, 12, 0.05);
 			transform: scale(1.15);
 		}
 	}

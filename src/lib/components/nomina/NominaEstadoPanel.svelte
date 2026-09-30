@@ -82,7 +82,7 @@
 	 * Color del chip SOBRE FONDO OSCURO.
 	 *
 	 * `claseBadgeEstado` no vale aquí y hay que decirlo: son clases pensadas
-	 * para fondo claro, y PAGADA es `text-emerald-900` (#064E3B) sobre un 10%
+	 * para fondo claro, y PAGADA es `text-emerald-900` (#14532d) sobre un 10%
 	 * de opacidad. En este panel eso desaparece —y es justo el estado que uno
 	 * viene a mirar—. Los tonos son los de la PESTAÑA de cada hoja
 	 * (`COLOR_HOJA_POR_ESTADO`) aclarados hasta que se leen aquí, así que la
@@ -611,7 +611,7 @@
 	   archivo es el mismo en los dos repos y el diff que los compara no tiene
 	   que llevar tres excepciones de color a cuestas. */
 	.nep-primario {
-		color: var(--emerald-500, #10b981);
+		color: var(--emerald-500, #16a34a);
 	}
 	.nep-peligro {
 		color: #fca5a5;
@@ -627,7 +627,7 @@
 		margin: 6px 4px 0;
 		font-size: 11px;
 		font-weight: 600;
-		color: var(--emerald-500, #10b981);
+		color: var(--emerald-500, #16a34a);
 	}
 	.nep-msg-error {
 		color: #fca5a5;
@@ -698,7 +698,7 @@
 		color: #334155;
 	}
 	.nep-btn-primary {
-		background: var(--emerald-600, #059669);
+		background: var(--emerald-600, #15803d);
 		color: #fff;
 	}
 	.nep-btn-ghost:disabled,

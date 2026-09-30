@@ -44,7 +44,7 @@
 		min-width: 0;
 	}
 	.kpi-label {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.62rem;
 		font-weight: 700;
 		color: var(--text-muted);
@@ -52,16 +52,17 @@
 		letter-spacing: 0.08em;
 	}
 	.kpi-value {
-		font-family: 'Fraunces', Georgia, serif;
+		font-family: var(--font-display);
+		letter-spacing: -0.02em;
 		font-size: 1.25rem;
-		font-weight: 500;
+		font-weight: 800;
 		color: var(--text-primary);
 		font-variant-numeric: tabular-nums;
 		line-height: 1.1;
 		margin-top: 0.15rem;
 	}
 	.kpi-sub {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.7rem;
 		font-weight: 600;
 		margin-left: auto;

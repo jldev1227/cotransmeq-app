@@ -897,7 +897,7 @@
 	}
 	.vista-toggle button svg { width: 1rem; height: 1rem; }
 	.vista-toggle button.active {
-		background: #f97316;
+		background: #ea580c;
 		color: white;
 	}
 
@@ -907,7 +907,7 @@
 		align-items: center;
 		gap: 0.375rem;
 		padding: 0.5rem 1rem;
-		background: #f97316;
+		background: #ea580c;
 		color: white;
 		border: none;
 		border-radius: 0.75rem;
@@ -916,7 +916,7 @@
 		cursor: pointer;
 		transition: all 0.2s;
 	}
-	.btn-primary:hover { background: #ea580c; }
+	.btn-primary:hover { background: #c2410c; }
 	.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
 	.btn-primary svg { width: 1rem; height: 1rem; }
 
@@ -1010,7 +1010,7 @@
 		outline: none;
 		transition: border-color 0.2s;
 	}
-	.input-sm:focus { border-color: #f97316; }
+	.input-sm:focus { border-color: #ea580c; }
 	.search-group .input-sm { border: none; flex: 1; }
 
 	/* Table */
@@ -1104,7 +1104,7 @@
 		cursor: pointer;
 		transition: all 0.2s;
 	}
-	.pagination-controls button.active { background: #f97316; color: white; border-color: #f97316; }
+	.pagination-controls button.active { background: #ea580c; color: white; border-color: #ea580c; }
 	.pagination-controls button:disabled { opacity: 0.4; cursor: not-allowed; }
 
 	/* Calendar */
@@ -1139,16 +1139,16 @@
 	.btn-cal-nav:hover { background: #f3f4f6; }
 	.btn-cal-today {
 		padding: 0.375rem 0.75rem;
-		border: 1px solid #f97316;
+		border: 1px solid #ea580c;
 		border-radius: 0.5rem;
 		background: #f0fdf4;
-		color: #ea580c;
+		color: #c2410c;
 		font-size: 0.8rem;
 		font-weight: 500;
 		cursor: pointer;
 		transition: all 0.2s;
 	}
-	.btn-cal-today:hover { background: #d1fae5; }
+	.btn-cal-today:hover { background: #dcfce7; }
 	.calendar-grid {
 		display: grid;
 		grid-template-columns: repeat(7, 1fr);
@@ -1207,7 +1207,7 @@
 	.modal-overlay {
 		position: fixed;
 		inset: 0;
-		background: linear-gradient(135deg, rgba(15, 23, 42, 0.45), rgba(10, 20, 16, 0.6));
+		background: linear-gradient(135deg, rgba(15, 23, 42, 0.45), rgba(20, 83, 45, 0.6));
 		backdrop-filter: blur(8px) saturate(120%);
 		-webkit-backdrop-filter: blur(8px) saturate(120%);
 		display: flex;
@@ -1259,9 +1259,9 @@
 		transition: all 0.2s;
 	}
 	.btn-close:hover {
-		background: rgba(249, 115, 22, 0.06);
-		border-color: rgba(249, 115, 22, 0.3);
-		color: #ea580c;
+		background: rgba(234, 88, 12, 0.06);
+		border-color: rgba(234, 88, 12, 0.3);
+		color: #c2410c;
 		transform: rotate(90deg);
 	}
 	.modal-body {
@@ -1313,7 +1313,7 @@
 		transition: border-color 0.2s;
 		width: 100%;
 	}
-	.input:focus { border-color: #f97316; box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1); }
+	.input:focus { border-color: #ea580c; box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1); }
 	.input:disabled { background: #f9fafb; color: #6b7280; }
 	textarea.input { resize: vertical; }
 
@@ -1332,7 +1332,7 @@
 		width: 2rem;
 		height: 2rem;
 		border: 3px solid #e5e7eb;
-		border-top-color: #f97316;
+		border-top-color: #ea580c;
 		border-radius: 50%;
 		animation: spin 0.7s linear infinite;
 	}

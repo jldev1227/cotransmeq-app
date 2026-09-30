@@ -127,8 +127,8 @@
 		pendiente: '#F59E0B',
 		en_curso: '#3B82F6',
 		planificado: '#8B5CF6',
-		completado: '#10B981',
-		realizado: '#10B981',
+		completado: '#16a34a',
+		realizado: '#16a34a',
 		cancelado: '#EF4444',
 		liquidado: '#6B7280'
 	};
@@ -145,8 +145,8 @@
 		pendiente: { bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe', dot: '#3b82f6' },
 		en_curso: { bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe', dot: '#3b82f6' },
 		planificado: { bg: '#faf5ff', fg: '#7e22ce', border: '#e9d5ff', dot: '#a855f7' },
-		completado: { bg: '#ecfdf5', fg: '#047857', border: '#a7f3d0', dot: '#10b981' },
-		realizado: { bg: '#ecfdf5', fg: '#047857', border: '#a7f3d0', dot: '#10b981' },
+		completado: { bg: '#f0fdf4', fg: '#166534', border: '#bbf7d0', dot: '#16a34a' },
+		realizado: { bg: '#f0fdf4', fg: '#166534', border: '#bbf7d0', dot: '#16a34a' },
 		cancelado: { bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca', dot: '#ef4444' },
 		liquidado: { bg: '#f3f4f6', fg: '#374151', border: '#d1d5db', dot: '#6b7280' }
 	};
@@ -439,7 +439,7 @@
 	function tipoIcono(tipo: string, cerrado: boolean): { emoji: string; color: string } {
 		if (cerrado) return { emoji: '🚧', color: '#DC2626' };
 		const map: Record<string, { emoji: string; color: string }> = {
-			accident: { emoji: '💥', color: '#EA580C' },
+			accident: { emoji: '💥', color: '#c2410c' },
 			road_closure: { emoji: '🚧', color: '#DC2626' },
 			construction: { emoji: '🏗️', color: '#D97706' },
 			hazard: { emoji: '⚠️', color: '#CA8A04' },
@@ -905,7 +905,7 @@
 					'moderate',
 					'#f59e0b',
 					'heavy',
-					'#f97316',
+					'#ea580c',
 					'severe',
 					'#ef4444',
 					'#94a3b8'
@@ -1286,7 +1286,7 @@
 					type: 'line',
 					source: 'route',
 					layout: { 'line-join': 'round', 'line-cap': 'round' },
-					paint: { 'line-color': '#059669', 'line-width': 5, 'line-opacity': 0.8 }
+					paint: { 'line-color': '#15803d', 'line-width': 5, 'line-opacity': 0.8 }
 				});
 			}
 
@@ -1302,11 +1302,11 @@
 			cargarIncidentesNacionales();
 
 			// Markers A / B
-			const om = new mapboxgl.Marker(pinEl('#059669', 'A'))
+			const om = new mapboxgl.Marker(pinEl('#15803d', 'A'))
 				.setLngLat([oLng, oLat])
 				.setPopup(
 					new mapboxgl.Popup({ offset: 25 }).setHTML(
-						`<div style="padding:10px;font-family:system-ui"><strong style="color:#059669">Origen</strong><br/><span style="font-size:12px;">${servicio.origen_especifico || servicio.origen?.nombre_municipio || '—'}</span></div>`
+						`<div style="padding:10px;font-family:system-ui"><strong style="color:#15803d">Origen</strong><br/><span style="font-size:12px;">${servicio.origen_especifico || servicio.origen?.nombre_municipio || '—'}</span></div>`
 					)
 				);
 			om.addTo(map!);
@@ -2347,7 +2347,7 @@
 		{#if showShareModal}
 			<div
 				class="fixed inset-0 z-[200] flex items-center justify-center p-4"
-				style="background-color: rgba(15, 31, 26, 0.55); backdrop-filter: blur(8px);"
+				style="background-color: rgba(15, 23, 42, 0.55); backdrop-filter: blur(8px);"
 				role="button"
 				tabindex="0"
 				on:click={() => {
@@ -2451,8 +2451,8 @@
 		width: 36px;
 		height: 36px;
 		border-radius: 10px;
-		background: #faf7f2;
-		color: #4a4a4a;
+		background: #fcfcfb;
+		color: #334155;
 		border: 1px solid rgba(0, 0, 0, 0.08);
 		cursor: pointer;
 		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
@@ -2460,8 +2460,8 @@
 	}
 	.servicio-icon-btn:hover:not(:disabled) {
 		background: white;
-		border-color: rgba(16, 185, 129, 0.3);
-		color: #059669;
+		border-color: rgba(22, 163, 74, 0.3);
+		color: #15803d;
 		transform: translateY(-1px);
 	}
 	.servicio-icon-btn:disabled {
@@ -2473,12 +2473,12 @@
 		width: 40px;
 		height: 40px;
 		border-radius: 12px;
-		background: linear-gradient(135deg, #10b981, #059669);
+		background: linear-gradient(135deg, #16a34a, #15803d);
 		display: none;
 		align-items: center;
 		justify-content: center;
 		color: white;
-		box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
+		box-shadow: 0 4px 16px rgba(22, 163, 74, 0.3);
 		flex-shrink: 0;
 	}
 	@media (min-width: 640px) {
@@ -2493,18 +2493,18 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #10b981;
-		background: rgba(16, 185, 129, 0.08);
+		color: #16a34a;
+		background: rgba(22, 163, 74, 0.08);
 		padding: 0.2rem 0.55rem;
 		border-radius: 5px;
-		font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+		font-family: var(--font-sans);
 	}
 
 	.servicio-title {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		font-size: 1.05rem;
-		color: #0f1f1a;
+		color: #0f172a;
 		margin: 0.3rem 0 0;
 		line-height: 1.2;
 		letter-spacing: 0.05em;
@@ -2517,7 +2517,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -2533,31 +2533,31 @@
 		gap: 0.4rem;
 		padding: 0.55rem 0.9rem;
 		border-radius: 12px;
-		background: linear-gradient(135deg, #10b981, #059669);
+		background: linear-gradient(135deg, #16a34a, #15803d);
 		color: white;
 		font-family: 'Inter Tight', system-ui, sans-serif;
 		font-size: 0.78rem;
 		font-weight: 600;
 		border: none;
 		cursor: pointer;
-		box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
+		box-shadow: 0 4px 16px rgba(22, 163, 74, 0.3);
 		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 	}
 	.servicio-share-btn:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+		box-shadow: 0 6px 20px rgba(22, 163, 74, 0.4);
 	}
 
 	/* ── Modal compartir (sistema landing) ─────────────────────── */
 	.servicio-share-modal {
 		background: white;
 		border-radius: 24px;
-		box-shadow: 0 20px 60px rgba(15, 31, 26, 0.25);
+		box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
 		border: 1px solid rgba(0, 0, 0, 0.06);
 	}
 
 	.servicio-share-hd {
-		background: linear-gradient(135deg, #10b981, #059669);
+		background: linear-gradient(135deg, #16a34a, #15803d);
 		padding: 1.1rem 1.5rem;
 		display: flex;
 		align-items: center;
@@ -2584,12 +2584,13 @@
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
 		color: rgba(255, 255, 255, 0.85);
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 
 	.servicio-share-title {
-		font-family: 'Fraunces', Georgia, serif;
-		font-weight: 500;
+		font-family: var(--font-display);
+		letter-spacing: -0.02em;
+		font-weight: 800;
 		font-size: 1.2rem;
 		color: white;
 		margin: 0.2rem 0 0;
@@ -2627,7 +2628,7 @@
 		gap: 0.3rem;
 		width: 100%;
 		text-align: left;
-		background: #faf7f2;
+		background: #fcfcfb;
 		border: 1px solid rgba(0, 0, 0, 0.08);
 		border-radius: 12px;
 		padding: 0.85rem 1rem;
@@ -2635,7 +2636,7 @@
 		transition: all 0.2s;
 	}
 	.servicio-share-link:hover {
-		border-color: rgba(16, 185, 129, 0.3);
+		border-color: rgba(22, 163, 74, 0.3);
 		background: white;
 	}
 
@@ -2644,14 +2645,14 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
-		color: #6b6b6b;
-		font-family: 'JetBrains Mono', monospace;
+		color: #64748b;
+		font-family: var(--font-sans);
 	}
 
 	.servicio-share-link-url {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.85rem;
-		color: #0f1f1a;
+		color: #0f172a;
 		font-weight: 500;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -2666,22 +2667,22 @@
 		width: 100%;
 		padding: 0.7rem 1.25rem;
 		border-radius: 12px;
-		background: linear-gradient(135deg, #10b981, #059669);
+		background: linear-gradient(135deg, #16a34a, #15803d);
 		color: white;
 		font-family: 'Inter Tight', system-ui, sans-serif;
 		font-size: 0.88rem;
 		font-weight: 600;
 		border: none;
 		cursor: pointer;
-		box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
+		box-shadow: 0 4px 16px rgba(22, 163, 74, 0.3);
 		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 	}
 	.servicio-share-cta:hover:not(:disabled) {
 		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+		box-shadow: 0 6px 20px rgba(22, 163, 74, 0.4);
 	}
 	.servicio-share-cta.copied {
-		background: #059669;
+		background: #15803d;
 	}
 
 	/* ── Cards landing (override de .glass para servicio) ────── */
@@ -2693,45 +2694,45 @@
 		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
 	}
 	:global(.servicio-cards .glass:hover) {
-		border-color: rgba(16, 185, 129, 0.22);
+		border-color: rgba(22, 163, 74, 0.22);
 	}
 
 	/* Eyebrows dentro de cards (label tracking-wide uppercase) */
 	:global(.servicio-cards .text-\[10px\].font-semibold.tracking-wide.uppercase) {
-		font-family: 'JetBrains Mono', monospace !important;
+		font-family: var(--font-sans);
 		letter-spacing: 0.12em !important;
 		font-size: 0.65rem !important;
-		color: #6b6b6b !important;
+		color: #64748b !important;
 	}
 
 	/* Nombres principales dentro de cards (font-bold gray-900) */
 	:global(.servicio-cards .font-bold.text-gray-900) {
 		font-family: 'Inter Tight', system-ui, sans-serif;
-		color: #0f1f1a;
+		color: #0f172a;
 		letter-spacing: -0.01em;
 	}
 
 	/* ── Leyenda del mapa (landing) ─────────────────────────────── */
 	:global(.servicio-cards .glass.soft-shadow) {
-		background: #faf7f2;
+		background: #fcfcfb;
 		border: 1px solid rgba(0, 0, 0, 0.08);
 	}
 
 	/* ── Botón centrar del mapa ────────────────────────────────── */
 	:global(.servicio-cards button[class*='rounded-xl border border-gray-200']:hover) {
-		border-color: rgba(16, 185, 129, 0.3);
-		color: #059669;
+		border-color: rgba(22, 163, 74, 0.3);
+		color: #15803d;
 	}
 
 	/* ── Condiciones del servicio (badges inline) ─────────────── */
 	:global(.servicio-cards .inline-flex.items-center.gap-1.rounded-md) {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		letter-spacing: 0.06em;
 	}
 
 	/* ── Eyebrow del cuerpo (entre el mapa y las cards) ───────── */
 	:global(.servicio-cards .text-\[11px\].font-semibold) {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		letter-spacing: 0.1em;
 	}
 
@@ -2740,12 +2741,12 @@
 		width: 30px;
 		height: 30px;
 		border-radius: 10px;
-		box-shadow: 0 4px 12px rgba(16, 185, 129, 0.22);
+		box-shadow: 0 4px 12px rgba(22, 163, 74, 0.22);
 	}
 
 	/* ── Pin circular dentro del card Recorrido (A/B) ─────────── */
 	:global(.servicio-cards .h-6.w-6.items-center.justify-center.rounded-full) {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		letter-spacing: 0.05em;
 		border: 2px solid white;
@@ -2800,18 +2801,18 @@
 		gap: 0.1rem;
 	}
 	.stat-block-label {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.6rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
-		color: #6b6b6b;
+		color: #64748b;
 	}
 	.stat-block-value {
-		font-family: 'Fraunces', Georgia, serif;
+		font-family: var(--font-display);
 		font-size: 1.15rem;
 		font-weight: 600;
-		color: #0f1f1a;
+		color: #0f172a;
 		letter-spacing: -0.01em;
 		line-height: 1.1;
 	}
@@ -2830,7 +2831,7 @@
 		content: '';
 		position: absolute;
 		inset: 0;
-		background: linear-gradient(135deg, rgba(16, 185, 129, 0.04), rgba(16, 185, 129, 0));
+		background: linear-gradient(135deg, rgba(22, 163, 74, 0.04), rgba(22, 163, 74, 0));
 		pointer-events: none;
 	}
 	.servicio-hero-route {
@@ -2858,7 +2859,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		font-size: 0.95rem;
 		color: white;
@@ -2867,7 +2868,7 @@
 		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 	}
 	.route-end.origin .route-pin {
-		background: linear-gradient(135deg, #10b981, #059669);
+		background: linear-gradient(135deg, #16a34a, #15803d);
 	}
 	.route-end.dest .route-pin {
 		background: linear-gradient(135deg, #ef4444, #dc2626);
@@ -2877,21 +2878,21 @@
 		flex: 1;
 	}
 	.route-end-eyebrow {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.6rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #10b981;
+		color: #16a34a;
 	}
 	.route-end.dest .route-end-eyebrow {
 		color: #dc2626;
 	}
 	.route-end-text {
-		font-family: 'Fraunces', Georgia, serif;
+		font-family: var(--font-display);
 		font-size: 1.15rem;
-		font-weight: 500;
-		color: #0f1f1a;
+		font-weight: 800;
+		color: #0f172a;
 		margin: 0.15rem 0 0;
 		line-height: 1.2;
 		letter-spacing: -0.01em;
@@ -2904,7 +2905,7 @@
 	}
 	.route-end-sub {
 		font-size: 0.72rem;
-		color: #6b6b6b;
+		color: #64748b;
 		margin: 0.15rem 0 0;
 	}
 	.route-line {
@@ -2919,7 +2920,7 @@
 	.route-line-track {
 		width: 100%;
 		height: 2px;
-		background: linear-gradient(to right, #10b981, #f59e0b, #ef4444);
+		background: linear-gradient(to right, #16a34a, #f59e0b, #ef4444);
 		border-radius: 1px;
 		opacity: 0.5;
 	}
@@ -2929,20 +2930,20 @@
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.25rem 0.75rem;
-		background: rgba(16, 185, 129, 0.08);
-		border: 1px solid rgba(16, 185, 129, 0.18);
+		background: rgba(22, 163, 74, 0.08);
+		border: 1px solid rgba(22, 163, 74, 0.18);
 		border-radius: 999px;
 		white-space: nowrap;
 	}
 	.route-stat {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.72rem;
 		font-weight: 700;
-		color: #047857;
+		color: #166534;
 		letter-spacing: 0.02em;
 	}
 	.route-stat-sep {
-		color: #10b981;
+		color: #16a34a;
 		opacity: 0.4;
 	}
 
@@ -2957,8 +2958,8 @@
 		transition: all 0.3s var(--ease);
 	}
 	.servicio-hero-card:hover {
-		border-color: rgba(16, 185, 129, 0.25);
-		box-shadow: 0 8px 24px rgba(16, 185, 129, 0.08);
+		border-color: rgba(22, 163, 74, 0.25);
+		box-shadow: 0 8px 24px rgba(22, 163, 74, 0.08);
 		transform: translateY(-1px);
 	}
 	.servicio-hero-avatar {
@@ -2968,7 +2969,7 @@
 		font-family: 'Inter Tight', system-ui, sans-serif;
 		font-size: 1rem;
 		font-weight: 700;
-		color: #0f1f1a;
+		color: #0f172a;
 		margin: 0;
 		line-height: 1.2;
 		letter-spacing: -0.01em;
@@ -2976,12 +2977,12 @@
 	}
 	.servicio-hero-sub {
 		font-size: 0.78rem;
-		color: #6b6b6b;
+		color: #64748b;
 		margin: 0.2rem 0 0;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 	.servicio-hero-sub--accent {
-		color: #047857;
+		color: #166534;
 		font-family: 'Inter Tight', system-ui, sans-serif;
 		font-weight: 500;
 	}
@@ -2993,24 +2994,24 @@
 		align-items: center;
 		gap: 0.3rem;
 		padding: 0.85rem 1rem;
-		background: linear-gradient(135deg, #faf7f2, #f5f1e8);
-		border: 1.5px solid rgba(16, 185, 129, 0.3);
+		background: linear-gradient(135deg, #fcfcfb, #f5f1e8);
+		border: 1.5px solid rgba(22, 163, 74, 0.3);
 		border-radius: 14px;
 		box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
 	}
 	.servicio-placa-label {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.55rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #10b981;
+		color: #16a34a;
 	}
 	.servicio-placa {
-		font-family: 'JetBrains Mono', 'Courier New', monospace;
+		font-family: var(--font-sans);
 		font-size: 1.7rem;
 		font-weight: 800;
-		color: #0f1f1a;
+		color: #0f172a;
 		letter-spacing: 0.12em;
 		line-height: 1;
 		text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
@@ -3022,8 +3023,8 @@
 		padding: 0.2rem 0.55rem;
 		font-size: 0.7rem;
 		font-weight: 600;
-		color: #4a4a4a;
-		background: #faf7f2;
+		color: #334155;
+		background: #fcfcfb;
 		border: 1px solid rgba(0, 0, 0, 0.08);
 		border-radius: 6px;
 	}
@@ -3040,17 +3041,17 @@
 		min-width: 0;
 	}
 	.servicio-info-row:hover {
-		background: #faf7f2;
+		background: #fcfcfb;
 	}
 	.servicio-info-key {
 		font-size: 0.75rem;
-		color: #6b6b6b;
+		color: #64748b;
 		font-weight: 500;
 	}
 	.servicio-info-val {
 		font-size: 0.82rem;
 		font-weight: 600;
-		color: #0f1f1a;
+		color: #0f172a;
 		text-align: right;
 		min-width: 0;
 		overflow: hidden;
@@ -3058,8 +3059,8 @@
 		white-space: nowrap;
 	}
 	.servicio-info-val--mono {
-		font-family: 'JetBrains Mono', monospace;
-		color: #047857;
+		font-family: var(--font-sans);
+		color: #166534;
 	}
 
 	/* ── BADGES de condiciones (compacto) ──────────────────────── */
@@ -3067,13 +3068,13 @@
 		display: inline-flex;
 		align-items: center;
 		padding: 0.15rem 0.55rem;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.6rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
-		color: #6b6b6b;
-		background: #faf7f2;
+		color: #64748b;
+		background: #fcfcfb;
 		border: 1px solid rgba(0, 0, 0, 0.08);
 		border-radius: 4px;
 	}
@@ -3082,13 +3083,13 @@
 		align-items: center;
 		gap: 0.3rem;
 		padding: 0.25rem 0.6rem;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
-		color: #0f1f1a;
-		background: #faf7f2;
+		color: #0f172a;
+		background: #fcfcfb;
 		border: 1px solid rgba(0, 0, 0, 0.08);
 		border-radius: 6px;
 	}
@@ -3108,9 +3109,9 @@
 		border-color: rgba(59, 130, 246, 0.25);
 	}
 	.servicio-cond-badge--emerald {
-		color: #047857;
-		background: rgba(16, 185, 129, 0.08);
-		border-color: rgba(16, 185, 129, 0.25);
+		color: #166534;
+		background: rgba(22, 163, 74, 0.08);
+		border-color: rgba(22, 163, 74, 0.25);
 	}
 	.servicio-cond-badge--red {
 		color: #b91c1c;

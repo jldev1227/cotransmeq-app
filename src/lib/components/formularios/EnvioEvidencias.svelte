@@ -770,7 +770,7 @@
 		font-family: var(--font-display, Georgia, serif);
 		font-size: 1rem;
 		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.evidencias__conteo {
@@ -778,8 +778,8 @@
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
 		font-weight: 700;
-		color: var(--orange-700, #c2410c);
-		background: color-mix(in srgb, var(--orange-700, #c2410c) 10%, transparent);
+		color: var(--orange-700, #9a3412);
+		background: color-mix(in srgb, var(--orange-700, #9a3412) 10%, transparent);
 		border-radius: 999px;
 	}
 
@@ -787,7 +787,7 @@
 		font-size: 0.8125rem;
 		font-style: italic;
 		line-height: 1.5;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	/* Rejilla y no lista: las evidencias son OBJETOS que se comparan de un
@@ -830,7 +830,7 @@
 	}
 
 	.tarjeta__lienzo--pulsable:focus-visible {
-		outline: 2px solid var(--orange-600, #ea580c);
+		outline: 2px solid var(--orange-600, #c2410c);
 		outline-offset: -2px;
 	}
 
@@ -850,7 +850,7 @@
 	}
 
 	.tarjeta__lienzo--sin {
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.tarjeta__ext {
@@ -873,7 +873,7 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: var(--orange-700, #c2410c);
+		color: var(--orange-700, #9a3412);
 	}
 
 	.tarjeta__pregunta {
@@ -884,11 +884,11 @@
 		overflow: hidden;
 		font-size: 0.8125rem;
 		line-height: 1.35;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.tarjeta__tec {
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.tarjeta__acciones {
@@ -909,7 +909,7 @@
 	.tarjeta__sin {
 		font-size: 0.75rem;
 		font-style: italic;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	/* `evidencia-visor` y no `visor` a secas: `PreviewEnvioPDF` ya usa esa clase
@@ -1248,7 +1248,7 @@
 		font: inherit;
 		font-size: 0.875rem;
 		font-weight: 500;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		background: var(--bg-surface, #fff);
 		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
 		border-radius: 10px;
@@ -1266,8 +1266,8 @@
 
 	.btn--primario {
 		color: #fff;
-		background: var(--orange-700, #c2410c);
-		border-color: var(--orange-700, #c2410c);
+		background: var(--orange-700, #9a3412);
+		border-color: var(--orange-700, #9a3412);
 	}
 
 	.btn:disabled {
@@ -1276,7 +1276,7 @@
 	}
 
 	.btn:focus-visible {
-		outline: 2px solid var(--orange-600, #ea580c);
+		outline: 2px solid var(--orange-600, #c2410c);
 		outline-offset: 2px;
 	}
 </style>

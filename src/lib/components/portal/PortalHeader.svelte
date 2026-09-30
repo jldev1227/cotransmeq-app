@@ -53,14 +53,14 @@
 		font-size: 1.5rem;
 		font-weight: 600;
 		line-height: 1.15;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.ph__meta {
 		margin: 0.1875rem 0 0;
 		font-family: var(--font-mono, monospace);
 		font-size: 0.75rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	/* Los controles se alinean con la primera línea del título y pueden envolver:

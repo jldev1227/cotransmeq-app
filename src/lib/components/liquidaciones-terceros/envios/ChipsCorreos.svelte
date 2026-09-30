@@ -154,7 +154,7 @@
 		cursor: text;
 	}
 	.chips:focus-within {
-		border-color: #ea580c;
+		border-color: #c2410c;
 		box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.15);
 	}
 	.chips.invalido {

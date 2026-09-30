@@ -66,24 +66,44 @@
 	--color-emerald-100: #ffedd5;
 	--color-emerald-200: #fed7aa;
 	--color-emerald-300: #fdba74;
-	--color-emerald-400: #fb923c;
-	--color-emerald-500: #f97316;
-	--color-emerald-600: #ea580c;
-	--color-emerald-700: #c2410c;
-	--color-emerald-800: #9a3412;
-	--color-emerald-900: #7c2d12;
+	--color-emerald-400: #ea580c;
+	--color-emerald-500: #c2410c;
+	--color-emerald-600: #9a3412;
+	--color-emerald-700: #9a3412;
+	--color-emerald-800: #7c2d12;
+	--color-emerald-900: #14532d;
 	--color-emerald-950: #431407;
 	--color-green-50: #fff7ed;
 	--color-green-100: #ffedd5;
 	--color-green-200: #fed7aa;
 	--color-green-300: #fdba74;
-	--color-green-400: #fb923c;
-	--color-green-500: #f97316;
-	--color-green-600: #ea580c;
-	--color-green-700: #c2410c;
-	--color-green-800: #9a3412;
-	--color-green-900: #7c2d12;
+	--color-green-400: #ea580c;
+	--color-green-500: #c2410c;
+	--color-green-600: #9a3412;
+	--color-green-700: #9a3412;
+	--color-green-800: #7c2d12;
+	--color-green-900: #14532d;
 	--color-green-950: #431407;
+
+	/* Neutros de la app móvil (slate): las utilidades `gray-*` de las páginas
+	   cambian de tono sin tocar el marcado. */
+	--color-gray-50: #fcfcfb;
+	--color-gray-100: #f1f5f9;
+	--color-gray-200: #e2e8f0;
+	--color-gray-300: #cbd5e1;
+	--color-gray-400: #94a3b8;
+	--color-gray-500: #64748b;
+	--color-gray-600: #475569;
+	--color-gray-700: #334155;
+	--color-gray-800: #1e293b;
+	--color-gray-900: #0f172a;
+	--color-gray-950: #0f172a;
+
+	/* Radios de la app: 12 · 14 · 22 · 28 */
+	--radius-lg: 0.75rem;
+	--radius-xl: 0.875rem;
+	--radius-2xl: 1.375rem;
+	--radius-3xl: 1.75rem;
 }
 
 /* Configuración global de tipografía */
@@ -97,6 +117,8 @@ body {
 		sans-serif;
 	background-color: #fcfcfb;
 	color: #0f172a;
+	/* Las cifras alinean en columnas aunque ya no vayan en monoespaciada. */
+	font-variant-numeric: tabular-nums;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 	overflow-x: hidden;
@@ -119,9 +141,9 @@ html {
    ═══════════════════════════════════════════════════════════════ */
 :root {
 	/* Naranja (acento principal de marca) — antes emerald */
-	--emerald-500: #f97316;
-	--emerald-600: #ea580c;
-	--emerald-700: #c2410c;
+	--emerald-500: #c2410c;
+	--emerald-600: #9a3412;
+	--emerald-700: #9a3412;
 	/* Verde bosque (acento secundario) — para texto emphasis y "aprobado" */
 	--emerald-800: #166534;
 	--emerald-deep: #14532d;
@@ -134,7 +156,7 @@ html {
 	   naranja. Son alias de `--emerald-*` —que en este repo ya son naranjas— y
 	   no copias, para que la marca tenga una sola fuente de verdad.
 	   Ojo: la definición del portal da a `--orange-700`/`--orange-800` valores
-	   verdes (#047857 / #065f46), resto de un renombrado a medias. Allí sigue
+	   verdes (#166534 / #14532d), resto de un renombrado a medias. Allí sigue
 	   mandando la suya porque está en un ámbito más específico. */
 	--orange-500: var(--emerald-500);
 	--orange-600: var(--emerald-600);
@@ -147,36 +169,37 @@ html {
 
 	/* Slate (textos y superficies oscuras — sidebar/dropdowns) */
 	--bg-charcoal: #0f172a;
-	--bg-charcoal-deep: #0f172a;
+	/* Sidebar y bloques de marca en el verde bosque de la app */
+	--bg-charcoal-deep: #14532d;
 	--slate-900: #0f172a;
 	--slate-800: #1e293b;
 	--gray-50: #f9fafb;
 
 	/* Texto (jerarquía) */
 	--text-primary: #0f172a;
-	--text-secondary: #64748b;
+	--text-secondary: #334155;
 	--text-muted: #64748b;
 	--text-very-muted: #94a3b8;
-	--text-on-dark: #fcfcfb;
+	--text-on-dark: #ffffff;
 
-	/* Bordes (slate hairline) */
-	--border-subtle: rgba(15, 23, 42, 0.08);
-	--border-default: rgba(15, 23, 42, 0.12);
-	--border-emphasis: rgba(15, 23, 42, 0.24);
+	/* Bordes: slate 100 · 200 · 300 de la app */
+	--border-subtle: #f1f5f9;
+	--border-default: #e2e8f0;
+	--border-emphasis: #cbd5e1;
 
 	/* Glass (sidebar oscuro, dropdowns) */
 	--glass-bg: rgba(255, 255, 255, 0.85);
 	--glass-border: rgba(255, 255, 255, 0.1);
-	--dark-bg: #0f172a;
-	--dark-surface: #111827;
+	--dark-bg: #14532d;
+	--dark-surface: #166534;
 	--dark-emerald: #166534;
 	--text-light: #e5e7eb;
 
 	/* Sombras (jerarquía de elevación con tinte naranja) */
 	--shadow-card: 0 4px 24px rgba(0, 0, 0, 0.04);
-	--shadow-card-hover: 0 12px 32px rgba(249, 115, 22, 0.12);
-	--shadow-btn: 0 4px 16px rgba(249, 115, 22, 0.3);
-	--shadow-btn-hover: 0 6px 20px rgba(249, 115, 22, 0.4);
+	--shadow-card-hover: 0 12px 32px rgba(234, 88, 12, 0.12);
+	--shadow-btn: 0 4px 16px rgba(234, 88, 12, 0.3);
+	--shadow-btn-hover: 0 6px 20px rgba(234, 88, 12, 0.4);
 	--shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.05);
 
 	/* Easings */
@@ -239,12 +262,12 @@ html {
 
 .emerald-glow {
 	box-shadow:
-		0 0 0 1px rgba(249, 115, 22, 0.1),
-		0 2px 8px rgba(249, 115, 22, 0.15);
+		0 0 0 1px rgba(234, 88, 12, 0.1),
+		0 2px 8px rgba(234, 88, 12, 0.15);
 }
 
 .emerald-glow:hover {
-	box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
+	box-shadow: 0 6px 20px rgba(234, 88, 12, 0.4);
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -253,9 +276,9 @@ html {
 .input-glow:focus {
 	box-shadow:
 		inset 0 2px 4px rgba(0, 0, 0, 0.05),
-		0 0 0 3px rgba(249, 115, 22, 0.1);
+		0 0 0 3px rgba(234, 88, 12, 0.1);
 	outline: none;
-	border-color: #f97316;
+	border-color: #ea580c;
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -263,9 +286,9 @@ html {
    Metadata usa uppercase + tracking (sin monospace dedicado).
    ═══════════════════════════════════════════════════════════════ */
 .font-display {
-	font-family: 'Geist', 'Inter', system-ui, sans-serif;
-	font-weight: 700;
-	letter-spacing: -0.02em;
+	font-family: var(--font-display);
+	font-weight: 800;
+	letter-spacing: -0.025em;
 }
 
 .font-mono-meta {
@@ -300,7 +323,7 @@ html {
 		text-transform: uppercase;
 		letter-spacing: 0.15em;
 		color: var(--emerald-500);
-		background: rgba(249, 115, 22, 0.08);
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0.35rem 0.8rem;
 		border-radius: 9999px;
 	}
@@ -311,19 +334,20 @@ html {
 		align-items: center;
 		gap: 0.5rem;
 		padding: 0.65rem 1.25rem;
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: var(--emerald-500);
 		color: white;
 		border: none;
-		border-radius: 12px;
+		border-radius: 14px;
 		font-family: 'Geist', 'Inter', system-ui, sans-serif;
 		font-size: 0.875rem;
-		font-weight: 600;
+		font-weight: 700;
 		cursor: pointer;
 		box-shadow: var(--shadow-btn);
 		transition: all 0.3s var(--ease-apple);
 		text-decoration: none;
 	}
 	.btn-primary:hover:not(:disabled) {
+		background: var(--emerald-600);
 		transform: translateY(-2px);
 		box-shadow: var(--shadow-btn-hover);
 	}
@@ -343,11 +367,11 @@ html {
 		padding: 0.65rem 1.25rem;
 		background: white;
 		color: var(--text-primary);
-		border: 1px solid var(--border-default);
-		border-radius: 12px;
+		border: 1.5px solid var(--border-default);
+		border-radius: 14px;
 		font-family: 'Geist', 'Inter', system-ui, sans-serif;
 		font-size: 0.875rem;
-		font-weight: 600;
+		font-weight: 700;
 		cursor: pointer;
 		transition: all 0.2s var(--ease-apple);
 		text-decoration: none;
@@ -379,8 +403,8 @@ html {
 		transition: all 0.2s var(--ease-apple);
 	}
 	.btn-icon:hover {
-		background: rgba(249, 115, 22, 0.04);
-		border-color: rgba(249, 115, 22, 0.3);
+		background: rgba(234, 88, 12, 0.04);
+		border-color: rgba(234, 88, 12, 0.3);
 		color: var(--emerald-500);
 	}
 	.btn-icon svg {
@@ -417,9 +441,9 @@ html {
 		gap: 0.35rem;
 		padding: 0.4rem 0.75rem;
 		border-radius: 10px;
-		background: rgba(249, 115, 22, 0.06);
-		border: 1px solid rgba(249, 115, 22, 0.18);
-		color: #c2410c;
+		background: rgba(234, 88, 12, 0.06);
+		border: 1px solid rgba(234, 88, 12, 0.18);
+		color: #9a3412;
 		font-family: 'Geist', 'Inter', system-ui, sans-serif;
 		font-size: 0.75rem;
 		font-weight: 600;
@@ -428,8 +452,8 @@ html {
 		white-space: nowrap;
 	}
 	.help-btn:hover {
-		background: rgba(249, 115, 22, 0.12);
-		border-color: rgba(249, 115, 22, 0.3);
+		background: rgba(234, 88, 12, 0.12);
+		border-color: rgba(234, 88, 12, 0.3);
 		transform: translateY(-0.5px);
 	}
 	.help-btn:active {
@@ -488,9 +512,9 @@ html {
 		transition: all 0.2s var(--ease-apple);
 	}
 	.calendar-nav-btn:hover {
-		background: rgba(249, 115, 22, 0.08);
+		background: rgba(234, 88, 12, 0.08);
 		color: var(--emerald-500);
-		border-color: rgba(249, 115, 22, 0.18);
+		border-color: rgba(234, 88, 12, 0.18);
 	}
 	.calendar-nav-btn svg {
 		width: 0.85rem;
@@ -526,8 +550,8 @@ html {
 		justify-content: center;
 	}
 	.calendar-cell:hover:not(:disabled) {
-		background: rgba(249, 115, 22, 0.08);
-		border-color: rgba(249, 115, 22, 0.25);
+		background: rgba(234, 88, 12, 0.08);
+		border-color: rgba(234, 88, 12, 0.25);
 		color: #166534;
 	}
 	.calendar-cell:active:not(:disabled) {
@@ -541,22 +565,22 @@ html {
 		opacity: 1;
 	}
 	.calendar-cell.is-today {
-		background: rgba(249, 115, 22, 0.1);
+		background: rgba(234, 88, 12, 0.1);
 		color: #166534;
 		font-weight: 700;
-		border-color: rgba(249, 115, 22, 0.3);
+		border-color: rgba(234, 88, 12, 0.3);
 	}
 	.calendar-cell.is-selected {
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		color: #ffffff !important;
 		font-weight: 700;
 		border-color: transparent;
-		box-shadow: 0 4px 14px rgba(249, 115, 22, 0.32);
+		box-shadow: 0 4px 14px rgba(234, 88, 12, 0.32);
 	}
 	.calendar-cell.is-selected:hover {
-		background: linear-gradient(135deg, #ea580c, #c2410c);
+		background: linear-gradient(135deg, #c2410c, #9a3412);
 		transform: translateY(-1px);
-		box-shadow: 0 6px 18px rgba(249, 115, 22, 0.42);
+		box-shadow: 0 6px 18px rgba(234, 88, 12, 0.42);
 	}
 	.calendar-cell.is-disabled {
 		opacity: 0.35;
@@ -571,8 +595,8 @@ html {
 		gap: 0.75rem;
 		padding: 0.55rem 0.8rem;
 		border-radius: 10px;
-		background: rgba(249, 115, 22, 0.08);
-		border: 1px solid rgba(249, 115, 22, 0.18);
+		background: rgba(234, 88, 12, 0.08);
+		border: 1px solid rgba(234, 88, 12, 0.18);
 	}
 	.calendar-footer-meta {
 		display: flex;
@@ -583,8 +607,8 @@ html {
 		width: 6px;
 		height: 6px;
 		border-radius: 50%;
-		background: #f97316;
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+		background: #ea580c;
+		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.18);
 	}
 	.calendar-footer-count {
 		font-family: 'Geist', 'Inter', system-ui, sans-serif;
@@ -613,8 +637,8 @@ html {
 			box-shadow 0.2s var(--ease-apple);
 	}
 	.item-card:hover {
-		border-color: rgba(249, 115, 22, 0.25);
-		box-shadow: 0 6px 18px rgba(249, 115, 22, 0.08);
+		border-color: rgba(234, 88, 12, 0.25);
+		box-shadow: 0 6px 18px rgba(234, 88, 12, 0.08);
 	}
 	.item-card-header {
 		display: flex;
@@ -632,7 +656,7 @@ html {
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
 		color: #166534;
-		background: rgba(249, 115, 22, 0.08);
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0.2rem 0.55rem;
 		border-radius: 5px;
 	}
@@ -640,8 +664,8 @@ html {
 		width: 5px;
 		height: 5px;
 		border-radius: 50%;
-		background: #f97316;
-		box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.18);
+		background: #ea580c;
+		box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.18);
 	}
 	.item-card-remove {
 		display: inline-flex;
@@ -710,15 +734,15 @@ html {
 		width: 5px;
 		height: 5px;
 		border-radius: 50%;
-		background: #f97316;
-		box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.18);
+		background: #ea580c;
+		box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.18);
 	}
 	.section-header-count {
 		display: inline-flex;
 		align-items: center;
 		padding: 0.1rem 0.45rem;
 		border-radius: 999px;
-		background: rgba(249, 115, 22, 0.1);
+		background: rgba(234, 88, 12, 0.1);
 		color: #166534;
 		font-size: 0.62rem;
 		font-weight: 700;
@@ -743,7 +767,7 @@ html {
 		transition: all 0.2s var(--ease-apple);
 	}
 	.stat-card:hover {
-		border-color: rgba(249, 115, 22, 0.3);
+		border-color: rgba(234, 88, 12, 0.3);
 		transform: translateY(-1px);
 	}
 	.stat-card .stat-label {
@@ -767,7 +791,7 @@ html {
 		width: 48px;
 		height: 48px;
 		border-radius: 14px;
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -784,12 +808,12 @@ html {
 		width: 32px;
 		height: 32px;
 		border-radius: 10px;
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		color: white;
-		box-shadow: 0 2px 8px rgba(249, 115, 22, 0.25);
+		box-shadow: 0 2px 8px rgba(234, 88, 12, 0.25);
 		flex-shrink: 0;
 	}
 	.card-icon-sm svg {
@@ -828,7 +852,7 @@ html {
 		cursor: pointer;
 	}
 	.table-row:hover {
-		background: rgba(249, 115, 22, 0.05);
+		background: rgba(234, 88, 12, 0.05);
 	}
 
 	/* ─── Status pill (estado) ───────────────────── */
@@ -853,7 +877,7 @@ html {
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
 		color: var(--emerald-500);
-		background: rgba(249, 115, 22, 0.08);
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0.2rem 0.55rem;
 		border-radius: 5px;
 	}
@@ -868,9 +892,9 @@ html {
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
-		color: #c2410c;
-		background: rgba(249, 115, 22, 0.08);
-		border: 1px solid rgba(249, 115, 22, 0.18);
+		color: #9a3412;
+		background: rgba(234, 88, 12, 0.08);
+		border: 1px solid rgba(234, 88, 12, 0.18);
 		padding: 0.2rem 0.55rem;
 		border-radius: 6px;
 		text-decoration: none;
@@ -883,8 +907,8 @@ html {
 		white-space: nowrap;
 	}
 	.chip-link:hover {
-		background: rgba(249, 115, 22, 0.16);
-		border-color: rgba(249, 115, 22, 0.4);
+		background: rgba(234, 88, 12, 0.16);
+		border-color: rgba(234, 88, 12, 0.4);
 		color: #166534;
 		transform: translateY(-0.5px);
 	}
@@ -892,7 +916,7 @@ html {
 		transform: translateY(0);
 	}
 	.chip-link:focus-visible {
-		outline: 2px solid rgba(249, 115, 22, 0.55);
+		outline: 2px solid rgba(234, 88, 12, 0.55);
 		outline-offset: 2px;
 	}
 
@@ -922,8 +946,8 @@ html {
 		color: #92400e;
 	}
 	.alert-info {
-		background: rgba(249, 115, 22, 0.04);
-		border: 1px solid rgba(249, 115, 22, 0.18);
+		background: rgba(234, 88, 12, 0.04);
+		border: 1px solid rgba(234, 88, 12, 0.18);
 		color: var(--emerald-800);
 	}
 
@@ -952,8 +976,8 @@ html {
 
 	/* ─── Instructivo hint (banner emerald tint) ──── */
 	.hint-card {
-		background: linear-gradient(135deg, rgba(249, 115, 22, 0.04), rgba(249, 115, 22, 0.08));
-		border: 1px solid rgba(249, 115, 22, 0.15);
+		background: linear-gradient(135deg, rgba(234, 88, 12, 0.04), rgba(234, 88, 12, 0.08));
+		border: 1px solid rgba(234, 88, 12, 0.15);
 		border-radius: 12px;
 		padding: 0.85rem 1rem;
 	}
@@ -974,7 +998,7 @@ html {
 	.confirm-card {
 		background: var(--bg-surface);
 		border: 1px solid var(--border-subtle);
-		border-radius: 24px;
+		border-radius: 22px;
 		padding: 2.5rem 2rem;
 		box-shadow: var(--shadow-card);
 	}
@@ -982,13 +1006,13 @@ html {
 		width: 72px;
 		height: 72px;
 		border-radius: 50%;
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		color: white;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		margin: 0 auto 1.5rem;
-		box-shadow: 0 8px 24px rgba(249, 115, 22, 0.3);
+		box-shadow: 0 8px 24px rgba(234, 88, 12, 0.3);
 	}
 	.confirm-icon svg {
 		width: 36px;
@@ -999,7 +1023,7 @@ html {
 	.spinner {
 		width: 24px;
 		height: 24px;
-		border: 3px solid rgba(249, 115, 22, 0.2);
+		border: 3px solid rgba(234, 88, 12, 0.2);
 		border-top-color: var(--emerald-500);
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
@@ -1017,7 +1041,7 @@ html {
 
 	/* ─── Loading state (splash) ──────────────── */
 	.brand-gradient {
-		background: linear-gradient(135deg, var(--emerald-500), var(--emerald-600));
+		background: var(--emerald-500);
 	}
 
 	/* ─── List card (mobile, reusable para tablas → cards) ─── */
@@ -1039,7 +1063,7 @@ html {
 		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
 	}
 	.list-card:focus-visible {
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.18);
 	}
 
 	/* ─── Filter panel (reutilizable para flota / conductores / etc) ─── */
@@ -1085,7 +1109,7 @@ html {
 		font-size: 0.65rem;
 		font-weight: 700;
 		color: var(--emerald-700);
-		background-color: rgba(249, 115, 22, 0.1);
+		background-color: rgba(234, 88, 12, 0.1);
 		padding: 0.15rem 0.55rem;
 		border-radius: 999px;
 	}
@@ -1104,15 +1128,15 @@ html {
 		font-size: 0.7rem;
 		font-weight: 600;
 		color: var(--emerald-800);
-		background-color: rgba(249, 115, 22, 0.08);
-		border: 1px solid rgba(249, 115, 22, 0.22);
+		background-color: rgba(234, 88, 12, 0.08);
+		border: 1px solid rgba(234, 88, 12, 0.22);
 		border-radius: 999px;
 		cursor: pointer;
 		transition: all 0.2s var(--ease-apple);
 	}
 	.filter-chip:hover {
-		background-color: rgba(249, 115, 22, 0.14);
-		border-color: rgba(249, 115, 22, 0.4);
+		background-color: rgba(234, 88, 12, 0.14);
+		border-color: rgba(234, 88, 12, 0.4);
 	}
 	.filter-chip svg {
 		width: 12px;
@@ -1231,7 +1255,7 @@ html {
 	.filter-field input:focus {
 		outline: none;
 		border-color: var(--emerald-500);
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12);
+		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.12);
 	}
 	.filter-actions {
 		display: flex;
@@ -1308,7 +1332,7 @@ html {
 	align-items: flex-end;
 	justify-content: center;
 	padding: 0;
-	background: linear-gradient(135deg, rgba(15, 23, 42, 0.45), rgba(10, 20, 16, 0.6));
+	background: linear-gradient(135deg, rgba(15, 23, 42, 0.45), rgba(20, 83, 45, 0.6));
 	backdrop-filter: blur(8px) saturate(120%);
 	-webkit-backdrop-filter: blur(8px) saturate(120%);
 	animation: modal-fade-in 0.2s var(--ease-apple);
@@ -1437,9 +1461,9 @@ html {
 	transition: all 0.2s var(--ease-apple);
 }
 .modal-close:hover {
-	background: rgba(249, 115, 22, 0.06);
+	background: rgba(234, 88, 12, 0.06);
 	color: var(--emerald-500);
-	border-color: rgba(249, 115, 22, 0.18);
+	border-color: rgba(234, 88, 12, 0.18);
 	transform: rotate(90deg);
 }
 .modal-close:active {
@@ -1494,7 +1518,7 @@ html {
 	text-transform: uppercase;
 	letter-spacing: 0.12em;
 	color: var(--emerald-500);
-	background: rgba(249, 115, 22, 0.08);
+	background: rgba(234, 88, 12, 0.08);
 	padding: 0.2rem 0.55rem;
 	border-radius: 4px;
 	margin-bottom: 0.5rem;
@@ -1516,10 +1540,10 @@ html {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	background: linear-gradient(135deg, #f97316, #ea580c);
+	background: linear-gradient(135deg, #ea580c, #c2410c);
 	color: white;
 	flex-shrink: 0;
-	box-shadow: 0 6px 16px rgba(249, 115, 22, 0.3);
+	box-shadow: 0 6px 16px rgba(234, 88, 12, 0.3);
 }
 .modal-icon svg {
 	width: 1.5rem;
@@ -1574,7 +1598,7 @@ html {
 	position: fixed;
 	inset: 0;
 	z-index: 50;
-	background: linear-gradient(135deg, rgba(15, 23, 42, 0.45), rgba(10, 20, 16, 0.6));
+	background: linear-gradient(135deg, rgba(15, 23, 42, 0.45), rgba(20, 83, 45, 0.6));
 	backdrop-filter: blur(8px) saturate(120%);
 	-webkit-backdrop-filter: blur(8px) saturate(120%);
 	display: flex;
@@ -1620,13 +1644,13 @@ html {
 	transition: all 0.2s var(--ease-apple);
 }
 .modal-select-card:hover {
-	border-color: rgba(249, 115, 22, 0.3);
-	background-color: rgba(249, 115, 22, 0.04);
+	border-color: rgba(234, 88, 12, 0.3);
+	background-color: rgba(234, 88, 12, 0.04);
 }
 .modal-select-card.selected {
-	background-color: rgba(249, 115, 22, 0.06);
+	background-color: rgba(234, 88, 12, 0.06);
 	border-color: var(--emerald-500);
-	box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.08);
+	box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.08);
 }
 .modal-select-card:disabled {
 	opacity: 0.5;
@@ -1938,8 +1962,8 @@ html {
 	--au-surface: #ffffff;
 	--au-dark: #14532d;
 	--au-dark-2: #166534;
-	--au-primary: #ea580c;
-	--au-primary-strong: #c2410c;
+	--au-primary: #c2410c;
+	--au-primary-strong: #9a3412;
 	--au-primary-rgb: 234, 88, 12;
 	--au-tint: #ffedd5;
 	--au-eyebrow: #fdba74;

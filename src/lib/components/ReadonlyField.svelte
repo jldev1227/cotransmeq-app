@@ -12,7 +12,7 @@
 
 <div
 	class="readonly-field flex min-h-[42px] items-center gap-2.5 rounded-xl px-3 py-2"
-	style="background: rgba(249, 115, 22, 0.04); border: 1px solid rgba(249, 115, 22, 0.14);"
+	style="background: rgba(234, 88, 12, 0.04); border: 1px solid rgba(234, 88, 12, 0.14);"
 >
 	{#if icon}
 		<svg

@@ -167,11 +167,11 @@
 		align-items: center;
 		gap: 0.375rem;
 		font-size: 0.75rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.migas a {
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		text-decoration: none;
 	}
 
@@ -201,7 +201,7 @@
 		font: inherit;
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 		background: none;
 		border: none;
 		border-radius: 999px;
@@ -210,7 +210,7 @@
 
 	.ancho--on {
 		background: #fff;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		font-weight: 700;
 		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 	}
@@ -224,13 +224,13 @@
 		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
 		border-radius: 10px;
 		font-size: 0.8125rem;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 	}
 
 	.metrica--nota {
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.lienzo {
@@ -248,7 +248,7 @@
 	   propósito — si algo desborda a 320 px hay que verlo, no taparlo. */
 	.marco--acotado {
 		padding: 0.75rem;
-		background: var(--bg-base, #faf7f2);
+		background: var(--bg-base, #fcfcfb);
 		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
 		border-radius: 20px;
 		box-shadow: var(--shadow-card, 0 4px 24px rgba(0, 0, 0, 0.04));
@@ -268,7 +268,7 @@
 		font: inherit;
 		font-size: 0.875rem;
 		font-weight: 500;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		background: #fff;
 		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
 		border-radius: 10px;
@@ -278,21 +278,21 @@
 
 	.btn--primario {
 		color: #fff;
-		background: var(--emerald-600, #059669);
-		border-color: var(--emerald-600, #059669);
+		background: var(--emerald-600, #15803d);
+		border-color: var(--emerald-600, #15803d);
 		font-weight: 600;
 	}
 
 	.btn:focus-visible,
 	.ancho:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 2px;
 	}
 
 	.estado {
 		padding: 2.5rem 1rem;
 		text-align: center;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.estado--error {
@@ -305,6 +305,6 @@
 		font-size: 0.75rem;
 		line-height: 1.45;
 		text-align: center;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 </style>

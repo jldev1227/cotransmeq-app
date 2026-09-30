@@ -39,7 +39,7 @@
 	const tipoColors: Record<string, { bg: string; color: string }> = {
 		CORRECTIVA: { bg: '#fef3c7', color: '#92400e' },
 		PREVENTIVA: { bg: '#ede9fe', color: '#5b21b6' },
-		MEJORA: { bg: '#d1fae5', color: '#166534' }
+		MEJORA: { bg: '#dcfce7', color: '#166534' }
 	};
 	$: tipoStyle = tipoColors[accion.tipo_accion_ejecutar || ''] ?? { bg: '#f3f4f6', color: '#374151' };
 
@@ -262,22 +262,22 @@
 		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 	}
 	.card:hover {
-		border-color: rgba(249, 115, 22, 0.3);
+		border-color: rgba(234, 88, 12, 0.3);
 		transform: translateY(-2px);
-		box-shadow: 0 8px 24px rgba(249, 115, 22, 0.1);
+		box-shadow: 0 8px 24px rgba(234, 88, 12, 0.1);
 	}
 	.card-vencida { border-color: rgba(239, 68, 68, 0.25); }
 	.card-vencida:hover { border-color: rgba(239, 68, 68, 0.5); box-shadow: 0 8px 24px rgba(239, 68, 68, 0.1); }
 
 	.card-highlight {
 		border-color: var(--accent);
-		box-shadow: 0 0 0 3px var(--accent-ring), 0 8px 24px rgba(249, 115, 22, 0.15);
+		box-shadow: 0 0 0 3px var(--accent-ring), 0 8px 24px rgba(234, 88, 12, 0.15);
 		animation: cardPulse 2.5s ease-out;
 	}
 	@keyframes cardPulse {
 		0% { box-shadow: 0 0 0 0 var(--accent-ring), 0 0 0 0 var(--accent-ring); }
 		40% { box-shadow: 0 0 0 6px var(--accent-ring), 0 0 12px var(--accent-ring); }
-		100% { box-shadow: 0 0 0 3px var(--accent-ring), 0 8px 24px rgba(249, 115, 22, 0.15); }
+		100% { box-shadow: 0 0 0 3px var(--accent-ring), 0 8px 24px rgba(234, 88, 12, 0.15); }
 	}
 
 	.card-deleted {
@@ -292,7 +292,7 @@
 	}
 
 	.badge-deleted {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.65rem;
 		font-weight: 700;
 		padding: 0.2rem 0.55rem;
@@ -307,7 +307,7 @@
 	.card-head { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 	.head-left { display: flex; align-items: center; gap: 0.5rem; }
 	.accion-num {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.78rem;
 		font-weight: 700;
 		color: var(--text-primary);
@@ -317,7 +317,7 @@
 
 	.tags { display: flex; flex-wrap: wrap; gap: 0.3rem; }
 	.tag {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.62rem;
 		font-weight: 700;
 		padding: 0.15rem 0.5rem;
@@ -375,7 +375,7 @@
 	}
 	.deleted-date { font-style: italic; color: #b91c1c; font-size: 0.7rem; }
 	.urgente-label {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.6rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -401,7 +401,7 @@
 		color: var(--text-secondary);
 	}
 	.revision-tag {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.58rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -475,7 +475,7 @@
 		align-items: center;
 		justify-content: center;
 		flex-shrink: 0;
-		box-shadow: 0 1px 3px rgba(249, 115, 22, 0.3);
+		box-shadow: 0 1px 3px rgba(234, 88, 12, 0.3);
 	}
 	.avatar-sm {
 		width: 16px;
@@ -498,8 +498,8 @@
 		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 	}
 	.act-btn:hover {
-		border-color: rgba(249, 115, 22, 0.3);
-		background: rgba(249, 115, 22, 0.06);
+		border-color: rgba(234, 88, 12, 0.3);
+		background: rgba(234, 88, 12, 0.06);
 		color: var(--accent-hover);
 	}
 	.act-btn:active { transform: scale(0.92); }

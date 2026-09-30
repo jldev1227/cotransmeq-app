@@ -254,7 +254,7 @@
 	const getEstadoColor = (estado: string) => {
 		switch (estado?.toUpperCase()) {
 			case 'ACTIVO':
-				return '#10b981'; // emerald-500
+				return '#16a34a'; // emerald-500
 			case 'INACTIVO':
 				return '#6b7280'; // gray-500
 			case 'VACACIONES':
@@ -594,7 +594,7 @@
 			<div class="flex items-center gap-3">
 				<div
 					class="brand-gradient flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
-					style="box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);"
+					style="box-shadow: 0 4px 16px rgba(22, 163, 74, 0.3);"
 				>
 					<svg
 						class="h-5 w-5 text-white"
@@ -612,7 +612,7 @@
 				</div>
 				<div>
 					<div class="flex items-center gap-2">
-						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 400;">
+						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 800;">
 							Gestión de Conductores
 						</h1>
 						<!-- Aquí había un chip «En vivo» pintado a mano, sin mirar el socket:
@@ -746,7 +746,7 @@
 						: 'var(--border-default)'}; color: {mostrarFiltros
 						? 'var(--emerald-700)'
 						: 'var(--text-secondary)'}; background-color: {mostrarFiltros
-						? 'rgba(16,185,129,0.04)'
+						? 'rgba(22, 163, 74,0.04)'
 						: 'white'};"
 				>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
@@ -894,7 +894,7 @@
 						</div>
 						<div
 							class="flex h-7 w-7 items-center justify-center rounded-lg"
-							style="background: linear-gradient(135deg, #6b6b6b, #4a4a4a);"
+							style="background: linear-gradient(135deg, #64748b, #334155);"
 						>
 							<svg
 								class="h-3.5 w-3.5 text-white"
@@ -919,7 +919,7 @@
 					style="border-color: {filtros.estado === 'ACTIVO'
 						? 'var(--emerald-500)'
 						: 'var(--border-subtle)'}; background-color: {filtros.estado === 'ACTIVO'
-						? 'rgba(16,185,129,0.04)'
+						? 'rgba(22, 163, 74,0.04)'
 						: 'var(--bg-surface)'};"
 				>
 					<div class="flex items-center justify-between">
@@ -952,7 +952,7 @@
 					onclick={() => ponerFiltro('estado', 'INACTIVO')}
 					class="stat-card apple-transition text-left"
 					style="border-color: {filtros.estado === 'INACTIVO'
-						? '#6b6b6b'
+						? '#64748b'
 						: 'var(--border-subtle)'}; background-color: {filtros.estado === 'INACTIVO'
 						? 'rgba(107,107,107,0.04)'
 						: 'var(--bg-surface)'};"
@@ -960,11 +960,11 @@
 					<div class="flex items-center justify-between">
 						<div>
 							<p class="stat-label">Inactivos</p>
-							<p class="stat-value" style="color: #6b6b6b;">{stats.inactivos}</p>
+							<p class="stat-value" style="color: #64748b;">{stats.inactivos}</p>
 						</div>
 						<div
 							class="flex h-7 w-7 items-center justify-center rounded-lg"
-							style="background-color: #6b6b6b;"
+							style="background-color: #64748b;"
 						>
 							<svg
 								class="h-3.5 w-3.5 text-white"
@@ -1144,7 +1144,7 @@
 								class="list-card"
 								style="border-left: 4px solid {getEstadoColor(conductor.estado)};
 								background-color: {conductoresSeleccionados.has(conductor.id)
-									? 'rgba(16, 185, 129, 0.04)'
+									? 'rgba(22, 163, 74, 0.04)'
 									: 'var(--bg-surface)'};
 								border-color: {conductoresSeleccionados.has(conductor.id)
 									? 'var(--emerald-500)'
@@ -1272,7 +1272,7 @@
 									<button
 										onclick={() => goto(`/dashboard/conductores/${conductor.id}`)}
 										class="apple-transition rounded-md p-1.5"
-										style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
+										style="color: var(--emerald-600); background-color: rgba(22, 163, 74, 0.06);"
 										title="Ver detalle"
 									>
 										<svg
@@ -1303,7 +1303,7 @@
 													ejecutarAccionMasiva('mostrar');
 												}}
 												class="apple-transition rounded-md p-1.5"
-												style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
+												style="color: var(--emerald-600); background-color: rgba(22, 163, 74, 0.06);"
 												title="Mostrar"
 											>
 												<svg
@@ -1335,7 +1335,7 @@
 													ejecutarAccionMasiva('restaurar');
 												}}
 												class="apple-transition rounded-md p-1.5"
-												style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
+												style="color: var(--emerald-600); background-color: rgba(22, 163, 74, 0.06);"
 												title="Restaurar"
 											>
 												<svg
@@ -1570,7 +1570,7 @@
 		<button
 			type="button"
 			class="fixed inset-0 z-[100] cursor-default border-0 p-0"
-			style="background: linear-gradient(135deg, rgba(15, 31, 26, 0.40), rgba(10, 20, 16, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
+			style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.40), rgba(20, 83, 45, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
 			aria-label="Cerrar modal"
 			onclick={cerrarModalEliminar}
 		></button>
@@ -1888,7 +1888,7 @@
 		box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
 	}
 	.emerald-glow:hover {
-		box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
+		box-shadow: 0 0 15px rgba(22, 163, 74, 0.4);
 	}
 
 	.bulk-actions-container {

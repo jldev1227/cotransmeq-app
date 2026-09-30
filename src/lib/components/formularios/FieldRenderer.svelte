@@ -388,7 +388,7 @@
 	.campo__label {
 		font-size: 0.9375rem;
 		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		line-height: 1.35;
 	}
 
@@ -399,7 +399,7 @@
 
 	.campo__ayuda {
 		font-size: 0.8125rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 		line-height: 1.4;
 	}
 
@@ -421,7 +421,7 @@
 		padding: 0.5rem 0.75rem;
 		font: inherit;
 		font-size: 0.9375rem;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		background: #fff;
 		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
 		border-radius: 10px;
@@ -430,13 +430,13 @@
 
 	.control:focus-visible {
 		outline: none;
-		border-color: var(--emerald-600, #059669);
-		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+		border-color: var(--emerald-600, #15803d);
+		box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
 	}
 
 	.control:disabled {
 		background: var(--gray-50, #f9fafb);
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.control--area {
@@ -469,8 +469,8 @@
 	}
 
 	.segmentado__btn--activo {
-		background: var(--emerald-600, #059669);
-		border-color: var(--emerald-600, #059669);
+		background: var(--emerald-600, #15803d);
+		border-color: var(--emerald-600, #15803d);
 		color: #fff;
 	}
 
@@ -499,7 +499,7 @@
 
 	.chip--emerald.chip--activo {
 		background: #fff7ed;
-		border-color: #ea580c;
+		border-color: #c2410c;
 		color: #9a3412;
 	}
 
@@ -525,14 +525,14 @@
 	.chip:focus-visible,
 	.segmentado__btn:focus-visible,
 	.btn-secundario:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 2px;
 	}
 
 	.info {
 		padding: 0.75rem 0.875rem;
 		background: #fff7ed;
-		border-left: 3px solid var(--emerald-600, #059669);
+		border-left: 3px solid var(--emerald-600, #15803d);
 		border-radius: 8px;
 	}
 
@@ -545,7 +545,7 @@
 	.info__cuerpo {
 		margin-top: 0.25rem;
 		font-size: 0.8438rem;
-		color: #c2410c;
+		color: #9a3412;
 		line-height: 1.5;
 	}
 
@@ -578,7 +578,7 @@
 	.evidencia__nombre {
 		font-family: var(--font-mono, monospace);
 		font-size: 0.75rem;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 	}
 
 	.evidencia__quitar {
@@ -596,7 +596,7 @@
 	.evidencia__hint,
 	.lookup__vacio {
 		font-size: 0.8125rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 		font-style: italic;
 	}
 
@@ -607,7 +607,7 @@
 		font: inherit;
 		font-size: 0.875rem;
 		font-weight: 500;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		background: #fff7ed;
 		border: 1px solid #fed7aa;
 		border-radius: 10px;
@@ -618,12 +618,12 @@
 	.lookup__valor {
 		font-family: var(--font-mono, monospace);
 		font-size: 0.8125rem;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 	}
 
 	.ubicacion__precision {
 		margin-left: 0.375rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.ubicacion__error {

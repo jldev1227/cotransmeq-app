@@ -942,20 +942,20 @@
 	.hero-text .eyebrow {
 		align-self: flex-start;
 		display: inline-block;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.7rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #f97316;
+		color: #ea580c;
 		background: #ffedd5;
 		padding: 0.3rem 0.75rem;
 		border-radius: 6px;
 	}
 	.hero-text h1 {
-		font-family: 'Fraunces', Georgia, serif;
+		font-family: var(--font-display);
 		font-size: clamp(1.4rem, 3vw, 1.9rem);
-		font-weight: 500;
+		font-weight: 800;
 		line-height: 1.2;
 		letter-spacing: -0.01em;
 		color: #111827;
@@ -969,7 +969,7 @@
 	   parecía ni a su propia lista. */
 	.pagina {
 		min-height: 100vh;
-		background: #faf7f2;
+		background: #fcfcfb;
 		font-family: 'Inter Tight', system-ui, sans-serif;
 		padding: 1.5rem 1.25rem 3rem;
 		display: flex;
@@ -984,7 +984,7 @@
 		flex-wrap: wrap;
 		gap: 0.4rem;
 		margin-top: 0.35rem;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 	.stat-item {
 		display: inline-flex;

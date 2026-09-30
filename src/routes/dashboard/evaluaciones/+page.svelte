@@ -387,12 +387,12 @@
 		--text-primary: #111827;
 		--text-secondary: #4b5563;
 		--text-muted: #6b7280;
-		--accent: #f97316;
-		--accent-hover: #ea580c;
+		--accent: #ea580c;
+		--accent-hover: #c2410c;
 		--accent-bg: #ffedd5;
 
 		min-height: 100vh;
-		background: #faf7f2;
+		background: #fcfcfb;
 		font-family: 'Inter Tight', system-ui, sans-serif;
 		color: var(--text-primary);
 		padding: 1.5rem 1.25rem 3rem;
@@ -436,7 +436,7 @@
 		align-items: center;
 		justify-content: center;
 		color: #fff;
-		box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
+		box-shadow: 0 4px 16px rgba(22, 163, 74, 0.3);
 	}
 	.hero-icon svg {
 		width: 24px;
@@ -454,7 +454,7 @@
 	.hero-text .eyebrow {
 		align-self: flex-start;
 		display: inline-block;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.7rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -465,9 +465,9 @@
 		border-radius: 6px;
 	}
 	.hero-text h1 {
-		font-family: 'Fraunces', Georgia, serif;
+		font-family: var(--font-display);
 		font-size: clamp(1.6rem, 3.5vw, 2.1rem);
-		font-weight: 500;
+		font-weight: 800;
 		line-height: 1.15;
 		letter-spacing: -0.01em;
 		color: var(--text-primary);
@@ -491,7 +491,7 @@
 		display: flex;
 		flex-wrap: wrap;
 		gap: 0.4rem;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 	.stat-item {
 		display: inline-flex;
@@ -564,7 +564,7 @@
 		margin-left: auto;
 	}
 	.filtros-conteo {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.72rem;
 		font-weight: 600;
 		text-transform: uppercase;
@@ -688,7 +688,7 @@
 	.chip-blue { background: #dbeafe; color: #1d4ed8; }
 	.chip-purple { background: #ede9fe; color: #6d28d9; }
 	.chip-green { background: #dcfce7; color: #15803d; }
-	.chip-orange { background: #ffedd5; color: #c2410c; }
+	.chip-orange { background: #ffedd5; color: #9a3412; }
 	.chip-pink { background: #fce7f3; color: #be185d; }
 	.chip-teal { background: #ccfbf1; color: #0f766e; }
 	.chip-gray { background: #f3f4f6; color: #4b5563; }
@@ -702,7 +702,7 @@
 		border-radius: 6px;
 		background: var(--accent-bg);
 		color: var(--accent-hover);
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.75rem;
 		font-weight: 700;
 	}
@@ -763,6 +763,6 @@
 		color: var(--text-muted);
 	}
 	.mono {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 </style>

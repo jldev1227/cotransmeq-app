@@ -112,7 +112,7 @@
 	<!-- Backdrop -->
 	<div
 		class="fixed inset-0 z-50 flex items-center justify-center p-4"
-		style="background-color: rgba(15, 31, 26, 0.55); backdrop-filter: blur(8px);"
+		style="background-color: rgba(15, 23, 42, 0.55); backdrop-filter: blur(8px);"
 		on:click={handleBackdropClick}
 		on:keydown={(e) => e.key === 'Escape' && handleClose()}
 		transition:fade={{ duration: 220 }}
@@ -440,7 +440,7 @@
 			'Segoe UI',
 			sans-serif;
 		border-radius: 24px;
-		box-shadow: 0 20px 60px rgba(15, 31, 26, 0.25);
+		box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
 		max-height: 90vh;
 		display: flex;
 		flex-direction: column;
@@ -475,11 +475,11 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #f97316;
-		background: rgba(249, 115, 22, 0.08);
+		color: #ea580c;
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0.25rem 0.6rem;
 		border-radius: 5px;
-		font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+		font-family: var(--font-sans);
 	}
 
 	.ticket-actions {
@@ -496,16 +496,16 @@
 		width: 36px;
 		height: 36px;
 		border-radius: 10px;
-		background: #faf7f2;
-		color: #4a4a4a;
+		background: #fcfcfb;
+		color: #334155;
 		border: 1px solid rgba(0, 0, 0, 0.08);
 		cursor: pointer;
 		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 	}
 	.ticket-icon-btn:hover:not(:disabled) {
 		background: white;
-		border-color: rgba(249, 115, 22, 0.3);
-		color: #ea580c;
+		border-color: rgba(234, 88, 12, 0.3);
+		color: #c2410c;
 		transform: translateY(-1px);
 	}
 	.ticket-icon-btn:disabled {
@@ -515,7 +515,7 @@
 
 	/* ─── Body ─── */
 	.ticket-body {
-		background: #faf7f2;
+		background: #fcfcfb;
 		padding: 1.5rem;
 		overflow-y: auto;
 		flex: 1;
@@ -536,7 +536,7 @@
 		gap: 0.4rem;
 		font-size: 0.72rem;
 		font-weight: 600;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
 		padding: 0.3rem 0.7rem;
@@ -595,25 +595,25 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
-		color: #6b6b6b;
-		font-family: 'JetBrains Mono', monospace;
+		color: #64748b;
+		font-family: var(--font-sans);
 	}
 
 	.ticket-section-value {
 		font-size: 0.88rem;
 		font-weight: 600;
-		color: #0f1f1a;
+		color: #0f172a;
 		line-height: 1.3;
 	}
 
 	.ticket-section-meta {
 		font-size: 0.74rem;
-		color: #6b6b6b;
+		color: #64748b;
 		line-height: 1.3;
 	}
 
 	.ticket-placa {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		letter-spacing: 0.08em;
 	}
 
@@ -640,7 +640,7 @@
 		align-items: center;
 		justify-content: center;
 		flex-shrink: 0;
-		color: #f97316;
+		color: #ea580c;
 		opacity: 0.7;
 	}
 	.ticket-route-eyebrow {
@@ -649,14 +649,14 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
-		color: #6b6b6b;
-		font-family: 'JetBrains Mono', monospace;
+		color: #64748b;
+		font-family: var(--font-sans);
 		margin-bottom: 0.1rem;
 	}
 	.ticket-route-city {
 		font-size: 0.88rem;
 		font-weight: 600;
-		color: #0f1f1a;
+		color: #0f172a;
 		margin: 0;
 		white-space: nowrap;
 		overflow: hidden;
@@ -676,10 +676,10 @@
 		flex-shrink: 0;
 		border: 2px solid white;
 		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 	.ticket-pin--a {
-		background: #ea580c;
+		background: #c2410c;
 	}
 	.ticket-pin--b {
 		background: #dc2626;
@@ -733,19 +733,19 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
-		color: #6b6b6b;
-		font-family: 'JetBrains Mono', monospace;
+		color: #64748b;
+		font-family: var(--font-sans);
 		margin: 0 0 0.15rem;
 	}
 	.ticket-info-val {
 		font-size: 0.85rem;
 		font-weight: 500;
-		color: #0f1f1a;
+		color: #0f172a;
 		margin: 0;
 	}
 	.ticket-info-val--soft {
 		font-weight: 400;
-		color: #4a4a4a;
+		color: #334155;
 	}
 
 	/* ─── Foto del conductor (cols 3-5) ─── */
@@ -773,7 +773,7 @@
 		min-height: 140px;
 		border-radius: 12px;
 		overflow: hidden;
-		background: linear-gradient(135deg, #f0ede6, #e8e2d4);
+		background: linear-gradient(135deg, #ffffff, #e8e2d4);
 	}
 	.ticket-photo-frame img {
 		width: 100%;
@@ -790,13 +790,13 @@
 	.ticket-photo-name {
 		font-size: 0.95rem;
 		font-weight: 600;
-		color: #0f1f1a;
+		color: #0f172a;
 		margin: 0.15rem 0 0;
 		line-height: 1.2;
 	}
 	.ticket-photo-meta {
 		font-size: 0.74rem;
-		color: #6b6b6b;
+		color: #64748b;
 		margin: 0;
 		line-height: 1.3;
 	}
@@ -807,16 +807,17 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 1rem;
-		background: linear-gradient(135deg, rgba(249, 115, 22, 0.04), rgba(249, 115, 22, 0.10));
-		border: 1px solid rgba(249, 115, 22, 0.20);
+		background: linear-gradient(135deg, rgba(234, 88, 12, 0.04), rgba(234, 88, 12, 0.10));
+		border: 1px solid rgba(234, 88, 12, 0.20);
 		border-radius: 16px;
 		padding: 0.7rem 1rem;
 	}
 	.ticket-total-amount {
-		font-family: 'Fraunces', Georgia, serif;
-		font-weight: 500;
+		font-family: var(--font-display);
+		letter-spacing: -0.02em;
+		font-weight: 800;
 		font-size: 1.35rem;
-		color: #065f46;
+		color: #14532d;
 		margin: 0.15rem 0 0;
 		line-height: 1.1;
 	}
@@ -828,11 +829,11 @@
 		border-top: 1px solid rgba(0, 0, 0, 0.06);
 		text-align: center;
 		font-size: 0.72rem;
-		color: #9a9a9a;
+		color: #94a3b8;
 	}
 	.ticket-footer-mono {
-		font-family: 'JetBrains Mono', monospace;
-		color: #f97316;
+		font-family: var(--font-sans);
+		color: #ea580c;
 	}
 
 	/* ─── Estilos del elemento de captura (sistema landing aplicado) ─── */
@@ -843,9 +844,9 @@
 		top: -9999px;
 		left: -9999px;
 		width: 480px;
-		background: #faf7f2;
+		background: #fcfcfb;
 		font-family: 'Inter Tight', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-		color: #0f1f1a;
+		color: #0f172a;
 	}
 
 	.ticket-capture-inner {
@@ -858,7 +859,7 @@
 
 	/* Header emerald */
 	.ticket-capture-header {
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		padding: 1.1rem 1.25rem;
 		display: flex;
 		align-items: center;
@@ -890,12 +891,13 @@
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
 		color: rgba(255, 255, 255, 0.85);
-		font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+		font-family: var(--font-sans);
 	}
 
 	.ticket-capture-title {
-		font-family: 'Fraunces', Georgia, serif;
-		font-weight: 500;
+		font-family: var(--font-display);
+		letter-spacing: -0.02em;
+		font-weight: 800;
 		font-size: 1.05rem;
 		color: #ffffff;
 		line-height: 1.2;
@@ -904,7 +906,7 @@
 	/* Body */
 	.ticket-capture-body {
 		padding: 1.1rem 1.25rem;
-		background: #faf7f2;
+		background: #fcfcfb;
 		display: flex;
 		flex-direction: column;
 		gap: 0.6rem;
@@ -923,29 +925,29 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #6b6b6b;
-		font-family: 'JetBrains Mono', monospace;
+		color: #64748b;
+		font-family: var(--font-sans);
 		margin-bottom: 0.4rem;
 	}
 
 	.ticket-capture-name {
 		font-size: 0.95rem;
 		font-weight: 600;
-		color: #0f1f1a;
+		color: #0f172a;
 		line-height: 1.2;
 	}
 
 	.ticket-capture-meta {
 		font-size: 0.72rem;
-		color: #6b6b6b;
+		color: #64748b;
 		margin-top: 0.1rem;
 	}
 
 	.ticket-capture-placa {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		font-size: 0.95rem;
-		color: #0f1f1a;
+		color: #0f172a;
 		letter-spacing: 0.08em;
 	}
 
@@ -967,7 +969,7 @@
 		align-items: center;
 		justify-content: center;
 		flex-shrink: 0;
-		color: #f97316;
+		color: #ea580c;
 		opacity: 0.75;
 		padding-top: 0.5rem;
 	}
@@ -976,13 +978,13 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
-		color: #6b6b6b;
-		font-family: 'JetBrains Mono', monospace;
+		color: #64748b;
+		font-family: var(--font-sans);
 	}
 	.ticket-capture-route-city {
 		font-size: 0.82rem;
 		font-weight: 600;
-		color: #0f1f1a;
+		color: #0f172a;
 		margin-top: 0.1rem;
 		word-break: break-word;
 	}
@@ -1000,10 +1002,10 @@
 		flex-shrink: 0;
 		border: 2px solid #ffffff;
 		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 	.ticket-capture-pin--a {
-		background: #ea580c;
+		background: #c2410c;
 	}
 	.ticket-capture-pin--b {
 		background: #dc2626;
@@ -1018,11 +1020,11 @@
 		align-items: center;
 		justify-content: space-between;
 		font-size: 0.68rem;
-		color: #9a9a9a;
+		color: #94a3b8;
 	}
 	.ticket-capture-footer-mono {
-		font-family: 'JetBrains Mono', monospace;
-		color: #f97316;
+		font-family: var(--font-sans);
+		color: #ea580c;
 		font-weight: 700;
 	}
 </style>

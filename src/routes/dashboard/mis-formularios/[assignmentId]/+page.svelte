@@ -693,7 +693,7 @@
 		place-items: center;
 		flex-shrink: 0;
 		font-size: 1.125rem;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 		background: var(--bg-surface, #fff);
 		border: 1px solid var(--border, #e2e8f0);
 		border-radius: 10px;
@@ -711,7 +711,7 @@
 		font-family: var(--font-mono, monospace);
 		font-size: 0.65rem;
 		font-weight: 700;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 	}
 
 	.barra__titulo {
@@ -818,7 +818,7 @@
 	.pie__relleno {
 		display: block;
 		height: 100%;
-		background: var(--emerald-600, #059669);
+		background: var(--emerald-600, #15803d);
 	}
 
 	.pie__texto {
@@ -848,8 +848,8 @@
 
 	.btn--primario {
 		color: #fff;
-		background: var(--emerald-600, #059669);
-		border-color: var(--emerald-600, #059669);
+		background: var(--emerald-600, #15803d);
+		border-color: var(--emerald-600, #15803d);
 	}
 
 	.btn:disabled {

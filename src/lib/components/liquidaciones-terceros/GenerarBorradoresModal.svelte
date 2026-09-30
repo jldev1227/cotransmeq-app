@@ -923,9 +923,9 @@
 		margin-bottom: 8px;
 	}
 	.gbm-buscador:focus {
-		outline: 2px solid #ea580c;
+		outline: 2px solid #c2410c;
 		outline-offset: -1px;
-		border-color: #ea580c;
+		border-color: #c2410c;
 	}
 	.gbm-lista li + li {
 		border-top: 1px solid #f1f5f9;
@@ -992,9 +992,9 @@
 		cursor: pointer;
 	}
 	.gbm-periodo-filtros select:focus {
-		outline: 2px solid #ea580c;
+		outline: 2px solid #c2410c;
 		outline-offset: -1px;
-		border-color: #ea580c;
+		border-color: #c2410c;
 	}
 	.gbm-periodo-atajo {
 		border: 1px solid #cbd5e1;
@@ -1026,9 +1026,9 @@
 	/* El periodo del canvas se distingue de un vistazo: la lista ya no es
 	   toda del mismo mes. */
 	.gbm-periodo-badge-canvas {
-		background: #ea580c;
+		background: #c2410c;
 		color: #fff;
-		border-color: #ea580c;
+		border-color: #c2410c;
 	}
 
 	.gbm-nota-mezcla {
@@ -1115,7 +1115,7 @@
 		width: 13px;
 		height: 13px;
 		border: 2px solid #cbd5e1;
-		border-top-color: #ea580c;
+		border-top-color: #c2410c;
 		border-radius: 50%;
 		animation: gbm-gira 0.7s linear infinite;
 		flex: none;
@@ -1177,7 +1177,7 @@
 	}
 	.gbm-barra-fill {
 		height: 100%;
-		background: #ea580c;
+		background: #c2410c;
 		transition: width 0.25s ease;
 	}
 	.gbm-pct {
@@ -1224,7 +1224,7 @@
 		color: #334155;
 	}
 	.gbm-btn-primary {
-		background: #ea580c;
+		background: #c2410c;
 		color: #fff;
 	}
 	.gbm-btn-ghost:disabled,

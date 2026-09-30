@@ -1540,7 +1540,7 @@
 	<button
 		type="button"
 		class="fixed inset-0 z-[60] cursor-default border-0 p-0"
-		style="background: linear-gradient(135deg, rgba(15, 31, 26, 0.40), rgba(10, 20, 16, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
+		style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.40), rgba(20, 83, 45, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
 		aria-label="Cerrar modal"
 		on:click={handleClose}
 		transition:fade={{ duration: 200 }}
@@ -1564,9 +1564,9 @@
 							class="flex h-12 w-12 items-center justify-center rounded-xl"
 							style="background: linear-gradient(135deg, {editMode
 								? '#3b82f6, #2563eb'
-								: '#10b981, #059669'}); box-shadow: 0 6px 16px {editMode
+								: '#16a34a, #15803d'}); box-shadow: 0 6px 16px {editMode
 								? 'rgba(59, 130, 246, 0.30)'
-								: 'rgba(16, 185, 129, 0.30)'};"
+								: 'rgba(22, 163, 74, 0.30)'};"
 						>
 							<svg
 								class="h-6 w-6 text-white"
@@ -1591,14 +1591,14 @@
 								class="font-mono-meta mb-1 inline-block rounded-md px-2 py-0.5 text-[10px]"
 								style="color: {editMode ? '#2563eb' : 'var(--emerald-500)'}; background: {editMode
 									? 'rgba(59, 130, 246, 0.08)'
-									: 'rgba(16, 185, 129, 0.08)'}; letter-spacing: 0.12em;"
+									: 'rgba(22, 163, 74, 0.08)'}; letter-spacing: 0.12em;"
 							>
 								{getNombreMes(currentMonth)}
 								{currentYear}
 							</p>
 							<h2
 								class="font-display text-2xl"
-								style="color: var(--bg-charcoal); font-weight: 500;"
+								style="color: var(--bg-charcoal); font-weight: 800;"
 							>
 								{editMode ? 'Editar Recargo' : 'Nuevo Recargo'}
 							</h2>
@@ -1644,7 +1644,7 @@
 									style="width: {(progress.completed / progress.total) *
 										100}%; background: linear-gradient(90deg, {editMode
 										? '#3b82f6, #2563eb'
-										: '#10b981, #059669'});"
+										: '#16a34a, #15803d'});"
 								></div>
 							</div>
 						</div>

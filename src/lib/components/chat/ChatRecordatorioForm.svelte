@@ -203,7 +203,7 @@
 			<div>
 				<span class="mb-1.5 block text-xs font-medium text-gray-700">Prioridad</span>
 				<div class="flex gap-2">
-					{#each [{ key: 'BAJA', bg: '#f3f4f6', fg: '#6b7280', border: '#d1d5db' }, { key: 'MEDIA', bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe' }, { key: 'ALTA', bg: '#fff7ed', fg: '#c2410c', border: '#fed7aa' }] as p}
+					{#each [{ key: 'BAJA', bg: '#f3f4f6', fg: '#6b7280', border: '#d1d5db' }, { key: 'MEDIA', bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe' }, { key: 'ALTA', bg: '#fff7ed', fg: '#9a3412', border: '#fed7aa' }] as p}
 						<button
 							onclick={() => (prioridad = p.key as any)}
 							class="rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors {prioridad ===

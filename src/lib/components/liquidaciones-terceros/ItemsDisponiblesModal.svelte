@@ -453,7 +453,7 @@
 	   casillas. La barra de la izquierda sí se lee en diagonal. */
 	.idm-tabla tbody tr.idm-on {
 		background: #f0fdf4;
-		box-shadow: inset 3px 0 0 #ea580c;
+		box-shadow: inset 3px 0 0 #c2410c;
 	}
 	.idm-check {
 		width: 30px;
@@ -558,7 +558,7 @@
 		border: none;
 		border-radius: 7px;
 		padding: 8px 14px;
-		background: #ea580c;
+		background: #c2410c;
 		color: #fff;
 		font-size: 12.5px;
 		font-weight: 700;

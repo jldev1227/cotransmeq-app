@@ -415,9 +415,9 @@
 					class="apple-transition group relative flex w-full cursor-pointer items-center overflow-hidden rounded-xl py-2.5
 						{isCollapsed ? 'justify-center px-2' : 'px-3'}
 						{activeSection === item.id ? 'text-white' : 'hover:bg-white/5'}"
-					style="color: {activeSection === item.id ? '#ffffff' : 'rgba(240,237,230,0.65)'};
-						background-color: {activeSection === item.id ? 'rgba(249,115,22,0.18)' : 'transparent'};
-						border: 1px solid {activeSection === item.id ? 'rgba(249,115,22,0.35)' : 'transparent'};"
+					style="color: {activeSection === item.id ? '#ffffff' : 'rgba(255, 255, 255,0.65)'};
+						background-color: {activeSection === item.id ? 'rgba(255,255,255,0.14)' : 'transparent'};
+						border: 1px solid {activeSection === item.id ? 'rgba(255,255,255,0.28)' : 'transparent'};"
 					on:click={() => handleMenuClick(item)}
 					in:fly={{ x: -30, duration: 400, delay: index * 50 + 300 }}
 					title={isCollapsed ? item.label : undefined}
@@ -458,7 +458,7 @@
 		<div class="flex-shrink-0 p-4" style="border-top: 1px solid rgba(255,255,255,0.06);">
 			<button
 				class="apple-transition group flex w-full items-center justify-center rounded-xl px-3 py-2.5"
-				style="color: rgba(240,237,230,0.65);"
+				style="color: rgba(255, 255, 255,0.65);"
 				on:click={() => dispatch('toggleCollapse')}
 				title={isCollapsed ? 'Expandir menú' : 'Contraer menú'}
 				aria-label={isCollapsed ? 'Expandir menú' : 'Contraer menú'}
@@ -502,7 +502,7 @@
 				<div class="flex items-center space-x-3">
 					<div
 						class="flex h-10 w-10 flex-shrink-0 items-center justify-center overflow-hidden rounded-xl"
-						style="box-shadow: 0 4px 16px rgba(249, 115, 22, 0.35); background-color: #0f172a;"
+						style="box-shadow: 0 4px 16px rgba(20, 83, 45, 0.45); background-color: #0f172a;"
 					>
 						<img
 							src="/favicon-32x32.png"
@@ -513,16 +513,16 @@
 						/>
 					</div>
 					<div class="min-w-0">
-						<h2 class="truncate font-display text-lg text-white" style="font-weight: 400;">
+						<h2 class="truncate font-display text-lg text-white" style="font-weight: 800;">
 							Cotransmeq
 						</h2>
-						<p class="text-xs" style="color: rgba(249,115,22,0.7);">Sistema de Gestión</p>
+						<p class="text-xs" style="color: rgba(253,186,116,0.9);">Sistema de Gestión</p>
 					</div>
 				</div>
 				<button
 					type="button"
 					class="apple-transition flex h-8 w-8 items-center justify-center rounded-lg"
-					style="color: rgba(240,237,230,0.65);"
+					style="color: rgba(255, 255, 255,0.65);"
 					on:click={closeDrawer}
 					aria-label="Cerrar menú"
 				>
@@ -535,9 +535,9 @@
 				{#each filteredMenuItems as item (item.id)}
 					<button
 						class="apple-transition group relative flex w-full cursor-pointer items-center overflow-hidden rounded-xl px-3 py-2.5"
-						style="color: {activeSection === item.id ? '#ffffff' : 'rgba(240,237,230,0.65)'};
-							background-color: {activeSection === item.id ? 'rgba(249,115,22,0.18)' : 'transparent'};
-							border: 1px solid {activeSection === item.id ? 'rgba(249,115,22,0.35)' : 'transparent'};"
+						style="color: {activeSection === item.id ? '#ffffff' : 'rgba(255, 255, 255,0.65)'};
+							background-color: {activeSection === item.id ? 'rgba(255,255,255,0.14)' : 'transparent'};
+							border: 1px solid {activeSection === item.id ? 'rgba(255,255,255,0.28)' : 'transparent'};"
 						on:click={() => handleMenuClick(item)}
 					>
 						<SidebarIcon icon={item.icon} active={activeSection === item.id} />

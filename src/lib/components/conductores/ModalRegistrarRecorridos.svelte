@@ -82,7 +82,7 @@
 	// Paleta semántica por TIPO de día. Misma convención que CalendarDiasLaborados
 	// y TablaDiasLaborados para que el sistema se lea igual en todos lados.
 	const COLOR_POR_TIPO: Record<TipoDia, { bg: string; text: string; border: string; light: string; label: string; dot: string }> = {
-		LABORADO:      { bg: '#ea580c', text: '#c2410c', border: '#ea580c50', light: '#d1fae5', label: 'Laborado',      dot: '#ea580c' },
+		LABORADO:      { bg: '#c2410c', text: '#9a3412', border: '#c2410c50', light: '#dcfce7', label: 'Laborado',      dot: '#c2410c' },
 		DISPONIBLE:    { bg: '#2563eb', text: '#1d4ed8', border: '#2563eb50', light: '#dbeafe', label: 'Disponible',    dot: '#2563eb' },
 		DESCANSO:      { bg: '#d97706', text: '#b45309', border: '#d9770650', light: '#fed7aa', label: 'Descanso',      dot: '#d97706' },
 		MANTENIMIENTO: { bg: '#dc2626', text: '#b91c1c', border: '#dc262650', light: '#fecaca', label: 'Mantenimiento', dot: '#dc2626' }
@@ -924,7 +924,7 @@
 		<button
 			type="button"
 			class="absolute inset-0 cursor-default border-0 p-0"
-			style="background: linear-gradient(135deg, rgba(15, 31, 26, 0.40), rgba(10, 20, 16, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
+			style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.40), rgba(20, 83, 45, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
 			aria-label="Cerrar modal"
 			onclick={cerrar}
 		></button>
@@ -943,7 +943,7 @@
 				<div class="flex flex-1 items-start gap-3">
 					<div
 						class="card-icon flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl"
-						style="background: linear-gradient(135deg, #f97316, #ea580c); color: white; box-shadow: 0 4px 16px rgba(249, 115, 22, 0.30);"
+						style="background: linear-gradient(135deg, #ea580c, #c2410c); color: white; box-shadow: 0 4px 16px rgba(234, 88, 12, 0.30);"
 					>
 						<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 							<path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
@@ -953,7 +953,7 @@
 						<div class="flex items-center gap-2">
 							<span
 								class="eyebrow inline-block text-[10px] font-bold uppercase"
-								style="letter-spacing: 0.12em; color: #f97316; background: rgba(249, 115, 22, 0.08); padding: 0.2rem 0.55rem; border-radius: 5px; font-family: 'JetBrains Mono', monospace;"
+								style="letter-spacing: 0.12em; color: #ea580c; background: rgba(234, 88, 12, 0.08); padding: 0.2rem 0.55rem; border-radius: 5px; font-family: var(--font-sans);"
 							>
 								GC-FR-RC
 							</span>
@@ -999,7 +999,7 @@
 					<div class="flex items-center justify-between gap-2">
 						<span
 							class="inline-block text-[10px] font-bold uppercase"
-							style="letter-spacing: 0.12em; color: #f97316; background: rgba(249, 115, 22, 0.08); padding: 0.3rem 0.65rem; border-radius: 6px; font-family: 'JetBrains Mono', monospace;"
+							style="letter-spacing: 0.12em; color: #ea580c; background: rgba(234, 88, 12, 0.08); padding: 0.3rem 0.65rem; border-radius: 6px; font-family: var(--font-sans);"
 						>
 							Conductor
 						</span>
@@ -1020,7 +1020,7 @@
 						{:else if hayBusquedaActiva}
 							<span
 								class="text-[10px] font-mono"
-								style="color: {conductoresFiltrados.length === 0 ? '#B91C1C' : '#c2410c'}; letter-spacing: 0.05em; font-weight: 600;"
+								style="color: {conductoresFiltrados.length === 0 ? '#B91C1C' : '#9a3412'}; letter-spacing: 0.05em; font-weight: 600;"
 							>
 								{conductoresFiltrados.length} resultado{conductoresFiltrados.length === 1 ? '' : 's'}
 							</span>
@@ -1038,11 +1038,11 @@
 							<!-- Chip del conductor seleccionado (estilo emerald-tinted) -->
 							<div
 								class="flex items-center gap-3 rounded-xl border-2 px-3 py-2.5"
-								style="border-color: #f97316; background-color: rgba(249, 115, 22, 0.04); box-shadow: 0 4px 16px rgba(249, 115, 22, 0.10);"
+								style="border-color: #ea580c; background-color: rgba(234, 88, 12, 0.04); box-shadow: 0 4px 16px rgba(234, 88, 12, 0.10);"
 							>
 								<div
 									class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full"
-									style="background: linear-gradient(135deg, #f97316, #ea580c); color: white; font-size: 11px; font-weight: 700; box-shadow: 0 2px 6px rgba(249, 115, 22, 0.30);"
+									style="background: linear-gradient(135deg, #ea580c, #c2410c); color: white; font-size: 11px; font-weight: 700; box-shadow: 0 2px 6px rgba(234, 88, 12, 0.30);"
 								>
 									{iniciales(conductorActual.nombre, conductorActual.apellido)}
 								</div>
@@ -1056,7 +1056,7 @@
 									{#if conductorActual.numero_identificacion}
 										<div
 											class="font-mono text-[10px]"
-											style="color: #c2410c; letter-spacing: 0.05em;"
+											style="color: #9a3412; letter-spacing: 0.05em;"
 										>
 											CC {conductorActual.numero_identificacion}
 										</div>
@@ -1068,8 +1068,8 @@
 									aria-label="Cambiar conductor"
 									title="Cambiar conductor"
 									class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg transition-colors"
-									style="color: #c2410c; background-color: white;"
-									onmouseenter={(e) => ((e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(249, 115, 22,0.10)')}
+									style="color: #9a3412; background-color: white;"
+									onmouseenter={(e) => ((e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(234, 88, 12,0.10)')}
 									onmouseleave={(e) => ((e.currentTarget as HTMLElement).style.backgroundColor = 'white')}
 								>
 									<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
@@ -1103,7 +1103,7 @@
 								<div
 									id="dropdown-conductor-modal"
 									class="absolute z-30 mt-1.5 w-full overflow-y-auto rounded-xl border bg-white"
-									style="border-color: var(--border-subtle); box-shadow: 0 12px 32px rgba(249, 115, 22, 0.12); max-height: min(70vh, 480px);"
+									style="border-color: var(--border-subtle); box-shadow: 0 12px 32px rgba(234, 88, 12, 0.12); max-height: min(70vh, 480px);"
 								>
 									{#if conductoresVisibles.length === 0}
 										<div class="flex flex-col items-center gap-1.5 p-4 text-center">
@@ -1129,18 +1129,18 @@
 												}}
 												onmouseenter={() => (highlightConductor = i)}
 												class="group flex w-full items-center gap-3 border-b px-3 py-2.5 text-left transition-colors last:border-b-0"
-												style="border-color: rgba(0, 0, 0, 0.06); background-color: {highlightConductor === i ? 'rgba(249, 115, 22, 0.08)' : 'white'};"
+												style="border-color: rgba(0, 0, 0, 0.06); background-color: {highlightConductor === i ? 'rgba(234, 88, 12, 0.08)' : 'white'};"
 											>
 												<div
 													class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold transition-colors"
-													style="background-color: {highlightConductor === i ? '#f97316' : 'rgba(249, 115, 22, 0.12)'}; color: {highlightConductor === i ? 'white' : '#c2410c'};"
+													style="background-color: {highlightConductor === i ? '#ea580c' : 'rgba(234, 88, 12, 0.12)'}; color: {highlightConductor === i ? 'white' : '#9a3412'};"
 												>
 													{iniciales(c.nombre, c.apellido)}
 												</div>
 												<div class="min-w-0 flex-1">
 													<div
 														class="truncate text-sm font-semibold"
-														style="color: {highlightConductor === i ? '#c2410c' : 'var(--text-primary)'}; font-family: 'Inter Tight', system-ui, sans-serif;"
+														style="color: {highlightConductor === i ? '#9a3412' : 'var(--text-primary)'}; font-family: 'Inter Tight', system-ui, sans-serif;"
 													>
 														{c.nombre}
 														<span style="color: var(--text-muted); font-weight: 500;">{c.apellido}</span>
@@ -1155,7 +1155,7 @@
 													{/if}
 												</div>
 												{#if highlightConductor === i}
-													<svg class="h-4 w-4 flex-shrink-0" style="color: #f97316;" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
+													<svg class="h-4 w-4 flex-shrink-0" style="color: #ea580c;" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
 														><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg
 													>
 												{/if}
@@ -1252,11 +1252,11 @@
 								type="button"
 								onclick={irAHoy}
 								class="apple-transition ml-1 rounded-md px-2 py-1 text-[9px] font-bold uppercase tracking-wider transition-colors"
-								style="color: #c2410c; background-color: rgba(249, 115, 22, 0.10);"
+								style="color: #9a3412; background-color: rgba(234, 88, 12, 0.10);"
 								title="Ir al mes actual"
 								aria-label="Ir al mes actual"
-								onmouseenter={(e) => ((e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(249, 115, 22, 0.18)')}
-								onmouseleave={(e) => ((e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(249, 115, 22, 0.10)')}
+								onmouseenter={(e) => ((e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(234, 88, 12, 0.18)')}
+								onmouseleave={(e) => ((e.currentTarget as HTMLElement).style.backgroundColor = 'rgba(234, 88, 12, 0.10)')}
 							>
 								Hoy
 							</button>
@@ -1310,7 +1310,7 @@
 						<div class="flex items-center justify-between">
 							<span
 								class="inline-block text-[10px] font-bold uppercase"
-								style="letter-spacing: 0.12em; color: #f97316; background: rgba(249, 115, 22, 0.08); padding: 0.3rem 0.65rem; border-radius: 6px; font-family: 'JetBrains Mono', monospace;"
+								style="letter-spacing: 0.12em; color: #ea580c; background: rgba(234, 88, 12, 0.08); padding: 0.3rem 0.65rem; border-radius: 6px; font-family: var(--font-sans);"
 							>
 								Paso 2 · Estado
 							</span>
@@ -1445,7 +1445,7 @@
 										oninput={(e) => onPlacaChange(p.idLocal, (e.currentTarget as HTMLInputElement).value.toUpperCase())}
 										placeholder="ABC123"
 										class="w-full rounded-lg border px-2 py-1.5 text-xs"
-										style="border-color: var(--border-default); background-color: white; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;"
+										style="border-color: var(--border-default); background-color: white; color: var(--text-primary); font-family: var(--font-sans);"
 									/>
 								</label>
 							{/if}
@@ -1478,7 +1478,7 @@
 										value={p.hora_inicio}
 										oninput={(e) => actualizarPatron(p.idLocal, { hora_inicio: (e.currentTarget as HTMLInputElement).value })}
 										class="w-full rounded-lg border px-2 py-1.5 text-xs"
-										style="border-color: var(--border-default); background-color: white; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;"
+										style="border-color: var(--border-default); background-color: white; color: var(--text-primary); font-family: var(--font-sans);"
 									/>
 								</label>
 								<label class="block">
@@ -1488,7 +1488,7 @@
 										value={p.hora_fin}
 										oninput={(e) => actualizarPatron(p.idLocal, { hora_fin: (e.currentTarget as HTMLInputElement).value })}
 										class="w-full rounded-lg border px-2 py-1.5 text-xs"
-										style="border-color: var(--border-default); background-color: white; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;"
+										style="border-color: var(--border-default); background-color: white; color: var(--text-primary); font-family: var(--font-sans);"
 									/>
 								</label>
 							{/if}
@@ -1503,7 +1503,7 @@
 										value={p.horas_conducidas}
 										oninput={(e) => actualizarPatron(p.idLocal, { horas_conducidas: parseFloat((e.currentTarget as HTMLInputElement).value) || 0 })}
 										class="w-full rounded-lg border px-2 py-1.5 text-xs"
-										style="border-color: var(--border-default); background-color: white; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;"
+										style="border-color: var(--border-default); background-color: white; color: var(--text-primary); font-family: var(--font-sans);"
 									/>
 								</label>
 							{/if}
@@ -1520,7 +1520,7 @@
 										}}
 										placeholder="opcional"
 										class="w-full rounded-lg border px-2 py-1.5 text-xs"
-										style="border-color: var(--border-default); background-color: white; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;"
+										style="border-color: var(--border-default); background-color: white; color: var(--text-primary); font-family: var(--font-sans);"
 									/>
 								</label>
 								<label class="block">
@@ -1535,7 +1535,7 @@
 										}}
 										placeholder="opcional"
 										class="w-full rounded-lg border px-2 py-1.5 text-xs"
-										style="border-color: var(--border-default); background-color: white; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;"
+										style="border-color: var(--border-default); background-color: white; color: var(--text-primary); font-family: var(--font-sans);"
 									/>
 								</label>
 							{/if}
@@ -1600,7 +1600,7 @@
 						<div class="flex items-center justify-between">
 							<span
 								class="inline-block text-[10px] font-bold uppercase"
-								style="letter-spacing: 0.12em; color: #f97316; background: rgba(249, 115, 22, 0.08); padding: 0.3rem 0.65rem; border-radius: 6px; font-family: 'JetBrains Mono', monospace;"
+								style="letter-spacing: 0.12em; color: #ea580c; background: rgba(234, 88, 12, 0.08); padding: 0.3rem 0.65rem; border-radius: 6px; font-family: var(--font-sans);"
 							>
 								Paso 4 · Calendario
 							</span>
@@ -1673,7 +1673,7 @@
 											bind:value={rangoTexto}
 											placeholder="1-10, 15, 25-30"
 											class="flex-1 rounded-lg border px-2 py-1.5 text-xs"
-											style="border-color: var(--border-default); background-color: white; color: var(--text-primary); font-family: 'JetBrains Mono', monospace;"
+											style="border-color: var(--border-default); background-color: white; color: var(--text-primary); font-family: var(--font-sans);"
 										/>
 										<button
 											type="button"
@@ -1745,7 +1745,7 @@
 						<div class="flex items-center justify-between">
 							<span
 								class="inline-block text-[10px] font-bold uppercase"
-								style="letter-spacing: 0.12em; color: #f97316; background: rgba(249, 115, 22, 0.08); padding: 0.3rem 0.65rem; border-radius: 6px; font-family: 'JetBrains Mono', monospace;"
+								style="letter-spacing: 0.12em; color: #ea580c; background: rgba(234, 88, 12, 0.08); padding: 0.3rem 0.65rem; border-radius: 6px; font-family: var(--font-sans);"
 							>
 								Resumen
 							</span>
@@ -1844,7 +1844,7 @@
 						class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
 						style="background: {erroresGuardado.length > 0
 							? 'linear-gradient(135deg, #9ca3af, #6b7280)'
-							: 'linear-gradient(135deg, #ea580c, #c2410c)'};"
+							: 'linear-gradient(135deg, #c2410c, #9a3412)'};"
 						title={erroresGuardado.length > 0
 							? 'Hay ' + erroresGuardado.length + ' problema(s) por resolver'
 							: 'Guardar recorridos'}
@@ -1877,7 +1877,7 @@
 	.modal-body {
 		/* Asegurar que el body haga scroll vertical si el contenido es alto */
 		scrollbar-width: thin;
-		scrollbar-color: rgba(249, 115, 22, 0.3) transparent;
+		scrollbar-color: rgba(234, 88, 12, 0.3) transparent;
 		scroll-behavior: smooth;
 	}
 	.modal-body::-webkit-scrollbar {
@@ -1887,11 +1887,11 @@
 		background: transparent;
 	}
 	.modal-body::-webkit-scrollbar-thumb {
-		background-color: rgba(249, 115, 22, 0.25);
+		background-color: rgba(234, 88, 12, 0.25);
 		border-radius: 4px;
 	}
 	.modal-body::-webkit-scrollbar-thumb:hover {
-		background-color: rgba(249, 115, 22, 0.45);
+		background-color: rgba(234, 88, 12, 0.45);
 	}
 	@media (max-width: 1024px) {
 		.modal-body {

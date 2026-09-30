@@ -406,7 +406,7 @@
 	<button
 		type="button"
 		class="fixed inset-0 z-[60] cursor-default border-0 p-0"
-		style="background: linear-gradient(135deg, rgba(15, 31, 26, 0.40), rgba(10, 20, 16, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
+		style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.40), rgba(20, 83, 45, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
 		aria-label="Cerrar modal"
 		on:click={handleClose}
 	></button>
@@ -436,14 +436,14 @@
 					<div class="min-w-0 flex-1">
 						<h2
 							class="font-display text-2xl"
-							style="color: var(--bg-charcoal); font-weight: 500; letter-spacing: -0.01em;"
+							style="color: var(--bg-charcoal); font-weight: 800; letter-spacing: -0.01em;"
 						>
 							Detalle de Recargo
 						</h2>
 						<div class="mt-1 flex items-center gap-2">
 							<p
 								class="font-mono-meta inline-block rounded-md px-2 py-0.5 text-[10px]"
-								style="color: var(--orange-500); background: rgba(249, 115, 22, 0.08); letter-spacing: 0.12em;"
+								style="color: var(--orange-500); background: rgba(234, 88, 12, 0.08); letter-spacing: 0.12em;"
 							>
 								{infoRecargo?.mesAño ?? '—'}
 							</p>
@@ -794,13 +794,13 @@
 							     generado por los recargos del período y el desglose por día. -->
 							<div
 								class="rounded-xl border p-5"
-								style="background: linear-gradient(135deg, rgba(249, 115, 22,0.06), rgba(234, 88, 12,0.03)); border-color: rgba(249, 115, 22,0.25);"
+								style="background: linear-gradient(135deg, rgba(234, 88, 12,0.06), rgba(234, 88, 12,0.03)); border-color: rgba(234, 88, 12,0.25);"
 							>
 								<div class="mb-4 flex items-center justify-between gap-3">
 									<div class="flex items-center gap-2">
 										<div
 											class="flex h-8 w-8 items-center justify-center rounded-lg"
-											style="background: linear-gradient(135deg, #f97316, #ea580c); box-shadow: 0 4px 10px rgba(249, 115, 22,0.25);"
+											style="background: linear-gradient(135deg, #ea580c, #c2410c); box-shadow: 0 4px 10px rgba(234, 88, 12,0.25);"
 										>
 											<svg
 												class="h-4 w-4 text-white"
@@ -856,7 +856,7 @@
 								{:else if previewPlanilla}
 									<!-- Total a pagar destacado -->
 									<div class="mb-4 flex items-baseline gap-2">
-										<span class="text-3xl font-bold text-[#c2410c]">
+										<span class="text-3xl font-bold text-[#9a3412]">
 											{fmtCOP(previewPlanilla.total_valor)}
 										</span>
 										<span class="text-xs text-gray-500"> · Total del recargo </span>
@@ -866,10 +866,10 @@
 									{#if previewPlanilla.dias.length > 0}
 										<div
 											class="overflow-hidden rounded-lg border"
-											style="border-color: rgba(249, 115, 22,0.20);"
+											style="border-color: rgba(234, 88, 12,0.20);"
 										>
 											<table class="w-full text-xs">
-												<thead style="background-color: rgba(249, 115, 22,0.06);">
+												<thead style="background-color: rgba(234, 88, 12,0.06);">
 													<tr>
 														<th
 															class="px-3 py-2 text-left font-medium tracking-wide text-gray-600 uppercase"
@@ -911,11 +911,11 @@
 																			? 'rgba(245,158,11,0.12)'
 																			: d.es_domingo
 																				? 'rgba(168,85,247,0.10)'
-																				: 'rgba(249, 115, 22,0.08)'}; color: {d.es_festivo
+																				: 'rgba(234, 88, 12,0.08)'}; color: {d.es_festivo
 																			? '#92400E'
 																			: d.es_domingo
 																				? '#6B21A8'
-																				: '#c2410c'};"
+																				: '#9a3412'};"
 																	>
 																		{String(d.dia).padStart(2, '0')}
 																	</span>
@@ -947,7 +947,7 @@
 															</td>
 															<td
 																class="px-3 py-2 text-right font-bold tabular-nums"
-																style="color: {d.disponibilidad ? '#9CA3AF' : '#c2410c'};"
+																style="color: {d.disponibilidad ? '#9CA3AF' : '#9a3412'};"
 															>
 																{d.disponibilidad ? '—' : fmtCOP(d.total_valor_dia)}
 															</td>
@@ -956,16 +956,16 @@
 												</tbody>
 												<tfoot>
 													<tr
-														style="background: rgba(249, 115, 22,0.08); border-top: 2px solid rgba(249, 115, 22,0.30);"
+														style="background: rgba(234, 88, 12,0.08); border-top: 2px solid rgba(234, 88, 12,0.30);"
 													>
 														<td
 															colspan="3"
-															class="px-3 py-2 text-right text-[11px] font-semibold text-[#c2410c]"
+															class="px-3 py-2 text-right text-[11px] font-semibold text-[#9a3412]"
 														>
 															Total
 														</td>
 														<td
-															class="px-3 py-2 text-right text-sm font-bold text-[#c2410c] tabular-nums"
+															class="px-3 py-2 text-right text-sm font-bold text-[#9a3412] tabular-nums"
 														>
 															{fmtCOP(previewPlanilla.total_valor)}
 														</td>

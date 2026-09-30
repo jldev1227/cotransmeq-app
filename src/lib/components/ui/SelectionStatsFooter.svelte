@@ -125,8 +125,8 @@
     align-items: center;
     gap: 5px;
     padding: 4px 10px;
-    background: rgba(249, 115, 22, 0.18);
-    border: 1px solid rgba(249, 115, 22, 0.35);
+    background: rgba(234, 88, 12, 0.18);
+    border: 1px solid rgba(234, 88, 12, 0.35);
     border-radius: 999px;
     font-size: 11px;
     font-weight: 700;
@@ -134,7 +134,7 @@
     letter-spacing: 0.02em;
   }
   .stats-badge :global(svg) {
-    color: #f97316;
+    color: #ea580c;
   }
 
   .stats-secondary {

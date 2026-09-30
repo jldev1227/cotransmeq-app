@@ -295,7 +295,7 @@
 		switch (estado?.toUpperCase()) {
 			case 'DISPONIBLE':
 			case 'ACTIVO':
-				return '#10b981';
+				return '#16a34a';
 			case 'SERVICIO':
 				return '#8b5cf6';
 			case 'MANTENIMIENTO':
@@ -375,7 +375,7 @@
 			<div class="flex items-center gap-3">
 				<div
 					class="brand-gradient flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
-					style="box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);"
+					style="box-shadow: 0 4px 16px rgba(22, 163, 74, 0.3);"
 				>
 					<svg
 						class="h-5 w-5 text-white"
@@ -389,7 +389,7 @@
 				</div>
 				<div>
 					<div class="flex items-center gap-2">
-						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 400;">
+						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 800;">
 							Gestión de Flota
 						</h1>
 						<!-- Aquí había un chip «En vivo» pintado a mano, sin mirar el socket:
@@ -417,7 +417,7 @@
 							style="border-color: {filtros.vista === 'ocultos'
 								? 'var(--emerald-500)'
 								: 'var(--border-default)'}; background-color: {filtros.vista === 'ocultos'
-								? 'rgba(16,185,129,0.04)'
+								? 'rgba(22, 163, 74,0.04)'
 								: 'white'}; color: {filtros.vista === 'ocultos' ? 'var(--emerald-600)' : 'var(--text-muted)'};"
 						>
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
@@ -469,7 +469,7 @@
 						: 'var(--border-default)'}; color: {mostrarFiltros
 						? 'var(--emerald-700)'
 						: 'var(--text-secondary)'}; background-color: {mostrarFiltros
-						? 'rgba(16,185,129,0.04)'
+						? 'rgba(22, 163, 74,0.04)'
 						: 'white'};"
 				>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
@@ -659,7 +659,7 @@
 							class="list-card"
 							style="border-left: 4px solid {getStatusColor(v.estado)};
 								background-color: {vehiculosSeleccionados.has(v.id)
-								? 'rgba(16, 185, 129, 0.04)'
+								? 'rgba(22, 163, 74, 0.04)'
 								: 'var(--bg-surface)'};
 								border-color: {vehiculosSeleccionados.has(v.id) ? 'var(--emerald-500)' : 'var(--border-subtle)'};
 								border-left-color: {getStatusColor(v.estado)};"
@@ -747,7 +747,7 @@
 									<button
 										onclick={() => openModal(v.id)}
 										class="apple-transition rounded-md p-1.5"
-										style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
+										style="color: var(--emerald-600); background-color: rgba(22, 163, 74, 0.06);"
 										title="Editar"
 									>
 										<svg

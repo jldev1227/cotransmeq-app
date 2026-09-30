@@ -389,7 +389,7 @@
 		font: inherit;
 		font-size: 12px;
 		font-weight: 600;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		cursor: pointer;
 		text-decoration: underline;
 	}
@@ -507,7 +507,7 @@
 	}
 	.med-campo input:focus,
 	.med-campo textarea:focus {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: -1px;
 	}
 	.med-pista {
@@ -544,8 +544,8 @@
 	}
 	.med-btn--ok {
 		color: #fff;
-		background: var(--emerald-700, #047857);
-		border-color: var(--emerald-700, #047857);
+		background: var(--emerald-700, #166534);
+		border-color: var(--emerald-700, #166534);
 	}
 	.med-btn:disabled {
 		opacity: 0.5;

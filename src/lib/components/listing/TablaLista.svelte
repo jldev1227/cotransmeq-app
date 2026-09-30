@@ -270,14 +270,14 @@
 		text-align: left;
 		white-space: nowrap;
 		padding: 0.65rem 0.9rem;
-		background: var(--tl-th-fondo, #faf7f2);
+		background: var(--tl-th-fondo, #fcfcfb);
 		border-bottom: 1px solid var(--tl-borde, rgba(0, 0, 0, 0.06));
 		font-family: var(--tl-mono, 'JetBrains Mono', monospace);
 		font-size: 0.68rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
-		color: var(--tl-th-color, #6b6b6b);
+		color: var(--tl-th-color, #64748b);
 	}
 	.tl-th-btn {
 		display: inline-flex;
@@ -293,7 +293,7 @@
 		cursor: pointer;
 	}
 	.tl-th-btn:hover {
-		color: var(--tl-th-color-hover, #0f1f1a);
+		color: var(--tl-th-color-hover, #0f172a);
 	}
 	.tl-orden {
 		opacity: 0.35;
@@ -319,18 +319,18 @@
 		outline: none;
 	}
 	.tl-tr--pulsable:focus-visible {
-		box-shadow: inset 3px 0 0 var(--tl-acento, #10b981);
+		box-shadow: inset 3px 0 0 var(--tl-acento, #16a34a);
 	}
 
 	.tl-td {
 		padding: 0.6rem 0.9rem;
 		vertical-align: middle;
-		color: var(--tl-td-color, #1a1a1a);
+		color: var(--tl-td-color, #0f172a);
 	}
 	.tl-vacio {
 		padding: 3rem 1rem;
 		text-align: center;
-		color: var(--tl-td-suave, #6b6b6b);
+		color: var(--tl-td-suave, #64748b);
 	}
 
 	.tl-esqueleto {

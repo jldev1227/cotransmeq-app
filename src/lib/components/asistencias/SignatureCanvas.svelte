@@ -23,7 +23,7 @@
 				ctx.scale(dpr, dpr);
 
 				// Estilos de dibujo
-				ctx.strokeStyle = '#ea580c'; // orange-600
+				ctx.strokeStyle = '#c2410c'; // orange-600
 				ctx.lineWidth = 2;
 				ctx.lineCap = 'round';
 				ctx.lineJoin = 'round';

@@ -100,7 +100,7 @@
 		height: 100%;
 		padding: 2rem;
 		text-align: center;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.estado--error {
@@ -108,7 +108,7 @@
 	}
 
 	.volver {
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		font-weight: 600;
 		text-decoration: underline;
 	}

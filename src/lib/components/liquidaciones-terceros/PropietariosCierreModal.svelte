@@ -613,7 +613,7 @@
 		text-align: center;
 	}
 	.pcm-fila-dentro .pcm-check {
-		background: #ea580c;
+		background: #c2410c;
 		color: #fff;
 	}
 
@@ -641,7 +641,7 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		color: #c2410c;
+		color: #9a3412;
 	}
 
 	.pcm-sel-item {
@@ -859,7 +859,7 @@
 		color: #334155;
 	}
 	.pcm-btn-primary {
-		background: #ea580c;
+		background: #c2410c;
 		color: #fff;
 	}
 	.pcm-btn-ghost:disabled,

@@ -143,7 +143,7 @@
     animation: pulse 1.5s ease-in-out infinite;
   }
   .dot-saved {
-    background-color: #10b981;
+    background-color: #16a34a;
   }
   .dot-error {
     background-color: #ef4444;

@@ -1847,8 +1847,8 @@
 		cursor: pointer;
 	}
 	.hs-facturas button:hover:not(:disabled) {
-		background: #ecfdf5;
-		border-color: #a7f3d0;
+		background: #f0fdf4;
+		border-color: #bbf7d0;
 	}
 	.hs-facturas button:disabled {
 		opacity: 0.5;
@@ -1857,7 +1857,7 @@
 	.hs-factura-num {
 		font-size: 12px;
 		font-weight: 700;
-		color: #065f46;
+		color: #14532d;
 	}
 	.hs-factura-meta {
 		font-size: 11px;

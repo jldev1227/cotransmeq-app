@@ -75,16 +75,16 @@
 
 <style>
 	.page {
-		--bg: #faf7f2;
+		--bg: #fcfcfb;
 		--surface: #ffffff;
 		--border: rgba(0, 0, 0, 0.08);
 		--border-default: rgba(0, 0, 0, 0.12);
-		--text-primary: #0f1f1a;
-		--text-secondary: #4a4a4a;
-		--text-muted: #6b6b6b;
-		--accent: #f97316;
-		--accent-hover: #ea580c;
-		--accent-bg: rgba(249, 115, 22, 0.08);
+		--text-primary: #0f172a;
+		--text-secondary: #334155;
+		--text-muted: #64748b;
+		--accent: #ea580c;
+		--accent-hover: #c2410c;
+		--accent-bg: rgba(234, 88, 12, 0.08);
 		--ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
 
 		min-height: 100vh;
@@ -150,7 +150,7 @@
 	.back-btn:hover {
 		background: var(--surface);
 		color: var(--accent-hover);
-		border-color: rgba(249, 115, 22, 0.3);
+		border-color: rgba(234, 88, 12, 0.3);
 	}
 	.back-btn svg {
 		width: 14px;
@@ -223,13 +223,13 @@
 		font-weight: 600;
 		font-family: inherit;
 		cursor: pointer;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.3);
 		transition: all 0.2s var(--ease);
 		white-space: nowrap;
 	}
 	.btn-primary:hover:not(:disabled) {
 		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
+		box-shadow: 0 6px 20px rgba(234, 88, 12, 0.4);
 	}
 	.btn-primary:active:not(:disabled) {
 		transform: translateY(0);

@@ -371,7 +371,7 @@
 	function getEstadoPill(tone: string): string {
 		const map: Record<string, string> = {
 			emerald:
-				'background: rgba(249, 115, 22,0.10); color: var(--orange-800); border: 1px solid rgba(249, 115, 22,0.25);',
+				'background: rgba(234, 88, 12,0.10); color: var(--orange-800); border: 1px solid rgba(234, 88, 12,0.25);',
 			slate:
 				'background: rgba(100,116,139,0.10); color: #334155; border: 1px solid rgba(100,116,139,0.22);',
 			sky: 'background: rgba(14,165,233,0.10); color: #075985; border: 1px solid rgba(14,165,233,0.25);',
@@ -821,7 +821,7 @@
 				</button>
 				<div>
 					<p class="eyebrow mb-1">Perfil del conductor</p>
-					<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 500;">
+					<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 800;">
 						{fullName || 'Cargando…'}
 					</h1>
 					<p class="mt-0.5 text-sm" style="color: var(--text-muted);">
@@ -873,7 +873,7 @@
 					/>
 				</svg>
 			</div>
-			<h2 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 500;">
+			<h2 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
 				No se pudo cargar el conductor
 			</h2>
 			<p class="max-w-md text-sm" style="color: var(--text-muted);">{error}</p>
@@ -918,7 +918,7 @@
 								{:else}
 									<div
 										class="brand-gradient flex h-full w-full items-center justify-center font-display text-3xl text-white"
-										style="font-weight: 500;"
+										style="font-weight: 800;"
 									>
 										{getInitials(conductor.nombre, conductor.apellido)}
 									</div>
@@ -1024,7 +1024,7 @@
 
 						<h2
 							class="mt-4 font-display text-xl"
-							style="color: var(--bg-charcoal); font-weight: 500;"
+							style="color: var(--bg-charcoal); font-weight: 800;"
 						>
 							{conductor.nombre}
 							{conductor.apellido}
@@ -1043,7 +1043,7 @@
 							</span>
 							<span
 								class="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold"
-								style="background: rgba(249, 115, 22,0.08); color: var(--orange-800);"
+								style="background: rgba(234, 88, 12,0.08); color: var(--orange-800);"
 							>
 								{conductor.sede_trabajo ? getSedeLabel(conductor.sede_trabajo) : 'Sin sede'}
 							</span>
@@ -1059,7 +1059,7 @@
 								</p>
 								<p
 									class="mt-0.5 font-display text-base"
-									style="color: var(--bg-charcoal); font-weight: 500;"
+									style="color: var(--bg-charcoal); font-weight: 800;"
 								>
 									{formatSalario(conductor.salario_base)}
 								</p>
@@ -1073,7 +1073,7 @@
 								</p>
 								<p
 									class="mt-0.5 font-display text-sm"
-									style="color: var(--bg-charcoal); font-weight: 500;"
+									style="color: var(--bg-charcoal); font-weight: 800;"
 								>
 									{conductor.fecha_ingreso
 										? formatDate(conductor.fecha_ingreso).split(' de ')[2]
@@ -1086,7 +1086,7 @@
 								</p>
 								<p
 									class="mt-0.5 font-display text-base"
-									style="color: var(--bg-charcoal); font-weight: 500;"
+									style="color: var(--bg-charcoal); font-weight: 800;"
 								>
 									{getSangreLabel(conductor.tipo_sangre)}
 								</p>
@@ -1213,7 +1213,7 @@
 						<div class="flex items-start gap-3">
 							<div
 								class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl"
-								style={`background: ${dias !== null && dias < 30 ? 'rgba(245,158,11,0.10)' : 'rgba(249, 115, 22,0.08)'}; color: ${dias !== null && dias < 30 ? '#b45309' : 'var(--orange-700)'};`}
+								style={`background: ${dias !== null && dias < 30 ? 'rgba(245,158,11,0.10)' : 'rgba(234, 88, 12,0.08)'}; color: ${dias !== null && dias < 30 ? '#b45309' : 'var(--orange-700)'};`}
 							>
 								<svg
 									class="h-4 w-4"
@@ -1266,7 +1266,7 @@
 					style="padding: 1rem 1.25rem;"
 				>
 					<div>
-						<p class="font-display text-base" style="color: var(--bg-charcoal); font-weight: 500;">
+						<p class="font-display text-base" style="color: var(--bg-charcoal); font-weight: 800;">
 							Expediente
 						</p>
 						<p class="text-xs" style="color: var(--text-muted);">
@@ -1360,12 +1360,12 @@
 								role="tab"
 								aria-selected={isActive}
 								class="group inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-all"
-								style={`background: ${isActive ? 'linear-gradient(135deg, rgba(249, 115, 22,0.10), rgba(234, 88, 12,0.10))' : 'transparent'}; color: ${isActive ? 'var(--orange-800)' : 'var(--text-secondary)'}; border: 1px solid ${isActive ? 'rgba(249, 115, 22,0.25)' : 'transparent'};`}
+								style={`background: ${isActive ? 'linear-gradient(135deg, rgba(234, 88, 12,0.10), rgba(234, 88, 12,0.10))' : 'transparent'}; color: ${isActive ? 'var(--orange-800)' : 'var(--text-secondary)'}; border: 1px solid ${isActive ? 'rgba(234, 88, 12,0.25)' : 'transparent'};`}
 								on:click={() => requestTabChange(tab.id)}
 							>
 								<span
 									class="flex h-6 w-6 items-center justify-center rounded-md"
-									style={`background: ${isActive ? 'linear-gradient(135deg, #f97316, #ea580c)' : 'rgba(249, 115, 22,0.08)'}; color: ${isActive ? 'white' : 'var(--orange-700)'};`}
+									style={`background: ${isActive ? 'linear-gradient(135deg, #ea580c, #c2410c)' : 'rgba(234, 88, 12,0.08)'}; color: ${isActive ? 'white' : 'var(--orange-700)'};`}
 								>
 									<svg
 										class="h-3.5 w-3.5"
@@ -1380,7 +1380,7 @@
 								<span class="whitespace-nowrap">{tab.label}</span>
 								<span
 									class="rounded-full px-1.5 py-0.5 text-[10px] font-bold"
-									style={`background: ${pct === 100 ? 'rgba(249, 115, 22,0.12)' : 'rgba(0,0,0,0.04)'}; color: ${pct === 100 ? 'var(--orange-800)' : 'var(--text-muted)'};`}
+									style={`background: ${pct === 100 ? 'rgba(234, 88, 12,0.12)' : 'rgba(0,0,0,0.04)'}; color: ${pct === 100 ? 'var(--orange-800)' : 'var(--text-muted)'};`}
 								>
 									{completion.done}/{completion.total}
 								</span>
@@ -1395,7 +1395,7 @@
 						<p class="font-mono-meta" style="color: var(--orange-700); font-size: 0.6rem;">
 							Sección activa
 						</p>
-						<h2 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 500;">
+						<h2 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
 							{FIELD_GROUPS.find((g) => g.id === activeTab)?.id === 'personal'
 								? 'Información Personal'
 								: ''}
@@ -1904,7 +1904,7 @@
 		<button
 			type="button"
 			class="absolute inset-0 cursor-default border-0 p-0"
-			style="background: linear-gradient(135deg, rgba(15,31,26,0.40), rgba(10,20,16,0.55)); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);"
+			style="background: linear-gradient(135deg, rgba(15, 23, 42,0.40), rgba(20, 83, 45,0.55)); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);"
 			aria-label="Cerrar"
 			on:click={cancelTabChange}
 			transition:fade={{ duration: 180 }}
@@ -1935,7 +1935,7 @@
 						</svg>
 					</div>
 					<div>
-						<h3 class="font-display text-base" style="color: var(--bg-charcoal); font-weight: 500;">
+						<h3 class="font-display text-base" style="color: var(--bg-charcoal); font-weight: 800;">
 							Cambios sin guardar
 						</h3>
 						<p class="text-xs" style="color: var(--text-muted);">
@@ -1977,7 +1977,7 @@
 		<button
 			type="button"
 			class="absolute inset-0 cursor-default border-0 p-0"
-			style="background: linear-gradient(135deg, rgba(15,31,26,0.40), rgba(10,20,16,0.55)); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);"
+			style="background: linear-gradient(135deg, rgba(15, 23, 42,0.40), rgba(20, 83, 45,0.55)); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);"
 			aria-label="Cerrar"
 			on:click={() => (confirmDeletePhoto = false)}
 			transition:fade={{ duration: 180 }}
@@ -2008,7 +2008,7 @@
 						</svg>
 					</div>
 					<div>
-						<h3 class="font-display text-base" style="color: var(--bg-charcoal); font-weight: 500;">
+						<h3 class="font-display text-base" style="color: var(--bg-charcoal); font-weight: 800;">
 							¿Eliminar la foto?
 						</h3>
 						<p class="text-xs" style="color: var(--text-muted);">No se puede deshacer.</p>
@@ -2042,7 +2042,7 @@
 {#if showSuccessAnim}
 	<div
 		class="fixed inset-0 z-[60] flex items-center justify-center"
-		style="background: linear-gradient(135deg, rgba(234, 88, 12,0.92), rgba(249, 115, 22,0.92)); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);"
+		style="background: linear-gradient(135deg, rgba(234, 88, 12,0.92), rgba(234, 88, 12,0.92)); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);"
 		role="status"
 		aria-live="polite"
 		transition:fade={{ duration: 200 }}
@@ -2064,7 +2064,7 @@
 			</div>
 			<h2
 				class="font-display text-3xl text-white"
-				style="font-weight: 500; letter-spacing: -0.01em;"
+				style="font-weight: 800; letter-spacing: -0.01em;"
 			>
 				¡Actualizado!
 			</h2>
@@ -2086,7 +2086,7 @@
 		<button
 			type="button"
 			class="absolute inset-0 cursor-default border-0 p-0"
-			style="background: linear-gradient(135deg, rgba(15,31,26,0.55), rgba(10,20,16,0.65)); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);"
+			style="background: linear-gradient(135deg, rgba(15, 23, 42,0.55), rgba(20, 83, 45,0.65)); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);"
 			aria-label="Cerrar"
 			on:click={handleCloseCropModal}
 			transition:fade={{ duration: 200 }}
@@ -2107,7 +2107,7 @@
 					<h3
 						id="crop-title"
 						class="font-display text-lg"
-						style="color: var(--bg-charcoal); font-weight: 500;"
+						style="color: var(--bg-charcoal); font-weight: 800;"
 					>
 						Recortar imagen
 					</h3>
@@ -2146,7 +2146,7 @@
 				{#if photoSuccess}
 					<div
 						class="pointer-events-none absolute inset-0 flex items-center justify-center"
-						style="background: rgba(249, 115, 22,0.45); backdrop-filter: blur(2px);"
+						style="background: rgba(234, 88, 12,0.45); backdrop-filter: blur(2px);"
 						transition:fade={{ duration: 220 }}
 					>
 						<div
@@ -2297,7 +2297,7 @@
 	.block-input:focus {
 		outline: none;
 		border-color: var(--orange-500);
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12);
+		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.12);
 	}
 	.block-input::placeholder {
 		color: var(--text-very-muted);
@@ -2336,18 +2336,18 @@
 		width: 16px;
 		height: 16px;
 		border-radius: 50%;
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		cursor: pointer;
 		border: 2px solid white;
-		box-shadow: 0 2px 6px rgba(249, 115, 22, 0.4);
+		box-shadow: 0 2px 6px rgba(234, 88, 12, 0.4);
 	}
 	.crop-range::-moz-range-thumb {
 		width: 16px;
 		height: 16px;
 		border-radius: 50%;
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		cursor: pointer;
 		border: 2px solid white;
-		box-shadow: 0 2px 6px rgba(249, 115, 22, 0.4);
+		box-shadow: 0 2px 6px rgba(234, 88, 12, 0.4);
 	}
 </style>

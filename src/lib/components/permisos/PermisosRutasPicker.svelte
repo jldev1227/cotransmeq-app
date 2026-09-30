@@ -360,14 +360,14 @@
 	}
 
 	.prp__modo--activo {
-		border-color: #f97316;
+		border-color: #ea580c;
 		background: #f0fdf4;
 	}
 
 	.prp__modo-titulo {
 		font-size: 0.8125rem;
 		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.prp__modo-desc {
@@ -414,7 +414,7 @@
 	}
 
 	.prp__buscar input:focus {
-		border-color: #f97316;
+		border-color: #ea580c;
 	}
 
 	.prp__acciones {
@@ -475,7 +475,7 @@
 	.prp__label {
 		font-size: 0.8125rem;
 		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.prp__desc {
@@ -592,7 +592,7 @@
 	}
 
 	.prp__pill--full {
-		background: #d1fae5;
+		background: #dcfce7;
 		color: #166534;
 	}
 

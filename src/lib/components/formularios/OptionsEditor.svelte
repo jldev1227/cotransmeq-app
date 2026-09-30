@@ -255,13 +255,13 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.opciones__conteo {
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.presets {
@@ -272,7 +272,7 @@
 
 	.presets__label {
 		font-size: 0.6875rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.presets__botones {
@@ -287,7 +287,7 @@
 		font: inherit;
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		background: #fff7ed;
 		border: 1px solid #fed7aa;
 		border-radius: 999px;
@@ -318,7 +318,7 @@
 		width: 1rem;
 		text-align: center;
 		font-size: 0.75rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 		cursor: grab;
 		user-select: none;
 	}
@@ -346,7 +346,7 @@
 		font-size: 0.625rem;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.op__input {
@@ -372,8 +372,8 @@
 
 	.op__input:focus-visible {
 		outline: none;
-		border-color: var(--emerald-600, #059669);
-		box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.18);
+		border-color: var(--emerald-600, #15803d);
+		box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.18);
 	}
 
 	.op__acciones {
@@ -389,7 +389,7 @@
 		place-items: center;
 		font: inherit;
 		font-size: 0.6875rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 		background: none;
 		border: 1px solid transparent;
 		border-radius: 5px;
@@ -414,7 +414,7 @@
 	.mini:focus-visible,
 	.preset:focus-visible,
 	.agregar:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 1px;
 	}
 
@@ -437,7 +437,7 @@
 		font: inherit;
 		font-size: 0.75rem;
 		font-weight: 600;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		background: none;
 		border: 1px dashed #fdba74;
 		border-radius: 8px;

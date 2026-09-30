@@ -146,12 +146,12 @@
 	// Paleta warm para badges de actividad (LABORADO esmeralda = acento principal)
 	function fmtActividadColor(t: string): { bg: string; fg: string } {
 		const map: Record<string, { bg: string; fg: string }> = {
-			LABORADO: { bg: 'rgba(16, 185, 129, 0.10)', fg: '#065F46' },
-			DISPONIBLE: { bg: 'rgba(16, 185, 129, 0.04)', fg: '#0F1F1A' },
-			DESCANSO: { bg: 'rgba(0, 0, 0, 0.04)', fg: '#6B6B6B' },
+			LABORADO: { bg: 'rgba(22, 163, 74, 0.10)', fg: '#14532d' },
+			DISPONIBLE: { bg: 'rgba(22, 163, 74, 0.04)', fg: '#0f172a' },
+			DESCANSO: { bg: 'rgba(0, 0, 0, 0.04)', fg: '#64748b' },
 			MANTENIMIENTO: { bg: 'rgba(245, 158, 11, 0.10)', fg: '#92400E' }
 		};
-		return map[t] || { bg: 'rgba(0, 0, 0, 0.04)', fg: '#6B6B6B' };
+		return map[t] || { bg: 'rgba(0, 0, 0, 0.04)', fg: '#64748b' };
 	}
 
 	function nombreConductor(c: RegistroRef['conductor']): string {
@@ -432,7 +432,7 @@
 	>
 		<div
 			class="relative flex h-[92vh] w-full max-w-[90rem] flex-col overflow-hidden bg-white"
-			style="border-radius: 24px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18), 0 4px 24px rgba(0, 0, 0, 0.06); font-family: 'Inter Tight', system-ui, sans-serif; color: #1A1A1A;"
+			style="border-radius: 24px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18), 0 4px 24px rgba(0, 0, 0, 0.06); font-family: 'Inter Tight', system-ui, sans-serif; color: #0f172a;"
 			onclick={(e) => e.stopPropagation()}
 			role="dialog"
 			aria-modal="true"
@@ -458,7 +458,7 @@
 							onerror={(e: any) => (e.currentTarget.style.display = 'none')}
 						/>
 						<span
-							style="display: inline-block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #10B981; background: rgba(16, 185, 129, 0.08); padding: 0.3rem 0.7rem; border-radius: 6px; font-family: 'JetBrains Mono', monospace;"
+							style="display: inline-block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #16a34a; background: rgba(22, 163, 74, 0.08); padding: 0.3rem 0.7rem; border-radius: 6px; font-family: var(--font-sans);"
 						>
 							Reporte · GAF-FR-REC
 						</span>
@@ -467,12 +467,12 @@
 					<!-- Título display (Fraunces) -->
 					<div class="text-center">
 						<p
-							style="font-family: 'Inter Tight', sans-serif; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6B6B6B; margin: 0 0 0.15rem;"
+							style="font-family: 'Inter Tight', sans-serif; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; margin: 0 0 0.15rem;"
 						>
 							Transportes y Servicios Esmeralda S.A.S.
 						</p>
 						<h2
-							style="font-family: 'Fraunces', 'Georgia', serif; font-weight: 500; font-size: 1.5rem; line-height: 1.15; color: #0F1F1A; margin: 0;"
+							style="font-family: 'Fraunces', 'Georgia', serif; font-weight: 500; font-size: 1.5rem; line-height: 1.15; color: #0f172a; margin: 0;"
 						>
 							Reporte de Recorridos
 						</h2>
@@ -482,31 +482,31 @@
 					<div class="flex flex-col items-end gap-0.5">
 						<div class="flex items-center gap-1.5">
 							<span
-								style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #9A9A9A; text-transform: uppercase; letter-spacing: 0.08em;"
+								style="font-family: var(--font-sans); font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em;"
 								>Código</span
 							>
 							<span
-								style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #1A1A1A; font-weight: 600;"
+								style="font-family: var(--font-sans); font-size: 0.72rem; color: #0f172a; font-weight: 600;"
 								>GAF-FR-REC</span
 							>
 						</div>
 						<div class="flex items-center gap-1.5">
 							<span
-								style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #9A9A9A; text-transform: uppercase; letter-spacing: 0.08em;"
+								style="font-family: var(--font-sans); font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em;"
 								>Versión</span
 							>
 							<span
-								style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #1A1A1A; font-weight: 600;"
+								style="font-family: var(--font-sans); font-size: 0.72rem; color: #0f172a; font-weight: 600;"
 								>1</span
 							>
 						</div>
 						<div class="flex items-center gap-1.5">
 							<span
-								style="font-family: 'JetBrains Mono', monospace; font-size: 0.7rem; color: #9A9A9A; text-transform: uppercase; letter-spacing: 0.08em;"
+								style="font-family: var(--font-sans); font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.08em;"
 								>Generado</span
 							>
 							<span
-								style="font-family: 'JetBrains Mono', monospace; font-size: 0.72rem; color: #1A1A1A; font-weight: 600;"
+								style="font-family: var(--font-sans); font-size: 0.72rem; color: #0f172a; font-weight: 600;"
 								>{fechaGenerado}</span
 							>
 						</div>
@@ -516,42 +516,42 @@
 				<!-- Period bar (base cálida hueso) -->
 				<div
 					class="flex flex-wrap items-center gap-x-6 gap-y-1.5"
-					style="background-color: #FAF7F2; border-top: 1px solid rgba(0, 0, 0, 0.06); padding: 0.7rem 1.5rem; font-size: 0.78rem;"
+					style="background-color: #fcfcfb; border-top: 1px solid rgba(0, 0, 0, 0.06); padding: 0.7rem 1.5rem; font-size: 0.78rem;"
 				>
 					<div class="flex items-baseline gap-1.5">
 						<span
-							style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6B6B6B;"
+							style="font-family: var(--font-sans); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;"
 							>Conductor</span
 						>
-						<span style="font-weight: 600; color: #0F1F1A;">{conductorNombre || '—'}</span>
+						<span style="font-weight: 600; color: #0f172a;">{conductorNombre || '—'}</span>
 					</div>
 					<div class="flex items-baseline gap-1.5">
 						<span
-							style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6B6B6B;"
+							style="font-family: var(--font-sans); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;"
 							>Desde</span
 						>
 						<span
-							style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #0F1F1A; font-weight: 600;"
+							style="font-family: var(--font-sans); font-size: 0.78rem; color: #0f172a; font-weight: 600;"
 							>{fmtFechaCorta(desde)}</span
 						>
 					</div>
 					<div class="flex items-baseline gap-1.5">
 						<span
-							style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6B6B6B;"
+							style="font-family: var(--font-sans); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;"
 							>Hasta</span
 						>
 						<span
-							style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #0F1F1A; font-weight: 600;"
+							style="font-family: var(--font-sans); font-size: 0.78rem; color: #0f172a; font-weight: 600;"
 							>{fmtFechaCorta(hasta)}</span
 						>
 					</div>
 					<div class="flex items-baseline gap-1.5">
 						<span
-							style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6B6B6B;"
+							style="font-family: var(--font-sans); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;"
 							>Períodos</span
 						>
 						<span
-							style="font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #0F1F1A; font-weight: 600;"
+							style="font-family: var(--font-sans); font-size: 0.78rem; color: #0f172a; font-weight: 600;"
 						>
 							{mesesCubiertos.map((m) => fmtMesAnio(m)).join(', ') || '—'}
 						</span>
@@ -566,32 +566,32 @@
 					<!-- Resumen (chips emerald-tinted) -->
 					<div class="flex flex-wrap items-center gap-2">
 						<span
-							style="font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6B6B6B;"
+							style="font-family: var(--font-sans); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;"
 							>Resumen</span
 						>
 						<span
-							style="display: inline-flex; align-items: center; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(0, 0, 0, 0.04); color: #0F1F1A; font-size: 0.72rem; font-weight: 600; font-family: 'Inter Tight', sans-serif;"
+							style="display: inline-flex; align-items: center; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(0, 0, 0, 0.04); color: #0f172a; font-size: 0.72rem; font-weight: 600; font-family: 'Inter Tight', sans-serif;"
 						>
 							{resumen.totalFilas} tramos
 						</span>
 						<span
-							style="display: inline-flex; align-items: center; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(16, 185, 129, 0.10); color: #065F46; font-size: 0.72rem; font-weight: 600; font-family: 'Inter Tight', sans-serif;"
+							style="display: inline-flex; align-items: center; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(22, 163, 74, 0.10); color: #14532d; font-size: 0.72rem; font-weight: 600; font-family: 'Inter Tight', sans-serif;"
 						>
 							{fmtNum(resumen.totalHoras, 1)}h
 						</span>
 						{#if resumen.totalKm > 0}
 							<span
-								style="display: inline-flex; align-items: center; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(0, 0, 0, 0.04); color: #1A1A1A; font-size: 0.72rem; font-weight: 600; font-family: 'Inter Tight', sans-serif;"
+								style="display: inline-flex; align-items: center; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(0, 0, 0, 0.04); color: #0f172a; font-size: 0.72rem; font-weight: 600; font-family: 'Inter Tight', sans-serif;"
 							>
 								{fmtNum(resumen.totalKm, 0)} km
 							</span>
 						{/if}
 						{#if resumen.highlighted > 0}
 							<span
-								style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(16, 185, 129, 0.10); color: #065F46; font-size: 0.72rem; font-weight: 600; font-family: 'Inter Tight', sans-serif; border: 1px solid rgba(16, 185, 129, 0.30);"
+								style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(22, 163, 74, 0.10); color: #14532d; font-size: 0.72rem; font-weight: 600; font-family: 'Inter Tight', sans-serif; border: 1px solid rgba(22, 163, 74, 0.30);"
 							>
 								<span
-									style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #10B981; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);"
+									style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);"
 								></span>
 								{resumen.highlighted} sincronizados
 							</span>
@@ -603,12 +603,12 @@
 						{#if clavesSincronizadas.length > 0}
 							<label
 								class="flex cursor-pointer items-center gap-1.5"
-								style="padding: 0.4rem 0.75rem; border-radius: 10px; background: rgba(16, 185, 129, 0.06); border: 1px solid rgba(16, 185, 129, 0.18); color: #065F46; font-size: 0.76rem; font-weight: 600; font-family: 'Inter Tight', sans-serif; transition: all 0.2s;"
+								style="padding: 0.4rem 0.75rem; border-radius: 10px; background: rgba(22, 163, 74, 0.06); border: 1px solid rgba(22, 163, 74, 0.18); color: #14532d; font-size: 0.76rem; font-weight: 600; font-family: 'Inter Tight', sans-serif; transition: all 0.2s;"
 							>
 								<input
 									type="checkbox"
 									bind:checked={onlyHighlighted}
-									style="height: 0.85rem; width: 0.85rem; cursor: pointer; border-radius: 4px; border-color: rgba(16, 185, 129, 0.30); accent-color: #10B981;"
+									style="height: 0.85rem; width: 0.85rem; cursor: pointer; border-radius: 4px; border-color: rgba(22, 163, 74, 0.30); accent-color: #16a34a;"
 								/>
 								Solo sincronizados
 							</label>
@@ -617,7 +617,7 @@
 						<div class="relative">
 							<svg
 								class="pointer-events-none absolute top-1/2 -translate-y-1/2"
-								style="left: 0.65rem; height: 0.9rem; width: 0.9rem; color: #9A9A9A;"
+								style="left: 0.65rem; height: 0.9rem; width: 0.9rem; color: #94a3b8;"
 								fill="none"
 								stroke="currentColor"
 								viewBox="0 0 24 24"
@@ -633,10 +633,10 @@
 								type="text"
 								bind:value={searchTerm}
 								placeholder="Buscar…"
-								style="width: 11rem; border-radius: 10px; border: 1px solid rgba(0, 0, 0, 0.12); background: #FFFFFF; padding: 0.45rem 0.75rem 0.45rem 2rem; font-size: 0.8rem; color: #1A1A1A; font-family: 'Inter Tight', sans-serif; transition: all 0.2s;"
+								style="width: 11rem; border-radius: 10px; border: 1px solid rgba(0, 0, 0, 0.12); background: #FFFFFF; padding: 0.45rem 0.75rem 0.45rem 2rem; font-size: 0.8rem; color: #0f172a; font-family: 'Inter Tight', sans-serif; transition: all 0.2s;"
 								onfocus={(e) => {
-									e.currentTarget.style.borderColor = '#10B981';
-									e.currentTarget.style.boxShadow = '0 0 0 3px rgba(16, 185, 129, 0.10)';
+									e.currentTarget.style.borderColor = '#16a34a';
+									e.currentTarget.style.boxShadow = '0 0 0 3px rgba(22, 163, 74, 0.10)';
 									e.currentTarget.style.outline = 'none';
 								}}
 								onblur={(e) => {
@@ -649,9 +649,9 @@
 						<button
 							type="button"
 							onclick={copiarComoCSV}
-							style="display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.85rem; border-radius: 10px; background: #FFFFFF; color: #1A1A1A; border: 1px solid rgba(0, 0, 0, 0.12); font-family: 'Inter Tight', sans-serif; font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: all 0.2s;"
+							style="display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.85rem; border-radius: 10px; background: #FFFFFF; color: #0f172a; border: 1px solid rgba(0, 0, 0, 0.12); font-family: 'Inter Tight', sans-serif; font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: all 0.2s;"
 							onmouseenter={(e) => {
-								e.currentTarget.style.background = '#FAF7F2';
+								e.currentTarget.style.background = '#fcfcfb';
 								e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.20)';
 							}}
 							onmouseleave={(e) => {
@@ -683,14 +683,14 @@
 						<button
 							type="button"
 							onclick={descargarCSV}
-							style="display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.95rem; border-radius: 10px; background: linear-gradient(135deg, #10B981, #059669); color: #FFFFFF; border: none; font-family: 'Inter Tight', sans-serif; font-size: 0.78rem; font-weight: 600; cursor: pointer; box-shadow: 0 4px 16px rgba(16, 185, 129, 0.30); transition: all 0.2s;"
+							style="display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.95rem; border-radius: 10px; background: linear-gradient(135deg, #16a34a, #15803d); color: #FFFFFF; border: none; font-family: 'Inter Tight', sans-serif; font-size: 0.78rem; font-weight: 600; cursor: pointer; box-shadow: 0 4px 16px rgba(22, 163, 74, 0.30); transition: all 0.2s;"
 							onmouseenter={(e) => {
 								e.currentTarget.style.transform = 'translateY(-1px)';
-								e.currentTarget.style.boxShadow = '0 6px 20px rgba(16, 185, 129, 0.40)';
+								e.currentTarget.style.boxShadow = '0 6px 20px rgba(22, 163, 74, 0.40)';
 							}}
 							onmouseleave={(e) => {
 								e.currentTarget.style.transform = 'translateY(0)';
-								e.currentTarget.style.boxShadow = '0 4px 16px rgba(16, 185, 129, 0.30)';
+								e.currentTarget.style.boxShadow = '0 4px 16px rgba(22, 163, 74, 0.30)';
 							}}
 							title="Descargar CSV"
 						>
@@ -713,15 +713,15 @@
 						<button
 							type="button"
 							onclick={cerrar}
-							style="display: inline-flex; align-items: center; justify-content: center; height: 2rem; width: 2rem; border-radius: 10px; background: transparent; color: #6B6B6B; border: 1px solid transparent; cursor: pointer; transition: all 0.2s;"
+							style="display: inline-flex; align-items: center; justify-content: center; height: 2rem; width: 2rem; border-radius: 10px; background: transparent; color: #64748b; border: 1px solid transparent; cursor: pointer; transition: all 0.2s;"
 							onmouseenter={(e) => {
-								e.currentTarget.style.background = '#FAF7F2';
-								e.currentTarget.style.color = '#1A1A1A';
+								e.currentTarget.style.background = '#fcfcfb';
+								e.currentTarget.style.color = '#0f172a';
 								e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.08)';
 							}}
 							onmouseleave={(e) => {
 								e.currentTarget.style.background = 'transparent';
-								e.currentTarget.style.color = '#6B6B6B';
+								e.currentTarget.style.color = '#64748b';
 								e.currentTarget.style.borderColor = 'transparent';
 							}}
 							title="Cerrar (Esc)"
@@ -746,9 +746,9 @@
 				{#if loading}
 					<div class="flex h-full flex-col items-center justify-center gap-3 p-12">
 						<div
-							style="height: 2.5rem; width: 2.5rem; border-radius: 50%; border: 3px solid rgba(16, 185, 129, 0.20); border-top-color: #10B981; animation: spin 1s linear infinite;"
+							style="height: 2.5rem; width: 2.5rem; border-radius: 50%; border: 3px solid rgba(22, 163, 74, 0.20); border-top-color: #16a34a; animation: spin 1s linear infinite;"
 						></div>
-						<p style="font-size: 0.85rem; color: #6B6B6B; font-family: 'Inter Tight', sans-serif;">
+						<p style="font-size: 0.85rem; color: #64748b; font-family: 'Inter Tight', sans-serif;">
 							Cargando recorridos del período seleccionado…
 						</p>
 					</div>
@@ -776,7 +776,7 @@
 						class="flex h-full flex-col items-center justify-center gap-3 p-12 text-center"
 					>
 						<div
-							style="display: flex; height: 3.5rem; width: 3.5rem; align-items: center; justify-content: center; border-radius: 16px; background: linear-gradient(135deg, rgba(16, 185, 129, 0.08), rgba(16, 185, 129, 0.15)); color: #10B981;"
+							style="display: flex; height: 3.5rem; width: 3.5rem; align-items: center; justify-content: center; border-radius: 16px; background: linear-gradient(135deg, rgba(22, 163, 74, 0.08), rgba(22, 163, 74, 0.15)); color: #16a34a;"
 						>
 							<svg
 								style="height: 1.75rem; width: 1.75rem;"
@@ -793,11 +793,11 @@
 							</svg>
 						</div>
 						<h3
-							style="font-family: 'Fraunces', 'Georgia', serif; font-size: 1.15rem; font-weight: 500; color: #0F1F1A; margin: 0;"
+							style="font-family: 'Fraunces', 'Georgia', serif; font-size: 1.15rem; font-weight: 500; color: #0f172a; margin: 0;"
 						>
 							Sin recorridos en este período
 						</h3>
-						<p style="font-size: 0.82rem; color: #6B6B6B; max-width: 24rem; margin: 0;">
+						<p style="font-size: 0.82rem; color: #64748b; max-width: 24rem; margin: 0;">
 							No se encontraron días registrados para este conductor entre el
 							{fmtFechaCorta(desde)} y el {fmtFechaCorta(hasta)}.
 						</p>
@@ -805,67 +805,67 @@
 				{:else}
 					<table
 						class="w-full border-collapse"
-						style="font-family: 'Inter Tight', sans-serif; font-size: 0.78rem; color: #1A1A1A;"
+						style="font-family: 'Inter Tight', sans-serif; font-size: 0.78rem; color: #0f172a;"
 					>
 						<thead class="sticky top-0 z-10">
-							<tr style="background-color: #FAF7F2;">
+							<tr style="background-color: #fcfcfb;">
 								<th
-									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: left; min-width: 160px; font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6B6B6B;"
+									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: left; min-width: 160px; font-family: var(--font-sans); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;"
 								>
 									Nombres y Apellidos
 								</th>
 								<th
-									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: left; min-width: 90px; font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6B6B6B;"
+									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: left; min-width: 90px; font-family: var(--font-sans); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;"
 								>
 									Fecha
 								</th>
 								<th
-									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: left; min-width: 100px; font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6B6B6B;"
+									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: left; min-width: 100px; font-family: var(--font-sans); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;"
 								>
 									Actividad
 								</th>
 								<th
-									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: left; min-width: 90px; font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6B6B6B;"
+									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: left; min-width: 90px; font-family: var(--font-sans); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;"
 								>
 									Placa
 								</th>
 								<th
-									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: left; min-width: 220px; font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6B6B6B;"
+									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: left; min-width: 220px; font-family: var(--font-sans); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;"
 								>
 									Descripción de la Labor / Recorrido
 								</th>
 								<th
-									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: left; min-width: 80px; font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6B6B6B;"
+									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: left; min-width: 80px; font-family: var(--font-sans); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;"
 								>
 									Hora Inicial
 								</th>
 								<th
-									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: left; min-width: 80px; font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6B6B6B;"
+									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: left; min-width: 80px; font-family: var(--font-sans); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;"
 								>
 									Hora Final
 								</th>
 								<th
-									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: right; min-width: 80px; font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6B6B6B;"
+									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: right; min-width: 80px; font-family: var(--font-sans); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;"
 								>
 									Km Inicial
 								</th>
 								<th
-									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: right; min-width: 80px; font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6B6B6B;"
+									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: right; min-width: 80px; font-family: var(--font-sans); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;"
 								>
 									Km Final
 								</th>
 								<th
-									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: center; min-width: 80px; font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6B6B6B;"
+									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: center; min-width: 80px; font-family: var(--font-sans); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;"
 								>
 									Pernocte
 								</th>
 								<th
-									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: right; min-width: 110px; font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6B6B6B;"
+									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.7rem 0.65rem; text-align: right; min-width: 110px; font-family: var(--font-sans); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;"
 								>
 									Horas Conducción
 								</th>
 								<th
-									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); padding: 0.7rem 0.65rem; text-align: left; min-width: 140px; font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6B6B6B;"
+									style="border-bottom: 1px solid rgba(0, 0, 0, 0.08); padding: 0.7rem 0.65rem; text-align: left; min-width: 140px; font-family: var(--font-sans); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b;"
 								>
 									Cliente
 								</th>
@@ -876,27 +876,27 @@
 								{@const act = fmtActividadColor(fila.actividad)}
 								<tr
 									style:background-color={fila.tiene_bonos
-										? 'rgba(16, 185, 129, 0.06)'
+										? 'rgba(22, 163, 74, 0.06)'
 										: i % 2 === 0
 											? '#FFFFFF'
-											: '#FAF7F2'}
+											: '#fcfcfb'}
 									style="border-bottom: 1px solid rgba(0, 0, 0, 0.04); transition: background-color 0.2s;"
-									onmouseenter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(16, 185, 129, 0.10)')}
+									onmouseenter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(22, 163, 74, 0.10)')}
 									onmouseleave={(e) =>
 										(e.currentTarget.style.backgroundColor = fila.tiene_bonos
-											? 'rgba(16, 185, 129, 0.06)'
+											? 'rgba(22, 163, 74, 0.06)'
 											: i % 2 === 0
 												? '#FFFFFF'
-												: '#FAF7F2')}
+												: '#fcfcfb')}
 								>
 									<td
-										style="border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.55rem 0.65rem; font-size: 0.78rem; font-weight: 600; color: #0F1F1A; vertical-align: top;"
+										style="border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.55rem 0.65rem; font-size: 0.78rem; font-weight: 600; color: #0f172a; vertical-align: top;"
 									>
 										<div class="flex flex-wrap items-center gap-1.5">
 											<span>{fila.conductor}</span>
 											{#if fila.tiene_bonos}
 												<span
-													style="display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.1rem 0.5rem; border-radius: 999px; background: linear-gradient(135deg, #10B981, #059669); color: #FFFFFF; font-family: 'JetBrains Mono', monospace; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);"
+													style="display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.1rem 0.5rem; border-radius: 999px; background: linear-gradient(135deg, #16a34a, #15803d); color: #FFFFFF; font-family: var(--font-sans); font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; box-shadow: 0 2px 6px rgba(22, 163, 74, 0.25);"
 													title="Este tramo tiene bonos sincronizados"
 												>
 													<svg
@@ -914,7 +914,7 @@
 										</div>
 									</td>
 									<td
-										style="border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.55rem 0.65rem; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #0F1F1A; vertical-align: top;"
+										style="border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.55rem 0.65rem; font-family: var(--font-sans); font-size: 0.78rem; color: #0f172a; vertical-align: top;"
 									>
 										{fila.fechaLabel}
 									</td>
@@ -922,38 +922,38 @@
 										<span
 											style:background-color={act.bg}
 											style:color={act.fg}
-											style="display: inline-block; padding: 0.2rem 0.55rem; border-radius: 999px; font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;"
+											style="display: inline-block; padding: 0.2rem 0.55rem; border-radius: 999px; font-family: var(--font-sans); font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;"
 										>
 											{fila.actividad}
 										</span>
 									</td>
 									<td
-										style="border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.55rem 0.65rem; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; font-weight: 600; color: #065F46; vertical-align: top;"
+										style="border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.55rem 0.65rem; font-family: var(--font-sans); font-size: 0.78rem; font-weight: 600; color: #14532d; vertical-align: top;"
 									>
 										{fila.placa}
 									</td>
 									<td
-										style="border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.55rem 0.65rem; font-size: 0.78rem; color: #4A4A4A; vertical-align: top; line-height: 1.45;"
+										style="border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.55rem 0.65rem; font-size: 0.78rem; color: #334155; vertical-align: top; line-height: 1.45;"
 									>
 										{fila.descripcion}
 									</td>
 									<td
-										style="border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.55rem 0.65rem; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #0F1F1A; vertical-align: top;"
+										style="border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.55rem 0.65rem; font-family: var(--font-sans); font-size: 0.78rem; color: #0f172a; vertical-align: top;"
 									>
 										{fila.hora_inicio}
 									</td>
 									<td
-										style="border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.55rem 0.65rem; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #0F1F1A; vertical-align: top;"
+										style="border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.55rem 0.65rem; font-family: var(--font-sans); font-size: 0.78rem; color: #0f172a; vertical-align: top;"
 									>
 										{fila.hora_fin}
 									</td>
 									<td
-										style="border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.55rem 0.65rem; text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #0F1F1A; vertical-align: top; font-variant-numeric: tabular-nums;"
+										style="border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.55rem 0.65rem; text-align: right; font-family: var(--font-sans); font-size: 0.78rem; color: #0f172a; vertical-align: top; font-variant-numeric: tabular-nums;"
 									>
 										{fmtKm(fila.km_inicial)}
 									</td>
 									<td
-										style="border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.55rem 0.65rem; text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; color: #0F1F1A; vertical-align: top; font-variant-numeric: tabular-nums;"
+										style="border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.55rem 0.65rem; text-align: right; font-family: var(--font-sans); font-size: 0.78rem; color: #0f172a; vertical-align: top; font-variant-numeric: tabular-nums;"
 									>
 										{fmtKm(fila.km_final)}
 									</td>
@@ -964,19 +964,19 @@
 											style:background-color={fila.pernocte === 'SÍ'
 												? 'rgba(245, 158, 11, 0.10)'
 												: 'rgba(0, 0, 0, 0.04)'}
-											style:color={fila.pernocte === 'SÍ' ? '#92400E' : '#6B6B6B'}
-											style="display: inline-block; padding: 0.2rem 0.55rem; border-radius: 999px; font-family: 'JetBrains Mono', monospace; font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;"
+											style:color={fila.pernocte === 'SÍ' ? '#92400E' : '#64748b'}
+											style="display: inline-block; padding: 0.2rem 0.55rem; border-radius: 999px; font-family: var(--font-sans); font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;"
 										>
 											{fila.pernocte}
 										</span>
 									</td>
 									<td
-										style="border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.55rem 0.65rem; text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; font-weight: 600; color: #065F46; vertical-align: top; font-variant-numeric: tabular-nums;"
+										style="border-right: 1px solid rgba(0, 0, 0, 0.04); padding: 0.55rem 0.65rem; text-align: right; font-family: var(--font-sans); font-size: 0.78rem; font-weight: 600; color: #14532d; vertical-align: top; font-variant-numeric: tabular-nums;"
 									>
 										{fmtHoras(fila.horas_conduccion)}
 									</td>
 									<td
-										style="padding: 0.55rem 0.65rem; font-size: 0.78rem; color: #4A4A4A; vertical-align: top;"
+										style="padding: 0.55rem 0.65rem; font-size: 0.78rem; color: #334155; vertical-align: top;"
 									>
 										{fila.cliente}
 									</td>
@@ -984,20 +984,20 @@
 							{/each}
 						</tbody>
 						<tfoot class="sticky bottom-0">
-							<tr style="background-color: #FAF7F2; border-top: 1px solid rgba(0, 0, 0, 0.08);">
+							<tr style="background-color: #fcfcfb; border-top: 1px solid rgba(0, 0, 0, 0.08);">
 								<td
 									colspan="10"
-									style="padding: 0.7rem 0.85rem; text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #6B6B6B; border-right: 1px solid rgba(0, 0, 0, 0.04);"
+									style="padding: 0.7rem 0.85rem; text-align: right; font-family: var(--font-sans); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; border-right: 1px solid rgba(0, 0, 0, 0.04);"
 								>
 									Totales
 								</td>
 								<td
-									style="padding: 0.7rem 0.65rem; text-align: right; font-family: 'JetBrains Mono', monospace; font-size: 0.82rem; font-weight: 700; color: #065F46; border-right: 1px solid rgba(0, 0, 0, 0.04); font-variant-numeric: tabular-nums;"
+									style="padding: 0.7rem 0.65rem; text-align: right; font-family: var(--font-sans); font-size: 0.82rem; font-weight: 700; color: #14532d; border-right: 1px solid rgba(0, 0, 0, 0.04); font-variant-numeric: tabular-nums;"
 								>
 									{fmtNum(resumen.totalHoras, 1)}h
 								</td>
 								<td
-									style="padding: 0.7rem 0.65rem; font-family: 'Inter Tight', sans-serif; font-size: 0.72rem; color: #6B6B6B;"
+									style="padding: 0.7rem 0.65rem; font-family: 'Inter Tight', sans-serif; font-size: 0.72rem; color: #64748b;"
 								>
 									{filasFiltradas.length} fila{filasFiltradas.length === 1 ? '' : 's'}
 								</td>
@@ -1010,10 +1010,10 @@
 			<!-- ═══ FOOTER editorial ═══ -->
 			<div
 				class="flex flex-shrink-0 items-center justify-between"
-				style="background-color: #FAF7F2; border-top: 1px solid rgba(0, 0, 0, 0.06); padding: 0.65rem 1.5rem; font-size: 0.72rem; color: #6B6B6B;"
+				style="background-color: #fcfcfb; border-top: 1px solid rgba(0, 0, 0, 0.06); padding: 0.65rem 1.5rem; font-size: 0.72rem; color: #64748b;"
 			>
 				<span
-					style="display: inline-block; padding: 0.2rem 0.5rem; border-radius: 5px; background: rgba(16, 185, 129, 0.08); color: #065F46; font-family: 'JetBrains Mono', monospace; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;"
+					style="display: inline-block; padding: 0.2rem 0.5rem; border-radius: 5px; background: rgba(22, 163, 74, 0.08); color: #14532d; font-family: var(--font-sans); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;"
 				>
 					GAF-FR-REC · V1
 				</span>

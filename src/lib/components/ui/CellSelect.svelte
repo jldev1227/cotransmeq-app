@@ -209,7 +209,7 @@
     color: #0f172a;
     font-weight: 600;
     border-style: solid;
-    border-color: #f97316;
+    border-color: #ea580c;
     background: #f0fdf4;
   }
   .cell-select-input::placeholder {
@@ -217,12 +217,12 @@
     font-style: italic;
   }
   .cell-select-input:hover {
-    border-color: #ea580c;
-    color: #ea580c;
+    border-color: #c2410c;
+    color: #c2410c;
   }
   .cell-select-input:focus,
   .cell-select-input.has-value:focus {
-    border-color: #ea580c;
+    border-color: #c2410c;
     color: #0f172a;
     border-style: solid;
     background: #fff;
@@ -244,10 +244,10 @@
   }
   .cell-select-chevron.open {
     transform: translateY(-50%) rotate(180deg);
-    color: #ea580c;
+    color: #c2410c;
   }
   .cell-select-input:focus ~ .cell-select-chevron {
-    color: #ea580c;
+    color: #c2410c;
   }
 
   .cell-select-dropdown {
@@ -284,7 +284,7 @@
     border-bottom: 1px solid #e2e8f0;
   }
   .cell-select-filter-hint {
-    color: #ea580c;
+    color: #c2410c;
     font-style: italic;
     text-transform: none;
     letter-spacing: 0;
@@ -321,8 +321,8 @@
   }
   .cell-select-option:hover,
   .cell-select-option.active {
-    background: #ecfdf5;
-    color: #047857;
+    background: #f0fdf4;
+    color: #166534;
   }
   .cell-select-option.active {
     font-weight: 600;
@@ -331,6 +331,6 @@
     text-transform: capitalize;
   }
   .cell-select-option.active :global(svg) {
-    color: #ea580c;
+    color: #c2410c;
   }
 </style>

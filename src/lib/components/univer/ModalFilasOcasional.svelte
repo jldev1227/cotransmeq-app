@@ -512,7 +512,7 @@
 		color: #166534;
 		font-weight: 700;
 		background: #f0fdf4;
-		border-bottom-color: #ea580c;
+		border-bottom-color: #c2410c;
 	}
 	.gv-tabs .gv-cuenta {
 		min-width: 18px;
@@ -526,7 +526,7 @@
 		text-align: center;
 	}
 	.gv-tabs button.gv-tab-on .gv-cuenta {
-		background: #ea580c;
+		background: #c2410c;
 		color: #fff;
 	}
 	.gv-nota-imp {

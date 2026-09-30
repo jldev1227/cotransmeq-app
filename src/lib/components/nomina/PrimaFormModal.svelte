@@ -226,7 +226,7 @@
 						disabled={loadingConductores}
 						--border-radius="0.5rem"
 						--border="1px solid #E5E7EB"
-						--border-focused="1px solid #10b981"
+						--border-focused="1px solid #16a34a"
 						--padding="0.625rem 0.875rem"
 						--height="40px"
 					/>

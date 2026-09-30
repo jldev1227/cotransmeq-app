@@ -328,7 +328,7 @@
 					Recargos
 				</a>
 				<span class="text-[var(--text-very-muted)]">/</span>
-				<span class="rounded-md bg-[rgba(16,185,129,0.08)] px-2 py-0.5 text-[var(--emerald-700)]">
+				<span class="rounded-md bg-[rgba(22, 163, 74,0.08)] px-2 py-0.5 text-[var(--emerald-700)]">
 					Configuración
 				</span>
 			</div>
@@ -395,7 +395,7 @@
 									class="apple-transition flex items-center gap-2 rounded-md border px-2 py-1 text-[10px] {cfg.activo
 										? jornadaDistinta
 											? 'border-[#B45309] bg-[rgba(180,83,9,0.08)] text-[#92400E]'
-											: 'border-[var(--emerald-300)] bg-[rgba(16,185,129,0.08)] text-[var(--emerald-800)]'
+											: 'border-[var(--emerald-300)] bg-[rgba(22, 163, 74,0.08)] text-[var(--emerald-800)]'
 										: 'border-gray-300 bg-gray-100 text-gray-500'}"
 									title={`${formatDate(cfg.vigencia_desde)}${cfg.vigencia_hasta ? ' → ' + formatDate(cfg.vigencia_hasta) : ' → ∞'} · ${formatCurrency(cfg.salario_basico)} · Jornada: ${jn.toFixed(2)}h / ${jf.toFixed(2)}h fest`}
 								>
@@ -532,7 +532,7 @@
 							{@const jornadaDistinta = jn !== 10.33 || jf !== 7.33}
 							<tr
 								class="table-row {recentlyCreated.has(config.id)
-									? '!bg-[rgba(16,185,129,0.08)]'
+									? '!bg-[rgba(22, 163, 74,0.08)]'
 									: ''} {recentlyUpdated.has(config.id)
 									? '!bg-[rgba(37,99,235,0.08)]'
 									: ''}"
@@ -587,7 +587,7 @@
 								<td class="px-4 py-3 text-center">
 									{#if config.paga_dias_festivos}
 										<span
-											class="status-pill !bg-[rgba(16,185,129,0.10)] !text-[var(--emerald-700)]"
+											class="status-pill !bg-[rgba(22, 163, 74,0.10)] !text-[var(--emerald-700)]"
 										>
 											<svg class="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
 												<path
@@ -620,7 +620,7 @@
 										disabled={isReadOnly}
 										class="status-pill apple-transition
 											{config.activo
-											? '!bg-[rgba(16,185,129,0.10)] !text-[var(--emerald-700)] hover:!bg-[rgba(16,185,129,0.18)]'
+											? '!bg-[rgba(22, 163, 74,0.10)] !text-[var(--emerald-700)] hover:!bg-[rgba(22, 163, 74,0.18)]'
 											: '!bg-[rgba(0,0,0,0.04)] !text-[var(--text-muted)] hover:!bg-[rgba(0,0,0,0.08)]'}"
 									>
 										{config.activo ? 'Activo' : 'Inactivo'}
@@ -709,7 +709,7 @@
 						<span
 							class="status-pill
 								{config.activo
-								? '!bg-[rgba(16,185,129,0.10)] !text-[var(--emerald-700)]'
+								? '!bg-[rgba(22, 163, 74,0.10)] !text-[var(--emerald-700)]'
 								: '!bg-[rgba(0,0,0,0.04)] !text-[var(--text-muted)]'}"
 						>
 							{config.activo ? 'Activo' : 'Inactivo'}
@@ -970,7 +970,7 @@
 									Jornada día normal
 									<span
 										class="ml-1 inline-block h-1.5 w-1.5 rounded-full align-middle"
-										style="background-color: #047857;"
+										style="background-color: #166534;"
 										title="Jornada aplicable de lunes a sábado"
 									></span>
 								</label>
@@ -1256,7 +1256,7 @@
 						type="submit"
 						disabled={saving}
 						class="apple-transition flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
-						style="background: linear-gradient(135deg, #10B981, #059669);"
+						style="background: linear-gradient(135deg, #16a34a, #15803d);"
 					>
 						{#if saving}
 							<div

@@ -278,7 +278,7 @@
 	}
 
 	function getTipoColor(tipo: string) {
-		return tipo === TipoCliente.EMPRESA ? '#3b82f6' : '#10b981';
+		return tipo === TipoCliente.EMPRESA ? '#3b82f6' : '#16a34a';
 	}
 
 	$effect(() => {
@@ -341,7 +341,7 @@
 			<div class="flex items-center gap-3">
 				<div
 					class="brand-gradient flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
-					style="box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);"
+					style="box-shadow: 0 4px 16px rgba(22, 163, 74, 0.3);"
 				>
 					<svg
 						class="h-5 w-5 text-white"
@@ -359,7 +359,7 @@
 				</div>
 				<div>
 					<div class="flex items-center gap-2">
-						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 400;">
+						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 800;">
 							Gestión de Clientes
 						</h1>
 						<!-- Aquí había un chip «En vivo» pintado a mano, sin mirar el socket:
@@ -384,7 +384,7 @@
 							style="border-color: {filtros.vista === 'ocultos'
 								? 'var(--emerald-500)'
 								: 'var(--border-default)'}; background-color: {filtros.vista === 'ocultos'
-								? 'rgba(16,185,129,0.04)'
+								? 'rgba(22, 163, 74,0.04)'
 								: 'white'}; color: {filtros.vista === 'ocultos' ? 'var(--emerald-600)' : 'var(--text-muted)'};"
 						>
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
@@ -417,7 +417,7 @@
 						: 'var(--border-default)'}; color: {mostrarFiltros
 						? 'var(--emerald-700)'
 						: 'var(--text-secondary)'}; background-color: {mostrarFiltros
-						? 'rgba(16,185,129,0.04)'
+						? 'rgba(22, 163, 74,0.04)'
 						: 'white'};"
 				>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
@@ -603,7 +603,7 @@
 					</svg>
 				</div>
 				<div class="text-center">
-					<h3 class="font-display mb-1 text-lg" style="color: var(--bg-charcoal); font-weight: 400;">
+					<h3 class="font-display mb-1 text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
 						No hay clientes
 					</h3>
 					<p class="text-sm" style="color: var(--text-muted);">No se encontraron resultados</p>
@@ -619,7 +619,7 @@
 							class="list-card"
 							style="border-left: 4px solid {getTipoColor(cliente.tipo)};
 								background-color: {clientesSeleccionados.has(cliente.id)
-								? 'rgba(16, 185, 129, 0.04)'
+								? 'rgba(22, 163, 74, 0.04)'
 								: 'var(--bg-surface)'};
 								border-color: {clientesSeleccionados.has(cliente.id) ? 'var(--emerald-500)' : 'var(--border-subtle)'};
 								border-left-color: {getTipoColor(cliente.tipo)};"
@@ -740,7 +740,7 @@
 								<button
 									onclick={() => goto(`/dashboard/clientes/${cliente.id}`)}
 									class="apple-transition rounded-md p-1.5"
-									style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
+									style="color: var(--emerald-600); background-color: rgba(22, 163, 74, 0.06);"
 									title="Ver detalle"
 								>
 									<svg
@@ -892,7 +892,7 @@
 	<button
 		type="button"
 		class="fixed inset-0 z-50 cursor-default border-0 p-0"
-		style="background: linear-gradient(135deg, rgba(15, 31, 26, 0.40), rgba(10, 20, 16, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
+		style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.40), rgba(20, 83, 45, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
 		aria-label="Cerrar modal"
 		onclick={() => (showDeleteModal = false)}
 	></button>

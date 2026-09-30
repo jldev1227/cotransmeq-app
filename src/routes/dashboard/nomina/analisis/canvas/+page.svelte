@@ -649,8 +649,8 @@
 			{
 				label: 'Bonificaciones',
 				data: bonPorPlaca.map((d) => d.total),
-				backgroundColor: '#059669cc',
-				borderColor: '#059669',
+				backgroundColor: '#15803dcc',
+				borderColor: '#15803d',
 				borderWidth: 1,
 				borderRadius: 4
 			}
@@ -662,8 +662,8 @@
 			{
 				label: 'Recargos',
 				data: recPorPlaca.map((d) => d.total),
-				backgroundColor: '#f97316cc',
-				borderColor: '#f97316',
+				backgroundColor: '#ea580ccc',
+				borderColor: '#ea580c',
 				borderWidth: 1,
 				borderRadius: 4
 			}
@@ -687,8 +687,8 @@
 		datasets: [
 			{
 				data: recPie.map((d) => d.value),
-				backgroundColor: ['#059669cc', '#f97316cc'],
-				borderColor: ['#059669', '#f97316'],
+				backgroundColor: ['#15803dcc', '#ea580ccc'],
+				borderColor: ['#15803d', '#ea580c'],
 				borderWidth: 1
 			}
 		]
@@ -795,7 +795,7 @@
 										type="button"
 										class={`apple-transition w-full cursor-pointer px-3 py-2 text-left text-sm ${
 											selectedIndex === i + 1
-												? 'bg-[rgba(249,115,22,0.12)] text-[var(--emerald-700)]'
+												? 'bg-[rgba(234, 88, 12,0.12)] text-[var(--emerald-700)]'
 												: 'hover:bg-[var(--bg-base)]'
 										}`}
 										onmousedown={() => (filtros.placa = p)}
@@ -894,7 +894,7 @@
 							class="mb-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3"
 							style="height:200px"
 						>
-							<Bar data={bonChartData} options={BAR_OPTS('Bonificaciones', '#059669')} />
+							<Bar data={bonChartData} options={BAR_OPTS('Bonificaciones', '#15803d')} />
 						</div>
 					{:else}
 						<div
@@ -1048,7 +1048,7 @@
 								class="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3"
 								style="height:200px"
 							>
-								<Bar data={recChartData} options={BAR_OPTS('Recargos', '#f97316')} />
+								<Bar data={recChartData} options={BAR_OPTS('Recargos', '#ea580c')} />
 							</div>
 						{:else}
 							<div

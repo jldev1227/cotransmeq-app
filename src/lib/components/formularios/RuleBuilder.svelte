@@ -348,7 +348,7 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.regla__quitar {
@@ -368,7 +368,7 @@
 	.regla__aviso {
 		font-size: 0.75rem;
 		line-height: 1.4;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.regla__aviso {
@@ -388,7 +388,7 @@
 		font: inherit;
 		font-size: 0.75rem;
 		font-weight: 600;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		background: none;
 		border: 1px dashed #fdba74;
 		border-radius: 8px;
@@ -409,7 +409,7 @@
 
 	.frase__palabra {
 		font-weight: 600;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 	}
 
 	.cond {
@@ -421,11 +421,11 @@
 
 	.cond__y {
 		font-weight: 600;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 	}
 
 	.cond__nada {
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.sel {
@@ -453,8 +453,8 @@
 
 	.sel:focus-visible {
 		outline: none;
-		border-color: var(--emerald-600, #059669);
-		box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.18);
+		border-color: var(--emerald-600, #15803d);
+		box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.18);
 	}
 
 	.multi {
@@ -476,7 +476,7 @@
 
 	.multi__chip--on {
 		background: #fff7ed;
-		border-color: #ea580c;
+		border-color: #c2410c;
 		color: #9a3412;
 		font-weight: 600;
 	}
@@ -488,7 +488,7 @@
 		place-items: center;
 		font: inherit;
 		font-size: 0.625rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 		background: none;
 		border: none;
 		border-radius: 4px;
@@ -506,7 +506,7 @@
 		font: inherit;
 		font-size: 0.6875rem;
 		font-weight: 600;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		background: none;
 		border: 1px dashed #fdba74;
 		border-radius: 6px;
@@ -518,7 +518,7 @@
 	.frase__agregar:focus-visible,
 	.regla__crear:focus-visible,
 	.regla__quitar:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 1px;
 	}
 

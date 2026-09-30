@@ -1786,7 +1786,7 @@
 					onclick={() => (modalImportarTransmeraldaIsOpen = true)}
 					disabled={bloqueoPorRecalc}
 					class="apple-transition flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-					style="background: linear-gradient(135deg, #047857, #065F46); box-shadow: 0 2px 6px rgba(6, 95, 70, 0.25);"
+					style="background: linear-gradient(135deg, #166534, #14532d); box-shadow: 0 2px 6px rgba(6, 95, 70, 0.25);"
 					title="Importar recargos desde Transmeralda (mismo schema, otra base de datos) para {getNombreMes(filtros.mes)} {filtros.anio}"
 				>
 					<svg
@@ -1928,7 +1928,7 @@
 			{:else if selectedRows.size > 0 && !isReadOnly}
 				<button
 					onclick={() => (modalRestaurarIsOpen = true)}
-					class="apple-transition flex cursor-pointer items-center gap-1.5 rounded-xl border border-[rgba(16,185,129,0.3)] bg-[var(--emerald-500)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--emerald-600)]"
+					class="apple-transition flex cursor-pointer items-center gap-1.5 rounded-xl border border-[rgba(22, 163, 74,0.3)] bg-[var(--emerald-500)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--emerald-600)]"
 				>
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
@@ -2002,7 +2002,7 @@
 			<div class="stat-card">
 				<div class="flex items-center gap-2">
 					<div
-						class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(16,185,129,0.10)]"
+						class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(22, 163, 74,0.10)]"
 					>
 						<svg
 							class="h-4 w-4 text-[var(--emerald-600)]"
@@ -2163,12 +2163,12 @@
 			<!-- Total a Pagar (suma del valor monetario de los recargos visibles) -->
 			<div
 				class="stat-card"
-				style="background: linear-gradient(135deg, rgba(16,185,129,0.08), rgba(5,150,105,0.04)); border-color: rgba(16,185,129,0.25);"
+				style="background: linear-gradient(135deg, rgba(22, 163, 74,0.08), rgba(21, 128, 61,0.04)); border-color: rgba(22, 163, 74,0.25);"
 			>
 				<div class="flex items-center gap-2">
 					<div
 						class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg"
-						style="background: linear-gradient(135deg, #10B981, #059669); box-shadow: 0 2px 6px rgba(16,185,129,0.25);"
+						style="background: linear-gradient(135deg, #16a34a, #15803d); box-shadow: 0 2px 6px rgba(22, 163, 74,0.25);"
 					>
 						<svg
 							class="h-4 w-4 text-white"
@@ -2186,7 +2186,7 @@
 					</div>
 					<div class="min-w-0 flex-1">
 						<p class="stat-label">Total a Pagar</p>
-						<p class="stat-value" style="color: #047857; font-size: 1.1rem;">
+						<p class="stat-value" style="color: #166534; font-size: 1.1rem;">
 							{fmtCOP(totalValorPagar)}
 						</p>
 					</div>
@@ -2199,19 +2199,19 @@
 			<div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
 				<span class="font-mono-meta text-[var(--emerald-700)]">DESGLOSE</span>
 				<span class="flex items-center gap-1.5 text-[var(--text-secondary)]">
-					<span class="inline-block h-2.5 w-2.5 rounded-full bg-[#10B981]"></span>
+					<span class="inline-block h-2.5 w-2.5 rounded-full bg-[#16a34a]"></span>
 					HED <strong class="text-[var(--text-primary)]">{stats.totalHED.toFixed(1)}</strong>
 				</span>
 				<span class="flex items-center gap-1.5 text-[var(--text-secondary)]">
-					<span class="inline-block h-2.5 w-2.5 rounded-full bg-[#047857]"></span>
+					<span class="inline-block h-2.5 w-2.5 rounded-full bg-[#166534]"></span>
 					HEN <strong class="text-[var(--text-primary)]">{stats.totalHEN.toFixed(1)}</strong>
 				</span>
 				<span class="flex items-center gap-1.5 text-[var(--text-secondary)]">
-					<span class="inline-block h-2.5 w-2.5 rounded-full bg-[#F97316]"></span>
+					<span class="inline-block h-2.5 w-2.5 rounded-full bg-[#ea580c]"></span>
 					HEFD <strong class="text-[var(--text-primary)]">{stats.totalHEFD.toFixed(1)}</strong>
 				</span>
 				<span class="flex items-center gap-1.5 text-[var(--text-secondary)]">
-					<span class="inline-block h-2.5 w-2.5 rounded-full bg-[#C2410C]"></span>
+					<span class="inline-block h-2.5 w-2.5 rounded-full bg-[#9a3412]"></span>
 					HEFN <strong class="text-[var(--text-primary)]">{stats.totalHEFN.toFixed(1)}</strong>
 				</span>
 				<span class="text-[var(--text-very-muted)]">|</span>
@@ -2449,7 +2449,7 @@
 							<tr
 								class="table-row cursor-pointer border-b border-[var(--border-subtle)]
 								{getEstadoBgColor(recargo.estado)}
-								{isNew ? 'border-l-4 border-l-[var(--emerald-500)] bg-[rgba(16,185,129,0.06)]' : ''}
+								{isNew ? 'border-l-4 border-l-[var(--emerald-500)] bg-[rgba(22, 163, 74,0.06)]' : ''}
 								{isUpdated ? 'border-l-4 border-l-[#2563EB] bg-[rgba(37,99,235,0.06)]' : ''}
 								{isSelected ? 'border-l-4 border-l-[var(--emerald-600)]' : ''}
 								{isDeleted ? 'border-l-4 border-l-[#EF4444] bg-[rgba(239,68,68,0.04)] opacity-75' : ''}
@@ -2634,7 +2634,7 @@
 													onmouseenter={(e) => showTmPopover(e, recargo)}
 													onmouseleave={hideTmPopover}
 													class="inline-flex cursor-help items-center gap-0.5 rounded-md px-1.5 py-0.5"
-													style="font-size: 0.55rem; font-weight: 700; color: #FFFFFF; background: linear-gradient(135deg, #047857, #065F46); border: 1px solid #065F46; letter-spacing: 0.05em; line-height: 1.3;"
+													style="font-size: 0.55rem; font-weight: 700; color: #FFFFFF; background: linear-gradient(135deg, #166534, #14532d); border: 1px solid #14532d; letter-spacing: 0.05em; line-height: 1.3;"
 													aria-label="Planilla trasladada desde Transmeralda"
 												>
 													<svg
@@ -2676,7 +2676,7 @@
 						{/each}
 
 						<!-- Totals Row -->
-						<tr class="sticky bottom-0 font-semibold" style="background: rgba(16, 185, 129, 0.08);">
+						<tr class="sticky bottom-0 font-semibold" style="background: rgba(22, 163, 74, 0.08);">
 							{#each columns as column}
 								<td
 									class="border border-[var(--border-subtle)] px-2 py-2 text-[var(--text-primary)] {column.key ===
@@ -2687,8 +2687,8 @@
 										? 'text-left'
 										: 'text-center'} text-xs"
 									style="width: {column.width}; min-width: {column.width}; {(column as any).fixed
-										? `position: sticky; left: ${(column as any).stickyLeft}; z-index: 10; background: rgba(16, 185, 129, 0.08);`
-										: 'background: rgba(16, 185, 129, 0.08);'}"
+										? `position: sticky; left: ${(column as any).stickyLeft}; z-index: 10; background: rgba(22, 163, 74, 0.08);`
+										: 'background: rgba(22, 163, 74, 0.08);'}"
 								>
 									{#if column.key === 'valor_pagar'}
 										<span class="font-mono-meta font-bold text-[var(--emerald-700)]">
@@ -2806,7 +2806,7 @@
 		<div class="flex items-start gap-2">
 			<svg
 				class="mt-0.5 h-3.5 w-3.5 flex-shrink-0"
-				style="color: #10B981;"
+				style="color: #16a34a;"
 				fill="none"
 				stroke="currentColor"
 				viewBox="0 0 24 24"

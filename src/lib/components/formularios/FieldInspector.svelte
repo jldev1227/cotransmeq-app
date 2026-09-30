@@ -357,7 +357,7 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 	}
 
 	.insp__titulo {
@@ -365,7 +365,7 @@
 		font-family: var(--font-display, Georgia, serif);
 		font-size: 1rem;
 		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		line-height: 1.3;
 	}
 
@@ -387,14 +387,14 @@
 	.insp__vacio-t {
 		font-size: 0.875rem;
 		font-weight: 600;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 	}
 
 	.insp__vacio-d {
 		margin-top: 0.25rem;
 		font-size: 0.8125rem;
 		line-height: 1.45;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.insp__issues {
@@ -429,14 +429,14 @@
 		align-items: flex-start;
 		gap: 0.5rem;
 		font-size: 0.8125rem;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.campo--check input {
 		width: 18px;
 		height: 18px;
 		margin-top: 0.0625rem;
-		accent-color: var(--emerald-600, #059669);
+		accent-color: var(--emerald-600, #15803d);
 	}
 
 	.campo__label {
@@ -444,7 +444,7 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.campo__input {
@@ -453,7 +453,7 @@
 		padding: 0.3125rem 0.5rem;
 		font: inherit;
 		font-size: 0.8125rem;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		background: #fff;
 		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
 		border-radius: 8px;
@@ -471,19 +471,19 @@
 
 	.campo__input:focus-visible {
 		outline: none;
-		border-color: var(--emerald-600, #059669);
-		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+		border-color: var(--emerald-600, #15803d);
+		box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
 	}
 
 	.campo__input:disabled {
 		background: var(--gray-50, #f9fafb);
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.campo__hint {
 		font-size: 0.6875rem;
 		line-height: 1.35;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.bloque {
@@ -499,6 +499,6 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 </style>

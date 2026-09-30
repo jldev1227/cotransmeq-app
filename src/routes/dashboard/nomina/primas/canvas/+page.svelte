@@ -336,7 +336,7 @@
 
 	function getPrimaEstadoColor(e: PrimaEstado): string {
 		return e === 'Pagado'
-			? 'bg-[rgba(16,185,129,0.10)] text-[var(--emerald-700)]'
+			? 'bg-[rgba(22, 163, 74,0.10)] text-[var(--emerald-700)]'
 			: 'bg-[rgba(245,158,11,0.10)] text-[#92400E]';
 	}
 
@@ -357,7 +357,7 @@
 		if (firmadoFlag) {
 			return {
 				label: 'Firmado',
-				classes: 'bg-[rgba(16,185,129,0.10)] text-[var(--emerald-700)]',
+				classes: 'bg-[rgba(22, 163, 74,0.10)] text-[var(--emerald-700)]',
 				icon: CheckCircle
 			};
 		}
@@ -492,7 +492,7 @@
 					<p class="stat-value">{statsPrimas.total}</p>
 				</div>
 				<div
-					class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(16,185,129,0.10)]"
+					class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-[rgba(22, 163, 74,0.10)]"
 				>
 					<Sparkles class="h-5 w-5 text-[var(--emerald-600)]" />
 				</div>
@@ -592,7 +592,7 @@
 					<div class="h-4 w-px bg-[var(--border-default)]"></div>
 					<button
 						onclick={() => handleBulkTogglePrimaVisible(true)}
-						class="apple-transition flex items-center gap-1.5 rounded-lg border border-[rgba(16,185,129,0.3)] bg-[rgba(16,185,129,0.08)] px-2.5 py-1.5 text-xs font-semibold text-[var(--emerald-700)] hover:bg-[rgba(16,185,129,0.14)]"
+						class="apple-transition flex items-center gap-1.5 rounded-lg border border-[rgba(22, 163, 74,0.3)] bg-[rgba(22, 163, 74,0.08)] px-2.5 py-1.5 text-xs font-semibold text-[var(--emerald-700)] hover:bg-[rgba(22, 163, 74,0.14)]"
 						title="Hacer visibles en el portal"
 					>
 						<Eye class="h-3.5 w-3.5" />Mostrar
@@ -676,7 +676,7 @@
 							{@const IconoFirma = firma.icon}
 							<tr
 								class="table-row border-l-2 {selectedPrimas.has(p.id)
-									? '!border-l-[var(--emerald-500)] !bg-[rgba(16,185,129,0.08)]'
+									? '!border-l-[var(--emerald-500)] !bg-[rgba(22, 163, 74,0.08)]'
 									: 'border-l-transparent'}"
 							>
 								<td class="w-10 px-3 py-2.5">
@@ -749,7 +749,7 @@
 										<button
 											onclick={() => handleDescargarPdfPrima(p)}
 											disabled={downloadingPrimaPdf === p.id}
-											class="apple-transition rounded-md p-1.5 text-[var(--text-muted)] hover:bg-[rgba(16,185,129,0.08)] hover:text-[var(--emerald-600)] disabled:opacity-50"
+											class="apple-transition rounded-md p-1.5 text-[var(--text-muted)] hover:bg-[rgba(22, 163, 74,0.08)] hover:text-[var(--emerald-600)] disabled:opacity-50"
 											title="Descargar PDF de Prima"
 										>
 											{#if downloadingPrimaPdf === p.id}

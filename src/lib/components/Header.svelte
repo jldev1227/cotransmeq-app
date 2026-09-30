@@ -94,7 +94,7 @@
 	/// dos productos y tienen que verse igual.
 	$: socketColor =
 		socketEstado === 'conectado'
-			? '#059669'
+			? '#15803d'
 			: socketEstado === 'reconectando'
 				? '#d97706'
 				: socketEstado === 'rechazado'
@@ -446,7 +446,7 @@
 								{#each notificaciones as notif (notif.id)}
 									<button
 										class="apple-transition w-full p-4 text-left {notif.leida ? '' : ''}"
-										style="border-bottom: 1px solid var(--border-subtle); background-color: {notif.leida ? 'transparent' : 'rgba(249, 115, 22,0.04)'};"
+										style="border-bottom: 1px solid var(--border-subtle); background-color: {notif.leida ? 'transparent' : 'rgba(234, 88, 12,0.04)'};"
 										on:click={() => handleNotifClick(notif)}
 									>
 										<div class="flex items-start gap-3">
@@ -494,7 +494,7 @@
 					<!-- Avatar -->
 					<div
 						class="brand-gradient flex h-9 w-9 items-center justify-center rounded-full"
-						style="box-shadow: 0 2px 8px rgba(249, 115, 22, 0.25);"
+						style="box-shadow: 0 2px 8px rgba(234, 88, 12, 0.25);"
 					>
 						<span class="text-sm font-semibold text-white">
 							{userName.charAt(0).toUpperCase()}
@@ -534,15 +534,15 @@
 						in:fly={{ y: -10, duration: 200 }}
 						out:fade={{ duration: 150 }}
 					>
-						<div class="p-4" style="background: linear-gradient(135deg, rgba(249, 115, 22,0.04), rgba(249, 115, 22,0.08)); border-bottom: 1px solid var(--border-subtle);">
+						<div class="p-4" style="background: linear-gradient(135deg, rgba(234, 88, 12,0.04), rgba(234, 88, 12,0.08)); border-bottom: 1px solid var(--border-subtle);">
 							<div class="flex items-center space-x-3">
-								<div class="brand-gradient flex h-12 w-12 items-center justify-center rounded-xl" style="box-shadow: 0 4px 16px rgba(249, 115, 22, 0.25);">
+								<div class="brand-gradient flex h-12 w-12 items-center justify-center rounded-xl" style="box-shadow: 0 4px 16px rgba(234, 88, 12, 0.25);">
 									<span class="font-display text-lg font-medium text-white">{userName.charAt(0).toUpperCase()}</span>
 								</div>
 								<div class="min-w-0">
 									<p class="truncate font-semibold" style="color: var(--text-primary);">{userName}</p>
 									<p class="truncate text-sm" style="color: var(--text-secondary);">{userEmail}</p>
-									<span class="mt-1 inline-block rounded-full px-2 py-0.5 text-xs" style="background: rgba(249, 115, 22,0.08); color: var(--orange-800);">{userRole}</span>
+									<span class="mt-1 inline-block rounded-full px-2 py-0.5 text-xs" style="background: rgba(234, 88, 12,0.08); color: var(--orange-800);">{userRole}</span>
 								</div>
 							</div>
 						</div>
@@ -615,7 +615,7 @@
 					</div>
 				{:else}
 					{#each notificaciones as notif (notif.id)}
-						<button class="apple-transition w-full p-4 text-left" style="border-bottom: 1px solid var(--border-subtle); background-color: {notif.leida ? 'transparent' : 'rgba(249, 115, 22,0.04)'};" on:click={() => handleNotifClick(notif)}>
+						<button class="apple-transition w-full p-4 text-left" style="border-bottom: 1px solid var(--border-subtle); background-color: {notif.leida ? 'transparent' : 'rgba(234, 88, 12,0.04)'};" on:click={() => handleNotifClick(notif)}>
 							<div class="flex items-start gap-3">
 								<span class="mt-0.5 text-lg">{getNotifIcon(notif.tipo)}</span>
 								<div class="min-w-0 flex-1">
@@ -667,15 +667,15 @@
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
 				</button>
 			</div>
-			<div class="overflow-y-auto p-4" style="background: linear-gradient(135deg, rgba(249, 115, 22,0.04), rgba(249, 115, 22,0.08));">
+			<div class="overflow-y-auto p-4" style="background: linear-gradient(135deg, rgba(234, 88, 12,0.04), rgba(234, 88, 12,0.08));">
 				<div class="flex items-center space-x-3">
-					<div class="brand-gradient flex h-12 w-12 shrink-0 items-center justify-center rounded-xl" style="box-shadow: 0 4px 16px rgba(249, 115, 22, 0.25);">
+					<div class="brand-gradient flex h-12 w-12 shrink-0 items-center justify-center rounded-xl" style="box-shadow: 0 4px 16px rgba(234, 88, 12, 0.25);">
 						<span class="font-display text-lg font-medium text-white">{userName.charAt(0).toUpperCase()}</span>
 					</div>
 					<div class="min-w-0 flex-1">
 						<p class="truncate font-semibold" style="color: var(--text-primary);">{userName}</p>
 						<p class="truncate text-sm" style="color: var(--text-secondary);">{userEmail}</p>
-						<span class="mt-1 inline-block rounded-full px-2 py-0.5 text-xs" style="background: rgba(249, 115, 22,0.08); color: var(--orange-800);">{userRole}</span>
+						<span class="mt-1 inline-block rounded-full px-2 py-0.5 text-xs" style="background: rgba(234, 88, 12,0.08); color: var(--orange-800);">{userRole}</span>
 					</div>
 				</div>
 			</div>
@@ -734,7 +734,7 @@
 					{#each allNotifs as notif (notif.id)}
 						<button
 							class="w-full px-6 py-4 text-left apple-transition"
-							style="border-bottom: 1px solid var(--border-subtle); background-color: {notif.leida ? 'transparent' : 'rgba(249, 115, 22,0.04)'};"
+							style="border-bottom: 1px solid var(--border-subtle); background-color: {notif.leida ? 'transparent' : 'rgba(234, 88, 12,0.04)'};"
 							on:click={() => handleNotifClick(notif)}
 						>
 							<div class="flex items-start gap-3">

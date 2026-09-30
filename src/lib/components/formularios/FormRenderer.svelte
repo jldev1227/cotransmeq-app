@@ -140,7 +140,7 @@
 		font-family: var(--font-display, Georgia, serif);
 		font-size: 1.375rem;
 		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		line-height: 1.25;
 	}
 
@@ -148,7 +148,7 @@
 		padding: 0.75rem 0.875rem;
 		font-size: 0.875rem;
 		line-height: 1.55;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 		background: #fffbeb;
 		border-left: 3px solid #f59e0b;
 		border-radius: 8px;
@@ -159,7 +159,7 @@
 		padding: 2rem 1rem;
 		text-align: center;
 		font-style: italic;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.resumen {
@@ -226,13 +226,13 @@
 		font-family: var(--font-display, Georgia, serif);
 		font-size: 1.0625rem;
 		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.seccion__desc {
 		margin-top: 0.1875rem;
 		font-size: 0.8125rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 		line-height: 1.45;
 	}
 

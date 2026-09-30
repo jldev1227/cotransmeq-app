@@ -1081,9 +1081,9 @@
 	function getEstadoBadge(estado: string) {
 		const map: Record<string, { bg: string; text: string; border: string; label: string }> = {
 			BORRADOR: { bg: 'rgba(100, 116, 139, 0.10)', text: '#475569', border: 'rgba(100, 116, 139, 0.22)', label: 'Borrador' },
-			LIQUIDADA: { bg: 'rgba(249, 115, 22, 0.08)', text: '#ea580c', border: 'rgba(249, 115, 22, 0.25)', label: 'Liquidada' },
-			APROBADA: { bg: 'rgba(249, 115, 22, 0.08)', text: '#ea580c', border: 'rgba(249, 115, 22, 0.25)', label: 'Aprobada' },
-			FACTURADA: { bg: 'rgba(249, 115, 22, 0.10)', text: '#ea580c', border: 'rgba(249, 115, 22, 0.30)', label: 'Facturada' },
+			LIQUIDADA: { bg: 'rgba(234, 88, 12, 0.08)', text: '#c2410c', border: 'rgba(234, 88, 12, 0.25)', label: 'Liquidada' },
+			APROBADA: { bg: 'rgba(234, 88, 12, 0.08)', text: '#c2410c', border: 'rgba(234, 88, 12, 0.25)', label: 'Aprobada' },
+			FACTURADA: { bg: 'rgba(234, 88, 12, 0.10)', text: '#c2410c', border: 'rgba(234, 88, 12, 0.30)', label: 'Facturada' },
 			ANULADA: { bg: 'rgba(220, 38, 38, 0.08)', text: '#dc2626', border: 'rgba(220, 38, 38, 0.25)', label: 'Anulada' }
 		};
 		return map[estado] || map.BORRADOR;
@@ -3061,7 +3061,7 @@
 								</div>
 							</div>
 							<div class="wb-enc-cell wb-enc-cell-fixed-220">
-								<span class="wb-enc-label">NIT <span style="color:#9a9a9a">(auto)</span></span>
+								<span class="wb-enc-label">NIT <span style="color:#94a3b8">(auto)</span></span>
 								<input
 									value={selectedCliente ? selectedCliente.nit : ''}
 									disabled
@@ -3833,15 +3833,15 @@
 						<div class="resumen-card">
 							<div class="resumen-row">
 								<span>Valor Total Servicios sin Recargos</span>
-								<strong style="color:#ea580c">{COP(totalSvc)}</strong>
+								<strong style="color:#c2410c">{COP(totalSvc)}</strong>
 							</div>
 							<div class="resumen-row">
 								<span>Valor Total Recargos</span>
-								<strong style="color:#ea580c">{COP(valRec)}</strong>
+								<strong style="color:#c2410c">{COP(valRec)}</strong>
 							</div>
 							<div class="resumen-row">
 								<span>Pernote ({ext.pernote_cant} noche{ext.pernote_cant !== 1 ? 's' : ''})</span>
-								<strong style="color:#ea580c">{COP(valPern)}</strong>
+								<strong style="color:#c2410c">{COP(valPern)}</strong>
 							</div>
 							<div class="resumen-row resumen-divider emphasis">
 								<span>Subtotal</span>
@@ -3912,7 +3912,7 @@
 								{#each terceroRows as t, i (i)}
 									{@const calc = terceroCalcs[i]}
 									<div class="wb-row wb-row-data wb-row-terceros" data-row={tercRowStart + 1 + i}>
-										<div class="wb-cell wb-cell-placa wb-cell-mono" style="color:#ea580c">
+										<div class="wb-cell wb-cell-placa wb-cell-mono" style="color:#c2410c">
 											{t.placa || '—'}
 										</div>
 										<div class="wb-cell wb-cell-wide" data-cell-key={`terc-${i}-nombre`}>
@@ -4176,7 +4176,7 @@
 							<div class="resumen-card">
 								<div class="resumen-row">
 									<span>Ingreso Total Tercero (V/Liquidar)</span>
-									<strong style="color:#ea580c">{COP(tercIngresoTotalTercero)}</strong>
+									<strong style="color:#c2410c">{COP(tercIngresoTotalTercero)}</strong>
 								</div>
 								<div class="resumen-row">
 									<span>Administración Cotransmeq</span>
@@ -4184,11 +4184,11 @@
 								</div>
 								<div class="resumen-row">
 									<span>Ingreso Global</span>
-									<strong style="color:#059669">{COP(tercTotalExtraGlobal)}</strong>
+									<strong style="color:#15803d">{COP(tercTotalExtraGlobal)}</strong>
 								</div>
 								<div class="resumen-row">
 									<span>Recargos</span>
-									<strong style="color:#ea580c">{COP(valRec)}</strong>
+									<strong style="color:#c2410c">{COP(valRec)}</strong>
 								</div>
 								<div class="resumen-row resumen-divider emphasis">
 									<span>INGRESO TOTAL COTRANSMEQ</span>
@@ -4772,9 +4772,9 @@
 											class="rgt-cnd">{(row.conductor || '').toUpperCase()}</td
 										>{#each Array(31) as _, i}<td
 												class="rgt-d tc"
-												style={row.days[i] > 0 ? 'font-weight:700;color:#ea580c' : 'color:#cbd5e1'}
+												style={row.days[i] > 0 ? 'font-weight:700;color:#c2410c' : 'color:#cbd5e1'}
 												>{row.days[i] ? row.days[i].toFixed(1) : '-'}</td
-											>{/each}<td class="rgt-t tc" style="font-weight:800;color:#ea580c"
+											>{/each}<td class="rgt-t tc" style="font-weight:800;color:#c2410c"
 											>{row.total.toFixed(1)}</td
 										><td class="rgt-t tc">{row.promedio.toFixed(1)}</td></tr
 									>{/each}
@@ -4785,7 +4785,7 @@
 											>{recargosTotals.days[i] ? recargosTotals.days[i].toFixed(1) : ''}</td
 										>{/each}<td
 										class="rgt-t tc"
-										style="font-weight:900;color:#ea580c;font-size:7.5pt"
+										style="font-weight:900;color:#c2410c;font-size:7.5pt"
 										>{recargosTotals.total.toFixed(1)}</td
 									><td></td></tr
 								>
@@ -4799,7 +4799,7 @@
 					{#if recargosRows.length > 0}
 						<div style="margin-top:10px">
 							<div
-								style="font-size:7.5pt;font-weight:800;color:#ea580c;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em"
+								style="font-size:7.5pt;font-weight:800;color:#c2410c;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em"
 							>
 								Consolidado Recargos
 							</div>
@@ -4981,7 +4981,7 @@
 									colspan="4"
 									style="text-align:right;font-weight:900;padding-right:10px;font-size:9.5pt"
 									>TOTAL</td
-								><td class="mc" style="font-weight:900;font-size:9.5pt;color:#ea580c"
+								><td class="mc" style="font-weight:900;font-size:9.5pt;color:#c2410c"
 									>{fmtDec1(liqTotal)}</td
 								></tr
 							>
@@ -5084,7 +5084,7 @@
 										style="font-weight:700">{COP(calc?.totalRow || 0)}</td
 									><td class="tc">{calc?.pctAdmin || 0}%</td><td class="mc" style="color:#b91c1c"
 										>{COP(calc?.admon || 0)}</td
-									><td class="mc" style="font-weight:700;color:#ea580c"
+									><td class="mc" style="font-weight:700;color:#c2410c"
 										>{COP(calc?.vLiquidar || 0)}</td
 									></tr
 								>{/each}</tbody
@@ -5095,7 +5095,7 @@
 									class="mc">{COP(tercTotalFacturado)}</td
 								><td></td><td class="mc" style="color:#b91c1c">{COP(tercTotalAdmon)}</td><td
 									class="mc"
-									style="color:#ea580c">{COP(tercTotalVLiquidar)}</td
+									style="color:#c2410c">{COP(tercTotalVLiquidar)}</td
 								></tr
 							></tfoot
 						>
@@ -5118,7 +5118,7 @@
 										style="font-size:7.5pt">{g.identificacion || '—'}</td
 									><td class="tc" style="font-size:7pt"
 										>{g.tipo === 'EMPRESA' ? '🏢 EMPRESA' : '👤 PERSONA'}</td
-									><td class="tc">{g.items}</td><td class="mc" style="font-weight:700;color:#ea580c"
+									><td class="tc">{g.items}</td><td class="mc" style="font-weight:700;color:#c2410c"
 										>{COP(g.vLiquidar)}</td
 									></tr
 								>{/each}</tbody
@@ -5140,7 +5140,7 @@
 								<tr
 									><td class="ts-lbl">INGRESO TOTAL TERCERO (V/Liquidar)</td><td
 										class="ts-val"
-										style="color:#ea580c">{COP(tercIngresoTotalTercero)}</td
+										style="color:#c2410c">{COP(tercIngresoTotalTercero)}</td
 									></tr
 								>
 								<tr class="ts-sep"
@@ -5152,23 +5152,23 @@
 								<tr
 									><td class="ts-lbl">INGRESO EXTRA GLOBAL</td><td
 										class="ts-val"
-										style="color:#ea580c">{COP(tercTotalExtraGlobal)}</td
+										style="color:#c2410c">{COP(tercTotalExtraGlobal)}</td
 									></tr
 								>
 								<tr
-									><td class="ts-lbl">PERNOCTES</td><td class="ts-val" style="color:#ea580c"
+									><td class="ts-lbl">PERNOCTES</td><td class="ts-val" style="color:#c2410c"
 										>{COP(valPern)}</td
 									></tr
 								>
 								<tr
-									><td class="ts-lbl">RECARGOS</td><td class="ts-val" style="color:#ea580c"
+									><td class="ts-lbl">RECARGOS</td><td class="ts-val" style="color:#c2410c"
 										>{COP(valRec)}</td
 									></tr
 								>
 								<tr class="ts-total"
 									><td class="ts-lbl">INGRESO TOTAL COTRANSMEQ</td><td
 										class="ts-val"
-										style="color:#ea580c">{COP(tercIngresoTotalCotransmeq)}</td
+										style="color:#c2410c">{COP(tercIngresoTotalCotransmeq)}</td
 									></tr
 								>
 								<tr class="ts-grand"
@@ -5520,7 +5520,7 @@
 						class="success-confetti"
 						style="--i:{i};--x:{Math.random() * 300 - 150}px;--r:{Math.random() * 540 -
 							270}deg;--d:{i * 0.07}s;--c:{[
-							'#fb923c',
+							'#f97316',
 							'#fdba74',
 							'#fed7aa',
 							'#fbbf24',
@@ -5574,8 +5574,8 @@
 
 <style>
 	.consec-ok {
-		border-color: #ea580c !important;
-		box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.25) !important;
+		border-color: #c2410c !important;
+		box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.25) !important;
 	}
 	.consec-taken {
 		border-color: #ef4444 !important;
@@ -5589,7 +5589,7 @@
 		color: #94a3b8;
 	}
 	.consec-ok-badge {
-		color: #ea580c;
+		color: #c2410c;
 	}
 	.consec-taken-badge {
 		color: #dc2626;
@@ -5618,9 +5618,9 @@
 	}
 	input:focus,
 	select:focus {
-		border-color: #c2410c;
+		border-color: #9a3412;
 		background: #fff;
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1);
 	}
 
 	/* ─ SEARCHABLE SELECT ─ */
@@ -5631,13 +5631,13 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		background: rgba(249, 115, 22, 0.06);
-		border: 1.5px solid rgba(249, 115, 22, 0.20);
+		background: rgba(234, 88, 12, 0.06);
+		border: 1.5px solid rgba(234, 88, 12, 0.20);
 		border-radius: 8px;
 		padding: 7px 11px;
 		font-size: 13px;
 		font-weight: 600;
-		color: #ea580c;
+		color: #c2410c;
 	}
 	.ss-selected .ss-nit {
 		font-size: 11px;
@@ -5690,7 +5690,7 @@
 	}
 	.ss-option:hover,
 	.ss-option.highlighted {
-		background: rgba(249, 115, 22, 0.06);
+		background: rgba(234, 88, 12, 0.06);
 	}
 	.ss-option .ss-opt-name {
 		font-weight: 600;
@@ -5703,7 +5703,7 @@
 	.ss-option .ss-opt-placa {
 		font-family: 'Geist', sans-serif;
 		font-weight: 800;
-		color: #ea580c;
+		color: #c2410c;
 		font-size: 12px;
 		font-variant-numeric: tabular-nums;
 	}
@@ -5773,8 +5773,8 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #f97316;
-		background: rgba(249, 115, 22, 0.08);
+		color: #ea580c;
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0.25rem 0.6rem;
 		border-radius: 9999px;
 		font-family: 'Geist', sans-serif;
@@ -5813,7 +5813,7 @@
 		width: 6px;
 		height: 6px;
 		border-radius: 50%;
-		background: #f97316;
+		background: #ea580c;
 		opacity: 0.35;
 		animation: liq-loading-pulse 1.2s infinite;
 	}
@@ -5853,7 +5853,7 @@
 		flex-shrink: 0;
 	}
 	.liq-loading-back:hover {
-		color: #f97316;
+		color: #ea580c;
 	}
 
 	/* BODY (cards contenedor) */
@@ -5884,8 +5884,8 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
-		color: #f97316;
-		background: rgba(249, 115, 22, 0.08);
+		color: #ea580c;
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0.18rem 0.5rem;
 		border-radius: 9999px;
 		font-family: 'Geist', sans-serif;
@@ -6002,7 +6002,7 @@
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.7rem 1.25rem;
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		color: white;
 		border: none;
 		border-radius: 12px;
@@ -6010,12 +6010,12 @@
 		font-size: 0.88rem;
 		font-weight: 600;
 		cursor: pointer;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.3);
 		transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 	}
 	.liq-btn-primary:hover {
 		transform: translateY(-2px);
-		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
+		box-shadow: 0 6px 20px rgba(234, 88, 12, 0.4);
 	}
 	.liq-btn-secondary {
 		display: inline-flex;
@@ -6186,8 +6186,8 @@
 		inset: 0;
 		background: #b8c0cc;
 		background-image:
-			radial-gradient(circle at 0% 0%, rgba(249, 115, 22, 0.06) 0%, transparent 50%),
-			radial-gradient(circle at 100% 100%, rgba(249, 115, 22, 0.05) 0%, transparent 55%);
+			radial-gradient(circle at 0% 0%, rgba(234, 88, 12, 0.06) 0%, transparent 50%),
+			radial-gradient(circle at 100% 100%, rgba(234, 88, 12, 0.05) 0%, transparent 55%);
 		z-index: 200;
 		display: flex;
 		flex-direction: column;
@@ -6248,8 +6248,8 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #ea580c;
-		background: rgba(249, 115, 22, 0.08);
+		color: #c2410c;
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0.22rem 0.6rem;
 		border-radius: 9999px;
 		font-family: 'Geist', sans-serif;
@@ -6324,12 +6324,12 @@
 	}
 	.ptab:hover {
 		color: #0f172a;
-		background: rgba(249, 115, 22, 0.06);
+		background: rgba(234, 88, 12, 0.06);
 	}
 	.ptab.active {
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		color: white;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.30);
+		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.30);
 	}
 	.ptab.active .ptab-num {
 		background: rgba(255, 255, 255, 0.25);
@@ -6384,8 +6384,8 @@
 		transition: all 0.2s;
 	}
 	.zoom-btn:hover {
-		background: rgba(249, 115, 22, 0.08);
-		color: #ea580c;
+		background: rgba(234, 88, 12, 0.08);
+		color: #c2410c;
 	}
 	.zoom-label {
 		font-family: 'Geist', sans-serif;
@@ -6439,22 +6439,22 @@
 		transform: translateY(-1px);
 	}
 	.pbtn-print {
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		color: #fff;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.30);
+		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.30);
 	}
 	.pbtn-print:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.40);
+		box-shadow: 0 6px 20px rgba(234, 88, 12, 0.40);
 	}
 	.zoom-fit {
 		font-size: 14px;
-		background: rgba(249, 115, 22, 0.08) !important;
-		border: 1px solid rgba(249, 115, 22, 0.20) !important;
-		color: #ea580c !important;
+		background: rgba(234, 88, 12, 0.08) !important;
+		border: 1px solid rgba(234, 88, 12, 0.20) !important;
+		color: #c2410c !important;
 	}
 	.zoom-fit:hover {
-		background: rgba(249, 115, 22, 0.16) !important;
+		background: rgba(234, 88, 12, 0.16) !important;
 	}
 
 	.pdf-body {
@@ -6676,7 +6676,7 @@
 	.dh-logo-fallback {
 		width: 80px;
 		height: 50px;
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		border-radius: 4px;
 		display: flex;
 		align-items: center;
@@ -6686,7 +6686,7 @@
 		font-weight: 900;
 		text-align: center;
 		line-height: 1.2;
-		box-shadow: 0 4px 12px rgba(249, 115, 22, 0.25);
+		box-shadow: 0 4px 12px rgba(234, 88, 12, 0.25);
 	}
 	.dh-title {
 		padding: 6px 14px;
@@ -6697,7 +6697,7 @@
 	.dh-co {
 		font-size: 10pt;
 		font-weight: 900;
-		color: #ea580c;
+		color: #c2410c;
 		text-transform: uppercase;
 		letter-spacing: 0.02em;
 	}
@@ -6754,7 +6754,7 @@
 	}
 	.mv {
 		font-weight: 800;
-		color: #ea580c;
+		color: #c2410c;
 		font-family: 'Geist', sans-serif;
 		font-variant-numeric: tabular-nums;
 	}
@@ -6789,14 +6789,14 @@
 		letter-spacing: 0.05em;
 	}
 	.pcval {
-		color: #ea580c;
+		color: #c2410c;
 		font-weight: 900;
 		font-size: 8.5pt;
 		font-family: 'Geist', sans-serif;
 		font-variant-numeric: tabular-nums;
 	}
 	.pc-consec .pcval {
-		color: #ea580c;
+		color: #c2410c;
 		font-family: 'Geist', sans-serif;
 		font-size: 10pt;
 		font-weight: 900;
@@ -6817,7 +6817,7 @@
 	}
 	.st th {
 		background: #fff7ed;
-		color: #ea580c;
+		color: #c2410c;
 		font-weight: 800;
 		text-align: center;
 		padding: 5px 4px;
@@ -6848,13 +6848,13 @@
 		border: 1px solid #fed7aa;
 		background: #fff7ed;
 		font-weight: 800;
-		color: #ea580c;
+		color: #c2410c;
 	}
 	.placa {
 		font-family: 'Geist', sans-serif;
 		font-weight: 900;
 		font-size: 7.6pt;
-		color: #ea580c;
+		color: #c2410c;
 		text-align: center;
 		display: block;
 		letter-spacing: 0.02em;
@@ -6873,7 +6873,7 @@
 		font-variant-numeric: tabular-nums;
 		font-size: 7.6pt;
 		font-weight: 900;
-		color: #ea580c;
+		color: #c2410c;
 	}
 	.tc {
 		text-align: center;
@@ -6900,7 +6900,7 @@
 	.obs-t {
 		font-weight: 900;
 		font-size: 8pt;
-		color: #ea580c;
+		color: #c2410c;
 		margin-bottom: 5px;
 		text-transform: uppercase;
 	}
@@ -6928,7 +6928,7 @@
 	}
 	.opv {
 		font-weight: 900;
-		color: #ea580c;
+		color: #c2410c;
 		font-size: 9.5pt;
 	}
 
@@ -6946,7 +6946,7 @@
 		background: #fff7ed;
 		font-size: 6.8pt;
 		font-weight: 800;
-		color: #ea580c;
+		color: #c2410c;
 		text-align: center;
 		padding: 3px 6px;
 		border: 1px solid #fed7aa;
@@ -6990,7 +6990,7 @@
 	}
 	.slhi {
 		font-weight: 900;
-		color: #ea580c;
+		color: #c2410c;
 		background: #ffedd5;
 		font-size: 9pt;
 		padding-top: 5px;
@@ -6999,7 +6999,7 @@
 	.svhi {
 		font-family: 'Geist', sans-serif;
 		font-weight: 900;
-		color: #ea580c;
+		color: #c2410c;
 		background: #ffedd5;
 		text-align: right;
 		font-size: 9pt;
@@ -7029,7 +7029,7 @@
 	}
 	.sig-lbl {
 		font-weight: 800;
-		color: #ea580c;
+		color: #c2410c;
 		font-size: 8pt;
 	}
 	/* .firma-img {
@@ -7071,7 +7071,7 @@
 	.doc-summary-title {
 		font-size: 7pt;
 		font-weight: 800;
-		color: #ea580c;
+		color: #c2410c;
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
 		text-align: center;
@@ -7127,7 +7127,7 @@
 	.doc-summary-pernote-title {
 		font-size: 6pt;
 		font-weight: 800;
-		color: #ea580c;
+		color: #c2410c;
 		background: #fff7ed;
 		padding: 1.5px 5px;
 		border: 1px solid #fed7aa;
@@ -7143,7 +7143,7 @@
 	}
 	.doc-summary-tbl th {
 		background: #fff7ed;
-		color: #ea580c;
+		color: #c2410c;
 		font-weight: 700;
 		padding: 1.5px 4px;
 		text-align: center;
@@ -7160,7 +7160,7 @@
 	}
 	.doc-summary-strong {
 		font-weight: 800;
-		color: #ea580c;
+		color: #c2410c;
 	}
 	.doc-summary-totals {
 		width: 100%;
@@ -7193,7 +7193,7 @@
 	}
 	.doc-summary-totals .doc-summary-grand td {
 		font-weight: 900;
-		color: #ea580c;
+		color: #c2410c;
 		font-size: 7.5pt;
 		padding-top: 3px;
 	}
@@ -7270,7 +7270,7 @@
 	}
 	.rgt th {
 		background: #fff7ed;
-		color: #ea580c;
+		color: #c2410c;
 		font-weight: 800;
 		font-size: 7pt;
 		text-transform: uppercase;
@@ -7319,8 +7319,8 @@
 	}
 	.rgt-totals td {
 		background: #ffedd5;
-		color: #ea580c;
-		border-top: 1.5px solid #ea580c;
+		color: #c2410c;
+		border-top: 1.5px solid #c2410c;
 		font-weight: 800;
 	}
 
@@ -7331,7 +7331,7 @@
 	}
 	.crt th {
 		background: #fff7ed;
-		color: #ea580c;
+		color: #c2410c;
 		font-weight: 800;
 		font-size: 6.5pt;
 		text-transform: uppercase;
@@ -7364,7 +7364,7 @@
 	}
 	.liq-sal-lbl {
 		font-weight: 800;
-		color: #ea580c;
+		color: #c2410c;
 		text-transform: uppercase;
 		font-size: 7.5pt;
 	}
@@ -7381,7 +7381,7 @@
 	}
 	.liq-tbl th {
 		background: #fff7ed;
-		color: #ea580c;
+		color: #c2410c;
 		font-weight: 800;
 		font-size: 7.5pt;
 		text-transform: uppercase;
@@ -7400,10 +7400,10 @@
 	}
 	.liq-sub-row td {
 		background: #fff7ed !important;
-		border-top: 1.5px solid #ea580c;
+		border-top: 1.5px solid #c2410c;
 	}
 	.liq-total-row td {
-		background: #ea580c !important;
+		background: #c2410c !important;
 		color: #fff !important;
 		border-top: 2px solid #9a3412;
 	}
@@ -7415,7 +7415,7 @@
 		margin-top: 6px;
 	}
 	.terc-prev-tbl th {
-		background: #ea580c;
+		background: #c2410c;
 		color: #fff;
 		padding: 5px 4px;
 		font-weight: 700;
@@ -7436,7 +7436,7 @@
 	.terc-summary-box {
 		margin-top: 14px;
 		padding: 10px 14px;
-		border: 2px solid #ea580c;
+		border: 2px solid #c2410c;
 		border-radius: 6px;
 		background: #f8fafc;
 	}
@@ -7463,12 +7463,12 @@
 		border-top: 1.5px solid #e2e8f0;
 	}
 	.ts-total td {
-		border-top: 2px solid #ea580c;
+		border-top: 2px solid #c2410c;
 		background: #fff7ed;
 		font-size: 9pt;
 	}
 	.ts-grand td {
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		color: #fff;
 		font-size: 10pt;
 		border-radius: 0 0 4px 4px;
@@ -8103,7 +8103,7 @@
 		align-items: center;
 		gap: 14px;
 		padding: 22px 24px 16px;
-		background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+		background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
 		color: #fff;
 	}
 	.print-modal-icon {
@@ -8142,8 +8142,8 @@
 		background: #fff;
 	}
 	.print-check:hover {
-		border-color: rgba(249, 115, 22, 0.30);
-		background: rgba(249, 115, 22, 0.04);
+		border-color: rgba(234, 88, 12, 0.30);
+		background: rgba(234, 88, 12, 0.04);
 	}
 	.print-check input[type='checkbox'] {
 		display: none;
@@ -8161,8 +8161,8 @@
 		position: relative;
 	}
 	.print-check input:checked + .print-check-mark {
-		background: linear-gradient(135deg, #f97316, #ea580c);
-		border-color: #ea580c;
+		background: linear-gradient(135deg, #ea580c, #c2410c);
+		border-color: #c2410c;
 	}
 	.print-check input:checked + .print-check-mark::after {
 		content: '✓';
@@ -8186,8 +8186,8 @@
 		margin-left: 4px;
 	}
 	.print-check-tag.print-tag-portrait {
-		color: #ea580c;
-		background: rgba(249, 115, 22, 0.08);
+		color: #c2410c;
+		background: rgba(234, 88, 12, 0.08);
 	}
 	.print-check-tag.print-tag-landscape {
 		color: #166534;
@@ -8199,7 +8199,7 @@
 	}
 	.print-check-all .print-check-lbl {
 		font-weight: 800;
-		color: #ea580c;
+		color: #c2410c;
 	}
 	.print-modal-ft {
 		padding: 16px 24px 20px;
@@ -8228,13 +8228,13 @@
 		border-color: rgba(15, 23, 42, 0.20);
 	}
 	.print-modal-go {
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		color: #fff;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.30);
+		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.30);
 	}
 	.print-modal-go:hover {
 		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.40);
+		box-shadow: 0 6px 20px rgba(234, 88, 12, 0.40);
 	}
 	.print-modal-go:disabled {
 		opacity: 0.4;
@@ -8251,7 +8251,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: rgba(15, 31, 26, 0.45);
+		background: rgba(15, 23, 42, 0.45);
 		backdrop-filter: blur(6px) saturate(120%);
 		-webkit-backdrop-filter: blur(6px) saturate(120%);
 		animation: pdfGenFadeIn 0.18s ease-out;
@@ -8302,12 +8302,12 @@
 	.pdf-generating-title {
 		font-size: 16px;
 		font-weight: 800;
-		color: #0f1f1a;
+		color: #0f172a;
 		letter-spacing: -0.01em;
 	}
 	.pdf-generating-sub {
 		font-size: 12.5px;
-		color: #6b6b6b;
+		color: #64748b;
 		font-weight: 500;
 	}
 
@@ -8319,7 +8319,7 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: linear-gradient(135deg, rgba(234, 88, 12, 0.95) 0%, rgba(249, 115, 22, 0.95) 100%);
+		background: linear-gradient(135deg, rgba(234, 88, 12, 0.95) 0%, rgba(234, 88, 12, 0.95) 100%);
 		animation: successFadeIn 0.35s ease-out;
 	}
 	@keyframes successFadeIn {
@@ -8472,8 +8472,8 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #ea580c;
-		background: rgba(249, 115, 22, 0.08);
+		color: #c2410c;
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0.18rem 0.5rem;
 		border-radius: 9999px;
 		font-family: 'Geist', sans-serif;
@@ -8509,19 +8509,19 @@
 		border: 1px solid rgba(100, 116, 139, 0.22);
 	}
 	.estado-badge-liquidada {
-		background: rgba(249, 115, 22, 0.08);
-		color: #ea580c;
-		border: 1px solid rgba(249, 115, 22, 0.25);
+		background: rgba(234, 88, 12, 0.08);
+		color: #c2410c;
+		border: 1px solid rgba(234, 88, 12, 0.25);
 	}
 	.estado-badge-aprobada {
-		background: rgba(249, 115, 22, 0.08);
-		color: #ea580c;
-		border: 1px solid rgba(249, 115, 22, 0.25);
+		background: rgba(234, 88, 12, 0.08);
+		color: #c2410c;
+		border: 1px solid rgba(234, 88, 12, 0.25);
 	}
 	.estado-badge-facturada {
-		background: rgba(249, 115, 22, 0.10);
-		color: #ea580c;
-		border: 1px solid rgba(249, 115, 22, 0.30);
+		background: rgba(234, 88, 12, 0.10);
+		color: #c2410c;
+		border: 1px solid rgba(234, 88, 12, 0.30);
 	}
 	.estado-badge-anulada {
 		background: rgba(220, 38, 38, 0.08);
@@ -8558,8 +8558,8 @@
 		width: 24px;
 		height: 24px;
 		border-radius: 7px;
-		background: rgba(249, 115, 22, 0.1);
-		color: #ea580c;
+		background: rgba(234, 88, 12, 0.1);
+		color: #c2410c;
 		flex-shrink: 0;
 	}
 	.estado-info-icon svg {
@@ -8609,7 +8609,7 @@
 		position: fixed;
 		inset: 0;
 		z-index: 10000;
-		background: rgba(15, 31, 26, 0.45);
+		background: rgba(15, 23, 42, 0.45);
 		backdrop-filter: blur(8px);
 		-webkit-backdrop-filter: blur(8px);
 		display: flex;
@@ -8663,13 +8663,13 @@
 		width: 48px;
 		height: 48px;
 		border-radius: 14px;
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		color: #fff;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		flex-shrink: 0;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.30);
+		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.30);
 	}
 	.historial-hd-text {
 		min-width: 0;
@@ -8682,8 +8682,8 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #ea580c;
-		background: rgba(249, 115, 22, 0.08);
+		color: #c2410c;
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0.2rem 0.55rem;
 		border-radius: 9999px;
 		font-family: 'Geist', sans-serif;
@@ -8746,8 +8746,8 @@
 	.historial-spinner {
 		width: 22px;
 		height: 22px;
-		border: 2.5px solid rgba(249, 115, 22, 0.15);
-		border-top-color: #f97316;
+		border: 2.5px solid rgba(234, 88, 12, 0.15);
+		border-top-color: #ea580c;
 		border-radius: 50%;
 		animation: histSpin 0.7s linear infinite;
 	}
@@ -8769,8 +8769,8 @@
 		width: 64px;
 		height: 64px;
 		border-radius: 50%;
-		background: rgba(249, 115, 22, 0.08);
-		color: #ea580c;
+		background: rgba(234, 88, 12, 0.08);
+		color: #c2410c;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -8802,7 +8802,7 @@
 		top: 0.75rem;
 		bottom: 0.75rem;
 		width: 2px;
-		background: linear-gradient(180deg, rgba(249, 115, 22, 0.35), rgba(249, 115, 22, 0.08));
+		background: linear-gradient(180deg, rgba(234, 88, 12, 0.35), rgba(234, 88, 12, 0.08));
 		border-radius: 1px;
 	}
 	.historial-entry {
@@ -8830,13 +8830,13 @@
 		background: #64748b;
 	}
 	.historial-dot-liquidada {
-		background: #ea580c;
+		background: #c2410c;
 	}
 	.historial-dot-aprobada {
-		background: #ea580c;
+		background: #c2410c;
 	}
 	.historial-dot-facturada {
-		background: #ea580c;
+		background: #c2410c;
 	}
 	.historial-dot-anulada {
 		background: #dc2626;
@@ -8846,7 +8846,7 @@
 		height: 1.35rem;
 		left: -1.725rem;
 		top: 0.65rem;
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.18);
 	}
 
 	/* Card de cada entrada */
@@ -8861,13 +8861,13 @@
 		transition: all 0.2s;
 	}
 	.historial-card:hover {
-		border-color: rgba(249, 115, 22, 0.25);
-		box-shadow: 0 2px 12px rgba(249, 115, 22, 0.06);
+		border-color: rgba(234, 88, 12, 0.25);
+		box-shadow: 0 2px 12px rgba(234, 88, 12, 0.06);
 	}
 	.historial-entry-first .historial-card {
 		background: white;
-		border: 1px solid rgba(249, 115, 22, 0.30);
-		box-shadow: 0 2px 12px rgba(249, 115, 22, 0.08);
+		border: 1px solid rgba(234, 88, 12, 0.30);
+		box-shadow: 0 2px 12px rgba(234, 88, 12, 0.08);
 	}
 	.historial-card-top {
 		display: flex;
@@ -8913,8 +8913,8 @@
 		width: 20px;
 		height: 20px;
 		border-radius: 6px;
-		background: rgba(249, 115, 22, 0.10);
-		color: #ea580c;
+		background: rgba(234, 88, 12, 0.10);
+		color: #c2410c;
 		flex-shrink: 0;
 	}
 	.historial-motivo {
@@ -8923,7 +8923,7 @@
 		font-style: italic;
 		padding: 0.5rem 0.7rem;
 		background: white;
-		border-left: 2px solid rgba(249, 115, 22, 0.35);
+		border-left: 2px solid rgba(234, 88, 12, 0.35);
 		border-radius: 0 8px 8px 0;
 		display: flex;
 		align-items: flex-start;
@@ -9003,13 +9003,13 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #ea580c;
-		background: rgba(249, 115, 22, 0.08);
+		color: #c2410c;
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0.25rem 0.6rem;
 		border-radius: 9999px;
 		display: inline-block;
 		width: max-content;
-		border: 1px solid rgba(249, 115, 22, 0.15);
+		border: 1px solid rgba(234, 88, 12, 0.15);
 	}
 	.wb-toolbar-t {
 		display: flex;
@@ -9036,11 +9036,11 @@
 	.wb-consec-inline {
 		font-family: 'Geist', sans-serif;
 		font-weight: 700;
-		color: #ea580c;
-		background: rgba(249, 115, 22, 0.1);
+		color: #c2410c;
+		background: rgba(234, 88, 12, 0.1);
 		padding: 0 0.4rem;
 		border-radius: 4px;
-		border: 1px solid rgba(249, 115, 22, 0.2);
+		border: 1px solid rgba(234, 88, 12, 0.2);
 		font-variant-numeric: tabular-nums;
 	}
 	.wb-btn-back {
@@ -9059,9 +9059,9 @@
 		font-family: 'Geist', sans-serif;
 	}
 	.wb-btn-back:hover {
-		color: #ea580c;
-		background: rgba(249, 115, 22, 0.06);
-		border-color: rgba(249, 115, 22, 0.3);
+		color: #c2410c;
+		background: rgba(234, 88, 12, 0.06);
+		border-color: rgba(234, 88, 12, 0.3);
 		transform: translateX(-2px);
 	}
 	.wb-btn-secondary {
@@ -9089,7 +9089,7 @@
 		align-items: center;
 		gap: 0.45rem;
 		background: transparent;
-		color: #6b6b6b;
+		color: #64748b;
 		border: 1px solid transparent;
 		border-radius: 10px;
 		padding: 0.55rem 0.95rem;
@@ -9109,7 +9109,7 @@
 		align-items: center;
 		gap: 0.45rem;
 		padding: 0.6rem 1.1rem;
-		background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
+		background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
 		color: #ffffff;
 		border: none;
 		border-radius: 10px;
@@ -9118,7 +9118,7 @@
 		font-weight: 700;
 		cursor: pointer;
 		box-shadow:
-			0 2px 8px rgba(249, 115, 22, 0.25),
+			0 2px 8px rgba(234, 88, 12, 0.25),
 			inset 0 1px 0 rgba(255, 255, 255, 0.15);
 		transition: all 0.2s;
 		letter-spacing: 0.01em;
@@ -9126,7 +9126,7 @@
 	.wb-btn-primary:hover:not(:disabled) {
 		transform: translateY(-1px);
 		box-shadow:
-			0 6px 16px rgba(249, 115, 22, 0.35),
+			0 6px 16px rgba(234, 88, 12, 0.35),
 			inset 0 1px 0 rgba(255, 255, 255, 0.2);
 	}
 	.wb-btn-primary:active:not(:disabled) {
@@ -9156,9 +9156,9 @@
 		align-items: center;
 		gap: 6px;
 		padding: 0.4rem 0.7rem 0.4rem 0.6rem;
-		background: rgba(249, 115, 22, 0.06);
-		color: #ea580c;
-		border: 1px solid rgba(249, 115, 22, 0.18);
+		background: rgba(234, 88, 12, 0.06);
+		color: #c2410c;
+		border: 1px solid rgba(234, 88, 12, 0.18);
 		border-radius: 20px;
 		font-size: 0.72rem;
 		font-weight: 600;
@@ -9166,8 +9166,8 @@
 		transition: all 0.2s;
 	}
 	.wb-draft-pill.wb-draft-saved {
-		background: rgba(249, 115, 22, 0.08);
-		border-color: rgba(249, 115, 22, 0.25);
+		background: rgba(234, 88, 12, 0.08);
+		border-color: rgba(234, 88, 12, 0.25);
 	}
 	.wb-draft-pill.wb-draft-active {
 		background: rgba(245, 158, 11, 0.06);
@@ -9178,7 +9178,7 @@
 		width: 7px;
 		height: 7px;
 		border-radius: 50%;
-		background: #f97316;
+		background: #ea580c;
 		position: relative;
 		flex-shrink: 0;
 	}
@@ -9187,7 +9187,7 @@
 		position: absolute;
 		inset: -3px;
 		border-radius: 50%;
-		background: #f97316;
+		background: #ea580c;
 		opacity: 0.4;
 		animation: wb-pulse 2s ease-in-out infinite;
 	}
@@ -9214,9 +9214,9 @@
 	.wb-draft-time {
 		font-family: 'Geist', sans-serif;
 		font-size: 0.68rem;
-		color: #c2410c;
+		color: #9a3412;
 		padding-left: 6px;
-		border-left: 1px solid rgba(249, 115, 22, 0.2);
+		border-left: 1px solid rgba(234, 88, 12, 0.2);
 		margin-left: 2px;
 	}
 	.wb-draft-active .wb-draft-time {
@@ -9315,7 +9315,7 @@
 		text-overflow: ellipsis;
 	}
 	.wb-ddc {
-		color: #ea580c;
+		color: #c2410c;
 		max-width: 200px;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -9367,14 +9367,14 @@
 		height: 8px;
 	}
 	.wb-table-wrap::-webkit-scrollbar-track {
-		background: rgba(249, 115, 22, 0.05);
+		background: rgba(234, 88, 12, 0.05);
 	}
 	.wb-table-wrap::-webkit-scrollbar-thumb {
-		background: rgba(249, 115, 22, 0.3);
+		background: rgba(234, 88, 12, 0.3);
 		border-radius: 4px;
 	}
 	.wb-table-wrap::-webkit-scrollbar-thumb:hover {
-		background: rgba(249, 115, 22, 0.5);
+		background: rgba(234, 88, 12, 0.5);
 	}
 
 	/* ── Grid layout (Liquidador, Valores adicionales) ── */
@@ -9413,7 +9413,7 @@
 		content: '';
 		width: 4px;
 		height: 4px;
-		background: #f97316;
+		background: #ea580c;
 		border-radius: 50%;
 		flex-shrink: 0;
 	}
@@ -9435,13 +9435,13 @@
 		min-width: 0;
 	}
 	.wb-grid-input input:hover:not(:disabled):not(:focus) {
-		background: rgba(249, 115, 22, 0.03);
-		border-color: rgba(249, 115, 22, 0.25);
+		background: rgba(234, 88, 12, 0.03);
+		border-color: rgba(234, 88, 12, 0.25);
 	}
 	.wb-grid-input input:focus {
 		background: #fff;
-		border-color: #f97316;
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.10);
+		border-color: #ea580c;
+		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.10);
 	}
 	.wb-grid-input input[type='number'] {
 		text-align: right;
@@ -9458,7 +9458,7 @@
 		transition: background 0.15s;
 	}
 	.wb-row:hover {
-		background: rgba(249, 115, 22, 0.03);
+		background: rgba(234, 88, 12, 0.03);
 	}
 	.wb-row-num {
 		position: sticky;
@@ -9509,16 +9509,16 @@
 	}
 	.wb-cell input:hover:not(:disabled):not(:focus),
 	.wb-cell select:hover:not(:focus) {
-		background: rgba(249, 115, 22, 0.04);
-		border-color: rgba(249, 115, 22, 0.2);
+		background: rgba(234, 88, 12, 0.04);
+		border-color: rgba(234, 88, 12, 0.2);
 	}
 	.wb-cell input:focus,
 	.wb-cell select:focus,
 	.wb-cell input:focus-visible,
 	.wb-cell select:focus-visible {
 		background: #fff;
-		border-color: #f97316;
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+		border-color: #ea580c;
+		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1);
 		z-index: 2;
 		position: relative;
 	}
@@ -9589,8 +9589,8 @@
 	}
 
 	.wb-th {
-		background: linear-gradient(135deg, rgba(249, 115, 22, 0.06), rgba(249, 115, 22, 0.10));
-		color: #ea580c;
+		background: linear-gradient(135deg, rgba(234, 88, 12, 0.06), rgba(234, 88, 12, 0.10));
+		color: #c2410c;
 		font-family: 'Geist', sans-serif;
 		font-weight: 700;
 		font-size: 0.65rem;
@@ -9600,7 +9600,7 @@
 		text-align: center;
 		padding: 9px 6px;
 		min-height: 36px;
-		border-bottom: 2px solid rgba(249, 115, 22, 0.25);
+		border-bottom: 2px solid rgba(234, 88, 12, 0.25);
 		flex: 0 0 auto;
 	}
 
@@ -9692,7 +9692,7 @@
 		z-index: 11;
 	}
 	.wb-th-num {
-		background: linear-gradient(135deg, rgba(249, 115, 22, 0.1), rgba(249, 115, 22, 0.18));
+		background: linear-gradient(135deg, rgba(234, 88, 12, 0.1), rgba(234, 88, 12, 0.18));
 	}
 	.wb-th-day {
 		padding: 8px 2px;
@@ -9750,7 +9750,7 @@
 		color: #0f172a;
 		justify-content: flex-end;
 		text-align: right;
-		background: rgba(249, 115, 22, 0.06);
+		background: rgba(234, 88, 12, 0.06);
 		padding: 0 10px 0 6px;
 		font-variant-numeric: tabular-nums;
 	}
@@ -9758,10 +9758,10 @@
 		font-family: 'Geist', sans-serif;
 		font-size: 0.78rem;
 		font-weight: 700;
-		color: #ea580c;
+		color: #c2410c;
 		justify-content: flex-end;
 		text-align: right;
-		background: rgba(249, 115, 22, 0.08);
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0 10px 0 6px;
 		font-variant-numeric: tabular-nums;
 	}
@@ -9769,10 +9769,10 @@
 		font-family: 'Geist', sans-serif;
 		font-size: 0.78rem;
 		font-weight: 800;
-		color: #ea580c;
+		color: #c2410c;
 		justify-content: flex-end;
 		text-align: right;
-		background: rgba(249, 115, 22, 0.08);
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0 10px 0 6px;
 		font-variant-numeric: tabular-nums;
 	}
@@ -9791,10 +9791,10 @@
 		font-family: 'Geist', sans-serif;
 		font-size: 0.78rem;
 		font-weight: 700;
-		color: #ea580c;
+		color: #c2410c;
 		justify-content: flex-end;
 		text-align: right;
-		background: rgba(249, 115, 22, 0.04);
+		background: rgba(234, 88, 12, 0.04);
 		padding: 0 10px 0 6px;
 		font-variant-numeric: tabular-nums;
 	}
@@ -9817,7 +9817,7 @@
 	.wb-btn-del {
 		background: transparent;
 		border: none;
-		color: #9a9a9a;
+		color: #94a3b8;
 		cursor: pointer;
 		font-size: 0.9rem;
 		padding: 3px 6px;
@@ -9836,7 +9836,7 @@
 	}
 	.wb-btn-del-placeholder:hover {
 		background: transparent;
-		color: #9a9a9a;
+		color: #94a3b8;
 	}
 
 	/* ═══════════════════════════════════════════════════════════════
@@ -9885,8 +9885,8 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
-		color: #ea580c;
-		background: rgba(249, 115, 22, 0.08);
+		color: #c2410c;
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0.22rem 0.6rem;
 		border-radius: 9999px;
 		font-family: 'Geist', sans-serif;
@@ -9929,8 +9929,8 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
-		color: #ea580c;
-		background: rgba(249, 115, 22, 0.08);
+		color: #c2410c;
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0.28rem 0.6rem;
 		border-radius: 9999px;
 		flex-shrink: 0;
@@ -9949,20 +9949,20 @@
 		align-items: center;
 		gap: 0.85rem;
 		padding: 0.85rem 1.1rem;
-		background: linear-gradient(135deg, rgba(249, 115, 22, 0.04), rgba(249, 115, 22, 0.08));
-		border: 1px solid rgba(249, 115, 22, 0.15);
+		background: linear-gradient(135deg, rgba(234, 88, 12, 0.04), rgba(234, 88, 12, 0.08));
+		border: 1px solid rgba(234, 88, 12, 0.15);
 	}
 	.wb-card-hint-icon {
 		width: 36px;
 		height: 36px;
 		border-radius: 10px;
 		background: white;
-		color: #ea580c;
+		color: #c2410c;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		flex-shrink: 0;
-		border: 1px solid rgba(249, 115, 22, 0.18);
+		border: 1px solid rgba(234, 88, 12, 0.18);
 	}
 	.wb-card-hint-body {
 		display: flex;
@@ -9975,7 +9975,7 @@
 	}
 	.wb-card-hint-text {
 		font-size: 0.82rem;
-		color: #ea580c;
+		color: #c2410c;
 		margin: 0;
 		line-height: 1.4;
 		overflow-wrap: anywhere;
@@ -9986,16 +9986,16 @@
 		font-size: 0.72rem;
 		font-weight: 700;
 		background: white;
-		border: 1px solid rgba(249, 115, 22, 0.25);
+		border: 1px solid rgba(234, 88, 12, 0.25);
 		border-bottom-width: 2px;
 		border-radius: 4px;
 		padding: 0.05rem 0.4rem;
-		color: #ea580c;
+		color: #c2410c;
 		margin: 0 0.1rem;
 	}
 
 	.wb-row-fields {
-		background: linear-gradient(180deg, rgba(249, 115, 22, 0.02), transparent);
+		background: linear-gradient(180deg, rgba(234, 88, 12, 0.02), transparent);
 	}
 
 	.wb-enc-row {
@@ -10055,7 +10055,7 @@
 		content: '';
 		width: 4px;
 		height: 4px;
-		background: #f97316;
+		background: #ea580c;
 		border-radius: 50%;
 		flex-shrink: 0;
 	}
@@ -10080,14 +10080,14 @@
 	}
 	.wb-enc-cell input:hover:not(:disabled):not(:focus),
 	.wb-enc-cell select:hover:not(:focus) {
-		border-color: rgba(249, 115, 22, 0.4);
+		border-color: rgba(234, 88, 12, 0.4);
 		background: #fcfcfb;
 	}
 	.wb-enc-cell input:focus,
 	.wb-enc-cell select:focus {
-		border-color: #f97316;
+		border-color: #ea580c;
 		background: #fff;
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.10);
+		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.10);
 	}
 	.wb-enc-cell input:disabled {
 		background: #f6f6f3;
@@ -10110,14 +10110,14 @@
 
 	/* ── Totals row ── */
 	.wb-row-totals {
-		background: rgba(249, 115, 22, 0.04);
-		border-top: 1px solid rgba(249, 115, 22, 0.3);
-		border-bottom: 1px solid rgba(249, 115, 22, 0.3);
+		background: rgba(234, 88, 12, 0.04);
+		border-top: 1px solid rgba(234, 88, 12, 0.3);
+		border-bottom: 1px solid rgba(234, 88, 12, 0.3);
 		font-weight: 700;
 	}
 	.wb-row-totals .wb-row-num {
-		background: rgba(249, 115, 22, 0.06);
-		color: #ea580c;
+		background: rgba(234, 88, 12, 0.06);
+		color: #c2410c;
 	}
 	.wb-cell-summary {
 		display: flex;
@@ -10135,14 +10135,14 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.wb-grand-pill {
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		color: #fff;
 		padding: 5px 14px;
 		border-radius: 9999px;
 		font-weight: 700;
 		margin-left: auto;
 		font-size: 0.85rem;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.25);
+		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.25);
 	}
 	.wb-grand-pill b {
 		color: #fff;
@@ -10206,7 +10206,7 @@
 		padding-top: 12px;
 	}
 	.resumen-total {
-		background: linear-gradient(135deg, #ea580c 0%, #f97316 60%, #fb923c 100%);
+		background: linear-gradient(135deg, #c2410c 0%, #ea580c 60%, #f97316 100%);
 		color: #fff;
 		padding: 14px 18px;
 		border-radius: 12px;
@@ -10215,7 +10215,7 @@
 		font-weight: 800;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.30);
+		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.30);
 		border-bottom: none;
 	}
 	.resumen-total > span:first-child {
@@ -10253,8 +10253,8 @@
 		margin: 8px 0 16px 14px;
 		padding: 8px 18px;
 		background: #ffffff;
-		border: 1.5px dashed rgba(249, 115, 22, 0.3);
-		color: #ea580c;
+		border: 1.5px dashed rgba(234, 88, 12, 0.3);
+		color: #c2410c;
 		border-radius: 10px;
 		font-size: 0.8rem;
 		font-weight: 600;
@@ -10264,8 +10264,8 @@
 		font-family: 'Geist', sans-serif;
 	}
 	.wb-btn-add-row:hover {
-		background: rgba(249, 115, 22, 0.06);
-		border-color: #f97316;
+		background: rgba(234, 88, 12, 0.06);
+		border-color: #ea580c;
 		border-style: solid;
 	}
 
@@ -10292,8 +10292,8 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.wb-consec-input.consec-ok {
-		border-color: #f97316 !important;
-		background: rgba(249, 115, 22, 0.06) !important;
+		border-color: #ea580c !important;
+		background: rgba(234, 88, 12, 0.06) !important;
 	}
 	.wb-consec-input.consec-taken {
 		border-color: #dc2626 !important;
@@ -10307,7 +10307,7 @@
 		flex-shrink: 0;
 	}
 	.consec-ok-badge {
-		color: #ea580c;
+		color: #c2410c;
 	}
 	.consec-taken-badge {
 		color: #b91c1c;
@@ -10321,9 +10321,9 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
-		background: linear-gradient(to right, #f97316, #ea580c);
+		background: linear-gradient(to right, #ea580c, #c2410c);
 		color: #ffffff;
-		border: 1px solid rgba(249, 115, 22, 0.3);
+		border: 1px solid rgba(234, 88, 12, 0.3);
 		border-radius: 10px;
 		padding: 0.4rem 0.85rem;
 		font-size: 0.72rem;
@@ -10334,8 +10334,8 @@
 		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 	}
 	.wb-btn-sync:hover {
-		background: linear-gradient(to right, #ea580c, #c2410c);
-		box-shadow: 0 0 0 1px rgba(249, 115, 22, 0.2), 0 2px 8px rgba(249, 115, 22, 0.25);
+		background: linear-gradient(to right, #c2410c, #9a3412);
+		box-shadow: 0 0 0 1px rgba(234, 88, 12, 0.2), 0 2px 8px rgba(234, 88, 12, 0.25);
 		transform: translateY(-1px);
 	}
 	.wb-btn-sync:active {
@@ -10354,13 +10354,13 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		background: rgba(249, 115, 22, 0.06);
-		border: 1px solid rgba(249, 115, 22, 0.20);
+		background: rgba(234, 88, 12, 0.06);
+		border: 1px solid rgba(234, 88, 12, 0.20);
 		border-radius: 8px;
 		padding: 5px 8px;
 		font-size: 0.8rem;
 		font-weight: 600;
-		color: #ea580c;
+		color: #c2410c;
 	}
 	.ss-selected .ss-nit {
 		font-size: 0.7rem;
@@ -10643,7 +10643,7 @@
 		white-space: nowrap;
 	}
 	.liq-v1-consec {
-		background: linear-gradient(135deg, #9a3412, #c2410c) !important;
+		background: linear-gradient(135deg, #9a3412, #9a3412) !important;
 		color: #fff;
 		border-color: #9a3412 !important;
 		border-radius: 5px;
@@ -10677,7 +10677,7 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 12px;
-		background: linear-gradient(135deg, #9a3412, #c2410c);
+		background: linear-gradient(135deg, #9a3412, #9a3412);
 		color: #fff;
 		padding: 7px 11px;
 		font-size: 8pt;

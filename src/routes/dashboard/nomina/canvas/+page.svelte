@@ -2435,7 +2435,7 @@
 		cursor: pointer;
 	}
 	.trec-fila:hover:not(:disabled) {
-		border-color: #ea580c;
+		border-color: #c2410c;
 	}
 	.trec-fila:disabled {
 		opacity: 0.55;
@@ -2465,7 +2465,7 @@
 		transition: background 0.15s ease;
 	}
 	.trec-switch.on {
-		background: #ea580c;
+		background: #c2410c;
 	}
 	.trec-bola {
 		position: absolute;
@@ -2511,8 +2511,8 @@
 		cursor: pointer;
 	}
 	.trec-botones button:hover:not(:disabled) {
-		border-color: #ea580c;
-		color: #c2410c;
+		border-color: #c2410c;
+		color: #9a3412;
 	}
 	.trec-botones button:disabled {
 		opacity: 0.55;

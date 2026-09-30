@@ -486,7 +486,7 @@
 		color: #166534;
 		font-weight: 700;
 		background: #f0fdf4;
-		border-bottom-color: #ea580c;
+		border-bottom-color: #c2410c;
 	}
 	.fi-cuenta {
 		min-width: 18px;
@@ -500,7 +500,7 @@
 		text-align: center;
 	}
 	.fi-tabs button.fi-tab-on .fi-cuenta {
-		background: #ea580c;
+		background: #c2410c;
 		color: #fff;
 	}
 
@@ -553,7 +553,7 @@
 		border: none;
 		border-radius: 7px;
 		padding: 8px 14px;
-		background: #ea580c;
+		background: #c2410c;
 		color: #fff;
 		font-size: 12.5px;
 		font-weight: 700;
@@ -628,7 +628,7 @@
 	}
 	.fi-edit:focus {
 		outline: none;
-		border-color: #ea580c;
+		border-color: #c2410c;
 		background: #fff;
 	}
 	.fi-edit:disabled {

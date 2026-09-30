@@ -571,7 +571,7 @@
 			<div class="flex items-center gap-3">
 				<span class="eyebrow">Modo Canvas · Sin límite</span>
 				<span
-					class="font-mono-meta text-[10px] text-[#6B6B6B]"
+					class="font-mono-meta text-[10px] text-[#64748b]"
 					style="text-transform: none; letter-spacing: 0.04em;"
 				>
 					{#if loadingInicial}
@@ -636,7 +636,7 @@
 		{#if loadingInicial}
 			<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12">
 				<div class="spinner"></div>
-				<p class="text-sm text-[#6B6B6B]">Cargando lote inicial de servicios…</p>
+				<p class="text-sm text-[#64748b]">Cargando lote inicial de servicios…</p>
 			</div>
 		{:else if servicios.length === 0}
 			<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12 text-center">
@@ -644,7 +644,7 @@
 					class="flex h-14 w-14 items-center justify-center rounded-2xl border border-[rgba(0,0,0,0.08)] bg-white"
 				>
 					<svg
-						class="h-7 w-7 text-[#9A9A9A]"
+						class="h-7 w-7 text-[#94a3b8]"
 						fill="none"
 						stroke="currentColor"
 						viewBox="0 0 24 24"
@@ -658,8 +658,8 @@
 					</svg>
 				</div>
 				<div>
-					<h3 class="font-display text-lg text-[#1A1A1A]">No hay servicios para mostrar</h3>
-					<p class="mt-1 text-sm text-[#6B6B6B]">
+					<h3 class="font-display text-lg text-[#0f172a]">No hay servicios para mostrar</h3>
+					<p class="mt-1 text-sm text-[#64748b]">
 						Ajusta los filtros en la vista de lista o crea un nuevo servicio.
 					</p>
 				</div>
@@ -667,7 +667,7 @@
 		{:else}
 			<div class="relative min-h-0 flex-1 overflow-auto" style="background-color: #ffffff;">
 				<table
-					class="border-collapse text-[12px] text-[#1A1A1A]"
+					class="border-collapse text-[12px] text-[#0f172a]"
 					style="min-width: {totalAncho}px;"
 				>
 					<thead class="sticky top-0 z-20">
@@ -679,7 +679,7 @@
 								<button
 									type="button"
 									class="flex w-full items-center justify-between gap-1.5 text-left {COLUMNAS[0].sortable
-										? 'cursor-pointer hover:text-[#f97316] transition-colors'
+										? 'cursor-pointer hover:text-[#ea580c] transition-colors'
 										: 'cursor-default'}"
 									onclick={() => handleSort(COLUMNAS[0])}
 									disabled={!COLUMNAS[0].sortable}
@@ -688,7 +688,7 @@
 									<span class="code-badge"># SOLICITUD</span>
 									{#if isSorted(COLUMNAS[0], 'asc')}
 										<svg
-											class="h-3 w-3 flex-shrink-0 text-[#f97316]"
+											class="h-3 w-3 flex-shrink-0 text-[#ea580c]"
 											fill="none"
 											stroke="currentColor"
 											viewBox="0 0 24 24"
@@ -698,7 +698,7 @@
 										</svg>
 									{:else if isSorted(COLUMNAS[0], 'desc')}
 										<svg
-											class="h-3 w-3 flex-shrink-0 text-[#f97316]"
+											class="h-3 w-3 flex-shrink-0 text-[#ea580c]"
 											fill="none"
 											stroke="currentColor"
 											viewBox="0 0 24 24"
@@ -717,7 +717,7 @@
 									<button
 										type="button"
 										class="flex w-full items-center gap-1.5 {col.sortable
-											? 'cursor-pointer hover:text-[#f97316] transition-colors'
+											? 'cursor-pointer hover:text-[#ea580c] transition-colors'
 											: 'cursor-default'} {col.align === 'center'
 											? 'justify-center'
 											: col.align === 'right'
@@ -727,12 +727,12 @@
 										disabled={!col.sortable}
 										title={col.sortable ? 'Click para ordenar' : ''}
 									>
-										<span class="font-mono-meta text-[10px] leading-tight text-[#6B6B6B]">
+										<span class="font-mono-meta text-[10px] leading-tight text-[#64748b]">
 											{col.label}
 										</span>
 										{#if isSorted(col, 'asc')}
 											<svg
-												class="h-3 w-3 flex-shrink-0 text-[#f97316]"
+												class="h-3 w-3 flex-shrink-0 text-[#ea580c]"
 												fill="none"
 												stroke="currentColor"
 												viewBox="0 0 24 24"
@@ -742,7 +742,7 @@
 											</svg>
 										{:else if isSorted(col, 'desc')}
 											<svg
-												class="h-3 w-3 flex-shrink-0 text-[#f97316]"
+												class="h-3 w-3 flex-shrink-0 text-[#ea580c]"
 												fill="none"
 												stroke="currentColor"
 												viewBox="0 0 24 24"
@@ -768,7 +768,7 @@
 								<td
 									class="sticky left-0 z-10 border-r border-[rgba(0,0,0,0.08)] px-3 py-2 {isPar
 										? 'bg-[#fcfcfb]'
-										: 'bg-white'} group-hover:bg-[rgba(249, 115, 22,0.05)] shadow-[2px_0_4px_rgba(0,0,0,0.04)]"
+										: 'bg-white'} group-hover:bg-[rgba(234, 88, 12,0.05)] shadow-[2px_0_4px_rgba(0,0,0,0.04)]"
 									style="min-width: {COLUMNAS[0].minWidth};"
 								>
 									{#if COLUMNAS[0].href}
@@ -789,7 +789,7 @@
 										{/if}
 									{:else}
 										<span
-											class="font-mono-meta text-[11px] tracking-wider text-[#f97316]"
+											class="font-mono-meta text-[11px] tracking-wider text-[#ea580c]"
 											style="text-transform: uppercase; letter-spacing: 0.08em;"
 										>
 											{COLUMNAS[0].value(servicio)}
@@ -851,7 +851,7 @@
 											</span>
 										{:else if col.mono}
 											<span
-												class="font-mono-meta block text-[11px] whitespace-nowrap text-[#1A1A1A]"
+												class="font-mono-meta block text-[11px] whitespace-nowrap text-[#0f172a]"
 												style="text-transform: none; letter-spacing: 0.02em;"
 											>
 												{col.value(servicio)}
@@ -891,7 +891,7 @@
 											</span>
 										{:else if col.truncate}
 											<span
-												class="block truncate text-[12px] leading-snug text-[#1A1A1A]"
+												class="block truncate text-[12px] leading-snug text-[#0f172a]"
 												title={col.value(servicio)}
 											>
 												{col.value(servicio)}
@@ -910,7 +910,7 @@
 												{siNoVal}
 											</span>
 										{:else}
-											<span class="block text-[12px] leading-snug whitespace-nowrap text-[#1A1A1A]">
+											<span class="block text-[12px] leading-snug whitespace-nowrap text-[#0f172a]">
 												{col.value(servicio)}
 											</span>
 										{/if}
@@ -926,7 +926,7 @@
 					class="sticky bottom-0 left-0 z-20 flex h-16 w-full items-center justify-center border-t border-[rgba(0,0,0,0.04)] bg-[#fcfcfb]/95 backdrop-blur"
 				>
 					{#if cargandoMas}
-						<div class="flex items-center gap-2 text-[#6B6B6B]">
+						<div class="flex items-center gap-2 text-[#64748b]">
 							<div class="spinner" style="width:16px;height:16px;border-width:2px;"></div>
 							<span
 								class="font-mono-meta text-[10px]"
@@ -939,7 +939,7 @@
 						<button
 							type="button"
 							onclick={() => onLoadMore?.()}
-							class="apple-transition flex items-center gap-2 rounded-xl border border-[rgba(249, 115, 22,0.25)] bg-white px-4 py-1.5 text-xs font-semibold text-[#166534] hover:border-[rgba(249, 115, 22,0.4)] hover:bg-[rgba(249, 115, 22,0.06)]"
+							class="apple-transition flex items-center gap-2 rounded-xl border border-[rgba(234, 88, 12,0.25)] bg-white px-4 py-1.5 text-xs font-semibold text-[#166534] hover:border-[rgba(234, 88, 12,0.4)] hover:bg-[rgba(234, 88, 12,0.06)]"
 						>
 							<svg
 								class="h-3.5 w-3.5"
@@ -958,7 +958,7 @@
 						</button>
 					{:else}
 						<span
-							class="font-mono-meta text-[10px] text-[#9A9A9A]"
+							class="font-mono-meta text-[10px] text-[#94a3b8]"
 							style="text-transform: none; letter-spacing: 0.04em;"
 						>
 							— Has llegado al final · {servicios.length} de {totalGeneral} servicios —
@@ -971,13 +971,13 @@
 				class="flex flex-shrink-0 items-center justify-between border-t border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-5 py-2.5"
 			>
 				<p
-					class="font-mono-meta text-[10px] text-[#6B6B6B]"
+					class="font-mono-meta text-[10px] text-[#64748b]"
 					style="text-transform: none; letter-spacing: 0.04em;"
 				>
 					Sin límite · Carga incremental cada 20 al hacer scroll · Click en fila para ver detalle
 				</p>
 				<p
-					class="font-mono-meta text-[10px] text-[#f97316]"
+					class="font-mono-meta text-[10px] text-[#ea580c]"
 					style="text-transform: none; letter-spacing: 0.04em;"
 				>
 					{servicios.length}/{totalGeneral} servicios · {COLUMNAS.length} columnas

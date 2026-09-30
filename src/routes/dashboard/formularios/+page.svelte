@@ -1253,7 +1253,7 @@
 		font: inherit;
 		font-size: 0.875rem;
 		font-weight: 600;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 		background: none;
 		border: none;
 		border-bottom: 2px solid transparent;
@@ -1262,17 +1262,17 @@
 	}
 
 	.pestana:hover {
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.pestana:focus-visible {
-		outline: 2px solid var(--orange-600, #ea580c);
+		outline: 2px solid var(--orange-600, #c2410c);
 		outline-offset: -2px;
 	}
 
 	.pestana--on {
-		color: var(--orange-700, #c2410c);
-		border-bottom-color: var(--orange-600, #ea580c);
+		color: var(--orange-700, #9a3412);
+		border-bottom-color: var(--orange-600, #c2410c);
 	}
 
 	.pestana__cuenta {
@@ -1280,7 +1280,7 @@
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
 		font-weight: 700;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 		background: var(--gray-50, #f9fafb);
 		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
 		border-radius: 999px;
@@ -1296,7 +1296,7 @@
 	}
 
 	.panel:focus-visible {
-		outline: 2px solid var(--orange-600, #ea580c);
+		outline: 2px solid var(--orange-600, #c2410c);
 		outline-offset: -2px;
 	}
 
@@ -1317,19 +1317,19 @@
 		align-items: center;
 		gap: 0.375rem;
 		font-size: 0.8125rem;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 	}
 
 	.filtros__check input {
 		width: 18px;
 		height: 18px;
-		accent-color: var(--orange-600, #ea580c);
+		accent-color: var(--orange-600, #c2410c);
 	}
 
 	.filtros__total {
 		font-family: var(--font-mono, monospace);
 		font-size: 0.75rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.filtros-envios {
@@ -1358,7 +1358,7 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.barra-envios {
@@ -1377,7 +1377,7 @@
 	.conteo {
 		font-family: var(--font-mono, monospace);
 		font-size: 0.75rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.conteo__nota {
@@ -1440,8 +1440,8 @@
 
 	.input:focus-visible {
 		outline: none;
-		border-color: var(--orange-600, #ea580c);
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.18);
+		border-color: var(--orange-600, #c2410c);
+		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.18);
 	}
 
 	/* Catálogo en rejilla fluida. `auto-fill` y no `auto-fit`: con dos formatos en
@@ -1481,7 +1481,7 @@
 		font-family: var(--font-mono, monospace);
 		font-size: 0.8125rem;
 		font-weight: 700;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.tarjeta__cuerpo {
@@ -1492,7 +1492,7 @@
 	.tarjeta__nombre {
 		font-size: 0.9375rem;
 		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		text-decoration: none;
 	}
 
@@ -1503,7 +1503,7 @@
 	.tarjeta__desc {
 		margin-top: 0.125rem;
 		font-size: 0.8125rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 		line-height: 1.4;
 	}
 
@@ -1511,7 +1511,7 @@
 		margin-top: 0.25rem;
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.tarjeta__versiones {
@@ -1545,7 +1545,7 @@
 	.pill--sin,
 	.pill--archivada {
 		background: var(--gray-50, #f9fafb);
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
 	}
 
@@ -1576,7 +1576,7 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 		background: var(--gray-50, #f9fafb);
 		border-bottom: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
 		white-space: nowrap;
@@ -1620,7 +1620,7 @@
 		display: block;
 		margin-top: 0.0625rem;
 		font-size: 0.6875rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.chip {
@@ -1651,7 +1651,7 @@
 	.chip--descartado {
 		margin-left: 0.25rem;
 		background: var(--gray-100, #f3f4f6);
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 	}
 
 	.btn {
@@ -1662,7 +1662,7 @@
 		font: inherit;
 		font-size: 0.875rem;
 		font-weight: 500;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		background: #fff;
 		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
 		border-radius: 10px;
@@ -1686,19 +1686,19 @@
 	}
 
 	.btn:focus-visible {
-		outline: 2px solid var(--orange-600, #ea580c);
+		outline: 2px solid var(--orange-600, #c2410c);
 		outline-offset: 2px;
 	}
 
 	.btn--primario {
 		color: #fff;
-		background: var(--orange-600, #ea580c);
-		border-color: var(--orange-600, #ea580c);
+		background: var(--orange-600, #c2410c);
+		border-color: var(--orange-600, #c2410c);
 		font-weight: 600;
 	}
 
 	.btn--primario:hover:not(:disabled) {
-		background: var(--orange-700, #c2410c);
+		background: var(--orange-700, #9a3412);
 	}
 
 	.btn--peligro {
@@ -1716,21 +1716,21 @@
 		background: var(--bg-surface, #fff);
 		border: 1px dashed var(--border-default, rgba(0, 0, 0, 0.12));
 		border-radius: 14px;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.estado__t {
 		font-family: var(--font-display, Georgia, serif);
 		font-size: 1rem;
 		font-weight: 600;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 	}
 
 	.estado__d {
 		margin-top: 0.3125rem;
 		font-size: 0.8125rem;
 		line-height: 1.5;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.paginacion {
@@ -1743,7 +1743,7 @@
 	.paginacion__estado {
 		font-family: var(--font-mono, monospace);
 		font-size: 0.75rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.modal {
@@ -1753,7 +1753,7 @@
 		display: grid;
 		place-items: center;
 		padding: 1rem;
-		background: rgba(15, 31, 26, 0.45);
+		background: rgba(15, 23, 42, 0.45);
 	}
 
 	.modal__caja {
@@ -1792,12 +1792,12 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.campo__hint {
 		font-size: 0.6875rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.campo__hint code {

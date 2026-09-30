@@ -133,18 +133,18 @@
 	}
 	.btn-back:hover {
 		background: var(--fm-surface-hover);
-		color: #ea580c;
-		border-color: rgba(249, 115, 22, 0.3);
+		color: #c2410c;
+		border-color: rgba(234, 88, 12, 0.3);
 	}
 	.header-title-group { display: flex; flex-direction: column; gap: 0.15rem; }
 	h1 {
 		font-family: 'Geist', monospace;
 		font-size: 0.65rem;
 		font-weight: 700;
-		color: #ea580c;
+		color: #c2410c;
 		letter-spacing: 0.12em;
 		text-transform: uppercase;
-		background: rgba(249, 115, 22, 0.08);
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0.2rem 0.6rem;
 		border-radius: 5px;
 		align-self: flex-start;
@@ -180,9 +180,9 @@
 		border: 1px solid var(--fm-border);
 	}
 	.btn-outline:hover {
-		border-color: rgba(249, 115, 22, 0.3);
-		background: rgba(249, 115, 22, 0.04);
-		color: #ea580c;
+		border-color: rgba(234, 88, 12, 0.3);
+		background: rgba(234, 88, 12, 0.04);
+		color: #c2410c;
 	}
 
 	.page-content {
@@ -450,9 +450,9 @@
 		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 	}
 	.btn-footer-back:hover {
-		background: rgba(249, 115, 22, 0.04);
-		border-color: rgba(249, 115, 22, 0.3);
-		color: #ea580c;
+		background: rgba(234, 88, 12, 0.04);
+		border-color: rgba(234, 88, 12, 0.3);
+		color: #c2410c;
 	}
 	.btn-footer-back svg { transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
 	.btn-footer-back:hover svg { transform: translateX(-3px); }

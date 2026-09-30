@@ -281,11 +281,11 @@
 	}
 
 	.rail-green {
-		background: #ea580c;
+		background: #c2410c;
 		color: #fff;
 	}
 	.rail-green:hover:not(:disabled) {
-		background: #c2410c;
+		background: #9a3412;
 	}
 	.rail-blue {
 		background: #2563eb;

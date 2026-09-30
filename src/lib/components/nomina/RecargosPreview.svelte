@@ -302,7 +302,7 @@
 				on:click={() => dispatch('openDesglose')}
 				disabled={!previewData || !previewData.planillas?.length}
 				class="apple-transition flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-				style="color: #047857; background: linear-gradient(135deg, rgba(16, 185, 129, 0.10), rgba(5, 150, 105, 0.06)); border-color: rgba(16, 185, 129, 0.30);"
+				style="color: #166534; background: linear-gradient(135deg, rgba(22, 163, 74, 0.10), rgba(21, 128, 61, 0.06)); border-color: rgba(22, 163, 74, 0.30);"
 				title="Ver desglose detallado por día, tipo de recargo, configuración salarial, etc."
 			>
 				<BarChart3 class="h-3.5 w-3.5" />
@@ -357,7 +357,7 @@
 			{:else}
 				<!-- Banner de resumen: cuántos ya están incluidos -->
 				{#if keysYaIncluidos.size > 0}
-					<div class="mb-3 flex items-center gap-2 rounded-lg border border-[rgba(16,185,129,0.20)] bg-[rgba(16,185,129,0.08)] px-3 py-2">
+					<div class="mb-3 flex items-center gap-2 rounded-lg border border-[rgba(22, 163, 74,0.20)] bg-[rgba(22, 163, 74,0.08)] px-3 py-2">
 						<svg
 							class="h-3.5 w-3.5 flex-shrink-0 text-[var(--emerald-600)]"
 							fill="none"

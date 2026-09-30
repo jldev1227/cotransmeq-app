@@ -155,7 +155,7 @@
     background: var(--surface, #fff);
     color: var(--text, #0f172a);
     outline: none;
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-family: var(--font-sans);
     cursor: pointer;
     appearance: none;
     -webkit-appearance: none;
@@ -163,7 +163,7 @@
     letter-spacing: 0.02em;
   }
   .time-picker-select:focus {
-    border-color: #ea580c;
+    border-color: #c2410c;
     box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.1);
   }
   .time-picker-select:disabled {
@@ -173,9 +173,9 @@
     opacity: 0.7;
   }
   .time-picker.has-value .time-picker-select {
-    border-color: #ea580c;
+    border-color: #c2410c;
     background: rgba(234, 88, 12, 0.04);
-    color: #c2410c;
+    color: #9a3412;
   }
   .time-picker.next-day.has-value .time-picker-select {
     border-color: #f59e0b;
@@ -204,7 +204,7 @@
     background: rgba(234, 88, 12, 0.1);
     border: none;
     border-radius: 50%;
-    color: #c2410c;
+    color: #9a3412;
     cursor: pointer;
     font-size: 0.7rem;
     line-height: 1;
@@ -224,7 +224,7 @@
   .time-picker.disabled { opacity: 0.85; }
 
   :global(.time-picker-select option) {
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-family: var(--font-sans);
     color: #0f172a;
     background: #fff;
   }

@@ -117,7 +117,7 @@
 		padding: 0 0.25rem;
 		font-size: 0.9375rem;
 		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.grupo__req {
@@ -128,7 +128,7 @@
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
 		font-weight: 500;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
 	}
@@ -139,14 +139,14 @@
 
 	.grupo__ayuda {
 		font-size: 0.8125rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.grupo__vacio,
 	.grupo__tope-aviso {
 		font-size: 0.8125rem;
 		font-style: italic;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.grupo__filas {
@@ -175,7 +175,7 @@
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
 		font-weight: 600;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.fila__quitar {
@@ -215,7 +215,7 @@
 		font: inherit;
 		font-size: 0.875rem;
 		font-weight: 600;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		background: #fff7ed;
 		border: 1px dashed #fdba74;
 		border-radius: 10px;
@@ -224,7 +224,7 @@
 
 	.grupo__agregar:focus-visible,
 	.fila__quitar:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 2px;
 	}
 

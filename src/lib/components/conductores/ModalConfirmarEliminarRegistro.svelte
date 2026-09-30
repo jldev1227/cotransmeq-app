@@ -45,7 +45,7 @@
 	};
 
 	const tipoColor: Record<string, string> = {
-		LABORADO: '#ea580c',
+		LABORADO: '#c2410c',
 		DISPONIBLE: '#2563eb',
 		DESCANSO: '#d97706',
 		MANTENIMIENTO: '#dc2626'
@@ -132,7 +132,7 @@
 					<h2
 						id="modal-eliminar-registro-title"
 						class="font-display text-base"
-						style="color: var(--bg-charcoal); font-weight: 500;"
+						style="color: var(--bg-charcoal); font-weight: 800;"
 					>
 						{conductorLabel}
 					</h2>

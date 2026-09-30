@@ -228,12 +228,12 @@
 			<!-- Header -->
 			<header
 				class="flex flex-shrink-0 items-start justify-between gap-3 border-b border-gray-200 px-5 py-4"
-				style="background: linear-gradient(135deg, #ecfdf5, #d1fae5);"
+				style="background: linear-gradient(135deg, #f0fdf4, #dcfce7);"
 			>
 				<div class="flex items-start gap-3">
 					<div
 						class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl"
-						style="background: linear-gradient(135deg, #059669, #047857); box-shadow: 0 4px 12px rgba(16,185,129,0.25);"
+						style="background: linear-gradient(135deg, #15803d, #166534); box-shadow: 0 4px 12px rgba(22, 163, 74,0.25);"
 					>
 						<svg
 							class="h-5 w-5 text-white"
@@ -252,14 +252,14 @@
 					<div>
 						<p
 							class="font-mono text-[10px] font-semibold uppercase tracking-wider"
-							style="color: #047857;"
+							style="color: #166534;"
 						>
 							Editar recorrido
 						</p>
 						<h2
 							id="modal-editar-segmento-title"
 							class="font-display text-lg"
-							style="color: var(--bg-charcoal); font-weight: 500;"
+							style="color: var(--bg-charcoal); font-weight: 800;"
 						>
 							{conductorLabel}
 						</h2>
@@ -301,7 +301,7 @@
 							value={vehiculoId ?? ''}
 							onchange={(e) => onVehiculoChange((e.currentTarget as HTMLSelectElement).value)}
 							class="apple-transition w-full rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs"
-							style="color: var(--text-primary); font-family: 'JetBrains Mono', monospace;"
+							style="color: var(--text-primary); font-family: var(--font-sans);"
 							disabled={loadingCatalogos}
 						>
 							<option value="">— Sin vehículo —</option>
@@ -380,7 +380,7 @@
 							step="0.5"
 							bind:value={horasConducidas}
 							class="apple-transition w-full rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs"
-							style="font-family: 'JetBrains Mono', monospace;"
+							style="font-family: var(--font-sans);"
 						/>
 					</label>
 
@@ -414,7 +414,7 @@
 							}}
 							placeholder="opcional"
 							class="apple-transition w-full rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs"
-							style="font-family: 'JetBrains Mono', monospace;"
+							style="font-family: var(--font-sans);"
 						/>
 					</label>
 
@@ -436,7 +436,7 @@
 							}}
 							placeholder="opcional"
 							class="apple-transition w-full rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs"
-							style="font-family: 'JetBrains Mono', monospace;"
+							style="font-family: var(--font-sans);"
 						/>
 					</label>
 
@@ -497,7 +497,7 @@
 					onclick={guardar}
 					disabled={guardando}
 					class="apple-transition inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
-					style="background: linear-gradient(135deg, #059669, #047857); box-shadow: 0 2px 6px rgba(16,185,129,0.25);"
+					style="background: linear-gradient(135deg, #15803d, #166534); box-shadow: 0 2px 6px rgba(22, 163, 74,0.25);"
 				>
 					{#if guardando}
 						<svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">

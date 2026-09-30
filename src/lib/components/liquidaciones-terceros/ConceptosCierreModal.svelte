@@ -992,7 +992,7 @@
 		color: #166534;
 		font-weight: 700;
 		background: #f0fdf4;
-		border-bottom-color: #ea580c;
+		border-bottom-color: #c2410c;
 	}
 	/* Contador por sección: refuerza dónde estás sin depender solo del color,
 	   y de paso dice cuántas filas hay sin tener que cambiar de pestaña. */
@@ -1008,7 +1008,7 @@
 		text-align: center;
 	}
 	.cxm-tabs button.cxm-tab-on .cxm-cuenta {
-		background: #ea580c;
+		background: #c2410c;
 		color: #fff;
 	}
 
@@ -1147,7 +1147,7 @@
 		font-size: 11.5px;
 		font-weight: 700;
 		font-family: inherit;
-		color: #c2410c;
+		color: #9a3412;
 		cursor: pointer;
 		white-space: nowrap;
 	}
@@ -1221,7 +1221,7 @@
 		border: none;
 		border-radius: 7px;
 		padding: 8px 14px;
-		background: #ea580c;
+		background: #c2410c;
 		color: #fff;
 		font-size: 12.5px;
 		font-weight: 700;

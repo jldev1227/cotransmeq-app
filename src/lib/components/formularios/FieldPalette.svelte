@@ -198,8 +198,8 @@
 
 	.paleta__input:focus-visible {
 		outline: none;
-		border-color: var(--emerald-600, #059669);
-		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+		border-color: var(--emerald-600, #15803d);
+		box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
 	}
 
 	.paleta__scroll {
@@ -225,7 +225,7 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 		background: none;
 		border: none;
 		border-radius: 8px;
@@ -239,7 +239,7 @@
 	.grupo__conteo {
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.grupo__lista {
@@ -272,7 +272,7 @@
 	}
 
 	.tipo:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 1px;
 	}
 
@@ -282,19 +282,19 @@
 	}
 
 	.tipo--plantilla {
-		border-left: 2px solid var(--emerald-500, #10b981);
+		border-left: 2px solid var(--emerald-500, #16a34a);
 		border-radius: 0 8px 8px 0;
 	}
 
 	.tipo__label {
 		font-size: 0.875rem;
 		font-weight: 500;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.tipo__hint {
 		font-size: 0.75rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 		line-height: 1.3;
 	}
 
@@ -302,7 +302,7 @@
 		padding: 1rem 0.5rem;
 		font-size: 0.8125rem;
 		font-style: italic;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.paleta__nota {

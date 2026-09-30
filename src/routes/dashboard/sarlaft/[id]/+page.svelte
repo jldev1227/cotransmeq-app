@@ -813,8 +813,8 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #f97316;
-		background: rgba(249, 115, 22, 0.08);
+		color: #ea580c;
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0.2rem 0.55rem;
 		border-radius: 4px;
 	}
@@ -852,7 +852,7 @@
 		width: fit-content;
 	}
 	.back-link:hover {
-		color: #f97316;
+		color: #ea580c;
 	}
 	.back-link svg {
 		width: 14px;
@@ -898,8 +898,8 @@
 		font-family: 'Geist', ui-monospace, monospace;
 		font-size: 0.78rem;
 		font-weight: 700;
-		color: #f97316;
-		background: rgba(249, 115, 22, 0.1);
+		color: #ea580c;
+		background: rgba(234, 88, 12, 0.1);
 		padding: 0.25rem 0.65rem;
 		border-radius: 6px;
 		letter-spacing: 0.04em;
@@ -958,12 +958,12 @@
 		flex-shrink: 0;
 	}
 	.meta-item--link {
-		color: #f97316;
+		color: #ea580c;
 		text-decoration: none;
 		transition: color 0.2s;
 	}
 	.meta-item--link:hover {
-		color: #c2410c;
+		color: #9a3412;
 		text-decoration: underline;
 	}
 	.meta-sep {
@@ -1149,7 +1149,7 @@
 	}
 	.export-btn:hover:not(:disabled) {
 		background: #fcfcfb;
-		border-color: rgba(249, 115, 22, 0.4);
+		border-color: rgba(234, 88, 12, 0.4);
 		color: #9a3412;
 	}
 	.export-btn:disabled {
@@ -1159,16 +1159,16 @@
 	.export-btn svg {
 		width: 16px;
 		height: 16px;
-		color: #f97316;
+		color: #ea580c;
 	}
 	.export-btn--zip {
-		background: rgba(249, 115, 22, 0.06);
-		border-color: rgba(249, 115, 22, 0.25);
+		background: rgba(234, 88, 12, 0.06);
+		border-color: rgba(234, 88, 12, 0.25);
 		color: #9a3412;
 	}
 	.export-btn--zip:hover:not(:disabled) {
-		background: rgba(249, 115, 22, 0.12);
-		border-color: #f97316;
+		background: rgba(234, 88, 12, 0.12);
+		border-color: #ea580c;
 	}
 	.export-contacto {
 		padding: 0.7rem 0.85rem;
@@ -1215,14 +1215,14 @@
 		transition: all 0.2s;
 	}
 	.contacto-link:hover {
-		border-color: rgba(249, 115, 22, 0.3);
+		border-color: rgba(234, 88, 12, 0.3);
 		color: #9a3412;
-		background: rgba(249, 115, 22, 0.05);
+		background: rgba(234, 88, 12, 0.05);
 	}
 	.contacto-link svg {
 		width: 14px;
 		height: 14px;
-		color: #f97316;
+		color: #ea580c;
 	}
 	.doc-row {
 		display: flex;
@@ -1240,7 +1240,7 @@
 	}
 	.doc-row:hover:not(:disabled) {
 		background: white;
-		border-color: rgba(249, 115, 22, 0.3);
+		border-color: rgba(234, 88, 12, 0.3);
 		transform: translateY(-1px);
 	}
 	.doc-row:disabled {
@@ -1302,7 +1302,7 @@
 		background: white;
 		border: 1px solid rgba(0, 0, 0, 0.06);
 		border-radius: 8px;
-		color: #f97316;
+		color: #ea580c;
 	}
 	.doc-action svg {
 		width: 14px;
@@ -1311,8 +1311,8 @@
 	.spin-ring--sm {
 		width: 14px;
 		height: 14px;
-		border: 2px solid rgba(249, 115, 22, 0.2);
-		border-top-color: #f97316;
+		border: 2px solid rgba(234, 88, 12, 0.2);
+		border-top-color: #ea580c;
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 	}
@@ -1441,8 +1441,8 @@
 	}
 	.entrega-enviado,
 	.entrega-descargado {
-		background: #ecfdf5;
-		color: #065f46;
+		background: #f0fdf4;
+		color: #14532d;
 	}
 	.entrega-pendiente {
 		background: #fffbeb;
@@ -1502,7 +1502,7 @@
 		font-size: 0.7rem;
 		font-weight: 700;
 		color: #9a3412;
-		background: rgba(249, 115, 22, 0.1);
+		background: rgba(234, 88, 12, 0.1);
 		padding: 0.25rem 0.6rem;
 		border-radius: 5px;
 	}
@@ -1545,8 +1545,8 @@
 	.input:focus,
 	.select:focus {
 		background: white;
-		border-color: rgba(249, 115, 22, 0.4);
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+		border-color: rgba(234, 88, 12, 0.4);
+		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1);
 	}
 	.textarea {
 		resize: vertical;
@@ -1558,14 +1558,14 @@
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.55rem 0.75rem;
-		background: rgba(249, 115, 22, 0.06);
-		border: 1px solid rgba(249, 115, 22, 0.15);
+		background: rgba(234, 88, 12, 0.06);
+		border: 1px solid rgba(234, 88, 12, 0.15);
 		border-radius: 10px;
 		font-size: 0.78rem;
 		color: #9a3412;
 	}
 	.eval-meta svg {
-		color: #f97316;
+		color: #ea580c;
 		flex-shrink: 0;
 	}
 	.eval-meta strong {
@@ -1627,8 +1627,8 @@
 	.spin-ring {
 		width: 30px;
 		height: 30px;
-		border: 2.5px solid rgba(249, 115, 22, 0.15);
-		border-top-color: #f97316;
+		border: 2.5px solid rgba(234, 88, 12, 0.15);
+		border-top-color: #ea580c;
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 	}
@@ -1692,13 +1692,13 @@
 		white-space: nowrap;
 	}
 	.btn-primary {
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		color: white;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.28);
+		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.28);
 	}
 	.btn-primary:hover:not(:disabled) {
 		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
+		box-shadow: 0 6px 20px rgba(234, 88, 12, 0.4);
 	}
 	.btn-primary:disabled {
 		opacity: 0.5;
@@ -1735,12 +1735,12 @@
 		width: 48px;
 		height: 48px;
 		border-radius: 14px;
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		color: white;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.3);
 	}
 	.card-icon svg {
 		width: 24px;

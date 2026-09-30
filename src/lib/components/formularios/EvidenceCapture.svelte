@@ -136,7 +136,7 @@
 		ctx.lineWidth = 2.2;
 		ctx.lineCap = 'round';
 		ctx.lineJoin = 'round';
-		ctx.strokeStyle = '#0f1f1a';
+		ctx.strokeStyle = '#0f172a';
 		ctx.clearRect(0, 0, ancho, alto);
 	}
 
@@ -452,14 +452,14 @@
 	.item__tipo {
 		font-size: 0.75rem;
 		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		text-transform: uppercase;
 	}
 
 	.item__peso {
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.item__quitar {
@@ -492,7 +492,7 @@
 		font: inherit;
 		font-size: 0.9375rem;
 		font-weight: 600;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		background: #fff7ed;
 		border: 1px solid #fed7aa;
 		border-radius: 12px;
@@ -500,15 +500,15 @@
 	}
 
 	.boton--plano {
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 		background: #fff;
 		border-color: var(--border-default, rgba(0, 0, 0, 0.12));
 	}
 
 	.boton--primario {
 		color: #fff;
-		background: var(--emerald-600, #059669);
-		border-color: var(--emerald-600, #059669);
+		background: var(--emerald-600, #15803d);
+		border-color: var(--emerald-600, #15803d);
 	}
 
 	.boton:disabled {
@@ -518,7 +518,7 @@
 
 	.boton:focus-visible,
 	.item__quitar:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 2px;
 	}
 
@@ -526,7 +526,7 @@
 	.firma__hint {
 		font-size: 0.75rem;
 		line-height: 1.4;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.oculto {

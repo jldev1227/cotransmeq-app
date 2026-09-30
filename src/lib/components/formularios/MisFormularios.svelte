@@ -555,7 +555,7 @@
 	}
 
 	.campo:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 1px;
 	}
 
@@ -579,7 +579,7 @@
 	}
 
 	.chip--activo {
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		background: #f0fdf4;
 		border-color: #bbf7d0;
 	}
@@ -637,7 +637,7 @@
 		font-size: 0.7rem;
 		font-weight: 600;
 		letter-spacing: 0.04em;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 	}
 
 	.tarjeta__titulo {
@@ -714,13 +714,13 @@
 	.tarjeta__accion {
 		margin-top: auto;
 		color: #fff;
-		background: var(--emerald-600, #059669);
+		background: var(--emerald-600, #15803d);
 	}
 
 	.tarjeta__badge {
 		font-size: 0.75rem;
 		font-weight: 600;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 	}
 
 	.btn {
@@ -752,7 +752,7 @@
 	.enlace {
 		padding: 0;
 		font: inherit;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		background: none;
 		border: 0;
 		text-decoration: underline;

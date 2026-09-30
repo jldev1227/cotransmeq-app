@@ -43,16 +43,16 @@
 	> = {
 		PENDIENTE: {
 			bg: '#fff7ed',
-			fg: '#c2410c',
+			fg: '#9a3412',
 			border: '#fed7aa',
-			dot: '#f97316',
+			dot: '#ea580c',
 			label: 'Pendiente'
 		},
 		APLICADO: {
-			bg: '#ecfdf5',
-			fg: '#047857',
-			border: '#a7f3d0',
-			dot: '#f97316',
+			bg: '#f0fdf4',
+			fg: '#166534',
+			border: '#bbf7d0',
+			dot: '#ea580c',
 			label: 'Aplicado'
 		},
 		CANCELADO: {
@@ -68,7 +68,7 @@
 	const prioridadColors: Record<string, { bg: string; fg: string; border: string }> = {
 		BAJA: { bg: '#f3f4f6', fg: '#6b7280', border: '#d1d5db' },
 		MEDIA: { bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe' },
-		ALTA: { bg: '#fff7ed', fg: '#c2410c', border: '#fed7aa' }
+		ALTA: { bg: '#fff7ed', fg: '#9a3412', border: '#fed7aa' }
 	};
 
 	const MESES = [

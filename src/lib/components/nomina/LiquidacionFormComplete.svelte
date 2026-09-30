@@ -2277,7 +2277,7 @@
 							--border-focused="1px solid var(--emerald-500)"
 							--border-hover="1px solid var(--border-emphasis)"
 							--padding="0.5rem 0.75rem"
-							--multi-item-bg="rgba(16,185,129,0.10)"
+							--multi-item-bg="rgba(22, 163, 74,0.10)"
 							--multi-item-color="var(--emerald-700)"
 							--multi-item-clear-icon-color="var(--text-muted)"
 						/>
@@ -3290,7 +3290,7 @@
 					>
 						<div
 							class="h-3 w-3 rounded-full {estadoLiquidacion === 'Liquidado'
-								? 'bg-[var(--emerald-500)] shadow-[0_0_0_3px_rgba(16,185,129,0.20)]'
+								? 'bg-[var(--emerald-500)] shadow-[0_0_0_3px_rgba(22, 163, 74,0.20)]'
 								: 'bg-[var(--text-very-muted)]'}"
 						></div>
 						<span class="text-sm font-semibold text-[var(--text-secondary)]"
@@ -3309,15 +3309,15 @@
 					<div
 						class="overflow-hidden rounded-2xl border border-[var(--border-subtle)] shadow-[var(--shadow-card)]"
 					>
-						<div class="px-5 py-5" style="background: linear-gradient(135deg, #0F1F1A, #0A1410);">
-							<span class="font-mono-meta text-[0.65rem] text-[#9A9A9A]">Total a Pagar</span>
+						<div class="px-5 py-5" style="background: linear-gradient(135deg, #0f172a, #14532d);">
+							<span class="font-mono-meta text-[0.65rem] text-[#94a3b8]">Total a Pagar</span>
 							<div class="mt-1 flex items-baseline justify-between gap-2">
 								<span class="font-display text-2xl font-medium text-[#34D399] sm:text-3xl">
 									{formatCurrency(totalAPagarVisual)}
 								</span>
 							</div>
 							{#if totales.sueldoTotal % 1 !== 0}
-								<span class="block text-[11px] text-[#6B6B6B]"
+								<span class="block text-[11px] text-[#64748b]"
 									>{formatCurrencyDecimal(totales.sueldoTotal)}</span
 								>
 							{/if}
@@ -3326,7 +3326,7 @@
 							<div class="mt-3">
 								<label
 									for="ajuste-pesos"
-									class="font-mono-meta mb-1 block text-[0.6rem] text-[#9A9A9A]"
+									class="font-mono-meta mb-1 block text-[0.6rem] text-[#94a3b8]"
 									>Ajuste manual ±$</label
 								>
 								<div class="flex flex-wrap rounded-lg border border-[#374151]">
@@ -3338,7 +3338,7 @@
 												? val < 0
 													? 'bg-[#DC2626] text-white'
 													: 'bg-[var(--emerald-500)] text-white'
-												: 'bg-[#1F2937] text-[#9A9A9A] hover:bg-[#374151] hover:text-[#E5E7EB]'}"
+												: 'bg-[#1F2937] text-[#94a3b8] hover:bg-[#374151] hover:text-[#E5E7EB]'}"
 										>
 											{val > 0 ? `+${val}` : val}
 										</button>
@@ -3497,7 +3497,7 @@
 												/>
 												<span class="font-semibold text-[var(--text-secondary)]">Recargos</span>
 											</div>
-											<span class="font-mono font-bold text-[#C2410C]"
+											<span class="font-mono font-bold text-[#9a3412]"
 												>{formatCurrency(totales.totalRecargos)}</span
 											>
 										</summary>
@@ -3579,7 +3579,7 @@
 											{#if totales.ajusteParex > 0}
 												<div class="flex items-center justify-between">
 													<span class="text-[var(--text-secondary)]">Ajuste PAREX (8%)</span>
-													<span class="font-mono text-[#C2410C]"
+													<span class="font-mono text-[#9a3412]"
 														>{formatCurrency(totales.ajusteParex)}</span
 													>
 												</div>
@@ -3885,7 +3885,7 @@
 							on:click={handleSubmit}
 							disabled={loading}
 							class="apple-transition flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-btn)] hover:shadow-[var(--shadow-btn-hover)] disabled:opacity-50"
-							style="background: linear-gradient(135deg, #10B981, #059669);"
+							style="background: linear-gradient(135deg, #16a34a, #15803d);"
 						>
 							{#if loading}
 								<div
@@ -4144,7 +4144,7 @@
 						on:click={handleSubmit}
 						disabled={loading}
 						class="apple-transition flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-btn)] disabled:opacity-50"
-						style="background: linear-gradient(135deg, #10B981, #059669);"
+						style="background: linear-gradient(135deg, #16a34a, #15803d);"
 					>
 						{#if loading}
 							<div

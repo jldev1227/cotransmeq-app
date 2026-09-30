@@ -1152,8 +1152,8 @@
 		width: 100%;
 	}
 	.env-correo:focus {
-		outline: 2px solid #ea580c55;
-		border-color: #ea580c;
+		outline: 2px solid #c2410c55;
+		border-color: #c2410c;
 	}
 	.env-chip {
 		font-size: 11px;
@@ -1208,8 +1208,8 @@
 	}
 	.env-campo input:focus,
 	.env-campo textarea:focus {
-		outline: 2px solid #ea580c55;
-		border-color: #ea580c;
+		outline: 2px solid #c2410c55;
+		border-color: #c2410c;
 	}
 	.env-adjuntos {
 		display: flex;
@@ -1291,7 +1291,7 @@
 		color: #64748b;
 	}
 	.env-btn-primary {
-		background: #ea580c;
+		background: #c2410c;
 		color: #fff;
 		border: none;
 		border-radius: 9px;
@@ -1301,7 +1301,7 @@
 		cursor: pointer;
 	}
 	.env-btn-primary:hover:not(:disabled) {
-		background: #c2410c;
+		background: #9a3412;
 	}
 	.env-btn-primary:disabled {
 		opacity: 0.5;
@@ -1334,7 +1334,7 @@
 	}
 	.env-barra-fill {
 		height: 100%;
-		background: linear-gradient(90deg, #ea580c, #f97316);
+		background: linear-gradient(90deg, #c2410c, #ea580c);
 		transition: width 0.4s ease;
 	}
 	.env-pct {
