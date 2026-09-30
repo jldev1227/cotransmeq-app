@@ -49,7 +49,8 @@
 			}
 
 			motivoInvalidez =
-				datos?.error ?? 'El enlace de recuperación no es válido. Solicita uno nuevo para continuar.';
+				datos?.error ??
+				'El enlace de recuperación no es válido. Solicita uno nuevo para continuar.';
 			estado = 'invalido';
 		} catch {
 			motivoInvalidez =
@@ -119,6 +120,20 @@
 	subtitulo={estado === 'formulario' && correoEnmascarado
 		? `Vas a cambiar la contraseña de ${correoEnmascarado}.`
 		: undefined}
+	mascota={estado === 'validando'
+		? 'procesando'
+		: estado === 'invalido'
+			? 'advertencia'
+			: estado === 'exito'
+				? 'celebracion'
+				: error
+					? 'advertencia'
+					: 'ayuda'}
+	marcaCodigo="Recuperar acceso"
+	marcaTitulo={estado === 'exito' ? '¡Listo!' : 'Tu cuenta, bajo tu control'}
+	marcaDesc={estado === 'exito'
+		? 'Tu contraseña nueva ya está activa.'
+		: 'La contraseña se restablece con un enlace que solo llega a tu correo corporativo y caduca a los 30 minutos.'}
 >
 	{#if estado === 'validando'}
 		<div class="estado">
@@ -127,13 +142,6 @@
 		</div>
 	{:else if estado === 'invalido'}
 		<div class="estado" in:fly={{ y: 12, duration: 280 }}>
-			<span class="estado-icono estado-icono--error">
-				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-					<circle cx="12" cy="12" r="9" />
-					<path stroke-linecap="round" d="M12 7.75v5" />
-					<path stroke-linecap="round" d="M12 16.25h.01" />
-				</svg>
-			</span>
 			<p class="estado-texto" role="alert">{motivoInvalidez}</p>
 			<a class="btn-submit" href="/recuperar-password">
 				<span class="btn-content">
@@ -146,15 +154,10 @@
 		</div>
 	{:else if estado === 'exito'}
 		<div class="estado" in:fly={{ y: 12, duration: 280 }}>
-			<span class="estado-icono estado-icono--ok">
-				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75" />
-					<circle cx="12" cy="12" r="9" />
-				</svg>
-			</span>
+			<span class="estado-badge">✓ Contraseña guardada</span>
 			<p class="estado-texto" role="status">
-				Tu contraseña quedó actualizada. Ya puedes entrar con ella; te llevamos al inicio de
-				sesión en unos segundos.
+				Tu contraseña quedó actualizada. Ya puedes entrar con ella; te llevamos al inicio de sesión
+				en unos segundos.
 			</p>
 			<a class="btn-submit" href="/login">
 				<span class="btn-content">

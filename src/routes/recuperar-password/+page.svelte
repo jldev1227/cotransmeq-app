@@ -106,25 +106,23 @@
 	subtitulo={enviado
 		? undefined
 		: 'Escribe el correo con el que ingresas y te enviaremos un enlace para crear una nueva.'}
+	mascota={enviado ? 'correoEnviado' : error ? 'advertencia' : 'ayuda'}
+	marcaCodigo="Recuperar acceso"
+	marcaTitulo={enviado ? '¡Mensaje enviado!' : 'Tu cuenta, bajo tu control'}
+	marcaDesc={enviado
+		? 'Tu enlace seguro ya va en camino.'
+		: 'La contraseña se restablece con un enlace que solo llega a tu correo corporativo y caduca a los 30 minutos.'}
 >
 	{#if enviado}
 		<div class="estado" in:fly={{ y: 12, duration: 280 }}>
-			<span class="estado-icono estado-icono--ok">
-				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
-					/>
-				</svg>
-			</span>
+			<span class="estado-badge">✓ Enlace enviado</span>
 			<p class="estado-texto">
-				Si <strong>{correoEnviado}</strong> corresponde a una cuenta activa, ya salió un
-				enlace para restablecer la contraseña.
+				Si <strong>{correoEnviado}</strong> corresponde a una cuenta activa, ya salió un enlace para restablecer
+				la contraseña.
 			</p>
 			<p class="estado-texto">
-				El enlace vence en <strong>30 minutos</strong> y solo puede usarse una vez. Si no
-				aparece, revisa la carpeta de spam o correo no deseado.
+				El enlace vence en <strong>30 minutos</strong> y solo puede usarse una vez. Si no aparece, revisa
+				la carpeta de spam o correo no deseado.
 			</p>
 
 			<button
@@ -160,7 +158,7 @@
 				{/if}
 			</button>
 
-			<button type="button" class="auth-link" onclick={corregirCorreo}>
+			<button type="button" class="btn-secondary" onclick={corregirCorreo}>
 				Usar otro correo
 			</button>
 		</div>

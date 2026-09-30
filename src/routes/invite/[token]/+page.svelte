@@ -121,8 +121,17 @@
 		: invitacion
 			? `${invitacion.invitadoPorNombre} te invitó al sistema. Elige una contraseña para terminar.`
 			: undefined}
+	mascota={validando
+		? 'procesando'
+		: tokenInvalido
+			? 'advertencia'
+			: exito
+				? 'celebracion'
+				: error
+					? 'advertencia'
+					: 'bienvenida'}
 	marcaCodigo="Acceso · Invitación"
-	marcaTitulo="Bienvenido al equipo"
+	marcaTitulo={exito ? '¡Bienvenido al equipo!' : 'Bienvenido al equipo'}
 	marcaDesc="Tu cuenta la abre una invitación del administrador. El correo y las áreas ya vienen definidos; lo único que eliges es tu contraseña."
 	marcaPuntos={[
 		'El enlace caduca a las 72 horas',
@@ -137,19 +146,10 @@
 		</div>
 	{:else if tokenInvalido}
 		<div class="estado" in:fly={{ y: 12, duration: 280 }}>
-			<span class="estado-icono estado-icono--error">
-				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"
-					/>
-				</svg>
-			</span>
 			<h2 class="estado-titulo">Invitación no válida</h2>
 			<p class="estado-texto">
-				El enlace ya se usó, fue reemplazado por uno más nuevo o pasaron las 72 horas de
-				vigencia. Pide al administrador que te envíe otra invitación.
+				El enlace ya se usó, fue reemplazado por uno más nuevo o pasaron las 72 horas de vigencia.
+				Pide al administrador que te envíe otra invitación.
 			</p>
 			<a class="btn-submit" href="/login">
 				<span class="btn-content">Ir a iniciar sesión</span>
@@ -157,15 +157,10 @@
 		</div>
 	{:else if exito}
 		<div class="estado" in:fly={{ y: 12, duration: 280 }}>
-			<span class="estado-icono estado-icono--ok">
-				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-				</svg>
-			</span>
 			<h2 class="estado-titulo">Cuenta creada</h2>
 			<p class="estado-texto">
-				Ya puedes entrar con <strong>{invitacion?.correo}</strong> y la contraseña que acabas de
-				elegir. Te llevamos al inicio de sesión…
+				Ya puedes entrar con <strong>{invitacion?.correo}</strong> y la contraseña que acabas de elegir.
+				Te llevamos al inicio de sesión…
 			</p>
 			<a class="auth-link" href="/login">Ir ahora</a>
 		</div>
@@ -399,13 +394,13 @@
 
 <style>
 	/* Resumen de lo que la invitación trae decidido. Usa los mismos tonos
-	   editoriales del marco: crema, carbón y el naranja solo como acento. */
+	   editoriales del marco: crema, carbón y el esmeralda solo como acento. */
 	.invitacion-resumen {
 		padding: 0.9rem 1.05rem;
 		margin-bottom: 1.4rem;
-		background: rgba(249, 115, 22, 0.05);
-		border: 1px solid rgba(249, 115, 22, 0.18);
-		border-radius: 12px;
+		background: var(--au-surface);
+		border: 1.5px solid var(--au-border);
+		border-radius: 14px;
 	}
 	.invitacion-resumen dl {
 		margin: 0;
@@ -421,18 +416,17 @@
 	.resumen-fila dt {
 		flex-shrink: 0;
 		width: 3.6rem;
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.65rem;
-		font-weight: 700;
+		font-size: 0.68rem;
+		font-weight: 800;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
-		color: #6b6b6b;
+		color: var(--au-muted);
 	}
 	.resumen-fila dd {
 		margin: 0;
-		font-size: 0.83rem;
+		font-size: 0.85rem;
 		line-height: 1.5;
-		color: #0f1f1a;
+		color: var(--au-text);
 	}
 	.chips {
 		display: flex;
@@ -441,17 +435,17 @@
 	}
 	.chip {
 		display: inline-block;
-		padding: 0.15rem 0.55rem;
-		font-size: 0.72rem;
-		font-weight: 600;
-		color: #c2410c;
-		background: rgba(249, 115, 22, 0.12);
+		padding: 0.2rem 0.6rem;
+		font-size: 0.74rem;
+		font-weight: 700;
+		color: var(--au-dark);
+		background: var(--au-tint);
 		border-radius: 999px;
 	}
 
 	.pie-texto {
-		font-size: 0.8rem;
-		color: #6b6b6b;
+		font-size: 0.85rem;
+		color: var(--au-muted);
 		margin-right: 0.35rem;
 	}
 </style>
