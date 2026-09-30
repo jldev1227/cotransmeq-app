@@ -1818,7 +1818,7 @@
 						type="search"
 						bind:value={listBusqueda}
 						onkeydown={onSearchKeyDown}
-						placeholder="Consecutivo, cliente, placa…"
+						placeholder="Consecutivo, factura, cliente, placa, OSI…"
 					/>
 				</div>
 				<div class="filter-field">
