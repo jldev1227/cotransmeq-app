@@ -19,8 +19,10 @@
    todo el ecosistema y ninguna descarga de fuentes.
    ═══════════════════════════════════════════════════════════════ */
 @theme {
-	--font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, system-ui, sans-serif;
-	--font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, system-ui, sans-serif;
+	--font-sans:
+		-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, system-ui, sans-serif;
+	--font-display:
+		-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, system-ui, sans-serif;
 	--font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
 	/* Override Tailwind emerald/green palette → naranja brand (Cotransmeq) */
@@ -2093,4 +2095,140 @@ html {
 	--au-border: #e2e8f0;
 	--au-danger: #b42318;
 	--au-danger-soft: #fff0ed;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   MODALES EN MÓVIL — hojas desde abajo
+   Cualquier modal del panel, sea con utilidades de Tailwind (el fondo
+   `fixed inset-0 flex items-center justify-center` y dentro el panel) o con
+   clases propias (`.modal-backdrop > .modal`, `.fondo > .panel`…), en
+   pantallas estrechas se pega al borde inferior, ocupa todo el ancho, se
+   desplaza por dentro si no cabe y entra de abajo hacia arriba. Es la misma
+   hoja que usan las notificaciones y el menú de usuario de la cabecera.
+
+   `translate` y no `transform`: las transiciones de Svelte (`fly`, `scale`)
+   animan `transform` por WAAPI y pisarían la entrada; `translate` es una
+   propiedad aparte y se suma sin pelear.
+   ═══════════════════════════════════════════════════════════════ */
+@media (max-width: 767.98px) {
+	/* Fondos: el panel va abajo, sin margen. */
+	.fixed.inset-0.flex.justify-center.items-center:has(
+			> [role='dialog'],
+			> [aria-modal],
+			> [class*='max-w-'],
+			> .confirm-card
+		),
+	.fixed.inset-0.flex.justify-center.items-start:has(
+			> [role='dialog'],
+			> [aria-modal],
+			> [class*='max-w-'],
+			> .confirm-card
+		),
+	.modal-backdrop,
+	.modal-overlay,
+	.fondo,
+	.tapa,
+	.idm-backdrop,
+	.env-backdrop,
+	.pcm-backdrop {
+		align-items: flex-end !important;
+		justify-content: center !important;
+		padding: 0 !important;
+		overflow: hidden !important;
+	}
+
+	/* Paneles: hoja a todo el ancho, con tope de altura y desplazamiento interno. */
+	.fixed.inset-0.flex.justify-center.items-center > [role='dialog'],
+	.fixed.inset-0.flex.justify-center.items-center > [aria-modal],
+	.fixed.inset-0.flex.justify-center.items-center > [class*='max-w-'],
+	.fixed.inset-0.flex.justify-center.items-center > .confirm-card,
+	.fixed.inset-0.flex.justify-center.items-start > [role='dialog'],
+	.fixed.inset-0.flex.justify-center.items-start > [aria-modal],
+	.fixed.inset-0.flex.justify-center.items-start > [class*='max-w-'],
+	.fixed.inset-0.flex.justify-center.items-start > .confirm-card,
+	.modal-backdrop > .modal,
+	.modal-overlay > .modal-box,
+	.modal-overlay > [role='dialog'],
+	.fondo > .panel,
+	.tapa > .dialogo,
+	.idm-backdrop > .idm,
+	.env-backdrop > .env,
+	.pcm-backdrop > .pcm {
+		position: relative;
+		width: 100% !important;
+		max-width: none !important;
+		min-width: 0 !important;
+		margin: 0 !important;
+		max-height: 92dvh !important;
+		height: auto !important;
+		overflow-y: auto !important;
+		border-radius: 22px 22px 0 0 !important;
+		box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.18) !important;
+		animation: hoja-subir 0.38s cubic-bezier(0.32, 0.72, 0, 1) both;
+	}
+
+	/* Asa de la hoja y aire para la barra inferior del teléfono. */
+	.fixed.inset-0.flex.justify-center.items-center > [role='dialog']::before,
+	.fixed.inset-0.flex.justify-center.items-center > [aria-modal]::before,
+	.fixed.inset-0.flex.justify-center.items-center > [class*='max-w-']::before,
+	.fixed.inset-0.flex.justify-center.items-center > .confirm-card::before,
+	.fixed.inset-0.flex.justify-center.items-start > [role='dialog']::before,
+	.fixed.inset-0.flex.justify-center.items-start > [aria-modal]::before,
+	.fixed.inset-0.flex.justify-center.items-start > [class*='max-w-']::before,
+	.fixed.inset-0.flex.justify-center.items-start > .confirm-card::before,
+	.modal-backdrop > .modal::before,
+	.modal-overlay > .modal-box::before,
+	.modal-overlay > [role='dialog']::before,
+	.fondo > .panel::before,
+	.tapa > .dialogo::before,
+	.idm-backdrop > .idm::before,
+	.env-backdrop > .env::before,
+	.pcm-backdrop > .pcm::before {
+		content: '';
+		display: block;
+		width: 40px;
+		height: 4px;
+		margin: 10px auto 6px;
+		border-radius: 999px;
+		background: var(--border-emphasis);
+		flex-shrink: 0;
+	}
+	.fixed.inset-0.flex.justify-center.items-center > [role='dialog']::after,
+	.fixed.inset-0.flex.justify-center.items-center > [aria-modal]::after,
+	.fixed.inset-0.flex.justify-center.items-center > [class*='max-w-']::after,
+	.fixed.inset-0.flex.justify-center.items-center > .confirm-card::after,
+	.fixed.inset-0.flex.justify-center.items-start > [role='dialog']::after,
+	.fixed.inset-0.flex.justify-center.items-start > [aria-modal]::after,
+	.fixed.inset-0.flex.justify-center.items-start > [class*='max-w-']::after,
+	.fixed.inset-0.flex.justify-center.items-start > .confirm-card::after,
+	.modal-backdrop > .modal::after,
+	.modal-overlay > .modal-box::after,
+	.modal-overlay > [role='dialog']::after,
+	.fondo > .panel::after,
+	.tapa > .dialogo::after,
+	.idm-backdrop > .idm::after,
+	.env-backdrop > .env::after,
+	.pcm-backdrop > .pcm::after {
+		content: '';
+		display: block;
+		height: env(safe-area-inset-bottom, 0px);
+		flex-shrink: 0;
+	}
+
+	@keyframes hoja-subir {
+		from {
+			translate: 0 100%;
+		}
+		to {
+			translate: 0 0;
+		}
+	}
+}
+
+@media (max-width: 767.98px) and (prefers-reduced-motion: reduce) {
+	.modal-backdrop > .modal,
+	.fondo > .panel,
+	.fixed.inset-0.flex.justify-center.items-center > * {
+		animation: none !important;
+	}
 }
