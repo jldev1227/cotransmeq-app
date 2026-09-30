@@ -114,7 +114,7 @@
 >
 	<div class="relative flex h-full flex-col">
 		<!-- Cabecera: la del menú de la app móvil; compacta con el menú contraído -->
-		<SidebarCabecera usuario={currentUser} compacta={isCollapsed} />
+		<SidebarCabecera compacta={isCollapsed} />
 
 		<!-- Navigation Menu -->
 		<nav class="flex-1 space-y-1 overflow-y-auto p-4">
@@ -203,7 +203,7 @@
 			style="background-color: var(--bg-charcoal-deep); border-right: 1px solid rgba(255,255,255,0.06);"
 		>
 			<!-- Cabecera: la del menú de la app móvil. Sin botón de cerrar: el fondo cierra. -->
-			<SidebarCabecera usuario={currentUser} conSafeArea />
+			<SidebarCabecera conSafeArea />
 
 			<!-- Navigation Menu -->
 			<nav class="flex-1 space-y-1 overflow-y-auto p-4">
