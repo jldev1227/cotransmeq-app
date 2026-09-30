@@ -284,7 +284,7 @@
 >
 	<div class="flex h-full items-center justify-between gap-3 px-4 md:px-6 lg:pl-6">
 		<!-- Left cluster: burger (mobile/tablet) + title -->
-		<div class="flex min-w-0 flex-1 items-center gap-2 lg:flex-none lg:basis-72 xl:basis-80" in:fade={{ duration: 600, delay: 400 }}>
+		<div class="flex min-w-0 flex-1 items-center gap-2 lg:flex-none lg:basis-80 xl:basis-96" in:fade={{ duration: 600, delay: 400 }}>
 			<!-- Burger menu (mobile/tablet only) — profesonal, dentro del flow -->
 			<button
 				type="button"
@@ -305,11 +305,16 @@
 			</button>
 
 			<h1 class="font-display truncate text-xl md:text-2xl" style="color: #fff; font-weight: 800;">{pageTitle}</h1>
+		</div>
 
-			<!-- ═══ Conexión en tiempo real — solo md+ (en móvil lo cubre el toast del layout) ═══ -->
+		<!-- Centro (solo escritorio): «Ir a…», el buscador de módulos. Antes esta
+		     franja quedaba vacía entre el título y el usuario. -->
+		<div class="hidden min-w-0 flex-1 items-center justify-center px-4 lg:flex" in:fade={{ duration: 600, delay: 450 }}>
+			<BuscadorModulos />
+			<!-- Conexión en tiempo real, tras el buscador para no quitarle sitio al título (en móvil lo cubre el toast del layout) -->
 			{#if socketEstado !== 'inactivo'}
 				<div
-					class="ml-1 hidden shrink-0 items-center gap-2 border-l pl-3 md:flex"
+					class="ml-3 hidden shrink-0 items-center gap-2 border-l pl-3 lg:flex"
 					style="border-color: rgba(255,255,255,0.14);"
 					role="status"
 					aria-live="polite"
@@ -357,12 +362,6 @@
 					{/if}
 				</div>
 			{/if}
-		</div>
-
-		<!-- Centro (solo escritorio): «Ir a…», el buscador de módulos. Antes esta
-		     franja quedaba vacía entre el título y el usuario. -->
-		<div class="hidden min-w-0 flex-1 justify-center px-4 lg:flex" in:fade={{ duration: 600, delay: 450 }}>
-			<BuscadorModulos />
 		</div>
 
 		<!-- Right Section -->
