@@ -196,7 +196,7 @@
 
 	function popupPeaje(p: { nombre: string; lat: number; lon: number }): string {
 		const url = `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`;
-		return `<div style="padding:10px 12px;min-width:170px;font-family:system-ui,sans-serif;">
+		return `<div style="padding:10px 12px;min-width:170px;font-family: var(--font-sans);">
 			<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
 				<div style="width:22px;height:22px;background:#f59e0b;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
 					<span style="color:#fff;font-weight:700;font-size:10px;">P</span>
@@ -215,7 +215,7 @@
 			hospedaje: { bg: '#14b8a6', emoji: '🏨', label: 'Hospedaje' }
 		};
 		const c = cfg[p.tipo] ?? cfg.restaurante;
-		return `<div style="padding:10px 12px;min-width:170px;font-family:system-ui,sans-serif;">
+		return `<div style="padding:10px 12px;min-width:170px;font-family: var(--font-sans);">
 			<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
 				<div style="width:22px;height:22px;background:${c.bg};border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
 					<span style="font-size:12px;">${c.emoji}</span>
@@ -465,7 +465,7 @@
 				.setLngLat([oLng, oLat])
 				.setPopup(
 					new mapboxgl.Popup({ offset: 25 }).setHTML(
-						`<div style="padding:8px;font-family:system-ui"><strong style="color:#ea580c;font-size:12px;">Origen</strong><br/><span style="font-size:11px;">${servicio.origen_especifico || servicio.origen?.nombre_municipio || ''}</span></div>`
+						`<div style="padding:8px;font-family: var(--font-sans)"><strong style="color:#ea580c;font-size:12px;">Origen</strong><br/><span style="font-size:11px;">${servicio.origen_especifico || servicio.origen?.nombre_municipio || ''}</span></div>`
 					)
 				);
 			om.addTo(map!);
@@ -475,7 +475,7 @@
 				.setLngLat([dLng, dLat])
 				.setPopup(
 					new mapboxgl.Popup({ offset: 25 }).setHTML(
-						`<div style="padding:8px;font-family:system-ui"><strong style="color:#DC2626;font-size:12px;">Destino</strong><br/><span style="font-size:11px;">${servicio.destino_especifico || servicio.destino?.nombre_municipio || ''}</span></div>`
+						`<div style="padding:8px;font-family: var(--font-sans)"><strong style="color:#DC2626;font-size:12px;">Destino</strong><br/><span style="font-size:11px;">${servicio.destino_especifico || servicio.destino?.nombre_municipio || ''}</span></div>`
 					)
 				);
 			dm.addTo(map!);
@@ -1000,7 +1000,7 @@
 		--shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.04);
 		--ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
 
-		font-family: 'Inter', 'Inter Tight', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		display: flex;
 		flex-direction: column;
 		min-height: 100%;
@@ -1157,11 +1157,11 @@
 		background: var(--emerald-tint);
 		padding: 0.2rem 0.55rem;
 		border-radius: 5px;
-		font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+		font-family: var(--font-sans);
 	}
 
 	.servicio-title {
-		font-family: 'Fraunces', Georgia, serif;
+		font-family: var(--font-sans);
 		font-weight: 500;
 		font-size: 0.98rem;
 		color: #0f1f1a;
@@ -1186,7 +1186,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -1411,14 +1411,14 @@
 		color: var(--text-3);
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 
 	.stat-chip-value {
 		font-size: 0.95rem;
 		font-weight: 700;
 		color: #0f1f1a;
-		font-family: 'Fraunces', Georgia, serif;
+		font-family: var(--font-sans);
 		letter-spacing: -0.01em;
 	}
 
@@ -1479,7 +1479,7 @@
 	}
 
 	.card-title {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.68rem;
 		font-weight: 700;
 		color: var(--text);
@@ -1503,7 +1503,7 @@
 		color: var(--emerald-700);
 		letter-spacing: 0.08em;
 		margin: 0;
-		font-family: 'JetBrains Mono', 'Courier New', monospace;
+		font-family: var(--font-sans);
 	}
 
 	.vehiculo-desc {
@@ -1596,7 +1596,7 @@
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
 		margin: 0 0 0.15rem;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 
 	.rloc-text {
@@ -1626,7 +1626,7 @@
 		font-size: 0.75rem;
 		color: var(--text-3);
 		margin: 0.25rem 0 0;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 
 	/* ─── Info list ─── */
@@ -1668,7 +1668,7 @@
 	}
 
 	.info-val--mono {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		color: var(--emerald-700);
 	}
 

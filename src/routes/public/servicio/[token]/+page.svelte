@@ -368,7 +368,7 @@
 	function popupPeaje(p: PeajeInfo): string {
 		const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`;
 		return `
-			<div style="padding:12px 14px;min-width:190px;font-family:system-ui,sans-serif;">
+			<div style="padding:12px 14px;min-width:190px;font-family: var(--font-sans);">
 				<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
 					<div style="width:28px;height:28px;background:#f59e0b;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
 						<span style="color:#fff;font-weight:700;font-size:12px;">P</span>
@@ -413,7 +413,7 @@
 		};
 		const c = configs[p.tipo];
 		return `
-			<div style="padding:12px 14px;min-width:190px;font-family:system-ui,sans-serif;">
+			<div style="padding:12px 14px;min-width:190px;font-family: var(--font-sans);">
 				<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
 					<div style="width:28px;height:28px;background:${c.bg};border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
 						<span style="color:#fff;font-size:14px;">${c.emoji}</span>
@@ -443,7 +443,7 @@
 			.filter(Boolean)
 			.join('');
 		return `
-			<div style="padding:12px 14px;min-width:210px;font-family:system-ui,sans-serif;">
+			<div style="padding:12px 14px;min-width:210px;font-family: var(--font-sans);">
 				<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
 					<img src="${DISTRACOM_ICON_URL}" style="width:22px;height:22px;object-fit:contain;flex-shrink:0;" alt="Distracom" />
 					<strong style="color:#1b5e20;font-size:13px;">${e.nombre}</strong>

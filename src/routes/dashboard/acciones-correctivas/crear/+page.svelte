@@ -89,7 +89,7 @@
 
 		min-height: 100vh;
 		background: var(--bg);
-		font-family: 'Inter', 'Geist', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		color: var(--text-primary);
 		-webkit-font-smoothing: antialiased;
 	}
@@ -173,7 +173,7 @@
 	.eyebrow {
 		display: inline-block;
 		align-self: flex-start;
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -185,7 +185,7 @@
 		margin-bottom: 0.35rem;
 	}
 	.page-title {
-		font-family: 'Geist', Georgia, serif;
+		font-family: var(--font-sans);
 		font-size: 1.3rem;
 		font-weight: 500;
 		color: var(--text-primary);

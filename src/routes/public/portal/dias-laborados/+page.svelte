@@ -1314,7 +1314,7 @@
     font-weight: 800;
     font-size: 1.1rem;
     color: var(--accent);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
   }
   .stat-label {
     font-size: 0.62rem;
@@ -1499,7 +1499,7 @@
     background: linear-gradient(180deg, var(--surface, #fff) 0%, var(--bg, #fcfcfb) 100%);
   }
   .modal-fecha {
-    font-family: 'Geist', 'Inter', system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-weight: 700;
     font-size: 1.1rem;
     color: var(--text, #0f172a);
@@ -1525,7 +1525,7 @@
   .modal-fecha-sub {
     font-size: 0.72rem;
     color: var(--text3, #94a3b8);
-    font-family: 'Geist', 'Inter', system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-weight: 600;
     letter-spacing: 0.1em;
   }
@@ -1801,7 +1801,7 @@
     margin: 0 2px;
     vertical-align: middle;
     line-height: 1.2;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
   }
   .tramo-toggle {
     color: var(--text3, #94a3b8);
@@ -1883,7 +1883,7 @@
     background: rgba(249, 115, 22, 0.08);
     padding: 0.2rem 0.55rem;
     border-radius: 4px;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     margin-bottom: 0.25rem;
   }
 
@@ -1918,7 +1918,7 @@
     min-width: 0;
   }
   .details-tipo-name {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: var(--font-sans);
     font-weight: 500;
     font-size: 1.15rem;
     color: #0F1F1A;
@@ -1937,13 +1937,13 @@
     justify-content: space-between;
     gap: 0.5rem;
     margin: 0;
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: var(--font-sans);
     font-weight: 500;
     font-size: 0.95rem;
     color: #0F1F1A;
   }
   .details-section-count {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.7rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -1988,7 +1988,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     flex-shrink: 0;
   }
   .details-tramo-title {
@@ -1998,7 +1998,7 @@
     color: #0F1F1A;
   }
   .details-tramo-horas {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.75rem;
     font-weight: 700;
     color: #065F46;
@@ -2020,7 +2020,7 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: #6B6B6B;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     padding-top: 0.15rem;
   }
   .details-grid dd {
@@ -2035,7 +2035,7 @@
     color: #6B6B6B;
     font-weight: 400;
     font-size: 0.78rem;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     margin-left: 0.3rem;
   }
 
@@ -2080,7 +2080,7 @@
     color: #1A1A1A;
     border: 1px solid rgba(0, 0, 0, 0.12);
     border-radius: 12px;
-    font-family: 'Inter Tight', system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-size: 0.9rem;
     font-weight: 600;
     cursor: pointer;
@@ -2125,7 +2125,7 @@
     font-size: 0.55rem;
     font-weight: 800;
     color: var(--tcolor, #ea580c);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     line-height: 1;
   }
 
@@ -2160,7 +2160,7 @@
     border-radius: 8px;
     background: var(--tramo-color, #ea580c);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--tramo-color, #ea580c) 16%, transparent);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.78rem;
   }
 

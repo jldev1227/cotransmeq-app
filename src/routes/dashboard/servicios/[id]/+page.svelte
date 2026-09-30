@@ -463,7 +463,7 @@
 				? `<p style="color:#555;font-size:11px;margin:0 0 6px;">📍 ${inc.viasAfectadas.join(', ')}</p>`
 				: '';
 		const desc = inc.longDescripcion || inc.descripcion;
-		return `<div style="padding:12px 14px;min-width:210px;font-family:system-ui,sans-serif;">
+		return `<div style="padding:12px 14px;min-width:210px;font-family: var(--font-sans);">
 			<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
 				<div style="width:28px;height:28px;background:${color};border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;">${emoji}</div>
 				<strong style="color:#111;font-size:12px;">${inc.cerrrado ? 'VÍA CERRADA — ' : ''}${tipoLabel(inc.tipo)}</strong>
@@ -655,7 +655,7 @@
 			new mapboxgl.Popup({ offset: [0, -14], maxWidth: '240px', anchor: 'bottom' })
 				.setLngLat(coords)
 				.setHTML(
-					`<div style="padding:12px 14px;min-width:200px;font-family:system-ui,sans-serif;">
+					`<div style="padding:12px 14px;min-width:200px;font-family: var(--font-sans);">
 					<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
 						<div style="width:28px;height:28px;background:${color};border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;">${emoji}</div>
 						<strong style="color:#111;font-size:12px;">${tipoLabel(tipo)}</strong>
@@ -994,7 +994,7 @@
 
 	function popupPeaje(p: PeajeInfo): string {
 		const url = `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`;
-		return `<div style="padding:12px 14px;min-width:190px;font-family:system-ui,sans-serif;">
+		return `<div style="padding:12px 14px;min-width:190px;font-family: var(--font-sans);">
 			<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
 				<div style="width:26px;height:26px;background:#f59e0b;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
 					<span style="color:#fff;font-weight:700;font-size:11px;">P</span>
@@ -1037,7 +1037,7 @@
 				label: 'Hospedaje'
 			}
 		}[p.tipo];
-		return `<div style="padding:12px 14px;min-width:190px;font-family:system-ui,sans-serif;">
+		return `<div style="padding:12px 14px;min-width:190px;font-family: var(--font-sans);">
 			<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
 				<div style="width:26px;height:26px;background:${cfg.bg};border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
 					<span style="font-size:13px;">${cfg.emoji}</span>
@@ -1066,7 +1066,7 @@
 		]
 			.filter(Boolean)
 			.join('');
-		return `<div style="padding:12px 14px;min-width:210px;font-family:system-ui,sans-serif;">
+		return `<div style="padding:12px 14px;min-width:210px;font-family: var(--font-sans);">
 			<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
 				<img src="${DISTRACOM_ICON_URL}" style="width:20px;height:20px;object-fit:contain;" alt=""/>
 				<strong style="color:#1b5e20;font-size:12px;">${e.nombre}</strong>
@@ -1306,7 +1306,7 @@
 				.setLngLat([oLng, oLat])
 				.setPopup(
 					new mapboxgl.Popup({ offset: 25 }).setHTML(
-						`<div style="padding:10px;font-family:system-ui"><strong style="color:#15803d">Origen</strong><br/><span style="font-size:12px;">${servicio.origen_especifico || servicio.origen?.nombre_municipio || '—'}</span></div>`
+						`<div style="padding:10px;font-family: var(--font-sans)"><strong style="color:#15803d">Origen</strong><br/><span style="font-size:12px;">${servicio.origen_especifico || servicio.origen?.nombre_municipio || '—'}</span></div>`
 					)
 				);
 			om.addTo(map!);
@@ -1316,7 +1316,7 @@
 				.setLngLat([dLng, dLat])
 				.setPopup(
 					new mapboxgl.Popup({ offset: 25 }).setHTML(
-						`<div style="padding:10px;font-family:system-ui"><strong style="color:#DC2626">Destino</strong><br/><span style="font-size:12px;">${servicio.destino_especifico || servicio.destino?.nombre_municipio || '—'}</span></div>`
+						`<div style="padding:10px;font-family: var(--font-sans)"><strong style="color:#DC2626">Destino</strong><br/><span style="font-size:12px;">${servicio.destino_especifico || servicio.destino?.nombre_municipio || '—'}</span></div>`
 					)
 				);
 			dm.addTo(map!);
@@ -2535,7 +2535,7 @@
 		border-radius: 12px;
 		background: linear-gradient(135deg, #16a34a, #15803d);
 		color: white;
-		font-family: 'Inter Tight', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.78rem;
 		font-weight: 600;
 		border: none;
@@ -2669,7 +2669,7 @@
 		border-radius: 12px;
 		background: linear-gradient(135deg, #16a34a, #15803d);
 		color: white;
-		font-family: 'Inter Tight', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.88rem;
 		font-weight: 600;
 		border: none;
@@ -2707,7 +2707,7 @@
 
 	/* Nombres principales dentro de cards (font-bold gray-900) */
 	:global(.servicio-cards .font-bold.text-gray-900) {
-		font-family: 'Inter Tight', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		color: #0f172a;
 		letter-spacing: -0.01em;
 	}
@@ -2963,10 +2963,10 @@
 		transform: translateY(-1px);
 	}
 	.servicio-hero-avatar {
-		font-family: 'Inter Tight', system-ui, sans-serif;
+		font-family: var(--font-sans);
 	}
 	.servicio-hero-name {
-		font-family: 'Inter Tight', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 1rem;
 		font-weight: 700;
 		color: #0f172a;
@@ -2983,7 +2983,7 @@
 	}
 	.servicio-hero-sub--accent {
 		color: #166534;
-		font-family: 'Inter Tight', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 500;
 	}
 

@@ -643,7 +643,7 @@
 	background: var(--input-bg);
 	border: 1.5px solid var(--border2);
 	border-radius: 12px; padding: .85rem 1rem;
-	font-family: 'JetBrains Mono', monospace;
+	font-family: var(--font-sans);
 	font-size: 1.3rem; font-weight: 500;
 	color: var(--text); letter-spacing: .12em;
 	transition: border-color .2s, box-shadow .2s; outline: none;
@@ -747,12 +747,12 @@
 	width: 32px; height: 32px;
 	background: linear-gradient(135deg, #047857, #047857);
 	border-radius: 50%; display: flex; align-items: center; justify-content: center;
-	font-family: 'JetBrains Mono', monospace;
+	font-family: var(--font-sans);
 	font-size: .78rem; font-weight: 700; color: #fff; flex-shrink: 0;
 }
 .conductor-info { line-height: 1.2; }
 .conductor-cedula {
-	font-family: 'JetBrains Mono', monospace;
+	font-family: var(--font-sans);
 	font-size: .78rem; font-weight: 500; color: var(--text); display: block;
 }
 .conductor-sesion { font-size: .65rem; color: var(--text3); display: block; }
@@ -801,7 +801,7 @@
 	letter-spacing: .04em; color: var(--text);
 }
 .cal-anio {
-	font-family: 'JetBrains Mono', monospace;
+	font-family: var(--font-sans);
 	font-size: .8rem; color: var(--accent); font-weight: 500;
 }
 .btn-nav {
@@ -899,13 +899,13 @@
 	background: linear-gradient(180deg, var(--surface) 0%, var(--surface2) 100%);
 }
 .modal-fecha {
-	font-family: 'Geist', 'Inter', system-ui, sans-serif;
+	font-family: var(--font-sans);
 	font-size: 1.25rem; font-weight: 700; text-transform: uppercase;
 	letter-spacing: -0.01em; color: var(--text); line-height: 1.1;
 }
 .modal-fecha-sub {
 	font-size: .73rem; color: var(--text3); margin-top: .2rem;
-	font-family: 'Geist', 'Inter', system-ui, sans-serif;
+	font-family: var(--font-sans);
 	font-weight: 600;
 	letter-spacing: 0.1em;
 }
@@ -969,7 +969,7 @@
 .field-input {
 	background: var(--input-bg); border: 1.5px solid var(--border2);
 	border-radius: 10px; padding: .62rem .75rem;
-	font-family: 'JetBrains Mono', monospace; font-size: .88rem;
+	font-family: var(--font-sans); font-size: .88rem;
 	color: var(--text); transition: border-color .2s, box-shadow .2s; outline: none; width: 100%;
 }
 .field-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #f9731618; }
@@ -998,7 +998,7 @@
 	flex: 1; padding: .85rem;
 	background: linear-gradient(135deg, #f97316, #ea580c);
 	border: none; border-radius: 12px;
-	font-family: 'Geist', 'Inter', system-ui, sans-serif;
+	font-family: var(--font-sans);
 	font-size: .95rem; font-weight: 600; letter-spacing: .02em; text-transform: none; color: #fff;
 	cursor: pointer; box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
 	transition: opacity .2s, transform .15s; display: flex; align-items: center; justify-content: center; gap: .5rem;

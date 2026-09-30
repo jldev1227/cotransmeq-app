@@ -432,13 +432,7 @@
 <style>
 	/* ─── Tipografía editorial (Fraunces + Inter Tight + JetBrains Mono) ─── */
 	.ticket-modal {
-		font-family:
-			'Inter Tight',
-			system-ui,
-			-apple-system,
-			BlinkMacSystemFont,
-			'Segoe UI',
-			sans-serif;
+		font-family: var(--font-sans);
 		border-radius: 24px;
 		box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
 		max-height: 90vh;
@@ -845,7 +839,7 @@
 		left: -9999px;
 		width: 480px;
 		background: #fcfcfb;
-		font-family: 'Inter Tight', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+		font-family: var(--font-sans);
 		color: #0f172a;
 	}
 

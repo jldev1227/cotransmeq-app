@@ -432,7 +432,7 @@
 	>
 		<div
 			class="relative flex h-[92vh] w-full max-w-[90rem] flex-col overflow-hidden bg-white"
-			style="border-radius: 24px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18), 0 4px 24px rgba(0, 0, 0, 0.06); font-family: 'Inter Tight', system-ui, sans-serif; color: #0f172a;"
+			style="border-radius: 24px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18), 0 4px 24px rgba(0, 0, 0, 0.06); font-family: var(--font-sans); color: #0f172a;"
 			onclick={(e) => e.stopPropagation()}
 			role="dialog"
 			aria-modal="true"
@@ -467,12 +467,12 @@
 					<!-- Título display (Fraunces) -->
 					<div class="text-center">
 						<p
-							style="font-family: 'Inter Tight', sans-serif; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; margin: 0 0 0.15rem;"
+							style="font-family: var(--font-sans); font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; color: #64748b; margin: 0 0 0.15rem;"
 						>
 							Transportes y Servicios Esmeralda S.A.S.
 						</p>
 						<h2
-							style="font-family: 'Fraunces', 'Georgia', serif; font-weight: 500; font-size: 1.5rem; line-height: 1.15; color: #0f172a; margin: 0;"
+							style="font-family: var(--font-sans); font-weight: 500; font-size: 1.5rem; line-height: 1.15; color: #0f172a; margin: 0;"
 						>
 							Reporte de Recorridos
 						</h2>
@@ -570,25 +570,25 @@
 							>Resumen</span
 						>
 						<span
-							style="display: inline-flex; align-items: center; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(0, 0, 0, 0.04); color: #0f172a; font-size: 0.72rem; font-weight: 600; font-family: 'Inter Tight', sans-serif;"
+							style="display: inline-flex; align-items: center; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(0, 0, 0, 0.04); color: #0f172a; font-size: 0.72rem; font-weight: 600; font-family: var(--font-sans);"
 						>
 							{resumen.totalFilas} tramos
 						</span>
 						<span
-							style="display: inline-flex; align-items: center; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(22, 163, 74, 0.10); color: #14532d; font-size: 0.72rem; font-weight: 600; font-family: 'Inter Tight', sans-serif;"
+							style="display: inline-flex; align-items: center; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(22, 163, 74, 0.10); color: #14532d; font-size: 0.72rem; font-weight: 600; font-family: var(--font-sans);"
 						>
 							{fmtNum(resumen.totalHoras, 1)}h
 						</span>
 						{#if resumen.totalKm > 0}
 							<span
-								style="display: inline-flex; align-items: center; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(0, 0, 0, 0.04); color: #0f172a; font-size: 0.72rem; font-weight: 600; font-family: 'Inter Tight', sans-serif;"
+								style="display: inline-flex; align-items: center; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(0, 0, 0, 0.04); color: #0f172a; font-size: 0.72rem; font-weight: 600; font-family: var(--font-sans);"
 							>
 								{fmtNum(resumen.totalKm, 0)} km
 							</span>
 						{/if}
 						{#if resumen.highlighted > 0}
 							<span
-								style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(22, 163, 74, 0.10); color: #14532d; font-size: 0.72rem; font-weight: 600; font-family: 'Inter Tight', sans-serif; border: 1px solid rgba(22, 163, 74, 0.30);"
+								style="display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.6rem; border-radius: 999px; background: rgba(22, 163, 74, 0.10); color: #14532d; font-size: 0.72rem; font-weight: 600; font-family: var(--font-sans); border: 1px solid rgba(22, 163, 74, 0.30);"
 							>
 								<span
 									style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);"
@@ -603,7 +603,7 @@
 						{#if clavesSincronizadas.length > 0}
 							<label
 								class="flex cursor-pointer items-center gap-1.5"
-								style="padding: 0.4rem 0.75rem; border-radius: 10px; background: rgba(22, 163, 74, 0.06); border: 1px solid rgba(22, 163, 74, 0.18); color: #14532d; font-size: 0.76rem; font-weight: 600; font-family: 'Inter Tight', sans-serif; transition: all 0.2s;"
+								style="padding: 0.4rem 0.75rem; border-radius: 10px; background: rgba(22, 163, 74, 0.06); border: 1px solid rgba(22, 163, 74, 0.18); color: #14532d; font-size: 0.76rem; font-weight: 600; font-family: var(--font-sans); transition: all 0.2s;"
 							>
 								<input
 									type="checkbox"
@@ -633,7 +633,7 @@
 								type="text"
 								bind:value={searchTerm}
 								placeholder="Buscar…"
-								style="width: 11rem; border-radius: 10px; border: 1px solid rgba(0, 0, 0, 0.12); background: #FFFFFF; padding: 0.45rem 0.75rem 0.45rem 2rem; font-size: 0.8rem; color: #0f172a; font-family: 'Inter Tight', sans-serif; transition: all 0.2s;"
+								style="width: 11rem; border-radius: 10px; border: 1px solid rgba(0, 0, 0, 0.12); background: #FFFFFF; padding: 0.45rem 0.75rem 0.45rem 2rem; font-size: 0.8rem; color: #0f172a; font-family: var(--font-sans); transition: all 0.2s;"
 								onfocus={(e) => {
 									e.currentTarget.style.borderColor = '#16a34a';
 									e.currentTarget.style.boxShadow = '0 0 0 3px rgba(22, 163, 74, 0.10)';
@@ -649,7 +649,7 @@
 						<button
 							type="button"
 							onclick={copiarComoCSV}
-							style="display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.85rem; border-radius: 10px; background: #FFFFFF; color: #0f172a; border: 1px solid rgba(0, 0, 0, 0.12); font-family: 'Inter Tight', sans-serif; font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: all 0.2s;"
+							style="display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.85rem; border-radius: 10px; background: #FFFFFF; color: #0f172a; border: 1px solid rgba(0, 0, 0, 0.12); font-family: var(--font-sans); font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: all 0.2s;"
 							onmouseenter={(e) => {
 								e.currentTarget.style.background = '#fcfcfb';
 								e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.20)';
@@ -683,7 +683,7 @@
 						<button
 							type="button"
 							onclick={descargarCSV}
-							style="display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.95rem; border-radius: 10px; background: linear-gradient(135deg, #16a34a, #15803d); color: #FFFFFF; border: none; font-family: 'Inter Tight', sans-serif; font-size: 0.78rem; font-weight: 600; cursor: pointer; box-shadow: 0 4px 16px rgba(22, 163, 74, 0.30); transition: all 0.2s;"
+							style="display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.95rem; border-radius: 10px; background: linear-gradient(135deg, #16a34a, #15803d); color: #FFFFFF; border: none; font-family: var(--font-sans); font-size: 0.78rem; font-weight: 600; cursor: pointer; box-shadow: 0 4px 16px rgba(22, 163, 74, 0.30); transition: all 0.2s;"
 							onmouseenter={(e) => {
 								e.currentTarget.style.transform = 'translateY(-1px)';
 								e.currentTarget.style.boxShadow = '0 6px 20px rgba(22, 163, 74, 0.40)';
@@ -748,7 +748,7 @@
 						<div
 							style="height: 2.5rem; width: 2.5rem; border-radius: 50%; border: 3px solid rgba(22, 163, 74, 0.20); border-top-color: #16a34a; animation: spin 1s linear infinite;"
 						></div>
-						<p style="font-size: 0.85rem; color: #64748b; font-family: 'Inter Tight', sans-serif;">
+						<p style="font-size: 0.85rem; color: #64748b; font-family: var(--font-sans);">
 							Cargando recorridos del período seleccionado…
 						</p>
 					</div>
@@ -793,7 +793,7 @@
 							</svg>
 						</div>
 						<h3
-							style="font-family: 'Fraunces', 'Georgia', serif; font-size: 1.15rem; font-weight: 500; color: #0f172a; margin: 0;"
+							style="font-family: var(--font-sans); font-size: 1.15rem; font-weight: 500; color: #0f172a; margin: 0;"
 						>
 							Sin recorridos en este período
 						</h3>
@@ -805,7 +805,7 @@
 				{:else}
 					<table
 						class="w-full border-collapse"
-						style="font-family: 'Inter Tight', sans-serif; font-size: 0.78rem; color: #0f172a;"
+						style="font-family: var(--font-sans); font-size: 0.78rem; color: #0f172a;"
 					>
 						<thead class="sticky top-0 z-10">
 							<tr style="background-color: #fcfcfb;">
@@ -997,7 +997,7 @@
 									{fmtNum(resumen.totalHoras, 1)}h
 								</td>
 								<td
-									style="padding: 0.7rem 0.65rem; font-family: 'Inter Tight', sans-serif; font-size: 0.72rem; color: #64748b;"
+									style="padding: 0.7rem 0.65rem; font-family: var(--font-sans); font-size: 0.72rem; color: #64748b;"
 								>
 									{filasFiltradas.length} fila{filasFiltradas.length === 1 ? '' : 's'}
 								</td>
@@ -1017,7 +1017,7 @@
 				>
 					GAF-FR-REC · V1
 				</span>
-				<span style="font-family: 'Inter Tight', sans-serif;">
+				<span style="font-family: var(--font-sans);">
 					Generado el {fechaGeneradoLarga} · TRANSPORTES Y SERVICIOS ESMERALDA S.A.S.
 				</span>
 			</div>

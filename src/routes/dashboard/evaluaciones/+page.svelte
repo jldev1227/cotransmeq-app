@@ -393,7 +393,7 @@
 
 		min-height: 100vh;
 		background: #fcfcfb;
-		font-family: 'Inter Tight', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		color: var(--text-primary);
 		padding: 1.5rem 1.25rem 3rem;
 		display: flex;

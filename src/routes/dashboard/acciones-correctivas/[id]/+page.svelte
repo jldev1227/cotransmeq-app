@@ -138,7 +138,7 @@
 	}
 	.header-title-group { display: flex; flex-direction: column; gap: 0.15rem; }
 	h1 {
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.65rem;
 		font-weight: 700;
 		color: #c2410c;
@@ -152,7 +152,7 @@
 		line-height: 1;
 	}
 	.header-sub {
-		font-family: 'Geist', Georgia, serif;
+		font-family: var(--font-sans);
 		font-size: 1.2rem;
 		font-weight: 500;
 		color: var(--fm-text);
@@ -257,7 +257,7 @@
 	}
 	:global(.fm-value) { font-size: 13px; color: var(--fm-text); line-height: 1.5; }
 	:global(.fm-block) { white-space: pre-wrap; }
-	:global(.fm-mono) { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; }
+	:global(.fm-mono) { font-family: var(--font-mono); font-size: 12px; }
 	:global(.fm-muted-text) { font-size: 12px; color: var(--fm-muted); }
 	:global(.fm-small) { font-size: 10.5px; }
 	:global(.fm-detail-text) { font-size: 12px; color: var(--fm-text-secondary); margin-top: 6px; }
@@ -337,7 +337,7 @@
 
 	.badges-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1rem; }
 	.badge {
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.65rem;
 		font-weight: 700;
 		padding: 0.25rem 0.6rem;

@@ -1278,7 +1278,7 @@
 	.terceros-page {
 		min-height: 100vh;
 		background: #fcfcfb;
-		font-family: 'Inter Tight', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		color: #0f172a;
 		padding: 1.5rem 1.25rem 3rem;
 	}
@@ -1950,7 +1950,7 @@
 		justify-content: center;
 		gap: 0.45rem;
 		padding: 0.65rem 1.15rem;
-		font-family: 'Inter Tight', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.85rem;
 		font-weight: 600;
 		border-radius: 11px;

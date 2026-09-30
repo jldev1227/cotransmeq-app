@@ -795,7 +795,7 @@
 	.sarlaft-page {
 		min-height: 100vh;
 		background: #fcfcfb;
-		font-family: 'Geist', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		color: #1e293b;
 		padding: 1.5rem 1.25rem 3rem;
 		display: flex;
@@ -808,7 +808,7 @@
 	   ═══════════════════════════════════════════════════════════════ */
 	.eyebrow {
 		display: inline-block;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -821,12 +821,12 @@
 	h1,
 	h2,
 	h3 {
-		font-family: 'Geist', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		color: #0f172a;
 		letter-spacing: -0.01em;
 	}
 	.mono {
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 	}
 	.mono--sm {
 		font-size: 0.7rem;
@@ -895,7 +895,7 @@
 	}
 	.radicado-pill {
 		display: inline-flex;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.78rem;
 		font-weight: 700;
 		color: #ea580c;
@@ -906,7 +906,7 @@
 	}
 	.codigo-pill {
 		display: inline-flex;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.68rem;
 		font-weight: 600;
 		color: #64748b;
@@ -919,7 +919,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -978,7 +978,7 @@
 		gap: 0.65rem;
 		padding-top: 1rem;
 		border-top: 1px solid rgba(0, 0, 0, 0.06);
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 	}
 	.stat-item {
 		display: inline-flex;
@@ -1101,7 +1101,7 @@
 	.evaluado-por {
 		font-size: 0.7rem;
 		color: #64748b;
-		font-family: 'Geist', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		text-align: right;
 	}
 	.evaluado-por strong {
@@ -1498,7 +1498,7 @@
 	.badge-count {
 		display: inline-flex;
 		align-items: center;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		font-weight: 700;
 		color: #9a3412;
@@ -1519,7 +1519,7 @@
 		gap: 0.35rem;
 	}
 	.field-label {
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.68rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -1590,7 +1590,7 @@
 		border-bottom: none;
 	}
 	.tech-list dt {
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -1682,7 +1682,7 @@
 		justify-content: center;
 		gap: 0.45rem;
 		padding: 0.65rem 1.15rem;
-		font-family: 'Geist', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.85rem;
 		font-weight: 600;
 		border-radius: 11px;

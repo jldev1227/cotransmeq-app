@@ -26,7 +26,7 @@
 		min-height: 100vh;
 		min-height: 100dvh;
 		background-color: #faf7f2;
-		font-family: 'Inter', 'Inter Tight', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		color: #1a1a1a;
 		-webkit-font-smoothing: antialiased;
 	}

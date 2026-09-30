@@ -309,7 +309,7 @@
     justify-content: center;
     padding: 1.5rem 1rem;
     background-color: #faf7f2;
-    font-family: 'Inter', 'Inter Tight', system-ui, sans-serif;
+    font-family: var(--font-sans);
     color: #1a1a1a;
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
@@ -403,7 +403,7 @@
   .eyebrow {
     display: inline-block;
     align-self: flex-start;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.7rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -416,7 +416,7 @@
   }
 
   .auth-title {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: var(--font-sans);
     font-size: clamp(1.75rem, 5vw, 2.15rem);
     font-weight: 400;
     line-height: 1.1;
@@ -437,7 +437,7 @@
   }
 
   .email-addr {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     color: #065f46;
     background: rgba(249, 115, 22, 0.08);
     padding: 0.1rem 0.4rem;
@@ -485,7 +485,7 @@
   }
 
   .field-label {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.65rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -496,7 +496,7 @@
   .cedula-input {
     width: 100%;
     padding: 0.85rem 1rem;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 1.15rem;
     font-weight: 600;
     letter-spacing: 0.18em;
@@ -611,7 +611,7 @@
   }
   .hint-label {
     display: inline-block;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.62rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -653,7 +653,7 @@
   }
 
   .state-title {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: var(--font-sans);
     font-size: 1.5rem;
     font-weight: 500;
     color: #0f1f1a;

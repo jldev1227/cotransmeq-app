@@ -1048,7 +1048,7 @@
 	.w-32 { width: 8rem; }
 	.max-w-xs { max-width: 12rem; }
 	.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-	.font-mono { font-family: monospace; }
+	.font-mono { font-family: var(--font-mono); }
 	.font-medium { font-weight: 500; }
 	.text-center { text-align: center; }
 	.text-xs { font-size: 0.7rem; }
@@ -1237,7 +1237,7 @@
 		background: linear-gradient(180deg, #ffffff 0%, #fcfcfb 100%);
 	}
 	.modal-header h2 {
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 1.25rem;
 		font-weight: 600;
 		color: #0f172a;

@@ -749,7 +749,7 @@
 
 		min-height: 100vh;
 		background: var(--bg);
-		font-family: 'Inter', 'Geist', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		color: var(--text-primary);
 		-webkit-font-smoothing: antialiased;
 	}
@@ -844,7 +844,7 @@
 	}
 	.eyebrow {
 		display: inline-block;
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -857,7 +857,7 @@
 		align-self: flex-start;
 	}
 	.page-title {
-		font-family: 'Geist', Georgia, serif;
+		font-family: var(--font-sans);
 		font-size: 1.4rem;
 		font-weight: 500;
 		color: var(--text-primary);
@@ -979,7 +979,7 @@
 		gap: 0.2rem;
 	}
 	.info-label {
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -1005,7 +1005,7 @@
 		margin: 0;
 	}
 	.meta-mono {
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85em;
 		color: var(--text-primary);
 	}
@@ -1020,7 +1020,7 @@
 		align-items: center;
 		gap: 0.3rem;
 		padding: 0.2rem 0.55rem;
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -1185,7 +1185,7 @@
 		border-bottom: 1px solid var(--border);
 	}
 	.th {
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -1357,7 +1357,7 @@
 		height: 26px;
 	}
 	.empty-title {
-		font-family: 'Geist', Georgia, serif;
+		font-family: var(--font-sans);
 		font-size: 1.1rem;
 		font-weight: 500;
 		color: var(--text-primary);
@@ -1425,7 +1425,7 @@
 		letter-spacing: -0.005em;
 	}
 	.m-card-date {
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		color: var(--text-muted);
 		margin-top: 0.15rem;
@@ -1447,7 +1447,7 @@
 		grid-column: 1 / -1;
 	}
 	.m-card-dl dt {
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.6rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -1512,7 +1512,7 @@
 		height: 22px;
 	}
 	.modal-title {
-		font-family: 'Geist', Georgia, serif;
+		font-family: var(--font-sans);
 		font-size: 1.1rem;
 		font-weight: 500;
 		color: var(--text-primary);

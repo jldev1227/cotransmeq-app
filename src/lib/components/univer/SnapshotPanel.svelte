@@ -479,7 +479,7 @@
 		border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 	}
 	.snap-diff td { padding: 5px 8px; border-bottom: 1px solid rgba(0, 0, 0, 0.04); vertical-align: top; }
-	.snap-path { font-family: monospace; color: #334155; word-break: break-all; }
+	.snap-path { font-family: var(--font-mono); color: #334155; word-break: break-all; }
 	.snap-antes { color: #b91c1c; text-decoration: line-through; }
 	.snap-despues { color: #166534; font-weight: 600; }
 
@@ -494,7 +494,7 @@
 	.snap-confirm p { font-size: 12.5px; color: #7f1d1d; margin: 0 0 8px; }
 	.snap-confirm-hint { font-size: 11.5px; }
 	.snap-confirm code {
-		font-family: monospace;
+		font-family: var(--font-mono);
 		background: rgba(0, 0, 0, 0.07);
 		padding: 1px 5px;
 		border-radius: 3px;

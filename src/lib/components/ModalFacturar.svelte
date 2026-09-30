@@ -277,7 +277,7 @@
 		box-sizing: border-box;
 	}
 	.field input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
-	.factura-input { font-family: monospace; font-weight: 700; font-size: 15px !important; letter-spacing: 0.5px; }
+	.factura-input { font-family: var(--font-mono); font-weight: 700; font-size: 15px !important; letter-spacing: 0.5px; }
 	.req { color: #ef4444; }
 	.search-row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
 	.search-input {
@@ -304,7 +304,7 @@
 	tr.selected { background: #eff6ff !important; }
 	.chk-col { width: 36px; text-align: center; }
 	.right { text-align: right; }
-	.mono { font-family: monospace; font-weight: 600; }
+	.mono { font-family: var(--font-mono); font-weight: 600; }
 	.badge {
 		display: inline-block; padding: 2px 8px; border-radius: 12px;
 		font-size: 10px; font-weight: 700; text-transform: uppercase;

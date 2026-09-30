@@ -617,7 +617,7 @@
 	>
 		<div
 			class="relative flex h-[94vh] w-full max-w-[96rem] flex-col overflow-hidden bg-white"
-			style="border-radius: 20px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18), 0 4px 24px rgba(0, 0, 0, 0.06); font-family: 'Inter Tight', system-ui, sans-serif; color: #0f172a;"
+			style="border-radius: 20px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18), 0 4px 24px rgba(0, 0, 0, 0.06); font-family: var(--font-sans); color: #0f172a;"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.stopPropagation()}
 			role="dialog"

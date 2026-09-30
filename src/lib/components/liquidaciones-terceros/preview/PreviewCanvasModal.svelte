@@ -490,7 +490,7 @@
 	.prev-pager-pos {
 		color: rgba(255, 255, 255, 0.85);
 		font-size: 11px;
-		font-family: 'SF Mono', 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		white-space: nowrap;
 	}
 	.prev-pager-nombre {
@@ -530,7 +530,7 @@
 		text-align: center;
 		color: rgba(255, 255, 255, 0.85);
 		font-size: 11px;
-		font-family: 'SF Mono', 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 	.prev-btn {
 		display: inline-flex;

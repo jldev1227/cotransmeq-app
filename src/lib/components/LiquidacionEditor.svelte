@@ -3124,7 +3124,7 @@
 								<input
 									bind:value={hdr.osi}
 									placeholder="OSI-####"
-									style="font-family:'Geist',sans-serif;font-weight:700;text-transform:uppercase"
+									style="font-family: var(--font-sans);font-weight:700;text-transform:uppercase"
 								/>
 							</div>
 						</div>
@@ -3178,7 +3178,7 @@
 										<div class="ss-wrap">
 											{#if row.placa}
 												<div class="ss-selected wb-ss-mini">
-													<span style="font-family:'Geist',sans-serif;font-weight:700"
+													<span style="font-family: var(--font-sans);font-weight:700"
 														>{row.placa}</span
 													>
 													<button class="ss-clear" on:click={() => clearPlaca(row.id)}>✕</button>
@@ -5112,7 +5112,7 @@
 							>{#each terceroPlacasGroup as g, gi}<tr
 									><td class="tc">{gi + 1}</td><td
 										class="tc"
-										style="font-weight:700;font-family:'Geist',sans-serif;font-variant-numeric:tabular-nums">{fmtPlaca(g.placa)}</td
+										style="font-weight:700;font-family: var(--font-sans);font-variant-numeric:tabular-nums">{fmtPlaca(g.placa)}</td
 									><td style="font-size:7.5pt;font-weight:600">{g.nombre.toUpperCase()}</td><td
 										class="tc"
 										style="font-size:7.5pt">{g.identificacion || '—'}</td
@@ -5701,7 +5701,7 @@
 		color: #94a3b8;
 	}
 	.ss-option .ss-opt-placa {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 800;
 		color: #c2410c;
 		font-size: 12px;
@@ -5777,7 +5777,7 @@
 		background: rgba(234, 88, 12, 0.08);
 		padding: 0.25rem 0.6rem;
 		border-radius: 9999px;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		margin-bottom: 0.5rem;
 	}
 	.liq-loading-eyebrow-danger {
@@ -5785,7 +5785,7 @@
 		background: rgba(220, 38, 38, 0.08);
 	}
 	.liq-loading-title {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		font-size: clamp(1.45rem, 3.6vw, 1.95rem);
 		line-height: 1.2;
@@ -5888,14 +5888,14 @@
 		background: rgba(234, 88, 12, 0.08);
 		padding: 0.18rem 0.5rem;
 		border-radius: 9999px;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		align-self: flex-start;
 		flex-shrink: 0;
 		white-space: nowrap;
 		margin-bottom: 0.4rem;
 	}
 	.liq-loading-card-title {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 600;
 		font-size: 1.25rem;
 		line-height: 1.3;
@@ -5967,7 +5967,7 @@
 		gap: 0.6rem;
 	}
 	.liq-error-title {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		font-size: 1.4rem;
 		line-height: 1.25;
@@ -6006,7 +6006,7 @@
 		color: white;
 		border: none;
 		border-radius: 12px;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.88rem;
 		font-weight: 600;
 		cursor: pointer;
@@ -6026,7 +6026,7 @@
 		color: #0f172a;
 		border: 1px solid rgba(15, 23, 42, 0.12);
 		border-radius: 12px;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.88rem;
 		font-weight: 600;
 		cursor: pointer;
@@ -6192,7 +6192,7 @@
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
-		font-family: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
+		font-family: var(--font-sans);
 	}
 
 	/* ═══════════════════════════════════════════════════════════════
@@ -6211,7 +6211,7 @@
 		display: flex;
 		align-items: center;
 		gap: 1rem;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 	}
 	.pdf-bar-inner {
 		display: flex;
@@ -6252,7 +6252,7 @@
 		background: rgba(234, 88, 12, 0.08);
 		padding: 0.22rem 0.6rem;
 		border-radius: 9999px;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		margin-bottom: 0.3rem;
 		white-space: nowrap;
 		overflow: hidden;
@@ -6263,7 +6263,7 @@
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		font-size: clamp(1.05rem, 1.8vw, 1.35rem);
 		line-height: 1.2;
@@ -6337,7 +6337,7 @@
 	}
 	.ptab-num {
 		display: none;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.65rem;
 		font-weight: 700;
 		background: rgba(15, 23, 42, 0.06);
@@ -6388,7 +6388,7 @@
 		color: #c2410c;
 	}
 	.zoom-label {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.72rem;
 		font-weight: 700;
 		color: #0f172a;
@@ -6426,7 +6426,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 7px;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 	}
 	.pbtn-back {
 		background: #ffffff;
@@ -6480,7 +6480,7 @@
 		padding: 8mm 11mm 13mm;
 		font-size: 8.8pt;
 		line-height: 1.35;
-		font-family: Arial, Helvetica, sans-serif;
+		font-family: var(--font-sans);
 		box-shadow: 0 8px 50px rgba(0, 0, 0, 0.3);
 		border-radius: 2px;
 	}
@@ -6492,7 +6492,7 @@
 		padding: 10mm 12mm 12mm;
 		font-size: 8pt;
 		line-height: 1.3;
-		font-family: Arial, Helvetica, sans-serif;
+		font-family: var(--font-sans);
 		box-shadow: 0 8px 50px rgba(0, 0, 0, 0.3);
 		border-radius: 2px;
 	}
@@ -6504,7 +6504,7 @@
 		padding: 8mm 11mm 13mm;
 		font-size: 8.8pt;
 		line-height: 1.35;
-		font-family: Arial, Helvetica, sans-serif;
+		font-family: var(--font-sans);
 		box-shadow: 0 8px 50px rgba(0, 0, 0, 0.3);
 		border-radius: 2px;
 	}
@@ -6519,7 +6519,7 @@
 		padding: 8mm 9mm 12mm;
 		font-size: 7.6pt;
 		line-height: 1.32;
-		font-family: Arial, Helvetica, sans-serif;
+		font-family: var(--font-sans);
 		box-shadow: 0 8px 50px rgba(0, 0, 0, 0.3);
 		border-radius: 2px;
 		overflow: hidden;
@@ -6755,7 +6755,7 @@
 	.mv {
 		font-weight: 800;
 		color: #c2410c;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -6792,12 +6792,12 @@
 		color: #c2410c;
 		font-weight: 900;
 		font-size: 8.5pt;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-variant-numeric: tabular-nums;
 	}
 	.pc-consec .pcval {
 		color: #c2410c;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 10pt;
 		font-weight: 900;
 	}
@@ -6851,7 +6851,7 @@
 		color: #c2410c;
 	}
 	.placa {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 900;
 		font-size: 7.6pt;
 		color: #c2410c;
@@ -6861,7 +6861,7 @@
 	}
 	.mc {
 		text-align: right;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-variant-numeric: tabular-nums;
 		font-size: 7.4pt;
 		color: #0f172a;
@@ -6869,7 +6869,7 @@
 	}
 	.mch {
 		text-align: right;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-variant-numeric: tabular-nums;
 		font-size: 7.6pt;
 		font-weight: 900;
@@ -6971,7 +6971,7 @@
 		color: #444;
 	}
 	.sva {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		text-align: right;
 		font-variant-numeric: tabular-nums;
@@ -6982,7 +6982,7 @@
 		font-size: 8pt;
 	}
 	.svb {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 800;
 		text-align: right;
 		font-size: 8pt;
@@ -6997,7 +6997,7 @@
 		padding-bottom: 5px;
 	}
 	.svhi {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 900;
 		color: #c2410c;
 		background: #ffedd5;
@@ -7155,7 +7155,7 @@
 		padding: 1.5px 4px;
 		text-align: center;
 		border: 1px solid #fed7aa;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-variant-numeric: tabular-nums;
 	}
 	.doc-summary-strong {
@@ -7178,7 +7178,7 @@
 	}
 	.doc-summary-totals td:last-child {
 		text-align: right;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-variant-numeric: tabular-nums;
 		font-weight: 700;
 		color: #0f172a;
@@ -7256,7 +7256,7 @@
 		padding: 10mm 12mm 12mm;
 		font-size: 8pt;
 		line-height: 1.3;
-		font-family: Arial, Helvetica, sans-serif;
+		font-family: var(--font-sans);
 		box-shadow: 0 8px 50px rgba(0, 0, 0, 0.3);
 		border-radius: 2px;
 	}
@@ -7369,7 +7369,7 @@
 		font-size: 7.5pt;
 	}
 	.liq-sal-val {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		font-size: 8.5pt;
 	}
@@ -7455,7 +7455,7 @@
 	.ts-val {
 		font-weight: 800;
 		text-align: right;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 9pt;
 		font-variant-numeric: tabular-nums;
 	}
@@ -8085,7 +8085,7 @@
 		max-width: 94vw;
 		box-shadow: 0 25px 80px rgba(0, 0, 0, 0.35);
 		overflow: hidden;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		animation: pmSlide 0.25s cubic-bezier(0.22, 0.61, 0.36, 1);
 	}
 	@keyframes pmSlide {
@@ -8476,7 +8476,7 @@
 		background: rgba(234, 88, 12, 0.08);
 		padding: 0.18rem 0.5rem;
 		border-radius: 9999px;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		white-space: nowrap;
 	}
 
@@ -8487,7 +8487,7 @@
 		gap: 0.4rem;
 		padding: 0.32rem 0.7rem;
 		border-radius: 9999px;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.7rem;
 		font-weight: 700;
 		letter-spacing: 0.04em;
@@ -8545,7 +8545,7 @@
 		align-items: center;
 		gap: 0.45rem;
 		min-width: 0;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 	}
 	.estado-info strong {
 		color: #0f172a;
@@ -8568,7 +8568,7 @@
 	}
 	.estado-info-short {
 		display: none;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.72rem;
 		color: #0f172a;
 		font-weight: 600;
@@ -8638,7 +8638,7 @@
 		box-shadow: 0 25px 60px rgba(15, 23, 42, 0.25), 0 4px 24px rgba(0, 0, 0, 0.08);
 		animation: histPop 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 		overflow: hidden;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 	}
 	@keyframes histPop {
 		from {
@@ -8686,11 +8686,11 @@
 		background: rgba(234, 88, 12, 0.08);
 		padding: 0.2rem 0.55rem;
 		border-radius: 9999px;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		margin-bottom: 0.4rem;
 	}
 	.historial-title {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		font-size: 1.4rem;
 		line-height: 1.25;
@@ -8741,7 +8741,7 @@
 		padding: 3rem 0;
 		color: #64748b;
 		font-size: 0.88rem;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 	}
 	.historial-spinner {
 		width: 22px;
@@ -8781,7 +8781,7 @@
 		font-size: 0.95rem;
 		font-weight: 600;
 		color: #64748b;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 	}
 	.historial-empty-sub {
 		font-size: 0.78rem;
@@ -8891,7 +8891,7 @@
 		flex-shrink: 0;
 	}
 	.historial-fecha {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.7rem;
 		color: #64748b;
 		white-space: nowrap;
@@ -8904,7 +8904,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 	}
 	.historial-user-icon {
 		display: inline-flex;
@@ -8953,7 +8953,7 @@
 		height: 100vh;
 		max-height: 100vh;
 		background: #fcfcfb;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 12.5px;
 		color: #0f172a;
 	}
@@ -8998,7 +8998,7 @@
 		gap: 2px;
 	}
 	.wb-toolbar-eyebrow {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -9015,7 +9015,7 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		color: #0f172a;
 		font-size: 1.35rem;
 		font-weight: 700;
@@ -9034,7 +9034,7 @@
 		white-space: nowrap;
 	}
 	.wb-consec-inline {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		color: #c2410c;
 		background: rgba(234, 88, 12, 0.1);
@@ -9056,7 +9056,7 @@
 		padding: 0.5rem 0.8rem;
 		border-radius: 10px;
 		transition: all 0.2s;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 	}
 	.wb-btn-back:hover {
 		color: #c2410c;
@@ -9073,7 +9073,7 @@
 		border: 1px solid rgba(15, 23, 42, 0.12);
 		border-radius: 10px;
 		padding: 0.55rem 0.95rem;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.82rem;
 		font-weight: 600;
 		cursor: pointer;
@@ -9093,7 +9093,7 @@
 		border: 1px solid transparent;
 		border-radius: 10px;
 		padding: 0.55rem 0.95rem;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.82rem;
 		font-weight: 600;
 		cursor: pointer;
@@ -9113,7 +9113,7 @@
 		color: #ffffff;
 		border: none;
 		border-radius: 10px;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.82rem;
 		font-weight: 700;
 		cursor: pointer;
@@ -9162,7 +9162,7 @@
 		border-radius: 20px;
 		font-size: 0.72rem;
 		font-weight: 600;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		transition: all 0.2s;
 	}
 	.wb-draft-pill.wb-draft-saved {
@@ -9212,7 +9212,7 @@
 		letter-spacing: 0.01em;
 	}
 	.wb-draft-time {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.68rem;
 		color: #9a3412;
 		padding-left: 6px;
@@ -9244,7 +9244,7 @@
 		border-radius: 8px;
 		font-size: 0.7rem;
 		font-weight: 700;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		cursor: pointer;
 	}
 
@@ -9287,7 +9287,7 @@
 		width: 100%;
 		border-collapse: collapse;
 		font-size: 10px;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 	}
 	.wb-debug-tbl th {
 		background: #fef3c7;
@@ -9398,7 +9398,7 @@
 		min-width: 0;
 	}
 	.wb-grid-label {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.65rem;
 		font-weight: 700;
 		color: #64748b;
@@ -9424,7 +9424,7 @@
 		width: 100%;
 		padding: 0.6rem 0.75rem;
 		font-size: 0.88rem;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 500;
 		color: #0f172a;
 		background: #ffffff;
@@ -9445,7 +9445,7 @@
 	}
 	.wb-grid-input input[type='number'] {
 		text-align: right;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -9468,7 +9468,7 @@
 		color: #94a3b8;
 		font-size: 0.68rem;
 		font-weight: 700;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-variant-numeric: tabular-nums;
 		padding: 8px 0;
 		text-align: center;
@@ -9500,7 +9500,7 @@
 		background: transparent;
 		padding: 5px 8px;
 		font-size: 0.85rem;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		color: #0f172a;
 		border-radius: 8px;
 		outline: none;
@@ -9591,7 +9591,7 @@
 	.wb-th {
 		background: linear-gradient(135deg, rgba(234, 88, 12, 0.06), rgba(234, 88, 12, 0.10));
 		color: #c2410c;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		font-size: 0.65rem;
 		text-transform: uppercase;
@@ -9718,13 +9718,13 @@
 	}
 	.wb-cell-num input {
 		text-align: center;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 500;
 		font-variant-numeric: tabular-nums;
 	}
 	.wb-cell-money input {
 		text-align: right;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 600;
 		font-variant-numeric: tabular-nums;
 	}
@@ -9734,7 +9734,7 @@
 	}
 
 	.wb-cell-calc {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.78rem;
 		color: #64748b;
 		justify-content: flex-end;
@@ -9744,7 +9744,7 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.wb-cell-calc-strong {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.78rem;
 		font-weight: 800;
 		color: #0f172a;
@@ -9755,7 +9755,7 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.wb-cell-calc-success {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.78rem;
 		font-weight: 700;
 		color: #c2410c;
@@ -9766,7 +9766,7 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.wb-cell-calc-primary {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.78rem;
 		font-weight: 800;
 		color: #c2410c;
@@ -9777,7 +9777,7 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.wb-cell-calc-danger {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.78rem;
 		font-weight: 700;
 		color: #b91c1c;
@@ -9788,7 +9788,7 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.wb-cell-calc-blue {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.78rem;
 		font-weight: 700;
 		color: #c2410c;
@@ -9799,7 +9799,7 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.wb-cell-mono {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		font-size: 0.8rem;
 		justify-content: center;
@@ -9889,11 +9889,11 @@
 		background: rgba(234, 88, 12, 0.08);
 		padding: 0.22rem 0.6rem;
 		border-radius: 9999px;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		margin-bottom: 0.35rem;
 	}
 	.wb-card-title {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		font-size: 1.25rem;
 		line-height: 1.3;
@@ -9924,7 +9924,7 @@
 	.wb-card-count {
 		display: inline-flex;
 		align-items: center;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.68rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -9982,7 +9982,7 @@
 	}
 	.wb-card-hint-text kbd {
 		display: inline-block;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.72rem;
 		font-weight: 700;
 		background: white;
@@ -10039,7 +10039,7 @@
 	}
 
 	.wb-enc-label {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.62rem;
 		font-weight: 700;
 		color: #64748b;
@@ -10067,7 +10067,7 @@
 		background: #ffffff;
 		padding: 9px 12px;
 		font-size: 0.85rem;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		color: #0f172a;
 		border-radius: 10px;
 		outline: none;
@@ -10093,7 +10093,7 @@
 		background: #f6f6f3;
 		color: #94a3b8;
 		cursor: not-allowed;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 600;
 	}
 	.wb-enc-cell select {
@@ -10130,7 +10130,7 @@
 	}
 	.wb-cell-summary b {
 		color: #0f172a;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		font-variant-numeric: tabular-nums;
 	}
@@ -10146,7 +10146,7 @@
 	}
 	.wb-grand-pill b {
 		color: #fff;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-variant-numeric: tabular-nums;
 	}
 
@@ -10178,7 +10178,7 @@
 	.resumen-row > span:last-child {
 		flex: 0 0 auto;
 		text-align: right;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		color: #0f172a;
 		font-size: 0.92rem;
@@ -10224,7 +10224,7 @@
 	}
 	.resumen-total > span:last-child {
 		color: #fff;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 800;
 		font-size: 1.05rem;
 		font-variant-numeric: tabular-nums;
@@ -10261,7 +10261,7 @@
 		cursor: pointer;
 		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 		min-width: max-content;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 	}
 	.wb-btn-add-row:hover {
 		background: rgba(234, 88, 12, 0.06);
@@ -10286,7 +10286,7 @@
 		min-width: 0;
 	}
 	.wb-consec-input {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		font-size: 0.9rem;
 		font-variant-numeric: tabular-nums;
@@ -10300,7 +10300,7 @@
 		background: rgba(220, 38, 38, 0.04) !important;
 	}
 	.consec-badge {
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.95rem;
 		font-weight: 600;
 		white-space: nowrap;
@@ -10329,7 +10329,7 @@
 		font-size: 0.72rem;
 		font-weight: 600;
 		cursor: pointer;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 		transition: all 0.2s ease;
 		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 	}
@@ -10366,7 +10366,7 @@
 		font-size: 0.7rem;
 		color: #64748b;
 		font-weight: 500;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 	}
 
 	/* ── Error message ── */
@@ -10380,7 +10380,7 @@
 		font-size: 0.82rem;
 		font-weight: 600;
 		min-width: max-content;
-		font-family: 'Geist', sans-serif;
+		font-family: var(--font-sans);
 	}
 
 	/* ═══ RESPONSIVE — TABLET (≤ 1279px) ═══ */
@@ -10663,7 +10663,7 @@
 	}
 	.liq-v1-consec strong {
 		margin-top: 4px;
-		font-family: monospace;
+		font-family: var(--font-mono);
 		font-size: 10.5pt;
 		font-weight: 900;
 		line-height: 1;
@@ -10686,7 +10686,7 @@
 		letter-spacing: 0.07em;
 	}
 	.liq-v1-section-title strong {
-		font-family: monospace;
+		font-family: var(--font-mono);
 		font-size: 9pt;
 	}
 	.liq-v1-section-title.compact {
@@ -10740,7 +10740,7 @@
 	}
 	.liq-v1-date,
 	.liq-v1-planilla {
-		font-family: monospace;
+		font-family: var(--font-mono);
 		font-size: 6.8pt;
 	}
 	.liq-v1-qty {
@@ -10790,7 +10790,7 @@
 	.liq-v1-pernote strong {
 		margin-left: 4px;
 		color: #9a3412;
-		font-family: monospace;
+		font-family: var(--font-mono);
 		font-weight: 900;
 	}
 	.liq-v1-summary {
@@ -10813,7 +10813,7 @@
 		font-weight: 700;
 	}
 	.liq-v1-srow strong {
-		font-family: monospace;
+		font-family: var(--font-mono);
 		font-weight: 900;
 		color: #111827;
 	}

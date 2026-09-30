@@ -99,7 +99,7 @@
 						>
 							ACCIÓN MASIVA
 						</p>
-						<h3 style="font-family: 'Geist', sans-serif; font-size: 1.25rem; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em;">
+						<h3 style="font-family: var(--font-sans); font-size: 1.25rem; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em;">
 							Cambiar Estado
 						</h3>
 						<p class="modal-sub">

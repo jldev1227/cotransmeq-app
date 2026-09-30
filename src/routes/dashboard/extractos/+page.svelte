@@ -2597,7 +2597,7 @@
 
 			<!-- Modal Body: PDF Document -->
 			<div class="p-6">
-				<div class="mx-auto max-w-2xl rounded-lg border border-gray-300 bg-white shadow-lg" style="font-family: Arial, sans-serif;">
+				<div class="mx-auto max-w-2xl rounded-lg border border-gray-300 bg-white shadow-lg" style="font-family: var(--font-sans);">
 					<!-- Header Row: Logos + Title + Code -->
 					<div class="border-b border-gray-400">
 						<table class="w-full border-collapse" style="table-layout: fixed;">

@@ -960,13 +960,13 @@
 						</div>
 						<h2
 							class="mt-1.5 text-2xl"
-							style="color: var(--bg-charcoal); font-family: 'Fraunces', Georgia, serif; font-weight: 500; letter-spacing: -0.015em; line-height: 1.1;"
+							style="color: var(--bg-charcoal); font-family: var(--font-sans); font-weight: 500; letter-spacing: -0.015em; line-height: 1.1;"
 						>
 							Registrar recorridos
 						</h2>
 						<p
 							class="mt-1 text-[13px]"
-							style="color: var(--text-muted); font-family: 'Inter Tight', system-ui, sans-serif;"
+							style="color: var(--text-muted); font-family: var(--font-sans);"
 						>
 							{#if conductorActual}
 								{conductorActual.nombre} {conductorActual.apellido} · {MESES[mes - 1]} {anio}
@@ -1049,7 +1049,7 @@
 								<div class="min-w-0 flex-1">
 									<div
 										class="truncate text-sm font-semibold"
-										style="color: var(--text-primary); font-family: 'Inter Tight', system-ui, sans-serif;"
+										style="color: var(--text-primary); font-family: var(--font-sans);"
 									>
 										{conductorActual.nombre} {conductorActual.apellido}
 									</div>
@@ -1096,7 +1096,7 @@
 									placeholder="Buscar por nombre o cédula…"
 									disabled={loadingConductores}
 									class="w-full rounded-xl border-2 py-2.5 pr-3 pl-9 text-sm transition-all focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
-									style="border-color: rgba(0, 0, 0, 0.12); background-color: white; color: var(--text-primary); font-family: 'Inter Tight', system-ui, sans-serif;"
+									style="border-color: rgba(0, 0, 0, 0.12); background-color: white; color: var(--text-primary); font-family: var(--font-sans);"
 								/>
 							</div>
 							{#if showConductorDropdown}
@@ -1110,7 +1110,7 @@
 											<svg class="h-5 w-5" style="color: var(--text-muted);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"
 												><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
 											</svg>
-											<p class="text-xs" style="color: var(--text-muted); font-family: 'Inter Tight', system-ui, sans-serif;">
+											<p class="text-xs" style="color: var(--text-muted); font-family: var(--font-sans);">
 												{#if searchConductor.trim()}
 													Sin coincidencias para "<strong style="color: var(--text-primary);">{searchConductor.trim()}</strong>"
 												{:else}
@@ -1140,7 +1140,7 @@
 												<div class="min-w-0 flex-1">
 													<div
 														class="truncate text-sm font-semibold"
-														style="color: {highlightConductor === i ? '#9a3412' : 'var(--text-primary)'}; font-family: 'Inter Tight', system-ui, sans-serif;"
+														style="color: {highlightConductor === i ? '#9a3412' : 'var(--text-primary)'}; font-family: var(--font-sans);"
 													>
 														{c.nombre}
 														<span style="color: var(--text-muted); font-weight: 500;">{c.apellido}</span>
@@ -1164,7 +1164,7 @@
 										{#if hayMasConductores}
 											<div
 												class="flex items-center gap-2 border-t px-3 py-2 text-[10px]"
-												style="border-color: rgba(0, 0, 0, 0.06); background-color: rgba(245, 158, 11, 0.06); color: #92400E; font-family: 'Inter Tight', system-ui, sans-serif;"
+												style="border-color: rgba(0, 0, 0, 0.06); background-color: rgba(245, 158, 11, 0.06); color: #92400E; font-family: var(--font-sans);"
 											>
 												<svg class="h-3.5 w-3.5 flex-shrink-0" style="color: #B45309;" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
 													><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg
@@ -1215,7 +1215,7 @@
 						</button>
 						<div
 							class="min-w-[150px] px-2 text-center text-sm font-bold uppercase"
-							style="color: var(--bg-charcoal); font-family: 'Fraunces', Georgia, serif; font-weight: 500; letter-spacing: 0.05em;"
+							style="color: var(--bg-charcoal); font-family: var(--font-sans); font-weight: 500; letter-spacing: 0.05em;"
 						>
 							{MESES[mes - 1]} {anio}
 						</div>
@@ -1415,7 +1415,7 @@
 									<p class="text-[10px] font-bold uppercase tracking-wider" style="color: {col.text};">
 										Paso 3 · Datos del patrón
 									</p>
-									<p class="text-[14px] font-bold" style="color: var(--bg-charcoal); font-family: 'Fraunces', Georgia, serif; font-weight: 500;">
+									<p class="text-[14px] font-bold" style="color: var(--bg-charcoal); font-family: var(--font-sans); font-weight: 500;">
 										{col.label} · {p.fechas.size} día{p.fechas.size === 1 ? '' : 's'}
 									</p>
 								</div>

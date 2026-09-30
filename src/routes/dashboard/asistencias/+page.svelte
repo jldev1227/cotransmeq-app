@@ -805,7 +805,7 @@
 
 	.eyebrow {
 		display: inline-block;
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -818,7 +818,7 @@
 	}
 
 	h1 {
-		font-family: 'Geist', Georgia, serif;
+		font-family: var(--font-sans);
 		font-size: 1.45rem;
 		font-weight: 500;
 		color: var(--text-primary);
@@ -963,7 +963,7 @@
 		min-width: 22px;
 		height: 22px;
 		padding: 0 8px;
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		font-weight: 700;
 		background: var(--accent, #ea580c);
@@ -1079,7 +1079,7 @@
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.4rem 0.8rem;
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		font-weight: 600;
 		text-transform: uppercase;
@@ -1114,7 +1114,7 @@
 		font-weight: 700;
 		background: rgba(0, 0, 0, 0.06);
 		border-radius: 8px;
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 	}
 
 	.pill-active .pill-count {
@@ -1191,7 +1191,7 @@
 		min-width: 28px;
 		height: 22px;
 		padding: 0 8px;
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		font-weight: 700;
 		background: var(--accent-bg);
@@ -1208,7 +1208,7 @@
 		display: inline-flex;
 		align-items: center;
 		padding: 0.15rem 0.55rem;
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -1225,7 +1225,7 @@
 		align-items: center;
 		gap: 0.3rem;
 		padding: 0.2rem 0.6rem;
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;

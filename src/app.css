@@ -14,52 +14,14 @@
 @import '@univerjs/sheets-ui/lib/index.css';
 
 /* ═══════════════════════════════════════════════════════════════
-   FUENTES — Sistema Geist (sans única, sin serif, sin mono dedicado)
-   Alineado con el skill landing-cotransmeq-design-system.
-   Se carga Geist desde el CDN de Vercel (latin subset woff2).
+   FUENTE — La del sistema, como en la app móvil de conductores (SF Pro en
+   iOS/macOS, Roboto en Android, Segoe UI en Windows). Una sola familia en
+   todo el ecosistema y ninguna descarga de fuentes.
    ═══════════════════════════════════════════════════════════════ */
-@font-face {
-	font-family: 'Geist';
-	font-style: normal;
-	font-weight: 300;
-	font-display: swap;
-	src: url('https://assets.vercel.com/raw/upload/v1/fonts/geist/Geist-Light.woff2') format('woff2');
-}
-@font-face {
-	font-family: 'Geist';
-	font-style: normal;
-	font-weight: 400;
-	font-display: swap;
-	src: url('https://assets.vercel.com/raw/upload/v1/fonts/geist/Geist-Regular.woff2')
-		format('woff2');
-}
-@font-face {
-	font-family: 'Geist';
-	font-style: normal;
-	font-weight: 500;
-	font-display: swap;
-	src: url('https://assets.vercel.com/raw/upload/v1/fonts/geist/Geist-Medium.woff2') format('woff2');
-}
-@font-face {
-	font-family: 'Geist';
-	font-style: normal;
-	font-weight: 600;
-	font-display: swap;
-	src: url('https://assets.vercel.com/raw/upload/v1/fonts/geist/Geist-SemiBold.woff2')
-		format('woff2');
-}
-@font-face {
-	font-family: 'Geist';
-	font-style: normal;
-	font-weight: 700;
-	font-display: swap;
-	src: url('https://assets.vercel.com/raw/upload/v1/fonts/geist/Geist-Bold.woff2') format('woff2');
-}
-
 @theme {
-	--font-display: 'Geist', 'Inter', system-ui, sans-serif;
-	--font-sans: 'Geist', 'Inter', system-ui, sans-serif;
-	--font-mono: 'Geist', 'Inter', system-ui, sans-serif;
+	--font-sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, system-ui, sans-serif;
+	--font-display: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, system-ui, sans-serif;
+	--font-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
 
 	/* Override Tailwind emerald/green palette → naranja brand (Cotransmeq) */
 	--color-emerald-50: #fff7ed;
@@ -108,13 +70,7 @@
 
 /* Configuración global de tipografía */
 body {
-	font-family:
-		'Geist',
-		'Inter',
-		-apple-system,
-		BlinkMacSystemFont,
-		'Segoe UI',
-		sans-serif;
+	font-family: var(--font-sans);
 	background-color: #fcfcfb;
 	color: #0f172a;
 	/* Las cifras alinean en columnas aunque ya no vayan en monoespaciada. */
@@ -126,6 +82,30 @@ body {
 
 * {
 	box-sizing: border-box;
+}
+
+/* Todo lo que se pulsa lo dice con el cursor: Tailwind 4 dejó los botones
+   con la flecha por defecto. */
+@layer base {
+	button,
+	[role='button'],
+	a[href],
+	label[for],
+	select,
+	summary,
+	input[type='checkbox'],
+	input[type='radio'],
+	input[type='file'],
+	input[type='submit'],
+	input[type='button'] {
+		cursor: pointer;
+	}
+	button:disabled,
+	[role='button'][aria-disabled='true'],
+	select:disabled,
+	input:disabled {
+		cursor: not-allowed;
+	}
 }
 
 html {
@@ -292,7 +272,7 @@ html {
 }
 
 .font-mono-meta {
-	font-family: 'Geist', 'Inter', system-ui, sans-serif;
+	font-family: var(--font-sans);
 	font-weight: 600;
 	text-transform: uppercase;
 	letter-spacing: 0.12em;
@@ -301,7 +281,7 @@ html {
 
 /* Drop cap editorial (disponible) */
 .dropcap::first-letter {
-	font-family: 'Geist', 'Inter', system-ui, sans-serif;
+	font-family: var(--font-sans);
 	font-weight: 700;
 	font-size: 5rem;
 	line-height: 0.85;
@@ -317,7 +297,7 @@ html {
 	/* ─── Eyebrow (tag uppercase + tracking sobre h1) — pill naranja ─ */
 	.eyebrow {
 		display: inline-block;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.7rem;
 		font-weight: 600;
 		text-transform: uppercase;
@@ -338,7 +318,7 @@ html {
 		color: white;
 		border: none;
 		border-radius: 14px;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.875rem;
 		font-weight: 700;
 		cursor: pointer;
@@ -369,7 +349,7 @@ html {
 		color: var(--text-primary);
 		border: 1.5px solid var(--border-default);
 		border-radius: 14px;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.875rem;
 		font-weight: 700;
 		cursor: pointer;
@@ -444,7 +424,7 @@ html {
 		background: rgba(234, 88, 12, 0.06);
 		border: 1px solid rgba(234, 88, 12, 0.18);
 		color: #9a3412;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.75rem;
 		font-weight: 600;
 		cursor: pointer;
@@ -474,7 +454,7 @@ html {
 	}
 
 	.calendar-day-head {
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.58rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -490,7 +470,7 @@ html {
 	}
 
 	.calendar-month-label {
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-weight: 600;
 		font-size: 1.05rem;
 		letter-spacing: -0.02em;
@@ -529,7 +509,7 @@ html {
 		width: auto;
 		height: 3rem;
 		border-radius: 6px;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.66rem;
 		font-weight: 500;
 		line-height: 1;
@@ -611,13 +591,13 @@ html {
 		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.18);
 	}
 	.calendar-footer-count {
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.78rem;
 		font-weight: 700;
 		color: #166534;
 	}
 	.calendar-footer-hint {
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.62rem;
 		font-weight: 600;
 		text-transform: uppercase;
@@ -650,7 +630,7 @@ html {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.35rem;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -698,7 +678,7 @@ html {
 		font-size: 0.78rem;
 	}
 	.item-card-summary-label {
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.65rem;
 		font-weight: 600;
 		text-transform: uppercase;
@@ -706,7 +686,7 @@ html {
 		color: var(--text-muted);
 	}
 	.item-card-summary-value {
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.85rem;
 		font-weight: 700;
 		color: #166534;
@@ -723,7 +703,7 @@ html {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.45rem;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -776,7 +756,7 @@ html {
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
 		color: var(--text-muted);
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 	}
 	.stat-card .stat-value {
 		font-size: 1.5rem;
@@ -836,7 +816,7 @@ html {
 		border-bottom: 1px solid var(--border-subtle);
 	}
 	.table-header th {
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -863,7 +843,7 @@ html {
 		border-radius: 6px;
 		font-size: 0.7rem;
 		font-weight: 600;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
 	}
@@ -871,7 +851,7 @@ html {
 	/* ─── Code badge (mono tag) ─────────────────── */
 	.code-badge {
 		display: inline-block;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.7rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -887,7 +867,7 @@ html {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.3rem;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.7rem;
 		font-weight: 600;
 		text-transform: uppercase;
@@ -983,7 +963,7 @@ html {
 	}
 	.hint-label {
 		display: inline-block;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -1086,7 +1066,7 @@ html {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.5rem;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.7rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -1105,7 +1085,7 @@ html {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.35rem;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.65rem;
 		font-weight: 700;
 		color: var(--emerald-700);
@@ -1124,7 +1104,7 @@ html {
 		align-items: center;
 		gap: 0.3rem;
 		padding: 0.3rem 0.55rem 0.3rem 0.65rem;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.7rem;
 		font-weight: 600;
 		color: var(--emerald-800);
@@ -1187,7 +1167,7 @@ html {
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.5rem;
-		font-family: 'Geist', 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -1195,7 +1175,7 @@ html {
 		color: var(--text-muted);
 	}
 	.filter-field-label-hint {
-		font-family: 'Inter', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.65rem;
 		font-weight: 500;
 		color: var(--text-very-muted);
@@ -1404,7 +1384,7 @@ html {
 }
 .modal-head h2,
 .modal-hd h2 {
-	font-family: 'Geist', 'Inter', system-ui, sans-serif;
+	font-family: var(--font-sans);
 	font-size: 1.25rem;
 	font-weight: 600;
 	color: var(--text-primary);
@@ -1484,7 +1464,7 @@ html {
 
 /* ─── Title y subtítulo (header) ─── */
 .modal-title {
-	font-family: 'Geist', 'Inter', system-ui, sans-serif;
+	font-family: var(--font-sans);
 	font-size: 1.25rem;
 	font-weight: 600;
 	color: var(--text-primary);
@@ -1512,7 +1492,7 @@ html {
 /* ─── Eyebrow tag (header) ─── */
 .modal-eyebrow {
 	display: inline-block;
-	font-family: 'Geist', 'Inter', system-ui, sans-serif;
+	font-family: var(--font-sans);
 	font-size: 0.7rem;
 	font-weight: 600;
 	text-transform: uppercase;
@@ -1573,7 +1553,7 @@ html {
 
 /* ─── Modal fecha (encabezado de día) ─── */
 .modal-fecha {
-	font-family: 'Geist', 'Inter', system-ui, sans-serif;
+	font-family: var(--font-sans);
 	font-size: 1.4rem;
 	font-weight: 700;
 	color: var(--text-primary);
@@ -1620,7 +1600,7 @@ html {
 	flex: 1;
 }
 .modal-title-text h2 {
-	font-family: 'Geist', 'Inter', system-ui, sans-serif;
+	font-family: var(--font-sans);
 	font-size: 1.25rem;
 	font-weight: 600;
 	color: var(--text-primary);

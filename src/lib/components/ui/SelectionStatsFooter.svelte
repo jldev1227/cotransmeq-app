@@ -181,7 +181,7 @@
     letter-spacing: 0.05em;
   }
   .stat-item .stat-value {
-    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
     font-weight: 700;
     color: #fff;
@@ -226,7 +226,7 @@
     background: rgba(255, 255, 255, 0.08);
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 4px;
-    font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+    font-family: var(--font-mono);
     font-size: 9px;
     font-weight: 600;
     color: rgba(255, 255, 255, 0.75);

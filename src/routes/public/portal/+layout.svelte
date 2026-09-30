@@ -256,7 +256,7 @@
     --shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.04);
     --ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
 
-    font-family: 'Inter', 'Inter Tight', system-ui, sans-serif;
+    font-family: var(--font-sans);
     min-height: 100vh;
     min-height: 100dvh;
     background: var(--bg);
@@ -312,14 +312,14 @@
     line-height: 1.15;
   }
   .brand-name {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: var(--font-sans);
     font-size: 0.95rem;
     font-weight: 500;
     color: var(--text);
     letter-spacing: -0.01em;
   }
   .brand-tag {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.6rem;
     font-weight: 700;
     letter-spacing: 0.12em;
@@ -379,7 +379,7 @@
     white-space: nowrap;
   }
   .chip-sub {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.65rem;
     color: var(--text-3);
     letter-spacing: 0.02em;
@@ -533,7 +533,7 @@
     max-width: 140px;
   }
   .sidebar-user-sub {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.65rem;
     color: var(--text-3);
     letter-spacing: 0.02em;
