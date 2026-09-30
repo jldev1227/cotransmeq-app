@@ -100,12 +100,21 @@
 		}
 	}
 
-	function getConductorPhoto() {
-		if (servicio?.conductor?.foto_signed_url) {
-			return servicio.conductor.foto_signed_url;
-		}
-		return 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"%3E%3Crect width="24" height="24" fill="%23e5e7eb"/%3E%3Cpath d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" fill="%239ca3af"/%3E%3C/svg%3E';
-	}
+	/**
+	 * Foto del conductor con respaldo.
+	 *
+	 * La URL firmada de S3 caduca: un ticket abierto un rato después de cargar
+	 * la lista pedía una imagen que ya no existía y quedaba el hueco roto del
+	 * navegador. Si no hay foto o falla al cargar, se pintan las iniciales.
+	 */
+	let fotoRota = false;
+	$: servicio, (fotoRota = false);
+	$: fotoConductor = !fotoRota ? (servicio?.conductor?.foto_signed_url ?? null) : null;
+	$: inicialesConductor =
+		[servicio?.conductor?.nombre, servicio?.conductor?.apellido]
+			.filter(Boolean)
+			.map((p) => String(p).trim()[0]?.toUpperCase() ?? '')
+			.join('') || '?';
 </script>
 
 {#if servicio}
@@ -339,7 +348,19 @@
 
 						<div class="ticket-photo-card">
 							<div class="ticket-photo-frame">
-								<img src={getConductorPhoto()} alt="Foto del conductor" />
+								{#if fotoConductor}
+									<img
+										src={fotoConductor}
+										alt="Foto del conductor"
+										loading="lazy"
+										on:error={() => (fotoRota = true)}
+									/>
+								{:else}
+									<div class="ticket-photo-fallback" aria-label="Sin foto del conductor">
+										<span class="ticket-photo-iniciales">{inicialesConductor}</span>
+										<span class="ticket-photo-sin">Sin foto</span>
+									</div>
+								{/if}
 							</div>
 						</div>
 					</div>
@@ -774,6 +795,30 @@
 		height: 100%;
 		object-fit: cover;
 		display: block;
+	}
+	.ticket-photo-fallback {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.35rem;
+		background: var(--au-tint);
+		color: var(--emerald-800);
+	}
+	.ticket-photo-iniciales {
+		font-size: 2.4rem;
+		font-weight: 800;
+		letter-spacing: 0.04em;
+		line-height: 1;
+	}
+	.ticket-photo-sin {
+		font-size: 0.65rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		opacity: 0.7;
 	}
 
 	.ticket-photo-footer {
