@@ -146,21 +146,21 @@
 		max-width: 26rem;
 		height: 40px;
 		padding: 0 0.75rem 0 0.85rem;
-		background: var(--bg-base);
+		background: rgba(255, 255, 255, 0.08);
 		border: 1.5px solid transparent;
 		border-radius: 12px;
-		color: var(--text-muted);
+		color: rgba(255, 255, 255, 0.6);
 		transition:
 			border-color 0.15s ease,
 			background-color 0.15s ease;
 	}
 	.ir-a:hover {
-		border-color: var(--border-default);
+		border-color: rgba(255, 255, 255, 0.18);
 	}
 	.ir-a--abierto {
-		background: var(--bg-surface);
-		border-color: var(--emerald-500);
-		box-shadow: 0 0 0 4px rgba(var(--au-primary-rgb), 0.12);
+		background: rgba(255, 255, 255, 0.12);
+		border-color: rgba(255, 255, 255, 0.4);
+		box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08);
 	}
 	.ir-a :global(.ir-a-lupa) {
 		flex-shrink: 0;
@@ -176,24 +176,24 @@
 		font-family: inherit;
 		font-size: 0.85rem;
 		font-weight: 500;
-		color: var(--text-primary);
+		color: #fff;
 	}
 	.ir-a-campo:focus {
 		outline: none;
 	}
 	.ir-a-campo::placeholder {
-		color: var(--text-very-muted);
+		color: rgba(255, 255, 255, 0.5);
 	}
 	.ir-a-atajo {
 		flex-shrink: 0;
 		padding: 0.15rem 0.45rem;
 		border-radius: 6px;
-		border: 1px solid var(--border-default);
-		background: var(--bg-surface);
+		border: 1px solid rgba(255, 255, 255, 0.18);
+		background: rgba(255, 255, 255, 0.08);
 		font-family: inherit;
 		font-size: 0.65rem;
 		font-weight: 700;
-		color: var(--text-very-muted);
+		color: rgba(255, 255, 255, 0.6);
 		letter-spacing: 0.04em;
 	}
 

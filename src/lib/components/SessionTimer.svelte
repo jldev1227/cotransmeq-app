@@ -51,7 +51,7 @@
 			? 'bg-red-100 text-red-700'
 			: isWarning
 				? 'bg-amber-100 text-amber-700'
-				: 'bg-gray-100 text-gray-600'}"
+				: 'bg-white/10 text-white/80'}"
 		in:fade={{ duration: 200 }}
 	>
 		<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

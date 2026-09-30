@@ -318,7 +318,7 @@
 	class="no-print apple-transition fixed top-0 right-0 left-0 z-35 h-16 border-b {isCollapsed
 		? 'lg:left-20'
 		: 'lg:left-64'}"
-	style="background-color: var(--bg-surface); border-color: var(--border-subtle);"
+	style="background-color: var(--bg-charcoal-deep); border-color: rgba(255,255,255,0.08);"
 	in:fly={{ y: -20, duration: 400, delay: 300 }}
 >
 	<div class="flex h-full items-center justify-between gap-3 px-4 md:px-6 lg:pl-6">
@@ -327,7 +327,7 @@
 			<!-- Burger menu (mobile/tablet only) — profesonal, dentro del flow -->
 			<button
 				type="button"
-				class="apple-transition btn-icon lg:hidden"
+				class="apple-transition btn-icon cab-icono lg:hidden"
 				on:click={() => mobileDrawerStore.toggle()}
 				aria-label="Abrir menú"
 				aria-expanded={$mobileDrawerStore}
@@ -343,13 +343,13 @@
 				{/if}
 			</button>
 
-			<h1 class="font-display truncate text-xl md:text-2xl" style="color: var(--bg-charcoal); font-weight: 700;">{pageTitle}</h1>
+			<h1 class="font-display truncate text-xl md:text-2xl" style="color: #fff; font-weight: 800;">{pageTitle}</h1>
 
 			<!-- ═══ Conexión en tiempo real — solo md+ (en móvil lo cubre el toast del layout) ═══ -->
 			{#if socketEstado !== 'inactivo'}
 				<div
 					class="ml-1 hidden shrink-0 items-center gap-2 border-l pl-3 md:flex"
-					style="border-color: var(--border-subtle);"
+					style="border-color: rgba(255,255,255,0.14);"
 					role="status"
 					aria-live="polite"
 					title={socketDetalle}
@@ -371,7 +371,7 @@
 
 					<span
 						class="whitespace-nowrap text-[12px] font-medium"
-						style="color:{socketProblema ? socketColor : 'var(--text-secondary)'}"
+						style="color:{socketProblema ? socketColor : 'rgba(255,255,255,0.75)'}"
 					>
 						{socketTexto}{#if socketEstado === 'reconectando' && socketIntentos > 0}<span
 								class="hidden lg:inline"
@@ -412,7 +412,7 @@
 			<!-- Notifications -->
 			<div class="relative notifications-menu">
 				<button
-					class="apple-transition btn-icon relative"
+					class="apple-transition btn-icon cab-icono relative"
 					on:click={toggleNotifications}
 					aria-label="Notificaciones"
 				>
@@ -498,15 +498,13 @@
 			<!-- User Menu -->
 			<div class="user-menu relative">
 				<button
-					class="apple-transition group flex items-center space-x-3 rounded-xl p-2"
-					style="color: var(--text-secondary);"
+					class="apple-transition group flex items-center space-x-3 rounded-xl p-2 cab-usuario"
 					on:click={toggleUserMenu}
 					aria-label="Menú de usuario"
 				>
 					<!-- Avatar -->
 					<div
-						class="brand-gradient flex h-9 w-9 items-center justify-center rounded-full"
-						style="box-shadow: 0 2px 8px rgba(234, 88, 12, 0.25);"
+						class="cab-avatar flex h-9 w-9 items-center justify-center rounded-full"
 					>
 						<span class="text-sm font-semibold text-white">
 							{userName.charAt(0).toUpperCase()}
@@ -515,8 +513,8 @@
 
 					<!-- User Info (Hidden on small screens) -->
 					<div class="hidden min-w-0 text-left md:block">
-						<p class="truncate text-sm font-semibold" style="color: var(--text-primary);">{userName}</p>
-						<p class="truncate text-xs" style="color: var(--text-muted);">{userRole}</p>
+						<p class="truncate text-sm font-semibold" style="color: #fff;">{userName}</p>
+						<p class="truncate text-xs" style="color: rgba(255,255,255,0.6);">{userRole}</p>
 					</div>
 
 					<!-- Chevron -->
@@ -524,7 +522,7 @@
 						class="apple-transition h-4 w-4 {showUserMenu
 							? 'rotate-180'
 							: ''}"
-						style="color: var(--text-very-muted);"
+						style="color: rgba(255,255,255,0.55);"
 						fill="none"
 						stroke="currentColor"
 						viewBox="0 0 24 24"
@@ -780,3 +778,30 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	/* ── Header en el verde del menú lateral ──
+	   La barra comparte superficie con el sidebar para que formen una sola
+	   pieza; los controles van translúcidos sobre ella. Los desplegables
+	   siguen siendo paneles blancos. */
+	.cab-icono {
+		background: rgba(255, 255, 255, 0.08) !important;
+		border-color: rgba(255, 255, 255, 0.12) !important;
+		color: rgba(255, 255, 255, 0.85) !important;
+	}
+	.cab-icono:hover {
+		background: rgba(255, 255, 255, 0.16) !important;
+		border-color: rgba(255, 255, 255, 0.28) !important;
+		color: #fff !important;
+	}
+	.cab-usuario {
+		color: rgba(255, 255, 255, 0.85);
+	}
+	.cab-usuario:hover {
+		background: rgba(255, 255, 255, 0.08);
+	}
+	.cab-avatar {
+		background: rgba(255, 255, 255, 0.14);
+		border: 1.5px solid rgba(255, 255, 255, 0.25);
+	}
+</style>
