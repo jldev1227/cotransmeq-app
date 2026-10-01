@@ -135,14 +135,6 @@
 		if (mes && !f.meses.length) f.meses = [String(Number(mes)).padStart(2, '0')];
 		if (placa && !f.placas.length) f.placas = [placa.toUpperCase()];
 		f.meses = f.meses.map((m) => String(Number(m)).padStart(2, '0'));
-		/// Una vez volcados, los parámetros antiguos se quitan de la barra: si
-		/// se quedaran, al soltar un chip la URL seguiría diciendo `mes=09` y
-		/// recargar lo volvería a poner.
-		if (anio || mes || placa) {
-			const u = new URL(window.location.href);
-			for (const k of ['anio', 'mes', 'placa']) u.searchParams.delete(k);
-			window.history.replaceState(window.history.state, '', u.toString());
-		}
 		return f;
 	}
 
@@ -151,10 +143,12 @@
 	$effect(() => {
 		void firma(DEFS, filtros);
 		if (!browser) return;
-		estadoUrl.escribir(
-			untrack(() => page.url),
-			untrack(() => filtros)
-		);
+		/// Se escribe sobre la URL SIN los parámetros antiguos (`anio`, `mes`,
+		/// `placa`): `page.url` los conserva aunque ya se volcaron en las
+		/// listas, y copiarlos de vuelta dejaba `mes=09` tras soltar el chip.
+		const base = new URL(untrack(() => page.url));
+		for (const k of ['anio', 'mes', 'placa']) base.searchParams.delete(k);
+		estadoUrl.escribir(base, untrack(() => filtros));
 	});
 
 	/// El periodo que viaja al siguiente canvas: el primer año y mes elegidos,
@@ -237,9 +231,11 @@
 		return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 	}
 
-	/** «Septiembre», «Sep», «09», «9» → «09». */
+	/** «Septiembre», «Sep», «09», «9» y «2026-09» (lo que escribe el canvas) → «09». */
 	function mesClave(m: string): string {
 		const t = normalizar(String(m ?? '').trim());
+		const iso = /^(\d{4})-(\d{2})/.exec(t);
+		if (iso) return iso[2];
 		if (/^\d{1,2}$/.test(t)) return t.padStart(2, '0');
 		const i = MESES.findIndex(
 			(n) => normalizar(n) === t || normalizar(n).startsWith(t.slice(0, 3))
