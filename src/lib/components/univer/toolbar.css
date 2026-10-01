@@ -17,11 +17,18 @@
 	min-height: var(--univer-header-h, 56px);
 	box-sizing: border-box;
 	display: flex;
+	/* La barra ENVUELVE. Antes era una sola fila con `space-between`: el lado
+	   izquierdo (`flex: 1; min-width: 0`) se encogía a nada y los controles
+	   de la derecha, que no se encogen, se montaban sobre el título y salían
+	   de la pantalla por la derecha, recortados en silencio. Con `wrap`, los
+	   controles bajan a una segunda fila cuando no caben al lado del título;
+	   el shell es una columna flex y el canvas absorbe el alto que sobra. */
+	flex-wrap: wrap;
 	align-items: center;
 	justify-content: space-between;
 	flex-shrink: 0;
 	box-shadow: 0 3px 16px rgba(0, 0, 0, 0.4);
-	gap: 12px;
+	gap: 8px 12px;
 	/* Por encima del carril lateral (`UniverSideRail`, z-index 20) y de sus
 	   popovers. La barra es un flex item con z-index propio, así que forma su
 	   PROPIO contexto de apilado: todo lo que cuelgue de ella —el buscador de
@@ -35,15 +42,50 @@
 	display: flex;
 	align-items: center;
 	gap: 12px;
-	min-width: 0;
-	flex: 1;
+	/* Base 0 y mínimo de 260px: para decidir si los controles caben en la
+	   fila solo cuentan esos 260px, no el subtítulo largo; después crece
+	   hasta ocupar lo que sobre. Con `auto` el subtítulo de nómina mandaba
+	   los controles a la segunda fila incluso a 1440px. */
+	flex: 1 1 0;
+	min-width: min(100%, 260px);
 }
 
 .univer-toolbar-right {
 	display: flex;
+	/* Los controles también envuelven entre sí: nueve controles en un
+	   portátil caben en dos filas, no en una recortada. */
+	flex-wrap: wrap;
 	align-items: center;
+	justify-content: flex-end;
 	gap: 8px;
+	flex: 0 1 auto;
+	max-width: 100%;
+	margin-left: auto;
+}
+
+/* El botón que en móvil muestra u oculta los controles. En escritorio no
+   existe: ahí caben envueltos. */
+.univer-toolbar-toggle {
+	display: none;
 	flex-shrink: 0;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	margin-left: auto;
+	padding: 0;
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	border-radius: 6px;
+	background: rgba(255, 255, 255, 0.1);
+	color: #fff;
+	cursor: pointer;
+}
+.univer-toolbar-toggle[aria-expanded='true'] {
+	background: rgba(255, 255, 255, 0.22);
+}
+.univer-toolbar-toggle svg {
+	width: 16px;
+	height: 16px;
 }
 
 .univer-btn {
@@ -355,14 +397,40 @@
 	}
 }
 
-/* Responsive: en móvil comprimimos el toolbar y ocultamos el subtítulo largo */
+/* ── Responsive ──────────────────────────────────────────────────────
+   Portátil: controles más compactos para que sigan cabiendo en una fila
+   el mayor tiempo posible antes de envolver. */
+@media (max-width: 1280px) {
+	.univer-toolbar {
+		padding: 8px 14px;
+		gap: 6px 10px;
+	}
+	.univer-toolbar-left {
+		gap: 10px;
+	}
+	.univer-toolbar-right {
+		gap: 6px;
+	}
+	.univer-btn {
+		padding: 6px 10px;
+	}
+	.univer-year-picker select,
+	.univer-month-picker {
+		padding: 0.28rem 0.4rem;
+	}
+}
+
+/* Móvil: una sola fila con «Volver», el título y el botón que despliega
+   los controles; abiertos, bajan envueltos bajo el título. El subtítulo
+   largo no cabe y se oculta. */
 @media (max-width: 720px) {
 	.univer-toolbar {
 		padding: 8px 12px;
 		gap: 8px;
 	}
-	.univer-info {
-		max-width: 50vw;
+	.univer-toolbar-left {
+		min-width: 0;
+		flex: 1 1 0;
 	}
 	.univer-info-subtitle {
 		display: none;
@@ -370,5 +438,38 @@
 	.univer-btn {
 		padding: 6px 10px;
 		font-size: 11px;
+	}
+	.univer-btn-back {
+		/* Solo la flecha: el texto del destino lo dice el título. */
+		font-size: 0;
+		gap: 0;
+		padding: 6px 8px;
+	}
+	.univer-btn-back svg {
+		width: 16px;
+		height: 16px;
+	}
+	.univer-toolbar-toggle {
+		display: inline-flex;
+	}
+	.univer-toolbar-right {
+		display: none;
+		flex: 1 1 100%;
+		justify-content: flex-start;
+	}
+	.univer-toolbar--abierta .univer-toolbar-right {
+		display: flex;
+	}
+	.univer-divider-v {
+		display: none;
+	}
+	/* El rango de fechas era 6px más ancho que la pantalla: los dos campos
+	   pueden partirse en dos líneas dentro de su marco. */
+	.univer-rango {
+		flex-wrap: wrap;
+		max-width: 100%;
+	}
+	.univer-rango input[type='date'] {
+		font-size: 0.74rem;
 	}
 }
