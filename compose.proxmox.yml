@@ -20,6 +20,14 @@ services:
       ORIGIN: https://app.cotransmeq.com
       APP_PUBLIC_URL: https://app.cotransmeq.com
       BACKEND_INTERNAL_URL: http://backend-cotransmeq-nest:4000
+      # Recuperación de contraseña: el enlace lo firma y lo envía este front.
+      # Sin estas cuatro, «¿Olvidaste tu contraseña?» responde «no está
+      # configurada en este entorno». PASSWORD_RECOVERY_SERVICE_TOKEN tiene que
+      # ser el mismo que el del backend.
+      PASSWORD_RECOVERY_SECRET: ${PASSWORD_RECOVERY_SECRET:-}
+      PASSWORD_RECOVERY_SERVICE_TOKEN: ${PASSWORD_RECOVERY_SERVICE_TOKEN:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-}
     networks:
       - backend
 

@@ -26,3 +26,18 @@ docker compose -f compose.proxmox.yml ps
 
 Rollback: vuelva a etiquetar la imagen anterior como `production` y ejecute
 `docker compose -f compose.proxmox.yml up -d`.
+
+## Recuperación de contraseña
+
+El enlace de «¿Olvidaste tu contraseña?» lo firma y lo envía este front, así
+que el contenedor necesita estas variables privadas de runtime (en el mismo
+archivo protegido que las de mapas):
+
+- `PASSWORD_RECOVERY_SECRET`: 32 caracteres o más, solo de este front.
+- `PASSWORD_RECOVERY_SERVICE_TOKEN`: el MISMO valor que tiene el `.env` del
+  backend; con él el front llama a `/api/auth/recuperacion/*`.
+- `RESEND_API_KEY` y `RESEND_FROM`: el remitente del correo.
+
+Si falta alguna, la pantalla responde «La recuperación de contraseña no está
+configurada en este entorno».
+
