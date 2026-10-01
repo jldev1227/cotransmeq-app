@@ -8,7 +8,6 @@
 	import { socketUtils } from '$lib/socket';
 	import { authStore } from '$lib/stores/auth';
 	import { toast } from 'svelte-sonner';
-	import TablaDiasLaborados from '$lib/components/conductores/TablaDiasLaborados.svelte';
 	import FilterDrawer from '$lib/components/ui/FilterDrawer.svelte';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
@@ -58,8 +57,6 @@
 		oculto?: boolean;
 	}
 
-	type VistaTab = 'lista' | 'calendario';
-
 	/**
 	 * Filtros de la página.
 	 *
@@ -69,7 +66,8 @@
 	 * que compartir una vista siempre devolvía a la primera página.
 	 */
 	interface FiltrosConductores {
-		/** Pestaña: `lista` | `calendario`. */
+		/** Siempre `lista`. `calendario` era la tabla clásica de recorridos y
+		 * ahora redirige al canvas; se lee solo para eso. */
 		vista: string;
 		q: string;
 		estado: string;
@@ -108,27 +106,23 @@
 
 	/// Atajos de lectura, para no cambiar todo el marcado de golpe.
 	const vistaActual = $derived(filtros.vista_lista as VistaActual);
-	const vistaTab = $derived(filtros.vista as VistaTab);
 
 	const isAdmin = $derived($authStore.user?.role === 'admin' || $authStore.user?.rol === 'admin');
 	const isOperaciones = $derived($authStore.user?.area?.includes('operaciones'));
 	const isTalentoHumano = $derived($authStore.user?.area?.includes('talento_humano'));
 	const canAccessSpecialViews = $derived(isAdmin || isOperaciones || isTalentoHumano);
-	// Permiso individual para gestionar bonos de planilla (no por área)
-	const canManageBonos = $derived($authStore.user?.permisos?.['bonos-planilla'] === true);
 
 	// ══════════════════════════════════════════════════════
 	//  URL PARAMS: sincroniza el estado del page con la URL
 	//  para que sea compartible / bookmarkable.
 	//
 	//  Soporta:
-	//    ?vista=lista|calendario
+	//    ?vista=calendario  → enlace antiguo: redirige al canvas de recorridos
 	//    ?q=juan           → búsqueda libre del tab lista
 	//    ?estado=ACTIVO
 	//    ?sede=YOPAL
 	//    ?vista_lista=ACTIVOS|OCULTOS|PAPELERA
-	//    ?conductor=<id>   → cuando se navega desde un conductor
-	//                        específico al tab de recorridos
+	//    ?conductor=<id>   → acompaña a `vista=calendario`; viaja al canvas
 	// ══════════════════════════════════════════════════════
 	/**
 	 * Filtros → URL.
@@ -139,14 +133,22 @@
 	 * quedaba siempre con la URL de carga — y `cambiarVista()` decidía si
 	 * conservar los filtros consultando esa URL obsoleta.
 	 */
+	/// `?vista=calendario` era la tabla clásica de recorridos, que ya no se
+	/// monta aquí. Un enlace guardado con ella va al canvas, con el conductor
+	/// si venía uno, y sin dejar rastro en el historial.
+	const vaAlCanvas = $derived(filtros.vista === 'calendario');
 	$effect(() => {
-		estadoUrl.escribir(pageState.url, filtros);
+		if (!vaAlCanvas) return;
+		const conductor = pageState.url.searchParams.get('conductor');
+		goto(`/dashboard/conductores/recorridos${conductor ? `?conductor=${conductor}` : ''}`, {
+			replaceState: true
+		});
 	});
 
-	// Leer conductor_id del URL para pasarlo a TablaDiasLaborados
-	/// Parámetro ajeno a los filtros: lo pone quien abre el detalle de un
-	/// conductor. El núcleo lo conserva al reescribir la URL.
-	const urlConductorId = $derived(pageState.url.searchParams.get('conductor') || '');
+	$effect(() => {
+		if (vaAlCanvas) return;
+		estadoUrl.escribir(pageState.url, filtros);
+	});
 
 	// Estados para modo selección
 	let conductoresSeleccionados = $state(new Set<string>());
@@ -402,8 +404,7 @@
 	 * `position: fixed` de su shell queda encajado en un contenedor con padding
 	 * y la hoja sale recortada.
 	 *
-	 * La tabla clásica sigue existiendo en `?vista=calendario` para quien la
-	 * tenga guardada, pero ya no hay botón que lleve a ella.
+	 * La tabla clásica (`?vista=calendario`) se retiró: ese enlace redirige aquí.
 	 */
 	function irAlCanvasDeRecorridos(conductorId?: string) {
 		// Sin fechas: el canvas abre el corte 21→20 vivo, que es lo que
@@ -539,10 +540,8 @@
 	});
 
 	// ═══════════════════════════════
-	// SOCKET: refrescar calendario y tabla en tiempo real
+	// SOCKET: refrescar la lista en tiempo real
 	// ═══════════════════════════════
-	let tablaRefreshKey = $state(0);
-	let calendarRefreshKey = 0;
 
 	function notificarWeb(titulo: string, cuerpo: string, tag = 'dias-laborados') {
 		if (!browser) return;
@@ -579,17 +578,8 @@
 			);
 		}
 
-		// Refrescar la tabla de días laborados (que internamente escucha el socket
-		// también, pero forzamos recarga para que la lista de conductores del filtro
-		// se actualice si es uno nuevo).
-		if (vistaTab === 'calendario') {
-			tablaRefreshKey++;
-		}
-
-		// Si el registro es del mes actual de la tabla, recargar
-		if (vistaTab === 'lista') {
-			cargar(true);
-		}
+		// La lista se recarga por si el conductor es nuevo o cambió de estado.
+		cargar(true);
 	}
 
 	let bajasSocket: Array<() => void> = [];
@@ -614,8 +604,8 @@
 	onDestroy(() => {
 		/// Se dan de baja solo NUESTROS listeners. El `off('evento')` que había
 		/// aquí se llevaba por delante el de `dias-laborados:registro-actualizado`
-		/// de TablaDiasLaborados.svelte, que dejaba de actualizarse al salir de
-		/// esta página sin que nada lo avisara.
+		/// del canvas de recorridos, que dejaba de actualizarse al salir de esta
+		/// página sin que nada lo avisara.
 		for (const baja of bajasSocket) baja();
 		bajasSocket = [];
 	});
@@ -631,7 +621,7 @@
 		<div class="dir-cabecera-texto">
 			<h1 class="dir-titulo">Conductores</h1>
 			<p class="dir-desc">Administra y supervisa todo el personal de conducción.</p>
-			{#if vistaTab === 'lista' && vistaActual === 'ACTIVOS'}
+			{#if vistaActual === 'ACTIVOS'}
 				<div class="dir-conteos">
 					<ResumenConteos
 						{conteos}
@@ -652,11 +642,9 @@
 				<button
 					onclick={() => ponerFiltro('vista', 'lista')}
 					class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold"
-					style="background-color: {vistaTab === 'lista' ? 'white' : 'transparent'};
-						color: {vistaTab === 'lista' ? 'var(--emerald-800)' : 'var(--text-secondary)'};
-						box-shadow: {vistaTab === 'lista' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none'};"
+					style="background-color: white; color: var(--emerald-800); box-shadow: 0 1px 3px rgba(0,0,0,0.06);"
 					role="tab"
-					aria-selected={vistaTab === 'lista'}
+					aria-selected="true"
 				>
 					<svg
 						class="h-3.5 w-3.5"
@@ -676,11 +664,9 @@
 				<button
 					onclick={() => irAlCanvasDeRecorridos()}
 					class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold"
-					style="background-color: {vistaTab === 'calendario' ? 'white' : 'transparent'};
-						color: {vistaTab === 'calendario' ? 'var(--emerald-800)' : 'var(--text-secondary)'};
-						box-shadow: {vistaTab === 'calendario' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none'};"
+					style="background-color: transparent; color: var(--text-secondary);"
 					role="tab"
-					aria-selected={vistaTab === 'calendario'}
+					aria-selected="false"
 				>
 					<svg
 						class="h-3.5 w-3.5"
@@ -739,42 +725,40 @@
 				</button>
 			{/if}
 
-			{#if vistaTab === 'lista'}
-				<button
-					onclick={() => (mostrarFiltros = !mostrarFiltros)}
-					class="btn-secondary"
-					style="border-color: {mostrarFiltros
-						? 'var(--emerald-500)'
-						: 'var(--border-default)'}; color: {mostrarFiltros
-						? 'var(--emerald-800)'
-						: 'var(--text-secondary)'}; background-color: {mostrarFiltros
-						? 'var(--au-tint)'
-						: 'white'};"
-				>
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-						/>
-					</svg>
-					Filtros
-					{#if numFiltrosActivos > 0}
-						<span
-							class="flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white"
-							style="background-color: var(--emerald-500);">!</span
-						>
-					{/if}
-				</button>
-
-				{#if puedeEditar}
-					<button onclick={() => goto('/dashboard/conductores/agregar')} class="btn-primary">
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-						</svg>
-						Nuevo conductor
-					</button>
+			<button
+				onclick={() => (mostrarFiltros = !mostrarFiltros)}
+				class="btn-secondary"
+				style="border-color: {mostrarFiltros
+					? 'var(--emerald-500)'
+					: 'var(--border-default)'}; color: {mostrarFiltros
+					? 'var(--emerald-800)'
+					: 'var(--text-secondary)'}; background-color: {mostrarFiltros
+					? 'var(--au-tint)'
+					: 'white'};"
+			>
+				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+					/>
+				</svg>
+				Filtros
+				{#if numFiltrosActivos > 0}
+					<span
+						class="flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white"
+						style="background-color: var(--emerald-500);">!</span
+					>
 				{/if}
+			</button>
+
+			{#if puedeEditar}
+				<button onclick={() => goto('/dashboard/conductores/agregar')} class="btn-primary">
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+					</svg>
+					Nuevo conductor
+				</button>
 			{/if}
 		</div>
 
@@ -874,169 +858,158 @@
 		</FilterDrawer>
 	</header>
 
-	{#if vistaTab === 'lista'}
-		<!-- ── FILTROS A LA VISTA: buscador + estado + sede ────── -->
-		<div class="dir-filtros" in:fly={{ y: 12, duration: 400, delay: 100 }}>
-			<div class="dir-filtros-buscador">
-				<BuscadorLista
-					valor={filtros.q}
-					onBuscar={(termino) => ponerFiltro('q', termino)}
-					placeholder="Nombre, cédula, teléfono o correo…"
-					etiqueta="Buscar conductores"
-				/>
-			</div>
-			<SegmentosFiltro
-				etiqueta="Estado"
-				opciones={SEGMENTOS_ESTADO}
-				valor={filtros.estado}
-				onCambiar={(v) => ponerFiltro('estado', v)}
-			/>
-			<SegmentosFiltro
-				etiqueta="Sede"
-				opciones={SEGMENTOS_SEDE}
-				valor={filtros.sede}
-				onCambiar={(v) => ponerFiltro('sede', v)}
+	<!-- ── FILTROS A LA VISTA: buscador + estado + sede ────── -->
+	<div class="dir-filtros" in:fly={{ y: 12, duration: 400, delay: 100 }}>
+		<div class="dir-filtros-buscador">
+			<BuscadorLista
+				valor={filtros.q}
+				onBuscar={(termino) => ponerFiltro('q', termino)}
+				placeholder="Nombre, cédula, teléfono o correo…"
+				etiqueta="Buscar conductores"
 			/>
 		</div>
-
-		<!-- ── LISTA ───────────────────────────────────────────── -->
-		<div class="dir-lista" in:fly={{ y: 12, duration: 400, delay: 150 }}>
-			<div class="dir-lista-scroll">
-				<TablaLista
-					columnas={COLUMNAS}
-					datos={conductores}
-					claveFila={(c) => c.id}
-					cargando={isLoading}
-					onFila={(c) => goto(`/dashboard/conductores/${c.id}`)}
-					etiqueta="Conductores"
-				>
-					{#snippet celda({ columnaId, fila: c })}
-						{#if columnaId === 'conductor'}
-							<div class="flex items-center">
-								<span class="dir-check">
-									<input
-										type="checkbox"
-										checked={conductoresSeleccionados.has(c.id)}
-										onclick={(e) => {
-											e.stopPropagation();
-											toggleSeleccion(c.id, conductores.indexOf(c), e);
-										}}
-										aria-label="Seleccionar {c.nombre} {c.apellido}"
-									/>
-								</span>
-								<CeldaIdentidad
-									titulo="{c.nombre} {c.apellido}"
-									subtitulo="{c.tipo_identificacion || 'CC'} {c.numero_identificacion}"
-									foto={c.foto_signed_url}
-									punto={getEstadoColor(c.estado)}
-								/>
-							</div>
-						{:else if columnaId === 'sede'}
-							<div class="dir-celda">
-								{#if c.sede_trabajo}<span>{c.sede_trabajo}</span>{:else}<span class="dir-nulo"
-										>Sin sede</span
-									>{/if}
-								<small>{c.cargo || 'Conductor'}</small>
-							</div>
-						{:else if columnaId === 'contacto'}
-							<div class="dir-celda">
-								{#if c.telefono}<span>{c.telefono}</span>{:else}<span class="dir-nulo"
-										>Sin teléfono</span
-									>{/if}
-								{#if c.email}<small>{c.email}</small>{/if}
-							</div>
-						{:else if columnaId === 'estado'}
-							<EstadoPunto
-								etiqueta={getEstadoText(c.estado)}
-								color={getEstadoColor(c.estado)}
-								apagado={['INACTIVO', 'RETIRADO'].includes(c.estado?.toUpperCase())}
-							/>
-						{:else if columnaId === 'acciones'}
-							<AccionesFila
-								acciones={[
-									{
-										id: 'recorridos',
-										etiqueta: 'Ver recorridos / bonos de planilla',
-										icono: Route,
-										onClick: () => irAlCanvasDeRecorridos(c.id)
-									},
-									{
-										id: 'ver',
-										etiqueta: 'Ver detalle',
-										icono: Eye,
-										onClick: () => goto(`/dashboard/conductores/${c.id}`)
-									},
-									{
-										id: 'ocultar',
-										etiqueta: 'Ocultar',
-										icono: EyeOff,
-										onClick: () => accionIndividual(c.id, 'ocultar'),
-										oculta: !puedeEditar || vistaActual !== 'ACTIVOS'
-									},
-									{
-										id: 'mostrar',
-										etiqueta: 'Mostrar',
-										icono: Eye,
-										onClick: () => accionIndividual(c.id, 'mostrar'),
-										oculta: !puedeEditar || vistaActual !== 'OCULTOS'
-									},
-									{
-										id: 'restaurar',
-										etiqueta: 'Restaurar',
-										icono: RotateCcw,
-										onClick: () => accionIndividual(c.id, 'restaurar'),
-										oculta: !puedeEditar || vistaActual !== 'PAPELERA'
-									},
-									{
-										id: 'eliminar',
-										etiqueta: 'Eliminar permanentemente',
-										icono: Trash2,
-										onClick: () => eliminarPermanente(c.id),
-										peligrosa: true,
-										oculta: !puedeEditar || vistaActual !== 'PAPELERA'
-									}
-								]}
-							/>
-						{/if}
-					{/snippet}
-
-					{#snippet vacio()}
-						{@const img = mascota('vacio')}
-						<div class="dir-vacio">
-							<img src={img.src} alt={img.alt} width="418" height="418" />
-							<h3>No hay conductores</h3>
-							<p>
-								{activeFilters.length
-									? 'No se encontraron conductores con los filtros aplicados.'
-									: 'Registra el primer conductor para verlo aquí.'}
-							</p>
-							{#if activeFilters.length}
-								<button onclick={limpiarFiltros} class="btn-secondary">Limpiar filtros</button>
-							{/if}
-						</div>
-					{/snippet}
-				</TablaLista>
-			</div>
-
-			<PaginadorLista
-				pagina={filtros.pagina}
-				total={totalConductores}
-				porPagina={POR_PAGINA}
-				cargando={isLoading}
-				nombreItems="conductores"
-				onCambiar={irPagina}
-			/>
-		</div>
-	{/if}
-
-	<!-- ── Vista Tabla de días laborados con marcación de bonos ── -->
-	{#if vistaTab === 'calendario'}
-		<TablaDiasLaborados
-			refreshKey={tablaRefreshKey}
-			conductorIdInicial={urlConductorId || undefined}
-			{canManageBonos}
+		<SegmentosFiltro
+			etiqueta="Estado"
+			opciones={SEGMENTOS_ESTADO}
+			valor={filtros.estado}
+			onCambiar={(v) => ponerFiltro('estado', v)}
 		/>
-	{/if}
+		<SegmentosFiltro
+			etiqueta="Sede"
+			opciones={SEGMENTOS_SEDE}
+			valor={filtros.sede}
+			onCambiar={(v) => ponerFiltro('sede', v)}
+		/>
+	</div>
+
+	<!-- ── LISTA ───────────────────────────────────────────── -->
+	<div class="dir-lista" in:fly={{ y: 12, duration: 400, delay: 150 }}>
+		<div class="dir-lista-scroll">
+			<TablaLista
+				columnas={COLUMNAS}
+				datos={conductores}
+				claveFila={(c) => c.id}
+				cargando={isLoading}
+				onFila={(c) => goto(`/dashboard/conductores/${c.id}`)}
+				etiqueta="Conductores"
+			>
+				{#snippet celda({ columnaId, fila: c })}
+					{#if columnaId === 'conductor'}
+						<div class="flex items-center">
+							<span class="dir-check">
+								<input
+									type="checkbox"
+									checked={conductoresSeleccionados.has(c.id)}
+									onclick={(e) => {
+										e.stopPropagation();
+										toggleSeleccion(c.id, conductores.indexOf(c), e);
+									}}
+									aria-label="Seleccionar {c.nombre} {c.apellido}"
+								/>
+							</span>
+							<CeldaIdentidad
+								titulo="{c.nombre} {c.apellido}"
+								subtitulo="{c.tipo_identificacion || 'CC'} {c.numero_identificacion}"
+								foto={c.foto_signed_url}
+								punto={getEstadoColor(c.estado)}
+							/>
+						</div>
+					{:else if columnaId === 'sede'}
+						<div class="dir-celda">
+							{#if c.sede_trabajo}<span>{c.sede_trabajo}</span>{:else}<span class="dir-nulo"
+									>Sin sede</span
+								>{/if}
+							<small>{c.cargo || 'Conductor'}</small>
+						</div>
+					{:else if columnaId === 'contacto'}
+						<div class="dir-celda">
+							{#if c.telefono}<span>{c.telefono}</span>{:else}<span class="dir-nulo"
+									>Sin teléfono</span
+								>{/if}
+							{#if c.email}<small>{c.email}</small>{/if}
+						</div>
+					{:else if columnaId === 'estado'}
+						<EstadoPunto
+							etiqueta={getEstadoText(c.estado)}
+							color={getEstadoColor(c.estado)}
+							apagado={['INACTIVO', 'RETIRADO'].includes(c.estado?.toUpperCase())}
+						/>
+					{:else if columnaId === 'acciones'}
+						<AccionesFila
+							acciones={[
+								{
+									id: 'recorridos',
+									etiqueta: 'Ver recorridos / bonos de planilla',
+									icono: Route,
+									onClick: () => irAlCanvasDeRecorridos(c.id)
+								},
+								{
+									id: 'ver',
+									etiqueta: 'Ver detalle',
+									icono: Eye,
+									onClick: () => goto(`/dashboard/conductores/${c.id}`)
+								},
+								{
+									id: 'ocultar',
+									etiqueta: 'Ocultar',
+									icono: EyeOff,
+									onClick: () => accionIndividual(c.id, 'ocultar'),
+									oculta: !puedeEditar || vistaActual !== 'ACTIVOS'
+								},
+								{
+									id: 'mostrar',
+									etiqueta: 'Mostrar',
+									icono: Eye,
+									onClick: () => accionIndividual(c.id, 'mostrar'),
+									oculta: !puedeEditar || vistaActual !== 'OCULTOS'
+								},
+								{
+									id: 'restaurar',
+									etiqueta: 'Restaurar',
+									icono: RotateCcw,
+									onClick: () => accionIndividual(c.id, 'restaurar'),
+									oculta: !puedeEditar || vistaActual !== 'PAPELERA'
+								},
+								{
+									id: 'eliminar',
+									etiqueta: 'Eliminar permanentemente',
+									icono: Trash2,
+									onClick: () => eliminarPermanente(c.id),
+									peligrosa: true,
+									oculta: !puedeEditar || vistaActual !== 'PAPELERA'
+								}
+							]}
+						/>
+					{/if}
+				{/snippet}
+
+				{#snippet vacio()}
+					{@const img = mascota('vacio')}
+					<div class="dir-vacio">
+						<img src={img.src} alt={img.alt} width="418" height="418" />
+						<h3>No hay conductores</h3>
+						<p>
+							{activeFilters.length
+								? 'No se encontraron conductores con los filtros aplicados.'
+								: 'Registra el primer conductor para verlo aquí.'}
+						</p>
+						{#if activeFilters.length}
+							<button onclick={limpiarFiltros} class="btn-secondary">Limpiar filtros</button>
+						{/if}
+					</div>
+				{/snippet}
+			</TablaLista>
+		</div>
+
+		<PaginadorLista
+			pagina={filtros.pagina}
+			total={totalConductores}
+			porPagina={POR_PAGINA}
+			cargando={isLoading}
+			nombreItems="conductores"
+			onCambiar={irPagina}
+		/>
+	</div>
 
 	<!-- Bulk Actions Bar — fondo charcoal profundo (no glass) -->
 	{#if conductoresSeleccionados.size > 0}
