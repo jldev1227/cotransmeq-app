@@ -2,18 +2,16 @@
 	/**
 	 * Canvas de ANÁLISIS de nómina.
 	 *
-	 * Era la tercera pestaña de `/dashboard/nomina`, la más grande de las tres
-	 * en markup y la única que no escribe nada: solo consulta. Al pasar a
-	 * pantalla completa gana justo donde sufría — las gráficas ya no compiten
-	 * por el alto con la cáscara del dashboard.
+	 * Solo consulta: no monta Univer. La cáscara (`UniverShell`, vía el
+	 * `+layout@.svelte`) es el viewport completo más la barra con el «Ir a…»;
+	 * el contenido son filtros, cifras, gráficas de `chart.js` y tablas.
 	 *
-	 * No monta Univer. La cáscara (`UniverShell`, vía el `+layout@.svelte`) es
-	 * solo layout de viewport completo más el toolbar con el «Ir a…»; el
-	 * contenido son gráficas de `chart.js` y tablas.
-	 *
-	 * Sus cuatro sub-pestañas —bonificaciones, recargos, pernotes y
-	 * mantenimientos— se quedan DENTRO del canvas. El «Ir a…» sirve para
-	 * saltar entre módulos, no para navegar dentro de uno.
+	 * Lee `GET /api/nomina/analisis`, que devuelve cada liquidación del canvas
+	 * ya resuelta —periodo, estado, firma, totales del desprendible y detalle
+	 * por vehículo— y los catálogos para filtrar. Los filtros de años, meses,
+	 * placas, conductores y estados viajan al servidor y a la URL; la búsqueda
+	 * libre, «paga cliente», la pestaña, el orden y la página se resuelven en el
+	 * cliente sobre lo que llegó.
 	 */
 	import { onMount, untrack } from 'svelte';
 	import { page } from '$app/state';
@@ -21,17 +19,6 @@
 	import { goto } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
 	import { Bar, Doughnut } from 'svelte-chartjs';
-	import {
-		AlertCircle,
-		BarChart2,
-		ChevronLeft,
-		ChevronRight,
-		Moon,
-		Plus,
-		TrendingUp,
-		Wrench,
-		Zap
-	} from 'lucide-svelte';
 	import {
 		Chart as ChartJS,
 		Title,
@@ -42,174 +29,124 @@
 		LinearScale,
 		ArcElement
 	} from 'chart.js';
-	import { texto, opcion, firma } from '$lib/listing/filtros';
+	import {
+		ArrowUpDown,
+		ChevronLeft,
+		ChevronRight,
+		Download,
+		ExternalLink,
+		RefreshCw,
+		Search,
+		X
+	} from 'lucide-svelte';
+	import { lista, opcion, texto, firma } from '$lib/listing/filtros';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
-	import { obtenerAnalisis } from '$lib/api/nomina';
+	import {
+		nominaCanvasAPI,
+		type AnalisisNominaDTO,
+		type LiquidacionAnalisis
+	} from '$lib/api/nomina-canvas';
+	import { COLOR_HOJA_POR_ESTADO, claseBadgeEstado } from '$lib/editor/builders/nomina-estado';
+	import { mascota } from '$lib/mascot';
 	import UniverToolbar from '$lib/components/univer/UniverToolbar.svelte';
 	import SelectorCanvasNomina from '$lib/components/univer/SelectorCanvasNomina.svelte';
+	import SelectorMultiple from '$lib/components/listing/SelectorMultiple.svelte';
 
 	ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, ArcElement);
-
-	// =============================================
-	// TIPOS ANALISIS
-	// =============================================
-	// =============================================
-	interface VehiculoA {
-		id: string;
-		placa: string;
-	}
-	// values llega como string JSON o array según endpoint
-	interface ValuesItem {
-		mes: string;
-		quantity: number;
-	}
-	interface BonificacionA {
-		vehiculo_id: string;
-		name: string;
-		value: number | string;
-		values?: ValuesItem[] | string;
-	}
-	interface RecargoA {
-		vehiculo_id: string;
-		valor: number | string;
-		pag_cliente: boolean;
-		empresa_id?: string;
-		porcentaje_propietario?: number | string | null;
-		// El endpoint /analisis usa "clientes"; otras rutas pueden usar "empresa"
-		clientes?: { id?: string; nombre: string };
-		empresa?: { id?: string; nombre: string };
-		mes: string;
-	}
-	interface PernoteA {
-		vehiculo_id: string;
-		cantidad: number;
-		valor: number | string;
-		fechas: string[];
-	}
-	interface MantenimientoA {
-		vehiculo_id: string;
-		values: ValuesItem[] | string; // también puede llegar como string
-	}
-	interface LiquidacionA {
-		id: string;
-		periodo_start?: string;
-		periodo_end?: string;
-		// el endpoint devuelve conductor con nombre completo ya concatenado
-		conductor?: { nombre?: string; apellido?: string };
-		vehiculos?: VehiculoA[];
-		bonificaciones?: BonificacionA[];
-		recargos?: RecargoA[];
-		pernotes?: PernoteA[];
-		mantenimientos?: MantenimientoA[];
-	}
-	interface ResBon {
-		placa: string;
-		nombre: string;
-		mes: string;
-		cantidad: number;
-		valorUnitario: number;
-		valorTotal: number;
-		conductor: string;
-	}
-	interface ResRec {
-		placa: string;
-		valor: number;
-		pagaCliente: string;
-		empresa_id: string;
-		empresa_nombre: string;
-		mes: string;
-		conductor: string;
-		tipo_fila?: 'cliente' | 'propietario';
-		porcentaje_propietario?: number;
-	}
-	interface ResPer {
-		placa: string;
-		cantidad: number;
-		valor: number;
-		valorTotal: number;
-		fechas: string[];
-		conductor: string;
-	}
-	interface ResMnt {
-		placa: string;
-		conductor: string;
-		mes: string;
-		cantidad: number;
-	}
 
 	// =============================================
 	// CONSTANTES
 	// =============================================
 	const MESES = [
-		{ valor: '01', nombre: 'Enero' },
-		{ valor: '02', nombre: 'Febrero' },
-		{ valor: '03', nombre: 'Marzo' },
-		{ valor: '04', nombre: 'Abril' },
-		{ valor: '05', nombre: 'Mayo' },
-		{ valor: '06', nombre: 'Junio' },
-		{ valor: '07', nombre: 'Julio' },
-		{ valor: '08', nombre: 'Agosto' },
-		{ valor: '09', nombre: 'Septiembre' },
-		{ valor: '10', nombre: 'Octubre' },
-		{ valor: '11', nombre: 'Noviembre' },
-		{ valor: '12', nombre: 'Diciembre' }
+		'Enero',
+		'Febrero',
+		'Marzo',
+		'Abril',
+		'Mayo',
+		'Junio',
+		'Julio',
+		'Agosto',
+		'Septiembre',
+		'Octubre',
+		'Noviembre',
+		'Diciembre'
 	];
-	const MESES_MAP: Record<string, string> = {
-		Enero: '01',
-		Febrero: '02',
-		Marzo: '03',
-		Abril: '04',
-		Mayo: '05',
-		Junio: '06',
-		Julio: '07',
-		Agosto: '08',
-		Septiembre: '09',
-		Octubre: '10',
-		Noviembre: '11',
-		Diciembre: '12'
+	const MES_CORTO = [
+		'Ene',
+		'Feb',
+		'Mar',
+		'Abr',
+		'May',
+		'Jun',
+		'Jul',
+		'Ago',
+		'Sep',
+		'Oct',
+		'Nov',
+		'Dic'
+	];
+	const ESTADOS = ['BORRADOR', 'LIQUIDADA', 'APROBADA', 'PAGADA', 'FIRMADA', 'ANULADA'];
+	const ETIQUETA_ESTADO: Record<string, string> = {
+		BORRADOR: 'Borrador',
+		LIQUIDADA: 'Liquidada',
+		APROBADA: 'Aprobada',
+		PAGADA: 'Pagada',
+		FIRMADA: 'Firmada',
+		ANULADA: 'Anulada'
 	};
-	const ITEMS_PER_PAGE_A = 10;
+	const POR_PAGINA = 15;
 
-	const ANALISIS_TABS = [
-		{ key: 'bonificaciones', label: 'Bonificaciones', icon: Zap },
-		{ key: 'recargos', label: 'Recargos', icon: TrendingUp },
-		{ key: 'pernotes', label: 'Pernotes', icon: Moon },
-		{ key: 'mantenimientos', label: 'Mantenimientos', icon: Wrench }
+	type Tab = 'resumen' | 'bonificaciones' | 'recargos' | 'pernotes' | 'mantenimientos';
+	const TABS: { key: Tab; label: string }[] = [
+		{ key: 'resumen', label: 'Liquidaciones' },
+		{ key: 'bonificaciones', label: 'Bonificaciones' },
+		{ key: 'recargos', label: 'Recargos' },
+		{ key: 'pernotes', label: 'Pernoctes' },
+		{ key: 'mantenimientos', label: 'Mantenimientos' }
 	];
-
-	type TabAnalisis = 'bonificaciones' | 'recargos' | 'pernotes' | 'mantenimientos';
 
 	// =============================================
 	// FILTROS EN LA URL
 	// =============================================
-	/**
-	 * Los mismos cuatro filtros que tenía la pestaña, con los mismos nombres,
-	 * para que los enlaces ya repartidos sigan valiendo.
-	 *
-	 * `anio` y `mes` son además el eje que trae el «Ir a…» desde los otros
-	 * canvas del módulo: llegan como número y aquí se leen como texto porque
-	 * es lo que esperan los `<select>` de la barra de filtros.
-	 */
 	const DEFS = {
-		placa: texto(),
-		mes: texto(),
-		anio: texto(),
-		analisis: opcion<TabAnalisis>('bonificaciones')
+		anios: lista(),
+		meses: lista(),
+		placas: lista(),
+		conductores: lista(),
+		estados: lista(),
+		pagaCliente: opcion<'todos' | 'si' | 'no'>('todos'),
+		q: texto(),
+		analisis: opcion<Tab>('resumen')
 	};
 	const estadoUrl = crearEstadoUrl(DEFS);
+
 	/**
-	 * El mes se guarda con cero delante ('09'), que es lo que valen las
-	 * opciones del `<select>`. Pero el «Ir a…» de los otros canvas lo manda
-	 * como número —allí `mes` es un `number`—, y un `?mes=9` dejaba el
-	 * desplegable en blanco y el chip del filtro sin valor, como si no hubiera
-	 * filtro puesto cuando sí lo había.
+	 * Compatibilidad con los enlaces antiguos y con el «Ir a…» de los otros
+	 * canvas, que mandan `anio` y `mes` en singular (y `placa`): se vuelcan en
+	 * las listas. `mes=9` y `mes=09` valen igual.
 	 */
-	function normalizarMes(f: ReturnType<typeof estadoUrl.leerInicial>) {
-		if (/^\d$/.test(f.mes)) f.mes = f.mes.padStart(2, '0');
+	function conLegado(f: ReturnType<typeof estadoUrl.leerInicial>) {
+		if (!browser) return f;
+		const p = page.url.searchParams;
+		const anio = p.get('anio');
+		const mes = p.get('mes');
+		const placa = p.get('placa');
+		if (anio && !f.anios.length) f.anios = [anio];
+		if (mes && !f.meses.length) f.meses = [String(Number(mes)).padStart(2, '0')];
+		if (placa && !f.placas.length) f.placas = [placa.toUpperCase()];
+		f.meses = f.meses.map((m) => String(Number(m)).padStart(2, '0'));
+		/// Una vez volcados, los parámetros antiguos se quitan de la barra: si
+		/// se quedaran, al soltar un chip la URL seguiría diciendo `mes=09` y
+		/// recargar lo volvería a poner.
+		if (anio || mes || placa) {
+			const u = new URL(window.location.href);
+			for (const k of ['anio', 'mes', 'placa']) u.searchParams.delete(k);
+			window.history.replaceState(window.history.state, '', u.toString());
+		}
 		return f;
 	}
 
-	let filtros = $state(normalizarMes(estadoUrl.leerInicial()));
+	let filtros = $state(conLegado(estadoUrl.leerInicial()));
 
 	$effect(() => {
 		void firma(DEFS, filtros);
@@ -220,1285 +157,1685 @@
 		);
 	});
 
-	/// El periodo que viaja al siguiente canvas. Si no hay filtro puesto se
-	/// manda el mes en curso, que es lo que el destino habría elegido solo.
-	const anioSalto = $derived(Number(filtros.anio) || new Date().getFullYear());
-	const mesSalto = $derived(Number(filtros.mes) || new Date().getMonth() + 1);
+	/// El periodo que viaja al siguiente canvas: el primer año y mes elegidos,
+	/// o el mes en curso si no hay filtro.
+	const anioSalto = $derived(Number(filtros.anios[0]) || new Date().getFullYear());
+	const mesSalto = $derived(Number(filtros.meses[0]) || new Date().getMonth() + 1);
 
 	// =============================================
 	// DATOS
 	// =============================================
-	let liquidacionesA = $state<LiquidacionA[]>([]);
-	let loadingA = $state(true);
+	let datos = $state<AnalisisNominaDTO | null>(null);
+	let cargando = $state(true);
+	let errorCarga = $state('');
+	let firmaCargada = '';
 
-	/// Desplegable de placas del filtro. `selectedIndex` arranca en 1 porque el
-	/// 0 es la opción «todas».
-	let showDropdown = $state(false);
-	let selectedIndex = $state(1);
+	/// Lo que decide una nueva consulta al servidor. La búsqueda libre, «paga
+	/// cliente», la pestaña y la página no: se resuelven sobre lo que ya llegó.
+	const firmaServidor = $derived(
+		JSON.stringify([
+			filtros.anios,
+			filtros.meses,
+			filtros.placas,
+			filtros.conductores,
+			filtros.estados
+		])
+	);
 
-	let pagesBon = $state(1);
-	let pagesRec = $state(1);
-	let pagesPer = $state(1);
-
-	async function cargarAnalisis() {
+	async function cargar(forzar = false) {
+		const f = firmaServidor;
+		if (!forzar && f === firmaCargada) return;
+		cargando = true;
+		errorCarga = '';
 		try {
-			loadingA = true;
-			const r: any = await obtenerAnalisis();
-			// El endpoint devuelve { data: { liquidaciones: [...] } }
-			// Intentamos varias formas de llegar al array por si el apiClient
-			// ya desenvuelve algún nivel.
-			const raw = r?.data?.liquidaciones ?? r?.liquidaciones ?? r?.data ?? r ?? [];
-			liquidacionesA = (Array.isArray(raw) ? raw : []) as LiquidacionA[];
-		} catch (e) {
-			console.error('Error análisis:', e);
-			toast.error('Error al cargar datos de análisis');
+			const r = await nominaCanvasAPI.analisis({
+				anios: filtros.anios.map(Number).filter(Boolean),
+				meses: filtros.meses.map(Number).filter(Boolean),
+				placas: filtros.placas,
+				conductores: filtros.conductores,
+				estados: filtros.estados
+			});
+			datos = r;
+			firmaCargada = f;
+		} catch (e: any) {
+			errorCarga = e?.response?.data?.error || e?.message || 'No se pudo cargar el análisis.';
+			toast.error(errorCarga);
 		} finally {
-			loadingA = false;
+			cargando = false;
 		}
 	}
 
-	onMount(cargarAnalisis);
+	$effect(() => {
+		void firmaServidor;
+		void cargar();
+	});
 
 	function volver() {
-		goto('/dashboard/nomina/canvas');
-	}
-
-	function formatCurrency(n: number): string {
-		return new Intl.NumberFormat('es-CO', {
-			style: 'currency',
-			currency: 'COP',
-			minimumFractionDigits: 0,
-			maximumFractionDigits: 0
-		}).format(n);
-	}
-	function getPageNumbers(cur: number, total: number): (number | string)[] {
-		const pages: (number | string)[] = [];
-		if (total <= 7) {
-			for (let i = 1; i <= total; i++) pages.push(i);
-		} else {
-			pages.push(1);
-			if (cur > 3) pages.push('...');
-			for (let i = Math.max(2, cur - 1); i <= Math.min(total - 1, cur + 1); i++) pages.push(i);
-			if (cur < total - 2) pages.push('...');
-			pages.push(total);
-		}
-		return pages;
+		goto('/dashboard/nomina');
 	}
 
 	// =============================================
-	// ANÁLISIS — HELPERS
+	// UTILIDADES
 	// =============================================
+	const cop = new Intl.NumberFormat('es-CO', {
+		style: 'currency',
+		currency: 'COP',
+		minimumFractionDigits: 0,
+		maximumFractionDigits: 0
+	});
+	const fmt = (n: number) => cop.format(Math.round(n || 0));
+	const fmtCorto = (v: number) => {
+		const a = Math.abs(v);
+		if (a >= 1_000_000_000) return `$${(v / 1_000_000_000).toFixed(1)} mM`;
+		if (a >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)} M`;
+		if (a >= 1_000) return `$${Math.round(v / 1_000)} k`;
+		return `$${Math.round(v)}`;
+	};
+	const num = new Intl.NumberFormat('es-CO');
 
-	/** values puede llegar como string JSON o ya como array */
-	function parseValues(raw: ValuesItem[] | string | undefined): ValuesItem[] {
-		if (!raw) return [];
-		if (typeof raw === 'string') {
-			try {
-				return JSON.parse(raw) as ValuesItem[];
-			} catch {
-				return [];
-			}
-		}
-		return raw;
+	function normalizar(s: string) {
+		return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 	}
 
-	/**
-	 * Normaliza el campo mes a número de 2 dígitos ("01".."12").
-	 * Acepta: "Enero", "2026-01", "01"
-	 */
-	function normalizeMes(mes: string): string {
-		if (!mes) return '';
-		// Formato YYYY-MM
-		if (/^\d{4}-\d{2}$/.test(mes)) return mes.split('-')[1];
-		// Nombre de mes
-		return MESES_MAP[mes] || mes;
+	/** «Septiembre», «Sep», «09», «9» → «09». */
+	function mesClave(m: string): string {
+		const t = normalizar(String(m ?? '').trim());
+		if (/^\d{1,2}$/.test(t)) return t.padStart(2, '0');
+		const i = MESES.findIndex(
+			(n) => normalizar(n) === t || normalizar(n).startsWith(t.slice(0, 3))
+		);
+		return i >= 0 ? String(i + 1).padStart(2, '0') : t;
 	}
+	const mesNombre = (clave: string) => MESES[Number(clave) - 1] ?? clave;
+	const periodoCorto = (l: LiquidacionAnalisis) => `${MES_CORTO[l.mes - 1] ?? l.mes} ${l.anio}`;
+	const periodoLargo = (l: LiquidacionAnalisis) => {
+		const ini = l.periodo_start.slice(8, 10);
+		const fin = l.periodo_end.slice(8, 10);
+		const mIni = Number(l.periodo_start.slice(5, 7));
+		return `${ini} ${MES_CORTO[mIni - 1] ?? ''} – ${fin} ${MES_CORTO[l.mes - 1] ?? ''} ${l.anio}`;
+	};
 
-	/** El endpoint devuelve conductor.nombre ya con apellido concatenado */
-	function getConductorA(liq: LiquidacionA): string {
-		return liq.conductor?.nombre?.trim() || 'Sin nombre';
-	}
-
-	/** Nombre de empresa: clientes.nombre o empresa.nombre */
-	function getEmpresaNombre(rec: RecargoA): string {
-		return rec.clientes?.nombre || rec.empresa?.nombre || '—';
-	}
-
-	function agruparFechas(fechas: string[]): string[] {
-		if (!fechas?.length) return [];
+	function fechasAgrupadas(fechas: string[]): string {
+		if (!fechas?.length) return '—';
 		const sorted = [...fechas].sort();
 		const grupos: string[] = [];
-		let ini = sorted[0],
-			ant = sorted[0];
+		let ini = sorted[0];
+		let ant = sorted[0];
 		for (let i = 1; i < sorted.length; i++) {
-			const diff = Math.round((new Date(sorted[i]).getTime() - new Date(ant).getTime()) / 86400000);
-			if (diff === 1) {
-				ant = sorted[i];
-			} else {
-				grupos.push(ini === ant ? ini : `${ini} al ${ant}`);
+			const diff = Math.round(
+				(new Date(sorted[i]).getTime() - new Date(ant).getTime()) / 86_400_000
+			);
+			if (diff === 1) ant = sorted[i];
+			else {
+				grupos.push(ini === ant ? ini.slice(5) : `${ini.slice(5)} al ${ant.slice(5)}`);
 				ini = sorted[i];
 				ant = sorted[i];
 			}
 		}
-		grupos.push(ini === ant ? ini : `${ini} al ${ant}`);
-		return grupos;
+		grupos.push(ini === ant ? ini.slice(5) : `${ini.slice(5)} al ${ant.slice(5)}`);
+		return grupos.join(', ');
 	}
 
 	// =============================================
-	// ANÁLISIS — DATOS DERIVADOS
+	// FILTRADO EN CLIENTE
 	// =============================================
-	const anosA = $derived.by(() => {
-		const s = new Set<string>();
-		liquidacionesA.forEach((l) => {
-			if (l.periodo_start) s.add(new Date(l.periodo_start).getFullYear().toString());
-		});
-		return Array.from(s).sort((a, b) => +b - +a);
-	});
-
-	const placasA = $derived.by(() => {
-		const s = new Set<string>();
-		liquidacionesA.forEach((l) =>
-			l.vehiculos?.forEach((v) => {
-				if (v.placa) s.add(v.placa);
-			})
+	const liqs = $derived.by(() => {
+		const todas = datos?.liquidaciones ?? [];
+		const q = normalizar(filtros.q.trim());
+		if (!q) return todas;
+		return todas.filter(
+			(l) =>
+				normalizar(l.conductor.nombre).includes(q) ||
+				(l.conductor.cedula ?? '').includes(q) ||
+				l.vehiculos.some((v) => normalizar(v.placa).includes(q))
 		);
-		return Array.from(s).sort();
 	});
 
-	const placasFiltradas = $derived(
-		placasA.filter((p) => p.toLowerCase().includes(filtros.placa.toLowerCase()))
-	);
+	const placaPasa = (placa: string | null) =>
+		!filtros.placas.length || (!!placa && filtros.placas.includes(placa));
+	const mesPasa = (clave: string) => !filtros.meses.length || filtros.meses.includes(clave);
 
-	const liqFiltradas = $derived(
-		liquidacionesA.filter((l) => {
-			if (!l.periodo_start) return false;
-			if (filtros.anio && new Date(l.periodo_start).getFullYear().toString() !== filtros.anio)
-				return false;
-			if (filtros.placa && !l.vehiculos?.some((v) => v.placa === filtros.placa)) return false;
-			return true;
-		})
-	);
-
-	const datosBon = $derived.by(() => {
-		const res: ResBon[] = [];
-		liqFiltradas.forEach((liq) => {
-			liq.bonificaciones?.forEach((bon) => {
-				if (!bon.vehiculo_id) return;
-				const v = liq.vehiculos?.find((x) => x.id === bon.vehiculo_id);
-				if (!v || (filtros.placa && v.placa !== filtros.placa)) return;
-				const vals = parseValues(bon.values);
-				vals.forEach((item) => {
-					const mesNorm = normalizeMes(item.mes);
-					if (filtros.mes && mesNorm !== filtros.mes) return;
-					if (item.quantity <= 0) return;
-					const vu = Number(bon.value);
-					// Mostrar el mes en formato legible
-					const mesLabel = MESES.find((m) => m.valor === mesNorm)?.nombre || item.mes;
-					res.push({
-						placa: v.placa,
-						nombre: bon.name,
-						mes: mesLabel,
-						cantidad: item.quantity,
-						valorUnitario: vu,
-						valorTotal: vu * item.quantity,
-						conductor: getConductorA(liq)
-					});
-				});
-			});
-		});
-		const map = new Map<string, ResBon>();
-		res.forEach((item) => {
-			const k = `${item.placa}|${item.nombre}|${item.valorUnitario}|${item.conductor}`;
-			const e = map.get(k);
-			if (e) {
-				e.cantidad += item.cantidad;
-				e.valorTotal += item.valorTotal;
-			} else map.set(k, { ...item });
-		});
-		return Array.from(map.values());
-	});
-
-	const datosRec = $derived.by(() => {
-		const res: ResRec[] = [];
-		liqFiltradas.forEach((liq) => {
-			liq.recargos?.forEach((rec) => {
-				if (!rec.vehiculo_id) return;
-				const v = liq.vehiculos?.find((x) => x.id === rec.vehiculo_id);
-				if (!v || (filtros.placa && v.placa !== filtros.placa)) return;
-				const mesNorm = normalizeMes(rec.mes);
-				if (filtros.mes && mesNorm !== filtros.mes) return;
-				const mesLabel = MESES.find((m) => m.valor === mesNorm)?.nombre || rec.mes;
-				const valorTotal = Number(rec.valor);
-				const pctProp = Number(rec.porcentaje_propietario || 0);
-
-				if (pctProp > 0) {
-					// Split: fila del cliente (valor - porcentaje) y fila del propietario (porcentaje)
-					const valorPropietario = Math.round((valorTotal * pctProp) / 100);
-					const valorCliente = valorTotal - valorPropietario;
-					res.push({
-						placa: v.placa,
-						valor: valorCliente,
-						pagaCliente: rec.pag_cliente ? 'Sí' : 'No',
-						empresa_id: rec.empresa_id ?? '',
-						empresa_nombre: getEmpresaNombre(rec),
-						mes: mesLabel,
-						conductor: getConductorA(liq),
-						tipo_fila: 'cliente',
-						porcentaje_propietario: pctProp
-					});
-					res.push({
-						placa: v.placa,
-						valor: valorPropietario,
-						pagaCliente: rec.pag_cliente ? 'Sí' : 'No',
-						empresa_id: rec.empresa_id ?? '',
-						empresa_nombre: getEmpresaNombre(rec),
-						mes: mesLabel,
-						conductor: getConductorA(liq),
-						tipo_fila: 'propietario',
-						porcentaje_propietario: pctProp
-					});
-				} else {
-					res.push({
-						placa: v.placa,
-						valor: valorTotal,
-						pagaCliente: rec.pag_cliente ? 'Sí' : 'No',
-						empresa_id: rec.empresa_id ?? '',
-						empresa_nombre: getEmpresaNombre(rec),
-						mes: mesLabel,
-						conductor: getConductorA(liq)
-					});
-				}
-			});
-		});
-		return res;
-	});
-
-	const datosPer = $derived.by(() => {
-		const res: ResPer[] = [];
-		liqFiltradas.forEach((liq) => {
-			liq.pernotes?.forEach((per) => {
-				if (!per.vehiculo_id) return;
-				const v = liq.vehiculos?.find((x) => x.id === per.vehiculo_id);
-				if (!v || (filtros.placa && v.placa !== filtros.placa)) return;
-				if (
-					filtros.mes &&
-					per.fechas?.length &&
-					!per.fechas.some((f) => f?.split('-')[1] === filtros.mes)
-				)
-					return;
-				res.push({
-					placa: v.placa,
-					cantidad: per.cantidad,
-					valor: Number(per.valor),
-					valorTotal: Number(per.valor) * per.cantidad,
-					fechas: per.fechas,
-					conductor: getConductorA(liq)
-				});
-			});
-		});
-		return res;
-	});
-
-	const datosMnt = $derived.by(() => {
-		const map = new Map<string, ResMnt>();
-		liqFiltradas.forEach((liq) => {
-			const conductor = getConductorA(liq);
-			liq.mantenimientos?.forEach((mnt) => {
-				const v = liq.vehiculos?.find((x) => x.id === mnt.vehiculo_id);
-				if (!v || (filtros.placa && v.placa !== filtros.placa)) return;
-				const vals = parseValues(mnt.values as ValuesItem[] | string);
-				vals.forEach((val) => {
-					const cantidad = Number(val.quantity) || 0;
-					if (cantidad === 0) return;
-					const mesNorm = normalizeMes(val.mes);
-					if (filtros.mes && mesNorm !== filtros.mes) return;
-					const mesLabel = MESES.find((m) => m.valor === mesNorm)?.nombre || val.mes;
-					const k = `${v.placa}|${conductor}|${mesLabel}`;
-					const e = map.get(k);
-					if (e) e.cantidad += cantidad;
-					else map.set(k, { placa: v.placa, conductor, mes: mesLabel, cantidad });
-				});
-			});
-		});
-		return Array.from(map.values()).filter((r) => r.cantidad > 0);
-	});
-
-	// Agrupados para gráficas
-	const bonPorPlaca = $derived.by(() => {
-		const m: Record<string, number> = {};
-		datosBon.forEach((i) => {
-			m[i.placa] = (m[i.placa] || 0) + i.valorTotal;
-		});
-		return Object.entries(m).map(([placa, total]) => ({ placa, total }));
-	});
-	const recPorPlaca = $derived.by(() => {
-		const m: Record<string, number> = {};
-		datosRec.forEach((i) => {
-			m[i.placa] = (m[i.placa] || 0) + i.valor;
-		});
-		return Object.entries(m).map(([placa, total]) => ({ placa, total }));
-	});
-	const perPorPlaca = $derived.by(() => {
-		const m: Record<string, number> = {};
-		datosPer.forEach((i) => {
-			m[i.placa] = (m[i.placa] || 0) + i.valorTotal;
-		});
-		return Object.entries(m).map(([placa, total]) => ({ placa, total }));
-	});
-
-	const recPie = $derived.by(() => {
-		let s = 0,
-			n = 0;
-		datosRec.forEach((i) => {
-			i.pagaCliente === 'Sí' ? (s += i.valor) : (n += i.valor);
-		});
-		return [
-			{ name: 'Paga cliente', value: s },
-			{ name: 'No paga cliente', value: n }
-		];
-	});
-
-	function handleKeydown(e: KeyboardEvent) {
-		if (!showDropdown) return;
-
-		if (e.key === 'ArrowDown') {
-			e.preventDefault();
-			selectedIndex = (selectedIndex + 1) % (placasFiltradas.length + 1);
-		}
-
-		if (e.key === 'ArrowUp') {
-			e.preventDefault();
-			selectedIndex =
-				(selectedIndex - 1 + (placasFiltradas.length + 1)) % (placasFiltradas.length + 1);
-		}
-
-		if (e.key === 'Enter') {
-			e.preventDefault();
-
-			if (selectedIndex === 0) {
-				filtros.placa = '';
-			} else {
-				filtros.placa = placasFiltradas[selectedIndex - 1];
-			}
-
-			showDropdown = false;
-		}
+	// ── Bonificaciones ──
+	interface FilaBon {
+		placa: string;
+		conductor: string;
+		nombre: string;
+		mes: string;
+		mesClave: string;
+		anio: number;
+		cantidad: number;
+		valorUnitario: number;
+		total: number;
 	}
+	const filasBon = $derived.by(() => {
+		const mapa = new Map<string, FilaBon>();
+		for (const l of liqs) {
+			for (const b of l.bonificaciones) {
+				if (!placaPasa(b.placa)) continue;
+				for (const v of b.valores) {
+					const mk = mesClave(v.mes);
+					if (!mesPasa(mk) || v.cantidad <= 0) continue;
+					const k = `${b.placa}|${b.nombre}|${b.valor_unitario}|${l.conductor.nombre}|${l.anio}|${mk}`;
+					const e = mapa.get(k);
+					if (e) {
+						e.cantidad += v.cantidad;
+						e.total += v.cantidad * b.valor_unitario;
+					} else {
+						mapa.set(k, {
+							placa: b.placa ?? '—',
+							conductor: l.conductor.nombre,
+							nombre: b.nombre,
+							mes: mesNombre(mk),
+							mesClave: mk,
+							anio: l.anio,
+							cantidad: v.cantidad,
+							valorUnitario: b.valor_unitario,
+							total: v.cantidad * b.valor_unitario
+						});
+					}
+				}
+			}
+		}
+		return Array.from(mapa.values());
+	});
 
-	const BAR_OPTS = (_label: string, _color: string) => ({
+	// ── Recargos ──
+	interface FilaRec {
+		placa: string;
+		conductor: string;
+		cliente: string;
+		mes: string;
+		mesClave: string;
+		anio: number;
+		valor: number;
+		pagaCliente: boolean;
+		parte: 'cliente' | 'propietario' | null;
+		porcentaje: number;
+	}
+	const filasRec = $derived.by(() => {
+		const res: FilaRec[] = [];
+		for (const l of liqs) {
+			for (const r of l.recargos) {
+				if (!placaPasa(r.placa)) continue;
+				const mk = mesClave(r.mes);
+				if (!mesPasa(mk)) continue;
+				if (filtros.pagaCliente === 'si' && !r.paga_cliente) continue;
+				if (filtros.pagaCliente === 'no' && r.paga_cliente) continue;
+				const base = {
+					placa: r.placa ?? '—',
+					conductor: l.conductor.nombre,
+					cliente: r.cliente || '—',
+					mes: mesNombre(mk),
+					mesClave: mk,
+					anio: l.anio,
+					pagaCliente: r.paga_cliente,
+					porcentaje: r.porcentaje_propietario
+				};
+				if (r.porcentaje_propietario > 0) {
+					const prop = Math.round((r.valor * r.porcentaje_propietario) / 100);
+					res.push({ ...base, valor: r.valor - prop, parte: 'cliente' });
+					res.push({ ...base, valor: prop, parte: 'propietario' });
+				} else {
+					res.push({ ...base, valor: r.valor, parte: null });
+				}
+			}
+		}
+		return res;
+	});
+
+	// ── Pernoctes ──
+	interface FilaPer {
+		placa: string;
+		conductor: string;
+		cliente: string;
+		anio: number;
+		cantidad: number;
+		valorUnitario: number;
+		total: number;
+		fechas: string;
+	}
+	const filasPer = $derived.by(() => {
+		const res: FilaPer[] = [];
+		for (const l of liqs) {
+			for (const p of l.pernotes) {
+				if (!placaPasa(p.placa)) continue;
+				if (
+					filtros.meses.length &&
+					p.fechas.length &&
+					!p.fechas.some((f) => filtros.meses.includes(f.slice(5, 7)))
+				)
+					continue;
+				res.push({
+					placa: p.placa ?? '—',
+					conductor: l.conductor.nombre,
+					cliente: p.cliente || '—',
+					anio: l.anio,
+					cantidad: p.cantidad,
+					valorUnitario: p.valor_unitario,
+					total: p.cantidad * p.valor_unitario,
+					fechas: fechasAgrupadas(p.fechas)
+				});
+			}
+		}
+		return res;
+	});
+
+	// ── Mantenimientos ──
+	interface FilaMnt {
+		placa: string;
+		conductor: string;
+		mes: string;
+		mesClave: string;
+		anio: number;
+		cantidad: number;
+	}
+	const filasMnt = $derived.by(() => {
+		const mapa = new Map<string, FilaMnt>();
+		for (const l of liqs) {
+			for (const m of l.mantenimientos) {
+				if (!placaPasa(m.placa)) continue;
+				for (const v of m.valores) {
+					const mk = mesClave(v.mes);
+					if (!mesPasa(mk) || v.cantidad <= 0) continue;
+					const k = `${m.placa}|${l.conductor.nombre}|${l.anio}|${mk}`;
+					const e = mapa.get(k);
+					if (e) e.cantidad += v.cantidad;
+					else
+						mapa.set(k, {
+							placa: m.placa ?? '—',
+							conductor: l.conductor.nombre,
+							mes: mesNombre(mk),
+							mesClave: mk,
+							anio: l.anio,
+							cantidad: v.cantidad
+						});
+				}
+			}
+		}
+		return Array.from(mapa.values());
+	});
+
+	// =============================================
+	// CIFRAS Y GRÁFICAS
+	// =============================================
+	const totales = $derived.by(() => {
+		const t = {
+			liquidaciones: liqs.length,
+			conductores: new Set(liqs.map((l) => l.conductor.id ?? l.conductor.nombre)).size,
+			placas: new Set(liqs.flatMap((l) => l.vehiculos.map((v) => v.placa))).size,
+			devengado: 0,
+			neto: 0,
+			bonificaciones: 0,
+			recargos: 0,
+			pernotes: 0,
+			deducciones: 0,
+			dias: 0,
+			firmadas: 0,
+			mantenimientos: filasMnt.reduce((s, f) => s + f.cantidad, 0),
+			bonFilas: filasBon.reduce((s, f) => s + f.total, 0),
+			recFilas: filasRec.reduce((s, f) => s + f.valor, 0),
+			perFilas: filasPer.reduce((s, f) => s + f.total, 0)
+		};
+		for (const l of liqs) {
+			t.devengado += l.salario_devengado;
+			t.neto += l.sueldo_total;
+			t.bonificaciones += l.total_bonificaciones;
+			t.recargos += l.total_recargos;
+			t.pernotes += l.total_pernotes;
+			t.deducciones += l.salud + l.pension + l.total_anticipos;
+			t.dias += l.dias_laborados;
+			if (l.estado_flujo === 'FIRMADA') t.firmadas++;
+		}
+		return t;
+	});
+
+	const porEstado = $derived.by(() => {
+		const m = new Map<string, number>();
+		for (const l of liqs) m.set(l.estado_flujo, (m.get(l.estado_flujo) ?? 0) + 1);
+		return ESTADOS.filter((e) => m.has(e)).map((e) => ({ estado: e, n: m.get(e) ?? 0 }));
+	});
+
+	/// Serie mensual sobre las liquidaciones: lo que el desprendible imprime,
+	/// que es lo que se pagó, no lo que las pestañas de detalle reparten.
+	const porMes = $derived.by(() => {
+		const m = new Map<string, { bon: number; rec: number; per: number; neto: number }>();
+		for (const l of liqs) {
+			const k = `${l.anio}-${String(l.mes).padStart(2, '0')}`;
+			const e = m.get(k) ?? { bon: 0, rec: 0, per: 0, neto: 0 };
+			e.bon += l.total_bonificaciones;
+			e.rec += l.total_recargos;
+			e.per += l.total_pernotes;
+			e.neto += l.sueldo_total;
+			m.set(k, e);
+		}
+		return Array.from(m.entries())
+			.sort(([a], [b]) => a.localeCompare(b))
+			.map(([k, v]) => ({
+				clave: k,
+				etiqueta: `${MES_CORTO[Number(k.slice(5, 7)) - 1]} ${k.slice(2, 4)}`,
+				...v
+			}));
+	});
+
+	const porPlaca = $derived.by(() => {
+		const m = new Map<string, number>();
+		for (const f of filasBon) m.set(f.placa, (m.get(f.placa) ?? 0) + f.total);
+		for (const f of filasRec) m.set(f.placa, (m.get(f.placa) ?? 0) + f.valor);
+		for (const f of filasPer) m.set(f.placa, (m.get(f.placa) ?? 0) + f.total);
+		return Array.from(m.entries())
+			.filter(([p]) => p !== '—')
+			.sort(([, a], [, b]) => b - a)
+			.slice(0, 14)
+			.map(([placa, total]) => ({ placa, total }));
+	});
+
+	const pagaCliente = $derived.by(() => {
+		let si = 0;
+		let no = 0;
+		for (const f of filasRec) f.pagaCliente ? (si += f.valor) : (no += f.valor);
+		return { si, no };
+	});
+
+	/// Colores de marca leídos del CSS: la gráfica sigue a la empresa sin
+	/// repetir hexadecimales en dos repositorios.
+	let colores = $state({
+		primario: '#079665',
+		oscuro: '#014339',
+		ambar: '#f59e0b',
+		azul: '#0ea5e9'
+	});
+	onMount(() => {
+		const css = getComputedStyle(document.documentElement);
+		const leer = (v: string, def: string) => css.getPropertyValue(v).trim() || def;
+		colores = {
+			primario: leer('--au-primary', colores.primario),
+			oscuro: leer('--au-dark', colores.oscuro),
+			ambar: '#f59e0b',
+			azul: '#0ea5e9'
+		};
+	});
+
+	const opcionesBarra = (apilada: boolean, moneda = true) => ({
 		responsive: true,
 		maintainAspectRatio: false,
 		plugins: {
-			legend: { display: false },
+			legend: apilada
+				? { position: 'bottom' as const, labels: { font: { size: 11 }, boxWidth: 12, padding: 14 } }
+				: { display: false },
 			tooltip: {
 				callbacks: {
-					label: (ctx: any) => {
-						const v = ctx.parsed.y;
-						return (
-							' ' +
-							new Intl.NumberFormat('es-CO', {
-								style: 'currency',
-								currency: 'COP',
-								minimumFractionDigits: 0
-							}).format(v)
-						);
-					}
+					label: (ctx: any) =>
+						` ${ctx.dataset.label ?? ''}: ${moneda ? fmt(ctx.parsed.y) : num.format(ctx.parsed.y)}`
 				}
 			}
 		},
 		scales: {
-			x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+			x: { stacked: apilada, grid: { display: false }, ticks: { font: { size: 11 } } },
 			y: {
-				grid: { color: '#f3f4f6' },
+				stacked: apilada,
+				grid: { color: 'rgba(0,0,0,0.05)' },
 				border: { dash: [4, 4] },
-				ticks: {
-					font: { size: 10 },
-					callback: (v: any) => {
-						if (v >= 1000000) return '$' + (v / 1000000).toFixed(1) + 'M';
-						if (v >= 1000) return '$' + (v / 1000).toFixed(0) + 'k';
-						return '$' + v;
-					}
-				}
+				ticks: { font: { size: 10 }, callback: (v: any) => (moneda ? fmtCorto(Number(v)) : v) }
 			}
 		}
 	});
-
-	const DONUT_OPTS = {
+	const opcionesDona = {
 		responsive: true,
 		maintainAspectRatio: false,
 		plugins: {
-			legend: { position: 'bottom' as const, labels: { font: { size: 11 }, padding: 12 } },
-			tooltip: {
-				callbacks: {
-					label: (ctx: any) =>
-						' ' +
-						new Intl.NumberFormat('es-CO', {
-							style: 'currency',
-							currency: 'COP',
-							minimumFractionDigits: 0
-						}).format(ctx.parsed)
-				}
-			}
+			legend: {
+				position: 'bottom' as const,
+				labels: { font: { size: 11 }, boxWidth: 12, padding: 12 }
+			},
+			tooltip: { callbacks: { label: (ctx: any) => ` ${ctx.label}: ${fmt(ctx.parsed)}` } }
 		},
-		cutout: '60%'
+		cutout: '62%'
+	};
+	const opcionesDonaConteo = {
+		...opcionesDona,
+		plugins: {
+			...opcionesDona.plugins,
+			tooltip: { callbacks: { label: (ctx: any) => ` ${ctx.label}: ${ctx.parsed}` } }
+		}
 	};
 
-	const bonChartData = $derived({
-		labels: bonPorPlaca.map((d) => d.placa),
+	const datosMes = $derived({
+		labels: porMes.map((m) => m.etiqueta),
 		datasets: [
 			{
 				label: 'Bonificaciones',
-				data: bonPorPlaca.map((d) => d.total),
-				backgroundColor: '#15803dcc',
-				borderColor: '#15803d',
-				borderWidth: 1,
+				data: porMes.map((m) => m.bon),
+				backgroundColor: colores.primario,
 				borderRadius: 4
-			}
-		]
-	});
-	const recChartData = $derived({
-		labels: recPorPlaca.map((d) => d.placa),
-		datasets: [
+			},
 			{
 				label: 'Recargos',
-				data: recPorPlaca.map((d) => d.total),
-				backgroundColor: '#ea580ccc',
-				borderColor: '#ea580c',
-				borderWidth: 1,
+				data: porMes.map((m) => m.rec),
+				backgroundColor: colores.ambar,
+				borderRadius: 4
+			},
+			{
+				label: 'Pernoctes',
+				data: porMes.map((m) => m.per),
+				backgroundColor: colores.azul,
 				borderRadius: 4
 			}
 		]
 	});
-	const perChartData = $derived({
-		labels: perPorPlaca.map((d) => d.placa),
+	const datosPlaca = $derived({
+		labels: porPlaca.map((p) => p.placa),
 		datasets: [
 			{
-				label: 'Pernotes',
-				data: perPorPlaca.map((d) => d.total),
-				backgroundColor: '#eab308cc',
-				borderColor: '#eab308',
-				borderWidth: 1,
+				label: 'Total',
+				data: porPlaca.map((p) => p.total),
+				backgroundColor: colores.oscuro,
 				borderRadius: 4
 			}
 		]
 	});
-	const pieChartData = $derived({
-		labels: recPie.map((d) => d.name),
+	const datosEstados = $derived({
+		labels: porEstado.map((e) => ETIQUETA_ESTADO[e.estado] ?? e.estado),
 		datasets: [
 			{
-				data: recPie.map((d) => d.value),
-				backgroundColor: ['#15803dcc', '#ea580ccc'],
-				borderColor: ['#15803d', '#ea580c'],
-				borderWidth: 1
+				data: porEstado.map((e) => e.n),
+				backgroundColor: porEstado.map((e) => COLOR_HOJA_POR_ESTADO[e.estado] ?? '#94a3b8'),
+				borderWidth: 0
+			}
+		]
+	});
+	const datosPaga = $derived({
+		labels: ['Paga el cliente', 'Asume la empresa'],
+		datasets: [
+			{
+				data: [pagaCliente.si, pagaCliente.no],
+				backgroundColor: [colores.primario, colores.ambar],
+				borderWidth: 0
 			}
 		]
 	});
 
-	// Totales
-	const totalBon = $derived(datosBon.reduce((s, i) => s + i.valorTotal, 0));
-	const totalRec = $derived(datosRec.reduce((s, i) => s + i.valor, 0));
-	const totalPer = $derived(datosPer.reduce((s, i) => s + i.valorTotal, 0));
-	const totalMnt = $derived(datosMnt.reduce((s, i) => s + i.cantidad, 0));
+	// =============================================
+	// TABLA: ORDEN, PÁGINA Y EXPORTACIÓN
+	// =============================================
+	let orden = $state<{ col: string; dir: 1 | -1 }>({ col: '', dir: 1 });
+	let pagina = $state(1);
 
-	// Paginación análisis
-	const bonPaginado = $derived(
-		datosBon.slice((pagesBon - 1) * ITEMS_PER_PAGE_A, pagesBon * ITEMS_PER_PAGE_A)
-	);
-	const recPaginado = $derived(
-		datosRec.slice((pagesRec - 1) * ITEMS_PER_PAGE_A, pagesRec * ITEMS_PER_PAGE_A)
-	);
-	const perPaginado = $derived(
-		datosPer.slice((pagesPer - 1) * ITEMS_PER_PAGE_A, pagesPer * ITEMS_PER_PAGE_A)
-	);
-	const totalPagesBon = $derived(Math.max(1, Math.ceil(datosBon.length / ITEMS_PER_PAGE_A)));
-	const totalPagesRec = $derived(Math.max(1, Math.ceil(datosRec.length / ITEMS_PER_PAGE_A)));
-	const totalPagesPer = $derived(Math.max(1, Math.ceil(datosPer.length / ITEMS_PER_PAGE_A)));
+	function ordenarPor(col: string) {
+		orden = orden.col === col ? { col, dir: orden.dir === 1 ? -1 : 1 } : { col, dir: 1 };
+	}
 
-	// Resetear página al cambiar filtros
-	$effect(() => {
-		if (filtros.placa || filtros.mes || filtros.anio || filtros.analisis) {
-			pagesBon = 1;
-			pagesRec = 1;
-			pagesPer = 1;
+	function ordenar<T extends Record<string, any>>(filas: T[]): T[] {
+		if (!orden.col) return filas;
+		const { col, dir } = orden;
+		return [...filas].sort((a, b) => {
+			const x = a[col];
+			const y = b[col];
+			if (typeof x === 'number' && typeof y === 'number') return (x - y) * dir;
+			return String(x ?? '').localeCompare(String(y ?? ''), 'es') * dir;
+		});
+	}
+
+	const filasActivas = $derived.by<Record<string, any>[]>(() => {
+		switch (filtros.analisis) {
+			case 'bonificaciones':
+				return ordenar(filasBon);
+			case 'recargos':
+				return ordenar(filasRec);
+			case 'pernotes':
+				return ordenar(filasPer);
+			case 'mantenimientos':
+				return ordenar(filasMnt);
+			default:
+				return ordenar(liqs as unknown as Record<string, any>[]);
 		}
 	});
+	const totalPaginas = $derived(Math.max(1, Math.ceil(filasActivas.length / POR_PAGINA)));
+	const filasPagina = $derived(filasActivas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA));
 
-	function limpiarFiltros() {
-		filtros.placa = '';
-		filtros.mes = '';
-		filtros.anio = '';
+	$effect(() => {
+		void filtros.analisis;
+		void filtros.q;
+		void filtros.pagaCliente;
+		void firmaServidor;
+		pagina = 1;
+	});
+	$effect(() => {
+		void filtros.analisis;
+		orden = { col: '', dir: 1 };
+	});
+
+	interface Columna {
+		key: string;
+		label: string;
+		num?: boolean;
+		fmt?: (v: any, fila: any) => string;
 	}
-	const hayFiltros = $derived(!!(filtros.placa || filtros.mes || filtros.anio));
+	const COLUMNAS: Record<Tab, Columna[]> = {
+		resumen: [
+			{ key: 'conductor', label: 'Conductor', fmt: (_v, f) => f.conductor.nombre },
+			{ key: 'periodo_end', label: 'Periodo', fmt: (_v, f) => periodoLargo(f) },
+			{
+				key: 'vehiculos',
+				label: 'Placas',
+				fmt: (v) => v.map((x: any) => x.placa).join(', ') || '—'
+			},
+			{ key: 'estado_flujo', label: 'Estado', fmt: (v) => ETIQUETA_ESTADO[v] ?? v },
+			{ key: 'dias_laborados', label: 'Días', num: true, fmt: (v) => num.format(v) },
+			{ key: 'salario_devengado', label: 'Devengado', num: true, fmt: fmt },
+			{ key: 'total_bonificaciones', label: 'Bonos', num: true, fmt: fmt },
+			{ key: 'total_recargos', label: 'Recargos', num: true, fmt: fmt },
+			{ key: 'total_pernotes', label: 'Pernoctes', num: true, fmt: fmt },
+			{
+				key: 'salud',
+				label: 'Deducciones',
+				num: true,
+				fmt: (_v, f) => fmt(f.salud + f.pension + f.total_anticipos)
+			},
+			{ key: 'sueldo_total', label: 'Neto', num: true, fmt: fmt }
+		],
+		bonificaciones: [
+			{ key: 'placa', label: 'Placa' },
+			{ key: 'conductor', label: 'Conductor' },
+			{ key: 'nombre', label: 'Bonificación' },
+			{ key: 'mesClave', label: 'Mes', fmt: (_v, f) => `${f.mes} ${f.anio}` },
+			{ key: 'cantidad', label: 'Cantidad', num: true, fmt: (v) => num.format(v) },
+			{ key: 'valorUnitario', label: 'V. unitario', num: true, fmt: fmt },
+			{ key: 'total', label: 'Total', num: true, fmt: fmt }
+		],
+		recargos: [
+			{ key: 'placa', label: 'Placa' },
+			{ key: 'conductor', label: 'Conductor' },
+			{ key: 'cliente', label: 'Cliente' },
+			{ key: 'mesClave', label: 'Mes', fmt: (_v, f) => `${f.mes} ${f.anio}` },
+			{ key: 'pagaCliente', label: 'Paga cliente', fmt: (v) => (v ? 'Sí' : 'No') },
+			{
+				key: 'parte',
+				label: 'Asume',
+				fmt: (v, f) =>
+					v === 'propietario'
+						? `Propietario ${f.porcentaje}%`
+						: v === 'cliente'
+							? `Cliente ${100 - f.porcentaje}%`
+							: '—'
+			},
+			{ key: 'valor', label: 'Valor', num: true, fmt: fmt }
+		],
+		pernotes: [
+			{ key: 'placa', label: 'Placa' },
+			{ key: 'conductor', label: 'Conductor' },
+			{ key: 'cliente', label: 'Cliente' },
+			{ key: 'fechas', label: 'Fechas' },
+			{ key: 'cantidad', label: 'Cantidad', num: true, fmt: (v) => num.format(v) },
+			{ key: 'valorUnitario', label: 'V. unitario', num: true, fmt: fmt },
+			{ key: 'total', label: 'Total', num: true, fmt: fmt }
+		],
+		mantenimientos: [
+			{ key: 'placa', label: 'Placa' },
+			{ key: 'conductor', label: 'Conductor' },
+			{ key: 'mesClave', label: 'Mes', fmt: (_v, f) => `${f.mes} ${f.anio}` },
+			{ key: 'cantidad', label: 'Mantenimientos', num: true, fmt: (v) => num.format(v) }
+		]
+	};
+	const columnas = $derived(COLUMNAS[filtros.analisis]);
+	const celda = (c: Columna, f: any) => (c.fmt ? c.fmt(f[c.key], f) : String(f[c.key] ?? ''));
+
+	function exportarCsv() {
+		const cols = columnas;
+		const lineas = [cols.map((c) => `"${c.label}"`).join(';')];
+		for (const f of filasActivas) {
+			lineas.push(cols.map((c) => `"${celda(c, f).replace(/"/g, '""')}"`).join(';'));
+		}
+		const blob = new Blob(['﻿' + lineas.join('\n')], { type: 'text/csv;charset=utf-8' });
+		const url = URL.createObjectURL(blob);
+		const a = document.createElement('a');
+		a.href = url;
+		a.download = `analisis-nomina-${filtros.analisis}-${new Date().toISOString().slice(0, 10)}.csv`;
+		a.click();
+		URL.revokeObjectURL(url);
+		toast.success(`${filasActivas.length} fila(s) exportadas.`);
+	}
+
+	function abrirEnCanvas(l: LiquidacionAnalisis) {
+		const p = new URLSearchParams({
+			anio: String(l.anio),
+			mes: String(l.mes),
+			desde: String(l.corte || 21),
+			liquidacion: l.id
+		});
+		goto(`/dashboard/nomina/canvas?${p.toString()}`);
+	}
+
+	// =============================================
+	// FILTROS: ALTERNAR
+	// =============================================
+	function alternar(clave: 'anios' | 'meses' | 'estados', valor: string) {
+		const actual = filtros[clave];
+		filtros[clave] = actual.includes(valor)
+			? actual.filter((v) => v !== valor)
+			: [...actual, valor];
+	}
+	function limpiarFiltros() {
+		filtros.anios = [];
+		filtros.meses = [];
+		filtros.placas = [];
+		filtros.conductores = [];
+		filtros.estados = [];
+		filtros.pagaCliente = 'todos';
+		filtros.q = '';
+	}
+	const nFiltros = $derived(
+		filtros.anios.length +
+			filtros.meses.length +
+			filtros.placas.length +
+			filtros.conductores.length +
+			filtros.estados.length +
+			(filtros.pagaCliente !== 'todos' ? 1 : 0) +
+			(filtros.q.trim() ? 1 : 0)
+	);
+
+	const opcionesPlacas = $derived(
+		(datos?.catalogos.placas ?? []).map((p) => ({ valor: p, etiqueta: p }))
+	);
+	const opcionesConductores = $derived(
+		(datos?.catalogos.conductores ?? []).map((c) => ({ valor: c.id, etiqueta: c.nombre }))
+	);
+	const aniosCatalogo = $derived.by(() => {
+		const s = new Set<string>((datos?.catalogos.anios ?? []).map(String));
+		for (const a of filtros.anios) s.add(a);
+		return Array.from(s).sort((a, b) => Number(b) - Number(a));
+	});
+	const subtitulo = $derived(
+		datos
+			? `${totales.liquidaciones} liquidación(es) · ${totales.conductores} conductor(es) · ${totales.placas} placa(s) · Σ neto ${fmt(totales.neto)}`
+			: 'cargando…'
+	);
 </script>
 
 <svelte:head><title>Análisis de Nómina · Cotransmeq</title></svelte:head>
 
-<UniverToolbar
-	title="ANÁLISIS"
-	subtitle="{liquidacionesA.length} liquidación(es) en el conjunto{hayFiltros
-		? '  ·  filtrado'
-		: ''}"
-	onBack={volver}
-	backLabel="Liquidaciones"
->
+<UniverToolbar title="ANÁLISIS" subtitle={subtitulo} onBack={volver} backLabel="Liquidaciones">
 	{#snippet actions()}
+		<button
+			type="button"
+			class="univer-btn univer-btn-dark"
+			onclick={() => cargar(true)}
+			disabled={cargando}
+			title="Volver a leer del servidor"
+		>
+			<RefreshCw size={13} class={cargando ? 'an-girar' : ''} /> Actualizar
+		</button>
+		<button
+			type="button"
+			class="univer-btn univer-btn-dark"
+			onclick={exportarCsv}
+			disabled={!filasActivas.length}
+			title="Descargar la pestaña activa como CSV, con los filtros puestos"
+		>
+			<Download size={13} /> Exportar CSV
+		</button>
+		<span class="univer-divider-v"></span>
 		<SelectorCanvasNomina actual="analisis" anio={anioSalto} mes={mesSalto} />
 	{/snippet}
 </UniverToolbar>
 
-<div class="analisis-canvas">
-	{#if loadingA}
-		<div class="flex items-center justify-center py-24">
-			<div class="text-center">
-				<div class="spinner mx-auto mb-4"></div>
-				<p class="text-[var(--text-muted)]">Cargando datos de análisis...</p>
-			</div>
-		</div>
-	{:else if liquidacionesA.length === 0}
-		<div class="table-card py-20 text-center">
-			<div
-				class="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--bg-base)]"
-			>
-				<AlertCircle class="h-8 w-8 text-[var(--text-very-muted)]" />
-			</div>
-			<h3 class="mb-1 text-lg font-semibold text-[var(--text-primary)]">Sin datos para analizar</h3>
-			<p class="mb-5 text-sm text-[var(--text-muted)]">
-				Aún no hay liquidaciones registradas en el sistema.
-			</p>
-			<button onclick={volver} class="btn-primary apple-transition">
-				<Plus class="h-4 w-4" /> Crear primera liquidación
-			</button>
-		</div>
-	{:else}
-		<!-- Filtros -->
-		<div class="page-card mb-5">
-			<div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-				<div class="filter-field relative w-full">
-					<label for="filtro-placa" class="filter-field-label">Placa</label>
-					<input
-						id="filtro-placa"
-						type="text"
-						placeholder="Buscar placa..."
-						bind:value={filtros.placa}
-						onfocus={() => (showDropdown = true)}
-						onblur={() => setTimeout(() => (showDropdown = false), 150)}
-						onkeydown={handleKeydown}
-					/>
-
-					{#if showDropdown && placasFiltradas.length > 0}
-						<ul
-							class="absolute top-full left-0 z-10 mt-1 max-h-48 w-full overflow-auto rounded-xl border border-[var(--border-default)] bg-white shadow-lg"
-						>
-							{#each placasFiltradas as p, i}
-								<li>
-									<button
-										type="button"
-										class={`apple-transition w-full cursor-pointer px-3 py-2 text-left text-sm ${
-											selectedIndex === i + 1
-												? 'bg-[rgba(234, 88, 12,0.12)] text-[var(--emerald-700)]'
-												: 'hover:bg-[var(--bg-base)]'
-										}`}
-										onmousedown={() => (filtros.placa = p)}
-									>
-										{p}
-									</button>
-								</li>
-							{/each}
-						</ul>
-					{/if}
-				</div>
-				<div class="filter-field">
-					<label for="filtro-mes" class="filter-field-label">Mes</label>
-					<select id="filtro-mes" bind:value={filtros.mes}>
-						<option value="">Todos los meses</option>
-						{#each MESES as m}<option value={m.valor}>{m.nombre}</option>{/each}
-					</select>
-				</div>
-				<div class="filter-field">
-					<label for="filtro-ano" class="filter-field-label">Año</label>
-					<select id="filtro-ano" bind:value={filtros.anio}>
-						<option value="">Todos los años</option>
-						{#each anosA as a}<option value={a}>{a}</option>{/each}
-					</select>
-				</div>
-			</div>
-			{#if hayFiltros}
-				<div class="filter-chips mt-3">
-					{#if filtros.placa}
-						<span class="filter-chip">
-							Placa: {filtros.placa}
-							<button onclick={() => (filtros.placa = '')}>✕</button>
-						</span>
-					{/if}
-					{#if filtros.mes}
-						<span class="filter-chip">
-							Mes: {MESES.find((m) => m.valor === filtros.mes)?.nombre}
-							<button onclick={() => (filtros.mes = '')}>✕</button>
-						</span>
-					{/if}
-					{#if filtros.anio}
-						<span class="filter-chip">
-							Año: {filtros.anio}
-							<button onclick={() => (filtros.anio = '')}>✕</button>
-						</span>
-					{/if}
-					<button
-						onclick={limpiarFiltros}
-						class="font-mono-meta text-[0.65rem] text-[var(--text-muted)] underline hover:text-[var(--emerald-700)]"
-						>Limpiar todo</button
-					>
-				</div>
-			{/if}
-		</div>
-
-		<!-- Resumen -->
-		<div class="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
-			{#each [{ label: 'Bonificaciones', value: formatCurrency(totalBon), count: datosBon.length }, { label: 'Recargos', value: formatCurrency(totalRec), count: datosRec.length }, { label: 'Pernotes', value: formatCurrency(totalPer), count: datosPer.length }, { label: 'Mantenimientos', value: String(totalMnt), count: datosMnt.length }] as card}
-				<div class="stat-card">
-					<p class="stat-label">{card.label}</p>
-					<p class="stat-value truncate">{card.value}</p>
-					<p class="text-[10px] text-[var(--text-very-muted)]">{card.count} registros</p>
-				</div>
-			{/each}
-		</div>
-
-		<!-- Tabs de análisis -->
-		<div class="table-card">
-			<div class="border-b border-[var(--border-subtle)] bg-[var(--bg-base)]">
-				<nav class="flex overflow-x-auto">
-					{#each ANALISIS_TABS as tab}
-						{@const Icono = tab.icon}
+<div class="an">
+	<!-- ── Filtros ── -->
+	<section class="an-card an-filtros">
+		<div class="an-filtros-fila">
+			<div class="an-grupo">
+				<span class="an-grupo-etiqueta">Años</span>
+				<div class="an-chips">
+					{#each aniosCatalogo as a (a)}
 						<button
-							onclick={() => (filtros.analisis = tab.key as typeof filtros.analisis)}
-							class="apple-transition flex items-center gap-2 border-b-2 px-5 py-4 text-sm font-semibold whitespace-nowrap
-									{filtros.analisis === tab.key
-								? 'border-[var(--emerald-500)] text-[var(--text-primary)]'
-								: 'border-transparent text-[var(--text-muted)] hover:border-[var(--border-default)] hover:text-[var(--text-secondary)]'}"
+							type="button"
+							class="an-chip"
+							class:an-chip--activo={filtros.anios.includes(a)}
+							aria-pressed={filtros.anios.includes(a)}
+							onclick={() => alternar('anios', a)}>{a}</button
 						>
-							<Icono class="h-4 w-4" />
-							{tab.label}
+					{/each}
+					{#if !aniosCatalogo.length}<span class="an-nota">Sin años</span>{/if}
+				</div>
+			</div>
+			<div class="an-grupo an-grupo--meses">
+				<span class="an-grupo-etiqueta">Meses</span>
+				<div class="an-chips">
+					{#each MES_CORTO as m, i (m)}
+						{@const clave = String(i + 1).padStart(2, '0')}
+						<button
+							type="button"
+							class="an-chip an-chip--mes"
+							class:an-chip--activo={filtros.meses.includes(clave)}
+							aria-pressed={filtros.meses.includes(clave)}
+							title={MESES[i]}
+							onclick={() => alternar('meses', clave)}>{m}</button
+						>
+					{/each}
+				</div>
+			</div>
+		</div>
+
+		<div class="an-filtros-fila an-filtros-fila--selectores">
+			<SelectorMultiple
+				etiqueta="Placas"
+				placeholder="Buscar placa…"
+				opciones={opcionesPlacas}
+				seleccion={filtros.placas}
+				onCambiar={(s) => (filtros.placas = s)}
+			/>
+			<SelectorMultiple
+				etiqueta="Conductores"
+				placeholder="Nombre…"
+				opciones={opcionesConductores}
+				seleccion={filtros.conductores}
+				onCambiar={(s) => (filtros.conductores = s)}
+			/>
+			<div class="an-grupo">
+				<span class="an-grupo-etiqueta">Estados</span>
+				<div class="an-chips">
+					{#each ESTADOS as e (e)}
+						<button
+							type="button"
+							class="an-chip"
+							class:an-chip--activo={filtros.estados.includes(e)}
+							aria-pressed={filtros.estados.includes(e)}
+							onclick={() => alternar('estados', e)}
+						>
+							<span
+								class="an-punto"
+								style="background:{COLOR_HOJA_POR_ESTADO[e]}"
+								aria-hidden="true"
+							></span>{ETIQUETA_ESTADO[e]}
 						</button>
 					{/each}
-				</nav>
+				</div>
 			</div>
+		</div>
 
-			<div class="p-4 sm:p-6">
-				<!-- ===== BONIFICACIONES ===== -->
-				{#if filtros.analisis === 'bonificaciones'}
-					<h2 class="mb-4 text-base font-bold text-[var(--text-primary)]">
-						Bonificaciones por Vehículo
-					</h2>
-
-					{#if bonPorPlaca.length > 0}
-						<div
-							class="mb-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3"
-							style="height:200px"
-						>
-							<Bar data={bonChartData} options={BAR_OPTS('Bonificaciones', '#15803d')} />
-						</div>
-					{:else}
-						<div
-							class="mb-4 rounded-xl border-2 border-dashed border-[var(--border-subtle)] bg-[var(--bg-base)] py-10 text-center"
-						>
-							<BarChart2 class="mx-auto mb-2 h-9 w-9 text-[var(--text-very-muted)]" />
-							<p class="text-sm text-[var(--text-muted)]">
-								Sin bonificaciones para los filtros aplicados
-							</p>
-						</div>
-					{/if}
-
-					<div class="mb-3 flex items-center justify-between">
-						<h3 class="font-semibold text-[var(--text-secondary)]">Detalle de Bonificaciones</h3>
-						<span class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]"
-							>{bonPaginado.length} / {datosBon.length}</span
-						>
-					</div>
-
-					<!-- Mobile -->
-					<div class="space-y-3 md:hidden">
-						{#if bonPaginado.length > 0}
-							{#each bonPaginado as item}
-								<div class="list-card flex-col items-stretch p-4">
-									<p class="text-sm font-semibold text-[var(--text-primary)]">
-										{item.placa} — {item.nombre}
-									</p>
-									<p class="mb-3 text-xs text-[var(--text-muted)]">{item.conductor}</p>
-									<div class="space-y-1.5 text-sm">
-										<div class="flex justify-between">
-											<span class="text-[var(--text-muted)]">Mes</span><span>{item.mes}</span>
-										</div>
-										<div class="flex justify-between">
-											<span class="text-[var(--text-muted)]">Cantidad</span><span
-												>{item.cantidad}</span
-											>
-										</div>
-										<div class="flex justify-between">
-											<span class="text-[var(--text-muted)]">V. Unitario</span><span
-												>{formatCurrency(item.valorUnitario)}</span
-											>
-										</div>
-										<div class="flex justify-between border-t pt-1.5">
-											<span class="font-semibold text-[var(--text-secondary)]">Total</span>
-											<span class="font-bold text-[#16A34A]">{formatCurrency(item.valorTotal)}</span
-											>
-										</div>
-									</div>
-								</div>
-							{/each}
-						{:else}
-							<div
-								class="rounded-xl border-2 border-dashed border-[var(--border-subtle)] py-12 text-center"
-							>
-								<AlertCircle class="mx-auto mb-2 h-8 w-8 text-[var(--text-very-muted)]" />
-								<p class="text-sm text-[var(--text-muted)]">
-									Sin registros{hayFiltros ? ' para los filtros aplicados' : ''}
-								</p>
-							</div>
-						{/if}
-					</div>
-
-					<!-- Desktop -->
-					<div
-						class="hidden overflow-x-auto rounded-xl border border-[var(--border-subtle)] md:block"
+		<div class="an-filtros-fila an-filtros-fila--pie">
+			<label class="an-buscador">
+				<Search size={15} />
+				<input
+					type="search"
+					bind:value={filtros.q}
+					placeholder="Buscar conductor, cédula o placa…"
+					aria-label="Buscar"
+				/>
+			</label>
+			<div class="an-segmentos" role="group" aria-label="Paga cliente">
+				<span class="an-grupo-etiqueta">Paga cliente</span>
+				{#each [['todos', 'Todos'], ['si', 'Sí'], ['no', 'No']] as [v, l] (v)}
+					<button
+						type="button"
+						class="an-segmento"
+						class:an-segmento--activo={filtros.pagaCliente === v}
+						aria-pressed={filtros.pagaCliente === v}
+						onclick={() => (filtros.pagaCliente = v as 'todos' | 'si' | 'no')}>{l}</button
 					>
-						<table class="w-full text-sm">
-							<thead class="table-header">
-								<tr>
-									{#each ['Placa', 'Conductor', 'Tipo', 'Mes', 'Cantidad', 'V. Unitario', 'V. Total'] as h}
-										<th class="text-left">{h}</th>
-									{/each}
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-[var(--border-subtle)]">
-								{#if bonPaginado.length > 0}
-									{#each bonPaginado as item}
-										<tr class="table-row">
-											<td class="px-4 py-3 font-medium text-[var(--text-primary)]">{item.placa}</td>
-											<td class="px-4 py-3 text-[var(--text-secondary)]">{item.conductor}</td>
-											<td class="px-4 py-3 text-[var(--text-secondary)]">{item.nombre}</td>
-											<td class="px-4 py-3 text-[var(--text-secondary)]">{item.mes}</td>
-											<td class="px-4 py-3">{item.cantidad}</td>
-											<td class="px-4 py-3">{formatCurrency(item.valorUnitario)}</td>
-											<td class="px-4 py-3 font-bold text-[#16A34A]"
-												>{formatCurrency(item.valorTotal)}</td
-											>
-										</tr>
-									{/each}
-								{:else}
-									<tr>
-										<td colspan="7" class="py-12 text-center">
-											<AlertCircle class="mx-auto mb-2 h-8 w-8 text-[var(--text-very-muted)]" />
-											<p class="text-sm text-[var(--text-muted)]">
-												Sin registros{hayFiltros ? ' para los filtros aplicados' : ''}
-											</p>
-										</td>
-									</tr>
-								{/if}
-							</tbody>
-						</table>
-					</div>
-
-					<!-- Paginación bon -->
-					{#if totalPagesBon > 1}
-						<div
-							class="mt-4 flex items-center justify-between rounded-xl border border-[var(--border-subtle)] bg-white px-3 py-2"
-						>
-							<span class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]"
-								>Página {pagesBon} de {totalPagesBon}</span
-							>
-							<div class="flex gap-1">
-								<button
-									disabled={pagesBon === 1}
-									onclick={() => pagesBon--}
-									class="apple-transition rounded-lg border border-[var(--border-default)] bg-white p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-base)] disabled:cursor-not-allowed disabled:opacity-40"
-									><ChevronLeft class="h-4 w-4" /></button
-								>
-								{#each getPageNumbers(pagesBon, totalPagesBon) as p}
-									{#if p === '...'}<span class="px-2 py-2 text-xs text-[var(--text-muted)]"
-											>...</span
-										>
-									{:else}
-										<button
-											onclick={() => (pagesBon = Number(p))}
-											class="apple-transition h-9 w-9 rounded-lg border text-xs font-bold {p ===
-											pagesBon
-												? 'border-transparent bg-[var(--bg-charcoal)] text-white'
-												: 'border-[var(--border-default)] bg-white text-[var(--text-secondary)] hover:bg-[var(--bg-base)]'}"
-											>{p}</button
-										>
-									{/if}
-								{/each}
-								<button
-									disabled={pagesBon === totalPagesBon}
-									onclick={() => pagesBon++}
-									class="apple-transition rounded-lg border border-[var(--border-default)] bg-white p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-base)] disabled:cursor-not-allowed disabled:opacity-40"
-									><ChevronRight class="h-4 w-4" /></button
-								>
-							</div>
-						</div>
-					{/if}
-
-					<!-- ===== RECARGOS ===== -->
-				{:else if filtros.analisis === 'recargos'}
-					<h2 class="mb-4 text-base font-bold text-[var(--text-primary)]">Recargos por Vehículo</h2>
-
-					<div class="mb-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
-						{#if recPorPlaca.length > 0}
-							<div
-								class="rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3"
-								style="height:200px"
-							>
-								<Bar data={recChartData} options={BAR_OPTS('Recargos', '#ea580c')} />
-							</div>
-						{:else}
-							<div
-								class="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-[var(--border-subtle)] bg-[var(--bg-base)] py-10 text-center"
-							>
-								<BarChart2 class="mb-2 h-9 w-9 text-[var(--text-very-muted)]" />
-								<p class="text-sm text-[var(--text-muted)]">Sin recargos</p>
-							</div>
-						{/if}
-
-						<div
-							class="flex flex-col justify-center rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3"
-							style="height:200px"
-						>
-							{#if recPie[0].value + recPie[1].value > 0}
-								<p class="font-mono-meta mb-1 text-center text-[0.65rem] text-[var(--text-muted)]">
-									PAGA CLIENTE VS EMPRESA
-								</p>
-								<Doughnut data={pieChartData} options={DONUT_OPTS} />
-							{:else}
-								<div class="flex h-full flex-col items-center justify-center gap-2">
-									<div
-										class="flex h-20 w-20 items-center justify-center rounded-full border-4 border-dashed border-[var(--border-default)]"
-									>
-										<p class="px-1 text-center text-xs text-[var(--text-muted)]">Sin datos</p>
-									</div>
-								</div>
-							{/if}
-						</div>
-					</div>
-
-					<div class="mb-3 flex items-center justify-between">
-						<h3 class="font-semibold text-[var(--text-secondary)]">Detalle de Recargos</h3>
-						<span class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]"
-							>{recPaginado.length} / {datosRec.length}</span
-						>
-					</div>
-
-					<!-- Mobile -->
-					<div class="space-y-3 md:hidden">
-						{#if recPaginado.length > 0}
-							{#each recPaginado as item}
-								<div
-									class="list-card flex-col items-stretch p-4 {item.tipo_fila === 'propietario'
-										? '!border-[rgba(245,158,11,0.35)] !bg-[rgba(245,158,11,0.06)]'
-										: item.pagaCliente === 'No'
-											? '!border-[rgba(220,38,38,0.25)] !bg-[rgba(220,38,38,0.04)]'
-											: ''}"
-								>
-									<div class="flex items-center gap-2">
-										<p class="text-sm font-semibold text-[var(--text-primary)]">
-											{item.placa} — {item.empresa_nombre}
-										</p>
-										{#if item.tipo_fila}
-											<span
-												class="status-pill {item.tipo_fila === 'propietario'
-													? '!bg-[rgba(245,158,11,0.18)] !text-[#92400E]'
-													: '!bg-[rgba(59,130,246,0.10)] !text-[#1D4ED8]'}"
-											>
-												{item.tipo_fila === 'propietario'
-													? `Prop ${item.porcentaje_propietario}%`
-													: `Cli ${100 - (item.porcentaje_propietario || 0)}%`}
-											</span>
-										{/if}
-									</div>
-									<p class="mb-3 text-xs text-[var(--text-muted)]">{item.conductor}</p>
-									<div class="space-y-1.5 text-sm">
-										<div class="flex justify-between">
-											<span class="text-[var(--text-muted)]">Mes</span><span>{item.mes}</span>
-										</div>
-										<div class="flex justify-between">
-											<span class="text-[var(--text-muted)]">Paga cliente</span>
-											<span
-												class="font-semibold {item.pagaCliente === 'Sí'
-													? 'text-[#16A34A]'
-													: 'text-[#DC2626]'}">{item.pagaCliente}</span
-											>
-										</div>
-										<div class="flex justify-between border-t pt-1.5">
-											<span class="font-semibold text-[var(--text-secondary)]">Valor</span>
-											<span class="font-bold text-[var(--text-primary)]"
-												>{formatCurrency(item.valor)}</span
-											>
-										</div>
-									</div>
-								</div>
-							{/each}
-						{:else}
-							<div
-								class="rounded-xl border-2 border-dashed border-[var(--border-subtle)] py-12 text-center"
-							>
-								<AlertCircle class="mx-auto mb-2 h-8 w-8 text-[var(--text-very-muted)]" />
-								<p class="text-sm text-[var(--text-muted)]">
-									Sin registros{hayFiltros ? ' para los filtros aplicados' : ''}
-								</p>
-							</div>
-						{/if}
-					</div>
-
-					<!-- Desktop -->
-					<div
-						class="hidden overflow-x-auto rounded-xl border border-[var(--border-subtle)] md:block"
+				{/each}
+			</div>
+			<div class="an-filtros-resumen">
+				{#if nFiltros}
+					<span class="an-nota"
+						>{nFiltros} filtro{nFiltros === 1 ? '' : 's'} · {totales.liquidaciones} liquidación(es)</span
 					>
-						<table class="w-full text-sm">
-							<thead class="table-header">
-								<tr>
-									{#each ['Placa', 'Conductor', 'Cliente', 'Mes', 'Valor', 'Paga Cliente', 'Asume'] as h}
-										<th class="text-left">{h}</th>
-									{/each}
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-[var(--border-subtle)]">
-								{#if recPaginado.length > 0}
-									{#each recPaginado as item}
-										<tr
-											class="table-row {item.tipo_fila === 'propietario'
-												? '!bg-[rgba(245,158,11,0.06)]'
-												: item.pagaCliente === 'No'
-													? '!bg-[rgba(220,38,38,0.04)]'
-													: ''}"
-										>
-											<td class="px-4 py-3 font-medium text-[var(--text-primary)]">{item.placa}</td>
-											<td class="px-4 py-3 text-[var(--text-secondary)]">{item.conductor}</td>
-											<td class="px-4 py-3 text-[var(--text-secondary)]">{item.empresa_nombre}</td>
-											<td class="px-4 py-3 text-[var(--text-secondary)]">{item.mes}</td>
-											<td class="px-4 py-3 font-bold text-[var(--text-primary)]">
-												{formatCurrency(item.valor)}
-											</td>
-											<td class="px-4 py-3">
-												<span
-													class="status-pill {item.pagaCliente === 'Sí'
-														? '!bg-[rgba(22,163,74,0.10)] !text-[#15803D]'
-														: '!bg-[rgba(220,38,38,0.10)] !text-[#991B1B]'}"
-												>
-													{item.pagaCliente}
-												</span>
-											</td>
-											<td class="px-4 py-3">
-												{#if item.tipo_fila === 'propietario'}
-													<span class="status-pill !bg-[rgba(245,158,11,0.18)] !text-[#92400E]">
-														Prop {item.porcentaje_propietario}%
-													</span>
-												{:else if item.tipo_fila === 'cliente'}
-													<span class="status-pill !bg-[rgba(59,130,246,0.10)] !text-[#1D4ED8]">
-														Cli {100 - (item.porcentaje_propietario || 0)}%
-													</span>
-												{:else}
-													<span class="text-xs text-[var(--text-very-muted)]">—</span>
-												{/if}
-											</td>
-										</tr>
-									{/each}
-								{:else}
-									<tr>
-										<td colspan="7" class="py-12 text-center">
-											<AlertCircle class="mx-auto mb-2 h-8 w-8 text-[var(--text-very-muted)]" />
-											<p class="text-sm text-[var(--text-muted)]">
-												Sin registros{hayFiltros ? ' para los filtros aplicados' : ''}
-											</p>
-										</td>
-									</tr>
-								{/if}
-							</tbody>
-						</table>
-					</div>
-
-					{#if totalPagesRec > 1}
-						<div
-							class="mt-4 flex items-center justify-between rounded-xl border border-[var(--border-subtle)] bg-white px-3 py-2"
-						>
-							<span class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]"
-								>Página {pagesRec} de {totalPagesRec}</span
-							>
-							<div class="flex gap-1">
-								<button
-									disabled={pagesRec === 1}
-									onclick={() => pagesRec--}
-									class="apple-transition rounded-lg border border-[var(--border-default)] bg-white p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-base)] disabled:cursor-not-allowed disabled:opacity-40"
-									><ChevronLeft class="h-4 w-4" /></button
-								>
-								{#each getPageNumbers(pagesRec, totalPagesRec) as p}
-									{#if p === '...'}<span class="px-2 py-2 text-xs text-[var(--text-muted)]"
-											>...</span
-										>
-									{:else}
-										<button
-											onclick={() => (pagesRec = Number(p))}
-											class="apple-transition h-9 w-9 rounded-lg border text-xs font-bold {p ===
-											pagesRec
-												? 'border-transparent bg-[var(--bg-charcoal)] text-white'
-												: 'border-[var(--border-default)] bg-white text-[var(--text-secondary)] hover:bg-[var(--bg-base)]'}"
-											>{p}</button
-										>
-									{/if}
-								{/each}
-								<button
-									disabled={pagesRec === totalPagesRec}
-									onclick={() => pagesRec++}
-									class="apple-transition rounded-lg border border-[var(--border-default)] bg-white p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-base)] disabled:cursor-not-allowed disabled:opacity-40"
-									><ChevronRight class="h-4 w-4" /></button
-								>
-							</div>
-						</div>
-					{/if}
-
-					<!-- ===== PERNOTES ===== -->
-				{:else if filtros.analisis === 'pernotes'}
-					<h2 class="mb-4 text-base font-bold text-[var(--text-primary)]">Pernotes por Vehículo</h2>
-
-					{#if perPorPlaca.length > 0}
-						<div
-							class="mb-4 rounded-xl border border-[var(--border-subtle)] bg-[var(--bg-base)] p-3"
-							style="height:200px"
-						>
-							<Bar data={perChartData} options={BAR_OPTS('Pernotes', '#eab308')} />
-						</div>
-					{:else}
-						<div
-							class="mb-4 rounded-xl border-2 border-dashed border-[var(--border-subtle)] bg-[var(--bg-base)] py-10 text-center"
-						>
-							<Moon class="mx-auto mb-2 h-9 w-9 text-[var(--text-very-muted)]" />
-							<p class="text-sm text-[var(--text-muted)]">
-								Sin pernotes para los filtros aplicados
-							</p>
-						</div>
-					{/if}
-
-					<div class="mb-3 flex items-center justify-between">
-						<h3 class="font-semibold text-[var(--text-secondary)]">Detalle de Pernotes</h3>
-						<span class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]"
-							>{perPaginado.length} / {datosPer.length}</span
-						>
-					</div>
-
-					<!-- Mobile -->
-					<div class="space-y-3 md:hidden">
-						{#if perPaginado.length > 0}
-							{#each perPaginado as item}
-								<div class="list-card flex-col items-stretch p-4">
-									<p class="text-sm font-semibold text-[var(--text-primary)]">{item.placa}</p>
-									<p class="mb-3 text-xs text-[var(--text-muted)]">{item.conductor}</p>
-									<div class="space-y-1.5 text-sm">
-										<div class="flex justify-between">
-											<span class="text-[var(--text-muted)]">Cantidad</span><span
-												>{item.cantidad}</span
-											>
-										</div>
-										<div class="flex justify-between">
-											<span class="text-[var(--text-muted)]">V. Unitario</span><span
-												>{formatCurrency(item.valor)}</span
-											>
-										</div>
-										<div class="flex justify-between border-t pt-1.5">
-											<span class="font-semibold text-[var(--text-secondary)]">Total</span>
-											<span class="font-bold text-[#A16207]">{formatCurrency(item.valorTotal)}</span
-											>
-										</div>
-										{#if item.fechas?.length}
-											<div class="border-t pt-1.5">
-												<p class="mb-0.5 text-xs text-[var(--text-muted)]">Fechas:</p>
-												<p class="text-xs text-[var(--text-secondary)]">
-													{agruparFechas(item.fechas).join(', ')}
-												</p>
-											</div>
-										{/if}
-									</div>
-								</div>
-							{/each}
-						{:else}
-							<div
-								class="rounded-xl border-2 border-dashed border-[var(--border-subtle)] py-12 text-center"
-							>
-								<AlertCircle class="mx-auto mb-2 h-8 w-8 text-[var(--text-very-muted)]" />
-								<p class="text-sm text-[var(--text-muted)]">
-									Sin registros{hayFiltros ? ' para los filtros aplicados' : ''}
-								</p>
-							</div>
-						{/if}
-					</div>
-
-					<!-- Desktop -->
-					<div
-						class="hidden overflow-x-auto rounded-xl border border-[var(--border-subtle)] md:block"
+					<button type="button" class="an-limpiar" onclick={limpiarFiltros}
+						><X size={12} /> Limpiar</button
 					>
-						<table class="w-full text-sm">
-							<thead class="table-header">
-								<tr>
-									{#each ['Placa', 'Conductor', 'Cantidad', 'V. Unitario', 'V. Total', 'Fechas'] as h}
-										<th class="text-left">{h}</th>
-									{/each}
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-[var(--border-subtle)]">
-								{#if perPaginado.length > 0}
-									{#each perPaginado as item}
-										<tr class="table-row">
-											<td class="px-4 py-3 font-medium text-[var(--text-primary)]">{item.placa}</td>
-											<td class="px-4 py-3 text-[var(--text-secondary)]">{item.conductor}</td>
-											<td class="px-4 py-3">{item.cantidad}</td>
-											<td class="px-4 py-3">{formatCurrency(item.valor)}</td>
-											<td class="px-4 py-3 font-bold text-[#A16207]"
-												>{formatCurrency(item.valorTotal)}</td
-											>
-											<td class="max-w-xs px-4 py-3 text-xs text-[var(--text-secondary)]">
-												{#if item.fechas?.length}
-													{agruparFechas(item.fechas).join(', ')}
-												{:else}
-													<span class="text-[var(--text-very-muted)]">—</span>
-												{/if}
-											</td>
-										</tr>
-									{/each}
-								{:else}
-									<tr>
-										<td colspan="6" class="py-12 text-center">
-											<AlertCircle class="mx-auto mb-2 h-8 w-8 text-[var(--text-very-muted)]" />
-											<p class="text-sm text-[var(--text-muted)]">
-												Sin registros{hayFiltros ? ' para los filtros aplicados' : ''}
-											</p>
-										</td>
-									</tr>
-								{/if}
-							</tbody>
-						</table>
-					</div>
-
-					{#if totalPagesPer > 1}
-						<div
-							class="mt-4 flex items-center justify-between rounded-xl border border-[var(--border-subtle)] bg-white px-3 py-2"
-						>
-							<span class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]"
-								>Página {pagesPer} de {totalPagesPer}</span
-							>
-							<div class="flex gap-1">
-								<button
-									disabled={pagesPer === 1}
-									onclick={() => pagesPer--}
-									class="apple-transition rounded-lg border border-[var(--border-default)] bg-white p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-base)] disabled:cursor-not-allowed disabled:opacity-40"
-									><ChevronLeft class="h-4 w-4" /></button
-								>
-								{#each getPageNumbers(pagesPer, totalPagesPer) as p}
-									{#if p === '...'}<span class="px-2 py-2 text-xs text-[var(--text-muted)]"
-											>...</span
-										>
-									{:else}
-										<button
-											onclick={() => (pagesPer = Number(p))}
-											class="apple-transition h-9 w-9 rounded-lg border text-xs font-bold {p ===
-											pagesPer
-												? 'border-transparent bg-[var(--bg-charcoal)] text-white'
-												: 'border-[var(--border-default)] bg-white text-[var(--text-secondary)] hover:bg-[var(--bg-base)]'}"
-											>{p}</button
-										>
-									{/if}
-								{/each}
-								<button
-									disabled={pagesPer === totalPagesPer}
-									onclick={() => pagesPer++}
-									class="apple-transition rounded-lg border border-[var(--border-default)] bg-white p-2 text-[var(--text-secondary)] hover:bg-[var(--bg-base)] disabled:cursor-not-allowed disabled:opacity-40"
-									><ChevronRight class="h-4 w-4" /></button
-								>
-							</div>
-						</div>
-					{/if}
-
-					<!-- ===== MANTENIMIENTOS ===== -->
-				{:else if filtros.analisis === 'mantenimientos'}
-					<h2 class="mb-4 text-base font-bold text-[var(--text-primary)]">
-						Mantenimientos por Vehículo
-					</h2>
-
-					<!-- Mobile -->
-					<div class="space-y-3 md:hidden">
-						{#if datosMnt.length > 0}
-							{#each datosMnt as item}
-								<div class="list-card flex-col items-stretch p-4">
-									<p class="text-sm font-semibold text-[var(--text-primary)]">{item.placa}</p>
-									<p class="mb-3 text-xs text-[var(--text-muted)]">{item.conductor}</p>
-									<div class="space-y-1.5 text-sm">
-										<div class="flex justify-between">
-											<span class="text-[var(--text-muted)]">Mes</span><span>{item.mes}</span>
-										</div>
-										<div class="flex justify-between border-t pt-1.5">
-											<span class="font-semibold text-[var(--text-secondary)]">Cantidad</span>
-											<span class="font-bold text-[#9333EA]">{item.cantidad}</span>
-										</div>
-									</div>
-								</div>
-							{/each}
-						{:else}
-							<div
-								class="rounded-xl border-2 border-dashed border-[var(--border-subtle)] py-12 text-center"
-							>
-								<Wrench class="mx-auto mb-2 h-8 w-8 text-[var(--text-very-muted)]" />
-								<p class="text-sm text-[var(--text-muted)]">
-									Sin mantenimientos{hayFiltros ? ' para los filtros aplicados' : ''}
-								</p>
-							</div>
-						{/if}
-					</div>
-
-					<!-- Desktop -->
-					<div
-						class="hidden overflow-x-auto rounded-xl border border-[var(--border-subtle)] md:block"
-					>
-						<table class="w-full text-sm">
-							<thead class="table-header">
-								<tr>
-									{#each ['Placa', 'Conductor', 'Mes', 'Cantidad Total'] as h}
-										<th class="text-left">{h}</th>
-									{/each}
-								</tr>
-							</thead>
-							<tbody class="divide-y divide-[var(--border-subtle)]">
-								{#if datosMnt.length > 0}
-									{#each datosMnt as item}
-										<tr class="table-row">
-											<td class="px-4 py-3 font-medium text-[var(--text-primary)]">{item.placa}</td>
-											<td class="px-4 py-3 text-[var(--text-secondary)]">{item.conductor}</td>
-											<td class="px-4 py-3 text-[var(--text-secondary)]">{item.mes}</td>
-											<td class="px-4 py-3 font-bold text-[#9333EA]">{item.cantidad}</td>
-										</tr>
-									{/each}
-								{:else}
-									<tr>
-										<td colspan="4" class="py-12 text-center">
-											<Wrench class="mx-auto mb-2 h-8 w-8 text-[var(--text-very-muted)]" />
-											<p class="text-sm text-[var(--text-muted)]">
-												Sin registros{hayFiltros ? ' para los filtros aplicados' : ''}
-											</p>
-										</td>
-									</tr>
-								{/if}
-							</tbody>
-						</table>
-					</div>
+				{:else}
+					<span class="an-nota">Todo el histórico · {totales.liquidaciones} liquidación(es)</span>
 				{/if}
 			</div>
 		</div>
+	</section>
+
+	{#if cargando && !datos}
+		<div class="an-estado">
+			<img src={mascota('procesando').src} alt="" class="an-estado-mascota" aria-hidden="true" />
+			<p>Cargando el análisis…</p>
+		</div>
+	{:else if errorCarga && !datos}
+		<div class="an-estado">
+			<img src={mascota('advertencia').src} alt="" class="an-estado-mascota" aria-hidden="true" />
+			<p>{errorCarga}</p>
+			<button type="button" class="btn-secondary" onclick={() => cargar(true)}>Reintentar</button>
+		</div>
+	{:else if datos && !liqs.length}
+		<div class="an-estado">
+			<img src={mascota('vacio').src} alt="" class="an-estado-mascota" aria-hidden="true" />
+			<p>Ninguna liquidación cumple los filtros.</p>
+			{#if nFiltros}<button type="button" class="btn-secondary" onclick={limpiarFiltros}
+					>Quitar filtros</button
+				>{/if}
+		</div>
+	{:else if datos}
+		<!-- ── Cifras ── -->
+		<section class="an-cifras" class:an-cargando={cargando}>
+			{#each [{ etiqueta: 'Liquidaciones', valor: num.format(totales.liquidaciones), detalle: `${totales.conductores} conductores · ${totales.placas} placas` }, { etiqueta: 'Neto pagado', valor: fmt(totales.neto), detalle: `${num.format(totales.dias)} días laborados`, fuerte: true }, { etiqueta: 'Devengado', valor: fmt(totales.devengado), detalle: 'salario del periodo' }, { etiqueta: 'Bonificaciones', valor: fmt(totales.bonificaciones), detalle: `${filasBon.length} filas en detalle` }, { etiqueta: 'Recargos', valor: fmt(totales.recargos), detalle: `${filasRec.length} filas en detalle` }, { etiqueta: 'Pernoctes', valor: fmt(totales.pernotes), detalle: `${filasPer.length} filas en detalle` }, { etiqueta: 'Deducciones', valor: fmt(totales.deducciones), detalle: 'salud, pensión y anticipos' }, { etiqueta: 'Firmadas', valor: `${totales.firmadas} / ${totales.liquidaciones}`, detalle: `${totales.mantenimientos} mantenimientos` }] as c (c.etiqueta)}
+				<div class="an-cifra" class:an-cifra--fuerte={c.fuerte}>
+					<span class="an-cifra-etiqueta">{c.etiqueta}</span>
+					<span class="an-cifra-valor">{c.valor}</span>
+					<span class="an-cifra-detalle">{c.detalle}</span>
+				</div>
+			{/each}
+		</section>
+
+		<!-- ── Gráficas ── -->
+		<section class="an-graficas" class:an-cargando={cargando}>
+			<div class="an-card an-grafica an-grafica--ancha">
+				<header class="an-card-cabecera">
+					<h2>Por mes</h2>
+					<span>Bonificaciones, recargos y pernoctes pagados en cada corte</span>
+				</header>
+				<div class="an-lienzo">
+					{#if porMes.length}
+						<Bar data={datosMes} options={opcionesBarra(true)} />
+					{:else}
+						<p class="an-sin">Sin datos</p>
+					{/if}
+				</div>
+			</div>
+			<div class="an-card an-grafica">
+				<header class="an-card-cabecera">
+					<h2>Por placa</h2>
+					<span>Las {porPlaca.length} con más bonos, recargos y pernoctes</span>
+				</header>
+				<div class="an-lienzo">
+					{#if porPlaca.length}
+						<Bar data={datosPlaca} options={opcionesBarra(false)} />
+					{:else}
+						<p class="an-sin">Sin datos</p>
+					{/if}
+				</div>
+			</div>
+			<div class="an-card an-grafica">
+				<header class="an-card-cabecera">
+					<h2>Estados</h2>
+					<span>Liquidaciones por estado del flujo</span>
+				</header>
+				<div class="an-lienzo">
+					{#if porEstado.length}
+						<Doughnut data={datosEstados} options={opcionesDonaConteo} />
+					{:else}
+						<p class="an-sin">Sin datos</p>
+					{/if}
+				</div>
+			</div>
+			<div class="an-card an-grafica">
+				<header class="an-card-cabecera">
+					<h2>Recargos</h2>
+					<span>Quién los asume</span>
+				</header>
+				<div class="an-lienzo">
+					{#if pagaCliente.si + pagaCliente.no > 0}
+						<Doughnut data={datosPaga} options={opcionesDona} />
+					{:else}
+						<p class="an-sin">Sin recargos</p>
+					{/if}
+				</div>
+			</div>
+		</section>
+
+		<!-- ── Tablas ── -->
+		<section class="an-card an-tabla-card" class:an-cargando={cargando}>
+			<div class="an-tabs" role="tablist">
+				{#each TABS as t (t.key)}
+					<button
+						type="button"
+						role="tab"
+						class="an-tab"
+						class:an-tab--activo={filtros.analisis === t.key}
+						aria-selected={filtros.analisis === t.key}
+						onclick={() => (filtros.analisis = t.key)}
+					>
+						{t.label}
+						<span class="an-tab-n">
+							{t.key === 'resumen'
+								? liqs.length
+								: t.key === 'bonificaciones'
+									? filasBon.length
+									: t.key === 'recargos'
+										? filasRec.length
+										: t.key === 'pernotes'
+											? filasPer.length
+											: filasMnt.length}
+						</span>
+					</button>
+				{/each}
+			</div>
+
+			{#if !filasActivas.length}
+				<div class="an-estado an-estado--corto">
+					<img src={mascota('vacio').src} alt="" class="an-estado-mascota" aria-hidden="true" />
+					<p>Sin registros en esta pestaña para los filtros puestos.</p>
+				</div>
+			{:else}
+				<div class="an-scroll">
+					<table class="an-tabla">
+						<thead>
+							<tr>
+								{#each columnas as c (c.key)}
+									<th class:an-th--num={c.num}>
+										<button type="button" class="an-th-btn" onclick={() => ordenarPor(c.key)}>
+											{c.label}
+											<ArrowUpDown
+												size={12}
+												class={orden.col === c.key ? 'an-orden--activo' : ''}
+											/>
+											{#if orden.col === c.key}<span class="an-orden-dir"
+													>{orden.dir === 1 ? '↑' : '↓'}</span
+												>{/if}
+										</button>
+									</th>
+								{/each}
+								{#if filtros.analisis === 'resumen'}<th class="an-th--acc"></th>{/if}
+							</tr>
+						</thead>
+						<tbody>
+							{#each filasPagina as f, i (filtros.analisis + (f.id ?? i) + (pagina - 1) * POR_PAGINA)}
+								<tr
+									class:an-tr--prop={f.parte === 'propietario'}
+									class:an-tr--empresa={filtros.analisis === 'recargos' && f.pagaCliente === false}
+								>
+									{#each columnas as c (c.key)}
+										<td class:an-td--num={c.num} data-etiqueta={c.label}>
+											{#if c.key === 'estado_flujo'}
+												<span class="an-estado-pill {claseBadgeEstado(f.estado_flujo)}">
+													<span
+														class="an-punto"
+														style="background:{COLOR_HOJA_POR_ESTADO[f.estado_flujo]}"
+													></span>
+													{ETIQUETA_ESTADO[f.estado_flujo] ?? f.estado_flujo}
+												</span>
+											{:else if c.key === 'conductor' && filtros.analisis === 'resumen'}
+												<span class="an-conductor">
+													<strong>{f.conductor.nombre}</strong>
+													{#if f.conductor.cedula}<small>C.C. {f.conductor.cedula}</small>{/if}
+												</span>
+											{:else if c.key === 'pagaCliente'}
+												<span class="an-si-no" class:an-si-no--si={f.pagaCliente}
+													>{f.pagaCliente ? 'Sí' : 'No'}</span
+												>
+											{:else if c.key === 'sueldo_total' || c.key === 'total' || (c.key === 'valor' && filtros.analisis === 'recargos')}
+												<strong>{celda(c, f)}</strong>
+											{:else}
+												{celda(c, f)}
+											{/if}
+										</td>
+									{/each}
+									{#if filtros.analisis === 'resumen'}
+										<td class="an-td--acc">
+											<button
+												type="button"
+												class="an-abrir"
+												onclick={() => abrirEnCanvas(f as LiquidacionAnalisis)}
+												title="Abrir esta liquidación en el canvas de nómina"
+											>
+												<ExternalLink size={14} /> Canvas
+											</button>
+										</td>
+									{/if}
+								</tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
+
+				<footer class="an-paginador">
+					<span class="an-nota">
+						{(pagina - 1) * POR_PAGINA + 1}–{Math.min(pagina * POR_PAGINA, filasActivas.length)} de {num.format(
+							filasActivas.length
+						)}
+					</span>
+					<div class="an-paginas">
+						<button
+							type="button"
+							class="an-pag"
+							disabled={pagina === 1}
+							onclick={() => pagina--}
+							aria-label="Anterior"
+						>
+							<ChevronLeft size={15} />
+						</button>
+						<span class="an-pag-actual">Página {pagina} de {totalPaginas}</span>
+						<button
+							type="button"
+							class="an-pag"
+							disabled={pagina === totalPaginas}
+							onclick={() => pagina++}
+							aria-label="Siguiente"
+						>
+							<ChevronRight size={15} />
+						</button>
+					</div>
+				</footer>
+			{/if}
+		</section>
 	{/if}
 </div>
 
 <style>
-	/* El canvas se queda el alto restante del shell y hace su propio scroll:
-	   sin esto las tablas largas empujarían el toolbar fuera del viewport. */
-	.analisis-canvas {
+	.an {
 		flex: 1 1 auto;
 		min-height: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		padding: 1rem 1.25rem 2rem;
 		overflow-y: auto;
-		padding: 1.25rem;
 		background: var(--bg-base);
+	}
+	@media (min-width: 1024px) {
+		.an {
+			padding: 1.25rem 1.75rem 2.5rem;
+		}
+	}
+	/* Hijos de una columna flex con scroll: sin esto la última tarjeta se
+	   encogía para caber en la ventana y la tabla quedaba con alto cero. */
+	.an > * {
+		flex-shrink: 0;
+	}
+	.an-card {
+		background: var(--bg-surface);
+		border-radius: 20px;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
+	}
+	.an-cargando {
+		opacity: 0.6;
+		pointer-events: none;
+		transition: opacity 0.2s ease;
+	}
+	:global(.an-girar) {
+		animation: an-girar 0.9s linear infinite;
+	}
+	@keyframes an-girar {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	/* ── Filtros ── */
+	.an-filtros {
+		display: flex;
+		flex-direction: column;
+		gap: 0.9rem;
+		padding: 1rem 1.1rem;
+	}
+	.an-filtros-fila {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.9rem 1.5rem;
+		align-items: flex-start;
+	}
+	.an-filtros-fila--selectores {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 0.9rem 1.25rem;
+	}
+	@media (min-width: 900px) {
+		.an-filtros-fila--selectores {
+			grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.6fr);
+		}
+	}
+	.an-filtros-fila--pie {
+		align-items: center;
+		padding-top: 0.75rem;
+		border-top: 1px solid var(--border-subtle);
+	}
+	.an-grupo {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+		min-width: 0;
+	}
+	.an-grupo--meses {
+		flex: 1;
+	}
+	.an-grupo-etiqueta {
+		font-size: 0.62rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.an-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem;
+	}
+	.an-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.38rem 0.7rem;
+		border: 1.5px solid var(--border-default);
+		border-radius: 999px;
+		background: var(--bg-surface);
+		font-family: inherit;
+		font-size: 0.78rem;
+		font-weight: 700;
+		color: var(--text-muted);
+		cursor: pointer;
+		transition:
+			background-color 0.15s ease,
+			border-color 0.15s ease,
+			color 0.15s ease;
+	}
+	.an-chip:hover {
+		border-color: var(--emerald-500);
+		color: var(--text-primary);
+	}
+	.an-chip--activo {
+		background: var(--au-tint, #ddf7ea);
+		border-color: transparent;
+		color: var(--emerald-800);
+	}
+	.an-chip--mes {
+		padding: 0.38rem 0.55rem;
+		min-width: 2.6rem;
+		justify-content: center;
+	}
+	.an-punto {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		flex-shrink: 0;
+	}
+	.an-buscador {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex: 1 1 16rem;
+		height: 40px;
+		padding: 0 0.85rem;
+		background: var(--bg-surface);
+		border: 1.5px solid var(--border-default);
+		border-radius: 12px;
+		color: var(--text-very-muted);
+	}
+	.an-buscador:focus-within {
+		border-color: var(--emerald-500);
+		box-shadow: 0 0 0 4px rgba(var(--au-primary-rgb, 7, 150, 101), 0.12);
+	}
+	.an-buscador input {
+		flex: 1;
+		min-width: 0;
+		border: none;
+		background: transparent;
+		font-family: inherit;
+		font-size: 0.85rem;
+		font-weight: 500;
+		color: var(--text-primary);
+	}
+	.an-buscador input:focus {
+		outline: none;
+	}
+	.an-segmentos {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.15rem;
+		padding: 0.25rem;
+		background: var(--bg-surface);
+		border: 1.5px solid var(--border-default);
+		border-radius: 14px;
+	}
+	.an-segmentos .an-grupo-etiqueta {
+		padding: 0 0.5rem 0 0.6rem;
+	}
+	.an-segmento {
+		padding: 0.4rem 0.75rem;
+		border: none;
+		border-radius: 10px;
+		background: transparent;
+		font-family: inherit;
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: var(--text-muted);
+		cursor: pointer;
+	}
+	.an-segmento--activo {
+		background: var(--au-tint, #ddf7ea);
+		color: var(--emerald-800);
+		font-weight: 700;
+	}
+	.an-filtros-resumen {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		margin-left: auto;
+	}
+	.an-nota {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--text-muted);
+	}
+	.an-limpiar {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0.35rem 0.7rem;
+		border: 1.5px solid var(--border-default);
+		border-radius: 999px;
+		background: var(--bg-surface);
+		font-family: inherit;
+		font-size: 0.75rem;
+		font-weight: 700;
+		color: var(--text-primary);
+		cursor: pointer;
+	}
+	.an-limpiar:hover {
+		border-color: var(--emerald-500);
+	}
+
+	/* ── Estados vacíos ── */
+	.an-estado {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 0.75rem;
+		padding: 3.5rem 1rem;
+		text-align: center;
+		font-size: 0.9rem;
+		color: var(--text-muted);
+	}
+	.an-estado--corto {
+		padding: 2.5rem 1rem;
+	}
+	.an-estado p {
+		margin: 0;
+	}
+	.an-estado-mascota {
+		width: 8rem;
+		height: 8rem;
+		object-fit: contain;
+	}
+
+	/* ── Cifras ── */
+	.an-cifras {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.75rem;
+	}
+	@media (min-width: 768px) {
+		.an-cifras {
+			grid-template-columns: repeat(4, minmax(0, 1fr));
+		}
+	}
+	@media (min-width: 1400px) {
+		.an-cifras {
+			grid-template-columns: repeat(8, minmax(0, 1fr));
+		}
+	}
+	.an-cifra {
+		display: flex;
+		flex-direction: column;
+		gap: 0.15rem;
+		min-width: 0;
+		padding: 0.85rem 1rem;
+		background: var(--bg-surface);
+		border-radius: 18px;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
+	}
+	.an-cifra--fuerte {
+		background: linear-gradient(160deg, var(--au-dark-2) 0%, var(--au-dark) 100%);
+		color: #fff;
+	}
+	.an-cifra-etiqueta {
+		font-size: 0.6rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.an-cifra--fuerte .an-cifra-etiqueta {
+		color: var(--au-eyebrow, #a9efcb);
+	}
+	.an-cifra-valor {
+		font-family: var(--font-display);
+		font-size: 1.15rem;
+		font-weight: 800;
+		letter-spacing: -0.02em;
+		color: var(--text-primary);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.an-cifra--fuerte .an-cifra-valor {
+		color: #fff;
+	}
+	.an-cifra-detalle {
+		font-size: 0.68rem;
+		color: var(--text-very-muted);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.an-cifra--fuerte .an-cifra-detalle {
+		color: rgba(255, 255, 255, 0.7);
+	}
+
+	/* ── Gráficas ── */
+	.an-graficas {
+		display: grid;
+		grid-template-columns: 1fr;
+		gap: 0.75rem;
+	}
+	@media (min-width: 900px) {
+		.an-graficas {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+		.an-grafica--ancha {
+			grid-column: 1 / -1;
+		}
+	}
+	@media (min-width: 1400px) {
+		.an-graficas {
+			grid-template-columns: 2fr 1fr 1fr 1fr;
+		}
+		.an-grafica--ancha {
+			grid-column: auto;
+		}
+	}
+	.an-grafica {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		padding: 1rem 1.1rem 0.9rem;
+		min-width: 0;
+	}
+	.an-card-cabecera {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+	}
+	.an-card-cabecera h2 {
+		margin: 0;
+		font-family: var(--font-display);
+		font-size: 0.98rem;
+		font-weight: 800;
+		letter-spacing: -0.01em;
+		color: var(--text-primary);
+	}
+	.an-card-cabecera span {
+		font-size: 0.72rem;
+		color: var(--text-muted);
+	}
+	.an-lienzo {
+		position: relative;
+		height: 230px;
+	}
+	.an-sin {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		height: 100%;
+		margin: 0;
+		border: 2px dashed var(--border-subtle);
+		border-radius: 14px;
+		font-size: 0.8rem;
+		color: var(--text-muted);
+	}
+
+	/* ── Tabla ── */
+	.an-tabla-card {
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+	}
+	.an-tabs {
+		display: flex;
+		gap: 0.25rem;
+		padding: 0.6rem 0.75rem 0;
+		overflow-x: auto;
+		scrollbar-width: none;
+		border-bottom: 1px solid var(--border-subtle);
+	}
+	.an-tabs::-webkit-scrollbar {
+		display: none;
+	}
+	.an-tab {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		flex-shrink: 0;
+		padding: 0.6rem 0.9rem;
+		border: none;
+		border-bottom: 2px solid transparent;
+		background: transparent;
+		font-family: inherit;
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--text-muted);
+		cursor: pointer;
+	}
+	.an-tab:hover {
+		color: var(--text-primary);
+	}
+	.an-tab--activo {
+		color: var(--emerald-800);
+		border-bottom-color: var(--emerald-500);
+		font-weight: 700;
+	}
+	.an-tab-n {
+		padding: 0.1rem 0.45rem;
+		border-radius: 999px;
+		background: var(--bg-base);
+		font-size: 0.68rem;
+		font-weight: 700;
+		color: var(--text-muted);
+	}
+	.an-tab--activo .an-tab-n {
+		background: var(--au-tint, #ddf7ea);
+		color: var(--emerald-800);
+	}
+	.an-scroll {
+		overflow-x: auto;
+	}
+	.an-tabla {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.84rem;
+	}
+	.an-tabla th {
+		position: sticky;
+		top: 0;
+		z-index: 1;
+		padding: 0.55rem 0.85rem;
+		background: var(--bg-base);
+		border-bottom: 1px solid var(--border-subtle);
+		text-align: left;
+		white-space: nowrap;
+	}
+	.an-th-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		border: none;
+		background: transparent;
+		font-family: inherit;
+		font-size: 0.62rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+		cursor: pointer;
+	}
+	.an-th-btn:hover {
+		color: var(--text-primary);
+	}
+	.an-th-btn :global(svg) {
+		opacity: 0.4;
+	}
+	.an-th-btn :global(.an-orden--activo) {
+		opacity: 1;
+		color: var(--emerald-800);
+	}
+	.an-orden-dir {
+		color: var(--emerald-800);
+	}
+	.an-th--num,
+	.an-td--num {
+		text-align: right;
+	}
+	.an-th--num .an-th-btn {
+		flex-direction: row-reverse;
+	}
+	.an-tabla td {
+		padding: 0.6rem 0.85rem;
+		border-bottom: 1px solid var(--border-subtle);
+		color: var(--text-secondary);
+		vertical-align: middle;
+	}
+	.an-td--num {
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+	}
+	.an-tabla tbody tr:hover td {
+		background: rgba(var(--au-primary-rgb, 7, 150, 101), 0.04);
+	}
+	.an-tr--prop td {
+		background: rgba(245, 158, 11, 0.06);
+	}
+	.an-tr--empresa td {
+		background: rgba(220, 38, 38, 0.035);
+	}
+	.an-conductor {
+		display: flex;
+		flex-direction: column;
+		line-height: 1.2;
+	}
+	.an-conductor strong {
+		color: var(--text-primary);
+		font-weight: 700;
+	}
+	.an-conductor small {
+		font-size: 0.68rem;
+		color: var(--text-very-muted);
+	}
+	.an-estado-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.2rem 0.6rem;
+		border-radius: 999px;
+		font-size: 0.68rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		white-space: nowrap;
+	}
+	.an-si-no {
+		display: inline-block;
+		padding: 0.15rem 0.5rem;
+		border-radius: 999px;
+		background: rgba(220, 38, 38, 0.1);
+		font-size: 0.7rem;
+		font-weight: 700;
+		color: #991b1b;
+	}
+	.an-si-no--si {
+		background: var(--au-tint, #ddf7ea);
+		color: var(--emerald-800);
+	}
+	.an-td--acc {
+		text-align: right;
+		white-space: nowrap;
+	}
+	.an-abrir {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.35rem 0.65rem;
+		border: 1.5px solid var(--border-default);
+		border-radius: 10px;
+		background: var(--bg-surface);
+		font-family: inherit;
+		font-size: 0.72rem;
+		font-weight: 700;
+		color: var(--text-primary);
+		cursor: pointer;
+	}
+	.an-abrir:hover {
+		border-color: var(--emerald-500);
+		color: var(--emerald-800);
+	}
+	.an-paginador {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		padding: 0.6rem 0.85rem;
+		border-top: 1px solid var(--border-subtle);
+	}
+	.an-paginas {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+	}
+	.an-pag {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 32px;
+		height: 32px;
+		border: 1.5px solid var(--border-default);
+		border-radius: 10px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		cursor: pointer;
+	}
+	.an-pag:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+	.an-pag-actual {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--text-muted);
+	}
+
+	/* ── Móvil: la tabla se apila en tarjetas ── */
+	@media (max-width: 767.98px) {
+		.an-tabla thead {
+			display: none;
+		}
+		.an-tabla,
+		.an-tabla tbody,
+		.an-tabla tr,
+		.an-tabla td {
+			display: block;
+			width: 100%;
+		}
+		.an-tabla tr {
+			margin: 0.6rem 0.75rem;
+			padding: 0.4rem 0.75rem;
+			border: 1px solid var(--border-subtle);
+			border-radius: 14px;
+		}
+		.an-tabla td {
+			display: flex;
+			justify-content: space-between;
+			gap: 0.75rem;
+			padding: 0.4rem 0;
+			border-bottom: 1px dashed var(--border-subtle);
+			text-align: right;
+		}
+		.an-tabla td:last-child {
+			border-bottom: none;
+		}
+		.an-tabla td::before {
+			content: attr(data-etiqueta);
+			flex-shrink: 0;
+			font-size: 0.62rem;
+			font-weight: 700;
+			letter-spacing: 0.08em;
+			text-transform: uppercase;
+			color: var(--text-muted);
+			text-align: left;
+		}
+		.an-td--acc::before {
+			content: '';
+		}
 	}
 </style>

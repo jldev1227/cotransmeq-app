@@ -65,6 +65,77 @@ export interface ResultadoRevertir {
 	nuevoSnapshot: { id: string; version: number } | null;
 }
 
+// ── Análisis ──────────────────────────────────────────────────────────
+
+export interface LiquidacionAnalisis {
+	id: string;
+	conductor: { id: string | null; nombre: string; cedula: string | null };
+	periodo_start: string;
+	periodo_end: string;
+	anio: number;
+	mes: number;
+	corte: number;
+	estado_flujo: string;
+	firmado: boolean;
+	desprendible_visible: boolean;
+	dias_laborados: number;
+	salario_basico: number;
+	salario_devengado: number;
+	auxilio_transporte: number;
+	total_bonificaciones: number;
+	total_recargos: number;
+	total_pernotes: number;
+	total_vacaciones: number;
+	total_licencia: number;
+	valor_incapacidad: number;
+	total_anticipos: number;
+	salud: number;
+	pension: number;
+	sueldo_total: number;
+	vehiculos: { id: string; placa: string }[];
+	bonificaciones: {
+		vehiculo_id: string | null;
+		placa: string | null;
+		nombre: string;
+		valor_unitario: number;
+		valores: { mes: string; cantidad: number }[];
+	}[];
+	recargos: {
+		vehiculo_id: string | null;
+		placa: string | null;
+		valor: number;
+		paga_cliente: boolean;
+		cliente_id: string | null;
+		cliente: string;
+		mes: string;
+		porcentaje_propietario: number;
+	}[];
+	pernotes: {
+		vehiculo_id: string | null;
+		placa: string | null;
+		cantidad: number;
+		valor_unitario: number;
+		fechas: string[];
+		cliente: string;
+	}[];
+	mantenimientos: {
+		vehiculo_id: string | null;
+		placa: string | null;
+		valores: { mes: string; cantidad: number }[];
+	}[];
+}
+
+export interface AnalisisNominaDTO {
+	liquidaciones: LiquidacionAnalisis[];
+	catalogos: {
+		anios: number[];
+		placas: string[];
+		conductores: { id: string; nombre: string }[];
+		estados: string[];
+	};
+	total: number;
+}
+
 export const nominaCanvasAPI = {
 	/** El libro entero del periodo. `corte` es el día de inicio (21 por defecto). */
 	async periodo(
@@ -77,6 +148,25 @@ export const nominaCanvasAPI = {
 			params: { anio, mes, ...(corte != null ? { desde: corte } : {}), ...paramsRango(rango) }
 		});
 		return data as PeriodoNominaDTO;
+	},
+
+	/**
+	 * Análisis: todas las liquidaciones con totales y detalle por vehículo.
+	 * Cada filtro es una lista; vacía significa «todo».
+	 */
+	async analisis(filtros: {
+		anios?: number[];
+		meses?: number[];
+		placas?: string[];
+		conductores?: string[];
+		estados?: string[];
+	}): Promise<AnalisisNominaDTO> {
+		const params: Record<string, string> = {};
+		for (const [k, v] of Object.entries(filtros)) {
+			if (Array.isArray(v) && v.length) params[k] = v.join(',');
+		}
+		const { data } = await apiClient.get('/api/nomina/analisis', { params });
+		return data as AnalisisNominaDTO;
 	},
 
 	async resumen(anio: number, mes: number, corte?: number): Promise<ResumenPeriodo> {
