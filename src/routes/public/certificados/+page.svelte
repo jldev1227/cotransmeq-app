@@ -356,7 +356,7 @@
     justify-content: center;
     padding: 1.5rem 1rem;
     background-color: #faf7f2;
-    font-family: 'Inter', 'Inter Tight', system-ui, sans-serif;
+    font-family: var(--font-sans);
     color: #1a1a1a;
     -webkit-font-smoothing: antialiased;
     overflow: hidden;
@@ -481,7 +481,7 @@
     height: 28px;
   }
   .state-title {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: var(--font-sans);
     font-size: 1.4rem;
     font-weight: 500;
     color: #0f1f1a;
@@ -498,7 +498,7 @@
   .eyebrow {
     display: inline-block;
     align-self: flex-start;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.7rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -511,7 +511,7 @@
   }
 
   .auth-title {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: var(--font-sans);
     font-size: clamp(1.75rem, 5vw, 2.15rem);
     font-weight: 400;
     line-height: 1.1;
@@ -532,7 +532,7 @@
   }
 
   .email-addr {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     color: #065f46;
     background: rgba(249, 115, 22, 0.08);
     padding: 0.1rem 0.4rem;
@@ -579,7 +579,7 @@
   }
 
   .field-label {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.65rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -590,7 +590,7 @@
   .cedula-input {
     width: 100%;
     padding: 0.85rem 1rem;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 1.15rem;
     font-weight: 600;
     letter-spacing: 0.18em;
@@ -709,7 +709,7 @@
   }
   .hint-label {
     display: inline-block;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.62rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -757,7 +757,7 @@
     min-width: 0;
   }
   .welcome-greeting {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.65rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -766,7 +766,7 @@
     margin: 0;
   }
   .welcome-name {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: var(--font-sans);
     font-size: 1.2rem;
     font-weight: 500;
     color: #0f1f1a;
@@ -777,7 +777,7 @@
     line-height: 1.2;
   }
   .welcome-id {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.7rem;
     color: #6b6b6b;
     margin: 0.15rem 0 0;
@@ -829,7 +829,7 @@
     color: #6b6b6b;
   }
   .meta-mono {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     color: #0f1f1a;
     font-weight: 600;
   }
@@ -889,7 +889,7 @@
     height: 22px;
   }
   .empty-title {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: var(--font-sans);
     font-size: 1rem;
     font-weight: 500;
     color: #0f1f1a;

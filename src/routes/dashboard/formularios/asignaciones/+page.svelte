@@ -325,11 +325,11 @@
 		align-items: center;
 		gap: 0.375rem;
 		font-size: 0.75rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.migas a {
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		text-decoration: none;
 	}
 
@@ -338,13 +338,13 @@
 		font-family: var(--font-display, Georgia, serif);
 		font-size: 1.5rem;
 		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.cabecera__sub {
 		margin-top: 0.1875rem;
 		font-size: 0.8125rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.filtros {
@@ -375,13 +375,13 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.filtro__total {
 		font-family: var(--font-mono, monospace);
 		font-size: 0.75rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 		padding-bottom: 0.625rem;
 	}
 
@@ -398,8 +398,8 @@
 
 	.input:focus-visible {
 		outline: none;
-		border-color: var(--emerald-600, #059669);
-		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+		border-color: var(--emerald-600, #15803d);
+		box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
 	}
 
 	.lista {
@@ -437,27 +437,27 @@
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
 		font-weight: 700;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 	}
 
 	.item__nombre {
 		font-size: 0.9375rem;
 		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.item__meta,
 	.item__vigencia {
 		margin-top: 0.1875rem;
 		font-size: 0.75rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 		line-height: 1.45;
 	}
 
 	.item__vigencia {
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.alerta {
@@ -517,7 +517,7 @@
 		font: inherit;
 		font-size: 0.8125rem;
 		font-weight: 500;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		background: #fff;
 		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
 		border-radius: 9px;
@@ -540,7 +540,7 @@
 	}
 
 	.btn:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 2px;
 	}
 
@@ -556,7 +556,7 @@
 	.estado {
 		padding: 2.5rem 1rem;
 		text-align: center;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 		background: var(--bg-surface, #fff);
 		border: 1px dashed var(--border-default, rgba(0, 0, 0, 0.12));
 		border-radius: 12px;
@@ -572,6 +572,6 @@
 	.paginacion__estado {
 		font-family: var(--font-mono, monospace);
 		font-size: 0.75rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 </style>

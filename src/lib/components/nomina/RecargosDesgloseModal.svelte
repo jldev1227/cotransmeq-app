@@ -594,7 +594,7 @@
 	// Color por código de recargo (paleta consistente con el resto del sistema)
 	function colorTipo(codigo: string): { bg: string; fg: string; bar: string } {
 		const map: Record<string, { bg: string; fg: string; bar: string }> = {
-			HED: { bg: 'rgba(249, 115, 22, 0.10)', fg: '#9A3412', bar: '#F97316' },
+			HED: { bg: 'rgba(234, 88, 12, 0.10)', fg: '#9A3412', bar: '#ea580c' },
 			HEN: { bg: 'rgba(59, 130, 246, 0.10)', fg: '#1E3A8A', bar: '#3B82F6' },
 			HEFD: { bg: 'rgba(234, 179, 8, 0.10)', fg: '#854D0E', bar: '#EAB308' },
 			HEFN: { bg: 'rgba(168, 85, 247, 0.10)', fg: '#6B21A8', bar: '#A855F7' },
@@ -617,7 +617,7 @@
 	>
 		<div
 			class="relative flex h-[94vh] w-full max-w-[96rem] flex-col overflow-hidden bg-white"
-			style="border-radius: 20px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18), 0 4px 24px rgba(0, 0, 0, 0.06); font-family: 'Inter Tight', system-ui, sans-serif; color: #1A1A1A;"
+			style="border-radius: 20px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18), 0 4px 24px rgba(0, 0, 0, 0.06); font-family: var(--font-sans); color: #0f172a;"
 			onclick={(e) => e.stopPropagation()}
 			onkeydown={(e) => e.stopPropagation()}
 			role="dialog"
@@ -635,19 +635,19 @@
 					<div class="flex min-w-0 items-center gap-3">
 						<div
 							class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
-							style="background: linear-gradient(135deg, #10B981, #059669); box-shadow: 0 6px 16px rgba(16, 185, 129, 0.30);"
+							style="background: linear-gradient(135deg, #16a34a, #15803d); box-shadow: 0 6px 16px rgba(22, 163, 74, 0.30);"
 						>
 							<TrendingUp class="h-5 w-5 text-white" />
 						</div>
 						<div class="min-w-0">
 							<p
-								style="display: inline-block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #065F46; background: rgba(16, 185, 129, 0.08); padding: 0.25rem 0.65rem; border-radius: 6px; font-family: 'JetBrains Mono', monospace;"
+								style="display: inline-block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #14532d; background: rgba(22, 163, 74, 0.08); padding: 0.25rem 0.65rem; border-radius: 6px; font-family: var(--font-sans);"
 							>
 								Desglose · Recargos
 							</p>
 							<h2
 								class="truncate font-display"
-								style="font-size: 1.4rem; font-weight: 500; color: #0F1F1A; margin-top: 0.35rem; line-height: 1.1;"
+								style="font-size: 1.4rem; font-weight: 800; color: #0f172a; margin-top: 0.35rem; line-height: 1.1;"
 							>
 								Detalle de recargos por día, tipo y configuración
 							</h2>
@@ -675,44 +675,44 @@
 					<div class="grid grid-cols-2 gap-2 border-t border-gray-100 px-6 py-3 sm:grid-cols-5">
 						<div
 							class="rounded-lg px-3 py-2"
-							style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.06), rgba(5, 150, 105, 0.04)); border: 1px solid rgba(16, 185, 129, 0.15);"
+							style="background: linear-gradient(135deg, rgba(22, 163, 74, 0.06), rgba(21, 128, 61, 0.04)); border: 1px solid rgba(22, 163, 74, 0.15);"
 						>
-							<p style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #047857; font-family: 'JetBrains Mono', monospace;">
+							<p style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #166534; font-family: var(--font-sans);">
 								Total recargos
 							</p>
-							<p class="mt-0.5 font-display" style="font-size: 1.15rem; font-weight: 700; color: #0F1F1A;">
+							<p class="mt-0.5 font-display" style="font-size: 1.15rem; font-weight: 700; color: #0f172a;">
 								{fmtCOP(statsPeriodo.totalRecargos)}
 							</p>
 						</div>
 						<div class="rounded-lg bg-gray-50 px-3 py-2" style="border: 1px solid rgba(0,0,0,0.06);">
-							<p style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">
+							<p style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">
 								Planillas
 							</p>
-							<p class="mt-0.5 font-display" style="font-size: 1.15rem; font-weight: 700; color: #0F1F1A;">
+							<p class="mt-0.5 font-display" style="font-size: 1.15rem; font-weight: 700; color: #0f172a;">
 								{statsPeriodo.planillas}
 							</p>
 						</div>
 						<div class="rounded-lg bg-gray-50 px-3 py-2" style="border: 1px solid rgba(0,0,0,0.06);">
-							<p style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">
+							<p style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">
 								Días trabajados
 							</p>
-							<p class="mt-0.5 font-display" style="font-size: 1.15rem; font-weight: 700; color: #0F1F1A;">
+							<p class="mt-0.5 font-display" style="font-size: 1.15rem; font-weight: 700; color: #0f172a;">
 								{statsPeriodo.dias}
 							</p>
 						</div>
 						<div class="rounded-lg bg-gray-50 px-3 py-2" style="border: 1px solid rgba(0,0,0,0.06);">
-							<p style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">
+							<p style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">
 								Horas
 							</p>
-							<p class="mt-0.5 font-display" style="font-size: 1.15rem; font-weight: 700; color: #0F1F1A;">
+							<p class="mt-0.5 font-display" style="font-size: 1.15rem; font-weight: 700; color: #0f172a;">
 								{fmtHoras(statsPeriodo.horas)}
 							</p>
 						</div>
 						<div class="rounded-lg bg-gray-50 px-3 py-2" style="border: 1px solid rgba(0,0,0,0.06);">
-							<p style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">
+							<p style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">
 								Festivos
 							</p>
-							<p class="mt-0.5 font-display" style="font-size: 1.15rem; font-weight: 700; color: #0F1F1A;">
+							<p class="mt-0.5 font-display" style="font-size: 1.15rem; font-weight: 700; color: #0f172a;">
 								{statsPeriodo.festivos}
 							</p>
 						</div>
@@ -735,7 +735,7 @@
 							onclick={() => (tabActiva = tab.id as any)}
 							class="flex items-center gap-1.5 border-b-2 px-3 py-2.5 font-mono-meta transition-colors"
 							style="font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; {tabActiva === tab.id
-								? 'color: #047857; border-bottom-color: #10B981;'
+								? 'color: #166534; border-bottom-color: #16a34a;'
 								: 'color: #6B7280; border-bottom-color: transparent;'}"
 						>
 							<tab.icon class="h-3.5 w-3.5" />
@@ -755,7 +755,7 @@
 						>
 							<FileText class="h-7 w-7 text-gray-400" />
 						</div>
-						<h3 class="font-display" style="font-size: 1.1rem; font-weight: 500; color: #0F1F1A;">
+						<h3 class="font-display" style="font-size: 1.1rem; font-weight: 800; color: #0f172a;">
 							Sin recargos para mostrar
 						</h3>
 						<p style="font-size: 0.8rem; color: #6B7280; margin-top: 0.4rem;">
@@ -771,7 +771,7 @@
 						>
 							<Calendar class="h-7 w-7" style="color: #B45309;" />
 						</div>
-						<h3 class="font-display" style="font-size: 1.1rem; font-weight: 500; color: #0F1F1A;">
+						<h3 class="font-display" style="font-size: 1.1rem; font-weight: 800; color: #0f172a;">
 							Sin recargos dentro del período
 						</h3>
 						<p style="font-size: 0.8rem; color: #6B7280; margin-top: 0.4rem; max-width: 28rem;">
@@ -794,7 +794,7 @@
 									<button
 										onclick={expandAllPlanillas}
 										class="font-mono-meta rounded-md px-2 py-1 transition-colors hover:bg-gray-100"
-										style="font-size: 0.65rem; color: #047857;"
+										style="font-size: 0.65rem; color: #166534;"
 									>
 										Expandir todo
 									</button>
@@ -833,9 +833,9 @@
 									<div
 										class="overflow-hidden rounded-xl border bg-white transition-shadow"
 										style="border-color: {isExpanded
-											? 'rgba(16, 185, 129, 0.35)'
+											? 'rgba(22, 163, 74, 0.35)'
 											: 'rgba(0, 0, 0, 0.08)'}; box-shadow: {isExpanded
-											? '0 4px 12px rgba(16, 185, 129, 0.08)'
+											? '0 4px 12px rgba(22, 163, 74, 0.08)'
 											: '0 1px 2px rgba(0, 0, 0, 0.04)'};"
 									>
 										<!-- Planilla header -->
@@ -848,7 +848,7 @@
 												<div
 													class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
 													style="background: linear-gradient(135deg, {isExpanded
-														? '#10B981, #059669'
+														? '#16a34a, #15803d'
 														: '#F3F4F6, #E5E7EB'}); color: {isExpanded ? 'white' : '#6B7280'};"
 												>
 													{#if isExpanded}
@@ -860,16 +860,16 @@
 												<div class="min-w-0 flex-1">
 													<div class="flex flex-wrap items-center gap-2">
 														<span
-															style="display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #047857; background: rgba(16, 185, 129, 0.08); padding: 0.2rem 0.55rem; border-radius: 6px; font-family: 'JetBrains Mono', monospace;"
+															style="display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #166534; background: rgba(22, 163, 74, 0.08); padding: 0.2rem 0.55rem; border-radius: 6px; font-family: var(--font-sans);"
 														>
 															<FileText class="h-2.5 w-2.5" />
 															{planilla.numero_planilla || 'Sin número'}
 														</span>
-														<span style="font-size: 0.85rem; font-weight: 600; color: #0F1F1A;">
+														<span style="font-size: 0.85rem; font-weight: 600; color: #0f172a;">
 															{planilla.vehiculo.placa}
 														</span>
 														<span style="font-size: 0.75rem; color: #6B7280;">·</span>
-														<span style="font-size: 0.85rem; color: #0F1F1A;">
+														<span style="font-size: 0.85rem; color: #0f172a;">
 															{planilla.empresa.nombre}
 														</span>
 														<span style="font-size: 0.75rem; color: #6B7280;">·</span>
@@ -882,15 +882,15 @@
 														style="font-size: 0.7rem; color: #6B7280;"
 													>
 														<span>
-															<span style="font-weight: 600; color: #0F1F1A;">{planilla.total_dias}</span> días
+															<span style="font-weight: 600; color: #0f172a;">{planilla.total_dias}</span> días
 														</span>
 														<span>·</span>
 														<span>
-															<span style="font-weight: 600; color: #0F1F1A;">{fmtHoras(planilla.total_horas)}</span> trabajadas
+															<span style="font-weight: 600; color: #0f172a;">{fmtHoras(planilla.total_horas)}</span> trabajadas
 														</span>
 														<span>·</span>
 														<span>
-															<span style="font-weight: 600; color: #0F1F1A;">{planilla.dias?.filter((d) => d.disponibilidad).length || 0}</span> disponibles
+															<span style="font-weight: 600; color: #0f172a;">{planilla.dias?.filter((d) => d.disponibilidad).length || 0}</span> disponibles
 														</span>
 													</div>
 												</div>
@@ -898,7 +898,7 @@
 											<div class="shrink-0 text-right">
 												<p
 													class="font-display"
-													style="font-size: 1.1rem; font-weight: 700; color: #047857;"
+													style="font-size: 1.1rem; font-weight: 700; color: #166534;"
 												>
 													{fmtCOP(planilla.total_valor)}
 												</p>
@@ -912,7 +912,7 @@
 										{#if isExpanded}
 											<div
 												class="border-t px-4 py-3"
-												style="border-color: rgba(16, 185, 129, 0.15); background-color: #FAFAFA;"
+												style="border-color: rgba(22, 163, 74, 0.15); background-color: #FAFAFA;"
 											>
 												<!-- Config salarial usada -->
 												{#if config}
@@ -922,7 +922,7 @@
 													>
 														<Settings2 class="h-3.5 w-3.5" style="color: #4F46E5;" />
 														<span
-															style="font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #4338CA; font-family: 'JetBrains Mono', monospace;"
+															style="font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #4338CA; font-family: var(--font-sans);"
 														>
 															Config destinada
 														</span>
@@ -931,7 +931,7 @@
 														</span>
 														{#if config.paga_dias_festivos}
 															<span
-																style="display: inline-flex; align-items: center; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #92400E; background: rgba(245, 158, 11, 0.10); padding: 0.15rem 0.5rem; border-radius: 6px; font-family: 'JetBrains Mono', monospace;"
+																style="display: inline-flex; align-items: center; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #92400E; background: rgba(245, 158, 11, 0.10); padding: 0.15rem 0.5rem; border-radius: 6px; font-family: var(--font-sans);"
 															>
 																Paga festivos: {config.porcentaje_festivos}%
 															</span>
@@ -968,7 +968,7 @@
 															style="border-color: {isDisp
 																? 'rgba(0, 0, 0, 0.06)'
 																: isDiaExpanded
-																	? 'rgba(16, 185, 129, 0.30)'
+																	? 'rgba(22, 163, 74, 0.30)'
 																	: 'rgba(0, 0, 0, 0.08)'}; background-color: {isDisp
 																? 'rgba(0, 0, 0, 0.02)'
 																: 'white'};"
@@ -990,19 +990,19 @@
 																				? 'rgba(245, 158, 11, 0.12)'
 																				: dia.es_domingo
 																					? 'rgba(168, 85, 247, 0.10)'
-																					: 'rgba(16, 185, 129, 0.08)'}; color: {isDisp
+																					: 'rgba(22, 163, 74, 0.08)'}; color: {isDisp
 																			? '#9CA3AF'
 																			: dia.es_festivo
 																				? '#92400E'
 																				: dia.es_domingo
 																					? '#6B21A8'
-																					: '#047857'};"
+																					: '#166534'};"
 																	>
 																		{String(dia.dia).padStart(2, '0')}
 																	</div>
 																	<div class="min-w-0">
 																		<div class="flex flex-wrap items-center gap-1.5">
-																				<span style="font-size: 0.78rem; font-weight: 600; color: {isDisp ? '#9CA3AF' : '#0F1F1A'};">
+																				<span style="font-size: 0.78rem; font-weight: 600; color: {isDisp ? '#9CA3AF' : '#0f172a'};">
 																					{diaSemana} {fechaFmt.corta}
 																				</span>
 																			<span style="font-size: 0.7rem; color: #6B7280;">
@@ -1010,20 +1010,20 @@
 																			</span>
 																			{#if dia.es_festivo}
 																				<span
-																					style="display: inline-flex; align-items: center; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #92400E; background: rgba(245, 158, 11, 0.12); padding: 0.1rem 0.45rem; border-radius: 4px; font-family: 'JetBrains Mono', monospace;"
+																					style="display: inline-flex; align-items: center; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #92400E; background: rgba(245, 158, 11, 0.12); padding: 0.1rem 0.45rem; border-radius: 4px; font-family: var(--font-sans);"
 																				>
 																					🎉 Festivo
 																				</span>
 																			{:else if dia.es_domingo}
 																				<span
-																					style="display: inline-flex; align-items: center; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B21A8; background: rgba(168, 85, 247, 0.10); padding: 0.1rem 0.45rem; border-radius: 4px; font-family: 'JetBrains Mono', monospace;"
+																					style="display: inline-flex; align-items: center; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B21A8; background: rgba(168, 85, 247, 0.10); padding: 0.1rem 0.45rem; border-radius: 4px; font-family: var(--font-sans);"
 																				>
 																					Dom
 																				</span>
 																			{/if}
 																			{#if isDisp}
 																				<span
-																					style="display: inline-flex; align-items: center; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; background: rgba(0, 0, 0, 0.05); padding: 0.1rem 0.45rem; border-radius: 4px; font-family: 'JetBrains Mono', monospace;"
+																					style="display: inline-flex; align-items: center; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; background: rgba(0, 0, 0, 0.05); padding: 0.1rem 0.45rem; border-radius: 4px; font-family: var(--font-sans);"
 																				>
 																					Disponible
 																				</span>
@@ -1032,7 +1032,7 @@
 																		<div class="mt-0.5" style="font-size: 0.7rem; color: #6B7280;">
 																			{#if !isDisp}
 																				{fmtHoraDecimal(dia.hora_inicio)} → {fmtHoraDecimal(dia.hora_fin)}
-																				<span style="color: #0F1F1A; font-weight: 600;">· {fmtHoras(dia.total_horas)}</span>
+																				<span style="color: #0f172a; font-weight: 600;">· {fmtHoras(dia.total_horas)}</span>
 																			{:else}
 																				Sin horas trabajadas
 																			{/if}
@@ -1042,14 +1042,14 @@
 																<div class="flex shrink-0 items-center gap-2">
 																	{#if !isDisp && (dia.recargos?.length || 0) > 0}
 																		<div class="text-right">
-																			<p style="font-size: 0.85rem; font-weight: 700; color: #047857;">
+																			<p style="font-size: 0.85rem; font-weight: 700; color: #166534;">
 																				{fmtCOP(dia.total_valor_dia)}
 																			</p>
 																			<p style="font-size: 0.6rem; color: #6B7280;">
 																				{dia.recargos.length} tipo{dia.recargos.length !== 1 ? 's' : ''}
 																			</p>
 																		</div>
-																		<div style="color: {isDiaExpanded ? '#10B981' : '#9CA3AF'};">
+																		<div style="color: {isDiaExpanded ? '#16a34a' : '#9CA3AF'};">
 																			{#if isDiaExpanded}
 																				<ChevronDown class="h-4 w-4" />
 																			{:else}
@@ -1066,7 +1066,7 @@
 															{#if isDiaExpanded && !isDisp && (dia.recargos?.length || 0) > 0}
 																<div
 																	class="border-t px-3 py-2"
-																	style="border-color: rgba(16, 185, 129, 0.15); background-color: #F9FAFB;"
+																	style="border-color: rgba(22, 163, 74, 0.15); background-color: #F9FAFB;"
 																>
 																	<table class="w-full" style="font-size: 0.7rem;">
 																		<thead>
@@ -1089,7 +1089,7 @@
 																								style="display: inline-block; width: 4px; height: 18px; border-radius: 2px; background-color: {c.bar};"
 																							></span>
 																							<div>
-																								<p style="font-weight: 700; color: {c.fg}; font-family: 'JetBrains Mono', monospace; font-size: 0.7rem;">
+																								<p style="font-weight: 700; color: {c.fg}; font-family: var(--font-sans); font-size: 0.7rem;">
 																									{r.tipo_codigo}
 																								</p>
 																								<p style="font-size: 0.65rem; color: #6B7280;">
@@ -1098,14 +1098,14 @@
 																							</div>
 																							{#if r.adicional}
 																								<span
-																									style="font-size: 0.55rem; color: #9333EA; background: rgba(168, 85, 247, 0.08); padding: 0.05rem 0.3rem; border-radius: 3px; font-family: 'JetBrains Mono', monospace; text-transform: uppercase; letter-spacing: 0.04em;"
+																									style="font-size: 0.55rem; color: #9333EA; background: rgba(168, 85, 247, 0.08); padding: 0.05rem 0.3rem; border-radius: 3px; font-family: var(--font-sans); text-transform: uppercase; letter-spacing: 0.04em;"
 																								>
 																									Adic
 																								</span>
 																							{/if}
 																						</div>
 																					</td>
-																					<td class="py-1.5 text-right font-mono-meta" style="font-weight: 600; color: #0F1F1A;">
+																					<td class="py-1.5 text-right font-mono-meta" style="font-weight: 600; color: #0f172a;">
 																						{fmtHoras(r.horas)}
 																					</td>
 																					<td class="py-1.5 text-right font-mono-meta" style="color: #6B7280;">
@@ -1117,16 +1117,16 @@
 																					<td class="py-1.5 text-right font-mono-meta" style="color: #6B7280;">
 																						{fmtCOPPlain(r.valor_hora_calculada)}
 																					</td>
-																					<td class="py-1.5 text-right font-mono-meta" style="font-weight: 700; color: #047857;">
+																					<td class="py-1.5 text-right font-mono-meta" style="font-weight: 700; color: #166534;">
 																						{fmtCOP(r.valor_total)}
 																					</td>
 																				</tr>
 																			{/each}
-																			<tr style="border-top: 2px solid rgba(16, 185, 129, 0.30);">
-																				<td colspan="5" class="py-1.5 text-right" style="font-size: 0.7rem; font-weight: 600; color: #0F1F1A;">
+																			<tr style="border-top: 2px solid rgba(22, 163, 74, 0.30);">
+																				<td colspan="5" class="py-1.5 text-right" style="font-size: 0.7rem; font-weight: 600; color: #0f172a;">
 																					Total día
 																				</td>
-																				<td class="py-1.5 text-right font-display" style="font-weight: 700; color: #047857; font-size: 0.85rem;">
+																				<td class="py-1.5 text-right font-display" style="font-weight: 700; color: #166534; font-size: 0.85rem;">
 																					{fmtCOP(dia.total_valor_dia)}
 																				</td>
 																			</tr>
@@ -1151,31 +1151,31 @@
 								<table class="w-full" style="font-size: 0.8rem;">
 									<thead style="background-color: #F9FAFB;">
 										<tr>
-											<th class="px-4 py-2.5 text-left" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">
+											<th class="px-4 py-2.5 text-left" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">
 												<Building2 class="mr-1 inline h-3 w-3" /> Empresa
 											</th>
-											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">Planillas</th>
-											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">Días</th>
-											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">Horas</th>
-											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">Total</th>
-											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">% del total</th>
+											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Planillas</th>
+											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Días</th>
+											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Horas</th>
+											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Total</th>
+											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">% del total</th>
 										</tr>
 									</thead>
 									<tbody>
 										{#each resumen as r}
 											{@const pct = statsPeriodo.totalRecargos ? (r.total / statsPeriodo.totalRecargos) * 100 : 0}
 											<tr class="transition-colors hover:bg-gray-50" style="border-top: 1px solid rgba(0, 0, 0, 0.06);">
-												<td class="px-4 py-2.5" style="font-weight: 600; color: #0F1F1A;">{r.empresaNombre}</td>
+												<td class="px-4 py-2.5" style="font-weight: 600; color: #0f172a;">{r.empresaNombre}</td>
 												<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #6B7280;">{r.planillas}</td>
-												<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0F1F1A;">{r.dias}</td>
-												<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0F1F1A;">{fmtHoras(r.horas)}</td>
-												<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #047857;">{fmtCOP(r.total)}</td>
+												<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0f172a;">{r.dias}</td>
+												<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0f172a;">{fmtHoras(r.horas)}</td>
+												<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #166534;">{fmtCOP(r.total)}</td>
 												<td class="px-4 py-2.5 text-right" style="min-width: 140px;">
 													<div class="flex items-center justify-end gap-2">
-														<div class="h-1.5 w-16 overflow-hidden rounded-full" style="background-color: rgba(16, 185, 129, 0.12);">
+														<div class="h-1.5 w-16 overflow-hidden rounded-full" style="background-color: rgba(22, 163, 74, 0.12);">
 															<div
 																class="h-full rounded-full"
-																style="width: {pct}%; background: linear-gradient(90deg, #10B981, #059669);"
+																style="width: {pct}%; background: linear-gradient(90deg, #16a34a, #15803d);"
 															></div>
 														</div>
 														<span class="font-mono-meta" style="font-size: 0.7rem; color: #6B7280; min-width: 36px; text-align: right;">
@@ -1188,17 +1188,17 @@
 									</tbody>
 									<tfoot>
 										<tr style="background-color: #F9FAFB; border-top: 2px solid rgba(0, 0, 0, 0.08);">
-											<td class="px-4 py-2.5" style="font-weight: 700; color: #0F1F1A;">Total</td>
-											<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0F1F1A;">
+											<td class="px-4 py-2.5" style="font-weight: 700; color: #0f172a;">Total</td>
+											<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
 												{resumen.reduce((s, r) => s + r.planillas, 0)}
 											</td>
-											<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0F1F1A;">
+											<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
 												{resumen.reduce((s, r) => s + r.dias, 0)}
 											</td>
-											<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0F1F1A;">
+											<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
 												{fmtHoras(resumen.reduce((s, r) => s + r.horas, 0))}
 											</td>
-											<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #047857;">
+											<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #166534;">
 												{fmtCOP(resumen.reduce((s, r) => s + r.total, 0))}
 											</td>
 											<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #6B7280;">100%</td>
@@ -1215,39 +1215,39 @@
 								<table class="w-full" style="font-size: 0.8rem;">
 									<thead style="background-color: #F9FAFB;">
 										<tr>
-											<th class="px-4 py-2.5 text-left" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">
+											<th class="px-4 py-2.5 text-left" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">
 												<Truck class="mr-1 inline h-3 w-3" /> Vehículo (placa)
 											</th>
-											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">Planillas</th>
-											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">Días</th>
-											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">Horas</th>
-											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">Total</th>
+											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Planillas</th>
+											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Días</th>
+											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Horas</th>
+											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Total</th>
 										</tr>
 									</thead>
 									<tbody>
 										{#each resumen as r}
 											<tr class="transition-colors hover:bg-gray-50" style="border-top: 1px solid rgba(0, 0, 0, 0.06);">
-												<td class="px-4 py-2.5" style="font-weight: 600; color: #0F1F1A;">{r.vehiculoPlaca}</td>
+												<td class="px-4 py-2.5" style="font-weight: 600; color: #0f172a;">{r.vehiculoPlaca}</td>
 												<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #6B7280;">{r.planillas}</td>
-												<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0F1F1A;">{r.dias}</td>
-												<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0F1F1A;">{fmtHoras(r.horas)}</td>
-												<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #047857;">{fmtCOP(r.total)}</td>
+												<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0f172a;">{r.dias}</td>
+												<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0f172a;">{fmtHoras(r.horas)}</td>
+												<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #166534;">{fmtCOP(r.total)}</td>
 											</tr>
 										{/each}
 									</tbody>
 									<tfoot>
 										<tr style="background-color: #F9FAFB; border-top: 2px solid rgba(0, 0, 0, 0.08);">
-											<td class="px-4 py-2.5" style="font-weight: 700; color: #0F1F1A;">Total</td>
-											<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0F1F1A;">
+											<td class="px-4 py-2.5" style="font-weight: 700; color: #0f172a;">Total</td>
+											<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
 												{resumen.reduce((s, r) => s + r.planillas, 0)}
 											</td>
-											<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0F1F1A;">
+											<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
 												{resumen.reduce((s, r) => s + r.dias, 0)}
 											</td>
-											<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0F1F1A;">
+											<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
 												{fmtHoras(resumen.reduce((s, r) => s + r.horas, 0))}
 											</td>
-											<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #047857;">
+											<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #166534;">
 												{fmtCOP(resumen.reduce((s, r) => s + r.total, 0))}
 											</td>
 										</tr>
@@ -1266,14 +1266,14 @@
 										style="border-color: rgba(0, 0, 0, 0.08);"
 									>
 										<div class="mb-2 flex items-center gap-2">
-											<Calendar class="h-3.5 w-3.5" style="color: #047857;" />
-											<p class="font-display" style="font-size: 1rem; font-weight: 600; color: #0F1F1A;">
+											<Calendar class="h-3.5 w-3.5" style="color: #166534;" />
+											<p class="font-display" style="font-size: 1rem; font-weight: 600; color: #0f172a;">
 												{r.mesLabel}
 											</p>
 										</div>
 										<p
 											class="font-display"
-											style="font-size: 1.3rem; font-weight: 700; color: #047857; line-height: 1.1;"
+											style="font-size: 1.3rem; font-weight: 700; color: #166534; line-height: 1.1;"
 										>
 											{fmtCOP(r.total)}
 										</p>
@@ -1283,15 +1283,15 @@
 										>
 											<div>
 												<p style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">Planillas</p>
-												<p style="font-weight: 600; color: #0F1F1A;">{r.planillas}</p>
+												<p style="font-weight: 600; color: #0f172a;">{r.planillas}</p>
 											</div>
 											<div>
 												<p style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">Días</p>
-												<p style="font-weight: 600; color: #0F1F1A;">{r.dias}</p>
+												<p style="font-weight: 600; color: #0f172a;">{r.dias}</p>
 											</div>
 											<div>
 												<p style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">Horas</p>
-												<p style="font-weight: 600; color: #0F1F1A;">{fmtHoras(r.horas)}</p>
+												<p style="font-weight: 600; color: #0f172a;">{fmtHoras(r.horas)}</p>
 											</div>
 										</div>
 									</div>
@@ -1332,14 +1332,14 @@
 									<table class="w-full" style="font-size: 0.8rem;">
 										<thead style="background-color: #F9FAFB;">
 											<tr>
-												<th class="px-4 py-2.5 text-left" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">
+												<th class="px-4 py-2.5 text-left" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">
 													<Settings2 class="mr-1 inline h-3 w-3" /> Tipo de recargo
 												</th>
-												<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">% aplicado</th>
-												<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">Categoría</th>
-												<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">Horas</th>
-												<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">Días</th>
-												<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: 'JetBrains Mono', monospace;">Total</th>
+												<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">% aplicado</th>
+												<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Categoría</th>
+												<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Horas</th>
+												<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Días</th>
+												<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Total</th>
 											</tr>
 										</thead>
 										<tbody>
@@ -1358,16 +1358,16 @@
 																	style="display: inline-block; width: 4px; height: {grupo.filas.length > 1 ? '18px' : '22px'}; border-radius: 2px; background-color: {c.bar};"
 																></span>
 																<div>
-																	<p style="font-weight: 700; color: {c.fg}; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;">
+																	<p style="font-weight: 700; color: {c.fg}; font-family: var(--font-sans); font-size: 0.8rem;">
 																		{r.codigo}
 																	</p>
 																	<p style="font-size: 0.7rem; color: #6B7280;">{r.nombre}</p>
 																</div>
 															</div>
 														</td>
-														<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0F1F1A; font-weight: 600;">
+														<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0f172a; font-weight: 600;">
 															<span
-																style="display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; font-weight: 700; {grupo.filas.length > 1 ? `background: ${c.bg}; color: ${c.fg};` : ''}"
+																style="display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-family: var(--font-sans); font-size: 0.75rem; font-weight: 700; {grupo.filas.length > 1 ? `background: ${c.bg}; color: ${c.fg};` : ''}"
 															>
 																{r.porcentaje}%
 															</span>
@@ -1375,7 +1375,7 @@
 														<td class="px-4 py-2.5 text-right" style="font-size: 0.7rem; color: #6B7280;">
 															{r.esHoraExtra ? 'Hora extra' : 'Recargo'}
 														</td>
-														<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0F1F1A; font-weight: 600;">
+														<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0f172a; font-weight: 600;">
 															{fmtHoras(r.totalHoras)}
 															{#if grupo.filas.length > 1}
 																<div
@@ -1392,7 +1392,7 @@
 														<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #6B7280;">
 															{r.dias.size}
 														</td>
-														<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #047857;">
+														<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #166534;">
 															{fmtCOP(r.totalValor)}
 														</td>
 													</tr>
@@ -1409,7 +1409,7 @@
 															{fmtHoras(subTotalHoras)}
 														</td>
 														<td class="px-4 py-1.5 text-right" style="font-size: 0.72rem; color: #6B7280;">—</td>
-														<td class="px-4 py-1.5 text-right font-mono-meta" style="font-size: 0.75rem; font-weight: 700; color: #047857;">
+														<td class="px-4 py-1.5 text-right font-mono-meta" style="font-size: 0.75rem; font-weight: 700; color: #166534;">
 															{fmtCOP(subTotalValor)}
 														</td>
 													</tr>
@@ -1418,16 +1418,16 @@
 										</tbody>
 										<tfoot>
 											<tr style="background-color: #F9FAFB; border-top: 2px solid rgba(0, 0, 0, 0.08);">
-												<td class="px-4 py-2.5" style="font-weight: 700; color: #0F1F1A;">Total general</td>
+												<td class="px-4 py-2.5" style="font-weight: 700; color: #0f172a;">Total general</td>
 												<td class="px-4 py-2.5"></td>
 												<td class="px-4 py-2.5"></td>
-												<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0F1F1A;">
+												<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
 													{fmtHoras(granTotalHoras)}
 												</td>
 												<td class="px-4 py-2.5 text-right" style="font-size: 0.7rem; color: #6B7280;">
 													{resumen.reduce((s, r) => s + r.dias.size, 0)}
 												</td>
-												<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #047857;">
+												<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #166534;">
 													{fmtCOP(granTotalValor)}
 												</td>
 											</tr>
@@ -1453,7 +1453,7 @@
 					<button
 						onclick={cerrar}
 						class="font-mono-meta rounded-lg px-4 py-2 transition-colors"
-						style="font-size: 0.75rem; font-weight: 600; color: white; background: #0F1F1A; text-transform: uppercase; letter-spacing: 0.04em;"
+						style="font-size: 0.75rem; font-weight: 600; color: white; background: #0f172a; text-transform: uppercase; letter-spacing: 0.04em;"
 					>
 						Cerrar
 					</button>

@@ -293,8 +293,8 @@
 	}
 	.disparador:focus-visible {
 		outline: none;
-		border-color: rgba(249, 115, 22, 0.5);
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
+		border-color: rgba(234, 88, 12, 0.5);
+		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.15);
 	}
 	.disparador--activo {
 		background: rgba(0, 0, 0, 0.06);
@@ -382,7 +382,7 @@
 	}
 	.tono-ver.item--destacada:hover:not(:disabled),
 	.tono-ver.item--destacada.item--activa:not(:disabled) {
-		background: rgba(249, 115, 22, 0.1);
+		background: rgba(234, 88, 12, 0.1);
 		color: var(--emerald-700);
 	}
 	.tono-editar.item--destacada {
@@ -408,7 +408,7 @@
 	}
 	.tono-aprobar:hover:not(:disabled),
 	.tono-aprobar.item--activa:not(:disabled) {
-		background: rgba(249, 115, 22, 0.1);
+		background: rgba(234, 88, 12, 0.1);
 		color: var(--emerald-700);
 	}
 	.tono-aviso {

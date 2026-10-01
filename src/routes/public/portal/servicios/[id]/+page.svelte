@@ -7,6 +7,7 @@
 	import mapboxgl from 'mapbox-gl';
 	import 'mapbox-gl/dist/mapbox-gl.css';
 	import { isAuthenticated } from '$lib/stores/portalStore';
+	import { labelPropositoServicio } from '$lib/config/proposito-servicio';
 	import {
 		conductorServiciosStore,
 		SERVICIO_STATUS_PALETTE,
@@ -196,7 +197,7 @@
 
 	function popupPeaje(p: { nombre: string; lat: number; lon: number }): string {
 		const url = `https://www.google.com/maps/search/?api=1&query=${p.lat},${p.lon}`;
-		return `<div style="padding:10px 12px;min-width:170px;font-family:system-ui,sans-serif;">
+		return `<div style="padding:10px 12px;min-width:170px;font-family: var(--font-sans);">
 			<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
 				<div style="width:22px;height:22px;background:#f59e0b;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
 					<span style="color:#fff;font-weight:700;font-size:10px;">P</span>
@@ -215,7 +216,7 @@
 			hospedaje: { bg: '#14b8a6', emoji: '🏨', label: 'Hospedaje' }
 		};
 		const c = cfg[p.tipo] ?? cfg.restaurante;
-		return `<div style="padding:10px 12px;min-width:170px;font-family:system-ui,sans-serif;">
+		return `<div style="padding:10px 12px;min-width:170px;font-family: var(--font-sans);">
 			<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
 				<div style="width:22px;height:22px;background:${c.bg};border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
 					<span style="font-size:12px;">${c.emoji}</span>
@@ -465,7 +466,7 @@
 				.setLngLat([oLng, oLat])
 				.setPopup(
 					new mapboxgl.Popup({ offset: 25 }).setHTML(
-						`<div style="padding:8px;font-family:system-ui"><strong style="color:#ea580c;font-size:12px;">Origen</strong><br/><span style="font-size:11px;">${servicio.origen_especifico || servicio.origen?.nombre_municipio || ''}</span></div>`
+						`<div style="padding:8px;font-family: var(--font-sans)"><strong style="color:#ea580c;font-size:12px;">Origen</strong><br/><span style="font-size:11px;">${servicio.origen_especifico || servicio.origen?.nombre_municipio || ''}</span></div>`
 					)
 				);
 			om.addTo(map!);
@@ -475,7 +476,7 @@
 				.setLngLat([dLng, dLat])
 				.setPopup(
 					new mapboxgl.Popup({ offset: 25 }).setHTML(
-						`<div style="padding:8px;font-family:system-ui"><strong style="color:#DC2626;font-size:12px;">Destino</strong><br/><span style="font-size:11px;">${servicio.destino_especifico || servicio.destino?.nombre_municipio || ''}</span></div>`
+						`<div style="padding:8px;font-family: var(--font-sans)"><strong style="color:#DC2626;font-size:12px;">Destino</strong><br/><span style="font-size:11px;">${servicio.destino_especifico || servicio.destino?.nombre_municipio || ''}</span></div>`
 					)
 				);
 			dm.addTo(map!);
@@ -956,8 +957,8 @@
 					{#if servicio.proposito_servicio}
 						<div class="info-item">
 							<span class="info-key">Propósito</span>
-							<span class="info-val info-val--capitalize">
-								{servicio.proposito_servicio.replace(/_/g, ' ')}
+							<span class="info-val">
+								{labelPropositoServicio(servicio.proposito_servicio)}
 							</span>
 						</div>
 					{/if}
@@ -981,26 +982,28 @@
 	   (consistente con +layout.svelte)
 	═══════════════════════════════════════ */
 	.detalle-page {
-		--bg: #faf7f2;
+		/* Paleta de la app móvil; los nombres antiguos se conservan porque el
+		resto de la hoja los usa. */
+		--bg: var(--au-bg, #effbf5);
 		--surface: #ffffff;
-		--surface-2: #f5f1e8;
-		--border: rgba(0, 0, 0, 0.08);
-		--border-default: rgba(0, 0, 0, 0.12);
-		--text: #1a1a1a;
-		--text-2: #4a4a4a;
-		--text-3: #6b6b6b;
-		--text-4: #9a9a9a;
-		--orange-500: #f97316;
-		--orange-600: #ea580c;
-		--orange-700: #047857;
-		--orange-800: #065f46;
-		--emerald-tint: rgba(249, 115, 22, 0.08);
-		--emerald-tint-hover: rgba(249, 115, 22, 0.14);
-		--emerald-border: rgba(249, 115, 22, 0.18);
-		--shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.04);
+		--surface-2: var(--au-tint, #ddf7ea);
+		--border: var(--au-border, #dee7e3);
+		--border-default: var(--au-border, #dee7e3);
+		--text: var(--au-text, #17201d);
+		--text-2: #33423d;
+		--text-3: var(--au-muted, #66756f);
+		--text-4: #8e9c96;
+		--emerald-500: var(--au-primary, #079665);
+		--emerald-600: var(--au-primary-strong, #087a57);
+		--emerald-700: var(--au-dark-2, #075c49);
+		--emerald-800: var(--au-dark, #014339);
+		--emerald-tint: rgba(var(--au-primary-rgb, 7, 150, 101), 0.1);
+		--emerald-tint-hover: rgba(var(--au-primary-rgb, 7, 150, 101), 0.16);
+		--emerald-border: rgba(var(--au-primary-rgb, 7, 150, 101), 0.25);
+		--shadow-soft: 0 6px 14px rgba(1, 67, 57, 0.065);
 		--ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
-
-		font-family: 'Inter', 'Inter Tight', system-ui, sans-serif;
+		
+		font-family: var(--font-sans);
 		display: flex;
 		flex-direction: column;
 		min-height: 100%;
@@ -1089,16 +1092,17 @@
 	   HEADER (estilo landing servicio-header)
 	═══════════════════════════════════════ */
 	.servicio-header {
-		background: var(--surface);
-		border-bottom: 1px solid var(--border);
-		padding: 0.85rem 1rem;
+		position: sticky;
+		top: 0;
+		z-index: 30;
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
 		flex-shrink: 0;
-		position: sticky;
-		top: 0;
-		z-index: 30;
+		padding: 0.85rem 1rem;
+		background: #fff;
+		border-radius: 22px;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
 	}
 	@media (min-width: 640px) {
 		.servicio-header {
@@ -1110,15 +1114,15 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 36px;
-		height: 36px;
-		border-radius: 10px;
-		background: #faf7f2;
-		color: var(--text-2);
-		border: 1px solid var(--border);
-		cursor: pointer;
-		transition: all 0.2s var(--ease);
+		width: 40px;
+		height: 40px;
 		flex-shrink: 0;
+		border: none;
+		border-radius: 13px;
+		background: var(--au-bg, #effbf5);
+		color: var(--au-dark, #014339);
+		cursor: pointer;
+		transition: background-color 0.2s var(--ease);
 	}
 
 	.servicio-icon-btn:hover {
@@ -1149,31 +1153,31 @@
 
 	.servicio-eyebrow {
 		display: inline-block;
-		font-size: 0.65rem;
-		font-weight: 700;
-		text-transform: uppercase;
+		padding: 0.2rem 0.6rem;
+		border-radius: 999px;
+		background: var(--au-tint, #ddf7ea);
+		font-family: var(--font-sans);
+		font-size: 0.62rem;
+		font-weight: 900;
 		letter-spacing: 0.12em;
-		color: var(--emerald-600);
-		background: var(--emerald-tint);
-		padding: 0.2rem 0.55rem;
-		border-radius: 5px;
-		font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+		text-transform: uppercase;
+		color: var(--au-dark, #014339);
 	}
 
 	.servicio-title {
-		font-family: 'Fraunces', Georgia, serif;
-		font-weight: 500;
-		font-size: 0.98rem;
-		color: #0f1f1a;
 		margin: 0.3rem 0 0;
+		font-family: var(--font-sans);
+		font-size: 1rem;
+		font-weight: 800;
+		letter-spacing: -0.015em;
 		line-height: 1.25;
+		color: var(--text);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
 		line-clamp: 2;
 		-webkit-box-orient: vertical;
-		letter-spacing: -0.01em;
 	}
 
 	.servicio-title-arrow {
@@ -1186,7 +1190,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -1221,14 +1225,12 @@
 		min-height: 360px;
 		flex-shrink: 0;
 		overflow: hidden;
-		border-radius: 20px;
-		border: 1px solid var(--border);
+		border-radius: 22px;
+		border: none;
 		background: #e8e4dc;
 		box-shadow: var(--shadow-soft);
-		/* FIX: crear stacking context dedicado. En el dashboard lo logra
-		   la clase `glass` via `backdrop-filter: blur(20px)`. Sin esto,
-		   el canvas WebGL de mapbox queda en un contexto roto (no
-		   compone) y no se ve. */
+		/* Stacking context dedicado: sin esto el canvas WebGL de mapbox no
+		compone y no se ve. */
 		isolation: isolate;
 		will-change: transform;
 	}
@@ -1376,11 +1378,11 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.15rem;
-		padding: 0.7rem 0.95rem;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		box-shadow: var(--shadow-soft);
+		padding: 0.75rem 1rem;
+		background: #fff;
+		border: none;
+		border-radius: 18px;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
 		transition: all 0.2s var(--ease);
 	}
 
@@ -1411,14 +1413,14 @@
 		color: var(--text-3);
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 
 	.stat-chip-value {
 		font-size: 0.95rem;
 		font-weight: 700;
 		color: #0f1f1a;
-		font-family: 'Fraunces', Georgia, serif;
+		font-family: var(--font-sans);
 		letter-spacing: -0.01em;
 	}
 
@@ -1444,11 +1446,11 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
-		padding: 1.15rem 1.25rem;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 20px;
-		box-shadow: var(--shadow-soft);
+		padding: 1.1rem 1.15rem;
+		background: #fff;
+		border: none;
+		border-radius: 22px;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
 		min-width: 0;
 		max-width: 100%;
 		transition: all 0.3s var(--ease);
@@ -1466,20 +1468,19 @@
 	}
 
 	.card-icon {
-		width: 32px;
-		height: 32px;
-		border-radius: 10px;
-		background: linear-gradient(135deg, var(--emerald-500), var(--emerald-600));
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		color: white;
-		box-shadow: 0 3px 10px rgba(249, 115, 22, 0.3);
+		width: 34px;
+		height: 34px;
 		flex-shrink: 0;
+		border-radius: 11px;
+		background: var(--au-tint, #ddf7ea);
+		color: var(--au-dark, #014339);
 	}
 
 	.card-title {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.68rem;
 		font-weight: 700;
 		color: var(--text);
@@ -1498,12 +1499,12 @@
 	}
 
 	.placa-big {
-		font-size: 1.5rem;
-		font-weight: 700;
-		color: var(--emerald-700);
-		letter-spacing: 0.08em;
 		margin: 0;
-		font-family: 'JetBrains Mono', 'Courier New', monospace;
+		font-family: var(--font-sans);
+		font-size: 1.6rem;
+		font-weight: 900;
+		letter-spacing: 0.06em;
+		color: var(--au-dark, #014339);
 	}
 
 	.vehiculo-desc {
@@ -1596,7 +1597,7 @@
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
 		margin: 0 0 0.15rem;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 
 	.rloc-text {
@@ -1626,7 +1627,7 @@
 		font-size: 0.75rem;
 		color: var(--text-3);
 		margin: 0.25rem 0 0;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 
 	/* ─── Info list ─── */
@@ -1668,7 +1669,7 @@
 	}
 
 	.info-val--mono {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		color: var(--emerald-700);
 	}
 

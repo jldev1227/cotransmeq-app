@@ -34,6 +34,9 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { toast } from 'svelte-sonner';
+	import { authStore } from '$lib/stores/auth';
+	import { mascota } from '$lib/mascot';
+	import { Search, ChevronRight, RefreshCw, Trash2 } from 'lucide-svelte';
 	import { MisFormulariosError, misFormulariosAPI } from '$lib/api/mis-formularios';
 	import type { PortalAssignmentCard, PortalListMeta } from '$lib/api/formularios-portal';
 	import { cargarLista, listaCacheada } from '$lib/formularios/mis-formularios-cache';
@@ -62,9 +65,19 @@
 		 * comparte la URL con nadie.
 		 */
 		sincronizarUrl?: boolean;
+		/**
+		 * Pintar la cabecera de bienvenida (saludo, mascota y cifras) encima de la
+		 * lista. La enciende la ruta propia; la pestaña de `/dashboard/formularios`
+		 * ya tiene su propia cabecera y solo quiere la lista.
+		 */
+		conCabecera?: boolean;
 	}
 
-	let { base = '/dashboard/mis-formularios', sincronizarUrl = false }: Props = $props();
+	let {
+		base = '/dashboard/mis-formularios',
+		sincronizarUrl = false,
+		conCabecera = false
+	}: Props = $props();
 
 	// ── Datos ──────────────────────────────────────────────────────────────────
 
@@ -294,6 +307,32 @@
 	const disponibles = $derived(visibles.filter((a) => a.dueState === 'AVAILABLE'));
 	const completados = $derived(visibles.filter((a) => a.dueState !== 'AVAILABLE'));
 
+	/** Primer nombre para el saludo, como en la app móvil. */
+	const primerNombre = $derived(($authStore.user?.nombre ?? '').trim().split(/\s+/)[0] || '');
+
+	/// Cifras de la cabecera. Las de `meta` las calcula el servidor sobre todo
+	/// lo asignado; si aún no llegaron se cuenta sobre lo cargado.
+	const cifras = $derived({
+		pendientes: meta?.pending ?? asignaciones.filter((a) => a.dueState === 'AVAILABLE').length,
+		borradores: meta?.drafts ?? asignaciones.reduce((n, a) => n + a.drafts.length, 0),
+		completados: asignaciones.filter((a) => a.dueState === 'DONE').length
+	});
+
+	/** Las dos últimas cifras del código, como la insignia de la app. */
+	function insignia(code: string): string {
+		const m = code.match(/(\d{1,2})\s*$/);
+		return m ? m[1].padStart(2, '0') : code.slice(-2).toUpperCase();
+	}
+
+	const ESTADO_TARJETA: Record<PortalAssignmentCard['dueState'], { texto: string; color: string }> =
+		{
+			AVAILABLE: { texto: 'Disponible', color: '#16a34a' },
+			DONE: { texto: 'Completado', color: '#16a34a' },
+			NOT_YET: { texto: 'Aún no', color: '#94a3b8' },
+			EXPIRED: { texto: 'Vencido', color: '#b42318' },
+			PAUSED: { texto: 'Pausado', color: '#f59e0b' }
+		};
+
 	function haceCuanto(iso: string): string {
 		const minutos = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
 		if (minutos < 1) return 'hace un momento';
@@ -305,49 +344,91 @@
 </script>
 
 <section class="mis">
+	{#if conCabecera}
+		{@const saludo = mascota('procesando')}
+		<!-- Cabecera de la app móvil: bloque oscuro con el saludo y la mascota,
+		     y debajo las tres cifras del día. -->
+		<header class="mis-hero">
+			<div class="mis-hero-glow" aria-hidden="true"></div>
+			<div class="mis-hero-texto">
+				<span class="mis-hero-eyebrow">Centro de operaciones</span>
+				<h1 class="mis-hero-titulo">Hola{primerNombre ? `, ${primerNombre}` : ''}</h1>
+				<p class="mis-hero-sub">Tus formatos, borradores y tareas de hoy en un solo lugar.</p>
+			</div>
+			<img class="mis-hero-mascota" src={saludo.src} alt={saludo.alt} width="418" height="418" />
+		</header>
+
+		<div class="mis-cifras">
+			<div class="mis-cifra">
+				<span class="mis-cifra-valor">{cifras.pendientes}</span>
+				<span class="mis-cifra-label">Por diligenciar</span>
+			</div>
+			<div class="mis-cifra">
+				<span class="mis-cifra-valor">{cifras.borradores}</span>
+				<span class="mis-cifra-label">En borrador</span>
+			</div>
+			<div class="mis-cifra">
+				<span class="mis-cifra-valor">{cifras.completados}</span>
+				<span class="mis-cifra-label">Completados</span>
+			</div>
+		</div>
+	{/if}
+
 	{#if cargando}
-		<p class="estado">Cargando tus formularios…</p>
+		<div class="mis-estado">
+			<span class="spinner" aria-hidden="true"></span>
+			<p>Cargando tus formularios…</p>
+		</div>
 	{:else if error && asignaciones.length === 0}
-		<p class="estado estado--error">{error}</p>
-		<button type="button" class="btn" onclick={() => void cargar({ forzar: true })}>
-			Reintentar
-		</button>
+		{@const img = mascota('advertencia')}
+		<div class="mis-estado">
+			<img src={img.src} alt={img.alt} width="418" height="418" />
+			<p class="mis-estado-error">{error}</p>
+			<button type="button" class="btn-secondary" onclick={() => void cargar({ forzar: true })}>
+				Reintentar
+			</button>
+		</div>
 	{:else if asignaciones.length === 0}
+		{@const img = mascota('vacio')}
 		<!--
 			Mensaje explícito sobre el porqué: la causa casi siempre es que la
 			asignación no incluye su área, no que el módulo esté vacío. Decir solo
 			«no hay nada» mandaría a la persona a preguntar por soporte.
 		-->
-		<p class="estado">
-			No tienes formularios asignados. Aparecen aquí cuando alguien de HSEQ o
-			administración crea una asignación que alcanza a tu área, tu cargo o a ti.
-		</p>
+		<div class="mis-estado">
+			<img src={img.src} alt={img.alt} width="418" height="418" />
+			<h3>No tienes formularios asignados</h3>
+			<p>
+				Aparecen aquí cuando alguien de HSEQ o administración crea una asignación que alcanza a tu
+				área, tu cargo o a ti.
+			</p>
+		</div>
 	{:else}
 		{#if error}
 			<!-- Falló un refresco, pero las tarjetas de antes siguen siendo útiles. -->
-			<p class="aviso" role="status">{error} Se muestra lo último que se pudo cargar.</p>
+			<p class="mis-aviso" role="status">{error} Se muestra lo último que se pudo cargar.</p>
 		{/if}
 
-		<div class="controles">
-			<div class="buscador">
-				<label class="sr-only" for="mis-buscar">Buscar entre tus formularios</label>
+		<!-- ── Buscador y filtros ── -->
+		<div class="mis-controles">
+			<label class="mis-buscador">
+				<Search size={18} strokeWidth={1.8} aria-hidden="true" />
+				<span class="sr-only">Buscar entre tus formularios</span>
 				<input
-					id="mis-buscar"
-					class="campo"
 					type="search"
 					autocomplete="off"
-					placeholder="Buscar por código, nombre, frecuencia o placa…"
+					placeholder="Buscar formato o código"
 					value={entrada}
 					oninput={(e) => alTeclear(e.currentTarget.value)}
 				/>
-			</div>
+			</label>
 
-			<div class="chips" role="group" aria-label="Filtrar por estado">
+			<div class="mis-segmentos" role="group" aria-label="Filtrar por estado">
 				{#each ESTADOS_FILTRO as e (e)}
 					<button
 						type="button"
-						class="chip"
-						class:chip--activo={estado === e}
+						class="mis-segmento"
+						class:mis-segmento--activo={estado === e}
 						aria-pressed={estado === e}
 						onclick={() => cambiarFiltro(() => (estado = e))}
 					>
@@ -362,7 +443,7 @@
 				<label class="sr-only" for="mis-frecuencia">Frecuencia</label>
 				<select
 					id="mis-frecuencia"
-					class="campo campo--select"
+					class="mis-select"
 					value={frecuencia}
 					onchange={(e) => cambiarFiltro(() => (frecuencia = e.currentTarget.value))}
 				>
@@ -376,7 +457,7 @@
 			<label class="sr-only" for="mis-orden">Ordenar por</label>
 			<select
 				id="mis-orden"
-				class="campo campo--select"
+				class="mis-select"
 				value={orden}
 				onchange={(e) => cambiarFiltro(() => (orden = e.currentTarget.value as Orden))}
 			>
@@ -386,48 +467,70 @@
 			</select>
 
 			{#if hayFiltros}
-				<button type="button" class="btn" onclick={limpiarFiltros}>Limpiar</button>
+				<button type="button" class="btn-secondary" onclick={limpiarFiltros}>Limpiar</button>
 			{/if}
 
 			<button
 				type="button"
-				class="btn btn--icono"
+				class="btn-icon mis-actualizar"
+				class:mis-actualizar--girando={revalidando}
 				onclick={() => void cargar({ forzar: true })}
 				disabled={revalidando}
-				title="Volver a consultar al servidor"
+				title={revalidando ? 'Actualizando…' : 'Volver a consultar al servidor'}
+				aria-label="Actualizar"
 			>
-				{revalidando ? 'Actualizando…' : 'Actualizar'}
+				<RefreshCw size={16} strokeWidth={1.8} />
 			</button>
 		</div>
 
-		<p class="resumen" aria-live="polite">
-			{#if hayFiltros}
-				{resultados.length} de {asignaciones.length}
-				{asignaciones.length === 1 ? 'formulario' : 'formularios'}
-			{:else if meta}
-				{meta.pending} por diligenciar · {meta.drafts} en borrador · al {meta.today}
-			{:else}
-				{asignaciones.length} {asignaciones.length === 1 ? 'formulario' : 'formularios'}
-			{/if}
-		</p>
+		<!-- ── Formatos asignados ── -->
+		<div class="mis-seccion">
+			<h2 class="mis-seccion-titulo">Formatos asignados</h2>
+			<span class="mis-seccion-detalle" aria-live="polite">
+				{#if hayFiltros}
+					{resultados.length} de {asignaciones.length}
+				{:else}
+					{asignaciones.length} {asignaciones.length === 1 ? 'resultado' : 'resultados'}
+				{/if}
+			</span>
+		</div>
 
 		{#if resultados.length === 0}
-			<p class="estado">
-				Ningún formulario coincide con la búsqueda.
-				<button type="button" class="enlace" onclick={limpiarFiltros}>Quitar los filtros</button>
-			</p>
+			{@const img = mascota('vacio')}
+			<div class="mis-estado">
+				<img src={img.src} alt={img.alt} width="418" height="418" />
+				<p>Ningún formulario coincide con la búsqueda.</p>
+				<button type="button" class="btn-secondary" onclick={limpiarFiltros}
+					>Quitar los filtros</button
+				>
+			</div>
 		{/if}
 
 		{#if disponibles.length}
-			<ul class="tarjetas">
+			<ul class="mis-lista">
 				{#each disponibles as a (a.assignmentId)}
-					<li class="tarjeta">
-						<div class="tarjeta__cabeza">
-							<span class="tarjeta__code">{a.code}</span>
-							<span class="tarjeta__titulo">{a.title}</span>
-							<span class="tarjeta__meta">
-								{etiquetaFrecuencia(a.frequency)}
-								{#if a.requiresContext.length}· pide {a.requiresContext.join(', ')}{/if}
+					{@const est = ESTADO_TARJETA[a.dueState]}
+					<li class="mis-tarjeta">
+						<a class="mis-tarjeta-cabeza" href="{base}/{a.assignmentId}?nuevo=1">
+							<span class="mis-insignia">{insignia(a.code)}</span>
+							<span class="mis-tarjeta-texto">
+								<span class="mis-tarjeta-titulo">{a.title}</span>
+								<span class="mis-tarjeta-meta">
+									{a.code} · {etiquetaFrecuencia(a.frequency)}
+									{#if a.requiresContext.length}· pide {a.requiresContext.join(', ')}{/if}
+								</span>
+							</span>
+							<ChevronRight class="mis-chevron" size={20} strokeWidth={1.8} aria-hidden="true" />
+						</a>
+
+						<div class="mis-tarjeta-pie">
+							<span class="mis-pill" style="--c:{est.color}">{est.texto}</span>
+							<span class="mis-tarjeta-estado">
+								{#if a.drafts.length}
+									{a.drafts.length} {a.drafts.length === 1 ? 'borrador' : 'borradores'}
+								{:else}
+									Listo para iniciar
+								{/if}
 							</span>
 						</div>
 
@@ -437,52 +540,80 @@
 							ofrecer solo el último dejaba el resto inalcanzable.
 						-->
 						{#if a.drafts.length}
-							<ul class="borradores">
+							<ul class="mis-borradores">
 								{#each a.drafts as d (d.clientSubmissionId)}
-									<li class="borrador-fila">
-										<a class="borrador" href="{base}/{a.assignmentId}?draft={d.clientSubmissionId}">
-											Continuar borrador · {d.progress}% · {haceCuanto(d.updatedAt)}
+									<li class="mis-borrador">
+										<a
+											class="mis-borrador-enlace"
+											href="{base}/{a.assignmentId}?draft={d.clientSubmissionId}"
+										>
+											<span class="mis-borrador-barra" aria-hidden="true">
+												<span style="width:{d.progress}%"></span>
+											</span>
+											<span class="mis-borrador-texto">
+												Continuar · {d.progress}% · {haceCuanto(d.updatedAt)}
+											</span>
 										</a>
 										<!-- Abrir el formulario ya crea el borrador, así que entrar a
 										     mirar y salirse dejaba una tarjeta a medias sin forma de
 										     quitarla. Discreto: descartar es la acción rara. -->
 										<button
 											type="button"
-											class="borrador__descartar"
+											class="mis-borrador-descartar"
 											disabled={descartando === d.clientSubmissionId}
+											title="Descartar borrador"
+											aria-label="Descartar borrador"
 											onclick={() => descartar(d.clientSubmissionId, a.title)}
 										>
-											{descartando === d.clientSubmissionId ? '…' : 'Descartar'}
+											<Trash2 size={15} strokeWidth={1.8} />
 										</button>
 									</li>
 								{/each}
 							</ul>
+							<a
+								class="mis-tarjeta-accion mis-tarjeta-accion--otro"
+								href="{base}/{a.assignmentId}?nuevo=1"
+							>
+								Empezar otro
+							</a>
+						{:else}
+							<a class="mis-tarjeta-accion" href="{base}/{a.assignmentId}?nuevo=1">Diligenciar</a>
 						{/if}
-
-						<a class="tarjeta__accion" href="{base}/{a.assignmentId}?nuevo=1">
-							{a.drafts.length ? 'Empezar otro' : 'Diligenciar'}
-						</a>
 					</li>
 				{/each}
 			</ul>
 		{/if}
 
 		{#if completados.length}
-			<h3 class="subtitulo">Ya completados en este período</h3>
-			<ul class="tarjetas">
+			<div class="mis-seccion mis-seccion--sub">
+				<h2 class="mis-seccion-titulo">Ya completados en este período</h2>
+				<span class="mis-seccion-detalle">{completados.length}</span>
+			</div>
+			<ul class="mis-lista">
 				{#each completados as a (a.assignmentId)}
-					<li class="tarjeta tarjeta--hecha">
-						<span class="tarjeta__code">{a.code}</span>
-						<span class="tarjeta__titulo">{a.title}</span>
-						<span class="tarjeta__meta">{etiquetaFrecuencia(a.frequency)}</span>
-						<span class="tarjeta__badge">✓ {a.submittedThisPeriod}</span>
+					{@const est = ESTADO_TARJETA[a.dueState]}
+					<li class="mis-tarjeta mis-tarjeta--hecha">
+						<div class="mis-tarjeta-cabeza">
+							<span class="mis-insignia mis-insignia--hecha">{insignia(a.code)}</span>
+							<span class="mis-tarjeta-texto">
+								<span class="mis-tarjeta-titulo">{a.title}</span>
+								<span class="mis-tarjeta-meta">{a.code} · {etiquetaFrecuencia(a.frequency)}</span>
+							</span>
+						</div>
+						<div class="mis-tarjeta-pie">
+							<span class="mis-pill" style="--c:{est.color}">{est.texto}</span>
+							<span class="mis-tarjeta-estado">
+								{#if a.submittedThisPeriod}✓ {a.submittedThisPeriod}
+									{a.submittedThisPeriod === 1 ? 'envío' : 'envíos'}{/if}
+							</span>
+						</div>
 					</li>
 				{/each}
 			</ul>
 		{/if}
 
 		{#if restantes > 0}
-			<button type="button" class="btn btn--mas" onclick={() => (tope += TANDA)}>
+			<button type="button" class="btn-secondary mis-mas" onclick={() => (tope += TANDA)}>
 				Mostrar {Math.min(restantes, TANDA)} más ({restantes} sin mostrar)
 			</button>
 		{/if}
@@ -493,270 +624,506 @@
 	.mis {
 		display: flex;
 		flex-direction: column;
+		gap: 0.9rem;
+	}
+
+	/* ── Cabecera: el hero de la app ── */
+	.mis-hero {
+		position: relative;
+		display: flex;
+		align-items: flex-start;
+		min-height: 200px;
+		padding: 1.5rem 1.5rem 3rem;
+		border-radius: 28px;
+		background: linear-gradient(160deg, var(--au-dark-2) 0%, var(--au-dark) 70%);
+		color: #fff;
+		overflow: hidden;
+		isolation: isolate;
+	}
+	.mis-hero-glow {
+		position: absolute;
+		right: -14%;
+		top: -35%;
+		width: 60%;
+		aspect-ratio: 1;
+		border-radius: 50%;
+		background: rgba(255, 255, 255, 0.06);
+		z-index: -1;
+	}
+	.mis-hero-texto {
+		display: flex;
+		flex-direction: column;
+		gap: 0.35rem;
+		max-width: 58%;
+		z-index: 1;
+	}
+	@media (min-width: 768px) {
+		.mis-hero-texto {
+			max-width: 34rem;
+		}
+	}
+	.mis-hero-eyebrow {
+		font-size: 0.72rem;
+		font-weight: 800;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--au-eyebrow);
+	}
+	.mis-hero-titulo {
+		margin: 0;
+		font-family: var(--font-display);
+		font-size: clamp(1.7rem, 4vw, 2.3rem);
+		font-weight: 800;
+		letter-spacing: -0.03em;
+		line-height: 1.1;
+		color: #fff;
+	}
+	.mis-hero-sub {
+		margin: 0;
+		font-size: 0.92rem;
+		line-height: 1.5;
+		color: var(--au-hero-text);
+	}
+	.mis-hero-mascota {
+		position: absolute;
+		right: -0.75rem;
+		bottom: -0.5rem;
+		width: 9.5rem;
+		height: 9.5rem;
+		object-fit: contain;
+		pointer-events: none;
+		filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.25));
+	}
+	@media (min-width: 768px) {
+		.mis-hero-mascota {
+			right: 1.5rem;
+			bottom: -1rem;
+			width: 14rem;
+			height: 14rem;
+		}
+	}
+
+	/* ── Cifras del día ── */
+	.mis-cifras {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 0.6rem;
+		margin-top: -2.4rem;
+		padding: 0 0.75rem;
+		z-index: 2;
+	}
+	.mis-cifra {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.15rem;
+		padding: 0.85rem 0.5rem;
+		background: var(--bg-surface);
+		border: 1px solid var(--border-subtle);
+		border-radius: 18px;
+		box-shadow: 0 12px 28px rgba(20, 83, 45, 0.1);
+		text-align: center;
+	}
+	.mis-cifra-valor {
+		font-size: 1.5rem;
+		font-weight: 800;
+		letter-spacing: -0.02em;
+		color: var(--emerald-700);
+		line-height: 1.1;
+	}
+	.mis-cifra:first-child .mis-cifra-valor {
+		color: var(--emerald-800);
+	}
+	.mis-cifra-label {
+		font-size: 0.72rem;
+		font-weight: 700;
+		color: var(--text-muted);
+	}
+
+	/* ── Estados ── */
+	.mis-estado {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
 		gap: 0.75rem;
+		padding: 2rem 1rem;
+		text-align: center;
+		background: var(--bg-surface);
+		border: 1px solid var(--border-subtle);
+		border-radius: 22px;
 	}
-
-	.estado {
+	.mis-estado img {
+		width: 9rem;
+		height: 9rem;
+		object-fit: contain;
+	}
+	.mis-estado h3 {
 		margin: 0;
-		padding: 1.5rem 0;
-		/* Texto corrido: pasado este ancho el ojo pierde el renglón. */
-		max-width: 46rem;
-		color: var(--text-muted, #64748b);
+		font-family: var(--font-display);
+		font-size: 1.15rem;
+		font-weight: 800;
+		letter-spacing: -0.02em;
 	}
-
-	.estado--error {
-		color: var(--red-600, #dc2626);
-	}
-
-	.aviso {
+	.mis-estado p {
 		margin: 0;
-		padding: 0.5rem 0.75rem;
-		font-size: 0.8rem;
-		color: var(--amber-800, #92400e);
+		max-width: 30rem;
+		font-size: 0.9rem;
+		line-height: 1.55;
+		color: var(--text-muted);
+	}
+	.mis-estado-error {
+		color: var(--au-danger) !important;
+		font-weight: 600;
+	}
+	.mis-aviso {
+		margin: 0;
+		padding: 0.6rem 0.85rem;
+		font-size: 0.82rem;
+		font-weight: 600;
+		color: #92400e;
 		background: #fffbeb;
 		border: 1px solid #fde68a;
-		border-radius: 8px;
+		border-radius: 12px;
 	}
 
-	/* Barra de controles: fluye y se reparte el ancho que le dé el layout, sin
-	   puntos de ruptura que haya que mantener a mano. */
-	.controles {
+	/* ── Controles ── */
+	.mis-controles {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.5rem;
+		gap: 0.6rem;
 	}
-
-	.buscador {
-		/* Crece con el ancho disponible, pero acotado como control: un buscador de
-		   1.600 px es un renglón vacío, no más información. */
-		flex: 1 1 16rem;
-		max-width: 32rem;
-	}
-
-	.campo {
-		width: 100%;
-		min-height: 36px;
-		padding: 0 0.75rem;
-		font: inherit;
-		font-size: 0.85rem;
-		color: inherit;
-		background: var(--bg-surface, #fff);
-		border: 1px solid var(--border, #e2e8f0);
-		border-radius: 8px;
-	}
-
-	.campo--select {
-		width: auto;
-		/* Medida del propio control: sin tope, el `select` se estira al texto de
-		   la opción más larga y desplaza a los demás controles. */
-		max-width: 14rem;
-		cursor: pointer;
-	}
-
-	.campo:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
-		outline-offset: 1px;
-	}
-
-	.chips {
+	.mis-buscador {
 		display: flex;
-		flex-wrap: wrap;
-		gap: 0.25rem;
-	}
-
-	.chip {
-		min-height: 36px;
-		padding: 0 0.75rem;
-		font: inherit;
-		font-size: 0.78rem;
-		font-weight: 500;
-		color: var(--text-muted, #64748b);
-		background: var(--bg-surface, #fff);
-		border: 1px solid var(--border, #e2e8f0);
+		align-items: center;
+		gap: 0.6rem;
+		flex: 1 1 16rem;
+		max-width: 34rem;
+		min-height: 48px;
+		padding: 0 1rem;
+		background: var(--bg-surface);
+		border: 1.5px solid var(--border-default);
 		border-radius: 999px;
-		cursor: pointer;
+		color: var(--text-muted);
 	}
-
-	.chip--activo {
-		color: var(--emerald-700, #047857);
-		background: #f0fdf4;
-		border-color: #bbf7d0;
+	.mis-buscador:focus-within {
+		border-color: var(--emerald-500);
+		box-shadow: 0 0 0 4px rgba(var(--au-primary-rgb), 0.12);
 	}
-
-	.resumen {
-		margin: 0;
-		font-size: 0.8rem;
-		color: var(--text-muted, #64748b);
+	.mis-buscador input {
+		flex: 1;
+		min-width: 0;
+		border: none;
+		background: transparent;
+		font: inherit;
+		font-size: 0.95rem;
+		color: var(--text-primary);
 	}
-
-	.subtitulo {
-		margin: 0.75rem 0 0;
+	.mis-buscador input:focus {
+		outline: none;
+	}
+	.mis-buscador input::placeholder {
+		color: var(--text-very-muted);
+	}
+	.mis-segmentos {
+		display: inline-flex;
+		flex-wrap: wrap;
+		gap: 0.15rem;
+		padding: 0.25rem;
+		background: var(--bg-surface);
+		border: 1.5px solid var(--border-default);
+		border-radius: 14px;
+	}
+	.mis-segmento {
+		padding: 0.45rem 0.75rem;
+		border: none;
+		border-radius: 10px;
+		background: transparent;
+		font: inherit;
 		font-size: 0.8rem;
 		font-weight: 600;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--text-muted, #64748b);
+		color: var(--text-muted);
+		cursor: pointer;
+		white-space: nowrap;
+	}
+	.mis-segmento:hover {
+		color: var(--text-primary);
+		background: var(--bg-base);
+	}
+	.mis-segmento--activo {
+		background: var(--au-tint);
+		color: var(--emerald-800);
+		font-weight: 700;
+	}
+	.mis-select {
+		min-height: 40px;
+		max-width: 13rem;
+		padding: 0 2rem 0 0.85rem;
+		font: inherit;
+		font-size: 0.82rem;
+		font-weight: 600;
+		color: var(--text-primary);
+		background: var(--bg-surface);
+		border: 1.5px solid var(--border-default);
+		border-radius: 12px;
+	}
+	.mis-actualizar {
+		margin-left: auto;
+	}
+	.mis-actualizar--girando :global(svg) {
+		animation: girar 0.9s linear infinite;
+	}
+	@keyframes girar {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
-	.tarjetas {
+	/* ── Secciones ── */
+	.mis-seccion {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 0.75rem;
+		margin-top: 0.35rem;
+	}
+	.mis-seccion--sub {
+		margin-top: 0.75rem;
+	}
+	.mis-seccion-titulo {
+		margin: 0;
+		font-family: var(--font-display);
+		font-size: 1.15rem;
+		font-weight: 800;
+		letter-spacing: -0.02em;
+		color: var(--text-primary);
+	}
+	.mis-seccion-detalle {
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--text-muted);
+	}
+
+	/* ── Tarjetas: la lista de la app ── */
+	.mis-lista {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+		grid-template-columns: 1fr;
 		gap: 0.75rem;
 		margin: 0;
 		padding: 0;
 		list-style: none;
 	}
-
-	.tarjeta {
+	@media (min-width: 1024px) {
+		.mis-lista {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+	@media (min-width: 1536px) {
+		.mis-lista {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+	}
+	.mis-tarjeta {
 		display: flex;
 		flex-direction: column;
-		gap: 0.5rem;
-		padding: 0.875rem;
-		background: var(--bg-surface, #fff);
-		border: 1px solid var(--border, #e2e8f0);
-		border-radius: 12px;
-		/* El navegador se salta el layout y el pintado de las tarjetas que quedan
-		   fuera de la ventana. `contain-intrinsic-size` le da la altura estimada
-		   para que la barra de scroll no salte al llegar a ellas. */
+		gap: 0.65rem;
+		padding: 1rem 1.1rem;
+		background: var(--bg-surface);
+		border: 1px solid var(--border-subtle);
+		border-radius: 22px;
+		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+		transition:
+			border-color 0.15s ease,
+			box-shadow 0.15s ease;
 		content-visibility: auto;
 		contain-intrinsic-size: auto 9rem;
 	}
-
-	.tarjeta--hecha {
-		opacity: 0.75;
+	.mis-tarjeta:hover {
+		border-color: rgba(var(--au-primary-rgb), 0.35);
+		box-shadow: 0 8px 28px rgba(var(--au-primary-rgb), 0.1);
 	}
-
-	.tarjeta__cabeza {
+	.mis-tarjeta--hecha {
+		opacity: 0.8;
+	}
+	.mis-tarjeta-cabeza {
+		display: flex;
+		align-items: center;
+		gap: 0.85rem;
+		min-width: 0;
+		color: inherit;
+		text-decoration: none;
+	}
+	.mis-insignia {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 48px;
+		height: 48px;
+		flex-shrink: 0;
+		border-radius: 14px;
+		background: var(--au-tint);
+		color: var(--emerald-800);
+		font-size: 1rem;
+		font-weight: 800;
+		letter-spacing: 0.02em;
+	}
+	.mis-insignia--hecha {
+		background: var(--bg-base);
+		color: var(--text-muted);
+	}
+	.mis-tarjeta-texto {
 		display: flex;
 		flex-direction: column;
-		gap: 0.125rem;
+		gap: 0.15rem;
+		min-width: 0;
+		flex: 1;
 	}
-
-	.tarjeta__code {
-		font-size: 0.7rem;
-		font-weight: 600;
-		letter-spacing: 0.04em;
-		color: var(--emerald-700, #047857);
+	.mis-tarjeta-titulo {
+		font-size: 1rem;
+		font-weight: 800;
+		letter-spacing: -0.01em;
+		line-height: 1.25;
+		color: var(--text-primary);
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
 	}
-
-	.tarjeta__titulo {
-		font-weight: 600;
-		line-height: 1.3;
+	.mis-tarjeta-meta {
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		text-transform: uppercase;
+		letter-spacing: 0.02em;
 	}
-
-	.tarjeta__meta {
+	.mis-tarjeta :global(.mis-chevron) {
+		flex-shrink: 0;
+		color: var(--emerald-500);
+	}
+	.mis-tarjeta-pie {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem;
+	}
+	.mis-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.3rem 0.7rem;
+		border-radius: 999px;
+		background: var(--au-tint);
 		font-size: 0.75rem;
-		color: var(--text-muted, #64748b);
+		font-weight: 700;
+		color: var(--c, var(--emerald-800));
+	}
+	.mis-pill::before {
+		content: '';
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--c, var(--emerald-500));
+	}
+	.mis-tarjeta-estado {
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--text-muted);
 	}
 
-	.borradores {
+	/* Borradores */
+	.mis-borradores {
 		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
+		gap: 0.4rem;
 		margin: 0;
 		padding: 0;
 		list-style: none;
 	}
-
-	.borrador,
-	.tarjeta__accion {
-		display: block;
-		padding: 0.5rem 0.75rem;
-		font-size: 0.8rem;
-		font-weight: 500;
-		text-align: center;
-		text-decoration: none;
-		border-radius: 8px;
-	}
-
-	.borrador {
-		color: var(--amber-800, #92400e);
-		background: #fffbeb;
-		border: 1px solid #fde68a;
-	}
-
-	.borrador-fila {
+	.mis-borrador {
 		display: flex;
 		align-items: stretch;
-		gap: 0.25rem;
+		gap: 0.35rem;
 	}
-
-	/* El enlace se queda con todo el ancho sobrante: continuar es lo que se hace
-	   todos los días y descartar lo excepcional. */
-	.borrador-fila .borrador {
+	.mis-borrador-enlace {
 		flex: 1;
-	}
-
-	.borrador__descartar {
-		flex: 0 0 auto;
-		padding: 0 0.625rem;
-		font: inherit;
-		font-size: 0.75rem;
-		color: var(--text-muted, #64748b);
-		background: none;
-		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
-		border-radius: 8px;
-		cursor: pointer;
-	}
-
-	.borrador__descartar:hover:not(:disabled) {
-		color: #b91c1c;
-		background: #fef2f2;
-		border-color: #fecaca;
-	}
-
-	.borrador__descartar:disabled {
-		opacity: 0.6;
-		cursor: default;
-	}
-
-	.tarjeta__accion {
-		margin-top: auto;
-		color: #fff;
-		background: var(--emerald-600, #059669);
-	}
-
-	.tarjeta__badge {
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: var(--emerald-700, #047857);
-	}
-
-	.btn {
-		align-self: flex-start;
-		min-height: 36px;
-		padding: 0 0.875rem;
-		font: inherit;
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+		padding: 0.6rem 0.8rem;
+		border-radius: 12px;
+		background: #fffbeb;
+		border: 1px solid #fde68a;
+		color: #92400e;
 		font-size: 0.8rem;
-		background: var(--bg-surface, #fff);
-		border: 1px solid var(--border, #e2e8f0);
-		border-radius: 8px;
+		font-weight: 700;
+		text-decoration: none;
+	}
+	.mis-borrador-barra {
+		display: block;
+		height: 4px;
+		border-radius: 999px;
+		background: rgba(146, 64, 14, 0.15);
+		overflow: hidden;
+	}
+	.mis-borrador-barra span {
+		display: block;
+		height: 100%;
+		border-radius: 999px;
+		background: #f59e0b;
+	}
+	.mis-borrador-descartar {
+		flex: 0 0 auto;
+		width: 40px;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		color: var(--text-muted);
 		cursor: pointer;
 	}
-
-	.btn:disabled {
-		opacity: 0.6;
+	.mis-borrador-descartar:hover:not(:disabled) {
+		color: var(--au-danger);
+		background: var(--au-danger-soft);
+		border-color: transparent;
+	}
+	.mis-borrador-descartar:disabled {
+		opacity: 0.5;
 		cursor: default;
 	}
 
-	.btn--icono {
-		margin-left: auto;
-		color: var(--text-muted, #64748b);
+	.mis-tarjeta-accion {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 44px;
+		margin-top: auto;
+		padding: 0 1rem;
+		border-radius: 14px;
+		background: var(--emerald-500);
+		color: #fff;
+		font-size: 0.9rem;
+		font-weight: 800;
+		text-decoration: none;
+		box-shadow: 0 6px 16px rgba(var(--au-primary-rgb), 0.25);
+		transition: background-color 0.15s ease;
+	}
+	.mis-tarjeta-accion:hover {
+		background: var(--emerald-600);
+	}
+	.mis-tarjeta-accion--otro {
+		background: transparent;
+		color: var(--emerald-800);
+		border: 1.5px solid var(--emerald-500);
+		box-shadow: none;
+	}
+	.mis-tarjeta-accion--otro:hover {
+		background: var(--au-tint);
 	}
 
-	.btn--mas {
+	.mis-mas {
 		align-self: center;
-	}
-
-	.enlace {
-		padding: 0;
-		font: inherit;
-		color: var(--emerald-700, #047857);
-		background: none;
-		border: 0;
-		text-decoration: underline;
-		cursor: pointer;
 	}
 
 	.sr-only {

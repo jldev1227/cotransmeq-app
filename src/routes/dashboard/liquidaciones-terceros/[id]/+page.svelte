@@ -209,7 +209,7 @@
 		color: rgba(255, 255, 255, 0.4);
 	}
 	.route-meta .placa {
-		font-family: 'SF Mono', 'Fira Code', monospace;
+		font-family: var(--font-mono);
 		background: rgba(255, 255, 255, 0.12);
 		padding: 2px 8px;
 		border-radius: 4px;

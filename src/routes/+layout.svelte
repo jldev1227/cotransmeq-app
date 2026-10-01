@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import { authStore } from '$lib/stores/auth';
 	import { Toaster } from 'svelte-sonner';
+	import Tooltip from '$lib/components/ui/Tooltip.svelte';
 	import { enUniverShell } from '$lib/stores/univerShell';
 	import '../app.css';
 	import favicon from '$lib/assets/favicon.svg';
@@ -50,5 +51,7 @@
 </svelte:head>
 
 <Toaster richColors position={posicionToast} offset={offsetToast} />
+<!-- Un solo tooltip para todos los `title` de la app. -->
+<Tooltip />
 
 {@render children?.()}

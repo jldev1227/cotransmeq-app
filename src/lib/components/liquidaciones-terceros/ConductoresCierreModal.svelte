@@ -525,7 +525,7 @@
 		border-color: #bbf7d0;
 	}
 	.ccm-fila-dentro:hover:not(:disabled) {
-		background: #d1fae5;
+		background: #dcfce7;
 	}
 	.ccm-fila:disabled {
 		opacity: 0.5;
@@ -545,7 +545,7 @@
 		text-align: center;
 	}
 	.ccm-fila-dentro .ccm-check {
-		background: #ea580c;
+		background: #c2410c;
 		color: #fff;
 	}
 
@@ -573,7 +573,7 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		color: #c2410c;
+		color: #9a3412;
 	}
 
 	.ccm-sel-item {
@@ -669,7 +669,7 @@
 		margin: 7px 0 0;
 		font-size: 11px;
 		line-height: 1.45;
-		color: #c2410c;
+		color: #9a3412;
 	}
 
 	.ccm-vacio {
@@ -723,7 +723,7 @@
 		color: #334155;
 	}
 	.ccm-btn-primary {
-		background: #ea580c;
+		background: #c2410c;
 		color: #fff;
 	}
 	.ccm-btn-ghost:disabled,

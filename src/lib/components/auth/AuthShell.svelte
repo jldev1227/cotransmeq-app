@@ -1,37 +1,42 @@
 <script lang="ts">
 	/**
-	 * Marco de las pantallas de acceso (recuperar contraseña, restablecerla, y
-	 * cualquiera que venga después).
+	 * Marco de las pantallas de acceso: login, recuperar contraseña,
+	 * restablecerla e invitación.
 	 *
-	 * Existe para que ninguna pantalla nueva tenga que copiar el fondo, la
-	 * tarjeta y el panel de marca del login: copiarlos fue justo lo que
-	 * arrastró el fondo verde de una pantalla a otra. Aquí el fondo es el crema
-	 * editorial `#fcfcfb` del sistema; el verde solo queda como acento.
+	 * Sigue el diseño de la app móvil de conductores: un bloque de marca oscuro
+	 * con la mascota y el formulario sobre el fondo claro de la marca, sin
+	 * tarjeta flotante. En escritorio el bloque oscuro es la mitad izquierda de
+	 * la pantalla; en móvil es la cabecera, como en la app.
 	 *
-	 * Las primitivas de formulario (`.field`, `.btn-submit`, `.alert`…) se
-	 * declaran con `:global()` dentro del panel porque el contenido llega como
-	 * snippet desde la página y, sin eso, el estilo con ámbito de este
-	 * componente no lo alcanzaría. Son la contraparte del contrato: la página
-	 * pone la estructura, este componente el aspecto.
+	 * La mascota la elige cada pantalla por INTENCIÓN (`mascota="correoEnviado"`)
+	 * y cambia con el estado: así la pantalla reacciona sin que cada página
+	 * tenga que dibujar su propio icono.
+	 *
+	 * Las primitivas de formulario (`.field`, `.btn-submit`, `.alert`…) van con
+	 * `:global()` dentro del panel porque el contenido llega como snippet desde
+	 * la página y, sin eso, el estilo con ámbito de este componente no lo
+	 * alcanzaría. La página pone la estructura, este componente el aspecto.
 	 */
 	import type { Snippet } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
+	import { mascota as mascotaDe, type MascotIntent } from '$lib/mascot';
 
 	interface Props {
-		/** Etiqueta monoespaciada sobre el título. */
+		/** Etiqueta pequeña sobre el título del formulario. */
 		eyebrow: string;
 		titulo: string;
 		subtitulo?: string;
-		/** Contenido del panel derecho: el formulario o el estado de la pantalla. */
+		/** Contenido del panel: el formulario o el estado de la pantalla. */
 		children: Snippet;
 		/** Pie opcional bajo el separador (enlaces de vuelta, ayuda…). */
 		pie?: Snippet;
+		/** Reacción de la mascota en el bloque de marca. */
+		mascota?: MascotIntent;
 		/**
-		 * Texto del panel de marca. Tiene valores por defecto porque nació para
-		 * la recuperación de contraseña; cualquier otra pantalla que use este
-		 * marco (invitación, alta…) debe pasar los suyos, o el panel izquierdo
-		 * hablará de restablecer contraseñas en un sitio donde no aplica.
+		 * Texto del bloque de marca. Tiene valores por defecto pensados para el
+		 * acceso a la cuenta; cualquier otra pantalla (invitación, alta…) debe
+		 * pasar los suyos, o el bloque hablará de otra cosa.
 		 */
 		marcaCodigo?: string;
 		marcaTitulo?: string;
@@ -45,7 +50,8 @@
 		subtitulo,
 		children,
 		pie,
-		marcaCodigo = 'Acceso · Cuenta',
+		mascota = 'bienvenida',
+		marcaCodigo = 'Sistema de gestión',
 		marcaTitulo = 'Tu cuenta, bajo tu control',
 		marcaDesc = 'La contraseña se restablece con un enlace que solo llega a tu correo corporativo y caduca a los 30 minutos.',
 		marcaPuntos = [
@@ -54,69 +60,69 @@
 			'Tu contraseña anterior sigue activa hasta que la cambies'
 		]
 	}: Props = $props();
+
+	const imagen = $derived(mascotaDe(mascota));
 </script>
 
 <div class="auth-page" in:fade={{ duration: 300 }}>
-	<!-- Ambiente sutil: dos manchas difusas, sin neón y sin fondo saturado. -->
-	<div class="orbs" aria-hidden="true">
-		<div class="orb orb-1"></div>
-		<div class="orb orb-2"></div>
-	</div>
+	<!-- ═══ Bloque de marca: oscuro, con la mascota ═══ -->
+	<aside class="hero">
+		<div class="hero-glow" aria-hidden="true"></div>
 
-	<div class="auth-card" in:fly={{ y: 20, duration: 500, easing: quintOut }}>
-		<!-- ═══ IZQUIERDA: panel de marca (carbón editorial) ═══ -->
-		<aside class="brand-panel">
-			<div class="brand-pattern" aria-hidden="true"></div>
+		<div class="hero-head">
+			<img
+				class="hero-logo"
+				src="/assets/logo_nombre_white.webp"
+				alt="Cotransmeq S.A.S"
+				width="132"
+				height="45"
+			/>
+		</div>
 
-			<div class="brand-head">
-				<img
-					class="brand-logo"
-					src="/assets/logo_nombre_white.webp"
-					alt="Cotransmeq S.A.S"
-					width="177"
-					height="113"
-				/>
-			</div>
+		<div class="hero-body">
+			<span class="hero-eyebrow">{marcaCodigo}</span>
+			<h2 class="hero-title">{marcaTitulo}</h2>
+			<p class="hero-desc">{marcaDesc}</p>
 
-			<div class="brand-body">
-				<span class="brand-code">{marcaCodigo}</span>
-				<h2 class="brand-title">{marcaTitulo}</h2>
-				<p class="brand-desc">{marcaDesc}</p>
-
-				<ul class="brand-features">
+			{#if marcaPuntos.length}
+				<ul class="hero-points">
 					{#each marcaPuntos as punto (punto)}
 						<li>
-							<span class="feature-mark">
+							<span class="point-mark" aria-hidden="true">
 								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-							</svg>
+									<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+								</svg>
 							</span>
 							{punto}
 						</li>
 					{/each}
 				</ul>
-			</div>
+			{/if}
+		</div>
 
-			<div class="brand-foot">
-				<span class="status-dot"></span>
-				<span class="status-text">Canal seguro</span>
-				<span class="status-sep">·</span>
-				<span class="status-meta">Cotransmeq S.A.S</span>
-			</div>
-		</aside>
+		<!-- La mascota cambia con el estado; `key` reinicia la entrada. -->
+		{#key imagen.src}
+			<img
+				class="hero-mascot"
+				src={imagen.src}
+				alt={imagen.alt}
+				width="418"
+				height="418"
+				in:fly={{ y: 24, duration: 450, easing: quintOut }}
+			/>
+		{/key}
 
-		<!-- ═══ DERECHA: panel de contenido ═══ -->
-		<section class="form-panel">
-			<div class="mobile-brand">
-				<img
-					class="mobile-logo"
-					src="/assets/logo_nombre.webp"
-					alt="Cotransmeq S.A.S"
-					width="177"
-					height="113"
-				/>
-			</div>
+		<div class="hero-foot">
+			<span class="status-dot" aria-hidden="true"></span>
+			<span>Canal seguro</span>
+			<span class="status-sep">·</span>
+			<span>Cotransmeq S.A.S</span>
+		</div>
+	</aside>
 
+	<!-- ═══ Panel de contenido ═══ -->
+	<section class="form-panel">
+		<div class="form-inner" in:fly={{ y: 16, duration: 450, delay: 80, easing: quintOut }}>
 			<div class="form-head">
 				<span class="eyebrow">{eyebrow}</span>
 				<h1 class="form-title">{titulo}</h1>
@@ -140,219 +146,214 @@
 			<p class="footer-copy">
 				© {new Date().getFullYear()} Cotransmeq S.A.S · Yopal, Casanare · Colombia
 			</p>
-		</section>
-	</div>
+		</div>
+	</section>
 </div>
 
 <style>
 	/* ════════════════════════════════════════════════════════════
-	   AUTH SHELL — mismo lenguaje que el login: crema de fondo,
-	   panel de marca carbón, acento esmeralda. Sin fondo verde.
+	   AUTH SHELL — el lenguaje de la app móvil llevado a la web:
+	   fondo suave de marca, bloque oscuro con mascota, sin tarjeta.
+	   Los colores salen de `--au-*` (app.css).
 	   ════════════════════════════════════════════════════════════ */
 	.auth-page {
-		position: relative;
-		min-height: 100vh;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 1.5rem;
-		font-family: 'Inter', 'Inter Tight', system-ui, sans-serif;
-		color: #1a1a1a;
-		background-color: #fcfcfb;
-		-webkit-font-smoothing: antialiased;
-		overflow: hidden;
-	}
-
-	.orbs {
-		position: absolute;
-		inset: 0;
-		pointer-events: none;
-		overflow: hidden;
-	}
-	.orb {
-		position: absolute;
-		border-radius: 50%;
-		filter: blur(90px);
-	}
-	.orb-1 {
-		top: -10rem;
-		right: -7rem;
-		width: 28rem;
-		height: 28rem;
-		background: rgba(16, 185, 129, 0.12);
-	}
-	.orb-2 {
-		bottom: -12rem;
-		left: -9rem;
-		width: 32rem;
-		height: 32rem;
-		background: rgba(15, 31, 26, 0.07);
-	}
-
-	.auth-card {
-		position: relative;
-		z-index: 1;
 		display: grid;
 		grid-template-columns: 1fr;
-		width: 100%;
-		max-width: 980px;
-		background: #ffffff;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 24px;
-		box-shadow:
-			0 1px 2px rgba(0, 0, 0, 0.05),
-			0 24px 60px rgba(15, 31, 26, 0.12);
-		overflow: hidden;
+		grid-template-rows: auto 1fr;
+		min-height: 100vh;
+		min-height: 100dvh;
+		background: var(--au-bg);
+		color: var(--au-text);
+		font-family: var(--font-sans);
+		-webkit-font-smoothing: antialiased;
 	}
 	@media (min-width: 1024px) {
-		.auth-card {
-			grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-		}
-	}
-	@media (max-width: 1023.98px) {
-		.auth-card {
-			max-width: 480px;
+		.auth-page {
+			grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+			grid-template-rows: 1fr;
 		}
 	}
 
-	/* ═══ Panel de marca ═══ */
-	.brand-panel {
+	/* ═══ Bloque de marca ═══ */
+	.hero {
 		position: relative;
-		display: none;
+		display: flex;
 		flex-direction: column;
-		justify-content: space-between;
-		gap: 2rem;
-		padding: 2.75rem 2.5rem;
-		background: #0f172a;
-		color: #f0ede6;
+		gap: 1.25rem;
+		padding: 1.5rem 1.5rem 1.75rem;
+		background: linear-gradient(160deg, var(--au-dark-2) 0%, var(--au-dark) 70%);
+		color: #ffffff;
+		border-radius: 0 0 30px 30px;
 		overflow: hidden;
 		isolation: isolate;
 	}
 	@media (min-width: 1024px) {
-		.brand-panel {
-			display: flex;
+		.hero {
+			justify-content: space-between;
+			gap: 2.5rem;
+			padding: 3rem 3.25rem;
+			border-radius: 0;
+			min-height: 100vh;
+			min-height: 100dvh;
+			position: sticky;
+			top: 0;
 		}
 	}
 
-	.brand-pattern {
+	/* Mancha de luz de marca, como el círculo del hero de la app. */
+	.hero-glow {
 		position: absolute;
-		inset: 0;
-		pointer-events: none;
-		opacity: 0.06;
-		background-image:
-			radial-gradient(circle at 20% 30%, white 1px, transparent 1px),
-			radial-gradient(circle at 70% 60%, white 1px, transparent 1px);
-		background-size: 28px 28px, 32px 32px;
-		mask-image: radial-gradient(ellipse at top left, black 0%, transparent 75%);
-		-webkit-mask-image: radial-gradient(ellipse at top left, black 0%, transparent 75%);
-	}
-
-	.brand-panel::before {
-		content: '';
-		position: absolute;
-		top: -6rem;
-		right: -6rem;
-		width: 18rem;
-		height: 18rem;
-		background: radial-gradient(circle, rgba(16, 185, 129, 0.25) 0%, transparent 70%);
+		right: -18%;
+		top: -25%;
+		width: 70%;
+		aspect-ratio: 1;
+		border-radius: 50%;
+		background: rgba(255, 255, 255, 0.06);
 		pointer-events: none;
 		z-index: -1;
 	}
 
-	.brand-head,
-	.brand-body,
-	.brand-foot {
+	.hero-head,
+	.hero-body,
+	.hero-foot {
 		position: relative;
-		z-index: 1;
+		z-index: 2;
 	}
 
-	.brand-logo {
-		height: 70px;
+	.hero-logo {
+		height: 40px;
 		width: auto;
 		display: block;
 	}
-
-	.brand-code {
-		display: inline-block;
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.7rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.12em;
-		color: #f97316;
-		background: rgba(16, 185, 129, 0.1);
-		padding: 0.3rem 0.7rem;
-		border-radius: 6px;
-		margin-bottom: 1.25rem;
+	@media (min-width: 1024px) {
+		.hero-logo {
+			height: 60px;
+		}
 	}
 
-	.brand-title {
-		font-family: 'Fraunces', Georgia, serif;
-		font-size: clamp(1.6rem, 2.4vw, 1.95rem);
-		font-weight: 400;
-		line-height: 1.18;
-		letter-spacing: -0.015em;
-		color: #f0ede6;
-		margin: 0 0 0.85rem;
-	}
-
-	.brand-desc {
-		font-size: 0.875rem;
-		line-height: 1.6;
-		color: rgba(240, 237, 230, 0.7);
-		margin: 0 0 1.75rem;
-	}
-
-	.brand-features {
-		list-style: none;
-		padding: 0;
-		margin: 0;
+	.hero-body {
+		max-width: 62%;
 		display: flex;
 		flex-direction: column;
-		gap: 0.65rem;
+		gap: 0.5rem;
 	}
-	.brand-features li {
+	@media (min-width: 1024px) {
+		.hero-body {
+			max-width: 26rem;
+			gap: 0.75rem;
+			/* Deja sitio a la mascota, que en escritorio ocupa la esquina inferior. */
+			margin-bottom: min(28vh, 16rem);
+		}
+	}
+
+	.hero-eyebrow {
+		font-size: 0.72rem;
+		font-weight: 800;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--au-eyebrow);
+	}
+
+	.hero-title {
+		font-size: clamp(1.6rem, 4.5vw, 2.4rem);
+		font-weight: 800;
+		line-height: 1.1;
+		letter-spacing: -0.03em;
+		color: #ffffff;
+		margin: 0;
+	}
+
+	.hero-desc {
+		font-size: 0.9rem;
+		line-height: 1.5;
+		color: var(--au-hero-text);
+		margin: 0;
+	}
+
+	/* En móvil el bloque es una cabecera corta: la lista solo cabe en escritorio. */
+	.hero-points {
+		display: none;
+		list-style: none;
+		padding: 0;
+		margin: 0.75rem 0 0;
+		flex-direction: column;
+		gap: 0.6rem;
+	}
+	@media (min-width: 1024px) {
+		.hero-points {
+			display: flex;
+		}
+	}
+	.hero-points li {
 		display: flex;
 		align-items: center;
 		gap: 0.7rem;
-		font-size: 0.8125rem;
-		color: rgba(240, 237, 230, 0.85);
+		font-size: 0.85rem;
+		color: rgba(255, 255, 255, 0.85);
 	}
-	.feature-mark {
+	.point-mark {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		width: 22px;
 		height: 22px;
 		border-radius: 7px;
-		background: rgba(16, 185, 129, 0.18);
-		color: #f97316;
+		background: rgba(255, 255, 255, 0.14);
+		color: var(--au-eyebrow);
 		flex-shrink: 0;
 	}
-	.feature-mark svg {
+	.point-mark svg {
 		width: 12px;
 		height: 12px;
 	}
 
-	.brand-foot {
-		display: flex;
+	.hero-mascot {
+		position: absolute;
+		right: -0.5rem;
+		bottom: -0.75rem;
+		width: 11.5rem;
+		height: 11.5rem;
+		object-fit: contain;
+		z-index: 1;
+		pointer-events: none;
+		user-select: none;
+		filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.25));
+	}
+	@media (min-width: 640px) {
+		.hero-mascot {
+			width: 13rem;
+			height: 13rem;
+		}
+	}
+	@media (min-width: 1024px) {
+		.hero-mascot {
+			right: 1.5rem;
+			bottom: 3.5rem;
+			width: min(26rem, 38vh);
+			height: min(26rem, 38vh);
+		}
+	}
+
+	.hero-foot {
+		display: none;
 		align-items: center;
 		gap: 0.55rem;
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.7rem;
-		color: rgba(240, 237, 230, 0.55);
+		font-size: 0.72rem;
+		font-weight: 600;
+		color: rgba(255, 255, 255, 0.65);
+	}
+	@media (min-width: 1024px) {
+		.hero-foot {
+			display: flex;
+		}
 	}
 	.status-dot {
-		width: 6px;
-		height: 6px;
+		width: 7px;
+		height: 7px;
 		border-radius: 50%;
-		background: #f97316;
-		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+		background: var(--au-eyebrow);
+		box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.12);
 		animation: pulse 2.5s ease-in-out infinite;
-	}
-	.status-text {
-		font-weight: 600;
-		color: rgba(240, 237, 230, 0.75);
 	}
 	.status-sep {
 		opacity: 0.4;
@@ -360,79 +361,67 @@
 	@keyframes pulse {
 		0%,
 		100% {
-			box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+			box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.12);
 		}
 		50% {
-			box-shadow: 0 0 0 5px rgba(16, 185, 129, 0.06);
+			box-shadow: 0 0 0 6px rgba(255, 255, 255, 0.04);
 		}
 	}
 
 	/* ═══ Panel de contenido ═══ */
 	.form-panel {
-		padding: 2.25rem 1.75rem 1.75rem;
 		display: flex;
-		flex-direction: column;
+		align-items: flex-start;
 		justify-content: center;
+		padding: 1.75rem 1.25rem 2rem;
 	}
 	@media (min-width: 640px) {
 		.form-panel {
-			padding: 3rem 2.5rem 2.25rem;
+			padding: 2.5rem 2rem;
 		}
 	}
 	@media (min-width: 1024px) {
 		.form-panel {
-			padding: 3.5rem 3rem;
+			align-items: center;
+			padding: 3rem 4rem;
 		}
 	}
 
-	.mobile-brand {
-		display: flex;
-		align-items: center;
-		margin-bottom: 2rem;
-	}
-	.mobile-logo {
-		height: 32px;
-		width: auto;
-		display: block;
-	}
-	@media (min-width: 1024px) {
-		.mobile-brand {
-			display: none;
-		}
+	.form-inner {
+		width: 100%;
+		max-width: 27rem;
 	}
 
 	.form-head {
-		margin-bottom: 1.75rem;
+		margin-bottom: 1.5rem;
 	}
 
 	.eyebrow {
 		display: inline-block;
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.7rem;
-		font-weight: 700;
+		font-size: 0.72rem;
+		font-weight: 800;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #f97316;
-		background: rgba(16, 185, 129, 0.08);
-		padding: 0.3rem 0.75rem;
-		border-radius: 6px;
+		color: var(--au-primary-strong);
+		background: var(--au-tint);
+		padding: 0.35rem 0.75rem;
+		border-radius: 999px;
 		margin-bottom: 0.85rem;
 	}
 
 	.form-title {
-		font-family: 'Fraunces', Georgia, serif;
-		font-size: clamp(1.65rem, 3.6vw, 2rem);
-		font-weight: 400;
+		font-size: clamp(1.5rem, 3.4vw, 1.9rem);
+		font-weight: 800;
 		line-height: 1.15;
-		letter-spacing: -0.015em;
-		color: #0f172a;
+		letter-spacing: -0.025em;
+		color: var(--au-text);
 		margin: 0 0 0.5rem;
 	}
 
 	.form-subtitle {
-		font-size: 0.9rem;
+		font-size: 0.95rem;
 		line-height: 1.55;
-		color: #4a4a4a;
+		color: var(--au-muted);
 		margin: 0;
 	}
 
@@ -445,15 +434,14 @@
 	.secure-sep {
 		flex: 1;
 		height: 1px;
-		background: rgba(0, 0, 0, 0.08);
+		background: var(--au-border);
 	}
 	.secure-text {
-		font-family: 'JetBrains Mono', monospace;
 		font-size: 0.65rem;
-		font-weight: 600;
+		font-weight: 700;
 		letter-spacing: 0.1em;
 		text-transform: uppercase;
-		color: #9a9a9a;
+		color: var(--au-muted);
 	}
 
 	.form-foot {
@@ -463,7 +451,7 @@
 
 	.footer-copy {
 		font-size: 0.75rem;
-		color: #9a9a9a;
+		color: var(--au-muted);
 		text-align: center;
 		margin: 1rem 0 0;
 		line-height: 1.5;
@@ -472,6 +460,7 @@
 	/* ════════════════════════════════════════════════════════════
 	   PRIMITIVAS DE FORMULARIO — las usan las páginas que se montan
 	   dentro del panel. Globales por el ámbito de los snippets.
+	   Medidas de la app: campos de 56px, radio 14, peso 600.
 	   ════════════════════════════════════════════════════════════ */
 	.form-panel :global(.auth-form) {
 		display: flex;
@@ -482,14 +471,13 @@
 	.form-panel :global(.field) {
 		display: flex;
 		flex-direction: column;
-		gap: 0.4rem;
+		gap: 0.45rem;
 	}
 
 	.form-panel :global(.field-label) {
-		font-size: 0.78rem;
-		font-weight: 600;
-		color: #0f172a;
-		letter-spacing: -0.005em;
+		font-size: 0.85rem;
+		font-weight: 700;
+		color: var(--au-text);
 	}
 
 	.form-panel :global(.field-control) {
@@ -498,86 +486,155 @@
 
 	.form-panel :global(.field-icon) {
 		position: absolute;
-		left: 0.95rem;
+		left: 1rem;
 		top: 50%;
 		transform: translateY(-50%);
-		width: 16px;
-		height: 16px;
-		color: #9a9a9a;
+		width: 18px;
+		height: 18px;
+		color: var(--au-muted);
 		pointer-events: none;
-		transition: color 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+		transition: color 0.2s ease;
 	}
 
 	.form-panel :global(.field-input) {
 		width: 100%;
-		padding: 0.7rem 0.95rem 0.7rem 2.55rem;
-		font-size: 0.9rem;
+		min-height: 3.25rem;
+		padding: 0.8rem 1rem 0.8rem 2.85rem;
+		font-size: 1rem;
+		font-weight: 600;
 		font-family: inherit;
-		color: #1a1a1a;
-		background: #ffffff;
-		border: 1px solid rgba(0, 0, 0, 0.12);
-		border-radius: 12px;
-		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+		color: var(--au-text);
+		background: var(--au-surface);
+		border: 1.5px solid var(--au-border);
+		border-radius: 14px;
+		transition:
+			border-color 0.2s ease,
+			box-shadow 0.2s ease;
 	}
 	.form-panel :global(.field-input::placeholder) {
-		color: #9a9a9a;
+		color: var(--au-muted);
+		font-weight: 500;
 	}
 	.form-panel :global(.field-input--with-action) {
-		padding-right: 2.85rem;
+		padding-right: 3rem;
 	}
 	.form-panel :global(.field-input:hover:not(:disabled)) {
-		border-color: rgba(0, 0, 0, 0.2);
+		border-color: var(--au-primary);
 	}
 	.form-panel :global(.field-input:focus) {
 		outline: none;
-		border-color: #f97316;
-		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+		border-color: var(--au-primary);
+		box-shadow: 0 0 0 4px rgba(var(--au-primary-rgb), 0.14);
 	}
 	.form-panel :global(.field-control:focus-within .field-icon) {
-		color: #f97316;
+		color: var(--au-primary);
 	}
 	.form-panel :global(.field-input:disabled) {
-		opacity: 0.6;
+		opacity: 0.7;
 		cursor: not-allowed;
-		background: #fcfcfb;
+		background: var(--au-bg);
 	}
 
 	.form-panel :global(.field-action) {
 		position: absolute;
-		right: 0.6rem;
+		right: 0.65rem;
 		top: 50%;
 		transform: translateY(-50%);
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 28px;
-		height: 28px;
+		width: 32px;
+		height: 32px;
 		padding: 0;
 		background: transparent;
 		border: none;
-		border-radius: 8px;
-		color: #9a9a9a;
+		border-radius: 10px;
+		color: var(--au-muted);
 		cursor: pointer;
-		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+		transition:
+			color 0.2s ease,
+			background-color 0.2s ease;
 	}
 	.form-panel :global(.field-action:hover:not(:disabled)) {
-		color: #ea580c;
-		background: rgba(16, 185, 129, 0.06);
+		color: var(--au-primary-strong);
+		background: var(--au-tint);
 	}
 	.form-panel :global(.field-action:disabled) {
 		opacity: 0.5;
 		cursor: not-allowed;
 	}
 	.form-panel :global(.field-action svg) {
-		width: 16px;
-		height: 16px;
+		width: 18px;
+		height: 18px;
 	}
 
 	.form-panel :global(.field-hint) {
-		font-size: 0.75rem;
+		font-size: 0.78rem;
 		line-height: 1.45;
-		color: #6b6b6b;
+		color: var(--au-muted);
 		margin: 0;
+	}
+
+	/* ═══ Fila «recordarme» + enlace ═══ */
+	.form-panel :global(.form-row) {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+	.form-panel :global(.checkbox) {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.55rem;
+		cursor: pointer;
+		user-select: none;
+	}
+	.form-panel :global(.checkbox-input) {
+		width: 18px;
+		height: 18px;
+		appearance: none;
+		-webkit-appearance: none;
+		margin: 0;
+		border: 1.5px solid var(--au-border);
+		border-radius: 5px;
+		background: var(--au-surface);
+		cursor: pointer;
+		position: relative;
+		flex-shrink: 0;
+		transition:
+			border-color 0.2s ease,
+			background-color 0.2s ease;
+	}
+	.form-panel :global(.checkbox-input:hover:not(:disabled)) {
+		border-color: var(--au-primary);
+	}
+	.form-panel :global(.checkbox-input:checked) {
+		background: var(--au-primary);
+		border-color: var(--au-primary);
+	}
+	.form-panel :global(.checkbox-input:checked::after) {
+		content: '';
+		position: absolute;
+		top: 2px;
+		left: 5px;
+		width: 5px;
+		height: 9px;
+		border: solid #ffffff;
+		border-width: 0 2px 2px 0;
+		transform: rotate(45deg);
+	}
+	.form-panel :global(.checkbox-input:disabled) {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+	.form-panel :global(.checkbox-label) {
+		font-size: 0.85rem;
+		font-weight: 500;
+		color: var(--au-muted);
+	}
+	.form-panel :global(.checkbox:hover .checkbox-label) {
+		color: var(--au-text);
 	}
 
 	/* ═══ Avisos ═══ */
@@ -585,9 +642,9 @@
 		display: flex;
 		align-items: flex-start;
 		gap: 0.7rem;
-		padding: 0.85rem 1.1rem;
-		border-radius: 12px;
-		margin-bottom: 1.5rem;
+		padding: 0.9rem 1.1rem;
+		border-radius: 14px;
+		margin-bottom: 1.4rem;
 	}
 	.form-panel :global(.alert:focus) {
 		outline: none;
@@ -600,12 +657,12 @@
 	}
 	.form-panel :global(.alert strong) {
 		display: block;
-		font-size: 0.85rem;
+		font-size: 0.88rem;
 		font-weight: 700;
 		margin-bottom: 0.15rem;
 	}
 	.form-panel :global(.alert p) {
-		font-size: 0.8rem;
+		font-size: 0.82rem;
 		line-height: 1.45;
 		margin: 0;
 	}
@@ -613,29 +670,52 @@
 		flex: 1;
 		min-width: 0;
 	}
+	.form-panel :global(.alert-close) {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 26px;
+		height: 26px;
+		padding: 0;
+		margin: -0.15rem -0.35rem 0 0;
+		background: transparent;
+		border: none;
+		border-radius: 8px;
+		color: currentColor;
+		cursor: pointer;
+		flex-shrink: 0;
+		opacity: 0.6;
+	}
+	.form-panel :global(.alert-close:hover) {
+		opacity: 1;
+	}
+	.form-panel :global(.alert-close svg) {
+		width: 14px;
+		height: 14px;
+	}
 
 	.form-panel :global(.alert-error) {
-		background: rgba(239, 68, 68, 0.06);
-		border: 1px solid rgba(220, 38, 38, 0.22);
-		color: #991b1b;
+		background: var(--au-danger-soft);
+		border: 1.5px solid rgba(180, 35, 24, 0.25);
+		color: var(--au-danger);
 	}
 	.form-panel :global(.alert-error > svg) {
-		color: #dc2626;
+		color: var(--au-danger);
 	}
 	.form-panel :global(.alert-error p) {
-		color: #b91c1c;
+		color: var(--au-danger);
 	}
 
 	.form-panel :global(.alert-success) {
-		background: rgba(16, 185, 129, 0.07);
-		border: 1px solid rgba(5, 150, 105, 0.24);
-		color: #166534;
+		background: var(--au-tint);
+		border: 1.5px solid rgba(var(--au-primary-rgb), 0.3);
+		color: var(--au-dark);
 	}
 	.form-panel :global(.alert-success > svg) {
-		color: #ea580c;
+		color: var(--au-primary-strong);
 	}
 	.form-panel :global(.alert-success p) {
-		color: #c2410c;
+		color: var(--au-primary-strong);
 	}
 
 	/* ═══ Botón principal ═══ */
@@ -644,29 +724,34 @@
 		align-items: center;
 		justify-content: center;
 		width: 100%;
-		padding: 0.8rem 1.25rem;
-		margin-top: 0.5rem;
+		min-height: 3.25rem;
+		padding: 0.85rem 1.25rem;
+		margin-top: 0.25rem;
 		font-family: inherit;
-		font-size: 0.9rem;
-		font-weight: 600;
+		font-size: 1rem;
+		font-weight: 800;
 		color: #ffffff;
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: var(--au-primary);
 		border: none;
-		border-radius: 12px;
+		border-radius: 14px;
 		cursor: pointer;
 		text-decoration: none;
-		box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);
-		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+		box-shadow: 0 8px 20px rgba(var(--au-primary-rgb), 0.28);
+		transition:
+			transform 0.15s ease,
+			box-shadow 0.2s ease,
+			background-color 0.2s ease;
 	}
 	.form-panel :global(.btn-submit:hover:not(:disabled)) {
+		background: var(--au-primary-strong);
 		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+		box-shadow: 0 10px 24px rgba(var(--au-primary-rgb), 0.34);
 	}
 	.form-panel :global(.btn-submit:active:not(:disabled)) {
-		transform: translateY(0);
+		transform: scale(0.99);
 	}
 	.form-panel :global(.btn-submit:disabled) {
-		opacity: 0.5;
+		opacity: 0.55;
 		cursor: not-allowed;
 		box-shadow: none;
 	}
@@ -676,8 +761,35 @@
 		gap: 0.5rem;
 	}
 	.form-panel :global(.btn-content svg) {
-		width: 16px;
-		height: 16px;
+		width: 18px;
+		height: 18px;
+	}
+
+	/* Botón secundario, con borde: «usar otra cédula», «volver»… */
+	.form-panel :global(.btn-secondary) {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		min-height: 3rem;
+		padding: 0.75rem 1.25rem;
+		font-family: inherit;
+		font-size: 0.95rem;
+		font-weight: 800;
+		color: var(--au-dark);
+		background: transparent;
+		border: 1.5px solid var(--au-primary);
+		border-radius: 14px;
+		cursor: pointer;
+		text-decoration: none;
+		transition: background-color 0.2s ease;
+	}
+	.form-panel :global(.btn-secondary:hover:not(:disabled)) {
+		background: var(--au-tint);
+	}
+	.form-panel :global(.btn-secondary:disabled) {
+		opacity: 0.55;
+		cursor: not-allowed;
 	}
 
 	.form-panel :global(.spin) {
@@ -691,82 +803,81 @@
 
 	/* ═══ Enlaces de apoyo ═══ */
 	.form-panel :global(.auth-link) {
-		font-size: 0.8rem;
-		font-weight: 600;
-		color: #f97316;
+		font-size: 0.85rem;
+		font-weight: 700;
+		color: var(--au-primary-strong);
 		background: transparent;
 		border: none;
 		padding: 0;
 		cursor: pointer;
 		font-family: inherit;
 		text-decoration: none;
-		transition: color 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+		transition: color 0.2s ease;
 	}
 	.form-panel :global(.auth-link:hover:not(:disabled)) {
-		color: #ea580c;
+		color: var(--au-dark);
+		text-decoration: underline;
 	}
 	.form-panel :global(.auth-link:disabled) {
 		opacity: 0.5;
 		cursor: not-allowed;
 	}
 
-	/* ═══ Estados centrados (validando, éxito, enlace inválido) ═══ */
+	/* ═══ Estados (validando, éxito, enlace inválido) ═══ */
 	.form-panel :global(.estado) {
 		display: flex;
 		flex-direction: column;
-		align-items: center;
-		text-align: center;
-		gap: 0.75rem;
-		padding: 1rem 0 0.5rem;
+		align-items: flex-start;
+		gap: 0.9rem;
+		padding: 0.25rem 0 0.5rem;
 	}
-	.form-panel :global(.estado-icono) {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 56px;
-		height: 56px;
-		border-radius: 18px;
-		margin-bottom: 0.25rem;
+	.form-panel :global(.estado-badge) {
+		display: inline-block;
+		padding: 0.35rem 0.75rem;
+		border-radius: 999px;
+		font-size: 0.75rem;
+		font-weight: 800;
+		color: var(--au-dark);
+		background: var(--au-tint);
 	}
-	.form-panel :global(.estado-icono svg) {
-		width: 26px;
-		height: 26px;
-	}
-	.form-panel :global(.estado-icono--ok) {
-		background: rgba(16, 185, 129, 0.1);
-		color: #ea580c;
-	}
-	.form-panel :global(.estado-icono--error) {
-		background: rgba(239, 68, 68, 0.08);
-		color: #dc2626;
+	.form-panel :global(.estado-badge--error) {
+		color: var(--au-danger);
+		background: var(--au-danger-soft);
 	}
 	.form-panel :global(.estado-titulo) {
-		font-family: 'Fraunces', Georgia, serif;
-		font-size: 1.3rem;
-		font-weight: 400;
-		color: #0f172a;
+		font-size: 1.35rem;
+		font-weight: 800;
+		letter-spacing: -0.02em;
+		color: var(--au-text);
 		margin: 0;
 	}
 	.form-panel :global(.estado-texto) {
-		font-size: 0.875rem;
-		line-height: 1.6;
-		color: #4a4a4a;
+		font-size: 0.95rem;
+		line-height: 1.55;
+		color: var(--au-muted);
 		margin: 0;
-		max-width: 34rem;
+	}
+	.form-panel :global(.estado-texto strong) {
+		color: var(--au-dark);
+		font-weight: 800;
+	}
+	.form-panel :global(.estado .btn-submit),
+	.form-panel :global(.estado .btn-secondary) {
+		margin-top: 0.35rem;
 	}
 	.form-panel :global(.spinner) {
 		width: 34px;
 		height: 34px;
 		border-radius: 50%;
-		border: 2px solid rgba(16, 185, 129, 0.2);
-		border-top-color: #f97316;
+		border: 3px solid var(--au-tint);
+		border-top-color: var(--au-primary);
 		animation: spin 0.8s linear infinite;
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		.auth-card,
-		.status-dot {
-			transition: none !important;
+		.status-dot,
+		.form-panel :global(.spin),
+		.form-panel :global(.spinner) {
 			animation: none !important;
 		}
 		.form-panel :global(.btn-submit),

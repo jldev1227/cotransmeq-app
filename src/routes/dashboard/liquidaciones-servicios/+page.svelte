@@ -1357,7 +1357,7 @@
 			BORRADOR: { bg: '#f1f5f9', text: '#64748b', label: 'Borrador' },
 			LIQUIDADA: { bg: '#dbeafe', text: '#2563eb', label: 'Liquidada' },
 			APROBADA: { bg: '#dcfce7', text: '#16a34a', label: 'Aprobada' },
-			FACTURADA: { bg: '#d1fae5', text: '#ea580c', label: 'Facturada' },
+			FACTURADA: { bg: '#dcfce7', text: '#c2410c', label: 'Facturada' },
 			ANULADA: { bg: '#fee2e2', text: '#dc2626', label: 'Anulada' }
 		};
 		return map[estado] || map.BORRADOR;
@@ -1649,11 +1649,11 @@
 				onclick={() => cambiarTab(id)}
 				class="apple-transition inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-semibold"
 				style="background-color: {facturasTab === id
-					? 'rgba(249, 115, 22,0.10)'
+					? 'rgba(234, 88, 12,0.10)'
 					: 'var(--bg-surface)'}; color: {facturasTab === id
 					? 'var(--orange-700)'
 					: 'var(--text-muted)'}; border: 1px solid {facturasTab === id
-					? 'rgba(249, 115, 22,0.30)'
+					? 'rgba(234, 88, 12,0.30)'
 					: 'var(--border-subtle)'};"
 			>
 				<Icono class="h-3.5 w-3.5" />
@@ -1723,7 +1723,7 @@
 						<div class="flex items-center gap-2">
 							<h1
 								class="font-display text-2xl"
-								style="color: var(--bg-charcoal); font-weight: 400;"
+								style="color: var(--bg-charcoal); font-weight: 800;"
 							>
 								Liquidaciones de Servicios
 							</h1>
@@ -1754,7 +1754,7 @@
 					</span>
 					<span
 						class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
-						style="background: rgba(249, 115, 22,0.10); color: var(--orange-700); border: 1px solid rgba(249, 115, 22,0.30);"
+						style="background: rgba(234, 88, 12,0.10); color: var(--orange-700); border: 1px solid rgba(234, 88, 12,0.30);"
 					>
 						<span class="h-1.5 w-1.5 rounded-full bg-orange-500"></span>
 						{listMetadata.estadoCounts['APROBADA'] || 0} Aprobadas
@@ -1818,7 +1818,7 @@
 						type="search"
 						bind:value={listBusqueda}
 						onkeydown={onSearchKeyDown}
-						placeholder="Consecutivo, cliente, placa…"
+						placeholder="Consecutivo, factura, cliente, placa, OSI…"
 					/>
 				</div>
 				<div class="filter-field">
@@ -1986,12 +1986,12 @@
 				>
 					<div
 						class="flex h-16 w-16 items-center justify-center rounded-2xl"
-						style="background: rgba(249, 115, 22,0.08);"
+						style="background: rgba(234, 88, 12,0.08);"
 					>
 						<FileText class="h-7 w-7" style="color: var(--orange-500);" />
 					</div>
 					<div class="text-center">
-						<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 400;">
+						<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
 							No hay liquidaciones registradas
 						</h3>
 						<p class="mt-1 text-sm" style="color: var(--text-muted);">
@@ -2224,7 +2224,7 @@
 								{@const isUnconfirmed = !liq.confirmada_at}
 								<tr
 									class="table-row {isNew
-										? 'border-l-4 border-l-[var(--orange-500)] !bg-[rgba(249, 115, 22,0.08)]'
+										? 'border-l-4 border-l-[var(--orange-500)] !bg-[rgba(234, 88, 12,0.08)]'
 										: ''} {isUpdated
 										? 'border-l-4 border-l-[#2563EB] !bg-[rgba(37,99,235,0.08)]'
 										: ''}"
@@ -2273,7 +2273,7 @@
 										{#if liq.tercero_liquidado}
 											<span
 												class="font-mono-meta inline-block rounded-md px-2 py-0.5 text-[10px]"
-												style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
+												style="background: rgba(234, 88, 12,0.10); color: var(--orange-700);"
 												>Sí</span
 											>
 										{:else}
@@ -2303,7 +2303,7 @@
 											>
 												<span
 													class="font-mono-meta inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold"
-													style="background: rgba(249, 115, 22,0.08); color: var(--orange-700);"
+													style="background: rgba(234, 88, 12,0.08); color: var(--orange-700);"
 												>
 													<Hash class="h-3 w-3" />
 													{itemsTotal}
@@ -2332,7 +2332,7 @@
 												<!-- svelte-ignore a11y_no_static_element_interactions -->
 												<span
 													class="font-mono-meta apple-transition inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-0.5 text-[10px]"
-													style="background: rgba(249, 115, 22,0.08); color: var(--orange-700);"
+													style="background: rgba(234, 88, 12,0.08); color: var(--orange-700);"
 													onmouseenter={(e) => {
 														const rect = (e.target as HTMLElement).getBoundingClientRect();
 														popoverPlacasPos = { top: rect.bottom + 4, left: rect.left };
@@ -2482,7 +2482,7 @@
 									{#if liq.tercero_liquidado}
 										<span
 											class="font-mono-meta inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px]"
-											style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
+											style="background: rgba(234, 88, 12,0.10); color: var(--orange-700);"
 										>
 											<CheckCircle2 class="h-3 w-3" />
 											Sí
@@ -2504,7 +2504,7 @@
 									<div class="flex items-center gap-1">
 										<span
 											class="font-mono-meta inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
-											style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
+											style="background: rgba(234, 88, 12,0.10); color: var(--orange-700);"
 										>
 											<Hash class="h-3 w-3" />
 											{liq.total_items || 0}
@@ -2655,7 +2655,7 @@
 					</p>
 					<span
 						class="font-mono-meta rounded-full px-1.5 py-0.5 text-[9px] font-bold"
-						style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
+						style="background: rgba(234, 88, 12,0.10); color: var(--orange-700);"
 					>
 						{popoverItems.length}
 					</span>
@@ -2673,11 +2673,11 @@
 						{#each popoverItems as it, idx}
 							<div
 								class="flex items-center gap-2 rounded-md px-2 py-1.5"
-								style="background: rgba(249, 115, 22,0.04); border: 1px solid var(--border-subtle);"
+								style="background: rgba(234, 88, 12,0.04); border: 1px solid var(--border-subtle);"
 							>
 								<span
 									class="font-mono-meta inline-flex h-5 min-w-[24px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold"
-									style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
+									style="background: rgba(234, 88, 12,0.10); color: var(--orange-700);"
 								>
 									{idx + 1}
 								</span>
@@ -2732,7 +2732,7 @@
 						<Receipt class="h-5 w-5 text-white" />
 					</div>
 					<div>
-						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 400;">
+						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 800;">
 							Facturas de Liquidaciones
 						</h1>
 						<p class="text-xs" style="color: var(--text-muted);">
@@ -2842,12 +2842,12 @@
 				<div class="flex flex-col items-center justify-center gap-4 p-16" in:fade>
 					<div
 						class="flex h-16 w-16 items-center justify-center rounded-2xl"
-						style="background: rgba(249, 115, 22,0.08);"
+						style="background: rgba(234, 88, 12,0.08);"
 					>
 						<Receipt class="h-7 w-7" style="color: var(--orange-500);" />
 					</div>
 					<div class="text-center">
-						<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 400;">
+						<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
 							No se encontraron facturas
 						</h3>
 						<p class="mt-1 text-sm" style="color: var(--text-muted);">
@@ -2931,7 +2931,7 @@
 										{#if fac.estado === 'ACTIVA'}
 											<span
 												class="status-pill"
-												style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
+												style="background: rgba(234, 88, 12,0.10); color: var(--orange-700);"
 												>Activa</span
 											>
 										{:else}
@@ -2952,7 +2952,7 @@
 									<td class="px-4 py-3 text-center whitespace-nowrap">
 										<div class="flex items-center justify-center gap-1">
 											<button
-												class="apple-transition rounded-lg p-1.5 transition-colors hover:bg-[rgba(249, 115, 22,0.08)]"
+												class="apple-transition rounded-lg p-1.5 transition-colors hover:bg-[rgba(234, 88, 12,0.08)]"
 												style="color: var(--text-muted);"
 												title="Ver detalle"
 												onclick={() => verDetalleFactura(fac.id)}
@@ -3078,7 +3078,7 @@
 						<Users class="h-5 w-5 text-white" />
 					</div>
 					<div>
-						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 400;">
+						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 800;">
 							Historial Liquidaciones de Terceros
 						</h1>
 						<p class="text-xs" style="color: var(--text-muted);">
@@ -3214,12 +3214,12 @@
 				<div class="flex flex-col items-center justify-center gap-4 p-16" in:fade>
 					<div
 						class="flex h-16 w-16 items-center justify-center rounded-2xl"
-						style="background: rgba(249, 115, 22,0.08);"
+						style="background: rgba(234, 88, 12,0.08);"
 					>
 						<Users class="h-7 w-7" style="color: var(--orange-500);" />
 					</div>
 					<div class="text-center">
-						<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 400;">
+						<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
 							No se encontraron items de terceros
 						</h3>
 						<p class="mt-1 text-sm" style="color: var(--text-muted);">
@@ -3252,7 +3252,7 @@
 							{#each tercerosItems as item, idx}
 								{@const facItem = item.liquidacion?.factura_items?.[0]}
 								{@const numFactura = facItem?.factura?.numero_factura || ''}
-								<tr class="table-row {numFactura ? '!bg-[rgba(249, 115, 22,0.04)]' : ''}">
+								<tr class="table-row {numFactura ? '!bg-[rgba(234, 88, 12,0.04)]' : ''}">
 									<td
 										class="font-mono-meta px-3 py-2 text-center text-[10px]"
 										style="color: var(--text-very-muted);">{(tercerosPage - 1) * 50 + idx + 1}</td
@@ -3317,7 +3317,7 @@
 										{#if numFactura}
 											<span
 												class="font-mono-meta inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px]"
-												style="background: rgba(249, 115, 22,0.10); color: var(--orange-700);"
+												style="background: rgba(234, 88, 12,0.10); color: var(--orange-700);"
 											>
 												<Receipt class="h-3 w-3" />
 												{numFactura}
@@ -3333,7 +3333,7 @@
 							{/each}
 
 							<!-- Totals Row -->
-							<tr style="background: rgba(249, 115, 22,0.10);">
+							<tr style="background: rgba(234, 88, 12,0.10);">
 								<td colspan="8" class="px-3 py-2">
 									<span class="font-mono-meta text-[10px]" style="color: var(--text-secondary);"
 										>Totales página</span
@@ -3432,7 +3432,7 @@
 						<Settings class="h-5 w-5 text-white" />
 					</div>
 					<div>
-						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 400;">
+						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 800;">
 							Configuración del Liquidador
 						</h1>
 						<p class="text-xs" style="color: var(--text-muted);">
@@ -3584,7 +3584,7 @@
 			<div class="modal-hd">
 				<div class="flex items-center gap-2">
 					<FileText class="h-4 w-4" style="color: var(--orange-500);" />
-					<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 500;">
+					<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
 						{detailLiq?.consecutivo || 'Detalle'}
 					</h3>
 				</div>
@@ -3839,7 +3839,7 @@
 			<div class="modal-hd">
 				<div class="flex items-center gap-2">
 					<Trash2 class="h-4 w-4" style="color: #DC2626;" />
-					<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 500;">
+					<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
 						Eliminar Liquidación
 					</h3>
 				</div>
@@ -3926,7 +3926,7 @@
 			<div class="modal-hd">
 				<div class="flex items-center gap-2">
 					<Ban class="h-4 w-4" style="color: #DC2626;" />
-					<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 500;">
+					<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
 						Anular Liquidación
 					</h3>
 				</div>
@@ -4159,7 +4159,7 @@
 			<div class="modal-hd">
 				<div class="flex items-center gap-2">
 					<Ban class="h-4 w-4" style="color: #DC2626;" />
-					<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 500;">
+					<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
 						Anular Factura
 					</h3>
 				</div>
@@ -4254,7 +4254,7 @@
 			<div class="modal-hd">
 				<div class="flex items-center gap-2">
 					<Trash2 class="h-4 w-4" style="color: #DC2626;" />
-					<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 500;">
+					<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
 						Eliminar Factura
 					</h3>
 				</div>
@@ -4339,7 +4339,7 @@
 			<div class="modal-hd">
 				<div class="flex items-center gap-2">
 					<History class="h-4 w-4" style="color: var(--orange-500);" />
-					<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 500;">
+					<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
 						Historial — <span class="font-mono-meta" style="color: var(--orange-700);"
 							>#{historialLiqConsecutivo}</span
 						>
@@ -4517,7 +4517,7 @@
 	.modal-bg {
 		position: fixed;
 		inset: 0;
-		background: rgba(15, 31, 26, 0.55);
+		background: rgba(15, 23, 42, 0.55);
 		backdrop-filter: blur(6px);
 		-webkit-backdrop-filter: blur(6px);
 		z-index: 100;
@@ -4573,12 +4573,12 @@
 		width: 40px;
 		height: 40px;
 		border-radius: 12px;
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		color: white;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.3);
 		flex-shrink: 0;
 	}
 
@@ -4588,16 +4588,17 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #f97316;
-		background: rgba(249, 115, 22, 0.08);
+		color: #ea580c;
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0.2rem 0.55rem;
 		border-radius: 5px;
-		font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
+		font-family: var(--font-sans);
 	}
 
 	.factura-detail-title {
-		font-family: 'Fraunces', Georgia, serif;
-		font-weight: 500;
+		font-family: var(--font-display);
+		letter-spacing: -0.02em;
+		font-weight: 800;
 		font-size: 1.2rem;
 		color: var(--bg-charcoal);
 		line-height: 1.2;
@@ -4605,7 +4606,7 @@
 	}
 
 	.factura-detail-num {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		color: #7e22ce;
 		letter-spacing: 0.05em;
@@ -4623,15 +4624,15 @@
 		justify-content: space-between;
 		gap: 1rem;
 		padding: 1rem 1.15rem;
-		background: linear-gradient(135deg, rgba(249, 115, 22, 0.04), rgba(249, 115, 22, 0.1));
-		border: 1px solid rgba(249, 115, 22, 0.22);
+		background: linear-gradient(135deg, rgba(234, 88, 12, 0.04), rgba(234, 88, 12, 0.1));
+		border: 1px solid rgba(234, 88, 12, 0.22);
 		border-radius: 14px;
 		margin-bottom: 1.25rem;
 	}
 
 	.factura-detail-label {
 		display: block;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -4646,7 +4647,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.68rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -4656,9 +4657,9 @@
 		border: 1px solid;
 	}
 	.factura-detail-badge--ok {
-		background: rgba(249, 115, 22, 0.1);
+		background: rgba(234, 88, 12, 0.1);
 		color: var(--orange-700);
-		border-color: rgba(249, 115, 22, 0.3);
+		border-color: rgba(234, 88, 12, 0.3);
 	}
 	.factura-detail-badge--anulada {
 		background: rgba(220, 38, 38, 0.08);
@@ -4667,8 +4668,9 @@
 	}
 
 	.factura-detail-total {
-		font-family: 'Fraunces', Georgia, serif;
-		font-weight: 500;
+		font-family: var(--font-display);
+		letter-spacing: -0.02em;
+		font-weight: 800;
 		font-size: 1.45rem;
 		color: #166534;
 		margin: 0.15rem 0 0;
@@ -4713,7 +4715,7 @@
 
 	/* Section title + count */
 	.factura-detail-section-title {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.7rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -4723,11 +4725,11 @@
 	}
 
 	.factura-detail-count {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.68rem;
 		font-weight: 700;
 		color: var(--orange-700);
-		background: rgba(249, 115, 22, 0.08);
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0.2rem 0.55rem;
 		border-radius: 5px;
 		letter-spacing: 0.05em;
@@ -4755,7 +4757,7 @@
 	}
 	.factura-detail-tbl th {
 		padding: 0.65rem 0.85rem;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -4772,23 +4774,23 @@
 		border-bottom: none;
 	}
 	.factura-detail-tbl tbody tr:hover {
-		background: rgba(249, 115, 22, 0.04);
+		background: rgba(234, 88, 12, 0.04);
 	}
 
 	.factura-detail-tbl-num {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		color: var(--orange-700);
 		letter-spacing: 0.05em;
 	}
 	.factura-detail-tbl-meta {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.78rem;
 		color: var(--text-muted);
 		letter-spacing: 0.05em;
 	}
 	.factura-detail-tbl-amount {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		color: var(--orange-700);
 	}
@@ -4806,7 +4808,7 @@
 		}
 	}
 	.det-label {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.65rem;
 		font-weight: 700;
 		color: var(--text-very-muted);
@@ -4834,7 +4836,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.35rem;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 	}
@@ -4859,7 +4861,7 @@
 	.det-tbl th {
 		background: var(--bg-base);
 		color: var(--text-muted);
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		font-size: 0.65rem;
 		text-transform: uppercase;
@@ -4876,7 +4878,7 @@
 	}
 	.det-tbl .mc {
 		text-align: right;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 	.det-tbl .recorrido-cell {
 		max-width: 180px;
@@ -4983,7 +4985,7 @@
 		padding: 0.3rem 0.5rem;
 		text-align: left;
 		font-weight: 700;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.65rem;
 		text-transform: uppercase;
 		letter-spacing: 0.08em;

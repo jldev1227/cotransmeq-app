@@ -193,7 +193,7 @@
 	/// tenerlo debajo hacía que el `$derived` se evaluara contra una variable
 	/// todavía sin asignar.
 	const TIPOS: { value: TipoDia; label: string; color: string; icon: string }[] = [
-		{ value: 'LABORADO', label: 'Día Laborado', color: '#ea580c', icon: '🚛' },
+		{ value: 'LABORADO', label: 'Día Laborado', color: '#c2410c', icon: '🚛' },
 		{ value: 'DISPONIBLE', label: 'Disponible', color: '#2563eb', icon: '✅' },
 		{ value: 'DESCANSO', label: 'Descanso', color: '#d97706', icon: '🌙' },
 		{ value: 'MANTENIMIENTO', label: 'Mantenimiento', color: '#dc2626', icon: '🔧' }
@@ -360,12 +360,12 @@
 			<!-- Header -->
 			<header
 				class="flex flex-shrink-0 items-start justify-between gap-3 border-b border-gray-200 px-5 py-4"
-				style="background: linear-gradient(135deg, #f0fdf4, #d1fae5);"
+				style="background: linear-gradient(135deg, #f0fdf4, #dcfce7);"
 			>
 				<div class="flex items-start gap-3">
 					<div
 						class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl"
-						style="background: linear-gradient(135deg, #ea580c, #c2410c); box-shadow: 0 4px 12px rgba(249, 115, 22,0.25);"
+						style="background: linear-gradient(135deg, #c2410c, #9a3412); box-shadow: 0 4px 12px rgba(234, 88, 12,0.25);"
 					>
 						<svg
 							class="h-5 w-5 text-white"
@@ -384,14 +384,14 @@
 					<div class="min-w-0">
 						<p
 							class="font-mono text-[10px] font-semibold uppercase tracking-wider"
-							style="color: #c2410c;"
+							style="color: #9a3412;"
 						>
 							Editar día
 						</p>
 						<h2
 							id="modal-editar-registro-title"
 							class="font-display text-lg capitalize"
-							style="color: var(--bg-charcoal); font-weight: 500;"
+							style="color: var(--bg-charcoal); font-weight: 800;"
 						>
 							{fechaLegible}
 						</h2>
@@ -728,7 +728,7 @@
 					onclick={guardar}
 					disabled={guardando || !form.tipo}
 					class="apple-transition inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
-					style="background: linear-gradient(135deg, #ea580c, #c2410c); box-shadow: 0 2px 6px rgba(249, 115, 22,0.25);"
+					style="background: linear-gradient(135deg, #c2410c, #9a3412); box-shadow: 0 2px 6px rgba(234, 88, 12,0.25);"
 				>
 					{#if guardando}
 						<svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -814,7 +814,7 @@
 		transition: border-color 0.15s;
 	}
 	.tramo-card.expandido {
-		border-color: #ea580c;
+		border-color: #c2410c;
 		box-shadow: 0 0 0 1px rgba(234, 88, 12, 0.1);
 	}
 	.tramo-header {
@@ -836,7 +836,7 @@
 		width: 24px;
 		height: 24px;
 		border-radius: 50%;
-		background: #ea580c;
+		background: #c2410c;
 		color: white;
 		font-size: 0.75rem;
 		font-weight: 800;
@@ -866,8 +866,8 @@
 		color: #1e40af;
 	}
 	.tramo-tag.cliente {
-		background: #d1fae5;
-		color: #c2410c;
+		background: #dcfce7;
+		color: #9a3412;
 	}
 	.tramo-tag.hora {
 		background: #fef3c7;
@@ -923,9 +923,9 @@
 		width: 100%;
 		margin-top: 0.4rem;
 		padding: 0.65rem;
-		border: 1.5px dashed #ea580c;
+		border: 1.5px dashed #c2410c;
 		background: rgba(234, 88, 12, 0.04);
-		color: #c2410c;
+		color: #9a3412;
 		font-size: 0.82rem;
 		font-weight: 700;
 		border-radius: 10px;
@@ -976,7 +976,7 @@
 		font-family: inherit;
 	}
 	.field-input:focus {
-		border-color: #ea580c;
+		border-color: #c2410c;
 		box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.1);
 	}
 	.field-textarea {
@@ -985,7 +985,7 @@
 	}
 	.field-hint {
 		font-size: 0.78rem;
-		color: #ea580c;
+		color: #c2410c;
 		margin: 0.3rem 0 0;
 	}
 	/* El campo obligatorio se marca antes de intentar guardar. */
@@ -1019,14 +1019,14 @@
 		border-radius: 8px;
 		font-size: 0.82rem;
 		font-weight: 600;
-		color: #c2410c;
+		color: #9a3412;
 		cursor: pointer;
 		user-select: none;
 	}
 	.pernocte-toggle input[type='checkbox'] {
 		width: 18px;
 		height: 18px;
-		accent-color: #c2410c;
+		accent-color: #9a3412;
 		cursor: pointer;
 	}
 </style>

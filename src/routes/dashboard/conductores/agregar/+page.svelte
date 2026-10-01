@@ -122,7 +122,7 @@
 
 			toast.success('Conductor creado exitosamente', {
 				duration: 3000,
-				style: 'background: white; color: black; border: 1px solid #10b981;'
+				style: 'background: white; color: black; border: 1px solid #16a34a;'
 			});
 
 			// Redirigir a la lista después de 1.5 segundos
@@ -204,7 +204,7 @@
 				</button>
 				<div
 					class="brand-gradient flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl"
-					style="box-shadow: 0 6px 16px rgba(16, 185, 129, 0.30);"
+					style="box-shadow: 0 6px 16px rgba(22, 163, 74, 0.30);"
 				>
 					<svg
 						class="h-6 w-6 text-white"
@@ -223,13 +223,13 @@
 				<div class="min-w-0 flex-1">
 					<p
 						class="font-mono-meta mb-1 inline-block rounded-md px-2 py-0.5 text-[10px]"
-						style="color: var(--emerald-500); background: rgba(16, 185, 129, 0.08); letter-spacing: 0.12em;"
+						style="color: var(--emerald-500); background: rgba(22, 163, 74, 0.08); letter-spacing: 0.12em;"
 					>
 						NUEVO REGISTRO
 					</p>
 					<h1
 						class="font-display text-3xl"
-						style="color: var(--bg-charcoal); font-weight: 500; letter-spacing: -0.01em;"
+						style="color: var(--bg-charcoal); font-weight: 800; letter-spacing: -0.01em;"
 					>
 						Nuevo Conductor
 					</h1>

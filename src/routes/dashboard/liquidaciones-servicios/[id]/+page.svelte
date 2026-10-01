@@ -33,7 +33,7 @@
 			</div>
 			<div>
 				<span class="eyebrow">Detalle</span>
-				<h1 class="mt-1 font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 400;">
+				<h1 class="mt-1 font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 800;">
 					Detalle de Liquidación
 				</h1>
 				<p class="text-xs" style="color: var(--text-muted);">

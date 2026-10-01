@@ -489,14 +489,14 @@
 	.panel__titulo {
 		font-size: 0.875rem;
 		font-weight: 700;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.panel__detalle {
 		margin-top: 0.1875rem;
 		font-size: 0.75rem;
 		line-height: 1.45;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 	}
 
 	.panel__error {
@@ -539,14 +539,14 @@
 	.envio__nombre {
 		font-size: 0.8125rem;
 		font-weight: 700;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.envio__meta {
 		margin-top: 0.125rem;
 		font-size: 0.6875rem;
 		line-height: 1.45;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 	}
 
 	.envio__error {
@@ -569,7 +569,7 @@
 		font: inherit;
 		font-size: 0.75rem;
 		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		background: rgba(255, 255, 255, 0.9);
 		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
 		border-radius: 9px;
@@ -582,7 +582,7 @@
 	}
 
 	.envio__boton:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 2px;
 	}
 
@@ -593,7 +593,7 @@
 		font: inherit;
 		font-size: 0.8125rem;
 		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		background: rgba(255, 255, 255, 0.85);
 		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
 		border-radius: 10px;
@@ -653,7 +653,7 @@
 
 	.chip:focus-visible,
 	.panel__accion:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 2px;
 	}
 </style>

@@ -497,7 +497,7 @@
 		cursor: not-allowed;
 	}
 	.ceh-primario {
-		color: #c2410c;
+		color: #9a3412;
 	}
 	.ceh-peligro {
 		color: #b91c1c;
@@ -602,7 +602,7 @@
 		color: #334155;
 	}
 	.ceh-btn-primary {
-		background: #ea580c;
+		background: #c2410c;
 		color: #fff;
 	}
 	.ceh-btn-danger {

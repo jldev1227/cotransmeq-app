@@ -54,7 +54,7 @@
 	<button
 		type="button"
 		class="modal-overlay cursor-default"
-		style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.45), rgba(10, 20, 16, 0.6)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
+		style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.45), rgba(20, 83, 45, 0.6)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
 		aria-label="Cerrar modal"
 		on:click={handleCancel}
 		transition:fade={{ duration: 200, easing: quintOut }}
@@ -95,11 +95,11 @@
 					<div class="modal-title-text">
 						<p
 							class="modal-eyebrow"
-							style="color: var(--emerald-500); background: rgba(249, 115, 22, 0.08);"
+							style="color: var(--emerald-500); background: rgba(234, 88, 12, 0.08);"
 						>
 							ACCIÓN MASIVA
 						</p>
-						<h3 style="font-family: 'Geist', sans-serif; font-size: 1.25rem; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em;">
+						<h3 style="font-family: var(--font-sans); font-size: 1.25rem; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em;">
 							Cambiar Estado
 						</h3>
 						<p class="modal-sub">
@@ -134,7 +134,7 @@
 							disabled={loading}
 							class="modal-select-card"
 							style="background-color: {selectedEstado === estado.value
-								? 'rgba(249, 115, 22, 0.06)'
+								? 'rgba(234, 88, 12, 0.06)'
 								: 'var(--bg-surface)'}; border-color: {selectedEstado === estado.value
 								? 'var(--emerald-500)'
 								: 'var(--border-default)'};"
@@ -184,7 +184,7 @@
 						{@const sel = estados.find((e) => e.value === selectedEstado)}
 						<span
 							class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
-							style="background: rgba(249, 115, 22, 0.10); color: var(--emerald-700); border: 1px solid rgba(249, 115, 22, 0.25);"
+							style="background: rgba(234, 88, 12, 0.10); color: var(--emerald-700); border: 1px solid rgba(234, 88, 12, 0.25);"
 						>
 							{sel?.icon}
 							{sel?.label}

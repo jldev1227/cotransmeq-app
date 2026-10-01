@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { cargarPdfMake } from '$lib/utils/pdfmake-cargar';
 	import { onMount, untrack } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import {
@@ -658,11 +659,7 @@
 		generatingPdf = true;
 
 		try {
-			const pdfMake = (await import('pdfmake/build/pdfmake')).default;
-			const pdfFonts = (await import('pdfmake/build/vfs_fonts')).default;
-			(pdfMake as any).vfs = pdfFonts.pdfMake
-				? pdfFonts.pdfMake.vfs
-				: pdfFonts.vfs || pdfFonts;
+			const pdfMake = await cargarPdfMake();
 
 			let logoBase64 = '';
 			try {
@@ -2597,7 +2594,7 @@
 
 			<!-- Modal Body: PDF Document -->
 			<div class="p-6">
-				<div class="mx-auto max-w-2xl rounded-lg border border-gray-300 bg-white shadow-lg" style="font-family: Arial, sans-serif;">
+				<div class="mx-auto max-w-2xl rounded-lg border border-gray-300 bg-white shadow-lg" style="font-family: var(--font-sans);">
 					<!-- Header Row: Logos + Title + Code -->
 					<div class="border-b border-gray-400">
 						<table class="w-full border-collapse" style="table-layout: fixed;">

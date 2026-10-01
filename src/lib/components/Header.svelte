@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import SessionTimer from './SessionTimer.svelte';
+	import BuscadorModulos from './BuscadorModulos.svelte';
 	import { notificacionesStore } from '$lib/stores/notificaciones';
 	import { authStore } from '$lib/stores/auth';
 	import { socketUtils, socketStore, socketManager } from '$lib/socket';
@@ -30,6 +31,8 @@
 		'acciones-correctivas': 'Acciones Correctivas',
 		evaluaciones: 'Evaluaciones',
 		'salidas-nc': 'Salidas No Conformidades',
+		formularios: 'Formularios',
+		'mis-formularios': 'Mis formularios',
 		nomina: 'Nómina',
 		extractos: 'Extractos',
 		'liquidaciones-servicios': 'Liquidaciones de Servicios',
@@ -54,6 +57,9 @@
 		if (pathname.startsWith('/dashboard/acciones-correctivas')) return 'acciones-correctivas';
 		if (pathname.startsWith('/dashboard/evaluaciones')) return 'evaluaciones';
 		if (pathname.startsWith('/dashboard/salidas-nc')) return 'salidas-nc';
+		/// Antes que `formularios`: los dos prefijos empiezan igual.
+		if (pathname.startsWith('/dashboard/mis-formularios')) return 'mis-formularios';
+		if (pathname.startsWith('/dashboard/formularios')) return 'formularios';
 		if (pathname.startsWith('/dashboard/clientes')) return 'clientes';
 		if (pathname.startsWith('/dashboard/nomina')) return 'nomina';
 		if (pathname.startsWith('/dashboard/extractos')) return 'extractos';
@@ -94,7 +100,7 @@
 	/// dos productos y tienen que verse igual.
 	$: socketColor =
 		socketEstado === 'conectado'
-			? '#059669'
+			? '#15803d'
 			: socketEstado === 'reconectando'
 				? '#d97706'
 				: socketEstado === 'rechazado'
@@ -128,19 +134,7 @@
 							'Tu sesión no es válida para la conexión en tiempo real. Vuelve a iniciar sesión.')
 						: '';
 
-	let showUserMenu = false;
-	let showNotifications = false;
 	let showAllNotifications = false;
-
-	let isMobile = false;
-	onMount(() => {
-		const checkMobile = () => {
-			isMobile = window.innerWidth < 768;
-		};
-		checkMobile();
-		window.addEventListener('resize', checkMobile);
-		return () => window.removeEventListener('resize', checkMobile);
-	});
 
 	// Full notifications modal state
 	let allNotifs: Notificacion[] = [];
@@ -176,35 +170,10 @@
 
 	function handleLogout() {
 		dispatch('logout');
-		showUserMenu = false;
-	}
-
-	function toggleUserMenu() {
-		showUserMenu = !showUserMenu;
-		showNotifications = false;
-	}
-
-	function toggleNotifications() {
-		showNotifications = !showNotifications;
-		showUserMenu = false;
-		// Al abrir, recargar
-		if (showNotifications) {
-			notificacionesStore.cargar();
-		}
-	}
-
-	function handleClickOutside(event: MouseEvent) {
-		const target = event.target as HTMLElement;
-		if (!target.closest('.user-menu') && !target.closest('.notifications-menu') && !target.closest('[data-bottom-sheet]')) {
-			showUserMenu = false;
-			showNotifications = false;
-		}
 	}
 
 	function handleKeydown(event: KeyboardEvent) {
 		if (event.key === 'Escape') {
-			showUserMenu = false;
-			showNotifications = false;
 			showAllNotifications = false;
 		}
 	}
@@ -218,7 +187,6 @@
 		if (!notif.leida) {
 			await notificacionesStore.marcarLeida(notif.id);
 		}
-		showNotifications = false;
 		showAllNotifications = false;
 
 		// Navegar según referencia_tipo
@@ -247,7 +215,6 @@
 	}
 
 	async function abrirTodasNotificaciones() {
-		showNotifications = false;
 		showAllNotifications = true;
 		allNotifsPage = 1;
 		await cargarTodasNotificaciones();
@@ -306,22 +273,22 @@
 	}
 </script>
 
-<svelte:window on:click={handleClickOutside} on:keydown={handleKeydown} />
+<svelte:window on:keydown={handleKeydown} />
 
 <header
 	class="no-print apple-transition fixed top-0 right-0 left-0 z-35 h-16 border-b {isCollapsed
 		? 'lg:left-20'
 		: 'lg:left-64'}"
-	style="background-color: var(--bg-surface); border-color: var(--border-subtle);"
+	style="background-color: var(--bg-charcoal-deep); border-color: rgba(255,255,255,0.08);"
 	in:fly={{ y: -20, duration: 400, delay: 300 }}
 >
 	<div class="flex h-full items-center justify-between gap-3 px-4 md:px-6 lg:pl-6">
 		<!-- Left cluster: burger (mobile/tablet) + title -->
-		<div class="flex min-w-0 flex-1 items-center gap-2" in:fade={{ duration: 600, delay: 400 }}>
+		<div class="flex min-w-0 flex-1 items-center gap-2 lg:flex-none lg:basis-80 xl:basis-96" in:fade={{ duration: 600, delay: 400 }}>
 			<!-- Burger menu (mobile/tablet only) — profesonal, dentro del flow -->
 			<button
 				type="button"
-				class="apple-transition btn-icon lg:hidden"
+				class="apple-transition btn-icon cab-icono lg:hidden"
 				on:click={() => mobileDrawerStore.toggle()}
 				aria-label="Abrir menú"
 				aria-expanded={$mobileDrawerStore}
@@ -337,13 +304,18 @@
 				{/if}
 			</button>
 
-			<h1 class="font-display truncate text-xl md:text-2xl" style="color: var(--bg-charcoal); font-weight: 700;">{pageTitle}</h1>
+			<h1 class="font-display truncate text-xl md:text-2xl" style="color: #fff; font-weight: 800;">{pageTitle}</h1>
+		</div>
 
-			<!-- ═══ Conexión en tiempo real — solo md+ (en móvil lo cubre el toast del layout) ═══ -->
+		<!-- Centro (solo escritorio): «Ir a…», el buscador de módulos. Antes esta
+		     franja quedaba vacía entre el título y el usuario. -->
+		<div class="hidden min-w-0 flex-1 items-center justify-center px-4 lg:flex" in:fade={{ duration: 600, delay: 450 }}>
+			<BuscadorModulos />
+			<!-- Conexión en tiempo real, tras el buscador para no quitarle sitio al título (en móvil lo cubre el toast del layout) -->
 			{#if socketEstado !== 'inactivo'}
 				<div
-					class="ml-1 hidden shrink-0 items-center gap-2 border-l pl-3 md:flex"
-					style="border-color: var(--border-subtle);"
+					class="ml-3 hidden shrink-0 items-center gap-2 border-l pl-3 lg:flex"
+					style="border-color: rgba(255,255,255,0.14);"
 					role="status"
 					aria-live="polite"
 					title={socketDetalle}
@@ -365,7 +337,7 @@
 
 					<span
 						class="whitespace-nowrap text-[12px] font-medium"
-						style="color:{socketProblema ? socketColor : 'var(--text-secondary)'}"
+						style="color:{socketProblema ? socketColor : 'rgba(255,255,255,0.75)'}"
 					>
 						{socketTexto}{#if socketEstado === 'reconectando' && socketIntentos > 0}<span
 								class="hidden lg:inline"
@@ -400,8 +372,8 @@
 			<!-- Notifications -->
 			<div class="relative notifications-menu">
 				<button
-					class="apple-transition btn-icon relative"
-					on:click={toggleNotifications}
+					class="apple-transition btn-icon cab-icono relative"
+					on:click={abrirTodasNotificaciones}
 					aria-label="Notificaciones"
 				>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
@@ -414,293 +386,43 @@
 					{/if}
 				</button>
 
-				<!-- Notifications Panel: dropdown en md+ (mobile usa bottom sheet fuera del header) -->
-				{#if showNotifications && !isMobile}
-					<div
-						class="absolute right-0 z-50 mt-2 w-80 overflow-hidden rounded-2xl border bg-white"
-						style="border-color: var(--border-subtle); box-shadow: 0 4px 24px rgba(0,0,0,0.06);"
-						in:fly={{ y: -10, duration: 200 }}
-						out:fade={{ duration: 150 }}
-					>
-						<div class="p-4" style="border-bottom: 1px solid var(--border-subtle);">
-							<div class="flex items-center justify-between">
-								<h3 class="font-semibold" style="color: var(--text-primary);">Notificaciones</h3>
-								{#if noLeidas > 0}
-									<button
-										class="apple-transition text-sm"
-										style="color: var(--orange-600);"
-										on:click={marcarTodasLeidas}
-									>
-										Marcar todas como leídas
-									</button>
-								{/if}
-							</div>
-						</div>
-						<div class="max-h-96 overflow-y-auto">
-							{#if notificaciones.length === 0}
-								<div class="p-6 text-center text-sm" style="color: var(--text-very-muted);">
-									<div class="mb-2 text-2xl">🔔</div>
-									No tienes notificaciones
-								</div>
-							{:else}
-								{#each notificaciones as notif (notif.id)}
-									<button
-										class="apple-transition w-full p-4 text-left {notif.leida ? '' : ''}"
-										style="border-bottom: 1px solid var(--border-subtle); background-color: {notif.leida ? 'transparent' : 'rgba(249, 115, 22,0.04)'};"
-										on:click={() => handleNotifClick(notif)}
-									>
-										<div class="flex items-start gap-3">
-											<span class="mt-0.5 text-lg">{getNotifIcon(notif.tipo)}</span>
-											<div class="min-w-0 flex-1">
-												<p class="truncate text-sm font-medium" style="color: var(--text-primary);">
-													{notif.titulo}
-												</p>
-												<p class="mt-1 line-clamp-2 text-sm" style="color: var(--text-secondary);">
-													{notif.mensaje}
-												</p>
-												<p class="mt-2 text-xs" style="color: var(--text-very-muted);">
-													{timeAgo(notif.created_at)}
-												</p>
-											</div>
-											{#if !notif.leida}
-												<div class="ml-2 mt-2 h-2 w-2 flex-shrink-0 rounded-full" style="background-color: var(--orange-500);"></div>
-											{/if}
-										</div>
-									</button>
-								{/each}
-							{/if}
-						</div>
-						<div class="p-2" style="border-top: 1px solid var(--border-subtle);">
-							<button
-								class="apple-transition w-full rounded-xl py-2 text-center text-sm font-medium"
-								style="color: var(--orange-600);"
-								on:click={abrirTodasNotificaciones}
-							>
-								Ver todas las notificaciones
-							</button>
-						</div>
-					</div>
-				{/if}
 			</div>
 
-			<!-- User Menu -->
-			<div class="user-menu relative">
-				<button
-					class="apple-transition group flex items-center space-x-3 rounded-xl p-2"
-					style="color: var(--text-secondary);"
-					on:click={toggleUserMenu}
-					aria-label="Menú de usuario"
-				>
-					<!-- Avatar -->
-					<div
-						class="brand-gradient flex h-9 w-9 items-center justify-center rounded-full"
-						style="box-shadow: 0 2px 8px rgba(249, 115, 22, 0.25);"
-					>
-						<span class="text-sm font-semibold text-white">
-							{userName.charAt(0).toUpperCase()}
-						</span>
-					</div>
+			<!-- Usuario: enlace directo al perfil, sin desplegable -->
+			<a
+				href="/dashboard/perfil"
+				class="apple-transition cab-usuario flex items-center space-x-3 rounded-xl p-2"
+				title="Mi perfil · {userEmail}"
+				aria-label="Mi perfil"
+			>
+				<div class="cab-avatar flex h-9 w-9 items-center justify-center rounded-full">
+					<span class="text-sm font-semibold text-white">{userName.charAt(0).toUpperCase()}</span>
+				</div>
+				<div class="hidden min-w-0 text-left md:block">
+					<p class="truncate text-sm font-semibold" style="color: #fff;">{userName}</p>
+					<p class="truncate text-xs" style="color: rgba(255,255,255,0.6);">{userRole}</p>
+				</div>
+			</a>
 
-					<!-- User Info (Hidden on small screens) -->
-					<div class="hidden min-w-0 text-left md:block">
-						<p class="truncate text-sm font-semibold" style="color: var(--text-primary);">{userName}</p>
-						<p class="truncate text-xs" style="color: var(--text-muted);">{userRole}</p>
-					</div>
-
-					<!-- Chevron -->
-					<svg
-						class="apple-transition h-4 w-4 {showUserMenu
-							? 'rotate-180'
-							: ''}"
-						style="color: var(--text-very-muted);"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M19 9l-7 7-7-7"
-						/>
-					</svg>
-				</button>
-
-				<!-- User Dropdown (md+) -->
-				{#if showUserMenu && !isMobile}
-					<div
-						class="absolute right-0 z-50 mt-2 w-64 overflow-hidden rounded-2xl border bg-white"
-						style="border-color: var(--border-subtle); box-shadow: 0 4px 24px rgba(0,0,0,0.06);"
-						in:fly={{ y: -10, duration: 200 }}
-						out:fade={{ duration: 150 }}
-					>
-						<div class="p-4" style="background: linear-gradient(135deg, rgba(249, 115, 22,0.04), rgba(249, 115, 22,0.08)); border-bottom: 1px solid var(--border-subtle);">
-							<div class="flex items-center space-x-3">
-								<div class="brand-gradient flex h-12 w-12 items-center justify-center rounded-xl" style="box-shadow: 0 4px 16px rgba(249, 115, 22, 0.25);">
-									<span class="font-display text-lg font-medium text-white">{userName.charAt(0).toUpperCase()}</span>
-								</div>
-								<div class="min-w-0">
-									<p class="truncate font-semibold" style="color: var(--text-primary);">{userName}</p>
-									<p class="truncate text-sm" style="color: var(--text-secondary);">{userEmail}</p>
-									<span class="mt-1 inline-block rounded-full px-2 py-0.5 text-xs" style="background: rgba(249, 115, 22,0.08); color: var(--orange-800);">{userRole}</span>
-								</div>
-							</div>
-						</div>
-						<div class="p-2">
-							<button class="apple-transition flex w-full items-center rounded-xl px-3 py-2 text-left" style="color: var(--text-secondary);" on:click={() => { showUserMenu = false; goto('/dashboard/perfil'); }}>
-								<svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-								Perfil
-							</button>
-							<button class="apple-transition flex w-full items-center rounded-xl px-3 py-2 text-left" style="color: var(--text-secondary);">
-								<svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-								Configuración
-							</button>
-							<button class="apple-transition flex w-full items-center rounded-xl px-3 py-2 text-left" style="color: var(--text-secondary);">
-								<svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-								Ayuda
-							</button>
-							<div class="my-2" style="border-top: 1px solid var(--border-subtle);"></div>
-							<button class="apple-transition flex w-full items-center rounded-xl px-3 py-2 text-left" style="color: #dc2626;" on:click={handleLogout}>
-								<svg class="mr-3 h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-								Cerrar Sesión
-							</button>
-						</div>
-					</div>
-				{/if}
-			</div>
+			<!-- Cerrar sesión: solo icono, en rojo, al final de la barra -->
+			<button
+				type="button"
+				class="apple-transition btn-icon cab-icono cab-salir"
+				on:click={handleLogout}
+				title="Cerrar sesión"
+				aria-label="Cerrar sesión"
+			>
+				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+					/>
+				</svg>
+			</button>
 		</div>
 	</div>
 </header>
-
-<!-- ─── Bottom Sheets (mobile, fuera del header fixed) ─────────────────────── -->
-
-{#if showNotifications && isMobile}
-	<div
-		class="fixed inset-0 z-[100] bg-black/50"
-		role="dialog"
-		aria-modal="true"
-		tabindex="-1"
-		on:click|self={() => (showNotifications = false)}
-		on:keydown={(e) => e.key === 'Escape' && (showNotifications = false)}
-		transition:fade={{ duration: 200 }}
-	>
-		<div
-			data-bottom-sheet
-			class="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl"
-			in:fly={{ y: 600, duration: 300 }}
-			out:fly={{ y: 600, duration: 200 }}
-		>
-			<div class="relative flex items-center justify-center p-4" style="border-bottom: 1px solid var(--border-subtle);">
-				<div class="h-1 w-12 rounded-full" style="background-color: var(--border-default);"></div>
-				<button
-					class="absolute right-4 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg"
-					style="color: var(--text-muted);"
-					on:click={() => (showNotifications = false)}
-					aria-label="Cerrar"
-				>
-					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-				</button>
-			</div>
-			<div class="flex items-center justify-between px-4 pb-4" style="border-bottom: 1px solid var(--border-subtle);">
-				<h3 class="font-semibold" style="color: var(--text-primary);">Notificaciones</h3>
-				{#if noLeidas > 0}
-					<button class="apple-transition text-sm font-medium" style="color: var(--orange-600);" on:click={marcarTodasLeidas}>Marcar todas</button>
-				{/if}
-			</div>
-			<div class="flex-1 overflow-y-auto">
-				{#if notificaciones.length === 0}
-					<div class="p-8 text-center text-sm" style="color: var(--text-very-muted);">
-						<div class="mb-2 text-3xl">🔔</div>
-						No tienes notificaciones
-					</div>
-				{:else}
-					{#each notificaciones as notif (notif.id)}
-						<button class="apple-transition w-full p-4 text-left" style="border-bottom: 1px solid var(--border-subtle); background-color: {notif.leida ? 'transparent' : 'rgba(249, 115, 22,0.04)'};" on:click={() => handleNotifClick(notif)}>
-							<div class="flex items-start gap-3">
-								<span class="mt-0.5 text-lg">{getNotifIcon(notif.tipo)}</span>
-								<div class="min-w-0 flex-1">
-									<p class="truncate text-sm font-medium" style="color: var(--text-primary);">{notif.titulo}</p>
-									<p class="mt-1 line-clamp-2 text-sm" style="color: var(--text-secondary);">{notif.mensaje}</p>
-									<p class="mt-2 text-xs" style="color: var(--text-very-muted);">{timeAgo(notif.created_at)}</p>
-								</div>
-								{#if !notif.leida}
-									<div class="ml-2 mt-2 h-2 w-2 flex-shrink-0 rounded-full" style="background-color: var(--orange-500);"></div>
-								{/if}
-							</div>
-						</button>
-					{/each}
-				{/if}
-			</div>
-			<div class="p-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]" style="border-top: 1px solid var(--border-subtle);">
-				<button class="apple-transition w-full rounded-xl py-3 text-center text-sm font-medium" style="color: var(--orange-600);" on:click={abrirTodasNotificaciones}>
-					Ver todas las notificaciones
-				</button>
-			</div>
-		</div>
-	</div>
-{/if}
-
-{#if showUserMenu && isMobile}
-	<div
-		class="fixed inset-0 z-[100] bg-black/50"
-		role="dialog"
-		aria-modal="true"
-		tabindex="-1"
-		on:click|self={() => (showUserMenu = false)}
-		on:keydown={(e) => e.key === 'Escape' && (showUserMenu = false)}
-		transition:fade={{ duration: 200 }}
-	>
-		<div
-			data-bottom-sheet
-			class="absolute inset-x-0 bottom-0 flex max-h-[85vh] flex-col overflow-hidden rounded-t-3xl bg-white shadow-2xl"
-			in:fly={{ y: 600, duration: 300 }}
-			out:fly={{ y: 600, duration: 200 }}
-		>
-			<div class="relative flex items-center justify-center p-4" style="border-bottom: 1px solid var(--border-subtle);">
-				<div class="h-1 w-12 rounded-full" style="background-color: var(--border-default);"></div>
-				<button
-					class="absolute right-4 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg"
-					style="color: var(--text-muted);"
-					on:click={() => (showUserMenu = false)}
-					aria-label="Cerrar"
-				>
-					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-				</button>
-			</div>
-			<div class="overflow-y-auto p-4" style="background: linear-gradient(135deg, rgba(249, 115, 22,0.04), rgba(249, 115, 22,0.08));">
-				<div class="flex items-center space-x-3">
-					<div class="brand-gradient flex h-12 w-12 shrink-0 items-center justify-center rounded-xl" style="box-shadow: 0 4px 16px rgba(249, 115, 22, 0.25);">
-						<span class="font-display text-lg font-medium text-white">{userName.charAt(0).toUpperCase()}</span>
-					</div>
-					<div class="min-w-0 flex-1">
-						<p class="truncate font-semibold" style="color: var(--text-primary);">{userName}</p>
-						<p class="truncate text-sm" style="color: var(--text-secondary);">{userEmail}</p>
-						<span class="mt-1 inline-block rounded-full px-2 py-0.5 text-xs" style="background: rgba(249, 115, 22,0.08); color: var(--orange-800);">{userRole}</span>
-					</div>
-				</div>
-			</div>
-			<div class="flex-1 overflow-y-auto p-2">
-				<button class="apple-transition flex w-full items-center rounded-xl px-3 py-3 text-left text-base" style="color: var(--text-secondary);" on:click={() => { showUserMenu = false; goto('/dashboard/perfil'); }}>
-					<svg class="mr-3 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-					Perfil
-				</button>
-				<button class="apple-transition flex w-full items-center rounded-xl px-3 py-3 text-left text-base" style="color: var(--text-secondary);">
-					<svg class="mr-3 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-					Configuración
-				</button>
-				<button class="apple-transition flex w-full items-center rounded-xl px-3 py-3 text-left text-base" style="color: var(--text-secondary);">
-					<svg class="mr-3 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-					Ayuda
-				</button>
-				<div class="my-2" style="border-top: 1px solid var(--border-subtle);"></div>
-				<button class="apple-transition flex w-full items-center rounded-xl px-3 py-3 text-left text-base" style="color: #dc2626;" on:click={handleLogout}>
-					<svg class="mr-3 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-					Cerrar Sesión
-				</button>
-			</div>
-		</div>
-	</div>
-{/if}
 
 <!-- Full Notifications Modal -->
 {#if showAllNotifications}
@@ -708,7 +430,7 @@
 		<div class="confirm-card flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden" in:fly={{ y: 30, duration: 300 }}>
 			<!-- Header -->
 			<div class="flex items-center justify-between px-6 py-4" style="border-bottom: 1px solid var(--border-subtle);">
-				<h2 class="font-display text-lg" style="color: var(--bg-charcoal);">🔔 Todas las Notificaciones</h2>
+				<h2 class="font-display text-lg" style="color: var(--bg-charcoal);">Notificaciones</h2>
 				<div class="flex items-center gap-2">
 					{#if noLeidas > 0}
 						<button class="rounded-lg px-3 py-1.5 text-sm font-medium" style="color: var(--orange-600);" on:click={marcarTodasLeidas}>
@@ -734,7 +456,7 @@
 					{#each allNotifs as notif (notif.id)}
 						<button
 							class="w-full px-6 py-4 text-left apple-transition"
-							style="border-bottom: 1px solid var(--border-subtle); background-color: {notif.leida ? 'transparent' : 'rgba(249, 115, 22,0.04)'};"
+							style="border-bottom: 1px solid var(--border-subtle); background-color: {notif.leida ? 'transparent' : 'rgba(234, 88, 12,0.04)'};"
 							on:click={() => handleNotifClick(notif)}
 						>
 							<div class="flex items-start gap-3">
@@ -768,3 +490,40 @@
 		</div>
 	</div>
 {/if}
+
+<style>
+	/* ── Header en el verde del menú lateral ──
+	   La barra comparte superficie con el sidebar para que formen una sola
+	   pieza; los controles van translúcidos sobre ella. Los desplegables
+	   siguen siendo paneles blancos. */
+	.cab-icono {
+		background: rgba(255, 255, 255, 0.08) !important;
+		border-color: rgba(255, 255, 255, 0.12) !important;
+		color: rgba(255, 255, 255, 0.85) !important;
+	}
+	.cab-icono:hover {
+		background: rgba(255, 255, 255, 0.16) !important;
+		border-color: rgba(255, 255, 255, 0.28) !important;
+		color: #fff !important;
+	}
+	.cab-usuario {
+		color: rgba(255, 255, 255, 0.85);
+	}
+	.cab-usuario:hover {
+		background: rgba(255, 255, 255, 0.08);
+	}
+	.cab-salir {
+		background: rgba(239, 68, 68, 0.16) !important;
+		border-color: rgba(239, 68, 68, 0.35) !important;
+		color: #fecaca !important;
+	}
+	.cab-salir:hover {
+		background: #dc2626 !important;
+		border-color: #dc2626 !important;
+		color: #fff !important;
+	}
+	.cab-avatar {
+		background: rgba(255, 255, 255, 0.14);
+		border: 1.5px solid rgba(255, 255, 255, 0.25);
+	}
+</style>

@@ -277,7 +277,7 @@
 		box-sizing: border-box;
 	}
 	.field input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.1); }
-	.factura-input { font-family: monospace; font-weight: 700; font-size: 15px !important; letter-spacing: 0.5px; }
+	.factura-input { font-family: var(--font-mono); font-weight: 700; font-size: 15px !important; letter-spacing: 0.5px; }
 	.req { color: #ef4444; }
 	.search-row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
 	.search-input {
@@ -304,7 +304,7 @@
 	tr.selected { background: #eff6ff !important; }
 	.chk-col { width: 36px; text-align: center; }
 	.right { text-align: right; }
-	.mono { font-family: monospace; font-weight: 600; }
+	.mono { font-family: var(--font-mono); font-weight: 600; }
 	.badge {
 		display: inline-block; padding: 2px 8px; border-radius: 12px;
 		font-size: 10px; font-weight: 700; text-transform: uppercase;
@@ -318,18 +318,18 @@
 	.resumen-item { display: flex; gap: 8px; align-items: center; }
 	.resumen-item .label { font-size: 13px; color: #64748b; }
 	.resumen-item .value { font-weight: 700; font-size: 14px; color: #1e293b; }
-	.resumen-item.total .value { color: #ea580c; font-size: 16px; }
+	.resumen-item.total .value { color: #c2410c; font-size: 16px; }
 	.btn-cancel {
 		padding: 10px 20px; border: 1.5px solid #e2e8f0; background: white;
 		border-radius: 8px; font-size: 13px; cursor: pointer; color: #475569;
 	}
 	.btn-cancel:hover { background: #f8fafc; }
 	.btn-facturar {
-		padding: 10px 24px; background: #ea580c; color: white;
+		padding: 10px 24px; background: #c2410c; color: white;
 		border: none; border-radius: 8px; font-size: 13px; font-weight: 600;
 		cursor: pointer; display: flex; align-items: center; gap: 6px;
 	}
-	.btn-facturar:hover:not(:disabled) { background: #047857; }
+	.btn-facturar:hover:not(:disabled) { background: #166534; }
 	.btn-facturar:disabled { opacity: 0.5; cursor: not-allowed; }
 	.spinner-sm {
 		display: inline-block; width: 14px; height: 14px;

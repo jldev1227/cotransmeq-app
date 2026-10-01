@@ -17,7 +17,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.3rem;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.65rem;
 		font-weight: 700;
 		letter-spacing: 0.06em;

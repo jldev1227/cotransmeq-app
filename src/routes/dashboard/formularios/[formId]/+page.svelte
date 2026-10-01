@@ -269,7 +269,7 @@
 						</div>
 						<div class="ver__acciones">
 							<a class="btn btn--mini" href={`/dashboard/formularios/${formId}/preview/${v.id}`}>
-								Preview
+								Vista previa
 							</a>
 							<a class="btn btn--mini" href={`/dashboard/formularios/${formId}/editar/${v.id}`}>
 								{v.status === 'DRAFT' ? 'Editar' : 'Ver estructura'}
@@ -488,11 +488,11 @@
 		align-items: center;
 		gap: 0.375rem;
 		font-size: 0.75rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.migas a {
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		text-decoration: none;
 	}
 
@@ -512,21 +512,21 @@
 		font-family: var(--font-mono, monospace);
 		font-size: 0.75rem;
 		font-weight: 700;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 	}
 
 	.head__titulo {
 		font-family: var(--font-display, Georgia, serif);
 		font-size: 1.5rem;
 		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		line-height: 1.2;
 	}
 
 	.head__desc {
 		margin-top: 0.25rem;
 		font-size: 0.875rem;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 		line-height: 1.45;
 	}
 
@@ -534,7 +534,7 @@
 		margin-top: 0.375rem;
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.head__acciones {
@@ -576,7 +576,7 @@
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
 		font-weight: 700;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 		background: var(--gray-50, #f9fafb);
 		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
 		border-radius: 999px;
@@ -585,7 +585,7 @@
 	.vacio {
 		font-size: 0.8125rem;
 		line-height: 1.5;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 	}
 
 	.mono {
@@ -618,7 +618,7 @@
 		font-weight: 700;
 		letter-spacing: 0.04em;
 		text-transform: uppercase;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 		border-bottom: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
 	}
 
@@ -634,12 +634,12 @@
 	}
 
 	.registro:hover {
-		border-color: var(--emerald-600, #059669);
+		border-color: var(--emerald-600, #15803d);
 		background: var(--gray-50, #f9fafb);
 	}
 
 	.registro:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 2px;
 	}
 
@@ -659,7 +659,7 @@
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
 		font-weight: 400;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 	}
 
 	.chip--submitted {
@@ -691,13 +691,13 @@
 		font-family: var(--font-display, Georgia, serif);
 		font-size: 1rem;
 		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.bloque__nota {
 		font-size: 0.8125rem;
 		font-style: italic;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.versiones,
@@ -746,7 +746,7 @@
 	.asig__nombre {
 		font-size: 0.875rem;
 		font-weight: 500;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.ver__meta,
@@ -755,7 +755,7 @@
 		margin-top: 0.125rem;
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 		line-height: 1.45;
 	}
 
@@ -803,7 +803,7 @@
 		font: inherit;
 		font-size: 0.875rem;
 		font-weight: 500;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		background: #fff;
 		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
 		border-radius: 10px;
@@ -827,14 +827,14 @@
 	}
 
 	.btn:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 2px;
 	}
 
 	.btn--primario {
 		color: #fff;
-		background: var(--emerald-600, #059669);
-		border-color: var(--emerald-600, #059669);
+		background: var(--emerald-600, #15803d);
+		border-color: var(--emerald-600, #15803d);
 		font-weight: 600;
 	}
 
@@ -850,7 +850,7 @@
 	.estado {
 		padding: 2.5rem 1rem;
 		text-align: center;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.estado--error {

@@ -20,7 +20,7 @@
 		{ value: 'solicitado', label: 'Solicitado', color: '#3B82F6' },
 		{ value: 'en_curso', label: 'En Curso', color: '#F59E0B' },
 		{ value: 'planificado', label: 'Planificado', color: '#8B5CF6' },
-		{ value: 'realizado', label: 'Realizado', color: '#10B981' },
+		{ value: 'realizado', label: 'Realizado', color: '#16a34a' },
 		{ value: 'cancelado', label: 'Cancelado', color: '#EF4444' }
 	];
 

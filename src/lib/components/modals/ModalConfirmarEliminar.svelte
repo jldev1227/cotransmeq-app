@@ -36,7 +36,7 @@
 	<button
 		type="button"
 		class="modal-overlay cursor-default"
-		style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.45), rgba(10, 20, 16, 0.6)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
+		style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.45), rgba(20, 83, 45, 0.6)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
 		aria-label="Cerrar modal"
 		on:click={handleCancel}
 		transition:fade={{ duration: 200, easing: quintOut }}
@@ -82,7 +82,7 @@
 						>
 							ACCIÓN DESTRUCTIVA
 						</p>
-						<h3 style="font-family: 'Geist', sans-serif; font-size: 1.25rem; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em;">
+						<h3 style="font-family: var(--font-sans); font-size: 1.25rem; font-weight: 600; color: var(--text-primary); letter-spacing: -0.01em;">
 							{title}
 						</h3>
 						<p class="modal-sub">{message}</p>

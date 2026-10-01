@@ -82,7 +82,7 @@
 	 * Color del chip SOBRE FONDO OSCURO.
 	 *
 	 * `claseBadgeEstado` no vale aquí y hay que decirlo: son clases pensadas
-	 * para fondo claro, y PAGADA es `text-emerald-900` (#064E3B) sobre un 10%
+	 * para fondo claro, y PAGADA es `text-emerald-900` (#14532d) sobre un 10%
 	 * de opacidad. En este panel eso desaparece —y es justo el estado que uno
 	 * viene a mirar—. Los tonos son los de la PESTAÑA de cada hoja
 	 * (`COLOR_HOJA_POR_ESTADO`) aclarados hasta que se leen aquí, así que la
@@ -97,6 +97,7 @@
 		LIQUIDADA: { color: '#7DD3FC', fondo: 'rgba(14, 165, 233, 0.16)' },
 		APROBADA: { color: '#86EFAC', fondo: 'rgba(22, 163, 74, 0.2)' },
 		PAGADA: { color: '#06281B', fondo: '#34D399' },
+		FIRMADA: { color: '#F5F3FF', fondo: '#7C3AED' },
 		ANULADA: { color: '#FCA5A5', fondo: 'rgba(185, 28, 28, 0.24)' }
 	};
 
@@ -311,6 +312,13 @@
 							<rect x="2" y="6" width="20" height="12" rx="2" />
 							<circle cx="12" cy="12" r="2.5" />
 							<path stroke-linecap="round" d="M6 12h.01M18 12h.01" />
+						</svg>
+					{:else if a.estado === 'FIRMADA'}
+						<!-- Pluma: firmada es que el conductor ya puso su firma. -->
+						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M12 19l7-7 3 3-7 7-3-3z" />
+							<path stroke-linecap="round" stroke-linejoin="round" d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5zM2 2l7.586 7.586" />
+							<circle cx="11" cy="11" r="2" />
 						</svg>
 					{:else if a.estado === 'ANULADA'}
 						<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -611,7 +619,7 @@
 	   archivo es el mismo en los dos repos y el diff que los compara no tiene
 	   que llevar tres excepciones de color a cuestas. */
 	.nep-primario {
-		color: var(--emerald-500, #10b981);
+		color: var(--emerald-500, #16a34a);
 	}
 	.nep-peligro {
 		color: #fca5a5;
@@ -627,7 +635,7 @@
 		margin: 6px 4px 0;
 		font-size: 11px;
 		font-weight: 600;
-		color: var(--emerald-500, #10b981);
+		color: var(--emerald-500, #16a34a);
 	}
 	.nep-msg-error {
 		color: #fca5a5;
@@ -698,7 +706,7 @@
 		color: #334155;
 	}
 	.nep-btn-primary {
-		background: var(--emerald-600, #059669);
+		background: var(--emerald-600, #15803d);
 		color: #fff;
 	}
 	.nep-btn-ghost:disabled,

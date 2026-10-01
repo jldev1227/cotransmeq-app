@@ -273,7 +273,7 @@
 	<button
 		type="button"
 		class="fixed inset-0 z-[60] cursor-default border-0 p-0"
-		style="background: linear-gradient(135deg, rgba(15, 31, 26, 0.40), rgba(10, 20, 16, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
+		style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.40), rgba(20, 83, 45, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
 		aria-label="Cerrar modal"
 		on:click={handleClose}
 		transition:fade={{ duration: 200 }}
@@ -300,7 +300,7 @@
 					<div class="flex items-center gap-3">
 						<div
 							class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
-							style="background: linear-gradient(135deg, #f97316, #ea580c); box-shadow: 0 6px 16px rgba(249, 115, 22, 0.30);"
+							style="background: linear-gradient(135deg, #ea580c, #c2410c); box-shadow: 0 6px 16px rgba(234, 88, 12, 0.30);"
 						>
 							<svg
 								class="h-5 w-5 text-white"
@@ -319,11 +319,11 @@
 						<div class="min-w-0 flex-1">
 							<p
 								class="font-mono-meta mb-1 inline-block rounded-md px-2 py-0.5 text-[10px]"
-								style="color: var(--emerald-500); background: rgba(249, 115, 22, 0.08); letter-spacing: 0.12em;"
+								style="color: var(--emerald-500); background: rgba(234, 88, 12, 0.08); letter-spacing: 0.12em;"
 							>
 								{vehiculoId ? 'EDICIÓN' : 'NUEVO REGISTRO'}
 							</p>
-							<h2 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 500;">
+							<h2 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 800;">
 								{vehiculoId ? 'Editar Vehículo' : 'Registrar Nuevo Vehículo'}
 							</h2>
 							<p class="mt-0.5 text-sm" style="color: var(--text-muted);">

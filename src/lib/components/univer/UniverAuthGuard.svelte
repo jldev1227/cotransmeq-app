@@ -115,7 +115,7 @@
 		align-items: center;
 		justify-content: center;
 		border-radius: 16px;
-		box-shadow: 0 8px 24px rgba(249, 115, 22, 0.25);
+		box-shadow: 0 8px 24px rgba(234, 88, 12, 0.25);
 	}
 	h1 {
 		margin: 0;

@@ -512,7 +512,7 @@
 		display: grid;
 		place-items: center;
 		padding: 1rem;
-		background: rgba(15, 31, 26, 0.45);
+		background: rgba(15, 23, 42, 0.45);
 	}
 
 	.caja {
@@ -594,12 +594,12 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.campo__hint {
 		font-size: 0.6875rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.input {
@@ -622,8 +622,8 @@
 
 	.input:focus-visible {
 		outline: none;
-		border-color: var(--emerald-600, #059669);
-		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+		border-color: var(--emerald-600, #15803d);
+		box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
 	}
 
 	.grupo {
@@ -640,13 +640,13 @@
 		align-items: center;
 		gap: 0.5rem;
 		font-size: 0.8125rem;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.check input {
 		width: 18px;
 		height: 18px;
-		accent-color: var(--emerald-600, #059669);
+		accent-color: var(--emerald-600, #15803d);
 	}
 
 	/* Etiqueta de familia. Pequeña y en mayúsculas: agrupa sin competir con la
@@ -676,7 +676,7 @@
 		font: inherit;
 		font-size: 0.75rem;
 		font-weight: 500;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		background: #fff7ed;
 		border: 1px solid #fed7aa;
 		border-radius: 999px;
@@ -710,13 +710,13 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.target__nota {
 		font-size: 0.75rem;
 		font-style: italic;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.target__quitar {
@@ -727,7 +727,7 @@
 		place-items: center;
 		font: inherit;
 		font-size: 0.6875rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 		background: none;
 		border: none;
 		border-radius: 6px;
@@ -748,7 +748,7 @@
 	}
 
 	.nota {
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 		background: var(--gray-50, #f9fafb);
 	}
 
@@ -772,8 +772,8 @@
 
 	.btn--primario {
 		color: #fff;
-		background: var(--emerald-600, #059669);
-		border-color: var(--emerald-600, #059669);
+		background: var(--emerald-600, #15803d);
+		border-color: var(--emerald-600, #15803d);
 		font-weight: 600;
 	}
 
@@ -786,7 +786,7 @@
 	.tipo:focus-visible,
 	.target__quitar:focus-visible,
 	.caja__cerrar:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 2px;
 	}
 </style>

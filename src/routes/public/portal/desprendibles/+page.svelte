@@ -691,7 +691,12 @@
   <!-- El párrafo explicativo que había aquí se fue: empujaba las pestañas y el
        primer desprendible fuera de la primera pantalla del teléfono. -->
   <div class="cabecera">
-  <PortalHeader titulo="Desprendibles y Primas">
+  <PortalHeader
+    eyebrow="Mi información laboral"
+    titulo="Pagos"
+    meta="Tus desprendibles y primas, listos para revisar y firmar."
+    mascota="celebracion"
+  >
     {#snippet acciones()}
       <button class="btn-refresh" on:click={cargarDesprendibles} disabled={loading} title="Actualizar">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class:spinning={loading}>
@@ -1402,7 +1407,7 @@
   .eyebrow {
     display: inline-block;
     align-self: flex-start;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.65rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -1414,7 +1419,7 @@
     margin-bottom: 0.4rem;
   }
   .meta-mono {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     color: inherit;
     font-weight: 600;
   }
@@ -1457,7 +1462,7 @@
   }
   .filter-group.grow { flex: 1; min-width: 180px; }
   .filter-label {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.62rem;
     font-weight: 700;
     color: var(--text-muted);
@@ -1540,7 +1545,7 @@
   .state-box p { margin: 0.4rem 0 0; font-size: 0.9rem; }
   .state-emoji { font-size: 2.5rem; display: block; margin-bottom: 0.4rem; }
   .state-title {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: var(--font-sans);
     font-weight: 500;
     font-size: 1.05rem;
     color: var(--text-primary);
@@ -1594,7 +1599,7 @@
   }
   .desp-table th {
     padding: 0.7rem 0.6rem;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.62rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -1625,7 +1630,7 @@
   }
   .text-right { text-align: right; }
   .text-center { text-align: center; }
-  .mono { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; }
+  .mono { font-family: var(--font-sans); font-size: 0.78rem; }
   .td-mes { display: block; white-space: normal; }
   .mes-row {
     display: flex;
@@ -1637,7 +1642,7 @@
   .tag-cotrans {
     padding: 0.1rem 0.45rem;
     border-radius: 5px;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.6rem;
     font-weight: 700;
     background: rgba(245, 158, 11, 0.08);
@@ -1649,7 +1654,7 @@
   .td-periodo {
     font-size: 0.72rem;
     color: var(--text-muted);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1660,7 +1665,7 @@
     gap: 0.3rem;
     padding: 0.2rem 0.55rem;
     border-radius: 999px;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.62rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -1792,7 +1797,7 @@
   }
   .m-card-mes { display: flex; flex-direction: column; }
   .m-mes-name {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: var(--font-sans);
     font-weight: 500;
     font-size: 1rem;
     color: var(--text-primary);
@@ -1801,7 +1806,7 @@
   .m-periodo {
     font-size: 0.72rem;
     color: var(--text-muted);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     margin-top: 0.1rem;
   }
   .m-card-badges {
@@ -1815,7 +1820,7 @@
   }
   .m-stat { display: flex; flex-direction: column; }
   .m-stat-label {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.6rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -1826,7 +1831,7 @@
     font-size: 0.88rem;
     font-weight: 600;
     color: var(--text-primary);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     margin-top: 0.1rem;
   }
   .m-stat-value.main { font-size: 1.05rem; color: var(--accent-hover); }
@@ -1891,7 +1896,7 @@
   /* ═══ Results count ═══ */
   .results-count {
     text-align: center;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.72rem;
     color: var(--text-muted);
     margin-top: 1rem;
@@ -1937,7 +1942,7 @@
     border-bottom: 1px solid var(--border);
   }
   .modal-title {
-    font-family: 'Geist', 'Inter', system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-size: 1.25rem;
     font-weight: 600;
     margin: 0.4rem 0 0;
@@ -1948,7 +1953,7 @@
     font-size: 0.78rem;
     color: var(--text-muted);
     margin: 0.2rem 0 0;
-    font-family: 'Geist', 'Inter', system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-weight: 500;
   }
   .modal-close {
@@ -1982,7 +1987,7 @@
   }
   .fr-item { display: flex; flex-direction: column; flex: 1; min-width: 0; }
   .fr-label {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.6rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -1993,7 +1998,7 @@
     font-size: 0.85rem;
     font-weight: 600;
     color: var(--text-primary);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     margin-top: 0.1rem;
   }
   .fr-value.main { color: var(--accent-hover); font-size: 0.95rem; }
@@ -2171,7 +2176,7 @@
     color: var(--accent-hover);
   }
   .success-title {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: var(--font-sans);
     font-size: 1.8rem;
     font-weight: 500;
     color: #fff;
@@ -2228,40 +2233,40 @@
   }
 
   .portal-tabs {
-    display: flex;
-    gap: 0.4rem;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 0.3rem;
-    margin-bottom: 1.25rem;
+  	display: flex;
+  	gap: 0.25rem;
+  	margin-bottom: 1rem;
+  	padding: 0.3rem;
+  	background: #fff;
+  	border: 1.5px solid var(--border);
+  	border-radius: 16px;
   }
   .portal-tab {
-    flex: 1;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.45rem;
-    padding: 0.55rem 0.8rem;
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    font-family: inherit;
-    font-size: 0.82rem;
-    font-weight: 600;
-    border-radius: 9px;
-    cursor: pointer;
-    transition: all 0.2s var(--ease);
+  	flex: 1;
+  	display: inline-flex;
+  	align-items: center;
+  	justify-content: center;
+  	gap: 0.45rem;
+  	padding: 0.6rem 0.8rem;
+  	border: none;
+  	border-radius: 11px;
+  	background: transparent;
+  	color: var(--text-3);
+  	font-family: inherit;
+  	font-size: 0.84rem;
+  	font-weight: 700;
+  	cursor: pointer;
+  	transition: all 0.2s var(--ease);
   }
   .portal-tab svg { width: 15px; height: 15px; }
   .portal-tab:hover:not(.active) {
-    background: rgba(249, 115, 22, 0.06);
-    color: var(--accent-hover);
+  	background: var(--bg);
+  	color: var(--text);
   }
   .portal-tab.active {
-    background: linear-gradient(135deg, #f97316, #ea580c);
-    color: #fff;
-    box-shadow: 0 2px 8px rgba(249, 115, 22, 0.3);
+  	background: var(--au-tint, #ddf7ea);
+  	color: var(--au-dark, #014339);
+  	box-shadow: none;
   }
   .portal-tab-count {
     display: inline-flex;
@@ -2272,7 +2277,7 @@
     padding: 0 0.45rem;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.22);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.68rem;
     font-weight: 700;
   }

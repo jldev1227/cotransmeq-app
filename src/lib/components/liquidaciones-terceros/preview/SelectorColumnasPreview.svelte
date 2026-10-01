@@ -151,7 +151,7 @@
 		background: rgba(255, 255, 255, 0.2);
 	}
 	.cols-count {
-		font-family: 'SF Mono', 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 10.5px;
 		padding: 1px 5px;
 		border-radius: 4px;

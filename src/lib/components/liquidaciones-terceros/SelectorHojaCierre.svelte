@@ -215,7 +215,7 @@
 		margin-bottom: 5px;
 	}
 	.shc-input:focus {
-		outline: 2px solid #ea580c;
+		outline: 2px solid #c2410c;
 		outline-offset: -1px;
 	}
 
@@ -244,7 +244,7 @@
 		background: #f1f5f9;
 	}
 	.shc-item-activo {
-		box-shadow: inset 2px 0 0 #ea580c;
+		box-shadow: inset 2px 0 0 #c2410c;
 	}
 
 	.shc-placa {

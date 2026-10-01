@@ -2,6 +2,7 @@
 	import { fly, fade } from 'svelte/transition';
 	import type { ServicioConRelaciones } from '$lib/types/servicios';
 	import { getEstadoColor, getEstadoText } from '$lib/types/servicios';
+	import { labelPropositoServicio } from '$lib/config/proposito-servicio';
 
 	type Props = {
 		servicio: ServicioConRelaciones | null;
@@ -91,7 +92,7 @@
 				{getEstadoText(servicio.estado)}
 			</span>
 			<span class="inline-flex items-center rounded-md border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-gray-700">
-				{servicio.proposito_servicio}
+				{labelPropositoServicio(servicio.proposito_servicio)}
 			</span>
 			{#if servicio.numero_planilla}
 				<span class="inline-flex items-center rounded-md border border-purple-200 bg-purple-50 px-2 py-0.5 font-mono text-[10px] font-semibold text-purple-700">

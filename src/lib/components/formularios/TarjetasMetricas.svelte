@@ -16,7 +16,7 @@
 	    «—». Pintar un 0 sería inventarse que no hay anulados cuando lo que pasa es
 	    que no se pudo preguntar.
 
-	La paleta (#ea580c · #4f46e5 · #0891b2 · #d97706 · #b91c1c) está validada sobre
+	La paleta (#c2410c · #4f46e5 · #0891b2 · #d97706 · #b91c1c) está validada sobre
 	el blanco de la superficie: todas superan 3:1 de contraste y la separación
 	entre pares adyacentes aguanta deuteranopía y protanopía.
 -->
@@ -38,7 +38,7 @@
 	}
 
 	const COLORES: Record<TonoMetrica, string> = {
-		emerald: '#ea580c',
+		emerald: '#c2410c',
 		indigo: '#4f46e5',
 		cyan: '#0891b2',
 		ambar: '#d97706',
@@ -141,7 +141,7 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	/* Cifras proporcionales a propósito: `tabular-nums` da a cada dígito el ancho
@@ -157,7 +157,7 @@
 	}
 
 	.metrica__valor--cargando {
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.metrica__detalle {
@@ -165,7 +165,7 @@
 		margin-top: 0.125rem;
 		font-size: 0.6875rem;
 		line-height: 1.35;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	/* Las métricas que llevan a la lista filtrada son botones de verdad: se
@@ -184,7 +184,7 @@
 	}
 
 	.metrica--pulsable:focus-visible {
-		outline: 2px solid var(--orange-600, #ea580c);
+		outline: 2px solid var(--orange-600, #c2410c);
 		outline-offset: 2px;
 	}
 

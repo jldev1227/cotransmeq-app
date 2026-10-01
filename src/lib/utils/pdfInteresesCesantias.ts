@@ -4,6 +4,7 @@
  */
 import type { Liquidacion, FirmaConUrl } from '$lib/types/nomina';
 import { obtenerLogoBase64 } from '$lib/utils/pdfUtils';
+import { cargarPdfMake } from '$lib/utils/pdfmake-cargar';
 
 function formatCurrency(value: number | string | null | undefined): string {
 	const num = Number(value) || 0;
@@ -23,9 +24,7 @@ export async function generarPdfInteresesCesantias(
 	item: Liquidacion,
 	firmas: FirmaConUrl[] = []
 ): Promise<void> {
-	const pdfMake = (await import('pdfmake/build/pdfmake')).default;
-	const pdfFonts = (await import('pdfmake/build/vfs_fonts')).default;
-	pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts.vfs;
+	const pdfMake = await cargarPdfMake();
 
 	const esCotransmeq = item.es_cotransmeq || false;
 	const color = esCotransmeq ? '#FF9500' : '#2E8B57';

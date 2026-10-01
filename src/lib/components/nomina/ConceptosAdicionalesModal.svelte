@@ -189,7 +189,7 @@
 	.fondo {
 		position: fixed;
 		inset: 0;
-		background: rgba(15, 31, 26, 0.5);
+		background: rgba(15, 23, 42, 0.5);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -224,7 +224,7 @@
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
 		color: var(--text-muted);
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 	.ayuda {
 		margin: 0.4rem 0 0;
@@ -273,7 +273,7 @@
 	.importe {
 		font-weight: 600;
 		font-size: 0.85rem;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		font-variant-numeric: tabular-nums;
 	}
 	.importe.negativo {
@@ -338,7 +338,7 @@
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
 		color: var(--text-muted);
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 	.campos input {
 		border: 1px solid var(--border-default, #ddd);

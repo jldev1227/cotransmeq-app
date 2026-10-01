@@ -665,7 +665,12 @@
 <div class="dias-page">
   <!-- Header -->
   <div class="cabecera">
-    <PortalHeader titulo="Días Laborados" meta="Registra tu actividad diaria" />
+    <PortalHeader
+      eyebrow="Control de jornada"
+      titulo="Días laborados"
+      meta="Registra tu jornada y mantenla sincronizada, incluso sin conexión."
+      mascota="espera"
+    />
   </div>
 
   <!-- Stats -->
@@ -1297,42 +1302,50 @@
   }
 
   .stats-row {
-    display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 0.5rem;
-    margin-bottom: 1rem;
+  	display: flex;
+  	align-items: stretch;
+  	margin-bottom: 1rem;
+  	padding: 0.85rem 0;
+  	background: #fff;
+  	border-radius: 22px;
+  	box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
   }
   .stat-card {
-    background: var(--surface, #fff);
-    border: 1px solid var(--border, #e2e8f0);
-    border-radius: 10px;
-    padding: 0.5rem 0.25rem;
-    text-align: center;
-    border-top: 3px solid var(--accent);
+  	flex: 1;
+  	min-width: 0;
+  	padding: 0 0.25rem;
+  	text-align: center;
+  	background: transparent;
+  	border: none;
+  	border-radius: 0;
+  }
+  .stat-card + .stat-card {
+    border-left: 1px solid var(--au-border, #dee7e3);
   }
   .stat-val {
-    font-weight: 800;
-    font-size: 1.1rem;
-    color: var(--accent);
-    font-family: 'JetBrains Mono', monospace;
+  	font-weight: 900;
+  	font-size: 1.25rem;
+  	letter-spacing: -0.02em;
+  	color: var(--au-dark, #014339);
+  	font-family: var(--font-sans);
   }
   .stat-label {
-    font-size: 0.62rem;
-    color: var(--text3, #94a3b8);
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    margin-top: 0.1rem;
+  	margin-top: 0.1rem;
+  	font-size: 0.58rem;
+  	font-weight: 700;
+  	letter-spacing: 0.06em;
+  	text-transform: uppercase;
+  	color: var(--text-muted, #66756f);
   }
 
   /* ── Calendar ── */
   .cal-card {
-    background: var(--surface, #fff);
-    border: 1px solid var(--border, #e2e8f0);
-    border-radius: 14px;
-    padding: 1rem;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.04);
-    position: relative;
+  	position: relative;
+  	padding: 1rem;
+  	background: #fff;
+  	border: none;
+  	border-radius: 22px;
+  	box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
   }
   .cal-header {
     display: flex;
@@ -1343,15 +1356,19 @@
   .cal-mes { font-weight: 800; font-size: 1.15rem; color: var(--text, #0f172a); }
   .cal-anio { font-size: 0.75rem; color: var(--text3, #94a3b8); }
   .btn-nav {
-    width: 36px; height: 36px;
-    border-radius: 10px;
-    border: 1px solid var(--border, #e2e8f0);
-    background: var(--surface, #fff);
-    font-size: 1.3rem;
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center;
-    color: var(--text2, #475569);
-    transition: all .15s;
+  	width: 40px;
+  	height: 40px;
+  	display: flex;
+  	align-items: center;
+  	justify-content: center;
+  	border: none;
+  	border-radius: 13px;
+  	background: var(--au-bg, #effbf5);
+  	color: var(--au-dark, #014339);
+  	font-size: 1.5rem;
+  	font-weight: 300;
+  	cursor: pointer;
+  	transition: background-color 0.15s;
   }
   .btn-nav:active { transform: scale(0.9); }
 
@@ -1499,7 +1516,7 @@
     background: linear-gradient(180deg, var(--surface, #fff) 0%, var(--bg, #fcfcfb) 100%);
   }
   .modal-fecha {
-    font-family: 'Geist', 'Inter', system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-weight: 700;
     font-size: 1.1rem;
     color: var(--text, #0f172a);
@@ -1525,7 +1542,7 @@
   .modal-fecha-sub {
     font-size: 0.72rem;
     color: var(--text3, #94a3b8);
-    font-family: 'Geist', 'Inter', system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-weight: 600;
     letter-spacing: 0.1em;
   }
@@ -1801,7 +1818,7 @@
     margin: 0 2px;
     vertical-align: middle;
     line-height: 1.2;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
   }
   .tramo-toggle {
     color: var(--text3, #94a3b8);
@@ -1883,7 +1900,7 @@
     background: rgba(249, 115, 22, 0.08);
     padding: 0.2rem 0.55rem;
     border-radius: 4px;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     margin-bottom: 0.25rem;
   }
 
@@ -1918,7 +1935,7 @@
     min-width: 0;
   }
   .details-tipo-name {
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: var(--font-sans);
     font-weight: 500;
     font-size: 1.15rem;
     color: #0F1F1A;
@@ -1937,13 +1954,13 @@
     justify-content: space-between;
     gap: 0.5rem;
     margin: 0;
-    font-family: 'Fraunces', Georgia, serif;
+    font-family: var(--font-sans);
     font-weight: 500;
     font-size: 0.95rem;
     color: #0F1F1A;
   }
   .details-section-count {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.7rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -1988,7 +2005,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     flex-shrink: 0;
   }
   .details-tramo-title {
@@ -1998,7 +2015,7 @@
     color: #0F1F1A;
   }
   .details-tramo-horas {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.75rem;
     font-weight: 700;
     color: #065F46;
@@ -2020,7 +2037,7 @@
     text-transform: uppercase;
     letter-spacing: 0.08em;
     color: #6B6B6B;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     padding-top: 0.15rem;
   }
   .details-grid dd {
@@ -2035,7 +2052,7 @@
     color: #6B6B6B;
     font-weight: 400;
     font-size: 0.78rem;
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     margin-left: 0.3rem;
   }
 
@@ -2080,7 +2097,7 @@
     color: #1A1A1A;
     border: 1px solid rgba(0, 0, 0, 0.12);
     border-radius: 12px;
-    font-family: 'Inter Tight', system-ui, sans-serif;
+    font-family: var(--font-sans);
     font-size: 0.9rem;
     font-weight: 600;
     cursor: pointer;
@@ -2125,7 +2142,7 @@
     font-size: 0.55rem;
     font-weight: 800;
     color: var(--tcolor, #ea580c);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     line-height: 1;
   }
 
@@ -2160,7 +2177,7 @@
     border-radius: 8px;
     background: var(--tramo-color, #ea580c);
     box-shadow: 0 0 0 3px color-mix(in srgb, var(--tramo-color, #ea580c) 16%, transparent);
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-sans);
     font-size: 0.78rem;
   }
 

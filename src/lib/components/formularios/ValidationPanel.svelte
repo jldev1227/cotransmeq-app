@@ -112,7 +112,7 @@
 	}
 
 	.panel__head:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: -2px;
 	}
 
@@ -128,7 +128,7 @@
 
 	.panel__flecha {
 		font-size: 0.75rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.panel__lista {
@@ -159,7 +159,7 @@
 	}
 
 	.fila:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 1px;
 	}
 
@@ -168,7 +168,7 @@
 		font-family: var(--font-mono, monospace);
 		font-size: 0.625rem;
 		font-weight: 600;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.fila__msg {

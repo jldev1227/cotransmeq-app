@@ -178,7 +178,7 @@
 	}
 
 	.sec--sel {
-		border-color: var(--emerald-600, #059669);
+		border-color: var(--emerald-600, #15803d);
 	}
 
 	.sec--error {
@@ -194,7 +194,7 @@
 	.sec__asa {
 		width: 1.25rem;
 		text-align: center;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 		cursor: grab;
 		user-select: none;
 	}
@@ -206,7 +206,7 @@
 		place-items: center;
 		font: inherit;
 		font-size: 0.75rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 		background: none;
 		border: none;
 		border-radius: 6px;
@@ -228,7 +228,7 @@
 		font-family: var(--font-display, Georgia, serif);
 		font-size: 1rem;
 		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		background: none;
 		border: 1px solid transparent;
 		border-radius: 6px;
@@ -241,22 +241,22 @@
 	.sec__titulo:focus-visible {
 		outline: none;
 		background: #fff;
-		border-color: var(--emerald-600, #059669);
-		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+		border-color: var(--emerald-600, #15803d);
+		box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
 	}
 
 	.sec__key {
 		padding-left: 0.3125rem;
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.sec__conteo {
 		flex-shrink: 0;
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.sec__acciones {
@@ -272,7 +272,7 @@
 		place-items: center;
 		font: inherit;
 		font-size: 0.8125rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 		background: none;
 		border: 1px solid transparent;
 		border-radius: 6px;
@@ -287,7 +287,7 @@
 	.accion:focus-visible,
 	.sec__colapsar:focus-visible,
 	.sec__agregar:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 1px;
 	}
 
@@ -320,7 +320,7 @@
 		font-size: 0.8125rem;
 		font-style: italic;
 		text-align: center;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 		border: 1px dashed var(--border-default, rgba(0, 0, 0, 0.12));
 		border-radius: 10px;
 	}
@@ -332,7 +332,7 @@
 		font: inherit;
 		font-size: 0.8125rem;
 		font-weight: 600;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		background: #fff7ed;
 		border: 1px solid #fed7aa;
 		border-radius: 10px;

@@ -8,6 +8,9 @@
 	    props + snippets. El estilo está centralizado en `toolbar.css`.
 	  • El `title` se trunca con ellipsis. El `subtitle` se oculta en <720px
 	    vía la media query del CSS.
+	  • La barra ENVUELVE: si los controles no caben al lado del título bajan
+	    a una segunda fila (y envuelven entre sí). En móvil van plegados bajo
+	    un botón. Nada se recorta ni se monta sobre el título.
 
 	Uso típico:
 	  <UniverToolbar title="..." subtitle="..." onBack={() => goto('...')}>
@@ -77,9 +80,13 @@
 		onQuitarFiltro,
 		onLimpiarFiltros
 	}: Props = $props();
+
+	/// En móvil los controles van plegados bajo un botón; en escritorio este
+	/// estado no se usa (el CSS los muestra siempre).
+	let abierta = $state(false);
 </script>
 
-<div class="univer-toolbar" inert={inerte}>
+<div class="univer-toolbar" class:univer-toolbar--abierta={abierta} inert={inerte}>
 	<div class="univer-toolbar-left">
 		{#if onBack}
 			<button class="univer-btn univer-btn-back" onclick={onBack} title="Volver">
@@ -134,6 +141,20 @@
 			</div>
 		{/if}
 	</div>
+	{#if actions}
+		<button
+			type="button"
+			class="univer-toolbar-toggle"
+			onclick={() => (abierta = !abierta)}
+			aria-expanded={abierta}
+			aria-label={abierta ? 'Ocultar controles' : 'Mostrar controles'}
+			title={abierta ? 'Ocultar controles' : 'Mostrar controles'}
+		>
+			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+				<path stroke-linecap="round" d="M4 7h16M4 12h10M4 17h16" />
+			</svg>
+		</button>
+	{/if}
 	<div class="univer-toolbar-right">
 		{#if actions}
 			{@render actions()}

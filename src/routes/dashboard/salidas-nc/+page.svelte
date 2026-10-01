@@ -1258,7 +1258,7 @@
 	.hero-text .eyebrow {
 		align-self: flex-start;
 		display: inline-block;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.7rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -1269,9 +1269,9 @@
 		border-radius: 6px;
 	}
 	.hero-text h1 {
-		font-family: 'Fraunces', Georgia, serif;
+		font-family: var(--font-display);
 		font-size: clamp(1.6rem, 3.5vw, 2.1rem);
-		font-weight: 500;
+		font-weight: 800;
 		line-height: 1.15;
 		letter-spacing: -0.01em;
 		color: #0f172a;
@@ -1294,7 +1294,7 @@
 	}
 	.compliance-tag {
 		display: inline-flex;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.66rem;
 		font-weight: 600;
 		text-transform: uppercase;
@@ -1314,7 +1314,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 0.4rem;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 	.stat-item {
 		display: inline-flex;
@@ -1369,10 +1369,10 @@
 		--tl-fila-hover: rgba(220, 38, 38, 0.03);
 	}
 	.mono {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 	.snc-num {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-weight: 700;
 		color: #0f172a;
 		white-space: nowrap;

@@ -463,7 +463,7 @@ export const liquidacionesServiciosAPI = {
 			headers: getAuthHeaders()
 		});
 		const json = await res.json();
-		if (!res.ok) throw new Error(json.error || 'Error al generar preview');
+		if (!res.ok) throw new Error(json.error || 'Error al generar la vista previa');
 		return json;
 	},
 

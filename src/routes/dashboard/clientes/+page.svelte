@@ -9,6 +9,14 @@
 	import FilterDrawer from '$lib/components/ui/FilterDrawer.svelte';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+	import TablaLista from '$lib/components/listing/TablaLista.svelte';
+	import CeldaIdentidad from '$lib/components/listing/CeldaIdentidad.svelte';
+	import AccionesFila from '$lib/components/listing/AccionesFila.svelte';
+	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
+	import SegmentosFiltro from '$lib/components/listing/SegmentosFiltro.svelte';
+	import { mascota } from '$lib/mascot';
+	import { Eye, Trash2 } from 'lucide-svelte';
+	import type { ColumnDef } from '@tanstack/table-core';
 	import { page } from '$app/state';
 	import { crearListingStore } from '$lib/listing/listingStore';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
@@ -163,9 +171,7 @@
 		}
 	}
 
-	const isAdmin = $derived(
-		$authStore.user?.rol === 'admin' || $authStore.user?.role === 'admin'
-	);
+	const isAdmin = $derived($authStore.user?.rol === 'admin' || $authStore.user?.role === 'admin');
 	const isOperaciones = $derived($authStore.user?.area?.includes('operaciones'));
 	const isTalentoHumano = $derived($authStore.user?.area?.includes('talento_humano'));
 	const canAccessSpecialViews = $derived(isAdmin || isOperaciones || isTalentoHumano);
@@ -189,7 +195,10 @@
 	const numFiltrosActivos = $derived(contarActivos(DEFS, filtros, ['q', 'pagina']));
 
 	function clearFilter(key: string) {
-		ponerFiltro(key as keyof FiltrosClientes, DEFS[key as keyof FiltrosClientes].porDefecto as never);
+		ponerFiltro(
+			key as keyof FiltrosClientes,
+			DEFS[key as keyof FiltrosClientes].porDefecto as never
+		);
 	}
 
 	const clientes = $derived($listaClientes._?.items ?? []);
@@ -277,8 +286,40 @@
 		}
 	}
 
+	const COLUMNAS: ColumnDef<Cliente, any>[] = [
+		{ id: 'cliente', header: 'Cliente', accessorKey: 'nombre', enableSorting: false },
+		{ id: 'tipo', header: 'Tipo', accessorKey: 'tipo', enableSorting: false, size: 170 },
+		{ id: 'contacto', header: 'Contacto', enableSorting: false },
+		{ id: 'condiciones', header: 'Condiciones', enableSorting: false, size: 190 },
+		{ id: 'acciones', header: '', enableSorting: false, size: 110 }
+	];
+
+	const SEGMENTOS_TIPO = [
+		{ valor: 'TODOS', etiqueta: 'Todos' },
+		{ valor: TipoCliente.EMPRESA, etiqueta: 'Empresas', punto: '#3b82f6' },
+		{ valor: TipoCliente.PERSONA_NATURAL, etiqueta: 'Personas', punto: '#16a34a' }
+	];
+
+	const conteos = $derived([
+		{ clave: 'TODOS', etiqueta: 'Total', valor: stats.total },
+		{ clave: TipoCliente.EMPRESA, etiqueta: 'Empresas', valor: stats.empresas, color: '#3b82f6' },
+		{
+			clave: TipoCliente.PERSONA_NATURAL,
+			etiqueta: 'Personas',
+			valor: stats.personas,
+			color: '#16a34a'
+		},
+		{ clave: 'osi', etiqueta: 'Con OSI', valor: stats.conOSI, color: '#f59e0b' },
+		{ clave: 'recargos', etiqueta: 'Pagan recargos', valor: stats.conRecargos, color: '#a855f7' }
+	]);
+
+	function filtrarPorConteo(clave: string) {
+		if (clave === 'osi' || clave === 'recargos') return;
+		ponerFiltro('tipo', filtros.tipo === clave ? 'TODOS' : clave);
+	}
+
 	function getTipoColor(tipo: string) {
-		return tipo === TipoCliente.EMPRESA ? '#3b82f6' : '#10b981';
+		return tipo === TipoCliente.EMPRESA ? '#3b82f6' : '#16a34a';
 	}
 
 	$effect(() => {
@@ -333,119 +374,80 @@
 	<title>Clientes — Cotransmeq</title>
 </svelte:head>
 
-<div class="flex h-full min-h-0 flex-col gap-4 p-6" in:fade={{ duration: 400 }}>
-	<!-- ── HEADER (page-card editorial) ─────────────────────── -->
-	<div class="page-card flex-shrink-0" style="padding: 1.25rem 1.5rem;">
-		<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-			<!-- Título -->
-			<div class="flex items-center gap-3">
-				<div
-					class="brand-gradient flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
-					style="box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);"
-				>
-					<svg
-						class="h-5 w-5 text-white"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-						stroke-width="1.8"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-						/>
-					</svg>
-				</div>
-				<div>
-					<div class="flex items-center gap-2">
-						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 400;">
-							Gestión de Clientes
-						</h1>
-						<!-- Aquí había un chip «En vivo» pintado a mano, sin mirar el socket:
-						     decía «En vivo» también con la conexión caída. El estado real lo
-						     muestra el header, junto al nombre de la sección. -->
-					</div>
-					<p class="text-xs" style="color: var(--text-muted);">
-						Administra toda la información de clientes registrados
-					</p>
-				</div>
+<div class="dir-pagina {shiftPressed ? 'select-none' : ''}" in:fade={{ duration: 400 }}>
+	<!-- ── CABECERA: título, conteos y acciones ─────────────── -->
+	<header class="page-card dir-cabecera" style="padding: 1.25rem 1.5rem;">
+		<div class="dir-cabecera-texto">
+			<h1 class="dir-titulo">Clientes</h1>
+			<p class="dir-desc">Administra toda la información de los clientes registrados.</p>
+			<div class="dir-conteos">
+				<ResumenConteos
+					{conteos}
+					activo={filtros.tipo === 'TODOS' ? null : filtros.tipo}
+					onElegir={filtrarPorConteo}
+				/>
 			</div>
+		</div>
 
-			<div class="flex flex-wrap items-center gap-2">
-				<!-- Vistas Rápidas (Icon Buttons) -->
-				{#if canAccessSpecialViews}
-					<div class="mr-1 flex items-center gap-1">
-						<button
-							onclick={() =>
-								ponerFiltro('vista', filtros.vista === 'ocultos' ? 'activos' : 'ocultos')}
-							title={filtros.vista === 'ocultos' ? 'Ver Activos' : 'Ver Ocultos'}
-							class="btn-icon"
-							style="border-color: {filtros.vista === 'ocultos'
-								? 'var(--emerald-500)'
-								: 'var(--border-default)'}; background-color: {filtros.vista === 'ocultos'
-								? 'rgba(16,185,129,0.04)'
-								: 'white'}; color: {filtros.vista === 'ocultos' ? 'var(--emerald-600)' : 'var(--text-muted)'};"
-						>
-							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
-								/>
-							</svg>
-						</button>
-					</div>
-				{/if}
-
-				<!-- Búsqueda -->
-				<div class="w-64">
-					<BuscadorLista
-						valor={filtros.q}
-						onBuscar={(termino) => ponerFiltro('q', termino)}
-						placeholder="Buscar clientes…"
-						etiqueta="Buscar clientes"
-					/>
-				</div>
-
-				<!-- Filtros -->
+		<div class="dir-cabecera-acciones">
+			{#if canAccessSpecialViews}
 				<button
-					onclick={() => (mostrarFiltros = !mostrarFiltros)}
-					class="btn-secondary"
-					style="border-color: {mostrarFiltros
+					onclick={() => ponerFiltro('vista', filtros.vista === 'ocultos' ? 'activos' : 'ocultos')}
+					title={filtros.vista === 'ocultos' ? 'Ver activos' : 'Ver ocultos'}
+					class="btn-icon"
+					style="border-color: {filtros.vista === 'ocultos'
 						? 'var(--emerald-500)'
-						: 'var(--border-default)'}; color: {mostrarFiltros
-						? 'var(--emerald-700)'
-						: 'var(--text-secondary)'}; background-color: {mostrarFiltros
-						? 'rgba(16,185,129,0.04)'
-						: 'white'};"
+						: 'var(--border-default)'}; background-color: {filtros.vista === 'ocultos'
+						? 'var(--au-tint)'
+						: 'white'}; color: {filtros.vista === 'ocultos'
+						? 'var(--emerald-800)'
+						: 'var(--text-muted)'};"
 				>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
-							d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+							d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
 						/>
 					</svg>
-					Filtros
-					{#if numFiltrosActivos > 0}
-						<span
-							class="flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white"
-							style="background-color: var(--emerald-500);">!</span
-						>
-					{/if}
 				</button>
+			{/if}
 
-				<!-- Nuevo -->
-				{#if puedeEditar}
-					<button onclick={() => goto('/dashboard/clientes/agregar')} class="btn-primary">
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-						</svg>
-						Nuevo Cliente
-					</button>
+			<button
+				onclick={() => (mostrarFiltros = !mostrarFiltros)}
+				class="btn-secondary"
+				style="border-color: {mostrarFiltros
+					? 'var(--emerald-500)'
+					: 'var(--border-default)'}; color: {mostrarFiltros
+					? 'var(--emerald-800)'
+					: 'var(--text-secondary)'}; background-color: {mostrarFiltros
+					? 'var(--au-tint)'
+					: 'white'};"
+			>
+				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+					/>
+				</svg>
+				Filtros
+				{#if numFiltrosActivos > 0}
+					<span
+						class="flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white"
+						style="background-color: var(--emerald-500);">!</span
+					>
 				{/if}
-			</div>
+			</button>
+
+			{#if puedeEditar}
+				<button onclick={() => goto('/dashboard/clientes/agregar')} class="btn-primary">
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+					</svg>
+					Nuevo cliente
+				</button>
+			{/if}
 		</div>
 
 		<!-- Panel de filtros (drawer lateral) — siempre montado para que las
@@ -524,11 +526,7 @@
 			</div>
 
 			<div slot="footer">
-				<button
-					class="filter-clear"
-					onclick={limpiarFiltros}
-					disabled={activeFilters.length === 0}
-				>
+				<button class="filter-clear" onclick={limpiarFiltros} disabled={activeFilters.length === 0}>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"
 						><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg
 					>
@@ -542,264 +540,126 @@
 				</button>
 			</div>
 		</FilterDrawer>
+	</header>
+
+	<!-- ── FILTROS A LA VISTA: buscador + tipo ───────────────── -->
+	<div class="dir-filtros" in:fly={{ y: 12, duration: 400, delay: 100 }}>
+		<div class="dir-filtros-buscador">
+			<BuscadorLista
+				valor={filtros.q}
+				onBuscar={(termino) => ponerFiltro('q', termino)}
+				placeholder="Nombre, NIT, representante o correo…"
+				etiqueta="Buscar clientes"
+			/>
+		</div>
+		<SegmentosFiltro
+			etiqueta="Tipo"
+			opciones={SEGMENTOS_TIPO}
+			valor={filtros.tipo}
+			onCambiar={(v) => ponerFiltro('tipo', v)}
+		/>
 	</div>
 
-	<!-- ── STATS CARDS (radio 16, mono labels) ──────────────── -->
-	<div
-		class="grid flex-shrink-0 grid-cols-2 gap-3 lg:grid-cols-5"
-		in:fly={{ y: 12, duration: 400, delay: 100 }}
-	>
-		<div class="stat-card">
-			<p class="stat-label">Total</p>
-			<p class="stat-value">{stats.total}</p>
-		</div>
-		<div class="stat-card">
-			<p class="stat-label">Empresas</p>
-			<p class="stat-value" style="color: #3b82f6;">{stats.empresas}</p>
-		</div>
-		<div class="stat-card">
-			<p class="stat-label">Personas</p>
-			<p class="stat-value" style="color: var(--emerald-600);">{stats.personas}</p>
-		</div>
-		<div class="stat-card">
-			<p class="stat-label">Con OSI</p>
-			<p class="stat-value" style="color: #f59e0b;">{stats.conOSI}</p>
-		</div>
-		<div class="stat-card">
-			<p class="stat-label">Recargos</p>
-			<p class="stat-value" style="color: #a855f7;">{stats.conRecargos}</p>
-		</div>
-	</div>
-
-	<!-- ── TABLA (table-card editorial) ──────────────────────── -->
-	<div
-		class="table-card flex min-h-0 flex-1 flex-col {shiftPressed ? 'select-none' : ''}"
-		in:fly={{ y: 12, duration: 400, delay: 150 }}
-	>
-		{#if isLoading}
-			<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12">
-				<div class="spinner" style="width: 2.5rem; height: 2.5rem; border-width: 4px;"></div>
-				<p class="text-sm" style="color: var(--text-muted);">Cargando clientes…</p>
-			</div>
-		{:else if clientes.length === 0}
-			<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12">
-				<div
-					class="flex h-14 w-14 items-center justify-center rounded-2xl"
-					style="background-color: var(--bg-base);"
-				>
-					<svg
-						class="h-7 w-7"
-						style="color: var(--text-very-muted);"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-						stroke-width="1.8"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-						/>
-					</svg>
-				</div>
-				<div class="text-center">
-					<h3 class="font-display mb-1 text-lg" style="color: var(--bg-charcoal); font-weight: 400;">
-						No hay clientes
-					</h3>
-					<p class="text-sm" style="color: var(--text-muted);">No se encontraron resultados</p>
-				</div>
-				<button onclick={limpiarFiltros} class="btn-primary">Limpiar filtros</button>
-			</div>
-		{:else}
-			<!-- Cards grid: 1 col mobile, 2 sm, 3 lg, 4 xl -->
-			<div class="min-h-0 flex-1 overflow-y-auto p-3">
-				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-					{#each clientes as cliente, index (cliente.id)}
-						<article
-							class="list-card"
-							style="border-left: 4px solid {getTipoColor(cliente.tipo)};
-								background-color: {clientesSeleccionados.has(cliente.id)
-								? 'rgba(16, 185, 129, 0.04)'
-								: 'var(--bg-surface)'};
-								border-color: {clientesSeleccionados.has(cliente.id) ? 'var(--emerald-500)' : 'var(--border-subtle)'};
-								border-left-color: {getTipoColor(cliente.tipo)};"
-							in:fly={{ y: 8, duration: 200, delay: Math.min(index * 20, 200) }}
-							onclick={(e) => toggleSeleccion(cliente.id, index, e)}
-							role="button"
-							tabindex="0"
-						>
-							<!-- Checkbox -->
-							<div class="flex-shrink-0 pt-0.5">
+	<!-- ── LISTA ─────────────────────────────────────────────── -->
+	<div class="dir-lista" in:fly={{ y: 12, duration: 400, delay: 150 }}>
+		<div class="dir-lista-scroll">
+			<TablaLista
+				columnas={COLUMNAS}
+				datos={clientes}
+				claveFila={(c) => c.id}
+				cargando={isLoading}
+				onFila={(c) => goto(`/dashboard/clientes/${c.id}`)}
+				etiqueta="Clientes registrados"
+			>
+				{#snippet celda({ columnaId, fila: c })}
+					{#if columnaId === 'cliente'}
+						<div class="flex items-center">
+							<span class="dir-check">
 								<input
 									type="checkbox"
-									checked={clientesSeleccionados.has(cliente.id)}
+									checked={clientesSeleccionados.has(c.id)}
 									onclick={(e) => {
 										e.stopPropagation();
-										toggleSeleccion(cliente.id, index, e);
+										toggleSeleccion(c.id, clientes.indexOf(c), e);
 									}}
-									class="rounded text-emerald-600 focus:ring-emerald-500"
-									style="border-color: var(--border-default);"
+									aria-label="Seleccionar {c.nombre}"
 								/>
+							</span>
+							<CeldaIdentidad
+								titulo={c.nombre}
+								subtitulo={c.nit ? `NIT ${c.nit}` : undefined}
+								tono={getTipoColor(c.tipo)}
+							/>
+						</div>
+					{:else if columnaId === 'tipo'}
+						<div class="dir-celda">
+							<span>{c.tipo === TipoCliente.EMPRESA ? 'Empresa' : 'Persona natural'}</span>
+							{#if c.representante}<small>{c.representante}</small>{/if}
+						</div>
+					{:else if columnaId === 'contacto'}
+						<div class="dir-celda">
+							{#if c.telefono}<span>{c.telefono}</span>{:else}<span class="dir-nulo"
+									>Sin teléfono</span
+								>{/if}
+							{#if c.correo}<small>{c.correo}</small>{/if}
+						</div>
+					{:else if columnaId === 'condiciones'}
+						{#if c.requiere_osi || c.paga_recargos}
+							<div class="dir-celda">
+								{#if c.requiere_osi}<span>Requiere OSI</span>{/if}
+								{#if c.paga_recargos}<span>Paga recargos</span>{/if}
 							</div>
+						{:else}
+							<span class="dir-nulo">—</span>
+						{/if}
+					{:else if columnaId === 'acciones'}
+						<AccionesFila
+							acciones={[
+								{
+									id: 'ver',
+									etiqueta: 'Ver detalle',
+									icono: Eye,
+									onClick: () => goto(`/dashboard/clientes/${c.id}`)
+								},
+								{
+									id: 'eliminar',
+									etiqueta: 'Eliminar',
+									icono: Trash2,
+									onClick: () => openDeleteModal(c),
+									peligrosa: true,
+									oculta: !puedeEditar
+								}
+							]}
+						/>
+					{/if}
+				{/snippet}
 
-							<!-- Contenido principal -->
-							<div class="min-w-0 flex-1">
-								<!-- Header: NIT (mono) + tipo pill -->
-								<div class="mb-1.5 flex items-start justify-between gap-2">
-									<p
-										class="font-mono-meta text-[11px]"
-										style="color: var(--text-very-muted); letter-spacing: 0.05em;"
-									>
-										NIT {cliente.nit}
-									</p>
-								</div>
+				{#snippet vacio()}
+					{@const img = mascota('vacio')}
+					<div class="dir-vacio">
+						<img src={img.src} alt={img.alt} width="418" height="418" />
+						<h3>No hay clientes</h3>
+						<p>
+							{activeFilters.length
+								? 'No se encontraron clientes con los filtros aplicados.'
+								: 'Registra el primer cliente para verlo aquí.'}
+						</p>
+						{#if activeFilters.length}
+							<button onclick={limpiarFiltros} class="btn-secondary">Limpiar filtros</button>
+						{/if}
+					</div>
+				{/snippet}
+			</TablaLista>
+		</div>
 
-								<!-- Nombre (línea principal) -->
-								<p
-									class="truncate text-sm leading-snug font-semibold"
-									style="color: var(--text-primary);"
-								>
-									{cliente.nombre}
-								</p>
-
-								<!-- Tipo (label editorial) -->
-								<p
-									class="mt-0.5 text-[10px] font-semibold tracking-wide uppercase"
-									style="color: {getTipoColor(cliente.tipo)};"
-								>
-									{cliente.tipo === TipoCliente.EMPRESA ? 'Empresa' : 'Persona Natural'}
-								</p>
-
-								<!-- Representante -->
-								{#if cliente.representante}
-									<p
-										class="mt-1.5 truncate text-[11px]"
-										style="color: var(--text-secondary);"
-									>
-										{cliente.representante}
-									</p>
-								{/if}
-
-								<!-- Footer: contacto -->
-								<div
-									class="mt-1.5 flex items-center justify-between gap-2 text-[10px]"
-									style="color: var(--text-muted);"
-								>
-									{#if cliente.telefono}
-										<span class="flex items-center gap-1 truncate">
-											<svg
-												class="h-3 w-3 flex-shrink-0"
-												style="color: var(--text-very-muted);"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-												stroke-width="1.8"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-												/>
-											</svg>
-											<span class="truncate">{cliente.telefono}</span>
-										</span>
-									{:else}
-										<span class="italic" style="color: var(--text-very-muted);">Sin teléfono</span>
-									{/if}
-								</div>
-
-								<!-- Badges OSI/REC -->
-								{#if cliente.requiere_osi || cliente.paga_recargos}
-									<div class="mt-2 flex flex-wrap gap-1">
-										{#if cliente.requiere_osi}
-											<span
-												class="font-mono-meta inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px]"
-												style="background: rgba(245, 158, 11, 0.08); color: #b45309;"
-											>
-												OSI
-											</span>
-										{/if}
-										{#if cliente.paga_recargos}
-											<span
-												class="font-mono-meta inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[9px]"
-												style="background: rgba(168, 85, 247, 0.08); color: #7e22ce;"
-											>
-												REC
-											</span>
-										{/if}
-									</div>
-								{/if}
-							</div>
-
-							<!-- Actions (vertical) -->
-							<div
-								class="flex flex-shrink-0 flex-col gap-1"
-								onclick={(e) => e.stopPropagation()}
-								role="presentation"
-							>
-								<button
-									onclick={() => goto(`/dashboard/clientes/${cliente.id}`)}
-									class="apple-transition rounded-md p-1.5"
-									style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
-									title="Ver detalle"
-								>
-									<svg
-										class="h-3.5 w-3.5"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-										stroke-width="1.8"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-										/>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-										/>
-									</svg>
-								</button>
-								{#if puedeEditar}
-									<button
-										onclick={() => openDeleteModal(cliente)}
-										class="apple-transition rounded-md p-1.5"
-										style="color: #dc2626; background-color: rgba(220, 38, 38, 0.06);"
-										title="Eliminar"
-									>
-										<svg
-											class="h-3.5 w-3.5"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-											stroke-width="1.8"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-											/>
-										</svg>
-									</button>
-								{/if}
-							</div>
-						</article>
-					{/each}
-				</div>
-			</div>
-
-			<!-- Paginación -->
-			<PaginadorLista
-				pagina={filtros.pagina}
-				total={totalClientes}
-				porPagina={POR_PAGINA}
-				cargando={isLoading}
-				nombreItems="clientes"
-				onCambiar={irPagina}
-			/>
-		{/if}
+		<PaginadorLista
+			pagina={filtros.pagina}
+			total={totalClientes}
+			porPagina={POR_PAGINA}
+			cargando={isLoading}
+			nombreItems="clientes"
+			onCambiar={irPagina}
+		/>
 	</div>
 
 	<!-- Bulk Actions Bar — fondo charcoal profundo (no glass) -->
@@ -892,7 +752,7 @@
 	<button
 		type="button"
 		class="fixed inset-0 z-50 cursor-default border-0 p-0"
-		style="background: linear-gradient(135deg, rgba(15, 31, 26, 0.40), rgba(10, 20, 16, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
+		style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.40), rgba(20, 83, 45, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
 		aria-label="Cerrar modal"
 		onclick={() => (showDeleteModal = false)}
 	></button>

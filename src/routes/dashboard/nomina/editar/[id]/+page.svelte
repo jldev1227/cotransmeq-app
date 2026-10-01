@@ -83,7 +83,7 @@
 			case 'liquidada':
 				return {
 					label: 'Liquidada',
-					bg: 'bg-[rgba(16,185,129,0.12)]',
+					bg: 'bg-[rgba(22, 163, 74,0.12)]',
 					text: 'text-[var(--emerald-700)]',
 					dot: 'bg-[var(--emerald-500)]'
 				};
@@ -158,7 +158,7 @@
 					</button>
 
 					<div
-						class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[rgba(16,185,129,0.12)] text-[var(--emerald-700)]"
+						class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[rgba(22, 163, 74,0.12)] text-[var(--emerald-700)]"
 					>
 						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
@@ -254,7 +254,7 @@
 
 					<!-- Neto pagado -->
 					<div
-						class="flex items-center gap-2 rounded-xl border border-[rgba(16,185,129,0.25)] bg-[rgba(16,185,129,0.08)] px-3 py-1.5"
+						class="flex items-center gap-2 rounded-xl border border-[rgba(22, 163, 74,0.25)] bg-[rgba(22, 163, 74,0.08)] px-3 py-1.5"
 					>
 						<svg
 							class="h-3.5 w-3.5 text-[var(--emerald-500)]"

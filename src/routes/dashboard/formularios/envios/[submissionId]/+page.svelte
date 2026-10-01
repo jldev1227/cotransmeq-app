@@ -525,11 +525,11 @@
 		align-items: center;
 		gap: 0.375rem;
 		font-size: 0.75rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.migas a {
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		text-decoration: none;
 	}
 
@@ -545,7 +545,7 @@
 		font-family: var(--font-mono, monospace);
 		font-size: 0.75rem;
 		font-weight: 700;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 	}
 
 	.head__titulo {
@@ -553,7 +553,7 @@
 		font-family: var(--font-display, Georgia, serif);
 		font-size: 1.375rem;
 		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		line-height: 1.2;
 	}
 
@@ -625,12 +625,12 @@
 	.descartado__titulo {
 		font-size: 0.875rem;
 		font-weight: 700;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.descartado__nota {
 		font-size: 0.75rem;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 		line-height: 1.45;
 	}
 
@@ -673,17 +673,17 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.ficha__par dd {
 		margin-top: 0.0625rem;
 		font-size: 0.875rem;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.ficha__par dd a {
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 	}
 
 	.bloque__cabeza {
@@ -709,7 +709,7 @@
 		font: inherit;
 		font-size: 0.75rem;
 		font-weight: 600;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 		background: transparent;
 		border: none;
 		border-radius: 8px;
@@ -717,13 +717,13 @@
 	}
 
 	.vistas__btn--on {
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		background: var(--bg-surface, #fff);
 		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
 	}
 
 	.vistas__btn:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 2px;
 	}
 
@@ -732,13 +732,13 @@
 		font-family: var(--font-display, Georgia, serif);
 		font-size: 1rem;
 		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.bloque__nota {
 		font-size: 0.8125rem;
 		font-style: italic;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.respuestas {
@@ -778,17 +778,17 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 	}
 
 	.adjunto__hash {
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.adjunto__sin {
 		font-size: 0.75rem;
 		font-style: italic;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.evento {
@@ -804,14 +804,14 @@
 
 	.evento__tipo {
 		font-weight: 700;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.evento__actor {
 		font-size: 0.625rem;
 		font-weight: 600;
 		text-transform: uppercase;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	@media (max-width: 780px) {
@@ -821,12 +821,12 @@
 	}
 
 	.evento__fecha {
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.evento__detalle {
 		font-size: 0.75rem;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 		overflow-wrap: anywhere;
 	}
 
@@ -843,7 +843,7 @@
 		font: inherit;
 		font-size: 0.875rem;
 		font-weight: 500;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		background: #fff;
 		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
 		border-radius: 10px;
@@ -875,14 +875,14 @@
 	}
 
 	.btn:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 2px;
 	}
 
 	.estado {
 		padding: 2.5rem 1rem;
 		text-align: center;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.estado--error {
@@ -896,7 +896,7 @@
 		display: grid;
 		place-items: center;
 		padding: 1rem;
-		background: rgba(15, 31, 26, 0.45);
+		background: rgba(15, 23, 42, 0.45);
 	}
 
 	.modal__caja {
@@ -920,7 +920,7 @@
 	.modal__cuerpo {
 		font-size: 0.8125rem;
 		line-height: 1.5;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 	}
 
 	.modal__acciones {
@@ -940,7 +940,7 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.input {
@@ -960,7 +960,7 @@
 
 	.input:focus-visible {
 		outline: none;
-		border-color: var(--emerald-600, #059669);
-		box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
+		border-color: var(--emerald-600, #15803d);
+		box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
 	}
 </style>

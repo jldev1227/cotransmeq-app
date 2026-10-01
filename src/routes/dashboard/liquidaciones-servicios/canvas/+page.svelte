@@ -1393,17 +1393,17 @@
 			},
 			{
 				id: 'preview',
-				label: 'Ver preview',
+				label: 'Ver vista previa',
 				hint:
 					seleccionLiq.length === 1
-						? `Abre el preview de ${seleccionLiq[0].consecutivo}.`
+						? `Abre la vista previa de ${seleccionLiq[0].consecutivo}.`
 						: 'También se abre pulsando 👁 VER en la primera columna.',
 				icon: icoVer,
 				disabled: seleccionLiq.length !== 1 || !!solicitudEditor,
 				disabledHint:
 					seleccionLiq.length === 0
 						? 'Selecciona una fila, o pulsa 👁 VER en la columna de acciones.'
-						: 'El preview es de una sola liquidación; hay varias seleccionadas.',
+						: 'La vista previa es de una sola liquidación; hay varias seleccionadas.',
 				onSelect: () => {
 					if (seleccionLiq.length === 1)
 						solicitudEditor = { modo: 'ver', id: seleccionLiq[0].id };
@@ -1847,8 +1847,8 @@
 		cursor: pointer;
 	}
 	.hs-facturas button:hover:not(:disabled) {
-		background: #ecfdf5;
-		border-color: #a7f3d0;
+		background: #f0fdf4;
+		border-color: #bbf7d0;
 	}
 	.hs-facturas button:disabled {
 		opacity: 0.5;
@@ -1857,7 +1857,7 @@
 	.hs-factura-num {
 		font-size: 12px;
 		font-weight: 700;
-		color: #065f46;
+		color: #14532d;
 	}
 	.hs-factura-meta {
 		font-size: 11px;

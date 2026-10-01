@@ -692,7 +692,7 @@
 		min-height: 100vh;
 		min-height: 100dvh;
 		background: var(--bg);
-		font-family: 'Inter', 'Inter Tight', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		color: var(--text-primary);
 		display: flex;
 		flex-direction: column;
@@ -700,14 +700,14 @@
 	}
 
 	.meta-mono {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		color: inherit;
 		font-weight: 600;
 	}
 
 	.eyebrow {
 		display: inline-block;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -806,7 +806,7 @@
 		height: 18px;
 	}
 	.header-title {
-		font-family: 'Fraunces', Georgia, serif;
+		font-family: var(--font-sans);
 		font-size: 1.05rem;
 		font-weight: 500;
 		color: var(--text-primary);
@@ -829,7 +829,7 @@
 		align-items: center;
 		gap: 0.35rem;
 		padding: 0.25rem 0.6rem;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -941,7 +941,7 @@
 		height: 28px;
 	}
 	.state-title {
-		font-family: 'Fraunces', Georgia, serif;
+		font-family: var(--font-sans);
 		font-size: 1.4rem;
 		font-weight: 500;
 		color: var(--text-primary);
@@ -1090,7 +1090,7 @@
 		gap: 0.2rem;
 	}
 	.tercero-name {
-		font-family: 'Fraunces', Georgia, serif;
+		font-family: var(--font-sans);
 		font-size: 1.2rem;
 		font-weight: 500;
 		color: var(--text-primary);
@@ -1137,7 +1137,7 @@
 		flex-wrap: wrap;
 	}
 	.docs-title {
-		font-family: 'Fraunces', Georgia, serif;
+		font-family: var(--font-sans);
 		font-size: 1.1rem;
 		font-weight: 500;
 		color: var(--text-primary);
@@ -1302,7 +1302,7 @@
 		display: inline-flex;
 		align-items: center;
 		padding: 0.1rem 0.45rem;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -1394,7 +1394,7 @@
 		margin-bottom: 0.85rem;
 	}
 	.aside-title {
-		font-family: 'Fraunces', Georgia, serif;
+		font-family: var(--font-sans);
 		font-size: 0.95rem;
 		font-weight: 500;
 		color: var(--accent-hover);
@@ -1409,7 +1409,7 @@
 	.aside-exp {
 		font-size: 0.7rem;
 		color: var(--text-very-muted);
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		letter-spacing: 0.02em;
 		margin: 0;
 		padding-top: 0.6rem;
@@ -1445,7 +1445,7 @@
 		height: 22px;
 	}
 	.empty-title {
-		font-family: 'Fraunces', Georgia, serif;
+		font-family: var(--font-sans);
 		font-size: 1rem;
 		font-weight: 500;
 		color: var(--text-primary);

@@ -133,18 +133,18 @@
 	}
 	.btn-back:hover {
 		background: var(--fm-surface-hover);
-		color: #ea580c;
-		border-color: rgba(249, 115, 22, 0.3);
+		color: #c2410c;
+		border-color: rgba(234, 88, 12, 0.3);
 	}
 	.header-title-group { display: flex; flex-direction: column; gap: 0.15rem; }
 	h1 {
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.65rem;
 		font-weight: 700;
-		color: #ea580c;
+		color: #c2410c;
 		letter-spacing: 0.12em;
 		text-transform: uppercase;
-		background: rgba(249, 115, 22, 0.08);
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0.2rem 0.6rem;
 		border-radius: 5px;
 		align-self: flex-start;
@@ -152,7 +152,7 @@
 		line-height: 1;
 	}
 	.header-sub {
-		font-family: 'Geist', Georgia, serif;
+		font-family: var(--font-sans);
 		font-size: 1.2rem;
 		font-weight: 500;
 		color: var(--fm-text);
@@ -180,9 +180,9 @@
 		border: 1px solid var(--fm-border);
 	}
 	.btn-outline:hover {
-		border-color: rgba(249, 115, 22, 0.3);
-		background: rgba(249, 115, 22, 0.04);
-		color: #ea580c;
+		border-color: rgba(234, 88, 12, 0.3);
+		background: rgba(234, 88, 12, 0.04);
+		color: #c2410c;
 	}
 
 	.page-content {
@@ -257,7 +257,7 @@
 	}
 	:global(.fm-value) { font-size: 13px; color: var(--fm-text); line-height: 1.5; }
 	:global(.fm-block) { white-space: pre-wrap; }
-	:global(.fm-mono) { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 12px; }
+	:global(.fm-mono) { font-family: var(--font-mono); font-size: 12px; }
 	:global(.fm-muted-text) { font-size: 12px; color: var(--fm-muted); }
 	:global(.fm-small) { font-size: 10.5px; }
 	:global(.fm-detail-text) { font-size: 12px; color: var(--fm-text-secondary); margin-top: 6px; }
@@ -337,7 +337,7 @@
 
 	.badges-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 1rem; }
 	.badge {
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.65rem;
 		font-weight: 700;
 		padding: 0.25rem 0.6rem;
@@ -450,9 +450,9 @@
 		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 	}
 	.btn-footer-back:hover {
-		background: rgba(249, 115, 22, 0.04);
-		border-color: rgba(249, 115, 22, 0.3);
-		color: #ea580c;
+		background: rgba(234, 88, 12, 0.04);
+		border-color: rgba(234, 88, 12, 0.3);
+		color: #c2410c;
 	}
 	.btn-footer-back svg { transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94); }
 	.btn-footer-back:hover svg { transform: translateX(-3px); }

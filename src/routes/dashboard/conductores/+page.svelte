@@ -8,10 +8,18 @@
 	import { socketUtils } from '$lib/socket';
 	import { authStore } from '$lib/stores/auth';
 	import { toast } from 'svelte-sonner';
-	import TablaDiasLaborados from '$lib/components/conductores/TablaDiasLaborados.svelte';
 	import FilterDrawer from '$lib/components/ui/FilterDrawer.svelte';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+	import TablaLista from '$lib/components/listing/TablaLista.svelte';
+	import CeldaIdentidad from '$lib/components/listing/CeldaIdentidad.svelte';
+	import EstadoPunto from '$lib/components/listing/EstadoPunto.svelte';
+	import AccionesFila from '$lib/components/listing/AccionesFila.svelte';
+	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
+	import SegmentosFiltro from '$lib/components/listing/SegmentosFiltro.svelte';
+	import { mascota } from '$lib/mascot';
+	import { Eye, EyeOff, Route, RotateCcw, Trash2 } from 'lucide-svelte';
+	import type { ColumnDef } from '@tanstack/table-core';
 	import { crearListingStore } from '$lib/listing/listingStore';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
 	import {
@@ -26,12 +34,7 @@
 
 	type VistaActual = 'ACTIVOS' | 'OCULTOS' | 'PAPELERA';
 	type EstadoConductor =
-		| 'TODOS'
-		| 'ACTIVO'
-		| 'INACTIVO'
-		| 'VACACIONES'
-		| 'INCAPACITADO'
-		| 'RETIRADO';
+		'TODOS' | 'ACTIVO' | 'INACTIVO' | 'VACACIONES' | 'INCAPACITADO' | 'RETIRADO';
 
 	interface Conductor {
 		id: string;
@@ -54,8 +57,6 @@
 		oculto?: boolean;
 	}
 
-	type VistaTab = 'lista' | 'calendario';
-
 	/**
 	 * Filtros de la página.
 	 *
@@ -65,7 +66,8 @@
 	 * que compartir una vista siempre devolvía a la primera página.
 	 */
 	interface FiltrosConductores {
-		/** Pestaña: `lista` | `calendario`. */
+		/** Siempre `lista`. `calendario` era la tabla clásica de recorridos y
+		 * ahora redirige al canvas; se lee solo para eso. */
 		vista: string;
 		q: string;
 		estado: string;
@@ -104,29 +106,23 @@
 
 	/// Atajos de lectura, para no cambiar todo el marcado de golpe.
 	const vistaActual = $derived(filtros.vista_lista as VistaActual);
-	const vistaTab = $derived(filtros.vista as VistaTab);
 
-	const isAdmin = $derived(
-		$authStore.user?.role === 'admin' || $authStore.user?.rol === 'admin'
-	);
+	const isAdmin = $derived($authStore.user?.role === 'admin' || $authStore.user?.rol === 'admin');
 	const isOperaciones = $derived($authStore.user?.area?.includes('operaciones'));
 	const isTalentoHumano = $derived($authStore.user?.area?.includes('talento_humano'));
 	const canAccessSpecialViews = $derived(isAdmin || isOperaciones || isTalentoHumano);
-	// Permiso individual para gestionar bonos de planilla (no por área)
-	const canManageBonos = $derived($authStore.user?.permisos?.['bonos-planilla'] === true);
 
 	// ══════════════════════════════════════════════════════
 	//  URL PARAMS: sincroniza el estado del page con la URL
 	//  para que sea compartible / bookmarkable.
 	//
 	//  Soporta:
-	//    ?vista=lista|calendario
+	//    ?vista=calendario  → enlace antiguo: redirige al canvas de recorridos
 	//    ?q=juan           → búsqueda libre del tab lista
 	//    ?estado=ACTIVO
 	//    ?sede=YOPAL
 	//    ?vista_lista=ACTIVOS|OCULTOS|PAPELERA
-	//    ?conductor=<id>   → cuando se navega desde un conductor
-	//                        específico al tab de recorridos
+	//    ?conductor=<id>   → acompaña a `vista=calendario`; viaja al canvas
 	// ══════════════════════════════════════════════════════
 	/**
 	 * Filtros → URL.
@@ -137,14 +133,22 @@
 	 * quedaba siempre con la URL de carga — y `cambiarVista()` decidía si
 	 * conservar los filtros consultando esa URL obsoleta.
 	 */
+	/// `?vista=calendario` era la tabla clásica de recorridos, que ya no se
+	/// monta aquí. Un enlace guardado con ella va al canvas, con el conductor
+	/// si venía uno, y sin dejar rastro en el historial.
+	const vaAlCanvas = $derived(filtros.vista === 'calendario');
 	$effect(() => {
-		estadoUrl.escribir(pageState.url, filtros);
+		if (!vaAlCanvas) return;
+		const conductor = pageState.url.searchParams.get('conductor');
+		goto(`/dashboard/conductores/recorridos${conductor ? `?conductor=${conductor}` : ''}`, {
+			replaceState: true
+		});
 	});
 
-	// Leer conductor_id del URL para pasarlo a TablaDiasLaborados
-	/// Parámetro ajeno a los filtros: lo pone quien abre el detalle de un
-	/// conductor. El núcleo lo conserva al reescribir la URL.
-	const urlConductorId = $derived(pageState.url.searchParams.get('conductor') || '');
+	$effect(() => {
+		if (vaAlCanvas) return;
+		estadoUrl.escribir(pageState.url, filtros);
+	});
 
 	// Estados para modo selección
 	let conductoresSeleccionados = $state(new Set<string>());
@@ -254,7 +258,7 @@
 	const getEstadoColor = (estado: string) => {
 		switch (estado?.toUpperCase()) {
 			case 'ACTIVO':
-				return '#10b981'; // emerald-500
+				return '#16a34a'; // emerald-500
 			case 'INACTIVO':
 				return '#6b7280'; // gray-500
 			case 'VACACIONES':
@@ -281,9 +285,55 @@
 			case 'RETIRADO':
 				return 'Retirado';
 			default:
-				return estado || 'Sin estado';
+				return estado
+					? estado.charAt(0).toUpperCase() + estado.slice(1).toLowerCase()
+					: 'Sin estado';
 		}
 	};
+
+	const COLUMNAS: ColumnDef<Conductor, any>[] = [
+		{ id: 'conductor', header: 'Conductor', accessorKey: 'nombre', enableSorting: false },
+		{ id: 'sede', header: 'Sede · Cargo', enableSorting: false, size: 180 },
+		{ id: 'contacto', header: 'Contacto', enableSorting: false },
+		{ id: 'estado', header: 'Estado', accessorKey: 'estado', enableSorting: false, size: 150 },
+		{ id: 'acciones', header: '', enableSorting: false, size: 150 }
+	];
+
+	const SEGMENTOS_ESTADO = [
+		{ valor: 'TODOS', etiqueta: 'Todos' },
+		{ valor: 'ACTIVO', etiqueta: 'Activos', punto: '#16a34a' },
+		{ valor: 'INACTIVO', etiqueta: 'Inactivos', punto: '#64748b' },
+		{ valor: 'VACACIONES', etiqueta: 'Vacaciones', punto: '#3b82f6' },
+		{ valor: 'INCAPACITADO', etiqueta: 'Incapacitados', punto: '#f59e0b' },
+		{ valor: 'RETIRADO', etiqueta: 'Retirados', punto: '#ef4444' }
+	];
+
+	const SEGMENTOS_SEDE = [
+		{ valor: 'TODOS', etiqueta: 'Todas' },
+		{ valor: 'YOPAL', etiqueta: 'Yopal' },
+		{ valor: 'VILLANUEVA', etiqueta: 'Villanueva' }
+	];
+
+	const conteos = $derived([
+		{ clave: 'TODOS', etiqueta: 'Total', valor: stats.total },
+		{ clave: 'ACTIVO', etiqueta: 'Activos', valor: stats.activos, color: '#16a34a' },
+		{ clave: 'INACTIVO', etiqueta: 'Inactivos', valor: stats.inactivos, color: '#64748b' },
+		{ clave: 'VACACIONES', etiqueta: 'Vacaciones', valor: stats.vacaciones, color: '#3b82f6' },
+		{
+			clave: 'INCAPACITADO',
+			etiqueta: 'Incapacitados',
+			valor: stats.incapacitados,
+			color: '#f59e0b'
+		},
+		{ clave: 'RETIRADO', etiqueta: 'Retirados', valor: stats.retirados, color: '#ef4444' }
+	]);
+
+	/** Un conductor solo, por la misma vía que las acciones masivas. */
+	function accionIndividual(id: string, accion: 'ocultar' | 'mostrar' | 'restaurar') {
+		conductoresSeleccionados.clear();
+		conductoresSeleccionados.add(id);
+		ejecutarAccionMasiva(accion);
+	}
 
 	async function traerConductores(): Promise<{ items: Conductor[]; total: number }> {
 		const params = {
@@ -318,19 +368,13 @@
 		) {
 			const conductores = items;
 			stats.total = total;
-					stats.activos = conductores.filter((c) => c.estado?.toUpperCase() === 'ACTIVO').length;
-					stats.inactivos = conductores.filter(
-						(c) => c.estado?.toUpperCase() === 'INACTIVO'
-					).length;
-					stats.vacaciones = conductores.filter(
-						(c) => c.estado?.toUpperCase() === 'VACACIONES'
-					).length;
-					stats.incapacitados = conductores.filter(
-						(c) => c.estado?.toUpperCase() === 'INCAPACITADO'
-					).length;
-			stats.retirados = conductores.filter(
-				(c) => c.estado?.toUpperCase() === 'RETIRADO'
+			stats.activos = conductores.filter((c) => c.estado?.toUpperCase() === 'ACTIVO').length;
+			stats.inactivos = conductores.filter((c) => c.estado?.toUpperCase() === 'INACTIVO').length;
+			stats.vacaciones = conductores.filter((c) => c.estado?.toUpperCase() === 'VACACIONES').length;
+			stats.incapacitados = conductores.filter(
+				(c) => c.estado?.toUpperCase() === 'INCAPACITADO'
 			).length;
+			stats.retirados = conductores.filter((c) => c.estado?.toUpperCase() === 'RETIRADO').length;
 		}
 
 		return { items, total };
@@ -348,10 +392,7 @@
 		await listaConductores.cargar(firmaDatos, traerConductores);
 	}
 
-	function ponerFiltro<K extends keyof FiltrosConductores>(
-		clave: K,
-		valor: FiltrosConductores[K]
-	) {
+	function ponerFiltro<K extends keyof FiltrosConductores>(clave: K, valor: FiltrosConductores[K]) {
 		filtros = { ...filtros, [clave]: valor, pagina: 1 };
 	}
 
@@ -363,8 +404,7 @@
 	 * `position: fixed` de su shell queda encajado en un contenedor con padding
 	 * y la hoja sale recortada.
 	 *
-	 * La tabla clásica sigue existiendo en `?vista=calendario` para quien la
-	 * tenga guardada, pero ya no hay botón que lleve a ella.
+	 * La tabla clásica (`?vista=calendario`) se retiró: ese enlace redirige aquí.
 	 */
 	function irAlCanvasDeRecorridos(conductorId?: string) {
 		// Sin fechas: el canvas abre el corte 21→20 vivo, que es lo que
@@ -500,10 +540,8 @@
 	});
 
 	// ═══════════════════════════════
-	// SOCKET: refrescar calendario y tabla en tiempo real
+	// SOCKET: refrescar la lista en tiempo real
 	// ═══════════════════════════════
-	let tablaRefreshKey = $state(0);
-	let calendarRefreshKey = 0;
 
 	function notificarWeb(titulo: string, cuerpo: string, tag = 'dias-laborados') {
 		if (!browser) return;
@@ -540,20 +578,9 @@
 			);
 		}
 
-		// Refrescar la tabla de días laborados (que internamente escucha el socket
-		// también, pero forzamos recarga para que la lista de conductores del filtro
-		// se actualice si es uno nuevo).
-		if (vistaTab === 'calendario') {
-			tablaRefreshKey++;
-		}
-
-		// Si el registro es del mes actual de la tabla, recargar
-		if (vistaTab === 'lista') {
-			cargar(true);
-		}
+		// La lista se recarga por si el conductor es nuevo o cambió de estado.
+		cargar(true);
 	}
-
-
 
 	let bajasSocket: Array<() => void> = [];
 
@@ -564,7 +591,9 @@
 
 	onMount(() => {
 		bajasSocket.push(socketUtils.on('conductores:actualizacion-masiva', () => cargar(true)));
-		bajasSocket.push(socketUtils.on('dias-laborados:registro-actualizado', handleRegistroActualizado));
+		bajasSocket.push(
+			socketUtils.on('dias-laborados:registro-actualizado', handleRegistroActualizado)
+		);
 
 		// Pedir permiso para notificaciones web (silencioso, no molesta)
 		if (browser && typeof Notification !== 'undefined' && Notification.permission === 'default') {
@@ -575,8 +604,8 @@
 	onDestroy(() => {
 		/// Se dan de baja solo NUESTROS listeners. El `off('evento')` que había
 		/// aquí se llevaba por delante el de `dias-laborados:registro-actualizado`
-		/// de TablaDiasLaborados.svelte, que dejaba de actualizarse al salir de
-		/// esta página sin que nada lo avisara.
+		/// del canvas de recorridos, que dejaba de actualizarse al salir de esta
+		/// página sin que nada lo avisara.
 		for (const baja of bajasSocket) baja();
 		bajasSocket = [];
 	});
@@ -586,18 +615,39 @@
 	<title>Conductores — Cotransmeq</title>
 </svelte:head>
 
-<div class="flex h-full min-h-0 flex-col gap-4 p-6" in:fade={{ duration: 400 }}>
-	<!-- ── HEADER (page-card editorial) ─────────────────────── -->
-	<div class="page-card flex-shrink-0" style="padding: 1.25rem 1.5rem;">
-		<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-			<!-- Título -->
-			<div class="flex items-center gap-3">
-				<div
-					class="brand-gradient flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
-					style="box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);"
+<div class="dir-pagina {shiftPressed ? 'select-none' : ''}" in:fade={{ duration: 400 }}>
+	<!-- ── CABECERA: título, conteos y acciones ─────────────── -->
+	<header class="page-card dir-cabecera" style="padding: 1.25rem 1.5rem;">
+		<div class="dir-cabecera-texto">
+			<h1 class="dir-titulo">Conductores</h1>
+			<p class="dir-desc">Administra y supervisa todo el personal de conducción.</p>
+			{#if vistaActual === 'ACTIVOS'}
+				<div class="dir-conteos">
+					<ResumenConteos
+						{conteos}
+						activo={filtros.estado === 'TODOS' ? null : filtros.estado}
+						onElegir={(clave) => ponerFiltro('estado', filtros.estado === clave ? 'TODOS' : clave)}
+					/>
+				</div>
+			{/if}
+		</div>
+
+		<div class="dir-cabecera-acciones">
+			<!-- Lista / Recorridos -->
+			<div
+				class="inline-flex gap-1 rounded-xl p-1"
+				style="background-color: var(--bg-base); border: 1px solid var(--border-default);"
+				role="tablist"
+			>
+				<button
+					onclick={() => ponerFiltro('vista', 'lista')}
+					class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold"
+					style="background-color: white; color: var(--emerald-800); box-shadow: 0 1px 3px rgba(0,0,0,0.06);"
+					role="tab"
+					aria-selected="true"
 				>
 					<svg
-						class="h-5 w-5 text-white"
+						class="h-3.5 w-3.5"
 						fill="none"
 						stroke="currentColor"
 						viewBox="0 0 24 24"
@@ -606,176 +656,110 @@
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
-							d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+							d="M4 6h16M4 10h16M4 14h16M4 18h16"
 						/>
 					</svg>
-				</div>
-				<div>
-					<div class="flex items-center gap-2">
-						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 400;">
-							Gestión de Conductores
-						</h1>
-						<!-- Aquí había un chip «En vivo» pintado a mano, sin mirar el socket:
-						     decía «En vivo» también con la conexión caída. El estado real lo
-						     muestra el header, junto al nombre de la sección. -->
-					</div>
-					<p class="text-xs" style="color: var(--text-muted);">
-						Administra y supervisa todo el personal de conducción
-					</p>
-				</div>
+					Lista
+				</button>
+				<button
+					onclick={() => irAlCanvasDeRecorridos()}
+					class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold"
+					style="background-color: transparent; color: var(--text-secondary);"
+					role="tab"
+					aria-selected="false"
+				>
+					<svg
+						class="h-3.5 w-3.5"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+						stroke-width="1.8"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+						/>
+					</svg>
+					Recorridos
+				</button>
 			</div>
 
-			<!-- Búsqueda + acciones -->
-			<div class="flex flex-wrap items-center gap-2">
-				<!-- Tabs Lista / Recorridos (segmented) -->
-				<div
-					class="inline-flex gap-1 rounded-xl p-1"
-					style="background-color: var(--bg-base); border: 1px solid var(--border-default);"
-					role="tablist"
-				>
-					<button
-						onclick={() => ponerFiltro('vista', 'lista')}
-						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold"
-						style="background-color: {vistaTab === 'lista' ? 'white' : 'transparent'};
-							color: {vistaTab === 'lista' ? 'var(--emerald-700)' : 'var(--text-secondary)'};
-							box-shadow: {vistaTab === 'lista' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none'};"
-						role="tab"
-						aria-selected={vistaTab === 'lista'}
-					>
-						<svg
-							class="h-3.5 w-3.5"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-							stroke-width="1.8"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M4 6h16M4 10h16M4 14h16M4 18h16"
-							/>
-						</svg>
-						Lista
-					</button>
-					<button
-						onclick={() => irAlCanvasDeRecorridos()}
-						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold"
-						style="background-color: {vistaTab === 'calendario' ? 'white' : 'transparent'};
-							color: {vistaTab === 'calendario' ? 'var(--emerald-700)' : 'var(--text-secondary)'};
-							box-shadow: {vistaTab === 'calendario' ? '0 1px 3px rgba(0,0,0,0.06)' : 'none'};"
-						role="tab"
-						aria-selected={vistaTab === 'calendario'}
-					>
-						<svg
-							class="h-3.5 w-3.5"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-							stroke-width="1.8"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-							/>
-						</svg>
-						Recorridos
-					</button>
-				</div>
-
-				<!-- Vistas Rápidas (Icon Buttons) -->
-				{#if canAccessSpecialViews}
-					<div class="mr-1 flex items-center gap-1">
-						<button
-							onclick={() => cambiarVista(vistaActual === 'OCULTOS' ? 'ACTIVOS' : 'OCULTOS')}
-							title={vistaActual === 'OCULTOS' ? 'Ver Activos' : 'Ver Ocultos'}
-							class="btn-icon"
-							style="border-color: {vistaActual === 'OCULTOS'
-								? '#f59e0b'
-								: 'var(--border-default)'}; background-color: {vistaActual === 'OCULTOS'
-								? 'rgba(245,158,11,0.06)'
-								: 'white'}; color: {vistaActual === 'OCULTOS' ? '#b45309' : 'var(--text-muted)'};"
-						>
-							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
-								/>
-							</svg>
-						</button>
-						<button
-							onclick={() => cambiarVista(vistaActual === 'PAPELERA' ? 'ACTIVOS' : 'PAPELERA')}
-							title={vistaActual === 'PAPELERA' ? 'Ver Activos' : 'Ver Papelera'}
-							class="btn-icon"
-							style="border-color: {vistaActual === 'PAPELERA'
-								? '#dc2626'
-								: 'var(--border-default)'}; background-color: {vistaActual === 'PAPELERA'
-								? 'rgba(220,38,38,0.06)'
-								: 'white'}; color: {vistaActual === 'PAPELERA' ? '#dc2626' : 'var(--text-muted)'};"
-						>
-							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-								/>
-							</svg>
-						</button>
-					</div>
-				{/if}
-
-			<!-- Acciones del LISTADO (solo visibles en tab 'lista') -->
-			{#if vistaTab === 'lista'}
-				<!-- Búsqueda -->
-				<div class="w-64">
-					<BuscadorLista
-						valor={filtros.q}
-						onBuscar={(termino) => ponerFiltro('q', termino)}
-						placeholder="Buscar conductores…"
-						etiqueta="Buscar conductores"
-					/>
-				</div>
-
-				<!-- Filtros -->
+			<!-- Vistas rápidas: ocultos y papelera -->
+			{#if canAccessSpecialViews}
 				<button
-					onclick={() => (mostrarFiltros = !mostrarFiltros)}
-					class="btn-secondary"
-					style="border-color: {mostrarFiltros
-						? 'var(--emerald-500)'
-						: 'var(--border-default)'}; color: {mostrarFiltros
-						? 'var(--emerald-700)'
-						: 'var(--text-secondary)'}; background-color: {mostrarFiltros
-						? 'rgba(16,185,129,0.04)'
-						: 'white'};"
+					onclick={() => cambiarVista(vistaActual === 'OCULTOS' ? 'ACTIVOS' : 'OCULTOS')}
+					title={vistaActual === 'OCULTOS' ? 'Ver activos' : 'Ver ocultos'}
+					class="btn-icon"
+					style="border-color: {vistaActual === 'OCULTOS'
+						? '#f59e0b'
+						: 'var(--border-default)'}; background-color: {vistaActual === 'OCULTOS'
+						? 'rgba(245,158,11,0.06)'
+						: 'white'}; color: {vistaActual === 'OCULTOS' ? '#b45309' : 'var(--text-muted)'};"
 				>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
-							d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+							d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
 						/>
 					</svg>
-					Filtros
-					{#if numFiltrosActivos > 0}
-						<span
-							class="flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white"
-							style="background-color: var(--emerald-500);">!</span
-						>
-					{/if}
 				</button>
-
-				<!-- Nuevo -->
-				{#if puedeEditar}
-					<button onclick={() => goto('/dashboard/conductores/agregar')} class="btn-primary">
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-						</svg>
-						Nuevo Conductor
-					</button>
-				{/if}
+				<button
+					onclick={() => cambiarVista(vistaActual === 'PAPELERA' ? 'ACTIVOS' : 'PAPELERA')}
+					title={vistaActual === 'PAPELERA' ? 'Ver activos' : 'Ver papelera'}
+					class="btn-icon"
+					style="border-color: {vistaActual === 'PAPELERA'
+						? '#dc2626'
+						: 'var(--border-default)'}; background-color: {vistaActual === 'PAPELERA'
+						? 'rgba(220,38,38,0.06)'
+						: 'white'}; color: {vistaActual === 'PAPELERA' ? '#dc2626' : 'var(--text-muted)'};"
+				>
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+						/>
+					</svg>
+				</button>
 			{/if}
-			</div>
+
+			<button
+				onclick={() => (mostrarFiltros = !mostrarFiltros)}
+				class="btn-secondary"
+				style="border-color: {mostrarFiltros
+					? 'var(--emerald-500)'
+					: 'var(--border-default)'}; color: {mostrarFiltros
+					? 'var(--emerald-800)'
+					: 'var(--text-secondary)'}; background-color: {mostrarFiltros
+					? 'var(--au-tint)'
+					: 'white'};"
+			>
+				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+					/>
+				</svg>
+				Filtros
+				{#if numFiltrosActivos > 0}
+					<span
+						class="flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white"
+						style="background-color: var(--emerald-500);">!</span
+					>
+				{/if}
+			</button>
+
+			{#if puedeEditar}
+				<button onclick={() => goto('/dashboard/conductores/agregar')} class="btn-primary">
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+					</svg>
+					Nuevo conductor
+				</button>
+			{/if}
 		</div>
 
 		<!-- Panel de filtros (drawer lateral) — siempre montado para que las
@@ -858,11 +842,7 @@
 			</div>
 
 			<div slot="footer">
-				<button
-					class="filter-clear"
-					onclick={limpiarFiltros}
-					disabled={activeFilters.length === 0}
-				>
+				<button class="filter-clear" onclick={limpiarFiltros} disabled={activeFilters.length === 0}>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"
 						><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg
 					>
@@ -876,560 +856,160 @@
 				</button>
 			</div>
 		</FilterDrawer>
+	</header>
+
+	<!-- ── FILTROS A LA VISTA: buscador + estado + sede ────── -->
+	<div class="dir-filtros" in:fly={{ y: 12, duration: 400, delay: 100 }}>
+		<div class="dir-filtros-buscador">
+			<BuscadorLista
+				valor={filtros.q}
+				onBuscar={(termino) => ponerFiltro('q', termino)}
+				placeholder="Nombre, cédula, teléfono o correo…"
+				etiqueta="Buscar conductores"
+			/>
+		</div>
+		<SegmentosFiltro
+			etiqueta="Estado"
+			opciones={SEGMENTOS_ESTADO}
+			valor={filtros.estado}
+			onCambiar={(v) => ponerFiltro('estado', v)}
+		/>
+		<SegmentosFiltro
+			etiqueta="Sede"
+			opciones={SEGMENTOS_SEDE}
+			valor={filtros.sede}
+			onCambiar={(v) => ponerFiltro('sede', v)}
+		/>
 	</div>
 
-	{#if vistaTab === 'lista'}
-		<!-- ── STATS CARDS (estilo landing, radius 16) ────────── -->
-		{#if vistaActual === 'ACTIVOS'}
-			<div
-				class="grid flex-shrink-0 grid-cols-3 gap-3 lg:grid-cols-6"
-				in:fly={{ y: 12, duration: 400, delay: 100 }}
+	<!-- ── LISTA ───────────────────────────────────────────── -->
+	<div class="dir-lista" in:fly={{ y: 12, duration: 400, delay: 150 }}>
+		<div class="dir-lista-scroll">
+			<TablaLista
+				columnas={COLUMNAS}
+				datos={conductores}
+				claveFila={(c) => c.id}
+				cargando={isLoading}
+				onFila={(c) => goto(`/dashboard/conductores/${c.id}`)}
+				etiqueta="Conductores"
 			>
-				<!-- Total -->
-				<div class="stat-card">
-					<div class="flex items-center justify-between">
-						<div>
-							<p class="stat-label">Total</p>
-							<p class="stat-value">{stats.total}</p>
-						</div>
-						<div
-							class="flex h-7 w-7 items-center justify-center rounded-lg"
-							style="background: linear-gradient(135deg, #6b6b6b, #4a4a4a);"
-						>
-							<svg
-								class="h-3.5 w-3.5 text-white"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								stroke-width="1.8"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+				{#snippet celda({ columnaId, fila: c })}
+					{#if columnaId === 'conductor'}
+						<div class="flex items-center">
+							<span class="dir-check">
+								<input
+									type="checkbox"
+									checked={conductoresSeleccionados.has(c.id)}
+									onclick={(e) => {
+										e.stopPropagation();
+										toggleSeleccion(c.id, conductores.indexOf(c), e);
+									}}
+									aria-label="Seleccionar {c.nombre} {c.apellido}"
 								/>
-							</svg>
-						</div>
-					</div>
-				</div>
-				<!-- Activos -->
-				<button
-					onclick={() => ponerFiltro('estado', 'ACTIVO')}
-					class="stat-card apple-transition text-left"
-					style="border-color: {filtros.estado === 'ACTIVO'
-						? 'var(--emerald-500)'
-						: 'var(--border-subtle)'}; background-color: {filtros.estado === 'ACTIVO'
-						? 'rgba(16,185,129,0.04)'
-						: 'var(--bg-surface)'};"
-				>
-					<div class="flex items-center justify-between">
-						<div>
-							<p class="stat-label">Activos</p>
-							<p class="stat-value" style="color: var(--emerald-600);">{stats.activos}</p>
-						</div>
-						<div
-							class="flex h-7 w-7 items-center justify-center rounded-lg"
-							style="background-color: var(--emerald-500);"
-						>
-							<svg
-								class="h-3.5 w-3.5 text-white"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								stroke-width="1.8"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-								/>
-							</svg>
-						</div>
-					</div>
-				</button>
-				<!-- Inactivos -->
-				<button
-					onclick={() => ponerFiltro('estado', 'INACTIVO')}
-					class="stat-card apple-transition text-left"
-					style="border-color: {filtros.estado === 'INACTIVO'
-						? '#6b6b6b'
-						: 'var(--border-subtle)'}; background-color: {filtros.estado === 'INACTIVO'
-						? 'rgba(107,107,107,0.04)'
-						: 'var(--bg-surface)'};"
-				>
-					<div class="flex items-center justify-between">
-						<div>
-							<p class="stat-label">Inactivos</p>
-							<p class="stat-value" style="color: #6b6b6b;">{stats.inactivos}</p>
-						</div>
-						<div
-							class="flex h-7 w-7 items-center justify-center rounded-lg"
-							style="background-color: #6b6b6b;"
-						>
-							<svg
-								class="h-3.5 w-3.5 text-white"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								stroke-width="1.8"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
-								/>
-							</svg>
-						</div>
-					</div>
-				</button>
-				<!-- Vacaciones -->
-				<button
-					onclick={() => ponerFiltro('estado', 'VACACIONES')}
-					class="stat-card apple-transition text-left"
-					style="border-color: {filtros.estado === 'VACACIONES'
-						? '#3b82f6'
-						: 'var(--border-subtle)'}; background-color: {filtros.estado === 'VACACIONES'
-						? 'rgba(59,130,246,0.04)'
-						: 'var(--bg-surface)'};"
-				>
-					<div class="flex items-center justify-between">
-						<div>
-							<p class="stat-label">Vacaciones</p>
-							<p class="stat-value" style="color: #3b82f6;">{stats.vacaciones}</p>
-						</div>
-						<div
-							class="flex h-7 w-7 items-center justify-center rounded-lg"
-							style="background-color: #3b82f6;"
-						>
-							<svg
-								class="h-3.5 w-3.5 text-white"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								stroke-width="1.8"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"
-								/>
-							</svg>
-						</div>
-					</div>
-				</button>
-				<!-- Incapacitados -->
-				<button
-					onclick={() => ponerFiltro('estado', 'INCAPACITADO')}
-					class="stat-card apple-transition text-left"
-					style="border-color: {filtros.estado === 'INCAPACITADO'
-						? '#f59e0b'
-						: 'var(--border-subtle)'}; background-color: {filtros.estado === 'INCAPACITADO'
-						? 'rgba(245,158,11,0.04)'
-						: 'var(--bg-surface)'};"
-				>
-					<div class="flex items-center justify-between">
-						<div>
-							<p class="stat-label">Incapacitados</p>
-							<p class="stat-value" style="color: #f59e0b;">{stats.incapacitados}</p>
-						</div>
-						<div
-							class="flex h-7 w-7 items-center justify-center rounded-lg"
-							style="background-color: #f59e0b;"
-						>
-							<svg
-								class="h-3.5 w-3.5 text-white"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								stroke-width="1.8"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 17c-.77 1.333.192 3 1.732 3z"
-								/>
-							</svg>
-						</div>
-					</div>
-				</button>
-				<!-- Retirados -->
-				<button
-					onclick={() => ponerFiltro('estado', 'RETIRADO')}
-					class="stat-card apple-transition text-left"
-					style="border-color: {filtros.estado === 'RETIRADO'
-						? '#dc2626'
-						: 'var(--border-subtle)'}; background-color: {filtros.estado === 'RETIRADO'
-						? 'rgba(220,38,38,0.04)'
-						: 'var(--bg-surface)'};"
-				>
-					<div class="flex items-center justify-between">
-						<div>
-							<p class="stat-label">Retirados</p>
-							<p class="stat-value" style="color: #dc2626;">{stats.retirados}</p>
-						</div>
-						<div
-							class="flex h-7 w-7 items-center justify-center rounded-lg"
-							style="background-color: #dc2626;"
-						>
-							<svg
-								class="h-3.5 w-3.5 text-white"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								stroke-width="1.8"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M13 7a4 4 0 11-8 0 4 4 0 018 0zM9 14a6 6 0 00-6 6v1h12v-1a6 6 0 00-6-6zM21 12h-6"
-								/>
-							</svg>
-						</div>
-					</div>
-				</button>
-			</div>
-		{/if}
-
-		<!-- ── TABLA (table-card editorial) ──────────────────── -->
-		<div
-			class="table-card flex min-h-0 flex-1 flex-col {shiftPressed ? 'select-none' : ''}"
-			in:fly={{ y: 12, duration: 400, delay: 150 }}
-		>
-			{#if isLoading}
-				<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12">
-					<div class="spinner" style="width: 2.5rem; height: 2.5rem; border-width: 4px;"></div>
-					<p class="text-sm" style="color: var(--text-muted);">Cargando conductores…</p>
-				</div>
-			{:else if conductores.length === 0}
-				<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12">
-					<div
-						class="flex h-14 w-14 items-center justify-center rounded-2xl"
-						style="background-color: var(--bg-base);"
-					>
-						<svg
-							class="h-7 w-7"
-							style="color: var(--text-very-muted);"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-							stroke-width="1.8"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
+							</span>
+							<CeldaIdentidad
+								titulo="{c.nombre} {c.apellido}"
+								subtitulo="{c.tipo_identificacion || 'CC'} {c.numero_identificacion}"
+								foto={c.foto_signed_url}
+								punto={getEstadoColor(c.estado)}
 							/>
-						</svg>
-					</div>
-					<div class="text-center">
-						<h3 class="mb-1 font-display text-lg" style="color: var(--bg-charcoal);">
-							No hay conductores
-						</h3>
-						<p class="text-sm" style="color: var(--text-muted);">
-							{filtros.q || filtros.estado !== 'TODOS'
-								? 'No se encontraron resultados con los filtros aplicados'
-								: 'Comienza registrando un nuevo conductor'}
-						</p>
-					</div>
-					{#if filtros.q || filtros.estado !== 'TODOS'}
-						<button onclick={limpiarFiltros} class="btn-primary">Limpiar filtros</button>
+						</div>
+					{:else if columnaId === 'sede'}
+						<div class="dir-celda">
+							{#if c.sede_trabajo}<span>{c.sede_trabajo}</span>{:else}<span class="dir-nulo"
+									>Sin sede</span
+								>{/if}
+							<small>{c.cargo || 'Conductor'}</small>
+						</div>
+					{:else if columnaId === 'contacto'}
+						<div class="dir-celda">
+							{#if c.telefono}<span>{c.telefono}</span>{:else}<span class="dir-nulo"
+									>Sin teléfono</span
+								>{/if}
+							{#if c.email}<small>{c.email}</small>{/if}
+						</div>
+					{:else if columnaId === 'estado'}
+						<EstadoPunto
+							etiqueta={getEstadoText(c.estado)}
+							color={getEstadoColor(c.estado)}
+							apagado={['INACTIVO', 'RETIRADO'].includes(c.estado?.toUpperCase())}
+						/>
+					{:else if columnaId === 'acciones'}
+						<AccionesFila
+							acciones={[
+								{
+									id: 'recorridos',
+									etiqueta: 'Ver recorridos / bonos de planilla',
+									icono: Route,
+									onClick: () => irAlCanvasDeRecorridos(c.id)
+								},
+								{
+									id: 'ver',
+									etiqueta: 'Ver detalle',
+									icono: Eye,
+									onClick: () => goto(`/dashboard/conductores/${c.id}`)
+								},
+								{
+									id: 'ocultar',
+									etiqueta: 'Ocultar',
+									icono: EyeOff,
+									onClick: () => accionIndividual(c.id, 'ocultar'),
+									oculta: !puedeEditar || vistaActual !== 'ACTIVOS'
+								},
+								{
+									id: 'mostrar',
+									etiqueta: 'Mostrar',
+									icono: Eye,
+									onClick: () => accionIndividual(c.id, 'mostrar'),
+									oculta: !puedeEditar || vistaActual !== 'OCULTOS'
+								},
+								{
+									id: 'restaurar',
+									etiqueta: 'Restaurar',
+									icono: RotateCcw,
+									onClick: () => accionIndividual(c.id, 'restaurar'),
+									oculta: !puedeEditar || vistaActual !== 'PAPELERA'
+								},
+								{
+									id: 'eliminar',
+									etiqueta: 'Eliminar permanentemente',
+									icono: Trash2,
+									onClick: () => eliminarPermanente(c.id),
+									peligrosa: true,
+									oculta: !puedeEditar || vistaActual !== 'PAPELERA'
+								}
+							]}
+						/>
 					{/if}
-				</div>
-			{:else}
-				<!-- Cards grid: 1 col mobile, 2 sm/md, 3 lg, 4 xl -->
-				<div class="min-h-0 flex-1 overflow-y-auto p-3">
-					<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-						{#each conductores as conductor, index (conductor.id)}
-							<article
-								class="list-card"
-								style="border-left: 4px solid {getEstadoColor(conductor.estado)};
-								background-color: {conductoresSeleccionados.has(conductor.id)
-									? 'rgba(16, 185, 129, 0.04)'
-									: 'var(--bg-surface)'};
-								border-color: {conductoresSeleccionados.has(conductor.id)
-									? 'var(--emerald-500)'
-									: 'var(--border-subtle)'};
-								border-left-color: {getEstadoColor(conductor.estado)};"
-								in:fly={{ y: 8, duration: 200, delay: Math.min(index * 20, 200) }}
-								onclick={(e) => toggleSeleccion(conductor.id, index, e)}
-								role="button"
-								tabindex="0"
-							>
-								<!-- Avatar: foto o fallback iniciales -->
-								<div class="flex-shrink-0">
-									<div
-										class="flex h-full w-16 items-center justify-center overflow-hidden rounded-sm"
-										style="border: 1px solid {getEstadoColor(
-											conductor.estado
-										)}30; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);"
-									>
-										{#if conductor.foto_signed_url}
-											<img
-												src={conductor.foto_signed_url}
-												alt="{conductor.nombre} {conductor.apellido}"
-												class="h-full w-full object-cover"
-												loading="lazy"
-											/>
-										{:else}
-											<div
-												class="flex h-full w-full items-center justify-center font-display text-sm font-medium"
-												style="background: linear-gradient(135deg, {getEstadoColor(
-													conductor.estado
-												)}15, {getEstadoColor(conductor.estado)}30); color: {getEstadoColor(
-													conductor.estado
-												)};"
-											>
-												{conductor.nombre[0]}{conductor.apellido[0]}
-											</div>
-										{/if}
-									</div>
-								</div>
+				{/snippet}
 
-								<!-- Contenido principal -->
-								<div class="min-w-0 flex-1">
-									<!-- Header: nombre + status pill -->
-									<div class="mb-1 flex items-start justify-between gap-2">
-										<p
-											class="truncate text-sm leading-snug font-semibold"
-											style="color: var(--text-primary);"
-										>
-											{conductor.nombre}
-											{conductor.apellido}
-										</p>
-									</div>
-
-									<!-- Identificación (mono) + tipo -->
-									<p
-										class="font-mono-meta text-[10px]"
-										style="color: var(--text-very-muted); letter-spacing: 0.05em;"
-									>
-										{conductor.tipo_identificacion || 'CC'} · {conductor.numero_identificacion}
-									</p>
-
-									<!-- Sede + cargo -->
-									<p class="mt-1.5 truncate text-[11px]" style="color: var(--text-secondary);">
-										{conductor.sede_trabajo || 'Sin sede'} · {conductor.cargo || 'CONDUCTOR'}
-									</p>
-
-									<!-- Footer: contacto + email -->
-									<div
-										class="mt-1.5 flex items-center justify-between gap-2 text-[10px]"
-										style="color: var(--text-muted);"
-									>
-										{#if conductor.telefono}
-											<span class="flex items-center gap-1 truncate">
-												<svg
-													class="h-3 w-3 flex-shrink-0"
-													style="color: var(--text-very-muted);"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-													stroke-width="1.8"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-													/>
-												</svg>
-												<span class="truncate">{conductor.telefono}</span>
-											</span>
-										{:else}
-											<span class="italic" style="color: var(--text-very-muted);">Sin teléfono</span
-											>
-										{/if}
-										{#if conductor.email}
-											<span class="truncate" style="color: var(--text-very-muted);"
-												>{conductor.email}</span
-											>
-										{/if}
-									</div>
-								</div>
-
-								<!-- Actions (vertical) -->
-								<div class="flex flex-shrink-0 flex-col gap-1" onclick={(e) => e.stopPropagation()} role="presentation">
-									<button
-										onclick={() => irAlCanvasDeRecorridos(conductor.id)}
-										class="apple-transition rounded-md p-1.5"
-										style="color: #1d4ed8; background-color: rgba(59, 130, 246, 0.08);"
-										title="Ver recorridos / bonos de planilla"
-										aria-label="Ver recorridos del conductor"
-									>
-										<svg
-											class="h-3.5 w-3.5"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-											stroke-width="1.8"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-											/>
-										</svg>
-									</button>
-									<button
-										onclick={() => goto(`/dashboard/conductores/${conductor.id}`)}
-										class="apple-transition rounded-md p-1.5"
-										style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
-										title="Ver detalle"
-									>
-										<svg
-											class="h-3.5 w-3.5"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-											stroke-width="1.8"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-											/>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-											/>
-										</svg>
-									</button>
-									{#if vistaActual === 'OCULTOS'}
-										{#if puedeEditar}
-											<button
-												onclick={() => {
-													conductoresSeleccionados.clear();
-													conductoresSeleccionados.add(conductor.id);
-													ejecutarAccionMasiva('mostrar');
-												}}
-												class="apple-transition rounded-md p-1.5"
-												style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
-												title="Mostrar"
-											>
-												<svg
-													class="h-3.5 w-3.5"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-													stroke-width="1.8"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-													/>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-													/>
-												</svg>
-											</button>
-										{/if}
-									{:else if vistaActual === 'PAPELERA'}
-										{#if puedeEditar}
-											<button
-												onclick={() => {
-													conductoresSeleccionados.clear();
-													conductoresSeleccionados.add(conductor.id);
-													ejecutarAccionMasiva('restaurar');
-												}}
-												class="apple-transition rounded-md p-1.5"
-												style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
-												title="Restaurar"
-											>
-												<svg
-													class="h-3.5 w-3.5"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-													stroke-width="1.8"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-													/>
-												</svg>
-											</button>
-										{/if}
-										{#if puedeEditar}
-											<button
-												onclick={() => eliminarPermanente(conductor.id)}
-												class="apple-transition rounded-md p-1.5"
-												style="color: #dc2626; background-color: rgba(220, 38, 38, 0.06);"
-												title="Eliminar Permanente"
-											>
-												<svg
-													class="h-3.5 w-3.5"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-													stroke-width="1.8"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-													/>
-												</svg>
-											</button>
-										{/if}
-									{:else}
-										{#if puedeEditar}
-											<button
-												onclick={() => {
-													conductoresSeleccionados.clear();
-													conductoresSeleccionados.add(conductor.id);
-													ejecutarAccionMasiva('ocultar');
-												}}
-												class="apple-transition rounded-md p-1.5"
-												style="color: var(--text-very-muted); background-color: var(--bg-base);"
-												title="Ocultar"
-											>
-												<svg
-													class="h-3.5 w-3.5"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-													stroke-width="1.8"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
-													/>
-												</svg>
-											</button>
-										{/if}
-									{/if}
-								</div>
-							</article>
-						{/each}
+				{#snippet vacio()}
+					{@const img = mascota('vacio')}
+					<div class="dir-vacio">
+						<img src={img.src} alt={img.alt} width="418" height="418" />
+						<h3>No hay conductores</h3>
+						<p>
+							{activeFilters.length
+								? 'No se encontraron conductores con los filtros aplicados.'
+								: 'Registra el primer conductor para verlo aquí.'}
+						</p>
+						{#if activeFilters.length}
+							<button onclick={limpiarFiltros} class="btn-secondary">Limpiar filtros</button>
+						{/if}
 					</div>
-				</div>
-
-				<!-- Paginación -->
-				<PaginadorLista
-					pagina={filtros.pagina}
-					total={totalConductores}
-					porPagina={POR_PAGINA}
-					cargando={isLoading}
-					nombreItems="conductores"
-					onCambiar={irPagina}
-				/>
-			{/if}
+				{/snippet}
+			</TablaLista>
 		</div>
-	{/if}
 
-	<!-- ── Vista Tabla de días laborados con marcación de bonos ── -->
-	{#if vistaTab === 'calendario'}
-		<TablaDiasLaborados
-			refreshKey={tablaRefreshKey}
-			conductorIdInicial={urlConductorId || undefined}
-			canManageBonos={canManageBonos}
+		<PaginadorLista
+			pagina={filtros.pagina}
+			total={totalConductores}
+			porPagina={POR_PAGINA}
+			cargando={isLoading}
+			nombreItems="conductores"
+			onCambiar={irPagina}
 		/>
-	{/if}
+	</div>
 
 	<!-- Bulk Actions Bar — fondo charcoal profundo (no glass) -->
 	{#if conductoresSeleccionados.size > 0}
@@ -1570,7 +1150,7 @@
 		<button
 			type="button"
 			class="fixed inset-0 z-[100] cursor-default border-0 p-0"
-			style="background: linear-gradient(135deg, rgba(15, 31, 26, 0.40), rgba(10, 20, 16, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
+			style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.40), rgba(20, 83, 45, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
 			aria-label="Cerrar modal"
 			onclick={cerrarModalEliminar}
 		></button>
@@ -1879,18 +1459,6 @@
 </div>
 
 <style>
-	.glass {
-		background: rgba(255, 255, 255, 0.7);
-		backdrop-filter: blur(10px);
-		-webkit-backdrop-filter: blur(10px);
-	}
-	.soft-shadow {
-		box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.05);
-	}
-	.emerald-glow:hover {
-		box-shadow: 0 0 15px rgba(16, 185, 129, 0.4);
-	}
-
 	.bulk-actions-container {
 		position: fixed;
 		bottom: 2rem;

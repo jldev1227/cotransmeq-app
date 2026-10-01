@@ -416,8 +416,8 @@
 	}
 	.snap-btn:hover:not(:disabled) { background: #f8fafc; }
 	.snap-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-	.snap-btn-primary { background: #059669; border-color: #059669; color: #fff; }
-	.snap-btn-primary:hover:not(:disabled) { background: #047857; }
+	.snap-btn-primary { background: #15803d; border-color: #15803d; color: #fff; }
+	.snap-btn-primary:hover:not(:disabled) { background: #166534; }
 	.snap-btn-danger { background: #b91c1c; border-color: #b91c1c; color: #fff; }
 	.snap-btn-danger:hover:not(:disabled) { background: #991b1b; }
 
@@ -442,7 +442,7 @@
 		cursor: pointer;
 	}
 	.snap-item:hover { background: #f8fafc; }
-	.snap-item-active { background: #ecfdf5; }
+	.snap-item-active { background: #f0fdf4; }
 	.snap-version { font-size: 12px; font-weight: 700; color: #0f172a; }
 	.snap-origen {
 		align-self: flex-start;
@@ -455,7 +455,7 @@
 		background: rgba(0, 0, 0, 0.06);
 		color: #475569;
 	}
-	.snap-origen-manual { background: rgba(16, 185, 129, 0.12); color: #047857; }
+	.snap-origen-manual { background: rgba(22, 163, 74, 0.12); color: #166534; }
 	.snap-origen-revert { background: rgba(185, 28, 28, 0.10); color: #b91c1c; }
 	.snap-meta { font-size: 11px; color: #64748b; }
 
@@ -479,9 +479,9 @@
 		border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 	}
 	.snap-diff td { padding: 5px 8px; border-bottom: 1px solid rgba(0, 0, 0, 0.04); vertical-align: top; }
-	.snap-path { font-family: monospace; color: #334155; word-break: break-all; }
+	.snap-path { font-family: var(--font-mono); color: #334155; word-break: break-all; }
 	.snap-antes { color: #b91c1c; text-decoration: line-through; }
-	.snap-despues { color: #047857; font-weight: 600; }
+	.snap-despues { color: #166534; font-weight: 600; }
 
 	.snap-msg { padding: 16px 18px; font-size: 12.5px; color: #64748b; }
 	.snap-msg-error { color: #b91c1c; }
@@ -494,7 +494,7 @@
 	.snap-confirm p { font-size: 12.5px; color: #7f1d1d; margin: 0 0 8px; }
 	.snap-confirm-hint { font-size: 11.5px; }
 	.snap-confirm code {
-		font-family: monospace;
+		font-family: var(--font-mono);
 		background: rgba(0, 0, 0, 0.07);
 		padding: 1px 5px;
 		border-radius: 3px;

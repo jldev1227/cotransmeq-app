@@ -204,7 +204,7 @@
 	header { align-items: flex-start; gap: 16px; }
 	h2 { margin: 2px 0 3px; font-size: 20px; color: #0f172a; }
 	header p { margin: 0; color: #64748b; font-size: 12px; }
-	.nin-kicker { color: #c2410c; font-weight: 800; letter-spacing: .1em; }
+	.nin-kicker { color: #9a3412; font-weight: 800; letter-spacing: .1em; }
 	.nin-close,
 	.nin-toolbar button {
 		border: 0;
@@ -215,7 +215,7 @@
 	}
 	.nin-toolbar { font-size: 12px; font-weight: 700; color: #475569; }
 	.nin-toolbar div { display: flex; gap: 10px; }
-	.nin-toolbar button { color: #c2410c; text-decoration: underline; }
+	.nin-toolbar button { color: #9a3412; text-decoration: underline; }
 	ul {
 		list-style: none;
 		margin: 0;
@@ -267,6 +267,6 @@
 		cursor: pointer;
 	}
 	.nin-secondary { border: 1px solid #cbd5e1; background: #fff; color: #334155; }
-	.nin-primary { border: 1px solid #ea580c; background: #ea580c; color: #fff; }
+	.nin-primary { border: 1px solid #c2410c; background: #c2410c; color: #fff; }
 	footer button:disabled { opacity: .5; cursor: not-allowed; }
 </style>

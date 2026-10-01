@@ -791,10 +791,11 @@
 		place-items: center;
 		flex-shrink: 0;
 		font-size: 1.125rem;
-		color: var(--text-secondary, #4a4a4a);
-		background: var(--bg-surface, #fff);
-		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
-		border-radius: 12px;
+		color: var(--au-dark, #014339);
+		background: #fff;
+		border: none;
+		border-radius: 14px;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
 		text-decoration: none;
 	}
 
@@ -806,16 +807,21 @@
 	}
 
 	.barra__code {
-		font-family: var(--font-mono, monospace);
-		font-size: 0.625rem;
-		font-weight: 700;
-		color: var(--emerald-700, #047857);
+		display: inline-block;
+		padding: 0.15rem 0.5rem;
+		border-radius: 999px;
+		background: var(--au-tint, #ddf7ea);
+		font-size: 0.62rem;
+		font-weight: 800;
+		letter-spacing: 0.04em;
+		color: var(--au-dark, #014339);
 	}
 
 	.barra__titulo {
-		font-size: 0.875rem;
-		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		font-size: 0.95rem;
+		font-weight: 800;
+		letter-spacing: -0.01em;
+		color: var(--text-primary, #17201d);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -864,10 +870,11 @@
 	}
 
 	.contexto {
-		padding: 0.75rem;
-		background: var(--bg-surface, #fff);
-		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
-		border-radius: 12px;
+		padding: 1rem;
+		background: #fff;
+		border: none;
+		border-radius: 22px;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
 	}
 
 	.contexto__campo {
@@ -904,13 +911,13 @@
 
 	.contexto__input {
 		width: 100%;
-		min-height: 48px;
-		padding: 0.5rem 0.75rem;
+		min-height: 50px;
+		padding: 0.5rem 0.85rem;
 		font: inherit;
 		font-size: 1rem;
-		background: #fff;
-		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
-		border-radius: 10px;
+		background: #f7faf8;
+		border: 1.5px solid var(--au-border, #dee7e3);
+		border-radius: 14px;
 	}
 
 	.contexto__input:focus-visible {
@@ -978,9 +985,9 @@
 
 	.pie__barra {
 		flex: 1;
-		height: 6px;
-		background: var(--gray-50, #f9fafb);
-		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+		height: 8px;
+		background: var(--au-bg, #effbf5);
+		border: none;
 		border-radius: 999px;
 		overflow: hidden;
 	}
@@ -988,7 +995,8 @@
 	.pie__relleno {
 		display: block;
 		height: 100%;
-		background: var(--emerald-500, #10b981);
+		border-radius: 999px;
+		background: var(--au-primary, #079665);
 	}
 
 	.pie__texto {
@@ -1009,23 +1017,23 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		min-height: 50px;
+		min-height: 52px;
 		padding: 0 1rem;
 		font: inherit;
-		font-size: 0.9375rem;
-		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		font-size: 0.95rem;
+		font-weight: 800;
+		color: var(--au-dark, #014339);
 		background: #fff;
-		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
-		border-radius: 12px;
+		border: 1.5px solid var(--au-primary, #079665);
+		border-radius: 14px;
 		cursor: pointer;
 		text-decoration: none;
 	}
 
 	.btn--primario {
 		color: #fff;
-		background: var(--emerald-600, #059669);
-		border-color: var(--emerald-600, #059669);
+		background: var(--au-primary, #079665);
+		border-color: var(--au-primary, #079665);
 	}
 
 	/* Descartar es la acción rara: en rojo suave y sin crecer, para que Guardar

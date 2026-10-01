@@ -3,6 +3,7 @@
 	import { page } from '$app/stores';
 	import { fade, fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
+	import { mascota } from '$lib/mascot';
 
 	const estado = $derived($page.status);
 	const esNoEncontrada = $derived(estado === 404);
@@ -22,6 +23,9 @@
 					'El sistema no pudo completar la operación. Vuelve a intentarlo en unos segundos.')
 	);
 
+	/** La mascota busca sin encontrar en el 404; avisa en cualquier otro error. */
+	const imagen = $derived(mascota(esNoEncontrada ? 'vacio' : 'advertencia'));
+
 	/** `history.length > 1` evita ofrecer un «atrás» que no lleva a ningún lado. */
 	let puedeVolver = $state(false);
 	onMount(() => {
@@ -34,52 +38,21 @@
 	<meta name="robots" content="noindex" />
 </svelte:head>
 
-<div class="relative flex min-h-screen items-center justify-center overflow-hidden px-6 py-16">
-	<!-- Los mismos orbes difuminados del login: atan esta pantalla al resto. -->
-	<div class="pointer-events-none absolute inset-0" aria-hidden="true">
-		<div class="absolute -top-32 -left-24 h-80 w-80 rounded-full bg-emerald-400/20 blur-3xl"></div>
-		<div
-			class="absolute -right-24 -bottom-32 h-96 w-96 rounded-full bg-emerald-600/10 blur-3xl"
-		></div>
-	</div>
+<div class="error-page">
+	<div class="error-inner" in:fly={{ y: 20, duration: 500, easing: quintOut }}>
+		<img class="error-mascot" src={imagen.src} alt={imagen.alt} width="418" height="418" />
 
-	<div
-		class="relative w-full max-w-lg text-center"
-		in:fly={{ y: 20, duration: 500, easing: quintOut }}
-	>
-		<span
-			class="inline-block rounded-md bg-emerald-500/10 px-3 py-1 font-mono text-[0.7rem] font-bold tracking-[0.12em] text-emerald-600 uppercase"
-		>
-			Error {estado}
-		</span>
+		<span class="error-badge">Error {estado}</span>
 
-		<p
-			class="mt-6 font-display text-8xl leading-none font-light tracking-tight text-emerald-600 tabular-nums sm:text-9xl"
-			aria-hidden="true"
-		>
-			{estado}
-		</p>
+		<h1 class="error-title">{titulo}</h1>
 
-		<h1
-			class="mt-6 font-display text-3xl leading-tight font-normal tracking-tight text-slate-900 sm:text-4xl"
-		>
-			{titulo}
-		</h1>
-
-		<p class="mx-auto mt-3 max-w-md text-sm leading-relaxed text-slate-500">
-			{detalle}
-		</p>
+		<p class="error-detail">{detalle}</p>
 
 		{#if esNoEncontrada}
-			<p
-				class="mx-auto mt-5 inline-block max-w-full rounded-lg border border-slate-200 bg-white/70 px-3 py-1.5 font-mono text-xs break-all text-slate-500"
-				in:fade={{ duration: 300, delay: 150 }}
-			>
-				{rutaPedida}
-			</p>
+			<p class="error-path" in:fade={{ duration: 300, delay: 150 }}>{rutaPedida}</p>
 		{/if}
 
-		<div class="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+		<div class="error-actions">
 			<!--
 				El destino es `/` y no una ruta calculada aquí: `routes/+page.svelte`
 				ya resuelve las tres ramas —sesión administrativa al panel,
@@ -89,22 +62,149 @@
 				hidrata de forma asíncrona, así que en el primer pintado todavía no
 				sabe si hay sesión.
 			-->
-			<a
-				href="/"
-				class="inline-flex w-full items-center justify-center rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 focus-visible:ring-2 focus-visible:ring-emerald-600 focus-visible:ring-offset-2 focus-visible:outline-none sm:w-auto"
-			>
-				Ir al inicio
-			</a>
+			<a href="/" class="btn-primary">Ir al inicio</a>
 
 			{#if puedeVolver}
-				<button
-					type="button"
-					onclick={() => history.back()}
-					class="inline-flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 focus-visible:outline-none sm:w-auto"
-				>
+				<button type="button" onclick={() => history.back()} class="btn-secondary">
 					Volver atrás
 				</button>
 			{/if}
 		</div>
 	</div>
 </div>
+
+<style>
+	.error-page {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 100vh;
+		min-height: 100dvh;
+		padding: 2rem 1.25rem;
+		background: var(--au-bg);
+		color: var(--au-text);
+		font-family: var(--font-sans);
+		-webkit-font-smoothing: antialiased;
+	}
+
+	.error-inner {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		text-align: center;
+		width: 100%;
+		max-width: 32rem;
+	}
+
+	.error-mascot {
+		width: 12rem;
+		height: 12rem;
+		object-fit: contain;
+		margin-bottom: 0.5rem;
+	}
+	@media (min-width: 640px) {
+		.error-mascot {
+			width: 15rem;
+			height: 15rem;
+		}
+	}
+
+	.error-badge {
+		display: inline-block;
+		padding: 0.35rem 0.75rem;
+		border-radius: 999px;
+		font-size: 0.72rem;
+		font-weight: 800;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--au-primary-strong);
+		background: var(--au-tint);
+	}
+
+	.error-title {
+		font-size: clamp(1.7rem, 5vw, 2.4rem);
+		font-weight: 800;
+		line-height: 1.1;
+		letter-spacing: -0.03em;
+		margin: 1.25rem 0 0;
+	}
+
+	.error-detail {
+		font-size: 0.95rem;
+		line-height: 1.6;
+		color: var(--au-muted);
+		margin: 0.85rem 0 0;
+		max-width: 28rem;
+	}
+
+	.error-path {
+		display: inline-block;
+		max-width: 100%;
+		margin: 1.25rem 0 0;
+		padding: 0.4rem 0.8rem;
+		border: 1.5px solid var(--au-border);
+		border-radius: 10px;
+		background: var(--au-surface);
+		font-family: var(--font-mono);
+		font-size: 0.78rem;
+		color: var(--au-muted);
+		word-break: break-all;
+	}
+
+	.error-actions {
+		display: flex;
+		flex-direction: column;
+		align-items: stretch;
+		gap: 0.75rem;
+		width: 100%;
+		margin-top: 2rem;
+	}
+	@media (min-width: 640px) {
+		.error-actions {
+			flex-direction: row;
+			justify-content: center;
+			width: auto;
+		}
+	}
+
+	.btn-primary,
+	.btn-secondary {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-height: 3.25rem;
+		padding: 0.85rem 1.75rem;
+		border-radius: 14px;
+		font-family: inherit;
+		font-size: 0.95rem;
+		font-weight: 800;
+		text-decoration: none;
+		cursor: pointer;
+		transition:
+			background-color 0.2s ease,
+			transform 0.15s ease;
+	}
+	.btn-primary {
+		color: #ffffff;
+		background: var(--au-primary);
+		border: none;
+		box-shadow: 0 8px 20px rgba(var(--au-primary-rgb), 0.28);
+	}
+	.btn-primary:hover {
+		background: var(--au-primary-strong);
+		transform: translateY(-1px);
+	}
+	.btn-secondary {
+		color: var(--au-dark);
+		background: transparent;
+		border: 1.5px solid var(--au-primary);
+	}
+	.btn-secondary:hover {
+		background: var(--au-tint);
+	}
+	.btn-primary:focus-visible,
+	.btn-secondary:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 4px rgba(var(--au-primary-rgb), 0.25);
+	}
+</style>

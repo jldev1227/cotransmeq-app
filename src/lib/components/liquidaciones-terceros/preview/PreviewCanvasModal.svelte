@@ -352,7 +352,7 @@
 				</button>
 			{/if}
 
-			<button class="prev-btn" onclick={onClose} title="Cerrar el preview (Esc)">
+			<button class="prev-btn" onclick={onClose} title="Cerrar la vista previa (Esc)">
 				<svg
 					width="14"
 					height="14"
@@ -389,7 +389,7 @@
 	.prev-bar {
 		flex-shrink: 0;
 		background: #1a2421;
-		border-bottom: 1px solid rgba(249, 115, 22, 0.18);
+		border-bottom: 1px solid rgba(234, 88, 12, 0.18);
 		box-shadow: 0 3px 16px rgba(0, 0, 0, 0.4);
 		padding: 11px 20px;
 		display: flex;
@@ -490,7 +490,7 @@
 	.prev-pager-pos {
 		color: rgba(255, 255, 255, 0.85);
 		font-size: 11px;
-		font-family: 'SF Mono', 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		white-space: nowrap;
 	}
 	.prev-pager-nombre {
@@ -530,7 +530,7 @@
 		text-align: center;
 		color: rgba(255, 255, 255, 0.85);
 		font-size: 11px;
-		font-family: 'SF Mono', 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 	.prev-btn {
 		display: inline-flex;

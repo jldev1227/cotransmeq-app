@@ -313,7 +313,7 @@
 	}
 	.mcg-field input:focus {
 		outline: none;
-		border-color: #ea580c;
+		border-color: #c2410c;
 		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.15);
 	}
 	.mcg-ejemplo {
@@ -344,12 +344,12 @@
 		background: #f8fafc;
 	}
 	.mcg-btn-ok {
-		border-color: #ea580c;
-		background: #ea580c;
+		border-color: #c2410c;
+		background: #c2410c;
 		color: #fff;
 	}
 	.mcg-btn-ok:hover:not(:disabled) {
-		background: #c2410c;
+		background: #9a3412;
 	}
 	.mcg-btn:disabled {
 		opacity: 0.55;

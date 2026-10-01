@@ -470,7 +470,7 @@
 	}
 	.seccion-eyebrow {
 		display: inline-block;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.66rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -482,7 +482,7 @@
 		margin-bottom: 0.4rem;
 	}
 	.seccion-head h3 {
-		font-family: 'Geist', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 1.2rem;
 		font-weight: 500;
 		color: #0f172a;
@@ -543,7 +543,7 @@
 	}
 
 	.campo dt {
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.66rem;
 		font-weight: 600;
 		text-transform: uppercase;
@@ -566,7 +566,7 @@
 	}
 	.valor-opcion {
 		display: inline-flex;
-		font-family: 'Geist', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.85rem;
 		font-weight: 600;
 		color: #0f172a;
@@ -575,20 +575,20 @@
 		font-weight: 700;
 		color: #c2410c;
 		font-variant-numeric: tabular-nums;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.9rem;
 	}
 	.valor-numero {
 		font-weight: 600;
 		color: #0f172a;
 		font-variant-numeric: tabular-nums;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.88rem;
 	}
 	.valor-fecha {
 		font-weight: 600;
 		color: #0f172a;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.88rem;
 	}
 
@@ -597,7 +597,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.3rem;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -662,7 +662,7 @@
 		font-weight: 600;
 		text-decoration: none;
 		transition: all 0.2s;
-		font-family: 'Geist', system-ui, sans-serif;
+		font-family: var(--font-sans);
 	}
 	.firma-link:hover {
 		background: #eef2ff;
@@ -700,7 +700,7 @@
 		border-radius: 4px;
 		font-size: 0.65rem;
 		font-weight: 600;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
 	}
@@ -745,7 +745,7 @@
 	}
 	.tabla-eyebrow {
 		display: inline-block;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -754,7 +754,7 @@
 		margin-bottom: 0.15rem;
 	}
 	.tabla-head h4 {
-		font-family: 'Geist', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.95rem;
 		font-weight: 500;
 		color: #0f172a;
@@ -764,7 +764,7 @@
 	.badge-count {
 		display: inline-flex;
 		align-items: center;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.68rem;
 		font-weight: 700;
 		color: #9a3412;
@@ -788,7 +788,7 @@
 	th {
 		text-align: left;
 		padding: 0.55rem 0.85rem;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.64rem;
 		font-weight: 700;
 		text-transform: uppercase;

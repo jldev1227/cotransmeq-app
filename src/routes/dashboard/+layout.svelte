@@ -5,6 +5,7 @@
 	import { sidebarStore } from '$lib/stores/sidebar';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import AuthLoading from '$lib/components/auth/AuthLoading.svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import { toast } from '$lib/stores/toast';
@@ -288,7 +289,7 @@
 		<button
 			type="button"
 			class="fixed inset-0 z-[9999] cursor-default border-0 p-0"
-			style="background: linear-gradient(135deg, rgba(15, 31, 26, 0.40), rgba(10, 20, 16, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
+			style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.40), rgba(20, 83, 45, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
 			aria-label="Cerrar modal"
 			transition:fade={{ duration: 200 }}
 		></button>
@@ -354,23 +355,6 @@
 	{/if}
 
 {:else}
-	<!-- Loading state — fondo cálido con marca editorial -->
-	<div class="flex min-h-screen items-center justify-center" style="background-color: var(--bg-base);">
-		<div class="text-center">
-			<div
-				class="mx-auto mb-5 flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl"
-				style="box-shadow: 0 8px 24px rgba(249, 115, 22, 0.25);"
-			>
-				<img
-					src="/android-chrome-192x192.png"
-					alt="Cotransmeq"
-					class="h-full w-full object-contain"
-					width="80"
-					height="80"
-				/>
-			</div>
-			<h1 class="font-display mb-1 text-3xl" style="color: var(--bg-charcoal);">Cotransmeq</h1>
-			<p class="text-sm" style="color: var(--text-muted);">Cargando dashboard…</p>
-		</div>
-	</div>
+	<!-- Estado de carga: la misma pantalla de espera que el acceso, con la mascota. -->
+	<AuthLoading texto="Cargando el panel…" />
 {/if}

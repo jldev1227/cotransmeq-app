@@ -103,7 +103,7 @@
 		font-size: 1.5rem;
 		font-weight: 600;
 		line-height: 1.15;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 	}
 
 	.cabecera__code {
@@ -122,14 +122,14 @@
 		max-width: 44rem;
 		font-size: 0.8125rem;
 		line-height: 1.45;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.cabecera__meta {
 		margin-top: 0.25rem;
 		font-family: var(--font-mono, monospace);
 		font-size: 0.6875rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.cabecera__acciones {

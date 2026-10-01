@@ -101,7 +101,7 @@
 		padding: 0 0.625rem;
 		font-size: 0.8125rem;
 		font-weight: 600;
-		color: var(--orange-700, #c2410c);
+		color: var(--orange-700, #9a3412);
 		background: var(--bg-surface, #fff);
 		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
 		border-radius: 999px;
@@ -110,12 +110,12 @@
 	}
 
 	.migas__volver:hover {
-		border-color: var(--orange-600, #ea580c);
+		border-color: var(--orange-600, #c2410c);
 		background: #f0fdf4;
 	}
 
 	.migas__volver:focus-visible {
-		outline: 2px solid var(--orange-600, #ea580c);
+		outline: 2px solid var(--orange-600, #c2410c);
 		outline-offset: 2px;
 	}
 
@@ -143,25 +143,25 @@
 		align-items: center;
 		gap: 0.25rem;
 		font-size: 0.75rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.migas__sep {
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.migas__enlace {
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 		text-decoration: none;
 	}
 
 	.migas__enlace:hover {
-		color: var(--orange-700, #c2410c);
+		color: var(--orange-700, #9a3412);
 		text-decoration: underline;
 	}
 
 	.migas__actual {
 		font-weight: 600;
-		color: var(--text-secondary, #4a4a4a);
+		color: var(--text-secondary, #334155);
 	}
 </style>

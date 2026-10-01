@@ -467,7 +467,7 @@
 	.sarlaft-page {
 		min-height: 100vh;
 		background: #fcfcfb;
-		font-family: 'Geist', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		color: #1e293b;
 		padding: 1.5rem 1.25rem 3rem;
 		display: flex;
@@ -484,11 +484,11 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
-		color: #f97316;
-		background: rgba(249, 115, 22, 0.08);
+		color: #ea580c;
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0.3rem 0.75rem;
 		border-radius: 6px;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 	}
 	.eyebrow--center {
 		display: block;
@@ -498,12 +498,12 @@
 	}
 	h1,
 	h3 {
-		font-family: 'Geist', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		color: #0f172a;
 		letter-spacing: -0.01em;
 	}
 	.mono {
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 	}
 
 	/* ═══════════════════════════════════════════════════════════════
@@ -580,16 +580,16 @@
 	}
 	.compliance-tag {
 		display: inline-flex;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.66rem;
 		font-weight: 600;
 		text-transform: uppercase;
 		letter-spacing: 0.06em;
 		color: #9a3412;
-		background: rgba(249, 115, 22, 0.06);
+		background: rgba(234, 88, 12, 0.06);
 		padding: 0.25rem 0.55rem;
 		border-radius: 5px;
-		border: 1px solid rgba(249, 115, 22, 0.15);
+		border: 1px solid rgba(234, 88, 12, 0.15);
 	}
 
 	.hero-stats {
@@ -597,7 +597,7 @@
 		flex-wrap: wrap;
 		align-items: center;
 		gap: 0.4rem;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 	}
 	/* La línea superior que separaba las cifras del texto se fue con el
 	   apilado: al ponerse en paralelo ya no hay nada arriba de lo que
@@ -671,7 +671,7 @@
 		flex-wrap: wrap;
 	}
 	.filter-label {
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -750,8 +750,8 @@
 		--tl-td-color: #1e293b;
 		--tl-td-suave: #64748b;
 		--tl-mono: 'Geist', ui-monospace, monospace;
-		--tl-acento: #f97316;
-		--tl-fila-hover: rgba(249, 115, 22, 0.04);
+		--tl-acento: #ea580c;
+		--tl-fila-hover: rgba(234, 88, 12, 0.04);
 	}
 
 	.c-radicado {
@@ -762,11 +762,11 @@
 	}
 	.radicado-pill {
 		display: inline-flex;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.72rem;
 		font-weight: 700;
-		color: #f97316;
-		background: rgba(249, 115, 22, 0.08);
+		color: #ea580c;
+		background: rgba(234, 88, 12, 0.08);
 		padding: 0.18rem 0.55rem;
 		border-radius: 5px;
 		letter-spacing: 0.04em;
@@ -777,7 +777,7 @@
 	}
 	.codigo-pill {
 		display: inline-flex;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.62rem;
 		font-weight: 600;
 		color: #64748b;
@@ -825,7 +825,7 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
-		font-family: 'Geist', ui-monospace, monospace;
+		font-family: var(--font-mono);
 		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -861,8 +861,8 @@
 	.spin-ring {
 		width: 30px;
 		height: 30px;
-		border: 2.5px solid rgba(249, 115, 22, 0.15);
-		border-top-color: #f97316;
+		border: 2.5px solid rgba(234, 88, 12, 0.15);
+		border-top-color: #ea580c;
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 	}
@@ -897,13 +897,13 @@
 		width: 64px;
 		height: 64px;
 		border-radius: 50%;
-		background: linear-gradient(135deg, rgba(249, 115, 22, 0.08), rgba(234, 88, 12, 0.12));
-		color: #f97316;
+		background: linear-gradient(135deg, rgba(234, 88, 12, 0.08), rgba(234, 88, 12, 0.12));
+		color: #ea580c;
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		margin-bottom: 0.4rem;
-		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.12);
+		box-shadow: 0 6px 20px rgba(234, 88, 12, 0.12);
 	}
 	.empty-icon svg {
 		width: 28px;
@@ -955,7 +955,7 @@
 		justify-content: center;
 		gap: 0.45rem;
 		padding: 0.65rem 1.15rem;
-		font-family: 'Geist', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		font-size: 0.85rem;
 		font-weight: 600;
 		border-radius: 11px;
@@ -985,12 +985,12 @@
 		width: 48px;
 		height: 48px;
 		border-radius: 14px;
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		color: white;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.3);
 	}
 	.card-icon svg {
 		width: 24px;

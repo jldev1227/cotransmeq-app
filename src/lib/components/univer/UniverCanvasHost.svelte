@@ -152,8 +152,8 @@
 	.univer-spinner-lg {
 		width: 36px;
 		height: 36px;
-		border: 3px solid rgba(249, 115, 22, 0.2);
-		border-top-color: #f97316;
+		border: 3px solid rgba(234, 88, 12, 0.2);
+		border-top-color: #ea580c;
 		border-radius: 50%;
 		animation: univer-spin-lg 0.7s linear infinite;
 	}

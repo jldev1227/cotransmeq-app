@@ -5,6 +5,7 @@
 import type { Liquidacion, FirmaConUrl } from '$lib/types/nomina';
 import { obtenerLogoBase64 } from '$lib/utils/pdfUtils';
 import { aplicarMarcasDias, leerMarcasDias } from '$lib/utils/marcasDias';
+import { blobDePdf, cargarPdfMake } from '$lib/utils/pdfmake-cargar';
 
 const PAREX_EMPRESA_ID = 'cfb258a6-448c-4469-aa71-8eeafa4530ef';
 const GEOPARK_EMPRESA_ID = 'eea5eda5-1b60-45a0-b4c7-606a8c908ff9';
@@ -150,14 +151,6 @@ async function imageToBase64Url(url: string): Promise<string> {
 		reader.onerror = reject;
 		reader.readAsDataURL(blob);
 	});
-}
-
-/** Carga pdfmake y le monta las fuentes. Solo corre en el cliente. */
-async function cargarPdfMake() {
-	const pdfMake = (await import('pdfmake/build/pdfmake')).default;
-	const pdfFonts = (await import('pdfmake/build/vfs_fonts')).default;
-	(pdfMake as any).vfs = (pdfFonts as any).pdfMake ? (pdfFonts as any).pdfMake.vfs : (pdfFonts as any).vfs;
-	return pdfMake;
 }
 
 /**
@@ -2195,10 +2188,7 @@ export async function generarBlobDesprendible(
 ): Promise<Blob> {
 	const pdfMake = await cargarPdfMake();
 	const docDefinition = await construirDocDefinition(item, firmas, recargosData);
-	/// pdfmake 0.3 devuelve una promesa y IGNORA el callback. Con la forma
-	/// antigua —`getBlob((blob) => resolve(blob))`— la promesa no se resolvía
-	/// nunca y la exportación en ZIP del canvas se quedaba colgada.
-	return pdfMake.createPdf(docDefinition).getBlob();
+	return blobDePdf(pdfMake, docDefinition);
 }
 
 /**

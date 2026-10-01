@@ -304,7 +304,7 @@
 		font-size: 0.65rem;
 		font-weight: 700;
 		color: var(--orange-600);
-		background: rgba(16, 185, 129, 0.1);
+		background: rgba(22, 163, 74, 0.1);
 		border-radius: 9999px;
 		padding: 0.1rem 0.4rem;
 		font-variant-numeric: tabular-nums;

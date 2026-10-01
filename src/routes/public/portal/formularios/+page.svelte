@@ -405,7 +405,12 @@
 <svelte:head><title>Formularios · Portal del Conductor</title></svelte:head>
 
 <PortalPage>
-	<PortalHeader titulo="Formularios" meta={hoy ? `Hoy: ${hoy}` : null}>
+	<PortalHeader
+		eyebrow="Centro de operaciones"
+		titulo="Formularios"
+		meta="Tus formatos, borradores y tareas de hoy en un solo lugar."
+		mascota="procesando"
+	>
 		{#snippet acciones()}
 			<!-- El estado de sincronización ya no ocupa una franja entera: vive aquí
 			     como chip y se despliega solo si hay algo que atender. -->
@@ -851,15 +856,15 @@
 	.tarjeta {
 		display: flex;
 		flex-direction: column;
-		gap: 0.1875rem;
+		gap: 0.25rem;
 		width: 100%;
-		padding: 0.875rem;
+		padding: 1rem 1.05rem;
 		text-align: left;
 		font: inherit;
 		background: var(--bg-surface, #fff);
-		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
-		border-radius: 14px;
-		box-shadow: var(--shadow-card, 0 4px 24px rgba(0, 0, 0, 0.04));
+		border: none;
+		border-radius: 22px;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
 	}
 
 	.tarjeta__cabeza {
@@ -928,21 +933,27 @@
 
 	.tarjeta--hecha {
 		cursor: default;
-		background: var(--gray-50, #f9fafb);
+		background: rgba(255, 255, 255, 0.6);
 		box-shadow: none;
 	}
 
 	.tarjeta__code {
-		font-family: var(--font-mono, monospace);
-		font-size: 0.6875rem;
-		font-weight: 700;
-		color: var(--emerald-700, #047857);
+		align-self: flex-start;
+		padding: 0.2rem 0.6rem;
+		border-radius: 999px;
+		background: var(--au-tint, #ddf7ea);
+		font-size: 0.68rem;
+		font-weight: 800;
+		letter-spacing: 0.04em;
+		color: var(--au-dark, #014339);
 	}
 
 	.tarjeta__titulo {
-		font-size: 1rem;
-		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		margin-top: 0.2rem;
+		font-size: 1.02rem;
+		font-weight: 800;
+		letter-spacing: -0.01em;
+		color: var(--text-primary, #17201d);
 		line-height: 1.3;
 	}
 
@@ -953,23 +964,28 @@
 	}
 
 	.tarjeta__accion {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 0.4rem;
 		width: 100%;
-		min-height: 44px;
-		margin-top: 0.5rem;
+		min-height: 48px;
+		margin-top: 0.6rem;
 		padding: 0 0.75rem;
 		font: inherit;
-		font-size: 0.8125rem;
+		font-size: 0.9rem;
 		font-weight: 700;
-		text-align: left;
-		color: var(--emerald-700, #047857);
-		background: var(--bg-surface, #fff);
-		border: 1px dashed var(--emerald-600, #059669);
-		border-radius: 10px;
+		color: #fff;
+		background: var(--au-primary, #079665);
+		border: none;
+		border-radius: 14px;
 		cursor: pointer;
+		transition: background-color 0.15s ease, transform 0.15s ease;
 	}
 
 	.tarjeta__accion:active {
-		transform: scale(0.995);
+		transform: scale(0.99);
+		background: var(--au-primary-strong, #087a57);
 	}
 
 	.barra {
@@ -1007,13 +1023,13 @@
 	.recibo {
 		display: flex;
 		flex-direction: column;
-		gap: 0.0625rem;
-		padding: 0.625rem 0.75rem;
-		background: var(--bg-surface, #fff);
-		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
-		border-radius: 10px;
+		gap: 0.15rem;
+		padding: 0.8rem 0.9rem;
 		text-decoration: none;
-		min-height: 44px;
+		color: inherit;
+		background: var(--bg-surface, #fff);
+		border: none;
+		border-radius: 16px;
 	}
 
 	.recibo--sin-detalle {

@@ -465,7 +465,7 @@
 	.fondo {
 		position: fixed;
 		inset: 0;
-		background: rgba(15, 31, 26, 0.5);
+		background: rgba(15, 23, 42, 0.5);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -500,7 +500,7 @@
 		margin: 0.2rem 0 0;
 		font-size: 0.8rem;
 		color: var(--text-muted);
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 	}
 	.cerrar {
 		background: none;
@@ -576,12 +576,12 @@
 	.meta {
 		font-size: 0.75rem;
 		color: var(--text-muted);
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		white-space: nowrap;
 	}
 	.estimado {
 		margin-left: auto;
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 0.8rem;
 		color: var(--text-secondary);
 	}
@@ -607,7 +607,7 @@
 		font-size: 0.8rem;
 	}
 	.buscador input:focus {
-		outline: 2px solid var(--emerald-500, #10b981);
+		outline: 2px solid var(--emerald-500, #16a34a);
 		outline-offset: -1px;
 	}
 	.buscador-cuenta {
@@ -641,7 +641,7 @@
 		color: var(--text-muted);
 	}
 	.pill--ok {
-		background: rgba(16, 185, 129, 0.12);
+		background: rgba(22, 163, 74, 0.12);
 		color: var(--emerald-700);
 	}
 	.pill--warn {

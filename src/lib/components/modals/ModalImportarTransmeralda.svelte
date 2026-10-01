@@ -85,7 +85,7 @@
 			errorMsg =
 				err?.response?.data?.message ||
 				err?.message ||
-				'No se pudo obtener el preview de Transmeralda';
+				'No se pudo obtener la vista previa de Transmeralda';
 		} finally {
 			loadingPreview = false;
 		}
@@ -345,7 +345,7 @@
 							<span class="stat-label">Nuevas</span>
 							<span
 								class="flex h-6 w-6 items-center justify-center rounded-md"
-								style="background: rgba(249, 115, 22, 0.10); color: #ea580c;"
+								style="background: rgba(234, 88, 12, 0.10); color: #c2410c;"
 							>
 								<svg
 									class="h-3 w-3"
@@ -507,7 +507,7 @@
 							type="search"
 							bind:value={busqueda}
 							placeholder="Buscar conductor, cédula, placa, planilla o empresa"
-							class="w-full rounded-lg border border-[var(--border-default)] bg-white py-1.5 pr-7 pl-8 text-xs apple-transition focus:border-[#f97316] focus:outline-none"
+							class="w-full rounded-lg border border-[var(--border-default)] bg-white py-1.5 pr-7 pl-8 text-xs apple-transition focus:border-[#ea580c] focus:outline-none"
 							style="color: var(--text-primary);"
 						/>
 						{#if busqueda}
@@ -535,7 +535,7 @@
 								bind:checked={mostrarNoImportables}
 								on:change={cargarPreview}
 								class="h-3 w-3 cursor-pointer rounded"
-								style="accent-color: #f97316;"
+								style="accent-color: #ea580c;"
 							/>
 							<span style="color: var(--text-secondary);">
 								Mostrar tachadas
@@ -642,7 +642,7 @@
 													checked={todasVisiblesSeleccionadas}
 													on:change={toggleSelectAll}
 													class="h-3.5 w-3.5 cursor-pointer rounded"
-													style="accent-color: #f97316;"
+													style="accent-color: #ea580c;"
 												/>
 											{/if}
 										</th>
@@ -677,7 +677,7 @@
 													checked={isSelected}
 													on:change={() => toggleSelect(p.source_id)}
 													class="h-3.5 w-3.5 cursor-pointer rounded disabled:cursor-not-allowed"
-													style="accent-color: #f97316;"
+													style="accent-color: #ea580c;"
 												/>
 											</td>
 											<td
@@ -780,7 +780,7 @@
 													{:else}
 														<span
 															class="status-pill"
-															style="background: rgba(249, 115, 22, 0.10); color: #c2410c;"
+															style="background: rgba(234, 88, 12, 0.10); color: #9a3412;"
 														>
 															Nueva
 														</span>

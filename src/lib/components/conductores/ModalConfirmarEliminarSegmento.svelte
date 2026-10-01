@@ -129,7 +129,7 @@
 					<h2
 						id="modal-eliminar-title"
 						class="font-display text-base"
-						style="color: var(--bg-charcoal); font-weight: 500;"
+						style="color: var(--bg-charcoal); font-weight: 800;"
 					>
 						{conductorLabel}
 					</h2>

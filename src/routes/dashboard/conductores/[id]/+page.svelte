@@ -186,7 +186,6 @@
 	let conductor: Conductor | null = null;
 	let isLoading = true;
 	let isSaving = false;
-	let showSuccessAnim = false;
 	let error: string | null = null;
 	let isEditing = false;
 	let activeTab: TabType = 'personal';
@@ -371,7 +370,7 @@
 	function getEstadoPill(tone: string): string {
 		const map: Record<string, string> = {
 			emerald:
-				'background: rgba(249, 115, 22,0.10); color: var(--orange-800); border: 1px solid rgba(249, 115, 22,0.25);',
+				'background: rgba(234, 88, 12,0.10); color: var(--orange-800); border: 1px solid rgba(234, 88, 12,0.25);',
 			slate:
 				'background: rgba(100,116,139,0.10); color: #334155; border: 1px solid rgba(100,116,139,0.22);',
 			sky: 'background: rgba(14,165,233,0.10); color: #075985; border: 1px solid rgba(14,165,233,0.25);',
@@ -379,6 +378,20 @@
 				'background: rgba(245,158,11,0.10); color: #92400e; border: 1px solid rgba(245,158,11,0.28);',
 			red: 'background: rgba(220,38,38,0.10); color: #991b1b; border: 1px solid rgba(220,38,38,0.25);',
 			teal: 'background: rgba(13,148,136,0.10); color: #115e59; border: 1px solid rgba(13,148,136,0.25);'
+		};
+		return map[tone] ?? map.slate;
+	}
+
+	/// Color del punto de estado en la tarjeta oscura: los tonos de
+	/// `getEstadoPill` son para fondo claro y ahí no se verían.
+	function puntoTono(tone: string): string {
+		const map: Record<string, string> = {
+			emerald: '#34d399',
+			slate: '#cbd5e1',
+			sky: '#38bdf8',
+			amber: '#fbbf24',
+			red: '#f87171',
+			teal: '#2dd4bf'
 		};
 		return map[tone] ?? map.slate;
 	}
@@ -516,11 +529,6 @@
 			};
 
 			await conductoresAPI.update(conductorId, payload);
-
-			showSuccessAnim = true;
-			setTimeout(() => {
-				showSuccessAnim = false;
-			}, 2200);
 
 			isEditing = false;
 			attemptedSubmit = false;
@@ -791,58 +799,24 @@
 	<title>{fullName || 'Conductor'} · Perfil — Cotransmeq</title>
 </svelte:head>
 
-<div
-	class="w-full px-4 py-6 sm:px-6 lg:px-8"
-	style="background-color: var(--bg-base);"
->
-	<!-- Header -->
-	<div
-		class="page-card mb-6"
-		style="padding: 1.1rem 1.5rem;"
-		in:fly={{ y: -16, duration: 480, easing: quintOut }}
-	>
-		<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-			<div class="flex items-center gap-3">
-				<button
-					type="button"
-					class="btn-icon"
-					aria-label="Volver al listado"
-					on:click={() => goto('/dashboard/conductores')}
-				>
-					<svg
-						class="h-4 w-4"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-						stroke-width="1.8"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-					</svg>
-				</button>
-				<div>
-					<p class="eyebrow mb-1">Perfil del conductor</p>
-					<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 500;">
-						{fullName || 'Cargando…'}
-					</h1>
-					<p class="mt-0.5 text-sm" style="color: var(--text-muted);">
-						Expediente individual, fotografía y datos del conductor.
-					</p>
-				</div>
-			</div>
-
-			{#if conductor}
-				<div class="flex flex-wrap items-center gap-2">
-					<span class="code-badge">ID · {conductor.numero_identificacion || '—'}</span>
-					<span class="status-pill" style={getEstadoPill(estadoInfo.tone)}>
-						<span
-							class="mr-1.5 inline-block h-1.5 w-1.5 rounded-full"
-							style="background: currentColor;"
-						></span>
-						{estadoInfo.label}
-					</span>
-				</div>
-			{/if}
-		</div>
+<div class="cond-pagina" style="background-color: var(--bg-base);">
+	<!-- Regreso al listado. La identidad completa vive en la tarjeta lateral. -->
+	<div class="cond-volver" in:fly={{ y: -10, duration: 400, easing: quintOut }}>
+		<button
+			type="button"
+			class="btn-icon"
+			aria-label="Volver al listado"
+			on:click={() => goto('/dashboard/conductores')}
+		>
+			<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+			</svg>
+		</button>
+		<span class="cond-miga">
+			<a href="/dashboard/conductores">Conductores</a>
+			<span aria-hidden="true">/</span>
+			<strong>{fullName || 'Cargando…'}</strong>
+		</span>
 	</div>
 
 	{#if isLoading}
@@ -873,7 +847,7 @@
 					/>
 				</svg>
 			</div>
-			<h2 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 500;">
+			<h2 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
 				No se pudo cargar el conductor
 			</h2>
 			<p class="max-w-md text-sm" style="color: var(--text-muted);">{error}</p>
@@ -895,42 +869,32 @@
 			</button>
 		</div>
 	{:else if conductor}
-		<div class="grid grid-cols-1 gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-			<!-- ═══ PERFIL RESUMEN (columna izquierda) ═══ -->
-			<aside class="space-y-4" in:fly={{ y: 16, duration: 480, easing: quintOut, delay: 60 }}>
-				<!-- Tarjeta identidad -->
-				<section class="page-card" style="padding: 1.5rem;">
-					<div class="flex flex-col items-center text-center">
-						<div class="photo-menu-wrapper relative">
+		<div class="cond-grid">
+			<!-- ═══ TARJETA LATERAL: identidad, acciones y licencia ═══ -->
+			<aside class="cond-aside" in:fly={{ y: 16, duration: 480, easing: quintOut, delay: 60 }}>
+				<!-- Identidad sobre el verde de marca -->
+				<section class="cond-hero">
+					<div class="cond-hero-fondo" aria-hidden="true">
+						<span class="cond-orbe cond-orbe--grande"></span>
+						<span class="cond-orbe cond-orbe--chico"></span>
+					</div>
+					<div class="cond-hero-cuerpo">
+						<div class="photo-menu-wrapper cond-foto-wrap">
 							<button
 								type="button"
-								class="group relative overflow-hidden rounded-2xl"
-								style="width: 128px; height: 128px;"
+								class="cond-foto group"
 								aria-label="Cambiar foto de perfil"
 								on:click={() => (showPhotoMenu = !showPhotoMenu)}
 							>
 								{#if conductor.foto_signed_url}
-									<img
-										src={conductor.foto_signed_url}
-										alt={fullName}
-										class="h-full w-full object-cover"
-									/>
+									<img src={conductor.foto_signed_url} alt={fullName} />
 								{:else}
-									<div
-										class="brand-gradient flex h-full w-full items-center justify-center font-display text-3xl text-white"
-										style="font-weight: 500;"
-									>
+									<div class="cond-foto-iniciales">
 										{getInitials(conductor.nombre, conductor.apellido)}
 									</div>
 								{/if}
-								<div
-									class="pointer-events-none absolute inset-0 flex items-end justify-center"
-									style="background: linear-gradient(180deg, rgba(0,0,0,0) 50%, rgba(0,0,0,0.45) 100%);"
-								>
-									<span
-										class="mb-2 inline-flex items-center gap-1 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-semibold"
-										style="color: var(--orange-700);"
-									>
+								<div class="cond-foto-velo">
+									<span class="cond-foto-cambiar">
 										<svg
 											class="h-3 w-3"
 											fill="none"
@@ -955,19 +919,9 @@
 							</button>
 
 							{#if showPhotoMenu}
-								<div
-									class="absolute top-full left-1/2 z-30 mt-2 w-56 -translate-x-1/2"
-									role="menu"
-									transition:fly={{ y: -6, duration: 200 }}
-								>
-									<div
-										class="overflow-hidden rounded-xl"
-										style="background: var(--bg-surface); border: 1px solid var(--border-subtle); box-shadow: 0 12px 32px rgba(0,0,0,0.10);"
-									>
-										<label
-											class="flex cursor-pointer items-center gap-2 px-3 py-2.5 text-sm font-medium hover:bg-orange-50/40"
-											style="color: var(--text-primary);"
-										>
+								<div class="cond-foto-menu" role="menu" transition:fly={{ y: -6, duration: 200 }}>
+									<div class="cond-foto-menu-caja">
+										<label class="cond-foto-menu-item">
 											<svg
 												class="h-4 w-4"
 												fill="none"
@@ -993,8 +947,7 @@
 										{#if conductor.foto_signed_url}
 											<button
 												type="button"
-												class="flex w-full items-center gap-2 border-t px-3 py-2.5 text-sm font-medium"
-												style="color: #b91c1c; border-color: var(--border-subtle);"
+												class="cond-foto-menu-item cond-foto-menu-item--peligro"
 												on:click={() => {
 													confirmDeletePhoto = true;
 													showPhotoMenu = false;
@@ -1022,234 +975,150 @@
 							{/if}
 						</div>
 
-						<h2
-							class="mt-4 font-display text-xl"
-							style="color: var(--bg-charcoal); font-weight: 500;"
-						>
-							{conductor.nombre}
-							{conductor.apellido}
-						</h2>
-						<p class="mt-0.5 text-sm" style="color: var(--text-muted);">
-							{conductor.cargo || 'Conductor'}
-						</p>
-
-						<div class="mt-3 flex flex-wrap items-center justify-center gap-1.5">
-							<span class="status-pill" style={getEstadoPill(estadoInfo.tone)}>
-								<span
-									class="mr-1.5 inline-block h-1.5 w-1.5 rounded-full"
-									style="background: currentColor;"
-								></span>
-								{estadoInfo.label}
-							</span>
-							<span
-								class="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold"
-								style="background: rgba(249, 115, 22,0.08); color: var(--orange-800);"
-							>
-								{conductor.sede_trabajo ? getSedeLabel(conductor.sede_trabajo) : 'Sin sede'}
-							</span>
-						</div>
-
-						<div
-							class="mt-5 grid w-full grid-cols-3 gap-2"
-							style="border-top: 1px solid var(--border-subtle); padding-top: 1rem;"
-						>
-							<div class="text-center">
-								<p class="font-mono-meta" style="color: var(--text-muted); font-size: 0.6rem;">
-									Salario
-								</p>
-								<p
-									class="mt-0.5 font-display text-base"
-									style="color: var(--bg-charcoal); font-weight: 500;"
-								>
-									{formatSalario(conductor.salario_base)}
-								</p>
-							</div>
-							<div
-								class="text-center"
-								style="border-left: 1px solid var(--border-subtle); border-right: 1px solid var(--border-subtle);"
-							>
-								<p class="font-mono-meta" style="color: var(--text-muted); font-size: 0.6rem;">
-									Ingreso
-								</p>
-								<p
-									class="mt-0.5 font-display text-sm"
-									style="color: var(--bg-charcoal); font-weight: 500;"
-								>
-									{conductor.fecha_ingreso
-										? formatDate(conductor.fecha_ingreso).split(' de ')[2]
-										: '—'}
-								</p>
-							</div>
-							<div class="text-center">
-								<p class="font-mono-meta" style="color: var(--text-muted); font-size: 0.6rem;">
-									Sangre
-								</p>
-								<p
-									class="mt-0.5 font-display text-base"
-									style="color: var(--bg-charcoal); font-weight: 500;"
-								>
-									{getSangreLabel(conductor.tipo_sangre)}
-								</p>
+						<div class="cond-identidad">
+							<span class="cond-eyebrow">{conductor.cargo || 'Conductor'}</span>
+							<h2 class="cond-nombre">{conductor.nombre} {conductor.apellido}</h2>
+							<p class="cond-documento">
+								{conductor.tipo_identificacion || 'ID'} · {conductor.numero_identificacion || '—'}
+							</p>
+							<div class="cond-pills">
+								<span class="cond-pill">
+									<span
+										class="cond-pill-punto"
+										style="background: {puntoTono(estadoInfo.tone)};"
+										aria-hidden="true"
+									></span>
+									{estadoInfo.label}
+								</span>
+								<span class="cond-pill">
+									{conductor.sede_trabajo ? getSedeLabel(conductor.sede_trabajo) : 'Sin sede'}
+								</span>
 							</div>
 						</div>
 					</div>
+
+					<dl class="cond-cifras">
+						<div class="cond-cifra">
+							<dt>Salario</dt>
+							<dd>{formatSalario(conductor.salario_base)}</dd>
+						</div>
+						<div class="cond-cifra">
+							<dt>Ingreso</dt>
+							<dd>
+								{conductor.fecha_ingreso ? formatDate(conductor.fecha_ingreso).split(' de ')[2] : '—'}
+							</dd>
+						</div>
+						<div class="cond-cifra">
+							<dt>Sangre</dt>
+							<dd>{getSangreLabel(conductor.tipo_sangre)}</dd>
+						</div>
+					</dl>
 				</section>
 
-				<!-- Tarjeta acciones rápidas -->
-				<section class="page-card" style="padding: 1.1rem 1.25rem;">
-					<p class="font-mono-meta mb-3" style="color: var(--text-muted); font-size: 0.6rem;">
-						Acciones rápidas
-					</p>
-					<div class="grid grid-cols-1 gap-2">
+				<!-- Acciones rápidas -->
+				<section class="page-card cond-card">
+					<p class="cond-card-titulo">Acciones rápidas</p>
+					<div class="cond-acciones">
 						<button
 							type="button"
-							class="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-sm font-medium"
-							style="background: var(--bg-surface); border-color: var(--border-subtle); color: var(--text-primary);"
+							class="cond-accion"
 							on:click={() =>
-								goto(`/dashboard/conductores?vista=calendario&conductor=${conductor!.id}`)}
+								goto(`/dashboard/conductores/recorridos?conductor=${conductor!.id}`)}
 						>
-							<span class="flex items-center gap-2">
-								<svg
-									class="h-4 w-4"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-									stroke-width="1.8"
-									style="color: var(--orange-500);"
-								>
+							<span class="cond-accion-icono">
+								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 									<path
 										stroke-linecap="round"
 										stroke-linejoin="round"
 										d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
 									/>
 								</svg>
-								Ver recorridos
 							</span>
+							<span class="cond-accion-texto">Ver recorridos</span>
 							<svg
-								class="h-3.5 w-3.5"
+								class="cond-accion-flecha"
 								fill="none"
 								stroke="currentColor"
 								viewBox="0 0 24 24"
 								stroke-width="2"
-								style="color: var(--text-very-muted);"
 							>
 								<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
 							</svg>
 						</button>
 						<button
 							type="button"
-							class="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-sm font-medium"
-							style="background: var(--bg-surface); border-color: var(--border-subtle); color: var(--text-primary);"
+							class="cond-accion"
 							disabled={!conductor?.email}
 							on:click={() =>
 								conductor?.email && (window.location.href = `mailto:${conductor.email}`)}
 						>
-							<span class="flex items-center gap-2">
-								<svg
-									class="h-4 w-4"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-									stroke-width="1.8"
-									style="color: var(--orange-500);"
-								>
+							<span class="cond-accion-icono">
+								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 									<path
 										stroke-linecap="round"
 										stroke-linejoin="round"
 										d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
 									/>
 								</svg>
-								Enviar correo
 							</span>
-							<span
-								class="font-mono-meta"
-								style="color: var(--text-very-muted); font-size: 0.6rem;"
-							>
-								{conductor.email ? 'Listo' : 'No registrado'}
-							</span>
+							<span class="cond-accion-texto">Enviar correo</span>
+							<span class="cond-accion-meta">{conductor.email || 'No registrado'}</span>
 						</button>
 						<button
 							type="button"
-							class="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-sm font-medium"
-							style="background: var(--bg-surface); border-color: var(--border-subtle); color: var(--text-primary);"
+							class="cond-accion"
 							disabled={!conductor?.telefono}
 							on:click={() =>
 								conductor?.telefono && (window.location.href = `tel:${conductor.telefono}`)}
 						>
-							<span class="flex items-center gap-2">
-								<svg
-									class="h-4 w-4"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-									stroke-width="1.8"
-									style="color: var(--orange-500);"
-								>
+							<span class="cond-accion-icono">
+								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 									<path
 										stroke-linecap="round"
 										stroke-linejoin="round"
 										d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21L6.374 11.5l8.25 8.25 2.113-3.85a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V20.72a2 2 0 01-2 2h-1.28C10.5 22.72 1.28 13.5 1.28 2.72V1.44a2 2 0 012-2H6.5z"
 									/>
 								</svg>
-								Llamar
 							</span>
-							<span
-								class="font-mono-meta"
-								style="color: var(--text-very-muted); font-size: 0.6rem;"
-							>
-								{conductor.telefono || 'No registrado'}
-							</span>
+							<span class="cond-accion-texto">Llamar</span>
+							<span class="cond-accion-meta">{conductor.telefono || 'No registrado'}</span>
 						</button>
 					</div>
 				</section>
 
-				<!-- Tarjeta licencia -->
+				<!-- Licencia -->
 				{#if conductor.vencimiento_licencia}
 					{@const dias = daysUntil(conductor.vencimiento_licencia)}
 					<section
-						class="page-card"
-						style={`padding: 1rem 1.25rem; border-left: 4px solid ${dias !== null && dias < 30 ? '#f59e0b' : 'var(--orange-500)'};`}
+						class="page-card cond-card cond-licencia"
+						class:cond-licencia--alerta={dias !== null && dias < 30}
+						class:cond-licencia--vencida={dias !== null && dias < 0}
 					>
-						<div class="flex items-start gap-3">
-							<div
-								class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl"
-								style={`background: ${dias !== null && dias < 30 ? 'rgba(245,158,11,0.10)' : 'rgba(249, 115, 22,0.08)'}; color: ${dias !== null && dias < 30 ? '#b45309' : 'var(--orange-700)'};`}
-							>
-								<svg
-									class="h-4 w-4"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-									stroke-width="1.8"
-								>
+						<div class="cond-licencia-fila">
+							<span class="cond-licencia-icono">
+								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 									<path
 										stroke-linecap="round"
 										stroke-linejoin="round"
 										d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
 									/>
 								</svg>
-							</div>
+							</span>
 							<div class="min-w-0 flex-1">
-								<p class="font-mono-meta" style="color: var(--text-muted); font-size: 0.6rem;">
+								<p class="cond-card-titulo" style="margin: 0;">
 									Licencia {conductor.categoria_licencia || '—'}
 								</p>
-								<p class="mt-0.5 text-sm font-semibold" style="color: var(--bg-charcoal);">
-									{formatDate(conductor.vencimiento_licencia)}
-								</p>
+								<p class="cond-licencia-fecha">{formatDate(conductor.vencimiento_licencia)}</p>
 								{#if dias !== null}
 									{#if dias < 0}
-										<p class="mt-1 text-xs" style="color: #b91c1c;">
-											Vencida hace {Math.abs(dias)} días
-										</p>
+										<p class="cond-licencia-nota">Vencida hace {Math.abs(dias)} días</p>
 									{:else if dias < 30}
-										<p class="mt-1 text-xs" style="color: #b45309;">
+										<p class="cond-licencia-nota">
 											Vence en {dias}
 											{dias === 1 ? 'día' : 'días'}
 										</p>
 									{:else}
-										<p class="mt-1 text-xs" style="color: var(--orange-700);">
-											Vigente · {dias} días restantes
-										</p>
+										<p class="cond-licencia-nota">Vigente · {dias} días restantes</p>
 									{/if}
 								{/if}
 							</div>
@@ -1259,14 +1128,14 @@
 			</aside>
 
 			<!-- ═══ CONTENIDO PRINCIPAL (columna derecha) ═══ -->
-			<section class="space-y-5" in:fly={{ y: 16, duration: 480, easing: quintOut, delay: 120 }}>
+			<section class="cond-main space-y-5" in:fly={{ y: 16, duration: 480, easing: quintOut, delay: 120 }}>
 				<!-- Barra de acciones de edición -->
 				<div
 					class="page-card flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
 					style="padding: 1rem 1.25rem;"
 				>
 					<div>
-						<p class="font-display text-base" style="color: var(--bg-charcoal); font-weight: 500;">
+						<p class="font-display text-base" style="color: var(--bg-charcoal); font-weight: 800;">
 							Expediente
 						</p>
 						<p class="text-xs" style="color: var(--text-muted);">
@@ -1348,7 +1217,7 @@
 
 				<!-- Tabs -->
 				<div class="page-card" style="padding: 0.65rem 0.65rem;">
-					<div class="flex flex-wrap gap-1.5" role="tablist" aria-label="Secciones del conductor">
+					<div class="cond-tabs" role="tablist" aria-label="Secciones del conductor">
 						{#each TABS as tab (tab.id)}
 							{@const meta = FIELD_GROUPS.find((g) => g.id === tab.id)}
 							{@const completion = tabCompletion[tab.id]}
@@ -1359,13 +1228,13 @@
 								type="button"
 								role="tab"
 								aria-selected={isActive}
-								class="group inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-all"
-								style={`background: ${isActive ? 'linear-gradient(135deg, rgba(249, 115, 22,0.10), rgba(234, 88, 12,0.10))' : 'transparent'}; color: ${isActive ? 'var(--orange-800)' : 'var(--text-secondary)'}; border: 1px solid ${isActive ? 'rgba(249, 115, 22,0.25)' : 'transparent'};`}
+								class="cond-tab group inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-all"
+								style={`background: ${isActive ? 'linear-gradient(135deg, rgba(234, 88, 12,0.10), rgba(234, 88, 12,0.10))' : 'transparent'}; color: ${isActive ? 'var(--orange-800)' : 'var(--text-secondary)'}; border: 1px solid ${isActive ? 'rgba(234, 88, 12,0.25)' : 'transparent'};`}
 								on:click={() => requestTabChange(tab.id)}
 							>
 								<span
 									class="flex h-6 w-6 items-center justify-center rounded-md"
-									style={`background: ${isActive ? 'linear-gradient(135deg, #f97316, #ea580c)' : 'rgba(249, 115, 22,0.08)'}; color: ${isActive ? 'white' : 'var(--orange-700)'};`}
+									style={`background: ${isActive ? 'linear-gradient(135deg, #ea580c, #c2410c)' : 'rgba(234, 88, 12,0.08)'}; color: ${isActive ? 'white' : 'var(--orange-700)'};`}
 								>
 									<svg
 										class="h-3.5 w-3.5"
@@ -1380,7 +1249,7 @@
 								<span class="whitespace-nowrap">{tab.label}</span>
 								<span
 									class="rounded-full px-1.5 py-0.5 text-[10px] font-bold"
-									style={`background: ${pct === 100 ? 'rgba(249, 115, 22,0.12)' : 'rgba(0,0,0,0.04)'}; color: ${pct === 100 ? 'var(--orange-800)' : 'var(--text-muted)'};`}
+									style={`background: ${pct === 100 ? 'rgba(234, 88, 12,0.12)' : 'rgba(0,0,0,0.04)'}; color: ${pct === 100 ? 'var(--orange-800)' : 'var(--text-muted)'};`}
 								>
 									{completion.done}/{completion.total}
 								</span>
@@ -1395,7 +1264,7 @@
 						<p class="font-mono-meta" style="color: var(--orange-700); font-size: 0.6rem;">
 							Sección activa
 						</p>
-						<h2 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 500;">
+						<h2 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
 							{FIELD_GROUPS.find((g) => g.id === activeTab)?.id === 'personal'
 								? 'Información Personal'
 								: ''}
@@ -1904,7 +1773,7 @@
 		<button
 			type="button"
 			class="absolute inset-0 cursor-default border-0 p-0"
-			style="background: linear-gradient(135deg, rgba(15,31,26,0.40), rgba(10,20,16,0.55)); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);"
+			style="background: linear-gradient(135deg, rgba(15, 23, 42,0.40), rgba(20, 83, 45,0.55)); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);"
 			aria-label="Cerrar"
 			on:click={cancelTabChange}
 			transition:fade={{ duration: 180 }}
@@ -1935,7 +1804,7 @@
 						</svg>
 					</div>
 					<div>
-						<h3 class="font-display text-base" style="color: var(--bg-charcoal); font-weight: 500;">
+						<h3 class="font-display text-base" style="color: var(--bg-charcoal); font-weight: 800;">
 							Cambios sin guardar
 						</h3>
 						<p class="text-xs" style="color: var(--text-muted);">
@@ -1977,7 +1846,7 @@
 		<button
 			type="button"
 			class="absolute inset-0 cursor-default border-0 p-0"
-			style="background: linear-gradient(135deg, rgba(15,31,26,0.40), rgba(10,20,16,0.55)); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);"
+			style="background: linear-gradient(135deg, rgba(15, 23, 42,0.40), rgba(20, 83, 45,0.55)); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);"
 			aria-label="Cerrar"
 			on:click={() => (confirmDeletePhoto = false)}
 			transition:fade={{ duration: 180 }}
@@ -2008,7 +1877,7 @@
 						</svg>
 					</div>
 					<div>
-						<h3 class="font-display text-base" style="color: var(--bg-charcoal); font-weight: 500;">
+						<h3 class="font-display text-base" style="color: var(--bg-charcoal); font-weight: 800;">
 							¿Eliminar la foto?
 						</h3>
 						<p class="text-xs" style="color: var(--text-muted);">No se puede deshacer.</p>
@@ -2038,43 +1907,6 @@
 	</div>
 {/if}
 
-<!-- ═══ OVERLAY ÉXITO ═══ -->
-{#if showSuccessAnim}
-	<div
-		class="fixed inset-0 z-[60] flex items-center justify-center"
-		style="background: linear-gradient(135deg, rgba(234, 88, 12,0.92), rgba(249, 115, 22,0.92)); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);"
-		role="status"
-		aria-live="polite"
-		transition:fade={{ duration: 200 }}
-	>
-		<div class="text-center" in:fly={{ y: 12, duration: 380, easing: quintOut }}>
-			<div
-				class="mx-auto mb-6 flex h-24 w-24 items-center justify-center rounded-full"
-				style="background: rgba(255,255,255,0.20); box-shadow: 0 0 60px rgba(255,255,255,0.25);"
-			>
-				<svg
-					class="h-12 w-12 text-white"
-					fill="none"
-					viewBox="0 0 24 24"
-					stroke="currentColor"
-					stroke-width="2.4"
-				>
-					<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-				</svg>
-			</div>
-			<h2
-				class="font-display text-3xl text-white"
-				style="font-weight: 500; letter-spacing: -0.01em;"
-			>
-				¡Actualizado!
-			</h2>
-			<p class="mt-1 text-base text-orange-50" style="opacity: 0.92;">
-				Los cambios se guardaron correctamente
-			</p>
-		</div>
-	</div>
-{/if}
-
 <!-- ═══ CROP MODAL ═══ -->
 {#if showCropModal}
 	<div
@@ -2086,7 +1918,7 @@
 		<button
 			type="button"
 			class="absolute inset-0 cursor-default border-0 p-0"
-			style="background: linear-gradient(135deg, rgba(15,31,26,0.55), rgba(10,20,16,0.65)); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);"
+			style="background: linear-gradient(135deg, rgba(15, 23, 42,0.55), rgba(20, 83, 45,0.65)); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);"
 			aria-label="Cerrar"
 			on:click={handleCloseCropModal}
 			transition:fade={{ duration: 200 }}
@@ -2107,7 +1939,7 @@
 					<h3
 						id="crop-title"
 						class="font-display text-lg"
-						style="color: var(--bg-charcoal); font-weight: 500;"
+						style="color: var(--bg-charcoal); font-weight: 800;"
 					>
 						Recortar imagen
 					</h3>
@@ -2146,7 +1978,7 @@
 				{#if photoSuccess}
 					<div
 						class="pointer-events-none absolute inset-0 flex items-center justify-center"
-						style="background: rgba(249, 115, 22,0.45); backdrop-filter: blur(2px);"
+						style="background: rgba(234, 88, 12,0.45); backdrop-filter: blur(2px);"
 						transition:fade={{ duration: 220 }}
 					>
 						<div
@@ -2280,6 +2112,504 @@
 {/if}
 
 <style>
+	/* ── Página del conductor ── */
+	.cond-pagina {
+		width: 100%;
+		padding: 1.25rem 1rem 2rem;
+	}
+	@media (min-width: 640px) {
+		.cond-pagina {
+			padding: 1.5rem 1.5rem 2.5rem;
+		}
+	}
+	@media (min-width: 1024px) {
+		.cond-pagina {
+			padding: 1.5rem 2rem 3rem;
+		}
+	}
+	.cond-volver {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		margin-bottom: 1.25rem;
+	}
+	.cond-miga {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-width: 0;
+		font-size: 0.85rem;
+		color: var(--text-muted);
+	}
+	.cond-miga a {
+		color: var(--text-muted);
+		text-decoration: none;
+	}
+	.cond-miga a:hover {
+		color: var(--text-primary);
+	}
+	.cond-miga strong {
+		font-weight: 700;
+		color: var(--text-primary);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+
+	/* Rejilla: el lateral gana ancho a medida que hay sitio y se queda
+	   pegado mientras el expediente hace scroll. */
+	.cond-grid {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 1.5rem;
+		align-items: start;
+	}
+	@media (min-width: 1024px) {
+		.cond-grid {
+			grid-template-columns: 320px minmax(0, 1fr);
+		}
+		.cond-aside {
+			position: sticky;
+			top: 1rem;
+			max-height: calc(100dvh - 4rem - 2rem);
+			overflow-y: auto;
+			scrollbar-width: none;
+		}
+		.cond-aside::-webkit-scrollbar {
+			display: none;
+		}
+	}
+	@media (min-width: 1280px) {
+		.cond-grid {
+			grid-template-columns: 380px minmax(0, 1fr);
+		}
+	}
+	@media (min-width: 1536px) {
+		.cond-grid {
+			grid-template-columns: 420px minmax(0, 1fr);
+		}
+	}
+	.cond-aside {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		min-width: 0;
+	}
+	/* En tableta el lateral va arriba: identidad a lo ancho y las otras dos
+	   tarjetas lado a lado. */
+	@media (min-width: 768px) and (max-width: 1023.98px) {
+		.cond-aside {
+			display: grid;
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.cond-hero {
+			grid-column: 1 / -1;
+		}
+		.cond-hero-cuerpo {
+			flex-direction: row;
+			text-align: left;
+		}
+		.cond-identidad {
+			align-items: flex-start;
+		}
+		.cond-pills {
+			justify-content: flex-start;
+		}
+	}
+	.cond-main {
+		min-width: 0;
+	}
+
+	/* ── Tarjeta de identidad ── */
+	.cond-hero {
+		position: relative;
+		border-radius: 24px;
+		padding: 1.5rem;
+		background: linear-gradient(160deg, var(--au-dark-2) 0%, var(--au-dark) 70%);
+		color: #fff;
+	}
+	.cond-hero-fondo {
+		position: absolute;
+		inset: 0;
+		overflow: hidden;
+		border-radius: inherit;
+		pointer-events: none;
+	}
+	.cond-orbe {
+		position: absolute;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.07);
+	}
+	.cond-orbe--grande {
+		width: 240px;
+		height: 240px;
+		right: -80px;
+		top: -110px;
+	}
+	.cond-orbe--chico {
+		width: 110px;
+		height: 110px;
+		left: -40px;
+		bottom: 30px;
+	}
+	.cond-hero-cuerpo {
+		position: relative;
+		z-index: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 1rem;
+		text-align: center;
+	}
+	.cond-foto-wrap {
+		position: relative;
+		flex-shrink: 0;
+	}
+	.cond-foto {
+		position: relative;
+		display: block;
+		width: 8.5rem;
+		height: 8.5rem;
+		overflow: hidden;
+		border-radius: 24px;
+		border: 3px solid rgba(255, 255, 255, 0.28);
+		background: rgba(255, 255, 255, 0.1);
+		padding: 0;
+		cursor: pointer;
+	}
+	@media (min-width: 1280px) {
+		.cond-foto {
+			width: 10rem;
+			height: 10rem;
+		}
+	}
+	.cond-foto img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		display: block;
+	}
+	.cond-foto-iniciales {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 100%;
+		height: 100%;
+		font-family: var(--font-display);
+		font-size: 2.4rem;
+		font-weight: 800;
+		color: #fff;
+		background: rgba(255, 255, 255, 0.12);
+	}
+	.cond-foto-velo {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: flex-end;
+		justify-content: center;
+		background: linear-gradient(180deg, rgba(0, 0, 0, 0) 55%, rgba(0, 0, 0, 0.5) 100%);
+		pointer-events: none;
+	}
+	.cond-foto-cambiar {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		margin-bottom: 0.5rem;
+		padding: 0.25rem 0.6rem;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.95);
+		font-size: 0.62rem;
+		font-weight: 700;
+		color: var(--au-dark);
+	}
+	.cond-foto-menu {
+		position: absolute;
+		top: 100%;
+		left: 50%;
+		z-index: 30;
+		width: 14rem;
+		margin-top: 0.5rem;
+		transform: translateX(-50%);
+	}
+	.cond-foto-menu-caja {
+		overflow: hidden;
+		border-radius: 14px;
+		background: var(--bg-surface);
+		border: 1px solid var(--border-subtle);
+		box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+		text-align: left;
+	}
+	.cond-foto-menu-item {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		width: 100%;
+		padding: 0.65rem 0.85rem;
+		border: none;
+		background: transparent;
+		font-family: inherit;
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--text-primary);
+		cursor: pointer;
+	}
+	.cond-foto-menu-item:hover {
+		background: var(--bg-base);
+	}
+	.cond-foto-menu-item--peligro {
+		color: #b91c1c;
+		border-top: 1px solid var(--border-subtle);
+	}
+	.cond-identidad {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.2rem;
+		min-width: 0;
+	}
+	.cond-eyebrow {
+		font-size: 0.62rem;
+		font-weight: 900;
+		letter-spacing: 0.13em;
+		text-transform: uppercase;
+		color: var(--au-eyebrow);
+	}
+	.cond-nombre {
+		margin: 0;
+		font-family: var(--font-display);
+		font-size: 1.35rem;
+		font-weight: 800;
+		letter-spacing: -0.02em;
+		line-height: 1.15;
+		color: #fff;
+	}
+	@media (min-width: 1280px) {
+		.cond-nombre {
+			font-size: 1.5rem;
+		}
+	}
+	.cond-documento {
+		margin: 0;
+		font-size: 0.8rem;
+		font-variant-numeric: tabular-nums;
+		color: rgba(255, 255, 255, 0.72);
+	}
+	.cond-pills {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 0.3rem;
+		margin-top: 0.5rem;
+	}
+	.cond-pill {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.22rem 0.65rem;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.12);
+		font-size: 0.68rem;
+		font-weight: 700;
+		color: #fff;
+		white-space: nowrap;
+	}
+	.cond-pill-punto {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+	}
+	.cond-cifras {
+		position: relative;
+		z-index: 1;
+		display: grid;
+		/* El salario es la cifra larga: se lleva más columna para no cortarse. */
+		grid-template-columns: 1.45fr 1fr 1fr;
+		margin: 1.25rem 0 0;
+		padding-top: 1rem;
+		border-top: 1px solid rgba(255, 255, 255, 0.14);
+	}
+	.cond-cifra {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.15rem;
+		padding: 0 0.15rem;
+		text-align: center;
+	}
+	.cond-cifra + .cond-cifra {
+		border-left: 1px solid rgba(255, 255, 255, 0.14);
+	}
+	.cond-cifra dt {
+		font-size: 0.6rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: rgba(255, 255, 255, 0.65);
+	}
+	.cond-cifra dd {
+		margin: 0;
+		font-family: var(--font-display);
+		font-size: 0.95rem;
+		font-weight: 800;
+		color: #fff;
+		white-space: nowrap;
+		max-width: 100%;
+	}
+
+	/* ── Tarjetas del lateral ── */
+	.cond-card {
+		padding: 1rem 1.1rem;
+	}
+	.cond-card-titulo {
+		margin: 0 0 0.6rem;
+		font-size: 0.62rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.cond-acciones {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+	.cond-accion {
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		width: 100%;
+		padding: 0.5rem 0.6rem;
+		border-radius: 12px;
+		border: 1px solid var(--border-subtle);
+		background: var(--bg-surface);
+		font-family: inherit;
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--text-primary);
+		text-align: left;
+		cursor: pointer;
+		transition:
+			border-color 0.15s ease,
+			background-color 0.15s ease;
+	}
+	.cond-accion:hover:not(:disabled) {
+		border-color: var(--emerald-500);
+		background: var(--bg-base);
+	}
+	.cond-accion:disabled {
+		opacity: 0.55;
+		cursor: not-allowed;
+	}
+	.cond-accion-icono {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 30px;
+		height: 30px;
+		flex-shrink: 0;
+		border-radius: 9px;
+		background: var(--au-tint);
+		color: var(--emerald-800);
+	}
+	.cond-accion-icono svg {
+		width: 15px;
+		height: 15px;
+	}
+	.cond-accion-texto {
+		flex: 1;
+		min-width: 0;
+	}
+	.cond-accion-meta {
+		max-width: 45%;
+		font-size: 0.68rem;
+		font-weight: 600;
+		color: var(--text-very-muted);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.cond-accion-flecha {
+		width: 14px;
+		height: 14px;
+		flex-shrink: 0;
+		color: var(--text-very-muted);
+	}
+	.cond-licencia {
+		border-left: 4px solid var(--emerald-500);
+	}
+	.cond-licencia--alerta {
+		border-left-color: #f59e0b;
+	}
+	.cond-licencia--vencida {
+		border-left-color: #dc2626;
+	}
+	.cond-licencia-fila {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.75rem;
+	}
+	.cond-licencia-icono {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 34px;
+		height: 34px;
+		flex-shrink: 0;
+		border-radius: 10px;
+		background: var(--au-tint);
+		color: var(--emerald-800);
+	}
+	.cond-licencia--alerta .cond-licencia-icono {
+		background: rgba(245, 158, 11, 0.12);
+		color: #b45309;
+	}
+	.cond-licencia--vencida .cond-licencia-icono {
+		background: rgba(220, 38, 38, 0.1);
+		color: #b91c1c;
+	}
+	.cond-licencia-icono svg {
+		width: 16px;
+		height: 16px;
+	}
+	.cond-licencia-fecha {
+		margin: 0.15rem 0 0;
+		font-size: 0.9rem;
+		font-weight: 700;
+		color: var(--text-primary);
+	}
+	.cond-licencia-nota {
+		margin: 0.2rem 0 0;
+		font-size: 0.75rem;
+		color: var(--emerald-800);
+	}
+	.cond-licencia--alerta .cond-licencia-nota {
+		color: #b45309;
+	}
+	.cond-licencia--vencida .cond-licencia-nota {
+		color: #b91c1c;
+	}
+
+	/* ── Pestañas: en pantallas medias se desplazan en vez de apilarse ── */
+	.cond-tabs {
+		display: flex;
+		flex-wrap: nowrap;
+		gap: 0.375rem;
+		overflow-x: auto;
+		scrollbar-width: none;
+		-webkit-overflow-scrolling: touch;
+	}
+	.cond-tabs::-webkit-scrollbar {
+		display: none;
+	}
+	.cond-tab {
+		flex-shrink: 0;
+	}
+	@media (min-width: 1280px) {
+		.cond-tabs {
+			flex-wrap: wrap;
+		}
+	}
+
 	.block-input {
 		appearance: none;
 		-webkit-appearance: none;
@@ -2297,7 +2627,7 @@
 	.block-input:focus {
 		outline: none;
 		border-color: var(--orange-500);
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12);
+		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.12);
 	}
 	.block-input::placeholder {
 		color: var(--text-very-muted);
@@ -2336,18 +2666,18 @@
 		width: 16px;
 		height: 16px;
 		border-radius: 50%;
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		cursor: pointer;
 		border: 2px solid white;
-		box-shadow: 0 2px 6px rgba(249, 115, 22, 0.4);
+		box-shadow: 0 2px 6px rgba(234, 88, 12, 0.4);
 	}
 	.crop-range::-moz-range-thumb {
 		width: 16px;
 		height: 16px;
 		border-radius: 50%;
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		cursor: pointer;
 		border: 2px solid white;
-		box-shadow: 0 2px 6px rgba(249, 115, 22, 0.4);
+		box-shadow: 0 2px 6px rgba(234, 88, 12, 0.4);
 	}
 </style>

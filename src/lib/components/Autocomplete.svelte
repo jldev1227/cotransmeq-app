@@ -402,11 +402,11 @@
     font-family: inherit;
   }
   .autocomplete-field:focus {
-    border-color: #ea580c;
+    border-color: #c2410c;
     box-shadow: 0 0 0 2px rgba(234, 88, 12, 0.1);
   }
   .autocomplete-field.has-value {
-    border-color: #ea580c;
+    border-color: #c2410c;
     background: rgba(234, 88, 12, 0.04);
   }
   .autocomplete-clear {
@@ -453,7 +453,7 @@
   }
   .autocomplete-option.selected {
     background: rgba(234, 88, 12, 0.12);
-    color: #047857;
+    color: #166534;
     font-weight: 700;
   }
   .autocomplete-option :global(mark) {

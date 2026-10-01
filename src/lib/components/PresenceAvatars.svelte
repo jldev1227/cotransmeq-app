@@ -25,8 +25,8 @@
   $: presence = users ?? globalPresence
 
   const AVATAR_COLORS = [
-    '#10b981', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
-    '#ec4899', '#06b6d4', '#f97316', '#6366f1', '#14b8a6',
+    '#16a34a', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6',
+    '#ec4899', '#06b6d4', '#ea580c', '#6366f1', '#14b8a6',
   ]
 
   function colorForUser(userId: string): string {

@@ -732,24 +732,24 @@
 	   TOKENS — landing-transmeralda editorial
 	   ═══════════════════════════════════════════════════ */
 	.page {
-		--bg: #faf7f2;
+		--bg: #fcfcfb;
 		--surface: #ffffff;
 		--border: rgba(0, 0, 0, 0.08);
 		--border-default: rgba(0, 0, 0, 0.12);
 		--border-hover: rgba(0, 0, 0, 0.2);
-		--text-primary: #0f1f1a;
-		--text-secondary: #4a4a4a;
-		--text-muted: #6b6b6b;
-		--text-very-muted: #9a9a9a;
-		--accent: #f97316;
-		--accent-hover: #ea580c;
-		--accent-bg: rgba(249, 115, 22, 0.08);
+		--text-primary: #0f172a;
+		--text-secondary: #334155;
+		--text-muted: #64748b;
+		--text-very-muted: #94a3b8;
+		--accent: #ea580c;
+		--accent-hover: #c2410c;
+		--accent-bg: rgba(234, 88, 12, 0.08);
 		--shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.04);
 		--ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
 
 		min-height: 100vh;
 		background: var(--bg);
-		font-family: 'Inter', 'Geist', system-ui, sans-serif;
+		font-family: var(--font-sans);
 		color: var(--text-primary);
 		-webkit-font-smoothing: antialiased;
 	}
@@ -771,7 +771,7 @@
 	.spinner-lg {
 		width: 36px;
 		height: 36px;
-		border: 3px solid rgba(249, 115, 22, 0.15);
+		border: 3px solid rgba(234, 88, 12, 0.15);
 		border-top-color: var(--accent);
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
@@ -834,7 +834,7 @@
 	.back-btn:hover {
 		background: var(--surface);
 		color: var(--accent-hover);
-		border-color: rgba(249, 115, 22, 0.3);
+		border-color: rgba(234, 88, 12, 0.3);
 	}
 
 	.page-titles {
@@ -844,7 +844,7 @@
 	}
 	.eyebrow {
 		display: inline-block;
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -857,7 +857,7 @@
 		align-self: flex-start;
 	}
 	.page-title {
-		font-family: 'Geist', Georgia, serif;
+		font-family: var(--font-sans);
 		font-size: 1.4rem;
 		font-weight: 500;
 		color: var(--text-primary);
@@ -900,11 +900,11 @@
 		background: linear-gradient(135deg, var(--accent), var(--accent-hover));
 		color: #fff;
 		border: none;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
+		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.3);
 	}
 	.btn-primary:hover:not(:disabled) {
 		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
+		box-shadow: 0 6px 20px rgba(234, 88, 12, 0.4);
 	}
 	.btn-primary svg {
 		width: 14px;
@@ -979,7 +979,7 @@
 		gap: 0.2rem;
 	}
 	.info-label {
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -1005,7 +1005,7 @@
 		margin: 0;
 	}
 	.meta-mono {
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.85em;
 		color: var(--text-primary);
 	}
@@ -1020,7 +1020,7 @@
 		align-items: center;
 		gap: 0.3rem;
 		padding: 0.2rem 0.55rem;
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.65rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -1093,7 +1093,7 @@
 	}
 	.search-wrap input:focus {
 		border-color: var(--accent);
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1);
 	}
 
 	.sort-wrap {
@@ -1115,7 +1115,7 @@
 	}
 	.select:focus {
 		border-color: var(--accent);
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1);
 	}
 	.sort-dir {
 		display: inline-flex;
@@ -1185,7 +1185,7 @@
 		border-bottom: 1px solid var(--border);
 	}
 	.th {
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -1218,7 +1218,7 @@
 		border-bottom: none;
 	}
 	.tr:hover {
-		background: rgba(249, 115, 22, 0.04);
+		background: rgba(234, 88, 12, 0.04);
 	}
 	.tr-selected {
 		background: var(--accent-bg);
@@ -1313,9 +1313,9 @@
 		transition: all 0.2s var(--ease);
 	}
 	.firma-thumb:hover {
-		border-color: rgba(249, 115, 22, 0.3);
+		border-color: rgba(234, 88, 12, 0.3);
 		background: var(--surface);
-		box-shadow: 0 4px 12px rgba(249, 115, 22, 0.1);
+		box-shadow: 0 4px 12px rgba(234, 88, 12, 0.1);
 	}
 	.firma-thumb img {
 		max-width: 100%;
@@ -1357,7 +1357,7 @@
 		height: 26px;
 	}
 	.empty-title {
-		font-family: 'Geist', Georgia, serif;
+		font-family: var(--font-sans);
 		font-size: 1.1rem;
 		font-weight: 500;
 		color: var(--text-primary);
@@ -1393,8 +1393,8 @@
 		transition: all 0.2s var(--ease);
 	}
 	.m-card-selected {
-		border-color: rgba(249, 115, 22, 0.3);
-		background: rgba(249, 115, 22, 0.03);
+		border-color: rgba(234, 88, 12, 0.3);
+		background: rgba(234, 88, 12, 0.03);
 	}
 	.m-card-head {
 		display: flex;
@@ -1425,7 +1425,7 @@
 		letter-spacing: -0.005em;
 	}
 	.m-card-date {
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.7rem;
 		color: var(--text-muted);
 		margin-top: 0.15rem;
@@ -1447,7 +1447,7 @@
 		grid-column: 1 / -1;
 	}
 	.m-card-dl dt {
-		font-family: 'Geist', monospace;
+		font-family: var(--font-mono);
 		font-size: 0.6rem;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -1469,7 +1469,7 @@
 		align-items: center;
 		justify-content: center;
 		padding: 1rem;
-		background: rgba(15, 31, 26, 0.55);
+		background: rgba(15, 23, 42, 0.55);
 		backdrop-filter: blur(8px);
 		-webkit-backdrop-filter: blur(8px);
 	}
@@ -1480,7 +1480,7 @@
 		border: 1px solid var(--border);
 		border-radius: 20px;
 		padding: 1.5rem 1.5rem 1.25rem;
-		box-shadow: 0 24px 64px rgba(15, 31, 26, 0.3);
+		box-shadow: 0 24px 64px rgba(15, 23, 42, 0.3);
 	}
 	.modal--lg {
 		max-width: 720px;
@@ -1512,7 +1512,7 @@
 		height: 22px;
 	}
 	.modal-title {
-		font-family: 'Geist', Georgia, serif;
+		font-family: var(--font-sans);
 		font-size: 1.1rem;
 		font-weight: 500;
 		color: var(--text-primary);

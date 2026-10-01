@@ -107,7 +107,7 @@
 		width: 26px;
 		height: 26px;
 		border: 3px solid rgba(255, 255, 255, 0.18);
-		border-top-color: #f97316;
+		border-top-color: #ea580c;
 		border-radius: 50%;
 		animation: uao-spin 0.7s linear infinite;
 	}
@@ -124,7 +124,7 @@
 		.uao-spinner {
 			animation: uao-pulso 1.4s ease-in-out infinite;
 			border-top-color: rgba(255, 255, 255, 0.18);
-			background: #f97316;
+			background: #ea580c;
 		}
 		@keyframes uao-pulso {
 			0%,

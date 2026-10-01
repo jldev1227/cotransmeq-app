@@ -308,7 +308,7 @@
 		margin-bottom: 5px;
 	}
 	.shn-input:focus {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: -1px;
 	}
 
@@ -337,7 +337,7 @@
 		background: #f1f5f9;
 	}
 	.shn-item-activo {
-		box-shadow: inset 2px 0 0 var(--emerald-600, #059669);
+		box-shadow: inset 2px 0 0 var(--emerald-600, #15803d);
 	}
 
 	.shn-nombre {

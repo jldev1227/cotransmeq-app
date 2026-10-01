@@ -1540,7 +1540,7 @@
 	<button
 		type="button"
 		class="fixed inset-0 z-[60] cursor-default border-0 p-0"
-		style="background: linear-gradient(135deg, rgba(15, 31, 26, 0.40), rgba(10, 20, 16, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
+		style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.40), rgba(20, 83, 45, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
 		aria-label="Cerrar modal"
 		on:click={handleClose}
 		transition:fade={{ duration: 200 }}
@@ -1564,9 +1564,9 @@
 							class="flex h-12 w-12 items-center justify-center rounded-xl"
 							style="background: linear-gradient(135deg, {editMode
 								? '#3b82f6, #2563eb'
-								: '#10b981, #059669'}); box-shadow: 0 6px 16px {editMode
+								: '#16a34a, #15803d'}); box-shadow: 0 6px 16px {editMode
 								? 'rgba(59, 130, 246, 0.30)'
-								: 'rgba(16, 185, 129, 0.30)'};"
+								: 'rgba(22, 163, 74, 0.30)'};"
 						>
 							<svg
 								class="h-6 w-6 text-white"
@@ -1591,14 +1591,14 @@
 								class="font-mono-meta mb-1 inline-block rounded-md px-2 py-0.5 text-[10px]"
 								style="color: {editMode ? '#2563eb' : 'var(--emerald-500)'}; background: {editMode
 									? 'rgba(59, 130, 246, 0.08)'
-									: 'rgba(16, 185, 129, 0.08)'}; letter-spacing: 0.12em;"
+									: 'rgba(22, 163, 74, 0.08)'}; letter-spacing: 0.12em;"
 							>
 								{getNombreMes(currentMonth)}
 								{currentYear}
 							</p>
 							<h2
 								class="font-display text-2xl"
-								style="color: var(--bg-charcoal); font-weight: 500;"
+								style="color: var(--bg-charcoal); font-weight: 800;"
 							>
 								{editMode ? 'Editar Recargo' : 'Nuevo Recargo'}
 							</h2>
@@ -1644,7 +1644,7 @@
 									style="width: {(progress.completed / progress.total) *
 										100}%; background: linear-gradient(90deg, {editMode
 										? '#3b82f6, #2563eb'
-										: '#10b981, #059669'});"
+										: '#16a34a, #15803d'});"
 								></div>
 							</div>
 						</div>
@@ -1667,18 +1667,20 @@
 					</div>
 				</div>
 
-				<!-- Tabs -->
-				<div class="mt-4 flex gap-2">
+				<!-- Tabs. En móvil son un control segmentado compacto: cada pestaña
+				     reparte el ancho, lleva el nombre corto y sin la pastilla «Opcional»;
+				     antes cada una medía media pantalla y la fila desbordaba. -->
+				<div class="mt-3 flex gap-1.5 sm:mt-4 sm:gap-2">
 					<button
 						on:click={() => (activeTab = 'informacion')}
-						class="flex items-center gap-2 rounded-lg px-4 py-2 transition-colors {activeTab ===
+						class="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors sm:flex-none sm:justify-start sm:gap-2 sm:px-4 sm:py-2 sm:text-sm sm:font-medium {activeTab ===
 						'informacion'
 							? editMode
 								? 'bg-blue-100 text-blue-700'
 								: 'bg-emerald-100 text-emerald-700'
 							: 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
 					>
-						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<svg class="hidden h-4 w-4 sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
@@ -1686,7 +1688,8 @@
 								d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
 							/>
 						</svg>
-						<span>Información Principal</span>
+						<span class="hidden sm:inline">Información Principal</span>
+						<span class="sm:hidden">Información</span>
 						{#if tabCompleted.informacion}
 							<svg class="h-4 w-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
 								<path
@@ -1700,14 +1703,14 @@
 
 					<button
 						on:click={() => (activeTab = 'condiciones')}
-						class="flex items-center gap-2 rounded-lg px-4 py-2 transition-colors {activeTab ===
+						class="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors sm:flex-none sm:justify-start sm:gap-2 sm:px-4 sm:py-2 sm:text-sm sm:font-medium {activeTab ===
 						'condiciones'
 							? editMode
 								? 'bg-blue-100 text-blue-700'
 								: 'bg-emerald-100 text-emerald-700'
 							: 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
 					>
-						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<svg class="hidden h-4 w-4 sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
@@ -1715,8 +1718,10 @@
 								d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
 							/>
 						</svg>
-						<span>Condiciones y Evaluación</span>
-						<span class="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600"
+						<span class="hidden sm:inline">Condiciones y Evaluación</span>
+						<span class="sm:hidden">Condiciones</span>
+						<span
+							class="hidden rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600 sm:inline"
 							>Opcional</span
 						>
 						{#if tabCompleted.condiciones}
@@ -1732,14 +1737,14 @@
 
 					<button
 						on:click={() => (activeTab = 'horarios')}
-						class="flex items-center gap-2 rounded-lg px-4 py-2 transition-colors {activeTab ===
+						class="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors sm:flex-none sm:justify-start sm:gap-2 sm:px-4 sm:py-2 sm:text-sm sm:font-medium {activeTab ===
 						'horarios'
 							? editMode
 								? 'bg-blue-100 text-blue-700'
 								: 'bg-emerald-100 text-emerald-700'
 							: 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
 					>
-						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+						<svg class="hidden h-4 w-4 sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
@@ -1747,7 +1752,8 @@
 								d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
 							/>
 						</svg>
-						<span>Horarios de Trabajo</span>
+						<span class="hidden sm:inline">Horarios de Trabajo</span>
+						<span class="sm:hidden">Horarios</span>
 						{#if tabCompleted.horarios}
 							<svg class="h-4 w-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
 								<path

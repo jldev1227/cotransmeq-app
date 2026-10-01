@@ -154,7 +154,7 @@
 				<div class="flex items-center gap-3">
 					<div
 						class="flex h-9 w-9 items-center justify-center rounded-xl"
-						style="background: linear-gradient(135deg, #f97316, #ea580c); box-shadow: 0 2px 8px rgba(249, 115, 22, 0.3);"
+						style="background: linear-gradient(135deg, #ea580c, #c2410c); box-shadow: 0 2px 8px rgba(234, 88, 12, 0.3);"
 					>
 						<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 							<path
@@ -335,13 +335,13 @@
 		margin: 0;
 		font-size: 17px;
 		font-weight: 600;
-		color: #1a1a1a;
+		color: #0f172a;
 		letter-spacing: -0.01em;
 	}
 	.modal-subtitle {
 		margin: 4px 0 0;
 		font-size: 12px;
-		color: #6b6b6b;
+		color: #64748b;
 		max-width: 440px;
 		line-height: 1.45;
 	}
@@ -364,7 +364,7 @@
 		align-items: center;
 		gap: 8px;
 		padding: 12px 24px;
-		background: #faf7f2;
+		background: #fcfcfb;
 		border-bottom: 1px solid rgba(0, 0, 0, 0.04);
 	}
 	.search-wrap {
@@ -393,16 +393,16 @@
 	}
 	.search-input:focus {
 		outline: none;
-		border-color: #f97316;
-		box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+		border-color: #ea580c;
+		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1);
 	}
 	.counter-pill {
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
 		padding: 4px 10px;
-		background: rgba(249, 115, 22, 0.08);
-		border: 1px solid rgba(249, 115, 22, 0.25);
+		background: rgba(234, 88, 12, 0.08);
+		border: 1px solid rgba(234, 88, 12, 0.25);
 		border-radius: 999px;
 		white-space: nowrap;
 	}
@@ -411,14 +411,14 @@
 		border: none;
 		font-size: 11px;
 		font-weight: 600;
-		color: #047857;
+		color: #166534;
 		cursor: pointer;
 		padding: 4px 8px;
 		border-radius: 6px;
 		transition: all 0.15s ease;
 	}
 	.btn-link:hover {
-		background: rgba(249, 115, 22, 0.06);
+		background: rgba(234, 88, 12, 0.06);
 	}
 	.modal-body {
 		padding: 16px 24px;
@@ -434,12 +434,12 @@
 		gap: 12px;
 		padding: 14px 24px;
 		border-top: 1px solid rgba(0, 0, 0, 0.06);
-		background: #faf7f2;
+		background: #fcfcfb;
 	}
 	.footer-hint {
 		margin: 0;
 		font-size: 11px;
-		color: #6b6b6b;
+		color: #64748b;
 		line-height: 1.4;
 	}
 	.items-list {
@@ -462,13 +462,13 @@
 		font: inherit;
 	}
 	.item-card:hover:not(:disabled) {
-		border-color: rgba(249, 115, 22, 0.45);
-		background: rgba(249, 115, 22, 0.02);
+		border-color: rgba(234, 88, 12, 0.45);
+		background: rgba(234, 88, 12, 0.02);
 		transform: translateX(2px);
 	}
 	.item-card.item-on {
-		border-color: rgba(249, 115, 22, 0.5);
-		background: rgba(249, 115, 22, 0.04);
+		border-color: rgba(234, 88, 12, 0.5);
+		background: rgba(234, 88, 12, 0.04);
 	}
 	.item-card.item-off {
 		opacity: 0.6;
@@ -489,8 +489,8 @@
 		transition: all 0.15s ease;
 	}
 	.item-checkbox.checked {
-		background: #f97316;
-		border-color: #f97316;
+		background: #ea580c;
+		border-color: #ea580c;
 	}
 	.item-body {
 		flex: 1;
@@ -499,7 +499,7 @@
 	.item-name {
 		font-size: 13px;
 		font-weight: 600;
-		color: #1a1a1a;
+		color: #0f172a;
 		margin: 0;
 		white-space: nowrap;
 		overflow: hidden;
@@ -509,7 +509,7 @@
 		font-size: 13px;
 		font-weight: 700;
 		font-variant-numeric: tabular-nums;
-		color: #047857;
+		color: #166534;
 		margin: 0;
 		flex-shrink: 0;
 	}
@@ -557,8 +557,8 @@
 	.spinner {
 		width: 24px;
 		height: 24px;
-		border: 3px solid rgba(249, 115, 22, 0.2);
-		border-top-color: #f97316;
+		border: 3px solid rgba(234, 88, 12, 0.2);
+		border-top-color: #ea580c;
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 	}
@@ -602,16 +602,16 @@
 		font-size: 12px;
 		font-weight: 600;
 		color: white;
-		background: linear-gradient(135deg, #f97316, #ea580c);
+		background: linear-gradient(135deg, #ea580c, #c2410c);
 		border: none;
 		border-radius: 8px;
 		cursor: pointer;
 		transition: all 0.15s ease;
-		box-shadow: 0 2px 6px rgba(249, 115, 22, 0.25);
+		box-shadow: 0 2px 6px rgba(234, 88, 12, 0.25);
 	}
 	.btn-primary-sm:hover:not(:disabled) {
 		transform: translateY(-1px);
-		box-shadow: 0 4px 10px rgba(249, 115, 22, 0.35);
+		box-shadow: 0 4px 10px rgba(234, 88, 12, 0.35);
 	}
 	.btn-primary-sm:disabled {
 		opacity: 0.5;
@@ -620,7 +620,7 @@
 		transform: none;
 	}
 	.code-badge {
-		font-family: 'JetBrains Mono', monospace;
+		font-family: var(--font-sans);
 		font-size: 10px;
 		background: #f1f5f9;
 		color: #475569;

@@ -634,7 +634,7 @@
 	// Paleta por tipo de día. Mismas convenciones que CalendarDiasLaborados
 	// para que el "recorrido" y el "calendario" se lean igual.
 	const COLOR_POR_TIPO: Record<TipoDia, { bg: string; text: string; border: string; dot: string; label: string; leftBar: string }> = {
-		LABORADO:      { bg: '#ea580c15', text: '#c2410c', border: '#ea580c40', dot: '#ea580c', label: 'Laborado',      leftBar: '#ea580c' },
+		LABORADO:      { bg: '#c2410c15', text: '#9a3412', border: '#c2410c40', dot: '#c2410c', label: 'Laborado',      leftBar: '#c2410c' },
 		DISPONIBLE:    { bg: '#2563eb15', text: '#1d4ed8', border: '#2563eb40', dot: '#2563eb', label: 'Disponible',    leftBar: '#2563eb' },
 		DESCANSO:      { bg: '#d9770615', text: '#b45309', border: '#d9770640', dot: '#d97706', label: 'Descanso',      leftBar: '#d97706' },
 		MANTENIMIENTO: { bg: '#dc262615', text: '#b91c1c', border: '#dc262640', dot: '#dc2626', label: 'Mantenimiento', leftBar: '#dc2626' }
@@ -1017,7 +1017,7 @@
 				{#if configsActivas.length > 0}
 					<span
 						class="ml-1 inline-flex items-center gap-1 rounded-full bg-orange-50 px-2 py-0.5 text-[10px] font-semibold"
-						style="color: #c2410c;"
+						style="color: #9a3412;"
 					>
 						{configsActivas.length}/{totalConfigsDisponibles} visibles
 					</span>
@@ -1055,7 +1055,7 @@
 					type="button"
 					onclick={abrirModalRegistrar}
 					class="apple-transition inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:opacity-95"
-					style="background: linear-gradient(135deg, #ea580c, #c2410c); box-shadow: 0 2px 6px rgba(249, 115, 22,0.25);"
+					style="background: linear-gradient(135deg, #c2410c, #9a3412); box-shadow: 0 2px 6px rgba(234, 88, 12,0.25);"
 					title="Registrar recorridos de un mes completo para un conductor (masivo)"
 				>
 					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
@@ -1266,11 +1266,11 @@
 				{stats.diasUnicos}
 			</p>
 		</div>
-		<div class="glass soft-shadow rounded-xl border border-orange-200/50 p-3" style="border-top: 3px solid #ea580c">
+		<div class="glass soft-shadow rounded-xl border border-orange-200/50 p-3" style="border-top: 3px solid #c2410c">
 			<p class="text-[10px] font-medium uppercase tracking-wide" style="color: var(--text-muted);">
 				Recorridos
 			</p>
-			<p class="mt-0.5 text-xl font-bold tabular-nums" style="color: #ea580c;">
+			<p class="mt-0.5 text-xl font-bold tabular-nums" style="color: #c2410c;">
 				{stats.totalRecorridos}
 			</p>
 		</div>
@@ -1282,11 +1282,11 @@
 				{stats.totalHoras.toFixed(1)}h
 			</p>
 		</div>
-		<div class="glass soft-shadow rounded-xl border border-amber-200/50 p-3" style="border-top: 3px solid {cambiosPendientes.total > 0 ? '#d97706' : '#ea580c'}">
+		<div class="glass soft-shadow rounded-xl border border-amber-200/50 p-3" style="border-top: 3px solid {cambiosPendientes.total > 0 ? '#d97706' : '#c2410c'}">
 			<p class="text-[10px] font-medium uppercase tracking-wide" style="color: var(--text-muted);">
 				Bonos marcados
 			</p>
-			<p class="mt-0.5 text-xl font-bold tabular-nums" style="color: {cambiosPendientes.total > 0 ? '#b45309' : '#ea580c'};">
+			<p class="mt-0.5 text-xl font-bold tabular-nums" style="color: {cambiosPendientes.total > 0 ? '#b45309' : '#c2410c'};">
 				{stats.totalChecks}
 			</p>
 			{#if cambiosPendientes.total > 0}
@@ -1294,16 +1294,16 @@
 					↳ {cambiosPendientes.total} sin guardar
 				</p>
 			{:else if stats.totalChecks > 0}
-				<p class="text-[9px] font-semibold" style="color: #ea580c;">
+				<p class="text-[9px] font-semibold" style="color: #c2410c;">
 					✓ sincronizado
 				</p>
 			{/if}
 		</div>
-		<div class="glass soft-shadow rounded-xl border border-orange-200/50 p-3" style="border-top: 3px solid #c2410c">
+		<div class="glass soft-shadow rounded-xl border border-orange-200/50 p-3" style="border-top: 3px solid #9a3412">
 			<p class="text-[10px] font-medium uppercase tracking-wide" style="color: var(--text-muted);">
 				Total a pagar
 			</p>
-			<p class="mt-0.5 text-xl font-bold tabular-nums" style="color: #c2410c;">
+			<p class="mt-0.5 text-xl font-bold tabular-nums" style="color: #9a3412;">
 				${formatCOP(stats.totalPagar)}
 			</p>
 			<p class="text-[9px] font-medium" style="color: var(--text-muted);">
@@ -1348,7 +1348,7 @@
 			{#each configsActivas as cfg (cfg.id)}
 				<span
 					class="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 font-mono text-[10px] font-semibold"
-					style="background: rgba(249, 115, 22, 0.06); color: #c2410c; border-color: rgba(249, 115, 22, 0.25);"
+					style="background: rgba(234, 88, 12, 0.06); color: #9a3412; border-color: rgba(234, 88, 12, 0.25);"
 					title={cfg.nombre}
 				>
 					{cfg.nombre} · ${formatCOP(Number(cfg.valor) || 0)}
@@ -1400,7 +1400,7 @@
 			<div class="flex items-center gap-3">
 				<span class="eyebrow">Modo Canvas · Recorridos</span>
 				<span
-					class="font-mono-meta text-[10px] text-[#6B6B6B]"
+					class="font-mono-meta text-[10px] text-[#64748b]"
 					style="text-transform: none; letter-spacing: 0.04em;"
 				>
 					{#if loading}
@@ -1468,7 +1468,7 @@
 		{:else}
 			<div class="relative min-h-0 flex-1 overflow-auto" style="background-color: #ffffff;">
 				<table
-					class="border-collapse text-[12px] text-[#1A1A1A]"
+					class="border-collapse text-[12px] text-[#0f172a]"
 					style="min-width: {totalAnchoTabla}px;"
 				>
 					<thead class="sticky top-0 z-20">
@@ -1477,43 +1477,43 @@
 								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-3 py-2.5 text-left align-bottom"
 								style="min-width: {COL_ANCHOS.conductor}px;"
 							>
-								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#6B6B6B]">Conductor</span>
+								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#64748b]">Conductor</span>
 							</th>
 							<th
 								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-3 py-2.5 text-left align-bottom"
 								style="min-width: {COL_ANCHOS.placa}px;"
 							>
-								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#6B6B6B]">Placa</span>
+								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#64748b]">Placa</span>
 							</th>
 							<th
 								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-3 py-2.5 text-left align-bottom"
 								style="min-width: {COL_ANCHOS.cliente}px;"
 							>
-								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#6B6B6B]">Cliente / Recorrido</span>
+								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#64748b]">Cliente / Recorrido</span>
 							</th>
 							<th
 								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-3 py-2.5 text-left align-bottom"
 								style="min-width: {COL_ANCHOS.horario}px;"
 							>
-								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#6B6B6B]">Horario</span>
+								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#64748b]">Horario</span>
 							</th>
 							<th
 								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-3 py-2.5 text-right align-bottom"
 								style="min-width: {COL_ANCHOS.horas}px;"
 							>
-								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#6B6B6B]">Horas</span>
+								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#64748b]">Horas</span>
 							</th>
 							<th
 								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-3 py-2.5 text-right align-bottom"
 								style="min-width: {COL_ANCHOS.km}px;"
 							>
-								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#6B6B6B]">KM</span>
+								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#64748b]">KM</span>
 							</th>
 							<th
 								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-3 py-2.5 text-center align-bottom"
 								style="min-width: {COL_ANCHOS.pernocte}px;"
 							>
-								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#6B6B6B]">Pernocte</span>
+								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#64748b]">Pernocte</span>
 							</th>
 							{#each configsActivas as cfg (cfg.id)}
 								<th
@@ -1522,10 +1522,10 @@
 									title={cfg.nombre}
 								>
 									<div class="flex flex-col items-center gap-0.5">
-										<span class="font-mono-meta text-[9px] uppercase tracking-wide text-[#c2410c]">
+										<span class="font-mono-meta text-[9px] uppercase tracking-wide text-[#9a3412]">
 											{cfg.nombre}
 										</span>
-										<span class="font-mono-meta text-[9px] text-[#6B6B6B]" style="text-transform: none;">
+										<span class="font-mono-meta text-[9px] text-[#64748b]" style="text-transform: none;">
 											${formatCOP(Number(cfg.valor) || 0)}
 										</span>
 									</div>
@@ -1535,7 +1535,7 @@
 								class="border-b border-r border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-3 py-2.5 text-left align-bottom"
 								style="min-width: {COL_ANCHOS.valorPagar}px;"
 							>
-								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#c2410c]">
+								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#9a3412]">
 									Valor a pagar
 								</span>
 							</th>
@@ -1543,7 +1543,7 @@
 								class="border-b border-[rgba(0,0,0,0.06)] bg-[#fcfcfb] px-2 py-2.5 text-center align-bottom"
 								style="min-width: {COL_ANCHOS.acciones}px;"
 							>
-								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#6B6B6B]">
+								<span class="font-mono-meta text-[10px] uppercase tracking-wide text-[#64748b]">
 									Acciones
 								</span>
 							</th>
@@ -1612,7 +1612,7 @@
 								{@const esLaborado = reg.tipo === 'LABORADO'}
 								<tr
 									class="border-b border-[rgba(0,0,0,0.04)] align-top"
-									style="background-color: {tieneBono ? 'rgba(249, 115, 22, 0.04)' : 'white'};
+									style="background-color: {tieneBono ? 'rgba(234, 88, 12, 0.04)' : 'white'};
 										box-shadow: inset 4px 0 0 0 {tipoColor.leftBar};"
 									in:fade={{ duration: 150, delay: Math.min(idx * 8, 200) }}
 								>
@@ -1638,7 +1638,7 @@
 										{#if seg}
 											<span
 												class="inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-[10px] font-semibold"
-												style="background-color: rgba(249, 115, 22, 0.06); color: #c2410c; border-color: rgba(249, 115, 22, 0.25);"
+												style="background-color: rgba(234, 88, 12, 0.06); color: #9a3412; border-color: rgba(234, 88, 12, 0.25);"
 											>
 												🚚 {seg.vehiculo_placa}
 											</span>
@@ -1771,8 +1771,8 @@
 												onclick={() => toggleBono(cfg.id, reg.id, segId)}
 												disabled={!canManageBonos || !esLaborado}
 												class="apple-transition inline-flex h-6 w-6 items-center justify-center rounded-md border-2 disabled:cursor-not-allowed disabled:opacity-60"
-												style:background-color={checked ? '#f97316' : 'white'}
-												style:border-color={checked ? '#f97316' : '#d1d5db'}
+												style:background-color={checked ? '#ea580c' : 'white'}
+												style:border-color={checked ? '#ea580c' : '#d1d5db'}
 												style:color={checked ? 'white' : 'transparent'}
 												aria-label="Aplicar bono: {cfg.nombre}"
 												title={!esLaborado
@@ -1799,7 +1799,7 @@
 										{:else}
 											<p
 												class="font-mono text-[11px] font-semibold tabular-nums leading-tight"
-												style="color: #c2410c;"
+												style="color: #9a3412;"
 												title={textoValor}
 											>
 												{textoValor}
@@ -1893,7 +1893,7 @@
 					{/each}
 				</div>
 				<p
-					class="font-mono-meta text-[10px] text-[#f97316]"
+					class="font-mono-meta text-[10px] text-[#ea580c]"
 					style="text-transform: none; letter-spacing: 0.04em;"
 				>
 					{filasPaginadas.length}/{filasFiltradas.length} recorridos · Total a pagar: ${formatCOP(stats.totalPagar)}

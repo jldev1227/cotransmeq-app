@@ -10,6 +10,15 @@
 	import ModalConfirmDelete from '$lib/components/vehiculos/ModalConfirmDelete.svelte';
 	import FilterDrawer from '$lib/components/ui/FilterDrawer.svelte';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import TablaLista from '$lib/components/listing/TablaLista.svelte';
+	import CeldaIdentidad from '$lib/components/listing/CeldaIdentidad.svelte';
+	import EstadoPunto from '$lib/components/listing/EstadoPunto.svelte';
+	import AccionesFila from '$lib/components/listing/AccionesFila.svelte';
+	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
+	import SegmentosFiltro from '$lib/components/listing/SegmentosFiltro.svelte';
+	import { mascota } from '$lib/mascot';
+	import { Pencil, Trash2 } from 'lucide-svelte';
+	import type { ColumnDef } from '@tanstack/table-core';
 	import { page } from '$app/state';
 	import { crearListingStore } from '$lib/listing/listingStore';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
@@ -58,9 +67,7 @@
 	// sesión termine de hidratarse. El backend aplica lo mismo sobre las
 	// rutas de escritura de `flota`; esto sólo evita ofrecer un botón
 	// que iba a devolver 403.
-	const puedeEditar = $derived(
-		!!$authStore.user && authStore.getAccessLevel('flota') === 'full'
-	);
+	const puedeEditar = $derived(!!$authStore.user && authStore.getAccessLevel('flota') === 'full');
 
 	const DEFS: DefinicionesFiltros<FiltrosFlota> = {
 		q: texto(),
@@ -152,9 +159,7 @@
 		}
 	}
 
-	const isAdmin = $derived(
-		$authStore.user?.rol === 'admin' || $authStore.user?.role === 'admin'
-	);
+	const isAdmin = $derived($authStore.user?.rol === 'admin' || $authStore.user?.role === 'admin');
 	const isOperaciones = $derived($authStore.user?.area?.includes('operaciones'));
 	const isTalentoHumano = $derived($authStore.user?.area?.includes('talento_humano'));
 	const canAccessSpecialViews = $derived(isAdmin || isOperaciones || isTalentoHumano);
@@ -219,7 +224,9 @@
 				const suyo = (v.estado ?? '').toUpperCase();
 				const buscado = filtros.estado.toUpperCase();
 				const equivalentes =
-					buscado === 'DISPONIBLE' ? ['DISPONIBLE', 'ACTIVO'] : [buscado, buscado.replace('_', ' ')];
+					buscado === 'DISPONIBLE'
+						? ['DISPONIBLE', 'ACTIVO']
+						: [buscado, buscado.replace('_', ' ')];
 				if (!equivalentes.includes(suyo)) return false;
 			}
 			return coincide(filtros.q, [
@@ -295,7 +302,7 @@
 		switch (estado?.toUpperCase()) {
 			case 'DISPONIBLE':
 			case 'ACTIVO':
-				return '#10b981';
+				return '#16a34a';
 			case 'SERVICIO':
 				return '#8b5cf6';
 			case 'MANTENIMIENTO':
@@ -308,6 +315,64 @@
 			default:
 				return '#9ca3af';
 		}
+	}
+
+	function getStatusLabel(estado: string) {
+		switch (estado?.toUpperCase()) {
+			case 'DISPONIBLE':
+			case 'ACTIVO':
+				return 'Disponible';
+			case 'SERVICIO':
+				return 'En servicio';
+			case 'MANTENIMIENTO':
+				return 'Mantenimiento';
+			case 'INACTIVO':
+				return 'Inactivo';
+			case 'NO_DISPONIBLE':
+			case 'NO DISPONIBLE':
+				return 'Fuera de servicio';
+			default:
+				return estado
+					? estado.charAt(0).toUpperCase() + estado.slice(1).toLowerCase()
+					: 'Sin estado';
+		}
+	}
+
+	/// Columnas de la lista. Sin `accessorKey` en las de presentación: la
+	/// celda las pinta con el snippet y `TablaLista` no intenta leer un valor.
+	const COLUMNAS: ColumnDef<Vehiculo, any>[] = [
+		{ id: 'vehiculo', header: 'Vehículo', accessorKey: 'placa', enableSorting: false },
+		{ id: 'detalle', header: 'Modelo · Clase', enableSorting: false },
+		{ id: 'conductor', header: 'Conductor asignado', enableSorting: false },
+		{ id: 'estado', header: 'Estado', accessorKey: 'estado', enableSorting: false, size: 150 },
+		{ id: 'acciones', header: '', enableSorting: false, size: 110 }
+	];
+
+	const SEGMENTOS_ESTADO = [
+		{ valor: 'todos', etiqueta: 'Todos' },
+		{ valor: 'disponible', etiqueta: 'Disponibles', punto: '#16a34a' },
+		{ valor: 'servicio', etiqueta: 'En servicio', punto: '#8b5cf6' },
+		{ valor: 'mantenimiento', etiqueta: 'Mantenimiento', punto: '#f59e0b' },
+		{ valor: 'inactivo', etiqueta: 'Inactivos', punto: '#64748b' }
+	];
+
+	const conteos = $derived([
+		{ clave: 'todos', etiqueta: 'Total', valor: stats.total },
+		{ clave: 'disponible', etiqueta: 'Disponibles', valor: stats.disponible, color: '#16a34a' },
+		{ clave: 'servicio', etiqueta: 'En servicio', valor: stats.servicio, color: '#8b5cf6' },
+		{
+			clave: 'mantenimiento',
+			etiqueta: 'Mantenimiento',
+			valor: stats.mantenimiento,
+			color: '#f59e0b'
+		},
+		{ clave: 'inactivo', etiqueta: 'Inactivos', valor: stats.inactivo, color: '#64748b' },
+		{ clave: 'fuera', etiqueta: 'Fuera de servicio', valor: stats.noDisponible, color: '#dc2626' }
+	]);
+
+	function filtrarPorConteo(clave: string) {
+		if (clave === 'fuera') return;
+		filtros = { ...filtros, estado: filtros.estado === clave ? 'todos' : clave };
 	}
 
 	function openModal(id: string | null = null) {
@@ -368,128 +433,100 @@
 	<title>Flota — Cotransmeq</title>
 </svelte:head>
 
-<div class="flex h-full min-h-0 flex-col gap-4 p-6" in:fade={{ duration: 400 }}>
-	<!-- ── HEADER (page-card editorial) ─────────────────────── -->
-	<div class="page-card flex-shrink-0" style="padding: 1.25rem 1.5rem;">
-		<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-			<div class="flex items-center gap-3">
-				<div
-					class="brand-gradient flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
-					style="box-shadow: 0 4px 16px rgba(16, 185, 129, 0.3);"
-				>
-					<svg
-						class="h-5 w-5 text-white"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-						stroke-width="1.8"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
-					</svg>
-				</div>
-				<div>
-					<div class="flex items-center gap-2">
-						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 400;">
-							Gestión de Flota
-						</h1>
-						<!-- Aquí había un chip «En vivo» pintado a mano, sin mirar el socket:
-						     decía «En vivo» también con la conexión caída. El estado real lo
-						     muestra el header, junto al nombre de la sección. -->
-					</div>
-					<p class="text-xs" style="color: var(--text-muted);">
-						Monitorea y administra todos los vehículos de la empresa
-					</p>
-				</div>
+<div class="dir-pagina {shiftPressed ? 'select-none' : ''}" in:fade={{ duration: 400 }}>
+	<!-- ── CABECERA: título, conteos y acciones ─────────────── -->
+	<header class="page-card dir-cabecera" style="padding: 1.25rem 1.5rem;">
+		<div class="dir-cabecera-texto">
+			<h1 class="dir-titulo">Flota</h1>
+			<p class="dir-desc">Monitorea y administra todos los vehículos de la empresa.</p>
+			<div class="dir-conteos">
+				<ResumenConteos
+					{conteos}
+					activo={filtros.estado === 'todos' ? null : filtros.estado}
+					onElegir={filtrarPorConteo}
+				/>
 			</div>
+		</div>
 
-			<div class="flex flex-wrap items-center gap-2">
-				<!-- Vistas Rápidas (Icon Buttons) -->
-				{#if canAccessSpecialViews}
-					<div class="mr-1 flex items-center gap-1">
-						<button
-							onclick={() =>
-								(filtros = {
-									...filtros,
-									vista: filtros.vista === 'ocultos' ? 'activos' : 'ocultos'
-								})}
-							title={filtros.vista === 'ocultos' ? 'Ver Activos' : 'Ver Ocultos'}
-							class="apple-transition btn-icon"
-							style="border-color: {filtros.vista === 'ocultos'
-								? 'var(--emerald-500)'
-								: 'var(--border-default)'}; background-color: {filtros.vista === 'ocultos'
-								? 'rgba(16,185,129,0.04)'
-								: 'white'}; color: {filtros.vista === 'ocultos' ? 'var(--emerald-600)' : 'var(--text-muted)'};"
-						>
-							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
-								/>
-							</svg>
-						</button>
-						<button
-							onclick={() =>
-								(filtros = {
-									...filtros,
-									vista: filtros.vista === 'papelera' ? 'activos' : 'papelera'
-								})}
-							title={filtros.vista === 'papelera' ? 'Ver Activos' : 'Ver Papelera'}
-							class="apple-transition btn-icon"
-							style="border-color: {filtros.vista === 'papelera'
-								? '#dc2626'
-								: 'var(--border-default)'}; background-color: {filtros.vista === 'papelera'
-								? 'rgba(220,38,38,0.04)'
-								: 'white'}; color: {filtros.vista === 'papelera' ? '#dc2626' : 'var(--text-muted)'};"
-						>
-							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-								/>
-							</svg>
-						</button>
-					</div>
-				{/if}
-
-				<div class="w-64">
-					<BuscadorLista
-						bind:valor={filtros.q}
-						onBuscar={(termino) => (filtros = { ...filtros, q: termino })}
-						placeholder="Placa, marca…"
-						etiqueta="Buscar vehículos"
-					/>
-				</div>
+		<div class="dir-cabecera-acciones">
+			<!-- Vistas rápidas: ocultos y papelera -->
+			{#if canAccessSpecialViews}
 				<button
-					onclick={() => (mostrarFiltros = !mostrarFiltros)}
-					class="btn-secondary"
-					style="border-color: {mostrarFiltros
+					onclick={() =>
+						(filtros = {
+							...filtros,
+							vista: filtros.vista === 'ocultos' ? 'activos' : 'ocultos'
+						})}
+					title={filtros.vista === 'ocultos' ? 'Ver activos' : 'Ver ocultos'}
+					class="btn-icon"
+					style="border-color: {filtros.vista === 'ocultos'
 						? 'var(--emerald-500)'
-						: 'var(--border-default)'}; color: {mostrarFiltros
-						? 'var(--emerald-700)'
-						: 'var(--text-secondary)'}; background-color: {mostrarFiltros
-						? 'rgba(16,185,129,0.04)'
-						: 'white'};"
+						: 'var(--border-default)'}; background-color: {filtros.vista === 'ocultos'
+						? 'var(--au-tint)'
+						: 'white'}; color: {filtros.vista === 'ocultos'
+						? 'var(--emerald-800)'
+						: 'var(--text-muted)'};"
 				>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
-							d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+							d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
 						/>
 					</svg>
-					Filtros
 				</button>
-				{#if puedeEditar}
-					<button onclick={() => openModal()} class="btn-primary">
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-						</svg>
-						Registrar Vehículo
-					</button>
-				{/if}
-			</div>
+				<button
+					onclick={() =>
+						(filtros = {
+							...filtros,
+							vista: filtros.vista === 'papelera' ? 'activos' : 'papelera'
+						})}
+					title={filtros.vista === 'papelera' ? 'Ver activos' : 'Ver papelera'}
+					class="btn-icon"
+					style="border-color: {filtros.vista === 'papelera'
+						? '#dc2626'
+						: 'var(--border-default)'}; background-color: {filtros.vista === 'papelera'
+						? 'rgba(220,38,38,0.04)'
+						: 'white'}; color: {filtros.vista === 'papelera' ? '#dc2626' : 'var(--text-muted)'};"
+				>
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+						/>
+					</svg>
+				</button>
+			{/if}
+
+			<button
+				onclick={() => (mostrarFiltros = !mostrarFiltros)}
+				class="btn-secondary"
+				style="border-color: {mostrarFiltros
+					? 'var(--emerald-500)'
+					: 'var(--border-default)'}; color: {mostrarFiltros
+					? 'var(--emerald-800)'
+					: 'var(--text-secondary)'}; background-color: {mostrarFiltros
+					? 'var(--au-tint)'
+					: 'white'};"
+			>
+				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
+					/>
+				</svg>
+				Filtros
+			</button>
+			{#if puedeEditar}
+				<button onclick={() => openModal()} class="btn-primary">
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+					</svg>
+					Registrar vehículo
+				</button>
+			{/if}
 		</div>
 
 		<!-- Panel de filtros (drawer lateral) — siempre montado para que las
@@ -564,11 +601,7 @@
 			</div>
 
 			<div slot="footer">
-				<button
-					class="filter-clear"
-					onclick={limpiarFiltros}
-					disabled={activeFilters.length === 0}
-				>
+				<button class="filter-clear" onclick={limpiarFiltros} disabled={activeFilters.length === 0}>
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"
 						><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg
 					>
@@ -582,217 +615,116 @@
 				</button>
 			</div>
 		</FilterDrawer>
+	</header>
+
+	<!-- ── FILTROS A LA VISTA: buscador + estado ─────────────── -->
+	<div class="dir-filtros" in:fly={{ y: 12, duration: 400, delay: 100 }}>
+		<div class="dir-filtros-buscador">
+			<BuscadorLista
+				bind:valor={filtros.q}
+				onBuscar={(termino) => (filtros = { ...filtros, q: termino })}
+				placeholder="Placa, marca, modelo o conductor…"
+				etiqueta="Buscar vehículos"
+			/>
+		</div>
+		<SegmentosFiltro
+			etiqueta="Estado"
+			opciones={SEGMENTOS_ESTADO}
+			valor={filtros.estado}
+			onCambiar={(v) => (filtros = { ...filtros, estado: v })}
+		/>
 	</div>
 
-	<!-- ── STATS CARDS (radios 16, mono labels) ──────────────── -->
-	<div
-		class="grid flex-shrink-0 grid-cols-2 gap-3 lg:grid-cols-6"
-		in:fly={{ y: 12, duration: 400, delay: 100 }}
-	>
-		<div class="stat-card">
-			<p class="stat-label">Total</p>
-			<p class="stat-value">{stats.total}</p>
-		</div>
-		<div class="stat-card">
-			<p class="stat-label">Disponibles</p>
-			<p class="stat-value" style="color: var(--emerald-600);">{stats.disponible}</p>
-		</div>
-		<div class="stat-card">
-			<p class="stat-label">En Servicio</p>
-			<p class="stat-value" style="color: #8b5cf6;">{stats.servicio}</p>
-		</div>
-		<div class="stat-card">
-			<p class="stat-label">Mantenimiento</p>
-			<p class="stat-value" style="color: #f59e0b;">{stats.mantenimiento}</p>
-		</div>
-		<div class="stat-card">
-			<p class="stat-label">Inactivos</p>
-			<p class="stat-value" style="color: var(--text-muted);">{stats.inactivo}</p>
-		</div>
-		<div class="stat-card">
-			<p class="stat-label">Fuera Serv.</p>
-			<p class="stat-value" style="color: #dc2626;">{stats.noDisponible}</p>
-		</div>
-	</div>
-
-	<!-- ── TABLA (table-card editorial) ──────────────────────── -->
-	<div
-		class="table-card flex min-h-0 flex-1 flex-col {shiftPressed ? 'select-none' : ''}"
-		in:fly={{ y: 12, duration: 400, delay: 150 }}
-	>
-		{#if isLoading}
-			<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12">
-				<div class="spinner" style="width: 2.5rem; height: 2.5rem; border-width: 4px;"></div>
-				<p class="text-sm" style="color: var(--text-muted);">Cargando flota…</p>
-			</div>
-		{:else if vehiculos.length === 0}
-			<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12">
-				<div
-					class="flex h-14 w-14 items-center justify-center rounded-2xl"
-					style="background-color: var(--bg-base);"
-				>
-					<svg
-						class="h-7 w-7"
-						style="color: var(--text-very-muted);"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-						stroke-width="1.8"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
-					</svg>
-				</div>
-				<div class="text-center">
-					<h3 class="mb-1 font-display text-lg" style="color: var(--bg-charcoal);">
-						No hay vehículos
-					</h3>
-					<p class="text-sm" style="color: var(--text-muted);">No se encontraron resultados</p>
-				</div>
-				<button onclick={limpiarFiltros} class="btn-primary">Limpiar filtros</button>
-			</div>
-		{:else}
-			<!-- Cards grid: 1 col mobile, 2 sm, 3 lg, 4 xl -->
-			<div class="min-h-0 flex-1 overflow-y-auto p-3">
-				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-					{#each vehiculosVisibles as v, index (v.id)}
-						<article
-							class="list-card"
-							style="border-left: 4px solid {getStatusColor(v.estado)};
-								background-color: {vehiculosSeleccionados.has(v.id)
-								? 'rgba(16, 185, 129, 0.04)'
-								: 'var(--bg-surface)'};
-								border-color: {vehiculosSeleccionados.has(v.id) ? 'var(--emerald-500)' : 'var(--border-subtle)'};
-								border-left-color: {getStatusColor(v.estado)};"
-							in:fly={{ y: 8, duration: 200, delay: Math.min(index * 20, 200) }}
-							onclick={(e) => toggleSeleccion(v.id, index, e)}
-							role="button"
-							tabindex="0"
-						>
-							<!-- Checkbox -->
-							<div class="flex-shrink-0 pt-0.5">
+	<!-- ── LISTA ─────────────────────────────────────────────── -->
+	<div class="dir-lista" in:fly={{ y: 12, duration: 400, delay: 150 }}>
+		<div class="dir-lista-scroll">
+			<TablaLista
+				columnas={COLUMNAS}
+				datos={vehiculosVisibles}
+				claveFila={(v) => v.id}
+				cargando={isLoading}
+				onFila={puedeEditar ? (v) => openModal(v.id) : undefined}
+				etiqueta="Vehículos de la flota"
+			>
+				{#snippet celda({ columnaId, fila: v })}
+					{#if columnaId === 'vehiculo'}
+						<div class="flex items-center">
+							<span class="dir-check">
 								<input
 									type="checkbox"
 									checked={vehiculosSeleccionados.has(v.id)}
 									onclick={(e) => {
 										e.stopPropagation();
-										toggleSeleccion(v.id, index, e);
+										toggleSeleccion(v.id, vehiculosVisibles.indexOf(v), e);
 									}}
-									class="rounded text-emerald-600 focus:ring-emerald-500"
-									style="border-color: var(--border-default);"
+									aria-label="Seleccionar {v.placa}"
 								/>
+							</span>
+							<CeldaIdentidad
+								codigo={v.placa}
+								titulo={[v.marca, v.linea].filter(Boolean).join(' ') || 'Sin marca'}
+								subtitulo={v.color ? v.color : undefined}
+							/>
+						</div>
+					{:else if columnaId === 'detalle'}
+						<div class="dir-celda">
+							<span>{v.modelo || '—'}</span>
+							<small>{v.clase_vehiculo ? v.clase_vehiculo.toUpperCase() : 'Sin clase'}</small>
+						</div>
+					{:else if columnaId === 'conductor'}
+						{#if v.conductores}
+							<div class="dir-celda">
+								<span>{v.conductores.nombre} {v.conductores.apellido}</span>
 							</div>
+						{:else}
+							<span class="dir-nulo">Sin conductor asignado</span>
+						{/if}
+					{:else if columnaId === 'estado'}
+						<EstadoPunto
+							etiqueta={getStatusLabel(v.estado)}
+							color={getStatusColor(v.estado)}
+							apagado={v.estado?.toUpperCase() === 'INACTIVO'}
+						/>
+					{:else if columnaId === 'acciones'}
+						<AccionesFila
+							acciones={[
+								{
+									id: 'editar',
+									etiqueta: 'Editar',
+									icono: Pencil,
+									onClick: () => openModal(v.id),
+									oculta: !puedeEditar
+								},
+								{
+									id: 'eliminar',
+									etiqueta: 'Eliminar',
+									icono: Trash2,
+									onClick: () => openDeleteModal(v),
+									peligrosa: true,
+									oculta: !puedeEditar
+								}
+							]}
+						/>
+					{/if}
+				{/snippet}
 
-							<!-- Contenido principal -->
-							<div class="min-w-0 flex-1">
-								<!-- Header: placa (mono) + status pill -->
-								<div class="mb-1.5 flex items-start justify-between gap-2">
-									<p
-										class="font-mono-meta text-sm"
-										style="color: var(--text-primary); letter-spacing: 0.08em;"
-									>
-										{v.placa}
-									</p>
-								</div>
-
-								<!-- Marca + modelo (línea principal) -->
-								<p class="text-sm leading-snug font-semibold" style="color: var(--text-primary);">
-									{v.marca}
-									{v.linea || ''}
-								</p>
-								<p class="text-[11px] leading-relaxed" style="color: var(--text-muted);">
-									{v.modelo || '—'} · {v.color || '—'}{#if v.clase_vehiculo}
-										· <span class="uppercase">{v.clase_vehiculo}</span>{/if}
-								</p>
-
-								<!-- Footer: conductor asignado -->
-								<div
-									class="mt-2 flex items-center gap-1.5 text-[11px]"
-									style="color: var(--text-secondary);"
-								>
-									<svg
-										class="h-3 w-3 flex-shrink-0"
-										style="color: var(--text-very-muted);"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-										stroke-width="1.8"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-										/>
-									</svg>
-									<span class="truncate">
-										{#if v.conductores}
-											<span class="font-medium" style="color: var(--text-primary);"
-												>{v.conductores.nombre} {v.conductores.apellido}</span
-											>
-										{:else}
-											<span class="italic" style="color: var(--text-very-muted);"
-												>Sin conductor asignado</span
-											>
-										{/if}
-									</span>
-								</div>
-							</div>
-
-							<!-- Actions (vertical) -->
-							<div
-								class="flex flex-shrink-0 flex-col gap-1"
-								onclick={(e) => e.stopPropagation()}
-								role="presentation"
-							>
-								{#if puedeEditar}
-									<button
-										onclick={() => openModal(v.id)}
-										class="apple-transition rounded-md p-1.5"
-										style="color: var(--emerald-600); background-color: rgba(16, 185, 129, 0.06);"
-										title="Editar"
-									>
-										<svg
-											class="h-3.5 w-3.5"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-											stroke-width="1.8"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M15.232 5.232l3.536 3.536M9 13l6.586-6.586a2 2 0 112.828 2.828L11.828 15.828a2 2 0 01-2.828 0L9 13zm-4 6h16"
-											/>
-										</svg>
-									</button>
-								{/if}
-								{#if puedeEditar}
-									<button
-										onclick={() => openDeleteModal(v)}
-										class="apple-transition rounded-md p-1.5"
-										style="color: #dc2626; background-color: rgba(220, 38, 38, 0.06);"
-										title="Eliminar"
-									>
-										<svg
-											class="h-3.5 w-3.5"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-											stroke-width="1.8"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-											/>
-										</svg>
-									</button>
-								{/if}
-							</div>
-						</article>
-					{/each}
-				</div>
-			</div>
-		{/if}
+				{#snippet vacio()}
+					{@const img = mascota('vacio')}
+					<div class="dir-vacio">
+						<img src={img.src} alt={img.alt} width="418" height="418" />
+						<h3>No hay vehículos</h3>
+						<p>
+							{activeFilters.length
+								? 'No se encontraron vehículos con los filtros aplicados.'
+								: 'Registra el primer vehículo para verlo aquí.'}
+						</p>
+						{#if activeFilters.length}
+							<button onclick={limpiarFiltros} class="btn-secondary">Limpiar filtros</button>
+						{/if}
+					</div>
+				{/snippet}
+			</TablaLista>
+		</div>
 	</div>
 
 	<!-- Bulk Actions Bar — fondo charcoal profundo (no glass) -->

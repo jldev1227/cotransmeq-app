@@ -209,8 +209,8 @@
 	}
 
 	.card--sel {
-		border-color: var(--emerald-600, #059669);
-		box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+		border-color: var(--emerald-600, #15803d);
+		box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
 	}
 
 	.card--error {
@@ -229,7 +229,7 @@
 		width: 1.25rem;
 		text-align: center;
 		font-size: 0.875rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 		cursor: grab;
 		user-select: none;
 	}
@@ -250,14 +250,14 @@
 	}
 
 	.card__cuerpo:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 1px;
 	}
 
 	.card__titulo {
 		font-size: 0.875rem;
 		font-weight: 500;
-		color: var(--text-primary, #1a1a1a);
+		color: var(--text-primary, #0f172a);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -274,7 +274,7 @@
 		align-items: center;
 		gap: 0.375rem;
 		font-size: 0.6875rem;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.card__tipo {
@@ -316,7 +316,7 @@
 		place-items: center;
 		font: inherit;
 		font-size: 0.8125rem;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 		background: none;
 		border: 1px solid transparent;
 		border-radius: 6px;
@@ -329,7 +329,7 @@
 	}
 
 	.accion:focus-visible {
-		outline: 2px solid var(--emerald-600, #059669);
+		outline: 2px solid var(--emerald-600, #15803d);
 		outline-offset: 1px;
 	}
 
@@ -382,13 +382,13 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: var(--text-muted, #6b6b6b);
+		color: var(--text-muted, #64748b);
 	}
 
 	.hijos__conteo {
 		font-family: var(--font-mono, monospace);
 		font-weight: 500;
-		color: var(--text-very-muted, #9a9a9a);
+		color: var(--text-very-muted, #94a3b8);
 	}
 
 	.hijos__zona {
@@ -412,7 +412,7 @@
 		font: inherit;
 		font-size: 0.75rem;
 		font-weight: 600;
-		color: var(--emerald-700, #047857);
+		color: var(--emerald-700, #166534);
 		background: none;
 		border: 1px dashed #fdba74;
 		border-radius: 8px;
