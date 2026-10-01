@@ -40,7 +40,7 @@
 </script>
 
 <svelte:head>
-	<title>Preview Ocasional · Liquidaciones de Terceros · Cotransmeq</title>
+	<title>Vista previa Ocasional · Liquidaciones de Terceros · Cotransmeq</title>
 </svelte:head>
 
 <div class="flex h-full min-h-0 flex-col" in:fade={{ duration: 300 }}>
@@ -64,7 +64,7 @@
 		<div class="flex flex-1 items-center justify-center p-12">
 			<div class="flex flex-col items-center gap-3">
 				<div class="h-10 w-10 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"></div>
-				<p class="text-[13px] text-gray-500">Cargando preview mensual…</p>
+				<p class="text-[13px] text-gray-500">Cargando vista previa mensual…</p>
 			</div>
 		</div>
 	{:else if loadError}

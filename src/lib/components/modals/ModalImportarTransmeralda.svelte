@@ -85,7 +85,7 @@
 			errorMsg =
 				err?.response?.data?.message ||
 				err?.message ||
-				'No se pudo obtener el preview de Transmeralda';
+				'No se pudo obtener la vista previa de Transmeralda';
 		} finally {
 			loadingPreview = false;
 		}

@@ -59,7 +59,7 @@
 </script>
 
 <svelte:head>
-	<title>{version ? `Preview v${version.versionNumber}` : 'Preview'} · Formularios</title>
+	<title>{version ? `Vista previa v${version.versionNumber}` : 'Vista previa'} · Formularios</title>
 </svelte:head>
 
 <div class="pagina">
@@ -69,7 +69,7 @@
 			<span aria-hidden="true">›</span>
 			<a href={`/dashboard/formularios/${formId}`}>Resumen</a>
 			<span aria-hidden="true">›</span>
-			<span>Preview {version ? `v${version.versionNumber}` : ''}</span>
+			<span>Vista previa {version ? `v${version.versionNumber}` : ''}</span>
 		</nav>
 
 		<div class="barra__controles">
@@ -129,7 +129,7 @@
 						class="btn btn--primario"
 						onclick={() => {
 							const ok = runner!.attemptSubmit();
-							if (ok) toast.success('El formulario está completo. (Preview: no se envía nada.)');
+							if (ok) toast.success('El formulario está completo. (Vista previa: no se envía nada.)');
 							else toast.error(`Faltan ${runner!.validation.errors.length} respuestas.`);
 						}}
 					>

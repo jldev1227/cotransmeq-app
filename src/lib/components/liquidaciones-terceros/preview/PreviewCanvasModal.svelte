@@ -352,7 +352,7 @@
 				</button>
 			{/if}
 
-			<button class="prev-btn" onclick={onClose} title="Cerrar el preview (Esc)">
+			<button class="prev-btn" onclick={onClose} title="Cerrar la vista previa (Esc)">
 				<svg
 					width="14"
 					height="14"

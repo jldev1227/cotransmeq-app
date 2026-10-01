@@ -1393,17 +1393,17 @@
 			},
 			{
 				id: 'preview',
-				label: 'Ver preview',
+				label: 'Ver vista previa',
 				hint:
 					seleccionLiq.length === 1
-						? `Abre el preview de ${seleccionLiq[0].consecutivo}.`
+						? `Abre la vista previa de ${seleccionLiq[0].consecutivo}.`
 						: 'También se abre pulsando 👁 VER en la primera columna.',
 				icon: icoVer,
 				disabled: seleccionLiq.length !== 1 || !!solicitudEditor,
 				disabledHint:
 					seleccionLiq.length === 0
 						? 'Selecciona una fila, o pulsa 👁 VER en la columna de acciones.'
-						: 'El preview es de una sola liquidación; hay varias seleccionadas.',
+						: 'La vista previa es de una sola liquidación; hay varias seleccionadas.',
 				onSelect: () => {
 					if (seleccionLiq.length === 1)
 						solicitudEditor = { modo: 'ver', id: seleccionLiq[0].id };

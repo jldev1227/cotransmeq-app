@@ -412,7 +412,7 @@
 			const r = await previewPrimas(Array.from(selectedPrimas));
 			previewPrimaItems = r.items ?? [];
 		} catch (err: any) {
-			toast.error('Error al cargar preview de primas');
+			toast.error('Error al cargar la vista previa de primas');
 			showPreviewPrimasModal = false;
 		} finally {
 			previewPrimasLoading = false;

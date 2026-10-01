@@ -269,7 +269,7 @@
 						</div>
 						<div class="ver__acciones">
 							<a class="btn btn--mini" href={`/dashboard/formularios/${formId}/preview/${v.id}`}>
-								Preview
+								Vista previa
 							</a>
 							<a class="btn btn--mini" href={`/dashboard/formularios/${formId}/editar/${v.id}`}>
 								{v.status === 'DRAFT' ? 'Editar' : 'Ver estructura'}

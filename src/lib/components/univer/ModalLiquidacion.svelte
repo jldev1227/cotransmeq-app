@@ -99,7 +99,7 @@
 			? 'Nueva liquidación'
 			: solicitud?.modo === 'editar'
 				? 'Editar liquidación'
-				: 'Preview de la liquidación'
+				: 'Vista previa de la liquidación'
 	);
 
 	/// El editor lee `editId` solo al montar, así que cambiar de liquidación o de

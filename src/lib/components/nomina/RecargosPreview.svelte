@@ -151,7 +151,7 @@
 			emitirDatos();
 		} catch (err: any) {
 			console.error('Error cargando preview de recargos:', err);
-			error = err.message || 'Error al cargar el preview';
+			error = err.message || 'Error al cargar la vista previa';
 			toast.error('Error al cargar los recargos');
 		} finally {
 			loading = false;

@@ -332,7 +332,7 @@
 				class:btn--activo={vista === 'preview'}
 				onclick={() => (vista = vista === 'preview' ? 'canvas' : 'preview')}
 			>
-				{vista === 'preview' ? 'Editar' : 'Preview'}
+				{vista === 'preview' ? 'Editar' : 'Vista previa'}
 			</button>
 
 			{#if store.editable}
@@ -460,7 +460,7 @@
 					/>
 				</div>
 				<p class="preview__nota">
-					Preview con el mismo renderer del portal. Las reglas condicionales funcionan; los adjuntos
+					Vista previa con el mismo renderer del portal. Las reglas condicionales funcionan; los adjuntos
 					no se suben desde aquí.
 				</p>
 			</div>
