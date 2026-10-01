@@ -1125,6 +1125,8 @@ function colorDePestana(estado: string): string {
 			return '#16A34A';
 		case 'PAGADA':
 			return '#0F4025';
+		case 'FIRMADA':
+			return '#7C3AED';
 		case 'ANULADA':
 			return '#B91C1C';
 		default:

@@ -56,7 +56,7 @@
 
 	let { hojas, envios, etiquetaPeriodo, anio, mes, onCerrar, onEnviado }: Props = $props();
 
-	const ESTADOS_ENVIABLES = ['APROBADA', 'PAGADA'];
+	const ESTADOS_ENVIABLES = ['APROBADA', 'PAGADA', 'FIRMADA'];
 
 	/// Enviable = aprobada Y con borrador generado. Sin liquidación no hay nada
 	/// que mandar, aunque el estado que muestre la hoja sea el que sea.

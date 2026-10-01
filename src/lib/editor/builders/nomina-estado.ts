@@ -13,13 +13,20 @@
  * distintas.
  */
 
-export type EstadoNomina = 'BORRADOR' | 'LIQUIDADA' | 'APROBADA' | 'PAGADA' | 'ANULADA';
+export type EstadoNomina =
+	| 'BORRADOR'
+	| 'LIQUIDADA'
+	| 'APROBADA'
+	| 'PAGADA'
+	| 'FIRMADA'
+	| 'ANULADA';
 
 export const ESTADOS_VALIDOS: EstadoNomina[] = [
 	'BORRADOR',
 	'LIQUIDADA',
 	'APROBADA',
 	'PAGADA',
+	'FIRMADA',
 	'ANULADA'
 ];
 
@@ -27,7 +34,10 @@ export const TRANSICIONES: Record<string, EstadoNomina[]> = {
 	BORRADOR: ['LIQUIDADA', 'ANULADA'],
 	LIQUIDADA: ['APROBADA', 'BORRADOR', 'ANULADA'],
 	APROBADA: ['PAGADA', 'LIQUIDADA', 'ANULADA'],
+	/// A FIRMADA solo se llega con la firma del conductor en el portal; aquí no
+	/// hay botón que la ponga. Desde FIRMADA solo cabe anular.
 	PAGADA: ['ANULADA'],
+	FIRMADA: ['ANULADA'],
 	ANULADA: []
 };
 
@@ -52,7 +62,8 @@ export const TRANSICIONES: Record<string, EstadoNomina[]> = {
  * ESPEJO de `backend-nest/src/modules/nomina-canvas/nomina-estado.service.ts`.
  */
 export const TRANSICIONES_ADMIN: Record<string, EstadoNomina[]> = {
-	PAGADA: ['APROBADA']
+	PAGADA: ['APROBADA'],
+	FIRMADA: ['PAGADA']
 };
 
 /**
@@ -68,8 +79,8 @@ export function destinosPosibles(estadoActual: string, admin: boolean): EstadoNo
 	return [...base, ...extra];
 }
 
-export const ESTADOS_QUE_EXIGEN_ADMIN: EstadoNomina[] = ['APROBADA', 'PAGADA'];
-export const ESTADOS_BLOQUEADOS: string[] = ['APROBADA', 'PAGADA', 'ANULADA'];
+export const ESTADOS_QUE_EXIGEN_ADMIN: EstadoNomina[] = ['APROBADA', 'PAGADA', 'FIRMADA'];
+export const ESTADOS_BLOQUEADOS: string[] = ['APROBADA', 'PAGADA', 'FIRMADA', 'ANULADA'];
 
 /**
  * Estados en los que se pueden volver a traer los días desde las planillas.
@@ -155,6 +166,7 @@ const ORDEN: Record<EstadoNomina, number> = {
 	LIQUIDADA: 1,
 	APROBADA: 2,
 	PAGADA: 3,
+	FIRMADA: 4,
 	ANULADA: 9
 };
 
@@ -176,6 +188,7 @@ const ETIQUETA: Record<EstadoNomina, string> = {
 	LIQUIDADA: 'Liquidar',
 	APROBADA: 'Aprobar',
 	PAGADA: 'Marcar pagada',
+	FIRMADA: 'Marcar firmada',
 	ANULADA: 'Anular'
 };
 
@@ -185,6 +198,7 @@ const EN_MINUSCULA: Record<EstadoNomina, string> = {
 	LIQUIDADA: 'liquidada',
 	APROBADA: 'aprobada',
 	PAGADA: 'pagada',
+	FIRMADA: 'firmada',
 	ANULADA: 'anulada'
 };
 
@@ -193,6 +207,7 @@ const TONO: Record<EstadoNomina, AccionEstado['tono']> = {
 	LIQUIDADA: 'primario',
 	APROBADA: 'primario',
 	PAGADA: 'primario',
+	FIRMADA: 'primario',
 	ANULADA: 'peligro'
 };
 
@@ -221,6 +236,9 @@ export const COLOR_HOJA_POR_ESTADO: Record<string, string> = {
 	LIQUIDADA: '#0EA5E9',
 	APROBADA: '#16A34A',
 	PAGADA: '#0F4025',
+	/// Violeta: la firma es un acto del conductor, no un paso más del verde
+	/// administrativo, y así se distingue de un vistazo en la barra de hojas.
+	FIRMADA: '#7C3AED',
 	ANULADA: '#B91C1C'
 };
 
@@ -237,6 +255,8 @@ export function claseBadgeEstado(estado: string): string {
 			return 'bg-green-100 text-green-800 ring-green-600/20';
 		case 'PAGADA':
 			return 'bg-emerald-900/10 text-emerald-900 ring-emerald-900/20';
+		case 'FIRMADA':
+			return 'bg-violet-100 text-violet-800 ring-violet-600/20';
 		case 'ANULADA':
 			return 'bg-red-100 text-red-800 ring-red-600/20';
 		default:
