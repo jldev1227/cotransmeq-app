@@ -7,6 +7,7 @@
 	import mapboxgl from 'mapbox-gl';
 	import 'mapbox-gl/dist/mapbox-gl.css';
 	import { isAuthenticated } from '$lib/stores/portalStore';
+	import { labelPropositoServicio } from '$lib/config/proposito-servicio';
 	import {
 		conductorServiciosStore,
 		SERVICIO_STATUS_PALETTE,
@@ -956,8 +957,8 @@
 					{#if servicio.proposito_servicio}
 						<div class="info-item">
 							<span class="info-key">Propósito</span>
-							<span class="info-val info-val--capitalize">
-								{servicio.proposito_servicio.replace(/_/g, ' ')}
+							<span class="info-val">
+								{labelPropositoServicio(servicio.proposito_servicio)}
 							</span>
 						</div>
 					{/if}

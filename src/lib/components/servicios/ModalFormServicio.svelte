@@ -12,6 +12,7 @@
 	} from '$lib/stores/recursos';
 	import { municipios, municipiosOptions, municipiosArray } from '$lib/stores/municipios';
 	import { toast } from '$lib/stores/toast';
+	import { labelPropositoServicio } from '$lib/config/proposito-servicio';
 	import { apiClient } from '$lib/api/apiClient';
 	import type { ServicioConRelaciones } from '$lib/types/servicios';
 	import ModalNuevaEmpresa from './ModalNuevaEmpresa.svelte';
@@ -595,8 +596,10 @@
 								</div>
 								<div class="space-y-1">
 									<p class="text-sm font-medium text-gray-500">Propósito</p>
-									<p class="text-md capitalize">
-										{servicio?.proposito_servicio || 'No especificado'}
+									<p class="text-md">
+										{servicio?.proposito_servicio
+											? labelPropositoServicio(servicio.proposito_servicio)
+											: 'No especificado'}
 									</p>
 								</div>
 							</div>

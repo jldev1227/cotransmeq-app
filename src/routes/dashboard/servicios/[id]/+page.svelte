@@ -7,6 +7,7 @@
 	import 'mapbox-gl/dist/mapbox-gl.css';
 	import { servicioDetalleStore } from '$lib/stores/servicio-detalle';
 	import { serviciosStore } from '$lib/stores/servicios';
+	import { labelPropositoServicio } from '$lib/config/proposito-servicio';
 	import { sidebarStore } from '$lib/stores/sidebar';
 	import distracomLocations from '$lib/data/distracomlocations';
 	import { quintOut } from 'svelte/easing';
@@ -2226,7 +2227,7 @@
 							{#if servicio.proposito_servicio}
 								<div class="servicio-info-row">
 									<span class="servicio-info-key">Propósito</span>
-									<span class="servicio-info-val capitalize">{servicio.proposito_servicio.replace(/_/g, ' ')}</span>
+									<span class="servicio-info-val">{labelPropositoServicio(servicio.proposito_servicio)}</span>
 								</div>
 							{/if}
 						</div>

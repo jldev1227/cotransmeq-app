@@ -11,7 +11,12 @@ export type EstadoServicio =
 	| 'planilla_asignada';
 
 // Propósitos de servicio
-export type PropositoServicio = 'personal' | 'personal y herramienta';
+/**
+ * El backend responde con el nombre del enum de Prisma (`personal_y_herramienta`);
+ * la variante con espacios es la que envía el formulario y el backend normaliza.
+ * Para mostrarlo usa `labelPropositoServicio` de `$lib/config/proposito-servicio`.
+ */
+export type PropositoServicio = 'personal' | 'personal y herramienta' | 'personal_y_herramienta';
 
 // Tipos de identificación
 export type TipoIdentificacion = 'CC' | 'CE' | 'TI' | 'PA' | 'RC' | 'NIT';

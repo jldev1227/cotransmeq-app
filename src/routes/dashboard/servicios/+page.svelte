@@ -20,6 +20,10 @@
 		type ServicioConRelaciones,
 		type EstadoServicio
 	} from '$lib/types/servicios';
+	import {
+		labelPropositoServicio,
+		normalizarPropositoServicio
+	} from '$lib/config/proposito-servicio';
 	import ModalTicket from '$lib/components/servicios/ModalTicket.svelte';
 	import ModalFormServicio from '$lib/components/servicios/ModalFormServicio.svelte';
 	import ModalConfirm from '$lib/components/common/ModalConfirm.svelte';
@@ -1978,13 +1982,13 @@
 									<td class="hidden px-3 py-2 whitespace-nowrap 2xl:table-cell">
 										<span
 											class="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium
-											{(servicio.proposito_servicio as string) === 'empresarial'
+											{normalizarPropositoServicio(servicio.proposito_servicio) === 'personal_y_herramienta'
 												? 'bg-blue-50 text-blue-700'
-												: (servicio.proposito_servicio as string) === 'personal'
+												: normalizarPropositoServicio(servicio.proposito_servicio) === 'personal'
 													? 'bg-violet-50 text-violet-700'
 													: 'bg-gray-100 text-gray-600'}"
 										>
-											{servicio.proposito_servicio ?? '—'}
+											{labelPropositoServicio(servicio.proposito_servicio)}
 										</span>
 									</td>
 

@@ -3,6 +3,7 @@
 	import { quintOut } from 'svelte/easing';
 	import { toast } from 'svelte-sonner';
 	import type { ServicioConRelaciones } from '$lib/types/servicios';
+	import { labelPropositoServicio } from '$lib/config/proposito-servicio';
 	import {
 		formatCurrency,
 		formatDateTime,
@@ -334,7 +335,9 @@
 								{#if servicio.proposito_servicio}
 									<div class="ticket-info-cell">
 										<p class="ticket-info-key">Propósito</p>
-										<p class="ticket-info-val capitalize">{servicio.proposito_servicio}</p>
+										<p class="ticket-info-val">
+											{labelPropositoServicio(servicio.proposito_servicio)}
+										</p>
 									</div>
 								{/if}
 								<div class="ticket-info-cell ticket-info-cell--full">
