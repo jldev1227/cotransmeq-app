@@ -120,7 +120,11 @@
 
 <svelte:head><title>Recibo de envío · Portal del Conductor</title></svelte:head>
 
-<div class="pagina">
+<!-- `data-listo` es la señal de «ya tengo mis datos» para quien imprime esta
+     página desde fuera: el PDF del recibo que descarga la app móvil lo genera
+     Chromium navegando aquí, y sin esta marca imprimiría el «Cargando recibo…».
+     Se distingue `error` de `si` para que una carga fallida NO se imprima. -->
+<div class="pagina" data-listo={cargando ? 'no' : error ? 'error' : 'si'}>
 	<header class="barra">
 		<a class="barra__volver" href="/public/portal/formularios" aria-label="Volver a formularios">←</a>
 		<span class="barra__titulo">Recibo</span>
@@ -254,6 +258,32 @@
 		flex-direction: column;
 		gap: 0.875rem;
 		padding: 0.75rem 0.875rem 4rem;
+	}
+
+	/*
+	 * Impresión.
+	 *
+	 * Esta misma página es el documento que sale por el PDF del recibo, así que
+	 * lo único que hay que quitar en papel es el chrome que no es el recibo: la
+	 * navegación del portal —`:global` porque vive en `+layout.svelte`— y los
+	 * botones de acción, que en una hoja impresa no hacen nada.
+	 */
+	@media print {
+		:global(.topbar),
+		:global(.sidebar),
+		:global(.bottom-nav) {
+			display: none !important;
+		}
+		:global(.content) {
+			padding: 0 !important;
+		}
+		.barra,
+		.btn {
+			display: none !important;
+		}
+		.pagina {
+			padding: 0;
+		}
 	}
 
 	.barra {

@@ -88,6 +88,10 @@
 	$: evaluacionId = $page.params.id;
 	$: totalPreguntas = evaluacion?.preguntas.length || 0;
 	$: progreso = currentStep === 0 ? 0 : (currentStep / (totalPreguntas + 1)) * 100;
+	// La evaluación que se carga para responder viene sin la clave (`esCorrecta`,
+	// `respuestaCorrecta`). La revisión la toma del resultado que devuelven
+	// `responder` y `verificar`, que traen la evaluación completa.
+	$: preguntasRevision = (miResultado?.evaluacion?.preguntas ?? evaluacion?.preguntas ?? []) as Pregunta[];
 
 	onMount(async () => {
 		// Generar fingerprint del dispositivo
@@ -138,7 +142,7 @@
 		error = null;
 		try {
 			const response = await fetch(
-				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}`
+				`${import.meta.env.VITE_API_URL}/api/public/evaluaciones/${evaluacionId}`
 			);
 			const data = await response.json();
 			if (data.success) {
@@ -805,7 +809,7 @@
 
 							<div class="space-y-4 p-6">
 								{#each miResultado.respuestas as respuesta, index}
-									{@const pregunta = evaluacion?.preguntas.find(
+									{@const pregunta = preguntasRevision.find(
 										(p) => p.id === respuesta.preguntaId
 									)}
 									{#if pregunta}

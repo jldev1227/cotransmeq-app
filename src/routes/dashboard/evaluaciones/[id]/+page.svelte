@@ -5,6 +5,7 @@
 	import { fade, fly } from 'svelte/transition';
 	import { toast } from 'svelte-sonner';
 	import { socketUtils } from '$lib/socket';
+	import { authHeaders } from '$lib/api/evaluaciones';
 
 	interface Evaluacion {
 		id: string;
@@ -111,7 +112,8 @@
 		error = null;
 		try {
 			const response = await fetch(
-				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}`
+				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}`,
+				{ headers: authHeaders() }
 			);
 			const data = await response.json();
 			if (data.success) {
@@ -131,7 +133,8 @@
 		isLoadingResultados = true;
 		try {
 			const response = await fetch(
-				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}/resultados`
+				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}/resultados`,
+				{ headers: authHeaders() }
 			);
 
 			if (!response.ok) {
@@ -219,7 +222,8 @@
 			const response = await fetch(
 				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}`,
 				{
-					method: 'DELETE'
+					method: 'DELETE',
+					headers: authHeaders()
 				}
 			);
 			if (response.ok) {
@@ -243,7 +247,8 @@
 		try {
 			toast.loading('Generando PDF...');
 			const response = await fetch(
-				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}/exportar-pdf`
+				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}/exportar-pdf`,
+				{ headers: authHeaders() }
 			);
 
 			if (!response.ok) {
@@ -280,7 +285,8 @@
 		try {
 			toast.loading('Generando PDF...');
 			const response = await fetch(
-				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}/resultados/${resultadoId}/exportar-pdf`
+				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}/resultados/${resultadoId}/exportar-pdf`,
+				{ headers: authHeaders() }
 			);
 
 			if (!response.ok) {
@@ -317,7 +323,8 @@
 		try {
 			toast.loading('Generando PDF...');
 			const response = await fetch(
-				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}/exportar-zip`
+				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}/exportar-zip`,
+				{ headers: authHeaders() }
 			);
 
 			if (!response.ok) {

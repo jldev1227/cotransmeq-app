@@ -1863,10 +1863,17 @@ html {
 		display: none !important;
 	}
 
-	/* Hide header */
-	header,
-	[class*='Header'],
-	[class*='header-'] {
+	/* Hide header
+	   `:not([data-fdoc] *)` deja fuera el documento de un envío de formulario:
+	   su membrete —logo, título y Código/Versión/Fecha— es un `<header>`, y esta
+	   regla lo borraba del papel, dejando el registro sin nada que lo
+	   identifique como formato oficial. No se notaba porque el dashboard exporta
+	   ese documento mandando su HTML al renderizador del servidor, que no carga
+	   esta hoja; sí se nota en cuanto alguien imprime la página tal cual —el
+	   `Ctrl+P` del dashboard, o el PDF que la app móvil pide del portal—. */
+	header:not([data-fdoc] *),
+	[class*='Header']:not([data-fdoc] *),
+	[class*='header-']:not([data-fdoc] *) {
 		display: none !important;
 	}
 

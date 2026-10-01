@@ -3,6 +3,7 @@
 	import { fade } from 'svelte/transition';
 	import { onMount } from 'svelte';
 	import { browser } from '$app/environment';
+	import { authHeaders } from '$lib/api/evaluaciones';
 
 	type TipoPregunta =
 		| 'OPCION_UNICA'
@@ -211,7 +212,7 @@
 		try {
 			const response = await fetch(`${import.meta.env.VITE_API_URL}/api/evaluaciones`, {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: { 'Content-Type': 'application/json', ...authHeaders() },
 				body: JSON.stringify({
 					titulo,
 					descripcion: descripcion.trim() || null,
