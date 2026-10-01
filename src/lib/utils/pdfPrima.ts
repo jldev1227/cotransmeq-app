@@ -8,6 +8,7 @@
  */
 import type { Prima, FirmaConUrl } from '$lib/types/nomina';
 import { imageToBase64Url } from '$lib/utils/pdfUtils';
+import { cargarPdfMake } from '$lib/utils/pdfmake-cargar';
 
 function safeValue<T>(val: T | null | undefined, def: T): T {
 	return val !== undefined && val !== null ? val : def;
@@ -99,9 +100,7 @@ export async function generarPdfPrima(
 		urlStarts: f?.presignedUrl?.substring(0, 30)
 	})));
 
-	const pdfMake = (await import('pdfmake/build/pdfmake')).default;
-	const pdfFonts = (await import('pdfmake/build/vfs_fonts')).default;
-	pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts.vfs;
+	const pdfMake = await cargarPdfMake();
 
 	const esCotransmeq = false;
 	const color = esCotransmeq ? '#FF9500' : '#2E8B57';

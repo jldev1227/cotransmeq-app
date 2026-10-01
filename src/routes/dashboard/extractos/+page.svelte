@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { cargarPdfMake } from '$lib/utils/pdfmake-cargar';
 	import { onMount, untrack } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import {
@@ -658,11 +659,7 @@
 		generatingPdf = true;
 
 		try {
-			const pdfMake = (await import('pdfmake/build/pdfmake')).default;
-			const pdfFonts = (await import('pdfmake/build/vfs_fonts')).default;
-			(pdfMake as any).vfs = pdfFonts.pdfMake
-				? pdfFonts.pdfMake.vfs
-				: pdfFonts.vfs || pdfFonts;
+			const pdfMake = await cargarPdfMake();
 
 			let logoBase64 = '';
 			try {

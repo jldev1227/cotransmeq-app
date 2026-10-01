@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { cargarPdfMake } from '$lib/utils/pdfmake-cargar';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { obtenerLogoBase64 } from '$lib/utils/pdfUtils';
@@ -52,9 +53,7 @@
 	async function generarPdf(item: any) {
 		estado = 'generando';
 
-		const pdfMake = (await import('pdfmake/build/pdfmake')).default;
-		const pdfFonts = (await import('pdfmake/build/vfs_fonts')).default;
-		pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts.vfs;
+		const pdfMake = await cargarPdfMake();
 
 		const esCotransmeq = item.es_cotransmeq || false;
 		const color = '#EA580C';
