@@ -6,6 +6,11 @@ import type { Liquidacion, FirmaConUrl } from '$lib/types/nomina';
 import { obtenerLogoBase64 } from '$lib/utils/pdfUtils';
 import { aplicarMarcasDias, leerMarcasDias } from '$lib/utils/marcasDias';
 import { blobDePdf, cargarPdfMake } from '$lib/utils/pdfmake-cargar';
+import {
+	logoPngDataUrl,
+	paginaControlDias,
+	type ControlDias
+} from '$lib/utils/pdfControlDias';
 
 const PAREX_EMPRESA_ID = 'cfb258a6-448c-4469-aa71-8eeafa4530ef';
 const GEOPARK_EMPRESA_ID = 'eea5eda5-1b60-45a0-b4c7-606a8c908ff9';
@@ -1983,7 +1988,10 @@ export async function construirDocDefinition(
 		? (recargosData as any).dias_sin_recargo
 		: [];
 
-	if (diasSinRecargo.length > 0 && item.mostrar_recargos) {
+	// Con la planilla de control de días (canvas) sobra: esa página ya lista
+	// cada día con su tipo. Sin ella —portal, enlace firmado— se mantiene.
+	const hayControlDias = !!(recargosData as any)?.control_dias?.filas?.length;
+	if (diasSinRecargo.length > 0 && item.mostrar_recargos && !hayControlDias) {
 		content.push({ text: '', pageBreak: 'before' as const });
 
 		content.push({
@@ -2135,6 +2143,38 @@ export async function construirDocDefinition(
 				paddingBottom: () => 1
 			}
 		});
+	}
+
+	// ============================================================
+	// CONTROL DÍAS LABORADOS (OP-FR-03), CON LA FIRMA
+	// ============================================================
+	//
+	// Solo llega desde el canvas de nómina (`desprendible-nomina.ts` la pide
+	// al libro de recorridos). El portal y el enlace firmado no la traen y el
+	// documento sale como antes.
+	const controlDias: ControlDias | null = (recargosData as any)?.control_dias ?? null;
+	if (controlDias?.filas?.length) {
+		let firmaControl: string | null = null;
+		if (firmas && firmas[0]?.presignedUrl) {
+			try {
+				firmaControl = await imageToBase64Url(firmas[0].presignedUrl);
+			} catch {
+				// Sin firma queda la línea para firmar a mano.
+			}
+		}
+		content.push(
+			...paginaControlDias({
+				control: controlDias,
+				color,
+				colorBg,
+				razonSocial: empresa,
+				// El logo de la marca, como en el export de recorridos; no el de la página 1.
+				logo: await logoPngDataUrl('/assets/logo_nombre.webp'),
+				conductorNombre,
+				conductorCedula: String(conductorCedula),
+				firma: firmaControl
+			})
+		);
 	}
 
 	const docDefinition: any = {

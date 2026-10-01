@@ -17,6 +17,8 @@
  */
 import { obtenerLiquidacionPorId } from '$lib/api/nomina';
 import { nominaBorradoresAPI } from '$lib/api/nomina-canvas';
+import { recorridosCanvasAPI } from '$lib/api/recorridos-canvas';
+import { controlDiasDesdeRecorridos } from '$lib/utils/pdfControlDias';
 import {
 	generarPdfDesprendible,
 	generarBlobDesprendible
@@ -91,7 +93,9 @@ export async function cargarDatosDesprendible(
 	const firmas = ((liquidacion as any).firmas_desprendibles ?? []).filter(
 		(f: any) => f?.presignedUrl && f.firma_url !== 'pending' && f.firma_url !== ''
 	);
-	const [recargosData] = await Promise.all([
+	const conductorId: string | undefined =
+		(liquidacion as any).conductor_id ?? (liquidacion as any).conductor?.id;
+	const [recargosData, recorridos] = await Promise.all([
 		/**
 		 * DESDE EL CANVAS, no desde las planillas.
 		 *
@@ -105,13 +109,27 @@ export async function cargarDatosDesprendible(
 			? nominaBorradoresAPI
 					.desprendibleData(liquidacionId, { anio, mes, corte: corte || null, ...rango })
 					.catch(() => null)
+			: Promise.resolve(null),
+		/**
+		 * La planilla OP-FR-03 del conductor, para la página de control de
+		 * días. Es opcional como las tablas: quien no tiene lectura de
+		 * `recorridos` (403) recibe el desprendible sin esa página.
+		 */
+		conductorId && iso.test(ini) && iso.test(fin)
+			? recorridosCanvasAPI
+					.periodo({ desde: ini.slice(0, 10), hasta: fin.slice(0, 10), conductores: [conductorId] })
+					.catch(() => null)
 			: Promise.resolve(null)
 	]);
 
 	const datos: DatosDesprendible = {
 		liquidacion,
 		firmas: Array.isArray(firmas) ? firmas : [],
-		recargosData: { ...(recargosData ?? {}), planillas: recargosData?.planillas ?? [] }
+		recargosData: {
+			...(recargosData ?? {}),
+			planillas: recargosData?.planillas ?? [],
+			control_dias: conductorId ? controlDiasDesdeRecorridos(recorridos, conductorId) : null
+		}
 	};
 	cache.set(liquidacionId, datos);
 	return datos;
