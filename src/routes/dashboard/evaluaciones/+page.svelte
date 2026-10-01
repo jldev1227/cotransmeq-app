@@ -1,13 +1,7 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { fade, fly } from 'svelte/transition';
-	import {
-		getEvaluaciones,
-		deleteEvaluacion,
-		type Evaluacion,
-		type Pregunta
-	} from '$lib/api/evaluaciones';
+	import { getEvaluaciones, deleteEvaluacion, type Evaluacion } from '$lib/api/evaluaciones';
 	import TablaLista from '$lib/components/listing/TablaLista.svelte';
 	import type { ColumnDef, SortingState } from '@tanstack/table-core';
 	import { page } from '$app/state';
@@ -15,8 +9,13 @@
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 	import AccionesFila from '$lib/components/listing/AccionesFila.svelte';
 	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
+	import CeldaIdentidad from '$lib/components/listing/CeldaIdentidad.svelte';
+	import EstadoPunto from '$lib/components/listing/EstadoPunto.svelte';
+	import PastillaTipo from '$lib/components/evaluaciones/PastillaTipo.svelte';
+	import ModalConfirmar from '$lib/components/evaluaciones/ModalConfirmar.svelte';
+	import { pluralPreguntas, pluralPuntos } from '$lib/components/evaluaciones/tipos';
 	import { mascota } from '$lib/mascot';
-	import { Eye, Trash2 } from 'lucide-svelte';
+	import { Eye, Pencil, Trash2 } from 'lucide-svelte';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
 	import { numero, opcion, texto, type DefinicionesFiltros } from '$lib/listing/filtros';
 
@@ -59,11 +58,11 @@
 		// El título necesita suelo propio: sin `size` el resto de columnas se
 		// lo comían y quedaba en cuatro renglones por fila.
 		{ id: 'titulo', accessorKey: 'titulo', header: 'Evaluación', size: 340 },
-		{ id: 'tipos', header: 'Tipos de pregunta', enableSorting: false, size: 190 },
+		{ id: 'tipos', header: 'Tipos de pregunta', enableSorting: false, size: 220 },
 		{ id: 'preguntas', header: 'Preguntas · Puntos', enableSorting: false, size: 150 },
-		{ id: 'firma', header: 'Firma', enableSorting: false, size: 90 },
-		{ id: 'created_at', accessorKey: 'created_at', header: 'Creada', size: 150 },
-		{ id: 'acciones', header: '', enableSorting: false, size: 110 }
+		{ id: 'firma', header: 'Firma', enableSorting: false, size: 110 },
+		{ id: 'created_at', accessorKey: 'created_at', header: 'Creada', size: 140 },
+		{ id: 'acciones', header: '', enableSorting: false, size: 150 }
 	];
 
 	/// `orden`/`dir` ya viajaban en la URL y ya se mandaban al backend; lo que
@@ -87,6 +86,10 @@
 	let evaluaciones = $state<Evaluacion[]>([]);
 	let isLoading = $state(false);
 	let totalRows = $state(0);
+
+	/** Evaluación pendiente de confirmar su borrado; `null` cierra el modal. */
+	let aEliminar = $state<{ id: string; titulo: string } | null>(null);
+	let eliminando = $state(false);
 
 	$effect(() => {
 		estadoUrl.escribir(page.url, filtros);
@@ -128,10 +131,6 @@
 		loadEvaluaciones();
 	});
 
-	function handleSort(field: string, order: 'asc' | 'desc') {
-		filtros = { ...filtros, orden: field, dir: order, pagina: 1 };
-	}
-
 	function handlePageChange(pagina: number) {
 		filtros = { ...filtros, pagina };
 	}
@@ -148,26 +147,26 @@
 		goto(`/dashboard/evaluaciones/${id}`);
 	}
 
-	async function handleDelete(id: string, titulo: string) {
-		if (!confirm(`¿Estás seguro de eliminar "${titulo}"?`)) return;
+	function pedirEliminar(id: string, titulo: string) {
+		aEliminar = { id, titulo };
+	}
+
+	async function confirmarEliminar() {
+		if (!aEliminar) return;
+		eliminando = true;
 		try {
-			const r = await deleteEvaluacion(id);
+			const r = await deleteEvaluacion(aEliminar.id);
 			if (r.success) loadEvaluaciones();
 		} catch (err) {
 			console.error('Error al eliminar:', err);
+		} finally {
+			eliminando = false;
+			aEliminar = null;
 		}
 	}
 
-	function getTipoLabel(tipo: string) {
-		const l: Record<string, string> = {
-			OPCION_UNICA: 'Única',
-			OPCION_MULTIPLE: 'Múltiple',
-			NUMERICA: 'Numérica',
-			TEXTO: 'Texto',
-			RELACION: 'Relación',
-			VERDADERO_FALSO: 'V/F'
-		};
-		return l[tipo] || tipo;
+	function tiposDe(e: Evaluacion): string[] {
+		return [...new Set(e.preguntas.map((p) => p.tipo))];
 	}
 
 	function formatDate(d: string) {
@@ -181,6 +180,21 @@
 	function calcularPuntajeTotal(e: Evaluacion) {
 		return e.preguntas.reduce((s, p) => s + p.puntaje, 0);
 	}
+
+	const conteos = $derived([
+		{ clave: 'total', etiqueta: 'Evaluaciones', valor: totalRows },
+		{
+			clave: 'firma',
+			etiqueta: 'Con firma',
+			valor: evaluaciones.filter((e) => e.requiere_firma).length,
+			color: '#ea580c'
+		},
+		{
+			clave: 'preguntas',
+			etiqueta: 'Preguntas en página',
+			valor: evaluaciones.reduce((s, e) => s + e.preguntas.length, 0)
+		}
+	]);
 </script>
 
 <svelte:head><title>Evaluaciones - Cotransmeq</title></svelte:head>
@@ -195,9 +209,7 @@
 				de lo que respondió cada evaluado.
 			</p>
 			<div class="dir-conteos">
-				<ResumenConteos
-					conteos={[{ clave: 'total', etiqueta: 'Evaluaciones', valor: totalRows }]}
-				/>
+				<ResumenConteos {conteos} />
 			</div>
 		</div>
 
@@ -241,24 +253,31 @@
 			>
 				{#snippet celda({ columnaId, fila, valor })}
 					{#if columnaId === 'titulo'}
-						<div class="dir-celda">
-							<span class="eval-titulo">{fila.titulo}</span>
-							{#if fila.descripcion}<small class="eval-desc">{fila.descripcion}</small>{/if}
+						<!-- Con ancho máximo: la descripción va en una línea sin cortes y, en
+						     una tabla de anchura automática, ese texto sin saltos hacía crecer
+						     la columna hasta sacar las demás de la pantalla. -->
+						<div class="eval-identidad">
+							<CeldaIdentidad titulo={fila.titulo} subtitulo={fila.descripcion ?? undefined} />
 						</div>
 					{:else if columnaId === 'tipos'}
-						<span class="dir-celda"
-							>{[...new Set(fila.preguntas.map((p) => p.tipo))].map(getTipoLabel).join(' · ')}</span
-						>
+						{@const tipos = tiposDe(fila)}
+						<div class="eval-tipos">
+							{#each tipos.slice(0, 3) as tipo (tipo)}
+								<PastillaTipo {tipo} corta />
+							{/each}
+							{#if tipos.length > 3}<span class="eval-tipos-mas">+{tipos.length - 3}</span>{/if}
+							{#if tipos.length === 0}<span class="dir-nulo">Sin preguntas</span>{/if}
+						</div>
 					{:else if columnaId === 'preguntas'}
 						<div class="dir-celda">
-							<span>{fila.preguntas.length} pregunta{fila.preguntas.length === 1 ? '' : 's'}</span>
-							<small>{calcularPuntajeTotal(fila)} puntos</small>
+							<span>{pluralPreguntas(fila.preguntas.length)}</span>
+							<small>{pluralPuntos(calcularPuntajeTotal(fila))}</small>
 						</div>
 					{:else if columnaId === 'firma'}
 						{#if fila.requiere_firma}
-							<span class="dir-celda">Requerida</span>
+							<EstadoPunto etiqueta="Requerida" color="#ea580c" />
 						{:else}
-							<span class="dir-nulo">—</span>
+							<EstadoPunto etiqueta="No aplica" color="#64748b" apagado />
 						{/if}
 					{:else if columnaId === 'created_at'}
 						<span class="dir-celda dir-celda--fecha">{formatDate(fila.created_at)}</span>
@@ -267,15 +286,21 @@
 							acciones={[
 								{
 									id: 'ver',
-									etiqueta: 'Ver',
+									etiqueta: 'Ver detalle',
 									icono: Eye,
 									onClick: () => navigateToDetalle(fila.id)
+								},
+								{
+									id: 'editar',
+									etiqueta: 'Editar',
+									icono: Pencil,
+									onClick: () => goto(`/dashboard/evaluaciones/${fila.id}/editar`)
 								},
 								{
 									id: 'eliminar',
 									etiqueta: 'Eliminar',
 									icono: Trash2,
-									onClick: () => handleDelete(fila.id, fila.titulo || ''),
+									onClick: () => pedirEliminar(fila.id, fila.titulo || ''),
 									peligrosa: true
 								}
 							]}
@@ -317,18 +342,36 @@
 	</div>
 </div>
 
+{#if aEliminar}
+	<ModalConfirmar
+		titulo="Eliminar evaluación"
+		mensaje={`Se eliminará «${aEliminar.titulo}» con todas sus preguntas y respuestas. Esta acción no se puede deshacer.`}
+		confirmar="Eliminar evaluación"
+		procesando={eliminando}
+		onConfirmar={confirmarEliminar}
+		onCancelar={() => (aEliminar = null)}
+	/>
+{/if}
+
 <style>
-	.eval-titulo {
-		font-weight: 700;
+	.eval-identidad {
+		/* Ancho fijo con tope: el título va en `nowrap`, y sin un ancho propio
+		   el mínimo de la columna sería el texto entero, que empuja la tabla
+		   fuera de la tarjeta y corta la columna de acciones. */
+		width: 19rem;
+		max-width: 100%;
+		min-width: 0;
+		flex: 1;
 	}
-	/* Dos líneas y corta: en el listado la descripción orienta, no se lee
-	   entera; para eso está el detalle. */
-	.eval-desc {
-		white-space: normal;
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		line-clamp: 2;
-		-webkit-box-orient: vertical;
-		overflow: hidden;
+	.eval-tipos {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.3rem;
+	}
+	.eval-tipos-mas {
+		font-size: 0.72rem;
+		font-weight: 700;
+		color: var(--text-muted);
 	}
 </style>
