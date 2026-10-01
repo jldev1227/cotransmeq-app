@@ -131,7 +131,12 @@
 >
 	<!-- ─── HEADER ─── -->
 	<header class="page-header">
-		<PortalHeader titulo="Mis servicios" meta={`Hola, ${$conductorNombre.split(' ')[0] || 'Conductor'}`}>
+		<PortalHeader
+			eyebrow="Mis recorridos"
+			titulo="Servicios"
+			meta="Consulta asignaciones, rutas y datos clave antes de salir."
+			mascota="exito"
+		>
 			{#snippet acciones()}
 				<button
 					class="refresh-btn"
@@ -350,17 +355,10 @@
 
 	/* ─── HEADER ─── */
 	.page-header {
-		position: sticky;
-		top: 0;
-		z-index: 30;
 		display: flex;
 		flex-direction: column;
 		gap: 0.85rem;
-		padding: 1rem 1rem 0.85rem;
-		background: rgba(255, 255, 255, 0.95);
-		backdrop-filter: blur(12px);
-		-webkit-backdrop-filter: blur(12px);
-		border-bottom: 1px solid #e5e7eb;
+		padding: 0 0 0.85rem;
 	}
 
 
@@ -396,41 +394,38 @@
 
 	/* ─── SEARCH ─── */
 	.search-wrap {
-		position: relative;
-		display: block;
+		display: flex;
+		align-items: center;
+		gap: 0.65rem;
+		min-height: 54px;
+		padding: 0 1rem;
+		background: #fff;
+		border-radius: 18px;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
 	}
 
 	.search-icon {
-		position: absolute;
-		left: 0.85rem;
-		top: 50%;
-		transform: translateY(-50%);
-		width: 1.05rem;
-		height: 1.05rem;
-		color: #94a3b8;
-		pointer-events: none;
+		width: 18px;
+		height: 18px;
+		flex-shrink: 0;
+		color: var(--au-dark, #014339);
 	}
 
 	.search-input {
-		width: 100%;
-		padding: 0.65rem 0.9rem 0.65rem 2.5rem;
-		font-size: 0.92rem;
-		font-weight: 500;
-		color: #0f172a;
-		background: #f8fafc;
-		border: 1.5px solid #e2e8f0;
-		border-radius: 12px;
-		outline: none;
+		flex: 1;
+		min-width: 0;
+		min-height: 52px;
+		padding: 0;
+		border: none;
+		background: transparent;
 		font-family: inherit;
-		transition: border-color 0.2s, background 0.2s;
-		appearance: none;
-		-webkit-appearance: none;
+		font-size: 0.95rem;
+		font-weight: 600;
+		color: var(--text);
 	}
 
 	.search-input:focus {
-		border-color: #ea580c;
-		background: white;
-		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1);
+		outline: none;
 	}
 
 	.search-input::placeholder {
@@ -459,19 +454,18 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
-		padding: 0.45rem 0.85rem;
-		font-size: 0.8rem;
-		font-weight: 600;
-		color: #475569;
-		background: #f1f5f9;
-		border: 1.5px solid transparent;
-		border-radius: 99px;
-		cursor: pointer;
-		white-space: nowrap;
 		flex-shrink: 0;
-		transition: all 0.18s;
+		padding: 0.5rem 0.85rem;
+		border: 1.5px solid var(--border);
+		border-radius: 999px;
+		background: #fff;
+		color: var(--text-3);
 		font-family: inherit;
-		min-height: 36px;
+		font-size: 0.8rem;
+		font-weight: 700;
+		white-space: nowrap;
+		cursor: pointer;
+		transition: all 0.15s;
 	}
 
 	.filter-pill:active {
@@ -479,9 +473,9 @@
 	}
 
 	.filter-pill.active {
-		background: #ecfdf5;
-		border-color: #f97316;
-		color: #047857;
+		background: var(--au-tint, #ddf7ea);
+		border-color: transparent;
+		color: var(--au-dark, #014339);
 	}
 
 	.filter-icon {
@@ -619,15 +613,15 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.85rem;
-		padding: 1rem;
-		background: white;
-		border: 1px solid #e2e8f0;
-		border-radius: 16px;
+		padding: 1.05rem;
+		background: #fff;
+		border: none;
+		border-radius: 22px;
 		text-align: left;
 		cursor: pointer;
 		font-family: inherit;
-		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-		transition: all 0.18s;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
+		transition: transform 0.18s, box-shadow 0.18s;
 		-webkit-tap-highlight-color: transparent;
 		min-width: 0;
 		max-width: 100%;
@@ -635,8 +629,6 @@
 
 	.servicio-card:active {
 		transform: scale(0.985);
-		border-color: #f97316;
-		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.1);
 	}
 
 	.status-badge {

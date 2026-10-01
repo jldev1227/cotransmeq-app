@@ -6,8 +6,9 @@
   import { portalSession, isAuthenticated, getApiBase } from '$lib/stores/portalStore';
   import { fade, fly } from 'svelte/transition';
   import { quintOut } from 'svelte/easing';
+  import { mascota } from '$lib/mascot';
 
-  const LOGO_SRC = '/assets/logo_nombre.webp';
+  const LOGO_SRC = '/assets/logo_nombre_white.webp';
   const TOKEN_DAYS = 30;
 
   let authStep: 'cedula' | 'email_sent' | 'verificando' = 'cedula';
@@ -156,542 +157,426 @@
 </svelte:head>
 
 {#if mounted}
-  <div class="portal-page" in:fade={{ duration: 300 }}>
-    <!-- Ambient orbs (sutiles, editorial) -->
-    <div class="orbs" aria-hidden="true">
-      <div class="orb orb-1"></div>
-      <div class="orb orb-2"></div>
-    </div>
-
-    <div class="auth-shell" in:fly={{ y: 20, duration: 500, easing: quintOut }}>
-      <div class="auth-card">
-        <div class="auth-head">
-          <img src={LOGO_SRC} alt="Cotransmeq S.A.S" class="auth-logo" />
+  <div class="acceso" in:fade={{ duration: 300 }}>
+    <div class="acceso-shell" in:fly={{ y: 20, duration: 500, easing: quintOut }}>
+      <!-- Hero: el mismo bloque verde de la pantalla de entrada de la app -->
+      <section class="hero">
+        <span class="hero-orbe hero-orbe--grande" aria-hidden="true"></span>
+        <span class="hero-orbe hero-orbe--chico" aria-hidden="true"></span>
+        <img src={LOGO_SRC} alt="Cotransmeq S.A.S" class="hero-logo" />
+        <div class="hero-copy">
+          <span class="hero-eyebrow">Portal del conductor</span>
+          {#if authStep === 'email_sent'}
+            <h1 class="hero-titulo">¡Mensaje enviado!</h1>
+            <p class="hero-sub">Tu acceso seguro ya va en camino.</p>
+          {:else if authStep === 'verificando'}
+            <h1 class="hero-titulo">Un momento…</h1>
+            <p class="hero-sub">Estamos validando tu enlace de acceso.</p>
+          {:else}
+            <h1 class="hero-titulo">Bienvenido de vuelta</h1>
+            <p class="hero-sub">Todo lo que necesitas para tu jornada, en un solo lugar.</p>
+          {/if}
         </div>
+        <img
+          class="hero-mascota"
+          src={mascota(authStep === 'email_sent' ? 'correoEnviado' : authStep === 'verificando' ? 'procesando' : 'bienvenida').src}
+          alt={mascota(authStep === 'email_sent' ? 'correoEnviado' : authStep === 'verificando' ? 'procesando' : 'bienvenida').alt}
+        />
+      </section>
 
+      <!-- Tarjeta blanca que monta sobre el hero -->
+      <div class="tarjeta">
         {#if authStep === 'verificando'}
-          <div class="state-block" in:fade={{ duration: 250 }}>
-            <div class="state-icon">
-              <span class="spinner-lg"></span>
-            </div>
-            <h1 class="state-title">Verificando acceso</h1>
-            <p class="state-sub">Estamos validando tu enlace mágico.</p>
+          <div class="estado" in:fade={{ duration: 250 }}>
+            <span class="spinner-lg" aria-hidden="true"></span>
+            <h2 class="tarjeta-titulo">Verificando acceso</h2>
+            <p class="ayuda">Estamos validando tu enlace mágico.</p>
           </div>
 
         {:else if authStep === 'email_sent'}
-          <div class="state-block" in:fly={{ y: 16, duration: 350, easing: quintOut }}>
-            <div class="state-icon state-icon--success">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <span class="eyebrow">Enlace enviado</span>
-            <h1 class="auth-title">Revisa tu correo</h1>
-            <p class="auth-sub">
-              Hemos enviado un enlace de acceso a
-              <strong class="email-addr">{formatEmail(emailHidden)}</strong>
+          <div class="estado-bloque" in:fly={{ y: 16, duration: 350, easing: quintOut }}>
+            <span class="insignia">✓ Enlace enviado</span>
+            <h2 class="tarjeta-titulo">Revisa tu correo</h2>
+            <p class="ayuda">
+              Enviamos un enlace temporal a
+              <strong class="correo">{formatEmail(emailHidden)}</strong>.
             </p>
-
-            <aside class="hint-card">
-              <span class="hint-label">Importante</span>
-              <p>
-                Revisa tu bandeja de entrada y la carpeta de spam. El enlace es válido por
-                <strong>{TOKEN_DAYS} días</strong>.
-              </p>
-            </aside>
-
-            <button class="btn-secondary" on:click={() => { authStep = 'cedula'; cedulaError = ''; }}>
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-              Volver a intentar
+            <p class="nota">
+              Puede tardar unos minutos. Revisa también la carpeta de correo no deseado.
+              El enlace es válido por <strong>{TOKEN_DAYS} días</strong>.
+            </p>
+            <button class="btn-secundario" on:click={() => { authStep = 'cedula'; cedulaError = ''; }}>
+              Usar otra cédula
             </button>
           </div>
 
         {:else}
-          <div class="state-block" in:fly={{ y: 16, duration: 350, easing: quintOut }}>
-            <span class="eyebrow">Acceso seguro</span>
-            <h1 class="auth-title">Portal del<br />Conductor</h1>
-            <p class="auth-sub">
-              Ingresa tu número de cédula para acceder a tus
-              <strong>desprendibles</strong>, <strong>servicios</strong> y
-              <strong>reporte diario</strong>.
-            </p>
+          <div class="estado-bloque" in:fly={{ y: 16, duration: 350, easing: quintOut }}>
+            <h2 class="tarjeta-titulo">Ingresa a tu cuenta</h2>
+            <p class="ayuda">Te enviaremos un enlace seguro al correo registrado.</p>
 
-            <ul class="features">
-              <li>
-                <span class="feature-mark">
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                </span>
-                Desprendibles de pago
-              </li>
-              <li>
-                <span class="feature-mark">
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                </span>
-                Mis servicios asignados
-              </li>
-              <li>
-                <span class="feature-mark">
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                  </svg>
-                </span>
-                Días laborados
-              </li>
-            </ul>
-
-            <div class="field">
-              <label for="cedula" class="field-label">Número de cédula</label>
+            <div class="campo">
+              <label for="cedula" class="campo-label">Número de cédula</label>
               <input
                 id="cedula"
                 type="tel"
                 inputmode="numeric"
-                class="cedula-input"
-                class:input-error={cedulaError}
+                class="campo-input"
+                class:campo-input--error={cedulaError}
                 bind:value={cedulaInput}
                 on:keydown={handleKey}
-                placeholder="00000000"
+                placeholder="Ej. 1098765432"
                 maxlength="12"
                 autocomplete="off"
               />
               {#if cedulaError}
-                <p class="error-msg" in:fly={{ y: -4, duration: 200 }}>
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                  </svg>
-                  {cedulaError}
+                <p class="error" in:fly={{ y: -4, duration: 200 }}>
+                  <img src={mascota('advertencia').src} alt="" aria-hidden="true" class="error-mascota" />
+                  <span>{cedulaError}</span>
                 </p>
+              {:else}
+                <p class="nota">Solo números, entre 5 y 12 dígitos.</p>
               {/if}
             </div>
 
-            <button class="btn-primary" on:click={solicitarAcceso} disabled={loadingAuth}>
+            <button class="btn-principal" on:click={solicitarAcceso} disabled={loadingAuth}>
               {#if loadingAuth}
-                <span class="spinner"></span>
+                <span class="spinner" aria-hidden="true"></span>
                 Enviando enlace…
               {:else}
-                Solicitar acceso
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                </svg>
+                Continuar con mi cédula
               {/if}
             </button>
 
-            <aside class="hint-card">
-              <span class="hint-label">Cómo funciona</span>
-              <p>
-                Recibirás un enlace de acceso en tu correo registrado. La sesión
-                permanece activa durante <strong>{TOKEN_DAYS} días</strong>.
-              </p>
-            </aside>
+            <p class="nota nota--centrada">
+              Podrás ver tus <strong>formularios</strong>, <strong>servicios</strong>,
+              <strong>días laborados</strong> y <strong>pagos</strong>. La sesión dura
+              <strong>{TOKEN_DAYS} días</strong>.
+            </p>
           </div>
         {/if}
       </div>
 
-      <p class="footer-copy">
-        © {new Date().getFullYear()} Cotransmeq S.A.S · Yopal, Casanare · Colombia
-      </p>
+      <p class="privacidad">Acceso protegido · Tu información se usa únicamente para validar tu identidad.</p>
+      <p class="pie">© {new Date().getFullYear()} Cotransmeq S.A.S · Yopal, Casanare · Colombia</p>
     </div>
   </div>
 {/if}
 
 <style>
-  .portal-page {
-    position: relative;
+  .acceso {
     min-height: 100vh;
     min-height: 100dvh;
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 1.5rem 1rem;
-    background-color: #faf7f2;
+    padding: 1.25rem 1rem 2rem;
+    background: var(--au-bg, #effbf5);
     font-family: var(--font-sans);
-    color: #1a1a1a;
+    color: var(--au-text, #17201d);
     -webkit-font-smoothing: antialiased;
-    overflow: hidden;
+  }
+  .acceso-shell {
+    width: 100%;
+    max-width: 440px;
   }
 
-  .orbs {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    overflow: hidden;
-  }
-  .orb {
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(80px);
-  }
-  .orb-1 {
-    top: -8rem;
-    right: -6rem;
-    width: 28rem;
-    height: 28rem;
-    background: rgba(249, 115, 22, 0.18);
-  }
-  .orb-2 {
-    bottom: -10rem;
-    left: -8rem;
-    width: 32rem;
-    height: 32rem;
-    background: rgba(249, 115, 22, 0.12);
-  }
-
-  .auth-shell {
+  /* ── Hero ── */
+  .hero {
     position: relative;
-    z-index: 1;
-    width: 100%;
-    max-width: 460px;
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
+    min-height: 17rem;
+    padding: 1.5rem;
+    border-radius: 30px;
+    background: linear-gradient(160deg, var(--au-dark-2, #075c49) 0%, var(--au-dark, #014339) 70%);
+    color: #fff;
+    overflow: hidden;
+    isolation: isolate;
   }
-
-  .auth-card {
-    background: #ffffff;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: 24px;
-    padding: 2.25rem 1.75rem 2rem;
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.04),
-      0 20px 60px rgba(15, 31, 26, 0.08);
+  .hero-orbe {
+    position: absolute;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    z-index: -1;
   }
-
-  .auth-head {
-    display: flex;
-    justify-content: center;
-    margin-bottom: 1.5rem;
+  .hero-orbe--grande {
+    width: 200px;
+    height: 200px;
+    right: -60px;
+    top: -80px;
   }
-
-  .auth-logo {
-    height: 44px;
-    width: auto;
+  .hero-orbe--chico {
+    width: 90px;
+    height: 90px;
+    left: -28px;
+    bottom: -40px;
+  }
+  .hero-logo {
     display: block;
+    height: 2.9rem;
+    width: auto;
+    max-width: 10rem;
+    object-fit: contain;
   }
-
-  .state-block {
+  .hero-copy {
     display: flex;
     flex-direction: column;
+    gap: 0.5rem;
+    max-width: 67%;
+    margin-top: 1.6rem;
   }
-
-  .state-icon {
-    align-self: center;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    background: rgba(249, 115, 22, 0.08);
-    color: #f97316;
-    margin-bottom: 1rem;
-  }
-  .state-icon svg {
-    width: 28px;
-    height: 28px;
-  }
-  .state-icon--success {
-    background: linear-gradient(135deg, #f97316, #ea580c);
-    color: #ffffff;
-    box-shadow: 0 8px 24px rgba(249, 115, 22, 0.3);
-  }
-
-  .eyebrow {
-    display: inline-block;
-    align-self: flex-start;
-    font-family: var(--font-sans);
-    font-size: 0.7rem;
-    font-weight: 700;
+  .hero-eyebrow {
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.13em;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: #f97316;
-    background: rgba(249, 115, 22, 0.08);
-    padding: 0.3rem 0.75rem;
-    border-radius: 6px;
-    margin-bottom: 0.75rem;
+    color: var(--au-eyebrow, #a9efcb);
   }
-
-  .auth-title {
-    font-family: var(--font-sans);
-    font-size: clamp(1.75rem, 5vw, 2.15rem);
-    font-weight: 400;
-    line-height: 1.1;
-    letter-spacing: -0.02em;
-    color: #0f1f1a;
-    margin: 0 0 0.6rem;
-  }
-
-  .auth-sub {
-    font-size: 0.9rem;
-    line-height: 1.55;
-    color: #4a4a4a;
-    margin: 0 0 1.25rem;
-  }
-  .auth-sub strong {
-    color: #0f1f1a;
-    font-weight: 600;
-  }
-
-  .email-addr {
-    font-family: var(--font-sans);
-    color: #065f46;
-    background: rgba(249, 115, 22, 0.08);
-    padding: 0.1rem 0.4rem;
-    border-radius: 4px;
-    font-size: 0.88em;
-    font-weight: 700;
-  }
-
-  .features {
-    list-style: none;
-    padding: 0;
-    margin: 0 0 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.55rem;
-  }
-  .features li {
-    display: flex;
-    align-items: center;
-    gap: 0.65rem;
-    font-size: 0.85rem;
-    color: #1a1a1a;
-  }
-  .feature-mark {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    border-radius: 7px;
-    background: rgba(249, 115, 22, 0.12);
-    color: #f97316;
-    flex-shrink: 0;
-  }
-  .feature-mark svg {
-    width: 12px;
-    height: 12px;
-  }
-
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-    margin-bottom: 0.25rem;
-  }
-
-  .field-label {
-    font-family: var(--font-sans);
-    font-size: 0.65rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: #6b6b6b;
-  }
-
-  .cedula-input {
-    width: 100%;
-    padding: 0.85rem 1rem;
-    font-family: var(--font-sans);
-    font-size: 1.15rem;
-    font-weight: 600;
-    letter-spacing: 0.18em;
-    color: #0f1f1a;
-    background: #ffffff;
-    border: 1px solid rgba(0, 0, 0, 0.12);
-    border-radius: 12px;
-    text-align: center;
-    outline: none;
-    transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  }
-  .cedula-input::placeholder {
-    color: #9a9a9a;
-    letter-spacing: 0.3em;
-  }
-  .cedula-input:hover:not(:disabled) {
-    border-color: rgba(0, 0, 0, 0.2);
-  }
-  .cedula-input:focus {
-    border-color: #f97316;
-    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
-  }
-  .cedula-input.input-error {
-    border-color: rgba(220, 38, 38, 0.45);
-    background: rgba(220, 38, 38, 0.03);
-  }
-
-  .error-msg {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    color: #991b1b;
-    font-size: 0.78rem;
-    font-weight: 600;
+  .hero-titulo {
     margin: 0;
+    font-family: var(--font-display);
+    font-size: 1.85rem;
+    font-weight: 900;
+    letter-spacing: -0.035em;
+    line-height: 1.12;
+    color: #fff;
   }
-  .error-msg svg {
-    width: 14px;
-    height: 14px;
-    color: #dc2626;
-    flex-shrink: 0;
+  .hero-sub {
+    margin: 0;
+    font-size: 0.88rem;
+    line-height: 1.45;
+    color: var(--au-hero-text, #d4f3e5);
+  }
+  .hero-mascota {
+    position: absolute;
+    right: -1rem;
+    bottom: -0.6rem;
+    width: 11.5rem;
+    height: 11.5rem;
+    object-fit: contain;
+    pointer-events: none;
+    z-index: 1;
+    filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.25));
   }
 
-  .btn-primary {
+  /* ── Tarjeta ── */
+  .tarjeta {
+    position: relative;
+    z-index: 2;
+    margin: -1.25rem 0.6rem 0;
+    padding: 1.4rem;
+    border-radius: 24px;
+    background: #fff;
+    box-shadow: 0 12px 20px rgba(1, 67, 57, 0.12);
+  }
+  .estado-bloque,
+  .estado {
+    display: flex;
+    flex-direction: column;
+    gap: 0.85rem;
+  }
+  .estado {
+    align-items: center;
+    text-align: center;
+    padding: 0.5rem 0;
+  }
+  .tarjeta-titulo {
+    margin: 0;
+    font-family: var(--font-display);
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    color: var(--au-text, #17201d);
+  }
+  .ayuda {
+    margin: 0;
+    font-size: 0.95rem;
+    line-height: 1.45;
+    color: var(--au-muted, #66756f);
+  }
+  .correo {
+    color: var(--au-dark, #014339);
+    font-weight: 800;
+    word-break: break-all;
+  }
+  .nota {
+    margin: 0;
+    font-size: 0.76rem;
+    line-height: 1.45;
+    color: var(--au-muted, #66756f);
+  }
+  .nota strong {
+    color: var(--au-text, #17201d);
+    font-weight: 700;
+  }
+  .nota--centrada {
+    text-align: center;
+  }
+  .insignia {
+    align-self: flex-start;
+    padding: 0.35rem 0.65rem;
+    border-radius: 999px;
+    background: var(--au-tint, #ddf7ea);
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: var(--au-dark, #014339);
+  }
+
+  .campo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.25rem;
+  }
+  .campo-label {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--au-text, #17201d);
+  }
+  .campo-input {
+    width: 100%;
+    min-height: 3.5rem;
+    padding: 0 1rem;
+    border: 1.5px solid var(--au-border, #dee7e3);
+    border-radius: 14px;
+    background: #f7faf8;
+    font-family: inherit;
+    font-size: 1.05rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--au-text, #17201d);
+    font-variant-numeric: tabular-nums;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .campo-input::placeholder {
+    color: #8e9c96;
+    font-weight: 500;
+    letter-spacing: 0;
+  }
+  .campo-input:focus {
+    outline: none;
+    border-color: var(--au-primary, #079665);
+    box-shadow: 0 0 0 4px rgba(var(--au-primary-rgb, 7, 150, 101), 0.12);
+    background: #fff;
+  }
+  .campo-input--error {
+    border-color: #b42318;
+    background: #fff0ed;
+  }
+  .error {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    color: #b42318;
+  }
+  .error-mascota {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    object-fit: contain;
+  }
+
+  .btn-principal {
     display: inline-flex;
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
     width: 100%;
-    padding: 0.85rem 1.25rem;
-    margin-top: 0.75rem;
-    font-family: inherit;
-    font-size: 0.92rem;
-    font-weight: 600;
-    color: #ffffff;
-    background: linear-gradient(135deg, #f97316, #ea580c);
+    min-height: 3.5rem;
     border: none;
-    border-radius: 12px;
+    border-radius: 14px;
+    background: var(--au-primary, #079665);
+    font-family: inherit;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #fff;
     cursor: pointer;
-    box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
-    transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    transition: background-color 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
   }
-  .btn-primary:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
+  .btn-principal:hover:not(:disabled) {
+    background: var(--au-primary-strong, #087a57);
   }
-  .btn-primary:active:not(:disabled) {
-    transform: translateY(0);
+  .btn-principal:active:not(:disabled) {
+    transform: scale(0.99);
   }
-  .btn-primary:disabled {
-    opacity: 0.6;
+  .btn-principal:disabled {
+    opacity: 0.65;
     cursor: not-allowed;
   }
-  .btn-primary svg {
-    width: 16px;
-    height: 16px;
-  }
-
-  .btn-secondary {
+  .btn-secundario {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.4rem;
-    align-self: center;
-    margin-top: 0.5rem;
-    padding: 0.6rem 1.1rem;
+    width: 100%;
+    min-height: 3.1rem;
+    border: 1.5px solid var(--au-primary, #079665);
+    border-radius: 14px;
+    background: transparent;
     font-family: inherit;
-    font-size: 0.82rem;
-    font-weight: 600;
-    color: #0f1f1a;
-    background: #ffffff;
-    border: 1px solid rgba(0, 0, 0, 0.12);
-    border-radius: 10px;
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: var(--au-dark, #014339);
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    transition: background-color 0.15s ease;
   }
-  .btn-secondary:hover {
-    background: #faf7f2;
-    border-color: rgba(0, 0, 0, 0.2);
-  }
-  .btn-secondary svg {
-    width: 14px;
-    height: 14px;
+  .btn-secundario:hover {
+    background: var(--au-tint, #ddf7ea);
   }
 
-  .hint-card {
-    background: linear-gradient(135deg, rgba(249, 115, 22, 0.04), rgba(249, 115, 22, 0.08));
-    border: 1px solid rgba(249, 115, 22, 0.15);
-    border-radius: 12px;
-    padding: 0.85rem 1rem;
-    margin-top: 1.25rem;
-  }
-  .hint-label {
+  .spinner,
+  .spinner-lg {
     display: inline-block;
-    font-family: var(--font-sans);
-    font-size: 0.62rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: #f97316;
-    background: #ffffff;
-    padding: 0.15rem 0.5rem;
-    border-radius: 4px;
-    margin-bottom: 0.45rem;
-  }
-  .hint-card p {
-    font-size: 0.78rem;
-    line-height: 1.5;
-    color: #065f46;
-    margin: 0;
-  }
-  .hint-card strong {
-    color: #047857;
-    font-weight: 700;
-  }
-
-  .spinner {
-    width: 16px;
-    height: 16px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-top-color: #ffffff;
     border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    display: inline-block;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #fff;
+    animation: girar 0.8s linear infinite;
+  }
+  .spinner {
+    width: 1rem;
+    height: 1rem;
   }
   .spinner-lg {
-    width: 36px;
-    height: 36px;
-    border: 3px solid rgba(249, 115, 22, 0.18);
-    border-top-color: #f97316;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    display: inline-block;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-width: 3px;
+    border-color: var(--au-tint, #ddf7ea);
+    border-top-color: var(--au-primary, #079665);
   }
-
-  .state-title {
-    font-family: var(--font-sans);
-    font-size: 1.5rem;
-    font-weight: 500;
-    color: #0f1f1a;
-    margin: 0 0 0.35rem;
-    text-align: center;
-  }
-  .state-sub {
-    font-size: 0.9rem;
-    color: #4a4a4a;
-    margin: 0;
-    text-align: center;
-  }
-
-  .footer-copy {
-    font-size: 0.72rem;
-    color: #9a9a9a;
-    text-align: center;
-    margin: 0;
-    line-height: 1.5;
-  }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-
-  @media (max-width: 480px) {
-    .auth-card {
-      padding: 1.75rem 1.25rem 1.5rem;
+  @keyframes girar {
+    to {
+      transform: rotate(360deg);
     }
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .auth-card,
-    .btn-primary,
-    .btn-secondary,
-    .cedula-input {
-      transition: none !important;
-      animation: none !important;
+  .privacidad,
+  .pie {
+    margin: 1rem 0 0;
+    text-align: center;
+    font-size: 0.72rem;
+    line-height: 1.4;
+    color: var(--au-muted, #66756f);
+  }
+  .pie {
+    margin-top: 0.4rem;
+    font-size: 0.68rem;
+    color: #8e9c96;
+  }
+
+  @media (min-width: 640px) {
+    .acceso-shell {
+      max-width: 480px;
+    }
+    .hero {
+      min-height: 18rem;
+      padding: 1.75rem;
+    }
+    .hero-titulo {
+      font-size: 2.1rem;
+    }
+    .tarjeta {
+      padding: 1.6rem;
     }
   }
 </style>

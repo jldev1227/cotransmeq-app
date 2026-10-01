@@ -981,25 +981,27 @@
 	   (consistente con +layout.svelte)
 	═══════════════════════════════════════ */
 	.detalle-page {
-		--bg: #faf7f2;
+		/* Paleta de la app móvil; los nombres antiguos se conservan porque el
+		resto de la hoja los usa. */
+		--bg: var(--au-bg, #effbf5);
 		--surface: #ffffff;
-		--surface-2: #f5f1e8;
-		--border: rgba(0, 0, 0, 0.08);
-		--border-default: rgba(0, 0, 0, 0.12);
-		--text: #1a1a1a;
-		--text-2: #4a4a4a;
-		--text-3: #6b6b6b;
-		--text-4: #9a9a9a;
-		--orange-500: #f97316;
-		--orange-600: #ea580c;
-		--orange-700: #047857;
-		--orange-800: #065f46;
-		--emerald-tint: rgba(249, 115, 22, 0.08);
-		--emerald-tint-hover: rgba(249, 115, 22, 0.14);
-		--emerald-border: rgba(249, 115, 22, 0.18);
-		--shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.04);
+		--surface-2: var(--au-tint, #ddf7ea);
+		--border: var(--au-border, #dee7e3);
+		--border-default: var(--au-border, #dee7e3);
+		--text: var(--au-text, #17201d);
+		--text-2: #33423d;
+		--text-3: var(--au-muted, #66756f);
+		--text-4: #8e9c96;
+		--emerald-500: var(--au-primary, #079665);
+		--emerald-600: var(--au-primary-strong, #087a57);
+		--emerald-700: var(--au-dark-2, #075c49);
+		--emerald-800: var(--au-dark, #014339);
+		--emerald-tint: rgba(var(--au-primary-rgb, 7, 150, 101), 0.1);
+		--emerald-tint-hover: rgba(var(--au-primary-rgb, 7, 150, 101), 0.16);
+		--emerald-border: rgba(var(--au-primary-rgb, 7, 150, 101), 0.25);
+		--shadow-soft: 0 6px 14px rgba(1, 67, 57, 0.065);
 		--ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
-
+		
 		font-family: var(--font-sans);
 		display: flex;
 		flex-direction: column;
@@ -1089,16 +1091,17 @@
 	   HEADER (estilo landing servicio-header)
 	═══════════════════════════════════════ */
 	.servicio-header {
-		background: var(--surface);
-		border-bottom: 1px solid var(--border);
-		padding: 0.85rem 1rem;
+		position: sticky;
+		top: 0;
+		z-index: 30;
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
 		flex-shrink: 0;
-		position: sticky;
-		top: 0;
-		z-index: 30;
+		padding: 0.85rem 1rem;
+		background: #fff;
+		border-radius: 22px;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
 	}
 	@media (min-width: 640px) {
 		.servicio-header {
@@ -1110,15 +1113,15 @@
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 36px;
-		height: 36px;
-		border-radius: 10px;
-		background: #faf7f2;
-		color: var(--text-2);
-		border: 1px solid var(--border);
-		cursor: pointer;
-		transition: all 0.2s var(--ease);
+		width: 40px;
+		height: 40px;
 		flex-shrink: 0;
+		border: none;
+		border-radius: 13px;
+		background: var(--au-bg, #effbf5);
+		color: var(--au-dark, #014339);
+		cursor: pointer;
+		transition: background-color 0.2s var(--ease);
 	}
 
 	.servicio-icon-btn:hover {
@@ -1149,31 +1152,31 @@
 
 	.servicio-eyebrow {
 		display: inline-block;
-		font-size: 0.65rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.12em;
-		color: var(--emerald-600);
-		background: var(--emerald-tint);
-		padding: 0.2rem 0.55rem;
-		border-radius: 5px;
+		padding: 0.2rem 0.6rem;
+		border-radius: 999px;
+		background: var(--au-tint, #ddf7ea);
 		font-family: var(--font-sans);
+		font-size: 0.62rem;
+		font-weight: 900;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--au-dark, #014339);
 	}
 
 	.servicio-title {
-		font-family: var(--font-sans);
-		font-weight: 500;
-		font-size: 0.98rem;
-		color: #0f1f1a;
 		margin: 0.3rem 0 0;
+		font-family: var(--font-sans);
+		font-size: 1rem;
+		font-weight: 800;
+		letter-spacing: -0.015em;
 		line-height: 1.25;
+		color: var(--text);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
 		line-clamp: 2;
 		-webkit-box-orient: vertical;
-		letter-spacing: -0.01em;
 	}
 
 	.servicio-title-arrow {
@@ -1221,14 +1224,12 @@
 		min-height: 360px;
 		flex-shrink: 0;
 		overflow: hidden;
-		border-radius: 20px;
-		border: 1px solid var(--border);
+		border-radius: 22px;
+		border: none;
 		background: #e8e4dc;
 		box-shadow: var(--shadow-soft);
-		/* FIX: crear stacking context dedicado. En el dashboard lo logra
-		   la clase `glass` via `backdrop-filter: blur(20px)`. Sin esto,
-		   el canvas WebGL de mapbox queda en un contexto roto (no
-		   compone) y no se ve. */
+		/* Stacking context dedicado: sin esto el canvas WebGL de mapbox no
+		compone y no se ve. */
 		isolation: isolate;
 		will-change: transform;
 	}
@@ -1376,11 +1377,11 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.15rem;
-		padding: 0.7rem 0.95rem;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		box-shadow: var(--shadow-soft);
+		padding: 0.75rem 1rem;
+		background: #fff;
+		border: none;
+		border-radius: 18px;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
 		transition: all 0.2s var(--ease);
 	}
 
@@ -1444,11 +1445,11 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.75rem;
-		padding: 1.15rem 1.25rem;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 20px;
-		box-shadow: var(--shadow-soft);
+		padding: 1.1rem 1.15rem;
+		background: #fff;
+		border: none;
+		border-radius: 22px;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
 		min-width: 0;
 		max-width: 100%;
 		transition: all 0.3s var(--ease);
@@ -1466,16 +1467,15 @@
 	}
 
 	.card-icon {
-		width: 32px;
-		height: 32px;
-		border-radius: 10px;
-		background: linear-gradient(135deg, var(--emerald-500), var(--emerald-600));
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		color: white;
-		box-shadow: 0 3px 10px rgba(249, 115, 22, 0.3);
+		width: 34px;
+		height: 34px;
 		flex-shrink: 0;
+		border-radius: 11px;
+		background: var(--au-tint, #ddf7ea);
+		color: var(--au-dark, #014339);
 	}
 
 	.card-title {
@@ -1498,12 +1498,12 @@
 	}
 
 	.placa-big {
-		font-size: 1.5rem;
-		font-weight: 700;
-		color: var(--emerald-700);
-		letter-spacing: 0.08em;
 		margin: 0;
 		font-family: var(--font-sans);
+		font-size: 1.6rem;
+		font-weight: 900;
+		letter-spacing: 0.06em;
+		color: var(--au-dark, #014339);
 	}
 
 	.vehiculo-desc {

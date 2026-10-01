@@ -1,7 +1,8 @@
 <!--
 	Bloque con título dentro de una pantalla del portal.
 
-	Dos tonos, y la diferencia es deliberada:
+	La cabeza es la `SectionHeader` de la app móvil: título en negrita y un
+	dato corto a la derecha. Dos tonos, y la diferencia es deliberada:
 
 	  - `accion` (por defecto): lo que el conductor TIENE QUE HACER. Tarjetas
 	    elevadas sobre el fondo, con sombra: piden que se toquen.
@@ -40,29 +41,32 @@
 	.ps {
 		display: flex;
 		flex-direction: column;
-		gap: 0.5rem;
+		gap: 0.6rem;
 	}
 
 	.ps__cabeza {
 		display: flex;
-		align-items: baseline;
+		align-items: flex-end;
 		justify-content: space-between;
 		gap: 0.5rem;
+		padding: 0 0.125rem;
 	}
 
 	.ps__titulo {
 		margin: 0;
-		font-size: 0.6875rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: var(--text-muted, #64748b);
+		font-family: var(--font-display);
+		font-size: 1.2rem;
+		font-weight: 800;
+		letter-spacing: -0.02em;
+		line-height: 1.2;
+		color: var(--text-primary, #17201d);
 	}
 
 	.ps__meta {
-		font-family: var(--font-mono, monospace);
-		font-size: 0.6875rem;
-		color: var(--text-very-muted, #94a3b8);
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--text-muted, #66756f);
+		white-space: nowrap;
 	}
 
 	/* ── Historial ──────────────────────────────────────────────────────────
@@ -71,13 +75,18 @@
 	.ps--historial {
 		margin-top: 0.75rem;
 		padding-top: 1rem;
-		border-top: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
+		border-top: 1px solid var(--border-default, #dee7e3);
+	}
+
+	.ps--historial .ps__titulo {
+		font-size: 1rem;
+		color: var(--text-muted, #66756f);
 	}
 
 	.ps--historial .ps__cuerpo {
 		padding: 0.5rem;
-		border-radius: 14px;
-		background: var(--bg-sunken, rgba(0, 0, 0, 0.025));
+		border-radius: 16px;
+		background: rgba(1, 67, 57, 0.04);
 	}
 
 	/* Las filas de historial pierden la sombra y el borde de las tarjetas de
@@ -86,13 +95,13 @@
 	.ps--historial .ps__cuerpo :global(.recibo) {
 		background: transparent;
 		border: none;
-		border-radius: 8px;
+		border-radius: 10px;
 		box-shadow: none;
 	}
 
 	.ps--historial .ps__cuerpo :global(.recibo + .recibo),
 	.ps--historial .ps__cuerpo :global(li + li .recibo) {
-		border-top: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+		border-top: 1px solid var(--border-subtle, #edf3f0);
 	}
 
 	.ps--historial .ps__cuerpo :global(a.recibo:active) {

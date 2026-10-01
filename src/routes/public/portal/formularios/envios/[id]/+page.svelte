@@ -291,9 +291,9 @@
 		gap: 0.375rem;
 		padding: 1.5rem 1rem;
 		text-align: center;
-		background: #f0fdf4;
-		border: 1px solid #bbf7d0;
-		border-radius: 16px;
+		background: var(--au-tint, #ddf7ea);
+		border: none;
+		border-radius: 22px;
 	}
 
 	.sello--pendiente {
@@ -332,12 +332,12 @@
 	}
 
 	.nota {
-		padding: 0.625rem 0.75rem;
+		padding: 0.7rem 0.85rem;
 		font-size: 0.8125rem;
 		line-height: 1.45;
-		color: var(--text-muted, #6b6b6b);
-		background: var(--gray-50, #f9fafb);
-		border-radius: 10px;
+		color: var(--text-muted, #66756f);
+		background: #fff;
+		border-radius: 14px;
 	}
 
 	.ficha {
@@ -427,12 +427,12 @@
 		min-height: 50px;
 		padding: 0 1rem;
 		font: inherit;
-		font-size: 0.9375rem;
-		font-weight: 600;
-		color: var(--text-primary, #1a1a1a);
+		font-size: 0.95rem;
+		font-weight: 800;
+		color: var(--au-dark, #014339);
 		background: #fff;
-		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
-		border-radius: 12px;
+		border: 1.5px solid var(--au-primary, #079665);
+		border-radius: 14px;
 		cursor: pointer;
 		text-decoration: none;
 	}

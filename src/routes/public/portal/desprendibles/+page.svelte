@@ -720,7 +720,12 @@
   <!-- El párrafo explicativo que había aquí se fue: empujaba las pestañas y el
        primer desprendible fuera de la primera pantalla del teléfono. -->
   <div class="cabecera">
-  <PortalHeader titulo="Desprendibles y Primas">
+  <PortalHeader
+    eyebrow="Mi información laboral"
+    titulo="Pagos"
+    meta="Tus desprendibles y primas, listos para revisar y firmar."
+    mascota="celebracion"
+  >
     {#snippet acciones()}
       <button class="btn-refresh" on:click={cargarDesprendibles} disabled={loading} title="Actualizar">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class:spinning={loading}>
@@ -2257,40 +2262,40 @@
   }
 
   .portal-tabs {
-    display: flex;
-    gap: 0.4rem;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 0.3rem;
-    margin-bottom: 1.25rem;
+  	display: flex;
+  	gap: 0.25rem;
+  	margin-bottom: 1rem;
+  	padding: 0.3rem;
+  	background: #fff;
+  	border: 1.5px solid var(--border);
+  	border-radius: 16px;
   }
   .portal-tab {
-    flex: 1;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.45rem;
-    padding: 0.55rem 0.8rem;
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    font-family: inherit;
-    font-size: 0.82rem;
-    font-weight: 600;
-    border-radius: 9px;
-    cursor: pointer;
-    transition: all 0.2s var(--ease);
+  	flex: 1;
+  	display: inline-flex;
+  	align-items: center;
+  	justify-content: center;
+  	gap: 0.45rem;
+  	padding: 0.6rem 0.8rem;
+  	border: none;
+  	border-radius: 11px;
+  	background: transparent;
+  	color: var(--text-3);
+  	font-family: inherit;
+  	font-size: 0.84rem;
+  	font-weight: 700;
+  	cursor: pointer;
+  	transition: all 0.2s var(--ease);
   }
   .portal-tab svg { width: 15px; height: 15px; }
   .portal-tab:hover:not(.active) {
-    background: rgba(249, 115, 22, 0.06);
-    color: var(--accent-hover);
+  	background: var(--bg);
+  	color: var(--text);
   }
   .portal-tab.active {
-    background: linear-gradient(135deg, #f97316, #ea580c);
-    color: #fff;
-    box-shadow: 0 2px 8px rgba(249, 115, 22, 0.3);
+  	background: var(--au-tint, #ddf7ea);
+  	color: var(--au-dark, #014339);
+  	box-shadow: none;
   }
   .portal-tab-count {
     display: inline-flex;

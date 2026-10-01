@@ -27,9 +27,16 @@
 	.portal-page {
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: 0.875rem;
 		max-width: 720px;
 		margin: 0 auto;
-		padding: 1rem 0.875rem 5rem;
+		padding: 0.75rem 0 5rem;
+	}
+	@media (min-width: 1024px) {
+		.portal-page {
+			max-width: 800px;
+			gap: 1rem;
+			padding-top: 0.25rem;
+		}
 	}
 </style>
