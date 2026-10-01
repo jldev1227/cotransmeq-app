@@ -1023,7 +1023,7 @@
 							type="button"
 							class="cond-accion"
 							on:click={() =>
-								goto(`/dashboard/conductores?vista=calendario&conductor=${conductor!.id}`)}
+								goto(`/dashboard/conductores/recorridos?conductor=${conductor!.id}`)}
 						>
 							<span class="cond-accion-icono">
 								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
