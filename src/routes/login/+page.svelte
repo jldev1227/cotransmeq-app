@@ -4,7 +4,11 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { authStore } from '$lib/stores/auth';
-	import { PORTAL_LOGIN, esDispositivoDelPortal } from '$lib/stores/portalStore';
+	import {
+		PORTAL_LOGIN,
+		entradaDirectaAlLogin,
+		esDispositivoDelPortal
+	} from '$lib/stores/portalStore';
 	import { fly } from 'svelte/transition';
 	import AuthShell from '$lib/components/auth/AuthShell.svelte';
 	import AuthLoading from '$lib/components/auth/AuthLoading.svelte';
@@ -87,8 +91,13 @@
 
 		/// `/login` es adonde acaba cualquier fallo de sesión, venga de donde venga.
 		/// Un dispositivo de conductor sin sesión administrativa vuelve a SU login;
-		/// `?admin=1` deja entrar a quien sí venga a administrar desde ese teléfono.
-		if (esDispositivoDelPortal() && $page.url.searchParams.get('admin') !== '1') {
+		/// `?admin=1` deja entrar a quien sí venga a administrar desde ese teléfono,
+		/// y escribir la dirección en la barra, también: ver `entradaDirectaAlLogin`.
+		if (
+			esDispositivoDelPortal() &&
+			$page.url.searchParams.get('admin') !== '1' &&
+			!entradaDirectaAlLogin()
+		) {
 			redirecting = true;
 			await goto(PORTAL_LOGIN, { replaceState: true });
 			return;

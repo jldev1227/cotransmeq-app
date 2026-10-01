@@ -93,6 +93,41 @@ export function olvidarDispositivoDelPortal(): void {
 }
 
 /**
+ * `true` si la persona ESCRIBIÓ `/` o `/login` en la barra (o abrió un
+ * marcador), y no llegó ahí empujada por la propia app.
+ *
+ * La marca del dispositivo existe para que un fallo de sesión no deje al
+ * conductor en el login administrativo: un logout, un 401 que recarga
+ * `/login` o el acceso directo de la PWA (`start_url: "/"`). Pero también
+ * atrapaba a quien entró UNA vez a un enlace del portal y luego quiere el
+ * login administrativo a propósito —una administradora que abrió el enlace
+ * mágico de un conductor quedó sin poder entrar a su cuenta—, y la marca
+ * solo la borra ese login que ya no podía ver.
+ *
+ * Se mira el DOCUMENTO con que arrancó la pestaña, no la ruta actual: `/`
+ * pasa a `/login` con `goto`, y eso no crea una navegación nueva. Cuenta como
+ * entrada directa si ese documento fue `/` o `/login`, sin referrer del mismo
+ * origen (las redirecciones internas por `location.href` sí lo llevan) y
+ * fuera de la PWA instalada.
+ */
+export function entradaDirectaAlLogin(): boolean {
+	if (!browser) return false;
+	try {
+		if (window.matchMedia?.('(display-mode: standalone)').matches) return false;
+		const nav = performance.getEntriesByType('navigation')[0] as
+			| PerformanceNavigationTiming
+			| undefined;
+		if (!nav) return false;
+		const ruta = new URL(nav.name).pathname.replace(/\/+$/, '') || '/';
+		if (ruta !== '/' && ruta !== '/login') return false;
+		if (document.referrer && new URL(document.referrer).origin === location.origin) return false;
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
  * Cierra la sesión del portal y lleva a su login. Nunca a `/login`.
  *
  * `replaceState` para que «atrás» no devuelva a la pantalla que acaba de
