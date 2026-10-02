@@ -41,6 +41,19 @@
 	let cargando = $state(false);
 	let error = $state('');
 	let snapshots = $state<SnapshotResumen[]>([]);
+
+	/**
+	 * Versiones sin cambios: las que el servidor cuenta con 0 cambios respecto
+	 * a la anterior (hoy, nómina). Son capturas automáticas que solo difieren en
+	 * detalle que el diff no muestra; abrirlas decía «Sin diferencias» y
+	 * llenaban la lista. Se ocultan, con la opción de verlas todas.
+	 */
+	let mostrarTodas = $state(false);
+	const cambiosDe = (s: SnapshotResumen) => (s as { cambios?: number }).cambios;
+	const ocultas = $derived(snapshots.filter((s) => cambiosDe(s) === 0).length);
+	const visibles = $derived(
+		mostrarTodas ? snapshots : snapshots.filter((s) => cambiosDe(s) !== 0)
+	);
 	let seleccionado = $state<SnapshotResumen | null>(null);
 	let diff = $state<SnapshotDiff | null>(null);
 	let cargandoDiff = $state(false);
@@ -137,11 +150,17 @@
 	 */
 	async function diffDeNomina(id: string) {
 		const r: any = await nominaCanvasAPI.diffSnapshot(id);
+		/// Mismas claves que pinta la tabla (`path` / `anterior` / `nuevo`). Antes
+		/// salían como `campo` / `antes` / `despues`: la tabla leía `path`
+		/// indefinido en todas las filas, Svelte abortaba el render por claves
+		/// duplicadas y el panel se quedaba en «Calculando diferencias…» aunque
+		/// el backend respondiera bien. El índice delante hace única la clave
+		/// cuando un mismo conductor y campo aparece dos veces.
 		return {
-			fields: (r?.cambios ?? []).map((c: any) => ({
-				campo: `${c.nombre} · ${c.campo}`,
-				antes: c.antes,
-				despues: c.despues
+			fields: (r?.cambios ?? []).map((c: any, i: number) => ({
+				path: `${i + 1}. ${c.nombre ?? 'Conductor'} · ${c.campo}`,
+				anterior: c.antes,
+				nuevo: c.despues
 			}))
 		};
 	}
@@ -280,7 +299,19 @@
 			{:else}
 				<div class="snap-body">
 					<ul class="snap-list">
-						{#each snapshots as s (s.id)}
+						{#if ocultas > 0}
+							<li class="snap-ocultas">
+								<span>
+									{mostrarTodas
+										? `${ocultas} sin cambios incluidas`
+										: `${ocultas} ${ocultas === 1 ? 'versión' : 'versiones'} sin cambios ocultas`}
+								</span>
+								<button type="button" onclick={() => (mostrarTodas = !mostrarTodas)}>
+									{mostrarTodas ? 'Ocultar' : 'Mostrar'}
+								</button>
+							</li>
+						{/if}
+						{#each visibles as s (s.id)}
 							<li>
 								<button
 									class="snap-item"
@@ -294,6 +325,13 @@
 									<span class="snap-meta">
 										{fmtFecha(s.created_at)} · {s.usuario?.nombre ?? 'sistema'}
 									</span>
+									{#if cambiosDe(s) != null}
+										<span class="snap-meta">
+											{cambiosDe(s) === 0
+												? 'Sin cambios'
+												: `${cambiosDe(s)} cambio${cambiosDe(s) === 1 ? '' : 's'}`}
+										</span>
+									{/if}
 									{#if s.totales}
 										<span class="snap-meta">
 											{s.totales.filas} fila(s) · {s.totales.cierres} cierre(s)
@@ -328,7 +366,7 @@
 										<tr><th>Campo</th><th>Antes</th><th>Después</th></tr>
 									</thead>
 									<tbody>
-										{#each diff.fields.slice(0, 200) as f (f.path)}
+										{#each diff.fields.slice(0, 200) as f, i (`${i}:${f.path}`)}
 											<tr>
 												<td class="snap-path">{f.path}</td>
 												<td class="snap-antes">{fmtValor(f.anterior)}</td>
@@ -469,6 +507,28 @@
 		overflow-y: auto;
 		background: var(--bg-surface);
 		border-right: 1px solid var(--border-subtle);
+	}
+	.snap-ocultas {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		padding: 8px 12px;
+		margin-bottom: 4px;
+		border-radius: 12px;
+		background: var(--bg-base);
+		color: var(--text-muted);
+		font-size: 12px;
+		font-weight: 600;
+	}
+	.snap-ocultas button {
+		border: 0;
+		background: none;
+		color: var(--bg-charcoal-deep);
+		font-size: 12px;
+		font-weight: 800;
+		text-decoration: underline;
+		cursor: pointer;
 	}
 	.snap-item {
 		width: 100%;

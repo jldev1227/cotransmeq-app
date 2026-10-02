@@ -48,6 +48,8 @@ export interface ResumenSnapshot {
 	revertido_de_id: string | null;
 	hojas: number;
 	conductores_con_planilla: number;
+	/** Cambios respecto a la versión anterior; 0 = solo detalle que el diff no muestra. */
+	cambios: number;
 }
 
 export interface CambioEstado {
