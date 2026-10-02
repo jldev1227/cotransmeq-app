@@ -349,7 +349,7 @@
 			{:else if !liquidacion}
 				<div class="py-20 text-center">
 					<p class="text-gray-500">No se pudo cargar la liquidación</p>
-					<button on:click={cerrar} class="mt-4 rounded-lg bg-gray-200 px-4 py-2 text-gray-700">
+					<button on:click={cerrar} class="btn-secondary mt-4">
 						Cerrar
 					</button>
 				</div>
@@ -1057,7 +1057,7 @@
 						{#if mostrarBotonIntereses}
 							<button
 								on:click={handleGenerateInteresesPDF}
-								class="flex items-center gap-2 rounded-lg bg-purple-50 px-4 py-2 text-sm font-medium text-purple-700 transition-colors hover:bg-purple-100"
+								class="btn-secondary"
 							>
 								<FileText class="h-4 w-4" />
 								Desprendible Intereses
@@ -1068,7 +1068,7 @@
 					<button
 						on:click={handleGeneratePDF}
 						disabled={generatingPdf || firmasLoading}
-						class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-5 py-2.5 font-medium text-white shadow-md transition-all hover:shadow-lg disabled:opacity-50"
+						class="btn-primary"
 					>
 						{#if generatingPdf}
 							<Loader2 class="h-4 w-4 animate-spin" />

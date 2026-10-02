@@ -19,6 +19,7 @@
 	 *
 	 * No guarda nada por su cuenta: `onGuardar` recibe el mapa entero.
 	 */
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 	import { claveMarcaDia, type MarcasDias } from '$lib/utils/marcasDias';
 	import type { DiaHojaDTO } from '$lib/editor/builders/nomina.builder';
 
@@ -149,209 +150,144 @@
 	}
 </script>
 
-<div class="fondo" role="presentation" onclick={() => !guardando && onClose()}>
-	<div
-		class="panel"
-		role="dialog"
-		aria-modal="true"
-		aria-label="Días en el desprendible"
-		onclick={(e) => e.stopPropagation()}
-	>
-		<header class="cabecera">
-			<div>
-				<span class="eyebrow">{nombreHoja}</span>
-				<h2>Días en el desprendible</h2>
-				<p class="ayuda">
-					<strong>No mostrar</strong> quita el día de las tablas de recargos.
-					<strong>No sumar</strong> lo deja en la tabla, en gris, pero su valor no se paga.
-				</p>
-			</div>
-			<button class="cerrar" onclick={onClose} disabled={guardando} aria-label="Cerrar">✕</button>
-		</header>
+<ModalBase
+	open={true}
+	eyebrow={nombreHoja}
+	title="Días en el desprendible"
+	subtitle="No mostrar quita el día de las tablas de recargos. No sumar lo deja en la tabla, en gris, pero su valor no se paga."
+	tamano="lg"
+	bloqueado={guardando}
+	oncerrar={onClose}
+>
+	{#if bloqueada}
+		<p class="bloqueo">{motivoBloqueo || 'Esta hoja no se puede editar.'}</p>
+	{/if}
 
-		<div class="cuerpo">
-			{#if bloqueada}
-				<p class="bloqueo">{motivoBloqueo || 'Esta hoja no se puede editar.'}</p>
-			{/if}
-
-			{#if filas.length}
-				<table class="tabla">
-					<thead>
-						<tr>
-							<th>Día</th>
-							<th>Empresa</th>
-							<th class="num">Horas</th>
-							<th class="num">Valor</th>
-							<th class="toggle">No mostrar</th>
-							<th class="toggle">No sumar</th>
+	<div class="tarjeta">
+		{#if filas.length}
+			<table class="tabla">
+				<thead>
+					<tr>
+						<th>Día</th>
+						<th>Empresa</th>
+						<th class="num">Horas</th>
+						<th class="num">Valor</th>
+						<th class="toggle">No mostrar</th>
+						<th class="toggle">No sumar</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each filas as f (f.clave)}
+						{@const m = marcas[f.clave]}
+						<tr class:oculta={m?.ocultar} class:nosuma={m?.noSumar}>
+							<td class="fecha">
+								{fechaCorta(f.fecha)}
+								{#if f.servicios > 1}<span class="chip">{f.servicios} serv.</span>{/if}
+							</td>
+							<td class="empresa">
+								<span class="punto" style:background={f.empresaColor ?? '#CBD5E1'}></span>
+								<span class="nombre-empresa" title={f.empresa}>{f.empresa}</span>
+								{#if f.disponibilidad}<span class="chip disp">Disponib.</span>{/if}
+							</td>
+							<td class="num">{horas(f.horas)}</td>
+							<td class="num valor">{f.disponibilidad ? '—' : money(f.valor)}</td>
+							<td class="toggle">
+								<label class="switch" title="Quitar este día de las tablas de recargos">
+									<input
+										type="checkbox"
+										checked={!!m?.ocultar}
+										disabled={bloqueada || guardando}
+										onchange={() => alternar(f.clave, 'ocultar')}
+										aria-label="No mostrar el {fechaCorta(f.fecha)} de {f.empresa}"
+									/>
+									<span class="pista-switch"></span>
+								</label>
+							</td>
+							<td class="toggle">
+								<label
+									class="switch"
+									title={f.disponibilidad
+										? 'Los días de disponibilidad ya no suman'
+										: 'Mostrar el día pero no pagar su valor'}
+								>
+									<input
+										type="checkbox"
+										checked={!!m?.noSumar}
+										disabled={bloqueada || guardando || f.disponibilidad}
+										onchange={() => alternar(f.clave, 'noSumar')}
+										aria-label="No sumar el {fechaCorta(f.fecha)} de {f.empresa}"
+									/>
+									<span class="pista-switch"></span>
+								</label>
+							</td>
 						</tr>
-					</thead>
-					<tbody>
-						{#each filas as f (f.clave)}
-							{@const m = marcas[f.clave]}
-							<tr class:oculta={m?.ocultar} class:nosuma={m?.noSumar}>
-								<td class="fecha">
-									{fechaCorta(f.fecha)}
-									{#if f.servicios > 1}<span class="chip">{f.servicios} serv.</span>{/if}
-								</td>
-								<td class="empresa">
-									<span class="punto" style:background={f.empresaColor ?? '#CBD5E1'}></span>
-									<span class="nombre-empresa" title={f.empresa}>{f.empresa}</span>
-									{#if f.disponibilidad}<span class="chip disp">Disponib.</span>{/if}
-								</td>
-								<td class="num">{horas(f.horas)}</td>
-								<td class="num valor">{f.disponibilidad ? '—' : money(f.valor)}</td>
-								<td class="toggle">
-									<label class="switch" title="Quitar este día de las tablas de recargos">
-										<input
-											type="checkbox"
-											checked={!!m?.ocultar}
-											disabled={bloqueada || guardando}
-											onchange={() => alternar(f.clave, 'ocultar')}
-											aria-label="No mostrar el {fechaCorta(f.fecha)} de {f.empresa}"
-										/>
-										<span class="pista-switch"></span>
-									</label>
-								</td>
-								<td class="toggle">
-									<label
-										class="switch"
-										title={f.disponibilidad
-											? 'Los días de disponibilidad ya no suman'
-											: 'Mostrar el día pero no pagar su valor'}
-									>
-										<input
-											type="checkbox"
-											checked={!!m?.noSumar}
-											disabled={bloqueada || guardando || f.disponibilidad}
-											onchange={() => alternar(f.clave, 'noSumar')}
-											aria-label="No sumar el {fechaCorta(f.fecha)} de {f.empresa}"
-										/>
-										<span class="pista-switch"></span>
-									</label>
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			{:else}
-				<p class="vacio">Esta hoja no tiene días trabajados en el corte.</p>
-			{/if}
-		</div>
-
-		<footer class="pie">
-			<div class="resumen">
-				<span>{ocultos} {ocultos === 1 ? 'oculto' : 'ocultos'} · {noSuman} sin sumar</span>
-				{#if noSumaTotal}
-					<span class="resta">Deja de sumar <strong>{money(noSumaTotal)}</strong></span>
-				{/if}
-				<span class="nota">
-					Si cambian los días que no suman, al guardar se rehacen los recargos de la hoja.
-				</span>
-			</div>
-			<div class="acciones">
-				<button class="btn-secondary" onclick={onClose} disabled={guardando}>Cancelar</button>
-				<button
-					class="btn-primary"
-					onclick={guardar}
-					disabled={bloqueada || guardando || !hayCambios}
-				>
-					{guardando ? 'Guardando…' : 'Guardar'}
-				</button>
-			</div>
-		</footer>
+					{/each}
+				</tbody>
+			</table>
+		{:else}
+			<p class="vacio">Esta hoja no tiene días trabajados en el corte.</p>
+		{/if}
 	</div>
-</div>
+
+	{#snippet pie()}
+		<div class="resumen">
+			<span>{ocultos} {ocultos === 1 ? 'oculto' : 'ocultos'} · {noSuman} sin sumar</span>
+			{#if noSumaTotal}
+				<span class="resta">Deja de sumar <strong>{money(noSumaTotal)}</strong></span>
+			{/if}
+			<span class="nota">
+				Si cambian los días que no suman, al guardar se rehacen los recargos de la hoja.
+			</span>
+		</div>
+		<button type="button" class="btn-secondary" onclick={onClose} disabled={guardando}>
+			Cancelar
+		</button>
+		<button
+			type="button"
+			class="btn-primary"
+			onclick={guardar}
+			disabled={bloqueada || guardando || !hayCambios}
+		>
+			{guardando ? 'Guardando…' : 'Guardar'}
+		</button>
+	{/snippet}
+</ModalBase>
 
 <style>
-	.fondo {
-		position: fixed;
-		inset: 0;
-		background: rgba(15, 31, 26, 0.5);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 9999;
-		padding: 1rem;
-	}
-	.panel {
-		background: var(--bg-surface, #fff);
+	.tarjeta {
+		padding: 4px 14px 8px;
 		border-radius: 16px;
-		width: 100%;
-		max-width: 46rem;
-		max-height: 88vh;
-		display: flex;
-		flex-direction: column;
-		box-shadow: 0 24px 64px rgba(0, 0, 0, 0.24);
-	}
-	.cabecera {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 1rem;
-		padding: 1.1rem 1.25rem;
-		border-bottom: 1px solid var(--border-subtle);
-	}
-	.cabecera h2 {
-		margin: 0.25rem 0 0;
-		font-size: 1.3rem;
-		font-weight: 500;
-	}
-	.eyebrow {
-		font-size: 0.68rem;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: var(--text-muted);
-		font-family: 'JetBrains Mono', monospace;
-	}
-	.ayuda {
-		margin: 0.4rem 0 0;
-		font-size: 0.78rem;
-		color: var(--text-muted);
-		max-width: 34rem;
-	}
-	.cerrar {
-		background: none;
-		border: none;
-		font-size: 1.1rem;
-		cursor: pointer;
-		color: var(--text-muted);
-	}
-	.cuerpo {
-		padding: 0.5rem 1.25rem 1rem;
-		overflow-y: auto;
-		flex: 1;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
 	}
 	.bloqueo {
-		margin: 0.5rem 0 0.9rem;
-		padding: 0.6rem 0.75rem;
-		border-radius: 10px;
+		margin: 0 0 12px;
+		padding: 10px 12px;
+		border-radius: 12px;
 		background: rgba(217, 119, 6, 0.1);
 		color: #92400e;
-		font-size: 0.8rem;
+		font-size: 13px;
 	}
 	.tabla {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: 0.8rem;
+		font-size: 13px;
+		color: var(--text-primary);
 	}
 	.tabla thead th {
 		position: sticky;
 		top: 0;
-		background: var(--bg-surface, #fff);
+		background: var(--bg-surface);
 		text-align: left;
-		font-size: 0.62rem;
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
+		font-size: 12px;
 		color: var(--text-muted);
-		font-family: 'JetBrains Mono', monospace;
-		font-weight: 500;
-		padding: 0.55rem 0.4rem;
+		font-weight: 700;
+		padding: 10px 6px;
 		border-bottom: 1px solid var(--border-subtle);
 		z-index: 1;
 	}
 	.tabla td {
-		padding: 0.45rem 0.4rem;
+		padding: 8px 6px;
 		border-bottom: 1px solid var(--border-subtle);
 		vertical-align: middle;
 	}
@@ -362,7 +298,7 @@
 	}
 	.valor {
 		font-weight: 600;
-		color: var(--emerald-700, #047857);
+		color: var(--text-primary);
 	}
 	.toggle {
 		text-align: center;
@@ -394,7 +330,7 @@
 		font-size: 0.62rem;
 		padding: 0.05rem 0.35rem;
 		border-radius: 999px;
-		background: var(--bg-base, #f1f5f9);
+		background: var(--bg-base);
 		color: var(--text-muted);
 		margin-left: 0.3rem;
 		white-space: nowrap;
@@ -404,7 +340,7 @@
 		color: #b91c1c;
 	}
 	tr.nosuma .valor {
-		color: #9ca3af;
+		color: var(--text-very-muted);
 		text-decoration: line-through;
 	}
 	tr.oculta td:not(.toggle) {
@@ -427,7 +363,7 @@
 		width: 2.1rem;
 		height: 1.2rem;
 		border-radius: 999px;
-		background: #d1d5db;
+		background: var(--border-default);
 		position: relative;
 		transition: background 0.15s ease;
 	}
@@ -444,13 +380,13 @@
 		transition: transform 0.15s ease;
 	}
 	.switch input:checked + .pista-switch {
-		background: #dc2626;
+		background: var(--accion);
 	}
 	.switch input:checked + .pista-switch::after {
 		transform: translateX(0.9rem);
 	}
 	.switch input:focus-visible + .pista-switch {
-		outline: 2px solid #2563eb;
+		outline: 2px solid var(--accion);
 		outline-offset: 2px;
 	}
 	.switch input:disabled,
@@ -462,23 +398,16 @@
 		margin: 0;
 		padding: 1.2rem 0;
 		text-align: center;
-		font-size: 0.82rem;
-		color: var(--text-very-muted, #999);
-	}
-	.pie {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		padding: 0.85rem 1.25rem;
-		border-top: 1px solid var(--border-subtle);
-		flex-wrap: wrap;
+		font-size: 13px;
+		color: var(--text-very-muted);
 	}
 	.resumen {
+		flex: 1 1 220px;
+		margin-right: auto;
 		display: flex;
 		flex-direction: column;
-		gap: 0.15rem;
-		font-size: 0.75rem;
+		gap: 2px;
+		font-size: 12px;
 		color: var(--text-muted);
 	}
 	.resta strong {
@@ -486,12 +415,8 @@
 		font-variant-numeric: tabular-nums;
 	}
 	.nota {
-		font-size: 0.7rem;
-		color: var(--text-very-muted, #999);
-	}
-	.acciones {
-		display: flex;
-		gap: 0.5rem;
+		font-size: 11px;
+		color: var(--text-very-muted);
 	}
 	@media (max-width: 36rem) {
 		.nombre-empresa {

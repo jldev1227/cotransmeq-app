@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { confirmar, confirmarEliminacion } from '$lib/stores/confirm';
 	import { onMount, onDestroy, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -438,13 +439,17 @@
 			return;
 		}
 		const n = celdasDescuadradas;
-		const ok = confirm(
-			`Se vuelven a montar los bonos de ${hoja.nombre} desde lo marcado en recorridos.\n\n` +
+		const ok = await confirmar({
+			title: `¿Rehacer los bonos de ${hoja.nombre}?`,
+			message:
+				'Se vuelven a montar desde lo marcado en recorridos.\n\n' +
 				(n
 					? `Se pierden las cantidades tecleadas a mano en ${n} ${n === 1 ? 'celda que se separó' : 'celdas que se separaron'}.`
 					: 'Ahora mismo ninguna celda se ha separado de lo marcado, así que no debería cambiar nada.') +
-				'\n\nEl precio unitario de cada bono no se toca; las vacaciones y el resto del desprendible tampoco.'
-		);
+				'\n\nEl precio unitario de cada bono no se toca; las vacaciones y el resto del desprendible tampoco.',
+			tone: n ? 'danger' : 'warning',
+			confirmText: 'Rehacer bonos'
+		});
 		if (!ok) return;
 
 		/// Lo que venga por rebote sobra: esto recarga igual y con datos más
@@ -639,13 +644,16 @@
 			return;
 		}
 
-		const ok = confirm(
-			`Se retira el borrador de ${hoja.nombre} del corte ${datos?.etiqueta ?? ''}.\n\n` +
+		const ok = await confirmarEliminacion({
+			title: `¿Eliminar el borrador de ${hoja.nombre}?`,
+			message:
+				`Se retira del corte ${datos?.etiqueta ?? ''}.\n\n` +
 				'Se pierde lo que lleve tecleado: días corregidos, bonos, vacaciones y conceptos ' +
 				'adicionales. Su hoja queda de solo lectura, y desaparece del libro si el conductor ' +
 				'no entra por su cuenta en la nómina del periodo.\n\n' +
-				'Se puede volver a generar, partiendo otra vez de las planillas.'
-		);
+				'Se puede volver a generar, partiendo otra vez de las planillas.',
+			confirmText: 'Eliminar borrador'
+		});
 		if (!ok) return;
 
 		eliminandoBorrador = true;
@@ -754,11 +762,14 @@
 			});
 			return;
 		}
-		const ok = confirm(
-			`Se volverán a traer los días de ${hoja.nombre} desde las planillas.\n\n` +
-				'Las horas que hayas corregido a mano en los días se pierden. Los bonos, ' +
-				'las vacaciones y el resto del desprendible no se tocan.'
-		);
+		const ok = await confirmar({
+			title: `¿Volver a traer los días de ${hoja.nombre}?`,
+			message:
+				'Se recargan desde las planillas. Las horas que hayas corregido a mano en los días se pierden. ' +
+				'Los bonos, las vacaciones y el resto del desprendible no se tocan.',
+			tone: 'danger',
+			confirmText: 'Traer días'
+		});
 		if (!ok) return;
 
 		refrescandoDias = true;
@@ -2228,7 +2239,7 @@
 					<p class="text-[10px] font-bold tracking-[0.16em] text-emerald-700">FIRMA RECIBIDA</p>
 					<h2 class="truncate text-base font-bold text-slate-900">{previewFirmadoNombre}</h2>
 				</div>
-				<button class="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" onclick={cerrarPreviewFirmado}>Cerrar</button>
+				<button class="btn-secondary" onclick={cerrarPreviewFirmado}>Cerrar</button>
 			</header>
 			<iframe class="min-h-0 flex-1 bg-slate-100" src={previewFirmadoUrl} title={previewFirmadoNombre}></iframe>
 		</div>

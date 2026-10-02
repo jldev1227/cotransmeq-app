@@ -601,7 +601,7 @@
 			<div class="error-icon-lg">⚠️</div>
 			<p class="error-title">No pudimos cargar el servicio</p>
 			<p class="error-msg">{error}</p>
-			<button class="btn-retry" on:click={back}>Volver</button>
+			<button class="btn-primary btn-retry" on:click={back}>Volver</button>
 		</div>
 	{:else if servicio && pal}
 		<!-- ─── HEADER (estilo landing) ─── -->
@@ -1072,20 +1072,7 @@
 		margin-top: 0.85rem;
 		padding: 0.65rem 1.35rem;
 		font-size: 0.85rem;
-		font-weight: 600;
-		color: white;
-		background: linear-gradient(135deg, var(--emerald-500), var(--emerald-600));
-		border: none;
-		border-radius: 12px;
 		cursor: pointer;
-		font-family: inherit;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
-		transition: all 0.2s var(--ease);
-	}
-
-	.btn-retry:hover {
-		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
 	}
 
 	/* ═══════════════════════════════════════

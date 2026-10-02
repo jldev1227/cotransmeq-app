@@ -7,6 +7,7 @@
 	qué a este conductor no le aparece nada?».
 -->
 <script lang="ts">
+	import { confirmar } from '$lib/stores/confirm';
 	import { page } from '$app/state';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
@@ -29,7 +30,6 @@
 	let asignaciones = $state<AssignmentDto[]>([]);
 	let cargando = $state(true);
 	let trabajando = $state(false);
-	let totalPages = $state(1);
 	let total = $state(0);
 
 	/**
@@ -76,7 +76,6 @@
 			});
 			asignaciones = data;
 			total = meta.total ?? 0;
-			totalPages = meta.totalPages ?? 1;
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'No se pudieron cargar las asignaciones.');
 		} finally {
@@ -92,9 +91,12 @@
 	async function cambiarEstado(a: AssignmentDto, accion: 'pausar' | 'reactivar' | 'cerrar') {
 		if (
 			accion === 'cerrar' &&
-			!confirm(
-				`Cerrar «${a.name}» es definitivo: no se puede reabrir y los conductores dejan de verla. ¿Continuar?`
-			)
+			!(await confirmar({
+				title: `¿Cerrar «${a.name}»?`,
+				message: 'Es definitivo: no se puede reabrir y los conductores dejan de verla.',
+				tone: 'warning',
+				confirmText: 'Cerrar asignación'
+			}))
 		)
 			return;
 
@@ -516,11 +518,11 @@
 		padding: 0 0.625rem;
 		font: inherit;
 		font-size: 0.8125rem;
-		font-weight: 500;
-		color: var(--text-primary, #0f172a);
+		font-weight: 800;
+		color: var(--bg-charcoal-deep);
 		background: #fff;
-		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
-		border-radius: 9px;
+		border: 1.5px solid var(--border-default);
+		border-radius: 16px;
 		cursor: pointer;
 		text-decoration: none;
 	}
@@ -531,7 +533,8 @@
 	}
 
 	.btn:hover:not(:disabled) {
-		background: var(--gray-50, #f9fafb);
+		background: var(--bg-base);
+		border-color: var(--border-emphasis);
 	}
 
 	.btn:disabled {

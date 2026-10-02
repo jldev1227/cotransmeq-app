@@ -107,7 +107,7 @@
 			<button
 				class="rounded-lg px-2.5 py-1 text-[10px] font-semibold whitespace-nowrap transition-colors {activeFilter ===
 				filter
-					? 'bg-orange-500 text-white'
+					? 'bg-[var(--accion)] text-white'
 					: 'text-gray-500 hover:bg-gray-100'}"
 				onclick={() => (activeFilter = filter as FilterType)}
 			>
@@ -139,7 +139,7 @@
 				<p class="mt-1 text-xs text-gray-500">Crea un recordatorio para esta liquidaci&oacute;n</p>
 				<button
 					onclick={onCreate}
-					class="mt-3 flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:from-orange-600 hover:to-orange-700"
+					class="btn-primary mt-3 flex items-center gap-1.5 transition-colors"
 				>
 					<svg
 						class="h-3.5 w-3.5"
@@ -222,7 +222,7 @@
 							<div class="mt-2 flex gap-2 border-t border-gray-100 pt-2">
 							<button
 								onclick={() => chatStore.cambiarEstadoRecordatorio(rec.id, 'APLICADO')}
-								class="rounded-lg bg-orange-500 px-2.5 py-1 text-[10px] font-semibold text-white transition-colors hover:bg-orange-600"
+								class="rounded-lg bg-[var(--accion)] px-2.5 py-1 text-[10px] font-semibold text-white transition-colors hover:bg-[var(--accion-hover)]"
 							>
 								Aplicar
 							</button>

@@ -192,13 +192,13 @@
 		<div class="sticky bottom-0 space-y-3 border-t border-gray-200 bg-white p-6">
 			<button
 				on:click={handleApply}
-				class="apple-transition w-full rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-3 font-semibold text-white shadow-lg shadow-orange-500/30 hover:from-orange-600 hover:to-orange-700"
+				class="btn-primary apple-transition w-full"
 			>
 				Aplicar Filtros
 			</button>
 			<button
 				on:click={handleReset}
-				class="apple-transition w-full rounded-xl bg-gray-100 px-6 py-3 font-semibold text-gray-700 hover:bg-gray-200"
+				class="btn-secondary apple-transition w-full"
 			>
 				Limpiar Filtros
 			</button>

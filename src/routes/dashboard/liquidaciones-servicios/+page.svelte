@@ -3,6 +3,7 @@
 	import { fade, fly, slide } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import { goto } from '$app/navigation';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
 	import { authStore } from '$lib/stores/auth';
@@ -26,8 +27,6 @@
 		RotateCcw,
 		ChevronDown,
 		ChevronUp,
-		ChevronLeft,
-		ChevronRight,
 		Truck,
 		AlertCircle,
 		Calendar,
@@ -43,14 +42,18 @@
 		type LiquidacionServicio,
 		type EstadoLiquidacionServicio,
 		type ConfigLiquidadorServicio,
-		type TerceroItemHistorial
+		type TerceroItemHistorial,
+		type FacturaActivaDeLiquidacion
 	} from '$lib/api/liquidaciones-servicios';
+	import { toast } from 'svelte-sonner';
 	import {
 		facturacionLiquidacionesAPI,
 		type FacturaInfoMap,
 		type FacturaLiquidacion
 	} from '$lib/api/facturacionLiquidaciones';
 	import ModalFacturar from '$lib/components/ModalFacturar.svelte';
+	import ModalRevertirFacturada from '$lib/components/ModalRevertirFacturada.svelte';
+	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
 	import SocketEventLogBar from '$lib/components/liquidaciones/SocketEventLogBar.svelte';
 	import AccionesDropdown, { type AccionMenu } from '$lib/components/AccionesDropdown.svelte';
 	import { checkAccess } from '$lib/config/permissions';
@@ -118,7 +121,6 @@
 	let listLoading = $state(false);
 	let listError = $state('');
 	let listPage = $state(1);
-	let listTotalPages = $state(1);
 	let listTotal = $state(0);
 	let listBusqueda = $state('');
 	let listEstado = $state<EstadoLiquidacionServicio | ''>('');
@@ -370,7 +372,6 @@
 	let tercerosItems = $state<TerceroItemHistorial[]>([]);
 	let tercerosLoading = $state(false);
 	let tercerosPage = $state(1);
-	let tercerosTotalPages = $state(1);
 	let tercerosTotal = $state(0);
 	let tercerosBusqueda = $state('');
 	let tercerosMes = $state<number | ''>('');
@@ -379,11 +380,14 @@
 	let facturas = $state<FacturaLiquidacion[]>([]);
 	let facturasLoading = $state(false);
 	let facturasPage = $state(1);
-	let facturasTotalPages = $state(1);
 	let facturasTotal = $state(0);
 	let facturasBusqueda = $state('');
 	let facturasEstado = $state<'' | 'ACTIVA' | 'ANULADA'>('');
 
+	/// FACTURADA → APROBADA: el modal que sugiere anular la factura o quitar
+	/// la liquidación de ella. Se abre con lo que devuelve el 409 del backend.
+	let revertirLiq = $state<{ id: string; consecutivo: string } | null>(null);
+	let revertirFactura = $state<FacturaActivaDeLiquidacion | null>(null);
 	let anularFacturaModalOpen = $state(false);
 	let anularFacturaTarget = $state<FacturaLiquidacion | null>(null);
 	let anularFacturaMotivo = $state('');
@@ -477,7 +481,6 @@
 			const r = await liquidacionesTercerosAPI.listarHistorial(filtros);
 			tercerosItems = r.items;
 			tercerosTotal = r.total;
-			tercerosTotalPages = r.totalPages;
 			// Agregados sobre TODOS los registros del filtro, no sobre la
 			// página. Ver `tercerosMetadata`.
 			tercerosMetadata = { ...TERCEROS_METADATA_VACIA, ...(r.metadata ?? {}) };
@@ -544,6 +547,7 @@
 	const canAnular = $derived(isAdmin); // solo admin: anular liquidaciones
 	const canRevertirABorrador = $derived(isFull); // admin + operaciones: liquidada → borrador
 	const canRevertirALiquidada = $derived(isAdmin); // solo admin: aprobada → liquidada
+	const canRevertirFacturada = $derived(isAdmin); // solo admin: facturada → aprobada (sacándola de su factura)
 
 	let logoError = $state(false);
 
@@ -815,7 +819,6 @@
 			const res = await liquidacionesServiciosAPI.listar(filtros);
 			liquidaciones = res.liquidaciones;
 			listTotal = res.total;
-			listTotalPages = res.totalPages;
 			listPage = res.page;
 			if (res.metadata)
 				/// El servidor no siempre manda las cuatro listas de la cabecera;
@@ -1161,6 +1164,15 @@
 			await liquidacionesServiciosAPI.cambiarEstado(id, estado, motivo);
 			if (detailLiq?.id === id) detailLiq = { ...detailLiq, estado };
 		} catch (err: any) {
+			/// Sigue en una factura activa: en vez del error, el modal que
+			/// propone anularla o quitarla de ella.
+			if (err?.code === 'FACTURA_ACTIVA' && err.factura) {
+				const liq =
+					(detailLiq?.id === id ? detailLiq : null) ?? liquidaciones.find((l) => l.id === id);
+				revertirLiq = { id, consecutivo: liq?.consecutivo ?? '' };
+				revertirFactura = err.factura;
+				return;
+			}
 			const status = err?.response?.status ?? err?.status;
 			const mensaje =
 				err?.response?.data?.error ?? err?.data?.error ?? err?.message ?? 'Error al cambiar estado';
@@ -1216,7 +1228,8 @@
 			onSelect: () => irVerLiquidacion(liq.id)
 		});
 
-		if (isFull && (liq.estado === 'BORRADOR' || (isAdmin && liq.estado === 'LIQUIDADA'))) {
+		/// Administración edita en cualquier estado; el resto, solo borradores.
+		if (isFull && (liq.estado === 'BORRADOR' || isAdmin)) {
 			items.push({
 				id: 'editar',
 				etiqueta: 'Editar',
@@ -1283,6 +1296,9 @@
 		}
 		if (canRevertirALiquidada && liq.estado === 'APROBADA') {
 			agregar(estado('a-liquidada', 'Devolver a liquidada', 'LIQUIDADA', 'aviso'));
+		}
+		if (canRevertirFacturada && liq.estado === 'FACTURADA') {
+			agregar(estado('a-aprobada', 'Devolver a aprobada', 'APROBADA', 'aviso'));
 		}
 		if (isAdmin && liq.estado === 'ANULADA') {
 			agregar(estado('reactivar', 'Reactivar (a borrador)', 'BORRADOR', 'aviso'));
@@ -1408,7 +1424,6 @@
 			});
 			facturas = res.facturas;
 			facturasTotal = res.total;
-			facturasTotalPages = res.totalPages;
 			facturasPage = res.page;
 			facturasMetadata = { ...FACTURAS_METADATA_VACIA, ...(res.metadata ?? {}) };
 			guardarDatos('facturas', key, {
@@ -1649,11 +1664,11 @@
 				onclick={() => cambiarTab(id)}
 				class="apple-transition inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-semibold"
 				style="background-color: {facturasTab === id
-					? 'rgba(234, 88, 12,0.10)'
+					? 'var(--accion)'
 					: 'var(--bg-surface)'}; color: {facturasTab === id
-					? 'var(--orange-700)'
+					? '#fff'
 					: 'var(--text-muted)'}; border: 1px solid {facturasTab === id
-					? 'rgba(234, 88, 12,0.30)'
+					? 'var(--accion)'
 					: 'var(--border-subtle)'};"
 			>
 				<Icono class="h-3.5 w-3.5" />
@@ -2565,51 +2580,14 @@
 			{/if}
 
 			<!-- Pagination -->
-			{#if !listLoading && listTotalPages > 1}
-				<div
-					class="flex items-center justify-between px-4 py-3"
-					style="border-top: 1px solid var(--border-subtle); background: var(--bg-base);"
-				>
-					<p class="font-mono-meta text-[10px]" style="color: var(--text-muted);">
-						Mostrando {(listPage - 1) * 15 + 1}–{Math.min(listPage * 15, listTotal)} de {listTotal}
-					</p>
-					<div class="flex items-center gap-1">
-						<button
-							onclick={() => irPagina(listPage - 1)}
-							disabled={listPage <= 1}
-							aria-label="Página anterior"
-							class="apple-transition rounded-lg p-1.5 disabled:opacity-40"
-							style="color: var(--text-muted);"
-						>
-							<ChevronLeft class="h-4 w-4" />
-						</button>
-						{#each Array(Math.min(listTotalPages, 10)) as _, i}
-							<button
-								onclick={() => irPagina(i + 1)}
-								class="apple-transition font-mono-meta min-w-[32px] rounded-lg px-2.5 py-1 text-[11px] font-semibold"
-								style="background: {listPage === i + 1
-									? 'var(--orange-500)'
-									: 'transparent'}; color: {listPage === i + 1
-									? 'white'
-									: 'var(--text-secondary)'};">{i + 1}</button
-							>
-						{/each}
-						{#if listTotalPages > 10}<span
-								class="font-mono-meta px-1 text-[10px]"
-								style="color: var(--text-very-muted);">…</span
-							>{/if}
-						<button
-							onclick={() => irPagina(listPage + 1)}
-							disabled={listPage >= listTotalPages}
-							aria-label="Página siguiente"
-							class="apple-transition rounded-lg p-1.5 disabled:opacity-40"
-							style="color: var(--text-muted);"
-						>
-							<ChevronRight class="h-4 w-4" />
-						</button>
-					</div>
-				</div>
-			{/if}
+			<PaginadorLista
+				pagina={listPage}
+				total={listTotal}
+				porPagina={15}
+				cargando={listLoading}
+				nombreItems="liquidaciones"
+				onCambiar={irPagina}
+			/>
 		</div>
 
 		<!-- Placas popover -->
@@ -3017,51 +2995,14 @@
 			{/if}
 
 			<!-- Pagination -->
-			{#if !facturasLoading && facturasTotalPages > 1}
-				<div
-					class="flex items-center justify-between px-4 py-3"
-					style="border-top: 1px solid var(--border-subtle); background: var(--bg-base);"
-				>
-					<p class="font-mono-meta text-[10px]" style="color: var(--text-muted);">
-						Página {facturasPage} de {facturasTotalPages} — {facturasTotal} registros
-					</p>
-					<div class="flex items-center gap-1">
-						<button
-							disabled={facturasPage <= 1}
-							onclick={() => irPaginaFacturas(facturasPage - 1)}
-							aria-label="Página anterior"
-							class="apple-transition rounded-lg p-1.5 disabled:opacity-40"
-							style="color: var(--text-muted);"
-						>
-							<ChevronLeft class="h-4 w-4" />
-						</button>
-						{#each Array(Math.min(facturasTotalPages, 10)) as _, i}
-							<button
-								onclick={() => irPaginaFacturas(i + 1)}
-								class="apple-transition font-mono-meta min-w-[32px] rounded-lg px-2.5 py-1 text-[11px] font-semibold"
-								style="background: {facturasPage === i + 1
-									? 'var(--orange-500)'
-									: 'transparent'}; color: {facturasPage === i + 1
-									? 'white'
-									: 'var(--text-secondary)'};">{i + 1}</button
-							>
-						{/each}
-						{#if facturasTotalPages > 10}<span
-								class="font-mono-meta px-1 text-[10px]"
-								style="color: var(--text-very-muted);">…{facturasTotalPages}</span
-							>{/if}
-						<button
-							disabled={facturasPage >= facturasTotalPages}
-							onclick={() => irPaginaFacturas(facturasPage + 1)}
-							aria-label="Página siguiente"
-							class="apple-transition rounded-lg p-1.5 disabled:opacity-40"
-							style="color: var(--text-muted);"
-						>
-							<ChevronRight class="h-4 w-4" />
-						</button>
-					</div>
-				</div>
-			{/if}
+			<PaginadorLista
+				pagina={facturasPage}
+				total={facturasTotal}
+				porPagina={15}
+				cargando={facturasLoading}
+				nombreItems="facturas"
+				onCambiar={irPaginaFacturas}
+			/>
 		</div>
 	{:else if facturasTab === 'terceros'}
 		<!-- TERCEROS HISTORIAL SUB-TAB — Canvas style like Recargos -->
@@ -3372,52 +3313,14 @@
 			{/if}
 
 			<!-- Pagination -->
-			{#if !tercerosLoading && tercerosTotalPages > 1}
-				<div
-					class="flex items-center justify-between px-4 py-3"
-					style="border-top: 1px solid var(--border-subtle); background: var(--bg-base);"
-				>
-					<p class="font-mono-meta text-[10px]" style="color: var(--text-muted);">
-						Mostrando {(tercerosPage - 1) * 50 + 1} a {Math.min(tercerosPage * 50, tercerosTotal)} de
-						{tercerosTotal} registros
-					</p>
-					<div class="flex items-center gap-1">
-						<button
-							disabled={tercerosPage <= 1}
-							onclick={() => irPaginaTerceros(tercerosPage - 1)}
-							aria-label="Página anterior"
-							class="apple-transition rounded-lg p-1.5 disabled:opacity-40"
-							style="color: var(--text-muted);"
-						>
-							<ChevronLeft class="h-4 w-4" />
-						</button>
-						{#each Array(Math.min(tercerosTotalPages, 10)) as _, i}
-							<button
-								onclick={() => irPaginaTerceros(i + 1)}
-								class="apple-transition font-mono-meta min-w-[32px] rounded-lg px-2.5 py-1 text-[11px] font-semibold"
-								style="background: {tercerosPage === i + 1
-									? 'var(--orange-500)'
-									: 'transparent'}; color: {tercerosPage === i + 1
-									? 'white'
-									: 'var(--text-secondary)'};">{i + 1}</button
-							>
-						{/each}
-						{#if tercerosTotalPages > 10}<span
-								class="font-mono-meta px-1 text-[10px]"
-								style="color: var(--text-very-muted);">…{tercerosTotalPages}</span
-							>{/if}
-						<button
-							disabled={tercerosPage >= tercerosTotalPages}
-							onclick={() => irPaginaTerceros(tercerosPage + 1)}
-							aria-label="Página siguiente"
-							class="apple-transition rounded-lg p-1.5 disabled:opacity-40"
-							style="color: var(--text-muted);"
-						>
-							<ChevronRight class="h-4 w-4" />
-						</button>
-					</div>
-				</div>
-			{/if}
+			<PaginadorLista
+				pagina={tercerosPage}
+				total={tercerosTotal}
+				porPagina={50}
+				cargando={tercerosLoading}
+				nombreItems="registros"
+				onCambiar={irPaginaTerceros}
+			/>
 		</div>
 	{:else if facturasTab === 'configuracion'}
 		<!-- CONFIG SUB-TAB -->
@@ -3779,8 +3682,8 @@
 						{/if}
 						{#if canAnular && detailLiq.estado !== 'ANULADA' && detailLiq.estado !== 'FACTURADA'}
 							<button
-								class="apple-transition"
-								style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.95rem; border-radius: 12px; background: rgba(220,38,38,0.08); color: #B91C1C; border: 1px solid rgba(220,38,38,0.20); font-size: 12px; font-weight: 600;"
+								class="btn-danger apple-transition"
+								style="padding: 0.45rem 0.95rem; font-size: 12px;"
 								onclick={() => detailLiq && abrirAnularModal(detailLiq.id)}
 							>
 								<Ban class="h-3.5 w-3.5" />
@@ -3789,8 +3692,8 @@
 						{/if}
 						{#if isAdmin && detailLiq.estado === 'ANULADA'}
 							<button
-								class="apple-transition"
-								style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.95rem; border-radius: 12px; background: rgba(245,158,11,0.10); color: #B45309; border: 1px solid rgba(245,158,11,0.20); font-size: 12px; font-weight: 600;"
+								class="btn-secondary apple-transition"
+								style="padding: 0.45rem 0.95rem; font-size: 12px;"
 								onclick={() => detailLiq && cambiarEstado(detailLiq.id, 'BORRADOR')}
 							>
 								<RotateCcw class="h-3.5 w-3.5" />
@@ -3799,18 +3702,28 @@
 						{/if}
 						{#if canRevertirABorrador && detailLiq.estado === 'LIQUIDADA'}
 							<button
-								class="apple-transition"
-								style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.95rem; border-radius: 12px; background: rgba(245,158,11,0.10); color: #B45309; border: 1px solid rgba(245,158,11,0.20); font-size: 12px; font-weight: 600;"
+								class="btn-secondary apple-transition"
+								style="padding: 0.45rem 0.95rem; font-size: 12px;"
 								onclick={() => detailLiq && cambiarEstado(detailLiq.id, 'BORRADOR')}
 							>
 								<RotateCcw class="h-3.5 w-3.5" />
 								A Borrador
 							</button>
 						{/if}
+						{#if canRevertirFacturada && detailLiq.estado === 'FACTURADA'}
+							<button
+								class="btn-secondary apple-transition"
+								style="padding: 0.45rem 0.95rem; font-size: 12px;"
+								onclick={() => detailLiq && cambiarEstado(detailLiq.id, 'APROBADA')}
+							>
+								<RotateCcw class="h-3.5 w-3.5" />
+								A Aprobada
+							</button>
+						{/if}
 						{#if canRevertirALiquidada && detailLiq.estado === 'APROBADA'}
 							<button
-								class="apple-transition"
-								style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.95rem; border-radius: 12px; background: rgba(245,158,11,0.10); color: #B45309; border: 1px solid rgba(245,158,11,0.20); font-size: 12px; font-weight: 600;"
+								class="btn-secondary apple-transition"
+								style="padding: 0.45rem 0.95rem; font-size: 12px;"
 								onclick={() => detailLiq && cambiarEstado(detailLiq.id, 'LIQUIDADA')}
 							>
 								<RotateCcw class="h-3.5 w-3.5" />
@@ -3825,164 +3738,67 @@
 {/if}
 
 <!-- MODAL: ELIMINAR LIQUIDACION -->
-{#if deleteModalOpen && deleteTargetLiq}
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-	<div
-		class="modal-bg"
-		onclick={(e) => {
-			if (e.target !== e.currentTarget) return;
-			deleteModalOpen = false;
-			deleteTargetLiq = null;
-		}}
-	>
-		<div class="modal-box" style="max-width:440px">
-			<div class="modal-hd">
-				<div class="flex items-center gap-2">
-					<Trash2 class="h-4 w-4" style="color: #DC2626;" />
-					<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
-						Eliminar Liquidación
-					</h3>
-				</div>
-				<button
-					class="btn-icon"
-					onclick={() => {
-						deleteModalOpen = false;
-						deleteTargetLiq = null;
-					}}
-				>
-					<X class="h-3.5 w-3.5" />
-				</button>
+<ConfirmDialog
+	open={deleteModalOpen && !!deleteTargetLiq}
+	tone="danger"
+	title="¿Eliminar esta liquidación?"
+	message="Se eliminarán también todos sus ítems. Queda en la papelera de liquidaciones y se puede restaurar."
+	confirmText="Eliminar"
+	loading={deleting}
+	loadingText="Eliminando…"
+	onconfirm={() => deleteTargetLiq && eliminarLiq(deleteTargetLiq.id)}
+	oncancel={() => {
+		deleteModalOpen = false;
+		deleteTargetLiq = null;
+	}}
+>
+	{#if deleteTargetLiq}
+		<div class="confirm-data">
+			<div>
+				<dt>Consecutivo</dt>
+				<dd class="font-mono-meta" style="color: var(--emerald-700);">
+					{deleteTargetLiq.consecutivo}
+				</dd>
 			</div>
-			<div class="modal-body">
-				<div class="mb-4 text-center">
-					<div
-						class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl"
-						style="background: rgba(220,38,38,0.08);"
-					>
-						<AlertCircle class="h-7 w-7" style="color: #DC2626;" />
-					</div>
-					<p class="text-sm font-semibold" style="color: var(--text-primary);">
-						¿Estás seguro de eliminar esta liquidación?
-					</p>
-				</div>
-				<div class="confirm-data">
-					<div>
-						<dt>Consecutivo</dt>
-						<dd class="font-mono-meta" style="color: var(--orange-700);">
-							{deleteTargetLiq.consecutivo}
-						</dd>
-					</div>
-					<div>
-						<dt>Cliente</dt>
-						<dd>{deleteTargetLiq.cliente?.nombre || '—'}</dd>
-					</div>
-					<div>
-						<dt>Total</dt>
-						<dd class="font-mono-meta" style="color: var(--orange-700);">
-							{COP(deleteTargetLiq.total || 0)}
-						</dd>
-					</div>
-				</div>
-				<div class="alert alert-error mb-4" style="padding: 0.65rem 0.85rem; font-size: 12px;">
-					<AlertCircle class="h-4 w-4" />
-					<span>Esta acción es irreversible. Se eliminarán todos los items asociados.</span>
-				</div>
-				<div class="flex justify-end gap-2">
-					<button
-						class="btn-secondary apple-transition"
-						onclick={() => {
-							deleteModalOpen = false;
-							deleteTargetLiq = null;
-						}}>Cancelar</button
-					>
-					<button
-						class="apple-transition inline-flex items-center gap-1.5"
-						style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.55rem 1.1rem; border-radius: 12px; background: #DC2626; color: white; font-size: 0.85rem; font-weight: 600; box-shadow: 0 4px 16px rgba(220,38,38,0.30); border: none;"
-						disabled={deleting}
-						onclick={() => deleteTargetLiq && eliminarLiq(deleteTargetLiq.id)}
-					>
-						{#if deleting}
-							<div
-								class="spinner"
-								style="width: 0.9rem; height: 0.9rem; border-width: 2px; border-top-color: white;"
-							></div>
-							Eliminando…
-						{:else}
-							<Trash2 class="h-3.5 w-3.5" />
-							Eliminar
-						{/if}
-					</button>
-				</div>
+			<div>
+				<dt>Cliente</dt>
+				<dd>{deleteTargetLiq.cliente?.nombre || '—'}</dd>
+			</div>
+			<div>
+				<dt>Total</dt>
+				<dd class="font-mono-meta" style="color: var(--emerald-700);">
+					{COP(deleteTargetLiq.total || 0)}
+				</dd>
 			</div>
 		</div>
-	</div>
-{/if}
+	{/if}
+</ConfirmDialog>
 
 <!-- MODAL: ANULAR LIQUIDACION -->
-{#if anularModalOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-	<div class="modal-bg" onclick={(e) => { if (e.target === e.currentTarget) anularModalOpen = false; }}>
-		<div class="modal-box" style="max-width:480px">
-			<div class="modal-hd">
-				<div class="flex items-center gap-2">
-					<Ban class="h-4 w-4" style="color: #DC2626;" />
-					<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
-						Anular Liquidación
-					</h3>
-				</div>
-				<button class="btn-icon" onclick={() => (anularModalOpen = false)}>
-					<X class="h-3.5 w-3.5" />
-				</button>
-			</div>
-			<div class="modal-body">
-				<p class="mb-3 text-sm" style="color: var(--text-secondary);">
-					Esta acción cambiará el estado a <strong style="color: #DC2626;">ANULADA</strong>. Indica
-					el motivo de la anulación para su debida corrección.
-				</p>
-				<label
-					for="anular-motivo"
-					class="filter-field-label"
-					style="margin-bottom: 0.35rem; display: block;"
-				>
-					Motivo de anulación <span style="color: #DC2626;">*</span>
-				</label>
-				<textarea
-					id="anular-motivo"
-					bind:value={anularMotivo}
-					rows="4"
-					placeholder="Ej: Error en valores, datos incorrectos del cliente, duplicidad..."
-					class="input-glow w-full rounded-xl border p-2.5 text-sm"
-					style="border-color: var(--border-default); background: var(--bg-surface); resize: vertical; font-family: inherit;"
-				></textarea>
-				<div class="mt-4 flex justify-end gap-2">
-					<button class="btn-secondary apple-transition" onclick={() => (anularModalOpen = false)}
-						>Cancelar</button
-					>
-					<button
-						class="apple-transition inline-flex items-center gap-1.5"
-						style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.55rem 1.1rem; border-radius: 12px; background: #DC2626; color: white; font-size: 0.85rem; font-weight: 600; box-shadow: 0 4px 16px rgba(220,38,38,0.30); border: none; opacity: {!anularMotivo.trim() ||
-						Boolean(estadoEnCurso[anularTargetId])
-							? '0.5'
-							: '1'};"
-						disabled={!anularMotivo.trim() || Boolean(estadoEnCurso[anularTargetId])}
-						onclick={confirmarAnulacion}
-					>
-						{#if estadoEnCurso[anularTargetId]}
-							<div
-								class="spinner"
-								style="width: 0.9rem; height: 0.9rem; border-width: 2px; border-top-color: white;"
-							></div>
-							Anulando…
-						{:else}
-							<Ban class="h-3.5 w-3.5" />
-							Confirmar Anulación
-						{/if}
-					</button>
-				</div>
-			</div>
-		</div>
-	</div>
-{/if}
+<ConfirmDialog
+	open={anularModalOpen}
+	tone="danger"
+	title="¿Anular esta liquidación?"
+	message="Pasará a ANULADA. Indica el motivo para su debida corrección."
+	confirmText="Anular"
+	loading={Boolean(estadoEnCurso[anularTargetId])}
+	loadingText="Anulando…"
+	confirmDisabled={!anularMotivo.trim()}
+	onconfirm={confirmarAnulacion}
+	oncancel={() => (anularModalOpen = false)}
+>
+	<label for="anular-motivo" class="filter-field-label" style="display: block;">
+		Motivo de anulación <span style="color: #DC2626;">*</span>
+	</label>
+	<textarea
+		id="anular-motivo"
+		bind:value={anularMotivo}
+		rows="3"
+		placeholder="Ej: Error en valores, datos incorrectos del cliente, duplicidad..."
+		class="input-glow w-full rounded-xl border p-2.5 text-sm"
+		style="border-color: var(--border-default); background: var(--bg-surface); resize: vertical; font-family: inherit; margin-top: -0.6rem;"
+	></textarea>
+</ConfirmDialog>
 
 <!-- MODAL: DETALLE FACTURA -->
 {#if detalleFactura}
@@ -4145,182 +3961,76 @@
 {/if}
 
 <!-- MODAL: ANULAR FACTURA -->
-{#if anularFacturaModalOpen && anularFacturaTarget}
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-	<div
-		class="modal-bg"
-		onclick={(e) => {
-			if (e.target !== e.currentTarget) return;
-			anularFacturaModalOpen = false;
-			anularFacturaTarget = null;
-		}}
-	>
-		<div class="modal-box" style="max-width:480px">
-			<div class="modal-hd">
-				<div class="flex items-center gap-2">
-					<Ban class="h-4 w-4" style="color: #DC2626;" />
-					<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
-						Anular Factura
-					</h3>
-				</div>
-				<button
-					class="btn-icon"
-					onclick={() => {
-						anularFacturaModalOpen = false;
-						anularFacturaTarget = null;
-					}}
-				>
-					<X class="h-3.5 w-3.5" />
-				</button>
-			</div>
-			<div class="modal-body">
-				<div class="mb-3 text-center">
-					<div
-						class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl"
-						style="background: rgba(220,38,38,0.08);"
-					>
-						<AlertCircle class="h-7 w-7" style="color: #DC2626;" />
-					</div>
-					<p class="text-sm font-semibold" style="color: var(--text-primary);">
-						¿Anular la factura <span class="font-mono-meta" style="color: #7E22CE;"
-							>#{anularFacturaTarget.numero_factura}</span
-						>?
-					</p>
-					<p class="mt-1 text-xs" style="color: var(--text-muted);">
-						Las liquidaciones asociadas volverán a estado LIQUIDADA.
-					</p>
-				</div>
-				<label
-					for="anular-factura-motivo"
-					class="filter-field-label"
-					style="margin-bottom: 0.35rem; display: block;"
-				>
-					Motivo de anulación <span style="color: #DC2626;">*</span>
-				</label>
-				<textarea
-					id="anular-factura-motivo"
-					bind:value={anularFacturaMotivo}
-					rows="3"
-					placeholder="Ej: Error en número de factura, liquidaciones incorrectas..."
-					class="input-glow w-full rounded-xl border p-2.5 text-sm"
-					style="border-color: var(--border-default); background: var(--bg-surface); resize: vertical; font-family: inherit;"
-				></textarea>
-				<div class="mt-4 flex justify-end gap-2">
-					<button
-						class="btn-secondary apple-transition"
-						onclick={() => {
-							anularFacturaModalOpen = false;
-							anularFacturaTarget = null;
-						}}>Cancelar</button
-					>
-					<button
-						class="apple-transition inline-flex items-center gap-1.5"
-						style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.55rem 1.1rem; border-radius: 12px; background: #DC2626; color: white; font-size: 0.85rem; font-weight: 600; box-shadow: 0 4px 16px rgba(220,38,38,0.30); border: none; opacity: {!anularFacturaMotivo.trim() ||
-						anulandoFactura
-							? '0.5'
-							: '1'};"
-						disabled={!anularFacturaMotivo.trim() || anulandoFactura}
-						onclick={confirmarAnularFactura}
-					>
-						{#if anulandoFactura}
-							<div
-								class="spinner"
-								style="width: 0.9rem; height: 0.9rem; border-width: 2px; border-top-color: white;"
-							></div>
-							Anulando…
-						{:else}
-							<Ban class="h-3.5 w-3.5" />
-							Confirmar Anulación
-						{/if}
-					</button>
-				</div>
-			</div>
-		</div>
-	</div>
-{/if}
+<ConfirmDialog
+	open={anularFacturaModalOpen && !!anularFacturaTarget}
+	tone="danger"
+	title="¿Anular la factura #{anularFacturaTarget?.numero_factura ?? ''}?"
+	message="Las liquidaciones asociadas volverán a estado LIQUIDADA."
+	confirmText="Anular factura"
+	loading={anulandoFactura}
+	loadingText="Anulando…"
+	confirmDisabled={!anularFacturaMotivo.trim()}
+	onconfirm={confirmarAnularFactura}
+	oncancel={() => {
+		anularFacturaModalOpen = false;
+		anularFacturaTarget = null;
+	}}
+>
+	<label for="anular-factura-motivo" class="filter-field-label" style="display: block;">
+		Motivo de anulación <span style="color: #DC2626;">*</span>
+	</label>
+	<textarea
+		id="anular-factura-motivo"
+		bind:value={anularFacturaMotivo}
+		rows="3"
+		placeholder="Ej: Error en número de factura, liquidaciones incorrectas..."
+		class="input-glow w-full rounded-xl border p-2.5 text-sm"
+		style="border-color: var(--border-default); background: var(--bg-surface); resize: vertical; font-family: inherit; margin-top: -0.6rem;"
+	></textarea>
+</ConfirmDialog>
 
 <!-- MODAL: ELIMINAR FACTURA -->
-{#if eliminarFacturaModalOpen && eliminarFacturaTarget}
-	<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-	<div
-		class="modal-bg"
-		onclick={(e) => {
-			if (e.target !== e.currentTarget) return;
-			eliminarFacturaModalOpen = false;
-			eliminarFacturaTarget = null;
-		}}
-	>
-		<div class="modal-box" style="max-width:440px">
-			<div class="modal-hd">
-				<div class="flex items-center gap-2">
-					<Trash2 class="h-4 w-4" style="color: #DC2626;" />
-					<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
-						Eliminar Factura
-					</h3>
-				</div>
-				<button
-					class="btn-icon"
-					onclick={() => {
-						eliminarFacturaModalOpen = false;
-						eliminarFacturaTarget = null;
-					}}
-				>
-					<X class="h-3.5 w-3.5" />
-				</button>
-			</div>
-			<div class="modal-body">
-				<div class="mb-4 text-center">
-					<div
-						class="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl"
-						style="background: rgba(220,38,38,0.08);"
-					>
-						<AlertCircle class="h-7 w-7" style="color: #DC2626;" />
-					</div>
-					<p class="text-sm font-semibold" style="color: var(--text-primary);">
-						¿Eliminar permanentemente la factura <span
-							class="font-mono-meta"
-							style="color: #7E22CE;">#{eliminarFacturaTarget.numero_factura}</span
-						>?
-					</p>
-				</div>
-				<div class="alert alert-error mb-4" style="padding: 0.65rem 0.85rem; font-size: 12px;">
-					<AlertCircle class="h-4 w-4" />
-					<span
-						>Esta acción es irreversible. Se eliminarán la factura y todos sus ítems asociados.</span
-					>
-				</div>
-				<div class="flex justify-end gap-2">
-					<button
-						class="btn-secondary apple-transition"
-						onclick={() => {
-							eliminarFacturaModalOpen = false;
-							eliminarFacturaTarget = null;
-						}}>Cancelar</button
-					>
-					<button
-						class="apple-transition inline-flex items-center gap-1.5"
-						style="display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.55rem 1.1rem; border-radius: 12px; background: #DC2626; color: white; font-size: 0.85rem; font-weight: 600; box-shadow: 0 4px 16px rgba(220,38,38,0.30); border: none; opacity: {eliminandoFactura
-							? '0.5'
-							: '1'};"
-						disabled={eliminandoFactura}
-						onclick={confirmarEliminarFactura}
-					>
-						{#if eliminandoFactura}
-							<div
-								class="spinner"
-								style="width: 0.9rem; height: 0.9rem; border-width: 2px; border-top-color: white;"
-							></div>
-							Eliminando…
-						{:else}
-							<Trash2 class="h-3.5 w-3.5" />
-							Confirmar Eliminación
-						{/if}
-					</button>
-				</div>
-			</div>
-		</div>
-	</div>
-{/if}
+<ConfirmDialog
+	open={eliminarFacturaModalOpen && !!eliminarFacturaTarget}
+	tone="danger"
+	title="¿Eliminar la factura #{eliminarFacturaTarget?.numero_factura ?? ''}?"
+	message="Se eliminarán la factura y todos sus ítems asociados."
+	confirmText="Eliminar"
+	loading={eliminandoFactura}
+	loadingText="Eliminando…"
+	onconfirm={confirmarEliminarFactura}
+	oncancel={() => {
+		eliminarFacturaModalOpen = false;
+		eliminarFacturaTarget = null;
+	}}
+/>
+
+<!-- MODAL: DEVOLVER FACTURADA A APROBADA -->
+<ModalRevertirFacturada
+	open={revertirLiq !== null}
+	liquidacion={revertirLiq}
+	factura={revertirFactura}
+	onclose={() => {
+		revertirLiq = null;
+		revertirFactura = null;
+	}}
+	ondone={({ accion, estados }) => {
+		const id = revertirLiq?.id;
+		if (id && detailLiq?.id === id) detailLiq = { ...detailLiq, estado: 'APROBADA' };
+		toast.success(
+			accion === 'anular'
+				? `Factura ${revertirFactura?.numero_factura} anulada`
+				: `Liquidación quitada de la factura ${revertirFactura?.numero_factura}`,
+			{
+				description: `${revertirLiq?.consecutivo} quedó APROBADA.${
+					Object.keys(estados).length > 1
+						? ` ${Object.keys(estados).length - 1} liquidación(es) más volvieron a LIQUIDADA.`
+						: ''
+				}`
+			}
+		);
+	}}
+/>
 
 <!-- MODAL FACTURAR -->
 <ModalFacturar

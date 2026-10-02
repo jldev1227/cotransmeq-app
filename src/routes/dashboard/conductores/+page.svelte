@@ -18,7 +18,18 @@
 	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
 	import SegmentosFiltro from '$lib/components/listing/SegmentosFiltro.svelte';
 	import { mascota } from '$lib/mascot';
-	import { Eye, EyeOff, Route, RotateCcw, Trash2 } from 'lucide-svelte';
+	import { Eye, EyeOff, Pencil, Route, RotateCcw, Trash2 } from 'lucide-svelte';
+	import BarraSeleccion from '$lib/components/listing/BarraSeleccion.svelte';
+	import { confirmarEliminacion } from '$lib/stores/confirm';
+	import {
+		EyeOff as IcoOcultar,
+		Eye as IcoMostrar,
+		Trash2 as IcoPapelera,
+		RotateCcw as IcoRestaurar
+	} from 'lucide-svelte';
+	import ModalFormConductor from '$lib/components/conductores/ModalFormConductor.svelte';
+	import ModalDetalleConductor from '$lib/components/conductores/ModalDetalleConductor.svelte';
+	import type { SortingState } from '@tanstack/table-core';
 	import type { ColumnDef } from '@tanstack/table-core';
 	import { crearListingStore } from '$lib/listing/listingStore';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
@@ -66,6 +77,8 @@
 	 * que compartir una vista siempre devolvía a la primera página.
 	 */
 	interface FiltrosConductores {
+		/** Orden alfabético por nombre: `asc` (A–Z) o `desc`. */
+		orden: string;
 		/** Siempre `lista`. `calendario` era la tabla clásica de recorridos y
 		 * ahora redirige al canvas; se lee solo para eso. */
 		vista: string;
@@ -95,7 +108,8 @@
 		estado: opcion('TODOS'),
 		sede: opcion('TODOS'),
 		vista_lista: opcion('ACTIVOS'),
-		pagina: numero(1)
+		pagina: numero(1),
+		orden: opcion('asc')
 	};
 
 	const estadoUrl = crearEstadoUrl(DEFS);
@@ -152,7 +166,6 @@
 
 	// Estados para modo selección
 	let conductoresSeleccionados = $state(new Set<string>());
-	let ultimoSeleccionadoIndex: number | null = null;
 	let shiftPressed = $state(false);
 	let procesandoMasivo = $state(false);
 
@@ -245,7 +258,7 @@
 	/// El contador del panel ignora la búsqueda, la pestaña y la página: no son
 	/// «filtros» a ojos de quien abre el panel.
 	const numFiltrosActivos = $derived(
-		contarActivos(DEFS, filtros, ['q', 'pagina', 'vista', 'vista_lista'])
+		contarActivos(DEFS, filtros, ['q', 'pagina', 'vista', 'vista_lista', 'orden'])
 	);
 
 	function clearFilter(key: string) {
@@ -292,7 +305,7 @@
 	};
 
 	const COLUMNAS: ColumnDef<Conductor, any>[] = [
-		{ id: 'conductor', header: 'Conductor', accessorKey: 'nombre', enableSorting: false },
+		{ id: 'conductor', header: 'Conductor', accessorKey: 'nombre' },
 		{ id: 'sede', header: 'Sede · Cargo', enableSorting: false, size: 180 },
 		{ id: 'contacto', header: 'Contacto', enableSorting: false },
 		{ id: 'estado', header: 'Estado', accessorKey: 'estado', enableSorting: false, size: 150 },
@@ -342,6 +355,8 @@
 			search: filtros.q,
 			estado: filtros.estado !== 'TODOS' ? filtros.estado : undefined,
 			sede_trabajo: filtros.sede !== 'TODOS' ? filtros.sede : undefined
+	,
+			orden: filtros.orden === 'desc' ? 'desc' : 'asc'
 		};
 
 		const response =
@@ -430,37 +445,19 @@
 		ponerFiltro('vista_lista', nuevaVista);
 	}
 
-	function toggleSeleccion(id: string, index: number, event: MouseEvent | TouchEvent | any) {
-		if (event.shiftKey && ultimoSeleccionadoIndex !== null) {
-			const start = Math.min(ultimoSeleccionadoIndex, index);
-			const end = Math.max(ultimoSeleccionadoIndex, index);
-
-			const idsInRange = conductores.slice(start, end + 1).map((c) => c.id);
-			const someNotSelected = idsInRange.some((id) => !conductoresSeleccionados.has(id));
-
-			if (someNotSelected) {
-				idsInRange.forEach((id) => conductoresSeleccionados.add(id));
-			} else {
-				idsInRange.forEach((id) => conductoresSeleccionados.delete(id));
-			}
-		} else {
-			if (conductoresSeleccionados.has(id)) {
-				conductoresSeleccionados.delete(id);
-			} else {
-				conductoresSeleccionados.add(id);
-			}
-			ultimoSeleccionadoIndex = index;
-		}
-		conductoresSeleccionados = conductoresSeleccionados;
-	}
-
-	function toggleSeleccionarTodo() {
-		if (conductoresSeleccionados.size === conductores.length && conductores.length > 0) {
-			conductoresSeleccionados.clear();
-		} else {
-			conductores.forEach((c) => conductoresSeleccionados.add(c.id));
-		}
-		conductoresSeleccionados = conductoresSeleccionados;
+	/// Mover a la papelera se confirma: es reversible, pero saca los registros
+	/// de la lista de todos.
+	async function moverAPapelera() {
+		const n = conductoresSeleccionados.size;
+		if (
+			!(await confirmarEliminacion({
+				title: `¿Mover ${n} conductores a la papelera?`,
+				message: 'Dejarán de aparecer en la lista. Puedes restaurarlos desde la papelera.',
+				confirmText: 'Mover a papelera'
+			}))
+		)
+			return;
+		await ejecutarAccionMasiva('eliminar');
 	}
 
 	async function ejecutarAccionMasiva(accion: 'ocultar' | 'mostrar' | 'eliminar' | 'restaurar') {
@@ -525,7 +522,7 @@
 	function limpiarFiltros() {
 		/// Se conservan la pestaña y la vista: limpiar filtros no debería
 		/// sacarte del calendario ni de la papelera.
-		filtros = limpiarFiltrosDe(DEFS, filtros, ['vista', 'vista_lista']);
+		filtros = limpiarFiltrosDe(DEFS, filtros, ['vista', 'vista_lista', 'orden']);
 	}
 
 	/**
@@ -589,7 +586,28 @@
 		void cargar();
 	});
 
+	/// Crear y editar van en el mismo modal, como en flota y clientes.
+	let modalConductor = $state<{ abierto: boolean; id: string | null }>({ abierto: false, id: null });
+	const abrirFormulario = (id: string | null = null) => (modalConductor = { abierto: true, id });
+
+	/// Orden de la tabla: A–Z por nombre de entrada. El tercer clic de la
+	/// cabecera («sin orden») vuelve a A–Z, que es el orden natural de un directorio.
+	const ordenTabla = $derived<SortingState>([{ id: 'conductor', desc: filtros.orden === 'desc' }]);
+	function aplicarOrden(o: SortingState) {
+		ponerFiltro('orden', o[0]?.desc ? 'desc' : 'asc');
+	}
+
+	/// Ficha de consulta: la fila abre la ficha; la página completa sigue a un clic.
+	let detalleId = $state<string | null>(null);
+
 	onMount(() => {
+		/// Enlaces viejos a `/agregar` llegan aquí con `?nuevo=1`.
+		if (pageState.url.searchParams.has('nuevo') && puedeEditar) {
+			abrirFormulario();
+			const url = new URL(pageState.url);
+			url.searchParams.delete('nuevo');
+			history.replaceState(history.state, '', url);
+		}
 		bajasSocket.push(socketUtils.on('conductores:actualizacion-masiva', () => cargar(true)));
 		bajasSocket.push(
 			socketUtils.on('dias-laborados:registro-actualizado', handleRegistroActualizado)
@@ -753,7 +771,7 @@
 			</button>
 
 			{#if puedeEditar}
-				<button onclick={() => goto('/dashboard/conductores/agregar')} class="btn-primary">
+				<button onclick={() => abrirFormulario()} class="btn-primary">
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
 					</svg>
@@ -890,23 +908,16 @@
 				datos={conductores}
 				claveFila={(c) => c.id}
 				cargando={isLoading}
-				onFila={(c) => goto(`/dashboard/conductores/${c.id}`)}
+				onFila={(c) => (detalleId = c.id)}
+				orden={ordenTabla}
+				onOrdenar={aplicarOrden}
+				seleccion={conductoresSeleccionados}
+				onSeleccion={(ids) => (conductoresSeleccionados = ids)}
 				etiqueta="Conductores"
 			>
 				{#snippet celda({ columnaId, fila: c })}
 					{#if columnaId === 'conductor'}
 						<div class="flex items-center">
-							<span class="dir-check">
-								<input
-									type="checkbox"
-									checked={conductoresSeleccionados.has(c.id)}
-									onclick={(e) => {
-										e.stopPropagation();
-										toggleSeleccion(c.id, conductores.indexOf(c), e);
-									}}
-									aria-label="Seleccionar {c.nombre} {c.apellido}"
-								/>
-							</span>
 							<CeldaIdentidad
 								titulo="{c.nombre} {c.apellido}"
 								subtitulo="{c.tipo_identificacion || 'CC'} {c.numero_identificacion}"
@@ -944,10 +955,17 @@
 									onClick: () => irAlCanvasDeRecorridos(c.id)
 								},
 								{
+									id: 'editar',
+									etiqueta: 'Editar',
+									icono: Pencil,
+									onClick: () => abrirFormulario(c.id),
+									oculta: !puedeEditar || vistaActual === 'PAPELERA'
+								},
+								{
 									id: 'ver',
 									etiqueta: 'Ver detalle',
 									icono: Eye,
-									onClick: () => goto(`/dashboard/conductores/${c.id}`)
+									onClick: () => (detalleId = c.id)
 								},
 								{
 									id: 'ocultar',
@@ -1011,138 +1029,24 @@
 		/>
 	</div>
 
-	<!-- Bulk Actions Bar — fondo charcoal profundo (no glass) -->
-	{#if conductoresSeleccionados.size > 0}
-		<div class="bulk-actions-container">
-			<div
-				class="flex items-center gap-4 rounded-2xl p-2.5 shadow-2xl"
-				style="background-color: var(--bg-charcoal); border: 1px solid rgba(255,255,255,0.08); color: white;"
-				in:scale={{ duration: 300, start: 0.9 }}
-			>
-				<span
-					class="px-2 text-xs font-medium"
-					style="border-right: 1px solid rgba(255,255,255,0.15);"
-				>
-					{conductoresSeleccionados.size} seleccionados
-				</span>
-				<div class="flex gap-1.5">
-					{#if vistaActual === 'ACTIVOS'}
-						{#if puedeEditar}
-							<button
-								onclick={() => ejecutarAccionMasiva('ocultar')}
-								disabled={procesandoMasivo}
-								class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
-								style="background-color: rgba(255,255,255,0.08);"
-							>
-								<svg
-									class="h-3.5 w-3.5"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-									stroke-width="1.8"
-									><path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
-									/></svg
-								>
-								Ocultar
-							</button>
-						{/if}
-						{#if puedeEditar}
-							<button
-								onclick={() => ejecutarAccionMasiva('eliminar')}
-								disabled={procesandoMasivo}
-								class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
-								style="background-color: rgba(220,38,38,0.85);"
-							>
-								<svg
-									class="h-3.5 w-3.5"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-									stroke-width="1.8"
-									><path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-									/></svg
-								>
-								Papelera
-							</button>
-						{/if}
-					{:else if vistaActual === 'OCULTOS'}
-						{#if puedeEditar}
-							<button
-								onclick={() => ejecutarAccionMasiva('mostrar')}
-								disabled={procesandoMasivo}
-								class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
-								style="background-color: var(--emerald-600);"
-							>
-								<svg
-									class="h-3.5 w-3.5"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-									stroke-width="1.8"
-									><path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-									/><path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-									/></svg
-								>
-								Mostrar
-							</button>
-						{/if}
-					{:else if vistaActual === 'PAPELERA'}
-						{#if puedeEditar}
-							<button
-								onclick={() => ejecutarAccionMasiva('restaurar')}
-								disabled={procesandoMasivo}
-								class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
-								style="background-color: var(--emerald-600);"
-							>
-								<svg
-									class="h-3.5 w-3.5"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-									stroke-width="1.8"
-									><path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-									/></svg
-								>
-								Restaurar
-							</button>
-						{/if}
-					{/if}
-				</div>
-				<button
-					onclick={() => {
-						conductoresSeleccionados.clear();
-						conductoresSeleccionados = conductoresSeleccionados;
-					}}
-					class="apple-transition ml-2"
-					style="color: rgba(255,255,255,0.5);"
-				>
-					<svg
-						class="h-4 w-4"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-						stroke-width="1.8"
-						><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg
-					>
-				</button>
-			</div>
-		</div>
-	{/if}
+	<!-- Acciones masivas: la misma barra en todos los directorios. -->
+	<BarraSeleccion
+		cantidad={conductoresSeleccionados.size}
+		nombreItems="conductores"
+		procesando={procesandoMasivo}
+		onLimpiar={() => (conductoresSeleccionados = new Set())}
+		acciones={!puedeEditar
+			? []
+			: vistaActual === 'PAPELERA'
+				? [{ id: 'restaurar', etiqueta: 'Restaurar', icono: IcoRestaurar, tono: 'primario', onClick: () => ejecutarAccionMasiva('restaurar') }]
+				: [
+						vistaActual === 'OCULTOS'
+							? { id: 'mostrar', etiqueta: 'Mostrar', icono: IcoMostrar, tono: 'primario', onClick: () => ejecutarAccionMasiva('mostrar') }
+							: { id: 'ocultar', etiqueta: 'Ocultar', icono: IcoOcultar, tono: 'neutro', onClick: () => ejecutarAccionMasiva('ocultar') },
+						{ id: 'papelera', etiqueta: 'Mover a papelera', icono: IcoPapelera, tono: 'peligro', onClick: () => moverAPapelera() }
+					]}
+	/>
+
 
 	<!-- Modal de eliminación permanente con preview de relaciones -->
 	{#if modalEliminar}
@@ -1458,23 +1362,21 @@
 	{/if}
 </div>
 
-<style>
-	.bulk-actions-container {
-		position: fixed;
-		bottom: 2rem;
-		left: 50%;
-		transform: translateX(-50%);
-		animation: slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-	}
+<ModalDetalleConductor
+	open={detalleId !== null}
+	conductorId={detalleId}
+	onclose={() => (detalleId = null)}
+	oneditar={puedeEditar
+		? (id) => {
+				detalleId = null;
+				abrirFormulario(id);
+			}
+		: undefined}
+/>
+<ModalFormConductor
+	open={modalConductor.abierto}
+	conductorId={modalConductor.id}
+	onclose={() => (modalConductor = { abierto: false, id: null })}
+	onguardado={() => cargar(true)}
+/>
 
-	@keyframes slide-up {
-		0% {
-			transform: translate(-50%, 100%);
-			opacity: 0;
-		}
-		100% {
-			transform: translate(-50%, 0);
-			opacity: 1;
-		}
-	}
-</style>

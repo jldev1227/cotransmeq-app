@@ -599,6 +599,7 @@
 				totalRows={totalRows}
 				currentPage={filtros.pagina}
 				pageSize={POR_PAGINA}
+				nombreItems="formularios"
 				selectable={true}
 				selectedIds={selectedIds}
 				onSelectionChange={handleSelectionChange}
@@ -703,7 +704,7 @@
 				<span class="bulk-text">seleccionado{selectedIds.size !== 1 ? 's' : ''}</span>
 			</div>
 			<div class="bulk-divider"></div>
-			<button class="bulk-btn bulk-btn-primary" onclick={descargarSeleccionados} disabled={isDownloading}>
+			<button class="btn-primary bulk-btn-primary" onclick={descargarSeleccionados} disabled={isDownloading}>
 				{#if isDownloading && progressJobId?.startsWith('sel-')}
 					<svg class="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
 						<path d="M21 12a9 9 0 11-6.219-8.56" />
@@ -833,64 +834,6 @@
 		line-height: 1.45;
 	}
 
-	.btn-primary {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 0.55rem 1rem;
-		background: linear-gradient(135deg, var(--accent), var(--accent-hover));
-		color: #fff;
-		border: none;
-		border-radius: 10px;
-		font-size: 0.82rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.2s var(--ease);
-		white-space: nowrap;
-		font-family: inherit;
-		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.3);
-	}
-
-	.btn-primary:hover {
-		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(234, 88, 12, 0.4);
-	}
-
-	.btn-primary:active {
-		transform: translateY(0);
-	}
-
-	.btn-secondary {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 0.55rem 0.9rem;
-		background: var(--surface);
-		color: var(--text-primary);
-		border: 1px solid var(--border-default);
-		border-radius: 10px;
-		font-size: 0.82rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.2s var(--ease);
-		white-space: nowrap;
-		font-family: inherit;
-	}
-
-	.btn-secondary:hover:not(:disabled) {
-		background: var(--surface-hover);
-		border-color: var(--border-hover);
-	}
-
-	.btn-secondary:active:not(:disabled) {
-		transform: translateY(0.5px);
-	}
-
-	.btn-secondary:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
 	.header-actions {
 		display: flex;
 		align-items: center;
@@ -999,17 +942,10 @@
 	}
 
 	.bulk-btn-primary {
-		background: var(--accent, #ea580c);
-		color: #fff;
-	}
-
-	.bulk-btn-primary:hover:not(:disabled) {
-		background: var(--accent-hover, #c2410c);
-	}
-
-	.bulk-btn-primary:disabled {
-		opacity: 0.6;
-		cursor: not-allowed;
+		min-height: 34px;
+		padding: 0 0.9rem;
+		font-size: 0.8rem;
+		white-space: nowrap;
 	}
 
 	.bulk-btn-ghost {

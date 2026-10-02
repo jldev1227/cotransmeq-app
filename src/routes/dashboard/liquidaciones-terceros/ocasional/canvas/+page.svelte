@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { confirmar } from '$lib/stores/confirm';
 	import { onMount, onDestroy, tick } from 'svelte';
 	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
@@ -660,9 +661,14 @@
 				.sort((a, b) => a - b)
 				.map((m) => MESES[m - 1])
 				.join(', ');
-			if (!confirm(`Hay cambios sin guardar en ${meses}. ¿Guardar y cambiar de año?`)) {
-				return;
-			}
+			const ok = await confirmar({
+				title: '¿Guardar y cambiar de año?',
+				message: `Hay cambios sin guardar en ${meses}.`,
+				tone: 'info',
+				mascot: 'procesando',
+				confirmText: 'Guardar y cambiar'
+			});
+			if (!ok) return;
 			await flushTodo();
 		}
 		realtimeCollab.leaveRoom();
@@ -913,9 +919,13 @@
 	async function cerrarYDistribuir() {
 		const cab = cabeceraActiva;
 		if (!cab) return;
-		if (!confirm(`¿Cerrar y distribuir ${cab.consecutivo}? Pasará a estado LIQUIDADA.`)) {
-			return;
-		}
+		const ok = await confirmar({
+			title: `¿Cerrar y distribuir ${cab.consecutivo}?`,
+			message: 'Pasará a estado LIQUIDADA.',
+			tone: 'warning',
+			confirmText: 'Cerrar y distribuir'
+		});
+		if (!ok) return;
 		// Persistir antes de cerrar: si hay ediciones en el debounce, el
 		// backend cerraría sobre datos viejos.
 		if (mesesSucios.has(mesActivo)) await flushSave(mesActivo);

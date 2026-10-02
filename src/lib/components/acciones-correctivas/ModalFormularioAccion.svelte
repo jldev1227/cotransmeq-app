@@ -714,7 +714,7 @@
 										<button
 											type="button"
 											on:click={agregarCausa}
-											class="apple-transition flex items-center gap-1 rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-600"
+											class="btn-primary apple-transition flex items-center gap-1"
 										>
 											<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 												<path
@@ -1017,7 +1017,7 @@
 						<button
 							type="button"
 							on:click={retrocederSeccion}
-							class="apple-transition rounded-lg border border-gray-200 bg-white/80 px-4 py-2.5 text-gray-600 hover:bg-gray-50"
+							class="btn-secondary apple-transition"
 						>
 							← Anterior
 						</button>
@@ -1028,7 +1028,7 @@
 					<button
 						type="button"
 						on:click={cerrarModal}
-						class="apple-transition rounded-lg border border-gray-200 bg-white/80 px-6 py-2.5 text-gray-600 hover:bg-gray-50"
+						class="btn-secondary apple-transition"
 						disabled={isSubmitting}
 					>
 						Cancelar
@@ -1038,14 +1038,14 @@
 						<button
 							type="button"
 							on:click={avanzarSeccion}
-							class="apple-transition rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 px-4 py-2.5 text-white shadow-lg shadow-orange-500/30 hover:from-orange-600 hover:to-orange-700"
+							class="btn-primary apple-transition"
 						>
 							Siguiente →
 						</button>
 					{:else}
 						<button
 							type="submit"
-							class="apple-transition flex items-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-2.5 text-white shadow-lg shadow-orange-500/30 hover:from-orange-600 hover:to-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
+							class="btn-primary apple-transition flex items-center gap-2 disabled:cursor-not-allowed"
 							disabled={isSubmitting}
 						>
 							{#if isSubmitting}

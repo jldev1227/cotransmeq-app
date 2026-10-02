@@ -18,6 +18,7 @@
 	page quien guarda y recarga el mes.
 -->
 <script lang="ts">
+	import { confirmarEliminacion } from '$lib/stores/confirm';
 	import type { ConceptoOcasional } from '$lib/api/liquidaciones-terceros-ocasional';
 
 	interface NuevoGasto {
@@ -172,11 +173,13 @@
 		limpiar();
 	}
 
-	function eliminar(g: ConceptoOcasional) {
+	async function eliminar(g: ConceptoOcasional) {
 		if (!g.id) return;
-		if (!confirm(`¿Eliminar «${g.concepto}» de los gastos de ${MESES[mes - 1]} ${anio}?`)) {
-			return;
-		}
+		const ok = await confirmarEliminacion({
+			title: `¿Eliminar «${g.concepto}»?`,
+			message: `Se quitará de los gastos de ${MESES[mes - 1]} ${anio}.`
+		});
+		if (!ok) return;
 		onEliminar(g.id);
 	}
 

@@ -161,29 +161,6 @@
 	}
 	.header-actions { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
 
-	.btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.55rem 0.9rem;
-		font-size: 0.8rem;
-		font-weight: 600;
-		border-radius: 10px;
-		cursor: pointer;
-		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-		font-family: inherit;
-		white-space: nowrap;
-	}
-	.btn-outline {
-		background: var(--fm-surface-elevated);
-		color: var(--fm-text);
-		border: 1px solid var(--fm-border);
-	}
-	.btn-outline:hover {
-		border-color: rgba(234, 88, 12, 0.3);
-		background: rgba(234, 88, 12, 0.04);
-		color: #c2410c;
-	}
 
 	.page-content {
 		padding: 3.5rem 1.5rem 3rem;
@@ -516,11 +493,11 @@
 				</div>
 			</div>
 			<div class="header-actions">
-				<a href="/dashboard/acciones-correctivas/editar/{accion.id}" class="btn btn-outline">
+				<a href="/dashboard/acciones-correctivas/editar/{accion.id}" class="btn-secondary">
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
 					Editar
 				</a>
-				<button on:click={descargarPDF} class="btn btn-outline">
+				<button on:click={descargarPDF} class="btn-secondary">
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
 					PDF
 				</button>

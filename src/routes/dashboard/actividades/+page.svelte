@@ -901,52 +901,6 @@
 		color: white;
 	}
 
-	/* Buttons */
-	.btn-primary {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-		padding: 0.5rem 1rem;
-		background: #ea580c;
-		color: white;
-		border: none;
-		border-radius: 0.75rem;
-		font-size: 0.85rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.btn-primary:hover { background: #c2410c; }
-	.btn-primary:disabled { opacity: 0.6; cursor: not-allowed; }
-	.btn-primary svg { width: 1rem; height: 1rem; }
-
-	.btn-secondary {
-		padding: 0.5rem 1rem;
-		background: #f3f4f6;
-		color: #374151;
-		border: 1px solid #e5e7eb;
-		border-radius: 0.75rem;
-		font-size: 0.85rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.btn-secondary:hover { background: #e5e7eb; }
-
-	.btn-danger {
-		padding: 0.5rem 1rem;
-		background: #ef4444;
-		color: white;
-		border: none;
-		border-radius: 0.75rem;
-		font-size: 0.85rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.btn-danger:hover { background: #dc2626; }
-	.btn-danger:disabled { opacity: 0.6; cursor: not-allowed; }
-
 	.btn-clear {
 		padding: 0.375rem 0.75rem;
 		background: transparent;
@@ -1094,18 +1048,9 @@
 	}
 	.pagination-info { font-size: 0.8rem; color: #6b7280; }
 	.pagination-controls { display: flex; gap: 0.25rem; }
-	.pagination-controls button {
-		padding: 0.375rem 0.625rem;
-		border: 1px solid #e5e7eb;
-		border-radius: 0.5rem;
-		background: white;
-		color: #374151;
-		font-size: 0.8rem;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.pagination-controls button.active { background: #ea580c; color: white; border-color: #ea580c; }
-	.pagination-controls button:disabled { opacity: 0.4; cursor: not-allowed; }
+	
+	
+	
 
 	/* Calendar */
 	.calendar-container {
@@ -1318,7 +1263,8 @@
 	textarea.input { resize: vertical; }
 
 	/* Empty / Loading */
-	.loading-state, .empty-state {
+	.loading-state,
+	.empty-state {
 		display: flex;
 		flex-direction: column;
 		align-items: center;
@@ -1357,7 +1303,10 @@
 		.input-sm { width: 100%; }
 		.kpis-row { grid-template-columns: repeat(2, 1fr); }
 		.form-group.flex-1 { min-width: 100%; }
-		.form-group.w-20, .form-group.w-28, .form-group.w-32,
-		.form-group.w-36, .form-group.w-40 { width: 100%; }
+		.form-group.w-20,
+	.form-group.w-28,
+	.form-group.w-32,
+	.form-group.w-36,
+	.form-group.w-40 { width: 100%; }
 	}
 </style>

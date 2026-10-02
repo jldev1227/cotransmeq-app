@@ -238,7 +238,7 @@
                     </div>
                   </div>
                   {#if cert.url}
-                    <a href={cert.url} target="_blank" rel="noopener noreferrer" class="btn-download" title="Descargar">
+                    <a href={cert.url} target="_blank" rel="noopener noreferrer" class="btn-primary btn-download" title="Descargar">
                       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
                       </svg>
@@ -642,24 +642,10 @@
     width: 100%;
     padding: 0.85rem 1.25rem;
     margin-top: 0.75rem;
-    font-family: inherit;
     font-size: 0.92rem;
-    font-weight: 600;
-    color: #ffffff;
-    background: linear-gradient(135deg, #f97316, #ea580c);
-    border: none;
-    border-radius: 12px;
     cursor: pointer;
-    box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
-    transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
-  .btn-primary:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
-  }
-  .btn-primary:active:not(:disabled) {
-    transform: translateY(0);
-  }
+
   .btn-primary:disabled {
     opacity: 0.6;
     cursor: not-allowed;
@@ -677,20 +663,10 @@
     align-self: center;
     margin-top: 0.5rem;
     padding: 0.6rem 1.1rem;
-    font-family: inherit;
     font-size: 0.82rem;
-    font-weight: 600;
-    color: #0f1f1a;
-    background: #ffffff;
-    border: 1px solid rgba(0, 0, 0, 0.12);
-    border-radius: 10px;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   }
-  .btn-secondary:hover {
-    background: #faf7f2;
-    border-color: rgba(0, 0, 0, 0.2);
-  }
+
   .btn-secondary svg {
     width: 14px;
     height: 14px;
@@ -838,20 +814,12 @@
     align-items: center;
     gap: 0.4rem;
     padding: 0.45rem 0.85rem;
-    background: linear-gradient(135deg, #f97316, #ea580c);
-    color: #ffffff;
-    border-radius: 8px;
     text-decoration: none;
     font-size: 0.78rem;
-    font-weight: 600;
-    box-shadow: 0 2px 8px rgba(249, 115, 22, 0.25);
-    transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     flex-shrink: 0;
+    min-height: 0;
   }
-  .btn-download:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 14px rgba(249, 115, 22, 0.35);
-  }
+
   .btn-download svg {
     width: 14px;
     height: 14px;

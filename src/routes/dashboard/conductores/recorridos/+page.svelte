@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { confirmar } from '$lib/stores/confirm';
 	/**
 	 * Canvas de RECORRIDOS.
 	 *
@@ -970,7 +971,7 @@
 	 * emite valores incompletos en cada pulsación, y cada uno dispararía una
 	 * recarga del periodo.
 	 */
-	function cambiarCorte(nuevo: Partial<Corte>) {
+	async function cambiarCorte(nuevo: Partial<Corte>) {
 		const propuesto: Corte = { ...corte, ...nuevo };
 		if (!esFechaValida(propuesto.desde) || !esFechaValida(propuesto.hasta)) return;
 		if (propuesto.desde > propuesto.hasta) {
@@ -980,7 +981,12 @@
 		if (propuesto.desde === corte.desde && propuesto.hasta === corte.hasta) return;
 		if (
 			(pendientes > 0 || borradores.size > 0) &&
-			!confirm('Hay cambios sin confirmar o filas sin guardar. ¿Cambiar de corte igualmente?')
+			!(await confirmar({
+				title: '¿Cambiar de corte igualmente?',
+				message: 'Hay cambios sin confirmar o filas sin guardar.',
+				tone: 'warning',
+				confirmText: 'Cambiar de corte'
+			}))
 		) {
 			return;
 		}

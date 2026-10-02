@@ -169,7 +169,7 @@
 
 			<div class="space-y-3">
 				<button
-					class="apple-hover apple-transition soft-shadow flex w-full items-center justify-between rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 p-4 text-white"
+					class="btn-primary apple-transition flex w-full items-center justify-between"
 				>
 					<span class="font-medium">Nuevo Conductor</span>
 					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -183,7 +183,7 @@
 				</button>
 
 				<button
-					class="apple-transition flex w-full items-center justify-between rounded-xl border border-gray-200 bg-white p-4 text-gray-700 hover:border-orange-200 hover:bg-orange-50"
+					class="btn-secondary apple-transition flex w-full items-center justify-between"
 				>
 					<span class="font-medium">Registrar Vehículo</span>
 					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -197,7 +197,7 @@
 				</button>
 
 				<button
-					class="apple-transition flex w-full items-center justify-between rounded-xl border border-gray-200 bg-white p-4 text-gray-700 hover:border-orange-200 hover:bg-orange-50"
+					class="btn-secondary apple-transition flex w-full items-center justify-between"
 				>
 					<span class="font-medium">Nueva Ruta</span>
 					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -211,7 +211,7 @@
 				</button>
 
 				<button
-					class="apple-transition flex w-full items-center justify-between rounded-xl border border-gray-200 bg-white p-4 text-gray-700 hover:border-orange-200 hover:bg-orange-50"
+					class="btn-secondary apple-transition flex w-full items-center justify-between"
 				>
 					<span class="font-medium">Ver Reportes</span>
 					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">

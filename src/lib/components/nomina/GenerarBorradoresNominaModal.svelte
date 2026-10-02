@@ -18,6 +18,7 @@
 	 *    ya guardado; esos borradores son válidos y se quedan.
 	 */
 	import { onDestroy } from 'svelte';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 	import { toast } from 'svelte-sonner';
 	import { permiteReemplazar } from '$lib/editor/builders/nomina-estado';
 	import {
@@ -261,192 +262,183 @@
 		}).format(n || 0);
 </script>
 
-<div class="fondo" role="presentation" onclick={() => !lanzando && onClose()}>
-	<div
-		class="panel"
-		role="dialog"
-		aria-modal="true"
-		aria-label="Generar borradores de nómina"
-		onclick={(e) => e.stopPropagation()}
-	>
-		<header class="cabecera">
-			<div>
-				<span class="eyebrow">Nómina · {etiqueta || `${mes}/${anio}`}</span>
-				<h2>Generar borradores</h2>
-				{#if ventana.desde && ventana.hasta}
-					<p class="ventana">Del {ventana.desde} al {ventana.hasta}</p>
-				{/if}
-			</div>
-			<button class="cerrar" onclick={onClose} disabled={lanzando} aria-label="Cerrar">✕</button>
-		</header>
-
-		{#if cargando}
-			<div class="estado"><p>Leyendo el periodo…</p></div>
-		{:else if errorCarga}
-			<div class="estado estado--error"><p>{errorCarga}</p></div>
-		{:else if jobId}
-			<div class="cuerpo">
-				<div class="barra">
-					<div class="barra-fondo"><div class="barra-relleno" style="width:{progreso}%"></div></div>
-					<p class="barra-txt">{paso} · {procesados}/{total}</p>
-				</div>
-
-				{#if terminado}
-					<div class="resumen">
-						<span class="pill pill--ok">{creados} creados</span>
-						{#if reemplazados}<span class="pill pill--warn">{reemplazados} reemplazados</span>{/if}
-						{#if omitidos}<span class="pill">{omitidos} omitidos</span>{/if}
-						{#if conError}<span class="pill pill--bad">{conError} con error</span>{/if}
-					</div>
-				{/if}
-
-				<ul class="resultados">
-					{#each resultados as r (r.conductorId)}
-						<li class="fila">
-							<span class="marca marca--{r.estado}" aria-hidden="true"></span>
-							<span class="nombre">{r.nombre}</span>
-							<span class="detalle">
-								{#if r.estado === 'creado' || r.estado === 'reemplazado'}
-									{money(r.sueldoTotal ?? 0)}
-								{:else}
-									{r.motivo ?? ''}
-								{/if}
-							</span>
-						</li>
-					{/each}
-				</ul>
+<ModalBase
+	open={true}
+	eyebrow={`Nómina · ${etiqueta || `${mes}/${anio}`}`}
+	title="Generar borradores"
+	subtitle={ventana.desde && ventana.hasta ? `Del ${ventana.desde} al ${ventana.hasta}` : null}
+	tamano="lg"
+	bloqueado={lanzando}
+	pie={cargando || errorCarga ? undefined : pieAcciones}
+	oncerrar={onClose}
+>
+	{#if cargando}
+		<div class="estado"><p>Leyendo el periodo…</p></div>
+	{:else if errorCarga}
+		<div class="estado estado--error"><p>{errorCarga}</p></div>
+	{:else if jobId}
+		<div class="cuerpo">
+			<div class="barra">
+				<div class="barra-fondo"><div class="barra-relleno" style="width:{progreso}%"></div></div>
+				<p class="barra-txt">{paso} · {procesados}/{total}</p>
 			</div>
 
-			<footer class="pie">
-				{#if terminado}
-					<button class="btn-primary" onclick={onClose}>Cerrar</button>
-				{:else}
-					<p class="nota">Cancelar no aborta el conductor en curso ni deshace lo ya guardado.</p>
-					<button class="btn-secondary" onclick={cancelar}>Cancelar generación</button>
-				{/if}
-			</footer>
-		{:else}
-			<div class="cuerpo">
-				{#if conLiquidacion.length}
-					<div class="aviso aviso--warn">
-						<strong>{conLiquidacion.length} ya tienen liquidación</strong> en este periodo. Solo se
-						puede rehacer la de quien siga en BORRADOR, y marcando «reemplazar» se sobrescribe lo
-						guardado.
-						{#if noReemplazables.length === 1}
-							La que ya está liquidada, aprobada, pagada o anulada solo enseña su estado: para
-							rehacerla hay que devolverla a BORRADOR.
-						{:else if noReemplazables.length}
-							Las {noReemplazables.length} que ya están liquidadas, aprobadas, pagadas o anuladas solo
-							enseñan su estado: para rehacerlas hay que devolverlas a BORRADOR.
-						{/if}
-					</div>
-				{/if}
-				{#if sinDatos.length}
-					<div class="aviso">
-						<strong>{sinDatos.length} sin planillas ni liquidación en el corte.</strong> Se listan igual
-						—antes no aparecían— porque son a quienes hay que poder generar cuando alguien reingresa o
-						su estado quedó mal puesto. Van sin estimación y desmarcados; generarles un borrador crea
-						el mes comercial completo.
-					</div>
-				{/if}
-				{#if sinDias.length}
-					<div class="aviso">
-						<strong>{sinDias.length} sin días en el periodo.</strong> No saldrían en cero: el borrador
-						se crea con el mes comercial —básico y auxilio completos— y los recargos en cero, porque su
-						planilla no ha llegado o está vacía. Nacen desmarcados por eso; si marcas a alguien, se le
-						genera igual y los días se traen después con «Actualizar días».
-					</div>
-				{/if}
-
-				<div class="buscador">
-					<input
-						type="search"
-						bind:value={busqueda}
-						placeholder="Buscar por nombre o cédula…"
-						aria-label="Buscar conductor"
-					/>
-					<span class="buscador-cuenta">
-						{visibles.length} de {conductores.length}
-					</span>
+			{#if terminado}
+				<div class="resumen">
+					<span class="pill pill--ok">{creados} creados</span>
+					{#if reemplazados}<span class="pill pill--warn">{reemplazados} reemplazados</span>{/if}
+					{#if omitidos}<span class="pill">{omitidos} omitidos</span>{/if}
+					{#if conError}<span class="pill pill--bad">{conError} con error</span>{/if}
 				</div>
+			{/if}
 
-				{#if !visibles.length}
-					<p class="vacio">Ningún conductor coincide con «{busqueda}».</p>
-				{/if}
+			<ul class="resultados">
+				{#each resultados as r (r.conductorId)}
+					<li class="fila">
+						<span class="marca marca--{r.estado}" aria-hidden="true"></span>
+						<span class="nombre">{r.nombre}</span>
+						<span class="detalle">
+							{#if r.estado === 'creado' || r.estado === 'reemplazado'}
+								{money(r.sueldoTotal ?? 0)}
+							{:else}
+								{r.motivo ?? ''}
+							{/if}
+						</span>
+					</li>
+				{/each}
+			</ul>
+		</div>
+	{:else}
+		<div class="cuerpo">
+			{#if conLiquidacion.length}
+				<div class="aviso aviso--warn">
+					<strong>{conLiquidacion.length} ya tienen liquidación</strong> en este periodo. Solo se
+					puede rehacer la de quien siga en BORRADOR, y marcando «reemplazar» se sobrescribe lo
+					guardado.
+					{#if noReemplazables.length === 1}
+						La que ya está liquidada, aprobada, pagada o anulada solo enseña su estado: para
+						rehacerla hay que devolverla a BORRADOR.
+					{:else if noReemplazables.length}
+						Las {noReemplazables.length} que ya están liquidadas, aprobadas, pagadas o anuladas solo
+						enseñan su estado: para rehacerlas hay que devolverlas a BORRADOR.
+					{/if}
+				</div>
+			{/if}
+			{#if sinDatos.length}
+				<div class="aviso">
+					<strong>{sinDatos.length} sin planillas ni liquidación en el corte.</strong> Se listan igual
+					—antes no aparecían— porque son a quienes hay que poder generar cuando alguien reingresa o
+					su estado quedó mal puesto. Van sin estimación y desmarcados; generarles un borrador crea
+					el mes comercial completo.
+				</div>
+			{/if}
+			{#if sinDias.length}
+				<div class="aviso">
+					<strong>{sinDias.length} sin días en el periodo.</strong> No saldrían en cero: el borrador
+					se crea con el mes comercial —básico y auxilio completos— y los recargos en cero, porque su
+					planilla no ha llegado o está vacía. Nacen desmarcados por eso; si marcas a alguien, se le
+					genera igual y los días se traen después con «Actualizar días».
+				</div>
+			{/if}
 
-				<ul class="lista">
-					{#each visibles as c (c.conductor_id)}
-						<li class="fila fila--sel" class:fila--gris={c.dias === 0}>
-							<label class="chk">
+			<div class="buscador">
+				<input
+					class="bn-input"
+					type="search"
+					bind:value={busqueda}
+					placeholder="Buscar por nombre o cédula…"
+					aria-label="Buscar conductor"
+				/>
+				<span class="buscador-cuenta">
+					{visibles.length} de {conductores.length}
+				</span>
+			</div>
+
+			{#if !visibles.length}
+				<p class="vacio">Ningún conductor coincide con «{busqueda}».</p>
+			{/if}
+
+			<ul class="lista">
+				{#each visibles as c (c.conductor_id)}
+					<li class="fila fila--sel" class:fila--gris={c.dias === 0}>
+						<label class="chk">
+							<input
+								type="checkbox"
+								checked={marcados.has(c.conductor_id)}
+								onchange={() => alternar(c.conductor_id)}
+							/>
+							<span class="nombre">{c.nombre}</span>
+							{#if !estaOperativo(c.estado_conductor)}
+								<!-- Rotulado, no escondido: es justo a quien se viene a buscar
+								     cuando alguien reingresa o el estado quedó mal puesto. -->
+								<span class="pill pill--gris" title="Estado operativo del conductor">
+									{c.estado_conductor ?? 'sin estado'}
+								</span>
+							{/if}
+						</label>
+
+						<span class="meta">
+							{#if c.con_datos === false}
+								sin planillas ni liquidación en el corte
+							{:else}
+								{c.dias} día{c.dias === 1 ? '' : 's'}
+								{#if c.placas.length}· {c.placas.join(', ')}{/if}
+							{/if}
+						</span>
+
+						{#if c.liquidacion_id && permiteReemplazar(c.estado ?? '')}
+							<label class="chk chk--reemplazo" title="Sobrescribe el borrador guardado">
 								<input
 									type="checkbox"
-									checked={marcados.has(c.conductor_id)}
-									onchange={() => alternar(c.conductor_id)}
+									checked={reemplazar.has(c.conductor_id)}
+									onchange={() => alternarReemplazo(c.conductor_id)}
 								/>
-								<span class="nombre">{c.nombre}</span>
-								{#if !estaOperativo(c.estado_conductor)}
-									<!-- Rotulado, no escondido: es justo a quien se viene a buscar
-									     cuando alguien reingresa o el estado quedó mal puesto. -->
-									<span class="pill pill--gris" title="Estado operativo del conductor">
-										{c.estado_conductor ?? 'sin estado'}
-									</span>
-								{/if}
+								<span class="pill pill--warn">{c.estado} · reemplazar</span>
 							</label>
-
-							<span class="meta">
-								{#if c.con_datos === false}
-									sin planillas ni liquidación en el corte
-								{:else}
-									{c.dias} día{c.dias === 1 ? '' : 's'}
-									{#if c.placas.length}· {c.placas.join(', ')}{/if}
-								{/if}
+						{:else if c.liquidacion_id}
+							<!--
+								Ya liquidada, aprobada, pagada o anulada: se enseña el estado
+								pero NO la casilla. Rehacerla reescribiría todos los totales y
+								devolvería el estado a BORRADOR, o sea que se perdería la
+								aprobación y las cifras ya revisadas.
+							-->
+							<span
+								class="pill pill--fija"
+								title="No se puede rehacer: devuélvela a BORRADOR primero"
+							>
+								{c.estado}
 							</span>
+						{:else if c.con_datos === false}
+							<!-- Sin datos del corte no hay estimación que enseñar; poner «$0»
+							     diría que se le va a pagar cero, y lo que se le generaría es el
+							     mes comercial completo. -->
+							<span class="estimado estimado--nd">—</span>
+						{:else}
+							<span class="estimado">{money(c.sueldo_estimado)}</span>
+						{/if}
+					</li>
+				{/each}
+			</ul>
+		</div>
+	{/if}
+</ModalBase>
 
-							{#if c.liquidacion_id && permiteReemplazar(c.estado ?? '')}
-								<label class="chk chk--reemplazo" title="Sobrescribe el borrador guardado">
-									<input
-										type="checkbox"
-										checked={reemplazar.has(c.conductor_id)}
-										onchange={() => alternarReemplazo(c.conductor_id)}
-									/>
-									<span class="pill pill--warn">{c.estado} · reemplazar</span>
-								</label>
-							{:else if c.liquidacion_id}
-								<!--
-									Ya liquidada, aprobada, pagada o anulada: se enseña el estado
-									pero NO la casilla. Rehacerla reescribiría todos los totales y
-									devolvería el estado a BORRADOR, o sea que se perdería la
-									aprobación y las cifras ya revisadas.
-								-->
-								<span
-									class="pill pill--fija"
-									title="No se puede rehacer: devuélvela a BORRADOR primero"
-								>
-									{c.estado}
-								</span>
-							{:else if c.con_datos === false}
-								<!-- Sin datos del corte no hay estimación que enseñar; poner «$0»
-								     diría que se le va a pagar cero, y lo que se le generaría es el
-								     mes comercial completo. -->
-								<span class="estimado estimado--nd">—</span>
-							{:else}
-								<span class="estimado">{money(c.sueldo_estimado)}</span>
-							{/if}
-						</li>
-					{/each}
-				</ul>
-			</div>
-
-			<footer class="pie">
-				<p class="nota">{marcados.size} de {conductores.length} marcados</p>
-				<button class="btn-secondary" onclick={onClose}>Cerrar</button>
-				<button class="btn-primary" onclick={lanzar} disabled={lanzando || marcados.size === 0}>
-					Generar {marcados.size} borrador{marcados.size === 1 ? '' : 'es'}
-				</button>
-			</footer>
+{#snippet pieAcciones()}
+	{#if jobId}
+		{#if terminado}
+			<button class="btn-primary" onclick={onClose}>Cerrar</button>
+		{:else}
+			<p class="nota">Cancelar no aborta el conductor en curso ni deshace lo ya guardado.</p>
+			<button class="btn-secondary" onclick={cancelar}>Cancelar generación</button>
 		{/if}
-	</div>
-</div>
+	{:else}
+		<p class="nota">{marcados.size} de {conductores.length} marcados</p>
+		<button class="btn-secondary" onclick={onClose}>Cerrar</button>
+		<button class="btn-primary" onclick={lanzar} disabled={lanzando || marcados.size === 0}>
+			Generar {marcados.size} borrador{marcados.size === 1 ? '' : 'es'}
+		</button>
+	{/if}
+{/snippet}
 
 <style>
 	/* El estado de una liquidación que NO se puede rehacer. Gris y sin casilla:
@@ -462,57 +454,9 @@
 		font-weight: 500;
 	}
 
-	.fondo {
-		position: fixed;
-		inset: 0;
-		background: rgba(15, 23, 42, 0.5);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 9999;
-		padding: 1rem;
-	}
-	/* Ventana centrada, no página: aquí el tope de ancho sí corresponde. */
-	.panel {
-		background: var(--bg-surface, #fff);
-		border-radius: 16px;
-		width: 100%;
-		max-width: 46rem;
-		max-height: 88vh;
+	.cuerpo {
 		display: flex;
 		flex-direction: column;
-		box-shadow: 0 24px 64px rgba(0, 0, 0, 0.24);
-	}
-	.cabecera {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 1rem;
-		padding: 1.1rem 1.25rem;
-		border-bottom: 1px solid var(--border-subtle);
-	}
-	.cabecera h2 {
-		margin: 0.25rem 0 0;
-		font-size: 1.3rem;
-		font-weight: 500;
-	}
-	.ventana {
-		margin: 0.2rem 0 0;
-		font-size: 0.8rem;
-		color: var(--text-muted);
-		font-family: var(--font-sans);
-	}
-	.cerrar {
-		background: none;
-		border: none;
-		font-size: 1.1rem;
-		cursor: pointer;
-		color: var(--text-muted);
-	}
-	.cuerpo {
-		padding: 1rem 1.25rem;
-		overflow-y: auto;
-		flex: 1;
 	}
 	.estado {
 		padding: 2.5rem 1.25rem;
@@ -524,35 +468,47 @@
 	}
 
 	.aviso {
-		font-size: 0.85rem;
+		font-size: 13px;
 		line-height: 1.5;
-		padding: 0.7rem 0.9rem;
-		border-radius: 10px;
-		background: var(--bg-base);
-		border: 1px solid var(--border-subtle);
-		margin-bottom: 0.8rem;
+		padding: 12px 14px;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
+		color: var(--text-secondary);
+		margin-bottom: 12px;
 	}
 	.aviso--warn {
-		background: rgba(245, 158, 11, 0.08);
+		background: #fffbeb;
 		border-color: rgba(245, 158, 11, 0.28);
 		color: #92400e;
 	}
 
+	/* Las listas son tarjetas blancas sobre el fondo claro del cuerpo. */
 	.lista,
 	.resultados {
 		list-style: none;
 		margin: 0;
-		padding: 0;
+		padding: 0 14px;
 		display: flex;
 		flex-direction: column;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
+	}
+	.resultados:empty {
+		display: none;
 	}
 	.fila {
 		display: flex;
 		align-items: center;
 		gap: 0.7rem;
-		padding: 0.5rem 0;
+		padding: 10px 0;
 		border-bottom: 1px solid var(--border-subtle);
-		font-size: 0.87rem;
+		font-size: 13px;
+		color: var(--text-primary);
+	}
+	.fila:last-child {
+		border-bottom: none;
 	}
 	.fila--gris {
 		opacity: 0.55;
@@ -596,22 +552,44 @@
 		position: sticky;
 		top: 0;
 		z-index: 1;
-		padding: 0.5rem 0 0.6rem;
-		background: var(--bg-surface, #fff);
+		margin-top: -4px;
+		padding: 4px 0 12px;
+		background: var(--bg-base);
 	}
-	.buscador input {
+	.bn-input {
 		flex: 1;
-		padding: 0.45rem 0.6rem;
-		border: 1px solid var(--border-color, #e2e8f0);
-		border-radius: 6px;
-		font-size: 0.8rem;
+		min-width: 0;
+		min-height: 42px;
+		padding: 9px 12px;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font: inherit;
+		font-size: 14px;
+		transition:
+			border-color 0.15s,
+			box-shadow 0.15s;
 	}
-	.buscador input:focus {
-		outline: 2px solid var(--emerald-500, #16a34a);
-		outline-offset: -1px;
+	.bn-input::placeholder {
+		color: var(--text-very-muted);
+		opacity: 1;
+	}
+	.bn-input:focus {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.bn-input:disabled {
+		background: var(--bg-base);
+		color: var(--text-muted);
+	}
+	input[type='checkbox'] {
+		accent-color: var(--accion);
 	}
 	.buscador-cuenta {
-		font-size: 0.7rem;
+		font-size: 12px;
+		font-weight: 600;
 		font-variant-numeric: tabular-nums;
 		color: var(--text-muted);
 		white-space: nowrap;
@@ -673,17 +651,21 @@
 	}
 
 	.barra {
-		margin-bottom: 1rem;
+		margin-bottom: 12px;
+		padding: 16px 18px;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
 	}
 	.barra-fondo {
 		height: 8px;
 		border-radius: 999px;
-		background: var(--bg-base);
+		background: var(--border-subtle);
 		overflow: hidden;
 	}
 	.barra-relleno {
 		height: 100%;
-		background: var(--emerald-500);
+		background: var(--accion);
 		transition: width 0.25s ease;
 	}
 	.barra-txt {
@@ -698,16 +680,12 @@
 		margin-bottom: 0.8rem;
 	}
 
-	.pie {
-		display: flex;
-		align-items: center;
-		gap: 0.6rem;
-		padding: 0.9rem 1.25rem;
-		border-top: 1px solid var(--border-subtle);
-	}
+	/* Texto de ayuda a la izquierda del pie de ModalBase. */
 	.nota {
-		margin: 0 auto 0 0;
-		font-size: 0.78rem;
+		flex: 1;
+		min-width: 160px;
+		margin: 0;
+		font-size: 12px;
 		color: var(--text-muted);
 	}
 </style>

@@ -33,6 +33,7 @@
 	import { liquidacionesTercerosDescuentosAPI } from '$lib/api/liquidaciones-terceros-descuentos';
 	import { tercerosAPI } from '$lib/api/terceros';
 	import { calcularPorcentajesEfectivos } from '$lib/editor/business/reparto-propietarios';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 
 	interface Props {
 		cierreId: string;
@@ -244,296 +245,235 @@
 		}
 	}
 
-	function alTeclado(e: KeyboardEvent) {
-		if (e.key === 'Escape' && !guardando) onClose();
-	}
-
 	const fmtPct = (n: number) =>
 		`${(Math.round(n * 100) / 100).toLocaleString('es-CO', { maximumFractionDigits: 2 })}%`;
 </script>
 
-<svelte:window onkeydown={alTeclado} />
+<ModalBase
+	open={true}
+	eyebrow={`Cierre · ${periodo}`}
+	title={`Propietarios de ${placa}`}
+	subtitle="Reparto en cascada: el primero toma su % del total y los demás se reparten el remanente"
+	tamano="lg"
+	sinRelleno
+	cerrarAlFondo={false}
+	bloqueado={guardando}
+	oncerrar={onClose}
+>
+	<div class="pcm-body">
+		<!-- ── Buscador de terceros ─────────────────────────────── -->
+		<section class="pcm-pane">
+			<label class="pcm-buscador">
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<circle cx="11" cy="11" r="7" />
+					<path d="M21 21l-4.35-4.35" stroke-linecap="round" />
+				</svg>
+				<input
+					type="search"
+					value={busqueda}
+					oninput={(e) => alBuscar(e.currentTarget.value)}
+					placeholder="Buscar tercero por nombre o identificación…"
+					disabled={cargando || guardando}
+				/>
+			</label>
 
-<div class="pcm-backdrop">
-	<div class="pcm" role="dialog" aria-modal="true" aria-labelledby="pcm-titulo">
-		<div class="pcm-head">
-			<div>
-				<h2 id="pcm-titulo">Propietarios de {placa}</h2>
-				<p class="pcm-sub">
-					{periodo} · reparto en cascada: el primero toma su % del total y los demás se
-					reparten el remanente
+			{#if cargando}
+				<p class="pcm-vacio">Cargando propietarios…</p>
+			{:else if errorCarga}
+				<p class="pcm-vacio pcm-error">{errorCarga}</p>
+			{:else if busqueda.trim().length < 2}
+				<p class="pcm-vacio">
+					Escribe al menos dos letras para buscar en el catálogo de terceros. Cada
+					resultado se añade a la lista con 0% para que teclees su porcentaje.
 				</p>
-			</div>
-			<button class="pcm-x" onclick={onClose} disabled={guardando} aria-label="Cerrar">×</button>
-		</div>
+			{:else if buscando}
+				<p class="pcm-vacio">Buscando…</p>
+			{:else if resultados.length === 0}
+				<p class="pcm-vacio">Ningún tercero coincide con «{busqueda}».</p>
+			{:else}
+				<ul class="pcm-lista">
+					{#each resultados as t (t.id)}
+						{@const dentro = idsEnLista.has(t.id)}
+						<li>
+							<button
+								type="button"
+								class="pcm-fila"
+								class:pcm-fila-dentro={dentro}
+								onclick={() => agregar(t)}
+								disabled={guardando || dentro}
+							>
+								<span class="pcm-check" aria-hidden="true">{dentro ? '✓' : '+'}</span>
+								<span class="pcm-nom">
+									<strong>{t.nombre_completo}</strong>
+									<small>{t.identificacion || 'sin identificación'}</small>
+								</span>
+								{#if dentro}<span class="pcm-tag">en la lista</span>{/if}
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
 
-		<div class="pcm-body">
-			<!-- ── Buscador de terceros ─────────────────────────────── -->
-			<section class="pcm-pane">
-				<label class="pcm-buscador">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<circle cx="11" cy="11" r="7" />
-						<path d="M21 21l-4.35-4.35" stroke-linecap="round" />
-					</svg>
-					<input
-						type="search"
-						value={busqueda}
-						oninput={(e) => alBuscar(e.currentTarget.value)}
-						placeholder="Buscar tercero por nombre o identificación…"
-						disabled={cargando || guardando}
-					/>
-				</label>
+		<!-- ── Lista de propietarios (el orden ES la cascada) ────── -->
+		<section class="pcm-pane pcm-pane-sel">
+			<h3>Propietarios del cierre ({lista.length})</h3>
 
-				{#if cargando}
-					<p class="pcm-vacio">Cargando propietarios…</p>
-				{:else if errorCarga}
-					<p class="pcm-vacio pcm-error">{errorCarga}</p>
-				{:else if busqueda.trim().length < 2}
-					<p class="pcm-vacio">
-						Escribe al menos dos letras para buscar en el catálogo de terceros. Cada
-						resultado se añade a la lista con 0% para que teclees su porcentaje.
-					</p>
-				{:else if buscando}
-					<p class="pcm-vacio">Buscando…</p>
-				{:else if resultados.length === 0}
-					<p class="pcm-vacio">Ningún tercero coincide con «{busqueda}».</p>
-				{:else}
-					<ul class="pcm-lista">
-						{#each resultados as t (t.id)}
-							{@const dentro = idsEnLista.has(t.id)}
-							<li>
-								<button
-									type="button"
-									class="pcm-fila"
-									class:pcm-fila-dentro={dentro}
-									onclick={() => agregar(t)}
-									disabled={guardando || dentro}
-								>
-									<span class="pcm-check" aria-hidden="true">{dentro ? '✓' : '+'}</span>
-									<span class="pcm-nom">
-										<strong>{t.nombre_completo}</strong>
-										<small>{t.identificacion || 'sin identificación'}</small>
-									</span>
-									{#if dentro}<span class="pcm-tag">en la lista</span>{/if}
-								</button>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</section>
-
-			<!-- ── Lista de propietarios (el orden ES la cascada) ────── -->
-			<section class="pcm-pane pcm-pane-sel">
-				<h3>Propietarios del cierre ({lista.length})</h3>
-
-				{#if !cargando && !errorCarga}
-					<ul class="pcm-sel">
-						{#each lista as f, idx (f.key)}
-							<li class="pcm-sel-item">
-								<div class="pcm-sel-head">
-									<div class="pcm-orden">
-										<button
-											type="button"
-											onclick={() => mover(f.key, -1)}
-											disabled={guardando || idx === 0}
-											aria-label="Subir a {f.nombre}"
-											title="Subir en la cascada"
-										>↑</button>
-										<span>{idx + 1}</span>
-										<button
-											type="button"
-											onclick={() => mover(f.key, 1)}
-											disabled={guardando || idx === lista.length - 1}
-											aria-label="Bajar a {f.nombre}"
-											title="Bajar en la cascada"
-										>↓</button>
-									</div>
-									<span class="pcm-nom">
-										<strong>{f.nombre}</strong>
-										<small>{f.identificacion || 'sin identificación'}</small>
-									</span>
+			{#if !cargando && !errorCarga}
+				<ul class="pcm-sel">
+					{#each lista as f, idx (f.key)}
+						<li class="pcm-sel-item">
+							<div class="pcm-sel-head">
+								<div class="pcm-orden">
 									<button
 										type="button"
-										class="pcm-quitar"
-										onclick={() => quitar(f.key)}
-										disabled={guardando}
-										title="Quitar de la lista"
-										aria-label="Quitar a {f.nombre}"
-									>×</button>
+										onclick={() => mover(f.key, -1)}
+										disabled={guardando || idx === 0}
+										aria-label="Subir a {f.nombre}"
+										title="Subir en la cascada"
+									>↑</button>
+									<span>{idx + 1}</span>
+									<button
+										type="button"
+										onclick={() => mover(f.key, 1)}
+										disabled={guardando || idx === lista.length - 1}
+										aria-label="Bajar a {f.nombre}"
+										title="Bajar en la cascada"
+									>↓</button>
 								</div>
-
-								<div class="pcm-sel-campos">
-									<label class="pcm-pct">
-										<span>%</span>
-										<input
-											type="number"
-											min="0"
-											step="0.01"
-											value={f.porcentaje}
-											oninput={(e) => fijarPorcentaje(f.key, e.currentTarget.value)}
-											disabled={guardando}
-										/>
-									</label>
-									{#if lista.length > 1}
-										<p class="pcm-efectivo">
-											efectivo <strong>{fmtPct(efectivos.get(f.key) ?? 0)}</strong>
-											{#if idx === 0}<small>toma su % del total</small>
-											{:else}<small>del remanente, en proporción</small>{/if}
-										</p>
-									{/if}
-								</div>
-
-								<input
-									class="pcm-nota"
-									type="text"
-									maxlength="255"
-									value={f.nota}
-									oninput={(e) => fijarNota(f.key, e.currentTarget.value)}
-									placeholder="Concepto del pago (opcional), ej. ABONAR A CRÉDITO BANCOOMEVA"
+								<span class="pcm-nom">
+									<strong>{f.nombre}</strong>
+									<small>{f.identificacion || 'sin identificación'}</small>
+								</span>
+								<button
+									type="button"
+									class="pcm-quitar"
+									onclick={() => quitar(f.key)}
 									disabled={guardando}
-								/>
+									title="Quitar de la lista"
+									aria-label="Quitar a {f.nombre}"
+								>×</button>
+							</div>
 
-								<label class="pcm-ret" class:pcm-ret-off={!f.aplicaRetenciones}>
+							<div class="pcm-sel-campos">
+								<label class="pcm-pct">
+									<span>%</span>
 									<input
-										type="checkbox"
-										checked={f.aplicaRetenciones}
-										onchange={(e) => fijarRetenciones(f.key, e.currentTarget.checked)}
+										class="pcm-input"
+										type="number"
+										min="0"
+										step="0.01"
+										value={f.porcentaje}
+										oninput={(e) => fijarPorcentaje(f.key, e.currentTarget.value)}
 										disabled={guardando}
 									/>
-									<span>
-										Aplica retenciones sobre su valor a facturar
-										{#if !f.aplicaRetenciones}
-											<small>pago interno por concepto — no genera egreso real ni tributa</small>
-										{/if}
-									</span>
 								</label>
-							</li>
-						{/each}
-					</ul>
+								{#if lista.length > 1}
+									<p class="pcm-efectivo">
+										efectivo <strong>{fmtPct(efectivos.get(f.key) ?? 0)}</strong>
+										{#if idx === 0}<small>toma su % del total</small>
+										{:else}<small>del remanente, en proporción</small>{/if}
+									</p>
+								{/if}
+							</div>
 
-					{#if lista.length > 1}
-						{#if Math.abs(sumaPorcentajes - 100) > 0.01}
-							<p class="pcm-aviso">
-								Los porcentajes suman {fmtPct(sumaPorcentajes)}. No es un error: la
-								cascada reparte con los efectivos de la derecha.
-							</p>
-						{/if}
-						{#if lista.length > 4}
-							<p class="pcm-aviso">
-								Con más de 4 propietarios la matriz de la hoja se recorta por ancho;
-								el PDF sí los muestra todos.
-							</p>
-						{/if}
-						<button
-							type="button"
-							class="pcm-restaurar"
-							onclick={restaurarUnico}
-							disabled={guardando}
-						>
-							Restaurar propietario único ({terceroTitular.nombre})
-						</button>
-					{:else}
-						<p class="pcm-vacio">
-							Con un solo propietario la hoja funciona en modo normal: sin tablas de
-							reparto y con la tabla general de impuestos.
+							<input
+								class="pcm-nota"
+								type="text"
+								maxlength="255"
+								value={f.nota}
+								oninput={(e) => fijarNota(f.key, e.currentTarget.value)}
+								placeholder="Concepto del pago (opcional), ej. ABONAR A CRÉDITO BANCOOMEVA"
+								disabled={guardando}
+							/>
+
+							<label class="pcm-ret" class:pcm-ret-off={!f.aplicaRetenciones}>
+								<input
+									type="checkbox"
+									checked={f.aplicaRetenciones}
+									onchange={(e) => fijarRetenciones(f.key, e.currentTarget.checked)}
+									disabled={guardando}
+								/>
+								<span>
+									Aplica retenciones sobre su valor a facturar
+									{#if !f.aplicaRetenciones}
+										<small>pago interno por concepto — no genera egreso real ni tributa</small>
+									{/if}
+								</span>
+							</label>
+						</li>
+					{/each}
+				</ul>
+
+				{#if lista.length > 1}
+					{#if Math.abs(sumaPorcentajes - 100) > 0.01}
+						<p class="pcm-aviso">
+							Los porcentajes suman {fmtPct(sumaPorcentajes)}. No es un error: la
+							cascada reparte con los efectivos de la derecha.
 						</p>
 					{/if}
+					{#if lista.length > 4}
+						<p class="pcm-aviso">
+							Con más de 4 propietarios la matriz de la hoja se recorta por ancho;
+							el PDF sí los muestra todos.
+						</p>
+					{/if}
+					<button
+						type="button"
+						class="btn-secondary pcm-restaurar"
+						onclick={restaurarUnico}
+						disabled={guardando}
+					>
+						Restaurar propietario único ({terceroTitular.nombre})
+					</button>
+				{:else}
+					<p class="pcm-vacio">
+						Con un solo propietario la hoja funciona en modo normal: sin tablas de
+						reparto y con la tabla general de impuestos.
+					</p>
 				{/if}
-			</section>
-		</div>
-
-		<div class="pcm-foot">
-			{#if errorGuardado}
-				<p class="pcm-error">{errorGuardado}</p>
 			{/if}
-			<div class="pcm-acciones">
-				<button class="pcm-btn-ghost" onclick={onClose} disabled={guardando}>Cancelar</button>
-				<button
-					class="pcm-btn-primary"
-					onclick={guardar}
-					disabled={guardando || cargando || !!errorCarga || !hayCambios}
-					title={hayCambios ? '' : 'No hay cambios que guardar'}
-				>
-					{guardando ? 'Guardando…' : 'Guardar y recalcular'}
-				</button>
-			</div>
-		</div>
+		</section>
 	</div>
-</div>
+
+	{#snippet pie()}
+		{#if errorGuardado}
+			<p class="pcm-error pcm-error-pie">{errorGuardado}</p>
+		{/if}
+		<button type="button" class="btn-secondary" onclick={onClose} disabled={guardando}>
+			Cancelar
+		</button>
+		<button
+			type="button"
+			class="btn-primary"
+			onclick={guardar}
+			disabled={guardando || cargando || !!errorCarga || !hayCambios}
+			title={hayCambios ? '' : 'No hay cambios que guardar'}
+		>
+			{guardando ? 'Guardando…' : 'Guardar y recalcular'}
+		</button>
+	{/snippet}
+</ModalBase>
 
 <style>
-	.pcm-backdrop {
-		position: fixed;
-		inset: 0;
-		z-index: 220;
-		background: rgb(15 23 42 / 0.55);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 20px;
-	}
-
-	.pcm {
-		background: #fff;
-		color: #0f172a;
-		border-radius: 12px;
-		width: 100%;
-		max-width: 860px;
-		max-height: 88vh;
-		display: flex;
-		flex-direction: column;
-		box-shadow: 0 20px 50px rgb(0 0 0 / 0.3);
-	}
-
-	.pcm-head {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 12px;
-		padding: 18px 20px 12px;
-		border-bottom: 1px solid #e2e8f0;
-	}
-	.pcm-head h2 {
-		margin: 0;
-		font-size: 16px;
-		font-weight: 700;
-	}
-	.pcm-sub {
-		margin: 3px 0 0;
-		font-size: 12px;
-		color: #64748b;
-	}
-	.pcm-x {
-		border: none;
-		background: transparent;
-		font-size: 22px;
-		line-height: 1;
-		cursor: pointer;
-		color: #64748b;
-		padding: 0 4px;
-	}
-	.pcm-x:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
-	}
-
+	/* Dos columnas que scrollean cada una por su lado: el cuerpo de
+	   ModalBase va sin relleno y la rejilla ocupa todo su alto. */
 	.pcm-body {
 		display: grid;
 		grid-template-columns: 1fr 1.15fr;
 		gap: 0;
+		height: 100%;
 		min-height: 0;
-		flex: 1 1 auto;
 	}
 	.pcm-pane {
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
-		padding: 14px 16px;
+		padding: 18px 20px;
 		overflow-y: auto;
 	}
 	.pcm-pane-sel {
-		border-left: 1px solid #e2e8f0;
-		background: #f8fafc;
+		border-left: 1px solid var(--border-subtle);
 	}
 	.pcm-pane-sel h3 {
 		margin: 0 0 10px;
@@ -541,28 +481,39 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: #475569;
+		color: var(--text-secondary);
 	}
 
+	/* Mismo aspecto que `.de-input` de ModalEntidad, con la lupa dentro. */
 	.pcm-buscador {
 		display: flex;
 		align-items: center;
-		gap: 7px;
-		padding: 7px 10px;
-		margin-bottom: 10px;
-		border: 1px solid #cbd5e1;
-		border-radius: 8px;
-		color: #64748b;
+		gap: 8px;
+		min-height: 42px;
+		padding: 0 12px;
+		margin-bottom: 12px;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		color: var(--text-muted);
 		flex: none;
+	}
+	.pcm-buscador:focus-within {
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
 	}
 	.pcm-buscador input {
 		border: none;
 		outline: none;
 		width: 100%;
-		font-size: 13px;
+		padding: 9px 0;
+		font-size: 14px;
 		font-family: inherit;
-		color: #0f172a;
+		color: var(--text-primary);
 		background: transparent;
+	}
+	.pcm-buscador input:disabled {
+		color: var(--text-muted);
 	}
 
 	.pcm-lista,
@@ -572,48 +523,52 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 3px;
+		gap: 4px;
+	}
+	.pcm-sel {
+		gap: 10px;
 	}
 
 	.pcm-fila {
 		display: flex;
 		align-items: center;
-		gap: 9px;
+		gap: 10px;
 		width: 100%;
-		padding: 7px 9px;
+		padding: 8px 10px;
 		border: 1px solid transparent;
-		border-radius: 7px;
+		border-radius: 12px;
 		background: transparent;
+		color: var(--text-primary);
 		cursor: pointer;
 		text-align: left;
 		font-family: inherit;
 	}
 	.pcm-fila:hover:not(:disabled) {
-		background: #f1f5f9;
+		background: var(--bg-surface);
 	}
 	.pcm-fila-dentro {
-		background: #f0fdf4;
-		border-color: #bbf7d0;
+		background: var(--bg-surface);
+		border-color: color-mix(in srgb, var(--accion) 35%, transparent);
 	}
 	.pcm-fila:disabled {
-		opacity: 0.6;
+		opacity: 0.5;
 		cursor: not-allowed;
 	}
 
 	.pcm-check {
 		flex: none;
-		width: 19px;
-		height: 19px;
-		border-radius: 5px;
-		background: #e2e8f0;
-		color: #475569;
+		width: 20px;
+		height: 20px;
+		border-radius: 6px;
+		background: var(--border-subtle);
+		color: var(--text-secondary);
 		font-size: 12px;
 		font-weight: 700;
-		line-height: 19px;
+		line-height: 20px;
 		text-align: center;
 	}
 	.pcm-fila-dentro .pcm-check {
-		background: #c2410c;
+		background: var(--accion);
 		color: #fff;
 	}
 
@@ -624,37 +579,102 @@
 		flex: 1;
 	}
 	.pcm-nom strong {
-		font-size: 12.5px;
+		font-size: 13px;
 		font-weight: 600;
+		color: var(--text-primary);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 	.pcm-nom small {
-		font-size: 11px;
-		color: #64748b;
+		font-size: 11.5px;
+		color: var(--text-muted);
 	}
 
 	.pcm-tag {
 		flex: none;
-		font-size: 9.5px;
+		font-size: 10px;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		color: #9a3412;
+		color: var(--accion);
 	}
 
 	.pcm-sel-item {
-		border: 1px solid #e2e8f0;
-		border-radius: 9px;
-		background: #fff;
-		padding: 9px 10px;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
+		padding: 12px 14px;
 	}
 	.pcm-sel-head {
 		display: flex;
 		align-items: flex-start;
 		gap: 8px;
 	}
+	.pcm-quitar {
+		flex: none;
+		width: 26px;
+		height: 26px;
+		display: grid;
+		place-items: center;
+		border: none;
+		border-radius: 999px;
+		background: transparent;
+		color: var(--text-muted);
+		font-size: 17px;
+		line-height: 1;
+		cursor: pointer;
+	}
+	.pcm-quitar:hover:not(:disabled) {
+		background: var(--bg-base);
+		color: #b42318;
+	}
+	.pcm-quitar:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
+	}
+
+	.pcm-sel-campos {
+		display: flex;
+		align-items: flex-start;
+		gap: 12px;
+		margin-top: 10px;
+	}
+	.pcm-input {
+		width: 92px;
+		min-height: 42px;
+		padding: 9px 12px;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font-size: 14px;
+		font-family: inherit;
+	}
+	.pcm-input:focus {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.pcm-input:disabled {
+		background: var(--bg-base);
+		color: var(--text-muted);
+	}
+
+
+
+	.pcm-vacio {
+		margin: 10px 2px;
+		font-size: 13px;
+		line-height: 1.5;
+		color: var(--text-muted);
+	}
+	.pcm-error {
+		color: #b42318;
+		font-size: 12px;
+		font-weight: 600;
+	}
+
 
 	.pcm-orden {
 		display: flex;
@@ -664,112 +684,93 @@
 		flex: none;
 	}
 	.pcm-orden span {
-		font-size: 10.5px;
+		font-size: 11px;
 		font-weight: 700;
-		color: #475569;
+		color: var(--text-secondary);
 	}
 	.pcm-orden button {
 		border: none;
+		border-radius: 6px;
 		background: transparent;
-		color: #64748b;
+		color: var(--text-muted);
 		font-size: 12px;
 		line-height: 1;
 		cursor: pointer;
-		padding: 1px 4px;
+		padding: 2px 5px;
 	}
 	.pcm-orden button:hover:not(:disabled) {
-		color: #0f172a;
+		background: var(--bg-base);
+		color: var(--text-primary);
 	}
 	.pcm-orden button:disabled {
 		opacity: 0.25;
 		cursor: not-allowed;
 	}
 
-	.pcm-quitar {
-		flex: none;
-		border: none;
-		background: transparent;
-		color: #94a3b8;
-		font-size: 17px;
-		line-height: 1;
-		cursor: pointer;
-		padding: 0 2px;
-	}
-	.pcm-quitar:hover:not(:disabled) {
-		color: #b91c1c;
-	}
-
-	.pcm-sel-campos {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-		margin-top: 8px;
-	}
 	.pcm-pct {
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		gap: 8px;
 		flex: none;
 	}
 	.pcm-pct span {
-		font-size: 10px;
+		font-size: 12px;
 		font-weight: 700;
-		text-transform: uppercase;
-		color: #64748b;
-	}
-	.pcm-pct input {
-		width: 78px;
-		padding: 5px 7px;
-		border: 1px solid #cbd5e1;
-		border-radius: 6px;
-		font-size: 13px;
-		font-family: inherit;
+		color: var(--text-secondary);
 	}
 
 	.pcm-efectivo {
 		margin: 0;
-		font-size: 11.5px;
-		color: #475569;
+		font-size: 12px;
+		color: var(--text-secondary);
 		display: flex;
 		flex-direction: column;
 		line-height: 1.3;
 	}
 	.pcm-efectivo strong {
-		font-size: 12.5px;
-		color: #0f172a;
+		font-size: 13px;
+		color: var(--text-primary);
 	}
 	.pcm-efectivo small {
-		font-size: 10px;
-		color: #94a3b8;
+		font-size: 11px;
+		color: var(--text-muted);
 	}
 
+	/* Campo secundario: borde discontinuo hasta que se enfoca. */
 	.pcm-nota {
 		width: 100%;
-		margin-top: 8px;
-		padding: 5px 7px;
-		border: 1px dashed #cbd5e1;
-		border-radius: 6px;
-		font-size: 11.5px;
+		margin-top: 10px;
+		min-height: 38px;
+		padding: 8px 12px;
+		border: 1px dashed var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		font-size: 13px;
 		font-family: inherit;
-		color: #0f172a;
+		color: var(--text-primary);
 	}
 	.pcm-nota::placeholder {
-		color: #94a3b8;
+		color: var(--text-very-muted);
 	}
 	.pcm-nota:focus {
 		outline: none;
 		border-style: solid;
-		border-color: #94a3b8;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.pcm-nota:disabled {
+		background: var(--bg-base);
+		color: var(--text-muted);
 	}
 
 	.pcm-ret {
 		display: flex;
 		align-items: flex-start;
-		gap: 7px;
-		margin-top: 8px;
-		padding: 6px 8px;
-		border: 1px solid #e2e8f0;
-		border-radius: 7px;
+		gap: 8px;
+		margin-top: 10px;
+		padding: 8px 10px;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
 		cursor: pointer;
 	}
 	.pcm-ret-off {
@@ -779,102 +780,45 @@
 	.pcm-ret input {
 		margin-top: 2px;
 		flex: none;
+		accent-color: var(--accion);
 	}
 	.pcm-ret span {
 		display: flex;
 		flex-direction: column;
-		font-size: 11.5px;
+		font-size: 12.5px;
 		font-weight: 600;
 		line-height: 1.3;
+		color: var(--text-primary);
 	}
 	.pcm-ret small {
-		font-size: 10.5px;
+		font-size: 11px;
 		font-weight: 500;
 		color: #92400e;
 	}
 
 	.pcm-aviso {
-		margin: 10px 2px 0;
-		font-size: 11px;
+		margin: 12px 2px 0;
+		font-size: 11.5px;
 		line-height: 1.45;
 		color: #b45309;
 	}
 
 	.pcm-restaurar {
-		margin-top: 10px;
+		margin-top: 12px;
 		align-self: flex-start;
-		border: 1px solid #e2e8f0;
-		background: #fff;
-		border-radius: 7px;
-		padding: 6px 10px;
-		font-size: 11.5px;
-		font-weight: 600;
-		color: #334155;
-		cursor: pointer;
-		font-family: inherit;
 	}
-	.pcm-restaurar:hover:not(:disabled) {
-		background: #f1f5f9;
-	}
-	.pcm-restaurar:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.pcm-vacio {
-		margin: 10px 2px;
-		font-size: 12.5px;
-		line-height: 1.5;
-		color: #64748b;
-	}
-	.pcm-error {
-		color: #b91c1c;
-		font-weight: 600;
-	}
-
-	.pcm-foot {
-		border-top: 1px solid #e2e8f0;
-		padding: 12px 20px 16px;
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-	}
-	.pcm-acciones {
-		display: flex;
-		justify-content: flex-end;
-		gap: 8px;
-	}
-	.pcm-btn-ghost,
-	.pcm-btn-primary {
-		border: none;
-		border-radius: 7px;
-		padding: 8px 14px;
-		font-size: 12.5px;
-		font-weight: 700;
-		cursor: pointer;
-		font-family: inherit;
-	}
-	.pcm-btn-ghost {
-		background: #f1f5f9;
-		color: #334155;
-	}
-	.pcm-btn-primary {
-		background: #c2410c;
-		color: #fff;
-	}
-	.pcm-btn-ghost:disabled,
-	.pcm-btn-primary:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
+	.pcm-error-pie {
+		margin: 0 auto 0 0;
 	}
 
 	@media (max-width: 720px) {
 		.pcm-body {
 			grid-template-columns: 1fr;
+			height: auto;
 		}
 		.pcm-pane-sel {
 			border-left: none;
-			border-top: 1px solid #e2e8f0;
+			border-top: 1px solid var(--border-subtle);
 		}
 	}
 </style>

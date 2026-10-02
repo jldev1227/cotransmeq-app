@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { nominaNotificacionesAPI } from '$lib/api/nomina-canvas';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 
 	interface Hoja {
 		liquidacionId: string | null;
@@ -99,30 +100,23 @@
 	}
 </script>
 
-<div
-	class="nin-bg"
-	role="dialog"
-	aria-modal="true"
-	aria-labelledby="nin-title"
-	tabindex="-1"
-	onkeydown={(event) => event.key === 'Escape' && onCerrar()}
+<ModalBase
+	open={true}
+	eyebrow="Notificación móvil"
+	title="Avisar desprendible disponible"
+	subtitle={`${etiquetaPeriodo} · Solo liquidaciones pagadas`}
+	tamano="md"
+	bloqueado={enviando}
+	cerrarAlFondo={!enviando}
+	oncerrar={onCerrar}
 >
-	<section class="nin-card">
-		<header>
-			<div>
-				<p class="nin-kicker">NOTIFICACIÓN MÓVIL</p>
-				<h2 id="nin-title">Avisar desprendible disponible</h2>
-				<p>{etiquetaPeriodo} · Solo liquidaciones pagadas</p>
-			</div>
-			<button class="nin-close" onclick={onCerrar} aria-label="Cerrar">✕</button>
-		</header>
-
-		{#if pagadas.length === 0}
-			<div class="nin-empty">
-				<strong>Aún no hay liquidaciones pagadas.</strong>
-				<span>Marca las hojas como PAGADA antes de notificar al conductor.</span>
-			</div>
-		{:else}
+	{#if pagadas.length === 0}
+		<div class="nin-empty">
+			<strong>Aún no hay liquidaciones pagadas.</strong>
+			<span>Marca las hojas como PAGADA antes de notificar al conductor.</span>
+		</div>
+	{:else}
+		<div class="nin-contenido">
 			<div class="nin-toolbar">
 				<span>{marcados.size} de {pagadas.length} seleccionadas</span>
 				<div>
@@ -151,86 +145,92 @@
 			<p class="nin-note">
 				Se enviará por la app móvil mediante Expo Push. Esta acción no envía correos.
 			</p>
-		{/if}
+		</div>
+	{/if}
 
-		<footer>
-			<button class="nin-secondary" onclick={onCerrar} disabled={enviando}>Cancelar</button>
-			<button
-				class="nin-primary"
-				onclick={enviar}
-				disabled={enviando || marcados.size === 0}
-			>
-				{enviando ? 'Notificando…' : `Notificar a ${marcados.size}`}
-			</button>
-		</footer>
-	</section>
-</div>
+	{#snippet pie()}
+		<button class="btn-secondary" onclick={onCerrar} disabled={enviando}>Cancelar</button>
+		<button class="btn-primary" onclick={enviar} disabled={enviando || marcados.size === 0}>
+			{enviando ? 'Notificando…' : `Notificar a ${marcados.size}`}
+		</button>
+	{/snippet}
+</ModalBase>
 
 <style>
-	.nin-bg {
-		position: fixed;
-		inset: 0;
-		z-index: 9980;
-		display: grid;
-		place-items: center;
-		padding: 24px;
-		background: rgba(15, 23, 42, 0.56);
-	}
-	.nin-card {
+	.nin-contenido {
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
-		width: min(720px, 100%);
-		max-height: min(86vh, 760px);
-		padding: 20px;
-		border-radius: 16px;
-		background: #fff;
-		box-shadow: 0 24px 70px rgba(2, 6, 23, 0.36);
 	}
-	header,
 	.nin-toolbar,
-	footer,
 	li,
 	label {
 		display: flex;
 		align-items: center;
 	}
-	header,
 	.nin-toolbar,
-	footer,
 	li {
 		justify-content: space-between;
 	}
-	header { align-items: flex-start; gap: 16px; }
-	h2 { margin: 2px 0 3px; font-size: 20px; color: #0f172a; }
-	header p { margin: 0; color: #64748b; font-size: 12px; }
-	.nin-kicker { color: #9a3412; font-weight: 800; letter-spacing: .1em; }
-	.nin-close,
+	.nin-toolbar {
+		font-size: 13px;
+		font-weight: 700;
+		color: var(--text-secondary);
+	}
+	.nin-toolbar div {
+		display: flex;
+		gap: 12px;
+	}
 	.nin-toolbar button {
 		border: 0;
+		padding: 0;
 		background: transparent;
-		color: #64748b;
+		color: var(--accion);
+		font: inherit;
+		font-size: 12px;
 		font-weight: 700;
 		cursor: pointer;
 	}
-	.nin-toolbar { font-size: 12px; font-weight: 700; color: #475569; }
-	.nin-toolbar div { display: flex; gap: 10px; }
-	.nin-toolbar button { color: #9a3412; text-decoration: underline; }
+	.nin-toolbar button:hover {
+		color: var(--accion-hover);
+		text-decoration: underline;
+	}
 	ul {
 		list-style: none;
 		margin: 0;
 		padding: 0;
-		overflow-y: auto;
-		border: 1px solid #e2e8f0;
-		border-radius: 12px;
+		overflow: hidden;
+		background: var(--bg-surface);
+		border-radius: 16px;
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
 	}
-	li { gap: 12px; padding: 12px 14px; border-bottom: 1px solid #f1f5f9; }
-	li:last-child { border-bottom: 0; }
-	label { gap: 10px; min-width: 0; cursor: pointer; }
-	.nin-person { display: grid; gap: 3px; min-width: 0; }
-	.nin-person strong { color: #0f172a; font-size: 13px; }
+	li {
+		gap: 12px;
+		padding: 12px 14px;
+		border-bottom: 1px solid var(--border-subtle);
+	}
+	li:last-child {
+		border-bottom: 0;
+	}
+	label {
+		gap: 10px;
+		min-width: 0;
+		cursor: pointer;
+	}
+	label input {
+		accent-color: var(--accion);
+	}
+	.nin-person {
+		display: grid;
+		gap: 3px;
+		min-width: 0;
+	}
+	.nin-person strong {
+		color: var(--text-primary);
+		font-size: 13px;
+	}
 	.nin-person small {
-		color: #64748b;
+		color: var(--text-muted);
 		font-size: 11px;
 		line-height: 1.35;
 		overflow: hidden;
@@ -239,7 +239,7 @@
 	}
 	.nin-ready {
 		flex: none;
-		padding: 3px 7px;
+		padding: 3px 8px;
 		border-radius: 999px;
 		background: #dcfce7;
 		color: #166534;
@@ -249,24 +249,20 @@
 	.nin-note,
 	.nin-empty {
 		margin: 0;
-		padding: 12px;
-		border-radius: 10px;
-		background: #fff7ed;
-		color: #9a3412;
-		font-size: 12px;
+		padding: 14px 16px;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
+		color: var(--text-secondary);
+		font-size: 12.5px;
+		line-height: 1.45;
 	}
-	.nin-empty { display: grid; gap: 4px; text-align: center; }
-	footer { justify-content: flex-end; gap: 8px; }
-	footer button {
-		min-height: 40px;
-		padding: 0 15px;
-		border-radius: 9px;
-		font: inherit;
-		font-size: 13px;
-		font-weight: 700;
-		cursor: pointer;
+	.nin-empty {
+		display: grid;
+		gap: 4px;
+		text-align: center;
 	}
-	.nin-secondary { border: 1px solid #cbd5e1; background: #fff; color: #334155; }
-	.nin-primary { border: 1px solid #c2410c; background: #c2410c; color: #fff; }
-	footer button:disabled { opacity: .5; cursor: not-allowed; }
+	.nin-empty strong {
+		color: var(--text-primary);
+	}
 </style>

@@ -6,6 +6,7 @@
 	import { browser } from '$app/environment';
 	import { fade, fly } from 'svelte/transition';
 	import { serviciosStore, serviciosPorEstado } from '$lib/stores/servicios';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 	import {
 		recursos,
 		conductoresOptions,
@@ -947,7 +948,7 @@
 						onclick={() => cambiarVista('lista')}
 						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold
 							{vistaActiva === 'lista'
-							? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-sm'
+							? 'bg-[var(--accion)] text-white'
 							: 'text-gray-600 hover:bg-gray-50'}"
 						role="tab"
 						aria-selected={vistaActiva === 'lista'}
@@ -966,7 +967,7 @@
 						onclick={() => cambiarVista('canvas')}
 						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold
 						{vistaActiva === 'canvas'
-							? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-sm'
+							? 'bg-[var(--accion)] text-white'
 							: 'text-gray-600 hover:bg-gray-50'}"
 						role="tab"
 						aria-selected={vistaActiva === 'canvas'}
@@ -985,7 +986,7 @@
 						onclick={() => cambiarVista('calendario')}
 						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold
 							{vistaActiva === 'calendario'
-							? 'bg-gradient-to-r from-emerald-500 to-emerald-600 text-white shadow-sm'
+							? 'bg-[var(--accion)] text-white'
 							: 'text-gray-600 hover:bg-gray-50'}"
 						role="tab"
 						aria-selected={vistaActiva === 'calendario'}
@@ -1054,7 +1055,7 @@
 				{#if puedeEditar}
 					<button
 						onclick={handleNuevoServicio}
-						class="apple-hover apple-transition soft-shadow emerald-glow flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-4 py-2 text-sm font-semibold text-white"
+						class="btn-primary apple-transition flex items-center gap-1.5"
 					>
 						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path
@@ -1497,7 +1498,7 @@
 					{#if busqueda || filtroEstado}
 						<button
 							onclick={limpiarFiltros}
-							class="apple-transition rounded-lg bg-emerald-500 px-4 py-2 text-sm text-white hover:bg-emerald-600"
+							class="btn-primary apple-transition"
 						>
 							Limpiar filtros
 						</button>
@@ -2216,115 +2217,14 @@
 				</div>
 
 				<!-- Paginación pegada al fondo -->
-				{#if totalPaginas > 1}
-					<div
-						class="flex flex-shrink-0 items-center justify-between border-t border-gray-100 bg-gray-50/50 px-4 py-3"
-					>
-						<p class="text-xs text-gray-500">
-							<span class="font-semibold text-gray-700"
-								>{(pagination.page - 1) * pagination.limit + 1}–{Math.min(
-									pagination.page * pagination.limit,
-									pagination.total
-								)}</span
-							>
-							de <span class="font-semibold text-gray-700">{pagination.total}</span> servicios
-						</p>
-
-						<div class="flex items-center gap-1">
-							<button
-								onclick={() => irPagina(1)}
-								disabled={pagination.page === 1 || loading}
-								class="apple-transition rounded-lg border border-gray-200 p-1.5 {pagination.page ===
-									1 || loading
-									? 'cursor-not-allowed bg-gray-100 text-gray-300'
-									: 'bg-white text-gray-600 hover:border-emerald-200 hover:bg-emerald-50'}"
-								title="Primera"
-							>
-								<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-									><path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
-									/></svg
-								>
-							</button>
-							<button
-								onclick={() => irPagina(pagination.page - 1)}
-								disabled={pagination.page === 1 || loading}
-								class="apple-transition rounded-lg border border-gray-200 p-1.5 {pagination.page ===
-									1 || loading
-									? 'cursor-not-allowed bg-gray-100 text-gray-300'
-									: 'bg-white text-gray-600 hover:border-emerald-200 hover:bg-emerald-50'}"
-								title="Anterior"
-							>
-								<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-									><path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M15 19l-7-7 7-7"
-									/></svg
-								>
-							</button>
-
-							{#each Array.from({ length: Math.min(5, totalPaginas) }, (_, i) => {
-								const start = Math.max(1, Math.min(pagination.page - 2, totalPaginas - 4));
-								return start + i;
-							}) as pagina}
-								<button
-									onclick={() => irPagina(pagina)}
-									disabled={loading}
-									class="apple-transition min-w-[2rem] rounded-lg border px-2 py-1 text-xs {pagination.page ===
-									pagina
-										? 'border-emerald-500 bg-emerald-500 font-semibold text-white'
-										: 'border-gray-200 bg-white text-gray-600 hover:border-emerald-200 hover:bg-emerald-50'} {loading
-										? 'opacity-50'
-										: ''}"
-								>
-									{pagina}
-								</button>
-							{/each}
-
-							<button
-								onclick={() => irPagina(pagination.page + 1)}
-								disabled={pagination.page === totalPaginas || loading}
-								class="apple-transition rounded-lg border border-gray-200 p-1.5 {pagination.page ===
-									totalPaginas || loading
-									? 'cursor-not-allowed bg-gray-100 text-gray-300'
-									: 'bg-white text-gray-600 hover:border-emerald-200 hover:bg-emerald-50'}"
-								title="Siguiente"
-							>
-								<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-									><path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M9 5l7 7-7 7"
-									/></svg
-								>
-							</button>
-							<button
-								onclick={() => irPagina(totalPaginas)}
-								disabled={pagination.page === totalPaginas || loading}
-								class="apple-transition rounded-lg border border-gray-200 p-1.5 {pagination.page ===
-									totalPaginas || loading
-									? 'cursor-not-allowed bg-gray-100 text-gray-300'
-									: 'bg-white text-gray-600 hover:border-emerald-200 hover:bg-emerald-50'}"
-								title="Última"
-							>
-								<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-									><path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M13 5l7 7-7 7M5 5l7 7-7 7"
-									/></svg
-								>
-							</button>
-						</div>
-					</div>
-				{/if}
+				<PaginadorLista
+					pagina={pagination.page}
+					total={pagination.total}
+					porPagina={pagination.limit}
+					cargando={loading}
+					nombreItems="servicios"
+					onCambiar={irPagina}
+				/>
 			{/if}
 		</div>
 	{/if}

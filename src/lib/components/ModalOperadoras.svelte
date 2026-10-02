@@ -21,8 +21,10 @@
 	«eliminada».
 -->
 <script lang="ts">
+	import { confirmarEliminacion } from '$lib/stores/confirm';
 	import { toast } from 'svelte-sonner';
 	import { operadorasAPI, type Operadora } from '$lib/api/liquidaciones-servicios';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 
 	interface Props {
 		open: boolean;
@@ -126,7 +128,13 @@
 	}
 
 	async function eliminar(o: Operadora) {
-		if (!confirm(`¿Eliminar la operadora ${o.codigo}?`)) return;
+		if (
+			!(await confirmarEliminacion({
+				title: `¿Eliminar la operadora ${o.codigo}?`,
+				message: 'Si alguna liquidación la usa, se retirará en lugar de borrarse.'
+			}))
+		)
+			return;
 		try {
 			const r = await operadorasAPI.eliminar(o.id);
 			huboCambios = true;
@@ -145,33 +153,23 @@
 			toast.error(e?.message || 'No se pudo eliminar');
 		}
 	}
-
-	function onKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') cerrar();
-	}
 </script>
 
-<svelte:window onkeydown={open ? onKeydown : undefined} />
-
-{#if open}
-	<!-- `role="presentation"`: el velo no es un control, solo capta el clic fuera.
-	     Escape lo cierra desde `svelte:window`, así que no hace falta teclado aquí. -->
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<div class="mop-bg" role="presentation" onclick={(e) => e.target === e.currentTarget && cerrar()}>
-		<div class="mop-box" role="dialog" aria-modal="true" aria-label="Catálogo de operadoras">
-			<header class="mop-hd">
-				<div>
-					<h2>Operadoras</h2>
-					<p>A quién se le atribuye cada liquidación de servicios.</p>
-				</div>
-				<button class="mop-x" onclick={cerrar} aria-label="Cerrar">✕</button>
-			</header>
-
-			{#if cargando}
-				<p class="mop-aviso">Cargando el catálogo…</p>
-			{:else if error}
-				<p class="mop-aviso mop-error">{error}</p>
-			{:else}
+<ModalBase
+	{open}
+	eyebrow="Catálogo"
+	title="Operadoras"
+	subtitle="A quién se le atribuye cada liquidación de servicios."
+	tamano="md"
+	oncerrar={cerrar}
+>
+	{#if cargando}
+		<p class="mop-card mop-aviso">Cargando el catálogo…</p>
+	{:else if error}
+		<p class="mop-card mop-aviso mop-error">{error}</p>
+	{:else}
+		<div class="mop-contenido">
+			<div class="mop-card">
 				<table class="mop-tabla">
 					<thead>
 						<tr>
@@ -211,106 +209,77 @@
 						{/if}
 					</tbody>
 				</table>
+			</div>
 
-				<div class="mop-nueva">
-					<input class="mop-input" placeholder="CÓDIGO" bind:value={nuevoCodigo} />
-					<input class="mop-input" placeholder="Nombre visible" bind:value={nuevoNombre} />
-					<button class="mop-btn mop-btn-alta" onclick={crear} disabled={creando}>
-						{creando ? 'Creando…' : 'Añadir'}
-					</button>
-				</div>
-				<p class="mop-pie">
-					El código se normaliza a mayúsculas y es lo que queda escrito en las liquidaciones. El
-					nombre es solo la etiqueta que se ve.
-				</p>
-			{/if}
+			<div class="mop-card mop-nueva">
+				<input class="mop-input" placeholder="CÓDIGO" bind:value={nuevoCodigo} />
+				<input class="mop-input" placeholder="Nombre visible" bind:value={nuevoNombre} />
+				<button class="btn-primary" onclick={crear} disabled={creando}>
+					{creando ? 'Creando…' : 'Añadir'}
+				</button>
+			</div>
+			<p class="mop-pie">
+				El código se normaliza a mayúsculas y es lo que queda escrito en las liquidaciones. El
+				nombre es solo la etiqueta que se ve.
+			</p>
 		</div>
-	</div>
-{/if}
+	{/if}
+</ModalBase>
 
 <style>
-	.mop-bg {
-		position: fixed;
-		inset: 0;
-		z-index: 60;
-		background: rgba(15, 23, 42, 0.45);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 24px;
-	}
-	.mop-box {
-		width: min(680px, 100%);
-		background: #fff;
-		border-radius: 12px;
-		box-shadow: 0 20px 60px rgba(2, 6, 23, 0.35);
-		padding: 18px 20px;
+	.mop-contenido {
 		display: flex;
 		flex-direction: column;
 		gap: 14px;
 	}
-	.mop-hd {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 12px;
-	}
-	.mop-hd h2 {
-		margin: 0;
-		font-size: 16px;
-		font-weight: 700;
-		color: #0f172a;
-	}
-	.mop-hd p {
-		margin: 2px 0 0;
-		font-size: 12px;
-		color: #64748b;
-	}
-	.mop-x {
-		border: none;
-		background: transparent;
-		font-size: 14px;
-		color: #64748b;
-		cursor: pointer;
-		padding: 4px;
+	.mop-card {
+		background: var(--bg-surface);
+		border-radius: 16px;
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
+		overflow: hidden;
 	}
 	.mop-aviso {
 		margin: 0;
 		padding: 18px 0;
 		text-align: center;
 		font-size: 13px;
-		color: #64748b;
+		color: var(--text-muted);
 	}
 	.mop-error {
-		color: #b91c1c;
+		color: #b42318;
 	}
 	.mop-tabla {
 		width: 100%;
 		border-collapse: collapse;
 		font-size: 13px;
+		color: var(--text-primary);
 	}
 	.mop-tabla th {
 		text-align: left;
 		font-size: 11px;
+		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		color: #64748b;
-		border-bottom: 1px solid #e2e8f0;
-		padding: 6px 8px;
+		color: var(--text-muted);
+		border-bottom: 1px solid var(--border-default);
+		padding: 10px 12px;
 	}
 	.mop-th-acc {
 		text-align: right;
 	}
 	.mop-tabla td {
-		padding: 6px 8px;
-		border-bottom: 1px solid #f1f5f9;
+		padding: 8px 12px;
+		border-bottom: 1px solid var(--border-subtle);
+	}
+	.mop-tabla tbody tr:last-child td {
+		border-bottom: none;
 	}
 	.mop-inactiva {
 		opacity: 0.55;
 	}
 	.mop-codigo {
 		font-weight: 700;
-		color: #0f172a;
+		color: var(--text-primary);
 		white-space: nowrap;
 	}
 	.mop-tag {
@@ -324,46 +293,70 @@
 	}
 	.mop-input {
 		width: 100%;
-		border: 1px solid #cbd5e1;
-		border-radius: 6px;
-		padding: 4px 8px;
-		font-size: 13px;
+		box-sizing: border-box;
+		min-height: 42px;
+		padding: 9px 12px;
+		border-radius: 12px;
+		border: 1px solid var(--border-default);
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font: inherit;
+		font-size: 14px;
+		transition:
+			border-color 0.15s ease,
+			box-shadow 0.15s ease;
+	}
+	.mop-input:focus {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.mop-input:disabled {
+		background: var(--bg-base);
+		color: var(--text-muted);
 	}
 	.mop-acc {
 		text-align: right;
 		white-space: nowrap;
 	}
+	/* Acciones de fila: compactas para no inflar la tabla, con el mismo
+	   lenguaje que `btn-secondary` / `btn-danger`. */
 	.mop-btn {
-		border: 1px solid #cbd5e1;
-		background: #fff;
-		border-radius: 6px;
-		padding: 3px 10px;
-		font-size: 12px;
-		cursor: pointer;
+		min-height: 32px;
+		padding: 0 12px;
 		margin-left: 6px;
+		border: 1.5px solid var(--border-default);
+		border-radius: 10px;
+		background: var(--bg-surface);
+		color: var(--bg-charcoal-deep);
+		font: inherit;
+		font-size: 12px;
+		font-weight: 700;
+		cursor: pointer;
+		transition:
+			background 0.15s ease,
+			border-color 0.15s ease;
 	}
 	.mop-btn:hover {
-		background: #f8fafc;
+		background: var(--bg-base);
 	}
 	.mop-btn-peligro {
-		color: #b91c1c;
+		color: #b42318;
 		border-color: #fecaca;
 	}
-	.mop-btn-alta {
-		background: #0f4025;
-		border-color: #0f4025;
-		color: #fff;
-		margin-left: 0;
+	.mop-btn-peligro:hover {
+		background: #fef3f2;
 	}
 	.mop-nueva {
 		display: grid;
 		grid-template-columns: 140px 1fr auto;
 		gap: 8px;
 		align-items: center;
+		padding: 12px;
 	}
 	.mop-pie {
 		margin: 0;
-		font-size: 11px;
-		color: #94a3b8;
+		font-size: 12px;
+		color: var(--text-muted);
 	}
 </style>

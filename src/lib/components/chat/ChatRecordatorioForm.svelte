@@ -233,14 +233,14 @@
 		<div class="mt-5 flex items-center justify-end gap-2">
 			<button
 				onclick={onClose}
-				class="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+				class="btn-secondary transition-colors"
 			>
 				Cancelar
 			</button>
 			<button
 				onclick={handleSubmit}
 				disabled={!isValid || saving}
-				class="apple-hover emerald-glow flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-4 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
+				class="btn-primary flex items-center gap-1.5"
 			>
 				{#if saving}
 					<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">

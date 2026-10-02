@@ -11,6 +11,7 @@
 	} from '$lib/api/apiClient';
 	import { socketUtils } from '$lib/socket';
 	import { toast } from 'svelte-sonner';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 	import ModalConfigBonos from './ModalConfigBonos.svelte';
 	import ModalRegistrarRecorridos from './ModalRegistrarRecorridos.svelte';
 	import ModalEditarSegmento from './ModalEditarSegmento.svelte';
@@ -1054,8 +1055,8 @@
 				<button
 					type="button"
 					onclick={abrirModalRegistrar}
-					class="apple-transition inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:opacity-95"
-					style="background: linear-gradient(135deg, #c2410c, #9a3412); box-shadow: 0 2px 6px rgba(234, 88, 12,0.25);"
+					class="btn-primary apple-transition inline-flex items-center gap-1.5"
+				
 					title="Registrar recorridos de un mes completo para un conductor (masivo)"
 				>
 					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
@@ -1065,8 +1066,8 @@
 				</button>
 				<button
 					onclick={() => cargarDatos()}
-					class="apple-transition flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium hover:bg-gray-50"
-					style="color: var(--text-secondary);"
+					class="btn-secondary apple-transition flex items-center gap-1.5"
+				
 				>
 					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -1076,10 +1077,7 @@
 				<button
 					onclick={guardarBonos}
 					disabled={!canManageBonos || guardandoBonos || cambiosPendientes.total === 0}
-					class="apple-hover apple-transition flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
-					style="background: {cambiosPendientes.total > 0
-						? 'linear-gradient(135deg, #f59e0b, #d97706)'
-						: 'linear-gradient(135deg, var(--orange-500), var(--orange-600))'};"
+					class="btn-primary apple-transition flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-60"
 					title={!canManageBonos
 						? 'No tienes el permiso bonos-planilla'
 						: cambiosPendientes.total === 0
@@ -1419,8 +1417,8 @@
 				<button
 					type="button"
 					onclick={() => (modalConfigOpen = true)}
-					class="apple-transition flex items-center gap-1.5 rounded-lg border bg-white px-2.5 py-1.5 text-[11px] font-semibold"
-					style="border-color: var(--border-default); color: var(--text-secondary);"
+					class="btn-secondary apple-transition flex items-center gap-1.5"
+				
 					title="Configurar qué items de bonos se exponen como columna en Recorridos (decisión global por año)"
 				>
 					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
@@ -1460,7 +1458,7 @@
 					</p>
 				</div>
 				{#if filtrosActivos > 0 || filtroDesde !== rangoPorDefecto().desde || filtroHasta !== rangoPorDefecto().hasta}
-					<button onclick={limpiarFiltros} class="apple-transition rounded-xl bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-700">
+					<button onclick={limpiarFiltros} class="btn-primary apple-transition">
 						Limpiar filtros
 					</button>
 				{/if}
@@ -1900,65 +1898,13 @@
 				</p>
 			</div>
 
-			{#if totalPages > 1}
-				<div
-					class="flex flex-shrink-0 items-center justify-between border-t border-gray-100 px-4 py-3"
-					style="background-color: var(--bg-base);"
-				>
-					<p class="text-[11px]" style="color: var(--text-muted);">
-						Mostrando
-						<span class="font-semibold" style="color: var(--text-primary);">
-							{(pagination.page - 1) * pagination.limit + 1}–{Math.min(
-								pagination.page * pagination.limit,
-								pagination.total
-							)}
-						</span>
-						de
-						<span class="font-semibold" style="color: var(--text-primary);">
-							{pagination.total}
-						</span>
-						recorridos
-					</p>
-					<div class="flex items-center gap-1">
-						<button
-							onclick={() => irPagina(pagination.page - 1)}
-							disabled={pagination.page === 1}
-							class="apple-transition rounded-lg border border-gray-200 bg-white p-1.5 hover:bg-gray-50 disabled:opacity-40"
-							style="color: var(--text-secondary);"
-							aria-label="Página anterior"
-						>
-							<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-							</svg>
-						</button>
-						{#each Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-							const start = Math.max(1, Math.min(pagination.page - 2, totalPages - 4));
-							return start + i;
-						}) as p}
-							<button
-								onclick={() => irPagina(p)}
-								class="apple-transition min-w-[1.75rem] rounded-lg border px-2 py-0.5 text-[11px] font-semibold"
-								style:border-color={pagination.page === p ? 'var(--orange-500)' : 'var(--border-default)'}
-								style:background-color={pagination.page === p ? 'var(--orange-500)' : 'white'}
-								style:color={pagination.page === p ? 'white' : 'var(--text-secondary)'}
-							>
-								{p}
-							</button>
-						{/each}
-						<button
-							onclick={() => irPagina(pagination.page + 1)}
-							disabled={pagination.page === totalPages}
-							class="apple-transition rounded-lg border border-gray-200 bg-white p-1.5 hover:bg-gray-50 disabled:opacity-40"
-							style="color: var(--text-secondary);"
-							aria-label="Página siguiente"
-						>
-							<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
-							</svg>
-						</button>
-					</div>
-				</div>
-			{/if}
+			<PaginadorLista
+				pagina={pagination.page}
+				total={pagination.total}
+				porPagina={pagination.limit}
+				nombreItems="recorridos"
+				onCambiar={irPagina}
+			/>
 		{/if}
 	</div>
 

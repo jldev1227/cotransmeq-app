@@ -26,6 +26,7 @@
 	import { onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { nominaEnviosAPI } from '$lib/api/nomina-canvas';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 
 	export interface HojaEnviable {
 		/** `null` cuando todavía no se ha generado el borrador de esa hoja. */
@@ -157,31 +158,26 @@
 	const total = $derived(marcados.size);
 </script>
 
-<div
-	class="med-bg"
-	role="dialog"
-	aria-modal="true"
-	aria-labelledby="med-titulo"
-	tabindex="-1"
-	onkeydown={(e) => {
-		if (e.key === 'Escape') onCerrar();
+<ModalBase
+	open={true}
+	eyebrow="Nómina"
+	title="Enviar desprendibles"
+	subtitle={etiquetaPeriodo}
+	tamano="lg"
+	bloqueado={enviando}
+	cerrarAlFondo={!enviando}
+	oncerrar={() => {
+		/// Con el histórico abierto encima, Escape le toca a él (ver abajo).
+		if (!historialDe) onCerrar();
 	}}
 >
-	<div class="med-box">
-		<header class="med-hd">
-			<div>
-				<h2 id="med-titulo">Enviar desprendibles</h2>
-				<p class="med-sub">{etiquetaPeriodo}</p>
-			</div>
-			<button class="med-x" onclick={onCerrar} aria-label="Cerrar">✕</button>
-		</header>
-
-		{#if aprobadas.length === 0}
-			<p class="med-vacio">
-				No hay ninguna hoja <b>APROBADA</b> en este periodo. Solo se envían las aprobadas: en
-				LIQUIDADA la nómina todavía puede volver a borrador y cambiar después de haber salido.
-			</p>
-		{:else}
+	{#if aprobadas.length === 0}
+		<p class="med-vacio">
+			No hay ninguna hoja <b>APROBADA</b> en este periodo. Solo se envían las aprobadas: en
+			LIQUIDADA la nómina todavía puede volver a borrador y cambiar después de haber salido.
+		</p>
+	{:else}
+		<div class="med-contenido">
 			<div class="med-barra">
 				<span class="med-cuenta">
 					{aprobadas.length} aprobada(s)
@@ -241,121 +237,69 @@
 			<div class="med-campos">
 				<label class="med-campo">
 					<span>Asunto</span>
-					<input type="text" bind:value={asunto} />
+					<input class="med-input" type="text" bind:value={asunto} />
 				</label>
 				<label class="med-campo">
 					<span>Mensaje (opcional)</span>
-					<textarea rows="2" bind:value={mensaje} placeholder="Se añade al cuerpo del correo."
+					<textarea
+						class="med-input"
+						rows="2"
+						bind:value={mensaje}
+						placeholder="Se añade al cuerpo del correo."
 					></textarea>
 				</label>
 				<p class="med-pista">
 					<code>{'{PERIODO}'}</code> se reemplaza por el periodo en el asunto.
 				</p>
 			</div>
-		{/if}
-
-		<footer class="med-ft">
-			<button class="med-btn" onclick={onCerrar} disabled={enviando}>Cancelar</button>
-			<button
-				class="med-btn med-btn--ok"
-				onclick={enviar}
-				disabled={enviando || total === 0}
-			>
-				{enviando ? 'Encolando…' : total === 0 ? 'Nadie marcado' : `Enviar ${total}`}
-			</button>
-		</footer>
-	</div>
-
-	{#if historialDe}
-		<!-- Panel aparte y no una fila que se despliega: el histórico de un
-		     conductor puede traer cincuenta intentos y empujaría el resto de la
-		     lista fuera de la vista justo cuando se está decidiendo a quién
-		     mandar. -->
-		<div class="med-box med-box--hist">
-			<header class="med-hd">
-				<div>
-					<h2>Histórico de envíos</h2>
-					<p class="med-sub">{historialDe.nombre}</p>
-				</div>
-				<button class="med-x" onclick={() => (historialDe = null)} aria-label="Cerrar">✕</button>
-			</header>
-
-			{#if cargandoHistorial}
-				<p class="med-vacio">Cargando…</p>
-			{:else if historial.length === 0}
-				<p class="med-vacio">Sin intentos registrados para esta liquidación.</p>
-			{:else}
-				<ol class="med-hist-lista">
-					{#each historial as ev (ev.id)}
-						<li class="med-hist-fila">
-							<span class="med-hist-estado med-hist-estado--{String(ev.estado).toLowerCase()}">
-								{ev.estado}
-							</span>
-							<span class="med-hist-fecha">{fecha(ev.enviado_at ?? ev.created_at)}</span>
-							<span class="med-hist-dest">{ev.email_destino}</span>
-							<span class="med-hist-quien">{ev.enviado_por ?? '—'}</span>
-							{#if ev.es_prueba}<span class="med-hist-prueba">prueba</span>{/if}
-							{#if ev.error}<span class="med-hist-error">{ev.error}</span>{/if}
-						</li>
-					{/each}
-				</ol>
-			{/if}
 		</div>
 	{/if}
-</div>
+
+	{#snippet pie()}
+		<button class="btn-secondary" onclick={onCerrar} disabled={enviando}>Cancelar</button>
+		<button class="btn-primary" onclick={enviar} disabled={enviando || total === 0}>
+			{enviando ? 'Encolando…' : total === 0 ? 'Nadie marcado' : `Enviar ${total}`}
+		</button>
+	{/snippet}
+</ModalBase>
+
+<!-- Modal aparte y no una fila que se despliega: el histórico de un conductor
+     puede traer cincuenta intentos y empujaría el resto de la lista fuera de
+     la vista justo cuando se está decidiendo a quién mandar. -->
+<ModalBase
+	open={!!historialDe}
+	eyebrow="Histórico de envíos"
+	title={historialDe?.nombre ?? ''}
+	tamano="md"
+	oncerrar={() => (historialDe = null)}
+>
+	{#if cargandoHistorial}
+		<p class="med-vacio">Cargando…</p>
+	{:else if historial.length === 0}
+		<p class="med-vacio">Sin intentos registrados para esta liquidación.</p>
+	{:else}
+		<ol class="med-hist-lista">
+			{#each historial as ev (ev.id)}
+				<li class="med-hist-fila">
+					<span class="med-hist-estado med-hist-estado--{String(ev.estado).toLowerCase()}">
+						{ev.estado}
+					</span>
+					<span class="med-hist-fecha">{fecha(ev.enviado_at ?? ev.created_at)}</span>
+					<span class="med-hist-dest">{ev.email_destino}</span>
+					<span class="med-hist-quien">{ev.enviado_por ?? '—'}</span>
+					{#if ev.es_prueba}<span class="med-hist-prueba">prueba</span>{/if}
+					{#if ev.error}<span class="med-hist-error">{ev.error}</span>{/if}
+				</li>
+			{/each}
+		</ol>
+	{/if}
+</ModalBase>
 
 <style>
-	.med-bg {
-		position: fixed;
-		inset: 0;
-		z-index: 9980;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 12px;
-		padding: 24px;
-		background: rgba(15, 23, 42, 0.55);
-	}
-
-	.med-box {
+	.med-contenido {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
-		width: min(860px, 100%);
-		max-height: min(86vh, 780px);
-		padding: 16px 18px;
-		background: #fff;
-		color: #0f172a;
-		border-radius: 12px;
-		box-shadow: 0 20px 60px rgba(2, 6, 23, 0.35);
-	}
-
-	.med-box--hist {
-		width: min(560px, 100%);
-	}
-
-	.med-hd {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 12px;
-	}
-	.med-hd h2 {
-		margin: 0;
-		font-size: 16px;
-		font-weight: 700;
-	}
-	.med-sub {
-		margin: 2px 0 0;
-		font-size: 12px;
-		color: #64748b;
-	}
-	.med-x {
-		border: none;
-		background: transparent;
-		font-size: 16px;
-		cursor: pointer;
-		color: #64748b;
+		gap: 14px;
 	}
 
 	.med-barra {
@@ -364,13 +308,14 @@
 		justify-content: space-between;
 		gap: 12px;
 		flex-wrap: wrap;
-		font-size: 12px;
+		font-size: 13px;
+		color: var(--text-primary);
 	}
 	.med-cuenta {
-		font-weight: 600;
+		font-weight: 700;
 	}
 	.med-fuera {
-		color: #64748b;
+		color: var(--text-muted);
 		font-weight: 500;
 	}
 	.med-alerta {
@@ -379,7 +324,7 @@
 	}
 	.med-acciones-lote {
 		display: flex;
-		gap: 10px;
+		gap: 12px;
 	}
 
 	.med-link {
@@ -388,24 +333,27 @@
 		padding: 0;
 		font: inherit;
 		font-size: 12px;
-		font-weight: 600;
-		color: var(--emerald-700, #166534);
+		font-weight: 700;
+		color: var(--accion);
 		cursor: pointer;
+	}
+	.med-link:hover:not(:disabled) {
+		color: var(--accion-hover);
 		text-decoration: underline;
 	}
 	.med-link:disabled {
-		color: #cbd5e1;
+		color: var(--text-very-muted);
 		cursor: not-allowed;
-		text-decoration: none;
 	}
 
 	.med-lista {
 		list-style: none;
 		margin: 0;
 		padding: 0;
-		overflow-y: auto;
-		border: 1px solid #e2e8f0;
-		border-radius: 8px;
+		overflow: hidden;
+		background: var(--bg-surface);
+		border-radius: 16px;
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
 	}
 
 	.med-fila {
@@ -413,9 +361,10 @@
 		grid-template-columns: minmax(0, 1.4fr) minmax(0, 1.3fr) auto auto;
 		align-items: center;
 		gap: 10px;
-		padding: 7px 10px;
-		font-size: 12px;
-		border-bottom: 1px solid #f1f5f9;
+		padding: 9px 14px;
+		font-size: 12.5px;
+		color: var(--text-primary);
+		border-bottom: 1px solid var(--border-subtle);
 	}
 	.med-fila:last-child {
 		border-bottom: none;
@@ -429,9 +378,12 @@
 	.med-check {
 		display: flex;
 		align-items: center;
-		gap: 7px;
+		gap: 8px;
 		min-width: 0;
 		cursor: pointer;
+	}
+	.med-check input {
+		accent-color: var(--accion);
 	}
 	.med-nombre {
 		font-weight: 700;
@@ -441,7 +393,7 @@
 	}
 
 	.med-correo {
-		color: #475569;
+		color: var(--text-secondary);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -455,8 +407,8 @@
 	}
 
 	.med-marca {
-		border-radius: 4px;
-		padding: 1px 6px;
+		border-radius: 999px;
+		padding: 2px 8px;
 		font-size: 10.5px;
 		font-weight: 700;
 		white-space: nowrap;
@@ -470,8 +422,8 @@
 		color: #991b1b;
 	}
 	.med-marca--no {
-		background: #f1f5f9;
-		color: #94a3b8;
+		background: var(--bg-base);
+		color: var(--text-muted);
 	}
 
 	.med-hist {
@@ -480,100 +432,81 @@
 
 	.med-campos {
 		display: grid;
-		gap: 8px;
+		gap: 12px;
+		padding: 16px;
+		background: var(--bg-surface);
+		border-radius: 16px;
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
 	}
 	.med-campo {
 		display: flex;
 		flex-direction: column;
-		gap: 3px;
-		font-size: 11px;
+		gap: 6px;
+		font-size: 12px;
 		font-weight: 700;
-		color: #64748b;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
+		color: var(--text-secondary);
 	}
-	.med-campo input,
-	.med-campo textarea {
+	.med-input {
+		min-height: 42px;
+		padding: 9px 12px;
+		border-radius: 12px;
+		border: 1px solid var(--border-default);
+		background: var(--bg-surface);
+		color: var(--text-primary);
 		font: inherit;
-		font-size: 13px;
+		font-size: 14px;
 		font-weight: 400;
-		text-transform: none;
-		letter-spacing: normal;
-		color: #0f172a;
-		padding: 7px 9px;
-		border: 1px solid #cbd5e1;
-		border-radius: 7px;
 		resize: vertical;
+		transition:
+			border-color 0.15s ease,
+			box-shadow 0.15s ease;
 	}
-	.med-campo input:focus,
-	.med-campo textarea:focus {
-		outline: 2px solid var(--emerald-600, #15803d);
-		outline-offset: -1px;
+	.med-input:focus {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.med-input:disabled {
+		background: var(--bg-base);
+		color: var(--text-muted);
 	}
 	.med-pista {
 		margin: 0;
-		font-size: 11px;
-		color: #64748b;
+		font-size: 12px;
+		color: var(--text-muted);
 	}
 
 	.med-vacio {
+		margin: 0;
 		padding: 18px 10px;
 		font-size: 13px;
 		line-height: 1.5;
-		color: #475569;
+		color: var(--text-secondary);
 		text-align: center;
-	}
-
-	.med-ft {
-		display: flex;
-		justify-content: flex-end;
-		gap: 8px;
-	}
-
-	.med-btn {
-		min-height: 38px;
-		padding: 0 14px;
-		font: inherit;
-		font-size: 13px;
-		font-weight: 600;
-		color: #0f172a;
-		background: #fff;
-		border: 1px solid #cbd5e1;
-		border-radius: 8px;
-		cursor: pointer;
-	}
-	.med-btn--ok {
-		color: #fff;
-		background: var(--emerald-700, #166534);
-		border-color: var(--emerald-700, #166534);
-	}
-	.med-btn:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
 	}
 
 	.med-hist-lista {
 		list-style: none;
 		margin: 0;
 		padding: 0;
-		overflow-y: auto;
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: 6px;
 	}
 	.med-hist-fila {
 		display: flex;
 		align-items: center;
 		gap: 8px;
 		flex-wrap: wrap;
-		padding: 6px 8px;
-		font-size: 11.5px;
-		background: #f8fafc;
-		border-radius: 6px;
+		padding: 10px 12px;
+		font-size: 12px;
+		background: var(--bg-surface);
+		border-radius: 12px;
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
 	}
 	.med-hist-estado {
-		border-radius: 4px;
-		padding: 1px 6px;
+		border-radius: 999px;
+		padding: 2px 8px;
 		font-size: 10px;
 		font-weight: 800;
 	}
@@ -591,20 +524,20 @@
 	}
 	.med-hist-fecha {
 		font-variant-numeric: tabular-nums;
-		color: #475569;
+		color: var(--text-secondary);
 	}
 	.med-hist-dest {
 		font-family: var(--font-mono, ui-monospace, monospace);
-		color: #0f172a;
+		color: var(--text-primary);
 	}
 	.med-hist-quien {
-		color: #64748b;
+		color: var(--text-muted);
 	}
 	.med-hist-prueba {
 		background: #ede9fe;
 		color: #5b21b6;
-		border-radius: 4px;
-		padding: 1px 5px;
+		border-radius: 999px;
+		padding: 2px 7px;
 		font-size: 10px;
 		font-weight: 700;
 	}

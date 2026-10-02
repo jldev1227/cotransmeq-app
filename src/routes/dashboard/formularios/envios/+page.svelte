@@ -14,6 +14,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { toast } from 'svelte-sonner';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 	import { enviosFormularioAPI, formulariosAPI, type FiltrosEnvios } from '$lib/api/formularios';
 	import {
 		SUBMISSION_STATUS_LABELS,
@@ -28,7 +29,6 @@
 	let exportando = $state(false);
 
 	let pagina = $state(1);
-	let totalPages = $state(1);
 	let total = $state(0);
 
 	let filtroFormId = $state('');
@@ -65,7 +65,6 @@
 			const { data, meta } = await enviosFormularioAPI.listar(filtros());
 			envios = data;
 			total = meta.total ?? 0;
-			totalPages = meta.totalPages ?? 1;
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'No se pudieron cargar los envíos.');
 		} finally {
@@ -293,33 +292,18 @@
 			</table>
 		</div>
 
-		{#if totalPages > 1}
-			<nav class="paginacion" aria-label="Paginación de envíos">
-				<button
-					type="button"
-					class="btn btn--mini"
-					disabled={pagina <= 1}
-					onclick={() => {
-						pagina -= 1;
-						void cargar();
-					}}
-				>
-					Anterior
-				</button>
-				<span class="paginacion__estado">Página {pagina} de {totalPages}</span>
-				<button
-					type="button"
-					class="btn btn--mini"
-					disabled={pagina >= totalPages}
-					onclick={() => {
-						pagina += 1;
-						void cargar();
-					}}
-				>
-					Siguiente
-				</button>
-			</nav>
-		{/if}
+		<PaginadorLista
+			{pagina}
+			{total}
+			porPagina={25}
+			{cargando}
+			nombreItems="envíos"
+			suelto
+			onCambiar={(p) => {
+				pagina = p;
+				void cargar();
+			}}
+		/>
 	{/if}
 </div>
 
@@ -497,11 +481,11 @@
 		padding: 0 0.875rem;
 		font: inherit;
 		font-size: 0.875rem;
-		font-weight: 500;
-		color: var(--text-primary, #0f172a);
+		font-weight: 800;
+		color: var(--bg-charcoal-deep);
 		background: #fff;
-		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
-		border-radius: 10px;
+		border: 1.5px solid var(--border-default);
+		border-radius: 16px;
 		cursor: pointer;
 		text-decoration: none;
 	}
@@ -513,7 +497,8 @@
 	}
 
 	.btn:hover:not(:disabled) {
-		background: var(--gray-50, #f9fafb);
+		background: var(--bg-base);
+		border-color: var(--border-emphasis);
 	}
 
 	.btn:disabled {
@@ -533,19 +518,6 @@
 		background: var(--bg-surface, #fff);
 		border: 1px dashed var(--border-default, rgba(0, 0, 0, 0.12));
 		border-radius: 12px;
-	}
-
-	.paginacion {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.75rem;
-	}
-
-	.paginacion__estado {
-		font-family: var(--font-mono, monospace);
-		font-size: 0.75rem;
-		color: var(--text-muted, #64748b);
 	}
 
 	.sr-only {

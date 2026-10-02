@@ -205,7 +205,7 @@
               Puede tardar unos minutos. Revisa también la carpeta de correo no deseado.
               El enlace es válido por <strong>{TOKEN_DAYS} días</strong>.
             </p>
-            <button class="btn-secundario" on:click={() => { authStep = 'cedula'; cedulaError = ''; }}>
+            <button class="btn-secondary btn-secundario" on:click={() => { authStep = 'cedula'; cedulaError = ''; }}>
               Usar otra cédula
             </button>
           </div>
@@ -239,7 +239,7 @@
               {/if}
             </div>
 
-            <button class="btn-principal" on:click={solicitarAcceso} disabled={loadingAuth}>
+            <button class="btn-primary btn-principal" on:click={solicitarAcceso} disabled={loadingAuth}>
               {#if loadingAuth}
                 <span class="spinner" aria-hidden="true"></span>
                 Enviando enlace…
@@ -485,22 +485,10 @@
     gap: 0.5rem;
     width: 100%;
     min-height: 3.5rem;
-    border: none;
-    border-radius: 14px;
-    background: var(--au-primary, #079665);
-    font-family: inherit;
     font-size: 1rem;
-    font-weight: 700;
-    color: #fff;
     cursor: pointer;
-    transition: background-color 0.15s ease, transform 0.15s ease, opacity 0.15s ease;
   }
-  .btn-principal:hover:not(:disabled) {
-    background: var(--au-primary-strong, #087a57);
-  }
-  .btn-principal:active:not(:disabled) {
-    transform: scale(0.99);
-  }
+
   .btn-principal:disabled {
     opacity: 0.65;
     cursor: not-allowed;
@@ -511,18 +499,8 @@
     justify-content: center;
     width: 100%;
     min-height: 3.1rem;
-    border: 1.5px solid var(--au-primary, #079665);
-    border-radius: 14px;
-    background: transparent;
-    font-family: inherit;
     font-size: 0.95rem;
-    font-weight: 800;
-    color: var(--au-dark, #014339);
     cursor: pointer;
-    transition: background-color 0.15s ease;
-  }
-  .btn-secundario:hover {
-    background: var(--au-tint, #ddf7ea);
   }
 
   .spinner,

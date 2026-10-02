@@ -38,6 +38,8 @@
 	import { page } from '$app/stores';
 	import { apiClient } from '$lib/api/apiClient';
 	import { authStore } from '$lib/stores/auth';
+	import { confirmar, confirmarEliminacion } from '$lib/stores/confirm';
+	import { toast } from 'svelte-sonner';
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import {
 		autoguardadoAPI,
@@ -519,7 +521,15 @@
 		lastDraftHash = h;
 
 		const idActual = borradorId ?? editingId;
-		const destino = decidirDestino({ ...payload, editingId: idActual });
+		/// Administración puede editar una liquidación en cualquier estado, pero
+		/// el autoguardado a la fila solo existe para BORRADOR (el backend
+		/// rechaza el resto con un 409 de «dejó de ser un borrador»). Fuera de
+		/// borrador se guarda en el borrador previo de esa liquidación: se
+		/// recupera si se cierra la pestaña y la fila solo cambia al Guardar.
+		const destino =
+			idActual && liqEstado !== 'BORRADOR'
+				? 'previo'
+				: decidirDestino({ ...payload, editingId: idActual });
 		if (destino === 'ninguno') return;
 
 		cola.encolar(
@@ -2006,6 +2016,24 @@
 			return;
 		}
 
+		/// Ya no es un borrador: guardarlo cambia algo que otros dieron por
+		/// cerrado (aprobación, factura enviada al cliente). Se pregunta antes.
+		if (editingId && liqEstado !== 'BORRADOR' && liqEstado !== 'LIQUIDADA') {
+			const seguir = await confirmar({
+				tone: 'warning',
+				eyebrow: `LIQUIDACIÓN ${liqEstado}`,
+				title: '¿Guardar los cambios?',
+				message:
+					liqEstado === 'FACTURADA'
+						? 'Esta liquidación ya está facturada. Si cambia el total, se recalculará el valor de su factura.'
+						: liqEstado === 'APROBADA'
+							? 'Esta liquidación ya está aprobada. Los cambios quedarán registrados en su historial.'
+							: 'Esta liquidación está anulada. Los cambios quedarán registrados en su historial.',
+				confirmText: 'Guardar cambios'
+			});
+			if (!seguir) return;
+		}
+
 		saving = true;
 		try {
 			const payload = buildPayloadLiquidacion();
@@ -2022,6 +2050,25 @@
 			successSub = idEdicion
 				? 'Los cambios se guardaron correctamente'
 				: 'Se registró correctamente en el sistema';
+			/// El total facturado cambió: es un dato que hay que llevar a
+			/// contabilidad, así que va también en un aviso que no se va solo.
+			const recalculada = (
+				guardada as {
+					factura_recalculada?: {
+						numero_factura: string;
+						valor_anterior: number;
+						valor_nuevo: number;
+					} | null;
+				}
+			).factura_recalculada;
+			if (recalculada) {
+				const detalle = `La factura ${recalculada.numero_factura} pasó de ${COP(recalculada.valor_anterior)} a ${COP(recalculada.valor_nuevo)}.`;
+				successSub = detalle;
+				toast.warning('Se recalculó el total de la factura', {
+					description: detalle,
+					duration: Infinity
+				});
+			}
 			showSuccessAnim = true;
 			/// Se avisa ya, no dentro del `setTimeout`: quien nos monta tiene que
 			/// poder pintar la fila mientras el usuario todavía ve el «guardado»,
@@ -2434,9 +2481,11 @@
 	async function handleCancel() {
 		const idCreado = borradorId;
 		if (idCreado) {
-			const seguro = confirm(
-				'Esta liquidación ya está guardada como borrador en el servidor. ¿Descartarla?'
-			);
+			const seguro = await confirmarEliminacion({
+				title: '¿Descartar esta liquidación?',
+				message: 'Ya está guardada como borrador en el servidor. Si la descartas, se eliminará.',
+				confirmText: 'Descartar'
+			});
 			if (!seguro) return;
 			try {
 				await liquidacionesServiciosAPI.eliminar(idCreado);
@@ -2725,7 +2774,7 @@
 				</p>
 			</div>
 			<div class="liq-error-actions">
-				<button class="liq-btn-primary" on:click={retryLoad}>
+				<button class="btn-primary liq-btn-primary" on:click={retryLoad}>
 					<svg
 						width="14"
 						height="14"
@@ -2739,7 +2788,7 @@
 					>
 					<span>Reintentar</span>
 				</button>
-				<button class="liq-btn-secondary" on:click={() => salir()}>
+				<button class="btn-secondary liq-btn-secondary" on:click={() => salir()}>
 					<svg
 						width="14"
 						height="14"
@@ -2826,7 +2875,7 @@
 				{/if}
 				<div class="wb-toolbar-divider wb-toolbar-divider-r"></div>
 				<button
-					class="wb-btn-secondary"
+					class="btn-secondary wb-btn-secondary"
 					on:click={() => {
 						previewPage = 'liquidacion';
 						setView('preview');
@@ -2867,7 +2916,7 @@
 					>
 					<span>Cancelar</span>
 				</button>
-				<button class="wb-btn-primary" on:click={registrarLiquidacion} disabled={saving}>
+				<button class="btn-primary wb-btn-primary" on:click={registrarLiquidacion} disabled={saving}>
 					{#if saving}
 						<span class="wb-btn-spinner"></span>
 						<span>Guardando…</span>
@@ -2934,8 +2983,8 @@
 						: ''} que no coinciden con lo que hay en el servidor.
 				</span>
 				<div class="wb-draft-aviso-acc">
-					<button class="liq-btn-secondary" on:click={recuperarBorrador}>Recuperar</button>
-					<button class="liq-btn-secondary" on:click={descartarBorrador}>Descartar</button>
+					<button class="btn-secondary liq-btn-secondary" on:click={recuperarBorrador}>Recuperar</button>
+					<button class="btn-secondary liq-btn-secondary" on:click={descartarBorrador}>Descartar</button>
 				</div>
 			</div>
 		{/if}
@@ -3871,7 +3920,7 @@
 								<p class="wb-card-sub">Propietarios, valores a liquidar e ingresos</p>
 							</div>
 							<button
-								class="wb-btn-sync"
+								class="btn-primary wb-btn-sync"
 								on:click={resetTerceroFromItems}
 								title="Copiar valores actuales desde Ítems de Servicio"
 							>
@@ -4381,7 +4430,7 @@
 						>
 						<span>{viewMode ? 'Volver' : 'Editar'}</span>
 					</button>
-					<button class="liq-btn-primary pdf-bar-print" on:click={handlePrint}>
+					<button class="btn-primary liq-btn-primary pdf-bar-print" on:click={handlePrint}>
 						<svg
 							width="14"
 							height="14"
@@ -4521,7 +4570,7 @@
 
 				<div class="estado-bar-actions">
 					<button
-						class="liq-btn-secondary estado-btn"
+						class="btn-secondary liq-btn-secondary estado-btn"
 						on:click={obtenerCSV}
 						disabled={csvLoading}
 						title="Obtener CSV (Excel)"
@@ -4542,7 +4591,7 @@
 						<span>{csvLoading ? 'Generando…' : 'Obtener CSV'}</span>
 					</button>
 					<button
-						class="liq-btn-primary estado-btn"
+						class="btn-primary liq-btn-primary estado-btn"
 						disabled={historialLoading}
 						on:click={abrirHistorial}
 						title="Ver trazabilidad de estados"
@@ -5273,11 +5322,11 @@
 				{/if}
 			</div>
 			<div class="print-modal-ft">
-				<button class="print-modal-btn print-modal-cancel" on:click={() => (printModalOpen = false)}
+				<button class="btn-secondary print-modal-btn print-modal-cancel" on:click={() => (printModalOpen = false)}
 					>Cancelar</button
 				>
 				<button
-					class="print-modal-btn print-modal-go"
+					class="btn-primary print-modal-btn print-modal-go"
 					disabled={printSheetCount === 0 || pdfLoading}
 					on:click={executePrint}
 				>
@@ -5465,7 +5514,7 @@
 
 			<footer class="historial-ft">
 				<button
-					class="liq-btn-secondary historial-ft-btn"
+					class="btn-secondary liq-btn-secondary historial-ft-btn"
 					on:click={() => (historialModalOpen = false)}
 				>
 					<svg
@@ -6002,39 +6051,17 @@
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.7rem 1.25rem;
-		background: linear-gradient(135deg, #ea580c, #c2410c);
-		color: white;
-		border: none;
-		border-radius: 12px;
-		font-family: var(--font-sans);
 		font-size: 0.88rem;
-		font-weight: 600;
 		cursor: pointer;
-		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.3);
-		transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 	}
-	.liq-btn-primary:hover {
-		transform: translateY(-2px);
-		box-shadow: 0 6px 20px rgba(234, 88, 12, 0.4);
-	}
+
 	.liq-btn-secondary {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.7rem 1.25rem;
-		background: white;
-		color: #0f172a;
-		border: 1px solid rgba(15, 23, 42, 0.12);
-		border-radius: 12px;
-		font-family: var(--font-sans);
 		font-size: 0.88rem;
-		font-weight: 600;
 		cursor: pointer;
-		transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-	}
-	.liq-btn-secondary:hover {
-		background: #f6f6f3;
-		border-color: rgba(15, 23, 42, 0.2);
 	}
 
 	/* Responsive — tablet ≤ 1279px */
@@ -6327,9 +6354,9 @@
 		background: rgba(234, 88, 12, 0.06);
 	}
 	.ptab.active {
-		background: linear-gradient(135deg, #ea580c, #c2410c);
+		background: var(--accion);
 		color: white;
-		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.30);
+		box-shadow: var(--shadow-btn);
 	}
 	.ptab.active .ptab-num {
 		background: rgba(255, 255, 255, 0.25);
@@ -8209,38 +8236,13 @@
 		border-top: 1px solid rgba(15, 23, 42, 0.08);
 	}
 	.print-modal-btn {
-		border: none;
-		border-radius: 10px;
 		padding: 11px 22px;
-		font-weight: 600;
 		font-size: 13px;
-		cursor: pointer;
-		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-		font-family: inherit;
 	}
-	.print-modal-cancel {
-		background: white;
-		color: #0f172a;
-		border: 1px solid rgba(15, 23, 42, 0.12);
-	}
-	.print-modal-cancel:hover {
-		background: #f6f6f3;
-		border-color: rgba(15, 23, 42, 0.20);
-	}
-	.print-modal-go {
-		background: linear-gradient(135deg, #ea580c, #c2410c);
-		color: #fff;
-		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.30);
-	}
-	.print-modal-go:hover {
-		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(234, 88, 12, 0.40);
-	}
+
 	.print-modal-go:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
-		transform: none;
-		box-shadow: none;
 	}
 
 	/* ─ GENERATING PDF OVERLAY (request en vuelo al endpoint) ─ */
@@ -9068,22 +9070,11 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.45rem;
-		background: #ffffff;
-		color: #0f172a;
-		border: 1px solid rgba(15, 23, 42, 0.12);
-		border-radius: 10px;
 		padding: 0.55rem 0.95rem;
-		font-family: var(--font-sans);
 		font-size: 0.82rem;
-		font-weight: 600;
 		cursor: pointer;
-		transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 	}
-	.wb-btn-secondary:hover {
-		background: #f6f6f3;
-		border-color: rgba(15, 23, 42, 0.20);
-		transform: translateY(-1px);
-	}
+
 	.wb-btn-ghost {
 		display: inline-flex;
 		align-items: center;
@@ -9109,29 +9100,10 @@
 		align-items: center;
 		gap: 0.45rem;
 		padding: 0.6rem 1.1rem;
-		background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
-		color: #ffffff;
-		border: none;
-		border-radius: 10px;
-		font-family: var(--font-sans);
 		font-size: 0.82rem;
-		font-weight: 700;
 		cursor: pointer;
-		box-shadow:
-			0 2px 8px rgba(234, 88, 12, 0.25),
-			inset 0 1px 0 rgba(255, 255, 255, 0.15);
-		transition: all 0.2s;
-		letter-spacing: 0.01em;
 	}
-	.wb-btn-primary:hover:not(:disabled) {
-		transform: translateY(-1px);
-		box-shadow:
-			0 6px 16px rgba(234, 88, 12, 0.35),
-			inset 0 1px 0 rgba(255, 255, 255, 0.2);
-	}
-	.wb-btn-primary:active:not(:disabled) {
-		transform: translateY(0);
-	}
+
 	.wb-btn-primary:disabled {
 		opacity: 0.6;
 		cursor: not-allowed;
@@ -10321,25 +10293,9 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
-		background: linear-gradient(to right, #ea580c, #c2410c);
-		color: #ffffff;
-		border: 1px solid rgba(234, 88, 12, 0.3);
-		border-radius: 10px;
 		padding: 0.4rem 0.85rem;
 		font-size: 0.72rem;
-		font-weight: 600;
-		cursor: pointer;
-		font-family: var(--font-sans);
-		transition: all 0.2s ease;
-		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
-	}
-	.wb-btn-sync:hover {
-		background: linear-gradient(to right, #c2410c, #9a3412);
-		box-shadow: 0 0 0 1px rgba(234, 88, 12, 0.2), 0 2px 8px rgba(234, 88, 12, 0.25);
-		transform: translateY(-1px);
-	}
-	.wb-btn-sync:active {
-		transform: translateY(0);
+		cursor: pointer;		min-height: 0;
 	}
 
 	/* ── Searchable select (mini) ── */

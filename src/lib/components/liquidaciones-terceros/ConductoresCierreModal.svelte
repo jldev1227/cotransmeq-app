@@ -34,6 +34,7 @@
 		type ConductorSelect
 	} from '$lib/api/liquidaciones-terceros-descuentos';
 	import { claveConductor } from '$lib/editor/builders/cierres-finales.builder';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 
 	interface Props {
 		cierreId: string;
@@ -214,153 +215,148 @@
 			cargandoCatalogo = false;
 		}
 	});
-
-	function alTeclado(e: KeyboardEvent) {
-		if (e.key === 'Escape' && !guardando) onClose();
-	}
 </script>
 
-<svelte:window onkeydown={alTeclado} />
+<ModalBase
+	open={true}
+	eyebrow={`Cierre · ${periodo}`}
+	title={`Conductores de ${placa}`}
+	subtitle="Define los recuadros de descuentos por la prestación del servicio"
+	tamano="lg"
+	sinRelleno
+	cerrarAlFondo={false}
+	bloqueado={guardando}
+	oncerrar={onClose}
+>
+	<div class="ccm-body">
+		<!-- ── Catálogo ─────────────────────────────────────────── -->
+		<section class="ccm-pane">
+			<label class="ccm-buscador">
+				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<circle cx="11" cy="11" r="7" />
+					<path d="M21 21l-4.35-4.35" stroke-linecap="round" />
+				</svg>
+				<input
+					type="search"
+					bind:value={busqueda}
+					placeholder="Buscar por nombre o cédula…"
+					disabled={cargandoCatalogo || !!errorCatalogo}
+				/>
+			</label>
 
-<div class="ccm-backdrop">
-	<div class="ccm" role="dialog" aria-modal="true" aria-labelledby="ccm-titulo">
-		<div class="ccm-head">
-			<div>
-				<h2 id="ccm-titulo">Conductores de {placa}</h2>
-				<p class="ccm-sub">
-					{periodo} · define los recuadros de descuentos por la prestación del servicio
+			{#if cargandoCatalogo}
+				<p class="ccm-vacio">Cargando conductores…</p>
+			{:else if errorCatalogo}
+				<p class="ccm-vacio ccm-error">{errorCatalogo}</p>
+			{:else if filtrados.length === 0}
+				<p class="ccm-vacio">Ningún conductor coincide con «{busqueda}».</p>
+			{:else}
+				<ul class="ccm-lista">
+					{#each filtrados as c (c.id)}
+						{@const dentro = seleccionados.has(c.id)}
+						<li>
+							<button
+								type="button"
+								class="ccm-fila"
+								class:ccm-fila-dentro={dentro}
+								onclick={() => alternar(c)}
+								disabled={guardando}
+							>
+								<span class="ccm-check" aria-hidden="true">{dentro ? '✓' : '+'}</span>
+								<span class="ccm-nom">
+									<strong>{c.nombre} {c.apellido}</strong>
+									<small>{c.numero_identificacion || 'sin identificación'}</small>
+								</span>
+								{#if dentro}<span class="ccm-tag">en el cierre</span>{/if}
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
+
+		<!-- ── Seleccionados ────────────────────────────────────── -->
+		<section class="ccm-pane ccm-pane-sel">
+			<h3>En este cierre ({seleccion.length})</h3>
+
+			{#if seleccion.length === 0}
+				<p class="ccm-vacio">
+					Sin conductores. La sección de descuentos por la prestación del servicio
+					quedará vacía.
 				</p>
-			</div>
-			<button class="ccm-x" onclick={onClose} disabled={guardando} aria-label="Cerrar">×</button>
-		</div>
-
-		<div class="ccm-body">
-			<!-- ── Catálogo ─────────────────────────────────────────── -->
-			<section class="ccm-pane">
-				<label class="ccm-buscador">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-						<circle cx="11" cy="11" r="7" />
-						<path d="M21 21l-4.35-4.35" stroke-linecap="round" />
-					</svg>
-					<input
-						type="search"
-						bind:value={busqueda}
-						placeholder="Buscar por nombre o cédula…"
-						disabled={cargandoCatalogo || !!errorCatalogo}
-					/>
-				</label>
-
-				{#if cargandoCatalogo}
-					<p class="ccm-vacio">Cargando conductores…</p>
-				{:else if errorCatalogo}
-					<p class="ccm-vacio ccm-error">{errorCatalogo}</p>
-				{:else if filtrados.length === 0}
-					<p class="ccm-vacio">Ningún conductor coincide con «{busqueda}».</p>
-				{:else}
-					<ul class="ccm-lista">
-						{#each filtrados as c (c.id)}
-							{@const dentro = seleccionados.has(c.id)}
-							<li>
+			{:else}
+				<ul class="ccm-sel">
+					{#each seleccion as s (s.id)}
+						<li class="ccm-sel-item">
+							<div class="ccm-sel-head">
+								<span class="ccm-nom">
+									<strong>{s.nombre}</strong>
+									<small>{s.identificacion || 'sin identificación'}</small>
+								</span>
 								<button
 									type="button"
-									class="ccm-fila"
-									class:ccm-fila-dentro={dentro}
-									onclick={() => alternar(c)}
+									class="ccm-quitar"
+									onclick={() => quitar(s.id)}
 									disabled={guardando}
-								>
-									<span class="ccm-check" aria-hidden="true">{dentro ? '✓' : '+'}</span>
-									<span class="ccm-nom">
-										<strong>{c.nombre} {c.apellido}</strong>
-										<small>{c.numero_identificacion || 'sin identificación'}</small>
-									</span>
-									{#if dentro}<span class="ccm-tag">en el cierre</span>{/if}
-								</button>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</section>
+									title={s.yaEstaba
+										? 'Da de baja su recuadro completo del cierre'
+										: 'Quitar de la selección'}
+									aria-label="Quitar {s.nombre}"
+								>×</button>
+							</div>
 
-			<!-- ── Seleccionados ────────────────────────────────────── -->
-			<section class="ccm-pane ccm-pane-sel">
-				<h3>En este cierre ({seleccion.length})</h3>
-
-				{#if seleccion.length === 0}
-					<p class="ccm-vacio">
-						Sin conductores. La sección de descuentos por la prestación del servicio
-						quedará vacía.
-					</p>
-				{:else}
-					<ul class="ccm-sel">
-						{#each seleccion as s (s.id)}
-							<li class="ccm-sel-item">
-								<div class="ccm-sel-head">
-									<span class="ccm-nom">
-										<strong>{s.nombre}</strong>
-										<small>{s.identificacion || 'sin identificación'}</small>
-									</span>
-									<button
-										type="button"
-										class="ccm-quitar"
-										onclick={() => quitar(s.id)}
+							<div class="ccm-sel-campos">
+								<label class="ccm-dias">
+									<span>Días</span>
+									<input
+										class="ccm-input"
+										type="number"
+										min="0"
+										max="31"
+										step="1"
+										value={s.dias}
+										oninput={(e) => fijarDias(s.id, e.currentTarget.value)}
 										disabled={guardando}
-										title={s.yaEstaba
-											? 'Da de baja su recuadro completo del cierre'
-											: 'Quitar de la selección'}
-										aria-label="Quitar {s.nombre}"
-									>×</button>
-								</div>
+									/>
+								</label>
 
-								<div class="ccm-sel-campos">
-									<label class="ccm-dias">
-										<span>Días</span>
-										<input
-											type="number"
-											min="0"
-											max="31"
-											step="1"
-											value={s.dias}
-											oninput={(e) => fijarDias(s.id, e.currentTarget.value)}
-											disabled={guardando}
-										/>
-									</label>
+								<label class="ccm-prop" class:ccm-prop-on={s.esPropietario}>
+									<input
+										type="checkbox"
+										checked={s.esPropietario}
+										onchange={(e) => fijarPropietario(s.id, e.currentTarget.checked)}
+										disabled={guardando}
+									/>
+									<span>
+										Propietario del vehículo
+										<small>no causa dotación ni examen médico</small>
+									</span>
+								</label>
+							</div>
 
-									<label class="ccm-prop" class:ccm-prop-on={s.esPropietario}>
-										<input
-											type="checkbox"
-											checked={s.esPropietario}
-											onchange={(e) => fijarPropietario(s.id, e.currentTarget.checked)}
-											disabled={guardando}
-										/>
-										<span>
-											Propietario del vehículo
-											<small>no causa dotación ni examen médico</small>
-										</span>
-									</label>
-								</div>
+							{#if !s.yaEstaba}
+								<p class="ccm-nuevo">
+									Se creará su recuadro: salario, auxilio de transporte,
+									bonificación, bonificación por turno doble y recargos, más
+									prestaciones sociales y seguridad social. Las filas llegan con
+									su valor unitario y en <strong>cantidad cero</strong>: los
+									días, bonos, turnos y horas se teclean en la hoja.
+								</p>
+							{:else if s.dias !== iniciales().find((i) => i.id === s.id)?.dias}
+								<p class="ccm-aviso">
+									Cambiar los días recalcula el salario, el auxilio de transporte y
+									sus prestaciones.
+								</p>
+							{/if}
+						</li>
+					{/each}
+				</ul>
+			{/if}
+		</section>
+	</div>
 
-								{#if !s.yaEstaba}
-									<p class="ccm-nuevo">
-										Se creará su recuadro: salario, auxilio de transporte,
-										bonificación, bonificación por turno doble y recargos, más
-										prestaciones sociales y seguridad social. Las filas llegan con
-										su valor unitario y en <strong>cantidad cero</strong>: los
-										días, bonos, turnos y horas se teclean en la hoja.
-									</p>
-								{:else if s.dias !== iniciales().find((i) => i.id === s.id)?.dias}
-									<p class="ccm-aviso">
-										Cambiar los días recalcula el salario, el auxilio de transporte y
-										sus prestaciones.
-									</p>
-								{/if}
-							</li>
-						{/each}
-					</ul>
-				{/if}
-			</section>
-		</div>
-
-		<div class="ccm-foot">
+	{#snippet pie()}
+		<div class="ccm-resumen">
 			<p class="ccm-base">
 				Días que causan dotación y examen médico:
 				<strong>{diasQueCausanGastos}</strong>
@@ -374,95 +370,42 @@
 			{#if errorGuardado}
 				<p class="ccm-error">{errorGuardado}</p>
 			{/if}
-
-			<div class="ccm-acciones">
-				<button class="ccm-btn-ghost" onclick={onClose} disabled={guardando}>Cancelar</button>
-				<button
-					class="ccm-btn-primary"
-					onclick={guardar}
-					disabled={guardando || !hayCambios}
-					title={hayCambios ? '' : 'No hay cambios que guardar'}
-				>
-					{guardando ? 'Guardando…' : 'Guardar y recalcular'}
-				</button>
-			</div>
 		</div>
-	</div>
-</div>
+
+		<button type="button" class="btn-secondary" onclick={onClose} disabled={guardando}>
+			Cancelar
+		</button>
+		<button
+			type="button"
+			class="btn-primary"
+			onclick={guardar}
+			disabled={guardando || !hayCambios}
+			title={hayCambios ? '' : 'No hay cambios que guardar'}
+		>
+			{guardando ? 'Guardando…' : 'Guardar y recalcular'}
+		</button>
+	{/snippet}
+</ModalBase>
 
 <style>
-	.ccm-backdrop {
-		position: fixed;
-		inset: 0;
-		z-index: 220;
-		background: rgb(15 23 42 / 0.55);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 20px;
-	}
-
-	.ccm {
-		background: #fff;
-		color: #0f172a;
-		border-radius: 12px;
-		width: 100%;
-		max-width: 820px;
-		max-height: 88vh;
-		display: flex;
-		flex-direction: column;
-		box-shadow: 0 20px 50px rgb(0 0 0 / 0.3);
-	}
-
-	.ccm-head {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 12px;
-		padding: 18px 20px 12px;
-		border-bottom: 1px solid #e2e8f0;
-	}
-	.ccm-head h2 {
-		margin: 0;
-		font-size: 16px;
-		font-weight: 700;
-	}
-	.ccm-sub {
-		margin: 3px 0 0;
-		font-size: 12px;
-		color: #64748b;
-	}
-	.ccm-x {
-		border: none;
-		background: transparent;
-		font-size: 22px;
-		line-height: 1;
-		cursor: pointer;
-		color: #64748b;
-		padding: 0 4px;
-	}
-	.ccm-x:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
-	}
-
+	/* Dos columnas que scrollean cada una por su lado: el cuerpo de
+	   ModalBase va sin relleno y la rejilla ocupa todo su alto. */
 	.ccm-body {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 		gap: 0;
+		height: 100%;
 		min-height: 0;
-		flex: 1 1 auto;
 	}
 	.ccm-pane {
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
-		padding: 14px 16px;
+		padding: 18px 20px;
 		overflow-y: auto;
 	}
 	.ccm-pane-sel {
-		border-left: 1px solid #e2e8f0;
-		background: #f8fafc;
+		border-left: 1px solid var(--border-subtle);
 	}
 	.ccm-pane-sel h3 {
 		margin: 0 0 10px;
@@ -470,28 +413,39 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: #475569;
+		color: var(--text-secondary);
 	}
 
+	/* Mismo aspecto que `.de-input` de ModalEntidad, con la lupa dentro. */
 	.ccm-buscador {
 		display: flex;
 		align-items: center;
-		gap: 7px;
-		padding: 7px 10px;
-		margin-bottom: 10px;
-		border: 1px solid #cbd5e1;
-		border-radius: 8px;
-		color: #64748b;
+		gap: 8px;
+		min-height: 42px;
+		padding: 0 12px;
+		margin-bottom: 12px;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		color: var(--text-muted);
 		flex: none;
+	}
+	.ccm-buscador:focus-within {
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
 	}
 	.ccm-buscador input {
 		border: none;
 		outline: none;
 		width: 100%;
-		font-size: 13px;
+		padding: 9px 0;
+		font-size: 14px;
 		font-family: inherit;
-		color: #0f172a;
+		color: var(--text-primary);
 		background: transparent;
+	}
+	.ccm-buscador input:disabled {
+		color: var(--text-muted);
 	}
 
 	.ccm-lista,
@@ -501,31 +455,35 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 3px;
+		gap: 4px;
+	}
+	.ccm-sel {
+		gap: 10px;
 	}
 
 	.ccm-fila {
 		display: flex;
 		align-items: center;
-		gap: 9px;
+		gap: 10px;
 		width: 100%;
-		padding: 7px 9px;
+		padding: 8px 10px;
 		border: 1px solid transparent;
-		border-radius: 7px;
+		border-radius: 12px;
 		background: transparent;
+		color: var(--text-primary);
 		cursor: pointer;
 		text-align: left;
 		font-family: inherit;
 	}
 	.ccm-fila:hover:not(:disabled) {
-		background: #f1f5f9;
+		background: var(--bg-surface);
 	}
 	.ccm-fila-dentro {
-		background: #f0fdf4;
-		border-color: #bbf7d0;
+		background: var(--bg-surface);
+		border-color: color-mix(in srgb, var(--accion) 35%, transparent);
 	}
 	.ccm-fila-dentro:hover:not(:disabled) {
-		background: #dcfce7;
+		background: color-mix(in srgb, var(--accion) 6%, var(--bg-surface));
 	}
 	.ccm-fila:disabled {
 		opacity: 0.5;
@@ -534,18 +492,18 @@
 
 	.ccm-check {
 		flex: none;
-		width: 19px;
-		height: 19px;
-		border-radius: 5px;
-		background: #e2e8f0;
-		color: #475569;
+		width: 20px;
+		height: 20px;
+		border-radius: 6px;
+		background: var(--border-subtle);
+		color: var(--text-secondary);
 		font-size: 12px;
 		font-weight: 700;
-		line-height: 19px;
+		line-height: 20px;
 		text-align: center;
 	}
 	.ccm-fila-dentro .ccm-check {
-		background: #c2410c;
+		background: var(--accion);
 		color: #fff;
 	}
 
@@ -556,31 +514,32 @@
 		flex: 1;
 	}
 	.ccm-nom strong {
-		font-size: 12.5px;
+		font-size: 13px;
 		font-weight: 600;
+		color: var(--text-primary);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
 	.ccm-nom small {
-		font-size: 11px;
-		color: #64748b;
+		font-size: 11.5px;
+		color: var(--text-muted);
 	}
 
 	.ccm-tag {
 		flex: none;
-		font-size: 9.5px;
+		font-size: 10px;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		color: #9a3412;
+		color: var(--accion);
 	}
 
 	.ccm-sel-item {
-		border: 1px solid #e2e8f0;
-		border-radius: 9px;
-		background: #fff;
-		padding: 9px 10px;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
+		padding: 12px 14px;
 	}
 	.ccm-sel-head {
 		display: flex;
@@ -589,54 +548,74 @@
 	}
 	.ccm-quitar {
 		flex: none;
+		width: 26px;
+		height: 26px;
+		display: grid;
+		place-items: center;
 		border: none;
+		border-radius: 999px;
 		background: transparent;
-		color: #94a3b8;
+		color: var(--text-muted);
 		font-size: 17px;
 		line-height: 1;
 		cursor: pointer;
-		padding: 0 2px;
 	}
 	.ccm-quitar:hover:not(:disabled) {
-		color: #b91c1c;
+		background: var(--bg-base);
+		color: #b42318;
+	}
+	.ccm-quitar:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
 	}
 
 	.ccm-sel-campos {
 		display: flex;
 		align-items: flex-start;
 		gap: 12px;
-		margin-top: 8px;
+		margin-top: 10px;
 	}
 	.ccm-dias {
 		display: flex;
 		flex-direction: column;
-		gap: 3px;
+		gap: 4px;
 		flex: none;
 	}
 	.ccm-dias span {
-		font-size: 10px;
+		font-size: 12px;
 		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		color: #64748b;
+		color: var(--text-secondary);
 	}
-	.ccm-dias input {
-		width: 62px;
-		padding: 5px 7px;
-		border: 1px solid #cbd5e1;
-		border-radius: 6px;
-		font-size: 13px;
+	.ccm-input {
+		width: 76px;
+		min-height: 42px;
+		padding: 9px 12px;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font-size: 14px;
 		font-family: inherit;
+	}
+	.ccm-input:focus {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.ccm-input:disabled {
+		background: var(--bg-base);
+		color: var(--text-muted);
 	}
 
 	.ccm-prop {
 		display: flex;
 		align-items: flex-start;
-		gap: 7px;
+		gap: 8px;
 		flex: 1;
-		padding: 6px 8px;
-		border: 1px solid #e2e8f0;
-		border-radius: 7px;
+		margin-top: 20px;
+		padding: 8px 10px;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
 		cursor: pointer;
 	}
 	.ccm-prop-on {
@@ -646,99 +625,77 @@
 	.ccm-prop input {
 		margin-top: 2px;
 		flex: none;
+		accent-color: var(--accion);
 	}
 	.ccm-prop span {
 		display: flex;
 		flex-direction: column;
-		font-size: 11.5px;
+		font-size: 12.5px;
 		font-weight: 600;
 		line-height: 1.3;
+		color: var(--text-primary);
 	}
 	.ccm-prop small {
-		font-size: 10.5px;
+		font-size: 11px;
 		font-weight: 500;
 		color: #92400e;
 	}
 
 	.ccm-aviso {
-		margin: 7px 0 0;
-		font-size: 11px;
+		margin: 8px 0 0;
+		font-size: 11.5px;
 		color: #b45309;
 	}
 	.ccm-nuevo {
-		margin: 7px 0 0;
-		font-size: 11px;
+		margin: 8px 0 0;
+		font-size: 11.5px;
 		line-height: 1.45;
-		color: #9a3412;
+		color: var(--text-secondary);
 	}
 
 	.ccm-vacio {
 		margin: 10px 2px;
-		font-size: 12.5px;
+		font-size: 13px;
 		line-height: 1.5;
-		color: #64748b;
+		color: var(--text-muted);
 	}
 	.ccm-error {
-		color: #b91c1c;
+		color: #b42318;
+		font-size: 12px;
 		font-weight: 600;
 	}
 
-	.ccm-foot {
-		border-top: 1px solid #e2e8f0;
-		padding: 12px 20px 16px;
+	.ccm-resumen {
+		flex: 1 1 260px;
 		display: flex;
 		flex-direction: column;
-		gap: 8px;
+		gap: 4px;
+		margin-right: auto;
+	}
+	.ccm-resumen .ccm-error {
+		margin: 0;
 	}
 	.ccm-base {
 		margin: 0;
-		font-size: 12px;
-		color: #475569;
+		font-size: 12.5px;
+		color: var(--text-secondary);
 	}
 	.ccm-base strong {
-		font-size: 13px;
-		color: #0f172a;
+		font-size: 14px;
+		color: var(--text-primary);
 	}
 	.ccm-base small {
 		color: #92400e;
 	}
 
-	.ccm-acciones {
-		display: flex;
-		justify-content: flex-end;
-		gap: 8px;
-	}
-	.ccm-btn-ghost,
-	.ccm-btn-primary {
-		border: none;
-		border-radius: 7px;
-		padding: 8px 14px;
-		font-size: 12.5px;
-		font-weight: 700;
-		cursor: pointer;
-		font-family: inherit;
-	}
-	.ccm-btn-ghost {
-		background: #f1f5f9;
-		color: #334155;
-	}
-	.ccm-btn-primary {
-		background: #c2410c;
-		color: #fff;
-	}
-	.ccm-btn-ghost:disabled,
-	.ccm-btn-primary:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
 	@media (max-width: 720px) {
 		.ccm-body {
 			grid-template-columns: 1fr;
+			height: auto;
 		}
 		.ccm-pane-sel {
 			border-left: none;
-			border-top: 1px solid #e2e8f0;
+			border-top: 1px solid var(--border-subtle);
 		}
 	}
 </style>

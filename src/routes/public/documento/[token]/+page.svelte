@@ -272,14 +272,14 @@
             <button
               on:click={limpiarFirma}
               disabled={!hasDrawn}
-              class="flex flex-1 items-center justify-center gap-2 rounded-xl border-2 border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 transition-all hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+              class="btn-secondary flex flex-1 items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Limpiar
             </button>
             <button
               on:click={enviarFirma}
               disabled={!hasDrawn}
-              class="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-orange-500/30 transition-all hover:scale-[1.02] hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:scale-100"
+              class="btn-primary flex flex-1 items-center justify-center gap-2 disabled:cursor-not-allowed disabled:opacity-40"
             >
               Confirmar Firma
             </button>
@@ -335,7 +335,7 @@
 
         <div class="grid grid-cols-1 gap-3">
           {#if presignedDocumentUrl}
-            <a href={presignedDocumentUrl} target="_blank" rel="noreferrer" class="flex w-full items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-4 text-base font-bold text-white shadow-xl shadow-orange-500/30 transition-all hover:scale-[1.02] hover:shadow-2xl">Ver Desprendible</a>
+            <a href={presignedDocumentUrl} target="_blank" rel="noreferrer" class="btn-primary flex w-full items-center justify-center gap-3">Ver Desprendible</a>
           {/if}
         </div>
 

@@ -469,8 +469,8 @@
 	}
 
 	.segmentado__btn--activo {
-		background: var(--emerald-600, #15803d);
-		border-color: var(--emerald-600, #15803d);
+		background: var(--accion);
+		border-color: var(--accion);
 		color: #fff;
 	}
 

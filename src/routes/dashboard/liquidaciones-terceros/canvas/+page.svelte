@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { confirmar } from '$lib/stores/confirm';
 	/**
 	 * Canvas de CIERRES FINALES de terceros.
 	 *
@@ -412,11 +413,16 @@
 	 * URL, no esta función: así da igual si el cambio viene de aquí, del
 	 * botón Atrás o de un enlace pegado.
 	 */
-	function cambiarPeriodo(nuevoAnio: number, nuevoMes: number) {
+	async function cambiarPeriodo(nuevoAnio: number, nuevoMes: number) {
 		if (nuevoAnio === anio && nuevoMes === mes) return;
 		if (
 			pendientes.size > 0 &&
-			!confirm('Hay cambios sin confirmar por el servidor. ¿Cambiar de periodo igualmente?')
+			!(await confirmar({
+				title: '¿Cambiar de periodo igualmente?',
+				message: 'Hay cambios sin confirmar por el servidor.',
+				tone: 'warning',
+				confirmText: 'Cambiar de periodo'
+			}))
 		) {
 			return;
 		}
@@ -1682,10 +1688,15 @@
 	 * cliente, así que sin este confirm la cola en memoria se perdería en
 	 * silencio. Mismo criterio que `cambiarPeriodo`.
 	 */
-	function antesDeSalir(): boolean {
+	async function antesDeSalir(): Promise<boolean> {
 		if (
 			totalPendientes > 0 &&
-			!confirm('Hay cambios sin confirmar por el servidor. ¿Salir del canvas igualmente?')
+			!(await confirmar({
+				title: '¿Salir del canvas igualmente?',
+				message: 'Hay cambios sin confirmar por el servidor.',
+				tone: 'warning',
+				confirmText: 'Salir'
+			}))
 		) {
 			return false;
 		}
@@ -1738,10 +1749,14 @@
 			toast.dismiss(aviso);
 			if (
 				!limpio &&
-				!confirm(
-					'Hay cambios que el servidor no ha confirmado. La vista previa PDF ' +
-						'muestra lo GUARDADO, así que no los verá. ¿Abrirla igualmente?'
-				)
+				!(await confirmar({
+					title: '¿Abrir la vista previa igualmente?',
+					message:
+						'Hay cambios que el servidor no ha confirmado. La vista previa PDF ' +
+						'muestra lo GUARDADO, así que no los verá.',
+					tone: 'warning',
+					confirmText: 'Abrir vista previa'
+				}))
 			) {
 				return;
 			}

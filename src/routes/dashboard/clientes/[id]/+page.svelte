@@ -5,7 +5,7 @@
 	import { fade, fly, slide } from 'svelte/transition';
 	import { clientesAPI } from '$lib/api/apiClient';
 	import { toast } from 'svelte-sonner';
-	import { updated } from '$app/state';
+	import ModalFormCliente from '$lib/components/clientes/ModalFormCliente.svelte';
 
 	// Constante para TipoCliente
 	const TipoCliente = {
@@ -72,11 +72,10 @@
 	// Estado
 	let cliente: Cliente | null = null;
 	let isLoading = true;
-	let updatedLoading = false;
-	let isEditing = false;
+	/// Editar abre el mismo modal que crear (listado de clientes).
+	let modalAbierto = false;
 	let error: string | null = null;
 	let activeTab: 'info' | 'servicios' | 'actividad' = 'info';
-	let editForm: Partial<Cliente> = {};
 
 	// Obtener ID del cliente de la URL
 	$: clienteId = $page.params.id as string;
@@ -100,7 +99,6 @@
 
 			if (response.data && response.data.success) {
 				cliente = response.data.data;
-				editForm = { ...cliente };
 			} else {
 				// Datos de ejemplo para desarrollo
 				cliente = {
@@ -123,41 +121,12 @@
 						servicio: 34
 					}
 				};
-				editForm = { ...cliente };
 			}
 		} catch (err: any) {
 			console.error('Error cargando cliente:', err);
 			error = err.message || 'Error al cargar el cliente';
 		} finally {
 			isLoading = false;
-		}
-	}
-
-	function toggleEdit() {
-		if (isEditing) {
-			// Cancelar edición
-			editForm = { ...cliente! };
-		}
-		isEditing = !isEditing;
-	}
-
-	async function saveChanges() {
-		updatedLoading = true;
-		try {
-			// Aquí iría la llamada a la API para guardar los cambios
-			await clientesAPI.update(clienteId, editForm);
-
-			// Por ahora, solo actualizamos localmente
-			cliente = { ...cliente!, ...editForm } as Cliente;
-			isEditing = false;
-
-			// Mostrar notificación de éxito
-			toast.info('Cliente actualizado exitosamente');
-		} catch (err: any) {
-			console.error('Error guardando cambios:', err);
-			error = err.message || 'Error al guardar los cambios';
-		} finally {
-			updatedLoading = false;
 		}
 	}
 
@@ -190,6 +159,13 @@
 	}
 </script>
 
+<ModalFormCliente
+	open={modalAbierto}
+	{clienteId}
+	onclose={() => (modalAbierto = false)}
+	onguardado={() => loadCliente()}
+/>
+
 <svelte:head>
 	<title>{cliente?.nombre || 'Cargando...'} - Perfil Cliente</title>
 </svelte:head>
@@ -210,7 +186,7 @@
 			<p class="mb-6 text-gray-600">{error}</p>
 			<button
 				on:click={() => goto('/dashboard/clientes')}
-				class="apple-transition rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 px-6 py-3 font-semibold text-white shadow-lg hover:shadow-xl"
+				class="btn-primary"
 			>
 				Volver a Clientes
 			</button>
@@ -229,7 +205,7 @@
 						<div class="flex flex-col items-center gap-3 sm:flex-row">
 							<!-- Avatar -->
 							<div
-								class="flex h-20 w-20 items-center justify-center rounded-xl border-2 border-white bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg"
+								class="flex h-20 w-20 items-center justify-center rounded-xl border-2 border-white bg-[var(--accion)]"
 							>
 								{#if cliente.tipo === TipoCliente.EMPRESA}
 									<svg
@@ -294,53 +270,20 @@
 
 						<!-- Botones de Acción -->
 						<div class="flex gap-2">
-							{#if isEditing}
-								<button
-									on:click={toggleEdit}
-									class="apple-transition rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
-								>
-									Cancelar
-								</button>
-								<button
-									on:click={saveChanges}
-									class="apple-transition flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:shadow-xl disabled:opacity-80"
-									disabled={updatedLoading}
-								>
-									{#if updatedLoading}
-										<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-											<circle
-												class="opacity-25"
-												cx="12"
-												cy="12"
-												r="10"
-												stroke="currentColor"
-												stroke-width="4"
-											/>
-											<path
-												class="opacity-75"
-												fill="currentColor"
-												d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-											/>
-										</svg>
-										<span>Guardando...</span>
-									{:else}
-										<span>Guardar</span>
-									{/if}
-								</button>
-							{:else}
+							
 								<button
 									on:click={() => goto('/dashboard/clientes')}
-									class="apple-transition rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+									class="btn-secondary"
 								>
 									← Volver
 								</button>
 								<button
-									on:click={toggleEdit}
-									class="apple-transition rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-lg hover:shadow-xl"
+									on:click={() => (modalAbierto = true)}
+									class="btn-primary"
 								>
-									✏️ Editar
+									Editar
 								</button>
-							{/if}
+							
 						</div>
 					</div>
 				</div>
@@ -353,7 +296,7 @@
 								on:click={() => (activeTab = 'info')}
 								class="apple-transition flex-1 rounded-lg px-4 py-2 text-sm font-semibold {activeTab ===
 								'info'
-									? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md'
+									? 'bg-[var(--accion)] text-white'
 									: 'text-gray-600 hover:bg-gray-100'}"
 							>
 								📋 Información
@@ -362,7 +305,7 @@
 								on:click={() => (activeTab = 'servicios')}
 								class="apple-transition flex-1 rounded-lg px-4 py-2 text-sm font-semibold {activeTab ===
 								'servicios'
-									? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md'
+									? 'bg-[var(--accion)] text-white'
 									: 'text-gray-600 hover:bg-gray-100'}"
 							>
 								🚛 Servicios ({cliente._count?.servicio || 0})
@@ -371,7 +314,7 @@
 								on:click={() => (activeTab = 'actividad')}
 								class="apple-transition flex-1 rounded-lg px-4 py-2 text-sm font-semibold {activeTab ===
 								'actividad'
-									? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md'
+									? 'bg-[var(--accion)] text-white'
 									: 'text-gray-600 hover:bg-gray-100'}"
 							>
 								📊 Actividad
@@ -392,131 +335,7 @@
 								<div class="glass space-y-4 rounded-xl border border-white/50 bg-white/90 p-4">
 									<h2 class="text-base font-bold text-gray-900">Información del Cliente</h2>
 
-									{#if isEditing}
-										<!-- Formulario de Edición -->
-										<div class="space-y-3">
-											<div>
-												<label for="nombre" class="mb-1 block text-xs font-medium text-gray-700">
-													Nombre Completo / Razón Social
-												</label>
-												<input
-													id="nombre"
-													type="text"
-													bind:value={editForm.nombre}
-													class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-												/>
-											</div>
-
-											<div class="grid gap-3 sm:grid-cols-2">
-												<div>
-													<label for="nit" class="mb-1 block text-xs font-medium text-gray-700"
-														>NIT</label
-													>
-													<input
-														id="nit"
-														type="text"
-														bind:value={editForm.nit}
-														class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-													/>
-												</div>
-
-												{#if cliente.tipo === TipoCliente.PERSONA_NATURAL}
-													<div>
-														<label for="cedula" class="mb-1 block text-xs font-medium text-gray-700"
-															>Cédula</label
-														>
-														<input
-															id="cedula"
-															type="text"
-															bind:value={editForm.cedula}
-															class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-														/>
-													</div>
-												{/if}
-											</div>
-
-											{#if cliente.tipo === TipoCliente.EMPRESA}
-												<div>
-													<label
-														for="representante"
-														class="mb-1 block text-xs font-medium text-gray-700"
-													>
-														Representante Legal
-													</label>
-													<input
-														id="representante"
-														type="text"
-														bind:value={editForm.representante}
-														class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-													/>
-												</div>
-											{/if}
-
-											<div class="grid gap-3 sm:grid-cols-2">
-												<div>
-													<label for="telefono" class="mb-1 block text-xs font-medium text-gray-700"
-														>Teléfono</label
-													>
-													<input
-														id="telefono"
-														type="text"
-														bind:value={editForm.telefono}
-														class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-													/>
-												</div>
-
-												<div>
-													<label for="correo" class="mb-1 block text-xs font-medium text-gray-700"
-														>Correo</label
-													>
-													<input
-														id="correo"
-														type="email"
-														bind:value={editForm.correo}
-														class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-													/>
-												</div>
-											</div>
-
-											<div>
-												<label for="direccion" class="mb-1 block text-xs font-medium text-gray-700"
-													>Dirección</label
-												>
-												<textarea
-													id="direccion"
-													bind:value={editForm.direccion}
-													rows="2"
-													class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-												></textarea>
-											</div>
-
-											<div class="grid gap-3 sm:grid-cols-2">
-												<div class="flex items-center gap-2">
-													<input
-														type="checkbox"
-														id="requiere_osi"
-														bind:checked={editForm.requiere_osi}
-														class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-													/>
-													<label for="requiere_osi" class="text-xs font-medium text-gray-700">
-														Requiere OSI
-													</label>
-												</div>
-
-												<div class="flex items-center gap-2">
-													<input
-														type="checkbox"
-														id="paga_recargos"
-														bind:checked={editForm.paga_recargos}
-														class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-													/>
-													<label for="paga_recargos" class="text-xs font-medium text-gray-700">
-														Paga Recargos
-													</label>
-												</div>
-											</div>
-										</div>
-									{:else}
+									
 										<!-- Vista de Información -->
 										<div class="space-y-3">
 											<div class="flex items-start gap-2 rounded-lg bg-gray-50 p-3">
@@ -635,7 +454,7 @@
 												</div>
 											</div>
 										</div>
-									{/if}
+									
 								</div>
 							</div>
 

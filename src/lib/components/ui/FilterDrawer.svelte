@@ -1,109 +1,83 @@
 <script lang="ts">
-	import { fly, fade, scale } from 'svelte/transition';
-	import { backOut, quintOut, cubicOut } from 'svelte/easing';
+	import { fly, fade } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
+	import { X } from 'lucide-svelte';
 
+	/**
+	 * Panel lateral de filtros de los listados.
+	 *
+	 * Mismo lenguaje que los modales de directorio y la app móvil: encabezado
+	 * verde profundo con la etiqueta, el título y cuántos filtros hay puestos;
+	 * cuerpo sobre el fondo claro; acciones en un pie blanco.
+	 *
+	 * Entra con un deslizamiento corto y una curva sin rebote. Antes llegaba
+	 * con `backOut` (se pasaba de largo y volvía) y cada bloque de dentro
+	 * entraba con su propio retraso: medio segundo de movimiento para abrir
+	 * un panel de filtros.
+	 */
 	export let open: boolean = false;
 	export let onClose: () => void = () => {};
 	export let activeCount: number = 0;
-	/** Etiqueta mono corta sobre el título (ej. "FILTROS", "DETALLE") */
+	/** Etiqueta corta sobre el título (ej. "Filtros"). */
 	export let eyebrow: string = 'Filtros';
-	/** Título editorial grande en Fraunces (ej. "Refinar resultados") */
+	/** Título del panel (ej. "Refinar resultados"). */
 	export let title: string = '';
-	/** Texto secundario bajo el título */
+	/** Texto secundario bajo el título. */
 	export let subtitle: string = '';
+
+	function onKeydown(e: KeyboardEvent) {
+		if (open && e.key === 'Escape') onClose();
+	}
 </script>
 
+<svelte:window on:keydown={onKeydown} />
+
 {#if open}
-	<!-- Backdrop con gradiente y blur -->
 	<button
 		type="button"
-		class="drawer-backdrop"
+		class="fd-backdrop"
 		aria-label="Cerrar filtros"
+		tabindex="-1"
 		on:click={onClose}
-		on:keydown={(e) => e.key === 'Escape' && onClose()}
-		transition:fade={{ duration: 240, easing: cubicOut }}
+		transition:fade={{ duration: 160 }}
 	></button>
 
-	<!-- Panel del drawer (slide desde la derecha con overshoot) -->
 	<aside
-		class="drawer-panel"
+		class="fd-panel"
 		role="dialog"
 		aria-modal="true"
 		aria-label={title || eyebrow}
-		transition:fly={{
-			x: 560,
-			duration: 460,
-			easing: backOut,
-			opacity: 0
-		}}
+		transition:fly={{ x: 48, duration: 240, easing: cubicOut }}
 	>
-		<!-- Header sticky con stagger interno -->
-		<header class="drawer-header">
-			<div class="min-w-0 flex-1">
-				<div
-					class="drawer-eyebrow"
-					in:fly={{ y: -8, duration: 360, delay: 120, easing: quintOut }}
-				>
-					<span class="drawer-eyebrow-dot"></span>
-					<span class="drawer-eyebrow-text">{eyebrow}</span>
+		<header class="fd-hero">
+			<span class="fd-orb"></span>
+			<div class="fd-copy">
+				<p class="fd-eyebrow">
+					{eyebrow.toUpperCase()}
 					{#if activeCount > 0}
-						<span
-							class="filter-count"
-							in:scale={{ duration: 320, start: 0.6, easing: backOut }}
-						>
-							{activeCount} activo{activeCount === 1 ? '' : 's'}
-						</span>
+						<span class="fd-count">{activeCount} activo{activeCount === 1 ? '' : 's'}</span>
 					{/if}
-				</div>
-				{#if title}
-					<h2
-						class="drawer-title"
-						in:fly={{ y: 10, duration: 420, delay: 200, easing: quintOut }}
-					>{title}</h2>
-				{/if}
-				{#if subtitle}
-					<p
-						class="drawer-subtitle"
-						in:fly={{ y: 8, duration: 400, delay: 280, easing: quintOut }}
-					>{subtitle}</p>
-				{/if}
+				</p>
+				{#if title}<h2 class="fd-title">{title}</h2>{/if}
+				{#if subtitle}<p class="fd-sub">{subtitle}</p>{/if}
 			</div>
-			<button
-				class="filter-close"
-				on:click={onClose}
-				aria-label="Cerrar"
-				in:scale={{ duration: 280, start: 0.5, delay: 100, easing: backOut }}
-			>
-				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-				</svg>
+			<button type="button" class="fd-close" on:click={onClose} aria-label="Cerrar">
+				<X size={16} strokeWidth={2.5} />
 			</button>
 		</header>
 
-		<!-- Chips removibles (slot opcional) -->
 		{#if $$slots.chips}
-			<div
-				class="drawer-chips"
-				in:fly={{ y: 12, duration: 380, delay: 340, easing: quintOut }}
-			>
+			<div class="fd-chips">
 				<slot name="chips" />
 			</div>
 		{/if}
 
-		<!-- Body scrollable -->
-		<div
-			class="drawer-body"
-			in:fly={{ y: 16, duration: 440, delay: 380, easing: quintOut }}
-		>
+		<div class="fd-body">
 			<slot />
 		</div>
 
-		<!-- Footer sticky con acciones (slot opcional) -->
 		{#if $$slots.footer}
-			<footer
-				class="drawer-footer"
-				in:fly={{ y: 20, duration: 420, delay: 440, easing: quintOut }}
-			>
+			<footer class="fd-footer">
 				<slot name="footer" />
 			</footer>
 		{/if}
@@ -111,25 +85,18 @@
 {/if}
 
 <style>
-	/* ═══ Backdrop con gradiente y blur ═══ */
-	:global(.drawer-backdrop) {
+	.fd-backdrop {
 		position: fixed;
 		inset: 0;
 		z-index: 90;
-		background: radial-gradient(
-				ellipse at top right,
-				rgba(234, 88, 12, 0.12) 0%,
-				transparent 50%
-			),
-			linear-gradient(135deg, rgba(15, 23, 42, 0.55) 0%, rgba(20, 83, 45, 0.65) 100%);
-		backdrop-filter: blur(8px) saturate(120%);
-		-webkit-backdrop-filter: blur(8px) saturate(120%);
-		border: none;
-		cursor: pointer;
+		border: 0;
+		padding: 0;
+		cursor: default;
+		background: rgba(4, 31, 26, 0.5);
+		backdrop-filter: blur(3px);
 	}
 
-	/* ═══ Panel del drawer ═══ */
-	:global(.drawer-panel) {
+	.fd-panel {
 		position: fixed;
 		top: 0;
 		right: 0;
@@ -139,126 +106,144 @@
 		max-width: 100vw;
 		display: flex;
 		flex-direction: column;
-		background-color: var(--bg-surface);
-		border-top-left-radius: 24px;
-		border-bottom-left-radius: 24px;
-		box-shadow:
-			-16px 0 48px rgba(15, 23, 42, 0.18),
-			-4px 0 16px rgba(15, 23, 42, 0.08),
-			inset 1px 0 0 rgba(255, 255, 255, 0.5);
 		overflow: hidden;
-		will-change: transform, opacity;
+		background: var(--bg-base);
+		border-radius: 28px 0 0 28px;
+		box-shadow: -16px 0 48px rgba(0, 29, 23, 0.22);
 	}
 
-	/* Sutil shimmer vertical en el borde izquierdo del panel */
-	:global(.drawer-panel::before) {
-		content: '';
-		position: absolute;
-		top: 0;
-		left: 0;
-		bottom: 0;
-		width: 1px;
-		background: linear-gradient(
-			180deg,
-			transparent 0%,
-			rgba(234, 88, 12, 0.3) 50%,
-			transparent 100%
-		);
-		pointer-events: none;
-	}
-
-	/* ═══ Header ═══ */
-	:global(.drawer-header) {
+	.fd-hero {
+		position: relative;
+		flex-shrink: 0;
 		display: flex;
 		align-items: flex-start;
-		justify-content: space-between;
-		gap: 1rem;
-		padding: 1.5rem 1.5rem 1.25rem;
-		border-bottom: 1px solid var(--border-subtle);
-		background: linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-base) 100%);
+		gap: 12px;
+		padding: 24px 22px 22px;
+		overflow: hidden;
+		background: var(--bg-charcoal-deep);
+	}
+	.fd-orb {
+		position: absolute;
+		width: 200px;
+		height: 200px;
+		right: -60px;
+		top: -100px;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.05);
+		pointer-events: none;
+	}
+	.fd-copy {
 		position: relative;
+		z-index: 1;
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
 	}
-	:global(.drawer-eyebrow) {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.5rem;
-		margin-bottom: 0.5rem;
-	}
-	:global(.drawer-eyebrow-dot) {
-		display: inline-block;
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		background-color: var(--emerald-500);
-		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.15);
-		animation: dot-pulse 2.4s var(--ease-apple) infinite;
-	}
-	:global(.drawer-eyebrow-text) {
-		font-family: var(--font-sans);
-		font-size: 0.7rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.12em;
-		color: var(--emerald-700);
-	}
-	:global(.drawer-title) {
-		font-family: var(--font-display);
-		font-size: 1.6rem;
-		font-weight: 800;
-		line-height: 1.2;
-		color: var(--bg-charcoal);
-		margin: 0 0 0.25rem;
-		letter-spacing: -0.01em;
-	}
-	:global(.drawer-subtitle) {
-		font-size: 0.82rem;
-		line-height: 1.5;
-		color: var(--text-muted);
+	.fd-eyebrow {
 		margin: 0;
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		color: rgba(255, 255, 255, 0.62);
+		font-size: 10px;
+		font-weight: 900;
+		letter-spacing: 0.12em;
 	}
-	:global(.drawer-chips) {
-		padding: 0.85rem 1.5rem;
-		border-bottom: 1px solid var(--border-subtle);
-		background-color: var(--bg-surface);
+	.fd-count {
+		padding: 2px 8px;
+		border-radius: 999px;
+		background: var(--accion);
+		color: #fff;
+		font-size: 10px;
+		font-weight: 800;
+		letter-spacing: 0.02em;
+	}
+	.fd-title {
+		margin: 0;
+		color: #fff;
+		font-family: var(--font-display);
+		font-size: 22px;
+		line-height: 1.2;
+		font-weight: 900;
+		letter-spacing: -0.02em;
+	}
+	.fd-sub {
+		margin: 0;
+		color: rgba(255, 255, 255, 0.72);
+		font-size: 13px;
+		line-height: 1.45;
+	}
+	.fd-close {
+		position: relative;
+		z-index: 1;
+		flex-shrink: 0;
+		width: 32px;
+		height: 32px;
+		display: grid;
+		place-items: center;
+		border: 1px solid rgba(255, 255, 255, 0.16);
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.06);
+		color: #fff;
+		cursor: pointer;
+	}
+	.fd-close:hover {
+		background: rgba(255, 255, 255, 0.16);
 	}
 
-	/* ═══ Body ═══ */
-	:global(.drawer-body) {
+	.fd-chips {
+		flex-shrink: 0;
+		padding: 12px 22px;
+		border-bottom: 1px solid var(--border-subtle);
+		background: var(--bg-surface);
+	}
+
+	.fd-body {
 		flex: 1 1 auto;
 		overflow-y: auto;
-		padding: 1.25rem 1.5rem 1.5rem;
-		/* Scroll suave en iOS */
+		padding: 20px 22px 24px;
 		-webkit-overflow-scrolling: touch;
 	}
+	/* Cada campo del filtro, como un dato de las fichas: tarjeta blanca. */
+	.fd-body :global(.filter-field) {
+		padding: 12px 14px;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
+	}
 
-	/* ═══ Footer ═══ */
-	:global(.drawer-footer) {
+	.fd-footer {
+		flex-shrink: 0;
 		display: flex;
 		align-items: center;
 		justify-content: flex-end;
-		gap: 0.6rem;
-		padding: 0.9rem 1.5rem;
+		gap: 10px;
+		padding: 14px 22px;
 		border-top: 1px solid var(--border-subtle);
-		background-color: var(--bg-base);
+		background: var(--bg-surface);
+	}
+	/* El slot de pie suele envolver sus botones en un div propio. */
+	.fd-footer > :global(div) {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 10px;
+		width: 100%;
 	}
 
-	/* ═══ Responsive ═══ */
 	@media (max-width: 640px) {
-		:global(.drawer-panel) {
+		.fd-panel {
 			width: 100vw;
 			border-radius: 0;
 		}
 	}
 
-	/* ═══ Animaciones globales del componente ═══ */
-	@keyframes dot-pulse {
-		0%, 100% {
-			box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.15);
-			transform: scale(1);
-		}
-		50% {
-			box-shadow: 0 0 0 5px rgba(234, 88, 12, 0.05);
-			transform: scale(1.15);
+	@media (prefers-reduced-motion: reduce) {
+		.fd-panel,
+		.fd-backdrop {
+			transition: none;
 		}
 	}
 </style>

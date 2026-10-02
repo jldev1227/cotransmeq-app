@@ -1652,8 +1652,7 @@
 				{:else}
 					<button
 						onclick={handleRecalcularSeleccionados}
-						class="apple-transition flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold text-white"
-						style="background: linear-gradient(135deg, #4F46E5, #4338CA); box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25);"
+						class="btn-primary apple-transition"
 						title="Recalcula los {selectedRows.size} recargo(s) seleccionado(s) con la config salarial y los % de tipos vigentes por día"
 					>
 						<svg
@@ -1787,8 +1786,7 @@
 				<button
 					onclick={() => (modalImportarTransmeraldaIsOpen = true)}
 					disabled={bloqueoPorRecalc}
-					class="apple-transition flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-40"
-					style="background: linear-gradient(135deg, #166534, #14532d); box-shadow: 0 2px 6px rgba(6, 95, 70, 0.25);"
+					class="btn-primary apple-transition"
 					title="Importar recargos desde Transmeralda (mismo schema, otra base de datos) para {getNombreMes(filtros.mes)} {filtros.anio}"
 				>
 					<svg
@@ -1872,7 +1870,7 @@
 			<!-- Listar eliminadas -->
 			<button
 				onclick={handleListDeleted}
-				class="apple-transition flex items-center gap-2 rounded-xl border border-[rgba(239,68,68,0.25)] bg-[rgba(239,68,68,0.06)] px-4 py-2.5 text-sm font-semibold text-[#991B1B] hover:bg-[rgba(239,68,68,0.12)]"
+				class="btn-secondary apple-transition"
 			>
 				Ver eliminados
 			</button>
@@ -1889,12 +1887,12 @@
 				{#if selectedRows.size > 0}
 					<button
 						onclick={handleUnselectRow}
-						class="apple-transition rounded-xl border border-[var(--border-default)] bg-white px-4 py-2 text-sm font-medium text-[var(--text-secondary)] hover:bg-[var(--bg-base)]"
+						class="btn-secondary apple-transition"
 						>Deseleccionar</button
 					>
 					<button
 						onclick={handleCopySelectedRows}
-						class="apple-transition rounded-xl bg-[var(--bg-charcoal)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--bg-charcoal-deep)]"
+						class="btn-secondary apple-transition"
 					>
 						Copiar seleccionados
 					</button>
@@ -1921,7 +1919,7 @@
 						</button>
 						<button
 							onclick={handleDeleteSelected}
-							class="apple-transition rounded-xl bg-[#DC2626] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#B91C1C]"
+							class="btn-danger apple-transition"
 						>
 							Eliminar
 						</button>
@@ -1930,7 +1928,7 @@
 			{:else if selectedRows.size > 0 && !isReadOnly}
 				<button
 					onclick={() => (modalRestaurarIsOpen = true)}
-					class="apple-transition flex cursor-pointer items-center gap-1.5 rounded-xl border border-[rgba(22, 163, 74,0.3)] bg-[var(--emerald-500)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--emerald-600)]"
+					class="btn-primary apple-transition"
 				>
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path
@@ -2163,7 +2161,7 @@
 				<p class="text-[#991B1B]">{error}</p>
 				<button
 					onclick={() => recargosStore.fetchRecargos()}
-					class="apple-transition rounded-xl border border-[var(--border-default)] bg-white px-4 py-2 text-sm font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-base)]"
+					class="btn-secondary apple-transition"
 				>
 					Reintentar
 				</button>

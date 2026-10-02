@@ -1,8 +1,8 @@
 <script lang="ts">
-	import { fade, scale } from 'svelte/transition';
 	import { browser } from '$app/environment';
 	import { bonoConfigVisualAPI, type BonoConfigVisualItem } from '$lib/api/apiClient';
 	import { toast } from 'svelte-sonner';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 
 	type Props = {
 		open: boolean;
@@ -21,7 +21,7 @@
 	let items = $state<BonoConfigVisualItem[]>([]);
 	let loading = $state(false);
 	let guardando = $state(false);
-	let error = '';
+	let error = $state('');
 	let searchTerm = $state('');
 
 	// Set reactivo de IDs seleccionados (visibles)
@@ -111,18 +111,6 @@
 		onclose?.();
 	}
 
-	function onKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape' && open) cerrar();
-	}
-
-	$effect(() => {
-		if (!browser) return;
-		if (open) {
-			document.addEventListener('keydown', onKeydown);
-			return () => document.removeEventListener('keydown', onKeydown);
-		}
-	});
-
 	let totalSeleccionados = $derived(visiblesSet.size);
 	let totalItems = $derived(items.length);
 	let todasFiltradasVisibles = $derived.by(() => {
@@ -131,241 +119,135 @@
 	});
 </script>
 
-{#if open}
-	<!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-	<div
-		class="modal-overlay"
-		onclick={cerrar}
-		role="presentation"
-		transition:fade={{ duration: 150 }}
-	>
-		<!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-		<div
-			class="modal-box"
-			onclick={(e) => e.stopPropagation()}
-			role="dialog"
-			aria-modal="true"
-			aria-labelledby="modal-config-bonos-title"
-			in:scale={{ duration: 200, start: 0.96 }}
-			out:scale={{ duration: 120, start: 0.98 }}
-		>
-			<!-- Header -->
-			<div class="modal-header">
-				<div class="flex items-center gap-3">
-					<div
-						class="flex h-9 w-9 items-center justify-center rounded-xl"
-						style="background: linear-gradient(135deg, #ea580c, #c2410c); box-shadow: 0 2px 8px rgba(234, 88, 12, 0.3);"
-					>
-						<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28z"
-							/>
-							<path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-						</svg>
-					</div>
-					<div>
-						<h2 id="modal-config-bonos-title" class="modal-title">Configurar bonos visibles</h2>
-						<p class="modal-subtitle">
-							Selecciona qué items de configuración de liquidación se exponen como columna en
-							Recorridos para el año <strong class="text-orange-700">{anio}</strong>.
-						</p>
-					</div>
-				</div>
-				<button class="close-btn" onclick={cerrar} aria-label="Cerrar">✕</button>
-			</div>
+<ModalBase
+	{open}
+	title="Configurar bonos visibles"
+	eyebrow="Recorridos · {anio}"
+	subtitle="Selecciona qué items de configuración de liquidación se exponen como columna en Recorridos para el año {anio}."
+	tamano="md"
+	bloqueado={guardando}
+	oncerrar={cerrar}
+>
+	<!-- Toolbar -->
+	<div class="toolbar">
+		<div class="search-wrap">
+			<svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+				<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+			</svg>
+			<input
+				type="text"
+				bind:value={searchTerm}
+				placeholder="Buscar por nombre o valor…"
+				class="search-input"
+			/>
+		</div>
+		<div class="counter-pill">
+			<span class="counter-num">{totalSeleccionados}/{totalItems}</span>
+			<span class="counter-lbl">visibles</span>
+		</div>
+		{#if canManageBonos && itemsFiltrados().length > 0}
+			<button class="btn-link" onclick={toggleTodas} type="button">
+				{todasFiltradasVisibles ? 'Ninguna' : 'Todas'}
+			</button>
+		{/if}
+	</div>
 
-			<!-- Toolbar -->
-			<div class="toolbar">
-				<div class="search-wrap">
-					<svg class="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-					</svg>
-					<input
-						type="text"
-						bind:value={searchTerm}
-						placeholder="Buscar por nombre o valor…"
-						class="search-input"
-					/>
-				</div>
-				<div class="counter-pill">
-					<span class="font-mono-meta text-[10px] font-bold text-orange-700">
-						{totalSeleccionados}/{totalItems}
-					</span>
-					<span class="text-[10px]" style="color: var(--text-muted);">visibles</span>
-				</div>
-				{#if canManageBonos && itemsFiltrados().length > 0}
-					<button class="btn-link" onclick={toggleTodas} type="button">
-						{todasFiltradasVisibles ? 'Ninguna' : 'Todas'}
-					</button>
-				{/if}
-			</div>
+	{#if error}
+		<div class="error-msg">⚠️ {error}</div>
+	{/if}
 
-			<!-- Body -->
-			<div class="modal-body">
-				{#if error}
-					<div class="error-msg">⚠️ {error}</div>
-				{/if}
-
-				{#if loading}
-					<div class="empty-state">
-						<div class="spinner"></div>
-						<p class="text-sm" style="color: var(--text-muted);">Cargando configuraciones…</p>
-					</div>
-				{:else if items.length === 0}
-					<div class="empty-state">
-						<div class="empty-icon">📋</div>
-						<p class="text-sm font-semibold" style="color: var(--text-primary);">
-							No hay configuraciones activas para {anio}
-						</p>
-						<p class="text-xs" style="color: var(--text-muted);">
-							Crea primero las configuraciones de liquidación en
-							<code class="code-badge">/dashboard/liquidaciones</code>.
-						</p>
-					</div>
-				{:else}
-					<div class="items-list">
-						{#each itemsFiltrados() as item (item.id)}
-							{@const isOn = visiblesSet.has(item.id)}
-							<button
-								type="button"
-								class="item-card"
-								class:item-on={isOn}
-								class:item-off={!isOn}
-								class:item-disabled={!canManageBonos}
-								onclick={() => toggleItem(item.id)}
-								disabled={!canManageBonos}
-							>
-								<div class="item-checkbox" class:checked={isOn}>
-									{#if isOn}
-										<svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3.5">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-										</svg>
-									{/if}
-								</div>
-								<div class="item-body">
-									<div class="flex items-center justify-between gap-2">
-										<p class="item-name">{item.nombre}</p>
-										<p class="item-value">${formatCOP(item.valor)}</p>
-									</div>
-									<div class="item-meta">
-										<span class="item-tag">{item.tipo}</span>
-										{#if !isOn}
-											<span class="item-tag-off">OCULTO</span>
-										{/if}
-									</div>
-								</div>
-							</button>
-						{/each}
-					</div>
-				{/if}
-			</div>
-
-			<!-- Footer -->
-			<div class="modal-footer">
-				<p class="footer-hint">
-					{#if !canManageBonos}
-						🔒 Modo solo lectura — necesitas el permiso <strong>bonos-planilla</strong>
-					{:else}
-						Los cambios aplican para todos los usuarios que abran Recorridos.
-					{/if}
-				</p>
-				<div class="flex gap-2">
-					<button class="btn-secondary-sm" onclick={cerrar} type="button" disabled={guardando}>
-						Cancelar
-					</button>
-					<button
-						class="btn-primary-sm"
-						onclick={guardar}
-						type="button"
-						disabled={!canManageBonos || guardando || loading || items.length === 0}
-					>
-						{#if guardando}
-							<svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25" />
-								<path d="M4 12a8 8 0 018-8v0" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
-							</svg>
-							Guardando…
-						{:else}
-							<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+	{#if loading}
+		<div class="empty-state">
+			<div class="spinner"></div>
+			<p class="text-sm" style="color: var(--text-muted);">Cargando configuraciones…</p>
+		</div>
+	{:else if items.length === 0}
+		<div class="empty-state">
+			<div class="empty-icon">📋</div>
+			<p class="text-sm font-semibold" style="color: var(--text-primary);">
+				No hay configuraciones activas para {anio}
+			</p>
+			<p class="text-xs" style="color: var(--text-muted);">
+				Crea primero las configuraciones de liquidación en
+				<code class="code-badge">/dashboard/liquidaciones</code>.
+			</p>
+		</div>
+	{:else}
+		<div class="items-list">
+			{#each itemsFiltrados() as item (item.id)}
+				{@const isOn = visiblesSet.has(item.id)}
+				<button
+					type="button"
+					class="item-card"
+					class:item-on={isOn}
+					class:item-off={!isOn}
+					class:item-disabled={!canManageBonos}
+					onclick={() => toggleItem(item.id)}
+					disabled={!canManageBonos}
+				>
+					<div class="item-checkbox" class:checked={isOn}>
+						{#if isOn}
+							<svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3.5">
 								<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
 							</svg>
-							Guardar configuración
 						{/if}
-					</button>
-				</div>
-			</div>
+					</div>
+					<div class="item-body">
+						<div class="flex items-center justify-between gap-2">
+							<p class="item-name">{item.nombre}</p>
+							<p class="item-value">${formatCOP(item.valor)}</p>
+						</div>
+						<div class="item-meta">
+							<span class="item-tag">{item.tipo}</span>
+							{#if !isOn}
+								<span class="item-tag-off">OCULTO</span>
+							{/if}
+						</div>
+					</div>
+				</button>
+			{/each}
 		</div>
-	</div>
-{/if}
+	{/if}
+
+	{#snippet pie()}
+		<p class="footer-hint">
+			{#if !canManageBonos}
+				🔒 Modo solo lectura — necesitas el permiso <strong>bonos-planilla</strong>
+			{:else}
+				Los cambios aplican para todos los usuarios que abran Recorridos.
+			{/if}
+		</p>
+		<button class="btn-secondary" onclick={cerrar} type="button" disabled={guardando}>
+			Cancelar
+		</button>
+		<button
+			class="btn-primary"
+			onclick={guardar}
+			type="button"
+			disabled={!canManageBonos || guardando || loading || items.length === 0}
+		>
+			{#if guardando}
+				<svg class="animate-spin" fill="none" viewBox="0 0 24 24">
+					<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25" />
+					<path d="M4 12a8 8 0 018-8v0" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+				</svg>
+				Guardando…
+			{:else}
+				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+				</svg>
+				Guardar configuración
+			{/if}
+		</button>
+	{/snippet}
+</ModalBase>
 
 <style>
-	.modal-overlay {
-		position: fixed;
-		inset: 0;
-		z-index: 9999;
-		background: rgba(0, 0, 0, 0.5);
-		backdrop-filter: blur(3px);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 20px;
-	}
-	.modal-box {
-		background: white;
-		border-radius: 16px;
-		width: 100%;
-		max-width: 640px;
-		max-height: 85vh;
-		display: flex;
-		flex-direction: column;
-		box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
-		overflow: hidden;
-	}
-	.modal-header {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 16px;
-		padding: 20px 24px 16px;
-		border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-	}
-	.modal-title {
-		margin: 0;
-		font-size: 17px;
-		font-weight: 600;
-		color: #0f172a;
-		letter-spacing: -0.01em;
-	}
-	.modal-subtitle {
-		margin: 4px 0 0;
-		font-size: 12px;
-		color: #64748b;
-		max-width: 440px;
-		line-height: 1.45;
-	}
-	.close-btn {
-		background: none;
-		border: none;
-		font-size: 18px;
-		color: #94a3b8;
-		cursor: pointer;
-		padding: 4px 8px;
-		border-radius: 6px;
-		transition: all 0.15s ease;
-	}
-	.close-btn:hover {
-		background: #f1f5f9;
-		color: #475569;
-	}
 	.toolbar {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		padding: 12px 24px;
-		background: #fcfcfb;
-		border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+		gap: 10px;
+		margin-bottom: 14px;
 	}
 	.search-wrap {
 		position: relative;
@@ -374,104 +256,99 @@
 	}
 	.search-icon {
 		position: absolute;
-		left: 10px;
+		left: 12px;
 		top: 50%;
 		transform: translateY(-50%);
-		width: 14px;
-		height: 14px;
-		color: #9ca3af;
+		width: 15px;
+		height: 15px;
+		color: var(--text-muted);
 		pointer-events: none;
 	}
 	.search-input {
 		width: 100%;
-		padding: 7px 10px 7px 30px;
-		border: 1px solid #e5e7eb;
-		border-radius: 8px;
-		font-size: 12px;
-		background: white;
-		transition: all 0.15s ease;
+		min-height: 42px;
+		padding: 9px 12px 9px 34px;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
+		font-size: 14px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
 	}
 	.search-input:focus {
 		outline: none;
-		border-color: #ea580c;
-		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1);
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
 	}
 	.counter-pill {
 		display: inline-flex;
 		align-items: center;
 		gap: 4px;
-		padding: 4px 10px;
-		background: rgba(234, 88, 12, 0.08);
-		border: 1px solid rgba(234, 88, 12, 0.25);
+		padding: 6px 12px;
+		background: var(--bg-surface);
+		border: 1px solid var(--border-default);
 		border-radius: 999px;
 		white-space: nowrap;
+	}
+	.counter-num {
+		font-size: 12px;
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+		color: var(--text-primary);
+	}
+	.counter-lbl {
+		font-size: 11px;
+		color: var(--text-muted);
 	}
 	.btn-link {
 		background: none;
 		border: none;
-		font-size: 11px;
-		font-weight: 600;
-		color: #166534;
+		font-size: 12px;
+		font-weight: 700;
+		color: var(--accion);
 		cursor: pointer;
-		padding: 4px 8px;
-		border-radius: 6px;
-		transition: all 0.15s ease;
+		padding: 6px 8px;
+		border-radius: 8px;
 	}
 	.btn-link:hover {
-		background: rgba(234, 88, 12, 0.06);
-	}
-	.modal-body {
-		padding: 16px 24px;
-		overflow-y: auto;
-		flex: 1;
-		min-height: 200px;
-		max-height: 55vh;
-	}
-	.modal-footer {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 12px;
-		padding: 14px 24px;
-		border-top: 1px solid rgba(0, 0, 0, 0.06);
-		background: #fcfcfb;
+		background: color-mix(in srgb, var(--accion) 8%, transparent);
 	}
 	.footer-hint {
-		margin: 0;
-		font-size: 11px;
-		color: #64748b;
+		margin: 0 auto 0 0;
+		flex: 1 1 200px;
+		font-size: 12px;
+		color: var(--text-muted);
 		line-height: 1.4;
 	}
 	.items-list {
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
+		gap: 8px;
 	}
 	.item-card {
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		padding: 10px 12px;
-		background: white;
-		border: 1.5px solid #e5e7eb;
-		border-radius: 10px;
+		padding: 12px 14px;
+		background: var(--bg-surface);
+		border: 1.5px solid transparent;
+		border-radius: 16px;
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
 		cursor: pointer;
-		transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+		transition:
+			border-color 0.15s ease,
+			opacity 0.15s ease;
 		text-align: left;
 		width: 100%;
 		font: inherit;
 	}
 	.item-card:hover:not(:disabled) {
-		border-color: rgba(234, 88, 12, 0.45);
-		background: rgba(234, 88, 12, 0.02);
-		transform: translateX(2px);
+		border-color: color-mix(in srgb, var(--accion) 45%, transparent);
 	}
 	.item-card.item-on {
-		border-color: rgba(234, 88, 12, 0.5);
-		background: rgba(234, 88, 12, 0.04);
+		border-color: color-mix(in srgb, var(--accion) 55%, transparent);
 	}
 	.item-card.item-off {
-		opacity: 0.6;
+		opacity: 0.65;
 	}
 	.item-card.item-disabled {
 		cursor: not-allowed;
@@ -480,17 +357,19 @@
 		width: 20px;
 		height: 20px;
 		border-radius: 6px;
-		border: 2px solid #d1d5db;
-		background: white;
+		border: 2px solid var(--border-default);
+		background: var(--bg-surface);
 		display: flex;
 		align-items: center;
 		justify-content: center;
 		flex-shrink: 0;
-		transition: all 0.15s ease;
+		transition:
+			background 0.15s ease,
+			border-color 0.15s ease;
 	}
 	.item-checkbox.checked {
-		background: #ea580c;
-		border-color: #ea580c;
+		background: var(--accion);
+		border-color: var(--accion);
 	}
 	.item-body {
 		flex: 1;
@@ -498,8 +377,8 @@
 	}
 	.item-name {
 		font-size: 13px;
-		font-weight: 600;
-		color: #0f172a;
+		font-weight: 700;
+		color: var(--text-primary);
 		margin: 0;
 		white-space: nowrap;
 		overflow: hidden;
@@ -507,9 +386,9 @@
 	}
 	.item-value {
 		font-size: 13px;
-		font-weight: 700;
+		font-weight: 800;
 		font-variant-numeric: tabular-nums;
-		color: #166534;
+		color: var(--text-primary);
 		margin: 0;
 		flex-shrink: 0;
 	}
@@ -522,12 +401,12 @@
 	.item-tag {
 		display: inline-block;
 		font-size: 9px;
-		font-weight: 600;
+		font-weight: 700;
 		letter-spacing: 0.05em;
 		padding: 1px 6px;
 		border-radius: 4px;
-		background: #f1f5f9;
-		color: #64748b;
+		background: var(--bg-base);
+		color: var(--text-secondary);
 		text-transform: uppercase;
 	}
 	.item-tag-off {
@@ -557,8 +436,8 @@
 	.spinner {
 		width: 24px;
 		height: 24px;
-		border: 3px solid rgba(234, 88, 12, 0.2);
-		border-top-color: #ea580c;
+		border: 3px solid color-mix(in srgb, var(--accion) 20%, transparent);
+		border-top-color: var(--accion);
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 	}
@@ -569,61 +448,18 @@
 	}
 	.error-msg {
 		background: #fef2f2;
-		color: #dc2626;
+		color: #b42318;
 		padding: 10px 14px;
-		border-radius: 8px;
+		border-radius: 12px;
 		font-size: 13px;
 		margin-bottom: 12px;
 		border: 1px solid #fecaca;
 	}
-	.btn-secondary-sm {
-		padding: 7px 14px;
-		font-size: 12px;
-		font-weight: 600;
-		color: #475569;
-		background: white;
-		border: 1px solid #d1d5db;
-		border-radius: 8px;
-		cursor: pointer;
-		transition: all 0.15s ease;
-	}
-	.btn-secondary-sm:hover:not(:disabled) {
-		background: #f8fafc;
-	}
-	.btn-secondary-sm:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-	.btn-primary-sm {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 7px 14px;
-		font-size: 12px;
-		font-weight: 600;
-		color: white;
-		background: linear-gradient(135deg, #ea580c, #c2410c);
-		border: none;
-		border-radius: 8px;
-		cursor: pointer;
-		transition: all 0.15s ease;
-		box-shadow: 0 2px 6px rgba(234, 88, 12, 0.25);
-	}
-	.btn-primary-sm:hover:not(:disabled) {
-		transform: translateY(-1px);
-		box-shadow: 0 4px 10px rgba(234, 88, 12, 0.35);
-	}
-	.btn-primary-sm:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-		box-shadow: none;
-		transform: none;
-	}
 	.code-badge {
 		font-family: var(--font-sans);
 		font-size: 10px;
-		background: #f1f5f9;
-		color: #475569;
+		background: var(--bg-base);
+		color: var(--text-secondary);
 		padding: 1px 5px;
 		border-radius: 4px;
 	}

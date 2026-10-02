@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { confirmar, confirmarEliminacion } from '$lib/stores/confirm';
 	/**
 	 * Canvas de PRIMAS de nómina.
 	 *
@@ -458,12 +459,22 @@
 	 * Gancho del «Ir a…». Este canvas escribe, así que un formulario abierto o
 	 * un envío en curso son trabajo que se perdería sin avisar.
 	 */
-	function antesDeSalir(): boolean {
+	async function antesDeSalir(): Promise<boolean> {
 		if (showPrimaFormModal || showPreviewPrimasModal) {
-			return confirm('Hay una prima abierta sin guardar. ¿Salir del canvas igualmente?');
+			return confirmarEliminacion({
+				title: '¿Salir del canvas igualmente?',
+				message: 'Hay una prima abierta sin guardar.',
+				confirmText: 'Salir sin guardar'
+			});
 		}
 		if (sendingPrimasEmails) {
-			return confirm('Hay un envío de primas en curso. ¿Salir del canvas igualmente?');
+			return confirmar({
+				title: '¿Salir del canvas igualmente?',
+				message: 'Hay un envío de primas en curso.',
+				tone: 'warning',
+				mascot: 'procesando',
+				confirmText: 'Salir'
+			});
 		}
 		return true;
 	}
@@ -573,7 +584,7 @@
 				{#if filtros.qPrimas || filtros.mesPrima || filtros.anioPrima}
 					<button
 						onclick={clearPrimaFilters}
-						class="apple-transition rounded-xl border border-[var(--border-default)] bg-white px-3 py-2 text-sm text-[var(--text-muted)] hover:bg-[var(--bg-base)]"
+						class="btn-secondary min-h-0 px-3 py-2"
 						>✕ Limpiar</button
 					>
 				{/if}
@@ -592,21 +603,21 @@
 					<div class="h-4 w-px bg-[var(--border-default)]"></div>
 					<button
 						onclick={() => handleBulkTogglePrimaVisible(true)}
-						class="apple-transition flex items-center gap-1.5 rounded-lg border border-[rgba(22, 163, 74,0.3)] bg-[rgba(22, 163, 74,0.08)] px-2.5 py-1.5 text-xs font-semibold text-[var(--emerald-700)] hover:bg-[rgba(22, 163, 74,0.14)]"
+						class="btn-secondary min-h-0 gap-1.5 px-2.5 py-1.5 text-xs"
 						title="Hacer visibles en el portal"
 					>
 						<Eye class="h-3.5 w-3.5" />Mostrar
 					</button>
 					<button
 						onclick={() => handleBulkTogglePrimaVisible(false)}
-						class="apple-transition flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-2.5 py-1.5 text-xs text-[var(--text-secondary)] hover:bg-[var(--bg-base)]"
+						class="btn-secondary min-h-0 gap-1.5 px-2.5 py-1.5 text-xs"
 						title="Ocultar del portal"
 					>
 						<XCircle class="h-3.5 w-3.5" />Ocultar
 					</button>
 					<button
 						onclick={abrirPreviewPrimas}
-						class="apple-transition flex items-center gap-1.5 rounded-lg bg-[var(--bg-charcoal)] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[var(--bg-charcoal-deep)]"
+						class="btn-primary min-h-0 gap-1.5 px-3 py-1.5 text-xs"
 					>
 						<Send class="h-3.5 w-3.5" />Enviar ({selectedPrimas.size})
 					</button>
@@ -819,12 +830,12 @@
 							showDeletePrimaModal = false;
 							primaToDelete = null;
 						}}
-						class="apple-transition rounded-xl border border-[var(--border-default)] bg-white px-4 py-2 text-sm font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-base)]"
+						class="btn-secondary"
 						>Cancelar</button
 					>
 					<button
 						onclick={eliminarPrima}
-						class="apple-transition rounded-xl bg-[#DC2626] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#B91C1C]"
+						class="btn-danger"
 						>Eliminar</button
 					>
 				</div>
@@ -1030,7 +1041,7 @@
 						<button
 							onclick={cerrarPreviewPrimasModal}
 							disabled={sendingPrimasEmails}
-							class="apple-transition rounded-xl border border-[var(--border-default)] bg-white px-4 py-2.5 text-sm font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-base)] disabled:opacity-50"
+							class="btn-secondary"
 						>
 							Cancelar
 						</button>
@@ -1038,8 +1049,7 @@
 							onclick={confirmarEnvioPrimas}
 							disabled={sendingPrimasEmails ||
 								previewPrimaItems.filter((p) => p.canSend).length === 0}
-							class="apple-transition flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
-							style="background: linear-gradient(135deg, #F59E0B, #D97706);"
+							class="btn-primary"
 						>
 							{#if sendingPrimasEmails}
 								<div

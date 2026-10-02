@@ -518,7 +518,7 @@
 				<button class="btn-eliminar" on:click={eliminarRegistro} title="Eliminar registro">🗑</button>
 			{/if}
 			<button
-				class="btn-guardar" class:ok={guardadoOk}
+				class="btn-primary btn-guardar" class:ok={guardadoOk}
 				on:click={guardarDia}
 				disabled={guardando || !form.tipo}
 			>
@@ -654,16 +654,10 @@
 
 .btn-primary {
 	width: 100%; margin-top: 1.2rem; padding: .9rem;
-	background: linear-gradient(135deg, #099d73, #047857);
-	border: none; border-radius: 12px;
-	font-family: 'Barlow Condensed', sans-serif;
-	font-size: 1.1rem; font-weight: 700;
-	letter-spacing: .06em; text-transform: uppercase; color: #fff;
-	cursor: pointer; box-shadow: 0 4px 20px #ea580c30;
-	transition: opacity .2s, transform .15s, box-shadow .2s;
+	font-size: 1.1rem;
+	cursor: pointer;
 	display: flex; align-items: center; justify-content: center; gap: .5rem;
 }
-.btn-primary:hover:not(:disabled) { opacity: .9; transform: translateY(-1px); box-shadow: 0 8px 28px #ea580c44; }
 .btn-primary:disabled { opacity: .55; cursor: not-allowed; }
 
 .auth-note {
@@ -996,16 +990,11 @@
 }
 .btn-guardar {
 	flex: 1; padding: .85rem;
-	background: linear-gradient(135deg, #f97316, #ea580c);
-	border: none; border-radius: 12px;
-	font-family: var(--font-sans);
-	font-size: .95rem; font-weight: 600; letter-spacing: .02em; text-transform: none; color: #fff;
-	cursor: pointer; box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
-	transition: opacity .2s, transform .15s; display: flex; align-items: center; justify-content: center; gap: .5rem;
+	font-size: .95rem;
+	cursor: pointer; display: flex; align-items: center; justify-content: center; gap: .5rem;
 }
-.btn-guardar:hover:not(:disabled) { opacity: .9; transform: translateY(-1px); }
 .btn-guardar:disabled { opacity: .55; cursor: not-allowed; }
-.btn-guardar.ok { background: linear-gradient(135deg, #ea580c, #047857); box-shadow: 0 4px 16px #ea580c30; }
+
 .btn-eliminar {
 	padding: .85rem 1rem; background: var(--surface2);
 	border: 1px solid var(--border); border-radius: 12px;

@@ -133,6 +133,21 @@ export interface ItemLiquidacionServicio {
 	orden?: number;
 }
 
+export interface FacturaRecalculada {
+	factura_id: string;
+	numero_factura: string;
+	valor_anterior: number;
+	valor_nuevo: number;
+}
+
+export interface FacturaActivaDeLiquidacion {
+	id: string;
+	numero_factura: string;
+	fecha_facturacion: string;
+	facturado_por?: { nombre: string } | null;
+	liquidaciones_en_factura: number;
+}
+
 export interface LiquidacionServicio {
 	id: string;
 	consecutivo: string;
@@ -540,7 +555,14 @@ export const liquidacionesServiciosAPI = {
 		return json;
 	},
 
-	async actualizar(id: string, data: CrearLiquidacionInput): Promise<LiquidacionServicio> {
+	/**
+	 * `factura_recalculada` viene cuando se editó una FACTURADA y el total de
+	 * su factura activa cambió: la pantalla debe avisarlo.
+	 */
+	async actualizar(
+		id: string,
+		data: CrearLiquidacionInput
+	): Promise<LiquidacionServicio & { factura_recalculada?: FacturaRecalculada | null }> {
 		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/${id}`, {
 			method: 'PUT',
 			headers: getAuthHeaders(),
@@ -575,7 +597,16 @@ export const liquidacionesServiciosAPI = {
 			body: JSON.stringify(body)
 		});
 		const json = await res.json();
-		if (!res.ok) throw new Error(json.error || 'Error al cambiar estado');
+		if (!res.ok) {
+			/// 409 `FACTURA_ACTIVA`: la liquidación sigue en una factura y hay que
+			/// anularla o quitarla de ella primero. Se adjunta para que la
+			/// pantalla ofrezca esas dos salidas en vez de solo mostrar el error.
+			throw Object.assign(new Error(json.error || 'Error al cambiar estado'), {
+				status: res.status,
+				code: json.code as string | undefined,
+				factura: json.factura as FacturaActivaDeLiquidacion | undefined
+			});
+		}
 		return json;
 	},
 

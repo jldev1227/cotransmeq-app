@@ -937,7 +937,7 @@
 
             {#if d.firmado}
               <button
-                class="m-btn-pdf"
+                class="btn-primary m-btn-pdf"
                 on:click={() => verDesprendible(d.id)}
                 disabled={generandoPdf === d.id}
               >
@@ -1132,7 +1132,7 @@
             </div>
 
             <button
-              class="m-btn-prima"
+              class="btn-primary m-btn-prima"
               on:click={() => verPrima(p.id)}
               disabled={generandoPdfPrima === p.id}
             >
@@ -1289,11 +1289,11 @@
 
       <!-- Actions -->
       <div class="modal-actions">
-        <button class="btn-modal-cancel" on:click={cerrarFirmaModal} disabled={firmaEnviando}>
+        <button class="btn-secondary btn-modal-cancel" on:click={cerrarFirmaModal} disabled={firmaEnviando}>
           Cancelar
         </button>
         <button
-          class="btn-modal-submit"
+          class="btn-primary btn-modal-submit"
           on:click={enviarFirma}
           disabled={!firmaValida || firmaEnviando}
         >
@@ -1750,13 +1750,13 @@
   }
   .btn-ver:disabled { opacity: 0.5; cursor: wait; }
   .btn-firmar {
-    background: linear-gradient(135deg, #f97316, #ea580c);
+    background: var(--accion);
     color: #fff;
-    box-shadow: 0 2px 8px rgba(249, 115, 22, 0.3);
+    box-shadow: var(--shadow-btn);
   }
   .btn-firmar:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 14px rgba(249, 115, 22, 0.4);
+    background: var(--accion-hover);
+    box-shadow: var(--shadow-btn-hover);
   }
   .btn-firmar:active { transform: scale(0.97); }
 
@@ -1843,19 +1843,10 @@
     width: calc(100% - 2rem);
     margin: 0.5rem 1rem 1rem;
     padding: 0.65rem;
-    border: none;
-    border-radius: 10px;
-    background: linear-gradient(135deg, #f97316, #ea580c);
-    color: #fff;
-    font-weight: 600;
     font-size: 0.85rem;
-    font-family: inherit;
     cursor: pointer;
-    box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
-    transition: all 0.2s var(--ease);
   }
-  .m-btn-pdf:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4); }
-  .m-btn-pdf:active:not(:disabled) { transform: scale(0.98); }
+
   .m-btn-pdf:disabled { opacity: 0.6; cursor: wait; }
   .m-btn-pdf svg { width: 14px; height: 14px; }
 
@@ -2111,38 +2102,19 @@
   .btn-modal-cancel {
     flex: 1;
     padding: 0.7rem;
-    border: 1px solid var(--border-default);
-    border-radius: 10px;
-    background: var(--surface);
-    color: var(--text-primary);
-    font-family: inherit;
-    font-weight: 600;
     font-size: 0.85rem;
     cursor: pointer;
-    transition: all 0.2s var(--ease);
   }
-  .btn-modal-cancel:hover { background: var(--bg); border-color: var(--border-hover); }
+
   .btn-modal-cancel:disabled { opacity: 0.5; }
   .btn-modal-submit {
     flex: 2;
     padding: 0.7rem;
-    border: none;
-    border-radius: 10px;
-    background: linear-gradient(135deg, #f97316, #ea580c);
-    color: #fff;
-    font-family: inherit;
-    font-weight: 600;
     font-size: 0.85rem;
     cursor: pointer;
     display: flex; align-items: center; justify-content: center; gap: 0.4rem;
-    box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
-    transition: all 0.2s var(--ease);
   }
-  .btn-modal-submit:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
-  }
-  .btn-modal-submit:active:not(:disabled) { transform: scale(0.98); }
+
   .btn-modal-submit:disabled { opacity: 0.5; cursor: not-allowed; }
   .btn-modal-submit svg { width: 14px; height: 14px; }
 
@@ -2335,14 +2307,14 @@
     align-items: center;
   }
   .btn-prima {
-    background: linear-gradient(135deg, #f59e0b, #d97706);
+    background: var(--accion);
     color: #fff;
     border: none;
-    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+    box-shadow: var(--shadow-btn);
   }
   .btn-prima:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4);
+    background: var(--accion-hover);
+    box-shadow: var(--shadow-btn-hover);
   }
   .btn-prima:active:not(:disabled) { transform: scale(0.97); }
   .btn-prima:disabled { opacity: 0.5; cursor: wait; }
@@ -2361,22 +2333,10 @@
     width: calc(100% - 2rem);
     margin: 0.5rem 1rem 1rem;
     padding: 0.6rem;
-    border: none;
-    border-radius: 10px;
-    background: linear-gradient(135deg, #f59e0b, #d97706);
-    color: #fff;
-    font-family: inherit;
-    font-weight: 600;
     font-size: 0.85rem;
     cursor: pointer;
-    box-shadow: 0 4px 16px rgba(245, 158, 11, 0.3);
-    transition: all 0.2s var(--ease);
   }
-  .m-btn-prima:hover:not(:disabled) {
-    transform: translateY(-1px);
-    box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
-  }
-  .m-btn-prima:active:not(:disabled) { transform: scale(0.98); }
+
   .m-btn-prima:disabled { opacity: 0.6; cursor: wait; }
   .m-btn-prima svg { width: 14px; height: 14px; }
 </style>

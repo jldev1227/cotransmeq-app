@@ -27,6 +27,7 @@
 	    con `ONE_PER_CONTEXT` es lo normal.
 -->
 <script lang="ts">
+	import { confirmar } from '$lib/stores/confirm';
 	import { onDestroy, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -326,9 +327,14 @@
 	async function cambiarVehiculo(vehicleId: string, placa?: string) {
 		const anterior = contexto.vehicleId;
 		if (anterior && anterior !== vehicleId && runner && runner.answers.size > 0) {
-			const ok = confirm(
-				'Cambiar de vehículo puede invalidar las respuestas que ya diligenciaste para el anterior. ¿Limpiar esas respuestas?'
-			);
+			const ok = await confirmar({
+				title: '¿Limpiar las respuestas del vehículo anterior?',
+				message:
+					'Cambiar de vehículo puede invalidar las respuestas que ya diligenciaste para el anterior.',
+				tone: 'warning',
+				confirmText: 'Limpiar respuestas',
+				cancelText: 'Conservarlas'
+			});
 			if (ok) {
 				/// Solo las que DEPENDEN del vehículo: fecha, nombre y demás campos
 				/// generales siguen siendo válidos.
@@ -505,7 +511,14 @@
 
 		/// `SUBMITTED` es terminal. Hay que saberlo ANTES, no descubrirlo al
 		/// intentar corregir.
-		if (!confirm('Después de enviar no podrás editar este formulario. ¿Enviar ahora?')) return;
+		const confirmado = await confirmar({
+			title: '¿Enviar ahora?',
+			message: 'Después de enviar no podrás editar este formulario.',
+			tone: 'warning',
+			mascot: 'correoEnviado',
+			confirmText: 'Enviar'
+		});
+		if (!confirmado) return;
 
 		enviando = true;
 		if (timerLocal) clearTimeout(timerLocal);
@@ -836,20 +849,29 @@
 		padding: 0 1rem;
 		font: inherit;
 		font-size: 0.85rem;
-		font-weight: 500;
+		font-weight: 800;
 		background: var(--bg-surface, #fff);
-		border: 1px solid var(--border, #e2e8f0);
-		border-radius: 8px;
+		border: 1.5px solid var(--border-default);
+		border-radius: 16px;
 		cursor: pointer;
 		text-decoration: none;
 		display: inline-grid;
 		place-items: center;
+		color: var(--bg-charcoal-deep);
 	}
 
 	.btn--primario {
 		color: #fff;
-		background: var(--emerald-600, #15803d);
-		border-color: var(--emerald-600, #15803d);
+		background: var(--accion);
+		border-color: var(--accion);
+		font-weight: 800;
+		box-shadow: var(--shadow-btn);
+	}
+
+	.btn--primario:hover:not(:disabled) {
+		background: var(--accion-hover);
+		border-color: var(--accion-hover);
+		box-shadow: var(--shadow-btn-hover);
 	}
 
 	.btn:disabled {

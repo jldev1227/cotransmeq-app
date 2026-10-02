@@ -11,6 +11,7 @@
 	backend reporta como warning al publicar.
 -->
 <script lang="ts">
+	import { confirmarEliminacion } from '$lib/stores/confirm';
 	import {
 		FIELD_TYPE_META,
 		FIELD_TYPES,
@@ -213,18 +214,22 @@
 					class="campo__input"
 					value={f.type}
 					disabled={bloqueado}
-					onchange={(e) => {
-						const nuevo = e.currentTarget.value as FieldType;
-						if (
-							cambioDestructivo &&
-							!confirm(
-								'Cambiar el tipo elimina las opciones y los campos hijos de esta card. ¿Continuar?'
-							)
-						) {
-							e.currentTarget.value = f.type;
-							return;
+					onchange={async (e) => {
+						const select = e.currentTarget;
+						const id = f.id;
+						const nuevo = select.value as FieldType;
+						if (cambioDestructivo) {
+							/// Mientras se decide, el select vuelve al tipo actual; solo cambia si confirma.
+							select.value = f.type;
+							const ok = await confirmarEliminacion({
+								title: '¿Cambiar el tipo del campo?',
+								message: 'Cambiar el tipo elimina las opciones y los campos hijos de esta card.',
+								confirmText: 'Cambiar tipo'
+							});
+							if (!ok) return;
+							select.value = nuevo;
 						}
-						store.updateField(f.id, { type: nuevo });
+						store.updateField(id, { type: nuevo });
 					}}
 				>
 					{#each FIELD_TYPES as type (type)}

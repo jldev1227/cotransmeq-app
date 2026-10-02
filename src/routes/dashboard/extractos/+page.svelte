@@ -1806,7 +1806,7 @@
 			<div class="mb-5 flex items-center justify-end gap-3">
 				<button
 					type="button"
-					class="rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-600 transition-all hover:bg-gray-50 hover:text-gray-900"
+					class="btn-secondary"
 					onclick={resetForm}
 				>
 					<svg
@@ -1826,7 +1826,7 @@
 				</button>
 				<button
 					type="button"
-					class="rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-orange-500/25 transition-all hover:from-orange-400 hover:to-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
+					class="btn-primary disabled:cursor-not-allowed"
 					onclick={generatePDF}
 					disabled={!formValid || generatingPdf}
 				>
@@ -2542,7 +2542,7 @@
 						<button
 							type="button"
 							onclick={() => (showPdfModal = true)}
-							class="w-full rounded-xl bg-orange-600 px-4 py-3 text-sm font-semibold text-white shadow-md transition hover:bg-orange-700 hover:shadow-lg active:scale-[0.98] flex items-center justify-center gap-2"
+							class="btn-primary w-full flex items-center justify-center gap-2"
 						>
 							<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -2860,7 +2860,7 @@
 				<button
 					type="button"
 					onclick={() => (showPdfModal = false)}
-					class="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50"
+					class="btn-secondary"
 				>
 					Cerrar
 				</button>

@@ -18,8 +18,10 @@
 	un cambio ya está en la calle cuando no lo está.
 -->
 <script lang="ts">
+	import { confirmar, confirmarEliminacion } from '$lib/stores/confirm';
 	import { page } from '$app/state';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 	import {
 		bandera,
 		numero,
@@ -83,7 +85,6 @@
 	/** Envío cuyo descarte o restauración está en vuelo. Bloquea su botón. */
 	let envioEnAccion = $state<string | null>(null);
 	let pagina = $state(1);
-	let totalPages = $state(1);
 	let total = $state(0);
 
 	let modalCrear = $state(false);
@@ -102,7 +103,6 @@
 	let enviosCargadosAlguna = $state(false);
 	let exportando = $state(false);
 	let paginaEnvios = $state(1);
-	let totalPagesEnvios = $state(1);
 	let totalEnvios = $state(0);
 
 	let filtroFormId = $state('');
@@ -248,7 +248,6 @@
 			});
 			formularios = data;
 			total = meta.total ?? 0;
-			totalPages = meta.totalPages ?? 1;
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'No se pudo cargar el catálogo.');
 		} finally {
@@ -282,7 +281,12 @@
 	async function descartarEnvio(envio: SubmissionSummaryDto) {
 		const quien = envio.actor?.nombre ?? 'alguien';
 		const etiqueta = `${envio.version?.code ?? 'el formulario'} de ${quien}`;
-		if (!confirm(`¿Descartar el borrador ${etiqueta}?\n\nSe puede restaurar después.`)) return;
+		const ok = await confirmarEliminacion({
+			title: '¿Descartar el borrador?',
+			message: `Borrador ${etiqueta}. Se puede restaurar después.`,
+			confirmText: 'Descartar'
+		});
+		if (!ok) return;
 
 		envioEnAccion = envio.id;
 		try {
@@ -315,7 +319,6 @@
 			const { data, meta } = await enviosFormularioAPI.listar(filtrosEnvios());
 			envios = data;
 			totalEnvios = meta.total ?? 0;
-			totalPagesEnvios = meta.totalPages ?? 1;
 			enviosCargadosAlguna = true;
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'No se pudieron cargar los envíos.');
@@ -547,12 +550,14 @@
 	}
 
 	async function archivar(form: FormDefinitionDto) {
-		if (
-			!confirm(
-				`Archivar «${form.code} — ${form.name}»? Los envíos históricos se conservan y el formulario deja de aparecer en el catálogo.`
-			)
-		)
-			return;
+		const ok = await confirmar({
+			title: `¿Archivar «${form.code} — ${form.name}»?`,
+			message:
+				'Los envíos históricos se conservan y el formulario deja de aparecer en el catálogo.',
+			tone: 'warning',
+			confirmText: 'Archivar'
+		});
+		if (!ok) return;
 		try {
 			await formulariosAPI.archivar(form.id);
 			toast.success('Formulario archivado.');
@@ -835,33 +840,18 @@
 					{/each}
 				</ul>
 
-				{#if totalPages > 1}
-					<nav class="paginacion" aria-label="Paginación del catálogo">
-						<button
-							type="button"
-							class="btn btn--mini"
-							disabled={pagina <= 1}
-							onclick={() => {
-								pagina -= 1;
-								void cargar();
-							}}
-						>
-							Anterior
-						</button>
-						<span class="paginacion__estado">Página {pagina} de {totalPages}</span>
-						<button
-							type="button"
-							class="btn btn--mini"
-							disabled={pagina >= totalPages}
-							onclick={() => {
-								pagina += 1;
-								void cargar();
-							}}
-						>
-							Siguiente
-						</button>
-					</nav>
-				{/if}
+				<PaginadorLista
+					{pagina}
+					{total}
+					porPagina={20}
+					{cargando}
+					nombreItems="formularios"
+					suelto
+					onCambiar={(p) => {
+						pagina = p;
+						void cargar();
+					}}
+				/>
 			{/if}
 		</div>
 	{:else if vista === 'mis-formularios'}
@@ -1134,33 +1124,18 @@
 					</table>
 				</div>
 
-				{#if totalPagesEnvios > 1}
-					<nav class="paginacion" aria-label="Paginación de envíos">
-						<button
-							type="button"
-							class="btn btn--mini"
-							disabled={paginaEnvios <= 1}
-							onclick={() => {
-								paginaEnvios -= 1;
-								void cargarEnvios();
-							}}
-						>
-							Anterior
-						</button>
-						<span class="paginacion__estado">Página {paginaEnvios} de {totalPagesEnvios}</span>
-						<button
-							type="button"
-							class="btn btn--mini"
-							disabled={paginaEnvios >= totalPagesEnvios}
-							onclick={() => {
-								paginaEnvios += 1;
-								void cargarEnvios();
-							}}
-						>
-							Siguiente
-						</button>
-					</nav>
-				{/if}
+				<PaginadorLista
+					pagina={paginaEnvios}
+					total={totalEnvios}
+					porPagina={25}
+					cargando={cargandoEnvios}
+					nombreItems="envíos"
+					suelto
+					onCambiar={(p) => {
+						paginaEnvios = p;
+						void cargarEnvios();
+					}}
+				/>
 			{/if}
 		</div>
 	{/if}
@@ -1661,11 +1636,11 @@
 		padding: 0 0.875rem;
 		font: inherit;
 		font-size: 0.875rem;
-		font-weight: 500;
-		color: var(--text-primary, #0f172a);
+		font-weight: 800;
+		color: var(--bg-charcoal-deep);
 		background: #fff;
-		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
-		border-radius: 10px;
+		border: 1.5px solid var(--border-default);
+		border-radius: 16px;
 		cursor: pointer;
 		text-decoration: none;
 	}
@@ -1677,7 +1652,8 @@
 	}
 
 	.btn:hover:not(:disabled) {
-		background: var(--gray-50, #f9fafb);
+		background: var(--bg-base);
+		border-color: var(--border-emphasis);
 	}
 
 	.btn:disabled {
@@ -1692,13 +1668,16 @@
 
 	.btn--primario {
 		color: #fff;
-		background: var(--orange-600, #c2410c);
-		border-color: var(--orange-600, #c2410c);
-		font-weight: 600;
+		background: var(--accion);
+		border-color: var(--accion);
+		font-weight: 800;
+		box-shadow: var(--shadow-btn);
 	}
 
 	.btn--primario:hover:not(:disabled) {
-		background: var(--orange-700, #9a3412);
+		background: var(--accion-hover);
+		border-color: var(--accion-hover);
+		box-shadow: var(--shadow-btn-hover);
 	}
 
 	.btn--peligro {
@@ -1731,19 +1710,6 @@
 		font-size: 0.8125rem;
 		line-height: 1.5;
 		color: var(--text-very-muted, #94a3b8);
-	}
-
-	.paginacion {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.75rem;
-	}
-
-	.paginacion__estado {
-		font-family: var(--font-mono, monospace);
-		font-size: 0.75rem;
-		color: var(--text-muted, #64748b);
 	}
 
 	.modal {

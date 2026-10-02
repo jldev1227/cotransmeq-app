@@ -133,7 +133,7 @@
 <!-- FAB: siempre visible, no se desmonta -->
 <button
 	onclick={openPanel}
-	class="cursor-pointer no-print apple-hover fixed right-6 bottom-6 z-[9998] flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-orange-500 to-orange-600 shadow-lg transition-opacity {open
+	class="cursor-pointer no-print apple-hover fixed right-6 bottom-6 z-[9998] flex h-14 w-14 items-center justify-center rounded-full bg-[var(--accion)] shadow-[var(--shadow-btn)] hover:bg-[var(--accion-hover)] transition-opacity {open
 		? 'pointer-events-none opacity-0'
 		: 'opacity-100'}"
 	aria-label="Abrir chat de liquidaci&oacute;n"

@@ -30,6 +30,7 @@
 	  - aquí solo queda el estado de la pantalla y su reflejo en la URL.
 -->
 <script lang="ts">
+	import { confirmarEliminacion } from '$lib/stores/confirm';
 	import { onMount, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -111,7 +112,12 @@
 	 * recargar la lista. El borrado es lógico: lo escrito no se destruye.
 	 */
 	async function descartar(clientSubmissionId: string, etiqueta: string) {
-		if (!confirm(`¿Descartar el borrador de ${etiqueta}?`)) return;
+		const ok = await confirmarEliminacion({
+			title: '¿Descartar el borrador?',
+			message: `El borrador de ${etiqueta} dejará de aparecer en tu lista.`,
+			confirmText: 'Descartar'
+		});
+		if (!ok) return;
 		descartando = clientSubmissionId;
 		try {
 			await misFormulariosAPI.descartarBorrador(clientSubmissionId);

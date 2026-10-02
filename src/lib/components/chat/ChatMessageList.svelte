@@ -190,7 +190,7 @@
 		{#if !s.stickyBottom}
 			<button
 				onclick={scrollToBottomInstant}
-				class="apple-transition sticky bottom-2 mx-auto flex items-center gap-1.5 rounded-full border border-orange-300 bg-orange-500 px-3 py-1 text-[10px] font-semibold text-white shadow-md hover:bg-orange-600"
+				class="apple-transition sticky bottom-2 mx-auto flex items-center gap-1.5 rounded-full bg-[var(--accion)] px-3 py-1 text-[10px] font-semibold text-white shadow-[var(--shadow-btn)] hover:bg-[var(--accion-hover)]"
 				title="Ir al final"
 			>
 				<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">

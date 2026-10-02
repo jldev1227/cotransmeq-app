@@ -1832,8 +1832,8 @@
 					<button
 						type="button"
 						onclick={cerrar}
-						class="rounded-lg border px-3 py-1.5 text-xs font-semibold hover:bg-gray-50"
-						style="border-color: var(--border-default); color: var(--text-secondary); background-color: white;"
+						class="btn-secondary"
+					
 					>
 						Cancelar
 					</button>
@@ -1841,10 +1841,7 @@
 						type="button"
 						onclick={guardar}
 						disabled={guardando || cargaInicial || erroresGuardado.length > 0}
-						class="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-40"
-						style="background: {erroresGuardado.length > 0
-							? 'linear-gradient(135deg, #9ca3af, #6b7280)'
-							: 'linear-gradient(135deg, #c2410c, #9a3412)'};"
+						class="btn-primary inline-flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-40"
 						title={erroresGuardado.length > 0
 							? 'Hay ' + erroresGuardado.length + ' problema(s) por resolver'
 							: 'Guardar recorridos'}

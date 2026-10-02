@@ -1266,8 +1266,17 @@
 
 	.btn--primario {
 		color: #fff;
-		background: var(--orange-700, #9a3412);
-		border-color: var(--orange-700, #9a3412);
+		background: var(--accion);
+		border-color: var(--accion);
+		border-radius: 16px;
+		font-weight: 800;
+		box-shadow: var(--shadow-btn);
+	}
+
+	.btn--primario:hover:not(:disabled) {
+		background: var(--accion-hover);
+		border-color: var(--accion-hover);
+		box-shadow: var(--shadow-btn-hover);
 	}
 
 	.btn:disabled {

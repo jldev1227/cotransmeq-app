@@ -2129,7 +2129,7 @@
 								type="button"
 								on:click={abrirModalRecorridos}
 								disabled={!conductorSelected?.value || !periodo_inicio || !periodo_fin}
-								class="apple-transition flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-base)] disabled:cursor-not-allowed disabled:opacity-60"
+								class="btn-secondary min-h-0 px-3 py-1.5 text-xs disabled:cursor-not-allowed"
 								title={!conductorSelected?.value
 									? 'Selecciona un conductor primero'
 									: !periodo_inicio || !periodo_fin
@@ -2160,8 +2160,7 @@
 									!periodo_inicio ||
 									!periodo_fin ||
 									detallesVehiculos.length === 0}
-								class="apple-transition flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-								style="background: linear-gradient(135deg, #6366f1, #4f46e5); color: white; border-color: transparent;"
+								class="btn-primary min-h-0 px-3 py-1.5 text-xs disabled:cursor-not-allowed"
 								title={!conductorSelected?.value
 									? 'Selecciona un conductor primero'
 									: !periodo_inicio || !periodo_fin
@@ -3872,7 +3871,7 @@
 							type="button"
 							on:click={() =>
 								(estadoLiquidacion = estadoLiquidacion === 'Pendiente' ? 'Liquidado' : 'Pendiente')}
-							class="apple-transition flex items-center justify-center gap-2 rounded-xl border border-[var(--border-default)] bg-white px-5 py-2.5 text-sm font-semibold text-[var(--text-secondary)] hover:border-[var(--border-emphasis)] hover:bg-[var(--bg-surface)]"
+							class="btn-secondary"
 						>
 							<div
 								class="h-2.5 w-2.5 rounded-full {estadoLiquidacion === 'Liquidado'
@@ -3884,8 +3883,7 @@
 						<button
 							on:click={handleSubmit}
 							disabled={loading}
-							class="apple-transition flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-btn)] hover:shadow-[var(--shadow-btn-hover)] disabled:opacity-50"
-							style="background: linear-gradient(135deg, #16a34a, #15803d);"
+							class="btn-primary"
 						>
 							{#if loading}
 								<div
@@ -4128,7 +4126,7 @@
 						type="button"
 						on:click={() =>
 							(estadoLiquidacion = estadoLiquidacion === 'Pendiente' ? 'Liquidado' : 'Pendiente')}
-						class="apple-transition flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border-default)] bg-white px-5 py-2.5 text-sm font-semibold text-[var(--text-secondary)] hover:border-[var(--border-emphasis)] hover:bg-[var(--bg-surface)]"
+						class="btn-secondary w-full"
 					>
 						<div
 							class="h-2.5 w-2.5 rounded-full {estadoLiquidacion === 'Liquidado'
@@ -4143,8 +4141,7 @@
 						type="button"
 						on:click={handleSubmit}
 						disabled={loading}
-						class="apple-transition flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-semibold text-white shadow-[var(--shadow-btn)] disabled:opacity-50"
-						style="background: linear-gradient(135deg, #16a34a, #15803d);"
+						class="btn-primary w-full"
 					>
 						{#if loading}
 							<div

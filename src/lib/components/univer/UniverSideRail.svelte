@@ -215,7 +215,9 @@
 		align-items: center;
 		gap: 4px;
 		padding: 6px 0;
-		background: #1e2429;
+		/* Mismo verde profundo que la barra superior: el canvas queda
+		   enmarcado por la marca por arriba y por la derecha. */
+		background: var(--bg-charcoal-deep);
 		border-left: 1px solid rgba(255, 255, 255, 0.08);
 		/* Por encima del canvas para que el popover no quede recortado por el
 		   `overflow:hidden` del host de Univer. */
@@ -245,7 +247,7 @@
 		justify-content: center;
 		padding: 0;
 		border: 1px solid transparent;
-		border-radius: 8px;
+		border-radius: 12px;
 		background: rgba(255, 255, 255, 0.08);
 		color: rgba(255, 255, 255, 0.82);
 		cursor: pointer;
@@ -259,7 +261,7 @@
 		color: #fff;
 	}
 	.rail-btn:focus-visible {
-		outline: 2px solid #38bdf8;
+		outline: 2px solid rgba(255, 255, 255, 0.7);
 		outline-offset: 1px;
 	}
 	.rail-btn:disabled {
@@ -280,26 +282,29 @@
 		flex: none;
 	}
 
+	/* Los tonos de los botones de la app móvil: acción principal, botón
+	   blanco y destructivo. Antes verde oscuro, azul (#2563eb, fuera de la
+	   marca) y un rojo distinto al de la app. */
 	.rail-green {
-		background: #c2410c;
+		background: var(--accion);
 		color: #fff;
 	}
 	.rail-green:hover:not(:disabled) {
-		background: #9a3412;
+		background: var(--accion-hover);
 	}
 	.rail-blue {
-		background: #2563eb;
-		color: #fff;
+		background: #fff;
+		color: var(--bg-charcoal-deep);
 	}
 	.rail-blue:hover:not(:disabled) {
-		background: #1d4ed8;
+		background: rgba(255, 255, 255, 0.86);
 	}
 	.rail-red {
-		background: #b91c1c;
+		background: #b42318;
 		color: #fff;
 	}
 	.rail-red:hover:not(:disabled) {
-		background: #991b1b;
+		background: #912018;
 	}
 
 	.rail-badge {
@@ -311,7 +316,7 @@
 		padding: 0 4px;
 		border-radius: 8px;
 		background: #f59e0b;
-		color: #1e2429;
+		color: var(--bg-charcoal-deep);
 		font-size: 10px;
 		font-weight: 700;
 		line-height: 16px;
@@ -350,10 +355,10 @@
 		max-width: 240px;
 		width: max-content;
 		padding: 7px 10px;
-		border-radius: 6px;
-		background: #0f172a;
-		border: 1px solid rgba(255, 255, 255, 0.12);
-		box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+		border-radius: 10px;
+		background: var(--bg-charcoal-deep);
+		border: 1px solid rgba(255, 255, 255, 0.14);
+		box-shadow: 0 8px 24px rgba(0, 29, 23, 0.35);
 		opacity: 0;
 		visibility: hidden;
 		transition:
@@ -395,8 +400,8 @@
 		   recortaría contra el borde del panel. */
 		overflow: visible;
 		padding: 12px;
-		border-radius: 8px;
-		box-shadow: 0 16px 40px rgba(15, 23, 42, 0.28);
+		border-radius: 16px;
+		box-shadow: 0 16px 40px rgba(0, 29, 23, 0.28);
 		z-index: 30;
 	}
 	.rail-panel-light {
@@ -405,7 +410,7 @@
 		color: #0f172a;
 	}
 	.rail-panel-dark {
-		background: #1e2429;
+		background: var(--bg-charcoal-deep);
 		border: 1px solid rgba(255, 255, 255, 0.14);
 		color: #e2e8f0;
 	}

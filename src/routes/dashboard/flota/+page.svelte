@@ -7,6 +7,7 @@
 	import { authStore } from '$lib/stores/auth';
 	import { toast } from 'svelte-sonner';
 	import ModalFormVehiculo from '$lib/components/vehiculos/ModalFormVehiculo.svelte';
+	import ModalDetalleVehiculo from '$lib/components/vehiculos/ModalDetalleVehiculo.svelte';
 	import ModalConfirmDelete from '$lib/components/vehiculos/ModalConfirmDelete.svelte';
 	import FilterDrawer from '$lib/components/ui/FilterDrawer.svelte';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
@@ -17,7 +18,16 @@
 	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
 	import SegmentosFiltro from '$lib/components/listing/SegmentosFiltro.svelte';
 	import { mascota } from '$lib/mascot';
-	import { Pencil, Trash2 } from 'lucide-svelte';
+	import { Eye, Pencil, Trash2 } from 'lucide-svelte';
+	import BarraSeleccion from '$lib/components/listing/BarraSeleccion.svelte';
+	import { confirmarEliminacion } from '$lib/stores/confirm';
+	import {
+		EyeOff as IcoOcultar,
+		Eye as IcoMostrar,
+		Trash2 as IcoPapelera,
+		RotateCcw as IcoRestaurar
+	} from 'lucide-svelte';
+	import type { SortingState } from '@tanstack/table-core';
 	import type { ColumnDef } from '@tanstack/table-core';
 	import { page } from '$app/state';
 	import { crearListingStore } from '$lib/listing/listingStore';
@@ -88,7 +98,6 @@
 
 	// Estados para modo selección
 	let vehiculosSeleccionados = $state(new Set<string>());
-	let ultimoSeleccionadoIndex: number | null = null;
 	let shiftPressed = $state(false);
 	let procesandoMasivo = $state(false);
 
@@ -100,37 +109,19 @@
 		if (e.key === 'Shift') shiftPressed = false;
 	}
 
-	function toggleSeleccion(id: string, index: number, event: MouseEvent | TouchEvent | any) {
-		if (event.shiftKey && ultimoSeleccionadoIndex !== null) {
-			const start = Math.min(ultimoSeleccionadoIndex, index);
-			const end = Math.max(ultimoSeleccionadoIndex, index);
-
-			const idsInRange = vehiculos.slice(start, end + 1).map((v) => v.id);
-			const someNotSelected = idsInRange.some((id) => !vehiculosSeleccionados.has(id));
-
-			if (someNotSelected) {
-				idsInRange.forEach((id) => vehiculosSeleccionados.add(id));
-			} else {
-				idsInRange.forEach((id) => vehiculosSeleccionados.delete(id));
-			}
-		} else {
-			if (vehiculosSeleccionados.has(id)) {
-				vehiculosSeleccionados.delete(id);
-			} else {
-				vehiculosSeleccionados.add(id);
-			}
-			ultimoSeleccionadoIndex = index;
-		}
-		vehiculosSeleccionados = vehiculosSeleccionados;
-	}
-
-	function toggleSeleccionarTodo() {
-		if (vehiculosSeleccionados.size === vehiculos.length && vehiculos.length > 0) {
-			vehiculosSeleccionados.clear();
-		} else {
-			vehiculos.forEach((v) => vehiculosSeleccionados.add(v.id));
-		}
-		vehiculosSeleccionados = vehiculosSeleccionados;
+	/// Mover a la papelera se confirma: es reversible, pero saca los registros
+	/// de la lista de todos.
+	async function moverAPapelera() {
+		const n = vehiculosSeleccionados.size;
+		if (
+			!(await confirmarEliminacion({
+				title: `¿Mover ${n} vehículos a la papelera?`,
+				message: 'Dejarán de aparecer en la lista. Puedes restaurarlos desde la papelera.',
+				confirmText: 'Mover a papelera'
+			}))
+		)
+			return;
+		await ejecutarAccionMasiva('eliminar');
 	}
 
 	async function ejecutarAccionMasiva(accion: 'ocultar' | 'mostrar' | 'eliminar' | 'restaurar') {
@@ -146,8 +137,7 @@
 			const data = respuesta.data;
 			if (data.success) {
 				toast.success(data.message);
-				vehiculosSeleccionados.clear();
-				vehiculosSeleccionados = vehiculosSeleccionados;
+				vehiculosSeleccionados = new Set();
 				cargar(true);
 			} else {
 				toast.error(data.message || 'Error al ejecutar acción masiva');
@@ -218,7 +208,15 @@
 	 * `vehiculosAPI.getAll` aceptaba parámetros. Teclear en el buscador
 	 * recargaba la misma lista completa una y otra vez.
 	 */
-	const vehiculosVisibles = $derived(
+	/// La flota llega entera (se filtra en cliente), así que el orden también es
+	/// local: A–Z por placa de entrada, como el resto de directorios.
+	let ordenTabla = $state<SortingState>([{ id: 'vehiculo', desc: false }]);
+	const porPlaca = (a: Vehiculo, b: Vehiculo) =>
+		(a.placa ?? '').localeCompare(b.placa ?? '', 'es', { numeric: true });
+
+	let detalleId = $state<string | null>(null);
+
+	const vehiculosFiltrados = $derived(
 		vehiculos.filter((v) => {
 			if (filtros.estado !== 'todos') {
 				const suyo = (v.estado ?? '').toUpperCase();
@@ -239,6 +237,10 @@
 				v.conductores ? `${v.conductores.nombre} ${v.conductores.apellido}` : ''
 			]);
 		})
+	);
+
+	const vehiculosVisibles = $derived(
+		ordenTabla[0]?.desc ? [...vehiculosFiltrados].sort(porPlaca).reverse() : [...vehiculosFiltrados].sort(porPlaca)
 	);
 
 	/// Las tarjetas de resumen cuentan sobre TODO lo cargado, no sobre lo
@@ -341,7 +343,7 @@
 	/// Columnas de la lista. Sin `accessorKey` en las de presentación: la
 	/// celda las pinta con el snippet y `TablaLista` no intenta leer un valor.
 	const COLUMNAS: ColumnDef<Vehiculo, any>[] = [
-		{ id: 'vehiculo', header: 'Vehículo', accessorKey: 'placa', enableSorting: false },
+		{ id: 'vehiculo', header: 'Vehículo', accessorKey: 'placa' },
 		{ id: 'detalle', header: 'Modelo · Clase', enableSorting: false },
 		{ id: 'conductor', header: 'Conductor asignado', enableSorting: false },
 		{ id: 'estado', header: 'Estado', accessorKey: 'estado', enableSorting: false, size: 150 },
@@ -643,23 +645,16 @@
 				datos={vehiculosVisibles}
 				claveFila={(v) => v.id}
 				cargando={isLoading}
-				onFila={puedeEditar ? (v) => openModal(v.id) : undefined}
+				onFila={(v) => (detalleId = v.id)}
 				etiqueta="Vehículos de la flota"
+				orden={ordenTabla}
+				onOrdenar={(o) => (ordenTabla = o.length ? o : [{ id: 'vehiculo', desc: false }])}
+				seleccion={vehiculosSeleccionados}
+				onSeleccion={(ids) => (vehiculosSeleccionados = ids)}
 			>
 				{#snippet celda({ columnaId, fila: v })}
 					{#if columnaId === 'vehiculo'}
 						<div class="flex items-center">
-							<span class="dir-check">
-								<input
-									type="checkbox"
-									checked={vehiculosSeleccionados.has(v.id)}
-									onclick={(e) => {
-										e.stopPropagation();
-										toggleSeleccion(v.id, vehiculosVisibles.indexOf(v), e);
-									}}
-									aria-label="Seleccionar {v.placa}"
-								/>
-							</span>
 							<CeldaIdentidad
 								codigo={v.placa}
 								titulo={[v.marca, v.linea].filter(Boolean).join(' ') || 'Sin marca'}
@@ -688,6 +683,12 @@
 					{:else if columnaId === 'acciones'}
 						<AccionesFila
 							acciones={[
+								{
+									id: 'ver',
+									etiqueta: 'Ver detalle',
+									icono: Eye,
+									onClick: () => (detalleId = v.id)
+								},
 								{
 									id: 'editar',
 									etiqueta: 'Editar',
@@ -727,96 +728,42 @@
 		</div>
 	</div>
 
-	<!-- Bulk Actions Bar — fondo charcoal profundo (no glass) -->
-	{#if vehiculosSeleccionados.size > 0}
-		<div class="bulk-actions-container">
-			<div
-				class="flex items-center gap-4 rounded-2xl p-2.5 shadow-2xl"
-				style="background-color: var(--bg-charcoal); border: 1px solid rgba(255,255,255,0.08); color: white;"
-				in:scale={{ duration: 300, start: 0.9 }}
-			>
-				<span
-					class="px-2 text-xs font-medium"
-					style="border-right: 1px solid rgba(255,255,255,0.15);"
-				>
-					{vehiculosSeleccionados.size} seleccionados
-				</span>
-				<div class="flex gap-1.5">
-					{#if puedeEditar}
-						<button
-							onclick={() => ejecutarAccionMasiva('ocultar')}
-							disabled={procesandoMasivo}
-							class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
-							style="background-color: rgba(255,255,255,0.08);"
-						>
-							<svg
-								class="h-3.5 w-3.5"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								stroke-width="1.8"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
-								/>
-							</svg>
-							Ocultar
-						</button>
-					{/if}
-					{#if puedeEditar}
-						<button
-							onclick={() => ejecutarAccionMasiva('eliminar')}
-							disabled={procesandoMasivo}
-							class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
-							style="background-color: rgba(220,38,38,0.85);"
-						>
-							<svg
-								class="h-3.5 w-3.5"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								stroke-width="1.8"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-								/>
-							</svg>
-							Papelera
-						</button>
-					{/if}
-				</div>
-				<button
-					onclick={() => {
-						vehiculosSeleccionados.clear();
-						vehiculosSeleccionados = vehiculosSeleccionados;
-					}}
-					class="apple-transition ml-2"
-					style="color: rgba(255,255,255,0.5);"
-				>
-					<svg
-						class="h-4 w-4"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-						stroke-width="1.8"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</div>
-		</div>
-	{/if}
+	<!-- Acciones masivas: la misma barra en todos los directorios. -->
+	<BarraSeleccion
+		cantidad={vehiculosSeleccionados.size}
+		nombreItems="vehículos"
+		procesando={procesandoMasivo}
+		onLimpiar={() => (vehiculosSeleccionados = new Set())}
+		acciones={!puedeEditar
+			? []
+			: filtros.vista === 'papelera'
+				? [{ id: 'restaurar', etiqueta: 'Restaurar', icono: IcoRestaurar, tono: 'primario', onClick: () => ejecutarAccionMasiva('restaurar') }]
+				: [
+						filtros.vista === 'ocultos'
+							? { id: 'mostrar', etiqueta: 'Mostrar', icono: IcoMostrar, tono: 'primario', onClick: () => ejecutarAccionMasiva('mostrar') }
+							: { id: 'ocultar', etiqueta: 'Ocultar', icono: IcoOcultar, tono: 'neutro', onClick: () => ejecutarAccionMasiva('ocultar') },
+						{ id: 'papelera', etiqueta: 'Mover a papelera', icono: IcoPapelera, tono: 'peligro', onClick: () => moverAPapelera() }
+					]}
+	/>
+
 </div>
 
+<ModalDetalleVehiculo
+	open={detalleId !== null}
+	vehiculoId={detalleId}
+	onclose={() => (detalleId = null)}
+	oneditar={puedeEditar
+		? (id) => {
+				detalleId = null;
+				openModal(id);
+			}
+		: undefined}
+/>
 <ModalFormVehiculo
-	bind:isOpen={isModalOpen}
+	open={isModalOpen}
 	vehiculoId={selectedVehiculoId}
-	on:close={() => (isModalOpen = false)}
-	on:success={() => cargar(true)}
+	onclose={() => (isModalOpen = false)}
+	onguardado={() => cargar(true)}
 />
 <ModalConfirmDelete
 	bind:isOpen={isDeleteModalOpen}

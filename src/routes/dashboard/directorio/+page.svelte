@@ -315,7 +315,7 @@
 			<div class="flex flex-wrap items-center gap-2">
 				<button
 					onclick={abrirModal}
-					class="inline-flex items-center gap-2 rounded-xl border border-orange-200 bg-white px-4 py-2.5 text-sm font-semibold text-orange-700 shadow-sm transition-colors hover:bg-orange-50"
+					class="btn-secondary inline-flex items-center gap-2"
 				>
 					<svg
 						class="h-4 w-4"
@@ -334,7 +334,7 @@
 				</button>
 				<button
 					onclick={abrirModalCrear}
-					class="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-700"
+					class="btn-primary inline-flex items-center gap-2"
 				>
 					<svg
 						class="h-4 w-4"
@@ -663,14 +663,14 @@
 			<div class="flex justify-end gap-3 border-t border-gray-100 px-6 py-4">
 				<button
 					onclick={() => (modalAbierto = false)}
-					class="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+					class="btn-secondary"
 				>
 					Cancelar
 				</button>
 				<button
 					onclick={enviarInvitacion}
 					disabled={enviando}
-					class="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-700 disabled:opacity-60"
+					class="btn-primary inline-flex items-center gap-2"
 				>
 					{#if enviando}
 						<div
@@ -887,14 +887,14 @@
 			<div class="flex justify-end gap-3 border-t border-gray-100 px-6 py-4">
 				<button
 					onclick={() => (modalCrearAbierto = false)}
-					class="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50"
+					class="btn-secondary"
 				>
 					Cancelar
 				</button>
 				<button
 					onclick={crearUsuario}
 					disabled={creando}
-					class="inline-flex items-center gap-2 rounded-xl bg-orange-600 px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-700 disabled:opacity-60"
+					class="btn-primary inline-flex items-center gap-2"
 				>
 					{#if creando}
 						<div

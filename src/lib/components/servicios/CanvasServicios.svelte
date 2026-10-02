@@ -939,7 +939,7 @@
 						<button
 							type="button"
 							onclick={() => onLoadMore?.()}
-							class="apple-transition flex items-center gap-2 rounded-xl border border-[rgba(234, 88, 12,0.25)] bg-white px-4 py-1.5 text-xs font-semibold text-[#166534] hover:border-[rgba(234, 88, 12,0.4)] hover:bg-[rgba(234, 88, 12,0.06)]"
+							class="btn-secondary apple-transition flex items-center gap-2"
 						>
 							<svg
 								class="h-3.5 w-3.5"

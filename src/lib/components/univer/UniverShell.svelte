@@ -35,9 +35,9 @@
 
 	let { header, children }: Props = $props();
 
-	// El shell se anuncia para que el `<Toaster>` del layout raíz baje los
-	// avisos a la esquina inferior derecha. En un canvas, la superior está
-	// ocupada por el toolbar y sus desplegables. Va aquí y no en cada
+	// El shell se anuncia para que el `<Toaster>` del layout raíz suba los
+	// avisos por encima de la barra de pestañas del canvas, que es con lo que
+	// se navega entre hojas. Va aquí y no en cada
 	// `+layout@.svelte` porque este componente lo monta todo canvas y solo un
 	// canvas: uno nuevo queda cubierto sin acordarse de nada.
 	//

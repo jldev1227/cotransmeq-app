@@ -153,7 +153,7 @@
 				<!-- {#if onClick}
 					<button
 						on:click={handleView}
-						class="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-xl text-sm font-medium apple-transition flex items-center gap-2"
+						class="btn-primary apple-transition flex items-center gap-2"
 						title="Ver detalles"
 					>
 						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -168,7 +168,7 @@
 				{#if onEdit && canEdit}
 					<button
 						on:click={handleEdit}
-						class="apple-transition flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+						class="btn-secondary apple-transition flex items-center gap-2"
 						title="Editar servicio"
 					>
 						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -187,7 +187,7 @@
 				<!-- {#if canShowTicket}
 					<button
 						on:click={handleTicket}
-						class="px-4 py-2 glass border border-gray-200 hover:border-orange-400 hover:bg-orange-50 text-gray-700 hover:text-orange-700 rounded-xl text-sm font-medium apple-transition flex items-center gap-2"
+						class="btn-secondary apple-transition flex items-center gap-2"
 						title="Ver ticket"
 					>
 						<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

@@ -344,14 +344,14 @@
 						type="button"
 						on:click={handleClose}
 						disabled={loading}
-						class="apple-transition flex-1 rounded-xl border border-gray-200 bg-white px-6 py-3 font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+						class="btn-secondary apple-transition flex-1"
 					>
 						Cancelar
 					</button>
 					<button
 						type="submit"
 						disabled={loading}
-						class="apple-transition flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-3 font-semibold text-white shadow-lg shadow-orange-500/30 hover:from-orange-600 hover:to-orange-700 disabled:opacity-50"
+						class="btn-primary apple-transition flex flex-1 items-center justify-center gap-2"
 					>
 						{#if loading}
 							<div

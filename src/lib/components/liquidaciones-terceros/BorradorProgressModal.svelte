@@ -204,7 +204,7 @@
 				{#if isDismissible}
 					<button
 						type="button"
-						class="apple-transition rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:from-emerald-600 hover:to-emerald-700"
+						class="btn-primary"
 						on:click={handleClose}
 					>
 						Entendido
@@ -212,7 +212,7 @@
 				{:else if isLocked}
 					<button
 						type="button"
-						class="apple-transition rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+						class="btn-secondary"
 						on:click={handleClose}
 					>
 						Cerrar
@@ -220,7 +220,7 @@
 				{:else}
 					<button
 						type="button"
-						class="apple-transition rounded-xl border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+						class="btn-danger"
 						on:click={handleCancel}
 					>
 						Cancelar generación

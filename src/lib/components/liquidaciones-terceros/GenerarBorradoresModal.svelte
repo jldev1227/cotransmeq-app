@@ -22,6 +22,7 @@
 	import { borradorQueue, borradorQueueStore } from '$lib/stores/borradorQueue';
 	import { claseBadgeEstado } from '$lib/editor/builders/cierres-finales-estado';
 	import type { CierreHoja } from '$lib/editor/builders/cierres-finales-identidad';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 
 	interface Props {
 		anio: number;
@@ -253,6 +254,15 @@
 	const job = $derived($borradorQueueStore);
 	const enCurso = $derived(
 		job != null && (job.status === 'queued' || job.status === 'running')
+	);
+	/** Con un job en marcha o recién terminado se ve su progreso, no el formulario. */
+	const mostrarProgreso = $derived(
+		job != null &&
+			(enCurso ||
+				job.status === 'complete' ||
+				job.status === 'cancelled' ||
+				job.status === 'error' ||
+				job.status === 'locked')
 	);
 
 	onMount(async () => {
@@ -495,451 +505,450 @@
 	}
 </script>
 
-<svelte:window
-	onkeydown={(e) => {
-		if (e.key === 'Escape' && !enCurso) onClose();
-	}}
-/>
-
 <!--
-	El fondo no cierra: un clic despistado tirando 100 liquidaciones ya
-	elegidas es demasiado caro. Se sale por la × , por Cancelar o por Esc.
+	El fondo no cierra (`cerrarAlFondo={false}`): un clic despistado tirando
+	100 liquidaciones ya elegidas es demasiado caro. Se sale por la ×, por
+	Cancelar o por Esc; mientras el job corre, ni eso (`bloqueado`).
 -->
-<div class="gbm-backdrop">
-	<div class="gbm" role="dialog" aria-modal="true" aria-label="Generar borradores" tabindex="-1">
-		<header class="gbm-head">
-			<div>
-				<h2>Generar borradores</h2>
-				<p class="gbm-periodo">
-					Periodo {String(mes).padStart(2, '0')}/{anio} · fijado por el canvas
-				</p>
-			</div>
-			<button class="gbm-x" onclick={onClose} disabled={enCurso} aria-label="Cerrar">×</button>
-		</header>
+<ModalBase
+	open={true}
+	eyebrow="Cierres finales"
+	title="Generar borradores"
+	subtitle={`Periodo ${String(mes).padStart(2, '0')}/${anio} · fijado por el canvas`}
+	tamano="lg"
+	cerrarAlFondo={false}
+	bloqueado={enCurso}
+	oncerrar={onClose}
+>
+	{#if job && mostrarProgreso}
+		<!-- ── Progreso ─────────────────────────────────────────────── -->
+		<section class="gbm-card">
+			{#if job.status === 'locked'}
+				<div class="gbm-aviso gbm-aviso-ambar">
+					<strong>{job.lockedBy?.userName ?? 'Otro usuario'}</strong> está generando
+					borradores
+					{#if job.lockedBy?.anio && job.lockedBy?.mes}
+						en {String(job.lockedBy.mes).padStart(2, '0')}/{job.lockedBy.anio}
+					{/if}.
+					El bloqueo es por periodo: otros meses siguen disponibles.
+				</div>
+			{:else}
+				<p class="gbm-paso">{job.currentStep}</p>
+				<div class="gbm-barra">
+					<div class="gbm-barra-fill" style="width: {job.progress}%"></div>
+				</div>
+				<p class="gbm-pct">{job.progress}%</p>
 
-		{#if job && (enCurso || job.status === 'complete' || job.status === 'cancelled' || job.status === 'error' || job.status === 'locked')}
-			<!-- ── Progreso ─────────────────────────────────────────────── -->
-			<section class="gbm-body">
-				{#if job.status === 'locked'}
+				{#if job.guardados?.length}
+					<p class="gbm-nota">
+						{job.guardados.length} cierre(s) creados. Sus hojas ya están en el canvas.
+					</p>
+				{/if}
+
+				{#if job.fallidos?.length}
+					<ul class="gbm-fallidos">
+						{#each job.fallidos as f (f.placa)}
+							<li><strong>{f.placa}</strong>: {f.error}</li>
+						{/each}
+					</ul>
+				{/if}
+
+				{#if job.status === 'error'}
+					<div class="gbm-aviso gbm-aviso-rojo">{job.error}</div>
+				{/if}
+				{#if job.status === 'cancelled'}
 					<div class="gbm-aviso gbm-aviso-ambar">
-						<strong>{job.lockedBy?.userName ?? 'Otro usuario'}</strong> está generando
-						borradores
-						{#if job.lockedBy?.anio && job.lockedBy?.mes}
-							en {String(job.lockedBy.mes).padStart(2, '0')}/{job.lockedBy.anio}
-						{/if}.
-						El bloqueo es por periodo: otros meses siguen disponibles.
+						Cancelado. Los cierres ya creados se conservan: son válidos.
 					</div>
-				{:else}
-					<p class="gbm-paso">{job.currentStep}</p>
-					<div class="gbm-barra">
-						<div class="gbm-barra-fill" style="width: {job.progress}%"></div>
-					</div>
-					<p class="gbm-pct">{job.progress}%</p>
+				{/if}
+			{/if}
+		</section>
+	{:else}
+		<!-- ── Formulario ───────────────────────────────────────────── -->
+		<section class="gbm-form">
+			{#if cargando}
+				<p class="gbm-nota">Cargando liquidaciones de todos los periodos…</p>
+			{:else if errorCarga}
+				<div class="gbm-aviso gbm-aviso-rojo">{errorCarga}</div>
+			{:else if liquidaciones.length === 0}
+				<div class="gbm-aviso gbm-aviso-ambar">
+					No hay ninguna liquidación de servicio registrada. Sin ellas no hay nada
+					que liquidar a terceros.
+				</div>
+			{:else}
+				<h3 class="gbm-h3">1 · Liquidaciones de servicio</h3>
 
-					{#if job.guardados?.length}
-						<p class="gbm-nota">
-							{job.guardados.length} cierre(s) creados. Sus hojas ya están en el canvas.
-						</p>
-					{/if}
-
-					{#if job.fallidos?.length}
-						<ul class="gbm-fallidos">
-							{#each job.fallidos as f (f.placa)}
-								<li><strong>{f.placa}</strong>: {f.error}</li>
+				<div class="gbm-periodo-filtros">
+					<label>
+						<span>Año</span>
+						<select class="gbm-input" bind:value={filtroAnio} onchange={alCambiarAnio}>
+							<option value={0}>Todos</option>
+							{#each aniosDisponibles as a (a)}
+								<option value={a}>{a}</option>
 							{/each}
-						</ul>
-					{/if}
-
-					{#if job.status === 'error'}
-						<div class="gbm-aviso gbm-aviso-rojo">{job.error}</div>
-					{/if}
-					{#if job.status === 'cancelled'}
-						<div class="gbm-aviso gbm-aviso-ambar">
-							Cancelado. Los cierres ya creados se conservan: son válidos.
-						</div>
-					{/if}
-				{/if}
-			</section>
-
-			<footer class="gbm-foot">
-				{#if enCurso}
-					<span class="gbm-hint">
-						Al cancelar se detiene tras terminar la placa en curso.
-					</span>
-					<button class="gbm-btn-ghost" onclick={() => borradorQueue.cancel()}>
-						Cancelar generación
-					</button>
-				{:else}
+						</select>
+					</label>
+					<label>
+						<span>Mes</span>
+						<select class="gbm-input" bind:value={filtroMes}>
+							<option value={0}>Todos</option>
+							{#each mesesDisponibles as m (m)}
+								<option value={m}>{MESES[m - 1]}</option>
+							{/each}
+						</select>
+					</label>
 					<button
-						class="gbm-btn-ghost"
-						onclick={() => {
-							borradorQueue.dismiss();
-						}}
+						type="button"
+						class="gbm-chip"
+						onclick={verPeriodoDelCanvas}
+						disabled={filtroAnio === anio && filtroMes === mes}
 					>
-						Generar otro
+						Periodo del canvas
 					</button>
-					<button class="gbm-btn-primary" onclick={onClose}>Cerrar</button>
-				{/if}
-			</footer>
-		{:else}
-			<!-- ── Formulario ───────────────────────────────────────────── -->
-			<section class="gbm-body">
-				{#if cargando}
-					<p class="gbm-nota">Cargando liquidaciones de todos los periodos…</p>
-				{:else if errorCarga}
-					<div class="gbm-aviso gbm-aviso-rojo">{errorCarga}</div>
-				{:else if liquidaciones.length === 0}
-					<div class="gbm-aviso gbm-aviso-ambar">
-						No hay ninguna liquidación de servicio registrada. Sin ellas no hay nada
-						que liquidar a terceros.
-					</div>
-				{:else}
-					<h3 class="gbm-h3">1 · Liquidaciones de servicio</h3>
-
-					<div class="gbm-periodo-filtros">
-						<label>
-							<span>Año</span>
-							<select bind:value={filtroAnio} onchange={alCambiarAnio}>
-								<option value={0}>Todos</option>
-								{#each aniosDisponibles as a (a)}
-									<option value={a}>{a}</option>
-								{/each}
-							</select>
-						</label>
-						<label>
-							<span>Mes</span>
-							<select bind:value={filtroMes}>
-								<option value={0}>Todos</option>
-								{#each mesesDisponibles as m (m)}
-									<option value={m}>{MESES[m - 1]}</option>
-								{/each}
-							</select>
-						</label>
-						<button
-							type="button"
-							class="gbm-periodo-atajo"
-							onclick={verPeriodoDelCanvas}
-							disabled={filtroAnio === anio && filtroMes === mes}
-						>
-							Periodo del canvas
+					{#if hayFiltroPeriodo}
+						<button type="button" class="gbm-chip" onclick={verTodosLosPeriodos}>
+							Todos los periodos
 						</button>
-						{#if hayFiltroPeriodo}
-							<button type="button" class="gbm-periodo-atajo" onclick={verTodosLosPeriodos}>
-								Todos los periodos
-							</button>
+					{/if}
+				</div>
+
+				<input
+					class="gbm-input gbm-buscador"
+					type="search"
+					placeholder="Buscar por consecutivo, cliente, estado o mes…"
+					aria-label="Buscar liquidaciones"
+					bind:value={busqueda}
+				/>
+
+				<div class="gbm-acciones-mini">
+					<label class="gbm-check-todas">
+						<input
+							type="checkbox"
+							checked={todasVisiblesMarcadas}
+							indeterminate={visiblesSeleccionadas > 0 && !todasVisiblesMarcadas}
+							disabled={liquidacionesVisibles.length === 0}
+							onchange={(e) => todasLasLiquidaciones(e.currentTarget.checked)}
+						/>
+						<span>
+							Seleccionar todas{hayFiltro ? ' las visibles' : ''}
+						</span>
+					</label>
+					<span class="gbm-nota">
+						{seleccionadas.size} elegida(s) · mostrando {liquidacionesVisibles.length}
+						de {liquidaciones.length}
+					</span>
+				</div>
+
+				{#if elegidasDeOtroPeriodo > 0}
+					<p class="gbm-nota gbm-nota-mezcla">
+						{elegidasDeOtroPeriodo} de las elegidas
+						{elegidasDeOtroPeriodo === 1 ? 'es' : 'son'} de otro periodo. Sus placas
+						entran igual, y el cierre se guarda en
+						{String(mes).padStart(2, '0')}/{anio}.
+					</p>
+				{/if}
+
+				{#if liquidacionesVisibles.length === 0}
+					<p class="gbm-nota">
+						{#if busqueda.trim()}
+							Ninguna liquidación coincide con «{busqueda}».
+						{:else}
+							No hay liquidaciones en el periodo elegido.
 						{/if}
-					</div>
+					</p>
+				{:else}
+					<ul class="gbm-lista gbm-lista-liqs">
+						{#each liquidacionesVisibles as l (l.id)}
+							<li>
+								<label>
+									<input
+										type="checkbox"
+										checked={seleccionadas.has(l.id)}
+										onchange={() => alternarLiquidacion(l.id)}
+									/>
+									<span class="gbm-cons">{l.consecutivo}</span>
+									<span
+										class="gbm-periodo-badge"
+										class:gbm-periodo-badge-canvas={esDelCanvas(l)}
+										title={esDelCanvas(l)
+											? 'Periodo del canvas'
+											: 'Otro periodo: el cierre se guarda igualmente en el del canvas'}
+									>
+										{etiquetaPeriodo(l)}
+									</span>
+									<span class="gbm-cliente">{l.cliente}</span>
+									<span class="gbm-estado {claseBadgeEstado(l.estado)}">{l.estado}</span>
+									<span class="gbm-total">${fmtCOP(l.total)}</span>
+								</label>
+							</li>
+						{/each}
+					</ul>
+				{/if}
 
-					<input
-						class="gbm-buscador"
-						type="search"
-						placeholder="Buscar por consecutivo, cliente, estado o mes…"
-						aria-label="Buscar liquidaciones"
-						bind:value={busqueda}
-					/>
+				<h3 class="gbm-h3">2 · Placas</h3>
 
-					<div class="gbm-acciones-mini">
-						<label class="gbm-check-todas">
-							<input
-								type="checkbox"
-								checked={todasVisiblesMarcadas}
-								indeterminate={visiblesSeleccionadas > 0 && !todasVisiblesMarcadas}
-								disabled={liquidacionesVisibles.length === 0}
-								onchange={(e) => todasLasLiquidaciones(e.currentTarget.checked)}
-							/>
-							<span>
-								Seleccionar todas{hayFiltro ? ' las visibles' : ''}
-							</span>
-						</label>
-						<span class="gbm-nota">
-							{seleccionadas.size} elegida(s) · mostrando {liquidacionesVisibles.length}
-							de {liquidaciones.length}
+				{#if seleccionadas.size === 0}
+					<p class="gbm-nota">Elige al menos una liquidación para ver sus placas.</p>
+				{:else if cargandoPlacas}
+					<div class="gbm-cargando" role="status">
+						<span class="gbm-spinner" aria-hidden="true"></span>
+						<span>
+							Leyendo placas ·
+							<strong>{placasProgreso.hechas}/{placasProgreso.total}</strong>
+							liquidación(es)
 						</span>
 					</div>
-
-					{#if elegidasDeOtroPeriodo > 0}
-						<p class="gbm-nota gbm-nota-mezcla">
-							{elegidasDeOtroPeriodo} de las elegidas
-							{elegidasDeOtroPeriodo === 1 ? 'es' : 'son'} de otro periodo. Sus placas
-							entran igual, y el cierre se guarda en
-							{String(mes).padStart(2, '0')}/{anio}.
-						</p>
-					{/if}
-
-					{#if liquidacionesVisibles.length === 0}
-						<p class="gbm-nota">
-							{#if busqueda.trim()}
-								Ninguna liquidación coincide con «{busqueda}».
-							{:else}
-								No hay liquidaciones en el periodo elegido.
-							{/if}
-						</p>
-					{:else}
-						<ul class="gbm-lista gbm-lista-liqs">
-							{#each liquidacionesVisibles as l (l.id)}
-								<li>
-									<label>
-										<input
-											type="checkbox"
-											checked={seleccionadas.has(l.id)}
-											onchange={() => alternarLiquidacion(l.id)}
-										/>
-										<span class="gbm-cons">{l.consecutivo}</span>
-										<span
-											class="gbm-periodo-badge"
-											class:gbm-periodo-badge-canvas={esDelCanvas(l)}
-											title={esDelCanvas(l)
-												? 'Periodo del canvas'
-												: 'Otro periodo: el cierre se guarda igualmente en el del canvas'}
-										>
-											{etiquetaPeriodo(l)}
-										</span>
-										<span class="gbm-cliente">{l.cliente}</span>
-										<span class="gbm-estado {claseBadgeEstado(l.estado)}">{l.estado}</span>
-										<span class="gbm-total">${fmtCOP(l.total)}</span>
-									</label>
-								</li>
-							{/each}
-						</ul>
-					{/if}
-
-					<h3 class="gbm-h3">2 · Placas</h3>
-
-					{#if seleccionadas.size === 0}
-						<p class="gbm-nota">Elige al menos una liquidación para ver sus placas.</p>
-					{:else if cargandoPlacas}
-						<div class="gbm-cargando" role="status">
-							<span class="gbm-spinner" aria-hidden="true"></span>
-							<span>
-								Leyendo placas ·
-								<strong>{placasProgreso.hechas}/{placasProgreso.total}</strong>
-								liquidación(es)
-							</span>
-						</div>
-						<ul class="gbm-esqueleto" aria-hidden="true">
-							{#each [0, 1, 2, 3] as i (i)}
-								<li></li>
-							{/each}
-						</ul>
-					{:else if placasDetectadas.length === 0}
-						<div class="gbm-aviso gbm-aviso-ambar">
-							Ninguna de las liquidaciones elegidas tiene items de terceros, así que
-							no hay nada que liquidar.
-							{#if sinItems.length > 0}
-								<br />Sin items: {sinItems.join(', ')}.
-							{/if}
-						</div>
-					{:else}
-						<div class="gbm-acciones-mini">
-							<button onclick={() => todasLasPlacas(true)}>Todas</button>
-							<button onclick={() => todasLasPlacas(false)}>Ninguna</button>
-							<span class="gbm-nota">{placasAIncluir.length} de {placasDetectadas.length}</span>
-						</div>
-						<ul class="gbm-lista gbm-lista-placas">
-							{#each placasDetectadas as p (p.placa)}
-								{@const existentes = cierrePorPlaca.get(normalizar(p.placa)) ?? []}
-								<li>
-									<label>
-										<input
-											type="checkbox"
-											checked={!placasExcluidas.has(p.placa)}
-											onchange={() => alternarPlaca(p.placa)}
-										/>
-										<span class="gbm-cons">{p.placa}</span>
-										<span class="gbm-cliente">{p.tercero}</span>
-										{#each existentes as c (c.id)}
-											<span class="gbm-estado {claseBadgeEstado(c.estado)}" title="Ya existe un cierre">
-												ya: {c.estado}
-											</span>
-										{/each}
-									</label>
-								</li>
-							{/each}
-						</ul>
+					<ul class="gbm-esqueleto" aria-hidden="true">
+						{#each [0, 1, 2, 3] as i (i)}
+							<li></li>
+						{/each}
+					</ul>
+				{:else if placasDetectadas.length === 0}
+					<div class="gbm-aviso gbm-aviso-ambar">
+						Ninguna de las liquidaciones elegidas tiene items de terceros, así que
+						no hay nada que liquidar.
 						{#if sinItems.length > 0}
-							<p class="gbm-nota">
-								{sinItems.length} liquidación(es) elegidas no tienen items de terceros
-								y no aportan placas: {sinItems.join(', ')}.
-							</p>
+							<br />Sin items: {sinItems.join(', ')}.
 						{/if}
-					{/if}
-
-					{#if errorPlacas}
-						<div class="gbm-aviso gbm-aviso-rojo">{errorPlacas}</div>
-					{/if}
-
-					{#if conflictos.length > 0}
-						<h3 class="gbm-h3">3 · Cierres que ya existen</h3>
-						<div class="gbm-aviso gbm-aviso-ambar">
-							{conflictos.length} de las placas elegidas ya tienen cierre en este
-							periodo.
-							{#if !forceNew}
-								Sin marcar la casilla de abajo, esas placas se <strong>actualizarán</strong>
-								sobre su cierre existente.
-							{/if}
-						</div>
-
-						<label class="gbm-check-peligro">
-							<input type="checkbox" bind:checked={forceNew} />
-							<span>
-								<strong>Crear cierres nuevos (force_new)</strong>
-								<em>
-									Marca los cierres actuales de esas placas como
-									<strong>REEMPLAZADA</strong> y crea otros desde cero. No hay
-									botón para deshacerlo: revertir un REEMPLAZADA es manual.
-								</em>
-							</span>
-						</label>
-					{/if}
-
-					{#if errorLanzar}
-						<div class="gbm-aviso gbm-aviso-rojo">{errorLanzar}</div>
+					</div>
+				{:else}
+					<div class="gbm-acciones-mini">
+						<button type="button" class="gbm-chip" onclick={() => todasLasPlacas(true)}>Todas</button>
+						<button type="button" class="gbm-chip" onclick={() => todasLasPlacas(false)}>Ninguna</button>
+						<span class="gbm-nota">{placasAIncluir.length} de {placasDetectadas.length}</span>
+					</div>
+					<ul class="gbm-lista gbm-lista-placas">
+						{#each placasDetectadas as p (p.placa)}
+							{@const existentes = cierrePorPlaca.get(normalizar(p.placa)) ?? []}
+							<li>
+								<label>
+									<input
+										type="checkbox"
+										checked={!placasExcluidas.has(p.placa)}
+										onchange={() => alternarPlaca(p.placa)}
+									/>
+									<span class="gbm-cons">{p.placa}</span>
+									<span class="gbm-cliente">{p.tercero}</span>
+									{#each existentes as c (c.id)}
+										<span class="gbm-estado {claseBadgeEstado(c.estado)}" title="Ya existe un cierre">
+											ya: {c.estado}
+										</span>
+									{/each}
+								</label>
+							</li>
+						{/each}
+					</ul>
+					{#if sinItems.length > 0}
+						<p class="gbm-nota">
+							{sinItems.length} liquidación(es) elegidas no tienen items de terceros
+							y no aportan placas: {sinItems.join(', ')}.
+						</p>
 					{/if}
 				{/if}
-			</section>
 
-			<footer class="gbm-foot">
+				{#if errorPlacas}
+					<div class="gbm-aviso gbm-aviso-rojo">{errorPlacas}</div>
+				{/if}
+
+				{#if conflictos.length > 0}
+					<h3 class="gbm-h3">3 · Cierres que ya existen</h3>
+					<div class="gbm-aviso gbm-aviso-ambar">
+						{conflictos.length} de las placas elegidas ya tienen cierre en este
+						periodo.
+						{#if !forceNew}
+							Sin marcar la casilla de abajo, esas placas se <strong>actualizarán</strong>
+							sobre su cierre existente.
+						{/if}
+					</div>
+
+					<label class="gbm-check-peligro">
+						<input type="checkbox" bind:checked={forceNew} />
+						<span>
+							<strong>Crear cierres nuevos (force_new)</strong>
+							<em>
+								Marca los cierres actuales de esas placas como
+								<strong>REEMPLAZADA</strong> y crea otros desde cero. No hay
+								botón para deshacerlo: revertir un REEMPLAZADA es manual.
+							</em>
+						</span>
+					</label>
+				{/if}
+
+				{#if errorLanzar}
+					<div class="gbm-aviso gbm-aviso-rojo">{errorLanzar}</div>
+				{/if}
+			{/if}
+		</section>
+	{/if}
+
+	{#snippet pie()}
+		{#if mostrarProgreso}
+			{#if enCurso}
 				<span class="gbm-hint">
-					Las hojas irán apareciendo en el canvas conforme se creen.
+					Al cancelar se detiene tras terminar la placa en curso.
 				</span>
-				<button class="gbm-btn-ghost" onclick={onClose}>Cancelar</button>
-				<button
-					class="gbm-btn-primary"
-					onclick={lanzar}
-					disabled={seleccionadas.size === 0 ||
-						placasAIncluir.length === 0 ||
-						cargandoPlacas ||
-						lanzando}
-				>
-					{#if lanzando}
-						Lanzando…
-					{:else if cargandoPlacas}
-						Leyendo placas…
-					{:else}
-						Generar {placasAIncluir.length} borrador(es)
-					{/if}
+				<button class="btn-secondary" onclick={() => borradorQueue.cancel()}>
+					Cancelar generación
 				</button>
-			</footer>
+			{:else}
+				<button
+					class="btn-secondary"
+					onclick={() => {
+						borradorQueue.dismiss();
+					}}
+				>
+					Generar otro
+				</button>
+				<button class="btn-primary" onclick={onClose}>Cerrar</button>
+			{/if}
+		{:else}
+			<span class="gbm-hint">
+				Las hojas irán apareciendo en el canvas conforme se creen.
+			</span>
+			<button class="btn-secondary" onclick={onClose}>Cancelar</button>
+			<button
+				class="btn-primary"
+				onclick={lanzar}
+				disabled={seleccionadas.size === 0 ||
+					placasAIncluir.length === 0 ||
+					cargandoPlacas ||
+					lanzando}
+			>
+				{#if lanzando}
+					Lanzando…
+				{:else if cargandoPlacas}
+					Leyendo placas…
+				{:else}
+					Generar {placasAIncluir.length} borrador(es)
+				{/if}
+			</button>
 		{/if}
-	</div>
-</div>
+	{/snippet}
+</ModalBase>
 
 <style>
-	.gbm-backdrop {
-		position: fixed;
-		inset: 0;
-		z-index: 220;
-		background: rgb(15 23 42 / 0.55);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 20px;
+	/* ── Bloques del cuerpo ─────────────────────────────────────── */
+	.gbm-card {
+		padding: 16px 18px;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
 	}
-
-	.gbm {
-		background: #fff;
-		color: #0f172a;
-		border-radius: 12px;
-		width: 100%;
-		max-width: 680px;
-		max-height: 88vh;
+	.gbm-form {
 		display: flex;
 		flex-direction: column;
-		box-shadow: 0 20px 50px rgb(0 0 0 / 0.3);
-	}
-
-	.gbm-head {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 12px;
-		padding: 18px 20px 12px;
-		border-bottom: 1px solid #e2e8f0;
-	}
-	.gbm-head h2 {
-		margin: 0;
-		font-size: 16px;
-		font-weight: 700;
-	}
-	.gbm-periodo {
-		margin: 3px 0 0;
-		font-size: 12px;
-		color: #64748b;
-	}
-	.gbm-x {
-		border: none;
-		background: transparent;
-		font-size: 22px;
-		line-height: 1;
-		cursor: pointer;
-		color: #64748b;
-		padding: 0 4px;
-	}
-	.gbm-x:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
-	}
-
-	.gbm-body {
-		padding: 16px 20px;
-		overflow-y: auto;
-		flex: 1;
 	}
 
 	.gbm-h3 {
-		margin: 16px 0 8px;
+		margin: 18px 0 8px;
 		font-size: 12px;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
-		color: #475569;
+		color: var(--text-muted);
 	}
 	.gbm-h3:first-child {
 		margin-top: 0;
 	}
 
+	/* ── Controles ──────────────────────────────────────────────── */
+	.gbm-input {
+		min-height: 42px;
+		padding: 9px 12px;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font: inherit;
+		font-size: 14px;
+		transition:
+			border-color 0.15s,
+			box-shadow 0.15s;
+	}
+	.gbm-input::placeholder {
+		color: var(--text-very-muted);
+		opacity: 1;
+	}
+	.gbm-input:focus {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.gbm-input:disabled {
+		background: var(--bg-base);
+		color: var(--text-muted);
+	}
+	select.gbm-input {
+		cursor: pointer;
+	}
+	.gbm-buscador {
+		width: 100%;
+		box-sizing: border-box;
+		margin-bottom: 10px;
+	}
+
+	/* Chips de atajo: «Periodo del canvas», «Todas», «Ninguna». */
+	.gbm-chip {
+		min-height: 32px;
+		padding: 0 12px;
+		border: 1px solid var(--border-default);
+		border-radius: 999px;
+		background: var(--bg-surface);
+		color: var(--text-secondary);
+		font: inherit;
+		font-size: 12px;
+		font-weight: 700;
+		cursor: pointer;
+		transition:
+			border-color 0.15s,
+			color 0.15s;
+	}
+	.gbm-chip:hover:not(:disabled) {
+		border-color: var(--accion);
+		color: var(--accion);
+	}
+	.gbm-chip:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.gbm-chip:disabled {
+		opacity: 0.45;
+		cursor: default;
+	}
+
+	input[type='checkbox'] {
+		accent-color: var(--accion);
+	}
+
+	/* ── Listas ─────────────────────────────────────────────────── */
 	.gbm-lista {
 		list-style: none;
 		margin: 0;
 		padding: 0;
-		border: 1px solid #e2e8f0;
-		border-radius: 8px;
+		border-radius: 16px;
 		overflow: hidden;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
 	}
 	.gbm-lista-placas,
 	.gbm-lista-liqs {
-		max-height: 220px;
+		max-height: 240px;
 		overflow-y: auto;
 	}
-
-	.gbm-buscador {
-		width: 100%;
-		box-sizing: border-box;
-		border: 1px solid #cbd5e1;
-		border-radius: 7px;
-		padding: 6px 10px;
-		font: inherit;
-		font-size: 12.5px;
-		margin-bottom: 8px;
-	}
-	.gbm-buscador:focus {
-		outline: 2px solid #c2410c;
-		outline-offset: -1px;
-		border-color: #c2410c;
-	}
 	.gbm-lista li + li {
-		border-top: 1px solid #f1f5f9;
+		border-top: 1px solid var(--border-subtle);
 	}
 	.gbm-lista label {
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		padding: 8px 10px;
-		font-size: 12.5px;
+		padding: 9px 14px;
+		font-size: 13px;
+		color: var(--text-primary);
 		cursor: pointer;
 	}
 	.gbm-lista label:hover {
-		background: #f8fafc;
+		background: var(--bg-base);
 	}
 
 	.gbm-cons {
@@ -949,7 +958,7 @@
 	}
 	.gbm-cliente {
 		flex: 1;
-		color: #475569;
+		color: var(--text-secondary);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
@@ -963,7 +972,7 @@
 	}
 	.gbm-total {
 		font-variant-numeric: tabular-nums;
-		color: #0f172a;
+		color: var(--text-primary);
 		font-weight: 600;
 	}
 
@@ -971,44 +980,16 @@
 		display: flex;
 		align-items: center;
 		flex-wrap: wrap;
-		gap: 8px;
-		margin-bottom: 8px;
+		gap: 10px;
+		margin-bottom: 10px;
 	}
 	.gbm-periodo-filtros label {
 		display: flex;
 		align-items: center;
-		gap: 5px;
-		font-size: 11.5px;
-		font-weight: 600;
-		color: #334155;
-	}
-	.gbm-periodo-filtros select {
-		border: 1px solid #cbd5e1;
-		border-radius: 6px;
-		padding: 4px 8px;
-		font: inherit;
+		gap: 6px;
 		font-size: 12px;
-		background: #fff;
-		cursor: pointer;
-	}
-	.gbm-periodo-filtros select:focus {
-		outline: 2px solid #c2410c;
-		outline-offset: -1px;
-		border-color: #c2410c;
-	}
-	.gbm-periodo-atajo {
-		border: 1px solid #cbd5e1;
-		background: #fff;
-		border-radius: 6px;
-		padding: 4px 9px;
-		font-size: 11px;
-		font-weight: 600;
-		color: #334155;
-		cursor: pointer;
-	}
-	.gbm-periodo-atajo:disabled {
-		opacity: 0.45;
-		cursor: default;
+		font-weight: 700;
+		color: var(--text-secondary);
 	}
 
 	.gbm-periodo-badge {
@@ -1019,16 +1000,16 @@
 		white-space: nowrap;
 		text-transform: uppercase;
 		letter-spacing: 0.03em;
-		background: #f1f5f9;
-		color: #64748b;
-		border: 1px solid #e2e8f0;
+		background: var(--bg-base);
+		color: var(--text-muted);
+		border: 1px solid var(--border-subtle);
 	}
 	/* El periodo del canvas se distingue de un vistazo: la lista ya no es
 	   toda del mismo mes. */
 	.gbm-periodo-badge-canvas {
-		background: #c2410c;
+		background: var(--accion);
 		color: #fff;
-		border-color: #c2410c;
+		border-color: var(--accion);
 	}
 
 	.gbm-nota-mezcla {
@@ -1038,35 +1019,28 @@
 	.gbm-acciones-mini {
 		display: flex;
 		align-items: center;
+		flex-wrap: wrap;
 		gap: 8px;
-		margin-bottom: 6px;
+		margin-bottom: 8px;
 	}
 	.gbm-check-todas {
 		display: flex;
 		align-items: center;
 		gap: 6px;
-		font-size: 11.5px;
-		font-weight: 600;
-		color: #334155;
+		font-size: 12px;
+		font-weight: 700;
+		color: var(--text-secondary);
 		cursor: pointer;
 	}
 	.gbm-check-todas input:disabled {
 		cursor: not-allowed;
 	}
-	.gbm-acciones-mini button {
-		border: 1px solid #cbd5e1;
-		background: #fff;
-		border-radius: 6px;
-		padding: 3px 9px;
-		font-size: 11px;
-		font-weight: 600;
-		cursor: pointer;
-	}
 
+	/* ── Avisos (colores de estado) ─────────────────────────────── */
 	.gbm-aviso {
-		border-radius: 8px;
-		padding: 10px 12px;
-		font-size: 12.5px;
+		border-radius: 14px;
+		padding: 10px 14px;
+		font-size: 13px;
 		line-height: 1.5;
 		margin: 10px 0;
 	}
@@ -1087,15 +1061,19 @@
 		align-items: flex-start;
 		border: 1px solid #fca5a5;
 		background: #fef2f2;
-		border-radius: 8px;
-		padding: 10px 12px;
+		border-radius: 14px;
+		padding: 12px 14px;
 		cursor: pointer;
+	}
+	.gbm-check-peligro input[type='checkbox'] {
+		accent-color: #b42318;
 	}
 	.gbm-check-peligro span {
 		display: flex;
 		flex-direction: column;
 		gap: 3px;
-		font-size: 12.5px;
+		font-size: 13px;
+		color: var(--text-primary);
 	}
 	.gbm-check-peligro em {
 		font-style: normal;
@@ -1103,19 +1081,20 @@
 		line-height: 1.45;
 	}
 
+	/* ── Carga ──────────────────────────────────────────────────── */
 	.gbm-cargando {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		font-size: 12px;
-		color: #475569;
+		font-size: 12.5px;
+		color: var(--text-secondary);
 		margin: 6px 0 8px;
 	}
 	.gbm-spinner {
 		width: 13px;
 		height: 13px;
-		border: 2px solid #cbd5e1;
-		border-top-color: #c2410c;
+		border: 2px solid var(--border-default);
+		border-top-color: var(--accion);
 		border-radius: 50%;
 		animation: gbm-gira 0.7s linear infinite;
 		flex: none;
@@ -1130,18 +1109,19 @@
 		list-style: none;
 		margin: 0;
 		padding: 0;
-		border: 1px solid #e2e8f0;
-		border-radius: 8px;
+		border-radius: 16px;
 		overflow: hidden;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
 	}
 	.gbm-esqueleto li {
-		height: 33px;
+		height: 36px;
 		background: linear-gradient(90deg, #f8fafc 25%, #eef2f7 37%, #f8fafc 63%);
 		background-size: 400% 100%;
 		animation: gbm-brillo 1.3s ease-in-out infinite;
 	}
 	.gbm-esqueleto li + li {
-		border-top: 1px solid #f1f5f9;
+		border-top: 1px solid var(--border-subtle);
 	}
 	@keyframes gbm-brillo {
 		0% {
@@ -1159,77 +1139,50 @@
 	}
 
 	.gbm-nota {
-		font-size: 12px;
-		color: #64748b;
+		font-size: 12.5px;
+		color: var(--text-muted);
 		margin: 6px 0;
 	}
 
+	/* ── Progreso ───────────────────────────────────────────────── */
 	.gbm-paso {
-		font-size: 13px;
-		font-weight: 600;
-		margin: 0 0 8px;
+		font-size: 14px;
+		font-weight: 700;
+		color: var(--text-primary);
+		margin: 0 0 10px;
 	}
 	.gbm-barra {
 		height: 8px;
-		background: #e2e8f0;
+		background: var(--border-subtle);
 		border-radius: 999px;
 		overflow: hidden;
 	}
 	.gbm-barra-fill {
 		height: 100%;
-		background: #c2410c;
+		background: var(--accion);
 		transition: width 0.25s ease;
 	}
 	.gbm-pct {
-		margin: 5px 0 0;
-		font-size: 11px;
-		color: #64748b;
+		margin: 6px 0 0;
+		font-size: 12px;
+		color: var(--text-muted);
 		font-variant-numeric: tabular-nums;
 	}
 
 	.gbm-fallidos {
 		margin: 10px 0 0;
 		padding-left: 18px;
-		font-size: 12px;
+		font-size: 12.5px;
 		color: #b91c1c;
 		max-height: 160px;
 		overflow-y: auto;
 	}
 
-	.gbm-foot {
-		display: flex;
-		align-items: center;
-		justify-content: flex-end;
-		gap: 8px;
-		padding: 12px 20px 16px;
-		border-top: 1px solid #e2e8f0;
-	}
+	/* Texto de ayuda a la izquierda del pie de ModalBase. */
 	.gbm-hint {
 		flex: 1;
-		font-size: 11.5px;
-		color: #64748b;
-	}
-
-	.gbm-btn-ghost,
-	.gbm-btn-primary {
-		border: none;
-		border-radius: 7px;
-		padding: 8px 14px;
-		font-size: 12.5px;
-		font-weight: 700;
-		cursor: pointer;
-	}
-	.gbm-btn-ghost {
-		background: #f1f5f9;
-		color: #334155;
-	}
-	.gbm-btn-primary {
-		background: #c2410c;
-		color: #fff;
-	}
-	.gbm-btn-ghost:disabled,
-	.gbm-btn-primary:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
+		min-width: 180px;
+		font-size: 12px;
+		color: var(--text-muted);
 	}
 </style>

@@ -22,6 +22,7 @@
 	import { documentoCss } from '$lib/components/liquidaciones-terceros/preview/documento.css';
 	import { componerHojasHtml } from '$lib/components/liquidaciones-terceros/preview/componer-hojas';
 	import ChipsCorreos from './ChipsCorreos.svelte';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 	import {
 		liquidacionesTercerosEnviosAPI,
 		type EnvioHistorialFila,
@@ -147,6 +148,15 @@
 
 	const job = $derived($enviosLiqStore);
 	const enCurso = $derived(job != null && (job.status === 'queued' || job.status === 'running'));
+	/** Hay un envío en marcha o su resultado pendiente de cerrar. */
+	const mostrarProgreso = $derived(
+		job != null &&
+			(enCurso ||
+				job.status === 'complete' ||
+				job.status === 'cancelled' ||
+				job.status === 'error' ||
+				job.status === 'locked')
+	);
 
 	async function cargarHistorial() {
 		cargandoHistorial = true;
@@ -305,112 +315,97 @@
 	}
 </script>
 
-<svelte:window
-	onkeydown={(e) => {
-		if (e.key === 'Escape' && !enCurso && !componiendo) onClose();
-	}}
-/>
+<!-- La cifra de cierre, también en el encabezado y no solo en el correo: es
+     lo que delata de un vistazo que se está enviando la hoja equivocada,
+     antes de que salga. -->
+{#snippet cifras()}
+	<p class="env-cifra">
+		{#each resumen as r (r.etiqueta)}
+			<span><strong>{r.etiqueta}</strong> {r.valor}</span>
+		{/each}
+	</p>
+{/snippet}
 
-<div class="env-backdrop">
-	<div class="env" role="dialog" aria-modal="true" aria-label="Enviar por correo" tabindex="-1">
-		<header class="env-head">
-			<div>
-				<h2>Enviar por correo — {hojaLabel}</h2>
-				<p class="env-sub">
-					{periodo} · va el PDF de la hoja tal como está en pantalla ({nombreArchivo}.pdf)
-				</p>
-				<!-- La cifra de cierre, también aquí y no solo en el correo: es lo
-				     que delata de un vistazo que se está enviando la hoja
-				     equivocada, antes de que salga. -->
-				{#if resumen.length > 0}
-					<p class="env-cifra">
-						{#each resumen as r (r.etiqueta)}
-							<span><strong>{r.etiqueta}</strong> {r.valor}</span>
+<ModalBase
+	open={true}
+	eyebrow="Enviar por correo"
+	title={hojaLabel}
+	subtitle={`${periodo} · va el PDF de la hoja tal como está en pantalla (${nombreArchivo}.pdf)`}
+	tamano="md"
+	cerrarAlFondo={false}
+	bloqueado={enCurso || componiendo}
+	oncerrar={onClose}
+	cabecera={resumen.length > 0 ? cifras : undefined}
+>
+	{#if mostrarProgreso && job}
+		<!-- ── Progreso / resultado ── -->
+		<section class="env-body env-card">
+			{#if job.status === 'locked'}
+				<div class="env-aviso env-aviso-ambar">
+					<strong>{job.lockedBy?.userName ?? 'Otro usuario'}</strong> ya está enviando este
+					periodo. Cuando termine podrás lanzar el tuyo.
+				</div>
+			{:else}
+				<p class="env-paso">{job.currentStep}</p>
+				<div class="env-barra">
+					<div class="env-barra-fill" style="width: {job.progress}%"></div>
+				</div>
+				<p class="env-pct">{job.progress}%</p>
+
+				{#if job.resultados.length > 0}
+					<ul class="env-resultados">
+						{#each job.resultados as r ((r.cierre_id ?? r.origen_id ?? r.placa) + r.to + (r.enviado_at ?? ''))}
+							<li class={r.estado === 'ENVIADO' ? 'ok' : 'err'}>
+								<span class="env-res-placa">{r.placa}</span>
+								<span class="env-res-to">{r.to}</span>
+								{#if r.estado === 'ENVIADO'}
+									<span class="env-chip env-chip-ok">Enviado</span>
+								{:else}
+									<span class="env-chip env-chip-err" title={r.error}>Error</span>
+								{/if}
+							</li>
 						{/each}
-					</p>
+					</ul>
 				{/if}
-			</div>
-			<button class="env-x" onclick={onClose} disabled={enCurso || componiendo} aria-label="Cerrar">×</button>
-		</header>
 
-		{#if job && (enCurso || job.status === 'complete' || job.status === 'cancelled' || job.status === 'error' || job.status === 'locked')}
-			<!-- ── Progreso / resultado ── -->
-			<section class="env-body">
-				{#if job.status === 'locked'}
+				{#if job.status === 'error'}
+					<div class="env-aviso env-aviso-rojo">{job.error}</div>
+				{/if}
+				{#if job.status === 'cancelled'}
 					<div class="env-aviso env-aviso-ambar">
-						<strong>{job.lockedBy?.userName ?? 'Otro usuario'}</strong> ya está enviando este
-						periodo. Cuando termine podrás lanzar el tuyo.
-					</div>
-				{:else}
-					<p class="env-paso">{job.currentStep}</p>
-					<div class="env-barra">
-						<div class="env-barra-fill" style="width: {job.progress}%"></div>
-					</div>
-					<p class="env-pct">{job.progress}%</p>
-
-					{#if job.resultados.length > 0}
-						<ul class="env-resultados">
-							{#each job.resultados as r ((r.cierre_id ?? r.origen_id ?? r.placa) + r.to + (r.enviado_at ?? ''))}
-								<li class={r.estado === 'ENVIADO' ? 'ok' : 'err'}>
-									<span class="env-res-placa">{r.placa}</span>
-									<span class="env-res-to">{r.to}</span>
-									{#if r.estado === 'ENVIADO'}
-										<span class="env-chip env-chip-ok">Enviado</span>
-									{:else}
-										<span class="env-chip env-chip-err" title={r.error}>Error</span>
-									{/if}
-								</li>
-							{/each}
-						</ul>
-					{/if}
-
-					{#if job.status === 'error'}
-						<div class="env-aviso env-aviso-rojo">{job.error}</div>
-					{/if}
-					{#if job.status === 'cancelled'}
-						<div class="env-aviso env-aviso-ambar">
-							Cancelado. Los correos ya despachados no se pueden retirar; quedaron registrados.
-						</div>
-					{/if}
-				{/if}
-			</section>
-
-			<footer class="env-foot">
-				{#if enCurso}
-					<span class="env-hint">Al cancelar se detiene tras el envío en curso.</span>
-					<button class="env-btn-ghost" onclick={cancelarJob}>Cancelar envío</button>
-				{:else}
-					<button class="env-btn-ghost" onclick={cerrarResultado}>Preparar otro envío</button>
-					<button class="env-btn-primary" onclick={onClose}>Cerrar</button>
-				{/if}
-			</footer>
-		{:else}
-			<!-- ── Formulario ── -->
-			<section class="env-body">
-				{#if errorConsulta}
-					<div class="env-aviso env-aviso-ambar">
-						No se pudo consultar el estado del servicio de correo ({errorConsulta}). Puede ser
-						que el servidor esté caído o la sesión haya vencido; el envío se puede intentar
-						igual y el resultado quedará en la constancia.
-						<button class="env-aviso-link" onclick={cargarHistorial}>Reintentar</button>
-					</div>
-				{:else if sinProveedor}
-					<div class="env-aviso env-aviso-rojo">
-						No hay proveedor de correo configurado en el servidor. Configura
-						CONTABILIDAD_SMTP_USER/PASSWORD o RESEND_API_KEY.
-					</div>
-				{:else if proveedor === 'resend' || proveedor === 'smtp'}
-					<div class="env-aviso env-aviso-info">
-						Los correos salen a nombre de <strong>Contabilidad Cotransmeq S.A.S.</strong> y las
-						respuestas llegan a <strong>contabilidadtransmeraldasas@gmail.com</strong> (que además
-						recibe copia de constancia de cada envío real).
-					</div>
-				{:else if proveedor === 'smtp-contabilidad'}
-					<div class="env-aviso env-aviso-info">
-						Enviando directamente desde <strong>contabilidadtransmeraldasas@gmail.com</strong>.
+						Cancelado. Los correos ya despachados no se pueden retirar; quedaron registrados.
 					</div>
 				{/if}
+			{/if}
+		</section>
+	{:else}
+		<!-- ── Formulario ── -->
+		<section class="env-body">
+			{#if errorConsulta}
+				<div class="env-aviso env-aviso-ambar">
+					No se pudo consultar el estado del servicio de correo ({errorConsulta}). Puede ser
+					que el servidor esté caído o la sesión haya vencido; el envío se puede intentar
+					igual y el resultado quedará en la constancia.
+					<button type="button" class="env-aviso-link" onclick={cargarHistorial}>Reintentar</button>
+				</div>
+			{:else if sinProveedor}
+				<div class="env-aviso env-aviso-rojo">
+					No hay proveedor de correo configurado en el servidor. Configura
+					CONTABILIDAD_SMTP_USER/PASSWORD o RESEND_API_KEY.
+				</div>
+			{:else if proveedor === 'resend' || proveedor === 'smtp'}
+				<div class="env-aviso env-aviso-info">
+					Los correos salen a nombre de <strong>Contabilidad Cotransmeq S.A.S.</strong> y las
+					respuestas llegan a <strong>contabilidadtransmeraldasas@gmail.com</strong> (que además
+					recibe copia de constancia de cada envío real).
+				</div>
+			{:else if proveedor === 'smtp-contabilidad'}
+				<div class="env-aviso env-aviso-info">
+					Enviando directamente desde <strong>contabilidadtransmeraldasas@gmail.com</strong>.
+				</div>
+			{/if}
 
+			<div class="env-card">
 				<h3 class="env-h3">1 · Destinatarios</h3>
 				<p class="env-nota env-nota-bloque">
 					Escribe el correo del destinatario. Para enviar <strong>con copia</strong>, separa los
@@ -433,20 +428,24 @@
 						</span>
 					{/if}
 				</div>
+			</div>
 
+			<div class="env-card">
 				<h3 class="env-h3">2 · Mensaje</h3>
 				<label class="env-campo">
 					<span>Asunto <em>(admite {'{PLACA}'} = {hojaLabel} y {'{PERIODO}'})</em></span>
-					<input type="text" bind:value={asunto} maxlength="300" />
+					<input class="env-input" type="text" bind:value={asunto} maxlength="300" />
 				</label>
 				<label class="env-campo">
 					<span>Cuerpo del mensaje</span>
-					<textarea rows="5" bind:value={mensaje} maxlength="5000"></textarea>
+					<textarea class="env-input" rows="5" bind:value={mensaje} maxlength="5000"></textarea>
 				</label>
+			</div>
 
+			<div class="env-card">
 				<h3 class="env-h3">3 · Adjuntos adicionales</h3>
 				<div class="env-adjuntos">
-					<label class="env-btn-ghost env-btn-file">
+					<label class="btn-secondary env-btn-file">
 						+ Añadir archivos
 						<input type="file" multiple onchange={agregarAdjuntos} hidden />
 					</label>
@@ -456,7 +455,7 @@
 								<li>
 									<span class="env-adj-nombre" title={a.filename}>📎 {a.filename}</span>
 									<span class="env-adj-size">{fmtBytes(a.size)}</span>
-									<button class="env-adj-x" onclick={() => quitarAdjunto(i)} aria-label="Quitar">×</button>
+									<button type="button" class="env-adj-x" onclick={() => quitarAdjunto(i)} aria-label="Quitar">×</button>
 								</li>
 							{/each}
 						</ul>
@@ -465,7 +464,9 @@
 						<p class="env-nota">Sin adjuntos extra. El PDF de la hoja va siempre.</p>
 					{/if}
 				</div>
+			</div>
 
+			<div class="env-card">
 				<h3 class="env-h3">4 · Modo prueba</h3>
 				<div class="env-prueba" class:activa={esPrueba}>
 					<label class="env-check">
@@ -477,14 +478,16 @@
 					</label>
 					{#if esPrueba}
 						<input
-							class="env-correo env-correo-prueba"
+							class="env-input env-correo-prueba"
 							type="email"
 							placeholder="correo de prueba"
 							bind:value={destinoPrueba}
 						/>
 					{/if}
 				</div>
+			</div>
 
+			<div class="env-card">
 				<h3 class="env-h3">Historial de envíos <em>({periodo})</em></h3>
 				{#if cargandoHistorial}
 					<p class="env-nota">Consultando…</p>
@@ -515,114 +518,73 @@
 						{/each}
 					</ul>
 				{/if}
-			</section>
+			</div>
+		</section>
+	{/if}
 
-			<footer class="env-foot">
-				<span class="env-hint">
-					{#if esPrueba}
-						Prueba a un único destino
-					{:else if destinatarios.length === 0}
-						Escribe al menos un correo válido
-					{:else}
-						Para: {destinatarios[0]}{copias.length > 0 ? ` · ${copias.length} en copia` : ''}
-					{/if}
-				</span>
-				<button
-					class="env-btn-primary"
-					disabled={componiendo || !puedeEnviar || sinProveedor}
-					onclick={enviar}
-				>
-					{componiendo ? 'Componiendo la hoja…' : esPrueba ? 'Enviar PRUEBA' : 'Enviar correo'}
-				</button>
-			</footer>
+	{#snippet pie()}
+		{#if mostrarProgreso}
+			{#if enCurso}
+				<span class="env-hint">Al cancelar se detiene tras el envío en curso.</span>
+				<button type="button" class="btn-secondary" onclick={cancelarJob}>Cancelar envío</button>
+			{:else}
+				<button type="button" class="btn-secondary" onclick={cerrarResultado}>Preparar otro envío</button>
+				<button type="button" class="btn-primary" onclick={onClose}>Cerrar</button>
+			{/if}
+		{:else}
+			<span class="env-hint">
+				{#if esPrueba}
+					Prueba a un único destino
+				{:else if destinatarios.length === 0}
+					Escribe al menos un correo válido
+				{:else}
+					Para: {destinatarios[0]}{copias.length > 0 ? ` · ${copias.length} en copia` : ''}
+				{/if}
+			</span>
+			<button
+				type="button"
+				class="btn-primary"
+				disabled={componiendo || !puedeEnviar || sinProveedor}
+				onclick={enviar}
+			>
+				{componiendo ? 'Componiendo la hoja…' : esPrueba ? 'Enviar PRUEBA' : 'Enviar correo'}
+			</button>
 		{/if}
-	</div>
-</div>
+	{/snippet}
+</ModalBase>
 
 <style>
-	.env-backdrop {
-		position: fixed;
-		inset: 0;
-		background: rgba(15, 23, 42, 0.55);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 1000;
-		padding: 24px;
-	}
-	.env {
-		width: min(720px, 100%);
-		max-height: 92vh;
+	.env-body {
 		display: flex;
 		flex-direction: column;
-		background: #fff;
-		border-radius: 14px;
-		box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
-		overflow: hidden;
+		gap: 14px;
 	}
-	.env-head {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 16px;
-		padding: 18px 22px 14px;
-		border-bottom: 1px solid #e2e8f0;
-	}
-	.env-head h2 {
-		margin: 0;
-		font-size: 17px;
-		font-weight: 800;
-		color: #0f172a;
-	}
-	.env-sub {
-		margin: 4px 0 0;
-		font-size: 12.5px;
-		color: #64748b;
-	}
-	.env-x {
-		border: none;
-		background: none;
-		font-size: 22px;
-		line-height: 1;
-		color: #64748b;
-		cursor: pointer;
-		padding: 2px 6px;
-		border-radius: 6px;
-	}
-	.env-x:hover:not(:disabled) {
-		background: #f1f5f9;
-		color: #0f172a;
-	}
-	.env-body {
-		padding: 16px 22px;
-		overflow-y: auto;
-		flex: 1 1 auto;
-		min-height: 0;
+	.env-card {
+		padding: 16px 18px;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
 	}
 	.env-h3 {
-		margin: 18px 0 8px;
-		font-size: 13px;
-		font-weight: 800;
-		color: #334155;
+		margin: 0 0 10px;
+		font-size: 12px;
+		font-weight: 700;
+		color: var(--text-secondary);
 		text-transform: uppercase;
-		letter-spacing: 0.03em;
-	}
-	.env-h3:first-of-type {
-		margin-top: 4px;
+		letter-spacing: 0.04em;
 	}
 	.env-h3 em {
 		font-weight: 500;
 		text-transform: none;
 		letter-spacing: 0;
-		color: #94a3b8;
+		color: var(--text-muted);
 		font-style: normal;
 	}
 	.env-aviso {
-		border-radius: 10px;
+		border-radius: 12px;
 		padding: 10px 14px;
 		font-size: 13px;
 		line-height: 1.55;
-		margin-bottom: 12px;
 	}
 	.env-aviso-info {
 		background: #f0fdf4;
@@ -637,16 +599,16 @@
 		color: #991b1b;
 	}
 	.env-cifra {
-		margin: 4px 0 0 0;
+		margin: 0 0 18px;
 		display: flex;
 		flex-wrap: wrap;
-		gap: 4px 14px;
-		font-size: 12.5px;
-		color: #166534;
+		gap: 6px 16px;
+		font-size: 13px;
+		color: #fff;
 	}
 	.env-cifra strong {
 		font-weight: 600;
-		color: #9a3412;
+		color: rgba(255, 255, 255, 0.62);
 	}
 	.env-aviso-link {
 		background: none;
@@ -664,18 +626,20 @@
 		align-items: flex-start;
 		gap: 8px;
 		font-size: 13px;
-		color: #334155;
+		color: var(--text-secondary);
 		cursor: pointer;
 	}
 	.env-check input {
 		margin-top: 2px;
+		accent-color: var(--accion);
 	}
 	.env-nota {
+		margin: 0;
 		font-size: 12px;
-		color: #64748b;
+		color: var(--text-muted);
 	}
 	.env-nota-bloque {
-		margin: 0 0 8px;
+		margin: 0 0 10px;
 	}
 	.env-correo-celda {
 		display: flex;
@@ -702,56 +666,59 @@
 		background: #fee2e2;
 		color: #991b1b;
 	}
-	.env-chip-neutro {
-		background: #e0e7ff;
-		color: #3730a3;
-	}
+	.env-chip-neutro,
 	.env-chip-cc {
-		background: #e0e7ff;
-		color: #3730a3;
+		background: var(--bg-base);
+		color: var(--text-secondary);
 	}
-	.env-correo {
-		border: 1px solid #cbd5e1;
-		border-radius: 8px;
-		padding: 5px 9px;
-		font-size: 12.5px;
-		color: #0f172a;
+	.env-input {
 		width: 100%;
+		min-height: 42px;
+		padding: 9px 12px;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font: inherit;
+		font-size: 14px;
+		transition:
+			border-color 0.15s,
+			box-shadow 0.15s;
 	}
-	.env-correo:focus {
-		outline: 2px solid #c2410c55;
-		border-color: #c2410c;
+	textarea.env-input {
+		resize: vertical;
+	}
+	.env-input::placeholder {
+		color: var(--text-very-muted);
+		opacity: 1;
+	}
+	.env-input:focus {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.env-input:disabled {
+		background: var(--bg-base);
+		color: var(--text-muted);
 	}
 	.env-campo {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		margin-bottom: 10px;
+		gap: 6px;
+		margin-bottom: 12px;
+	}
+	.env-campo:last-child {
+		margin-bottom: 0;
 	}
 	.env-campo span {
-		font-size: 12.5px;
-		color: #475569;
+		font-size: 13px;
+		color: var(--text-secondary);
 		font-weight: 600;
 	}
 	.env-campo em {
 		font-weight: 400;
-		color: #94a3b8;
+		color: var(--text-muted);
 		font-style: normal;
-	}
-	.env-campo input,
-	.env-campo textarea {
-		border: 1px solid #cbd5e1;
-		border-radius: 8px;
-		padding: 8px 10px;
-		font-size: 13px;
-		font-family: inherit;
-		color: #0f172a;
-		resize: vertical;
-	}
-	.env-campo input:focus,
-	.env-campo textarea:focus {
-		outline: 2px solid #c2410c55;
-		border-color: #c2410c;
 	}
 	.env-adjuntos {
 		display: flex;
@@ -774,190 +741,131 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		font-size: 12.5px;
-		background: #f8fafc;
-		border-radius: 8px;
-		padding: 5px 10px;
+		font-size: 13px;
+		background: var(--bg-base);
+		border-radius: 10px;
+		padding: 6px 10px;
 	}
 	.env-adj-nombre {
 		flex: 1;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		color: #334155;
+		color: var(--text-primary);
 	}
 	.env-adj-size {
-		color: #94a3b8;
+		color: var(--text-muted);
 		font-variant-numeric: tabular-nums;
 	}
 	.env-adj-x {
 		border: none;
 		background: none;
-		color: #94a3b8;
+		color: var(--text-muted);
 		font-size: 15px;
 		cursor: pointer;
-		border-radius: 4px;
-		padding: 0 4px;
+		border-radius: 6px;
+		padding: 0 5px;
 	}
 	.env-adj-x:hover {
 		color: #b91c1c;
 		background: #fee2e2;
 	}
 	.env-prueba {
-		border: 1px dashed #cbd5e1;
-		border-radius: 10px;
+		border: 1px dashed var(--border-default);
+		border-radius: 12px;
 		padding: 10px 14px;
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
 	}
 	.env-prueba.activa {
-		border-color: #f59e0b;
-		background: #fffbeb;
+		border-color: var(--accion);
+		background: color-mix(in srgb, var(--accion) 6%, transparent);
 	}
 	.env-correo-prueba {
 		max-width: 320px;
 	}
-	.env-hist {
+	.env-hist,
+	.env-resultados {
 		list-style: none;
 		margin: 0;
 		padding: 0;
-		border: 1px solid #e2e8f0;
-		border-radius: 10px;
+		border: 1px solid var(--border-subtle);
+		border-radius: 12px;
 		max-height: 220px;
 		overflow-y: auto;
 	}
-	.env-hist li {
+	.env-resultados {
+		max-height: 260px;
+	}
+	.env-hist li,
+	.env-resultados li {
 		display: flex;
 		align-items: center;
 		gap: 10px;
-		padding: 6px 12px;
-		font-size: 12.5px;
-		border-bottom: 1px solid #f1f5f9;
+		padding: 7px 12px;
+		font-size: 13px;
+		border-bottom: 1px solid var(--border-subtle);
 	}
-	.env-hist li:last-child {
+	.env-hist li:last-child,
+	.env-resultados li:last-child {
 		border-bottom: none;
 	}
-	.env-hist-hoja {
+	.env-hist-hoja,
+	.env-res-placa {
 		font-weight: 800;
-		color: #0f172a;
+		color: var(--text-primary);
 		min-width: 88px;
 	}
-	.env-hist-to {
+	.env-res-placa {
+		min-width: 76px;
+	}
+	.env-hist-to,
+	.env-res-to {
 		flex: 1;
-		color: #475569;
+		color: var(--text-secondary);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 	.env-hist-fecha {
-		color: #94a3b8;
+		color: var(--text-muted);
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
 	}
 	.env-hist-por {
-		color: #94a3b8;
+		color: var(--text-muted);
 		max-width: 120px;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
-	.env-foot {
-		display: flex;
-		align-items: center;
-		justify-content: flex-end;
-		gap: 12px;
-		padding: 12px 22px;
-		border-top: 1px solid #e2e8f0;
-		background: #f8fafc;
-	}
 	.env-hint {
 		margin-right: auto;
 		font-size: 12px;
-		color: #64748b;
+		color: var(--text-muted);
 	}
-	.env-btn-primary {
-		background: #c2410c;
-		color: #fff;
-		border: none;
-		border-radius: 9px;
-		padding: 9px 18px;
-		font-size: 13.5px;
-		font-weight: 700;
-		cursor: pointer;
-	}
-	.env-btn-primary:hover:not(:disabled) {
-		background: #9a3412;
-	}
-	.env-btn-primary:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-	.env-btn-ghost {
-		background: #fff;
-		color: #334155;
-		border: 1px solid #cbd5e1;
-		border-radius: 9px;
-		padding: 8px 14px;
-		font-size: 13px;
-		font-weight: 600;
-		cursor: pointer;
-	}
-	.env-btn-ghost:hover {
-		background: #f1f5f9;
-	}
+
 	.env-paso {
-		margin: 4px 0 10px;
+		margin: 0 0 10px;
 		font-size: 14px;
-		color: #0f172a;
+		color: var(--text-primary);
 		font-weight: 600;
 	}
 	.env-barra {
 		height: 10px;
 		border-radius: 999px;
-		background: #e2e8f0;
+		background: var(--bg-base);
 		overflow: hidden;
 	}
 	.env-barra-fill {
 		height: 100%;
-		background: linear-gradient(90deg, #c2410c, #ea580c);
+		background: var(--accion);
 		transition: width 0.4s ease;
 	}
 	.env-pct {
-		margin: 6px 0 12px;
+		margin: 6px 0 4px;
 		font-size: 12px;
-		color: #64748b;
-	}
-	.env-resultados {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		border: 1px solid #e2e8f0;
-		border-radius: 10px;
-		max-height: 260px;
-		overflow-y: auto;
-	}
-	.env-resultados li {
-		display: flex;
-		align-items: center;
-		gap: 10px;
-		padding: 6px 12px;
-		font-size: 12.5px;
-		border-bottom: 1px solid #f1f5f9;
-	}
-	.env-resultados li:last-child {
-		border-bottom: none;
-	}
-	.env-res-placa {
-		font-weight: 800;
-		color: #0f172a;
-		min-width: 76px;
-	}
-	.env-res-to {
-		flex: 1;
-		color: #475569;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		color: var(--text-muted);
 	}
 </style>

@@ -167,44 +167,11 @@
 		}
 	}
 
+	/* El aspecto viene de los .btn-* globales; aquí solo el tamaño de la CTA. */
 	.btn-primary,
 	.btn-secondary {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
 		min-height: 3.25rem;
 		padding: 0.85rem 1.75rem;
-		border-radius: 14px;
-		font-family: inherit;
 		font-size: 0.95rem;
-		font-weight: 800;
-		text-decoration: none;
-		cursor: pointer;
-		transition:
-			background-color 0.2s ease,
-			transform 0.15s ease;
-	}
-	.btn-primary {
-		color: #ffffff;
-		background: var(--au-primary);
-		border: none;
-		box-shadow: 0 8px 20px rgba(var(--au-primary-rgb), 0.28);
-	}
-	.btn-primary:hover {
-		background: var(--au-primary-strong);
-		transform: translateY(-1px);
-	}
-	.btn-secondary {
-		color: var(--au-dark);
-		background: transparent;
-		border: 1.5px solid var(--au-primary);
-	}
-	.btn-secondary:hover {
-		background: var(--au-tint);
-	}
-	.btn-primary:focus-visible,
-	.btn-secondary:focus-visible {
-		outline: none;
-		box-shadow: 0 0 0 4px rgba(var(--au-primary-rgb), 0.25);
 	}
 </style>

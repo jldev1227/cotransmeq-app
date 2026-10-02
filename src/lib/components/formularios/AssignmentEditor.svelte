@@ -763,18 +763,27 @@
 		padding: 0 0.875rem;
 		font: inherit;
 		font-size: 0.875rem;
-		font-weight: 500;
+		font-weight: 800;
+		color: var(--bg-charcoal-deep);
 		background: #fff;
-		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
-		border-radius: 10px;
+		border: 1.5px solid var(--border-default);
+		border-radius: 16px;
 		cursor: pointer;
 	}
 
 	.btn--primario {
 		color: #fff;
-		background: var(--emerald-600, #15803d);
-		border-color: var(--emerald-600, #15803d);
-		font-weight: 600;
+		background: var(--accion);
+		border-color: var(--accion);
+		border-radius: 16px;
+		font-weight: 800;
+		box-shadow: var(--shadow-btn);
+	}
+
+	.btn--primario:hover:not(:disabled) {
+		background: var(--accion-hover);
+		border-color: var(--accion-hover);
+		box-shadow: var(--shadow-btn-hover);
 	}
 
 	.btn:disabled {

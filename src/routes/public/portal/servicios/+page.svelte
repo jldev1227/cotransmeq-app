@@ -209,7 +209,7 @@
 				<div class="error-icon">⚠️</div>
 				<p class="error-title">No pudimos cargar tus servicios</p>
 				<p class="error-msg">{error}</p>
-				<button class="btn-retry" on:click={handleRefresh}>Reintentar</button>
+				<button class="btn-primary btn-retry" on:click={handleRefresh}>Reintentar</button>
 			</div>
 		{:else if serviciosFiltrados.length === 0}
 			<div class="empty-state">
@@ -360,9 +360,6 @@
 		gap: 0.85rem;
 		padding: 0 0 0.85rem;
 	}
-
-
-
 
 	.refresh-btn {
 		width: 40px;
@@ -561,13 +558,7 @@
 		margin-top: 0.75rem;
 		padding: 0.6rem 1.25rem;
 		font-size: 0.85rem;
-		font-weight: 700;
-		color: white;
-		background: linear-gradient(135deg, #ea580c, #047857);
-		border: none;
-		border-radius: 10px;
 		cursor: pointer;
-		font-family: inherit;
 	}
 
 	/* Empty */

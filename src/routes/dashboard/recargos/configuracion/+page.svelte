@@ -662,14 +662,16 @@
 											<div class="flex gap-2">
 												<button
 													on:click={() => (deleteConfirmId = null)}
-													class="apple-transition rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-base)]"
+													class="btn-secondary apple-transition"
+													style="min-height: 32px; padding: 0 0.75rem; font-size: 12px;"
 												>
 													Cancelar
 												</button>
 												<button
 													on:click={() => eliminar(config.id)}
 													disabled={deleteLoading}
-													class="apple-transition rounded-lg bg-[#DC2626] px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-[#B91C1C] disabled:opacity-50"
+													class="btn-danger apple-transition"
+													style="min-height: 32px; padding: 0 0.75rem; font-size: 12px;"
 												>
 													{deleteLoading ? 'Eliminando...' : 'Confirmar'}
 												</button>
@@ -1248,15 +1250,14 @@
 					<button
 						type="button"
 						on:click={() => (modalOpen = false)}
-						class="apple-transition rounded-xl border border-[var(--border-default)] bg-white px-4 py-2 text-sm font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-base)]"
+						class="btn-secondary apple-transition"
 					>
 						Cancelar
 					</button>
 					<button
 						type="submit"
 						disabled={saving}
-						class="apple-transition flex items-center gap-2 rounded-xl px-5 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-50"
-						style="background: linear-gradient(135deg, #16a34a, #15803d);"
+						class="btn-primary apple-transition"
 					>
 						{#if saving}
 							<div

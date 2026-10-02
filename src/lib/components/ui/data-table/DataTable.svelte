@@ -1,4 +1,6 @@
 <script lang="ts" generics="T extends { id?: string | number }">
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+
 	interface Column {
 		key: string;
 		label: string;
@@ -16,6 +18,7 @@
 		totalRows = 0,
 		currentPage = 1,
 		pageSize = 10,
+		nombreItems = 'registros',
 		onPageChange,
 		onSortChange,
 		emptyMessage = 'No se encontraron resultados',
@@ -33,6 +36,8 @@
 		totalRows?: number;
 		currentPage?: number;
 		pageSize?: number;
+		/** Sustantivo plural para el pie: «1–10 de 40 formularios». */
+		nombreItems?: string;
 		onPageChange?: (page: number) => void;
 		onSortChange?: (sortBy: string, sortOrder: 'asc' | 'desc') => void;
 		emptyMessage?: string;
@@ -55,10 +60,6 @@
 		}
 		onSortChange?.(key, sortDirection);
 	}
-
-	let totalPages = $derived(Math.max(1, Math.ceil(totalRows / pageSize)));
-	let startIndex = $derived((currentPage - 1) * pageSize + 1);
-	let endIndex = $derived(Math.min(currentPage * pageSize, totalRows));
 
 	let pageSelectedCount = $derived(
 		data.filter((row) => row.id != null && selectedIds.has(row.id)).length
@@ -215,33 +216,14 @@
 			</table>
 		</div>
 
-		{#if totalPages >= 1}
-			<div class="pagination">
-				<button
-					class="page-btn"
-					onclick={() => onPageChange?.(currentPage - 1)}
-					disabled={currentPage <= 1}
-				>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-						<polyline points="15 18 9 12 15 6" />
-					</svg>
-					Anterior
-				</button>
-				<span class="page-info">
-					Página {currentPage} de {totalPages} · {startIndex}-{endIndex} de {totalRows}
-				</span>
-				<button
-					class="page-btn"
-					onclick={() => onPageChange?.(currentPage + 1)}
-					disabled={currentPage >= totalPages}
-				>
-					Siguiente
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-						<polyline points="9 18 15 12 9 6" />
-					</svg>
-				</button>
-			</div>
-		{/if}
+		<PaginadorLista
+			pagina={currentPage}
+			total={totalRows}
+			porPagina={pageSize}
+			cargando={isLoading}
+			{nombreItems}
+			onCambiar={(p) => onPageChange?.(p)}
+		/>
 	{/if}
 </div>
 
@@ -444,67 +426,5 @@
 
 	@keyframes spin {
 		to { transform: rotate(360deg); }
-	}
-
-	.btn-primary {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 8px 16px;
-		background: var(--accent, #ea580c);
-		color: #fff;
-		border: none;
-		border-radius: 8px;
-		font-size: 13px;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.15s;
-		font-family: inherit;
-	}
-
-	.btn-primary:hover {
-		background: var(--accent-hover, #c2410c);
-		transform: translateY(-1px);
-	}
-
-	.pagination {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 12px 16px;
-		border-top: 1px solid var(--border, #e5e7eb);
-		background: #fafbfc;
-	}
-
-	.page-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 6px 12px;
-		background: #fff;
-		border: 1px solid var(--border, #e5e7eb);
-		border-radius: 6px;
-		font-size: 12px;
-		font-weight: 500;
-		color: var(--text-secondary, #4b5563);
-		cursor: pointer;
-		transition: all 0.15s;
-		font-family: inherit;
-	}
-
-	.page-btn:hover:not(:disabled) {
-		background: #f3f4f6;
-		border-color: var(--border-hover, #d1d5db);
-	}
-
-	.page-btn:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-
-	.page-info {
-		font-size: 12px;
-		color: var(--text-muted, #6b7280);
-		font-weight: 500;
 	}
 </style>

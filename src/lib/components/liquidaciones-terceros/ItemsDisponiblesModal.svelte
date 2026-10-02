@@ -34,6 +34,7 @@
 		liquidacionesTercerosDescuentosAPI,
 		type ItemDisponible
 	} from '$lib/api/liquidaciones-terceros-descuentos';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 
 	interface Props {
 		cierreId: string;
@@ -165,298 +166,264 @@
 		}
 	}
 
-	function alTeclado(e: KeyboardEvent) {
-		if (e.key === 'Escape' && !trabajando) onClose();
-	}
-
 	onMount(() => {
 		void cargar();
 	});
 </script>
 
-<svelte:window onkeydown={alTeclado} />
+<!-- El descarte va en la CABECERA y no bajo la tabla, que es donde estaba:
+     con una lista corta la nota quedaba fuera de pantalla, y es justo
+     entonces —cuando el usuario esperaba más items— cuando hay que explicar
+     por qué no están. Solo se pasa cuando hay algo que decir: una cabecera
+     vacía le quitaría el relleno inferior al encabezado. -->
+{#snippet descarte()}
+	<p class="idm-descarte">
+		{ocupados} item(s) más de {placa} no se listan: ya están en un cierre. Un item
+		solo puede vivir en uno, o se pagaría dos veces.
+	</p>
+{/snippet}
 
-<div class="idm-backdrop">
-	<div class="idm" role="dialog" aria-modal="true" aria-labelledby="idm-titulo">
-		<div class="idm-head">
-			<div>
-				<h2 id="idm-titulo">Traer items a {placa}</h2>
-				<p class="idm-sub">
-					{periodo} · items de esta placa que no están en ningún cierre, de cualquier mes
-				</p>
-				<!-- El descarte va en la CABECERA y no bajo la tabla, que es donde
-				     estaba: con una lista corta la nota quedaba fuera de pantalla, y
-				     es justo entonces —cuando el usuario esperaba más items— cuando
-				     hay que explicar por qué no están. -->
-				{#if !cargando && ocupados > 0}
-					<p class="idm-descarte">
-						{ocupados} item(s) más de {placa} no se listan: ya están en un cierre. Un item
-						solo puede vivir en uno, o se pagaría dos veces.
-					</p>
-				{/if}
-			</div>
-			<button class="idm-x" onclick={onClose} disabled={trabajando} aria-label="Cerrar">×</button>
-		</div>
+<ModalBase
+	open={true}
+	eyebrow={`Cierre · ${periodo}`}
+	title={`Traer items a ${placa}`}
+	subtitle="Items de esta placa que no están en ningún cierre, de cualquier mes"
+	tamano="xl"
+	cerrarAlFondo={false}
+	bloqueado={trabajando}
+	cabecera={!cargando && ocupados > 0 ? descarte : undefined}
+	oncerrar={onClose}
+>
+	{#if !editable}
+		<p class="idm-bloqueo">
+			La hoja no está en BORRADOR: se puede consultar la lista, pero no añadir items.
+		</p>
+	{/if}
 
-		{#if !editable}
-			<p class="idm-bloqueo">
-				La hoja no está en BORRADOR: se puede consultar la lista, pero no añadir items.
+	<div class="idm-filtros">
+		<input
+			class="idm-input idm-buscar"
+			type="search"
+			placeholder="Buscar por recorrido, cliente, tercero, factura o # liquidación…"
+			bind:value={busqueda}
+			disabled={cargando}
+		/>
+		<select
+			class="idm-input"
+			bind:value={filtroPeriodo}
+			disabled={cargando || periodos.length === 0}
+		>
+			<option value="">Todos los periodos ({disponibles.length})</option>
+			{#each periodos as [clave, etiqueta] (clave)}
+				<option value={clave}>
+					{etiqueta} ({disponibles.filter((i) => clavePeriodo(i) === clave).length})
+				</option>
+			{/each}
+		</select>
+	</div>
+
+	<div class="idm-card">
+		{#if cargando}
+			<p class="idm-vacio">Leyendo items de {placa}…</p>
+		{:else if error && disponibles.length === 0}
+			<p class="idm-error">{error}</p>
+		{:else if disponibles.length === 0}
+			<p class="idm-vacio">
+				No hay items sueltos de {placa}. Todos los que existen en la base ya están en
+				un cierre.
 			</p>
-		{/if}
-
-		<div class="idm-filtros">
-			<input
-				class="idm-buscar"
-				type="search"
-				placeholder="Buscar por recorrido, cliente, tercero, factura o # liquidación…"
-				bind:value={busqueda}
-				disabled={cargando}
-			/>
-			<select bind:value={filtroPeriodo} disabled={cargando || periodos.length === 0}>
-				<option value="">Todos los periodos ({disponibles.length})</option>
-				{#each periodos as [clave, etiqueta] (clave)}
-					<option value={clave}>
-						{etiqueta} ({disponibles.filter((i) => clavePeriodo(i) === clave).length})
-					</option>
-				{/each}
-			</select>
-		</div>
-
-		<div class="idm-body">
-			{#if cargando}
-				<p class="idm-vacio">Leyendo items de {placa}…</p>
-			{:else if error && disponibles.length === 0}
-				<p class="idm-error">{error}</p>
-			{:else if disponibles.length === 0}
-				<p class="idm-vacio">
-					No hay items sueltos de {placa}. Todos los que existen en la base ya están en
-					un cierre.
-				</p>
-			{:else if filtrados.length === 0}
-				<p class="idm-vacio">Ningún item coincide con el filtro.</p>
-			{:else}
-				<table class="idm-tabla">
-					<thead>
-						<tr>
-							<th class="idm-check">
+		{:else if filtrados.length === 0}
+			<p class="idm-vacio">Ningún item coincide con el filtro.</p>
+		{:else}
+			<table class="idm-tabla">
+				<thead>
+					<tr>
+						<th class="idm-check">
+							<input
+								type="checkbox"
+								checked={todosMarcados}
+								onchange={alternarTodos}
+								disabled={!editable || trabajando}
+								aria-label="Marcar todos los visibles"
+							/>
+						</th>
+						<th>Periodo</th>
+						<th># Liq</th>
+						<th>Cliente</th>
+						<th>Nombre 3°</th>
+						<th>Recorrido</th>
+						<th>Fechas</th>
+						<th># Factura</th>
+						<th class="idm-num">V/Liquidar</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each filtrados as i (i.id)}
+						<tr
+							class:idm-on={seleccion.has(i.id)}
+							onclick={() => alternar(i.id)}
+							title={`V/unidad $${formatCOP(i.valor_unitario)} × ${i.cantidad} · admón ${i.porcentaje_admin}% ($${formatCOP(i.valor_admin)}) · total facturado $${formatCOP(i.total_facturado)}${i.numero_planilla ? ` · planilla ${i.numero_planilla}` : ''}`}
+						>
+							<td class="idm-check">
 								<input
 									type="checkbox"
-									checked={todosMarcados}
-									onchange={alternarTodos}
+									checked={seleccion.has(i.id)}
+									onchange={() => alternar(i.id)}
+									onclick={(e) => e.stopPropagation()}
 									disabled={!editable || trabajando}
-									aria-label="Marcar todos los visibles"
+									aria-label={`Seleccionar ${i.recorrido || 'item'}`}
 								/>
-							</th>
-							<th>Periodo</th>
-							<th># Liq</th>
-							<th>Cliente</th>
-							<th>Nombre 3°</th>
-							<th>Recorrido</th>
-							<th>Fechas</th>
-							<th># Factura</th>
-							<th class="idm-num">V/Liquidar</th>
+							</td>
+							<td>
+								<span class="idm-periodo" class:idm-otro={esDeOtroPeriodo(i)}>
+									{etiquetaPeriodo(i)}
+								</span>
+							</td>
+							<td class="idm-mono">{i.liquidacion_consecutivo || '—'}</td>
+							<td>{i.cliente_nombre || '—'}</td>
+							<td>
+								{i.tercero_nombre || '—'}
+								{#if i.otro_tercero}
+									<span class="idm-badge" title="Este item va con un tercero distinto al del cierre. Se puede traer igualmente: lo que decide es la placa.">otro 3°</span>
+								{/if}
+							</td>
+							<td class="idm-recorrido">{i.recorrido || '—'}</td>
+							<td class="idm-mono">{i.fechas || '—'}</td>
+							<td class="idm-mono">{i.numero_factura || '—'}</td>
+							<td class="idm-num idm-total">${formatCOP(i.valor_liquidar)}</td>
 						</tr>
-					</thead>
-					<tbody>
-						{#each filtrados as i (i.id)}
-							<tr
-								class:idm-on={seleccion.has(i.id)}
-								onclick={() => alternar(i.id)}
-								title={`V/unidad $${formatCOP(i.valor_unitario)} × ${i.cantidad} · admón ${i.porcentaje_admin}% ($${formatCOP(i.valor_admin)}) · total facturado $${formatCOP(i.total_facturado)}${i.numero_planilla ? ` · planilla ${i.numero_planilla}` : ''}`}
-							>
-								<td class="idm-check">
-									<input
-										type="checkbox"
-										checked={seleccion.has(i.id)}
-										onchange={() => alternar(i.id)}
-										onclick={(e) => e.stopPropagation()}
-										disabled={!editable || trabajando}
-										aria-label={`Seleccionar ${i.recorrido || 'item'}`}
-									/>
-								</td>
-								<td>
-									<span class="idm-periodo" class:idm-otro={esDeOtroPeriodo(i)}>
-										{etiquetaPeriodo(i)}
-									</span>
-								</td>
-								<td class="idm-mono">{i.liquidacion_consecutivo || '—'}</td>
-								<td>{i.cliente_nombre || '—'}</td>
-								<td>
-									{i.tercero_nombre || '—'}
-									{#if i.otro_tercero}
-										<span class="idm-badge" title="Este item va con un tercero distinto al del cierre. Se puede traer igualmente: lo que decide es la placa.">otro 3°</span>
-									{/if}
-								</td>
-								<td class="idm-recorrido">{i.recorrido || '—'}</td>
-								<td class="idm-mono">{i.fechas || '—'}</td>
-								<td class="idm-mono">{i.numero_factura || '—'}</td>
-								<td class="idm-num idm-total">${formatCOP(i.valor_liquidar)}</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-			{/if}
+					{/each}
+				</tbody>
+			</table>
+		{/if}
 
-			{#if error && disponibles.length > 0}
-				<p class="idm-error">{error}</p>
-			{/if}
-
-		</div>
-
-		<div class="idm-foot">
-			<span class="idm-resumen">
-				{#if seleccionados.length > 0}
-					<strong>{seleccionados.length}</strong> seleccionado(s) ·
-					<strong>${formatCOP(totalSeleccionado)}</strong>
-					{#if ocultosMarcados > 0}
-						<span class="idm-ocultos">
-							· {ocultosMarcados} marcado(s) fuera del filtro, no entran
-						</span>
-					{/if}
-				{:else if !cargando && disponibles.length > 0}
-					{filtrados.length} item(s) a la vista
-				{/if}
-			</span>
-			<div class="idm-acciones">
-				<button class="idm-ghost" onclick={onClose} disabled={trabajando}>Cerrar</button>
-				<button
-					class="idm-add"
-					onclick={agregar}
-					disabled={!editable || trabajando || seleccionados.length === 0}
-				>
-					{trabajando ? 'Añadiendo…' : `Añadir ${seleccionados.length || ''} item(s)`}
-				</button>
-			</div>
-		</div>
+		{#if error && disponibles.length > 0}
+			<p class="idm-error">{error}</p>
+		{/if}
 	</div>
-</div>
+
+	{#snippet pie()}
+		<span class="idm-resumen">
+			{#if seleccionados.length > 0}
+				<strong>{seleccionados.length}</strong> seleccionado(s) ·
+				<strong>${formatCOP(totalSeleccionado)}</strong>
+				{#if ocultosMarcados > 0}
+					<span class="idm-ocultos">
+						· {ocultosMarcados} marcado(s) fuera del filtro, no entran
+					</span>
+				{/if}
+			{:else if !cargando && disponibles.length > 0}
+				{filtrados.length} item(s) a la vista
+			{/if}
+		</span>
+		<button type="button" class="btn-secondary" onclick={onClose} disabled={trabajando}>
+			Cerrar
+		</button>
+		<button
+			type="button"
+			class="btn-primary idm-add"
+			onclick={agregar}
+			disabled={!editable || trabajando || seleccionados.length === 0}
+		>
+			{trabajando ? 'Añadiendo…' : `Añadir ${seleccionados.length || ''} item(s)`}
+		</button>
+	{/snippet}
+</ModalBase>
 
 <style>
-	.idm-backdrop {
-		position: fixed;
-		inset: 0;
-		z-index: 220;
-		background: rgb(15 23 42 / 0.55);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 20px;
-	}
-	.idm {
-		background: #fff;
-		color: #0f172a;
-		border-radius: 12px;
-		width: 100%;
-		max-width: 1120px;
-		max-height: 88vh;
-		display: flex;
-		flex-direction: column;
-		box-shadow: 0 20px 50px rgb(0 0 0 / 0.3);
-	}
-
-	.idm-head {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 12px;
-		padding: 18px 20px 12px;
-	}
-	.idm-head h2 {
-		margin: 0;
-		font-size: 16px;
-		font-weight: 700;
-	}
-	.idm-sub {
-		margin: 3px 0 0;
-		font-size: 12px;
-		color: #64748b;
-	}
-	.idm-x {
-		border: none;
-		background: transparent;
-		font-size: 22px;
-		line-height: 1;
-		cursor: pointer;
-		color: #64748b;
-		padding: 0 4px;
-	}
 	.idm-bloqueo {
-		margin: 0 20px 8px;
-		padding: 8px 10px;
-		border-radius: 7px;
+		margin: 0 0 12px;
+		padding: 10px 12px;
+		border-radius: 12px;
 		background: #fffbeb;
 		color: #b45309;
-		font-size: 11.5px;
+		font-size: 12.5px;
 		font-weight: 600;
 	}
 
 	.idm-filtros {
 		display: flex;
-		gap: 8px;
-		padding: 0 20px 12px;
-		border-bottom: 1px solid #e2e8f0;
+		flex-wrap: wrap;
+		gap: 10px;
+		margin-bottom: 14px;
 	}
-	.idm-filtros input,
-	.idm-filtros select {
-		padding: 7px 10px;
-		border: 1px solid #cbd5e1;
-		border-radius: 7px;
-		font-size: 12.5px;
+	.idm-input {
+		min-height: 42px;
+		padding: 9px 12px;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
 		font-family: inherit;
-		color: #0f172a;
-		background: #fff;
+		font-size: 14px;
+	}
+	.idm-input:focus {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.idm-input:disabled {
+		background: var(--bg-base);
+		color: var(--text-muted);
 	}
 	.idm-buscar {
-		flex: 1 1 auto;
+		flex: 1 1 280px;
 		min-width: 0;
 	}
 
-	.idm-body {
-		padding: 12px 20px;
-		overflow: auto;
-		min-height: 0;
-		flex: 1 1 auto;
+	/* Sin `overflow: hidden`: rompería el encabezado pegajoso de la tabla. */
+	.idm-card {
+		padding: 6px 14px 10px;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
 	}
 
 	.idm-tabla {
 		width: 100%;
 		border-collapse: collapse;
 		font-size: 12.5px;
+		color: var(--text-primary);
 	}
+	/* `top: -20px` compensa el relleno del cuerpo de ModalBase, que es el
+	   que hace scroll. */
 	.idm-tabla th {
 		position: sticky;
-		top: -12px;
+		top: -20px;
 		z-index: 1;
-		background: #fff;
+		background: var(--bg-surface);
 		text-align: left;
-		font-size: 10px;
+		font-size: 10.5px;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		color: #64748b;
-		padding: 0 8px 6px;
-		border-bottom: 1px solid #e2e8f0;
+		color: var(--text-muted);
+		padding: 10px 8px 8px;
+		border-bottom: 1px solid var(--border-default);
 	}
 	.idm-tabla td {
-		padding: 7px 8px;
-		border-bottom: 1px solid #f1f5f9;
+		padding: 8px;
+		border-bottom: 1px solid var(--border-subtle);
 		vertical-align: top;
 	}
 	.idm-tabla tbody tr {
 		cursor: pointer;
 	}
 	.idm-tabla tbody tr:hover {
-		background: #f8fafc;
+		background: var(--bg-base);
 	}
-	/* El verde de fondo solo no bastaba: a 12 filas la diferencia entre
-	   `#fff` y `#f0fdf4` no se ve de un vistazo y había que ir contando
-	   casillas. La barra de la izquierda sí se lee en diagonal. */
+	/* El color de fondo solo no bastaba: a 12 filas la diferencia no se ve
+	   de un vistazo y había que ir contando casillas. La barra de la
+	   izquierda sí se lee en diagonal. */
 	.idm-tabla tbody tr.idm-on {
-		background: #f0fdf4;
-		box-shadow: inset 3px 0 0 #c2410c;
+		background: color-mix(in srgb, var(--accion) 7%, transparent);
+		box-shadow: inset 3px 0 0 var(--accion);
 	}
 	.idm-check {
 		width: 30px;
+	}
+	.idm-check input {
+		accent-color: var(--accion);
 	}
 	.idm-num {
 		text-align: right;
@@ -468,7 +435,7 @@
 	.idm-mono {
 		font-variant-numeric: tabular-nums;
 		white-space: nowrap;
-		color: #475569;
+		color: var(--text-secondary);
 	}
 	/* El recorrido es la celda larga: se le deja partir para que no empuje al
 	   resto de columnas fuera del modal. */
@@ -489,8 +456,8 @@
 	/* Un item de otro mes es EL CASO NORMAL de este modal, no un error: se
 	   distingue en gris para poder agrupar de un vistazo, sin alarmar. */
 	.idm-periodo.idm-otro {
-		background: #f1f5f9;
-		color: #475569;
+		background: var(--bg-base);
+		color: var(--text-secondary);
 	}
 	.idm-badge {
 		display: inline-block;
@@ -507,67 +474,32 @@
 
 	.idm-vacio {
 		margin: 14px 2px;
-		font-size: 12.5px;
-		color: #64748b;
+		font-size: 13px;
+		color: var(--text-muted);
 	}
 	.idm-error {
-		margin: 10px 0 0;
-		font-size: 11.5px;
+		margin: 10px 0 4px;
+		font-size: 12px;
 		font-weight: 600;
-		color: #b91c1c;
+		color: #b42318;
 	}
 	.idm-descarte {
-		margin: 6px 0 0;
-		font-size: 11px;
+		margin: 0 0 16px;
+		font-size: 12px;
 		line-height: 1.45;
-		color: #64748b;
-		max-width: 62ch;
+		color: rgba(255, 255, 255, 0.72);
+		max-width: 70ch;
 	}
 	.idm-ocultos {
 		color: #b45309;
 	}
 
-	.idm-foot {
-		padding: 12px 20px 16px;
-		border-top: 1px solid #e2e8f0;
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 12px;
-	}
 	.idm-resumen {
-		font-size: 12px;
-		color: #475569;
-	}
-	.idm-acciones {
-		display: flex;
-		gap: 8px;
-	}
-	.idm-ghost {
-		border: none;
-		border-radius: 7px;
-		padding: 8px 14px;
-		background: #f1f5f9;
-		color: #334155;
-		font-size: 12.5px;
-		font-weight: 700;
-		font-family: inherit;
-		cursor: pointer;
+		margin-right: auto;
+		font-size: 13px;
+		color: var(--text-secondary);
 	}
 	.idm-add {
-		border: none;
-		border-radius: 7px;
-		padding: 8px 14px;
-		background: #c2410c;
-		color: #fff;
-		font-size: 12.5px;
-		font-weight: 700;
-		font-family: inherit;
-		cursor: pointer;
 		white-space: nowrap;
-	}
-	.idm-add:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
 	}
 </style>

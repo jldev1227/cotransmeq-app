@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { confirmar } from '$lib/stores/confirm';
 	import { browser } from '$app/environment';
 	import { page } from '$app/state';
 	import { texto, opcion, numero, contarActivos, limpiar, firma } from '$lib/listing/filtros';
@@ -573,7 +574,13 @@
 	}
 
 	async function cerrarTodasUsuario(usuarioId: string, nombre: string) {
-		if (!confirm(`¿Cerrar todas las sesiones activas de ${nombre}?`)) return;
+		const ok = await confirmar({
+			title: `¿Cerrar todas las sesiones de ${nombre}?`,
+			message: 'Tendrá que volver a iniciar sesión en todos sus dispositivos.',
+			tone: 'warning',
+			confirmText: 'Cerrar sesiones'
+		});
+		if (!ok) return;
 		try {
 			await sesionesAPI.cerrarTodasUsuario(usuarioId);
 			toast.success(`Sesiones de ${nombre} cerradas`);
@@ -803,11 +810,14 @@
 			// actualmente coinciden con el filtro "opuesto": para no
 			// "otorgar a todos" y "revocar a todos" al mismo tiempo.
 			// Pedimos confirmación explícita.
-			const ok = confirm(
-				granted
-					? `No has seleccionado usuarios. ¿Deseas OTORGAR el permiso a TODOS los ${usuariosBonos.length} usuarios del filtro actual?`
-					: `No has seleccionado usuarios. ¿Deseas REVOCAR el permiso a TODOS los ${usuariosBonos.length} usuarios del filtro actual?`
-			);
+			const ok = await confirmar({
+				title: granted
+					? `¿Otorgar el permiso a los ${usuariosBonos.length} usuarios?`
+					: `¿Revocar el permiso a los ${usuariosBonos.length} usuarios?`,
+				message: `No has seleccionado usuarios, así que se aplicará a TODOS los del filtro actual.`,
+				tone: granted ? 'warning' : 'danger',
+				confirmText: granted ? 'Otorgar a todos' : 'Revocar a todos'
+			});
 			if (!ok) return;
 			ids = usuariosBonos.map((u) => u.id);
 		}
@@ -1410,7 +1420,7 @@
 				<div class="bonos-bulk-actions">
 					<button
 						type="button"
-						class="btn-bonos-grant"
+						class="btn-primary btn-bonos-grant"
 						disabled={guardandoBonos}
 						onclick={() => setBonosPlanilla(true)}
 					>
@@ -3073,71 +3083,10 @@
 	.alert strong {
 		font-weight: 600;
 	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   BOTONES
-	   ═══════════════════════════════════════════════════════════════ */
-	.btn-primary,
-	.btn-secondary,
-	.btn-danger {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.45rem;
-		padding: 0.65rem 1.15rem;
-		font-family: var(--font-sans);
-		font-size: 0.85rem;
-		font-weight: 600;
-		border-radius: 11px;
-		cursor: pointer;
-		transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-		border: 1px solid transparent;
-		white-space: nowrap;
-	}
-	.btn-primary {
-		background: linear-gradient(135deg, #16a34a, #087a57);
-		color: white;
-		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.28);
-	}
-	.btn-primary:hover:not(:disabled) {
-		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(234, 88, 12, 0.4);
-	}
-	.btn-primary:disabled {
-		opacity: 0.6;
-		cursor: not-allowed;
-	}
-	.btn-secondary {
-		background: white;
-		color: #0f172a;
-		border-color: rgba(0, 0, 0, 0.12);
-	}
-	.btn-secondary:hover:not(:disabled) {
-		background: #fcfcfb;
-		border-color: rgba(0, 0, 0, 0.2);
-	}
-	.btn-secondary:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
-	}
 	.btn-secondary--sm {
+		min-height: 34px;
 		padding: 0.45rem 0.85rem;
 		font-size: 0.78rem;
-	}
-	.btn-danger {
-		background: linear-gradient(135deg, #dc2626, #b91c1c);
-		color: white;
-		box-shadow: 0 4px 16px rgba(220, 38, 38, 0.28);
-	}
-	.btn-danger:hover:not(:disabled) {
-		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(220, 38, 38, 0.4);
-	}
-	.btn-primary svg,
-	.btn-secondary svg,
-	.btn-danger svg {
-		width: 15px;
-		height: 15px;
 	}
 	.spin {
 		width: 14px;
@@ -3471,7 +3420,11 @@
 		margin: 0 0 1rem 0;
 	}
 
-	.btn-bonos-grant,
+	.btn-bonos-grant {
+		min-height: 34px;
+		padding: 0.5rem 0.875rem;
+		font-size: 0.75rem;
+	}
 	.btn-bonos-revoke {
 		display: inline-flex;
 		align-items: center;
@@ -3484,15 +3437,6 @@
 		cursor: pointer;
 		transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 	}
-	.btn-bonos-grant {
-		background: linear-gradient(135deg, #16a34a, #087a57);
-		color: white;
-		box-shadow: 0 2px 8px rgba(234, 88, 12, 0.25);
-	}
-	.btn-bonos-grant:hover:not(:disabled) {
-		transform: translateY(-1px);
-		box-shadow: 0 4px 14px rgba(234, 88, 12, 0.35);
-	}
 	.btn-bonos-revoke {
 		background: white;
 		color: #b91c1c;
@@ -3502,7 +3446,6 @@
 		background: rgba(220, 38, 38, 0.06);
 		border-color: #dc2626;
 	}
-	.btn-bonos-grant:disabled,
 	.btn-bonos-revoke:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;

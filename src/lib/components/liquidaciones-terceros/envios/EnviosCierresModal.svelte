@@ -28,6 +28,7 @@
 	import { componerHojasHtml } from '$lib/components/liquidaciones-terceros/preview/componer-hojas';
 	import { COP, fmtPlaca } from '$lib/components/liquidaciones-terceros/preview/formato';
 	import ChipsCorreos from './ChipsCorreos.svelte';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 	import {
 		liquidacionesTercerosEnviosAPI,
 		type EstadoEnvioCierre,
@@ -130,6 +131,15 @@
 
 	const job = $derived($enviosLiqStore);
 	const enCurso = $derived(job != null && (job.status === 'queued' || job.status === 'running'));
+	/** Hay un envío en marcha o su resultado pendiente de cerrar. */
+	const mostrarProgreso = $derived(
+		job != null &&
+			(enCurso ||
+				job.status === 'complete' ||
+				job.status === 'cancelled' ||
+				job.status === 'error' ||
+				job.status === 'locked')
+	);
 
 	/**
 	 * Un DESTINATARIO del lote. No es lo mismo que una hoja.
@@ -250,6 +260,13 @@
 	/** Cuántas placas del periodo se liquidan a varios propietarios. */
 	const placasMulti = $derived(
 		new Set(destinos.filter((d) => d.propietarioId).map((d) => d.hoja.id)).size
+	);
+
+	const subtitulo = $derived(
+		'Cada destinatario recibe el PDF de la liquidación de su placa' +
+			(placasMulti > 0
+				? ` · ${placasMulti} placa(s) con varios propietarios se despliegan en un correo por propietario, con su valor a facturar`
+				: '')
 	);
 
 	const seleccionadas = $derived(filas.filter((f) => seleccion.has(f.destino.key)));
@@ -629,106 +646,85 @@
 	});
 </script>
 
-<svelte:window
-	onkeydown={(e) => {
-		if (e.key === 'Escape' && !enCurso && !componiendo) onClose();
-	}}
-/>
+<ModalBase
+	open={true}
+	eyebrow="Enviar por correo"
+	title="Liquidaciones de {periodo}"
+	subtitle={subtitulo}
+	tamano="xl"
+	cerrarAlFondo={false}
+	bloqueado={enCurso || componiendo}
+	oncerrar={onClose}
+>
+	{#if mostrarProgreso && job}
+		<!-- ── Progreso / resultado ── -->
+		<section class="env-body env-card">
+			{#if job.status === 'locked'}
+				<div class="env-aviso env-aviso-ambar">
+					<strong>{job.lockedBy?.userName ?? 'Otro usuario'}</strong> ya está enviando este
+					periodo. El bloqueo es por mes: cuando termine podrás lanzar el tuyo.
+				</div>
+			{:else}
+				<p class="env-paso">{job.currentStep}</p>
+				<div class="env-barra">
+					<div class="env-barra-fill" style="width: {job.progress}%"></div>
+				</div>
+				<p class="env-pct">{job.processed} de {job.total} · {job.progress}%</p>
 
-<div class="env-backdrop">
-	<div class="env" role="dialog" aria-modal="true" aria-label="Enviar liquidaciones por correo" tabindex="-1">
-		<header class="env-head">
-			<div>
-				<h2>Enviar liquidaciones por correo</h2>
-				<p class="env-sub">
-					{periodo} · cada destinatario recibe el PDF de la liquidación de su placa
-					{#if placasMulti > 0}
-						· <strong>{placasMulti}</strong> placa(s) con varios propietarios se despliegan en
-						un correo por propietario, con su valor a facturar
-					{/if}
-				</p>
-			</div>
-			<button class="env-x" onclick={onClose} disabled={enCurso || componiendo} aria-label="Cerrar">×</button>
-		</header>
+				{#if job.resultados.length > 0}
+					<ul class="env-resultados">
+						{#each job.resultados as r (r.cierre_id + r.to + (r.enviado_at ?? ''))}
+							<li class={r.estado === 'ENVIADO' ? 'ok' : 'err'}>
+								<span class="env-res-placa">{fmtPlaca(r.placa)}</span>
+								<span class="env-res-to">{r.to}</span>
+								{#if r.estado === 'ENVIADO'}
+									<span class="env-chip env-chip-ok">Enviado</span>
+								{:else}
+									<span class="env-chip env-chip-err" title={r.error}>Error</span>
+								{/if}
+							</li>
+						{/each}
+					</ul>
+				{/if}
 
-		{#if job && (enCurso || job.status === 'complete' || job.status === 'cancelled' || job.status === 'error' || job.status === 'locked')}
-			<!-- ── Progreso / resultado ── -->
-			<section class="env-body">
-				{#if job.status === 'locked'}
+				{#if job.status === 'error'}
+					<div class="env-aviso env-aviso-rojo">{job.error}</div>
+				{/if}
+				{#if job.status === 'cancelled'}
 					<div class="env-aviso env-aviso-ambar">
-						<strong>{job.lockedBy?.userName ?? 'Otro usuario'}</strong> ya está enviando este
-						periodo. El bloqueo es por mes: cuando termine podrás lanzar el tuyo.
-					</div>
-				{:else}
-					<p class="env-paso">{job.currentStep}</p>
-					<div class="env-barra">
-						<div class="env-barra-fill" style="width: {job.progress}%"></div>
-					</div>
-					<p class="env-pct">{job.processed} de {job.total} · {job.progress}%</p>
-
-					{#if job.resultados.length > 0}
-						<ul class="env-resultados">
-							{#each job.resultados as r (r.cierre_id + r.to + (r.enviado_at ?? ''))}
-								<li class={r.estado === 'ENVIADO' ? 'ok' : 'err'}>
-									<span class="env-res-placa">{fmtPlaca(r.placa)}</span>
-									<span class="env-res-to">{r.to}</span>
-									{#if r.estado === 'ENVIADO'}
-										<span class="env-chip env-chip-ok">Enviado</span>
-									{:else}
-										<span class="env-chip env-chip-err" title={r.error}>Error</span>
-									{/if}
-								</li>
-							{/each}
-						</ul>
-					{/if}
-
-					{#if job.status === 'error'}
-						<div class="env-aviso env-aviso-rojo">{job.error}</div>
-					{/if}
-					{#if job.status === 'cancelled'}
-						<div class="env-aviso env-aviso-ambar">
-							Cancelado. Los correos ya despachados no se pueden retirar; quedaron registrados.
-						</div>
-					{/if}
-				{/if}
-			</section>
-
-			<footer class="env-foot">
-				{#if enCurso}
-					<span class="env-hint">Al cancelar se detiene tras el envío en curso.</span>
-					<button class="env-btn-ghost" onclick={cancelarJob}>Cancelar envíos</button>
-				{:else}
-					<button class="env-btn-ghost" onclick={cerrarResultado}>Preparar otro envío</button>
-					<button class="env-btn-primary" onclick={onClose}>Cerrar</button>
-				{/if}
-			</footer>
-		{:else}
-			<!-- ── Formulario ── -->
-			<section class="env-body">
-				{#if errorConsulta}
-					<div class="env-aviso env-aviso-ambar">
-						No se pudo consultar el estado del servicio de correo ({errorConsulta}). Puede ser
-						que el servidor esté caído o la sesión haya vencido; el envío se puede intentar
-						igual y el resultado quedará en la constancia.
-						<button class="env-aviso-link" onclick={cargarEstados}>Reintentar</button>
-					</div>
-				{:else if sinProveedor}
-					<div class="env-aviso env-aviso-rojo">
-						No hay proveedor de correo configurado en el servidor. Configura
-						CONTABILIDAD_SMTP_USER/PASSWORD o RESEND_API_KEY.
-					</div>
-				{:else if proveedor === 'resend' || proveedor === 'smtp'}
-					<div class="env-aviso env-aviso-info">
-						Los correos salen a nombre de <strong>Contabilidad Cotransmeq S.A.S.</strong> y las
-						respuestas llegan a <strong>contabilidadtransmeraldasas@gmail.com</strong> (que además
-						recibe copia de constancia de cada envío real).
-					</div>
-				{:else if proveedor === 'smtp-contabilidad'}
-					<div class="env-aviso env-aviso-info">
-						Enviando directamente desde <strong>contabilidadtransmeraldasas@gmail.com</strong>.
+						Cancelado. Los correos ya despachados no se pueden retirar; quedaron registrados.
 					</div>
 				{/if}
+			{/if}
+		</section>
+	{:else}
+		<!-- ── Formulario ── -->
+		<section class="env-body">
+			{#if errorConsulta}
+				<div class="env-aviso env-aviso-ambar">
+					No se pudo consultar el estado del servicio de correo ({errorConsulta}). Puede ser
+					que el servidor esté caído o la sesión haya vencido; el envío se puede intentar
+					igual y el resultado quedará en la constancia.
+					<button type="button" class="env-aviso-link" onclick={cargarEstados}>Reintentar</button>
+				</div>
+			{:else if sinProveedor}
+				<div class="env-aviso env-aviso-rojo">
+					No hay proveedor de correo configurado en el servidor. Configura
+					CONTABILIDAD_SMTP_USER/PASSWORD o RESEND_API_KEY.
+				</div>
+			{:else if proveedor === 'resend' || proveedor === 'smtp'}
+				<div class="env-aviso env-aviso-info">
+					Los correos salen a nombre de <strong>Contabilidad Cotransmeq S.A.S.</strong> y las
+					respuestas llegan a <strong>contabilidadtransmeraldasas@gmail.com</strong> (que además
+					recibe copia de constancia de cada envío real).
+				</div>
+			{:else if proveedor === 'smtp-contabilidad'}
+				<div class="env-aviso env-aviso-info">
+					Enviando directamente desde <strong>contabilidadtransmeraldasas@gmail.com</strong>.
+				</div>
+			{/if}
 
+			<div class="env-card">
 				<h3 class="env-h3">1 · Destinatarios</h3>
 				<div class="env-acciones-mini">
 					<label class="env-check">
@@ -849,20 +845,24 @@
 						cuando la fila lleva una sola dirección)
 					</span>
 				</label>
+			</div>
 
+			<div class="env-card">
 				<h3 class="env-h3">2 · Mensaje</h3>
 				<label class="env-campo">
 					<span>Asunto <em>(admite {'{PLACA}'}, {'{TERCERO}'} y {'{PERIODO}'})</em></span>
-					<input type="text" bind:value={asunto} maxlength="300" />
+					<input class="env-input" type="text" bind:value={asunto} maxlength="300" />
 				</label>
 				<label class="env-campo">
 					<span>Cuerpo del mensaje</span>
-					<textarea rows="5" bind:value={mensaje} maxlength="5000"></textarea>
+					<textarea class="env-input" rows="5" bind:value={mensaje} maxlength="5000"></textarea>
 				</label>
+			</div>
 
+			<div class="env-card">
 				<h3 class="env-h3">3 · Adjuntos adicionales <em>(van en todos los correos del lote)</em></h3>
 				<div class="env-adjuntos">
-					<label class="env-btn-ghost env-btn-file">
+					<label class="btn-secondary env-btn-file">
 						+ Añadir archivos
 						<input type="file" multiple onchange={agregarAdjuntos} hidden />
 					</label>
@@ -872,7 +872,7 @@
 								<li>
 									<span class="env-adj-nombre" title={a.filename}>📎 {a.filename}</span>
 									<span class="env-adj-size">{fmtBytes(a.size)}</span>
-									<button class="env-adj-x" onclick={() => quitarAdjunto(i)} aria-label="Quitar">×</button>
+									<button type="button" class="env-adj-x" onclick={() => quitarAdjunto(i)} aria-label="Quitar">×</button>
 								</li>
 							{/each}
 						</ul>
@@ -881,7 +881,9 @@
 						<p class="env-nota">Sin adjuntos extra. El PDF de la liquidación va siempre.</p>
 					{/if}
 				</div>
+			</div>
 
+			<div class="env-card">
 				<h3 class="env-h3">4 · Modo prueba</h3>
 				<div class="env-prueba" class:activa={esPrueba}>
 					<label class="env-check">
@@ -893,118 +895,107 @@
 					</label>
 					{#if esPrueba}
 						<input
-							class="env-correo env-correo-prueba"
+							class="env-input env-correo-prueba"
 							type="email"
 							placeholder="correo de prueba"
 							bind:value={destinoPrueba}
 						/>
 					{/if}
 				</div>
-			</section>
+			</div>
+		</section>
+	{/if}
 
-			<footer class="env-foot">
-				<span class="env-hint">
-					{enviables.length} correo(s) listos
-					{#if noEnviables > 0}
-						· {noEnviables} seleccionada(s) sin correo válido quedarán fuera
-					{/if}
-				</span>
-				<button
-					class="env-btn-primary"
-					disabled={componiendo || enviables.length === 0 || sinProveedor}
-					onclick={enviar}
-				>
-					{componiendo ? progresoComposicion : esPrueba ? 'Enviar PRUEBA' : `Enviar ${enviables.length} correo(s)`}
-				</button>
-			</footer>
+	{#snippet pie()}
+		{#if mostrarProgreso}
+			{#if enCurso}
+				<span class="env-hint">Al cancelar se detiene tras el envío en curso.</span>
+				<button type="button" class="btn-secondary" onclick={cancelarJob}>Cancelar envíos</button>
+			{:else}
+				<button type="button" class="btn-secondary" onclick={cerrarResultado}>Preparar otro envío</button>
+				<button type="button" class="btn-primary" onclick={onClose}>Cerrar</button>
+			{/if}
+		{:else}
+			<span class="env-hint">
+				{enviables.length} correo(s) listos
+				{#if noEnviables > 0}
+					· {noEnviables} seleccionada(s) sin correo válido quedarán fuera
+				{/if}
+			</span>
+			<button
+				type="button"
+				class="btn-primary"
+				disabled={componiendo || enviables.length === 0 || sinProveedor}
+				onclick={enviar}
+			>
+				{componiendo ? progresoComposicion : esPrueba ? 'Enviar PRUEBA' : `Enviar ${enviables.length} correo(s)`}
+			</button>
 		{/if}
-	</div>
-</div>
+	{/snippet}
+</ModalBase>
 
 <style>
-	.env-backdrop {
-		position: fixed;
-		inset: 0;
-		background: rgba(15, 23, 42, 0.55);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 1000;
-		padding: 24px;
-	}
-	.env {
-		width: min(860px, 100%);
-		max-height: 92vh;
+	.env-body {
 		display: flex;
 		flex-direction: column;
-		background: #fff;
-		border-radius: 14px;
-		box-shadow: 0 24px 64px rgba(0, 0, 0, 0.35);
-		overflow: hidden;
+		gap: 14px;
 	}
-	.env-head {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 16px;
-		padding: 18px 22px 14px;
-		border-bottom: 1px solid #e2e8f0;
+	.env-card {
+		padding: 16px 18px;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
 	}
-	.env-head h2 {
-		margin: 0;
-		font-size: 17px;
-		font-weight: 800;
-		color: #0f172a;
+	.env-input {
+		width: 100%;
+		min-height: 42px;
+		padding: 9px 12px;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font: inherit;
+		font-size: 14px;
+		transition:
+			border-color 0.15s,
+			box-shadow 0.15s;
 	}
-	.env-sub {
-		margin: 4px 0 0;
-		font-size: 12.5px;
-		color: #64748b;
+	textarea.env-input {
+		resize: vertical;
 	}
-	.env-x {
-		border: none;
-		background: none;
-		font-size: 22px;
-		line-height: 1;
-		color: #64748b;
-		cursor: pointer;
-		padding: 2px 6px;
-		border-radius: 6px;
+	.env-input::placeholder {
+		color: var(--text-very-muted);
+		opacity: 1;
 	}
-	.env-x:hover:not(:disabled) {
-		background: #f1f5f9;
-		color: #0f172a;
+	.env-input:focus {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
 	}
-	.env-body {
-		padding: 16px 22px;
-		overflow-y: auto;
-		flex: 1 1 auto;
-		min-height: 0;
+	.env-input:disabled {
+		background: var(--bg-base);
+		color: var(--text-muted);
 	}
 	.env-h3 {
-		margin: 18px 0 8px;
-		font-size: 13px;
-		font-weight: 800;
-		color: #334155;
+		margin: 0 0 10px;
+		font-size: 12px;
+		font-weight: 700;
+		color: var(--text-secondary);
 		text-transform: uppercase;
-		letter-spacing: 0.03em;
-	}
-	.env-h3:first-of-type {
-		margin-top: 4px;
+		letter-spacing: 0.04em;
 	}
 	.env-h3 em {
 		font-weight: 500;
 		text-transform: none;
 		letter-spacing: 0;
-		color: #94a3b8;
+		color: var(--text-muted);
 		font-style: normal;
 	}
 	.env-aviso {
-		border-radius: 10px;
+		border-radius: 12px;
 		padding: 10px 14px;
 		font-size: 13px;
 		line-height: 1.55;
-		margin-bottom: 12px;
 	}
 	.env-aviso-info {
 		background: #f0fdf4;
@@ -1041,15 +1032,17 @@
 		align-items: flex-start;
 		gap: 8px;
 		font-size: 13px;
-		color: #334155;
+		color: var(--text-secondary);
 		cursor: pointer;
 	}
 	.env-check input {
 		margin-top: 2px;
+		accent-color: var(--accion);
 	}
 	.env-nota {
+		margin: 0;
 		font-size: 12px;
-		color: #64748b;
+		color: var(--text-muted);
 	}
 	.env-rojo {
 		color: #b91c1c;
@@ -1058,8 +1051,8 @@
 		list-style: none;
 		margin: 0;
 		padding: 0;
-		border: 1px solid #e2e8f0;
-		border-radius: 10px;
+		border: 1px solid var(--border-subtle);
+		border-radius: 12px;
 		max-height: 290px;
 		overflow-y: auto;
 	}
@@ -1072,18 +1065,18 @@
 		align-items: center;
 		gap: 10px;
 		padding: 7px 12px;
-		border-bottom: 1px solid #f1f5f9;
+		border-bottom: 1px solid var(--border-subtle);
 		font-size: 13px;
 	}
 	/* Fila de copropietario: sangrada bajo su placa, para que se lea como
 	   "esta placa se reparte entre estos" y no como placas distintas. */
 	.env-lista li.es-copro .env-placa {
 		font-weight: 500;
-		color: #94a3b8;
+		color: var(--text-muted);
 		font-size: 12px;
 	}
 	.env-lista li.es-copro {
-		background: #f8fafc;
+		background: var(--bg-base);
 	}
 	.env-lista li.es-concepto {
 		background: var(--tpdf-verde-claro-bg, #f0fdf4);
@@ -1102,7 +1095,7 @@
 		display: block;
 		font-style: normal;
 		font-size: 10.5px;
-		color: #64748b;
+		color: var(--text-muted);
 	}
 	.env-chip-concepto {
 		background: #dcfce7;
@@ -1120,11 +1113,11 @@
 	}
 	.env-placa {
 		font-weight: 800;
-		color: #0f172a;
+		color: var(--text-primary);
 		font-variant-numeric: tabular-nums;
 	}
 	.env-tercero {
-		color: #475569;
+		color: var(--text-secondary);
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
@@ -1140,20 +1133,8 @@
 		min-width: 0;
 	}
 	.env-chip-cc {
-		background: #e0e7ff;
-		color: #3730a3;
-	}
-	.env-correo {
-		border: 1px solid #cbd5e1;
-		border-radius: 8px;
-		padding: 5px 9px;
-		font-size: 12.5px;
-		color: #0f172a;
-		width: 100%;
-	}
-	.env-correo:focus {
-		outline: 2px solid #c2410c55;
-		border-color: #c2410c;
+		background: var(--bg-base);
+		color: var(--text-secondary);
 	}
 	.env-chip {
 		font-size: 11px;
@@ -1171,11 +1152,11 @@
 		color: #991b1b;
 	}
 	.env-chip-neutro {
-		background: #e0e7ff;
-		color: #3730a3;
+		background: var(--bg-base);
+		color: var(--text-secondary);
 	}
 	.env-chip-vacio {
-		color: #cbd5e1;
+		color: var(--text-very-muted);
 	}
 	.env-persistir {
 		margin-top: 8px;
@@ -1188,28 +1169,13 @@
 	}
 	.env-campo span {
 		font-size: 12.5px;
-		color: #475569;
+		color: var(--text-secondary);
 		font-weight: 600;
 	}
 	.env-campo em {
 		font-weight: 400;
-		color: #94a3b8;
+		color: var(--text-muted);
 		font-style: normal;
-	}
-	.env-campo input,
-	.env-campo textarea {
-		border: 1px solid #cbd5e1;
-		border-radius: 8px;
-		padding: 8px 10px;
-		font-size: 13px;
-		font-family: inherit;
-		color: #0f172a;
-		resize: vertical;
-	}
-	.env-campo input:focus,
-	.env-campo textarea:focus {
-		outline: 2px solid #c2410c55;
-		border-color: #c2410c;
 	}
 	.env-adjuntos {
 		display: flex;
@@ -1233,7 +1199,7 @@
 		align-items: center;
 		gap: 10px;
 		font-size: 12.5px;
-		background: #f8fafc;
+		background: var(--bg-base);
 		border-radius: 8px;
 		padding: 5px 10px;
 	}
@@ -1242,16 +1208,16 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
-		color: #334155;
+		color: var(--text-secondary);
 	}
 	.env-adj-size {
-		color: #94a3b8;
+		color: var(--text-muted);
 		font-variant-numeric: tabular-nums;
 	}
 	.env-adj-x {
 		border: none;
 		background: none;
-		color: #94a3b8;
+		color: var(--text-muted);
 		font-size: 15px;
 		cursor: pointer;
 		border-radius: 4px;
@@ -1262,92 +1228,54 @@
 		background: #fee2e2;
 	}
 	.env-prueba {
-		border: 1px dashed #cbd5e1;
-		border-radius: 10px;
+		border: 1px dashed var(--border-default);
+		border-radius: 12px;
 		padding: 10px 14px;
 		display: flex;
 		flex-direction: column;
 		gap: 8px;
 	}
 	.env-prueba.activa {
-		border-color: #f59e0b;
-		background: #fffbeb;
+		border-color: var(--accion);
+		background: color-mix(in srgb, var(--accion) 6%, transparent);
 	}
 	.env-correo-prueba {
 		max-width: 320px;
 	}
-	.env-foot {
-		display: flex;
-		align-items: center;
-		justify-content: flex-end;
-		gap: 12px;
-		padding: 12px 22px;
-		border-top: 1px solid #e2e8f0;
-		background: #f8fafc;
-	}
 	.env-hint {
 		margin-right: auto;
 		font-size: 12px;
-		color: #64748b;
+		color: var(--text-muted);
 	}
-	.env-btn-primary {
-		background: #c2410c;
-		color: #fff;
-		border: none;
-		border-radius: 9px;
-		padding: 9px 18px;
-		font-size: 13.5px;
-		font-weight: 700;
-		cursor: pointer;
-	}
-	.env-btn-primary:hover:not(:disabled) {
-		background: #9a3412;
-	}
-	.env-btn-primary:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-	.env-btn-ghost {
-		background: #fff;
-		color: #334155;
-		border: 1px solid #cbd5e1;
-		border-radius: 9px;
-		padding: 8px 14px;
-		font-size: 13px;
-		font-weight: 600;
-		cursor: pointer;
-	}
-	.env-btn-ghost:hover {
-		background: #f1f5f9;
-	}
+
 	.env-paso {
-		margin: 4px 0 10px;
+		margin: 0 0 10px;
 		font-size: 14px;
-		color: #0f172a;
+		color: var(--text-primary);
 		font-weight: 600;
 	}
 	.env-barra {
 		height: 10px;
 		border-radius: 999px;
-		background: #e2e8f0;
+		background: var(--bg-base);
 		overflow: hidden;
 	}
 	.env-barra-fill {
 		height: 100%;
-		background: linear-gradient(90deg, #c2410c, #ea580c);
+		background: var(--accion);
 		transition: width 0.4s ease;
 	}
 	.env-pct {
 		margin: 6px 0 12px;
 		font-size: 12px;
-		color: #64748b;
+		color: var(--text-muted);
 	}
 	.env-resultados {
 		list-style: none;
 		margin: 0;
 		padding: 0;
-		border: 1px solid #e2e8f0;
-		border-radius: 10px;
+		border: 1px solid var(--border-subtle);
+		border-radius: 12px;
 		max-height: 260px;
 		overflow-y: auto;
 	}
@@ -1357,19 +1285,19 @@
 		gap: 10px;
 		padding: 6px 12px;
 		font-size: 12.5px;
-		border-bottom: 1px solid #f1f5f9;
+		border-bottom: 1px solid var(--border-subtle);
 	}
 	.env-resultados li:last-child {
 		border-bottom: none;
 	}
 	.env-res-placa {
 		font-weight: 800;
-		color: #0f172a;
+		color: var(--text-primary);
 		min-width: 76px;
 	}
 	.env-res-to {
 		flex: 1;
-		color: #475569;
+		color: var(--text-secondary);
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;

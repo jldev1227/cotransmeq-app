@@ -32,6 +32,8 @@
 		type AccionEnCurso
 	} from '$lib/components/univer/UniverActionOverlay.svelte';
 	import ModalFacturar from '$lib/components/ModalFacturar.svelte';
+	import ModalRevertirFacturada from '$lib/components/ModalRevertirFacturada.svelte';
+	import { confirmar, confirmarEliminacion } from '$lib/stores/confirm';
 	import ModalConfigLiquidador from '$lib/components/univer/ModalConfigLiquidador.svelte';
 	import ModalOperadoras from '$lib/components/ModalOperadoras.svelte';
 	import ModalLiquidacion, {
@@ -65,7 +67,8 @@
 		liquidacionesTercerosAPI,
 		type LiquidacionServicio,
 		type EstadoLiquidacionServicio,
-		type TerceroItemHistorial
+		type TerceroItemHistorial,
+		type FacturaActivaDeLiquidacion
 	} from '$lib/api/liquidaciones-servicios';
 	import {
 		facturacionLiquidacionesAPI,
@@ -274,11 +277,10 @@
 	/// trabajo. Está duplicado por el mismo motivo que el resto de permisos de
 	/// esta página (ver el comentario del bloque de permisos): el listado es
 	/// Svelte 4 y no comparte derivados.
+	/// Administración edita en cualquier estado (el backend lo permite y
+	/// recalcula la factura si estaba FACTURADA); el resto, solo BORRADOR.
 	const editable = $derived(
-		seleccionLiq.length === 1 &&
-			isFull &&
-			(seleccionLiq[0].estado === 'BORRADOR' ||
-				(isAdmin && seleccionLiq[0].estado === 'LIQUIDADA'))
+		seleccionLiq.length === 1 && isFull && (seleccionLiq[0].estado === 'BORRADOR' || isAdmin)
 	);
 
 	const motivoNoEditable = $derived(
@@ -777,11 +779,12 @@
 		if (objetivo.length === 0 || !permitido) return;
 
 		if (
-			!confirm(
-				`${textos.pregunta.replace('{n}', String(objetivo.length))}\n\n` +
-					objetivo.map((o) => o.consecutivo).join(', ') +
-					`\n\n${textos.consecuencia}`
-			)
+			!(await confirmar({
+				tone: 'warning',
+				title: textos.pregunta.replace('{n}', String(objetivo.length)),
+				message: `${objetivo.map((o) => o.consecutivo).join(', ')}\n\n${textos.consecuencia}`,
+				confirmText: 'Continuar'
+			}))
 		) {
 			return;
 		}
@@ -865,6 +868,35 @@
 			canRevertirABorrador
 		);
 
+	/// FACTURADA → APROBADA, de una en una: cada una arrastra la decisión de
+	/// qué hacer con SU factura (anularla o solo quitarla de ella).
+	const facturadaUnica = $derived(
+		seleccionLiq.length === 1 && seleccionLiq[0].estado === 'FACTURADA' ? seleccionLiq[0] : null
+	);
+	let revertirLiq = $state<{ id: string; consecutivo: string } | null>(null);
+	let revertirFactura = $state<FacturaActivaDeLiquidacion | null>(null);
+
+	async function devolverAAprobada() {
+		const liq = facturadaUnica;
+		if (!liq || !canRevertirALiquidada) return;
+		try {
+			/// Sin factura activa (dato inconsistente) el cambio pasa directo;
+			/// con ella, el 409 trae la factura para el modal.
+			await liquidacionesServiciosAPI.cambiarEstado(liq.id, 'APROBADA');
+			aplicarCambios([
+				{ id: liq.id, consecutivo: liq.consecutivo, estado: 'APROBADA' as any, factura_id: null, numero_factura: null }
+			]);
+			toast.success(`${liq.consecutivo} quedó APROBADA`);
+		} catch (e: any) {
+			if (e?.code === 'FACTURA_ACTIVA' && e.factura) {
+				revertirLiq = { id: liq.id, consecutivo: liq.consecutivo };
+				revertirFactura = e.factura;
+				return;
+			}
+			toast.error('No se pudo devolver a aprobada', { description: mensajeError(e) });
+		}
+	}
+
 	const reversarAprobacionSeleccion = () =>
 		moverEstadoSeleccion(
 			[...reversables],
@@ -884,12 +916,12 @@
 		if (objetivo.length === 0 || !canEliminar) return;
 
 		if (
-			!confirm(
-				`¿Eliminar ${objetivo.length} liquidación(es) en BORRADOR?\n\n` +
+			!(await confirmarEliminacion({
+				title: `¿Eliminar ${objetivo.length} liquidación(es) en BORRADOR?`,
+				message:
 					objetivo.map((o) => o.consecutivo).join(', ') +
-					'\n\nSe archivan (soft-delete): dejan de aparecer en el historial, ' +
-					'pero se pueden restaurar desde el backend.'
-			)
+					'\n\nSe archivan: dejan de aparecer en el historial, pero se pueden restaurar.'
+			}))
 		) {
 			return;
 		}
@@ -1010,10 +1042,11 @@
 
 		const consecutivos = objetivo.map((o) => o.consecutivo).join(', ');
 		if (
-			!confirm(
-				`¿Quitar ${objetivo.length} liquidación(es) de su factura?\n\n${consecutivos}\n\n` +
-					'Volverán a estado LIQUIDADA y el total de la factura se recalculará.'
-			)
+			!(await confirmarEliminacion({
+				title: `¿Quitar ${objetivo.length} liquidación(es) de su factura?`,
+				message: `${consecutivos}\n\nVolverán a estado LIQUIDADA y el total de la factura se recalculará.`,
+				confirmText: 'Quitar de la factura'
+			}))
 		) {
 			return;
 		}
@@ -1499,6 +1532,22 @@
 				onSelect: desasociarSeleccion
 			},
 			{
+				id: 'devolver-aprobada',
+				label: 'Devolver a aprobada',
+				hint: facturadaUnica
+					? `Saca ${facturadaUnica.consecutivo} de su factura y la deja APROBADA.`
+					: 'Selecciona una liquidación FACTURADA.',
+				icon: icoDesasociar,
+				tone: 'red',
+				disabled: !facturadaUnica || !canRevertirALiquidada || !!accionEnCurso,
+				disabledHint: !canRevertirALiquidada
+					? 'Solo Administración puede devolver una facturada a aprobada.'
+					: seleccionLiq.length > 1
+						? 'Se hace de una en una; hay varias seleccionadas.'
+						: 'Selecciona una liquidación FACTURADA.',
+				onSelect: devolverAAprobada
+			},
+			{
 				id: 'reversar-aprobacion',
 				label: 'Reversar aprobación',
 				hint: `Devuelve a LIQUIDADA las ${reversables.length} fila(s) APROBADAS de la selección.`,
@@ -1587,6 +1636,33 @@
 	<!-- Último hijo de `.hs-body` para que cubra también el carril. -->
 	<UniverActionOverlay accion={accionEnCurso} />
 </div>
+
+<ModalRevertirFacturada
+	open={revertirLiq !== null}
+	liquidacion={revertirLiq}
+	factura={revertirFactura}
+	onclose={() => {
+		revertirLiq = null;
+		revertirFactura = null;
+	}}
+	ondone={({ accion, estados }) => {
+		aplicarCambios(
+			Object.entries(estados).map(([id, estado]) => ({
+				id,
+				consecutivo: id === revertirLiq?.id ? revertirLiq.consecutivo : '',
+				estado: estado as any,
+				factura_id: null,
+				numero_factura: null
+			}))
+		);
+		toast.success(
+			accion === 'anular'
+				? `Factura ${revertirFactura?.numero_factura} anulada`
+				: `Quitada de la factura ${revertirFactura?.numero_factura}`,
+			{ description: `${revertirLiq?.consecutivo} quedó APROBADA.` }
+		);
+	}}
+/>
 
 <ModalFacturar
 	open={modalFacturar}

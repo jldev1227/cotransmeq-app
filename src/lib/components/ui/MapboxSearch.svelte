@@ -505,14 +505,14 @@
 					<button
 						type="button"
 						on:click={cancelarManual}
-						class="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50"
+						class="btn-secondary flex-1"
 					>
 						Cancelar
 					</button>
 					<button
 						type="button"
 						on:click={confirmarManual}
-						class="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-orange-500 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-orange-600"
+						class="btn-primary flex flex-1 items-center justify-center gap-1.5"
 					>
 						<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />

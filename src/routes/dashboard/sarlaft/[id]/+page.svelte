@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { confirmar } from '$lib/stores/confirm';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
@@ -152,11 +153,15 @@
 			const etiqueta =
 				ESTADO_LABELS[editEstado as EstadoSarlaft]?.label ?? editEstado;
 			const versionNueva = (detalle.documentos_generados?.length ?? 0) + 1;
-			const ok = confirm(
-				`Vas a registrar el resultado "${etiqueta}" del radicado ${detalle.radicado}.\n\n` +
+			const ok = await confirmar({
+				title: `¿Registrar el resultado "${etiqueta}"?`,
+				message:
+					`Radicado ${detalle.radicado}.\n\n` +
 					`Se emitirá la versión documental ${versionNueva} del formato, con esa casilla marcada. ` +
-					`La versión recibida no se modifica.\n\n¿Continuar?`
-			);
+					`La versión recibida no se modifica.`,
+				tone: 'warning',
+				confirmText: 'Registrar resultado'
+			});
 			if (!ok) return;
 		}
 
@@ -1671,58 +1676,13 @@
 		font-size: 0.82rem;
 		color: #b91c1c;
 	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   BOTONES
-	   ═══════════════════════════════════════════════════════════════ */
-	.btn-primary,
-	.btn-secondary {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.45rem;
-		padding: 0.65rem 1.15rem;
-		font-family: var(--font-sans);
-		font-size: 0.85rem;
-		font-weight: 600;
-		border-radius: 11px;
-		cursor: pointer;
-		transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-		border: 1px solid transparent;
-		white-space: nowrap;
-	}
-	.btn-primary {
-		background: linear-gradient(135deg, #ea580c, #c2410c);
-		color: white;
-		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.28);
-	}
-	.btn-primary:hover:not(:disabled) {
-		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(234, 88, 12, 0.4);
-	}
-	.btn-primary:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-	.btn-secondary {
-		background: white;
-		color: #1e293b;
-		border-color: rgba(0, 0, 0, 0.12);
-	}
-	.btn-secondary:hover:not(:disabled) {
-		background: #fcfcfb;
-		border-color: rgba(0, 0, 0, 0.2);
-	}
 	.btn-secondary--sm {
+		min-height: 34px;
 		padding: 0.45rem 0.85rem;
 		font-size: 0.78rem;
 	}
 	.btn-block {
 		width: 100%;
-	}
-	.btn-primary svg {
-		width: 15px;
-		height: 15px;
 	}
 	.spin {
 		width: 14px;

@@ -917,12 +917,18 @@
 		padding: 0 1rem;
 		font: inherit;
 		font-size: 0.8125rem;
-		font-weight: 700;
+		font-weight: 800;
 		color: #fff;
-		background: var(--emerald-600, #059669);
+		background: var(--accion);
 		border: none;
-		border-radius: 10px;
+		border-radius: 16px;
+		box-shadow: var(--shadow-btn);
 		cursor: pointer;
+	}
+
+	.barra__btn:hover:not(:disabled) {
+		background: var(--accion-hover);
+		box-shadow: var(--shadow-btn-hover);
 	}
 
 	.barra__btn:disabled {

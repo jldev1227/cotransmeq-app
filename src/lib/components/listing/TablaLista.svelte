@@ -52,6 +52,14 @@
 		etiqueta: string;
 		celda?: Snippet<[{ columnaId: string; fila: T; valor: unknown }]>;
 		vacio?: Snippet;
+		/**
+		 * Selección múltiple. Con `onSeleccion` la tabla pinta una columna
+		 * PROPIA de casillas, con «seleccionar todo» en la cabecera. Antes cada
+		 * pantalla metía la casilla dentro de su primera celda, pegada al nombre
+		 * y sin forma de marcar la página entera.
+		 */
+		seleccion?: Set<string>;
+		onSeleccion?: (ids: Set<string>) => void;
 	}
 
 	let {
@@ -64,8 +72,57 @@
 		onFila,
 		etiqueta,
 		celda,
-		vacio
+		vacio,
+		seleccion = new Set<string>(),
+		onSeleccion
 	}: Props = $props();
+
+	const conSeleccion = $derived(!!onSeleccion);
+	const clavesVisibles = $derived(datos.map((d) => claveFila(d)));
+	const marcadasVisibles = $derived(clavesVisibles.filter((k) => seleccion.has(k)).length);
+	const todasMarcadas = $derived(
+		clavesVisibles.length > 0 && marcadasVisibles === clavesVisibles.length
+	);
+	const algunasMarcadas = $derived(marcadasVisibles > 0 && !todasMarcadas);
+
+	/// Último índice marcado a mano: con Mayús se marca el tramo hasta él.
+	let ultimoIndice: number | null = null;
+
+	function alternarFila(clave: string, indice: number, e: MouseEvent) {
+		if (!onSeleccion) return;
+		const nueva = new Set(seleccion);
+		if (e.shiftKey && ultimoIndice !== null) {
+			const [a, b] = [Math.min(ultimoIndice, indice), Math.max(ultimoIndice, indice)];
+			const tramo = clavesVisibles.slice(a, b + 1);
+			const marcar = tramo.some((k) => !nueva.has(k));
+			for (const k of tramo) {
+				if (marcar) nueva.add(k);
+				else nueva.delete(k);
+			}
+		} else {
+			if (nueva.has(clave)) nueva.delete(clave);
+			else nueva.add(clave);
+		}
+		ultimoIndice = indice;
+		onSeleccion(nueva);
+	}
+
+	/// «Todo» es la página visible: es lo que el usuario ve marcado. Lo de
+	/// otras páginas se conserva tal cual.
+	function alternarTodas() {
+		if (!onSeleccion) return;
+		const nueva = new Set(seleccion);
+		if (todasMarcadas) clavesVisibles.forEach((k) => nueva.delete(k));
+		else clavesVisibles.forEach((k) => nueva.add(k));
+		onSeleccion(nueva);
+	}
+
+	/// `indeterminate` solo existe como propiedad del DOM, no como atributo.
+	function indeterminada(nodo: HTMLInputElement) {
+		$effect(() => {
+			nodo.indeterminate = algunasMarcadas;
+		});
+	}
 
 	/// `state` y `onStateChange` son obligatorios en el núcleo aunque el estado
 	/// real lo tenga el padre. Se crea con el estado vacío porque `createTable`
@@ -151,10 +208,30 @@
 	<!-- El desbordamiento horizontal se queda AQUÍ. Una tabla ancha que empuje
 	     el scroll de la página entera rompe el layout del dashboard. -->
 	<div class="tl-scroll">
-		<table class="tl-tabla" aria-label={etiqueta} aria-busy={cargando}>
+		<table
+			class="tl-tabla"
+			class:tl-tabla--sel={conSeleccion}
+			aria-label={etiqueta}
+			aria-busy={cargando}
+		>
 			<thead>
 				{#each modelo.grupos as grupo (grupo.id)}
 					<tr>
+						{#if conSeleccion}
+							<th scope="col" class="tl-th tl-th--sel">
+								<input
+									type="checkbox"
+									class="tl-check"
+									checked={todasMarcadas}
+									use:indeterminada
+									disabled={cargando || clavesVisibles.length === 0}
+									onclick={alternarTodas}
+									aria-label={todasMarcadas
+										? 'Quitar la selección de esta página'
+										: 'Seleccionar todos los de esta página'}
+								/>
+							</th>
+						{/if}
 						{#each grupo.headers as header (header.id)}
 							{@const id = header.column.id}
 							{@const dir = direccion(id)}
@@ -194,6 +271,7 @@
 					     cero y el contenido de abajo salta al llegar los datos. -->
 					{#each Array(6) as _, i (i)}
 						<tr class="tl-tr">
+							{#if conSeleccion}<td class="tl-td tl-td--sel"></td>{/if}
 							{#each columnas as col, j (j)}
 								<td class="tl-td"><span class="tl-esqueleto"></span></td>
 							{/each}
@@ -201,15 +279,17 @@
 					{/each}
 				{:else if modelo.filas.length === 0}
 					<tr>
-						<td class="tl-td tl-vacio" colspan={columnas.length}>
+						<td class="tl-td tl-vacio" colspan={columnas.length + (conSeleccion ? 1 : 0)}>
 							{#if vacio}{@render vacio()}{:else}Sin resultados{/if}
 						</td>
 					</tr>
 				{:else}
-					{#each modelo.filas as fila (claveFila(fila.original))}
+					{#each modelo.filas as fila, indice (claveFila(fila.original))}
+						{@const clave = claveFila(fila.original)}
 						<tr
 							class="tl-tr"
 							class:tl-tr--pulsable={!!onFila}
+							class:tl-tr--marcada={seleccion.has(clave)}
 							onclick={onFila ? () => onFila(fila.original) : undefined}
 							onkeydown={onFila
 								? (e) => {
@@ -222,9 +302,22 @@
 							tabindex={onFila ? 0 : undefined}
 							role={onFila ? 'button' : undefined}
 						>
-							{#each fila.getVisibleCells() as cell (cell.id)}
+							{#if conSeleccion}
+								<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
+								<td class="tl-td tl-td--sel" onclick={(e) => e.stopPropagation()}>
+									<input
+										type="checkbox"
+										class="tl-check"
+										checked={seleccion.has(clave)}
+										onclick={(e) => alternarFila(clave, indice, e)}
+										aria-label="Seleccionar fila"
+									/>
+								</td>
+							{/if}
+							{#each fila.getVisibleCells() as cell, j (cell.id)}
 								<td
 									class="tl-td"
+									class:tl-td--primera={j === 0}
 									class:tl-td--acciones={cell.column.id === 'acciones'}
 									data-etiqueta={typeof cell.column.columnDef.header === 'string'
 										? cell.column.columnDef.header
@@ -338,6 +431,30 @@
 		text-align: right;
 	}
 
+	/* Columna de selección: angosta y propia, separada del nombre. */
+	.tl-th--sel,
+	.tl-td--sel {
+		width: 52px;
+		padding-right: 0;
+		text-align: center;
+	}
+	.tl-check {
+		width: 18px;
+		height: 18px;
+		margin: 0;
+		vertical-align: middle;
+		accent-color: var(--accion, #079665);
+		cursor: pointer;
+	}
+	.tl-check:disabled {
+		cursor: not-allowed;
+		opacity: 0.4;
+	}
+	.tl-tr--marcada,
+	.tl-tr--marcada:hover {
+		background: color-mix(in srgb, var(--accion, #079665) 7%, transparent);
+	}
+
 	/* ── Móvil: cada fila se apila como una tarjeta ──
 	   La celda de identidad va arriba a todo el ancho; el resto lleva su
 	   etiqueta de columna delante; las acciones, a la derecha del título. */
@@ -362,12 +479,12 @@
 			padding: 0.2rem 0;
 			font-size: 0.85rem;
 		}
-		.tl-td:first-child {
+		.tl-td--primera {
 			/* Deja sitio a las acciones, que van en la esquina superior derecha. */
 			padding-right: 7.5rem;
 			margin-bottom: 0.35rem;
 		}
-		.tl-td:not(:first-child):not(.tl-td--acciones)::before {
+		.tl-td:not(.tl-td--primera):not(.tl-td--acciones):not(.tl-td--sel)::before {
 			content: attr(data-etiqueta);
 			flex: 0 0 6.5rem;
 			font-size: 0.62rem;
@@ -380,6 +497,17 @@
 			position: absolute;
 			top: 0.6rem;
 			right: 0.5rem;
+			padding: 0;
+		}
+		/* En tarjeta, la casilla va en la esquina superior izquierda. */
+		.tl-tabla--sel .tl-tr {
+			padding-left: 2.85rem;
+		}
+		.tl-td--sel {
+			position: absolute;
+			top: 1.05rem;
+			left: 0.9rem;
+			width: auto;
 			padding: 0;
 		}
 		.tl-td .tl-esqueleto {

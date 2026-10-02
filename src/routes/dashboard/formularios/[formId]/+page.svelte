@@ -12,6 +12,7 @@
 	    saca el FR-09 del FR-08, que comparten casi todo).
 -->
 <script lang="ts">
+	import { confirmar } from '$lib/stores/confirm';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -32,6 +33,8 @@
 		type SubmissionSummaryDto
 	} from '$lib/formularios/types';
 	import AssignmentEditor from '$lib/components/formularios/AssignmentEditor.svelte';
+	import TabsVista from '$lib/components/ui/TabsVista.svelte';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 
 	const formId = $derived($page.params.formId!);
 
@@ -52,6 +55,32 @@
 	let envios = $state<SubmissionSummaryDto[]>([]);
 	let totalEnvios = $state(0);
 	let cargandoEnvios = $state(true);
+	let paginaEnvios = $state(1);
+	const POR_PAGINA_ENVIOS = 25;
+
+	/**
+	 * Registros, versiones y asignaciones van en pestañas, no apilados.
+	 *
+	 * Apiladas, las tarjetas de versiones y asignaciones ocupaban media pantalla
+	 * antes del primer registro, que es lo que casi siempre se viene a ver. La
+	 * vista viaja en la URL (`?vista=`) para que un enlace abra en la misma.
+	 */
+	type Vista = 'registros' | 'versiones' | 'asignaciones';
+	const VISTAS: Vista[] = ['registros', 'versiones', 'asignaciones'];
+	const vistaUrl = $page.url.searchParams.get('vista') as Vista | null;
+	let vista = $state<Vista>(vistaUrl && VISTAS.includes(vistaUrl) ? vistaUrl : 'registros');
+
+	function cambiarVista(id: string) {
+		const url = new URL($page.url);
+		if (id === 'registros') url.searchParams.delete('vista');
+		else url.searchParams.set('vista', id);
+		history.replaceState(history.state, '', url);
+	}
+
+	function irPaginaEnvios(p: number) {
+		paginaEnvios = p;
+		void cargarEnvios();
+	}
 
 	async function cargar() {
 		cargando = true;
@@ -80,7 +109,11 @@
 	async function cargarEnvios() {
 		cargandoEnvios = true;
 		try {
-			const { data, meta } = await enviosFormularioAPI.listar({ formId, limit: 25 });
+			const { data, meta } = await enviosFormularioAPI.listar({
+				formId,
+				page: paginaEnvios,
+				limit: POR_PAGINA_ENVIOS
+			});
 			envios = data;
 			totalEnvios = meta?.total ?? data.length;
 		} catch (err) {
@@ -107,12 +140,13 @@
 	});
 
 	async function clonar(versionId: string, versionNumber: number) {
-		if (
-			!confirm(
-				`Clonar la v${versionNumber} en un borrador nuevo? La versión actual queda intacta y sus envíos no cambian.`
-			)
-		)
-			return;
+		const ok = await confirmar({
+			title: `¿Clonar la v${versionNumber} en un borrador nuevo?`,
+			message: 'La versión actual queda intacta y sus envíos no cambian.',
+			tone: 'info',
+			confirmText: 'Clonar'
+		});
+		if (!ok) return;
 		trabajando = true;
 		try {
 			const nueva = await formulariosAPI.clonarVersion(formId, versionId);
@@ -126,12 +160,13 @@
 	}
 
 	async function archivarVersion(versionId: string, versionNumber: number) {
-		if (
-			!confirm(
-				`Archivar la v${versionNumber}? Dejará de admitir asignaciones y envíos nuevos; el histórico se conserva.`
-			)
-		)
-			return;
+		const ok = await confirmar({
+			title: `¿Archivar la v${versionNumber}?`,
+			message: 'Dejará de admitir asignaciones y envíos nuevos; el histórico se conserva.',
+			tone: 'warning',
+			confirmText: 'Archivar'
+		});
+		if (!ok) return;
 		trabajando = true;
 		try {
 			await formulariosAPI.archivarVersion(formId, versionId);
@@ -169,7 +204,12 @@
 	) {
 		if (
 			accion === 'cerrar' &&
-			!confirm('Cerrar es definitivo: la asignación no se puede reabrir. ¿Continuar?')
+			!(await confirmar({
+				title: '¿Cerrar la asignación?',
+				message: 'Es definitivo: la asignación no se puede reabrir.',
+				tone: 'warning',
+				confirmText: 'Cerrar asignación'
+			}))
 		)
 			return;
 		trabajando = true;
@@ -250,8 +290,86 @@
 			</div>
 		</header>
 
-		<section class="bloque">
-			<h2 class="bloque__titulo">Versiones</h2>
+		<TabsVista
+			etiqueta="Vistas del formulario"
+			tabs={[
+				{ id: 'registros', label: 'Registros diligenciados', cuenta: totalEnvios },
+				{ id: 'versiones', label: 'Versiones', cuenta: versiones.length },
+				{ id: 'asignaciones', label: 'Asignaciones', cuenta: asignaciones.length }
+			]}
+			bind:activa={vista}
+			onCambiar={cambiarVista}
+		/>
+
+		{#if vista === 'registros'}
+			<section class="bloque">
+			<div class="bloque__cabeza">
+				<p class="bloque__desc">Quién diligenció este formato y cuándo. Abre una fila para ver sus respuestas.</p>
+				{#if totalEnvios > 0}
+					<a class="btn btn--mini" href={`/dashboard/formularios/envios?formId=${formId}`}>
+						Buscar y filtrar
+					</a>
+				{/if}
+			</div>
+
+			{#if cargandoEnvios}
+				<p class="vacio" aria-busy="true">Cargando registros…</p>
+			{:else if envios.length === 0}
+				<p class="vacio">
+					Todavía no hay envíos de este formato. Aparecerán aquí en cuanto un conductor entregue
+					uno.
+				</p>
+			{:else}
+				<!-- Filas, no tarjetas: son registros que se comparan entre sí, y una
+				     rejilla alineada deja leer la columna de fecha o de placa en
+				     vertical. La fila entera es el enlace al envío. -->
+				<ul class="registros">
+					<li class="registros__cab" aria-hidden="true">
+						<span>Entregado</span>
+						<span>Conductor</span>
+						<span>Vehículo</span>
+						<span>Versión</span>
+						<span>Respuestas</span>
+						<span>Estado</span>
+					</li>
+					{#each envios as envio (envio.id)}
+						<li>
+							<a class="registro" href={`/dashboard/formularios/envios/${envio.id}`}>
+								<span class="registro__fecha"
+									>{fechaHora(envio.submittedAt ?? envio.startedAt)}</span
+								>
+								<span class="registro__conductor">
+									{envio.actor?.nombre ?? '—'}
+									{#if envio.conductor?.numeroIdentificacion}
+										<small>{envio.conductor.numeroIdentificacion}</small>
+									{/if}
+								</span>
+								<span class="mono">{envio.vehiculo?.placa ?? '—'}</span>
+								<span class="mono">v{envio.version?.versionNumber ?? '—'}</span>
+								<span class="mono">{envio.answerCount ?? '—'}</span>
+								<span class="chip chip--{envio.status.toLowerCase()}">
+									{SUBMISSION_STATUS_LABELS[envio.status]}
+								</span>
+							</a>
+						</li>
+					{/each}
+				</ul>
+				<PaginadorLista
+					pagina={paginaEnvios}
+					total={totalEnvios}
+					porPagina={POR_PAGINA_ENVIOS}
+					cargando={cargandoEnvios}
+					nombreItems="registros"
+					suelto
+					onCambiar={irPaginaEnvios}
+				/>
+			{/if}
+		</section>
+		{:else if vista === 'versiones'}
+					<section class="bloque">
+			<p class="bloque__desc">
+				Cada publicación es una versión fija: para cambiar una publicada se clona en un borrador.
+			</p>
 			<ul class="versiones">
 				{#each versiones as v (v.id)}
 					<li class="ver">
@@ -310,10 +428,10 @@
 				</p>
 			{/if}
 		</section>
-
-		<section class="bloque">
+		{:else}
+			<section class="bloque">
 			<div class="bloque__head">
-				<h2 class="bloque__titulo">Asignaciones</h2>
+				<p class="bloque__desc">A quién le llega cada versión publicada y con qué frecuencia.</p>
 				{#if form.activeVersion}
 					<button
 						type="button"
@@ -397,64 +515,7 @@
 				</ul>
 			{/if}
 		</section>
-
-		<section class="bloque">
-			<div class="bloque__cabeza">
-				<h2 class="bloque__titulo">
-					Registros diligenciados
-					{#if totalEnvios > 0}<span class="cuenta">{totalEnvios}</span>{/if}
-				</h2>
-				{#if totalEnvios > envios.length}
-					<a class="btn btn--mini" href={`/dashboard/formularios/envios?formId=${formId}`}>
-						Ver los {totalEnvios} con filtros
-					</a>
-				{/if}
-			</div>
-
-			{#if cargandoEnvios}
-				<p class="vacio" aria-busy="true">Cargando registros…</p>
-			{:else if envios.length === 0}
-				<p class="vacio">
-					Todavía no hay envíos de este formato. Aparecerán aquí en cuanto un conductor entregue
-					uno.
-				</p>
-			{:else}
-				<!-- Filas, no tarjetas: son registros que se comparan entre sí, y una
-				     rejilla alineada deja leer la columna de fecha o de placa en
-				     vertical. La fila entera es el enlace al envío. -->
-				<ul class="registros">
-					<li class="registros__cab" aria-hidden="true">
-						<span>Entregado</span>
-						<span>Conductor</span>
-						<span>Vehículo</span>
-						<span>Versión</span>
-						<span>Respuestas</span>
-						<span>Estado</span>
-					</li>
-					{#each envios as envio (envio.id)}
-						<li>
-							<a class="registro" href={`/dashboard/formularios/envios/${envio.id}`}>
-								<span class="registro__fecha"
-									>{fechaHora(envio.submittedAt ?? envio.startedAt)}</span
-								>
-								<span class="registro__conductor">
-									{envio.actor?.nombre ?? '—'}
-									{#if envio.conductor?.numeroIdentificacion}
-										<small>{envio.conductor.numeroIdentificacion}</small>
-									{/if}
-								</span>
-								<span class="mono">{envio.vehiculo?.placa ?? '—'}</span>
-								<span class="mono">v{envio.version?.versionNumber ?? '—'}</span>
-								<span class="mono">{envio.answerCount ?? '—'}</span>
-								<span class="chip chip--{envio.status.toLowerCase()}">
-									{SUBMISSION_STATUS_LABELS[envio.status]}
-								</span>
-							</a>
-						</li>
-					{/each}
-				</ul>
-			{/if}
-		</section>
+		{/if}
 	{/if}
 </div>
 
@@ -550,7 +611,16 @@
 		padding: 0.875rem;
 		background: var(--bg-surface, #fff);
 		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
-		border-radius: 14px;
+		border-radius: 0 14px 14px 14px;
+		/* Pegado a las pestañas: es el contenido de la activa. */
+		margin-top: -1.125rem;
+		border-top: 0;
+	}
+
+	.bloque__desc {
+		margin: 0;
+		font-size: 0.8125rem;
+		color: var(--text-muted);
 	}
 
 	.bloque__head {
@@ -570,17 +640,7 @@
 		margin-bottom: 0.625rem;
 	}
 
-	.cuenta {
-		margin-left: 0.375rem;
-		padding: 0.0625rem 0.375rem;
-		font-family: var(--font-mono, monospace);
-		font-size: 0.6875rem;
-		font-weight: 700;
-		color: var(--text-secondary, #334155);
-		background: var(--gray-50, #f9fafb);
-		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
-		border-radius: 999px;
-	}
+	
 
 	.vacio {
 		font-size: 0.8125rem;
@@ -687,12 +747,7 @@
 		}
 	}
 
-	.bloque__titulo {
-		font-family: var(--font-display, Georgia, serif);
-		font-size: 1rem;
-		font-weight: 600;
-		color: var(--text-primary, #0f172a);
-	}
+	
 
 	.bloque__nota {
 		font-size: 0.8125rem;
@@ -802,11 +857,11 @@
 		padding: 0 0.875rem;
 		font: inherit;
 		font-size: 0.875rem;
-		font-weight: 500;
-		color: var(--text-primary, #0f172a);
+		font-weight: 800;
+		color: var(--bg-charcoal-deep);
 		background: #fff;
-		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
-		border-radius: 10px;
+		border: 1.5px solid var(--border-default);
+		border-radius: 16px;
 		cursor: pointer;
 		text-decoration: none;
 	}
@@ -818,7 +873,8 @@
 	}
 
 	.btn:hover:not(:disabled) {
-		background: var(--gray-50, #f9fafb);
+		background: var(--bg-base);
+		border-color: var(--border-emphasis);
 	}
 
 	.btn:disabled {
@@ -833,9 +889,16 @@
 
 	.btn--primario {
 		color: #fff;
-		background: var(--emerald-600, #15803d);
-		border-color: var(--emerald-600, #15803d);
-		font-weight: 600;
+		background: var(--accion);
+		border-color: var(--accion);
+		font-weight: 800;
+		box-shadow: var(--shadow-btn);
+	}
+
+	.btn--primario:hover:not(:disabled) {
+		background: var(--accion-hover);
+		border-color: var(--accion-hover);
+		box-shadow: var(--shadow-btn-hover);
 	}
 
 	.btn--peligro {

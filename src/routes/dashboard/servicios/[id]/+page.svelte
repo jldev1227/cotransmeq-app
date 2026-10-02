@@ -1475,7 +1475,7 @@
 				<p class="mb-4 text-gray-600">{error}</p>
 				<button
 					on:click={() => goto('/dashboard/servicios')}
-					class="apple-transition apple-hover rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:from-emerald-600 hover:to-emerald-700"
+					class="btn-primary apple-transition"
 				>
 					Volver
 				</button>
@@ -1535,7 +1535,7 @@
 					{STATUS_LABEL[servicio.estado] ?? servicio.estado}
 				</span>
 
-				<button on:click={handleCompartir} class="servicio-share-btn">
+				<button on:click={handleCompartir} class="btn-primary servicio-share-btn">
 					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path
 							stroke-linecap="round"
@@ -2406,7 +2406,7 @@
 							<span class="servicio-share-link-eyebrow">Click para copiar</span>
 							<span class="servicio-share-link-url">{generatedShareUrl}</span>
 						</button>
-						<button on:click={copyLink} class="servicio-share-cta" class:copied={copySuccess}>
+						<button on:click={copyLink} class="btn-primary servicio-share-cta" class:copied={copySuccess}>
 							{#if copySuccess}
 								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 									<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
@@ -2537,20 +2537,8 @@
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.55rem 0.9rem;
-		border-radius: 12px;
-		background: linear-gradient(135deg, #16a34a, #15803d);
-		color: white;
-		font-family: var(--font-sans);
 		font-size: 0.78rem;
-		font-weight: 600;
-		border: none;
 		cursor: pointer;
-		box-shadow: 0 4px 16px rgba(22, 163, 74, 0.3);
-		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-	}
-	.servicio-share-btn:hover {
-		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(22, 163, 74, 0.4);
 	}
 
 	/* ── Modal compartir (sistema landing) ─────────────────────── */
@@ -2671,23 +2659,8 @@
 		gap: 0.45rem;
 		width: 100%;
 		padding: 0.7rem 1.25rem;
-		border-radius: 12px;
-		background: linear-gradient(135deg, #16a34a, #15803d);
-		color: white;
-		font-family: var(--font-sans);
 		font-size: 0.88rem;
-		font-weight: 600;
-		border: none;
 		cursor: pointer;
-		box-shadow: 0 4px 16px rgba(22, 163, 74, 0.3);
-		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-	}
-	.servicio-share-cta:hover:not(:disabled) {
-		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(22, 163, 74, 0.4);
-	}
-	.servicio-share-cta.copied {
-		background: #15803d;
 	}
 
 	/* ── Cards landing (override de .glass para servicio) ────── */

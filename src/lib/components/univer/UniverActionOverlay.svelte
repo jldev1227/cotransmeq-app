@@ -78,10 +78,10 @@
 		align-items: center;
 		gap: 14px;
 		padding: 18px 24px;
-		border-radius: 12px;
-		background: #1e2429;
+		border-radius: 18px;
+		background: var(--bg-charcoal-deep);
 		color: #fff;
-		box-shadow: 0 18px 44px rgba(15, 23, 42, 0.32);
+		box-shadow: 0 18px 44px rgba(0, 29, 23, 0.32);
 		max-width: min(460px, calc(100% - 48px));
 	}
 

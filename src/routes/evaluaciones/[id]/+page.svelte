@@ -1683,7 +1683,7 @@
 
 							<button
 								on:click={clearSignature}
-								class="rounded-lg bg-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-300"
+								class="btn-secondary"
 							>
 								Limpiar Firma
 							</button>
@@ -1697,7 +1697,7 @@
 						{#if currentStep > 0 && currentStep <= totalPreguntas + 1}
 							<button
 								on:click={anterior}
-								class="flex w-full items-center justify-center gap-2 rounded-lg bg-gray-100 px-8 py-3.5 font-semibold text-gray-700 transition-colors hover:bg-gray-200 sm:w-auto"
+								class="btn-secondary flex w-full items-center justify-center gap-2 sm:w-auto"
 							>
 								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path
@@ -1716,7 +1716,7 @@
 						{#if currentStep < totalPreguntas}
 							<button
 								on:click={siguiente}
-								class="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-teal-600 px-8 py-3.5 font-semibold text-white shadow-lg transition-all hover:scale-105 hover:shadow-xl sm:w-auto"
+								class="btn-primary flex w-full items-center justify-center gap-2 sm:w-auto"
 							>
 								Siguiente
 								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1732,7 +1732,7 @@
 							<button
 								on:click={enviarEvaluacion}
 								disabled={isSubmitting}
-								class="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-teal-600 px-8 py-3.5 font-semibold text-white shadow-lg transition-all hover:scale-105 hover:shadow-xl disabled:opacity-50 sm:w-auto"
+								class="btn-primary flex w-full items-center justify-center gap-2 sm:w-auto"
 							>
 								{#if isSubmitting}
 									<svg class="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -1766,7 +1766,7 @@
 						{:else if currentStep === totalPreguntas}
 							<button
 								on:click={siguiente}
-								class="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-teal-600 px-8 py-3.5 font-semibold text-white shadow-lg transition-all hover:scale-105 hover:shadow-xl sm:w-auto"
+								class="btn-primary flex w-full items-center justify-center gap-2 sm:w-auto"
 							>
 								Continuar a Firma
 								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1782,7 +1782,7 @@
 							<button
 								on:click={enviarEvaluacion}
 								disabled={isSubmitting}
-								class="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-teal-600 px-8 py-3.5 font-semibold text-white shadow-lg transition-all hover:scale-105 hover:shadow-xl disabled:opacity-50 sm:w-auto"
+								class="btn-primary flex w-full items-center justify-center gap-2 sm:w-auto"
 							>
 								{#if isSubmitting}
 									<svg class="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">

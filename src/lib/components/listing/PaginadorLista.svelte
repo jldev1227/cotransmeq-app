@@ -1,16 +1,19 @@
 <script lang="ts">
+	import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-svelte';
+
 	/**
-	 * Controles de paginación de una lista.
+	 * Paginador ÚNICO de las tablas de la app.
 	 *
 	 * El mismo bloque estaba copiado a mano en conductores, clientes, servicios,
-	 * terceros y sarlaft, con textos y comportamientos ligeramente distintos —
-	 * unas mostraban el rango «11–20 de 340» y otras solo «página 2 de 17»—.
+	 * terceros, sarlaft, formularios, liquidaciones… con textos y comportamientos
+	 * distintos —unas mostraban «11–20 de 340» y otras solo «página 2 de 17», unas
+	 * con flechas «‹ ›» y otras con «Anterior / Siguiente»—. Da igual cómo sea la
+	 * tabla de encima: el pie de paginación es este.
 	 *
-	 * No incluye la lógica: la página decide qué hacer con el número, que en
-	 * las listas migradas significa escribirlo en la URL. Antes ninguna lo
-	 * hacía, así que compartir un enlace devolvía siempre a la primera página.
+	 * No incluye la lógica: la página decide qué hacer con el número (en las
+	 * listas migradas, escribirlo en la URL para que un enlace compartido abra en
+	 * la misma página).
 	 */
-
 	interface Props {
 		pagina: number;
 		/** Total de registros en el servidor, no los de esta página. */
@@ -20,6 +23,8 @@
 		cargando?: boolean;
 		/** Para el texto: «… de 340 vehículos». */
 		nombreItems?: string;
+		/** Sin borde superior ni fondo: para paginadores fuera de una tabla. */
+		suelto?: boolean;
 	}
 
 	let {
@@ -28,19 +33,18 @@
 		porPagina,
 		onCambiar,
 		cargando = false,
-		nombreItems = 'registros'
+		nombreItems = 'registros',
+		suelto = false
 	}: Props = $props();
 
-	const totalPaginas = $derived(Math.max(1, Math.ceil(total / porPagina)));
+	const totalPaginas = $derived(Math.max(1, Math.ceil(total / Math.max(1, porPagina))));
 	const desde = $derived(total === 0 ? 0 : (pagina - 1) * porPagina + 1);
 	const hasta = $derived(Math.min(pagina * porPagina, total));
 
 	/**
-	 * Ventana de páginas alrededor de la actual.
-	 *
-	 * Con 60 páginas no caben todos los botones, así que se muestran cinco
-	 * centrados en la actual, corriendo la ventana en los extremos para que
-	 * siempre haya cinco y no se encoja al principio y al final.
+	 * Ventana de páginas alrededor de la actual: cinco botones centrados en ella,
+	 * corriendo la ventana en los extremos para que no se encoja al principio ni
+	 * al final.
 	 */
 	const ventana = $derived.by(() => {
 		const maximo = 5;
@@ -60,48 +64,69 @@
 	}
 </script>
 
-{#if totalPaginas > 1}
-	<nav class="paginador" aria-label="Paginación">
+<!-- El rango se muestra aunque quepa todo en una página: el pie es siempre el
+     mismo y dice cuántos hay. Los botones solo cuando hay a dónde ir. -->
+{#if total > 0}
+	<nav class="paginador" class:suelto aria-label="Paginación">
 		<p class="rango">
 			<span class="fuerte">{desde}–{hasta}</span> de
-			<span class="fuerte">{total}</span>
+			<span class="fuerte">{total.toLocaleString('es-CO')}</span>
 			{nombreItems}
 		</p>
 
-		<div class="botones">
-			<button type="button" onclick={() => ir(1)} disabled={pagina === 1 || cargando}
-				aria-label="Primera página">«</button
-			>
-			<button type="button" onclick={() => ir(pagina - 1)} disabled={pagina === 1 || cargando}
-				aria-label="Página anterior">‹</button
-			>
-
-			{#each ventana as n (n)}
+		{#if totalPaginas > 1}
+			<div class="botones">
 				<button
 					type="button"
-					class:activa={n === pagina}
-					onclick={() => ir(n)}
-					disabled={cargando}
-					aria-current={n === pagina ? 'page' : undefined}
-					aria-label={`Página ${n}`}
+					class="extremo"
+					onclick={() => ir(1)}
+					disabled={pagina === 1 || cargando}
+					aria-label="Primera página"
 				>
-					{n}
+					<ChevronsLeft size={16} strokeWidth={2.5} />
 				</button>
-			{/each}
+				<button
+					type="button"
+					onclick={() => ir(pagina - 1)}
+					disabled={pagina === 1 || cargando}
+					aria-label="Página anterior"
+				>
+					<ChevronLeft size={16} strokeWidth={2.5} />
+				</button>
 
-			<button
-				type="button"
-				onclick={() => ir(pagina + 1)}
-				disabled={pagina === totalPaginas || cargando}
-				aria-label="Página siguiente">›</button
-			>
-			<button
-				type="button"
-				onclick={() => ir(totalPaginas)}
-				disabled={pagina === totalPaginas || cargando}
-				aria-label="Última página">»</button
-			>
-		</div>
+				{#each ventana as n (n)}
+					<button
+						type="button"
+						class="num"
+						class:activa={n === pagina}
+						onclick={() => ir(n)}
+						disabled={cargando && n !== pagina}
+						aria-current={n === pagina ? 'page' : undefined}
+						aria-label={`Página ${n}`}
+					>
+						{n}
+					</button>
+				{/each}
+
+				<button
+					type="button"
+					onclick={() => ir(pagina + 1)}
+					disabled={pagina === totalPaginas || cargando}
+					aria-label="Página siguiente"
+				>
+					<ChevronRight size={16} strokeWidth={2.5} />
+				</button>
+				<button
+					type="button"
+					class="extremo"
+					onclick={() => ir(totalPaginas)}
+					disabled={pagina === totalPaginas || cargando}
+					aria-label="Última página"
+				>
+					<ChevronsRight size={16} strokeWidth={2.5} />
+				</button>
+			</div>
+		{/if}
 	</nav>
 {/if}
 
@@ -116,52 +141,81 @@
 		border-top: 1px solid var(--border-subtle);
 		background: var(--bg-base);
 	}
+	.paginador.suelto {
+		padding: 0.75rem 0 0;
+		border-top: 0;
+		background: transparent;
+	}
 
 	.rango {
 		margin: 0;
-		font-size: 0.75rem;
+		font-size: 0.8125rem;
 		color: var(--text-muted);
 	}
-
 	.fuerte {
-		font-weight: 600;
+		font-weight: 800;
 		color: var(--text-primary);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.botones {
 		display: flex;
 		align-items: center;
-		gap: 0.25rem;
+		gap: 0.3rem;
 	}
 
+	/* Misma familia que los botones de la app: esquinas de 12, borde neutro,
+	   activo en el color de acción plano. */
 	button {
-		min-width: 2rem;
-		height: 2rem;
-		padding: 0 0.5rem;
-		border: 1px solid var(--border-subtle);
-		border-radius: 8px;
+		min-width: 2.25rem;
+		height: 2.25rem;
+		padding: 0 0.6rem;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		border: 1.5px solid var(--border-default);
+		border-radius: 12px;
 		background: var(--bg-surface, #fff);
-		color: var(--text-primary);
+		color: var(--bg-charcoal-deep);
 		font-size: 0.8125rem;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
 		cursor: pointer;
 		transition:
 			background-color 0.15s ease,
-			border-color 0.15s ease;
+			border-color 0.15s ease,
+			transform 0.15s ease;
 	}
-
-	button:hover:not(:disabled) {
-		border-color: var(--accent, var(--emerald-500));
+	button:hover:not(:disabled):not(.activa) {
+		border-color: var(--border-emphasis);
+		background: var(--bg-base);
 	}
-
+	button:active:not(:disabled) {
+		transform: scale(0.96);
+	}
 	button:disabled {
-		opacity: 0.45;
+		opacity: 0.4;
 		cursor: not-allowed;
 	}
-
 	button.activa {
-		background: var(--accent, var(--emerald-500));
-		border-color: var(--accent, var(--emerald-500));
+		background: var(--accion);
+		border-color: var(--accion);
 		color: #fff;
-		font-weight: 600;
+		font-weight: 800;
+		box-shadow: var(--shadow-btn);
+		cursor: default;
+	}
+
+	@media (max-width: 640px) {
+		.paginador {
+			justify-content: center;
+		}
+		.rango {
+			width: 100%;
+			text-align: center;
+		}
+		.extremo {
+			display: none;
+		}
 	}
 </style>

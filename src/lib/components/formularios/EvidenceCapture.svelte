@@ -500,15 +500,26 @@
 	}
 
 	.boton--plano {
-		color: var(--text-secondary, #334155);
+		color: var(--bg-charcoal-deep);
 		background: #fff;
-		border-color: var(--border-default, rgba(0, 0, 0, 0.12));
+		border: 1.5px solid var(--border-default);
+		border-radius: 16px;
+		font-weight: 800;
 	}
 
 	.boton--primario {
 		color: #fff;
-		background: var(--emerald-600, #15803d);
-		border-color: var(--emerald-600, #15803d);
+		background: var(--accion);
+		border-color: var(--accion);
+		border-radius: 16px;
+		font-weight: 800;
+		box-shadow: var(--shadow-btn);
+	}
+
+	.boton--primario:hover:not(:disabled) {
+		background: var(--accion-hover);
+		border-color: var(--accion-hover);
+		box-shadow: var(--shadow-btn-hover);
 	}
 
 	.boton:disabled {

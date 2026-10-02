@@ -277,7 +277,7 @@
 			<!-- Botón duplicar año -->
 			<button
 				on:click={openDuplicarModal}
-				class="flex items-center gap-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-100"
+				class="btn-secondary"
 				title="Duplicar configuraciones a otro año"
 			>
 				<Copy class="h-4 w-4" />
@@ -287,7 +287,7 @@
 			<!-- Botón agregar -->
 			<button
 				on:click={openCrearModal}
-				class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-sm font-semibold text-white shadow-md transition-all hover:shadow-lg hover:-translate-y-0.5"
+				class="btn-primary"
 			>
 				<Plus class="h-4 w-4" />
 				Agregar
@@ -311,14 +311,14 @@
 				<div class="mt-4 flex gap-3 justify-center">
 					<button
 						on:click={openCrearModal}
-						class="rounded-lg bg-emerald-500 px-4 py-2 text-white hover:bg-emerald-600"
+						class="btn-primary"
 					>
 						Crear configuración
 					</button>
 					{#if aniosDisponibles.length > 0}
 						<button
 							on:click={openDuplicarModal}
-							class="rounded-lg border border-emerald-500 px-4 py-2 text-emerald-600 hover:bg-emerald-50"
+							class="btn-secondary"
 						>
 							Duplicar desde otro año
 						</button>
@@ -503,13 +503,13 @@
 			<div class="mt-6 flex gap-3 justify-end">
 				<button
 					on:click={() => (showCrearModal = false)}
-					class="rounded-lg px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
+					class="btn-secondary"
 				>
 					Cancelar
 				</button>
 				<button
 					on:click={handleCrear}
-					class="rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-white font-semibold hover:shadow-lg transition-all"
+					class="btn-primary"
 				>
 					<span class="flex items-center gap-2">
 						<Save class="h-4 w-4" />
@@ -571,14 +571,14 @@
 			<div class="mt-6 flex gap-3 justify-end">
 				<button
 					on:click={() => (showDuplicarModal = false)}
-					class="rounded-lg px-4 py-2 text-gray-700 hover:bg-gray-100 transition-colors"
+					class="btn-secondary"
 				>
 					Cancelar
 				</button>
 				<button
 					on:click={handleDuplicar}
 					disabled={duplicando}
-					class="rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2 text-white font-semibold hover:shadow-lg transition-all disabled:opacity-50"
+					class="btn-primary"
 				>
 					{#if duplicando}
 						<span class="flex items-center gap-2">
@@ -623,13 +623,13 @@
 			<div class="flex gap-3 justify-end">
 				<button
 					on:click={() => (showDeleteModal = false)}
-					class="rounded-lg px-4 py-2 text-gray-700 hover:bg-gray-100"
+					class="btn-secondary"
 				>
 					Cancelar
 				</button>
 				<button
 					on:click={handleEliminar}
-					class="rounded-lg bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+					class="btn-danger"
 				>
 					Eliminar
 				</button>

@@ -327,9 +327,9 @@
 				<textarea bind:value={motivo} rows="3" placeholder="Explica por qué se anula esta liquidación"></textarea>
 			</label>
 			<div class="ceh-dialog-actions">
-				<button class="ceh-btn-ghost" onclick={cerrarMenus} disabled={enviando}>Cancelar</button>
+				<button class="btn-secondary" onclick={cerrarMenus} disabled={enviando}>Cancelar</button>
 				<button
-					class="ceh-btn-danger"
+					class="btn-danger"
 					onclick={() => confirmando && ejecutar(confirmando)}
 					disabled={enviando || !motivo.trim()}
 				>
@@ -362,10 +362,10 @@
 					te dirá cuál falló.
 				</p>
 				<div class="ceh-dialog-actions">
-					<button class="ceh-btn-ghost" onclick={() => (loteAbierto = false)} disabled={enviando}>
+					<button class="btn-secondary" onclick={() => (loteAbierto = false)} disabled={enviando}>
 						Cancelar
 					</button>
-					<button class="ceh-btn-primary" onclick={ejecutarLote} disabled={enviando}>
+					<button class="btn-primary" onclick={ejecutarLote} disabled={enviando}>
 						{enviando ? 'Liquidando…' : `Liquidar ${borradores}`}
 					</button>
 				</div>
@@ -382,7 +382,7 @@
 					</ul>
 				{/if}
 				<div class="ceh-dialog-actions">
-					<button class="ceh-btn-primary" onclick={() => (loteAbierto = false)}>Cerrar</button>
+					<button class="btn-primary" onclick={() => (loteAbierto = false)}>Cerrar</button>
 				</div>
 			{/if}
 		</div>
@@ -424,7 +424,7 @@
 				</ol>
 			{/if}
 			<div class="ceh-dialog-actions">
-				<button class="ceh-btn-primary" onclick={() => (historialAbierto = false)}>Cerrar</button>
+				<button class="btn-primary" onclick={() => (historialAbierto = false)}>Cerrar</button>
 			</div>
 		</div>
 	</div>
@@ -585,35 +585,6 @@
 		justify-content: flex-end;
 		gap: 8px;
 		margin-top: 14px;
-	}
-
-	.ceh-btn-ghost,
-	.ceh-btn-primary,
-	.ceh-btn-danger {
-		border: none;
-		border-radius: 7px;
-		padding: 8px 14px;
-		font-size: 12.5px;
-		font-weight: 700;
-		cursor: pointer;
-	}
-	.ceh-btn-ghost {
-		background: #f1f5f9;
-		color: #334155;
-	}
-	.ceh-btn-primary {
-		background: #c2410c;
-		color: #fff;
-	}
-	.ceh-btn-danger {
-		background: #dc2626;
-		color: #fff;
-	}
-	.ceh-btn-ghost:disabled,
-	.ceh-btn-primary:disabled,
-	.ceh-btn-danger:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
 	}
 
 	.ceh-fallidos {

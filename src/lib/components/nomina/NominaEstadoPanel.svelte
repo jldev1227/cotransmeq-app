@@ -26,6 +26,7 @@
 	 */
 
 	import { nominaCanvasAPI, type CambioEstado } from '$lib/api/nomina-canvas';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 	import {
 		accionesDisponibles,
 		claseBadgeEstado,
@@ -220,14 +221,6 @@
 	}
 </script>
 
-<svelte:window
-	onkeydown={(e) => {
-		if (e.key !== 'Escape') return;
-		loteAbierto = false;
-		historialAbierto = false;
-	}}
-/>
-
 <div class="nep" role="menu">
 	{#if hoja}
 		<div class="nep-head">
@@ -389,121 +382,109 @@
 </div>
 
 <!-- ── Lote ──────────────────────────────────────────────────────────── -->
-{#if loteAbierto}
-	<div
-		class="nep-backdrop"
-		role="presentation"
-		onclick={(e) => {
-			if (e.target === e.currentTarget && !enviando) loteAbierto = false;
-		}}
-	>
-		<div
-			class="nep-dialog"
-			role="dialog"
-			aria-modal="true"
-			aria-label="Liquidar los borradores del periodo"
-			tabindex="-1"
-		>
-			{#if !loteResultado}
-				<h3>Liquidar todos los borradores</h3>
-				<p class="nep-dialog-sub">
-					Pasan a <strong>LIQUIDADA</strong> las {borradores.length} hoja(s) que siguen en BORRADOR en
-					{periodo}. Cada una deja registro en su historial.
-				</p>
-				<p class="nep-dialog-sub">
-					En LIQUIDADA la hoja se sigue editando —bonos, vacaciones, conceptos—, pero ya no se
-					pueden volver a traer los días desde las planillas.
-				</p>
-				<p class="nep-dialog-sub">
-					No es una operación atómica: si alguna falla, el resto sí se aplica y aquí se dice cuál
-					falló.
-				</p>
-				<ul class="nep-lista">
-					{#each borradores as b (b.liquidacionId)}
-						<li>{b.nombre}</li>
-					{/each}
-				</ul>
-				<div class="nep-dialog-actions">
-					<button class="nep-btn-ghost" onclick={() => (loteAbierto = false)} disabled={enviando}>
-						Cancelar
-					</button>
-					<button class="nep-btn-primary" onclick={ejecutarLote} disabled={enviando}>
-						{enviando ? 'Liquidando…' : `Liquidar ${borradores.length}`}
-					</button>
-				</div>
-			{:else}
-				<h3>Resultado</h3>
-				<p class="nep-dialog-sub">
-					{loteResultado.ok} de {loteResultado.total} liquidada(s).
-				</p>
-				{#if loteResultado.fallidos.length}
-					<ul class="nep-fallidos">
-						{#each loteResultado.fallidos as f, i (i)}
-							<li><strong>{f.nombre}</strong>: {f.error}</li>
-						{/each}
-					</ul>
-				{/if}
-				<div class="nep-dialog-actions">
-					<button class="nep-btn-primary" onclick={() => (loteAbierto = false)}>Cerrar</button>
-				</div>
-			{/if}
+<ModalBase
+	open={loteAbierto}
+	eyebrow="Nómina"
+	subtitle={periodo}
+	title={loteResultado ? 'Resultado' : 'Liquidar todos los borradores'}
+	tamano="sm"
+	bloqueado={enviando}
+	cerrarAlFondo={!enviando}
+	oncerrar={() => (loteAbierto = false)}
+>
+	{#if !loteResultado}
+		<div class="nep-card">
+			<p class="nep-dialog-sub">
+				Pasan a <strong>LIQUIDADA</strong> las {borradores.length} hoja(s) que siguen en BORRADOR en
+				{periodo}. Cada una deja registro en su historial.
+			</p>
+			<p class="nep-dialog-sub">
+				En LIQUIDADA la hoja se sigue editando —bonos, vacaciones, conceptos—, pero ya no se
+				pueden volver a traer los días desde las planillas.
+			</p>
+			<p class="nep-dialog-sub">
+				No es una operación atómica: si alguna falla, el resto sí se aplica y aquí se dice cuál
+				falló.
+			</p>
 		</div>
-	</div>
-{/if}
+		<ul class="nep-card nep-lista">
+			{#each borradores as b (b.liquidacionId)}
+				<li>{b.nombre}</li>
+			{/each}
+		</ul>
+	{:else}
+		<div class="nep-card">
+			<p class="nep-dialog-sub">
+				{loteResultado.ok} de {loteResultado.total} liquidada(s).
+			</p>
+		</div>
+		{#if loteResultado.fallidos.length}
+			<ul class="nep-card nep-fallidos">
+				{#each loteResultado.fallidos as f, i (i)}
+					<li><strong>{f.nombre}</strong>: {f.error}</li>
+				{/each}
+			</ul>
+		{/if}
+	{/if}
+
+	{#snippet pie()}
+		{#if !loteResultado}
+			<button class="btn-secondary" onclick={() => (loteAbierto = false)} disabled={enviando}>
+				Cancelar
+			</button>
+			<button class="btn-primary" onclick={ejecutarLote} disabled={enviando}>
+				{enviando ? 'Liquidando…' : `Liquidar ${borradores.length}`}
+			</button>
+		{:else}
+			<button class="btn-primary" onclick={() => (loteAbierto = false)}>Cerrar</button>
+		{/if}
+	{/snippet}
+</ModalBase>
 
 <!-- ── Historial de estados ──────────────────────────────────────────── -->
-{#if historialAbierto}
-	<div
-		class="nep-backdrop"
-		role="presentation"
-		onclick={(e) => {
-			if (e.target === e.currentTarget) historialAbierto = false;
-		}}
-	>
-		<div
-			class="nep-dialog nep-dialog-wide"
-			role="dialog"
-			aria-modal="true"
-			aria-label="Historial de estados"
-			tabindex="-1"
-		>
-			<h3>Historial de estados{hoja ? ` · ${hoja.nombre}` : ''}</h3>
-			{#if historialCargando}
-				<p class="nep-dialog-sub">Cargando…</p>
-			{:else if !historial.length}
-				<p class="nep-dialog-sub">
-					Sin registros. Los cambios anteriores a esta versión del sistema no quedaron guardados en
-					tabla.
-				</p>
-			{:else}
-				<ol class="nep-timeline">
-					{#each historial as h (h.id)}
-						<li>
-							<span class="nep-tl-estado {claseBadgeEstado(h.estado_nuevo)}">
-								{h.estado_nuevo}
-							</span>
-							<span class="nep-tl-meta">
-								{h.estado_anterior ? `desde ${h.estado_anterior} · ` : ''}{fmtFecha(h.created_at)}
-								{h.usuario?.nombre ? ` · ${h.usuario.nombre}` : ''}
-							</span>
-							{#if h.motivo}
-								<span class="nep-tl-motivo">{h.motivo}</span>
-							{/if}
-						</li>
-					{/each}
-				</ol>
-			{/if}
-			<div class="nep-dialog-actions">
-				<button class="nep-btn-primary" onclick={() => (historialAbierto = false)}>Cerrar</button>
-			</div>
-		</div>
-	</div>
-{/if}
+<ModalBase
+	open={historialAbierto}
+	eyebrow="Nómina"
+	title="Historial de estados"
+	subtitle={hoja?.nombre ?? null}
+	tamano="md"
+	oncerrar={() => (historialAbierto = false)}
+>
+	{#if historialCargando}
+		<p class="nep-dialog-sub">Cargando…</p>
+	{:else if !historial.length}
+		<p class="nep-dialog-sub">
+			Sin registros. Los cambios anteriores a esta versión del sistema no quedaron guardados en
+			tabla.
+		</p>
+	{:else}
+		<ol class="nep-card nep-timeline">
+			{#each historial as h (h.id)}
+				<li>
+					<span class="nep-tl-estado {claseBadgeEstado(h.estado_nuevo)}">
+						{h.estado_nuevo}
+					</span>
+					<span class="nep-tl-meta">
+						{h.estado_anterior ? `desde ${h.estado_anterior} · ` : ''}{fmtFecha(h.created_at)}
+						{h.usuario?.nombre ? ` · ${h.usuario.nombre}` : ''}
+					</span>
+					{#if h.motivo}
+						<span class="nep-tl-motivo">{h.motivo}</span>
+					{/if}
+				</li>
+			{/each}
+		</ol>
+	{/if}
+
+	{#snippet pie()}
+		<button class="btn-primary" onclick={() => (historialAbierto = false)}>Cerrar</button>
+	{/snippet}
+</ModalBase>
 
 <style>
 	/* El desplegable vive dentro del flyout OSCURO del carril
 	   (`panelTone: 'dark'`), así que el texto va en claro. Los diálogos, en
-	   cambio, son blancos: son ventanas propias, no parte de la barra. */
+	   cambio, van en `ModalBase`: son ventanas propias, no parte de la barra. */
 	.nep {
 		display: flex;
 		flex-direction: column;
@@ -641,87 +622,41 @@
 		color: #fca5a5;
 	}
 
-	/* ─── Diálogos ──────────────────────────────────────────────────── */
-	.nep-backdrop {
-		position: fixed;
-		inset: 0;
-		z-index: 200;
-		background: rgb(15 23 42 / 0.55);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 20px;
+	/* ─── Diálogos (cascarón: `ModalBase`) ─────────────────────────── */
+	.nep-card {
+		margin: 0 0 12px;
+		padding: 14px 16px;
+		background: var(--bg-surface);
+		border-radius: 16px;
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
 	}
-
-	.nep-dialog {
-		background: #fff;
-		color: #0f172a;
-		border-radius: 12px;
-		padding: 20px;
-		width: 100%;
-		max-width: 440px;
-		box-shadow: 0 20px 50px rgb(0 0 0 / 0.3);
-	}
-	.nep-dialog-wide {
-		max-width: 560px;
-	}
-	.nep-dialog h3 {
-		margin: 0 0 6px;
-		font-size: 15px;
-		font-weight: 700;
+	.nep-card:last-child {
+		margin-bottom: 0;
 	}
 	.nep-dialog-sub {
 		margin: 0 0 10px;
-		font-size: 12.5px;
+		font-size: 13px;
 		line-height: 1.5;
-		color: #475569;
+		color: var(--text-secondary);
+	}
+	.nep-dialog-sub:last-child {
+		margin-bottom: 0;
 	}
 
 	.nep-lista {
-		margin: 0;
-		padding-left: 18px;
-		max-height: 160px;
+		padding-left: 32px;
+		max-height: 200px;
 		overflow-y: auto;
-		font-size: 12px;
-		color: #334155;
-	}
-
-	.nep-dialog-actions {
-		display: flex;
-		justify-content: flex-end;
-		gap: 8px;
-		margin-top: 14px;
-	}
-	.nep-btn-ghost,
-	.nep-btn-primary {
-		border: none;
-		border-radius: 7px;
-		padding: 8px 14px;
-		font-size: 12.5px;
-		font-weight: 700;
-		cursor: pointer;
-	}
-	.nep-btn-ghost {
-		background: #f1f5f9;
-		color: #334155;
-	}
-	.nep-btn-primary {
-		background: var(--emerald-600, #15803d);
-		color: #fff;
-	}
-	.nep-btn-ghost:disabled,
-	.nep-btn-primary:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
+		font-size: 13px;
+		color: var(--text-primary);
 	}
 
 	.nep-fallidos {
-		margin: 0;
-		padding-left: 18px;
+		padding-left: 32px;
 		max-height: 220px;
 		overflow-y: auto;
-		font-size: 12px;
-		color: #b91c1c;
+		font-size: 12.5px;
+		color: #b42318;
 	}
 	.nep-fallidos li {
 		margin-bottom: 4px;
@@ -729,17 +664,18 @@
 
 	.nep-timeline {
 		list-style: none;
-		margin: 0;
-		padding: 0;
-		max-height: 340px;
-		overflow-y: auto;
+		padding-top: 4px;
+		padding-bottom: 4px;
 	}
 	.nep-timeline li {
 		display: flex;
 		flex-direction: column;
-		gap: 2px;
-		padding: 9px 0;
-		border-bottom: 1px solid #f1f5f9;
+		gap: 3px;
+		padding: 10px 0;
+		border-bottom: 1px solid var(--border-subtle);
+	}
+	.nep-timeline li:last-child {
+		border-bottom: none;
 	}
 	.nep-tl-estado {
 		align-self: flex-start;
@@ -749,12 +685,12 @@
 		font-weight: 700;
 	}
 	.nep-tl-meta {
-		font-size: 11.5px;
-		color: #64748b;
+		font-size: 12px;
+		color: var(--text-muted);
 	}
 	.nep-tl-motivo {
-		font-size: 12px;
-		color: #334155;
+		font-size: 12.5px;
+		color: var(--text-secondary);
 		font-style: italic;
 	}
 </style>

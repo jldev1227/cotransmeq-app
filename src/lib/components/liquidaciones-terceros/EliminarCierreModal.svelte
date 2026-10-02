@@ -16,6 +16,7 @@
 	 *   placa cuesta tres segundos y obliga a leer cuál es.
 	 */
 
+	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
 	import type { CierreHoja } from '$lib/editor/builders/cierres-finales-identidad';
 	import { claseBadgeEstado } from '$lib/editor/builders/cierres-finales-estado';
 
@@ -46,113 +47,73 @@
 		if (!puedeConfirmar) return;
 		onConfirm();
 	}
-</script>
 
-<svelte:window
-	onkeydown={(e) => {
-		if (e.key === 'Escape' && !enCurso) onClose();
-	}}
-/>
+	/// El foco va al campo de la placa: el botón de confirmar arranca
+	/// deshabilitado y no puede recibirlo.
+	let campo = $state<HTMLInputElement | null>(null);
+	$effect(() => {
+		campo?.focus();
+	});
+</script>
 
 <!--
 	El fondo no cierra: el mismo criterio que en «Generar borradores». Un clic
 	despistado no debe poder ni lanzar ni cancelar una operación de este peso.
 -->
-<div class="ecm-backdrop">
-	<div class="ecm" role="dialog" aria-modal="true" aria-label="Eliminar cierre" tabindex="-1">
-		<header class="ecm-head">
-			<div>
-				<h2>Eliminar el cierre de {cierre.placa}</h2>
-				<p class="ecm-periodo">
-					Periodo {String(mes).padStart(2, '0')}/{anio}
-					{#if cierre.consecutivo}
-						· {cierre.consecutivo}
-					{/if}
-					<span class="ecm-estado {claseBadgeEstado(cierre.estado)}">{cierre.estado}</span>
-				</p>
-			</div>
-			<button class="ecm-x" onclick={onClose} disabled={enCurso} aria-label="Cerrar">×</button>
-		</header>
+<ConfirmDialog
+	open
+	title={`¿Eliminar el cierre de ${cierre.placa}?`}
+	tone="danger"
+	eyebrow="ELIMINAR CIERRE"
+	confirmText="Eliminar cierre"
+	loadingText="Eliminando…"
+	loading={enCurso}
+	confirmDisabled={!puedeConfirmar}
+	closeOnBackdrop={false}
+	onconfirm={confirmar}
+	oncancel={onClose}
+>
+	<p class="ecm-periodo">
+		Periodo {String(mes).padStart(2, '0')}/{anio}
+		{#if cierre.consecutivo}
+			· {cierre.consecutivo}
+		{/if}
+		<span class="ecm-estado {claseBadgeEstado(cierre.estado)}">{cierre.estado}</span>
+	</p>
 
-		<div class="ecm-body">
-			<ul class="ecm-lista">
-				<li>La hoja sale del libro del periodo, con sus items y sus conceptos.</li>
-				<li>Quien tenga este periodo abierto verá desaparecer la pestaña.</li>
-				<li>
-					<strong>Se marca, no se borra.</strong> Queda con fecha de eliminación y contabilidad
-					puede recuperarla; no aparece en listados, totales ni PDF.
-				</li>
-			</ul>
+	<ul class="ecm-lista">
+		<li>La hoja sale del libro del periodo, con sus items y sus conceptos.</li>
+		<li>Quien tenga este periodo abierto verá desaparecer la pestaña.</li>
+		<li>
+			<strong>Se marca, no se borra.</strong> Queda con fecha de eliminación y contabilidad
+			puede recuperarla; no aparece en listados, totales ni PDF.
+		</li>
+	</ul>
 
-			<label class="ecm-campo">
-				<span>
-					Escribe <strong>{cierre.placa}</strong> para confirmar
-				</span>
-				<input
-					type="text"
-					bind:value={confirmacion}
-					disabled={enCurso}
-					placeholder={cierre.placa}
-					autocomplete="off"
-					spellcheck="false"
-					onkeydown={(e) => {
-						if (e.key === 'Enter') confirmar();
-					}}
-				/>
-			</label>
-		</div>
-
-		<footer class="ecm-foot">
-			<button class="ecm-btn-ghost" onclick={onClose} disabled={enCurso}>Cancelar</button>
-			<button class="ecm-btn-danger" onclick={confirmar} disabled={!puedeConfirmar}>
-				{enCurso ? 'Eliminando…' : 'Eliminar cierre'}
-			</button>
-		</footer>
-	</div>
-</div>
+	<label class="ecm-campo">
+		<span>
+			Escribe <strong>{cierre.placa}</strong> para confirmar
+		</span>
+		<input
+			bind:this={campo}
+			type="text"
+			bind:value={confirmacion}
+			disabled={enCurso}
+			placeholder={cierre.placa}
+			autocomplete="off"
+			spellcheck="false"
+			onkeydown={(e) => {
+				if (e.key === 'Enter') confirmar();
+			}}
+		/>
+	</label>
+</ConfirmDialog>
 
 <style>
-	.ecm-backdrop {
-		position: fixed;
-		inset: 0;
-		z-index: 220;
-		background: rgb(15 23 42 / 0.55);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 1rem;
-	}
-
-	.ecm {
-		background: #fff;
-		color: #0f172a;
-		border-radius: 12px;
-		width: 100%;
-		max-width: 460px;
-		display: flex;
-		flex-direction: column;
-		box-shadow: 0 20px 50px rgb(0 0 0 / 0.3);
-	}
-
-	.ecm-head {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 0.75rem;
-		padding: 1rem 1.15rem 0.75rem;
-		border-bottom: 1px solid #e2e8f0;
-	}
-
-	.ecm-head h2 {
-		margin: 0;
-		font-size: 1rem;
-		font-weight: 700;
-	}
-
 	.ecm-periodo {
-		margin: 0.3rem 0 0;
-		font-size: 0.78rem;
-		color: #64748b;
+		margin: 0;
+		font-size: 13px;
+		color: var(--text-muted);
 		display: flex;
 		align-items: center;
 		gap: 0.4rem;
@@ -169,31 +130,13 @@
 		white-space: nowrap;
 	}
 
-	.ecm-x {
-		background: none;
-		border: none;
-		font-size: 1.35rem;
-		line-height: 1;
-		color: #94a3b8;
-		cursor: pointer;
-		padding: 0 0.2rem;
-	}
-
-	.ecm-x:disabled {
-		cursor: not-allowed;
-		opacity: 0.5;
-	}
-
-	.ecm-body {
-		padding: 0.9rem 1.15rem;
-	}
-
 	.ecm-lista {
-		margin: 0 0 1rem;
+		margin: 0;
 		padding-left: 1.1rem;
-		font-size: 0.83rem;
-		line-height: 1.5;
-		color: #334155;
+		list-style: disc;
+		font-size: 14px;
+		line-height: 21px;
+		color: var(--text-muted);
 	}
 
 	.ecm-lista li + li {
@@ -202,63 +145,24 @@
 
 	.ecm-campo {
 		display: block;
-		font-size: 0.8rem;
-		color: #334155;
+		font-size: 13px;
+		color: var(--text-primary);
 	}
 
 	.ecm-campo input {
-		margin-top: 0.35rem;
+		margin-top: 0.4rem;
 		width: 100%;
-		padding: 0.5rem 0.65rem;
-		border: 1px solid #cbd5e1;
-		border-radius: 8px;
-		font-size: 0.9rem;
+		min-height: 44px;
+		padding: 0.5rem 0.75rem;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
+		font-size: 15px;
 		font-family: inherit;
 	}
 
 	.ecm-campo input:focus {
 		outline: none;
-		border-color: #dc2626;
-		box-shadow: 0 0 0 3px rgb(220 38 38 / 0.12);
-	}
-
-	.ecm-foot {
-		display: flex;
-		justify-content: flex-end;
-		gap: 0.5rem;
-		padding: 0.75rem 1.15rem 1rem;
-		border-top: 1px solid #e2e8f0;
-	}
-
-	.ecm-btn-ghost,
-	.ecm-btn-danger {
-		border-radius: 8px;
-		font-size: 0.85rem;
-		font-weight: 600;
-		padding: 0.45rem 0.9rem;
-		cursor: pointer;
-	}
-
-	.ecm-btn-ghost {
-		background: #fff;
-		border: 1px solid #cbd5e1;
-		color: #334155;
-	}
-
-	.ecm-btn-danger {
-		background: #dc2626;
-		border: 1px solid #dc2626;
-		color: #fff;
-	}
-
-	.ecm-btn-danger:disabled {
-		background: #fca5a5;
-		border-color: #fca5a5;
-		cursor: not-allowed;
-	}
-
-	.ecm-btn-ghost:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
+		border-color: #b42318;
+		box-shadow: 0 0 0 3px rgb(180 35 24 / 0.12);
 	}
 </style>

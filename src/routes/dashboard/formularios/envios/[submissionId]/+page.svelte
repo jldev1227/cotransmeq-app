@@ -10,6 +10,7 @@
 	respuestas, exige un motivo y registra al actor en la bitácora.
 -->
 <script lang="ts">
+	import { confirmarEliminacion } from '$lib/stores/confirm';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { toast } from 'svelte-sonner';
@@ -119,9 +120,12 @@
 	 * Nada de esto vale para un envío ENTREGADO: ese se anula, con motivo.
 	 */
 	async function descartar() {
-		if (!confirm('¿Descartar este borrador?\n\nDeja de aparecer en el explorador y se puede restaurar.')) {
-			return;
-		}
+		const ok = await confirmarEliminacion({
+			title: '¿Descartar este borrador?',
+			message: 'Deja de aparecer en el explorador y se puede restaurar.',
+			confirmText: 'Descartar'
+		});
+		if (!ok) return;
 		descartando = true;
 		try {
 			await enviosFormularioAPI.descartar(submissionId);
@@ -842,11 +846,11 @@
 		padding: 0 0.875rem;
 		font: inherit;
 		font-size: 0.875rem;
-		font-weight: 500;
-		color: var(--text-primary, #0f172a);
+		font-weight: 800;
+		color: var(--bg-charcoal-deep);
 		background: #fff;
-		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
-		border-radius: 10px;
+		border: 1.5px solid var(--border-default);
+		border-radius: 16px;
 		cursor: pointer;
 		text-decoration: none;
 	}
@@ -864,9 +868,9 @@
 
 	.btn--peligro-solido {
 		color: #fff;
-		background: #dc2626;
-		border-color: #dc2626;
-		font-weight: 600;
+		background: #b42318;
+		border-color: #b42318;
+		font-weight: 800;
 	}
 
 	.btn:disabled {

@@ -57,7 +57,7 @@
 		</div>
 		<a
 			href="/public/portal"
-			class="w-full rounded-xl bg-emerald-600 px-6 py-3 text-base font-semibold text-white shadow-sm hover:bg-emerald-700"
+			class="btn-primary w-full"
 		>
 			Ir al portal
 		</a>
@@ -70,13 +70,13 @@
 			<div class="flex w-full flex-col gap-3">
 				<a
 					href={enlaceApp}
-					class="w-full rounded-xl bg-emerald-600 px-6 py-3 text-base font-semibold text-white shadow-sm hover:bg-emerald-700"
+					class="btn-primary w-full"
 				>
 					Abrir la app
 				</a>
 				<a
 					href={enlaceWeb}
-					class="w-full rounded-xl border border-gray-300 px-6 py-3 text-base font-medium text-gray-700 hover:bg-gray-50"
+					class="btn-secondary w-full"
 				>
 					Seguir en el navegador
 				</a>

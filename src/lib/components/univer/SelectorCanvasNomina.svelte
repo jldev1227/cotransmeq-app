@@ -39,7 +39,7 @@
 		 * Gancho previo a navegar: aquí cada canvas suelta su sesión, vacía su
 		 * cola o pide confirmación. Devolver `false` cancela el salto.
 		 */
-		onSalir?: () => boolean;
+		onSalir?: () => boolean | Promise<boolean>;
 		/// Opción propia del canvas anfitrión (p. ej. una vista previa).
 		extra?: OpcionExtra;
 	}
@@ -62,7 +62,7 @@
 
 	const destinos = $derived((Object.keys(RUTAS) as Canvas[]).filter((c) => c !== actual));
 
-	function elegir(e: Event) {
+	async function elegir(e: Event) {
 		const sel = e.currentTarget as HTMLSelectElement;
 		const valor = sel.value;
 		// Vuelve a mostrar el placeholder aunque se cancele el salto.
@@ -73,7 +73,7 @@
 			extra.onSelect();
 			return;
 		}
-		if (onSalir && onSalir() === false) return;
+		if (onSalir && (await onSalir()) === false) return;
 		// El periodo abierto viaja al destino: todos leen `anio`/`mes` de sus
 		// search params al montar, así que sin esto salir de MARZO 2026
 		// aterrizaría en el mes en curso.

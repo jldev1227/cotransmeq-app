@@ -980,22 +980,11 @@
 		justify-content: center;
 		gap: 0.4rem;
 		padding: 0.55rem 1rem;
-		font-family: inherit;
 		font-size: 0.82rem;
-		font-weight: 600;
-		color: #ffffff;
-		background: linear-gradient(135deg, var(--accent), var(--accent-hover));
-		border: none;
-		border-radius: 10px;
 		cursor: pointer;
 		text-decoration: none;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
-		transition: all 0.2s var(--ease);
 	}
-	.btn-primary:hover {
-		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(249, 115, 22, 0.4);
-	}
+
 	.btn-primary svg {
 		width: 14px;
 		height: 14px;
@@ -1007,21 +996,11 @@
 		justify-content: center;
 		gap: 0.4rem;
 		padding: 0.55rem 1rem;
-		font-family: inherit;
 		font-size: 0.82rem;
-		font-weight: 600;
-		color: var(--text-primary);
-		background: var(--surface);
-		border: 1px solid var(--border-default);
-		border-radius: 10px;
 		cursor: pointer;
 		text-decoration: none;
-		transition: all 0.2s var(--ease);
 	}
-	.btn-secondary:hover {
-		background: var(--bg);
-		border-color: var(--border-hover);
-	}
+
 	.btn-secondary svg {
 		width: 14px;
 		height: 14px;

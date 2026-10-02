@@ -154,7 +154,7 @@
 			<button
 				type="submit"
 				disabled={isLoading || !email || !password}
-				class="apple-hover apple-transition emerald-glow relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-3 font-semibold text-white disabled:transform-none disabled:cursor-not-allowed disabled:opacity-50"
+				class="btn-primary apple-transition relative w-full overflow-hidden disabled:transform-none disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				{#if isLoading}
 					<div class="flex items-center justify-center">

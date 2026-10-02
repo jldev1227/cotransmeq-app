@@ -15,7 +15,20 @@
 	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
 	import SegmentosFiltro from '$lib/components/listing/SegmentosFiltro.svelte';
 	import { mascota } from '$lib/mascot';
-	import { Eye, Trash2 } from 'lucide-svelte';
+	import { Eye, Pencil, Trash2 } from 'lucide-svelte';
+	import BarraSeleccion from '$lib/components/listing/BarraSeleccion.svelte';
+	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
+	import { confirmarEliminacion } from '$lib/stores/confirm';
+	import {
+		EyeOff as IcoOcultar,
+		Eye as IcoMostrar,
+		Trash2 as IcoPapelera,
+		RotateCcw as IcoRestaurar
+	} from 'lucide-svelte';
+	import ModalFormCliente from '$lib/components/clientes/ModalFormCliente.svelte';
+	import ModalDetalleCliente from '$lib/components/clientes/ModalDetalleCliente.svelte';
+	import type { SortingState } from '@tanstack/table-core';
+	import { page as pageState } from '$app/state';
 	import type { ColumnDef } from '@tanstack/table-core';
 	import { page } from '$app/state';
 	import { crearListingStore } from '$lib/listing/listingStore';
@@ -73,6 +86,8 @@
 	 * búsqueda va con retardo, para no lanzar una petición por letra.
 	 */
 	interface FiltrosClientes {
+		/** Orden alfabético por nombre: `asc` (A–Z) o `desc`. */
+		orden: string;
 		q: string;
 		tipo: string;
 		/** `activos` | `ocultos`. */
@@ -86,7 +101,8 @@
 		q: texto(),
 		tipo: opcion('TODOS'),
 		vista: opcion('activos'),
-		pagina: numero(1)
+		pagina: numero(1),
+		orden: opcion('asc')
 	};
 
 	const estadoUrl = crearEstadoUrl(DEFS);
@@ -100,7 +116,6 @@
 
 	// Estados para modo selección
 	let clientesSeleccionados = $state(new Set<string>());
-	let ultimoSeleccionadoIndex: number | null = null;
 	let shiftPressed = $state(false);
 	let procesandoMasivo = $state(false);
 
@@ -112,40 +127,22 @@
 		if (e.key === 'Shift') shiftPressed = false;
 	}
 
-	function toggleSeleccion(id: string, index: number, event: MouseEvent | TouchEvent | any) {
-		if (event.shiftKey && ultimoSeleccionadoIndex !== null) {
-			const start = Math.min(ultimoSeleccionadoIndex, index);
-			const end = Math.max(ultimoSeleccionadoIndex, index);
-
-			const idsInRange = clientes.slice(start, end + 1).map((c) => c.id);
-			const someNotSelected = idsInRange.some((id) => !clientesSeleccionados.has(id));
-
-			if (someNotSelected) {
-				idsInRange.forEach((id) => clientesSeleccionados.add(id));
-			} else {
-				idsInRange.forEach((id) => clientesSeleccionados.delete(id));
-			}
-		} else {
-			if (clientesSeleccionados.has(id)) {
-				clientesSeleccionados.delete(id);
-			} else {
-				clientesSeleccionados.add(id);
-			}
-			ultimoSeleccionadoIndex = index;
-		}
-		clientesSeleccionados = clientesSeleccionados;
+	/// Mover a la papelera se confirma: es reversible, pero saca los registros
+	/// de la lista de todos.
+	async function moverAPapelera() {
+		const n = clientesSeleccionados.size;
+		if (
+			!(await confirmarEliminacion({
+				title: `¿Mover ${n} clientes a la papelera?`,
+				message: 'Dejarán de aparecer en la lista. Puedes restaurarlos desde la papelera.',
+				confirmText: 'Mover a papelera'
+			}))
+		)
+			return;
+		await ejecutarAccionMasiva('eliminar');
 	}
 
-	function toggleSeleccionarTodo() {
-		if (clientesSeleccionados.size === clientes.length && clientes.length > 0) {
-			clientesSeleccionados.clear();
-		} else {
-			clientes.forEach((c) => clientesSeleccionados.add(c.id));
-		}
-		clientesSeleccionados = clientesSeleccionados;
-	}
-
-	async function ejecutarAccionMasiva(accion: 'ocultar' | 'mostrar' | 'eliminar') {
+	async function ejecutarAccionMasiva(accion: 'ocultar' | 'mostrar' | 'eliminar' | 'restaurar') {
 		if (clientesSeleccionados.size === 0) return;
 
 		const ids = Array.from(clientesSeleccionados);
@@ -158,8 +155,7 @@
 			const data = respuesta.data;
 			if (data.success) {
 				toast.success(data.message);
-				clientesSeleccionados.clear();
-				clientesSeleccionados = clientesSeleccionados;
+				clientesSeleccionados = new Set();
 				cargar(true);
 			} else {
 				toast.error(data.message || 'Error al ejecutar acción masiva');
@@ -185,14 +181,20 @@
 		...(filtros.tipo !== 'TODOS'
 			? [{ key: 'tipo', label: 'Tipo', value: TIPO_LABELS[filtros.tipo] ?? filtros.tipo }]
 			: []),
-		...(filtros.vista === 'ocultos'
-			? [{ key: 'vista', label: 'Visibilidad', value: 'Ocultos' }]
+		...(filtros.vista !== 'activos'
+			? [
+					{
+						key: 'vista',
+						label: 'Visibilidad',
+						value: filtros.vista === 'papelera' ? 'Papelera' : 'Ocultos'
+					}
+				]
 			: []),
 		...(filtros.q.trim() ? [{ key: 'q', label: 'Búsqueda', value: `"${filtros.q.trim()}"` }] : [])
 	]);
 
 	/// La página no cuenta como filtro y la búsqueda tiene su propio campo.
-	const numFiltrosActivos = $derived(contarActivos(DEFS, filtros, ['q', 'pagina']));
+	const numFiltrosActivos = $derived(contarActivos(DEFS, filtros, ['q', 'pagina', 'orden']));
 
 	function clearFilter(key: string) {
 		ponerFiltro(
@@ -228,12 +230,16 @@
 			limit: POR_PAGINA,
 			search: filtros.q.trim() || undefined,
 			tipo: filtros.tipo !== 'TODOS' ? filtros.tipo : undefined
+	,
+			orden: filtros.orden === 'desc' ? 'desc' : 'asc'
 		};
 
 		const res =
-			filtros.vista === 'ocultos'
-				? await clientesAPI.getOcultos(params)
-				: await clientesAPI.getAll(params);
+			filtros.vista === 'papelera'
+				? await clientesAPI.getPapelera(params)
+				: filtros.vista === 'ocultos'
+					? await clientesAPI.getOcultos(params)
+					: await clientesAPI.getAll(params);
 
 		const cuerpo = res.data ?? {};
 		const items: Cliente[] = cuerpo.data ?? (Array.isArray(cuerpo) ? cuerpo : []);
@@ -250,7 +256,7 @@
 	}
 
 	function limpiarFiltros() {
-		filtros = limpiarFiltrosDe(DEFS, filtros);
+		filtros = limpiarFiltrosDe(DEFS, filtros, ['orden']);
 	}
 
 	function irPagina(pagina: number) {
@@ -272,22 +278,58 @@
 		showDeleteModal = true;
 	}
 
+	/// Por `clientesAPI` y no por `fetch` crudo: el `fetch` iba sin token, el
+	/// servidor lo rechazaba con 401 y aun así se avisaba «Cliente eliminado».
 	async function confirmDelete() {
 		if (!clienteToDelete) return;
 		try {
-			await fetch(`${import.meta.env.VITE_API_URL}/api/clientes/${clienteToDelete.id}`, {
-				method: 'DELETE'
-			});
-			toast.success('Cliente eliminado');
+			await clientesAPI.delete(clienteToDelete.id);
+			toast.success('Cliente movido a la papelera', { description: clienteToDelete.nombre ?? '' });
 			showDeleteModal = false;
 			cargar(true);
-		} catch (err) {
-			toast.error('Error al eliminar');
+		} catch (err: any) {
+			toast.error('No se pudo eliminar', {
+				description: err?.response?.data?.message ?? 'Intenta de nuevo.'
+			});
+		}
+	}
+
+	async function restaurarCliente(c: Cliente) {
+		try {
+			await clientesAPI.restaurar(c.id);
+			toast.success('Cliente restaurado', { description: c.nombre ?? '' });
+			cargar(true);
+		} catch (err: any) {
+			toast.error('No se pudo restaurar', {
+				description: err?.response?.data?.message ?? 'Intenta de nuevo.'
+			});
+		}
+	}
+
+	/// Definitivo solo desde la papelera. Con historial (servicios, liquidaciones,
+	/// recargos) el servidor responde 409 y se explica en el aviso.
+	async function eliminarDefinitivo(c: Cliente) {
+		if (
+			!(await confirmarEliminacion({
+				title: '¿Eliminar definitivamente este cliente?',
+				message: `${c.nombre ?? 'El cliente'} se borrará para siempre. Solo es posible si no tiene servicios, liquidaciones ni recargos.`,
+				confirmText: 'Eliminar definitivamente'
+			}))
+		)
+			return;
+		try {
+			await clientesAPI.eliminarPermanente(c.id);
+			toast.success('Cliente eliminado definitivamente', { description: c.nombre ?? '' });
+			cargar(true);
+		} catch (err: any) {
+			toast.error('No se pudo eliminar definitivamente', {
+				description: err?.response?.data?.message ?? 'Intenta de nuevo.'
+			});
 		}
 	}
 
 	const COLUMNAS: ColumnDef<Cliente, any>[] = [
-		{ id: 'cliente', header: 'Cliente', accessorKey: 'nombre', enableSorting: false },
+		{ id: 'cliente', header: 'Cliente', accessorKey: 'nombre' },
 		{ id: 'tipo', header: 'Tipo', accessorKey: 'tipo', enableSorting: false, size: 170 },
 		{ id: 'contacto', header: 'Contacto', enableSorting: false },
 		{ id: 'condiciones', header: 'Condiciones', enableSorting: false, size: 190 },
@@ -346,7 +388,28 @@
 		}
 	});
 
+	/// Crear y editar van en el mismo modal, como en flota y conductores.
+	let modalCliente = $state<{ abierto: boolean; id: string | null }>({ abierto: false, id: null });
+	const abrirFormulario = (id: string | null = null) => (modalCliente = { abierto: true, id });
+
+	/// Orden de la tabla: A–Z por nombre de entrada. El tercer clic de la
+	/// cabecera («sin orden») vuelve a A–Z, que es el orden natural de un directorio.
+	const ordenTabla = $derived<SortingState>([{ id: 'cliente', desc: filtros.orden === 'desc' }]);
+	function aplicarOrden(o: SortingState) {
+		ponerFiltro('orden', o[0]?.desc ? 'desc' : 'asc');
+	}
+
+	/// Ficha de consulta: la fila abre la ficha; la página completa sigue a un clic.
+	let detalleId = $state<string | null>(null);
+
 	onMount(() => {
+		/// Enlaces viejos a `/agregar` llegan aquí con `?nuevo=1`.
+		if (pageState.url.searchParams.has('nuevo') && puedeEditar) {
+			abrirFormulario();
+			const url = new URL(pageState.url);
+			url.searchParams.delete('nuevo');
+			history.replaceState(history.state, '', url);
+		}
 		/// Estos tres eventos no existían en el backend hasta ahora: el módulo
 		/// emitía `cliente:oculto` y `clientes:actualizacion-masiva`, así que
 		/// crear o editar un cliente no le llegaba a nadie más.
@@ -411,6 +474,19 @@
 						/>
 					</svg>
 				</button>
+				<button
+					onclick={() => ponerFiltro('vista', filtros.vista === 'papelera' ? 'activos' : 'papelera')}
+					title={filtros.vista === 'papelera' ? 'Ver activos' : 'Ver papelera'}
+					aria-label={filtros.vista === 'papelera' ? 'Ver activos' : 'Ver papelera'}
+					class="btn-icon"
+					style="border-color: {filtros.vista === 'papelera'
+						? '#b42318'
+						: 'var(--border-default)'}; background-color: {filtros.vista === 'papelera'
+						? 'rgba(180,35,24,0.06)'
+						: 'white'}; color: {filtros.vista === 'papelera' ? '#b42318' : 'var(--text-muted)'};"
+				>
+					<IcoPapelera size={16} strokeWidth={1.8} />
+				</button>
 			{/if}
 
 			<button
@@ -441,7 +517,7 @@
 			</button>
 
 			{#if puedeEditar}
-				<button onclick={() => goto('/dashboard/clientes/agregar')} class="btn-primary">
+				<button onclick={() => abrirFormulario()} class="btn-primary">
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
 					</svg>
@@ -508,6 +584,7 @@
 					>
 						<option value="activos">Activos</option>
 						<option value="ocultos" disabled={!canAccessSpecialViews}>Solo ocultos</option>
+						<option value="papelera" disabled={!canAccessSpecialViews}>Papelera</option>
 					</select>
 				</div>
 
@@ -568,23 +645,16 @@
 				datos={clientes}
 				claveFila={(c) => c.id}
 				cargando={isLoading}
-				onFila={(c) => goto(`/dashboard/clientes/${c.id}`)}
+				onFila={(c) => (detalleId = c.id)}
+				orden={ordenTabla}
+				onOrdenar={aplicarOrden}
+				seleccion={clientesSeleccionados}
+				onSeleccion={(ids) => (clientesSeleccionados = ids)}
 				etiqueta="Clientes registrados"
 			>
 				{#snippet celda({ columnaId, fila: c })}
 					{#if columnaId === 'cliente'}
 						<div class="flex items-center">
-							<span class="dir-check">
-								<input
-									type="checkbox"
-									checked={clientesSeleccionados.has(c.id)}
-									onclick={(e) => {
-										e.stopPropagation();
-										toggleSeleccion(c.id, clientes.indexOf(c), e);
-									}}
-									aria-label="Seleccionar {c.nombre}"
-								/>
-							</span>
 							<CeldaIdentidad
 								titulo={c.nombre}
 								subtitulo={c.nit ? `NIT ${c.nit}` : undefined}
@@ -616,18 +686,40 @@
 						<AccionesFila
 							acciones={[
 								{
+									id: 'editar',
+									etiqueta: 'Editar',
+									icono: Pencil,
+									onClick: () => abrirFormulario(c.id),
+									oculta: !puedeEditar || filtros.vista === 'papelera'
+								},
+								{
 									id: 'ver',
 									etiqueta: 'Ver detalle',
 									icono: Eye,
-									onClick: () => goto(`/dashboard/clientes/${c.id}`)
+									onClick: () => (detalleId = c.id)
 								},
 								{
 									id: 'eliminar',
-									etiqueta: 'Eliminar',
+									etiqueta: 'Mover a papelera',
 									icono: Trash2,
 									onClick: () => openDeleteModal(c),
 									peligrosa: true,
-									oculta: !puedeEditar
+									oculta: !puedeEditar || filtros.vista === 'papelera'
+								},
+								{
+									id: 'restaurar',
+									etiqueta: 'Restaurar',
+									icono: IcoRestaurar,
+									onClick: () => restaurarCliente(c),
+									oculta: !puedeEditar || filtros.vista !== 'papelera'
+								},
+								{
+									id: 'eliminar-definitivo',
+									etiqueta: 'Eliminar definitivamente',
+									icono: Trash2,
+									onClick: () => eliminarDefinitivo(c),
+									peligrosa: true,
+									oculta: !puedeEditar || filtros.vista !== 'papelera'
 								}
 							]}
 						/>
@@ -662,168 +754,54 @@
 		/>
 	</div>
 
-	<!-- Bulk Actions Bar — fondo charcoal profundo (no glass) -->
-	{#if clientesSeleccionados.size > 0}
-		<div class="bulk-actions-container">
-			<div
-				class="flex items-center gap-4 rounded-2xl p-2.5 shadow-2xl"
-				style="background-color: var(--bg-charcoal); border: 1px solid rgba(255,255,255,0.08); color: white;"
-				in:scale={{ duration: 300, start: 0.9 }}
-			>
-				<span
-					class="px-2 text-xs font-medium"
-					style="border-right: 1px solid rgba(255,255,255,0.15);"
-				>
-					{clientesSeleccionados.size} seleccionados
-				</span>
-				<div class="flex gap-1.5">
-					{#if puedeEditar}
-						<button
-							onclick={() => ejecutarAccionMasiva('ocultar')}
-							disabled={procesandoMasivo}
-							class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
-							style="background-color: rgba(255,255,255,0.08);"
-						>
-							<svg
-								class="h-3.5 w-3.5"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								stroke-width="1.8"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"
-								/>
-							</svg>
-							Ocultar
-						</button>
-					{/if}
-					{#if puedeEditar}
-						<button
-							onclick={() => ejecutarAccionMasiva('eliminar')}
-							disabled={procesandoMasivo}
-							class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs"
-							style="background-color: rgba(220,38,38,0.85);"
-						>
-							<svg
-								class="h-3.5 w-3.5"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								stroke-width="1.8"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-								/>
-							</svg>
-							Papelera
-						</button>
-					{/if}
-				</div>
-				<button
-					onclick={() => {
-						clientesSeleccionados.clear();
-						clientesSeleccionados = clientesSeleccionados;
-					}}
-					class="apple-transition ml-2"
-					style="color: rgba(255,255,255,0.5);"
-				>
-					<svg
-						class="h-4 w-4"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-						stroke-width="1.8"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</div>
-		</div>
-	{/if}
+	<!-- Acciones masivas: la misma barra en todos los directorios. -->
+	<BarraSeleccion
+		cantidad={clientesSeleccionados.size}
+		nombreItems="clientes"
+		procesando={procesandoMasivo}
+		onLimpiar={() => (clientesSeleccionados = new Set())}
+		acciones={!puedeEditar
+			? []
+			: filtros.vista === 'papelera'
+				? [{ id: 'restaurar', etiqueta: 'Restaurar', icono: IcoRestaurar, tono: 'primario', onClick: () => ejecutarAccionMasiva('restaurar') }]
+				: [
+						filtros.vista === 'ocultos'
+							? { id: 'mostrar', etiqueta: 'Mostrar', icono: IcoMostrar, tono: 'primario', onClick: () => ejecutarAccionMasiva('mostrar') }
+							: { id: 'ocultar', etiqueta: 'Ocultar', icono: IcoOcultar, tono: 'neutro', onClick: () => ejecutarAccionMasiva('ocultar') },
+						{ id: 'papelera', etiqueta: 'Mover a papelera', icono: IcoPapelera, tono: 'peligro', onClick: () => moverAPapelera() }
+					]}
+	/>
+
 </div>
 
-{#if showDeleteModal && clienteToDelete}
-	<!-- Backdrop con blur (paleta landing) -->
-	<button
-		type="button"
-		class="fixed inset-0 z-50 cursor-default border-0 p-0"
-		style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.40), rgba(20, 83, 45, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
-		aria-label="Cerrar modal"
-		onclick={() => (showDeleteModal = false)}
-	></button>
+<!-- Mover a papelera: el diálogo de confirmación de la app. -->
+<ConfirmDialog
+	open={showDeleteModal && !!clienteToDelete}
+	tone="danger"
+	title="¿Mover este cliente a la papelera?"
+	message={`${clienteToDelete?.nombre ?? 'El cliente'} dejará de aparecer en la lista. Puedes restaurarlo desde la papelera.`}
+	confirmText="Mover a papelera"
+	onconfirm={confirmDelete}
+	oncancel={() => (showDeleteModal = false)}
+/>
 
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center p-4"
-		onkeydown={(e) => e.key === 'Escape' && (showDeleteModal = false)}
-		role="dialog"
-		aria-modal="true"
-	>
-		<div
-			class="w-full max-w-sm overflow-hidden"
-			style="background-color: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 24px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18); padding: 1.5rem;"
-			in:scale={{ duration: 200, start: 0.95 }}
-		>
-			<div class="mb-4 flex items-center gap-3">
-				<div
-					class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full"
-					style="background-color: rgba(220, 38, 38, 0.08);"
-				>
-					<svg
-						class="h-5 w-5"
-						style="color: #dc2626;"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-						stroke-width="1.8"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-						/>
-					</svg>
-				</div>
-				<div>
-					<h2 class="text-base font-bold" style="color: var(--text-primary);">
-						¿Eliminar cliente?
-					</h2>
-					<p class="mt-0.5 text-xs" style="color: var(--text-muted);">
-						Esta acción no se puede deshacer
-					</p>
-				</div>
-			</div>
-			<p class="mb-5 text-sm" style="color: var(--text-secondary);">
-				Se eliminará a <span class="font-semibold" style="color: var(--text-primary);"
-					>{clienteToDelete.nombre}</span
-				>
-				del sistema.
-			</p>
-			<div class="flex gap-2">
-				<button
-					onclick={() => (showDeleteModal = false)}
-					class="btn-secondary flex-1"
-					style="justify-content: center;"
-				>
-					Cancelar
-				</button>
-				{#if puedeEditar}
-					<button
-						onclick={confirmDelete}
-						class="flex-1 rounded-xl px-4 py-2 text-sm font-semibold text-white"
-						style="background-color: #dc2626;"
-					>
-						Eliminar
-					</button>
-				{/if}
-			</div>
-		</div>
-	</div>
-{/if}
+<ModalDetalleCliente
+	open={detalleId !== null}
+	clienteId={detalleId}
+	onclose={() => (detalleId = null)}
+	oneditar={puedeEditar
+		? (id) => {
+				detalleId = null;
+				abrirFormulario(id);
+			}
+		: undefined}
+/>
+<ModalFormCliente
+	open={modalCliente.abierto}
+	clienteId={modalCliente.id}
+	onclose={() => (modalCliente = { abierto: false, id: null })}
+	onguardado={() => cargar(true)}
+/>
 
 <style>
 	/* .page-card, .stat-card, .table-card, .list-card, .brand-gradient, .btn-primary,

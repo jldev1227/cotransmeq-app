@@ -141,7 +141,7 @@
 		padding: 40px 0;
 		text-align: center;
 		font-size: 13px;
-		color: #64748b;
+		color: var(--text-muted);
 	}
 	.ml-error {
 		color: #b91c1c;

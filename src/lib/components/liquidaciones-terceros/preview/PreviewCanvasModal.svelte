@@ -24,6 +24,8 @@
 	import { cargarSeleccion, guardarSeleccion, type ScopePreview } from './columnas';
 	import { exportarPdfCompuesto, exportarPdfDocumento } from './exportar-pdf';
 	import DocumentoHoja from './DocumentoHoja.svelte';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
+	import TabsVista from '$lib/components/ui/TabsVista.svelte';
 	import SelectorColumnasPreview from './SelectorColumnasPreview.svelte';
 	import type { DocumentoPreview } from './tipos';
 
@@ -111,6 +113,7 @@
 	let altoEscalado = $state(1200);
 	let docEl: HTMLElement | null = $state(null);
 	let rootEl: HTMLElement | null = $state(null);
+	let bodyEl: HTMLElement | null = $state(null);
 	let exportando = $state(false);
 
 	function aplicarSeleccion(keys: string[]) {
@@ -126,7 +129,9 @@
 
 	function ajustarAlAncho() {
 		if (typeof window === 'undefined') return;
-		const disponible = Math.max(280, window.innerWidth - 80);
+		/// Ancho del lienzo dentro del modal (menos su relleno); sin él aún, la
+		/// ventana con el margen del modal.
+		const disponible = Math.max(280, bodyEl ? bodyEl.clientWidth - 44 : window.innerWidth - 120);
 		zoom = Math.max(0.25, Math.min(2.5, (disponible * 0.96) / ANCHO_LIENZO));
 	}
 
@@ -167,7 +172,7 @@
 	}
 
 	function onKey(e: KeyboardEvent) {
-		if (e.key === 'Escape') onClose();
+		// Escape lo gestiona ModalBase.
 		if (!paginador) return;
 		// Pasar página con el teclado, salvo que el foco esté en un control DEL
 		// PREVIEW (el selector de columnas, por ejemplo). El foco suele seguir
@@ -245,35 +250,34 @@
      CSS con hashes de scope de Svelte no serviría allí. -->
 {@html `<style>${CSS_DOC}</style>`}
 
-<div class="prev-root" bind:this={rootEl}>
-	<!-- ── BARRA ── -->
-	<div class="prev-bar no-print">
-		<div class="prev-bar-l">
-			<div class="prev-bar-text">
-				<div class="prev-title">{documento.titulo}</div>
-				{#if subtitulo}<div class="prev-sub">{subtitulo}</div>{/if}
-			</div>
-		</div>
+<!-- Documentos hermanos del mismo periodo, como pestañas del encabezado. -->
+{#snippet hojas()}
+	<TabsVista
+		tabs={pestanas ?? []}
+		activa={pestanaActiva ?? ''}
+		variante="oscuro"
+		etiqueta="Hoja del documento"
+		onCambiar={(id) => onPestana?.(id)}
+	/>
+{/snippet}
 
-		<div class="prev-bar-r">
-			{#if pestanas && pestanas.length > 1}
-				<div class="prev-tabs" role="tablist" aria-label="Hoja del documento">
-					{#each pestanas as p (p.id)}
-						<button
-							role="tab"
-							aria-selected={p.id === pestanaActiva}
-							class:activa={p.id === pestanaActiva}
-							onclick={() => onPestana?.(p.id)}
-						>
-							{p.label}
-						</button>
-					{/each}
-				</div>
-			{/if}
-
+<ModalBase
+	open={true}
+	eyebrow="Vista previa"
+	title={documento.titulo}
+	subtitle={subtitulo || null}
+	tamano="full"
+	sinRelleno
+	oncerrar={onClose}
+	cabecera={pestanas && pestanas.length > 1 ? hojas : undefined}
+>
+	<div class="prev-root" bind:this={rootEl}>
+		<!-- ── BARRA DE HERRAMIENTAS ── -->
+		<div class="prev-tools no-print">
 			{#if paginador && paginador.total > 1}
 				<div class="prev-pager" aria-label="Conductor del documento">
 					<button
+						type="button"
 						onclick={() => paginador?.onIr(paginador.indice - 1)}
 						disabled={paginador.indice <= 0}
 						title="Anterior (←)"
@@ -284,6 +288,7 @@
 					<span class="prev-pager-pos">{paginador.indice + 1} / {paginador.total}</span>
 					<span class="prev-pager-nombre" title={paginador.etiqueta}>{paginador.etiqueta}</span>
 					<button
+						type="button"
 						onclick={() => paginador?.onIr(paginador.indice + 1)}
 						disabled={paginador.indice >= paginador.total - 1}
 						title="Siguiente (→)"
@@ -294,18 +299,33 @@
 				</div>
 			{/if}
 
-			<div class="prev-zoom">
-				<button onclick={() => fijarZoom(zoom - 0.05)} title="Reducir">−</button>
-				<span class="prev-zoom-val">{Math.round(zoom * 100)}%</span>
-				<button onclick={() => fijarZoom(zoom + 0.05)} title="Aumentar">+</button>
-				<button onclick={() => fijarZoom(1)} title="Tamaño real">↺</button>
-				<button onclick={ajustarAlAncho} title="Ajustar al ancho">⤢</button>
+			<div class="prev-tools-r">
+				<div class="prev-zoom">
+					<button type="button" onclick={() => fijarZoom(zoom - 0.05)} title="Reducir">−</button>
+					<span class="prev-zoom-val">{Math.round(zoom * 100)}%</span>
+					<button type="button" onclick={() => fijarZoom(zoom + 0.05)} title="Aumentar">+</button>
+					<button type="button" onclick={() => fijarZoom(1)} title="Tamaño real">↺</button>
+					<button type="button" onclick={ajustarAlAncho} title="Ajustar al ancho">⤢</button>
+				</div>
+
+				<SelectorColumnasPreview {scope} {seleccion} onCambio={aplicarSeleccion} />
 			</div>
+		</div>
 
-			<SelectorColumnasPreview {scope} {seleccion} onCambio={aplicarSeleccion} />
+		<!-- ── LIENZO ── -->
+		<div class="prev-body" bind:this={bodyEl}>
+			<div class="prev-scale" style="width: {ANCHO_LIENZO * zoom}px; height: {altoEscalado}px;">
+				<DocumentoHoja {scope} {documento} {seleccion} ancho={ANCHO_LIENZO} {zoom} bind:el={docEl} />
+			</div>
+		</div>
+	</div>
 
-			<button class="prev-btn prev-btn-pdf" onclick={exportar} disabled={exportando}>
-				{#if exportando}
+	{#snippet pie()}
+		<button type="button" class="btn-secondary" onclick={onClose}>Cerrar</button>
+
+		{#if exportarTodo}
+			<button type="button" class="btn-secondary" onclick={exportarTodos} disabled={exportandoTodo}>
+				{#if exportandoTodo}
 					<span class="prev-spinner" aria-hidden="true"></span>
 					Generando PDF…
 				{:else}
@@ -320,39 +340,19 @@
 						<path
 							stroke-linecap="round"
 							stroke-linejoin="round"
-							d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
+							d="M8 7V5a2 2 0 012-2h9a2 2 0 012 2v9a2 2 0 01-2 2h-2M5 8h9a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2v-9a2 2 0 012-2z"
 						/>
 					</svg>
-					{exportarTodo ? 'Exportar este' : 'Exportar PDF'}
+					{exportarTodo.etiqueta}
 				{/if}
 			</button>
+		{/if}
 
-			{#if exportarTodo}
-				<button class="prev-btn prev-btn-pdf" onclick={exportarTodos} disabled={exportandoTodo}>
-					{#if exportandoTodo}
-						<span class="prev-spinner" aria-hidden="true"></span>
-						Generando PDF…
-					{:else}
-						<svg
-							width="14"
-							height="14"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M8 7V5a2 2 0 012-2h9a2 2 0 012 2v9a2 2 0 01-2 2h-2M5 8h9a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2v-9a2 2 0 012-2z"
-							/>
-						</svg>
-						{exportarTodo.etiqueta}
-					{/if}
-				</button>
-			{/if}
-
-			<button class="prev-btn" onclick={onClose} title="Cerrar la vista previa (Esc)">
+		<button type="button" class="btn-primary" onclick={exportar} disabled={exportando}>
+			{#if exportando}
+				<span class="prev-spinner" aria-hidden="true"></span>
+				Generando PDF…
+			{:else}
 				<svg
 					width="14"
 					height="14"
@@ -361,211 +361,126 @@
 					stroke="currentColor"
 					stroke-width="2"
 				>
-					<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"
+					/>
 				</svg>
-				Cerrar
-			</button>
-		</div>
-	</div>
-
-	<!-- ── LIENZO ── -->
-	<div class="prev-body">
-		<div class="prev-scale" style="width: {ANCHO_LIENZO * zoom}px; height: {altoEscalado}px;">
-			<DocumentoHoja {scope} {documento} {seleccion} ancho={ANCHO_LIENZO} {zoom} bind:el={docEl} />
-		</div>
-	</div>
-</div>
+				{exportarTodo ? 'Exportar este' : 'Exportar PDF'}
+			{/if}
+		</button>
+	{/snippet}
+</ModalBase>
 
 <style>
 	.prev-root {
-		position: fixed;
-		inset: 0;
-		z-index: 400;
-		background: #b0b8c2;
+		height: 100%;
 		display: flex;
 		flex-direction: column;
 		overflow: hidden;
 	}
-	.prev-bar {
+	.prev-tools {
 		flex-shrink: 0;
-		background: #1a2421;
-		border-bottom: 1px solid rgba(234, 88, 12, 0.18);
-		box-shadow: 0 3px 16px rgba(0, 0, 0, 0.4);
-		padding: 11px 20px;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
-		gap: 16px;
+		flex-wrap: wrap;
+		gap: 10px;
+		padding: 10px 22px;
+		background: var(--bg-surface);
+		border-bottom: 1px solid var(--border-subtle);
 	}
-	.prev-bar-l {
-		min-width: 0;
-		flex: 1;
-	}
-	.prev-bar-text {
-		min-width: 0;
-	}
-	.prev-title {
-		color: #fff;
-		font-size: 14px;
-		font-weight: 700;
-		letter-spacing: 0.02em;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.prev-sub {
-		margin-top: 2px;
-		color: rgba(255, 255, 255, 0.6);
-		font-size: 11.5px;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.prev-bar-r {
+	.prev-tools-r {
+		margin-left: auto;
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		flex-shrink: 0;
 	}
-	/* Alterna entre los documentos hermanos de un mismo periodo (las dos
-	   hojas del canvas de ingresos). Mismo envoltorio que `.prev-zoom` para
-	   que la barra siga leyéndose como una sola fila de controles. */
-	.prev-tabs {
+	/* Paginador del consolidado: un documento por conductor, de uno en uno. */
+	.prev-pager,
+	.prev-zoom {
 		display: flex;
 		align-items: center;
 		gap: 2px;
-		padding: 2px;
-		border-radius: 7px;
-		background: rgba(255, 255, 255, 0.08);
-		border: 1px solid rgba(255, 255, 255, 0.14);
+		padding: 3px;
+		border-radius: 12px;
+		background: var(--bg-base);
+		border: 1px solid var(--border-default);
 	}
-	.prev-tabs button {
-		padding: 5px 12px;
+	.prev-pager {
+		gap: 4px;
+		max-width: 380px;
+		min-width: 0;
+	}
+	.prev-pager button,
+	.prev-zoom button {
+		width: 30px;
+		height: 30px;
 		border: none;
 		background: none;
-		color: rgba(255, 255, 255, 0.7);
-		font-size: 12px;
-		font-weight: 600;
-		border-radius: 5px;
+		color: var(--text-primary);
+		font-size: 14px;
+		line-height: 1;
+		border-radius: 9px;
 		cursor: pointer;
-		white-space: nowrap;
-	}
-	.prev-tabs button:hover {
-		background: rgba(255, 255, 255, 0.12);
-		color: #fff;
-	}
-	.prev-tabs button.activa {
-		background: rgba(255, 255, 255, 0.92);
-		color: #0f172a;
-	}
-	/* Paginador del consolidado: un documento por conductor, de uno en uno. */
-	.prev-pager {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		padding: 2px;
-		border-radius: 7px;
-		background: rgba(255, 255, 255, 0.08);
-		border: 1px solid rgba(255, 255, 255, 0.14);
-		max-width: 340px;
 	}
 	.prev-pager button {
-		width: 26px;
-		height: 24px;
-		border: none;
-		background: none;
-		color: #fff;
-		font-size: 16px;
-		line-height: 1;
-		border-radius: 5px;
-		cursor: pointer;
+		font-size: 17px;
 	}
-	.prev-pager button:hover:not(:disabled) {
-		background: rgba(255, 255, 255, 0.16);
+	.prev-pager button:hover:not(:disabled),
+	.prev-zoom button:hover {
+		background: var(--bg-surface);
 	}
 	.prev-pager button:disabled {
 		opacity: 0.35;
 		cursor: default;
 	}
-	.prev-pager-pos {
-		color: rgba(255, 255, 255, 0.85);
-		font-size: 11px;
-		font-family: var(--font-sans);
-		white-space: nowrap;
-	}
-	.prev-pager-nombre {
-		color: #fff;
+	.prev-pager-pos,
+	.prev-zoom-val {
+		color: var(--text-secondary);
 		font-size: 12px;
 		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+		white-space: nowrap;
+	}
+	.prev-zoom-val {
+		min-width: 44px;
+		text-align: center;
+	}
+	.prev-pager-nombre {
+		color: var(--text-primary);
+		font-size: 13px;
+		font-weight: 700;
 		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		min-width: 0;
 		padding: 0 4px;
 	}
-	.prev-zoom {
-		display: flex;
-		align-items: center;
-		gap: 2px;
-		padding: 2px;
-		border-radius: 7px;
-		background: rgba(255, 255, 255, 0.08);
-		border: 1px solid rgba(255, 255, 255, 0.14);
-	}
-	.prev-zoom button {
-		width: 26px;
-		height: 24px;
-		border: none;
-		background: none;
-		color: #fff;
-		font-size: 13px;
-		border-radius: 5px;
-		cursor: pointer;
-	}
-	.prev-zoom button:hover {
-		background: rgba(255, 255, 255, 0.16);
-	}
-	.prev-zoom-val {
-		min-width: 42px;
-		text-align: center;
-		color: rgba(255, 255, 255, 0.85);
-		font-size: 11px;
-		font-family: var(--font-sans);
-	}
-	.prev-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
+	/* El selector de columnas trae un botón pensado para barra oscura: aquí
+	   va sobre la barra clara del modal. */
+	.prev-tools :global(.cols-btn) {
+		min-height: 38px;
 		padding: 6px 12px;
-		border-radius: 7px;
-		border: 1px solid rgba(255, 255, 255, 0.22);
-		background: rgba(255, 255, 255, 0.1);
-		color: #fff;
-		font-size: 12px;
-		font-weight: 600;
-		cursor: pointer;
-		white-space: nowrap;
-		transition: background 0.15s;
+		border-radius: 12px;
+		border: 1px solid var(--border-default);
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font-size: 13px;
 	}
-	.prev-btn:hover:not(:disabled) {
-		background: rgba(255, 255, 255, 0.2);
+	.prev-tools :global(.cols-btn:hover) {
+		background: var(--bg-base);
 	}
-	.prev-btn:disabled {
-		opacity: 0.65;
-		cursor: default;
-	}
-	.prev-btn-pdf {
-		background: #0f4025;
-		border-color: #14532d;
-	}
-	.prev-btn-pdf:hover:not(:disabled) {
-		background: #166534;
+	.prev-tools :global(.cols-count) {
+		background: var(--bg-base);
+		color: var(--text-secondary);
 	}
 	.prev-spinner {
 		width: 12px;
 		height: 12px;
-		border: 2px solid rgba(255, 255, 255, 0.3);
-		border-top-color: #fff;
+		border: 2px solid currentColor;
+		border-top-color: transparent;
 		border-radius: 50%;
 		animation: prev-spin 0.7s linear infinite;
 	}
@@ -581,6 +496,9 @@
 		padding: 22px;
 		display: flex;
 		justify-content: center;
+		/* La «mesa» del preview: un tono por debajo del fondo para que la hoja
+		   blanca se lea como papel. */
+		background: color-mix(in srgb, var(--bg-charcoal-deep) 10%, var(--bg-base));
 	}
 	.prev-scale {
 		position: relative;
@@ -591,6 +509,6 @@
 	.prev-scale :global(.doc) {
 		background: #fff;
 		padding: 26px 30px 34px;
-		box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+		box-shadow: 0 10px 40px rgba(0, 29, 23, 0.18);
 	}
 </style>

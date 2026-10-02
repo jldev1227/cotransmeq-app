@@ -1278,7 +1278,7 @@
 						<div class="flex justify-end">
 							<button
 								on:click={handleClose}
-								class="group flex items-center gap-2 rounded-xl border-2 border-gray-200 bg-white px-6 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition-all hover:border-gray-300 hover:bg-gray-50"
+								class="btn-secondary group flex items-center gap-2"
 							>
 								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path
@@ -1295,7 +1295,7 @@
 						<div class="flex items-center justify-between">
 							<button
 								on:click={handleClose}
-								class="flex items-center gap-2 rounded-xl border-2 border-gray-200 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 shadow-sm transition-all hover:border-gray-300 hover:bg-gray-50"
+								class="btn-secondary flex items-center gap-2"
 							>
 								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path
@@ -1311,7 +1311,7 @@
 							<button
 								on:click={handleSubmit}
 								disabled={loading}
-								class="group flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-8 py-2.5 text-sm font-semibold text-white shadow-lg shadow-orange-500/30 transition-all hover:scale-105 hover:shadow-xl hover:shadow-orange-500/40 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+								class="btn-primary group flex items-center gap-2"
 							>
 								{#if loading}
 									<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">

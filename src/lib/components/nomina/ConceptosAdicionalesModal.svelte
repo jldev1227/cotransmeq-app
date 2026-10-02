@@ -20,6 +20,8 @@
 	 * No guarda nada por su cuenta: llama a `onAgregar` / `onEliminar` y es la
 	 * página quien lo manda por el socket con su compare-and-swap.
 	 */
+	import { X } from 'lucide-svelte';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 
 	interface Props {
 		/** Conductor de la hoja abierta, para que se vea sobre quién se actúa. */
@@ -102,30 +104,21 @@
 	}
 </script>
 
-<div class="fondo" role="presentation" onclick={() => !guardando && onClose()}>
-	<div
-		class="panel"
-		role="dialog"
-		aria-modal="true"
-		aria-label="Conceptos adicionales"
-		onclick={(e) => e.stopPropagation()}
-	>
-		<header class="cabecera">
-			<div>
-				<span class="eyebrow">{nombreHoja}</span>
-				<h2>Conceptos adicionales</h2>
-				<p class="ayuda">
-					Van al desprendible debajo de AUXILIO DE TRANSPORTE. Suman al devengado y no cotizan.
-				</p>
-			</div>
-			<button class="cerrar" onclick={onClose} disabled={guardando} aria-label="Cerrar">✕</button>
-		</header>
+<ModalBase
+	open={true}
+	eyebrow={nombreHoja}
+	title="Conceptos adicionales"
+	subtitle="Van al desprendible debajo de AUXILIO DE TRANSPORTE. Suman al devengado y no cotizan."
+	tamano="md"
+	bloqueado={guardando}
+	oncerrar={onClose}
+>
+	<div class="cuerpo">
+		{#if bloqueada}
+			<p class="bloqueo">{motivoBloqueo || 'Esta hoja no se puede editar.'}</p>
+		{/if}
 
-		<div class="cuerpo">
-			{#if bloqueada}
-				<p class="bloqueo">{motivoBloqueo || 'Esta hoja no se puede editar.'}</p>
-			{/if}
-
+		<div class="tarjeta">
 			{#if conceptos.length}
 				<ul class="lista">
 					{#each conceptos as c (c.nombre)}
@@ -133,11 +126,12 @@
 							<span class="importe" class:negativo={c.valor < 0}>{money(c.valor)}</span>
 							<span class="nombre">{c.nombre}</span>
 							<button
+								type="button"
 								class="quitar"
 								onclick={() => onEliminar(c.nombre)}
 								disabled={bloqueada || guardando}
 								aria-label="Quitar {c.nombre}"
-								title="Quitar del desprendible">✕</button
+								title="Quitar del desprendible"><X size={14} strokeWidth={2.5} /></button
 							>
 						</li>
 					{/each}
@@ -146,111 +140,66 @@
 			{:else}
 				<p class="vacio">Esta liquidación no tiene conceptos adicionales.</p>
 			{/if}
-
-			<div class="alta">
-				<div class="campos">
-					<label>
-						<span>Importe</span>
-						<input
-							type="text"
-							inputmode="decimal"
-							bind:value={nuevoValor}
-							placeholder="+Devengo / −Deducción"
-							disabled={bloqueada || guardando}
-							onkeydown={(e) => e.key === 'Enter' && agregar()}
-						/>
-					</label>
-					<label>
-						<span>Descripción</span>
-						<input
-							type="text"
-							bind:value={nuevoNombre}
-							placeholder="BONO ADICIONAL - NO SALARIAL"
-							disabled={bloqueada || guardando}
-							onkeydown={(e) => e.key === 'Enter' && agregar()}
-						/>
-					</label>
-				</div>
-				{#if error}<p class="error">{error}</p>{/if}
-				<button class="btn-primary" onclick={agregar} disabled={bloqueada || guardando}>
-					{guardando ? 'Guardando…' : 'Agregar al desprendible'}
-				</button>
-			</div>
 		</div>
 
-		<footer class="pie">
-			<p class="pista">El importe de un concepto que ya existe se cambia en su propia celda.</p>
-			<button class="btn-secondary" onclick={onClose} disabled={guardando}>Cerrar</button>
-		</footer>
+		<div class="tarjeta">
+			<div class="campos">
+				<label>
+					<span>Importe</span>
+					<input
+						class="ca-input"
+						type="text"
+						inputmode="decimal"
+						bind:value={nuevoValor}
+						placeholder="+Devengo / −Deducción"
+						disabled={bloqueada || guardando}
+						onkeydown={(e) => e.key === 'Enter' && agregar()}
+					/>
+				</label>
+				<label>
+					<span>Descripción</span>
+					<input
+						class="ca-input"
+						type="text"
+						bind:value={nuevoNombre}
+						placeholder="BONO ADICIONAL - NO SALARIAL"
+						disabled={bloqueada || guardando}
+						onkeydown={(e) => e.key === 'Enter' && agregar()}
+					/>
+				</label>
+			</div>
+			{#if error}<p class="error">{error}</p>{/if}
+			<button type="button" class="btn-primary agregar" onclick={agregar} disabled={bloqueada || guardando}>
+				{guardando ? 'Guardando…' : 'Agregar al desprendible'}
+			</button>
+		</div>
 	</div>
-</div>
+
+	{#snippet pie()}
+		<p class="pista">El importe de un concepto que ya existe se cambia en su propia celda.</p>
+		<button type="button" class="btn-secondary" onclick={onClose} disabled={guardando}>Cerrar</button>
+	{/snippet}
+</ModalBase>
 
 <style>
-	.fondo {
-		position: fixed;
-		inset: 0;
-		background: rgba(15, 23, 42, 0.5);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 9999;
-		padding: 1rem;
-	}
-	.panel {
-		background: var(--bg-surface, #fff);
-		border-radius: 16px;
-		width: 100%;
-		max-width: 34rem;
-		max-height: 88vh;
+	.cuerpo {
 		display: flex;
 		flex-direction: column;
-		box-shadow: 0 24px 64px rgba(0, 0, 0, 0.24);
+		gap: 12px;
 	}
-	.cabecera {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 1rem;
-		padding: 1.1rem 1.25rem;
-		border-bottom: 1px solid var(--border-subtle);
-	}
-	.cabecera h2 {
-		margin: 0.25rem 0 0;
-		font-size: 1.3rem;
-		font-weight: 500;
-	}
-	.eyebrow {
-		font-size: 0.68rem;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: var(--text-muted);
-		font-family: var(--font-sans);
-	}
-	.ayuda {
-		margin: 0.4rem 0 0;
-		font-size: 0.78rem;
-		color: var(--text-muted);
-		max-width: 26rem;
-	}
-	.cerrar {
-		background: none;
-		border: none;
-		font-size: 1.1rem;
-		cursor: pointer;
-		color: var(--text-muted);
-	}
-	.cuerpo {
-		padding: 1rem 1.25rem;
-		overflow-y: auto;
-		flex: 1;
+	.tarjeta {
+		padding: 16px;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
 	}
 	.bloqueo {
-		margin: 0 0 0.9rem;
-		padding: 0.6rem 0.75rem;
-		border-radius: 10px;
+		margin: 0;
+		padding: 10px 12px;
+		border-radius: 12px;
 		background: rgba(217, 119, 6, 0.1);
 		color: #92400e;
-		font-size: 0.8rem;
+		font-size: 13px;
 	}
 	.lista {
 		list-style: none;
@@ -258,68 +207,75 @@
 		padding: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.35rem;
+		gap: 6px;
 	}
 	.fila {
 		display: grid;
 		grid-template-columns: auto 1fr auto;
 		align-items: center;
-		gap: 0.6rem;
-		padding: 0.5rem 0.7rem;
+		gap: 10px;
+		padding: 8px 10px 8px 12px;
 		border: 1px solid var(--border-subtle);
-		border-radius: 10px;
-		background: var(--bg-base, #fafafa);
+		border-radius: 12px;
+		background: var(--bg-base);
 	}
 	.importe {
-		font-weight: 600;
-		font-size: 0.85rem;
-		color: var(--emerald-700, #166534);
+		font-weight: 700;
+		font-size: 14px;
+		color: var(--text-primary);
 		font-variant-numeric: tabular-nums;
 	}
 	.importe.negativo {
-		color: #dc2626;
+		color: #b91c1c;
 	}
 	.nombre {
-		font-size: 0.78rem;
-		color: var(--text-secondary, #444);
+		font-size: 13px;
+		color: var(--text-secondary);
 		overflow-wrap: anywhere;
 	}
 	.quitar {
+		width: 28px;
+		height: 28px;
+		display: grid;
+		place-items: center;
 		background: none;
-		border: none;
+		border: 1px solid transparent;
 		cursor: pointer;
-		color: #dc2626;
-		font-size: 0.85rem;
-		padding: 0.15rem 0.3rem;
-		border-radius: 6px;
+		color: var(--text-muted);
+		border-radius: 999px;
+		transition:
+			background 0.15s ease,
+			color 0.15s ease;
+	}
+	.quitar:hover:not(:disabled) {
+		background: rgba(180, 35, 24, 0.08);
+		color: #b42318;
 	}
 	.quitar:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
 	}
 	.total {
-		margin: 0.6rem 0 0;
+		margin: 10px 0 0;
 		text-align: right;
-		font-size: 0.8rem;
+		font-size: 13px;
 		color: var(--text-muted);
 		font-variant-numeric: tabular-nums;
 	}
+	.total strong {
+		color: var(--text-primary);
+	}
 	.vacio {
 		margin: 0;
-		padding: 1.2rem 0;
+		padding: 12px 0;
 		text-align: center;
-		font-size: 0.82rem;
-		color: var(--text-very-muted, #999);
-	}
-	.alta {
-		margin-top: 1rem;
-		padding-top: 1rem;
-		border-top: 1px dashed var(--border-subtle);
+		font-size: 13px;
+		color: var(--text-very-muted);
 	}
 	.campos {
 		display: grid;
 		grid-template-columns: 1fr 1.4fr;
-		gap: 0.6rem;
+		gap: 10px;
 	}
 	/* En pantalla estrecha los dos campos se apilan: a 1.4fr la descripción
 	   se quedaba en dos palabras por línea. */
@@ -331,46 +287,50 @@
 	.campos label {
 		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
+		gap: 6px;
 	}
 	.campos span {
-		font-size: 0.62rem;
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
+		font-size: 12px;
+		font-weight: 700;
+		color: var(--text-secondary);
+	}
+	.ca-input {
+		width: 100%;
+		min-height: 42px;
+		padding: 9px 12px;
+		border-radius: 12px;
+		border: 1px solid var(--border-default);
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font-size: 14px;
+		transition:
+			border-color 0.15s ease,
+			box-shadow 0.15s ease;
+	}
+	.ca-input:focus {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.ca-input:disabled {
+		background: var(--bg-base);
 		color: var(--text-muted);
-		font-family: var(--font-sans);
-	}
-	.campos input {
-		border: 1px solid var(--border-default, #ddd);
-		border-radius: 10px;
-		padding: 0.45rem 0.6rem;
-		font-size: 0.85rem;
-		background: #fff;
-	}
-	.campos input:disabled {
-		background: #f5f5f5;
 		cursor: not-allowed;
 	}
 	.error {
-		margin: 0.6rem 0 0;
-		font-size: 0.78rem;
+		margin: 10px 0 0;
+		font-size: 13px;
+		font-weight: 600;
 		color: #b91c1c;
 	}
-	.alta .btn-primary {
-		margin-top: 0.75rem;
+	.agregar {
+		margin-top: 12px;
 		width: 100%;
 	}
-	.pie {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		padding: 0.85rem 1.25rem;
-		border-top: 1px solid var(--border-subtle);
-	}
 	.pista {
-		margin: 0;
-		font-size: 0.72rem;
-		color: var(--text-very-muted, #999);
+		margin: 0 auto 0 0;
+		flex: 1 1 200px;
+		font-size: 12px;
+		color: var(--text-very-muted);
 	}
 </style>

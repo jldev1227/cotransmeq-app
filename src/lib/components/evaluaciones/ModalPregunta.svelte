@@ -484,9 +484,9 @@
 		color: var(--au-muted);
 	}
 	.mp-btn-chico {
+		min-height: 34px;
 		padding: 0.4rem 0.75rem;
 		font-size: 0.78rem;
-		border-radius: 11px;
 		flex-shrink: 0;
 	}
 	.mp-btn-chico svg {

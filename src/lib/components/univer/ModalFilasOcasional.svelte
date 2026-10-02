@@ -30,6 +30,9 @@
 	page quien guarda y recarga el mes.
 -->
 <script lang="ts">
+	import { confirmarEliminacion } from '$lib/stores/confirm';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
+	import TabsVista from '$lib/components/ui/TabsVista.svelte';
 	import type { ConceptoOcasional } from '$lib/api/liquidaciones-terceros-ocasional';
 
 	/// Las dos secciones que se pueden EDITAR desde aquí.
@@ -205,11 +208,13 @@
 		limpiar();
 	}
 
-	function eliminar(g: ConceptoOcasional) {
+	async function eliminar(g: ConceptoOcasional) {
 		if (!g.id) return;
-		if (!confirm(`¿Eliminar «${g.concepto}» de los gastos de ${MESES[mes - 1]} ${anio}?`)) {
-			return;
-		}
+		const ok = await confirmarEliminacion({
+			title: `¿Eliminar «${g.concepto}»?`,
+			message: `Se quitará de los gastos de ${MESES[mes - 1]} ${anio}.`
+		});
+		if (!ok) return;
 		onEliminar(g.id);
 	}
 
@@ -220,341 +225,248 @@
 	}
 
 	let totalSeccion = $derived(filasDeSeccion.reduce((s, g) => s + totalDe(g), 0));
+
+	/// Pestañas para `TabsVista`: id = sección, cuenta = filas de cada una.
+	const tabsVista = $derived([
+		{ id: 'GASTO_OPERATIVO', label: 'Gastos de vehículo', cuenta: (gastos ?? []).length },
+		{ id: 'ANTICIPO', label: 'Anticipos', cuenta: (anticipos ?? []).length },
+		{ id: 'IMPUESTO', label: 'Impuestos', cuenta: (impuestos ?? []).length }
+	]);
 </script>
 
-{#if open}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div
-		class="gv-backdrop"
-		onclick={(e) => {
-			if (e.target === e.currentTarget) onClose();
-		}}
-	>
-		<div class="gv-modal" role="dialog" aria-modal="true" aria-label="Filas del ocasional">
-			<header class="gv-header">
-				<div>
-					<h2>Filas de {MESES[mes - 1]} {anio}</h2>
-					<p>Añadir o quitar gastos de vehículo, anticipos e impuestos</p>
+<ModalBase
+	{open}
+	title="Filas de {MESES[mes - 1]} {anio}"
+	eyebrow="Liquidación ocasional"
+	subtitle="Añadir o quitar gastos de vehículo, anticipos e impuestos"
+	tamano="lg"
+	bloqueado={guardando}
+	oncerrar={onClose}
+>
+	{#snippet cabecera()}
+		<TabsVista
+			tabs={tabsVista}
+			activa={seccion}
+			variante="oscuro"
+			etiqueta="Secciones"
+			onCambiar={(id) => {
+				seccion = id as Seccion;
+				error = '';
+			}}
+		/>
+	{/snippet}
+
+	{#if seccion === 'IMPUESTO'}
+		<section class="gv-card">
+			<p class="gv-nota-imp">
+				Las cuatro retenciones se repintan solas en cada montaje de la hoja, así que una quinta
+				puesta aquí duraría hasta el siguiente recálculo. Sus
+				<strong>porcentajes se editan en la propia hoja</strong>, en la columna PORCENTAJE del
+				bloque IMPUESTOS Y RETENCIONES.
+			</p>
+			{#if (impuestos ?? []).length === 0}
+				<p class="gv-vacio">Este mes todavía no tiene impuestos calculados.</p>
+			{:else}
+				<div class="gv-scroll">
+					<table class="gv-tabla">
+						<thead>
+							<tr>
+								<th>Concepto</th>
+								<th class="gv-num">%</th>
+								<th class="gv-num">Base</th>
+								<th class="gv-num">Valor</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each impuestos ?? [] as imp (imp.id)}
+								<tr>
+									<td>{String(imp.concepto).replace(/_/g, ' ')}</td>
+									<td class="gv-num">{Number(imp.porcentaje) || 0}%</td>
+									<td class="gv-num">${formatCOP(Number(imp.base_calculo) || 0)}</td>
+									<td class="gv-num">${formatCOP(Number(imp.valor_total) || 0)}</td>
+								</tr>
+							{/each}
+						</tbody>
+					</table>
 				</div>
-				<button class="gv-btn" onclick={onClose} aria-label="Cerrar">✕</button>
-			</header>
+			{/if}
+		</section>
+	{:else}
+		<section class="gv-card gv-form">
+			<label class="gv-field gv-field-wide">
+				<span>Descripción</span>
+				<input
+					class="gv-input"
+					bind:value={concepto}
+					maxlength="100"
+					placeholder="Ej. FEOL7850 compra de llantas austone 195/55r16 sp401 veh LZQ-974"
+					disabled={guardando}
+					onkeydown={(e) => {
+						if (e.key === 'Enter') agregar();
+					}}
+				/>
+				<small>{concepto.trim().length}/100</small>
+			</label>
 
-			<div class="gv-tabs" role="tablist">
-				<button
-					role="tab"
-					aria-selected={seccion === 'GASTO_OPERATIVO'}
-					class:gv-tab-on={seccion === 'GASTO_OPERATIVO'}
-					onclick={() => { seccion = 'GASTO_OPERATIVO'; error = ''; }}
+			<label class="gv-field gv-field-sm">
+				<span>Cantidad</span>
+				<input class="gv-input" bind:value={cantidadTxt} inputmode="decimal" disabled={guardando} />
+			</label>
+
+			<label class="gv-field">
+				<span>Valor unitario</span>
+				<input
+					class="gv-input"
+					bind:value={valorTxt}
+					inputmode="decimal"
+					placeholder="439.555"
 					disabled={guardando}
-				>
-					Gastos de vehículo
-					<span class="gv-cuenta">{(gastos ?? []).length}</span>
-				</button>
-				<button
-					role="tab"
-					aria-selected={seccion === 'ANTICIPO'}
-					class:gv-tab-on={seccion === 'ANTICIPO'}
-					onclick={() => { seccion = 'ANTICIPO'; error = ''; }}
+					onkeydown={(e) => {
+						if (e.key === 'Enter') agregar();
+					}}
+				/>
+			</label>
+
+			<label class="gv-field gv-field-sm">
+				<span>Placa <em>(opcional)</em></span>
+				<input
+					class="gv-input"
+					bind:value={placa}
+					maxlength="20"
+					placeholder="LZQ-974"
 					disabled={guardando}
-				>
-					Anticipos
-					<span class="gv-cuenta">{(anticipos ?? []).length}</span>
-				</button>
-				<button
-					role="tab"
-					aria-selected={seccion === 'IMPUESTO'}
-					class:gv-tab-on={seccion === 'IMPUESTO'}
-					onclick={() => { seccion = 'IMPUESTO'; error = ''; }}
+				/>
+			</label>
+
+			<label class="gv-field gv-field-wide">
+				<span>Observaciones <em>(opcional)</em></span>
+				<input
+					class="gv-input"
+					bind:value={observaciones}
+					placeholder="Detalle que no cabe en la descripción"
 					disabled={guardando}
-				>
-					Impuestos
-					<span class="gv-cuenta">{(impuestos ?? []).length}</span>
+				/>
+			</label>
+
+			<div class="gv-form-foot">
+				<span class="gv-preview">
+					Total de esta fila: <strong>${formatCOP(totalPrevio)}</strong>
+				</span>
+				<button type="button" class="btn-primary" onclick={agregar} disabled={guardando}>
+					{guardando
+						? 'Guardando…'
+						: seccion === 'ANTICIPO'
+							? 'Agregar anticipo'
+							: 'Agregar gasto'}
 				</button>
 			</div>
 
-			<div class="gv-body">
-				{#if seccion === 'IMPUESTO'}
-					<section class="gv-lista">
-						<p class="gv-nota-imp">
-							Las cuatro retenciones se repintan solas en cada montaje de la hoja, así que
-							una quinta puesta aquí duraría hasta el siguiente recálculo. Sus
-							<strong>porcentajes se editan en la propia hoja</strong>, en la columna
-							PORCENTAJE del bloque IMPUESTOS Y RETENCIONES.
-						</p>
-						{#if (impuestos ?? []).length === 0}
-							<p class="gv-vacio">Este mes todavía no tiene impuestos calculados.</p>
-						{:else}
-							<table class="gv-tabla">
-								<thead>
-									<tr>
-										<th>Concepto</th>
-										<th class="gv-num">%</th>
-										<th class="gv-num">Base</th>
-										<th class="gv-num">Valor</th>
-									</tr>
-								</thead>
-								<tbody>
-									{#each impuestos ?? [] as imp (imp.id)}
-										<tr>
-											<td>{String(imp.concepto).replace(/_/g, ' ')}</td>
-											<td class="gv-num">{Number(imp.porcentaje) || 0}%</td>
-											<td class="gv-num">${formatCOP(Number(imp.base_calculo) || 0)}</td>
-											<td class="gv-num">${formatCOP(Number(imp.valor_total) || 0)}</td>
-										</tr>
-									{/each}
-								</tbody>
-							</table>
-						{/if}
-					</section>
-				{:else}
-				<section class="gv-form">
-					<label class="gv-field gv-field-wide">
-						<span>Descripción</span>
-						<input
-							bind:value={concepto}
-							maxlength="100"
-							placeholder="Ej. FEOL7850 compra de llantas austone 195/55r16 sp401 veh LZQ-974"
-							disabled={guardando}
-							onkeydown={(e) => {
-								if (e.key === 'Enter') agregar();
-							}}
-						/>
-						<small>{concepto.trim().length}/100</small>
-					</label>
+			{#if error}
+				<p class="gv-error">{error}</p>
+			{/if}
+		</section>
 
-					<label class="gv-field gv-field-sm">
-						<span>Cantidad</span>
-						<input bind:value={cantidadTxt} inputmode="decimal" disabled={guardando} />
-					</label>
-
-					<label class="gv-field">
-						<span>Valor unitario</span>
-						<input
-							bind:value={valorTxt}
-							inputmode="decimal"
-							placeholder="439.555"
-							disabled={guardando}
-							onkeydown={(e) => {
-								if (e.key === 'Enter') agregar();
-							}}
-						/>
-					</label>
-
-					<label class="gv-field gv-field-sm">
-						<span>Placa <em>(opcional)</em></span>
-						<input bind:value={placa} maxlength="20" placeholder="LZQ-974" disabled={guardando} />
-					</label>
-
-					<label class="gv-field gv-field-wide">
-						<span>Observaciones <em>(opcional)</em></span>
-						<input
-							bind:value={observaciones}
-							placeholder="Detalle que no cabe en la descripción"
-							disabled={guardando}
-						/>
-					</label>
-
-					<div class="gv-form-foot">
-						<span class="gv-preview">
-							Total de esta fila: <strong>${formatCOP(totalPrevio)}</strong>
-						</span>
-						<button class="gv-btn gv-btn-primary" onclick={agregar} disabled={guardando}>
-							{guardando
-								? 'Guardando…'
-								: seccion === 'ANTICIPO'
-									? 'Agregar anticipo'
-									: 'Agregar gasto'}
-						</button>
-					</div>
-
-					{#if error}
-						<p class="gv-error">{error}</p>
-					{/if}
-				</section>
-
-				<section class="gv-lista">
-					<h3>
-						{seccion === 'ANTICIPO' ? 'Anticipos de este mes' : 'Gastos añadidos en este mes'}
-					</h3>
-					{#if filasDeSeccion.length === 0}
-						<p class="gv-vacio">
-							{#if seccion === 'ANTICIPO'}
-								Todavía no hay ninguno. Los que agregues abren el bloque ANTICIPOS al final de
-								la hoja —si el mes no tiene ninguno, ese bloque no se pinta— y restan del
-								TOTAL DESCUENTOS.
-							{:else}
-								Todavía no hay ninguno. Los que agregues aparecen como filas nuevas al final de
-								«GASTOS DE VEHÍCULO», y su cantidad y su valor se editan directamente en la hoja.
-							{/if}
-						</p>
+		<section class="gv-card gv-lista">
+			<h3>
+				{seccion === 'ANTICIPO' ? 'Anticipos de este mes' : 'Gastos añadidos en este mes'}
+			</h3>
+			{#if filasDeSeccion.length === 0}
+				<p class="gv-vacio">
+					{#if seccion === 'ANTICIPO'}
+						Todavía no hay ninguno. Los que agregues abren el bloque ANTICIPOS al final de la
+						hoja —si el mes no tiene ninguno, ese bloque no se pinta— y restan del TOTAL
+						DESCUENTOS.
 					{:else}
-						<table class="gv-tabla">
-							<thead>
-								<tr>
-									<th>Descripción</th>
-									<th class="gv-num">Cant.</th>
-									<th class="gv-num">Valor</th>
-									<th class="gv-num">Total</th>
-									<th></th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each filasDeSeccion as g (g.id)}
-									<tr>
-										<td>
-											{g.concepto}
-											{#if g.placa_aplicada}<span class="gv-placa">{g.placa_aplicada}</span>{/if}
-										</td>
-										<td class="gv-num">{Number(g.dias) || 0}</td>
-										<td class="gv-num">${formatCOP(Number(g.valor_unitario) || 0)}</td>
-										<td class="gv-num">${formatCOP(totalDe(g))}</td>
-										<td class="gv-num">
-											<button
-												class="gv-btn gv-btn-danger"
-												onclick={() => eliminar(g)}
-												disabled={guardando}
-												title={seccion === 'ANTICIPO' ? 'Eliminar este anticipo' : 'Eliminar este gasto'}
-											>
-												Eliminar
-											</button>
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-							<tfoot>
-								<tr>
-									<td colspan="3">
-										{seccion === 'ANTICIPO' ? 'Suma de los anticipos' : 'Suma de los gastos añadidos'}
-									</td>
-									<td class="gv-num"><strong>${formatCOP(totalSeccion)}</strong></td>
-									<td></td>
-								</tr>
-							</tfoot>
-						</table>
+						Todavía no hay ninguno. Los que agregues aparecen como filas nuevas al final de
+						«GASTOS DE VEHÍCULO», y su cantidad y su valor se editan directamente en la hoja.
 					{/if}
-				</section>
-				{/if}
-			</div>
-		</div>
-	</div>
-{/if}
+				</p>
+			{:else}
+				<div class="gv-scroll">
+					<table class="gv-tabla">
+						<thead>
+							<tr>
+								<th>Descripción</th>
+								<th class="gv-num">Cant.</th>
+								<th class="gv-num">Valor</th>
+								<th class="gv-num">Total</th>
+								<th></th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each filasDeSeccion as g (g.id)}
+								<tr>
+									<td>
+										{g.concepto}
+										{#if g.placa_aplicada}<span class="gv-placa">{g.placa_aplicada}</span>{/if}
+									</td>
+									<td class="gv-num">{Number(g.dias) || 0}</td>
+									<td class="gv-num">${formatCOP(Number(g.valor_unitario) || 0)}</td>
+									<td class="gv-num">${formatCOP(totalDe(g))}</td>
+									<td class="gv-num">
+										<button
+											type="button"
+											class="gv-eliminar"
+											onclick={() => eliminar(g)}
+											disabled={guardando}
+											title={seccion === 'ANTICIPO' ? 'Eliminar este anticipo' : 'Eliminar este gasto'}
+										>
+											Eliminar
+										</button>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+						<tfoot>
+							<tr>
+								<td colspan="3">
+									{seccion === 'ANTICIPO' ? 'Suma de los anticipos' : 'Suma de los gastos añadidos'}
+								</td>
+								<td class="gv-num"><strong>${formatCOP(totalSeccion)}</strong></td>
+								<td></td>
+							</tr>
+						</tfoot>
+					</table>
+				</div>
+			{/if}
+		</section>
+	{/if}
+
+	{#snippet pie()}
+		<button type="button" class="btn-secondary" onclick={onClose} disabled={guardando}>Cerrar</button>
+	{/snippet}
+</ModalBase>
 
 <style>
-	.gv-backdrop {
-		position: fixed;
-		inset: 0;
-		z-index: 9600;
-		background: rgba(15, 23, 42, 0.45);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 24px;
+	.gv-card {
+		padding: 16px 18px;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
 	}
-	.gv-modal {
-		width: min(880px, 100%);
-		max-height: 90vh;
-		display: flex;
-		flex-direction: column;
-		background: #fff;
-		border-radius: 12px;
-		box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25);
-		overflow: hidden;
+	.gv-card + .gv-card {
+		margin-top: 14px;
 	}
-	.gv-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 12px;
-		padding: 16px 20px;
-		border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-	}
-	.gv-header h2 {
-		margin: 0;
-		font-size: 15px;
-		font-weight: 700;
-		color: #0f172a;
-	}
-	.gv-header p {
-		margin: 2px 0 0;
-		font-size: 12px;
-		color: #64748b;
-	}
-	.gv-tabs {
-		display: flex;
-		gap: 2px;
-		padding: 0 20px;
-		border-bottom: 1px solid #e2e8f0;
-	}
-	.gv-tabs button {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		border: none;
-		background: transparent;
-		padding: 9px 14px;
-		font-size: 12.5px;
-		font-weight: 600;
-		font-family: inherit;
-		color: #64748b;
-		cursor: pointer;
-		border-bottom: 3px solid transparent;
-		margin-bottom: -1px;
-	}
-	.gv-tabs button:hover:not(:disabled) {
-		color: #334155;
-		background: #f8fafc;
-	}
-	/* Clase + ELEMENTO, no la clase sola: la regla de arriba es (0,2,1) y con
-	   el scoping de Svelte se llevaría por delante el color del activo. Mismo
-	   tropiezo que ya hubo en el modal de conceptos de placas. */
-	.gv-tabs button.gv-tab-on {
-		color: #166534;
-		font-weight: 700;
-		background: #f0fdf4;
-		border-bottom-color: #c2410c;
-	}
-	.gv-tabs .gv-cuenta {
-		min-width: 18px;
-		padding: 0 5px;
-		border-radius: 9px;
-		background: #e2e8f0;
-		color: #475569;
-		font-size: 10.5px;
-		font-weight: 700;
-		line-height: 17px;
-		text-align: center;
-	}
-	.gv-tabs button.gv-tab-on .gv-cuenta {
-		background: #c2410c;
-		color: #fff;
-	}
+	/* Aviso de estado: ámbar informativo, no de marca. */
 	.gv-nota-imp {
 		margin: 0 0 12px;
 		padding: 10px 12px;
-		border-radius: 8px;
+		border-radius: 12px;
 		background: #fffbeb;
 		color: #92400e;
-		font-size: 12px;
+		font-size: 12.5px;
 		line-height: 1.5;
-	}
-
-	.gv-body {
-		overflow-y: auto;
-		padding: 16px 20px 20px;
 	}
 
 	.gv-form {
 		display: grid;
 		grid-template-columns: repeat(4, minmax(0, 1fr));
 		gap: 12px;
-		padding-bottom: 16px;
-		border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 	}
 	.gv-field {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: 6px;
 		min-width: 0;
 	}
 	.gv-field-wide {
@@ -564,33 +476,39 @@
 		max-width: 100%;
 	}
 	.gv-field span {
-		font-size: 11px;
-		font-weight: 600;
-		color: #334155;
-		text-transform: uppercase;
-		letter-spacing: 0.03em;
+		font-size: 12px;
+		font-weight: 700;
+		color: var(--text-secondary);
 	}
 	.gv-field em {
 		font-style: normal;
-		font-weight: 400;
-		color: #94a3b8;
-		text-transform: none;
+		font-weight: 500;
+		color: var(--text-muted);
 	}
-	.gv-field input {
-		border: 1px solid rgba(0, 0, 0, 0.15);
-		border-radius: 8px;
-		padding: 8px 10px;
-		font-size: 13px;
-		color: #0f172a;
-		background: #fff;
+	.gv-input {
+		width: 100%;
+		min-height: 42px;
+		padding: 9px 12px;
+		border-radius: 12px;
+		border: 1px solid var(--border-default);
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font-size: 14px;
+		font-family: inherit;
+		box-sizing: border-box;
 	}
-	.gv-field input:focus {
-		outline: 2px solid rgba(22, 101, 52, 0.35);
-		outline-offset: -1px;
+	.gv-input:focus {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.gv-input:disabled {
+		background: var(--bg-base);
+		color: var(--text-muted);
 	}
 	.gv-field small {
-		font-size: 10px;
-		color: #94a3b8;
+		font-size: 11px;
+		color: var(--text-muted);
 		align-self: flex-end;
 	}
 	.gv-form-foot {
@@ -598,49 +516,59 @@
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
+		flex-wrap: wrap;
 		gap: 12px;
 	}
 	.gv-preview {
-		font-size: 12px;
-		color: #475569;
+		font-size: 13px;
+		color: var(--text-secondary);
+	}
+	.gv-preview strong {
+		color: var(--text-primary);
 	}
 	.gv-error {
 		grid-column: 1 / -1;
 		margin: 0;
 		font-size: 12px;
-		color: #b91c1c;
+		font-weight: 600;
+		color: #b42318;
 	}
 
 	.gv-lista h3 {
-		margin: 16px 0 8px;
-		font-size: 13px;
-		font-weight: 700;
-		color: #0f172a;
+		margin: 0 0 10px;
+		font-size: 14px;
+		font-weight: 800;
+		color: var(--text-primary);
 	}
 	.gv-vacio {
 		margin: 0;
-		font-size: 12px;
-		color: #64748b;
+		font-size: 12.5px;
+		color: var(--text-muted);
 		line-height: 1.5;
+	}
+	.gv-scroll {
+		overflow-x: auto;
 	}
 	.gv-tabla {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: 12px;
+		font-size: 13px;
 	}
 	.gv-tabla th,
 	.gv-tabla td {
-		border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+		border-bottom: 1px solid var(--border-subtle);
 		padding: 8px 6px;
 		text-align: left;
-		color: #0f172a;
+		color: var(--text-primary);
 		vertical-align: top;
 	}
 	.gv-tabla th {
 		font-size: 11px;
+		font-weight: 700;
 		text-transform: uppercase;
-		letter-spacing: 0.03em;
-		color: #475569;
+		letter-spacing: 0.04em;
+		color: var(--text-muted);
+		border-bottom-color: var(--border-default);
 	}
 	.gv-tabla .gv-num {
 		text-align: right;
@@ -648,49 +576,43 @@
 	}
 	.gv-tabla tfoot td {
 		border-bottom: none;
-		color: #475569;
+		border-top: 2px solid var(--border-default);
+		font-weight: 700;
+		color: var(--text-secondary);
 	}
 	.gv-placa {
 		display: inline-block;
 		margin-left: 6px;
 		padding: 1px 6px;
 		border-radius: 999px;
-		background: #f1f5f9;
-		color: #475569;
+		background: var(--bg-base);
+		color: var(--text-secondary);
 		font-size: 10px;
-		font-weight: 600;
+		font-weight: 700;
 	}
-
-	.gv-btn {
-		border: 1px solid rgba(0, 0, 0, 0.12);
-		background: #fff;
-		border-radius: 8px;
-		padding: 7px 12px;
+	.gv-eliminar {
+		border: 1px solid var(--border-default);
+		border-radius: 10px;
+		background: var(--bg-surface);
+		padding: 4px 10px;
 		font-size: 12px;
-		font-weight: 600;
-		color: #0f172a;
+		font-weight: 700;
+		font-family: inherit;
+		color: #b42318;
 		cursor: pointer;
 	}
-	.gv-btn:hover:not(:disabled) {
-		background: #f8fafc;
+	.gv-eliminar:hover:not(:disabled) {
+		background: #fef2f2;
+		border-color: #fecaca;
 	}
-	.gv-btn:disabled {
+	.gv-eliminar:disabled {
 		opacity: 0.55;
 		cursor: not-allowed;
 	}
-	.gv-btn-primary {
-		background: #166534;
-		border-color: #166534;
-		color: #fff;
-	}
-	.gv-btn-primary:hover:not(:disabled) {
-		background: #14532d;
-	}
-	.gv-btn-danger {
-		color: #b91c1c;
-		border-color: rgba(185, 28, 28, 0.35);
-	}
-	.gv-btn-danger:hover:not(:disabled) {
-		background: #fef2f2;
+
+	@media (max-width: 640px) {
+		.gv-form {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
 	}
 </style>

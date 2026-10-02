@@ -731,21 +731,20 @@
 		font-size: 1rem;
 		font-weight: 800;
 		color: #ffffff;
-		background: var(--au-primary);
+		background: var(--accion);
 		border: none;
-		border-radius: 14px;
+		border-radius: 16px;
 		cursor: pointer;
 		text-decoration: none;
-		box-shadow: 0 8px 20px rgba(var(--au-primary-rgb), 0.28);
+		box-shadow: var(--shadow-btn);
 		transition:
 			transform 0.15s ease,
 			box-shadow 0.2s ease,
 			background-color 0.2s ease;
 	}
 	.form-panel :global(.btn-submit:hover:not(:disabled)) {
-		background: var(--au-primary-strong);
-		transform: translateY(-1px);
-		box-shadow: 0 10px 24px rgba(var(--au-primary-rgb), 0.34);
+		background: var(--accion-hover);
+		box-shadow: var(--shadow-btn-hover);
 	}
 	.form-panel :global(.btn-submit:active:not(:disabled)) {
 		transform: scale(0.99);
@@ -767,29 +766,10 @@
 
 	/* Botón secundario, con borde: «usar otra cédula», «volver»… */
 	.form-panel :global(.btn-secondary) {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
 		width: 100%;
 		min-height: 3rem;
 		padding: 0.75rem 1.25rem;
-		font-family: inherit;
 		font-size: 0.95rem;
-		font-weight: 800;
-		color: var(--au-dark);
-		background: transparent;
-		border: 1.5px solid var(--au-primary);
-		border-radius: 14px;
-		cursor: pointer;
-		text-decoration: none;
-		transition: background-color 0.2s ease;
-	}
-	.form-panel :global(.btn-secondary:hover:not(:disabled)) {
-		background: var(--au-tint);
-	}
-	.form-panel :global(.btn-secondary:disabled) {
-		opacity: 0.55;
-		cursor: not-allowed;
 	}
 
 	.form-panel :global(.spin) {

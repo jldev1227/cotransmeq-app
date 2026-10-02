@@ -945,8 +945,7 @@
 		display: flex;
 		gap: 0.5rem;
 	}
-	.perfil-firma-acciones svg,
-	.btn-secondary svg {
+	.perfil-firma-acciones svg {
 		width: 16px;
 		height: 16px;
 	}
@@ -1066,10 +1065,6 @@
 		display: flex;
 		gap: 0.6rem;
 		padding-top: 0.25rem;
-	}
-	.btn-primary:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
 	}
 
 	/* ── Carga ── */

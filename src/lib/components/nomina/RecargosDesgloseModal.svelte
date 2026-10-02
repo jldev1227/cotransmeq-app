@@ -1,9 +1,7 @@
 <script lang="ts">
+	import { confirmar } from '$lib/stores/confirm';
 	import { createEventDispatcher, onMount, onDestroy } from 'svelte';
-	import { fly, fade } from 'svelte/transition';
-	import { quintOut } from 'svelte/easing';
-	import { browser } from '$app/environment';
-	import {
+		import {
 		Calendar,
 		Building2,
 		Truck,
@@ -13,12 +11,13 @@
 		ChevronRight,
 		FileText,
 		Settings2,
-		TrendingUp,
 		RefreshCw,
 		Loader2
 	} from 'lucide-svelte';
 	import type { PreviewRecargosResponse } from '$lib/api/nomina';
 	import { recargosApi } from '$lib/api/recargos';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
+	import TabsVista, { type TabVista } from '$lib/components/ui/TabsVista.svelte';
 	import { toast } from 'svelte-sonner';
 
 	type Props = {
@@ -205,16 +204,15 @@
 		dispatch('close');
 	}
 
-	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape' && open) cerrar();
-	}
+	// Escape lo atiende ModalBase.
 
-	$effect(() => {
-		if (browser && open) {
-			document.addEventListener('keydown', handleKeydown);
-			return () => document.removeEventListener('keydown', handleKeydown);
-		}
-	});
+	const TABS: TabVista[] = [
+		{ id: 'planillas', label: 'Por día / planilla' },
+		{ id: 'empresa', label: 'Por empresa' },
+		{ id: 'vehiculo', label: 'Por vehículo' },
+		{ id: 'mes', label: 'Por mes' },
+		{ id: 'tipo', label: 'Por tipo' }
+	];
 
 	// Planillas que aportan al período seleccionado: el backend ya filtra los
 	// días por rango, así que una planilla cuyos días caen todos fuera del
@@ -289,13 +287,15 @@
 	async function handleRecalcularTodas() {
 		if (!previewData?.planillas?.length) return;
 		const planillas = previewData.planillas;
-		if (
-			!confirm(
-				`Vas a recalcular ${planillas.length} planilla(s) con la config salarial y los % de tipos vigentes por día. Esta acción no modifica las horas, solo los valores monetarios. ¿Continuar?`
-			)
-		) {
-			return;
-		}
+		const ok = await confirmar({
+			title: `¿Recalcular ${planillas.length} planilla(s)?`,
+			message:
+				'Se usarán la config salarial y los % de tipos vigentes por día. Esta acción no modifica las horas, solo los valores monetarios.',
+			tone: 'warning',
+			mascot: 'procesando',
+			confirmText: 'Recalcular'
+		});
+		if (!ok) return;
 
 		recalculandoTodas = true;
 		progresoRecalc = { actuales: 0, total: planillas.length };
@@ -606,859 +606,851 @@
 	}
 </script>
 
-{#if open}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center p-4"
-		style="background-color: rgba(15, 20, 25, 0.55); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);"
-		onclick={cerrar}
-		onkeydown={(e) => e.key === 'Escape' && cerrar()}
-		role="presentation"
-		transition:fade={{ duration: 180 }}
-	>
-		<div
-			class="relative flex h-[94vh] w-full max-w-[96rem] flex-col overflow-hidden bg-white"
-			style="border-radius: 20px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18), 0 4px 24px rgba(0, 0, 0, 0.06); font-family: var(--font-sans); color: #0f172a;"
-			onclick={(e) => e.stopPropagation()}
-			onkeydown={(e) => e.stopPropagation()}
-			role="dialog"
-			tabindex="-1"
-			aria-modal="true"
-			aria-label="Desglose detallado de recargos de planillas"
-			transition:fly={{ y: 20, duration: 320, easing: quintOut }}
-		>
-			<!-- ═══ HEADER ═══ -->
-			<div
-				class="flex-shrink-0"
-				style="background: linear-gradient(180deg, #FFFFFF 0%, #F9FAFB 100%); border-bottom: 1px solid rgba(0, 0, 0, 0.08);"
-			>
-				<div class="flex items-center justify-between gap-4 px-6 py-4">
-					<div class="flex min-w-0 items-center gap-3">
-						<div
-							class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
-							style="background: linear-gradient(135deg, #16a34a, #15803d); box-shadow: 0 6px 16px rgba(22, 163, 74, 0.30);"
-						>
-							<TrendingUp class="h-5 w-5 text-white" />
-						</div>
-						<div class="min-w-0">
-							<p
-								style="display: inline-block; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #14532d; background: rgba(22, 163, 74, 0.08); padding: 0.25rem 0.65rem; border-radius: 6px; font-family: var(--font-sans);"
-							>
-								Desglose · Recargos
-							</p>
-							<h2
-								class="truncate font-display"
-								style="font-size: 1.4rem; font-weight: 800; color: #0f172a; margin-top: 0.35rem; line-height: 1.1;"
-							>
-								Detalle de recargos por día, tipo y configuración
-							</h2>
-							<p
-								class="font-mono-meta"
-								style="font-size: 0.7rem; color: #6B7280; margin-top: 0.2rem;"
-							>
-								{conductorNombre ? `${conductorNombre} · ` : ''}Período {periodoInicio} → {periodoFin}
-							</p>
-						</div>
-					</div>
-					<button
-						onclick={cerrar}
-						class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-gray-500 transition-all hover:bg-gray-100 hover:text-gray-900"
-						aria-label="Cerrar"
-					>
-						<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-						</svg>
-					</button>
+<ModalBase
+	{open}
+	eyebrow="Desglose · Recargos"
+	title="Detalle de recargos por día, tipo y configuración"
+	subtitle={`${conductorNombre ? `${conductorNombre} · ` : ''}Período ${periodoInicio} → ${periodoFin}`}
+	tamano="full"
+	oncerrar={cerrar}
+>
+	{#snippet cabecera()}
+		<!-- Stat cards (resumen rápido) — calculadas sobre planillasVisibles -->
+		{#if previewData}
+			<div class="rd-stats">
+				<div class="rd-stat rd-stat--total">
+					<p class="rd-stat-label">Total recargos</p>
+					<p class="rd-stat-valor">{fmtCOP(statsPeriodo.totalRecargos)}</p>
 				</div>
-
-				<!-- Stat cards (resumen rápido) — calculadas sobre planillasVisibles -->
-				{#if previewData}
-					<div class="grid grid-cols-2 gap-2 border-t border-gray-100 px-6 py-3 sm:grid-cols-5">
-						<div
-							class="rounded-lg px-3 py-2"
-							style="background: linear-gradient(135deg, rgba(22, 163, 74, 0.06), rgba(21, 128, 61, 0.04)); border: 1px solid rgba(22, 163, 74, 0.15);"
-						>
-							<p style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #166534; font-family: var(--font-sans);">
-								Total recargos
-							</p>
-							<p class="mt-0.5 font-display" style="font-size: 1.15rem; font-weight: 700; color: #0f172a;">
-								{fmtCOP(statsPeriodo.totalRecargos)}
-							</p>
-						</div>
-						<div class="rounded-lg bg-gray-50 px-3 py-2" style="border: 1px solid rgba(0,0,0,0.06);">
-							<p style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">
-								Planillas
-							</p>
-							<p class="mt-0.5 font-display" style="font-size: 1.15rem; font-weight: 700; color: #0f172a;">
-								{statsPeriodo.planillas}
-							</p>
-						</div>
-						<div class="rounded-lg bg-gray-50 px-3 py-2" style="border: 1px solid rgba(0,0,0,0.06);">
-							<p style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">
-								Días trabajados
-							</p>
-							<p class="mt-0.5 font-display" style="font-size: 1.15rem; font-weight: 700; color: #0f172a;">
-								{statsPeriodo.dias}
-							</p>
-						</div>
-						<div class="rounded-lg bg-gray-50 px-3 py-2" style="border: 1px solid rgba(0,0,0,0.06);">
-							<p style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">
-								Horas
-							</p>
-							<p class="mt-0.5 font-display" style="font-size: 1.15rem; font-weight: 700; color: #0f172a;">
-								{fmtHoras(statsPeriodo.horas)}
-							</p>
-						</div>
-						<div class="rounded-lg bg-gray-50 px-3 py-2" style="border: 1px solid rgba(0,0,0,0.06);">
-							<p style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">
-								Festivos
-							</p>
-							<p class="mt-0.5 font-display" style="font-size: 1.15rem; font-weight: 700; color: #0f172a;">
-								{statsPeriodo.festivos}
-							</p>
-						</div>
-					</div>
-				{/if}
-
-				<!-- Tabs -->
-				<div
-					class="flex items-center gap-1 overflow-x-auto border-t border-gray-100 px-6"
-					style="background-color: #FAFAFA;"
-				>
-					{#each [
-						{ id: 'planillas', label: 'Por día / planilla', icon: FileText },
-						{ id: 'empresa', label: 'Por empresa', icon: Building2 },
-						{ id: 'vehiculo', label: 'Por vehículo', icon: Truck },
-						{ id: 'mes', label: 'Por mes', icon: Calendar },
-						{ id: 'tipo', label: 'Por tipo', icon: Settings2 }
-					] as tab}
-						<button
-							onclick={() => (tabActiva = tab.id as any)}
-							class="flex items-center gap-1.5 border-b-2 px-3 py-2.5 font-mono-meta transition-colors"
-							style="font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; {tabActiva === tab.id
-								? 'color: #166534; border-bottom-color: #16a34a;'
-								: 'color: #6B7280; border-bottom-color: transparent;'}"
-						>
-							<tab.icon class="h-3.5 w-3.5" />
-							{tab.label}
-						</button>
-					{/each}
+				<div class="rd-stat">
+					<p class="rd-stat-label">Planillas</p>
+					<p class="rd-stat-valor">{statsPeriodo.planillas}</p>
+				</div>
+				<div class="rd-stat">
+					<p class="rd-stat-label">Días trabajados</p>
+					<p class="rd-stat-valor">{statsPeriodo.dias}</p>
+				</div>
+				<div class="rd-stat">
+					<p class="rd-stat-label">Horas</p>
+					<p class="rd-stat-valor">{fmtHoras(statsPeriodo.horas)}</p>
+				</div>
+				<div class="rd-stat">
+					<p class="rd-stat-label">Festivos</p>
+					<p class="rd-stat-valor">{statsPeriodo.festivos}</p>
 				</div>
 			</div>
+		{/if}
 
-			<!-- ═══ BODY (scrollable) ═══ -->
-			<div class="flex-1 overflow-y-auto" style="background-color: #F9FAFB;">
-				{#if !previewData || !previewData.planillas?.length}
-					<div class="flex h-full flex-col items-center justify-center py-16 text-center">
-						<div
-							class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl"
-							style="background-color: #F3F4F6;"
-						>
-							<FileText class="h-7 w-7 text-gray-400" />
-						</div>
-						<h3 class="font-display" style="font-size: 1.1rem; font-weight: 800; color: #0f172a;">
-							Sin recargos para mostrar
-						</h3>
-						<p style="font-size: 0.8rem; color: #6B7280; margin-top: 0.4rem;">
-							No se encontraron recargos en el período seleccionado. Pulsa "Recalcular" en la sección
-							de planillas.
-						</p>
-					</div>
-				{:else if planillasVisibles.length === 0}
-					<div class="flex h-full flex-col items-center justify-center py-16 text-center">
-						<div
-							class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl"
-							style="background-color: #FEF3C7;"
-						>
-							<Calendar class="h-7 w-7" style="color: #B45309;" />
-						</div>
-						<h3 class="font-display" style="font-size: 1.1rem; font-weight: 800; color: #0f172a;">
-							Sin recargos dentro del período
-						</h3>
-						<p style="font-size: 0.8rem; color: #6B7280; margin-top: 0.4rem; max-width: 28rem;">
-							Hay {previewData.planillas.length} planilla{previewData.planillas.length !== 1 ? 's' : ''}
-							registrada{previewData.planillas.length !== 1 ? 's' : ''}, pero sus días caen fuera
-							del rango seleccionado ({periodoInicio} → {periodoFin}). Amplía el período o revisa
-							las planillas directamente.
-						</p>
-					</div>
-				{:else}
-					<div class="p-5">
-						<!-- ══════ TAB: Por día / planilla ══════ -->
-						{#if tabActiva === 'planillas'}
-							<div class="mb-3 flex items-center justify-between gap-3">
-								<p style="font-size: 0.75rem; color: #6B7280;">
-									Haz clic en una planilla para ver el desglose por día. Cada día muestra
-									los tipos de recargo, horas, porcentaje y valor.
-								</p>
-								<div class="flex shrink-0 items-center gap-2">
-									<button
-										onclick={expandAllPlanillas}
-										class="font-mono-meta rounded-md px-2 py-1 transition-colors hover:bg-gray-100"
-										style="font-size: 0.65rem; color: #166534;"
-									>
-										Expandir todo
-									</button>
-									<button
-										onclick={collapseAllPlanillas}
-										class="font-mono-meta rounded-md px-2 py-1 transition-colors hover:bg-gray-100"
-										style="font-size: 0.65rem; color: #6B7280;"
-									>
-										Colapsar todo
-									</button>
-									<button
-										onclick={handleRecalcularTodas}
-										disabled={recalculandoTodas ||
-											!previewData?.planillas?.length ||
-											recalculandoPlanillas.size > 0}
-										class="font-mono-meta flex items-center gap-1.5 rounded-md px-2.5 py-1 transition-all disabled:cursor-not-allowed disabled:opacity-50"
-										style="font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: white; background: linear-gradient(135deg, #4F46E5, #4338CA);"
-										title="Re-procesa TODAS las planillas con la config vigente por día (ej: tras cambio de tarifario)"
-									>
-										{#if recalculandoTodas}
-											<Loader2 class="h-3 w-3 animate-spin" />
-											{progresoRecalc.actuales}/{progresoRecalc.total}
-										{:else}
-											<RefreshCw class="h-3 w-3" />
-											Recalcular todas
-										{/if}
-									</button>
-								</div>
-							</div>
+		<TabsVista
+			variante="oscuro"
+			etiqueta="Vistas del desglose"
+			tabs={TABS}
+			activa={tabActiva}
+			onCambiar={(id) => (tabActiva = id as typeof tabActiva)}
+		/>
+	{/snippet}
 
-						<!-- Planillas con días dentro del período seleccionado -->
-						<div class="space-y-3">
-							{#each planillasVisibles as planilla (planilla.planilla_id)}
-									{@const isExpanded = expandedPlanillas.has(planilla.planilla_id)}
-									{@const config = planilla.configuracion_salarial}
-									<div
-										class="overflow-hidden rounded-xl border bg-white transition-shadow"
-										style="border-color: {isExpanded
-											? 'rgba(22, 163, 74, 0.35)'
-											: 'rgba(0, 0, 0, 0.08)'}; box-shadow: {isExpanded
-											? '0 4px 12px rgba(22, 163, 74, 0.08)'
-											: '0 1px 2px rgba(0, 0, 0, 0.04)'};"
-									>
-										<!-- Planilla header -->
-										<button
-											onclick={() => togglePlanilla(planilla.planilla_id)}
-											class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors"
-											style="background: linear-gradient(180deg, #FFFFFF 0%, #FAFAFA 100%);"
+	<div class="rd-cuerpo">
+		{#if !previewData || !previewData.planillas?.length}
+			<div class="flex h-full flex-col items-center justify-center py-16 text-center">
+				<div
+					class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl"
+					style="background-color: #F3F4F6;"
+				>
+					<FileText class="h-7 w-7 text-gray-400" />
+				</div>
+				<h3 class="font-display" style="font-size: 1.1rem; font-weight: 800; color: #0f172a;">
+					Sin recargos para mostrar
+				</h3>
+				<p style="font-size: 0.8rem; color: #6B7280; margin-top: 0.4rem;">
+					No se encontraron recargos en el período seleccionado. Pulsa "Recalcular" en la sección
+					de planillas.
+				</p>
+			</div>
+		{:else if planillasVisibles.length === 0}
+			<div class="flex h-full flex-col items-center justify-center py-16 text-center">
+				<div
+					class="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl"
+					style="background-color: #FEF3C7;"
+				>
+					<Calendar class="h-7 w-7" style="color: #B45309;" />
+				</div>
+				<h3 class="font-display" style="font-size: 1.1rem; font-weight: 800; color: #0f172a;">
+					Sin recargos dentro del período
+				</h3>
+				<p style="font-size: 0.8rem; color: #6B7280; margin-top: 0.4rem; max-width: 28rem;">
+					Hay {previewData.planillas.length} planilla{previewData.planillas.length !== 1 ? 's' : ''}
+					registrada{previewData.planillas.length !== 1 ? 's' : ''}, pero sus días caen fuera
+					del rango seleccionado ({periodoInicio} → {periodoFin}). Amplía el período o revisa
+					las planillas directamente.
+				</p>
+			</div>
+		{:else}
+			<div>
+				<!-- ══════ TAB: Por día / planilla ══════ -->
+				{#if tabActiva === 'planillas'}
+					<div class="rd-barra">
+						<p class="rd-ayuda">
+							Haz clic en una planilla para ver el desglose por día. Cada día muestra
+							los tipos de recargo, horas, porcentaje y valor.
+						</p>
+						<div class="rd-acciones">
+							<button type="button" onclick={expandAllPlanillas} class="rd-enlace">
+								Expandir todo
+							</button>
+							<button type="button" onclick={collapseAllPlanillas} class="rd-enlace">
+								Colapsar todo
+							</button>
+							<button
+								type="button"
+								onclick={handleRecalcularTodas}
+								disabled={recalculandoTodas ||
+									!previewData?.planillas?.length ||
+									recalculandoPlanillas.size > 0}
+								class="btn-primary rd-btn-chico"
+								title="Re-procesa TODAS las planillas con la config vigente por día (ej: tras cambio de tarifario)"
+							>
+								{#if recalculandoTodas}
+									<Loader2 class="animate-spin" />
+									{progresoRecalc.actuales}/{progresoRecalc.total}
+								{:else}
+									<RefreshCw />
+									Recalcular todas
+								{/if}
+							</button>
+						</div>
+					</div>
+
+				<!-- Planillas con días dentro del período seleccionado -->
+				<div class="space-y-3">
+					{#each planillasVisibles as planilla (planilla.planilla_id)}
+							{@const isExpanded = expandedPlanillas.has(planilla.planilla_id)}
+							{@const config = planilla.configuracion_salarial}
+							<div
+								class="overflow-hidden rounded-xl border bg-white transition-shadow"
+								style="border-color: {isExpanded
+									? 'rgba(22, 163, 74, 0.35)'
+									: 'rgba(0, 0, 0, 0.08)'}; box-shadow: {isExpanded
+									? '0 4px 12px rgba(22, 163, 74, 0.08)'
+									: '0 1px 2px rgba(0, 0, 0, 0.04)'};"
+							>
+								<!-- Planilla header -->
+								<button
+									onclick={() => togglePlanilla(planilla.planilla_id)}
+									class="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors"
+									style="background: var(--bg-surface);"
+								>
+									<div class="flex min-w-0 flex-1 items-center gap-3">
+										<div
+											class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
+											style="background: {isExpanded ? 'var(--bg-charcoal-deep)' : 'var(--bg-base)'}; color: {isExpanded ? 'white' : 'var(--text-muted)'};"
 										>
-											<div class="flex min-w-0 flex-1 items-center gap-3">
-												<div
-													class="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg"
-													style="background: linear-gradient(135deg, {isExpanded
-														? '#16a34a, #15803d'
-														: '#F3F4F6, #E5E7EB'}); color: {isExpanded ? 'white' : '#6B7280'};"
-												>
-													{#if isExpanded}
-														<ChevronDown class="h-4 w-4" />
-													{:else}
-														<ChevronRight class="h-4 w-4" />
-													{/if}
-												</div>
-												<div class="min-w-0 flex-1">
-													<div class="flex flex-wrap items-center gap-2">
-														<span
-															style="display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #166534; background: rgba(22, 163, 74, 0.08); padding: 0.2rem 0.55rem; border-radius: 6px; font-family: var(--font-sans);"
-														>
-															<FileText class="h-2.5 w-2.5" />
-															{planilla.numero_planilla || 'Sin número'}
-														</span>
-														<span style="font-size: 0.85rem; font-weight: 600; color: #0f172a;">
-															{planilla.vehiculo.placa}
-														</span>
-														<span style="font-size: 0.75rem; color: #6B7280;">·</span>
-														<span style="font-size: 0.85rem; color: #0f172a;">
-															{planilla.empresa.nombre}
-														</span>
-														<span style="font-size: 0.75rem; color: #6B7280;">·</span>
-														<span style="font-size: 0.8rem; color: #6B7280;">
-															{MESES[planilla.mes] || planilla.mes} {planilla.año}
-														</span>
-													</div>
-													<div
-														class="mt-1 flex flex-wrap items-center gap-3"
-														style="font-size: 0.7rem; color: #6B7280;"
-													>
-														<span>
-															<span style="font-weight: 600; color: #0f172a;">{planilla.total_dias}</span> días
-														</span>
-														<span>·</span>
-														<span>
-															<span style="font-weight: 600; color: #0f172a;">{fmtHoras(planilla.total_horas)}</span> trabajadas
-														</span>
-														<span>·</span>
-														<span>
-															<span style="font-weight: 600; color: #0f172a;">{planilla.dias?.filter((d) => d.disponibilidad).length || 0}</span> disponibles
-														</span>
-													</div>
-												</div>
-											</div>
-											<div class="shrink-0 text-right">
-												<p
-													class="font-display"
-													style="font-size: 1.1rem; font-weight: 700; color: #166534;"
-												>
-													{fmtCOP(planilla.total_valor)}
-												</p>
-												<p style="font-size: 0.6rem; color: #6B7280; margin-top: 0.1rem;">
-													{planilla.dias?.length || 0} día{planilla.dias?.length !== 1 ? 's' : ''} calculado{(planilla.dias?.length || 0) !== 1 ? 's' : ''}
-												</p>
-											</div>
-										</button>
-
-										<!-- Planilla body -->
-										{#if isExpanded}
-											<div
-												class="border-t px-4 py-3"
-												style="border-color: rgba(22, 163, 74, 0.15); background-color: #FAFAFA;"
-											>
-												<!-- Config salarial usada -->
-												{#if config}
-													<div
-														class="mb-3 flex flex-wrap items-center gap-2 rounded-lg px-3 py-2"
-														style="background: linear-gradient(135deg, rgba(99, 102, 241, 0.06), rgba(79, 70, 229, 0.04)); border: 1px solid rgba(99, 102, 241, 0.15);"
-													>
-														<Settings2 class="h-3.5 w-3.5" style="color: #4F46E5;" />
-														<span
-															style="font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #4338CA; font-family: var(--font-sans);"
-														>
-															Config destinada
-														</span>
-														<span style="font-size: 0.75rem; color: #312E81;">
-															{fmtConfigLabel(config)}
-														</span>
-														{#if config.paga_dias_festivos}
-															<span
-																style="display: inline-flex; align-items: center; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #92400E; background: rgba(245, 158, 11, 0.10); padding: 0.15rem 0.5rem; border-radius: 6px; font-family: var(--font-sans);"
-															>
-																Paga festivos: {config.porcentaje_festivos}%
-															</span>
-														{/if}
-														<!-- Botón recalcular con config vigente -->
-														<button
-															onclick={() => handleRecalcular(planilla.planilla_id)}
-															disabled={recalculandoPlanillas.has(planilla.planilla_id)}
-															class="ml-auto flex items-center gap-1.5 rounded-md px-2.5 py-1 font-mono-meta transition-all disabled:cursor-not-allowed disabled:opacity-60"
-															style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #4338CA; background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25);"
-															title="Re-procesa este recargo con la config salarial y los % de tipos vigentes en cada día (no modifica las horas de los días)"
-														>
-															{#if recalculandoPlanillas.has(planilla.planilla_id)}
-																<Loader2 class="h-3 w-3 animate-spin" />
-																Recalculando...
-															{:else}
-																<RefreshCw class="h-3 w-3" />
-																Recalcular con config vigente
-															{/if}
-														</button>
-													</div>
-												{/if}
-
-												<!-- Días -->
-												<div class="space-y-1.5">
-													{#each planilla.dias || [] as dia (dia.fecha + dia.dia)}
-														{@const diaKey = `${planilla.planilla_id}-${dia.fecha}-${dia.dia}`}
-														{@const isDiaExpanded = expandedDias.has(diaKey)}
-														{@const isDisp = dia.disponibilidad}
-														{@const fechaFmt = normalizarFecha(dia.fecha)}
-														{@const diaSemana = fechaFmt.diaNum >= 0 ? DIAS_SEMANA[fechaFmt.diaNum] : ''}
-														<div
-															class="overflow-hidden rounded-lg border"
-															style="border-color: {isDisp
-																? 'rgba(0, 0, 0, 0.06)'
-																: isDiaExpanded
-																	? 'rgba(22, 163, 74, 0.30)'
-																	: 'rgba(0, 0, 0, 0.08)'}; background-color: {isDisp
-																? 'rgba(0, 0, 0, 0.02)'
-																: 'white'};"
-														>
-															<button
-																onclick={() => !isDisp && toggleDia(diaKey)}
-																class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors"
-																disabled={isDisp}
-																style={isDisp
-																	? 'cursor: default;'
-																	: 'cursor: pointer;'}
-															>
-																<div class="flex min-w-0 items-center gap-2.5">
-																	<div
-																		class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-mono-meta"
-																		style="font-size: 0.65rem; font-weight: 700; background: {isDisp
-																			? '#F3F4F6'
-																			: dia.es_festivo
-																				? 'rgba(245, 158, 11, 0.12)'
-																				: dia.es_domingo
-																					? 'rgba(168, 85, 247, 0.10)'
-																					: 'rgba(22, 163, 74, 0.08)'}; color: {isDisp
-																			? '#9CA3AF'
-																			: dia.es_festivo
-																				? '#92400E'
-																				: dia.es_domingo
-																					? '#6B21A8'
-																					: '#166534'};"
-																	>
-																		{String(dia.dia).padStart(2, '0')}
-																	</div>
-																	<div class="min-w-0">
-																		<div class="flex flex-wrap items-center gap-1.5">
-																				<span style="font-size: 0.78rem; font-weight: 600; color: {isDisp ? '#9CA3AF' : '#0f172a'};">
-																					{diaSemana} {fechaFmt.corta}
-																				</span>
-																			<span style="font-size: 0.7rem; color: #6B7280;">
-																				{dia.nombre_dia}
-																			</span>
-																			{#if dia.es_festivo}
-																				<span
-																					style="display: inline-flex; align-items: center; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #92400E; background: rgba(245, 158, 11, 0.12); padding: 0.1rem 0.45rem; border-radius: 4px; font-family: var(--font-sans);"
-																				>
-																					🎉 Festivo
-																				</span>
-																			{:else if dia.es_domingo}
-																				<span
-																					style="display: inline-flex; align-items: center; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B21A8; background: rgba(168, 85, 247, 0.10); padding: 0.1rem 0.45rem; border-radius: 4px; font-family: var(--font-sans);"
-																				>
-																					Dom
-																				</span>
-																			{/if}
-																			{#if isDisp}
-																				<span
-																					style="display: inline-flex; align-items: center; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; background: rgba(0, 0, 0, 0.05); padding: 0.1rem 0.45rem; border-radius: 4px; font-family: var(--font-sans);"
-																				>
-																					Disponible
-																				</span>
-																			{/if}
-																		</div>
-																		<div class="mt-0.5" style="font-size: 0.7rem; color: #6B7280;">
-																			{#if !isDisp}
-																				{fmtHoraDecimal(dia.hora_inicio)} → {fmtHoraDecimal(dia.hora_fin)}
-																				<span style="color: #0f172a; font-weight: 600;">· {fmtHoras(dia.total_horas)}</span>
-																			{:else}
-																				Sin horas trabajadas
-																			{/if}
-																		</div>
-																	</div>
-																</div>
-																<div class="flex shrink-0 items-center gap-2">
-																	{#if !isDisp && (dia.recargos?.length || 0) > 0}
-																		<div class="text-right">
-																			<p style="font-size: 0.85rem; font-weight: 700; color: #166534;">
-																				{fmtCOP(dia.total_valor_dia)}
-																			</p>
-																			<p style="font-size: 0.6rem; color: #6B7280;">
-																				{dia.recargos.length} tipo{dia.recargos.length !== 1 ? 's' : ''}
-																			</p>
-																		</div>
-																		<div style="color: {isDiaExpanded ? '#16a34a' : '#9CA3AF'};">
-																			{#if isDiaExpanded}
-																				<ChevronDown class="h-4 w-4" />
-																			{:else}
-																				<ChevronRight class="h-4 w-4" />
-																			{/if}
-																		</div>
-																	{:else}
-																		<span style="font-size: 0.7rem; color: #9CA3AF;">—</span>
-																	{/if}
-																</div>
-															</button>
-
-															<!-- Detalle del día -->
-															{#if isDiaExpanded && !isDisp && (dia.recargos?.length || 0) > 0}
-																<div
-																	class="border-t px-3 py-2"
-																	style="border-color: rgba(22, 163, 74, 0.15); background-color: #F9FAFB;"
-																>
-																	<table class="w-full" style="font-size: 0.7rem;">
-																		<thead>
-																			<tr style="color: #6B7280;">
-																				<th class="py-1 text-left font-mono-meta" style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">Tipo</th>
-																				<th class="py-1 text-right font-mono-meta" style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">Horas</th>
-																				<th class="py-1 text-right font-mono-meta" style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">%</th>
-																				<th class="py-1 text-right font-mono-meta" style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">$/h base</th>
-																				<th class="py-1 text-right font-mono-meta" style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">$/h aplicada</th>
-																				<th class="py-1 text-right font-mono-meta" style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">Valor</th>
-																			</tr>
-																		</thead>
-																		<tbody>
-																			{#each dia.recargos as r}
-																				{@const c = colorTipo(r.tipo_codigo)}
-																				<tr style="border-top: 1px dashed rgba(0, 0, 0, 0.06);">
-																					<td class="py-1.5">
-																						<div class="flex items-center gap-1.5">
-																							<span
-																								style="display: inline-block; width: 4px; height: 18px; border-radius: 2px; background-color: {c.bar};"
-																							></span>
-																							<div>
-																								<p style="font-weight: 700; color: {c.fg}; font-family: var(--font-sans); font-size: 0.7rem;">
-																									{r.tipo_codigo}
-																								</p>
-																								<p style="font-size: 0.65rem; color: #6B7280;">
-																									{r.tipo_nombre}
-																								</p>
-																							</div>
-																							{#if r.adicional}
-																								<span
-																									style="font-size: 0.55rem; color: #9333EA; background: rgba(168, 85, 247, 0.08); padding: 0.05rem 0.3rem; border-radius: 3px; font-family: var(--font-sans); text-transform: uppercase; letter-spacing: 0.04em;"
-																								>
-																									Adic
-																								</span>
-																							{/if}
-																						</div>
-																					</td>
-																					<td class="py-1.5 text-right font-mono-meta" style="font-weight: 600; color: #0f172a;">
-																						{fmtHoras(r.horas)}
-																					</td>
-																					<td class="py-1.5 text-right font-mono-meta" style="color: #6B7280;">
-																						{r.porcentaje}%
-																					</td>
-																					<td class="py-1.5 text-right font-mono-meta" style="color: #6B7280;">
-																						{fmtCOPPlain(r.valor_hora_base)}
-																					</td>
-																					<td class="py-1.5 text-right font-mono-meta" style="color: #6B7280;">
-																						{fmtCOPPlain(r.valor_hora_calculada)}
-																					</td>
-																					<td class="py-1.5 text-right font-mono-meta" style="font-weight: 700; color: #166534;">
-																						{fmtCOP(r.valor_total)}
-																					</td>
-																				</tr>
-																			{/each}
-																			<tr style="border-top: 2px solid rgba(22, 163, 74, 0.30);">
-																				<td colspan="5" class="py-1.5 text-right" style="font-size: 0.7rem; font-weight: 600; color: #0f172a;">
-																					Total día
-																				</td>
-																				<td class="py-1.5 text-right font-display" style="font-weight: 700; color: #166534; font-size: 0.85rem;">
-																					{fmtCOP(dia.total_valor_dia)}
-																				</td>
-																			</tr>
-																		</tbody>
-																	</table>
-																</div>
-															{/if}
-														</div>
-													{/each}
-												</div>
-											</div>
-										{/if}
-									</div>
-								{/each}
-							</div>
-						{/if}
-
-						<!-- ══════ TAB: Por empresa ══════ -->
-						{#if tabActiva === 'empresa'}
-							{@const resumen = resumenPorEmpresa()}
-							<div class="overflow-hidden rounded-xl border border-gray-200 bg-white">
-								<table class="w-full" style="font-size: 0.8rem;">
-									<thead style="background-color: #F9FAFB;">
-										<tr>
-											<th class="px-4 py-2.5 text-left" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">
-												<Building2 class="mr-1 inline h-3 w-3" /> Empresa
-											</th>
-											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Planillas</th>
-											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Días</th>
-											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Horas</th>
-											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Total</th>
-											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">% del total</th>
-										</tr>
-									</thead>
-									<tbody>
-										{#each resumen as r}
-											{@const pct = statsPeriodo.totalRecargos ? (r.total / statsPeriodo.totalRecargos) * 100 : 0}
-											<tr class="transition-colors hover:bg-gray-50" style="border-top: 1px solid rgba(0, 0, 0, 0.06);">
-												<td class="px-4 py-2.5" style="font-weight: 600; color: #0f172a;">{r.empresaNombre}</td>
-												<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #6B7280;">{r.planillas}</td>
-												<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0f172a;">{r.dias}</td>
-												<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0f172a;">{fmtHoras(r.horas)}</td>
-												<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #166534;">{fmtCOP(r.total)}</td>
-												<td class="px-4 py-2.5 text-right" style="min-width: 140px;">
-													<div class="flex items-center justify-end gap-2">
-														<div class="h-1.5 w-16 overflow-hidden rounded-full" style="background-color: rgba(22, 163, 74, 0.12);">
-															<div
-																class="h-full rounded-full"
-																style="width: {pct}%; background: linear-gradient(90deg, #16a34a, #15803d);"
-															></div>
-														</div>
-														<span class="font-mono-meta" style="font-size: 0.7rem; color: #6B7280; min-width: 36px; text-align: right;">
-															{pct.toFixed(1)}%
-														</span>
-													</div>
-												</td>
-											</tr>
-										{/each}
-									</tbody>
-									<tfoot>
-										<tr style="background-color: #F9FAFB; border-top: 2px solid rgba(0, 0, 0, 0.08);">
-											<td class="px-4 py-2.5" style="font-weight: 700; color: #0f172a;">Total</td>
-											<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
-												{resumen.reduce((s, r) => s + r.planillas, 0)}
-											</td>
-											<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
-												{resumen.reduce((s, r) => s + r.dias, 0)}
-											</td>
-											<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
-												{fmtHoras(resumen.reduce((s, r) => s + r.horas, 0))}
-											</td>
-											<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #166534;">
-												{fmtCOP(resumen.reduce((s, r) => s + r.total, 0))}
-											</td>
-											<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #6B7280;">100%</td>
-										</tr>
-									</tfoot>
-								</table>
-							</div>
-						{/if}
-
-						<!-- ══════ TAB: Por vehículo ══════ -->
-						{#if tabActiva === 'vehiculo'}
-							{@const resumen = resumenPorVehiculo()}
-							<div class="overflow-hidden rounded-xl border border-gray-200 bg-white">
-								<table class="w-full" style="font-size: 0.8rem;">
-									<thead style="background-color: #F9FAFB;">
-										<tr>
-											<th class="px-4 py-2.5 text-left" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">
-												<Truck class="mr-1 inline h-3 w-3" /> Vehículo (placa)
-											</th>
-											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Planillas</th>
-											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Días</th>
-											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Horas</th>
-											<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Total</th>
-										</tr>
-									</thead>
-									<tbody>
-										{#each resumen as r}
-											<tr class="transition-colors hover:bg-gray-50" style="border-top: 1px solid rgba(0, 0, 0, 0.06);">
-												<td class="px-4 py-2.5" style="font-weight: 600; color: #0f172a;">{r.vehiculoPlaca}</td>
-												<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #6B7280;">{r.planillas}</td>
-												<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0f172a;">{r.dias}</td>
-												<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0f172a;">{fmtHoras(r.horas)}</td>
-												<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #166534;">{fmtCOP(r.total)}</td>
-											</tr>
-										{/each}
-									</tbody>
-									<tfoot>
-										<tr style="background-color: #F9FAFB; border-top: 2px solid rgba(0, 0, 0, 0.08);">
-											<td class="px-4 py-2.5" style="font-weight: 700; color: #0f172a;">Total</td>
-											<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
-												{resumen.reduce((s, r) => s + r.planillas, 0)}
-											</td>
-											<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
-												{resumen.reduce((s, r) => s + r.dias, 0)}
-											</td>
-											<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
-												{fmtHoras(resumen.reduce((s, r) => s + r.horas, 0))}
-											</td>
-											<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #166534;">
-												{fmtCOP(resumen.reduce((s, r) => s + r.total, 0))}
-											</td>
-										</tr>
-									</tfoot>
-								</table>
-							</div>
-						{/if}
-
-						<!-- ══════ TAB: Por mes ══════ -->
-						{#if tabActiva === 'mes'}
-							{@const resumen = resumenPorMes()}
-							<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-								{#each resumen as r}
-									<div
-										class="rounded-xl border bg-white p-4 transition-shadow hover:shadow-md"
-										style="border-color: rgba(0, 0, 0, 0.08);"
-									>
-										<div class="mb-2 flex items-center gap-2">
-											<Calendar class="h-3.5 w-3.5" style="color: #166534;" />
-											<p class="font-display" style="font-size: 1rem; font-weight: 600; color: #0f172a;">
-												{r.mesLabel}
-											</p>
+											{#if isExpanded}
+												<ChevronDown class="h-4 w-4" />
+											{:else}
+												<ChevronRight class="h-4 w-4" />
+											{/if}
 										</div>
+										<div class="min-w-0 flex-1">
+											<div class="flex flex-wrap items-center gap-2">
+												<span
+													style="display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #166534; background: rgba(22, 163, 74, 0.08); padding: 0.2rem 0.55rem; border-radius: 6px; font-family: var(--font-sans);"
+												>
+													<FileText class="h-2.5 w-2.5" />
+													{planilla.numero_planilla || 'Sin número'}
+												</span>
+												<span style="font-size: 0.85rem; font-weight: 600; color: #0f172a;">
+													{planilla.vehiculo.placa}
+												</span>
+												<span style="font-size: 0.75rem; color: #6B7280;">·</span>
+												<span style="font-size: 0.85rem; color: #0f172a;">
+													{planilla.empresa.nombre}
+												</span>
+												<span style="font-size: 0.75rem; color: #6B7280;">·</span>
+												<span style="font-size: 0.8rem; color: #6B7280;">
+													{MESES[planilla.mes] || planilla.mes} {planilla.año}
+												</span>
+											</div>
+											<div
+												class="mt-1 flex flex-wrap items-center gap-3"
+												style="font-size: 0.7rem; color: #6B7280;"
+											>
+												<span>
+													<span style="font-weight: 600; color: #0f172a;">{planilla.total_dias}</span> días
+												</span>
+												<span>·</span>
+												<span>
+													<span style="font-weight: 600; color: #0f172a;">{fmtHoras(planilla.total_horas)}</span> trabajadas
+												</span>
+												<span>·</span>
+												<span>
+													<span style="font-weight: 600; color: #0f172a;">{planilla.dias?.filter((d) => d.disponibilidad).length || 0}</span> disponibles
+												</span>
+											</div>
+										</div>
+									</div>
+									<div class="shrink-0 text-right">
 										<p
 											class="font-display"
-											style="font-size: 1.3rem; font-weight: 700; color: #166534; line-height: 1.1;"
+											style="font-size: 1.1rem; font-weight: 700; color: #166534;"
 										>
-											{fmtCOP(r.total)}
+											{fmtCOP(planilla.total_valor)}
 										</p>
-										<div
-											class="mt-2 grid grid-cols-3 gap-2 border-t border-gray-100 pt-2"
-											style="font-size: 0.7rem; color: #6B7280;"
-										>
-											<div>
-												<p style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">Planillas</p>
-												<p style="font-weight: 600; color: #0f172a;">{r.planillas}</p>
-											</div>
-											<div>
-												<p style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">Días</p>
-												<p style="font-weight: 600; color: #0f172a;">{r.dias}</p>
-											</div>
-											<div>
-												<p style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">Horas</p>
-												<p style="font-weight: 600; color: #0f172a;">{fmtHoras(r.horas)}</p>
-											</div>
-										</div>
+										<p style="font-size: 0.6rem; color: #6B7280; margin-top: 0.1rem;">
+											{planilla.dias?.length || 0} día{planilla.dias?.length !== 1 ? 's' : ''} calculado{(planilla.dias?.length || 0) !== 1 ? 's' : ''}
+										</p>
 									</div>
-								{/each}
-							</div>
-						{/if}
+								</button>
 
-						<!-- ══════ TAB: Por tipo ══════ -->
-						{#if tabActiva === 'tipo'}
-							{@const resumen = resumenPorTipo()}
-							{@const codigosUnicos = Array.from(new Set(resumen.map((r) => r.codigo)))}
-							{@const porcentajesPorCodigo = codigosUnicos.map((codigo) => ({
-								codigo,
-								filas: resumen.filter((r) => r.codigo === codigo)
-							}))}
-							{@const granTotalHoras = resumen.reduce((s, r) => s + r.totalHoras, 0)}
-							{@const granTotalValor = resumen.reduce((s, r) => s + r.totalValor, 0)}
-							{@const hayMultiplesTarifas = resumen.length > codigosUnicos.length}
-							<div class="space-y-3">
-								<!-- Banner explicativo cuando hay más de una tarifa por tipo -->
-								{#if hayMultiplesTarifas}
+								<!-- Planilla body -->
+								{#if isExpanded}
 									<div
-										class="flex items-start gap-2 rounded-lg px-3 py-2"
-										style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(217, 119, 6, 0.04)); border: 1px solid rgba(245, 158, 11, 0.25);"
+										class="border-t px-4 py-3"
+										style="border-color: rgba(22, 163, 74, 0.15); background-color: #FAFAFA;"
 									>
-										<Settings2 class="mt-0.5 h-3.5 w-3.5 shrink-0" style="color: #B45309;" />
-										<p style="font-size: 0.72rem; color: #78350F; line-height: 1.4;">
-											<strong style="font-weight: 700;">Cambio de tarifario detectado.</strong>
-											El mismo tipo de recargo se calculó con porcentajes distintos según el
-											día (ej: tarifario viejo y nuevo vigentes en el mismo período). Cada fila
-											muestra el total generado a ese %.
-										</p>
-									</div>
-								{/if}
-
-								<!-- Tabla principal: una fila por (tipo, %) -->
-								<div class="overflow-hidden rounded-xl border border-gray-200 bg-white">
-									<table class="w-full" style="font-size: 0.8rem;">
-										<thead style="background-color: #F9FAFB;">
-											<tr>
-												<th class="px-4 py-2.5 text-left" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">
-													<Settings2 class="mr-1 inline h-3 w-3" /> Tipo de recargo
-												</th>
-												<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">% aplicado</th>
-												<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Categoría</th>
-												<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Horas</th>
-												<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Días</th>
-												<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Total</th>
-											</tr>
-										</thead>
-										<tbody>
-											{#each porcentajesPorCodigo as grupo}
-												{#each grupo.filas as r, idxFila}
-													{@const c = colorTipo(r.codigo)}
-													{@const totalPorCodigo = grupo.filas.reduce((s, x) => s + x.totalHoras, 0)}
-													{@const pctGrupoHoras = totalPorCodigo > 0 ? (r.totalHoras / totalPorCodigo) * 100 : 0}
-													<tr
-														class="transition-colors hover:bg-gray-50"
-														style="border-top: {idxFila === 0 ? '1px solid rgba(0, 0, 0, 0.06)' : '1px dashed rgba(0, 0, 0, 0.04)'};"
+										<!-- Config salarial usada -->
+										{#if config}
+											<div
+												class="mb-3 flex flex-wrap items-center gap-2 rounded-lg px-3 py-2"
+												style="background: var(--bg-surface); border: 1px solid var(--border-subtle);"
+											>
+												<Settings2 class="h-3.5 w-3.5" style="color: var(--text-muted);" />
+												<span
+													style="font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-secondary); font-family: var(--font-sans);"
+												>
+													Config destinada
+												</span>
+												<span style="font-size: 0.75rem; color: var(--text-primary);">
+													{fmtConfigLabel(config)}
+												</span>
+												{#if config.paga_dias_festivos}
+													<span
+														style="display: inline-flex; align-items: center; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #92400E; background: rgba(245, 158, 11, 0.10); padding: 0.15rem 0.5rem; border-radius: 6px; font-family: var(--font-sans);"
 													>
-														<td class="px-4 py-2.5">
-															<div class="flex items-center gap-2">
-																<span
-																	style="display: inline-block; width: 4px; height: {grupo.filas.length > 1 ? '18px' : '22px'}; border-radius: 2px; background-color: {c.bar};"
-																></span>
-																<div>
-																	<p style="font-weight: 700; color: {c.fg}; font-family: var(--font-sans); font-size: 0.8rem;">
-																		{r.codigo}
-																	</p>
-																	<p style="font-size: 0.7rem; color: #6B7280;">{r.nombre}</p>
+														Paga festivos: {config.porcentaje_festivos}%
+													</span>
+												{/if}
+												<!-- Botón recalcular con config vigente -->
+												<button
+													onclick={() => handleRecalcular(planilla.planilla_id)}
+													disabled={recalculandoPlanillas.has(planilla.planilla_id)}
+													type="button"
+													class="rd-recalc"
+													title="Re-procesa este recargo con la config salarial y los % de tipos vigentes en cada día (no modifica las horas de los días)"
+												>
+													{#if recalculandoPlanillas.has(planilla.planilla_id)}
+														<Loader2 class="h-3 w-3 animate-spin" />
+														Recalculando...
+													{:else}
+														<RefreshCw class="h-3 w-3" />
+														Recalcular con config vigente
+													{/if}
+												</button>
+											</div>
+										{/if}
+
+										<!-- Días -->
+										<div class="space-y-1.5">
+											{#each planilla.dias || [] as dia (dia.fecha + dia.dia)}
+												{@const diaKey = `${planilla.planilla_id}-${dia.fecha}-${dia.dia}`}
+												{@const isDiaExpanded = expandedDias.has(diaKey)}
+												{@const isDisp = dia.disponibilidad}
+												{@const fechaFmt = normalizarFecha(dia.fecha)}
+												{@const diaSemana = fechaFmt.diaNum >= 0 ? DIAS_SEMANA[fechaFmt.diaNum] : ''}
+												<div
+													class="overflow-hidden rounded-lg border"
+													style="border-color: {isDisp
+														? 'rgba(0, 0, 0, 0.06)'
+														: isDiaExpanded
+															? 'rgba(22, 163, 74, 0.30)'
+															: 'rgba(0, 0, 0, 0.08)'}; background-color: {isDisp
+														? 'rgba(0, 0, 0, 0.02)'
+														: 'white'};"
+												>
+													<button
+														onclick={() => !isDisp && toggleDia(diaKey)}
+														class="flex w-full items-center justify-between gap-3 px-3 py-2 text-left transition-colors"
+														disabled={isDisp}
+														style={isDisp
+															? 'cursor: default;'
+															: 'cursor: pointer;'}
+													>
+														<div class="flex min-w-0 items-center gap-2.5">
+															<div
+																class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md font-mono-meta"
+																style="font-size: 0.65rem; font-weight: 700; background: {isDisp
+																	? '#F3F4F6'
+																	: dia.es_festivo
+																		? 'rgba(245, 158, 11, 0.12)'
+																		: dia.es_domingo
+																			? 'rgba(168, 85, 247, 0.10)'
+																			: 'rgba(22, 163, 74, 0.08)'}; color: {isDisp
+																	? '#9CA3AF'
+																	: dia.es_festivo
+																		? '#92400E'
+																		: dia.es_domingo
+																			? '#6B21A8'
+																			: '#166534'};"
+															>
+																{String(dia.dia).padStart(2, '0')}
+															</div>
+															<div class="min-w-0">
+																<div class="flex flex-wrap items-center gap-1.5">
+																		<span style="font-size: 0.78rem; font-weight: 600; color: {isDisp ? '#9CA3AF' : '#0f172a'};">
+																			{diaSemana} {fechaFmt.corta}
+																		</span>
+																	<span style="font-size: 0.7rem; color: #6B7280;">
+																		{dia.nombre_dia}
+																	</span>
+																	{#if dia.es_festivo}
+																		<span
+																			style="display: inline-flex; align-items: center; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #92400E; background: rgba(245, 158, 11, 0.12); padding: 0.1rem 0.45rem; border-radius: 4px; font-family: var(--font-sans);"
+																		>
+																			🎉 Festivo
+																		</span>
+																	{:else if dia.es_domingo}
+																		<span
+																			style="display: inline-flex; align-items: center; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B21A8; background: rgba(168, 85, 247, 0.10); padding: 0.1rem 0.45rem; border-radius: 4px; font-family: var(--font-sans);"
+																		>
+																			Dom
+																		</span>
+																	{/if}
+																	{#if isDisp}
+																		<span
+																			style="display: inline-flex; align-items: center; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; background: rgba(0, 0, 0, 0.05); padding: 0.1rem 0.45rem; border-radius: 4px; font-family: var(--font-sans);"
+																		>
+																			Disponible
+																		</span>
+																	{/if}
+																</div>
+																<div class="mt-0.5" style="font-size: 0.7rem; color: #6B7280;">
+																	{#if !isDisp}
+																		{fmtHoraDecimal(dia.hora_inicio)} → {fmtHoraDecimal(dia.hora_fin)}
+																		<span style="color: #0f172a; font-weight: 600;">· {fmtHoras(dia.total_horas)}</span>
+																	{:else}
+																		Sin horas trabajadas
+																	{/if}
 																</div>
 															</div>
-														</td>
-														<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0f172a; font-weight: 600;">
-															<span
-																style="display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-family: var(--font-sans); font-size: 0.75rem; font-weight: 700; {grupo.filas.length > 1 ? `background: ${c.bg}; color: ${c.fg};` : ''}"
-															>
-																{r.porcentaje}%
-															</span>
-														</td>
-														<td class="px-4 py-2.5 text-right" style="font-size: 0.7rem; color: #6B7280;">
-															{r.esHoraExtra ? 'Hora extra' : 'Recargo'}
-														</td>
-														<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0f172a; font-weight: 600;">
-															{fmtHoras(r.totalHoras)}
-															{#if grupo.filas.length > 1}
-																<div
-																	class="mt-1 h-1 w-16 overflow-hidden rounded-full"
-																	style="background-color: {c.bg}; margin-left: auto;"
-																>
-																	<div
-																		class="h-full rounded-full"
-																		style="width: {pctGrupoHoras}%; background-color: {c.bar};"
-																	></div>
+														</div>
+														<div class="flex shrink-0 items-center gap-2">
+															{#if !isDisp && (dia.recargos?.length || 0) > 0}
+																<div class="text-right">
+																	<p style="font-size: 0.85rem; font-weight: 700; color: #166534;">
+																		{fmtCOP(dia.total_valor_dia)}
+																	</p>
+																	<p style="font-size: 0.6rem; color: #6B7280;">
+																		{dia.recargos.length} tipo{dia.recargos.length !== 1 ? 's' : ''}
+																	</p>
 																</div>
+																<div style="color: {isDiaExpanded ? '#16a34a' : '#9CA3AF'};">
+																	{#if isDiaExpanded}
+																		<ChevronDown class="h-4 w-4" />
+																	{:else}
+																		<ChevronRight class="h-4 w-4" />
+																	{/if}
+																</div>
+															{:else}
+																<span style="font-size: 0.7rem; color: #9CA3AF;">—</span>
 															{/if}
-														</td>
-														<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #6B7280;">
-															{r.dias.size}
-														</td>
-														<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #166534;">
-															{fmtCOP(r.totalValor)}
-														</td>
-													</tr>
-												{/each}
-												<!-- Subtotal por código cuando hay varias tarifas -->
-												{#if grupo.filas.length > 1}
-													{@const subTotalHoras = grupo.filas.reduce((s, x) => s + x.totalHoras, 0)}
-													{@const subTotalValor = grupo.filas.reduce((s, x) => s + x.totalValor, 0)}
-													<tr style="background-color: rgba(0, 0, 0, 0.015);">
-														<td colspan="3" class="px-4 py-1.5 text-right" style="font-size: 0.65rem; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.04em;">
-															Subtotal {grupo.codigo} (todas las tarifas)
-														</td>
-														<td class="px-4 py-1.5 text-right font-mono-meta" style="font-size: 0.72rem; font-weight: 600; color: #374151;">
-															{fmtHoras(subTotalHoras)}
-														</td>
-														<td class="px-4 py-1.5 text-right" style="font-size: 0.72rem; color: #6B7280;">—</td>
-														<td class="px-4 py-1.5 text-right font-mono-meta" style="font-size: 0.75rem; font-weight: 700; color: #166534;">
-															{fmtCOP(subTotalValor)}
-														</td>
-													</tr>
-												{/if}
+														</div>
+													</button>
+
+													<!-- Detalle del día -->
+													{#if isDiaExpanded && !isDisp && (dia.recargos?.length || 0) > 0}
+														<div
+															class="border-t px-3 py-2"
+															style="border-color: rgba(22, 163, 74, 0.15); background-color: #F9FAFB;"
+														>
+															<table class="w-full" style="font-size: 0.7rem;">
+																<thead>
+																	<tr style="color: #6B7280;">
+																		<th class="py-1 text-left font-mono-meta" style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">Tipo</th>
+																		<th class="py-1 text-right font-mono-meta" style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">Horas</th>
+																		<th class="py-1 text-right font-mono-meta" style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">%</th>
+																		<th class="py-1 text-right font-mono-meta" style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">$/h base</th>
+																		<th class="py-1 text-right font-mono-meta" style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">$/h aplicada</th>
+																		<th class="py-1 text-right font-mono-meta" style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">Valor</th>
+																	</tr>
+																</thead>
+																<tbody>
+																	{#each dia.recargos as r}
+																		{@const c = colorTipo(r.tipo_codigo)}
+																		<tr style="border-top: 1px dashed rgba(0, 0, 0, 0.06);">
+																			<td class="py-1.5">
+																				<div class="flex items-center gap-1.5">
+																					<span
+																						style="display: inline-block; width: 4px; height: 18px; border-radius: 2px; background-color: {c.bar};"
+																					></span>
+																					<div>
+																						<p style="font-weight: 700; color: {c.fg}; font-family: var(--font-sans); font-size: 0.7rem;">
+																							{r.tipo_codigo}
+																						</p>
+																						<p style="font-size: 0.65rem; color: #6B7280;">
+																							{r.tipo_nombre}
+																						</p>
+																					</div>
+																					{#if r.adicional}
+																						<span
+																							style="font-size: 0.55rem; color: #9333EA; background: rgba(168, 85, 247, 0.08); padding: 0.05rem 0.3rem; border-radius: 3px; font-family: var(--font-sans); text-transform: uppercase; letter-spacing: 0.04em;"
+																						>
+																							Adic
+																						</span>
+																					{/if}
+																				</div>
+																			</td>
+																			<td class="py-1.5 text-right font-mono-meta" style="font-weight: 600; color: #0f172a;">
+																				{fmtHoras(r.horas)}
+																			</td>
+																			<td class="py-1.5 text-right font-mono-meta" style="color: #6B7280;">
+																				{r.porcentaje}%
+																			</td>
+																			<td class="py-1.5 text-right font-mono-meta" style="color: #6B7280;">
+																				{fmtCOPPlain(r.valor_hora_base)}
+																			</td>
+																			<td class="py-1.5 text-right font-mono-meta" style="color: #6B7280;">
+																				{fmtCOPPlain(r.valor_hora_calculada)}
+																			</td>
+																			<td class="py-1.5 text-right font-mono-meta" style="font-weight: 700; color: #166534;">
+																				{fmtCOP(r.valor_total)}
+																			</td>
+																		</tr>
+																	{/each}
+																	<tr style="border-top: 2px solid rgba(22, 163, 74, 0.30);">
+																		<td colspan="5" class="py-1.5 text-right" style="font-size: 0.7rem; font-weight: 600; color: #0f172a;">
+																			Total día
+																		</td>
+																		<td class="py-1.5 text-right font-display" style="font-weight: 700; color: #166534; font-size: 0.85rem;">
+																			{fmtCOP(dia.total_valor_dia)}
+																		</td>
+																	</tr>
+																</tbody>
+															</table>
+														</div>
+													{/if}
+												</div>
 											{/each}
-										</tbody>
-										<tfoot>
-											<tr style="background-color: #F9FAFB; border-top: 2px solid rgba(0, 0, 0, 0.08);">
-												<td class="px-4 py-2.5" style="font-weight: 700; color: #0f172a;">Total general</td>
-												<td class="px-4 py-2.5"></td>
-												<td class="px-4 py-2.5"></td>
-												<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
-													{fmtHoras(granTotalHoras)}
-												</td>
-												<td class="px-4 py-2.5 text-right" style="font-size: 0.7rem; color: #6B7280;">
-													{resumen.reduce((s, r) => s + r.dias.size, 0)}
-												</td>
-												<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #166534;">
-													{fmtCOP(granTotalValor)}
-												</td>
-											</tr>
-										</tfoot>
-									</table>
+										</div>
+									</div>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				{/if}
+
+				<!-- ══════ TAB: Por empresa ══════ -->
+				{#if tabActiva === 'empresa'}
+					{@const resumen = resumenPorEmpresa()}
+					<div class="overflow-hidden rounded-xl border border-gray-200 bg-white">
+						<table class="w-full" style="font-size: 0.8rem;">
+							<thead style="background-color: #F9FAFB;">
+								<tr>
+									<th class="px-4 py-2.5 text-left" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">
+										<Building2 class="mr-1 inline h-3 w-3" /> Empresa
+									</th>
+									<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Planillas</th>
+									<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Días</th>
+									<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Horas</th>
+									<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Total</th>
+									<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">% del total</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each resumen as r}
+									{@const pct = statsPeriodo.totalRecargos ? (r.total / statsPeriodo.totalRecargos) * 100 : 0}
+									<tr class="transition-colors hover:bg-gray-50" style="border-top: 1px solid rgba(0, 0, 0, 0.06);">
+										<td class="px-4 py-2.5" style="font-weight: 600; color: #0f172a;">{r.empresaNombre}</td>
+										<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #6B7280;">{r.planillas}</td>
+										<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0f172a;">{r.dias}</td>
+										<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0f172a;">{fmtHoras(r.horas)}</td>
+										<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #166534;">{fmtCOP(r.total)}</td>
+										<td class="px-4 py-2.5 text-right" style="min-width: 140px;">
+											<div class="flex items-center justify-end gap-2">
+												<div class="h-1.5 w-16 overflow-hidden rounded-full" style="background-color: rgba(22, 163, 74, 0.12);">
+													<div
+														class="h-full rounded-full"
+														style="width: {pct}%; background: linear-gradient(90deg, #16a34a, #15803d);"
+													></div>
+												</div>
+												<span class="font-mono-meta" style="font-size: 0.7rem; color: #6B7280; min-width: 36px; text-align: right;">
+													{pct.toFixed(1)}%
+												</span>
+											</div>
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+							<tfoot>
+								<tr style="background-color: #F9FAFB; border-top: 2px solid rgba(0, 0, 0, 0.08);">
+									<td class="px-4 py-2.5" style="font-weight: 700; color: #0f172a;">Total</td>
+									<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
+										{resumen.reduce((s, r) => s + r.planillas, 0)}
+									</td>
+									<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
+										{resumen.reduce((s, r) => s + r.dias, 0)}
+									</td>
+									<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
+										{fmtHoras(resumen.reduce((s, r) => s + r.horas, 0))}
+									</td>
+									<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #166534;">
+										{fmtCOP(resumen.reduce((s, r) => s + r.total, 0))}
+									</td>
+									<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #6B7280;">100%</td>
+								</tr>
+							</tfoot>
+						</table>
+					</div>
+				{/if}
+
+				<!-- ══════ TAB: Por vehículo ══════ -->
+				{#if tabActiva === 'vehiculo'}
+					{@const resumen = resumenPorVehiculo()}
+					<div class="overflow-hidden rounded-xl border border-gray-200 bg-white">
+						<table class="w-full" style="font-size: 0.8rem;">
+							<thead style="background-color: #F9FAFB;">
+								<tr>
+									<th class="px-4 py-2.5 text-left" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">
+										<Truck class="mr-1 inline h-3 w-3" /> Vehículo (placa)
+									</th>
+									<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Planillas</th>
+									<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Días</th>
+									<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Horas</th>
+									<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Total</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each resumen as r}
+									<tr class="transition-colors hover:bg-gray-50" style="border-top: 1px solid rgba(0, 0, 0, 0.06);">
+										<td class="px-4 py-2.5" style="font-weight: 600; color: #0f172a;">{r.vehiculoPlaca}</td>
+										<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #6B7280;">{r.planillas}</td>
+										<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0f172a;">{r.dias}</td>
+										<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0f172a;">{fmtHoras(r.horas)}</td>
+										<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #166534;">{fmtCOP(r.total)}</td>
+									</tr>
+								{/each}
+							</tbody>
+							<tfoot>
+								<tr style="background-color: #F9FAFB; border-top: 2px solid rgba(0, 0, 0, 0.08);">
+									<td class="px-4 py-2.5" style="font-weight: 700; color: #0f172a;">Total</td>
+									<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
+										{resumen.reduce((s, r) => s + r.planillas, 0)}
+									</td>
+									<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
+										{resumen.reduce((s, r) => s + r.dias, 0)}
+									</td>
+									<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
+										{fmtHoras(resumen.reduce((s, r) => s + r.horas, 0))}
+									</td>
+									<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #166534;">
+										{fmtCOP(resumen.reduce((s, r) => s + r.total, 0))}
+									</td>
+								</tr>
+							</tfoot>
+						</table>
+					</div>
+				{/if}
+
+				<!-- ══════ TAB: Por mes ══════ -->
+				{#if tabActiva === 'mes'}
+					{@const resumen = resumenPorMes()}
+					<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+						{#each resumen as r}
+							<div
+								class="rounded-xl border bg-white p-4 transition-shadow hover:shadow-md"
+								style="border-color: rgba(0, 0, 0, 0.08);"
+							>
+								<div class="mb-2 flex items-center gap-2">
+									<Calendar class="h-3.5 w-3.5" style="color: #166534;" />
+									<p class="font-display" style="font-size: 1rem; font-weight: 600; color: #0f172a;">
+										{r.mesLabel}
+									</p>
+								</div>
+								<p
+									class="font-display"
+									style="font-size: 1.3rem; font-weight: 700; color: #166534; line-height: 1.1;"
+								>
+									{fmtCOP(r.total)}
+								</p>
+								<div
+									class="mt-2 grid grid-cols-3 gap-2 border-t border-gray-100 pt-2"
+									style="font-size: 0.7rem; color: #6B7280;"
+								>
+									<div>
+										<p style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">Planillas</p>
+										<p style="font-weight: 600; color: #0f172a;">{r.planillas}</p>
+									</div>
+									<div>
+										<p style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">Días</p>
+										<p style="font-weight: 600; color: #0f172a;">{r.dias}</p>
+									</div>
+									<div>
+										<p style="font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.06em;">Horas</p>
+										<p style="font-weight: 600; color: #0f172a;">{fmtHoras(r.horas)}</p>
+									</div>
 								</div>
 							</div>
+						{/each}
+					</div>
+				{/if}
+
+				<!-- ══════ TAB: Por tipo ══════ -->
+				{#if tabActiva === 'tipo'}
+					{@const resumen = resumenPorTipo()}
+					{@const codigosUnicos = Array.from(new Set(resumen.map((r) => r.codigo)))}
+					{@const porcentajesPorCodigo = codigosUnicos.map((codigo) => ({
+						codigo,
+						filas: resumen.filter((r) => r.codigo === codigo)
+					}))}
+					{@const granTotalHoras = resumen.reduce((s, r) => s + r.totalHoras, 0)}
+					{@const granTotalValor = resumen.reduce((s, r) => s + r.totalValor, 0)}
+					{@const hayMultiplesTarifas = resumen.length > codigosUnicos.length}
+					<div class="space-y-3">
+						<!-- Banner explicativo cuando hay más de una tarifa por tipo -->
+						{#if hayMultiplesTarifas}
+							<div
+								class="flex items-start gap-2 rounded-lg px-3 py-2"
+								style="background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(217, 119, 6, 0.04)); border: 1px solid rgba(245, 158, 11, 0.25);"
+							>
+								<Settings2 class="mt-0.5 h-3.5 w-3.5 shrink-0" style="color: #B45309;" />
+								<p style="font-size: 0.72rem; color: #78350F; line-height: 1.4;">
+									<strong style="font-weight: 700;">Cambio de tarifario detectado.</strong>
+									El mismo tipo de recargo se calculó con porcentajes distintos según el
+									día (ej: tarifario viejo y nuevo vigentes en el mismo período). Cada fila
+									muestra el total generado a ese %.
+								</p>
+							</div>
 						{/if}
+
+						<!-- Tabla principal: una fila por (tipo, %) -->
+						<div class="overflow-hidden rounded-xl border border-gray-200 bg-white">
+							<table class="w-full" style="font-size: 0.8rem;">
+								<thead style="background-color: #F9FAFB;">
+									<tr>
+										<th class="px-4 py-2.5 text-left" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">
+											<Settings2 class="mr-1 inline h-3 w-3" /> Tipo de recargo
+										</th>
+										<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">% aplicado</th>
+										<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Categoría</th>
+										<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Horas</th>
+										<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Días</th>
+										<th class="px-4 py-2.5 text-right" style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #6B7280; font-family: var(--font-sans);">Total</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each porcentajesPorCodigo as grupo}
+										{#each grupo.filas as r, idxFila}
+											{@const c = colorTipo(r.codigo)}
+											{@const totalPorCodigo = grupo.filas.reduce((s, x) => s + x.totalHoras, 0)}
+											{@const pctGrupoHoras = totalPorCodigo > 0 ? (r.totalHoras / totalPorCodigo) * 100 : 0}
+											<tr
+												class="transition-colors hover:bg-gray-50"
+												style="border-top: {idxFila === 0 ? '1px solid rgba(0, 0, 0, 0.06)' : '1px dashed rgba(0, 0, 0, 0.04)'};"
+											>
+												<td class="px-4 py-2.5">
+													<div class="flex items-center gap-2">
+														<span
+															style="display: inline-block; width: 4px; height: {grupo.filas.length > 1 ? '18px' : '22px'}; border-radius: 2px; background-color: {c.bar};"
+														></span>
+														<div>
+															<p style="font-weight: 700; color: {c.fg}; font-family: var(--font-sans); font-size: 0.8rem;">
+																{r.codigo}
+															</p>
+															<p style="font-size: 0.7rem; color: #6B7280;">{r.nombre}</p>
+														</div>
+													</div>
+												</td>
+												<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0f172a; font-weight: 600;">
+													<span
+														style="display: inline-block; padding: 0.15rem 0.5rem; border-radius: 4px; font-family: var(--font-sans); font-size: 0.75rem; font-weight: 700; {grupo.filas.length > 1 ? `background: ${c.bg}; color: ${c.fg};` : ''}"
+													>
+														{r.porcentaje}%
+													</span>
+												</td>
+												<td class="px-4 py-2.5 text-right" style="font-size: 0.7rem; color: #6B7280;">
+													{r.esHoraExtra ? 'Hora extra' : 'Recargo'}
+												</td>
+												<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #0f172a; font-weight: 600;">
+													{fmtHoras(r.totalHoras)}
+													{#if grupo.filas.length > 1}
+														<div
+															class="mt-1 h-1 w-16 overflow-hidden rounded-full"
+															style="background-color: {c.bg}; margin-left: auto;"
+														>
+															<div
+																class="h-full rounded-full"
+																style="width: {pctGrupoHoras}%; background-color: {c.bar};"
+															></div>
+														</div>
+													{/if}
+												</td>
+												<td class="px-4 py-2.5 text-right font-mono-meta" style="color: #6B7280;">
+													{r.dias.size}
+												</td>
+												<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #166534;">
+													{fmtCOP(r.totalValor)}
+												</td>
+											</tr>
+										{/each}
+										<!-- Subtotal por código cuando hay varias tarifas -->
+										{#if grupo.filas.length > 1}
+											{@const subTotalHoras = grupo.filas.reduce((s, x) => s + x.totalHoras, 0)}
+											{@const subTotalValor = grupo.filas.reduce((s, x) => s + x.totalValor, 0)}
+											<tr style="background-color: rgba(0, 0, 0, 0.015);">
+												<td colspan="3" class="px-4 py-1.5 text-right" style="font-size: 0.65rem; font-weight: 600; color: #6B7280; text-transform: uppercase; letter-spacing: 0.04em;">
+													Subtotal {grupo.codigo} (todas las tarifas)
+												</td>
+												<td class="px-4 py-1.5 text-right font-mono-meta" style="font-size: 0.72rem; font-weight: 600; color: #374151;">
+													{fmtHoras(subTotalHoras)}
+												</td>
+												<td class="px-4 py-1.5 text-right" style="font-size: 0.72rem; color: #6B7280;">—</td>
+												<td class="px-4 py-1.5 text-right font-mono-meta" style="font-size: 0.75rem; font-weight: 700; color: #166534;">
+													{fmtCOP(subTotalValor)}
+												</td>
+											</tr>
+										{/if}
+									{/each}
+								</tbody>
+								<tfoot>
+									<tr style="background-color: #F9FAFB; border-top: 2px solid rgba(0, 0, 0, 0.08);">
+										<td class="px-4 py-2.5" style="font-weight: 700; color: #0f172a;">Total general</td>
+										<td class="px-4 py-2.5"></td>
+										<td class="px-4 py-2.5"></td>
+										<td class="px-4 py-2.5 text-right font-mono-meta" style="font-weight: 700; color: #0f172a;">
+											{fmtHoras(granTotalHoras)}
+										</td>
+										<td class="px-4 py-2.5 text-right" style="font-size: 0.7rem; color: #6B7280;">
+											{resumen.reduce((s, r) => s + r.dias.size, 0)}
+										</td>
+										<td class="px-4 py-2.5 text-right font-display" style="font-weight: 700; color: #166534;">
+											{fmtCOP(granTotalValor)}
+										</td>
+									</tr>
+								</tfoot>
+							</table>
+						</div>
 					</div>
 				{/if}
 			</div>
-
-			<!-- ═══ FOOTER ═══ -->
-			<div
-				class="flex-shrink-0 px-6 py-3"
-				style="background: linear-gradient(180deg, #F9FAFB 0%, #F3F4F6 100%); border-top: 1px solid rgba(0, 0, 0, 0.08);"
-			>
-				<div class="flex items-center justify-between gap-3">
-					<p style="font-size: 0.7rem; color: #6B7280;">
-						💡 Cada fila muestra la configuración salarial que se aplicó en su día correspondiente
-						(snapshot inmutable).
-					</p>
-					<button
-						onclick={cerrar}
-						class="font-mono-meta rounded-lg px-4 py-2 transition-colors"
-						style="font-size: 0.75rem; font-weight: 600; color: white; background: #0f172a; text-transform: uppercase; letter-spacing: 0.04em;"
-					>
-						Cerrar
-					</button>
-				</div>
-			</div>
-		</div>
+		{/if}
 	</div>
-{/if}
+
+	{#snippet pie()}
+		<p class="rd-nota">
+			Cada fila muestra la configuración salarial que se aplicó en su día correspondiente
+			(snapshot inmutable).
+		</p>
+		<button type="button" onclick={cerrar} class="btn-secondary">Cerrar</button>
+	{/snippet}
+</ModalBase>
+
+<style>
+	.rd-stats {
+		display: grid;
+		grid-template-columns: repeat(5, minmax(0, 1fr));
+		gap: 8px;
+		margin-bottom: 14px;
+	}
+	@media (max-width: 640px) {
+		.rd-stats {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+	.rd-stat {
+		padding: 8px 12px;
+		border-radius: 14px;
+		border: 1px solid rgba(255, 255, 255, 0.12);
+		background: rgba(255, 255, 255, 0.06);
+	}
+	.rd-stat--total {
+		background: rgba(255, 255, 255, 0.12);
+	}
+	.rd-stat-label {
+		margin: 0;
+		font-size: 11px;
+		font-weight: 700;
+		color: rgba(255, 255, 255, 0.62);
+	}
+	.rd-stat-valor {
+		margin: 2px 0 0;
+		font-family: var(--font-display);
+		font-size: 18px;
+		font-weight: 800;
+		color: #fff;
+		font-variant-numeric: tabular-nums;
+	}
+	.rd-cuerpo {
+		height: 100%;
+	}
+	.rd-barra {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		flex-wrap: wrap;
+		gap: 12px;
+		margin-bottom: 12px;
+	}
+	.rd-ayuda {
+		margin: 0;
+		font-size: 13px;
+		color: var(--text-muted);
+	}
+	.rd-acciones {
+		display: flex;
+		flex-shrink: 0;
+		align-items: center;
+		gap: 8px;
+	}
+	.rd-enlace {
+		padding: 6px 10px;
+		border: 0;
+		border-radius: 10px;
+		background: none;
+		color: var(--text-secondary);
+		font-size: 12px;
+		font-weight: 700;
+		cursor: pointer;
+		transition: background 0.15s ease;
+	}
+	.rd-enlace:hover {
+		background: var(--bg-surface);
+		color: var(--text-primary);
+	}
+	.rd-btn-chico {
+		min-height: 34px;
+		padding: 0 12px;
+		font-size: 12px;
+		border-radius: 12px;
+	}
+	.rd-recalc {
+		margin-left: auto;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		min-height: 30px;
+		padding: 0 10px;
+		border-radius: 10px;
+		border: 1px solid var(--border-default);
+		background: var(--bg-surface);
+		color: var(--bg-charcoal-deep);
+		font-size: 12px;
+		font-weight: 700;
+		cursor: pointer;
+		transition:
+			background 0.15s ease,
+			border-color 0.15s ease;
+	}
+	.rd-recalc:hover:not(:disabled) {
+		background: var(--bg-base);
+		border-color: var(--accion);
+	}
+	.rd-recalc:disabled {
+		opacity: 0.6;
+		cursor: not-allowed;
+	}
+	.rd-nota {
+		flex: 1 1 260px;
+		margin: 0 auto 0 0;
+		font-size: 12px;
+		color: var(--text-muted);
+	}
+</style>

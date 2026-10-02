@@ -36,6 +36,8 @@
 	quien guarda y recarga el mes.
 -->
 <script lang="ts">
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
+	import TabsVista from '$lib/components/ui/TabsVista.svelte';
 	import type {
 		ConceptoIngreso,
 		HojaIngreso
@@ -113,6 +115,15 @@
 			.filter((c) => c.hoja === hoja && c.tipo === seccion)
 			.slice()
 			.sort((a, b) => (Number(a.orden) || 0) - (Number(b.orden) || 0))
+	);
+
+	/// Pestañas para `TabsVista`: id = tipo de fila, cuenta = filas de la hoja.
+	const tabsVista = $derived(
+		pestanas.map((t) => ({
+			id: t,
+			label: ETIQUETA[t],
+			cuenta: conceptos.filter((c) => c.hoja === hoja && c.tipo === t).length
+		}))
 	);
 
 	const total = $derived(filas.reduce((s, c) => s + (Number(c.valor_total) || 0), 0));
@@ -212,392 +223,280 @@
 	}
 </script>
 
-{#if open}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div
-		class="fi-backdrop"
-		onclick={(e) => {
-			if (e.target === e.currentTarget) onClose();
-		}}
-	>
-		<div class="fi-modal" role="dialog" aria-modal="true" aria-label="Filas del pie">
-			<header class="fi-header">
-				<div>
-					<h2>Filas de {hoja === 'ADICIONALES' ? 'ADICIONALES' : 'OTROS INGRESOS'}</h2>
-					<p>{periodo} · el pie de esta hoja. Cada hoja tiene el suyo.</p>
-				</div>
-				<button class="fi-x" onclick={onClose} aria-label="Cerrar">✕</button>
-			</header>
+<ModalBase
+	{open}
+	title="Filas de {hoja === 'ADICIONALES' ? 'ADICIONALES' : 'OTROS INGRESOS'}"
+	eyebrow="Pie de la hoja"
+	subtitle="{periodo} · el pie de esta hoja. Cada hoja tiene el suyo."
+	tamano="lg"
+	bloqueado={guardando}
+	oncerrar={onClose}
+>
+	{#snippet cabecera()}
+		<TabsVista
+			tabs={tabsVista}
+			bind:activa={seccion}
+			variante="oscuro"
+			etiqueta="Bloques del pie"
+			onCambiar={() => (error = '')}
+		/>
+	{/snippet}
 
-			<div class="fi-tabs" role="tablist">
-				{#each pestanas as t (t)}
-					<button
-						role="tab"
-						aria-selected={seccion === t}
-						class:fi-tab-on={seccion === t}
-						onclick={() => {
-							seccion = t;
-							error = '';
-						}}
-						disabled={guardando}
-					>
-						{ETIQUETA[t]}
-						<span class="fi-cuenta">
-							{conceptos.filter((c) => c.hoja === hoja && c.tipo === t).length}
-						</span>
-					</button>
+	<section class="fi-card fi-form">
+		<label class="fi-field fi-crece">
+			<span>Nombre de la fila</span>
+			<input
+				class="fi-input"
+				bind:value={concepto}
+				maxlength="100"
+				placeholder={seccion === 'IMPUESTO'
+					? 'Ej. RETENCION CREE'
+					: seccion === 'ANTICIPO'
+						? 'Ej. ANTICIPO TALLER'
+						: 'Ej. LAVADO Y ENGRASE'}
+				disabled={guardando}
+				onkeydown={(e) => {
+					if (e.key === 'Enter') agregar();
+				}}
+			/>
+		</label>
+
+		{#if seccion === 'IMPUESTO'}
+			<label class="fi-field fi-corto">
+				<span>Porcentaje</span>
+				<input class="fi-input" bind:value={pctTxt} inputmode="decimal" placeholder="3.5" disabled={guardando} />
+			</label>
+		{/if}
+
+		<label class="fi-field fi-corto">
+			<span>Valor <em>(opcional)</em></span>
+			<input
+				class="fi-input"
+				bind:value={valorTxt}
+				inputmode="decimal"
+				placeholder="0"
+				disabled={guardando}
+				onkeydown={(e) => {
+					if (e.key === 'Enter') agregar();
+				}}
+			/>
+		</label>
+
+		<button type="button" class="btn-primary fi-add" onclick={agregar} disabled={guardando}>
+			{guardando ? 'Guardando…' : 'Añadir fila'}
+		</button>
+	</section>
+
+	<p class="fi-nota">
+		{#if seccion === 'IMPUESTO'}
+			El valor lo calcula la hoja aplicando el porcentaje a la base imponible; el que
+			escribas aquí es solo el de arranque. Las cuatro retenciones estándar ya están:
+			esto es para una quinta.
+		{:else}
+			El valor se puede dejar en cero y escribirlo después. Una fila que se quede a
+			cero y con su nombre de fábrica no se guarda.
+		{/if}
+	</p>
+
+	{#if error}
+		<p class="fi-error">{error}</p>
+	{/if}
+
+	<div class="fi-card fi-card-tabla">
+		<table class="fi-tabla">
+			<thead>
+				<tr>
+					<th>Concepto</th>
+					{#if seccion === 'IMPUESTO'}<th class="fi-num">%</th>{/if}
+					<th class="fi-num">Valor</th>
+					<th></th>
+				</tr>
+			</thead>
+			<tbody>
+				{#each filas as c (c.id)}
+					<tr>
+						<td>
+							<input
+								class="fi-edit fi-edit-txt"
+								value={String(c.concepto).replace(/_/g, ' ')}
+								maxlength="100"
+								disabled={guardando}
+								aria-label="Nombre de la fila"
+								onblur={(e) => editarTexto(c, e.currentTarget.value)}
+								onkeydown={(e) => {
+									if (e.key === 'Enter') e.currentTarget.blur();
+								}}
+							/>
+							{#if esSembrada(c)}
+								<span
+									class="fi-fija"
+									title="Fila que el pie abre por sí solo. Se edita, pero no se borra: reaparecería en la siguiente lectura. «Vaciar» la devuelve a su nombre y a cero."
+								>del pie</span>
+							{/if}
+						</td>
+						{#if seccion === 'IMPUESTO'}
+							<td class="fi-num">
+								<input
+									class="fi-edit fi-edit-num"
+									value={Number(c.porcentaje) || 0}
+									inputmode="decimal"
+									disabled={guardando}
+									aria-label="Porcentaje"
+									onblur={(e) => editarNumero(c, 'porcentaje', e.currentTarget.value)}
+									onkeydown={(e) => {
+										if (e.key === 'Enter') e.currentTarget.blur();
+									}}
+								/>
+							</td>
+						{/if}
+						<td class="fi-num">
+							<input
+								class="fi-edit fi-edit-num"
+								value={Number(c.valor_total) || 0}
+								inputmode="decimal"
+								disabled={guardando}
+								aria-label="Valor"
+								onblur={(e) => editarNumero(c, 'valor_total', e.currentTarget.value)}
+								onkeydown={(e) => {
+									if (e.key === 'Enter') e.currentTarget.blur();
+								}}
+							/>
+						</td>
+						<td class="fi-num">
+							{#if esSembrada(c)}
+								<button
+									type="button"
+									class="fi-quitar"
+									onclick={() => c.id && onVaciar(c.id)}
+									disabled={guardando}
+									title="Devolver esta fila a su nombre de fábrica y a cero. No se puede borrar: es una de las que el pie abre siempre."
+								>Vaciar</button>
+							{:else}
+								<button
+									type="button"
+									class="fi-quitar"
+									onclick={() => c.id && onEliminar(c.id)}
+									disabled={guardando}
+									title="Borrar esta fila del pie"
+								>Quitar</button>
+							{/if}
+						</td>
+					</tr>
 				{/each}
-			</div>
-
-			<div class="fi-body">
-				<section class="fi-form">
-					<label class="fi-field fi-crece">
-						<span>Nombre de la fila</span>
-						<input
-							bind:value={concepto}
-							maxlength="100"
-							placeholder={seccion === 'IMPUESTO'
-								? 'Ej. RETENCION CREE'
-								: seccion === 'ANTICIPO'
-									? 'Ej. ANTICIPO TALLER'
-									: 'Ej. LAVADO Y ENGRASE'}
-							disabled={guardando}
-							onkeydown={(e) => {
-								if (e.key === 'Enter') agregar();
-							}}
-						/>
-					</label>
-
-					{#if seccion === 'IMPUESTO'}
-						<label class="fi-field fi-corto">
-							<span>Porcentaje</span>
-							<input bind:value={pctTxt} inputmode="decimal" placeholder="3.5" disabled={guardando} />
-						</label>
-					{/if}
-
-					<label class="fi-field fi-corto">
-						<span>Valor <em>(opcional)</em></span>
-						<input
-							bind:value={valorTxt}
-							inputmode="decimal"
-							placeholder="0"
-							disabled={guardando}
-							onkeydown={(e) => {
-								if (e.key === 'Enter') agregar();
-							}}
-						/>
-					</label>
-
-					<button class="fi-add" onclick={agregar} disabled={guardando}>
-						{guardando ? 'Guardando…' : 'Añadir fila'}
-					</button>
-				</section>
-
-				<p class="fi-nota">
-					{#if seccion === 'IMPUESTO'}
-						El valor lo calcula la hoja aplicando el porcentaje a la base imponible; el que
-						escribas aquí es solo el de arranque. Las cuatro retenciones estándar ya están:
-						esto es para una quinta.
-					{:else}
-						El valor se puede dejar en cero y escribirlo después. Una fila que se quede a
-						cero y con su nombre de fábrica no se guarda.
-					{/if}
-				</p>
-
-				{#if error}
-					<p class="fi-error">{error}</p>
-				{/if}
-
-				<table class="fi-tabla">
-					<thead>
-						<tr>
-							<th>Concepto</th>
-							{#if seccion === 'IMPUESTO'}<th class="fi-num">%</th>{/if}
-							<th class="fi-num">Valor</th>
-							<th></th>
-						</tr>
-					</thead>
-					<tbody>
-						{#each filas as c (c.id)}
-							<tr>
-								<td>
-									<input
-										class="fi-edit fi-edit-txt"
-										value={String(c.concepto).replace(/_/g, ' ')}
-										maxlength="100"
-										disabled={guardando}
-										aria-label="Nombre de la fila"
-										onblur={(e) => editarTexto(c, e.currentTarget.value)}
-										onkeydown={(e) => {
-											if (e.key === 'Enter') e.currentTarget.blur();
-										}}
-									/>
-									{#if esSembrada(c)}
-										<span
-											class="fi-fija"
-											title="Fila que el pie abre por sí solo. Se edita, pero no se borra: reaparecería en la siguiente lectura. «Vaciar» la devuelve a su nombre y a cero."
-										>del pie</span>
-									{/if}
-								</td>
-								{#if seccion === 'IMPUESTO'}
-									<td class="fi-num">
-										<input
-											class="fi-edit fi-edit-num"
-											value={Number(c.porcentaje) || 0}
-											inputmode="decimal"
-											disabled={guardando}
-											aria-label="Porcentaje"
-											onblur={(e) => editarNumero(c, 'porcentaje', e.currentTarget.value)}
-											onkeydown={(e) => {
-												if (e.key === 'Enter') e.currentTarget.blur();
-											}}
-										/>
-									</td>
-								{/if}
-								<td class="fi-num">
-									<input
-										class="fi-edit fi-edit-num"
-										value={Number(c.valor_total) || 0}
-										inputmode="decimal"
-										disabled={guardando}
-										aria-label="Valor"
-										onblur={(e) => editarNumero(c, 'valor_total', e.currentTarget.value)}
-										onkeydown={(e) => {
-											if (e.key === 'Enter') e.currentTarget.blur();
-										}}
-									/>
-								</td>
-								<td class="fi-num">
-									{#if esSembrada(c)}
-										<button
-											class="fi-quitar"
-											onclick={() => c.id && onVaciar(c.id)}
-											disabled={guardando}
-											title="Devolver esta fila a su nombre de fábrica y a cero. No se puede borrar: es una de las que el pie abre siempre."
-										>Vaciar</button>
-									{:else}
-										<button
-											class="fi-quitar"
-											onclick={() => c.id && onEliminar(c.id)}
-											disabled={guardando}
-											title="Borrar esta fila del pie"
-										>Quitar</button>
-									{/if}
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-					<tfoot>
-						<tr>
-							<td colspan={seccion === 'IMPUESTO' ? 2 : 1}>Total del bloque</td>
-							<td class="fi-num"><strong>${formatCOP(total)}</strong></td>
-							<td></td>
-						</tr>
-					</tfoot>
-				</table>
-			</div>
-
-			<div class="fi-foot">
-				<button class="fi-ghost" onclick={onClose} disabled={guardando}>Cerrar</button>
-			</div>
-		</div>
+			</tbody>
+			<tfoot>
+				<tr>
+					<td colspan={seccion === 'IMPUESTO' ? 2 : 1}>Total del bloque</td>
+					<td class="fi-num"><strong>${formatCOP(total)}</strong></td>
+					<td></td>
+				</tr>
+			</tfoot>
+		</table>
 	</div>
-{/if}
+
+	{#snippet pie()}
+		<button type="button" class="btn-secondary" onclick={onClose} disabled={guardando}>Cerrar</button>
+	{/snippet}
+</ModalBase>
 
 <style>
-	.fi-backdrop {
-		position: fixed;
-		inset: 0;
-		z-index: 220;
-		background: rgb(15 23 42 / 0.55);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 20px;
+	.fi-card {
+		padding: 16px 18px;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
 	}
-	.fi-modal {
-		background: #fff;
-		color: #0f172a;
-		border-radius: 12px;
-		width: 100%;
-		max-width: 700px;
-		max-height: 88vh;
-		display: flex;
-		flex-direction: column;
-		box-shadow: 0 20px 50px rgb(0 0 0 / 0.3);
-	}
-
-	.fi-header {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 12px;
-		padding: 18px 20px 12px;
-	}
-	.fi-header h2 {
-		margin: 0;
-		font-size: 16px;
-		font-weight: 700;
-	}
-	.fi-header p {
-		margin: 3px 0 0;
-		font-size: 12px;
-		color: #64748b;
-	}
-	.fi-x {
-		border: none;
-		background: transparent;
-		font-size: 18px;
-		line-height: 1;
-		cursor: pointer;
-		color: #64748b;
-		padding: 0 4px;
-	}
-
-	.fi-tabs {
-		display: flex;
-		gap: 2px;
-		padding: 0 20px;
-		border-bottom: 1px solid #e2e8f0;
-	}
-	.fi-tabs button {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		border: none;
-		background: transparent;
-		padding: 9px 14px;
-		font-size: 12.5px;
-		font-weight: 600;
-		font-family: inherit;
-		color: #64748b;
-		cursor: pointer;
-		border-bottom: 3px solid transparent;
-		margin-bottom: -1px;
-	}
-	.fi-tabs button:hover:not(:disabled) {
-		color: #334155;
-		background: #f8fafc;
-	}
-	/* Clase + ELEMENTO: la regla de arriba es (0,2,1) y con el scoping de
-	   Svelte se llevaría por delante el color del activo. */
-	.fi-tabs button.fi-tab-on {
-		color: #166534;
-		font-weight: 700;
-		background: #f0fdf4;
-		border-bottom-color: #c2410c;
-	}
-	.fi-cuenta {
-		min-width: 18px;
-		padding: 0 5px;
-		border-radius: 9px;
-		background: #e2e8f0;
-		color: #475569;
-		font-size: 10.5px;
-		font-weight: 700;
-		line-height: 17px;
-		text-align: center;
-	}
-	.fi-tabs button.fi-tab-on .fi-cuenta {
-		background: #c2410c;
-		color: #fff;
-	}
-
-	.fi-body {
-		padding: 14px 20px;
-		overflow-y: auto;
-		min-height: 0;
-		flex: 1 1 auto;
+	.fi-card-tabla {
+		margin-top: 14px;
+		padding: 10px 12px;
+		overflow-x: auto;
 	}
 
 	.fi-form {
 		display: flex;
 		align-items: flex-end;
-		gap: 8px;
+		gap: 10px;
 		flex-wrap: wrap;
 	}
 	.fi-field {
 		display: flex;
 		flex-direction: column;
-		gap: 3px;
+		gap: 6px;
 	}
 	.fi-crece {
 		flex: 1 1 200px;
 	}
-	.fi-corto input {
-		width: 96px;
+	.fi-corto .fi-input {
+		width: 110px;
 	}
 	.fi-field span {
-		font-size: 10px;
+		font-size: 12px;
 		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		color: #64748b;
+		color: var(--text-secondary);
 	}
 	.fi-field em {
 		font-style: normal;
-		text-transform: none;
 		font-weight: 500;
+		color: var(--text-muted);
 	}
-	.fi-field input {
-		padding: 6px 8px;
-		border: 1px solid #cbd5e1;
-		border-radius: 6px;
-		font-size: 13px;
-		font-family: inherit;
+	.fi-input {
 		width: 100%;
+		min-height: 42px;
+		padding: 9px 12px;
+		border-radius: 12px;
+		border: 1px solid var(--border-default);
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font-size: 14px;
+		font-family: inherit;
 		box-sizing: border-box;
 	}
-	.fi-add {
-		border: none;
-		border-radius: 7px;
-		padding: 8px 14px;
-		background: #c2410c;
-		color: #fff;
-		font-size: 12.5px;
-		font-weight: 700;
-		font-family: inherit;
-		cursor: pointer;
-		white-space: nowrap;
+	.fi-input:focus {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
 	}
-	.fi-add:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
+	.fi-input:disabled {
+		background: var(--bg-base);
+		color: var(--text-muted);
+	}
+	.fi-add {
+		min-height: 42px;
+		white-space: nowrap;
 	}
 
 	.fi-nota {
-		margin: 10px 0 0;
-		font-size: 11.5px;
+		margin: 12px 2px 0;
+		font-size: 12px;
 		line-height: 1.45;
-		color: #64748b;
+		color: var(--text-muted);
 	}
 	.fi-error {
-		margin: 8px 0 0;
-		font-size: 11.5px;
+		margin: 8px 2px 0;
+		font-size: 12px;
 		font-weight: 600;
-		color: #b91c1c;
+		color: #b42318;
 	}
 
 	.fi-tabla {
 		width: 100%;
 		border-collapse: collapse;
-		font-size: 12.5px;
-		margin-top: 14px;
+		font-size: 13px;
+		color: var(--text-primary);
 	}
 	.fi-tabla th {
 		text-align: left;
-		font-size: 10px;
+		font-size: 11px;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.04em;
-		color: #64748b;
-		padding: 0 8px 6px;
-		border-bottom: 1px solid #e2e8f0;
+		color: var(--text-muted);
+		padding: 4px 8px 8px;
+		border-bottom: 1px solid var(--border-default);
 	}
 	.fi-tabla td {
 		padding: 7px 8px;
-		border-bottom: 1px solid #f1f5f9;
+		border-bottom: 1px solid var(--border-subtle);
 	}
 	.fi-num {
 		text-align: right;
@@ -605,7 +504,7 @@
 	}
 	.fi-tabla tfoot td {
 		border-bottom: none;
-		border-top: 2px solid #e2e8f0;
+		border-top: 2px solid var(--border-default);
 		font-weight: 700;
 	}
 	/* Celdas editables: sin caja hasta que se enfocan. Con borde permanente,
@@ -613,23 +512,24 @@
 	   vistazo, que es para lo que se abre esta lista. */
 	.fi-edit {
 		border: 1px solid transparent;
-		border-radius: 5px;
+		border-radius: 8px;
 		background: transparent;
-		padding: 3px 5px;
+		padding: 4px 6px;
 		font-family: inherit;
-		font-size: 12.5px;
+		font-size: 13px;
 		color: inherit;
 		width: 100%;
 		box-sizing: border-box;
 	}
 	.fi-edit:hover:not(:disabled) {
-		border-color: #e2e8f0;
-		background: #f8fafc;
+		border-color: var(--border-default);
+		background: var(--bg-base);
 	}
 	.fi-edit:focus {
 		outline: none;
-		border-color: #c2410c;
-		background: #fff;
+		border-color: var(--accion);
+		background: var(--bg-surface);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
 	}
 	.fi-edit:disabled {
 		opacity: 0.6;
@@ -648,8 +548,8 @@
 		margin-left: 6px;
 		padding: 1px 6px;
 		border-radius: 999px;
-		background: #f1f5f9;
-		color: #475569;
+		background: var(--bg-base);
+		color: var(--text-secondary);
 		font-size: 9.5px;
 		font-weight: 700;
 		text-transform: uppercase;
@@ -657,14 +557,14 @@
 		cursor: help;
 	}
 	.fi-quitar {
-		border: 1px solid #cbd5e1;
-		border-radius: 6px;
-		background: #fff;
-		padding: 3px 9px;
-		font-size: 11.5px;
+		border: 1px solid var(--border-default);
+		border-radius: 10px;
+		background: var(--bg-surface);
+		padding: 4px 10px;
+		font-size: 12px;
 		font-weight: 700;
 		font-family: inherit;
-		color: #b91c1c;
+		color: #b42318;
 		cursor: pointer;
 	}
 	.fi-quitar:hover:not(:disabled) {
@@ -674,23 +574,5 @@
 	.fi-quitar:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
-	}
-
-	.fi-foot {
-		padding: 12px 20px 16px;
-		display: flex;
-		justify-content: flex-end;
-		border-top: 1px solid #e2e8f0;
-	}
-	.fi-ghost {
-		border: none;
-		border-radius: 7px;
-		padding: 8px 14px;
-		background: #f1f5f9;
-		color: #334155;
-		font-size: 12.5px;
-		font-weight: 700;
-		font-family: inherit;
-		cursor: pointer;
 	}
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { confirmar } from '$lib/stores/confirm';
 	import { onMount, onDestroy, tick } from 'svelte';
 	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
@@ -686,7 +687,12 @@
 		// el momento. `mesesSucios` solo refleja patches sin ACK todavía.
 		if (
 			isDirty &&
-			!confirm('Hay cambios sin confirmar por el servidor. ¿Cambiar de año igualmente?')
+			!(await confirmar({
+				title: '¿Cambiar de año igualmente?',
+				message: 'Hay cambios sin confirmar por el servidor.',
+				tone: 'warning',
+				confirmText: 'Cambiar de año'
+			}))
 		) {
 			return;
 		}

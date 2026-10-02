@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { confirmarEliminacion } from '$lib/stores/confirm';
 	import { page } from '$app/state';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
@@ -330,7 +331,12 @@
 
 	async function handleEliminarPermanente(event: CustomEvent<{ id: string }>) {
 		const id = event.detail.id;
-		if (!confirm('¿Eliminar permanentemente? Esta acción no se puede deshacer.')) return;
+		const ok = await confirmarEliminacion({
+			title: '¿Eliminar permanentemente?',
+			message: 'Esta acción no se puede deshacer.',
+			confirmText: 'Eliminar para siempre'
+		});
+		if (!ok) return;
 		loadingState = { id, action: 'eliminar-permanente' };
 		try {
 			await accionesCorrectivasAPI.eliminarPermanente(id);
@@ -777,30 +783,6 @@
 		color: var(--text-muted);
 		margin: 0.2rem 0 0;
 		line-height: 1.45;
-	}
-	.btn-primary {
-		display: inline-flex;
-		align-items: center;
-		gap: 6px;
-		padding: 0.55rem 1rem;
-		background: linear-gradient(135deg, var(--accent), var(--accent-hover));
-		color: #fff;
-		border: none;
-		border-radius: 10px;
-		font-size: 0.82rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.2s var(--ease);
-		white-space: nowrap;
-		font-family: inherit;
-		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.3);
-	}
-	.btn-primary:hover {
-		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(234, 88, 12, 0.4);
-	}
-	.btn-primary:active {
-		transform: translateY(0);
 	}
 
 	.kpi-row,

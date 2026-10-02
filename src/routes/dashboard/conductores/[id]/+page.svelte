@@ -3,10 +3,10 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { fade, fly } from 'svelte/transition';
-	import { normalizarNombrePersona } from '$lib/utils/nombre-persona';
 	import { quintOut } from 'svelte/easing';
 	import Cropper, { type OnCropCompleteEvent } from 'svelte-easy-crop';
 	import { conductoresAPI } from '$lib/api/apiClient';
+	import ModalFormConductor from '$lib/components/conductores/ModalFormConductor.svelte';
 	import { socketUtils } from '$lib/socket';
 	import { toast } from 'svelte-sonner';
 	import ReadonlyField from '$lib/components/ReadonlyField.svelte';
@@ -185,15 +185,12 @@
 
 	let conductor: Conductor | null = null;
 	let isLoading = true;
-	let isSaving = false;
+	/// Editar abre el mismo modal que crear (listado de conductores).
+	let modalAbierto = false;
 	let error: string | null = null;
-	let isEditing = false;
 	let activeTab: TabType = 'personal';
-	let formErrors: Partial<Record<keyof ConductorForm, string>> = {};
-	let attemptedSubmit = false;
 
 	let formData: ConductorForm = emptyForm();
-	let savedSnapshot: ConductorForm = emptyForm();
 
 	let showCropModal = false;
 	let imageFile: File | null = null;
@@ -206,8 +203,6 @@
 	let showPhotoMenu = false;
 	let confirmDeletePhoto = false;
 	let photoSuccess = false;
-	let showDirtyConfirm = false;
-	let pendingTab: TabType | null = null;
 
 	$: conductorId = $page.params.id;
 	$: fullName = conductor ? `${conductor.nombre ?? ''} ${conductor.apellido ?? ''}`.trim() : '';
@@ -222,7 +217,6 @@
 		);
 	})();
 	$: tabCompletion = computeTabCompletion(formData);
-	$: isDirty = JSON.stringify(formData) !== JSON.stringify(savedSnapshot);
 
 	function emptyForm(): ConductorForm {
 		return {
@@ -335,32 +329,6 @@
 		};
 	}
 
-	function validateForm(data: ConductorForm): Partial<Record<keyof ConductorForm, string>> {
-		const errors: Partial<Record<keyof ConductorForm, string>> = {};
-		// Se normalizan ANTES de validar: así lo que se envía es exactamente lo
-		// que el servidor va a guardar, y el usuario no ve cambiar su nombre
-		// después de pulsar Guardar. El backend lo normaliza igualmente.
-		data.nombre = normalizarNombrePersona(data.nombre);
-		data.apellido = normalizarNombrePersona(data.apellido);
-		if (!data.nombre.trim()) errors.nombre = 'El nombre es obligatorio';
-		if (!data.apellido.trim()) errors.apellido = 'El apellido es obligatorio';
-		if (!data.numero_identificacion.trim()) {
-			errors.numero_identificacion = 'La identificación es obligatoria';
-		}
-		if (data.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.email.trim())) {
-			errors.email = 'Formato de email no válido';
-		}
-		if (data.salario_base && Number.isNaN(parseFloat(data.salario_base))) {
-			errors.salario_base = 'Salario no válido';
-		}
-		if (data.vencimiento_licencia && data.fecha_ingreso) {
-			if (new Date(data.vencimiento_licencia) < new Date(data.fecha_ingreso)) {
-				errors.vencimiento_licencia = 'Debe ser posterior al ingreso';
-			}
-		}
-		return errors;
-	}
-
 	function getInitials(nombre: string, apellido: string): string {
 		const n = nombre?.trim().charAt(0) ?? '';
 		const a = apellido?.trim().charAt(0) ?? '';
@@ -454,9 +422,6 @@
 				confirmDeletePhoto = false;
 			} else if (showPhotoMenu) {
 				showPhotoMenu = false;
-			} else if (showDirtyConfirm) {
-				showDirtyConfirm = false;
-				pendingTab = null;
 			}
 		};
 		document.addEventListener('keydown', escListener);
@@ -482,7 +447,6 @@
 			conductor = response.data.data || response.data;
 			if (conductor) {
 				formData = toForm(conductor);
-				savedSnapshot = { ...formData };
 			}
 		} catch (err: any) {
 			const msg = err.response?.data?.message || err.message || 'No se pudo cargar el conductor';
@@ -493,127 +457,8 @@
 		}
 	}
 
-	async function handleSubmit() {
-		attemptedSubmit = true;
-		formErrors = validateForm(formData);
-		if (Object.keys(formErrors).length > 0) {
-			const firstTabWithError = firstTabWithErrors(formErrors);
-			if (firstTabWithError) activeTab = firstTabWithError;
-			toast.error('Revisa los campos marcados antes de guardar');
-			return;
-		}
-
-		try {
-			isSaving = true;
-			error = null;
-			if (!conductorId) return;
-
-			const payload: Record<string, unknown> = {
-				...formData,
-				salario_base: formData.salario_base ? parseFloat(formData.salario_base) : null,
-				email: formData.email.trim() || null,
-				telefono: formData.telefono.trim() || null,
-				direccion: formData.direccion.trim() || null,
-				eps: formData.eps.trim() || null,
-				fondo_pension: formData.fondo_pension.trim() || null,
-				arl: formData.arl.trim() || null,
-				cargo: formData.cargo.trim() || 'CONDUCTOR',
-				fecha_nacimiento: formData.fecha_nacimiento || null,
-				fecha_ingreso: formData.fecha_ingreso || null,
-				vencimiento_licencia: formData.vencimiento_licencia || null,
-				tipo_sangre: formData.tipo_sangre || null,
-				genero: formData.genero || null,
-				sede_trabajo: formData.sede_trabajo || null,
-				tipo_contrato: formData.tipo_contrato || null,
-				categoria_licencia: formData.categoria_licencia || null
-			};
-
-			await conductoresAPI.update(conductorId, payload);
-
-			isEditing = false;
-			attemptedSubmit = false;
-			await loadConductor();
-			toast.success('Conductor actualizado');
-		} catch (err: any) {
-			const message = err.response?.data?.message || 'No se pudo actualizar el conductor';
-			toast.error(message);
-		} finally {
-			isSaving = false;
-		}
-	}
-
-	function firstTabWithErrors(
-		errors: Partial<Record<keyof ConductorForm, string>>
-	): TabType | null {
-		const map: Record<TabType, (keyof ConductorForm)[]> = {
-			personal: [
-				'nombre',
-				'apellido',
-				'numero_identificacion',
-				'email',
-				'telefono',
-				'genero',
-				'fecha_nacimiento'
-			],
-			laboral: [
-				'cargo',
-				'fecha_ingreso',
-				'salario_base',
-				'estado',
-				'sede_trabajo',
-				'tipo_contrato'
-			],
-			seguridad: ['eps', 'fondo_pension', 'arl'],
-			licencia: ['categoria_licencia', 'vencimiento_licencia']
-		};
-		for (const tab of Object.keys(map) as TabType[]) {
-			if (map[tab].some((f) => errors[f])) return tab;
-		}
-		return null;
-	}
-
-	function handleCancel() {
-		if (isDirty) {
-			formData = { ...savedSnapshot };
-		}
-		formErrors = {};
-		attemptedSubmit = false;
-		isEditing = false;
-	}
-
-	function handleEdit() {
-		isEditing = true;
-	}
-
 	function requestTabChange(tab: TabType) {
-		if (tab === activeTab) return;
-		if (isEditing && isDirty && !showDirtyConfirm) {
-			pendingTab = tab;
-			showDirtyConfirm = true;
-			return;
-		}
 		activeTab = tab;
-	}
-
-	function confirmTabChange() {
-		if (pendingTab) {
-			formData = { ...savedSnapshot };
-			formErrors = {};
-			attemptedSubmit = false;
-			isEditing = false;
-			activeTab = pendingTab;
-		}
-		showDirtyConfirm = false;
-		pendingTab = null;
-	}
-
-	function cancelTabChange() {
-		showDirtyConfirm = false;
-		pendingTab = null;
-	}
-
-	function fieldError(field: keyof ConductorForm): string | undefined {
-		return attemptedSubmit ? formErrors[field] : undefined;
 	}
 
 	function handleFileSelect(event: Event) {
@@ -794,6 +639,13 @@
 		);
 	}
 </script>
+
+<ModalFormConductor
+	open={modalAbierto}
+	{conductorId}
+	onclose={() => (modalAbierto = false)}
+	onguardado={() => loadConductor()}
+/>
 
 <svelte:head>
 	<title>{fullName || 'Conductor'} · Perfil — Cotransmeq</title>
@@ -1139,63 +991,12 @@
 							Expediente
 						</p>
 						<p class="text-xs" style="color: var(--text-muted);">
-							{isEditing
-								? 'Editando — recuerda guardar al terminar.'
-								: 'Vista de solo lectura. Activa la edición para modificar los datos.'}
+							Vista de solo lectura. «Editar» abre el formulario del conductor.
 						</p>
 					</div>
 					<div class="flex flex-wrap gap-2">
-						{#if isEditing}
-							{#if isDirty}
-								<span
-									class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10px] font-semibold"
-									style="background: rgba(245,158,11,0.10); color: #b45309; border: 1px solid rgba(245,158,11,0.25);"
-								>
-									<span class="h-1.5 w-1.5 rounded-full" style="background: #f59e0b;"></span>
-									Cambios sin guardar
-								</span>
-							{/if}
-							<button
-								type="button"
-								class="btn-secondary"
-								on:click={handleCancel}
-								disabled={isSaving}
-							>
-								Cancelar
-							</button>
-							<button type="button" class="btn-primary" on:click={handleSubmit} disabled={isSaving}>
-								{#if isSaving}
-									<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-										<circle
-											class="opacity-25"
-											cx="12"
-											cy="12"
-											r="10"
-											stroke="currentColor"
-											stroke-width="4"
-										></circle>
-										<path
-											class="opacity-75"
-											fill="currentColor"
-											d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-										></path>
-									</svg>
-									Guardando…
-								{:else}
-									<svg
-										class="h-4 w-4"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-										stroke-width="1.8"
-									>
-										<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-									</svg>
-									Guardar cambios
-								{/if}
-							</button>
-						{:else}
-							<button type="button" class="btn-primary" on:click={handleEdit}>
+						
+							<button type="button" class="btn-primary" on:click={() => (modalAbierto = true)}>
 								<svg
 									class="h-4 w-4"
 									fill="none"
@@ -1211,7 +1012,7 @@
 								</svg>
 								Editar
 							</button>
-						{/if}
+						
 					</div>
 				</div>
 
@@ -1259,7 +1060,7 @@
 				</div>
 
 				<!-- Form -->
-				<form class="page-card" style="padding: 1.5rem;" on:submit|preventDefault={handleSubmit}>
+				<div class="page-card" style="padding: 1.5rem;">
 					<div class="mb-5 flex flex-col gap-1">
 						<p class="font-mono-meta" style="color: var(--orange-700); font-size: 0.6rem;">
 							Sección activa
@@ -1294,21 +1095,10 @@
 									<span>Nombre <span style="color:#dc2626">*</span></span>
 									<span class="filter-field-label-hint">Requerido</span>
 								</label>
-								{#if isEditing}
-									<input
-										id="nombre"
-										type="text"
-										bind:value={formData.nombre}
-										placeholder="JUAN"
-										class="block-input uppercase"
-										class:input-error={fieldError('nombre')}
-									/>
-								{:else}
+								
 									<ReadonlyField value={conductor.nombre} />
-								{/if}
-								{#if fieldError('nombre')}
-									<p class="text-xs" style="color:#b91c1c">{fieldError('nombre')}</p>
-								{/if}
+								
+								
 							</div>
 
 							<!-- Apellido -->
@@ -1317,21 +1107,10 @@
 									<span>Apellido <span style="color:#dc2626">*</span></span>
 									<span class="filter-field-label-hint">Requerido</span>
 								</label>
-								{#if isEditing}
-									<input
-										id="apellido"
-										type="text"
-										bind:value={formData.apellido}
-										placeholder="PÉREZ"
-										class="block-input uppercase"
-										class:input-error={fieldError('apellido')}
-									/>
-								{:else}
+								
 									<ReadonlyField value={conductor.apellido} />
-								{/if}
-								{#if fieldError('apellido')}
-									<p class="text-xs" style="color:#b91c1c">{fieldError('apellido')}</p>
-								{/if}
+								
+								
 							</div>
 
 							<!-- Tipo ID -->
@@ -1339,22 +1118,12 @@
 								<label for="tipo_identificacion" class="filter-field-label">
 									<span>Tipo de identificación</span>
 								</label>
-								{#if isEditing}
-									<select
-										id="tipo_identificacion"
-										bind:value={formData.tipo_identificacion}
-										class="block-input"
-									>
-										{#each TIPOS_ID as opt (opt.value)}
-											<option value={opt.value}>{opt.label}</option>
-										{/each}
-									</select>
-								{:else}
+								
 									<ReadonlyField
 										value={TIPOS_ID.find((t) => t.value === conductor?.tipo_identificacion)
 											?.label ?? conductor?.tipo_identificacion}
 									/>
-								{/if}
+								
 							</div>
 
 							<!-- Número ID -->
@@ -1363,22 +1132,10 @@
 									<span>Número de identificación <span style="color:#dc2626">*</span></span>
 									<span class="filter-field-label-hint">Único</span>
 								</label>
-								{#if isEditing}
-									<input
-										id="numero_identificacion"
-										type="text"
-										bind:value={formData.numero_identificacion}
-										placeholder="1234567890"
-										class="block-input font-mono-meta"
-										style="letter-spacing: 0.04em;"
-										class:input-error={fieldError('numero_identificacion')}
-									/>
-								{:else}
+								
 									<ReadonlyField value={conductor.numero_identificacion} mono />
-								{/if}
-								{#if fieldError('numero_identificacion')}
-									<p class="text-xs" style="color:#b91c1c">{fieldError('numero_identificacion')}</p>
-								{/if}
+								
+								
 							</div>
 
 							<!-- Email -->
@@ -1386,21 +1143,10 @@
 								<label for="email" class="filter-field-label">
 									<span>Email</span>
 								</label>
-								{#if isEditing}
-									<input
-										id="email"
-										type="email"
-										bind:value={formData.email}
-										placeholder="juan.perez@email.com"
-										class="block-input"
-										class:input-error={fieldError('email')}
-									/>
-								{:else}
+								
 									<ReadonlyField value={conductor.email} emptyText="Sin email" />
-								{/if}
-								{#if fieldError('email')}
-									<p class="text-xs" style="color:#b91c1c">{fieldError('email')}</p>
-								{/if}
+								
+								
 							</div>
 
 							<!-- Teléfono -->
@@ -1408,17 +1154,9 @@
 								<label for="telefono" class="filter-field-label">
 									<span>Teléfono</span>
 								</label>
-								{#if isEditing}
-									<input
-										id="telefono"
-										type="tel"
-										bind:value={formData.telefono}
-										placeholder="310 123 4567"
-										class="block-input"
-									/>
-								{:else}
+								
 									<ReadonlyField value={conductor.telefono} emptyText="Sin teléfono" />
-								{/if}
+								
 							</div>
 
 							<!-- Fecha nacimiento -->
@@ -1426,16 +1164,9 @@
 								<label for="fecha_nacimiento" class="filter-field-label">
 									<span>Fecha de nacimiento</span>
 								</label>
-								{#if isEditing}
-									<input
-										id="fecha_nacimiento"
-										type="date"
-										bind:value={formData.fecha_nacimiento}
-										class="block-input"
-									/>
-								{:else}
+								
 									<ReadonlyField value={formatDate(conductor.fecha_nacimiento)} />
-								{/if}
+								
 							</div>
 
 							<!-- Género -->
@@ -1443,15 +1174,9 @@
 								<label for="genero" class="filter-field-label">
 									<span>Género</span>
 								</label>
-								{#if isEditing}
-									<select id="genero" bind:value={formData.genero} class="block-input">
-										{#each GENEROS as opt (opt.value)}
-											<option value={opt.value}>{opt.label}</option>
-										{/each}
-									</select>
-								{:else}
+								
 									<ReadonlyField value={getGeneroLabel(conductor.genero)} />
-								{/if}
+								
 							</div>
 
 							<!-- Tipo de sangre -->
@@ -1459,15 +1184,9 @@
 								<label for="tipo_sangre" class="filter-field-label">
 									<span>Tipo de sangre</span>
 								</label>
-								{#if isEditing}
-									<select id="tipo_sangre" bind:value={formData.tipo_sangre} class="block-input">
-										{#each TIPOS_SANGRE as opt (opt.value)}
-											<option value={opt.value}>{opt.label}</option>
-										{/each}
-									</select>
-								{:else}
+								
 									<ReadonlyField value={getSangreLabel(conductor.tipo_sangre)} />
-								{/if}
+								
 							</div>
 
 							<!-- Dirección -->
@@ -1475,17 +1194,9 @@
 								<label for="direccion" class="filter-field-label">
 									<span>Dirección</span>
 								</label>
-								{#if isEditing}
-									<input
-										id="direccion"
-										type="text"
-										bind:value={formData.direccion}
-										placeholder="Calle 123 # 45-67"
-										class="block-input"
-									/>
-								{:else}
+								
 									<ReadonlyField value={conductor.direccion} emptyText="Sin dirección registrada" />
-								{/if}
+								
 							</div>
 						</div>
 					{:else if activeTab === 'laboral'}
@@ -1495,33 +1206,18 @@
 						>
 							<div class="space-y-1.5">
 								<label for="cargo" class="filter-field-label"><span>Cargo</span></label>
-								{#if isEditing}
-									<input
-										id="cargo"
-										type="text"
-										bind:value={formData.cargo}
-										placeholder="CONDUCTOR"
-										class="block-input"
-									/>
-								{:else}
+								
 									<ReadonlyField value={conductor.cargo} emptyText="Conductor" />
-								{/if}
+								
 							</div>
 
 							<div class="space-y-1.5">
 								<label for="fecha_ingreso" class="filter-field-label"
 									><span>Fecha de ingreso</span></label
 								>
-								{#if isEditing}
-									<input
-										id="fecha_ingreso"
-										type="date"
-										bind:value={formData.fecha_ingreso}
-										class="block-input"
-									/>
-								{:else}
+								
 									<ReadonlyField value={formatDate(conductor.fecha_ingreso)} />
-								{/if}
+								
 							</div>
 
 							<div class="space-y-1.5">
@@ -1529,75 +1225,41 @@
 									<span>Salario base <span style="color:#dc2626">*</span></span>
 									<span class="filter-field-label-hint">COP / mensual</span>
 								</label>
-								{#if isEditing}
-									<input
-										id="salario_base"
-										type="number"
-										step="0.01"
-										bind:value={formData.salario_base}
-										placeholder="1500000"
-										class="block-input"
-										class:input-error={fieldError('salario_base')}
-									/>
-								{:else}
+								
 									<ReadonlyField value={formatSalario(conductor.salario_base)} />
-								{/if}
-								{#if fieldError('salario_base')}
-									<p class="text-xs" style="color:#b91c1c">{fieldError('salario_base')}</p>
-								{/if}
+								
+								
 							</div>
 
 							<div class="space-y-1.5">
 								<label for="estado" class="filter-field-label">
 									<span>Estado <span style="color:#dc2626">*</span></span>
 								</label>
-								{#if isEditing}
-									<select id="estado" bind:value={formData.estado} class="block-input">
-										{#each ESTADOS as opt (opt.value)}
-											<option value={opt.value}>{opt.label}</option>
-										{/each}
-									</select>
-								{:else}
+								
 									<ReadonlyField value={estadoInfo.label} />
-								{/if}
+								
 							</div>
 
 							<div class="space-y-1.5">
 								<label for="sede_trabajo" class="filter-field-label"
 									><span>Sede de trabajo</span></label
 								>
-								{#if isEditing}
-									<select id="sede_trabajo" bind:value={formData.sede_trabajo} class="block-input">
-										{#each SEDES as opt (opt.value)}
-											<option value={opt.value}>{opt.label}</option>
-										{/each}
-									</select>
-								{:else}
+								
 									<ReadonlyField value={getSedeLabel(conductor.sede_trabajo)} />
-								{/if}
+								
 							</div>
 
 							<div class="space-y-1.5">
 								<label for="tipo_contrato" class="filter-field-label"
 									><span>Tipo de contrato</span></label
 								>
-								{#if isEditing}
-									<select
-										id="tipo_contrato"
-										bind:value={formData.tipo_contrato}
-										class="block-input"
-									>
-										{#each TIPOS_CONTRATO as opt (opt.value)}
-											<option value={opt.value}>{opt.label}</option>
-										{/each}
-									</select>
-								{:else}
+								
 									<ReadonlyField
 										value={TIPOS_CONTRATO.find((t) => t.value === conductor?.tipo_contrato)
 											?.label ?? conductor?.tipo_contrato}
 										emptyText="Sin contrato definido"
 									/>
-								{/if}
+								
 							</div>
 						</div>
 					{:else if activeTab === 'seguridad'}
@@ -1610,17 +1272,9 @@
 									<span>EPS</span>
 									<span class="filter-field-label-hint">Salud</span>
 								</label>
-								{#if isEditing}
-									<input
-										id="eps"
-										type="text"
-										bind:value={formData.eps}
-										placeholder="Sanitas"
-										class="block-input"
-									/>
-								{:else}
+								
 									<ReadonlyField value={conductor.eps} emptyText="Sin EPS" />
-								{/if}
+								
 							</div>
 
 							<div class="space-y-1.5">
@@ -1628,17 +1282,9 @@
 									<span>Fondo de pensión</span>
 									<span class="filter-field-label-hint">Ahorro</span>
 								</label>
-								{#if isEditing}
-									<input
-										id="fondo_pension"
-										type="text"
-										bind:value={formData.fondo_pension}
-										placeholder="Porvenir"
-										class="block-input"
-									/>
-								{:else}
+								
 									<ReadonlyField value={conductor.fondo_pension} emptyText="Sin fondo" />
-								{/if}
+								
 							</div>
 
 							<div class="space-y-1.5">
@@ -1646,17 +1292,9 @@
 									<span>ARL</span>
 									<span class="filter-field-label-hint">Riesgos</span>
 								</label>
-								{#if isEditing}
-									<input
-										id="arl"
-										type="text"
-										bind:value={formData.arl}
-										placeholder="Sura"
-										class="block-input"
-									/>
-								{:else}
+								
 									<ReadonlyField value={conductor.arl} emptyText="Sin ARL" />
-								{/if}
+								
 							</div>
 						</div>
 					{:else if activeTab === 'licencia'}
@@ -1669,172 +1307,32 @@
 									<span>Categoría</span>
 									<span class="filter-field-label-hint">C1, C2, C3…</span>
 								</label>
-								{#if isEditing}
-									<select
-										id="categoria_licencia"
-										bind:value={formData.categoria_licencia}
-										class="block-input"
-									>
-										{#each CATEGORIAS_LICENCIA as opt (opt.value)}
-											<option value={opt.value}>{opt.label}</option>
-										{/each}
-									</select>
-								{:else}
+								
 									<ReadonlyField value={conductor.categoria_licencia} emptyText="Sin categoría" />
-								{/if}
+								
 							</div>
 
 							<div class="space-y-1.5">
 								<label for="vencimiento_licencia" class="filter-field-label">
 									<span>Fecha de vencimiento</span>
 								</label>
-								{#if isEditing}
-									<input
-										id="vencimiento_licencia"
-										type="date"
-										bind:value={formData.vencimiento_licencia}
-										class="block-input"
-										class:input-error={fieldError('vencimiento_licencia')}
-									/>
-								{:else}
+								
 									<ReadonlyField value={formatDate(conductor.vencimiento_licencia)} />
-								{/if}
-								{#if fieldError('vencimiento_licencia')}
-									<p class="text-xs" style="color:#b91c1c">{fieldError('vencimiento_licencia')}</p>
-								{/if}
+								
+								
 							</div>
 						</div>
 					{/if}
 
-					{#if isEditing}
-						<div
-							class="mt-6 flex flex-col gap-3 pt-5 sm:flex-row sm:items-center sm:justify-between"
-							style="border-top: 1px solid var(--border-subtle);"
-						>
-							<p class="text-xs" style="color: var(--text-muted);">
-								Los cambios se aplicarán al guardar. Puedes cancelar en cualquier momento.
-							</p>
-							<div class="flex gap-2 sm:justify-end">
-								<button
-									type="button"
-									class="btn-secondary"
-									on:click={handleCancel}
-									disabled={isSaving}
-								>
-									Cancelar
-								</button>
-								<button type="submit" class="btn-primary" disabled={isSaving}>
-									{#if isSaving}
-										<svg class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
-											<circle
-												class="opacity-25"
-												cx="12"
-												cy="12"
-												r="10"
-												stroke="currentColor"
-												stroke-width="4"
-											></circle>
-											<path
-												class="opacity-75"
-												fill="currentColor"
-												d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-											></path>
-										</svg>
-										Guardando…
-									{:else}
-										<svg
-											class="h-4 w-4"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-											stroke-width="1.8"
-										>
-											<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-										</svg>
-										Guardar cambios
-									{/if}
-								</button>
-							</div>
-						</div>
-					{/if}
-				</form>
+					
+				</div>
 			</section>
 		</div>
 	{/if}
 </div>
 
 <!-- ═══ CONFIRMACIÓN DE CAMBIO DE PESTAÑA CON CAMBIOS PENDIENTES ═══ -->
-{#if showDirtyConfirm}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center p-4"
-		role="dialog"
-		aria-modal="true"
-	>
-		<button
-			type="button"
-			class="absolute inset-0 cursor-default border-0 p-0"
-			style="background: linear-gradient(135deg, rgba(15, 23, 42,0.40), rgba(20, 83, 45,0.55)); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);"
-			aria-label="Cerrar"
-			on:click={cancelTabChange}
-			transition:fade={{ duration: 180 }}
-		></button>
-		<div
-			class="relative w-full max-w-sm"
-			style="background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 20px; box-shadow: 0 24px 64px rgba(0,0,0,0.18);"
-			transition:fly={{ y: 12, duration: 240, easing: quintOut }}
-		>
-			<div class="px-6 pt-5 pb-2">
-				<div class="flex items-center gap-3">
-					<div
-						class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl"
-						style="background: rgba(245,158,11,0.10); color: #b45309;"
-					>
-						<svg
-							class="h-5 w-5"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-							stroke-width="1.8"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
-							/>
-						</svg>
-					</div>
-					<div>
-						<h3 class="font-display text-base" style="color: var(--bg-charcoal); font-weight: 800;">
-							Cambios sin guardar
-						</h3>
-						<p class="text-xs" style="color: var(--text-muted);">
-							Perderás los cambios en esta sección.
-						</p>
-					</div>
-				</div>
-			</div>
-			<div class="px-6 py-3 text-sm" style="color: var(--text-secondary);">
-				¿Deseas continuar y descartar los cambios pendientes?
-			</div>
-			<div
-				class="flex flex-col-reverse gap-2 px-6 pt-3 pb-5 sm:flex-row sm:justify-end"
-				style="border-top: 1px solid var(--border-subtle);"
-			>
-				<button type="button" class="btn-secondary" on:click={cancelTabChange}
-					>Seguir editando</button
-				>
-				<button
-					type="button"
-					class="btn-primary"
-					style="background: linear-gradient(135deg, #d97706, #b45309); box-shadow: 0 4px 16px rgba(245,158,11,0.30);"
-					on:click={confirmTabChange}
-				>
-					Descartar y cambiar
-				</button>
-			</div>
-		</div>
-	</div>
-{/if}
+
 
 <!-- ═══ CONFIRMACIÓN DE ELIMINAR FOTO ═══ -->
 {#if confirmDeletePhoto}
@@ -1896,8 +1394,7 @@
 				</button>
 				<button
 					type="button"
-					class="btn-primary"
-					style="background: linear-gradient(135deg, #dc2626, #b91c1c); box-shadow: 0 4px 16px rgba(220,38,38,0.30);"
+					class="btn-danger"
 					on:click={handleDeletePhoto}
 				>
 					Sí, eliminar

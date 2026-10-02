@@ -8,6 +8,7 @@
 	machacarlo perdería trabajo sin dejar rastro.
 -->
 <script lang="ts">
+	import { confirmar } from '$lib/stores/confirm';
 	import { onMount, untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { formulariosAPI, plantillasFormularioAPI, FormApiError } from '$lib/api/formularios';
@@ -172,9 +173,15 @@
 		const avisos = store.issues.filter((i) => i.severity === 'warning');
 		const mensaje =
 			avisos.length > 0
-				? `Hay ${avisos.length} advertencia(s). Publicar congela la versión: después solo se podrá clonar. ¿Continuar?`
-				: 'Publicar congela la versión: después solo se podrá clonar. ¿Continuar?';
-		if (!confirm(mensaje)) return;
+				? `Hay ${avisos.length} advertencia(s). Publicar congela la versión: después solo se podrá clonar.`
+				: 'Publicar congela la versión: después solo se podrá clonar.';
+		const ok = await confirmar({
+			title: '¿Publicar esta versión?',
+			message: mensaje,
+			tone: 'warning',
+			confirmText: 'Publicar'
+		});
+		if (!ok) return;
 
 		publicando = true;
 		try {
@@ -645,13 +652,17 @@
 
 	.btn--primario {
 		color: #fff;
-		background: var(--emerald-600, #15803d);
-		border-color: var(--emerald-600, #15803d);
-		font-weight: 600;
+		background: var(--accion);
+		border-color: var(--accion);
+		border-radius: 16px;
+		font-weight: 800;
+		box-shadow: var(--shadow-btn);
 	}
 
 	.btn--primario:hover:not(:disabled) {
-		background: var(--emerald-700, #166534);
+		background: var(--accion-hover);
+		border-color: var(--accion-hover);
+		box-shadow: var(--shadow-btn-hover);
 	}
 
 	.btn:focus-visible {

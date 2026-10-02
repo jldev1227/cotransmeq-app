@@ -17,6 +17,7 @@
 	    otro vehículo.
 -->
 <script lang="ts">
+	import { confirmar } from '$lib/stores/confirm';
 	import { onDestroy, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -421,9 +422,14 @@
 	async function cambiarVehiculo(vehicleId: string, placa?: string) {
 		const anterior = contexto.vehicleId;
 		if (anterior && anterior !== vehicleId && runner && runner.answers.size > 0) {
-			const ok = confirm(
-				'Cambiar de vehículo puede invalidar las respuestas que ya diligenciaste para el anterior. ¿Limpiar esas respuestas?'
-			);
+			const ok = await confirmar({
+				title: '¿Limpiar las respuestas del vehículo anterior?',
+				message:
+					'Cambiar de vehículo puede invalidar las respuestas que ya diligenciaste para el anterior.',
+				tone: 'warning',
+				confirmText: 'Limpiar respuestas',
+				cancelText: 'Conservarlas'
+			});
 			if (ok) {
 				/// Se limpian por dependencia declarada, no todo: las respuestas
 				/// generales (fecha, nombre, salud) siguen siendo válidas.
@@ -554,7 +560,14 @@
 
 		/// Confirmación explícita: `SUBMITTED` es terminal y el conductor debe
 		/// saberlo ANTES, no descubrirlo al intentar corregir.
-		if (!confirm('Después de enviar no podrás editar este formulario. ¿Enviar ahora?')) return;
+		const confirmado = await confirmar({
+			title: '¿Enviar ahora?',
+			message: 'Después de enviar no podrás editar este formulario.',
+			tone: 'warning',
+			mascot: 'correoEnviado',
+			confirmText: 'Enviar'
+		});
+		if (!confirmado) return;
 
 		enviando = true;
 		try {
@@ -603,7 +616,7 @@
 	{:else if error || !runner || !definicion}
 		<div class="estado estado--error">
 			<p>{error ?? 'No se pudo abrir el formulario.'}</p>
-			<a class="btn" href="/public/portal/formularios">Volver</a>
+			<a class="btn-secondary btn" href="/public/portal/formularios">Volver</a>
 		</div>
 	{:else}
 		{#if bloqueo}
@@ -611,7 +624,7 @@
 				<p class="bloqueo__titulo">El servidor rechazó este envío</p>
 				<p class="bloqueo__cuerpo">{bloqueo.message}</p>
 				<p class="bloqueo__nota">Nada se perdió: corrige lo señalado y vuelve a enviar.</p>
-				<button type="button" class="btn btn--primario" onclick={reintentar}>
+				<button type="button" class="btn-primary btn" onclick={reintentar}>
 					Reintentar envío
 				</button>
 			</div>
@@ -716,14 +729,14 @@
 			<div class="pie__acciones">
 				<button
 					type="button"
-					class="btn btn--descartar"
+					class="btn-secondary btn btn--descartar"
 					onclick={() => (confirmandoDescarte = true)}
 				>
 					Descartar
 				</button>
 				<button
 					type="button"
-					class="btn"
+					class="btn-secondary btn"
 					onclick={async () => {
 						await guardarLocal();
 						await encolarBackup(clientSubmissionId);
@@ -732,7 +745,7 @@
 				>
 					Guardar
 				</button>
-				<button type="button" class="btn btn--primario" disabled={enviando} onclick={enviar}>
+				<button type="button" class="btn-primary btn" disabled={enviando} onclick={enviar}>
 					{enviando ? 'Preparando…' : 'Enviar'}
 				</button>
 			</div>
@@ -751,12 +764,12 @@
 						Se borra de este teléfono y no se envía nada. Esta acción no se puede deshacer.
 					</p>
 					<div class="descarte-modal__acciones">
-						<button type="button" class="btn" onclick={() => (confirmandoDescarte = false)}>
+						<button type="button" class="btn-secondary btn" onclick={() => (confirmandoDescarte = false)}>
 							Conservar
 						</button>
 						<button
 							type="button"
-							class="btn btn--descartar"
+							class="btn-danger btn"
 							disabled={descartando}
 							onclick={descartar}
 						>
@@ -1019,21 +1032,7 @@
 		justify-content: center;
 		min-height: 52px;
 		padding: 0 1rem;
-		font: inherit;
 		font-size: 0.95rem;
-		font-weight: 800;
-		color: var(--au-dark, #014339);
-		background: #fff;
-		border: 1.5px solid var(--au-primary, #079665);
-		border-radius: 14px;
-		cursor: pointer;
-		text-decoration: none;
-	}
-
-	.btn--primario {
-		color: #fff;
-		background: var(--au-primary, #079665);
-		border-color: var(--au-primary, #079665);
 	}
 
 	/* Descartar es la acción rara: en rojo suave y sin crecer, para que Guardar
@@ -1083,7 +1082,7 @@
 	}
 
 	/* Dentro del modal los dos botones sí comparten el ancho por igual. */
-	.descarte-modal__acciones .btn--descartar {
+	.descarte-modal__acciones .btn-danger {
 		flex: 1;
 	}
 

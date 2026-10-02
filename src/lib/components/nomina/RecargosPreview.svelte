@@ -301,8 +301,7 @@
 			<button
 				on:click={() => dispatch('openDesglose')}
 				disabled={!previewData || !previewData.planillas?.length}
-				class="apple-transition flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
-				style="color: #166534; background: linear-gradient(135deg, rgba(22, 163, 74, 0.10), rgba(21, 128, 61, 0.06)); border-color: rgba(22, 163, 74, 0.30);"
+				class="btn-secondary min-h-0 px-3 py-1.5 text-xs disabled:cursor-not-allowed"
 				title="Ver desglose detallado por día, tipo de recargo, configuración salarial, etc."
 			>
 				<BarChart3 class="h-3.5 w-3.5" />
@@ -311,7 +310,7 @@
 			<button
 				on:click={cargarPreview}
 				disabled={!canLoad || loading}
-				class="apple-transition flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-xs font-semibold text-[var(--text-secondary)] hover:bg-[var(--bg-base)] hover:border-[var(--border-emphasis)] disabled:opacity-50 disabled:cursor-not-allowed"
+				class="btn-secondary min-h-0 px-3 py-1.5 text-xs disabled:cursor-not-allowed"
 			>
 				{#if loading}
 					<Loader2 class="h-3.5 w-3.5 animate-spin" />

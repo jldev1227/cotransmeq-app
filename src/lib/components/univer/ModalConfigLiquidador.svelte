@@ -11,6 +11,7 @@
 -->
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 	import {
 		liquidacionesServiciosAPI,
 		type ConfigLiquidadorServicio
@@ -96,163 +97,117 @@
 			guardando = false;
 		}
 	}
-
-	function onKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') onClose();
-	}
 </script>
 
-<svelte:window onkeydown={open ? onKeydown : undefined} />
-
-{#if open}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div class="mcl-bg" onclick={(e) => e.target === e.currentTarget && onClose()}>
-		<div class="mcl-box" role="dialog" aria-modal="true" aria-label="Configuración del liquidador">
-			<header class="mcl-hd">
-				<div>
-					<h2>Configuración del liquidador</h2>
-					<p>Parámetros base para el cálculo de servicios de transporte.</p>
-				</div>
-				<button class="mcl-x" onclick={onClose} aria-label="Cerrar">✕</button>
-			</header>
-
-			{#if cargando}
-				<p class="mcl-cargando">Cargando configuración…</p>
-			{:else}
-				<div class="mcl-grid">
-					<label class="mcl-field">
-						<span>Salario básico <em>SMLV vigente</em></span>
-						<input type="number" min="0" bind:value={form.salario_basico} />
-					</label>
-					<label class="mcl-field">
-						<span>Cargo</span>
-						<input type="text" bind:value={form.cargo} placeholder="Ej. Conductor" />
-					</label>
-					<label class="mcl-field">
-						<span>Valor hora override <em>0 = auto ({COP(valorHoraAuto)})</em></span>
-						<input type="number" min="0" bind:value={form.valor_hora_override} />
-					</label>
-					<label class="mcl-field">
-						<span>Conductor adicional</span>
-						<input type="number" min="0" bind:value={form.conductor_adicional} />
-					</label>
-					<label class="mcl-field">
-						<span>% Seguridad social</span>
-						<input type="number" step="0.01" bind:value={form.pct_seg_social} />
-					</label>
-					<label class="mcl-field">
-						<span>% Prestaciones</span>
-						<input type="number" step="0.01" bind:value={form.pct_prestaciones} />
-					</label>
-					<label class="mcl-field">
-						<span>% Admin</span>
-						<input type="number" step="0.01" bind:value={form.pct_admin} />
-					</label>
-					<label class="mcl-field">
-						<span>Prueba covid <em>0 = sin cobro</em></span>
-						<input type="number" min="0" bind:value={form.prueba_covid} />
-					</label>
-				</div>
-
-				<footer class="mcl-ft">
-					<button class="univer-btn" onclick={onClose} disabled={guardando}>Cancelar</button>
-					<button class="univer-btn univer-btn-dark" onclick={guardar} disabled={guardando}>
-						{guardando ? 'Guardando…' : 'Guardar configuración'}
-					</button>
-				</footer>
-			{/if}
+<ModalBase
+	{open}
+	title="Configuración del liquidador"
+	eyebrow="Liquidación de servicios"
+	subtitle="Parámetros base para el cálculo de servicios de transporte."
+	tamano="md"
+	bloqueado={guardando}
+	oncerrar={onClose}
+>
+	{#if cargando}
+		<p class="mcl-cargando">Cargando configuración…</p>
+	{:else}
+		<div class="mcl-card">
+			<div class="mcl-grid">
+				<label class="mcl-field">
+					<span>Salario básico <em>SMLV vigente</em></span>
+					<input class="mcl-input" type="number" min="0" bind:value={form.salario_basico} />
+				</label>
+				<label class="mcl-field">
+					<span>Cargo</span>
+					<input class="mcl-input" type="text" bind:value={form.cargo} placeholder="Ej. Conductor" />
+				</label>
+				<label class="mcl-field">
+					<span>Valor hora override <em>0 = auto ({COP(valorHoraAuto)})</em></span>
+					<input class="mcl-input" type="number" min="0" bind:value={form.valor_hora_override} />
+				</label>
+				<label class="mcl-field">
+					<span>Conductor adicional</span>
+					<input class="mcl-input" type="number" min="0" bind:value={form.conductor_adicional} />
+				</label>
+				<label class="mcl-field">
+					<span>% Seguridad social</span>
+					<input class="mcl-input" type="number" step="0.01" bind:value={form.pct_seg_social} />
+				</label>
+				<label class="mcl-field">
+					<span>% Prestaciones</span>
+					<input class="mcl-input" type="number" step="0.01" bind:value={form.pct_prestaciones} />
+				</label>
+				<label class="mcl-field">
+					<span>% Admin</span>
+					<input class="mcl-input" type="number" step="0.01" bind:value={form.pct_admin} />
+				</label>
+				<label class="mcl-field">
+					<span>Prueba covid <em>0 = sin cobro</em></span>
+					<input class="mcl-input" type="number" min="0" bind:value={form.prueba_covid} />
+				</label>
+			</div>
 		</div>
-	</div>
-{/if}
+	{/if}
+
+	{#snippet pie()}
+		<button type="button" class="btn-secondary" onclick={onClose} disabled={guardando}>Cancelar</button>
+		<button type="button" class="btn-primary" onclick={guardar} disabled={guardando || cargando}>
+			{guardando ? 'Guardando…' : 'Guardar configuración'}
+		</button>
+	{/snippet}
+</ModalBase>
 
 <style>
-	.mcl-bg {
-		position: fixed;
-		inset: 0;
-		z-index: 60;
-		background: rgba(15, 23, 42, 0.45);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 24px;
-	}
-	.mcl-box {
-		width: min(680px, 100%);
-		background: #fff;
-		border-radius: 12px;
-		box-shadow: 0 20px 60px rgba(2, 6, 23, 0.35);
-		padding: 18px 20px;
-		display: flex;
-		flex-direction: column;
-		gap: 14px;
-	}
-	.mcl-hd {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 12px;
-	}
-	.mcl-hd h2 {
-		margin: 0;
-		font-size: 16px;
-		font-weight: 700;
-		color: #0f172a;
-	}
-	.mcl-hd p {
-		margin: 2px 0 0;
-		font-size: 12px;
-		color: #64748b;
-	}
-	.mcl-x {
-		border: none;
-		background: transparent;
-		font-size: 14px;
-		color: #64748b;
-		cursor: pointer;
-		padding: 4px;
-	}
 	.mcl-cargando {
 		margin: 0;
 		padding: 24px 0;
 		text-align: center;
 		font-size: 13px;
-		color: #64748b;
+		color: var(--text-muted);
+	}
+	.mcl-card {
+		padding: 18px;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
 	}
 	.mcl-grid {
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-		gap: 10px 14px;
+		gap: 14px 16px;
 	}
 	.mcl-field {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
+		gap: 6px;
 	}
 	.mcl-field span {
-		font-size: 11px;
-		font-weight: 600;
-		color: #334155;
-		text-transform: uppercase;
-		letter-spacing: 0.02em;
+		font-size: 12px;
+		font-weight: 700;
+		color: var(--text-secondary);
 	}
 	.mcl-field em {
 		font-style: normal;
-		font-weight: 400;
-		text-transform: none;
-		color: #94a3b8;
+		font-weight: 500;
+		color: var(--text-muted);
 	}
-	.mcl-field input {
-		height: 32px;
-		border: 1px solid #cbd5e1;
-		border-radius: 6px;
-		padding: 0 8px;
-		font-size: 13px;
+	.mcl-input {
+		width: 100%;
+		min-height: 42px;
+		padding: 9px 12px;
+		border-radius: 12px;
+		border: 1px solid var(--border-default);
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font-size: 14px;
 	}
-	.mcl-ft {
-		display: flex;
-		justify-content: flex-end;
-		gap: 8px;
-		border-top: 1px dashed #e2e8f0;
-		padding-top: 12px;
+	.mcl-input:focus {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.mcl-input:disabled {
+		background: var(--bg-base);
+		color: var(--text-muted);
 	}
 </style>

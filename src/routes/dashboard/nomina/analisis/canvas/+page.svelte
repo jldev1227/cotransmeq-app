@@ -18,6 +18,7 @@
 	import { browser } from '$app/environment';
 	import { goto } from '$app/navigation';
 	import { toast } from 'svelte-sonner';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 	import { Bar, Doughnut } from 'svelte-chartjs';
 	import {
 		Chart as ChartJS,
@@ -31,8 +32,6 @@
 	} from 'chart.js';
 	import {
 		ArrowUpDown,
-		ChevronLeft,
-		ChevronRight,
 		Download,
 		ExternalLink,
 		RefreshCw,
@@ -685,7 +684,6 @@
 				return ordenar(liqs as unknown as Record<string, any>[]);
 		}
 	});
-	const totalPaginas = $derived(Math.max(1, Math.ceil(filasActivas.length / POR_PAGINA)));
 	const filasPagina = $derived(filasActivas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA));
 
 	$effect(() => {
@@ -1177,34 +1175,13 @@
 					</table>
 				</div>
 
-				<footer class="an-paginador">
-					<span class="an-nota">
-						{(pagina - 1) * POR_PAGINA + 1}–{Math.min(pagina * POR_PAGINA, filasActivas.length)} de {num.format(
-							filasActivas.length
-						)}
-					</span>
-					<div class="an-paginas">
-						<button
-							type="button"
-							class="an-pag"
-							disabled={pagina === 1}
-							onclick={() => pagina--}
-							aria-label="Anterior"
-						>
-							<ChevronLeft size={15} />
-						</button>
-						<span class="an-pag-actual">Página {pagina} de {totalPaginas}</span>
-						<button
-							type="button"
-							class="an-pag"
-							disabled={pagina === totalPaginas}
-							onclick={() => pagina++}
-							aria-label="Siguiente"
-						>
-							<ChevronRight size={15} />
-						</button>
-					</div>
-				</footer>
+				<PaginadorLista
+					{pagina}
+					total={filasActivas.length}
+					porPagina={POR_PAGINA}
+					nombreItems="registros"
+					onCambiar={(p) => (pagina = p)}
+				/>
 			{/if}
 		</section>
 	{/if}
@@ -1755,40 +1732,6 @@
 	.an-abrir:hover {
 		border-color: var(--emerald-500);
 		color: var(--emerald-800);
-	}
-	.an-paginador {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
-		padding: 0.6rem 0.85rem;
-		border-top: 1px solid var(--border-subtle);
-	}
-	.an-paginas {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-	.an-pag {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 32px;
-		height: 32px;
-		border: 1.5px solid var(--border-default);
-		border-radius: 10px;
-		background: var(--bg-surface);
-		color: var(--text-primary);
-		cursor: pointer;
-	}
-	.an-pag:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
-	}
-	.an-pag-actual {
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: var(--text-muted);
 	}
 
 	/* ── Móvil: la tabla se apila en tarjetas ── */

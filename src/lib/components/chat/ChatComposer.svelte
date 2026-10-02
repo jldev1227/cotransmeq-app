@@ -76,7 +76,7 @@
 		<button
 			onclick={handleSend}
 			disabled={!text.trim()}
-			class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 text-white shadow-sm disabled:opacity-40"
+			class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--accion)] text-white shadow-[var(--shadow-btn)] hover:bg-[var(--accion-hover)] disabled:opacity-40"
 			title="Enviar"
 		>
 			<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">

@@ -538,7 +538,7 @@
 			<!-- Botón Nueva SNC -->
 			<button
 				onclick={abrirModalCrear}
-				class="apple-transition flex shrink-0 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-red-500 to-red-600 px-5 py-2.5 whitespace-nowrap text-white shadow-lg shadow-red-500/30 hover:from-red-600 hover:to-red-700"
+				class="btn-primary apple-transition flex shrink-0 items-center justify-center gap-2 whitespace-nowrap"
 			>
 				<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -601,7 +601,7 @@
 		     que inútil: hacía creer que hasta pulsarlo la lista no estaba
 		     filtrada. -->
 		<div class="flex gap-3">
-			<button onclick={limpiarFiltros} class="apple-transition rounded-lg border border-gray-200 bg-white px-5 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+			<button onclick={limpiarFiltros} class="btn-secondary apple-transition">
 				Limpiar filtros
 			</button>
 		</div>
@@ -620,7 +620,7 @@
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
 				</svg>
 				<p class="mt-4 text-gray-500">No hay salidas no conformes registradas</p>
-				<button onclick={abrirModalCrear} class="mt-4 rounded-lg bg-red-500 px-4 py-2 text-sm text-white hover:bg-red-600">
+				<button onclick={abrirModalCrear} class="btn-primary mt-4">
 					Registrar primera SNC
 				</button>
 			</div>
@@ -1152,13 +1152,13 @@
 
 			<!-- Footer del modal -->
 			<div class="flex shrink-0 items-center justify-end gap-3 rounded-b-2xl border-t border-gray-200 bg-gray-50 px-8 py-4">
-				<button onclick={cerrarModal} class="rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50">
+				<button onclick={cerrarModal} class="btn-secondary">
 					Cancelar
 				</button>
 				<button
 					onclick={guardar}
 					disabled={isSaving}
-					class="apple-transition flex items-center gap-2 rounded-lg bg-gradient-to-r from-red-500 to-red-600 px-6 py-2.5 text-sm font-medium text-white shadow-lg shadow-red-500/30 hover:from-red-600 hover:to-red-700 disabled:opacity-50"
+					class="btn-primary apple-transition flex items-center gap-2"
 				>
 					{#if isSaving}
 						<div class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></div>
@@ -1188,10 +1188,10 @@
 				</div>
 			</div>
 			<div class="flex justify-end gap-3">
-				<button onclick={() => { showDeleteModal = false; salidaEliminar = null; }} class="rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+				<button onclick={() => { showDeleteModal = false; salidaEliminar = null; }} class="btn-secondary">
 					Cancelar
 				</button>
-				<button onclick={confirmarEliminacion} class="rounded-lg bg-red-500 px-4 py-2 text-sm font-medium text-white hover:bg-red-600">
+				<button onclick={confirmarEliminacion} class="btn-danger">
 					Eliminar
 				</button>
 			</div>

@@ -24,6 +24,10 @@
 	import { fade, fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import { tercerosAPI, type Tercero, type TerceroCounts } from '$lib/api/terceros';
+	import ModalFormTercero from '$lib/components/terceros/ModalFormTercero.svelte';
+	import ModalDetalleTercero from '$lib/components/terceros/ModalDetalleTercero.svelte';
+	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
+	import { toast } from 'svelte-sonner';
 
 	// ── Permisos ──────────────────────────────────────────────────────
 	// `Consulta` (`read`) entra a la pantalla pero no escribe. Se lee
@@ -86,26 +90,9 @@
 	let terceros = $state<Tercero[]>([]);
 	let counts = $state<TerceroCounts>({ total: 0, personas: 0, empresas: 0 });
 
-	// Modal state
-	let showModal = $state(false);
-	let editingTercero = $state<Tercero | null>(null);
-	let isSaving = $state(false);
-	let modalError = $state<string | null>(null);
-
-	let form = $state(resetForm());
-
-	function resetForm() {
-		return {
-			nombre_completo: '',
-			identificacion: '',
-			telefono: '',
-			correo: '',
-			direccion: '',
-			tipo_persona: 'PERSONA' as 'PERSONA' | 'EMPRESA',
-			regimen: '' as string,
-			notas: ''
-		};
-	}
+	/// Crear y editar: `ModalFormTercero`, el mismo cascarón de los demás
+	/// directorios.
+	let modalTercero = $state<{ abierto: boolean; id: string | null }>({ abierto: false, id: null });
 
 	let showDeleteModal = $state(false);
 	let terceroToDelete = $state<Tercero | null>(null);
@@ -114,8 +101,8 @@
 	let isImporting = $state(false);
 	let importResult = $state<{ importados: number; duplicados: number; total: number } | null>(null);
 
-	let showDetail = $state(false);
-	let detailTercero = $state<Tercero | null>(null);
+	/// Ficha de consulta abierta (id del tercero) o `null`.
+	let detalleId = $state<string | null>(null);
 
 	const hasActiveFilter = $derived(filtros.q.trim() !== '' || filtros.tipo !== 'TODOS');
 
@@ -256,68 +243,14 @@
 		return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 	}
 
-	// ─── CRUD Modal ───
+	// ─── Crear / editar ───
 	function openCreateModal() {
-		editingTercero = null;
-		form = resetForm();
-		modalError = null;
-		showModal = true;
+		modalTercero = { abierto: true, id: null };
 	}
 
 	function openEditModal(t: Tercero, e?: Event) {
 		e?.stopPropagation();
-		editingTercero = t;
-		form = {
-			nombre_completo: t.nombre_completo,
-			identificacion: t.identificacion || '',
-			telefono: t.telefono || '',
-			correo: t.correo || '',
-			direccion: t.direccion || '',
-			tipo_persona: t.tipo_persona,
-			regimen: t.regimen || '',
-			notas: t.notas || ''
-		};
-		modalError = null;
-		showModal = true;
-	}
-
-	function closeModal() {
-		showModal = false;
-		editingTercero = null;
-		modalError = null;
-	}
-
-	async function saveTercero() {
-		if (!form.nombre_completo.trim()) {
-			modalError = 'El nombre es requerido';
-			return;
-		}
-		isSaving = true;
-		modalError = null;
-		try {
-			const payload: any = {
-				nombre_completo: form.nombre_completo.trim(),
-				identificacion: form.identificacion.trim() || null,
-				telefono: form.telefono.trim() || null,
-				correo: form.correo.trim() || null,
-				direccion: form.direccion.trim() || null,
-				tipo_persona: form.tipo_persona,
-				regimen: form.regimen || null,
-				notas: form.notas.trim() || null
-			};
-
-			if (editingTercero) {
-				await tercerosAPI.actualizar(editingTercero.id, payload);
-			} else {
-				await tercerosAPI.crear(payload);
-			}
-			closeModal();
-			cargar(true);
-		} catch (err: any) {
-			modalError = err.response?.data?.message || err.message || 'Error al guardar';
-		} finally {
-			isSaving = false;
-		}
+		modalTercero = { abierto: true, id: t.id };
 	}
 
 	function openDeleteModal(t: Tercero, e: Event) {
@@ -335,11 +268,16 @@
 		if (!terceroToDelete) return;
 		operando = true;
 		try {
+			const nombre = terceroToDelete.nombre_completo;
 			await tercerosAPI.eliminar(terceroToDelete.id);
 			closeDeleteModal();
+			toast.success('Tercero eliminado', { description: nombre });
 			cargar(true);
 		} catch (err: any) {
-			errorOperacion = err.response?.data?.message || err.message || 'Error al eliminar';
+			closeDeleteModal();
+			toast.error('No se pudo eliminar', {
+				description: err.response?.data?.message || err.message || 'Error al eliminar'
+			});
 		} finally {
 			operando = false;
 		}
@@ -365,13 +303,7 @@
 	}
 
 	function openDetail(t: Tercero) {
-		detailTercero = t;
-		showDetail = true;
-	}
-
-	function closeDetail() {
-		showDetail = false;
-		detailTercero = null;
+		detalleId = t.id;
 	}
 </script>
 
@@ -564,389 +496,26 @@
 	{/if}
 </div>
 
-<!-- ══════════════════════════════════════════════════════════════
-     MODAL: Crear / Editar Tercero
-     ══════════════════════════════════════════════════════════════ -->
-{#if showModal}
-	<div
-		class="modal-backdrop"
-		onclick={closeModal}
-		onkeydown={(e) => e.key === 'Escape' && closeModal()}
-		role="presentation"
-		transition:fade={{ duration: 200 }}
-	>
-		<div
-			class="modal modal--md"
-			onclick={(e) => e.stopPropagation()}
-			onkeydown={(e) => e.stopPropagation()}
-			role="dialog"
-			tabindex="-1"
-			aria-modal="true"
-			aria-labelledby="tercero-modal-title"
-			transition:fly={{ y: 24, duration: 280, easing: quintOut }}
-		>
-			<header class="modal-head">
-				<div>
-					<span class="eyebrow">{editingTercero ? 'Editar registro' : 'Nuevo registro'}</span>
-					<h2 id="tercero-modal-title">
-						{editingTercero ? 'Editar tercero' : 'Nuevo tercero'}
-					</h2>
-				</div>
-				<button class="modal-close" onclick={closeModal} aria-label="Cerrar">
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</header>
+<!-- Crear / editar: el mismo modal que flota, conductores y clientes. -->
+<ModalFormTercero
+	open={modalTercero.abierto}
+	terceroId={modalTercero.id}
+	onclose={() => (modalTercero = { abierto: false, id: null })}
+	onguardado={() => cargar(true)}
+/>
 
-			{#if modalError}
-				<div class="alert alert-error" in:fly={{ y: -8, duration: 240 }}>
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
-						/>
-					</svg>
-					<strong>{modalError}</strong>
-				</div>
-			{/if}
-
-			<form
-				onsubmit={(e) => {
-					e.preventDefault();
-					saveTercero();
-				}}
-				class="modal-form"
-			>
-				<!-- Tipo persona -->
-				<div class="field">
-					<span class="field-label">Tipo de tercero</span>
-					<div class="segmented">
-						<button
-							type="button"
-							class="seg"
-							class:seg--active={form.tipo_persona === 'PERSONA'}
-							class:seg--persona={form.tipo_persona === 'PERSONA'}
-							onclick={() => (form.tipo_persona = 'PERSONA')}
-						>
-							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"
-								/>
-							</svg>
-							Persona natural
-						</button>
-						<button
-							type="button"
-							class="seg"
-							class:seg--active={form.tipo_persona === 'EMPRESA'}
-							class:seg--empresa={form.tipo_persona === 'EMPRESA'}
-							onclick={() => (form.tipo_persona = 'EMPRESA')}
-						>
-							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"
-								/>
-							</svg>
-							Empresa
-						</button>
-					</div>
-				</div>
-
-				<div class="field">
-					<label for="t-nombre" class="field-label">
-						{form.tipo_persona === 'EMPRESA' ? 'Razón social' : 'Nombre completo'}
-						<span class="field-required">*</span>
-					</label>
-					<input
-						id="t-nombre"
-						type="text"
-						bind:value={form.nombre_completo}
-						required
-						class="input"
-						placeholder={form.tipo_persona === 'EMPRESA'
-							? 'Transportes del Valle S.A.S.'
-							: 'Juan Carlos Pérez'}
-					/>
-				</div>
-
-				<div class="field-grid">
-					<div class="field">
-						<label for="t-ident" class="field-label">
-							{form.tipo_persona === 'EMPRESA' ? 'NIT' : 'Cédula'}
-						</label>
-						<input
-							id="t-ident"
-							type="text"
-							bind:value={form.identificacion}
-							class="input"
-							placeholder={form.tipo_persona === 'EMPRESA' ? '900123456-1' : '12345678'}
-						/>
-					</div>
-					<div class="field">
-						<label for="t-regimen" class="field-label">Régimen fiscal</label>
-						<select id="t-regimen" bind:value={form.regimen} class="input">
-							<option value="">Sin especificar</option>
-							{#each Object.entries(REGIMENES) as [key, label]}
-								<option value={key}>{label}</option>
-							{/each}
-						</select>
-					</div>
-				</div>
-
-				<div class="field-grid">
-					<div class="field">
-						<label for="t-tel" class="field-label">Teléfono</label>
-						<input
-							id="t-tel"
-							type="tel"
-							bind:value={form.telefono}
-							class="input"
-							placeholder="3201234567"
-						/>
-					</div>
-					<div class="field">
-						<label for="t-correo" class="field-label">Correo</label>
-						<input
-							id="t-correo"
-							type="email"
-							bind:value={form.correo}
-							class="input"
-							placeholder="correo@ejemplo.com"
-						/>
-					</div>
-				</div>
-
-				<div class="field">
-					<label for="t-dir" class="field-label">Dirección</label>
-					<input
-						id="t-dir"
-						type="text"
-						bind:value={form.direccion}
-						class="input"
-						placeholder="Calle 15 #23-45, Ciudad"
-					/>
-				</div>
-
-				<div class="field">
-					<label for="t-notas" class="field-label">Notas</label>
-					<textarea
-						id="t-notas"
-						bind:value={form.notas}
-						rows="3"
-						class="input"
-						placeholder="Observaciones adicionales…"
-					></textarea>
-				</div>
-
-				<footer class="modal-foot">
-					<button type="button" class="btn-secondary" onclick={closeModal}>Cancelar</button>
-					<button type="submit" class="btn-primary" disabled={isSaving}>
-						{#if isSaving}
-							<svg class="spin" viewBox="0 0 24 24" fill="none">
-								<circle
-									cx="12"
-									cy="12"
-									r="10"
-									stroke="currentColor"
-									stroke-width="3"
-									opacity="0.25"
-								/>
-								<path
-									d="M4 12a8 8 0 018-8v0"
-									stroke="currentColor"
-									stroke-width="3"
-									stroke-linecap="round"
-								/>
-							</svg>
-							Guardando…
-						{:else}
-							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-							</svg>
-							{editingTercero ? 'Actualizar' : 'Crear tercero'}
-						{/if}
-					</button>
-				</footer>
-			</form>
-		</div>
-	</div>
-{/if}
-
-<!-- ══════════════════════════════════════════════════════════════
-     MODAL: Detalle del tercero
-     ══════════════════════════════════════════════════════════════ -->
-{#if showDetail && detailTercero}
-	<div
-		class="modal-backdrop"
-		onclick={closeDetail}
-		onkeydown={(e) => e.key === 'Escape' && closeDetail()}
-		role="presentation"
-		transition:fade={{ duration: 200 }}
-	>
-		<div
-			class="modal modal--md"
-			onclick={(e) => e.stopPropagation()}
-			onkeydown={(e) => e.stopPropagation()}
-			role="dialog"
-			tabindex="-1"
-			aria-modal="true"
-			aria-labelledby="tercero-detail-title"
-			transition:fly={{ y: 24, duration: 280, easing: quintOut }}
-		>
-			<header class="modal-head">
-				<div>
-					<span class="eyebrow">
-						{detailTercero.tipo_persona === 'EMPRESA' ? 'Empresa' : 'Persona natural'}
-					</span>
-					<h2 id="tercero-detail-title" class:valor-vacio={!detailTercero.nombre_completo?.trim()}>
-						{detailTercero.nombre_completo?.trim() || 'Sin nombre'}
-					</h2>
-				</div>
-				<button class="modal-close" onclick={closeDetail} aria-label="Cerrar">
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</header>
-
-			<dl class="detail-data">
-				<div>
-					<dt>{detailTercero.tipo_persona === 'EMPRESA' ? 'NIT' : 'Cédula'}</dt>
-					{#if detailTercero.identificacion}
-						<dd class="mono">{detailTercero.identificacion}</dd>
-					{:else}
-						<dd class="valor-vacio">Sin registrar</dd>
-					{/if}
-				</div>
-				{#if detailTercero.regimen}
-					<div>
-						<dt>Régimen fiscal</dt>
-						<dd>{REGIMENES[detailTercero.regimen] || detailTercero.regimen}</dd>
-					</div>
-				{/if}
-				{#if detailTercero.telefono}
-					<div>
-						<dt>Teléfono</dt>
-						<dd class="mono">{detailTercero.telefono}</dd>
-					</div>
-				{/if}
-				{#if detailTercero.correo}
-					<div>
-						<dt>Correo</dt>
-						<dd><a href="mailto:{detailTercero.correo}">{detailTercero.correo}</a></dd>
-					</div>
-				{/if}
-				{#if detailTercero.direccion}
-					<div>
-						<dt>Dirección</dt>
-						<dd>{detailTercero.direccion}</dd>
-					</div>
-				{/if}
-				<div>
-					<dt>Creado</dt>
-					<dd>
-						{new Date(detailTercero.created_at).toLocaleDateString('es-CO', {
-							year: 'numeric',
-							month: 'long',
-							day: 'numeric'
-						})}
-					</dd>
-				</div>
-				{#if detailTercero.notas}
-					<div>
-						<dt>Notas</dt>
-						<dd>{detailTercero.notas}</dd>
-					</div>
-				{/if}
-			</dl>
-
-			<footer class="modal-foot">
-				{#if puedeEditar}
-					<button
-						class="btn-secondary"
-						onclick={(e) => {
-							if (detailTercero) {
-								closeDetail();
-								openEditModal(detailTercero, e);
-							}
-						}}
-					>
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
-							/>
-						</svg>
-						Editar
-					</button>
-				{/if}
-				<button class="btn-primary" onclick={closeDetail}>Cerrar</button>
-			</footer>
-		</div>
-	</div>
-{/if}
-
-<!-- ══════════════════════════════════════════════════════════════
-     MODAL: Confirmar Eliminación
-     ══════════════════════════════════════════════════════════════ -->
-{#if showDeleteModal && terceroToDelete}
-	<div
-		class="modal-backdrop"
-		onclick={closeDeleteModal}
-		onkeydown={(e) => e.key === 'Escape' && closeDeleteModal()}
-		role="presentation"
-		transition:fade={{ duration: 200 }}
-	>
-		<div
-			class="modal modal--sm"
-			onclick={(e) => e.stopPropagation()}
-			onkeydown={(e) => e.stopPropagation()}
-			role="alertdialog"
-			tabindex="-1"
-			aria-modal="true"
-			aria-labelledby="tercero-delete-title"
-			transition:fly={{ y: 20, duration: 240, easing: quintOut }}
-		>
-			<div class="danger-icon" aria-hidden="true">
-				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
-					/>
-				</svg>
-			</div>
-			<span class="eyebrow eyebrow--danger">Acción irreversible</span>
-			<h3 id="tercero-delete-title">Eliminar tercero</h3>
-			<p class="modal-desc">
-				¿Estás seguro que deseas eliminar a
-				<strong>{terceroToDelete.nombre_completo}</strong>? Esta acción no se puede deshacer.
-			</p>
-			<footer class="modal-foot">
-				<button class="btn-secondary" onclick={closeDeleteModal}>Cancelar</button>
-				{#if puedeEditar}
-					<button class="btn-danger" onclick={deleteTercero}>
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
-							/>
-						</svg>
-						Sí, eliminar
-					</button>
-				{/if}
-			</footer>
-		</div>
-	</div>
-{/if}
+<!-- Ficha de consulta: la misma de flota, conductores y clientes. -->
+<ModalDetalleTercero
+	open={detalleId !== null}
+	terceroId={detalleId}
+	onclose={() => (detalleId = null)}
+	oneditar={puedeEditar
+		? (id) => {
+				detalleId = null;
+				modalTercero = { abierto: true, id };
+			}
+		: undefined}
+/>
 
 <!-- ══════════════════════════════════════════════════════════════
      MODAL: Importar desde Vehículos
@@ -1076,13 +645,8 @@
 		margin: 0 auto 0.5rem;
 		width: fit-content;
 	}
-	.eyebrow--danger {
-		color: #b91c1c;
-		background: rgba(220, 38, 38, 0.08);
-	}
 
 	h1,
-	h2,
 	h3 {
 		font-family: var(--font-display);
 		color: #0f172a;
@@ -1094,33 +658,12 @@
 	}
 
 	/* Dato que falta: se lee como ausencia, no como valor. */
-	.valor-vacio {
-		color: #94a3b8;
-		font-style: italic;
-	}
-	.data-row dd.mono {
-		font-size: 0.78rem;
-	}
+	
 
 	/* ═══════════════════════════════════════════════════════════════
 	   PAGINACIÓN
 	   ═══════════════════════════════════════════════════════════════ */
-	.pagination {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		margin-top: 1.5rem;
-		padding: 0.85rem 1.25rem;
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.06);
-		border-radius: 14px;
-	}
-	.pagination-info .mono {
-		color: #0f172a;
-		font-weight: 700;
-	}
+
 	@keyframes spin {
 		to {
 			transform: rotate(360deg);
@@ -1164,65 +707,8 @@
 		color: #b91c1c;
 	}
 
-	/* ═══════════════════════════════════════════════════════════════
-	   BOTONES
-	   ═══════════════════════════════════════════════════════════════ */
-	.btn-primary,
-	.btn-secondary,
-	.btn-danger {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.45rem;
-		padding: 0.65rem 1.15rem;
-		font-family: var(--font-sans);
-		font-size: 0.85rem;
-		font-weight: 600;
-		border-radius: 11px;
-		cursor: pointer;
-		transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-		border: 1px solid transparent;
-		white-space: nowrap;
-	}
-	.btn-primary {
-		background: linear-gradient(135deg, #16a34a, #087a57);
-		color: white;
-		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.28);
-	}
-	.btn-primary:hover:not(:disabled) {
-		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(234, 88, 12, 0.4);
-	}
-	.btn-primary:disabled {
-		opacity: 0.6;
-		cursor: not-allowed;
-	}
-	.btn-primary svg,
-	.btn-secondary svg,
-	.btn-danger svg {
-		width: 15px;
-		height: 15px;
-	}
-
-	.btn-secondary {
-		background: white;
-		color: #0f172a;
-		border-color: rgba(0, 0, 0, 0.12);
-	}
-	.btn-secondary:hover:not(:disabled) {
-		background: #fcfcfb;
-		border-color: rgba(0, 0, 0, 0.2);
-	}
-
-	.btn-danger {
-		background: linear-gradient(135deg, #dc2626, #b91c1c);
-		color: white;
-		box-shadow: 0 4px 16px rgba(220, 38, 38, 0.28);
-	}
-	.btn-danger:hover:not(:disabled) {
-		transform: translateY(-1px);
-		box-shadow: 0 6px 20px rgba(220, 38, 38, 0.4);
-	}
+	/* Botones: los globales de `app.css` (.btn-primary / .btn-secondary),
+	   igual que el resto de directorios. */
 
 	.spin {
 		width: 14px;
@@ -1260,150 +746,19 @@
 	.modal--sm {
 		max-width: 420px;
 	}
-	.modal--md {
-		max-width: 560px;
-	}
+	
 
-	.modal-head {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 1rem;
-	}
-	.modal-head h2 {
-		font-size: 1.4rem;
-		font-weight: 500;
-		margin: 0.35rem 0 0;
-		color: #0f172a;
-	}
-	.modal-close {
-		flex-shrink: 0;
-		width: 32px;
-		height: 32px;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		background: transparent;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 8px;
-		color: #64748b;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.modal-close svg {
-		width: 16px;
-		height: 16px;
-	}
-	.modal-close:hover {
-		color: #0f172a;
-		border-color: rgba(0, 0, 0, 0.2);
-	}
+	
+	
+	
+	
+	
 
 	.modal-desc {
 		font-size: 0.9rem;
 		line-height: 1.6;
 		color: #33423d;
 		margin: 0;
-	}
-	.modal-desc strong {
-		color: #0f172a;
-		font-weight: 600;
-	}
-
-	.modal-form {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-	}
-
-	.field {
-		display: flex;
-		flex-direction: column;
-		gap: 0.4rem;
-	}
-	.field-grid {
-		display: grid;
-		grid-template-columns: 1fr;
-		gap: 1rem;
-	}
-	@media (min-width: 540px) {
-		.field-grid {
-			grid-template-columns: repeat(2, 1fr);
-		}
-	}
-	.field-label {
-		font-size: 0.78rem;
-		font-weight: 600;
-		color: #0f172a;
-	}
-	.field-required {
-		color: #dc2626;
-		margin-left: 0.1rem;
-	}
-	.input {
-		width: 100%;
-		padding: 0.6rem 0.85rem;
-		font-family: inherit;
-		font-size: 0.88rem;
-		color: #0f172a;
-		background: #fcfcfb;
-		border: 1px solid rgba(0, 0, 0, 0.1);
-		border-radius: 10px;
-		outline: none;
-		transition: all 0.2s;
-	}
-	.input::placeholder {
-		color: #94a3b8;
-	}
-	.input:focus {
-		background: white;
-		border-color: rgba(234, 88, 12, 0.4);
-		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1);
-	}
-	textarea.input {
-		resize: vertical;
-		font-family: inherit;
-		line-height: 1.5;
-	}
-
-	.segmented {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 0.5rem;
-	}
-	.seg {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.45rem;
-		padding: 0.65rem 0.8rem;
-		font-family: inherit;
-		font-size: 0.85rem;
-		font-weight: 600;
-		background: #fcfcfb;
-		color: #33423d;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 12px;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.seg svg {
-		width: 16px;
-		height: 16px;
-	}
-	.seg:hover {
-		color: #0f172a;
-		border-color: rgba(0, 0, 0, 0.15);
-	}
-	.seg--active.seg--persona {
-		background: linear-gradient(135deg, rgba(234, 88, 12, 0.1), rgba(8, 122, 87, 0.14));
-		color: #014339;
-		border-color: rgba(234, 88, 12, 0.35);
-	}
-	.seg--active.seg--empresa {
-		background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(217, 119, 6, 0.14));
-		color: #92400e;
-		border-color: rgba(245, 158, 11, 0.35);
 	}
 
 	.modal-foot {
@@ -1418,47 +773,13 @@
 	}
 
 	/* Detalle */
-	.detail-data {
-		background: #fcfcfb;
-		border-radius: 14px;
-		padding: 1rem 1.15rem;
-		margin: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0;
-	}
-	.detail-data > div {
-		display: flex;
-		flex-direction: column;
-		gap: 0.2rem;
-		padding: 0.65rem 0;
-		border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-	}
-	.detail-data > div:last-child {
-		border-bottom: none;
-	}
-	.detail-data dt {
-		font-size: 0.7rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: #64748b;
-		font-family: var(--font-sans);
-		margin: 0;
-	}
-	.detail-data dd {
-		margin: 0;
-		font-size: 0.92rem;
-		color: #0f172a;
-		font-weight: 500;
-	}
-	.detail-data dd a {
-		color: #16a34a;
-		text-decoration: none;
-	}
-	.detail-data dd a:hover {
-		text-decoration: underline;
-	}
+	
+	
+	
+	
+	
+	
+	
 
 	/* Modal iconos especiales */
 	.confirm-icon {
@@ -1476,23 +797,6 @@
 	.confirm-icon svg {
 		width: 30px;
 		height: 30px;
-	}
-
-	.danger-icon {
-		width: 56px;
-		height: 56px;
-		border-radius: 50%;
-		background: rgba(220, 38, 38, 0.08);
-		color: #dc2626;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		margin: 0 auto 0.5rem;
-		border: 1px solid rgba(220, 38, 38, 0.15);
-	}
-	.danger-icon svg {
-		width: 26px;
-		height: 26px;
 	}
 
 	.import-icon {

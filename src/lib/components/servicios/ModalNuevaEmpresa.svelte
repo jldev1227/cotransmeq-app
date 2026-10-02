@@ -152,14 +152,14 @@
 					<button
 						type="button"
 						on:click={handleClose}
-						class="apple-transition apple-hover rounded-xl border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700"
+						class="btn-secondary apple-transition"
 					>
 						Cancelar
 					</button>
 					<button
 						type="submit"
 						disabled={loading}
-						class="apple-transition apple-hover rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-2 text-sm font-medium text-white shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
+						class="btn-primary apple-transition"
 					>
 						{loading ? 'Guardando...' : 'Crear Empresa'}
 					</button>

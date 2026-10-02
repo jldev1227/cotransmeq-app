@@ -323,14 +323,14 @@
 					<button
 						type="button"
 						on:click={closeModal}
-						class="rounded-xl border border-gray-300 px-5 py-2.5 font-medium text-gray-700 transition-colors hover:bg-gray-50"
+						class="btn-secondary"
 						disabled={isSubmitting}
 					>
 						Cancelar
 					</button>
 					<button
 						type="submit"
-						class="flex items-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-5 py-2.5 font-medium text-white shadow-lg transition-all hover:shadow-orange-500/50 disabled:cursor-not-allowed disabled:opacity-50"
+						class="btn-primary flex items-center gap-2 disabled:cursor-not-allowed"
 						disabled={isSubmitting}
 					>
 						{#if isSubmitting}

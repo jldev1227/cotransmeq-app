@@ -952,7 +952,7 @@
 							<div class="pt-4">
 								<button
 									type="submit"
-									class="apple-transition apple-hover flex w-full items-center justify-center gap-3 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-3 text-base font-medium text-white shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
+									class="btn-primary apple-transition flex w-full items-center justify-center gap-3 disabled:cursor-not-allowed"
 									disabled={isSubmitting}
 								>
 									{#if isSubmitting}

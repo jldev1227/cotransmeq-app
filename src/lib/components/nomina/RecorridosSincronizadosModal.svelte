@@ -649,15 +649,8 @@
 						<button
 							type="button"
 							onclick={copiarComoCSV}
-							style="display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.85rem; border-radius: 10px; background: #FFFFFF; color: #0f172a; border: 1px solid rgba(0, 0, 0, 0.12); font-family: var(--font-sans); font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: all 0.2s;"
-							onmouseenter={(e) => {
-								e.currentTarget.style.background = '#fcfcfb';
-								e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.20)';
-							}}
-							onmouseleave={(e) => {
-								e.currentTarget.style.background = '#FFFFFF';
-								e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.12)';
-							}}
+							class="btn-secondary min-h-0"
+							style="padding: 0.45rem 0.9rem; font-size: 0.78rem;"
 							title="Copiar tabla como CSV (pegar en Excel)"
 						>
 							<svg
@@ -683,15 +676,8 @@
 						<button
 							type="button"
 							onclick={descargarCSV}
-							style="display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.45rem 0.95rem; border-radius: 10px; background: linear-gradient(135deg, #16a34a, #15803d); color: #FFFFFF; border: none; font-family: var(--font-sans); font-size: 0.78rem; font-weight: 600; cursor: pointer; box-shadow: 0 4px 16px rgba(22, 163, 74, 0.30); transition: all 0.2s;"
-							onmouseenter={(e) => {
-								e.currentTarget.style.transform = 'translateY(-1px)';
-								e.currentTarget.style.boxShadow = '0 6px 20px rgba(22, 163, 74, 0.40)';
-							}}
-							onmouseleave={(e) => {
-								e.currentTarget.style.transform = 'translateY(0)';
-								e.currentTarget.style.boxShadow = '0 4px 16px rgba(22, 163, 74, 0.30)';
-							}}
+							class="btn-primary min-h-0"
+							style="padding: 0.45rem 0.9rem; font-size: 0.78rem;"
 							title="Descargar CSV"
 						>
 							<svg

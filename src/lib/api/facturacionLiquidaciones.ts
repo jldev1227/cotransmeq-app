@@ -105,10 +105,19 @@ export const facturacionLiquidacionesAPI = {
 		return res.data;
 	},
 
-	async anular(id: string, motivo: string): Promise<FacturaLiquidacion> {
+	/**
+	 * `mantener_aprobada`: id de una liquidación de la factura que debe quedar
+	 * APROBADA en vez de volver a LIQUIDADA (solo Administración). Es la que se
+	 * está devolviendo a autorizada desde su ficha.
+	 */
+	async anular(
+		id: string,
+		motivo: string,
+		opciones: { mantener_aprobada?: string } = {}
+	): Promise<FacturaLiquidacion> {
 		const res = await apiClient.patch<FacturaLiquidacion>(
 			`/api/facturacion-liquidaciones/${id}/anular`,
-			{ motivo }
+			{ motivo, ...opciones }
 		);
 		return res.data;
 	},
@@ -150,14 +159,17 @@ export const facturacionLiquidacionesAPI = {
 	 */
 	async quitarLiquidacion(
 		facturaId: string,
-		liquidacionId: string
+		liquidacionId: string,
+		/// `APROBADA` la deja autorizada en vez de LIQUIDADA (solo Administración).
+		destino: 'LIQUIDADA' | 'APROBADA' = 'LIQUIDADA'
 	): Promise<{
 		factura: FacturaLiquidacion;
 		quedo_vacia: boolean;
 		liquidaciones_afectadas: LiquidacionAfectada[];
 	}> {
 		const res = await apiClient.delete(
-			`/api/facturacion-liquidaciones/${facturaId}/items/${liquidacionId}`
+			`/api/facturacion-liquidaciones/${facturaId}/items/${liquidacionId}`,
+			destino === 'APROBADA' ? { data: { destino } } : undefined
 		);
 		return res.data;
 	},

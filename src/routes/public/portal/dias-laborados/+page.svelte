@@ -1222,12 +1222,12 @@
       {#if soloLectura}
         <button class="btn-eliminar" on:click={pedirConfirmacionEliminar} title="Eliminar registro" aria-label="Eliminar registro">🗑</button>
         <button
-          class="btn-secondary-action"
+          class="btn-secondary btn-secondary-action"
           on:click={cerrarModal}
         >
           Cerrar
         </button>
-        <button class="btn-editar" on:click={activarEdicion}>
+        <button class="btn-primary btn-editar" on:click={activarEdicion}>
           ✏️ Editar
         </button>
       {:else}
@@ -1235,12 +1235,12 @@
           <button class="btn-eliminar" on:click={pedirConfirmacionEliminar} title="Eliminar registro" aria-label="Eliminar registro">🗑</button>
         {/if}
         {#if modoEdicion}
-          <button class="btn-secondary-action" on:click={cancelarEdicion} disabled={guardando}>
+          <button class="btn-secondary btn-secondary-action" on:click={cancelarEdicion} disabled={guardando}>
             Cancelar
           </button>
         {/if}
         <button
-          class="btn-guardar" class:ok={guardadoOk}
+          class="btn-primary btn-guardar" class:ok={guardadoOk}
           on:click={guardarDia}
           disabled={guardando || !form.tipo || (form.tipo === 'MANTENIMIENTO' && !form.mantenimiento_vehiculo_placa)}
         >
@@ -1274,10 +1274,10 @@
         {/if}
 
         <div class="confirm-actions">
-          <button class="btn-confirm-cancel" on:click={cancelarEliminar} disabled={eliminando}>
+          <button class="btn-secondary btn-confirm-cancel" on:click={cancelarEliminar} disabled={eliminando}>
             Cancelar
           </button>
-          <button class="btn-confirm-del" on:click={eliminarRegistro} disabled={eliminando}>
+          <button class="btn-danger btn-confirm-del" on:click={eliminarRegistro} disabled={eliminando}>
             {#if eliminando}
               <span class="spinner-dark"></span> Eliminando...
             {:else}
@@ -1702,18 +1702,11 @@
   .btn-guardar {
     flex: 1;
     padding: 0.65rem;
-    border: none;
-    border-radius: 10px;
-    background: linear-gradient(135deg, #ea580c, #047857);
-    color: #fff;
-    font-weight: 700;
     font-size: 0.9rem;
     cursor: pointer;
     display: flex; align-items: center; justify-content: center; gap: 0.4rem;
-    transition: all .15s;
   }
   .btn-guardar:disabled { opacity: 0.5; cursor: not-allowed; }
-  .btn-guardar.ok { background: #ea580c; }
 
   .spinner-sm, .spinner-dark {
     width: 16px; height: 16px;
@@ -2093,22 +2086,8 @@
   .btn-secondary-action {
     flex: 1;
     padding: 0.65rem 1.25rem;
-    background: #FFFFFF;
-    color: #1A1A1A;
-    border: 1px solid rgba(0, 0, 0, 0.12);
-    border-radius: 12px;
-    font-family: var(--font-sans);
     font-size: 0.9rem;
-    font-weight: 600;
     cursor: pointer;
-    transition: all 0.2s;
-  }
-  .btn-secondary-action:hover {
-    background: #FAF7F2;
-    border-color: rgba(0, 0, 0, 0.20);
-  }
-  .btn-secondary-action:active {
-    transform: translateY(1px);
   }
 
   /* Mobile tweaks para details view */
@@ -2299,21 +2278,14 @@
   .btn-editar {
     flex: 1;
     padding: 0.65rem 1rem;
-    border: none;
-    border-radius: 12px;
-    background: linear-gradient(135deg, #ea580c, #c2410c);
-    color: #fff;
-    font-family: inherit;
-    font-weight: 700;
     font-size: 0.9rem;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 0.35rem;
-    transition: all 0.15s;
   }
-  .btn-editar:active { transform: translateY(1px); }
+
   .btn-secondary-action:disabled { opacity: 0.5; cursor: not-allowed; }
 
   /* ═══════════════════════════════════════
@@ -2373,23 +2345,11 @@
   }
   .btn-confirm-cancel {
     padding: 0.65rem 0.75rem;
-    border-radius: 10px;
-    border: 1px solid var(--border, #e2e8f0);
-    background: var(--surface, #fff);
-    color: var(--text2, #475569);
-    font-family: inherit;
-    font-weight: 700;
     font-size: 0.85rem;
     cursor: pointer;
   }
   .btn-confirm-del {
     padding: 0.65rem 0.75rem;
-    border-radius: 10px;
-    border: none;
-    background: linear-gradient(135deg, #ef4444, #dc2626);
-    color: #fff;
-    font-family: inherit;
-    font-weight: 700;
     font-size: 0.85rem;
     cursor: pointer;
     display: flex;

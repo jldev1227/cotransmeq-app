@@ -397,7 +397,7 @@
                   <div class="flex flex-shrink-0 gap-1.5 pt-0.5">
                     <button type="button" on:click={() => { temas[key] = true; temas = { ...temas } }}
                       class="rounded px-2 py-0.5 text-xs font-bold transition-all
-                        {temas[key] ? 'bg-orange-500 text-white' : 'bg-white border border-gray-200 text-gray-400'}">SÍ</button>
+                        {temas[key] ? 'bg-[var(--accion)] text-white' : 'bg-white border border-gray-200 text-gray-400'}">SÍ</button>
                     <button type="button" on:click={() => { temas[key] = false; temas = { ...temas } }}
                       class="rounded px-2 py-0.5 text-xs font-bold transition-all
                         {!temas[key] ? 'bg-gray-400 text-white' : 'bg-white border border-gray-200 text-gray-400'}">NO</button>
@@ -450,7 +450,7 @@
                   {#each temasKeys as key}
                     <div class="flex items-start gap-2 text-xs">
                       <span class="mt-0.5 flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full text-[10px] font-bold
-                        {temas[key] ? 'bg-orange-500 text-white' : 'bg-red-100 text-red-500'}">
+                        {temas[key] ? 'bg-[var(--accion)] text-white' : 'bg-red-100 text-red-500'}">
                         {temas[key] ? '✓' : '✗'}
                       </span>
                       <span class="{temas[key] ? 'text-gray-700' : 'text-gray-400'} leading-snug">{temasLabels[key]}</span>
@@ -481,7 +481,7 @@
           type="button"
           on:click={retroceder}
           disabled={isSubmitting}
-          class="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 active:bg-gray-100 transition-colors disabled:opacity-50"
+          class="btn-secondary flex items-center gap-1.5 disabled:opacity-50"
         >
           <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
@@ -496,7 +496,7 @@
         <button
           type="button"
           on:click={avanzar}
-          class="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 py-3 text-sm font-semibold text-white shadow-sm active:from-orange-700 active:to-orange-700 transition-all"
+          class="btn-primary flex flex-1 items-center justify-center gap-2"
         >
           Siguiente
           <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -508,7 +508,7 @@
           type="button"
           on:click={handleSubmit}
           disabled={isSubmitting}
-          class="flex flex-1 items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 py-3 text-sm font-semibold text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed active:from-orange-700 transition-all"
+          class="btn-primary flex flex-1 items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {#if isSubmitting}
             <svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" stroke="currentColor">

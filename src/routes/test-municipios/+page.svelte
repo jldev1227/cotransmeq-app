@@ -91,7 +91,7 @@
 			<button
 				on:click={handleBuscar}
 				disabled={loading || !searchTerm}
-				class="rounded-xl bg-orange-500 px-6 py-2.5 font-semibold text-white transition-all hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+				class="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
 			>
 				{loading ? 'Buscando...' : 'Buscar'}
 			</button>

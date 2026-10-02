@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { fade, scale } from 'svelte/transition';
-	import { cubicOut } from 'svelte/easing';
 	import { tick } from 'svelte';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
+	import TabsVista from '$lib/components/ui/TabsVista.svelte';
 	import { liquidacionesTercerosOcasionalAPI, type TerceroCandidato } from '$lib/api/liquidaciones-terceros-ocasional';
 
 	export let isOpen = false;
@@ -12,6 +12,11 @@
 
 	type FiltroTipo = 'documento' | 'placa' | 'nombre';
 	let filtroTipo: FiltroTipo = 'nombre';
+	const TABS_FILTRO: { id: FiltroTipo; label: string }[] = [
+		{ id: 'nombre', label: 'Nombre' },
+		{ id: 'documento', label: 'NIT / Documento' },
+		{ id: 'placa', label: 'Placa' }
+	];
 	let busqueda = '';
 	let loading = false;
 	let terceros: TerceroCandidato[] = [];
@@ -81,223 +86,406 @@
 		onClose();
 	}
 
+	/// Escape lo atiende ModalBase; aquí queda el atajo de Enter para confirmar.
 	function handleKeydown(e: KeyboardEvent) {
-		if (e.key === 'Escape') {
-			e.preventDefault();
-			onClose();
-		} else if (e.key === 'Enter' && selected.size > 0) {
+		if (e.key === 'Enter' && selected.size > 0) {
 			e.preventDefault();
 			handleConfirm();
 		}
 	}
 </script>
 
-{#if isOpen}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
-		on:click={onClose}
-		on:keydown={handleKeydown}
-		role="dialog"
-		aria-modal="true"
-		tabindex="-1"
-		transition:fade={{ duration: 150 }}
-	>
-		<div
-			class="w-full max-w-3xl rounded-2xl bg-white shadow-2xl"
-			on:click|stopPropagation
-			role="document"
-			transition:scale={{ duration: 200, easing: cubicOut, start: 0.95 }}
-		>
-			<!-- Header -->
-			<div class="flex items-center gap-3 border-b border-gray-100 p-5">
-				<div class="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-orange-400 to-orange-600">
-					<svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-					</svg>
-				</div>
-				<div class="min-w-0 flex-1">
-					<h2 class="text-base font-bold text-gray-900">Seleccionar terceros ocasionales</h2>
-					<p class="text-xs text-gray-500">
-						Mes {mes}/{anio} — elige los terceros que deseas incluir en la liquidación mensual
-					</p>
-				</div>
-				<button
-					class="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-					on:click={onClose}
-					aria-label="Cerrar"
-				>
-					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</div>
+<ModalBase
+	open={isOpen}
+	eyebrow="Liquidación ocasional"
+	title="Seleccionar terceros ocasionales"
+	subtitle={`Mes ${mes}/${anio} — elige los terceros que deseas incluir en la liquidación mensual`}
+	tamano="lg"
+	oncerrar={onClose}
+>
+	{#snippet cabecera()}
+		<TabsVista
+			tabs={TABS_FILTRO}
+			activa={filtroTipo}
+			variante="oscuro"
+			etiqueta="Buscar por"
+			onCambiar={(id) => (filtroTipo = id as FiltroTipo)}
+		/>
+	{/snippet}
 
-			<!-- Filtros -->
-			<div class="space-y-3 border-b border-gray-100 p-5">
-				<!-- Tabs de filtro -->
-				<div class="flex gap-1 rounded-xl bg-gray-100 p-1">
-					{#each [
-						{ value: 'nombre' as FiltroTipo, label: 'Nombre' },
-						{ value: 'documento' as FiltroTipo, label: 'NIT / Documento' },
-						{ value: 'placa' as FiltroTipo, label: 'Placa' }
-					] as opt}
-						<button
-							class="flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors {filtroTipo === opt.value
-								? 'bg-white text-orange-700 shadow-sm'
-								: 'text-gray-600 hover:text-gray-900'}"
-							on:click={() => (filtroTipo = opt.value)}
-							type="button"
-						>
-							{opt.label}
-						</button>
-					{/each}
-				</div>
-
-				<!-- Búsqueda -->
-				<div class="relative">
-					<svg
-						class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-						stroke-width="2"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-					</svg>
-					<input
-						bind:this={searchInput}
-						bind:value={busqueda}
-						type="text"
-						placeholder={filtroTipo === 'documento'
-							? 'Buscar por NIT o número de documento...'
-							: filtroTipo === 'placa'
-								? 'Buscar por placa...'
-								: 'Buscar por nombre del tercero...'}
-						class="input-glow apple-transition w-full rounded-xl border border-gray-200 bg-white py-2 pr-4 pl-9 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-400"
-					/>
-				</div>
-
-				<!-- Hint -->
-				<p class="text-[10px] text-gray-500">
-					Búsqueda insensible a mayúsculas. Aparecen terceros con items pendientes de cierre en este mes.
-				</p>
-			</div>
-
-			<!-- Lista -->
-			<div class="max-h-96 overflow-y-auto p-3">
-				{#if loading}
-					<div class="flex items-center justify-center py-12">
-						<div class="h-8 w-8 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"></div>
-					</div>
-				{:else if terceros.length === 0}
-					<div class="flex flex-col items-center justify-center py-12 text-center">
-						<div class="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-100">
-							<svg class="h-6 w-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-							</svg>
-						</div>
-						<p class="text-sm font-semibold text-gray-900">Sin terceros</p>
-						<p class="text-xs text-gray-500">No hay items pendientes de cierre para este filtro en {mes}/{anio}.</p>
-					</div>
-				{:else}
-					<div class="space-y-1">
-						{#if terceros.length > 1}
-							<button
-								class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-xs font-medium text-orange-700 hover:bg-orange-50"
-								on:click={toggleAll}
-								type="button"
-							>
-								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-								</svg>
-								{terceros.every((t) => selected.has(t.candidato_id))
-									? 'Deseleccionar todos'
-									: 'Seleccionar todos'}
-							</button>
-						{/if}
-						{#each terceros as t (t.candidato_id)}
-							{@const isSelected = selected.has(t.candidato_id)}
-							{@const hasBlocked = t.cierres_bloqueados > 0}
-							<button
-								class="flex w-full items-start gap-3 rounded-lg border p-3 text-left transition-colors {isSelected
-									? 'border-orange-300 bg-orange-50'
-									: 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'}"
-								on:click={() => toggle(t)}
-								type="button"
-							>
-								<div
-									class="flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 {isSelected
-										? 'border-orange-500 bg-orange-500 text-white'
-										: 'border-gray-300 bg-white'}"
-								>
-									{#if isSelected}
-										<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-										</svg>
-									{/if}
-								</div>
-								<div class="min-w-0 flex-1">
-									<div class="flex items-center gap-2">
-										<p class="truncate text-sm font-semibold text-gray-900">
-											{t.tercero_nombre}
-										</p>
-										{#if hasBlocked}
-											<span
-												class="inline-flex items-center gap-1 rounded-md border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-orange-700"
-											>
-												{t.cierres_bloqueados} bloqueado{t.cierres_bloqueados > 1 ? 's' : ''}
-											</span>
-										{/if}
-									</div>
-									<div class="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-gray-500">
-										{#if t.tercero_documento}
-											<span>
-												<span class="font-medium text-gray-600">Doc:</span>
-												{t.tercero_documento}
-											</span>
-										{/if}
-										<span>
-											<span class="font-medium text-gray-600">Placas:</span>
-											<!-- Un item puede no tener placa registrada; sin este
-											     texto la etiqueta quedaba colgando vacía. -->
-											{t.placas.filter(Boolean).join(', ') || '(sin placa)'}
-										</span>
-										<span>
-											<span class="font-medium text-gray-600">Cierres:</span>
-											{t.cierres_count}
-										</span>
-									</div>
-								</div>
-							</button>
-						{/each}
-					</div>
-				{/if}
-			</div>
-
-			<!-- Footer -->
-			<div class="flex items-center justify-between gap-2 border-t border-gray-100 bg-gray-50/50 p-4">
-				<p class="text-xs text-gray-600">
-					<span class="font-semibold text-gray-900">{selected.size}</span>
-					{selected.size === 1 ? 'tercero seleccionado' : 'terceros seleccionados'}
-				</p>
-				<div class="flex items-center gap-2">
-					<button
-						class="apple-transition rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-						on:click={onClose}
-						type="button"
-					>
-						Cancelar
-					</button>
-					<button
-						class="apple-transition rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:from-orange-600 hover:to-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
-						on:click={handleConfirm}
-						disabled={selected.size === 0}
-						type="button"
-					>
-						Generar borrador ({selected.size})
-					</button>
-				</div>
-			</div>
+	<!-- svelte-ignore a11y_no_static_element_interactions -->
+	<div class="mst" on:keydown={handleKeydown}>
+		<!-- Búsqueda -->
+		<div class="mst-buscar">
+			<svg
+				class="mst-buscar-icono"
+				fill="none"
+				stroke="currentColor"
+				viewBox="0 0 24 24"
+				stroke-width="2"
+				aria-hidden="true"
+			>
+				<path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+			</svg>
+			<input
+				bind:this={searchInput}
+				bind:value={busqueda}
+				type="text"
+				aria-label="Buscar terceros"
+				placeholder={filtroTipo === 'documento'
+					? 'Buscar por NIT o número de documento...'
+					: filtroTipo === 'placa'
+						? 'Buscar por placa...'
+						: 'Buscar por nombre del tercero...'}
+				class="mst-input"
+			/>
 		</div>
+
+		<!-- Hint -->
+		<p class="mst-hint">
+			Búsqueda insensible a mayúsculas. Aparecen terceros con items pendientes de cierre en este mes.
+		</p>
+
+		<!-- Lista -->
+		{#if loading}
+			<div class="mst-cargando">
+				<div class="mst-spinner" aria-hidden="true"></div>
+			</div>
+		{:else if terceros.length === 0}
+			<div class="mst-vacio">
+				<div class="mst-vacio-icono">
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+					</svg>
+				</div>
+				<p class="mst-vacio-titulo">Sin terceros</p>
+				<p class="mst-vacio-texto">No hay items pendientes de cierre para este filtro en {mes}/{anio}.</p>
+			</div>
+		{:else}
+			<div class="mst-lista">
+				{#if terceros.length > 1}
+					<button class="mst-todos" on:click={toggleAll} type="button">
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" aria-hidden="true">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+						</svg>
+						{terceros.every((t) => selected.has(t.candidato_id))
+							? 'Deseleccionar todos'
+							: 'Seleccionar todos'}
+					</button>
+				{/if}
+				{#each terceros as t (t.candidato_id)}
+					{@const isSelected = selected.has(t.candidato_id)}
+					{@const hasBlocked = t.cierres_bloqueados > 0}
+					<button
+						class="mst-fila"
+						class:mst-fila--on={isSelected}
+						aria-pressed={isSelected}
+						on:click={() => toggle(t)}
+						type="button"
+					>
+						<div class="mst-check" class:mst-check--on={isSelected}>
+							{#if isSelected}
+								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3" aria-hidden="true">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+								</svg>
+							{/if}
+						</div>
+						<div class="mst-fila-texto">
+							<div class="mst-fila-cabeza">
+								<p class="mst-nombre">{t.tercero_nombre}</p>
+								{#if hasBlocked}
+									<span class="mst-bloqueado">
+										{t.cierres_bloqueados} bloqueado{t.cierres_bloqueados > 1 ? 's' : ''}
+									</span>
+								{/if}
+							</div>
+							<div class="mst-meta">
+								{#if t.tercero_documento}
+									<span>
+										<span class="mst-meta-label">Doc:</span>
+										{t.tercero_documento}
+									</span>
+								{/if}
+								<span>
+									<span class="mst-meta-label">Placas:</span>
+									<!-- Un item puede no tener placa registrada; sin este
+									     texto la etiqueta quedaba colgando vacía. -->
+									{t.placas.filter(Boolean).join(', ') || '(sin placa)'}
+								</span>
+								<span>
+									<span class="mst-meta-label">Cierres:</span>
+									{t.cierres_count}
+								</span>
+							</div>
+						</div>
+					</button>
+				{/each}
+			</div>
+		{/if}
 	</div>
-{/if}
+
+	{#snippet pie()}
+		<p class="mst-resumen">
+			<strong>{selected.size}</strong>
+			{selected.size === 1 ? 'tercero seleccionado' : 'terceros seleccionados'}
+		</p>
+		<button class="btn-secondary" on:click={onClose} type="button">Cancelar</button>
+		<button
+			class="btn-primary"
+			on:click={handleConfirm}
+			disabled={selected.size === 0}
+			type="button"
+		>
+			Generar borrador ({selected.size})
+		</button>
+	{/snippet}
+</ModalBase>
+
+<style>
+	.mst {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+
+	.mst-buscar {
+		position: relative;
+	}
+	.mst-buscar-icono {
+		position: absolute;
+		left: 12px;
+		top: 50%;
+		width: 16px;
+		height: 16px;
+		transform: translateY(-50%);
+		color: var(--text-very-muted);
+		pointer-events: none;
+	}
+	.mst-input {
+		width: 100%;
+		min-height: 42px;
+		padding: 9px 12px 9px 36px;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font: inherit;
+		font-size: 14px;
+		transition:
+			border-color 0.15s,
+			box-shadow 0.15s;
+	}
+	.mst-input::placeholder {
+		color: var(--text-very-muted);
+		opacity: 1;
+	}
+	.mst-input:focus {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.mst-input:disabled {
+		background: var(--bg-base);
+		color: var(--text-muted);
+	}
+
+	.mst-hint {
+		margin: 0;
+		font-size: 12px;
+		color: var(--text-muted);
+	}
+
+	.mst-cargando {
+		display: flex;
+		justify-content: center;
+		padding: 48px 0;
+	}
+	.mst-spinner {
+		width: 32px;
+		height: 32px;
+		border: 4px solid var(--accion);
+		border-top-color: transparent;
+		border-radius: 50%;
+		animation: mst-gira 0.8s linear infinite;
+	}
+	@keyframes mst-gira {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.mst-spinner {
+			animation: none;
+		}
+	}
+
+	.mst-vacio {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		padding: 40px 16px;
+		text-align: center;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
+	}
+	.mst-vacio-icono {
+		display: grid;
+		place-items: center;
+		width: 48px;
+		height: 48px;
+		margin-bottom: 12px;
+		border-radius: 16px;
+		background: var(--bg-base);
+		color: var(--text-very-muted);
+	}
+	.mst-vacio-icono svg {
+		width: 24px;
+		height: 24px;
+	}
+	.mst-vacio-titulo {
+		margin: 0;
+		font-size: 14px;
+		font-weight: 700;
+		color: var(--text-primary);
+	}
+	.mst-vacio-texto {
+		margin: 2px 0 0;
+		font-size: 12.5px;
+		color: var(--text-muted);
+	}
+
+	.mst-lista {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	.mst-todos {
+		align-self: flex-start;
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		padding: 6px 10px;
+		border: 0;
+		border-radius: 10px;
+		background: transparent;
+		color: var(--accion);
+		font: inherit;
+		font-size: 13px;
+		font-weight: 700;
+		cursor: pointer;
+	}
+	.mst-todos:hover {
+		background: color-mix(in srgb, var(--accion) 8%, transparent);
+	}
+	.mst-todos svg {
+		width: 16px;
+		height: 16px;
+	}
+
+	.mst-fila {
+		display: flex;
+		align-items: flex-start;
+		gap: 12px;
+		width: 100%;
+		padding: 12px 14px;
+		border: 1px solid transparent;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+		transition:
+			border-color 0.15s,
+			background 0.15s;
+	}
+	.mst-fila:hover {
+		border-color: var(--border-default);
+	}
+	.mst-fila:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.mst-fila--on,
+	.mst-fila--on:hover {
+		border-color: var(--accion);
+		background: color-mix(in srgb, var(--accion) 6%, var(--bg-surface));
+	}
+
+	.mst-check {
+		display: grid;
+		place-items: center;
+		flex-shrink: 0;
+		width: 20px;
+		height: 20px;
+		margin-top: 1px;
+		border: 2px solid var(--border-default);
+		border-radius: 6px;
+		background: var(--bg-surface);
+		color: #fff;
+	}
+	.mst-check--on {
+		border-color: var(--accion);
+		background: var(--accion);
+	}
+	.mst-check svg {
+		width: 12px;
+		height: 12px;
+	}
+
+	.mst-fila-texto {
+		flex: 1;
+		min-width: 0;
+	}
+	.mst-fila-cabeza {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.mst-nombre {
+		margin: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 14px;
+		font-weight: 700;
+		color: var(--text-primary);
+	}
+	.mst-bloqueado {
+		flex-shrink: 0;
+		padding: 2px 6px;
+		border: 1px solid #fed7aa;
+		border-radius: 6px;
+		background: #fff7ed;
+		color: #9a3412;
+		font-size: 10px;
+		font-weight: 700;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+	}
+	.mst-meta {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px 12px;
+		margin-top: 3px;
+		font-size: 12px;
+		color: var(--text-muted);
+	}
+	.mst-meta-label {
+		font-weight: 600;
+		color: var(--text-secondary);
+	}
+
+	/* Resumen a la izquierda del pie de ModalBase. */
+	.mst-resumen {
+		flex: 1;
+		min-width: 160px;
+		margin: 0;
+		font-size: 13px;
+		color: var(--text-secondary);
+	}
+	.mst-resumen strong {
+		color: var(--text-primary);
+	}
+</style>

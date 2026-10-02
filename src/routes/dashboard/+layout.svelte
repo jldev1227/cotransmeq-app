@@ -203,8 +203,8 @@
 	</div>
 
 	<!-- ═══ TOAST — Conexión en tiempo real, SOLO móvil ═══
-	     En md+ esto lo dice el indicador del header, junto al nombre de la
-	     sección: allí se ve siempre y no tapa contenido. En móvil el header no
+	     En md+ esto lo dice el indicador del header, junto al buscador: allí se
+	     ve siempre y no tapa contenido. En móvil el header no
 	     tiene ancho para el indicador, así que ahí se mantiene el toast. -->
 	{#if avisoSocket}
 		{@const rechazado = estadoSocket === 'rechazado'}

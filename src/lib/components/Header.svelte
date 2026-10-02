@@ -2,7 +2,6 @@
 	import { createEventDispatcher, onMount, onDestroy } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { goto } from '$app/navigation';
-	import { page } from '$app/stores';
 	import SessionTimer from './SessionTimer.svelte';
 	import BuscadorModulos from './BuscadorModulos.svelte';
 	import { notificacionesStore } from '$lib/stores/notificaciones';
@@ -21,71 +20,12 @@
 	export let isCollapsed = false;
 	export let showSessionTimer = false;
 
-	const PAGE_LABELS: Record<string, string> = {
-		flota: 'Flota',
-		conductores: 'Conductores',
-		servicios: 'Servicios',
-		recargos: 'Recargos',
-		clientes: 'Clientes',
-		asistencias: 'Asistencias',
-		'acciones-correctivas': 'Acciones Correctivas',
-		evaluaciones: 'Evaluaciones',
-		'salidas-nc': 'Salidas No Conformidades',
-		formularios: 'Formularios',
-		'mis-formularios': 'Mis formularios',
-		nomina: 'Nómina',
-		extractos: 'Extractos',
-		'liquidaciones-servicios': 'Liquidaciones de Servicios',
-		'liquidaciones-terceros': 'Liquidaciones de Terceros',
-		'liquidaciones-terceros-adicionales': 'Adicionales de Cierres Finales',
-		sarlaft: 'SARLAFT + PTEE',
-		pesv: 'PESV',
-		certificados: 'Certificados Tributarios',
-		terceros: 'Terceros',
-		usuarios: 'Equipo',
-		perfil: 'Perfil',
-		'': 'Dashboard'
-	};
-
-	function getActiveSectionFromPath(pathname: string): string {
-		if (pathname === '/dashboard') return '';
-		if (pathname.startsWith('/dashboard/flota')) return 'flota';
-		if (pathname.startsWith('/dashboard/conductores')) return 'conductores';
-		if (pathname.startsWith('/dashboard/servicios')) return 'servicios';
-		if (pathname.startsWith('/dashboard/recargos')) return 'recargos';
-		if (pathname.startsWith('/dashboard/asistencias')) return 'asistencias';
-		if (pathname.startsWith('/dashboard/acciones-correctivas')) return 'acciones-correctivas';
-		if (pathname.startsWith('/dashboard/evaluaciones')) return 'evaluaciones';
-		if (pathname.startsWith('/dashboard/salidas-nc')) return 'salidas-nc';
-		/// Antes que `formularios`: los dos prefijos empiezan igual.
-		if (pathname.startsWith('/dashboard/mis-formularios')) return 'mis-formularios';
-		if (pathname.startsWith('/dashboard/formularios')) return 'formularios';
-		if (pathname.startsWith('/dashboard/clientes')) return 'clientes';
-		if (pathname.startsWith('/dashboard/nomina')) return 'nomina';
-		if (pathname.startsWith('/dashboard/extractos')) return 'extractos';
-		if (pathname.startsWith('/dashboard/liquidaciones-servicios')) return 'liquidaciones-servicios';
-		// Todas las rutas de terceros (incluidos ambos canvas anuales) mapean
-		// al único módulo de menú: `liquidaciones-terceros`.
-		if (pathname.startsWith('/dashboard/liquidaciones-terceros')) return 'liquidaciones-terceros';
-		if (pathname.startsWith('/dashboard/sarlaft')) return 'sarlaft';
-		if (pathname.startsWith('/dashboard/pesv')) return 'pesv';
-		if (pathname.startsWith('/dashboard/certificados')) return 'certificados';
-		if (pathname.startsWith('/dashboard/terceros')) return 'terceros';
-		if (pathname.startsWith('/dashboard/usuarios')) return 'usuarios';
-		if (pathname.startsWith('/dashboard/sesiones')) return 'usuarios';
-		if (pathname.startsWith('/dashboard/directorio')) return 'usuarios';
-		if (pathname.startsWith('/dashboard/perfil')) return 'perfil';
-		return '';
-	}
-
-	$: pageTitle = PAGE_LABELS[getActiveSectionFromPath($page.url.pathname)] || 'Dashboard';
-
 	// ═══ Estado de la conexión en tiempo real ═══
 	//
 	// Vive aquí y no en un aviso flotante porque en escritorio y tablet el
 	// header solo llevaba el nombre de la sección y dejaba media barra vacía,
 	// mientras el estado del socket se anunciaba con un toast centrado que
-	// tapaba contenido. Junto al título se ve siempre, sin robar sitio.
+	// tapaba contenido. En el header se ve siempre, sin robar sitio.
 	//
 	// El toast sigue existiendo en `dashboard/+layout.svelte` para móvil, donde
 	// el header va justo de ancho y no cabe este indicador.
@@ -283,8 +223,9 @@
 	in:fly={{ y: -20, duration: 400, delay: 300 }}
 >
 	<div class="flex h-full items-center justify-between gap-3 px-4 md:px-6 lg:pl-6">
-		<!-- Left cluster: burger (mobile/tablet) + title -->
-		<div class="flex min-w-0 flex-1 items-center gap-2 lg:flex-none lg:basis-80 xl:basis-96" in:fade={{ duration: 600, delay: 400 }}>
+		<!-- Burger (mobile/tablet). Sin nombre de la sección: cada página ya trae
+		     su propio título y el sidebar marca dónde se está. -->
+		<div class="flex min-w-0 flex-1 items-center lg:hidden" in:fade={{ duration: 600, delay: 400 }}>
 			<!-- Burger menu (mobile/tablet only) — profesonal, dentro del flow -->
 			<button
 				type="button"
@@ -304,14 +245,13 @@
 				{/if}
 			</button>
 
-			<h1 class="font-display truncate text-xl md:text-2xl" style="color: #fff; font-weight: 800;">{pageTitle}</h1>
 		</div>
 
 		<!-- Centro (solo escritorio): «Ir a…», el buscador de módulos. Antes esta
-		     franja quedaba vacía entre el título y el usuario. -->
+		     franja quedaba vacía junto al usuario. -->
 		<div class="hidden min-w-0 flex-1 items-center justify-center px-4 lg:flex" in:fade={{ duration: 600, delay: 450 }}>
 			<BuscadorModulos />
-			<!-- Conexión en tiempo real, tras el buscador para no quitarle sitio al título (en móvil lo cubre el toast del layout) -->
+			<!-- Conexión en tiempo real, tras el buscador (en móvil lo cubre el toast del layout) -->
 			{#if socketEstado !== 'inactivo'}
 				<div
 					class="ml-3 hidden shrink-0 items-center gap-2 border-l pl-3 lg:flex"

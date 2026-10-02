@@ -3,7 +3,8 @@
 	import Select from 'svelte-select';
 	import { obtenerConductores } from '$lib/api/nomina';
 	import type { Conductor, Prima, CreatePrimaPayload } from '$lib/types/nomina';
-	import { X, Save, User, Sparkles, FileText, Calendar } from 'lucide-svelte';
+	import { Save, User, FileText, Calendar } from 'lucide-svelte';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 	import { toast } from 'svelte-sonner';
 
 	// Props
@@ -176,321 +177,318 @@
 	}
 </script>
 
-{#if show}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-		on:click|self={close}
-	>
-		<div class="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-2xl">
-			<!-- Header -->
-			<div class="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-				<div class="flex items-center gap-3">
-					<div class="rounded-lg bg-emerald-100 p-2">
-						<Sparkles class="h-5 w-5 text-emerald-600" />
-					</div>
-					<div>
-						<h2 class="text-lg font-semibold text-gray-900">
-							{prima ? 'Editar Prima' : 'Nueva Prima'}
-						</h2>
-						<p class="text-xs text-gray-500">
-							{prima
-								? 'Modifique los datos de la prima'
-								: 'Registre una prima independiente del desprendible de nómina'}
-						</p>
-					</div>
-				</div>
-				<button
-					on:click={close}
-					class="flex h-8 w-8 items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700"
-				>
-					<X class="h-4 w-4" />
-				</button>
+<ModalBase
+	open={show}
+	eyebrow="Primas"
+	title={prima ? 'Editar Prima' : 'Nueva Prima'}
+	subtitle={prima
+		? 'Modifique los datos de la prima'
+		: 'Registre una prima independiente del desprendible de nómina'}
+	tamano="md"
+	bloqueado={loading}
+	oncerrar={close}
+>
+	<div class="pf-cuerpo">
+		<div class="pf-tarjeta">
+			<!-- Conductor -->
+			<div class="pf-campo">
+				<label for="conductor" class="pf-label">
+					Conductor <span class="pf-req">*</span>
+				</label>
+				<Select
+					items={conductoresOptions}
+					bind:value={conductorSelected}
+					placeholder={loadingConductores ? 'Cargando conductores...' : 'Buscar conductor...'}
+					searchable={true}
+					clearable={false}
+					disabled={loadingConductores}
+					--border-radius="12px"
+					--border="1px solid var(--border-default)"
+					--border-focused="1px solid var(--accion)"
+					--border-hover="1px solid var(--border-default)"
+					--padding="0 12px"
+					--height="42px"
+					--font-size="14px"
+					--item-is-active-bg="var(--accion)"
+				/>
+				{#if errors.conductor}
+					<p class="pf-error">{errors.conductor}</p>
+				{/if}
 			</div>
 
-			<!-- Body -->
-			<div class="space-y-4 px-6 py-5">
-				<!-- Conductor -->
-				<div>
-					<label
-						for="conductor"
-						class="mb-1.5 block text-xs font-medium tracking-wide text-gray-500 uppercase"
-					>
-						Conductor <span class="text-red-500">*</span>
-					</label>
-					<Select
-						items={conductoresOptions}
-						bind:value={conductorSelected}
-						placeholder={loadingConductores ? 'Cargando conductores...' : 'Buscar conductor...'}
-						searchable={true}
-						clearable={false}
-						disabled={loadingConductores}
-						--border-radius="0.5rem"
-						--border="1px solid #E5E7EB"
-						--border-focused="1px solid #16a34a"
-						--padding="0.625rem 0.875rem"
-						--height="40px"
-					/>
-					{#if errors.conductor}
-						<p class="mt-1 text-xs text-red-500">{errors.conductor}</p>
-					{/if}
-				</div>
-
-				<!-- Mes y Año -->
-				<div class="grid grid-cols-2 gap-4">
-					<div>
-						<label
-							for="mes"
-							class="mb-1.5 block text-xs font-medium tracking-wide text-gray-500 uppercase"
-						>
-							Mes <span class="text-red-500">*</span>
-						</label>
-						<select
-							id="mes"
-							bind:value={mes}
-							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-						>
-							<option value={null}>— Seleccione —</option>
-							{#each MESES as m}
-								<option value={m.valor}>{m.nombre}</option>
-							{/each}
-						</select>
-						{#if errors.mes}
-							<p class="mt-1 text-xs text-red-500">{errors.mes}</p>
-						{/if}
-					</div>
-					<div>
-						<label
-							for="anio"
-							class="mb-1.5 block text-xs font-medium tracking-wide text-gray-500 uppercase"
-						>
-							Año <span class="text-red-500">*</span>
-						</label>
-						<input
-							id="anio"
-							type="number"
-							bind:value={anio}
-							min="2000"
-							max="2100"
-							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-						/>
-						{#if errors.anio}
-							<p class="mt-1 text-xs text-red-500">{errors.anio}</p>
-						{/if}
-					</div>
-				</div>
-
-				<!-- Prima y Prima Pendiente -->
-				<div class="grid grid-cols-2 gap-4">
-					<div>
-						<label
-							for="prima-valor"
-							class="mb-1.5 block text-xs font-medium tracking-wide text-gray-500 uppercase"
-						>
-							Valor Prima <span class="text-red-500">*</span>
-						</label>
-						<input
-							id="prima-valor"
-							type="text"
-							inputmode="numeric"
-							placeholder="$ 0"
-							value={primaValor ? '$ ' + formatCOPInput(primaValor) : ''}
-							on:focus={handleCOPFocus}
-							on:blur={handleCOPBlur}
-							on:input={(e) => (primaValor = parseCOPInput(e.currentTarget.value))}
-							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-						/>
-						{#if errors.prima}
-							<p class="mt-1 text-xs text-red-500">{errors.prima}</p>
-						{/if}
-					</div>
-					<div>
-						<label
-							for="prima-pendiente"
-							class="mb-1.5 block text-xs font-medium tracking-wide text-gray-500 uppercase"
-						>
-							Prima Pendiente (opcional)
-						</label>
-						<input
-							id="prima-pendiente"
-							type="text"
-							inputmode="numeric"
-							placeholder="$ 0"
-							value={primaPendiente ? '$ ' + formatCOPInput(primaPendiente) : ''}
-							on:focus={handleCOPFocus}
-							on:blur={handleCOPBlur}
-							on:input={(e) =>
-								(primaPendiente = parseCOPInput(e.currentTarget.value) || null)}
-							class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-						/>
-					</div>
-				</div>
-
-				<!-- Estado -->
-				<div>
-					<label
-						for="estado"
-						class="mb-1.5 block text-xs font-medium tracking-wide text-gray-500 uppercase"
-					>
-						Estado <span class="text-red-500">*</span>
-					</label>
-					<select
-						id="estado"
-						bind:value={estado}
-						class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-					>
-						<option value="Pendiente">Pendiente</option>
-						<option value="Pagado">Pagado</option>
+			<!-- Mes y Año -->
+			<div class="pf-grid">
+				<div class="pf-campo">
+					<label for="mes" class="pf-label">Mes <span class="pf-req">*</span></label>
+					<select id="mes" class="pf-input" bind:value={mes}>
+						<option value={null}>— Seleccione —</option>
+						{#each MESES as m}
+							<option value={m.valor}>{m.nombre}</option>
+						{/each}
 					</select>
+					{#if errors.mes}
+						<p class="pf-error">{errors.mes}</p>
+					{/if}
 				</div>
-
-				<!-- Observaciones -->
-				<div>
-					<label
-						for="observaciones"
-						class="mb-1.5 block text-xs font-medium tracking-wide text-gray-500 uppercase"
-					>
-						Observaciones
-					</label>
-					<textarea
-						id="observaciones"
-						bind:value={observaciones}
-						rows="3"
-						placeholder="Notas adicionales..."
-						class="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-					></textarea>
-				</div>
-
-				<!-- Campos manuales del desprendible -->
-				<div class="rounded-lg border border-gray-200 bg-gray-50 p-4">
-					<h4 class="mb-3 text-xs font-semibold tracking-wide text-gray-500 uppercase">
-						Datos del Desprendible de Prima
-					</h4>
-					<div class="grid grid-cols-2 gap-4">
-						<!-- Tiempo trabajado (días) -->
-						<div>
-							<label for="tiempo-dias" class="mb-1.5 block text-xs font-medium text-gray-700">
-								Tiempo Trabajado (días)
-							</label>
-							<input
-								id="tiempo-dias"
-								type="number"
-								bind:value={tiempo_trabajado_dias}
-								min="0"
-								max="365"
-								placeholder="180"
-								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-							/>
-						</div>
-
-						<!-- Sueldo Básico -->
-						<div>
-							<label for="sueldo-basico" class="mb-1.5 block text-xs font-medium text-gray-700">
-								Sueldo Básico
-							</label>
-							<input
-								id="sueldo-basico"
-								type="text"
-								inputmode="numeric"
-								placeholder="$ 0"
-								value={sueldo_basico ? '$ ' + formatCOPInput(sueldo_basico) : ''}
-								on:focus={handleCOPFocus}
-								on:blur={handleCOPBlur}
-								on:input={(e) => (sueldo_basico = parseCOPInput(e.currentTarget.value) || null)}
-								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-							/>
-						</div>
-
-						<!-- Auxilio de Transporte -->
-						<div>
-							<label
-								for="auxilio-transporte"
-								class="mb-1.5 block text-xs font-medium text-gray-700"
-							>
-								Auxilio de Transporte
-							</label>
-							<input
-								id="auxilio-transporte"
-								type="text"
-								inputmode="numeric"
-								placeholder="$ 0"
-								value={auxilio_transporte ? '$ ' + formatCOPInput(auxilio_transporte) : ''}
-								on:focus={handleCOPFocus}
-								on:blur={handleCOPBlur}
-								on:input={(e) =>
-									(auxilio_transporte = parseCOPInput(e.currentTarget.value) || null)}
-								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-							/>
-						</div>
-
-						<!-- Sueldo Variable -->
-						<div>
-							<label
-								for="sueldo-variable"
-								class="mb-1.5 block text-xs font-medium text-gray-700"
-							>
-								Sueldo Variable
-							</label>
-							<input
-								id="sueldo-variable"
-								type="text"
-								inputmode="numeric"
-								placeholder="$ 0"
-								value={sueldo_variable ? '$ ' + formatCOPInput(sueldo_variable) : ''}
-								on:focus={handleCOPFocus}
-								on:blur={handleCOPBlur}
-								on:input={(e) => (sueldo_variable = parseCOPInput(e.currentTarget.value) || null)}
-								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-							/>
-						</div>
-
-						<!-- Total Base de Liquidación (span 2 columns) -->
-						<div class="col-span-2">
-							<label for="total-base" class="mb-1.5 block text-xs font-medium text-gray-700">
-								Total Base de Liquidación
-							</label>
-							<input
-								id="total-base"
-								type="text"
-								inputmode="numeric"
-								placeholder="$ 0"
-								value={total_base_liquidacion
-									? '$ ' + formatCOPInput(total_base_liquidacion)
-									: ''}
-								on:focus={handleCOPFocus}
-								on:blur={handleCOPBlur}
-								on:input={(e) =>
-									(total_base_liquidacion = parseCOPInput(e.currentTarget.value) || null)}
-								class="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
-							/>
-						</div>
-					</div>
+				<div class="pf-campo">
+					<label for="anio" class="pf-label">Año <span class="pf-req">*</span></label>
+					<input id="anio" class="pf-input" type="number" bind:value={anio} min="2000" max="2100" />
+					{#if errors.anio}
+						<p class="pf-error">{errors.anio}</p>
+					{/if}
 				</div>
 			</div>
 
-			<!-- Footer -->
-			<div class="flex items-center justify-end gap-2 border-t border-gray-200 px-6 py-4">
-				<button
-					on:click={close}
-					disabled={loading}
-					class="rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-50"
-				>
-					Cancelar
-				</button>
-				<button
-					on:click={handleSubmit}
-					disabled={loading}
-					class="flex items-center gap-2 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-50"
-				>
-					{#if loading}
-						<div
-							class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent"
-						></div>
-					{:else}
-						<Save class="h-4 w-4" />
+			<!-- Prima y Prima Pendiente -->
+			<div class="pf-grid">
+				<div class="pf-campo">
+					<label for="prima-valor" class="pf-label">
+						Valor Prima <span class="pf-req">*</span>
+					</label>
+					<input
+						id="prima-valor"
+						class="pf-input"
+						type="text"
+						inputmode="numeric"
+						placeholder="$ 0"
+						value={primaValor ? '$ ' + formatCOPInput(primaValor) : ''}
+						on:focus={handleCOPFocus}
+						on:blur={handleCOPBlur}
+						on:input={(e) => (primaValor = parseCOPInput(e.currentTarget.value))}
+					/>
+					{#if errors.prima}
+						<p class="pf-error">{errors.prima}</p>
 					{/if}
-					{prima ? 'Guardar cambios' : 'Crear prima'}
-				</button>
+				</div>
+				<div class="pf-campo">
+					<label for="prima-pendiente" class="pf-label">Prima Pendiente (opcional)</label>
+					<input
+						id="prima-pendiente"
+						class="pf-input"
+						type="text"
+						inputmode="numeric"
+						placeholder="$ 0"
+						value={primaPendiente ? '$ ' + formatCOPInput(primaPendiente) : ''}
+						on:focus={handleCOPFocus}
+						on:blur={handleCOPBlur}
+						on:input={(e) => (primaPendiente = parseCOPInput(e.currentTarget.value) || null)}
+					/>
+				</div>
+			</div>
+
+			<!-- Estado -->
+			<div class="pf-campo">
+				<label for="estado" class="pf-label">Estado <span class="pf-req">*</span></label>
+				<select id="estado" class="pf-input" bind:value={estado}>
+					<option value="Pendiente">Pendiente</option>
+					<option value="Pagado">Pagado</option>
+				</select>
+			</div>
+
+			<!-- Observaciones -->
+			<div class="pf-campo">
+				<label for="observaciones" class="pf-label">Observaciones</label>
+				<textarea
+					id="observaciones"
+					class="pf-input"
+					bind:value={observaciones}
+					rows="3"
+					placeholder="Notas adicionales..."
+				></textarea>
+			</div>
+		</div>
+
+		<!-- Campos manuales del desprendible -->
+		<div class="pf-tarjeta">
+			<h4 class="pf-seccion">Datos del Desprendible de Prima</h4>
+			<div class="pf-grid">
+				<!-- Tiempo trabajado (días) -->
+				<div class="pf-campo">
+					<label for="tiempo-dias" class="pf-label">Tiempo Trabajado (días)</label>
+					<input
+						id="tiempo-dias"
+						class="pf-input"
+						type="number"
+						bind:value={tiempo_trabajado_dias}
+						min="0"
+						max="365"
+						placeholder="180"
+					/>
+				</div>
+
+				<!-- Sueldo Básico -->
+				<div class="pf-campo">
+					<label for="sueldo-basico" class="pf-label">Sueldo Básico</label>
+					<input
+						id="sueldo-basico"
+						class="pf-input"
+						type="text"
+						inputmode="numeric"
+						placeholder="$ 0"
+						value={sueldo_basico ? '$ ' + formatCOPInput(sueldo_basico) : ''}
+						on:focus={handleCOPFocus}
+						on:blur={handleCOPBlur}
+						on:input={(e) => (sueldo_basico = parseCOPInput(e.currentTarget.value) || null)}
+					/>
+				</div>
+
+				<!-- Auxilio de Transporte -->
+				<div class="pf-campo">
+					<label for="auxilio-transporte" class="pf-label">Auxilio de Transporte</label>
+					<input
+						id="auxilio-transporte"
+						class="pf-input"
+						type="text"
+						inputmode="numeric"
+						placeholder="$ 0"
+						value={auxilio_transporte ? '$ ' + formatCOPInput(auxilio_transporte) : ''}
+						on:focus={handleCOPFocus}
+						on:blur={handleCOPBlur}
+						on:input={(e) => (auxilio_transporte = parseCOPInput(e.currentTarget.value) || null)}
+					/>
+				</div>
+
+				<!-- Sueldo Variable -->
+				<div class="pf-campo">
+					<label for="sueldo-variable" class="pf-label">Sueldo Variable</label>
+					<input
+						id="sueldo-variable"
+						class="pf-input"
+						type="text"
+						inputmode="numeric"
+						placeholder="$ 0"
+						value={sueldo_variable ? '$ ' + formatCOPInput(sueldo_variable) : ''}
+						on:focus={handleCOPFocus}
+						on:blur={handleCOPBlur}
+						on:input={(e) => (sueldo_variable = parseCOPInput(e.currentTarget.value) || null)}
+					/>
+				</div>
+
+				<!-- Total Base de Liquidación (ocupa las dos columnas) -->
+				<div class="pf-campo pf-ancho">
+					<label for="total-base" class="pf-label">Total Base de Liquidación</label>
+					<input
+						id="total-base"
+						class="pf-input"
+						type="text"
+						inputmode="numeric"
+						placeholder="$ 0"
+						value={total_base_liquidacion ? '$ ' + formatCOPInput(total_base_liquidacion) : ''}
+						on:focus={handleCOPFocus}
+						on:blur={handleCOPBlur}
+						on:input={(e) => (total_base_liquidacion = parseCOPInput(e.currentTarget.value) || null)}
+					/>
+				</div>
 			</div>
 		</div>
 	</div>
-{/if}
+
+	{#snippet pie()}
+		<button type="button" on:click={close} disabled={loading} class="btn-secondary">
+			Cancelar
+		</button>
+		<button type="button" on:click={handleSubmit} disabled={loading} class="btn-primary">
+			{#if loading}
+				<span class="pf-spinner"></span>
+			{:else}
+				<Save />
+			{/if}
+			{prima ? 'Guardar cambios' : 'Crear prima'}
+		</button>
+	{/snippet}
+</ModalBase>
+
+<style>
+	.pf-cuerpo {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+	.pf-tarjeta {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+		padding: 16px;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
+	}
+	.pf-seccion {
+		margin: 0;
+		font-size: 13px;
+		font-weight: 700;
+		color: var(--text-primary);
+	}
+	.pf-grid {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 12px 14px;
+	}
+	@media (max-width: 30rem) {
+		.pf-grid {
+			grid-template-columns: 1fr;
+		}
+	}
+	.pf-campo {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		min-width: 0;
+	}
+	.pf-ancho {
+		grid-column: 1 / -1;
+	}
+	.pf-label {
+		font-size: 12px;
+		font-weight: 700;
+		color: var(--text-secondary);
+	}
+	.pf-req {
+		color: #b91c1c;
+	}
+	.pf-input {
+		width: 100%;
+		min-height: 42px;
+		padding: 9px 12px;
+		border-radius: 12px;
+		border: 1px solid var(--border-default);
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font-size: 14px;
+		transition:
+			border-color 0.15s ease,
+			box-shadow 0.15s ease;
+	}
+	textarea.pf-input {
+		resize: vertical;
+	}
+	.pf-input:focus {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.pf-input:disabled {
+		background: var(--bg-base);
+		color: var(--text-muted);
+		cursor: not-allowed;
+	}
+	.pf-error {
+		margin: 0;
+		font-size: 12px;
+		font-weight: 600;
+		color: #b91c1c;
+	}
+	.pf-spinner {
+		width: 14px;
+		height: 14px;
+		border-radius: 999px;
+		border: 2px solid #fff;
+		border-top-color: transparent;
+		animation: pf-giro 0.8s linear infinite;
+	}
+	@keyframes pf-giro {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+</style>

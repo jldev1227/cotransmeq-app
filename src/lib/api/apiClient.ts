@@ -411,6 +411,11 @@ export const clientesAPI = {
 	 * el camino la búsqueda, el tipo y la paginación.
 	 */
 	getOcultos: (params?: any) => apiClient.get('/api/clientes/ocultos', { params }),
+	/** Papelera: clientes con borrado lógico. */
+	getPapelera: (params?: any) => apiClient.get('/api/clientes/papelera', { params }),
+	restaurar: (id: string) => apiClient.post(`/api/clientes/${id}/restore`),
+	/** Solo desde la papelera y sin historial; si no, 409 con el motivo. */
+	eliminarPermanente: (id: string) => apiClient.delete(`/api/clientes/${id}/permanente`),
 	/** Ver la nota de `vehiculosAPI.operacionesMasivas`: mismo fallo de token. */
 	operacionesMasivas: (ids: string[], accion: string) =>
 		apiClient.post('/api/clientes/masivo', { ids, accion })

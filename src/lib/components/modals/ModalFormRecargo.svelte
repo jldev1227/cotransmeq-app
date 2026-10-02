@@ -3155,7 +3155,7 @@
 										<button
 											on:click={copiarSeleccionASiguientes}
 											disabled={!hayDiasSiguientes}
-											class="flex items-center gap-1 rounded-lg bg-blue-500 px-3 py-1.5 text-xs text-white transition-colors hover:bg-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
+											class="btn-primary flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
 										>
 											<svg
 												class="h-3.5 w-3.5"
@@ -3175,7 +3175,7 @@
 										<button
 											on:click={incrementarDiasSiguientes}
 											disabled={!hayDiasSiguientes}
-											class="flex items-center gap-1 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
+											class="btn-secondary flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
 										>
 											<svg
 												class="h-3.5 w-3.5"

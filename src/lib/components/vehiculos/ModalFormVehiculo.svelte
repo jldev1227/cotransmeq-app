@@ -1,626 +1,406 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
-	import { fade, fly, scale } from 'svelte/transition';
-	import { quintOut } from 'svelte/easing';
+	import ModalEntidad from '$lib/components/directorio/ModalEntidad.svelte';
+	import Campo from '$lib/components/directorio/Campo.svelte';
+	import {
+		avisarErrorGuardado,
+		avisarErroresValidacion,
+		avisarGuardado,
+		errorDeApi,
+		erroresPorTab,
+		hayCambios,
+		primeraTabConError,
+		type Errores
+	} from '$lib/components/directorio/formulario';
 	import { vehiculosAPI } from '$lib/api/apiClient';
 	import { socketUtils } from '$lib/socket';
 	import { flotaStore } from '$lib/stores/flota';
 
-	export let isOpen = false;
-	export let vehiculoId: string | null = null;
+	/**
+	 * Crear y editar un vehículo: el mismo modal para los dos casos, con el
+	 * cascarón común de los directorios (`ModalEntidad`).
+	 *
+	 * Los campos son los que de verdad guarda la tabla `vehiculos`. El modal
+	 * anterior pedía «Año» y «Capacidad de pasajeros», que no existen en la base
+	 * y el backend descartaba en silencio; y su estado por defecto iba en
+	 * mayúsculas (`DISPONIBLE`), que el backend rechaza: crear con el valor por
+	 * defecto fallaba siempre.
+	 */
+	interface Props {
+		open: boolean;
+		vehiculoId?: string | null;
+		onclose: () => void;
+		onguardado?: () => void;
+	}
 
-	const dispatch = createEventDispatcher();
+	let { open, vehiculoId = null, onclose, onguardado }: Props = $props();
 
-	let isSubmitting = false;
-	let error: string | null = null;
-	let fieldErrors: { [key: string]: string } = {};
-	let showSuccessAnimation = false;
-	let successMessage = '';
+	const CLASES = [
+		['automovil', 'Automóvil'],
+		['camioneta', 'Camioneta'],
+		['campero', 'Campero'],
+		['van', 'Van'],
+		['microbus', 'Microbús'],
+		['buseta', 'Buseta'],
+		['bus', 'Bus'],
+		['camion', 'Camión'],
+		['motocicleta', 'Motocicleta'],
+		['otro', 'Otro']
+	] as const;
 
-	// Form data
-	let formData = {
+	/// Los valores del enum `enum_vehiculos_estado`, en minúscula como los guarda.
+	const ESTADOS = [
+		['disponible', 'Disponible'],
+		['programado', 'Programado'],
+		['servicio', 'En servicio'],
+		['mantenimiento', 'En mantenimiento'],
+		['inactivo', 'Inactivo'],
+		['desvinculado', 'Desvinculado']
+	] as const;
+
+	const COMBUSTIBLES = ['DIESEL', 'GASOLINA', 'GAS', 'ELÉCTRICO', 'HÍBRIDO'];
+
+	const TABS = [
+		{ id: 'general', label: 'General' },
+		{ id: 'tecnico', label: 'Ficha técnica' },
+		{ id: 'propietario', label: 'Propietario' }
+	];
+
+	const CAMPO_TAB: Record<string, string> = {
+		placa: 'general',
+		clase_vehiculo: 'general',
+		marca: 'general',
+		linea: 'general',
+		modelo: 'general',
+		color: 'general',
+		estado: 'general',
+		tipo_carroceria: 'tecnico',
+		combustible: 'tecnico',
+		numero_motor: 'tecnico',
+		vin: 'tecnico',
+		numero_serie: 'tecnico',
+		numero_chasis: 'tecnico',
+		kilometraje: 'tecnico',
+		fecha_matricula: 'tecnico',
+		propietario_nombre: 'propietario',
+		propietario_identificacion: 'propietario'
+	};
+
+	const vacio = () => ({
 		placa: '',
-		marca: '',
-		modelo: '',
-		ano: new Date().getFullYear(),
 		clase_vehiculo: '',
-		capacidad_pasajeros: 1,
-		estado: 'DISPONIBLE'
-	};
+		marca: '',
+		linea: '',
+		modelo: '',
+		color: '',
+		estado: 'disponible',
+		tipo_carroceria: '',
+		combustible: '',
+		numero_motor: '',
+		vin: '',
+		numero_serie: '',
+		numero_chasis: '',
+		kilometraje: '',
+		fecha_matricula: '',
+		propietario_nombre: '',
+		propietario_identificacion: ''
+	});
 
-	const claseVehiculoOptions = [
-		'automovil',
-		'camioneta',
-		'van',
-		'bus',
-		'camion',
-		'motocicleta',
-		'otro'
-	];
+	let form = $state(vacio());
+	let original = $state(JSON.stringify(vacio()));
+	let errores = $state<Errores>({});
+	let intentoGuardar = $state(false);
+	let tab = $state('general');
+	let cargando = $state(false);
+	let guardando = $state(false);
 
-	const estadoOptions = [
-		{ value: 'DISPONIBLE', label: 'Disponible' },
-		{ value: 'disponible', label: 'Disponible' },
-		{ value: 'SERVICIO', label: 'En Servicio' },
-		{ value: 'servicio', label: 'En Servicio' },
-		{ value: 'MANTENIMIENTO', label: 'Mantenimiento' },
-		{ value: 'mantenimiento', label: 'Mantenimiento' },
-		{ value: 'INACTIVO', label: 'Inactivo' },
-		{ value: 'inactivo', label: 'Inactivo' },
-		{ value: 'NO_DISPONIBLE', label: 'No Disponible' },
-		{ value: 'no_disponible', label: 'No Disponible' },
-		{ value: 'DESVINCULADO', label: 'Desvinculado' },
-		{ value: 'desvinculado', label: 'Desvinculado' }
-	];
+	const editando = $derived(Boolean(vehiculoId));
+	const sucio = $derived(hayCambios(form, JSON.parse(original)));
 
-	const handleClose = () => {
-		if (isSubmitting) return;
-		isOpen = false;
-		resetForm();
-		dispatch('close');
-	};
+	/// Cada apertura empieza de cero; al editar, con lo que hay en el servidor.
+	$effect(() => {
+		if (!open) return;
+		tab = 'general';
+		errores = {};
+		intentoGuardar = false;
+		const base = vacio();
+		form = base;
+		original = JSON.stringify(base);
+		if (vehiculoId) void cargar(vehiculoId);
+	});
 
-	const resetForm = () => {
-		formData = {
-			placa: '',
-			marca: '',
-			modelo: '',
-			ano: new Date().getFullYear(),
-			clase_vehiculo: '',
-			capacidad_pasajeros: 1,
-			estado: 'DISPONIBLE'
-		};
-		error = null;
-		fieldErrors = {};
-		showSuccessAnimation = false;
-		successMessage = '';
-	};
-
-	const parseBackendError = (err: any): string => {
-		// Si es un error de validación de Zod del backend
-		if (err.response?.data?.errors) {
-			const errors = err.response.data.errors;
-
-			// Mapear errores de campos específicos a mensajes amigables
-			if (errors.estado) {
-				return 'El estado seleccionado no es válido. Por favor, seleccione un estado de la lista.';
-			}
-
-			if (errors.capacidad_pasajeros) {
-				return 'La capacidad de pasajeros debe ser al menos 1 persona.';
-			}
-
-			if (errors.placa) {
-				return 'La placa debe tener al menos 6 caracteres.';
-			}
-
-			if (errors.marca) {
-				return 'La marca debe tener al menos 2 caracteres.';
-			}
-
-			if (errors.clase_vehiculo) {
-				return 'La clase de vehículo es requerida.';
-			}
-
-			// Si hay múltiples errores, mostrar el primero
-			const firstError = Object.values(errors)[0];
-			if (typeof firstError === 'string') {
-				return firstError;
-			}
-
-			return 'Por favor, corrija los errores en el formulario.';
-		}
-
-		// Si es un mensaje directo del backend
-		if (err.response?.data?.message) {
-			const message = err.response.data.message;
-
-			// Traducir mensajes comunes del backend
-			if (message.includes('estado must be equal to one of the allowed values')) {
-				return 'El estado seleccionado no es válido. Seleccione: Disponible, En Servicio, Mantenimiento, Inactivo, No Disponible o Desvinculado.';
-			}
-
-			if (message.includes('capacidad_pasajeros must be >= 1')) {
-				return 'La capacidad de pasajeros debe ser al menos 1 persona.';
-			}
-
-			if (
-				message.includes('placa already exists') ||
-				(message.includes('placa') && message.includes('unique'))
-			) {
-				return 'Ya existe un vehículo registrado con esta placa.';
-			}
-
-			return message;
-		}
-
-		// Error genérico
-		return 'Error al guardar el vehículo. Por favor, intente nuevamente.';
-	};
-
-	const handleSubmit = async () => {
-		error = null;
-		fieldErrors = {};
-
-		// Validaciones del frontend
-		if (!formData.placa.trim()) {
-			error = 'La placa es obligatoria';
-			fieldErrors.placa = 'Este campo es obligatorio';
-			return;
-		}
-
-		if (formData.placa.trim().length < 6) {
-			error = 'La placa debe tener al menos 6 caracteres';
-			fieldErrors.placa = 'Mínimo 6 caracteres';
-			return;
-		}
-
-		if (!formData.marca.trim()) {
-			error = 'La marca es obligatoria';
-			fieldErrors.marca = 'Este campo es obligatorio';
-			return;
-		}
-
-		if (!formData.modelo.trim()) {
-			error = 'El modelo es obligatorio';
-			fieldErrors.modelo = 'Este campo es obligatorio';
-			return;
-		}
-
-		if (formData.ano < 1900 || formData.ano > new Date().getFullYear() + 1) {
-			error = `El año debe estar entre 1900 y ${new Date().getFullYear() + 1}`;
-			fieldErrors.ano = 'Año inválido';
-			return;
-		}
-
-		if (!formData.clase_vehiculo) {
-			error = 'La clase de vehículo es obligatoria';
-			fieldErrors.clase_vehiculo = 'Seleccione una opción';
-			return;
-		}
-
-		if (formData.capacidad_pasajeros < 1) {
-			error = 'La capacidad de pasajeros debe ser al menos 1 persona';
-			fieldErrors.capacidad_pasajeros = 'Mínimo 1 pasajero';
-			return;
-		}
-
+	async function cargar(id: string) {
+		cargando = true;
 		try {
-			isSubmitting = true;
-
-			const payload = {
-				...formData,
-				placa: formData.placa.toUpperCase().trim(),
-				marca: formData.marca.trim(),
-				modelo: formData.modelo.trim(),
-				clase_vehiculo: formData.clase_vehiculo.trim()
+			const v = (await vehiculosAPI.getById(id)).data.data;
+			const datos = {
+				...vacio(),
+				...Object.fromEntries(
+					Object.keys(vacio()).map((k) => [k, v[k] == null ? '' : String(v[k])])
+				),
+				clase_vehiculo: (v.clase_vehiculo ?? '').toLowerCase(),
+				estado: (v.estado ?? 'disponible').toLowerCase()
 			};
+			form = datos;
+			original = JSON.stringify(datos);
+		} catch (e) {
+			avisarErrorGuardado(errorDeApi(e, 'No se pudo cargar el vehículo.').mensaje, false);
+			onclose();
+		} finally {
+			cargando = false;
+		}
+	}
 
-			let response;
+	function validar(): Errores {
+		const e: Errores = {};
+		const placa = form.placa.trim();
+		if (!placa) e.placa = 'La placa es obligatoria.';
+		else if (placa.length < 6) e.placa = 'Mínimo 6 caracteres.';
+		if (!form.clase_vehiculo) e.clase_vehiculo = 'Selecciona la clase.';
+		if (form.marca.trim() && form.marca.trim().length < 2) e.marca = 'Mínimo 2 caracteres.';
+		if (form.linea.trim() && form.linea.trim().length < 2) e.linea = 'Mínimo 2 caracteres.';
+		if (form.kilometraje != null && form.kilometraje !== '' && !(Number(form.kilometraje) >= 0))
+			e.kilometraje = 'Debe ser un número mayor o igual a 0.';
+		return e;
+	}
+
+	/// Revalida en vivo después del primer intento: el error se va en cuanto
+	/// se corrige, sin esperar otro clic.
+	$effect(() => {
+		if (intentoGuardar) errores = validar();
+	});
+
+	/**
+	 * Solo lo que tiene valor. Las rutas validan cada texto con `minLength` y
+	 * sin `null`, así que un campo vacío se omite en vez de mandarse como `''`.
+	 */
+	function payload() {
+		const p: Record<string, unknown> = {};
+		for (const [k, v] of Object.entries(form)) {
+			/// Un `<input type="number">` vacío queda en `null`, no en `''`.
+			const t = v == null ? '' : String(v).trim();
+			if (t !== '') p[k] = t;
+		}
+		p.placa = form.placa.trim().toUpperCase();
+		if (p.kilometraje !== undefined) p.kilometraje = Math.round(Number(form.kilometraje));
+		return p;
+	}
+
+	async function guardar() {
+		intentoGuardar = true;
+		errores = validar();
+		if (Object.keys(errores).length) {
+			tab =
+				primeraTabConError(
+					errores,
+					CAMPO_TAB,
+					TABS.map((t) => t.id)
+				) ?? tab;
+			avisarErroresValidacion(errores);
+			return;
+		}
+		guardando = true;
+		try {
 			if (vehiculoId) {
-				response = await vehiculosAPI.update(vehiculoId, payload);
-				const vehiculo = response.data.data;
-
-				successMessage = 'Vehículo actualizado exitosamente';
-
-				// Emitir evento de actualización por socket
-				socketUtils.emit('vehiculo-actualizado', {
-					vehiculoId,
-					vehiculo
-				});
-
-				// Actualizar en el store
+				const vehiculo = (await vehiculosAPI.update(vehiculoId, payload())).data.data;
+				socketUtils.emit('vehiculo-actualizado', { vehiculoId, vehiculo });
 				flotaStore.updateVehiculo(vehiculoId, vehiculo);
 			} else {
-				response = await vehiculosAPI.create(payload);
-				successMessage = 'Vehículo registrado exitosamente';
-
-				// Emitir evento de creación por socket
-				socketUtils.emit('vehiculo-creado', {
-					vehiculo: response.data
-				});
-
-				// Agregar al store con flag isNew
-				flotaStore.addVehiculo(response.data);
+				const vehiculo = (await vehiculosAPI.create(payload())).data.data;
+				socketUtils.emit('vehiculo-creado', { vehiculo });
+				flotaStore.addVehiculo(vehiculo);
 			}
-
-			// Mostrar animación de éxito
-			showSuccessAnimation = true;
-
-			// Cerrar el modal después de 2 segundos
-			setTimeout(() => {
-				showSuccessAnimation = false;
-				isOpen = false;
-				resetForm();
-				dispatch('success');
-			}, 2000);
-		} catch (err: any) {
-			console.error('Error al guardar vehículo:', err);
-			error = parseBackendError(err);
+			avisarGuardado('Vehículo', form.placa.trim().toUpperCase(), !editando);
+			original = JSON.stringify(form);
+			onguardado?.();
+			onclose();
+		} catch (e) {
+			const { mensaje } = errorDeApi(e, 'Error al guardar el vehículo.');
+			/// El único choque que el backend explica es la placa repetida.
+			if (/placa/i.test(mensaje)) {
+				errores = { ...errores, placa: mensaje };
+				tab = 'general';
+			}
+			avisarErrorGuardado(mensaje, !editando);
 		} finally {
-			isSubmitting = false;
-		}
-	};
-
-	// Load vehiculo data if editing
-	$: if (isOpen && vehiculoId) {
-		loadVehiculo();
-	}
-
-	async function loadVehiculo() {
-		try {
-			const response = await vehiculosAPI.getById(vehiculoId!);
-			const vehiculo = response.data.data;
-
-			formData = {
-				placa: vehiculo.placa || '',
-				marca: vehiculo.marca || '',
-				modelo: vehiculo.modelo || '',
-				ano: vehiculo.ano || new Date().getFullYear(),
-				clase_vehiculo: vehiculo.clase_vehiculo.toLowerCase() || '',
-				capacidad_pasajeros: vehiculo.capacidad_pasajeros || 1,
-				estado: vehiculo.estado || 'DISPONIBLE'
-			};
-		} catch (err) {
-			console.error('Error al cargar vehículo:', err);
-			error = 'Error al cargar los datos del vehículo';
+			guardando = false;
 		}
 	}
+
+	const conteo = $derived(erroresPorTab(errores, CAMPO_TAB));
+	const inv = (k: string) => (errores[k] ? 'true' : undefined);
 </script>
 
-{#if isOpen}
-	<!-- Backdrop con blur (paleta landing) -->
-	<button
-		type="button"
-		class="fixed inset-0 z-[60] cursor-default border-0 p-0"
-		style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.40), rgba(20, 83, 45, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
-		aria-label="Cerrar modal"
-		on:click={handleClose}
-		transition:fade={{ duration: 200 }}
-	></button>
-
-	<!-- Modal Container -->
-	<div
-		class="fixed inset-0 z-[60] flex items-center justify-center p-4"
-		role="presentation"
-	>
-		<div
-			class="relative w-full max-w-2xl overflow-hidden"
-			style="background-color: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 24px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);"
-			role="dialog"
-			aria-modal="true"
-			transition:fly={{ y: 20, duration: 300, easing: quintOut }}
-		>
-			<!-- Header editorial (paleta landing) -->
-			<div
-				class="px-6 py-5"
-				style="border-bottom: 1px solid var(--border-subtle); background: linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-base) 100%);"
-			>
-				<div class="flex items-center justify-between gap-3">
-					<div class="flex items-center gap-3">
-						<div
-							class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
-							style="background: linear-gradient(135deg, #ea580c, #c2410c); box-shadow: 0 6px 16px rgba(234, 88, 12, 0.30);"
-						>
-							<svg
-								class="h-5 w-5 text-white"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								stroke-width="1.8"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M8 9l4-4 4 4m0 6l-4 4-4-4"
-								/>
-							</svg>
-						</div>
-						<div class="min-w-0 flex-1">
-							<p
-								class="font-mono-meta mb-1 inline-block rounded-md px-2 py-0.5 text-[10px]"
-								style="color: var(--emerald-500); background: rgba(234, 88, 12, 0.08); letter-spacing: 0.12em;"
-							>
-								{vehiculoId ? 'EDICIÓN' : 'NUEVO REGISTRO'}
-							</p>
-							<h2 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 800;">
-								{vehiculoId ? 'Editar Vehículo' : 'Registrar Nuevo Vehículo'}
-							</h2>
-							<p class="mt-0.5 text-sm" style="color: var(--text-muted);">
-								Complete la información básica del vehículo
-							</p>
-						</div>
-					</div>
-					<button
-						on:click={handleClose}
-						disabled={isSubmitting}
-						class="filter-close"
-						title="Cerrar"
-						aria-label="Cerrar modal"
+<ModalEntidad
+	{open}
+	eyebrow={editando ? 'EDITAR VEHÍCULO' : 'NUEVO VEHÍCULO'}
+	title={editando ? form.placa || 'Vehículo' : 'Registrar vehículo'}
+	subtitle={editando
+		? [form.marca, form.linea, form.modelo].filter(Boolean).join(' · ')
+		: 'Los campos con * son obligatorios.'}
+	tabs={TABS}
+	bind:tabActiva={tab}
+	erroresPorTab={conteo}
+	{cargando}
+	{guardando}
+	{sucio}
+	textoGuardar={editando ? 'Guardar cambios' : 'Registrar vehículo'}
+	onguardar={guardar}
+	oncerrar={onclose}
+>
+	{#snippet children(activa)}
+		<div class="de-grid">
+			{#if activa === 'general'}
+				<Campo id="v-placa" label="Placa" requerido error={errores.placa}>
+					<input
+						id="v-placa"
+						class="de-input"
+						style="text-transform: uppercase"
+						placeholder="ABC123"
+						bind:value={form.placa}
+						aria-invalid={inv('placa')}
+					/>
+				</Campo>
+				<Campo id="v-clase" label="Clase de vehículo" requerido error={errores.clase_vehiculo}>
+					<select
+						id="v-clase"
+						class="de-input"
+						bind:value={form.clase_vehiculo}
+						aria-invalid={inv('clase_vehiculo')}
 					>
-						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M6 18L18 6M6 6l12 12"
-							/>
-						</svg>
-					</button>
-				</div>
-			</div>
-
-			<!-- Body -->
-			<form on:submit|preventDefault={handleSubmit} class="p-6">
-				{#if showSuccessAnimation}
-					<!-- Animación de Éxito -->
-					<div
-						class="flex flex-col items-center justify-center py-12"
-						in:scale={{ duration: 500, start: 0.5 }}
-					>
-						<!-- Icono de verificación animado -->
-						<div class="relative mb-6">
-							<div
-								class="flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-orange-600"
-								in:scale={{ duration: 600, delay: 100 }}
-							>
-								<svg
-									class="h-12 w-12 text-white"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-									in:scale={{ duration: 400, delay: 400 }}
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="3"
-										d="M5 13l4 4L19 7"
-									/>
-								</svg>
-							</div>
-							<!-- Círculo de expansión -->
-							<div
-								class="absolute inset-0 rounded-full bg-orange-500 opacity-25"
-								in:scale={{ duration: 800, start: 0.5 }}
-							></div>
-						</div>
-
-						<!-- Mensaje de éxito -->
-						<h3
-							class="mb-2 text-2xl font-bold text-gray-900"
-							in:fly={{ y: 20, duration: 500, delay: 300 }}
-						>
-							¡Éxito!
-						</h3>
-						<p class="mb-4 text-center text-gray-600" in:fly={{ y: 20, duration: 500, delay: 400 }}>
-							{successMessage}
-						</p>
-
-						<!-- Barra de progreso de cierre -->
-						<div class="mt-4 w-64 overflow-hidden rounded-full bg-gray-200">
-							<div
-								class="h-1 bg-gradient-to-r from-orange-500 to-teal-600"
-								style="animation: progressBar 2s linear forwards;"
-							></div>
-						</div>
-					</div>
-				{:else}
-					<!-- Formulario normal -->
-					{#if error}
-						<div
-							class="mb-4 rounded-lg border border-red-200 bg-red-50 p-4"
-							transition:fly={{ y: -10, duration: 300 }}
-						>
-							<div class="flex items-center gap-2">
-								<svg
-									class="h-5 w-5 text-red-600"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-									/>
-								</svg>
-								<p class="text-sm text-red-800">{error}</p>
-							</div>
-						</div>
-					{/if}
-
-					<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
-						<!-- Placa -->
-						<div>
-							<label for="placa" class="mb-2 block text-sm font-medium text-gray-700">
-								Placa <span class="text-red-500">*</span>
-							</label>
-							<input
-								id="placa"
-								type="text"
-								bind:value={formData.placa}
-								disabled={isSubmitting}
-								placeholder="ABC-123"
-								class="h-10 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm uppercase focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
-								required
-							/>
-						</div>
-
-						<!-- Marca -->
-						<div>
-							<label for="marca" class="mb-2 block text-sm font-medium text-gray-700">
-								Marca <span class="text-red-500">*</span>
-							</label>
-							<input
-								id="marca"
-								type="text"
-								bind:value={formData.marca}
-								disabled={isSubmitting}
-								placeholder="Toyota, Ford, etc."
-								class="h-10 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
-								required
-							/>
-						</div>
-
-						<!-- Modelo -->
-						<div>
-							<label for="modelo" class="mb-2 block text-sm font-medium text-gray-700">
-								Modelo <span class="text-red-500">*</span>
-							</label>
-							<input
-								id="modelo"
-								type="text"
-								bind:value={formData.modelo}
-								disabled={isSubmitting}
-								placeholder="Corolla, F-150, etc."
-								class="h-10 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
-								required
-							/>
-						</div>
-
-						<!-- Año -->
-						<div>
-							<label for="ano" class="mb-2 block text-sm font-medium text-gray-700">
-								Año <span class="text-red-500">*</span>
-							</label>
-							<input
-								id="ano"
-								type="number"
-								bind:value={formData.ano}
-								disabled={isSubmitting}
-								min="1900"
-								max={new Date().getFullYear() + 1}
-								class="h-10 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
-								required
-							/>
-						</div>
-
-						<!-- Clase de Vehículo -->
-						<div>
-							<label for="clase_vehiculo" class="mb-2 block text-sm font-medium text-gray-700">
-								Clase de Vehículo <span class="text-red-500">*</span>
-							</label>
-							<select
-								id="clase_vehiculo"
-								bind:value={formData.clase_vehiculo}
-								disabled={isSubmitting}
-								class="h-10 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:ring-2 focus:ring-orange-200"
-								required
-							>
-								<option value="">Seleccione...</option>
-								{#each claseVehiculoOptions as clase}
-									<option value={clase}>{clase}</option>
-								{/each}
-							</select>
-						</div>
-
-						<!-- Capacidad de Pasajeros -->
-						<div>
-							<label for="capacidad_pasajeros" class="mb-2 block text-sm font-medium text-gray-700">
-								Capacidad de Pasajeros <span class="text-red-500">*</span>
-							</label>
-							<input
-								id="capacidad_pasajeros"
-								type="number"
-								bind:value={formData.capacidad_pasajeros}
-								disabled={isSubmitting}
-								min="1"
-								placeholder="1"
-								class="h-10 w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 {fieldErrors.capacidad_pasajeros
-									? 'border-red-300 focus:border-red-500 focus:ring-red-200'
-									: 'border-gray-300 focus:border-orange-500 focus:ring-orange-200'}"
-								required
-							/>
-							{#if fieldErrors.capacidad_pasajeros}
-								<p class="mt-1 text-xs text-red-600">{fieldErrors.capacidad_pasajeros}</p>
-							{:else}
-								<p class="mt-1 text-xs text-gray-500">Mínimo 1 pasajero</p>
-							{/if}
-						</div>
-
-						<!-- Estado -->
-						<div>
-							<label for="estado" class="mb-2 block text-sm font-medium text-gray-700">
-								Estado <span class="text-red-500">*</span>
-							</label>
-							<select
-								id="estado"
-								bind:value={formData.estado}
-								disabled={isSubmitting}
-								class="h-10 w-full rounded-lg border px-3 py-2 text-sm focus:ring-2 {fieldErrors.estado
-									? 'border-red-300 focus:border-red-500 focus:ring-red-200'
-									: 'border-gray-300 focus:border-orange-500 focus:ring-orange-200'}"
-								required
-							>
-								{#each estadoOptions as option}
-									<option value={option.value}>{option.label}</option>
-								{/each}
-							</select>
-							{#if fieldErrors.estado}
-								<p class="mt-1 text-xs text-red-600">{fieldErrors.estado}</p>
-							{:else}
-								<p class="mt-1 text-xs text-gray-500">Estado actual del vehículo</p>
-							{/if}
-						</div>
-					</div>
-
-					<!-- Footer -->
-					<div class="mt-6 flex justify-end gap-3 border-t border-gray-200 pt-6">
-						<button
-							type="button"
-							on:click={handleClose}
-							disabled={isSubmitting}
-							class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50 disabled:opacity-50"
-						>
-							Cancelar
-						</button>
-						<button
-							type="submit"
-							disabled={isSubmitting}
-							class="flex items-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-teal-600 px-6 py-2 text-sm font-medium text-white transition-all hover:shadow-lg disabled:opacity-50"
-						>
-							{#if isSubmitting}
-								<svg
-									class="h-4 w-4 animate-spin"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-									/>
-								</svg>
-								<span>Guardando...</span>
-							{:else}
-								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M5 13l4 4L19 7"
-									/>
-								</svg>
-								<span>{vehiculoId ? 'Actualizar' : 'Registrar'}</span>
-							{/if}
-							</button>
-					</div>
-				{/if}
-			</form>
+						<option value="">Selecciona…</option>
+						{#each CLASES as [valor, etiqueta] (valor)}<option value={valor}>{etiqueta}</option
+							>{/each}
+						<!-- Una clase guardada que no está en la lista no se pierde al editar. -->
+						{#if form.clase_vehiculo && !CLASES.some(([v]) => v === form.clase_vehiculo)}
+							<option value={form.clase_vehiculo}>{form.clase_vehiculo}</option>
+						{/if}
+					</select>
+				</Campo>
+				<Campo id="v-marca" label="Marca" error={errores.marca}>
+					<input
+						id="v-marca"
+						placeholder="Ej. TOYOTA"
+						class="de-input"
+						bind:value={form.marca}
+						aria-invalid={inv('marca')}
+					/>
+				</Campo>
+				<Campo id="v-linea" label="Línea" error={errores.linea}>
+					<input
+						id="v-linea"
+						placeholder="Ej. HILUX"
+						class="de-input"
+						bind:value={form.linea}
+						aria-invalid={inv('linea')}
+					/>
+				</Campo>
+				<Campo id="v-modelo" label="Modelo" ayuda="Año del modelo, p. ej. 2024.">
+					<input
+						id="v-modelo"
+						placeholder="Ej. 2024"
+						class="de-input"
+						inputmode="numeric"
+						bind:value={form.modelo}
+					/>
+				</Campo>
+				<Campo id="v-color" label="Color">
+					<input id="v-color" placeholder="Ej. BLANCO" class="de-input" bind:value={form.color} />
+				</Campo>
+				<Campo id="v-estado" label="Estado">
+					<select id="v-estado" class="de-input" bind:value={form.estado}>
+						{#each ESTADOS as [valor, etiqueta] (valor)}<option value={valor}>{etiqueta}</option
+							>{/each}
+					</select>
+				</Campo>
+			{:else if activa === 'tecnico'}
+				<Campo id="v-carroceria" label="Tipo de carrocería">
+					<input
+						id="v-carroceria"
+						placeholder="Ej. DOBLE CABINA"
+						class="de-input"
+						bind:value={form.tipo_carroceria}
+					/>
+				</Campo>
+				<Campo id="v-combustible" label="Combustible">
+					<select id="v-combustible" class="de-input" bind:value={form.combustible}>
+						<option value="">Sin especificar</option>
+						{#each COMBUSTIBLES as c (c)}<option value={c}>{c}</option>{/each}
+						{#if form.combustible && !COMBUSTIBLES.includes(form.combustible)}
+							<option value={form.combustible}>{form.combustible}</option>
+						{/if}
+					</select>
+				</Campo>
+				<Campo id="v-motor" label="Número de motor">
+					<input
+						id="v-motor"
+						placeholder="Ej. 1GD1234567"
+						class="de-input"
+						bind:value={form.numero_motor}
+					/>
+				</Campo>
+				<Campo id="v-vin" label="VIN">
+					<input
+						id="v-vin"
+						placeholder="17 caracteres"
+						class="de-input"
+						style="text-transform: uppercase"
+						bind:value={form.vin}
+					/>
+				</Campo>
+				<Campo id="v-serie" label="Número de serie">
+					<input
+						id="v-serie"
+						placeholder="Número de serie"
+						class="de-input"
+						bind:value={form.numero_serie}
+					/>
+				</Campo>
+				<Campo id="v-chasis" label="Número de chasis">
+					<input
+						id="v-chasis"
+						placeholder="Número de chasis"
+						class="de-input"
+						bind:value={form.numero_chasis}
+					/>
+				</Campo>
+				<Campo id="v-km" label="Kilometraje" error={errores.kilometraje}>
+					<input
+						id="v-km"
+						placeholder="Ej. 85000"
+						class="de-input"
+						type="number"
+						min="0"
+						step="1"
+						bind:value={form.kilometraje}
+						aria-invalid={inv('kilometraje')}
+					/>
+				</Campo>
+				<Campo id="v-matricula" label="Fecha de matrícula">
+					<input id="v-matricula" class="de-input" type="date" bind:value={form.fecha_matricula} />
+				</Campo>
+			{:else}
+				<Campo id="v-prop-nombre" label="Nombre del propietario" completo>
+					<input
+						id="v-prop-nombre"
+						placeholder="Nombre completo o razón social"
+						class="de-input"
+						bind:value={form.propietario_nombre}
+					/>
+				</Campo>
+				<Campo
+					id="v-prop-id"
+					label="Identificación del propietario"
+					ayuda="Cédula o NIT, sin puntos."
+				>
+					<input
+						id="v-prop-id"
+						placeholder="Ej. 1098765432"
+						class="de-input"
+						inputmode="numeric"
+						bind:value={form.propietario_identificacion}
+					/>
+				</Campo>
+			{/if}
 		</div>
-	</div>
-{/if}
-
-<style>
-	@keyframes progressBar {
-		from {
-			width: 0%;
-		}
-		to {
-			width: 100%;
-		}
-	}
-</style>
+	{/snippet}
+</ModalEntidad>

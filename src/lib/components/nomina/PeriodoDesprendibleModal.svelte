@@ -1,4 +1,6 @@
 <script lang="ts">
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
+
 	/**
 	 * El PERIODO DEL DESPRENDIBLE de una hoja: las dos fechas que imprime el
 	 * comprobante del conductor.
@@ -107,35 +109,26 @@
 	}
 </script>
 
-<div class="fondo" role="presentation" onclick={() => !guardando && onClose()}>
-	<div
-		class="panel"
-		role="dialog"
-		aria-modal="true"
-		aria-label="Periodo del desprendible"
-		onclick={(e) => e.stopPropagation()}
-	>
-		<header class="cabecera">
-			<div>
-				<span class="eyebrow">{nombreHoja}</span>
-				<h2>Periodo del desprendible</h2>
-				<p class="ayuda">
-					Las fechas que imprime el comprobante. Al guardar se rehacen los recargos con estas
-					fechas y se recalcula el neto.
-				</p>
-			</div>
-			<button class="cerrar" onclick={onClose} disabled={guardando} aria-label="Cerrar">✕</button>
-		</header>
+<ModalBase
+	open={true}
+	eyebrow={nombreHoja}
+	title="Periodo del desprendible"
+	subtitle="Las fechas que imprime el comprobante. Al guardar se rehacen los recargos con estas fechas y se recalcula el neto."
+	tamano="sm"
+	bloqueado={guardando}
+	oncerrar={onClose}
+>
+	<div class="cuerpo">
+		{#if bloqueada}
+			<p class="bloqueo">{motivoBloqueo || 'Esta hoja no se puede editar.'}</p>
+		{/if}
 
-		<div class="cuerpo">
-			{#if bloqueada}
-				<p class="bloqueo">{motivoBloqueo || 'Esta hoja no se puede editar.'}</p>
-			{/if}
-
+		<div class="tarjeta">
 			<div class="campos">
 				<label>
 					<span>Desde</span>
 					<input
+						class="pd-input"
 						type="date"
 						bind:value={inicio}
 						max={fin || undefined}
@@ -145,6 +138,7 @@
 				<label>
 					<span>Hasta</span>
 					<input
+						class="pd-input"
 						type="date"
 						bind:value={fin}
 						min={inicio || undefined}
@@ -154,10 +148,12 @@
 			</div>
 
 			<p class="actual">Ahora: {fmt(desde)} — {fmt(hasta)}</p>
+		</div>
 
-			{#if error}
-				<p class="error">{error}</p>
-			{:else}
+		{#if error}
+			<p class="error">{error}</p>
+		{:else}
+			<div class="tarjeta">
 				<p class="resumen">
 					{diasCalendario}
 					{diasCalendario === 1 ? 'día' : 'días'} de calendario ·
@@ -172,98 +168,54 @@
 						{/if}
 					</span>
 				</label>
-			{/if}
-		</div>
-
-		<footer class="pie">
-			<p class="pista">La copia de días no se toca; si el rango crece, usa «Actualizar días».</p>
-			<div class="acciones">
-				<button class="btn-secondary" onclick={onClose} disabled={guardando}>Cancelar</button>
-				<button
-					class="btn-primary"
-					onclick={guardar}
-					disabled={bloqueada || guardando || !!error || sinCambios}
-				>
-					{guardando ? 'Guardando…' : 'Guardar'}
-				</button>
 			</div>
-		</footer>
+		{/if}
+
+		<p class="pista">La copia de días no se toca; si el rango crece, usa «Actualizar días».</p>
 	</div>
-</div>
+
+	{#snippet pie()}
+		<button type="button" class="btn-secondary" onclick={onClose} disabled={guardando}>
+			Cancelar
+		</button>
+		<button
+			type="button"
+			class="btn-primary"
+			onclick={guardar}
+			disabled={bloqueada || guardando || !!error || sinCambios}
+		>
+			{guardando ? 'Guardando…' : 'Guardar'}
+		</button>
+	{/snippet}
+</ModalBase>
 
 <style>
-	.fondo {
-		position: fixed;
-		inset: 0;
-		background: rgba(15, 31, 26, 0.5);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		z-index: 9999;
-		padding: 1rem;
-	}
-	.panel {
-		background: var(--bg-surface, #fff);
-		border-radius: 16px;
-		width: 100%;
-		max-width: 30rem;
-		max-height: 88vh;
-		display: flex;
-		flex-direction: column;
-		box-shadow: 0 24px 64px rgba(0, 0, 0, 0.24);
-	}
-	.cabecera {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 1rem;
-		padding: 1.1rem 1.25rem;
-		border-bottom: 1px solid var(--border-subtle);
-	}
-	.cabecera h2 {
-		margin: 0.25rem 0 0;
-		font-size: 1.3rem;
-		font-weight: 500;
-	}
-	.eyebrow {
-		font-size: 0.68rem;
-		letter-spacing: 0.08em;
-		text-transform: uppercase;
-		color: var(--text-muted);
-		font-family: 'JetBrains Mono', monospace;
-	}
-	.ayuda {
-		margin: 0.4rem 0 0;
-		font-size: 0.78rem;
-		color: var(--text-muted);
-	}
-	.cerrar {
-		background: none;
-		border: none;
-		font-size: 1.1rem;
-		cursor: pointer;
-		color: var(--text-muted);
-	}
 	.cuerpo {
-		padding: 1rem 1.25rem;
-		overflow-y: auto;
-		flex: 1;
 		display: flex;
 		flex-direction: column;
-		gap: 0.7rem;
+		gap: 12px;
+	}
+	.tarjeta {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		padding: 16px;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
 	}
 	.bloqueo {
 		margin: 0;
-		padding: 0.6rem 0.75rem;
-		border-radius: 10px;
+		padding: 10px 12px;
+		border-radius: 12px;
 		background: rgba(217, 119, 6, 0.1);
 		color: #92400e;
-		font-size: 0.8rem;
+		font-size: 13px;
 	}
 	.campos {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
-		gap: 0.6rem;
+		gap: 10px;
 	}
 	@media (max-width: 26rem) {
 		.campos {
@@ -273,40 +225,58 @@
 	.campos label {
 		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
+		gap: 6px;
 	}
 	.campos span {
-		font-size: 0.62rem;
-		letter-spacing: 0.06em;
-		text-transform: uppercase;
-		color: var(--text-muted);
-		font-family: 'JetBrains Mono', monospace;
+		font-size: 12px;
+		font-weight: 700;
+		color: var(--text-secondary);
 	}
-	.campos input {
-		border: 1px solid var(--border-default, #ddd);
-		border-radius: 10px;
-		padding: 0.45rem 0.6rem;
-		font-size: 0.85rem;
-		background: #fff;
+	.pd-input {
+		width: 100%;
+		min-height: 42px;
+		padding: 9px 12px;
+		border-radius: 12px;
+		border: 1px solid var(--border-default);
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font-size: 14px;
+		transition:
+			border-color 0.15s ease,
+			box-shadow 0.15s ease;
+	}
+	.pd-input:focus {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.pd-input:disabled {
+		background: var(--bg-base);
+		color: var(--text-muted);
+		cursor: not-allowed;
 	}
 	.actual {
 		margin: 0;
-		font-size: 0.75rem;
-		color: var(--text-very-muted, #999);
+		font-size: 12px;
+		color: var(--text-muted);
 	}
 	.resumen {
 		margin: 0;
-		font-size: 0.82rem;
-		color: var(--text-secondary, #444);
+		font-size: 13px;
+		color: var(--text-secondary);
 		font-variant-numeric: tabular-nums;
 	}
 	.casilla {
 		display: flex;
 		align-items: flex-start;
-		gap: 0.5rem;
-		font-size: 0.8rem;
-		color: var(--text-secondary, #444);
+		gap: 8px;
+		font-size: 13px;
+		color: var(--text-secondary);
 		cursor: pointer;
+	}
+	.casilla input {
+		accent-color: var(--accion);
+		margin-top: 2px;
 	}
 	.casilla em {
 		color: var(--text-muted);
@@ -314,26 +284,13 @@
 	}
 	.error {
 		margin: 0;
-		font-size: 0.78rem;
+		font-size: 13px;
+		font-weight: 600;
 		color: #b91c1c;
-	}
-	.pie {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		padding: 0.85rem 1.25rem;
-		border-top: 1px solid var(--border-subtle);
-		flex-wrap: wrap;
 	}
 	.pista {
 		margin: 0;
-		font-size: 0.72rem;
-		color: var(--text-very-muted, #999);
-		max-width: 16rem;
-	}
-	.acciones {
-		display: flex;
-		gap: 0.5rem;
+		font-size: 12px;
+		color: var(--text-very-muted);
 	}
 </style>

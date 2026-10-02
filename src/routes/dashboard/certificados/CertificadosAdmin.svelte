@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { fade, slide } from 'svelte/transition';
 	import { toast } from 'svelte-sonner';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 	import { certificadosAdminAPI } from '$lib/api/certificadosAdmin';
 	import { certificadosTerceroAPI } from '$lib/api/certificadosTercero';
 
@@ -32,6 +33,7 @@
 	let isLoading = $state(true);
 	let searchInput = $state('');
 	let currentPage = $state(1);
+	let totalTerceros = $state(0);
 	const pageSize = 10;
 	let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -71,6 +73,7 @@
 				limit: pageSize
 			});
 			terceros = res.data.terceros ?? [];
+			totalTerceros = res.data.total ?? terceros.length;
 		} catch (err: any) {
 			toast.error('Error al cargar', { description: err?.response?.data?.error ?? err?.message });
 		} finally {
@@ -323,25 +326,25 @@
 					</svg>
 					<input type="text" placeholder="Buscar tercero, NIT o correo..." value={searchInput} oninput={(e) => { searchInput = (e.target as HTMLInputElement).value; onSearchInput(); }} class="input-glow apple-transition w-72 rounded-xl border border-gray-200 bg-white/80 py-2 pr-4 pl-9 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-400" />
 				</div>
-				<button onclick={() => openEmailModal()} class="apple-transition flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+				<button onclick={() => openEmailModal()} class="btn-secondary apple-transition flex items-center gap-1.5">
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
 					</svg>
 					Enviar correos
 				</button>
-				<button onclick={() => { showAuditLog = true; cargarAuditLog(); }} class="apple-transition flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+				<button onclick={() => { showAuditLog = true; cargarAuditLog(); }} class="btn-secondary apple-transition flex items-center gap-1.5">
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
 					</svg>
 					Audit Log
 				</button>
-				<button onclick={syncS3} disabled={isSyncing} class="apple-transition flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+				<button onclick={syncS3} disabled={isSyncing} class="btn-secondary apple-transition flex items-center gap-1.5">
 					<svg class="h-4 w-4 {isSyncing ? 'animate-spin' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
 					</svg>
 					{isSyncing ? 'Sincronizando...' : 'Sincronizar S3'}
 				</button>
-				<button onclick={() => showZipModal = true} class="apple-transition flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+				<button onclick={() => showZipModal = true} class="btn-secondary apple-transition flex items-center gap-1.5">
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
 					</svg>
@@ -362,19 +365,19 @@
 					</svg>
 					<input type="text" placeholder="Buscar tercero..." value={searchInput} oninput={(e) => { searchInput = (e.target as HTMLInputElement).value; onSearchInput(); }} class="input-glow apple-transition w-56 rounded-xl border border-gray-200 bg-white/80 py-2 pr-4 pl-9 text-sm text-gray-900 placeholder-gray-400 focus:border-orange-400" />
 				</div>
-				<button onclick={() => openEmailModal()} class="apple-transition flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+				<button onclick={() => openEmailModal()} class="btn-secondary apple-transition flex items-center gap-1.5">
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
 					</svg>
 					Email
 				</button>
-				<button onclick={syncS3} disabled={isSyncing} class="apple-transition flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+				<button onclick={syncS3} disabled={isSyncing} class="btn-secondary apple-transition flex items-center gap-1.5">
 					<svg class="h-4 w-4 {isSyncing ? 'animate-spin' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
 					</svg>
 					Sync
 				</button>
-				<button onclick={() => showZipModal = true} class="apple-transition flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+				<button onclick={() => showZipModal = true} class="btn-secondary apple-transition flex items-center gap-1.5">
 					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
 					</svg>
@@ -551,7 +554,7 @@
 				<div class="flex items-center justify-between border-b border-gray-100 px-4 py-3">
 					<div>
 						<p class="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Terceros con certificados</p>
-						<p class="text-base font-bold text-gray-900">{terceros.length} registrados</p>
+						<p class="text-base font-bold text-gray-900">{totalTerceros} registrados</p>
 					</div>
 					<button onclick={cargarTerceros} class="rounded-md p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-700" title="Refrescar">
 						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
@@ -635,6 +638,17 @@
 						</div>
 					{/if}
 				</div>
+				<PaginadorLista
+					pagina={currentPage}
+					total={totalTerceros}
+					porPagina={pageSize}
+					cargando={isLoading}
+					nombreItems="terceros"
+					onCambiar={(p) => {
+						currentPage = p;
+						cargarTerceros();
+					}}
+				/>
 			</div>
 		{/if}
 	</div>
@@ -757,10 +771,10 @@
 					{/if}
 
 					<div class="flex items-center justify-end gap-2 border-t border-gray-100 pt-4">
-						<button onclick={() => showEmailModal = false} class="apple-transition rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+						<button onclick={() => showEmailModal = false} class="btn-secondary apple-transition">
 							Cancelar
 						</button>
-						<button onclick={enviarEmail} disabled={isSending || selectedCertIds.length === 0} class="apple-transition rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-2 text-sm font-semibold text-white shadow-sm disabled:opacity-50 hover:shadow-md">
+						<button onclick={enviarEmail} disabled={isSending || selectedCertIds.length === 0} class="btn-primary apple-transition">
 							{#if isSending}
 								<span class="inline-flex items-center gap-2">
 									<span class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>

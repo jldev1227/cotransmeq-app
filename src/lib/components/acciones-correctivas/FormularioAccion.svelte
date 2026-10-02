@@ -1978,7 +1978,7 @@
 									type="button"
 									on:click={reabrirAccion}
 									disabled={isSubmitting}
-									class="w-full rounded-lg bg-red-600 py-3 text-sm font-bold text-white shadow-lg transition-colors hover:bg-red-700 disabled:opacity-50"
+									class="btn-danger w-full"
 								>
 									Generar Nueva Acción desde Reapertura
 								</button>

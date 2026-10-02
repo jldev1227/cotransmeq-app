@@ -719,7 +719,7 @@
 				<button
 					type="button"
 					onclick={onclose}
-					class="apple-transition rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+					class="btn-secondary apple-transition"
 				>
 					Cancelar
 				</button>
@@ -727,8 +727,8 @@
 					type="button"
 					onclick={guardar}
 					disabled={guardando || !form.tipo}
-					class="apple-transition inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:opacity-60"
-					style="background: linear-gradient(135deg, #c2410c, #9a3412); box-shadow: 0 2px 6px rgba(234, 88, 12,0.25);"
+					class="btn-primary apple-transition inline-flex items-center gap-1.5 disabled:cursor-not-allowed disabled:opacity-60"
+				
 				>
 					{#if guardando}
 						<svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">

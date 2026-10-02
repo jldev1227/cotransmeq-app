@@ -3,15 +3,10 @@ import { writable, derived, type Readable } from 'svelte/store';
 /**
  * ¿Hay un canvas Univer ocupando la pantalla ahora mismo?
  *
- * POR QUÉ EXISTE: el `<Toaster>` es único y vive en el layout raíz, así que
- * su posición la decide una sola línea para toda la app. En las pantallas
- * normales `top-right` está bien, pero en los canvas esa esquina es la más
- * ocupada que hay: los selectores de año y mes, el «Ir a…», el buscador de
- * hoja, los avatares de presencia y el indicador de autoguardado. Un toast
- * ahí tapa justo el desplegable del buscador —que se abre hacia abajo desde
- * esa misma esquina— y el aviso de guardado, que es lo que uno mira cuando
- * quiere saber si su edición llegó. Abajo a la derecha el canvas solo tiene
- * la barra de pestañas y el zoom.
+ * POR QUÉ EXISTE: el `<Toaster>` es único (`ToastProvider`, en el layout
+ * raíz) y siempre va abajo al centro. En los canvas, abajo está la barra de
+ * pestañas y el zoom, con lo que se navega entre hojas: el toast tiene que
+ * subirse para quedar apoyado sobre ella en vez de taparla.
  *
  * POR QUÉ UN CONTADOR Y NO UN BOOLEANO: al navegar de un canvas a otro, los
  * dos layouts existen a la vez durante un instante y Svelte no garantiza que
