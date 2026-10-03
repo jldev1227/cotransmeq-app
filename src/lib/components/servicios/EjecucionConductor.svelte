@@ -138,7 +138,9 @@
 	};
 
 	const vias = $derived(reporte ? VIAS.filter(([k]) => reporte[k] === true).map(([, l]) => l) : []);
-	const riesgos = $derived(reporte ? RIESGOS.filter(([k]) => reporte[k] === true).map(([, l]) => l) : []);
+	const riesgos = $derived(
+		reporte ? RIESGOS.filter(([k]) => reporte[k] === true).map(([, l]) => l) : []
+	);
 
 	function mover(delta: number) {
 		if (visor === null || fotos.length === 0) return;
@@ -151,38 +153,27 @@
 		else if (e.key === 'ArrowRight') mover(1);
 		else if (e.key === 'ArrowLeft') mover(-1);
 	}
+	/** Nombres de las tres etapas del preoperacional, como en la app del conductor. */
+	const ETAPAS = ['Prealistamiento', 'Desplazamiento', 'Cierre'];
 </script>
 
 <svelte:window onkeydown={teclado} />
 
 {#if ejecucion}
-	<section class="glass soft-shadow mt-3 rounded-2xl border border-gray-200/50 p-4" aria-label="Ejecución del conductor">
-		<div class="mb-3 flex flex-wrap items-center justify-between gap-2">
-			<div class="flex items-center gap-2">
-				<div
-					class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600"
-				>
-					<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3"
-						/>
-					</svg>
-				</div>
-				<p class="text-[10px] font-semibold tracking-widest text-gray-500 uppercase">Ejecución del conductor</p>
-			</div>
-			<span class="ejec-badge">Desde la app</span>
-		</div>
-
-		<div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+	<div class="ejec-seccion">
+		<h2 class="ejec-seccion__titulo">Ejecución del servicio</h2>
+		<span class="ejec-seccion__detalle">Desde la app del conductor</span>
+	</div>
+	<section class="ejec-card" aria-label="Ejecución del conductor">
+		<div class="ejec-bloques">
 			<!-- Inicio -->
 			<div class="ejec-bloque">
 				<div class="ejec-bloque__titulo">
 					<span>Inicio</span>
 					{#if ejecucion.iniciado_diferido}
-						<span class="ejec-badge ejec-badge--amber" title="Registrado sin conexión; la app lo envió después"
-							>Diferido</span
+						<span
+							class="ejec-badge ejec-badge--amber"
+							title="Registrado sin conexión; la app lo envió después">Diferido</span
 						>
 					{/if}
 				</div>
@@ -205,8 +196,9 @@
 				<div class="ejec-bloque__titulo">
 					<span>Liberación</span>
 					{#if ejecucion.liberado_diferido}
-						<span class="ejec-badge ejec-badge--amber" title="Registrada sin conexión; la app la envió después"
-							>Diferida</span
+						<span
+							class="ejec-badge ejec-badge--amber"
+							title="Registrada sin conexión; la app la envió después">Diferida</span
 						>
 					{/if}
 				</div>
@@ -225,7 +217,7 @@
 			</div>
 
 			<!-- Preoperacional -->
-			<div class="ejec-bloque">
+			<div class="ejec-bloque ejec-bloque--ancho">
 				<div class="ejec-bloque__titulo">
 					<span>Preoperacional</span>
 					{#if preop}
@@ -234,31 +226,38 @@
 					{/if}
 				</div>
 				{#if preop}
-					<p class="truncate text-sm font-semibold text-gray-900" title={preop.nombre}>
-						<span class="font-mono text-xs text-emerald-700">{preop.code}</span>
+					<p class="ejec-preop" title={preop.nombre}>
+						<span class="ejec-preop__codigo">{preop.code}</span>
 						{preop.nombre}
 					</p>
-					<div class="mt-1.5 flex items-center gap-1" aria-label="Etapas cerradas">
-						{#each [1, 2, 3] as etapa}
-							<span
-								class="ejec-etapa {preop.etapas_cerradas.includes(etapa) ? 'ejec-etapa--ok' : ''}"
-								title={preop.etapas_cerradas.includes(etapa) ? `Etapa ${etapa} cerrada` : `Etapa ${etapa} abierta`}
-								>{etapa}</span
-							>
+					<div class="ejec-etapas" aria-label="Etapas del preoperacional">
+						{#each ETAPAS as etapa, i}
+							{@const cerrada = preop.etapas_cerradas.includes(i + 1)}
+							<div class="ejec-etapa" title={cerrada ? `${etapa} cerrada` : `${etapa} abierta`}>
+								<span class="ejec-etapa__circulo" class:ejec-etapa__circulo--ok={cerrada}
+									>{cerrada ? '✓' : i + 1}</span
+								>
+								<span class="ejec-etapa__nombre" class:ejec-etapa__nombre--ok={cerrada}
+									>{etapa}</span
+								>
+							</div>
 						{/each}
-						{#if ejecucion.formato_elegido_por_conductor}
-							<span class="ml-1 text-[11px] text-gray-500" title="La clase del vehículo no recomendaba formato"
-								>Formato elegido por el conductor</span
-							>
-						{/if}
 					</div>
+					{#if ejecucion.formato_elegido_por_conductor}
+						<p class="ejec-nota" title="La clase del vehículo no recomendaba formato">
+							Formato elegido por el conductor
+						</p>
+					{/if}
 					{#if !preop.eliminado}
-						<a
-							href={preop.detalle_path}
-							class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-emerald-700 hover:underline"
-						>
+						<a href={preop.detalle_path} class="ejec-enlace">
 							Ver envío
-							<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2">
+							<svg
+								class="h-3 w-3"
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+								stroke-width="2.2"
+							>
 								<path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
 							</svg>
 						</a>
@@ -270,17 +269,18 @@
 		</div>
 
 		{#if fotos.length > 0 || ejecucion?.pausas_activas_cada_horas != null}
-			<div class="mt-3 border-t border-gray-100 pt-3">
-				<p class="mb-2 text-[10px] font-semibold tracking-widest text-gray-500 uppercase">
+			<div class="ejec-sub">
+				<p class="ejec-sub__titulo">
 					{fotos.some((f) => f.pausa_activa) || ejecucion?.pausas_activas_cada_horas != null
 						? 'Pausas activas y fotos del recorrido'
 						: 'Fotos del recorrido'}
 				</p>
 				{#if ejecucion?.pausas_activas_cada_horas != null}
-					<p class="mb-2 text-sm text-gray-700">
+					<p class="ejec-texto">
 						Pausa activa cada
 						<strong>{ejecucion.pausas_activas_cada_horas.toLocaleString('es-CO')} h</strong>
-						{#if !fotos.some((f) => f.pausa_activa)}<span class="text-gray-500">· sin fotos</span>{/if}
+						{#if !fotos.some((f) => f.pausa_activa)}<span class="text-gray-500">· sin fotos</span
+							>{/if}
 					</p>
 				{/if}
 				<div class="flex flex-wrap gap-2">
@@ -301,34 +301,35 @@
 		{/if}
 
 		{#if reporte}
-			<div class="mt-3 border-t border-gray-100 pt-3">
-				<p class="mb-2 text-[10px] font-semibold tracking-widest text-gray-500 uppercase">Reporte del conductor</p>
+			<div class="ejec-sub">
+				<p class="ejec-sub__titulo">Reporte del conductor</p>
 				<div class="flex flex-wrap items-center gap-1.5">
 					{#if reporte.estado_conductor}
 						{@const ec = ESTADO_CONDUCTOR[reporte.estado_conductor] ?? {
 							label: reporte.estado_conductor,
 							punto: 'bg-gray-400'
 						}}
-						<span class="ejec-badge"><span class="h-2 w-2 rounded-full {ec.punto}"></span>Conductor {ec.label}</span>
+						<span class="ejec-badge"
+							><span class="h-2 w-2 rounded-full {ec.punto}"></span>Conductor {ec.label}</span
+						>
 					{/if}
 					{#if reporte.km_final != null}
 						<span class="ejec-badge">Km final {reporte.km_final.toLocaleString('es-CO')}</span>
 					{/if}
 					{#each vias as via}<span class="ejec-badge ejec-badge--blue">Vía {via}</span>{/each}
-					{#each riesgos as riesgo}<span class="ejec-badge ejec-badge--red">⚠️ {riesgo}</span>{/each}
+					{#each riesgos as riesgo}<span class="ejec-badge ejec-badge--red">⚠️ {riesgo}</span
+						>{/each}
 				</div>
 				{#if reporte.novedades}
-					<p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-gray-700">{reporte.novedades}</p>
+					<p class="ejec-texto ejec-texto--parrafo">{reporte.novedades}</p>
 				{/if}
 			</div>
 		{/if}
 
 		{#if ejecucion?.recomendaciones}
-			<div class="mt-3 border-t border-gray-100 pt-3">
-				<p class="mb-2 text-[10px] font-semibold tracking-widest text-gray-500 uppercase">
-					Recomendaciones del conductor
-				</p>
-				<p class="text-sm leading-relaxed whitespace-pre-line text-gray-700">{ejecucion.recomendaciones}</p>
+			<div class="ejec-sub">
+				<p class="ejec-sub__titulo">Recomendaciones del conductor</p>
+				<p class="ejec-texto ejec-texto--parrafo">{ejecucion.recomendaciones}</p>
 			</div>
 		{/if}
 	</section>
@@ -342,32 +343,99 @@
 			aria-modal="true"
 			aria-label={foto.field_label ?? 'Foto'}
 		>
-			<button type="button" class="absolute inset-0 cursor-default" aria-label="Cerrar" onclick={() => (visor = null)}
+			<button
+				type="button"
+				class="absolute inset-0 cursor-default"
+				aria-label="Cerrar"
+				onclick={() => (visor = null)}
 			></button>
-			<img src={foto.url} alt={foto.field_label ?? 'Foto'} class="relative max-h-[80vh] max-w-full rounded-xl object-contain" />
+			<img
+				src={foto.url}
+				alt={foto.field_label ?? 'Foto'}
+				class="relative max-h-[80vh] max-w-full rounded-xl object-contain"
+			/>
 			<div class="relative flex items-center gap-2 text-sm text-white">
 				{#if fotos.length > 1}
-					<button type="button" class="ejec-visor-btn" onclick={() => mover(-1)} aria-label="Anterior">‹</button>
+					<button
+						type="button"
+						class="ejec-visor-btn"
+						onclick={() => mover(-1)}
+						aria-label="Anterior">‹</button
+					>
 				{/if}
 				<span>{foto.field_label ?? 'Foto'} · {fmtFecha(foto.uploaded_at)}</span>
 				{#if fotos.length > 1}
-					<span class="font-mono text-xs opacity-70">{visor + 1}/{fotos.length}</span>
-					<button type="button" class="ejec-visor-btn" onclick={() => mover(1)} aria-label="Siguiente">›</button>
+					<span class="text-xs opacity-70">{visor + 1}/{fotos.length}</span>
+					<button
+						type="button"
+						class="ejec-visor-btn"
+						onclick={() => mover(1)}
+						aria-label="Siguiente">›</button
+					>
 				{/if}
-				<a href={foto.url} target="_blank" rel="noopener noreferrer" class="ejec-visor-btn px-3 text-xs">Abrir</a>
-				<button type="button" class="ejec-visor-btn" onclick={() => (visor = null)} aria-label="Cerrar">✕</button>
+				<a
+					href={foto.url}
+					target="_blank"
+					rel="noopener noreferrer"
+					class="ejec-visor-btn px-3 text-xs">Abrir</a
+				>
+				<button
+					type="button"
+					class="ejec-visor-btn"
+					onclick={() => (visor = null)}
+					aria-label="Cerrar">✕</button
+				>
 			</div>
 		</div>
 	{/if}
 {/if}
 
 <style>
+	/* Estilo de la app móvil: título de sección fuera de la tarjeta, tarjeta blanca de radio 22,
+	   bloques en menta y chips redondeados. La marca sale de --color-emerald-* (verde o naranja). */
+	.ejec-seccion {
+		display: flex;
+		align-items: flex-end;
+		justify-content: space-between;
+		gap: 0.75rem;
+		margin-top: 0.25rem;
+		padding: 0 0.125rem;
+	}
+	.ejec-seccion__titulo {
+		font-size: 1.3125rem;
+		line-height: 1.625rem;
+		font-weight: 800;
+		letter-spacing: -0.02em;
+		color: var(--color-gray-950);
+	}
+	.ejec-seccion__detalle {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--color-gray-600);
+	}
+	.ejec-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		padding: 1.0625rem;
+		border-radius: 22px;
+		background: #ffffff;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
+	}
+	.ejec-bloques {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+		gap: 0.625rem;
+	}
 	.ejec-bloque {
-		border: 1px solid rgba(0, 0, 0, 0.06);
-		border-radius: 12px;
-		background: #faf7f2;
-		padding: 0.75rem;
+		border-radius: 16px;
+		background: var(--color-emerald-50);
+		padding: 0.75rem 0.875rem;
 		min-width: 0;
+	}
+	/* El preoperacional ocupa la fila completa: las tres etapas llevan nombre. */
+	.ejec-bloque--ancho {
+		grid-column: 1 / -1;
 	}
 	.ejec-bloque__titulo {
 		display: flex;
@@ -375,88 +443,157 @@
 		justify-content: space-between;
 		gap: 0.5rem;
 		margin-bottom: 0.4rem;
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.65rem;
-		font-weight: 700;
+		font-size: 0.6875rem;
+		font-weight: 800;
+		letter-spacing: 0.04em;
 		text-transform: uppercase;
-		letter-spacing: 0.1em;
-		color: #6b6b6b;
+		color: var(--color-gray-600);
 	}
 	.ejec-fila {
 		display: flex;
 		justify-content: space-between;
+		align-items: baseline;
 		gap: 0.5rem;
 		padding: 0.15rem 0;
 	}
 	.ejec-fila__k {
 		font-size: 0.75rem;
-		color: #6b6b6b;
-		font-weight: 500;
+		font-weight: 700;
+		color: var(--color-gray-600);
 	}
 	.ejec-fila__v {
-		font-size: 0.82rem;
-		font-weight: 600;
-		color: #0f1f1a;
+		font-size: 0.8125rem;
+		font-weight: 700;
+		color: var(--color-gray-950);
 		text-align: right;
-		white-space: nowrap;
 	}
 	.ejec-vacio {
-		font-size: 0.8rem;
-		color: #9ca3af;
+		font-size: 0.8125rem;
+		color: var(--color-gray-600);
 	}
 	.ejec-badge {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.3rem;
-		padding: 0.2rem 0.55rem;
-		font-family: 'JetBrains Mono', monospace;
-		font-size: 0.62rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: #0f1f1a;
-		background: #faf7f2;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 6px;
+		gap: 0.375rem;
+		padding: 0.2rem 0.65rem;
+		font-size: 0.75rem;
+		font-weight: 800;
+		color: var(--color-emerald-900);
+		background: var(--color-emerald-50);
+		border-radius: 999px;
 		white-space: nowrap;
+	}
+	.ejec-bloque .ejec-badge {
+		background: #ffffff;
 	}
 	.ejec-badge--amber {
 		color: #92400e;
-		background: rgba(245, 158, 11, 0.08);
-		border-color: rgba(245, 158, 11, 0.3);
+		background: #fef3c7 !important;
 	}
 	.ejec-badge--blue {
-		color: #1e40af;
-		background: rgba(59, 130, 246, 0.08);
-		border-color: rgba(59, 130, 246, 0.25);
+		color: #1d4ed8;
+		background: #dbeafe !important;
 	}
 	.ejec-badge--emerald {
-		color: var(--color-emerald-700, #047857);
-		background: color-mix(in srgb, var(--color-emerald-500, #10b981) 8%, transparent);
-		border-color: color-mix(in srgb, var(--color-emerald-500, #10b981) 25%, transparent);
+		color: #047857;
+		background: #d1fae5 !important;
 	}
 	.ejec-badge--red {
-		color: #b91c1c;
-		background: rgba(239, 68, 68, 0.08);
-		border-color: rgba(239, 68, 68, 0.25);
+		color: #b42318;
+		background: #fff0ed !important;
+	}
+	.ejec-preop {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 0.875rem;
+		font-weight: 800;
+		color: var(--color-gray-950);
+	}
+	.ejec-preop__codigo {
+		color: var(--color-emerald-600);
+	}
+	.ejec-etapas {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 0.25rem;
+		margin-top: 0.625rem;
 	}
 	.ejec-etapa {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 0.25rem;
+		min-width: 0;
+	}
+	.ejec-etapa__circulo {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 1.25rem;
-		height: 1.25rem;
-		border-radius: 9999px;
-		font-size: 0.65rem;
-		font-weight: 700;
-		color: #9ca3af;
-		border: 1px solid #d1d5db;
-		background: white;
+		width: 1.75rem;
+		height: 1.75rem;
+		border-radius: 999px;
+		font-size: 0.8125rem;
+		font-weight: 800;
+		color: var(--color-gray-600);
+		background: #ffffff;
+		border: 2px solid var(--color-gray-200);
 	}
-	.ejec-etapa--ok {
-		color: white;
-		background: var(--color-emerald-500, #10b981);
-		border-color: var(--color-emerald-500, #10b981);
+	.ejec-etapa__circulo--ok {
+		color: #ffffff;
+		background: var(--color-emerald-500);
+		border-color: var(--color-emerald-500);
+	}
+	.ejec-etapa__nombre {
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 0.6875rem;
+		font-weight: 700;
+		color: var(--color-gray-600);
+	}
+	.ejec-etapa__nombre--ok {
+		color: var(--color-emerald-900);
+	}
+	.ejec-nota {
+		margin-top: 0.375rem;
+		font-size: 0.6875rem;
+		color: var(--color-gray-600);
+	}
+	.ejec-enlace {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		margin-top: 0.5rem;
+		font-size: 0.8125rem;
+		font-weight: 800;
+		color: var(--color-emerald-700);
+	}
+	.ejec-enlace:hover {
+		text-decoration: underline;
+	}
+	.ejec-sub {
+		padding-top: 0.75rem;
+		border-top: 1px solid var(--color-gray-100);
+	}
+	.ejec-sub__titulo {
+		margin-bottom: 0.5rem;
+		font-size: 0.6875rem;
+		font-weight: 800;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--color-gray-600);
+	}
+	.ejec-texto {
+		margin-bottom: 0.5rem;
+		font-size: 0.875rem;
+		color: var(--color-gray-950);
+	}
+	.ejec-texto--parrafo {
+		margin: 0.5rem 0 0;
+		line-height: 1.25rem;
+		white-space: pre-line;
 	}
 	.ejec-miniatura {
 		position: relative;

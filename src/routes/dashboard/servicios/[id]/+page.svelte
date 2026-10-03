@@ -2,7 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { fade, fly } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
 	import mapboxgl from 'mapbox-gl';
 	import 'mapbox-gl/dist/mapbox-gl.css';
 	import { servicioDetalleStore } from '$lib/stores/servicio-detalle';
@@ -10,8 +10,8 @@
 	import { labelPropositoServicio } from '$lib/config/proposito-servicio';
 	import { sidebarStore } from '$lib/stores/sidebar';
 	import distracomLocations from '$lib/data/distracomlocations';
-	import { quintOut } from 'svelte/easing';
 	import EjecucionConductor from '$lib/components/servicios/EjecucionConductor.svelte';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 
 	const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_ACCESS_TOKEN;
 	const OVERPASS_API = 'https://overpass-api.de/api/interpreter';
@@ -135,24 +135,35 @@
 		liquidado: '#6B7280'
 	};
 	const STATUS_LABEL: Record<string, string> = {
+		solicitado: 'Solicitado',
 		pendiente: 'Pendiente',
-		en_curso: 'En Curso',
+		en_curso: 'En curso',
 		planificado: 'Planificado',
 		completado: 'Completado',
 		realizado: 'Realizado',
+		planilla_asignada: 'Planilla asignada',
 		cancelado: 'Cancelado',
 		liquidado: 'Liquidado'
 	};
-	const STATUS_PALETTE: Record<string, { bg: string; fg: string; border: string; dot: string }> = {
-		pendiente: { bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe', dot: '#3b82f6' },
-		en_curso: { bg: '#eff6ff', fg: '#1d4ed8', border: '#bfdbfe', dot: '#3b82f6' },
-		planificado: { bg: '#faf5ff', fg: '#7e22ce', border: '#e9d5ff', dot: '#a855f7' },
-		completado: { bg: '#f0fdf4', fg: '#166534', border: '#bbf7d0', dot: '#16a34a' },
-		realizado: { bg: '#f0fdf4', fg: '#166534', border: '#bbf7d0', dot: '#16a34a' },
-		cancelado: { bg: '#fef2f2', fg: '#b91c1c', border: '#fecaca', dot: '#ef4444' },
-		liquidado: { bg: '#f3f4f6', fg: '#374151', border: '#d1d5db', dot: '#6b7280' }
+	/** Chip del estado como en la app móvil (src/lib/service-status.ts): mismo tono en claro y en oscuro. */
+	const ESTADO_APP: Record<string, { fondo: string; texto: string }> = {
+		en_curso: { fondo: '#FEF3C7', texto: '#92400E' },
+		planificado: { fondo: '#EDE9FE', texto: '#6D28D9' },
+		solicitado: { fondo: '#DBEAFE', texto: '#1D4ED8' },
+		pendiente: { fondo: '#F3F4F6', texto: '#374151' },
+		realizado: { fondo: '#D1FAE5', texto: '#047857' },
+		completado: { fondo: '#D1FAE5', texto: '#047857' },
+		planilla_asignada: { fondo: '#E0E7FF', texto: '#4338CA' },
+		liquidado: { fondo: '#CFFAFE', texto: '#0E7490' },
+		cancelado: { fondo: '#FEE2E2', texto: '#B91C1C' }
 	};
-
+	/** Chip de cada condición de la vía, como el chip de tráfico de la app. */
+	const NIVEL_APP: Record<string, { fondo: string; texto: string }> = {
+		ok: { fondo: '#DCFCE7', texto: '#166534' },
+		moderado: { fondo: '#FEF3C7', texto: '#92400E' },
+		alto: { fondo: '#FFEDD5', texto: '#9A3412' },
+		critico: { fondo: '#FEE2E2', texto: '#991B1B' }
+	};
 	const fmtDate = (d: any) =>
 		d
 			? new Intl.DateTimeFormat('es-CO', {
@@ -1402,6 +1413,11 @@
 			alert('Error al compartir');
 		}
 	}
+	function cerrarCompartir() {
+		showShareModal = false;
+		copySuccess = false;
+	}
+
 	async function copyLink() {
 		try {
 			await navigator.clipboard.writeText(generatedShareUrl);
@@ -1473,1264 +1489,687 @@
 					</svg>
 				</div>
 				<p class="mb-4 text-gray-600">{error}</p>
-				<button
-					on:click={() => goto('/dashboard/servicios')}
-					class="btn-primary apple-transition"
-				>
+				<button onclick={() => goto('/dashboard/servicios')} class="btn-primary apple-transition">
 					Volver
 				</button>
 			</div>
 		</div>
 	{:else if servicio}
-		<!-- ── HEADER (sistema landing) ─────────────────────────────────────── -->
-		<header class="servicio-header">
+		<!-- ── ENCABEZADO (como la app móvil) ── -->
+		<header class="detalle-header">
 			<button
-				on:click={() => {
+				onclick={() => {
 					isNavigating = true;
 					goto('/dashboard/servicios');
 				}}
 				disabled={isNavigating}
 				aria-label="Volver a servicios"
-				class="servicio-icon-btn"
+				class="detalle-volver"
 			>
-				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-					<path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-				</svg>
-			</button>
-
-			<div class="servicio-brand-icon" aria-hidden="true">
 				<svg
-					class="h-5 w-5 text-white"
+					class="h-5 w-5"
 					fill="none"
 					stroke="currentColor"
 					viewBox="0 0 24 24"
-					stroke-width="1.8"
+					stroke-width="2.4"
+				>
+					<path stroke-linecap="round" stroke-linejoin="round" d="M15 5l-7 7 7 7" />
+				</svg>
+			</button>
+			<div class="min-w-0 flex-1">
+				<h1 class="detalle-header-titulo">Detalle del servicio</h1>
+				<p class="detalle-header-id">{servicio.id.slice(0, 8).toUpperCase()}</p>
+			</div>
+			<button onclick={handleCompartir} class="btn-primary">
+				<svg
+					class="h-3.5 w-3.5"
+					fill="none"
+					stroke="currentColor"
+					viewBox="0 0 24 24"
+					stroke-width="2"
 				>
 					<path
 						stroke-linecap="round"
 						stroke-linejoin="round"
-						d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+						d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
 					/>
 				</svg>
-			</div>
-
-			<div class="min-w-0 flex-1">
-				<span class="servicio-eyebrow">Detalle del servicio</span>
-				<h1 class="servicio-title">
-					{servicio.id.slice(0, 8).toUpperCase()}
-				</h1>
-			</div>
-
-			<div class="flex items-center gap-2">
-				<span
-					class="servicio-status-pill"
-					style="background-color: {STATUS_PALETTE[servicio.estado]?.bg ??
-						'#f3f4f6'}; color: {STATUS_PALETTE[servicio.estado]?.fg ??
-						'#374151'}; border-color: {STATUS_PALETTE[servicio.estado]?.border ?? '#d1d5db'}"
-				>
-					<span
-						class="h-1.5 w-1.5 rounded-full"
-						style="background-color: {STATUS_PALETTE[servicio.estado]?.dot ?? '#6b7280'}"
-					></span>
-					{STATUS_LABEL[servicio.estado] ?? servicio.estado}
-				</span>
-
-				<button on:click={handleCompartir} class="btn-primary servicio-share-btn">
-					<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-						/>
-					</svg>
-					<span class="hidden sm:inline">Compartir</span>
-				</button>
-			</div>
+				<span class="hidden sm:inline">Compartir</span>
+			</button>
 		</header>
 
-		<!-- ── ÁREA SCROLLEABLE ───────────────────────────────────── -->
-		<div class="flex-1 overflow-y-auto">
-			<div class="glass.soft-shadow px-4 py-5 md:px-6">
-				<!-- ═══ MAPA (hero) ═══ -->
-				<div
-					class="servicio-map-frame glass soft-shadow relative mb-3 overflow-hidden rounded-2xl border border-gray-200/50"
-				>
-					<div id="map" class="h-full w-full"></div>
-
-					<!-- Botón centrar -->
-					<button
-						on:click={centerRoute}
-						class="servicio-map-center-btn apple-transition absolute top-3 left-3 z-10 flex items-center gap-1.5 rounded-xl border border-gray-200/50 bg-white/90 px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm backdrop-blur-md hover:bg-white"
+		<!-- ── ÁREA DESPLAZABLE (estilo de la app móvil) ── -->
+		<div class="detalle-fondo flex-1 overflow-y-auto">
+			<div class="detalle w-full px-4 py-4 md:px-6">
+				<div class="detalle-estado">
+					<span
+						class="detalle-chip"
+						style="background-color: {ESTADO_APP[servicio.estado]?.fondo ??
+							'#F3F4F6'}; color: {ESTADO_APP[servicio.estado]?.texto ?? '#374151'}"
 					>
-						<svg
-							class="h-4 w-4 text-emerald-600"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-							stroke-width="2"
+						{STATUS_LABEL[servicio.estado] ?? servicio.estado}
+					</span>
+					{#if servicio.proposito_servicio}
+						<span class="detalle-proposito"
+							>{labelPropositoServicio(servicio.proposito_servicio)}</span
 						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-							/>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-							/>
-						</svg>
-						Centrar
-					</button>
-
-					<!-- Trip summary overlay (esquina inferior izquierda, encima de la leyenda) -->
-					{#if distancia !== '—'}
-						<div class="servicio-map-stats" in:fade={{ duration: 300 }}>
-							<div class="stat-block">
-								<span class="stat-block-label">Distancia</span>
-								<span class="stat-block-value">{distancia}</span>
-							</div>
-							<div class="stat-divider"></div>
-							<div class="stat-block">
-								<span class="stat-block-label">Tiempo est.</span>
-								<span class="stat-block-value">{duracion}</span>
-							</div>
-						</div>
 					{/if}
-
-					<!-- ─── LEYENDA INTERACTIVA (subida para no chocar con stats) ─── -->
-					<div
-						class="servicio-map-leyenda glass soft-shadow absolute bottom-3 right-3 z-10 overflow-hidden rounded-xl border border-gray-200/50"
-						style="min-width:220px;backdrop-filter:blur(12px);"
-					>
-						<div class="border-b border-gray-100 px-3 py-2">
-							<p class="text-[10px] font-semibold tracking-wider text-gray-500 uppercase">
-								Puntos de interés
-							</p>
-						</div>
-
-						<div class="space-y-px p-1.5">
-							<!-- Origen / Destino -->
-							<div class="flex items-center gap-2 rounded-lg px-2 py-1">
-								<div
-									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500"
-								>
-									<span style="color:#fff;font-weight:700;font-size:9px;">A</span>
-								</div>
-								<span class="text-xs font-medium text-gray-700">Origen</span>
-							</div>
-							<div class="flex items-center gap-2 rounded-lg px-2 py-1">
-								<div
-									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-red-500"
-								>
-									<span style="color:#fff;font-weight:700;font-size:9px;">B</span>
-								</div>
-								<span class="text-xs font-medium text-gray-700">Destino</span>
-							</div>
-
-							<div class="my-1 border-t border-gray-100"></div>
-
-							<!-- Peajes -->
-							<button
-								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
-								class:opacity-40={!showPeajes}
-								on:click={() => (showPeajes = !showPeajes)}
-							>
-								<div
-									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-amber-400"
-								>
-									<span style="color:#fff;font-weight:700;font-size:9px;">P</span>
-								</div>
-								<span class="flex-1 text-left text-xs font-medium text-gray-700">Peajes</span>
-								{#if peajes.length > 0}
-									<span
-										class="rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"
-										>{peajes.length}</span
-									>
-								{/if}
-							</button>
-
-							<!-- Restaurantes -->
-							<button
-								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
-								class:opacity-40={!showRestaurantes}
-								on:click={() => {
-									showRestaurantes = !showRestaurantes;
-									pintarParadas();
-								}}
-							>
-								<div
-									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-blue-500"
-								>
-									<span style="color:#fff;font-weight:700;font-size:9px;">R</span>
-								</div>
-								<span class="flex-1 text-left text-xs font-medium text-gray-700">Restaurantes</span>
-								{#if countRestaurantes > 0}
-									<span
-										class="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700"
-										>{countRestaurantes}</span
-									>
-								{/if}
-							</button>
-
-							<!-- Estaciones de servicio -->
-							<button
-								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
-								class:opacity-40={!showEstaciones}
-								on:click={() => {
-									showEstaciones = !showEstaciones;
-									pintarParadas();
-								}}
-							>
-								<div
-									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-purple-500"
-								>
-									<span style="color:#fff;font-weight:700;font-size:9px;">S</span>
-								</div>
-								<span class="flex-1 text-left text-xs font-medium text-gray-700">Est. Servicio</span>
-								{#if countEstaciones > 0}
-									<span
-										class="rounded-md bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700"
-										>{countEstaciones}</span
-									>
-								{/if}
-							</button>
-
-							<!-- Hospedajes -->
-							<button
-								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
-								class:opacity-40={!showHospedajes}
-								on:click={() => {
-									showHospedajes = !showHospedajes;
-									pintarParadas();
-								}}
-							>
-								<div
-									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-teal-500"
-								>
-									<span style="color:#fff;font-weight:700;font-size:9px;">H</span>
-								</div>
-								<span class="flex-1 text-left text-xs font-medium text-gray-700">Hospedajes</span>
-								{#if countHospedajes > 0}
-									<span
-										class="rounded-md bg-teal-50 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700"
-										>{countHospedajes}</span
-									>
-								{/if}
-							</button>
-
-							<!-- Incidentes / Cierres -->
-							<button
-								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
-								class:opacity-40={!showIncidentes}
-								on:click={() => {
-									showIncidentes = !showIncidentes;
-									pintarIncidentes();
-								}}
-							>
-								<div
-									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-red-600 text-[10px]"
-								>
-									🚧
-								</div>
-								<span class="flex-1 text-left text-xs font-medium text-gray-700">Cierres / Accidentes</span>
-								{#if loadingCondiciones}
-									<span
-										class="h-3 w-3 animate-spin rounded-full border border-red-400 border-t-transparent"
-									></span>
-								{:else if incidentes.length > 0 || incidentesNacionales.length > 0}
-									{@const total = incidentes.length + incidentesNacionales.length}
-									<span
-										class="rounded-md px-1.5 py-0.5 text-[10px] font-semibold {incidentes.some((i) => i.cerrrado)
-											? 'bg-red-50 text-red-700'
-											: 'bg-orange-50 text-orange-700'}">{total}</span
-									>
-								{/if}
-							</button>
-
-							<!-- Distracom -->
-							<button
-								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
-								class:opacity-40={!showDistracom}
-								on:click={() => (showDistracom = !showDistracom)}
-							>
-								<img
-									src={DISTRACOM_ICON_URL}
-									alt="Distracom"
-									class="h-5 w-5 flex-shrink-0 object-contain"
-								/>
-								<span class="flex-1 text-left text-xs font-medium text-gray-700">Distracom</span>
-								{#if distracomMarkers.length > 0}
-									<span
-										class="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700"
-										>{distracomMarkers.length}</span
-									>
-								{/if}
-							</button>
-
-							<div class="my-1 border-t border-gray-100"></div>
-
-							<!-- Tráfico en tiempo real -->
-							<button
-								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
-								class:opacity-40={!showTrafico}
-								on:click={toggleTrafico}
-							>
-								<div
-									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-orange-400"
-								>
-									<span style="color:#fff;font-weight:700;font-size:9px;">T</span>
-								</div>
-								<span class="flex-1 text-left text-xs font-medium text-gray-700">Tráfico</span>
-								{#if showTrafico}
-									<span
-										class="inline-flex items-center gap-1.5 rounded-md border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700"
-									>
-										<span class="h-1.5 w-1.5 rounded-full bg-orange-500"></span>
-										ON
-									</span>
-								{/if}
-							</button>
-
-							<!-- Riesgo deslizamientos SGC -->
-							<button
-								class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
-								class:opacity-40={!showRiesgos}
-								on:click={toggleRiesgosSGC}
-							>
-								<div
-									class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-red-600"
-								>
-									<span style="color:#fff;font-weight:700;font-size:9px;">⚠</span>
-								</div>
-								<span class="flex-1 text-left text-xs font-medium text-gray-700">Riesgo desliz.</span>
-								{#if showRiesgos}
-									<span
-										class="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
-									>
-										<span class="h-1.5 w-1.5 rounded-full bg-red-500"></span>
-										ON
-									</span>
-								{/if}
-							</button>
-						</div>
-
-						<div class="border-t border-gray-100 px-3 py-1.5">
-							<p class="text-[9px] font-medium text-gray-400">Click para mostrar/ocultar</p>
-						</div>
-					</div>
 				</div>
 
-				<!-- ═══ HERO RECORRIDO (protagonista #2) ═══ -->
-				<div class="servicio-hero-recorrido glass soft-shadow mb-3 rounded-2xl border border-gray-200/50 p-5 md:p-6">
-					<div class="mb-3 flex items-center gap-2">
-						<div
-							class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600"
-						>
-							<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-								<path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-							</svg>
-						</div>
-						<p class="text-[10px] font-semibold tracking-widest text-gray-500 uppercase">Recorrido</p>
-					</div>
-					<div class="servicio-hero-route">
-						<!-- ORIGEN -->
-						<div class="route-end origin">
-							<div class="route-pin" aria-hidden="true">A</div>
-							<div class="route-end-body">
-								<span class="route-end-eyebrow">Origen</span>
-								<p class="route-end-text">
-									{servicio.origen_especifico ||
-										servicio.origen?.nombre_municipio ||
-										'Sin especificar'}
-								</p>
-								{#if servicio.origen?.nombre_departamento}
-									<p class="route-end-sub">
-										{servicio.origen.nombre_municipio}, {servicio.origen.nombre_departamento}
-									</p>
-								{/if}
-							</div>
-						</div>
-
-						<!-- LÍNEA CENTRAL CON DISTANCIA/TIEMPO -->
-						<div class="route-line" aria-hidden="true">
-							<div class="route-line-track"></div>
-							<div class="route-line-stats">
-								{#if distancia !== '—'}
-									<span class="route-stat">{distancia}</span>
-								{/if}
-								{#if duracion !== '—'}
-									<span class="route-stat-sep">·</span>
-									<span class="route-stat">{duracion}</span>
-								{/if}
-							</div>
-						</div>
-
-						<!-- DESTINO -->
-						<div class="route-end dest">
-							<div class="route-pin" aria-hidden="true">B</div>
-							<div class="route-end-body">
-								<span class="route-end-eyebrow">Destino</span>
-								<p class="route-end-text">
-									{servicio.destino_especifico ||
-										servicio.destino?.nombre_municipio ||
-										'Sin especificar'}
-								</p>
-								{#if servicio.destino?.nombre_departamento}
-									<p class="route-end-sub">
-										{servicio.destino.nombre_municipio}, {servicio.destino.nombre_departamento}
-									</p>
-								{/if}
-							</div>
-						</div>
-					</div>
-				</div>
-
-				<!-- ─── CONDICIONES VIALES ─── -->
-				{#if loadingCondiciones}
-					<div
-						class="glass mb-3 flex items-center gap-2 rounded-xl border border-blue-200/50 bg-blue-50/80 px-4 py-2.5"
-					>
-						<span
-							class="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-blue-500 border-t-transparent"
-						></span>
-						<span class="text-xs font-semibold text-blue-700"
-							>Analizando condiciones actuales de la vía...</span
-						>
-					</div>
-				{:else if condicionesViales.length > 0}
-					<div class="mb-4 grid [grid-template-columns:repeat(auto-fit,minmax(260px,1fr))] gap-2">
-						{#each condicionesViales as cond}
-							{@const estilos = {
-								ok: {
-									bg: 'bg-emerald-50/80',
-									border: 'border-emerald-200/60',
-									icon: '✅',
-									dot: 'bg-emerald-500',
-									titulo: 'text-emerald-900',
-									desc: 'text-emerald-700'
-								},
-								moderado: {
-									bg: 'bg-amber-50/80',
-									border: 'border-amber-200/60',
-									icon: '⚠️',
-									dot: 'bg-amber-500',
-									titulo: 'text-amber-900',
-									desc: 'text-amber-700'
-								},
-								alto: {
-									bg: 'bg-orange-50/80',
-									border: 'border-orange-200/60',
-									icon: '🔶',
-									dot: 'bg-orange-500',
-									titulo: 'text-orange-900',
-									desc: 'text-orange-700'
-								},
-								critico: {
-									bg: 'bg-red-50/80',
-									border: 'border-red-200/60',
-									icon: '🚨',
-									dot: 'bg-red-500',
-									titulo: 'text-red-900',
-									desc: 'text-red-700'
-								}
-							}[cond.nivel]}
-							<div class="soft-shadow rounded-xl border {estilos.border} {estilos.bg} px-4 py-3">
-								<div class="mb-1 flex items-center gap-2">
-									<span class="text-sm">{estilos.icon}</span>
-									<p class="text-xs font-bold {estilos.titulo}">{cond.titulo}</p>
-									<div class="ml-auto h-2 w-2 rounded-full {estilos.dot} animate-pulse"></div>
-								</div>
-								<p class="text-[11px] leading-relaxed {estilos.desc}">{cond.descripcion}</p>
-							</div>
-						{/each}
+				{#if servicio.observaciones}
+					<div class="detalle-card detalle-indicaciones">
+						<p class="detalle-indicaciones-titulo">Indicaciones de operaciones</p>
+						<p class="detalle-indicaciones-texto">{servicio.observaciones}</p>
 					</div>
 				{/if}
 
-				<!-- LOADING POIs -->
-				{#if loadingPOIs}
-					<div
-						class="glass soft-shadow mb-4 flex items-center gap-3 rounded-xl border border-emerald-200/50 bg-emerald-50/80 px-4 py-2.5"
-						in:fade={{ duration: 200 }}
-						out:fade={{ duration: 200 }}
-					>
-						<div class="relative flex h-5 w-5 flex-shrink-0">
-							<span
-								class="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60"
-							></span>
-							<span
-								class="relative inline-flex h-5 w-5 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent"
-							></span>
-						</div>
-						<div class="flex min-w-0 flex-1 items-center gap-2">
-							<span class="text-sm font-semibold text-emerald-800"
-								>Buscando puntos de interés en la ruta...</span
-							>
-							<span class="hidden items-center gap-1.5 text-xs text-emerald-700 sm:flex">
-								<span
-									class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-100/80 px-2 py-0.5 text-[10px] font-semibold"
-									>🛣️ Peajes</span
-								>
-								<span
-									class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-100/80 px-2 py-0.5 text-[10px] font-semibold"
-									>🍽️ Restaurantes</span
-								>
-								<span
-									class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-100/80 px-2 py-0.5 text-[10px] font-semibold"
-									>⛽ Est. Servicio</span
-								>
-								<span
-									class="inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-100/80 px-2 py-0.5 text-[10px] font-semibold"
-									>🏨 Hospedajes</span
-								>
-							</span>
-						</div>
-					</div>
-				{/if}
+				<div class="detalle-columnas">
+					<div class="detalle-columna">
+						<!-- ═══ MAPA (hero) ═══ -->
+						<div class="servicio-map-frame detalle-mapa relative overflow-hidden">
+							<div id="map" class="h-full w-full"></div>
 
-				<!-- ═══ TRES HERO CARDS: Conductor | Vehículo | Cliente ═══ -->
-				<div class="servicio-hero-grid mb-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-					<!-- ─── CONDUCTOR ─── -->
-					<div class="servicio-hero-card glass soft-shadow rounded-2xl border border-gray-200/50 p-4">
-						<div class="mb-3 flex items-center gap-2">
-							<div
-								class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600"
+							<!-- Botón centrar -->
+							<button
+								onclick={centerRoute}
+								class="servicio-map-center-btn apple-transition absolute top-3 left-3 z-10 flex items-center gap-1.5 rounded-xl border border-gray-200/50 bg-white/90 px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm backdrop-blur-md hover:bg-white"
 							>
-								<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+								<svg
+									class="h-4 w-4 text-emerald-600"
+									fill="none"
+									stroke="currentColor"
+									viewBox="0 0 24 24"
+									stroke-width="2"
+								>
 									<path
 										stroke-linecap="round"
 										stroke-linejoin="round"
-										d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+										d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+									/>
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
 									/>
 								</svg>
+								Centrar
+							</button>
+
+							<!-- Trip summary overlay (esquina inferior izquierda, encima de la leyenda) -->
+							{#if distancia !== '—'}
+								<div class="servicio-map-stats" in:fade={{ duration: 300 }}>
+									<div class="stat-block">
+										<span class="stat-block-label">Distancia</span>
+										<span class="stat-block-value">{distancia}</span>
+									</div>
+									<div class="stat-divider"></div>
+									<div class="stat-block">
+										<span class="stat-block-label">Tiempo est.</span>
+										<span class="stat-block-value">{duracion}</span>
+									</div>
+								</div>
+							{/if}
+
+							<!-- ─── LEYENDA INTERACTIVA (subida para no chocar con stats) ─── -->
+							<div
+								class="servicio-map-leyenda glass soft-shadow absolute right-3 bottom-3 z-10 overflow-hidden rounded-xl border border-gray-200/50"
+								style="min-width:220px;backdrop-filter:blur(12px);"
+							>
+								<div class="border-b border-gray-100 px-3 py-2">
+									<p class="text-[10px] font-semibold tracking-wider text-gray-500 uppercase">
+										Puntos de interés
+									</p>
+								</div>
+
+								<div class="space-y-px p-1.5">
+									<!-- Origen / Destino -->
+									<div class="flex items-center gap-2 rounded-lg px-2 py-1">
+										<div
+											class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500"
+										>
+											<span style="color:#fff;font-weight:700;font-size:9px;">A</span>
+										</div>
+										<span class="text-xs font-medium text-gray-700">Origen</span>
+									</div>
+									<div class="flex items-center gap-2 rounded-lg px-2 py-1">
+										<div
+											class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-red-500"
+										>
+											<span style="color:#fff;font-weight:700;font-size:9px;">B</span>
+										</div>
+										<span class="text-xs font-medium text-gray-700">Destino</span>
+									</div>
+
+									<div class="my-1 border-t border-gray-100"></div>
+
+									<!-- Peajes -->
+									<button
+										class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
+										class:opacity-40={!showPeajes}
+										onclick={() => (showPeajes = !showPeajes)}
+									>
+										<div
+											class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-amber-400"
+										>
+											<span style="color:#fff;font-weight:700;font-size:9px;">P</span>
+										</div>
+										<span class="flex-1 text-left text-xs font-medium text-gray-700">Peajes</span>
+										{#if peajes.length > 0}
+											<span
+												class="rounded-md bg-amber-50 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"
+												>{peajes.length}</span
+											>
+										{/if}
+									</button>
+
+									<!-- Restaurantes -->
+									<button
+										class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
+										class:opacity-40={!showRestaurantes}
+										onclick={() => {
+											showRestaurantes = !showRestaurantes;
+											pintarParadas();
+										}}
+									>
+										<div
+											class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-blue-500"
+										>
+											<span style="color:#fff;font-weight:700;font-size:9px;">R</span>
+										</div>
+										<span class="flex-1 text-left text-xs font-medium text-gray-700"
+											>Restaurantes</span
+										>
+										{#if countRestaurantes > 0}
+											<span
+												class="rounded-md bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700"
+												>{countRestaurantes}</span
+											>
+										{/if}
+									</button>
+
+									<!-- Estaciones de servicio -->
+									<button
+										class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
+										class:opacity-40={!showEstaciones}
+										onclick={() => {
+											showEstaciones = !showEstaciones;
+											pintarParadas();
+										}}
+									>
+										<div
+											class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-purple-500"
+										>
+											<span style="color:#fff;font-weight:700;font-size:9px;">S</span>
+										</div>
+										<span class="flex-1 text-left text-xs font-medium text-gray-700"
+											>Est. Servicio</span
+										>
+										{#if countEstaciones > 0}
+											<span
+												class="rounded-md bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700"
+												>{countEstaciones}</span
+											>
+										{/if}
+									</button>
+
+									<!-- Hospedajes -->
+									<button
+										class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
+										class:opacity-40={!showHospedajes}
+										onclick={() => {
+											showHospedajes = !showHospedajes;
+											pintarParadas();
+										}}
+									>
+										<div
+											class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-teal-500"
+										>
+											<span style="color:#fff;font-weight:700;font-size:9px;">H</span>
+										</div>
+										<span class="flex-1 text-left text-xs font-medium text-gray-700"
+											>Hospedajes</span
+										>
+										{#if countHospedajes > 0}
+											<span
+												class="rounded-md bg-teal-50 px-1.5 py-0.5 text-[10px] font-semibold text-teal-700"
+												>{countHospedajes}</span
+											>
+										{/if}
+									</button>
+
+									<!-- Incidentes / Cierres -->
+									<button
+										class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
+										class:opacity-40={!showIncidentes}
+										onclick={() => {
+											showIncidentes = !showIncidentes;
+											pintarIncidentes();
+										}}
+									>
+										<div
+											class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-red-600 text-[10px]"
+										>
+											🚧
+										</div>
+										<span class="flex-1 text-left text-xs font-medium text-gray-700"
+											>Cierres / Accidentes</span
+										>
+										{#if loadingCondiciones}
+											<span
+												class="h-3 w-3 animate-spin rounded-full border border-red-400 border-t-transparent"
+											></span>
+										{:else if incidentes.length > 0 || incidentesNacionales.length > 0}
+											{@const total = incidentes.length + incidentesNacionales.length}
+											<span
+												class="rounded-md px-1.5 py-0.5 text-[10px] font-semibold {incidentes.some(
+													(i) => i.cerrrado
+												)
+													? 'bg-red-50 text-red-700'
+													: 'bg-orange-50 text-orange-700'}">{total}</span
+											>
+										{/if}
+									</button>
+
+									<!-- Distracom -->
+									<button
+										class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
+										class:opacity-40={!showDistracom}
+										onclick={() => (showDistracom = !showDistracom)}
+									>
+										<img
+											src={DISTRACOM_ICON_URL}
+											alt="Distracom"
+											class="h-5 w-5 flex-shrink-0 object-contain"
+										/>
+										<span class="flex-1 text-left text-xs font-medium text-gray-700">Distracom</span
+										>
+										{#if distracomMarkers.length > 0}
+											<span
+												class="rounded-md bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700"
+												>{distracomMarkers.length}</span
+											>
+										{/if}
+									</button>
+
+									<div class="my-1 border-t border-gray-100"></div>
+
+									<!-- Tráfico en tiempo real -->
+									<button
+										class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
+										class:opacity-40={!showTrafico}
+										onclick={toggleTrafico}
+									>
+										<div
+											class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-orange-400"
+										>
+											<span style="color:#fff;font-weight:700;font-size:9px;">T</span>
+										</div>
+										<span class="flex-1 text-left text-xs font-medium text-gray-700">Tráfico</span>
+										{#if showTrafico}
+											<span
+												class="inline-flex items-center gap-1.5 rounded-md border border-orange-200 bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700"
+											>
+												<span class="h-1.5 w-1.5 rounded-full bg-orange-500"></span>
+												ON
+											</span>
+										{/if}
+									</button>
+
+									<!-- Riesgo deslizamientos SGC -->
+									<button
+										class="apple-transition flex w-full items-center gap-2 rounded-lg px-2 py-1 transition-colors hover:bg-emerald-50/50"
+										class:opacity-40={!showRiesgos}
+										onclick={toggleRiesgosSGC}
+									>
+										<div
+											class="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-red-600"
+										>
+											<span style="color:#fff;font-weight:700;font-size:9px;">⚠</span>
+										</div>
+										<span class="flex-1 text-left text-xs font-medium text-gray-700"
+											>Riesgo desliz.</span
+										>
+										{#if showRiesgos}
+											<span
+												class="inline-flex items-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-1.5 py-0.5 text-[10px] font-semibold text-red-700"
+											>
+												<span class="h-1.5 w-1.5 rounded-full bg-red-500"></span>
+												ON
+											</span>
+										{/if}
+									</button>
+								</div>
+
+								<div class="border-t border-gray-100 px-3 py-1.5">
+									<p class="text-[9px] font-medium text-gray-400">Click para mostrar/ocultar</p>
+								</div>
 							</div>
-							<p class="text-[10px] font-semibold tracking-widest text-gray-500 uppercase">
-								Conductor
-							</p>
 						</div>
-						<div class="flex flex-col items-center text-center">
+
+						<div class="detalle-seccion">
+							<h2 class="detalle-seccion-titulo">Estado de la vía</h2>
+						</div>
+						{#if loadingCondiciones}
+							<div class="detalle-card detalle-fila-cargando">
+								<span class="detalle-spinner"></span>
+								<span>Analizando condiciones actuales de la vía…</span>
+							</div>
+						{:else if condicionesViales.length > 0}
+							<div class="detalle-card">
+								{#each condicionesViales as cond, indice}
+									<div class="detalle-condicion" class:detalle-condicion--separada={indice > 0}>
+										<span
+											class="detalle-chip"
+											style="background-color: {NIVEL_APP[cond.nivel]?.fondo}; color: {NIVEL_APP[
+												cond.nivel
+											]?.texto}"
+										>
+											{cond.titulo}
+										</span>
+										<p class="detalle-muted">{cond.descripcion}</p>
+									</div>
+								{/each}
+							</div>
+						{/if}
+						{#if loadingPOIs}
+							<div
+								class="detalle-card detalle-fila-cargando"
+								in:fade={{ duration: 200 }}
+								out:fade={{ duration: 200 }}
+							>
+								<span class="detalle-spinner"></span>
+								<span>Buscando peajes, paradas y estaciones en la ruta…</span>
+							</div>
+						{/if}
+
+						<!-- Ejecución del conductor (inicio/liberación desde la app) -->
+						<EjecucionConductor servicioId={servicio.id} estado={servicio.estado} />
+					</div>
+
+					<div class="detalle-columna">
+						<div class="detalle-seccion"><h2 class="detalle-seccion-titulo">Recorrido</h2></div>
+						<div class="detalle-card">
+							<div class="detalle-tramo">
+								<span class="detalle-punto detalle-punto--origen"></span>
+								<div class="detalle-tramo-texto">
+									<p class="detalle-etiqueta">ORIGEN</p>
+									<p class="detalle-titulo-card">
+										{[servicio.origen?.nombre_municipio, servicio.origen?.nombre_departamento]
+											.filter(Boolean)
+											.join(', ') ||
+											servicio.origen_especifico ||
+											'Sin especificar'}
+									</p>
+									{#if servicio.origen_especifico && servicio.origen?.nombre_municipio && servicio.origen_especifico !== servicio.origen.nombre_municipio}
+										<p class="detalle-muted">{servicio.origen_especifico}</p>
+									{/if}
+								</div>
+							</div>
+							<div class="detalle-linea"></div>
+							<div class="detalle-tramo">
+								<span class="detalle-punto detalle-punto--destino"></span>
+								<div class="detalle-tramo-texto">
+									<p class="detalle-etiqueta">DESTINO</p>
+									<p class="detalle-titulo-card">
+										{[servicio.destino?.nombre_municipio, servicio.destino?.nombre_departamento]
+											.filter(Boolean)
+											.join(', ') ||
+											servicio.destino_especifico ||
+											'Sin especificar'}
+									</p>
+									{#if servicio.destino_especifico && servicio.destino?.nombre_municipio && servicio.destino_especifico !== servicio.destino.nombre_municipio}
+										<p class="detalle-muted">{servicio.destino_especifico}</p>
+									{/if}
+								</div>
+							</div>
+							{#if distancia !== '—'}
+								<p class="detalle-recorrido-resumen">
+									{[distancia, duracion].filter((v) => v !== '—').join(' · ')}
+								</p>
+							{/if}
+						</div>
+
+						<div class="detalle-seccion"><h2 class="detalle-seccion-titulo">Programación</h2></div>
+						<div class="detalle-card">
+							{#if servicio.fecha_solicitud}
+								<div class="detalle-dato">
+									<span class="detalle-etiqueta">Solicitado</span><span class="detalle-valor"
+										>{fmtDate(servicio.fecha_solicitud)}</span
+									>
+								</div>
+							{/if}
+							{#if (servicio as any).fecha_servicio}
+								<div class="detalle-dato">
+									<span class="detalle-etiqueta">Servicio</span><span class="detalle-valor"
+										>{fmtDate((servicio as any).fecha_servicio)}</span
+									>
+								</div>
+							{/if}
+							{#if (servicio as any).hora_inicio}
+								<div class="detalle-dato">
+									<span class="detalle-etiqueta">Hora inicio</span><span class="detalle-valor"
+										>{fmtTime((servicio as any).hora_inicio)}</span
+									>
+								</div>
+							{/if}
+							{#if (servicio as any).hora_fin}
+								<div class="detalle-dato">
+									<span class="detalle-etiqueta">Hora fin</span><span class="detalle-valor"
+										>{fmtTime((servicio as any).hora_fin)}</span
+									>
+								</div>
+							{/if}
+							{#if servicio.fecha_realizacion}
+								<div class="detalle-dato">
+									<span class="detalle-etiqueta">Realización</span><span class="detalle-valor"
+										>{fmtDate(servicio.fecha_realizacion)}</span
+									>
+								</div>
+							{/if}
+							{#if servicio.fecha_finalizacion}
+								<div class="detalle-dato">
+									<span class="detalle-etiqueta">Finalización</span><span class="detalle-valor"
+										>{fmtDate(servicio.fecha_finalizacion)}</span
+									>
+								</div>
+							{/if}
+							{#if servicio.numero_planilla}
+								<div class="detalle-dato">
+									<span class="detalle-etiqueta">Planilla</span><span class="detalle-valor"
+										>{servicio.numero_planilla}</span
+									>
+								</div>
+							{/if}
+						</div>
+
+						<div class="detalle-seccion"><h2 class="detalle-seccion-titulo">Vehículo</h2></div>
+						<div class="detalle-card">
+							{#if servicio.vehiculo?.placa}
+								<span class="detalle-placa">{servicio.vehiculo.placa}</span>
+								{#if servicio.vehiculo.marca || servicio.vehiculo.linea || servicio.vehiculo.modelo}
+									<p class="detalle-titulo-card">
+										{[servicio.vehiculo.marca, servicio.vehiculo.linea, servicio.vehiculo.modelo]
+											.filter(Boolean)
+											.join(' ')}
+									</p>
+								{/if}
+								{#if servicio.vehiculo.color || servicio.vehiculo.clase_vehiculo || (servicio.vehiculo as any).combustible}
+									<p class="detalle-muted">
+										{[
+											servicio.vehiculo.color,
+											servicio.vehiculo.clase_vehiculo,
+											(servicio.vehiculo as any).combustible
+										]
+											.filter(Boolean)
+											.join(' · ')}
+									</p>
+								{/if}
+							{:else}
+								<p class="detalle-muted">Todavía no hay vehículo asignado a este servicio.</p>
+							{/if}
+						</div>
+
+						<div class="detalle-seccion"><h2 class="detalle-seccion-titulo">Conductor</h2></div>
+						<div class="detalle-card detalle-persona">
 							{#if servicio.conductor?.foto_signed_url}
 								<img
 									src={servicio.conductor.foto_signed_url}
 									alt={servicio.conductor.nombre}
-									class="servicio-hero-avatar mb-3 h-20 w-20 rounded-2xl object-cover shadow"
+									class="detalle-avatar object-cover"
 								/>
 							{:else if servicio.conductor}
-								<div
-									class="servicio-hero-avatar soft-shadow mb-3 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600"
-								>
-									<span class="text-2xl font-bold text-white"
-										>{servicio.conductor.nombre.charAt(0)}{servicio.conductor.apellido.charAt(
-											0
-										)}</span
-									>
-								</div>
-							{:else}
-								<div
-									class="servicio-hero-avatar mb-3 flex h-20 w-20 items-center justify-center rounded-2xl bg-gray-100"
-								>
-									<svg
-										class="h-9 w-9 text-gray-300"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="1.5"
-											d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-										/>
-									</svg>
+								<div class="detalle-avatar detalle-avatar--iniciales">
+									{servicio.conductor.nombre.charAt(0)}{servicio.conductor.apellido.charAt(0)}
 								</div>
 							{/if}
-							<p class="servicio-hero-name">
-								{servicio.conductor
-									? `${servicio.conductor.nombre} ${servicio.conductor.apellido}`
-									: 'Sin asignar'}
-							</p>
-							{#if servicio.conductor?.numero_identificacion}
-								<p class="servicio-hero-sub">CC {servicio.conductor.numero_identificacion}</p>
-							{/if}
-							{#if servicio.conductor?.telefono}
-								<p class="servicio-hero-sub servicio-hero-sub--accent">
-									📞 {servicio.conductor.telefono}
+							<div class="min-w-0 flex-1">
+								<p class="detalle-titulo-card">
+									{servicio.conductor
+										? `${servicio.conductor.nombre} ${servicio.conductor.apellido}`
+										: 'Sin asignar'}
 								</p>
-							{/if}
-						</div>
-					</div>
-
-					<!-- ─── VEHÍCULO (protagonista por la PLACA) ─── -->
-					{#if servicio.vehiculo?.placa}
-						<div class="servicio-hero-card glass soft-shadow rounded-2xl border border-gray-200/50 p-4">
-							<div class="mb-3 flex items-center gap-2">
-								<div
-									class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600"
-								>
-									<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M9 17a2 2 0 11-4 0 2 2 0 014 0zM19 17a2 2 0 11-4 0 2 2 0 014 0z"
-										/>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"
-										/>
-									</svg>
-								</div>
-								<p class="text-[10px] font-semibold tracking-widest text-gray-500 uppercase">
-									Vehículo
-								</p>
-							</div>
-							<div class="servicio-placa-wrap">
-								<span class="servicio-placa-label">Placa</span>
-								<span class="servicio-placa">{servicio.vehiculo.placa}</span>
-							</div>
-							{#if servicio.vehiculo.marca || servicio.vehiculo.linea || servicio.vehiculo.modelo}
-								<p class="servicio-hero-name mt-3 text-base">
-									{[servicio.vehiculo.marca, servicio.vehiculo.linea, servicio.vehiculo.modelo]
-										.filter(Boolean)
-										.join(' ')}
-								</p>
-							{/if}
-							{#if servicio.vehiculo.color || servicio.vehiculo.clase_vehiculo || (servicio.vehiculo as any).combustible}
-								<div class="mt-2 flex flex-wrap justify-center gap-1.5">
-									{#if servicio.vehiculo.color}
-										<span class="servicio-mini-tag">🎨 {servicio.vehiculo.color}</span>
-									{/if}
-									{#if servicio.vehiculo.clase_vehiculo}
-										<span class="servicio-mini-tag">🚗 {servicio.vehiculo.clase_vehiculo}</span>
-									{/if}
-									{#if (servicio.vehiculo as any).combustible}
-										<span class="servicio-mini-tag">⛽ {(servicio.vehiculo as any).combustible}</span>
-									{/if}
-								</div>
-							{/if}
-						</div>
-					{:else}
-						<div class="servicio-hero-card glass soft-shadow flex items-center justify-center rounded-2xl border border-gray-200/50 p-4 text-sm text-gray-400">
-							Sin vehículo asignado
-						</div>
-					{/if}
-
-					<!-- ─── CLIENTE ─── -->
-					<div class="servicio-hero-card glass soft-shadow rounded-2xl border border-gray-200/50 p-4">
-						<div class="mb-3 flex items-center gap-2">
-							<div
-								class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-amber-600"
-							>
-								<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-									/>
-								</svg>
-							</div>
-							<p class="text-[10px] font-semibold tracking-widest text-gray-500 uppercase">
-								Cliente
-							</p>
-						</div>
-						{#if servicio.cliente}
-							<div class="flex flex-col items-center text-center">
-								<div class="servicio-hero-avatar soft-shadow mb-3 flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600">
-									<svg class="h-9 w-9 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-									</svg>
-								</div>
-								<p class="servicio-hero-name">
-									{(servicio.cliente as any).razon_social || servicio.cliente.nombre || '—'}
-								</p>
-								{#if servicio.cliente.nit}
-									<p class="servicio-hero-sub">NIT {servicio.cliente.nit}</p>
-								{/if}
-								{#if (servicio.cliente as any).telefono}
-									<p class="servicio-hero-sub servicio-hero-sub--accent">
-										📞 {(servicio.cliente as any).telefono}
+								{#if servicio.conductor?.numero_identificacion || servicio.conductor?.telefono}
+									<p class="detalle-muted">
+										{[
+											servicio.conductor?.numero_identificacion
+												? `CC ${servicio.conductor.numero_identificacion}`
+												: '',
+											servicio.conductor?.telefono ?? ''
+										]
+											.filter(Boolean)
+											.join(' · ')}
 									</p>
 								{/if}
 							</div>
-						{:else}
-							<div class="flex flex-col items-center text-center text-sm text-gray-400">
-								<div class="servicio-hero-avatar mb-3 flex h-20 w-20 items-center justify-center rounded-2xl bg-gray-100">
-									<svg class="h-9 w-9 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-									</svg>
-								</div>
-								Sin cliente asignado
-							</div>
-						{/if}
-					</div>
-				</div>
+						</div>
 
-				<!-- ═══ SECCIÓN DE DETALLES: Fechas + Planilla + Condiciones ═══ -->
-				<div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
-					<!-- Fechas + Planilla + Propósito (compacto) -->
-					<div class="glass soft-shadow rounded-2xl border border-gray-200/50 p-4">
-						<div class="mb-3 flex items-center gap-2">
-							<div
-								class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-blue-400 to-blue-600"
-							>
-								<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-								</svg>
-							</div>
-							<p class="text-[10px] font-semibold tracking-widest text-gray-500 uppercase">
-								Información
+						<div class="detalle-seccion"><h2 class="detalle-seccion-titulo">Cliente</h2></div>
+						<div class="detalle-card">
+							<p class="detalle-titulo-card">
+								{servicio.cliente?.nombre || 'Sin cliente asignado'}
 							</p>
-						</div>
-						<div class="grid grid-cols-2 gap-x-3 gap-y-1">
-							{#if servicio.fecha_solicitud}
-								<div class="servicio-info-row">
-									<span class="servicio-info-key">Solicitud</span>
-									<span class="servicio-info-val">{fmtDate(servicio.fecha_solicitud)}</span>
-								</div>
-							{/if}
-							{#if (servicio as any).fecha_servicio}
-								<div class="servicio-info-row">
-									<span class="servicio-info-key">Servicio</span>
-									<span class="servicio-info-val">{fmtDate((servicio as any).fecha_servicio)}</span>
-								</div>
-							{/if}
-							{#if (servicio as any).hora_inicio}
-								<div class="servicio-info-row">
-									<span class="servicio-info-key">Hora inicio</span>
-									<span class="servicio-info-val">{fmtTime((servicio as any).hora_inicio)}</span>
-								</div>
-							{/if}
-							{#if (servicio as any).hora_fin}
-								<div class="servicio-info-row">
-									<span class="servicio-info-key">Hora fin</span>
-									<span class="servicio-info-val">{fmtTime((servicio as any).hora_fin)}</span>
-								</div>
-							{/if}
-							{#if servicio.fecha_realizacion}
-								<div class="servicio-info-row">
-									<span class="servicio-info-key">Realización</span>
-									<span class="servicio-info-val">{fmtDate(servicio.fecha_realizacion)}</span>
-								</div>
-							{/if}
-							{#if servicio.fecha_finalizacion}
-								<div class="servicio-info-row">
-									<span class="servicio-info-key">Finalización</span>
-									<span class="servicio-info-val">{fmtDate(servicio.fecha_finalizacion)}</span>
-								</div>
-							{/if}
-							{#if servicio.numero_planilla}
-								<div class="servicio-info-row">
-									<span class="servicio-info-key">Planilla</span>
-									<span class="servicio-info-val servicio-info-val--mono">{servicio.numero_planilla}</span>
-								</div>
-							{/if}
-							{#if servicio.proposito_servicio}
-								<div class="servicio-info-row">
-									<span class="servicio-info-key">Propósito</span>
-									<span class="servicio-info-val">{labelPropositoServicio(servicio.proposito_servicio)}</span>
-								</div>
-							{/if}
-						</div>
-					</div>
-
-					<!-- Condiciones del servicio (compacto) -->
-					<div class="glass soft-shadow rounded-2xl border border-gray-200/50 p-4">
-						<div class="mb-3 flex items-center justify-between gap-2">
-							<div class="flex items-center gap-2">
-								<div
-									class="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600"
-								>
-									<svg class="h-4 w-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-									</svg>
-								</div>
-								<p class="text-[10px] font-semibold tracking-widest text-gray-500 uppercase">
-									Condiciones
+							{#if servicio.cliente?.nit || (servicio.cliente as any)?.telefono}
+								<p class="detalle-muted">
+									{[
+										servicio.cliente?.nit ? `NIT ${servicio.cliente.nit}` : '',
+										(servicio.cliente as any)?.telefono ?? ''
+									]
+										.filter(Boolean)
+										.join(' · ')}
 								</p>
-							</div>
-							{#if esDefault}
-								<span class="servicio-default-tag">Por defecto</span>
 							{/if}
 						</div>
-						<div class="flex flex-wrap gap-1.5">
-							<!-- Estado conductor -->
-							<div class="servicio-cond-badge">
-								<div
-									class="h-2 w-2 rounded-full {estadoConductor === 'optimo'
-										? 'bg-emerald-500'
-										: estadoConductor === 'regular'
-											? 'bg-amber-500'
-											: estadoConductor === 'fatigado'
-												? 'bg-orange-500'
-												: 'bg-red-500'}"
-								></div>
-								<span>Conductor {estadoConductor}</span>
-							</div>
 
-							{#if viaTrocha}<span class="servicio-cond-badge servicio-cond-badge--amber">🏞️ Trocha</span>{/if}
-							{#if viaAfirmado}<span class="servicio-cond-badge servicio-cond-badge--yellow">🪨 Afirmado</span>{/if}
-							{#if viaMixto}<span class="servicio-cond-badge servicio-cond-badge--blue">🔀 Mixto</span>{/if}
-							{#if viaPavimentada}<span class="servicio-cond-badge servicio-cond-badge--emerald">🛣️ Pavimentada</span>{/if}
-
-							{#if riesgoDesniveles}<span class="servicio-cond-badge servicio-cond-badge--red">⚠️ Desniveles</span>{/if}
-							{#if riesgoDeslizamientos}<span class="servicio-cond-badge servicio-cond-badge--red">⚠️ Deslizamientos</span>{/if}
-							{#if riesgoSinSenalizacion}<span class="servicio-cond-badge servicio-cond-badge--red">⚠️ Sin señalización</span>{/if}
-							{#if riesgoAnimales}<span class="servicio-cond-badge servicio-cond-badge--red">⚠️ Animales</span>{/if}
-							{#if riesgoPeatones}<span class="servicio-cond-badge servicio-cond-badge--red">🚶 Peatones</span>{/if}
-							{#if riesgoTrafico}<span class="servicio-cond-badge servicio-cond-badge--red">🚗 Tráfico alto</span>{/if}
+						<div class="detalle-seccion">
+							<h2 class="detalle-seccion-titulo">Vía y riesgos</h2>
+							{#if esDefault}<span class="detalle-seccion-detalle">Por defecto</span>{/if}
 						</div>
-
-						<!-- Calificación — solo si realizado -->
-						{#if esRealizado && rc?.calificacion_servicio}
-							{@const estrellas =
-								{ excelente: 5, bueno: 5, regular: 3, malo: 2 }[calificacion as 'excelente' | 'bueno' | 'regular' | 'malo'] ?? 5}
-							{@const calColor =
-								{
-									excelente: 'text-emerald-600',
-									bueno: 'text-emerald-600',
-									regular: 'text-amber-500',
-									malo: 'text-red-500'
-								}[calificacion as 'excelente' | 'bueno' | 'regular' | 'malo'] ?? 'text-emerald-600'}
-							{@const calLabel =
-								{ excelente: 'Excelente', bueno: 'Bueno', regular: 'Regular', malo: 'Malo' }[
-									calificacion as 'excelente' | 'bueno' | 'regular' | 'malo'
-								] ?? 'Bueno'}
-							<div class="mt-3 flex items-center gap-2 border-t border-gray-100 pt-3">
-								<span class="text-[10px] font-semibold tracking-widest text-gray-500 uppercase"
-									>Calificación</span
-								>
-								<div class="flex items-center gap-0.5">
-									{#each Array(5) as _, i}
-										<svg
-											class="h-3.5 w-3.5 {i < estrellas ? 'text-amber-400' : 'text-gray-200'}"
-											fill="currentColor"
-											viewBox="0 0 20 20"
-										>
-											<path
-												d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"
-											/>
-										</svg>
-									{/each}
-								</div>
-								<span class="text-xs font-semibold {calColor}">{calLabel}</span>
+						<div class="detalle-card">
+							<div class="detalle-chips">
+								<span class="detalle-chip detalle-chip--neutro">
+									<span
+										class="h-2 w-2 rounded-full {estadoConductor === 'optimo'
+											? 'bg-emerald-500'
+											: estadoConductor === 'regular'
+												? 'bg-amber-500'
+												: estadoConductor === 'fatigado'
+													? 'bg-orange-500'
+													: 'bg-red-500'}"
+									></span>
+									Conductor {estadoConductor}
+								</span>
+								{#if viaPavimentada}<span class="detalle-chip detalle-chip--neutro"
+										>Pavimentada</span
+									>{/if}
+								{#if viaMixto}<span class="detalle-chip detalle-chip--neutro">Mixta</span>{/if}
+								{#if viaAfirmado}<span class="detalle-chip detalle-chip--neutro">Afirmado</span
+									>{/if}
+								{#if viaTrocha}<span class="detalle-chip detalle-chip--neutro">Trocha</span>{/if}
+								{#if riesgoDeslizamientos}<span class="detalle-chip detalle-chip--alerta"
+										>Deslizamientos</span
+									>{/if}
+								{#if riesgoDesniveles}<span class="detalle-chip detalle-chip--alerta"
+										>Desniveles</span
+									>{/if}
+								{#if riesgoSinSenalizacion}<span class="detalle-chip detalle-chip--alerta"
+										>Sin señalización</span
+									>{/if}
+								{#if riesgoAnimales}<span class="detalle-chip detalle-chip--alerta"
+										>Animales en la vía</span
+									>{/if}
+								{#if riesgoPeatones}<span class="detalle-chip detalle-chip--alerta">Peatones</span
+									>{/if}
+								{#if riesgoTrafico}<span class="detalle-chip detalle-chip--alerta"
+										>Tráfico alto</span
+									>{/if}
 							</div>
-						{/if}
+							<!-- Calificación — solo si realizado -->
+							{#if esRealizado && rc?.calificacion_servicio}
+								{@const estrellas =
+									{ excelente: 5, bueno: 5, regular: 3, malo: 2 }[
+										calificacion as 'excelente' | 'bueno' | 'regular' | 'malo'
+									] ?? 5}
+								{@const calColor =
+									{
+										excelente: 'text-emerald-600',
+										bueno: 'text-emerald-600',
+										regular: 'text-amber-500',
+										malo: 'text-red-500'
+									}[calificacion as 'excelente' | 'bueno' | 'regular' | 'malo'] ??
+									'text-emerald-600'}
+								{@const calLabel =
+									{ excelente: 'Excelente', bueno: 'Bueno', regular: 'Regular', malo: 'Malo' }[
+										calificacion as 'excelente' | 'bueno' | 'regular' | 'malo'
+									] ?? 'Bueno'}
+								<div class="detalle-calificacion">
+									<span class="detalle-etiqueta">CALIFICACIÓN</span>
+									<div class="flex items-center gap-0.5">
+										{#each Array(5) as _, i}
+											<svg
+												class="h-3.5 w-3.5 {i < estrellas ? 'text-amber-400' : 'text-gray-200'}"
+												fill="currentColor"
+												viewBox="0 0 20 20"
+											>
+												<path
+													d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"
+												/>
+											</svg>
+										{/each}
+									</div>
+									<span class="text-xs font-semibold {calColor}">{calLabel}</span>
+								</div>
+							{/if}
+						</div>
 					</div>
 				</div>
-
-				<!-- Ejecución del conductor (inicio/liberación desde la app) -->
-				<EjecucionConductor servicioId={servicio.id} estado={servicio.estado} />
-
-				<!-- Observaciones (small, full width) -->
-				{#if servicio.observaciones}
-					<div class="servicio-obs glass soft-shadow mt-3 rounded-2xl border border-gray-200/50 p-4">
-						<div class="mb-2 flex items-center gap-2">
-							<div
-								class="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600"
-							>
-								<svg class="h-3.5 w-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-									/>
-								</svg>
-							</div>
-							<p class="text-[10px] font-semibold tracking-widest text-gray-500 uppercase">
-								Observaciones
-							</p>
-						</div>
-						<p class="text-sm leading-relaxed text-gray-700">{servicio.observaciones}</p>
-					</div>
-				{/if}
 				<div class="h-8"></div>
 			</div>
 		</div>
 
-		<!-- MODAL COMPARTIR (sistema landing) -->
-		{#if showShareModal}
-			<div
-				class="fixed inset-0 z-[200] flex items-center justify-center p-4"
-				style="background-color: rgba(15, 23, 42, 0.55); backdrop-filter: blur(8px);"
-				role="button"
-				tabindex="0"
-				on:click={() => {
-					showShareModal = false;
-					copySuccess = false;
-				}}
-				on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape') { showShareModal = false; copySuccess = false; } }}
-				transition:fade={{ duration: 220 }}
-			>
-				<div
-					class="servicio-share-modal w-full max-w-md overflow-hidden"
-					role="dialog"
-					aria-modal="true"
-					aria-label="Enlace compartible"
-					tabindex="0"
-					on:click|stopPropagation
-					on:keydown|stopPropagation
-					transition:fly={{ y: 20, duration: 500, easing: quintOut }}
-				>
-					<div class="servicio-share-hd">
-						<div class="flex items-center gap-3 min-w-0">
-							<div class="servicio-share-icon" aria-hidden="true">
-								<svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-									/>
-								</svg>
-							</div>
-							<div class="min-w-0">
-								<span class="servicio-share-eyebrow">Compartir</span>
-								<h3 class="servicio-share-title">Enlace compartible</h3>
-							</div>
-						</div>
-						<button
-							on:click={() => {
-								showShareModal = false;
-								copySuccess = false;
-							}}
-							aria-label="Cerrar modal"
-							class="servicio-share-close"
-						>
-							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-							</svg>
-						</button>
-					</div>
-					<div class="servicio-share-body">
-						<button on:click={copyLink} class="servicio-share-link">
-							<span class="servicio-share-link-eyebrow">Click para copiar</span>
-							<span class="servicio-share-link-url">{generatedShareUrl}</span>
-						</button>
-						<button on:click={copyLink} class="btn-primary servicio-share-cta" class:copied={copySuccess}>
-							{#if copySuccess}
-								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-								</svg>
-								¡Copiado al portapapeles!
-							{:else}
-								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-									/>
-								</svg>
-								Copiar enlace
-							{/if}
-						</button>
-					</div>
-				</div>
-			</div>
-		{/if}
+		<!-- MODAL COMPARTIR (ModalBase, estilo de la app) -->
+		<ModalBase
+			open={showShareModal}
+			eyebrow="Compartir"
+			title="Enlace del servicio"
+			subtitle="Quien tenga el enlace ve el detalle público del servicio, sin iniciar sesión."
+			tamano="sm"
+			oncerrar={cerrarCompartir}
+		>
+			<button type="button" onclick={copyLink} class="compartir-enlace">
+				<span class="compartir-enlace-etiqueta">Toca para copiar</span>
+				<span class="compartir-enlace-url">{generatedShareUrl}</span>
+			</button>
+			{#snippet pie()}
+				<button type="button" class="btn-secondary" onclick={cerrarCompartir}>Cerrar</button>
+				<button type="button" class="btn-primary" onclick={copyLink}>
+					{copySuccess ? '¡Copiado!' : 'Copiar enlace'}
+				</button>
+			{/snippet}
+		</ModalBase>
 	{/if}
 </div>
 
 <style>
-	/* ── Header sticky (sistema landing) ─────────────────────────── */
-	.servicio-header {
-		background: #ffffff;
-		border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-		padding: 0.85rem 1.25rem;
-		display: flex;
-		align-items: center;
-		gap: 0.85rem;
-		flex-shrink: 0;
-		z-index: 50;
-		position: relative;
-	}
-	@media (min-width: 768px) {
-		.servicio-header {
-			padding: 0.85rem 1.5rem;
-		}
-	}
-
-	.servicio-icon-btn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 36px;
-		height: 36px;
-		border-radius: 10px;
-		background: #fcfcfb;
-		color: #334155;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		cursor: pointer;
-		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-		flex-shrink: 0;
-	}
-	.servicio-icon-btn:hover:not(:disabled) {
-		background: white;
-		border-color: rgba(22, 163, 74, 0.3);
-		color: #15803d;
-		transform: translateY(-1px);
-	}
-	.servicio-icon-btn:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
-	}
-
-	.servicio-brand-icon {
-		width: 40px;
-		height: 40px;
-		border-radius: 12px;
-		background: linear-gradient(135deg, #16a34a, #15803d);
-		display: none;
-		align-items: center;
-		justify-content: center;
-		color: white;
-		box-shadow: 0 4px 16px rgba(22, 163, 74, 0.3);
-		flex-shrink: 0;
-	}
-	@media (min-width: 640px) {
-		.servicio-brand-icon {
-			display: flex;
-		}
-	}
-
-	.servicio-eyebrow {
-		display: inline-block;
-		font-size: 0.65rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.12em;
-		color: #16a34a;
-		background: rgba(22, 163, 74, 0.08);
-		padding: 0.2rem 0.55rem;
-		border-radius: 5px;
-		font-family: var(--font-sans);
-	}
-
-	.servicio-title {
-		font-family: var(--font-sans);
-		font-weight: 700;
-		font-size: 1.05rem;
-		color: #0f172a;
-		margin: 0.3rem 0 0;
-		line-height: 1.2;
-		letter-spacing: 0.05em;
-		text-overflow: ellipsis;
-		overflow: hidden;
-		white-space: nowrap;
-	}
-
-	.servicio-status-pill {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		font-family: var(--font-sans);
-		font-size: 0.65rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		padding: 0.3rem 0.65rem;
-		border-radius: 999px;
-		border: 1px solid;
-	}
-
-	.servicio-share-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.55rem 0.9rem;
-		font-size: 0.78rem;
-		cursor: pointer;
-	}
-
-	/* ── Modal compartir (sistema landing) ─────────────────────── */
-	.servicio-share-modal {
-		background: white;
-		border-radius: 24px;
-		box-shadow: 0 20px 60px rgba(15, 23, 42, 0.25);
-		border: 1px solid rgba(0, 0, 0, 0.06);
-	}
-
-	.servicio-share-hd {
-		background: linear-gradient(135deg, #16a34a, #15803d);
-		padding: 1.1rem 1.5rem;
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-	}
-
-	.servicio-share-icon {
-		width: 44px;
-		height: 44px;
-		border-radius: 14px;
-		background: rgba(255, 255, 255, 0.18);
-		backdrop-filter: blur(4px);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		flex-shrink: 0;
-	}
-
-	.servicio-share-eyebrow {
-		display: inline-block;
-		font-size: 0.62rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.12em;
-		color: rgba(255, 255, 255, 0.85);
-		font-family: var(--font-sans);
-	}
-
-	.servicio-share-title {
-		font-family: var(--font-display);
-		letter-spacing: -0.02em;
-		font-weight: 800;
-		font-size: 1.2rem;
-		color: white;
-		margin: 0.2rem 0 0;
-		line-height: 1.2;
-	}
-
-	.servicio-share-close {
-		width: 32px;
-		height: 32px;
-		border-radius: 8px;
-		background: rgba(255, 255, 255, 0.12);
-		color: rgba(255, 255, 255, 0.9);
-		border: none;
-		cursor: pointer;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		transition: all 0.2s;
-	}
-	.servicio-share-close:hover {
-		background: rgba(255, 255, 255, 0.22);
-		color: white;
-	}
-
-	.servicio-share-body {
-		padding: 1.25rem 1.5rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.85rem;
-	}
-
-	.servicio-share-link {
-		display: flex;
-		flex-direction: column;
-		gap: 0.3rem;
-		width: 100%;
-		text-align: left;
-		background: #fcfcfb;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 12px;
-		padding: 0.85rem 1rem;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.servicio-share-link:hover {
-		border-color: rgba(22, 163, 74, 0.3);
-		background: white;
-	}
-
-	.servicio-share-link-eyebrow {
-		font-size: 0.62rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.1em;
-		color: #64748b;
-		font-family: var(--font-sans);
-	}
-
-	.servicio-share-link-url {
-		font-family: var(--font-sans);
-		font-size: 0.85rem;
-		color: #0f172a;
-		font-weight: 500;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.servicio-share-cta {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.45rem;
-		width: 100%;
-		padding: 0.7rem 1.25rem;
-		font-size: 0.88rem;
-		cursor: pointer;
-	}
-
-	/* ── Cards landing (override de .glass para servicio) ────── */
-	:global(.servicio-cards .glass) {
-		background: white;
-		backdrop-filter: none;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 20px;
-		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
-	}
-	:global(.servicio-cards .glass:hover) {
-		border-color: rgba(22, 163, 74, 0.22);
-	}
-
-	/* Eyebrows dentro de cards (label tracking-wide uppercase) */
-	:global(.servicio-cards .text-\[10px\].font-semibold.tracking-wide.uppercase) {
-		font-family: var(--font-sans);
-		letter-spacing: 0.12em !important;
-		font-size: 0.65rem !important;
-		color: #64748b !important;
-	}
-
-	/* Nombres principales dentro de cards (font-bold gray-900) */
-	:global(.servicio-cards .font-bold.text-gray-900) {
-		font-family: var(--font-sans);
-		color: #0f172a;
-		letter-spacing: -0.01em;
-	}
-
-	/* ── Leyenda del mapa (landing) ─────────────────────────────── */
-	:global(.servicio-cards .glass.soft-shadow) {
-		background: #fcfcfb;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-	}
-
-	/* ── Botón centrar del mapa ────────────────────────────────── */
-	:global(.servicio-cards button[class*='rounded-xl border border-gray-200']:hover) {
-		border-color: rgba(22, 163, 74, 0.3);
-		color: #15803d;
-	}
-
-	/* ── Condiciones del servicio (badges inline) ─────────────── */
-	:global(.servicio-cards .inline-flex.items-center.gap-1.rounded-md) {
-		font-family: var(--font-sans);
-		letter-spacing: 0.06em;
-	}
-
-	/* ── Eyebrow del cuerpo (entre el mapa y las cards) ───────── */
-	:global(.servicio-cards .text-\[11px\].font-semibold) {
-		font-family: var(--font-sans);
-		letter-spacing: 0.1em;
-	}
-
-	/* ── Icon containers dentro de cards (h-6 w-6 → 32px landing) ─ */
-	:global(.servicio-cards .h-6.w-6.shrink-0.rounded-lg) {
-		width: 30px;
-		height: 30px;
-		border-radius: 10px;
-		box-shadow: 0 4px 12px rgba(22, 163, 74, 0.22);
-	}
-
-	/* ── Pin circular dentro del card Recorrido (A/B) ─────────── */
-	:global(.servicio-cards .h-6.w-6.items-center.justify-center.rounded-full) {
-		font-family: var(--font-sans);
-		font-weight: 700;
-		letter-spacing: 0.05em;
-		border: 2px solid white;
-		box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-	}
-
 	:global(#map) {
 		width: 100%;
 		height: 100%;
@@ -2799,303 +2238,6 @@
 		height: 28px;
 		background: rgba(0, 0, 0, 0.08);
 	}
-
-	/* ── HERO RECORRIDO (protagonista #2) ──────────────────────── */
-	.servicio-hero-recorrido {
-		position: relative;
-		overflow: hidden;
-	}
-	.servicio-hero-recorrido::before {
-		content: '';
-		position: absolute;
-		inset: 0;
-		background: linear-gradient(135deg, rgba(22, 163, 74, 0.04), rgba(22, 163, 74, 0));
-		pointer-events: none;
-	}
-	.servicio-hero-route {
-		position: relative;
-		display: grid;
-		grid-template-columns: 1fr auto 1fr;
-		align-items: center;
-		gap: 0.5rem;
-		margin-top: 0.5rem;
-	}
-	.route-end {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		min-width: 0;
-	}
-	.route-end.dest {
-		flex-direction: row-reverse;
-		text-align: right;
-	}
-	.route-pin {
-		width: 40px;
-		height: 40px;
-		border-radius: 50%;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-family: var(--font-sans);
-		font-weight: 700;
-		font-size: 0.95rem;
-		color: white;
-		flex-shrink: 0;
-		border: 2.5px solid white;
-		box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
-	}
-	.route-end.origin .route-pin {
-		background: linear-gradient(135deg, #16a34a, #15803d);
-	}
-	.route-end.dest .route-pin {
-		background: linear-gradient(135deg, #ef4444, #dc2626);
-	}
-	.route-end-body {
-		min-width: 0;
-		flex: 1;
-	}
-	.route-end-eyebrow {
-		font-family: var(--font-sans);
-		font-size: 0.6rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.12em;
-		color: #16a34a;
-	}
-	.route-end.dest .route-end-eyebrow {
-		color: #dc2626;
-	}
-	.route-end-text {
-		font-family: var(--font-display);
-		font-size: 1.15rem;
-		font-weight: 800;
-		color: #0f172a;
-		margin: 0.15rem 0 0;
-		line-height: 1.2;
-		letter-spacing: -0.01em;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		line-clamp: 2;
-		-webkit-box-orient: vertical;
-	}
-	.route-end-sub {
-		font-size: 0.72rem;
-		color: #64748b;
-		margin: 0.15rem 0 0;
-	}
-	.route-line {
-		position: relative;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		padding: 0 0.5rem;
-		min-width: 100px;
-	}
-	.route-line-track {
-		width: 100%;
-		height: 2px;
-		background: linear-gradient(to right, #16a34a, #f59e0b, #ef4444);
-		border-radius: 1px;
-		opacity: 0.5;
-	}
-	.route-line-stats {
-		margin-top: 0.5rem;
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.25rem 0.75rem;
-		background: rgba(22, 163, 74, 0.08);
-		border: 1px solid rgba(22, 163, 74, 0.18);
-		border-radius: 999px;
-		white-space: nowrap;
-	}
-	.route-stat {
-		font-family: var(--font-sans);
-		font-size: 0.72rem;
-		font-weight: 700;
-		color: #166534;
-		letter-spacing: 0.02em;
-	}
-	.route-stat-sep {
-		color: #16a34a;
-		opacity: 0.4;
-	}
-
-	/* ── HERO CARDS GRID (3 cols) ──────────────────────────────── */
-	.servicio-hero-grid {
-		--ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
-	}
-	.servicio-hero-card {
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-		transition: all 0.3s var(--ease);
-	}
-	.servicio-hero-card:hover {
-		border-color: rgba(22, 163, 74, 0.25);
-		box-shadow: 0 8px 24px rgba(22, 163, 74, 0.08);
-		transform: translateY(-1px);
-	}
-	.servicio-hero-avatar {
-		font-family: var(--font-sans);
-	}
-	.servicio-hero-name {
-		font-family: var(--font-sans);
-		font-size: 1rem;
-		font-weight: 700;
-		color: #0f172a;
-		margin: 0;
-		line-height: 1.2;
-		letter-spacing: -0.01em;
-		word-break: break-word;
-	}
-	.servicio-hero-sub {
-		font-size: 0.78rem;
-		color: #64748b;
-		margin: 0.2rem 0 0;
-		font-family: var(--font-sans);
-	}
-	.servicio-hero-sub--accent {
-		color: #166534;
-		font-family: var(--font-sans);
-		font-weight: 500;
-	}
-
-	/* PLACA — protagonista del card vehículo */
-	.servicio-placa-wrap {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 0.3rem;
-		padding: 0.85rem 1rem;
-		background: linear-gradient(135deg, #fcfcfb, #f5f1e8);
-		border: 1.5px solid rgba(22, 163, 74, 0.3);
-		border-radius: 14px;
-		box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04);
-	}
-	.servicio-placa-label {
-		font-family: var(--font-sans);
-		font-size: 0.55rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.12em;
-		color: #16a34a;
-	}
-	.servicio-placa {
-		font-family: var(--font-sans);
-		font-size: 1.7rem;
-		font-weight: 800;
-		color: #0f172a;
-		letter-spacing: 0.12em;
-		line-height: 1;
-		text-shadow: 0 1px 0 rgba(255, 255, 255, 0.6);
-	}
-	.servicio-mini-tag {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.2rem;
-		padding: 0.2rem 0.55rem;
-		font-size: 0.7rem;
-		font-weight: 600;
-		color: #334155;
-		background: #fcfcfb;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 6px;
-	}
-
-	/* ── INFO ROWS (Información compacta) ──────────────────────── */
-	.servicio-info-row {
-		display: flex;
-		justify-content: space-between;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 0.45rem 0.6rem;
-		border-radius: 8px;
-		transition: background 0.2s var(--ease);
-		min-width: 0;
-	}
-	.servicio-info-row:hover {
-		background: #fcfcfb;
-	}
-	.servicio-info-key {
-		font-size: 0.75rem;
-		color: #64748b;
-		font-weight: 500;
-	}
-	.servicio-info-val {
-		font-size: 0.82rem;
-		font-weight: 600;
-		color: #0f172a;
-		text-align: right;
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.servicio-info-val--mono {
-		font-family: var(--font-sans);
-		color: #166534;
-	}
-
-	/* ── BADGES de condiciones (compacto) ──────────────────────── */
-	.servicio-default-tag {
-		display: inline-flex;
-		align-items: center;
-		padding: 0.15rem 0.55rem;
-		font-family: var(--font-sans);
-		font-size: 0.6rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.1em;
-		color: #64748b;
-		background: #fcfcfb;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 4px;
-	}
-	.servicio-cond-badge {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
-		padding: 0.25rem 0.6rem;
-		font-family: var(--font-sans);
-		font-size: 0.65rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: #0f172a;
-		background: #fcfcfb;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 6px;
-	}
-	.servicio-cond-badge--amber {
-		color: #92400e;
-		background: rgba(245, 158, 11, 0.08);
-		border-color: rgba(245, 158, 11, 0.25);
-	}
-	.servicio-cond-badge--yellow {
-		color: #854d0e;
-		background: rgba(234, 179, 8, 0.08);
-		border-color: rgba(234, 179, 8, 0.25);
-	}
-	.servicio-cond-badge--blue {
-		color: #1e40af;
-		background: rgba(59, 130, 246, 0.08);
-		border-color: rgba(59, 130, 246, 0.25);
-	}
-	.servicio-cond-badge--emerald {
-		color: #166534;
-		background: rgba(22, 163, 74, 0.08);
-		border-color: rgba(22, 163, 74, 0.25);
-	}
-	.servicio-cond-badge--red {
-		color: #b91c1c;
-		background: rgba(239, 68, 68, 0.08);
-		border-color: rgba(239, 68, 68, 0.25);
-	}
 	@keyframes ping {
 		75%,
 		100% {
@@ -3118,5 +2260,328 @@
 	:global(.mapboxgl-ctrl-bottom-right) {
 		margin-bottom: 2rem;
 		margin-right: 0.75rem;
+	}
+
+	/* ── Estilo de la app móvil (detalle del servicio) ──────────────
+	   Los colores de marca salen de las variables del tema (--color-emerald-*),
+	   que cada web define: verde en Transmeralda, naranja en Cotransmeq. */
+	.detalle-header {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.75rem 1rem;
+		background: var(--color-emerald-50);
+	}
+	@media (min-width: 768px) {
+		.detalle-header {
+			padding: 0.85rem 1.5rem;
+		}
+	}
+	.detalle-volver {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.5rem;
+		height: 2.5rem;
+		flex-shrink: 0;
+		border-radius: 999px;
+		background: #ffffff;
+		color: var(--color-emerald-900);
+		box-shadow: 0 4px 12px rgba(1, 67, 57, 0.08);
+		transition: transform 0.15s ease;
+	}
+	.detalle-volver:hover:not(:disabled) {
+		transform: translateX(-1px);
+	}
+	.detalle-volver:disabled {
+		opacity: 0.5;
+	}
+	.detalle-header-titulo {
+		font-size: 1.3125rem;
+		line-height: 1.65rem;
+		font-weight: 800;
+		letter-spacing: -0.02em;
+		color: var(--color-gray-950);
+	}
+	.detalle-header-id {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--color-gray-600);
+	}
+	.detalle-fondo {
+		background: var(--color-emerald-50);
+	}
+	.detalle {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+	.detalle-columnas {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 0.75rem;
+	}
+	@media (min-width: 1024px) {
+		.detalle-columnas {
+			grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+			gap: 1.25rem;
+			align-items: start;
+		}
+	}
+	.detalle-columna {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		min-width: 0;
+	}
+	.detalle-estado {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.625rem;
+	}
+	.detalle-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.375rem;
+		align-self: flex-start;
+		padding: 0.3rem 0.75rem;
+		border-radius: 999px;
+		font-size: 0.8125rem;
+		font-weight: 800;
+	}
+	.detalle-chip--neutro {
+		background: var(--color-emerald-50);
+		color: var(--color-emerald-900);
+	}
+	.detalle-chip--alerta {
+		background: #fff0ed;
+		color: #b42318;
+	}
+	.detalle-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+	.detalle-proposito {
+		font-size: 0.8125rem;
+		font-weight: 700;
+		color: var(--color-gray-600);
+	}
+	/* Tarjeta de la app: blanca, radio 22 y sombra suave verde. */
+	.detalle-card {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5625rem;
+		padding: 1.0625rem;
+		border-radius: 22px;
+		background: #ffffff;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
+	}
+	.detalle-mapa {
+		border-radius: 22px;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
+		background: #dbeafe;
+	}
+	.detalle-seccion {
+		display: flex;
+		align-items: flex-end;
+		justify-content: space-between;
+		gap: 0.75rem;
+		margin-top: 0.25rem;
+		padding: 0 0.125rem;
+	}
+	.detalle-seccion-titulo {
+		font-size: 1.3125rem;
+		line-height: 1.625rem;
+		font-weight: 800;
+		letter-spacing: -0.02em;
+		color: var(--color-gray-950);
+	}
+	.detalle-seccion-detalle {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--color-gray-600);
+	}
+	.detalle-titulo-card {
+		font-size: 1rem;
+		line-height: 1.3125rem;
+		font-weight: 800;
+		color: var(--color-gray-950);
+	}
+	.detalle-muted {
+		font-size: 0.8125rem;
+		line-height: 1.1875rem;
+		color: var(--color-gray-600);
+	}
+	.detalle-etiqueta {
+		font-size: 0.6875rem;
+		font-weight: 800;
+		letter-spacing: 0.04em;
+		color: var(--color-gray-600);
+	}
+	.detalle-valor {
+		font-size: 0.875rem;
+		font-weight: 700;
+		text-align: right;
+		color: var(--color-gray-950);
+	}
+	.detalle-dato {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+	/* Indicaciones de operaciones: tarjeta ámbar con borde a la izquierda, como en la app. */
+	.detalle-indicaciones {
+		border-left: 4px solid #d97706;
+		background: #fffbeb;
+	}
+	.detalle-indicaciones-titulo {
+		font-size: 0.8125rem;
+		font-weight: 900;
+		letter-spacing: 0.025em;
+		color: #92400e;
+	}
+	.detalle-indicaciones-texto {
+		font-size: 0.9375rem;
+		line-height: 1.375rem;
+		color: var(--color-gray-950);
+		white-space: pre-line;
+	}
+	.detalle-condicion {
+		display: flex;
+		flex-direction: column;
+		gap: 0.375rem;
+	}
+	.detalle-condicion--separada {
+		padding-top: 0.75rem;
+		border-top: 1px solid var(--color-gray-100);
+	}
+	.detalle-fila-cargando {
+		flex-direction: row;
+		align-items: center;
+		gap: 0.625rem;
+		font-size: 0.8125rem;
+		font-weight: 700;
+		color: var(--color-emerald-900);
+	}
+	.detalle-spinner {
+		width: 1rem;
+		height: 1rem;
+		flex-shrink: 0;
+		border-radius: 999px;
+		border: 2px solid var(--color-emerald-500);
+		border-top-color: transparent;
+		animation: detalle-giro 0.8s linear infinite;
+	}
+	@keyframes detalle-giro {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+	/* Recorrido vertical con puntos, como en la app. */
+	.detalle-tramo {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.75rem;
+	}
+	.detalle-tramo-texto {
+		display: flex;
+		flex-direction: column;
+		gap: 0.125rem;
+		min-width: 0;
+		flex: 1;
+	}
+	.detalle-punto {
+		width: 13px;
+		height: 13px;
+		margin-top: 5px;
+		flex-shrink: 0;
+		border-radius: 999px;
+	}
+	.detalle-punto--origen {
+		background: var(--color-emerald-500);
+	}
+	.detalle-punto--destino {
+		background: var(--color-emerald-900);
+	}
+	.detalle-linea {
+		width: 2px;
+		height: 18px;
+		margin-left: 5.5px;
+		background: var(--color-emerald-100);
+	}
+	.detalle-recorrido-resumen {
+		margin-top: 0.25rem;
+		font-size: 0.8125rem;
+		font-weight: 700;
+		color: var(--color-emerald-900);
+	}
+	/* Placa: recuadro verde oscuro con letras blancas, como en la app. */
+	.detalle-placa {
+		align-self: flex-start;
+		padding: 0.375rem 0.875rem;
+		border-radius: 10px;
+		background: var(--color-emerald-900);
+		color: #ffffff;
+		font-size: 1.1875rem;
+		font-weight: 900;
+		letter-spacing: 0.08em;
+	}
+	.detalle-persona {
+		flex-direction: row;
+		align-items: center;
+		gap: 0.875rem;
+	}
+	.detalle-avatar {
+		width: 3rem;
+		height: 3rem;
+		flex-shrink: 0;
+		border-radius: 16px;
+	}
+	.detalle-avatar--iniciales {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		background: var(--color-emerald-100);
+		color: var(--color-emerald-900);
+		font-weight: 800;
+	}
+	.detalle-calificacion {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-top: 0.25rem;
+		padding-top: 0.75rem;
+		border-top: 1px solid var(--color-gray-100);
+	}
+
+	/* Enlace del modal de compartir: tarjeta blanca de la app que se copia al tocarla. */
+	.compartir-enlace {
+		display: flex;
+		width: 100%;
+		flex-direction: column;
+		gap: 0.25rem;
+		padding: 0.875rem 1rem;
+		border-radius: 16px;
+		background: #ffffff;
+		box-shadow: 0 3px 10px rgba(0, 29, 23, 0.05);
+		text-align: left;
+		transition: box-shadow 0.15s ease;
+	}
+	.compartir-enlace:hover {
+		box-shadow: 0 0 0 2px var(--color-emerald-100);
+	}
+	.compartir-enlace-etiqueta {
+		font-size: 0.75rem;
+		font-weight: 600;
+		color: var(--color-gray-600);
+	}
+	.compartir-enlace-url {
+		font-size: 0.875rem;
+		font-weight: 800;
+		color: var(--color-emerald-900);
+		overflow-wrap: anywhere;
 	}
 </style>
