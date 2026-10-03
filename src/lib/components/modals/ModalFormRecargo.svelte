@@ -1585,7 +1585,7 @@
 	eyebrow="{getNombreMes(currentMonth)} {currentYear}"
 	title={editMode ? 'Editar Recargo' : 'Nuevo Recargo'}
 	subtitle={fromServicio ? 'Vinculado a un servicio' : null}
-	tamano="full"
+	tamano="xl"
 	bloqueado={isLoading || mostrarModalEmpresa || mostrarModalConductor || mostrarModalVehiculo}
 	oncerrar={handleClose}
 >
