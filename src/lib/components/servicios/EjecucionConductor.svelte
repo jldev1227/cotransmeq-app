@@ -48,6 +48,9 @@
 			liberado_dispositivo_at: string | null;
 			liberado_diferido: boolean;
 			reporte: Reporte | null;
+			pausas_activas_cada_horas: number | null;
+			recomendaciones: string | null;
+			recomendaciones_at: string | null;
 		};
 		preoperacional: null | {
 			submission_id: string;
@@ -266,11 +269,20 @@
 			</div>
 		</div>
 
-		{#if fotos.length > 0}
+		{#if fotos.length > 0 || ejecucion?.pausas_activas_cada_horas != null}
 			<div class="mt-3 border-t border-gray-100 pt-3">
 				<p class="mb-2 text-[10px] font-semibold tracking-widest text-gray-500 uppercase">
-					{fotos.some((f) => f.pausa_activa) ? 'Pausas activas y fotos del recorrido' : 'Fotos del recorrido'}
+					{fotos.some((f) => f.pausa_activa) || ejecucion?.pausas_activas_cada_horas != null
+						? 'Pausas activas y fotos del recorrido'
+						: 'Fotos del recorrido'}
 				</p>
+				{#if ejecucion?.pausas_activas_cada_horas != null}
+					<p class="mb-2 text-sm text-gray-700">
+						Pausa activa cada
+						<strong>{ejecucion.pausas_activas_cada_horas.toLocaleString('es-CO')} h</strong>
+						{#if !fotos.some((f) => f.pausa_activa)}<span class="text-gray-500">· sin fotos</span>{/if}
+					</p>
+				{/if}
 				<div class="flex flex-wrap gap-2">
 					{#each fotos as foto, i (foto.id)}
 						<button
@@ -308,6 +320,15 @@
 				{#if reporte.novedades}
 					<p class="mt-2 text-sm leading-relaxed whitespace-pre-line text-gray-700">{reporte.novedades}</p>
 				{/if}
+			</div>
+		{/if}
+
+		{#if ejecucion?.recomendaciones}
+			<div class="mt-3 border-t border-gray-100 pt-3">
+				<p class="mb-2 text-[10px] font-semibold tracking-widest text-gray-500 uppercase">
+					Recomendaciones del conductor
+				</p>
+				<p class="text-sm leading-relaxed whitespace-pre-line text-gray-700">{ejecucion.recomendaciones}</p>
 			</div>
 		{/if}
 	</section>

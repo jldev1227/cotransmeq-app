@@ -326,12 +326,13 @@
 						<div class="md:col-span-2">
 							<label for="observaciones" class="mb-2 block text-sm font-semibold text-gray-700">
 								Observaciones
+								<span class="ml-1 text-xs font-medium text-amber-700">· visibles para el conductor en la app</span>
 							</label>
 							<textarea
 								id="observaciones"
 								bind:value={formData.observaciones}
 								rows="3"
-								placeholder="Notas adicionales sobre el servicio..."
+								placeholder="Indicaciones para el conductor: hora de recogida, contacto, recomendaciones de la ruta..."
 								class="apple-transition w-full resize-none rounded-xl border border-gray-200 px-4 py-3 focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
 							></textarea>
 						</div>

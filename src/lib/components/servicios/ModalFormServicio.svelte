@@ -1130,12 +1130,13 @@
 							<div>
 								<label for="observaciones" class="mb-2 block text-sm font-semibold text-gray-700">
 									Observaciones
+									<span class="ml-1 text-xs font-medium text-amber-700">· visibles para el conductor en la app</span>
 								</label>
 								<textarea
 									id="observaciones"
 									bind:value={observaciones}
 									rows="4"
-									placeholder="Escribe cualquier observación relevante del servicio..."
+									placeholder="Indicaciones para el conductor: hora de recogida, contacto, recomendaciones de la ruta..."
 									class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 transition-all focus:border-orange-400 focus:ring-4 focus:ring-orange-400/10 focus:outline-none"
 									style="max-height: 300px;"
 								></textarea>
