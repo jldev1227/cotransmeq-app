@@ -259,7 +259,7 @@
 	}
 
 	.opciones__conteo {
-		font-family: var(--font-mono, monospace);
+		font-variant-numeric: tabular-nums;
 		font-size: 0.6875rem;
 		color: var(--text-very-muted, #94a3b8);
 	}
@@ -285,7 +285,7 @@
 		min-height: 32px;
 		padding: 0 0.5rem;
 		font: inherit;
-		font-family: var(--font-mono, monospace);
+		font-variant-numeric: tabular-nums;
 		font-size: 0.6875rem;
 		color: var(--emerald-700, #166534);
 		background: #fff7ed;
@@ -361,7 +361,7 @@
 	}
 
 	.op__input--mono {
-		font-family: var(--font-mono, monospace);
+		font-variant-numeric: tabular-nums;
 		font-size: 0.75rem;
 	}
 

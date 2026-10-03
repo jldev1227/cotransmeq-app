@@ -12,6 +12,7 @@
 	// así que la recursión termina siempre.
 	import FieldCard from './FieldCard.svelte';
 	import { flip } from 'svelte/animate';
+	import { ArrowDown, ArrowUp, Copy, GripVertical, Trash2 } from 'lucide-svelte';
 	import { FIELD_TYPE_META, isContainer, type FieldType } from '$lib/formularios/types';
 	import type { BuilderField, BuilderStore } from '$lib/formularios/builder-store.svelte';
 	import type { ValidationIssue } from '$lib/formularios/types';
@@ -31,7 +32,9 @@
 	let { field, store, sectionId, issues, depth = 0, index, total, onaddchild }: Props = $props();
 
 	const meta = $derived(FIELD_TYPE_META[field.type as FieldType]);
-	const seleccionado = $derived(store.selection.kind === 'field' && store.selection.id === field.id);
+	const seleccionado = $derived(
+		store.selection.kind === 'field' && store.selection.id === field.id
+	);
 	const propios = $derived(issues.get(field.id) ?? []);
 	const errores = $derived(propios.filter((i) => i.severity === 'error'));
 	const avisos = $derived(propios.filter((i) => i.severity === 'warning'));
@@ -40,7 +43,8 @@
 	/// Animación de reordenado. Se anula con `prefers-reduced-motion` porque el
 	/// flip completo de una sección de 22 ítems marea.
 	const reduceMotion =
-		typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+		typeof window !== 'undefined' &&
+		window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 	const flipDuration = reduceMotion ? 0 : 160;
 
 	function seleccionar() {
@@ -72,7 +76,11 @@
 	<!-- El asa es el único punto de arrastre: arrastrar desde toda la card hace
 	     imposible seleccionar texto en los campos del inspector inline. -->
 	<div class="card__fila">
-		<span class="card__asa" data-dnd-handle aria-hidden="true">⠿</span>
+		{#if editable}
+			<span class="card__asa" data-dnd-handle aria-hidden="true">
+				<GripVertical size={16} strokeWidth={2} />
+			</span>
+		{/if}
 
 		<button type="button" class="card__cuerpo" onclick={seleccionar}>
 			<span class="card__titulo">
@@ -96,44 +104,46 @@
 			</span>
 		</button>
 
-		<div class="card__acciones">
-			<button
-				type="button"
-				class="accion"
-				disabled={!editable || index === 0}
-				aria-label="Mover «{field.label}» arriba"
-				onclick={() => store.moveField(field.id, -1)}
-			>
-				↑
-			</button>
-			<button
-				type="button"
-				class="accion"
-				disabled={!editable || index === total - 1}
-				aria-label="Mover «{field.label}» abajo"
-				onclick={() => store.moveField(field.id, 1)}
-			>
-				↓
-			</button>
-			<button
-				type="button"
-				class="accion"
-				disabled={!editable}
-				aria-label="Duplicar «{field.label}»"
-				onclick={() => store.duplicateField(field.id)}
-			>
-				⧉
-			</button>
-			<button
-				type="button"
-				class="accion accion--peligro"
-				disabled={!editable}
-				aria-label="Eliminar «{field.label}»"
-				onclick={() => store.removeField(field.id)}
-			>
-				✕
-			</button>
-		</div>
+		<!-- En lectura (versión publicada) las acciones no se pintan: cuatro
+		     botones deshabilitados por card solo le quitaban ancho al título. -->
+		{#if editable}
+			<div class="card__acciones">
+				<button
+					type="button"
+					class="accion"
+					disabled={index === 0}
+					aria-label="Mover «{field.label}» arriba"
+					onclick={() => store.moveField(field.id, -1)}
+				>
+					<ArrowUp size={15} strokeWidth={2.25} />
+				</button>
+				<button
+					type="button"
+					class="accion"
+					disabled={index === total - 1}
+					aria-label="Mover «{field.label}» abajo"
+					onclick={() => store.moveField(field.id, 1)}
+				>
+					<ArrowDown size={15} strokeWidth={2.25} />
+				</button>
+				<button
+					type="button"
+					class="accion"
+					aria-label="Duplicar «{field.label}»"
+					onclick={() => store.duplicateField(field.id)}
+				>
+					<Copy size={14} strokeWidth={2.25} />
+				</button>
+				<button
+					type="button"
+					class="accion accion--peligro"
+					aria-label="Eliminar «{field.label}»"
+					onclick={() => store.removeField(field.id)}
+				>
+					<Trash2 size={14} strokeWidth={2.25} />
+				</button>
+			</div>
+		{/if}
 	</div>
 
 	{#if errores.length || avisos.length}
@@ -195,22 +205,27 @@
 </article>
 
 <style>
+	/* Lenguaje de la app móvil: tarjeta blanca, título oscuro y grueso, tipo
+	   como chip suave y la clave en gris, sin monoespaciada. */
 	.card {
-		background: var(--bg-surface, #fff);
-		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
-		border-radius: 10px;
-		box-shadow: var(--shadow-card, 0 4px 24px rgba(0, 0, 0, 0.04));
-		transition: border-color 120ms ease, box-shadow 120ms ease;
+		container-type: inline-size;
+		background: var(--bg-surface);
+		border: 1px solid var(--border-subtle);
+		border-radius: 14px;
+		box-shadow: 0 2px 8px rgba(1, 67, 57, 0.05);
+		transition:
+			border-color 120ms ease,
+			box-shadow 120ms ease;
 	}
 
 	.card--hijo {
 		box-shadow: none;
-		background: var(--gray-50, #f9fafb);
+		background: var(--bg-base);
 	}
 
 	.card--sel {
-		border-color: var(--emerald-600, #15803d);
-		box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.2);
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
 	}
 
 	.card--error {
@@ -218,49 +233,60 @@
 	}
 
 	.card__fila {
-		display: flex;
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto;
 		align-items: center;
 		gap: 0.25rem;
-		padding: 0.4375rem 0.5rem;
+		padding: 0.5rem 0.5rem 0.5rem 0.375rem;
+	}
+
+	/* Sin asa (lectura) el cuerpo empieza en la primera columna. */
+	.card__fila > .card__cuerpo:first-child {
+		grid-column: 1 / 3;
+		padding-left: 0.5rem;
 	}
 
 	.card__asa {
-		flex-shrink: 0;
-		width: 1.25rem;
-		text-align: center;
-		font-size: 0.875rem;
-		color: var(--text-very-muted, #94a3b8);
+		display: grid;
+		place-items: center;
+		width: 1.5rem;
+		height: 2rem;
+		color: var(--text-very-muted);
 		cursor: grab;
 		user-select: none;
 	}
 
 	.card__cuerpo {
-		flex: 1;
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.0625rem;
+		gap: 0.25rem;
 		padding: 0.25rem;
 		text-align: left;
 		font: inherit;
 		background: none;
 		border: none;
-		border-radius: 6px;
+		border-radius: 8px;
 		cursor: pointer;
 	}
 
 	.card__cuerpo:focus-visible {
-		outline: 2px solid var(--emerald-600, #15803d);
+		outline: 2px solid var(--accion);
 		outline-offset: 1px;
 	}
 
+	/* Dos renglones antes de cortar: con una sola línea, en móvil los títulos
+	   largos quedaban en «Vencimiento de la tarjet…». */
 	.card__titulo {
-		font-size: 0.875rem;
-		font-weight: 500;
-		color: var(--text-primary, #0f172a);
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 2;
+		line-clamp: 2;
 		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
+		font-size: 0.875rem;
+		font-weight: 700;
+		line-height: 1.35;
+		color: var(--text-primary);
 	}
 
 	.card__req {
@@ -272,64 +298,69 @@
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.375rem;
-		font-size: 0.6875rem;
-		color: var(--text-very-muted, #94a3b8);
+		gap: 0.25rem 0.375rem;
+		font-size: 0.75rem;
+		color: var(--text-muted);
 	}
 
 	.card__tipo {
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		font-weight: 600;
+		padding: 0.0625rem 0.5rem;
+		font-size: 0.6875rem;
+		font-weight: 700;
+		color: var(--color-emerald-900);
+		background: var(--color-emerald-100);
+		border-radius: 999px;
+		white-space: nowrap;
 	}
 
 	.card__key {
-		font-family: var(--font-mono, monospace);
+		min-width: 0;
+		overflow-wrap: anywhere;
 	}
 
 	.card__badge {
-		padding: 0.0625rem 0.3125rem;
-		font-size: 0.625rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		background: var(--gray-50, #f9fafb);
-		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+		padding: 0.0625rem 0.4375rem;
+		font-size: 0.6875rem;
+		font-weight: 700;
+		color: var(--text-secondary);
+		background: var(--bg-base);
+		border: 1px solid var(--border-default);
 		border-radius: 999px;
+		white-space: nowrap;
 	}
 
 	.card__badge--nuevo {
-		background: #fffbeb;
+		background: #fef3c7;
 		border-color: #fde68a;
 		color: #92400e;
 	}
 
 	.card__acciones {
 		display: flex;
-		gap: 0.0625rem;
-		flex-shrink: 0;
+		gap: 0.125rem;
 	}
 
 	.accion {
-		width: 30px;
-		height: 30px;
+		width: 32px;
+		height: 32px;
 		display: grid;
 		place-items: center;
 		font: inherit;
-		font-size: 0.8125rem;
-		color: var(--text-muted, #64748b);
+		color: var(--text-muted);
 		background: none;
 		border: 1px solid transparent;
-		border-radius: 6px;
+		border-radius: 10px;
 		cursor: pointer;
 	}
 
 	.accion:hover:not(:disabled) {
-		background: var(--gray-50, #f9fafb);
-		border-color: var(--border-subtle, rgba(0, 0, 0, 0.08));
+		color: var(--text-primary);
+		background: var(--bg-base);
+		border-color: var(--border-subtle);
 	}
 
 	.accion:focus-visible {
-		outline: 2px solid var(--emerald-600, #15803d);
+		outline: 2px solid var(--accion);
 		outline-offset: 1px;
 	}
 
@@ -339,16 +370,31 @@
 	}
 
 	.accion--peligro:hover:not(:disabled) {
-		background: #fef2f2;
-		border-color: #fecaca;
-		color: #b91c1c;
+		background: #fef3f2;
+		border-color: #f4c7c3;
+		color: #b42318;
+	}
+
+	/* Card estrecha (móvil, o un hijo dentro de un grupo): las acciones bajan a
+	   su propio renglón, alineadas a la derecha, y el título usa todo el ancho. */
+	@container (max-width: 26rem) {
+		.card__fila {
+			grid-template-columns: auto minmax(0, 1fr);
+		}
+
+		.card__acciones {
+			grid-column: 2;
+			justify-content: flex-end;
+			margin-top: -0.25rem;
+		}
 	}
 
 	.card__issues {
 		display: flex;
 		flex-direction: column;
 		gap: 0.125rem;
-		padding: 0 0.75rem 0.5rem 1.9375rem;
+		margin: 0;
+		padding: 0 0.75rem 0.625rem 2.25rem;
 		list-style: none;
 	}
 
@@ -358,7 +404,7 @@
 	}
 
 	.issue--error {
-		color: #b91c1c;
+		color: #b42318;
 	}
 
 	.issue--warn {
@@ -366,57 +412,63 @@
 	}
 
 	.hijos {
-		margin: 0 0.5rem 0.5rem 1.75rem;
-		padding: 0.5rem;
-		background: rgba(0, 0, 0, 0.015);
-		border: 1px dashed var(--border-default, rgba(0, 0, 0, 0.12));
-		border-radius: 8px;
+		margin: 0 0.625rem 0.625rem 1.75rem;
+		padding: 0.625rem;
+		background: var(--bg-base);
+		border: 1px dashed var(--border-default);
+		border-radius: 12px;
 	}
 
 	.hijos__titulo {
 		display: flex;
 		align-items: center;
 		gap: 0.375rem;
-		margin-bottom: 0.375rem;
-		font-size: 0.6875rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: var(--text-muted, #64748b);
+		margin: 0 0 0.5rem;
+		font-size: 0.75rem;
+		font-weight: 800;
+		color: var(--text-secondary);
 	}
 
 	.hijos__conteo {
-		font-family: var(--font-mono, monospace);
-		font-weight: 500;
-		color: var(--text-very-muted, #94a3b8);
+		padding: 0 0.4375rem;
+		font-size: 0.6875rem;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+		color: var(--text-muted);
+		background: var(--bg-surface);
+		border-radius: 999px;
 	}
 
 	.hijos__zona {
 		display: flex;
 		flex-direction: column;
-		gap: 0.25rem;
+		gap: 0.375rem;
 		min-height: 1.5rem;
 	}
 
 	.hijos__vacio {
+		margin: 0;
 		padding: 0.375rem 0;
 		font-size: 0.75rem;
-		font-style: italic;
-		color: #b91c1c;
+		color: #b42318;
 	}
 
 	.hijos__agregar {
-		margin-top: 0.375rem;
+		margin-top: 0.5rem;
 		min-height: 36px;
-		padding: 0 0.625rem;
+		padding: 0 0.75rem;
 		font: inherit;
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: var(--emerald-700, #166534);
-		background: none;
-		border: 1px dashed #fdba74;
-		border-radius: 8px;
+		font-size: 0.8125rem;
+		font-weight: 700;
+		color: var(--accion);
+		background: var(--bg-surface);
+		border: 1px dashed color-mix(in srgb, var(--accion) 45%, transparent);
+		border-radius: 10px;
 		cursor: pointer;
+	}
+
+	.hijos__agregar:hover {
+		background: color-mix(in srgb, var(--accion) 7%, var(--bg-surface));
 	}
 
 	@media (prefers-reduced-motion: reduce) {

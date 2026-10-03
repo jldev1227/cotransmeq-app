@@ -8,14 +8,20 @@
 	machacarlo perdería trabajo sin dejar rastro.
 -->
 <script lang="ts">
-	import { confirmar } from '$lib/stores/confirm';
 	import { onMount, untrack } from 'svelte';
+	import { confirmar } from '$lib/stores/confirm';
 	import { toast } from 'svelte-sonner';
+	import { Redo2, Undo2, X } from 'lucide-svelte';
 	import { formulariosAPI, plantillasFormularioAPI, FormApiError } from '$lib/api/formularios';
 	import type { BuilderStore } from '$lib/formularios/builder-store.svelte';
 	import { toPreviewSections } from '$lib/formularios/builder-store.svelte';
 	import { createRunnerState } from '$lib/formularios/runner-state.svelte';
-	import type { FieldTemplateDto, FieldType, ValidationIssue } from '$lib/formularios/types';
+	import type {
+		FieldTemplateDto,
+		FieldType,
+		ValidationIssue,
+		VersionStatus
+	} from '$lib/formularios/types';
 	import FieldPalette from './FieldPalette.svelte';
 	import SectionCard from './SectionCard.svelte';
 	import FieldInspector from './FieldInspector.svelte';
@@ -214,7 +220,9 @@
 	async function duplicarTrasConflicto() {
 		try {
 			const nueva = await formulariosAPI.clonarVersion(store.formId, store.versionId);
-			toast.success(`Se creó la versión ${nueva.versionNumber} con tus cambios pendientes por rehacer.`);
+			toast.success(
+				`Se creó la versión ${nueva.versionNumber} con tus cambios pendientes por rehacer.`
+			);
 			window.location.href = `/dashboard/formularios/${store.formId}/editar/${nueva.id}`;
 		} catch {
 			toast.error('No se pudo duplicar la versión.');
@@ -248,7 +256,11 @@
 			toast.error('Crea una sección primero.');
 			return;
 		}
-		const creado = store.addFromTemplate(plantilla as any, destino.sectionId, destino.parentFieldId);
+		const creado = store.addFromTemplate(
+			plantilla as any,
+			destino.sectionId,
+			destino.parentFieldId
+		);
 		if (!creado) toast.error('Esa plantilla no se puede insertar aquí.');
 		else if (window.innerWidth < 1100) drawer = null;
 	}
@@ -268,6 +280,12 @@
 	const previewRunner = $derived.by(() =>
 		createRunnerState({ sections: toPreviewSections(store.sections) })
 	);
+
+	const ESTADO_VERSION: Record<VersionStatus, string> = {
+		DRAFT: 'Borrador',
+		PUBLISHED: 'Publicada',
+		ARCHIVED: 'Archivada'
+	};
 
 	const etiquetaEstado = $derived.by(() => {
 		switch (store.saveState) {
@@ -292,51 +310,60 @@
 		<div class="barra__id">
 			<span class="barra__code">{code}</span>
 			<span class="barra__ver">v{versionNumber}</span>
-			<span class="barra__estado barra__estado--{store.status.toLowerCase()}">{store.status}</span>
+			<span class="chip chip--{store.status.toLowerCase()}">
+				{ESTADO_VERSION[store.status as VersionStatus] ?? store.status}
+			</span>
 		</div>
 
-		<input
-			class="barra__titulo"
-			value={store.title}
-			disabled={!store.editable}
-			aria-label="Título de la versión"
-			oninput={(e) => store.setHeader({ title: e.currentTarget.value })}
-		/>
+		<!-- En lectura el título es texto y no un input: un input no parte
+		     renglones, y en móvil un título largo quedaba en «…microbuses, b…». -->
+		{#if store.editable}
+			<input
+				class="barra__titulo"
+				value={store.title}
+				disabled={!store.editable}
+				aria-label="Título de la versión"
+				oninput={(e) => store.setHeader({ title: e.currentTarget.value })}
+			/>
+		{:else}
+			<h1 class="barra__titulo barra__titulo--leer">{store.title}</h1>
+		{/if}
 
 		<div class="barra__acciones">
 			<!-- El estado de guardado lleva texto además de color: es la regla de
 			     accesibilidad que aplica todo el módulo. -->
-			<span
-				class="guardado guardado--{store.saveState}"
-				role="status"
-				aria-live="polite"
-			>
+			<span class="guardado guardado--{store.saveState}" role="status" aria-live="polite">
 				{etiquetaEstado}
 			</span>
 
-			<button
-				type="button"
-				class="btn"
-				disabled={!store.canUndo}
-				aria-label="Deshacer"
-				onclick={() => store.undo()}
-			>
-				↶
-			</button>
-			<button
-				type="button"
-				class="btn"
-				disabled={!store.canRedo}
-				aria-label="Rehacer"
-				onclick={() => store.redo()}
-			>
-				↷
-			</button>
+			{#if store.editable}
+				<button
+					type="button"
+					class="icono"
+					disabled={!store.canUndo}
+					aria-label="Deshacer"
+					title="Deshacer (Ctrl+Z)"
+					onclick={() => store.undo()}
+				>
+					<Undo2 size={16} strokeWidth={2.25} />
+				</button>
+				<button
+					type="button"
+					class="icono"
+					disabled={!store.canRedo}
+					aria-label="Rehacer"
+					title="Rehacer (Ctrl+Shift+Z)"
+					onclick={() => store.redo()}
+				>
+					<Redo2 size={16} strokeWidth={2.25} />
+				</button>
+			{/if}
 
 			<button
 				type="button"
-				class="btn"
-				class:btn--activo={vista === 'preview'}
+				class="btn-secondary acc"
+				class:acc--activo={vista === 'preview'}
+				aria-pressed={vista === 'preview'}
 				onclick={() => (vista = vista === 'preview' ? 'canvas' : 'preview')}
 			>
 				{vista === 'preview' ? 'Editar' : 'Vista previa'}
@@ -345,7 +372,7 @@
 			{#if store.editable}
 				<button
 					type="button"
-					class="btn btn--primario"
+					class="btn-primary acc"
 					disabled={publicando || errores.length > 0}
 					onclick={publicar}
 				>
@@ -370,10 +397,10 @@
 				</p>
 			</div>
 			<div class="conflicto__acciones">
-				<button type="button" class="btn" onclick={recargarTrasConflicto}>
+				<button type="button" class="btn-secondary acc" onclick={recargarTrasConflicto}>
 					Recargar (descarta lo mío)
 				</button>
-				<button type="button" class="btn btn--primario" onclick={duplicarTrasConflicto}>
+				<button type="button" class="btn-primary acc" onclick={duplicarTrasConflicto}>
 					Duplicar en versión nueva
 				</button>
 			</div>
@@ -382,8 +409,9 @@
 
 	{#if !store.editable}
 		<div class="aviso" role="note">
-			Esta versión está <strong>{store.status}</strong> y no se puede editar. Clónala desde el resumen
-			del formulario para crear un borrador nuevo.
+			Esta versión está <strong
+				>{(ESTADO_VERSION[store.status as VersionStatus] ?? store.status).toLowerCase()}</strong
+			> y no se puede editar. Clónala desde el resumen del formulario para crear un borrador nuevo.
 		</div>
 	{/if}
 
@@ -398,7 +426,7 @@
 						aria-label="Cerrar paleta"
 						onclick={() => (drawer = null)}
 					>
-						✕
+						<X size={18} strokeWidth={2.25} />
 					</button>
 				</div>
 				<FieldPalette
@@ -451,7 +479,7 @@
 						aria-label="Cerrar propiedades"
 						onclick={() => (drawer = null)}
 					>
-						✕
+						<X size={18} strokeWidth={2.25} />
 					</button>
 				</div>
 				<FieldInspector {store} issues={issuesPorNodo} />
@@ -467,8 +495,8 @@
 					/>
 				</div>
 				<p class="preview__nota">
-					Vista previa con el mismo renderer del portal. Las reglas condicionales funcionan; los adjuntos
-					no se suben desde aquí.
+					Vista previa con el mismo renderer del portal. Las reglas condicionales funcionan; los
+					adjuntos no se suben desde aquí.
 				</p>
 			</div>
 		{/if}
@@ -499,199 +527,247 @@
 </div>
 
 <style>
+	/* Lenguaje de la app móvil: fondo claro de la marca, superficies blancas,
+	   chips de estado en tinte suave y botones de la app. Colores de marca solo
+	   por variables del tema. */
 	.shell {
 		display: flex;
 		flex-direction: column;
 		min-height: 0;
 		height: 100%;
-		background: var(--bg-base, #fcfcfb);
+		background: var(--bg-base);
+		font-variant-numeric: tabular-nums;
 	}
 
+	/* ─── Barra superior ─────────────────────────────────────────────────── */
 	.barra {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.625rem;
-		padding: 0.625rem 0.875rem;
-		background: var(--bg-surface, #fff);
-		border-bottom: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+		gap: 0.5rem 0.75rem;
+		padding: 0.75rem 1rem;
+		background: var(--bg-surface);
+		border-bottom: 1px solid var(--border-subtle);
 	}
 
 	.barra__id {
 		display: flex;
 		align-items: center;
 		gap: 0.375rem;
+		flex-shrink: 0;
 	}
 
 	.barra__code {
-		font-family: var(--font-mono, monospace);
+		padding: 0.125rem 0.5rem;
 		font-size: 0.75rem;
-		font-weight: 700;
-		color: var(--text-primary, #0f172a);
+		font-weight: 800;
+		color: var(--color-emerald-900);
+		background: var(--color-emerald-100);
+		border-radius: 999px;
+		white-space: nowrap;
 	}
 
 	.barra__ver {
-		font-family: var(--font-mono, monospace);
-		font-size: 0.6875rem;
-		color: var(--text-very-muted, #94a3b8);
-	}
-
-	.barra__estado {
-		padding: 0.0625rem 0.375rem;
-		font-size: 0.625rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		border-radius: 999px;
-	}
-
-	.barra__estado--draft {
-		background: #fffbeb;
-		color: #92400e;
-	}
-
-	.barra__estado--published {
-		background: #f0fdf4;
-		color: #166534;
-	}
-
-	.barra__estado--archived {
-		background: var(--gray-50, #f9fafb);
-		color: var(--text-muted, #64748b);
-	}
-
-	.barra__titulo {
-		flex: 1;
-		min-width: 10rem;
-		min-height: 38px;
-		padding: 0.25rem 0.5rem;
-		font-family: var(--font-display, Georgia, serif);
-		font-size: 1rem;
-		font-weight: 600;
-		background: none;
-		border: 1px solid transparent;
+		display: inline-grid;
+		place-items: center;
+		min-width: 2rem;
+		height: 1.5rem;
+		padding: 0 0.4375rem;
+		font-size: 0.75rem;
+		font-weight: 800;
+		color: #fff;
+		background: var(--bg-charcoal-deep);
 		border-radius: 8px;
 	}
 
+	.chip {
+		padding: 0.125rem 0.5625rem;
+		font-size: 0.75rem;
+		font-weight: 700;
+		border-radius: 999px;
+		white-space: nowrap;
+	}
+
+	.chip--draft {
+		background: #fef3c7;
+		color: #92400e;
+	}
+
+	.chip--published {
+		background: var(--color-emerald-100);
+		color: var(--color-emerald-900);
+	}
+
+	.chip--archived {
+		background: #f3f4f6;
+		color: #374151;
+	}
+
+	.barra__titulo {
+		flex: 1 1 16rem;
+		min-width: 0;
+		min-height: 40px;
+		padding: 0.25rem 0.5rem;
+		font: inherit;
+		font-size: 1rem;
+		font-weight: 800;
+		color: var(--text-primary);
+		text-overflow: ellipsis;
+		background: none;
+		border: 1px solid transparent;
+		border-radius: 10px;
+	}
+
+	.barra__titulo--leer {
+		margin: 0;
+		min-height: 0;
+		padding: 0.25rem 0.5rem;
+		line-height: 1.3;
+		overflow-wrap: anywhere;
+	}
+
 	.barra__titulo:hover:not(:disabled) {
-		border-color: var(--border-subtle, rgba(0, 0, 0, 0.08));
+		border-color: var(--border-subtle);
 	}
 
 	.barra__titulo:focus-visible {
 		outline: none;
-		background: #fff;
-		border-color: var(--emerald-600, #15803d);
-		box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
+		background: var(--bg-surface);
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
 	}
 
 	.barra__acciones {
 		display: flex;
 		align-items: center;
-		gap: 0.3125rem;
+		gap: 0.375rem;
 		flex-wrap: wrap;
 	}
 
 	.guardado {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.25rem;
-		padding: 0 0.5rem;
-		min-height: 32px;
-		font-size: 0.6875rem;
-		font-weight: 600;
+		min-height: 30px;
+		padding: 0 0.625rem;
+		font-size: 0.75rem;
+		font-weight: 700;
 		border-radius: 999px;
-		background: var(--gray-50, #f9fafb);
-		color: var(--text-muted, #64748b);
+		background: var(--bg-base);
+		color: var(--text-muted);
+		white-space: nowrap;
 	}
 
 	.guardado--saved {
-		background: #f0fdf4;
-		color: #166534;
+		background: var(--color-emerald-100);
+		color: var(--color-emerald-900);
 	}
 
 	.guardado--dirty,
 	.guardado--saving {
-		background: #fffbeb;
+		background: #fef3c7;
 		color: #92400e;
 	}
 
 	.guardado--conflict,
 	.guardado--error {
-		background: #fef2f2;
+		background: #fee2e2;
 		color: #991b1b;
 	}
 
-	.btn {
-		min-height: 38px;
-		min-width: 38px;
-		padding: 0 0.6875rem;
-		font: inherit;
-		font-size: 0.8125rem;
-		font-weight: 500;
-		color: var(--text-primary, #0f172a);
-		background: #fff;
-		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
-		border-radius: 9px;
+	.icono {
+		width: 36px;
+		height: 36px;
+		display: grid;
+		place-items: center;
+		color: var(--text-secondary);
+		background: var(--bg-surface);
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
 		cursor: pointer;
 	}
 
-	.btn:hover:not(:disabled) {
-		background: var(--gray-50, #f9fafb);
+	.icono:hover:not(:disabled) {
+		background: var(--bg-base);
 	}
 
-	.btn:disabled {
+	.icono:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
 	}
 
-	.btn--activo {
-		background: #fff7ed;
-		border-color: #fed7aa;
-		color: var(--emerald-700, #166534);
-	}
-
-	.btn--primario {
-		color: #fff;
-		background: var(--accion);
-		border-color: var(--accion);
-		border-radius: 16px;
-		font-weight: 800;
-		box-shadow: var(--shadow-btn);
-	}
-
-	.btn--primario:hover:not(:disabled) {
-		background: var(--accion-hover);
-		border-color: var(--accion-hover);
-		box-shadow: var(--shadow-btn-hover);
-	}
-
-	.btn:focus-visible {
-		outline: 2px solid var(--emerald-600, #15803d);
+	.icono:focus-visible {
+		outline: 2px solid var(--accion);
 		outline-offset: 2px;
 	}
 
+	/* Botones compactos de la app. */
+	.acc {
+		min-height: 36px;
+		padding: 0 0.875rem;
+		border-radius: 12px;
+		font-size: 0.8125rem;
+		white-space: nowrap;
+	}
+
+	.btn-secondary.acc {
+		border-width: 1px;
+	}
+
+	.acc--activo {
+		color: var(--color-emerald-900);
+		background: var(--color-emerald-100);
+		border-color: transparent;
+	}
+
+	/* Móvil: código y estado arriba, el título en su propio renglón y las
+	   acciones debajo, todas del mismo alto. */
+	@media (max-width: 720px) {
+		.barra {
+			padding: 0.75rem;
+		}
+
+		.barra__titulo {
+			order: 1;
+			flex-basis: 100%;
+			margin-inline: -0.25rem;
+		}
+
+		.barra__acciones {
+			order: 2;
+			width: 100%;
+		}
+
+		.barra__acciones .acc {
+			flex: 1 1 auto;
+		}
+	}
+
+	/* ─── Avisos ─────────────────────────────────────────────────────────── */
 	.conflicto {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.75rem;
-		padding: 0.75rem 0.875rem;
-		background: #fef2f2;
-		border-bottom: 1px solid #fecaca;
+		margin: 0.75rem 1rem 0;
+		padding: 0.875rem 1rem;
+		background: #fef3f2;
+		border: 1px solid #fecaca;
+		border-radius: 16px;
 	}
 
 	.conflicto__titulo {
+		margin: 0;
 		font-size: 0.875rem;
-		font-weight: 700;
+		font-weight: 800;
 		color: #991b1b;
 	}
 
 	.conflicto__cuerpo {
-		margin-top: 0.125rem;
+		margin: 0.125rem 0 0;
 		font-size: 0.8125rem;
 		line-height: 1.45;
-		color: #b91c1c;
+		color: #b42318;
 	}
 
 	.conflicto__acciones {
@@ -701,14 +777,20 @@
 	}
 
 	.aviso {
-		padding: 0.625rem 0.875rem;
+		margin: 0.75rem 1rem 0;
+		padding: 0.75rem 1rem;
 		font-size: 0.8125rem;
-		line-height: 1.45;
+		line-height: 1.5;
 		color: #92400e;
-		background: #fffbeb;
-		border-bottom: 1px solid #fde68a;
+		background: #fef3c7;
+		border-radius: 14px;
 	}
 
+	.aviso strong {
+		font-weight: 800;
+	}
+
+	/* ─── Cuerpo de tres columnas ────────────────────────────────────────── */
 	.cuerpo {
 		flex: 1;
 		min-height: 0;
@@ -727,53 +809,61 @@
 		min-height: 0;
 		display: flex;
 		flex-direction: column;
+		background: var(--bg-surface);
 	}
 
 	.col--canvas {
 		overflow-y: auto;
-		background: var(--bg-base, #fcfcfb);
+		background: var(--bg-base);
 	}
 
 	.col__head {
 		display: none;
 	}
 
-	/* Por debajo de 1100 px las columnas laterales se convierten en drawers.
-	   El canvas ocupa todo el ancho, como pide el documento. */
+	/* Por debajo de 1100 px las columnas laterales se convierten en hojas
+	   inferiores, como las de la app. Cerradas se esconden del todo (fuera de
+	   pantalla y sin foco): antes asomaba la cabecera «Propiedades» por encima
+	   de la barra inferior cuando el panel era más bajo que el desplazamiento. */
 	@media (max-width: 1099px) {
 		.col--paleta,
 		.col--insp {
 			position: fixed;
-			inset: auto 0 3.25rem 0;
+			inset: auto 0 calc(3.75rem + env(safe-area-inset-bottom, 0px)) 0;
 			z-index: 40;
 			max-height: 72vh;
-			transform: translateY(110%);
-			transition: transform 200ms var(--ease-apple, ease);
-			box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.14);
-			border-top-left-radius: 16px;
-			border-top-right-radius: 16px;
+			transform: translateY(calc(100% + 5rem));
+			visibility: hidden;
+			transition:
+				transform 220ms var(--ease-apple, ease),
+				visibility 0s linear 220ms;
+			box-shadow: 0 -12px 32px rgba(1, 67, 57, 0.16);
+			border-top-left-radius: 22px;
+			border-top-right-radius: 22px;
 			overflow: hidden;
 		}
 
 		.col--abierta {
 			transform: translateY(0);
+			visibility: visible;
+			transition:
+				transform 220ms var(--ease-apple, ease),
+				visibility 0s;
 		}
 
 		.col__head {
 			display: flex;
 			align-items: center;
 			justify-content: space-between;
-			padding: 0.625rem 0.75rem;
-			border-bottom: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
-			background: var(--bg-surface, #fff);
+			padding: 0.75rem 0.75rem 0.625rem 1rem;
+			border-bottom: 1px solid var(--border-subtle);
+			background: var(--bg-surface);
 		}
 
 		.col__titulo {
-			font-size: 0.75rem;
-			font-weight: 700;
-			text-transform: uppercase;
-			letter-spacing: 0.05em;
-			color: var(--text-muted, #64748b);
+			font-size: 0.9375rem;
+			font-weight: 800;
+			color: var(--text-primary);
 		}
 
 		.col__cerrar {
@@ -781,64 +871,85 @@
 			height: 36px;
 			display: grid;
 			place-items: center;
-			font: inherit;
-			background: none;
+			color: var(--text-secondary);
+			background: var(--bg-base);
 			border: none;
+			border-radius: 999px;
 			cursor: pointer;
 		}
 	}
 
 	@media (min-width: 1100px) {
 		.col--paleta {
-			border-right: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+			border-right: 1px solid var(--border-subtle);
 		}
 
 		.col--insp {
-			border-left: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+			border-left: 1px solid var(--border-subtle);
 		}
 	}
 
 	.canvas {
 		display: flex;
 		flex-direction: column;
-		gap: 0.75rem;
-		padding: 0.875rem;
+		gap: 0.875rem;
+		padding: 1rem;
 		width: 100%;
 	}
 
 	.canvas__vacio {
 		padding: 2.5rem 1rem;
 		text-align: center;
-		border: 1px dashed var(--border-default, rgba(0, 0, 0, 0.12));
-		border-radius: 14px;
+		background: var(--bg-surface);
+		border-radius: 18px;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
 	}
 
 	.canvas__vacio-t {
-		font-family: var(--font-display, Georgia, serif);
+		margin: 0;
 		font-size: 1rem;
-		font-weight: 600;
-		color: var(--text-secondary, #334155);
+		font-weight: 800;
+		color: var(--text-primary);
 	}
 
 	.canvas__vacio-d {
-		margin-top: 0.3125rem;
+		margin: 0.3125rem 0 0;
 		font-size: 0.8125rem;
 		line-height: 1.5;
-		color: var(--text-very-muted, #94a3b8);
+		color: var(--text-muted);
 	}
 
 	.canvas__agregar {
 		align-self: flex-start;
 		min-height: 44px;
-		padding: 0 1rem;
+		padding: 0 1.125rem;
 		font: inherit;
 		font-size: 0.875rem;
-		font-weight: 600;
-		color: var(--emerald-700, #166534);
-		background: #fff;
-		border: 1px dashed #fdba74;
-		border-radius: 12px;
+		font-weight: 800;
+		color: var(--accion);
+		background: var(--bg-surface);
+		border: 1.5px dashed color-mix(in srgb, var(--accion) 45%, transparent);
+		border-radius: 16px;
 		cursor: pointer;
+	}
+
+	.canvas__agregar:hover {
+		background: color-mix(in srgb, var(--accion) 7%, var(--bg-surface));
+	}
+
+	.canvas__agregar:focus-visible {
+		outline: 2px solid var(--accion);
+		outline-offset: 2px;
+	}
+
+	@media (max-width: 720px) {
+		.canvas {
+			padding: 0.75rem;
+		}
+
+		.canvas__agregar {
+			align-self: stretch;
+		}
 	}
 
 	.preview {
@@ -855,20 +966,21 @@
 	.preview__nota {
 		max-width: 44rem;
 		margin: 1.25rem auto 0;
-		padding: 0.625rem 0.75rem;
-		font-size: 0.75rem;
-		line-height: 1.45;
-		color: var(--text-muted, #64748b);
-		background: var(--gray-50, #f9fafb);
-		border-radius: 10px;
+		padding: 0.75rem 1rem;
+		font-size: 0.8125rem;
+		line-height: 1.5;
+		color: var(--text-muted);
+		background: var(--bg-surface);
+		border-radius: 14px;
 	}
 
+	/* ─── Barra inferior (móvil y tablet) ────────────────────────────────── */
 	.movil {
 		display: flex;
-		gap: 0.375rem;
-		padding: 0.375rem 0.5rem;
-		background: var(--bg-surface, #fff);
-		border-top: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+		gap: 0.5rem;
+		padding: 0.5rem 0.75rem calc(0.5rem + env(safe-area-inset-bottom, 0px));
+		background: var(--bg-surface);
+		border-top: 1px solid var(--border-subtle);
 	}
 
 	@media (min-width: 1100px) {
@@ -881,19 +993,24 @@
 		flex: 1;
 		min-height: 44px;
 		font: inherit;
-		font-size: 0.8125rem;
-		font-weight: 600;
-		color: var(--text-secondary, #334155);
-		background: var(--gray-50, #f9fafb);
-		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
-		border-radius: 10px;
+		font-size: 0.875rem;
+		font-weight: 800;
+		color: var(--text-secondary);
+		background: var(--bg-base);
+		border: 1px solid var(--border-subtle);
+		border-radius: 14px;
 		cursor: pointer;
 	}
 
 	.movil__btn--activo {
-		background: #fff7ed;
-		border-color: #fed7aa;
-		color: var(--emerald-700, #166534);
+		color: var(--color-emerald-900);
+		background: var(--color-emerald-100);
+		border-color: transparent;
+	}
+
+	.movil__btn:focus-visible {
+		outline: 2px solid var(--accion);
+		outline-offset: 2px;
 	}
 
 	@media (prefers-reduced-motion: reduce) {

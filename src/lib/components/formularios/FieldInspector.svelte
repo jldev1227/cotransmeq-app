@@ -465,7 +465,7 @@
 	}
 
 	.campo__input--mono {
-		font-family: var(--font-mono, monospace);
+		font-variant-numeric: tabular-nums;
 		font-size: 0.75rem;
 	}
 

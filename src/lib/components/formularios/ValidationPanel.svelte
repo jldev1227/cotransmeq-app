@@ -165,7 +165,7 @@
 
 	.fila__code {
 		flex-shrink: 0;
-		font-family: var(--font-mono, monospace);
+		font-variant-numeric: tabular-nums;
 		font-size: 0.625rem;
 		font-weight: 600;
 		color: var(--text-very-muted, #94a3b8);

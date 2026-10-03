@@ -59,7 +59,9 @@
 
 <svelte:head>
 	<title>
-		{definicion ? `${definicion.code} v${version?.versionNumber ?? ''} · Constructor` : 'Constructor'}
+		{definicion
+			? `${definicion.code} v${version?.versionNumber ?? ''} · Constructor`
+			: 'Constructor'}
 	</title>
 </svelte:head>
 
@@ -89,6 +91,10 @@
 	   su propio scroll en vez de arrastrar la página entera. */
 	.host {
 		height: calc(100vh - 4rem);
+		/* `dvh` en móvil: con `vh` la barra del navegador tapaba la barra
+		   inferior de Paleta/Propiedades. */
+		height: calc(100dvh - 4rem);
+		background: var(--bg-base);
 		min-height: 32rem;
 		overflow: hidden;
 	}
@@ -100,7 +106,7 @@
 		height: 100%;
 		padding: 2rem;
 		text-align: center;
-		color: var(--text-muted, #64748b);
+		color: var(--text-muted);
 	}
 
 	.estado--error {
@@ -108,7 +114,7 @@
 	}
 
 	.volver {
-		color: var(--emerald-700, #166534);
+		color: var(--accion);
 		font-weight: 600;
 		text-decoration: underline;
 	}

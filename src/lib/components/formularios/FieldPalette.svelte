@@ -188,18 +188,25 @@
 
 	.paleta__input {
 		width: 100%;
-		min-height: 40px;
-		padding: 0.375rem 0.625rem;
+		min-height: 42px;
+		padding: 0.5rem 0.75rem;
 		font: inherit;
 		font-size: 0.875rem;
-		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
-		border-radius: 10px;
+		color: var(--text-primary);
+		background: var(--bg-base);
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
+	}
+
+	.paleta__input::placeholder {
+		color: var(--text-very-muted);
 	}
 
 	.paleta__input:focus-visible {
 		outline: none;
-		border-color: var(--emerald-600, #15803d);
-		box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
+		background: var(--bg-surface);
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
 	}
 
 	.paleta__scroll {
@@ -221,25 +228,27 @@
 		min-height: 40px;
 		padding: 0 0.5rem;
 		font: inherit;
-		font-size: 0.75rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: var(--text-muted, #64748b);
+		font-size: 0.8125rem;
+		font-weight: 800;
+		color: var(--text-primary);
 		background: none;
 		border: none;
-		border-radius: 8px;
+		border-radius: 10px;
 		cursor: pointer;
 	}
 
 	.grupo__toggle:hover {
-		background: var(--gray-50, #f9fafb);
+		background: var(--bg-base);
 	}
 
 	.grupo__conteo {
-		font-family: var(--font-mono, monospace);
+		padding: 0 0.4375rem;
 		font-size: 0.6875rem;
-		color: var(--text-very-muted, #94a3b8);
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+		color: var(--text-muted);
+		background: var(--bg-base);
+		border-radius: 999px;
 	}
 
 	.grupo__lista {
@@ -261,18 +270,20 @@
 		font: inherit;
 		background: none;
 		border: 1px solid transparent;
-		border-radius: 8px;
+		border-radius: 12px;
 		cursor: pointer;
-		transition: background 120ms ease, border-color 120ms ease;
+		transition:
+			background 120ms ease,
+			border-color 120ms ease;
 	}
 
 	.tipo:hover:not(:disabled) {
-		background: #fff7ed;
-		border-color: #fed7aa;
+		background: color-mix(in srgb, var(--accion) 7%, var(--bg-surface));
+		border-color: color-mix(in srgb, var(--accion) 25%, transparent);
 	}
 
 	.tipo:focus-visible {
-		outline: 2px solid var(--emerald-600, #15803d);
+		outline: 2px solid var(--accion);
 		outline-offset: 1px;
 	}
 
@@ -282,19 +293,19 @@
 	}
 
 	.tipo--plantilla {
-		border-left: 2px solid var(--emerald-500, #16a34a);
-		border-radius: 0 8px 8px 0;
+		border-left: 3px solid var(--accion);
+		border-radius: 4px 12px 12px 4px;
 	}
 
 	.tipo__label {
 		font-size: 0.875rem;
-		font-weight: 500;
-		color: var(--text-primary, #0f172a);
+		font-weight: 700;
+		color: var(--text-primary);
 	}
 
 	.tipo__hint {
 		font-size: 0.75rem;
-		color: var(--text-very-muted, #94a3b8);
+		color: var(--text-muted);
 		line-height: 1.3;
 	}
 
