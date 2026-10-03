@@ -30,9 +30,11 @@
 		SUBMISSION_STATUS_LABELS,
 		type AssignmentDto,
 		type FormDefinitionDto,
-		type SubmissionSummaryDto
+		type SubmissionSummaryDto,
+		type VersionStatus
 	} from '$lib/formularios/types';
 	import AssignmentEditor from '$lib/components/formularios/AssignmentEditor.svelte';
+	import ModalDuplicarFormulario from '$lib/components/formularios/ModalDuplicarFormulario.svelte';
 	import TabsVista from '$lib/components/ui/TabsVista.svelte';
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 
@@ -43,6 +45,7 @@
 	let cargando = $state(true);
 	let trabajando = $state(false);
 	let editorAsignacion = $state<{ versionId: string; existing?: AssignmentDto } | null>(null);
+	let duplicando = $state(false);
 
 	/**
 	 * Los envíos de este formato, aquí mismo.
@@ -81,6 +84,26 @@
 		paginaEnvios = p;
 		void cargarEnvios();
 	}
+
+	/**
+	 * La pestaña activa, siempre a la vista.
+	 *
+	 * En móvil las tres pestañas no caben y la barra se desplaza en horizontal:
+	 * un enlace con `?vista=asignaciones` abría la pestaña correcta pero fuera de
+	 * pantalla, y no se veía cuál estaba elegida.
+	 */
+	let zonaTabs = $state<HTMLElement | null>(null);
+	$effect(() => {
+		void vista;
+		const lista = zonaTabs?.querySelector<HTMLElement>('[role="tablist"]');
+		const activa = lista?.querySelector<HTMLElement>('[aria-selected="true"]');
+		if (!lista || !activa) return;
+		const izq = activa.offsetLeft;
+		const der = izq + activa.offsetWidth;
+		if (izq < lista.scrollLeft || der > lista.scrollLeft + lista.clientWidth) {
+			lista.scrollTo({ left: Math.max(0, izq - 16) });
+		}
+	});
 
 	async function cargar() {
 		cargando = true;
@@ -123,15 +146,34 @@
 		}
 	}
 
-	function fechaHora(iso: string | null): string {
+	/**
+	 * Fechas como en la app: «01 oct 2026» y «12:27 p. m.».
+	 *
+	 * `toLocaleString` daba «01 de oct de 2026, 12:27 p. m.», que en una columna
+	 * o una tarjeta estrecha partía en cuatro renglones. Los espacios internos
+	 * pasan a no separables para que el día y la hora nunca se corten por dentro.
+	 */
+	const FMT_DIA = new Intl.DateTimeFormat('es-CO', {
+		day: '2-digit',
+		month: 'short',
+		year: 'numeric'
+	});
+	const FMT_HORA = new Intl.DateTimeFormat('es-CO', {
+		hour: 'numeric',
+		minute: '2-digit',
+		hour12: true
+	});
+
+	function dia(iso: string | null): string {
 		if (!iso) return '—';
-		return new Date(iso).toLocaleString('es-CO', {
-			day: '2-digit',
-			month: 'short',
-			year: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
+		const partes = FMT_DIA.formatToParts(new Date(iso));
+		const de = (t: Intl.DateTimeFormatPartTypes) => partes.find((p) => p.type === t)?.value ?? '';
+		return `${de('day')}\u00a0${de('month').replace('.', '')}\u00a0${de('year')}`;
+	}
+
+	function hora(iso: string | null): string {
+		if (!iso) return '';
+		return FMT_HORA.format(new Date(iso)).replace(/\s/g, '\u00a0');
 	}
 
 	onMount(() => {
@@ -180,22 +222,25 @@
 		}
 	}
 
-	async function duplicarFormulario() {
-		const code = prompt('Código HSEQ del formulario nuevo (ej.: HSEQ-FR-09)');
-		if (!code?.trim()) return;
-		const name = prompt('Nombre del formulario nuevo', `${form?.name} (copia)`);
-		if (!name?.trim()) return;
+	function duplicarFormulario() {
+		duplicando = true;
+	}
 
-		trabajando = true;
-		try {
-			const nuevo = await formulariosAPI.duplicar(formId, { code: code.trim(), name: name.trim() });
-			toast.success(`${nuevo.code} creado desde este formulario.`);
-			await goto(`/dashboard/formularios/${nuevo.id}`);
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'No se pudo duplicar.');
-		} finally {
-			trabajando = false;
-		}
+	/**
+	 * Tras duplicar se abre el formulario nuevo.
+	 *
+	 * Es la misma ruta con otro `formId`, y SvelteKit reutiliza el componente:
+	 * `onMount` no vuelve a correr, así que sin recargar a mano se vería el
+	 * formulario de origen bajo la URL del nuevo.
+	 */
+	async function alDuplicar(nuevo: FormDefinitionDto) {
+		toast.success(`${nuevo.code} creado desde este formulario.`);
+		await goto(`/dashboard/formularios/${nuevo.id}`);
+		duplicando = false;
+		vista = 'registros';
+		paginaEnvios = 1;
+		void cargar();
+		void cargarEnvios();
 	}
 
 	async function cambiarEstadoAsignacion(
@@ -228,14 +273,17 @@
 
 	function fecha(iso: string | null): string {
 		if (!iso) return '—';
-		return new Date(iso).toLocaleString('es-CO', {
-			day: '2-digit',
-			month: 'short',
-			year: 'numeric',
-			hour: '2-digit',
-			minute: '2-digit'
-		});
+		return `${dia(iso)}, ${hora(iso)}`;
 	}
+
+	const VERSION_STATUS_LABELS: Record<VersionStatus, string> = {
+		DRAFT: 'Borrador',
+		PUBLISHED: 'Publicada',
+		ARCHIVED: 'Archivada'
+	};
+
+	const plural = (n: number, uno: string, varios: string) =>
+		`${n.toLocaleString('es-CO')} ${n === 1 ? uno : varios}`;
 
 	const versiones = $derived(form?.versions ?? []);
 	const publicadas = $derived(versiones.filter((v) => v.status === 'PUBLISHED'));
@@ -261,15 +309,14 @@
 				<h1 class="head__titulo">{form.name}</h1>
 				{#if form.description}<p class="head__desc">{form.description}</p>{/if}
 				<p class="head__meta">
-					Área {form.ownerArea} · slug <code>{form.slug}</code> · actualizado {fecha(
-						form.updatedAt
-					)}
+					<span class="nw">Área {form.ownerArea}</span> · <span class="nw">slug {form.slug}</span> ·
+					<span class="nw">actualizado {fecha(form.updatedAt)}</span>
 				</p>
 			</div>
 			<div class="head__acciones">
 				{#if form.draftVersion}
 					<a
-						class="btn btn--primario"
+						class="btn-primary cab-accion"
 						href={`/dashboard/formularios/${formId}/editar/${form.draftVersion.id}`}
 					>
 						Continuar borrador v{form.draftVersion.versionNumber}
@@ -277,244 +324,296 @@
 				{:else if form.activeVersion}
 					<button
 						type="button"
-						class="btn btn--primario"
+						class="btn-primary cab-accion"
 						disabled={trabajando}
 						onclick={() => clonar(form!.activeVersion!.id, form!.activeVersion!.versionNumber)}
 					>
 						Editar (clonar v{form!.activeVersion!.versionNumber})
 					</button>
 				{/if}
-				<button type="button" class="btn" disabled={trabajando} onclick={duplicarFormulario}>
+				<button
+					type="button"
+					class="btn-secondary cab-accion"
+					disabled={trabajando}
+					onclick={duplicarFormulario}
+				>
 					Duplicar formulario
 				</button>
 			</div>
 		</header>
 
-		<TabsVista
-			etiqueta="Vistas del formulario"
-			tabs={[
-				{ id: 'registros', label: 'Registros diligenciados', cuenta: totalEnvios },
-				{ id: 'versiones', label: 'Versiones', cuenta: versiones.length },
-				{ id: 'asignaciones', label: 'Asignaciones', cuenta: asignaciones.length }
-			]}
-			bind:activa={vista}
-			onCambiar={cambiarVista}
-		/>
+		<div class="tabs" bind:this={zonaTabs}>
+			<TabsVista
+				etiqueta="Vistas del formulario"
+				tabs={[
+					{ id: 'registros', label: 'Registros diligenciados', cuenta: totalEnvios },
+					{ id: 'versiones', label: 'Versiones', cuenta: versiones.length },
+					{ id: 'asignaciones', label: 'Asignaciones', cuenta: asignaciones.length }
+				]}
+				bind:activa={vista}
+				onCambiar={cambiarVista}
+			/>
+		</div>
 
 		{#if vista === 'registros'}
 			<section class="bloque">
-			<div class="bloque__cabeza">
-				<p class="bloque__desc">Quién diligenció este formato y cuándo. Abre una fila para ver sus respuestas.</p>
-				{#if totalEnvios > 0}
-					<a class="btn btn--mini" href={`/dashboard/formularios/envios?formId=${formId}`}>
-						Buscar y filtrar
-					</a>
-				{/if}
-			</div>
+				<div class="intro">
+					<p class="intro__texto">
+						Quién diligenció este formato y cuándo. Abre un registro para ver sus respuestas.
+					</p>
+					{#if totalEnvios > 0}
+						<a class="btn-secondary acc" href={`/dashboard/formularios/envios?formId=${formId}`}>
+							Buscar y filtrar
+						</a>
+					{/if}
+				</div>
 
-			{#if cargandoEnvios}
-				<p class="vacio" aria-busy="true">Cargando registros…</p>
-			{:else if envios.length === 0}
-				<p class="vacio">
-					Todavía no hay envíos de este formato. Aparecerán aquí en cuanto un conductor entregue
-					uno.
-				</p>
-			{:else}
-				<!-- Filas, no tarjetas: son registros que se comparan entre sí, y una
-				     rejilla alineada deja leer la columna de fecha o de placa en
-				     vertical. La fila entera es el enlace al envío. -->
-				<ul class="registros">
-					<li class="registros__cab" aria-hidden="true">
-						<span>Entregado</span>
-						<span>Conductor</span>
-						<span>Vehículo</span>
-						<span>Versión</span>
-						<span>Respuestas</span>
-						<span>Estado</span>
-					</li>
-					{#each envios as envio (envio.id)}
-						<li>
-							<a class="registro" href={`/dashboard/formularios/envios/${envio.id}`}>
-								<span class="registro__fecha"
-									>{fechaHora(envio.submittedAt ?? envio.startedAt)}</span
+				{#if cargandoEnvios}
+					<p class="vacio" aria-busy="true">Cargando registros…</p>
+				{:else if envios.length === 0}
+					<p class="vacio">
+						Todavía no hay envíos de este formato. Aparecerán aquí en cuanto un conductor entregue
+						uno.
+					</p>
+				{:else}
+					<!-- En escritorio, filas alineadas dentro de una tarjeta: son registros
+					     que se comparan entre sí y la rejilla deja leer la fecha o la placa
+					     en vertical. En una columna estrecha cada registro pasa a ser su
+					     propia tarjeta. La fila entera es el enlace al envío. -->
+					<div class="registros-zona">
+						<ul class="registros">
+							<li class="registros__cab" aria-hidden="true">
+								<span>Fecha</span>
+								<span>Diligenciado por</span>
+								<span>Placa</span>
+								<span>Versión</span>
+								<span class="num">Respuestas</span>
+								<span>Estado</span>
+							</li>
+							{#each envios as envio (envio.id)}
+								{@const cuando = envio.submittedAt ?? envio.startedAt}
+								<li>
+									<a class="registro" href={`/dashboard/formularios/envios/${envio.id}`}>
+										<span class="r-fecha">
+											<span class="r-dia">{dia(cuando)}</span>
+											{#if cuando}<span class="r-hora">{hora(cuando)}</span>{/if}
+										</span>
+										<span class="r-persona">
+											<span class="r-nombre">
+												{envio.actor?.nombre ?? envio.conductor?.nombre ?? '—'}
+											</span>
+											{#if envio.conductor?.numeroIdentificacion}
+												<span class="r-doc">CC {envio.conductor.numeroIdentificacion}</span>
+											{/if}
+										</span>
+										<span class="r-meta">
+											<span class="r-placa" class:r-sin={!envio.vehiculo?.placa}>
+												{envio.vehiculo?.placa ?? '—'}
+											</span>
+											<span class="r-version">v{envio.version?.versionNumber ?? '—'}</span>
+											<span class="r-resp" class:r-sin={envio.answerCount == null}>
+												{envio.answerCount ?? '—'}<span class="r-resp-txt">
+													{envio.answerCount === 1 ? 'respuesta' : 'respuestas'}</span
+												>
+											</span>
+										</span>
+										<span class="r-estado">
+											<span class="chip chip--{envio.status.toLowerCase()}">
+												{SUBMISSION_STATUS_LABELS[envio.status]}
+											</span>
+										</span>
+									</a>
+								</li>
+							{/each}
+						</ul>
+					</div>
+					<PaginadorLista
+						pagina={paginaEnvios}
+						total={totalEnvios}
+						porPagina={POR_PAGINA_ENVIOS}
+						cargando={cargandoEnvios}
+						nombreItems="registros"
+						suelto
+						onCambiar={irPaginaEnvios}
+					/>
+				{/if}
+			</section>
+		{:else if vista === 'versiones'}
+			<section class="bloque">
+				<div class="intro">
+					<p class="intro__texto">
+						Cada publicación es una versión fija: para cambiar una publicada se clona en un
+						borrador.
+					</p>
+				</div>
+				<ul class="tarjetas">
+					{#each versiones as v (v.id)}
+						{@const vigente = form.activeVersion?.id === v.id}
+						<li class="tarjeta">
+							<div class="tarjeta__cuerpo">
+								<div class="tarjeta__chips">
+									<span class="ver-num">v{v.versionNumber}</span>
+									<span class="chip chip--{v.status.toLowerCase()}">
+										{VERSION_STATUS_LABELS[v.status]}
+									</span>
+									{#if vigente}<span class="chip chip--neutro">Vigente</span>{/if}
+								</div>
+								<p class="tarjeta__titulo">{v.title}</p>
+								<p class="tarjeta__meta">
+									<span class="nw">Revisión {v.revision}</span> ·
+									<span class="nw">creada {fecha(v.createdAt)}</span>
+									{#if v.publishedAt}· <span class="nw">publicada {fecha(v.publishedAt)}</span>{/if}
+									{#if v.archivedAt}· <span class="nw">archivada {fecha(v.archivedAt)}</span>{/if}
+								</p>
+							</div>
+							<div class="acciones">
+								{#if v.status === 'PUBLISHED'}
+									<button
+										type="button"
+										class="acc"
+										class:btn-primary={vigente}
+										class:btn-secondary={!vigente}
+										disabled={trabajando}
+										onclick={() => (editorAsignacion = { versionId: v.id })}
+									>
+										Asignar
+									</button>
+								{/if}
+								<a
+									class="acc"
+									class:btn-primary={v.status === 'DRAFT'}
+									class:btn-secondary={v.status !== 'DRAFT'}
+									href={`/dashboard/formularios/${formId}/editar/${v.id}`}
 								>
-								<span class="registro__conductor">
-									{envio.actor?.nombre ?? '—'}
-									{#if envio.conductor?.numeroIdentificacion}
-										<small>{envio.conductor.numeroIdentificacion}</small>
-									{/if}
-								</span>
-								<span class="mono">{envio.vehiculo?.placa ?? '—'}</span>
-								<span class="mono">v{envio.version?.versionNumber ?? '—'}</span>
-								<span class="mono">{envio.answerCount ?? '—'}</span>
-								<span class="chip chip--{envio.status.toLowerCase()}">
-									{SUBMISSION_STATUS_LABELS[envio.status]}
-								</span>
-							</a>
+									{v.status === 'DRAFT' ? 'Editar' : 'Ver estructura'}
+								</a>
+								<a
+									class="btn-secondary acc"
+									href={`/dashboard/formularios/${formId}/preview/${v.id}`}
+								>
+									Vista previa
+								</a>
+								{#if v.status === 'PUBLISHED'}
+									<button
+										type="button"
+										class="btn-secondary acc"
+										disabled={trabajando}
+										onclick={() => clonar(v.id, v.versionNumber)}
+									>
+										Clonar
+									</button>
+									<button
+										type="button"
+										class="btn-secondary acc acc--peligro"
+										disabled={trabajando}
+										onclick={() => archivarVersion(v.id, v.versionNumber)}
+									>
+										Archivar
+									</button>
+								{/if}
+							</div>
 						</li>
 					{/each}
 				</ul>
-				<PaginadorLista
-					pagina={paginaEnvios}
-					total={totalEnvios}
-					porPagina={POR_PAGINA_ENVIOS}
-					cargando={cargandoEnvios}
-					nombreItems="registros"
-					suelto
-					onCambiar={irPaginaEnvios}
-				/>
-			{/if}
-		</section>
-		{:else if vista === 'versiones'}
-					<section class="bloque">
-			<p class="bloque__desc">
-				Cada publicación es una versión fija: para cambiar una publicada se clona en un borrador.
-			</p>
-			<ul class="versiones">
-				{#each versiones as v (v.id)}
-					<li class="ver">
-						<div class="ver__id">
-							<span class="ver__num">v{v.versionNumber}</span>
-							<span class="chip chip--{v.status.toLowerCase()}">{v.status}</span>
-						</div>
-						<div class="ver__cuerpo">
-							<p class="ver__titulo">{v.title}</p>
-							<p class="ver__meta">
-								revisión {v.revision} · creada {fecha(v.createdAt)}
-								{#if v.publishedAt}· publicada {fecha(v.publishedAt)}{/if}
-								{#if v.archivedAt}· archivada {fecha(v.archivedAt)}{/if}
-							</p>
-						</div>
-						<div class="ver__acciones">
-							<a class="btn btn--mini" href={`/dashboard/formularios/${formId}/preview/${v.id}`}>
-								Vista previa
-							</a>
-							<a class="btn btn--mini" href={`/dashboard/formularios/${formId}/editar/${v.id}`}>
-								{v.status === 'DRAFT' ? 'Editar' : 'Ver estructura'}
-							</a>
-							{#if v.status === 'PUBLISHED'}
-								<button
-									type="button"
-									class="btn btn--mini"
-									disabled={trabajando}
-									onclick={() => (editorAsignacion = { versionId: v.id })}
-								>
-									Asignar
-								</button>
-								<button
-									type="button"
-									class="btn btn--mini"
-									disabled={trabajando}
-									onclick={() => clonar(v.id, v.versionNumber)}
-								>
-									Clonar
-								</button>
-								<button
-									type="button"
-									class="btn btn--mini btn--peligro"
-									disabled={trabajando}
-									onclick={() => archivarVersion(v.id, v.versionNumber)}
-								>
-									Archivar
-								</button>
-							{/if}
-						</div>
-					</li>
-				{/each}
-			</ul>
-			{#if publicadas.length === 0}
-				<p class="bloque__nota">
-					Ninguna versión publicada todavía: los conductores no ven este formulario.
-				</p>
-			{/if}
-		</section>
+				{#if publicadas.length === 0}
+					<p class="nota">
+						Ninguna versión publicada todavía: los conductores no ven este formulario.
+					</p>
+				{/if}
+			</section>
 		{:else}
 			<section class="bloque">
-			<div class="bloque__head">
-				<p class="bloque__desc">A quién le llega cada versión publicada y con qué frecuencia.</p>
-				{#if form.activeVersion}
-					<button
-						type="button"
-						class="btn btn--mini"
-						onclick={() => (editorAsignacion = { versionId: form!.activeVersion!.id })}
-					>
-						+ Nueva asignación
-					</button>
-				{/if}
-			</div>
+				<div class="intro">
+					<p class="intro__texto">A quién le llega cada versión publicada y con qué frecuencia.</p>
+					{#if form.activeVersion}
+						<button
+							type="button"
+							class="btn-primary acc intro__accion"
+							onclick={() => (editorAsignacion = { versionId: form!.activeVersion!.id })}
+						>
+							+ Nueva asignación
+						</button>
+					{/if}
+				</div>
 
-			{#if asignaciones.length === 0}
-				<p class="bloque__nota">
-					Sin asignaciones. Un formulario publicado sin asignar no le aparece a nadie.
-				</p>
-			{:else}
-				<ul class="asig">
-					{#each asignaciones as a (a.id)}
-						<li class="asig__item">
-							<div class="asig__cuerpo">
-								<p class="asig__nombre">{a.name}</p>
-								<p class="asig__meta">
-									v{a.version?.versionNumber} · {FREQUENCY_LABELS[a.frequency]} ·
-									{LIMIT_POLICY_LABELS[a.limitPolicy]} · {a.targets.length} target{a.targets
-										.length === 1
-										? ''
-										: 's'}
-									{#if a.submissionCount != null}· {a.submissionCount} envío{a.submissionCount === 1
-											? ''
-											: 's'}{/if}
-								</p>
-								<p class="asig__vigencia">
-									{a.startsAt ? `Desde ${fecha(a.startsAt)}` : 'Sin fecha de inicio'}
-									· {a.endsAt ? `hasta ${fecha(a.endsAt)}` : 'sin fecha de fin'}
-								</p>
-							</div>
-							<span class="chip chip--{a.status.toLowerCase()}">
-								{ASSIGNMENT_STATUS_LABELS[a.status]}
-							</span>
-							<div class="asig__acciones">
-								<button
-									type="button"
-									class="btn btn--mini"
-									disabled={trabajando || a.status === 'CLOSED'}
-									onclick={() => (editorAsignacion = { versionId: a.versionId, existing: a })}
-								>
-									Editar
-								</button>
-								{#if a.status === 'ACTIVE'}
+				{#if asignaciones.length === 0}
+					<p class="nota">
+						Sin asignaciones. Un formulario publicado sin asignar no le aparece a nadie.
+					</p>
+				{:else}
+					<ul class="tarjetas">
+						{#each asignaciones as a (a.id)}
+							<li class="tarjeta">
+								<div class="tarjeta__cuerpo">
+									<div class="tarjeta__chips">
+										<span class="chip chip--{a.status.toLowerCase()}">
+											{ASSIGNMENT_STATUS_LABELS[a.status]}
+										</span>
+										<span class="chip chip--neutro">{FREQUENCY_LABELS[a.frequency]}</span>
+									</div>
+									<p class="tarjeta__titulo">{a.name}</p>
+									<p class="tarjeta__meta">
+										<span class="nw">Versión v{a.version?.versionNumber}</span> ·
+										<span class="nw">{LIMIT_POLICY_LABELS[a.limitPolicy]}</span> ·
+										<span class="nw">{plural(a.targets.length, 'target', 'targets')}</span>
+										{#if a.submissionCount != null}
+											· <span class="nw">{plural(a.submissionCount, 'envío', 'envíos')}</span>
+										{/if}
+									</p>
+									<p class="tarjeta__meta">
+										<span class="nw">
+											{a.startsAt ? `Desde ${fecha(a.startsAt)}` : 'Sin fecha de inicio'}
+										</span>
+										·
+										<span class="nw"
+											>{a.endsAt ? `hasta ${fecha(a.endsAt)}` : 'sin fecha de fin'}</span
+										>
+									</p>
+								</div>
+								<div class="acciones">
 									<button
 										type="button"
-										class="btn btn--mini"
-										disabled={trabajando}
-										onclick={() => cambiarEstadoAsignacion(a, 'pausar')}
+										class="btn-secondary acc"
+										disabled={trabajando || a.status === 'CLOSED'}
+										onclick={() => (editorAsignacion = { versionId: a.versionId, existing: a })}
 									>
-										Pausar
+										Editar
 									</button>
-								{:else if a.status === 'PAUSED'}
-									<button
-										type="button"
-										class="btn btn--mini"
-										disabled={trabajando}
-										onclick={() => cambiarEstadoAsignacion(a, 'reactivar')}
-									>
-										Reactivar
-									</button>
-								{/if}
-								{#if a.status !== 'CLOSED'}
-									<button
-										type="button"
-										class="btn btn--mini btn--peligro"
-										disabled={trabajando}
-										onclick={() => cambiarEstadoAsignacion(a, 'cerrar')}
-									>
-										Cerrar
-									</button>
-								{/if}
-							</div>
-						</li>
-					{/each}
-				</ul>
-			{/if}
-		</section>
+									{#if a.status === 'ACTIVE'}
+										<button
+											type="button"
+											class="btn-secondary acc"
+											disabled={trabajando}
+											onclick={() => cambiarEstadoAsignacion(a, 'pausar')}
+										>
+											Pausar
+										</button>
+									{:else if a.status === 'PAUSED'}
+										<button
+											type="button"
+											class="btn-secondary acc"
+											disabled={trabajando}
+											onclick={() => cambiarEstadoAsignacion(a, 'reactivar')}
+										>
+											Reactivar
+										</button>
+									{/if}
+									{#if a.status !== 'CLOSED'}
+										<button
+											type="button"
+											class="btn-secondary acc acc--peligro"
+											disabled={trabajando}
+											onclick={() => cambiarEstadoAsignacion(a, 'cerrar')}
+										>
+											Cerrar
+										</button>
+									{/if}
+								</div>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</section>
 		{/if}
 	{/if}
 </div>
@@ -536,24 +635,41 @@
 	{/key}
 {/if}
 
+{#if form}
+	<ModalDuplicarFormulario
+		open={duplicando}
+		{form}
+		oncerrar={() => (duplicando = false)}
+		onduplicado={alDuplicar}
+	/>
+{/if}
+
 <style>
+	/* Lenguaje de la app móvil: fondo claro de la marca, tarjetas blancas con
+	   sombra suave, títulos oscuros y gruesos, metadatos grises y chips de
+	   estado en tinte suave. Los colores de marca solo por variables del tema,
+	   para que cada empresa pinte su paleta. */
 	.pagina {
 		display: flex;
 		flex-direction: column;
 		gap: 1.125rem;
+		min-height: 100%;
 		padding: 1.25rem 1.25rem 3rem;
+		background: var(--bg-base);
+		font-variant-numeric: tabular-nums;
 	}
 
 	.migas {
 		display: flex;
 		align-items: center;
 		gap: 0.375rem;
-		font-size: 0.75rem;
-		color: var(--text-muted, #64748b);
+		font-size: 0.8125rem;
+		color: var(--text-muted);
 	}
 
 	.migas a {
-		color: var(--emerald-700, #166534);
+		font-weight: 700;
+		color: var(--accion);
 		text-decoration: none;
 	}
 
@@ -567,360 +683,538 @@
 		align-items: flex-start;
 		justify-content: space-between;
 		gap: 0.875rem;
+		margin-top: -0.5rem;
+	}
+
+	.head__texto {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 0.25rem;
+		min-width: 0;
+		max-width: 48rem;
 	}
 
 	.head__code {
-		font-family: var(--font-mono, monospace);
+		padding: 0.125rem 0.5rem;
 		font-size: 0.75rem;
-		font-weight: 700;
-		color: var(--emerald-700, #166534);
+		font-weight: 800;
+		color: var(--color-emerald-900);
+		background: var(--color-emerald-100);
+		border-radius: 999px;
 	}
 
 	.head__titulo {
-		font-family: var(--font-display, Georgia, serif);
+		margin: 0;
+		font-family: var(--font-display, inherit);
 		font-size: 1.5rem;
-		font-weight: 600;
-		color: var(--text-primary, #0f172a);
+		font-weight: 800;
 		line-height: 1.2;
+		color: var(--text-primary);
 	}
 
 	.head__desc {
-		margin-top: 0.25rem;
+		margin: 0;
 		font-size: 0.875rem;
-		color: var(--text-secondary, #334155);
-		line-height: 1.45;
+		line-height: 1.5;
+		color: var(--text-secondary);
 	}
 
 	.head__meta {
-		margin-top: 0.375rem;
-		font-family: var(--font-mono, monospace);
-		font-size: 0.6875rem;
-		color: var(--text-very-muted, #94a3b8);
+		margin: 0;
+		font-size: 0.75rem;
+		line-height: 1.5;
+		color: var(--text-muted);
 	}
 
 	.head__acciones {
 		display: flex;
-		gap: 0.375rem;
+		gap: 0.5rem;
 		flex-wrap: wrap;
+	}
+
+	.nw {
+		white-space: nowrap;
+	}
+
+	.tabs {
+		min-width: 0;
 	}
 
 	.bloque {
+		container-type: inline-size;
 		display: flex;
 		flex-direction: column;
-		gap: 0.625rem;
-		padding: 0.875rem;
-		background: var(--bg-surface, #fff);
-		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
-		border-radius: 0 14px 14px 14px;
-		/* Pegado a las pestañas: es el contenido de la activa. */
-		margin-top: -1.125rem;
-		border-top: 0;
+		gap: 0.875rem;
+		min-width: 0;
+		margin-top: -0.25rem;
 	}
 
-	.bloque__desc {
+	.intro {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		flex-wrap: wrap;
+	}
+
+	.intro__texto {
+		flex: 1 1 18rem;
 		margin: 0;
 		font-size: 0.8125rem;
+		line-height: 1.5;
 		color: var(--text-muted);
 	}
 
-	.bloque__head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.5rem;
-		flex-wrap: wrap;
-	}
-
-	.bloque__cabeza {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
-		flex-wrap: wrap;
-		margin-bottom: 0.625rem;
-	}
-
-	
-
-	.vacio {
+	.vacio,
+	.nota {
+		margin: 0;
+		padding: 1.25rem 1rem;
 		font-size: 0.8125rem;
 		line-height: 1.5;
-		color: var(--text-secondary, #334155);
+		text-align: center;
+		color: var(--text-muted);
+		background: var(--bg-surface);
+		border-radius: 18px;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
 	}
 
-	.mono {
-		font-family: var(--font-mono, monospace);
-	}
-
-	/* Rejilla de registros. Las mismas columnas en la cabecera y en cada fila,
-	   con una variable: si cambia el reparto, cambia en los dos sitios a la vez
-	   y no se desalinean. */
-	.registros {
-		--cols: minmax(9rem, 0.9fr) minmax(11rem, 1.6fr) 6rem 4rem 6rem 7rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.1875rem;
-		list-style: none;
-		padding: 0;
-	}
-
-	.registros__cab,
-	.registro {
-		display: grid;
-		grid-template-columns: var(--cols);
-		align-items: center;
-		gap: 0.75rem;
-		padding: 0.4375rem 0.625rem;
-	}
-
-	.registros__cab {
-		font-size: 0.625rem;
-		font-weight: 700;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--text-secondary, #334155);
-		border-bottom: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
-	}
-
-	/* La fila entera es el enlace: un destino táctil de una fila completa no se
-	   falla, y no obliga a apuntar a un «ver» de doce píxeles. */
-	.registro {
+	/* ─── Botones compactos ───────────────────────────────────────────────── */
+	.acc {
+		min-height: 36px;
+		padding: 0 0.875rem;
+		border-radius: 12px;
 		font-size: 0.8125rem;
-		color: inherit;
-		text-decoration: none;
-		background: var(--bg-surface, #fff);
-		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
-		border-radius: 10px;
+		white-space: nowrap;
+	}
+	.btn-secondary.acc {
+		border-width: 1px;
 	}
 
-	.registro:hover {
-		border-color: var(--emerald-600, #15803d);
-		background: var(--gray-50, #f9fafb);
+	/* Destructiva pero secundaria: misma forma que sus vecinas, en rojo, para
+	   que no se confunda con «Clonar» ni compita con la principal. */
+	.acc--peligro {
+		color: #b42318;
+		border-color: #f4c7c3;
+	}
+	.acc--peligro:hover:not(:disabled) {
+		color: #912018;
+		background: #fef3f2;
+		border-color: #eba59e;
 	}
 
-	.registro:focus-visible {
-		outline: 2px solid var(--emerald-600, #15803d);
-		outline-offset: 2px;
+	.cab-accion {
+		white-space: nowrap;
 	}
 
-	.registro__fecha {
-		font-family: var(--font-mono, monospace);
-		font-size: 0.75rem;
-	}
-
-	.registro__conductor {
-		display: flex;
-		flex-direction: column;
-		min-width: 0;
-		font-weight: 600;
-	}
-
-	.registro__conductor small {
-		font-family: var(--font-mono, monospace);
-		font-size: 0.6875rem;
-		font-weight: 400;
-		color: var(--text-secondary, #334155);
-	}
-
-	.chip--submitted {
-		color: #166534;
-		background: #f0fdf4;
-		border-color: #bbf7d0;
-	}
-
-	.chip--voided {
-		color: #991b1b;
-		background: #fef2f2;
-		border-color: #fecaca;
-	}
-
-	/* Por debajo de esta anchura la rejilla de seis columnas deja de caber sin
-	   comprimir los nombres a dos letras: se apila. */
-	@media (max-width: 860px) {
-		.registros__cab {
-			display: none;
-		}
-
-		.registro {
-			grid-template-columns: 1fr auto;
-			gap: 0.25rem 0.75rem;
-		}
-	}
-
-	
-
-	.bloque__nota {
-		font-size: 0.8125rem;
-		font-style: italic;
-		color: var(--text-very-muted, #94a3b8);
-	}
-
-	.versiones,
-	.asig {
-		display: flex;
-		flex-direction: column;
-		gap: 0.5rem;
-		list-style: none;
-	}
-
-	.ver,
-	.asig__item {
-		display: grid;
-		grid-template-columns: 1fr;
-		gap: 0.5rem;
-		padding: 0.625rem 0.75rem;
-		background: var(--gray-50, #f9fafb);
-		border-radius: 10px;
-	}
-
-	@media (min-width: 800px) {
-		.ver {
-			grid-template-columns: 9rem 1fr auto;
-			align-items: center;
-		}
-
-		.asig__item {
-			grid-template-columns: 1fr auto auto;
-			align-items: center;
-		}
-	}
-
-	.ver__id {
-		display: flex;
-		align-items: center;
-		gap: 0.375rem;
-	}
-
-	.ver__num {
-		font-family: var(--font-mono, monospace);
-		font-size: 0.8125rem;
-		font-weight: 700;
-	}
-
-	.ver__titulo,
-	.asig__nombre {
-		font-size: 0.875rem;
-		font-weight: 500;
-		color: var(--text-primary, #0f172a);
-	}
-
-	.ver__meta,
-	.asig__meta,
-	.asig__vigencia {
-		margin-top: 0.125rem;
-		font-family: var(--font-mono, monospace);
-		font-size: 0.6875rem;
-		color: var(--text-very-muted, #94a3b8);
-		line-height: 1.45;
-	}
-
-	.ver__acciones,
-	.asig__acciones {
-		display: flex;
-		gap: 0.25rem;
-		flex-wrap: wrap;
-	}
-
+	/* ─── Chips de estado ─────────────────────────────────────────────────── */
 	.chip {
-		align-self: flex-start;
-		padding: 0.125rem 0.5rem;
-		font-size: 0.625rem;
+		display: inline-flex;
+		align-items: center;
+		padding: 0.1875rem 0.625rem;
+		font-size: 0.75rem;
 		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
+		line-height: 1.4;
 		border-radius: 999px;
 		white-space: nowrap;
 	}
 
 	.chip--published,
-	.chip--active {
-		background: #f0fdf4;
-		color: #166534;
+	.chip--active,
+	.chip--submitted {
+		background: var(--color-emerald-100);
+		color: var(--color-emerald-900);
 	}
 
-	.chip--draft,
-	.chip--paused {
-		background: #fffbeb;
+	.chip--draft {
+		background: #fef3c7;
 		color: #92400e;
+	}
+
+	.chip--paused {
+		background: #dbeafe;
+		color: #1d4ed8;
 	}
 
 	.chip--archived,
 	.chip--closed {
 		background: #f3f4f6;
-		color: #4b5563;
+		color: #374151;
 	}
 
-	.btn {
-		display: inline-flex;
-		align-items: center;
-		min-height: 44px;
-		padding: 0 0.875rem;
-		font: inherit;
-		font-size: 0.875rem;
-		font-weight: 800;
-		color: var(--bg-charcoal-deep);
-		background: #fff;
-		border: 1.5px solid var(--border-default);
-		border-radius: 16px;
-		cursor: pointer;
-		text-decoration: none;
+	.chip--voided {
+		background: #fee2e2;
+		color: #991b1b;
 	}
 
-	.btn--mini {
-		min-height: 36px;
-		padding: 0 0.625rem;
-		font-size: 0.8125rem;
-	}
-
-	.btn:hover:not(:disabled) {
+	.chip--neutro {
 		background: var(--bg-base);
-		border-color: var(--border-emphasis);
+		color: var(--text-secondary);
+		box-shadow: inset 0 0 0 1px var(--border-default);
 	}
 
-	.btn:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
+	/* ─── Registros ───────────────────────────────────────────────────────────
+	   Base: una tarjeta por registro (columna estrecha). Desde 46rem de
+	   contenedor: filas de una sola tarjeta con cabecera, como una tabla. */
+	.registros-zona {
+		container-type: inline-size;
 	}
 
-	.btn:focus-visible {
-		outline: 2px solid var(--emerald-600, #15803d);
+	.registros {
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.registros__cab {
+		display: none;
+	}
+
+	.registro {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) auto;
+		grid-template-areas:
+			'persona estado'
+			'fecha fecha'
+			'meta meta';
+		align-items: start;
+		gap: 0.3125rem 0.75rem;
+		padding: 0.875rem 1rem;
+		color: inherit;
+		text-decoration: none;
+		background: var(--bg-surface);
+		border-radius: 16px;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
+		transition: background 0.15s;
+	}
+
+	.registro:hover {
+		background: color-mix(in srgb, var(--color-emerald-50) 55%, var(--bg-surface));
+	}
+
+	.registro:focus-visible {
+		outline: 2px solid var(--accion);
 		outline-offset: 2px;
 	}
 
-	.btn--primario {
-		color: #fff;
-		background: var(--accion);
-		border-color: var(--accion);
+	.r-persona {
+		grid-area: persona;
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+
+	.r-nombre {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		font-size: 0.9375rem;
 		font-weight: 800;
-		box-shadow: var(--shadow-btn);
+		line-height: 1.3;
+		color: var(--text-primary);
 	}
 
-	.btn--primario:hover:not(:disabled) {
-		background: var(--accion-hover);
-		border-color: var(--accion-hover);
-		box-shadow: var(--shadow-btn-hover);
+	.r-doc {
+		font-size: 0.75rem;
+		color: var(--text-muted);
 	}
 
-	.btn--peligro {
-		color: #b91c1c;
+	.r-fecha {
+		grid-area: fecha;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0 0.375rem;
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+		white-space: nowrap;
 	}
 
-	.btn--peligro:hover:not(:disabled) {
-		background: #fef2f2;
-		border-color: #fecaca;
+	.r-hora::before {
+		content: '·';
+		margin-right: 0.375rem;
 	}
 
+	.r-meta {
+		grid-area: meta;
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.375rem;
+		margin-top: 0.25rem;
+	}
+
+	.r-placa,
+	.r-version,
+	.r-resp {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+		padding: 0.125rem 0.5rem;
+		font-size: 0.75rem;
+		font-weight: 700;
+		color: var(--text-secondary);
+		background: var(--bg-base);
+		border-radius: 8px;
+		white-space: nowrap;
+	}
+
+	.r-resp {
+		font-weight: 600;
+		color: var(--text-muted);
+	}
+
+	.r-sin {
+		display: none;
+	}
+
+	.r-estado {
+		grid-area: estado;
+	}
+
+	@container (min-width: 46rem) {
+		.registros {
+			--cols: 7.5rem minmax(12rem, 1fr) 6rem 4.5rem 6.5rem 7rem;
+			gap: 0;
+			overflow: hidden;
+			background: var(--bg-surface);
+			border-radius: 18px;
+			box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
+		}
+
+		.registros__cab,
+		.registro {
+			display: grid;
+			grid-template-columns: var(--cols);
+			grid-template-areas: none;
+			align-items: center;
+			gap: 1rem;
+			padding: 0.75rem 1.25rem;
+		}
+
+		.registros__cab {
+			padding-block: 0.6875rem;
+			font-size: 0.6875rem;
+			font-weight: 700;
+			letter-spacing: 0.06em;
+			text-transform: uppercase;
+			color: var(--text-muted);
+			background: var(--bg-surface);
+		}
+
+		.registros li + li .registro {
+			border-top: 1px solid var(--border-subtle);
+		}
+
+		.registro {
+			border-radius: 0;
+			box-shadow: none;
+		}
+
+		.registro:hover {
+			background: var(--bg-base);
+		}
+
+		.registro:focus-visible {
+			outline-offset: -2px;
+		}
+
+		.r-persona,
+		.r-fecha,
+		.r-estado {
+			grid-area: auto;
+		}
+
+		.r-fecha {
+			flex-direction: column;
+			font-size: 0.8125rem;
+			line-height: 1.35;
+		}
+
+		.r-dia {
+			font-weight: 700;
+			color: var(--text-primary);
+		}
+
+		.r-hora {
+			font-size: 0.75rem;
+		}
+
+		.r-hora::before {
+			content: none;
+		}
+
+		.r-nombre {
+			font-size: 0.875rem;
+			white-space: nowrap;
+		}
+
+		.r-meta {
+			display: contents;
+		}
+
+		.r-placa,
+		.r-resp {
+			padding: 0;
+			font-size: 0.8125rem;
+			background: none;
+		}
+
+		.r-placa {
+			color: var(--text-primary);
+		}
+
+		.r-sin {
+			display: inline-flex;
+			color: var(--text-very-muted);
+		}
+
+		.r-resp {
+			justify-content: flex-end;
+			color: var(--text-secondary);
+		}
+
+		.r-resp-txt {
+			display: none;
+		}
+
+		.r-version {
+			justify-self: start;
+		}
+
+		.num {
+			text-align: right;
+		}
+	}
+
+	/* ─── Tarjetas de versiones y asignaciones ────────────────────────────── */
+	.tarjetas {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.tarjeta {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		gap: 0.875rem;
+		padding: 1rem;
+		background: var(--bg-surface);
+		border-radius: 18px;
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
+	}
+
+	.tarjeta__cuerpo {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		min-width: 0;
+	}
+
+	.tarjeta__chips {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.375rem;
+		margin-bottom: 0.25rem;
+	}
+
+	.ver-num {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 2.125rem;
+		height: 1.625rem;
+		padding: 0 0.5rem;
+		font-size: 0.8125rem;
+		font-weight: 800;
+		color: #fff;
+		background: var(--bg-charcoal-deep);
+		border-radius: 8px;
+	}
+
+	.tarjeta__titulo {
+		margin: 0;
+		font-size: 0.9375rem;
+		font-weight: 800;
+		line-height: 1.35;
+		color: var(--text-primary);
+		overflow-wrap: anywhere;
+	}
+
+	.tarjeta__meta {
+		margin: 0;
+		font-size: 0.8125rem;
+		line-height: 1.5;
+		color: var(--text-muted);
+	}
+
+	/* Acciones en columna estrecha: rejilla de dos, todas del mismo ancho, y
+	   la última sola ocupa la fila entera en vez de quedar huérfana. */
+	.acciones {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.5rem;
+		padding-top: 0.875rem;
+		border-top: 1px solid var(--border-subtle);
+	}
+
+	.acciones > :last-child:nth-child(odd) {
+		grid-column: 1 / -1;
+	}
+
+	@container (min-width: 46rem) {
+		.tarjeta {
+			grid-template-columns: minmax(0, 1fr) auto;
+			align-items: center;
+			gap: 1.25rem;
+			padding: 1rem 1.25rem;
+		}
+
+		.acciones {
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: flex-end;
+			max-width: 40rem;
+			padding-top: 0;
+			border-top: 0;
+		}
+
+		.acciones > :last-child:nth-child(odd) {
+			grid-column: auto;
+		}
+	}
+
+	/* ─── Estados de página y móvil ───────────────────────────────────────── */
 	.estado {
 		padding: 2.5rem 1rem;
 		text-align: center;
-		color: var(--text-muted, #64748b);
+		color: var(--text-muted);
 	}
 
 	.estado--error {
-		color: #b91c1c;
+		color: #b42318;
 	}
 
-	code {
-		font-family: var(--font-mono, monospace);
+	@media (max-width: 640px) {
+		.pagina {
+			padding: 1rem 1rem 2.5rem;
+		}
+
+		.head__acciones {
+			width: 100%;
+		}
+
+		.cab-accion {
+			flex: 1 1 auto;
+		}
+
+		.intro__accion {
+			flex: 1 1 100%;
+		}
 	}
 </style>

@@ -17,6 +17,24 @@
 	import { onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import {
+		Briefcase,
+		Building2,
+		Check,
+		IdCard,
+		Info,
+		Layers,
+		MapPin,
+		Plus,
+		TriangleAlert,
+		Truck,
+		UserCog,
+		UserRound,
+		Users,
+		X
+	} from 'lucide-svelte';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
+	import Campo from '$lib/components/directorio/Campo.svelte';
+	import {
 		asignacionesFormularioAPI,
 		FormApiError,
 		type AudienciaInterna,
@@ -86,6 +104,36 @@
 	let usuarios = $state<AudienciaInterna['usuarios']>([]);
 	let cargosConocidos = $state<string[]>([]);
 	let guardando = $state(false);
+
+	/// Prefijo para los `id` de los campos: el editor se remonta con `{#key}`
+	/// y no debe chocar con otro formulario abierto en la página.
+	const uid = `asig-${Math.random().toString(36).slice(2, 8)}`;
+
+	/// Subtítulo del encabezado: al editar se nombra la versión (que no se
+	/// puede cambiar); al crear se explica qué se define aquí.
+	const subtitulo = $derived.by(() => {
+		const v = existing?.version;
+		if (!v) return 'Define quién lo diligencia, con qué frecuencia y durante qué período.';
+		return [v.code, v.title, `Versión\u00a0${v.versionNumber}`].filter(Boolean).join(' · ');
+	});
+
+	const LIMITE_AYUDA: Record<LimitPolicy, string> = {
+		UNLIMITED: 'Se puede enviar las veces que haga falta.',
+		ONE_PER_PERIOD: 'Un envío por persona en cada período.',
+		ONE_PER_CONTEXT: 'Un envío por persona y período para cada vehículo o servicio.'
+	};
+
+	const ICONO_TARGET: Record<TargetType, typeof Users> = {
+		ALL_CONDUCTORS: Users,
+		CONDUCTOR: UserRound,
+		VEHICLE: Truck,
+		SEDE: MapPin,
+		GROUP: Layers,
+		ALL_USERS: Building2,
+		USER: UserCog,
+		AREA: Briefcase,
+		CARGO: IdCard
+	};
 
 	/**
 	 * Extrae el array de una respuesta del API existente.
@@ -199,7 +247,8 @@
 		if (!nombre.trim()) return 'La asignación necesita un nombre.';
 		if (targets.length === 0) return 'Hace falta al menos un target.';
 		for (const t of targets) {
-			if (t.type === 'CONDUCTOR' && !t.conductorId) return 'Falta elegir el conductor de un target.';
+			if (t.type === 'CONDUCTOR' && !t.conductorId)
+				return 'Falta elegir el conductor de un target.';
 			if (t.type === 'VEHICLE' && !t.vehicleId) return 'Falta elegir el vehículo de un target.';
 			if (t.type === 'SEDE' && !t.sede?.trim()) return 'Falta la sede de un target.';
 			if (t.type === 'GROUP' && !t.groupKey?.trim()) return 'Falta la clave de grupo de un target.';
@@ -267,535 +316,763 @@
 	}
 </script>
 
-<div
-	class="overlay"
-	role="dialog"
-	aria-modal="true"
-	aria-labelledby="asig-titulo"
-	tabindex="-1"
-	onkeydown={(e) => {
-		if (e.key === 'Escape') onclose();
-	}}
+<ModalBase
+	open
+	eyebrow="Asignaciones"
+	title={existing ? 'Editar asignación' : 'Nueva asignación'}
+	subtitle={subtitulo}
+	tamano="lg"
+	cerrarAlFondo={false}
+	bloqueado={guardando}
+	oncerrar={onclose}
 >
-	<div class="caja">
-		<header class="caja__head">
-			<h2 class="caja__titulo" id="asig-titulo">
-				{existing ? 'Editar asignación' : 'Nueva asignación'}
-			</h2>
-			<button type="button" class="caja__cerrar" aria-label="Cerrar" onclick={onclose}>✕</button>
-		</header>
+	<div class="ae">
+		{#if existing}
+			<p class="ae-aviso ae-aviso--info">
+				<Info size={16} strokeWidth={2.2} />
+				<span>
+					La versión de una asignación no se puede cambiar: los envíos ya hechos la referencian.
+					Para pasar a otra versión, cierra esta y crea una nueva.
+				</span>
+			</p>
+		{/if}
 
-		<div class="caja__cuerpo">
-			{#if existing}
-				<p class="nota">
-					La versión de una asignación no se puede cambiar: los envíos ya hechos la referencian. Para
-					pasar a otra versión, cierra esta y crea una nueva.
-				</p>
-			{/if}
+		<section class="ae-seccion">
+			<h3 class="ae-titulo">Datos generales</h3>
+			<div class="ae-card ae-grid">
+				<Campo id="{uid}-nombre" label="Nombre" requerido completo>
+					<input
+						id="{uid}-nombre"
+						class="ae-input"
+						bind:value={nombre}
+						placeholder="Preoperacional camionetas diario"
+					/>
+				</Campo>
+				<Campo id="{uid}-desde" label="Vigente desde">
+					<input id="{uid}-desde" class="ae-input" type="datetime-local" bind:value={desde} />
+				</Campo>
+				<Campo id="{uid}-hasta" label="Vigente hasta" ayuda="Vacío = sin fecha de fin.">
+					<input id="{uid}-hasta" class="ae-input" type="datetime-local" bind:value={hasta} />
+				</Campo>
+			</div>
+		</section>
 
-			<label class="campo">
-				<span class="campo__label">Nombre</span>
-				<input class="input" bind:value={nombre} placeholder="Preoperacional camionetas diario" />
-			</label>
-
-			<div class="fila">
-				<label class="campo">
-					<span class="campo__label">Frecuencia</span>
-					<select class="input" bind:value={frecuencia}>
+		<section class="ae-seccion">
+			<h3 class="ae-titulo">Frecuencia y límite</h3>
+			<div class="ae-card ae-pila">
+				<fieldset class="ae-grupo">
+					<legend class="ae-label">Frecuencia</legend>
+					<div class="ae-chips">
 						{#each ASSIGNMENT_FREQUENCIES as f (f)}
-							<option value={f}>{FREQUENCY_LABELS[f]}</option>
+							<label class="ae-chip" class:ae-chip--activo={frecuencia === f}>
+								<input
+									type="radio"
+									name="{uid}-frecuencia"
+									value={f}
+									class="ae-sr"
+									bind:group={frecuencia}
+								/>
+								{#if frecuencia === f}<Check size={14} strokeWidth={3} />{/if}
+								{FREQUENCY_LABELS[f]}
+							</label>
 						{/each}
-					</select>
-				</label>
+					</div>
+				</fieldset>
 
-				<label class="campo">
-					<span class="campo__label">Límite</span>
-					<select class="input" bind:value={limite}>
+				<fieldset class="ae-grupo">
+					<legend class="ae-label">Límite de envíos</legend>
+					<div class="ae-opciones">
 						{#each LIMIT_POLICIES as l (l)}
-							<option value={l}>{LIMIT_POLICY_LABELS[l]}</option>
+							<label class="ae-opcion" class:ae-opcion--activa={limite === l}>
+								<input
+									type="radio"
+									name="{uid}-limite"
+									value={l}
+									class="ae-sr"
+									bind:group={limite}
+								/>
+								<span class="ae-opcion-texto">
+									<span class="ae-opcion-titulo">{LIMIT_POLICY_LABELS[l]}</span>
+									<span class="ae-opcion-sub">{LIMITE_AYUDA[l]}</span>
+								</span>
+								<span class="ae-opcion-check" aria-hidden="true">
+									<Check size={13} strokeWidth={3} />
+								</span>
+							</label>
 						{/each}
-					</select>
-				</label>
+					</div>
+				</fieldset>
 			</div>
+		</section>
 
-			<div class="fila">
-				<label class="campo">
-					<span class="campo__label">Vigente desde</span>
-					<input class="input" type="datetime-local" bind:value={desde} />
+		<section class="ae-seccion">
+			<h3 class="ae-titulo">Contexto y conexión</h3>
+			<div class="ae-card ae-ajustes">
+				<label class="ae-ajuste">
+					<span class="ae-ajuste-texto">
+						<span class="ae-ajuste-titulo">Exigir vehículo al abrir el formulario</span>
+						<span class="ae-ajuste-sub"
+							>Quien lo diligencia debe elegir el vehículo antes de empezar.</span
+						>
+					</span>
+					<input type="checkbox" role="switch" class="ae-switch" bind:checked={exigeVehiculo} />
 				</label>
-				<label class="campo">
-					<span class="campo__label">Vigente hasta</span>
-					<input class="input" type="datetime-local" bind:value={hasta} />
-					<span class="campo__hint">Vacío = sin fecha de fin.</span>
-				</label>
-			</div>
-
-			<fieldset class="grupo">
-				<legend class="campo__label">Contexto obligatorio</legend>
-				<label class="check">
-					<input type="checkbox" bind:checked={exigeVehiculo} />
-					Exigir vehículo al abrir el formulario
-				</label>
-				<label class="check">
-					<input type="checkbox" bind:checked={exigeServicio} />
-					Exigir servicio
+				<label class="ae-ajuste">
+					<span class="ae-ajuste-texto">
+						<span class="ae-ajuste-titulo">Exigir servicio</span>
+						<span class="ae-ajuste-sub"
+							>Quien lo diligencia debe elegir el servicio al que corresponde.</span
+						>
+					</span>
+					<input type="checkbox" role="switch" class="ae-switch" bind:checked={exigeServicio} />
 				</label>
 				{#if avisoContexto}
-					<p class="aviso">{avisoContexto}</p>
+					<p class="ae-aviso">
+						<TriangleAlert size={16} strokeWidth={2.2} />
+						<span>{avisoContexto}</span>
+					</p>
 				{/if}
-			</fieldset>
+				<label class="ae-ajuste">
+					<span class="ae-ajuste-texto">
+						<span class="ae-ajuste-titulo">Permitir diligenciar sin conexión</span>
+						<span class="ae-ajuste-sub">Útil en rutas o sitios sin señal.</span>
+					</span>
+					<input type="checkbox" role="switch" class="ae-switch" bind:checked={permitirOffline} />
+				</label>
+			</div>
+		</section>
 
-			<label class="check">
-				<input type="checkbox" bind:checked={permitirOffline} />
-				Permitir diligenciar sin conexión
-			</label>
-
-			<fieldset class="grupo">
-				<legend class="campo__label">A quién le aparece</legend>
-
+		<section class="ae-seccion">
+			<h3 class="ae-titulo">
+				A quién le aparece
+				<span class="ae-conteo">{targets.length}</span>
+			</h3>
+			<div class="ae-card ae-pila">
 				<!--
-					Dos filas de botones y no una sola lista: la separación es lo que
-					comunica que los targets de arriba y los de abajo NO compiten
+					Dos grupos de botones y no una sola lista: la separación es lo que
+					comunica que los targets de un grupo y los del otro NO compiten
 					entre sí, y que marcar ambos es una combinación normal.
 				-->
-				<p class="familia__titulo">Conductores</p>
-				<div class="tipos">
-					{#each CONDUCTOR_TARGET_TYPES as type (type)}
-						<button
-							type="button"
-							class="tipo"
-							disabled={bloqueado(type)}
-							onclick={() => agregarTarget(type)}
-						>
-							+ {TARGET_TYPE_LABELS[type]}
-						</button>
-					{/each}
-				</div>
-
-				<p class="familia__titulo">Personal interno</p>
-				<div class="tipos">
-					{#each USER_TARGET_TYPES as type (type)}
-						<button
-							type="button"
-							class="tipo"
-							disabled={bloqueado(type)}
-							onclick={() => agregarTarget(type)}
-						>
-							+ {TARGET_TYPE_LABELS[type]}
-						</button>
-					{/each}
+				<div class="ae-familias">
+					<div class="ae-familia">
+						<p class="ae-label">Conductores</p>
+						<div class="ae-chips">
+							{#each CONDUCTOR_TARGET_TYPES as type (type)}
+								<button
+									type="button"
+									class="ae-chip ae-chip--agregar"
+									disabled={bloqueado(type)}
+									onclick={() => agregarTarget(type)}
+								>
+									<Plus size={14} strokeWidth={2.6} />
+									{TARGET_TYPE_LABELS[type]}
+								</button>
+							{/each}
+						</div>
+					</div>
+					<div class="ae-familia">
+						<p class="ae-label">Personal interno</p>
+						<div class="ae-chips">
+							{#each USER_TARGET_TYPES as type (type)}
+								<button
+									type="button"
+									class="ae-chip ae-chip--agregar"
+									disabled={bloqueado(type)}
+									onclick={() => agregarTarget(type)}
+								>
+									<Plus size={14} strokeWidth={2.6} />
+									{TARGET_TYPE_LABELS[type]}
+								</button>
+							{/each}
+						</div>
+					</div>
 				</div>
 
 				{#if avisoAudienciaInterna}
-					<p class="aviso">{avisoAudienciaInterna}</p>
+					<p class="ae-aviso">
+						<TriangleAlert size={16} strokeWidth={2.2} />
+						<span>{avisoAudienciaInterna}</span>
+					</p>
 				{/if}
 
-				<ul class="targets">
-					{#each targets as target, i (i)}
-						<li class="target">
-							<span class="target__tipo">{TARGET_TYPE_LABELS[target.type]}</span>
+				{#if targets.length === 0}
+					<p class="ae-vacio">Agrega al menos un destinatario con los botones de arriba.</p>
+				{:else}
+					<ul class="ae-targets">
+						{#each targets as target, i (i)}
+							{@const Icono = ICONO_TARGET[target.type]}
+							<li class="ae-target">
+								<span class="ae-target-icono" aria-hidden="true"><Icono size={18} /></span>
+								<div class="ae-target-cuerpo">
+									<span class="ae-target-tipo">
+										{TARGET_TYPE_LABELS[target.type]}
+										<span class="ae-target-familia">
+											{esTargetDeUsuario(target.type) ? 'Personal interno' : 'Conductores'}
+										</span>
+									</span>
 
-							{#if target.type === 'CONDUCTOR'}
-								<select
-									class="input input--mini"
-									value={target.conductorId ?? ''}
-									onchange={(e) => actualizarTarget(i, { conductorId: e.currentTarget.value || null })}
-								>
-									<option value="">Selecciona conductor…</option>
-									{#each conductores as c (c.id)}
-										<option value={c.id}>{c.nombre}</option>
-									{/each}
-								</select>
-							{:else if target.type === 'VEHICLE'}
-								<select
-									class="input input--mini"
-									value={target.vehicleId ?? ''}
-									onchange={(e) => actualizarTarget(i, { vehicleId: e.currentTarget.value || null })}
-								>
-									<option value="">Selecciona vehículo…</option>
-									{#each vehiculos as v (v.id)}
-										<option value={v.id}>{v.placa}</option>
-									{/each}
-								</select>
-							{:else if target.type === 'SEDE'}
-								<input
-									class="input input--mini"
-									placeholder="Sede"
-									value={target.sede ?? ''}
-									oninput={(e) => actualizarTarget(i, { sede: e.currentTarget.value })}
-								/>
-							{:else if target.type === 'GROUP'}
-								<input
-									class="input input--mini"
-									placeholder="Clave del grupo"
-									value={target.groupKey ?? ''}
-									oninput={(e) => actualizarTarget(i, { groupKey: e.currentTarget.value })}
-								/>
-							{:else if target.type === 'USER'}
-								<select
-									class="input input--mini"
-									value={target.usuarioId ?? ''}
-									onchange={(e) => actualizarTarget(i, { usuarioId: e.currentTarget.value || null })}
-								>
-									<option value="">Selecciona usuario…</option>
-									{#each usuarios as u (u.id)}
-										<option value={u.id}>{u.nombre}{u.cargo ? ` — ${u.cargo}` : ''}</option>
-									{/each}
-								</select>
-							{:else if target.type === 'AREA'}
-								<select
-									class="input input--mini"
-									value={target.area ?? ''}
-									onchange={(e) => actualizarTarget(i, { area: e.currentTarget.value || null })}
-								>
-									<option value="">Selecciona área…</option>
-									{#each AREAS as area (area)}
-										<option value={area}>{AREA_LABELS[area as Area]}</option>
-									{/each}
-								</select>
-							{:else if target.type === 'CARGO'}
-								<!--
-									`users.cargo` es texto libre: el `datalist` ofrece los que ya
-									existen porque un cargo escrito distinto al de la ficha del
-									usuario crea un target que no alcanza a nadie, y sin ningún
-									error visible.
-								-->
-								<input
-									class="input input--mini"
-									list="cargos-conocidos"
-									placeholder="Cargo"
-									value={target.cargo ?? ''}
-									oninput={(e) => actualizarTarget(i, { cargo: e.currentTarget.value })}
-								/>
-							{:else if target.type === 'ALL_USERS'}
-								<span class="target__nota">Alcanza a todo el personal interno activo.</span>
-							{:else}
-								<span class="target__nota">Alcanza a todos los conductores activos.</span>
-							{/if}
+									{#if target.type === 'CONDUCTOR'}
+										<select
+											class="ae-input"
+											aria-label="Conductor del target {i + 1}"
+											value={target.conductorId ?? ''}
+											onchange={(e) =>
+												actualizarTarget(i, { conductorId: e.currentTarget.value || null })}
+										>
+											<option value="">Selecciona conductor…</option>
+											{#each conductores as c (c.id)}
+												<option value={c.id}>{c.nombre}</option>
+											{/each}
+										</select>
+									{:else if target.type === 'VEHICLE'}
+										<select
+											class="ae-input"
+											aria-label="Vehículo del target {i + 1}"
+											value={target.vehicleId ?? ''}
+											onchange={(e) =>
+												actualizarTarget(i, { vehicleId: e.currentTarget.value || null })}
+										>
+											<option value="">Selecciona vehículo…</option>
+											{#each vehiculos as v (v.id)}
+												<option value={v.id}>{v.placa}</option>
+											{/each}
+										</select>
+									{:else if target.type === 'SEDE'}
+										<input
+											class="ae-input"
+											aria-label="Sede del target {i + 1}"
+											placeholder="Sede"
+											value={target.sede ?? ''}
+											oninput={(e) => actualizarTarget(i, { sede: e.currentTarget.value })}
+										/>
+									{:else if target.type === 'GROUP'}
+										<input
+											class="ae-input"
+											aria-label="Clave del grupo del target {i + 1}"
+											placeholder="Clave del grupo"
+											value={target.groupKey ?? ''}
+											oninput={(e) => actualizarTarget(i, { groupKey: e.currentTarget.value })}
+										/>
+									{:else if target.type === 'USER'}
+										<select
+											class="ae-input"
+											aria-label="Usuario del target {i + 1}"
+											value={target.usuarioId ?? ''}
+											onchange={(e) =>
+												actualizarTarget(i, { usuarioId: e.currentTarget.value || null })}
+										>
+											<option value="">Selecciona usuario…</option>
+											{#each usuarios as u (u.id)}
+												<option value={u.id}>{u.nombre}{u.cargo ? ` — ${u.cargo}` : ''}</option>
+											{/each}
+										</select>
+									{:else if target.type === 'AREA'}
+										<select
+											class="ae-input"
+											aria-label="Área del target {i + 1}"
+											value={target.area ?? ''}
+											onchange={(e) => actualizarTarget(i, { area: e.currentTarget.value || null })}
+										>
+											<option value="">Selecciona área…</option>
+											{#each AREAS as area (area)}
+												<option value={area}>{AREA_LABELS[area as Area]}</option>
+											{/each}
+										</select>
+									{:else if target.type === 'CARGO'}
+										<!--
+											`users.cargo` es texto libre: el `datalist` ofrece los que ya
+											existen porque un cargo escrito distinto al de la ficha del
+											usuario crea un target que no alcanza a nadie, y sin ningún
+											error visible.
+										-->
+										<input
+											class="ae-input"
+											aria-label="Cargo del target {i + 1}"
+											list="cargos-conocidos"
+											placeholder="Cargo"
+											value={target.cargo ?? ''}
+											oninput={(e) => actualizarTarget(i, { cargo: e.currentTarget.value })}
+										/>
+									{:else if target.type === 'ALL_USERS'}
+										<span class="ae-target-nota">Alcanza a todo el personal interno activo.</span>
+									{:else}
+										<span class="ae-target-nota">Alcanza a todos los conductores activos.</span>
+									{/if}
+								</div>
 
-							{#if targets.length > 1}
-								<button
-									type="button"
-									class="target__quitar"
-									aria-label="Quitar target {i + 1}"
-									onclick={() => quitarTarget(i)}
-								>
-									✕
-								</button>
-							{/if}
-						</li>
-					{/each}
-				</ul>
+								{#if targets.length > 1}
+									<button
+										type="button"
+										class="ae-quitar"
+										aria-label="Quitar target {i + 1}"
+										onclick={() => quitarTarget(i)}
+									>
+										<X size={16} strokeWidth={2.4} />
+									</button>
+								{/if}
+							</li>
+						{/each}
+					</ul>
+				{/if}
 
 				<datalist id="cargos-conocidos">
 					{#each cargosConocidos as cargo (cargo)}
 						<option value={cargo}></option>
 					{/each}
 				</datalist>
-			</fieldset>
-		</div>
-
-		<footer class="caja__foot">
-			<button type="button" class="btn" onclick={onclose}>Cancelar</button>
-			<button type="button" class="btn btn--primario" disabled={guardando} onclick={guardar}>
-				{guardando ? 'Guardando…' : existing ? 'Guardar cambios' : 'Crear asignación'}
-			</button>
-		</footer>
+			</div>
+		</section>
 	</div>
-</div>
+
+	{#snippet pie()}
+		<button type="button" class="btn-secondary" disabled={guardando} onclick={onclose}>
+			Cancelar
+		</button>
+		<button type="button" class="btn-primary" disabled={guardando} onclick={guardar}>
+			{guardando ? 'Guardando…' : existing ? 'Guardar cambios' : 'Crear asignación'}
+		</button>
+	{/snippet}
+</ModalBase>
 
 <style>
-	.overlay {
-		position: fixed;
-		inset: 0;
-		z-index: 60;
-		display: grid;
-		place-items: center;
-		padding: 1rem;
-		background: rgba(15, 23, 42, 0.45);
-	}
-
-	.caja {
+	.ae {
 		display: flex;
 		flex-direction: column;
-		width: 100%;
-		max-width: 34rem;
-		max-height: 90vh;
-		background: var(--bg-surface, #fff);
-		border-radius: 16px;
-		box-shadow: 0 24px 64px rgba(0, 0, 0, 0.24);
+		gap: 22px;
+	}
+	.ae-sr {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		margin: -1px;
+		padding: 0;
 		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
 	}
 
-	.caja__head {
+	/* Secciones: título en negrita sobre una tarjeta blanca, como en la app. */
+	.ae-seccion {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		min-width: 0;
+	}
+	.ae-titulo {
+		margin: 0;
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		padding: 0.875rem 1rem;
-		border-bottom: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+		gap: 8px;
+		color: var(--text-primary);
+		font-size: 17px;
+		font-weight: 800;
+		letter-spacing: -0.01em;
 	}
-
-	.caja__titulo {
-		font-family: var(--font-display, Georgia, serif);
-		font-size: 1.0625rem;
-		font-weight: 600;
-	}
-
-	.caja__cerrar {
-		width: 36px;
-		height: 36px;
-		display: grid;
+	.ae-conteo {
+		min-width: 24px;
+		height: 24px;
+		padding: 0 7px;
+		display: inline-grid;
 		place-items: center;
-		font: inherit;
-		background: none;
-		border: none;
-		border-radius: 8px;
-		cursor: pointer;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--accion) 12%, transparent);
+		color: var(--color-emerald-600);
+		font-size: 12px;
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
 	}
-
-	.caja__cuerpo {
-		flex: 1;
-		min-height: 0;
-		overflow-y: auto;
-		padding: 0.875rem 1rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
+	.ae-card {
+		padding: 16px;
+		border-radius: 18px;
+		background: var(--bg-surface);
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
 	}
-
-	.caja__foot {
-		display: flex;
-		justify-content: flex-end;
-		gap: 0.5rem;
-		padding: 0.75rem 1rem;
-		border-top: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
-	}
-
-	.fila {
+	.ae-grid {
 		display: grid;
-		grid-template-columns: 1fr;
-		gap: 0.625rem;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 16px;
 	}
-
-	@media (min-width: 560px) {
-		.fila {
-			grid-template-columns: 1fr 1fr;
-		}
+	.ae-grid :global(.de-full) {
+		grid-column: 1 / -1;
 	}
-
-	.campo {
+	.ae-pila {
 		display: flex;
 		flex-direction: column;
-		gap: 0.1875rem;
+		gap: 18px;
 	}
 
-	.campo__label {
-		font-size: 0.6875rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		color: var(--text-muted, #64748b);
-	}
-
-	.campo__hint {
-		font-size: 0.6875rem;
-		color: var(--text-very-muted, #94a3b8);
-	}
-
-	.input {
+	/* Controles con el aspecto de `.de-input` de los formularios de directorio. */
+	.ae-input {
 		width: 100%;
 		min-height: 42px;
-		padding: 0.375rem 0.625rem;
+		padding: 9px 12px;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
 		font: inherit;
-		font-size: 0.875rem;
-		background: #fff;
-		border: 1px solid var(--border-default, rgba(0, 0, 0, 0.12));
-		border-radius: 9px;
+		font-size: 14px;
+		font-variant-numeric: tabular-nums;
+		transition:
+			border-color 0.15s,
+			box-shadow 0.15s;
 	}
-
-	.input--mini {
-		min-height: 36px;
-		font-size: 0.8125rem;
-		flex: 1;
-		min-width: 8rem;
+	.ae-input::placeholder {
+		color: var(--text-very-muted);
+		opacity: 1;
 	}
-
-	.input:focus-visible {
+	.ae-input:focus,
+	.ae-input:focus-visible {
 		outline: none;
-		border-color: var(--emerald-600, #15803d);
-		box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
 	}
 
-	.grupo {
+	.ae-grupo {
+		min-width: 0;
+		margin: 0;
+		padding: 0;
+		border: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.5rem;
-		padding: 0.625rem 0.75rem;
-		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
-		border-radius: 10px;
+		gap: 8px;
+	}
+	.ae-label {
+		margin: 0;
+		padding: 0;
+		color: var(--text-secondary);
+		font-size: 13px;
+		font-weight: 700;
 	}
 
-	.check {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		font-size: 0.8125rem;
-		color: var(--text-primary, #0f172a);
-	}
-
-	.check input {
-		width: 18px;
-		height: 18px;
-		accent-color: var(--emerald-600, #15803d);
-	}
-
-	/* Etiqueta de familia. Pequeña y en mayúsculas: agrupa sin competir con la
-	   leyenda del fieldset, que sigue siendo «A quién le aparece». */
-	.familia__titulo {
-		margin: 0.5rem 0 0.25rem;
-		font-size: 0.7rem;
-		font-weight: 600;
-		letter-spacing: 0.04em;
-		text-transform: uppercase;
-		color: var(--text-muted, #64748b);
-	}
-
-	.familia__titulo:first-of-type {
-		margin-top: 0;
-	}
-
-	.tipos {
+	/* Chips: elección de frecuencia y botones para agregar destinatarios. */
+	.ae-chips {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.25rem;
+		gap: 8px;
 	}
-
-	.tipo {
-		min-height: 34px;
-		padding: 0 0.5rem;
-		font: inherit;
-		font-size: 0.75rem;
-		font-weight: 500;
-		color: var(--emerald-700, #166534);
-		background: #fff7ed;
-		border: 1px solid #fed7aa;
+	.ae-chip {
+		min-height: 38px;
+		padding: 0 14px;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		border: 1.5px solid var(--border-default);
 		border-radius: 999px;
+		background: var(--bg-surface);
+		color: var(--text-secondary);
+		font: inherit;
+		font-size: 13px;
+		font-weight: 700;
 		cursor: pointer;
+		transition:
+			border-color 0.15s,
+			background 0.15s,
+			color 0.15s;
 	}
-
-	.tipo:disabled {
+	.ae-chip:hover:not(:disabled) {
+		border-color: var(--border-emphasis);
+	}
+	.ae-chip:has(input:focus-visible),
+	.ae-chip:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.ae-chip--activo,
+	.ae-chip--activo:hover:not(:disabled) {
+		border-color: var(--accion);
+		background: color-mix(in srgb, var(--accion) 9%, var(--bg-surface));
+		color: var(--color-emerald-600);
+	}
+	.ae-chip--agregar {
+		color: var(--color-emerald-600);
+	}
+	.ae-chip--agregar:hover:not(:disabled) {
+		border-color: var(--accion);
+		background: color-mix(in srgb, var(--accion) 7%, var(--bg-surface));
+	}
+	.ae-chip:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
 	}
 
-	.targets {
+	/* Tarjetas de opción para el límite de envíos. */
+	.ae-opciones {
+		display: grid;
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+		gap: 10px;
+	}
+	.ae-opcion {
+		display: flex;
+		align-items: flex-start;
+		gap: 10px;
+		padding: 12px 14px;
+		border: 1.5px solid var(--border-default);
+		border-radius: 16px;
+		background: var(--bg-surface);
+		cursor: pointer;
+		transition:
+			border-color 0.15s,
+			background 0.15s;
+	}
+	.ae-opcion:hover {
+		border-color: var(--border-emphasis);
+	}
+	.ae-opcion:has(input:focus-visible) {
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.ae-opcion--activa,
+	.ae-opcion--activa:hover {
+		border-color: var(--accion);
+		background: color-mix(in srgb, var(--accion) 7%, var(--bg-surface));
+	}
+	.ae-opcion-texto {
+		flex: 1;
+		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 0.375rem;
-		list-style: none;
+		gap: 3px;
 	}
-
-	.target {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		flex-wrap: wrap;
-		padding: 0.375rem 0.5rem;
-		background: var(--gray-50, #f9fafb);
-		border-radius: 8px;
+	.ae-opcion-titulo {
+		color: var(--text-primary);
+		font-size: 14px;
+		font-weight: 800;
 	}
-
-	.target__tipo {
-		font-size: 0.6875rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		color: var(--text-muted, #64748b);
+	.ae-opcion-sub {
+		color: var(--text-muted);
+		font-size: 12px;
+		line-height: 1.4;
 	}
-
-	.target__nota {
-		font-size: 0.75rem;
-		font-style: italic;
-		color: var(--text-very-muted, #94a3b8);
-	}
-
-	.target__quitar {
-		margin-left: auto;
-		width: 28px;
-		height: 28px;
+	.ae-opcion-check {
+		width: 22px;
+		height: 22px;
+		flex-shrink: 0;
 		display: grid;
 		place-items: center;
-		font: inherit;
-		font-size: 0.6875rem;
-		color: var(--text-muted, #64748b);
-		background: none;
-		border: none;
-		border-radius: 6px;
-		cursor: pointer;
+		border: 1.5px solid var(--border-default);
+		border-radius: 999px;
+		color: transparent;
+	}
+	.ae-opcion--activa .ae-opcion-check {
+		border-color: var(--accion);
+		background: var(--accion);
+		color: #fff;
 	}
 
-	.target__quitar:hover {
+	/* Ajustes con interruptor, uno por fila. */
+	.ae-ajustes {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding-block: 8px;
+	}
+	.ae-ajuste {
+		display: flex;
+		align-items: center;
+		gap: 14px;
+		padding: 10px 0;
+		cursor: pointer;
+	}
+	.ae-ajuste + .ae-ajuste {
+		border-top: 1px solid var(--border-subtle);
+	}
+	.ae-ajuste-texto {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.ae-ajuste-titulo {
+		color: var(--text-primary);
+		font-size: 14px;
+		font-weight: 700;
+	}
+	.ae-ajuste-sub {
+		color: var(--text-muted);
+		font-size: 12px;
+	}
+	.ae-switch {
+		position: relative;
+		flex-shrink: 0;
+		width: 44px;
+		height: 26px;
+		margin: 0;
+		appearance: none;
+		border-radius: 999px;
+		background: var(--border-default);
+		cursor: pointer;
+		transition: background 0.18s;
+	}
+	.ae-switch::after {
+		content: '';
+		position: absolute;
+		top: 3px;
+		left: 3px;
+		width: 20px;
+		height: 20px;
+		border-radius: 999px;
+		background: #fff;
+		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+		transition: transform 0.18s;
+	}
+	.ae-switch:checked {
+		background: var(--accion);
+	}
+	.ae-switch:checked::after {
+		transform: translateX(18px);
+	}
+	.ae-switch:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 22%, transparent);
+	}
+
+	/* Destinatarios. */
+	.ae-familias {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 16px;
+	}
+	.ae-familia {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		min-width: 0;
+	}
+	.ae-targets {
+		margin: 0;
+		padding: 0;
+		list-style: none;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	/* Rejilla: ícono, tipo y quitar arriba; el control debajo, a todo el ancho
+	   disponible (en el teléfono, desde el borde del ícono). */
+	.ae-target {
+		display: grid;
+		grid-template-columns: 38px minmax(0, 1fr) auto;
+		align-items: center;
+		gap: 8px 12px;
+		padding: 12px;
+		border: 1px solid var(--border-subtle);
+		border-radius: 16px;
+		background: var(--bg-base);
+	}
+	.ae-target-icono {
+		grid-column: 1;
+		grid-row: 1;
+		width: 38px;
+		height: 38px;
+		display: grid;
+		place-items: center;
+		border-radius: 12px;
+		background: color-mix(in srgb, var(--accion) 12%, var(--bg-surface));
+		color: var(--color-emerald-600);
+	}
+	.ae-target-cuerpo {
+		display: contents;
+	}
+	.ae-target-tipo {
+		grid-column: 2;
+		grid-row: 1;
+		display: flex;
+		align-items: baseline;
+		flex-wrap: wrap;
+		gap: 2px 8px;
+		color: var(--text-primary);
+		font-size: 14px;
+		font-weight: 800;
+		line-height: 1.3;
+	}
+	.ae-target-familia {
+		color: var(--text-muted);
+		font-size: 12px;
+		font-weight: 600;
+	}
+	.ae-target .ae-input,
+	.ae-target-nota {
+		grid-column: 2 / -1;
+		grid-row: 2;
+	}
+	.ae-target-nota {
+		margin-top: -4px;
+		color: var(--text-muted);
+		font-size: 12px;
+	}
+	.ae-quitar {
+		grid-column: 3;
+		grid-row: 1;
+		width: 34px;
+		height: 34px;
+		flex-shrink: 0;
+		display: grid;
+		place-items: center;
+		border: 1px solid var(--border-default);
+		border-radius: 999px;
+		background: var(--bg-surface);
+		color: var(--text-muted);
+		cursor: pointer;
+		transition:
+			background 0.15s,
+			color 0.15s,
+			border-color 0.15s;
+	}
+	.ae-quitar:hover {
+		border-color: #fecaca;
 		background: #fef2f2;
 		color: #b91c1c;
 	}
-
-	.nota,
-	.aviso {
-		font-size: 0.75rem;
-		line-height: 1.45;
-		padding: 0.5rem 0.625rem;
-		border-radius: 8px;
+	.ae-quitar:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.ae-vacio {
+		margin: 0;
+		padding: 14px;
+		border: 1.5px dashed var(--border-default);
+		border-radius: 16px;
+		color: var(--text-muted);
+		font-size: 13px;
+		text-align: center;
 	}
 
-	.nota {
-		color: var(--text-muted, #64748b);
-		background: var(--gray-50, #f9fafb);
-	}
-
-	.aviso {
-		color: #92400e;
-		background: #fffbeb;
+	/* Avisos: ámbar para advertencias, neutro con la marca para información. */
+	.ae-aviso {
+		margin: 0;
+		display: flex;
+		align-items: flex-start;
+		gap: 10px;
+		padding: 12px 14px;
 		border: 1px solid #fde68a;
+		border-radius: 14px;
+		background: #fffbeb;
+		color: #92400e;
+		font-size: 13px;
+		line-height: 1.45;
+	}
+	.ae-aviso :global(svg) {
+		flex-shrink: 0;
+		margin-top: 1px;
+	}
+	.ae-aviso--info {
+		border-color: color-mix(in srgb, var(--accion) 22%, transparent);
+		background: color-mix(in srgb, var(--accion) 7%, var(--bg-surface));
+		color: var(--text-secondary);
+	}
+	.ae-aviso--info :global(svg) {
+		color: var(--color-emerald-600);
 	}
 
-	.btn {
-		min-height: 44px;
-		padding: 0 0.875rem;
-		font: inherit;
-		font-size: 0.875rem;
-		font-weight: 800;
-		color: var(--bg-charcoal-deep);
-		background: #fff;
-		border: 1.5px solid var(--border-default);
-		border-radius: 16px;
-		cursor: pointer;
-	}
-
-	.btn--primario {
-		color: #fff;
-		background: var(--accion);
-		border-color: var(--accion);
-		border-radius: 16px;
-		font-weight: 800;
-		box-shadow: var(--shadow-btn);
-	}
-
-	.btn--primario:hover:not(:disabled) {
-		background: var(--accion-hover);
-		border-color: var(--accion-hover);
-		box-shadow: var(--shadow-btn-hover);
-	}
-
-	.btn:disabled {
-		opacity: 0.4;
-		cursor: not-allowed;
-	}
-
-	.btn:focus-visible,
-	.tipo:focus-visible,
-	.target__quitar:focus-visible,
-	.caja__cerrar:focus-visible {
-		outline: 2px solid var(--emerald-600, #15803d);
-		outline-offset: 2px;
+	@media (max-width: 640px) {
+		.ae-grid,
+		.ae-familias,
+		.ae-opciones {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.ae-target .ae-input {
+			grid-column: 1 / -1;
+		}
 	}
 </style>
