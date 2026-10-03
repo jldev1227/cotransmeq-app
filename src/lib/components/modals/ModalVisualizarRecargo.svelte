@@ -4,6 +4,10 @@
 	import { apiClient } from '$lib/api/apiClient';
 	import type { RecargoDetallado } from '$lib/types/recargos';
 	import { getNombreMes } from '$lib/utils/recargosHelpers';
+	import { CircleAlert, Eye, FileText, FileX, History, User } from 'lucide-svelte';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
+	import TabsVista from '$lib/components/ui/TabsVista.svelte';
+	import Dato from '$lib/components/directorio/Dato.svelte';
 
 	export let isOpen = false;
 	export let recargoId: string | null = null;
@@ -401,941 +405,905 @@
 	}
 </script>
 
-{#if isOpen}
-	<!-- Backdrop con blur (paleta landing) -->
-	<button
-		type="button"
-		class="fixed inset-0 z-[60] cursor-default border-0 p-0"
-		style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.40), rgba(20, 83, 45, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
-		aria-label="Cerrar modal"
-		on:click={handleClose}
-	></button>
+<ModalBase
+	open={isOpen}
+	eyebrow="Recargos"
+	title="Detalle de recargo"
+	subtitle={infoRecargo?.mesAño ?? null}
+	tamano="xl"
+	oncerrar={handleClose}
+>
+	{#snippet accionesCabecera()}
+		{#if recargo}
+			{#if recargo.planilla_s3key}
+				<span class="vr-chip-hero" title="Documento adjunto disponible">
+					<FileText size={12} strokeWidth={2.5} />
+					Documento
+				</span>
+			{:else}
+				<span class="vr-chip-hero vr-chip-hero--apagado" title="Sin documento adjunto">
+					<FileX size={12} strokeWidth={2.5} />
+					Sin documento
+				</span>
+			{/if}
+		{/if}
+	{/snippet}
 
-	<!-- Modal Container -->
-	<div
-		class="fixed inset-0 z-[60] flex items-center justify-center p-4"
-		on:keydown={(e) => e.key === 'Escape' && handleClose()}
-		role="presentation"
-	>
-		<!-- Modal Content -->
-		<div
-			class="relative max-h-[85vh] w-full max-w-5xl overflow-hidden"
-			style="background-color: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 24px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);"
-			on:click|stopPropagation
-			on:keydown|stopPropagation
-			role="dialog"
-			aria-modal="true"
-			tabindex="-1"
-		>
-			<!-- Header -->
-			<div
-				class="px-6 py-5"
-				style="border-bottom: 1px solid var(--border-subtle); background: linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-base) 100%);"
-			>
-				<div class="flex items-center justify-between gap-3">
-					<div class="min-w-0 flex-1">
-						<h2
-							class="font-display text-2xl"
-							style="color: var(--bg-charcoal); font-weight: 800; letter-spacing: -0.01em;"
-						>
-							Detalle de Recargo
-						</h2>
-						<div class="mt-1 flex items-center gap-2">
-							<p
-								class="font-mono-meta inline-block rounded-md px-2 py-0.5 text-[10px]"
-								style="color: var(--orange-500); background: rgba(234, 88, 12, 0.08); letter-spacing: 0.12em;"
-							>
-								{infoRecargo?.mesAño ?? '—'}
-							</p>
-							{#if recargo?.planilla_s3key}
-								<span
-									class="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-medium text-orange-700"
-									title="Documento adjunto disponible"
-								>
-									<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-										/>
-									</svg>
-									Documento
-								</span>
-							{:else}
-								<span
-									class="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600"
-									title="Sin documento adjunto"
-								>
-									<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M6 18L18 6M6 6l12 12"
-										/>
-									</svg>
-									Sin documento
-								</span>
-							{/if}
-						</div>
-					</div>
-					<div class="flex flex-shrink-0 items-center gap-2">
-						{#if recargo?.planilla_s3key}
-							<!-- Botón para PDF o imagen -->
-							<button on:click={visualizarArchivo} class="btn-primary" title="Visualizar adjunto">
-								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-									/>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-									/>
-								</svg>
-								Ver archivo
-							</button>
-						{/if}
-						<button on:click={handleClose} class="filter-close" aria-label="Cerrar modal">
-							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M6 18L18 6M6 6l12 12"
-								/>
-							</svg>
-						</button>
-					</div>
+	{#snippet cabecera()}
+		{#if !isLoadingData && !error && recargo && infoRecargo}
+			<TabsVista
+				variante="oscuro"
+				etiqueta="Secciones del recargo"
+				tabs={[
+					{ id: 'detalles', label: 'Detalles' },
+					{ id: 'auditoria', label: 'Auditoría' },
+					{
+						id: 'historial',
+						label: 'Historial',
+						cuenta: historial.length > 0 ? historial.length : null
+					}
+				]}
+				bind:activa={selectedTab}
+			/>
+		{/if}
+	{/snippet}
+
+	{#if isLoadingData}
+		<div class="vr-estado" aria-live="polite">
+			<span class="vr-spinner" aria-hidden="true"></span>
+			<p>Cargando información...</p>
+		</div>
+	{:else if error}
+		<div class="vr-estado vr-estado--error" role="alert">
+			<CircleAlert size={28} strokeWidth={2} />
+			<p>{error}</p>
+		</div>
+	{:else if recargo && infoRecargo}
+		{#if selectedTab === 'detalles'}
+			<!-- Información principal -->
+			<section class="vr-seccion">
+				<h3 class="vr-titulo">Datos del recargo</h3>
+				<div class="vr-grid">
+					<Dato etiqueta="Conductor">
+						{`${infoRecargo.conductor.apellido} ${infoRecargo.conductor.nombre}`}
+						<span class="vr-sub">CC: {infoRecargo.conductor.numero_identificacion}</span>
+					</Dato>
+					<Dato etiqueta="Vehículo" valor={infoRecargo.vehiculo.placa} mono />
+					<Dato etiqueta="Número de planilla" valor={infoRecargo.planilla} mono />
+					<Dato etiqueta="Empresa">
+						{infoRecargo.empresa.nombre}
+						<span class="vr-sub">NIT: {infoRecargo.empresa.nit}</span>
+					</Dato>
 				</div>
-			</div>
+			</section>
 
-			<!-- Body -->
-			<div class="max-h-[calc(85vh-180px)] overflow-y-auto px-6 py-6">
-				{#if isLoadingData}
-					<div class="flex items-center justify-center py-12">
-						<div class="text-center">
-							<div
-								class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"
-							></div>
-							<p class="text-sm text-gray-500">Cargando información...</p>
-						</div>
-					</div>
-				{:else if error}
-					<div class="flex items-center justify-center py-12">
-						<div class="text-center">
-							<svg
-								class="mx-auto mb-3 h-12 w-12 text-red-400"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-								/>
-							</svg>
-							<p class="text-sm text-red-600">{error}</p>
-						</div>
-					</div>
-				{:else if recargo && infoRecargo}
-					<!-- Tabs -->
-					<div class="mb-6 border-b border-gray-200">
-						<div class="flex gap-4">
-							<button
-								class="border-b-2 px-4 py-2 text-sm font-medium {selectedTab === 'detalles'
-									? 'border-orange-500 text-orange-600'
-									: 'border-transparent text-gray-500 hover:text-gray-700'}"
-								on:click={() => (selectedTab = 'detalles')}
-							>
-								<div class="flex items-center gap-2">
-									<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-										/>
-									</svg>
-									<span>Detalles</span>
-								</div>
-							</button>
-							<button
-								class="border-b-2 px-4 py-2 text-sm font-medium {selectedTab === 'auditoria'
-									? 'border-orange-500 text-orange-600'
-									: 'border-transparent text-gray-500 hover:text-gray-700'}"
-								on:click={() => (selectedTab = 'auditoria')}
-							>
-								<div class="flex items-center gap-2">
-									<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-										/>
-									</svg>
-									<span>Auditoría</span>
-								</div>
-							</button>
-							<button
-								class="border-b-2 px-4 py-2 text-sm font-medium {selectedTab === 'historial'
-									? 'border-orange-500 text-orange-600'
-									: 'border-transparent text-gray-500 hover:text-gray-700'}"
-								on:click={() => (selectedTab = 'historial')}
-							>
-								<div class="flex items-center gap-2">
-									<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-										/>
-									</svg>
-									<span>Historial</span>
-									{#if historial.length > 0}
-										<span
-											class="ml-1 rounded-full bg-orange-100 px-2 py-0.5 text-xs font-medium text-orange-700"
-										>
-											{historial.length}
-										</span>
-									{/if}
-								</div>
-							</button>
-						</div>
-					</div>
-
-					<!-- Tab Content -->
-					<div class="space-y-6">
-						{#if selectedTab === 'detalles'}
-							<!-- Información Principal -->
-							<div class="grid grid-cols-1 gap-4 md:grid-cols-6">
-								<div class="col-span-2 space-y-1">
-									<div class="text-xs tracking-wide text-gray-400 uppercase">Conductor</div>
-									<div class="font-medium text-gray-900">
-										{`${infoRecargo.conductor.apellido} ${infoRecargo.conductor.nombre}`}
-									</div>
-									<div class="text-sm text-gray-500">
-										CC: {infoRecargo.conductor.numero_identificacion}
-									</div>
-								</div>
-
-								<div class="col-span-1 space-y-1">
-									<div class="text-xs tracking-wide text-gray-400 uppercase">Vehículo</div>
-									<div class="text-lg font-medium text-gray-900">
-										{infoRecargo.vehiculo.placa}
-									</div>
-								</div>
-
-								<div class="col-span-1 space-y-1">
-									<div class="text-xs tracking-wide text-gray-400 uppercase">
-										Número de planilla
-									</div>
-									<div class="text-lg font-medium text-gray-900">{infoRecargo.planilla}</div>
-								</div>
-
-								<div class="col-span-2 space-y-1">
-									<div class="text-xs tracking-wide text-gray-400 uppercase">Empresa</div>
-									<div class="font-medium text-gray-900">{infoRecargo.empresa.nombre}</div>
-									<div class="text-sm text-gray-500">NIT: {infoRecargo.empresa.nit}</div>
-								</div>
-							</div>
-
-							<!-- Información del Servicio Asociado -->
-							{#if servicioInfo}
-								<div
-									class="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50 to-indigo-50 p-5"
-								>
-									<div class="mb-4 flex items-center gap-3">
-										<div class="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600">
-											<svg
-												class="h-4 w-4 text-white"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-												/>
-											</svg>
-										</div>
-										<div>
-											<h3 class="text-sm font-semibold text-gray-900">Servicio Asociado</h3>
-											<p class="text-xs text-gray-500">Información del servicio vinculado</p>
-										</div>
-									</div>
-
-									<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-										<!-- Origen -->
-										<div class="rounded-lg bg-white/70 px-3 py-2">
-											<div class="mb-1 text-xs font-medium text-gray-500 uppercase">Origen</div>
-											{#if servicioInfo.origen}
-												<div class="font-medium text-gray-900">
-													{servicioInfo.origen.nombre_municipio}
-												</div>
-												<div class="flex items-center gap-2 text-xs text-gray-500">
-													<span>{servicioInfo.origen.nombre_departamento}</span>
-													<span
-														class="inline-flex items-center rounded bg-blue-100 px-1.5 py-0.5 font-mono font-semibold text-blue-700"
-													>
-														DIVIPOLA: {servicioInfo.origen.codigo_municipio}
-													</span>
-												</div>
-												{#if servicioInfo.origen_especifico}
-													<div class="mt-1 text-xs text-gray-600">
-														📍 {servicioInfo.origen_especifico}
-													</div>
-												{/if}
-											{:else}
-												<div class="text-sm text-gray-400">No disponible</div>
-											{/if}
-										</div>
-
-										<!-- Destino -->
-										<div class="rounded-lg bg-white/70 px-3 py-2">
-											<div class="mb-1 text-xs font-medium text-gray-500 uppercase">Destino</div>
-											{#if servicioInfo.destino}
-												<div class="font-medium text-gray-900">
-													{servicioInfo.destino.nombre_municipio}
-												</div>
-												<div class="flex items-center gap-2 text-xs text-gray-500">
-													<span>{servicioInfo.destino.nombre_departamento}</span>
-													<span
-														class="inline-flex items-center rounded bg-blue-100 px-1.5 py-0.5 font-mono font-semibold text-blue-700"
-													>
-														DIVIPOLA: {servicioInfo.destino.codigo_municipio}
-													</span>
-												</div>
-												{#if servicioInfo.destino_especifico}
-													<div class="mt-1 text-xs text-gray-600">
-														📍 {servicioInfo.destino_especifico}
-													</div>
-												{/if}
-											{:else}
-												<div class="text-sm text-gray-400">No disponible</div>
-											{/if}
-										</div>
-
-										<!-- Tipo de Servicio -->
-										<div class="rounded-lg bg-white/70 px-3 py-2">
-											<div class="mb-1 text-xs font-medium text-gray-500 uppercase">
-												Tipo de Servicio
-											</div>
-											<span
-												class="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium {servicioInfo.proposito_servicio ===
-												'personal'
-													? 'bg-blue-100 text-blue-700'
-													: servicioInfo.proposito_servicio === 'personal_y_herramienta'
-														? 'bg-orange-100 text-orange-700'
-														: 'bg-gray-100 text-gray-700'}"
-											>
-												{servicioInfo.proposito_servicio === 'personal'
-													? '� Personal'
-													: servicioInfo.proposito_servicio === 'personal_y_herramienta'
-														? '�️ Personal y Herramienta'
-														: servicioInfo.proposito_servicio || 'No especificado'}
-											</span>
-										</div>
-
-										<!-- Observaciones -->
-										{#if servicioInfo.observaciones}
-											<div class="rounded-lg bg-white/70 px-3 py-2 md:col-span-2">
-												<div class="mb-1 text-xs font-medium text-gray-500 uppercase">
-													Observaciones
-												</div>
-												<div class="text-sm text-gray-700">{servicioInfo.observaciones}</div>
-											</div>
-										{/if}
-									</div>
-								</div>
-							{/if}
-
-							<!-- Resumen de Totales -->
-							<div class="rounded-lg bg-gray-50 p-4">
-								<div class="mb-3 text-xs tracking-wide text-gray-400 uppercase">
-									Resumen de Horas
-								</div>
-								<div class="grid grid-cols-4 gap-4 md:grid-cols-8">
-									<div class="text-center">
-										<div class="text-lg font-semibold text-gray-900">
-											{formatearHoras(totales.totalHoras)}
-										</div>
-										<div class="text-xs text-gray-400">Total</div>
-									</div>
-									<div class="text-center">
-										<div class="text-lg font-semibold text-gray-900">{infoRecargo.totalDias}</div>
-										<div class="text-xs text-gray-400">Días</div>
-									</div>
-									{#each [{ key: 'HED', value: totales.totalesRecargos.HED, label: 'HED', percent: '25%' }, { key: 'HEN', value: totales.totalesRecargos.HEN, label: 'HEN', percent: '75%' }, { key: 'HEFD', value: totales.totalesRecargos.HEFD, label: 'HEFD', percent: '100%' }, { key: 'HEFN', value: totales.totalesRecargos.HEFN, label: 'HEFN', percent: '150%' }, { key: 'RNDF', value: totales.totalesRecargos.RNDF, label: 'RNDF', percent: '115%' }, { key: 'RN', value: totales.totalesRecargos.RN, label: 'RN', percent: '35%' }, { key: 'RD', value: totales.totalesRecargos.RD, label: 'RD', percent: '75%' }] as { key, value, label, percent }}
-										<div class="text-center">
-											<div class="text-lg font-semibold text-gray-900">
-												{formatearHoras(value)}
-											</div>
-											<div class="text-xs text-gray-400">{label}</div>
-											<div class="text-xs text-gray-500">{percent}</div>
-										</div>
-									{/each}
-								</div>
-							</div>
-
-							<!-- ═══ Valor a Pagar (cálculo monetario del período) ═══ -->
-							<!-- Replica la lógica de RecargosDesgloseModal: muestra el total a pagar
-							     generado por los recargos del período y el desglose por día. -->
-							<div
-								class="rounded-xl border p-5"
-								style="background: linear-gradient(135deg, rgba(234, 88, 12,0.06), rgba(234, 88, 12,0.03)); border-color: rgba(234, 88, 12,0.25);"
-							>
-								<div class="mb-4 flex items-center justify-between gap-3">
-									<div class="flex items-center gap-2">
-										<div
-											class="flex h-8 w-8 items-center justify-center rounded-lg"
-											style="background: linear-gradient(135deg, #ea580c, #c2410c); box-shadow: 0 4px 10px rgba(234, 88, 12,0.25);"
-										>
-											<svg
-												class="h-4 w-4 text-white"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-												stroke-width="2"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-												/>
-											</svg>
-										</div>
-										<div>
-											<p class="text-[10px] font-medium tracking-wide text-gray-500 uppercase">
-												Valor a Pagar · Recargos del Período
-											</p>
-											<p class="text-[10px] text-gray-400">
-												Cálculo automático con config salarial y % vigentes por día
-											</p>
-										</div>
-									</div>
-									{#if isLoadingPreview}
-										<div class="flex items-center gap-1.5 text-gray-400">
-											<svg class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-												<circle
-													class="opacity-25"
-													cx="12"
-													cy="12"
-													r="10"
-													stroke="currentColor"
-													stroke-width="4"
-												/>
-												<path
-													class="opacity-75"
-													fill="currentColor"
-													d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-												/>
-											</svg>
-											<span class="text-[10px]">Calculando…</span>
-										</div>
-									{/if}
-								</div>
-
-								{#if previewError && !isLoadingPreview}
-									<div
-										class="rounded-lg border border-orange-200 bg-orange-50 p-3 text-xs text-orange-700"
-									>
-										{previewError}
-									</div>
-								{:else if previewPlanilla}
-									<!-- Total a pagar destacado -->
-									<div class="mb-4 flex items-baseline gap-2">
-										<span class="text-3xl font-bold text-[#9a3412]">
-											{fmtCOP(previewPlanilla.total_valor)}
-										</span>
-										<span class="text-xs text-gray-500"> · Total del recargo </span>
-									</div>
-
-									<!-- Desglose por día -->
-									{#if previewPlanilla.dias.length > 0}
-										<div
-											class="overflow-hidden rounded-lg border"
-											style="border-color: rgba(234, 88, 12,0.20);"
-										>
-											<table class="w-full text-xs">
-												<thead style="background-color: rgba(234, 88, 12,0.06);">
-													<tr>
-														<th
-															class="px-3 py-2 text-left font-medium tracking-wide text-gray-600 uppercase"
-															style="font-size: 10px;"
-														>
-															Día
-														</th>
-														<th
-															class="px-3 py-2 text-left font-medium tracking-wide text-gray-600 uppercase"
-															style="font-size: 10px;"
-														>
-															Tipo
-														</th>
-														<th
-															class="px-3 py-2 text-right font-medium tracking-wide text-gray-600 uppercase"
-															style="font-size: 10px;"
-														>
-															Horas
-														</th>
-														<th
-															class="px-3 py-2 text-right font-medium tracking-wide text-gray-600 uppercase"
-															style="font-size: 10px;"
-														>
-															Valor del día
-														</th>
-													</tr>
-												</thead>
-												<tbody>
-													{#each previewPlanilla.dias.slice().sort((a, b) => a.dia - b.dia) as d}
-														<tr
-															class="border-t border-gray-100"
-															style="background: {d.disponibilidad ? '#FAFAFA' : 'white'};"
-														>
-															<td class="px-3 py-2">
-																<div class="flex items-center gap-1.5">
-																	<span
-																		class="inline-flex h-6 w-6 items-center justify-center rounded-md text-[10px] font-semibold"
-																		style="background: {d.es_festivo
-																			? 'rgba(245,158,11,0.12)'
-																			: d.es_domingo
-																				? 'rgba(168,85,247,0.10)'
-																				: 'rgba(234, 88, 12,0.08)'}; color: {d.es_festivo
-																			? '#92400E'
-																			: d.es_domingo
-																				? '#6B21A8'
-																				: '#9a3412'};"
-																	>
-																		{String(d.dia).padStart(2, '0')}
-																	</span>
-																</div>
-															</td>
-															<td class="px-3 py-2">
-																{#if d.disponibilidad}
-																	<span class="text-[10px] text-gray-400">Disponible</span>
-																{:else if d.es_festivo}
-																	<span
-																		class="rounded px-1.5 py-0.5 text-[10px] font-semibold"
-																		style="background: rgba(245,158,11,0.10); color: #92400E;"
-																	>
-																		Festivo
-																	</span>
-																{:else if d.es_domingo}
-																	<span
-																		class="rounded px-1.5 py-0.5 text-[10px] font-semibold"
-																		style="background: rgba(168,85,247,0.10); color: #6B21A8;"
-																	>
-																		Domingo
-																	</span>
-																{:else}
-																	<span class="text-[10px] text-gray-500">Normal</span>
-																{/if}
-															</td>
-															<td class="px-3 py-2 text-right text-gray-700 tabular-nums">
-																{formatearHoras(d.total_horas)}h
-															</td>
-															<td
-																class="px-3 py-2 text-right font-bold tabular-nums"
-																style="color: {d.disponibilidad ? '#9CA3AF' : '#9a3412'};"
-															>
-																{d.disponibilidad ? '—' : fmtCOP(d.total_valor_dia)}
-															</td>
-														</tr>
-													{/each}
-												</tbody>
-												<tfoot>
-													<tr
-														style="background: rgba(234, 88, 12,0.08); border-top: 2px solid rgba(234, 88, 12,0.30);"
-													>
-														<td
-															colspan="3"
-															class="px-3 py-2 text-right text-[11px] font-semibold text-[#9a3412]"
-														>
-															Total
-														</td>
-														<td
-															class="px-3 py-2 text-right text-sm font-bold text-[#9a3412] tabular-nums"
-														>
-															{fmtCOP(previewPlanilla.total_valor)}
-														</td>
-													</tr>
-												</tfoot>
-											</table>
-										</div>
-									{:else}
-										<p class="text-xs text-gray-500 italic">
-											Este recargo no tiene días con recargos monetizables dentro del período.
-										</p>
-									{/if}
-								{/if}
-							</div>
-
-							<!-- Días Laborales -->
-							<div>
-								<div class="mb-4 flex items-center justify-between">
-									<div class="text-xs tracking-wide text-gray-400 uppercase">Días Laborales</div>
-									<span class="text-xs text-gray-400">
-										{diasLaborales.length} días registrados
+			<!-- Información del servicio asociado -->
+			{#if servicioInfo}
+				<section class="vr-seccion">
+					<h3 class="vr-titulo">Servicio asociado</h3>
+					<p class="vr-nota">Información del servicio vinculado</p>
+					<div class="vr-grid">
+						<Dato etiqueta="Origen">
+							{#if servicioInfo.origen}
+								{servicioInfo.origen.nombre_municipio}
+								<span class="vr-sub">
+									{servicioInfo.origen.nombre_departamento}
+									<span class="vr-chip vr-chip--neutro vr-chip--num">
+										DIVIPOLA: {servicioInfo.origen.codigo_municipio}
 									</span>
-								</div>
-								<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-									{#each diasLaborales as dia}
-										{@const recargosDelDia = {
-											HED: dia.hed || 0,
-											HEN: dia.hen || 0,
-											HEFD: dia.hefd || 0,
-											HEFN: dia.hefn || 0,
-											RNDF: dia.rndf || 0,
-											RN: dia.rn || 0,
-											RD: dia.rd || 0
-										}}
-										{@const tieneRecargos = Object.values(recargosDelDia).some(
-											(valor) => valor > 0
-										)}
-
-										<div
-											class="rounded-lg border border-gray-100 bg-white p-4 transition-shadow hover:shadow-sm"
-										>
-											<!-- Header del día -->
-											<div class="mb-3 flex items-center justify-between">
-												<div class="flex items-center gap-2">
-													<div
-														class="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100"
-													>
-														<span class="text-sm font-semibold text-gray-700">{dia.dia}</span>
-													</div>
-													{#if dia.es_especial}
-														<span class="rounded-full bg-red-50 px-2 py-0.5 text-xs text-red-600">
-															{dia.es_domingo ? 'DOM' : 'FEST'}
-														</span>
-													{/if}
-												</div>
-												<span class="text-sm text-gray-500">
-													{formatearHoras(dia.total_horas)}h
-												</span>
-											</div>
-
-											<!-- Horario -->
-											<div class="mb-3 text-xs text-gray-400">
-												{dia.hora_inicio}:00 - {dia.hora_fin}:00
-											</div>
-
-											<!-- Recargos -->
-											{#if tieneRecargos}
-												<div class="space-y-1">
-													{#each [{ key: 'HED', color: 'bg-green-50 text-green-700', value: recargosDelDia.HED }, { key: 'HEN', color: 'bg-blue-50 text-blue-700', value: recargosDelDia.HEN }, { key: 'HEFD', color: 'bg-orange-50 text-orange-700', value: recargosDelDia.HEFD }, { key: 'HEFN', color: 'bg-purple-50 text-purple-700', value: recargosDelDia.HEFN }, { key: 'RNDF', color: 'bg-indigo-50 text-indigo-700', value: recargosDelDia.RNDF }, { key: 'RN', color: 'bg-teal-50 text-teal-700', value: recargosDelDia.RN }, { key: 'RD', color: 'bg-red-50 text-red-700', value: recargosDelDia.RD }] as { key, color, value }}
-														{#if value > 0}
-															<div
-																class="flex items-center justify-between rounded px-2 py-1 text-xs {color}"
-															>
-																<span>{key}:</span>
-																<span class="font-medium">{formatearHoras(value)}h</span>
-															</div>
-														{/if}
-													{/each}
-												</div>
-											{/if}
-										</div>
-									{/each}
-								</div>
-							</div>
-
-							<!-- Información Adicional -->
-							<div class="border-t border-gray-100 pt-4">
-								<div class="mb-2 text-xs tracking-wide text-gray-400 uppercase">
-									Información del Sistema
-								</div>
-								<div class="font-mono text-xs break-all text-gray-500">ID: {recargo.id}</div>
-							</div>
-						{:else if selectedTab === 'auditoria'}
-							<!-- Auditoría -->
-							<div class="space-y-6">
-								<!-- Información de Creación -->
-								<div
-									class="rounded-lg border border-orange-100 bg-gradient-to-br from-orange-50 to-green-50 p-6"
-								>
-									<div class="mb-4 flex items-center gap-3">
-										<div
-											class="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-600"
-										>
-											<svg
-												class="h-5 w-5 text-white"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-												/>
-											</svg>
-										</div>
-										<div>
-											<h3 class="text-sm font-semibold text-gray-900">Creación del Recargo</h3>
-											<p class="text-xs text-gray-500">Versión {auditoria.version}</p>
-										</div>
-									</div>
-									<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-										<div>
-											<div class="mb-1 text-xs text-gray-500">Creado por</div>
-											<div class="font-medium text-gray-900">
-												{auditoria.creado_por.nombre}
-												{auditoria.creado_por.apellido}
-											</div>
-											<div class="text-xs text-gray-500">
-												{auditoria.creado_por.email}
-											</div>
-										</div>
-										<div>
-											<div class="mb-1 text-xs text-gray-500">Fecha de creación</div>
-											<div class="flex items-center gap-2 text-sm text-gray-900">
-												<svg
-													class="h-3.5 w-3.5 text-gray-400"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-													/>
-												</svg>
-												{auditoria.created_at
-													? formatearFecha(auditoria.created_at)
-													: 'No disponible'}
-											</div>
-										</div>
-									</div>
-								</div>
-
-								<!-- Información de Última Actualización -->
-								{#if auditoria.actualizado_por}
-									<div
-										class="rounded-lg border border-blue-100 bg-gradient-to-br from-blue-50 to-indigo-50 p-6"
-									>
-										<div class="mb-4 flex items-center gap-3">
-											<div
-												class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-600"
-											>
-												<svg
-													class="h-5 w-5 text-white"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-													/>
-												</svg>
-											</div>
-											<div>
-												<h3 class="text-sm font-semibold text-gray-900">Última Actualización</h3>
-												<p class="text-xs text-gray-500">Versión {auditoria.version}</p>
-											</div>
-										</div>
-
-										<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-											<div>
-												<div class="mb-1 text-xs text-gray-500">Actualizado por</div>
-												<div class="font-medium text-gray-900">
-													{auditoria.actualizado_por.nombre}
-													{auditoria.actualizado_por.apellido}
-												</div>
-												<div class="text-xs text-gray-500">
-													{auditoria.actualizado_por.email}
-												</div>
-											</div>
-											<div>
-												<div class="mb-1 text-xs text-gray-500">Fecha de actualización</div>
-												<div class="flex items-center gap-2 text-sm text-gray-900">
-													<svg
-														class="h-3.5 w-3.5 text-gray-400"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															stroke-width="2"
-															d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-														/>
-													</svg>
-													{auditoria.updated_at
-														? formatearFecha(auditoria.updated_at)
-														: 'No disponible'}
-												</div>
-											</div>
-										</div>
-									</div>
+								</span>
+								{#if servicioInfo.origen_especifico}
+									<span class="vr-sub">{servicioInfo.origen_especifico}</span>
 								{/if}
+							{:else}
+								<span class="vr-nulo">No disponible</span>
+							{/if}
+						</Dato>
+						<Dato etiqueta="Destino">
+							{#if servicioInfo.destino}
+								{servicioInfo.destino.nombre_municipio}
+								<span class="vr-sub">
+									{servicioInfo.destino.nombre_departamento}
+									<span class="vr-chip vr-chip--neutro vr-chip--num">
+										DIVIPOLA: {servicioInfo.destino.codigo_municipio}
+									</span>
+								</span>
+								{#if servicioInfo.destino_especifico}
+									<span class="vr-sub">{servicioInfo.destino_especifico}</span>
+								{/if}
+							{:else}
+								<span class="vr-nulo">No disponible</span>
+							{/if}
+						</Dato>
+						<Dato etiqueta="Tipo de servicio">
+							<span
+								class="vr-chip"
+								class:vr-chip--neutro={servicioInfo.proposito_servicio !== 'personal' &&
+									servicioInfo.proposito_servicio !== 'personal_y_herramienta'}
+								class:vr-chip--info={servicioInfo.proposito_servicio === 'personal'}
+								class:vr-chip--marca={servicioInfo.proposito_servicio === 'personal_y_herramienta'}
+							>
+								{servicioInfo.proposito_servicio === 'personal'
+									? 'Personal'
+									: servicioInfo.proposito_servicio === 'personal_y_herramienta'
+										? 'Personal y Herramienta'
+										: servicioInfo.proposito_servicio || 'No especificado'}
+							</span>
+						</Dato>
+						{#if servicioInfo.observaciones}
+							<Dato etiqueta="Observaciones" valor={servicioInfo.observaciones} completo />
+						{/if}
+					</div>
+				</section>
+			{/if}
 
-								<!-- Información Adicional -->
-								<div class="rounded-lg bg-gray-50 p-4">
-									<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-										<div>
-											<div class="mb-1 text-xs tracking-wide text-gray-400 uppercase">Estado</div>
-											<span
-												class="inline-flex items-center rounded-full bg-green-100 px-2 py-1 text-xs font-medium text-green-800 uppercase"
-											>
-												{recargo.estado}
-											</span>
-										</div>
-										<div>
-											<div class="mb-1 text-xs tracking-wide text-gray-400 uppercase">Versión</div>
-											<div class="text-sm font-semibold text-gray-900">
-												v{auditoria.version}
-											</div>
-										</div>
-										<div>
-											<div class="mb-1 text-xs tracking-wide text-gray-400 uppercase">
-												ID del Sistema
-											</div>
-											<div class="font-mono text-xs break-all text-gray-500">{recargo.id}</div>
-										</div>
-									</div>
+			<!-- Resumen de totales -->
+			<section class="vr-seccion">
+				<h3 class="vr-titulo">Resumen de horas</h3>
+				<div class="vr-card vr-resumen">
+					<div class="vr-stat vr-stat--principal">
+						<span class="vr-stat-valor">{formatearHoras(totales.totalHoras)}</span>
+						<span class="vr-stat-label">Total</span>
+					</div>
+					<div class="vr-stat vr-stat--principal">
+						<span class="vr-stat-valor">{infoRecargo.totalDias}</span>
+						<span class="vr-stat-label">Días</span>
+					</div>
+					{#each [{ key: 'HED', value: totales.totalesRecargos.HED, label: 'HED', percent: '25%' }, { key: 'HEN', value: totales.totalesRecargos.HEN, label: 'HEN', percent: '75%' }, { key: 'HEFD', value: totales.totalesRecargos.HEFD, label: 'HEFD', percent: '100%' }, { key: 'HEFN', value: totales.totalesRecargos.HEFN, label: 'HEFN', percent: '150%' }, { key: 'RNDF', value: totales.totalesRecargos.RNDF, label: 'RNDF', percent: '115%' }, { key: 'RN', value: totales.totalesRecargos.RN, label: 'RN', percent: '35%' }, { key: 'RD', value: totales.totalesRecargos.RD, label: 'RD', percent: '75%' }] as { key, value, label, percent } (key)}
+						<div class="vr-stat">
+							<span class="vr-stat-valor">{formatearHoras(value)}</span>
+							<span class="vr-stat-label">{label}</span>
+							<span class="vr-stat-pct">{percent}</span>
+						</div>
+					{/each}
+				</div>
+			</section>
 
-									{#if recargo.observaciones}
-										<div class="mt-4 border-t border-gray-200 pt-4">
-											<div class="mb-1 text-xs tracking-wide text-gray-400 uppercase">
-												Observaciones
-											</div>
-											<p class="text-sm text-gray-700">{recargo.observaciones}</p>
-										</div>
-									{/if}
-								</div>
-							</div>
-						{:else if selectedTab === 'historial'}
-							<!-- Historial -->
-							<div>
-								{#if !historial || historial.length === 0}
-									<div class="py-12 text-center">
-										<svg
-											class="mx-auto mb-4 h-12 w-12 text-gray-300"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-											/>
-										</svg>
-										<p class="text-sm text-gray-500">No hay cambios registrados en el historial</p>
-									</div>
-								{:else}
-									<div class="space-y-4">
-										{#each historial
-											.slice()
-											.sort((a, b) => (b.version_nueva ?? 0) - (a.version_nueva ?? 0)) as item}
-											<div
-												class="rounded-lg border border-gray-200 bg-white p-4 transition-shadow hover:shadow-sm"
-											>
-												<div class="mb-3 flex items-center justify-between">
-													<div class="flex items-center gap-3">
-														<span
-															class="rounded-full px-3 py-1 text-xs font-medium {getColorAccion(
-																item.accion
-															)}"
-														>
-															{traducirAccion(item.accion)}
-														</span>
-														<span class="text-sm text-gray-500">
-															v{item.version_anterior} → v{item.version_nueva}
-														</span>
-													</div>
-													<span class="text-xs text-gray-400">
-														{formatearFecha(item.created_at)}
+			<!-- ═══ Valor a Pagar (cálculo monetario del período) ═══ -->
+			<!-- Replica la lógica de RecargosDesgloseModal: muestra el total a pagar
+			     generado por los recargos del período y el desglose por día. -->
+			<section class="vr-seccion">
+				<div class="vr-titulo-fila">
+					<div>
+						<h3 class="vr-titulo">Valor a pagar · Recargos del período</h3>
+						<p class="vr-nota">Cálculo automático con config salarial y % vigentes por día</p>
+					</div>
+					{#if isLoadingPreview}
+						<span class="vr-calculando" aria-live="polite">
+							<span class="vr-spinner vr-spinner--sm" aria-hidden="true"></span>
+							Calculando…
+						</span>
+					{/if}
+				</div>
+
+				{#if previewError && !isLoadingPreview}
+					<div class="vr-aviso">{previewError}</div>
+				{:else if previewPlanilla}
+					<div class="vr-card">
+						<!-- Total a pagar destacado -->
+						<div class="vr-total">
+							<span class="vr-total-valor">{fmtCOP(previewPlanilla.total_valor)}</span>
+							<span class="vr-total-label">Total del recargo</span>
+						</div>
+
+						<!-- Desglose por día -->
+						{#if previewPlanilla.dias.length > 0}
+							<div class="vr-tabla-wrap">
+								<table class="vr-tabla">
+									<thead>
+										<tr>
+											<th>Día</th>
+											<th>Tipo</th>
+											<th class="vr-der">Horas</th>
+											<th class="vr-der">Valor del día</th>
+										</tr>
+									</thead>
+									<tbody>
+										{#each previewPlanilla.dias.slice().sort((a, b) => a.dia - b.dia) as d}
+											<tr class:vr-fila-disponible={d.disponibilidad}>
+												<td>
+													<span
+														class="vr-dia"
+														class:vr-dia--festivo={d.es_festivo}
+														class:vr-dia--domingo={!d.es_festivo && d.es_domingo}
+													>
+														{String(d.dia).padStart(2, '0')}
 													</span>
-												</div>
-
-												<div class="mb-2 flex items-center gap-2 text-sm">
-													<svg
-														class="h-4 w-4 text-gray-400"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															stroke-width="2"
-															d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-														/>
-													</svg>
-													{#if item.usuario}
-														<span class="font-medium text-gray-900">
-															{item.usuario.nombre}
-															{item.usuario.apellido}
-														</span>
-														<span class="text-gray-500">({item.usuario.email})</span>
+												</td>
+												<td>
+													{#if d.disponibilidad}
+														<span class="vr-tipo-texto vr-tipo-texto--apagado">Disponible</span>
+													{:else if d.es_festivo}
+														<span class="vr-chip vr-chip--festivo">Festivo</span>
+													{:else if d.es_domingo}
+														<span class="vr-chip vr-chip--domingo">Domingo</span>
 													{:else}
-														<span class="text-gray-500">Usuario no disponible</span>
+														<span class="vr-tipo-texto">Normal</span>
 													{/if}
-												</div>
-
-												{#if item.campos_modificados && item.campos_modificados.length > 0}
-													<div class="mt-3 rounded bg-gray-50 p-3">
-														<div class="mb-2 text-xs font-medium text-gray-500">
-															Campos modificados:
-														</div>
-														<div class="flex flex-wrap gap-2">
-															{#each item.campos_modificados as campo}
-																<span
-																	class="rounded bg-white px-2 py-1 font-mono text-xs text-gray-700"
-																>
-																	{campo}
-																</span>
-															{/each}
-														</div>
-													</div>
-												{/if}
-
-												{#if item.motivo}
-													<div class="mt-3 border-t border-gray-100 pt-3">
-														<div class="mb-1 text-xs font-medium text-gray-500">Motivo:</div>
-														<p class="text-sm text-gray-700">{item.motivo}</p>
-													</div>
-												{/if}
-											</div>
+												</td>
+												<td class="vr-der vr-num">{formatearHoras(d.total_horas)}h</td>
+												<td
+													class="vr-der vr-num vr-valor-dia"
+													class:vr-valor-dia--apagado={d.disponibilidad}
+												>
+													{d.disponibilidad ? '—' : fmtCOP(d.total_valor_dia)}
+												</td>
+											</tr>
 										{/each}
-									</div>
-								{/if}
+									</tbody>
+									<tfoot>
+										<tr>
+											<td colspan="3" class="vr-der">Total</td>
+											<td class="vr-der vr-num">{fmtCOP(previewPlanilla.total_valor)}</td>
+										</tr>
+									</tfoot>
+								</table>
 							</div>
+						{:else}
+							<p class="vr-vacio-texto">
+								Este recargo no tiene días con recargos monetizables dentro del período.
+							</p>
 						{/if}
 					</div>
 				{/if}
-			</div>
+			</section>
 
-			<!-- Footer -->
-			<div
-				class="px-6 py-4"
-				style="border-top: 1px solid var(--border-subtle); background-color: var(--bg-base);"
-			>
-				<div class="flex justify-end">
-					<button on:click={handleClose} class="btn-primary"> Cerrar </button>
+			<!-- Días laborales -->
+			<section class="vr-seccion">
+				<div class="vr-titulo-fila">
+					<h3 class="vr-titulo">Días laborales</h3>
+					<span class="vr-nota">{diasLaborales.length} días registrados</span>
 				</div>
-			</div>
-		</div>
-	</div>
-{/if}
+				<div class="vr-dias">
+					{#each diasLaborales as dia (dia.id)}
+						{@const recargosDelDia = {
+							HED: dia.hed || 0,
+							HEN: dia.hen || 0,
+							HEFD: dia.hefd || 0,
+							HEFN: dia.hefn || 0,
+							RNDF: dia.rndf || 0,
+							RN: dia.rn || 0,
+							RD: dia.rd || 0
+						}}
+						{@const tieneRecargos = Object.values(recargosDelDia).some((valor) => valor > 0)}
+
+						<div class="vr-card vr-dia-card">
+							<!-- Encabezado del día -->
+							<div class="vr-dia-cabecera">
+								<div class="vr-dia-id">
+									<span class="vr-dia vr-dia--grande">{dia.dia}</span>
+									{#if dia.es_especial}
+										<span class="vr-chip vr-chip--peligro">
+											{dia.es_domingo ? 'DOM' : 'FEST'}
+										</span>
+									{/if}
+								</div>
+								<span class="vr-dia-horas">{formatearHoras(dia.total_horas)}h</span>
+							</div>
+
+							<!-- Horario -->
+							<p class="vr-dia-horario">{dia.hora_inicio}:00 - {dia.hora_fin}:00</p>
+
+							<!-- Recargos -->
+							{#if tieneRecargos}
+								<div class="vr-dia-recargos">
+									{#each [{ key: 'HED', color: 'bg-green-50 text-green-700', value: recargosDelDia.HED }, { key: 'HEN', color: 'bg-blue-50 text-blue-700', value: recargosDelDia.HEN }, { key: 'HEFD', color: 'bg-orange-50 text-orange-700', value: recargosDelDia.HEFD }, { key: 'HEFN', color: 'bg-purple-50 text-purple-700', value: recargosDelDia.HEFN }, { key: 'RNDF', color: 'bg-indigo-50 text-indigo-700', value: recargosDelDia.RNDF }, { key: 'RN', color: 'bg-teal-50 text-teal-700', value: recargosDelDia.RN }, { key: 'RD', color: 'bg-red-50 text-red-700', value: recargosDelDia.RD }] as { key, color, value } (key)}
+										{#if value > 0}
+											<div class="vr-recargo {color}">
+												<span>{key}:</span>
+												<span class="vr-num">{formatearHoras(value)}h</span>
+											</div>
+										{/if}
+									{/each}
+								</div>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			</section>
+
+			<!-- Información adicional -->
+			<section class="vr-seccion">
+				<h3 class="vr-titulo">Información del sistema</h3>
+				<div class="vr-grid">
+					<Dato etiqueta="ID" valor={recargo.id} mono completo />
+				</div>
+			</section>
+		{:else if selectedTab === 'auditoria'}
+			<!-- Información de creación -->
+			<section class="vr-seccion">
+				<h3 class="vr-titulo">Creación del recargo</h3>
+				<p class="vr-nota">Versión {auditoria.version}</p>
+				<div class="vr-grid">
+					<Dato etiqueta="Creado por">
+						{auditoria.creado_por.nombre}
+						{auditoria.creado_por.apellido}
+						<span class="vr-sub">{auditoria.creado_por.email}</span>
+					</Dato>
+					<Dato
+						etiqueta="Fecha de creación"
+						valor={auditoria.created_at ? formatearFecha(auditoria.created_at) : 'No disponible'}
+					/>
+				</div>
+			</section>
+
+			<!-- Información de última actualización -->
+			{#if auditoria.actualizado_por}
+				<section class="vr-seccion">
+					<h3 class="vr-titulo">Última actualización</h3>
+					<p class="vr-nota">Versión {auditoria.version}</p>
+					<div class="vr-grid">
+						<Dato etiqueta="Actualizado por">
+							{auditoria.actualizado_por.nombre}
+							{auditoria.actualizado_por.apellido}
+							<span class="vr-sub">{auditoria.actualizado_por.email}</span>
+						</Dato>
+						<Dato
+							etiqueta="Fecha de actualización"
+							valor={auditoria.updated_at ? formatearFecha(auditoria.updated_at) : 'No disponible'}
+						/>
+					</div>
+				</section>
+			{/if}
+
+			<!-- Información adicional -->
+			<section class="vr-seccion">
+				<h3 class="vr-titulo">Registro</h3>
+				<div class="vr-grid vr-grid--3">
+					<Dato etiqueta="Estado">
+						<span class="vr-chip vr-chip--marca vr-chip--mayus">{recargo.estado}</span>
+					</Dato>
+					<Dato etiqueta="Versión" valor={`v${auditoria.version}`} />
+					<Dato etiqueta="ID del sistema" valor={recargo.id} mono />
+					{#if recargo.observaciones}
+						<Dato etiqueta="Observaciones" valor={recargo.observaciones} completo />
+					{/if}
+				</div>
+			</section>
+		{:else if selectedTab === 'historial'}
+			{#if !historial || historial.length === 0}
+				<div class="vr-estado">
+					<History size={28} strokeWidth={2} />
+					<p>No hay cambios registrados en el historial</p>
+				</div>
+			{:else}
+				<section class="vr-seccion">
+					<h3 class="vr-titulo">Historial de cambios</h3>
+					<div class="vr-historial">
+						{#each historial
+							.slice()
+							.sort((a, b) => (b.version_nueva ?? 0) - (a.version_nueva ?? 0)) as item}
+							<div class="vr-card">
+								<div class="vr-historial-cabecera">
+									<div class="vr-historial-accion">
+										<span class="vr-chip {getColorAccion(item.accion)}">
+											{traducirAccion(item.accion)}
+										</span>
+										<span class="vr-nota vr-num">
+											v{item.version_anterior} → v{item.version_nueva}
+										</span>
+									</div>
+									<span class="vr-nota">{formatearFecha(item.created_at)}</span>
+								</div>
+
+								<div class="vr-historial-usuario">
+									<User size={14} strokeWidth={2} />
+									{#if item.usuario}
+										<strong>{item.usuario.nombre} {item.usuario.apellido}</strong>
+										<span class="vr-nota">({item.usuario.email})</span>
+									{:else}
+										<span class="vr-nota">Usuario no disponible</span>
+									{/if}
+								</div>
+
+								{#if item.campos_modificados && item.campos_modificados.length > 0}
+									<div class="vr-historial-bloque">
+										<span class="vr-etiqueta">Campos modificados:</span>
+										<div class="vr-chips">
+											{#each item.campos_modificados as campo}
+												<span class="vr-chip vr-chip--neutro">{campo}</span>
+											{/each}
+										</div>
+									</div>
+								{/if}
+
+								{#if item.motivo}
+									<div class="vr-historial-bloque">
+										<span class="vr-etiqueta">Motivo:</span>
+										<p class="vr-texto">{item.motivo}</p>
+									</div>
+								{/if}
+							</div>
+						{/each}
+					</div>
+				</section>
+			{/if}
+		{/if}
+	{/if}
+
+	{#snippet pie()}
+		<button type="button" onclick={handleClose} class="btn-secondary">Cerrar</button>
+		{#if recargo?.planilla_s3key}
+			<!-- Botón para PDF o imagen -->
+			<button
+				type="button"
+				onclick={visualizarArchivo}
+				class="btn-primary"
+				title="Visualizar adjunto"
+			>
+				<Eye size={16} strokeWidth={2} />
+				Ver archivo
+			</button>
+		{/if}
+	{/snippet}
+</ModalBase>
+
+<style>
+	/* Chip del encabezado oscuro: estado del documento adjunto. */
+	.vr-chip-hero {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		padding: 4px 10px;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.14);
+		color: #fff;
+		font-size: 12px;
+		font-weight: 800;
+		white-space: nowrap;
+	}
+	.vr-chip-hero--apagado {
+		background: rgba(255, 255, 255, 0.06);
+		color: rgba(255, 255, 255, 0.62);
+	}
+
+	/* Estados del cuerpo: cargando, error, vacío. */
+	.vr-estado {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 12px;
+		min-height: 220px;
+		color: var(--text-muted);
+		font-size: 14px;
+		font-weight: 600;
+		text-align: center;
+	}
+	.vr-estado p {
+		margin: 0;
+	}
+	.vr-estado--error {
+		color: #dc2626;
+	}
+	.vr-spinner {
+		width: 28px;
+		height: 28px;
+		border-radius: 999px;
+		border: 3px solid var(--border-default);
+		border-top-color: var(--accion);
+		animation: vr-giro 0.7s linear infinite;
+	}
+	.vr-spinner--sm {
+		width: 14px;
+		height: 14px;
+		border-width: 2px;
+	}
+	@keyframes vr-giro {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	/* Secciones: título en negrita sobre tarjetas blancas, como la app. */
+	.vr-seccion + .vr-seccion {
+		margin-top: 24px;
+	}
+	.vr-titulo {
+		margin: 0 0 10px;
+		color: var(--text-primary);
+		font-family: var(--font-display);
+		font-size: 17px;
+		font-weight: 800;
+		letter-spacing: -0.01em;
+	}
+	.vr-titulo + .vr-nota {
+		margin: -6px 0 10px;
+	}
+	.vr-titulo-fila {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 12px;
+		margin-bottom: 10px;
+	}
+	.vr-titulo-fila .vr-titulo {
+		margin-bottom: 2px;
+	}
+	.vr-nota {
+		margin: 0;
+		color: var(--text-muted);
+		font-size: 12px;
+		font-weight: 600;
+	}
+	.vr-etiqueta {
+		display: block;
+		margin-bottom: 6px;
+		color: var(--text-muted);
+		font-size: 12px;
+		font-weight: 700;
+	}
+	.vr-texto {
+		margin: 0;
+		color: var(--text-secondary);
+		font-size: 14px;
+		font-weight: 600;
+	}
+	.vr-num {
+		font-variant-numeric: tabular-nums;
+	}
+	.vr-der {
+		text-align: right;
+	}
+
+	.vr-card {
+		padding: 16px;
+		border-radius: 18px;
+		background: var(--bg-surface);
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
+	}
+
+	/* Rejilla de datos (tarjetas `Dato`). */
+	.vr-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 10px;
+	}
+	.vr-grid--3 {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+	.vr-sub {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+		margin-top: 2px;
+		color: var(--text-muted);
+		font-size: 12.5px;
+		font-weight: 600;
+	}
+	.vr-nulo {
+		color: var(--text-very-muted);
+		font-weight: 600;
+		font-style: italic;
+	}
+
+	/* Chips suaves para estados y etiquetas. */
+	.vr-chip {
+		display: inline-flex;
+		align-items: center;
+		padding: 3px 10px;
+		border-radius: 999px;
+		font-size: 12px;
+		font-weight: 700;
+		white-space: nowrap;
+	}
+	/* Sin color propio: las clases de Tailwind (historial) ponen el suyo. */
+	.vr-chip--neutro {
+		background: var(--bg-base);
+		color: var(--text-secondary);
+	}
+	.vr-chip--num {
+		padding: 1px 8px;
+		font-size: 11px;
+		font-variant-numeric: tabular-nums;
+	}
+	.vr-chip--marca {
+		background: var(--color-emerald-100);
+		color: var(--color-emerald-700);
+	}
+	.vr-chip--info {
+		background: #dbeafe;
+		color: #1d4ed8;
+	}
+	.vr-chip--festivo {
+		background: rgba(245, 158, 11, 0.12);
+		color: #92400e;
+	}
+	.vr-chip--domingo {
+		background: rgba(168, 85, 247, 0.1);
+		color: #6b21a8;
+	}
+	.vr-chip--peligro {
+		background: #fef2f2;
+		color: #dc2626;
+	}
+	.vr-chip--mayus {
+		text-transform: uppercase;
+	}
+	.vr-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 6px;
+	}
+
+	/* Resumen de horas. */
+	.vr-resumen {
+		display: grid;
+		grid-template-columns: repeat(9, minmax(0, 1fr));
+		gap: 8px;
+	}
+	.vr-stat {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 2px;
+		padding: 8px 4px;
+		border-radius: 14px;
+		text-align: center;
+	}
+	.vr-stat--principal {
+		background: var(--color-emerald-50);
+	}
+	.vr-stat-valor {
+		color: var(--text-primary);
+		font-size: 17px;
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+	}
+	.vr-stat--principal .vr-stat-valor {
+		color: var(--color-emerald-700);
+	}
+	.vr-stat-label {
+		color: var(--text-muted);
+		font-size: 11px;
+		font-weight: 700;
+	}
+	.vr-stat-pct {
+		color: var(--text-very-muted);
+		font-size: 11px;
+		font-weight: 600;
+	}
+
+	/* Valor a pagar. */
+	.vr-calculando {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		flex-shrink: 0;
+		color: var(--text-muted);
+		font-size: 12px;
+		font-weight: 600;
+	}
+	.vr-aviso {
+		padding: 12px 14px;
+		border-radius: 14px;
+		background: #fff7ed;
+		color: #c2410c;
+		font-size: 13px;
+		font-weight: 600;
+	}
+	.vr-total {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 4px 10px;
+		margin-bottom: 14px;
+	}
+	.vr-total-valor {
+		color: var(--color-emerald-700);
+		font-family: var(--font-display);
+		font-size: 28px;
+		font-weight: 900;
+		letter-spacing: -0.02em;
+		font-variant-numeric: tabular-nums;
+	}
+	.vr-total-label {
+		color: var(--text-muted);
+		font-size: 12px;
+		font-weight: 700;
+	}
+	.vr-vacio-texto {
+		margin: 0;
+		color: var(--text-muted);
+		font-size: 13px;
+		font-style: italic;
+	}
+	.vr-tabla-wrap {
+		overflow-x: auto;
+		border: 1px solid var(--border-subtle);
+		border-radius: 14px;
+	}
+	.vr-tabla {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 13px;
+	}
+	.vr-tabla th {
+		padding: 9px 12px;
+		background: var(--bg-base);
+		color: var(--text-muted);
+		font-size: 11px;
+		font-weight: 800;
+		text-align: left;
+		white-space: nowrap;
+	}
+	.vr-tabla th.vr-der {
+		text-align: right;
+	}
+	.vr-tabla td {
+		padding: 8px 12px;
+		border-top: 1px solid var(--border-subtle);
+		color: var(--text-secondary);
+		font-weight: 600;
+	}
+	.vr-fila-disponible td {
+		background: var(--bg-base);
+	}
+	.vr-tabla tfoot td {
+		border-top: 2px solid var(--color-emerald-200);
+		background: var(--color-emerald-50);
+		color: var(--color-emerald-700);
+		font-size: 13px;
+		font-weight: 800;
+	}
+	.vr-tabla tfoot td:last-child {
+		font-size: 14px;
+		font-variant-numeric: tabular-nums;
+	}
+	.vr-tabla td.vr-valor-dia {
+		color: var(--color-emerald-700);
+		font-weight: 800;
+	}
+	.vr-tabla td.vr-valor-dia--apagado {
+		color: var(--text-very-muted);
+	}
+	.vr-tipo-texto {
+		color: var(--text-muted);
+		font-size: 12px;
+	}
+	.vr-tipo-texto--apagado {
+		color: var(--text-very-muted);
+	}
+
+	/* Insignia del número de día. */
+	.vr-dia {
+		display: inline-grid;
+		place-items: center;
+		width: 28px;
+		height: 28px;
+		border-radius: 9px;
+		background: var(--color-emerald-50);
+		color: var(--color-emerald-700);
+		font-size: 11px;
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+	}
+	.vr-dia--festivo {
+		background: rgba(245, 158, 11, 0.12);
+		color: #92400e;
+	}
+	.vr-dia--domingo {
+		background: rgba(168, 85, 247, 0.1);
+		color: #6b21a8;
+	}
+	.vr-dia--grande {
+		width: 34px;
+		height: 34px;
+		border-radius: 11px;
+		background: var(--bg-base);
+		color: var(--text-primary);
+		font-size: 14px;
+	}
+
+	/* Días laborales. */
+	.vr-dias {
+		display: grid;
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+		gap: 10px;
+	}
+	.vr-dia-card {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+	.vr-dia-cabecera {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+	}
+	.vr-dia-id {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+	.vr-dia-horas {
+		color: var(--text-primary);
+		font-size: 14px;
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+	}
+	.vr-dia-horario {
+		margin: 0;
+		color: var(--text-muted);
+		font-size: 12px;
+		font-weight: 600;
+		font-variant-numeric: tabular-nums;
+	}
+	.vr-dia-recargos {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+	}
+	.vr-recargo {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		padding: 4px 10px;
+		border-radius: 10px;
+		font-size: 12px;
+		font-weight: 700;
+	}
+
+	/* Historial. */
+	.vr-historial {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+	.vr-historial-cabecera {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 8px;
+		margin-bottom: 10px;
+	}
+	.vr-historial-accion {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+	}
+	.vr-historial-usuario {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+		color: var(--text-muted);
+		font-size: 14px;
+	}
+	.vr-historial-usuario strong {
+		color: var(--text-primary);
+		font-weight: 800;
+	}
+	.vr-historial-bloque {
+		margin-top: 12px;
+		padding-top: 12px;
+		border-top: 1px solid var(--border-subtle);
+	}
+
+	@media (max-width: 1024px) {
+		.vr-dias {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+	}
+	@media (max-width: 860px) {
+		.vr-resumen {
+			grid-template-columns: repeat(5, minmax(0, 1fr));
+		}
+		.vr-dias {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+	@media (max-width: 640px) {
+		.vr-grid,
+		.vr-grid--3,
+		.vr-dias {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.vr-resumen {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+	}
+</style>

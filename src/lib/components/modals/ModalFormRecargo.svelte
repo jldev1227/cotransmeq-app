@@ -1,6 +1,23 @@
 <script lang="ts">
 	import { onMount, createEventDispatcher, tick } from 'svelte';
-	import { fade, fly } from 'svelte/transition';
+	import { fade } from 'svelte/transition';
+	import {
+		Calendar,
+		Check,
+		CircleAlert,
+		CircleCheck,
+		Copy,
+		FileText,
+		Info,
+		LoaderCircle,
+		Plus,
+		RefreshCw,
+		ShieldCheck,
+		Trash2,
+		TriangleAlert,
+		Upload,
+		X
+	} from 'lucide-svelte';
 	import { recargosStore } from '$lib/stores/recargos';
 	import { recursos } from '$lib/stores/recursos';
 	import { recargosApi } from '$lib/api/recargos';
@@ -23,6 +40,8 @@
 	import ModalNuevoConductor from '../servicios/ModalNuevoConductor.svelte';
 	import ModalNuevaEmpresa from '../servicios/ModalNuevaEmpresa.svelte';
 	import MapboxSearch from '../ui/MapboxSearch.svelte';
+	import ModalBase from '../ui/ModalBase.svelte';
+	import Campo from '../directorio/Campo.svelte';
 	import { municipios } from '$lib/stores/municipios';
 
 	// Props
@@ -88,6 +107,9 @@
 	let erroresDias: { [key: string]: string } = {};
 
 	// Empresas que NO reconocen RNDF (Recargo Nocturno Dominical/Festivo)
+	// Columnas de recargo de la tabla de días, en el orden en que se muestran.
+	const CODIGOS_RECARGO = ['HED', 'HEN', 'HEFD', 'HEFN', 'RNDF', 'RN', 'RD'] as const;
+
 	const EMPRESAS_SIN_RNDF = [
 		'cfb258a6-448c-4469-aa71-8eeafa4530ef' // PAREX RESOURCES (COLOMBIA) AG SUCURSAL
 	];
@@ -176,11 +198,18 @@
 		if (cached) return cached;
 
 		const porcentajes: PorcentajesRecargo = {
-			HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RN: 0, RD: 0, RNDF: 0
+			HED: 0,
+			HEN: 0,
+			HEFD: 0,
+			HEFN: 0,
+			RN: 0,
+			RD: 0,
+			RNDF: 0
 		};
 		const seen = new Set<string>();
 		const ordenados = [...tiposVigentes].sort(
-			(a: any, b: any) => new Date(b.vigencia_desde).getTime() - new Date(a.vigencia_desde).getTime()
+			(a: any, b: any) =>
+				new Date(b.vigencia_desde).getTime() - new Date(a.vigencia_desde).getTime()
 		);
 		for (const t of ordenados) {
 			const desde = new Date(t.vigencia_desde);
@@ -410,6 +439,8 @@
 				highlightConductor = 0;
 			}
 		} else if (e.key === 'Escape') {
+			// Escape cierra solo la lista, no el modal.
+			e.stopPropagation();
 			showConductorDropdown = false;
 			highlightConductor = 0;
 		}
@@ -435,6 +466,8 @@
 				highlightVehiculo = 0;
 			}
 		} else if (e.key === 'Escape') {
+			// Escape cierra solo la lista, no el modal.
+			e.stopPropagation();
 			showVehiculoDropdown = false;
 			highlightVehiculo = 0;
 		}
@@ -460,6 +493,8 @@
 				highlightEmpresa = 0;
 			}
 		} else if (e.key === 'Escape') {
+			// Escape cierra solo la lista, no el modal.
+			e.stopPropagation();
 			showEmpresaDropdown = false;
 			highlightEmpresa = 0;
 		}
@@ -738,14 +773,24 @@
 		});
 	}
 
-
 	function calcularTotales() {
 		const totales = {
 			totalHoras: 0,
-			HED: 0, HEN: 0, HEFD: 0, HEFN: 0, RNDF: 0, RN: 0, RD: 0,
+			HED: 0,
+			HEN: 0,
+			HEFD: 0,
+			HEFN: 0,
+			RNDF: 0,
+			RN: 0,
+			RD: 0,
 			// Valores monetarios (por tipo y total)
-			valorHED: 0, valorHEN: 0, valorHEFD: 0, valorHEFN: 0,
-			valorRN: 0, valorRD: 0, valorRNDF: 0,
+			valorHED: 0,
+			valorHEN: 0,
+			valorHEFD: 0,
+			valorHEFN: 0,
+			valorRN: 0,
+			valorRD: 0,
+			valorRNDF: 0,
 			valorTotal: 0
 		};
 
@@ -1535,2499 +1580,2391 @@
 	}
 </script>
 
-{#if isOpen}
-	<!-- Backdrop con blur (paleta landing) -->
-	<button
-		type="button"
-		class="fixed inset-0 z-[60] cursor-default border-0 p-0"
-		style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.40), rgba(20, 83, 45, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
-		aria-label="Cerrar modal"
-		on:click={handleClose}
-		transition:fade={{ duration: 200 }}
-	></button>
-
-	<!-- Modal Container -->
-	<div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+<ModalBase
+	open={isOpen}
+	eyebrow="{getNombreMes(currentMonth)} {currentYear}"
+	title={editMode ? 'Editar Recargo' : 'Nuevo Recargo'}
+	subtitle={fromServicio ? 'Vinculado a un servicio' : null}
+	tamano="full"
+	bloqueado={isLoading || mostrarModalEmpresa || mostrarModalConductor || mostrarModalVehiculo}
+	oncerrar={handleClose}
+>
+	{#snippet accionesCabecera()}
 		<div
-			class="relative max-h-[90vh] w-full max-w-7xl overflow-hidden"
-			style="background-color: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 24px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);"
-			transition:fly={{ y: 20, duration: 300 }}
+			class="rf-progreso"
+			title="{progress.completed} de {progress.total} completado"
+			aria-label="{progress.completed} de {progress.total} completado"
 		>
-			<!-- Header -->
-			<div
-				class="sticky top-0 z-10 px-6 py-5"
-				style="border-bottom: 1px solid var(--border-subtle); background: linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-base) 100%);"
+			<span class="rf-progreso-num">{progress.completed}/{progress.total}</span>
+			<span class="rf-progreso-barra" aria-hidden="true">
+				<span style="width: {(progress.completed / progress.total) * 100}%;"></span>
+			</span>
+		</div>
+	{/snippet}
+
+	{#snippet cabecera()}
+		<!-- Pestañas del formulario. En móvil cada una reparte el ancho y lleva
+		     el nombre corto, para que la fila no desborde. -->
+		<div class="rf-tabs" role="tablist" aria-label="Secciones del recargo">
+			<button
+				type="button"
+				role="tab"
+				class="rf-tab"
+				class:activa={activeTab === 'informacion'}
+				aria-selected={activeTab === 'informacion'}
+				onclick={() => (activeTab = 'informacion')}
 			>
-				<div class="flex items-center justify-between">
-					<div class="flex items-center gap-3">
-						<div
-							class="flex h-12 w-12 items-center justify-center rounded-xl"
-							style="background: linear-gradient(135deg, {editMode
-								? '#3b82f6, #2563eb'
-								: '#16a34a, #15803d'}); box-shadow: 0 6px 16px {editMode
-								? 'rgba(59, 130, 246, 0.30)'
-								: 'rgba(22, 163, 74, 0.30)'};"
-						>
-							<svg
-								class="h-6 w-6 text-white"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								stroke-width="1.8"
-							>
-								{#if editMode}
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-									/>
-								{:else}
-									<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-								{/if}
-							</svg>
-						</div>
-						<div>
-							<p
-								class="font-mono-meta mb-1 inline-block rounded-md px-2 py-0.5 text-[10px]"
-								style="color: {editMode ? '#2563eb' : 'var(--emerald-500)'}; background: {editMode
-									? 'rgba(59, 130, 246, 0.08)'
-									: 'rgba(22, 163, 74, 0.08)'}; letter-spacing: 0.12em;"
-							>
-								{getNombreMes(currentMonth)}
-								{currentYear}
-							</p>
-							<h2
-								class="font-display text-2xl"
-								style="color: var(--bg-charcoal); font-weight: 800;"
-							>
-								{editMode ? 'Editar Recargo' : 'Nuevo Recargo'}
-							</h2>
-							<div class="flex items-center gap-2">
-								{#if fromServicio}
-									<span
-										class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold"
-										style="background-color: rgba(59, 130, 246, 0.08); color: #1d4ed8; border: 1px solid rgba(59, 130, 246, 0.2);"
-									>
-										<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-											/>
-										</svg>
-										Desde Servicio
-									</span>
-								{/if}
-							</div>
-						</div>
-					</div>
+				<span class="rf-tab-largo">Información Principal</span>
+				<span class="rf-tab-corto">Información</span>
+				{#if tabCompleted.informacion}
+					<CircleCheck class="rf-tab-check" size={15} strokeWidth={2.5} aria-label="Completo" />
+				{/if}
+			</button>
+			<button
+				type="button"
+				role="tab"
+				class="rf-tab"
+				class:activa={activeTab === 'condiciones'}
+				aria-selected={activeTab === 'condiciones'}
+				onclick={() => (activeTab = 'condiciones')}
+			>
+				<span class="rf-tab-largo">Condiciones y Evaluación</span>
+				<span class="rf-tab-corto">Condiciones</span>
+				<span class="rf-tab-opcional">Opcional</span>
+				{#if tabCompleted.condiciones}
+					<CircleCheck class="rf-tab-check" size={15} strokeWidth={2.5} aria-label="Completo" />
+				{/if}
+			</button>
+			<button
+				type="button"
+				role="tab"
+				class="rf-tab"
+				class:activa={activeTab === 'horarios'}
+				aria-selected={activeTab === 'horarios'}
+				onclick={() => (activeTab = 'horarios')}
+			>
+				<span class="rf-tab-largo">Horarios de Trabajo</span>
+				<span class="rf-tab-corto">Horarios</span>
+				{#if tabCompleted.horarios}
+					<CircleCheck class="rf-tab-check" size={15} strokeWidth={2.5} aria-label="Completo" />
+				{/if}
+			</button>
+		</div>
+	{/snippet}
 
-					<!-- Progreso -->
-					<div class="flex items-center gap-4">
-						<div class="text-right">
-							<div class="text-xs font-semibold" style="color: var(--text-muted);">
-								<span
-									class="font-mono-meta"
-									style="color: {editMode ? '#2563eb' : 'var(--emerald-500)'};"
-								>
-									{progress.completed}/{progress.total}
-								</span>
-								<span class="ml-1">completado</span>
-							</div>
-							<div
-								class="mt-1.5 h-1.5 w-32 overflow-hidden rounded-full"
-								style="background-color: var(--bg-base); border: 1px solid var(--border-subtle);"
-							>
-								<div
-									class="h-full transition-all duration-300"
-									style="width: {(progress.completed / progress.total) *
-										100}%; background: linear-gradient(90deg, {editMode
-										? '#3b82f6, #2563eb'
-										: '#16a34a, #15803d'});"
-								></div>
-							</div>
-						</div>
-
-						<button
-							on:click={handleClose}
-							disabled={isLoading}
-							aria-label="Cerrar modal"
-							class="filter-close"
-						>
-							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M6 18L18 6M6 6l12 12"
-								/>
-							</svg>
-						</button>
-					</div>
-				</div>
-
-				<!-- Tabs. En móvil son un control segmentado compacto: cada pestaña
-				     reparte el ancho, lleva el nombre corto y sin la pastilla «Opcional»;
-				     antes cada una medía media pantalla y la fila desbordaba. -->
-				<div class="mt-3 flex gap-1.5 sm:mt-4 sm:gap-2">
-					<button
-						on:click={() => (activeTab = 'informacion')}
-						class="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors sm:flex-none sm:justify-start sm:gap-2 sm:px-4 sm:py-2 sm:text-sm sm:font-medium {activeTab ===
-						'informacion'
-							? editMode
-								? 'bg-blue-100 text-blue-700'
-								: 'bg-emerald-100 text-emerald-700'
-							: 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
-					>
-						<svg class="hidden h-4 w-4 sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-							/>
-						</svg>
-						<span class="hidden sm:inline">Información Principal</span>
-						<span class="sm:hidden">Información</span>
-						{#if tabCompleted.informacion}
-							<svg class="h-4 w-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
-								<path
-									fill-rule="evenodd"
-									d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-									clip-rule="evenodd"
-								/>
-							</svg>
-						{/if}
-					</button>
-
-					<button
-						on:click={() => (activeTab = 'condiciones')}
-						class="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors sm:flex-none sm:justify-start sm:gap-2 sm:px-4 sm:py-2 sm:text-sm sm:font-medium {activeTab ===
-						'condiciones'
-							? editMode
-								? 'bg-blue-100 text-blue-700'
-								: 'bg-emerald-100 text-emerald-700'
-							: 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
-					>
-						<svg class="hidden h-4 w-4 sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-							/>
-						</svg>
-						<span class="hidden sm:inline">Condiciones y Evaluación</span>
-						<span class="sm:hidden">Condiciones</span>
-						<span
-							class="hidden rounded-full bg-gray-200 px-2 py-0.5 text-xs font-medium text-gray-600 sm:inline"
-							>Opcional</span
-						>
-						{#if tabCompleted.condiciones}
-							<svg class="h-4 w-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
-								<path
-									fill-rule="evenodd"
-									d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-									clip-rule="evenodd"
-								/>
-							</svg>
-						{/if}
-					</button>
-
-					<button
-						on:click={() => (activeTab = 'horarios')}
-						class="flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors sm:flex-none sm:justify-start sm:gap-2 sm:px-4 sm:py-2 sm:text-sm sm:font-medium {activeTab ===
-						'horarios'
-							? editMode
-								? 'bg-blue-100 text-blue-700'
-								: 'bg-emerald-100 text-emerald-700'
-							: 'bg-gray-100 text-gray-600 hover:bg-gray-200'}"
-					>
-						<svg class="hidden h-4 w-4 sm:block" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-							/>
-						</svg>
-						<span class="hidden sm:inline">Horarios de Trabajo</span>
-						<span class="sm:hidden">Horarios</span>
-						{#if tabCompleted.horarios}
-							<svg class="h-4 w-4 text-emerald-500" fill="currentColor" viewBox="0 0 20 20">
-								<path
-									fill-rule="evenodd"
-									d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-									clip-rule="evenodd"
-								/>
-							</svg>
-						{/if}
-					</button>
-				</div>
-			</div>
-
-			<!-- Body -->
-			<div class="max-h-[calc(67.5vh-200px)] overflow-y-auto p-6">
-				{#if isLoadingData}
-					<div class="flex items-center justify-center py-12">
-						<div class="text-center">
-							<div
-								class="h-12 w-12 border-4 {editMode
-									? 'border-blue-500'
-									: 'border-emerald-500'} mx-auto mb-4 animate-spin rounded-full border-t-transparent"
-							></div>
-							<p class="text-gray-600">Cargando datos del recargo...</p>
-						</div>
-					</div>
-				{:else if activeTab === 'informacion'}
-					<!-- Tab: Información Principal -->
-					<div class="space-y-6" transition:fade={{ duration: 200 }}>
-						<!-- Grid de 2 columnas para campos principales -->
-						<div class="grid grid-cols-1 gap-6 md:grid-cols-2">
-							<!-- Conductor -->
-							<div>
-								<div class="mb-2 block text-sm font-semibold text-gray-800">
-									<div class="flex items-center gap-2">
-										<svg
-											class="h-5 w-5 text-emerald-600"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-											/>
-										</svg>
-										Conductor
-										<span class="text-red-500">*</span>
-									</div>
-								</div>
-								<div class="flex items-center gap-3">
-									<div class="relative flex-1">
-										{#if conductorSeleccionado}
-											<div
-												class="flex flex-1 items-center justify-between rounded-xl border-2 border-emerald-500 bg-emerald-50 px-4 py-3"
-											>
-												<div>
-													<div class="font-medium text-gray-900">
-														{conductorSeleccionado.nombre}
-														{conductorSeleccionado.apellido}
-													</div>
-													{#if conductorSeleccionado.numero_identificacion}
-														<div class="text-sm text-gray-600">
-															CC {conductorSeleccionado.numero_identificacion}
-														</div>
-													{/if}
-												</div>
-												{#if !fromServicio}
-													<button
-														on:click={() => {
-															formData.conductorId = '';
-															searchConductor = '';
-														}}
-														aria-label="Cambiar conductor"
-														class="rounded-lg p-2 transition-colors hover:bg-emerald-100"
-													>
-														<svg
-															class="h-5 w-5 text-gray-600"
-															fill="none"
-															stroke="currentColor"
-															viewBox="0 0 24 24"
-														>
-															<path
-																stroke-linecap="round"
-																stroke-linejoin="round"
-																stroke-width="2"
-																d="M6 18L18 6M6 6l12 12"
-															/>
-														</svg>
-													</button>
-												{/if}
-											</div>
-										{:else}
-											<input
-												type="text"
-												bind:value={searchConductor}
-												on:focus={() => (showConductorDropdown = true)}
-												on:blur={() => setTimeout(() => (showConductorDropdown = false), 200)}
-												on:keydown={handleConductorKeydown}
-												placeholder="Buscar conductor por nombre..."
-												disabled={fromServicio}
-												class="w-full rounded-xl border-2 border-gray-300 px-4 py-3 transition-all focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:opacity-60"
-											/>
-											{#if showConductorDropdown && conductoresFiltrados.length > 0}
-												<div
-													id="dropdown-conductor"
-													class="absolute z-20 mt-2 max-h-60 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"
-												>
-													{#each conductoresFiltrados as conductor, i}
-														<button
-															data-dropdown-item
-															on:click={() => {
-																formData.conductorId = conductor.id;
-																showConductorDropdown = false;
-																highlightConductor = -1;
-															}}
-															class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 {highlightConductor ===
-															i
-																? 'bg-emerald-100'
-																: 'hover:bg-gray-50'}"
-														>
-															<div class="font-medium text-gray-900">
-																{conductor.nombre}
-																{conductor.apellido}
-															</div>
-															{#if conductor.numero_identificacion}
-																<div class="text-sm text-gray-600">
-																	CC {conductor.numero_identificacion}
-																</div>
-															{/if}
-														</button>
-													{/each}
-												</div>
-											{/if}
-										{/if}
-									</div>
-
-									<button
-										type="button"
-										on:click={() => (mostrarModalConductor = true)}
-										class="group flex h-11 w-11 items-center justify-center rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50/50 text-emerald-600 transition-all hover:scale-105 hover:border-emerald-400 hover:bg-emerald-50"
-										title="Crear nuevo vehículo"
-									>
-										<svg
-											class="h-5 w-5 transition-transform group-hover:rotate-90"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2.5"
-											viewBox="0 0 24 24"
-										>
-											<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-										</svg>
-									</button>
-								</div>
-							</div>
-
-							<!-- Vehículo -->
-							<div>
-								<div class="mb-2 block text-sm font-semibold text-gray-800">
-									<div class="flex items-center gap-2">
-										<svg
-											class="h-5 w-5 text-emerald-600"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M13 10V3L4 14h7v7l9-11h-7z"
-											/>
-										</svg>
-										Vehículo
-										<span class="text-red-500">*</span>
-									</div>
-								</div>
-								<div class="relative">
-									{#if vehiculoSeleccionado}
-										<div
-											class="flex items-center justify-between rounded-xl border-2 border-emerald-500 bg-emerald-50 px-4 py-3"
-										>
-											<div>
-												<div class="font-medium text-gray-900">{vehiculoSeleccionado.placa}</div>
-												{#if vehiculoSeleccionado.marca}
-													<div class="text-sm text-gray-600">
-														{vehiculoSeleccionado.marca}
-														{vehiculoSeleccionado.linea || ''}
-														{vehiculoSeleccionado.modelo || ''}
-													</div>
+	{#if isLoadingData}
+		<div class="rf-cargando" aria-live="polite">
+			<span class="rf-spinner" aria-hidden="true"></span>
+			<p>Cargando datos del recargo...</p>
+		</div>
+	{:else if activeTab === 'informacion'}
+		<!-- Tab: Información Principal -->
+		<div class="rf" transition:fade={{ duration: 200 }}>
+			<section class="rf-seccion">
+				<h3 class="rf-titulo">Datos principales</h3>
+				<div class="rf-card">
+					<div class="rf-grid">
+						<!-- Conductor -->
+						<Campo id="rf-conductor" label="Conductor" requerido>
+							<div class="rf-fila-control">
+								<div class="rf-buscador">
+									{#if conductorSeleccionado}
+										<div class="rf-elegido">
+											<div class="rf-elegido-texto">
+												<span class="rf-elegido-nombre">
+													{conductorSeleccionado.nombre}
+													{conductorSeleccionado.apellido}
+												</span>
+												{#if conductorSeleccionado.numero_identificacion}
+													<span class="rf-elegido-sub">
+														CC {conductorSeleccionado.numero_identificacion}
+													</span>
 												{/if}
 											</div>
 											{#if !fromServicio}
 												<button
-													on:click={() => {
-														formData.vehiculoId = '';
-														searchVehiculo = '';
+													type="button"
+													onclick={() => {
+														formData.conductorId = '';
+														searchConductor = '';
 													}}
-													aria-label="Cambiar vehículo"
-													class="rounded-lg p-2 transition-colors hover:bg-emerald-100"
+													aria-label="Cambiar conductor"
+													class="rf-quitar"
 												>
-													<svg
-														class="h-5 w-5 text-gray-600"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															stroke-width="2"
-															d="M6 18L18 6M6 6l12 12"
-														/>
-													</svg>
-												</button>
-											{/if}
-										</div>
-									{:else}
-										<div class="flex items-center gap-3">
-											<input
-												type="text"
-												bind:value={searchVehiculo}
-												on:focus={() => (showVehiculoDropdown = true)}
-												on:blur={() => setTimeout(() => (showVehiculoDropdown = false), 200)}
-												on:keydown={handleVehiculoKeydown}
-												placeholder="Buscar vehículo por placa..."
-												disabled={fromServicio}
-												class="w-full rounded-xl border-2 border-gray-300 px-4 py-3 transition-all focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:opacity-60"
-											/>
-											{#if showVehiculoDropdown && vehiculosFiltrados.length > 0}
-												<div
-													id="dropdown-vehiculo"
-													class="absolute z-20 mt-2 max-h-60 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"
-												>
-													{#each vehiculosFiltrados as vehiculo, i}
-														<button
-															data-dropdown-item
-															on:click={() => {
-																formData.vehiculoId = vehiculo.id;
-																showVehiculoDropdown = false;
-																highlightVehiculo = -1;
-															}}
-															class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 {highlightVehiculo ===
-															i
-																? 'bg-emerald-100'
-																: 'hover:bg-gray-50'}"
-														>
-															<div class="font-medium text-gray-900">{vehiculo.placa}</div>
-															{#if vehiculo.marca}
-																<div class="text-sm text-gray-600">
-																	{vehiculo.marca}
-																	{vehiculo.linea || ''}
-																	{vehiculo.modelo || ''}
-																</div>
-															{/if}
-														</button>
-													{/each}
-												</div>
-											{/if}
-											<button
-												type="button"
-												on:click={() => (mostrarModalVehiculo = true)}
-												class="group flex h-11 w-11 items-center justify-center rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50/50 text-emerald-600 transition-all hover:scale-105 hover:border-emerald-400 hover:bg-emerald-50"
-												title="Crear nuevo vehículo"
-											>
-												<svg
-													class="h-5 w-5 transition-transform group-hover:rotate-90"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2.5"
-													viewBox="0 0 24 24"
-												>
-													<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-												</svg>
-											</button>
-										</div>
-									{/if}
-								</div>
-							</div>
-
-							<!-- Empresa -->
-							<div>
-								<div class="mb-2 block text-sm font-semibold text-gray-800">
-									<div class="flex items-center gap-2">
-										<svg
-											class="h-5 w-5 text-emerald-600"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-											/>
-										</svg>
-										Empresa
-										<span class="text-red-500">*</span>
-									</div>
-								</div>
-								<div class="relative flex items-center gap-3">
-									{#if empresaSeleccionada}
-										<div
-											class="flex flex-1 items-center justify-between rounded-xl border-2 border-emerald-500 bg-emerald-50 px-4 py-3"
-										>
-											<div>
-												<div class="font-medium text-gray-900">{empresaSeleccionada.nombre}</div>
-												{#if empresaSeleccionada.nit}
-													<div class="text-sm text-gray-600">NIT: {empresaSeleccionada.nit}</div>
-												{/if}
-											</div>
-											{#if !fromServicio}
-												<button
-													on:click={() => {
-														formData.empresaId = '';
-														searchEmpresa = '';
-													}}
-													aria-label="Cambiar empresa"
-													class="rounded-lg p-2 transition-colors hover:bg-emerald-100"
-												>
-													<svg
-														class="h-5 w-5 text-gray-600"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															stroke-width="2"
-															d="M6 18L18 6M6 6l12 12"
-														/>
-													</svg>
+													<X size={16} strokeWidth={2.5} />
 												</button>
 											{/if}
 										</div>
 									{:else}
 										<input
+											id="rf-conductor"
 											type="text"
-											bind:value={searchEmpresa}
-											on:focus={() => (showEmpresaDropdown = true)}
-											on:blur={() => setTimeout(() => (showEmpresaDropdown = false), 200)}
-											on:keydown={handleEmpresaKeydown}
-											placeholder="Buscar empresa por nombre..."
+											bind:value={searchConductor}
+											onfocus={() => (showConductorDropdown = true)}
+											onblur={() => setTimeout(() => (showConductorDropdown = false), 200)}
+											onkeydown={handleConductorKeydown}
+											placeholder="Buscar conductor por nombre..."
 											disabled={fromServicio}
-											class="w-full rounded-xl border-2 border-gray-300 px-4 py-3 transition-all focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:opacity-60"
+											autocomplete="off"
+											class="rf-input"
 										/>
-										{#if showEmpresaDropdown && empresasFiltradas.length > 0}
-											<div
-												id="dropdown-empresa"
-												class="absolute z-20 mt-2 max-h-60 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"
-											>
-												{#each empresasFiltradas as empresa, i}
+										{#if showConductorDropdown && conductoresFiltrados.length > 0}
+											<div id="dropdown-conductor" class="rf-lista">
+												{#each conductoresFiltrados as conductor, i}
 													<button
+														type="button"
 														data-dropdown-item
-														on:click={() => {
-															formData.empresaId = empresa.id;
-															showEmpresaDropdown = false;
-															highlightEmpresa = -1;
+														onclick={() => {
+															formData.conductorId = conductor.id;
+															showConductorDropdown = false;
+															highlightConductor = -1;
 														}}
-														class="w-full border-b border-gray-100 px-4 py-3 text-left transition-colors last:border-b-0 {highlightEmpresa ===
-														i
-															? 'bg-emerald-100'
-															: 'hover:bg-gray-50'}"
+														class="rf-opcion"
+														class:activa={highlightConductor === i}
 													>
-														<div class="font-medium text-gray-900">{empresa.nombre}</div>
-														{#if empresa.nit}
-															<div class="text-sm text-gray-600">NIT: {empresa.nit}</div>
+														<span class="rf-opcion-nombre">
+															{conductor.nombre}
+															{conductor.apellido}
+														</span>
+														{#if conductor.numero_identificacion}
+															<span class="rf-opcion-sub">CC {conductor.numero_identificacion}</span
+															>
 														{/if}
 													</button>
 												{/each}
 											</div>
 										{/if}
 									{/if}
-									<button
-										type="button"
-										on:click={() => (mostrarModalEmpresa = true)}
-										class="group flex h-11 w-11 items-center justify-center rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50/50 text-emerald-600 transition-all hover:scale-105 hover:border-emerald-400 hover:bg-emerald-50"
-										title="Crear nuevo vehículo"
-									>
-										<svg
-											class="h-5 w-5 transition-transform group-hover:rotate-90"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2.5"
-											viewBox="0 0 24 24"
-										>
-											<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-										</svg>
-									</button>
 								</div>
+								<button
+									type="button"
+									onclick={() => (mostrarModalConductor = true)}
+									class="rf-btn-icono"
+									title="Crear nuevo conductor"
+									aria-label="Crear nuevo conductor"
+								>
+									<Plus size={18} strokeWidth={2.5} />
+								</button>
 							</div>
-							<!-- Número de planilla -->
-							<div>
-								<div class="mb-2 text-sm font-semibold text-gray-800">
-									<div class="flex items-center gap-2">
-										<svg
-											class="h-5 w-5 text-emerald-600"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-											/>
-										</svg>
-										<label for="tm-number">Número de Planilla (Generado Automáticamente)</label>
-									</div>
-								</div>
-								<div class="flex gap-2">
-									<div class="relative flex-1">
-										<input
-											id="tm-number"
-											type="text"
-											bind:value={formData.tmNumber}
-											placeholder={isGenerandoPlanilla ? 'Generando...' : 'TM-0001'}
-											class="w-full rounded-xl border-2 px-4 transition-all focus:ring-2 focus:ring-emerald-200 {formData.tmNumber
-												? 'border-emerald-500 bg-emerald-50 py-5.5'
-												: 'border-gray-300 py-3'} focus:border-emerald-500 disabled:cursor-wait disabled:opacity-70"
-										/>
-										{#if isGenerandoPlanilla}
-											<div class="absolute top-1/2 right-3 -translate-y-1/2">
-												<svg
-													class="h-5 w-5 animate-spin text-emerald-600"
-													fill="none"
-													viewBox="0 0 24 24"
+						</Campo>
+
+						<!-- Vehículo -->
+						<Campo id="rf-vehiculo" label="Vehículo" requerido>
+							<div class="rf-fila-control">
+								<div class="rf-buscador">
+									{#if vehiculoSeleccionado}
+										<div class="rf-elegido">
+											<div class="rf-elegido-texto">
+												<span class="rf-elegido-nombre">{vehiculoSeleccionado.placa}</span>
+												{#if vehiculoSeleccionado.marca}
+													<span class="rf-elegido-sub">
+														{vehiculoSeleccionado.marca}
+														{vehiculoSeleccionado.linea || ''}
+														{vehiculoSeleccionado.modelo || ''}
+													</span>
+												{/if}
+											</div>
+											{#if !fromServicio}
+												<button
+													type="button"
+													onclick={() => {
+														formData.vehiculoId = '';
+														searchVehiculo = '';
+													}}
+													aria-label="Cambiar vehículo"
+													class="rf-quitar"
 												>
-													<circle
-														class="opacity-25"
-														cx="12"
-														cy="12"
-														r="10"
-														stroke="currentColor"
-														stroke-width="4"
-													/>
-													<path
-														class="opacity-75"
-														fill="currentColor"
-														d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-													/>
-												</svg>
+													<X size={16} strokeWidth={2.5} />
+												</button>
+											{/if}
+										</div>
+									{:else}
+										<input
+											id="rf-vehiculo"
+											type="text"
+											bind:value={searchVehiculo}
+											onfocus={() => (showVehiculoDropdown = true)}
+											onblur={() => setTimeout(() => (showVehiculoDropdown = false), 200)}
+											onkeydown={handleVehiculoKeydown}
+											placeholder="Buscar vehículo por placa..."
+											disabled={fromServicio}
+											autocomplete="off"
+											class="rf-input"
+										/>
+										{#if showVehiculoDropdown && vehiculosFiltrados.length > 0}
+											<div id="dropdown-vehiculo" class="rf-lista">
+												{#each vehiculosFiltrados as vehiculo, i}
+													<button
+														type="button"
+														data-dropdown-item
+														onclick={() => {
+															formData.vehiculoId = vehiculo.id;
+															showVehiculoDropdown = false;
+															highlightVehiculo = -1;
+														}}
+														class="rf-opcion"
+														class:activa={highlightVehiculo === i}
+													>
+														<span class="rf-opcion-nombre">{vehiculo.placa}</span>
+														{#if vehiculo.marca}
+															<span class="rf-opcion-sub">
+																{vehiculo.marca}
+																{vehiculo.linea || ''}
+																{vehiculo.modelo || ''}
+															</span>
+														{/if}
+													</button>
+												{/each}
 											</div>
 										{/if}
-									</div>
-									<button
-										type="button"
-										on:click={() => generarNumeroPlanilla({ force: true })}
-										disabled={isGenerandoPlanilla}
-										aria-label="Regenerar número de planilla"
-										title={isGenerandoPlanilla
-											? 'Generando...'
-											: 'Regenerar número de planilla (consulta el siguiente disponible en el backend)'}
-										class="flex h-[52px] flex-shrink-0 items-center gap-2 rounded-xl border-2 px-4 text-sm font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50 {isGenerandoPlanilla
-											? 'border-gray-300 bg-gray-100 text-gray-400'
-											: 'border-emerald-500 bg-emerald-50 text-emerald-700 hover:border-emerald-600 hover:bg-emerald-100 active:scale-95'}"
-									>
-										{#if isGenerandoPlanilla}
-											<svg class="h-5 w-5 animate-spin" fill="none" viewBox="0 0 24 24">
-												<circle
-													class="opacity-25"
-													cx="12"
-													cy="12"
-													r="10"
-													stroke="currentColor"
-													stroke-width="4"
-												/>
-												<path
-													class="opacity-75"
-													fill="currentColor"
-													d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-												/>
-											</svg>
-											<span>Generando…</span>
-										{:else}
-											<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-												/>
-											</svg>
-											<span>Regenerar</span>
-										{/if}
-									</button>
-								</div>
-							</div>
-						</div>
-
-						<!-- Información del Servicio (Editable) -->
-						{#if mostrarServicioInfo || fromServicio}
-							<div
-								class="rounded-xl border border-emerald-200 bg-gradient-to-br from-emerald-50 to-teal-50 p-5"
-							>
-								<div class="mb-4 flex items-center gap-3">
-									<div class="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-600">
-										<svg
-											class="h-5 w-5 text-white"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-											/>
-										</svg>
-									</div>
-									<div>
-										<h3 class="text-sm font-semibold text-gray-900">Información del Servicio</h3>
-										<p class="text-xs text-gray-500">
-											{fromServicio
-												? 'Editar datos del servicio vinculado'
-												: 'Registrar servicio opcional para este recargo'}
-										</p>
-									</div>
-									{#if !fromServicio}
-										<button
-											type="button"
-											on:click={() => {
-												mostrarServicioInfo = false;
-											}}
-											class="ml-auto rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-500"
-											aria-label="Ocultar formulario de servicio"
-										>
-											<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M6 18L18 6M6 6l12 12"
-												/>
-											</svg>
-										</button>
 									{/if}
 								</div>
-
-								<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-									<!-- Municipio Origen -->
-									<div>
-										<div class="mb-1 text-xs font-medium tracking-wide text-gray-600 uppercase">
-											Municipio Origen
-										</div>
-										<div class="relative">
-											{#if servicioOrigenSeleccionado}
-												<div
-													class="flex items-center justify-between rounded-xl border-2 border-emerald-500 bg-white px-3 py-2"
-												>
-													<div>
-														<div class="text-sm font-medium text-gray-900">
-															{servicioOrigenSeleccionado.nombre_municipio}
-														</div>
-														<div class="flex items-center gap-2 text-xs text-gray-500">
-															<span>{servicioOrigenSeleccionado.nombre_departamento}</span>
-															<span
-																class="inline-flex items-center rounded bg-emerald-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-emerald-700"
-															>
-																DIVIPOLA: {servicioOrigenSeleccionado.codigo_municipio}
-															</span>
-														</div>
-													</div>
-													<button
-														type="button"
-														on:click={() => {
-															servicioOrigenSeleccionado = null;
-															searchServicioOrigen = '';
-															servicioOrigenEspecifico = '';
-															servicioOrigenLatitud = null;
-															servicioOrigenLongitud = null;
-														}}
-														class="rounded-lg p-1.5 transition-colors hover:bg-emerald-100"
-														aria-label="Cambiar municipio origen"
-													>
-														<svg
-															class="h-4 w-4 text-gray-600"
-															fill="none"
-															stroke="currentColor"
-															viewBox="0 0 24 24"
-														>
-															<path
-																stroke-linecap="round"
-																stroke-linejoin="round"
-																stroke-width="2"
-																d="M6 18L18 6M6 6l12 12"
-															/>
-														</svg>
-													</button>
-												</div>
-											{:else}
-												<input
-													type="text"
-													bind:value={searchServicioOrigen}
-													on:focus={() => (showServicioOrigenDropdown = true)}
-													on:blur={() =>
-														setTimeout(() => (showServicioOrigenDropdown = false), 200)}
-													placeholder="Buscar municipio de origen..."
-													class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-												/>
-												{#if showServicioOrigenDropdown && filteredServicioOrigen.length > 0}
-													<div
-														class="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"
-													>
-														{#each filteredServicioOrigen as mun}
-															<button
-																type="button"
-																on:click={() => {
-																	servicioOrigenSeleccionado = mun;
-																	showServicioOrigenDropdown = false;
-																	searchServicioOrigen = '';
-																}}
-																class="w-full border-b border-gray-100 px-3 py-2 text-left transition-colors last:border-b-0 hover:bg-emerald-50"
-															>
-																<div class="text-sm font-medium text-gray-900">
-																	{mun.nombre_municipio}
-																</div>
-																<div class="flex items-center gap-2 text-xs text-gray-500">
-																	<span>{mun.nombre_departamento}</span>
-																	<span
-																		class="inline-flex items-center rounded bg-blue-100 px-1.5 py-0.5 font-mono font-semibold text-blue-700"
-																	>
-																		{mun.codigo_municipio}
-																	</span>
-																</div>
-															</button>
-														{/each}
-													</div>
-												{/if}
-											{/if}
-										</div>
-									</div>
-
-									<!-- Municipio Destino -->
-									<div>
-										<div class="mb-1 text-xs font-medium tracking-wide text-gray-600 uppercase">
-											Municipio Destino
-										</div>
-										<div class="relative">
-											{#if servicioDestinoSeleccionado}
-												<div
-													class="flex items-center justify-between rounded-xl border-2 border-emerald-500 bg-white px-3 py-2"
-												>
-													<div>
-														<div class="text-sm font-medium text-gray-900">
-															{servicioDestinoSeleccionado.nombre_municipio}
-														</div>
-														<div class="flex items-center gap-2 text-xs text-gray-500">
-															<span>{servicioDestinoSeleccionado.nombre_departamento}</span>
-															<span
-																class="inline-flex items-center rounded bg-emerald-100 px-1.5 py-0.5 font-mono text-xs font-semibold text-emerald-700"
-															>
-																DIVIPOLA: {servicioDestinoSeleccionado.codigo_municipio}
-															</span>
-														</div>
-													</div>
-													<button
-														type="button"
-														on:click={() => {
-															servicioDestinoSeleccionado = null;
-															searchServicioDestino = '';
-															servicioDestinoEspecifico = '';
-															servicioDestinoLatitud = null;
-															servicioDestinoLongitud = null;
-														}}
-														class="rounded-lg p-1.5 transition-colors hover:bg-emerald-100"
-														aria-label="Cambiar municipio destino"
-													>
-														<svg
-															class="h-4 w-4 text-gray-600"
-															fill="none"
-															stroke="currentColor"
-															viewBox="0 0 24 24"
-														>
-															<path
-																stroke-linecap="round"
-																stroke-linejoin="round"
-																stroke-width="2"
-																d="M6 18L18 6M6 6l12 12"
-															/>
-														</svg>
-													</button>
-												</div>
-											{:else}
-												<input
-													type="text"
-													bind:value={searchServicioDestino}
-													on:focus={() => (showServicioDestinoDropdown = true)}
-													on:blur={() =>
-														setTimeout(() => (showServicioDestinoDropdown = false), 200)}
-													placeholder="Buscar municipio de destino..."
-													class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-												/>
-												{#if showServicioDestinoDropdown && filteredServicioDestino.length > 0}
-													<div
-														class="absolute z-20 mt-1 max-h-48 w-full overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg"
-													>
-														{#each filteredServicioDestino as mun}
-															<button
-																type="button"
-																on:click={() => {
-																	servicioDestinoSeleccionado = mun;
-																	showServicioDestinoDropdown = false;
-																	searchServicioDestino = '';
-																}}
-																class="w-full border-b border-gray-100 px-3 py-2 text-left transition-colors last:border-b-0 hover:bg-emerald-50"
-															>
-																<div class="text-sm font-medium text-gray-900">
-																	{mun.nombre_municipio}
-																</div>
-																<div class="flex items-center gap-2 text-xs text-gray-500">
-																	<span>{mun.nombre_departamento}</span>
-																	<span
-																		class="inline-flex items-center rounded bg-blue-100 px-1.5 py-0.5 font-mono font-semibold text-blue-700"
-																	>
-																		{mun.codigo_municipio}
-																	</span>
-																</div>
-															</button>
-														{/each}
-													</div>
-												{/if}
-											{/if}
-										</div>
-									</div>
-
-									<!-- Dirección Origen Específica (Google Places) -->
-									<div>
-										<MapboxSearch
-											label="Dirección Origen Específica"
-											placeholder="Buscar dirección de origen..."
-											value={servicioOrigenEspecifico}
-											onSelect={(data) => {
-												servicioOrigenEspecifico = data.address;
-												servicioOrigenLatitud = data.coordinates[1];
-												servicioOrigenLongitud = data.coordinates[0];
-											}}
-										/>
-									</div>
-
-									<!-- Dirección Destino Específica (Google Places) -->
-									<div>
-										<MapboxSearch
-											label="Dirección Destino Específica"
-											placeholder="Buscar dirección de destino..."
-											value={servicioDestinoEspecifico}
-											onSelect={(data) => {
-												servicioDestinoEspecifico = data.address;
-												servicioDestinoLatitud = data.coordinates[1];
-												servicioDestinoLongitud = data.coordinates[0];
-											}}
-										/>
-									</div>
-
-									<!-- Fecha de Realización -->
-									<div>
-										<div class="mb-1 text-xs font-medium tracking-wide text-gray-600 uppercase">
-											Fecha y hora de realización
-										</div>
-										<input
-											type="datetime-local"
-											bind:value={servicioFechaRealizacion}
-											class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-										/>
-									</div>
-
-									<!-- Propósito del Servicio -->
-									<div>
-										<div class="mb-1 text-xs font-medium tracking-wide text-gray-600 uppercase">
-											Tipo de Servicio
-										</div>
-										<select
-											bind:value={servicioProposito}
-											class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-										>
-											<option value="personal">👤 Personal</option>
-											<option value="personal_y_herramienta">🛠️ Personal y Herramienta</option>
-										</select>
-									</div>
-
-									<!-- Observaciones -->
-									<div class="md:col-span-2">
-										<div class="mb-1 text-xs font-medium tracking-wide text-gray-600 uppercase">
-											Observaciones del Servicio
-										</div>
-										<textarea
-											bind:value={servicioObservaciones}
-											rows="2"
-											placeholder="Observaciones adicionales del servicio..."
-											class="w-full resize-none rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20"
-										></textarea>
-									</div>
-								</div>
+								{#if !vehiculoSeleccionado}
+									<button
+										type="button"
+										onclick={() => (mostrarModalVehiculo = true)}
+										class="rf-btn-icono"
+										title="Crear nuevo vehículo"
+										aria-label="Crear nuevo vehículo"
+									>
+										<Plus size={18} strokeWidth={2.5} />
+									</button>
+								{/if}
 							</div>
-						{:else if !fromServicio}
-							<!-- Botón para mostrar formulario de servicio en modo creación -->
+						</Campo>
+
+						<!-- Empresa -->
+						<Campo id="rf-empresa" label="Empresa" requerido>
+							<div class="rf-fila-control">
+								<div class="rf-buscador">
+									{#if empresaSeleccionada}
+										<div class="rf-elegido">
+											<div class="rf-elegido-texto">
+												<span class="rf-elegido-nombre">{empresaSeleccionada.nombre}</span>
+												{#if empresaSeleccionada.nit}
+													<span class="rf-elegido-sub">NIT: {empresaSeleccionada.nit}</span>
+												{/if}
+											</div>
+											{#if !fromServicio}
+												<button
+													type="button"
+													onclick={() => {
+														formData.empresaId = '';
+														searchEmpresa = '';
+													}}
+													aria-label="Cambiar empresa"
+													class="rf-quitar"
+												>
+													<X size={16} strokeWidth={2.5} />
+												</button>
+											{/if}
+										</div>
+									{:else}
+										<input
+											id="rf-empresa"
+											type="text"
+											bind:value={searchEmpresa}
+											onfocus={() => (showEmpresaDropdown = true)}
+											onblur={() => setTimeout(() => (showEmpresaDropdown = false), 200)}
+											onkeydown={handleEmpresaKeydown}
+											placeholder="Buscar empresa por nombre..."
+											disabled={fromServicio}
+											autocomplete="off"
+											class="rf-input"
+										/>
+										{#if showEmpresaDropdown && empresasFiltradas.length > 0}
+											<div id="dropdown-empresa" class="rf-lista">
+												{#each empresasFiltradas as empresa, i}
+													<button
+														type="button"
+														data-dropdown-item
+														onclick={() => {
+															formData.empresaId = empresa.id;
+															showEmpresaDropdown = false;
+															highlightEmpresa = -1;
+														}}
+														class="rf-opcion"
+														class:activa={highlightEmpresa === i}
+													>
+														<span class="rf-opcion-nombre">{empresa.nombre}</span>
+														{#if empresa.nit}
+															<span class="rf-opcion-sub">NIT: {empresa.nit}</span>
+														{/if}
+													</button>
+												{/each}
+											</div>
+										{/if}
+									{/if}
+								</div>
+								<button
+									type="button"
+									onclick={() => (mostrarModalEmpresa = true)}
+									class="rf-btn-icono"
+									title="Crear nueva empresa"
+									aria-label="Crear nueva empresa"
+								>
+									<Plus size={18} strokeWidth={2.5} />
+								</button>
+							</div>
+						</Campo>
+
+						<!-- Número de planilla -->
+						<Campo
+							id="tm-number"
+							label="Número de Planilla"
+							ayuda="Se genera automáticamente; puede escribirlo o regenerarlo."
+						>
+							<div class="rf-fila-control">
+								<div class="rf-buscador">
+									<input
+										id="tm-number"
+										type="text"
+										bind:value={formData.tmNumber}
+										placeholder={isGenerandoPlanilla ? 'Generando...' : 'TM-0001'}
+										class="rf-input rf-input-planilla"
+										class:lleno={!!formData.tmNumber}
+									/>
+									{#if isGenerandoPlanilla}
+										<span class="rf-input-spinner" aria-hidden="true">
+											<LoaderCircle class="rf-spin" size={18} />
+										</span>
+									{/if}
+								</div>
+								<button
+									type="button"
+									onclick={() => generarNumeroPlanilla({ force: true })}
+									disabled={isGenerandoPlanilla}
+									aria-label="Regenerar número de planilla"
+									title={isGenerandoPlanilla
+										? 'Generando...'
+										: 'Regenerar número de planilla (consulta el siguiente disponible en el backend)'}
+									class="btn-secondary rf-btn-regenerar"
+								>
+									{#if isGenerandoPlanilla}
+										<LoaderCircle class="rf-spin" size={16} />
+										<span>Generando…</span>
+									{:else}
+										<RefreshCw size={16} />
+										<span>Regenerar</span>
+									{/if}
+								</button>
+							</div>
+						</Campo>
+					</div>
+				</div>
+			</section>
+
+			<!-- Información del Servicio (Editable) -->
+			{#if mostrarServicioInfo || fromServicio}
+				<section class="rf-seccion">
+					<div class="rf-titulo-fila">
+						<div>
+							<h3 class="rf-titulo">Información del Servicio</h3>
+							<p class="rf-titulo-sub">
+								{fromServicio
+									? 'Editar datos del servicio vinculado'
+									: 'Registrar servicio opcional para este recargo'}
+							</p>
+						</div>
+						{#if !fromServicio}
 							<button
 								type="button"
-								on:click={() => {
-									mostrarServicioInfo = true;
+								onclick={() => {
+									mostrarServicioInfo = false;
 								}}
-								class="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50/50 px-4 py-3 text-sm font-medium text-emerald-700 transition-colors hover:border-emerald-400 hover:bg-emerald-50"
+								class="rf-quitar"
+								aria-label="Ocultar formulario de servicio"
+								title="Ocultar formulario de servicio"
 							>
-								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-									/>
-								</svg>
-								Agregar información de servicio (opcional)
+								<X size={16} strokeWidth={2.5} />
 							</button>
 						{/if}
-
-						<!-- Archivo adjunto -->
-						<div>
-							<p class="mb-2 block text-sm font-semibold text-gray-800">
-								<span class="flex items-center gap-2">
-									<svg
-										class="h-5 w-5 text-emerald-600"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-										/>
-									</svg>
-									Archivo PDF (Opcional)
-								</span>
-							</p>
-
-							{#if archivoExistente}
-								<div
-									class="flex items-center gap-3 rounded-xl border-2 border-blue-200 bg-blue-50 px-4 py-3"
-								>
-									<svg
-										class="h-10 w-10 text-blue-500"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-										/>
-									</svg>
-									<div class="flex-1">
-										<p class="font-medium text-gray-900">Archivo existente</p>
-										<p class="text-sm text-gray-600">Documento PDF adjunto previamente</p>
-									</div>
-									<button
-										on:click={() => {
-											archivoExistente = null;
-											archivoExistenteKey = null;
-										}}
-										aria-label="Eliminar archivo existente"
-										class="rounded-lg p-2 transition-colors hover:bg-blue-100"
-									>
-										<svg
-											class="h-5 w-5 text-gray-600"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-											/>
-										</svg>
-									</button>
-								</div>
-							{:else if archivoAdjunto}
-								<div
-									class="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4"
-								>
-									<svg
-										class="h-10 w-10 text-emerald-500"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-										/>
-									</svg>
-									<div class="flex-1">
-										<p class="font-medium text-gray-900">{archivoAdjunto.name}</p>
-										<p class="text-sm text-gray-600">
-											{(archivoAdjunto.size / 1024 / 1024).toFixed(2)} MB
-										</p>
-									</div>
-									<button
-										on:click={() => (archivoAdjunto = null)}
-										aria-label="Eliminar archivo adjunto"
-										class="rounded-lg p-2 transition-colors hover:bg-emerald-100"
-									>
-										<svg
-											class="h-5 w-5 text-gray-600"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-											/>
-										</svg>
-									</button>
-								</div>
-							{:else}
-								<label
-									class="flex h-32 w-full cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-gray-300 transition-all hover:border-emerald-500 hover:bg-emerald-50"
-								>
-									<svg
-										class="mb-2 h-8 w-8 text-gray-400"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-										/>
-									</svg>
-									<p class="text-sm text-gray-600">Haga clic para seleccionar un archivo PDF</p>
-									<input
-										type="file"
-										accept="application/pdf"
-										on:change={handleFileChange}
-										class="hidden"
-									/>
-								</label>
-							{/if}
-						</div>
 					</div>
-				{:else if activeTab === 'condiciones'}
-					<!-- Tab: Condiciones y Evaluación -->
-					<div class="space-y-6" transition:fade={{ duration: 200 }}>
-						<!-- Banner informativo -->
-						<div class="rounded-lg border border-green-200 bg-green-50 p-4">
-							<div class="flex gap-3">
-								<svg
-									class="h-5 w-5 flex-shrink-0 text-green-600"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-									/>
-								</svg>
-								<div>
-									<h4 class="font-semibold text-green-900">Sección Opcional - Preaprobada</h4>
-									<p class="mt-1 text-sm text-green-800">
-										Esta sección ya está validada con valores óptimos por defecto. Puede modificar
-										los campos si desea agregar información específica del servicio, pero no es
-										necesario para crear el recargo.
-									</p>
-								</div>
-							</div>
-						</div>
-
-						<!-- Estado del Conductor -->
-						<div class="rounded-lg border border-gray-200 bg-white p-4">
-							<h3 class="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-800">
-								<svg
-									class="h-5 w-5 text-blue-600"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-									/>
-								</svg>
-								Estado del Conductor
-							</h3>
-							<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-								<div>
-									<label
-										for="estado-conductor"
-										class="mb-2 block text-sm font-medium text-gray-700"
-									>
-										Estado Físico/Mental
-									</label>
-									<select
-										id="estado-conductor"
-										bind:value={formData.estado_conductor}
-										class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
-									>
-										<option value={null}>Seleccione...</option>
-										<option value="optimo">✅ Óptimo</option>
-										<option value="fatigado">😴 Fatigado</option>
-										<option value="regular">😐 Regular</option>
-										<option value="malo">❌ Malo</option>
-									</select>
-								</div>
-							</div>
-						</div>
-
-						<!-- Tipo de Terreno -->
-						<div class="rounded-lg border border-gray-200 bg-white p-4">
-							<h3 class="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-800">
-								<svg
-									class="h-5 w-5 text-amber-600"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"
-									/>
-								</svg>
-								Tipo de Terreno Transitado
-							</h3>
-							<div class="grid grid-cols-2 gap-3 md:grid-cols-4">
-								<label
-									class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 p-3 transition-colors hover:bg-gray-50 {formData.via_trocha
-										? 'border-emerald-500 bg-emerald-50'
-										: ''}"
-								>
-									<input
-										type="checkbox"
-										bind:checked={formData.via_trocha}
-										class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-									/>
-									<span class="text-sm font-medium">🏞️ Trocha</span>
-								</label>
-								<label
-									class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 p-3 transition-colors hover:bg-gray-50 {formData.via_afirmado
-										? 'border-emerald-500 bg-emerald-50'
-										: ''}"
-								>
-									<input
-										type="checkbox"
-										bind:checked={formData.via_afirmado}
-										class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-									/>
-									<span class="text-sm font-medium">🪨 Afirmado</span>
-								</label>
-								<label
-									class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 p-3 transition-colors hover:bg-gray-50 {formData.via_mixto
-										? 'border-emerald-500 bg-emerald-50'
-										: ''}"
-								>
-									<input
-										type="checkbox"
-										bind:checked={formData.via_mixto}
-										class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-									/>
-									<span class="text-sm font-medium">🔀 Mixto</span>
-								</label>
-								<label
-									class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 p-3 transition-colors hover:bg-gray-50 {formData.via_pavimentada
-										? 'border-emerald-500 bg-emerald-50'
-										: ''}"
-								>
-									<input
-										type="checkbox"
-										bind:checked={formData.via_pavimentada}
-										class="h-4 w-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
-									/>
-									<span class="text-sm font-medium">🛣️ Pavimentada</span>
-								</label>
-							</div>
-						</div>
-
-						<!-- Riesgos de Seguridad -->
-						<div class="rounded-lg border border-gray-200 bg-white p-4">
-							<h3 class="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-800">
-								<svg
-									class="h-5 w-5 text-red-600"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-									/>
-								</svg>
-								Riesgos y Condiciones de Seguridad
-							</h3>
-							<div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-								<label
-									class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 p-3 transition-colors hover:bg-gray-50 {formData.riesgo_desniveles
-										? 'border-red-500 bg-red-50'
-										: ''}"
-								>
-									<input
-										type="checkbox"
-										bind:checked={formData.riesgo_desniveles}
-										class="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
-									/>
-									<span class="text-sm font-medium">⛰️ Desniveles</span>
-								</label>
-								<label
-									class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 p-3 transition-colors hover:bg-gray-50 {formData.riesgo_deslizamientos
-										? 'border-red-500 bg-red-50'
-										: ''}"
-								>
-									<input
-										type="checkbox"
-										bind:checked={formData.riesgo_deslizamientos}
-										class="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
-									/>
-									<span class="text-sm font-medium">🪨 Deslizamientos</span>
-								</label>
-								<label
-									class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 p-3 transition-colors hover:bg-gray-50 {formData.riesgo_sin_senalizacion
-										? 'border-red-500 bg-red-50'
-										: ''}"
-								>
-									<input
-										type="checkbox"
-										bind:checked={formData.riesgo_sin_senalizacion}
-										class="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
-									/>
-									<span class="text-sm font-medium">🚫 Sin Señalización</span>
-								</label>
-								<label
-									class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 p-3 transition-colors hover:bg-gray-50 {formData.riesgo_animales
-										? 'border-red-500 bg-red-50'
-										: ''}"
-								>
-									<input
-										type="checkbox"
-										bind:checked={formData.riesgo_animales}
-										class="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
-									/>
-									<span class="text-sm font-medium">🐄 Animales en Vía</span>
-								</label>
-								<label
-									class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 p-3 transition-colors hover:bg-gray-50 {formData.riesgo_peatones
-										? 'border-red-500 bg-red-50'
-										: ''}"
-								>
-									<input
-										type="checkbox"
-										bind:checked={formData.riesgo_peatones}
-										class="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
-									/>
-									<span class="text-sm font-medium">🚶 Peatones</span>
-								</label>
-								<label
-									class="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-300 p-3 transition-colors hover:bg-gray-50 {formData.riesgo_trafico_alto
-										? 'border-red-500 bg-red-50'
-										: ''}"
-								>
-									<input
-										type="checkbox"
-										bind:checked={formData.riesgo_trafico_alto}
-										class="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
-									/>
-									<span class="text-sm font-medium">🚗 Tráfico Alto</span>
-								</label>
-							</div>
-						</div>
-
-						<!-- Evaluación del Servicio -->
-						<div class="rounded-lg border border-gray-200 bg-white p-4">
-							<h3 class="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-800">
-								<svg
-									class="h-5 w-5 text-yellow-600"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"
-									/>
-								</svg>
-								Evaluación del Servicio
-							</h3>
-							<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-								<div>
-									<label for="fuente-consulta" class="mb-2 block text-sm font-medium text-gray-700">
-										Fuente de Consulta
-									</label>
-									<select
-										id="fuente-consulta"
-										bind:value={formData.fuente_consulta}
-										class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
-									>
-										<option value={null}>Seleccione...</option>
-										<option value="conductor">👤 Conductor</option>
-										<option value="gps">📍 GPS</option>
-										<option value="cliente">🏢 Cliente</option>
-										<option value="sistema">💻 Sistema</option>
-									</select>
-								</div>
-								<div>
-									<label
-										for="calificacion-servicio"
-										class="mb-2 block text-sm font-medium text-gray-700"
-									>
-										Calificación del Servicio
-									</label>
-									<select
-										id="calificacion-servicio"
-										bind:value={formData.calificacion_servicio}
-										class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
-									>
-										<option value={null}>Seleccione...</option>
-										<option value="bueno">⭐⭐⭐⭐⭐ Bueno</option>
-										<option value="regular">⭐⭐⭐⭐ Regular</option>
-										<option value="malo">⭐⭐⭐ Malo</option>
-									</select>
-								</div>
-							</div>
-						</div>
-
-						<!-- Métricas de Tiempo -->
-						<div class="rounded-lg border border-gray-200 bg-white p-4">
-							<h3 class="mb-4 flex items-center gap-2 text-lg font-semibold text-gray-800">
-								<svg
-									class="h-5 w-5 text-indigo-600"
-									fill="none"
-									stroke="currentColor"
-									viewBox="0 0 24 24"
-								>
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-									/>
-								</svg>
-								Métricas de Tiempo
-							</h3>
-							<div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
-								<div>
-									<label
-										for="tiempo-disponibilidad"
-										class="mb-2 block text-sm font-medium text-gray-700"
-									>
-										Tiempo Disponibilidad (horas)
-									</label>
-									<input
-										id="tiempo-disponibilidad"
-										type="number"
-										step="0.1"
-										min="0"
-										bind:value={formData.tiempo_disponibilidad_horas}
-										placeholder="Ej: 12.5"
-										class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
-									/>
-								</div>
-								<div>
-									<label
-										for="duracion-trayecto"
-										class="mb-2 block text-sm font-medium text-gray-700"
-									>
-										Duración Trayecto (horas)
-									</label>
-									<input
-										id="duracion-trayecto"
-										type="number"
-										step="0.1"
-										min="0"
-										value={totalHorasTrabajadas.toFixed(1)}
-										disabled
-										class="w-full cursor-not-allowed rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-600"
-									/>
-								</div>
-								<div>
-									<label
-										for="numero-dias-servicio"
-										class="mb-2 block text-sm font-medium text-gray-700"
-									>
-										Número de Días Servicio
-									</label>
-									<input
-										id="numero-dias-servicio"
-										type="number"
-										min="1"
-										bind:value={formData.numero_dias_servicio}
-										placeholder="Ej: 3"
-										class="w-full rounded-lg border border-gray-300 px-3 py-2 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200"
-									/>
-								</div>
-								<div>
-									<label
-										for="total-kilometraje"
-										class="mb-2 block text-sm font-medium text-gray-700"
-									>
-										Total Kilometraje (km)
-									</label>
-									<input
-										id="total-kilometraje"
-										type="number"
-										step="0.1"
-										min="0"
-										value={totalKilometraje.toFixed(1)}
-										disabled
-										class="w-full cursor-not-allowed rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-gray-600"
-									/>
-								</div>
-							</div>
-						</div>
-					</div>
-				{:else if activeTab === 'horarios'}
-					<!-- Tab: Horarios de Trabajo -->
-					<div class="space-y-4" transition:fade={{ duration: 200 }}>
-						<!-- Indicador de festivos colombianos -->
-						{#if festivosDelMes.length > 0}
-							<div class="rounded-lg border border-emerald-200 bg-emerald-50 p-3">
-								<div class="flex items-center gap-2">
-									<svg
-										class="h-5 w-5 text-emerald-600"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-										/>
-									</svg>
-									<div class="flex-1">
-										<h4 class="text-sm font-semibold text-emerald-800">
-											Días Festivos de {getNombreMes(currentMonth)}
-											{currentYear}
-										</h4>
-										<p class="mt-1 text-xs text-emerald-700">
-											{festivosDelMes.length}
-											{festivosDelMes.length === 1 ? 'festivo' : 'festivos'}:
-											{festivosDelMes.map((f) => `${f.dia} (${f.nombre})`).join(', ')}
-										</p>
-										<p class="mt-1 text-xs text-emerald-600">
-											Los días festivos se marcan automáticamente con 🎉
-										</p>
-									</div>
-								</div>
-							</div>
-						{/if}
-
-						<!-- Panel de acciones de copiado -->
-						{#if selectedRow && hayMasDeUnDia}
-							<div class="rounded-lg border border-blue-200 bg-blue-50 p-3">
-								<div class="flex items-center justify-between">
-									<div class="flex items-center gap-2">
-										<svg
-											class="h-4 w-4 text-blue-600"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-											/>
-										</svg>
-										<span class="text-sm font-medium text-blue-800">
-											Fila seleccionada: {selectedIndex + 1} de {diasLaborales.length}
-										</span>
-									</div>
-									<div class="flex gap-2">
-										<button
-											on:click={copiarSeleccionASiguientes}
-											disabled={!hayDiasSiguientes}
-											class="btn-primary flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
-										>
-											<svg
-												class="h-3.5 w-3.5"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
-												/>
-											</svg>
-											Copiar Horas
-										</button>
-										<button
-											on:click={incrementarDiasSiguientes}
-											disabled={!hayDiasSiguientes}
-											class="btn-secondary flex items-center gap-1 disabled:cursor-not-allowed disabled:opacity-50"
-										>
-											<svg
-												class="h-3.5 w-3.5"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M12 4v16m8-8H4"
-												/>
-											</svg>
-											Incrementar Días
-										</button>
-										<button
-											on:click={() => (selectedRow = null)}
-											class="rounded-lg px-3 py-1.5 text-xs text-gray-600 transition-colors hover:bg-gray-100"
-										>
-											Cancelar
-										</button>
-									</div>
-								</div>
-								{#if !hayDiasSiguientes}
-									<div class="mt-2 text-xs text-gray-600">
-										No hay días siguientes para aplicar estas acciones
-									</div>
-								{/if}
-							</div>
-						{/if}
-
-						<!-- Botón para agregar días y mensajes de error -->
-						<div class="mb-3 flex items-center justify-between gap-4">
-							<!-- Mensajes de error -->
-							<div class="flex-1">
-								{#if mensajesError.length > 0}
-									<div class="flex flex-col gap-1">
-										{#each mensajesError as mensaje}
-											<div
-												class="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-xs text-red-600"
-											>
-												<svg
-													class="h-4 w-4 flex-shrink-0"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-													/>
-												</svg>
-												<span>{mensaje}</span>
+					<div class="rf-card">
+						<div class="rf-grid">
+							<!-- Municipio Origen -->
+							<Campo id="rf-servicio-origen" label="Municipio Origen">
+								<div class="rf-buscador">
+									{#if servicioOrigenSeleccionado}
+										<div class="rf-elegido">
+											<div class="rf-elegido-texto">
+												<span class="rf-elegido-nombre">
+													{servicioOrigenSeleccionado.nombre_municipio}
+												</span>
+												<span class="rf-elegido-sub">
+													{servicioOrigenSeleccionado.nombre_departamento}
+													<span class="rf-codigo">
+														DIVIPOLA: {servicioOrigenSeleccionado.codigo_municipio}
+													</span>
+												</span>
 											</div>
-										{/each}
-									</div>
-								{/if}
-							</div>
-
-							<!-- Botón agregar día - OCULTO: Los días se generan automáticamente según numero_dias_servicio -->
-							<!-- 
-							<button
-								on:click={agregarDiaLaboral}
-								disabled={diasLaborales.length >= 15}
-								class="flex flex-shrink-0 items-center gap-2 rounded-lg bg-emerald-500 px-4 py-2 text-white transition-colors hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
-							>
-								<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M12 4v16m8-8H4"
-									/>
-								</svg>
-								Agregar Día
-								{#if diasLaborales.length < 15}
-									<span class="text-xs opacity-75">({diasLaborales.length}/15)</span>
-								{/if}
-							</button>
-							-->
-						</div>
-
-						{#if !formData.numero_dias_servicio || formData.numero_dias_servicio <= 0}
-							<!-- Mensaje informativo cuando no hay número de días -->
-							<div class="rounded-lg border border-amber-200 bg-amber-50 p-4">
-								<div class="flex items-center gap-3">
-									<svg
-										class="h-6 w-6 flex-shrink-0 text-amber-500"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-										/>
-									</svg>
-									<div>
-										<h4 class="text-sm font-semibold text-amber-800">
-											No hay número de días ingresado
-										</h4>
-										<p class="mt-1 text-xs text-amber-700">
-											Ingrese el <strong>Número de Días Servicio</strong> en la pestaña de
 											<button
-												on:click={() => (activeTab = 'informacion')}
-												class="font-semibold text-amber-900 underline hover:text-amber-950"
-												>Información</button
+												type="button"
+												onclick={() => {
+													servicioOrigenSeleccionado = null;
+													searchServicioOrigen = '';
+													servicioOrigenEspecifico = '';
+													servicioOrigenLatitud = null;
+													servicioOrigenLongitud = null;
+												}}
+												class="rf-quitar"
+												aria-label="Cambiar municipio origen"
 											>
-											para generar automáticamente los horarios de trabajo.
-										</p>
-									</div>
-								</div>
-							</div>
-						{:else}
-							<!-- Tabla de Recargos -->
-							<div class="overflow-x-auto rounded-lg border border-gray-200">
-								<table class="min-w-full divide-y divide-gray-200">
-									<thead class="bg-gray-50">
-										<tr>
-											<th
-												class="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-											>
-												Día
-											</th>
-											<th
-												class="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-											>
-												Hora Inicio
-											</th>
-											<th
-												class="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-											>
-												Hora Fin
-											</th>
-											<th
-												class="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-											>
-												KM Inicial
-											</th>
-											<th
-												class="px-3 py-3 text-left text-xs font-medium tracking-wider text-gray-500 uppercase"
-											>
-												KM Final
-											</th>
-											<th
-												class="px-3 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase"
-											>
-												KM Recorridos
-											</th>
-											<th
-												class="px-3 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase"
-											>
-												Pernocte
-											</th>
-											<th
-												class="px-3 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase"
-											>
-												Disponible
-											</th>
-											<th
-												class="px-3 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase"
-												title="Continúa al día siguiente"
-											>
-												Cont.
-											</th>
-											<th
-												class="px-3 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase"
-											>
-												Total (h)
-											</th>
-											<th
-												class="px-3 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase"
-											>
-												HED<br /><span class="text-[10px] font-normal">(25%)</span>
-											</th>
-											<th
-												class="px-3 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase"
-											>
-												HEN<br /><span class="text-[10px] font-normal">(75%)</span>
-											</th>
-											<th
-												class="px-3 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase"
-											>
-												HEFD<br /><span class="text-[10px] font-normal">(100%)</span>
-											</th>
-											<th
-												class="px-3 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase"
-											>
-												HEFN<br /><span class="text-[10px] font-normal">(150%)</span>
-											</th>
-											<th
-												class="px-3 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase"
-											>
-												RNDF<br /><span class="text-[10px] font-normal">(115%)</span>
-											</th>
-											<th
-												class="px-3 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase"
-											>
-												RN<br /><span class="text-[10px] font-normal">(35%)</span>
-											</th>
-											<th
-												class="px-3 py-3 text-center text-xs font-medium tracking-wider text-gray-500 uppercase"
-											>
-												RD<br /><span class="text-[10px] font-normal">(75%)</span>
-											</th>
-											<!-- Columna Acciones REMOVIDA - Los días se generan automáticamente -->
-										</tr>
-									</thead>
-									<tbody class="divide-y divide-gray-200 bg-white">
-										{#each diasLaborales as dia, rowIdx (dia.id)}
-											{@const recargos = calcularRecargos(dia)}
-											{@const totalHoras = calcularTotalHoras(dia.hora_inicio, dia.hora_fin)}
-											{@const isSelected = selectedRow === dia.id}
-											{@const isDomingo = dia.es_domingo}
-											{@const isFestivo = dia.es_festivo}
-											{@const maxDia = obtenerMaximoDiaMes(currentMonth, currentYear)}
-											{@const kmInicial = dia.kilometraje_inicial
-												? parseFloat(dia.kilometraje_inicial)
-												: 0}
-											{@const kmFinal = dia.kilometraje_final
-												? parseFloat(dia.kilometraje_final)
-												: 0}
-											{@const kmRecorridos = kmFinal > kmInicial ? kmFinal - kmInicial : 0}
-											{@const esContinuacion =
-												rowIdx > 0 && diasLaborales[rowIdx - 1].continua_siguiente_dia}
-
-											<tr
-												on:click={() => (selectedRow = dia.id)}
-												class="cursor-pointer transition-colors {isSelected
-													? 'border-l-4 border-blue-500 bg-blue-50'
-													: dia.continua_siguiente_dia || esContinuacion
-														? 'border-l-4 border-orange-400 bg-orange-50/50 hover:bg-orange-100/50'
-														: dia.disponibilidad
-															? 'bg-green-50 hover:bg-green-100'
-															: isDomingo
-																? 'bg-red-50 hover:bg-red-100'
-																: isFestivo
-																	? 'bg-emerald-50 hover:bg-emerald-100'
-																	: 'hover:bg-gray-50'}"
-											>
-												<!-- Día -->
-												<td class="px-3 py-2 whitespace-nowrap">
-													<div class="flex items-center gap-2">
-														<input
-															type="number"
-															min="1"
-															max={maxDia}
-															bind:value={dia.dia}
-															on:input={(e) =>
-																actualizarDiaLaboral(dia.id, 'dia', e.currentTarget.value)}
-															on:keydown={handleHorarioCellKeydown}
-															data-nav-row={rowIdx}
-															data-nav-col="0"
-															class="w-14 rounded border px-2 py-1 text-sm focus:ring-1 {erroresDias[
-																dia.id
-															]
-																? 'border-red-500 bg-red-50 focus:border-red-500 focus:ring-red-500'
-																: 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'}"
-															placeholder="1"
-														/>
-														{#if isFestivo}
-															<span class="text-lg" title="Día festivo">🎉</span>
-														{:else if isDomingo}
-															<span class="text-lg" title="Domingo">🌞</span>
-														{:else}
-															<span class="text-lg" title="Día normal">📆</span>
-														{/if}
-														{#if cruzaCambioConfig && dia.dia}
-															{@const etiquetaCfg = getEtiquetaConfigParaDia(dia.dia)}
-															{#if etiquetaCfg}
-																<span
-																	class="inline-flex items-center rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-amber-700"
-																	title={etiquetaCfg}
-																>
-																	{etiquetaCfg}
-																</span>
-															{/if}
-														{/if}
-													</div>
-												</td>
-
-												<!-- Hora Inicio -->
-												<td class="px-3 py-2 whitespace-nowrap">
-													<input
-														type="number"
-														min="0.5"
-														max="48"
-														step="0.5"
-														bind:value={dia.hora_inicio}
-														on:input={(e) =>
-															actualizarDiaLaboral(dia.id, 'hora_inicio', e.currentTarget.value)}
-														on:keydown={handleHorarioCellKeydown}
-														data-nav-row={rowIdx}
-														data-nav-col="1"
-														class="w-20 rounded border px-2 py-1 text-sm focus:ring-1 {erroresHoras[
-															dia.id
-														]?.inicio
-															? 'border-red-500 bg-red-50 focus:border-red-500 focus:ring-red-500'
-															: 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'}"
-														placeholder="0.5"
-													/>
-												</td>
-
-												<!-- Hora Fin -->
-												<td class="px-3 py-2 whitespace-nowrap">
-													<input
-														type="number"
-														min="0.5"
-														max="48"
-														step="0.5"
-														bind:value={dia.hora_fin}
-														on:input={(e) =>
-															actualizarDiaLaboral(dia.id, 'hora_fin', e.currentTarget.value)}
-														on:keydown={handleHorarioCellKeydown}
-														data-nav-row={rowIdx}
-														data-nav-col="2"
-														class="w-20 rounded border px-2 py-1 text-sm focus:ring-1 {erroresHoras[
-															dia.id
-														]?.fin
-															? 'border-red-500 bg-red-50 focus:border-red-500 focus:ring-red-500'
-															: 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'}"
-														placeholder="0.5"
-													/>
-												</td>
-
-												<!-- KM Inicial -->
-												<td class="px-3 py-2 whitespace-nowrap">
-													<input
-														type="number"
-														bind:value={dia.kilometraje_inicial}
-														on:input={(e) =>
-															actualizarDiaLaboral(
-																dia.id,
-																'kilometraje_inicial',
-																e.currentTarget.value
-															)}
-														on:keydown={handleHorarioCellKeydown}
-														data-nav-row={rowIdx}
-														data-nav-col="3"
-														class="w-20 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-														placeholder="0"
-													/>
-												</td>
-
-												<!-- KM Final -->
-												<td class="px-3 py-2 whitespace-nowrap">
-													<input
-														type="number"
-														bind:value={dia.kilometraje_final}
-														on:input={(e) =>
-															actualizarDiaLaboral(
-																dia.id,
-																'kilometraje_final',
-																e.currentTarget.value
-															)}
-														on:keydown={handleHorarioCellKeydown}
-														data-nav-row={rowIdx}
-														data-nav-col="4"
-														class="w-20 rounded border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-														placeholder="0"
-													/>
-												</td>
-
-												<!-- KM Recorridos (Calculado) -->
-												<td class="px-3 py-2 text-center whitespace-nowrap">
-													<span class="text-sm font-semibold text-gray-700">
-														{kmRecorridos > 0 ? kmRecorridos.toFixed(1) : '-'}
-													</span>
-												</td>
-
-												<!-- Pernocte -->
-												<td class="px-3 py-2 text-center">
-													<input
-														type="checkbox"
-														bind:checked={dia.pernocte}
-														on:change={(e) =>
-															actualizarDiaLaboral(dia.id, 'pernocte', e.currentTarget.checked)}
-														class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-													/>
-												</td>
-
-												<!-- Disponible -->
-												<td class="px-3 py-2 text-center">
-													<input
-														type="checkbox"
-														bind:checked={dia.disponibilidad}
-														on:change={(e) =>
-															actualizarDiaLaboral(
-																dia.id,
-																'disponibilidad',
-																e.currentTarget.checked
-															)}
-														class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-													/>
-												</td>
-
-												<!-- Continúa día siguiente -->
-												<td class="px-3 py-2 text-center">
-													<input
-														type="checkbox"
-														bind:checked={dia.continua_siguiente_dia}
-														on:change={(e) =>
-															actualizarDiaLaboral(
-																dia.id,
-																'continua_siguiente_dia',
-																e.currentTarget.checked
-															)}
-														class="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-														title="Marcar si el servicio continúa al día siguiente"
-													/>
-												</td>
-
-												<!-- Total Horas -->
-												<td class="px-3 py-2 text-center whitespace-nowrap">
-													<span
-														class="text-sm font-semibold {dia.disponibilidad
-															? 'text-green-600'
-															: 'text-gray-700'}"
-													>
-														{#if dia.disponibilidad}
-															<span title="Día disponible - no se contabiliza">D</span>
-														{:else}
-															{totalHoras > 0 ? totalHoras.toFixed(1) : '-'}
-														{/if}
-													</span>
-												</td>
-
-												<!-- HED -->
-												<td class="px-3 py-2 text-center">
-													{#if dia.disponibilidad}
-														<span
-															class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-400"
-															>-</span
-														>
-													{:else}
-														<span
-															class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
-																'HED',
-																recargos.HED
-															)}"
-														>
-															{recargos.HED > 0 ? recargos.HED.toFixed(2) : '-'}
-														</span>
-													{/if}
-												</td>
-
-												<!-- HEN -->
-												<td class="px-3 py-2 text-center">
-													{#if dia.disponibilidad}
-														<span
-															class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-400"
-															>-</span
-														>
-													{:else}
-														<span
-															class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
-																'HEN',
-																recargos.HEN
-															)}"
-														>
-															{recargos.HEN > 0 ? recargos.HEN.toFixed(2) : '-'}
-														</span>
-													{/if}
-												</td>
-
-												<!-- HEFD -->
-												<td class="px-3 py-2 text-center">
-													{#if dia.disponibilidad}
-														<span
-															class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-400"
-															>-</span
-														>
-													{:else}
-														<span
-															class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
-																'HEFD',
-																recargos.HEFD
-															)}"
-														>
-															{recargos.HEFD > 0 ? recargos.HEFD.toFixed(2) : '-'}
-														</span>
-													{/if}
-												</td>
-
-												<!-- HEFN -->
-												<td class="px-3 py-2 text-center">
-													{#if dia.disponibilidad}
-														<span
-															class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-400"
-															>-</span
-														>
-													{:else}
-														<span
-															class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
-																'HEFN',
-																recargos.HEFN
-															)}"
-														>
-															{recargos.HEFN > 0 ? recargos.HEFN.toFixed(2) : '-'}
-														</span>
-													{/if}
-												</td>
-
-												<!-- RNDF -->
-												<td class="px-3 py-2 text-center">
-													{#if dia.disponibilidad}
-														<span
-															class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-400"
-															>-</span
-														>
-													{:else}
-														<span
-															class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
-																'RNDF',
-																recargos.RNDF
-															)}"
-														>
-															{recargos.RNDF > 0 ? recargos.RNDF.toFixed(2) : '-'}
-														</span>
-													{/if}
-												</td>
-
-												<!-- RN -->
-												<td class="px-3 py-2 text-center">
-													{#if dia.disponibilidad}
-														<span
-															class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-400"
-															>-</span
-														>
-													{:else}
-														<span
-															class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
-																'RN',
-																recargos.RN
-															)}"
-														>
-															{recargos.RN > 0 ? recargos.RN.toFixed(2) : '-'}
-														</span>
-													{/if}
-												</td>
-
-												<!-- RD -->
-												<td class="px-3 py-2 text-center">
-													{#if dia.disponibilidad}
-														<span
-															class="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-400"
-															>-</span
-														>
-													{:else}
-														<span
-															class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium {obtenerColorRecargo(
-																'RD',
-																recargos.RD
-															)}"
-														>
-															{recargos.RD > 0 ? recargos.RD.toFixed(2) : '-'}
-														</span>
-													{/if}
-												</td>
-
-												<!-- Columna Acciones REMOVIDA -->
-											</tr>
-										{/each}
-									</tbody>
-								</table>
-							</div>
-
-							<!-- Alerta de cruce de config -->
-							{#if cruzaCambioConfig}
-								<div
-									class="apple-transition mt-4 flex items-start gap-3 rounded-xl border-2 border-amber-300 bg-gradient-to-br from-amber-50 to-yellow-50 p-4"
-									role="alert"
-								>
-									<svg
-										class="mt-0.5 h-5 w-5 shrink-0 text-amber-600"
-										fill="none"
-										stroke="currentColor"
-										viewBox="0 0 24 24"
-									>
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+												<X size={16} strokeWidth={2.5} />
+											</button>
+										</div>
+									{:else}
+										<input
+											id="rf-servicio-origen"
+											type="text"
+											bind:value={searchServicioOrigen}
+											onfocus={() => (showServicioOrigenDropdown = true)}
+											onblur={() => setTimeout(() => (showServicioOrigenDropdown = false), 200)}
+											placeholder="Buscar municipio de origen..."
+											autocomplete="off"
+											class="rf-input"
 										/>
-									</svg>
-									<div class="min-w-0 flex-1">
-										<h4 class="text-sm font-semibold text-amber-900">
-											Esta planilla cruza un cambio de configuración
-										</h4>
-										<p class="mt-1 text-xs text-amber-800">
-											Los días se calcularán con la config salarial y los % de recargo vigentes
-											en cada fecha. Revisa el desglose por config abajo.
-										</p>
-									</div>
-								</div>
-							{/if}
-
-							<!-- Resumen de Totales -->
-							<div class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4 lg:grid-cols-7">
-								<!-- HED Card -->
-								<div
-									class="rounded-lg border border-orange-200 bg-gradient-to-br from-orange-50 to-orange-100 p-4"
-								>
-									<div class="mb-2 flex items-center justify-between">
-										<span class="text-xs font-medium text-orange-700">HED</span>
-										<span class="text-xs text-orange-600">{cruzaCambioConfig ? '25%*' : '25%'}</span>
-									</div>
-									<div class="text-2xl font-bold text-orange-800">{totales.HED.toFixed(2)}</div>
-									<div class="mt-1 text-[10px] text-orange-600">
-										Hora Extra Diurna{formatValorMonetario(totales.valorHED)}
-									</div>
-								</div>
-
-								<!-- HEN Card -->
-								<div
-									class="rounded-lg border border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100 p-4"
-								>
-									<div class="mb-2 flex items-center justify-between">
-										<span class="text-xs font-medium text-blue-700">HEN</span>
-										<span class="text-xs text-blue-600">75%</span>
-									</div>
-									<div class="text-2xl font-bold text-blue-800">{totales.HEN.toFixed(2)}</div>
-									<div class="mt-1 text-[10px] text-blue-600">
-										Hora Extra Nocturna{formatValorMonetario(totales.valorHEN)}
-									</div>
-								</div>
-
-								<!-- HEFD Card -->
-								<div
-									class="rounded-lg border border-yellow-200 bg-gradient-to-br from-yellow-50 to-yellow-100 p-4"
-								>
-									<div class="mb-2 flex items-center justify-between">
-										<span class="text-xs font-medium text-yellow-700">HEFD</span>
-										<span class="text-xs text-yellow-600">{cruzaCambioConfig ? '105/115%' : '105%'}</span>
-									</div>
-									<div class="text-2xl font-bold text-yellow-800">{totales.HEFD.toFixed(2)}</div>
-									<div class="mt-1 text-[10px] text-yellow-600">
-										H. Extra Festiva Diurna{formatValorMonetario(totales.valorHEFD)}
-									</div>
-								</div>
-
-								<!-- HEFN Card -->
-								<div
-									class="rounded-lg border border-purple-200 bg-gradient-to-br from-purple-50 to-purple-100 p-4"
-								>
-									<div class="mb-2 flex items-center justify-between">
-										<span class="text-xs font-medium text-purple-700">HEFN</span>
-										<span class="text-xs text-purple-600">{cruzaCambioConfig ? '155/165%' : '155%'}</span>
-									</div>
-									<div class="text-2xl font-bold text-purple-800">{totales.HEFN.toFixed(2)}</div>
-									<div class="mt-1 text-[10px] text-purple-600">
-										H. Extra Festiva Nocturna{formatValorMonetario(totales.valorHEFN)}
-									</div>
-								</div>
-
-								<!-- RNDF Card -->
-								<div
-									class="rounded-lg border border-indigo-200 bg-gradient-to-br from-indigo-50 to-indigo-100 p-4"
-								>
-									<div class="mb-2 flex items-center justify-between">
-										<span class="text-xs font-medium text-indigo-700">RNDF</span>
-										<span class="text-xs text-indigo-600">{cruzaCambioConfig ? '115/125%' : '115%'}</span>
-									</div>
-									<div class="text-2xl font-bold text-indigo-800">{totales.RNDF.toFixed(2)}</div>
-									<div class="mt-1 text-[10px] text-indigo-600">
-										R. Noct. Domin./Festivo{formatValorMonetario(totales.valorRNDF)}
-									</div>
-								</div>
-
-								<!-- RN Card -->
-								<div
-									class="rounded-lg border border-teal-200 bg-gradient-to-br from-teal-50 to-teal-100 p-4"
-								>
-									<div class="mb-2 flex items-center justify-between">
-										<span class="text-xs font-medium text-teal-700">RN</span>
-										<span class="text-xs text-teal-600">35%</span>
-									</div>
-									<div class="text-2xl font-bold text-teal-800">{totales.RN.toFixed(2)}</div>
-									<div class="mt-1 text-[10px] text-teal-600">
-										Recargo Nocturno{formatValorMonetario(totales.valorRN)}
-									</div>
-								</div>
-
-								<!-- RD Card -->
-								<div
-									class="rounded-lg border border-red-200 bg-gradient-to-br from-red-50 to-red-100 p-4"
-								>
-									<div class="mb-2 flex items-center justify-between">
-										<span class="text-xs font-medium text-red-700">RD</span>
-										<span class="text-xs text-red-600">{cruzaCambioConfig ? '80/90%' : '80%'}</span>
-									</div>
-									<div class="text-2xl font-bold text-red-800">{totales.RD.toFixed(2)}</div>
-									<div class="mt-1 text-[10px] text-red-600">
-										Recargo Dominical/Festivo{formatValorMonetario(totales.valorRD)}
-									</div>
-								</div>
-							</div>
-
-							<!-- Desglose por configuración (cuando cruza cambio) -->
-							{#if cruzaCambioConfig}
-								{@const desglose = getDesglosePorConfig()}
-								<div class="mt-4">
-									<h4 class="mb-2 flex items-center gap-2 text-xs font-semibold text-gray-700">
-										<svg class="h-3.5 w-3.5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-										</svg>
-										DESGLOSE POR CONFIGURACIÓN
-									</h4>
-									<div class="grid gap-2 md:grid-cols-2">
-										{#each Array.from(desglose.values()) as item}
-											<div
-												class="rounded-lg border border-amber-200 bg-gradient-to-br from-amber-50/50 to-yellow-50/50 p-3"
-											>
-												<div class="flex items-start justify-between">
-													<div class="min-w-0 flex-1">
-														<p class="text-xs font-semibold text-amber-900">
-															{item.config.etiqueta}
-														</p>
-														<p class="mt-0.5 text-[10px] text-amber-700">
-															Valor hora: {formatearCOP(item.config.valorHora)} · Salario: {formatearCOP(item.config.salarioBasico)}
-														</p>
-														<p class="mt-0.5 text-[10px] text-amber-700">
-															Días: {item.dias.length > 6 ? item.dias.slice(0, 6).join(', ') + ` +${item.dias.length - 6}` : item.dias.join(', ')}
-														</p>
-													</div>
-													<p class="ml-2 whitespace-nowrap text-sm font-bold text-amber-900">
-														{formatearCOP(item.total)}
-													</p>
-												</div>
+										{#if showServicioOrigenDropdown && filteredServicioOrigen.length > 0}
+											<div class="rf-lista">
+												{#each filteredServicioOrigen as mun}
+													<button
+														type="button"
+														onclick={() => {
+															servicioOrigenSeleccionado = mun;
+															showServicioOrigenDropdown = false;
+															searchServicioOrigen = '';
+														}}
+														class="rf-opcion"
+													>
+														<span class="rf-opcion-nombre">{mun.nombre_municipio}</span>
+														<span class="rf-opcion-sub">
+															{mun.nombre_departamento}
+															<span class="rf-codigo">{mun.codigo_municipio}</span>
+														</span>
+													</button>
+												{/each}
 											</div>
-										{/each}
-									</div>
+										{/if}
+									{/if}
 								</div>
-							{/if}
+							</Campo>
 
-							<!-- Total monetario y estadísticas -->
-							<div
-								class="mt-4 flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 md:flex-row md:items-center md:justify-between"
-							>
-								<div class="flex flex-wrap items-center gap-4 text-xs text-gray-600">
-									<div>
-										<span class="font-medium">Total Días:</span>
-										<span class="ml-1 font-bold text-gray-800">{diasLaborales.length}</span>
-									</div>
-									<div>
-										<span class="font-medium">Con Datos:</span>
-										<span class="ml-1 font-bold text-gray-800">
-											{diasLaborales.filter((d) => d.hora_inicio && d.hora_fin).length}
-										</span>
-									</div>
-									<div>
-										<span class="font-medium">Total Horas:</span>
-										<span class="ml-1 font-bold text-gray-800">{totales.totalHoras.toFixed(1)}</span>
-									</div>
-									<div>
-										<span class="font-medium">Valor Total:</span>
-										<span class="ml-1 text-base font-bold text-emerald-700">
-											{formatearCOP(totales.valorTotal)}
-										</span>
-									</div>
+							<!-- Municipio Destino -->
+							<Campo id="rf-servicio-destino" label="Municipio Destino">
+								<div class="rf-buscador">
+									{#if servicioDestinoSeleccionado}
+										<div class="rf-elegido">
+											<div class="rf-elegido-texto">
+												<span class="rf-elegido-nombre">
+													{servicioDestinoSeleccionado.nombre_municipio}
+												</span>
+												<span class="rf-elegido-sub">
+													{servicioDestinoSeleccionado.nombre_departamento}
+													<span class="rf-codigo">
+														DIVIPOLA: {servicioDestinoSeleccionado.codigo_municipio}
+													</span>
+												</span>
+											</div>
+											<button
+												type="button"
+												onclick={() => {
+													servicioDestinoSeleccionado = null;
+													searchServicioDestino = '';
+													servicioDestinoEspecifico = '';
+													servicioDestinoLatitud = null;
+													servicioDestinoLongitud = null;
+												}}
+												class="rf-quitar"
+												aria-label="Cambiar municipio destino"
+											>
+												<X size={16} strokeWidth={2.5} />
+											</button>
+										</div>
+									{:else}
+										<input
+											id="rf-servicio-destino"
+											type="text"
+											bind:value={searchServicioDestino}
+											onfocus={() => (showServicioDestinoDropdown = true)}
+											onblur={() => setTimeout(() => (showServicioDestinoDropdown = false), 200)}
+											placeholder="Buscar municipio de destino..."
+											autocomplete="off"
+											class="rf-input"
+										/>
+										{#if showServicioDestinoDropdown && filteredServicioDestino.length > 0}
+											<div class="rf-lista">
+												{#each filteredServicioDestino as mun}
+													<button
+														type="button"
+														onclick={() => {
+															servicioDestinoSeleccionado = mun;
+															showServicioDestinoDropdown = false;
+															searchServicioDestino = '';
+														}}
+														class="rf-opcion"
+													>
+														<span class="rf-opcion-nombre">{mun.nombre_municipio}</span>
+														<span class="rf-opcion-sub">
+															{mun.nombre_departamento}
+															<span class="rf-codigo">{mun.codigo_municipio}</span>
+														</span>
+													</button>
+												{/each}
+											</div>
+										{/if}
+									{/if}
 								</div>
-								<div class="text-[10px] text-gray-500 italic">
-									Cálculo según normativa laboral colombiana
-									{#if cruzaCambioConfig}· con vigencias por fecha{/if}
-								</div>
+							</Campo>
+
+							<!-- Dirección Origen Específica -->
+							<div class="rf-mapbox">
+								<MapboxSearch
+									label="Dirección Origen Específica"
+									placeholder="Buscar dirección de origen..."
+									value={servicioOrigenEspecifico}
+									onSelect={(data) => {
+										servicioOrigenEspecifico = data.address;
+										servicioOrigenLatitud = data.coordinates[1];
+										servicioOrigenLongitud = data.coordinates[0];
+									}}
+								/>
 							</div>
-						{/if}
+
+							<!-- Dirección Destino Específica -->
+							<div class="rf-mapbox">
+								<MapboxSearch
+									label="Dirección Destino Específica"
+									placeholder="Buscar dirección de destino..."
+									value={servicioDestinoEspecifico}
+									onSelect={(data) => {
+										servicioDestinoEspecifico = data.address;
+										servicioDestinoLatitud = data.coordinates[1];
+										servicioDestinoLongitud = data.coordinates[0];
+									}}
+								/>
+							</div>
+
+							<!-- Fecha de Realización -->
+							<Campo id="rf-servicio-fecha" label="Fecha y hora de realización">
+								<input
+									id="rf-servicio-fecha"
+									type="datetime-local"
+									bind:value={servicioFechaRealizacion}
+									class="rf-input"
+								/>
+							</Campo>
+
+							<!-- Propósito del Servicio -->
+							<Campo id="rf-servicio-proposito" label="Tipo de Servicio">
+								<select id="rf-servicio-proposito" bind:value={servicioProposito} class="rf-input">
+									<option value="personal">Personal</option>
+									<option value="personal_y_herramienta">Personal y Herramienta</option>
+								</select>
+							</Campo>
+
+							<!-- Observaciones -->
+							<Campo id="rf-servicio-observaciones" label="Observaciones del Servicio" completo>
+								<textarea
+									id="rf-servicio-observaciones"
+									bind:value={servicioObservaciones}
+									rows="2"
+									placeholder="Observaciones adicionales del servicio..."
+									class="rf-input"
+								></textarea>
+							</Campo>
+						</div>
 					</div>
+				</section>
+			{:else if !fromServicio}
+				<!-- Botón para mostrar formulario de servicio en modo creación -->
+				<button
+					type="button"
+					onclick={() => {
+						mostrarServicioInfo = true;
+					}}
+					class="rf-agregar"
+				>
+					<Plus size={18} strokeWidth={2.5} />
+					Agregar información de servicio (opcional)
+				</button>
+			{/if}
+
+			<!-- Archivo adjunto -->
+			<section class="rf-seccion">
+				<h3 class="rf-titulo">Archivo PDF <span class="rf-titulo-nota">Opcional</span></h3>
+
+				{#if archivoExistente}
+					<div class="rf-archivo">
+						<span class="rf-archivo-icono"><FileText size={20} /></span>
+						<div class="rf-archivo-texto">
+							<span class="rf-elegido-nombre">Archivo existente</span>
+							<span class="rf-elegido-sub">Documento PDF adjunto previamente</span>
+						</div>
+						<button
+							type="button"
+							onclick={() => {
+								archivoExistente = null;
+								archivoExistenteKey = null;
+							}}
+							aria-label="Eliminar archivo existente"
+							class="rf-quitar"
+						>
+							<Trash2 size={16} />
+						</button>
+					</div>
+				{:else if archivoAdjunto}
+					<div class="rf-archivo">
+						<span class="rf-archivo-icono"><FileText size={20} /></span>
+						<div class="rf-archivo-texto">
+							<span class="rf-elegido-nombre">{archivoAdjunto.name}</span>
+							<span class="rf-elegido-sub">
+								{(archivoAdjunto.size / 1024 / 1024).toFixed(2)} MB
+							</span>
+						</div>
+						<button
+							type="button"
+							onclick={() => (archivoAdjunto = null)}
+							aria-label="Eliminar archivo adjunto"
+							class="rf-quitar"
+						>
+							<Trash2 size={16} />
+						</button>
+					</div>
+				{:else}
+					<label class="rf-soltar">
+						<span class="rf-archivo-icono"><Upload size={20} /></span>
+						<span class="rf-soltar-texto">Haga clic para seleccionar un archivo PDF</span>
+						<input
+							type="file"
+							accept="application/pdf"
+							onchange={handleFileChange}
+							class="rf-oculto"
+						/>
+					</label>
 				{/if}
+			</section>
+		</div>
+	{:else if activeTab === 'condiciones'}
+		<!-- Tab: Condiciones y Evaluación -->
+		<div class="rf" transition:fade={{ duration: 200 }}>
+			<!-- Banner informativo -->
+			<div class="rf-aviso rf-aviso--marca">
+				<ShieldCheck class="rf-aviso-icono" size={20} />
+				<div>
+					<p class="rf-aviso-titulo">Sección Opcional - Preaprobada</p>
+					<p class="rf-aviso-texto">
+						Esta sección ya está validada con valores óptimos por defecto. Puede modificar los
+						campos si desea agregar información específica del servicio, pero no es necesario para
+						crear el recargo.
+					</p>
+				</div>
 			</div>
 
-			<!-- Footer -->
-			<div
-				class="sticky bottom-0 flex items-center justify-between px-6 py-4"
-				style="border-top: 1px solid var(--border-subtle); background-color: var(--bg-base);"
-			>
-				<div class="flex items-center gap-2 text-sm" style="color: var(--text-muted);">
-					<div
-						class="h-2 w-2 rounded-full"
-						style="background-color: {progress.completed === progress.total
-							? 'var(--emerald-500)'
-							: '#f59e0b'};"
-					></div>
-					{#if progress.completed === progress.total}
-						Formulario completo
-					{:else}
-						{progress.total - progress.completed} campos pendientes
+			<!-- Estado del Conductor -->
+			<section class="rf-seccion">
+				<h3 class="rf-titulo">Estado del Conductor</h3>
+				<div class="rf-card">
+					<div class="rf-grid">
+						<Campo id="estado-conductor" label="Estado Físico/Mental">
+							<select id="estado-conductor" bind:value={formData.estado_conductor} class="rf-input">
+								<option value={null}>Seleccione...</option>
+								<option value="optimo">Óptimo</option>
+								<option value="fatigado">Fatigado</option>
+								<option value="regular">Regular</option>
+								<option value="malo">Malo</option>
+							</select>
+						</Campo>
+					</div>
+				</div>
+			</section>
+
+			<!-- Tipo de Terreno -->
+			<section class="rf-seccion">
+				<h3 class="rf-titulo">Tipo de Terreno Transitado</h3>
+				<div class="rf-card">
+					<div class="rf-chips">
+						<label class="rf-chip" class:activo={formData.via_trocha}>
+							<input type="checkbox" bind:checked={formData.via_trocha} class="rf-oculto" />
+							{#if formData.via_trocha}<Check size={14} strokeWidth={3} />{/if}
+							Trocha
+						</label>
+						<label class="rf-chip" class:activo={formData.via_afirmado}>
+							<input type="checkbox" bind:checked={formData.via_afirmado} class="rf-oculto" />
+							{#if formData.via_afirmado}<Check size={14} strokeWidth={3} />{/if}
+							Afirmado
+						</label>
+						<label class="rf-chip" class:activo={formData.via_mixto}>
+							<input type="checkbox" bind:checked={formData.via_mixto} class="rf-oculto" />
+							{#if formData.via_mixto}<Check size={14} strokeWidth={3} />{/if}
+							Mixto
+						</label>
+						<label class="rf-chip" class:activo={formData.via_pavimentada}>
+							<input type="checkbox" bind:checked={formData.via_pavimentada} class="rf-oculto" />
+							{#if formData.via_pavimentada}<Check size={14} strokeWidth={3} />{/if}
+							Pavimentada
+						</label>
+					</div>
+				</div>
+			</section>
+
+			<!-- Riesgos de Seguridad -->
+			<section class="rf-seccion">
+				<h3 class="rf-titulo">Riesgos y Condiciones de Seguridad</h3>
+				<div class="rf-card">
+					<div class="rf-chips">
+						<label class="rf-chip rf-chip--riesgo" class:activo={formData.riesgo_desniveles}>
+							<input type="checkbox" bind:checked={formData.riesgo_desniveles} class="rf-oculto" />
+							{#if formData.riesgo_desniveles}<TriangleAlert size={14} strokeWidth={2.5} />{/if}
+							Desniveles
+						</label>
+						<label class="rf-chip rf-chip--riesgo" class:activo={formData.riesgo_deslizamientos}>
+							<input
+								type="checkbox"
+								bind:checked={formData.riesgo_deslizamientos}
+								class="rf-oculto"
+							/>
+							{#if formData.riesgo_deslizamientos}<TriangleAlert size={14} strokeWidth={2.5} />{/if}
+							Deslizamientos
+						</label>
+						<label class="rf-chip rf-chip--riesgo" class:activo={formData.riesgo_sin_senalizacion}>
+							<input
+								type="checkbox"
+								bind:checked={formData.riesgo_sin_senalizacion}
+								class="rf-oculto"
+							/>
+							{#if formData.riesgo_sin_senalizacion}<TriangleAlert
+									size={14}
+									strokeWidth={2.5}
+								/>{/if}
+							Sin Señalización
+						</label>
+						<label class="rf-chip rf-chip--riesgo" class:activo={formData.riesgo_animales}>
+							<input type="checkbox" bind:checked={formData.riesgo_animales} class="rf-oculto" />
+							{#if formData.riesgo_animales}<TriangleAlert size={14} strokeWidth={2.5} />{/if}
+							Animales en Vía
+						</label>
+						<label class="rf-chip rf-chip--riesgo" class:activo={formData.riesgo_peatones}>
+							<input type="checkbox" bind:checked={formData.riesgo_peatones} class="rf-oculto" />
+							{#if formData.riesgo_peatones}<TriangleAlert size={14} strokeWidth={2.5} />{/if}
+							Peatones
+						</label>
+						<label class="rf-chip rf-chip--riesgo" class:activo={formData.riesgo_trafico_alto}>
+							<input
+								type="checkbox"
+								bind:checked={formData.riesgo_trafico_alto}
+								class="rf-oculto"
+							/>
+							{#if formData.riesgo_trafico_alto}<TriangleAlert size={14} strokeWidth={2.5} />{/if}
+							Tráfico Alto
+						</label>
+					</div>
+				</div>
+			</section>
+
+			<!-- Evaluación del Servicio -->
+			<section class="rf-seccion">
+				<h3 class="rf-titulo">Evaluación del Servicio</h3>
+				<div class="rf-card">
+					<div class="rf-grid">
+						<Campo id="fuente-consulta" label="Fuente de Consulta">
+							<select id="fuente-consulta" bind:value={formData.fuente_consulta} class="rf-input">
+								<option value={null}>Seleccione...</option>
+								<option value="conductor">Conductor</option>
+								<option value="gps">GPS</option>
+								<option value="cliente">Cliente</option>
+								<option value="sistema">Sistema</option>
+							</select>
+						</Campo>
+						<Campo id="calificacion-servicio" label="Calificación del Servicio">
+							<select
+								id="calificacion-servicio"
+								bind:value={formData.calificacion_servicio}
+								class="rf-input"
+							>
+								<option value={null}>Seleccione...</option>
+								<option value="bueno">Bueno</option>
+								<option value="regular">Regular</option>
+								<option value="malo">Malo</option>
+							</select>
+						</Campo>
+					</div>
+				</div>
+			</section>
+
+			<!-- Métricas de Tiempo -->
+			<section class="rf-seccion">
+				<h3 class="rf-titulo">Métricas de Tiempo</h3>
+				<div class="rf-card">
+					<div class="rf-grid rf-grid--4">
+						<Campo id="tiempo-disponibilidad" label="Tiempo Disponibilidad (horas)">
+							<input
+								id="tiempo-disponibilidad"
+								type="number"
+								step="0.1"
+								min="0"
+								bind:value={formData.tiempo_disponibilidad_horas}
+								placeholder="Ej: 12.5"
+								class="rf-input rf-num"
+							/>
+						</Campo>
+						<Campo id="duracion-trayecto" label="Duración Trayecto (horas)">
+							<input
+								id="duracion-trayecto"
+								type="number"
+								step="0.1"
+								min="0"
+								value={totalHorasTrabajadas.toFixed(1)}
+								disabled
+								class="rf-input rf-num"
+							/>
+						</Campo>
+						<Campo id="numero-dias-servicio" label="Número de Días Servicio">
+							<input
+								id="numero-dias-servicio"
+								type="number"
+								min="1"
+								bind:value={formData.numero_dias_servicio}
+								placeholder="Ej: 3"
+								class="rf-input rf-num"
+							/>
+						</Campo>
+						<Campo id="total-kilometraje" label="Total Kilometraje (km)">
+							<input
+								id="total-kilometraje"
+								type="number"
+								step="0.1"
+								min="0"
+								value={totalKilometraje.toFixed(1)}
+								disabled
+								class="rf-input rf-num"
+							/>
+						</Campo>
+					</div>
+				</div>
+			</section>
+		</div>
+	{:else if activeTab === 'horarios'}
+		<!-- Tab: Horarios de Trabajo -->
+		<div class="rf" transition:fade={{ duration: 200 }}>
+			<!-- Indicador de festivos colombianos -->
+			{#if festivosDelMes.length > 0}
+				<div class="rf-aviso rf-aviso--marca">
+					<Calendar class="rf-aviso-icono" size={20} />
+					<div>
+						<p class="rf-aviso-titulo">
+							Días Festivos de {getNombreMes(currentMonth)}
+							{currentYear}
+						</p>
+						<p class="rf-aviso-texto">
+							{festivosDelMes.length}
+							{festivosDelMes.length === 1 ? 'festivo' : 'festivos'}:
+							{festivosDelMes.map((f) => `${f.dia} (${f.nombre})`).join(', ')}
+						</p>
+						<p class="rf-aviso-texto">
+							Los días festivos se marcan automáticamente con la etiqueta «Festivo».
+						</p>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Panel de acciones de copiado -->
+			{#if selectedRow && hayMasDeUnDia}
+				<div class="rf-copiado">
+					<div class="rf-copiado-fila">
+						<span class="rf-copiado-texto">
+							<Copy size={16} />
+							Fila seleccionada: {selectedIndex + 1} de {diasLaborales.length}
+						</span>
+						<div class="rf-copiado-acciones">
+							<button
+								type="button"
+								onclick={copiarSeleccionASiguientes}
+								disabled={!hayDiasSiguientes}
+								class="btn-primary rf-btn-compacto"
+							>
+								<Copy size={16} />
+								Copiar Horas
+							</button>
+							<button
+								type="button"
+								onclick={incrementarDiasSiguientes}
+								disabled={!hayDiasSiguientes}
+								class="btn-secondary rf-btn-compacto"
+							>
+								<Plus size={16} />
+								Incrementar Días
+							</button>
+							<button type="button" onclick={() => (selectedRow = null)} class="rf-enlace">
+								Cancelar
+							</button>
+						</div>
+					</div>
+					{#if !hayDiasSiguientes}
+						<p class="rf-copiado-nota">No hay días siguientes para aplicar estas acciones</p>
 					{/if}
 				</div>
+			{/if}
 
-				<div class="flex gap-2">
-					<button on:click={handleClose} disabled={isLoading} class="btn-secondary">
-						Cancelar
-					</button>
-					<button
-						on:click={handleSubmit}
-						disabled={isLoading || progress.completed !== progress.total}
-						class="btn-primary"
-					>
-						{#if isLoading}
-							<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24"
-								><circle
-									class="opacity-25"
-									cx="12"
-									cy="12"
-									r="10"
-									stroke="currentColor"
-									stroke-width="4"
-								/><path
-									class="opacity-75"
-									fill="currentColor"
-									d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-								/></svg
-							>
-						{:else}
-							<svg
-								class="h-4 w-4"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								stroke-width="1.8"
-								><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg
-							>
-						{/if}
-						{editMode ? 'Actualizar' : 'Crear'} Recargo
-					</button>
+			<!-- Mensajes de error -->
+			{#if mensajesError.length > 0}
+				<div class="rf-errores">
+					{#each mensajesError as mensaje}
+						<div class="rf-error" role="alert">
+							<CircleAlert size={16} />
+							<span>{mensaje}</span>
+						</div>
+					{/each}
 				</div>
-			</div>
+			{/if}
+
+			<!-- Botón agregar día - OCULTO: Los días se generan automáticamente según numero_dias_servicio -->
+
+			{#if !formData.numero_dias_servicio || formData.numero_dias_servicio <= 0}
+				<!-- Mensaje informativo cuando no hay número de días -->
+				<div class="rf-aviso rf-aviso--alerta">
+					<Info class="rf-aviso-icono" size={20} />
+					<div>
+						<p class="rf-aviso-titulo">No hay número de días ingresado</p>
+						<p class="rf-aviso-texto">
+							Ingrese el <strong>Número de Días Servicio</strong> en la pestaña de
+							<button
+								type="button"
+								onclick={() => (activeTab = 'informacion')}
+								class="rf-enlace rf-enlace--linea">Información</button
+							>
+							para generar automáticamente los horarios de trabajo.
+						</p>
+					</div>
+				</div>
+			{:else}
+				<!-- Tabla de Recargos -->
+				<section class="rf-seccion">
+					<h3 class="rf-titulo">Días laborados</h3>
+					<div class="rf-tabla-card">
+						<table class="rf-tabla">
+							<thead>
+								<tr>
+									<th>Día</th>
+									<th>Hora Inicio</th>
+									<th>Hora Fin</th>
+									<th>KM Inicial</th>
+									<th>KM Final</th>
+									<th class="rf-centro">KM Recorridos</th>
+									<th class="rf-centro">Pernocte</th>
+									<th class="rf-centro">Disponible</th>
+									<th class="rf-centro" title="Continúa al día siguiente">Cont.</th>
+									<th class="rf-centro">Total (h)</th>
+									<th class="rf-centro">HED<span class="rf-th-pct">(25%)</span></th>
+									<th class="rf-centro">HEN<span class="rf-th-pct">(75%)</span></th>
+									<th class="rf-centro">HEFD<span class="rf-th-pct">(100%)</span></th>
+									<th class="rf-centro">HEFN<span class="rf-th-pct">(150%)</span></th>
+									<th class="rf-centro">RNDF<span class="rf-th-pct">(115%)</span></th>
+									<th class="rf-centro">RN<span class="rf-th-pct">(35%)</span></th>
+									<th class="rf-centro">RD<span class="rf-th-pct">(75%)</span></th>
+									<!-- Columna Acciones REMOVIDA - Los días se generan automáticamente -->
+								</tr>
+							</thead>
+							<tbody>
+								{#each diasLaborales as dia, rowIdx (dia.id)}
+									{@const recargos = calcularRecargos(dia)}
+									{@const totalHoras = calcularTotalHoras(dia.hora_inicio, dia.hora_fin)}
+									{@const isSelected = selectedRow === dia.id}
+									{@const isDomingo = dia.es_domingo}
+									{@const isFestivo = dia.es_festivo}
+									{@const maxDia = obtenerMaximoDiaMes(currentMonth, currentYear)}
+									{@const kmInicial = dia.kilometraje_inicial
+										? parseFloat(dia.kilometraje_inicial)
+										: 0}
+									{@const kmFinal = dia.kilometraje_final ? parseFloat(dia.kilometraje_final) : 0}
+									{@const kmRecorridos = kmFinal > kmInicial ? kmFinal - kmInicial : 0}
+									{@const esContinuacion =
+										rowIdx > 0 && diasLaborales[rowIdx - 1].continua_siguiente_dia}
+									{@const filaContinua =
+										!isSelected && !!(dia.continua_siguiente_dia || esContinuacion)}
+									{@const filaDisponible = !isSelected && !filaContinua && !!dia.disponibilidad}
+									{@const filaDomingo =
+										!isSelected && !filaContinua && !filaDisponible && !!isDomingo}
+									{@const filaFestivo =
+										!isSelected && !filaContinua && !filaDisponible && !filaDomingo && !!isFestivo}
+
+									<tr
+										onclick={() => (selectedRow = dia.id)}
+										class="rf-fila"
+										class:seleccionada={isSelected}
+										class:continua={filaContinua}
+										class:disponible={filaDisponible}
+										class:domingo={filaDomingo}
+										class:festivo={filaFestivo}
+									>
+										<!-- Día -->
+										<td>
+											<div class="rf-dia">
+												<input
+													type="number"
+													min="1"
+													max={maxDia}
+													bind:value={dia.dia}
+													oninput={(e) =>
+														actualizarDiaLaboral(dia.id, 'dia', e.currentTarget.value)}
+													onkeydown={handleHorarioCellKeydown}
+													data-nav-row={rowIdx}
+													data-nav-col="0"
+													aria-label="Día"
+													aria-invalid={erroresDias[dia.id] ? 'true' : undefined}
+													class="rf-celda rf-celda--dia"
+													placeholder="1"
+												/>
+												{#if isFestivo}
+													<span class="rf-tag rf-tag--festivo" title="Día festivo">Festivo</span>
+												{:else if isDomingo}
+													<span class="rf-tag rf-tag--domingo" title="Domingo">Dom.</span>
+												{/if}
+												{#if cruzaCambioConfig && dia.dia}
+													{@const etiquetaCfg = getEtiquetaConfigParaDia(dia.dia)}
+													{#if etiquetaCfg}
+														<span class="rf-tag rf-tag--config" title={etiquetaCfg}>
+															{etiquetaCfg}
+														</span>
+													{/if}
+												{/if}
+											</div>
+										</td>
+
+										<!-- Hora Inicio -->
+										<td>
+											<input
+												type="number"
+												min="0.5"
+												max="48"
+												step="0.5"
+												bind:value={dia.hora_inicio}
+												oninput={(e) =>
+													actualizarDiaLaboral(dia.id, 'hora_inicio', e.currentTarget.value)}
+												onkeydown={handleHorarioCellKeydown}
+												data-nav-row={rowIdx}
+												data-nav-col="1"
+												aria-label="Hora inicio"
+												aria-invalid={erroresHoras[dia.id]?.inicio ? 'true' : undefined}
+												class="rf-celda"
+												placeholder="0.5"
+											/>
+										</td>
+
+										<!-- Hora Fin -->
+										<td>
+											<input
+												type="number"
+												min="0.5"
+												max="48"
+												step="0.5"
+												bind:value={dia.hora_fin}
+												oninput={(e) =>
+													actualizarDiaLaboral(dia.id, 'hora_fin', e.currentTarget.value)}
+												onkeydown={handleHorarioCellKeydown}
+												data-nav-row={rowIdx}
+												data-nav-col="2"
+												aria-label="Hora fin"
+												aria-invalid={erroresHoras[dia.id]?.fin ? 'true' : undefined}
+												class="rf-celda"
+												placeholder="0.5"
+											/>
+										</td>
+
+										<!-- KM Inicial -->
+										<td>
+											<input
+												type="number"
+												bind:value={dia.kilometraje_inicial}
+												oninput={(e) =>
+													actualizarDiaLaboral(
+														dia.id,
+														'kilometraje_inicial',
+														e.currentTarget.value
+													)}
+												onkeydown={handleHorarioCellKeydown}
+												data-nav-row={rowIdx}
+												data-nav-col="3"
+												aria-label="Kilometraje inicial"
+												class="rf-celda"
+												placeholder="0"
+											/>
+										</td>
+
+										<!-- KM Final -->
+										<td>
+											<input
+												type="number"
+												bind:value={dia.kilometraje_final}
+												oninput={(e) =>
+													actualizarDiaLaboral(dia.id, 'kilometraje_final', e.currentTarget.value)}
+												onkeydown={handleHorarioCellKeydown}
+												data-nav-row={rowIdx}
+												data-nav-col="4"
+												aria-label="Kilometraje final"
+												class="rf-celda"
+												placeholder="0"
+											/>
+										</td>
+
+										<!-- KM Recorridos (Calculado) -->
+										<td class="rf-centro">
+											<span class="rf-cifra">
+												{kmRecorridos > 0 ? kmRecorridos.toFixed(1) : '-'}
+											</span>
+										</td>
+
+										<!-- Pernocte -->
+										<td class="rf-centro">
+											<input
+												type="checkbox"
+												bind:checked={dia.pernocte}
+												onchange={(e) =>
+													actualizarDiaLaboral(dia.id, 'pernocte', e.currentTarget.checked)}
+												aria-label="Pernocte"
+												class="rf-check"
+											/>
+										</td>
+
+										<!-- Disponible -->
+										<td class="rf-centro">
+											<input
+												type="checkbox"
+												bind:checked={dia.disponibilidad}
+												onchange={(e) =>
+													actualizarDiaLaboral(dia.id, 'disponibilidad', e.currentTarget.checked)}
+												aria-label="Disponible"
+												class="rf-check"
+											/>
+										</td>
+
+										<!-- Continúa día siguiente -->
+										<td class="rf-centro">
+											<input
+												type="checkbox"
+												bind:checked={dia.continua_siguiente_dia}
+												onchange={(e) =>
+													actualizarDiaLaboral(
+														dia.id,
+														'continua_siguiente_dia',
+														e.currentTarget.checked
+													)}
+												aria-label="Continúa al día siguiente"
+												class="rf-check rf-check--continua"
+												title="Marcar si el servicio continúa al día siguiente"
+											/>
+										</td>
+
+										<!-- Total Horas -->
+										<td class="rf-centro">
+											<span class="rf-cifra" class:rf-cifra--disponible={dia.disponibilidad}>
+												{#if dia.disponibilidad}
+													<span title="Día disponible - no se contabiliza">D</span>
+												{:else}
+													{totalHoras > 0 ? totalHoras.toFixed(1) : '-'}
+												{/if}
+											</span>
+										</td>
+
+										<!-- HED · HEN · HEFD · HEFN · RNDF · RN · RD -->
+										{#each CODIGOS_RECARGO as tipo (tipo)}
+											{@const valor = recargos[tipo]}
+											<td class="rf-centro">
+												{#if dia.disponibilidad}
+													<span class="rf-pill bg-gray-100 text-gray-400">-</span>
+												{:else}
+													<span class="rf-pill {obtenerColorRecargo(tipo, valor)}">
+														{valor > 0 ? valor.toFixed(2) : '-'}
+													</span>
+												{/if}
+											</td>
+										{/each}
+
+										<!-- Columna Acciones REMOVIDA -->
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				</section>
+
+				<!-- Alerta de cruce de config -->
+				{#if cruzaCambioConfig}
+					<div class="rf-aviso rf-aviso--alerta" role="alert">
+						<TriangleAlert class="rf-aviso-icono" size={20} />
+						<div>
+							<p class="rf-aviso-titulo">Esta planilla cruza un cambio de configuración</p>
+							<p class="rf-aviso-texto">
+								Los días se calcularán con la config salarial y los % de recargo vigentes en cada
+								fecha. Revisa el desglose por config abajo.
+							</p>
+						</div>
+					</div>
+				{/if}
+
+				<!-- Resumen de Totales -->
+				<section class="rf-seccion">
+					<h3 class="rf-titulo">Resumen de recargos</h3>
+					<div class="rf-totales">
+						<div class="rf-total" style="--tono: #ea580c;">
+							<div class="rf-total-cabeza">
+								<span class="rf-total-codigo">HED</span>
+								<span class="rf-total-pct">{cruzaCambioConfig ? '25%*' : '25%'}</span>
+							</div>
+							<span class="rf-total-valor">{totales.HED.toFixed(2)}</span>
+							<span class="rf-total-desc">
+								Hora Extra Diurna{formatValorMonetario(totales.valorHED)}
+							</span>
+						</div>
+
+						<div class="rf-total" style="--tono: #2563eb;">
+							<div class="rf-total-cabeza">
+								<span class="rf-total-codigo">HEN</span>
+								<span class="rf-total-pct">75%</span>
+							</div>
+							<span class="rf-total-valor">{totales.HEN.toFixed(2)}</span>
+							<span class="rf-total-desc">
+								Hora Extra Nocturna{formatValorMonetario(totales.valorHEN)}
+							</span>
+						</div>
+
+						<div class="rf-total" style="--tono: #ca8a04;">
+							<div class="rf-total-cabeza">
+								<span class="rf-total-codigo">HEFD</span>
+								<span class="rf-total-pct">{cruzaCambioConfig ? '105/115%' : '105%'}</span>
+							</div>
+							<span class="rf-total-valor">{totales.HEFD.toFixed(2)}</span>
+							<span class="rf-total-desc">
+								H. Extra Festiva Diurna{formatValorMonetario(totales.valorHEFD)}
+							</span>
+						</div>
+
+						<div class="rf-total" style="--tono: #9333ea;">
+							<div class="rf-total-cabeza">
+								<span class="rf-total-codigo">HEFN</span>
+								<span class="rf-total-pct">{cruzaCambioConfig ? '155/165%' : '155%'}</span>
+							</div>
+							<span class="rf-total-valor">{totales.HEFN.toFixed(2)}</span>
+							<span class="rf-total-desc">
+								H. Extra Festiva Nocturna{formatValorMonetario(totales.valorHEFN)}
+							</span>
+						</div>
+
+						<div class="rf-total" style="--tono: #4f46e5;">
+							<div class="rf-total-cabeza">
+								<span class="rf-total-codigo">RNDF</span>
+								<span class="rf-total-pct">{cruzaCambioConfig ? '115/125%' : '115%'}</span>
+							</div>
+							<span class="rf-total-valor">{totales.RNDF.toFixed(2)}</span>
+							<span class="rf-total-desc">
+								R. Noct. Domin./Festivo{formatValorMonetario(totales.valorRNDF)}
+							</span>
+						</div>
+
+						<div class="rf-total" style="--tono: #0d9488;">
+							<div class="rf-total-cabeza">
+								<span class="rf-total-codigo">RN</span>
+								<span class="rf-total-pct">35%</span>
+							</div>
+							<span class="rf-total-valor">{totales.RN.toFixed(2)}</span>
+							<span class="rf-total-desc">
+								Recargo Nocturno{formatValorMonetario(totales.valorRN)}
+							</span>
+						</div>
+
+						<div class="rf-total" style="--tono: #dc2626;">
+							<div class="rf-total-cabeza">
+								<span class="rf-total-codigo">RD</span>
+								<span class="rf-total-pct">{cruzaCambioConfig ? '80/90%' : '80%'}</span>
+							</div>
+							<span class="rf-total-valor">{totales.RD.toFixed(2)}</span>
+							<span class="rf-total-desc">
+								Recargo Dominical/Festivo{formatValorMonetario(totales.valorRD)}
+							</span>
+						</div>
+					</div>
+				</section>
+
+				<!-- Desglose por configuración (cuando cruza cambio) -->
+				{#if cruzaCambioConfig}
+					{@const desglose = getDesglosePorConfig()}
+					<section class="rf-seccion">
+						<h3 class="rf-titulo">Desglose por configuración</h3>
+						<div class="rf-desglose">
+							{#each Array.from(desglose.values()) as item}
+								<div class="rf-card rf-desglose-item">
+									<div class="rf-desglose-texto">
+										<p class="rf-desglose-etiqueta">{item.config.etiqueta}</p>
+										<p class="rf-desglose-detalle">
+											Valor hora: {formatearCOP(item.config.valorHora)} · Salario: {formatearCOP(
+												item.config.salarioBasico
+											)}
+										</p>
+										<p class="rf-desglose-detalle">
+											Días: {item.dias.length > 6
+												? item.dias.slice(0, 6).join(', ') + ` +${item.dias.length - 6}`
+												: item.dias.join(', ')}
+										</p>
+									</div>
+									<p class="rf-desglose-total">{formatearCOP(item.total)}</p>
+								</div>
+							{/each}
+						</div>
+					</section>
+				{/if}
+
+				<!-- Total monetario y estadísticas -->
+				<div class="rf-card rf-resumen">
+					<div class="rf-resumen-datos">
+						<div class="rf-resumen-dato">
+							<span>Total Días</span>
+							<strong>{diasLaborales.length}</strong>
+						</div>
+						<div class="rf-resumen-dato">
+							<span>Con Datos</span>
+							<strong>{diasLaborales.filter((d) => d.hora_inicio && d.hora_fin).length}</strong>
+						</div>
+						<div class="rf-resumen-dato">
+							<span>Total Horas</span>
+							<strong>{totales.totalHoras.toFixed(1)}</strong>
+						</div>
+						<div class="rf-resumen-dato rf-resumen-dato--total">
+							<span>Valor Total</span>
+							<strong>{formatearCOP(totales.valorTotal)}</strong>
+						</div>
+					</div>
+					<p class="rf-resumen-nota">
+						Cálculo según normativa laboral colombiana
+						{#if cruzaCambioConfig}· con vigencias por fecha{/if}
+					</p>
+				</div>
+			{/if}
 		</div>
-	</div>
-{/if}
+	{/if}
 
-<ModalNuevaEmpresa
-	isOpen={mostrarModalEmpresa}
-	onClose={() => (mostrarModalEmpresa = false)}
-	onSuccess={handleEmpresaCreada}
-/>
+	{#snippet pie()}
+		<p class="rf-estado">
+			<span class="rf-estado-punto" class:completo={progress.completed === progress.total}></span>
+			{#if progress.completed === progress.total}
+				Formulario completo
+			{:else}
+				{progress.total - progress.completed} campos pendientes
+			{/if}
+		</p>
+		<button type="button" onclick={handleClose} disabled={isLoading} class="btn-secondary">
+			Cancelar
+		</button>
+		<button
+			type="button"
+			onclick={handleSubmit}
+			disabled={isLoading || progress.completed !== progress.total}
+			class="btn-primary"
+		>
+			{#if isLoading}
+				<LoaderCircle class="rf-spin" size={16} />
+			{:else}
+				<Check size={16} strokeWidth={2.5} />
+			{/if}
+			{editMode ? 'Actualizar' : 'Crear'} Recargo
+		</button>
+	{/snippet}
+</ModalBase>
 
-<ModalNuevoConductor
-	isOpen={mostrarModalConductor}
-	onClose={() => (mostrarModalConductor = false)}
-	onSuccess={handleConductorCreado}
-/>
+<!-- Los modales de creación rápida se abren por encima de este (ModalBase va
+     en z-index 10040; ellos traen z-[60]). -->
+<div class="rf-submodales">
+	<ModalNuevaEmpresa
+		isOpen={mostrarModalEmpresa}
+		onClose={() => (mostrarModalEmpresa = false)}
+		onSuccess={handleEmpresaCreada}
+	/>
 
-<ModalNuevoVehiculo
-	isOpen={mostrarModalVehiculo}
-	onClose={() => (mostrarModalVehiculo = false)}
-	onSuccess={handleVehiculoCreado}
-/>
+	<ModalNuevoConductor
+		isOpen={mostrarModalConductor}
+		onClose={() => (mostrarModalConductor = false)}
+		onSuccess={handleConductorCreado}
+	/>
+
+	<ModalNuevoVehiculo
+		isOpen={mostrarModalVehiculo}
+		onClose={() => (mostrarModalVehiculo = false)}
+		onSuccess={handleVehiculoCreado}
+	/>
+</div>
+
+<style>
+	/* ── Encabezado: progreso y pestañas ─────────────────────────────── */
+	.rf-progreso {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 6px 10px;
+		border: 1px solid rgba(255, 255, 255, 0.16);
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.06);
+		color: #fff;
+	}
+	.rf-progreso-num {
+		font-size: 12px;
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+	}
+	.rf-progreso-barra {
+		width: 64px;
+		height: 6px;
+		overflow: hidden;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.16);
+	}
+	.rf-progreso-barra span {
+		display: block;
+		height: 100%;
+		border-radius: inherit;
+		background: #fff;
+		transition: width 0.3s ease;
+	}
+
+	.rf-tabs {
+		display: flex;
+		gap: 4px;
+		overflow-x: auto;
+		scrollbar-width: none;
+	}
+	.rf-tabs::-webkit-scrollbar {
+		display: none;
+	}
+	.rf-tab {
+		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 10px 14px;
+		border: 0;
+		border-radius: 12px 12px 0 0;
+		background: transparent;
+		color: rgba(255, 255, 255, 0.7);
+		font: inherit;
+		font-size: 13px;
+		font-weight: 700;
+		white-space: nowrap;
+		cursor: pointer;
+		transition:
+			color 0.15s,
+			background 0.15s;
+	}
+	.rf-tab:hover {
+		color: #fff;
+	}
+	.rf-tab:focus-visible {
+		outline: 2px solid var(--accion);
+		outline-offset: -2px;
+	}
+	/* La pestaña activa toma el fondo del cuerpo, como una carpeta. */
+	.rf-tab.activa {
+		background: var(--bg-base);
+		color: var(--text-primary);
+	}
+	.rf-tab :global(.rf-tab-check) {
+		color: var(--color-emerald-400, #34d399);
+	}
+	.rf-tab.activa :global(.rf-tab-check) {
+		color: var(--accion);
+	}
+	.rf-tab-corto {
+		display: none;
+	}
+	.rf-tab-opcional {
+		padding: 2px 7px;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.14);
+		font-size: 10.5px;
+		font-weight: 700;
+	}
+	.rf-tab.activa .rf-tab-opcional {
+		background: var(--border-subtle);
+		color: var(--text-muted);
+	}
+
+	/* ── Estructura del cuerpo ───────────────────────────────────────── */
+	.rf {
+		display: flex;
+		flex-direction: column;
+		gap: 22px;
+	}
+	.rf-seccion {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		min-width: 0;
+	}
+	.rf-titulo {
+		margin: 0;
+		color: var(--text-primary);
+		font-size: 17px;
+		font-weight: 800;
+		letter-spacing: -0.01em;
+	}
+	.rf-titulo-nota {
+		margin-left: 6px;
+		color: var(--text-muted);
+		font-size: 12px;
+		font-weight: 600;
+		letter-spacing: 0;
+	}
+	.rf-titulo-fila {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 12px;
+	}
+	.rf-titulo-sub {
+		margin: 2px 0 0;
+		color: var(--text-muted);
+		font-size: 13px;
+	}
+	.rf-card {
+		padding: 16px;
+		border-radius: 18px;
+		background: var(--bg-surface);
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
+	}
+	.rf-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 16px;
+	}
+	.rf-grid--4 {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+	/* `Campo completo` ocupa toda la fila. */
+	.rf-grid :global(.de-full) {
+		grid-column: 1 / -1;
+	}
+	.rf-mapbox {
+		min-width: 0;
+	}
+
+	.rf-cargando {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 12px;
+		min-height: 240px;
+		color: var(--text-muted);
+		font-size: 14px;
+	}
+	.rf-cargando p {
+		margin: 0;
+	}
+	.rf-spinner {
+		width: 36px;
+		height: 36px;
+		border-radius: 999px;
+		border: 3px solid var(--border-default);
+		border-top-color: var(--accion);
+		animation: rf-giro 0.7s linear infinite;
+	}
+	:global(.rf-spin) {
+		animation: rf-giro 0.8s linear infinite;
+	}
+	@keyframes rf-giro {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+
+	/* ── Controles (mismo aspecto que `.de-input` de ModalEntidad) ───── */
+	.rf-input {
+		width: 100%;
+		min-height: 42px;
+		padding: 9px 12px;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font: inherit;
+		font-size: 14px;
+		transition:
+			border-color 0.15s,
+			box-shadow 0.15s;
+	}
+	.rf-input::placeholder {
+		color: var(--text-very-muted);
+		opacity: 1;
+	}
+	textarea.rf-input {
+		resize: vertical;
+	}
+	.rf-input:focus {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.rf-input:disabled {
+		background: var(--bg-base);
+		color: var(--text-muted);
+		cursor: not-allowed;
+	}
+	.rf-num {
+		font-variant-numeric: tabular-nums;
+	}
+	.rf-input-planilla {
+		padding-right: 40px;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+	}
+	.rf-input-planilla.lleno {
+		border-color: color-mix(in srgb, var(--accion) 45%, var(--border-default));
+		background: color-mix(in srgb, var(--accion) 5%, var(--bg-surface));
+	}
+	.rf-input-spinner {
+		position: absolute;
+		top: 50%;
+		right: 12px;
+		display: grid;
+		transform: translateY(-50%);
+		color: var(--accion);
+	}
+
+	.rf-fila-control {
+		display: flex;
+		align-items: flex-start;
+		gap: 8px;
+	}
+	.rf-buscador {
+		position: relative;
+		flex: 1;
+		min-width: 0;
+	}
+	.rf-btn-icono {
+		flex-shrink: 0;
+		width: 42px;
+		height: 42px;
+		display: grid;
+		place-items: center;
+		border: 1.5px dashed color-mix(in srgb, var(--accion) 45%, var(--border-default));
+		border-radius: 12px;
+		background: var(--bg-surface);
+		color: var(--accion);
+		cursor: pointer;
+		transition:
+			background 0.15s,
+			border-color 0.15s;
+	}
+	.rf-btn-icono:hover {
+		border-color: var(--accion);
+		background: color-mix(in srgb, var(--accion) 7%, var(--bg-surface));
+	}
+	.rf-btn-regenerar {
+		flex-shrink: 0;
+		min-height: 42px;
+		border-radius: 12px;
+	}
+
+	/* Entidad elegida: tarjeta con el nombre y el botón para cambiarla. */
+	.rf-elegido {
+		min-height: 42px;
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+		padding: 8px 8px 8px 14px;
+		border: 1.5px solid var(--accion);
+		border-radius: 12px;
+		background: color-mix(in srgb, var(--accion) 6%, var(--bg-surface));
+	}
+	.rf-elegido-texto,
+	.rf-archivo-texto {
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.rf-elegido-nombre {
+		color: var(--text-primary);
+		font-size: 14.5px;
+		font-weight: 800;
+		overflow-wrap: anywhere;
+	}
+	.rf-elegido-sub {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+		color: var(--text-muted);
+		font-size: 12.5px;
+	}
+	.rf-codigo {
+		padding: 1px 7px;
+		border-radius: 999px;
+		background: var(--bg-base);
+		border: 1px solid var(--border-default);
+		color: var(--text-secondary);
+		font-size: 11px;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+	}
+	.rf-quitar {
+		flex-shrink: 0;
+		width: 32px;
+		height: 32px;
+		display: grid;
+		place-items: center;
+		border: 0;
+		border-radius: 999px;
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		transition:
+			background 0.15s,
+			color 0.15s;
+	}
+	.rf-quitar:hover {
+		background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+		color: var(--text-primary);
+	}
+
+	/* Lista desplegable de búsqueda. */
+	.rf-lista {
+		position: absolute;
+		z-index: 20;
+		left: 0;
+		right: 0;
+		margin-top: 6px;
+		max-height: 240px;
+		overflow-y: auto;
+		padding: 6px;
+		border: 1px solid var(--border-default);
+		border-radius: 14px;
+		background: var(--bg-surface);
+		box-shadow: 0 12px 28px rgba(0, 29, 23, 0.14);
+	}
+	.rf-opcion {
+		width: 100%;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		padding: 9px 12px;
+		border: 0;
+		border-radius: 10px;
+		background: transparent;
+		text-align: left;
+		cursor: pointer;
+	}
+	.rf-opcion:hover {
+		background: var(--bg-base);
+	}
+	.rf-opcion.activa {
+		background: color-mix(in srgb, var(--accion) 10%, var(--bg-surface));
+	}
+	.rf-opcion-nombre {
+		color: var(--text-primary);
+		font-size: 14px;
+		font-weight: 700;
+	}
+	.rf-opcion-sub {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 6px;
+		color: var(--text-muted);
+		font-size: 12.5px;
+	}
+
+	.rf-agregar {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 8px;
+		min-height: 48px;
+		padding: 10px 16px;
+		border: 1.5px dashed color-mix(in srgb, var(--accion) 45%, var(--border-default));
+		border-radius: 16px;
+		background: var(--bg-surface);
+		color: var(--accion);
+		font: inherit;
+		font-size: 14px;
+		font-weight: 700;
+		cursor: pointer;
+		transition:
+			background 0.15s,
+			border-color 0.15s;
+	}
+	.rf-agregar:hover {
+		border-color: var(--accion);
+		background: color-mix(in srgb, var(--accion) 6%, var(--bg-surface));
+	}
+
+	/* ── Archivo adjunto ─────────────────────────────────────────────── */
+	.rf-archivo {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 14px 12px 14px 16px;
+		border-radius: 18px;
+		background: var(--bg-surface);
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
+	}
+	.rf-archivo-texto {
+		flex: 1;
+	}
+	.rf-archivo-icono {
+		flex-shrink: 0;
+		width: 40px;
+		height: 40px;
+		display: grid;
+		place-items: center;
+		border-radius: 12px;
+		background: color-mix(in srgb, var(--accion) 10%, var(--bg-surface));
+		color: var(--accion);
+	}
+	.rf-soltar {
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 10px;
+		min-height: 128px;
+		padding: 16px;
+		border: 1.5px dashed var(--border-default);
+		border-radius: 18px;
+		background: var(--bg-surface);
+		cursor: pointer;
+		transition:
+			border-color 0.15s,
+			background 0.15s;
+	}
+	.rf-soltar:hover,
+	.rf-soltar:focus-within {
+		border-color: var(--accion);
+		background: color-mix(in srgb, var(--accion) 4%, var(--bg-surface));
+	}
+	.rf-soltar-texto {
+		color: var(--text-secondary);
+		font-size: 13.5px;
+		font-weight: 600;
+	}
+	.rf-oculto {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		padding: 0;
+		margin: -1px;
+		overflow: hidden;
+		clip: rect(0, 0, 0, 0);
+		white-space: nowrap;
+		border: 0;
+	}
+
+	/* ── Avisos ──────────────────────────────────────────────────────── */
+	.rf-aviso {
+		display: flex;
+		align-items: flex-start;
+		gap: 12px;
+		padding: 14px 16px;
+		border-radius: 16px;
+		border: 1px solid;
+	}
+	.rf-aviso :global(.rf-aviso-icono) {
+		flex-shrink: 0;
+		margin-top: 1px;
+	}
+	.rf-aviso--marca {
+		border-color: color-mix(in srgb, var(--accion) 22%, transparent);
+		background: color-mix(in srgb, var(--accion) 6%, var(--bg-surface));
+		color: var(--text-secondary);
+	}
+	.rf-aviso--marca :global(.rf-aviso-icono) {
+		color: var(--accion);
+	}
+	.rf-aviso--alerta {
+		border-color: #fedf89;
+		background: #fffaeb;
+		color: #93370d;
+	}
+	.rf-aviso--alerta :global(.rf-aviso-icono) {
+		color: #dc6803;
+	}
+	.rf-aviso-titulo {
+		margin: 0;
+		color: var(--text-primary);
+		font-size: 14px;
+		font-weight: 800;
+	}
+	.rf-aviso--alerta .rf-aviso-titulo {
+		color: #7a2e0e;
+	}
+	.rf-aviso-texto {
+		margin: 4px 0 0;
+		font-size: 13px;
+		line-height: 1.45;
+	}
+
+	/* ── Chips de opciones (terreno, riesgos) ───────────────────────── */
+	.rf-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+	.rf-chip {
+		position: relative;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		min-height: 38px;
+		padding: 0 14px;
+		border: 1.5px solid var(--border-default);
+		border-radius: 999px;
+		background: var(--bg-surface);
+		color: var(--text-secondary);
+		font-size: 13.5px;
+		font-weight: 700;
+		cursor: pointer;
+		user-select: none;
+		transition:
+			background 0.15s,
+			border-color 0.15s,
+			color 0.15s;
+	}
+	.rf-chip:hover {
+		border-color: var(--border-emphasis, var(--text-very-muted));
+	}
+	.rf-chip:has(:focus-visible) {
+		outline: 2px solid var(--accion);
+		outline-offset: 2px;
+	}
+	.rf-chip.activo {
+		border-color: var(--accion);
+		background: var(--accion);
+		color: #fff;
+	}
+	.rf-chip--riesgo.activo {
+		border-color: #b42318;
+		background: #fef3f2;
+		color: #b42318;
+	}
+
+	/* ── Panel de copiado y errores ──────────────────────────────────── */
+	.rf-copiado {
+		padding: 14px 16px;
+		border-radius: 18px;
+		background: var(--bg-surface);
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
+		border-left: 4px solid var(--accion);
+	}
+	.rf-copiado-fila {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 10px;
+	}
+	.rf-copiado-texto {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		color: var(--text-primary);
+		font-size: 14px;
+		font-weight: 700;
+	}
+	.rf-copiado-acciones {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 8px;
+	}
+	.rf-btn-compacto {
+		min-height: 38px;
+		padding: 0 14px;
+		border-radius: 12px;
+		font-size: 13px;
+	}
+	.rf-copiado-nota {
+		margin: 8px 0 0;
+		color: var(--text-muted);
+		font-size: 12.5px;
+	}
+	.rf-enlace {
+		padding: 6px 10px;
+		border: 0;
+		border-radius: 10px;
+		background: transparent;
+		color: var(--text-muted);
+		font: inherit;
+		font-size: 13px;
+		font-weight: 700;
+		cursor: pointer;
+	}
+	.rf-enlace:hover {
+		background: var(--bg-base);
+		color: var(--text-primary);
+	}
+	.rf-enlace--linea {
+		padding: 0;
+		color: inherit;
+		font-size: inherit;
+		text-decoration: underline;
+	}
+	.rf-enlace--linea:hover {
+		background: transparent;
+		color: inherit;
+	}
+	.rf-errores {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	.rf-error {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		padding: 8px 12px;
+		border: 1px solid #fecdca;
+		border-radius: 12px;
+		background: #fef3f2;
+		color: #b42318;
+		font-size: 13px;
+		font-weight: 600;
+	}
+
+	/* ── Tabla de días ───────────────────────────────────────────────── */
+	.rf-tabla-card {
+		overflow-x: auto;
+		border-radius: 18px;
+		background: var(--bg-surface);
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
+	}
+	.rf-tabla {
+		min-width: 100%;
+		border-collapse: collapse;
+	}
+	.rf-tabla th {
+		padding: 11px 10px;
+		background: var(--bg-base);
+		border-bottom: 1px solid var(--border-default);
+		color: var(--text-muted);
+		font-size: 11.5px;
+		font-weight: 800;
+		text-align: left;
+		white-space: nowrap;
+	}
+	.rf-th-pct {
+		display: block;
+		font-size: 10px;
+		font-weight: 600;
+	}
+	.rf-tabla td {
+		padding: 7px 10px;
+		border-bottom: 1px solid var(--border-subtle);
+		white-space: nowrap;
+	}
+	.rf-tabla tbody tr:last-child td {
+		border-bottom: 0;
+	}
+	.rf-tabla .rf-centro {
+		text-align: center;
+	}
+	.rf-fila {
+		cursor: pointer;
+		transition: background 0.15s;
+	}
+	.rf-fila:hover {
+		background: var(--bg-base);
+	}
+	.rf-fila.seleccionada {
+		background: color-mix(in srgb, var(--accion) 9%, var(--bg-surface));
+		box-shadow: inset 4px 0 0 var(--accion);
+	}
+	.rf-fila.continua {
+		background: #fff7ed;
+		box-shadow: inset 4px 0 0 #fb923c;
+	}
+	.rf-fila.continua:hover {
+		background: #ffedd5;
+	}
+	.rf-fila.disponible {
+		background: #ecfdf3;
+	}
+	.rf-fila.disponible:hover {
+		background: #dcfae6;
+	}
+	.rf-fila.domingo {
+		background: #fef3f2;
+	}
+	.rf-fila.domingo:hover {
+		background: #fee4e2;
+	}
+	.rf-fila.festivo {
+		background: color-mix(in srgb, var(--accion) 6%, var(--bg-surface));
+	}
+	.rf-fila.festivo:hover {
+		background: color-mix(in srgb, var(--accion) 11%, var(--bg-surface));
+	}
+	.rf-dia {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+	.rf-celda {
+		width: 76px;
+		min-height: 34px;
+		padding: 5px 8px;
+		border: 1px solid var(--border-default);
+		border-radius: 10px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font: inherit;
+		font-size: 13.5px;
+		font-variant-numeric: tabular-nums;
+		transition:
+			border-color 0.15s,
+			box-shadow 0.15s;
+	}
+	.rf-celda--dia {
+		width: 58px;
+	}
+	.rf-celda:focus {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.rf-celda[aria-invalid='true'] {
+		border-color: #dc2626;
+		background: #fff8f7;
+	}
+	.rf-check {
+		width: 17px;
+		height: 17px;
+		accent-color: var(--accion);
+		cursor: pointer;
+	}
+	.rf-check--continua {
+		accent-color: #ea580c;
+	}
+	.rf-tag {
+		padding: 2px 7px;
+		border-radius: 999px;
+		font-size: 10.5px;
+		font-weight: 800;
+	}
+	.rf-tag--festivo {
+		background: color-mix(in srgb, var(--accion) 14%, var(--bg-surface));
+		color: var(--bg-charcoal-deep);
+	}
+	.rf-tag--domingo {
+		background: #fee4e2;
+		color: #b42318;
+	}
+	.rf-tag--config {
+		border: 1px solid #fedf89;
+		background: #fffaeb;
+		color: #b54708;
+		font-size: 9.5px;
+	}
+	.rf-cifra {
+		color: var(--text-secondary);
+		font-size: 13.5px;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+	}
+	.rf-cifra--disponible {
+		color: #067647;
+	}
+	.rf-pill {
+		display: inline-flex;
+		align-items: center;
+		padding: 3px 9px;
+		border-radius: 999px;
+		font-size: 12px;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+	}
+
+	/* ── Totales ─────────────────────────────────────────────────────── */
+	.rf-totales {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+		gap: 10px;
+	}
+	.rf-total {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		padding: 14px;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
+	}
+	.rf-total-cabeza {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 6px;
+	}
+	.rf-total-codigo {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		color: var(--text-secondary);
+		font-size: 12px;
+		font-weight: 800;
+	}
+	.rf-total-codigo::before {
+		content: '';
+		width: 8px;
+		height: 8px;
+		border-radius: 999px;
+		background: var(--tono);
+	}
+	.rf-total-pct {
+		color: var(--text-muted);
+		font-size: 11.5px;
+		font-weight: 600;
+	}
+	.rf-total-valor {
+		color: var(--text-primary);
+		font-size: 22px;
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+	}
+	.rf-total-desc {
+		color: var(--text-muted);
+		font-size: 11.5px;
+		line-height: 1.35;
+	}
+
+	.rf-desglose {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 10px;
+	}
+	.rf-desglose-item {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 10px;
+	}
+	.rf-desglose-texto {
+		min-width: 0;
+		flex: 1;
+	}
+	.rf-desglose-etiqueta {
+		margin: 0;
+		color: var(--text-primary);
+		font-size: 13.5px;
+		font-weight: 800;
+	}
+	.rf-desglose-detalle {
+		margin: 3px 0 0;
+		color: var(--text-muted);
+		font-size: 12px;
+	}
+	.rf-desglose-total {
+		margin: 0;
+		color: var(--text-primary);
+		font-size: 14.5px;
+		font-weight: 800;
+		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.rf-resumen {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 12px;
+	}
+	.rf-resumen-datos {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 10px 24px;
+	}
+	.rf-resumen-dato {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.rf-resumen-dato span {
+		color: var(--text-muted);
+		font-size: 12px;
+		font-weight: 600;
+	}
+	.rf-resumen-dato strong {
+		color: var(--text-primary);
+		font-size: 15px;
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+	}
+	.rf-resumen-dato--total strong {
+		color: var(--color-emerald-700);
+		font-size: 18px;
+	}
+	.rf-resumen-nota {
+		margin: 0;
+		color: var(--text-muted);
+		font-size: 12px;
+	}
+
+	/* ── Pie ─────────────────────────────────────────────────────────── */
+	.rf-estado {
+		margin: 0 auto 0 0;
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		color: var(--text-muted);
+		font-size: 13px;
+		font-weight: 600;
+	}
+	.rf-estado-punto {
+		width: 8px;
+		height: 8px;
+		border-radius: 999px;
+		background: #f59e0b;
+	}
+	.rf-estado-punto.completo {
+		background: var(--accion);
+	}
+
+	/* Los modales de creación rápida traen `z-[60]`: se suben por encima
+	   de ModalBase (10040) y por debajo de las confirmaciones (10050). */
+	.rf-submodales :global(.fixed.inset-0) {
+		z-index: 10045;
+	}
+
+	@media (max-width: 1024px) {
+		.rf-grid--4 {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+	}
+
+	@media (max-width: 640px) {
+		.rf-grid,
+		.rf-grid--4,
+		.rf-desglose {
+			grid-template-columns: minmax(0, 1fr);
+		}
+		.rf-tab {
+			flex: 1;
+			justify-content: center;
+			padding: 9px 8px;
+			font-size: 12.5px;
+		}
+		.rf-tab-largo,
+		.rf-tab-opcional {
+			display: none;
+		}
+		.rf-tab-corto {
+			display: inline;
+		}
+		.rf-progreso-barra {
+			display: none;
+		}
+		.rf-totales {
+			grid-template-columns: repeat(2, minmax(0, 1fr));
+		}
+		.rf-estado {
+			flex-basis: 100%;
+		}
+	}
+</style>

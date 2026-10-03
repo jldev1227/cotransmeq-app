@@ -1,7 +1,6 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { fade, fly, scale } from 'svelte/transition';
-	import { cubicOut, quintOut } from 'svelte/easing';
+	import { onDestroy, onMount } from 'svelte';
+	import { fly } from 'svelte/transition';
 	import Select from 'svelte-select';
 	import { serviciosStore } from '$lib/stores/servicios';
 	import {
@@ -20,6 +19,26 @@
 	import ModalNuevoVehiculo from './ModalNuevoVehiculo.svelte';
 	import ModalSelectCliente from '$lib/components/ui/ModalSelectCliente.svelte';
 	import MapboxSearch from '$lib/components/ui/MapboxSearch.svelte';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
+	import Campo from '$lib/components/directorio/Campo.svelte';
+	import Dato from '$lib/components/directorio/Dato.svelte';
+	import { formularioAbierto } from '$lib/stores/formularioAbierto';
+	import {
+		Building2,
+		Check,
+		ChevronDown,
+		ChevronRight,
+		CircleCheck,
+		Info,
+		LoaderCircle,
+		MapPin,
+		Package,
+		Plus,
+		Truck,
+		UserRound,
+		Users,
+		X
+	} from 'lucide-svelte';
 
 	// Props
 	export let isOpen = false;
@@ -83,43 +102,61 @@
 	$: conductores = $recursos.conductores;
 	$: vehiculos = $recursos.vehiculos;
 
-	// Icon components
-	function UserIcon() {
-		return `<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-			<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-		</svg>`;
+	// Con un sub-modal encima, Escape y el fondo son de él: el formulario no se cierra.
+	$: subModalAbierto =
+		mostrarModalEmpresa ||
+		mostrarModalConductor ||
+		mostrarModalVehiculo ||
+		mostrarModalSelectCliente ||
+		mostrarModalSelectOrigen ||
+		mostrarModalSelectDestino;
+
+	// Escape dentro de un campo (buscador de direcciones, svelte-select) cierra su
+	// lista, no el modal: se marca en captura, antes de que ModalBase lo vea.
+	let escapeInterno = false;
+	function marcarEscapeInterno(e: KeyboardEvent) {
+		if (e.key !== 'Escape' || !isOpen) return;
+		const target = e.target as HTMLElement | null;
+		if (!target?.closest?.('.fs-form input, .fs-form textarea, .fs-form .svelte-select')) return;
+		escapeInterno = true;
+		setTimeout(() => (escapeInterno = false));
 	}
 
-	function LocationMarkerIcon() {
-		return `<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-			<path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
-			<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
-		</svg>`;
+	// Avisa a ToastProvider para que los toasts no tapen el pie del modal.
+	let avisandoToasts = false;
+	$: if (isOpen !== avisandoToasts) {
+		if (isOpen) formularioAbierto.entrar();
+		else formularioAbierto.salir();
+		avisandoToasts = isOpen;
 	}
+	onDestroy(() => {
+		if (avisandoToasts) formularioAbierto.salir();
+	});
 
-	function TruckIcon() {
-		return `<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-			<path stroke-linecap="round" stroke-linejoin="round" d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 0 0-10.026 0 1.106 1.106 0 0 0-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12" />
-		</svg>`;
-	}
+	// Estado con el que quedará registrado el servicio (vista previa).
+	$: mensajeEstado = (() => {
+		const now = new Date();
+		const fechaReal = new Date(fechaRealizacion);
 
-	function UsersIcon() {
-		return `<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-			<path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
-		</svg>`;
-	}
+		if (fechaReal < now) {
+			if (!conductorSelected || !vehicleSelected) {
+				return 'La fecha de realización es anterior a la actual. Para registrar o actualizar este servicio, debe asignar un conductor y un vehículo.';
+			}
+			return 'El servicio será registrado como EN CURSO ya que la fecha de realización es anterior a la actual; a menos que marque el servicio como finalizado.';
+		}
 
-	function CheckCircleIcon() {
-		return `<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-			<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-		</svg>`;
-	}
-
-	function BuildingIcon() {
-		return `<svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
-			<path stroke-linecap="round" stroke-linejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
-		</svg>`;
-	}
+		return conductorSelected && vehicleSelected
+			? 'El servicio será registrado como PLANIFICADO ya que tiene conductor y vehículo asignados.'
+			: 'El servicio será registrado como SOLICITADO ya que no tiene conductor o vehículo asignados.';
+	})();
+	$: estadoPrevisto = (() => {
+		const now = new Date();
+		const fechaReal = new Date(fechaRealizacion);
+		if (fechaReal < now && conductorSelected && vehicleSelected) {
+			return finalizarServicio ? 'REALIZADO' : 'EN CURSO';
+		}
+		return conductorSelected && vehicleSelected ? 'PLANIFICADO' : 'SOLICITADO';
+	})();
 
 	// Initialize form with current date/time
 	function initializeDates() {
@@ -438,975 +475,952 @@
 	}
 </script>
 
-{#if isOpen}
-	<!-- Backdrop con blur (paleta landing) -->
-	<button
-		type="button"
-		class="fixed inset-0 z-50 cursor-default border-0 p-4"
-		style="background: linear-gradient(135deg, rgba(15, 23, 42, 0.40), rgba(20, 83, 45, 0.55)); backdrop-filter: blur(8px) saturate(120%); -webkit-backdrop-filter: blur(8px) saturate(120%);"
-		aria-label="Cerrar modal"
-		on:click={handleClose}
-		transition:fade={{ duration: 200, easing: quintOut }}
-	></button>
+<svelte:window onkeydowncapture={marcarEscapeInterno} />
 
-	<!-- Modal Container -->
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center overflow-y-auto p-4"
-		role="presentation"
-	>
-		<!-- Modal content -->
-		<div
-			class="relative w-full max-w-5xl overflow-hidden transition-all duration-300"
-			style="background-color: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 24px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);"
-			role="dialog"
-			aria-modal="true"
-			in:fly={{ y: 20, duration: 400, easing: quintOut }}
-		>
-			<!-- Header editorial (paleta landing) -->
-			<div
-				class="px-8 py-6"
-				style="border-bottom: 1px solid var(--border-subtle); background: linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-base) 100%);"
-			>
-				<div class="flex items-center justify-between gap-3">
-					<div class="flex items-center gap-3">
-						<div
-							class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl"
-							style="background: linear-gradient(135deg, #ea580c, #c2410c); box-shadow: 0 6px 16px rgba(234, 88, 12, 0.30);"
-						>
-							<svg
-								class="h-5 w-5 text-white"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								stroke-width="1.8"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-								/>
-							</svg>
-						</div>
-						<div class="min-w-0 flex-1">
-							<div class="flex items-center gap-2">
-								<p
-									class="font-mono-meta inline-block rounded-md px-2 py-0.5 text-[10px]"
-									style="color: var(--emerald-500); background: rgba(234, 88, 12, 0.08); letter-spacing: 0.12em;"
-								>
-									{isEditing ? (isReadOnly ? 'DETALLE' : 'EDICIÓN') : 'NUEVO REGISTRO'}
-								</p>
-								{#if isEditing && servicio}
-									<span
-										class="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
-										style="background-color: rgba(234, 88, 12, 0.10); color: var(--emerald-800); border: 1px solid rgba(234, 88, 12, 0.25);"
-									>
-										{servicio.estado.replace('_', ' ').toUpperCase()}
-									</span>
-								{/if}
-							</div>
-							<h2
-								class="mt-1 font-display text-2xl"
-								style="color: var(--bg-charcoal); font-weight: 800;"
-							>
-								{#if isEditing}
-									{isReadOnly ? 'Detalles del Servicio' : 'Editar Servicio'}
-								{:else}
-									Nuevo Servicio
-								{/if}
-							</h2>
-							<p class="mt-0.5 text-sm" style="color: var(--text-muted);">
-								Complete toda la información para registrar el servicio
-							</p>
-						</div>
-					</div>
+<ModalBase
+	open={isOpen}
+	eyebrow={isEditing ? (isReadOnly ? 'Detalle' : 'Edición') : 'Nuevo registro'}
+	title={isEditing ? (isReadOnly ? 'Detalles del Servicio' : 'Editar Servicio') : 'Nuevo Servicio'}
+	subtitle="Complete toda la información para registrar el servicio"
+	tamano="lg"
+	bloqueado={loading || subModalAbierto || escapeInterno}
+	oncerrar={handleClose}
+>
+	{#snippet accionesCabecera()}
+		{#if isEditing && servicio}
+			<span class="fs-estado-hero">{servicio.estado.replace('_', ' ').toUpperCase()}</span>
+		{/if}
+	{/snippet}
 
-					<button on:click={handleClose} class="filter-close" aria-label="Cerrar modal">
-						<svg
-							class="h-4 w-4"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-							stroke-width="2"
-						>
-							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-						</svg>
-					</button>
+	<div class="fs-form">
+		{#if isReadOnly}
+			<!-- Vista de solo lectura -->
+			<section class="fs-seccion">
+				<h3 class="fs-titulo">Información Básica</h3>
+				<div class="fs-datos">
+					<Dato
+						etiqueta="Cliente"
+						valor={empresas.find((e) => e.id === servicio?.cliente_id)?.nombre || 'No asignado'}
+					/>
+					<Dato etiqueta="Estado">
+						<span class="capitalize">{servicio?.estado}</span>
+					</Dato>
+					<Dato
+						etiqueta="Fecha de Solicitud"
+						valor={servicio?.fecha_solicitud
+							? new Date(servicio.fecha_solicitud).toLocaleString('es-CO')
+							: 'No definida'}
+					/>
+					<Dato
+						etiqueta="Fecha de Realización"
+						valor={servicio?.fecha_realizacion
+							? new Date(servicio.fecha_realizacion).toLocaleString('es-CO')
+							: 'No definida'}
+					/>
 				</div>
-			</div>
+			</section>
 
-			<!-- Step Progress Bar (Hidden - Showing all content in one view) -->
+			<section class="fs-seccion">
+				<h3 class="fs-titulo">Origen y Destino</h3>
+				<div class="fs-datos">
+					<Dato etiqueta="Origen">
+						{servicio?.origen_especifico}
+						<span class="fs-dato-sub">
+							{municipiosData.find((m) => m.id === servicio?.origen_id)?.nombre_municipio ||
+								'No especificado'}
+						</span>
+					</Dato>
+					<Dato etiqueta="Destino">
+						{servicio?.destino_especifico}
+						<span class="fs-dato-sub">
+							{municipiosData.find((m) => m.id === servicio?.destino_id)?.nombre_municipio ||
+								'No especificado'}
+						</span>
+					</Dato>
+					<Dato
+						etiqueta="Propósito"
+						valor={servicio?.proposito_servicio
+							? labelPropositoServicio(servicio.proposito_servicio)
+							: 'No especificado'}
+					/>
+				</div>
+			</section>
 
-			<!-- Form content -->
-			<div class="h-[25rem] overflow-y-auto px-8 py-6">
-				{#if isReadOnly}
-					<!-- Read-only view -->
-					<div class="space-y-6">
-						<div class="space-y-4">
-							<h3 class="border-b border-gray-200 pb-2 text-lg font-medium text-gray-900">
-								Información Básica
-							</h3>
-							<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-								<div class="space-y-1">
-									<p class="text-sm font-medium text-gray-500">Cliente</p>
-									<p class="text-md">
-										{empresas.find((e) => e.id === servicio?.cliente_id)?.nombre || 'No asignado'}
-									</p>
-								</div>
-								<div class="space-y-1">
-									<p class="text-sm font-medium text-gray-500">Estado</p>
-									<p class="text-md capitalize">{servicio?.estado}</p>
-								</div>
-								<div class="space-y-1">
-									<p class="text-sm font-medium text-gray-500">Fecha de Solicitud</p>
-									<p class="text-md">
-										{servicio?.fecha_solicitud
-											? new Date(servicio.fecha_solicitud).toLocaleString('es-CO')
-											: 'No definida'}
-									</p>
-								</div>
-								<div class="space-y-1">
-									<p class="text-sm font-medium text-gray-500">Fecha de Realización</p>
-									<p class="text-md">
-										{servicio?.fecha_realizacion
-											? new Date(servicio.fecha_realizacion).toLocaleString('es-CO')
-											: 'No definida'}
-									</p>
-								</div>
-							</div>
+			<section class="fs-seccion">
+				<h3 class="fs-titulo">Asignaciones</h3>
+				<div class="fs-datos">
+					<Dato
+						etiqueta="Conductor"
+						valor={conductores.find((c) => c.id === servicio?.conductor_id)
+							? `${conductores.find((c) => c.id === servicio?.conductor_id)?.nombre} ${conductores.find((c) => c.id === servicio?.conductor_id)?.apellido}`
+							: 'No asignado'}
+					/>
+					<Dato
+						etiqueta="Vehículo"
+						valor={vehiculos.find((v) => v.id === servicio?.vehiculo_id)
+							? `${vehiculos.find((v) => v.id === servicio?.vehiculo_id)?.placa} (${vehiculos.find((v) => v.id === servicio?.vehiculo_id)?.marca})`
+							: 'No asignado'}
+					/>
+				</div>
+			</section>
 
-							<h3 class="border-b border-gray-200 pt-4 pb-2 text-lg font-medium text-gray-900">
-								Origen y Destino
-							</h3>
-							<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-								<div class="space-y-1">
-									<p class="text-sm font-medium text-gray-500">Origen</p>
-									<p class="text-md">{servicio?.origen_especifico}</p>
-									<p class="text-sm text-gray-500">
-										{municipiosData.find((m) => m.id === servicio?.origen_id)?.nombre_municipio ||
-											'No especificado'}
-									</p>
-								</div>
-								<div class="space-y-1">
-									<p class="text-sm font-medium text-gray-500">Destino</p>
-									<p class="text-md">{servicio?.destino_especifico}</p>
-									<p class="text-sm text-gray-500">
-										{municipiosData.find((m) => m.id === servicio?.destino_id)?.nombre_municipio ||
-											'No especificado'}
-									</p>
-								</div>
-								<div class="space-y-1">
-									<p class="text-sm font-medium text-gray-500">Propósito</p>
-									<p class="text-md">
-										{servicio?.proposito_servicio
-											? labelPropositoServicio(servicio.proposito_servicio)
-											: 'No especificado'}
-									</p>
-								</div>
-							</div>
-
-							<h3 class="border-b border-gray-200 pt-4 pb-2 text-lg font-medium text-gray-900">
-								Asignaciones
-							</h3>
-							<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-								<div class="space-y-1">
-									<p class="text-sm font-medium text-gray-500">Conductor</p>
-									<p class="text-md">
-										{conductores.find((c) => c.id === servicio?.conductor_id)
-											? `${conductores.find((c) => c.id === servicio?.conductor_id)?.nombre} ${conductores.find((c) => c.id === servicio?.conductor_id)?.apellido}`
-											: 'No asignado'}
-									</p>
-								</div>
-								<div class="space-y-1">
-									<p class="text-sm font-medium text-gray-500">Vehículo</p>
-									<p class="text-md">
-										{vehiculos.find((v) => v.id === servicio?.vehiculo_id)
-											? `${vehiculos.find((v) => v.id === servicio?.vehiculo_id)?.placa} (${vehiculos.find((v) => v.id === servicio?.vehiculo_id)?.marca})`
-											: 'No asignado'}
-									</p>
-								</div>
-							</div>
-
-							{#if servicio?.observaciones}
-								<h3 class="border-b border-gray-200 pt-4 pb-2 text-lg font-medium text-gray-900">
-									Observaciones
-								</h3>
-								<p class="text-md">{servicio.observaciones}</p>
-							{/if}
-						</div>
+			{#if servicio?.observaciones}
+				<section class="fs-seccion">
+					<h3 class="fs-titulo">Observaciones</h3>
+					<div class="fs-datos">
+						<Dato etiqueta="Observaciones" valor={servicio.observaciones} completo />
 					</div>
-				{:else}
-					<!-- Unified Form View - All Steps in One Scrollable View -->
-					<div class="space-y-8">
-						<!-- Section 1: Información Básica -->
-						<div class="space-y-5">
-							<h3
-								class="flex items-center gap-2 border-b-2 border-orange-100 pb-2 text-lg font-bold text-gray-900"
-							>
-								<div
-									class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 text-white"
-								>
-									<span class="text-sm font-bold">1</span>
-								</div>
-								Información Básica
-							</h3>
-							<!-- Cliente -->
-							<div>
-								<label for="cliente" class="mb-2 block text-sm font-semibold text-gray-700">
-									Cliente / Empresa <span class="text-red-500">*</span>
-								</label>
-								<div class="flex items-stretch gap-2">
-									<!-- Input display (read-only) -->
-									<button
-										type="button"
-										on:click={() => (mostrarModalSelectCliente = true)}
-										class="group relative flex flex-1 items-center gap-3 rounded-xl border {errors.cliente
-											? 'border-red-300'
-											: 'border-gray-200'} bg-white px-4 py-2.5 text-left transition-all hover:border-gray-300 hover:bg-gray-50"
-									>
-										<div class="text-gray-400 transition-colors group-hover:text-orange-600">
-											{@html BuildingIcon()}
-										</div>
-										<div class="flex-1">
-											{#if clienteSelected}
-												<span class="text-sm font-medium text-gray-900">
-													{empresaOptions.find((o) => o.value === clienteSelected)?.label ||
-														'Seleccionar empresa'}
-												</span>
-											{:else}
-												<span class="text-sm text-gray-400">Buscar o seleccionar empresa...</span>
-											{/if}
-										</div>
-										<svg
-											class="h-4 w-4 text-gray-400 transition-transform group-hover:translate-x-1"
-											fill="none"
-											stroke="currentColor"
-											viewBox="0 0 24 24"
-										>
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M9 5l7 7-7 7"
-											/>
-										</svg>
-									</button>
-
-									<button
-										type="button"
-										on:click={() => (mostrarModalEmpresa = true)}
-										class="group flex h-11 w-11 items-center justify-center rounded-xl border-2 border-dashed border-orange-300 bg-orange-50/50 text-orange-600 transition-all hover:scale-105 hover:border-orange-400 hover:bg-orange-50"
-										title="Crear nueva empresa"
-									>
-										<svg
-											class="h-5 w-5 transition-transform group-hover:rotate-90"
-											fill="none"
-											stroke="currentColor"
-											stroke-width="2.5"
-											viewBox="0 0 24 24"
-										>
-											<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-										</svg>
-									</button>
-								</div>
-								{#if errors.cliente}
-									<p class="mt-1 text-sm text-red-600">{errors.cliente}</p>
-								{/if}
-							</div>
-
-							<!-- Dates -->
-							<div class="grid grid-cols-1 gap-5 md:grid-cols-2">
-								<div>
-									<label
-										for="fechaSolicitud"
-										class="mb-2 block text-sm font-semibold text-gray-700"
-									>
-										Fecha y hora de solicitud <span class="text-red-500">*</span>
-									</label>
-									<div class="relative">
-										<input
-											type="datetime-local"
-											id="fechaSolicitud"
-											bind:value={fechaSolicitud}
-											class="w-full rounded-xl border {errors.fechaSolicitud
-												? 'border-red-300'
-												: 'border-gray-200'} bg-white px-4 py-2.5 text-sm text-gray-900 transition-all focus:border-orange-400 focus:ring-4 focus:ring-orange-400/10 focus:outline-none"
-										/>
-									</div>
-									{#if errors.fechaSolicitud}
-										<p class="mt-1 text-sm text-red-600">{errors.fechaSolicitud}</p>
-									{/if}
-								</div>
-								<div>
-									<label
-										for="fechaRealizacion"
-										class="mb-2 block text-sm font-semibold text-gray-700"
-									>
-										Fecha y hora de realización <span class="text-red-500">*</span>
-									</label>
-									<div class="relative">
-										<input
-											type="datetime-local"
-											id="fechaRealizacion"
-											bind:value={fechaRealizacion}
-											class="w-full rounded-xl border {errors.fechaRealizacion
-												? 'border-red-300'
-												: 'border-gray-200'} bg-white px-4 py-2.5 text-sm text-gray-900 transition-all focus:border-orange-400 focus:ring-4 focus:ring-orange-400/10 focus:outline-none"
-										/>
-									</div>
-									{#if errors.fechaRealizacion}
-										<p class="mt-1 text-sm text-red-600">{errors.fechaRealizacion}</p>
-									{/if}
-								</div>
-							</div>
-						</div>
-
-						<!-- Section 2: Trayecto -->
-						<div class="space-y-5">
-							<h3
-								class="flex items-center gap-2 border-b-2 border-orange-100 pb-2 text-lg font-bold text-gray-900"
-							>
-								<div
-									class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 text-white"
-								>
-									<span class="text-sm font-bold">2</span>
-								</div>
-								Trayecto
-							</h3>
-							<!-- Municipios y Direcciones Específicas -->
-							<div class="grid grid-cols-1 gap-5 md:grid-cols-2">
-								<!-- Origen -->
-								<div class="space-y-4">
-									<div>
-										<label for="origen" class="mb-2 block text-sm font-semibold text-gray-700">
-											Municipio de Origen <span class="text-red-500">*</span>
-										</label>
-										<button
-											type="button"
-											on:click={() => (mostrarModalSelectOrigen = true)}
-											class="relative flex h-12 w-full items-center gap-3 rounded-lg border {errors.origen
-												? 'border-red-300'
-												: 'border-gray-300'} bg-white px-4 text-left text-sm transition-all hover:border-orange-300 hover:bg-orange-50/30 focus:border-orange-400 focus:outline-none"
-										>
-											<div class="flex-shrink-0 text-gray-400">
-												<svg
-													class="h-5 w-5"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-													/>
-												</svg>
-											</div>
-											{#if selectedOriginMun}
-												<span class="flex-1 text-gray-900">
-													{municipioOptions.find((o) => o.value === selectedOriginMun)?.label ||
-														'Seleccionado'}
-												</span>
-											{:else}
-												<span class="flex-1 text-gray-400">Buscar municipio de origen...</span>
-											{/if}
-											<svg
-												class="h-4 w-4 flex-shrink-0 text-gray-400 transition-transform group-hover:translate-x-1"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-												viewBox="0 0 24 24"
-											>
-												<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-											</svg>
-										</button>
-										{#if errors.origen}
-											<p class="mt-1 text-sm text-red-600">{errors.origen}</p>
-										{/if}
-									</div>
-
-									<div>
-										<MapboxSearch
-											bind:value={originSpecific}
-											label="Dirección específica de origen"
-											placeholder="Buscar dirección, pozo, campamento..."
-											onSelect={(data) => {
-												originSpecific = data.address;
-												originCoords = { lat: data.coordinates[1], lng: data.coordinates[0] };
-											}}
-										/>
-										{#if originCoords.lat !== 0 && originCoords.lng !== 0}
-											<p class="mt-2 text-xs text-gray-500">
-												📍 Coordenadas: {originCoords.lat.toFixed(6)}, {originCoords.lng.toFixed(6)}
-											</p>
-										{/if}
-									</div>
-								</div>
-
-								<!-- Destino -->
-								<div class="space-y-4">
-									<div>
-										<label for="destino" class="mb-2 block text-sm font-semibold text-gray-700">
-											Municipio de Destino <span class="text-red-500">*</span>
-										</label>
-										<button
-											type="button"
-											on:click={() => (mostrarModalSelectDestino = true)}
-											class="relative flex h-12 w-full items-center gap-3 rounded-lg border {errors.destino
-												? 'border-red-300'
-												: 'border-gray-300'} bg-white px-4 text-left text-sm transition-all hover:border-orange-300 hover:bg-orange-50/30 focus:border-orange-400 focus:outline-none"
-										>
-											<div class="flex-shrink-0 text-gray-400">
-												<svg
-													class="h-5 w-5"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-													/>
-												</svg>
-											</div>
-											{#if selectedDestMun}
-												<span class="flex-1 text-gray-900">
-													{municipioOptions.find((o) => o.value === selectedDestMun)?.label ||
-														'Seleccionado'}
-												</span>
-											{:else}
-												<span class="flex-1 text-gray-400">Buscar municipio de destino...</span>
-											{/if}
-											<svg
-												class="h-4 w-4 flex-shrink-0 text-gray-400 transition-transform group-hover:translate-x-1"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-												viewBox="0 0 24 24"
-											>
-												<path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
-											</svg>
-										</button>
-										{#if errors.destino}
-											<p class="mt-1 text-sm text-red-600">{errors.destino}</p>
-										{/if}
-									</div>
-
-									<div>
-										<MapboxSearch
-											bind:value={destSpecific}
-											label="Dirección específica de destino"
-											placeholder="Buscar dirección, pozo, campamento..."
-											onSelect={(data) => {
-												destSpecific = data.address;
-												destCoords = { lat: data.coordinates[1], lng: data.coordinates[0] };
-											}}
-										/>
-										{#if destCoords.lat !== 0 && destCoords.lng !== 0}
-											<p class="mt-2 text-xs text-gray-500">
-												📍 Coordenadas: {destCoords.lat.toFixed(6)}, {destCoords.lng.toFixed(6)}
-											</p>
-										{/if}
-									</div>
-								</div>
-							</div>
-
-							<!-- Purpose -->
-							<div>
-								<p class="mb-3 block text-sm font-semibold text-gray-700">
-									Propósito del Servicio <span class="text-red-500">*</span>
-								</p>
-								<div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-									<label
-										class="group relative flex cursor-pointer items-center gap-3 rounded-xl border-2 p-4 transition-all {purpose ===
-										'personal'
-											? 'border-orange-500 bg-orange-50/50'
-											: errors.purpose
-												? 'border-red-300 bg-white hover:border-red-400 hover:bg-red-50/30'
-												: 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'}"
-									>
-										<input
-											type="radio"
-											name="purpose"
-											value="personal"
-											bind:group={purpose}
-											class="h-5 w-5 border-gray-300 text-orange-600 focus:ring-2 focus:ring-orange-500 focus:ring-offset-0"
-										/>
-										<div class="flex flex-1 items-center gap-3">
-											<div class="rounded-lg bg-orange-100 p-2 text-orange-600">
-												<svg
-													class="h-5 w-5"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-													/>
-												</svg>
-											</div>
-											<div>
-												<p class="font-semibold text-gray-900">Transporte de personal</p>
-												<p class="text-xs text-gray-500">Solo pasajeros</p>
-											</div>
-										</div>
-									</label>
-									<label
-										class="group relative flex cursor-pointer items-center gap-3 rounded-xl border-2 p-4 transition-all {purpose ===
-										'personal y herramienta'
-											? 'border-orange-500 bg-orange-50/50'
-											: errors.purpose
-												? 'border-red-300 bg-white hover:border-red-400 hover:bg-red-50/30'
-												: 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'}"
-									>
-										<input
-											type="radio"
-											name="purpose"
-											value="personal y herramienta"
-											bind:group={purpose}
-											class="h-5 w-5 border-gray-300 text-orange-600 focus:ring-2 focus:ring-orange-500 focus:ring-offset-0"
-										/>
-										<div class="flex flex-1 items-center gap-3">
-											<div class="rounded-lg bg-orange-100 p-2 text-orange-600">
-												<svg
-													class="h-5 w-5"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"
-													/>
-												</svg>
-											</div>
-											<div>
-												<p class="font-semibold text-gray-900">Personal y herramienta</p>
-												<p class="text-xs text-gray-500">Pasajeros y equipo</p>
-											</div>
-										</div>
-									</label>
-								</div>
-							</div>
-							{#if errors.purpose}
-								<p class="mt-1 text-sm text-red-600">{errors.purpose}</p>
-							{/if}
-						</div>
-
-						<!-- Section 3: Recursos -->
-						<div class="space-y-5">
-							<h3
-								class="flex items-center gap-2 border-b-2 border-orange-100 pb-2 text-lg font-bold text-gray-900"
-							>
-								<div
-									class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 text-white"
-								>
-									<span class="text-sm font-bold">3</span>
-								</div>
-								Recursos
-							</h3>
-							<!-- Vehicle and Conductor -->
-							<div class="grid grid-cols-1 gap-5 md:grid-cols-2">
-								<div>
-									<label for="vehiculo" class="mb-2 block text-sm font-semibold text-gray-700">
-										Vehículo Asignado
-									</label>
-									<div class="flex items-stretch gap-2">
-										<div class="glass relative flex-1">
-											<div
-												class="pointer-events-none absolute top-1/2 left-3 z-10 -translate-y-1/2 text-gray-400"
-											>
-												<svg
-													class="h-5 w-5"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M8.25 18.75a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 0 1-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 0 0-3.213-9.193 2.056 2.056 0 0 0-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 0 0-10.026 0 1.106 1.106 0 0 0-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12"
-													/>
-												</svg>
-											</div>
-											<Select
-												items={vehiculoOptions}
-												value={vehiculoOptions.find((o) => o.value === vehicleSelected)}
-												on:change={(e) => (vehicleSelected = e.detail?.value || '')}
-												on:clear={() => (vehicleSelected = '')}
-												placeholder="Buscar o seleccionar vehículo..."
-												--border-radius="0.75rem"
-												--padding="1.25rem 1rem 1.25rem 2.75rem"
-												--border-focused="1px solid rgb(16 185 129)"
-												--border-hover="1px solid rgb(209 213 219)"
-												--font-size="0.875rem"
-												--item-font-size="0.875rem"
-											/>
-										</div>
-										<button
-											type="button"
-											on:click={() => (mostrarModalVehiculo = true)}
-											class="group flex h-11 w-11 items-center justify-center rounded-xl border-2 border-dashed border-orange-300 bg-orange-50/50 text-orange-600 transition-all hover:scale-105 hover:border-orange-400 hover:bg-orange-50"
-											title="Crear nuevo vehículo"
-										>
-											<svg
-												class="h-5 w-5 transition-transform group-hover:rotate-90"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2.5"
-												viewBox="0 0 24 24"
-											>
-												<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-											</svg>
-										</button>
-									</div>
-								</div>
-								<div>
-									<label for="conductor" class="mb-2 block text-sm font-semibold text-gray-700">
-										Conductor Asignado
-									</label>
-									<div class="flex items-stretch gap-2">
-										<div class="glass relative flex-1">
-											<div
-												class="pointer-events-none absolute top-1/2 left-3 z-10 -translate-y-1/2 text-gray-400"
-											>
-												<svg
-													class="h-5 w-5"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z"
-													/>
-												</svg>
-											</div>
-											<Select
-												items={conductorOptions}
-												value={conductorOptions.find((o) => o.value === conductorSelected)}
-												on:change={(e) => (conductorSelected = e.detail?.value || '')}
-												on:clear={() => (conductorSelected = '')}
-												placeholder="Buscar o seleccionar conductor..."
-												--border-radius="0.75rem"
-												--padding="1.25rem 1rem 1.25rem 2.75rem"
-												--border-focused="1px solid rgb(16 185 129)"
-												--border-hover="1px solid rgb(209 213 219)"
-												--font-size="0.875rem"
-												--item-font-size="0.875rem"
-											/>
-										</div>
-										<button
-											type="button"
-											on:click={() => (mostrarModalConductor = true)}
-											class="group flex h-11 w-11 items-center justify-center rounded-xl border-2 border-dashed border-orange-300 bg-orange-50/50 text-orange-600 transition-all hover:scale-105 hover:border-orange-400 hover:bg-orange-50"
-											title="Crear nuevo conductor"
-										>
-											<svg
-												class="h-5 w-5 transition-transform group-hover:rotate-90"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2.5"
-												viewBox="0 0 24 24"
-											>
-												<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-											</svg>
-										</button>
-									</div>
-								</div>
-							</div>
-
-							<!-- Observaciones -->
-							<div>
-								<label for="observaciones" class="mb-2 block text-sm font-semibold text-gray-700">
-									Observaciones
-									<span class="ml-1 text-xs font-medium text-amber-700">· visibles para el conductor en la app</span>
-								</label>
-								<textarea
-									id="observaciones"
-									bind:value={observaciones}
-									rows="4"
-									placeholder="Indicaciones para el conductor: hora de recogida, contacto, recomendaciones de la ruta..."
-									class="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 transition-all focus:border-orange-400 focus:ring-4 focus:ring-orange-400/10 focus:outline-none"
-									style="max-height: 300px;"
-								></textarea>
-							</div>
-						</div>
-
-						<!-- Section 4: Estado y Finalización -->
-						<div class="space-y-5">
-							<h3
-								class="flex items-center gap-2 border-b-2 border-orange-100 pb-2 text-lg font-bold text-gray-900"
-							>
-								<div
-									class="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-orange-600 text-white"
-								>
-									<span class="text-sm font-bold">4</span>
-								</div>
-								Estado y Finalización
-							</h3>
-							<div>
-								<p class="mb-3 block text-sm font-semibold text-gray-700">Estado del Servicio</p>
-								<div
-									class="rounded-2xl border-2 border-orange-100 bg-gradient-to-br from-orange-50/50 to-teal-50/50 p-5"
-								>
-									<div class="flex items-start gap-3">
-										<div class="rounded-lg bg-orange-100 p-2 text-orange-600">
-											<svg
-												class="h-5 w-5"
-												fill="none"
-												stroke="currentColor"
-												stroke-width="2"
-												viewBox="0 0 24 24"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-												/>
-											</svg>
-										</div>
-										<div class="flex-1">
-											<p class="text-sm leading-relaxed font-medium text-gray-700">
-												{(() => {
-													const now = new Date();
-													const fechaReal = new Date(fechaRealizacion);
-
-													if (fechaReal < now) {
-														if (!conductorSelected || !vehicleSelected) {
-															return 'La fecha de realización es anterior a la actual. Para registrar o actualizar este servicio, debe asignar un conductor y un vehículo.';
-														}
-														return 'El servicio será registrado como EN CURSO ya que la fecha de realización es anterior a la actual; a menos que marque el servicio como finalizado.';
-													}
-
-													return conductorSelected && vehicleSelected
-														? 'El servicio será registrado como PLANIFICADO ya que tiene conductor y vehículo asignados.'
-														: 'El servicio será registrado como SOLICITADO ya que no tiene conductor o vehículo asignados.';
-												})()}
-											</p>
-											<div
-												class="mt-3 inline-flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 text-xs font-semibold shadow-sm"
-											>
-												<div class="h-2 w-2 animate-pulse rounded-full bg-orange-500"></div>
-												{(() => {
-													const now = new Date();
-													const fechaReal = new Date(fechaRealizacion);
-													if (fechaReal < now && conductorSelected && vehicleSelected) {
-														return finalizarServicio ? 'REALIZADO' : 'EN CURSO';
-													}
-													return conductorSelected && vehicleSelected
-														? 'PLANIFICADO'
-														: 'SOLICITADO';
-												})()}
-											</div>
-										</div>
-									</div>
-								</div>
-
-								{#if conductorSelected && vehicleSelected && new Date(fechaRealizacion) < new Date()}
-									<div class="mt-5 space-y-4">
-										<label
-											class="flex cursor-pointer items-center gap-3 rounded-xl border-2 p-4 transition-all {finalizarServicio
-												? 'border-orange-500 bg-orange-50/50'
-												: 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50'}"
-										>
-											<input
-												type="checkbox"
-												bind:checked={finalizarServicio}
-												class="h-5 w-5 rounded border-gray-300 text-orange-600 focus:ring-2 focus:ring-orange-500 focus:ring-offset-0"
-											/>
-											<div class="flex items-center gap-3">
-												<div class="rounded-lg bg-orange-100 p-2 text-orange-600">
-													<svg
-														class="h-5 w-5"
-														fill="none"
-														stroke="currentColor"
-														stroke-width="2"
-														viewBox="0 0 24 24"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-														/>
-													</svg>
-												</div>
-												<div>
-													<p class="font-semibold text-gray-900">Marcar servicio como finalizado</p>
-													<p class="text-xs text-gray-500">
-														El servicio pasará al estado "Realizado"
-													</p>
-												</div>
-											</div>
-										</label>
-
-										{#if finalizarServicio}
-											<div in:fly={{ y: -10, duration: 200 }}>
-												<label
-													for="fechaFinalizacion"
-													class="mb-2 block text-sm font-semibold text-gray-700"
-												>
-													Fecha y hora de finalización <span class="text-red-500">*</span>
-												</label>
-												<input
-													type="datetime-local"
-													id="fechaFinalizacion"
-													bind:value={fechaFinalizacion}
-													class="w-full rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm text-gray-900 transition-all focus:border-orange-400 focus:ring-4 focus:ring-orange-400/10 focus:outline-none"
-												/>
-											</div>
-										{/if}
-									</div>
-								{/if}
-							</div>
-						</div>
-					</div>
-				{/if}
-
-				<!-- Footer buttons -->
-				<div class="border-t border-gray-100 bg-gray-50/30 py-5">
-					{#if isReadOnly}
-						<div class="flex justify-end">
+				</section>
+			{/if}
+		{:else}
+			<!-- Formulario: todas las secciones en una sola vista con scroll -->
+			<section class="fs-seccion">
+				<h3 class="fs-titulo"><span class="fs-paso">1</span>Información Básica</h3>
+				<div class="fs-card fs-grid">
+					<Campo id="cliente" label="Cliente / Empresa" requerido error={errors.cliente} completo>
+						<div class="fs-fila">
 							<button
-								on:click={handleClose}
-								class="btn-secondary group flex items-center gap-2"
+								type="button"
+								id="cliente"
+								class="fs-input fs-picker"
+								class:fs-input--error={!!errors.cliente}
+								onclick={() => (mostrarModalSelectCliente = true)}
 							>
-								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M6 18L18 6M6 6l12 12"
-									/>
-								</svg>
-								Cerrar
-							</button>
-						</div>
-					{:else}
-						<div class="flex items-center justify-between">
-							<button
-								on:click={handleClose}
-								class="btn-secondary flex items-center gap-2"
-							>
-								<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										stroke-width="2"
-										d="M6 18L18 6M6 6l12 12"
-									/>
-								</svg>
-								Cancelar
-							</button>
-
-							<button
-								on:click={handleSubmit}
-								disabled={loading}
-								class="btn-primary group flex items-center gap-2"
-							>
-								{#if loading}
-									<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-										<circle
-											class="opacity-25"
-											cx="12"
-											cy="12"
-											r="10"
-											stroke="currentColor"
-											stroke-width="4"
-										></circle>
-										<path
-											class="opacity-75"
-											fill="currentColor"
-											d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-										></path>
-									</svg>
-									Guardando...
+								<Building2 size={18} class="fs-picker-icono" />
+								{#if clienteSelected}
+									<span class="fs-picker-valor">
+										{empresaOptions.find((o) => o.value === clienteSelected)?.label ||
+											'Seleccionar empresa'}
+									</span>
 								{:else}
-									<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											stroke-width="2"
-											d="M5 13l4 4L19 7"
-										/>
-									</svg>
-									{isEditing ? 'Actualizar Servicio' : 'Crear Servicio'}
+									<span class="fs-picker-vacio">Buscar o seleccionar empresa...</span>
 								{/if}
+								<ChevronRight size={16} class="fs-picker-flecha" />
+							</button>
+							<button
+								type="button"
+								class="fs-btn-crear"
+								title="Crear nueva empresa"
+								aria-label="Crear nueva empresa"
+								onclick={() => (mostrarModalEmpresa = true)}
+							>
+								<Plus size={18} strokeWidth={2.5} />
 							</button>
 						</div>
+					</Campo>
+
+					<Campo
+						id="fechaSolicitud"
+						label="Fecha y hora de solicitud"
+						requerido
+						error={errors.fechaSolicitud}
+					>
+						<input
+							type="datetime-local"
+							id="fechaSolicitud"
+							class="fs-input"
+							aria-invalid={errors.fechaSolicitud ? 'true' : undefined}
+							bind:value={fechaSolicitud}
+						/>
+					</Campo>
+					<Campo
+						id="fechaRealizacion"
+						label="Fecha y hora de realización"
+						requerido
+						error={errors.fechaRealizacion}
+					>
+						<input
+							type="datetime-local"
+							id="fechaRealizacion"
+							class="fs-input"
+							aria-invalid={errors.fechaRealizacion ? 'true' : undefined}
+							bind:value={fechaRealizacion}
+						/>
+					</Campo>
+				</div>
+			</section>
+
+			<section class="fs-seccion">
+				<h3 class="fs-titulo"><span class="fs-paso">2</span>Trayecto</h3>
+				<div class="fs-card fs-grid">
+					<!-- Origen -->
+					<div class="fs-columna">
+						<Campo id="origen" label="Municipio de Origen" requerido error={errors.origen}>
+							<button
+								type="button"
+								id="origen"
+								class="fs-input fs-picker"
+								class:fs-input--error={!!errors.origen}
+								onclick={() => (mostrarModalSelectOrigen = true)}
+							>
+								<MapPin size={18} class="fs-picker-icono" />
+								{#if selectedOriginMun}
+									<span class="fs-picker-valor">
+										{municipioOptions.find((o) => o.value === selectedOriginMun)?.label ||
+											'Seleccionado'}
+									</span>
+								{:else}
+									<span class="fs-picker-vacio">Buscar municipio de origen...</span>
+								{/if}
+								<ChevronDown size={16} class="fs-picker-flecha" />
+							</button>
+						</Campo>
+
+						<div class="fs-mapbox">
+							<MapboxSearch
+								bind:value={originSpecific}
+								label="Dirección específica de origen"
+								placeholder="Buscar dirección, pozo, campamento..."
+								onSelect={(data) => {
+									originSpecific = data.address;
+									originCoords = { lat: data.coordinates[1], lng: data.coordinates[0] };
+								}}
+							/>
+							{#if originCoords.lat !== 0 && originCoords.lng !== 0}
+								<p class="fs-coords">
+									<MapPin size={13} />
+									Coordenadas: {originCoords.lat.toFixed(6)}, {originCoords.lng.toFixed(6)}
+								</p>
+							{/if}
+						</div>
+					</div>
+
+					<!-- Destino -->
+					<div class="fs-columna">
+						<Campo id="destino" label="Municipio de Destino" requerido error={errors.destino}>
+							<button
+								type="button"
+								id="destino"
+								class="fs-input fs-picker"
+								class:fs-input--error={!!errors.destino}
+								onclick={() => (mostrarModalSelectDestino = true)}
+							>
+								<MapPin size={18} class="fs-picker-icono" />
+								{#if selectedDestMun}
+									<span class="fs-picker-valor">
+										{municipioOptions.find((o) => o.value === selectedDestMun)?.label ||
+											'Seleccionado'}
+									</span>
+								{:else}
+									<span class="fs-picker-vacio">Buscar municipio de destino...</span>
+								{/if}
+								<ChevronDown size={16} class="fs-picker-flecha" />
+							</button>
+						</Campo>
+
+						<div class="fs-mapbox">
+							<MapboxSearch
+								bind:value={destSpecific}
+								label="Dirección específica de destino"
+								placeholder="Buscar dirección, pozo, campamento..."
+								onSelect={(data) => {
+									destSpecific = data.address;
+									destCoords = { lat: data.coordinates[1], lng: data.coordinates[0] };
+								}}
+							/>
+							{#if destCoords.lat !== 0 && destCoords.lng !== 0}
+								<p class="fs-coords">
+									<MapPin size={13} />
+									Coordenadas: {destCoords.lat.toFixed(6)}, {destCoords.lng.toFixed(6)}
+								</p>
+							{/if}
+						</div>
+					</div>
+
+					<!-- Propósito -->
+					<fieldset class="fs-grupo de-full">
+						<legend class="fs-label">
+							Propósito del Servicio <span class="fs-req" aria-hidden="true">*</span>
+						</legend>
+						<div class="fs-opciones">
+							<label
+								class="fs-opcion"
+								class:fs-opcion--activa={purpose === 'personal'}
+								class:fs-opcion--error={!!errors.purpose && purpose !== 'personal'}
+							>
+								<input
+									type="radio"
+									name="purpose"
+									value="personal"
+									class="sr-only"
+									bind:group={purpose}
+								/>
+								<span class="fs-opcion-icono"><Users size={18} /></span>
+								<span class="fs-opcion-texto">
+									<span class="fs-opcion-titulo">Transporte de personal</span>
+									<span class="fs-opcion-sub">Solo pasajeros</span>
+								</span>
+								<span class="fs-opcion-check" aria-hidden="true"
+									><Check size={14} strokeWidth={3} /></span
+								>
+							</label>
+							<label
+								class="fs-opcion"
+								class:fs-opcion--activa={purpose === 'personal y herramienta'}
+								class:fs-opcion--error={!!errors.purpose && purpose !== 'personal y herramienta'}
+							>
+								<input
+									type="radio"
+									name="purpose"
+									value="personal y herramienta"
+									class="sr-only"
+									bind:group={purpose}
+								/>
+								<span class="fs-opcion-icono"><Package size={18} /></span>
+								<span class="fs-opcion-texto">
+									<span class="fs-opcion-titulo">Personal y herramienta</span>
+									<span class="fs-opcion-sub">Pasajeros y equipo</span>
+								</span>
+								<span class="fs-opcion-check" aria-hidden="true"
+									><Check size={14} strokeWidth={3} /></span
+								>
+							</label>
+						</div>
+						{#if errors.purpose}
+							<p class="fs-error" role="alert">{errors.purpose}</p>
+						{/if}
+					</fieldset>
+				</div>
+			</section>
+
+			<section class="fs-seccion">
+				<h3 class="fs-titulo"><span class="fs-paso">3</span>Recursos</h3>
+				<div class="fs-card fs-grid">
+					<Campo id="vehiculo" label="Vehículo Asignado">
+						<div class="fs-fila">
+							<div class="fs-select">
+								<span class="fs-select-icono" aria-hidden="true"><Truck size={18} /></span>
+								<Select
+									id="vehiculo"
+									items={vehiculoOptions}
+									value={vehiculoOptions.find((o) => o.value === vehicleSelected)}
+									on:change={(e) => (vehicleSelected = e.detail?.value || '')}
+									on:clear={() => (vehicleSelected = '')}
+									placeholder="Buscar o seleccionar vehículo..."
+									--height="42px"
+									--padding="0 0 0 40px"
+									--border="1px solid var(--border-default)"
+									--border-hover="1px solid var(--border-emphasis)"
+									--border-focused="1px solid var(--accion)"
+									--border-radius="12px"
+									--border-radius-focused="12px"
+									--background="var(--bg-surface)"
+									--placeholder-color="var(--text-very-muted)"
+									--font-size="14px"
+									--item-is-active-bg="var(--accion)"
+									--item-hover-bg="var(--bg-base)"
+									--list-border-radius="12px"
+								/>
+							</div>
+							<button
+								type="button"
+								class="fs-btn-crear"
+								title="Crear nuevo vehículo"
+								aria-label="Crear nuevo vehículo"
+								onclick={() => (mostrarModalVehiculo = true)}
+							>
+								<Plus size={18} strokeWidth={2.5} />
+							</button>
+						</div>
+					</Campo>
+					<Campo id="conductor" label="Conductor Asignado">
+						<div class="fs-fila">
+							<div class="fs-select">
+								<span class="fs-select-icono" aria-hidden="true"><UserRound size={18} /></span>
+								<Select
+									id="conductor"
+									items={conductorOptions}
+									value={conductorOptions.find((o) => o.value === conductorSelected)}
+									on:change={(e) => (conductorSelected = e.detail?.value || '')}
+									on:clear={() => (conductorSelected = '')}
+									placeholder="Buscar o seleccionar conductor..."
+									--height="42px"
+									--padding="0 0 0 40px"
+									--border="1px solid var(--border-default)"
+									--border-hover="1px solid var(--border-emphasis)"
+									--border-focused="1px solid var(--accion)"
+									--border-radius="12px"
+									--border-radius-focused="12px"
+									--background="var(--bg-surface)"
+									--placeholder-color="var(--text-very-muted)"
+									--font-size="14px"
+									--item-is-active-bg="var(--accion)"
+									--item-hover-bg="var(--bg-base)"
+									--list-border-radius="12px"
+								/>
+							</div>
+							<button
+								type="button"
+								class="fs-btn-crear"
+								title="Crear nuevo conductor"
+								aria-label="Crear nuevo conductor"
+								onclick={() => (mostrarModalConductor = true)}
+							>
+								<Plus size={18} strokeWidth={2.5} />
+							</button>
+						</div>
+					</Campo>
+
+					<Campo
+						id="observaciones"
+						label="Observaciones"
+						ayuda="Visibles para el conductor en la app."
+						completo
+					>
+						<textarea
+							id="observaciones"
+							class="fs-input"
+							rows="4"
+							placeholder="Indicaciones para el conductor: hora de recogida, contacto, recomendaciones de la ruta..."
+							style="max-height: 300px;"
+							bind:value={observaciones}
+						></textarea>
+					</Campo>
+				</div>
+			</section>
+
+			<section class="fs-seccion">
+				<h3 class="fs-titulo"><span class="fs-paso">4</span>Estado y Finalización</h3>
+				<div class="fs-card fs-estado">
+					<p class="fs-label">Estado del Servicio</p>
+					<div class="fs-estado-aviso">
+						<span class="fs-estado-icono"><Info size={18} /></span>
+						<div class="fs-estado-copy">
+							<p class="fs-estado-texto">{mensajeEstado}</p>
+							<span class="fs-chip-estado">
+								<span class="fs-chip-punto" aria-hidden="true"></span>
+								{estadoPrevisto}
+							</span>
+						</div>
+					</div>
+
+					{#if conductorSelected && vehicleSelected && new Date(fechaRealizacion) < new Date()}
+						<label class="fs-opcion" class:fs-opcion--activa={finalizarServicio}>
+							<input type="checkbox" class="sr-only" bind:checked={finalizarServicio} />
+							<span class="fs-opcion-icono"><CircleCheck size={18} /></span>
+							<span class="fs-opcion-texto">
+								<span class="fs-opcion-titulo">Marcar servicio como finalizado</span>
+								<span class="fs-opcion-sub">El servicio pasará al estado "Realizado"</span>
+							</span>
+							<span class="fs-opcion-check" aria-hidden="true"
+								><Check size={14} strokeWidth={3} /></span
+							>
+						</label>
+
+						{#if finalizarServicio}
+							<div in:fly={{ y: -10, duration: 200 }}>
+								<Campo id="fechaFinalizacion" label="Fecha y hora de finalización" requerido>
+									<input
+										type="datetime-local"
+										id="fechaFinalizacion"
+										class="fs-input"
+										bind:value={fechaFinalizacion}
+									/>
+								</Campo>
+							</div>
+						{/if}
 					{/if}
 				</div>
-			</div>
-		</div>
+			</section>
+		{/if}
 	</div>
-{/if}
 
-<!-- Sub-modals -->
-<ModalSelectCliente
-	isOpen={mostrarModalSelectCliente}
-	items={empresaOptions}
-	selectedValue={clienteSelected}
-	title="Seleccionar Cliente / Empresa"
-	icon="building"
-	searchPlaceholder="Buscar por nombre de empresa..."
-	emptyMessage="No se encontraron empresas"
-	onClose={() => (mostrarModalSelectCliente = false)}
-	onSelect={(value) => (clienteSelected = value)}
-/>
+	{#snippet pie()}
+		{#if isReadOnly}
+			<button type="button" class="btn-secondary" onclick={handleClose}>
+				<X size={16} />
+				Cerrar
+			</button>
+		{:else}
+			<button type="button" class="btn-secondary" onclick={handleClose} disabled={loading}>
+				<X size={16} />
+				Cancelar
+			</button>
+			<button type="button" class="btn-primary" onclick={handleSubmit} disabled={loading}>
+				{#if loading}
+					<LoaderCircle size={16} class="animate-spin" />
+					Guardando...
+				{:else}
+					<Check size={16} />
+					{isEditing ? 'Actualizar Servicio' : 'Crear Servicio'}
+				{/if}
+			</button>
+		{/if}
+	{/snippet}
+</ModalBase>
 
-<ModalSelectCliente
-	isOpen={mostrarModalSelectOrigen}
-	items={municipioOptions}
-	selectedValue={selectedOriginMun}
-	title="Seleccionar Municipio de Origen"
-	icon="location"
-	searchPlaceholder="Buscar municipio..."
-	emptyMessage="No se encontraron municipios"
-	onClose={() => (mostrarModalSelectOrigen = false)}
-	onSelect={(value) => (selectedOriginMun = value)}
-/>
+<!-- Sub-modales: van en una capa sobre ModalBase (z-index 10040) y bajo los
+     diálogos de confirmación (10050); sin ella quedarían tapados por el modal. -->
+<div class="fs-capa-submodales">
+	<ModalSelectCliente
+		isOpen={mostrarModalSelectCliente}
+		items={empresaOptions}
+		selectedValue={clienteSelected}
+		title="Seleccionar Cliente / Empresa"
+		icon="building"
+		searchPlaceholder="Buscar por nombre de empresa..."
+		emptyMessage="No se encontraron empresas"
+		onClose={() => (mostrarModalSelectCliente = false)}
+		onSelect={(value) => (clienteSelected = value)}
+	/>
 
-<ModalSelectCliente
-	isOpen={mostrarModalSelectDestino}
-	items={municipioOptions}
-	selectedValue={selectedDestMun}
-	title="Seleccionar Municipio de Destino"
-	icon="location"
-	searchPlaceholder="Buscar municipio..."
-	emptyMessage="No se encontraron municipios"
-	onClose={() => (mostrarModalSelectDestino = false)}
-	onSelect={(value) => (selectedDestMun = value)}
-/>
+	<ModalSelectCliente
+		isOpen={mostrarModalSelectOrigen}
+		items={municipioOptions}
+		selectedValue={selectedOriginMun}
+		title="Seleccionar Municipio de Origen"
+		icon="location"
+		searchPlaceholder="Buscar municipio..."
+		emptyMessage="No se encontraron municipios"
+		onClose={() => (mostrarModalSelectOrigen = false)}
+		onSelect={(value) => (selectedOriginMun = value)}
+	/>
 
-<ModalNuevaEmpresa
-	isOpen={mostrarModalEmpresa}
-	onClose={() => (mostrarModalEmpresa = false)}
-	onSuccess={handleEmpresaCreada}
-/>
+	<ModalSelectCliente
+		isOpen={mostrarModalSelectDestino}
+		items={municipioOptions}
+		selectedValue={selectedDestMun}
+		title="Seleccionar Municipio de Destino"
+		icon="location"
+		searchPlaceholder="Buscar municipio..."
+		emptyMessage="No se encontraron municipios"
+		onClose={() => (mostrarModalSelectDestino = false)}
+		onSelect={(value) => (selectedDestMun = value)}
+	/>
 
-<ModalNuevoConductor
-	isOpen={mostrarModalConductor}
-	onClose={() => (mostrarModalConductor = false)}
-	onSuccess={handleConductorCreado}
-/>
+	<ModalNuevaEmpresa
+		isOpen={mostrarModalEmpresa}
+		onClose={() => (mostrarModalEmpresa = false)}
+		onSuccess={handleEmpresaCreada}
+	/>
 
-<ModalNuevoVehiculo
-	isOpen={mostrarModalVehiculo}
-	onClose={() => (mostrarModalVehiculo = false)}
-	onSuccess={handleVehiculoCreado}
-/>
+	<ModalNuevoConductor
+		isOpen={mostrarModalConductor}
+		onClose={() => (mostrarModalConductor = false)}
+		onSuccess={handleConductorCreado}
+	/>
+
+	<ModalNuevoVehiculo
+		isOpen={mostrarModalVehiculo}
+		onClose={() => (mostrarModalVehiculo = false)}
+		onSuccess={handleVehiculoCreado}
+	/>
+</div>
 
 <style>
+	.fs-capa-submodales {
+		position: relative;
+		z-index: 10045;
+	}
+
+	/* Chip del estado actual, sobre el encabezado oscuro de la marca. */
+	.fs-estado-hero {
+		display: inline-flex;
+		align-items: center;
+		padding: 5px 10px;
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.1);
+		color: #fff;
+		font-size: 10px;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		white-space: nowrap;
+	}
+
+	.fs-form {
+		display: flex;
+		flex-direction: column;
+		gap: 22px;
+	}
+	.fs-seccion {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		min-width: 0;
+	}
+	.fs-titulo {
+		margin: 0;
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		color: var(--text-primary);
+		font-size: 17px;
+		font-weight: 800;
+		letter-spacing: -0.01em;
+	}
+	.fs-paso {
+		width: 24px;
+		height: 24px;
+		display: grid;
+		place-items: center;
+		flex-shrink: 0;
+		border-radius: 999px;
+		background: color-mix(in srgb, var(--accion) 12%, transparent);
+		color: var(--color-emerald-600);
+		font-size: 12px;
+		font-weight: 800;
+	}
+	.fs-card {
+		padding: 16px;
+		border-radius: 18px;
+		background: var(--bg-surface);
+		box-shadow: 0 6px 14px rgba(1, 67, 57, 0.065);
+	}
+
+	/* Rejilla de campos: dos columnas, una en el teléfono (como `.de-grid`). */
+	.fs-grid {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 16px;
+	}
+	.fs-form :global(.de-full) {
+		grid-column: 1 / -1;
+	}
+	.fs-columna {
+		display: flex;
+		flex-direction: column;
+		gap: 14px;
+		min-width: 0;
+	}
+	.fs-fila {
+		display: flex;
+		align-items: stretch;
+		gap: 8px;
+	}
+
+	/* Controles con el aspecto de `.de-input` de los formularios de directorio. */
+	.fs-input {
+		width: 100%;
+		min-height: 42px;
+		padding: 9px 12px;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font: inherit;
+		font-size: 14px;
+		transition:
+			border-color 0.15s,
+			box-shadow 0.15s;
+	}
+	.fs-input::placeholder {
+		color: var(--text-very-muted);
+		opacity: 1;
+	}
+	textarea.fs-input {
+		resize: vertical;
+	}
+	.fs-input:focus,
+	.fs-input:focus-visible {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.fs-input[aria-invalid='true'],
+	.fs-input--error {
+		border-color: #dc2626;
+		background: #fff8f7;
+	}
+	.fs-input:disabled {
+		background: var(--bg-base);
+		color: var(--text-muted);
+	}
+
+	/* Botón que abre el selector con buscador (cliente, municipios). */
+	.fs-picker {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		text-align: left;
+		cursor: pointer;
+	}
+	.fs-picker:hover:not(:disabled) {
+		border-color: var(--border-emphasis);
+	}
+	.fs-picker :global(.fs-picker-icono) {
+		flex-shrink: 0;
+		color: var(--text-muted);
+	}
+	.fs-picker:hover :global(.fs-picker-icono) {
+		color: var(--accion);
+	}
+	.fs-picker :global(.fs-picker-flecha) {
+		flex-shrink: 0;
+		color: var(--text-very-muted);
+	}
+	.fs-picker-valor {
+		flex: 1;
+		min-width: 0;
+		overflow: hidden;
+		color: var(--text-primary);
+		font-weight: 600;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.fs-picker-vacio {
+		flex: 1;
+		min-width: 0;
+		color: var(--text-very-muted);
+	}
+
+	.fs-btn-crear {
+		width: 42px;
+		min-height: 42px;
+		flex-shrink: 0;
+		display: grid;
+		place-items: center;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		color: var(--accion);
+		cursor: pointer;
+		transition:
+			background 0.15s,
+			border-color 0.15s;
+	}
+	.fs-btn-crear:hover {
+		border-color: var(--accion);
+		background: color-mix(in srgb, var(--accion) 8%, var(--bg-surface));
+	}
+	.fs-btn-crear:focus-visible {
+		outline: none;
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+
+	/* svelte-select con ícono a la izquierda. */
+	.fs-select {
+		position: relative;
+		flex: 1;
+		min-width: 0;
+	}
+	.fs-select-icono {
+		position: absolute;
+		z-index: 2;
+		top: 50%;
+		left: 12px;
+		display: flex;
+		color: var(--text-muted);
+		pointer-events: none;
+		transform: translateY(-50%);
+	}
+
+	/* MapboxSearch trae su propia etiqueta e input: se alinean con `Campo`. */
+	.fs-mapbox :global(label[for='address-search-input']) {
+		display: block;
+		margin-bottom: 6px;
+		color: var(--text-secondary);
+		font-size: 13px;
+		font-weight: 700;
+	}
+	.fs-mapbox :global(#address-search-input) {
+		border-radius: 12px;
+		font-size: 14px;
+	}
+	.fs-mapbox :global(#address-search-input:not(.border-red-300)) {
+		border-color: var(--border-default);
+	}
+	.fs-mapbox :global(#address-search-input:focus) {
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.fs-coords {
+		margin: 8px 0 0;
+		display: flex;
+		align-items: center;
+		gap: 6px;
+		color: var(--text-muted);
+		font-size: 12px;
+		font-variant-numeric: tabular-nums;
+	}
+
+	/* Grupos de opciones (propósito, finalizar): chips-tarjeta suaves. */
+	.fs-grupo {
+		min-width: 0;
+		margin: 0;
+		padding: 0;
+		border: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	.fs-label {
+		margin: 0;
+		padding: 0;
+		color: var(--text-secondary);
+		font-size: 13px;
+		font-weight: 700;
+	}
+	.fs-req {
+		margin-left: 2px;
+		color: #dc2626;
+	}
+	.fs-error {
+		margin: 0;
+		color: #b42318;
+		font-size: 12px;
+		font-weight: 600;
+	}
+	.fs-opciones {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 10px;
+	}
+	.fs-opcion {
+		display: flex;
+		align-items: center;
+		gap: 12px;
+		padding: 12px 14px;
+		border: 1.5px solid var(--border-default);
+		border-radius: 16px;
+		background: var(--bg-surface);
+		cursor: pointer;
+		transition:
+			border-color 0.15s,
+			background 0.15s;
+	}
+	.fs-opcion:hover {
+		border-color: var(--border-emphasis);
+	}
+	.fs-opcion:has(input:focus-visible) {
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.fs-opcion--error {
+		border-color: #f3b1aa;
+	}
+	.fs-opcion--activa,
+	.fs-opcion--activa:hover {
+		border-color: var(--accion);
+		background: color-mix(in srgb, var(--accion) 7%, var(--bg-surface));
+	}
+	.fs-opcion-icono {
+		width: 36px;
+		height: 36px;
+		flex-shrink: 0;
+		display: grid;
+		place-items: center;
+		border-radius: 12px;
+		background: var(--bg-base);
+		color: var(--text-muted);
+	}
+	.fs-opcion--activa .fs-opcion-icono {
+		background: color-mix(in srgb, var(--accion) 14%, transparent);
+		color: var(--color-emerald-600);
+	}
+	.fs-opcion-texto {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.fs-opcion-titulo {
+		color: var(--text-primary);
+		font-size: 14px;
+		font-weight: 800;
+	}
+	.fs-opcion-sub {
+		color: var(--text-muted);
+		font-size: 12px;
+	}
+	.fs-opcion-check {
+		width: 22px;
+		height: 22px;
+		flex-shrink: 0;
+		display: grid;
+		place-items: center;
+		border: 1.5px solid var(--border-default);
+		border-radius: 999px;
+		color: transparent;
+	}
+	.fs-opcion--activa .fs-opcion-check {
+		border-color: var(--accion);
+		background: var(--accion);
+		color: #fff;
+	}
+
+	/* Estado previsto del servicio. */
+	.fs-estado {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+	}
+	.fs-estado-aviso {
+		display: flex;
+		align-items: flex-start;
+		gap: 12px;
+		padding: 14px;
+		border-radius: 16px;
+		background: var(--bg-base);
+	}
+	.fs-estado-icono {
+		width: 36px;
+		height: 36px;
+		flex-shrink: 0;
+		display: grid;
+		place-items: center;
+		border-radius: 12px;
+		background: color-mix(in srgb, var(--accion) 12%, transparent);
+		color: var(--color-emerald-600);
+	}
+	.fs-estado-copy {
+		flex: 1;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 10px;
+	}
+	.fs-estado-texto {
+		margin: 0;
+		color: var(--text-secondary);
+		font-size: 13.5px;
+		line-height: 1.5;
+	}
+	.fs-chip-estado {
+		display: inline-flex;
+		align-items: center;
+		gap: 8px;
+		padding: 6px 12px;
+		border: 1px solid var(--border-default);
+		border-radius: 999px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font-size: 11px;
+		font-weight: 800;
+		letter-spacing: 0.06em;
+	}
+	.fs-chip-punto {
+		width: 8px;
+		height: 8px;
+		border-radius: 999px;
+		background: var(--accion);
+	}
+
+	/* Vista de solo lectura. */
+	.fs-datos {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 10px;
+	}
+	.fs-dato-sub {
+		display: block;
+		margin-top: 2px;
+		color: var(--text-muted);
+		font-size: 12.5px;
+		font-weight: 600;
+	}
+
+	@media (max-width: 640px) {
+		.fs-grid,
+		.fs-opciones,
+		.fs-datos {
+			grid-template-columns: minmax(0, 1fr);
+		}
+	}
+
 	/* Estilos personalizados para el scrollbar */
 	:global(.overflow-y-auto::-webkit-scrollbar) {
 		width: 8px;
@@ -1418,18 +1432,18 @@
 	}
 
 	:global(.overflow-y-auto::-webkit-scrollbar-thumb) {
-		background: linear-gradient(to bottom, #ea580c, #c2410c);
+		background: var(--accion);
 		border-radius: 10px;
 		transition: background 0.3s ease;
 	}
 
 	:global(.overflow-y-auto::-webkit-scrollbar-thumb:hover) {
-		background: linear-gradient(to bottom, #c2410c, #166534);
+		background: var(--accion-hover);
 	}
 
 	/* Para Firefox */
 	:global(.overflow-y-auto) {
 		scrollbar-width: thin;
-		scrollbar-color: #ea580c #f1f5f9;
+		scrollbar-color: var(--accion) #f1f5f9;
 	}
 </style>
