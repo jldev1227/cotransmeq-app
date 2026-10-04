@@ -1,4 +1,5 @@
 import { writable } from 'svelte/store';
+import type { Guia } from '$lib/guias/motor';
 
 export interface MensajeChat {
 	id: number;
@@ -6,6 +7,8 @@ export interface MensajeChat {
 	contenido: string;
 	/** Consultas que hizo el asistente para responder ("Buscando conductores"). */
 	pasos?: string[];
+	/** Guía que el asistente ofreció con esta respuesta (botón «Iniciar guía»). */
+	guia?: Guia;
 	error?: boolean;
 }
 

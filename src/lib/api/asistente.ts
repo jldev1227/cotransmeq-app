@@ -18,11 +18,15 @@ export interface ContextoAsistente {
 	filtros?: Record<string, unknown>;
 }
 
+import type { Guia } from '$lib/guias/motor';
+
 export type EventoAsistente =
 	| { t: 'herramienta'; nombre: string; etiqueta: string }
 	| { t: 'texto'; d: string }
 	/** El backend pide abrir una ruta interna (ya validada con los permisos del usuario). */
 	| { t: 'navegar'; ruta: string }
+	/** Guía paso a paso para pintar en pantalla; con `iniciar` arranca sin botón. */
+	| { t: 'guia'; guia: Guia; iniciar: boolean }
 	| { t: 'fin' }
 	| { t: 'error'; mensaje: string };
 

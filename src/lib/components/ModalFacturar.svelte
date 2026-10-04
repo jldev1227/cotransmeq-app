@@ -144,7 +144,7 @@
 
 		<!-- Buscador -->
 		<div class="search-row">
-			<input
+			<input data-tour="fac-buscar"
 				type="text"
 				bind:value={searchText}
 				placeholder="Buscar por consecutivo o cliente..."
@@ -164,7 +164,7 @@
 				<p>No hay liquidaciones en estado LIQUIDADA o APROBADA para facturar.</p>
 			</div>
 		{:else}
-			<div class="mf-card table-wrap">
+			<div class="mf-card table-wrap" data-tour="fac-tabla">
 				<table>
 					<thead>
 						<tr>
@@ -223,7 +223,7 @@
 
 	{#snippet pie()}
 		<button class="btn-secondary" on:click={cerrar} disabled={saving}>Cancelar</button>
-		<button
+		<button data-tour="fac-confirmar"
 			class="btn-primary"
 			on:click={facturar}
 			disabled={saving || selectedIds.size === 0 || !numeroFactura.trim()}

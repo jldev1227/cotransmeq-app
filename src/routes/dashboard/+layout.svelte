@@ -6,6 +6,8 @@
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import Header from '$lib/components/Header.svelte';
 	import AsistentePanel from '$lib/components/asistente/AsistentePanel.svelte';
+	import { asistenteAbierto } from '$lib/stores/asistente';
+	import GuiaVisor from '$lib/components/asistente/GuiaVisor.svelte';
 	import AuthLoading from '$lib/components/auth/AuthLoading.svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
@@ -193,12 +195,14 @@
 
 			<!-- Asistente de IA: panel lateral que abre el disparador de la cabecera (o ⌘K). -->
 			<AsistentePanel />
+			<GuiaVisor />
 
 			<!-- Page Content -->
 			<main
 				class="flex-1 overflow-x-hidden overflow-y-auto pt-16 {$sidebarStore
 					? 'lg:ml-24'
 					: 'lg:ml-64'} apple-transition"
+				class:con-asistente={$asistenteAbierto}
 			>
 				<!-- Slot para el contenido de las páginas -->
 				<slot />
@@ -362,3 +366,15 @@
 	<!-- Estado de carga: la misma pantalla de espera que el acceso, con la mascota. -->
 	<AuthLoading texto="Cargando el panel…" />
 {/if}
+
+<style>
+	/* El panel del asistente (420px, fijo a la derecha) EMPUJA el contenido en
+	   vez de taparlo: en escritorio el usuario sigue viendo la tabla completa
+	   mientras pregunta. Por debajo de 1024px (mismo corte que el sidebar) no
+	   hay sitio para los dos: el panel va encima, como en móvil. */
+	@media (min-width: 1024px) {
+		main.con-asistente {
+			margin-right: 420px;
+		}
+	}
+</style>

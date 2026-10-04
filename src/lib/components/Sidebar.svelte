@@ -126,6 +126,7 @@
 					style="color: {activeSection === item.id ? '#ffffff' : 'rgba(255, 255, 255,0.65)'};
 						background-color: {activeSection === item.id ? 'rgba(255,255,255,0.14)' : 'transparent'};
 						border: 1px solid {activeSection === item.id ? 'rgba(255,255,255,0.28)' : 'transparent'};"
+					data-tour={`nav-${item.id}`}
 					on:click={() => handleMenuClick(item)}
 					in:fly={{ x: -30, duration: 400, delay: index * 50 + 300 }}
 					title={isCollapsed ? item.label : undefined}
@@ -213,6 +214,7 @@
 						style="color: {activeSection === item.id ? '#ffffff' : 'rgba(255, 255, 255,0.65)'};
 							background-color: {activeSection === item.id ? 'rgba(255,255,255,0.14)' : 'transparent'};
 							border: 1px solid {activeSection === item.id ? 'rgba(255,255,255,0.28)' : 'transparent'};"
+						data-tour={`nav-${item.id}`}
 						on:click={() => handleMenuClick(item)}
 					>
 						<SidebarIcon icon={item.icon} active={activeSection === item.id} />

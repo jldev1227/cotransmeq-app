@@ -604,7 +604,7 @@
 				</section>
 
 				<!-- Conectar con Claude: tokens personales para consultar la app por MCP -->
-				<section class="perfil-card">
+				<section class="perfil-card" data-tour="perfil-claude">
 					<header class="perfil-card-cabecera">
 						<span class="perfil-card-icono">
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">

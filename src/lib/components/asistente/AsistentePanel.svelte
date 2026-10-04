@@ -16,7 +16,9 @@
 	import { fade, fly } from 'svelte/transition';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
-	import { Loader2, Search, Send, SquarePen, Sparkles, Square, X } from 'lucide-svelte';
+	import { Lightbulb, Loader2, Search, Send, SquarePen, Sparkles, Square, X } from 'lucide-svelte';
+	import { iniciarGuia } from '$lib/stores/guia';
+	import type { Guia } from '$lib/guias/motor';
 	import { authStore } from '$lib/stores/auth';
 	import {
 		asistenteAbierto,
@@ -51,6 +53,8 @@
 			return ['¿Qué conductores están en vacaciones o incapacidad?', 'Busca al conductor por cédula'];
 		if (r.startsWith('/dashboard/flota'))
 			return ['¿Qué vehículos están en mantenimiento?', '¿Quién tiene asignada la placa…?'];
+		if (r.startsWith('/dashboard/liquidaciones-servicios'))
+			return ['¿Qué liquidaciones hay en borrador este mes?', 'Duplica la liquidación … en borrador con el consecutivo …'];
 		if (r.startsWith('/dashboard/clientes'))
 			return ['¿Qué clientes requieren OSI?', 'Busca el cliente por NIT'];
 		return ['¿Qué puedo hacer en esta app?', 'Llévame a nómina', '¿Cuántos servicios hubo este mes?'];
@@ -108,6 +112,9 @@
 						void bajar();
 					} else if (e.t === 'navegar') {
 						navegar(e.ruta);
+					} else if (e.t === 'guia') {
+						actualizarUltimo((m) => ({ ...m, guia: e.guia }));
+						if (e.iniciar) arrancarGuia(e.guia);
 					} else if (e.t === 'error') {
 						actualizarUltimo((m) => ({ ...m, contenido: e.mensaje, error: true }));
 					}
@@ -139,6 +146,12 @@
 		if (!destino.startsWith('/') || destino.startsWith('//')) return;
 		void goto(destino);
 		if (window.matchMedia('(max-width: 639px)').matches) asistenteAbierto.set(false);
+	}
+
+	/** El panel tapa la derecha de la pantalla: se cierra para que el foco se vea. */
+	function arrancarGuia(g: Guia) {
+		asistenteAbierto.set(false);
+		iniciarGuia(g);
 	}
 
 	function detener() {
@@ -254,6 +267,18 @@
 								<!-- markdownAHtml escapa todo el texto y solo genera enlaces internos -->
 								<!-- eslint-disable-next-line svelte/no-at-html-tags -->
 								{@html markdownAHtml(m.contenido)}
+							</div>
+						{/if}
+						{#if m.guia}
+							<div class="asis-guia">
+								<span class="asis-guia-icono"><Lightbulb size={15} strokeWidth={2.2} /></span>
+								<div class="asis-guia-texto">
+									<p class="asis-guia-titulo">{m.guia.titulo}</p>
+									<p class="asis-guia-sub">Guía en pantalla · {m.guia.pasos.length} pasos</p>
+								</div>
+								<button type="button" class="asis-guia-btn" onclick={() => m.guia && arrancarGuia(m.guia)}>
+									Iniciar guía
+								</button>
 							</div>
 						{/if}
 						{#if !m.contenido && enviando}
@@ -466,6 +491,57 @@
 		background: var(--bg-base);
 		font-size: 0.72rem;
 		color: var(--text-muted);
+	}
+	.asis-guia {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		margin-top: 0.6rem;
+		padding: 0.6rem 0.7rem;
+		border-radius: 12px;
+		border: 1px solid var(--border-subtle);
+		background: var(--bg-base);
+	}
+	.asis-guia-icono {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex-shrink: 0;
+		width: 28px;
+		height: 28px;
+		border-radius: 8px;
+		background: var(--emerald-600);
+		color: #fff;
+	}
+	.asis-guia-texto {
+		flex: 1;
+		min-width: 0;
+	}
+	.asis-guia-titulo {
+		margin: 0;
+		font-size: 0.82rem;
+		font-weight: 600;
+		color: var(--text-primary);
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
+	}
+	.asis-guia-sub {
+		margin: 0;
+		font-size: 0.72rem;
+		color: var(--text-muted);
+	}
+	.asis-guia-btn {
+		flex-shrink: 0;
+		padding: 0.38rem 0.7rem;
+		border-radius: 8px;
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: #fff;
+		background: var(--emerald-600);
+	}
+	.asis-guia-btn:hover {
+		background: var(--emerald-700);
 	}
 	.asis-pensando {
 		display: flex;

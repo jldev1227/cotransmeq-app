@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { authStore } from '$lib/stores/auth';
 	import { onMount, onDestroy, untrack } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { goto, replaceState } from '$app/navigation';
 	import { page as pageState } from '$app/state';
 	import { browser } from '$app/environment';
 	import { fade, fly } from 'svelte/transition';
@@ -461,6 +461,48 @@
 	 * sin ellos. Abrir un enlace con `?q=algo` lo borraba antes de leerlo.
 	 */
 	restaurarDesdeUrl();
+
+	/**
+	 * Enlace profundo al ticket: `/dashboard/servicios?ticket=<id>` abre el
+	 * modal del ticket de ese servicio. Lo usa el asistente («ábreme el ticket
+	 * del servicio…»), que solo sabe navegar a rutas, y sirve igual para
+	 * compartir el enlace.
+	 *
+	 * El parámetro se lee AQUÍ, en el cuerpo, por la misma razón que
+	 * `restaurarDesdeUrl`: el efecto que escribe la URL lo borraría antes de
+	 * que un `onMount` lo viera. El efecto de abajo cubre las navegaciones
+	 * posteriores (el asistente pide otro ticket sin salir de la pantalla).
+	 * Una vez abierto, el parámetro se quita de la barra: cerrar el modal no
+	 * debe reabrirlo, ni quedar en el historial.
+	 */
+	let ticketPendiente = $state<string | null>(browser ? pageState.url.searchParams.get('ticket') : null);
+
+	$effect(() => {
+		const id = pageState.url.searchParams.get('ticket');
+		if (id) ticketPendiente = id;
+	});
+
+	$effect(() => {
+		if (!inicializado || !ticketPendiente) return;
+		const id = ticketPendiente;
+		ticketPendiente = null;
+		void abrirTicketPorId(id);
+	});
+
+	async function abrirTicketPorId(id: string) {
+		const servicio = servicios.find((s) => s.id === id) ?? (await serviciosStore.obtenerServicio(id));
+		if (!servicio) {
+			toast.error('No se encontró el servicio del ticket');
+			return;
+		}
+		servicioSeleccionado = servicio;
+		mostrarModalTicket = true;
+		const url = new URL(pageState.url);
+		if (url.searchParams.has('ticket')) {
+			url.searchParams.delete('ticket');
+			replaceState(url, pageState.state);
+		}
+	}
 
 	function cambiarVista(vista: VistaActiva) {
 		vistaActiva = vista;
@@ -1053,7 +1095,7 @@
 
 				<!-- Nuevo -->
 				{#if puedeEditar}
-					<button
+					<button data-tour="srv-btn-nuevo"
 						onclick={handleNuevoServicio}
 						class="btn-primary apple-transition flex items-center gap-1.5"
 					>
@@ -1714,6 +1756,7 @@
 												}}
 												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-purple-50 hover:text-purple-600"
 												title="Ticket"
+										data-tour="srv-btn-ticket"
 											>
 												<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 													<path
@@ -2107,6 +2150,7 @@
 												}}
 												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-purple-50 hover:text-purple-600"
 												title="Ticket"
+										data-tour="srv-btn-ticket"
 											>
 												<svg
 													class="h-3.5 w-3.5"

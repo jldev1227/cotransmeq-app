@@ -159,7 +159,7 @@
 		</div>
 	{/if}
 
-	<form class="cc-form" onsubmit={crear}>
+	<form class="cc-form" data-tour="perfil-claude-form" onsubmit={crear}>
 		<input
 			bind:value={nombre}
 			maxlength="60"

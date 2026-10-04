@@ -462,7 +462,7 @@
 		justify-content: space-between;
 		gap: 1rem;
 		padding: 1.1rem 1.25rem;
-		background: linear-gradient(180deg, #fcfcfb 0%, white 100%);
+		background: linear-gradient(180deg, #f7faf8 0%, white 100%);
 		border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 	}
 	.seccion-head-text {
@@ -524,7 +524,7 @@
 		flex-direction: column;
 		gap: 0.25rem;
 		padding: 0.7rem 0.85rem;
-		background: #fcfcfb;
+		background: #f7faf8;
 		border-radius: 10px;
 		border-left: 2px solid transparent;
 		transition: all 0.2s;
@@ -627,7 +627,7 @@
 		grid-column: 1 / -1;
 	}
 	.firma-imagen-wrap {
-		background: #fcfcfb;
+		background: #f7faf8;
 		border: 1px solid rgba(0, 0, 0, 0.08);
 		border-bottom: 2px solid #1e293b;
 		border-radius: 8px;
@@ -709,7 +709,7 @@
 	   TABLAS REPETIBLES
 	   ═══════════════════════════════════════════════════════════════ */
 	.tabla-bloque {
-		background: #fcfcfb;
+		background: #f7faf8;
 		border: 1px solid rgba(0, 0, 0, 0.06);
 		border-radius: 14px;
 		overflow: hidden;

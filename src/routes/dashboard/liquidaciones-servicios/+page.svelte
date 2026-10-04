@@ -1634,6 +1634,29 @@
 		});
 	});
 
+	/**
+	 * `?tab=` también DESPUÉS de montar. `hidratarDesdeUrl` lo lee una vez; si
+	 * alguien navega a esta misma página con otra pestaña en la URL (el
+	 * asistente, una guía, un enlace del feed) la página no se vuelve a montar
+	 * y la pestaña no cambiaba. Solo reacciona a valores explícitos: la
+	 * ausencia del parámetro no significa «liquidaciones», porque la escritura
+	 * de la URL va un tick por detrás del estado y se pelearían.
+	 */
+	$effect(() => {
+		const pedido = $page.url.searchParams.get('tab');
+		if (!browser || !hidratado) return;
+		if (
+			pedido !== 'liquidaciones' &&
+			pedido !== 'facturas' &&
+			pedido !== 'terceros' &&
+			pedido !== 'configuracion'
+		)
+			return;
+		untrack(() => {
+			if (facturasTab !== pedido) facturasTab = pedido;
+		});
+	});
+
 	// Badges de pestaña: eventos llegados mientras el tab no estaba a la vista.
 	const pendientesPorTab = $derived({
 		liquidaciones: $cacheLiquidaciones.liquidaciones.pendientes,
@@ -1661,6 +1684,7 @@
 		)}
 			{@const Icono = icon}
 			<button
+				data-tour={`liq-tab-${id}`}
 				onclick={() => cambiarTab(id)}
 				class="apple-transition inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-semibold"
 				style="background-color: {facturasTab === id
@@ -1795,6 +1819,7 @@
 				<div class="flex items-center gap-2 xl:shrink-0">
 					{#if (isFull || isLimited) && (isFacturacion || isAdmin)}
 						<button
+							data-tour="liq-btn-facturar"
 							onclick={abrirModalFacturar}
 							class="btn-secondary apple-transition flex-1 xl:flex-none"
 						>
@@ -2700,6 +2725,7 @@
 	{:else if facturasTab === 'facturas'}
 		<!-- Header (page-card editorial) -->
 		<div
+			data-tour="liq-facturas"
 			class="page-card mb-4"
 			style="padding: 1.25rem 1.5rem;"
 			in:fly={{ y: 12, duration: 400, easing: quintOut }}
