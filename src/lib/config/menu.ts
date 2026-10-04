@@ -1,10 +1,12 @@
 /**
- * Módulos del panel: la lista única que pintan el menú lateral y el
- * buscador de módulos de la cabecera.
+ * Módulos del panel: la lista única que pinta el menú lateral.
  *
- * Vivía dentro de `Sidebar.svelte`; al sacarla, el buscador «Ir a…» de la
- * cabecera y el menú no pueden desincronizarse. Los permisos se aplican
- * en cada sitio con `checkAccess`, igual que antes.
+ * Vivía dentro de `Sidebar.svelte`; se sacó para que la compartiera el
+ * buscador «Ir a…» de la cabecera, hoy reemplazado por el asistente de IA. El
+ * backend tiene su espejo en `modules/asistente/modulos.ts` (etiqueta y ruta
+ * por módulo): si se añade una entrada aquí hay que añadirla allí, o el
+ * asistente dirá que esa pantalla no existe. Los permisos se aplican con
+ * `checkAccess`, igual que antes.
  */
 import type { ComponentType } from 'svelte';
 import {

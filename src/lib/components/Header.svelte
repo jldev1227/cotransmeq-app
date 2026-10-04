@@ -3,7 +3,7 @@
 	import { fade, fly } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import SessionTimer from './SessionTimer.svelte';
-	import BuscadorModulos from './BuscadorModulos.svelte';
+	import AsistenteDisparador from './asistente/AsistenteDisparador.svelte';
 	import { notificacionesStore } from '$lib/stores/notificaciones';
 	import { authStore } from '$lib/stores/auth';
 	import { socketUtils, socketStore, socketManager } from '$lib/socket';
@@ -249,11 +249,12 @@
 
 		</div>
 
-		<!-- Centro (solo escritorio): «Ir a…», el buscador de módulos. Antes esta
-		     franja quedaba vacía junto al usuario. -->
+		<!-- Centro (solo escritorio): el asistente de IA. Ocupa el sitio del antiguo
+		     buscador «Ir a un módulo…»: además de llevarte a una pantalla, consulta
+		     datos y explica la app. Mismo atajo (⌘K). -->
 		<div class="hidden min-w-0 flex-1 items-center justify-center px-4 lg:flex" in:fade={{ duration: 600, delay: 450 }}>
-			<BuscadorModulos />
-			<!-- Conexión en tiempo real, tras el buscador (en móvil lo cubre el toast del layout) -->
+			<AsistenteDisparador />
+			<!-- Conexión en tiempo real, tras el asistente (en móvil lo cubre el toast del layout) -->
 			{#if socketEstado !== 'inactivo'}
 				<div
 					class="ml-3 hidden shrink-0 items-center gap-2 border-l pl-3 lg:flex"

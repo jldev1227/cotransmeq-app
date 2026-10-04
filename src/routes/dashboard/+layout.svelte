@@ -5,6 +5,7 @@
 	import { sidebarStore } from '$lib/stores/sidebar';
 	import Sidebar from '$lib/components/Sidebar.svelte';
 	import Header from '$lib/components/Header.svelte';
+	import AsistentePanel from '$lib/components/asistente/AsistentePanel.svelte';
 	import AuthLoading from '$lib/components/auth/AuthLoading.svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
@@ -189,6 +190,9 @@
 				showSessionTimer={false}
 				on:logout={handleLogout}
 			/>
+
+			<!-- Asistente de IA: panel lateral que abre el disparador de la cabecera (o ⌘K). -->
+			<AsistentePanel />
 
 			<!-- Page Content -->
 			<main

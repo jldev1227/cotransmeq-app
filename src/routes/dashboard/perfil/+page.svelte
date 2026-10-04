@@ -5,6 +5,7 @@
 	import { authAPI } from '$lib/api/apiClient';
 	import { toast } from '$lib/stores/toast';
 	import { AREA_LABELS, type Area } from '$lib/config/permissions';
+	import ConexionesClaude from '$lib/components/asistente/ConexionesClaude.svelte';
 
 	let user = $authStore.user;
 	let sesion: any = null;
@@ -600,6 +601,23 @@
 							</div>
 						</div>
 					{/if}
+				</section>
+
+				<!-- Conectar con Claude: tokens personales para consultar la app por MCP -->
+				<section class="perfil-card">
+					<header class="perfil-card-cabecera">
+						<span class="perfil-card-icono">
+							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M13 10V3L4 14h7v7l9-11h-7z"
+								/>
+							</svg>
+						</span>
+						<h2>Conectar con Claude</h2>
+					</header>
+					<ConexionesClaude />
 				</section>
 			</div>
 		</div>

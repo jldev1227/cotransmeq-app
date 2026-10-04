@@ -1,0 +1,29 @@
+import { writable } from 'svelte/store';
+
+export interface MensajeChat {
+	id: number;
+	rol: 'usuario' | 'asistente';
+	contenido: string;
+	/** Consultas que hizo el asistente para responder ("Buscando conductores"). */
+	pasos?: string[];
+	error?: boolean;
+}
+
+/**
+ * Estado del chat con el asistente. Vive fuera del panel para que la
+ * conversación sobreviva a la navegación: el usuario sigue un enlace de la
+ * respuesta y al volver a abrir el panel la encuentra igual.
+ */
+export const asistenteAbierto = writable(false);
+export const conversacion = writable<MensajeChat[]>([]);
+
+let ultimoId = 0;
+
+/**
+ * Id único de mensaje. Va en el módulo y no en el panel: si el panel se vuelve a
+ * montar (HMR, cambio de layout) la conversación sigue aquí y un contador local
+ * repetiría ids.
+ */
+export function nuevoIdMensaje(): number {
+	return ++ultimoId;
+}
