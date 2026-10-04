@@ -627,14 +627,19 @@ function createServiciosStore() {
 
 			if (!authState.user) return;
 
+			/// Siempre, y ANTES del atajo de «ya inicializado». La página de
+			/// Servicios llama a `limpiarSocket()` en su `onDestroy`, así que al
+			/// salir a otra pantalla y volver (cosa que el asistente hace a cada
+			/// rato con «llévame a…») el store seguía `isInitialized` pero ya sin
+			/// listeners: un servicio creado desde otra pestaña, o desde el propio
+			/// chat, no aparecía hasta recargar. `configurarSocket()` es
+			/// idempotente: primero da de baja lo que haya, así que llamarlo de
+			/// más no duplica nada.
+			this.configurarSocket();
+
 			// Si ya está inicializado y no es forzado, no reinicializar
 			if (!forceRefresh && state.isInitialized) {
 				return;
-			}
-
-			// Configurar Socket.IO solo si no está configurado
-			if (!state.isInitialized) {
-				this.configurarSocket();
 			}
 
 			// Marcar como inicializado
