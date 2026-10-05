@@ -22,6 +22,7 @@
 		type SubmissionDetailDto
 	} from '$lib/formularios/types';
 	import { fechaDeFormularioDe } from '$lib/formularios/fecha-diligenciamiento';
+	import { progresoEtapas, resolverEtapas } from '$lib/formularios/etapas';
 	import FormRenderer from '$lib/components/formularios/FormRenderer.svelte';
 	import PreviewEnvioPDF from '$lib/components/formularios/PreviewEnvioPDF.svelte';
 
@@ -33,6 +34,11 @@
 	/// campo existiera, que es un dato en sí: no se inventa ninguna.
 	const fechaDelFormulario = $derived(fechaDeFormularioDe(envio?.context));
 	let definicion = $state<FormVersionDto | null>(null);
+
+	/// Etapas del formato y hasta cuál llegó el teléfono. `null` en un formato
+	/// de un solo paso: entonces no hay nada que contar.
+	const etapas = $derived(definicion ? resolverEtapas(definicion.sections ?? []) : null);
+	const progreso = $derived(envio ? progresoEtapas(etapas, envio.status, envio.device) : null);
 	let runner = $state<RunnerState | null>(null);
 
 	/// El documento manda por defecto: quien abre un envío quiere LEER el
@@ -285,18 +291,56 @@
 
 		{#if envio.status === 'DRAFT'}
 			<div class="borrador" role="note">
-				<p class="borrador__titulo">Borrador en curso · el conductor aún no lo ha entregado</p>
+				<p class="borrador__titulo">
+					Borrador en curso · el conductor aún no lo ha entregado
+					{#if progreso && etapas}
+						· {progreso.enCurso
+							? `va en la etapa ${progreso.enCurso.numero} de ${progreso.total}`
+							: `las ${progreso.total} etapas están cerradas, falta enviar`}
+					{/if}
+				</p>
 				<p class="borrador__nota">
 					Es la última copia que el teléfono alcanzó a respaldar{#if envio.updatedAt}, del
 						{fechaHora(envio.updatedAt)}{/if}. Puede estar incompleto y NO está validado: los campos
 					obligatorios y los formatos se comprueban al enviar, así que aquí puede haber valores a
 					medio escribir.
 				</p>
-				<p class="borrador__nota">
-					La firma y las evidencias fotográficas se capturan al cerrar el formulario, de modo que lo
-					normal es que todavía no aparezcan. No sirve como registro entregado.
-				</p>
+				{#if progreso && etapas}
+					<p class="borrador__nota">
+						Es un formato por etapas: cada una se cierra por separado en el teléfono y el envío sale
+						una sola vez, al cerrar la última. Lo que ya se firmó en una etapa cerrada sí aparece en
+						el documento.
+					</p>
+				{:else}
+					<p class="borrador__nota">
+						La firma y las evidencias fotográficas se capturan al cerrar el formulario, de modo que lo
+						normal es que todavía no aparezcan. No sirve como registro entregado.
+					</p>
+				{/if}
 			</div>
+		{/if}
+
+		{#if progreso && etapas}
+			<!-- El recorrido por etapas, visible también en un envío entregado: ahí
+			     todas salen cerradas, que es la constancia de que el conductor pasó
+			     por los tres momentos y no llenó todo de una vez al final. -->
+			<ol class="etapas" aria-label="Etapas del formulario">
+				{#each etapas as etapa (etapa.numero)}
+					{@const cerrada = progreso.cerradas.includes(etapa.numero)}
+					{@const enCurso = progreso.enCurso?.numero === etapa.numero}
+					<li class="etapas__item" class:etapas__item--cerrada={cerrada} class:etapas__item--curso={enCurso}>
+						<span class="etapas__marca" aria-hidden="true">{cerrada ? '✓' : etapa.numero}</span>
+						<span class="etapas__texto">
+							<span class="etapas__titulo">{etapa.titulo}</span>
+							<span class="etapas__estado">
+								{cerrada ? 'Cerrada' : enCurso ? 'En curso' : 'Pendiente'}
+								{#if etapa.firma}· con firma{/if}
+								· {etapa.sections.length} {etapa.sections.length === 1 ? 'sección' : 'secciones'}
+							</span>
+						</span>
+					</li>
+				{/each}
+			</ol>
 		{/if}
 
 		{#if envio.status === 'VOIDED'}
@@ -606,6 +650,75 @@
 		font-size: 0.75rem;
 		color: #92400e;
 		line-height: 1.45;
+	}
+
+	.etapas {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+		gap: 0.5rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.etapas__item {
+		display: flex;
+		gap: 0.625rem;
+		align-items: center;
+		padding: 0.5rem 0.75rem;
+		border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+		border-radius: 12px;
+		background: var(--surface, #fff);
+	}
+
+	.etapas__item--cerrada {
+		border-color: #bbf7d0;
+		background: #f0fdf4;
+	}
+
+	.etapas__item--curso {
+		border-color: #fde68a;
+		background: #fffbeb;
+	}
+
+	.etapas__marca {
+		display: inline-grid;
+		place-items: center;
+		width: 1.625rem;
+		height: 1.625rem;
+		flex: none;
+		font-size: 0.8125rem;
+		font-weight: 700;
+		color: var(--text-secondary, #334155);
+		background: var(--gray-100, #f1f5f9);
+		border-radius: 999px;
+	}
+
+	.etapas__item--cerrada .etapas__marca {
+		color: #fff;
+		background: #16a34a;
+	}
+
+	.etapas__item--curso .etapas__marca {
+		color: #78350f;
+		background: #fde68a;
+	}
+
+	.etapas__texto {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+
+	.etapas__titulo {
+		font-size: 0.875rem;
+		font-weight: 600;
+		color: var(--text-primary, #0f172a);
+	}
+
+	.etapas__estado {
+		font-size: 0.75rem;
+		color: var(--text-muted, #64748b);
 	}
 
 	.anulado {

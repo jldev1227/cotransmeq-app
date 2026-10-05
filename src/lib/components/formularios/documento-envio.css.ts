@@ -203,6 +203,39 @@ export function documentoEnvioCss(): string {
 	break-after: avoid;
 }
 
+/* Banda de etapa: más alta y oscura que la de sección, porque titula un
+   grupo de secciones y no una. */
+[data-fdoc] .banda--etapa {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 0.5rem;
+	margin-top: 0.375rem;
+	padding: 0.1875rem 0.5rem;
+	font-size: 0.75rem;
+	color: #fff;
+	background: #14532d;
+	border-top: 1px solid #111;
+}
+
+[data-fdoc] .banda__estado {
+	padding: 0 0.375rem;
+	font-size: 0.625rem;
+	letter-spacing: 0.02em;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.18);
+}
+
+[data-fdoc] .banda__estado--cerrada {
+	background: #dcf0e0;
+	color: #14532d;
+}
+
+[data-fdoc] .banda__estado--en-curso {
+	background: #fde68a;
+	color: #78350f;
+}
+
 /* ── Datos del registro ───────────────────────────────────────────────
    Rejilla de cuatro pares por línea a todo el ancho de la hoja, no una tira
    de pares que se reparte sola: con \`auto-fit\` el número de columnas dependía
@@ -866,6 +899,7 @@ export function documentoEnvioCss(): string {
 	[data-fdoc] .fila__c--on,
 	[data-fdoc] .marca,
 	[data-fdoc] .banda,
+	[data-fdoc] .banda__estado,
 	[data-fdoc] .cab-estado,
 	[data-fdoc] .cab__meta dt,
 	[data-fdoc] .ficha__par dt,

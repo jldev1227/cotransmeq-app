@@ -776,6 +776,22 @@
 										>
 											Publicada v{form.activeVersion.versionNumber}
 										</a>
+										<!-- Archivar es opcional, así que la v1 puede seguir publicada
+										     mientras las asignaciones nuevas usan la v2 (p. ej. el
+										     preoperacional clásico y el «por etapas»). Sin estas
+										     píldoras las dos quedan escondidas detrás de un solo
+										     «Publicada v2» y el admin cree que la otra no existe. -->
+										{#each (form.versions ?? []).filter(
+											(v) => v.status === 'PUBLISHED' && v.id !== form.activeVersion?.id
+										) as vieja (vieja.id)}
+											<a
+												class="pill pill--pub-vieja"
+												href={`/dashboard/formularios/${form.id}/preview/${vieja.id}`}
+												title={vieja.title}
+											>
+												También v{vieja.versionNumber}
+											</a>
+										{/each}
 									{:else}
 										<span class="pill pill--sin">Sin publicar</span>
 									{/if}
@@ -794,6 +810,14 @@
 							<div class="tarjeta__cuerpo">
 								<a class="tarjeta__nombre" href={`/dashboard/formularios/${form.id}`}>{form.name}</a
 								>
+								<!-- El título que ven los conductores es el de la VERSIÓN, no el del
+								     formulario: «… (por etapas)» solo existe en la v2. Si difieren,
+								     mostrarlo; si no, sería repetir el nombre. -->
+								{#if form.activeVersion && form.activeVersion.title.trim() !== form.name.trim()}
+									<p class="tarjeta__version-titulo">
+										v{form.activeVersion.versionNumber}: {form.activeVersion.title}
+									</p>
+								{/if}
 								{#if form.description}
 									<p class="tarjeta__desc">{form.description}</p>
 								{/if}
@@ -1083,6 +1107,15 @@
 										<span class="chip chip--{envio.status.toLowerCase()}">
 											{SUBMISSION_STATUS_LABELS[envio.status]}
 										</span>
+										{#if envio.status === 'DRAFT' && envio.etapasCerradas?.length}
+											<!-- Un borrador por etapas no es «sin empezar»: el conductor
+											     ya firmó y cerró pasos en el teléfono. -->
+											<span class="chip chip--etapa">
+												{envio.etapasCerradas.length === 1
+													? `Etapa ${envio.etapasCerradas[0]} cerrada`
+													: `Etapas ${envio.etapasCerradas.join(', ')} cerradas`}
+											</span>
+										{/if}
 										{#if envio.deletedAt}
 											<!-- Se muestra JUNTO al estado, no en su lugar: descartar no
 											     cambia el estado del envío, lo retira. Un borrador
@@ -1475,6 +1508,14 @@
 		text-decoration: underline;
 	}
 
+	.tarjeta__version-titulo {
+		margin-top: 0.125rem;
+		font-size: 0.8125rem;
+		font-weight: 500;
+		color: var(--text-secondary, #334155);
+		line-height: 1.4;
+	}
+
 	.tarjeta__desc {
 		margin-top: 0.125rem;
 		font-size: 0.8125rem;
@@ -1511,6 +1552,11 @@
 		border: 1px solid #bbf7d0;
 	}
 
+	.pill--pub-vieja {
+		background: #f1f5f9;
+		color: #334155;
+		border: 1px solid #cbd5e1;
+	}
 	.pill--draft {
 		background: #fffbeb;
 		color: #92400e;
@@ -1621,6 +1667,12 @@
 	.chip--draft {
 		background: #fffbeb;
 		color: #92400e;
+	}
+
+	.chip--etapa {
+		margin-left: 0.25rem;
+		background: #eef6ff;
+		color: #1e40af;
 	}
 
 	.chip--descartado {

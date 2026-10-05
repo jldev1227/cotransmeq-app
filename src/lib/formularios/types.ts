@@ -117,9 +117,24 @@ export const FIELD_TYPE_META: Record<
 	FieldType,
 	{ label: string; hint: string; icon: string; category: string }
 > = {
-	SHORT_TEXT: { label: 'Texto corto', hint: 'Placa, sede, cargo', icon: 'type', category: 'Básicos' },
-	LONG_TEXT: { label: 'Texto largo', hint: 'Observaciones', icon: 'align-left', category: 'Básicos' },
-	INTEGER: { label: 'Número entero', hint: 'Kilometraje, cantidad', icon: 'hash', category: 'Básicos' },
+	SHORT_TEXT: {
+		label: 'Texto corto',
+		hint: 'Placa, sede, cargo',
+		icon: 'type',
+		category: 'Básicos'
+	},
+	LONG_TEXT: {
+		label: 'Texto largo',
+		hint: 'Observaciones',
+		icon: 'align-left',
+		category: 'Básicos'
+	},
+	INTEGER: {
+		label: 'Número entero',
+		hint: 'Kilometraje, cantidad',
+		icon: 'hash',
+		category: 'Básicos'
+	},
 	DECIMAL: { label: 'Número decimal', hint: 'Horas, litros', icon: 'percent', category: 'Básicos' },
 	BOOLEAN: { label: 'Sí / No', hint: 'Confirmación simple', icon: 'toggle', category: 'Básicos' },
 	SINGLE_CHOICE: {
@@ -134,14 +149,34 @@ export const FIELD_TYPE_META: Record<
 		icon: 'check-square',
 		category: 'Selección'
 	},
-	DATE: { label: 'Fecha', hint: 'Inspección, vencimiento', icon: 'calendar', category: 'Fecha y hora' },
+	DATE: {
+		label: 'Fecha',
+		hint: 'Inspección, vencimiento',
+		icon: 'calendar',
+		category: 'Fecha y hora'
+	},
 	TIME: { label: 'Hora', hint: 'Inicio de jornada', icon: 'clock', category: 'Fecha y hora' },
-	DATETIME: { label: 'Fecha y hora', hint: 'Cierre, ocurrencia', icon: 'calendar-clock', category: 'Fecha y hora' },
+	DATETIME: {
+		label: 'Fecha y hora',
+		hint: 'Cierre, ocurrencia',
+		icon: 'calendar-clock',
+		category: 'Fecha y hora'
+	},
 	PHOTO: { label: 'Fotografía', hint: 'Registro visual', icon: 'camera', category: 'Evidencia' },
 	FILE: { label: 'Archivo', hint: 'PDF de soporte', icon: 'paperclip', category: 'Evidencia' },
-	SIGNATURE: { label: 'Firma', hint: 'Quien inspecciona / recibe', icon: 'pen', category: 'Evidencia' },
+	SIGNATURE: {
+		label: 'Firma',
+		hint: 'Quien inspecciona / recibe',
+		icon: 'pen',
+		category: 'Evidencia'
+	},
 	LOCATION: { label: 'Ubicación', hint: 'GPS del punto', icon: 'map-pin', category: 'Evidencia' },
-	INFO: { label: 'Texto informativo', hint: 'Instrucción, declaración', icon: 'info', category: 'Estructura' },
+	INFO: {
+		label: 'Texto informativo',
+		hint: 'Instrucción, declaración',
+		icon: 'info',
+		category: 'Estructura'
+	},
 	REPEATABLE_GROUP: {
 		label: 'Grupo repetible',
 		hint: 'Hallazgos, plan de acción',
@@ -150,7 +185,12 @@ export const FIELD_TYPE_META: Record<
 	},
 	MATRIX: { label: 'Matriz', hint: 'Lista de ítems C/NC/NA', icon: 'grid', category: 'Estructura' },
 	LOOKUP: { label: 'Referencia', hint: 'Conductor, vehículo', icon: 'link', category: 'Avanzados' },
-	CALCULATED: { label: 'Calculado', hint: 'Total, porcentaje', icon: 'sigma', category: 'Avanzados' }
+	CALCULATED: {
+		label: 'Calculado',
+		hint: 'Total, porcentaje',
+		icon: 'sigma',
+		category: 'Avanzados'
+	}
 };
 
 export const PALETTE_CATEGORIES = [
@@ -395,7 +435,12 @@ export const CONDUCTOR_TARGET_TYPES = [
 ] as const satisfies readonly TargetType[];
 
 /** Targets que resuelven contra usuarios internos. */
-export const USER_TARGET_TYPES = ['ALL_USERS', 'USER', 'AREA', 'CARGO'] as const satisfies readonly TargetType[];
+export const USER_TARGET_TYPES = [
+	'ALL_USERS',
+	'USER',
+	'AREA',
+	'CARGO'
+] as const satisfies readonly TargetType[];
 
 export function esTargetDeUsuario(type: TargetType): boolean {
 	return (USER_TARGET_TYPES as readonly string[]).includes(type);
@@ -544,6 +589,13 @@ export interface SubmissionSummaryDto {
 	 * los oculta salvo que se marque «Ver descartados».
 	 */
 	deletedAt?: string | null;
+	/**
+	 * Etapas que el teléfono ya cerró en un borrador por etapas
+	 * (`device.stagesClosed`, saneado por el servidor). `undefined` si la
+	 * consulta no lo trajo; `[]` si no hay ninguna o el formulario no es por
+	 * etapas. Un `SUBMITTED` las tiene todas, aunque aquí no se repitan.
+	 */
+	etapasCerradas?: number[];
 	conductor: { id: string; nombre: string; numeroIdentificacion: string | null } | null;
 	usuario: { id: string; nombre: string; correo: string } | null;
 	/**

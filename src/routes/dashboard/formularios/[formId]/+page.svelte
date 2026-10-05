@@ -421,6 +421,13 @@
 											<span class="chip chip--{envio.status.toLowerCase()}">
 												{SUBMISSION_STATUS_LABELS[envio.status]}
 											</span>
+											{#if envio.status === 'DRAFT' && envio.etapasCerradas?.length}
+												<span class="chip chip--etapa" title="Etapas cerradas en el teléfono">
+													{envio.etapasCerradas.length === 1
+														? `Etapa ${envio.etapasCerradas[0]} cerrada`
+														: `Etapas ${envio.etapasCerradas.join(', ')} cerradas`}
+												</span>
+											{/if}
 										</span>
 									</a>
 								</li>
@@ -824,6 +831,12 @@
 	.chip--submitted {
 		background: var(--color-emerald-100);
 		color: var(--color-emerald-900);
+	}
+
+	.chip--etapa {
+		margin-left: 0.25rem;
+		background: #eef6ff;
+		color: #1e40af;
 	}
 
 	.chip--draft {

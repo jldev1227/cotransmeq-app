@@ -22,6 +22,12 @@
 		type ValidationIssue
 	} from '$lib/formularios/types';
 	import type { BuilderStore } from '$lib/formularios/builder-store.svelte';
+	import {
+		firmaDeEtapa,
+		numeroDeEtapa,
+		problemasEtapas,
+		tituloDeEtapa
+	} from '$lib/formularios/etapas';
 	import OptionsEditor from './OptionsEditor.svelte';
 	import RuleBuilder from './RuleBuilder.svelte';
 
@@ -38,6 +44,32 @@
 		seleccion.kind === 'section' && seleccion.id ? store.findSection(seleccion.id) : null
 	);
 	const bloqueado = $derived(!store.editable);
+
+	/**
+	 * Etapas ya declaradas en el formulario, más la siguiente libre.
+	 *
+	 * El selector ofrece solo esas: una etapa es un paso que el conductor cierra
+	 * en el teléfono, y dejar escribir «7» en un formulario de tres pasos crea
+	 * cuatro pasos vacíos en medio.
+	 */
+	const etapasDeclaradas = $derived(
+		[...new Set(store.sections.map(numeroDeEtapa).filter((n): n is number => n !== null))].sort(
+			(a, b) => a - b
+		)
+	);
+	const siguienteEtapa = $derived(
+		etapasDeclaradas.length ? etapasDeclaradas[etapasDeclaradas.length - 1] + 1 : 1
+	);
+	const avisosEtapas = $derived(problemasEtapas(store.sections));
+	const etapaActual = $derived(seccion ? numeroDeEtapa(seccion) : null);
+	const seccionesDeLaEtapa = $derived(
+		etapaActual === null ? 0 : store.sections.filter((s) => numeroDeEtapa(s) === etapaActual).length
+	);
+
+	function cambiarEtapa(id: string, valor: string) {
+		if (valor === '') store.updateSectionStage(id, { etapa: null });
+		else store.updateSectionStage(id, { etapa: Number(valor) });
+	}
 	const propios = $derived(
 		seleccion.id ? (issues.get(seleccion.id) ?? []) : ([] as ValidationIssue[])
 	);
@@ -166,6 +198,68 @@
 						store.updateSection(seccion.id, { description: e.currentTarget.value || null })}
 				></textarea>
 			</label>
+
+			<!-- Etapas: tramos que el conductor diligencia y cierra por separado
+			     dentro de UN SOLO envío (p. ej. prealistamiento → desplazamiento →
+			     cierre). Viven en `settings` de la sección, sin columna propia. El
+			     título y la firma son de la etapa entera: el store los propaga a
+			     todas las secciones con el mismo número. -->
+			<fieldset class="campo etapa">
+				<legend class="campo__label">Etapa</legend>
+				<select
+					class="campo__input"
+					value={etapaActual === null ? '' : String(etapaActual)}
+					disabled={bloqueado}
+					aria-label="Etapa de la sección"
+					onchange={(e) => cambiarEtapa(seccion.id, e.currentTarget.value)}
+				>
+					<option value="">Sin etapa · el formulario se diligencia de una vez</option>
+					{#each etapasDeclaradas as n (n)}
+						<option value={String(n)}>Etapa {n}</option>
+					{/each}
+					<option value={String(siguienteEtapa)}>Nueva etapa {siguienteEtapa}</option>
+				</select>
+
+				{#if etapaActual !== null}
+					<label class="campo">
+						<span class="campo__label">Título de la etapa {etapaActual}</span>
+						<input
+							class="campo__input"
+							value={tituloDeEtapa(seccion) ?? ''}
+							placeholder={`Etapa ${etapaActual}`}
+							disabled={bloqueado}
+							oninput={(e) =>
+								store.updateSectionStage(seccion.id, { etapaTitulo: e.currentTarget.value })}
+						/>
+					</label>
+					<label class="campo campo--check">
+						<input
+							type="checkbox"
+							checked={firmaDeEtapa(seccion)}
+							disabled={bloqueado}
+							onchange={(e) =>
+								store.updateSectionStage(seccion.id, { etapaFirma: e.currentTarget.checked })}
+						/>
+						<span>
+							Se cierra con la firma del conductor
+							<span class="campo__hint">
+								Solo cambia los textos del teléfono: qué campo firma lo decide la sección.
+							</span>
+						</span>
+					</label>
+					<span class="campo__hint">
+						{seccionesDeLaEtapa === 1
+							? 'Esta es la única sección de la etapa.'
+							: `La etapa agrupa ${seccionesDeLaEtapa} secciones; el título y la firma se aplican a todas.`}
+					</span>
+				{/if}
+
+				{#each avisosEtapas as aviso (aviso.mensaje)}
+					<p class="etapa__aviso" class:etapa__aviso--error={aviso.nivel === 'error'}>
+						{aviso.mensaje}
+					</p>
+				{/each}
+			</fieldset>
 		</div>
 	{:else if campo}
 		{@const f = campo.field}
@@ -483,6 +577,34 @@
 	.campo__input:disabled {
 		background: var(--gray-50, #f9fafb);
 		color: var(--text-muted, #64748b);
+	}
+
+	.etapa {
+		gap: 0.5rem;
+		padding: 0.625rem 0.75rem;
+		border: 1px dashed var(--border-strong, rgba(0, 0, 0, 0.16));
+		border-radius: 10px;
+	}
+
+	.etapa > legend {
+		padding: 0 0.25rem;
+	}
+
+	.etapa__aviso {
+		margin: 0;
+		padding: 0.375rem 0.5rem;
+		font-size: 0.75rem;
+		line-height: 1.4;
+		color: #92400e;
+		background: #fffbeb;
+		border: 1px solid #fde68a;
+		border-radius: 8px;
+	}
+
+	.etapa__aviso--error {
+		color: #991b1b;
+		background: #fef2f2;
+		border-color: #fecaca;
 	}
 
 	.campo__hint {

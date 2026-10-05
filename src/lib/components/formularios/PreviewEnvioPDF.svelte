@@ -45,6 +45,7 @@
 <script lang="ts">
 	import { toast } from 'svelte-sonner';
 	import { fechaDeFormularioDe } from '$lib/formularios/fecha-diligenciamiento';
+	import { progresoEtapas, resolverEtapas, type Etapa } from '$lib/formularios/etapas';
 	import { documentoEnvioCss } from './documento-envio.css';
 	import { exportarPdfEnvio } from './exportar-pdf-envio';
 	import type {
@@ -464,8 +465,41 @@
 		return fotos >= FOTOS_PARA_ANCHO_COMPLETO;
 	}
 
-	const seccionesEstrechas = $derived(secciones.filter((s) => !seccionAncha(s)));
-	const seccionesAnchas = $derived(secciones.filter(seccionAncha));
+	/**
+	 * El cuerpo se imprime por ETAPA cuando el formato las tiene: cada etapa
+	 * trae su banda, su cuerpo a dos columnas y sus bloques anchos. Así el papel
+	 * refleja lo que el conductor cerró paso a paso en el teléfono, y en un
+	 * borrador se ve hasta dónde llegó. Sin etapas hay un único grupo sin banda,
+	 * y el documento queda exactamente como antes.
+	 */
+	interface GrupoImpreso {
+		clave: string;
+		etapa: Etapa<FormSectionDto> | null;
+		estrechas: FormSectionDto[];
+		anchas: FormSectionDto[];
+	}
+
+	const etapas = $derived(resolverEtapas(definicion.sections ?? []));
+	const progreso = $derived(progresoEtapas(etapas, envio.status, envio.device));
+
+	const grupos = $derived.by((): GrupoImpreso[] => {
+		const partir = (lista: FormSectionDto[]) => ({
+			estrechas: lista.filter((s) => !seccionAncha(s)),
+			anchas: lista.filter(seccionAncha)
+		});
+		if (!etapas) return [{ clave: 'todo', etapa: null, ...partir(secciones) }];
+		return etapas.map((etapa) => ({
+			clave: `etapa-${etapa.numero}`,
+			etapa,
+			...partir(etapa.sections.filter(seccionImprime))
+		}));
+	});
+
+	function estadoEtapa(etapa: Etapa<FormSectionDto>): 'cerrada' | 'en-curso' | 'pendiente' | null {
+		if (!progreso || envio.status === 'SUBMITTED') return null;
+		if (progreso.cerradas.includes(etapa.numero)) return 'cerrada';
+		return progreso.enCurso?.numero === etapa.numero ? 'en-curso' : 'pendiente';
+	}
 
 	// ── Hallazgos ────────────────────────────────────────────────────────────
 
@@ -660,125 +694,140 @@
 			</div>
 		{/if}
 
-		<!-- Cuerpo a dos columnas paralelas. `columns` y no `grid`: las secciones
-		     fluyen y se equilibran solas sin repartirlas a mano. -->
-		<div class="cuerpo">
-			{#each seccionesEstrechas as section (section.id)}
-				{@const catalogo = catalogoComun(camposDe(section))}
-				<section class="sec">
-					<h2 class="banda">{section.title}</h2>
-
-					{#if catalogo}
-						<!-- Cabecera de estados: se dibuja UNA vez por sección en vez de
-						     repetir la etiqueta en cada una de las 130 filas. -->
-						<div class="cab-estado" style={`--n:${catalogo.length}`}>
-							<span class="cab-estado__desc">Descripción</span>
-							{#each catalogo as o (o.id)}
-								<span class="cab-estado__c" title={o.label}>{abreviatura(o)}</span>
-							{/each}
-						</div>
+		{#each grupos as grupo (grupo.clave)}
+			{#if grupo.etapa}
+				{@const estado = estadoEtapa(grupo.etapa)}
+				<!-- Banda de etapa: parte el formato en los pasos que el conductor
+				     cierra uno a uno. En un borrador dice además en cuál va. -->
+				<h2 class="banda banda--etapa">
+					<span>Etapa {grupo.etapa.numero} de {grupos.length} · {grupo.etapa.titulo}</span>
+					{#if estado}
+						<span class="banda__estado banda__estado--{estado}">
+							{estado === 'cerrada' ? 'Cerrada' : estado === 'en-curso' ? 'En curso' : 'Pendiente'}
+						</span>
 					{/if}
+				</h2>
+			{/if}
+			<!-- Cuerpo a dos columnas paralelas. `columns` y no `grid`: las secciones
+			     fluyen y se equilibran solas sin repartirlas a mano. -->
+			<div class="cuerpo">
+				{#each grupo.estrechas as section (section.id)}
+					{@const catalogo = catalogoComun(camposDe(section))}
+					<section class="sec">
+						<h2 class="banda">{section.title}</h2>
 
-					{#each tramosDe(section) as tramo}
-						{#if tramo.forma === 'checklist' && catalogo}
-							{#each tramo.campos as field (field.id)}
-								{@const marcado = valorMarcado(field)}
-								{@const opcion = field.options.find((o) => o.value === marcado)}
-								{@const tono = marcado ? tonoDeOpcion(opcion) : 'vacio'}
-								<div class="fila fila--{tono}" style={`--n:${catalogo.length}`}>
-									<span class="fila__desc">{field.label}</span>
-									{#each catalogo as o (o.id)}
-										<span class="fila__c" class:fila__c--on={o.value === marcado}>
-											{o.value === marcado ? '✕' : ''}
-										</span>
-									{/each}
-								</div>
-							{/each}
-						{:else if tramo.forma === 'checklist'}
-							<!-- Escalas mezcladas en la misma sección: sin cabecera común, el
-							     valor va escrito en la fila. -->
-							{#each tramo.campos as field (field.id)}
-								{@const marcado = valorMarcado(field)}
-								{@const opcion = field.options.find((o) => o.value === marcado)}
-								<div class="fila fila--libre">
-									<span class="fila__desc">{field.label}</span>
-									<span class="fila__valor marca marca--{marcado ? tonoDeOpcion(opcion) : 'vacio'}">
-										{opcion?.label ?? marcado ?? '—'}
-									</span>
-								</div>
-							{/each}
-						{:else if tramo.forma === 'escalar'}
-							{#each tramo.campos as field (field.id)}
-								{@const valor = valorLegible(field)}
-								<div class="fila fila--libre">
-									<span class="fila__desc">{field.label}</span>
-									<span class="fila__valor" class:vacio={valor === null}>{valor ?? '—'}</span>
-								</div>
-							{/each}
-						{:else if tramo.forma === 'bloque'}
-							<!-- Texto libre. Solo se imprime el que tiene contenido: en un
-							     preoperacional conforme las observaciones van casi todas en
-							     blanco, y antes cada una gastaba su renglón para decir que no
-							     decía nada —decenas de líneas y hojas de más—. La constancia de
-							     que se preguntó la da el FORMATO, que es versionado y queda
-							     identificado en el pie; lo que se escribió lo da esta página. -->
-							{#each conTexto(tramo.campos) as field (field.id)}
-								<div class="parrafo">
-									<p class="parrafo__k">{field.label}</p>
-									<p class="parrafo__v">{valorLegible(field)}</p>
-								</div>
-							{/each}
-						{:else if tramo.forma === 'nota'}
-							{#each tramo.campos as field (field.id)}
-								<p class="nota">{field.helpText || field.label}</p>
-							{/each}
+						{#if catalogo}
+							<!-- Cabecera de estados: se dibuja UNA vez por sección en vez de
+							     repetir la etiqueta en cada una de las 130 filas. -->
+							<div class="cab-estado" style={`--n:${catalogo.length}`}>
+								<span class="cab-estado__desc">Descripción</span>
+								{#each catalogo as o (o.id)}
+									<span class="cab-estado__c" title={o.label}>{abreviatura(o)}</span>
+								{/each}
+							</div>
 						{/if}
-					{/each}
-				</section>
-			{/each}
-		</div>
 
-		<!-- Firmas, evidencia y tablas: fuera del cuerpo a dos columnas porque no
-		     caben en una columna estrecha, pero emparejadas entre sí para no gastar
-		     una banda entera por bloque. Solo las tablas con filas y las firmas
-		     ocupan el ancho completo. -->
-		<div class="anchas">
-			{#each seccionesAnchas as section (section.id)}
-				{@const grupos = bloquesDeFirma(section)}
-				<section class="sec sec--ancha" class:sec--completa={anchaCompleta(section)}>
-					<h2 class="banda">{section.title}</h2>
+						{#each tramosDe(section) as tramo}
+							{#if tramo.forma === 'checklist' && catalogo}
+								{#each tramo.campos as field (field.id)}
+									{@const marcado = valorMarcado(field)}
+									{@const opcion = field.options.find((o) => o.value === marcado)}
+									{@const tono = marcado ? tonoDeOpcion(opcion) : 'vacio'}
+									<div class="fila fila--{tono}" style={`--n:${catalogo.length}`}>
+										<span class="fila__desc">{field.label}</span>
+										{#each catalogo as o (o.id)}
+											<span class="fila__c" class:fila__c--on={o.value === marcado}>
+												{o.value === marcado ? '✕' : ''}
+											</span>
+										{/each}
+									</div>
+								{/each}
+							{:else if tramo.forma === 'checklist'}
+								<!-- Escalas mezcladas en la misma sección: sin cabecera común, el
+								     valor va escrito en la fila. -->
+								{#each tramo.campos as field (field.id)}
+									{@const marcado = valorMarcado(field)}
+									{@const opcion = field.options.find((o) => o.value === marcado)}
+									<div class="fila fila--libre">
+										<span class="fila__desc">{field.label}</span>
+										<span class="fila__valor marca marca--{marcado ? tonoDeOpcion(opcion) : 'vacio'}">
+											{opcion?.label ?? marcado ?? '—'}
+										</span>
+									</div>
+								{/each}
+							{:else if tramo.forma === 'escalar'}
+								{#each tramo.campos as field (field.id)}
+									{@const valor = valorLegible(field)}
+									<div class="fila fila--libre">
+										<span class="fila__desc">{field.label}</span>
+										<span class="fila__valor" class:vacio={valor === null}>{valor ?? '—'}</span>
+									</div>
+								{/each}
+							{:else if tramo.forma === 'bloque'}
+								<!-- Texto libre. Solo se imprime el que tiene contenido: en un
+								     preoperacional conforme las observaciones van casi todas en
+								     blanco, y antes cada una gastaba su renglón para decir que no
+								     decía nada —decenas de líneas y hojas de más—. La constancia de
+								     que se preguntó la da el FORMATO, que es versionado y queda
+								     identificado en el pie; lo que se escribió lo da esta página. -->
+								{#each conTexto(tramo.campos) as field (field.id)}
+									<div class="parrafo">
+										<p class="parrafo__k">{field.label}</p>
+										<p class="parrafo__v">{valorLegible(field)}</p>
+									</div>
+								{/each}
+							{:else if tramo.forma === 'nota'}
+								{#each tramo.campos as field (field.id)}
+									<p class="nota">{field.helpText || field.label}</p>
+								{/each}
+							{/if}
+						{/each}
+					</section>
+				{/each}
+			</div>
 
-					{#each grupos.previos as tramo}{@render tramoAncho(tramo)}{/each}
+			<!-- Firmas, evidencia y tablas: fuera del cuerpo a dos columnas porque no
+			     caben en una columna estrecha, pero emparejadas entre sí para no gastar
+			     una banda entera por bloque. Solo las tablas con filas y las firmas
+			     ocupan el ancho completo. -->
+			<div class="anchas">
+				{#each grupo.anchas as section (section.id)}
+					{@const grupos = bloquesDeFirma(section)}
+					<section class="sec sec--ancha" class:sec--completa={anchaCompleta(section)}>
+						<h2 class="banda">{section.title}</h2>
 
-					{#if grupos.bloques.length}
-						<!-- Una columna por firmante: la rúbrica y los datos de quien la
-					     estampó viajan juntos, como en el papel. -->
-						<div class="firmantes">
-							{#each grupos.bloques as bloque (bloque.firma.id)}
-								{@const adjuntos = adjuntosPorCampo.get(bloque.firma.id) ?? []}
-								<div class="firmante">
-									<figure class="firma">
-										{#if adjuntos.length && adjuntos[0].url}
-											<!-- El `alt` es la etiqueta a secas: el campo ya se llama
-										     «Firma de quien entrega» y anteponerle «Firma de» daba
-										     «Firma de Firma de quien entrega» a quien lo lee con
-										     lector de pantalla. -->
-											<img class="firma__img" src={adjuntos[0].url} alt={bloque.firma.label} />
-										{:else}
-											<div class="firma__falta">Sin firma registrada</div>
-										{/if}
-										<figcaption class="firma__pie">{bloque.firma.label}</figcaption>
-									</figure>
-									{#each bloque.extras as tramo}{@render tramoAncho(tramo)}{/each}
-								</div>
-							{/each}
-						</div>
-					{/if}
+						{#each grupos.previos as tramo}{@render tramoAncho(tramo)}{/each}
 
-					{#each grupos.posteriores as tramo}{@render tramoAncho(tramo)}{/each}
-				</section>
-			{/each}
-		</div>
+						{#if grupos.bloques.length}
+							<!-- Una columna por firmante: la rúbrica y los datos de quien la
+						     estampó viajan juntos, como en el papel. -->
+							<div class="firmantes">
+								{#each grupos.bloques as bloque (bloque.firma.id)}
+									{@const adjuntos = adjuntosPorCampo.get(bloque.firma.id) ?? []}
+									<div class="firmante">
+										<figure class="firma">
+											{#if adjuntos.length && adjuntos[0].url}
+												<!-- El `alt` es la etiqueta a secas: el campo ya se llama
+											     «Firma de quien entrega» y anteponerle «Firma de» daba
+											     «Firma de Firma de quien entrega» a quien lo lee con
+											     lector de pantalla. -->
+												<img class="firma__img" src={adjuntos[0].url} alt={bloque.firma.label} />
+											{:else}
+												<div class="firma__falta">Sin firma registrada</div>
+											{/if}
+											<figcaption class="firma__pie">{bloque.firma.label}</figcaption>
+										</figure>
+										{#each bloque.extras as tramo}{@render tramoAncho(tramo)}{/each}
+									</div>
+								{/each}
+							</div>
+						{/if}
+
+						{#each grupos.posteriores as tramo}{@render tramoAncho(tramo)}{/each}
+					</section>
+				{/each}
+			</div>
+		{/each}
 
 		<!-- La cadena de formas vive en un snippet porque se usa en dos sitios: el
 		     flujo normal de la sección y el interior de cada bloque de firmante. -->

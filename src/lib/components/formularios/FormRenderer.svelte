@@ -15,6 +15,8 @@
 	import type { FormFieldDto } from '$lib/formularios/types';
 	import type { RunnerState } from '$lib/formularios/runner-state.svelte';
 	import { fieldLabelPath } from '$lib/formularios/runner-state.svelte';
+	import { resolverEtapas } from '$lib/formularios/etapas';
+	import type { FormSectionDto } from '$lib/formularios/types';
 	import FieldRenderer from './FieldRenderer.svelte';
 
 	interface Props {
@@ -47,6 +49,14 @@
 			section.fields.some((field) => runner.stateOf(field.id, null).visible)
 		)
 	);
+
+	/**
+	 * Secciones agrupadas por etapa, o `null` si el formulario no está por etapas.
+	 *
+	 * Se agrupa sobre las visibles para que una etapa cuyas secciones quedaron
+	 * todas ocultas no deje una banda vacía.
+	 */
+	const etapas = $derived(resolverEtapas(seccionesVisibles));
 
 	/**
 	 * Lleva el foco al primer campo con error.
@@ -104,7 +114,29 @@
 		</div>
 	{/if}
 
-	{#each seccionesVisibles as section (section.id)}
+	{#if etapas}
+		<!-- Formulario por etapas: la misma lista de secciones, con una banda que
+		     dice dónde empieza cada paso que el conductor cierra en el teléfono.
+		     Aquí no se cierra nada: el portal muestra el formato completo. -->
+		{#each etapas as etapa (etapa.numero)}
+			<div class="etapa" role="group" aria-label={`Etapa ${etapa.numero} de ${etapas.length}`}>
+				<span class="etapa__n">Etapa {etapa.numero} de {etapas.length}</span>
+				<span class="etapa__t">{etapa.titulo}</span>
+				{#if etapa.firma}
+					<span class="etapa__firma">Se cierra con firma</span>
+				{/if}
+			</div>
+			{#each etapa.sections as section (section.id)}
+				{@render seccion(section)}
+			{/each}
+		{/each}
+	{:else}
+		{#each seccionesVisibles as section (section.id)}
+			{@render seccion(section)}
+		{/each}
+	{/if}
+
+	{#snippet seccion(section: FormSectionDto)}
 		<section class="seccion" aria-labelledby={`s-${section.id}`}>
 			<header class="seccion__cabecera">
 				<h3 class="seccion__titulo" id={`s-${section.id}`}>{section.title}</h3>
@@ -119,7 +151,7 @@
 				{/each}
 			</div>
 		</section>
-	{/each}
+	{/snippet}
 
 	{#if seccionesVisibles.length === 0}
 		<p class="formulario__vacio">Este formulario todavía no tiene campos que diligenciar.</p>
@@ -215,6 +247,39 @@
 		display: flex;
 		flex-direction: column;
 		gap: 0.625rem;
+	}
+
+	.etapa {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: baseline;
+		gap: 0.25rem 0.625rem;
+		margin-top: 0.75rem;
+		padding: 0.5rem 0.75rem;
+		border-left: 3px solid var(--primary, #ea580c);
+		background: var(--surface-muted, rgba(0, 0, 0, 0.035));
+		border-radius: 0 10px 10px 0;
+	}
+
+	.etapa__n {
+		font-size: 0.6875rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		text-transform: uppercase;
+		color: var(--primary, #ea580c);
+	}
+
+	.etapa__t {
+		font-family: var(--font-display, Georgia, serif);
+		font-size: 1rem;
+		font-weight: 600;
+		color: var(--text-primary, #0f172a);
+	}
+
+	.etapa__firma {
+		margin-left: auto;
+		font-size: 0.6875rem;
+		color: var(--text-muted, #64748b);
 	}
 
 	.seccion__cabecera {

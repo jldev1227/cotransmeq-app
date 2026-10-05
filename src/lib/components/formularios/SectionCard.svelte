@@ -15,6 +15,7 @@
 		BuilderStore
 	} from '$lib/formularios/builder-store.svelte';
 	import type { ValidationIssue } from '$lib/formularios/types';
+	import { numeroDeEtapa, tituloDeEtapa } from '$lib/formularios/etapas';
 	import FieldCard from './FieldCard.svelte';
 
 	interface Props {
@@ -89,6 +90,13 @@
 				<h3 class="sec__titulo sec__titulo--leer">{section.title}</h3>
 			{/if}
 			<span class="sec__key">{section.key}</span>
+			{#if numeroDeEtapa(section) !== null}
+				<!-- Para ver de un vistazo el reparto en etapas sin abrir cada
+				     sección en el inspector. -->
+				<span class="sec__etapa" title={tituloDeEtapa(section) ?? undefined}>
+					Etapa {numeroDeEtapa(section)}
+				</span>
+			{/if}
 		</div>
 
 		<span class="sec__conteo">
@@ -286,6 +294,17 @@
 		background: var(--bg-surface);
 		border-color: var(--accion);
 		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+
+	.sec__etapa {
+		margin-left: 0.4375rem;
+		padding: 0.0625rem 0.4375rem;
+		font-size: 0.6875rem;
+		font-weight: 600;
+		white-space: nowrap;
+		color: var(--text-secondary, #33423d);
+		background: var(--gray-100, #f3f4f6);
+		border-radius: 999px;
 	}
 
 	.sec__key {

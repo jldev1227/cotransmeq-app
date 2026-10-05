@@ -187,7 +187,9 @@ export function toPreviewSections(sections: BuilderSection[]): FormSectionDto[] 
  * Un `SINGLE_CHOICE` sin opciones es un error de publicación, así que la card
  * nace ya usable con el patrón que HSEQ usa en casi todos sus formatos.
  */
-const OPCIONES_POR_DEFECTO: Partial<Record<FieldType, { value: string; label: string; color?: string }[]>> = {
+const OPCIONES_POR_DEFECTO: Partial<
+	Record<FieldType, { value: string; label: string; color?: string }[]>
+> = {
 	SINGLE_CHOICE: [
 		{ value: 'C', label: 'Cumple', color: 'emerald' },
 		{ value: 'NC', label: 'No cumple', color: 'red' },
@@ -305,7 +307,12 @@ export function createBuilderStore(init: BuilderInit) {
 		fields: BuilderField[],
 		parent: BuilderField | null,
 		section: BuilderSection,
-		visit: (f: BuilderField, parent: BuilderField | null, section: BuilderSection, siblings: BuilderField[]) => void
+		visit: (
+			f: BuilderField,
+			parent: BuilderField | null,
+			section: BuilderSection,
+			siblings: BuilderField[]
+		) => void
 	) {
 		for (const field of fields) {
 			visit(field, parent, section, fields);
@@ -313,8 +320,18 @@ export function createBuilderStore(init: BuilderInit) {
 		}
 	}
 
-	function allFields(): { field: BuilderField; parent: BuilderField | null; section: BuilderSection; siblings: BuilderField[] }[] {
-		const out: { field: BuilderField; parent: BuilderField | null; section: BuilderSection; siblings: BuilderField[] }[] = [];
+	function allFields(): {
+		field: BuilderField;
+		parent: BuilderField | null;
+		section: BuilderSection;
+		siblings: BuilderField[];
+	}[] {
+		const out: {
+			field: BuilderField;
+			parent: BuilderField | null;
+			section: BuilderSection;
+			siblings: BuilderField[];
+		}[] = [];
 		for (const section of sections) {
 			walkFields(section.fields, null, section, (field, parent, sec, siblings) =>
 				out.push({ field, parent, section: sec, siblings })
@@ -395,6 +412,62 @@ export function createBuilderStore(init: BuilderInit) {
 			/// Renombrar el título NO renombra la clave si ya se fijó: la clave es
 			/// lo que referencian informes y reglas, y cambiarla en silencio los
 			/// rompería.
+		});
+	}
+
+	/**
+	 * Cambia la etapa de una sección.
+	 *
+	 * `etapa: null` saca la sección de las etapas (borra las tres claves). El
+	 * título y la firma son de la ETAPA, no de la sección: el teléfono toma el
+	 * título de la primera sección del grupo y la firma de cualquiera, así que
+	 * escribirlos en una sola dejaría a las demás desincronizadas en silencio.
+	 * Por eso se propagan a todas las secciones con el mismo número.
+	 */
+	function updateSectionStage(
+		id: string,
+		patch: { etapa?: number | null; etapaTitulo?: string | null; etapaFirma?: boolean }
+	) {
+		const seccion = findSection(id);
+		if (!seccion) return;
+		mutate(() => {
+			if (patch.etapa === null) {
+				seccion.settings = Object.fromEntries(
+					Object.entries(seccion.settings).filter(
+						([k]) => k !== 'etapa' && k !== 'etapaTitulo' && k !== 'etapaFirma'
+					)
+				);
+				return;
+			}
+			if (patch.etapa !== undefined) {
+				/// Al entrar a una etapa que ya existe, hereda su título y su firma
+				/// para no partirla en dos con metadatos distintos.
+				const hermana = sections.find(
+					(s) => s.id !== id && Number(s.settings.etapa) === patch.etapa
+				);
+				seccion.settings = {
+					...seccion.settings,
+					etapa: patch.etapa,
+					...(hermana
+						? { etapaTitulo: hermana.settings.etapaTitulo, etapaFirma: hermana.settings.etapaFirma }
+						: {})
+				};
+				if (seccion.settings.etapaTitulo === undefined) delete seccion.settings.etapaTitulo;
+				if (seccion.settings.etapaFirma === undefined) seccion.settings.etapaFirma = false;
+			}
+			const numero = Number(seccion.settings.etapa);
+			if (!Number.isFinite(numero)) return;
+			for (const s of sections) {
+				if (Number(s.settings.etapa) !== numero) continue;
+				if (patch.etapaTitulo !== undefined) {
+					const titulo = patch.etapaTitulo?.trim() || null;
+					s.settings = titulo
+						? { ...s.settings, etapaTitulo: titulo }
+						: Object.fromEntries(Object.entries(s.settings).filter(([k]) => k !== 'etapaTitulo'));
+				}
+				if (patch.etapaFirma !== undefined)
+					s.settings = { ...s.settings, etapaFirma: patch.etapaFirma };
+			}
 		});
 	}
 
@@ -792,7 +865,11 @@ export function createBuilderStore(init: BuilderInit) {
 
 	// ── Cabecera ────────────────────────────────────────────────────────────
 
-	function setHeader(patch: { title?: string; description?: string | null; instructions?: string | null }) {
+	function setHeader(patch: {
+		title?: string;
+		description?: string | null;
+		instructions?: string | null;
+	}) {
 		mutate(() => {
 			if (patch.title !== undefined) title = patch.title;
 			if (patch.description !== undefined) description = patch.description;
@@ -1032,6 +1109,7 @@ export function createBuilderStore(init: BuilderInit) {
 		// mutaciones
 		addSection,
 		updateSection,
+		updateSectionStage,
 		removeSection,
 		duplicateSection,
 		moveSection,
