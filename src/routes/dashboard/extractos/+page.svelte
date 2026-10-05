@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { cargarPdfMake } from '$lib/utils/pdfmake-cargar';
 	import { onMount, untrack } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
@@ -1514,11 +1515,7 @@
 				class="glass overflow-hidden rounded-2xl border border-gray-200/50"
 			>
 				{#if loadingHistorial}
-					<div class="flex h-48 items-center justify-center">
-						<div
-							class="h-8 w-8 animate-spin rounded-full border-[3px] border-orange-200 border-t-orange-600"
-						></div>
-					</div>
+					<CargaMascota texto="Cargando el historial…" />
 				{:else if extractosHistoricos.length === 0}
 					<div class="flex h-48 flex-col items-center justify-center text-gray-400">
 						<svg

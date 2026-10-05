@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { onMount } from 'svelte';
 	import { page as pageStore } from '$app/stores';
 	import { fade } from 'svelte/transition';
@@ -61,12 +62,7 @@
 	</div>
 
 	{#if loading}
-		<div class="flex flex-1 items-center justify-center p-12">
-			<div class="flex flex-col items-center gap-3">
-				<div class="h-10 w-10 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"></div>
-				<p class="text-[13px] text-gray-500">Cargando vista previa mensual…</p>
-			</div>
-		</div>
+		<CargaMascota tamano="pantalla" texto="Cargando la vista previa mensual…" />
 	{:else if loadError}
 		<div class="flex flex-1 items-center justify-center p-12">
 			<div class="rounded-xl border border-red-200 bg-red-50 p-4 text-center">

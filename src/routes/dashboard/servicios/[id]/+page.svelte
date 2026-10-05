@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
@@ -1467,14 +1468,7 @@
 
 <div class="flex h-screen w-full flex-col overflow-hidden bg-gray-50" in:fade={{ duration: 400 }}>
 	{#if loading}
-		<div class="flex flex-1 items-center justify-center bg-white" in:fade>
-			<div class="text-center">
-				<div
-					class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"
-				></div>
-				<p class="text-sm text-gray-500">Cargando servicio...</p>
-			</div>
-		</div>
+		<CargaMascota tamano="pantalla" texto="Cargando el servicio…" />
 	{:else if error}
 		<div class="flex flex-1 items-center justify-center bg-white p-6" in:fade>
 			<div class="max-w-xs text-center">

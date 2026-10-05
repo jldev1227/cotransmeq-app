@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { onMount } from 'svelte';
 	import { fade, slide } from 'svelte/transition';
 	import { toast } from 'svelte-sonner';
@@ -432,9 +433,7 @@
 					class="flex min-h-0 flex-1 flex-col overflow-hidden lg:min-h-[max(28rem,calc(100vh-17rem))] lg:flex-row"
 				>
 					{#if isLoadingCerts}
-						<div class="flex flex-1 items-center justify-center py-12">
-							<div class="h-8 w-8 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"></div>
-						</div>
+						<CargaMascota texto="Cargando certificados…" />
 					{:else if !selectedTercero.certificados_archivo || selectedTercero.certificados_archivo.length === 0}
 						<div class="flex flex-1 flex-col items-center justify-center py-12 text-center">
 							<p class="text-sm font-semibold text-gray-900">Sin certificados</p>
@@ -565,9 +564,7 @@
 
 				<div class="flex-1 overflow-auto">
 					{#if isLoading}
-						<div class="flex items-center justify-center py-12">
-							<div class="h-8 w-8 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"></div>
-						</div>
+						<CargaMascota texto="Cargando terceros…" />
 					{:else if terceros.length === 0}
 						<div class="flex flex-col items-center justify-center py-12 text-center">
 							<div class="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-100">

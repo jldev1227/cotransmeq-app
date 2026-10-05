@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { onMount, onDestroy } from 'svelte';
 	import { apiClient } from '$lib/api/apiClient';
 	import { usuariosAPI } from '$lib/api/usuarios';
@@ -406,11 +407,7 @@
 	<!-- ─── Tab Usuarios ──────────────────────────────────────────────────── -->
 	{#if tabActiva === 'usuarios'}
 		{#if cargando}
-			<div class="flex justify-center py-16">
-				<div
-					class="h-8 w-8 animate-spin rounded-full border-2 border-orange-600 border-t-transparent"
-				></div>
-			</div>
+			<CargaMascota texto="Cargando usuarios…" />
 		{:else}
 			<div class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
 				<table class="w-full text-sm">
@@ -500,11 +497,7 @@
 	<!-- ─── Tab Invitaciones ──────────────────────────────────────────────── -->
 	{#if tabActiva === 'invitaciones'}
 		{#if cargandoInv}
-			<div class="flex justify-center py-16">
-				<div
-					class="h-8 w-8 animate-spin rounded-full border-2 border-orange-600 border-t-transparent"
-				></div>
-			</div>
+			<CargaMascota texto="Cargando invitaciones…" />
 		{:else}
 			<div class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
 				<table class="w-full text-sm">

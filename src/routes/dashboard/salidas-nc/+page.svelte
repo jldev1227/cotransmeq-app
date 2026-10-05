@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { page as pageState } from '$app/state';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
@@ -610,10 +611,7 @@
 	<!-- Tabla -->
 	<div class="glass overflow-hidden rounded-xl border border-gray-200" in:fly={{ y: 20, delay: 600 }}>
 		{#if isLoading}
-			<div class="flex items-center justify-center py-20">
-				<div class="h-8 w-8 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
-				<span class="ml-3 text-gray-500">Cargando...</span>
-			</div>
+			<CargaMascota texto="Cargando salidas…" />
 		{:else if salidas.length === 0}
 			<div class="py-20 text-center">
 				<svg class="mx-auto h-12 w-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
