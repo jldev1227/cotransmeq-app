@@ -39,6 +39,26 @@
 	let lista = $state<HTMLDivElement | null>(null);
 	let entrada = $state<HTMLTextAreaElement | null>(null);
 
+	/// Líneas visibles del campo antes de que aparezca su propio scroll, como en
+	/// WhatsApp: crece con cada salto de línea (Mayús+Enter) y vuelve a una
+	/// línea al enviar. El tope sale del `line-height` real, no de un número a
+	/// mano, así que sigue valiendo si cambia la fuente.
+	const LINEAS_MAX = 10;
+	function ajustarAlto() {
+		const el = entrada;
+		if (!el) return;
+		const linea = parseFloat(getComputedStyle(el).lineHeight) || 20;
+		const tope = linea * LINEAS_MAX;
+		el.style.height = 'auto';
+		const alto = Math.min(el.scrollHeight, tope);
+		el.style.height = `${alto}px`;
+		el.style.overflowY = el.scrollHeight > tope ? 'auto' : 'hidden';
+	}
+	$effect(() => {
+		void texto;
+		ajustarAlto();
+	});
+
 	const ruta = $derived($page.url.pathname);
 	const primerNombre = $derived(String($authStore.user?.nombre ?? '').split(' ')[0]);
 	const sugerencias = $derived(sugerenciasPara(ruta));
@@ -646,8 +666,10 @@
 	.asis-entrada textarea {
 		flex: 1;
 		min-height: 1.5rem;
-		max-height: 8rem;
+		/* Sin max-height: el tope de 10 líneas lo pone `ajustarAlto`. */
+		line-height: 1.5rem;
 		padding: 0;
+		overflow-y: hidden;
 		border: none;
 		background: transparent;
 		font-family: inherit;
