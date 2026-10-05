@@ -629,6 +629,69 @@
 		return '';
 	}
 
+	/**
+	 * Errores de las dos celdas de horario de un día. Además del rango de cada
+	 * una, la hora fin tiene que ir después de la de inicio: un turno que pasa
+	 * de medianoche se escribe con horas mayores de 24 (20 → 28) o con
+	 * «continúa al día siguiente», nunca al revés. Antes esto viajaba al
+	 * servidor como `total_horas` negativo, volvía como «Error de validación»
+	 * y el modal se cerraba sin señalar la celda.
+	 */
+	function validarHorasDia(
+		id: string,
+		dia: Pick<DiaLaboral, 'hora_inicio' | 'hora_fin'>
+	): { inicio: string; fin: string } {
+		const errores = {
+			inicio: validarHora(id, 'inicio', dia.hora_inicio),
+			fin: validarHora(id, 'fin', dia.hora_fin)
+		};
+		const vacia = (v: unknown) => v === '' || v === null || v === undefined;
+		if (!errores.inicio && !errores.fin && !vacia(dia.hora_inicio) && !vacia(dia.hora_fin)) {
+			const inicio = parseFloat(String(dia.hora_inicio));
+			const fin = parseFloat(String(dia.hora_fin));
+			if (fin < inicio) errores.fin = `Debe ser mayor que la hora de inicio (${inicio})`;
+		}
+		return errores;
+	}
+
+	function hayErroresEnHorarios(): boolean {
+		return (
+			Object.values(erroresDias).some(Boolean) ||
+			Object.values(erroresHoras).some((e) => e.inicio || e.fin)
+		);
+	}
+
+	/**
+	 * Lleva las incidencias de zod del servidor (`errors`, con `path` tipo
+	 * `['dias_laborales', 3, 'hora_fin']`) a la fila y celda del formulario.
+	 * Devuelve true si marcó alguna.
+	 */
+	function marcarErroresDelServidor(error: unknown): boolean {
+		const issues = (error as any)?.response?.data?.errors;
+		if (!Array.isArray(issues)) return false;
+		let marcados = 0;
+		for (const issue of issues) {
+			const [raiz, indice, campo] = Array.isArray(issue?.path) ? issue.path : [];
+			if (raiz !== 'dias_laborales' || typeof indice !== 'number') continue;
+			const fila = diasLaborales[indice];
+			if (!fila) continue;
+			const mensaje = issue.code === 'custom' ? String(issue.message) : 'Valor inválido';
+			if (campo === 'dia') {
+				erroresDias[fila.id] = mensaje;
+			} else {
+				if (!erroresHoras[fila.id]) erroresHoras[fila.id] = { inicio: '', fin: '' };
+				if (campo === 'hora_inicio') erroresHoras[fila.id].inicio = mensaje;
+				else erroresHoras[fila.id].fin = mensaje;
+			}
+			marcados++;
+		}
+		if (marcados) {
+			erroresDias = erroresDias;
+			erroresHoras = erroresHoras;
+		}
+		return marcados > 0;
+	}
+
 	function actualizarDiaLaboral(id: string, campo: keyof DiaLaboral, valor: any) {
 		diasLaborales = diasLaborales.map((dia) => {
 			if (dia.id === id) {
@@ -647,16 +710,10 @@
 					}
 				}
 
-				// Validar horas
-				if (campo === 'hora_inicio') {
-					if (!erroresHoras[id]) erroresHoras[id] = { inicio: '', fin: '' };
-					erroresHoras[id].inicio = validarHora(id, 'inicio', valor);
-					erroresHoras = erroresHoras;
-				}
-
-				if (campo === 'hora_fin') {
-					if (!erroresHoras[id]) erroresHoras[id] = { inicio: '', fin: '' };
-					erroresHoras[id].fin = validarHora(id, 'fin', valor);
+				// Validar horas: las dos juntas, porque la regla «fin después de
+				// inicio» depende de ambas celdas.
+				if (campo === 'hora_inicio' || campo === 'hora_fin') {
+					erroresHoras[id] = validarHorasDia(id, updated);
 					erroresHoras = erroresHoras;
 				}
 
@@ -1314,6 +1371,21 @@
 			return;
 		}
 
+		// Revalidar todas las filas (las cargadas en edición nunca pasaron por
+		// `actualizarDiaLaboral`) y frenar aquí: el servidor rechazaría igual,
+		// pero con la celda ya marcada se sabe qué corregir.
+		for (const dia of diasLaborales) {
+			erroresDias[dia.id] = validarDia(dia.dia);
+			erroresHoras[dia.id] = validarHorasDia(dia.id, dia);
+		}
+		erroresDias = erroresDias;
+		erroresHoras = erroresHoras;
+		if (hayErroresEnHorarios()) {
+			toast.error('Revisa los campos marcados en Horarios');
+			activeTab = 'horarios';
+			return;
+		}
+
 		isLoading = true;
 
 		try {
@@ -1509,6 +1581,9 @@
 				}
 			}
 
+			// Si el servidor devolvió incidencias de zod sobre los días, marcar
+			// la celda exacta además del toast. El modal sigue abierto.
+			if (marcarErroresDelServidor(error)) activeTab = 'horarios';
 			toast.error(errorMessage);
 		} finally {
 			isLoading = false;

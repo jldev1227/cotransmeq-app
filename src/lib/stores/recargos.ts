@@ -249,21 +249,19 @@ function createRecargosStore() {
 		/**
 		 * Crear nuevo recargo
 		 */
-		async crearRecargo(data: CrearRecargoPlanillaDTO): Promise<RecargoPlanilla | null> {
-			try {
-				const { recargo, valor_pagar } = await recargosApi.crear(data);
-				// Inyectar el `valor_pagar` que ya viene calculado en la
-				// respuesta HTTP. Así la columna "Valor a Pagar" del canvas
-				// se pinta al instante, sin esperar al socket ni al re-fetch.
-				valoresPagarByRecargoStore.set(recargo.id, valor_pagar);
-				toast.success('Recargo creado exitosamente');
-				await this.fetchRecargos(); // Recargar lista
-				return recargo;
-			} catch (error: any) {
-				const errorMsg = error.response?.data?.message || 'Error creando recargo';
-				toast.error(errorMsg);
-				return null;
-			}
+		async crearRecargo(data: CrearRecargoPlanillaDTO): Promise<RecargoPlanilla> {
+			/// Si la API falla, el error sube tal cual: el modal es el único que
+			/// llama aquí y necesita `response.data.errors` para marcar la celda
+			/// del horario que el servidor rechazó. Antes se tragaba acá, se
+			/// devolvía `null` y el modal se cerraba como si hubiera guardado.
+			const { recargo, valor_pagar } = await recargosApi.crear(data);
+			// Inyectar el `valor_pagar` que ya viene calculado en la
+			// respuesta HTTP. Así la columna "Valor a Pagar" del canvas
+			// se pinta al instante, sin esperar al socket ni al re-fetch.
+			valoresPagarByRecargoStore.set(recargo.id, valor_pagar);
+			toast.success('Recargo creado exitosamente');
+			await this.fetchRecargos(); // Recargar lista
+			return recargo;
 		},
 
 		/**
@@ -272,18 +270,13 @@ function createRecargosStore() {
 		async actualizarRecargo(
 			id: string,
 			data: ActualizarRecargoPlanillaDTO
-		): Promise<RecargoPlanilla | null> {
-			try {
-				const { recargo, valor_pagar } = await recargosApi.actualizar(id, data);
-				valoresPagarByRecargoStore.set(recargo.id, valor_pagar);
-				toast.success('Recargo actualizado exitosamente');
-				await this.fetchRecargos();
-				return recargo;
-			} catch (error: any) {
-				const errorMsg = error.response?.data?.message || 'Error actualizando recargo';
-				toast.error(errorMsg);
-				return null;
-			}
+		): Promise<RecargoPlanilla> {
+			/// Mismo criterio que `crearRecargo`: el error sube al modal.
+			const { recargo, valor_pagar } = await recargosApi.actualizar(id, data);
+			valoresPagarByRecargoStore.set(recargo.id, valor_pagar);
+			toast.success('Recargo actualizado exitosamente');
+			await this.fetchRecargos();
+			return recargo;
 		},
 
 		/**
