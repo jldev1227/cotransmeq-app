@@ -21,6 +21,8 @@ export function secretoFirma(): string | null {
 export interface ConfigCorreo {
 	apiKey: string;
 	remitente: string;
+	/** Logotipo del correo; la misma variable que usa el backend. Sin ella va el de la marca. */
+	logoUrl: string | null;
 }
 
 /** Credenciales de Resend. `null` si falta cualquiera de las dos. */
@@ -28,7 +30,7 @@ export function configCorreo(): ConfigCorreo | null {
 	const apiKey = env.RESEND_API_KEY?.trim();
 	const remitente = env.RESEND_FROM?.trim();
 	if (!apiKey || !remitente) return null;
-	return { apiKey, remitente };
+	return { apiKey, remitente, logoUrl: env.EMAIL_LOGO_URL?.trim() || null };
 }
 
 /** URL del backend NestJS que aplica el cambio de contraseña. */
