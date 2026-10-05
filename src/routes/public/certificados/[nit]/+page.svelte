@@ -1,4 +1,19 @@
 <script lang="ts">
+	/**
+	 * Certificados tributarios de un tercero, por NIT.
+	 *
+	 * Misma cáscara que el portal del conductor: barra con el logo, cabecera
+	 * verde con la mascota (`PortalHeader`) y tarjetas blancas sobre el fondo
+	 * de marca. Las carpetas (tipo + año) se reparten en una rejilla fluida
+	 * para aprovechar el ancho del escritorio sin puntos de ruptura a mano.
+	 *
+	 * Los estados sin datos (validando, sin acceso, error) hablan con la
+	 * mascota: el tono del error decide la reacción y los colores, no un
+	 * hexadecimal por código.
+	 *
+	 * El layout público deja el `body` sin scroll (lo necesita el mapa), así
+	 * que la página es su propio contenedor de scroll.
+	 */
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
@@ -6,6 +21,13 @@
 	import { quintOut } from 'svelte/easing';
 	import { browser } from '$app/environment';
 	import { certificadosPublicTerceroAPI } from '$lib/api/certificadosTercero';
+	import PortalHeader from '$lib/components/portal/PortalHeader.svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
+	import { mascota as mascotaDe, type MascotIntent } from '$lib/mascot';
+
+	const EMPRESA = 'Cotransmeq S.A.S';
+	const LOGO_SRC = '/assets/logo_nombre.webp';
+	const STORAGE_KEY = 'certificados_access_token';
 
 	type EstadoVista = 'cargando' | 'verificando' | 'auth_required' | 'listo' | 'error';
 	type CodigoError =
@@ -18,172 +40,122 @@
 		| 'config_error'
 		| 'server_error'
 		| 'not_configured';
-
-	let estado: EstadoVista = $state('cargando');
+	type Tono = 'aviso' | 'peligro' | 'info';
 	type ErrorData = { code: CodigoError; message: string; details?: string };
-	let errorData: ErrorData | null = $state<ErrorData | null>(null);
-	type DocumentoTributario = {
+	type Documento = {
 		id: string;
 		nombre: string;
 		url: string;
 		fecha_creacion: string;
-		tamaño: number;
 		carpeta: string;
 		tipo?: string;
 	};
-	let documentos: DocumentoTributario[] = $state([]);
-	let carpetas: { nombre: string; cantidad: number }[] = $state([]);
+
+	let estado = $state<EstadoVista>('cargando');
+	let errorData = $state<ErrorData | null>(null);
+	let documentos = $state<Documento[]>([]);
 	let nit = $state('');
 	let terceroNombre = $state('');
 	let tokenExpiresAt = $state('');
 	let storedToken = $state('');
-	let mounted = $state(false);
 
-	const STORAGE_KEY = 'certificados_access_token';
+	/** Qué decir y con qué cara ante cada código del servidor. */
+	const ERRORES: Record<CodigoError, { titulo: string; descripcion: string; tono: Tono; mascota: MascotIntent }> = {
+		invalid_nit: {
+			titulo: 'NIT inválido',
+			descripcion: 'El NIT debe contener solo números, entre 6 y 11 dígitos.',
+			tono: 'aviso',
+			mascota: 'advertencia'
+		},
+		not_found: {
+			titulo: 'Sin documentos disponibles',
+			descripcion: 'No se encontraron certificados para el NIT consultado.',
+			tono: 'aviso',
+			mascota: 'vacio'
+		},
+		unauthorized: {
+			titulo: 'Acceso no autorizado',
+			descripcion: 'Tu enlace de acceso no es válido o ya venció. Solicita uno nuevo.',
+			tono: 'peligro',
+			mascota: 'advertencia'
+		},
+		forbidden: {
+			titulo: 'Acceso denegado',
+			descripcion: 'Tu enlace no da acceso a los certificados de este NIT.',
+			tono: 'peligro',
+			mascota: 'advertencia'
+		},
+		rate_limited: {
+			titulo: 'Demasiadas solicitudes',
+			descripcion: 'El servicio de documentos está limitando las consultas. Intenta en unos minutos.',
+			tono: 'info',
+			mascota: 'espera'
+		},
+		service_unavailable: {
+			titulo: 'Servicio no disponible',
+			descripcion: 'No pudimos conectar con el repositorio de documentos en este momento.',
+			tono: 'info',
+			mascota: 'espera'
+		},
+		config_error: {
+			titulo: 'Error de configuración',
+			descripcion: 'Falta configuración del repositorio de documentos en el servidor.',
+			tono: 'peligro',
+			mascota: 'advertencia'
+		},
+		server_error: {
+			titulo: 'Error del servidor',
+			descripcion: 'Ocurrió un error inesperado. Intenta nuevamente.',
+			tono: 'peligro',
+			mascota: 'advertencia'
+		},
+		not_configured: {
+			titulo: 'Servicio no configurado',
+			descripcion: 'El servicio de certificados no está disponible en este momento.',
+			tono: 'aviso',
+			mascota: 'espera'
+		}
+	};
 
-	function getErrorConfig(code: CodigoError) {
-		const configs: Record<CodigoError, { titulo: string; descripcion: string; iconBg: string; iconColor: string; detailBg: string; detailBorder: string; detailText: string }> = {
-			invalid_nit: {
-				titulo: 'NIT inválido',
-				descripcion: 'El NIT debe contener solo números, entre 6 y 11 dígitos.',
-				iconBg: 'rgba(245, 158, 11, 0.08)',
-				iconColor: '#d97706',
-				detailBg: 'rgba(245, 158, 11, 0.06)',
-				detailBorder: 'rgba(245, 158, 11, 0.25)',
-				detailText: '#92400E'
-			},
-			not_found: {
-				titulo: 'Sin documentos disponibles',
-				descripcion: 'No se encontraron certificados para el NIT consultado.',
-				iconBg: 'rgba(245, 158, 11, 0.08)',
-				iconColor: '#d97706',
-				detailBg: 'rgba(245, 158, 11, 0.06)',
-				detailBorder: 'rgba(245, 158, 11, 0.25)',
-				detailText: '#92400E'
-			},
-			unauthorized: {
-				titulo: 'Acceso no autorizado',
-				descripcion: 'Tu enlace de acceso es inválido o ha expirado. Solicita un nuevo acceso.',
-				iconBg: 'rgba(220, 38, 38, 0.06)',
-				iconColor: '#dc2626',
-				detailBg: 'rgba(220, 38, 38, 0.06)',
-				detailBorder: 'rgba(220, 38, 38, 0.25)',
-				detailText: '#991b1b'
-			},
-			forbidden: {
-				titulo: 'Acceso denegado',
-				descripcion: 'No tienes permiso para ver los certificados de este NIT.',
-				iconBg: 'rgba(220, 38, 38, 0.06)',
-				iconColor: '#dc2626',
-				detailBg: 'rgba(220, 38, 38, 0.06)',
-				detailBorder: 'rgba(220, 38, 38, 0.25)',
-				detailText: '#991b1b'
-			},
-			rate_limited: {
-				titulo: 'Demasiadas solicitudes',
-				descripcion: 'Microsoft Graph está limitando las solicitudes. Intenta en unos minutos.',
-				iconBg: 'rgba(59, 130, 246, 0.08)',
-				iconColor: '#2563eb',
-				detailBg: 'rgba(59, 130, 246, 0.06)',
-				detailBorder: 'rgba(59, 130, 246, 0.25)',
-				detailText: '#1e40af'
-			},
-			service_unavailable: {
-				titulo: 'Servicio no disponible',
-				descripcion: 'No se pudo conectar con Microsoft Graph en este momento.',
-				iconBg: 'rgba(59, 130, 246, 0.08)',
-				iconColor: '#2563eb',
-				detailBg: 'rgba(59, 130, 246, 0.06)',
-				detailBorder: 'rgba(59, 130, 246, 0.25)',
-				detailText: '#1e40af'
-			},
-			config_error: {
-				titulo: 'Error de configuración',
-				descripcion: 'Faltan variables de entorno de Microsoft Graph en el servidor.',
-				iconBg: 'rgba(109, 40, 217, 0.08)',
-				iconColor: '#7c3aed',
-				detailBg: 'rgba(109, 40, 217, 0.06)',
-				detailBorder: 'rgba(109, 40, 217, 0.25)',
-				detailText: '#5b21b6'
-			},
-			server_error: {
-				titulo: 'Error del servidor',
-				descripcion: 'Ocurrió un error inesperado. Intenta nuevamente.',
-				iconBg: 'rgba(220, 38, 38, 0.06)',
-				iconColor: '#dc2626',
-				detailBg: 'rgba(220, 38, 38, 0.06)',
-				detailBorder: 'rgba(220, 38, 38, 0.25)',
-				detailText: '#991b1b'
-			},
-			not_configured: {
-				titulo: 'Servicio no configurado',
-				descripcion: 'El servicio de certificados no está disponible en este momento.',
-				iconBg: 'rgba(245, 158, 11, 0.08)',
-				iconColor: '#d97706',
-				detailBg: 'rgba(245, 158, 11, 0.06)',
-				detailBorder: 'rgba(245, 158, 11, 0.25)',
-				detailText: '#92400E'
-			}
-		};
-		return configs[code] || configs.server_error;
+	const TIPOS: Record<string, string> = {
+		RETEFUENTE: 'Retefuente',
+		RETEICA: 'Reteica',
+		RETEIVA: 'Reteiva',
+		ICA: 'ICA',
+		IVA: 'IVA',
+		RETENCIONES: 'Retenciones',
+		OTROS: 'Otros'
+	};
+	const formatearTipo = (codigo: string) => TIPOS[codigo] || codigo;
+
+	/** La carpeta viene como «RETEFUENTE 2025»: se muestra con el tipo legible. */
+	function formatearCarpeta(nombre: string) {
+		const [codigo, ...resto] = nombre.split(' ');
+		return [formatearTipo(codigo), ...resto].join(' ');
 	}
 
-	function formatFileSize(size: number): string {
-		if (!size || size <= 0) return 'Tamaño desconocido';
-		const KB = 1024;
-		const MB = KB * 1024;
-		const GB = MB * 1024;
-		if (size >= GB) return `${(size / GB).toFixed(2)} GB`;
-		if (size >= MB) return `${(size / MB).toFixed(2)} MB`;
-		if (size >= KB) return `${(size / KB).toFixed(2)} KB`;
-		return `${size} Bytes`;
-	}
-
-	function formatDate(date?: string): string {
-		if (!date) return 'Fecha no disponible';
+	function formatearFecha(fecha?: string) {
+		if (!fecha) return 'Fecha no disponible';
 		try {
-			return new Date(date).toLocaleDateString('es-CO', {
-				year: 'numeric',
-				month: 'long',
-				day: 'numeric'
-			});
+			return new Date(fecha).toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' });
 		} catch {
 			return 'Fecha no disponible';
 		}
 	}
 
-	function getFileEmoji(filename: string): string {
-		const ext = filename.split('.').pop()?.toLowerCase() ?? '';
-		if (ext === 'pdf') return '📄';
-		if (ext === 'doc' || ext === 'docx') return '📝';
-		if (ext === 'xls' || ext === 'xlsx') return '📊';
-		if (ext === 'jpg' || ext === 'jpeg' || ext === 'png') return '🖼️';
-		return '📁';
-	}
+	const formatearNit = (n: string) => n.replace(/\D/g, '').slice(0, 11);
+	/// Los certificados se guardan sin extensión en el nombre: son PDF.
+	const extensionDe = (nombre: string) =>
+		nombre.includes('.') ? nombre.split('.').pop()!.toUpperCase().slice(0, 4) : 'PDF';
 
-	function getFileColor(filename: string): string {
-		const ext = filename.split('.').pop()?.toLowerCase() ?? '';
-		if (ext === 'pdf') return 'from-red-400 to-red-600';
-		if (ext === 'doc' || ext === 'docx') return 'from-blue-400 to-blue-600';
-		if (ext === 'xls' || ext === 'xlsx') return 'from-orange-400 to-orange-600';
-		if (ext === 'jpg' || ext === 'jpeg' || ext === 'png') return 'from-purple-400 to-purple-600';
-		return 'from-gray-400 to-gray-600';
-	}
-
-	function groupByCarpeta(
-		docs: DocumentoTributario[],
-		carps: { nombre: string; cantidad: number }[]
-	): Map<string, DocumentoTributario[]> {
-		const map = new Map<string, DocumentoTributario[]>();
-		carps.forEach((c) => {
-			if (!map.has(c.nombre)) map.set(c.nombre, []);
-		});
-		docs.forEach((d) => {
-			const key = d.carpeta || 'Sin carpeta';
-			if (!map.has(key)) map.set(key, []);
-			map.get(key)!.push(d);
-		});
-		return map;
+	function agruparPorCarpeta(docs: Documento[]) {
+		const grupos = new Map<string, Documento[]>();
+		for (const d of docs) {
+			const clave = d.carpeta || 'Sin carpeta';
+			if (!grupos.has(clave)) grupos.set(clave, []);
+			grupos.get(clave)!.push(d);
+		}
+		return Array.from(grupos.entries());
 	}
 
 	async function cargar(nitParam: string, token: string) {
@@ -192,9 +164,7 @@
 		try {
 			const res = await certificadosPublicTerceroAPI.verificarToken(token);
 			const terceroNit = res.data.tercero.identificacion?.replace(/\D/g, '') ?? '';
-			const cleanParam = nitParam.replace(/\D/g, '');
-
-			if (terceroNit !== cleanParam) {
+			if (terceroNit !== nitParam.replace(/\D/g, '')) {
 				estado = 'auth_required';
 				return;
 			}
@@ -202,40 +172,26 @@
 			nit = nitParam;
 			terceroNombre = res.data.tercero.nombre_completo;
 			tokenExpiresAt = res.data.expires_at;
-
-			const certs = res.data.certificados ?? [];
-			documentos = certs.map((c: any) => ({
+			documentos = (res.data.certificados ?? []).map((c: any) => ({
 				id: c.id,
 				nombre: c.filename,
 				url: c.url,
 				fecha_creacion: c.created_at,
-				tamaño: 0,
 				carpeta: `${c.tipo_certificado?.codigo || c.tipo || 'Otros'} ${c.anio}`,
 				tipo: c.tipo_certificado?.codigo || c.tipo
 			}));
-			carpetas = [];
-
-			const carpetaMap = new Map<string, number>();
-			for (const doc of documentos) {
-				const key = doc.carpeta || 'Sin carpeta';
-				carpetaMap.set(key, (carpetaMap.get(key) || 0) + 1);
-			}
-			carpetas = Array.from(carpetaMap.entries()).map(([nombre, cantidad]) => ({ nombre, cantidad }));
-
 			estado = 'listo';
 		} catch (err: any) {
 			if (err?.response?.status === 401) {
 				estado = 'auth_required';
 				if (browser) localStorage.removeItem(STORAGE_KEY);
 			} else {
-				const code: CodigoError = (err?.response?.data?.code ?? 'server_error') as CodigoError;
 				errorData = {
-					code,
+					code: (err?.response?.data?.code ?? 'server_error') as CodigoError,
 					message: err?.response?.data?.error ?? 'Error al consultar los certificados.',
 					details: err?.response?.data?.details
 				};
 				documentos = [];
-				carpetas = [];
 				estado = 'error';
 			}
 		}
@@ -245,149 +201,97 @@
 		if (nit && storedToken) cargar(nit, storedToken);
 	}
 
-	function formatNit(n: string): string {
-		return n.replace(/\D/g, '').slice(0, 11);
-	}
-
 	function cerrarSesion() {
 		if (browser) localStorage.removeItem(STORAGE_KEY);
 		storedToken = '';
 		goto('/public/certificados');
 	}
 
-	function formatTipo(codigo: string): string {
-		const map: Record<string, string> = {
-			RETEFUENTE: 'Retefuente',
-			RETEICA: 'Reteica',
-			RETEIVA: 'Reteiva',
-			ICA: 'ICA',
-			IVA: 'IVA',
-			RETENCIONES: 'Retenciones',
-			OTROS: 'Otros'
-		};
-		return map[codigo] || codigo;
-	}
-
-	const carpetasAgrupadas = $derived(groupByCarpeta(documentos, carpetas));
+	const carpetas = $derived(agruparPorCarpeta(documentos));
 	const totalDocumentos = $derived(documentos.length);
-	const totalCarpetas = $derived(carpetas.length);
-	const errorConfig = $derived(errorData ? getErrorConfig(errorData.code) : null);
+	const errorInfo = $derived(errorData ? (ERRORES[errorData.code] ?? ERRORES.server_error) : null);
+	const mascotaEstado = $derived(
+		estado === 'auth_required' ? mascotaDe('advertencia') : errorInfo ? mascotaDe(errorInfo.mascota) : null
+	);
 
 	onMount(async () => {
 		const nitParam = $page.url.pathname.split('/').pop() ?? '';
 		nit = nitParam;
 
-		const urlToken = $page.url.searchParams.get('token');
-		const localToken = browser ? localStorage.getItem(STORAGE_KEY) : null;
-		const token = urlToken || localToken;
-
+		const token = $page.url.searchParams.get('token') || (browser ? localStorage.getItem(STORAGE_KEY) : null);
 		if (!token) {
 			estado = 'auth_required';
-			mounted = true;
 			return;
 		}
 
 		storedToken = token;
 		estado = 'verificando';
-
-		const checkFinal = () => {
-			if (browser && estado === 'listo') {
-				localStorage.setItem(STORAGE_KEY, token);
-				const url = new URL(window.location.href);
-				url.searchParams.delete('token');
-				window.history.replaceState({}, '', url.toString());
-			}
-		};
-
 		try {
 			await cargar(nitParam, token);
 		} catch {
 			estado = 'auth_required';
 		}
-		checkFinal();
-		mounted = true;
+
+		/// El token sale de la URL en cuanto sirvió: así no viaja en el historial
+		/// ni en un enlace que alguien copie de la barra.
+		if (browser && (estado as EstadoVista) === 'listo') {
+			localStorage.setItem(STORAGE_KEY, token);
+			const url = new URL(window.location.href);
+			url.searchParams.delete('token');
+			window.history.replaceState({}, '', url.toString());
+		}
 	});
 </script>
 
 <svelte:head>
-	<title>Certificados Tributarios — NIT {formatNit(nit)} · Cotransmeq</title>
+	<title>Certificados tributarios · NIT {formatearNit(nit)} · {EMPRESA}</title>
 	<meta name="robots" content="noindex, nofollow" />
 </svelte:head>
 
-<div class="page" in:fade={{ duration: 300 }}>
-	<!-- Sticky header -->
-	<header class="page-header">
-		<div class="page-header-inner">
-			<div class="header-left">
-				<a class="back-btn" href="/public/certificados" aria-label="Volver al inicio">
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-					</svg>
-					<span class="back-text">Inicio</span>
-				</a>
-				<div class="header-brand">
-					<div class="header-icon">
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-							/>
-						</svg>
-					</div>
-					<div>
-						<span class="eyebrow">Documentos oficiales</span>
-						<h1 class="header-title">Certificados Tributarios</h1>
-					</div>
-				</div>
-			</div>
-
-			<div class="header-right">
-				<span class="status-pill">
-					<span class="status-dot"></span>
-					Verificados
-				</span>
-				{#if estado === 'listo'}
-					<button class="btn-icon" onclick={cerrarSesion} aria-label="Cerrar sesión" title="Cerrar sesión">
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-							/>
-						</svg>
-					</button>
-				{/if}
-			</div>
-		</div>
+<div class="pagina" in:fade={{ duration: 250 }}>
+	<header class="barra">
+		<a class="barra-marca" href="/public/certificados" aria-label="Ir al portal de certificados">
+			<img src={LOGO_SRC} alt={EMPRESA} class="barra-logo" width="132" height="45" />
+			<span class="barra-tag">Certificados tributarios</span>
+		</a>
+		{#if estado === 'listo'}
+			<button type="button" class="barra-salir" onclick={cerrarSesion}>
+				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+					<path
+						stroke-linecap="round"
+						stroke-linejoin="round"
+						d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
+					/>
+				</svg>
+				<span>Cerrar sesión</span>
+			</button>
+		{:else}
+			<a class="barra-salir" href="/public/certificados">
+				<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+					<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+				</svg>
+				<span>Portal</span>
+			</a>
+		{/if}
 	</header>
 
-	<main class="page-main">
+	<main class="cuerpo">
 		{#if estado === 'cargando' || estado === 'verificando'}
-			<div class="state-block" in:fade={{ duration: 200 }}>
-				<span class="spinner-lg"></span>
-				<p class="state-text">
-					{estado === 'verificando' ? 'Verificando acceso…' : 'Cargando certificados…'}
-				</p>
-			</div>
-
+			<CargaMascota
+				tamano="pantalla"
+				texto={estado === 'verificando' ? 'Validando tu acceso…' : 'Cargando certificados…'}
+			/>
 		{:else if estado === 'auth_required'}
-			<div class="state-card state-card--auth" in:fly={{ y: 20, duration: 400, easing: quintOut }}>
-				<div class="state-icon state-icon--danger">
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
-						/>
-					</svg>
-				</div>
-				<span class="eyebrow eyebrow--danger">Acceso requerido</span>
-				<h1 class="state-title">Necesitas un enlace válido</h1>
-				<p class="state-sub">
-					Solicita acceso desde el portal principal para recibir tu enlace por correo.
+			<section class="estado estado--peligro" in:fly={{ y: 16, duration: 350, easing: quintOut }}>
+				{#if mascotaEstado}
+					<img class="estado-mascota" src={mascotaEstado.src} alt="" aria-hidden="true" width="160" height="160" />
+				{/if}
+				<span class="estado-badge">Acceso requerido</span>
+				<h1 class="estado-titulo">Necesitas un enlace válido</h1>
+				<p class="estado-texto">
+					Solicita el acceso desde el portal con tu número de identificación y te enviamos el enlace por correo.
 				</p>
-				<div class="state-actions">
+				<div class="estado-acciones">
 					<a href="/public/certificados" class="btn-primary">
 						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 							<path
@@ -399,31 +303,24 @@
 						Solicitar acceso
 					</a>
 				</div>
-			</div>
-
-		{:else if estado === 'error' && errorData && errorConfig}
-			<div class="state-card state-card--error" in:fly={{ y: 20, duration: 400, easing: quintOut }}>
-				<div class="state-icon" style="background: {errorConfig.iconBg}; color: {errorConfig.iconColor};">
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
-						/>
-					</svg>
-				</div>
-				<span class="eyebrow">Error</span>
-				<h1 class="state-title">{errorConfig.titulo}</h1>
-				<p class="state-sub">{errorConfig.descripcion}</p>
-				{#if errorData.details}
-					<p
-						class="detail-box"
-						style="background: {errorConfig.detailBg}; border-color: {errorConfig.detailBorder}; color: {errorConfig.detailText};"
-					>
-						{errorData.details}
-					</p>
+			</section>
+		{:else if estado === 'error' && errorData && errorInfo}
+			<section
+				class="estado"
+				class:estado--aviso={errorInfo.tono === 'aviso'}
+				class:estado--peligro={errorInfo.tono === 'peligro'}
+				in:fly={{ y: 16, duration: 350, easing: quintOut }}
+			>
+				{#if mascotaEstado}
+					<img class="estado-mascota" src={mascotaEstado.src} alt="" aria-hidden="true" width="160" height="160" />
 				{/if}
-				<div class="state-actions">
+				<span class="estado-badge">No se pudo cargar</span>
+				<h1 class="estado-titulo">{errorInfo.titulo}</h1>
+				<p class="estado-texto">{errorInfo.descripcion}</p>
+				{#if errorData.details}
+					<p class="estado-detalle">{errorData.details}</p>
+				{/if}
+				<div class="estado-acciones">
 					{#if errorData.code === 'invalid_nit' || errorData.code === 'not_found'}
 						<a href="/public/certificados" class="btn-primary">
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
@@ -432,7 +329,7 @@
 							Consultar otro NIT
 						</a>
 					{:else}
-						<button onclick={reintentar} class="btn-primary">
+						<button type="button" onclick={reintentar} class="btn-primary">
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 								<path
 									stroke-linecap="round"
@@ -442,1039 +339,564 @@
 							</svg>
 							Reintentar
 						</button>
+						<a href="/public/certificados" class="btn-secondary">Ir al portal</a>
 					{/if}
-					<a href="/public/certificados" class="btn-secondary">
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
-							/>
-						</svg>
-						Ir al inicio
-					</a>
 				</div>
-			</div>
-
+			</section>
 		{:else}
-			<div class="content-grid">
-				<div class="content-main">
-					<!-- Tercero header -->
-					<section class="tercero-card" in:fly={{ y: 16, duration: 400, easing: quintOut }}>
-						<div class="tercero-icon">
+			<div class="contenido" in:fly={{ y: 12, duration: 350, easing: quintOut }}>
+				<PortalHeader
+					eyebrow="Certificados tributarios"
+					titulo={terceroNombre}
+					meta={`NIT ${formatearNit(nit)} · ${totalDocumentos} ${totalDocumentos === 1 ? 'documento' : 'documentos'} en ${carpetas.length} ${carpetas.length === 1 ? 'carpeta' : 'carpetas'}`}
+					mascota={totalDocumentos > 0 ? 'exito' : 'vacio'}
+				/>
+
+				{#if totalDocumentos === 0}
+					<section class="estado estado--aviso">
+						<span class="estado-badge">Sin documentos</span>
+						<h2 class="estado-titulo">Todavía no hay certificados</h2>
+						<p class="estado-texto">
+							No se encontraron certificados para el NIT <strong>{formatearNit(nit)}</strong>. Cuando
+							contabilidad los publique, aparecerán aquí con este mismo enlace.
+						</p>
+						<div class="estado-acciones">
+							<a href="/public/certificados" class="btn-secondary">
+								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+								</svg>
+								Consultar otro NIT
+							</a>
+						</div>
+					</section>
+				{:else}
+					<div class="carpetas">
+						{#each carpetas as [nombreCarpeta, docs] (nombreCarpeta)}
+							<section class="carpeta">
+								<header class="carpeta-cabecera">
+									<span class="carpeta-icono" aria-hidden="true">
+										<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
+											/>
+										</svg>
+									</span>
+									<div class="carpeta-texto">
+										<h2 class="carpeta-nombre">{formatearCarpeta(nombreCarpeta)}</h2>
+										<p class="carpeta-conteo">{docs.length} {docs.length === 1 ? 'documento' : 'documentos'}</p>
+									</div>
+								</header>
+
+								<ul class="docs">
+									{#each docs as doc (doc.id)}
+										<li class="doc">
+											<span class="doc-ext" aria-hidden="true">{extensionDe(doc.nombre)}</span>
+											<div class="doc-info">
+												<p class="doc-nombre">{doc.nombre}</p>
+												<p class="doc-meta">
+													{formatearFecha(doc.fecha_creacion)}
+													{#if doc.tipo}
+														<span class="doc-sep">·</span>
+														{formatearTipo(doc.tipo)}
+													{/if}
+												</p>
+											</div>
+											{#if doc.url}
+												<a
+													class="doc-abrir"
+													href={doc.url}
+													target="_blank"
+													rel="noopener noreferrer"
+													aria-label="Abrir {doc.nombre}"
+													title="Abrir en una pestaña nueva"
+												>
+													<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+														<path
+															stroke-linecap="round"
+															stroke-linejoin="round"
+															d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"
+														/>
+													</svg>
+												</a>
+											{/if}
+										</li>
+									{/each}
+								</ul>
+							</section>
+						{/each}
+					</div>
+
+					<aside class="nota">
+						<span class="nota-icono" aria-hidden="true">
 							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 								<path
 									stroke-linecap="round"
 									stroke-linejoin="round"
-									d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+									d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
 								/>
 							</svg>
-						</div>
-						<div class="tercero-info">
-							<span class="eyebrow">Certificados de</span>
-							<h2 class="tercero-name">{terceroNombre}</h2>
-							<p class="tercero-nit">
-								NIT <span class="meta-mono">{formatNit(nit)}</span>
+						</span>
+						<div>
+							<p class="nota-titulo">Documentos verificados</p>
+							<p class="nota-texto">
+								Son los certificados oficiales emitidos por {EMPRESA}.
+								{#if tokenExpiresAt}
+									Tu enlace de acceso es válido hasta el <strong>{formatearFecha(tokenExpiresAt)}</strong>.
+								{/if}
 							</p>
 						</div>
-						{#if totalCarpetas > 0}
-							<div class="carpetas-pill">
-								<span class="meta-mono">{totalCarpetas}</span>
-								<span>{totalCarpetas === 1 ? 'carpeta' : 'carpetas'}</span>
-							</div>
-						{/if}
-					</section>
-
-					<!-- Certificados -->
-					<section class="docs-card" in:fly={{ y: 16, duration: 400, easing: quintOut, delay: 100 }}>
-						<header class="docs-head">
-							<div>
-								<h3 class="docs-title">Certificados disponibles</h3>
-								<p class="docs-sub">Documentos obtenidos desde OneDrive corporativo.</p>
-							</div>
-							{#if totalDocumentos > 0}
-								<span class="docs-pill">
-									<span class="meta-mono">{totalDocumentos}</span>
-									<span>{totalDocumentos === 1 ? 'documento' : 'documentos'}</span>
-								</span>
-							{/if}
-						</header>
-
-						{#if totalDocumentos === 0 && totalCarpetas === 0}
-							<div class="empty-state" in:fade={{ duration: 250 }}>
-								<div class="empty-icon">
-									<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.6">
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
-										/>
-									</svg>
-								</div>
-								<h2 class="empty-title">No hay documentos</h2>
-								<p class="empty-sub">
-									No se encontraron certificados para el NIT
-									<strong>{formatNit(nit)}</strong>.
-								</p>
-								<a href="/public/certificados" class="btn-secondary">
-									<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-									</svg>
-									Consultar otro NIT
-								</a>
-							</div>
-						{:else}
-							<div class="carpetas-stack">
-								{#each Array.from(carpetasAgrupadas.entries()) as [nombreCarpeta, docs] (nombreCarpeta)}
-									<section class="carpeta">
-										<header class="carpeta-head">
-											<div class="carpeta-icon">
-												<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"
-													/>
-												</svg>
-											</div>
-											<div class="carpeta-info">
-												<h4 class="carpeta-name">
-													{nombreCarpeta === 'Sin carpeta' ? 'Sin carpeta' : nombreCarpeta}
-												</h4>
-												<p class="carpeta-count">
-													{docs.length} documento{docs.length !== 1 ? 's' : ''}
-												</p>
-											</div>
-											<span class="carpeta-pill">
-												<span class="meta-mono">{docs.length}</span>
-											</span>
-										</header>
-
-										{#if docs.length > 0}
-											<ul class="docs-list">
-												{#each docs as doc (doc.id)}
-													<li class="doc-item">
-														<div class="doc-icon bg-gradient-to-br {getFileColor(doc.nombre)}">
-															<span class="doc-emoji">{getFileEmoji(doc.nombre)}</span>
-														</div>
-														<div class="doc-info">
-															<p class="doc-name">{doc.nombre}</p>
-															<div class="doc-meta">
-																<span class="doc-meta-item">
-																	<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-																		<path
-																			stroke-linecap="round"
-																			stroke-linejoin="round"
-																			d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-																		/>
-																	</svg>
-																	{formatDate(doc.fecha_creacion)}
-																</span>
-																{#if doc.tipo}
-																	<span class="doc-meta-tag">
-																		{formatTipo(doc.tipo)}
-																	</span>
-																{/if}
-															</div>
-														</div>
-														{#if doc.url}
-															<a
-																href={doc.url}
-																target="_blank"
-																rel="noopener noreferrer"
-																class="doc-open"
-																title="Abrir en nueva pestaña"
-																aria-label="Abrir documento {doc.nombre}"
-															>
-																<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-																	<path
-																		stroke-linecap="round"
-																		stroke-linejoin="round"
-																		d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-																	/>
-																</svg>
-															</a>
-														{/if}
-													</li>
-												{/each}
-											</ul>
-										{:else}
-											<div class="carpeta-empty">Carpeta sin documentos.</div>
-										{/if}
-									</section>
-								{/each}
-							</div>
-						{/if}
-					</section>
-
-					{#if totalDocumentos > 0}
-						<aside class="info-banner" in:fly={{ y: 12, duration: 400, delay: 200 }}>
-							<div class="info-icon">
-								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-									<path
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-									/>
-								</svg>
-							</div>
-							<div>
-								<p class="info-title">Documentos verificados</p>
-								<p class="info-text">
-									Todos los certificados mostrados son documentos oficiales obtenidos
-									desde OneDrive corporativo de Cotransmeq.
-								</p>
-							</div>
-						</aside>
-					{/if}
-				</div>
-
-				<aside class="content-aside">
-					<div class="aside-card" in:fly={{ y: 16, duration: 400, easing: quintOut, delay: 150 }}>
-						<img
-							src="/assets/logo_nombre.webp"
-							alt="Cotransmeq S.A.S"
-							class="aside-logo"
-						/>
-						<h3 class="aside-title">
-							{totalDocumentos > 0 ? 'Documentos listos' : 'Sin resultados'}
-						</h3>
-						<p class="aside-sub">
-							{totalDocumentos > 0
-								? 'Todos los certificados están disponibles para descarga.'
-								: 'No se encontraron documentos para esta empresa.'}
-						</p>
-						{#if tokenExpiresAt}
-							<p class="aside-exp">
-								Enlace válido hasta
-								<span class="meta-mono">{formatDate(tokenExpiresAt)}</span>
-							</p>
-						{/if}
-					</div>
-				</aside>
+					</aside>
+				{/if}
 			</div>
 		{/if}
 	</main>
 
-	<footer class="page-footer">
-		<div class="page-footer-inner">
-			<p>© {new Date().getFullYear()} Certificados Cotransmeq · Todos los derechos reservados.</p>
-			<div class="footer-meta">
-				<span>Soporte técnico</span>
-				<span class="dot-sep">·</span>
-				<span>Datos protegidos</span>
-			</div>
-		</div>
+	<footer class="pie">
+		<p>© {new Date().getFullYear()} {EMPRESA} · Yopal, Casanare · Colombia</p>
+		<p class="pie-meta">
+			<span class="pie-punto" aria-hidden="true"></span>
+			Canal seguro · datos protegidos
+		</p>
 	</footer>
 </div>
 
 <style>
-	/* ═══════════════════════════════════════════════════
-	   TOKENS — landing-transmeralda editorial
-	   ═══════════════════════════════════════════════════ */
-	.page {
-		--bg: #faf7f2;
-		--surface: #ffffff;
-		--surface-2: #f5f1e8;
-		--border: rgba(0, 0, 0, 0.08);
-		--border-default: rgba(0, 0, 0, 0.12);
-		--border-hover: rgba(0, 0, 0, 0.2);
-		--text-primary: #0f1f1a;
-		--text-secondary: #4a4a4a;
-		--text-muted: #6b6b6b;
-		--text-very-muted: #9a9a9a;
-		--accent: #f97316;
-		--accent-hover: #ea580c;
-		--accent-bg: rgba(249, 115, 22, 0.08);
-		--shadow-soft: 0 4px 24px rgba(0, 0, 0, 0.04);
-		--ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+	/* ════════════════════════════════════════════════════════════
+	   La paleta y las medidas son las de la app móvil (`--au-*`).
+	   El body no hace scroll bajo /public: la página es su contenedor.
+	   ════════════════════════════════════════════════════════════ */
+	.pagina {
+		--cert-aviso: #b45309;
+		--cert-aviso-soft: #fff4e5;
+		--cert-info: var(--au-dark);
+		--cert-info-soft: var(--au-tint);
 
-		min-height: 100vh;
-		min-height: 100dvh;
-		background: var(--bg);
-		font-family: var(--font-sans);
-		color: var(--text-primary);
 		display: flex;
 		flex-direction: column;
+		height: 100vh;
+		height: 100dvh;
+		overflow-y: auto;
+		overflow-x: hidden;
+		background: var(--au-bg);
+		color: var(--au-text);
+		font-family: var(--font-sans);
 		-webkit-font-smoothing: antialiased;
 	}
 
-	.meta-mono {
-		font-family: var(--font-sans);
-		color: inherit;
-		font-weight: 600;
-	}
-
-	.eyebrow {
-		display: inline-block;
-		font-family: var(--font-sans);
-		font-size: 0.65rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.12em;
-		color: var(--accent-hover);
-		background: var(--accent-bg);
-		padding: 0.2rem 0.6rem;
-		border-radius: 5px;
-		margin-bottom: 0.4rem;
-	}
-	.eyebrow--danger {
-		color: #b91c1c;
-		background: rgba(220, 38, 38, 0.06);
-	}
-
-	/* ═══ Sticky header ═══ */
-	.page-header {
+	/* ═══ Barra superior ═══ */
+	.barra {
 		position: sticky;
 		top: 0;
-		z-index: 30;
-		background: rgba(255, 255, 255, 0.85);
-		backdrop-filter: saturate(180%) blur(20px);
-		-webkit-backdrop-filter: saturate(180%) blur(20px);
-		border-bottom: 1px solid var(--border);
-	}
-	.page-header-inner {
+		z-index: 10;
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 1rem;
-		padding: 0.85rem 1.5rem;
-		flex-wrap: wrap;
+		padding: 0.75rem 1rem;
+		background: rgba(255, 255, 255, 0.86);
+		backdrop-filter: blur(12px);
+		-webkit-backdrop-filter: blur(12px);
+		border-bottom: 1px solid var(--au-border);
 	}
-	.header-left {
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-		min-width: 0;
-		flex: 1;
-	}
-	.back-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
-		padding: 0.4rem 0.4rem 0.4rem 0.5rem;
-		background: transparent;
-		border: 1px solid var(--border-default);
-		border-radius: 8px;
-		color: var(--text-secondary);
-		font-family: inherit;
-		font-size: 0.78rem;
-		font-weight: 600;
-		text-decoration: none;
-		cursor: pointer;
-		transition: all 0.2s var(--ease);
-		flex-shrink: 0;
-	}
-	.back-btn:hover {
-		background: var(--surface);
-		color: var(--accent-hover);
-		border-color: rgba(249, 115, 22, 0.3);
-	}
-	.back-btn svg {
-		width: 14px;
-		height: 14px;
-	}
-	.back-text {
-		display: none;
-	}
-	@media (min-width: 480px) {
-		.back-text {
-			display: inline;
+	@media (min-width: 768px) {
+		.barra {
+			padding: 0.85rem 1.5rem;
 		}
 	}
-
-	.header-brand {
-		display: flex;
+	.barra-marca {
+		display: inline-flex;
 		align-items: center;
 		gap: 0.75rem;
 		min-width: 0;
+		text-decoration: none;
+		color: inherit;
 	}
-	.header-icon {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 38px;
-		height: 38px;
-		border-radius: 10px;
-		background: linear-gradient(135deg, var(--accent), var(--accent-hover));
-		color: #ffffff;
-		flex-shrink: 0;
-		box-shadow: 0 2px 8px rgba(249, 115, 22, 0.25);
+	.barra-logo {
+		height: 34px;
+		width: auto;
+		display: block;
 	}
-	.header-icon svg {
-		width: 18px;
-		height: 18px;
-	}
-	.header-title {
-		font-family: var(--font-sans);
-		font-size: 1.05rem;
-		font-weight: 500;
-		color: var(--text-primary);
-		margin: 0;
-		letter-spacing: -0.015em;
-		line-height: 1.2;
-		overflow: hidden;
-		text-overflow: ellipsis;
+	.barra-tag {
+		display: none;
+		padding: 0.3rem 0.7rem;
+		border-radius: 999px;
+		background: var(--au-tint);
+		color: var(--au-primary-strong);
+		font-size: 0.68rem;
+		font-weight: 800;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
 		white-space: nowrap;
 	}
-
-	.header-right {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
+	@media (min-width: 640px) {
+		.barra-tag {
+			display: inline-block;
+		}
 	}
-
-	.status-pill {
+	.barra-salir {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.35rem;
-		padding: 0.25rem 0.6rem;
-		font-family: var(--font-sans);
-		font-size: 0.65rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: var(--accent-hover);
-		background: var(--accent-bg);
-		border: 1px solid rgba(249, 115, 22, 0.18);
+		gap: 0.4rem;
+		min-height: 2.5rem;
+		padding: 0 0.9rem;
+		border: 1.5px solid var(--au-border);
 		border-radius: 999px;
-	}
-	.status-dot {
-		width: 5px;
-		height: 5px;
-		border-radius: 50%;
-		background: var(--accent);
-		animation: pulse 2.5s ease-in-out infinite;
-	}
-	@keyframes pulse {
-		0%, 100% { opacity: 1; }
-		50% { opacity: 0.4; }
-	}
-
-	.btn-icon {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 36px;
-		height: 36px;
-		background: var(--surface);
-		border: 1px solid var(--border-default);
-		border-radius: 10px;
-		color: var(--text-secondary);
+		background: var(--au-surface);
+		color: var(--au-dark);
+		font-family: inherit;
+		font-size: 0.82rem;
+		font-weight: 800;
+		text-decoration: none;
 		cursor: pointer;
-		transition: all 0.2s var(--ease);
+		flex-shrink: 0;
+		transition:
+			border-color 0.2s ease,
+			background-color 0.2s ease;
 	}
-	.btn-icon:hover {
-		background: rgba(220, 38, 38, 0.04);
-		border-color: rgba(220, 38, 38, 0.2);
-		color: #b91c1c;
+	.barra-salir:hover {
+		border-color: var(--au-primary);
+		background: var(--au-tint);
 	}
-	.btn-icon svg {
+	.barra-salir svg {
 		width: 16px;
 		height: 16px;
 	}
 
-	/* ═══ Main content ═══ */
-	.page-main {
+	/* ═══ Cuerpo ═══ */
+	.cuerpo {
 		flex: 1;
-		width: 100%;
-		padding: 1.5rem 1.5rem 2rem;
+		padding: 1rem 1rem 2rem;
 	}
-
-	/* ═══ Loading state ═══ */
-	.state-block {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 0.85rem;
-		padding: 5rem 1rem;
-		color: var(--text-muted);
-	}
-	.state-text {
-		font-size: 0.9rem;
-		margin: 0;
-	}
-	.spinner-lg {
-		width: 36px;
-		height: 36px;
-		border: 3px solid rgba(249, 115, 22, 0.15);
-		border-top-color: var(--accent);
-		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
-	}
-	@keyframes spin {
-		to { transform: rotate(360deg); }
-	}
-
-	/* ═══ State cards (auth/error) ═══ */
-	.state-card {
-		max-width: 480px;
-		margin: 2rem auto;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 24px;
-		padding: 2rem 1.75rem;
-		box-shadow: var(--shadow-soft);
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		text-align: center;
-	}
-	.state-icon {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 64px;
-		height: 64px;
-		border-radius: 50%;
-		background: var(--accent-bg);
-		color: var(--accent);
-		margin-bottom: 1rem;
-	}
-	.state-icon--danger {
-		background: rgba(220, 38, 38, 0.06);
-		color: #b91c1c;
-	}
-	.state-icon svg {
-		width: 28px;
-		height: 28px;
-	}
-	.state-title {
-		font-family: var(--font-sans);
-		font-size: 1.4rem;
-		font-weight: 500;
-		color: var(--text-primary);
-		margin: 0 0 0.5rem;
-	}
-	.state-sub {
-		font-size: 0.88rem;
-		color: var(--text-secondary);
-		margin: 0 0 1.25rem;
-		max-width: 380px;
-		line-height: 1.55;
-	}
-	.state-actions {
-		display: flex;
-		gap: 0.6rem;
-		flex-wrap: wrap;
-		justify-content: center;
-	}
-
-	.detail-box {
-		font-size: 0.78rem;
-		font-weight: 500;
-		padding: 0.6rem 0.85rem;
-		border-radius: 8px;
-		border: 1px solid;
-		margin: 0 0 1.25rem;
-		max-width: 420px;
-		text-align: left;
-		line-height: 1.5;
-	}
-
-	/* ═══ Buttons ═══ */
-	.btn-primary {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.4rem;
-		padding: 0.55rem 1rem;
-		font-size: 0.82rem;
-		cursor: pointer;
-		text-decoration: none;
-	}
-
-	.btn-primary svg {
-		width: 14px;
-		height: 14px;
-	}
-
-	.btn-secondary {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.4rem;
-		padding: 0.55rem 1rem;
-		font-size: 0.82rem;
-		cursor: pointer;
-		text-decoration: none;
-	}
-
-	.btn-secondary svg {
-		width: 14px;
-		height: 14px;
-	}
-
-	/* ═══ Content grid (main + aside) ═══ */
-	.content-grid {
-		display: flex;
-		flex-direction: column;
-		gap: 1.25rem;
-	}
-	@media (min-width: 1024px) {
-		.content-grid {
-			display: grid;
-			grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-			gap: 1.5rem;
-			align-items: start;
+	@media (min-width: 768px) {
+		.cuerpo {
+			padding: 1.5rem 1.5rem 2.5rem;
 		}
 	}
-	.content-main {
+	.contenido {
 		display: flex;
 		flex-direction: column;
-		gap: 1.25rem;
-	}
-	.content-aside {
-		display: none;
-	}
-	@media (min-width: 1024px) {
-		.content-aside {
-			display: block;
-		}
+		gap: 1rem;
 	}
 
-	/* ═══ Tercero card ═══ */
-	.tercero-card {
-		display: flex;
-		align-items: center;
-		gap: 0.9rem;
-		padding: 1.1rem 1.25rem;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 20px;
-		box-shadow: var(--shadow-soft);
-	}
-	.tercero-icon {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 48px;
-		height: 48px;
-		border-radius: 14px;
-		background: linear-gradient(135deg, var(--accent), var(--accent-hover));
-		color: #ffffff;
-		flex-shrink: 0;
-		box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
-	}
-	.tercero-icon svg {
-		width: 22px;
-		height: 22px;
-	}
-	.tercero-info {
-		flex: 1;
-		min-width: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.2rem;
-	}
-	.tercero-name {
-		font-family: var(--font-sans);
-		font-size: 1.2rem;
-		font-weight: 500;
-		color: var(--text-primary);
-		margin: 0;
-		letter-spacing: -0.015em;
-		line-height: 1.2;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.tercero-nit {
-		font-size: 0.78rem;
-		color: var(--text-muted);
-		margin: 0;
-	}
-	.carpetas-pill {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.3rem 0.7rem;
-		font-size: 0.78rem;
-		font-weight: 500;
-		color: var(--text-secondary);
-		background: var(--bg);
-		border: 1px solid var(--border);
-		border-radius: 999px;
-		flex-shrink: 0;
-	}
-
-	/* ═══ Docs card ═══ */
-	.docs-card {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 20px;
-		box-shadow: var(--shadow-soft);
-		padding: 1.25rem 1.4rem;
-	}
-	.docs-head {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 0.85rem;
-		margin-bottom: 1.1rem;
-		flex-wrap: wrap;
-	}
-	.docs-title {
-		font-family: var(--font-sans);
-		font-size: 1.1rem;
-		font-weight: 500;
-		color: var(--text-primary);
-		margin: 0 0 0.2rem;
-		letter-spacing: -0.015em;
-	}
-	.docs-sub {
-		font-size: 0.8rem;
-		color: var(--text-muted);
-		margin: 0;
-	}
-	.docs-pill {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.3rem 0.7rem;
-		font-size: 0.78rem;
-		font-weight: 600;
-		color: var(--accent-hover);
-		background: var(--accent-bg);
-		border: 1px solid rgba(249, 115, 22, 0.18);
-		border-radius: 999px;
-	}
-
-	/* ═══ Carpetas stack ═══ */
-	.carpetas-stack {
-		display: flex;
-		flex-direction: column;
-		gap: 0.85rem;
+	/* ═══ Carpetas: rejilla fluida, una tarjeta por tipo y año ═══ */
+	.carpetas {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+		gap: 1rem;
 	}
 	.carpeta {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 16px;
-		overflow: hidden;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		padding: 1rem;
+		background: var(--au-surface);
+		border: 1.5px solid var(--au-border);
+		border-radius: 20px;
 	}
-	.carpeta-head {
+	.carpeta-cabecera {
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
-		padding: 0.85rem 1rem;
-		background: var(--bg);
-		border-bottom: 1px solid var(--border);
 	}
-	.carpeta-icon {
-		display: flex;
+	.carpeta-icono {
+		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		width: 36px;
-		height: 36px;
-		border-radius: 10px;
-		background: linear-gradient(135deg, var(--accent), var(--accent-hover));
-		color: #ffffff;
+		width: 40px;
+		height: 40px;
+		border-radius: 12px;
+		background: var(--au-tint);
+		color: var(--au-primary-strong);
 		flex-shrink: 0;
-		box-shadow: 0 2px 8px rgba(249, 115, 22, 0.25);
 	}
-	.carpeta-icon svg {
+	.carpeta-icono svg {
+		width: 20px;
+		height: 20px;
+	}
+	.carpeta-texto {
+		min-width: 0;
+	}
+	.carpeta-nombre {
+		margin: 0;
+		font-size: 1.05rem;
+		font-weight: 800;
+		letter-spacing: -0.02em;
+		color: var(--au-text);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.carpeta-conteo {
+		margin: 0.1rem 0 0;
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: var(--au-muted);
+	}
+
+	.docs {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.5rem;
+	}
+	.doc {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+		padding: 0.65rem 0.75rem;
+		border-radius: 14px;
+		background: var(--au-bg);
+		border: 1.5px solid transparent;
+		transition: border-color 0.2s ease;
+	}
+	.doc:hover {
+		border-color: var(--au-primary);
+	}
+	.doc-ext {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		min-width: 2.6rem;
+		height: 2.6rem;
+		padding: 0 0.4rem;
+		border-radius: 10px;
+		background: var(--au-dark);
+		color: var(--au-eyebrow);
+		font-size: 0.62rem;
+		font-weight: 900;
+		letter-spacing: 0.08em;
+		flex-shrink: 0;
+	}
+	.doc-info {
+		min-width: 0;
+		flex: 1;
+	}
+	.doc-nombre {
+		margin: 0;
+		font-size: 0.88rem;
+		font-weight: 700;
+		color: var(--au-text);
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.doc-meta {
+		margin: 0.15rem 0 0;
+		font-size: 0.76rem;
+		color: var(--au-muted);
+	}
+	.doc-sep {
+		margin: 0 0.3rem;
+		opacity: 0.6;
+	}
+	.doc-abrir {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 2.5rem;
+		height: 2.5rem;
+		border-radius: 12px;
+		background: var(--au-primary);
+		color: #ffffff;
+		box-shadow: var(--shadow-btn);
+		flex-shrink: 0;
+		transition:
+			background-color 0.2s ease,
+			transform 0.15s ease;
+	}
+	.doc-abrir:hover {
+		background: var(--au-primary-strong);
+	}
+	.doc-abrir:active {
+		transform: scale(0.96);
+	}
+	.doc-abrir svg {
 		width: 18px;
 		height: 18px;
 	}
-	.carpeta-info {
-		flex: 1;
-		min-width: 0;
-	}
-	.carpeta-name {
-		font-size: 0.92rem;
-		font-weight: 600;
-		color: var(--text-primary);
-		margin: 0;
-		letter-spacing: -0.005em;
-	}
-	.carpeta-count {
-		font-size: 0.75rem;
-		color: var(--text-muted);
-		margin: 0.1rem 0 0;
-	}
-	.carpeta-pill {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		min-width: 24px;
-		height: 22px;
-		padding: 0 0.5rem;
-		font-size: 0.7rem;
-		font-weight: 700;
-		color: var(--accent-hover);
-		background: var(--accent-bg);
-		border-radius: 999px;
-	}
-	.carpeta-empty {
-		padding: 1rem 1.25rem;
-		font-size: 0.78rem;
-		color: var(--text-muted);
-		text-align: center;
-	}
 
-	/* ═══ Docs list ═══ */
-	.docs-list {
-		list-style: none;
-		padding: 0;
-		margin: 0;
-	}
-	.doc-item {
+	/* ═══ Nota de verificación ═══ */
+	.nota {
 		display: flex;
-		align-items: center;
+		align-items: flex-start;
 		gap: 0.75rem;
-		padding: 0.85rem 1rem;
-		border-top: 1px solid rgba(0, 0, 0, 0.04);
-		transition: background-color 0.15s var(--ease);
+		padding: 0.9rem 1rem;
+		border-radius: 16px;
+		background: var(--au-tint);
+		border: 1.5px solid rgba(var(--au-primary-rgb), 0.25);
+		color: var(--au-dark);
 	}
-	.doc-item:first-child {
-		border-top: none;
-	}
-	.doc-item:hover {
-		background: var(--accent-bg);
-	}
-	.doc-icon {
-		width: 38px;
-		height: 38px;
-		border-radius: 8px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		flex-shrink: 0;
-	}
-	.doc-emoji {
-		font-size: 1.1rem;
-		line-height: 1;
-	}
-	.doc-info {
-		flex: 1;
-		min-width: 0;
-	}
-	.doc-name {
-		font-size: 0.85rem;
-		font-weight: 600;
-		color: var(--text-primary);
-		margin: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.doc-meta {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.5rem 0.85rem;
-		margin-top: 0.2rem;
-		font-size: 0.72rem;
-		color: var(--text-muted);
-	}
-	.doc-meta-item {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.25rem;
-	}
-	.doc-meta-item svg {
-		width: 12px;
-		height: 12px;
-	}
-	.doc-meta-tag {
-		display: inline-flex;
-		align-items: center;
-		padding: 0.1rem 0.45rem;
-		font-family: var(--font-sans);
-		font-size: 0.62rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		color: #5b21b6;
-		background: rgba(109, 40, 217, 0.08);
-		border: 1px solid rgba(109, 40, 217, 0.18);
-		border-radius: 4px;
-	}
-	.doc-open {
+	.nota-icono {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
 		width: 32px;
 		height: 32px;
-		background: transparent;
-		border: 1px solid var(--border);
-		border-radius: 8px;
-		color: var(--accent);
-		cursor: pointer;
-		text-decoration: none;
-		transition: all 0.2s var(--ease);
+		border-radius: 10px;
+		background: var(--au-surface);
+		color: var(--au-primary-strong);
 		flex-shrink: 0;
 	}
-	.doc-open:hover {
-		background: var(--accent-bg);
-		border-color: rgba(249, 115, 22, 0.3);
+	.nota-icono svg {
+		width: 18px;
+		height: 18px;
 	}
-	.doc-open svg {
-		width: 14px;
-		height: 14px;
-	}
-
-	/* ═══ Info banner ═══ */
-	.info-banner {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.75rem;
-		padding: 0.9rem 1.1rem;
-		background: linear-gradient(135deg, rgba(249, 115, 22, 0.04), rgba(249, 115, 22, 0.08));
-		border: 1px solid rgba(249, 115, 22, 0.18);
-		border-radius: 14px;
-	}
-	.info-icon {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 28px;
-		height: 28px;
-		border-radius: 8px;
-		background: var(--accent-bg);
-		color: var(--accent);
-		flex-shrink: 0;
-	}
-	.info-icon svg {
-		width: 14px;
-		height: 14px;
-	}
-	.info-title {
+	.nota-titulo {
+		margin: 0;
 		font-size: 0.85rem;
-		font-weight: 700;
-		color: #047857;
-		margin: 0 0 0.15rem;
+		font-weight: 800;
 	}
-	.info-text {
-		font-size: 0.78rem;
+	.nota-texto {
+		margin: 0.15rem 0 0;
+		font-size: 0.8rem;
 		line-height: 1.5;
-		color: #065f46;
-		margin: 0;
+		color: var(--au-primary-strong);
+		max-width: 44rem;
+	}
+	.nota-texto strong {
+		color: var(--au-dark);
+		font-weight: 800;
 	}
 
-	/* ═══ Aside ═══ */
-	.aside-card {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 20px;
-		padding: 1.5rem 1.4rem;
-		box-shadow: var(--shadow-soft);
-		text-align: center;
+	/* ═══ Estados con mascota (sin acceso, error, vacío) ═══ */
+	.estado {
+		position: relative;
 		display: flex;
 		flex-direction: column;
-		align-items: center;
+		align-items: flex-start;
+		gap: 0.7rem;
+		padding: 1.5rem 1.25rem;
+		background: var(--au-surface);
+		border: 1.5px solid var(--au-border);
+		border-radius: 24px;
+		overflow: hidden;
 	}
-	.aside-logo {
-		height: 72px;
-		width: auto;
-		object-fit: contain;
-		display: block;
-		margin-bottom: 0.85rem;
-	}
-	.aside-title {
-		font-family: var(--font-sans);
-		font-size: 0.95rem;
-		font-weight: 500;
-		color: var(--accent-hover);
-		margin: 0 0 0.4rem;
-	}
-	.aside-sub {
-		font-size: 0.78rem;
-		color: var(--text-muted);
-		line-height: 1.5;
-		margin: 0 0 0.6rem;
-	}
-	.aside-exp {
-		font-size: 0.7rem;
-		color: var(--text-very-muted);
-		font-family: var(--font-sans);
-		letter-spacing: 0.02em;
-		margin: 0;
-		padding-top: 0.6rem;
-		border-top: 1px solid var(--border);
-		width: 100%;
-	}
-
-	/* ═══ Empty state ═══ */
-	.empty-state {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 0.6rem;
-		padding: 2.5rem 1.5rem;
-		background: var(--bg);
-		border: 1px solid var(--border);
-		border-radius: 16px;
-		text-align: center;
-	}
-	.empty-icon {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		width: 48px;
-		height: 48px;
-		border-radius: 50%;
-		background: var(--accent-bg);
-		color: var(--accent);
-		margin-bottom: 0.3rem;
-	}
-	.empty-icon svg {
-		width: 22px;
-		height: 22px;
-	}
-	.empty-title {
-		font-family: var(--font-sans);
-		font-size: 1rem;
-		font-weight: 500;
-		color: var(--text-primary);
-		margin: 0;
-	}
-	.empty-sub {
-		font-size: 0.82rem;
-		color: var(--text-muted);
-		margin: 0;
-		max-width: 320px;
-	}
-
-	/* ═══ Footer ═══ */
-	.page-footer {
-		border-top: 1px solid var(--border);
-		background: rgba(255, 255, 255, 0.6);
-		padding: 1rem 1.5rem;
-	}
-	.page-footer-inner {
-		display: flex;
-		flex-direction: column;
-		gap: 0.4rem;
-		align-items: center;
-		justify-content: space-between;
-		font-size: 0.75rem;
-		color: var(--text-muted);
-		text-align: center;
-	}
-	@media (min-width: 640px) {
-		.page-footer-inner {
-			flex-direction: row;
-			text-align: left;
+	@media (min-width: 768px) {
+		.estado {
+			padding: 2rem 2rem 2rem;
+			padding-right: 13rem;
 		}
 	}
-	.page-footer p { margin: 0; }
-	.footer-meta {
-		display: flex;
-		gap: 0.5rem;
-		color: var(--text-very-muted);
+	.estado-mascota {
+		display: none;
+		position: absolute;
+		right: 0.5rem;
+		bottom: -0.5rem;
+		width: 10rem;
+		height: 10rem;
+		object-fit: contain;
+		pointer-events: none;
 	}
-	.dot-sep {
-		opacity: 0.4;
+	@media (min-width: 768px) {
+		.estado-mascota {
+			display: block;
+		}
+	}
+	.estado-badge {
+		display: inline-block;
+		padding: 0.35rem 0.75rem;
+		border-radius: 999px;
+		font-size: 0.72rem;
+		font-weight: 800;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--cert-info);
+		background: var(--cert-info-soft);
+	}
+	.estado--peligro .estado-badge {
+		color: var(--au-danger);
+		background: var(--au-danger-soft);
+	}
+	.estado--aviso .estado-badge {
+		color: var(--cert-aviso);
+		background: var(--cert-aviso-soft);
+	}
+	.estado-titulo {
+		margin: 0;
+		font-size: clamp(1.3rem, 3vw, 1.7rem);
+		font-weight: 800;
+		letter-spacing: -0.025em;
+		color: var(--au-text);
+	}
+	.estado-texto {
+		margin: 0;
+		font-size: 0.95rem;
+		line-height: 1.55;
+		color: var(--au-muted);
+		max-width: 44rem;
+	}
+	.estado-texto strong {
+		color: var(--au-dark);
+		font-weight: 800;
+	}
+	.estado-detalle {
+		margin: 0;
+		padding: 0.7rem 0.9rem;
+		border-radius: 12px;
+		font-size: 0.8rem;
+		line-height: 1.45;
+		color: var(--cert-info);
+		background: var(--cert-info-soft);
+		max-width: 44rem;
+	}
+	.estado--peligro .estado-detalle {
+		color: var(--au-danger);
+		background: var(--au-danger-soft);
+	}
+	.estado--aviso .estado-detalle {
+		color: var(--cert-aviso);
+		background: var(--cert-aviso-soft);
+	}
+	.estado-acciones {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.6rem;
+		margin-top: 0.5rem;
+	}
+
+	/* ═══ Pie ═══ */
+	.pie {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem 1rem;
+		padding: 1rem 1rem 1.25rem;
+		border-top: 1px solid var(--au-border);
+		font-size: 0.75rem;
+		color: var(--au-muted);
+	}
+	@media (min-width: 768px) {
+		.pie {
+			padding: 1rem 1.5rem 1.25rem;
+		}
+	}
+	.pie p {
+		margin: 0;
+	}
+	.pie-meta {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		font-weight: 600;
+	}
+	.pie-punto {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--au-primary);
+		box-shadow: 0 0 0 3px rgba(var(--au-primary-rgb), 0.15);
 	}
 
 	@media (prefers-reduced-motion: reduce) {
-		*,
-		*::before,
-		*::after {
+		.doc,
+		.doc-abrir,
+		.barra-salir {
 			transition: none !important;
-			animation: none !important;
 		}
 	}
 </style>

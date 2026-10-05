@@ -1,918 +1,501 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
-  import { page } from '$app/stores';
-  import { browser } from '$app/environment';
-  import { certificadosPublicTerceroAPI } from '$lib/api/certificadosTercero';
-  import { fade, fly } from 'svelte/transition';
-  import { quintOut } from 'svelte/easing';
+	/**
+	 * Portal de certificados tributarios para terceros.
+	 *
+	 * Usa el mismo marco que las pantallas de acceso (`AuthShell`): bloque de
+	 * marca oscuro con la mascota y el contenido sobre el fondo claro. La
+	 * mascota reacciona al paso (bienvenida → correo enviado → validando →
+	 * listo / sin certificados), así que la pantalla cuenta en qué va sin
+	 * iconos propios.
+	 *
+	 * El layout público deja el `body` sin scroll (lo necesita el mapa de
+	 * servicios), así que esta página es su propio contenedor de scroll: sin
+	 * eso, la lista de certificados en un teléfono quedaba cortada.
+	 */
+	import { onMount } from 'svelte';
+	import { browser } from '$app/environment';
+	import { fly } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
+	import AuthShell from '$lib/components/auth/AuthShell.svelte';
+	import type { MascotIntent } from '$lib/mascot';
+	import { certificadosPublicTerceroAPI } from '$lib/api/certificadosTercero';
 
-  const LOGO_SRC = '/assets/logo_nombre.webp';
-  const TOKEN_DAYS = 90;
+	const EMPRESA = 'Cotransmeq S.A.S';
+	const TOKEN_DAYS = 90;
+	const STORAGE_KEY = 'certificados_access_token';
 
-  let authStep: 'identificacion' | 'email_sent' | 'verificando' | 'portal' = 'identificacion';
-  let identificacionInput = '';
-  let identificacionError = '';
-  let emailHidden = '';
-  let loadingAuth = false;
-  let mounted = false;
+	type Paso = 'identificacion' | 'email_sent' | 'verificando' | 'portal';
 
-  let tercero: any = null;
-  let certificados: any[] = [];
-  let tokenExpiresAt = '';
+	let paso = $state<Paso>('identificacion');
+	let identificacion = $state('');
+	let error = $state('');
+	let emailOculto = $state('');
+	let cargando = $state(false);
+	let montado = $state(false);
 
-  function validarIdentificacion(v: string) {
-    if (!v.trim()) return 'Ingresa tu número de identificación';
-    if (!/^\d{5,15}$/.test(v.trim())) return 'La identificación debe tener entre 5 y 15 dígitos';
-    return '';
-  }
+	let tercero: any = $state(null);
+	let certificados: any[] = $state([]);
+	let expiraEl = $state('');
 
-  async function solicitarAcceso() {
-    identificacionError = validarIdentificacion(identificacionInput);
-    if (identificacionError) return;
-    loadingAuth = true;
-    try {
-      const res = await certificadosPublicTerceroAPI.solicitarAcceso(identificacionInput.trim());
-      emailHidden = res.data.email || '';
-      authStep = 'email_sent';
-    } catch (err: any) {
-      identificacionError = err?.response?.data?.error || err?.message || 'Error al solicitar acceso';
-    } finally {
-      loadingAuth = false;
-    }
-  }
+	const mascota: MascotIntent = $derived(
+		paso === 'email_sent'
+			? 'correoEnviado'
+			: paso === 'verificando'
+				? 'procesando'
+				: paso === 'portal'
+					? certificados.length > 0
+						? 'exito'
+						: 'vacio'
+					: error
+						? 'advertencia'
+						: 'bienvenida'
+	);
 
-  async function verificarTokenFromUrl(token: string) {
-    authStep = 'verificando';
-    loadingAuth = true;
-    try {
-      const res = await certificadosPublicTerceroAPI.verificarToken(token);
-      tercero = res.data.tercero;
-      certificados = res.data.certificados;
-      tokenExpiresAt = res.data.expires_at;
-      authStep = 'portal';
+	const cabecera = $derived.by(() => {
+		switch (paso) {
+			case 'verificando':
+				return {
+					eyebrow: 'Un momento',
+					titulo: 'Validando tu acceso',
+					subtitulo: 'Estamos comprobando el enlace que abriste desde tu correo.'
+				};
+			case 'email_sent':
+				return {
+					eyebrow: 'Revisa tu correo',
+					titulo: 'Te enviamos el enlace',
+					subtitulo: undefined
+				};
+			case 'portal':
+				return {
+					eyebrow: 'Certificados tributarios',
+					titulo: tercero?.nombre_completo ?? 'Tus certificados',
+					subtitulo: `CC ${tercero?.identificacion ?? ''} · acceso válido hasta el ${formatearFecha(expiraEl)}.`
+				};
+			default:
+				return {
+					eyebrow: 'Acceso seguro',
+					titulo: 'Portal de certificados',
+					subtitulo: 'Escribe tu número de identificación y te enviamos un enlace de acceso a tu correo registrado.'
+				};
+		}
+	});
 
-      if (browser) {
-        localStorage.setItem('certificados_access_token', token);
-      }
-    } catch (err: any) {
-      identificacionError = err?.response?.data?.error || 'Enlace inválido o expirado. Solicita un nuevo acceso.';
-      authStep = 'identificacion';
-    } finally {
-      loadingAuth = false;
-    }
-  }
+	function validar(v: string) {
+		if (!v.trim()) return 'Escribe tu número de identificación.';
+		if (!/^\d{5,15}$/.test(v.trim())) return 'La identificación debe tener entre 5 y 15 dígitos, sin puntos.';
+		return '';
+	}
 
-  function handleKey(e: KeyboardEvent) { if (e.key === 'Enter') solicitarAcceso(); }
+	async function solicitar(e?: SubmitEvent) {
+		e?.preventDefault();
+		error = validar(identificacion);
+		if (error) return;
+		cargando = true;
+		try {
+			const res = await certificadosPublicTerceroAPI.solicitarAcceso(identificacion.trim());
+			emailOculto = res.data.email || '';
+			paso = 'email_sent';
+		} catch (err: any) {
+			error = err?.response?.data?.error || err?.message || 'No pudimos enviar el enlace. Intenta de nuevo.';
+		} finally {
+			cargando = false;
+		}
+	}
 
-  function cerrarSesion() {
-    if (browser) localStorage.removeItem('certificados_access_token');
-    authStep = 'identificacion';
-    tercero = null;
-    certificados = [];
-    tokenExpiresAt = '';
-  }
+	async function verificarToken(token: string) {
+		paso = 'verificando';
+		cargando = true;
+		try {
+			const res = await certificadosPublicTerceroAPI.verificarToken(token);
+			tercero = res.data.tercero;
+			certificados = res.data.certificados;
+			expiraEl = res.data.expires_at;
+			paso = 'portal';
+			if (browser) localStorage.setItem(STORAGE_KEY, token);
+		} catch (err: any) {
+			error = err?.response?.data?.error || 'El enlace no es válido o ya venció. Solicita un nuevo acceso.';
+			paso = 'identificacion';
+		} finally {
+			cargando = false;
+		}
+	}
 
-  function formatTipo(codigo: string): string {
-    const map: Record<string, string> = {
-      RETEFUENTE: 'Retefuente',
-      RETEICA: 'Reteica',
-      RETEIVA: 'Reteiva',
-      ICA: 'ICA',
-      IVA: 'IVA',
-      RETENCIONES: 'Retenciones',
-      OTROS: 'Otros'
-    };
-    return map[codigo] || codigo;
-  }
+	function volverAEmpezar() {
+		paso = 'identificacion';
+		error = '';
+	}
 
-  function initial(name: string | null | undefined): string {
-    if (!name) return '?';
-    return name.trim().charAt(0).toUpperCase();
-  }
+	function cerrarSesion() {
+		if (browser) localStorage.removeItem(STORAGE_KEY);
+		tercero = null;
+		certificados = [];
+		expiraEl = '';
+		identificacion = '';
+		volverAEmpezar();
+	}
 
-  function formatEmail(email: string): string {
-    if (!email) return '';
-    const [user, domain] = email.split('@');
-    if (!user || !domain) return email;
-    const visible = user.slice(0, 2);
-    return `${visible}${'•'.repeat(Math.max(user.length - 2, 3))}@${domain}`;
-  }
+	const TIPOS: Record<string, string> = {
+		RETEFUENTE: 'Retefuente',
+		RETEICA: 'Reteica',
+		RETEIVA: 'Reteiva',
+		ICA: 'ICA',
+		IVA: 'IVA',
+		RETENCIONES: 'Retenciones',
+		OTROS: 'Otros'
+	};
+	const formatearTipo = (codigo: string) => TIPOS[codigo] || codigo;
 
-  function formatDate(iso?: string): string {
-    if (!iso) return '—';
-    try {
-      return new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
-    } catch {
-      return '—';
-    }
-  }
+	function inicial(nombre: string | null | undefined) {
+		return nombre?.trim().charAt(0).toUpperCase() || '?';
+	}
 
-  onMount(async () => {
-    let urlToken: string | null = null;
-    if (browser) {
-      const params = new URLSearchParams(window.location.search);
-      urlToken = params.get('token');
-    }
-    if (!urlToken) {
-      urlToken = $page.url.searchParams.get('token');
-    }
-    if (urlToken) {
-      await verificarTokenFromUrl(urlToken);
-    }
-    mounted = true;
-  });
+	/** «ju••••@dominio.com»: confirma a qué correo salió sin exponerlo entero. */
+	function ocultarCorreo(email: string) {
+		if (!email) return '';
+		const [usuario, dominio] = email.split('@');
+		if (!usuario || !dominio) return email;
+		return `${usuario.slice(0, 2)}${'•'.repeat(Math.max(usuario.length - 2, 3))}@${dominio}`;
+	}
+
+	function formatearFecha(iso?: string) {
+		if (!iso) return '—';
+		try {
+			return new Date(iso).toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+		} catch {
+			return '—';
+		}
+	}
+
+	onMount(async () => {
+		const token = browser ? new URLSearchParams(window.location.search).get('token') : null;
+		if (token) await verificarToken(token);
+		montado = true;
+	});
 </script>
 
 <svelte:head>
-  <title>Portal de Certificados · Cotransmeq S.A.S</title>
-  <meta name="description" content="Acceso al portal de certificados tributarios de Cotransmeq S.A.S" />
+	<title>Portal de certificados · {EMPRESA}</title>
+	<meta name="description" content="Acceso al portal de certificados tributarios de {EMPRESA}" />
 </svelte:head>
 
-{#if mounted}
-  <div class="page" in:fade={{ duration: 300 }}>
-    <!-- Ambient orbs -->
-    <div class="orbs" aria-hidden="true">
-      <div class="orb orb-1"></div>
-      <div class="orb orb-2"></div>
-    </div>
+{#snippet pieSalir()}
+	<button type="button" class="auth-link" onclick={cerrarSesion}>Cerrar sesión</button>
+{/snippet}
 
-    <div class="auth-shell" in:fly={{ y: 20, duration: 500, easing: quintOut }}>
-      {#if authStep === 'verificando'}
-        <div class="auth-card">
-          <div class="auth-head">
-            <img src={LOGO_SRC} alt="Cotransmeq S.A.S" class="auth-logo" />
-          </div>
-          <div class="state-block" in:fade={{ duration: 250 }}>
-            <div class="state-icon">
-              <span class="spinner-lg"></span>
-            </div>
-            <h1 class="state-title">Verificando acceso</h1>
-            <p class="state-sub">Estamos validando tu enlace mágico.</p>
-          </div>
-        </div>
+{#if montado}
+	<div class="certificados-scroll">
+		<AuthShell
+			eyebrow={cabecera.eyebrow}
+			titulo={cabecera.titulo}
+			subtitulo={cabecera.subtitulo}
+			{mascota}
+			pie={paso === 'portal' ? pieSalir : undefined}
+			marcaCodigo="Certificados tributarios"
+			marcaTitulo="Tus certificados, siempre a mano"
+			marcaDesc="Retefuente, Reteica, Reteiva y los demás certificados de cada año, listos para descargar en PDF."
+			marcaPuntos={[
+				'Enlace de acceso a tu correo registrado',
+				'Descarga directa en PDF',
+				`Sesión válida durante ${TOKEN_DAYS} días`
+			]}
+		>
+			{#if paso === 'verificando'}
+				<div class="estado" aria-live="polite">
+					<span class="spinner" aria-hidden="true"></span>
+					<p class="estado-texto">Si el enlace es válido, en un instante verás tus certificados.</p>
+				</div>
+			{:else if paso === 'email_sent'}
+				<div class="estado" in:fly={{ y: 12, duration: 280, easing: quintOut }}>
+					<span class="estado-badge">✓ Enlace enviado</span>
+					<p class="estado-texto">
+						Enviamos un enlace de acceso a <strong>{ocultarCorreo(emailOculto)}</strong>.
+					</p>
+					<p class="estado-texto">
+						Revisa la bandeja de entrada y la carpeta de spam. El enlace es válido durante
+						<strong>{TOKEN_DAYS} días</strong>.
+					</p>
+					<button type="button" class="btn-secondary" onclick={volverAEmpezar}>
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+							<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+						</svg>
+						Usar otra identificación
+					</button>
+				</div>
+			{:else if paso === 'portal' && tercero}
+				<div class="portal" in:fly={{ y: 12, duration: 280, easing: quintOut }}>
+					{#if certificados.length === 0}
+						<div class="estado">
+							<span class="estado-badge">Sin certificados</span>
+							<p class="estado-texto">
+								Todavía no hay certificados cargados para <strong>{tercero.nombre_completo}</strong>.
+								Cuando contabilidad los publique, aparecerán aquí con este mismo enlace.
+							</p>
+						</div>
+					{:else}
+						<div class="portal-cabecera">
+							<span class="portal-avatar" aria-hidden="true">{inicial(tercero.nombre_completo)}</span>
+							<p class="portal-conteo">
+								<strong>{certificados.length}</strong>
+								{certificados.length === 1 ? 'certificado disponible' : 'certificados disponibles'}
+							</p>
+						</div>
+						<ul class="certs">
+							{#each certificados as cert (cert.id)}
+								<li class="cert">
+									<span class="cert-icono" aria-hidden="true">
+										<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+											/>
+										</svg>
+									</span>
+									<span class="cert-info">
+										<span class="cert-tipo">
+											{formatearTipo(cert.tipo_certificado?.codigo || cert.tipo || 'Certificado')}
+										</span>
+										<span class="cert-anio">Año {cert.anio}</span>
+									</span>
+									{#if cert.url}
+										<a
+											class="cert-descargar"
+											href={cert.url}
+											target="_blank"
+											rel="noopener noreferrer"
+											aria-label="Descargar {formatearTipo(cert.tipo_certificado?.codigo || cert.tipo || 'certificado')} {cert.anio}"
+										>
+											<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"
+												/>
+											</svg>
+											<span>PDF</span>
+										</a>
+									{:else}
+										<span class="cert-sin-archivo">Sin archivo</span>
+									{/if}
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</div>
+			{:else}
+				{#if error}
+					<div class="alert alert-error" role="alert" aria-live="assertive" in:fly={{ y: -8, duration: 250 }}>
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
+							/>
+						</svg>
+						<div class="alert-body">
+							<strong>No pudimos continuar.</strong>
+							<p>{error}</p>
+						</div>
+						<button type="button" class="alert-close" onclick={() => (error = '')} aria-label="Cerrar mensaje">
+							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+								<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+							</svg>
+						</button>
+					</div>
+				{/if}
 
-      {:else if authStep === 'email_sent'}
-        <div class="auth-card" in:fly={{ y: 16, duration: 350, easing: quintOut }}>
-          <div class="auth-head">
-            <img src={LOGO_SRC} alt="Cotransmeq S.A.S" class="auth-logo" />
-          </div>
-          <div class="state-block">
-            <div class="state-icon state-icon--success">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <span class="eyebrow">Enlace enviado</span>
-            <h1 class="auth-title">Revisa tu correo</h1>
-            <p class="auth-sub">
-              Hemos enviado un enlace de acceso a
-              <strong class="email-addr">{formatEmail(emailHidden)}</strong>
-            </p>
+				<form class="auth-form" onsubmit={solicitar}>
+					<div class="field">
+						<label for="identificacion" class="field-label">Número de identificación</label>
+						<div class="field-control">
+							<svg class="field-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 012-2h0a2 2 0 012 2v1m-4 0h4m-6 7a2 2 0 100-4 2 2 0 000 4zm-3 4a3 3 0 016 0m3-5h4m-4 3h4"
+								/>
+							</svg>
+							<input
+								id="identificacion"
+								type="tel"
+								inputmode="numeric"
+								class="field-input"
+								bind:value={identificacion}
+								placeholder="Solo números, sin puntos"
+								maxlength="15"
+								autocomplete="off"
+								required
+								disabled={cargando}
+							/>
+						</div>
+						<p class="field-hint">
+							El enlace llega al correo que tienes registrado y la sesión queda activa durante {TOKEN_DAYS} días.
+						</p>
+					</div>
 
-            <aside class="hint-card">
-              <span class="hint-label">Importante</span>
-              <p>
-                Revisa tu bandeja de entrada y la carpeta de spam. El enlace es válido por
-                <strong>{TOKEN_DAYS} días</strong>.
-              </p>
-            </aside>
-
-            <button class="btn-secondary" on:click={() => { authStep = 'identificacion'; identificacionError = ''; }}>
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
-              </svg>
-              Volver a intentar
-            </button>
-          </div>
-        </div>
-
-      {:else if authStep === 'portal' && tercero}
-        <div class="auth-card auth-card--wide" in:fly={{ y: 16, duration: 350, easing: quintOut }}>
-          <div class="auth-head">
-            <img src={LOGO_SRC} alt="Cotransmeq S.A.S" class="auth-logo" />
-            <button class="btn-logout" on:click={cerrarSesion} aria-label="Cerrar sesión">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              <span>Salir</span>
-            </button>
-          </div>
-
-          <div class="welcome-block">
-            <div class="welcome-avatar">{initial(tercero.nombre_completo)}</div>
-            <div class="welcome-info">
-              <p class="welcome-greeting">¡Hola!</p>
-              <h1 class="welcome-name">{tercero.nombre_completo}</h1>
-              <p class="welcome-id">CC {tercero.identificacion}</p>
-            </div>
-          </div>
-
-          <aside class="hint-card hint-card--info">
-            <span class="hint-label">Sesión</span>
-            <p>
-              Acceso válido hasta el
-              <strong>{formatDate(tokenExpiresAt)}</strong>.
-            </p>
-          </aside>
-
-          {#if certificados.length === 0}
-            <div class="empty-state" in:fade={{ duration: 250 }}>
-              <div class="empty-icon">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.6">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-              </div>
-              <h2 class="empty-title">Sin certificados disponibles</h2>
-              <p class="empty-sub">Aún no tienes certificados cargados en el sistema.</p>
-            </div>
-          {:else}
-            <div class="certs-list">
-              {#each certificados as cert (cert.id)}
-                <div class="cert-item">
-                  <div class="cert-info">
-                    <div class="cert-tipo">
-                      <span class="cert-tipo-label">{formatTipo(cert.tipo_certificado?.codigo || cert.tipo || 'Certificado')}</span>
-                      <span class="cert-year">
-                        Año <span class="meta-mono">{cert.anio}</span>
-                      </span>
-                    </div>
-                  </div>
-                  {#if cert.url}
-                    <a href={cert.url} target="_blank" rel="noopener noreferrer" class="btn-primary btn-download" title="Descargar">
-                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />
-                      </svg>
-                      <span>Descargar</span>
-                    </a>
-                  {:else}
-                    <span class="cert-na">—</span>
-                  {/if}
-                </div>
-              {/each}
-            </div>
-          {/if}
-        </div>
-
-      {:else}
-        <div class="auth-card" in:fly={{ y: 16, duration: 350, easing: quintOut }}>
-          <div class="auth-head">
-            <img src={LOGO_SRC} alt="Cotransmeq S.A.S" class="auth-logo" />
-          </div>
-
-          <span class="eyebrow">Acceso seguro</span>
-          <h1 class="auth-title">Portal de<br />Certificados</h1>
-          <p class="auth-sub">
-            Ingresa tu número de identificación para acceder a tus
-            <strong>certificados tributarios</strong>.
-          </p>
-
-          <ul class="features">
-            <li>
-              <span class="feature-mark">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              </span>
-              Certificados tributarios
-            </li>
-            <li>
-              <span class="feature-mark">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              </span>
-              Descarga directa en PDF
-            </li>
-            <li>
-              <span class="feature-mark">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                </svg>
-              </span>
-              Acceso seguro y cifrado
-            </li>
-          </ul>
-
-          <div class="field">
-            <label for="identificacion" class="field-label">Número de identificación</label>
-            <input
-              id="identificacion"
-              type="tel"
-              inputmode="numeric"
-              class="cedula-input"
-              class:input-error={identificacionError}
-              bind:value={identificacionInput}
-              on:keydown={handleKey}
-              placeholder="00000000"
-              maxlength="15"
-              autocomplete="off"
-            />
-            {#if identificacionError}
-              <p class="error-msg" in:fly={{ y: -4, duration: 200 }}>
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                </svg>
-                {identificacionError}
-              </p>
-            {/if}
-          </div>
-
-          <button class="btn-primary" on:click={solicitarAcceso} disabled={loadingAuth}>
-            {#if loadingAuth}
-              <span class="spinner"></span>
-              Enviando enlace…
-            {:else}
-              Solicitar acceso
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-              </svg>
-            {/if}
-          </button>
-
-          <aside class="hint-card">
-            <span class="hint-label">Cómo funciona</span>
-            <p>
-              Recibirás un enlace de acceso en tu correo registrado. La sesión permanece activa
-              durante <strong>{TOKEN_DAYS} días</strong>.
-            </p>
-          </aside>
-        </div>
-      {/if}
-
-      <p class="footer-copy">
-        © {new Date().getFullYear()} Cotransmeq S.A.S · Yopal, Casanare · Colombia
-      </p>
-    </div>
-  </div>
+					<button type="submit" class="btn-submit" disabled={cargando || !identificacion.trim()}>
+						{#if cargando}
+							<span class="btn-content">
+								<svg class="spin" viewBox="0 0 24 24" fill="none">
+									<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25" />
+									<path d="M4 12a8 8 0 018-8v0" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+								</svg>
+								Enviando enlace…
+							</span>
+						{:else}
+							<span class="btn-content">
+								Solicitar acceso
+								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+									<path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+								</svg>
+							</span>
+						{/if}
+					</button>
+				</form>
+			{/if}
+		</AuthShell>
+	</div>
 {/if}
 
 <style>
-  .page {
-    position: relative;
-    min-height: 100vh;
-    min-height: 100dvh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1.5rem 1rem;
-    background-color: #faf7f2;
-    font-family: var(--font-sans);
-    color: #1a1a1a;
-    -webkit-font-smoothing: antialiased;
-    overflow: hidden;
-  }
+	/* El body no hace scroll bajo /public: la página es su propio contenedor. */
+	.certificados-scroll {
+		height: 100vh;
+		height: 100dvh;
+		overflow-y: auto;
+		overflow-x: hidden;
+		background: var(--au-bg);
+	}
 
-  .orbs {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    overflow: hidden;
-  }
-  .orb {
-    position: absolute;
-    border-radius: 50%;
-    filter: blur(80px);
-  }
-  .orb-1 {
-    top: -8rem;
-    right: -6rem;
-    width: 28rem;
-    height: 28rem;
-    background: rgba(249, 115, 22, 0.18);
-  }
-  .orb-2 {
-    bottom: -10rem;
-    left: -8rem;
-    width: 32rem;
-    height: 32rem;
-    background: rgba(249, 115, 22, 0.12);
-  }
+	/* ═══ Lista de certificados dentro del panel del AuthShell ═══ */
+	.portal {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+	}
 
-  .auth-shell {
-    position: relative;
-    z-index: 1;
-    width: 100%;
-    max-width: 460px;
-    display: flex;
-    flex-direction: column;
-    gap: 1.25rem;
-  }
+	.portal-cabecera {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+	.portal-avatar {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 40px;
+		height: 40px;
+		border-radius: 12px;
+		background: var(--au-tint);
+		color: var(--au-dark);
+		font-weight: 800;
+		font-size: 1rem;
+		flex-shrink: 0;
+	}
+	.portal-conteo {
+		margin: 0;
+		font-size: 0.9rem;
+		color: var(--au-muted);
+	}
+	.portal-conteo strong {
+		color: var(--au-text);
+		font-weight: 800;
+	}
 
-  .auth-card {
-    background: #ffffff;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: 24px;
-    padding: 2.25rem 1.75rem 2rem;
-    box-shadow:
-      0 1px 2px rgba(0, 0, 0, 0.04),
-      0 20px 60px rgba(15, 31, 26, 0.08);
-  }
+	.certs {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+	}
+	.cert {
+		display: flex;
+		align-items: center;
+		gap: 0.8rem;
+		padding: 0.8rem 0.9rem;
+		background: var(--au-surface);
+		border: 1.5px solid var(--au-border);
+		border-radius: 16px;
+		transition: border-color 0.2s ease;
+	}
+	.cert:hover {
+		border-color: var(--au-primary);
+	}
+	.cert-icono {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		width: 40px;
+		height: 40px;
+		border-radius: 12px;
+		background: var(--au-tint);
+		color: var(--au-primary-strong);
+		flex-shrink: 0;
+	}
+	.cert-icono svg {
+		width: 20px;
+		height: 20px;
+	}
+	.cert-info {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+		min-width: 0;
+		flex: 1;
+	}
+	.cert-tipo {
+		font-size: 0.95rem;
+		font-weight: 800;
+		color: var(--au-text);
+		letter-spacing: -0.01em;
+	}
+	.cert-anio {
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--au-muted);
+	}
 
-  .auth-card--wide {
-    max-width: 560px;
-  }
+	.cert-descargar {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		min-height: 2.5rem;
+		padding: 0 0.95rem;
+		border-radius: 12px;
+		background: var(--au-primary);
+		color: #ffffff;
+		font-size: 0.8rem;
+		font-weight: 800;
+		text-decoration: none;
+		box-shadow: var(--shadow-btn);
+		flex-shrink: 0;
+		transition:
+			background-color 0.2s ease,
+			transform 0.15s ease;
+	}
+	.cert-descargar:hover {
+		background: var(--au-primary-strong);
+	}
+	.cert-descargar:active {
+		transform: scale(0.985);
+	}
+	.cert-descargar svg {
+		width: 16px;
+		height: 16px;
+	}
+	.cert-sin-archivo {
+		font-size: 0.78rem;
+		font-weight: 600;
+		color: var(--au-muted);
+		padding: 0 0.4rem;
+	}
 
-  .auth-head {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    margin-bottom: 1.5rem;
-    position: relative;
-  }
-
-  .auth-logo {
-    height: 44px;
-    width: auto;
-    display: block;
-  }
-
-  .btn-logout {
-    position: absolute;
-    right: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    padding: 0.4rem 0.7rem;
-    font-family: inherit;
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: #4a4a4a;
-    background: #faf7f2;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: 8px;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  }
-  .btn-logout svg {
-    width: 14px;
-    height: 14px;
-  }
-  .btn-logout:hover {
-    background: rgba(220, 38, 38, 0.04);
-    border-color: rgba(220, 38, 38, 0.2);
-    color: #b91c1c;
-  }
-
-  .state-block {
-    display: flex;
-    flex-direction: column;
-  }
-  .state-icon {
-    align-self: center;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    background: rgba(249, 115, 22, 0.08);
-    color: #f97316;
-    margin-bottom: 1rem;
-  }
-  .state-icon--success {
-    background: linear-gradient(135deg, #f97316, #ea580c);
-    color: #ffffff;
-    box-shadow: 0 8px 24px rgba(249, 115, 22, 0.3);
-  }
-  .state-icon svg {
-    width: 28px;
-    height: 28px;
-  }
-  .state-title {
-    font-family: var(--font-sans);
-    font-size: 1.4rem;
-    font-weight: 500;
-    color: #0f1f1a;
-    margin: 0 0 0.35rem;
-    text-align: center;
-  }
-  .state-sub {
-    font-size: 0.9rem;
-    color: #4a4a4a;
-    margin: 0;
-    text-align: center;
-  }
-
-  .eyebrow {
-    display: inline-block;
-    align-self: flex-start;
-    font-family: var(--font-sans);
-    font-size: 0.7rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: #f97316;
-    background: rgba(249, 115, 22, 0.08);
-    padding: 0.3rem 0.75rem;
-    border-radius: 6px;
-    margin-bottom: 0.75rem;
-  }
-
-  .auth-title {
-    font-family: var(--font-sans);
-    font-size: clamp(1.75rem, 5vw, 2.15rem);
-    font-weight: 400;
-    line-height: 1.1;
-    letter-spacing: -0.02em;
-    color: #0f1f1a;
-    margin: 0 0 0.6rem;
-  }
-
-  .auth-sub {
-    font-size: 0.9rem;
-    line-height: 1.55;
-    color: #4a4a4a;
-    margin: 0 0 1.25rem;
-  }
-  .auth-sub strong {
-    color: #0f1f1a;
-    font-weight: 600;
-  }
-
-  .email-addr {
-    font-family: var(--font-sans);
-    color: #065f46;
-    background: rgba(249, 115, 22, 0.08);
-    padding: 0.1rem 0.4rem;
-    border-radius: 4px;
-    font-size: 0.88em;
-    font-weight: 700;
-  }
-
-  .features {
-    list-style: none;
-    padding: 0;
-    margin: 0 0 1.5rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.55rem;
-  }
-  .features li {
-    display: flex;
-    align-items: center;
-    gap: 0.65rem;
-    font-size: 0.85rem;
-    color: #1a1a1a;
-  }
-  .feature-mark {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 22px;
-    border-radius: 7px;
-    background: rgba(249, 115, 22, 0.12);
-    color: #f97316;
-    flex-shrink: 0;
-  }
-  .feature-mark svg {
-    width: 12px;
-    height: 12px;
-  }
-
-  .field {
-    display: flex;
-    flex-direction: column;
-    gap: 0.4rem;
-  }
-
-  .field-label {
-    font-family: var(--font-sans);
-    font-size: 0.65rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: #6b6b6b;
-  }
-
-  .cedula-input {
-    width: 100%;
-    padding: 0.85rem 1rem;
-    font-family: var(--font-sans);
-    font-size: 1.15rem;
-    font-weight: 600;
-    letter-spacing: 0.18em;
-    color: #0f1f1a;
-    background: #ffffff;
-    border: 1px solid rgba(0, 0, 0, 0.12);
-    border-radius: 12px;
-    text-align: center;
-    outline: none;
-    transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  }
-  .cedula-input::placeholder {
-    color: #9a9a9a;
-    letter-spacing: 0.3em;
-  }
-  .cedula-input:hover:not(:disabled) {
-    border-color: rgba(0, 0, 0, 0.2);
-  }
-  .cedula-input:focus {
-    border-color: #f97316;
-    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
-  }
-  .cedula-input.input-error {
-    border-color: rgba(220, 38, 38, 0.45);
-    background: rgba(220, 38, 38, 0.03);
-  }
-
-  .error-msg {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    color: #991b1b;
-    font-size: 0.78rem;
-    font-weight: 600;
-    margin: 0;
-  }
-  .error-msg svg {
-    width: 14px;
-    height: 14px;
-    color: #dc2626;
-    flex-shrink: 0;
-  }
-
-  .btn-primary {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    width: 100%;
-    padding: 0.85rem 1.25rem;
-    margin-top: 0.75rem;
-    font-size: 0.92rem;
-    cursor: pointer;
-  }
-
-  .btn-primary:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-  .btn-primary svg {
-    width: 16px;
-    height: 16px;
-  }
-
-  .btn-secondary {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.4rem;
-    align-self: center;
-    margin-top: 0.5rem;
-    padding: 0.6rem 1.1rem;
-    font-size: 0.82rem;
-    cursor: pointer;
-  }
-
-  .btn-secondary svg {
-    width: 14px;
-    height: 14px;
-  }
-
-  .hint-card {
-    background: linear-gradient(135deg, rgba(249, 115, 22, 0.04), rgba(249, 115, 22, 0.08));
-    border: 1px solid rgba(249, 115, 22, 0.15);
-    border-radius: 12px;
-    padding: 0.85rem 1rem;
-    margin-top: 1.25rem;
-  }
-  .hint-card--info {
-    margin-top: 0.5rem;
-    margin-bottom: 1.5rem;
-  }
-  .hint-label {
-    display: inline-block;
-    font-family: var(--font-sans);
-    font-size: 0.62rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: #f97316;
-    background: #ffffff;
-    padding: 0.15rem 0.5rem;
-    border-radius: 4px;
-    margin-bottom: 0.45rem;
-  }
-  .hint-card p {
-    font-size: 0.78rem;
-    line-height: 1.5;
-    color: #065f46;
-    margin: 0;
-  }
-  .hint-card strong {
-    color: #047857;
-    font-weight: 700;
-  }
-
-  .welcome-block {
-    display: flex;
-    align-items: center;
-    gap: 0.85rem;
-    margin-bottom: 0.75rem;
-  }
-  .welcome-avatar {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #f97316, #ea580c);
-    color: #ffffff;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-    font-size: 1.1rem;
-    box-shadow: 0 4px 16px rgba(249, 115, 22, 0.3);
-    flex-shrink: 0;
-  }
-  .welcome-info {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-  .welcome-greeting {
-    font-family: var(--font-sans);
-    font-size: 0.65rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.12em;
-    color: #f97316;
-    margin: 0;
-  }
-  .welcome-name {
-    font-family: var(--font-sans);
-    font-size: 1.2rem;
-    font-weight: 500;
-    color: #0f1f1a;
-    margin: 0.15rem 0 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    line-height: 1.2;
-  }
-  .welcome-id {
-    font-family: var(--font-sans);
-    font-size: 0.7rem;
-    color: #6b6b6b;
-    margin: 0.15rem 0 0;
-    letter-spacing: 0.04em;
-  }
-
-  .certs-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-    margin-top: 0.5rem;
-  }
-  .cert-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    padding: 0.75rem 0.9rem;
-    background: #faf7f2;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: 12px;
-    transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  }
-  .cert-item:hover {
-    border-color: rgba(249, 115, 22, 0.3);
-    background: #ffffff;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.08);
-  }
-  .cert-info {
-    display: flex;
-    flex-direction: column;
-    gap: 0.15rem;
-    min-width: 0;
-    flex: 1;
-  }
-  .cert-tipo {
-    display: flex;
-    align-items: baseline;
-    gap: 0.6rem;
-  }
-  .cert-tipo-label {
-    font-size: 0.88rem;
-    font-weight: 600;
-    color: #0f1f1a;
-  }
-  .cert-year {
-    font-size: 0.78rem;
-    color: #6b6b6b;
-  }
-  .meta-mono {
-    font-family: var(--font-sans);
-    color: #0f1f1a;
-    font-weight: 600;
-  }
-  .btn-download {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.45rem 0.85rem;
-    text-decoration: none;
-    font-size: 0.78rem;
-    flex-shrink: 0;
-    min-height: 0;
-  }
-
-  .btn-download svg {
-    width: 14px;
-    height: 14px;
-  }
-  .cert-na {
-    font-size: 0.8rem;
-    color: #9a9a9a;
-    padding: 0 0.5rem;
-  }
-
-  .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.6rem;
-    padding: 2.5rem 1.5rem;
-    background: #faf7f2;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    border-radius: 16px;
-    text-align: center;
-  }
-  .empty-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: rgba(249, 115, 22, 0.08);
-    color: #f97316;
-    margin-bottom: 0.3rem;
-  }
-  .empty-icon svg {
-    width: 22px;
-    height: 22px;
-  }
-  .empty-title {
-    font-family: var(--font-sans);
-    font-size: 1rem;
-    font-weight: 500;
-    color: #0f1f1a;
-    margin: 0;
-  }
-  .empty-sub {
-    font-size: 0.82rem;
-    color: #6b6b6b;
-    margin: 0;
-    max-width: 320px;
-  }
-
-  .footer-copy {
-    font-size: 0.72rem;
-    color: #9a9a9a;
-    text-align: center;
-    margin: 0;
-    line-height: 1.5;
-  }
-
-  .spinner {
-    width: 16px;
-    height: 16px;
-    border: 2px solid rgba(255, 255, 255, 0.3);
-    border-top-color: #ffffff;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    display: inline-block;
-  }
-  .spinner-lg {
-    width: 32px;
-    height: 32px;
-    border: 3px solid rgba(249, 115, 22, 0.15);
-    border-top-color: #f97316;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-    display: inline-block;
-  }
-
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  @media (max-width: 480px) {
-    .auth-card {
-      padding: 1.75rem 1.25rem 1.5rem;
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .auth-card,
-    .btn-primary,
-    .btn-secondary,
-    .cedula-input,
-    .cert-item {
-      transition: none !important;
-      animation: none !important;
-    }
-  }
+	@media (prefers-reduced-motion: reduce) {
+		.cert,
+		.cert-descargar {
+			transition: none !important;
+		}
+	}
 </style>
