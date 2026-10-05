@@ -940,6 +940,28 @@
 			toast.error('Error al descargar rutograma: ' + (error.message || 'Error desconocido'));
 		}
 	}
+
+	/// «12 oct · 08:00»; el año solo cuando no es el actual. Las tres fechas de
+	/// un servicio van apiladas en una misma celda y el año repetido tres veces
+	/// era la mitad del ancho.
+	function fechaCorta(fecha: string | Date): string {
+		const d = typeof fecha === 'string' ? new Date(fecha) : fecha;
+		if (Number.isNaN(d.getTime())) return '—';
+		const mismoAnio = d.getFullYear() === new Date().getFullYear();
+		const dia = new Intl.DateTimeFormat('es-CO', {
+			day: 'numeric',
+			month: 'short',
+			...(mismoAnio ? {} : { year: '2-digit' })
+		})
+			.format(d)
+			.replace('.', '');
+		const hora = new Intl.DateTimeFormat('es-CO', {
+			hour: '2-digit',
+			minute: '2-digit',
+			hour12: false
+		}).format(d);
+		return `${dia} · ${hora}`;
+	}
 </script>
 
 <svelte:head>
@@ -955,18 +977,6 @@
 		<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 			<!-- Título -->
 			<div class="flex items-center gap-3">
-				<div
-					class="soft-shadow flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600"
-				>
-					<svg class="h-5 w-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-						/>
-					</svg>
-				</div>
 				<div>
 					<!-- El estado del socket lo dice el header, junto al nombre de la
 					     sección. Aquí había otro chip «En vivo»/«Offline» que
@@ -1826,9 +1836,8 @@
 				<!-- ─────────────────────────────────────────
 			     DESKTOP: Tabla responsive  (>= lg)
 			     Breakpoints de columnas:
-			       lg       : barra, ruta, cliente, conductor, valor, estado, acciones
-			       xl       : + vehículo, fecha solicitud
-			       2xl      : + propósito, planilla, fecha realización, fecha finalización
+			       lg       : barra, ruta, cliente, conductor·vehículo, fechas, acciones
+			       xl       : + servicio (propósito y planilla)
 			     ───────────────────────────────────────── -->
 				<div class="hidden min-h-0 flex-1 overflow-auto lg:block">
 					<table class="w-full border-collapse text-sm">
@@ -1851,53 +1860,28 @@
 									Cliente
 								</th>
 
-								<!-- Conductor: siempre (lg+) -->
+								<!-- Conductor y vehículo juntos: el vehículo era una columna aparte que
+								     solo aparecía desde xl. -->
 								<th
 									class="px-3 py-2.5 text-left text-[10px] font-semibold tracking-wider whitespace-nowrap text-gray-500 uppercase"
 								>
-									Conductor
+									Conductor · Vehículo
 								</th>
 
-								<!-- Vehículo: xl+ -->
+								<!-- Propósito y planilla: una sola columna, xl+ -->
 								<th
 									class="hidden px-3 py-2.5 text-left text-[10px] font-semibold tracking-wider whitespace-nowrap text-gray-500 uppercase xl:table-cell"
 								>
-									Vehículo
+									Servicio
 								</th>
 
-								<!-- Propósito: 2xl+ -->
+								<!-- Las tres fechas en una columna con su línea de tiempo. Antes
+								     eran tres columnas de ~150 px (dos solo en 2xl+), casi siempre
+								     con «—»: ocupaban ancho para no decir nada. -->
 								<th
-									class="hidden px-3 py-2.5 text-left text-[10px] font-semibold tracking-wider whitespace-nowrap text-gray-500 uppercase 2xl:table-cell"
+									class="px-3 py-2.5 text-left text-[10px] font-semibold tracking-wider whitespace-nowrap text-gray-500 uppercase"
 								>
-									Propósito
-								</th>
-
-								<!-- Planilla: 2xl+ -->
-								<th
-									class="hidden px-3 py-2.5 text-left text-[10px] font-semibold tracking-wider whitespace-nowrap text-gray-500 uppercase 2xl:table-cell"
-								>
-									Planilla
-								</th>
-
-								<!-- Fecha Solicitud: xl+ -->
-								<th
-									class="hidden px-3 py-2.5 text-left text-[10px] font-semibold tracking-wider whitespace-nowrap text-gray-500 uppercase xl:table-cell"
-								>
-									Solicitud
-								</th>
-
-								<!-- Fecha Realización: 2xl+ -->
-								<th
-									class="hidden px-3 py-2.5 text-left text-[10px] font-semibold tracking-wider whitespace-nowrap text-gray-500 uppercase 2xl:table-cell"
-								>
-									Realización
-								</th>
-
-								<!-- Fecha Finalización: 2xl+ -->
-								<th
-									class="hidden px-3 py-2.5 text-left text-[10px] font-semibold tracking-wider whitespace-nowrap text-gray-500 uppercase 2xl:table-cell"
-								>
-									Finalización
+									Fechas
 								</th>
 
 								<!-- Estado: siempre -->
@@ -2017,39 +2001,41 @@
 										{/if}
 									</td>
 
-									<!-- Conductor -->
-									<td class="max-w-[150px] min-w-[120px] px-3 py-2">
+									<!-- Conductor + vehículo -->
+									<td class="max-w-[190px] min-w-[140px] px-3 py-2">
 										{#if servicio.conductor}
 											<p
-												class="truncate text-xs text-gray-900"
+												class="truncate text-xs font-medium text-gray-900"
 												title="{servicio.conductor.nombre} {servicio.conductor.apellido}"
 											>
 												{servicio.conductor.nombre}
 												{servicio.conductor.apellido}
 											</p>
-											{#if servicio.conductor.telefono}
-												<p class="text-[10px] text-gray-400">{servicio.conductor.telefono}</p>
-											{/if}
 										{:else}
-											<span class="text-xs text-gray-400 italic">Sin asignar</span>
+											<p class="text-xs text-gray-400 italic">Sin conductor</p>
 										{/if}
-									</td>
-
-									<!-- Vehículo: xl+ -->
-									<td class="hidden min-w-[100px] px-3 py-2 xl:table-cell">
 										{#if servicio.vehiculo}
-											<p class="text-xs font-semibold text-gray-900">{servicio.vehiculo.placa}</p>
-											<p class="truncate text-[10px] text-gray-400">
-												{servicio.vehiculo.marca}
-												{servicio.vehiculo.modelo}
+											<p class="mt-0.5 flex items-center gap-1.5 text-[10px] text-gray-500">
+												<span
+													class="rounded bg-gray-100 px-1 py-px font-mono font-semibold text-gray-700"
+													>{servicio.vehiculo.placa}</span
+												>
+												<span class="truncate"
+													>{[servicio.vehiculo.marca, servicio.vehiculo.modelo]
+														.filter(Boolean)
+														.join(' ')}</span
+												>
 											</p>
 										{:else}
-											<span class="text-xs text-gray-400 italic">Sin asignar</span>
+											<p class="mt-0.5 text-[10px] text-gray-400 italic">Sin vehículo</p>
+										{/if}
+										{#if servicio.conductor?.telefono}
+											<p class="text-[10px] text-gray-400">{servicio.conductor.telefono}</p>
 										{/if}
 									</td>
 
-									<!-- Propósito: 2xl+ -->
-									<td class="hidden px-3 py-2 whitespace-nowrap 2xl:table-cell">
+									<!-- Servicio: propósito + planilla, xl+ -->
+									<td class="hidden px-3 py-2 whitespace-nowrap xl:table-cell">
 										<span
 											class="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium
 											{normalizarPropositoServicio(servicio.proposito_servicio) === 'personal_y_herramienta'
@@ -2060,48 +2046,24 @@
 										>
 											{labelPropositoServicio(servicio.proposito_servicio)}
 										</span>
+										<p class="mt-1 font-mono text-[10px] text-gray-500">
+											{servicio.numero_planilla ? `Planilla ${servicio.numero_planilla}` : 'Sin planilla'}
+										</p>
 									</td>
 
-									<!-- Planilla: 2xl+ -->
-									<td class="hidden px-3 py-2 whitespace-nowrap 2xl:table-cell">
-										{#if servicio.numero_planilla}
-											<span
-												class="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] text-gray-700"
-											>
-												{servicio.numero_planilla}
-											</span>
-										{:else}
-											<span class="text-xs text-gray-300">—</span>
-										{/if}
-									</td>
-
-									<!-- Fecha Solicitud: xl+ -->
-									<td class="hidden px-3 py-2 whitespace-nowrap xl:table-cell">
-										<span class="text-xs text-gray-600"
-											>{formatDateTime(servicio.fecha_solicitud)}</span
-										>
-									</td>
-
-									<!-- Fecha Realización: 2xl+ -->
-									<td class="hidden px-3 py-2 whitespace-nowrap 2xl:table-cell">
-										{#if servicio.fecha_realizacion}
-											<span class="text-xs text-gray-600"
-												>{formatDateTime(servicio.fecha_realizacion)}</span
-											>
-										{:else}
-											<span class="text-xs text-gray-300">—</span>
-										{/if}
-									</td>
-
-									<!-- Fecha Finalización: 2xl+ -->
-									<td class="hidden px-3 py-2 whitespace-nowrap 2xl:table-cell">
-										{#if servicio.fecha_finalizacion}
-											<span class="text-xs text-gray-600"
-												>{formatDateTime(servicio.fecha_finalizacion)}</span
-											>
-										{:else}
-											<span class="text-xs text-gray-300">—</span>
-										{/if}
+									<!-- Fechas: línea de tiempo solicitud → realización → finalización -->
+									<td class="px-3 py-2 whitespace-nowrap">
+										<ol class="srv-fechas">
+											{#each [{ etiqueta: 'Solicitud', valor: servicio.fecha_solicitud }, { etiqueta: 'Realización', valor: servicio.fecha_realizacion }, { etiqueta: 'Finalización', valor: servicio.fecha_finalizacion }] as f (f.etiqueta)}
+												<li class="srv-fecha" class:srv-fecha--pendiente={!f.valor}>
+													<span class="srv-fecha-punto" aria-hidden="true"></span>
+													<span class="srv-fecha-etiqueta">{f.etiqueta}</span>
+													<span class="srv-fecha-valor">
+														{f.valor ? fechaCorta(f.valor) : 'Pendiente'}
+													</span>
+												</li>
+											{/each}
+										</ol>
 									</td>
 
 									<!-- Estado badge -->
@@ -2343,3 +2305,59 @@
 		on:cancel={cancelarEliminacion}
 	/>
 {/if}
+
+<style>
+	/* ═══ Fechas del servicio: línea de tiempo vertical en la celda ═══ */
+	.srv-fechas {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		gap: 2px;
+	}
+	.srv-fecha {
+		position: relative;
+		display: grid;
+		grid-template-columns: 8px 4.9rem auto;
+		align-items: center;
+		gap: 6px;
+		font-size: 11px;
+		line-height: 16px;
+	}
+	/* El trazo que une cada punto con el siguiente. */
+	.srv-fecha:not(:last-child)::after {
+		content: '';
+		position: absolute;
+		left: 3px;
+		top: 12px;
+		height: 10px;
+		width: 2px;
+		border-radius: 1px;
+		background: var(--border-default, #dee7e3);
+	}
+	.srv-fecha-punto {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--emerald-500, #079665);
+	}
+	.srv-fecha-etiqueta {
+		font-size: 9.5px;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: var(--text-muted, #66756f);
+	}
+	.srv-fecha-valor {
+		font-variant-numeric: tabular-nums;
+		color: var(--text-primary, #17201d);
+	}
+	.srv-fecha--pendiente .srv-fecha-punto {
+		background: transparent;
+		box-shadow: inset 0 0 0 1.5px var(--border-default, #dee7e3);
+	}
+	.srv-fecha--pendiente .srv-fecha-valor {
+		color: var(--text-very-muted, #8e9c96);
+		font-style: italic;
+	}
+</style>
