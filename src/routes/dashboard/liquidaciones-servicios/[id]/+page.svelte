@@ -28,9 +28,6 @@
 
 	<div class="page-card no-print" style="padding: 1.25rem 1.5rem; margin-bottom: 1rem;">
 		<div class="flex items-center gap-3">
-			<div class="card-icon">
-				<Eye class="h-5 w-5 text-white" />
-			</div>
 			<div>
 				<span class="eyebrow">Detalle</span>
 				<h1 class="mt-1 font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 800;">

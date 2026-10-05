@@ -335,9 +335,6 @@
 			<h1
 				class="font-display flex items-center gap-3 text-2xl font-normal tracking-tight text-[var(--bg-charcoal)] md:text-3xl"
 			>
-				<div class="card-icon">
-					<Settings class="h-5 w-5 text-white" />
-				</div>
 				Configuración de Salarios
 			</h1>
 			<p class="mt-1.5 text-sm text-[var(--text-secondary)]">

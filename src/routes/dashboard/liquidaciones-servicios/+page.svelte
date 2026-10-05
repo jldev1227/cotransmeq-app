@@ -1755,9 +1755,6 @@
 			<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 				<!-- Título -->
 				<div class="flex items-center gap-3">
-					<div class="card-icon">
-						<FileText class="h-5 w-5 text-white" />
-					</div>
 					<div>
 						<div class="flex items-center gap-2">
 							<h1
@@ -2732,9 +2729,6 @@
 		>
 			<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 				<div class="flex items-center gap-3">
-					<div class="card-icon">
-						<Receipt class="h-5 w-5 text-white" />
-					</div>
 					<div>
 						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 800;">
 							Facturas de Liquidaciones
@@ -3041,9 +3035,6 @@
 		>
 			<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 				<div class="flex items-center gap-3">
-					<div class="card-icon">
-						<Users class="h-5 w-5 text-white" />
-					</div>
 					<div>
 						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 800;">
 							Historial Liquidaciones de Terceros
@@ -3357,9 +3348,6 @@
 		>
 			<div class="mb-5 flex items-center justify-between gap-3">
 				<div class="flex items-center gap-3">
-					<div class="card-icon">
-						<Settings class="h-5 w-5 text-white" />
-					</div>
 					<div>
 						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 800;">
 							Configuración del Liquidador
