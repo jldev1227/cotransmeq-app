@@ -5,7 +5,8 @@ export function formatDate(dateStr: string): string {
 	if (!dateStr || dateStr === 'undefined' || dateStr === 'null') return '';
 	const [y, m, d] = dateStr.split('-');
 	if (!y || !m || !d) return '';
-	return `${d}/${y.slice(2)}`;
+	/// Con el mes: antes devolvía «16/26» y no se sabía de qué mes era.
+	return `${d}/${m}/${y.slice(2)}`;
 }
 
 export function isUrgent(dateStr: string): boolean {

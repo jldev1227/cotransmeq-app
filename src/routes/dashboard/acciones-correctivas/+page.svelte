@@ -1,7 +1,28 @@
 <script lang="ts">
-	import { confirmarEliminacion } from '$lib/stores/confirm';
+	/**
+	 * Tablero de acciones correctivas y preventivas.
+	 *
+	 * Misma cáscara que los directorios (`dir-*` de app.css y `listing/`):
+	 * cabecera con los indicadores como conteos pulsables, buscador y
+	 * segmentos a la vista, y las tarjetas de acción en una rejilla fluida.
+	 * Entre medias, dos paneles de seguimiento (revisiones vencidas y
+	 * próximas) y una franja con el estado de las causas y el reparto por
+	 * tipo. Antes tenía su propio cascarón —cabecera con icono, pastillas,
+	 * tarjetas KPI— que no se parecía al resto del panel.
+	 *
+	 * Filtros y papelera viven en la URL: un enlace compartido abre la misma
+	 * vista.
+	 */
 	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
+	import { fade, fly } from 'svelte/transition';
+	import { toast } from 'svelte-sonner';
+	import { Plus, Trash2 } from 'lucide-svelte';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
+	import SegmentosFiltro from '$lib/components/listing/SegmentosFiltro.svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
+	import AccionCard from '$lib/components/acciones-correctivas/dashboard/AccionCard.svelte';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
 	import {
 		bandera,
@@ -10,149 +31,153 @@
 		texto,
 		type DefinicionesFiltros
 	} from '$lib/listing/filtros';
-	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
-	import { fade, fly } from 'svelte/transition';
-	import { toast } from 'svelte-sonner';
+	import { confirmarEliminacion } from '$lib/stores/confirm';
+	import { mascota } from '$lib/mascot';
 	import {
 		accionesCorrectivasAPI,
 		type AccionCorrectivaPreventiva,
 		type ActionStatusGlobal
 	} from '$lib/api/acciones-correctivas';
-	import KpiCard from '$lib/components/acciones-correctivas/dashboard/KpiCard.svelte';
-	import AccionCard from '$lib/components/acciones-correctivas/dashboard/AccionCard.svelte';
 	import {
 		resumenRevision,
 		formatearDiasRelativo,
 		formatDate as formatDateCorta
 	} from '$lib/acciones-correctivas/dashboard-utils';
 
-	const FILTERS: { label: string; value: ActionStatusGlobal | '' }[] = [
-		{ label: 'Todas', value: '' },
-		{ label: 'En Proceso', value: 'EN_PROCESO' },
-		{ label: 'Vencidas', value: 'VENCIDA' },
-		{ label: 'Cumplidas', value: 'CUMPLIDA' }
+	const EMPRESA = 'Cotransmeq';
+
+	// Colores semáforo de los estados: iguales en los dos gemelos.
+	const AZUL = '#3b82f6';
+	const ROJO = '#ef4444';
+	const VERDE = '#22c55e';
+	const AMBAR = '#f59e0b';
+	const GRIS = '#66756f';
+
+	const SEGMENTOS_ESTADO = [
+		{ valor: '', etiqueta: 'Todas' },
+		{ valor: 'EN_PROCESO', etiqueta: 'En proceso', punto: AZUL },
+		{ valor: 'VENCIDA', etiqueta: 'Vencidas', punto: ROJO },
+		{ valor: 'CUMPLIDA', etiqueta: 'Cumplidas', punto: VERDE }
 	];
+	const SEGMENTOS_REVISION = [
+		{ valor: '', etiqueta: 'Todas' },
+		{ valor: 'vencidas', etiqueta: 'Rev. vencidas', punto: ROJO },
+		{ valor: 'proximas', etiqueta: 'Rev. próximas', punto: AMBAR }
+	];
+	const REVISIONES_PANEL_LIMITE = 8;
 
-	type FiltroRevision = '' | 'vencidas' | 'proximas';
-	let expandirVencidas = $state(false);
-	let expandirProximas = $state(false);
-	const REVISIONES_PANEL_LIMITE = 5;
-
-	let acciones = $state<AccionCorrectivaPreventiva[]>([]);
-	let isLoading = $state(true);
-	let total = 0;
-	let highlightId = $state<string | null>(null);
-	let highlightTimer: any;
-	let loadingState = $state<{ id: string; action: 'duplicar' | 'eliminar' | 'restaurar' | 'eliminar-permanente' | 'pdf' } | null>(null);
-
-	/**
-	 * Filtros en la URL.
-	 *
-	 * Los nombres `search` y `estado` son los que esta página ya usaba, para no
-	 * romper enlaces guardados. `revision` y `eliminadas` son nuevos: hasta
-	 * ahora se perdían al recargar.
-	 */
+	// ── Filtros en la URL ────────────────────────────────────────────────
+	/// Los nombres `search` y `estado` son los que esta página ya usaba, para
+	/// no romper enlaces guardados.
 	interface FiltrosAcciones {
 		search: string;
 		estado: string;
 		revision: string;
 		eliminadas: boolean;
 	}
-
 	const DEFS: DefinicionesFiltros<FiltrosAcciones> = {
 		search: texto(),
 		estado: opcion(''),
 		revision: opcion(''),
 		eliminadas: bandera(false)
 	};
-
 	const estadoUrl = crearEstadoUrl(DEFS);
 	let filtros = $state<FiltrosAcciones>(estadoUrl.leer(page.url));
+	$effect(() => {
+		estadoUrl.escribir(page.url, filtros);
+	});
+	function ponerFiltro<K extends keyof FiltrosAcciones>(clave: K, valor: FiltrosAcciones[K]) {
+		filtros = { ...filtros, [clave]: valor };
+	}
+	const papelera = $derived(filtros.eliminadas);
+	const hayFiltros = $derived(!!filtros.search || !!filtros.estado || !!filtros.revision);
 
-	/// Atajos de lectura, para no reescribir todo el marcado de golpe.
-	const search = $derived(filtros.search);
-	const activeFilter = $derived(filtros.estado as ActionStatusGlobal | '');
+	// ── Datos ────────────────────────────────────────────────────────────
+	let acciones = $state<AccionCorrectivaPreventiva[]>([]);
+	let cargando = $state(true);
+	let highlightId = $state<string | null>(null);
+	let highlightTimer: ReturnType<typeof setTimeout> | undefined;
+	let expandirVencidas = $state(false);
+	let expandirProximas = $state(false);
+	let loadingState = $state<{
+		id: string;
+		action: 'duplicar' | 'eliminar' | 'restaurar' | 'eliminar-permanente' | 'pdf';
+	} | null>(null);
 
+	/// La recarga la dispara el cambio de filtros, no cada handler.
+	$effect(() => {
+		void filtros.search;
+		void filtros.estado;
+		void filtros.eliminadas;
+		void cargarAcciones();
+	});
+
+	async function cargarAcciones() {
+		cargando = true;
+		try {
+			const resultado = await accionesCorrectivasAPI.listar({
+				limit: 50,
+				sortBy: 'created_at',
+				sortOrder: 'desc',
+				...(filtros.search && { busqueda: filtros.search }),
+				...(filtros.estado && { estado_global: filtros.estado as ActionStatusGlobal }),
+				...(filtros.eliminadas && { incluir_eliminados: true })
+			});
+			acciones = resultado.acciones;
+			expandirVencidas = false;
+			expandirProximas = false;
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'No se pudieron cargar las acciones');
+			acciones = [];
+		} finally {
+			cargando = false;
+		}
+	}
+
+	// ── Indicadores ──────────────────────────────────────────────────────
 	const accionCounts = $derived.by(() => {
 		let enProceso = 0;
 		let vencida = 0;
 		let cumplida = 0;
 		let proxVencer = 0;
-		const now = new Date();
-		const sevenDays = 7 * 24 * 60 * 60 * 1000;
-		acciones.forEach(a => {
+		const ahora = Date.now();
+		const sieteDias = 7 * 24 * 60 * 60 * 1000;
+		for (const a of acciones) {
 			if (a.estado_global === 'EN_PROCESO') enProceso++;
 			else if (a.estado_global === 'VENCIDA') vencida++;
 			else if (a.estado_global === 'CUMPLIDA') cumplida++;
 			if (a.fecha_limite_cierre_accion) {
-				const fecha = new Date(a.fecha_limite_cierre_accion);
-				const diff = fecha.getTime() - now.getTime();
-				if (diff > 0 && diff < sevenDays) proxVencer++;
+				const diff = new Date(a.fecha_limite_cierre_accion).getTime() - ahora;
+				if (diff > 0 && diff < sieteDias) proxVencer++;
 			}
-		});
+		}
 		return { enProceso, vencida, cumplida, proxVencer, total: acciones.length };
 	});
 
 	type AccionConRevision = AccionCorrectivaPreventiva & {
 		_revision: ReturnType<typeof resumenRevision>;
 	};
+	const conRevision = $derived<AccionConRevision[]>(
+		acciones.map((a) => ({ ...a, _revision: resumenRevision(a) }))
+	);
+	const revisionesVencidas = $derived(
+		conRevision
+			.filter((a) => a._revision.estado === 'vencida' || a._revision.estado === 'hoy')
+			.sort((a, b) => (a._revision.diasHasta ?? 0) - (b._revision.diasHasta ?? 0))
+	);
+	const revisionesProximas = $derived(
+		conRevision
+			.filter((a) => ['proxima', 'al-dia', 'sin-actividad'].includes(a._revision.estado))
+			.sort((a, b) => (a._revision.diasHasta ?? 999) - (b._revision.diasHasta ?? 999))
+	);
 
-	const revisiones = $derived.by(() => {
-		const map = new Map<string, AccionConRevision>();
-		acciones.forEach((a) => {
-			map.set(a.id, { ...a, _revision: resumenRevision(a) });
-		});
-		return map;
-	});
-
-	const revisionCounts = $derived.by(() => {
-		let vencida = 0;
-		let hoy = 0;
-		let proxima = 0;
-		let alDia = 0;
-		let sinActividad = 0;
-		revisiones.forEach((a) => {
-			switch (a._revision.estado) {
-				case 'vencida': vencida++; break;
-				case 'hoy': hoy++; break;
-				case 'proxima': proxima++; break;
-				case 'al-dia': alDia++; break;
-				case 'sin-actividad': sinActividad++; break;
-			}
-		});
-		return { vencida, hoy, proxima, alDia, sinActividad, totalRevision: vencida + hoy + proxima + alDia + sinActividad };
-	});
-
-	const revisionesVencidas = $derived(Array.from(revisiones.values())
-		.filter((a) => a._revision.estado === 'vencida' || a._revision.estado === 'hoy')
-		.sort((a, b) => (a._revision.diasHasta ?? 0) - (b._revision.diasHasta ?? 0)));
-
-	const revisionesProximas = $derived(Array.from(revisiones.values())
-		.filter((a) => a._revision.estado === 'proxima' || a._revision.estado === 'al-dia' || a._revision.estado === 'sin-actividad')
-		.sort((a, b) => (a._revision.diasHasta ?? 999) - (b._revision.diasHasta ?? 999)));
-
-	const filteredAcciones = $derived.by(() => {
+	const accionesVisibles = $derived.by(() => {
 		if (!filtros.revision) return acciones;
-		return acciones.filter((a) => {
-			const r = resumenRevision(a);
-			if (filtros.revision === 'vencidas') {
-				return r.estado === 'vencida' || r.estado === 'hoy';
-			}
-			if (filtros.revision === 'proximas') {
-				return r.estado === 'proxima' || r.estado === 'al-dia' || r.estado === 'sin-actividad';
-			}
-			return true;
-		});
-	});
-
-	const tipoCounts = $derived.by(() => {
-		const counts: Record<string, number> = {};
-		acciones.forEach(a => {
-			const tipo = a.tipo_accion_ejecutar || 'Sin tipo';
-			counts[tipo] = (counts[tipo] || 0) + 1;
-		});
-		return counts;
+		const vencidas = new Set(revisionesVencidas.map((a) => a.id));
+		const proximas = new Set(revisionesProximas.map((a) => a.id));
+		return acciones.filter((a) =>
+			filtros.revision === 'vencidas' ? vencidas.has(a.id) : proximas.has(a.id)
+		);
 	});
 
 	const causasStats = $derived.by(() => {
@@ -160,142 +185,70 @@
 		let vencida = 0;
 		let cumplida = 0;
 		let total = 0;
-		acciones.forEach(a => {
-			if (a.causas) {
-				total += a.causas.length;
-				a.causas.forEach(c => {
-					if (c.estado_seguimiento === 'En Proceso') enProceso++;
-					else if (c.estado_seguimiento === 'Vencida') vencida++;
-					else if (c.estado_seguimiento === 'Cumplida') cumplida++;
-				});
+		for (const a of acciones) {
+			for (const c of a.causas ?? []) {
+				total++;
+				if (c.estado_seguimiento === 'En Proceso') enProceso++;
+				else if (c.estado_seguimiento === 'Vencida') vencida++;
+				else if (c.estado_seguimiento === 'Cumplida') cumplida++;
 			}
-		});
+		}
 		return { enProceso, vencida, cumplida, total };
 	});
 
-	const kpis = $derived([
-		{
-			label: 'Total',
-			value: accionCounts.total,
-			sub: `${accionCounts.proxVencer} próx. vencer`,
-			color: '#6366f1'
-		},
-		{
-			label: 'En Proceso',
-			value: accionCounts.enProceso,
-			sub: `${accionCounts.total > 0 ? Math.round((accionCounts.enProceso / accionCounts.total) * 100) : 0}%`,
-			color: '#3b82f6'
-		},
-		{
-			label: 'Vencidas',
-			value: accionCounts.vencida,
-			sub: `${accionCounts.total > 0 ? Math.round((accionCounts.vencida / accionCounts.total) * 100) : 0}%`,
-			color: '#ef4444'
-		},
-		{
-			label: 'Cumplidas',
-			value: accionCounts.cumplida,
-			sub: `${accionCounts.total > 0 ? Math.round((accionCounts.cumplida / accionCounts.total) * 100) : 0}%`,
-			color: '#22c55e'
-		},
-		{
-			label: 'Rev. vencidas',
-			value: revisionCounts.vencida + revisionCounts.hoy,
-			sub: revisionCounts.vencida + revisionCounts.hoy > 0
-				? 'requieren seguimiento'
-				: 'al día con seguimientos',
-			color: '#dc2626'
+	const tipos = $derived.by(() => {
+		const counts = new Map<string, number>();
+		for (const a of acciones) {
+			const tipo = a.tipo_accion_ejecutar || 'Sin tipo';
+			counts.set(tipo, (counts.get(tipo) ?? 0) + 1);
 		}
-		]);
+		return [...counts.entries()].sort((a, b) => b[1] - a[1]);
+	});
+	const COLOR_TIPO: Record<string, string> = {
+		CORRECTIVA: AMBAR,
+		PREVENTIVA: '#8b5cf6',
+		MEJORA: '#079665'
+	};
 
-	function setFilter(value: ActionStatusGlobal | '') {
-		ponerFiltro('estado', value);
+	const resumen = $derived([
+		{ clave: '', etiqueta: 'Total', valor: accionCounts.total },
+		{ clave: 'EN_PROCESO', etiqueta: 'En proceso', valor: accionCounts.enProceso, color: AZUL },
+		{ clave: 'VENCIDA', etiqueta: 'Vencidas', valor: accionCounts.vencida, color: ROJO },
+		{ clave: 'CUMPLIDA', etiqueta: 'Cumplidas', valor: accionCounts.cumplida, color: VERDE },
+		{ clave: 'prox', etiqueta: 'Vencen en 7 días', valor: accionCounts.proxVencer, color: AMBAR },
+		{ clave: 'rev', etiqueta: 'Rev. vencidas', valor: revisionesVencidas.length, color: '#dc2626' }
+	]);
+	function elegirConteo(clave: string) {
+		if (clave === 'prox') return;
+		if (clave === 'rev') return ponerFiltro('revision', filtros.revision === 'vencidas' ? '' : 'vencidas');
+		ponerFiltro('estado', filtros.estado === clave ? '' : clave);
 	}
 
-	function setRevisionFilter(value: FiltroRevision) {
-		/// Pulsar el filtro activo lo quita; es un conmutador.
-		ponerFiltro('revision', filtros.revision === value ? '' : value);
-	}
+	const causas = $derived([
+		{ clave: 'total', etiqueta: 'Causas', valor: causasStats.total },
+		{ clave: 'proceso', etiqueta: 'En proceso', valor: causasStats.enProceso, color: AZUL },
+		{ clave: 'vencida', etiqueta: 'Vencidas', valor: causasStats.vencida, color: ROJO },
+		{ clave: 'cumplida', etiqueta: 'Cumplidas', valor: causasStats.cumplida, color: VERDE }
+	]);
 
-	function clearFilters() {
+	function limpiarFiltros() {
 		filtros = limpiarFiltrosDe(DEFS, filtros);
 	}
 
-	/// La recarga la dispara el cambio de filtros, no cada handler: así no hay
-	/// que acordarse de llamarla en cada sitio nuevo.
-	$effect(() => {
-		void filtros.search;
-		void filtros.estado;
-		void filtros.eliminadas;
-		cargarAcciones();
-	});
-
-	async function cargarAcciones() {
-		isLoading = true;
-		try {
-			const resultado = await accionesCorrectivasAPI.listar({
-				limit: 50,
-				sortBy: 'created_at',
-				sortOrder: 'desc',
-				...(search && { busqueda: search }),
-				...(activeFilter && { estado_global: activeFilter }),
-				...(filtros.eliminadas && { incluir_eliminados: true })
-			});
-			acciones = resultado.acciones;
-			total = resultado.total;
-			expandirVencidas = false;
-			expandirProximas = false;
-		} catch (error) {
-			const message = error instanceof Error ? error.message : 'Error al cargar las acciones';
-			toast.error(message);
-			acciones = [];
-		} finally {
-			isLoading = false;
-		}
-	}
-
-	function toggleDeleted() {
-		ponerFiltro('eliminadas', !filtros.eliminadas);
-	}
-
-	/// La papelera también viaja en la URL: antes se perdía al recargar y el
-	/// usuario volvía a la vista normal sin entender por qué.
-	const showDeleted = $derived(filtros.eliminadas);
-
-	/// Ya no hace falta leer la URL en `onMount`: `filtros` se inicializa desde
-	/// ella, y el efecto de carga se dispara solo.
-
-	/**
-	 * Filtros → URL.
-	 *
-	 * Con `goto`, no con `window.history.replaceState`. Aquel cambiaba la barra
-	 * de direcciones pero NO el store `page` de SvelteKit, así que cualquier
-	 * lógica que consultara `$page.url` leía la URL de carga, no la actual.
-	 */
-	$effect(() => {
-		estadoUrl.escribir(page.url, filtros);
-	});
-
-	function ponerFiltro<K extends keyof FiltrosAcciones>(clave: K, valor: FiltrosAcciones[K]) {
-		filtros = { ...filtros, [clave]: valor };
-	}
-
+	// ── Acciones sobre una tarjeta ───────────────────────────────────────
 	async function handleDuplicar(event: CustomEvent<{ id: string }>) {
 		const id = event.detail.id;
 		loadingState = { id, action: 'duplicar' };
 		try {
-			toast.loading('Duplicando acción...', { id: 'duplicar' });
-			const nuevaAccion = await accionesCorrectivasAPI.duplicar(id);
-			toast.success(`Acción duplicada: ${nuevaAccion.accion_numero}`, { id: 'duplicar' });
-			highlightId = nuevaAccion.id;
+			toast.loading('Duplicando acción…', { id: 'duplicar' });
+			const nueva = await accionesCorrectivasAPI.duplicar(id);
+			toast.success(`Acción duplicada: ${nueva.accion_numero}`, { id: 'duplicar' });
+			highlightId = nueva.id;
 			clearTimeout(highlightTimer);
-			highlightTimer = setTimeout(() => {
-				highlightId = null;
-			}, 3000);
+			highlightTimer = setTimeout(() => (highlightId = null), 3000);
 			await cargarAcciones();
-		} catch (error: any) {
-			const message = error instanceof Error ? error.message : 'Error al duplicar la acción';
-			toast.error(message, { id: 'duplicar' });
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'No se pudo duplicar', { id: 'duplicar' });
 		} finally {
 			loadingState = null;
 		}
@@ -309,7 +262,7 @@
 			toast.success('Acción movida a la papelera');
 			await cargarAcciones();
 		} catch (error: any) {
-			toast.error(error.message || 'Error al eliminar la acción');
+			toast.error(error?.message || 'No se pudo mover a la papelera');
 		} finally {
 			loadingState = null;
 		}
@@ -323,7 +276,7 @@
 			toast.success('Acción restaurada');
 			await cargarAcciones();
 		} catch (error: any) {
-			toast.error(error.message || 'Error al restaurar la acción');
+			toast.error(error?.message || 'No se pudo restaurar');
 		} finally {
 			loadingState = null;
 		}
@@ -343,7 +296,7 @@
 			toast.success('Acción eliminada permanentemente');
 			await cargarAcciones();
 		} catch (error: any) {
-			toast.error(error.message || 'Error al eliminar permanentemente');
+			toast.error(error?.message || 'No se pudo eliminar');
 		} finally {
 			loadingState = null;
 		}
@@ -353,12 +306,12 @@
 		const id = event.detail.id;
 		loadingState = { id, action: 'pdf' };
 		try {
-			toast.loading('Generando PDF...', { id: 'pdf' });
-			const accion = acciones.find(a => a.id === id);
+			toast.loading('Generando PDF…', { id: 'pdf' });
+			const accion = acciones.find((a) => a.id === id);
 			await accionesCorrectivasAPI.descargarPDF(id, accion?.accion_numero || id);
 			toast.success('PDF descargado', { id: 'pdf' });
 		} catch (error: any) {
-			toast.error(error.message || 'Error al exportar PDF', { id: 'pdf' });
+			toast.error(error?.message || 'No se pudo exportar el PDF', { id: 'pdf' });
 		} finally {
 			loadingState = null;
 		}
@@ -366,873 +319,429 @@
 </script>
 
 <svelte:head>
-	<title>Acciones Correctivas · Cotransmeq</title>
+	<title>Acciones correctivas — {EMPRESA}</title>
 </svelte:head>
 
-<div class="dash-wrapper" in:fade={{ duration: 400 }}>
-	<div class="dash">
-		<header class="header">
-			<div class="header-left">
-				<div class="logo-mark" aria-hidden="true">
-					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+<div class="dir-pagina ac-pagina" in:fade={{ duration: 400 }}>
+	<header class="page-card dir-cabecera" style="padding: 1.25rem 1.5rem;">
+		<div class="dir-cabecera-texto">
+			<h1 class="dir-titulo">Acciones correctivas y preventivas</h1>
+			<p class="dir-desc">
+				Hallazgos, causas, planes de acción y seguimiento del sistema de gestión HSEQ.
+			</p>
+			{#if !papelera}
+				<div class="dir-conteos">
+					<ResumenConteos
+						conteos={resumen}
+						activo={filtros.revision === 'vencidas' ? 'rev' : filtros.estado || null}
+						onElegir={elegirConteo}
+					/>
 				</div>
-				<div>
-					<span class="eyebrow">Acciones de mejora · {new Date().toLocaleDateString('es-CO', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
-					<h1>Acciones Correctivas y Preventivas</h1>
-					<p class="header-sub">Gestión HSEQ · Causas, planes de acción y seguimiento.</p>
-				</div>
-			</div>
-			<div class="header-actions">
-				<button
-					class="btn-trash-toggle"
-					class:btn-trash-active={showDeleted}
-					onclick={toggleDeleted}
-					aria-label="Ver papelera"
-				>
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-					<span>Papelera</span>
-				</button>
-				<button class="btn-primary" onclick={() => goto('/dashboard/acciones-correctivas/crear')} aria-label="Crear nueva acción">
-					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-					Nueva acción
-				</button>
-			</div>
-		</header>
-
-		{#if !isLoading && !showDeleted}
-			<section class="kpi-row" aria-label="Indicadores clave">
-				{#each kpis as kpi (kpi.label)}
-					<KpiCard {...kpi} />
-				{/each}
-			</section>
-		{/if}
-
-		{#if !isLoading && !showDeleted && (revisionesVencidas.length > 0 || revisionesProximas.length > 0)}
-			<section class="revisiones-panel" aria-label="Revisiones pendientes y próximas">
-				<div class="revisiones-col revisiones-col-vencidas">
-					<header class="revisiones-col-head">
-						<div class="revisiones-col-title">
-							<span class="revisiones-dot dot-vencida" aria-hidden="true"></span>
-							<h3>Vencidas de revisión</h3>
-						</div>
-						<span class="revisiones-count">{revisionesVencidas.length}</span>
-					</header>
-					<p class="revisiones-help">
-						Acciones cuya última actividad tiene más de 15 días. Se debió haber registrado un seguimiento antes de hoy.
-					</p>
-					<div class="revisiones-list">
-						{#each (expandirVencidas ? revisionesVencidas : revisionesVencidas.slice(0, REVISIONES_PANEL_LIMITE)) as acc (acc.id)}
-							<button
-								class="revision-item revision-item-vencida"
-								onclick={() => goto(`/dashboard/acciones-correctivas/${acc.id}`)}
-								title="Ir al detalle"
-							>
-								<div class="revision-item-head">
-									<span class="revision-item-num">{acc.accion_numero}</span>
-									<span class="revision-item-tag revision-item-tag-vencida">
-										{formatearDiasRelativo(acc._revision.diasHasta)}
-									</span>
-								</div>
-								<div class="revision-item-meta">
-									<span class="revision-item-resp">{acc.responsable_ejecucion || 'Sin asignar'}</span>
-									<span class="revision-item-sep">·</span>
-									<span>Última: {acc._revision.ultimaFecha ? formatDateCorta(acc._revision.ultimaFecha) : '—'}</span>
-								</div>
-							</button>
-						{/each}
-						{#if revisionesVencidas.length > REVISIONES_PANEL_LIMITE}
-							<button
-								class="revisiones-more"
-								onclick={() => (expandirVencidas = !expandirVencidas)}
-								aria-expanded={expandirVencidas}
-							>
-								{#if expandirVencidas}
-									Ver menos
-								{:else}
-									Ver {revisionesVencidas.length - REVISIONES_PANEL_LIMITE} más
-								{/if}
-							</button>
-						{/if}
-					</div>
-				</div>
-
-				<div class="revisiones-col revisiones-col-proximas">
-					<header class="revisiones-col-head">
-						<div class="revisiones-col-title">
-							<span class="revisiones-dot dot-proxima" aria-hidden="true"></span>
-							<h3>Próximas revisiones</h3>
-						</div>
-						<span class="revisiones-count">{revisionesProximas.length}</span>
-					</header>
-					<p class="revisiones-help">
-						Acciones cuya próxima revisión cae en los siguientes días. Planifica el seguimiento antes de que se venza.
-					</p>
-					<div class="revisiones-list">
-						{#each (expandirProximas ? revisionesProximas : revisionesProximas.slice(0, REVISIONES_PANEL_LIMITE)) as acc (acc.id)}
-							<button
-								class="revision-item revision-item-{acc._revision.estado === 'sin-actividad' ? 'sin' : 'proxima'}"
-								onclick={() => goto(`/dashboard/acciones-correctivas/${acc.id}`)}
-								title="Ir al detalle"
-							>
-								<div class="revision-item-head">
-									<span class="revision-item-num">{acc.accion_numero}</span>
-									<span class="revision-item-tag revision-item-tag-{acc._revision.estado === 'sin-actividad' ? 'sin' : 'proxima'}">
-										{#if acc._revision.estado === 'sin-actividad'}
-											Sin actividad
-										{:else}
-											{formatearDiasRelativo(acc._revision.diasHasta)}
-										{/if}
-									</span>
-								</div>
-								<div class="revision-item-meta">
-									<span class="revision-item-resp">{acc.responsable_ejecucion || 'Sin asignar'}</span>
-									<span class="revision-item-sep">·</span>
-									<span>Próx.: {acc._revision.proximaFecha ? formatDateCorta(acc._revision.proximaFecha) : '—'}</span>
-								</div>
-							</button>
-						{/each}
-						{#if revisionesProximas.length > REVISIONES_PANEL_LIMITE}
-							<button
-								class="revisiones-more"
-								onclick={() => (expandirProximas = !expandirProximas)}
-								aria-expanded={expandirProximas}
-							>
-								{#if expandirProximas}
-									Ver menos
-								{:else}
-									Ver {revisionesProximas.length - REVISIONES_PANEL_LIMITE} más
-								{/if}
-							</button>
-						{/if}
-					</div>
-				</div>
-			</section>
-		{/if}
-
-		{#if !isLoading && !showDeleted && acciones.length > 0 && causasStats.total > 0}
-			<section class="causa-stats-row" aria-label="Estado de causas">
-				<div class="causa-stat-card">
-					<span class="causa-stat-dot dot-proceso"></span>
-					<div class="causa-stat-info">
-						<span class="causa-stat-label">En Proceso (Causas)</span>
-						<span class="causa-stat-value">{causasStats.enProceso}</span>
-					</div>
-				</div>
-				<div class="causa-stat-card">
-					<span class="causa-stat-dot dot-vencida"></span>
-					<div class="causa-stat-info">
-						<span class="causa-stat-label">Vencidas (Causas)</span>
-						<span class="causa-stat-value">{causasStats.vencida}</span>
-					</div>
-				</div>
-				<div class="causa-stat-card">
-					<span class="causa-stat-dot dot-cumplida"></span>
-					<div class="causa-stat-info">
-						<span class="causa-stat-label">Cumplidas (Causas)</span>
-						<span class="causa-stat-value">{causasStats.cumplida}</span>
-					</div>
-				</div>
-				<div class="causa-stat-card causa-stat-total">
-					<span class="causa-stat-label">Total causas</span>
-					<span class="causa-stat-value">{causasStats.total}</span>
-				</div>
-			</section>
-		{/if}
-
-		{#if !isLoading && !showDeleted && Object.keys(tipoCounts).length > 0}
-			<div class="tipo-row" role="list" aria-label="Distribución por tipo">
-				{#each Object.entries(tipoCounts) as [tipo, count] (tipo)}
-					{@const pct = accionCounts.total > 0 ? Math.round((count / accionCounts.total) * 100) : 0}
-					<div class="tipo-item" role="listitem">
-						<span class="tipo-name">{tipo}</span>
-						<div class="tipo-bar-track" aria-label="{tipo}: {count} acciones ({pct}%)">
-							<div class="tipo-bar-fill tipo-{tipo.toLowerCase()}" style="width: {pct}%"></div>
-						</div>
-						<span class="tipo-count">{count}</span>
-					</div>
-				{/each}
-			</div>
-		{/if}
-
-		<div class="filter-bar" role="search">
-			<div class="search-wrap">
-				<BuscadorLista
-					valor={filtros.search}
-					onBuscar={(termino) => ponerFiltro('search', termino)}
-					placeholder={showDeleted
-						? 'Buscar en papelera…'
-						: 'Buscar por número, descripción, responsable…'}
-					etiqueta="Buscar acciones"
-				/>
-			</div>
-
-			{#if !showDeleted}
-			<nav class="pills" aria-label="Filtros de estado">
-				{#each FILTERS as f (f.label)}
-					<button
-						class="pill"
-						class:pill-active={activeFilter === f.value}
-						onclick={() => setFilter(f.value)}
-						aria-pressed={activeFilter === f.value}
-					>
-						{f.label}
-					{#if f.value}
-						<span class="pill-count">
-							{f.value === 'EN_PROCESO'
-								? accionCounts.enProceso
-								: f.value === 'VENCIDA'
-									? accionCounts.vencida
-									: accionCounts.cumplida}
-						</span>
-					{/if}
-					</button>
-				{/each}
-			</nav>
-
-			<nav class="pills pills-revision" aria-label="Filtros de revisión">
-				<button
-					class="pill pill-revision"
-					class:pill-active-vencida={filtros.revision === 'vencidas'}
-					class:pill-active={filtros.revision === 'vencidas'}
-					onclick={() => setRevisionFilter('vencidas')}
-					aria-pressed={filtros.revision === 'vencidas'}
-					title="Mostrar solo acciones con seguimiento vencido"
-				>
-					Rev. vencidas
-					{#if revisionCounts.vencida + revisionCounts.hoy > 0}
-						<span class="pill-count">{revisionCounts.vencida + revisionCounts.hoy}</span>
-					{/if}
-				</button>
-				<button
-					class="pill pill-revision"
-					class:pill-active-proxima={filtros.revision === 'proximas'}
-					class:pill-active={filtros.revision === 'proximas'}
-					onclick={() => setRevisionFilter('proximas')}
-					aria-pressed={filtros.revision === 'proximas'}
-					title="Mostrar acciones con revisión próxima o al día"
-				>
-					Rev. próximas
-					{#if revisionCounts.proxima + revisionCounts.alDia + revisionCounts.sinActividad > 0}
-						<span class="pill-count">{revisionCounts.proxima + revisionCounts.alDia + revisionCounts.sinActividad}</span>
-					{/if}
-				</button>
-			</nav>
 			{/if}
 		</div>
 
-		<div class="results-info" aria-live="polite" aria-atomic="true">
-			{#if isLoading}
-				<span>Cargando...</span>
-			{:else}
-				<span>
-					{#if showDeleted}
-						🗑️ Papelera:
-					{:else if filtros.revision}
-						{filteredAcciones.length} de {acciones.length} acción{acciones.length !== 1 ? 'es' : ''} (filtro: {filtros.revision === 'vencidas' ? 'rev. vencidas' : 'rev. próximas'})
-					{:else}
-						{acciones.length} acción{acciones.length !== 1 ? 'es' : ''} encontrada{acciones.length !== 1 ? 's' : ''}
+		<div class="dir-cabecera-acciones">
+			<button
+				type="button"
+				class="btn-secondary"
+				class:ac-papelera--on={papelera}
+				onclick={() => ponerFiltro('eliminadas', !papelera)}
+				aria-pressed={papelera}
+				title={papelera ? 'Volver a las acciones' : 'Ver la papelera'}
+			>
+				<Trash2 size={16} strokeWidth={2} />
+				Papelera
+			</button>
+			<button type="button" class="btn-primary" onclick={() => goto('/dashboard/acciones-correctivas/crear')}>
+				<Plus size={16} strokeWidth={2.4} />
+				Nueva acción
+			</button>
+		</div>
+	</header>
+
+	<div class="dir-filtros" in:fly={{ y: 12, duration: 400, delay: 80 }}>
+		<div class="dir-filtros-buscador">
+			<BuscadorLista
+				bind:valor={filtros.search}
+				onBuscar={(t) => ponerFiltro('search', t)}
+				placeholder={papelera ? 'Buscar en la papelera…' : 'Número, hallazgo, responsable…'}
+				etiqueta="Buscar acciones"
+			/>
+		</div>
+		{#if !papelera}
+			<SegmentosFiltro
+				etiqueta="Estado"
+				opciones={SEGMENTOS_ESTADO}
+				valor={filtros.estado}
+				onCambiar={(v) => ponerFiltro('estado', v)}
+			/>
+			<SegmentosFiltro
+				etiqueta="Revisión"
+				opciones={SEGMENTOS_REVISION}
+				valor={filtros.revision}
+				onCambiar={(v) => ponerFiltro('revision', v)}
+			/>
+		{/if}
+	</div>
+
+	{#if cargando}
+		<CargaMascota texto={papelera ? 'Abriendo la papelera…' : 'Cargando acciones…'} />
+	{:else}
+		{#if !papelera && (revisionesVencidas.length > 0 || revisionesProximas.length > 0)}
+			<!-- ── Seguimiento: lo que hay que revisar ya y lo que viene ── -->
+			<section class="ac-revisiones" aria-label="Revisiones pendientes y próximas" in:fly={{ y: 12, duration: 400, delay: 120 }}>
+				{#each [{ clave: 'vencidas', titulo: 'Vencidas de revisión', ayuda: 'Más de 15 días sin un seguimiento registrado.', lista: revisionesVencidas, expandida: expandirVencidas, tono: 'vencida' }, { clave: 'proximas', titulo: 'Próximas revisiones', ayuda: 'El siguiente seguimiento cae en los próximos días.', lista: revisionesProximas, expandida: expandirProximas, tono: 'proxima' }] as panel (panel.clave)}
+					{#if panel.lista.length > 0}
+						<article class="page-card ac-panel ac-panel--{panel.tono}">
+							<header class="ac-panel-cabecera">
+								<span class="ac-panel-punto" aria-hidden="true"></span>
+								<h2 class="ac-panel-titulo">{panel.titulo}</h2>
+								<span class="ac-panel-conteo">{panel.lista.length}</span>
+							</header>
+							<!-- Una tira de chips, no una fila por acción: el panel es un aviso
+							     rápido, no la lista. El detalle está a un clic. -->
+							<ul class="ac-chips" title={panel.ayuda}>
+								{#each panel.expandida ? panel.lista : panel.lista.slice(0, REVISIONES_PANEL_LIMITE) as acc (acc.id)}
+									<li>
+										<a
+											class="ac-chip"
+											href="/dashboard/acciones-correctivas/{acc.id}"
+											title="{acc.responsable_ejecucion || 'Sin asignar'} · {panel.clave === 'vencidas'
+												? `última: ${acc._revision.ultimaFecha ? formatDateCorta(acc._revision.ultimaFecha) : '—'}`
+												: `próxima: ${acc._revision.proximaFecha ? formatDateCorta(acc._revision.proximaFecha) : '—'}`}"
+										>
+											<span class="ac-chip-num">{acc.accion_numero}</span>
+											<span class="ac-chip-tag" class:ac-chip-tag--sin={acc._revision.estado === 'sin-actividad'}>
+												{acc._revision.estado === 'sin-actividad' ? 'sin actividad' : formatearDiasRelativo(acc._revision.diasHasta)}
+											</span>
+										</a>
+									</li>
+								{/each}
+								{#if panel.lista.length > REVISIONES_PANEL_LIMITE}
+									<li>
+										<button
+											type="button"
+											class="ac-chip ac-chip--mas"
+											aria-expanded={panel.expandida}
+											onclick={() => {
+												if (panel.clave === 'vencidas') expandirVencidas = !expandirVencidas;
+												else expandirProximas = !expandirProximas;
+											}}
+										>
+											{panel.expandida ? 'Ver menos' : `+${panel.lista.length - REVISIONES_PANEL_LIMITE} más`}
+										</button>
+									</li>
+								{/if}
+							</ul>
+						</article>
 					{/if}
-				</span>
-				{#if search || activeFilter || filtros.revision}
-					<button class="reset-btn" onclick={clearFilters}>
-						Limpiar filtros
+				{/each}
+			</section>
+		{/if}
+
+		{#if !papelera && acciones.length > 0 && (causasStats.total > 0 || tipos.length > 0)}
+			<!-- ── Causas y reparto por tipo, en una sola franja ── -->
+			<section class="page-card ac-resumen" aria-label="Causas y tipos" in:fly={{ y: 12, duration: 400, delay: 160 }}>
+				{#if causasStats.total > 0}
+					<div class="ac-resumen-bloque">
+						<span class="ac-resumen-titulo">Causas registradas</span>
+						<ResumenConteos conteos={causas} />
+					</div>
+				{/if}
+				{#if tipos.length > 0}
+					<div class="ac-resumen-bloque ac-resumen-bloque--tipos">
+						<span class="ac-resumen-titulo">Por tipo de acción</span>
+						<ul class="ac-tipos">
+							{#each tipos as [tipo, n] (tipo)}
+								{@const pct = accionCounts.total ? Math.round((n / accionCounts.total) * 100) : 0}
+								<li class="ac-tipo">
+									<span class="ac-tipo-nombre">{tipo}</span>
+									<span class="ac-tipo-barra" aria-label="{tipo}: {n} ({pct} %)">
+										<span class="ac-tipo-relleno" style="width: {pct}%; background: {COLOR_TIPO[tipo] ?? GRIS}"></span>
+									</span>
+									<span class="ac-tipo-n">{n}</span>
+								</li>
+							{/each}
+						</ul>
+					</div>
+				{/if}
+			</section>
+		{/if}
+
+		<p class="ac-resultados" aria-live="polite">
+			{#if papelera}
+				Papelera · {acciones.length} {acciones.length === 1 ? 'acción' : 'acciones'}
+			{:else if filtros.revision}
+				{accionesVisibles.length} de {acciones.length} {acciones.length === 1 ? 'acción' : 'acciones'}
+			{:else}
+				{acciones.length} {acciones.length === 1 ? 'acción' : 'acciones'}
+			{/if}
+			{#if hayFiltros}
+				<button type="button" class="ac-limpiar" onclick={limpiarFiltros}>Limpiar filtros</button>
+			{/if}
+		</p>
+
+		{#if accionesVisibles.length === 0}
+			{@const img = mascota(papelera || hayFiltros ? 'vacio' : 'espera')}
+			<div class="page-card dir-vacio">
+				<img src={img.src} alt={img.alt} width="418" height="418" />
+				<h3>
+					{papelera ? 'La papelera está vacía' : hayFiltros ? 'Sin resultados' : 'Todavía no hay acciones'}
+				</h3>
+				<p>
+					{papelera
+						? 'Lo que muevas a la papelera aparecerá aquí para restaurarlo o eliminarlo del todo.'
+						: hayFiltros
+							? 'Ninguna acción coincide con la búsqueda o los filtros elegidos.'
+							: 'Registra el primer hallazgo con sus causas y su plan de acción.'}
+				</p>
+				{#if hayFiltros}
+					<button type="button" class="btn-secondary" onclick={limpiarFiltros}>Limpiar filtros</button>
+				{:else if !papelera}
+					<button type="button" class="btn-primary" onclick={() => goto('/dashboard/acciones-correctivas/crear')}>
+						<Plus size={16} strokeWidth={2.4} />
+						Registrar acción
 					</button>
 				{/if}
-			{/if}
-		</div>
-
-		<main>
-			{#if isLoading}
-				<div class="empty" role="status">
-					<div class="spinner"></div>
-					<p>Cargando acciones...</p>
-				</div>
-			{:else if acciones.length === 0}
-				<div class="empty" role="status">
-					<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-					<p>{showDeleted ? 'No hay acciones en la papelera' : search || activeFilter || filtros.revision ? 'Sin resultados para los filtros aplicados' : 'No hay acciones registradas'}</p>
-					{#if !search && !activeFilter && !filtros.revision && !showDeleted}
-						<button class="btn-primary" onclick={() => goto('/dashboard/acciones-correctivas/crear')}>
-							Crear primera acción
-						</button>
-					{/if}
-				</div>
-			{:else if filteredAcciones.length === 0}
-				<div class="empty" role="status">
-					<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-					<p>No hay acciones con el filtro de revisión aplicado</p>
-					<button class="reset-btn" onclick={() => (filtros.revision = '')}>Quitar filtro de revisión</button>
-				</div>
-			{:else}
-				<div class="grid" transition:fly={{ y: 12, duration: 400 }}>
-					{#each acciones as accion (accion.id)}
-						<AccionCard
-							{accion}
-							highlight={highlightId === accion.id}
-							loadingAction={loadingState?.id === accion.id ? loadingState.action : null}
-							on:duplicar={handleDuplicar}
-							on:eliminar={handleEliminar}
-							on:restaurar={handleRestaurar}
-							on:eliminar-permanente={handleEliminarPermanente}
-							on:pdf={handleExportPDF}
-						/>
-					{/each}
-				</div>
-			{/if}
-		</main>
-	</div>
+			</div>
+		{:else}
+			<div class="ac-rejilla" in:fly={{ y: 12, duration: 400, delay: 200 }}>
+				{#each accionesVisibles as accion (accion.id)}
+					<AccionCard
+						{accion}
+						highlight={highlightId === accion.id}
+						loadingAction={loadingState?.id === accion.id ? loadingState.action : null}
+						on:duplicar={handleDuplicar}
+						on:eliminar={handleEliminar}
+						on:restaurar={handleRestaurar}
+						on:eliminar-permanente={handleEliminarPermanente}
+						on:pdf={handleExportPDF}
+					/>
+				{/each}
+			</div>
+		{/if}
+	{/if}
 </div>
 
 <style>
-	.dash-wrapper {
-		--surface: #fff;
-		--surface-hover: #fcfcfb;
-		--border: rgba(0, 0, 0, 0.08);
-		--border-default: rgba(0, 0, 0, 0.12);
-		--border-hover: rgba(0, 0, 0, 0.2);
-		--text-primary: #0f172a;
-		--text-secondary: #334155;
-		--text-muted: #64748b;
-		--accent: #ea580c;
-		--accent-hover: #c2410c;
-		--accent-bg: rgba(234, 88, 12, 0.08);
-		--accent-ring: rgba(234, 88, 12, 0.15);
-		--tag-bg: rgba(0, 0, 0, 0.05);
-		--avatar-bg: rgba(0, 0, 0, 0.05);
-		--avatar-color: #0f172a;
+	/* Las tarjetas de acción (`AccionCard`, `StatusBadge`, `CausasDots`) leen
+	   estas variables de su contenedor: aquí se mapean a los tokens de la app
+	   en vez de repetir hexadecimales. */
+	.ac-pagina {
+		--surface: var(--bg-surface);
+		--surface-hover: var(--bg-base);
+		--border: var(--border-subtle);
+		--border-default: var(--border-default);
+		--border-hover: var(--au-primary);
+		--accent: var(--au-primary);
+		--accent-hover: var(--au-primary-strong);
+		--accent-bg: var(--au-tint);
+		--accent-ring: rgba(var(--au-primary-rgb), 0.18);
+		--tag-bg: var(--bg-base);
+		--avatar-bg: var(--au-tint);
+		--avatar-color: var(--au-dark);
 		--ease: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+		height: auto;
+		min-height: 100%;
 	}
-	.dash {
-		padding: 2rem 2.5rem 4rem;
+
+	.ac-papelera--on {
+		border-color: var(--au-danger) !important;
+		color: var(--au-danger) !important;
+		background: var(--au-danger-soft) !important;
+	}
+
+	/* ═══ Paneles de revisión ═══ */
+	.ac-revisiones {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+		gap: 1rem;
+	}
+	.ac-panel {
 		display: flex;
 		flex-direction: column;
-		gap: 1.25rem;
+		gap: 0.55rem;
+		padding: 0.9rem 1.1rem;
 	}
-	.header {
+	.ac-panel--vencida {
+		--ac-tono: #dc2626;
+		--ac-tono-suave: #fff0ed;
+	}
+	.ac-panel--proxima {
+		--ac-tono: #b45309;
+		--ac-tono-suave: #fff4e5;
+	}
+	.ac-panel-cabecera {
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		gap: 16px;
-		padding-bottom: 1rem;
-		border-bottom: 1px solid var(--border);
-		flex-wrap: wrap;
+		gap: 0.55rem;
 	}
-	.header-left { display: flex; align-items: center; gap: 12px; }
-	.header-actions { display: flex; align-items: center; gap: 8px; }
-	.btn-trash-toggle {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		padding: 0.55rem 0.85rem;
-		background: transparent;
-		color: var(--text-muted);
-		border: 1px solid var(--border-default);
-		border-radius: 10px;
-		font-size: 0.8rem;
-		font-weight: 500;
-		cursor: pointer;
-		transition: all 0.2s var(--ease);
-		font-family: inherit;
-	}
-	.btn-trash-toggle:hover {
-		border-color: rgba(220, 38, 38, 0.3);
-		color: #b91c1c;
-		background: rgba(220, 38, 38, 0.04);
-	}
-	.btn-trash-active {
-		border-color: #b91c1c;
-		color: #b91c1c;
-		background: rgba(220, 38, 38, 0.06);
-	}
-	.logo-mark {
-		width: 44px;
-		height: 44px;
-		background: linear-gradient(135deg, var(--accent), var(--accent-hover));
-		color: #fff;
-		border-radius: 12px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		flex-shrink: 0;
-		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.3);
-	}
-	.eyebrow {
-		display: inline-block;
-		font-family: var(--font-sans);
-		font-size: 0.65rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.12em;
-		color: var(--accent-hover);
-		background: var(--accent-bg);
-		padding: 0.2rem 0.6rem;
-		border-radius: 5px;
-		margin-bottom: 0.35rem;
-	}
-	h1 {
-		font-family: var(--font-display);
-		font-size: 1.4rem;
-		font-weight: 800;
-		color: var(--text-primary);
-		letter-spacing: -0.015em;
-		line-height: 1.2;
-		margin: 0;
-	}
-	.header-sub {
-		font-size: 0.78rem;
-		color: var(--text-muted);
-		margin: 0.2rem 0 0;
-		line-height: 1.45;
-	}
-
-	.kpi-row,
-	.causa-stats-row {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-		gap: 0.75rem;
-	}
-	.causa-stat-card {
-		display: flex;
-		align-items: center;
-		gap: 0.65rem;
-		padding: 0.85rem 1rem;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		transition: all 0.2s var(--ease);
-		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-	}
-	.causa-stat-card:hover {
-		border-color: var(--border-hover);
-		transform: translateY(-1px);
-	}
-	.causa-stat-total {
-		justify-content: center;
-		background: var(--bg);
-	}
-	.causa-stat-dot {
-		width: 10px;
-		height: 10px;
+	.ac-panel-punto {
+		width: 9px;
+		height: 9px;
 		border-radius: 50%;
-		flex-shrink: 0;
-		box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.03);
+		background: var(--ac-tono);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--ac-tono) 18%, transparent);
 	}
-	.dot-proceso { background: #3b82f6; }
-	.dot-vencida { background: #ef4444; }
-	.dot-cumplida { background: #22c55e; }
-	.causa-stat-info { display: flex; flex-direction: column; min-width: 0; }
-	.causa-stat-label {
-		font-family: var(--font-sans);
-		font-size: 0.62rem;
-		font-weight: 700;
-		color: var(--text-muted);
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-	}
-	.causa-stat-value {
-		font-family: var(--font-display);
-		letter-spacing: -0.02em;
-		font-size: 1.25rem;
-		font-weight: 800;
-		color: var(--text-primary);
-		font-variant-numeric: tabular-nums;
-		line-height: 1.1;
-		margin-top: 0.15rem;
-	}
-	.causa-stat-total .causa-stat-value { font-size: 1.35rem; }
-
-	.tipo-row {
-		display: flex;
-		gap: 1.25rem;
-		padding: 1rem 1.25rem;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		flex-wrap: wrap;
-		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-	}
-	.tipo-item { display: flex; align-items: center; gap: 0.75rem; flex: 1; min-width: 140px; }
-	.tipo-name {
-		font-family: var(--font-sans);
-		font-size: 0.65rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: var(--text-muted);
-		min-width: 80px;
-	}
-	.tipo-bar-track {
+	.ac-panel-titulo {
+		margin: 0;
 		flex: 1;
-		height: 6px;
-		background: rgba(0, 0, 0, 0.06);
-		border-radius: 3px;
-		overflow: hidden;
-	}
-	.tipo-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
-	.tipo-correctiva { background: #f59e0b; }
-	.tipo-preventiva { background: #6366f1; }
-	.tipo-mejora { background: #22c55e; }
-	.tipo-count {
-		font-family: var(--font-sans);
-		font-size: 0.75rem;
-		font-weight: 700;
-		color: var(--text-primary);
-		font-variant-numeric: tabular-nums;
-		min-width: 20px;
-		text-align: right;
-	}
-
-	.filter-bar {
-		display: flex;
-		gap: 0.6rem;
-		align-items: center;
-		flex-wrap: wrap;
-		padding: 0.75rem;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-	}
-	.search-wrap { position: relative; flex: 1; min-width: 220px; }
-	.search-icon {
-		position: absolute;
-		left: 0.85rem;
-		top: 50%;
-		transform: translateY(-50%);
-		color: var(--text-very-muted, #94a3b8);
-		pointer-events: none;
-	}
-	.search-wrap input {
-		width: 100%;
-		padding: 0.55rem 2.4rem 0.55rem;
-		font-size: 0.85rem;
-		border-radius: 10px;
-		border: 1px solid var(--border-default);
-		background: var(--surface);
-		color: var(--text-primary);
-		outline: none;
-		transition: all 0.2s var(--ease);
-		font-family: inherit;
-	}
-	.search-wrap input:focus {
-		border-color: var(--accent);
-		box-shadow: 0 0 0 3px var(--accent-ring);
-	}
-	.search-wrap input::placeholder { color: var(--text-muted); }
-
-	.pills { display: flex; gap: 0.4rem; flex-wrap: wrap; }
-	.pill {
-		font-family: var(--font-sans);
-		font-size: 0.7rem;
-		font-weight: 600;
-		padding: 0.4rem 0.8rem;
-		border-radius: 999px;
-		border: 1px solid var(--border-default);
-		background: var(--surface);
-		color: var(--text-muted);
-		cursor: pointer;
-		transition: all 0.2s var(--ease);
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-		font-family: inherit;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-	}
-	.pill:hover {
-		border-color: var(--border-hover);
-		color: var(--text-primary);
-		background: var(--bg);
-	}
-	.pill-active {
-		background: var(--accent-bg);
-		border-color: rgba(234, 88, 12, 0.3);
-		color: var(--accent-hover);
-	}
-	.pill-count {
-		font-size: 0.6rem;
-		font-weight: 700;
-		background: rgba(0, 0, 0, 0.06);
-		border-radius: 8px;
-		padding: 0.1rem 0.4rem;
-		line-height: 1.4;
-		font-family: var(--font-sans);
-	}
-	.pill-active .pill-count { background: rgba(234, 88, 12, 0.2); color: var(--accent-hover); }
-	.pills-revision {
-		margin-left: auto;
-		padding-left: 0.6rem;
-		border-left: 1px dashed var(--border-default);
-	}
-	.pill-active-vencida {
-		background: rgba(220, 38, 38, 0.06);
-		border-color: rgba(220, 38, 38, 0.35);
-		color: #b91c1c;
-	}
-	.pill-active-vencida .pill-count {
-		background: rgba(220, 38, 38, 0.14);
-		color: #b91c1c;
-	}
-	.pill-active-proxima {
-		background: rgba(245, 158, 11, 0.06);
-		border-color: rgba(245, 158, 11, 0.4);
-		color: #b45309;
-	}
-	.pill-active-proxima .pill-count {
-		background: rgba(245, 158, 11, 0.18);
-		color: #b45309;
-	}
-
-	.revisiones-panel {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 0.85rem;
-	}
-	.revisiones-col {
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 14px;
-		padding: 1rem 1.1rem 1.1rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.65rem;
-		box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-		min-width: 0;
-	}
-	.revisiones-col-vencidas { border-color: rgba(220, 38, 38, 0.18); }
-	.revisiones-col-proximas { border-color: rgba(245, 158, 11, 0.22); }
-	.revisiones-col-head {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.5rem;
-	}
-	.revisiones-col-title {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-	}
-	.revisiones-col-title h3 {
 		font-family: var(--font-display);
-		font-size: 0.95rem;
+		font-size: 1rem;
 		font-weight: 800;
+		letter-spacing: -0.015em;
 		color: var(--text-primary);
+	}
+	.ac-panel-conteo {
+		padding: 0.15rem 0.6rem;
+		border-radius: 999px;
+		background: var(--ac-tono-suave);
+		color: var(--ac-tono);
+		font-size: 0.78rem;
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+	}
+	.ac-chips {
+		list-style: none;
 		margin: 0;
-		letter-spacing: -0.01em;
+		padding: 0;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
 	}
-	.revisiones-dot {
-		width: 8px;
-		height: 8px;
-		border-radius: 50%;
+	.ac-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+		min-height: 2rem;
+		padding: 0.2rem 0.3rem 0.2rem 0.65rem;
+		border: 1px solid var(--border-subtle);
+		border-radius: 999px;
+		background: var(--bg-base);
+		color: var(--text-primary);
+		font-family: inherit;
+		font-size: 0.78rem;
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+		text-decoration: none;
+		cursor: pointer;
+		transition:
+			border-color 0.15s ease,
+			background-color 0.15s ease;
 	}
-	.dot-vencida { background: #ef4444; box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.18); }
-	.dot-proxima { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2); }
-	.revisiones-count {
-		font-family: var(--font-sans);
-		font-size: 0.7rem;
-		font-weight: 700;
-		background: rgba(0, 0, 0, 0.06);
+	.ac-chip:hover {
+		border-color: var(--ac-tono);
+		background: var(--bg-surface);
+	}
+	.ac-chip-tag {
+		padding: 0.1rem 0.5rem;
+		border-radius: 999px;
+		background: var(--ac-tono-suave);
+		color: var(--ac-tono);
+		font-size: 0.68rem;
+		font-weight: 800;
+		white-space: nowrap;
+	}
+	.ac-chip-tag--sin {
+		background: var(--bg-surface);
 		color: var(--text-muted);
-		padding: 0.15rem 0.55rem;
-		border-radius: 8px;
+		border: 1px solid var(--border-subtle);
 	}
-	.revisiones-col-vencidas .revisiones-count {
-		background: rgba(220, 38, 38, 0.08);
-		color: #b91c1c;
+	.ac-chip--mas {
+		padding: 0.2rem 0.75rem;
+		background: var(--bg-surface);
+		color: var(--au-primary-strong);
 	}
-	.revisiones-col-proximas .revisiones-count {
-		background: rgba(245, 158, 11, 0.1);
-		color: #b45309;
+
+	/* ═══ Causas y tipos ═══ */
+	.ac-resumen {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+		gap: 1rem 2rem;
 	}
-	.revisiones-help {
-		font-size: 0.72rem;
+	.ac-resumen-bloque {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+		min-width: 0;
+	}
+	.ac-resumen-titulo {
+		font-size: 0.66rem;
+		font-weight: 800;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
 		color: var(--text-muted);
+	}
+	.ac-tipos {
+		list-style: none;
 		margin: 0;
-		line-height: 1.45;
-	}
-	.revisiones-list {
+		padding: 0;
 		display: flex;
 		flex-direction: column;
 		gap: 0.4rem;
 	}
-	.revision-item {
-		display: flex;
-		flex-direction: column;
-		gap: 0.25rem;
-		padding: 0.55rem 0.7rem;
-		background: var(--bg);
-		border: 1px solid var(--border);
-		border-radius: 10px;
-		text-align: left;
-		font-family: inherit;
-		cursor: pointer;
-		transition: all 0.18s var(--ease);
-		color: var(--text-primary);
-		min-width: 0;
-	}
-	.revision-item:hover {
-		transform: translateY(-1px);
-		border-color: var(--border-hover);
-	}
-	.revision-item-vencida:hover {
-		border-color: rgba(220, 38, 38, 0.4);
-		box-shadow: 0 4px 12px rgba(220, 38, 38, 0.1);
-	}
-	.revision-item-proxima:hover {
-		border-color: rgba(245, 158, 11, 0.5);
-		box-shadow: 0 4px 12px rgba(245, 158, 11, 0.12);
-	}
-	.revision-item-sin:hover {
-		border-color: var(--border-hover);
-	}
-	.revision-item-head {
-		display: flex;
+	.ac-tipo {
+		display: grid;
+		grid-template-columns: 7rem 1fr 2.5rem;
 		align-items: center;
-		justify-content: space-between;
-		gap: 0.5rem;
+		gap: 0.6rem;
 	}
-	.revision-item-num {
-		font-family: var(--font-sans);
+	.ac-tipo-nombre {
 		font-size: 0.78rem;
 		font-weight: 700;
-		color: var(--text-primary);
-		letter-spacing: 0.02em;
-	}
-	.revision-item-tag {
-		font-family: var(--font-sans);
-		font-size: 0.6rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.05em;
-		padding: 0.1rem 0.5rem;
-		border-radius: 6px;
-		white-space: nowrap;
-	}
-	.revision-item-tag-vencida {
-		background: rgba(220, 38, 38, 0.08);
-		color: #b91c1c;
-		border: 1px solid rgba(220, 38, 38, 0.22);
-	}
-	.revision-item-tag-proxima {
-		background: rgba(245, 158, 11, 0.1);
-		color: #b45309;
-		border: 1px solid rgba(245, 158, 11, 0.28);
-	}
-	.revision-item-tag-sin {
-		background: rgba(0, 0, 0, 0.05);
-		color: var(--text-muted);
-		border: 1px solid var(--border-default);
-	}
-	.revision-item-meta {
-		font-size: 0.72rem;
-		color: var(--text-muted);
-		display: flex;
-		align-items: center;
-		gap: 0.35rem;
-		overflow: hidden;
-		white-space: nowrap;
-	}
-	.revision-item-resp {
-		font-weight: 600;
 		color: var(--text-secondary);
-		max-width: 50%;
+		white-space: nowrap;
 		overflow: hidden;
 		text-overflow: ellipsis;
 	}
-	.revision-item-sep { opacity: 0.5; }
-	.revisiones-more {
-		font-family: var(--font-sans);
-		font-size: 0.68rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		background: transparent;
-		border: 1px dashed var(--border-default);
-		border-radius: 10px;
-		padding: 0.5rem 0.6rem;
-		color: var(--text-muted);
-		cursor: pointer;
-		transition: all 0.2s var(--ease);
+	.ac-tipo-barra {
+		display: block;
+		height: 8px;
+		border-radius: 999px;
+		background: var(--bg-base);
+		overflow: hidden;
 	}
-	.revisiones-more:hover {
-		color: var(--accent-hover);
-		border-color: rgba(234, 88, 12, 0.35);
-		background: var(--accent-bg);
+	.ac-tipo-relleno {
+		display: block;
+		height: 100%;
+		border-radius: 999px;
+		transition: width 0.4s ease;
+	}
+	.ac-tipo-n {
+		font-size: 0.8rem;
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+		text-align: right;
+		color: var(--text-primary);
 	}
 
-	.results-info {
+	/* ═══ Resultados y rejilla ═══ */
+	.ac-resultados {
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
-		font-size: 0.78rem;
+		margin: 0;
+		font-size: 0.8rem;
+		font-weight: 600;
 		color: var(--text-muted);
 	}
-	.reset-btn {
-		font-size: 0.78rem;
-		color: var(--accent);
+	.ac-limpiar {
+		border: 0;
 		background: none;
-		border: none;
-		cursor: pointer;
 		padding: 0;
+		color: var(--au-primary-strong);
 		font-family: inherit;
-		font-weight: 600;
-		transition: color 0.2s var(--ease);
+		font-size: inherit;
+		font-weight: 800;
+		cursor: pointer;
 	}
-	.reset-btn:hover {
-		color: var(--accent-hover);
+	.ac-limpiar:hover {
+		text-decoration: underline;
 	}
-
-	.grid {
+	.ac-rejilla {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-		gap: 0.85rem;
-	}
-	/* En escritorio, cinco por fila: la tarjeta recorta descripción y
-	   etiquetas, así que cabe sin que se desproporcione. */
-	@media (min-width: 1360px) {
-		.grid {
-			grid-template-columns: repeat(5, minmax(0, 1fr));
-		}
-	}
-
-	.empty {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 0.75rem;
-		padding: 4rem 2rem;
-		color: var(--text-muted);
-		text-align: center;
-		background: var(--surface);
-		border: 1px solid var(--border);
-		border-radius: 16px;
-	}
-	.empty p { font-size: 0.88rem; margin: 0; }
-	.spinner {
-		width: 32px;
-		height: 32px;
-		border: 3px solid rgba(234, 88, 12, 0.15);
-		border-top-color: var(--accent);
-		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
-	}
-	@keyframes spin { to { transform: rotate(360deg); } }
-
-	@media (max-width: 600px) {
-		.dash { padding: 1.25rem 1rem 3rem; }
-		h1 { font-size: 1.2rem; }
-		.tipo-row { gap: 0.75rem; }
-		.kpi-row,
-		.causa-stats-row {
-			grid-template-columns: repeat(2, 1fr);
-		}
-		.revisiones-panel { grid-template-columns: 1fr; }
-		.pills-revision {
-			margin-left: 0;
-			padding-left: 0;
-			border-left: none;
-			width: 100%;
-		}
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+		gap: 1rem;
+		padding-bottom: 1rem;
 	}
 </style>
