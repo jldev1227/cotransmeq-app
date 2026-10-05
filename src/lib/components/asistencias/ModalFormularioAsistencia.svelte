@@ -1,374 +1,261 @@
 <script lang="ts">
-	import { createEventDispatcher } from 'svelte';
-	import { fade, fly } from 'svelte/transition';
+	/**
+	 * Alta y edición de un formulario de asistencia.
+	 *
+	 * Usa el mismo cascarón que los formularios de directorio (`ModalEntidad`):
+	 * encabezado de marca, pie con las acciones, Escape/fondo y el aviso de
+	 * cambios sin guardar. Antes era un modal propio con clases de Tailwind y
+	 * validaba con toasts; ahora cada campo marca su propio error.
+	 */
+	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import ModalEntidad from '$lib/components/directorio/ModalEntidad.svelte';
+	import Campo from '$lib/components/directorio/Campo.svelte';
 	import {
 		asistenciasAPI,
 		type CreateFormularioInput,
+		type FormularioAsistencia,
 		type TipoEvento
 	} from '$lib/api/asistencias';
+	import { TIPOS_EVENTO } from '$lib/asistencias/eventos';
 
-	export let isOpen = false;
-	export let formularioEdit: any = null;
-
-	const dispatch = createEventDispatcher();
-
-	// Form fields
-	let tematica = '';
-	let objetivo = '';
-	let fecha = '';
-	let horaInicio = '';
-	let horaFinalizacion = '';
-	let tipoEvento: TipoEvento = 'capacitacion';
-	let tipoEventoOtro = '';
-	let lugarSede = '';
-	let nombreInstructor = '';
-	let observaciones = '';
-	let isSubmitting = false;
-
-	const tiposEvento: Array<{ value: TipoEvento; label: string }> = [
-		{ value: 'capacitacion', label: 'Capacitación' },
-		{ value: 'asesoria', label: 'Asesoría' },
-		{ value: 'charla', label: 'Charla' },
-		{ value: 'induccion', label: 'Inducción' },
-		{ value: 'reunion', label: 'Reunión' },
-		{ value: 'divulgacion', label: 'Divulgación' },
-		{ value: 'otro', label: 'Otro' }
-	];
-
-	$: if (isOpen && formularioEdit) {
-		tematica = formularioEdit.tematica || '';
-		objetivo = formularioEdit.objetivo || '';
-		fecha = formularioEdit.fecha ? formularioEdit.fecha.split('T')[0] : '';
-		horaInicio = formularioEdit.hora_inicio || '';
-		horaFinalizacion = formularioEdit.hora_finalizacion || '';
-		tipoEvento = formularioEdit.tipo_evento || 'capacitacion';
-		tipoEventoOtro = formularioEdit.tipo_evento_otro || '';
-		lugarSede = formularioEdit.lugar_sede || '';
-		nombreInstructor = formularioEdit.nombre_instructor || '';
-		observaciones = formularioEdit.observaciones || '';
+	interface Props {
+		open: boolean;
+		/** Formulario a editar; `null` crea uno nuevo. */
+		formulario?: FormularioAsistencia | null;
+		oncerrar: () => void;
+		onguardado?: (formulario: FormularioAsistencia) => void;
 	}
 
-	$: if (isOpen && !formularioEdit) {
-		resetForm();
+	let { open, formulario = null, oncerrar, onguardado }: Props = $props();
+
+	const TABS = [{ id: 'evento', label: 'Evento' }];
+
+	interface Form {
+		tematica: string;
+		objetivo: string;
+		fecha: string;
+		hora_inicio: string;
+		hora_finalizacion: string;
+		tipo_evento: TipoEvento;
+		tipo_evento_otro: string;
+		lugar_sede: string;
+		nombre_instructor: string;
+		observaciones: string;
 	}
 
-	function resetForm() {
-		tematica = '';
-		objetivo = '';
-		fecha = new Date().toISOString().split('T')[0];
-		horaInicio = '';
-		horaFinalizacion = '';
-		tipoEvento = 'capacitacion';
-		tipoEventoOtro = '';
-		lugarSede = '';
-		nombreInstructor = '';
-		observaciones = '';
+	const hoy = () => new Date().toISOString().split('T')[0];
+
+	function desde(f: FormularioAsistencia | null): Form {
+		return {
+			tematica: f?.tematica ?? '',
+			objetivo: f?.objetivo ?? '',
+			fecha: f?.fecha ? f.fecha.split('T')[0] : hoy(),
+			hora_inicio: f?.hora_inicio ?? '',
+			hora_finalizacion: f?.hora_finalizacion ?? '',
+			tipo_evento: f?.tipo_evento ?? 'capacitacion',
+			tipo_evento_otro: f?.tipo_evento_otro ?? '',
+			lugar_sede: f?.lugar_sede ?? '',
+			nombre_instructor: f?.nombre_instructor ?? '',
+			observaciones: f?.observaciones ?? ''
+		};
 	}
 
-	function closeModal() {
-		isOpen = false;
-		resetForm();
-		dispatch('close');
-	}
+	let form = $state<Form>(desde(null));
+	let inicial = $state('');
+	let errores = $state<Partial<Record<keyof Form, string>>>({});
+	let guardando = $state(false);
+	let tab = $state('evento');
 
-	async function handleSubmit() {
-		if (!tematica.trim()) {
-			toast.error('La temática es requerida');
-			return;
+	/// Cada apertura parte del formulario recibido (o de uno vacío) y guarda
+	/// la foto inicial para saber si hay cambios sin guardar.
+	$effect(() => {
+		if (!open) return;
+		const f = formulario;
+		untrack(() => {
+			form = desde(f);
+			inicial = JSON.stringify(form);
+			errores = {};
+		});
+	});
+
+	const editando = $derived(!!formulario);
+	const sucio = $derived(JSON.stringify(form) !== inicial);
+	const inv = (k: keyof Form) => (errores[k] ? 'true' : undefined);
+
+	function validar(): boolean {
+		const e: Partial<Record<keyof Form, string>> = {};
+		if (!form.tematica.trim()) e.tematica = 'Escribe la temática del evento.';
+		if (!form.fecha) e.fecha = 'La fecha es obligatoria.';
+		if (form.tipo_evento === 'otro' && !form.tipo_evento_otro.trim()) {
+			e.tipo_evento_otro = 'Indica qué tipo de evento es.';
 		}
-
-		if (!fecha) {
-			toast.error('La fecha es requerida');
-			return;
+		if (form.hora_inicio && form.hora_finalizacion && form.hora_finalizacion <= form.hora_inicio) {
+			e.hora_finalizacion = 'Debe ser posterior a la hora de inicio.';
 		}
+		errores = e;
+		return Object.keys(e).length === 0;
+	}
 
-		if (tipoEvento === 'otro' && !tipoEventoOtro.trim()) {
-			toast.error('Debe especificar el tipo de evento');
-			return;
-		}
-
-		isSubmitting = true;
-
+	async function guardar() {
+		if (!validar()) return;
+		guardando = true;
 		try {
 			const data: CreateFormularioInput = {
-				tematica: tematica.trim(),
-				objetivo: objetivo.trim() || undefined,
-				fecha: new Date(fecha).toISOString(),
-				hora_inicio: horaInicio || undefined,
-				hora_finalizacion: horaFinalizacion || undefined,
-				tipo_evento: tipoEvento,
-				tipo_evento_otro: tipoEvento === 'otro' ? tipoEventoOtro.trim() : undefined,
-				lugar_sede: lugarSede.trim() || undefined,
-				nombre_instructor: nombreInstructor.trim() || undefined,
-				observaciones: observaciones.trim() || undefined
+				tematica: form.tematica.trim(),
+				objetivo: form.objetivo.trim() || undefined,
+				fecha: new Date(form.fecha).toISOString(),
+				hora_inicio: form.hora_inicio || undefined,
+				hora_finalizacion: form.hora_finalizacion || undefined,
+				tipo_evento: form.tipo_evento,
+				tipo_evento_otro: form.tipo_evento === 'otro' ? form.tipo_evento_otro.trim() : undefined,
+				lugar_sede: form.lugar_sede.trim() || undefined,
+				nombre_instructor: form.nombre_instructor.trim() || undefined,
+				observaciones: form.observaciones.trim() || undefined
 			};
-
-			let formulario;
-
-			if (formularioEdit) {
-				formulario = await asistenciasAPI.actualizarFormulario(formularioEdit.id, data);
-			} else {
-				formulario = await asistenciasAPI.crearFormulario(data);
-				toast.success('Formulario creado exitosamente');
-			}
-
-			dispatch('save', { formulario });
-			closeModal();
+			const guardado = formulario
+				? await asistenciasAPI.actualizarFormulario(formulario.id, data)
+				: await asistenciasAPI.crearFormulario(data);
+			toast.success(formulario ? 'Formulario actualizado' : 'Formulario creado');
+			onguardado?.(guardado);
+			oncerrar();
 		} catch (error: any) {
-			toast.error(error.message || 'Error al guardar el formulario');
+			toast.error(error?.message || 'No se pudo guardar el formulario');
 		} finally {
-			isSubmitting = false;
+			guardando = false;
 		}
 	}
 </script>
 
-{#if isOpen}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
-		on:click={closeModal}
-		on:keydown={(e) => e.key === 'Escape' && closeModal()}
-		role="button"
-		tabindex="0"
-		transition:fade={{ duration: 200 }}
-	>
-		<div
-			class="max-h-[40rem] w-full max-w-3xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl"
-			on:click|stopPropagation
-			on:keydown|stopPropagation
-			role="dialog"
-			tabindex="0"
-			transition:fly={{ y: 50, duration: 300 }}
-		>
-			<!-- Header -->
-			<div class="mb-6 flex items-center justify-between">
-				<h2 class="text-2xl font-bold text-gray-900">
-					{formularioEdit ? 'Editar Formulario' : 'Nuevo Formulario'}
-				</h2>
-				<button
-					on:click={closeModal}
-					class="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-					disabled={isSubmitting}
-					aria-label="Cerrar modal"
+<ModalEntidad
+	{open}
+	eyebrow={editando ? 'EDITAR ASISTENCIA' : 'NUEVA ASISTENCIA'}
+	title={editando ? form.tematica || 'Formulario de asistencia' : 'Nuevo formulario de asistencia'}
+	subtitle={editando
+		? 'Los asistentes que ya firmaron no se ven afectados.'
+		: 'Los campos con * son obligatorios. El enlace para firmar se genera al crearlo.'}
+	tabs={TABS}
+	bind:tabActiva={tab}
+	erroresPorTab={{ evento: Object.keys(errores).length }}
+	{guardando}
+	{sucio}
+	textoGuardar={editando ? 'Guardar cambios' : 'Crear formulario'}
+	onguardar={guardar}
+	{oncerrar}
+>
+	{#snippet children()}
+		<div class="de-grid">
+			<Campo id="as-tematica" label="Temática del evento" requerido error={errores.tematica} completo>
+				<input
+					id="as-tematica"
+					class="de-input"
+					placeholder="Ej. Seguridad y salud en el trabajo"
+					bind:value={form.tematica}
+					aria-invalid={inv('tematica')}
+					disabled={guardando}
+				/>
+			</Campo>
+
+			<Campo id="as-tipo" label="Tipo de evento" requerido>
+				<select id="as-tipo" class="de-input" bind:value={form.tipo_evento} disabled={guardando}>
+					{#each TIPOS_EVENTO as t (t.value)}
+						<option value={t.value}>{t.label}</option>
+					{/each}
+				</select>
+			</Campo>
+
+			<Campo id="as-fecha" label="Fecha" requerido error={errores.fecha}>
+				<input
+					id="as-fecha"
+					type="date"
+					class="de-input"
+					bind:value={form.fecha}
+					aria-invalid={inv('fecha')}
+					disabled={guardando}
+				/>
+			</Campo>
+
+			{#if form.tipo_evento === 'otro'}
+				<Campo
+					id="as-tipo-otro"
+					label="¿Qué tipo de evento?"
+					requerido
+					error={errores.tipo_evento_otro}
+					completo
 				>
-					<svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M6 18L18 6M6 6l12 12"
-						/>
-					</svg>
-				</button>
-			</div>
-
-			<form on:submit|preventDefault={handleSubmit} class="space-y-4">
-				<!-- Temática (requerido) -->
-				<div>
-					<label for="tematica" class="mb-2 block text-sm font-medium text-gray-700">
-						Temática del Evento <span class="text-red-500">*</span>
-					</label>
 					<input
-						id="tematica"
-						type="text"
-						bind:value={tematica}
-						placeholder="Ej: Seguridad y Salud en el Trabajo"
-						class="w-full rounded-xl border border-gray-300 px-4 py-2.5 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 focus:outline-none"
-						disabled={isSubmitting}
-						required
+						id="as-tipo-otro"
+						class="de-input"
+						placeholder="Ej. Simulacro de evacuación"
+						bind:value={form.tipo_evento_otro}
+						aria-invalid={inv('tipo_evento_otro')}
+						disabled={guardando}
 					/>
-				</div>
+				</Campo>
+			{/if}
 
-				<!-- Objetivo -->
-				<div>
-					<label for="objetivo" class="mb-2 block text-sm font-medium text-gray-700">
-						Objetivo
-					</label>
-					<textarea
-						id="objetivo"
-						bind:value={objetivo}
-						placeholder="Describe el objetivo o propósito del evento..."
-						rows="3"
-						class="w-full rounded-xl border border-gray-300 px-4 py-2.5 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 focus:outline-none"
-						disabled={isSubmitting}
-					></textarea>
-				</div>
+			<Campo id="as-hora-inicio" label="Hora de inicio">
+				<input
+					id="as-hora-inicio"
+					type="time"
+					class="de-input"
+					bind:value={form.hora_inicio}
+					disabled={guardando}
+				/>
+			</Campo>
 
-				<!-- Tipo de Evento -->
-				<div>
-					<label for="tipoEvento" class="mb-2 block text-sm font-medium text-gray-700">
-						Tipo de Evento <span class="text-red-500">*</span>
-					</label>
-					<select
-						id="tipoEvento"
-						bind:value={tipoEvento}
-						class="w-full rounded-xl border border-gray-300 px-4 py-2.5 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 focus:outline-none"
-						disabled={isSubmitting}
-						required
-					>
-						{#each tiposEvento as tipo}
-							<option value={tipo.value}>{tipo.label}</option>
-						{/each}
-					</select>
-				</div>
+			<Campo id="as-hora-fin" label="Hora de finalización" error={errores.hora_finalizacion}>
+				<input
+					id="as-hora-fin"
+					type="time"
+					class="de-input"
+					bind:value={form.hora_finalizacion}
+					aria-invalid={inv('hora_finalizacion')}
+					disabled={guardando}
+				/>
+			</Campo>
 
-				<!-- Tipo Evento Otro (condicional) -->
-				{#if tipoEvento === 'otro'}
-					<div transition:fly={{ y: -10, duration: 300 }}>
-						<label for="tipoEventoOtro" class="mb-2 block text-sm font-medium text-gray-700">
-							Especificar Tipo de Evento <span class="text-red-500">*</span>
-						</label>
-						<input
-							id="tipoEventoOtro"
-							type="text"
-							bind:value={tipoEventoOtro}
-							placeholder="Especifique el tipo de evento"
-							class="w-full rounded-xl border border-gray-300 px-4 py-2.5 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 focus:outline-none"
-							disabled={isSubmitting}
-							required
-						/>
-					</div>
-				{/if}
+			<Campo id="as-lugar" label="Lugar o sede">
+				<input
+					id="as-lugar"
+					class="de-input"
+					placeholder="Ej. Sede Yopal, virtual…"
+					bind:value={form.lugar_sede}
+					disabled={guardando}
+				/>
+			</Campo>
 
-				<!-- Fecha, Hora Inicio, Hora Fin -->
-				<div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-					<div>
-						<label for="fecha" class="mb-2 block text-sm font-medium text-gray-700">
-							Fecha <span class="text-red-500">*</span>
-						</label>
-						<input
-							id="fecha"
-							type="date"
-							bind:value={fecha}
-							class="w-full rounded-xl border border-gray-300 px-4 py-2.5 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 focus:outline-none"
-							disabled={isSubmitting}
-							required
-						/>
-					</div>
+			<Campo id="as-instructor" label="Instructor o facilitador">
+				<input
+					id="as-instructor"
+					class="de-input"
+					placeholder="Ej. Juan Pérez · ARL Sura"
+					bind:value={form.nombre_instructor}
+					disabled={guardando}
+				/>
+			</Campo>
 
-					<div>
-						<label for="horaInicio" class="mb-2 block text-sm font-medium text-gray-700">
-							Hora Inicio
-						</label>
-						<input
-							id="horaInicio"
-							type="time"
-							bind:value={horaInicio}
-							class="w-full rounded-xl border border-gray-300 px-4 py-2.5 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 focus:outline-none"
-							disabled={isSubmitting}
-						/>
-					</div>
+			<Campo id="as-objetivo" label="Objetivo" completo ayuda="Se muestra a los asistentes antes de firmar.">
+				<textarea
+					id="as-objetivo"
+					class="de-input"
+					rows="3"
+					placeholder="Propósito del evento…"
+					bind:value={form.objetivo}
+					disabled={guardando}
+				></textarea>
+			</Campo>
 
-					<div>
-						<label for="horaFin" class="mb-2 block text-sm font-medium text-gray-700">
-							Hora Finalización
-						</label>
-						<input
-							id="horaFin"
-							type="time"
-							bind:value={horaFinalizacion}
-							class="w-full rounded-xl border border-gray-300 px-4 py-2.5 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 focus:outline-none"
-							disabled={isSubmitting}
-						/>
-					</div>
-				</div>
-
-				<!-- Lugar/Sede -->
-				<div>
-					<label for="lugarSede" class="mb-2 block text-sm font-medium text-gray-700">
-						Lugar / Sede
-					</label>
-					<input
-						id="lugarSede"
-						type="text"
-						bind:value={lugarSede}
-						placeholder="Ej: Oficina Principal, Sede Sur, Virtual"
-						class="w-full rounded-xl border border-gray-300 px-4 py-2.5 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 focus:outline-none"
-						disabled={isSubmitting}
-					/>
-				</div>
-
-				<!-- Nombre del Instructor -->
-				<div>
-					<label for="nombreInstructor" class="mb-2 block text-sm font-medium text-gray-700">
-						Nombre del Instructor / Facilitador
-					</label>
-					<input
-						id="nombreInstructor"
-						type="text"
-						bind:value={nombreInstructor}
-						placeholder="Ej: Juan Pérez - ARL Sura"
-						class="w-full rounded-xl border border-gray-300 px-4 py-2.5 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 focus:outline-none"
-						disabled={isSubmitting}
-					/>
-				</div>
-
-				<!-- Observaciones -->
-				<div>
-					<label for="observaciones" class="mb-2 block text-sm font-medium text-gray-700">
-						Observaciones
-					</label>
-					<textarea
-						id="observaciones"
-						bind:value={observaciones}
-						placeholder="Observaciones o comentarios adicionales sobre el evento..."
-						rows="3"
-						class="w-full rounded-xl border border-gray-300 px-4 py-2.5 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/20 focus:outline-none"
-						disabled={isSubmitting}
-					></textarea>
-				</div>
-
-				<!-- Buttons -->
-				<div class="flex items-center justify-end gap-3 border-t pt-4">
-					<button
-						type="button"
-						on:click={closeModal}
-						class="btn-secondary"
-						disabled={isSubmitting}
-					>
-						Cancelar
-					</button>
-					<button
-						type="submit"
-						class="btn-primary flex items-center gap-2 disabled:cursor-not-allowed"
-						disabled={isSubmitting}
-					>
-						{#if isSubmitting}
-							<svg
-								class="h-5 w-5 animate-spin"
-								fill="none"
-								viewBox="0 0 24 24"
-								stroke="currentColor"
-							>
-								<circle
-									class="opacity-25"
-									cx="12"
-									cy="12"
-									r="10"
-									stroke="currentColor"
-									stroke-width="4"
-								/>
-								<path
-									class="opacity-75"
-									fill="currentColor"
-									d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-								/>
-							</svg>
-							<span>Guardando...</span>
-						{:else}
-							<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M5 13l4 4L19 7"
-								/>
-							</svg>
-							<span>{formularioEdit ? 'Actualizar' : 'Crear Formulario'}</span>
-						{/if}
-					</button>
-				</div>
-			</form>
+			<Campo id="as-observaciones" label="Observaciones" completo>
+				<textarea
+					id="as-observaciones"
+					class="de-input"
+					rows="2"
+					placeholder="Comentarios internos sobre el evento…"
+					bind:value={form.observaciones}
+					disabled={guardando}
+				></textarea>
+			</Campo>
 		</div>
-	</div>
-{/if}
+	{/snippet}
+</ModalEntidad>
