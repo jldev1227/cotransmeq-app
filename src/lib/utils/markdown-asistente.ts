@@ -32,8 +32,25 @@ function enLinea(t: string): string {
 		// escribe sin formato markdown aunque el prompt se lo pida. Se vuelven
 		// enlace igual; la que ya está dentro de un <a> no se toca.
 		.replace(/(^|[\s(])(\/dashboard\/[^\s)<]*[^\s)<.,;:])/g, (_m, antes: string, ruta: string) => {
-			return `${antes}<a href="${ruta}" data-interno>${ruta}</a>`;
+			return `${antes}<a href="${ruta}" data-interno>${textoDeRuta(ruta)}</a>`;
 		});
+}
+
+/// Texto legible para una ruta suelta: el id interno (UUID) no le dice nada a
+/// quien lee y el prompt pide no mostrarlo. «/dashboard/servicios/<id>» se lee
+/// «ver servicio»; una ruta sin id, «abrir en pantalla».
+const ETIQUETAS_RUTA: [RegExp, string][] = [
+	[/^\/dashboard\/servicios\//, 'ver servicio'],
+	[/^\/dashboard\/conductores\//, 'ver conductor'],
+	[/^\/dashboard\/clientes\//, 'ver cliente'],
+	[/^\/dashboard\/formularios\/envios\//, 'ver envío'],
+	[/^\/dashboard\/liquidaciones-servicios\//, 'ver liquidación'],
+	[/^\/dashboard\/acciones-correctivas\//, 'ver acción']
+];
+const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+function textoDeRuta(ruta: string): string {
+	if (!UUID.test(ruta)) return ruta.includes('?') ? 'abrir en pantalla' : ruta;
+	return ETIQUETAS_RUTA.find(([re]) => re.test(ruta))?.[1] ?? 'abrir';
 }
 
 const ES_FILA_TABLA = /^\s*\|.*\|\s*$/;
