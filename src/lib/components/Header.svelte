@@ -7,10 +7,10 @@
 	import { notificacionesStore } from '$lib/stores/notificaciones';
 	import { authStore } from '$lib/stores/auth';
 	import { socketUtils, socketStore, socketManager } from '$lib/socket';
-	import { notificacionesApi } from '$lib/api/notificaciones';
 	import { mobileDrawerStore } from '$lib/stores/mobileDrawer';
 	import { sidebarStore } from '$lib/stores/sidebar';
 	import type { Notificacion } from '$lib/api/notificaciones';
+	import ModalNotificaciones from '$lib/components/notificaciones/ModalNotificaciones.svelte';
 
 	const dispatch = createEventDispatcher();
 
@@ -76,12 +76,6 @@
 
 	let showAllNotifications = false;
 
-	// Full notifications modal state
-	let allNotifs: Notificacion[] = [];
-	let allNotifsTotal = 0;
-	let allNotifsPage = 1;
-	let allNotifsTotalPages = 1;
-	let allNotifsLoading = false;
 
 	$: notifState = $notificacionesStore;
 	$: noLeidas = notifState.noLeidas;
@@ -118,15 +112,9 @@
 		}
 	}
 
-	function marcarTodasLeidas() {
-		notificacionesStore.marcarTodasLeidas();
-	}
 
 	async function handleNotifClick(notif: Notificacion) {
-		// Marcar como leída
-		if (!notif.leida) {
-			await notificacionesStore.marcarLeida(notif.id);
-		}
+		/// Marcarla como leída lo hace `ModalNotificaciones` antes de llamar aquí.
 		showAllNotifications = false;
 
 		// Navegar según referencia_tipo
@@ -150,68 +138,18 @@
 				// mismo canvas, SvelteKit conservaría el componente y su caché podría
 				// seguir mostrando el PDF anterior a la firma.
 				window.location.assign(`/dashboard/nomina/canvas?${params.toString()}`);
+			} else if (notif.referencia_tipo === 'ACCION_CORRECTIVA') {
+				goto(`/dashboard/acciones-correctivas/${notif.referencia_id}`);
+			} else if (notif.tipo.startsWith('FACTURA_')) {
+				goto('/dashboard/liquidaciones-servicios?tab=facturas');
 			} else if (notif.tipo.startsWith('LIQUIDACION_')) {
 				goto('/dashboard/liquidaciones-servicios');
 			}
 		}
 	}
 
-	async function abrirTodasNotificaciones() {
+	function abrirTodasNotificaciones() {
 		showAllNotifications = true;
-		allNotifsPage = 1;
-		await cargarTodasNotificaciones();
-	}
-
-	async function cargarTodasNotificaciones() {
-		allNotifsLoading = true;
-		try {
-			const res = await notificacionesApi.listar(allNotifsPage, 20);
-			allNotifs = res.notificaciones;
-			allNotifsTotal = res.total;
-			allNotifsTotalPages = res.totalPages;
-		} catch (e) {
-			console.error('Error cargando todas las notificaciones:', e);
-		} finally {
-			allNotifsLoading = false;
-		}
-	}
-
-	async function cambiarPaginaNotifs(p: number) {
-		if (p < 1 || p > allNotifsTotalPages) return;
-		allNotifsPage = p;
-		await cargarTodasNotificaciones();
-	}
-
-	function timeAgo(dateStr: string): string {
-		const now = Date.now();
-		const date = new Date(dateStr).getTime();
-		const diff = now - date;
-		const mins = Math.floor(diff / 60000);
-		if (mins < 1) return 'Ahora';
-		if (mins < 60) return `${mins} min`;
-		const hrs = Math.floor(mins / 60);
-		if (hrs < 24) return `${hrs}h`;
-		const days = Math.floor(hrs / 24);
-		return `${days}d`;
-	}
-
-	function formatDateFull(dateStr: string): string {
-		return new Date(dateStr).toLocaleDateString('es-CO', {
-			day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-		});
-	}
-
-	function getNotifIcon(tipo: string): string {
-		switch (tipo) {
-			case 'LIQUIDACION_ANULADA': return '🚫';
-			case 'LIQUIDACION_PENDIENTE': return '📋';
-			case 'LIQUIDACION_CREADA': return '🆕';
-			case 'LIQUIDACION_ACTUALIZADA': return '✏️';
-			case 'ACTIVIDAD_PESV_ASIGNADA': return '📌';
-			case 'ACTIVIDAD_PESV_ACTUALIZADA': return '🔄';
-			case 'ACTIVIDAD_PESV_VENCIDA': return '⏰';
-			default: return '🔔';
-		}
 	}
 </script>
 
@@ -367,72 +305,12 @@
 	</div>
 </header>
 
-<!-- Full Notifications Modal -->
-{#if showAllNotifications}
-	<div class="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true" tabindex="-1" on:click|self={() => showAllNotifications = false} on:keydown={e => e.key === 'Escape' && (showAllNotifications = false)} transition:fade={{ duration: 200 }}>
-		<div class="confirm-card flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden" in:fly={{ y: 30, duration: 300 }}>
-			<!-- Header -->
-			<div class="flex items-center justify-between px-6 py-4" style="border-bottom: 1px solid var(--border-subtle);">
-				<h2 class="font-display text-lg" style="color: var(--bg-charcoal);">Notificaciones</h2>
-				<div class="flex items-center gap-2">
-					{#if noLeidas > 0}
-						<button class="rounded-lg px-3 py-1.5 text-sm font-medium" style="color: var(--orange-600);" on:click={marcarTodasLeidas}>
-							Marcar todas como leídas
-						</button>
-					{/if}
-					<button class="flex h-8 w-8 items-center justify-center rounded-lg" style="color: var(--text-muted);" on:click={() => showAllNotifications = false}>✕</button>
-				</div>
-			</div>
-
-			<!-- Body -->
-			<div class="flex-1 overflow-y-auto">
-				{#if allNotifsLoading}
-					<div class="flex items-center justify-center py-12">
-						<div class="spinner"></div>
-					</div>
-				{:else if allNotifs.length === 0}
-					<div class="py-12 text-center" style="color: var(--text-very-muted);">
-						<span class="text-3xl">🔔</span>
-						<p class="mt-2">No hay notificaciones</p>
-					</div>
-				{:else}
-					{#each allNotifs as notif (notif.id)}
-						<button
-							class="w-full px-6 py-4 text-left apple-transition"
-							style="border-bottom: 1px solid var(--border-subtle); background-color: {notif.leida ? 'transparent' : 'rgba(234, 88, 12,0.04)'};"
-							on:click={() => handleNotifClick(notif)}
-						>
-							<div class="flex items-start gap-3">
-								<span class="mt-0.5 text-lg">{getNotifIcon(notif.tipo)}</span>
-								<div class="min-w-0 flex-1">
-									<div class="flex items-center gap-2">
-										<p class="text-sm font-medium" style="color: var(--text-primary);">{notif.titulo}</p>
-										{#if !notif.leida}
-											<span class="h-2 w-2 flex-shrink-0 rounded-full" style="background-color: var(--orange-500);"></span>
-										{/if}
-									</div>
-									<p class="mt-1 text-sm" style="color: var(--text-secondary);">{notif.mensaje}</p>
-									<p class="mt-1 text-xs" style="color: var(--text-very-muted);">{formatDateFull(notif.created_at)}</p>
-								</div>
-							</div>
-						</button>
-					{/each}
-				{/if}
-			</div>
-
-			<!-- Pagination -->
-			{#if allNotifsTotalPages > 1}
-				<div class="flex items-center justify-between px-6 py-3" style="border-top: 1px solid var(--border-subtle);">
-					<span class="text-xs" style="color: var(--text-muted);">Página {allNotifsPage} de {allNotifsTotalPages} ({allNotifsTotal} total)</span>
-					<div class="flex gap-1">
-						<button class="rounded-lg border px-3 py-1 text-sm disabled:opacity-40" style="border-color: var(--border-default);" disabled={allNotifsPage === 1} on:click={() => cambiarPaginaNotifs(allNotifsPage - 1)}>←</button>
-						<button class="rounded-lg border px-3 py-1 text-sm disabled:opacity-40" style="border-color: var(--border-default);" disabled={allNotifsPage === allNotifsTotalPages} on:click={() => cambiarPaginaNotifs(allNotifsPage + 1)}>→</button>
-					</div>
-				</div>
-			{/if}
-		</div>
-	</div>
-{/if}
+<!-- Historial de notificaciones: el modal vive en su componente. -->
+<ModalNotificaciones
+	open={showAllNotifications}
+	oncerrar={() => (showAllNotifications = false)}
+	onabrir={handleNotifClick}
+/>
 
 <style>
 	/* ── Header en el verde del menú lateral ──
