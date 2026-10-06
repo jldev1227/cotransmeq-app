@@ -69,31 +69,48 @@
 	}
 
 	// ── Sopa de letras ──
-	// Las palabras se escriben una por línea; se guardan como lista.
+	// Tres estados locales y la configuración se arma SOLO al guardar. Antes
+	// un `$effect` leía `p.configuracion` y la reescribía: se disparaba a sí
+	// mismo, Svelte cortaba el ciclo y dejaba de aplicar cambios, así que el
+	// modal se abría pero ya no se podía cerrar.
+	const sopaInicial = p.configuracion;
 	let palabrasTexto = $state(
-		Array.isArray(p.configuracion?.palabras)
-			? p
-					.configuracion!.palabras.map((x: any) => (typeof x === 'string' ? x : (x?.texto ?? '')))
+		Array.isArray(sopaInicial?.palabras)
+			? sopaInicial.palabras
+					.map((x: any) => (typeof x === 'string' ? x : (x?.texto ?? '')))
 					.join('\n')
 			: ''
 	);
-	$effect(() => {
-		if (p.tipo !== 'SOPA_LETRAS') return;
-		const palabras = palabrasTexto
+	let sopaTamano = $state<number>(sopaInicial?.tamano ?? 12);
+	let sopaDiagonales = $state<boolean>(sopaInicial?.diagonales ?? false);
+
+	const palabrasSopa = $derived(
+		palabrasTexto
 			.split(/\r?\n|,/)
 			.map((x) => x.trim())
-			.filter(Boolean);
-		p.configuracion = {
-			tamano: p.configuracion?.tamano ?? 12,
-			diagonales: p.configuracion?.diagonales ?? false,
-			cuadricula: p.configuracion?.cuadricula,
-			palabras
-		};
-	});
-	const palabrasSopa = $derived(p.tipo === 'SOPA_LETRAS' ? (p.configuracion?.palabras ?? []) : []);
+			.filter(Boolean)
+	);
 	const palabraMasLarga = $derived(
 		palabrasSopa.reduce((m, x) => Math.max(m, x.replace(/[^\p{L}]/gu, '').length), 0)
 	);
+	const resumenSopa = $derived(
+		`${palabrasSopa.length} ${palabrasSopa.length === 1 ? 'palabra' : 'palabras'}` +
+			(palabraMasLarga > 0 ? ` · la más larga tiene ${palabraMasLarga} letras` : '')
+	);
+	const tamanoInsuficiente = $derived(palabraMasLarga > 0 && palabraMasLarga > sopaTamano);
+
+	function guardar() {
+		if (p.tipo === 'SOPA_LETRAS') {
+			p.configuracion = {
+				palabras: palabrasSopa,
+				tamano: sopaTamano,
+				diagonales: sopaDiagonales,
+				// Se reenvía la cuadrícula: el backend la conserva si nada cambió.
+				cuadricula: sopaInicial?.cuadricula
+			};
+		}
+		onGuardar(p);
+	}
 
 	function teclado(e: KeyboardEvent) {
 		if (e.key === 'Escape') onCancelar();
@@ -296,42 +313,63 @@
 						<div>
 							<h4>Palabras escondidas</h4>
 							<p>
-								Una por línea. El backend arma la cuadrícula al guardar; cada palabra hallada suma
-								la parte proporcional del puntaje.
+								Una por línea. La cuadrícula se arma al guardar; cada palabra hallada suma su parte
+								del puntaje.
 							</p>
 						</div>
 					</div>
+
 					<div class="ev-campo">
 						<label for="mp-sopa-palabras">Palabras</label>
 						<textarea
 							id="mp-sopa-palabras"
 							bind:value={palabrasTexto}
-							rows="5"
+							rows="4"
 							placeholder={'CASCO\nGUANTES\nEXTINTOR'}
 						></textarea>
-						<small>
-							{palabrasSopa.length} palabra{palabrasSopa.length === 1 ? '' : 's'}
-							{#if palabraMasLarga > 0}· la más larga tiene {palabraMasLarga} letras{/if}
-						</small>
 					</div>
+
+					{#if palabrasSopa.length > 0}
+						<ul class="mp-sopa-palabras" aria-label="Vista previa de las palabras">
+							{#each palabrasSopa as palabra, i (i)}
+								<li>{palabra.toUpperCase()}</li>
+							{/each}
+						</ul>
+					{/if}
+					<p class="mp-sopa-resumen">
+						{resumenSopa}
+					</p>
+
 					<div class="mp-sopa-ajustes">
 						<div class="ev-campo">
 							<label for="mp-sopa-tamano">Tamaño de la cuadrícula</label>
-							<input
-								id="mp-sopa-tamano"
-								type="number"
-								min="6"
-								max="20"
-								bind:value={p.configuracion!.tamano}
-							/>
-							<small>Entre 6 y 20; nunca menor que la palabra más larga.</small>
+							<div class="mp-puntaje-control mp-sopa-tamano">
+								<input id="mp-sopa-tamano" type="number" min="6" max="20" bind:value={sopaTamano} />
+							</div>
+							{#if tamanoInsuficiente}
+								<small class="mp-sopa-alerta">
+									Debe ser al menos {palabraMasLarga} para que quepa la palabra más larga.
+								</small>
+							{:else}
+								<small>Entre 6 y 20.</small>
+							{/if}
 						</div>
-						<label class="mp-sopa-check">
-							<input type="checkbox" bind:checked={p.configuracion!.diagonales} />
-							<span>
+
+						<label class="ev-toggle mp-sopa-toggle" for="mp-sopa-diagonales">
+							<span class="ev-toggle-texto">
 								<strong>Diagonales e inversas</strong>
-								<small>Sin marcar, solo de izquierda a derecha y de arriba abajo.</small>
+								<small>
+									{sopaDiagonales
+										? 'En las ocho direcciones, también al revés.'
+										: 'Solo de izquierda a derecha y de arriba abajo.'}
+								</small>
 							</span>
+							<input
+								id="mp-sopa-diagonales"
+								type="checkbox"
+								class="ev-switch"
+								bind:checked={sopaDiagonales}
+							/>
 						</label>
 					</div>
 				</div>
@@ -402,7 +440,7 @@
 
 		<footer class="mp-pie">
 			<button type="button" class="btn-secondary" onclick={onCancelar}>Cancelar</button>
-			<button type="button" class="btn-primary" onclick={() => onGuardar(p)}>
+			<button type="button" class="btn-primary" onclick={guardar}>
 				{editando ? 'Guardar cambios' : 'Agregar pregunta'}
 			</button>
 		</footer>
@@ -723,34 +761,48 @@
 		color: var(--au-danger);
 	}
 
+	.mp-sopa-palabras {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.mp-sopa-palabras li {
+		padding: 0.2rem 0.6rem;
+		border-radius: 999px;
+		background: var(--au-tint);
+		color: var(--au-dark);
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+	}
+	.mp-sopa-resumen {
+		margin: 0;
+		font-size: 0.74rem;
+		color: var(--au-muted);
+	}
 	.mp-sopa-ajustes {
 		display: grid;
 		grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-		gap: 0.9rem;
-		align-items: start;
+		gap: 0.75rem;
+		align-items: stretch;
+		padding-top: 0.25rem;
 	}
-	.mp-sopa-check {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.6rem;
-		padding: 0.6rem 0.75rem;
-		border: 1.5px solid var(--au-border);
-		border-radius: 14px;
-		cursor: pointer;
-		font-size: 0.84rem;
+	/* Dentro de la sección (que ya tiene el fondo base) el conmutador va en
+	   tarjeta blanca, como las opciones y los pares. */
+	/* Más específico que `.ev-campo input[type='number']`, que lo estira al 100 %. */
+	.mp-sopa-tamano input[type='number'] {
+		width: 6rem;
 	}
-	.mp-sopa-check input {
-		margin-top: 0.2rem;
-		accent-color: var(--au-primary);
+	.mp-sopa-toggle {
+		background: #fff;
+		box-shadow: 0 2px 6px rgba(1, 67, 57, 0.05);
 	}
-	.mp-sopa-check span {
-		display: flex;
-		flex-direction: column;
-		gap: 0.1rem;
-	}
-	.mp-sopa-check small {
-		font-size: 0.74rem;
-		color: var(--au-muted);
+	.mp-sopa-alerta {
+		color: var(--au-danger) !important;
+		font-weight: 600;
 	}
 	.mp-par {
 		display: grid;
