@@ -28,7 +28,9 @@
 	}
 </script>
 
-<svelte:window onkeydown={atajo} />
+<!-- En captura: con el foco en la hoja, Univer se queda con el ⌘K antes de
+     que llegue a window y el panel no abría. -->
+<svelte:window onkeydowncapture={atajo} />
 
 <AsistentePanel />
 

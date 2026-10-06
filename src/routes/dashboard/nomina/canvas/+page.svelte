@@ -51,12 +51,12 @@
 	// `pdfDesprendible.ts`, que es el mismo documento que ve el conductor en
 	// el portal. Aquí no se maqueta nada.
 	import {
-		abrirDesprendible,
 		blobDesprendible,
 		limpiarCacheDesprendibles
 	} from '$lib/editor/canvas/desprendible-nomina';
 	import { crearZip } from '$lib/components/liquidaciones-terceros/preview/zip';
 	import SnapshotPanel from '$lib/components/univer/SnapshotPanel.svelte';
+	import ModalDesprendible from '$lib/components/nomina/ModalDesprendible.svelte';
 	import UniverToolbar from '$lib/components/univer/UniverToolbar.svelte';
 	import SelectorCanvasNomina from '$lib/components/univer/SelectorCanvasNomina.svelte';
 	import SelectorHojaNomina from '$lib/components/univer/SelectorHojaNomina.svelte';
@@ -177,7 +177,20 @@
 	const abrirPreviewPedido = $page.url.searchParams.get('preview') === '1';
 	let previewAutomaticoConsumido = false;
 	let previewFirmadoUrl = $state<string | null>(null);
-	let previewFirmadoNombre = $state('Desprendible firmado');
+	let previewFirmadoNombre = $state('');
+	/// El modal del desprendible es uno solo para todas las entradas (carril,
+	/// asistente, notificación de firma); solo cambia el rótulo.
+	let previewEtiqueta = $state('DESPRENDIBLE');
+	let previewArchivo = $state('desprendible.pdf');
+	const previewPeriodo = $derived.by(() => {
+		const dias = datos?.periodo.dias ?? [];
+		const a = dias[0]?.fecha;
+		const b = dias[dias.length - 1]?.fecha;
+		if (!a || !b) return '';
+		const f = (iso: string) =>
+			new Date(`${iso}T00:00:00Z`).toLocaleDateString('es-CO', { timeZone: 'UTC', day: 'numeric', month: 'short', year: 'numeric' });
+		return `Periodo ${f(a)} – ${f(b)}`;
+	});
 	let accionEnCurso = $state<{ titulo: string; detalle?: string } | null>(null);
 	let presencia = $state<{ id: string; name: string }[]>([]);
 	let conectado = $state(true);
@@ -1238,7 +1251,7 @@
 		}
 		const hoja = hojaActiva;
 		await conOverlay('Generando el desprendible', hoja.nombre, async () => {
-			await abrirDesprendible(hoja.liquidacionId!);
+			mostrarPreview(hoja, await blobDesprendible(hoja.liquidacionId!), 'DESPRENDIBLE');
 		});
 	}
 
@@ -1248,10 +1261,16 @@
 			// debe servir aquí el blob que el canvas pudiera tener en memoria.
 			limpiarCacheDesprendibles();
 			const blob = await blobDesprendible(hoja.liquidacionId!);
-			if (previewFirmadoUrl) URL.revokeObjectURL(previewFirmadoUrl);
-			previewFirmadoUrl = URL.createObjectURL(blob);
-			previewFirmadoNombre = `Desprendible firmado · ${hoja.nombre}`;
+			mostrarPreview(hoja, blob, 'FIRMA RECIBIDA');
 		});
+	}
+
+	function mostrarPreview(hoja: NonNullable<typeof hojaActiva>, blob: Blob, etiqueta: string) {
+		if (previewFirmadoUrl) URL.revokeObjectURL(previewFirmadoUrl);
+		previewFirmadoUrl = URL.createObjectURL(blob);
+		previewFirmadoNombre = hoja.nombre;
+		previewEtiqueta = etiqueta;
+		previewArchivo = `Desprendible ${hoja.nombre}.pdf`;
 	}
 
 	function cerrarPreviewFirmado() {
@@ -2263,18 +2282,14 @@
 {/if}
 
 {#if previewFirmadoUrl}
-	<div class="fixed inset-0 z-[100] flex flex-col bg-slate-950/75 p-3 backdrop-blur-sm md:p-6" role="dialog" aria-modal="true" aria-label={previewFirmadoNombre}>
-		<div class="mx-auto flex h-full w-full max-w-6xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
-			<header class="flex items-center justify-between gap-4 border-b border-slate-200 px-4 py-3 md:px-5">
-				<div class="min-w-0">
-					<p class="text-[10px] font-bold tracking-[0.16em] text-emerald-700">FIRMA RECIBIDA</p>
-					<h2 class="truncate text-base font-bold text-slate-900">{previewFirmadoNombre}</h2>
-				</div>
-				<button class="btn-secondary" onclick={cerrarPreviewFirmado}>Cerrar</button>
-			</header>
-			<iframe class="min-h-0 flex-1 bg-slate-100" src={previewFirmadoUrl} title={previewFirmadoNombre}></iframe>
-		</div>
-	</div>
+	<ModalDesprendible
+		url={previewFirmadoUrl}
+		titulo={previewFirmadoNombre}
+		etiqueta={previewEtiqueta}
+		periodo={previewPeriodo}
+		archivo={previewArchivo}
+		onclose={cerrarPreviewFirmado}
+	/>
 {/if}
 
 <style>
