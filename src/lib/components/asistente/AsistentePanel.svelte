@@ -77,6 +77,12 @@
 			return ['¿Qué liquidaciones hay en borrador este mes?', 'Duplica la liquidación … en borrador con el consecutivo …'];
 		if (r.startsWith('/dashboard/clientes'))
 			return ['¿Qué clientes requieren OSI?', 'Busca el cliente por NIT'];
+		if (r.startsWith('/dashboard/nomina'))
+			return ['¿Qué liquidaciones de nómina están pendientes?', '¿Cuánto se liquidó en el último periodo?'];
+		if (r.startsWith('/dashboard/liquidaciones-terceros'))
+			return ['¿Cuánto se les liquidó a los terceros este mes?', '¿Qué cierres están en borrador?'];
+		if (r.startsWith('/dashboard/conductores/recorridos'))
+			return ['¿Quién tiene más días laborados este mes?', '¿Qué conductores no han registrado recorridos?'];
 		return ['¿Qué puedo hacer en esta app?', 'Llévame a nómina', '¿Cuántos servicios hubo este mes?'];
 	}
 
@@ -205,6 +211,14 @@
 			void tick().then(() => entrada?.focus());
 			void bajar();
 		}
+	});
+
+	/// Lo que está fuera del <main> del dashboard (el body fijo de los canvas
+	/// Univer, el visor PDF de la liquidación) no sabe del panel: una clase en
+	/// <html> y reglas globales en app.css les quitan los 420px de la derecha.
+	$effect(() => {
+		document.documentElement.classList.toggle('asistente-abierto', $asistenteAbierto);
+		return () => document.documentElement.classList.remove('asistente-abierto');
 	});
 </script>
 

@@ -13,6 +13,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import UniverAuthGuard from '$lib/components/univer/UniverAuthGuard.svelte';
 	import UniverShell from '$lib/components/univer/UniverShell.svelte';
+	import AsistenteCanvas from '$lib/components/asistente/AsistenteCanvas.svelte';
 	import '$lib/components/univer/toolbar.css';
 	import type { Snippet } from 'svelte';
 
@@ -37,4 +38,6 @@
 	<UniverShell>
 		{@render children()}
 	</UniverShell>
+	<!-- Asistente: este layout se salta la cabecera del dashboard, así que va aquí. -->
+	<AsistenteCanvas />
 </UniverAuthGuard>

@@ -204,8 +204,15 @@
 					: 'lg:ml-64'} apple-transition"
 				class:con-asistente={$asistenteAbierto}
 			>
-				<!-- Slot para el contenido de las páginas -->
-				<slot />
+				<!-- Slot para el contenido de las páginas. El `key` por pathname
+				     remonta la página cuando se pasa de /liquidaciones/A a
+				     /liquidaciones/B: SvelteKit reutiliza el componente y las
+				     páginas que cargan en onMount se quedaban con el registro
+				     anterior (solo cambiaba la URL). Los parámetros de consulta
+				     no remontan: los filtros y modales por URL siguen igual. -->
+				{#key $page.url.pathname}
+					<slot />
+				{/key}
 			</main>
 		</div>
 	</div>

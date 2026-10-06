@@ -2299,3 +2299,16 @@ html {
 		animation: none !important;
 	}
 }
+
+/* ── Asistente abierto fuera del <main> del dashboard ──
+   El panel (420px, fijo a la derecha) empuja al <main> con margin-right, pero
+   el body fijo de los canvas Univer y el visor PDF de la liquidación
+   (`.pdf-wrap`, fixed inset 0) no cuelgan de ese margen: se encogen con esta
+   clase que pone AsistentePanel en <html>. Por debajo de 1024px el panel va
+   encima, como en el resto de la app. */
+@media (min-width: 1024px) {
+	html.asistente-abierto body.univer-shell-active,
+	html.asistente-abierto .pdf-wrap {
+		right: 420px;
+	}
+}
