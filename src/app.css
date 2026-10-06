@@ -2312,3 +2312,12 @@ html {
 		right: 420px;
 	}
 }
+/* En los canvas no hay cabecera del dashboard (64px): el panel se acopla
+   como una columna más, después del carril, de arriba abajo y sin sombra. */
+html.univer-shell-active .asis-panel {
+	top: 0;
+	box-shadow: none;
+}
+html.univer-shell-active .asis-fondo {
+	inset: 0;
+}

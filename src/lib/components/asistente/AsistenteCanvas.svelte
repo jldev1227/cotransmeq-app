@@ -6,14 +6,15 @@
 	 * Esas pantallas usan `+layout@.svelte` para saltarse el layout del
 	 * dashboard —y con él la cabecera donde vive el disparador y el panel—, así
 	 * que aquí se montan los dos de nuevo: el mismo panel (la conversación vive
-	 * en el store y sobrevive al cambio de pantalla) y un botón flotante con el
-	 * atajo ⌘K. Cuando el panel se abre, `html.asistente-abierto` hace que el
+	 * en el store y sobrevive al cambio de pantalla), el atajo ⌘K y, solo si la
+	 * página no monta `UniverSideRail` (que lleva el botón al pie del carril),
+	 * un botón flotante. Cuando el panel se abre, `html.asistente-abierto` hace que el
 	 * `body` fijo del shell se encoja 420px para que la hoja no quede tapada
 	 * (regla global en app.css).
 	 */
 	import { Sparkles } from 'lucide-svelte';
 	import AsistentePanel from './AsistentePanel.svelte';
-	import { asistenteAbierto } from '$lib/stores/asistente';
+	import { asistenteAbierto, railConAsistente } from '$lib/stores/asistente';
 
 	function alternar() {
 		asistenteAbierto.update((v) => !v);
@@ -31,7 +32,9 @@
 
 <AsistentePanel />
 
-{#if !$asistenteAbierto}
+<!-- Flotante solo en los canvas sin carril (análisis, primas, adicionales):
+     los demás llevan el botón al pie de `UniverSideRail`. -->
+{#if !$asistenteAbierto && !$railConAsistente}
 	<button
 		type="button"
 		class="asis-flotante"

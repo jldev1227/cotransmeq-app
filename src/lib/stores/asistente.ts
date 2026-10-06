@@ -18,6 +18,11 @@ export interface MensajeChat {
  * respuesta y al volver a abrir el panel la encuentra igual.
  */
 export const asistenteAbierto = writable(false);
+/**
+ * `true` mientras un `UniverSideRail` está montado: el carril lleva su propio
+ * botón del asistente y `AsistenteCanvas` no debe pintar el flotante encima.
+ */
+export const railConAsistente = writable(false);
 export const conversacion = writable<MensajeChat[]>([]);
 
 let ultimoId = 0;

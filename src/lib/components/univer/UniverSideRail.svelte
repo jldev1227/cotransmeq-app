@@ -96,12 +96,31 @@
 </script>
 
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { Sparkles } from 'lucide-svelte';
+	import { asistenteAbierto, railConAsistente } from '$lib/stores/asistente';
+
 	interface Props {
 		items: RailItem[];
 		ariaLabel?: string;
+		/// El asistente de IA va siempre al pie del carril: es la única acción
+		/// que el carril conoce por sí mismo, porque es común a todos los canvas
+		/// y el layout `@` de estos no monta la cabecera donde vive su disparador.
+		asistente?: boolean;
 	}
 
-	let { items, ariaLabel = 'Acciones del canvas' }: Props = $props();
+	let { items, ariaLabel = 'Acciones del canvas', asistente = true }: Props = $props();
+
+	onMount(() => {
+		if (!asistente) return;
+		railConAsistente.set(true);
+		return () => railConAsistente.set(false);
+	});
+
+	function alternarAsistente() {
+		abierto = null;
+		asistenteAbierto.update((v) => !v);
+	}
 
 	/// Id del item cuyo flyout está abierto. Solo uno a la vez: dos paneles
 	/// abiertos sobre un canvas de 32px de margen se solapan sin remedio.
@@ -199,6 +218,27 @@
 			</div>
 		{/if}
 	{/each}
+
+	{#if asistente}
+		<div class="rail-sep rail-sep-pie" role="separator"></div>
+		<div class="rail-slot">
+			<button
+				type="button"
+				class="rail-btn rail-default rail-asistente"
+				class:rail-on={$asistenteAbierto}
+				aria-label="Asistente"
+				aria-haspopup="dialog"
+				aria-expanded={$asistenteAbierto}
+				onclick={alternarAsistente}
+			>
+				<Sparkles size={19} strokeWidth={1.8} aria-hidden="true" />
+			</button>
+			<div class="rail-tip rail-tip-pie" role="tooltip">
+				<strong>Asistente</strong>
+				<span>Pregunta por los datos de esta pantalla (⌘K)</span>
+			</div>
+		</div>
+	{/if}
 </div>
 
 <style>
@@ -224,6 +264,16 @@
 		z-index: 20;
 		/* Sin overflow: los popovers salen por la izquierda del carril. */
 		overflow: visible;
+	}
+
+	/* El asistente cierra el carril por abajo, separado del resto de acciones. */
+	.rail-sep-pie {
+		margin-top: auto;
+	}
+	/* Su popover crece hacia arriba: abajo no hay sitio. */
+	.rail-tip-pie {
+		top: auto;
+		bottom: 0;
 	}
 
 	.rail-sep {
