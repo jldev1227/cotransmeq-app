@@ -615,7 +615,7 @@
 								/>
 							</svg>
 						</span>
-						<h2>Conectar con Claude</h2>
+						<h2>Conectar con Claude o ChatGPT</h2>
 					</header>
 					<ConexionesClaude />
 				</section>

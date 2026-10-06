@@ -25,7 +25,7 @@
 	let creando = $state(false);
 	/** La recién creada: es la única vez que se puede ver el token. */
 	let nueva = $state<ConexionCreada | null>(null);
-	let copiado = $state<'web' | 'codigo' | null>(null);
+	let copiado = $state<'web' | 'codigo' | 'gpt' | null>(null);
 
 	const urlWeb = $derived(nueva ? `${URL_MCP}/${nueva.token}` : '');
 	const comandoCodigo = $derived(
@@ -81,7 +81,7 @@
 		}
 	}
 
-	async function copiar(texto: string, cual: 'web' | 'codigo') {
+	async function copiar(texto: string, cual: 'web' | 'codigo' | 'gpt') {
 		try {
 			await navigator.clipboard.writeText(texto);
 			copiado = cual;
@@ -105,14 +105,16 @@
 
 <div class="cc" in:fade>
 	<p class="cc-intro">
-		Conecta tu cuenta de Claude a la app para preguntarle por conductores, vehículos, servicios o
-		clientes desde Claude. Claude consulta con <strong>tus mismos permisos</strong> y solo puede
-		leer: no crea, edita, aprueba ni paga nada.
+		Conecta tu cuenta de Claude o de ChatGPT a la app para preguntarle por conductores, vehículos,
+		servicios, planillas, liquidaciones, formularios o acciones correctivas desde allí. El asistente
+		trabaja con <strong>tus mismos permisos</strong>: consulta todo lo que tú puedes ver y, solo si
+		tienes permiso de escritura y lo confirmas, puede crear servicios, planillas de recargos,
+		recorridos y acciones correctivas. No edita, aprueba, factura ni paga nada.
 	</p>
 	<p class="cc-nota">
 		<Info size={13} aria-hidden="true" />
-		Lo que Claude consulte se procesa en los servidores de Anthropic según las condiciones de tu cuenta
-		de Claude.
+		Lo que consultes se procesa en los servidores de Anthropic o de OpenAI según las condiciones de tu
+		cuenta de Claude o de ChatGPT.
 	</p>
 
 	{#if nueva}
@@ -155,6 +157,34 @@
 						{copiado === 'codigo' ? 'Copiado' : 'Copiar'}
 					</button>
 				</div>
+			</div>
+
+			<div class="cc-bloque">
+				<p class="cc-bloque-titulo">ChatGPT (conector en modo desarrollador)</p>
+				<ol class="cc-pasos">
+					<li>
+						En ChatGPT ve a Configuración → Aplicaciones y conectores → Configuración avanzada y
+						activa el «Modo desarrollador» (disponible en los planes Plus, Pro, Business y Enterprise).
+					</li>
+					<li>
+						Vuelve a Conectores → «Crear», ponle de nombre {NOMBRE_MCP}, pega este enlace como URL del
+						servidor MCP y deja la autenticación en «Sin autenticación»: el enlace ya lleva tu clave.
+					</li>
+					<li>
+						En un chat nuevo pulsa «+» → «Más» y activa el conector. También sirve en Deep Research.
+					</li>
+				</ol>
+				<div class="cc-copiar">
+					<code>{urlWeb}</code>
+					<button type="button" class="cc-btn cc-btn--oscuro" onclick={() => copiar(urlWeb, 'gpt')}>
+						{#if copiado === 'gpt'}<Check size={14} />{:else}<Copy size={14} />{/if}
+						{copiado === 'gpt' ? 'Copiado' : 'Copiar'}
+					</button>
+				</div>
+				<p class="cc-bloque-pie">
+					Si prefieres no llevar la clave en la URL, usa <code>{URL_MCP}</code> con autenticación
+					«Token de acceso» y pega la clave (<code>{nueva.token.slice(0, 8)}…</code>) como token.
+				</p>
 			</div>
 		</div>
 	{/if}
@@ -250,6 +280,16 @@
 	}
 	.cc-bloque {
 		margin-top: 1rem;
+	}
+	.cc-bloque-pie {
+		margin: 0.5rem 0 0;
+		font-size: 0.78rem;
+		color: var(--text-muted);
+		line-height: 1.45;
+	}
+	.cc-bloque-pie code {
+		font-size: 0.74rem;
+		word-break: break-all;
 	}
 	.cc-bloque-titulo {
 		margin: 0;
