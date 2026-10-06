@@ -646,6 +646,69 @@
 	color: var(--au-muted);
 }
 
+/* Buscador y paginador de resultados */
+.ev-buscador {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	margin-bottom: 0.75rem;
+	padding: 0 0.85rem;
+	border: 1.5px solid var(--au-border);
+	border-radius: 14px;
+	background: #fff;
+	color: var(--au-muted);
+	transition:
+		border-color 0.15s ease,
+		box-shadow 0.15s ease;
+}
+.ev-buscador:focus-within {
+	border-color: var(--au-primary);
+	box-shadow: 0 0 0 3px rgba(var(--au-primary-rgb), 0.15);
+}
+.ev-buscador svg {
+	width: 1rem;
+	height: 1rem;
+	flex: none;
+}
+.ev-buscador input {
+	flex: 1;
+	min-width: 0;
+	padding: 0.6rem 0;
+	border: 0;
+	background: transparent;
+	font-family: inherit;
+	font-size: 0.86rem;
+	color: var(--au-text);
+}
+.ev-buscador input:focus {
+	outline: none;
+}
+.ev-buscador input::placeholder {
+	color: var(--text-very-muted, #9aa8a2);
+}
+.ev-paginador {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 0.5rem;
+	margin-top: 0.75rem;
+}
+.ev-paginador-botones {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+.ev-paginador-botones .ev-res-btn:disabled {
+	opacity: 0.45;
+	cursor: not-allowed;
+}
+.ev-paginador-pagina {
+	font-size: 0.76rem;
+	font-weight: 700;
+	color: var(--au-muted);
+	font-variant-numeric: tabular-nums;
+}
+
 /* Semáforo del puntaje */
 .ev-nota {
 	grid-area: nota;
@@ -897,4 +960,77 @@
 	width: 0.85rem;
 	height: 0.85rem;
 	color: var(--au-muted);
+}
+
+/* Edición de respuestas por un administrador */
+.ev-edicion-acciones {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.5rem;
+}
+.ev-resp--edicion {
+	border-color: var(--au-border);
+}
+.ev-edit-opcion {
+	display: flex;
+	align-items: flex-start;
+	gap: 0.55rem;
+	padding: 0.45rem 0.6rem;
+	border-radius: 10px;
+	font-size: 0.86rem;
+	color: var(--au-text);
+	cursor: pointer;
+}
+.ev-edit-opcion:hover {
+	background: rgba(var(--au-primary-rgb), 0.06);
+}
+.ev-edit-opcion--correcta {
+	background: var(--au-tint);
+	color: var(--au-dark);
+	font-weight: 600;
+}
+.ev-edit-opcion--correcta:hover {
+	background: var(--au-tint);
+}
+.ev-edit-correcta {
+	margin-left: auto;
+	flex: none;
+	font-size: 0.62rem;
+	font-weight: 800;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--au-primary);
+}
+.ev-edit-par-clave {
+	display: block;
+	font-size: 0.7rem;
+	font-weight: 600;
+	color: var(--au-primary);
+}
+.ev-edit-opcion input {
+	margin-top: 0.2rem;
+	accent-color: var(--au-primary);
+	flex: none;
+}
+.ev-edit-campo {
+	width: 100%;
+	padding: 0.55rem 0.75rem;
+	border: 1.5px solid var(--au-border);
+	border-radius: 12px;
+	background: #fff;
+	font-family: inherit;
+	font-size: 0.86rem;
+	color: var(--au-text);
+}
+.ev-edit-campo:focus {
+	outline: none;
+	border-color: var(--au-primary);
+	box-shadow: 0 0 0 3px rgba(var(--au-primary-rgb), 0.15);
+}
+.ev-edit-par {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	align-items: center;
+	gap: 0.5rem;
+	margin-bottom: 0.4rem;
 }

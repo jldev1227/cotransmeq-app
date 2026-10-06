@@ -56,17 +56,21 @@ export interface GetEvaluacionesParams {
 	sortOrder?: 'asc' | 'desc';
 }
 
-export async function getEvaluaciones(params: GetEvaluacionesParams = {}): Promise<EvaluacionesResponse> {
+export async function getEvaluaciones(
+	params: GetEvaluacionesParams = {}
+): Promise<EvaluacionesResponse> {
 	const { page = 1, limit = 10, search, sortBy = 'created_at', sortOrder = 'desc' } = params;
-	
+
 	const response = await api.get('/api/evaluaciones', {
 		params: { page, limit, search, sortBy, sortOrder }
 	});
-	
+
 	return response.data;
 }
 
-export async function getEvaluacionById(id: string): Promise<{ success: boolean; data: Evaluacion }> {
+export async function getEvaluacionById(
+	id: string
+): Promise<{ success: boolean; data: Evaluacion }> {
 	const response = await api.get(`/api/evaluaciones/${id}`);
 	return response.data;
 }
@@ -81,13 +85,40 @@ export async function createEvaluacion(data: {
 	return response.data;
 }
 
-export async function updateEvaluacion(id: string, data: {
-	titulo: string;
-	descripcion?: string | null;
-	requiere_firma?: boolean;
-	preguntas: any[];
-}): Promise<{ success: boolean; data: Evaluacion }> {
+export async function updateEvaluacion(
+	id: string,
+	data: {
+		titulo: string;
+		descripcion?: string | null;
+		requiere_firma?: boolean;
+		preguntas: any[];
+	}
+): Promise<{ success: boolean; data: Evaluacion }> {
 	const response = await api.put(`/api/evaluaciones/${id}`, data);
+	return response.data;
+}
+
+/** Respuesta a una pregunta tal como la recibe el backend (misma forma que al responder). */
+export interface RespuestaEnvio {
+	preguntaId: string;
+	valor_texto?: string;
+	valor_numero?: number;
+	opcionesIds?: string[];
+	relacion?: { izq: string; der: string }[];
+}
+
+/**
+ * Un administrador corrige las respuestas de un resultado; el backend las
+ * reemplaza y recalifica con la clave actual. Exige acceso total a evaluaciones.
+ */
+export async function actualizarRespuestasResultado<T = any>(
+	evaluacionId: string,
+	resultadoId: string,
+	respuestas: RespuestaEnvio[]
+): Promise<{ success: boolean; data: T }> {
+	const response = await api.put(`/api/evaluaciones/${evaluacionId}/resultados/${resultadoId}`, {
+		respuestas
+	});
 	return response.data;
 }
 

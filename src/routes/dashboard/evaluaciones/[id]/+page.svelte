@@ -17,7 +17,8 @@
 		tonoPuntaje
 	} from '$lib/components/evaluaciones/tipos';
 	import '$lib/components/evaluaciones/evaluaciones.css';
-	import { authHeaders } from '$lib/api/evaluaciones';
+	import { authHeaders, actualizarRespuestasResultado } from '$lib/api/evaluaciones';
+	import { authStore } from '$lib/stores/auth';
 
 	interface Evaluacion {
 		id: string;
@@ -63,7 +64,7 @@
 
 	interface RespuestaDetalle {
 		id: string;
-		pregunta_id: string;
+		preguntaId: string;
 		valor_texto: string | null;
 		valor_numero: number | null;
 		opcionesIds: string[];
@@ -105,12 +106,14 @@
 		/// seguía contando esta pestaña como presente en la evaluación.
 		socketUtils.emit('leave-evaluacion', evaluacionId);
 		bajaNuevaRespuesta?.();
+		bajaRespuestaActualizada?.();
 	});
 
 	/// Antes esta página abría su PROPIA conexión con `io(...)`, sin token y sin
 	/// darse de baja de nada: cada visita dejaba un socket más contra el
 	/// servidor. Ahora usa el cliente compartido, que ya está autenticado.
 	let bajaNuevaRespuesta: (() => void) | undefined;
+	let bajaRespuestaActualizada: (() => void) | undefined;
 
 	function initSocket() {
 		socketUtils.emit('join-evaluacion', evaluacionId);
@@ -121,6 +124,18 @@
 			nuevosResultadosCount++;
 			toast.success(`Nueva respuesta de ${data.nombre_completo}`);
 		});
+
+		bajaRespuestaActualizada = socketUtils.on('respuesta-actualizada', (data: Resultado) => {
+			reemplazarResultado(data);
+		});
+	}
+
+	/** Sustituye un resultado en la lista y, si está abierto y no se está editando, en el detalle. */
+	function reemplazarResultado(data: Resultado) {
+		resultados = resultados.map((r) => (r.id === data.id ? data : r));
+		if (resultadoSeleccionado?.id === data.id && !editandoRespuestas) {
+			resultadoSeleccionado = data;
+		}
 	}
 
 	async function loadEvaluacion() {
@@ -179,11 +194,172 @@
 
 	function cerrarDetalleResultado() {
 		resultadoSeleccionado = null;
+		editandoRespuestas = false;
+	}
+
+	/**
+	 * Las respuestas llegan en el orden en que la base las devuelve, que no es
+	 * el de las preguntas; sin esto la «pregunta 1» del detalle podía ser la
+	 * séptima de la evaluación.
+	 */
+	function ordenarPorPregunta(respuestas: RespuestaDetalle[]): RespuestaDetalle[] {
+		if (!evaluacion) return respuestas;
+		const posicion = new Map(evaluacion.preguntas.map((p, i) => [p.id, i]));
+		return [...respuestas].sort(
+			(a, b) =>
+				(posicion.get(a.pregunta?.id ?? a.preguntaId) ?? Infinity) -
+				(posicion.get(b.pregunta?.id ?? b.preguntaId) ?? Infinity)
+		);
+	}
+
+	// ── Edición de respuestas por un administrador ──
+	// Cuando la evaluación se edita después de que alguien respondió, las
+	// opciones se recrean con ids nuevos y esa persona queda con 0 sin haber
+	// fallado. Quien tenga acceso total a evaluaciones puede corregirlo.
+	$: puedeEditarRespuestas =
+		!!$authStore.user && authStore.getAccessLevel('evaluaciones') === 'full';
+
+	interface BorradorRespuesta {
+		opcionUnica: string;
+		opcionesIds: string[];
+		valor_numero: number | null;
+		valor_texto: string;
+		relacion: Record<string, string>;
+	}
+
+	let editandoRespuestas = false;
+	let guardandoRespuestas = false;
+	let borrador: Record<string, BorradorRespuesta> = {};
+
+	function iniciarEdicionRespuestas() {
+		if (!evaluacion || !resultadoSeleccionado) return;
+		const previas = new Map(
+			resultadoSeleccionado.respuestas.map((r) => [r.pregunta?.id ?? r.preguntaId, r])
+		);
+		const nuevo: Record<string, BorradorRespuesta> = {};
+		// Se recorren las preguntas de la evaluación, no las respuestas: así
+		// también se puede contestar una pregunta añadida después.
+		for (const pregunta of evaluacion.preguntas) {
+			const previa = previas.get(pregunta.id);
+			const ids = (previa?.opcionesIds ?? []).filter((id) =>
+				pregunta.opciones.some((o) => o.id === id)
+			);
+			const relacion: Record<string, string> = {};
+			for (const par of Array.isArray(previa?.relacion) ? previa.relacion : []) {
+				relacion[par.izq] = par.der;
+			}
+			nuevo[pregunta.id] = {
+				opcionUnica: ids[0] ?? '',
+				opcionesIds: ids,
+				valor_numero: previa?.valor_numero ?? null,
+				valor_texto: previa?.valor_texto ?? '',
+				relacion
+			};
+		}
+		borrador = nuevo;
+		editandoRespuestas = true;
+	}
+
+	/// Sin `bind:` aquí: un `bind:value` sobre `relacion[izq]` dentro del bucle
+	/// anidado hacía que Svelte evaluara `izq` fuera de su alcance al invalidar
+	/// `borrador` desde cualquier otro campo («izq is not defined»).
+	function fijarRelacion(preguntaId: string, izq: string, der: string) {
+		const b = borrador[preguntaId];
+		borrador = { ...borrador, [preguntaId]: { ...b, relacion: { ...b.relacion, [izq]: der } } };
+	}
+
+	function cancelarEdicionRespuestas() {
+		editandoRespuestas = false;
+		borrador = {};
+	}
+
+	async function guardarRespuestas() {
+		if (!evaluacion || !resultadoSeleccionado) return;
+		const respuestas = evaluacion.preguntas.map((pregunta) => {
+			const b = borrador[pregunta.id];
+			const base = { preguntaId: pregunta.id };
+			switch (pregunta.tipo) {
+				case 'OPCION_UNICA':
+					return { ...base, opcionesIds: b.opcionUnica ? [b.opcionUnica] : [] };
+				case 'OPCION_MULTIPLE':
+					return { ...base, opcionesIds: b.opcionesIds };
+				case 'VERDADERO_FALSO':
+				case 'NUMERICA':
+					return typeof b.valor_numero === 'number' && !Number.isNaN(b.valor_numero)
+						? { ...base, valor_numero: b.valor_numero }
+						: base;
+				case 'TEXTO':
+					return { ...base, valor_texto: b.valor_texto };
+				case 'RELACION':
+					return {
+						...base,
+						relacion: Object.entries(b.relacion)
+							.filter(([, der]) => der)
+							.map(([izq, der]) => ({ izq, der }))
+					};
+			}
+		});
+
+		guardandoRespuestas = true;
+		try {
+			const res = await actualizarRespuestasResultado(
+				evaluacion.id,
+				resultadoSeleccionado.id,
+				respuestas
+			);
+			if (!res.success) throw new Error('No se pudo guardar');
+			editandoRespuestas = false;
+			borrador = {};
+			reemplazarResultado(res.data);
+			toast.success(
+				`Respuestas corregidas · nuevo puntaje ${res.data.puntaje_total}/${puntajeMaximo}`
+			);
+		} catch (err: any) {
+			const msg = err?.response?.data?.message || err?.message || 'No se pudo guardar';
+			toast.error(msg);
+		} finally {
+			guardandoRespuestas = false;
+		}
 	}
 
 	function limpiarNuevosResultados() {
 		nuevosResultadosCount = 0;
 	}
+
+	// ── Búsqueda y paginación de resultados ──
+	// El backend devuelve todas las respuestas de una vez; filtrar y paginar
+	// aquí evita otra ida al servidor y mantiene el tiempo real intacto.
+	const POR_PAGINA = 10;
+	let busqueda = '';
+	let paginaActual = 1;
+
+	function normalizar(texto: string | number | null | undefined) {
+		return String(texto ?? '')
+			.normalize('NFD')
+			.replace(/[\u0300-\u036f]/g, '')
+			.toLowerCase()
+			.trim();
+	}
+
+	$: terminoBusqueda = normalizar(busqueda);
+	$: resultadosFiltrados = terminoBusqueda
+		? resultados.filter(
+				(r) =>
+					normalizar(r.nombre_completo).includes(terminoBusqueda) ||
+					normalizar(r.numero_documento).includes(terminoBusqueda)
+			)
+		: resultados;
+	$: totalPaginas = Math.max(1, Math.ceil(resultadosFiltrados.length / POR_PAGINA));
+	$: if (paginaActual > totalPaginas) paginaActual = totalPaginas;
+	$: resultadosVisibles = resultadosFiltrados.slice(
+		(paginaActual - 1) * POR_PAGINA,
+		paginaActual * POR_PAGINA
+	);
+	// Al cambiar el término de búsqueda se vuelve a la primera página.
+	$: (terminoBusqueda, (paginaActual = 1));
+	// Los «nuevos» se resaltan por id, no por posición: con filtro o en otra
+	// página la posición ya no coincide con el orden de llegada.
+	$: nuevosIds = new Set(resultados.slice(0, nuevosResultadosCount).map((r) => r.id));
 
 	function formatDate(dateString: string) {
 		return new Date(dateString).toLocaleDateString('es-CO', {
@@ -510,16 +686,53 @@
 						<span>{porcentaje(sel.puntaje_total, puntajeMaximo)} % de acierto</span>
 					</div>
 
-					<button type="button" class="btn-primary" on:click={() => exportarPDFIndividual(sel.id)}>
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
-							/>
-						</svg>
-						Exportar PDF
-					</button>
+					{#if editandoRespuestas}
+						<div class="ev-edicion-acciones">
+							<button
+								type="button"
+								class="btn-secondary"
+								disabled={guardandoRespuestas}
+								on:click={cancelarEdicionRespuestas}
+							>
+								Cancelar
+							</button>
+							<button
+								type="button"
+								class="btn-primary"
+								disabled={guardandoRespuestas}
+								on:click={guardarRespuestas}
+							>
+								{guardandoRespuestas ? 'Guardando…' : 'Guardar y recalificar'}
+							</button>
+						</div>
+					{:else}
+						<div class="ev-edicion-acciones">
+							{#if puedeEditarRespuestas}
+								<button
+									type="button"
+									class="btn-secondary"
+									on:click={iniciarEdicionRespuestas}
+									title="Corregir las respuestas registradas y recalcular el puntaje"
+								>
+									Editar respuestas
+								</button>
+							{/if}
+							<button
+								type="button"
+								class="btn-primary"
+								on:click={() => exportarPDFIndividual(sel.id)}
+							>
+								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+									<path
+										stroke-linecap="round"
+										stroke-linejoin="round"
+										d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+									/>
+								</svg>
+								Exportar PDF
+							</button>
+						</div>
+					{/if}
 				</section>
 
 				{#if sel.firma}
@@ -529,214 +742,219 @@
 					</section>
 				{/if}
 
-				<section class="ev-card">
-					<header class="ev-card-cab">
-						<h2 class="ev-card-titulo">
-							Respuestas detalladas
-							<small>{pluralPreguntas(sel.respuestas.length)}</small>
-						</h2>
-					</header>
+				{#if editandoRespuestas}
+					<section class="ev-card">
+						<header class="ev-card-cab">
+							<h2 class="ev-card-titulo">
+								Corregir respuestas
+								<small
+									>Marca lo que {sel.nombre_completo} respondió. Al guardar se recalifica con la clave
+									actual.</small
+								>
+							</h2>
+						</header>
+						<div class="ev-respuestas">
+							{#each evaluacion.preguntas as pregunta, index (pregunta.id)}
+								<article class="ev-resp ev-resp--edicion">
+									<header class="ev-resp-cab">
+										<span class="ev-resp-num">{index + 1}</span>
+										<PastillaTipo tipo={pregunta.tipo} />
+										<span class="ev-resp-pts">{pregunta.puntaje} pts</span>
+									</header>
+									<p class="ev-resp-pregunta">{pregunta.texto}</p>
+									<div class="ev-resp-cuerpo">
+										{#if pregunta.tipo === 'OPCION_UNICA'}
+											{#each pregunta.opciones as opcion (opcion.id)}
+												<label
+													class="ev-edit-opcion"
+													class:ev-edit-opcion--correcta={opcion.esCorrecta}
+												>
+													<input
+														type="radio"
+														name="edit-{pregunta.id}"
+														value={opcion.id}
+														bind:group={borrador[pregunta.id].opcionUnica}
+													/>
+													<span>{opcion.texto}</span>
+													{#if opcion.esCorrecta}<span class="ev-edit-correcta">Correcta</span>{/if}
+												</label>
+											{/each}
+										{:else if pregunta.tipo === 'OPCION_MULTIPLE'}
+											{#each pregunta.opciones as opcion (opcion.id)}
+												<label
+													class="ev-edit-opcion"
+													class:ev-edit-opcion--correcta={opcion.esCorrecta}
+												>
+													<input
+														type="checkbox"
+														value={opcion.id}
+														bind:group={borrador[pregunta.id].opcionesIds}
+													/>
+													<span>{opcion.texto}</span>
+													{#if opcion.esCorrecta}<span class="ev-edit-correcta">Correcta</span>{/if}
+												</label>
+											{/each}
+										{:else if pregunta.tipo === 'VERDADERO_FALSO'}
+											<label
+												class="ev-edit-opcion"
+												class:ev-edit-opcion--correcta={pregunta.respuestaCorrecta === 1}
+											>
+												<input
+													type="radio"
+													name="edit-{pregunta.id}"
+													value={1}
+													bind:group={borrador[pregunta.id].valor_numero}
+												/>
+												<span>Verdadero</span>
+												{#if pregunta.respuestaCorrecta === 1}<span class="ev-edit-correcta"
+														>Correcta</span
+													>{/if}
+											</label>
+											<label
+												class="ev-edit-opcion"
+												class:ev-edit-opcion--correcta={pregunta.respuestaCorrecta === 0}
+											>
+												<input
+													type="radio"
+													name="edit-{pregunta.id}"
+													value={0}
+													bind:group={borrador[pregunta.id].valor_numero}
+												/>
+												<span>Falso</span>
+												{#if pregunta.respuestaCorrecta === 0}<span class="ev-edit-correcta"
+														>Correcta</span
+													>{/if}
+											</label>
+										{:else if pregunta.tipo === 'NUMERICA'}
+											<input
+												class="ev-edit-campo"
+												type="number"
+												step="any"
+												placeholder="Sin respuesta"
+												bind:value={borrador[pregunta.id].valor_numero}
+											/>
+											{#if pregunta.respuestaCorrecta !== undefined && pregunta.respuestaCorrecta !== null}
+												<p class="ev-resp-nota">
+													Respuesta correcta: <strong>{pregunta.respuestaCorrecta}</strong>
+												</p>
+											{/if}
+										{:else if pregunta.tipo === 'TEXTO'}
+											<textarea
+												class="ev-edit-campo"
+												rows="3"
+												placeholder="Sin respuesta"
+												bind:value={borrador[pregunta.id].valor_texto}
+											></textarea>
+											<p class="ev-resp-nota">Si el texto cambia, la IA lo vuelve a calificar.</p>
+										{:else if pregunta.tipo === 'RELACION'}
+											{#each pregunta.relacionIzq as izq, i (izq)}
+												<label class="ev-edit-par">
+													<span class="ev-resp-par-lado">
+														{izq}
+														<small class="ev-edit-par-clave"
+															>correcta: {pregunta.relacionDer[i]}</small
+														>
+													</span>
+													<select
+														class="ev-edit-campo"
+														value={borrador[pregunta.id].relacion[izq] ?? ''}
+														on:change={(e) =>
+															fijarRelacion(pregunta.id, izq, e.currentTarget.value)}
+													>
+														<option value="">— sin unir —</option>
+														{#each pregunta.relacionDer as der (der)}
+															<option value={der}>{der}</option>
+														{/each}
+													</select>
+												</label>
+											{/each}
+										{/if}
+									</div>
+								</article>
+							{/each}
+						</div>
+					</section>
+				{:else}
+					<section class="ev-card">
+						<header class="ev-card-cab">
+							<h2 class="ev-card-titulo">
+								Respuestas detalladas
+								<small>{pluralPreguntas(sel.respuestas.length)}</small>
+							</h2>
+						</header>
 
-					<!-- Rejilla fluida, no una columna: en una evaluación de veinte
+						<!-- Rejilla fluida, no una columna: en una evaluación de veinte
 					     preguntas la lista en columna única es kilométrica, y con
 					     `auto-fit` se adapta sola al ancho real del `main` cuando la
 					     barra lateral se colapsa, sin puntos de ruptura que mantener. -->
-					<div class="ev-respuestas">
-						{#each sel.respuestas as respuesta, index}
-							{#if respuesta.pregunta}
-								{@const estado = acierto(respuesta.puntaje, respuesta.pregunta.puntaje)}
-								<article class="ev-resp ev-resp--{estado}">
-									<header class="ev-resp-cab">
-										<span class="ev-resp-num">{index + 1}</span>
-										<PastillaTipo tipo={respuesta.pregunta.tipo} />
-										<span
-											class="ev-resp-pts ev-nota--{estado === 'correcta'
-												? 'alto'
-												: estado === 'parcial'
-													? 'medio'
-													: 'bajo'}"
-											title={ACIERTO_TEXTO[estado]}
-										>
-											{respuesta.puntaje} / {respuesta.pregunta.puntaje} pts
-										</span>
-									</header>
-									<p class="ev-resp-pregunta">{respuesta.pregunta.texto}</p>
+						<div class="ev-respuestas">
+							{#each ordenarPorPregunta(sel.respuestas) as respuesta, index (respuesta.id)}
+								{#if respuesta.pregunta}
+									{@const estado = acierto(respuesta.puntaje, respuesta.pregunta.puntaje)}
+									<article class="ev-resp ev-resp--{estado}">
+										<header class="ev-resp-cab">
+											<span class="ev-resp-num">{index + 1}</span>
+											<PastillaTipo tipo={respuesta.pregunta.tipo} />
+											<span
+												class="ev-resp-pts ev-nota--{estado === 'correcta'
+													? 'alto'
+													: estado === 'parcial'
+														? 'medio'
+														: 'bajo'}"
+												title={ACIERTO_TEXTO[estado]}
+											>
+												{respuesta.puntaje} / {respuesta.pregunta.puntaje} pts
+											</span>
+										</header>
+										<p class="ev-resp-pregunta">{respuesta.pregunta.texto}</p>
 
-									<div class="ev-resp-cuerpo">
-										<span class="ev-resp-etiqueta">Respuesta del evaluado</span>
+										<div class="ev-resp-cuerpo">
+											<span class="ev-resp-etiqueta">Respuesta del evaluado</span>
 
-										{#if respuesta.pregunta.tipo === 'TEXTO'}
-											{#if respuesta.valor_texto}
-												<p class="ev-resp-valor">{respuesta.valor_texto}</p>
-											{:else}
-												<p class="ev-resp-vacia">Sin respuesta</p>
-											{/if}
-											<p class="ev-resp-nota">Respuesta abierta · calificada por IA.</p>
-										{:else if respuesta.pregunta.tipo === 'NUMERICA'}
-											<p class="ev-resp-valor">
-												<strong
-													>{respuesta.valor_numero ??
-														respuesta.valor_texto ??
-														'Sin respuesta'}</strong
-												>
-											</p>
-											{#if respuesta.pregunta.respuestaCorrecta !== undefined && respuesta.pregunta.respuestaCorrecta !== null}
-												<p class="ev-resp-nota">
-													Respuesta correcta: <strong>{respuesta.pregunta.respuestaCorrecta}</strong
+											{#if respuesta.pregunta.tipo === 'TEXTO'}
+												{#if respuesta.valor_texto}
+													<p class="ev-resp-valor">{respuesta.valor_texto}</p>
+												{:else}
+													<p class="ev-resp-vacia">Sin respuesta</p>
+												{/if}
+												<p class="ev-resp-nota">Respuesta abierta · calificada por IA.</p>
+											{:else if respuesta.pregunta.tipo === 'NUMERICA'}
+												<p class="ev-resp-valor">
+													<strong
+														>{respuesta.valor_numero ??
+															respuesta.valor_texto ??
+															'Sin respuesta'}</strong
 													>
 												</p>
-											{/if}
-										{:else if respuesta.pregunta.tipo === 'RELACION'}
-											{@const relaciones = Array.isArray(respuesta.relacion)
-												? respuesta.relacion
-												: []}
-											{#if relaciones.length > 0}
-												<ul class="ev-resp-lista">
-													{#each relaciones as rel}
-														{@const idx = respuesta.pregunta.relacionIzq.indexOf(rel.izq)}
-														{@const ok =
-															idx !== -1 && respuesta.pregunta.relacionDer[idx] === rel.der}
-														<li
-															class="ev-resp-item"
-															class:ev-resp-item--ok={ok}
-															class:ev-resp-item--mal={!ok}
-														>
-															<span
-																class="ev-resp-icono {ok
-																	? 'ev-resp-icono--ok'
-																	: 'ev-resp-icono--mal'}"
-																aria-hidden="true"
-															>
-																{#if ok}
-																	<svg
-																		viewBox="0 0 24 24"
-																		fill="none"
-																		stroke="currentColor"
-																		stroke-width="3"
-																		><path
-																			stroke-linecap="round"
-																			stroke-linejoin="round"
-																			d="M5 13l4 4L19 7"
-																		/></svg
-																	>
-																{:else}
-																	<svg
-																		viewBox="0 0 24 24"
-																		fill="none"
-																		stroke="currentColor"
-																		stroke-width="3"
-																		><path
-																			stroke-linecap="round"
-																			stroke-linejoin="round"
-																			d="M6 18L18 6M6 6l12 12"
-																		/></svg
-																	>
-																{/if}
-															</span>
-															<span class="ev-resp-par">
-																<span class="ev-resp-par-lado">{rel.izq}</span>
-																<svg
-																	viewBox="0 0 24 24"
-																	fill="none"
-																	stroke="currentColor"
-																	stroke-width="2"
-																	aria-hidden="true"
-																	><path
-																		stroke-linecap="round"
-																		stroke-linejoin="round"
-																		d="M14 5l7 7m0 0l-7 7m7-7H3"
-																	/></svg
-																>
-																<span class="ev-resp-par-lado">{rel.der}</span>
-															</span>
-														</li>
-													{/each}
-												</ul>
-											{:else}
-												<p class="ev-resp-vacia">Sin respuesta</p>
-											{/if}
-										{:else if respuesta.pregunta.tipo === 'VERDADERO_FALSO'}
-											{@const respuestaUsuario = respuesta.valor_numero}
-											{@const respuestaCorrectaVF = respuesta.pregunta.respuestaCorrecta}
-											{@const esCorrectoVF =
-												typeof respuestaUsuario === 'number' &&
-												respuestaCorrectaVF !== null &&
-												respuestaCorrectaVF !== undefined &&
-												respuestaUsuario === respuestaCorrectaVF}
-											{#if typeof respuestaUsuario === 'number'}
-												<ul class="ev-resp-lista">
-													<li
-														class="ev-resp-item"
-														class:ev-resp-item--ok={esCorrectoVF}
-														class:ev-resp-item--mal={!esCorrectoVF}
-													>
-														<span
-															class="ev-resp-icono {esCorrectoVF
-																? 'ev-resp-icono--ok'
-																: 'ev-resp-icono--mal'}"
-															aria-hidden="true"
-														>
-															{#if esCorrectoVF}
-																<svg
-																	viewBox="0 0 24 24"
-																	fill="none"
-																	stroke="currentColor"
-																	stroke-width="3"
-																	><path
-																		stroke-linecap="round"
-																		stroke-linejoin="round"
-																		d="M5 13l4 4L19 7"
-																	/></svg
-																>
-															{:else}
-																<svg
-																	viewBox="0 0 24 24"
-																	fill="none"
-																	stroke="currentColor"
-																	stroke-width="3"
-																	><path
-																		stroke-linecap="round"
-																		stroke-linejoin="round"
-																		d="M6 18L18 6M6 6l12 12"
-																	/></svg
-																>
-															{/if}
-														</span>
-														{respuestaUsuario === 1 ? 'Verdadero' : 'Falso'}
-													</li>
-												</ul>
-												{#if !esCorrectoVF && respuestaCorrectaVF !== null && respuestaCorrectaVF !== undefined}
+												{#if respuesta.pregunta.respuestaCorrecta !== undefined && respuesta.pregunta.respuestaCorrecta !== null}
 													<p class="ev-resp-nota">
 														Respuesta correcta: <strong
-															>{respuestaCorrectaVF === 1 ? 'Verdadero' : 'Falso'}</strong
+															>{respuesta.pregunta.respuestaCorrecta}</strong
 														>
 													</p>
 												{/if}
-											{:else}
-												<p class="ev-resp-vacia">Sin respuesta</p>
-											{/if}
-										{:else}
-											<!-- OPCION_UNICA / OPCION_MULTIPLE -->
-											{@const selectedIds = Array.isArray(respuesta.opcionesIds)
-												? respuesta.opcionesIds
-												: []}
-											{#if selectedIds.length > 0}
-												<ul class="ev-resp-lista">
-													{#each respuesta.pregunta.opciones as opcion}
-														{@const fueSeleccionada = selectedIds.includes(opcion.id)}
-														{#if fueSeleccionada}
+											{:else if respuesta.pregunta.tipo === 'RELACION'}
+												{@const relaciones = Array.isArray(respuesta.relacion)
+													? respuesta.relacion
+													: []}
+												{#if relaciones.length > 0}
+													<ul class="ev-resp-lista">
+														{#each relaciones as rel}
+															{@const idx = respuesta.pregunta.relacionIzq.indexOf(rel.izq)}
+															{@const ok =
+																idx !== -1 && respuesta.pregunta.relacionDer[idx] === rel.der}
 															<li
 																class="ev-resp-item"
-																class:ev-resp-item--ok={opcion.esCorrecta}
-																class:ev-resp-item--mal={!opcion.esCorrecta}
+																class:ev-resp-item--ok={ok}
+																class:ev-resp-item--mal={!ok}
 															>
 																<span
-																	class="ev-resp-icono {opcion.esCorrecta
+																	class="ev-resp-icono {ok
 																		? 'ev-resp-icono--ok'
 																		: 'ev-resp-icono--mal'}"
 																	aria-hidden="true"
 																>
-																	{#if opcion.esCorrecta}
+																	{#if ok}
 																		<svg
 																			viewBox="0 0 24 24"
 																			fill="none"
@@ -762,30 +980,175 @@
 																		>
 																	{/if}
 																</span>
-																{opcion.texto}
+																<span class="ev-resp-par">
+																	<span class="ev-resp-par-lado">{rel.izq}</span>
+																	<svg
+																		viewBox="0 0 24 24"
+																		fill="none"
+																		stroke="currentColor"
+																		stroke-width="2"
+																		aria-hidden="true"
+																		><path
+																			stroke-linecap="round"
+																			stroke-linejoin="round"
+																			d="M14 5l7 7m0 0l-7 7m7-7H3"
+																		/></svg
+																	>
+																	<span class="ev-resp-par-lado">{rel.der}</span>
+																</span>
 															</li>
-														{:else if opcion.esCorrecta}
-															<li class="ev-resp-item ev-resp-item--omitida">
-																<span
-																	class="ev-resp-icono ev-resp-icono--omitida"
-																	aria-hidden="true"
-																></span>
-																{opcion.texto}
-																<span class="ev-resp-nota">· correcta, no marcada</span>
-															</li>
-														{/if}
-													{/each}
-												</ul>
+														{/each}
+													</ul>
+												{:else}
+													<p class="ev-resp-vacia">Sin respuesta</p>
+												{/if}
+											{:else if respuesta.pregunta.tipo === 'VERDADERO_FALSO'}
+												{@const respuestaUsuario = respuesta.valor_numero}
+												{@const respuestaCorrectaVF = respuesta.pregunta.respuestaCorrecta}
+												{@const esCorrectoVF =
+													typeof respuestaUsuario === 'number' &&
+													respuestaCorrectaVF !== null &&
+													respuestaCorrectaVF !== undefined &&
+													respuestaUsuario === respuestaCorrectaVF}
+												{#if typeof respuestaUsuario === 'number'}
+													<ul class="ev-resp-lista">
+														<li
+															class="ev-resp-item"
+															class:ev-resp-item--ok={esCorrectoVF}
+															class:ev-resp-item--mal={!esCorrectoVF}
+														>
+															<span
+																class="ev-resp-icono {esCorrectoVF
+																	? 'ev-resp-icono--ok'
+																	: 'ev-resp-icono--mal'}"
+																aria-hidden="true"
+															>
+																{#if esCorrectoVF}
+																	<svg
+																		viewBox="0 0 24 24"
+																		fill="none"
+																		stroke="currentColor"
+																		stroke-width="3"
+																		><path
+																			stroke-linecap="round"
+																			stroke-linejoin="round"
+																			d="M5 13l4 4L19 7"
+																		/></svg
+																	>
+																{:else}
+																	<svg
+																		viewBox="0 0 24 24"
+																		fill="none"
+																		stroke="currentColor"
+																		stroke-width="3"
+																		><path
+																			stroke-linecap="round"
+																			stroke-linejoin="round"
+																			d="M6 18L18 6M6 6l12 12"
+																		/></svg
+																	>
+																{/if}
+															</span>
+															{respuestaUsuario === 1 ? 'Verdadero' : 'Falso'}
+														</li>
+													</ul>
+													{#if !esCorrectoVF && respuestaCorrectaVF !== null && respuestaCorrectaVF !== undefined}
+														<p class="ev-resp-nota">
+															Respuesta correcta: <strong
+																>{respuestaCorrectaVF === 1 ? 'Verdadero' : 'Falso'}</strong
+															>
+														</p>
+													{/if}
+												{:else}
+													<p class="ev-resp-vacia">Sin respuesta</p>
+												{/if}
 											{:else}
-												<p class="ev-resp-vacia">Sin respuesta</p>
+												<!-- OPCION_UNICA / OPCION_MULTIPLE -->
+												{@const selectedIds = Array.isArray(respuesta.opcionesIds)
+													? respuesta.opcionesIds
+													: []}
+												{@const opcionesVigentes = respuesta.pregunta.opciones.filter((o) =>
+													selectedIds.includes(o.id)
+												).length}
+												{#if selectedIds.length > 0 && opcionesVigentes === 0}
+													<!-- La evaluación se editó después de esta respuesta: las
+												     opciones se recrearon y lo marcado ya no apunta a nada. -->
+													<p class="ev-resp-vacia">
+														Marcó {selectedIds.length}
+														{selectedIds.length === 1
+															? 'opción que ya no existe'
+															: 'opciones que ya no existen'}: la evaluación se editó después de
+														esta respuesta.
+														{#if puedeEditarRespuestas}Usa «Editar respuestas» para registrar lo que
+															contestó.{/if}
+													</p>
+												{:else if selectedIds.length > 0}
+													<ul class="ev-resp-lista">
+														{#each respuesta.pregunta.opciones as opcion}
+															{@const fueSeleccionada = selectedIds.includes(opcion.id)}
+															{#if fueSeleccionada}
+																<li
+																	class="ev-resp-item"
+																	class:ev-resp-item--ok={opcion.esCorrecta}
+																	class:ev-resp-item--mal={!opcion.esCorrecta}
+																>
+																	<span
+																		class="ev-resp-icono {opcion.esCorrecta
+																			? 'ev-resp-icono--ok'
+																			: 'ev-resp-icono--mal'}"
+																		aria-hidden="true"
+																	>
+																		{#if opcion.esCorrecta}
+																			<svg
+																				viewBox="0 0 24 24"
+																				fill="none"
+																				stroke="currentColor"
+																				stroke-width="3"
+																				><path
+																					stroke-linecap="round"
+																					stroke-linejoin="round"
+																					d="M5 13l4 4L19 7"
+																				/></svg
+																			>
+																		{:else}
+																			<svg
+																				viewBox="0 0 24 24"
+																				fill="none"
+																				stroke="currentColor"
+																				stroke-width="3"
+																				><path
+																					stroke-linecap="round"
+																					stroke-linejoin="round"
+																					d="M6 18L18 6M6 6l12 12"
+																				/></svg
+																			>
+																		{/if}
+																	</span>
+																	{opcion.texto}
+																</li>
+															{:else if opcion.esCorrecta}
+																<li class="ev-resp-item ev-resp-item--omitida">
+																	<span
+																		class="ev-resp-icono ev-resp-icono--omitida"
+																		aria-hidden="true"
+																	></span>
+																	{opcion.texto}
+																	<span class="ev-resp-nota">· correcta, no marcada</span>
+																</li>
+															{/if}
+														{/each}
+													</ul>
+												{:else}
+													<p class="ev-resp-vacia">Sin respuesta</p>
+												{/if}
 											{/if}
-										{/if}
-									</div>
-								</article>
-							{/if}
-						{/each}
-					</div>
-				</section>
+										</div>
+									</article>
+								{/if}
+							{/each}
+						</div>
+					</section>
+				{/if}
 			</div>
 		{:else}
 			<div class="ev-grid-detalle" in:fly={{ y: 12, duration: 400, delay: 80 }}>
@@ -846,65 +1209,120 @@
 								</button>
 							</div>
 						{:else}
-							<div class="ev-res-lista">
-								{#each resultados.slice(0, 10) as resultado, index (resultado.id)}
-									<div class="ev-res-fila" class:ev-res-fila--nueva={index < nuevosResultadosCount}>
-										<span class="ev-avatar" aria-hidden="true"
-											>{iniciales(resultado.nombre_completo)}</span
-										>
-										<div class="ev-res-texto">
-											<span class="ev-res-nombre">{resultado.nombre_completo}</span>
-											<span class="ev-res-meta">
-												{resultado.cargo || 'Sin cargo'} · CC {resultado.numero_documento}
+							<label class="ev-buscador">
+								<svg
+									viewBox="0 0 24 24"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									aria-hidden="true"
+								>
+									<circle cx="11" cy="11" r="8" />
+									<line x1="21" y1="21" x2="16.65" y2="16.65" />
+								</svg>
+								<input
+									type="search"
+									bind:value={busqueda}
+									placeholder="Buscar por nombre o documento"
+									aria-label="Buscar respuestas por nombre o documento"
+								/>
+							</label>
+
+							{#if resultadosFiltrados.length === 0}
+								<p class="ev-mas">Ninguna respuesta coincide con «{busqueda}»</p>
+							{:else}
+								<div class="ev-res-lista">
+									{#each resultadosVisibles as resultado (resultado.id)}
+										<div class="ev-res-fila" class:ev-res-fila--nueva={nuevosIds.has(resultado.id)}>
+											<span class="ev-avatar" aria-hidden="true"
+												>{iniciales(resultado.nombre_completo)}</span
+											>
+											<div class="ev-res-texto">
+												<span class="ev-res-nombre">{resultado.nombre_completo}</span>
+												<span class="ev-res-meta">
+													{resultado.cargo || 'Sin cargo'} · CC {resultado.numero_documento}
+												</span>
+												<span class="ev-res-meta">{formatDate(resultado.created_at)}</span>
+											</div>
+											<span
+												class="ev-nota ev-nota--{tonoPuntaje(
+													resultado.puntaje_total,
+													puntajeMaximo
+												)}"
+											>
+												{resultado.puntaje_total}/{puntajeMaximo}
+												<small>· {porcentaje(resultado.puntaje_total, puntajeMaximo)} %</small>
 											</span>
-											<span class="ev-res-meta">{formatDate(resultado.created_at)}</span>
-										</div>
-										<span
-											class="ev-nota ev-nota--{tonoPuntaje(resultado.puntaje_total, puntajeMaximo)}"
-										>
-											{resultado.puntaje_total}/{puntajeMaximo}
-											<small>· {porcentaje(resultado.puntaje_total, puntajeMaximo)} %</small>
-										</span>
-										<!-- Dos botones a todo el ancho por resultado eran 38 botones
+											<!-- Dos botones a todo el ancho por resultado eran 38 botones
 										     grandes en una evaluación de 19 respuestas, apilados en una
 										     columna estrecha. La fila entera abre el detalle y el PDF
 										     queda como acción secundaria. -->
-										<div class="ev-res-acciones">
-											<button
-												type="button"
-												class="ev-res-btn ev-res-btn--principal"
-												on:click={() => verDetalleResultado(resultado)}
-											>
-												Ver respuestas
-											</button>
+											<div class="ev-res-acciones">
+												<button
+													type="button"
+													class="ev-res-btn ev-res-btn--principal"
+													on:click={() => verDetalleResultado(resultado)}
+												>
+													Ver respuestas
+												</button>
+												<button
+													type="button"
+													class="ev-res-btn"
+													on:click={() => exportarPDFIndividual(resultado.id)}
+													title="Exportar esta respuesta a PDF"
+													aria-label="Exportar a PDF la respuesta de {resultado.nombre_completo}"
+												>
+													<svg
+														viewBox="0 0 24 24"
+														fill="none"
+														stroke="currentColor"
+														stroke-width="2"
+														stroke-linecap="round"
+														stroke-linejoin="round"
+													>
+														<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
+														<polyline points="7 10 12 15 17 10" />
+														<line x1="12" y1="15" x2="12" y2="3" />
+													</svg>
+													PDF
+												</button>
+											</div>
+										</div>
+									{/each}
+								</div>
+
+								<nav class="ev-paginador" aria-label="Paginación de respuestas">
+									<p class="ev-mas">
+										Mostrando {(paginaActual - 1) * POR_PAGINA + 1}–{Math.min(
+											paginaActual * POR_PAGINA,
+											resultadosFiltrados.length
+										)} de {resultadosFiltrados.length}
+										{resultadosFiltrados.length === 1 ? 'respuesta' : 'respuestas'}
+									</p>
+									{#if totalPaginas > 1}
+										<div class="ev-paginador-botones">
 											<button
 												type="button"
 												class="ev-res-btn"
-												on:click={() => exportarPDFIndividual(resultado.id)}
-												title="Exportar esta respuesta a PDF"
-												aria-label="Exportar a PDF la respuesta de {resultado.nombre_completo}"
+												disabled={paginaActual === 1}
+												on:click={() => (paginaActual -= 1)}
 											>
-												<svg
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-												>
-													<path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
-													<polyline points="7 10 12 15 17 10" />
-													<line x1="12" y1="15" x2="12" y2="3" />
-												</svg>
-												PDF
+												Anterior
+											</button>
+											<span class="ev-paginador-pagina">{paginaActual} / {totalPaginas}</span>
+											<button
+												type="button"
+												class="ev-res-btn"
+												disabled={paginaActual === totalPaginas}
+												on:click={() => (paginaActual += 1)}
+											>
+												Siguiente
 											</button>
 										</div>
-									</div>
-								{/each}
-							</div>
-
-							{#if resultados.length > 10}
-								<p class="ev-mas">Mostrando 10 de {resultados.length} respuestas</p>
+									{/if}
+								</nav>
 							{/if}
 						{/if}
 					</section>
