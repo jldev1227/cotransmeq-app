@@ -8,12 +8,13 @@
 	import PreguntaCard from '$lib/components/evaluaciones/PreguntaCard.svelte';
 	import ModalPregunta from '$lib/components/evaluaciones/ModalPregunta.svelte';
 	import ModalConfirmar from '$lib/components/evaluaciones/ModalConfirmar.svelte';
-	import { pluralPreguntas, pluralPuntos } from '$lib/components/evaluaciones/tipos';
+	import {
+		pluralPreguntas,
+		pluralPuntos,
+		type TipoPregunta
+	} from '$lib/components/evaluaciones/tipos';
 	import '$lib/components/evaluaciones/evaluaciones.css';
 	import { authHeaders } from '$lib/api/evaluaciones';
-
-	type TipoPregunta =
-		'OPCION_UNICA' | 'OPCION_MULTIPLE' | 'NUMERICA' | 'TEXTO' | 'RELACION' | 'VERDADERO_FALSO';
 
 	interface Pregunta {
 		id?: string;
@@ -24,6 +25,13 @@
 		relacionIzq: string[];
 		relacionDer: string[];
 		respuestaCorrecta?: number;
+		/** Sopa de letras: palabras, tamaño y direcciones (y la cuadrícula ya generada al editar). */
+		configuracion?: {
+			palabras: string[];
+			tamano: number;
+			diagonales: boolean;
+			cuadricula?: string[];
+		} | null;
 	}
 
 	interface Opcion {
@@ -77,7 +85,21 @@
 					opciones: p.opciones || [],
 					relacionIzq: p.relacionIzq || [],
 					relacionDer: p.relacionDer || [],
-					respuestaCorrecta: p.respuestaCorrecta
+					respuestaCorrecta: p.respuestaCorrecta,
+					// La sopa guardada trae ubicaciones; el formulario trabaja con los
+					// textos. Se reenvía la cuadrícula para que el backend la conserve
+					// si las palabras no cambian.
+					configuracion:
+						p.tipo === 'SOPA_LETRAS' && p.configuracion
+							? {
+									tamano: p.configuracion.tamano,
+									diagonales: !!p.configuracion.diagonales,
+									cuadricula: p.configuracion.cuadricula,
+									palabras: (p.configuracion.palabras ?? []).map((x: any) =>
+										typeof x === 'string' ? x : x.texto
+									)
+								}
+							: null
 				}));
 			} else {
 				error = 'Error al cargar la evaluación';
@@ -168,6 +190,30 @@
 			}
 			preguntaActual.opciones = [];
 			preguntaActual.respuestaCorrecta = undefined;
+		} else if (preguntaActual.tipo === 'SOPA_LETRAS') {
+			const palabras = (preguntaActual.configuracion?.palabras ?? [])
+				.map((x) => x.trim())
+				.filter(Boolean);
+			if (palabras.length < 2) {
+				toast.error('La sopa de letras necesita al menos dos palabras');
+				return;
+			}
+			const tamano = Math.min(20, Math.max(6, Number(preguntaActual.configuracion?.tamano) || 12));
+			const masLarga = Math.max(...palabras.map((x) => x.replace(/[^\p{L}]/gu, '').length));
+			if (masLarga > tamano) {
+				toast.error(`La cuadrícula de ${tamano} no cabe una palabra de ${masLarga} letras`);
+				return;
+			}
+			preguntaActual.configuracion = {
+				...preguntaActual.configuracion,
+				palabras,
+				tamano,
+				diagonales: !!preguntaActual.configuracion?.diagonales
+			};
+			preguntaActual.opciones = [];
+			preguntaActual.relacionIzq = [];
+			preguntaActual.relacionDer = [];
+			preguntaActual.respuestaCorrecta = undefined;
 		} else if (preguntaActual.tipo === 'VERDADERO_FALSO') {
 			if (
 				preguntaActual.respuestaCorrecta === undefined ||
@@ -185,6 +231,8 @@
 			preguntaActual.relacionDer = [];
 			preguntaActual.respuestaCorrecta = undefined;
 		}
+
+		if (preguntaActual.tipo !== 'SOPA_LETRAS') preguntaActual.configuracion = null;
 
 		if (editIndex !== null) {
 			preguntas[editIndex] = preguntaActual;

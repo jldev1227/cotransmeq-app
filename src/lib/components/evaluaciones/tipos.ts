@@ -8,7 +8,13 @@
  * sola versión, con la larga y la corta.
  */
 export type TipoPregunta =
-	'OPCION_UNICA' | 'OPCION_MULTIPLE' | 'NUMERICA' | 'TEXTO' | 'RELACION' | 'VERDADERO_FALSO';
+	| 'OPCION_UNICA'
+	| 'OPCION_MULTIPLE'
+	| 'NUMERICA'
+	| 'TEXTO'
+	| 'RELACION'
+	| 'VERDADERO_FALSO'
+	| 'SOPA_LETRAS';
 
 export interface DefinicionTipo {
 	valor: TipoPregunta;
@@ -54,8 +60,98 @@ export const TIPOS_PREGUNTA: DefinicionTipo[] = [
 		etiqueta: 'Relación',
 		corta: 'Relación',
 		ayuda: 'Pares que el evaluado tiene que emparejar.'
+	},
+	{
+		valor: 'SOPA_LETRAS',
+		etiqueta: 'Sopa de letras',
+		corta: 'Sopa',
+		ayuda: 'Palabras escondidas en una cuadrícula; puntúa por palabras halladas.'
 	}
 ];
+
+// ── Sopa de letras ──────────────────────────────────────────────
+
+/** Lo que define quien diseña la pregunta. */
+export interface EntradaSopa {
+	palabras: string[];
+	tamano: number;
+	diagonales: boolean;
+}
+
+export interface UbicacionPalabra {
+	texto: string;
+	fila: number;
+	columna: number;
+	dFila: number;
+	dColumna: number;
+}
+
+/** La configuración tal como la guarda el backend (ruta de administración). */
+export interface ConfigSopa {
+	tamano: number;
+	diagonales: boolean;
+	cuadricula: string[];
+	palabras: UbicacionPalabra[];
+}
+
+/** La configuración que ve el evaluado: sin ubicaciones. */
+export interface ConfigSopaPublica {
+	tamano: number;
+	diagonales: boolean;
+	cuadricula: string[];
+	palabras: string[];
+}
+
+/** Una línea marcada entre dos celdas `[fila, columna]`. */
+export interface TrazoSopa {
+	palabra?: string;
+	desde: [number, number];
+	hasta: [number, number];
+}
+
+/** Misma normalización que el backend: mayúsculas, sin tildes, solo letras y Ñ. */
+export function normalizarPalabraSopa(texto: string): string {
+	return texto
+		.toUpperCase()
+		.replace(/Ñ/g, '\u0000')
+		.normalize('NFD')
+		.replace(/[\u0300-\u036f]/g, '')
+		.replace(/\u0000/g, 'Ñ')
+		.replace(/[^A-ZÑ]/g, '');
+}
+
+/** Los textos de las palabras, venga la configuración de admin o pública. */
+export function palabrasDeSopa(config: ConfigSopa | ConfigSopaPublica): string[] {
+	return config.palabras.map((p) => (typeof p === 'string' ? p : p.texto));
+}
+
+/** Trazos de la clave: dónde está cada palabra (solo con la configuración de admin). */
+export function trazosDeSopa(config: ConfigSopa | ConfigSopaPublica): TrazoSopa[] {
+	/// En el editor las palabras ya vienen como texto (sin ubicación): no hay
+	/// clave que dibujar hasta que el backend vuelva a guardar la sopa.
+	return config.palabras.flatMap((u) => {
+		if (typeof u === 'string') return [];
+		const largo = u.texto.length - 1;
+		return [
+			{
+				palabra: u.texto,
+				desde: [u.fila, u.columna] as [number, number],
+				hasta: [u.fila + u.dFila * largo, u.columna + u.dColumna * largo] as [number, number]
+			}
+		];
+	});
+}
+
+/** Celdas que cubre un trazo recto. Vacío si no es recto. */
+export function celdasDeTrazo(t: TrazoSopa): [number, number][] {
+	const dF = Math.sign(t.hasta[0] - t.desde[0]);
+	const dC = Math.sign(t.hasta[1] - t.desde[1]);
+	const df = Math.abs(t.hasta[0] - t.desde[0]);
+	const dc = Math.abs(t.hasta[1] - t.desde[1]);
+	if (dF !== 0 && dC !== 0 && df !== dc) return [];
+	const largo = Math.max(df, dc) + 1;
+	return Array.from({ length: largo }, (_, k) => [t.desde[0] + dF * k, t.desde[1] + dC * k]);
+}
 
 const POR_VALOR = new Map(TIPOS_PREGUNTA.map((t) => [t.valor, t]));
 

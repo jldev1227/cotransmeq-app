@@ -8,6 +8,13 @@
 	import { mascota } from '$lib/mascot';
 	import PreguntaCard from '$lib/components/evaluaciones/PreguntaCard.svelte';
 	import PastillaTipo from '$lib/components/evaluaciones/PastillaTipo.svelte';
+	import SopaLetras from '$lib/components/evaluaciones/SopaLetras.svelte';
+	import {
+		palabrasDeSopa,
+		trazosDeSopa,
+		type ConfigSopa,
+		type TrazoSopa
+	} from '$lib/components/evaluaciones/tipos';
 	import ModalConfirmar from '$lib/components/evaluaciones/ModalConfirmar.svelte';
 	import {
 		acierto,
@@ -17,7 +24,11 @@
 		tonoPuntaje
 	} from '$lib/components/evaluaciones/tipos';
 	import '$lib/components/evaluaciones/evaluaciones.css';
-	import { authHeaders, actualizarRespuestasResultado } from '$lib/api/evaluaciones';
+	import {
+		authHeaders,
+		actualizarRespuestasResultado,
+		obtenerResultado
+	} from '$lib/api/evaluaciones';
 	import { authStore } from '$lib/stores/auth';
 
 	interface Evaluacion {
@@ -34,12 +45,20 @@
 		id: string;
 		texto: string;
 		tipo:
-			'OPCION_UNICA' | 'OPCION_MULTIPLE' | 'NUMERICA' | 'TEXTO' | 'RELACION' | 'VERDADERO_FALSO';
+			| 'OPCION_UNICA'
+			| 'OPCION_MULTIPLE'
+			| 'NUMERICA'
+			| 'TEXTO'
+			| 'RELACION'
+			| 'VERDADERO_FALSO'
+			| 'SOPA_LETRAS';
 		puntaje: number;
 		opciones: Opcion[];
 		relacionIzq: string[];
 		relacionDer: string[];
 		respuestaCorrecta?: number;
+		/** Sopa de letras: cuadrícula y ubicación de cada palabra. */
+		configuracion?: ConfigSopa | null;
 	}
 
 	interface Opcion {
@@ -57,7 +76,9 @@
 		correo: string;
 		telefono: string;
 		puntaje_total: number;
-		firma: string | null;
+		/** Solo viene en el detalle; la lista trae `tiene_firma`. */
+		firma?: string | null;
+		tiene_firma?: boolean;
 		created_at: string;
 		respuestas: RespuestaDetalle[];
 	}
@@ -185,11 +206,31 @@
 		}
 	}
 
-	function verDetalleResultado(resultado: Resultado) {
+	let isLoadingDetalle = false;
+
+	/**
+	 * La lista llega sin firma y sin la pregunta de cada respuesta (pesaba
+	 * medio mega con quince respuestas y en producción no cargaba). Se abre
+	 * con lo que hay y se completa con el detalle en cuanto llega.
+	 */
+	async function verDetalleResultado(resultado: Resultado) {
 		resultadoSeleccionado = resultado;
 		// Al abrir un detalle desde media página desplazada, el contenido nuevo
 		// empieza fuera de la vista y parece que no ha pasado nada.
 		if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+		if (resultado.respuestas.every((r) => r.pregunta) && resultado.firma !== undefined) return;
+		isLoadingDetalle = true;
+		try {
+			const res = await obtenerResultado<Resultado>(evaluacionId ?? '', resultado.id);
+			if (res.success && resultadoSeleccionado?.id === resultado.id) {
+				resultadoSeleccionado = res.data;
+				resultados = resultados.map((r) => (r.id === res.data.id ? res.data : r));
+			}
+		} catch (err: any) {
+			toast.error(err?.message || 'No se pudo cargar el detalle');
+		} finally {
+			isLoadingDetalle = false;
+		}
 	}
 
 	function cerrarDetalleResultado() {
@@ -225,6 +266,8 @@
 		valor_numero: number | null;
 		valor_texto: string;
 		relacion: Record<string, string>;
+		/** Sopa de letras: palabras que se dan por encontradas. */
+		palabras: string[];
 	}
 
 	let editandoRespuestas = false;
@@ -253,7 +296,8 @@
 				opcionesIds: ids,
 				valor_numero: previa?.valor_numero ?? null,
 				valor_texto: previa?.valor_texto ?? '',
-				relacion
+				relacion,
+				palabras: pregunta.tipo === 'SOPA_LETRAS' ? [...(previa?.opcionesIds ?? [])] : []
 			};
 		}
 		borrador = nuevo;
@@ -290,6 +334,17 @@
 						: base;
 				case 'TEXTO':
 					return { ...base, valor_texto: b.valor_texto };
+				case 'SOPA_LETRAS':
+					// El backend califica por trazos; el panel conoce dónde está cada
+					// palabra y manda el trazo real de las que se dan por encontradas.
+					return {
+						...base,
+						trazos: pregunta.configuracion
+							? trazosDeSopa(pregunta.configuracion).filter((t) =>
+									b.palabras.includes(t.palabra ?? '')
+								)
+							: []
+					};
 				case 'RELACION':
 					return {
 						...base,
@@ -742,6 +797,13 @@
 					</section>
 				{/if}
 
+				{#if isLoadingDetalle}
+					<div class="ev-cargando">
+						<span class="ev-spinner" aria-hidden="true"></span>
+						Cargando el detalle…
+					</div>
+				{/if}
+
 				{#if editandoRespuestas}
 					<section class="ev-card">
 						<header class="ev-card-cab">
@@ -846,6 +908,17 @@
 												bind:value={borrador[pregunta.id].valor_texto}
 											></textarea>
 											<p class="ev-resp-nota">Si el texto cambia, la IA lo vuelve a calificar.</p>
+										{:else if pregunta.tipo === 'SOPA_LETRAS'}
+											{#each pregunta.configuracion ? palabrasDeSopa(pregunta.configuracion) : [] as palabra (palabra)}
+												<label class="ev-edit-opcion">
+													<input
+														type="checkbox"
+														value={palabra}
+														bind:group={borrador[pregunta.id].palabras}
+													/>
+													<span>{palabra}</span>
+												</label>
+											{/each}
 										{:else if pregunta.tipo === 'RELACION'}
 											{#each pregunta.relacionIzq as izq, i (izq)}
 												<label class="ev-edit-par">
@@ -933,6 +1006,21 @@
 														>
 													</p>
 												{/if}
+											{:else if respuesta.pregunta.tipo === 'SOPA_LETRAS'}
+												{#if respuesta.pregunta.configuracion?.cuadricula?.length}
+													<SopaLetras
+														compacta
+														cuadricula={respuesta.pregunta.configuracion.cuadricula}
+														palabras={palabrasDeSopa(respuesta.pregunta.configuracion)}
+														trazos={Array.isArray(respuesta.relacion)
+															? (respuesta.relacion as unknown as TrazoSopa[])
+															: []}
+													/>
+												{/if}
+												<p class="ev-resp-nota">
+													{(respuesta.opcionesIds ?? []).length} de {respuesta.pregunta
+														.configuracion?.palabras.length ?? 0} palabras encontradas
+												</p>
 											{:else if respuesta.pregunta.tipo === 'RELACION'}
 												{@const relaciones = Array.isArray(respuesta.relacion)
 													? respuesta.relacion

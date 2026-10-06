@@ -98,6 +98,18 @@ export async function updateEvaluacion(
 	return response.data;
 }
 
+/**
+ * Un resultado completo (firma y pregunta de cada respuesta). La lista de
+ * resultados viene aligerada; esto se pide al abrir el detalle.
+ */
+export async function obtenerResultado<T = any>(
+	evaluacionId: string,
+	resultadoId: string
+): Promise<{ success: boolean; data: T }> {
+	const response = await api.get(`/api/evaluaciones/${evaluacionId}/resultados/${resultadoId}`);
+	return response.data;
+}
+
 /** Respuesta a una pregunta tal como la recibe el backend (misma forma que al responder). */
 export interface RespuestaEnvio {
 	preguntaId: string;

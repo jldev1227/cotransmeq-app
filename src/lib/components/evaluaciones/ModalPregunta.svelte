@@ -13,7 +13,7 @@
 	 * [role=dialog]`: en móvil el CSS global la convierte en hoja inferior.
 	 */
 	import { fade, scale } from 'svelte/transition';
-	import { TIPOS_PREGUNTA, type TipoPregunta } from './tipos';
+	import { TIPOS_PREGUNTA, type EntradaSopa, type TipoPregunta } from './tipos';
 
 	interface OpcionForm {
 		id?: string;
@@ -30,6 +30,8 @@
 		relacionIzq: string[];
 		relacionDer: string[];
 		respuestaCorrecta?: number;
+		/** Sopa de letras. Al editar puede traer además la cuadrícula ya generada. */
+		configuracion?: (EntradaSopa & { cuadricula?: string[] }) | null;
 	}
 
 	interface Props {
@@ -65,6 +67,33 @@
 		p.relacionIzq = p.relacionIzq.filter((_, i) => i !== index);
 		p.relacionDer = p.relacionDer.filter((_, i) => i !== index);
 	}
+
+	// ── Sopa de letras ──
+	// Las palabras se escriben una por línea; se guardan como lista.
+	let palabrasTexto = $state(
+		Array.isArray(p.configuracion?.palabras)
+			? p
+					.configuracion!.palabras.map((x: any) => (typeof x === 'string' ? x : (x?.texto ?? '')))
+					.join('\n')
+			: ''
+	);
+	$effect(() => {
+		if (p.tipo !== 'SOPA_LETRAS') return;
+		const palabras = palabrasTexto
+			.split(/\r?\n|,/)
+			.map((x) => x.trim())
+			.filter(Boolean);
+		p.configuracion = {
+			tamano: p.configuracion?.tamano ?? 12,
+			diagonales: p.configuracion?.diagonales ?? false,
+			cuadricula: p.configuracion?.cuadricula,
+			palabras
+		};
+	});
+	const palabrasSopa = $derived(p.tipo === 'SOPA_LETRAS' ? (p.configuracion?.palabras ?? []) : []);
+	const palabraMasLarga = $derived(
+		palabrasSopa.reduce((m, x) => Math.max(m, x.replace(/[^\p{L}]/gu, '').length), 0)
+	);
 
 	function teclado(e: KeyboardEvent) {
 		if (e.key === 'Escape') onCancelar();
@@ -257,6 +286,53 @@
 							</svg>
 							Falso
 						</button>
+					</div>
+				</div>
+			{/if}
+
+			{#if p.tipo === 'SOPA_LETRAS'}
+				<div class="mp-seccion">
+					<div class="mp-seccion-cab">
+						<div>
+							<h4>Palabras escondidas</h4>
+							<p>
+								Una por línea. El backend arma la cuadrícula al guardar; cada palabra hallada suma
+								la parte proporcional del puntaje.
+							</p>
+						</div>
+					</div>
+					<div class="ev-campo">
+						<label for="mp-sopa-palabras">Palabras</label>
+						<textarea
+							id="mp-sopa-palabras"
+							bind:value={palabrasTexto}
+							rows="5"
+							placeholder={'CASCO\nGUANTES\nEXTINTOR'}
+						></textarea>
+						<small>
+							{palabrasSopa.length} palabra{palabrasSopa.length === 1 ? '' : 's'}
+							{#if palabraMasLarga > 0}· la más larga tiene {palabraMasLarga} letras{/if}
+						</small>
+					</div>
+					<div class="mp-sopa-ajustes">
+						<div class="ev-campo">
+							<label for="mp-sopa-tamano">Tamaño de la cuadrícula</label>
+							<input
+								id="mp-sopa-tamano"
+								type="number"
+								min="6"
+								max="20"
+								bind:value={p.configuracion!.tamano}
+							/>
+							<small>Entre 6 y 20; nunca menor que la palabra más larga.</small>
+						</div>
+						<label class="mp-sopa-check">
+							<input type="checkbox" bind:checked={p.configuracion!.diagonales} />
+							<span>
+								<strong>Diagonales e inversas</strong>
+								<small>Sin marcar, solo de izquierda a derecha y de arriba abajo.</small>
+							</span>
+						</label>
 					</div>
 				</div>
 			{/if}
@@ -647,6 +723,35 @@
 		color: var(--au-danger);
 	}
 
+	.mp-sopa-ajustes {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+		gap: 0.9rem;
+		align-items: start;
+	}
+	.mp-sopa-check {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.6rem;
+		padding: 0.6rem 0.75rem;
+		border: 1.5px solid var(--au-border);
+		border-radius: 14px;
+		cursor: pointer;
+		font-size: 0.84rem;
+	}
+	.mp-sopa-check input {
+		margin-top: 0.2rem;
+		accent-color: var(--au-primary);
+	}
+	.mp-sopa-check span {
+		display: flex;
+		flex-direction: column;
+		gap: 0.1rem;
+	}
+	.mp-sopa-check small {
+		font-size: 0.74rem;
+		color: var(--au-muted);
+	}
 	.mp-par {
 		display: grid;
 		grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;

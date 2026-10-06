@@ -14,6 +14,13 @@
 		pluralPreguntas
 	} from '$lib/components/evaluaciones/tipos';
 	import { mascota } from '$lib/mascot';
+	import SopaLetras from '$lib/components/evaluaciones/SopaLetras.svelte';
+	import {
+		palabrasDeSopa,
+		type ConfigSopa,
+		type ConfigSopaPublica,
+		type TrazoSopa
+	} from '$lib/components/evaluaciones/tipos';
 	// La misma hoja del módulo de evaluaciones del panel: hero, tarjetas,
 	// campos y semáforo del puntaje. Así la página pública y el detalle
 	// que ve HSEQ son la misma familia.
@@ -31,12 +38,21 @@
 		id: string;
 		texto: string;
 		tipo:
-			'OPCION_UNICA' | 'OPCION_MULTIPLE' | 'NUMERICA' | 'TEXTO' | 'RELACION' | 'VERDADERO_FALSO';
+			| 'OPCION_UNICA'
+			| 'OPCION_MULTIPLE'
+			| 'NUMERICA'
+			| 'TEXTO'
+			| 'RELACION'
+			| 'VERDADERO_FALSO'
+			| 'SOPA_LETRAS';
 		puntaje: number;
 		opciones: Opcion[];
 		relacionIzq: string[];
 		relacionDer: string[];
 		respuestaCorrecta?: number;
+		/** Sopa de letras: cuadrícula y lista de palabras, sin ubicaciones. */
+		/// Antes de responder llega sin ubicaciones; en el resultado, completa.
+		configuracion?: ConfigSopaPublica | ConfigSopa | null;
 	}
 
 	interface Opcion {
@@ -56,6 +72,8 @@
 		valor_numero?: number;
 		opcionesIds?: string[];
 		relacion?: { izq: string; der: string }[];
+		/** Sopa de letras: líneas marcadas. */
+		trazos?: TrazoSopa[];
 	}
 
 	let evaluacion: Evaluacion | null = null;
@@ -257,6 +275,11 @@
 					mostrarToast('Por favor ingresa una respuesta', 'error');
 					return;
 				}
+			} else if (preguntaActual.tipo === 'SOPA_LETRAS') {
+				if (!respuesta.trazos || respuesta.trazos.length === 0) {
+					mostrarToast('Marca al menos una palabra en la sopa de letras', 'error');
+					return;
+				}
 			} else if (preguntaActual.tipo === 'RELACION') {
 				if (!respuesta.relacion || respuesta.relacion.length === 0) {
 					mostrarToast('Por favor relaciona los elementos', 'error');
@@ -316,6 +339,15 @@
 		respuestas.set(preguntaId, {
 			preguntaId,
 			valor_numero: valor
+		});
+		respuestas = respuestas;
+	}
+
+	function handleSopa(preguntaId: string, trazos: TrazoSopa[]) {
+		respuestas.set(preguntaId, {
+			preguntaId,
+			opcionesIds: trazos.map((t) => t.palabra ?? '').filter(Boolean),
+			trazos
 		});
 		respuestas = respuestas;
 	}
@@ -766,6 +798,19 @@
 											{:else}
 												<p class="ev-resp-vacia">Sin respuesta</p>
 											{/if}
+										{:else if pregunta.tipo === 'SOPA_LETRAS'}
+											{#if pregunta.configuracion?.cuadricula?.length}
+												<SopaLetras
+													compacta
+													cuadricula={pregunta.configuracion.cuadricula}
+													palabras={palabrasDeSopa(pregunta.configuracion)}
+													trazos={Array.isArray(respuesta.relacion) ? respuesta.relacion : []}
+												/>
+											{/if}
+											<p class="ev-resp-nota">
+												{(respuesta.opcionesIds ?? []).length} de {pregunta.configuracion?.palabras
+													.length ?? 0} palabras encontradas
+											</p>
 										{:else if pregunta.tipo === 'RELACION'}
 											{@const relaciones = Array.isArray(respuesta.relacion)
 												? respuesta.relacion
@@ -1149,6 +1194,18 @@
 											Falso
 										</button>
 									</div>
+								{:else if pregunta.tipo === 'SOPA_LETRAS'}
+									{#if pregunta.configuracion?.cuadricula?.length}
+										<SopaLetras
+											interactivo
+											cuadricula={pregunta.configuracion.cuadricula}
+											palabras={palabrasDeSopa(pregunta.configuracion)}
+											trazos={respuesta?.trazos ?? []}
+											onCambio={(trazos) => handleSopa(pregunta.id, trazos)}
+										/>
+									{:else}
+										<p class="ev-resp-vacia">Esta sopa de letras no tiene cuadrícula generada.</p>
+									{/if}
 								{:else if pregunta.tipo === 'RELACION'}
 									{@const _ = initRelacionItems(pregunta)}
 									{@const itemsIzq = itemsIzqShuffled.get(pregunta.id) || []}

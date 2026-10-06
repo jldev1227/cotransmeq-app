@@ -10,7 +10,8 @@
 	 */
 	import { Pencil, Trash2 } from 'lucide-svelte';
 	import PastillaTipo from './PastillaTipo.svelte';
-	import { pluralPuntos } from './tipos';
+	import SopaLetras from './SopaLetras.svelte';
+	import { palabrasDeSopa, pluralPuntos, trazosDeSopa, type ConfigSopa } from './tipos';
 
 	interface OpcionVista {
 		texto: string;
@@ -25,6 +26,8 @@
 		relacionIzq?: string[];
 		relacionDer?: string[];
 		respuestaCorrecta?: number | null;
+		/** Sopa de letras ya generada (ruta de administración) o aún sin generar. */
+		configuracion?: ConfigSopa | { palabras: string[]; tamano: number; diagonales: boolean } | null;
 	}
 
 	interface Props {
@@ -38,6 +41,25 @@
 	let { pregunta, indice, onEditar, onEliminar }: Props = $props();
 
 	const opciones = $derived(pregunta.opciones ?? []);
+	/// Recién creada en el formulario la sopa no tiene cuadrícula todavía: la
+	/// genera el backend al guardar. Hasta entonces solo se listan las palabras.
+	const sopa = $derived(
+		pregunta.tipo === 'SOPA_LETRAS' && pregunta.configuracion
+			? 'cuadricula' in pregunta.configuracion && pregunta.configuracion.cuadricula?.length
+				? {
+						cuadricula: pregunta.configuracion.cuadricula,
+						palabras: palabrasDeSopa(pregunta.configuracion as ConfigSopa).map((x) =>
+							x.toUpperCase()
+						),
+						trazos: trazosDeSopa(pregunta.configuracion as ConfigSopa)
+					}
+				: {
+						cuadricula: [] as string[],
+						palabras: (pregunta.configuracion.palabras as string[]).map((p) => p.toUpperCase()),
+						trazos: []
+					}
+			: null
+	);
 	const pares = $derived(
 		pregunta.tipo === 'RELACION'
 			? (pregunta.relacionIzq ?? []).map((izq, i) => ({
@@ -115,6 +137,24 @@
 				</li>
 			{/each}
 		</ul>
+	{/if}
+
+	{#if sopa}
+		<div class="pc-sopa">
+			{#if sopa.cuadricula.length}
+				<SopaLetras
+					compacta
+					cuadricula={sopa.cuadricula}
+					palabras={sopa.palabras}
+					trazos={sopa.trazos}
+				/>
+			{:else}
+				<ul class="pc-sopa-palabras">
+					{#each sopa.palabras as palabra}<li>{palabra}</li>{/each}
+				</ul>
+				<p class="pc-nota">La cuadrícula se genera al guardar la evaluación.</p>
+			{/if}
+		</div>
 	{/if}
 
 	{#if pregunta.tipo === 'VERDADERO_FALSO'}
@@ -299,6 +339,28 @@
 	.pc-clave-valor--falso {
 		background: var(--au-danger-soft);
 		color: var(--au-danger);
+	}
+	.pc-sopa {
+		display: flex;
+		flex-direction: column;
+		gap: 0.4rem;
+	}
+	.pc-sopa-palabras {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.pc-sopa-palabras li {
+		padding: 0.15rem 0.5rem;
+		border-radius: 999px;
+		background: var(--au-tint);
+		color: var(--au-dark);
+		font-size: 0.7rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
 	}
 	.pc-nota {
 		margin: 0;
