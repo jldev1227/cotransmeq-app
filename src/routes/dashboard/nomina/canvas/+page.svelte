@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { confirmar, confirmarEliminacion } from '$lib/stores/confirm';
-	import { onMount, onDestroy, tick } from 'svelte';
+	import { onMount, onDestroy, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { toast } from 'svelte-sonner';
@@ -1014,6 +1014,37 @@
 		conductorActivo = conductorId;
 		ctx?.activarConductor(conductorId);
 	}
+	/**
+	 * `?desprendible=<liquidacionId>`: abre el desprendible de esa liquidación
+	 * (lo pide el asistente con «muéstrame el desprendible de Mónica»).
+	 *
+	 * Va en un efecto sobre la URL y no solo en la primera carga porque el
+	 * asistente puede pedirlo con el canvas ya abierto: navegar a la misma ruta
+	 * con otros parámetros no remonta la página. Si la liquidación es de otro
+	 * periodo, primero se cambia al rango de la URL y el efecto vuelve a correr
+	 * cuando llegan los datos nuevos.
+	 */
+	let desprendibleConsumido: string | null = null;
+	$effect(() => {
+		const pedido = $page.url.searchParams.get('desprendible');
+		if (!pedido || pedido === desprendibleConsumido || loading || !datos) return;
+		const hoja = datos.hojas.find((h) => h.liquidacionId === pedido);
+		untrack(() => {
+			if (!hoja) {
+				const r = rangoDeUrl();
+				if (r && (r.desde !== rango?.desde || r.hasta !== rango?.hasta)) {
+					void cambiarRango(r);
+					return;
+				}
+				desprendibleConsumido = pedido;
+				toast.info('Ese desprendible no está en este periodo.');
+				return;
+			}
+			desprendibleConsumido = pedido;
+			irAConductor(hoja.conductorId);
+			void tick().then(verDesprendible);
+		});
+	});
 
 	// ─── Sesión colaborativa ───────────────────────────────
 	function conectarSesion() {
