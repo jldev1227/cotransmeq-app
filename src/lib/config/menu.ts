@@ -16,6 +16,7 @@ import {
 	CalendarCheck,
 	ClipboardPen,
 	HandCoins,
+	Receipt,
 	IdCard,
 	LayoutTemplate,
 	ListChecks,
@@ -137,6 +138,14 @@ export const MENU_ITEMS: MenuItem[] = [
 		icon: TriangleAlert,
 		badge: null,
 		href: '/dashboard/salidas-nc'
+	},
+	{
+		id: 'viaticos',
+		label: 'Viáticos',
+		/// Anticipos a conductores y los gastos con que los legalizan.
+		icon: Receipt,
+		badge: null,
+		href: '/dashboard/viaticos'
 	},
 	{
 		id: 'formularios',

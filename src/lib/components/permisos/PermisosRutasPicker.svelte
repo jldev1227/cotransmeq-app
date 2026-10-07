@@ -55,6 +55,7 @@
 		'acciones-correctivas': 'Acciones correctivas',
 		evaluaciones: 'Evaluaciones',
 		'salidas-nc': 'Salidas no conformes',
+		viaticos: 'Viáticos',
 		formularios: 'Formularios',
 		nomina: 'Nómina',
 		extractos: 'Extractos',

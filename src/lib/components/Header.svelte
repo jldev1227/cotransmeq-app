@@ -138,6 +138,10 @@
 				// mismo canvas, SvelteKit conservaría el componente y su caché podría
 				// seguir mostrando el PDF anterior a la firma.
 				window.location.assign(`/dashboard/nomina/canvas?${params.toString()}`);
+			} else if (notif.referencia_tipo === 'viatico_anticipo') {
+				goto(`/dashboard/viaticos?anticipo=${notif.referencia_id}`);
+			} else if (notif.referencia_tipo === 'viatico_solicitud') {
+				goto(`/dashboard/viaticos?solicitud=${notif.referencia_id}`);
 			} else if (notif.referencia_tipo === 'ACCION_CORRECTIVA') {
 				goto(`/dashboard/acciones-correctivas/${notif.referencia_id}`);
 			} else if (notif.tipo.startsWith('FACTURA_')) {
