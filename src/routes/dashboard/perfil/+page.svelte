@@ -6,6 +6,7 @@
 	import { toast } from '$lib/stores/toast';
 	import { AREA_LABELS, type Area } from '$lib/config/permissions';
 	import ConexionesClaude from '$lib/components/asistente/ConexionesClaude.svelte';
+	import AccesoAppMovil from '$lib/components/perfil/AccesoAppMovil.svelte';
 
 	let user = $authStore.user;
 	let sesion: any = null;
@@ -601,6 +602,20 @@
 							</div>
 						</div>
 					{/if}
+				</section>
+
+				<!-- App móvil: enlace de 30 días para administración, operaciones y HSEQ -->
+				<section class="perfil-card">
+					<header class="perfil-card-cabecera">
+						<span class="perfil-card-icono">
+							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+								<rect x="6" y="2.5" width="12" height="19" rx="2.5" />
+								<path stroke-linecap="round" d="M10.5 18.5h3" />
+							</svg>
+						</span>
+						<h2>App móvil</h2>
+					</header>
+					<AccesoAppMovil />
 				</section>
 
 				<!-- Conectar con Claude: tokens personales para consultar la app por MCP -->

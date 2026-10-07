@@ -21,9 +21,29 @@
 	let sinToken = false;
 	let enlaceApp = '';
 	let enlaceWeb = '';
+	let esUsuario = false;
 
 	onMount(() => {
 		const url = new URL(window.location.href);
+		/// Enlace de un usuario administrativo (generado en su perfil): no tiene portal web al que
+		/// caer, así que en Android el intent sin `browser_fallback_url` lleva a la tienda si la app
+		/// no está instalada.
+		if (url.searchParams.get('tipo') === 'usuario') {
+			const codigo = url.searchParams.get('codigo') ?? '';
+			if (!codigo) {
+				sinToken = true;
+				return;
+			}
+			window.history.replaceState(null, '', url.pathname);
+			const c = encodeURIComponent(codigo);
+			esUsuario = true;
+			enlaceApp = /android/i.test(navigator.userAgent)
+				? `intent://admin?codigo=${c}#Intent;scheme=${APP.esquema};package=${APP.paquete};end`
+				: `${APP.esquema}://admin?codigo=${c}`;
+			window.location.href = enlaceApp;
+			return;
+		}
+
 		const token = url.searchParams.get('token') ?? '';
 		if (!token) {
 			sinToken = true;
@@ -74,12 +94,18 @@
 				>
 					Abrir la app
 				</a>
-				<a
-					href={enlaceWeb}
-					class="btn-secondary w-full"
-				>
-					Seguir en el navegador
-				</a>
+				{#if esUsuario}
+					<p class="text-xs text-gray-500">
+						Necesitas la app de {APP.nombre} instalada en este teléfono.
+					</p>
+				{:else}
+					<a
+						href={enlaceWeb}
+						class="btn-secondary w-full"
+					>
+						Seguir en el navegador
+					</a>
+				{/if}
 			</div>
 		{/if}
 	{/if}
