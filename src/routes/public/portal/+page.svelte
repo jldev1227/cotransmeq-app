@@ -11,7 +11,17 @@
   const LOGO_SRC = '/assets/logo_nombre_white.webp';
   const TOKEN_DAYS = 30;
 
-  let authStep: 'cedula' | 'email_sent' | 'verificando' = 'cedula';
+  /** Cada intento de validar el enlace se corta a los 15 s; son tres intentos con pausa creciente. */
+  const VERIFICAR_TIMEOUT_MS = 15_000;
+  const VERIFICAR_INTENTOS = 3;
+  /** A partir de aquí se avisa que la conexión va lenta, para que nadie mire un spinner mudo. */
+  const AVISO_LENTO_MS = 5_000;
+  /** Si la página de destino no termina de cargar, se fuerza una navegación completa. */
+  const NAVEGAR_TIMEOUT_MS = 15_000;
+
+  let authStep: 'cedula' | 'email_sent' | 'verificando' | 'sin_conexion' = 'cedula';
+  let tokenPendiente = '';
+  let conexionLenta = false;
   let cedulaInput = '';
   let cedulaError = '';
   let emailHidden = '';
@@ -49,18 +59,52 @@
     }
   }
 
-  async function verificarTokenFromUrl(token: string) {
-    authStep = 'verificando';
-    loadingAuth = true;
-    try {
-      const base = getApiBase();
-      const res = await fetch(`${base}/api/conductor-portal/verificar-token?token=${encodeURIComponent(token)}`);
-      const json = await res.json();
+  const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+  /**
+   * Valida el enlace con tiempo límite y reintentos. Sin límite, un fetch en 4G con mala señal
+   * quedaba colgado y el conductor veía «Verificando acceso» durante minutos. Reintentar es seguro:
+   * el enlace sirve varias veces mientras no venza. Solo se reintentan los fallos de red y los 5xx;
+   * un 401 (enlace vencido) es una respuesta, no un fallo.
+   */
+  async function pedirVerificacion(token: string): Promise<{ ok: boolean; status: number; json: any }> {
+    const url = `${getApiBase()}/api/conductor-portal/verificar-token?token=${encodeURIComponent(token)}`;
+    for (let intento = 1; ; intento++) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), VERIFICAR_TIMEOUT_MS);
+      try {
+        /// El cuerpo se lee dentro del mismo límite: la respuesta puede llegar y el cuerpo colgarse.
+        const res = await fetch(url, { signal: controller.signal, cache: 'no-store' });
+        const json = await res.json().catch(() => ({}));
+        const reintentable = res.status >= 500 || res.status === 408 || res.status === 429;
+        if (!reintentable || intento >= VERIFICAR_INTENTOS) return { ok: res.ok, status: res.status, json };
+      } catch (err) {
+        if (intento >= VERIFICAR_INTENTOS) throw err;
+      } finally {
+        clearTimeout(timer);
+      }
+      await esperar(1_000 * intento);
+    }
+  }
+
+  async function verificarTokenFromUrl(token: string) {
+    tokenPendiente = token;
+    authStep = 'verificando';
+    conexionLenta = false;
+    loadingAuth = true;
+    const avisoLento = setTimeout(() => (conexionLenta = true), AVISO_LENTO_MS);
+    try {
+      const res = await pedirVerificacion(token);
+      const json = res.json;
+
+      if (res.status >= 500) {
+        authStep = 'sin_conexion';
+        return;
+      }
       if (!res.ok) {
         cedulaError = json.message || 'Enlace inválido o expirado.';
         authStep = 'cedula';
-        loadingAuth = false;
+        quitarTokenDeUrl();
         return;
       }
 
@@ -93,13 +137,34 @@
       const redirectUrl = qs
         ? `/public/portal/desprendibles?${qs}`
         : '/public/portal/desprendibles';
-      goto(redirectUrl);
-    } catch (err: any) {
-      cedulaError = 'Enlace inválido o expirado. Solicita un nuevo acceso.';
-      authStep = 'cedula';
+      /// La sesión ya quedó guardada: si el código de la página de destino no baja a tiempo,
+      /// una navegación completa lo vuelve a pedir en vez de dejar el spinner encendido.
+      const navego = await Promise.race([
+        goto(redirectUrl).then(() => true, () => false),
+        esperar(NAVEGAR_TIMEOUT_MS).then(() => false)
+      ]);
+      if (!navego) window.location.assign(redirectUrl);
+    } catch {
+      authStep = 'sin_conexion';
     } finally {
+      clearTimeout(avisoLento);
+      conexionLenta = false;
       loadingAuth = false;
     }
+  }
+
+  function quitarTokenDeUrl() {
+    tokenPendiente = '';
+    if (!browser) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete('token');
+    window.history.replaceState({}, '', url.toString());
+  }
+
+  function pedirEnlaceNuevo() {
+    quitarTokenDeUrl();
+    cedulaError = '';
+    authStep = 'cedula';
   }
 
   function handleKey(e: KeyboardEvent) { if (e.key === 'Enter') solicitarAcceso(); }
@@ -172,6 +237,9 @@
           {:else if authStep === 'verificando'}
             <h1 class="hero-titulo">Un momento…</h1>
             <p class="hero-sub">Estamos validando tu enlace de acceso.</p>
+          {:else if authStep === 'sin_conexion'}
+            <h1 class="hero-titulo">Sin conexión</h1>
+            <p class="hero-sub">Tu enlace sigue siendo válido.</p>
           {:else}
             <h1 class="hero-titulo">Bienvenido de vuelta</h1>
             <p class="hero-sub">Todo lo que necesitas para tu jornada, en un solo lugar.</p>
@@ -179,8 +247,8 @@
         </div>
         <img
           class="hero-mascota"
-          src={mascota(authStep === 'email_sent' ? 'correoEnviado' : authStep === 'verificando' ? 'procesando' : 'bienvenida').src}
-          alt={mascota(authStep === 'email_sent' ? 'correoEnviado' : authStep === 'verificando' ? 'procesando' : 'bienvenida').alt}
+          src={mascota(authStep === 'email_sent' ? 'correoEnviado' : authStep === 'verificando' ? 'procesando' : authStep === 'sin_conexion' ? 'advertencia' : 'bienvenida').src}
+          alt={mascota(authStep === 'email_sent' ? 'correoEnviado' : authStep === 'verificando' ? 'procesando' : authStep === 'sin_conexion' ? 'advertencia' : 'bienvenida').alt}
         />
       </section>
 
@@ -191,6 +259,26 @@
             <span class="spinner-lg" aria-hidden="true"></span>
             <h2 class="tarjeta-titulo">Verificando acceso</h2>
             <p class="ayuda">Estamos validando tu enlace mágico.</p>
+            {#if conexionLenta}
+              <p class="nota nota--centrada" in:fade={{ duration: 200 }}>
+                Tu conexión está lenta. Seguimos intentando…
+              </p>
+            {/if}
+          </div>
+
+        {:else if authStep === 'sin_conexion'}
+          <div class="estado-bloque" in:fly={{ y: 16, duration: 350, easing: quintOut }}>
+            <h2 class="tarjeta-titulo">No pudimos validar tu enlace</h2>
+            <p class="ayuda">
+              La conexión no respondió a tiempo. Revisa tu señal o tus datos móviles e inténtalo de nuevo;
+              no necesitas pedir otro correo.
+            </p>
+            <button class="btn-primary btn-principal" on:click={() => verificarTokenFromUrl(tokenPendiente)}>
+              Reintentar
+            </button>
+            <button class="btn-secondary btn-secundario" on:click={pedirEnlaceNuevo}>
+              Solicitar un enlace nuevo
+            </button>
           </div>
 
         {:else if authStep === 'email_sent'}
