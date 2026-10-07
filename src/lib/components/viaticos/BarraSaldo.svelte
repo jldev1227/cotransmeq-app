@@ -23,7 +23,7 @@
 			<small>de {moneda(saldo.valor)}</small>
 		</div>
 		<div class="bs-pista" aria-hidden="true">
-			<div class="bs-relleno" style:width="{ancho}%" style:background={color}></div>
+			<div class="bs-relleno" style:transform="scaleX({ancho / 100})" style:background={color}></div>
 			<div class="bs-marca"></div>
 		</div>
 	</div>
@@ -46,7 +46,7 @@
 			aria-valuenow={ancho}
 			aria-label="Porcentaje restante"
 		>
-			<div class="bs-relleno" style:width="{ancho}%" style:background={color}></div>
+			<div class="bs-relleno" style:transform="scaleX({ancho / 100})" style:background={color}></div>
 			<div class="bs-marca" title="15 %: alerta de saldo bajo"></div>
 		</div>
 		<dl class="bs-totales">
@@ -130,10 +130,12 @@
 	.bs-pista--grande {
 		height: 10px;
 	}
+	/* Se escala en vez de animar el ancho: un cambio de saldo no recalcula el layout. */
 	.bs-relleno {
+		width: 100%;
 		height: 100%;
-		border-radius: inherit;
-		transition: width 0.3s ease;
+		transform-origin: left center;
+		transition: transform 0.3s ease;
 	}
 	.bs-marca {
 		position: absolute;
