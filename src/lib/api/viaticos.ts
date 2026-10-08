@@ -235,7 +235,6 @@ export const viaticosAPI = {
 		}
 		if (!r.ok)
 			throw new Error(`La subida del comprobante falló (${r.status}). Vuelve a intentarlo.`);
-		throw new Error(`La subida del comprobante falló (${r.status}). Vuelve a intentarlo.`);
 		return { key: firmado.key, mime_type: archivo.type, nombre: archivo.name };
 	},
 
@@ -299,3 +298,119 @@ export function colorSaldo(s: Pick<Saldo, 'saldo_bajo' | 'agotado'>): string {
 export function etiquetaSaldo(s: Pick<Saldo, 'saldo_bajo' | 'agotado'>): string {
 	return s.agotado ? 'Agotado' : s.saldo_bajo ? 'Saldo bajo' : 'Con saldo';
 }
+
+// ── Tablero y gastos que asume la empresa ───────────────────────────────
+
+export type Agrupacion = 'dia' | 'semana' | 'mes';
+export type CategoriaGasto = 'OFICINA' | 'MANTENIMIENTO' | 'CONDUCTOR' | 'BANCARIO' | 'OTRO';
+export type MetodoGasto = 'TRANSFERENCIA' | 'RETIRO_TARJETA' | 'EFECTIVO' | 'DEBITO_AUTOMATICO';
+/** Quién reconoce el gasto: la empresa o el tercero propietario de la placa. */
+export type AsumeGasto = 'EMPRESA' | 'TERCERO';
+
+export const CATEGORIA_LABELS: Record<CategoriaGasto, string> = {
+	OFICINA: 'Oficina',
+	MANTENIMIENTO: 'Mantenimiento de vehículo',
+	CONDUCTOR: 'A un conductor',
+	BANCARIO: 'Bancario (4x1000, cuota de manejo)',
+	OTRO: 'Otro'
+};
+export const METODO_GASTO_LABELS: Record<MetodoGasto, string> = {
+	TRANSFERENCIA: 'Transferencia',
+	RETIRO_TARJETA: 'Retiro con tarjeta',
+	EFECTIVO: 'Efectivo',
+	DEBITO_AUTOMATICO: 'Débito automático'
+};
+export const ASUME_LABELS: Record<AsumeGasto, string> = {
+	EMPRESA: 'La empresa',
+	TERCERO: 'El propietario de la placa'
+};
+
+export interface PeriodoViaticos {
+	clave: string;
+	desde: string;
+	hasta: string;
+	anticipos: number;
+	cantidad_anticipos: number;
+	legalizado: number;
+	gastos_empresa: number;
+	cantidad_gastos_empresa: number;
+}
+
+export interface ResumenViaticos {
+	rango: { desde: string; hasta: string; agrupar: Agrupacion };
+	totales: {
+		anticipos: number;
+		cantidad_anticipos: number;
+		legalizado: number;
+		gastos_empresa: number;
+		cantidad_gastos_empresa: number;
+		/** Gastos directos que asume el propietario de la placa (se le descuentan a él). */
+		gastos_tercero: number;
+		cantidad_gastos_tercero: number;
+		egresos: number;
+		en_manos_de_conductores: number;
+	};
+	periodos: PeriodoViaticos[];
+	por_categoria: { categoria: CategoriaGasto; valor: number; cantidad: number }[];
+	top_conductores: { id: string; etiqueta: string; valor: number; cantidad: number }[];
+	top_placas: { id: string; etiqueta: string; valor: number; cantidad: number }[];
+	fondos: { usuario_id: string; nombre: string; saldo: number }[];
+}
+
+export interface GastoEmpresa {
+	id: string;
+	categoria: CategoriaGasto;
+	asume: AsumeGasto;
+	tercero: { id: string; nombre: string; identificacion: string | null } | null;
+	descripcion: string;
+	beneficiario: string | null;
+	valor: number;
+	fecha: string;
+	metodo: MetodoGasto;
+	numero_comprobante: string | null;
+	comprobante: { key: string; mime_type: string | null; nombre: string | null } | null;
+	vehiculo: { id: string; placa: string } | null;
+	conductor: { id: string; nombre: string } | null;
+	creado_por: { id: string; nombre: string } | null;
+	created_at: string;
+}
+
+export interface GastoEmpresaInput {
+	categoria: CategoriaGasto;
+	asume: AsumeGasto;
+	descripcion: string;
+	beneficiario?: string | null;
+	valor: number;
+	fecha: string;
+	metodo: MetodoGasto;
+	numero_comprobante?: string | null;
+	comprobante?: { key: string; mime_type: string; nombre: string } | null;
+	vehiculo_id?: string | null;
+	conductor_id?: string | null;
+}
+
+export interface ListadoGastosEmpresa {
+	data: GastoEmpresa[];
+	meta: { total: number; page: number; limit: number; totalPages: number };
+	total_valor: number;
+}
+
+export const viaticosEmpresaAPI = {
+	resumen: (params: { desde: string; hasta: string; agrupar: Agrupacion }) =>
+		llamar<ResumenViaticos>(apiClient.get('/api/viaticos/resumen', { params }), 'No se pudo calcular el resumen'),
+
+	async gastos(params: { q?: string; categoria?: CategoriaGasto; desde?: string; hasta?: string; page?: number; limit?: number }): Promise<ListadoGastosEmpresa> {
+		try {
+			const { data } = await apiClient.get('/api/viaticos/gastos-empresa', { params });
+			return data;
+		} catch (error) {
+			throw mensaje(error, 'No se pudieron cargar los gastos de la empresa');
+		}
+	},
+	crear: (input: GastoEmpresaInput) =>
+		llamar<GastoEmpresa>(apiClient.post('/api/viaticos/gastos-empresa', input), 'No se pudo registrar el gasto'),
+	actualizar: (id: string, input: GastoEmpresaInput) =>
+		llamar<GastoEmpresa>(apiClient.put(`/api/viaticos/gastos-empresa/${id}`, input), 'No se pudo actualizar el gasto'),
+	eliminar: (id: string) =>
+		llamar<{ id: string }>(apiClient.delete(`/api/viaticos/gastos-empresa/${id}`), 'No se pudo eliminar el gasto')
+};

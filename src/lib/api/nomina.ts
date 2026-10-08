@@ -136,7 +136,9 @@ export const eliminarLiquidacion = async (id: string) => {
  * Obtener todos los conductores (sin límite para selects)
  */
 export const obtenerConductores = async () => {
-	const response = await apiClient.get<{ data: Conductor[] }>('/api/conductores?limit=9999');
+	const response = await apiClient.get<{ data: Conductor[] }>(
+		'/api/conductores?limit=9999&incluir_ocultos=true'
+	);
 	return response.data;
 };
 
@@ -154,7 +156,7 @@ export const obtenerConductorPorId = async (id: string) => {
  * Obtener todos los vehículos
  */
 export const obtenerVehiculos = async () => {
-	const response = await apiClient.get<{ data: Vehiculo[] }>('/api/vehiculos');
+	const response = await apiClient.get<{ data: Vehiculo[] }>('/api/vehiculos?incluir_ocultos=true');
 	return response.data;
 };
 

@@ -312,7 +312,8 @@ export const publicApiClient: AxiosInstance = axios.create({
 
 // Funciones de API para otros módulos
 export const vehiculosAPI = {
-	getAll: () => apiClient.get('/api/vehiculos'),
+	/// `{ incluir_ocultos: 'true' }` en selectores: un vehículo oculto se puede elegir.
+	getAll: (params?: { incluir_ocultos?: 'true' }) => apiClient.get('/api/vehiculos', { params }),
 	getById: (id: string) => apiClient.get(`/api/vehiculos/${id}`),
 	create: (data: any) => apiClient.post('/api/vehiculos', data),
 	update: (id: string, data: any) => apiClient.put(`/api/vehiculos/${id}`, data),

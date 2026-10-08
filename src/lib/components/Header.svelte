@@ -138,6 +138,13 @@
 				// mismo canvas, SvelteKit conservaría el componente y su caché podría
 				// seguir mostrando el PDF anterior a la firma.
 				window.location.assign(`/dashboard/nomina/canvas?${params.toString()}`);
+			} else if (notif.referencia_tipo === 'preoperacional') {
+				goto(`/dashboard/formularios/envios/${notif.referencia_id}`);
+			} else if (notif.referencia_tipo?.startsWith('dias_laborados:')) {
+				/// Recorridos del conductor ese día (`dias_laborados:<fecha>`, la referencia es el conductor).
+				const fecha = notif.referencia_tipo.split(':')[1];
+				const params = new URLSearchParams({ desde: fecha, hasta: fecha, conductor: notif.referencia_id });
+				goto(`/dashboard/conductores/recorridos?${params.toString()}`);
 			} else if (notif.referencia_tipo === 'viatico_anticipo') {
 				goto(`/dashboard/viaticos?anticipo=${notif.referencia_id}`);
 			} else if (notif.referencia_tipo === 'viatico_solicitud') {

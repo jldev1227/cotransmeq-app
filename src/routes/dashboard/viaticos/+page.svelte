@@ -1,11 +1,14 @@
 <script lang="ts">
 	/**
-	 * Viáticos: anticipos entregados a conductores y su legalización.
+	 * Viáticos: anticipos entregados a conductores, su legalización y los gastos
+	 * que asume la empresa.
 	 *
-	 * Dos vistas: los ANTICIPOS (con su saldo calculado por el servidor) y las
-	 * SOLICITUDES de más dinero que los conductores hacen desde la app. Aprobar
-	 * una solicitud abre el formulario del anticipo con el valor pedido y con
-	 * conductor y placa fijos.
+	 * Cuatro vistas: el RESUMEN (tablero por semana, mes o rango), los ANTICIPOS
+	 * (con su saldo calculado por el servidor), los GASTOS DE LA EMPRESA (oficina,
+	 * mantenimientos, dinero a un conductor sin placa: no los reconoce el tercero)
+	 * y las SOLICITUDES de más dinero que los conductores hacen desde la app.
+	 * Aprobar una solicitud abre el formulario del anticipo con el valor pedido y
+	 * con conductor y placa fijos.
 	 *
 	 * Misma cáscara que los directorios (`dir-*` de app.css y `listing/`). Los
 	 * enlaces de las notificaciones llegan con `?anticipo=<id>` o
@@ -30,6 +33,8 @@
 	import ModalDetalleAnticipo from '$lib/components/viaticos/ModalDetalleAnticipo.svelte';
 	import ModalMotivo from '$lib/components/viaticos/ModalMotivo.svelte';
 	import BarraSaldo from '$lib/components/viaticos/BarraSaldo.svelte';
+	import ResumenViaticos from '$lib/components/viaticos/ResumenViaticos.svelte';
+	import ModalGastoEmpresa from '$lib/components/viaticos/ModalGastoEmpresa.svelte';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
 	import {
 		limpiar as limpiarFiltrosDe,
@@ -48,6 +53,12 @@
 		fechaCorta,
 		moneda,
 		viaticosAPI,
+		viaticosEmpresaAPI,
+		CATEGORIA_LABELS,
+		METODO_GASTO_LABELS,
+		type CategoriaGasto,
+		type GastoEmpresa,
+		type ListadoGastosEmpresa,
 		type AnticipoDetalle,
 		type AnticipoResumen,
 		type FiltroEstadoAnticipo,
@@ -67,12 +78,14 @@
 		vista: string;
 		q: string;
 		estado: string;
+		categoria: string;
 		pagina: number;
 	}
 	const DEFS: DefinicionesFiltros<Filtros> = {
-		vista: opcion('anticipos'),
+		vista: opcion('resumen'),
 		q: texto(),
 		estado: opcion('todos'),
+		categoria: opcion('todas'),
 		pagina: numero(1)
 	};
 	const estadoUrl = crearEstadoUrl(DEFS);
@@ -193,9 +206,74 @@
 		RECHAZADA: { etiqueta: 'Rechazada', color: '#ef4444' }
 	} as const;
 
+	// ── Gastos de la empresa ─────────────────────────────────────────────
+	let gastos = $state<ListadoGastosEmpresa | null>(null);
+	let cargandoGastos = $state(false);
+	let gastoAbierto = $state(false);
+	let gastoEnEdicion = $state<GastoEmpresa | null>(null);
+	/// Sube cada vez que algo cambia, para que el tablero recalcule.
+	let version = $state(0);
+
+	$effect(() => {
+		if (filtros.vista !== 'gastos') return;
+		void filtros.q;
+		void filtros.categoria;
+		void filtros.pagina;
+		void cargarGastos();
+	});
+
+	async function cargarGastos() {
+		cargandoGastos = true;
+		try {
+			gastos = await viaticosEmpresaAPI.gastos({
+				q: filtros.q || undefined,
+				categoria: filtros.categoria === 'todas' ? undefined : (filtros.categoria as CategoriaGasto),
+				page: filtros.pagina,
+				limit: POR_PAGINA
+			});
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'No se pudieron cargar los gastos');
+		} finally {
+			cargandoGastos = false;
+		}
+	}
+
+	const COLUMNAS_GASTO: ColumnDef<GastoEmpresa, any>[] = [
+		{ id: 'gasto', header: 'Gasto', enableSorting: false },
+		{ id: 'referencia', header: 'Vehículo · Conductor', enableSorting: false, size: 210 },
+		{ id: 'pago', header: 'Pago', enableSorting: false, size: 170 },
+		{ id: 'valor', header: 'Valor', enableSorting: false, size: 140 },
+		{ id: 'acciones', header: '', enableSorting: false, size: 90 }
+	];
+	const SEGMENTOS_CATEGORIA = [
+		{ valor: 'todas', etiqueta: 'Todas' },
+		...Object.entries(CATEGORIA_LABELS).map(([valor, etiqueta]) => ({ valor, etiqueta }))
+	];
+
+	function abrirGasto(g: GastoEmpresa | null) {
+		gastoEnEdicion = g;
+		gastoAbierto = true;
+	}
+	async function eliminarGasto(g: GastoEmpresa) {
+		const ok = await confirmarEliminacion({
+			title: '¿Eliminar el gasto?',
+			message: `«${g.descripcion}» por ${moneda(g.valor)}. Si salió del saldo de alguien de operaciones, vuelve a su saldo.`
+		});
+		if (!ok) return;
+		try {
+			await viaticosEmpresaAPI.eliminar(g.id);
+			toast.success('Gasto eliminado');
+			recargar();
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'No se pudo eliminar');
+		}
+	}
+
 	function recargar() {
-		void cargarAnticipos();
+		version++;
+		if (filtros.vista === 'anticipos') void cargarAnticipos();
 		if (filtros.vista === 'solicitudes') void cargarSolicitudes();
+		if (filtros.vista === 'gastos') void cargarGastos();
 	}
 
 	// ── Modales ──────────────────────────────────────────────────────────
@@ -284,10 +362,11 @@
 		<div class="dir-cabecera-texto">
 			<h1 class="dir-titulo">Viáticos</h1>
 			<p class="dir-desc">
-				Anticipos entregados a los conductores, los gastos con que los legalizan desde la app y sus
-				solicitudes de más dinero. Al bajar del 15 % del anticipo se avisa a operaciones y al
-				conductor.
+				Anticipos entregados a los conductores, los gastos con que los legalizan desde la app, sus
+				solicitudes de más dinero y los gastos que asume la empresa. Al bajar del 15 % del anticipo
+				se avisa a operaciones y al conductor.
 			</p>
+			{#if filtros.vista === 'anticipos'}
 			<div class="dir-conteos">
 				<ResumenConteos
 					conteos={resumen}
@@ -297,13 +376,25 @@
 					onElegir={elegirConteo}
 				/>
 			</div>
+			{/if}
 		</div>
 		{#if puedeEscribir}
 			<div class="dir-cabecera-acciones">
-				<button type="button" class="btn-primary" onclick={abrirNuevo}>
-					<Plus size={16} strokeWidth={2.4} />
-					Registrar anticipo
-				</button>
+				{#if filtros.vista === 'gastos'}
+					<button type="button" class="btn-primary" onclick={() => abrirGasto(null)}>
+						<Plus size={16} strokeWidth={2.4} />
+						Registrar gasto
+					</button>
+				{:else}
+					<button type="button" class="btn-secondary" onclick={() => abrirGasto(null)}>
+						<Plus size={16} strokeWidth={2.4} />
+						Gasto de la empresa
+					</button>
+					<button type="button" class="btn-primary" onclick={abrirNuevo}>
+						<Plus size={16} strokeWidth={2.4} />
+						Registrar anticipo
+					</button>
+				{/if}
 			</div>
 		{/if}
 	</header>
@@ -311,7 +402,9 @@
 	<div in:fly={{ y: 12, duration: 400, delay: 60 }}>
 		<TabsVista
 			tabs={[
+				{ id: 'resumen', label: 'Resumen' },
 				{ id: 'anticipos', label: 'Anticipos', cuenta: listado?.conteos.todos ?? null },
+				{ id: 'gastos', label: 'Gastos de la empresa', cuenta: gastos?.meta.total ?? null },
 				{ id: 'solicitudes', label: 'Solicitudes', cuenta: listado?.solicitudes_pendientes || null }
 			]}
 			activa={filtros.vista}
@@ -320,7 +413,93 @@
 		/>
 	</div>
 
-	{#if filtros.vista === 'anticipos'}
+	{#if filtros.vista === 'resumen'}
+		<div in:fly={{ y: 12, duration: 300 }}>
+			<ResumenViaticos {version} />
+		</div>
+	{:else if filtros.vista === 'gastos'}
+		<div class="dir-filtros" in:fly={{ y: 12, duration: 300 }}>
+			<div class="dir-filtros-buscador">
+				<BuscadorLista
+					bind:valor={filtros.q}
+					onBuscar={(t) => ponerFiltro('q', t)}
+					placeholder="Descripción, proveedor, placa, conductor…"
+					etiqueta="Buscar gastos de la empresa"
+				/>
+			</div>
+			<SegmentosFiltro
+				etiqueta="Categoría"
+				opciones={SEGMENTOS_CATEGORIA}
+				valor={filtros.categoria}
+				onCambiar={(v) => ponerFiltro('categoria', v)}
+			/>
+		</div>
+		<div class="dir-lista" in:fly={{ y: 12, duration: 300, delay: 60 }}>
+			<div class="dir-lista-scroll">
+				<TablaLista
+					columnas={COLUMNAS_GASTO}
+					datos={gastos?.data ?? []}
+					claveFila={(g) => g.id}
+					cargando={cargandoGastos}
+					onFila={puedeEscribir ? (g) => abrirGasto(g) : undefined}
+					etiqueta="Gastos de la empresa"
+				>
+					{#snippet celda({ columnaId, fila: g })}
+						{#if columnaId === 'gasto'}
+							<div class="dir-celda vt-concepto">
+								<span>{g.descripcion}</span>
+								<small>{CATEGORIA_LABELS[g.categoria]}{g.beneficiario ? ` · ${g.beneficiario}` : ''}{g.asume === 'TERCERO' ? ` · A cargo de ${g.tercero?.nombre ?? 'el propietario'}` : ''}</small>
+							</div>
+						{:else if columnaId === 'referencia'}
+							<div class="dir-celda">
+								<span>{g.vehiculo?.placa ?? '—'}</span>
+								<small>{g.conductor?.nombre ?? 'Sin conductor'}</small>
+							</div>
+						{:else if columnaId === 'pago'}
+							<div class="dir-celda dir-celda--fecha">
+								<span>{fechaCorta(g.fecha)}</span>
+								<small>{METODO_GASTO_LABELS[g.metodo]}{g.numero_comprobante ? ` · ${g.numero_comprobante}` : ''}</small>
+							</div>
+						{:else if columnaId === 'valor'}
+							<span class="vt-monto">{moneda(g.valor)}</span>
+						{:else if columnaId === 'acciones' && puedeEscribir}
+							<AccionesFila
+								acciones={[
+									{ id: 'editar', etiqueta: 'Editar', icono: Pencil, onClick: () => abrirGasto(g) },
+									{ id: 'eliminar', etiqueta: 'Eliminar', icono: Trash2, onClick: () => eliminarGasto(g), peligrosa: true }
+								]}
+							/>
+						{/if}
+					{/snippet}
+
+					{#snippet vacio()}
+						{@const img = mascota(filtros.q || filtros.categoria !== 'todas' ? 'vacio' : 'exito')}
+						<div class="dir-vacio">
+							<img src={img.src} alt={img.alt} width="418" height="418" />
+							<h3>{filtros.q || filtros.categoria !== 'todas' ? 'Sin resultados' : 'No hay gastos de la empresa'}</h3>
+							<p>Aquí van los gastos que asume la empresa: oficina, mantenimientos de vehículos o dinero a un conductor sin placa.</p>
+							{#if puedeEscribir}
+								<button type="button" class="btn-primary" onclick={() => abrirGasto(null)}>
+									<Plus size={16} strokeWidth={2.4} /> Registrar gasto
+								</button>
+							{/if}
+						</div>
+					{/snippet}
+				</TablaLista>
+			</div>
+			<PaginadorLista
+				pagina={filtros.pagina}
+				total={gastos?.meta.total ?? 0}
+				porPagina={POR_PAGINA}
+				cargando={cargandoGastos}
+				nombreItems="gastos"
+				onCambiar={(p) => (filtros = { ...filtros, pagina: p })}
+			/>
+			{#if gastos?.total_valor}
+				<p class="vt-total">Total de los gastos filtrados: <strong>{moneda(gastos.total_valor)}</strong></p>
+			{/if}
+		</div>
+	{:else if filtros.vista === 'anticipos'}
 		<div class="dir-filtros" in:fly={{ y: 12, duration: 300 }}>
 			<div class="dir-filtros-buscador">
 				<BuscadorLista
@@ -571,6 +750,16 @@
 	oncambio={recargar}
 />
 
+<ModalGastoEmpresa
+	open={gastoAbierto}
+	gasto={gastoEnEdicion}
+	oncerrar={() => (gastoAbierto = false)}
+	onguardado={() => {
+		gastoAbierto = false;
+		recargar();
+	}}
+/>
+
 <ModalMotivo
 	open={!!rechazando}
 	titulo="Rechazar solicitud"
@@ -584,6 +773,11 @@
 />
 
 <style>
+	.vt-total {
+		padding: 0.25rem 0.25rem 0;
+		font-size: 13px;
+		color: var(--text-muted);
+	}
 	.vt-concepto {
 		max-width: 26rem;
 		min-width: 12rem;

@@ -29,7 +29,9 @@
 		AlarmClock,
 		Receipt,
 		ReceiptText,
-		Route
+		Route,
+		ClipboardCheck,
+		CalendarDays
 	} from 'lucide-svelte';
 	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
@@ -106,11 +108,14 @@
 	/// Las GENERAL se distinguen por su referencia: sin esto, los avisos de
 	/// servicio caían en la campana genérica.
 	const POR_REFERENCIA: Record<string, { icono: ComponentType; tono: Tono; etiqueta: string }> = {
-		servicio: { icono: Route, tono: 'azul', etiqueta: 'Servicio' }
+		servicio: { icono: Route, tono: 'azul', etiqueta: 'Servicio' },
+		preoperacional: { icono: ClipboardCheck, tono: 'verde', etiqueta: 'Preoperacional' },
+		dias_laborados: { icono: CalendarDays, tono: 'azul', etiqueta: 'Días laborados' }
 	};
 	const tipoDe = (n: Notificacion) =>
 		TIPOS[n.tipo] ??
-		(n.referencia_tipo ? POR_REFERENCIA[n.referencia_tipo] : undefined) ?? {
+		/// `dias_laborados:<fecha>` lleva la fecha pegada: se compara por el prefijo.
+		(n.referencia_tipo ? POR_REFERENCIA[n.referencia_tipo.split(':')[0]] : undefined) ?? {
 			icono: Bell,
 			tono: 'gris' as Tono,
 			etiqueta: 'General'

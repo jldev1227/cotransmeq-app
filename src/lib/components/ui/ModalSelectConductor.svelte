@@ -57,7 +57,7 @@
 		loading = true;
 		try {
 			const res = await apiClient.get('/api/conductores', {
-				params: { limit: 500 }
+				params: { limit: 500, incluir_ocultos: 'true' }
 			});
 			conductores = res.data?.data || res.data || [];
 			loaded = true;

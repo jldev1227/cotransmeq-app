@@ -158,8 +158,9 @@
 		/// usen: cargarlos al cambiar de tipo produciría un desplegable vacío
 		/// durante el primer segundo.
 		const [c, v, interna] = await Promise.all([
-			conductoresAPI.getAll({ limit: 500 }).catch(() => null),
-			vehiculosAPI.getAll().catch(() => null),
+			/// Los ocultos también se pueden asignar: ocultar es para las tablas.
+			conductoresAPI.getAll({ limit: 500, incluir_ocultos: 'true' }).catch(() => null),
+			vehiculosAPI.getAll({ incluir_ocultos: 'true' }).catch(() => null),
 			asignacionesFormularioAPI.audienciaInterna().catch(() => null)
 		]);
 

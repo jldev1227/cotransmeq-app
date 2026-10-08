@@ -372,9 +372,10 @@
 	async function loadFormData() {
 		try {
 			const [clientesRes, vehiculosRes, conductoresRes] = await Promise.all([
-				clientesAPI.getAll({ limit: 1000 }),
-				vehiculosAPI.getAll(),
-				conductoresAPI.getAll({ limit: 1000 })
+				// Selectores: los ocultos también se pueden elegir.
+				clientesAPI.getAll({ limit: 1000, incluir_ocultos: 'true' }),
+				vehiculosAPI.getAll({ incluir_ocultos: 'true' }),
+				conductoresAPI.getAll({ limit: 1000, incluir_ocultos: 'true' })
 			]);
 			clientes = clientesRes.data?.data || clientesRes.data || [];
 			vehiculos = vehiculosRes.data?.data || vehiculosRes.data || [];
