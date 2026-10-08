@@ -3,7 +3,7 @@
 	 * Registrar o editar un anticipo de viáticos.
 	 *
 	 * Dos formas de entregar el dinero:
-	 *  - Transferencia: se adjunta el comprobante (foto o PDF). Al soltarlo se
+	 *  - Transferencia: se puede adjuntar el comprobante (foto o PDF, opcional). Al soltarlo se
 	 *    sube y Azure OpenAI lee valor, fecha, número y banco para prellenar el
 	 *    formulario; quien registra revisa y corrige. Lo leído se guarda aparte
 	 *    para auditar diferencias.
@@ -211,8 +211,6 @@
 		if (form.concepto.trim().length < 3) e.concepto = 'Escribe el concepto del anticipo.';
 		if (valorNumero <= 0) e.valor = 'Escribe el valor entregado.';
 		if (!form.fecha) e.fecha = 'Indica la fecha.';
-		if (form.metodo === 'TRANSFERENCIA' && !comprobante)
-			e.comprobante = 'Adjunta el comprobante de la transferencia.';
 		if (form.metodo === 'RETIRO_TARJETA' && !form.tarjeta_cuenta.trim()) {
 			e.tarjeta_cuenta = 'Indica de qué tarjeta o cuenta salió.';
 		}
@@ -355,7 +353,7 @@
 					<Landmark size={20} />
 					<span>
 						<strong>Transferencia</strong>
-						<small>Se adjunta el comprobante del pago</small>
+						<small>Con el comprobante del pago, si lo hay</small>
 					</span>
 				</button>
 				<button
@@ -376,7 +374,7 @@
 
 			{#if form.metodo === 'TRANSFERENCIA'}
 				<div class="de-full" in:fly={{ y: 6, duration: 180 }}>
-					<span class="va-etiqueta">Comprobante <span class="va-req">*</span></span>
+					<span class="va-etiqueta">Comprobante (opcional)</span>
 					{#if comprobante}
 						<div class="va-comprobante">
 							{#if comprobante.vista && comprobante.mime_type.startsWith('image/')}
