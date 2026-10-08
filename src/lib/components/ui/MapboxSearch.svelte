@@ -23,6 +23,8 @@
 		title: string;
 		subtitle: string;
 		address: string;
+		/** `local`: registrado a mano por el equipo (custom_places) · `here`: API de mapas. */
+		source?: 'local' | 'here';
 	}
 
 	interface LookupResult {
@@ -56,8 +58,31 @@
 	let savingPlace = false;
 	let savePlaceError = '';
 
-	$: if (value && !selectedData && !searchQuery) {
-		searchQuery = value;
+	/// Solo se copia `value` al input cuando cambia desde fuera (abrir otro
+	/// servicio, limpiar el formulario). Antes se copiaba siempre que el input
+	/// quedara vacío: al borrar la última letra, `value` del padre aún la tenía
+	/// y la volvía a escribir, y al abrir otro servicio se quedaba la dirección
+	/// del anterior porque el input ya tenía texto.
+	$: sincronizarDesdeFuera(value);
+	function sincronizarDesdeFuera(v: string) {
+		const externo = v ?? '';
+		if (externo !== searchQuery) {
+			searchQuery = externo;
+			selectedData = null;
+		}
+	}
+
+	/// Las rutas /api/maps/* leen el token de aquí antes que de la cookie: la
+	/// cookie vence a los 7 días y el token de localStorage no, y sin token los
+	/// lugares registrados ni se guardaban ni salían en la búsqueda.
+	function headersAuth(extra: Record<string, string> = {}): Record<string, string> {
+		let token: string | null = null;
+		try {
+			token = localStorage.getItem('transmeralda_token');
+		} catch {
+			/* sin almacenamiento: queda la cookie */
+		}
+		return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
 	}
 
 	async function buscarLugares(query: string) {
@@ -69,7 +94,8 @@
 		isLoading = true;
 		try {
 			const res = await fetch(
-				`/api/maps/autocomplete?q=${encodeURIComponent(query.trim())}&limit=8&countryCode=COL&lang=es`
+				`/api/maps/autocomplete?q=${encodeURIComponent(query.trim())}&limit=8&countryCode=COL&lang=es`,
+				{ headers: headersAuth() }
 			);
 			const data = await res.json();
 			if (Array.isArray(data?.results) && data.results.length > 0) {
@@ -90,9 +116,9 @@
 
 	async function fetchLookup(id: string): Promise<LookupResult | null> {
 		try {
-			const res = await fetch(
-				`/api/maps/lookup?id=${encodeURIComponent(id)}&lang=es`
-			);
+			const res = await fetch(`/api/maps/lookup?id=${encodeURIComponent(id)}&lang=es`, {
+				headers: headersAuth()
+			});
 			if (!res.ok) {
 				const err = await res.json().catch(() => ({}));
 				throw new Error(err?.error ?? `HTTP ${res.status}`);
@@ -184,7 +210,7 @@
 		try {
 			const res = await fetch('/api/maps/custom-place', {
 				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
+				headers: headersAuth({ 'Content-Type': 'application/json' }),
 				body: JSON.stringify({
 					nombre: placeName,
 					latitud: lat,
@@ -194,11 +220,12 @@
 			});
 			if (!res.ok) {
 				const err = await res.json().catch(() => ({}));
-				// 401: usuario no logueado → guardado anónimo, no pasa nada
-				if (res.status !== 401) {
-					console.warn('[AddressSearch] No se pudo guardar el lugar:', err?.error);
-					savePlaceError = err?.error || 'No se pudo guardar el lugar para futuros usos';
-				}
+				// Antes el 401 se callaba y el lugar parecía guardado sin estarlo.
+				console.warn('[AddressSearch] No se pudo guardar el lugar:', err?.error);
+				savePlaceError =
+					res.status === 401
+						? 'Tu sesión venció, vuelve a iniciar sesión'
+						: err?.error || 'No se pudo guardar el lugar para futuros usos';
 			}
 		} catch (e) {
 			console.warn('[AddressSearch] Error guardando lugar:', e);
@@ -335,16 +362,75 @@
 			>
 				<ul class="py-1">
 					{#each suggestions as item, index}
+						<!-- Un rótulo cada vez que cambia el origen: arriba los lugares
+						     registrados a mano, debajo lo que trae la API de mapas. -->
+						{#if index === 0 || suggestions[index - 1].source !== item.source}
+							<li
+								class="flex items-center gap-1.5 px-4 pt-2.5 pb-1 text-[0.68rem] font-bold tracking-wide text-gray-400 uppercase"
+								class:border-t={index > 0}
+								class:border-gray-100={index > 0}
+							>
+								{item.source === 'local' ? 'Registrados manualmente' : 'Sugerencias del mapa'}
+							</li>
+						{/if}
 						<li>
 							<button
 								type="button"
 								on:click={() => seleccionarSugerencia(item)}
-								class="w-full px-4 py-3 text-left transition-colors hover:bg-orange-50 {selectedIndex === index ? 'bg-orange-50' : ''}"
+								class="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-orange-50 {selectedIndex ===
+								index
+									? 'bg-orange-50'
+									: ''}"
 							>
-								<div class="font-semibold text-gray-900">{item.title}</div>
-								{#if item.subtitle}
-									<div class="mt-0.5 text-sm text-gray-500">{item.subtitle}</div>
-								{/if}
+								<span
+									class="mt-0.5 flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg {item.source ===
+									'local'
+										? 'bg-orange-100 text-orange-700'
+										: 'bg-gray-100 text-gray-400'}"
+									aria-hidden="true"
+								>
+									{#if item.source === 'local'}
+										<!-- Chincheta: lugar puesto a mano por el equipo -->
+										<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"
+											/>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"
+											/>
+										</svg>
+									{:else}
+										<!-- Mapa plegado: resultado de la API -->
+										<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												stroke-width="2"
+												d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
+											/>
+										</svg>
+									{/if}
+								</span>
+								<span class="min-w-0 flex-1">
+									<span class="flex items-center gap-2">
+										<span class="font-semibold text-gray-900">{item.title}</span>
+										{#if item.source === 'local'}
+											<span
+												class="flex-shrink-0 rounded-full bg-orange-100 px-2 py-0.5 text-[0.65rem] font-bold text-orange-700"
+												>Manual</span
+											>
+										{/if}
+									</span>
+									{#if item.subtitle}
+										<span class="mt-0.5 block text-sm text-gray-500">{item.subtitle}</span>
+									{/if}
+								</span>
 							</button>
 						</li>
 					{/each}

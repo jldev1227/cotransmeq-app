@@ -11,6 +11,17 @@ const HERE_KEY = env.HERE_MAPS_API_KEY || '';
 const HERE_URL = 'https://lookup.search.hereapi.com/v1/lookup';
 const BACKEND_URL = env.BACKEND_INTERNAL_URL || 'http://localhost:4000';
 
+/**
+ * El token llega en `Authorization` (lo manda MapboxSearch desde
+ * localStorage) o, si no, en la cookie. La cookie sola no basta: vence a
+ * los 7 días aunque la sesión del dashboard siga viva.
+ */
+function tokenDe(request: Request): string | null {
+	const auth = request.headers.get('authorization');
+	if (auth?.startsWith('Bearer ')) return auth.slice(7).trim() || null;
+	return getBearerToken(request.headers.get('cookie'));
+}
+
 function getBearerToken(cookieHeader: string | null | undefined): string | null {
 	if (!cookieHeader) return null;
 	const cookies = cookieHeader.split(';');
@@ -105,7 +116,7 @@ export const GET: RequestHandler = async ({ url, request }) => {
 
 	// ─── 1) ¿Es un id local? → NestJS ───
 	if (id.startsWith('local:cp:')) {
-		const token = getBearerToken(request.headers.get('cookie'));
+		const token = tokenDe(request);
 		const result = await lookupLocal(id, token);
 		if ('error' in result) {
 			return json({ error: result.error }, { status: result.status });

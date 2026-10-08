@@ -110,6 +110,9 @@ function createAuthStore() {
 				}
 
 				if (token && userData) {
+					// Renovar la cookie: las rutas de servidor (/api/maps/*) la leen y
+					// vence a los 7 días aunque el token de localStorage siga vigente.
+					document.cookie = `transmeralda_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Strict`;
 					try {
 						// Cargar datos locales inmediatamente para evitar flash
 						const user = JSON.parse(userData);

@@ -61,6 +61,17 @@ async function fetchLocalPlaces(
  * El SvelteKit server no tiene localStorage; lee la cookie que el
  * cliente setea al hacer login (ver auth.ts:145).
  */
+/**
+ * El token llega en `Authorization` (lo manda MapboxSearch desde
+ * localStorage) o, si no, en la cookie. La cookie sola no basta: vence a
+ * los 7 días aunque la sesión del dashboard siga viva.
+ */
+function tokenDe(request: Request): string | null {
+	const auth = request.headers.get('authorization');
+	if (auth?.startsWith('Bearer ')) return auth.slice(7).trim() || null;
+	return getBearerToken(request.headers.get('cookie'));
+}
+
 function getBearerToken(cookieHeader: string | null | undefined): string | null {
 	if (!cookieHeader) return null;
 	const cookies = cookieHeader.split(';');
@@ -82,7 +93,7 @@ export const GET: RequestHandler = async ({ url, request }) => {
 	}
 
 	// ─── 1) Resultados locales (custom_places) — primero, sin coords ───
-	const token = getBearerToken(request.headers.get('cookie'));
+	const token = tokenDe(request);
 	const local = await fetchLocalPlaces(q, limit, token);
 	const localResults = local.map((p) => ({
 		id: p.id, // ya viene como "local:cp:<uuid>" desde NestJS

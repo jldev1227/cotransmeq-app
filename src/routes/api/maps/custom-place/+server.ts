@@ -10,6 +10,17 @@ import { env } from '$env/dynamic/private';
 
 const BACKEND_URL = env.BACKEND_INTERNAL_URL || 'http://localhost:4000';
 
+/**
+ * El token llega en `Authorization` (lo manda MapboxSearch desde
+ * localStorage) o, si no, en la cookie. La cookie sola no basta: vence a
+ * los 7 días aunque la sesión del dashboard siga viva.
+ */
+function tokenDe(request: Request): string | null {
+	const auth = request.headers.get('authorization');
+	if (auth?.startsWith('Bearer ')) return auth.slice(7).trim() || null;
+	return getBearerToken(request.headers.get('cookie'));
+}
+
 function getBearerToken(cookieHeader: string | null | undefined): string | null {
 	if (!cookieHeader) return null;
 	const cookies = cookieHeader.split(';');
@@ -21,7 +32,7 @@ function getBearerToken(cookieHeader: string | null | undefined): string | null 
 }
 
 export const POST: RequestHandler = async ({ request }) => {
-	const token = getBearerToken(request.headers.get('cookie'));
+	const token = tokenDe(request);
 	if (!token) {
 		return json(
 			{ error: 'No autenticado. Inicia sesión para guardar lugares personalizados.' },
