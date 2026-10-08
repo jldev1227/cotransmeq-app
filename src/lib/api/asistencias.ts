@@ -97,8 +97,23 @@ export interface GetFormulariosParams {
 	limit?: number;
 	search?: string;
 	filterActivo?: 'all' | 'activo' | 'inactivo';
+	/** Fecha del evento, `YYYY-MM-DD`, inclusive. */
+	desde?: string;
+	hasta?: string;
 	sortBy?: 'fecha' | 'tematica' | 'respuestas';
 	sortOrder?: 'asc' | 'desc';
+}
+
+/** Lo que comparten la tabla, «Seleccionar todos» y «Descargar todas». */
+export type FiltrosListado = Pick<GetFormulariosParams, 'filterActivo' | 'search' | 'desde' | 'hasta'>;
+
+function queryFiltros(params?: FiltrosListado): URLSearchParams {
+	const q = new URLSearchParams();
+	if (params?.filterActivo) q.set('filterActivo', params.filterActivo);
+	if (params?.search) q.set('search', params.search);
+	if (params?.desde) q.set('desde', params.desde);
+	if (params?.hasta) q.set('hasta', params.hasta);
+	return q;
 }
 
 export interface FormularioAsistenciaResponse {
@@ -150,6 +165,8 @@ class AsistenciasAPI {
 			limit = 10,
 			search,
 			filterActivo = 'all',
+			desde,
+			hasta,
 			sortBy = 'fecha',
 			sortOrder = 'desc'
 		} = params;
@@ -159,6 +176,8 @@ class AsistenciasAPI {
 			limit: String(limit),
 			...(search && { search }),
 			filterActivo,
+			...(desde && { desde }),
+			...(hasta && { hasta }),
 			sortBy,
 			sortOrder
 		});
@@ -174,13 +193,12 @@ class AsistenciasAPI {
 		return await response.json();
 	}
 
-	// Obtener solo los IDs de los formularios filtrados (para selección masiva)
-	async obtenerTodosLosIds(params?: { filterActivo?: 'all' | 'activo' | 'inactivo'; search?: string }): Promise<string[]> {
-		const queryParams = new URLSearchParams();
-		if (params?.filterActivo) queryParams.set('filterActivo', params.filterActivo);
-		if (params?.search) queryParams.set('search', params.search);
-
-		const qs = queryParams.toString();
+	// Obtener los IDs de los formularios filtrados (para selección masiva),
+	// con cuáles están activos para contar qué activar y qué cerrar.
+	async obtenerTodosLosIds(
+		params?: FiltrosListado
+	): Promise<{ ids: string[]; activos: string[] }> {
+		const qs = queryFiltros(params).toString();
 		const url = `${this.baseUrl}/formularios/ids${qs ? `?${qs}` : ''}`;
 
 		const response = await fetch(url, {
@@ -192,7 +210,24 @@ class AsistenciasAPI {
 		}
 
 		const result = await response.json();
-		return result.data || [];
+		return { ids: result.data || [], activos: result.activos || [] };
+	}
+
+	// Activar o cerrar varios formularios a la vez; devuelve cuántos cambiaron.
+	async cambiarEstado(ids: string[], activo: boolean): Promise<number> {
+		const response = await fetch(`${this.baseUrl}/formularios/estado`, {
+			method: 'PATCH',
+			headers: await this.getAuthHeaders(),
+			body: JSON.stringify({ ids, activo })
+		});
+
+		if (!response.ok) {
+			const error = await response.json().catch(() => ({}));
+			throw new Error(error.message || 'Error al cambiar el estado de los formularios');
+		}
+
+		const result = await response.json();
+		return result.actualizados ?? 0;
 	}
 
 	async obtenerFormularioPorId(id: string): Promise<FormularioAsistencia> {
@@ -336,10 +371,8 @@ class AsistenciasAPI {
 	}
 
 	// Exportar TODAS las asistencias a un ZIP
-	async exportarTodasPDFs(params?: { filterActivo?: 'all' | 'activo' | 'inactivo'; search?: string; jobId?: string }): Promise<Blob> {
-		const queryParams = new URLSearchParams();
-		if (params?.filterActivo) queryParams.set('filterActivo', params.filterActivo);
-		if (params?.search) queryParams.set('search', params.search);
+	async exportarTodasPDFs(params?: FiltrosListado & { jobId?: string }): Promise<Blob> {
+		const queryParams = queryFiltros(params);
 		if (params?.jobId) queryParams.set('jobId', params.jobId);
 
 		const qs = queryParams.toString();

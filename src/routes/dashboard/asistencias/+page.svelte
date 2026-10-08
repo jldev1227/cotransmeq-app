@@ -15,6 +15,7 @@
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { onMount, onDestroy, untrack } from 'svelte';
+	import { SvelteMap } from 'svelte/reactivity';
 	import { fade, fly } from 'svelte/transition';
 	import { toast } from 'svelte-sonner';
 	import type { ColumnDef, SortingState } from '@tanstack/table-core';
@@ -56,6 +57,11 @@
 	interface Filtros {
 		q: string;
 		estado: string;
+		/** `todo` · `mes` (usa `mes`, `YYYY-MM`) · `rango` (usa `desde`/`hasta`). */
+		periodo: string;
+		mes: string;
+		desde: string;
+		hasta: string;
 		orden: string;
 		dir: string;
 		pagina: number;
@@ -63,6 +69,10 @@
 	const DEFS: DefinicionesFiltros<Filtros> = {
 		q: texto(),
 		estado: opcion('all'),
+		periodo: opcion('todo'),
+		mes: texto(),
+		desde: texto(),
+		hasta: texto(),
 		orden: opcion('fecha'),
 		dir: opcion('desc'),
 		pagina: numero(1)
@@ -73,13 +83,56 @@
 	$effect(() => {
 		estadoUrl.escribir(page.url, filtros);
 	});
-	const hayFiltros = $derived(!!filtros.q || filtros.estado !== 'all');
+	const hayFiltros = $derived(!!filtros.q || filtros.estado !== 'all' || filtros.periodo !== 'todo');
 
 	const SEGMENTOS = [
 		{ valor: 'all', etiqueta: 'Todos' },
 		{ valor: 'activo', etiqueta: 'Activos', punto: VERDE },
 		{ valor: 'inactivo', etiqueta: 'Inactivos', punto: GRIS }
 	];
+
+	// ── Periodo (fecha del evento) ───────────────────────────────────────
+	const SEGMENTOS_PERIODO = [
+		{ valor: 'todo', etiqueta: 'Todo' },
+		{ valor: 'mes', etiqueta: 'Mes' },
+		{ valor: 'rango', etiqueta: 'Periodo' }
+	];
+
+	function hoyLocal(): string {
+		const d = new Date();
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+	}
+
+	/// Al elegir «Mes» o «Periodo» sin fechas se arranca en el mes en curso:
+	/// un segmento activo sin fechas no filtraría nada y parecería roto.
+	function elegirPeriodo(v: string) {
+		const hoy = hoyLocal();
+		if (v === 'mes') ponerFiltros({ periodo: v, mes: filtros.mes || hoy.slice(0, 7) });
+		else if (v === 'rango')
+			ponerFiltros({ periodo: v, desde: filtros.desde || `${hoy.slice(0, 7)}-01`, hasta: filtros.hasta || hoy });
+		else ponerFiltros({ periodo: 'todo', mes: '', desde: '', hasta: '' });
+	}
+
+	/// El periodo elegido como rango de fechas, que es lo único que entiende la API.
+	const rango = $derived.by((): { desde?: string; hasta?: string } => {
+		if (filtros.periodo === 'mes' && /^\d{4}-\d{2}$/.test(filtros.mes)) {
+			const [y, m] = filtros.mes.split('-').map(Number);
+			const ultimo = new Date(y, m, 0).getDate();
+			return { desde: `${filtros.mes}-01`, hasta: `${filtros.mes}-${String(ultimo).padStart(2, '0')}` };
+		}
+		if (filtros.periodo === 'rango') {
+			return { desde: filtros.desde || undefined, hasta: filtros.hasta || undefined };
+		}
+		return {};
+	});
+
+	/// Lo mismo que ve la tabla es lo que seleccionan «Seleccionar todos» y
+	/// lo que baja «Descargar todas»: búsqueda, estado y periodo.
+	const filtrosApi = $derived({
+		search: filtros.q || undefined,
+		filterActivo: filtros.estado as 'all' | 'activo' | 'inactivo',
+		...rango
+	});
 
 	// ── Datos ────────────────────────────────────────────────────────────
 	let formularios = $state<FormularioAsistencia[]>([]);
@@ -96,12 +149,12 @@
 			const res = await asistenciasAPI.obtenerFormularios({
 				page: filtros.pagina,
 				limit: POR_PAGINA,
-				search: filtros.q || undefined,
-				filterActivo: filtros.estado as 'all' | 'activo' | 'inactivo',
+				...filtrosApi,
 				sortBy: filtros.orden as 'fecha' | 'tematica' | 'respuestas',
 				sortOrder: filtros.dir as 'asc' | 'desc'
 			});
 			formularios = res?.data ?? [];
+			for (const f of formularios) estadoConocido.set(f.id, f.activo);
 			totalRows = res?.meta?.total ?? formularios.length;
 		} catch (error) {
 			toast.error('No se pudieron cargar los formularios');
@@ -113,12 +166,14 @@
 
 	/// La API no trae totales por estado: se piden dos páginas de un registro
 	/// solo por su `meta.total`. Son dos consultas livianas y evitan contar
-	/// sobre la página visible, que daba cifras falsas.
+	/// sobre la página visible, que daba cifras falsas. Cuentan dentro del
+	/// periodo elegido, que es el alcance de la vista.
 	async function cargarConteos() {
+		const r = untrack(() => rango);
 		try {
 			const [a, i] = await Promise.all([
-				asistenciasAPI.obtenerFormularios({ page: 1, limit: 1, filterActivo: 'activo' }),
-				asistenciasAPI.obtenerFormularios({ page: 1, limit: 1, filterActivo: 'inactivo' })
+				asistenciasAPI.obtenerFormularios({ page: 1, limit: 1, filterActivo: 'activo', ...r }),
+				asistenciasAPI.obtenerFormularios({ page: 1, limit: 1, filterActivo: 'inactivo', ...r })
 			]);
 			const activos = a?.meta?.total ?? 0;
 			const inactivos = i?.meta?.total ?? 0;
@@ -137,7 +192,12 @@
 		void filtros;
 		untrack(() => void cargar());
 	});
-	onMount(() => void cargarConteos());
+	/// Los conteos solo dependen del periodo: buscar o paginar no los recarga.
+	const claveRango = $derived(`${rango.desde ?? ''}|${rango.hasta ?? ''}`);
+	$effect(() => {
+		void claveRango;
+		untrack(() => void cargarConteos());
+	});
 
 	const resumen = $derived([
 		{ clave: 'all', etiqueta: 'Total', valor: conteos.total },
@@ -148,6 +208,45 @@
 	// ── Selección ────────────────────────────────────────────────────────
 	let seleccion = $state<Set<string>>(new Set());
 	let seleccionandoTodo = $state(false);
+	let cambiandoEstado = $state(false);
+
+	/// Estado de cada formulario que ha pasado por la vista o por «Seleccionar
+	/// todos»: la selección puede abarcar páginas que no se han cargado.
+	const estadoConocido = new SvelteMap<string, boolean>();
+
+	/// Cuántos de la selección están activos y cuántos no: la barra ofrece
+	/// «Activar» sobre los inactivos y «Cerrar» sobre los activos.
+	const conteoSeleccion = $derived.by(() => {
+		let activos = 0;
+		let inactivos = 0;
+		for (const id of seleccion) {
+			const activo = estadoConocido.get(id);
+			if (activo === true) activos++;
+			else if (activo === false) inactivos++;
+		}
+		return { activos, inactivos };
+	});
+
+	async function cambiarEstadoSeleccion(activo: boolean) {
+		if (cambiandoEstado) return;
+		const ids = [...seleccion].filter((id) => estadoConocido.get(id) === !activo);
+		if (ids.length === 0) return;
+		cambiandoEstado = true;
+		try {
+			const n = await asistenciasAPI.cambiarEstado(ids, activo);
+			for (const id of ids) estadoConocido.set(id, activo);
+			toast.success(
+				activo
+					? `${n} ${n === 1 ? 'formulario activado' : 'formularios activados'}`
+					: `${n} ${n === 1 ? 'formulario cerrado' : 'formularios cerrados'}: ya no reciben firmas`
+			);
+			recargar();
+		} catch (error: any) {
+			toast.error(error?.message || 'No se pudo cambiar el estado');
+		} finally {
+			cambiandoEstado = false;
+		}
+	}
 
 	/// Cambiar un filtro limpia la selección: lo marcado ya no está a la vista
 	/// y una descarga masiva sobre ello sorprendería.
@@ -160,10 +259,9 @@
 		if (seleccionandoTodo) return;
 		seleccionandoTodo = true;
 		try {
-			const ids = await asistenciasAPI.obtenerTodosLosIds({
-				filterActivo: filtros.estado as 'all' | 'activo' | 'inactivo',
-				search: filtros.q || undefined
-			});
+			const { ids, activos } = await asistenciasAPI.obtenerTodosLosIds(filtrosApi);
+			const activosSet = new Set(activos);
+			for (const id of ids) estadoConocido.set(id, activosSet.has(id));
 			seleccion = new Set(ids);
 		} catch {
 			toast.error('No se pudo seleccionar todo');
@@ -193,19 +291,15 @@
 		descargando = true;
 		progresoJobId = `${ids ? 'sel' : 'all'}-${Date.now()}`;
 		progresoToastId = toast.loading(
-			ids ? `Generando ZIP con ${ids.length} formularios…` : 'Generando ZIP con todas las asistencias filtradas…',
+			ids ? `Generando ZIP con ${ids.length} formularios…` : `Generando ZIP con ${totalRows} formularios filtrados…`,
 			{ description: 'Puede tardar unos minutos.' }
 		);
 		try {
 			const blob = ids
 				? await asistenciasAPI.exportarSeleccionadosPDFs(ids, progresoJobId)
-				: await asistenciasAPI.exportarTodasPDFs({
-						filterActivo: filtros.estado as 'all' | 'activo' | 'inactivo',
-						search: filtros.q || undefined,
-						jobId: progresoJobId
-					});
+				: await asistenciasAPI.exportarTodasPDFs({ ...filtrosApi, jobId: progresoJobId });
 			toast.success('Descarga lista', { id: progresoToastId });
-			bajar(blob, `asistencias${ids ? '_seleccionadas' : ''}_${new Date().toISOString().slice(0, 10)}.zip`);
+			bajar(blob, `asistencias${ids ? '_seleccionadas' : sufijoPeriodo()}_${new Date().toISOString().slice(0, 10)}.zip`);
 			if (ids) seleccion = new Set();
 		} catch (error: any) {
 			toast.error(error?.message || 'No se pudo generar el ZIP', { id: progresoToastId });
@@ -213,6 +307,13 @@
 			progresoJobId = null;
 			descargando = false;
 		}
+	}
+
+	/// El nombre del ZIP dice qué periodo trae: `_2026-09` o `_2026-09-01_a_2026-09-15`.
+	function sufijoPeriodo(): string {
+		if (filtros.periodo === 'mes' && filtros.mes) return `_${filtros.mes}`;
+		if (rango.desde || rango.hasta) return `_${rango.desde ?? 'inicio'}_a_${rango.hasta ?? 'hoy'}`;
+		return '';
 	}
 
 	const onExportProgress = (p: any) => {
@@ -352,10 +453,14 @@
 				class="btn-secondary"
 				onclick={() => descargarZip(null)}
 				disabled={descargando || totalRows === 0}
-				title="ZIP con el PDF de cada formulario de la lista filtrada"
+				title="ZIP con el PDF de cada formulario de la lista filtrada (búsqueda, estado y periodo)"
 			>
 				<Download size={16} strokeWidth={2} />
-				{descargando && progresoJobId?.startsWith('all-') ? 'Generando…' : 'Descargar todas'}
+				{descargando && progresoJobId?.startsWith('all-')
+					? 'Generando…'
+					: hayFiltros
+						? `Descargar ${totalRows.toLocaleString('es-CO')} filtradas`
+						: 'Descargar todas'}
 			</button>
 			<button type="button" class="btn-primary" onclick={abrirNuevo}>
 				<Plus size={16} strokeWidth={2.4} />
@@ -379,6 +484,41 @@
 			valor={filtros.estado}
 			onCambiar={(v) => ponerFiltros({ estado: v })}
 		/>
+		<div class="as-periodo">
+			<SegmentosFiltro
+				etiqueta="Fecha"
+				opciones={SEGMENTOS_PERIODO}
+				valor={filtros.periodo}
+				onCambiar={elegirPeriodo}
+			/>
+			{#if filtros.periodo === 'mes'}
+				<input
+					type="month"
+					class="as-fecha"
+					aria-label="Mes del evento"
+					value={filtros.mes}
+					onchange={(e) => e.currentTarget.value && ponerFiltros({ mes: e.currentTarget.value })}
+				/>
+			{:else if filtros.periodo === 'rango'}
+				<input
+					type="date"
+					class="as-fecha"
+					aria-label="Desde"
+					value={filtros.desde}
+					max={filtros.hasta || undefined}
+					onchange={(e) => ponerFiltros({ desde: e.currentTarget.value })}
+				/>
+				<span class="as-fecha-sep" aria-hidden="true">–</span>
+				<input
+					type="date"
+					class="as-fecha"
+					aria-label="Hasta"
+					value={filtros.hasta}
+					min={filtros.desde || undefined}
+					onchange={(e) => ponerFiltros({ hasta: e.currentTarget.value })}
+				/>
+			{/if}
+		</div>
 	</div>
 
 	<div class="dir-lista" in:fly={{ y: 12, duration: 400, delay: 150 }}>
@@ -454,7 +594,7 @@
 						<h3>{hayFiltros ? 'Sin resultados' : 'Todavía no hay formularios'}</h3>
 						<p>
 							{hayFiltros
-								? 'No hay formularios que coincidan con la búsqueda o el estado elegido.'
+								? 'No hay formularios que coincidan con la búsqueda, el estado o el periodo elegido.'
 								: 'Crea el primero y comparte su enlace para que los asistentes firmen desde el celular.'}
 						</p>
 						{#if hayFiltros}
@@ -485,7 +625,7 @@
 	<BarraSeleccion
 		cantidad={seleccion.size}
 		nombreItems="formularios"
-		procesando={descargando || seleccionandoTodo}
+		procesando={descargando || seleccionandoTodo || cambiandoEstado}
 		onLimpiar={() => (seleccion = new Set())}
 		acciones={[
 			...(seleccion.size < totalRows
@@ -496,6 +636,28 @@
 							icono: CheckCheck,
 							tono: 'neutro' as const,
 							onClick: seleccionarTodosLosFiltrados
+						}
+					]
+				: []),
+			...(conteoSeleccion.inactivos > 0
+				? [
+						{
+							id: 'activar',
+							etiqueta: `Activar ${conteoSeleccion.inactivos.toLocaleString('es-CO')}`,
+							icono: Power,
+							tono: 'neutro' as const,
+							onClick: () => cambiarEstadoSeleccion(true)
+						}
+					]
+				: []),
+			...(conteoSeleccion.activos > 0
+				? [
+						{
+							id: 'cerrar',
+							etiqueta: `Cerrar ${conteoSeleccion.activos.toLocaleString('es-CO')}`,
+							icono: PowerOff,
+							tono: 'neutro' as const,
+							onClick: () => cambiarEstadoSeleccion(false)
 						}
 					]
 				: []),
@@ -518,6 +680,31 @@
 />
 
 <style>
+	/* Periodo: los segmentos y, según el modo, el mes o el rango al lado. */
+	.as-periodo {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.4rem;
+	}
+	.as-fecha {
+		min-height: 40px;
+		padding: 0 0.7rem;
+		border: 1.5px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		font-family: inherit;
+		font-size: 0.85rem;
+		color: var(--text-primary);
+	}
+	.as-fecha:focus-visible {
+		outline: none;
+		border-color: var(--au-dark);
+	}
+	.as-fecha-sep {
+		color: var(--text-very-muted);
+	}
+
 	.as-evento {
 		max-width: 34rem;
 		min-width: 14rem;
