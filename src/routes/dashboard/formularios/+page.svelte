@@ -919,7 +919,7 @@
 					<input
 						class="input"
 						type="search"
-						placeholder="Nombre, cédula o placa…"
+						placeholder="Nombre, cédula, placa, código o nombre del formato…"
 						value={filtroBusqueda}
 						oninput={(e) => onBuscarEnvios(e.currentTarget.value)}
 					/>
