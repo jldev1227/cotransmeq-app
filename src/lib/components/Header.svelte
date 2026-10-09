@@ -147,6 +147,8 @@
 				goto(`/dashboard/viaticos?anticipo=${notif.referencia_id}`);
 			} else if (notif.referencia_tipo === 'viatico_solicitud') {
 				goto(`/dashboard/viaticos?solicitud=${notif.referencia_id}`);
+			} else if (notif.referencia_tipo === 'solicitud_web') {
+				goto(`/dashboard/solicitudes?solicitud=${notif.referencia_id}`);
 			} else if (notif.referencia_tipo === 'ACCION_CORRECTIVA') {
 				goto(`/dashboard/acciones-correctivas/${notif.referencia_id}`);
 			} else if (notif.tipo.startsWith('FACTURA_')) {

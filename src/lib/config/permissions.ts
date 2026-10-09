@@ -109,6 +109,13 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
 		full: ['administracion', 'talento_humano'],
 		description: 'Formularios SARLAFT + PTEE (cumplimiento)'
 	},
+	// Bandeja de las solicitudes del formulario público de la landing.
+	// Espejo EXACTO del backend (`config/permissions.ts`).
+	solicitudes: {
+		full: ['administracion', 'operaciones'],
+		read: ['facturacion', 'contabilidad'],
+		description: 'Solicitudes web (cotizaciones y servicios desde la landing)'
+	},
 	asistencias: {
 		full: ['administracion', 'hseq'],
 		description: 'Formularios de asistencia'

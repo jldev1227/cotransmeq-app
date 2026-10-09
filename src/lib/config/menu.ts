@@ -18,6 +18,7 @@ import {
 	FileText,
 	HandCoins,
 	IdCard,
+	Inbox,
 	LayoutDashboard,
 	LayoutTemplate,
 	ListChecks,
@@ -107,6 +108,15 @@ export const MENU_ITEMS: MenuItem[] = [
 		icon: ShieldCheck,
 		badge: null,
 		href: '/dashboard/sarlaft'
+	},
+	{
+		id: 'solicitudes',
+		label: 'Solicitudes web',
+		/// Bandeja de lo que entra por el formulario público de la landing:
+		/// cotizaciones y servicios que hay que verificar antes de atender.
+		icon: Inbox,
+		badge: null,
+		href: '/dashboard/solicitudes'
 	},
 	{
 		id: 'asistencias',
