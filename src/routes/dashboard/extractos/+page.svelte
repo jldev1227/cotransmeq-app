@@ -1,2868 +1,663 @@
 <script lang="ts">
-	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
-	import { cargarPdfMake } from '$lib/utils/pdfmake-cargar';
-	import { onMount, untrack } from 'svelte';
-	import { fade, fly } from 'svelte/transition';
-	import {
-		vehiculosAPI,
-		conductoresAPI,
-		clientesAPI,
-		extractosAPI
-	} from '$lib/api/apiClient';
-	import { toast } from 'svelte-sonner';
-	import { browser } from '$app/environment';
-	import { page } from '$app/state';
-	import { texto, numero, opcion, leerDeParams, contarActivos, limpiar, firma } from '$lib/listing/filtros';
-	import { crearEstadoUrl } from '$lib/listing/urlState';
-	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
-	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
-
-	// =====================
-	// INTERFACES
-	// =====================
-	interface Cliente {
-		id: string;
-		nit: string;
-		nombre: string;
-		representante: string | null;
-		cedula: string | null;
-		telefono: string;
-		direccion: string;
-	}
-
-	interface Vehiculo {
-		id: string;
-		placa: string;
-		modelo: string | null;
-		marca: string | null;
-		linea: string | null;
-		clase_vehiculo: string;
-		color: string | null;
-	}
-
-	interface Conductor {
-		id: string;
-		nombre: string;
-		apellido: string;
-		numero_identificacion: string;
-		categoria_licencia: string | null;
-		vencimiento_licencia: string | null;
-	}
-
-	interface ExtractoConductor {
-		nombre: string;
-		cedula: string;
-		licencia_conduccion: string;
-		vigencia_licencia: string;
-	}
-
-	interface ExtractoData {
-		numero_contrato: string;
-		numero_extracto: string;
-		codigo_formato: string;
-		version_formato: string;
-		contratante_nombre: string;
-		contratante_nit: string;
-		objeto_contrato: string;
-		origen: string;
-		destino: string;
-		fecha_inicial: string;
-		fecha_vencimiento: string;
-		placa: string;
-		modelo_vehiculo: string;
-		marca_vehiculo: string;
-		clase_vehiculo: string;
-		numero_tarjeta_operacion: string;
-		numero_interno: string;
-		conductores: ExtractoConductor[];
-		responsable_nombre: string;
-		responsable_cedula: string;
-		responsable_telefono: string;
-		responsable_direccion: string;
-	}
-
-	interface ExtractoHistorico {
-		consecutivo: string;
-		contratante: string;
-		origen_destino: string;
-		fecha_inicial: string;
-		fecha_final: string;
-		placa: string;
-		num_interno: string;
-		num_tarjeta_operacion: string;
-		conductor_1: string;
-		vigencia_pase_1: string;
-		conductor_2: string;
-		vigencia_pase_2: string;
-		conductor_3: string;
-		vigencia_pase_3: string;
-	}
-
-	interface MatchesData {
-		placaMap: Record<string, string>;
-		clienteMap: Record<string, string>;
-		conductorMap: Record<string, string>;
-		stats: {
-			totalExtractos: number;
-			uniquePlacas: number;
-			uniqueContratantes: number;
-			uniqueConductores: number;
-			matchedPlacas: number;
-			matchedContratantes: number;
-			matchedConductores: number;
-		};
-	}
-
-	// =====================
-	// TABS
-	// =====================
-	type TabId = 'historial' | 'crear';
-
-	// =====================
-	// STATE - HISTORIAL
-	// =====================
-	let extractosHistoricos : ExtractoHistorico[] = $state([]);
-	let matches : MatchesData | null = $state(null);
-	let loadingHistorial = $state(false);
-	let loadingMatches = $state(false);
-	let syncing = $state(false);
-	let pagination = $state({
-		page: 1,
-		limit: 50,
-		total: 0,
-		pages: 0,
-		hasNext: false,
-		hasPrev: false
-	});
-
 	/**
-	 * Filtros de la página, y con ellos la URL.
+	 * Extractos de contrato (FUEC, OP-FR-04).
 	 *
-	 * Esta ruta no tocaba `searchParams` en absoluto: los cuatro campos, la
-	 * página y hasta la pestaña vivían solo en memoria, así que recargar
-	 * devolvía al historial sin filtros y no había forma de compartir una
-	 * búsqueda. Los cuatro los resuelve el servidor.
+	 * Dos vistas: los EXTRACTOS (emitidos por el sistema y los importados del
+	 * libro de Excel) y los CONTRATANTES (catálogo con contrato, NIT y
+	 * responsable). Emitir abre el formulario, firma en el servidor y descarga
+	 * el PDF con su QR de validación. Un extracto no se edita: se reemplaza o
+	 * se anula desde el detalle.
+	 *
+	 * Misma cáscara que los directorios (`dir-*` de app.css y `listing/`).
 	 */
-	const DEFS = {
+	import { page } from '$app/state';
+	import { fade, fly } from 'svelte/transition';
+	import { toast } from 'svelte-sonner';
+	import type { ColumnDef } from '@tanstack/table-core';
+	import { Download, Eye, Pencil, Plus, Trash2 } from 'lucide-svelte';
+	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import TablaLista from '$lib/components/listing/TablaLista.svelte';
+	import EstadoPunto from '$lib/components/listing/EstadoPunto.svelte';
+	import AccionesFila from '$lib/components/listing/AccionesFila.svelte';
+	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
+	import SegmentosFiltro from '$lib/components/listing/SegmentosFiltro.svelte';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+	import TabsVista from '$lib/components/ui/TabsVista.svelte';
+	import ModalExtracto from '$lib/components/extractos/ModalExtracto.svelte';
+	import ModalDetalleExtracto from '$lib/components/extractos/ModalDetalleExtracto.svelte';
+	import ModalContratante from '$lib/components/extractos/ModalContratante.svelte';
+	import { crearEstadoUrl } from '$lib/listing/urlState';
+	import {
+		limpiar as limpiarFiltrosDe,
+		numero,
+		opcion,
+		texto,
+		type DefinicionesFiltros
+	} from '$lib/listing/filtros';
+	import { confirmarEliminacion } from '$lib/stores/confirm';
+	import { authStore } from '$lib/stores/auth';
+	import { mascota } from '$lib/mascot';
+	import { descargarExtracto } from '$lib/utils/pdfExtracto';
+	import {
+		ESTADO_COLORES,
+		ESTADO_LABELS,
+		conPuntos,
+		extractosAPI,
+		fechaLarga,
+		type Contratante,
+		type Extracto,
+		type FiltroEstadoExtracto,
+		type ListadoExtractos,
+		type OpcionesExtracto,
+		type SnapshotExtracto
+	} from '$lib/api/extractos';
+
+	const LOGO = '/assets/logo_nombre.webp';
+	const FIRMA = '/assets/fuec/firma.png';
+	const POR_PAGINA = 20;
+
+	const puedeEscribir = $derived(
+		!!$authStore.user && authStore.getAccessLevel('extractos') === 'full'
+	);
+
+	// ── Filtros en la URL ────────────────────────────────────────────────
+	interface Filtros {
+		vista: string;
+		q: string;
+		estado: string;
+		anio: number;
+		pagina: number;
+	}
+	const DEFS: DefinicionesFiltros<Filtros> = {
+		vista: opcion('extractos'),
 		q: texto(),
-		contratante: texto(),
-		placa: texto(),
-		conductor: texto(),
-		pagina: numero(1),
-		tab: opcion<TabId>('historial')
+		estado: opcion('todos'),
+		anio: numero(0),
+		pagina: numero(1)
 	};
 	const estadoUrl = crearEstadoUrl(DEFS);
-	let filtros = $state(leerDeParams(DEFS, new URLSearchParams(browser ? window.location.search : '')));
+	let filtros = $state<Filtros>(estadoUrl.leer(page.url));
+	$effect(() => {
+		estadoUrl.escribir(page.url, filtros);
+	});
+	function ponerFiltro<K extends keyof Filtros>(clave: K, valor: Filtros[K]) {
+		filtros = { ...filtros, [clave]: valor, pagina: 1 };
+	}
+	function limpiarFiltros() {
+		filtros = { ...limpiarFiltrosDe(DEFS, filtros), vista: filtros.vista };
+	}
+	const hayFiltros = $derived(!!filtros.q || filtros.estado !== 'todos' || filtros.anio !== 0);
 
-	// =====================
-	// STATE - CREAR
-	// =====================
-	let generatingPdf = $state(false);
+	const SEGMENTOS = [
+		{ valor: 'todos', etiqueta: 'Todos' },
+		{ valor: 'vigentes', etiqueta: 'Vigentes', punto: ESTADO_COLORES.VIGENTE },
+		{ valor: 'por_vencer', etiqueta: 'Por vencer', punto: ESTADO_COLORES.POR_VENCER },
+		{ valor: 'vencidos', etiqueta: 'Vencidos', punto: ESTADO_COLORES.VENCIDO },
+		{ valor: 'anulados', etiqueta: 'Anulados', punto: ESTADO_COLORES.ANULADO }
+	];
 
-	let extracto : ExtractoData = $state({
-		numero_contrato: '',
-		numero_extracto: '',
-		codigo_formato: 'OP-FR-04',
-		version_formato: '5',
-		contratante_nombre: '',
-		contratante_nit: '',
-		objeto_contrato: 'CONTRATO PARA TRANSPORTE DE PERSONAL',
-		origen: '',
-		destino: '',
-		fecha_inicial: '',
-		fecha_vencimiento: '',
-		placa: '',
-		modelo_vehiculo: '',
-		marca_vehiculo: '',
-		clase_vehiculo: '',
-		numero_tarjeta_operacion: '',
-		numero_interno: '',
-		conductores: [
-			{ nombre: '', cedula: '', licencia_conduccion: '', vigencia_licencia: '' },
-			{ nombre: '', cedula: '', licencia_conduccion: '', vigencia_licencia: '' },
-			{ nombre: '', cedula: '', licencia_conduccion: '', vigencia_licencia: '' }
-		],
-		responsable_nombre: '',
-		responsable_cedula: '',
-		responsable_telefono: '',
-		responsable_direccion: ''
+	// ── Extractos ────────────────────────────────────────────────────────
+	let listado = $state<ListadoExtractos | null>(null);
+	let cargando = $state(true);
+	let anios = $state<number[]>([]);
+	let opciones = $state<OpcionesExtracto | null>(null);
+
+	$effect(() => {
+		if (filtros.vista !== 'extractos') return;
+		void filtros.q;
+		void filtros.estado;
+		void filtros.anio;
+		void filtros.pagina;
+		void cargar();
+	});
+	$effect(() => {
+		void extractosAPI
+			.anios()
+			.then((a) => (anios = a))
+			.catch(() => {});
 	});
 
-	let clientes : Cliente[] = $state([]);
-	let vehiculos : Vehiculo[] = $state([]);
-	let conductoresList : Conductor[] = $state([]);
-
-	let clienteSearch = $state('');
-	let vehiculoSearch = $state('');
-	let conductorSearch : string[] = $state(['', '', '']);
-	let showClienteDropdown = $state(false);
-	let showVehiculoDropdown = $state(false);
-	let showConductorDropdown : boolean[] = $state([false, false, false]);
-
-	let extractosGenerados : {
-		fecha: string;
-		contrato: string;
-		contratante: string;
-		placa: string;
-	}[] = $state([]);
-
-	let showPdfModal = $state(false);
-
-	// =====================
-	// COMPUTED
-	// =====================
-	const clientesFiltrados = $derived(clientes.filter(
-		(c) =>
-			c.nombre?.toLowerCase().includes(clienteSearch.toLowerCase()) ||
-			c.nit?.toLowerCase().includes(clienteSearch.toLowerCase())
-	));
-
-	const vehiculosFiltrados = $derived(vehiculos.filter(
-		(v) =>
-			v.placa?.toLowerCase().includes(vehiculoSearch.toLowerCase()) ||
-			v.marca?.toLowerCase().includes(vehiculoSearch.toLowerCase()) ||
-			v.linea?.toLowerCase().includes(vehiculoSearch.toLowerCase())
-	));
-
-	const conductoresFiltradosPor = $derived((index: number) =>
-		conductoresList.filter(
-			(c) =>
-				`${c.nombre} ${c.apellido}`
-					.toLowerCase()
-					.includes(conductorSearch[index]?.toLowerCase() || '') ||
-				c.numero_identificacion?.includes(conductorSearch[index] || '')
-		));
-
-	const formValid = $derived(extracto.numero_contrato.trim() !== '' &&
-		extracto.contratante_nombre.trim() !== '' &&
-		extracto.placa.trim() !== '' &&
-		extracto.conductores[0].nombre.trim() !== '');
-
-	// =====================
-	// MATCHING HELPERS
-	// =====================
-	function normalizeStr(str: string): string {
-		return str
-			.toUpperCase()
-			.trim()
-			.normalize('NFD')
-			.replace(/[\u0300-\u036f]/g, '')
-			.replace(/\s+/g, ' ');
-	}
-
-	function isPlacaMatched(placa: string): boolean {
-		if (!matches || !placa) return false;
-		return !!matches.placaMap[placa.toUpperCase().trim()];
-	}
-
-	function getPlacaId(placa: string): string {
-		if (!matches || !placa) return '';
-		return matches.placaMap[placa.toUpperCase().trim()] || '';
-	}
-
-	function isContratanteMatched(contratante: string): boolean {
-		if (!matches || !contratante) return false;
-		return !!matches.clienteMap[normalizeStr(contratante)];
-	}
-
-	function getContratanteId(contratante: string): string {
-		if (!matches || !contratante) return '';
-		return matches.clienteMap[normalizeStr(contratante)] || '';
-	}
-
-	function isConductorMatched(conductor: string): boolean {
-		if (!matches || !conductor) return false;
-		return !!matches.conductorMap[normalizeStr(conductor)];
-	}
-
-	function getConductorId(conductor: string): string {
-		if (!matches || !conductor) return '';
-		return matches.conductorMap[normalizeStr(conductor)] || '';
-	}
-
-	function shortUUID(uuid: string): string {
-		if (!uuid) return '';
-		return uuid.substring(0, 8);
-	}
-
-	// =====================
-	// LIFECYCLE
-	// =====================
-	onMount(async () => {
-		await Promise.all([loadHistorial(), syncAndLoadMatches(), loadFormData(), loadNextConsecutivo()]);
-		/// Se suelta el freno DESPUÉS de la primera carga: el efecto que sigue a
-		/// la firma se dispararía en el primer render y pediría el historial dos
-		/// veces a la vez.
-		montado = true;
-	});
-
-	// =====================
-	// DATA LOADING
-	// =====================
-	let nextConsecutivo : number | null = $state(null);
-
-	async function loadNextConsecutivo() {
+	async function cargar() {
+		cargando = true;
 		try {
-			const res = await extractosAPI.getNextConsecutivo();
-			nextConsecutivo = res.data?.consecutivo || null;
-			// Auto-set in form if empty
-			if (nextConsecutivo && !extracto.numero_contrato) {
-				extracto.numero_contrato = nextConsecutivo.toString();
-			}
-		} catch (err: any) {
-			console.error('Error cargando siguiente consecutivo:', err);
-		}
-	}
-
-	async function loadHistorial() {
-		loadingHistorial = true;
-		try {
-			const params: Record<string, any> = { page: filtros.pagina, limit: pagination.limit };
-			if (filtros.q) params.search = filtros.q;
-			if (filtros.contratante) params.contratante = filtros.contratante;
-			if (filtros.placa) params.placa = filtros.placa;
-			if (filtros.conductor) params.conductor = filtros.conductor;
-
-			const res = await extractosAPI.getAll(params);
-			extractosHistoricos = res.data?.data || [];
-			if (res.data?.pagination) {
-				pagination = res.data.pagination;
-			}
-		} catch (err: any) {
-			console.error('Error cargando historial:', err);
-			toast.error('Error cargando extractos históricos');
+			listado = await extractosAPI.listar({
+				q: filtros.q || undefined,
+				estado: filtros.estado as FiltroEstadoExtracto,
+				anio: filtros.anio || undefined,
+				page: filtros.pagina,
+				limit: POR_PAGINA
+			});
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'No se pudieron cargar los extractos');
 		} finally {
-			loadingHistorial = false;
+			cargando = false;
 		}
 	}
 
-	async function syncAndLoadMatches() {
-		loadingMatches = true;
-		syncing = true;
+	async function cargarOpciones(): Promise<OpcionesExtracto | null> {
 		try {
-			// Sync creates missing entities AND returns the full maps
-			const res = await extractosAPI.syncToDatabase();
-			matches = res.data || null;
-			if (res.data?.created) {
-				const c = res.data.created;
-				const total = c.clientes + c.vehiculos + c.conductores;
-				if (total > 0) {
-					toast.success(
-						`Sincronizado: ${c.clientes} contratantes, ${c.vehiculos} vehículos, ${c.conductores} conductores creados`
-					);
-					// Reload form data since new entities were created
-					await loadFormData();
-				}
-			}
-		} catch (err: any) {
-			console.error('Error sincronizando:', err);
-			// Fallback to just loading matches
-			try {
-				const res = await extractosAPI.getMatches();
-				matches = res.data || null;
-			} catch {
-				console.error('Error cargando matches fallback');
-			}
-		} finally {
-			loadingMatches = false;
-			syncing = false;
-		}
-	}
-
-	async function loadFormData() {
-		try {
-			const [clientesRes, vehiculosRes, conductoresRes] = await Promise.all([
-				// Selectores: los ocultos también se pueden elegir.
-				clientesAPI.getAll({ limit: 1000, incluir_ocultos: 'true' }),
-				vehiculosAPI.getAll({ incluir_ocultos: 'true' }),
-				conductoresAPI.getAll({ limit: 1000, incluir_ocultos: 'true' })
-			]);
-			clientes = clientesRes.data?.data || clientesRes.data || [];
-			vehiculos = vehiculosRes.data?.data || vehiculosRes.data || [];
-			// Filtrar conductores duplicados/importados (EXT-) y quedarse solo con los reales
-			const allConductores: Conductor[] = conductoresRes.data?.data || conductoresRes.data || [];
-			conductoresList = allConductores.filter(
-				(c) => !c.numero_identificacion?.startsWith('EXT-')
-			);
-		} catch (err: any) {
-			console.error('Error cargando datos del formulario:', err);
-		}
-	}
-
-	/**
-	 * Cuántos filtros hay puestos. La pestaña y la página no cuentan: una no es
-	 * un filtro y la otra es dónde estás dentro del resultado.
-	 */
-	const NO_SON_FILTROS = ['pagina', 'tab'] as const;
-	const filtrosActivos = $derived(contarActivos(DEFS, filtros, [...NO_SON_FILTROS]));
-
-	function clearFilters() {
-		filtros = limpiar(DEFS, filtros, ['tab']);
-	}
-
-	/**
-	 * Un solo sitio decide cuándo se vuelve a pedir el historial.
-	 *
-	 * Antes cada uno de los cuatro campos llamaba a `handleSearch`, que
-	 * rearmaba su propio `setTimeout` de 400 ms, y además `clearFilters` y el
-	 * paginador pedían por su cuenta. Ahora el disparo es la firma de los
-	 * filtros: cambie lo que cambie —incluida la página— se pide una vez.
-	 */
-	const firmaConsulta = $derived(
-		firma(DEFS, { ...filtros, tab: 'historial' as TabId })
-	);
-	let montado = false;
-	let temporizadorConsulta: ReturnType<typeof setTimeout> | null = null;
-
-	$effect(() => {
-		void firmaConsulta;
-		if (!montado) return;
-		if (temporizadorConsulta) clearTimeout(temporizadorConsulta);
-		temporizadorConsulta = setTimeout(() => void loadHistorial(), 300);
-	});
-
-	/**
-	 * Vuelve a la página 1 cuando cambian los filtros.
-	 *
-	 * La clave arranca con el valor inicial y no vacía: si no, la primera
-	 * pasada la vería «cambiada» y descartaría la página que venía en la URL.
-	 */
-	function claveFiltros(f: typeof filtros): string {
-		return [f.q, f.contratante, f.placa, f.conductor].join('|');
-	}
-	let ultimaClave = untrack(() => claveFiltros(filtros));
-	const claveActual = $derived(claveFiltros(filtros));
-	$effect(() => {
-		if (claveActual === ultimaClave) return;
-		ultimaClave = claveActual;
-		filtros.pagina = 1;
-	});
-
-	/// Los filtros a la URL. `escribir` no navega si ya dice lo mismo, que es
-	/// lo que impide que este efecto se realimente.
-	$effect(() => {
-		void firma(DEFS, filtros);
-		if (!browser) return;
-		estadoUrl.escribir(untrack(() => page.url), untrack(() => filtros));
-	});
-
-	// =====================
-	// TABLE ACTIONS
-	// =====================
-	function fillFromHistorical(ext: ExtractoHistorico) {
-		const od = ext.origen_destino || '';
-		const cleaned = od.replace(/\(VICEVERSA\)/gi, '').trim();
-		const dashParts = cleaned.split(' - ');
-		let origen = '';
-		let destino = '';
-		if (dashParts.length >= 4) {
-			origen = `${dashParts[0].trim()} - ${dashParts[1].trim()}`;
-			destino = dashParts.slice(2).join(' - ').trim();
-		} else if (dashParts.length >= 2) {
-			origen = dashParts[0].trim();
-			destino = dashParts.slice(1).join(' - ').trim();
-		} else {
-			origen = cleaned;
-		}
-
-		const parseDate = (d: string) => {
-			if (!d) return '';
-			const p = d.split('/');
-			if (p.length === 3) {
-				const day = p[0].padStart(2, '0');
-				const month = p[1].padStart(2, '0');
-				let year = p[2];
-				if (year.length === 2) year = (parseInt(year) > 50 ? '19' : '20') + year;
-				return `${year}-${month}-${day}`;
-			}
-			return '';
-		};
-
-		let contratanteNombre = ext.contratante;
-		if (contratanteNombre === 'HV SERVICES Y SUPPLY SAS') {
-			contratanteNombre = 'FEPCO SERVICIOS S.A.S';
-		}
-
-		extracto = {
-			numero_contrato: ext.consecutivo,
-			numero_extracto: '',
-			codigo_formato: 'OP-FR-04',
-			version_formato: '5',
-			contratante_nombre: contratanteNombre,
-			contratante_nit: '',
-			objeto_contrato: 'CONTRATO PARA TRANSPORTE DE PERSONAL',
-			origen,
-			destino,
-			fecha_inicial: parseDate(ext.fecha_inicial),
-			fecha_vencimiento: parseDate(ext.fecha_final),
-			placa: ext.placa,
-			modelo_vehiculo: '',
-			marca_vehiculo: '',
-			clase_vehiculo: '',
-			numero_tarjeta_operacion: ext.num_tarjeta_operacion,
-			numero_interno: ext.num_interno,
-			conductores: [
-				{
-					nombre: ext.conductor_1 || '',
-					cedula: '',
-					licencia_conduccion: '',
-					vigencia_licencia: ext.vigencia_pase_1 || ''
-				},
-				{
-					nombre: ext.conductor_2 || '',
-					cedula: '',
-					licencia_conduccion: '',
-					vigencia_licencia: ext.vigencia_pase_2 || ''
-				},
-				{
-					nombre: ext.conductor_3 || '',
-					cedula: '',
-					licencia_conduccion: '',
-					vigencia_licencia: ext.vigencia_pase_3 || ''
-				}
-			],
-			responsable_nombre: '',
-			responsable_cedula: '',
-			responsable_telefono: '',
-			responsable_direccion: ''
-		};
-
-		// Auto-fill from DB - Vehicle
-		const matchedVehiculo = vehiculos.find(
-			(v) => v.placa.toUpperCase() === ext.placa.toUpperCase()
-		);
-		if (matchedVehiculo) {
-			extracto.modelo_vehiculo = matchedVehiculo.modelo || '';
-			extracto.marca_vehiculo = matchedVehiculo.marca || '';
-			extracto.clase_vehiculo = matchedVehiculo.clase_vehiculo || '';
-			vehiculoSearch = matchedVehiculo.placa;
-		} else {
-			vehiculoSearch = ext.placa;
-		}
-
-		// Auto-fill from DB - Cliente
-		const matchedCliente = clientes.find((c) => {
-			const n = normalizeStr(c.nombre || '');
-			return (
-				n === normalizeStr(contratanteNombre) ||
-				n === normalizeStr(ext.contratante)
-			);
-		});
-		if (matchedCliente) {
-			extracto.contratante_nombre = matchedCliente.nombre || contratanteNombre;
-			extracto.contratante_nit = matchedCliente.nit || '';
-			extracto.responsable_nombre = matchedCliente.representante || '';
-			extracto.responsable_cedula = matchedCliente.cedula || '';
-			extracto.responsable_telefono = matchedCliente.telefono || '';
-			extracto.responsable_direccion = matchedCliente.direccion || '';
-			clienteSearch = matchedCliente.nombre || '';
-		} else {
-			clienteSearch = contratanteNombre;
-		}
-
-		// Auto-fill from DB - Conductores
-		for (let i = 0; i < 3; i++) {
-			const condName = extracto.conductores[i].nombre;
-			if (condName) {
-				const normalizedName = normalizeStr(condName);
-				const extWords = normalizedName.split(' ').filter(Boolean);
-				// 1) Exact match
-				let matchedCond = conductoresList.find(
-					(c) => normalizeStr(`${c.nombre} ${c.apellido}`) === normalizedName
-				);
-				// 2) Sorted word-set match (handles different word order)
-				if (!matchedCond) {
-					const sortedExt = [...extWords].sort().join(' ');
-					matchedCond = conductoresList.find((c) => {
-						const dbWords = normalizeStr(`${c.nombre} ${c.apellido}`).split(' ').filter(Boolean).sort().join(' ');
-						return dbWords === sortedExt;
-					});
-				}
-				// 3) All words contained (handles partial name differences)
-				if (!matchedCond && extWords.length >= 2) {
-					matchedCond = conductoresList.find((c) => {
-						const fullName = normalizeStr(`${c.nombre} ${c.apellido}`);
-						return extWords.every((w) => fullName.includes(w));
-					});
-				}
-				if (matchedCond) {
-					extracto.conductores[i].cedula = matchedCond.numero_identificacion;
-					extracto.conductores[i].licencia_conduccion =
-						matchedCond.categoria_licencia || '';
-				}
-				conductorSearch[i] = condName;
-			} else {
-				conductorSearch[i] = '';
-			}
-		}
-
-		filtros.tab = 'crear';
-		toast.success(`Extracto ${ext.consecutivo} cargado en el formulario`);
-	}
-
-	// =====================
-	// AUTOCOMPLETE HANDLERS
-	// =====================
-	function selectCliente(cliente: Cliente) {
-		extracto.contratante_nombre = cliente.nombre || '';
-		extracto.contratante_nit = cliente.nit || '';
-		extracto.responsable_nombre = cliente.representante || '';
-		extracto.responsable_cedula = cliente.cedula || '';
-		extracto.responsable_telefono = cliente.telefono || '';
-		extracto.responsable_direccion = cliente.direccion || '';
-		clienteSearch = cliente.nombre || '';
-		showClienteDropdown = false;
-	}
-
-	function selectVehiculo(vehiculo: Vehiculo) {
-		extracto.placa = vehiculo.placa || '';
-		extracto.modelo_vehiculo = vehiculo.modelo || '';
-		extracto.marca_vehiculo = vehiculo.marca || '';
-		extracto.clase_vehiculo = vehiculo.clase_vehiculo || '';
-		vehiculoSearch = vehiculo.placa || '';
-		showVehiculoDropdown = false;
-	}
-
-	function selectConductor(conductor: Conductor, index: number) {
-		extracto.conductores[index] = {
-			nombre: `${conductor.nombre} ${conductor.apellido}`,
-			cedula: conductor.numero_identificacion,
-			licencia_conduccion: conductor.categoria_licencia || '',
-			vigencia_licencia: conductor.vencimiento_licencia
-				? new Date(conductor.vencimiento_licencia).toLocaleDateString('es-CO')
-				: ''
-		};
-		conductorSearch[index] = `${conductor.nombre} ${conductor.apellido}`;
-		showConductorDropdown[index] = false;
-		showConductorDropdown = [...showConductorDropdown];
-	}
-
-	function clearConductor(index: number) {
-		extracto.conductores[index] = {
-			nombre: '',
-			cedula: '',
-			licencia_conduccion: '',
-			vigencia_licencia: ''
-		};
-		conductorSearch[index] = '';
-	}
-
-	// =====================
-	// PDF GENERATION
-	// =====================
-	async function generatePDF() {
-		if (!formValid) {
+			opciones = await extractosAPI.opciones();
+			return opciones;
+		} catch (error) {
 			toast.error(
-				'Complete los campos obligatorios: Nº Contrato, Contratante, Placa y al menos un conductor'
+				error instanceof Error ? error.message : 'No se pudieron cargar los datos del formulario'
 			);
-			return;
+			return null;
 		}
+	}
 
-		generatingPdf = true;
+	const resumen = $derived([
+		{ clave: 'todos', etiqueta: 'Extractos', valor: listado?.conteos.todos ?? 0 },
+		{
+			clave: 'vigentes',
+			etiqueta: 'Vigentes',
+			valor: listado?.conteos.vigentes ?? 0,
+			color: ESTADO_COLORES.VIGENTE
+		},
+		{
+			clave: 'por_vencer',
+			etiqueta: 'Por vencer',
+			valor: listado?.conteos.por_vencer ?? 0,
+			color: ESTADO_COLORES.POR_VENCER
+		},
+		{
+			clave: 'vencidos',
+			etiqueta: 'Vencidos',
+			valor: listado?.conteos.vencidos ?? 0,
+			color: ESTADO_COLORES.VENCIDO
+		},
+		{
+			clave: 'anulados',
+			etiqueta: 'Anulados',
+			valor: listado?.conteos.anulados ?? 0,
+			color: ESTADO_COLORES.ANULADO
+		}
+	]);
+	function elegirConteo(clave: string) {
+		ponerFiltro('estado', filtros.estado === clave ? 'todos' : clave);
+	}
 
+	const COLUMNAS: ColumnDef<Extracto, any>[] = [
+		{ id: 'numero', header: 'No. · FUEC', enableSorting: false, size: 190 },
+		{ id: 'contratante', header: 'Contratante · Origen-destino', enableSorting: false },
+		{ id: 'vehiculo', header: 'Vehículo', enableSorting: false, size: 150 },
+		{ id: 'conductores', header: 'Conductores', enableSorting: false, size: 220 },
+		{ id: 'vigencia', header: 'Vigencia', enableSorting: false, size: 170 },
+		{ id: 'estado', header: 'Estado', enableSorting: false, size: 120 },
+		{ id: 'acciones', header: '', enableSorting: false, size: 90 }
+	];
+
+	// ── Modales ──────────────────────────────────────────────────────────
+	let modalNuevo = $state(false);
+	let base = $state<Extracto | null>(null);
+	let detalle = $state<Extracto | null>(null);
+	let modalDetalle = $state(false);
+
+	async function abrirNuevo(desde: Extracto | null = null) {
+		const o = opciones ?? (await cargarOpciones());
+		if (!o) return;
+		/// El consecutivo pudo avanzar desde la última carga.
+		void cargarOpciones();
+		base = desde;
+		modalDetalle = false;
+		modalNuevo = true;
+	}
+
+	async function abrirDetalle(e: Extracto) {
+		detalle = e;
+		modalDetalle = true;
 		try {
-			const pdfMake = await cargarPdfMake();
-
-			let logoBase64 = '';
-			try {
-				const response = await fetch('/assets/logo_nombre.webp');
-				const blob = await response.blob();
-				logoBase64 = await new Promise<string>((resolve) => {
-					const reader = new FileReader();
-					reader.onloadend = () => resolve(reader.result as string);
-					reader.readAsDataURL(blob);
-				});
-			} catch {
-				console.warn('No se pudo cargar el logo');
-			}
-
-			const formatDateForDoc = (dateStr: string) => {
-				if (!dateStr) return { dia: '___', mes: '___', anio: '___' };
-				const d = new Date(dateStr + 'T00:00:00');
-				return {
-					dia: String(d.getDate()).padStart(2, '0'),
-					mes: String(d.getMonth() + 1).padStart(2, '0'),
-					anio: String(d.getFullYear())
-				};
-			};
-
-			const fechaIni = formatDateForDoc(extracto.fecha_inicial);
-			const fechaVen = formatDateForDoc(extracto.fecha_vencimiento);
-
-			const conductorRows: any[] = [];
-			for (let i = 0; i < 3; i++) {
-				const c = extracto.conductores[i];
-				conductorRows.push([
-					{
-						text: `CONDUCTOR ${i + 1}`,
-						style: 'labelCell',
-						fillColor: '#E8F5E9',
-						colSpan: 2
-					},
-					{},
-					{ text: c.nombre || '', style: 'valueCell', colSpan: 6 },
-					{},
-					{},
-					{},
-					{},
-					{}
-				]);
-				conductorRows.push([
-					{ text: 'CÉDULA', style: 'labelCell', fillColor: '#E8F5E9' },
-					{ text: c.cedula || '', style: 'valueCell' },
-					{
-						text: 'LICENCIA CONDUCCIÓN',
-						style: 'labelCell',
-						fillColor: '#E8F5E9',
-						colSpan: 2
-					},
-					{},
-					{ text: c.licencia_conduccion || '', style: 'valueCell', colSpan: 2 },
-					{},
-					{ text: 'VIGENCIA', style: 'labelCell', fillColor: '#E8F5E9' },
-					{ text: c.vigencia_licencia || '', style: 'valueCell' }
-				]);
-			}
-
-			const docDefinition: any = {
-				pageSize: 'LETTER',
-				pageMargins: [30, 30, 30, 60],
-				content: [
-					{
-						table: {
-							widths: [80, '*', 130],
-							body: [
-								[
-									logoBase64
-										? {
-												image: logoBase64,
-												width: 65,
-												height: 50,
-												rowSpan: 3,
-												alignment: 'center',
-												margin: [0, 5, 0, 5]
-											}
-										: {
-												text: 'COTRANSMEQ',
-												bold: true,
-												fontSize: 8,
-												rowSpan: 3,
-												alignment: 'center',
-												margin: [0, 15, 0, 0]
-											},
-									{
-										text: 'MINISTERIO DE TRANSPORTE',
-										style: 'headerTitle',
-										alignment: 'center',
-										margin: [0, 2, 0, 0]
-									},
-									{
-										text: `Código: ${extracto.codigo_formato}`,
-										style: 'headerMeta',
-										alignment: 'center',
-										margin: [0, 2, 0, 0]
-									}
-								],
-								[
-									{},
-									{
-										text: 'FORMATO ÚNICO DE EXTRACTO\nDEL CONTRATO',
-										style: 'headerSubtitle',
-										alignment: 'center',
-										bold: true
-									},
-									{
-										text: `Versión: ${extracto.version_formato}`,
-										style: 'headerMeta',
-										alignment: 'center'
-									}
-								],
-								[
-									{},
-									{
-										text: 'COTRANSMEQ S.A.S.',
-										style: 'headerCompany',
-										alignment: 'center',
-										bold: true,
-										margin: [0, 0, 0, 2]
-									},
-									{
-										text: 'Página: 1 de 1',
-										style: 'headerMeta',
-										alignment: 'center'
-									}
-								]
-							]
-						},
-						layout: {
-							hLineWidth: () => 0.8,
-							vLineWidth: () => 0.8,
-							hLineColor: () => '#2E7D32',
-							vLineColor: () => '#2E7D32'
-						}
-					},
-					{ text: '', margin: [0, 6, 0, 0] },
-					{
-						table: {
-							widths: ['*'],
-							body: [
-								[
-									{
-										text: [
-											{ text: 'EXTRACTO DEL CONTRATO Nº ', bold: true, fontSize: 11 },
-											{
-												text: extracto.numero_contrato || '________',
-												bold: true,
-												fontSize: 11,
-												color: '#1B5E20'
-											}
-										],
-										alignment: 'center',
-										fillColor: '#E8F5E9',
-										margin: [0, 4, 0, 4]
-									}
-								]
-							]
-						},
-						layout: {
-							hLineWidth: () => 0.8,
-							vLineWidth: () => 0.8,
-							hLineColor: () => '#2E7D32',
-							vLineColor: () => '#2E7D32'
-						}
-					},
-					{ text: '', margin: [0, 4, 0, 0] },
-					{
-						table: {
-							widths: [75, 90, 50, 55, 60, 55, 50, '*'],
-							body: [
-								[
-									{
-										text: 'CONTRATANTE',
-										style: 'labelCell',
-										fillColor: '#E8F5E9',
-										colSpan: 2
-									},
-									{},
-									{
-										text: extracto.contratante_nombre || '',
-										style: 'valueCell',
-										colSpan: 4
-									},
-									{},
-									{},
-									{},
-									{ text: 'NIT', style: 'labelCell', fillColor: '#E8F5E9' },
-									{ text: extracto.contratante_nit || '', style: 'valueCell' }
-								],
-								[
-									{
-										text: 'OBJETO DEL CONTRATO',
-										style: 'labelCell',
-										fillColor: '#E8F5E9',
-										colSpan: 2
-									},
-									{},
-									{
-										text: extracto.objeto_contrato || '',
-										style: 'valueCell',
-										colSpan: 6
-									},
-									{},
-									{},
-									{},
-									{},
-									{}
-								],
-								[
-									{ text: 'ORIGEN', style: 'labelCell', fillColor: '#E8F5E9' },
-									{
-										text: extracto.origen || '',
-										style: 'valueCell',
-										colSpan: 3
-									},
-									{},
-									{},
-									{ text: 'DESTINO', style: 'labelCell', fillColor: '#E8F5E9' },
-									{
-										text: extracto.destino || '',
-										style: 'valueCell',
-										colSpan: 3
-									},
-									{},
-									{}
-								],
-								[
-									{
-										text: 'VIGENCIA DEL CONTRATO',
-										style: 'labelCell',
-										fillColor: '#C8E6C9',
-										colSpan: 8,
-										alignment: 'center',
-										bold: true
-									},
-									{},
-									{},
-									{},
-									{},
-									{},
-									{},
-									{}
-								],
-								[
-									{
-										text: 'FECHA INICIAL',
-										style: 'labelCell',
-										fillColor: '#E8F5E9'
-									},
-									{
-										text: `DÍA: ${fechaIni.dia}`,
-										style: 'valueCell',
-										alignment: 'center'
-									},
-									{
-										text: `MES: ${fechaIni.mes}`,
-										style: 'valueCell',
-										alignment: 'center'
-									},
-									{
-										text: `AÑO: ${fechaIni.anio}`,
-										style: 'valueCell',
-										alignment: 'center'
-									},
-									{
-										text: 'FECHA VENCIMIENTO',
-										style: 'labelCell',
-										fillColor: '#E8F5E9'
-									},
-									{
-										text: `DÍA: ${fechaVen.dia}`,
-										style: 'valueCell',
-										alignment: 'center'
-									},
-									{
-										text: `MES: ${fechaVen.mes}`,
-										style: 'valueCell',
-										alignment: 'center'
-									},
-									{
-										text: `AÑO: ${fechaVen.anio}`,
-										style: 'valueCell',
-										alignment: 'center'
-									}
-								],
-								[
-									{
-										text: 'DATOS DEL VEHÍCULO',
-										style: 'labelCell',
-										fillColor: '#C8E6C9',
-										colSpan: 8,
-										alignment: 'center',
-										bold: true
-									},
-									{},
-									{},
-									{},
-									{},
-									{},
-									{},
-									{}
-								],
-								[
-									{ text: 'PLACA', style: 'labelCell', fillColor: '#E8F5E9' },
-									{
-										text: extracto.placa || '',
-										style: 'valueCell',
-										bold: true,
-										fontSize: 10
-									},
-									{ text: 'MODELO', style: 'labelCell', fillColor: '#E8F5E9' },
-									{ text: extracto.modelo_vehiculo || '', style: 'valueCell' },
-									{ text: 'MARCA', style: 'labelCell', fillColor: '#E8F5E9' },
-									{ text: extracto.marca_vehiculo || '', style: 'valueCell' },
-									{ text: 'CLASE', style: 'labelCell', fillColor: '#E8F5E9' },
-									{ text: extracto.clase_vehiculo || '', style: 'valueCell' }
-								],
-								[
-									{
-										text: 'TARJETA DE OPERACIÓN',
-										style: 'labelCell',
-										fillColor: '#E8F5E9',
-										colSpan: 2
-									},
-									{},
-									{
-										text: extracto.numero_tarjeta_operacion || '',
-										style: 'valueCell',
-										colSpan: 2
-									},
-									{},
-									{
-										text: 'Nº INTERNO',
-										style: 'labelCell',
-										fillColor: '#E8F5E9',
-										colSpan: 2
-									},
-									{},
-									{
-										text: extracto.numero_interno || '',
-										style: 'valueCell',
-										colSpan: 2
-									},
-									{}
-								],
-								[
-									{
-										text: 'DATOS DE LOS CONDUCTORES',
-										style: 'labelCell',
-										fillColor: '#C8E6C9',
-										colSpan: 8,
-										alignment: 'center',
-										bold: true
-									},
-									{},
-									{},
-									{},
-									{},
-									{},
-									{},
-									{}
-								],
-								...conductorRows,
-								[
-									{
-										text: 'RESPONSABLE DEL CONTRATANTE',
-										style: 'labelCell',
-										fillColor: '#C8E6C9',
-										colSpan: 8,
-										alignment: 'center',
-										bold: true
-									},
-									{},
-									{},
-									{},
-									{},
-									{},
-									{},
-									{}
-								],
-								[
-									{ text: 'NOMBRE', style: 'labelCell', fillColor: '#E8F5E9' },
-									{
-										text: extracto.responsable_nombre || '',
-										style: 'valueCell',
-										colSpan: 3
-									},
-									{},
-									{},
-									{ text: 'CÉDULA', style: 'labelCell', fillColor: '#E8F5E9' },
-									{
-										text: extracto.responsable_cedula || '',
-										style: 'valueCell',
-										colSpan: 3
-									},
-									{},
-									{}
-								],
-								[
-									{
-										text: 'TELÉFONO',
-										style: 'labelCell',
-										fillColor: '#E8F5E9'
-									},
-									{
-										text: extracto.responsable_telefono || '',
-										style: 'valueCell',
-										colSpan: 3
-									},
-									{},
-									{},
-									{
-										text: 'DIRECCIÓN',
-										style: 'labelCell',
-										fillColor: '#E8F5E9'
-									},
-									{
-										text: extracto.responsable_direccion || '',
-										style: 'valueCell',
-										colSpan: 3
-									},
-									{},
-									{}
-								]
-							]
-						},
-						layout: {
-							hLineWidth: () => 0.6,
-							vLineWidth: () => 0.6,
-							hLineColor: () => '#2E7D32',
-							vLineColor: () => '#2E7D32',
-							paddingLeft: () => 4,
-							paddingRight: () => 4,
-							paddingTop: () => 3,
-							paddingBottom: () => 3
-						}
-					},
-					{ text: '', margin: [0, 8, 0, 0] },
-					{
-						table: {
-							widths: ['*'],
-							body: [
-								[
-									{
-										text: [
-											{ text: 'Nº DE EXTRACTO: ', bold: true, fontSize: 9 },
-											{
-												text:
-													extracto.numero_extracto || '________________________',
-												fontSize: 9,
-												color: '#1B5E20'
-											}
-										],
-										alignment: 'center',
-										margin: [0, 3, 0, 3],
-										fillColor: '#F1F8E9'
-									}
-								]
-							]
-						},
-						layout: {
-							hLineWidth: () => 0.6,
-							vLineWidth: () => 0.6,
-							hLineColor: () => '#2E7D32',
-							vLineColor: () => '#2E7D32'
-						}
-					},
-					{ text: '', margin: [0, 15, 0, 0] },
-					{
-						columns: [
-							{ width: '*', text: '' },
-							{
-								width: 250,
-								stack: [
-									{
-										canvas: [
-											{
-												type: 'line',
-												x1: 0,
-												y1: 0,
-												x2: 220,
-												y2: 0,
-												lineWidth: 0.8,
-												lineColor: '#333'
-											}
-										]
-									},
-									{
-										text: 'COTRANSMEQ S.A.S.',
-										bold: true,
-										fontSize: 9,
-										alignment: 'center',
-										margin: [0, 3, 0, 0]
-									},
-									{
-										text: 'NIT: 901.053.612-7',
-										fontSize: 8,
-										alignment: 'center'
-									},
-									{
-										text: 'Cra 14 #20-11 Apto 201 - Tunja, Boyacá',
-										fontSize: 7,
-										alignment: 'center',
-										color: '#666',
-										margin: [0, 2, 0, 0]
-									},
-									{
-										text: 'Tel: 310 339 7671',
-										fontSize: 7,
-										alignment: 'center',
-										color: '#666'
-									}
-								]
-							},
-							{ width: '*', text: '' }
-						]
-					}
-				],
-				styles: {
-					headerTitle: { fontSize: 8, bold: true, color: '#1B5E20' },
-					headerSubtitle: { fontSize: 10, bold: true, color: '#1B5E20' },
-					headerCompany: { fontSize: 9, bold: true, color: '#2E7D32' },
-					headerMeta: { fontSize: 8, color: '#555' },
-					labelCell: { fontSize: 7.5, bold: true, color: '#1B5E20' },
-					valueCell: { fontSize: 8.5 }
-				},
-				defaultStyle: { font: 'Roboto' }
-			};
-
-			pdfMake
-				.createPdf(docDefinition)
-				.download(
-					`Extracto_Contrato_${extracto.numero_contrato || 'SN'}_${extracto.placa || 'SN'}.pdf`
-				);
-
-			// Save to backend (extractos.txt)
-			try {
-				const formatDateToFile = (dateStr: string) => {
-					if (!dateStr) return '';
-					// From YYYY-MM-DD to DD/MM/YYYY
-					const parts = dateStr.split('-');
-					if (parts.length === 3) {
-						return `${parts[2]}/${parts[1]}/${parts[0]}`;
-					}
-					return dateStr;
-				};
-
-				const origenDestino = [extracto.origen, extracto.destino]
-					.filter(Boolean)
-					.join(' - ');
-
-				await extractosAPI.create({
-					contratante: extracto.contratante_nombre,
-					origen_destino: origenDestino || '',
-					fecha_inicial: formatDateToFile(extracto.fecha_inicial),
-					fecha_final: formatDateToFile(extracto.fecha_vencimiento),
-					placa: extracto.placa,
-					num_interno: extracto.numero_interno,
-					num_tarjeta_operacion: extracto.numero_tarjeta_operacion,
-					conductor_1: extracto.conductores[0]?.nombre || '',
-					vigencia_pase_1: extracto.conductores[0]?.vigencia_licencia || '',
-					conductor_2: extracto.conductores[1]?.nombre || '',
-					vigencia_pase_2: extracto.conductores[1]?.vigencia_licencia || '',
-					conductor_3: extracto.conductores[2]?.nombre || '',
-					vigencia_pase_3: extracto.conductores[2]?.vigencia_licencia || ''
-				});
-
-				// Reload next consecutivo and historial
-				await loadNextConsecutivo();
-				filtros.pagina = 1;
-				await loadHistorial();
-			} catch (saveErr: any) {
-				console.error('Error guardando extracto:', saveErr);
-				toast.error('PDF generado pero error al guardar en historial');
-			}
-
-			extractosGenerados = [
-				{
-					fecha: new Date().toLocaleString('es-CO'),
-					contrato: extracto.numero_contrato,
-					contratante: extracto.contratante_nombre,
-					placa: extracto.placa
-				},
-				...extractosGenerados
-			];
-
-			toast.success('PDF generado y extracto guardado exitosamente');
-		} catch (err: any) {
-			console.error('Error generando PDF:', err);
-			toast.error('Error generando PDF: ' + (err.message || 'Error desconocido'));
-		} finally {
-			generatingPdf = false;
+			detalle = await extractosAPI.detalle(e.id);
+		} catch {
+			/* se queda con lo de la lista */
 		}
 	}
 
-	// =====================
-	// UTILS
-	// =====================
-	function resetForm() {
-		loadNextConsecutivo();
-		extracto = {
-			numero_contrato: nextConsecutivo ? nextConsecutivo.toString() : '',
-			numero_extracto: '',
-			codigo_formato: 'OP-FR-04',
-			version_formato: '5',
-			contratante_nombre: '',
-			contratante_nit: '',
-			objeto_contrato: 'CONTRATO PARA TRANSPORTE DE PERSONAL',
-			origen: '',
-			destino: '',
-			fecha_inicial: '',
-			fecha_vencimiento: '',
-			placa: '',
-			modelo_vehiculo: '',
-			marca_vehiculo: '',
-			clase_vehiculo: '',
-			numero_tarjeta_operacion: '',
-			numero_interno: '',
-			conductores: [
-				{ nombre: '', cedula: '', licencia_conduccion: '', vigencia_licencia: '' },
-				{ nombre: '', cedula: '', licencia_conduccion: '', vigencia_licencia: '' },
-				{ nombre: '', cedula: '', licencia_conduccion: '', vigencia_licencia: '' }
-			],
-			responsable_nombre: '',
-			responsable_cedula: '',
-			responsable_telefono: '',
-			responsable_direccion: ''
+	function snapshotDe(e: Extracto): SnapshotExtracto {
+		const s = e.snapshot as SnapshotExtracto;
+		if (s && s.numero) return s;
+		/// Importados antiguos sin snapshot: se arma con lo guardado.
+		return {
+			numero: e.numero_completo,
+			consecutivo: e.consecutivo,
+			empresa: opciones?.empresa
+				? { razon_social: opciones.empresa.razon_social, nit: opciones.empresa.nit }
+				: { razon_social: '', nit: '' },
+			contrato_numero: e.contrato_numero ?? '',
+			contratante: { nombre: e.contratante_nombre ?? '', nit: e.contratante_nit },
+			objeto_contrato: e.objeto_contrato ?? '',
+			origen_destino: e.origen_destino ?? '',
+			convenio: e.convenio ?? 'N/A',
+			vigencia_desde: e.vigencia_desde,
+			vigencia_hasta: e.vigencia_hasta,
+			vehiculo: {
+				placa: e.placa ?? '',
+				modelo: e.modelo,
+				marca: e.marca,
+				clase: e.clase,
+				numero_interno: e.numero_interno,
+				tarjeta_operacion: e.tarjeta_operacion
+			},
+			conductores: e.conductores.map((c) => ({
+				nombre: c.nombre,
+				cedula: c.cedula,
+				licencia_vigencia: c.licencia_vigencia
+			})),
+			responsable: e.responsable,
+			emitido_at: e.emitido_at
 		};
-		clienteSearch = '';
-		vehiculoSearch = '';
-		conductorSearch = ['', '', ''];
 	}
 
-	function handleClickOutside(event: MouseEvent) {
-		const target = event.target as HTMLElement;
-		if (!target.closest('.autocomplete-wrapper')) {
-			showClienteDropdown = false;
-			showVehiculoDropdown = false;
-			showConductorDropdown = [false, false, false];
+	async function descargar(e: Extracto) {
+		const o = opciones ?? (await cargarOpciones());
+		if (!o) return;
+		try {
+			const nombre = await descargarExtracto(snapshotDe(e), {
+				empresa: o.empresa,
+				logo: LOGO,
+				firma: FIRMA,
+				codigo_verificacion: e.codigo_verificacion,
+				huella: e.huella,
+				marca: e.firmado ? null : 'Copia del libro histórico · sin firma electrónica'
+			});
+			toast.success(`Descargado ${nombre}`);
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'No se pudo generar el PDF');
 		}
 	}
+
+	async function emitido(e: Extracto) {
+		toast.success(`Extracto ${e.consecutivo} emitido y firmado`);
+		await cargar();
+		await descargar(e);
+		detalle = e;
+		modalDetalle = true;
+	}
+
+	function anulado(e: Extracto) {
+		detalle = e;
+		void cargar();
+	}
+
+	// ── Contratantes ─────────────────────────────────────────────────────
+	let contratantes = $state<Contratante[]>([]);
+	let cargandoContratantes = $state(false);
+	let modalContratante = $state(false);
+	let contratanteEditado = $state<Contratante | null>(null);
+
+	$effect(() => {
+		if (filtros.vista !== 'contratantes') return;
+		void filtros.q;
+		void cargarContratantes();
+	});
+
+	async function cargarContratantes() {
+		cargandoContratantes = true;
+		try {
+			contratantes = await extractosAPI.contratantes(filtros.q || undefined);
+		} catch (error) {
+			toast.error(
+				error instanceof Error ? error.message : 'No se pudieron cargar los contratantes'
+			);
+		} finally {
+			cargandoContratantes = false;
+		}
+	}
+
+	async function eliminarContratante(c: Contratante) {
+		const ok = await confirmarEliminacion({
+			title: `Eliminar a ${c.nombre}`,
+			message: 'Desaparece del catálogo para nuevos extractos. Los ya emitidos no cambian.'
+		});
+		if (!ok) return;
+		try {
+			await extractosAPI.eliminarContratante(c.id);
+			toast.success('Contratante eliminado');
+			await cargarContratantes();
+			opciones = null;
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'No se pudo eliminar');
+		}
+	}
+
+	const COLUMNAS_CONTRATANTE: ColumnDef<Contratante, any>[] = [
+		{ id: 'nombre', header: 'Contratante', enableSorting: false },
+		{ id: 'contrato', header: 'Contrato · NIT', enableSorting: false, size: 170 },
+		{ id: 'responsable', header: 'Responsable', enableSorting: false },
+		{ id: 'usos', header: 'Extractos', enableSorting: false, size: 110 },
+		{ id: 'acciones', header: '', enableSorting: false, size: 90 }
+	];
 </script>
 
 <svelte:head>
-	<title>Extractos · Cotransmeq</title>
+	<title>Extractos de contrato · Cotransmeq</title>
 </svelte:head>
 
-<svelte:window onclick={handleClickOutside} />
-
-<div
-	class="min-h-screen p-4 lg:p-6"
-	in:fade={{ duration: 300 }}
->
-	<!-- Header -->
-	<div class="glass mb-5 rounded-2xl border border-gray-200/50 p-6" in:fly={{ y: -20, duration: 400 }}>
-		<div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-			<div>
-				<h1 class="text-2xl font-bold text-gray-900 lg:text-3xl">
-					Extractos de Contrato
-				</h1>
-				<p class="mt-1 text-sm text-gray-500">
-					Formato Único — Ministerio de Transporte ·
-					{matches?.stats?.totalExtractos?.toLocaleString() || '...'} registros históricos
-					{#if syncing}
-						<span class="ml-2 inline-flex items-center gap-1 text-amber-600">
-							<svg class="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
-								<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" class="opacity-25"/>
-								<path d="M4 12a8 8 0 018-8" stroke="currentColor" stroke-width="3" stroke-linecap="round" class="opacity-75"/>
-							</svg>
-							sincronizando con BD…
-						</span>
-					{/if}
-				</p>
-			</div>
-
-			<!-- Tabs -->
-			<div class="flex rounded-xl border border-gray-200 bg-gray-100 p-1">
-				<button
-					type="button"
-					class="rounded-lg px-4 py-2 text-sm font-medium transition-all {filtros.tab ===
-					'historial'
-						? 'bg-white text-orange-700 shadow-sm'
-						: 'text-gray-500 hover:text-gray-700'}"
-					onclick={() => (filtros.tab = 'historial')}
-				>
-					<svg
-						class="mr-1.5 inline h-4 w-4"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M4 6h16M4 10h16M4 14h16M4 18h16"
-						/>
-					</svg>
-					Historial
-				</button>
-				<button
-					type="button"
-					class="rounded-lg px-4 py-2 text-sm font-medium transition-all {filtros.tab ===
-					'crear'
-						? 'bg-white text-orange-700 shadow-sm'
-						: 'text-gray-500 hover:text-gray-700'}"
-					onclick={() => (filtros.tab = 'crear')}
-				>
-					<svg
-						class="mr-1.5 inline h-4 w-4"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M12 4v16m8-8H4"
-						/>
-					</svg>
-					Crear / Editar
-				</button>
-			</div>
-		</div>
-	</div>
-
-	<!-- STATS BAR -->
-	{#if matches?.stats}
-		<div
-			class="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7"
-			in:fly={{ y: 10, duration: 300, delay: 100 }}
-		>
-			<div class="glass rounded-xl border border-gray-200/50 px-3 py-2.5 text-center">
-				<div class="text-lg font-bold text-gray-900">
-					{matches.stats.totalExtractos.toLocaleString()}
-				</div>
-				<div class="text-[10px] text-gray-500">Extractos</div>
-			</div>
-			<div class="glass rounded-xl border border-gray-200/50 px-3 py-2.5 text-center">
-				<div class="text-lg font-bold text-gray-900">{matches.stats.uniquePlacas}</div>
-				<div class="text-[10px] text-gray-500">Placas únicas</div>
-			</div>
-			<div class="glass rounded-xl border border-gray-200/50 px-3 py-2.5 text-center">
-				<div class="text-lg font-bold text-orange-600">{matches.stats.matchedPlacas}</div>
-				<div class="text-[10px] text-gray-500">Placas en BD</div>
-			</div>
-			<div class="glass rounded-xl border border-gray-200/50 px-3 py-2.5 text-center">
-				<div class="text-lg font-bold text-gray-900">{matches.stats.uniqueContratantes}</div>
-				<div class="text-[10px] text-gray-500">Contratantes</div>
-			</div>
-			<div class="glass rounded-xl border border-gray-200/50 px-3 py-2.5 text-center">
-				<div class="text-lg font-bold text-orange-600">
-					{matches.stats.matchedContratantes}
-				</div>
-				<div class="text-[10px] text-gray-500">Clientes en BD</div>
-			</div>
-			<div class="glass rounded-xl border border-gray-200/50 px-3 py-2.5 text-center">
-				<div class="text-lg font-bold text-gray-900">{matches.stats.uniqueConductores}</div>
-				<div class="text-[10px] text-gray-500">Conductores</div>
-			</div>
-			<div class="glass rounded-xl border border-gray-200/50 px-3 py-2.5 text-center">
-				<div class="text-lg font-bold text-orange-600">
-					{matches.stats.matchedConductores}
-				</div>
-				<div class="text-[10px] text-gray-500">Conductores en BD</div>
-			</div>
-		</div>
-	{/if}
-
-	<!-- ================= TAB: HISTORIAL ================= -->
-	{#if filtros.tab === 'historial'}
-		<div in:fade={{ duration: 200 }}>
-			<!-- Filters -->
-			<div class="glass mb-4 rounded-2xl border border-gray-200/50 p-4">
-				<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-					<div class="lg:col-span-2">
-						<label
-							for="search"
-							class="mb-1 block text-[10px] font-medium uppercase text-gray-500"
-							>Buscar</label
-						>
-						<BuscadorLista
-							bind:valor={filtros.q}
-							onBuscar={(termino) => (filtros.q = termino)}
-							placeholder="Nº, contratante, placa, conductor, ruta..."
-						/>
-					</div>
-					<div>
-						<label
-							for="f_contratante"
-							class="mb-1 block text-[10px] font-medium uppercase text-gray-500"
-							>Contratante</label
-						>
-						<input
-							id="f_contratante"
-							type="text"
-							bind:value={filtros.contratante}
-							placeholder="Nombre empresa..."
-							class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-						/>
-					</div>
-					<div>
-						<label
-							for="f_placa"
-							class="mb-1 block text-[10px] font-medium uppercase text-gray-500"
-							>Placa</label
-						>
-						<input
-							id="f_placa"
-							type="text"
-							bind:value={filtros.placa}
-							placeholder="ABC123"
-							class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 font-mono text-sm uppercase text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-						/>
-					</div>
-					<div>
-						<label
-							for="f_conductor"
-							class="mb-1 block text-[10px] font-medium uppercase text-gray-500"
-							>Conductor</label
-						>
-						<div class="flex gap-2">
-							<input
-								id="f_conductor"
-								type="text"
-								bind:value={filtros.conductor}
-								placeholder="Nombre..."
-								class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-							/>
-							{#if filtrosActivos > 0}
-								<button
-									type="button"
-									class="flex-shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-500 transition hover:bg-gray-50 hover:text-gray-700"
-									onclick={clearFilters}
-									title="Limpiar filtros"
-								>
-									✕
-								</button>
-							{/if}
-						</div>
-					</div>
-				</div>
-			</div>
-
-			<!-- Table -->
-			<div
-				class="glass overflow-hidden rounded-2xl border border-gray-200/50"
-			>
-				{#if loadingHistorial}
-					<CargaMascota texto="Cargando el historial…" />
-				{:else if extractosHistoricos.length === 0}
-					<div class="flex h-48 flex-col items-center justify-center text-gray-400">
-						<svg
-							class="mb-2 h-10 w-10"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="1.5"
-								d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-							/>
-						</svg>
-						<p class="text-sm">No se encontraron extractos</p>
-					</div>
-				{:else}
-					<div class="overflow-x-auto">
-						<table class="w-full min-w-[1200px] text-left text-sm">
-							<thead>
-								<tr class="border-b border-gray-200 bg-gray-50">
-									<th
-										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
-										>Nº</th
-									>
-									<th
-										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
-										>Contratante</th
-									>
-									<th
-										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
-										>Origen - Destino</th
-									>
-									<th
-										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
-										>Fechas</th
-									>
-									<th
-										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
-										>Placa</th
-									>
-									<th
-										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
-										>Int.</th
-									>
-									<th
-										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
-										>Conductor 1</th
-									>
-									<th
-										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
-										>Conductor 2</th
-									>
-									<th
-										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
-										>Conductor 3</th
-									>
-									<th
-										class="px-3 py-3 text-[10px] font-semibold uppercase text-gray-600"
-									></th>
-								</tr>
-							</thead>
-							<tbody>
-								{#each extractosHistoricos as ext, idx (ext.consecutivo + '-' + idx)}
-									<tr
-										class="border-b border-gray-100 transition-colors hover:bg-orange-50/50 {idx %
-											2 ===
-										0
-											? 'bg-white'
-											: 'bg-gray-50/50'}"
-									>
-										<td class="px-3 py-2.5 font-mono text-xs font-bold text-orange-600">
-											{ext.consecutivo}
-										</td>
-										<td class="max-w-[180px] px-3 py-2.5">
-											<div class="flex items-center gap-1.5">
-												{#if isContratanteMatched(ext.contratante)}
-													<span
-														class="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-orange-500"
-														title="Registrado en BD"
-													></span>
-												{:else}
-													<span
-														class="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-amber-400"
-														title="No encontrado en BD"
-													></span>
-												{/if}
-												<span
-													class="truncate text-xs text-gray-700"
-													title={ext.contratante}
-												>
-													{ext.contratante}
-												</span>
-											</div>
-											{#if getContratanteId(ext.contratante)}
-												<div
-													class="mt-0.5 font-mono text-[9px] text-orange-600/50"
-													title={getContratanteId(ext.contratante)}
-												>
-													{shortUUID(getContratanteId(ext.contratante))}…
-												</div>
-											{/if}
-										</td>
-										<td class="max-w-[220px] px-3 py-2.5">
-											<span
-												class="line-clamp-2 text-[11px] text-gray-500"
-												title={ext.origen_destino}
-											>
-												{ext.origen_destino}
-											</span>
-										</td>
-										<td class="px-3 py-2.5 text-[11px] text-gray-500">
-											<div>{ext.fecha_inicial}</div>
-											<div class="text-gray-400">{ext.fecha_final}</div>
-										</td>
-										<td class="px-3 py-2.5">
-											<span
-												class="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-xs font-bold {isPlacaMatched(
-													ext.placa
-												)
-													? 'bg-orange-100 text-orange-700'
-													: 'bg-gray-100 text-gray-500'}"
-											>
-												{#if isPlacaMatched(ext.placa)}
-													<span class="h-1.5 w-1.5 rounded-full bg-orange-500"
-													></span>
-												{/if}
-												{ext.placa}
-											</span>
-											{#if getPlacaId(ext.placa)}
-												<div
-													class="mt-0.5 font-mono text-[9px] text-orange-600/50"
-													title={getPlacaId(ext.placa)}
-												>
-													{shortUUID(getPlacaId(ext.placa))}…
-												</div>
-											{/if}
-										</td>
-										<td class="px-3 py-2.5 text-xs text-gray-400"
-											>{ext.num_interno}</td
-										>
-										<td class="max-w-[160px] px-3 py-2.5">
-											{#if ext.conductor_1}
-												<div class="flex items-center gap-1">
-													{#if isConductorMatched(ext.conductor_1)}
-														<span
-															class="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-orange-500"
-															title="Registrado en BD"
-														></span>
-													{/if}
-													<span
-														class="truncate text-[11px] text-gray-700"
-														title={ext.conductor_1}>{ext.conductor_1}</span
-													>
-												</div>
-												{#if getConductorId(ext.conductor_1)}
-													<div
-														class="font-mono text-[9px] text-orange-600/50"
-														title={getConductorId(ext.conductor_1)}
-													>
-														{shortUUID(getConductorId(ext.conductor_1))}…
-													</div>
-												{/if}
-												<div class="text-[10px] text-gray-400">
-													{ext.vigencia_pase_1}
-												</div>
-											{/if}
-										</td>
-										<td class="max-w-[160px] px-3 py-2.5">
-											{#if ext.conductor_2}
-												<div class="flex items-center gap-1">
-													{#if isConductorMatched(ext.conductor_2)}
-														<span
-															class="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-orange-500"
-															title="Registrado en BD"
-														></span>
-													{/if}
-													<span
-														class="truncate text-[11px] text-gray-700"
-														title={ext.conductor_2}>{ext.conductor_2}</span
-													>
-												</div>
-												{#if getConductorId(ext.conductor_2)}
-													<div
-														class="font-mono text-[9px] text-orange-600/50"
-														title={getConductorId(ext.conductor_2)}
-													>
-														{shortUUID(getConductorId(ext.conductor_2))}…
-													</div>
-												{/if}
-												<div class="text-[10px] text-gray-400">
-													{ext.vigencia_pase_2}
-												</div>
-											{/if}
-										</td>
-										<td class="max-w-[160px] px-3 py-2.5">
-											{#if ext.conductor_3}
-												<div class="flex items-center gap-1">
-													{#if isConductorMatched(ext.conductor_3)}
-														<span
-															class="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-orange-500"
-															title="Registrado en BD"
-														></span>
-													{/if}
-													<span
-														class="truncate text-[11px] text-gray-700"
-														title={ext.conductor_3}>{ext.conductor_3}</span
-													>
-												</div>
-												{#if getConductorId(ext.conductor_3)}
-													<div
-														class="font-mono text-[9px] text-orange-600/50"
-														title={getConductorId(ext.conductor_3)}
-													>
-														{shortUUID(getConductorId(ext.conductor_3))}…
-													</div>
-												{/if}
-												<div class="text-[10px] text-gray-400">
-													{ext.vigencia_pase_3}
-												</div>
-											{/if}
-										</td>
-										<td class="px-3 py-2.5">
-											<button
-												type="button"
-												class="rounded-lg bg-orange-50 p-1.5 text-orange-600 transition hover:bg-orange-100 hover:text-orange-700"
-												title="Cargar en formulario y generar PDF"
-												onclick={() => fillFromHistorical(ext)}
-											>
-												<svg
-													class="h-4 w-4"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-													/>
-												</svg>
-											</button>
-										</td>
-									</tr>
-								{/each}
-							</tbody>
-						</table>
-					</div>
-
-					<!-- Paginación. Antes eran «Anterior/Siguiente» y un «3 / 12»:
-					     no se podía saltar a una página concreta. -->
-					<PaginadorLista
-						pagina={pagination.page}
-						total={pagination.total}
-						porPagina={pagination.limit}
-						nombreItems="extractos"
-						cargando={loadingHistorial}
-						onCambiar={(p) => (filtros.pagina = p)}
+<div class="dir-pagina" in:fade={{ duration: 400 }}>
+	<header class="page-card dir-cabecera" style="padding: 1.25rem 1.5rem;">
+		<div class="dir-cabecera-texto">
+			<h1 class="dir-titulo">Extractos de contrato</h1>
+			<p class="dir-desc">
+				Formato único de extracto del contrato (FUEC, OP-FR-04). Cada extracto sale firmado y con un
+				QR que lleva a su página de validación; para corregir uno se emite el reemplazo y el
+				anterior queda anulado.
+			</p>
+			{#if filtros.vista === 'extractos'}
+				<div class="dir-conteos">
+					<ResumenConteos
+						conteos={resumen}
+						activo={filtros.estado !== 'todos' ? filtros.estado : null}
+						onElegir={elegirConteo}
 					/>
+				</div>
+			{/if}
+		</div>
+		{#if puedeEscribir}
+			<div class="dir-cabecera-acciones">
+				{#if filtros.vista === 'contratantes'}
+					<button
+						type="button"
+						class="btn-primary"
+						onclick={() => {
+							contratanteEditado = null;
+							modalContratante = true;
+						}}
+					>
+						<Plus size={16} strokeWidth={2.4} />
+						Nuevo contratante
+					</button>
+				{:else}
+					<button type="button" class="btn-primary" onclick={() => abrirNuevo()}>
+						<Plus size={16} strokeWidth={2.4} />
+						Emitir extracto
+					</button>
 				{/if}
 			</div>
+		{/if}
+	</header>
 
-			<!-- Legend -->
-			<div class="mt-3 flex flex-wrap items-center gap-4 text-[10px] text-gray-400">
-				<span class="flex items-center gap-1">
-					<span class="h-2 w-2 rounded-full bg-orange-500"></span>
-					Registrado en base de datos
-				</span>
-				<span class="flex items-center gap-1">
-					<span class="h-2 w-2 rounded-full bg-amber-400"></span>
-					No encontrado en base de datos
-				</span>
-				<span class="text-gray-300">|</span>
-				<span>HV SERVICES Y SUPPLY SAS = FEPCO SERVICIOS S.A.S</span>
+	<div in:fly={{ y: 12, duration: 400, delay: 60 }}>
+		<TabsVista
+			tabs={[
+				{ id: 'extractos', label: 'Extractos', cuenta: listado?.conteos.todos ?? null },
+				{ id: 'contratantes', label: 'Contratantes', cuenta: contratantes.length || null }
+			]}
+			activa={filtros.vista}
+			etiqueta="Vistas de extractos"
+			onCambiar={(v) => (filtros = { ...filtros, vista: v, q: '', pagina: 1 })}
+		/>
+	</div>
+
+	{#if filtros.vista === 'extractos'}
+		<div class="dir-filtros" in:fly={{ y: 12, duration: 300 }}>
+			<div class="dir-filtros-buscador">
+				<BuscadorLista
+					bind:valor={filtros.q}
+					onBuscar={(t) => ponerFiltro('q', t)}
+					placeholder="Número, consecutivo, placa, contratante, conductor…"
+					etiqueta="Buscar extractos"
+				/>
+			</div>
+			<SegmentosFiltro
+				etiqueta="Estado"
+				opciones={SEGMENTOS}
+				valor={filtros.estado}
+				onCambiar={(v) => ponerFiltro('estado', v)}
+			/>
+			<label class="ex-anio">
+				<span>Año</span>
+				<select
+					value={String(filtros.anio)}
+					onchange={(e) =>
+						ponerFiltro('anio', Number((e.currentTarget as HTMLSelectElement).value))}
+				>
+					<option value="0">Todos</option>
+					{#each anios as a (a)}<option value={String(a)}>{a}</option>{/each}
+				</select>
+			</label>
+			{#if hayFiltros}
+				<button type="button" class="btn-secondary" onclick={limpiarFiltros}>Limpiar</button>
+			{/if}
+		</div>
+		<div class="dir-lista" in:fly={{ y: 12, duration: 300, delay: 60 }}>
+			<div class="dir-lista-scroll">
+				<TablaLista
+					columnas={COLUMNAS}
+					datos={listado?.data ?? []}
+					claveFila={(e) => e.id}
+					{cargando}
+					onFila={(e) => abrirDetalle(e)}
+					etiqueta="Extractos de contrato"
+				>
+					{#snippet celda({ columnaId, fila: e })}
+						{#if columnaId === 'numero'}
+							<div class="dir-celda">
+								<span class="ex-consecutivo">{e.consecutivo}</span>
+								<small class="ex-numero">{e.numero_completo}</small>
+							</div>
+						{:else if columnaId === 'contratante'}
+							<div class="dir-celda">
+								<span>{e.contratante_nombre ?? '—'}</span>
+								<small>{e.origen_destino ?? '—'}</small>
+							</div>
+						{:else if columnaId === 'vehiculo'}
+							<div class="dir-celda">
+								<span class="ex-placa">{e.placa ?? '—'}</span>
+								<small
+									>{[e.numero_interno ? `Int. ${e.numero_interno}` : null, e.clase]
+										.filter(Boolean)
+										.join(' · ') || '—'}</small
+								>
+							</div>
+						{:else if columnaId === 'conductores'}
+							<div class="dir-celda">
+								{#each e.conductores as c (c.id)}
+									<small class="ex-conductor">{c.nombre}</small>
+								{:else}
+									<span class="dir-nulo">—</span>
+								{/each}
+							</div>
+						{:else if columnaId === 'vigencia'}
+							<div class="dir-celda dir-celda--fecha">
+								<span>{fechaLarga(e.vigencia_desde)}</span>
+								<small>hasta {fechaLarga(e.vigencia_hasta)}</small>
+							</div>
+						{:else if columnaId === 'estado'}
+							<EstadoPunto
+								etiqueta={ESTADO_LABELS[e.estado]}
+								color={ESTADO_COLORES[e.estado]}
+								apagado={e.estado === 'ANULADO'}
+							/>
+						{:else if columnaId === 'acciones'}
+							<AccionesFila
+								acciones={[
+									{
+										id: 'pdf',
+										etiqueta: 'Descargar PDF',
+										icono: Download,
+										onClick: () => descargar(e)
+									},
+									{ id: 'ver', etiqueta: 'Ver', icono: Eye, onClick: () => abrirDetalle(e) }
+								]}
+							/>
+						{/if}
+					{/snippet}
+					{#snippet vacio()}
+						{@const img = mascota(hayFiltros ? 'vacio' : 'exito')}
+						<div class="dir-vacio">
+							<img src={img.src} alt={img.alt} width="418" height="418" />
+							<h3>{hayFiltros ? 'Sin resultados' : 'Todavía no hay extractos'}</h3>
+							<p>
+								Los extractos emitidos aparecen aquí con su estado, su vigencia y su QR de
+								validación.
+							</p>
+							{#if puedeEscribir && !hayFiltros}
+								<button type="button" class="btn-primary" onclick={() => abrirNuevo()}
+									><Plus size={16} /> Emitir el primero</button
+								>
+							{/if}
+						</div>
+					{/snippet}
+				</TablaLista>
+			</div>
+			{#if listado && listado.total > POR_PAGINA}
+				<PaginadorLista
+					pagina={filtros.pagina}
+					total={listado.total}
+					porPagina={POR_PAGINA}
+					onCambiar={(p) => (filtros = { ...filtros, pagina: p })}
+					{cargando}
+					nombreItems="extractos"
+				/>
+			{/if}
+		</div>
+	{:else}
+		<div class="dir-filtros" in:fly={{ y: 12, duration: 300 }}>
+			<div class="dir-filtros-buscador">
+				<BuscadorLista
+					bind:valor={filtros.q}
+					onBuscar={(t) => ponerFiltro('q', t)}
+					placeholder="Nombre, NIT o contrato…"
+					etiqueta="Buscar contratantes"
+				/>
 			</div>
 		</div>
-	{/if}
-
-	<!-- ================= TAB: CREAR ================= -->
-	{#if filtros.tab === 'crear'}
-		<div in:fade={{ duration: 200 }}>
-			<!-- Action Bar -->
-			<div class="mb-5 flex items-center justify-end gap-3">
-				<button
-					type="button"
-					class="btn-secondary"
-					onclick={resetForm}
+		<div class="dir-lista" in:fly={{ y: 12, duration: 300, delay: 60 }}>
+			<div class="dir-lista-scroll">
+				<TablaLista
+					columnas={COLUMNAS_CONTRATANTE}
+					datos={contratantes}
+					claveFila={(c) => c.id}
+					cargando={cargandoContratantes}
+					onFila={puedeEscribir
+						? (c) => {
+								contratanteEditado = c;
+								modalContratante = true;
+							}
+						: undefined}
+					etiqueta="Contratantes"
 				>
-					<svg
-						class="mr-2 inline h-4 w-4"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-						/>
-					</svg>
-					Limpiar
-				</button>
-				<button
-					type="button"
-					class="btn-primary disabled:cursor-not-allowed"
-					onclick={generatePDF}
-					disabled={!formValid || generatingPdf}
-				>
-					{#if generatingPdf}
-						<svg class="mr-2 inline h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-							<circle
-								class="opacity-25"
-								cx="12"
-								cy="12"
-								r="10"
-								stroke="currentColor"
-								stroke-width="4"
+					{#snippet celda({ columnaId, fila: c })}
+						{#if columnaId === 'nombre'}
+							<div class="dir-celda"><span>{c.nombre}</span></div>
+						{:else if columnaId === 'contrato'}
+							<div class="dir-celda">
+								<span>{c.numero_contrato ? `Contrato ${c.numero_contrato}` : '—'}</span>
+								<small>{c.nit ? `NIT ${conPuntos(c.nit)}` : 'Sin NIT'}</small>
+							</div>
+						{:else if columnaId === 'responsable'}
+							<div class="dir-celda">
+								<span>{c.responsable.nombre ?? '—'}</span>
+								<small
+									>{[
+										c.responsable.cedula ? conPuntos(c.responsable.cedula) : null,
+										c.responsable.telefono,
+										c.responsable.direccion
+									]
+										.filter(Boolean)
+										.join(' · ')}</small
+								>
+							</div>
+						{:else if columnaId === 'usos'}
+							<div class="dir-celda dir-celda--fecha">
+								<span>{c.usos}</span>
+								<small>{c.ultimo_uso_at ? `último ${fechaLarga(c.ultimo_uso_at)}` : '—'}</small>
+							</div>
+						{:else if columnaId === 'acciones' && puedeEscribir}
+							<AccionesFila
+								acciones={[
+									{
+										id: 'editar',
+										etiqueta: 'Editar',
+										icono: Pencil,
+										onClick: () => {
+											contratanteEditado = c;
+											modalContratante = true;
+										}
+									},
+									{
+										id: 'eliminar',
+										etiqueta: 'Eliminar',
+										icono: Trash2,
+										onClick: () => eliminarContratante(c),
+										peligrosa: true
+									}
+								]}
 							/>
-							<path
-								class="opacity-75"
-								fill="currentColor"
-								d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-							/>
-						</svg>
-						Generando...
-					{:else}
-						<svg
-							class="mr-2 inline h-4 w-4"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-							/>
-						</svg>
-						Generar PDF
-					{/if}
-				</button>
-			</div>
-
-			<div class="grid grid-cols-1 gap-6 xl:grid-cols-3">
-				<!-- LEFT: FORM -->
-				<div class="space-y-5 xl:col-span-2">
-					<!-- Datos del Contrato -->
-					<div class="glass rounded-2xl border border-gray-200/50 p-5">
-						<h2
-							class="mb-4 flex items-center text-sm font-semibold uppercase tracking-wide text-orange-700"
-						>
-							<svg
-								class="mr-2 h-4 w-4"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-								/>
-							</svg>
-							Datos del Contrato
-						</h2>
-						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-							<div>
-								<label
-									for="numero_contrato"
-									class="mb-1 block text-xs font-medium text-gray-600"
-									>Nº Contrato <span class="text-orange-500">(auto)</span></label
-								>
-								<input
-									id="numero_contrato"
-									type="text"
-									bind:value={extracto.numero_contrato}
-									readonly
-									class="w-full rounded-lg border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-semibold text-orange-700 transition cursor-not-allowed"
-								/>
-							</div>
-							<div>
-								<label
-									for="numero_extracto"
-									class="mb-1 block text-xs font-medium text-gray-600"
-									>Nº Extracto</label
-								>
-								<input
-									id="numero_extracto"
-									type="text"
-									bind:value={extracto.numero_extracto}
-									placeholder="Ej: 415464522202600533892"
-									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-								/>
-							</div>
-							<div>
-								<label
-									for="objeto_contrato"
-									class="mb-1 block text-xs font-medium text-gray-600"
-									>Objeto del Contrato</label
-								>
-								<input
-									id="objeto_contrato"
-									type="text"
-									bind:value={extracto.objeto_contrato}
-									placeholder="Ej: CONTRATO PARA TRANSPORTE DE PERSONAL"
-									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-								/>
-							</div>
+						{/if}
+					{/snippet}
+					{#snippet vacio()}
+						{@const img = mascota(filtros.q ? 'vacio' : 'exito')}
+						<div class="dir-vacio">
+							<img src={img.src} alt={img.alt} width="418" height="418" />
+							<h3>{filtros.q ? 'Sin resultados' : 'No hay contratantes'}</h3>
+							<p>Se crean solos al emitir un extracto, o desde «Nuevo contratante».</p>
 						</div>
-					</div>
-
-					<!-- Contratante -->
-					<div class="glass rounded-2xl border border-gray-200/50 p-5">
-						<h2
-							class="mb-4 flex items-center text-sm font-semibold uppercase tracking-wide text-orange-700"
-						>
-							<svg
-								class="mr-2 h-4 w-4"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-								/>
-							</svg>
-							Contratante
-						</h2>
-						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-							<div class="autocomplete-wrapper relative">
-								<label
-									for="cliente_search"
-									class="mb-1 block text-xs font-medium text-gray-600"
-									>Buscar Cliente *</label
-								>
-								<input
-									id="cliente_search"
-									type="text"
-									bind:value={clienteSearch}
-									onfocus={() => (showClienteDropdown = true)}
-									oninput={() => (showClienteDropdown = true)}
-									placeholder="Escriba nombre o NIT..."
-									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-									autocomplete="off"
-								/>
-								{#if showClienteDropdown && clientesFiltrados.length > 0}
-									<div
-										class="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-xl"
-										transition:fly={{ y: -5, duration: 150 }}
-									>
-										{#each clientesFiltrados.slice(0, 15) as cliente}
-											<button
-												type="button"
-												class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-orange-50 hover:text-gray-900"
-												onclick={(e) => {
-													e.stopPropagation();
-													selectCliente(cliente);
-												}}
-											>
-												<span class="truncate font-medium">{cliente.nombre}</span>
-												<span class="ml-auto text-xs text-white/40"
-													>{cliente.nit || ''}</span
-												>
-											</button>
-										{/each}
-									</div>
-								{/if}
-							</div>
-							<div>
-								<label
-									for="contratante_nit"
-									class="mb-1 block text-xs font-medium text-gray-600">NIT</label
-								>
-								<input
-									id="contratante_nit"
-									type="text"
-									bind:value={extracto.contratante_nit}
-									placeholder="NIT del contratante"
-									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-								/>
-							</div>
-							<div class="sm:col-span-2">
-								<label
-									for="contratante_nombre"
-									class="mb-1 block text-xs font-medium text-gray-600"
-									>Nombre Contratante</label
-								>
-								<input
-									id="contratante_nombre"
-									type="text"
-									bind:value={extracto.contratante_nombre}
-									placeholder="Nombre del contratante"
-									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-								/>
-							</div>
-						</div>
-					</div>
-
-					<!-- Ruta y Vigencia -->
-					<div class="glass rounded-2xl border border-gray-200/50 p-5">
-						<h2
-							class="mb-4 flex items-center text-sm font-semibold uppercase tracking-wide text-orange-700"
-						>
-							<svg
-								class="mr-2 h-4 w-4"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-								/>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-								/>
-							</svg>
-							Ruta y Vigencia
-						</h2>
-						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-							<div>
-								<label for="origen" class="mb-1 block text-xs font-medium text-gray-600"
-									>Origen</label
-								>
-								<input
-									id="origen"
-									type="text"
-									bind:value={extracto.origen}
-									placeholder="Ciudad de origen"
-									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-								/>
-							</div>
-							<div>
-								<label for="destino" class="mb-1 block text-xs font-medium text-gray-600"
-									>Destino</label
-								>
-								<input
-									id="destino"
-									type="text"
-									bind:value={extracto.destino}
-									placeholder="Ciudad de destino"
-									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-								/>
-							</div>
-							<div>
-								<label
-									for="fecha_inicial"
-									class="mb-1 block text-xs font-medium text-gray-600"
-									>Fecha Inicial</label
-								>
-								<input
-									id="fecha_inicial"
-									type="date"
-									bind:value={extracto.fecha_inicial}
-									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-								/>
-							</div>
-							<div>
-								<label
-									for="fecha_vencimiento"
-									class="mb-1 block text-xs font-medium text-gray-600"
-									>Fecha Vencimiento</label
-								>
-								<input
-									id="fecha_vencimiento"
-									type="date"
-									bind:value={extracto.fecha_vencimiento}
-									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-								/>
-							</div>
-						</div>
-					</div>
-
-					<!-- Vehículo -->
-					<div class="glass rounded-2xl border border-gray-200/50 p-5">
-						<h2
-							class="mb-4 flex items-center text-sm font-semibold uppercase tracking-wide text-orange-700"
-						>
-							<svg
-								class="mr-2 h-4 w-4"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 002 12v4c0 .6.4 1 1 1h2"
-									stroke="currentColor"
-									stroke-width="2"
-									fill="none"
-								/>
-								<circle
-									cx="7"
-									cy="17"
-									r="2"
-									stroke="currentColor"
-									stroke-width="2"
-									fill="none"
-								/>
-								<circle
-									cx="17"
-									cy="17"
-									r="2"
-									stroke="currentColor"
-									stroke-width="2"
-									fill="none"
-								/>
-							</svg>
-							Vehículo
-						</h2>
-						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-							<div class="autocomplete-wrapper relative">
-								<label
-									for="vehiculo_search"
-									class="mb-1 block text-xs font-medium text-gray-600"
-									>Buscar Vehículo *</label
-								>
-								<input
-									id="vehiculo_search"
-									type="text"
-									bind:value={vehiculoSearch}
-									onfocus={() => (showVehiculoDropdown = true)}
-									oninput={() => (showVehiculoDropdown = true)}
-									placeholder="Escriba placa o marca..."
-									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-									autocomplete="off"
-								/>
-								{#if showVehiculoDropdown && vehiculosFiltrados.length > 0}
-									<div
-										class="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-xl"
-										transition:fly={{ y: -5, duration: 150 }}
-									>
-										{#each vehiculosFiltrados.slice(0, 15) as vehiculo}
-											<button
-												type="button"
-												class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-orange-50 hover:text-gray-900"
-												onclick={(e) => {
-													e.stopPropagation();
-													selectVehiculo(vehiculo);
-												}}
-											>
-												<span class="font-mono font-bold text-orange-300"
-													>{vehiculo.placa}</span
-												>
-												<span class="text-white/50">·</span>
-												<span class="truncate"
-													>{vehiculo.marca || ''} {vehiculo.linea || ''}</span
-												>
-												<span class="ml-auto text-xs text-white/40"
-													>{vehiculo.modelo || ''}</span
-												>
-											</button>
-										{/each}
-									</div>
-								{/if}
-							</div>
-							<div>
-								<label
-									for="marca_vehiculo"
-									class="mb-1 block text-xs font-medium text-gray-600">Marca</label
-								>
-								<input
-									id="marca_vehiculo"
-									type="text"
-									bind:value={extracto.marca_vehiculo}
-									placeholder="Marca"
-									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-								/>
-							</div>
-							<div>
-								<label
-									for="modelo_vehiculo"
-									class="mb-1 block text-xs font-medium text-gray-600"
-									>Modelo (Año)</label
-								>
-								<input
-									id="modelo_vehiculo"
-									type="text"
-									bind:value={extracto.modelo_vehiculo}
-									placeholder="Año"
-									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-								/>
-							</div>
-							<div>
-								<label
-									for="clase_vehiculo"
-									class="mb-1 block text-xs font-medium text-gray-600">Clase</label
-								>
-								<input
-									id="clase_vehiculo"
-									type="text"
-									bind:value={extracto.clase_vehiculo}
-									placeholder="Ej: CAMIONETA"
-									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-								/>
-							</div>
-							<div>
-								<label
-									for="tarjeta_op"
-									class="mb-1 block text-xs font-medium text-gray-600"
-									>Tarjeta de Operación</label
-								>
-								<input
-									id="tarjeta_op"
-									type="text"
-									bind:value={extracto.numero_tarjeta_operacion}
-									placeholder="Nº Tarjeta"
-									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-								/>
-							</div>
-							<div>
-								<label
-									for="numero_interno"
-									class="mb-1 block text-xs font-medium text-gray-600"
-									>Nº Interno</label
-								>
-								<input
-									id="numero_interno"
-									type="text"
-									bind:value={extracto.numero_interno}
-									placeholder="Nº Interno"
-									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-								/>
-							</div>
-						</div>
-					</div>
-
-					<!-- Conductores -->
-					<div class="glass rounded-2xl border border-gray-200/50 p-5">
-						<h2
-							class="mb-4 flex items-center text-sm font-semibold uppercase tracking-wide text-orange-700"
-						>
-							<svg
-								class="mr-2 h-4 w-4"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-								/>
-							</svg>
-							Conductores
-							<span class="ml-2 text-xs font-normal text-white/40">(hasta 3)</span>
-						</h2>
-
-						{#each [0, 1, 2] as i}
-							<div
-								class="rounded-xl border border-white/5 bg-white/[0.02] p-4 {i > 0
-									? 'mt-3'
-									: ''}"
-							>
-								<div class="mb-3 flex items-center justify-between">
-									<span class="text-xs font-semibold text-orange-400/80"
-										>Conductor {i + 1}
-										{i === 0 ? '*' : '(Opcional)'}</span
-									>
-									{#if extracto.conductores[i].nombre}
-										<button
-											type="button"
-											class="text-xs text-red-400/60 transition hover:text-red-400"
-											onclick={() => clearConductor(i)}>Limpiar</button
-										>
-									{/if}
-								</div>
-								<div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-									<div class="autocomplete-wrapper relative sm:col-span-2">
-										<label
-											for="conductor_{i}"
-											class="mb-1 block text-xs font-medium text-gray-600"
-											>Buscar Conductor</label
-										>
-										<input
-											id="conductor_{i}"
-											type="text"
-											bind:value={conductorSearch[i]}
-											onfocus={() => {
-												showConductorDropdown[i] = true;
-												showConductorDropdown = [...showConductorDropdown];
-											}}
-											oninput={() => {
-												showConductorDropdown[i] = true;
-												showConductorDropdown = [...showConductorDropdown];
-											}}
-											placeholder="Nombre o cédula..."
-											class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-											autocomplete="off"
-										/>
-										{#if showConductorDropdown[i] && conductoresFiltradosPor(i).length > 0}
-											<div
-												class="absolute z-50 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-xl"
-												transition:fly={{ y: -5, duration: 150 }}
-											>
-												{#each conductoresFiltradosPor(i).slice(0, 10) as conductor}
-													<button
-														type="button"
-														class="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-gray-700 transition hover:bg-orange-50 hover:text-gray-900"
-														onclick={(e) => {
-															e.stopPropagation();
-															selectConductor(conductor, i);
-														}}
-													>
-														<span class="truncate font-medium"
-															>{conductor.nombre} {conductor.apellido}</span
-														>
-														<span class="ml-auto text-xs text-white/40"
-															>{conductor.numero_identificacion}</span
-														>
-													</button>
-												{/each}
-											</div>
-										{/if}
-									</div>
-									<div>
-										<label
-											for="cedula_{i}"
-											class="mb-1 block text-xs font-medium text-gray-600"
-											>Cédula</label
-										>
-										<input
-											id="cedula_{i}"
-											type="text"
-											bind:value={extracto.conductores[i].cedula}
-											placeholder="Cédula"
-											class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-										/>
-									</div>
-									<div>
-										<label
-											for="licencia_{i}"
-											class="mb-1 block text-xs font-medium text-gray-600"
-											>Licencia</label
-										>
-										<input
-											id="licencia_{i}"
-											type="text"
-											bind:value={extracto.conductores[i].licencia_conduccion}
-											placeholder="Categoría"
-											class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-										/>
-									</div>
-								</div>
-								{#if extracto.conductores[i].nombre}
-									<div class="mt-2 flex items-center gap-4 text-xs">
-										<span class="text-white/50">
-											<span class="text-white/30">Nombre:</span>
-											<span class="font-medium text-orange-300"
-												>{extracto.conductores[i].nombre}</span
-											>
-										</span>
-										{#if extracto.conductores[i].vigencia_licencia}
-											<span class="text-white/50">
-												<span class="text-white/30">Vigencia Lic:</span>
-												<span class="text-white/70"
-													>{extracto.conductores[i].vigencia_licencia}</span
-												>
-											</span>
-										{/if}
-									</div>
-								{/if}
-							</div>
-						{/each}
-					</div>
-
-					<!-- Responsable -->
-					<div class="glass rounded-2xl border border-gray-200/50 p-5">
-						<h2
-							class="mb-4 flex items-center text-sm font-semibold uppercase tracking-wide text-orange-700"
-						>
-							<svg
-								class="mr-2 h-4 w-4"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-								/>
-							</svg>
-							Responsable del Contratante
-						</h2>
-						<div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-							<div>
-								<label
-									for="resp_nombre"
-									class="mb-1 block text-xs font-medium text-gray-600"
-									>Nombre</label
-								>
-								<input
-									id="resp_nombre"
-									type="text"
-									bind:value={extracto.responsable_nombre}
-									placeholder="Nombre del responsable"
-									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-								/>
-							</div>
-							<div>
-								<label
-									for="resp_cedula"
-									class="mb-1 block text-xs font-medium text-gray-600"
-									>Cédula</label
-								>
-								<input
-									id="resp_cedula"
-									type="text"
-									bind:value={extracto.responsable_cedula}
-									placeholder="Cédula del responsable"
-									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-								/>
-							</div>
-							<div>
-								<label
-									for="resp_telefono"
-									class="mb-1 block text-xs font-medium text-gray-600"
-									>Teléfono</label
-								>
-								<input
-									id="resp_telefono"
-									type="text"
-									bind:value={extracto.responsable_telefono}
-									placeholder="Teléfono"
-									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-								/>
-							</div>
-							<div>
-								<label
-									for="resp_direccion"
-									class="mb-1 block text-xs font-medium text-gray-600"
-									>Dirección</label
-								>
-								<input
-									id="resp_direccion"
-									type="text"
-									bind:value={extracto.responsable_direccion}
-									placeholder="Dirección"
-									class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 transition focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
-								/>
-							</div>
-						</div>
-					</div>
-				</div>
-
-				<!-- RIGHT: PREVIEW BUTTON -->
-				<div class="space-y-5">
-					<div class="glass rounded-2xl border border-gray-200/50 p-5">
-						<h2
-							class="mb-4 flex items-center text-sm font-semibold uppercase tracking-wide text-orange-700"
-						>
-							<svg
-								class="mr-2 h-4 w-4"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-								/>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-								/>
-							</svg>
-							Vista Previa
-						</h2>
-
-						<!-- Mini thumbnail preview -->
-						<div class="mb-4 rounded-lg border border-gray-200 bg-white p-2 shadow-sm">
-							<div class="flex items-center justify-between border-b border-gray-200 pb-2 mb-2">
-								<img src="/assets/logo_nombre.webp" alt="Cotransmeq" class="h-4 object-contain" />
-								<div class="text-[6px] text-gray-500">Extracto</div>
-							</div>
-							<div class="space-y-1">
-								<div class="flex justify-between text-[6px]">
-									<span class="text-gray-500">Contrato:</span>
-									<span class="font-semibold text-gray-800">{extracto.numero_contrato || '—'}</span>
-								</div>
-								<div class="flex justify-between text-[6px]">
-									<span class="text-gray-500">Placa:</span>
-									<span class="font-bold text-orange-700">{extracto.placa || '—'}</span>
-								</div>
-								<div class="flex justify-between text-[6px]">
-									<span class="text-gray-500">Contratante:</span>
-									<span class="text-gray-800 truncate ml-1">{extracto.contratante_nombre || '—'}</span>
-								</div>
-								<div class="flex justify-between text-[6px]">
-									<span class="text-gray-500">Vigencia:</span>
-									<span class="text-gray-800">
-										{#if extracto.fecha_inicial && extracto.fecha_vencimiento}
-											{extracto.fecha_inicial} → {extracto.fecha_vencimiento}
-										{:else}
-											—
-										{/if}
-									</span>
-								</div>
-							</div>
-						</div>
-
-						<button
-							type="button"
-							onclick={() => (showPdfModal = true)}
-							class="btn-primary w-full flex items-center justify-center gap-2"
-						>
-							<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-							</svg>
-							Ver Vista Previa PDF
-						</button>
-					</div>
-				</div>
+					{/snippet}
+				</TablaLista>
 			</div>
 		</div>
 	{/if}
 </div>
 
-<!-- MODAL: Vista Previa PDF -->
-{#if showPdfModal}
-	<!-- svelte-ignore a11y_click_events_have_key_events -->
-	<!-- svelte-ignore a11y_no_static_element_interactions -->
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4"
-		onclick={(e) => {
-			if (e.target === e.currentTarget) showPdfModal = false;
-		}}
-		transition:fade={{ duration: 200 }}
-	>
-		<div
-			class="relative w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl"
-			in:fly={{ y: 40, duration: 250 }}
-		>
-			<!-- Modal Header -->
-			<div class="sticky top-0 z-10 flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4 rounded-t-2xl">
-				<h2 class="flex items-center gap-2 text-lg font-bold text-gray-800">
-					<svg class="h-5 w-5 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-					</svg>
-					Vista Previa — Extracto
-				</h2>
-				<button
-					type="button"
-					onclick={() => (showPdfModal = false)}
-					class="rounded-lg p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
-					aria-label="Cerrar vista previa"
-				>
-					<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</div>
-
-			<!-- Modal Body: PDF Document -->
-			<div class="p-6">
-				<div class="mx-auto max-w-2xl rounded-lg border border-gray-300 bg-white shadow-lg" style="font-family: var(--font-sans);">
-					<!-- Header Row: Logos + Title + Code -->
-					<div class="border-b border-gray-400">
-						<table class="w-full border-collapse" style="table-layout: fixed;">
-							<tbody>
-								<tr>
-									<td class="w-[25%] border-r border-gray-400 p-2 text-center align-middle">
-										<img src="/assets/la_movilidad_es_de_todos.png" alt="Mintransporte - La movilidad es de todos" class="mx-auto h-10 object-contain" />
-									</td>
-									<td class="w-[50%] border-r border-gray-400 p-3 text-center align-middle">
-										<div class="text-[10px] font-bold text-gray-800 leading-tight">
-											FORMATO ÚNICO DE EXTRACTO DEL CONTRATO DEL SERVICIO PÚBLICO DE TRANSPORTE TERRESTRE AUTOMOTOR ESPECIAL
-										</div>
-									</td>
-									<td class="w-[25%] p-2 text-center align-middle">
-										<img src="/assets/logo_nombre.webp" alt="Cotransmeq S.A.S" class="mx-auto h-10 object-contain" />
-									</td>
-								</tr>
-							</tbody>
-						</table>
-					</div>
-
-					<!-- Code / Version / Date Row -->
-					<div class="border-b border-gray-400">
-						<table class="w-full border-collapse" style="table-layout: fixed;">
-							<tbody>
-								<tr>
-									<td class="w-1/3 border-r border-gray-400 px-3 py-1.5 text-[10px] text-gray-600">
-										Código: <span class="font-semibold text-gray-800">{extracto.codigo_formato}</span>
-									</td>
-									<td class="w-1/3 border-r border-gray-400 px-3 py-1.5 text-[10px] text-gray-600">
-										Versión: <span class="font-semibold text-gray-800">{extracto.version_formato}</span>
-									</td>
-									<td class="w-1/3 px-3 py-1.5 text-[10px] text-gray-600">
-										Fecha: <span class="font-semibold text-gray-800">{new Date().toLocaleDateString('es-CO')}</span>
-									</td>
-								</tr>
-							</tbody>
-						</table>
-					</div>
-
-					<!-- No. Extracto -->
-					<div class="border-b border-gray-400 px-3 py-2 text-center">
-						<div class="text-xs font-bold text-gray-800">
-							No. {extracto.numero_extracto || '415464522202600054226'}
-						</div>
-					</div>
-
-					<!-- Company Info -->
-					<div class="border-b border-gray-400 px-3 py-1.5 text-center">
-						<div class="text-[11px] font-bold text-gray-800">SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S. ZOMAC</div>
-						<div class="text-[10px] text-gray-600">NIT: 901.528.440-3</div>
-					</div>
-
-					<!-- Contrato No + Contratante + NIT -->
-					<div class="border-b border-gray-400">
-						<table class="w-full border-collapse" style="table-layout: fixed;">
-							<tbody>
-								<tr>
-									<td class="w-[20%] border-r border-gray-400 bg-gray-50 px-2 py-1.5 text-[10px] font-bold text-gray-700">CONTRATO No.</td>
-									<td class="w-[15%] border-r border-gray-400 px-2 py-1.5 text-xs font-bold text-center text-gray-900">
-										{extracto.numero_contrato || '____'}
-									</td>
-									<td class="w-[18%] border-r border-gray-400 bg-gray-50 px-2 py-1.5 text-[10px] font-bold text-gray-700">CONTRATANTE:</td>
-									<td class="w-[27%] border-r border-gray-400 px-2 py-1.5 text-[10px] text-gray-800 truncate">
-										{extracto.contratante_nombre || '—'}
-									</td>
-									<td class="w-[6%] bg-gray-50 px-1 py-1.5 text-[10px] font-bold text-gray-700">NIT:</td>
-									<td class="w-[14%] px-2 py-1.5 text-[10px] text-gray-800">
-										{extracto.contratante_nit || '—'}
-									</td>
-								</tr>
-							</tbody>
-						</table>
-					</div>
-
-					<!-- Objeto del Contrato -->
-					<div class="border-b border-gray-400">
-						<table class="w-full border-collapse">
-							<tbody>
-								<tr>
-									<td class="bg-gray-50 px-3 py-1.5 text-center text-[10px] font-bold text-gray-700 border-b border-gray-300">
-										OBJETO DEL CONTRATO:
-									</td>
-								</tr>
-								<tr>
-									<td class="px-3 py-1.5 text-center text-[10px] text-gray-800">
-										{extracto.objeto_contrato || 'CONTRATO PARA TRANSPORTE DE PERSONAL Y HERRAMIENTAS'}
-									</td>
-								</tr>
-							</tbody>
-						</table>
-					</div>
-
-					<!-- Origen - Destino -->
-					<div class="border-b border-gray-400">
-						<table class="w-full border-collapse">
-							<tbody>
-								<tr>
-									<td class="w-[22%] bg-gray-50 px-3 py-1.5 text-[10px] font-bold text-gray-700 border-r border-gray-400">ORIGEN - DESTINO</td>
-									<td class="px-3 py-1.5 text-[10px] text-gray-800 text-center">
-										{#if extracto.origen || extracto.destino}
-											{extracto.origen || '—'} - {extracto.destino || '—'} (VICEVERSA)
-										{:else}
-											—
-										{/if}
-									</td>
-								</tr>
-							</tbody>
-						</table>
-					</div>
-
-					<!-- Vigencia del Contrato -->
-					<div class="border-b border-gray-400">
-						<table class="w-full border-collapse">
-							<tbody>
-								<tr>
-									<td colspan="2" class="bg-gray-50 px-3 py-1.5 text-center text-[10px] font-bold text-gray-700 border-b border-gray-400">
-										VIGENCIA DEL CONTRATO
-									</td>
-								</tr>
-								<tr class="border-b border-gray-300">
-									<td class="w-[30%] bg-gray-50 px-3 py-1.5 text-[10px] font-bold text-gray-700 border-r border-gray-400">FECHA INICIAL</td>
-									<td class="px-3 py-1.5 text-[11px] text-center text-gray-800">
-										{#if extracto.fecha_inicial}
-											{(() => { const d = new Date(extracto.fecha_inicial + 'T12:00:00'); return `${d.getDate().toString().padStart(2,'0')} / ${(d.getMonth()+1).toString().padStart(2,'0')} / ${d.getFullYear()}`; })()}
-										{:else}
-											__ / __ / ____
-										{/if}
-									</td>
-								</tr>
-								<tr>
-									<td class="bg-gray-50 px-3 py-1.5 text-[10px] font-bold text-gray-700 border-r border-gray-400">FECHA VENCIMIENTO</td>
-									<td class="px-3 py-1.5 text-[11px] text-center text-gray-800">
-										{#if extracto.fecha_vencimiento}
-											{(() => { const d = new Date(extracto.fecha_vencimiento + 'T12:00:00'); return `${d.getDate().toString().padStart(2,'0')} / ${(d.getMonth()+1).toString().padStart(2,'0')} / ${d.getFullYear()}`; })()}
-										{:else}
-											__ / __ / ____
-										{/if}
-									</td>
-								</tr>
-							</tbody>
-						</table>
-					</div>
-
-					<!-- Características del Vehículo -->
-					<div class="border-b border-gray-400">
-						<table class="w-full border-collapse">
-							<tbody>
-								<tr>
-									<td colspan="4" class="bg-gray-50 px-3 py-1.5 text-center text-[10px] font-bold text-gray-700 border-b border-gray-400">
-										CARACTERÍSTICAS DEL VEHÍCULO
-									</td>
-								</tr>
-								<tr class="bg-gray-50">
-									<td class="w-1/4 border-r border-gray-400 px-2 py-1 text-[9px] font-bold text-gray-600 text-center">PLACA</td>
-									<td class="w-1/4 border-r border-gray-400 px-2 py-1 text-[9px] font-bold text-gray-600 text-center">MODELO</td>
-									<td class="w-1/4 border-r border-gray-400 px-2 py-1 text-[9px] font-bold text-gray-600 text-center">MARCA</td>
-									<td class="w-1/4 px-2 py-1 text-[9px] font-bold text-gray-600 text-center">CLASE</td>
-								</tr>
-								<tr>
-									<td class="border-r border-gray-400 px-2 py-1.5 text-xs font-bold text-center text-gray-900">{extracto.placa || '—'}</td>
-									<td class="border-r border-gray-400 px-2 py-1.5 text-[11px] text-center text-gray-800">{extracto.modelo_vehiculo || '—'}</td>
-									<td class="border-r border-gray-400 px-2 py-1.5 text-[11px] text-center text-gray-800">{extracto.marca_vehiculo || '—'}</td>
-									<td class="px-2 py-1.5 text-[11px] text-center text-gray-800">{extracto.clase_vehiculo || '—'}</td>
-								</tr>
-							</tbody>
-						</table>
-					</div>
-
-					<!-- Tarjeta Operación -->
-					<div class="border-b border-gray-400">
-						<table class="w-full border-collapse">
-							<tbody>
-								<tr>
-									<td class="w-1/2 border-r border-gray-400 px-3 py-1.5 text-[10px] text-center text-gray-800">
-										<span class="font-semibold">{extracto.numero_interno || '—'}</span>
-									</td>
-									<td class="w-1/2 px-3 py-1.5 text-[10px] text-center">
-										<span class="text-gray-600">No. TARJETA DE OPERACIÓN: </span>
-										<span class="font-semibold text-gray-800">{extracto.numero_tarjeta_operacion || '—'}</span>
-									</td>
-								</tr>
-							</tbody>
-						</table>
-					</div>
-
-					<!-- Conductores -->
-					{#each extracto.conductores as cond, idx}
-						<div class="border-b border-gray-400">
-							<table class="w-full border-collapse">
-								<tbody>
-									<tr class="bg-gray-50">
-										<td class="w-[18%] border-r border-gray-400 px-2 py-1.5 text-[9px] font-bold text-gray-700">
-											DATOS DEL<br/>CONDUCTOR {idx + 1}
-										</td>
-										<td class="w-[32%] border-r border-gray-400 px-2 py-1 text-[9px] font-bold text-center text-gray-600">NOMBRES Y APELLIDOS</td>
-										<td class="w-[15%] border-r border-gray-400 px-2 py-1 text-[9px] font-bold text-center text-gray-600">No. CÉDULA</td>
-										<td class="w-[18%] border-r border-gray-400 px-2 py-1 text-[9px] font-bold text-center text-gray-600">LICENCIA COND.</td>
-										<td class="w-[17%] px-2 py-1 text-[9px] font-bold text-center text-gray-600">VIGENCIA</td>
-									</tr>
-									<tr>
-										<td class="border-r border-gray-400"></td>
-										<td class="border-r border-gray-400 px-2 py-1.5 text-[10px] text-center text-gray-800 truncate">{cond.nombre || '—'}</td>
-										<td class="border-r border-gray-400 px-2 py-1.5 text-[10px] text-center text-gray-800">{cond.cedula || '—'}</td>
-										<td class="border-r border-gray-400 px-2 py-1.5 text-[10px] text-center text-gray-800">{cond.licencia_conduccion || cond.cedula || '—'}</td>
-										<td class="px-2 py-1.5 text-[10px] text-center text-gray-800">{cond.vigencia_licencia || '—'}</td>
-									</tr>
-								</tbody>
-							</table>
-						</div>
-					{/each}
-
-					<!-- Responsable -->
-					<div class="border-b border-gray-400">
-						<table class="w-full border-collapse">
-							<tbody>
-								<tr class="bg-gray-50">
-									<td class="w-[18%] border-r border-gray-400 px-2 py-1.5 text-[9px] font-bold text-gray-700">
-										RESPONSABLE DEL<br/>CONTRATANTE
-									</td>
-									<td class="w-[32%] border-r border-gray-400 px-2 py-1 text-[9px] font-bold text-center text-gray-600">NOMBRES Y APELLIDOS</td>
-									<td class="w-[15%] border-r border-gray-400 px-2 py-1 text-[9px] font-bold text-center text-gray-600">No. CÉDULA</td>
-									<td class="w-[18%] border-r border-gray-400 px-2 py-1 text-[9px] font-bold text-center text-gray-600">TELÉFONO</td>
-									<td class="w-[17%] px-2 py-1 text-[9px] font-bold text-center text-gray-600">DIRECCIÓN</td>
-								</tr>
-								<tr>
-									<td class="border-r border-gray-400"></td>
-									<td class="border-r border-gray-400 px-2 py-1.5 text-[10px] text-center text-gray-800 truncate">{extracto.responsable_nombre || '—'}</td>
-									<td class="border-r border-gray-400 px-2 py-1.5 text-[10px] text-center text-gray-800">{extracto.responsable_cedula || '—'}</td>
-									<td class="border-r border-gray-400 px-2 py-1.5 text-[10px] text-center text-gray-800">{extracto.responsable_telefono || '—'}</td>
-									<td class="px-2 py-1.5 text-[10px] text-center text-gray-800 truncate">{extracto.responsable_direccion || '—'}</td>
-								</tr>
-							</tbody>
-						</table>
-					</div>
-
-					<!-- Footer -->
-					<div class="px-3 py-3">
-						<div class="flex items-center justify-between">
-							<div class="flex items-center gap-2">
-								<img src="/assets/super_transporte.png" alt="SuperTransporte" class="h-8 object-contain" />
-								<div class="text-[9px] text-gray-500">
-									<div>Finca San Martín (Vereda La Esmeralda) Tauramena Casanare</div>
-									<div>operaciones.transmeraldasas@gmail.com</div>
-									<div>3233340117</div>
-								</div>
-							</div>
-							<div class="text-center">
-								<img src="/assets/logo_nombre.webp" alt="Cotransmeq S.A.S" class="h-7 object-contain" />
-							</div>
-							<div class="text-right text-[9px] text-gray-500">
-								<img src="/assets/NELLY MORALES.jpg" alt="Firma Nelly Morales R." class="ml-auto h-6 object-contain" />
-								<div class="font-bold text-gray-700">NELLY MORALES R.</div>
-								<div class="text-gray-500">GERENTE</div>
-							</div>
-						</div>
-					</div>
-				</div>
-			</div>
-
-			<!-- Modal Footer -->
-			<div class="sticky bottom-0 flex items-center justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-3 rounded-b-2xl">
-				<button
-					type="button"
-					onclick={() => (showPdfModal = false)}
-					class="btn-secondary"
-				>
-					Cerrar
-				</button>
-			</div>
-		</div>
-	</div>
+{#if opciones}
+	<ModalExtracto
+		open={modalNuevo}
+		{opciones}
+		{base}
+		oncerrar={() => (modalNuevo = false)}
+		onemitido={emitido}
+	/>
 {/if}
+<ModalDetalleExtracto
+	open={modalDetalle}
+	extracto={detalle}
+	{puedeEscribir}
+	oncerrar={() => (modalDetalle = false)}
+	ondescargar={descargar}
+	onreemplazar={(e) => abrirNuevo(e)}
+	onanulado={anulado}
+/>
+<ModalContratante
+	open={modalContratante}
+	contratante={contratanteEditado}
+	oncerrar={() => (modalContratante = false)}
+	onguardado={() => {
+		void cargarContratantes();
+		opciones = null;
+	}}
+/>
+
+<style>
+	.ex-anio {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 0.8rem;
+		font-weight: 700;
+		color: var(--text-secondary);
+	}
+	.ex-anio select {
+		padding: 0.4rem 0.6rem;
+		border: 1.5px solid var(--border-default);
+		border-radius: 10px;
+		background: var(--bg-surface);
+		font: inherit;
+		font-size: 0.82rem;
+	}
+	.ex-consecutivo {
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+	}
+	.ex-numero {
+		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+		letter-spacing: 0.02em;
+	}
+	.ex-placa {
+		font-weight: 800;
+		letter-spacing: 0.06em;
+	}
+	.ex-conductor {
+		display: block;
+	}
+</style>

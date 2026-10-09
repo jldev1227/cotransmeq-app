@@ -15,12 +15,13 @@ import {
 	Calculator,
 	CalendarCheck,
 	ClipboardPen,
+	FileText,
 	HandCoins,
-	Receipt,
 	IdCard,
 	LayoutDashboard,
 	LayoutTemplate,
 	ListChecks,
+	Receipt,
 	ReceiptText,
 	Route,
 	ShieldCheck,
@@ -184,13 +185,13 @@ export const MENU_ITEMS: MenuItem[] = [
 		/// El módulo ya no tiene listado: su puerta es el canvas.
 		href: '/dashboard/nomina/canvas'
 	},
-	// {
-	// 	id: 'extractos',
-	// 	label: 'Extractos',
-	// 	icon: FileText,
-	// 	badge: null,
-	// 	href: '/dashboard/extractos'
-	// },
+	{
+		id: 'extractos',
+		label: 'Extractos',
+		icon: FileText,
+		badge: null,
+		href: '/dashboard/extractos'
+	},
 	{
 		id: 'liquidaciones-servicios',
 		label: 'Liq. Servicios',
