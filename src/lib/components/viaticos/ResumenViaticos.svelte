@@ -12,12 +12,21 @@
 	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { Bar } from 'svelte-chartjs';
-	import { Chart as ChartJS, BarElement, CategoryScale, LinearScale, Tooltip, Legend } from 'chart.js';
-	import { Table2, BarChart3 } from 'lucide-svelte';
+	import {
+		Chart as ChartJS,
+		BarElement,
+		CategoryScale,
+		LinearScale,
+		Tooltip,
+		Legend
+	} from 'chart.js';
+	import { Table2, BarChart3, FileDown } from 'lucide-svelte';
+	import { descargarConsolidadoFondo } from '$lib/utils/pdfConsolidadoFondo';
 	import {
 		CATEGORIA_LABELS,
 		moneda,
 		viaticosEmpresaAPI,
+		viaticosFondoAPI,
 		type Agrupacion,
 		type ResumenViaticos
 	} from '$lib/api/viaticos';
@@ -25,10 +34,67 @@
 	ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend);
 
 	interface Props {
+		/** Para el encabezado del PDF del consolidado. */
+		empresa?: string;
+		logo?: string;
+		generadoPor?: string | null;
 		/** Cambia cuando se registra o elimina algo, para recalcular. */
 		version?: number;
 	}
-	let { version = 0 }: Props = $props();
+	let {
+		version = 0,
+		empresa = 'Transmeralda',
+		logo = '/assets/logo_transmeralda-264.webp',
+		generadoPor = null
+	}: Props = $props();
+
+	/// Consolidado del saldo del área en el periodo que está filtrado: cada
+	/// movimiento con el saldo que había en ese momento y con cuánto se cerró.
+	let descargando = $state(false);
+	const MESES_LARGO = [
+		'enero',
+		'febrero',
+		'marzo',
+		'abril',
+		'mayo',
+		'junio',
+		'julio',
+		'agosto',
+		'septiembre',
+		'octubre',
+		'noviembre',
+		'diciembre'
+	];
+	function etiquetaRangoPdf(r: { desde: string; hasta: string }): string {
+		if (modo === 'semanas') return 'Últimas 12 semanas';
+		if (modo === 'meses') return 'Últimos 12 meses';
+		const [a, m] = r.desde.split('-').map(Number);
+		const [a2, m2, d2] = r.hasta.split('-').map(Number);
+		return r.desde.slice(0, 7) === r.hasta.slice(0, 7) &&
+			r.desde.endsWith('-01') &&
+			new Date(a2, m2, 0).getDate() === d2
+			? `${MESES_LARGO[m - 1][0].toUpperCase()}${MESES_LARGO[m - 1].slice(1)} de ${a}`
+			: 'Periodo personalizado';
+	}
+	async function descargarConsolidado() {
+		if (descargando) return;
+		const r = rango;
+		descargando = true;
+		try {
+			const c = await viaticosFondoAPI.consolidado({ desde: r.desde, hasta: r.hasta });
+			const nombre = await descargarConsolidadoFondo(c, {
+				empresa,
+				logo,
+				generadoPor,
+				etiquetaPeriodo: etiquetaRangoPdf(r)
+			});
+			toast.success(`Consolidado descargado: ${nombre}`);
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : 'No se pudo generar el consolidado');
+		} finally {
+			descargando = false;
+		}
+	}
 
 	const SERIES = {
 		anticipos: { etiqueta: 'Anticipos a conductores', color: '#2a78d6' },
@@ -39,7 +105,8 @@
 
 	type Modo = 'semanas' | 'meses' | 'personalizado';
 	let modo = $state<Modo>('semanas');
-	const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+	const iso = (d: Date) =>
+		`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 	const hoy = new Date();
 	let desdePersonal = $state(iso(new Date(hoy.getFullYear(), hoy.getMonth(), 1)));
 	let hastaPersonal = $state(iso(hoy));
@@ -54,10 +121,20 @@
 			d.setDate(d.getDate() - 7 * 11 - ((d.getDay() + 6) % 7));
 			return { desde: iso(d), hasta: iso(hoy), agrupar: 'semana' };
 		}
-		if (modo === 'meses') return { desde: iso(new Date(hoy.getFullYear(), hoy.getMonth() - 11, 1)), hasta: iso(hoy), agrupar: 'mes' };
-		const dias = (new Date(hastaPersonal).getTime() - new Date(desdePersonal).getTime()) / 86_400_000 + 1;
+		if (modo === 'meses')
+			return {
+				desde: iso(new Date(hoy.getFullYear(), hoy.getMonth() - 11, 1)),
+				hasta: iso(hoy),
+				agrupar: 'mes'
+			};
+		const dias =
+			(new Date(hastaPersonal).getTime() - new Date(desdePersonal).getTime()) / 86_400_000 + 1;
 		const auto: Agrupacion = dias <= 45 ? 'dia' : dias <= 200 ? 'semana' : 'mes';
-		return { desde: desdePersonal, hasta: hastaPersonal, agrupar: agruparPersonal === 'auto' ? auto : agruparPersonal };
+		return {
+			desde: desdePersonal,
+			hasta: hastaPersonal,
+			agrupar: agruparPersonal === 'auto' ? auto : agruparPersonal
+		};
 	});
 
 	let datos = $state<ResumenViaticos | null>(null);
@@ -78,13 +155,27 @@
 			const d = await viaticosEmpresaAPI.resumen(r);
 			if (actual === consulta) datos = d;
 		} catch (error) {
-			if (actual === consulta) toast.error(error instanceof Error ? error.message : 'No se pudo calcular el resumen');
+			if (actual === consulta)
+				toast.error(error instanceof Error ? error.message : 'No se pudo calcular el resumen');
 		} finally {
 			if (actual === consulta) cargando = false;
 		}
 	}
 
-	const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+	const MESES = [
+		'ene',
+		'feb',
+		'mar',
+		'abr',
+		'may',
+		'jun',
+		'jul',
+		'ago',
+		'sep',
+		'oct',
+		'nov',
+		'dic'
+	];
 	function etiquetaPeriodo(p: { desde: string; hasta: string }, agrupar: Agrupacion) {
 		const [y, m, d] = p.desde.split('-').map(Number);
 		if (agrupar === 'mes') return `${MESES[m - 1]} ${String(y).slice(2)}`;
@@ -95,7 +186,8 @@
 
 	/// Pesos abreviados para el eje: $1,2 M, $350 mil.
 	function corto(v: number) {
-		if (Math.abs(v) >= 1_000_000) return `$${(v / 1_000_000).toLocaleString('es-CO', { maximumFractionDigits: 1 })} M`;
+		if (Math.abs(v) >= 1_000_000)
+			return `$${(v / 1_000_000).toLocaleString('es-CO', { maximumFractionDigits: 1 })} M`;
 		if (Math.abs(v) >= 1_000) return `$${Math.round(v / 1_000).toLocaleString('es-CO')} mil`;
 		return `$${v}`;
 	}
@@ -131,7 +223,14 @@
 			legend: {
 				position: 'top' as const,
 				align: 'start' as const,
-				labels: { usePointStyle: true, pointStyle: 'rectRounded', boxWidth: 10, boxHeight: 10, color: '#33423d', font: { size: 12, weight: 600 as const } }
+				labels: {
+					usePointStyle: true,
+					pointStyle: 'rectRounded',
+					boxWidth: 10,
+					boxHeight: 10,
+					color: '#33423d',
+					font: { size: 12, weight: 600 as const }
+				}
 			},
 			tooltip: {
 				backgroundColor: '#17201d',
@@ -139,24 +238,46 @@
 				cornerRadius: 10,
 				boxPadding: 4,
 				usePointStyle: true,
-				callbacks: { label: (c: { dataset: { label?: string }; parsed: { y: number | null } }) => ` ${c.dataset.label}: ${moneda(c.parsed.y ?? 0)}` }
+				callbacks: {
+					label: (c: { dataset: { label?: string }; parsed: { y: number | null } }) =>
+						` ${c.dataset.label}: ${moneda(c.parsed.y ?? 0)}`
+				}
 			}
 		},
 		scales: {
-			x: { grid: { display: false }, ticks: { color: '#66756f', font: { size: 11 }, maxRotation: 0, autoSkip: true, autoSkipPadding: 10 }, border: { color: '#dfe7e3' } },
+			x: {
+				grid: { display: false },
+				ticks: {
+					color: '#66756f',
+					font: { size: 11 },
+					maxRotation: 0,
+					autoSkip: true,
+					autoSkipPadding: 10
+				},
+				border: { color: '#dfe7e3' }
+			},
 			y: {
 				beginAtZero: true,
 				grid: { color: '#edf3f0' },
 				border: { display: false },
-				ticks: { color: '#66756f', font: { size: 11 }, maxTicksLimit: 5, callback: (v: string | number) => corto(Number(v)) }
+				ticks: {
+					color: '#66756f',
+					font: { size: 11 },
+					maxTicksLimit: 5,
+					callback: (v: string | number) => corto(Number(v))
+				}
 			}
 		}
 	};
 
 	const maxCategoria = $derived(Math.max(1, ...(datos?.por_categoria.map((c) => c.valor) ?? [0])));
-	const maxConductor = $derived(Math.max(1, ...(datos?.top_conductores.map((c) => c.valor) ?? [0])));
+	const maxConductor = $derived(
+		Math.max(1, ...(datos?.top_conductores.map((c) => c.valor) ?? [0]))
+	);
 	const maxPlaca = $derived(Math.max(1, ...(datos?.top_placas.map((c) => c.valor) ?? [0])));
-	const sinMovimientos = $derived(!!datos && datos.totales.egresos === 0 && datos.totales.legalizado === 0);
+	const sinMovimientos = $derived(
+		!!datos && datos.totales.egresos === 0 && datos.totales.legalizado === 0
+	);
 </script>
 
 <section class="rv" aria-label="Resumen de viáticos">
@@ -188,8 +309,20 @@
 				</label>
 			</div>
 		{:else}
-			<p class="rv-ayuda">{modo === 'semanas' ? 'Últimas 12 semanas, de lunes a domingo' : 'Últimos 12 meses'}</p>
+			<p class="rv-ayuda">
+				{modo === 'semanas' ? 'Últimas 12 semanas, de lunes a domingo' : 'Últimos 12 meses'}
+			</p>
 		{/if}
+		<button
+			type="button"
+			class="rv-vista rv-pdf"
+			onclick={descargarConsolidado}
+			disabled={descargando}
+			title="PDF con cada movimiento del saldo del área en este periodo, el saldo en ese momento y con cuánto se cerró cada corte"
+		>
+			<FileDown size={15} />
+			{descargando ? 'Generando…' : 'Consolidado del saldo (PDF)'}
+		</button>
 	</div>
 
 	{#if !datos && cargando}
@@ -197,21 +330,33 @@
 	{:else if datos}
 		<div class="rv-tiles" class:atenuado={cargando}>
 			<div class="page-card rv-tile">
-				<span class="rv-tile-etiqueta"><i style="background:{SERIES.anticipos.color}"></i>Anticipos a conductores</span>
+				<span class="rv-tile-etiqueta"
+					><i style="background:{SERIES.anticipos.color}"></i>Anticipos a conductores</span
+				>
 				<strong>{moneda(datos.totales.anticipos)}</strong>
-				<span class="rv-tile-sub">{datos.totales.cantidad_anticipos} anticipo{datos.totales.cantidad_anticipos === 1 ? '' : 's'}</span>
+				<span class="rv-tile-sub"
+					>{datos.totales.cantidad_anticipos} anticipo{datos.totales.cantidad_anticipos === 1
+						? ''
+						: 's'}</span
+				>
 			</div>
 			<div class="page-card rv-tile">
-				<span class="rv-tile-etiqueta"><i style="background:{SERIES.gastos_empresa.color}"></i>Gastos de la empresa</span>
+				<span class="rv-tile-etiqueta"
+					><i style="background:{SERIES.gastos_empresa.color}"></i>Gastos de la empresa</span
+				>
 				<strong>{moneda(datos.totales.gastos_empresa)}</strong>
 				<span class="rv-tile-sub"
-					>{datos.totales.cantidad_gastos_empresa} gasto{datos.totales.cantidad_gastos_empresa === 1 ? '' : 's'}{datos.totales.gastos_tercero
+					>{datos.totales.cantidad_gastos_empresa} gasto{datos.totales.cantidad_gastos_empresa === 1
+						? ''
+						: 's'}{datos.totales.gastos_tercero
 						? ` · + ${moneda(datos.totales.gastos_tercero)} a cargo de terceros`
 						: ''}</span
 				>
 			</div>
 			<div class="page-card rv-tile">
-				<span class="rv-tile-etiqueta"><i style="background:{SERIES.legalizado.color}"></i>Legalizado por conductores</span>
+				<span class="rv-tile-etiqueta"
+					><i style="background:{SERIES.legalizado.color}"></i>Legalizado por conductores</span
+				>
 				<strong>{moneda(datos.totales.legalizado)}</strong>
 				<span class="rv-tile-sub">facturas reportadas en la app</span>
 			</div>
@@ -225,10 +370,24 @@
 		<div class="page-card rv-grafica" class:atenuado={cargando}>
 			<div class="rv-grafica-cabecera">
 				<div>
-					<h2>Lo que salió por {datos.rango.agrupar === 'mes' ? 'mes' : datos.rango.agrupar === 'semana' ? 'semana' : 'día'}</h2>
-					<p>Total en el periodo: <strong>{moneda(datos.totales.egresos)}</strong> entre anticipos y gastos directos</p>
+					<h2>
+						Lo que salió por {datos.rango.agrupar === 'mes'
+							? 'mes'
+							: datos.rango.agrupar === 'semana'
+								? 'semana'
+								: 'día'}
+					</h2>
+					<p>
+						Total en el periodo: <strong>{moneda(datos.totales.egresos)}</strong> entre anticipos y gastos
+						directos
+					</p>
 				</div>
-				<button type="button" class="rv-vista" onclick={() => (vistaTabla = !vistaTabla)} aria-pressed={vistaTabla}>
+				<button
+					type="button"
+					class="rv-vista"
+					onclick={() => (vistaTabla = !vistaTabla)}
+					aria-pressed={vistaTabla}
+				>
 					{#if vistaTabla}<BarChart3 size={15} /> Ver gráfica{:else}<Table2 size={15} /> Ver tabla{/if}
 				</button>
 			</div>
@@ -266,7 +425,13 @@
 				{#each datos.por_categoria as c (c.categoria)}
 					<div class="rv-fila">
 						<span class="rv-fila-etiqueta">{CATEGORIA_LABELS[c.categoria]}</span>
-						<span class="rv-barra"><span class:con-valor={c.valor > 0} style="width:{(c.valor / maxCategoria) * 100}%; background:{SERIES.gastos_empresa.color}"></span></span>
+						<span class="rv-barra"
+							><span
+								class:con-valor={c.valor > 0}
+								style="width:{(c.valor / maxCategoria) * 100}%; background:{SERIES.gastos_empresa
+									.color}"
+							></span></span
+						>
 						<span class="rv-fila-valor">{c.valor ? moneda(c.valor) : '—'}</span>
 					</div>
 				{/each}
@@ -276,7 +441,12 @@
 				{#each datos.top_conductores as c (c.id)}
 					<div class="rv-fila">
 						<span class="rv-fila-etiqueta" title={c.etiqueta}>{c.etiqueta}</span>
-						<span class="rv-barra"><span class:con-valor={c.valor > 0} style="width:{(c.valor / maxConductor) * 100}%; background:{SERIES.anticipos.color}"></span></span>
+						<span class="rv-barra"
+							><span
+								class:con-valor={c.valor > 0}
+								style="width:{(c.valor / maxConductor) * 100}%; background:{SERIES.anticipos.color}"
+							></span></span
+						>
 						<span class="rv-fila-valor">{moneda(c.valor)}</span>
 					</div>
 				{:else}
@@ -288,7 +458,12 @@
 				{#each datos.top_placas as c (c.id)}
 					<div class="rv-fila">
 						<span class="rv-fila-etiqueta">{c.etiqueta}</span>
-						<span class="rv-barra"><span class:con-valor={c.valor > 0} style="width:{(c.valor / maxPlaca) * 100}%; background:{SERIES.anticipos.color}"></span></span>
+						<span class="rv-barra"
+							><span
+								class:con-valor={c.valor > 0}
+								style="width:{(c.valor / maxPlaca) * 100}%; background:{SERIES.anticipos.color}"
+							></span></span
+						>
 						<span class="rv-fila-valor">{moneda(c.valor)}</span>
 					</div>
 				{:else}
@@ -334,7 +509,9 @@
 		font-size: 13px;
 		font-weight: 600;
 		color: var(--text-secondary);
-		transition: background-color 160ms ease, color 160ms ease;
+		transition:
+			background-color 160ms ease,
+			color 160ms ease;
 	}
 	.rv-segmento.activo {
 		background: var(--bg-surface);
@@ -433,6 +610,15 @@
 	.rv-grafica p {
 		font-size: 12px;
 		color: var(--text-muted);
+	}
+	.rv-pdf {
+		margin-left: auto;
+		background: var(--bg-surface);
+		cursor: pointer;
+	}
+	.rv-pdf:disabled {
+		opacity: 0.6;
+		cursor: wait;
 	}
 	.rv-vista {
 		display: inline-flex;

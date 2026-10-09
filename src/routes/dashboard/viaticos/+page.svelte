@@ -35,6 +35,7 @@
 	import BarraSaldo from '$lib/components/viaticos/BarraSaldo.svelte';
 	import ResumenViaticos from '$lib/components/viaticos/ResumenViaticos.svelte';
 	import ModalGastoEmpresa from '$lib/components/viaticos/ModalGastoEmpresa.svelte';
+	import FondoArea from '$lib/components/viaticos/FondoArea.svelte';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
 	import {
 		limpiar as limpiarFiltrosDe,
@@ -227,7 +228,8 @@
 		try {
 			gastos = await viaticosEmpresaAPI.gastos({
 				q: filtros.q || undefined,
-				categoria: filtros.categoria === 'todas' ? undefined : (filtros.categoria as CategoriaGasto),
+				categoria:
+					filtros.categoria === 'todas' ? undefined : (filtros.categoria as CategoriaGasto),
 				page: filtros.pagina,
 				limit: POR_PAGINA
 			});
@@ -367,15 +369,15 @@
 				se avisa a operaciones y al conductor.
 			</p>
 			{#if filtros.vista === 'anticipos'}
-			<div class="dir-conteos">
-				<ResumenConteos
-					conteos={resumen}
-					activo={filtros.vista === 'anticipos' && filtros.estado !== 'todos'
-						? filtros.estado
-						: null}
-					onElegir={elegirConteo}
-				/>
-			</div>
+				<div class="dir-conteos">
+					<ResumenConteos
+						conteos={resumen}
+						activo={filtros.vista === 'anticipos' && filtros.estado !== 'todos'
+							? filtros.estado
+							: null}
+						onElegir={elegirConteo}
+					/>
+				</div>
 			{/if}
 		</div>
 		{#if puedeEscribir}
@@ -413,9 +415,22 @@
 		/>
 	</div>
 
+	{#if filtros.vista === 'resumen' || filtros.vista === 'anticipos'}
+		<!-- El saldo del área manda sobre los anticipos: va encima del resumen y
+		     del listado. Lo que se registra aquí cambia el resumen (version). -->
+		<div in:fly={{ y: 12, duration: 300 }}>
+			<FondoArea {puedeEscribir} {version} onCambio={() => version++} />
+		</div>
+	{/if}
+
 	{#if filtros.vista === 'resumen'}
 		<div in:fly={{ y: 12, duration: 300 }}>
-			<ResumenViaticos {version} />
+			<ResumenViaticos
+				{version}
+				empresa={EMPRESA}
+				logo="/assets/logo_nombre.webp"
+				generadoPor={$authStore.user?.nombre ?? null}
+			/>
 		</div>
 	{:else if filtros.vista === 'gastos'}
 		<div class="dir-filtros" in:fly={{ y: 12, duration: 300 }}>
@@ -448,7 +463,13 @@
 						{#if columnaId === 'gasto'}
 							<div class="dir-celda vt-concepto">
 								<span>{g.descripcion}</span>
-								<small>{CATEGORIA_LABELS[g.categoria]}{g.beneficiario ? ` · ${g.beneficiario}` : ''}{g.asume === 'TERCERO' ? ` · A cargo de ${g.tercero?.nombre ?? 'el propietario'}` : ''}</small>
+								<small
+									>{CATEGORIA_LABELS[g.categoria]}{g.beneficiario
+										? ` · ${g.beneficiario}`
+										: ''}{g.asume === 'TERCERO'
+										? ` · A cargo de ${g.tercero?.nombre ?? 'el propietario'}`
+										: ''}</small
+								>
 							</div>
 						{:else if columnaId === 'referencia'}
 							<div class="dir-celda">
@@ -458,7 +479,11 @@
 						{:else if columnaId === 'pago'}
 							<div class="dir-celda dir-celda--fecha">
 								<span>{fechaCorta(g.fecha)}</span>
-								<small>{METODO_GASTO_LABELS[g.metodo]}{g.numero_comprobante ? ` · ${g.numero_comprobante}` : ''}</small>
+								<small
+									>{METODO_GASTO_LABELS[g.metodo]}{g.numero_comprobante
+										? ` · ${g.numero_comprobante}`
+										: ''}</small
+								>
 							</div>
 						{:else if columnaId === 'valor'}
 							<span class="vt-monto">{moneda(g.valor)}</span>
@@ -466,7 +491,13 @@
 							<AccionesFila
 								acciones={[
 									{ id: 'editar', etiqueta: 'Editar', icono: Pencil, onClick: () => abrirGasto(g) },
-									{ id: 'eliminar', etiqueta: 'Eliminar', icono: Trash2, onClick: () => eliminarGasto(g), peligrosa: true }
+									{
+										id: 'eliminar',
+										etiqueta: 'Eliminar',
+										icono: Trash2,
+										onClick: () => eliminarGasto(g),
+										peligrosa: true
+									}
 								]}
 							/>
 						{/if}
@@ -476,8 +507,15 @@
 						{@const img = mascota(filtros.q || filtros.categoria !== 'todas' ? 'vacio' : 'exito')}
 						<div class="dir-vacio">
 							<img src={img.src} alt={img.alt} width="418" height="418" />
-							<h3>{filtros.q || filtros.categoria !== 'todas' ? 'Sin resultados' : 'No hay gastos de la empresa'}</h3>
-							<p>Aquí van los gastos que asume la empresa: oficina, mantenimientos de vehículos o dinero a un conductor sin placa.</p>
+							<h3>
+								{filtros.q || filtros.categoria !== 'todas'
+									? 'Sin resultados'
+									: 'No hay gastos de la empresa'}
+							</h3>
+							<p>
+								Aquí van los gastos que asume la empresa: oficina, mantenimientos de vehículos o
+								dinero a un conductor sin placa.
+							</p>
 							{#if puedeEscribir}
 								<button type="button" class="btn-primary" onclick={() => abrirGasto(null)}>
 									<Plus size={16} strokeWidth={2.4} /> Registrar gasto
@@ -496,7 +534,9 @@
 				onCambiar={(p) => (filtros = { ...filtros, pagina: p })}
 			/>
 			{#if gastos?.total_valor}
-				<p class="vt-total">Total de los gastos filtrados: <strong>{moneda(gastos.total_valor)}</strong></p>
+				<p class="vt-total">
+					Total de los gastos filtrados: <strong>{moneda(gastos.total_valor)}</strong>
+				</p>
 			{/if}
 		</div>
 	{:else if filtros.vista === 'anticipos'}

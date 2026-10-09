@@ -287,6 +287,15 @@ export const moneda = (v: number) => cop.format(v);
 
 export function fechaCorta(iso: string | null | undefined): string {
 	if (!iso) return '—';
+	/// Un instante (con hora) se muestra en el día local: a las 10 p. m. en
+	/// Colombia ya es el día siguiente en UTC y cortar el ISO lo adelantaba.
+	/// Una fecha a secas (YYYY-MM-DD) se corta tal cual: no tiene zona.
+	if (iso.includes('T')) {
+		const f = new Date(iso);
+		if (!Number.isNaN(f.getTime())) {
+			return f.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: 'numeric' });
+		}
+	}
 	const [y, m, d] = iso.slice(0, 10).split('-');
 	return `${d}/${m}/${y}`;
 }
@@ -397,9 +406,19 @@ export interface ListadoGastosEmpresa {
 
 export const viaticosEmpresaAPI = {
 	resumen: (params: { desde: string; hasta: string; agrupar: Agrupacion }) =>
-		llamar<ResumenViaticos>(apiClient.get('/api/viaticos/resumen', { params }), 'No se pudo calcular el resumen'),
+		llamar<ResumenViaticos>(
+			apiClient.get('/api/viaticos/resumen', { params }),
+			'No se pudo calcular el resumen'
+		),
 
-	async gastos(params: { q?: string; categoria?: CategoriaGasto; desde?: string; hasta?: string; page?: number; limit?: number }): Promise<ListadoGastosEmpresa> {
+	async gastos(params: {
+		q?: string;
+		categoria?: CategoriaGasto;
+		desde?: string;
+		hasta?: string;
+		page?: number;
+		limit?: number;
+	}): Promise<ListadoGastosEmpresa> {
 		try {
 			const { data } = await apiClient.get('/api/viaticos/gastos-empresa', { params });
 			return data;
@@ -408,9 +427,143 @@ export const viaticosEmpresaAPI = {
 		}
 	},
 	crear: (input: GastoEmpresaInput) =>
-		llamar<GastoEmpresa>(apiClient.post('/api/viaticos/gastos-empresa', input), 'No se pudo registrar el gasto'),
+		llamar<GastoEmpresa>(
+			apiClient.post('/api/viaticos/gastos-empresa', input),
+			'No se pudo registrar el gasto'
+		),
 	actualizar: (id: string, input: GastoEmpresaInput) =>
-		llamar<GastoEmpresa>(apiClient.put(`/api/viaticos/gastos-empresa/${id}`, input), 'No se pudo actualizar el gasto'),
+		llamar<GastoEmpresa>(
+			apiClient.put(`/api/viaticos/gastos-empresa/${id}`, input),
+			'No se pudo actualizar el gasto'
+		),
 	eliminar: (id: string) =>
-		llamar<{ id: string }>(apiClient.delete(`/api/viaticos/gastos-empresa/${id}`), 'No se pudo eliminar el gasto')
+		llamar<{ id: string }>(
+			apiClient.delete(`/api/viaticos/gastos-empresa/${id}`),
+			'No se pudo eliminar el gasto'
+		)
+};
+
+// ── Fondo (saldo) del área de operaciones ───────────────────────────────────
+// Ver backend `viaticos-fondo.service.ts`: el saldo es la suma de movimientos;
+// un CIERRE marca el fin de un corte sin mover plata (lo que queda arrastra).
+
+export type TipoMovimientoFondo =
+	'RECARGA' | 'ANTICIPO' | 'GASTO_EMPRESA' | 'AJUSTE' | 'REVERSO' | 'CIERRE';
+
+export interface MovimientoFondo {
+	id: string;
+	tipo: TipoMovimientoFondo;
+	valor: number;
+	observaciones: string | null;
+	fecha: string;
+	registrado_por: string | null;
+	/** Saldo recibido o corrección a mano: se puede editar. Lo de anticipos/gastos, no. */
+	editable: boolean;
+	anticipo: { id: string; concepto: string; conductor: string; placa: string } | null;
+	gasto_empresa: { id: string; categoria: string; descripcion: string } | null;
+}
+
+export interface CorteFondo {
+	desde: string | null;
+	arrastre: number;
+	recibido: number;
+	anticipos: number;
+	gastos: number;
+	ajustes: number;
+	reversos: number;
+	restante: number;
+	movimientos: number;
+	cerrado: { id: string; fecha: string; por: string | null; observaciones: string | null } | null;
+}
+
+export interface FondoViaticos {
+	fondo: string;
+	/** Si lo que entrega este usuario descuenta del fondo (operaciones); administración no. */
+	requiere_fondo: boolean;
+	saldo: number;
+	base_ultima_recarga: number;
+	porcentaje_restante: number;
+	saldo_bajo: boolean;
+	sin_saldo: boolean;
+	ultima_recarga: { valor: number; fecha: string; por: string | null } | null;
+	corte_actual: CorteFondo;
+	cortes: CorteFondo[];
+	movimientos: MovimientoFondo[];
+}
+
+export const TIPO_MOVIMIENTO_LABELS: Record<TipoMovimientoFondo, string> = {
+	RECARGA: 'Saldo recibido',
+	ANTICIPO: 'Anticipo',
+	GASTO_EMPRESA: 'Gasto de la empresa',
+	AJUSTE: 'Corrección',
+	REVERSO: 'Reverso',
+	CIERRE: 'Cierre de corte'
+};
+
+export interface ConsolidadoFondo {
+	fondo: string;
+	desde: string;
+	hasta: string;
+	saldo_inicial: number;
+	saldo_final: number;
+	totales: {
+		recibido: number;
+		anticipos: number;
+		gastos: number;
+		ajustes: number;
+		reversos: number;
+		cierres: number;
+	};
+	cierres: {
+		id: string;
+		fecha: string;
+		restante: number;
+		por: string | null;
+		observaciones: string | null;
+	}[];
+	movimientos: {
+		id: string;
+		tipo: TipoMovimientoFondo;
+		fecha: string;
+		detalle: string;
+		entra: number;
+		sale: number;
+		saldo_antes: number;
+		saldo_despues: number;
+		registrado_por: string | null;
+		observaciones: string | null;
+	}[];
+}
+
+export const viaticosFondoAPI = {
+	consolidado: (params: { desde: string; hasta: string }) =>
+		llamar<ConsolidadoFondo>(
+			apiClient.get('/api/viaticos/fondo/consolidado', { params }),
+			'No se pudo armar el consolidado'
+		),
+	estado: () =>
+		llamar<FondoViaticos>(
+			apiClient.get('/api/viaticos/fondo'),
+			'No se pudo consultar el saldo del área'
+		),
+	registrarSaldo: (input: { valor: number; observaciones?: string | null }) =>
+		llamar<FondoViaticos>(
+			apiClient.post('/api/viaticos/fondo/recargas', input),
+			'No se pudo registrar el saldo'
+		),
+	corregir: (input: { valor: number; observaciones: string }) =>
+		llamar<FondoViaticos>(
+			apiClient.post('/api/viaticos/fondo/ajustes', input),
+			'No se pudo corregir el saldo'
+		),
+	editarMovimiento: (id: string, input: { valor: number; observaciones: string | null }) =>
+		llamar<FondoViaticos>(
+			apiClient.patch(`/api/viaticos/fondo/movimientos/${id}`, input),
+			'No se pudo editar el movimiento'
+		),
+	cerrarCorte: (input: { observaciones?: string | null }) =>
+		llamar<FondoViaticos>(
+			apiClient.post('/api/viaticos/fondo/cierres', input),
+			'No se pudo cerrar el corte'
+		)
 };
