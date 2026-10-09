@@ -152,6 +152,9 @@
 	// pestaña que el usuario toca haría el botón Atrás inservible.
 	const anio = $derived(Number($page.url.searchParams.get('anio')) || new Date().getFullYear());
 	const mes = $derived(mesValido(Number($page.url.searchParams.get('mes'))));
+	/// `?spotlight=estado`: el panel de inicio manda aquí a marcar pagadas las
+	/// hojas aprobadas del mes y pide resaltar el botón de estado.
+	const destacarEstado = $derived($page.url.searchParams.get('spotlight') === 'estado');
 
 	/// Periodo efectivamente cargado. Se compara con el de la URL para saber
 	/// si hay que recargar; es una variable normal a propósito, para que
@@ -2079,6 +2082,7 @@
 				for (const c of cambios) aplicarEstado(c.id, c.estado, c.version);
 			}}
 			onConflicto={({ id, estado, version }) => aplicarEstado(id, estado, version)}
+			destacar={destacarEstado}
 		/>
 	</div>
 {/snippet}
@@ -2254,7 +2258,8 @@
 				badge: borradores,
 				panel: panelEstado,
 				panelTone: 'dark',
-				panelWidth: 300
+				panelWidth: 300,
+				destacar: destacarEstado
 			}
 		]}
 	/>

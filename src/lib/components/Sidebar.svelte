@@ -80,13 +80,14 @@
 		// única entrada del menú: «Liq. Terceros».
 		if (pathname.startsWith('/dashboard/liquidaciones-terceros')) return 'liquidaciones-terceros';
 		if (pathname.startsWith('/dashboard/sarlaft')) return 'SARLAFT + PTEE';
-		if (pathname.startsWith('/dashboard/pesv')) return 'pesv';
 		if (pathname.startsWith('/dashboard/certificados')) return 'certificados';
 		if (pathname.startsWith('/dashboard/terceros')) return 'terceros';
 		if (pathname.startsWith('/dashboard/usuarios')) return 'usuarios';
 		if (pathname.startsWith('/dashboard/sesiones')) return 'usuarios';
 		if (pathname.startsWith('/dashboard/directorio')) return 'usuarios';
 		if (pathname.startsWith('/dashboard/perfil')) return 'perfil';
+		if (pathname.startsWith('/dashboard/actividad')) return 'dashboard';
+		if (pathname === '/dashboard' || pathname === '/dashboard/') return 'dashboard';
 		return 'servicios';
 	}
 

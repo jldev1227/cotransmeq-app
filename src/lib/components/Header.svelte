@@ -119,9 +119,7 @@
 
 		// Navegar según referencia_tipo
 		if (notif.referencia_id) {
-			if (notif.referencia_tipo === 'actividad_pesv') {
-				goto('/dashboard/pesv');
-			} else if (notif.referencia_tipo === 'servicio') {
+			if (notif.referencia_tipo === 'servicio') {
 				goto(`/dashboard/servicios/${notif.referencia_id}`);
 			} else if (notif.referencia_tipo?.startsWith('nomina_desprendible_firmado')) {
 				const [, anio, mes, desde] = notif.referencia_tipo.split(':');

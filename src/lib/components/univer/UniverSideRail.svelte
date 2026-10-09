@@ -85,6 +85,12 @@
 		 * es puramente de ubicación.
 		 */
 		panelTone?: 'light' | 'dark';
+		/**
+		 * Llega desde fuera (p. ej. `?spotlight=estado` del panel de inicio):
+		 * el botón late unos segundos y, si tiene flyout, se abre solo una vez
+		 * para que el ojo caiga donde hay que hacer clic.
+		 */
+		destacar?: boolean;
 	}
 
 	export interface RailSeparator {
@@ -126,6 +132,18 @@
 	/// abiertos sobre un canvas de 32px de margen se solapan sin remedio.
 	let abierto = $state<string | null>(null);
 
+	/// El item destacado abre su flyout una sola vez (no cada vez que el
+	/// canvas repinta los items), y solo si el usuario no abrió otro antes.
+	let destacadoAbierto = false;
+	$effect(() => {
+		const it = items.find(
+			(i) => i.type !== 'sep' && (i as RailAction).destacar && (i as RailAction).panel
+		) as RailAction | undefined;
+		if (!it || destacadoAbierto) return;
+		destacadoAbierto = true;
+		if (abierto === null) abierto = it.id;
+	});
+
 	function esAccion(i: RailItem): i is RailAction {
 		return i.type !== 'sep';
 	}
@@ -161,13 +179,7 @@
 
 <svelte:window onpointerdown={alPunteroFuera} onkeydown={alTeclado} />
 
-<div
-	class="rail"
-	data-rail
-	role="toolbar"
-	aria-label={ariaLabel}
-	aria-orientation="vertical"
->
+<div class="rail" data-rail role="toolbar" aria-label={ariaLabel} aria-orientation="vertical">
 	{#each items as it, i (esAccion(it) ? it.id : (it.id ?? `sep-${i}`))}
 		{#if !esAccion(it)}
 			<div class="rail-sep" role="separator"></div>
@@ -177,6 +189,7 @@
 					type="button"
 					class="rail-btn rail-{it.tone ?? 'default'}"
 					class:rail-on={abierto === it.id}
+					class:rail-destacado={it.destacar}
 					aria-label={it.label}
 					aria-haspopup={it.panel ? 'dialog' : undefined}
 					aria-expanded={it.panel ? abierto === it.id : undefined}
@@ -381,6 +394,21 @@
 		border-top-color: #fff;
 		border-radius: 50%;
 		animation: rail-spin 0.7s linear infinite;
+	}
+	/* Anillo que late: el item llegó destacado desde fuera. */
+	.rail-destacado {
+		animation: rail-latido 1.2s ease-in-out 6;
+	}
+	@keyframes rail-latido {
+		0% {
+			box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.9);
+		}
+		70% {
+			box-shadow: 0 0 0 10px rgba(251, 191, 36, 0);
+		}
+		100% {
+			box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+		}
 	}
 	@keyframes rail-spin {
 		to {

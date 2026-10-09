@@ -62,7 +62,6 @@
 		'liquidaciones-servicios': 'Liq. de servicios',
 		'liquidaciones-terceros': 'Liq. de terceros',
 		'liquidaciones-terceros-adicionales': 'Liq. terceros — adicionales',
-		pesv: 'PESV',
 		certificados: 'Certificados tributarios',
 		terceros: 'Terceros',
 		usuarios: 'Usuarios del sistema',

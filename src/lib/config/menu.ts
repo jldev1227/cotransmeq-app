@@ -18,13 +18,13 @@ import {
 	HandCoins,
 	Receipt,
 	IdCard,
+	LayoutDashboard,
 	LayoutTemplate,
 	ListChecks,
 	ReceiptText,
 	Route,
 	ShieldCheck,
 	Timer,
-	TrafficCone,
 	TriangleAlert,
 	Truck,
 	UserCog,
@@ -45,13 +45,13 @@ export type MenuItem = {
 };
 
 export const MENU_ITEMS: MenuItem[] = [
-	// {
-	// 	id: 'dashboard',
-	// 	label: 'Dashboard',
-	// 	icon: LayoutDashboard,
-	// 	badge: null,
-	// 	href: '/dashboard'
-	// },
+	{
+		id: 'dashboard',
+		label: 'Inicio',
+		icon: LayoutDashboard,
+		badge: null,
+		href: '/dashboard'
+	},
 	{
 		id: 'flota',
 		label: 'Flota',
@@ -217,15 +217,6 @@ export const MENU_ITEMS: MenuItem[] = [
 	// OJO: el moduleId `liquidaciones-terceros-adicionales` SIGUE existiendo en
 	// `config/permissions.ts` porque el `+layout@.svelte` del canvas se lo pasa
 	// a `UniverAuthGuard`, y `checkAccess` deniega todo moduleId desconocido.
-	{
-		id: 'pesv',
-		label: 'PESV',
-		/// Seguridad vial, no seguridad a secas: el cono lo dice sin repetir el
-		/// escudo que ya usaban «Acciones C/P».
-		icon: TrafficCone,
-		badge: null,
-		href: '/dashboard/pesv'
-	},
 	{
 		id: 'certificados',
 		label: 'Certificados',

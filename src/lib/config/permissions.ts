@@ -42,6 +42,18 @@ export interface RoutePermission {
 }
 
 export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
+	// Panel de inicio y registro de actividad: entran todos; lo que cada uno ve
+	// adentro lo decide el backend sección por sección según sus módulos.
+	dashboard: {
+		full: [],
+		general: true,
+		description: 'Panel de inicio'
+	},
+	actividad: {
+		full: [],
+		general: true,
+		description: 'Actividad reciente del equipo'
+	},
 	perfil: {
 		full: [
 			'administracion',
@@ -198,26 +210,6 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
 		full: ['administracion', 'operaciones'],
 		limited: ['facturacion', 'contabilidad'],
 		description: 'Adicionales (unificados) de cierres finales de terceros'
-	},
-	// El módulo dejó de ser un panel de conteos y pasó a ser el expediente de
-	// cumplimiento: aprueba evidencia, declara pasos cumplidos y configura metas.
-	// Por eso deja de ser `general: true` y se gradúa por área.
-	//
-	//  - `full`    HSEQ y Administración. La capacidad de APROBAR evidencia no
-	//              la da este nivel: es una regla de negocio que el servidor
-	//              comprueba por área en `puedeRevisar()`, y además prohíbe
-	//              aprobar lo que uno mismo aportó.
-	//  - `limited` Operaciones, Mantenimiento y Talento Humano: aportan evidencia
-	//              y registran su operación.
-	//  - `read`    Contabilidad y Facturación: consultan.
-	//
-	// Espejo EXACTO de `backend-nest/src/config/permissions.ts`. Si aquí y allí
-	// no coinciden, el sidebar muestra una entrada que la API rechaza con 403.
-	pesv: {
-		full: ['administracion', 'hseq'],
-		limited: ['operaciones', 'mantenimiento', 'talento_humano'],
-		read: ['contabilidad', 'facturacion'],
-		description: 'Plan Estratégico de Seguridad Vial'
 	},
 	certificados: {
 		full: ['administracion', 'contabilidad'],

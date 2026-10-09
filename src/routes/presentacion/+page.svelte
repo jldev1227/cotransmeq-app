@@ -35,7 +35,7 @@
 				separar el trabajo de campo de la gestión administrativa.
 			</p>
 			<div class="chips">
-				<span>PESV</span><span>Flota</span><span>Formularios</span><span>Servicios</span><span
+				<span>Flota</span><span>Formularios</span><span>Servicios</span><span
 					>Liquidaciones</span
 				>
 			</div>

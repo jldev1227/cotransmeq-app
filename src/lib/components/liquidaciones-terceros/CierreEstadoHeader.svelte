@@ -55,6 +55,12 @@
 		 * debe refrescar la hoja, porque puede haber pasado a solo lectura.
 		 */
 		onConflicto?: (r: { id: string; estado: string; version: number }) => void;
+		/**
+		 * Resalta el botón «Estado» unos segundos. Lo pide el panel de inicio
+		 * cuando manda a marcar como pagadas las hojas aprobadas de un mes
+		 * (`?spotlight=estado`), para que el ojo caiga donde hay que hacer clic.
+		 */
+		destacar?: boolean;
 	}
 
 	let {
@@ -65,7 +71,8 @@
 		borradores = 0,
 		onCambiado,
 		onLoteCambiado,
-		onConflicto
+		onConflicto,
+		destacar = false
 	}: Props = $props();
 
 	let abierto = $state(false);
@@ -241,6 +248,7 @@
 			<div class="ceh-menu-wrap">
 				<button
 					class="univer-btn univer-btn-dark"
+					class:ceh-destacado={destacar}
 					onclick={() => (abierto = !abierto)}
 					disabled={enviando}
 					title="Cambiar el estado de {cierre.placa}"
@@ -435,6 +443,24 @@
 		display: inline-flex;
 		align-items: center;
 		gap: 8px;
+	}
+
+	/* Anillo que late: llega desde el panel de inicio con ?spotlight=estado. */
+	.ceh-destacado {
+		position: relative;
+		animation: ceh-latido 1.2s ease-in-out 6;
+		box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.9);
+	}
+	@keyframes ceh-latido {
+		0% {
+			box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.9);
+		}
+		70% {
+			box-shadow: 0 0 0 10px rgba(251, 191, 36, 0);
+		}
+		100% {
+			box-shadow: 0 0 0 0 rgba(251, 191, 36, 0);
+		}
 	}
 
 	.ceh-badge {

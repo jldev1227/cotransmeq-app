@@ -89,15 +89,9 @@
 	 * quien tiene lista blanca puede no tener servicios, y el guard se dispararía
 	 * otra vez en el destino, encadenando toasts de error.
 	 */
+	/// El panel de inicio es de todos: lo que no le toca al usuario no se pinta.
 	function rutaDeAterrizaje(): string {
-		const accesibles = getAccessibleModules(
-			user?.role || user?.rol,
-			user?.area,
-			user?.permisos_rutas
-		);
-		if (accesibles['servicios']) return '/dashboard/servicios';
-		const primero = Object.keys(accesibles).find((m) => m !== 'perfil');
-		return primero ? `/dashboard/${primero}` : '/dashboard/perfil';
+		return '/dashboard';
 	}
 
 	/**

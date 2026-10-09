@@ -67,7 +67,7 @@
 	function resolveTarget(): string {
 		let savedRedirect = localStorage.getItem('redirect_after_login');
 		if (savedRedirect?.startsWith('/dashboard/nomina')) savedRedirect = null;
-		const targetPath = redirectPath || savedRedirect || '/dashboard/servicios';
+		const targetPath = redirectPath || savedRedirect || '/dashboard';
 		localStorage.removeItem('redirect_after_login');
 		return targetPath;
 	}
