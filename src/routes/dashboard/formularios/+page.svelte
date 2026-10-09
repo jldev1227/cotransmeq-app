@@ -599,8 +599,8 @@
 			a.click();
 			a.remove();
 			URL.revokeObjectURL(url);
-			if (!filtroVersionId) {
-				toast.info('Sin filtrar por versión, el CSV trae solo la cabecera de cada envío.');
+			if (!filtroFormId && !filtroVersionId) {
+				toast.info('Sin filtrar por formulario, el CSV trae solo la cabecera de cada envío. Con un formulario salen las respuestas de todas sus versiones.');
 			}
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'No se pudo exportar.');
@@ -929,18 +929,32 @@
 					<span class="filtro__label">Formulario</span>
 					<select
 						class="input"
-						value={filtroFormId}
+						value={filtroVersionId ? `${filtroFormId}:${filtroVersionId}` : filtroFormId}
 						onchange={(e) =>
 							cambiarFiltroEnvios(() => {
-								filtroFormId = e.currentTarget.value;
-								/// La versión se limpia al cambiar de formulario: una versión de
-								/// otro formulario devolvería cero resultados sin explicación.
-								filtroVersionId = '';
+								/// `formId` o `formId:versionId`: un formato con varias versiones
+								/// ofrece cada versión como opción propia, con su título, porque
+								/// el nombre del formato es el de la versión original y una
+								/// v4 «por etapas» no se veía por ningún lado. Elegir el formato
+								/// a secas trae todas sus versiones.
+								const [formId, versionId = ''] = e.currentTarget.value.split(':');
+								filtroFormId = formId;
+								filtroVersionId = versionId;
 							})}
 					>
 						<option value="">Todos</option>
 						{#each catalogoTotal as f (f.id)}
-							<option value={f.id}>{f.code} — {f.name}</option>
+							{@const versiones = f.versions ?? []}
+							{#if versiones.length > 1}
+								<optgroup label={`${f.code} — ${f.name}`}>
+									<option value={f.id}>Todas las versiones ({versiones.map((v) => `v${v.versionNumber}`).join(', ')})</option>
+									{#each versiones as v (v.id)}
+										<option value={`${f.id}:${v.id}`}>v{v.versionNumber} · {v.title}{v.status !== 'PUBLISHED' ? ` (${v.status.toLowerCase()})` : ''}</option>
+									{/each}
+								</optgroup>
+							{:else}
+								<option value={f.id}>{f.code} — {f.name}</option>
+							{/if}
 						{/each}
 					</select>
 				</label>
@@ -955,7 +969,7 @@
 					>
 						<option value="">Todas</option>
 						{#each versionesDisponibles as v (v.id)}
-							<option value={v.id}>v{v.versionNumber} · {v.status}</option>
+							<option value={v.id}>v{v.versionNumber} · {v.title}{v.status !== 'PUBLISHED' ? ` (${v.status.toLowerCase()})` : ''}</option>
 						{/each}
 					</select>
 				</label>
