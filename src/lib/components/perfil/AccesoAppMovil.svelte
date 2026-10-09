@@ -1,7 +1,7 @@
 <script lang="ts">
 	/**
-	 * «App móvil»: enlace de 30 días con el que un usuario de administración, operaciones o HSEQ
-	 * entra a la app del teléfono. El enlace completo se ve una sola vez (el backend guarda su
+	 * «App móvil»: enlace de 30 días con el que cualquier usuario entra a la app del teléfono
+	 * (lo que ve adentro depende de sus permisos). El enlace completo se ve una sola vez (el backend guarda su
 	 * hash); generar otro invalida el anterior y revocarlo cierra las sesiones que abrió.
 	 */
 	import { onMount } from 'svelte';
@@ -19,7 +19,6 @@
 	import { confirmar } from '$lib/stores/confirm';
 
 	let cargando = $state(true);
-	let habilitado = $state(false);
 	let vigente = $state<EnlaceAppMovil | null>(null);
 	let nuevo = $state<EnlaceAppMovilCreado | null>(null);
 	let qr = $state('');
@@ -34,7 +33,6 @@
 		cargando = true;
 		try {
 			const estado = await estadoEnlaceApp();
-			habilitado = estado.habilitado;
 			vigente = estado.enlace;
 		} catch {
 			toast.error('No se pudo consultar tu acceso a la app');
@@ -70,7 +68,8 @@
 	async function revocar() {
 		const ok = await confirmar({
 			title: '¿Revocar el acceso a la app?',
-			message: 'El enlace deja de funcionar y se cierra la sesión en los teléfonos que entraron con él.',
+			message:
+				'El enlace deja de funcionar y se cierra la sesión en los teléfonos que entraron con él.',
 			tone: 'danger',
 			confirmText: 'Revocar'
 		});
@@ -119,16 +118,11 @@
 <div class="am" in:fade>
 	{#if cargando}
 		<p class="am-vacio"><Loader2 size={15} class="am-girar" /> Cargando…</p>
-	{:else if !habilitado}
-		<p class="am-intro">
-			La app móvil es para los usuarios de administración, operaciones y HSEQ. Tu usuario no tiene
-			ninguna de esas áreas.
-		</p>
 	{:else}
 		<p class="am-intro">
-			Entra a la app de Cotransmeq desde tu teléfono para crear y asignar servicios, compartir tickets,
-			usar el asistente y diligenciar tus formularios. Abre el enlace en el teléfono —o escanea el
-			código— con la app instalada. El acceso dura <strong>30 días</strong>.
+			Entra a la app de Cotransmeq desde tu teléfono con tu usuario: verás las secciones que te
+			dan tus permisos (servicios, formularios, capacitaciones, asistente…). Abre el enlace en el
+			teléfono —o escanea el código— con la app instalada. El acceso dura <strong>30 días</strong>.
 		</p>
 
 		{#if nuevo}
@@ -138,17 +132,28 @@
 						<CheckCircle2 size={15} aria-hidden="true" />
 						Enlace listo
 					</p>
-					<button type="button" class="am-btn-icono" aria-label="Ocultar" onclick={() => (nuevo = null)}>
+					<button
+						type="button"
+						class="am-btn-icono"
+						aria-label="Ocultar"
+						onclick={() => (nuevo = null)}
+					>
 						<X size={15} />
 					</button>
 				</div>
 				<p class="am-nuevo-aviso">
-					Por seguridad no se vuelve a mostrar. Quien lo tenga entra a la app como tú: envíatelo solo a
-					ti.
+					Por seguridad no se vuelve a mostrar. Quien lo tenga entra a la app como tú: envíatelo
+					solo a ti.
 				</p>
 				<div class="am-nuevo-cuerpo">
 					{#if qr}
-						<img class="am-qr" src={qr} alt="Código QR del enlace a la app" width="160" height="160" />
+						<img
+							class="am-qr"
+							src={qr}
+							alt="Código QR del enlace a la app"
+							width="160"
+							height="160"
+						/>
 					{/if}
 					<div class="am-nuevo-acciones">
 						<code>{nuevo.url}</code>
@@ -178,7 +183,9 @@
 						{vigente.usos === 1 ? 'vez' : 'veces'} · último uso {fecha(vigente.ultimo_uso)}
 					</p>
 				</div>
-				<button type="button" class="am-revocar" onclick={revocar} disabled={trabajando}>Revocar</button>
+				<button type="button" class="am-revocar" onclick={revocar} disabled={trabajando}
+					>Revocar</button
+				>
 			</div>
 		{/if}
 
