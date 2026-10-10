@@ -3,7 +3,6 @@
  * Portado de pdfMaker.tsx (@react-pdf/renderer) a pdfmake - IGUALADO
  */
 import type { Liquidacion, FirmaConUrl } from '$lib/types/nomina';
-import { obtenerLogoBase64 } from '$lib/utils/pdfUtils';
 import { aplicarMarcasDias, leerMarcasDias } from '$lib/utils/marcasDias';
 import { blobDePdf, cargarPdfMake } from '$lib/utils/pdfmake-cargar';
 import {
@@ -11,9 +10,36 @@ import {
 	paginaControlDias,
 	type ControlDias
 } from '$lib/utils/pdfControlDias';
+import {
+	cabeceraSeccion,
+	firmaConductor,
+	paginaPrincipalDiseno2,
+	pieDocumento,
+	type LineaDiseno,
+	type MarcaDesprendible
+} from '$lib/utils/pdfDesprendibleDiseno';
 
 const PAREX_EMPRESA_ID = 'cfb258a6-448c-4469-aa71-8eeafa4530ef';
 const GEOPARK_EMPRESA_ID = 'eea5eda5-1b60-45a0-b4c7-606a8c908ff9';
+
+/** Colores e imágenes del diseño 2 para esta empresa. */
+const MARCA_DISENO: Omit<MarcaDesprendible, 'razonSocial' | 'nit' | 'logo' | 'mascota' | 'sello'> & {
+	logoUrl: string;
+	mascotaUrl: string;
+	selloUrl: string;
+} = {
+	nombre: 'Cotransmeq',
+	oscuro: '#14532D',
+	suave: '#FFEDD5',
+	acento: '#F97316',
+	kicker: '#FDBA74',
+	periodo: '#FFEDD5',
+	borde: '#FED7AA',
+	fondoSuave: '#FFF7ED',
+	logoUrl: '/assets/logo_nombre_white.webp',
+	mascotaUrl: '/mascot/trabajando.webp',
+	selloUrl: '/assets/sello-firma-terceros.jpg'
+};
 
 function formatCurrency(value: number | string | null | undefined): string {
 	const num = Number(value) || 0;
@@ -330,8 +356,8 @@ export async function construirDocDefinition(
 	recargosData: any = null
 ): Promise<any> {
 
-	const color = '#EA580C';
-	const colorBg = '#FFF7ED';
+	const color = MARCA_DISENO.oscuro;
+	const colorBg = MARCA_DISENO.suave;
 	const empresa = 'SERVICIOS Y TRANSPORTES COTRANSMEQ S.A.S';
 	const nit = '901983227';
 
@@ -340,9 +366,6 @@ export async function construirDocDefinition(
 		(item.conductor as any)?.cedula || (item.conductor as any)?.numero_identificacion,
 		'N/A'
 	);
-
-	// Cargar logo
-	const logoBase64 = await obtenerLogoBase64(false);
 
 	// Disponibilidad (viene separada de item.total_recargos en el payload)
 	const disponibilidadVal = Number(safeValue(item.disponibilidad, 0));
@@ -450,15 +473,6 @@ export async function construirDocDefinition(
 		});
 	}
 
-	const bonosFilas = Object.values(bonosAgrupados)
-		.filter((b) => b.quantity > 0)
-		.map((b) => [
-			{ text: b.name || '', style: 'valueText' },
-			{ text: '', style: 'valueText' },
-			{ text: String(b.quantity), alignment: 'center' as const, style: 'valueText' },
-			{ text: formatCurrency(b.totalValue), alignment: 'center' as const, style: 'valueText' }
-		]);
-
 	// Pernotes - fechas agrupadas (igual que pdfMaker)
 	// Parsear fechas defensivamente: puede venir como string JSON o como array
 	const parseFechas = (fechas: any): string[] => {
@@ -524,615 +538,146 @@ export async function construirDocDefinition(
 	}
 
 	// ============================================================
-	// TABLA DE CONCEPTOS (4 columnas: 30%, 40%, 15%, 15%)
+	// PÁGINA 1 · DISEÑO 2
 	// ============================================================
-	const conceptosBody: any[][] = [
-		// Header
-		[
-			{ text: 'CONCEPTO', bold: true, fontSize: 10, color },
-			{ text: 'OBSERVACIÓN', bold: true, fontSize: 10, color },
-			{ text: 'CANTIDAD', bold: true, fontSize: 10, color, alignment: 'center' as const },
-			{ text: 'VALOR', bold: true, fontSize: 10, color, alignment: 'center' as const }
-		],
-		// Bonificaciones
-		...bonosFilas,
-		// Recargos (llamado "Otros" como en pdfMaker) - suma de recargos que no son PAREX ni GEOPARK
-		[
-			{ text: 'Otros', style: 'valueText' },
-			{ text: 'Ver recargos detallados más adelante', fontSize: 10, color: '#666' },
-			{ text: ' ', alignment: 'center' as const },
-			{
-				text: formatCurrency(totalRecargosOtros),
-				alignment: 'center' as const,
-				style: 'valueText'
-			}
-		],
-		// Recargos PAREX (si hay — manuales + planillas)
-		...(hayRecargosParex
-			? [
-					[
-						{ text: 'Recargos PAREX', style: 'valueText' },
-						{
-							text: 'Ver recargos detallados más adelante',
-							fontSize: 10,
-							color: '#666'
-						},
-						{ text: ' ', alignment: 'center' as const },
-						{
-							text: formatCurrency(totalRecargosParex),
-							alignment: 'center' as const,
-							style: 'valueText'
-						}
-					]
-				]
-			: []),
-		// Recargos Geopark (si hay — manuales + planillas)
-		...(hayRecargosGeopark
-			? [
-					[
-						{ text: 'Recargos GEOPARK', style: 'valueText' },
-						{
-							text: 'Ver recargos detallados más adelante',
-							fontSize: 10,
-							color: '#666'
-						},
-						{ text: ' ', alignment: 'center' as const },
-						{
-							text: formatCurrency(totalRecargosGeopark),
-							alignment: 'center' as const,
-							style: 'valueText'
-						}
-					]
-				]
-			: []),
-		// Pernotes con fechas agrupadas
-		[
-			{ text: 'Pernoctes', style: 'valueText' },
-			{ text: pernoteFechasTexto, fontSize: 10, color: '#666' },
-			{
-				text: String(cantidadPernotes),
-				alignment: 'center' as const,
-				style: 'valueText'
-			},
-			{
-				text: formatCurrency(totalPernotes),
-				alignment: 'center' as const,
-				style: 'valueText'
-			}
-		]
-	];
+	// Los mismos datos y reglas de siempre, pintados con la maquetación
+	// aprobada (ver `pdfDesprendibleDiseno.ts`). Ninguna cifra se calcula en el
+	// diseño: todo sale de aquí ya resuelto.
+	const diasDe = (ini?: string | null, fin?: string | null) =>
+		ini && fin ? obtenerDiferenciaDias(String(ini).slice(0, 10), String(fin).slice(0, 10)) : 0;
+	const textoDias = (n: number) => (n > 0 ? `${n} día${n === 1 ? '' : 's'}` : '');
+	const verDetalle = 'Ver recargos detallados más adelante';
 
-	// ============================================================
-	// DATOS DEL EMPLEADO (tabla label-value con colores iguales a pdfMaker)
-	// ============================================================
-	const empleadoBody: any[][] = [
-		[{ text: 'Nombre' }, { text: conductorNombre, alignment: 'right' as const }],
-		[{ text: 'C.C.' }, { text: conductorCedula, alignment: 'right' as const }],
-		[
-			{ text: 'Días laborados' },
-			{
-				text: String(safeValue(item.dias_laborados, 0)),
-				alignment: 'right' as const
-			}
-		],
-		[
-			{ text: 'Salario devengado' },
-			{
-				text: formatCurrency(item.salario_devengado),
-				color: '#007AFF',
-				alignment: 'right' as const
-			}
-		],
-		[
-			{ text: 'Auxilio de transporte' },
-			{
-				text: formatCurrency(item.auxilio_transporte),
-				color: '#00000074',
-				alignment: 'right' as const
-			}
-		]
+	const basicos: LineaDiseno[] = [
+		{
+			concepto: 'Salario devengado',
+			cantidad: textoDias(Number(safeValue(item.dias_laborados, 0))),
+			valor: formatCurrency(item.salario_devengado)
+		},
+		{ concepto: 'Auxilio de transporte', valor: formatCurrency(item.auxilio_transporte) }
 	];
-
-	// Incapacidad (si > 0) - con días y valor en color verde
 	if (Number(safeValue(item.valor_incapacidad, 0)) > 0) {
-		const diasIncapacidad =
-			item.periodo_incapacidad_inicio && item.periodo_incapacidad_fin
-				? `${obtenerDiferenciaDias(item.periodo_incapacidad_inicio, item.periodo_incapacidad_fin)} días`
-				: item.periodo_start_incapacidad && item.periodo_end_incapacidad
-					? `${obtenerDiferenciaDias(item.periodo_start_incapacidad, item.periodo_end_incapacidad)} días`
-					: '-';
-		empleadoBody.push([
-			{ text: 'Remuneración por incapacidad' },
-			{
-				columns: [
-					{ text: diasIncapacidad, width: 'auto' },
-					{
-						text: formatCurrency(item.valor_incapacidad),
-						color,
-						alignment: 'right' as const,
-						width: '*'
-					}
-				]
-			}
-		]);
+		const n =
+			diasDe(item.periodo_incapacidad_inicio, item.periodo_incapacidad_fin) ||
+			diasDe(item.periodo_start_incapacidad, item.periodo_end_incapacidad);
+		basicos.push({ concepto: 'Remuneración por incapacidad', cantidad: textoDias(n) || '-', valor: formatCurrency(item.valor_incapacidad) });
 	}
-
-	/**
-	 * LICENCIA DE MATERNIDAD O PATERNIDAD (si hay): se paga y cotiza como el
-	 * salario, así que va con los devengos del empleado y no en el resumen.
-	 * Faltaba: el neto la llevaba dentro y el comprobante no decía de dónde
-	 * salía esa cifra. El rótulo sigue la misma regla que el canvas: por el
-	 * género de la ficha, y con las dos palabras si no lo tiene.
-	 */
+	// Licencia de maternidad o paternidad: se paga y cotiza como el salario.
 	if (Number(safeValue((item as any).total_licencia, 0)) > 0) {
-		const ini = String((item as any).periodo_start_licencia ?? '').slice(0, 10);
-		const fin = String((item as any).periodo_end_licencia ?? '').slice(0, 10);
-		const diasLicencia = ini && fin ? `${obtenerDiferenciaDias(ini, fin)} días` : '-';
-		empleadoBody.push([
-			{ text: rotuloLicencia((item.conductor as any)?.genero) },
-			{
-				columns: [
-					{ text: diasLicencia, width: 'auto' },
-					{
-						text: formatCurrency((item as any).total_licencia),
-						color,
-						alignment: 'right' as const,
-						width: '*'
-					}
-				]
-			}
-		]);
-	}
-
-	// Ajuste salarial (siempre se muestra en Transmeralda)
-	empleadoBody.push([
-		{ text: 'Bono Nivelación de Salario' },
-		{
-			columns: [
-				{
-					text: `${safeValue(item.dias_laborados_villanueva, 0)} días`,
-					width: 'auto'
-				},
-				{
-					text: formatCurrency(item.ajuste_salarial || 0),
-					color: '#FF9500',
-					alignment: 'right' as const,
-					width: '*'
-				}
-			]
-		}
-	]);
-
-	// ============================================================
-	// CONSTRUIR CONTENIDO
-	// ============================================================
-	const content: any[] = [
-		// Header
-		{
-			columns: [
-				{
-					stack: [
-						{
-							text: empresa,
-							style: 'header',
-							color,
-							bold: true,
-							fontSize: 13,
-							maxWidth: 300
-						},
-						{ text: `NIT: ${nit}`, fontSize: 10, margin: [0, 2, 0, 0] },
-						{
-							text: `COMPROBANTE DE NOMINA - ${monthAndYear(item.periodo_fin)}`,
-							fontSize: 10,
-							color,
-							bold: true,
-							margin: [0, 10, 0, 0]
-						},
-						{
-							text: `BÁSICO CORRESPONDIENTE AL MES DE ${monthAndYear(item.periodo_fin)}`,
-							fontSize: 10,
-							color,
-							bold: true,
-							margin: [0, 2, 0, 0]
-						}
-					],
-					width: '*'
-				},
-				...(logoBase64
-					? [
-							{
-								image: logoBase64,
-								width: 175,
-								height: 100,
-								alignment: 'left' as const,
-								margin: [0, -15, 0, 0]
-							}
-						]
-					: [])
-			],
-			margin: [0, 0, 0, 20]
-		},
-
-		// Datos del empleado
-		{
-			table: {
-				widths: ['*', '*'],
-				body: empleadoBody
-			},
-			layout: {
-				hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length ? 1 : 0.5),
-				vLineWidth: (i: number, node: any) => (i === 0 || i === node.table.widths.length ? 1 : 0),
-				hLineColor: () => '#E0E0E0',
-				vLineColor: () => '#E0E0E0',
-				paddingLeft: () => 5,
-				paddingRight: () => 5,
-				paddingTop: () => 4,
-				paddingBottom: () => 4
-			}
-		},
-
-		// Título ADICIONALES
-		{
-			text: `ADICIONALES ${formatDate(item.periodo_inicio)} - ${formatDate(item.periodo_fin)}`.toUpperCase(),
-			alignment: 'center' as const,
-			bold: true,
-			color,
-			fontSize: 12,
-			margin: [0, 12, 0, 12]
-		},
-
-		// Tabla de conceptos (4 columnas: 30%, 40%, 15%, 15%)
-		{
-			table: {
-				headerRows: 1,
-				widths: ['30%', '40%', '15%', '15%'],
-				body: conceptosBody
-			},
-			layout: {
-				hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length ? 1 : 0.5),
-				vLineWidth: () => 1,
-				hLineColor: () => '#E0E0E0',
-				vLineColor: () => '#E0E0E0',
-				paddingLeft: () => 5,
-				paddingRight: () => 5,
-				paddingTop: () => 5,
-				paddingBottom: () => 5,
-				fillColor: (row: number) => (row === 0 ? colorBg : null)
-			}
-		}
-	];
-
-	// ============================================================
-	// CONCEPTOS ADICIONALES (si hay) - layout igual a pdfMaker
-	// ============================================================
-	const conceptosAdicionales = parseValues(item.conceptos_adicionales);
-	if (conceptosAdicionales.length > 0) {
-		const conceptosAdicionalesBody = conceptosAdicionales.map((c: any) => {
-			const isNegative = Number(c.valor) < 0;
-			return [
-				{ text: c.observaciones || c.concepto || '', fontSize: 10 },
-				{ text: '1', alignment: 'center' as const },
-				{
-					text: `${isNegative ? '' : '+'}${formatCurrency(c.valor)}`,
-					alignment: 'center' as const,
-					color: isNegative ? '#e60f0f' : color
-				}
-			];
-		});
-
-		content.push(
-			{
-				text: 'CONCEPTOS ADICIONALES',
-				bold: true,
-				color,
-				fontSize: 11,
-				margin: [0, 15, 0, 6]
-			},
-			{
-				table: {
-					widths: ['40%', '15%', '30%'],
-					body: conceptosAdicionalesBody
-				},
-				layout: {
-					hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length ? 1 : 0.5),
-					vLineWidth: () => 1,
-					hLineColor: () => '#E0E0E0',
-					vLineColor: () => '#E0E0E0',
-					paddingLeft: () => 5,
-					paddingRight: () => 5,
-					paddingTop: () => 5,
-					paddingBottom: () => 5
-				}
-			}
-		);
-	}
-
-	// ============================================================
-	// DISPONIBILIDAD (solo si tiene valor > 0)
-	// ============================================================
-	if (disponibilidadVal > 0) {
-		content.push(
-			{
-				text: 'DISPONIBILIDAD',
-				bold: true,
-				color,
-				fontSize: 11,
-				margin: [0, 15, 0, 6]
-			},
-			{
-				table: {
-					widths: ['*', '*'],
-					body: [
-						[
-							{ text: 'Disponibilidad' },
-							{
-								text: formatCurrency(disponibilidadVal),
-								alignment: 'right' as const,
-								color
-							}
-						]
-					]
-				},
-				layout: {
-					hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length ? 1 : 0.5),
-					vLineWidth: (i: number, node: any) => (i === 0 || i === node.table.widths.length ? 1 : 0),
-					hLineColor: () => '#E0E0E0',
-					vLineColor: () => '#E0E0E0',
-					paddingLeft: () => 5,
-					paddingRight: () => 5,
-					paddingTop: () => 4,
-					paddingBottom: () => 4
-				}
-			}
-		);
-	}
-
-	// ============================================================
-	// DEDUCCIONES
-	// ============================================================
-	const deduccionesBody: any[][] = [
-		[
-			{ text: 'Salud' },
-			{
-				text: formatCurrency(item.salud),
-				color: '#e60f0f',
-				alignment: 'right' as const
-			}
-		],
-		[
-			{ text: 'Pensión' },
-			{
-				text: formatCurrency(item.pension),
-				color: '#e60f0f',
-				alignment: 'right' as const
-			}
-		]
-	];
-
-	/**
-	 * LA LÍNEA SALE POR EL TOTAL, NO POR SUS HIJOS.
-	 *
-	 * Se condicionaba a `anticipos.length > 0` —las filas de detalle— pero lo
-	 * que imprimía era `total_anticipos`. Una liquidación con total y sin
-	 * detalle, que es lo normal cuando el anticipo se teclea en el canvas, se
-	 * quedaba SIN la línea mientras el neto sí la descontaba: un desprendible
-	 * cuyas deducciones no suman lo que dice restar, con la diferencia
-	 * inexplicada en contra del conductor.
-	 *
-	 * El detalle, si lo hay, sigue colgando debajo.
-	 */
-	if (Number(item.total_anticipos) > 0 || (item.anticipos?.length ?? 0) > 0) {
-		deduccionesBody.push([
-			{ text: 'Anticipos' },
-			{
-				text: formatCurrency(item.total_anticipos),
-				color: '#e60f0f',
-				alignment: 'right' as const
-			}
-		]);
-
-		(item.anticipos ?? []).forEach((a) => {
-			const conceptoTexto = a.concepto || a.observaciones || '';
-			deduccionesBody.push([
-				{
-					text: [
-						{ text: '  • ', color: '#9E9E9E' },
-						{ text: conceptoTexto, fontSize: 10, color: '#555' }
-					],
-					colSpan: 2
-				},
-				{}
-			]);
+		const n = diasDe((item as any).periodo_start_licencia, (item as any).periodo_end_licencia);
+		basicos.push({
+			concepto: rotuloLicencia((item.conductor as any)?.genero),
+			cantidad: textoDias(n) || '-',
+			valor: formatCurrency((item as any).total_licencia)
 		});
 	}
+	// Ajuste salarial: siempre se muestra, aunque sea $0.
+	basicos.push({
+		concepto: 'Bono Nivelación de Salario',
+		cantidad: textoDias(Number(safeValue(item.dias_laborados_villanueva, 0))) || '0 días',
+		valor: formatCurrency(item.ajuste_salarial || 0)
+	});
 
-	content.push(
+	const adicionales: LineaDiseno[] = [
+		...Object.values(bonosAgrupados)
+			.filter((b) => b.quantity > 0)
+			.map((b) => ({ concepto: b.name || '', cantidad: String(b.quantity), valor: formatCurrency(b.totalValue) })),
+		{ concepto: 'Recargos OTROS', detalle: verDetalle, valor: formatCurrency(totalRecargosOtros) },
+		...(hayRecargosParex ? [{ concepto: 'Recargos PAREX', detalle: verDetalle, valor: formatCurrency(totalRecargosParex) }] : []),
+		...(hayRecargosGeopark ? [{ concepto: 'Recargos GEOPARK', detalle: verDetalle, valor: formatCurrency(totalRecargosGeopark) }] : []),
 		{
-			text: 'DEDUCCIONES',
-			bold: true,
-			color,
-			fontSize: 11,
-			margin: [0, 15, 0, 6]
+			concepto: 'Pernoctes',
+			detalle: pernoteFechasTexto || undefined,
+			cantidad: String(cantidadPernotes),
+			valor: formatCurrency(totalPernotes)
 		},
-		{
-			table: {
-				widths: ['*', '*'],
-				body: deduccionesBody
-			},
-			layout: {
-				hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length ? 1 : 0.5),
-				vLineWidth: (i: number, node: any) => (i === 0 || i === node.table.widths.length ? 1 : 0),
-				hLineColor: () => '#E0E0E0',
-				vLineColor: () => '#E0E0E0',
-				paddingLeft: () => 5,
-				paddingRight: () => 5,
-				paddingTop: () => 4,
-				paddingBottom: () => 4
-			}
-		}
-	);
+		...(disponibilidadVal > 0 ? [{ concepto: 'Disponibilidad', valor: formatCurrency(disponibilidadVal) }] : [])
+	];
 
-	// ============================================================
-	// RESUMEN FINAL
-	// ============================================================
-	const resumenBody: any[][] = [];
-
-	// Vacaciones con días (igual que pdfMaker)
+	const novedades: LineaDiseno[] = [];
 	if (Number(safeValue(item.total_vacaciones, 0)) > 0) {
-		const diasVacaciones =
-			item.periodo_vacaciones_inicio && item.periodo_vacaciones_fin
-				? obtenerDiferenciaDias(item.periodo_vacaciones_inicio, item.periodo_vacaciones_fin)
-				: item.periodo_start_vacaciones && item.periodo_end_vacaciones
-					? obtenerDiferenciaDias(item.periodo_start_vacaciones, item.periodo_end_vacaciones)
-					: 0;
-
-		resumenBody.push([
-			{ text: 'Vacaciones' },
-			{ text: `${diasVacaciones} días` },
-			{
-				text: formatCurrency(item.total_vacaciones),
-				color: '#FF9500',
-				alignment: 'right' as const
-			}
-		]);
+		const n =
+			diasDe(item.periodo_vacaciones_inicio, item.periodo_vacaciones_fin) ||
+			diasDe(item.periodo_start_vacaciones, item.periodo_end_vacaciones);
+		novedades.push({ concepto: 'Vacaciones', cantidad: `${n} días`, valor: formatCurrency(item.total_vacaciones) });
+	}
+	for (const c of parseValues(item.conceptos_adicionales)) {
+		const negativo = Number(c.valor) < 0;
+		novedades.push({
+			concepto: c.observaciones || c.concepto || '',
+			cantidad: '1',
+			valor: `${negativo ? '' : '+'}${formatCurrency(c.valor)}`,
+			colorValor: negativo ? '#E60F0F' : '#EA580C'
+		});
 	}
 
-	// Sueldo total ajustado
-	const sueldoBase = Number(safeValue(item.sueldo_total, 0));
-	const intereses = Number(safeValue(item.interes_cesantias, 0));
-	const sueldoAjustado = sueldoBase - intereses;
-
-	// Si hay vacaciones, usar 3 columnas para alinear
-	if (resumenBody.length > 0) {
-		resumenBody.push([
-			{ text: 'Salario total', bold: true },
-			{ text: '' },
-			{
-				text: formatCurrency(sueldoAjustado),
-				bold: true,
-				color: '#007AFF',
-				alignment: 'right' as const
-			}
-		]);
-
-		content.push(
-			{
-				text: 'RESUMEN FINAL',
-				bold: true,
-				color,
-				fontSize: 11,
-				margin: [0, 15, 0, 6]
-			},
-			{
-				table: {
-					widths: ['*', 'auto', 'auto'],
-					body: resumenBody
-				},
-				layout: {
-					hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length ? 1 : 0.5),
-					vLineWidth: (i: number, node: any) => (i === 0 || i === node.table.widths.length ? 1 : 0),
-					hLineColor: () => '#E0E0E0',
-					vLineColor: () => '#E0E0E0',
-					paddingLeft: () => 5,
-					paddingRight: () => 5,
-					paddingTop: () => 4,
-					paddingBottom: () => 4
-				}
-			}
-		);
-	} else {
-		// Sin vacaciones: 2 columnas
-		content.push(
-			{
-				text: 'RESUMEN FINAL',
-				bold: true,
-				color,
-				fontSize: 11,
-				margin: [0, 15, 0, 6]
-			},
-			{
-				table: {
-					widths: ['*', '*'],
-					body: [
-						[
-							{ text: 'Salario total', bold: true },
-							{
-								text: formatCurrency(sueldoAjustado),
-								bold: true,
-								color: '#007AFF',
-								alignment: 'right' as const
-							}
-						]
-					]
-				},
-				layout: {
-					hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length ? 1 : 0.5),
-					vLineWidth: (i: number, node: any) => (i === 0 || i === node.table.widths.length ? 1 : 0),
-					hLineColor: () => '#E0E0E0',
-					vLineColor: () => '#E0E0E0',
-					paddingLeft: () => 5,
-					paddingRight: () => 5,
-					paddingTop: () => 4,
-					paddingBottom: () => 4
-				}
-			}
-		);
+	// Anticipos: la línea sale por el TOTAL, no por sus hijos (un total
+	// tecleado en el canvas no trae detalle y el neto sí lo descuenta).
+	const deducciones: LineaDiseno[] = [
+		{ concepto: 'Salud', valor: formatCurrency(item.salud) },
+		{ concepto: 'Pensión', valor: formatCurrency(item.pension) }
+	];
+	if (Number(item.total_anticipos) > 0 || (item.anticipos?.length ?? 0) > 0) {
+		deducciones.push({ concepto: 'Anticipos', valor: formatCurrency(item.total_anticipos) });
+		for (const a of item.anticipos ?? []) {
+			deducciones.push({ concepto: a.concepto || a.observaciones || '', valor: '', hija: true });
+		}
 	}
 
-	// ============================================================
-	// FOOTER CON FIRMA (igual que pdfMaker)
-	// ============================================================
+	// El neto es el de siempre: `sueldo_total` menos los intereses de cesantías,
+	// que se pagan aparte. Los ingresos se derivan del neto y las deducciones
+	// para que el resumen cuadre siempre con lo que se paga.
+	const sueldoAjustado =
+		Number(safeValue(item.sueldo_total, 0)) - Number(safeValue(item.interes_cesantias, 0));
+	const totalDeducciones =
+		Number(safeValue(item.salud, 0)) + Number(safeValue(item.pension, 0)) + Number(safeValue(item.total_anticipos, 0));
+
+	let firmaDelConductor: string | null = null;
 	if (firmas && firmas[0]?.presignedUrl) {
 		try {
-			const firmaBase64 = await imageToBase64Url(firmas[0].presignedUrl);
-			content.push({
-				stack: [
-					{
-						image: firmaBase64,
-						width: 180,
-						height: 50,
-						alignment: 'center' as const,
-						margin: [0, 30, 0, 0]
-					},
-					{
-						canvas: [
-							{
-								type: 'line',
-								x1: 0,
-								y1: 0,
-								x2: 190,
-								y2: 0,
-								lineWidth: 1,
-								lineColor: '#BDBDBD'
-							}
-						],
-						width: 190,
-						alignment: 'center' as const,
-						margin: [0, 2, 0, 0]
-					},
-					{
-						text: 'Firma de recibido',
-						fontSize: 10,
-						color,
-						alignment: 'center' as const,
-						bold: true,
-						margin: [0, 4, 0, 7]
-					}
-				],
-				alignment: 'center' as const
-			});
+			firmaDelConductor = await imageToBase64Url(firmas[0].presignedUrl);
 		} catch {
-			// Si falla la carga de la firma, no mostrarla
+			// Sin firma queda la línea para firmar a mano.
 		}
 	}
 
-	content.push({
-		text: `Documento generado el ${new Date().toLocaleDateString('es-CO')}`,
-		fontSize: 9,
-		color: '#9E9E9E',
-		alignment: 'center' as const,
-		margin: [0, 20, 0, 0]
-	});
+	const [logoMarca, mascotaMarca, selloMarca] = await Promise.all([
+		logoPngDataUrl(MARCA_DISENO.logoUrl),
+		logoPngDataUrl(MARCA_DISENO.mascotaUrl),
+		logoPngDataUrl(MARCA_DISENO.selloUrl)
+	]);
+
+	const marca: MarcaDesprendible = {
+		...MARCA_DISENO,
+		razonSocial: empresa,
+		nit,
+		logo: logoMarca,
+		mascota: mascotaMarca,
+		sello: selloMarca
+	};
+	const fechaGeneracion = new Date().toLocaleDateString('es-CO');
+
+	const content: any[] = paginaPrincipalDiseno2(
+		{
+			nombre: conductorNombre,
+			cedula: String(conductorCedula),
+			diasLaborados: String(safeValue(item.dias_laborados, 0)),
+			cargo: (item.conductor as any)?.cargo || 'Conductor',
+			mes: monthAndYear(item.periodo_fin),
+			periodo: `Periodo del ${formatDate(item.periodo_inicio)} al ${formatDate(item.periodo_fin)}`,
+			basicos,
+			tituloAdicionales: `Adicionales ${formatDate(item.periodo_inicio)} - ${formatDate(item.periodo_fin)}`,
+			adicionales,
+			novedades,
+			deducciones,
+			totalIngresos: formatCurrency(sueldoAjustado + totalDeducciones),
+			totalDeducciones: formatCurrency(totalDeducciones),
+			neto: formatCurrency(sueldoAjustado),
+			firma: firmaDelConductor,
+			fechaGeneracion
+		},
+		marca
+	);
 
 	// ============================================================
 	// PÁGINA 2+: HORAS EXTRAS Y RECARGOS (si hay recargos planilla)
@@ -1195,15 +740,24 @@ export async function construirDocDefinition(
 			// Page break before each planilla group
 			content.push({ text: '', pageBreak: 'before' as const });
 
-			// Title
-			content.push({
-				text: sectionTitle,
-				bold: true,
-				color: headerColor,
-				fontSize: 13,
-				alignment: 'center' as const,
-				margin: [0, 0, 0, 10]
-			});
+			const mesNombre = new Date(planilla.año, planilla.mes - 1)
+				.toLocaleString('es-CO', { month: 'long' })
+				.toUpperCase();
+			content.push(
+				...cabeceraSeccion(
+					isBonoAparte || isNoPagar ? { ...marca, oscuro: headerColor } : marca,
+					{
+						titulo: sectionTitle.charAt(0) + sectionTitle.slice(1).toLowerCase(),
+						subtitulo: `${planilla.empresa?.nombre || 'Sin empresa'} · ${mesNombre} ${planilla.año}`,
+						datos: [
+							['CONDUCTOR', conductorNombre],
+							['C.C.', String(conductorCedula)],
+							['VEHÍCULO', planilla.vehiculo?.placa || 'N/A'],
+							['MES', `${mesNombre} ${planilla.año}`]
+						]
+					}
+				)
+			);
 
 			// Avisos
 			const hayFestivosODomingos = planilla.dias?.some((d: any) => d.es_festivo || d.es_domingo);
@@ -1238,82 +792,6 @@ export async function construirDocDefinition(
 					margin: [0, 0, 0, 5]
 				});
 			}
-
-			// Header verde con info del vehículo/conductor/periodo
-			const mesNombre = new Date(planilla.año, planilla.mes - 1)
-				.toLocaleString('es-CO', { month: 'long' })
-				.toUpperCase();
-
-			const headerRows: any[] = [];
-			// Conductor info
-			headerRows.push({
-				columns: [
-					{
-						text: `CONDUCTOR: ${conductorNombre}`,
-						color: 'white',
-						bold: true,
-						fontSize: 9
-					},
-					{
-						text: `C.C.: ${conductorCedula}`,
-						color: 'white',
-						fontSize: 9,
-						alignment: 'right' as const
-					}
-				],
-				margin: [0, 0, 0, 2]
-			});
-			// Vehículo y periodo
-			headerRows.push({
-				columns: [
-					{
-						text: `VEHÍCULO: ${planilla.vehiculo?.placa || 'N/A'}`,
-						color: 'white',
-						bold: true,
-						fontSize: 10
-					},
-					{
-						text: `MES: ${mesNombre} ${planilla.año}`,
-						color: 'white',
-						bold: true,
-						fontSize: 10,
-						alignment: 'right' as const
-					}
-				]
-			});
-
-			content.push({
-				stack: headerRows,
-				fillColor: headerBg,
-				margin: [0, 5, 0, 0]
-				// Wrap in a table to get the green background
-			});
-
-			// Use a table to achieve the green header background
-			content.pop(); // Remove the stack we just added
-			content.push({
-				table: {
-					widths: ['*'],
-					body: [
-						[
-							{
-								stack: headerRows,
-								fillColor: headerBg,
-								margin: [4, 4, 4, 4]
-							}
-						]
-					]
-				},
-				layout: {
-					hLineWidth: () => 0,
-					vLineWidth: () => 0,
-					paddingLeft: () => 0,
-					paddingRight: () => 0,
-					paddingTop: () => 0,
-					paddingBottom: () => 0
-				},
-				margin: [0, 5, 0, 0]
-			});
 
 			// Empresa info
 			const valorHoraBase = planilla.configuracion_salarial?.valor_hora_trabajador || 0;
@@ -1350,7 +828,7 @@ export async function construirDocDefinition(
 										margin: [0, 2, 0, 0]
 									}
 								],
-								fillColor: isBonoAparte ? COLOR_BONO_APARTE_BG : '#f9f9f9',
+								fillColor: isBonoAparte ? COLOR_BONO_APARTE_BG : MARCA_DISENO.fondoSuave,
 								margin: [4, 4, 4, 4]
 							}
 						]
@@ -1359,7 +837,7 @@ export async function construirDocDefinition(
 				layout: {
 					hLineWidth: (i: number, node: any) => (i === node.table.body.length ? 1 : 0),
 					vLineWidth: () => 0,
-					hLineColor: () => '#E0E0E0',
+					hLineColor: () => MARCA_DISENO.borde,
 					paddingLeft: () => 0,
 					paddingRight: () => 0,
 					paddingTop: () => 0,
@@ -1403,7 +881,7 @@ export async function construirDocDefinition(
 							? '#FEF3C7'
 							: idx % 2 === 0
 								? '#ffffff'
-								: '#f9f9f9';
+								: MARCA_DISENO.fondoSuave;
 				const textColor = isBonoAparte
 					? '#1E3A8A' // blue-900
 					: esDisponible
@@ -1559,8 +1037,8 @@ export async function construirDocDefinition(
 					hLineWidth: (i: number, node: any) =>
 						i === 0 || i === 1 || i === node.table.body.length ? 1 : 0.5,
 					vLineWidth: () => 0.5,
-					hLineColor: () => '#E0E0E0',
-					vLineColor: () => '#E0E0E0',
+					hLineColor: () => MARCA_DISENO.borde,
+					vLineColor: () => MARCA_DISENO.borde,
 					paddingLeft: () => 2,
 					paddingRight: () => 2,
 					paddingTop: () => 1,
@@ -1785,8 +1263,8 @@ export async function construirDocDefinition(
 						hLineWidth: (i: number, node: any) =>
 							i === 0 || i === 1 || i === node.table.body.length ? 1 : 0.5,
 						vLineWidth: () => 0.5,
-						hLineColor: () => '#E0E0E0',
-						vLineColor: () => '#E0E0E0',
+						hLineColor: () => MARCA_DISENO.borde,
+						vLineColor: () => MARCA_DISENO.borde,
 						paddingLeft: () => 2,
 						paddingRight: () => 2,
 						paddingTop: () => 1,
@@ -1811,7 +1289,7 @@ export async function construirDocDefinition(
 									color: 'white',
 									bold: true,
 									fontSize: 10,
-									fillColor: headerColor,
+									fillColor: isBonoAparte || isNoPagar ? headerColor : MARCA_DISENO.acento,
 									margin: [4, 4, 0, 4]
 								},
 								{
@@ -1819,7 +1297,7 @@ export async function construirDocDefinition(
 									color: 'white',
 									bold: true,
 									fontSize: 10,
-									fillColor: headerColor,
+									fillColor: isBonoAparte || isNoPagar ? headerColor : MARCA_DISENO.acento,
 									alignment: 'right' as const,
 									margin: [0, 4, 15, 4]
 								}
@@ -1904,58 +1382,12 @@ export async function construirDocDefinition(
 			// Los días marcados «no sumar»: su valor, aparte y en gris.
 			content.push(...bloqueNoSuman(dias));
 
-			// Firma on recargos page
-			if (firmas && firmas[0]?.presignedUrl) {
-				try {
-					const firmaBase64 = await imageToBase64Url(firmas[0].presignedUrl);
-					content.push({
-						stack: [
-							{
-								image: firmaBase64,
-								width: 180,
-								height: 50,
-								alignment: 'center' as const,
-								margin: [0, 30, 0, 0]
-							},
-							{
-								canvas: [
-									{
-										type: 'line',
-										x1: 0,
-										y1: 0,
-										x2: 190,
-										y2: 0,
-										lineWidth: 1,
-										lineColor: '#BDBDBD'
-									}
-								],
-								width: 190,
-								alignment: 'center' as const,
-								margin: [0, 2, 0, 0]
-							},
-							{
-								text: 'Firma de recibido',
-								fontSize: 10,
-								color,
-								alignment: 'center' as const,
-								bold: true,
-								margin: [0, 4, 0, 7]
-							}
-						],
-						alignment: 'center' as const
-					});
-				} catch {
-					// Silently skip if firma fails
-				}
+			// Firma del conductor al pie de cada página de recargos.
+			if (firmaDelConductor) {
+				content.push(firmaConductor(marca, firmaDelConductor, conductorNombre, String(conductorCedula)));
 			}
 
-			content.push({
-				text: `Documento generado el ${new Date().toLocaleDateString('es-CO')}`,
-				fontSize: 9,
-				color: '#9E9E9E',
-				alignment: 'center' as const,
-				margin: [0, 10, 0, 0]
-			});
+			content.push(pieDocumento(marca, fechaGeneracion));
 		}
 	}
 
@@ -1994,14 +1426,17 @@ export async function construirDocDefinition(
 	if (diasSinRecargo.length > 0 && item.mostrar_recargos && !hayControlDias) {
 		content.push({ text: '', pageBreak: 'before' as const });
 
-		content.push({
-			text: 'DÍAS SIN RECARGO DEL CORTE',
-			bold: true,
-			color,
-			fontSize: 13,
-			alignment: 'center' as const,
-			margin: [0, 0, 0, 10]
-		});
+		content.push(
+			...cabeceraSeccion(marca, {
+				titulo: 'Días sin recargo del corte',
+				subtitulo: `Periodo del ${formatDate(item.periodo_inicio)} al ${formatDate(item.periodo_fin)}`,
+				datos: [
+					['CONDUCTOR', conductorNombre],
+					['C.C.', String(conductorCedula)],
+					['DÍAS', String(diasSinRecargo.length)]
+				]
+			})
+		);
 
 		content.push({
 			text: 'Aviso: Estos días no generan horas extras ni recargos. No suman a los totales del desprendible.',
@@ -2011,59 +1446,6 @@ export async function construirDocDefinition(
 			margin: [0, 0, 0, 5]
 		});
 
-		// Cabecera verde, igual que la de cada planilla.
-		const cabeceraSinRecargo: any[] = [
-			{
-				columns: [
-					{
-						text: `CONDUCTOR: ${conductorNombre}`,
-						color: 'white',
-						bold: true,
-						fontSize: 9
-					},
-					{
-						text: `C.C.: ${conductorCedula}`,
-						color: 'white',
-						fontSize: 9,
-						alignment: 'right' as const
-					}
-				],
-				margin: [0, 0, 0, 2]
-			},
-			{
-				columns: [
-					{
-						text: 'DÍAS SIN RECARGO',
-						color: 'white',
-						bold: true,
-						fontSize: 10
-					},
-					{
-						text: `${diasSinRecargo.length} ${diasSinRecargo.length === 1 ? 'DÍA' : 'DÍAS'}`,
-						color: 'white',
-						bold: true,
-						fontSize: 10,
-						alignment: 'right' as const
-					}
-				]
-			}
-		];
-
-		content.push({
-			table: {
-				widths: ['*'],
-				body: [[{ stack: cabeceraSinRecargo, fillColor: color, margin: [4, 4, 4, 4] }]]
-			},
-			layout: {
-				hLineWidth: () => 0,
-				vLineWidth: () => 0,
-				paddingLeft: () => 0,
-				paddingRight: () => 0,
-				paddingTop: () => 0,
-				paddingBottom: () => 0
-			},
-			margin: [0, 5, 0, 0]
-		});
 
 		const diaDeLaSemana = (fecha: string): string => {
 			const d = new Date(`${fecha}T12:00:00`);
@@ -2081,7 +1463,7 @@ export async function construirDocDefinition(
 		}));
 
 		const filasSinRecargo = diasSinRecargo.map((d: any, idx: number) => {
-			const fondo = idx % 2 === 0 ? '#ffffff' : '#f9f9f9';
+			const fondo = idx % 2 === 0 ? '#ffffff' : MARCA_DISENO.fondoSuave;
 			const celda = (texto: string, alineacion: 'left' | 'center', negrita = false) => ({
 				text: texto,
 				bold: negrita,
@@ -2135,8 +1517,8 @@ export async function construirDocDefinition(
 				hLineWidth: (i: number, node: any) =>
 					i === 0 || i === 1 || i === node.table.body.length ? 1 : 0.5,
 				vLineWidth: () => 0.5,
-				hLineColor: () => '#E0E0E0',
-				vLineColor: () => '#E0E0E0',
+				hLineColor: () => MARCA_DISENO.borde,
+				vLineColor: () => MARCA_DISENO.borde,
 				paddingLeft: () => 2,
 				paddingRight: () => 2,
 				paddingTop: () => 1,
@@ -2172,7 +1554,9 @@ export async function construirDocDefinition(
 				logo: await logoPngDataUrl('/assets/logo_nombre.webp'),
 				conductorNombre,
 				conductorCedula: String(conductorCedula),
-				firma: firmaControl
+				firma: firmaControl,
+				borde: MARCA_DISENO.borde,
+				fondoSuave: MARCA_DISENO.fondoSuave
 			})
 		);
 	}

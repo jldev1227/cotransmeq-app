@@ -111,9 +111,13 @@ export function paginaControlDias(o: {
 	conductorCedula: string;
 	/** Firma del conductor en data-URL; sin ella queda la línea para firmar a mano. */
 	firma: string | null;
+	/** Tonos del diseño 2 (bordes y cebra); sin ellos, los grises de siempre. */
+	borde?: string;
+	fondoSuave?: string;
 }): any[] {
 	const { control, color, colorBg } = o;
-	const borde = '#BDBDBD';
+	const borde = o.borde ?? '#BDBDBD';
+	const fondoSuave = o.fondoSuave ?? '#f9f9f9';
 
 	const encabezado = {
 		table: {
@@ -257,13 +261,13 @@ export function paginaControlDias(o: {
 			hLineWidth: (i: number, node: any) =>
 				i === 0 || i === 1 || i === node.table.body.length ? 1 : 0.5,
 			vLineWidth: () => 0.5,
-			hLineColor: () => '#E0E0E0',
-			vLineColor: () => '#E0E0E0',
+			hLineColor: () => borde,
+			vLineColor: () => borde,
 			paddingLeft: () => 3,
 			paddingRight: () => 3,
 			paddingTop: () => 1,
 			paddingBottom: () => 1,
-			fillColor: (i: number) => (i > 0 && i % 2 === 0 ? '#f9f9f9' : null)
+			fillColor: (i: number) => (i > 0 && i % 2 === 0 ? fondoSuave : null)
 		}
 	};
 
