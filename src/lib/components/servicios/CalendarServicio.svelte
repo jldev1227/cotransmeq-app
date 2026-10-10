@@ -1,14 +1,35 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
-	import { fly, fade } from 'svelte/transition';
+	/**
+	 * Vista de calendario de la gestión de servicios.
+	 *
+	 * Una sola tarjeta: arriba la barra del mes (navegación, con qué fecha se
+	 * ubica cada servicio y el resumen por estado), debajo la cuadrícula y, al
+	 * elegir un día, su lista a la derecha. Pulsar un servicio abre la vista
+	 * rápida (`ModalDetalleServicio`).
+	 *
+	 * Antes encima iban siete tarjetas de colores con los mismos conteos que ya
+	 * tiene la cabecera de la página, el selector de fecha estaba oculto y el
+	 * detalle salía en un drawer cortado contra el borde.
+	 */
 	import { browser } from '$app/environment';
+	import { ChevronLeft, ChevronRight, X } from 'lucide-svelte';
 	import CustomCalendar from '$lib/components/common/CustomCalendar.svelte';
 	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
-	import DrawerDetalleServicio from './DrawerDetalleServicio.svelte';
+	import SegmentosFiltro from '$lib/components/listing/SegmentosFiltro.svelte';
+	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
+	import EstadoPunto from '$lib/components/listing/EstadoPunto.svelte';
+	import ModalDetalleServicio from './ModalDetalleServicio.svelte';
 	import { obtenerFestivosCompletos } from '$lib/utils/festivosColombia';
-	import { getEstadoColor, getEstadoText, type EstadoServicio, type ServicioConRelaciones } from '$lib/types/servicios';
+	import {
+		getEstadoColor,
+		getEstadoText,
+		type EstadoServicio,
+		type ServicioConRelaciones
+	} from '$lib/types/servicios';
 	import { toast } from '$lib/stores/toast';
 	import { serviciosStore } from '$lib/stores/servicios';
+
+	type CampoFecha = 'fecha_solicitud' | 'fecha_realizacion' | 'fecha_finalizacion';
 
 	type FiltrosAplicados = {
 		estado: EstadoServicio | '';
@@ -20,10 +41,13 @@
 	type Props = {
 		mes: number;
 		anio: number;
-		campoFecha: 'fecha_solicitud' | 'fecha_realizacion' | 'fecha_finalizacion';
+		campoFecha: CampoFecha;
 		filtros: FiltrosAplicados;
+		/** La búsqueda de la página: el calendario solo muestra lo que coincide. */
+		coincide?: (servicio: ServicioConRelaciones) => boolean;
+		puedeEditar?: boolean;
 		onMesAnioChange: (mes: number, anio: number) => void;
-		onCampoFechaChange: (campo: 'fecha_solicitud' | 'fecha_realizacion' | 'fecha_finalizacion') => void;
+		onCampoFechaChange: (campo: CampoFecha) => void;
 		onEditar: (servicio: ServicioConRelaciones) => void;
 		onEliminar: (servicio: ServicioConRelaciones) => void;
 	};
@@ -33,6 +57,8 @@
 		anio = $bindable(),
 		campoFecha = $bindable(),
 		filtros,
+		coincide,
+		puedeEditar = false,
 		onMesAnioChange,
 		onCampoFechaChange,
 		onEditar,
@@ -41,53 +67,83 @@
 
 	let loading = $state(false);
 	let servicios = $state<ServicioConRelaciones[]>([]);
-	let servicioDrawer = $state<ServicioConRelaciones | null>(null);
-	let total = $state(0);
+	let servicioAbierto = $state<ServicioConRelaciones | null>(null);
 	let diaSeleccionado = $state<string | null>(null);
 	let fetchToken = 0;
 
-	let festivos = $derived(obtenerFestivosCompletos(anio));
+	const MESES = [
+		'Enero',
+		'Febrero',
+		'Marzo',
+		'Abril',
+		'Mayo',
+		'Junio',
+		'Julio',
+		'Agosto',
+		'Septiembre',
+		'Octubre',
+		'Noviembre',
+		'Diciembre'
+	];
+	const CAMPOS: { valor: CampoFecha; etiqueta: string }[] = [
+		{ valor: 'fecha_solicitud', etiqueta: 'Solicitud' },
+		{ valor: 'fecha_realizacion', etiqueta: 'Realización' },
+		{ valor: 'fecha_finalizacion', etiqueta: 'Finalización' }
+	];
+	const ESTADOS: EstadoServicio[] = [
+		'solicitado',
+		'planificado',
+		'en_curso',
+		'realizado',
+		'cancelado',
+		'liquidado'
+	];
 
-	let eventosPorDia = $derived.by(() => {
+	const festivos = $derived(obtenerFestivosCompletos(anio));
+	const visibles = $derived(coincide ? servicios.filter(coincide) : servicios);
+
+	/// El día y la hora salen de la MISMA fecha local. Antes el día se tomaba
+	/// del ISO en UTC y la hora en hora de Colombia: un servicio del 6 a las
+	/// 23:53 aparecía en la casilla del 7 con «23:53».
+	function instante(s: ServicioConRelaciones): Date | null {
+		const raw = s[campoFecha] || s.fecha_solicitud;
+		const d = raw ? new Date(raw) : null;
+		return d && !Number.isNaN(d.getTime()) ? d : null;
+	}
+	const claveLocal = (d: Date) =>
+		`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+	const eventosPorDia = $derived.by(() => {
 		const map = new Map<string, ServicioConRelaciones[]>();
-		for (const s of servicios) {
-			const fechaRaw = s[campoFecha] || s.fecha_solicitud;
-			if (!fechaRaw) continue;
-			const key = fechaRaw.split('T')[0];
+		for (const s of visibles) {
+			const d = instante(s);
+			if (!d) continue;
+			const key = claveLocal(d);
 			if (!map.has(key)) map.set(key, []);
 			map.get(key)!.push(s);
+		}
+		for (const lista of map.values()) {
+			lista.sort((x, y) => (instante(x)?.getTime() ?? 0) - (instante(y)?.getTime() ?? 0));
 		}
 		return map;
 	});
 
-	let eventosDelDia = $derived(diaSeleccionado ? (eventosPorDia.get(diaSeleccionado) || []) : []);
+	const eventosDelDia = $derived(diaSeleccionado ? (eventosPorDia.get(diaSeleccionado) ?? []) : []);
 
-	let statsMes = $derived.by(() => {
-		const base = {
-			total: servicios.length,
-			solicitado: 0,
-			en_curso: 0,
-			planificado: 0,
-			realizado: 0,
-			cancelado: 0,
-			liquidado: 0
-		};
-		for (const s of servicios) {
-			const estado = (s.estado || '').toLowerCase();
-			if (estado === 'solicitado') base.solicitado++;
-			else if (estado === 'en_curso') base.en_curso++;
-			else if (estado === 'planificado') base.planificado++;
-			else if (estado === 'realizado') base.realizado++;
-			else if (estado === 'cancelado') base.cancelado++;
-			else if (estado === 'liquidado') base.liquidado++;
-		}
-		return base;
+	/// Resumen del mes visible: solo los estados que tienen algo.
+	const conteosMes = $derived.by(() => {
+		const n = new Map<string, number>();
+		for (const s of visibles) n.set(s.estado, (n.get(s.estado) ?? 0) + 1);
+		return [
+			{ clave: 'total', etiqueta: 'En el mes', valor: visibles.length },
+			...ESTADOS.filter((e) => n.get(e)).map((e) => ({
+				clave: e,
+				etiqueta: getEstadoText(e),
+				valor: n.get(e)!,
+				color: getEstadoColor(e)
+			}))
+		];
 	});
-
-	const MESES_NOMBRES = [
-		'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-		'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-	];
 
 	async function cargarServiciosCalendario() {
 		if (!browser) return;
@@ -111,24 +167,16 @@
 			});
 
 			if (tokenActual !== fetchToken) return;
-
-			if (!res.ok) {
-				throw new Error(`Error ${res.status}`);
-			}
+			if (!res.ok) throw new Error(`Error ${res.status}`);
 
 			const json = await res.json();
-			if (json.success) {
-				servicios = json.data?.servicios ?? [];
-				total = json.data?.total ?? 0;
-			} else {
-				throw new Error(json.error || 'Error desconocido');
-			}
+			if (!json.success) throw new Error(json.error || 'Error desconocido');
+			servicios = json.data?.servicios ?? [];
 		} catch (err) {
 			if (tokenActual === fetchToken) {
 				console.error('Error cargando calendario:', err);
 				toast.error('Error al cargar el calendario: ' + (err instanceof Error ? err.message : ''));
 				servicios = [];
-				total = 0;
 			}
 		} finally {
 			if (tokenActual === fetchToken) loading = false;
@@ -147,11 +195,9 @@
 	});
 
 	function cambiarMes(delta: number) {
-		let nuevoMes = mes + delta;
-		let nuevoAnio = anio;
-		if (nuevoMes < 0) { nuevoMes = 11; nuevoAnio--; }
-		else if (nuevoMes > 11) { nuevoMes = 0; nuevoAnio++; }
-		onMesAnioChange(nuevoMes, nuevoAnio);
+		const d = new Date(anio, mes + delta, 1);
+		diaSeleccionado = null;
+		onMesAnioChange(d.getMonth(), d.getFullYear());
 	}
 
 	function irHoy() {
@@ -160,214 +206,158 @@
 		diaSeleccionado = null;
 	}
 
-	function handleDayClick(date: Date) {
-		const y = date.getFullYear();
-		const m = String(date.getMonth() + 1).padStart(2, '0');
-		const d = String(date.getDate()).padStart(2, '0');
-		diaSeleccionado = `${y}-${m}-${d}`;
-	}
+	const esMesActual = $derived(mes === new Date().getMonth() && anio === new Date().getFullYear());
 
-	function abrirDrawer(servicio: ServicioConRelaciones) {
-		servicioDrawer = servicio;
-	}
-
-	function cerrarDrawer() {
-		servicioDrawer = null;
-	}
-
-	async function handleTicket(servicio: ServicioConRelaciones) {
+	async function compartir(servicio: ServicioConRelaciones) {
 		try {
 			let token = servicio.share_token;
-			if (!token) {
-				token = (await serviciosStore.generarShareToken(servicio.id)) || undefined;
-			}
+			if (!token) token = (await serviciosStore.generarShareToken(servicio.id)) || undefined;
 			if (!token) {
 				toast.error('Error al generar enlace compartible');
 				return;
 			}
-			const shareUrl = `${window.location.origin}/public/servicio/${token}`;
-			await navigator.clipboard.writeText(shareUrl);
+			await navigator.clipboard.writeText(`${window.location.origin}/public/servicio/${token}`);
 			toast.success('Enlace copiado al portapapeles');
 		} catch (err) {
 			console.error('Error generando token:', err);
-			toast.error('Error al generar ticket');
+			toast.error('No se pudo copiar el enlace');
 		}
+	}
+
+	function hora(s: ServicioConRelaciones): string {
+		const raw = s[campoFecha] || s.fecha_solicitud;
+		if (!raw) return '—';
+		return new Intl.DateTimeFormat('es-CO', {
+			hour: '2-digit',
+			minute: '2-digit',
+			hour12: false
+		}).format(new Date(raw));
 	}
 </script>
 
-<div class="flex h-full min-h-0 flex-col gap-3">
-
-	<div class="hidden">
-		<input type="hidden" bind:value={campoFecha} />
+<div class="cal">
+	<!-- ═══ Barra del mes ═══ -->
+	<div class="cal-barra">
+		<div class="cal-nav">
+			<button
+				type="button"
+				class="cal-flecha"
+				onclick={() => cambiarMes(-1)}
+				aria-label="Mes anterior"
+			>
+				<ChevronLeft size={18} />
+			</button>
+			<h2 class="cal-mes">{MESES[mes]} <span>{anio}</span></h2>
+			<button
+				type="button"
+				class="cal-flecha"
+				onclick={() => cambiarMes(1)}
+				aria-label="Mes siguiente"
+			>
+				<ChevronRight size={18} />
+			</button>
+			<button type="button" class="btn-secondary cal-hoy" onclick={irHoy} disabled={esMesActual}>
+				Hoy
+			</button>
+		</div>
+		<SegmentosFiltro
+			etiqueta="Ubicar por"
+			opciones={CAMPOS}
+			valor={campoFecha}
+			onCambiar={(v) => {
+				diaSeleccionado = null;
+				onCampoFechaChange(v as CampoFecha);
+			}}
+		/>
 	</div>
 
-	<div class="grid flex-shrink-0 grid-cols-3 gap-2 lg:grid-cols-7" in:fly={{ y: 8, duration: 250 }}>
-		<div class="glass soft-shadow rounded-xl border border-gray-200/50 p-2.5">
-			<p class="text-[9px] font-medium uppercase tracking-wide text-gray-500">Total del mes</p>
-			<p class="mt-0.5 text-lg font-bold text-gray-900 tabular-nums">{statsMes.total}</p>
-			<p class="text-[9px] text-gray-400">{MESES_NOMBRES[mes]} {anio}</p>
+	{#if !loading}
+		<div class="cal-resumen">
+			<ResumenConteos conteos={conteosMes} />
+			<span class="cal-leyenda">
+				<span class="cal-leyenda-hoy"></span> Hoy
+				<span class="cal-leyenda-festivo"></span> Festivo
+			</span>
 		</div>
+	{/if}
 
-		<div class="glass soft-shadow rounded-xl border border-gray-200/50 p-2.5">
-			<div class="flex items-start justify-between">
-				<div>
-					<p class="text-[9px] font-medium uppercase tracking-wide text-gray-500">Solicitados</p>
-					<p class="mt-0.5 text-lg font-bold text-blue-600 tabular-nums">{statsMes.solicitado}</p>
-				</div>
-				<div class="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-blue-400 to-blue-600">
-					<svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-					</svg>
-				</div>
-			</div>
-		</div>
-
-		<div class="glass soft-shadow rounded-xl border border-gray-200/50 p-2.5">
-			<div class="flex items-start justify-between">
-				<div>
-					<p class="text-[9px] font-medium uppercase tracking-wide text-gray-500">En Curso</p>
-					<p class="mt-0.5 text-lg font-bold text-amber-600 tabular-nums">{statsMes.en_curso}</p>
-				</div>
-				<div class="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-amber-400 to-amber-600">
-					<svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-					</svg>
-				</div>
-			</div>
-		</div>
-
-		<div class="glass soft-shadow rounded-xl border border-gray-200/50 p-2.5">
-			<div class="flex items-start justify-between">
-				<div>
-					<p class="text-[9px] font-medium uppercase tracking-wide text-gray-500">Planificados</p>
-					<p class="mt-0.5 text-lg font-bold text-violet-600 tabular-nums">{statsMes.planificado}</p>
-				</div>
-				<div class="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-violet-400 to-violet-600">
-					<svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-					</svg>
-				</div>
-			</div>
-		</div>
-
-		<div class="glass soft-shadow rounded-xl border border-gray-200/50 p-2.5">
-			<div class="flex items-start justify-between">
-				<div>
-					<p class="text-[9px] font-medium uppercase tracking-wide text-gray-500">Realizados</p>
-					<p class="mt-0.5 text-lg font-bold text-orange-600 tabular-nums">{statsMes.realizado}</p>
-				</div>
-				<div class="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-orange-400 to-orange-600">
-					<svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-					</svg>
-				</div>
-			</div>
-		</div>
-
-		<div class="glass soft-shadow rounded-xl border border-gray-200/50 p-2.5">
-			<div class="flex items-start justify-between">
-				<div>
-					<p class="text-[9px] font-medium uppercase tracking-wide text-gray-500">Cancelados</p>
-					<p class="mt-0.5 text-lg font-bold text-red-600 tabular-nums">{statsMes.cancelado}</p>
-				</div>
-				<div class="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-red-400 to-red-600">
-					<svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
-					</svg>
-				</div>
-			</div>
-		</div>
-
-		<div class="glass soft-shadow rounded-xl border border-gray-200/50 p-2.5">
-			<div class="flex items-start justify-between">
-				<div>
-					<p class="text-[9px] font-medium uppercase tracking-wide text-gray-500">Liquidados</p>
-					<p class="mt-0.5 text-lg font-bold text-cyan-600 tabular-nums">{statsMes.liquidado}</p>
-				</div>
-				<div class="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-cyan-400 to-cyan-600">
-					<svg class="h-3 w-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-					</svg>
-				</div>
-			</div>
-		</div>
-	</div>
-
-	<div class="flex min-h-0 flex-1 gap-3">
-		<div class="flex min-h-0 min-w-0 flex-1 flex-col">
+	<!-- ═══ Cuadrícula + panel del día ═══ -->
+	<div class="cal-cuerpo">
+		<div class="cal-grilla">
 			{#if loading}
 				<CargaMascota texto="Cargando servicios del mes…" />
 			{:else}
 				<CustomCalendar
 					{mes}
 					{anio}
-					eventosPorDia={eventosPorDia}
-					festivos={festivos}
+					{eventosPorDia}
+					{festivos}
+					{campoFecha}
 					{diaSeleccionado}
-					onPrevMonth={() => cambiarMes(-1)}
-					onNextMonth={() => cambiarMes(1)}
-					onToday={irHoy}
-					onEventClick={abrirDrawer}
-					onDayClick={handleDayClick}
+					onEventClick={(s) => (servicioAbierto = s)}
+					onDayClick={(k) => (diaSeleccionado = diaSeleccionado === k ? null : k)}
 				/>
 			{/if}
 		</div>
 
 		{#if diaSeleccionado}
-			<aside class="glass soft-shadow flex w-72 flex-shrink-0 flex-col overflow-hidden rounded-2xl border border-gray-200/50" in:fly={{ x: 20, duration: 200 }}>
-				<div class="flex items-center justify-between border-b border-gray-100 bg-gray-50/60 px-3 py-2.5">
+			<aside class="cal-dia" aria-label="Servicios del día">
+				<header class="cal-dia-cabeza">
 					<div>
-						<p class="text-[10px] font-medium uppercase tracking-wider text-gray-500">Día seleccionado</p>
-						<p class="text-sm font-bold text-gray-900">
-							{new Date(diaSeleccionado + 'T00:00:00').toLocaleDateString('es-CO', { weekday: 'long', day: 'numeric', month: 'long' })}
+						<p class="cal-dia-fecha">
+							{new Intl.DateTimeFormat('es-CO', {
+								weekday: 'long',
+								day: 'numeric',
+								month: 'long'
+							}).format(new Date(diaSeleccionado + 'T00:00:00'))}
 						</p>
+						<small
+							>{eventosDelDia.length}
+							{eventosDelDia.length === 1 ? 'servicio' : 'servicios'}</small
+						>
 					</div>
-					<button onclick={() => diaSeleccionado = null}
-						class="apple-transition rounded-md p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
-						aria-label="Cerrar">
-						<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-						</svg>
+					<button
+						type="button"
+						class="cal-flecha"
+						onclick={() => (diaSeleccionado = null)}
+						aria-label="Cerrar el día"
+					>
+						<X size={16} />
 					</button>
-				</div>
-				<div class="flex-1 overflow-y-auto p-2">
+				</header>
+				<div class="cal-dia-lista">
 					{#if eventosDelDia.length === 0}
-						<div class="flex flex-col items-center justify-center gap-1 py-8 text-center">
-							<svg class="h-8 w-8 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-							</svg>
-							<p class="text-xs text-gray-500">Sin servicios este día</p>
-						</div>
+						<p class="cal-dia-vacio">Sin servicios este día.</p>
 					{:else}
-						<div class="space-y-1.5">
-							{#each eventosDelDia as ev (ev.id)}
-								<button onclick={() => abrirDrawer(ev)}
-									class="w-full rounded-lg border bg-white p-2 text-left apple-transition hover:border-orange-300 hover:bg-orange-50/40"
-									style="border-color: {getEstadoColor(ev.estado)}40">
-									<div class="flex items-center justify-between">
-										<span class="inline-flex items-center gap-1.5 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold"
-											style="background-color: {getEstadoColor(ev.estado)}15; border-color: {getEstadoColor(ev.estado)}40; color: {getEstadoColor(ev.estado)}">
-											<span class="h-1 w-1 rounded-full" style="background-color: {getEstadoColor(ev.estado)}"></span>
-											{getEstadoText(ev.estado)}
-										</span>
-									</div>
-									<p class="mt-1.5 truncate text-xs font-semibold text-gray-900">
-										{ev.origen_especifico || ev.origen?.nombre_municipio || '—'}
-										<span class="text-gray-400">→</span>
-										{ev.destino_especifico || ev.destino?.nombre_municipio || '—'}
-									</p>
-									{#if ev.vehiculo?.placa}
-										<p class="mt-0.5 font-mono text-[10px] font-semibold text-orange-700">{ev.vehiculo.placa}</p>
-									{/if}
-									{#if ev.conductor?.nombre}
-										<p class="text-[10px] text-gray-500">{ev.conductor.nombre} {ev.conductor.apellido || ''}</p>
-									{/if}
-									{#if ev.cliente?.nombre && !ev.vehiculo?.placa && !ev.conductor?.nombre}
-										<p class="text-[10px] text-gray-500">{ev.cliente.nombre}</p>
-									{/if}
-								</button>
-							{/each}
-						</div>
+						{#each eventosDelDia as s (s.id)}
+							<button
+								type="button"
+								class="cal-dia-item"
+								style="--c: {getEstadoColor(s.estado)}"
+								onclick={() => (servicioAbierto = s)}
+							>
+								<span class="cal-dia-hora">{hora(s)}</span>
+								<span class="cal-dia-texto">
+									<strong
+										>{s.origen_especifico || s.origen?.nombre_municipio || '—'} → {s.destino_especifico ||
+											s.destino?.nombre_municipio ||
+											'—'}</strong
+									>
+									<EstadoPunto
+										etiqueta={getEstadoText(s.estado)}
+										color={getEstadoColor(s.estado)}
+										apagado={s.estado === 'cancelado'}
+									/>
+									<small>
+										{#if s.vehiculo?.placa}<b>{s.vehiculo.placa}</b> ·{/if}
+										{s.conductor
+											? `${s.conductor.nombre} ${s.conductor.apellido ?? ''}`
+											: 'Sin conductor'}
+									</small>
+									{#if s.cliente?.nombre}<small>{s.cliente.nombre}</small>{/if}
+								</span>
+							</button>
+						{/each}
 					{/if}
 				</div>
 			</aside>
@@ -375,10 +365,234 @@
 	</div>
 </div>
 
-<DrawerDetalleServicio
-	servicio={servicioDrawer}
-	onClose={cerrarDrawer}
-	onEdit={(s) => { cerrarDrawer(); onEditar(s); }}
-	onTicket={handleTicket}
-	onDelete={(s) => { cerrarDrawer(); onEliminar(s); }}
+<ModalDetalleServicio
+	servicio={servicioAbierto}
+	{puedeEditar}
+	oncerrar={() => (servicioAbierto = null)}
+	oneditar={(s) => {
+		servicioAbierto = null;
+		onEditar(s);
+	}}
+	oncompartir={compartir}
+	oneliminar={(s) => {
+		servicioAbierto = null;
+		onEliminar(s);
+	}}
 />
+
+<style>
+	.cal {
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+		background: var(--bg-surface);
+		border: 1px solid var(--border-subtle);
+		border-radius: 22px;
+		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+		overflow: hidden;
+	}
+
+	/* ── Barra del mes ── */
+	.cal-barra {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem 1.25rem;
+		padding: 0.9rem 1.1rem;
+		border-bottom: 1px solid var(--border-subtle);
+	}
+	.cal-nav {
+		display: flex;
+		align-items: center;
+		gap: 6px;
+	}
+	.cal-mes {
+		min-width: 10.5rem;
+		margin: 0;
+		text-align: center;
+		font-family: var(--font-display);
+		font-size: 1.2rem;
+		font-weight: 800;
+		letter-spacing: -0.01em;
+		color: var(--text-primary);
+	}
+	.cal-mes span {
+		font-weight: 600;
+		color: var(--text-muted);
+	}
+	.cal-flecha {
+		display: inline-grid;
+		place-items: center;
+		width: 34px;
+		height: 34px;
+		border: 1px solid var(--border-subtle);
+		border-radius: 10px;
+		background: var(--bg-surface);
+		color: var(--text-secondary);
+		cursor: pointer;
+		transition:
+			background 0.15s,
+			color 0.15s;
+	}
+	.cal-flecha:hover {
+		background: var(--bg-base);
+		color: var(--text-primary);
+	}
+	.cal-hoy {
+		margin-left: 6px;
+	}
+	.cal-hoy:disabled {
+		opacity: 0.5;
+		cursor: default;
+	}
+
+	.cal-resumen {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.5rem 1rem;
+		padding: 0.6rem 1.1rem;
+		border-bottom: 1px solid var(--border-subtle);
+		background: var(--bg-base);
+	}
+	.cal-leyenda {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 0.72rem;
+		font-weight: 600;
+		color: var(--text-muted);
+	}
+	.cal-leyenda-hoy,
+	.cal-leyenda-festivo {
+		width: 9px;
+		height: 9px;
+		border-radius: 50%;
+		background: var(--accion);
+	}
+	.cal-leyenda-festivo {
+		margin-left: 8px;
+		background: #dc2626;
+	}
+
+	/* ── Cuerpo ── */
+	.cal-cuerpo {
+		display: flex;
+		min-height: 0;
+		flex: 1;
+	}
+	.cal-grilla {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		flex: 1;
+	}
+
+	/* ── Panel del día ── */
+	.cal-dia {
+		display: flex;
+		flex-direction: column;
+		width: 20rem;
+		flex-shrink: 0;
+		border-left: 1px solid var(--border-subtle);
+		background: color-mix(in srgb, var(--bg-base) 60%, var(--bg-surface));
+	}
+	.cal-dia-cabeza {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 8px;
+		padding: 0.9rem 1rem;
+		border-bottom: 1px solid var(--border-subtle);
+	}
+	.cal-dia-fecha {
+		margin: 0;
+		font-size: 0.95rem;
+		font-weight: 800;
+		color: var(--text-primary);
+	}
+	.cal-dia-fecha::first-letter {
+		text-transform: uppercase;
+	}
+	.cal-dia-cabeza small {
+		font-size: 0.76rem;
+		color: var(--text-muted);
+	}
+	.cal-dia-lista {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+		padding: 0.75rem;
+		overflow-y: auto;
+	}
+	.cal-dia-vacio {
+		margin: 0;
+		padding: 2rem 0;
+		text-align: center;
+		font-size: 0.84rem;
+		color: var(--text-muted);
+	}
+	.cal-dia-item {
+		display: flex;
+		gap: 10px;
+		padding: 10px 12px;
+		border: 1px solid var(--border-subtle);
+		border-left: 3px solid var(--c);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+		transition:
+			background 0.15s,
+			box-shadow 0.15s;
+	}
+	.cal-dia-item:hover {
+		background: color-mix(in srgb, var(--c) 6%, var(--bg-surface));
+		box-shadow: 0 4px 14px rgba(0, 0, 0, 0.05);
+	}
+	.cal-dia-hora {
+		flex-shrink: 0;
+		font-size: 0.8rem;
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+		color: var(--text-secondary);
+	}
+	.cal-dia-texto {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 3px;
+		min-width: 0;
+	}
+	.cal-dia-texto strong {
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 0.84rem;
+		color: var(--text-primary);
+	}
+	.cal-dia-texto small {
+		font-size: 0.74rem;
+		color: var(--text-muted);
+	}
+	.cal-dia-texto b {
+		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+		color: var(--text-secondary);
+	}
+
+	/* En pantallas angostas el día va debajo, no al lado. */
+	@media (max-width: 900px) {
+		.cal-cuerpo {
+			flex-direction: column;
+		}
+		.cal-dia {
+			width: auto;
+			border-left: 0;
+			border-top: 1px solid var(--border-subtle);
+		}
+	}
+</style>

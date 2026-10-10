@@ -1,5 +1,26 @@
 <script lang="ts">
 	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
+	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
+	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import EstadoPunto from '$lib/components/listing/EstadoPunto.svelte';
+	import AccionesDropdown, { type AccionMenu } from '$lib/components/AccionesDropdown.svelte';
+	import { mascota } from '$lib/mascot';
+	import {
+		ArrowDown,
+		CalendarDays,
+		Eye,
+		List,
+		Map as MapIcon,
+		Pencil,
+		Plus,
+		Share2,
+		SlidersHorizontal,
+		Smartphone,
+		Table2,
+		Ticket,
+		Trash2,
+		X
+	} from 'lucide-svelte';
 	import { authStore } from '$lib/stores/auth';
 	import { onMount, onDestroy, untrack } from 'svelte';
 	import { goto, replaceState } from '$app/navigation';
@@ -962,167 +983,148 @@
 		}).format(d);
 		return `${dia} · ${hora}`;
 	}
+
+	// ── Cáscara de listado: conteos, vistas y menú de acciones ──────────
+	const ESTADOS_RESUMEN = ['solicitado', 'planificado', 'en_curso', 'realizado', 'cancelado'] as const;
+	const ETIQUETA_RESUMEN: Record<(typeof ESTADOS_RESUMEN)[number], string> = {
+		solicitado: 'Solicitados',
+		planificado: 'Planificados',
+		en_curso: 'En curso',
+		realizado: 'Realizados',
+		cancelado: 'Cancelados'
+	};
+	const VISTAS: { id: VistaActiva; etiqueta: string; icono: typeof List }[] = [
+		{ id: 'lista', etiqueta: 'Lista', icono: List },
+		{ id: 'canvas', etiqueta: 'Excel', icono: Table2 },
+		{ id: 'calendario', etiqueta: 'Calendario', icono: CalendarDays }
+	];
+
+	/** Pulsar un conteo filtra por ese estado; pulsar el activo (o «Servicios») lo quita. */
+	function elegirEstadoResumen(clave: string) {
+		filtroEstado = !clave || filtroEstado === clave ? '' : (clave as EstadoServicio);
+		paginaActual = 1;
+		cargarServicios();
+	}
+
+	const origenDe = (s: ServicioConRelaciones) =>
+		s.origen_especifico || s.origen?.nombre_municipio || 'Sin origen';
+	const destinoDe = (s: ServicioConRelaciones) =>
+		s.destino_especifico || s.destino?.nombre_municipio || 'Sin destino';
+
+	/// Las mismas seis acciones que antes eran iconos sueltos en la fila.
+	function accionesDeServicio(servicio: ServicioConRelaciones): AccionMenu[] {
+		return [
+			{ id: 'ver', etiqueta: 'Ver detalle', icono: Eye, tono: 'ver', destacada: true, onSelect: () => verDetalle(servicio.id) },
+			...(puedeEditar
+				? [{ id: 'editar', etiqueta: 'Editar', icono: Pencil, tono: 'editar' as const, destacada: true, onSelect: () => handleEditarServicio(servicio) }]
+				: []),
+			{
+				id: 'ticket',
+				etiqueta: 'Ticket',
+				icono: Ticket,
+				onSelect: () => {
+					servicioSeleccionado = servicio;
+					mostrarModalTicket = true;
+				}
+			},
+			{ id: 'rutograma', etiqueta: 'Rutograma PDF', icono: MapIcon, onSelect: () => handleDescargarRutograma(servicio) },
+			{ id: 'compartir', etiqueta: 'Compartir enlace', icono: Share2, onSelect: () => handleCompartirServicio(servicio) },
+			...(puedeEditar
+				? [{ id: 'eliminar', etiqueta: 'Eliminar', icono: Trash2, tono: 'eliminar' as const, destacada: true, separadorAntes: true, onSelect: () => handleEliminarServicio(servicio) }]
+				: [])
+		];
+	}
 </script>
 
 <svelte:head>
 	<title>Servicios - Cotransmeq</title>
 </svelte:head>
 
-<!-- Layout raíz: columna que ocupa todo el alto disponible -->
-<div class="flex h-full min-h-0 flex-col gap-4 overflow-y-auto p-6" in:fade={{ duration: 400 }}>
-	<!-- ═══════════════════════════════════════════
-	     HEADER
-	     ═══════════════════════════════════════════ -->
-	<div class="glass soft-shadow flex-shrink-0 rounded-2xl border border-gray-200/50 p-5">
-		<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-			<!-- Título -->
-			<div class="flex items-center gap-3">
-				<div>
-					<!-- El estado del socket lo dice el header, junto al nombre de la
-					     sección. Aquí había otro chip «En vivo»/«Offline» que
-					     aparecía a diez centímetros del suyo diciendo lo mismo. -->
-					<div class="flex items-center gap-2">
-						<h1 class="text-xl font-bold text-gray-900">Gestión de Servicios</h1>
-					</div>
-					<p class="text-xs text-gray-500">
-						Administra y monitorea todos los servicios de transporte
-					</p>
-				</div>
-			</div>
-
-			<!-- Búsqueda + acciones -->
-			<div class="flex flex-wrap items-center gap-2">
-				<!-- Tabs Lista / Calendario -->
-				<div
-					class="inline-flex gap-1 rounded-xl border border-gray-200 bg-white/80 p-1"
-					role="tablist"
-				>
-					<button
-						onclick={() => cambiarVista('lista')}
-						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold
-							{vistaActiva === 'lista'
-							? 'bg-[var(--accion)] text-white'
-							: 'text-gray-600 hover:bg-gray-50'}"
-						role="tab"
-						aria-selected={vistaActiva === 'lista'}
-					>
-						<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M4 6h16M4 10h16M4 14h16M4 18h16"
-							/>
-						</svg>
-						Lista
-					</button>
-					<button
-						onclick={() => cambiarVista('canvas')}
-						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold
-						{vistaActiva === 'canvas'
-							? 'bg-[var(--accion)] text-white'
-							: 'text-gray-600 hover:bg-gray-50'}"
-						role="tab"
-						aria-selected={vistaActiva === 'canvas'}
-					>
-						<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M3.75 9.75h16.5m-16.5 4.5h16.5m-16.5 4.5h16.5M6 5.25h12a1.5 1.5 0 011.5 1.5v12a1.5 1.5 0 01-1.5 1.5H6a1.5 1.5 0 01-1.5-1.5v-12a1.5 1.5 0 011.5-1.5z"
-							/>
-						</svg>
-						Excel
-					</button>
-					<button
-						onclick={() => cambiarVista('calendario')}
-						class="apple-transition flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold
-							{vistaActiva === 'calendario'
-							? 'bg-[var(--accion)] text-white'
-							: 'text-gray-600 hover:bg-gray-50'}"
-						role="tab"
-						aria-selected={vistaActiva === 'calendario'}
-					>
-						<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-							/>
-						</svg>
-						Calendario
-					</button>
-				</div>
-
-				<!-- Búsqueda -->
-				<div class="relative">
-					<input
-						type="text"
-						bind:value={busqueda}
-						placeholder="Buscar por #solicitud, placa, conductor, divipol/municipio origen o destino…"
-						class="input-glow apple-transition w-96 max-w-full rounded-xl border border-gray-200 bg-white/80 py-2 pr-4 pl-9 text-sm text-gray-900 placeholder-gray-400 focus:border-emerald-400"
+<!-- Cáscara de los listados (`dir-*` de app.css), la misma de liquidaciones de
+     servicios, extractos y los directorios: una cabecera con los conteos, las
+     pestañas de vista, la barra de búsqueda y la tabla que pasa a tarjetas
+     cuando su contenedor es angosto. -->
+<div class="dir-pagina srv-pagina" in:fade={{ duration: 400 }}>
+	<header class="page-card dir-cabecera" style="padding: 1.25rem 1.5rem;">
+		<div class="dir-cabecera-texto">
+			<h1 class="dir-titulo">Gestión de servicios</h1>
+			<p class="dir-desc">Administra y monitorea todos los servicios de transporte.</p>
+			{#if stats}
+				<div class="dir-conteos">
+					<!-- Cada estado filtra la lista; pulsar el activo lo quita. -->
+					<ResumenConteos
+						conteos={[
+							{ clave: '', etiqueta: 'Servicios', valor: stats.total },
+							...ESTADOS_RESUMEN.map((e) => ({
+								clave: e,
+								etiqueta: ETIQUETA_RESUMEN[e],
+								valor: stats?.[e] ?? 0,
+								color: getEstadoColor(e)
+							}))
+						]}
+						activo={filtroEstado || null}
+						onElegir={elegirEstadoResumen}
 					/>
-					<svg
-						class="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-gray-400"
-						fill="none"
-						stroke="currentColor"
-						viewBox="0 0 24 24"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-						/>
-					</svg>
 				</div>
-
-				<!-- Filtros -->
-				<button
-					onclick={() => (mostrarFiltros = !mostrarFiltros)}
-					class="apple-transition flex items-center gap-1.5 rounded-xl border px-3 py-2 text-sm font-medium transition-colors
-						{mostrarFiltros
-						? 'border-emerald-300 bg-emerald-50 text-emerald-700'
-						: 'border-gray-200 bg-white text-gray-700 hover:border-emerald-200 hover:bg-emerald-50'}"
-				>
-					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"
-						/>
-					</svg>
-					Filtros
-					{#if activeFilters.length > 0}
-						<span
-							class="flex h-4 min-w-4 items-center justify-center rounded-full bg-emerald-500 px-1 text-[9px] font-bold text-white"
-							>{activeFilters.length}</span
-						>
-					{/if}
-				</button>
-
-				<!-- Nuevo -->
-				{#if puedeEditar}
-					<button data-tour="srv-btn-nuevo"
-						onclick={handleNuevoServicio}
-						class="btn-primary apple-transition flex items-center gap-1.5"
-					>
-						<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-							/>
-						</svg>
-						Nuevo Servicio
-					</button>
-				{/if}
-			</div>
+			{/if}
 		</div>
+
+		<div class="dir-cabecera-acciones">
+			{#if puedeEditar}
+				<button data-tour="srv-btn-nuevo" onclick={handleNuevoServicio} class="btn-primary">
+					<Plus class="h-4 w-4" />
+					Nuevo servicio
+				</button>
+			{/if}
+		</div>
+	</header>
+
+	<!-- Pestañas con la forma de `TabsVista`, como en liquidaciones. -->
+	<div class="srv-tabs" role="tablist" aria-label="Vistas de servicios">
+		{#each VISTAS as v (v.id)}
+			{@const Icono = v.icono}
+			<button
+				type="button"
+				role="tab"
+				class="srv-tab"
+				class:activa={vistaActiva === v.id}
+				aria-selected={vistaActiva === v.id}
+				onclick={() => cambiarVista(v.id)}
+			>
+				<Icono class="h-3.5 w-3.5" />
+				{v.etiqueta}
+			</button>
+		{/each}
+	</div>
+
+	<!-- Búsqueda y filtros: sirven a las tres vistas. -->
+	<div class="dir-filtros">
+		<div class="dir-filtros-buscador">
+			<BuscadorLista
+				bind:valor={busqueda}
+				onBuscar={() => {}}
+				placeholder="#solicitud, placa, conductor, municipio de origen o destino…"
+				etiqueta="Buscar servicios"
+			/>
+		</div>
+		<button
+			type="button"
+			class="btn-secondary srv-btn-filtros"
+			class:srv-btn-filtros--activo={mostrarFiltros || activeFilters.length > 0}
+			onclick={() => (mostrarFiltros = !mostrarFiltros)}
+		>
+			<SlidersHorizontal class="h-4 w-4" />
+			Filtros
+			{#if activeFilters.length > 0}
+				<span class="srv-contador">{activeFilters.length}</span>
+			{/if}
+		</button>
+		{#if activeFilters.length > 0}
+			<button type="button" class="btn-secondary" onclick={limpiarFiltros}>
+				<X class="h-3.5 w-3.5" />
+				Limpiar
+			</button>
+		{/if}
 	</div>
 
 	<!-- Panel de filtros (drawer lateral) — renderizado fuera del .glass card
@@ -1314,903 +1316,127 @@
 		</div>
 	</FilterDrawer>
 
-	<!-- ═══════════════════════════════════════════
-	     STATS CARDS — compactas, una fila (solo en vista lista)
-	     ═══════════════════════════════════════════ -->
-	{#if vistaActiva === 'lista' && stats}
-		<div
-			class="grid flex-shrink-0 grid-cols-3 gap-3 lg:grid-cols-6"
-			in:fly={{ y: 12, duration: 400, delay: 100 }}
-		>
-			<!-- Total -->
-			<div class="glass soft-shadow rounded-xl border border-gray-200/50 p-3">
-				<div class="flex items-center justify-between">
-					<div>
-						<p class="text-[10px] font-medium tracking-wide text-gray-500 uppercase">Total</p>
-						<p class="text-xl font-bold text-gray-900">{stats.total}</p>
-					</div>
-					<div
-						class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-gray-400 to-gray-600"
-					>
-						<svg
-							class="h-3.5 w-3.5 text-white"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-							/>
-						</svg>
-					</div>
-				</div>
-			</div>
-
-			<!-- Solicitados -->
-			<button
-				onclick={() => cambiarFiltroEstado('solicitado')}
-				class="glass soft-shadow apple-transition rounded-xl border p-3 text-left transition-colors hover:border-blue-200 hover:bg-blue-50/30
-					{filtroEstado === 'solicitado' ? 'border-blue-300 bg-blue-50/50' : 'border-gray-200/50'}"
-			>
-				<div class="flex items-center justify-between">
-					<div>
-						<p class="text-[10px] font-medium tracking-wide text-gray-500 uppercase">Solicitados</p>
-						<p class="text-xl font-bold text-blue-600">{stats.solicitado}</p>
-					</div>
-					<div
-						class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-blue-400 to-blue-600"
-					>
-						<svg
-							class="h-3.5 w-3.5 text-white"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-							/>
-						</svg>
-					</div>
-				</div>
-			</button>
-
-			<!-- En Curso -->
-			<button
-				onclick={() => cambiarFiltroEstado('en_curso')}
-				class="glass soft-shadow apple-transition rounded-xl border p-3 text-left transition-colors hover:border-amber-200 hover:bg-amber-50/30
-					{filtroEstado === 'en_curso' ? 'border-amber-300 bg-amber-50/50' : 'border-gray-200/50'}"
-			>
-				<div class="flex items-center justify-between">
-					<div>
-						<p class="text-[10px] font-medium tracking-wide text-gray-500 uppercase">En Curso</p>
-						<p class="text-xl font-bold text-amber-600">{stats.en_curso}</p>
-					</div>
-					<div
-						class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-amber-600"
-					>
-						<svg
-							class="h-3.5 w-3.5 text-white"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M13 10V3L4 14h7v7l9-11h-7z"
-							/>
-						</svg>
-					</div>
-				</div>
-			</button>
-
-			<!-- Planificados -->
-			<button
-				onclick={() => cambiarFiltroEstado('planificado')}
-				class="glass soft-shadow apple-transition rounded-xl border p-3 text-left transition-colors hover:border-violet-200 hover:bg-violet-50/30
-					{filtroEstado === 'planificado' ? 'border-violet-300 bg-violet-50/50' : 'border-gray-200/50'}"
-			>
-				<div class="flex items-center justify-between">
-					<div>
-						<p class="text-[10px] font-medium tracking-wide text-gray-500 uppercase">
-							Planificados
-						</p>
-						<p class="text-xl font-bold text-violet-600">{stats.planificado}</p>
-					</div>
-					<div
-						class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-violet-400 to-violet-600"
-					>
-						<svg
-							class="h-3.5 w-3.5 text-white"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-							/>
-						</svg>
-					</div>
-				</div>
-			</button>
-
-			<!-- Realizados -->
-			<button
-				onclick={() => cambiarFiltroEstado('realizado')}
-				class="glass soft-shadow apple-transition rounded-xl border p-3 text-left transition-colors hover:border-emerald-200 hover:bg-emerald-50/30
-					{filtroEstado === 'realizado' ? 'border-emerald-300 bg-emerald-50/50' : 'border-gray-200/50'}"
-			>
-				<div class="flex items-center justify-between">
-					<div>
-						<p class="text-[10px] font-medium tracking-wide text-gray-500 uppercase">Realizados</p>
-						<p class="text-xl font-bold text-emerald-600">{stats.realizado}</p>
-					</div>
-					<div
-						class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-400 to-emerald-600"
-					>
-						<svg
-							class="h-3.5 w-3.5 text-white"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-							/>
-						</svg>
-					</div>
-				</div>
-			</button>
-
-			<!-- Cancelados -->
-			<button
-				onclick={() => cambiarFiltroEstado('cancelado')}
-				class="glass soft-shadow apple-transition rounded-xl border p-3 text-left transition-colors hover:border-red-200 hover:bg-red-50/30
-					{filtroEstado === 'cancelado' ? 'border-red-300 bg-red-50/50' : 'border-gray-200/50'}"
-			>
-				<div class="flex items-center justify-between">
-					<div>
-						<p class="text-[10px] font-medium tracking-wide text-gray-500 uppercase">Cancelados</p>
-						<p class="text-xl font-bold text-red-600">{stats.cancelado}</p>
-					</div>
-					<div
-						class="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-red-400 to-red-600"
-					>
-						<svg
-							class="h-3.5 w-3.5 text-white"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-							/>
-						</svg>
-					</div>
-				</div>
-			</button>
-		</div>
-	{/if}
-
-	<!-- ═══════════════════════════════════════════
-	     TABLA — ocupa el resto del alto disponible
-	     ═══════════════════════════════════════════ -->
 	{#if vistaActiva === 'lista'}
-		<div
-			class="glass soft-shadow flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200/50"
-			in:fly={{ y: 12, duration: 400, delay: 150 }}
-		>
+		<div class="srv-marco" in:fly={{ y: 12, duration: 400, delay: 60 }}>
 			{#if loading}
 				<CargaMascota texto="Cargando servicios…" />
 			{:else if servicios.length === 0}
-				<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12">
-					<div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100">
-						<svg
-							class="h-7 w-7 text-gray-400"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-							/>
-						</svg>
-					</div>
-					<div class="text-center">
-						<h3 class="mb-1 text-base font-semibold text-gray-900">No hay servicios</h3>
-						<p class="text-sm text-gray-500">
-							{busqueda || filtroEstado
-								? 'No se encontraron servicios con los filtros aplicados'
-								: 'Comienza creando un nuevo servicio'}
-						</p>
-					</div>
-					{#if busqueda || filtroEstado}
-						<button
-							onclick={limpiarFiltros}
-							class="btn-primary apple-transition"
-						>
+				{@const filtrado = activeFilters.length > 0}
+				<div class="dir-vacio">
+					<img src={mascota(filtrado ? 'vacio' : 'exito').src} alt="" width="418" height="418" />
+					<h3>{filtrado ? 'Sin resultados' : 'Todavía no hay servicios'}</h3>
+					<p>
+						{filtrado
+							? 'Ningún servicio coincide con estos filtros.'
+							: 'Los servicios aparecen aquí con su ruta, su conductor y sus fechas.'}
+					</p>
+					{#if filtrado}
+						<button type="button" class="btn-secondary" onclick={limpiarFiltros}>
 							Limpiar filtros
+						</button>
+					{:else if puedeEditar}
+						<button onclick={handleNuevoServicio} class="btn-primary">
+							<Plus class="h-4 w-4" />
+							Nuevo servicio
 						</button>
 					{/if}
 				</div>
 			{:else}
-				<!-- ─────────────────────────────────────────
-			     LEYENDA DE ESTADOS
-			     ───────────────────────────────────────── -->
-				<div
-					class="flex flex-shrink-0 flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-gray-100 bg-gray-50/60 px-4 py-2"
-				>
-					<span class="text-[10px] font-semibold tracking-wider text-gray-400 uppercase"
-						>Estados:</span
-					>
-					{#each [{ estado: 'solicitado', label: 'Solicitado' }, { estado: 'en_curso', label: 'En Curso' }, { estado: 'planificado', label: 'Planificado' }, { estado: 'realizado', label: 'Realizado' }, { estado: 'cancelado', label: 'Cancelado' }, { estado: 'liquidado', label: 'Liquidado' }] as item}
-						<button
-							onclick={() => cambiarFiltroEstado(item.estado as EstadoServicio)}
-							class="flex items-center gap-1.5 rounded-full px-2 py-0.5 transition-colors hover:bg-gray-100
-							{filtroEstado === item.estado ? 'bg-gray-200/80 ring-1 ring-gray-300' : ''}"
-							title="Filtrar por {item.label}"
-						>
-							<span
-								class="h-2 w-2 flex-shrink-0 rounded-full"
-								style="background-color: {getEstadoColor(item.estado as EstadoServicio)}"
-							></span>
-							<span class="text-[10px] font-medium text-gray-600">{item.label}</span>
-						</button>
-					{/each}
-					{#if filtroEstado}
-						<button
-							onclick={() => {
-								filtroEstado = '';
-								paginaActual = 1;
-								cargarServicios();
-							}}
-							class="ml-auto flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-red-500 hover:bg-red-50"
-						>
-							<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M6 18L18 6M6 6l12 12"
-								/>
-							</svg>
-							Quitar filtro
-						</button>
-					{/if}
-				</div>
-
-				<!-- ─────────────────────────────────────────
-			     MOBILE: Lista de cards  (< lg)
-			     ───────────────────────────────────────── -->
-				<div class="min-h-0 flex-1 overflow-y-auto lg:hidden">
-					<div class="divide-y divide-gray-100">
-						{#each servicios as servicio, index (servicio?.id || `temp-${index}`)}
-							<div
-								class="relative flex gap-0 transition-colors hover:bg-gray-50/60"
-								in:fly={{ y: 8, duration: 200, delay: index * 20 }}
-							>
-								<!-- Barra de estado lateral -->
-								<div
-									class="w-1 flex-shrink-0 rounded-l-sm"
-									style="background-color: {getEstadoColor(servicio.estado)}"
-								></div>
-
-								<!-- Contenido de la card -->
-								<div class="min-w-0 flex-1 px-3 py-3">
-									<!-- Fila 1: Ruta + Estado badge -->
-									<div class="mb-2 flex items-start justify-between gap-2">
-										<div class="min-w-0 flex-1">
-											<div class="flex items-center gap-1">
-												<svg
-													class="h-3 w-3 flex-shrink-0 text-emerald-500"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-													/>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-													/>
-												</svg>
-												<p class="truncate text-sm font-semibold text-gray-900">
-													{servicio.origen_especifico ||
-														servicio.origen?.nombre_municipio ||
-														'Sin origen'}
-												</p>
-											</div>
-											<div class="mt-0.5 flex items-center gap-1 pl-4">
-												<svg
-													class="h-2.5 w-2.5 flex-shrink-0 text-gray-300"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M19 14l-7 7m0 0l-7-7m7 7V3"
-													/>
-												</svg>
-												<p class="truncate text-xs text-gray-500">
-													{servicio.destino_especifico ||
-														servicio.destino?.nombre_municipio ||
-														'Sin destino'}
-												</p>
-											</div>
-										</div>
-										<span
-											class="flex-shrink-0 rounded-md border px-2 py-0.5 text-[10px] font-semibold"
-											style="background-color: {getEstadoColor(
-												servicio.estado
-											)}15; border-color: {getEstadoColor(
-												servicio.estado
-											)}40; color: {getEstadoColor(servicio.estado)}"
-										>
-											{getEstadoText(servicio.estado)}
-										</span>
-										{#if servicio.ejecucion?.iniciado_at}
-											<span
-												class="inline-flex flex-shrink-0 items-center gap-0.5 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700"
-												title={servicio.ejecucion.liberado_at
-													? 'Iniciado y liberado por el conductor desde la app'
-													: 'Iniciado por el conductor desde la app'}
-											>
-												<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
-													><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg
-												>
-												{servicio.ejecucion.liberado_at ? 'Liberado' : 'Iniciado'}
-											</span>
-										{/if}
-									</div>
-
-									<!-- Fila 2: Cliente + Valor -->
-									<div class="mb-1.5 flex items-center justify-between gap-2">
-										<div class="min-w-0 flex-1">
-											<p class="truncate text-xs text-gray-700" title={servicio.cliente?.nombre}>
-												<span class="font-medium text-gray-500">Cliente: </span>
-												{servicio.cliente?.nombre || 'Sin cliente'}
-											</p>
-										</div>
-										{#if servicio.valor}
-											<span class="flex-shrink-0 text-xs font-semibold text-gray-900">
-												{new Intl.NumberFormat('es-CO', {
-													style: 'currency',
-													currency: 'COP',
-													minimumFractionDigits: 0
-												}).format(servicio.valor)}
-											</span>
-										{/if}
-									</div>
-
-									<!-- Fila 3: Conductor + Vehículo -->
-									<div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-0.5">
-										{#if servicio.conductor}
-											<p class="text-xs text-gray-500">
-												<span class="font-medium">🧑 </span>
-												{servicio.conductor.nombre}
-												{servicio.conductor.apellido}
-											</p>
-										{:else}
-											<p class="text-xs text-gray-400 italic">Sin conductor</p>
-										{/if}
-										{#if servicio.vehiculo}
-											<p class="text-xs text-gray-500">
-												<span class="font-mono font-semibold text-gray-700"
-													>{servicio.vehiculo.placa}</span
-												>
-												· {servicio.vehiculo.marca}
-											</p>
-										{/if}
-									</div>
-
-									<!-- Fila 4: Fecha solicitud + Acciones -->
-									<div class="flex items-center justify-between gap-2">
-										<p class="text-[10px] text-gray-400">
-											{formatDateTime(servicio.fecha_solicitud)}
-										</p>
-
-										<!-- Acciones mobile -->
-										<div class="flex items-center gap-0.5">
-											<button
-												onclick={(e) => { e.stopPropagation(); handleCompartirServicio(servicio); }}
-												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-teal-50 hover:text-teal-600"
-												title="Compartir"
-											>
-												<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-													/>
-												</svg>
-											</button>
-											<button
-												onclick={(e) => {
-													e.stopPropagation();
-													console.log(servicio);
-													servicioSeleccionado = servicio;
-													mostrarModalTicket = true;
-												}}
-												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-purple-50 hover:text-purple-600"
-												title="Ticket"
-										data-tour="srv-btn-ticket"
-											>
-												<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"
-													/>
-												</svg>
-											</button>
-											{#if puedeEditar}
-												<button
-													onclick={(e) => { e.stopPropagation(); handleEditarServicio(servicio); }}
-													class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
-													title="Editar"
-												>
-													<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															stroke-width="2"
-															d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-														/>
-													</svg>
-												</button>
-											{/if}
-											<button
-												onclick={(e) => { e.stopPropagation(); verDetalle(servicio.id); }}
-												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600"
-												title="Ver detalle"
-											>
-												<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-													/>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-													/>
-												</svg>
-											</button>
-											{#if puedeEditar}
-												<button
-													onclick={(e) => { e.stopPropagation(); handleEliminarServicio(servicio); }}
-													class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
-													title="Eliminar"
-												>
-													<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															stroke-width="2"
-															d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-														/>
-													</svg>
-												</button>
-											{/if}
-										</div>
-									</div>
-								</div>
-							</div>
-						{/each}
-					</div>
-				</div>
-
-				<!-- ─────────────────────────────────────────
-			     DESKTOP: Tabla responsive  (>= lg)
-			     Breakpoints de columnas:
-			       lg       : barra, ruta, cliente, conductor·vehículo, fechas, acciones
-			       xl       : + servicio (propósito y planilla)
-			     ───────────────────────────────────────── -->
-				<div class="hidden min-h-0 flex-1 overflow-auto lg:block">
-					<table class="w-full border-collapse text-sm">
+				<!-- ═══ Tabla, o tarjetas si el contenedor es angosto (ver `.srv-marco`) ═══ -->
+				<div class="srv-scroll srv-vista-tabla">
+					<table class="srv-tabla" style="min-width: 1040px">
 						<thead>
-							<tr class="sticky top-0 z-10 border-b border-gray-200 bg-gray-50/95 backdrop-blur-sm">
-								<!-- Barra estado: siempre -->
-								<th class="w-1 p-0"></th>
-
-								<!-- Ruta: siempre -->
-								<th
-									class="px-3 py-2.5 text-left text-[10px] font-semibold tracking-wider whitespace-nowrap text-gray-500 uppercase"
-								>
-									Ruta
-								</th>
-
-								<!-- Cliente: siempre -->
-								<th
-									class="px-3 py-2.5 text-left text-[10px] font-semibold tracking-wider whitespace-nowrap text-gray-500 uppercase"
-								>
-									Cliente
-								</th>
-
-								<!-- Conductor y vehículo juntos: el vehículo era una columna aparte que
-								     solo aparecía desde xl. -->
-								<th
-									class="px-3 py-2.5 text-left text-[10px] font-semibold tracking-wider whitespace-nowrap text-gray-500 uppercase"
-								>
-									Conductor · Vehículo
-								</th>
-
-								<!-- Propósito y planilla: una sola columna, xl+ -->
-								<th
-									class="hidden px-3 py-2.5 text-left text-[10px] font-semibold tracking-wider whitespace-nowrap text-gray-500 uppercase xl:table-cell"
-								>
-									Servicio
-								</th>
-
-								<!-- Las tres fechas en una columna con su línea de tiempo. Antes
-								     eran tres columnas de ~150 px (dos solo en 2xl+), casi siempre
-								     con «—»: ocupaban ancho para no decir nada. -->
-								<th
-									class="px-3 py-2.5 text-left text-[10px] font-semibold tracking-wider whitespace-nowrap text-gray-500 uppercase"
-								>
-									Fechas
-								</th>
-
-								<!-- Estado: siempre -->
-								<!-- <th class="px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-wider text-gray-500 whitespace-nowrap">
-								Estado
-							</th> -->
-
-								<!-- Acciones: siempre, sticky -->
-								<th
-									class="sticky right-0 bg-gray-50/95 px-3 py-2.5 text-center text-[10px] font-semibold tracking-wider whitespace-nowrap text-gray-500 uppercase backdrop-blur-sm"
-								>
-									Acciones
-								</th>
+							<tr>
+								<th style="min-width: 210px">Ruta</th>
+								<th style="min-width: 120px">Estado</th>
+								<th style="min-width: 170px">Cliente</th>
+								<th style="min-width: 190px">Conductor · vehículo</th>
+								<th style="min-width: 150px">Servicio</th>
+								<th style="min-width: 200px">Fechas</th>
+								<th style="width: 64px"></th>
 							</tr>
 						</thead>
-
-						<tbody class="divide-y divide-gray-100 bg-white">
+						<tbody>
 							{#each servicios as servicio, index (servicio?.id || `temp-${index}`)}
-								<tr
-									class="group transition-colors duration-100 hover:bg-emerald-50/40"
-									in:fly={{ y: 8, duration: 200, delay: index * 20 }}
-								>
-									<!-- Barra de estado lateral -->
-									<td class="w-1 p-0">
-										<div
-											class="min-h-[2.5rem] w-1"
-											style="background-color: {getEstadoColor(servicio.estado)}"
-										></div>
-									</td>
-
-									<!-- Ruta -->
-									<td class="max-w-[200px] min-w-[150px] px-3 py-2">
-										<div class="flex items-start gap-1">
-											<svg
-												class="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-emerald-500"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-												/>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-												/>
-											</svg>
-											<div class="min-w-0">
-												<p
-													class="truncate text-xs leading-tight font-semibold text-gray-900"
-													title={servicio.origen_especifico || servicio.origen?.nombre_municipio}
-												>
-													{servicio.origen_especifico ||
-														servicio.origen?.nombre_municipio ||
-														'Sin origen'}
-												</p>
-												<div class="mt-0.5 flex items-center gap-0.5">
-													<svg
-														class="h-2.5 w-2.5 flex-shrink-0 text-gray-300"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															stroke-width="2"
-															d="M19 14l-7 7m0 0l-7-7m7 7V3"
-														/>
-													</svg>
-													<p
-														class="truncate text-xs leading-tight text-gray-500"
-														title={servicio.destino_especifico ||
-															servicio.destino?.nombre_municipio}
-													>
-														{servicio.destino_especifico ||
-															servicio.destino?.nombre_municipio ||
-															'Sin destino'}
-													</p>
-												</div>
-												{#if servicio.ejecucion?.iniciado_at}
-													<div class="mt-1 flex">
-														{#if servicio.ejecucion?.iniciado_at}
-															<span
-																class="inline-flex flex-shrink-0 items-center gap-0.5 rounded-md border border-emerald-200 bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700"
-																title={servicio.ejecucion.liberado_at
-																	? 'Iniciado y liberado por el conductor desde la app'
-																	: 'Iniciado por el conductor desde la app'}
-															>
-																<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"
-																	><path stroke-linecap="round" stroke-linejoin="round" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg
-																>
-																{servicio.ejecucion.liberado_at ? 'Liberado' : 'Iniciado'}
-															</span>
-														{/if}
-													</div>
-												{/if}
-											</div>
+								<tr>
+									<td>
+										<div class="srv-ruta">
+											<span class="srv-ruta-origen" title={origenDe(servicio)}>{origenDe(servicio)}</span>
+											<span class="srv-ruta-destino" title={destinoDe(servicio)}>
+												<ArrowDown class="h-3 w-3" />
+												{destinoDe(servicio)}
+											</span>
 										</div>
 									</td>
-
-									<!-- Cliente -->
-									<td class="max-w-[160px] min-w-[120px] px-3 py-2">
-										<p
-											class="truncate text-xs font-medium text-gray-900"
-											title={servicio.cliente?.nombre}
-										>
-											{servicio.cliente?.nombre || 'Sin cliente'}
-										</p>
-										{#if servicio.cliente?.nit}
-											<p class="text-[10px] text-gray-400">NIT: {servicio.cliente.nit}</p>
-										{/if}
-									</td>
-
-									<!-- Conductor + vehículo -->
-									<td class="max-w-[190px] min-w-[140px] px-3 py-2">
-										{#if servicio.conductor}
-											<p
-												class="truncate text-xs font-medium text-gray-900"
-												title="{servicio.conductor.nombre} {servicio.conductor.apellido}"
-											>
-												{servicio.conductor.nombre}
-												{servicio.conductor.apellido}
-											</p>
-										{:else}
-											<p class="text-xs text-gray-400 italic">Sin conductor</p>
-										{/if}
-										{#if servicio.vehiculo}
-											<p class="mt-0.5 flex items-center gap-1.5 text-[10px] text-gray-500">
+									<td>
+										<div class="srv-estado">
+											<EstadoPunto
+												etiqueta={getEstadoText(servicio.estado)}
+												color={getEstadoColor(servicio.estado)}
+												apagado={servicio.estado === 'cancelado'}
+											/>
+											{#if servicio.ejecucion?.iniciado_at}
 												<span
-													class="rounded bg-gray-100 px-1 py-px font-mono font-semibold text-gray-700"
-													>{servicio.vehiculo.placa}</span
+													class="srv-app"
+													title={servicio.ejecucion.liberado_at
+														? 'Iniciado y liberado por el conductor desde la app'
+														: 'Iniciado por el conductor desde la app'}
 												>
-												<span class="truncate"
-													>{[servicio.vehiculo.marca, servicio.vehiculo.modelo]
-														.filter(Boolean)
-														.join(' ')}</span
-												>
-											</p>
-										{:else}
-											<p class="mt-0.5 text-[10px] text-gray-400 italic">Sin vehículo</p>
-										{/if}
-										{#if servicio.conductor?.telefono}
-											<p class="text-[10px] text-gray-400">{servicio.conductor.telefono}</p>
-										{/if}
-									</td>
-
-									<!-- Servicio: propósito + planilla, xl+ -->
-									<td class="hidden px-3 py-2 whitespace-nowrap xl:table-cell">
-										<span
-											class="inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-medium
-											{normalizarPropositoServicio(servicio.proposito_servicio) === 'personal_y_herramienta'
-												? 'bg-blue-50 text-blue-700'
-												: normalizarPropositoServicio(servicio.proposito_servicio) === 'personal'
-													? 'bg-violet-50 text-violet-700'
-													: 'bg-gray-100 text-gray-600'}"
-										>
-											{labelPropositoServicio(servicio.proposito_servicio)}
-										</span>
-										<p class="mt-1 font-mono text-[10px] text-gray-500">
-											{servicio.numero_planilla ? `Planilla ${servicio.numero_planilla}` : 'Sin planilla'}
-										</p>
-									</td>
-
-									<!-- Fechas: línea de tiempo solicitud → realización → finalización -->
-									<td class="px-3 py-2 whitespace-nowrap">
-										<ol class="srv-fechas">
-											{#each [{ etiqueta: 'Solicitud', valor: servicio.fecha_solicitud }, { etiqueta: 'Realización', valor: servicio.fecha_realizacion }, { etiqueta: 'Finalización', valor: servicio.fecha_finalizacion }] as f (f.etiqueta)}
-												<li class="srv-fecha" class:srv-fecha--pendiente={!f.valor}>
-													<span class="srv-fecha-punto" aria-hidden="true"></span>
-													<span class="srv-fecha-etiqueta">{f.etiqueta}</span>
-													<span class="srv-fecha-valor">
-														{f.valor ? fechaCorta(f.valor) : 'Pendiente'}
-													</span>
-												</li>
-											{/each}
-										</ol>
-									</td>
-
-									<!-- Estado badge -->
-									<!-- <td class="px-3 py-2 whitespace-nowrap">
-									<span
-										class="inline-flex items-center rounded-md border px-2 py-0.5 text-[10px] font-semibold"
-										style="background-color: {getEstadoColor(servicio.estado)}15; border-color: {getEstadoColor(servicio.estado)}40; color: {getEstadoColor(servicio.estado)}"
-									>
-										{getEstadoText(servicio.estado)}
-									</span>
-								</td> -->
-
-									<!-- Acciones sticky -->
-									<td
-										class="sticky right-0 bg-white px-2 py-2 whitespace-nowrap group-hover:bg-emerald-50/40"
-									>
-										<div class="flex items-center justify-center gap-0.5">
-											<button
-												onclick={(e) => { e.stopPropagation(); handleCompartirServicio(servicio); }}
-												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-teal-50 hover:text-teal-600"
-												title="Compartir"
-											>
-												<svg
-													class="h-3.5 w-3.5"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
-													/>
-												</svg>
-											</button>
-											<button
-												onclick={(e) => {
-													e.stopPropagation();
-													servicioSeleccionado = servicio;
-													mostrarModalTicket = true;
-												}}
-												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-purple-50 hover:text-purple-600"
-												title="Ticket"
-										data-tour="srv-btn-ticket"
-											>
-												<svg
-													class="h-3.5 w-3.5"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M15 5v2m0 4v2m0 4v2M5 5a2 2 0 00-2 2v3a2 2 0 110 4v3a2 2 0 002 2h14a2 2 0 002-2v-3a2 2 0 110-4V7a2 2 0 00-2-2H5z"
-													/>
-												</svg>
-											</button>
-											<button
-												onclick={(e) => { e.stopPropagation(); handleDescargarRutograma(servicio); }}
-												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-emerald-50 hover:text-emerald-700"
-												title="Rutograma PDF"
-											>
-												<svg
-													class="h-3.5 w-3.5"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"
-													/>
-												</svg>
-											</button>
-											{#if puedeEditar}
-												<button
-													onclick={(e) => { e.stopPropagation(); handleEditarServicio(servicio); }}
-													class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-blue-50 hover:text-blue-600"
-													title="Editar"
-												>
-													<svg
-														class="h-3.5 w-3.5"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															stroke-width="2"
-															d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"
-														/>
-													</svg>
-												</button>
-											{/if}
-											<button
-												onclick={(e) => { e.stopPropagation(); verDetalle(servicio.id); }}
-												class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-emerald-50 hover:text-emerald-600"
-												title="Ver detalle"
-											>
-												<svg
-													class="h-3.5 w-3.5"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-													/>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-													/>
-												</svg>
-											</button>
-											{#if puedeEditar}
-												<button
-													onclick={(e) => { e.stopPropagation(); handleEliminarServicio(servicio); }}
-													class="rounded-md p-1.5 text-gray-400 transition-colors hover:bg-red-50 hover:text-red-600"
-													title="Eliminar"
-												>
-													<svg
-														class="h-3.5 w-3.5"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															stroke-width="2"
-															d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-														/>
-													</svg>
-												</button>
+													<Smartphone class="h-3 w-3" />
+													{servicio.ejecucion.liberado_at ? 'Liberado' : 'Iniciado'}
+												</span>
 											{/if}
 										</div>
+									</td>
+									<td>
+										<div class="dir-celda">
+											<span class="srv-texto" title={servicio.cliente?.nombre || ''}
+												>{servicio.cliente?.nombre || 'Sin cliente'}</span
+											>
+											{#if servicio.cliente?.nit}<small>NIT {servicio.cliente.nit}</small>{/if}
+										</div>
+									</td>
+									<td>
+										<div class="dir-celda">
+											{#if servicio.conductor}
+												<span
+													class="srv-texto"
+													title="{servicio.conductor.nombre} {servicio.conductor.apellido}"
+													>{servicio.conductor.nombre} {servicio.conductor.apellido}</span
+												>
+											{:else}
+												<span class="dir-nulo">Sin conductor</span>
+											{/if}
+											{#if servicio.vehiculo}
+												<small class="srv-vehiculo">
+													<span class="srv-placa">{servicio.vehiculo.placa}</span>
+													{[servicio.vehiculo.marca, servicio.vehiculo.modelo]
+														.filter(Boolean)
+														.join(' ')}
+												</small>
+											{:else}
+												<small class="dir-nulo">Sin vehículo</small>
+											{/if}
+										</div>
+									</td>
+									<td>
+										<div class="dir-celda">
+											<span>{labelPropositoServicio(servicio.proposito_servicio)}</span>
+											<small class="srv-mono"
+												>{servicio.numero_planilla
+													? `Planilla ${servicio.numero_planilla}`
+													: 'Sin planilla'}</small
+											>
+										</div>
+									</td>
+									<td class="srv-nowrap">
+										{@render lineaFechas(servicio)}
+									</td>
+									<td class="srv-acciones">
+										<AccionesDropdown
+											etiqueta="Acciones del servicio {origenDe(servicio)}"
+											acciones={accionesDeServicio(servicio)}
+										/>
 									</td>
 								</tr>
 							{/each}
@@ -2218,20 +1444,98 @@
 					</table>
 				</div>
 
-				<!-- Paginación pegada al fondo -->
-				<PaginadorLista
-					pagina={pagination.page}
-					total={pagination.total}
-					porPagina={pagination.limit}
-					cargando={loading}
-					nombreItems="servicios"
-					onCambiar={irPagina}
-				/>
+				<!-- ═══ Tarjetas: una por servicio ═══ -->
+				<ul class="srv-tarjetas srv-vista-tarjetas">
+					{#each servicios as servicio, index (servicio?.id || `temp-${index}`)}
+						<li class="srv-tarjeta">
+							<div class="srv-tarjeta-cabeza">
+								<div class="srv-ruta">
+									<span class="srv-ruta-origen">{origenDe(servicio)}</span>
+									<span class="srv-ruta-destino">
+										<ArrowDown class="h-3 w-3" />
+										{destinoDe(servicio)}
+									</span>
+								</div>
+								<AccionesDropdown
+									etiqueta="Acciones del servicio {origenDe(servicio)}"
+									acciones={accionesDeServicio(servicio)}
+								/>
+							</div>
+							<div class="srv-estado srv-tarjeta-estado">
+								<EstadoPunto
+									etiqueta={getEstadoText(servicio.estado)}
+									color={getEstadoColor(servicio.estado)}
+									apagado={servicio.estado === 'cancelado'}
+								/>
+								{#if servicio.ejecucion?.iniciado_at}
+									<span class="srv-app">
+										<Smartphone class="h-3 w-3" />
+										{servicio.ejecucion.liberado_at ? 'Liberado' : 'Iniciado'}
+									</span>
+								{/if}
+							</div>
+							<dl class="srv-tarjeta-datos">
+								<div>
+									<dt>Cliente</dt>
+									<dd>{servicio.cliente?.nombre || 'Sin cliente'}</dd>
+								</div>
+								<div>
+									<dt>Conductor</dt>
+									<dd>
+										{servicio.conductor
+											? `${servicio.conductor.nombre} ${servicio.conductor.apellido}`
+											: 'Sin conductor'}
+									</dd>
+								</div>
+								<div>
+									<dt>Vehículo</dt>
+									<dd class="srv-mono">{servicio.vehiculo?.placa ?? '—'}</dd>
+								</div>
+								<div>
+									<dt>Servicio</dt>
+									<dd>{labelPropositoServicio(servicio.proposito_servicio)}</dd>
+								</div>
+								<div>
+									<dt>Planilla</dt>
+									<dd class="srv-mono">{servicio.numero_planilla || '—'}</dd>
+								</div>
+								<div>
+									<dt>Fechas</dt>
+									<dd>{@render lineaFechas(servicio)}</dd>
+								</div>
+							</dl>
+						</li>
+					{/each}
+				</ul>
+
+				<div class="srv-pie">
+					<PaginadorLista
+						pagina={pagination.page}
+						total={pagination.total}
+						porPagina={pagination.limit}
+						cargando={loading}
+						nombreItems="servicios"
+						onCambiar={irPagina}
+					/>
+				</div>
 			{/if}
 		</div>
 	{/if}
 
-	<!-- ═══════════════════════════════════════════
+	{#snippet lineaFechas(servicio: ServicioConRelaciones)}
+		<!-- Solicitud → realización → finalización, con lo pendiente en hueco. -->
+		<ol class="srv-fechas">
+			{#each [{ etiqueta: 'Solicitud', valor: servicio.fecha_solicitud }, { etiqueta: 'Realización', valor: servicio.fecha_realizacion }, { etiqueta: 'Finalización', valor: servicio.fecha_finalizacion }] as f (f.etiqueta)}
+				<li class="srv-fecha" class:srv-fecha--pendiente={!f.valor}>
+					<span class="srv-fecha-punto" aria-hidden="true"></span>
+					<span class="srv-fecha-etiqueta">{f.etiqueta}</span>
+					<span class="srv-fecha-valor">{f.valor ? fechaCorta(f.valor) : 'Pendiente'}</span>
+				</li>
+			{/each}
+		</ol>
+	{/snippet}
+
+<!-- ═══════════════════════════════════════════
 	     CALENDARIO — vista alternativa
 	     ═══════════════════════════════════════════ -->
 	{#if vistaActiva === 'calendario'}
@@ -2248,6 +1552,8 @@
 				}}
 				onMesAnioChange={onCalMesAnioChange}
 				onCampoFechaChange={onCalCampoFechaChange}
+				coincide={busqueda.trim() ? (s) => servicioMatch(s, busqueda.trim()) : undefined}
+				{puedeEditar}
 				onEditar={handleEditarServicio}
 				onEliminar={handleEliminarServicio}
 			/>
@@ -2307,6 +1613,267 @@
 {/if}
 
 <style>
+	/* ── Cáscara: la de liquidaciones de servicios y los directorios (`dir-*` de app.css) ── */
+	.srv-pagina {
+		height: auto;
+		min-height: 100%;
+	}
+
+	/* ── Pestañas: la forma de `TabsVista` (variante clara) ── */
+	.srv-tabs {
+		display: flex;
+		gap: 4px;
+		overflow-x: auto;
+		scrollbar-width: none;
+		border-bottom: 1.5px solid var(--border-default);
+		flex-shrink: 0;
+	}
+	.srv-tabs::-webkit-scrollbar {
+		display: none;
+	}
+	.srv-tab {
+		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		margin-bottom: -1.5px;
+		padding: 10px 14px;
+		border: 1.5px solid transparent;
+		border-bottom: 0;
+		border-radius: 12px 12px 0 0;
+		background: transparent;
+		font: inherit;
+		font-size: 13px;
+		font-weight: 700;
+		color: var(--text-muted);
+		cursor: pointer;
+		transition:
+			color 0.15s,
+			background 0.15s;
+	}
+	.srv-tab:hover {
+		color: var(--text-primary);
+		background: var(--bg-base);
+	}
+	.srv-tab.activa {
+		background: var(--bg-surface);
+		border-color: var(--border-default);
+		color: var(--bg-charcoal-deep);
+		box-shadow: inset 0 3px 0 var(--accion);
+	}
+	.srv-tab:focus-visible {
+		outline: 2px solid var(--accion);
+		outline-offset: -2px;
+	}
+
+	/* ── Barra de filtros ── */
+	.srv-btn-filtros--activo {
+		border-color: var(--accion);
+		color: var(--text-primary);
+	}
+	.srv-contador {
+		min-width: 18px;
+		height: 18px;
+		padding: 0 5px;
+		display: inline-grid;
+		place-items: center;
+		border-radius: 999px;
+		background: var(--accion);
+		color: #fff;
+		font-size: 10px;
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+	}
+
+	/* ── Tabla: los mismos tokens que `TablaLista` y liquidaciones ── */
+	/* Tabla o tarjetas según el ancho del PROPIO contenedor, no de la ventana. */
+	.srv-marco {
+		container-type: inline-size;
+		display: flex;
+		flex-direction: column;
+		background: var(--bg-surface);
+		border: 1px solid var(--border-subtle);
+		border-radius: 22px;
+		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+		overflow: hidden;
+	}
+	.srv-scroll {
+		overflow-x: auto;
+	}
+	.srv-tabla {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.82rem;
+	}
+	.srv-tabla thead th {
+		position: sticky;
+		top: 0;
+		z-index: 2;
+		padding: 0.7rem 1.1rem;
+		background: var(--bg-base);
+		border-bottom: 1px solid var(--border-subtle);
+		text-align: left;
+		white-space: nowrap;
+		font-size: 0.66rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.srv-tabla tbody tr {
+		border-bottom: 1px solid var(--border-subtle);
+		transition: background-color 0.15s;
+	}
+	.srv-tabla tbody tr:last-child {
+		border-bottom: 0;
+	}
+	.srv-tabla tbody tr:hover {
+		background: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
+	}
+	.srv-tabla td {
+		height: 64px;
+		padding: 0.6rem 1.1rem;
+		vertical-align: middle;
+		color: var(--text-primary);
+	}
+	.srv-acciones {
+		width: 1%;
+		text-align: right;
+		white-space: nowrap;
+	}
+	.srv-nowrap {
+		white-space: nowrap;
+	}
+
+	/* ── Contenido de las celdas ── */
+	.srv-ruta {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+		max-width: 16rem;
+	}
+	.srv-ruta-origen {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-weight: 800;
+		color: var(--text-primary);
+	}
+	.srv-ruta-destino {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 0.78rem;
+		color: var(--text-muted);
+	}
+	.srv-ruta-destino :global(svg) {
+		flex-shrink: 0;
+		color: var(--text-very-muted);
+	}
+	.srv-estado {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 4px;
+	}
+	.srv-app {
+		display: inline-flex;
+		align-items: center;
+		gap: 3px;
+		padding: 1px 7px;
+		border-radius: 999px;
+		border: 1px solid color-mix(in srgb, var(--accion) 30%, transparent);
+		background: color-mix(in srgb, var(--accion) 8%, transparent);
+		font-size: 0.7rem;
+		font-weight: 700;
+		color: var(--text-secondary);
+	}
+	.srv-texto {
+		display: block;
+		max-width: 15rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.srv-vehiculo {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+	}
+	.srv-placa {
+		padding: 0 5px;
+		border-radius: 5px;
+		background: var(--bg-base);
+		border: 1px solid var(--border-subtle);
+		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-weight: 800;
+		letter-spacing: 0.04em;
+		color: var(--text-primary);
+	}
+	.srv-mono {
+		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+		letter-spacing: 0.01em;
+	}
+
+	.srv-vista-tarjetas {
+		display: none;
+	}
+	@container (max-width: 1000px) {
+		.srv-vista-tabla {
+			display: none;
+		}
+		.srv-vista-tarjetas {
+			display: flex;
+		}
+	}
+
+	/* ── Tarjetas ── */
+	.srv-tarjetas {
+		flex-direction: column;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.srv-tarjeta {
+		padding: 0.9rem 1rem;
+		border-bottom: 1px solid var(--border-subtle);
+	}
+	.srv-tarjeta-cabeza {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+	.srv-tarjeta-estado {
+		flex-direction: row;
+		align-items: center;
+		margin: 0.35rem 0 0.6rem;
+	}
+	.srv-tarjeta-datos {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+		gap: 0.4rem 1rem;
+		margin: 0;
+	}
+	.srv-tarjeta-datos dt {
+		font-size: 0.62rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-very-muted);
+	}
+	.srv-tarjeta-datos dd {
+		margin: 0;
+		font-size: 0.84rem;
+		color: var(--text-primary);
+	}
+	.srv-pie {
+		border-top: 1px solid var(--border-subtle);
+	}
+
 	/* ═══ Fechas del servicio: línea de tiempo vertical en la celda ═══ */
 	.srv-fechas {
 		list-style: none;

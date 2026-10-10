@@ -1,19 +1,30 @@
 <script lang="ts">
-	import { fly, fade } from 'svelte/transition';
+	/**
+	 * Cuadrícula mensual de servicios.
+	 *
+	 * La semana empieza el lunes (como en Colombia) y los días de los meses
+	 * vecinos se pintan atenuados en vez de quedar como huecos. Cada servicio
+	 * es una tira con el filo del color de su estado, su hora y «placa ·
+	 * conductor». Más de tres en un día se resumen en «+N más», que abre el
+	 * panel del día.
+	 *
+	 * Si el contenedor es angosto (teléfono, barra lateral abierta en una
+	 * pantalla pequeña) la cuadrícula no cabe: se cambia por una agenda con
+	 * solo los días que tienen servicios.
+	 */
 	import type { FestivoColombiano } from '$lib/utils/festivosColombia';
-	import { getEstadoColor, getEstadoText, type EstadoServicio, type ServicioConRelaciones } from '$lib/types/servicios';
+	import { getEstadoColor, getEstadoText, type ServicioConRelaciones } from '$lib/types/servicios';
 
 	type Props = {
 		mes: number;
 		anio: number;
 		eventosPorDia: Map<string, ServicioConRelaciones[]>;
 		festivos: FestivoColombiano[];
+		/** Campo con el que se ubicó cada servicio: de ahí sale su hora. */
+		campoFecha: 'fecha_solicitud' | 'fecha_realizacion' | 'fecha_finalizacion';
 		diaSeleccionado?: string | null;
-		onPrevMonth: () => void;
-		onNextMonth: () => void;
-		onToday: () => void;
 		onEventClick: (servicio: ServicioConRelaciones) => void;
-		onDayClick?: (date: Date) => void;
+		onDayClick?: (clave: string) => void;
 	};
 
 	let {
@@ -21,175 +32,442 @@
 		anio,
 		eventosPorDia,
 		festivos,
+		campoFecha,
 		diaSeleccionado = null,
-		onPrevMonth,
-		onNextMonth,
-		onToday,
 		onEventClick,
 		onDayClick
 	}: Props = $props();
 
-	const DIAS_SEMANA = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-	const MESES = [
-		'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-		'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
-	];
+	const DIAS_SEMANA = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+	const VISIBLES = 3;
 
-	function yyyymmdd(d: Date): string {
-		const y = d.getFullYear();
-		const m = String(d.getMonth() + 1).padStart(2, '0');
-		const day = String(d.getDate()).padStart(2, '0');
-		return `${y}-${m}-${day}`;
+	function clave(d: Date): string {
+		return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 	}
 
-	function isToday(d: Date): boolean {
-		const t = new Date();
-		return d.getFullYear() === t.getFullYear()
-			&& d.getMonth() === t.getMonth()
-			&& d.getDate() === t.getDate();
+	/** Semanas completas de lunes a domingo que cubren el mes. */
+	const celdas = $derived.by(() => {
+		const primero = new Date(anio, mes, 1);
+		const desfase = (primero.getDay() + 6) % 7; // lunes = 0
+		const dias = new Date(anio, mes + 1, 0).getDate();
+		const total = Math.ceil((desfase + dias) / 7) * 7;
+		return Array.from({ length: total }, (_, i) => {
+			const fecha = new Date(anio, mes, 1 - desfase + i);
+			return { fecha, clave: clave(fecha), delMes: fecha.getMonth() === mes };
+		});
+	});
+
+	const hoy = clave(new Date());
+	const festivoDe = $derived(new Map(festivos.map((f) => [f.fechaCompleta, f.nombre])));
+
+	/** Días del mes con servicios, en orden, para la agenda. */
+	const diasConServicios = $derived(
+		celdas.filter((c) => c.delMes && (eventosPorDia.get(c.clave)?.length ?? 0) > 0)
+	);
+
+	function hora(s: ServicioConRelaciones): string | null {
+		const raw = s[campoFecha] || s.fecha_solicitud;
+		if (!raw) return null;
+		const d = new Date(raw);
+		if (Number.isNaN(d.getTime())) return null;
+		return new Intl.DateTimeFormat('es-CO', {
+			hour: '2-digit',
+			minute: '2-digit',
+			hour12: false
+		}).format(d);
 	}
 
-	function buildGrid(mes: number, anio: number) {
-		const firstDay = new Date(anio, mes, 1).getDay();
-		const daysInMonth = new Date(anio, mes + 1, 0).getDate();
-		const totalCells = Math.ceil((firstDay + daysInMonth) / 7) * 7;
-		const cells: Array<{ date: Date | null; inMonth: boolean }> = [];
-
-		for (let i = 0; i < firstDay; i++) cells.push({ date: null, inMonth: false });
-
-		for (let day = 1; day <= daysInMonth; day++) {
-			cells.push({ date: new Date(anio, mes, day), inMonth: true });
-		}
-
-		while (cells.length < totalCells) cells.push({ date: null, inMonth: false });
-
-		return cells;
+	function resumen(s: ServicioConRelaciones): string {
+		const partes = [s.vehiculo?.placa, s.conductor?.nombre?.split(' ')[0]].filter(Boolean);
+		return partes.length ? partes.join(' · ') : (s.cliente?.nombre ?? 'Sin asignar');
 	}
 
-	let grid = $derived(buildGrid(mes, anio));
-	let today = new Date();
-	let todayKey = $derived(yyyymmdd(today));
+	function ruta(s: ServicioConRelaciones): string {
+		const o = s.origen_especifico || s.origen?.nombre_municipio || '—';
+		const d = s.destino_especifico || s.destino?.nombre_municipio || '—';
+		return `${o} → ${d}`;
+	}
 
-	let eventosPorDiaKey = $derived(new Map(eventosPorDia));
+	function diaLargo(fecha: Date): string {
+		return new Intl.DateTimeFormat('es-CO', {
+			weekday: 'long',
+			day: 'numeric',
+			month: 'long'
+		}).format(fecha);
+	}
 </script>
 
-<div class="glass soft-shadow flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200/50">
+{#snippet tira(s: ServicioConRelaciones)}
+	{@const h = hora(s)}
+	<button
+		type="button"
+		class="cc-tira"
+		style="--c: {getEstadoColor(s.estado)}"
+		class:cc-tira--apagada={s.estado === 'cancelado'}
+		title="{getEstadoText(s.estado)} · {ruta(s)}"
+		onclick={(e) => {
+			e.stopPropagation();
+			onEventClick(s);
+		}}
+	>
+		{#if h}<span class="cc-hora">{h}</span>{/if}
+		<span class="cc-resumen">{resumen(s)}</span>
+	</button>
+{/snippet}
 
-	<div class="flex flex-shrink-0 items-center justify-between border-b border-gray-100 bg-gray-50/60 px-4 py-3">
-		<div class="flex items-center gap-2">
-			<button onclick={onPrevMonth}
-				class="apple-transition rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:border-orange-200 hover:bg-orange-50"
-				aria-label="Mes anterior">
-				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-				</svg>
-			</button>
-
-			<div class="min-w-[180px] text-center">
-				<h2 class="text-base font-bold text-gray-900">
-					{MESES[mes]} {anio}
-				</h2>
-			</div>
-
-			<button onclick={onNextMonth}
-				class="apple-transition rounded-lg border border-gray-200 bg-white p-1.5 text-gray-600 hover:border-orange-200 hover:bg-orange-50"
-				aria-label="Mes siguiente">
-				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-				</svg>
-			</button>
-
-			<button onclick={onToday}
-				class="apple-transition rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-xs font-medium text-gray-700 hover:border-orange-200 hover:bg-orange-50">
-				Hoy
-			</button>
+<div class="cc">
+	<!-- ═══ Cuadrícula ═══ -->
+	<div class="cc-mes" role="grid" aria-label="Servicios del mes">
+		<div class="cc-semana cc-cabeza" role="row">
+			{#each DIAS_SEMANA as d, i (d)}
+				<div class="cc-dia-nombre" class:cc-finde={i >= 5} role="columnheader">{d}</div>
+			{/each}
 		</div>
-
-		<div class="flex items-center gap-2 text-[10px] text-gray-500">
-			<span class="flex items-center gap-1.5">
-				<span class="h-2 w-2 rounded-full bg-orange-500"></span>
-				Hoy
-			</span>
-			<span class="flex items-center gap-1.5">
-				<span class="h-2 w-2 rounded-full bg-red-400"></span>
-				Festivo
-			</span>
-		</div>
-	</div>
-
-	<div class="grid grid-cols-7 border-b border-gray-100 bg-gray-50/95 backdrop-blur-sm">
-		{#each DIAS_SEMANA as dia}
-			<div class="px-2 py-2 text-center text-[10px] font-semibold uppercase tracking-wider text-gray-500">
-				{dia}
-			</div>
-		{/each}
-	</div>
-
-	<div class="grid min-h-0 flex-1 grid-cols-7 overflow-auto">
-		{#each grid as cell, i (i)}
-			{#if !cell.date}
-				<div class="border-b border-r border-gray-100 bg-gray-50/30 min-h-[6.5rem]"></div>
-			{:else}
-				{@const dateKey = yyyymmdd(cell.date)}
-				{@const eventos = eventosPorDiaKey.get(dateKey) || []}
-				{@const festivo = festivos.find(f => f.fechaCompleta === dateKey)}
-				{@const isCurrentDay = dateKey === todayKey}
-				{@const isSelected = diaSeleccionado === dateKey}
-				<button
-					type="button"
-					onclick={() => onDayClick?.(cell.date!)}
-					class="group relative flex min-h-[6.5rem] flex-col gap-0.5 border-b border-r border-gray-100 p-1.5 text-left apple-transition
-						bg-white
-						{isSelected ? 'ring-2 ring-inset ring-orange-500' : ''}
-						hover:bg-orange-50/40"
-					in:fade={{ duration: 150, delay: i * 4 }}
+		<div class="cc-cuerpo">
+			{#each celdas as c, i (c.clave)}
+				{@const eventos = eventosPorDia.get(c.clave) ?? []}
+				{@const festivo = festivoDe.get(c.clave)}
+				<div
+					class="cc-celda"
+					class:cc-celda--fuera={!c.delMes}
+					class:cc-finde={i % 7 >= 5}
+					class:cc-celda--hoy={c.clave === hoy}
+					class:cc-celda--elegida={diaSeleccionado === c.clave}
+					role="gridcell"
+					tabindex={c.delMes ? 0 : -1}
+					aria-label="{diaLargo(c.fecha)}: {eventos.length} servicios"
+					onclick={() => c.delMes && onDayClick?.(c.clave)}
+					onkeydown={(e) => {
+						if (c.delMes && (e.key === 'Enter' || e.key === ' ')) {
+							e.preventDefault();
+							onDayClick?.(c.clave);
+						}
+					}}
 				>
-					<div class="flex items-center justify-between">
-						<span class="text-xs font-semibold
-							{festivo ? 'text-red-600' : 'text-gray-900'}
-							{isCurrentDay ? 'flex h-5 w-5 items-center justify-center rounded-full bg-orange-500 text-white' : ''}">
-							{cell.date.getDate()}
-						</span>
-						{#if festivo}
-							<span class="truncate text-[9px] font-medium text-red-500" title={festivo.nombre}>
-								{festivo.nombre.length > 8 ? festivo.nombre.substring(0, 8) + '…' : festivo.nombre}
-							</span>
+					<div class="cc-celda-cabeza">
+						<span class="cc-numero" class:cc-numero--festivo={!!festivo}>{c.fecha.getDate()}</span>
+						{#if festivo && c.delMes}
+							<span class="cc-festivo" title={festivo}>{festivo}</span>
+						{:else if eventos.length > 0 && c.delMes}
+							<span class="cc-cuenta">{eventos.length}</span>
 						{/if}
 					</div>
-
-					{#each eventos.slice(0, 3) as ev (ev.id)}
-						<div
-							role="button"
-							tabindex="0"
-							onclick={(e) => { e.stopPropagation(); onEventClick(ev); }}
-							onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onEventClick(ev); } }}
-							class="group/ev flex w-full cursor-pointer items-center gap-1 rounded-md border px-1.5 py-0.5 text-left text-[10px] font-medium truncate apple-transition hover:scale-[1.02]"
-							style="background-color: {getEstadoColor(ev.estado)}15; border-color: {getEstadoColor(ev.estado)}40; color: {getEstadoColor(ev.estado)}"
-							title="{getEstadoText(ev.estado)} — {ev.origen_especifico || ev.origen?.nombre_municipio || ''} → {ev.destino_especifico || ev.destino?.nombre_municipio || ''}"
-						>
-							<span class="h-1.5 w-1.5 flex-shrink-0 rounded-full" style="background-color: {getEstadoColor(ev.estado)}"></span>
-							<span class="truncate">
-								{#if ev.vehiculo?.placa}
-									<span class="font-mono font-semibold">{ev.vehiculo.placa}</span>
-								{/if}
-								{#if ev.conductor?.nombre}
-									{#if ev.vehiculo?.placa} · {/if}
-									<span>{ev.conductor.nombre}</span>
-								{/if}
-								{#if ev.cliente?.nombre && !ev.vehiculo?.placa && !ev.conductor?.nombre}
-									<span class="truncate">{ev.cliente.nombre}</span>
-								{/if}
-							</span>
+					{#if c.delMes}
+						<div class="cc-tiras">
+							{#each eventos.slice(0, VISIBLES) as s (s.id)}
+								{@render tira(s)}
+							{/each}
+							{#if eventos.length > VISIBLES}
+								<button
+									type="button"
+									class="cc-mas"
+									onclick={(e) => {
+										e.stopPropagation();
+										onDayClick?.(c.clave);
+									}}
+								>
+									+{eventos.length - VISIBLES} más
+								</button>
+							{/if}
 						</div>
-					{/each}
-
-					{#if eventos.length > 3}
-						<span class="text-[9px] font-medium text-gray-400">
-							+{eventos.length - 3} más
-						</span>
 					{/if}
-				</button>
-			{/if}
-		{/each}
+				</div>
+			{/each}
+		</div>
+	</div>
+
+	<!-- ═══ Agenda (contenedor angosto) ═══ -->
+	<div class="cc-agenda">
+		{#if diasConServicios.length === 0}
+			<p class="cc-agenda-vacia">No hay servicios este mes.</p>
+		{:else}
+			{#each diasConServicios as c (c.clave)}
+				{@const festivo = festivoDe.get(c.clave)}
+				<section class="cc-agenda-dia" class:cc-celda--hoy={c.clave === hoy}>
+					<h3>
+						<span class="cc-numero">{c.fecha.getDate()}</span>
+						<span class="cc-agenda-fecha">{diaLargo(c.fecha)}</span>
+						{#if festivo}<span class="cc-festivo">{festivo}</span>{/if}
+					</h3>
+					<div class="cc-agenda-lista">
+						{#each eventosPorDia.get(c.clave) ?? [] as s (s.id)}
+							<button
+								type="button"
+								class="cc-agenda-item"
+								style="--c: {getEstadoColor(s.estado)}"
+								onclick={() => onEventClick(s)}
+							>
+								<span class="cc-hora">{hora(s) ?? '—'}</span>
+								<span class="cc-agenda-texto">
+									<strong>{ruta(s)}</strong>
+									<small>{getEstadoText(s.estado)} · {resumen(s)}</small>
+								</span>
+							</button>
+						{/each}
+					</div>
+				</section>
+			{/each}
+		{/if}
 	</div>
 </div>
+
+<style>
+	.cc {
+		container-type: inline-size;
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+		flex: 1;
+	}
+
+	/* ── Cuadrícula ── */
+	.cc-mes {
+		display: flex;
+		flex-direction: column;
+		min-height: 0;
+		flex: 1;
+	}
+	.cc-semana,
+	.cc-cuerpo {
+		display: grid;
+		grid-template-columns: repeat(7, minmax(0, 1fr));
+	}
+	.cc-cabeza {
+		border-bottom: 1px solid var(--border-subtle);
+		background: var(--bg-base);
+	}
+	.cc-dia-nombre {
+		padding: 0.6rem 0.75rem;
+		font-size: 0.66rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.cc-dia-nombre.cc-finde {
+		color: var(--text-very-muted);
+	}
+	.cc-cuerpo {
+		flex: 1;
+		grid-auto-rows: minmax(7.25rem, 1fr);
+	}
+	.cc-celda {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		min-width: 0;
+		padding: 6px 6px 8px;
+		border-right: 1px solid var(--border-subtle);
+		border-bottom: 1px solid var(--border-subtle);
+		cursor: pointer;
+		outline: none;
+		transition: background-color 0.15s;
+	}
+	.cc-celda:nth-child(7n) {
+		border-right: 0;
+	}
+	.cc-celda.cc-finde {
+		background: color-mix(in srgb, var(--bg-base) 55%, transparent);
+	}
+	.cc-celda:hover,
+	.cc-celda:focus-visible {
+		background: color-mix(in srgb, var(--accion) 5%, transparent);
+	}
+	.cc-celda--fuera {
+		cursor: default;
+		background: transparent !important;
+	}
+	.cc-celda--fuera .cc-numero {
+		color: var(--text-very-muted);
+		opacity: 0.55;
+	}
+	.cc-celda--elegida {
+		background: color-mix(in srgb, var(--accion) 8%, transparent) !important;
+		box-shadow: inset 0 0 0 2px var(--accion);
+	}
+	.cc-celda-cabeza {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 4px;
+		min-height: 24px;
+	}
+	.cc-numero {
+		display: inline-grid;
+		place-items: center;
+		min-width: 24px;
+		height: 24px;
+		padding: 0 4px;
+		border-radius: 999px;
+		font-size: 0.8rem;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+		color: var(--text-primary);
+	}
+	.cc-numero--festivo {
+		color: #dc2626;
+	}
+	.cc-celda--hoy .cc-numero {
+		background: var(--accion);
+		color: #fff;
+	}
+	.cc-festivo {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		padding: 1px 6px;
+		border-radius: 999px;
+		background: #fef2f2;
+		font-size: 0.62rem;
+		font-weight: 700;
+		color: #b91c1c;
+	}
+	.cc-cuenta {
+		font-size: 0.66rem;
+		font-weight: 700;
+		color: var(--text-very-muted);
+		font-variant-numeric: tabular-nums;
+	}
+	.cc-tiras {
+		display: flex;
+		flex-direction: column;
+		gap: 3px;
+		min-width: 0;
+	}
+	.cc-tira {
+		display: flex;
+		align-items: center;
+		gap: 5px;
+		min-width: 0;
+		padding: 3px 6px;
+		border: 0;
+		border-left: 3px solid var(--c);
+		border-radius: 6px;
+		background: color-mix(in srgb, var(--c) 11%, var(--bg-surface));
+		font: inherit;
+		font-size: 0.7rem;
+		text-align: left;
+		color: var(--text-primary);
+		cursor: pointer;
+		transition:
+			background-color 0.15s,
+			transform 0.15s;
+	}
+	.cc-tira:hover {
+		background: color-mix(in srgb, var(--c) 20%, var(--bg-surface));
+	}
+	.cc-tira:focus-visible {
+		outline: 2px solid var(--c);
+		outline-offset: 1px;
+	}
+	.cc-tira--apagada {
+		opacity: 0.6;
+		text-decoration: line-through;
+	}
+	.cc-hora {
+		flex-shrink: 0;
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+		color: var(--text-secondary);
+	}
+	.cc-resumen {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-weight: 600;
+	}
+	.cc-mas {
+		align-self: flex-start;
+		padding: 1px 6px;
+		border: 0;
+		border-radius: 6px;
+		background: none;
+		font: inherit;
+		font-size: 0.68rem;
+		font-weight: 700;
+		color: var(--text-muted);
+		cursor: pointer;
+	}
+	.cc-mas:hover {
+		background: var(--bg-base);
+		color: var(--text-primary);
+	}
+
+	/* ── Agenda ── */
+	.cc-agenda {
+		display: none;
+		flex-direction: column;
+	}
+	@container (max-width: 760px) {
+		.cc-mes {
+			display: none;
+		}
+		.cc-agenda {
+			display: flex;
+		}
+	}
+	.cc-agenda-vacia {
+		margin: 0;
+		padding: 2.5rem 1rem;
+		text-align: center;
+		font-size: 0.86rem;
+		color: var(--text-muted);
+	}
+	.cc-agenda-dia {
+		padding: 0.75rem 1rem;
+		border-bottom: 1px solid var(--border-subtle);
+	}
+	.cc-agenda-dia h3 {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin: 0 0 8px;
+	}
+	.cc-agenda-fecha {
+		font-size: 0.82rem;
+		font-weight: 700;
+		color: var(--text-secondary);
+	}
+	.cc-agenda-fecha::first-letter {
+		text-transform: uppercase;
+	}
+	.cc-agenda-lista {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+	}
+	.cc-agenda-item {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 8px 10px;
+		border: 1px solid var(--border-subtle);
+		border-left: 3px solid var(--c);
+		border-radius: 10px;
+		background: var(--bg-surface);
+		font: inherit;
+		text-align: left;
+		cursor: pointer;
+	}
+	.cc-agenda-item:hover {
+		background: color-mix(in srgb, var(--c) 7%, var(--bg-surface));
+	}
+	.cc-agenda-texto {
+		display: flex;
+		flex-direction: column;
+		min-width: 0;
+	}
+	.cc-agenda-texto strong {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		font-size: 0.84rem;
+		color: var(--text-primary);
+	}
+	.cc-agenda-texto small {
+		font-size: 0.74rem;
+		color: var(--text-muted);
+	}
+</style>
