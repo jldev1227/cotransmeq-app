@@ -4,6 +4,7 @@
 	import { quintOut } from 'svelte/easing';
 	import { X } from 'lucide-svelte';
 	import TabsVista, { type TabVista } from '$lib/components/ui/TabsVista.svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 
 	/**
 	 * Ficha de consulta de un registro de directorio (vehículo, conductor,
@@ -121,10 +122,7 @@
 
 			<div class="md-body">
 				{#if cargando}
-					<div class="md-cargando" aria-live="polite">
-						<span class="md-spinner" aria-hidden="true"></span>
-						Cargando…
-					</div>
+					<CargaMascota texto="Cargando…" />
 				{:else}
 					{@render children(tabActiva)}
 				{/if}
@@ -304,28 +302,6 @@
 		overflow-y: auto;
 		padding: 20px 22px;
 		background: var(--bg-base);
-	}
-	.md-cargando {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 10px;
-		min-height: 200px;
-		color: var(--text-muted);
-		font-size: 14px;
-	}
-	.md-spinner {
-		width: 16px;
-		height: 16px;
-		border-radius: 999px;
-		border: 2px solid var(--border-default);
-		border-top-color: var(--accion);
-		animation: md-giro 0.7s linear infinite;
-	}
-	@keyframes md-giro {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 
 	.md-footer {

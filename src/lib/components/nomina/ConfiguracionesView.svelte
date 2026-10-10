@@ -10,6 +10,7 @@
 	} from '$lib/api/nomina';
 	import type { ConfiguracionLiquidacion } from '$lib/types/nomina';
 	import { toast } from 'svelte-sonner';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import {
 		Settings,
 		Edit,
@@ -298,12 +299,7 @@
 	<!-- Tabla de Configuraciones -->
 	<div class="rounded-xl bg-white shadow-md overflow-hidden">
 		{#if loading}
-			<div class="flex items-center justify-center py-12">
-				<div class="text-center">
-					<div class="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"></div>
-					<p class="text-gray-600">Cargando configuraciones...</p>
-				</div>
-			</div>
+			<CargaMascota texto="Cargando configuraciones…" />
 		{:else if configuraciones.length === 0}
 			<div class="py-12 text-center">
 				<Settings class="mx-auto h-12 w-12 text-gray-400" />

@@ -5,6 +5,7 @@
 	import { goto } from '$app/navigation';
 	import { ChevronLeft, Eye } from 'lucide-svelte';
 	import LiquidacionEditor from '$lib/components/LiquidacionEditor.svelte';
+	import { urlListado } from '$lib/stores/volverLiquidaciones';
 
 	$: editId = $page.params.id;
 	$: viewMode = $page.url.searchParams.get('mode') === 'view';
@@ -20,7 +21,7 @@
 	in:fly={{ y: 20, duration: 500, easing: quintOut }}
 >
 	<div class="mb-4 no-print">
-		<button class="btn-ghost" on:click={() => goto('/dashboard/liquidaciones-servicios')}>
+		<button class="btn-ghost" on:click={() => goto(urlListado())}>
 			<ChevronLeft class="h-3.5 w-3.5" />
 			Volver al listado
 		</button>

@@ -72,6 +72,7 @@
 	import SelectorHojaCierre from '$lib/components/liquidaciones-terceros/SelectorHojaCierre.svelte';
 	import SelectorCanvasTerceros from '$lib/components/univer/SelectorCanvasTerceros.svelte';
 	import CierreEstadoHeader from '$lib/components/liquidaciones-terceros/CierreEstadoHeader.svelte';
+	import ModalEstadoLote from '$lib/components/liquidaciones-terceros/ModalEstadoLote.svelte';
 	import GenerarBorradoresModal from '$lib/components/liquidaciones-terceros/GenerarBorradoresModal.svelte';
 	import EliminarCierreModal from '$lib/components/liquidaciones-terceros/EliminarCierreModal.svelte';
 	import ConductoresCierreModal from '$lib/components/liquidaciones-terceros/ConductoresCierreModal.svelte';
@@ -176,6 +177,8 @@
 	let cierreActivo = $state<string | null>($page.url.searchParams.get('cierre'));
 
 	let modalBorradores = $state(false);
+	/// Cambio de estado de las hojas que el usuario marque (ver ModalEstadoLote).
+	let modalEstadoLote = $state(false);
 	/**
 	 * Envío por correo de las liquidaciones del periodo.
 	 *
@@ -623,6 +626,21 @@
 
 	/// Remount completo. Solo al cambiar de PERIODO o cuando cambia la
 	/// geometría de una hoja. Editar celdas no remonta.
+	/**
+	 * Remontaje agrupado. Un cambio de estado en lote llega como N cambios
+	 * (y N avisos por socket, uno por hoja): sin agrupar, el motor se
+	 * desmontaba y montaba una vez por hoja. Los que caen dentro de la
+	 * ventana producen un solo remontaje.
+	 */
+	let remontajeTimer: ReturnType<typeof setTimeout> | null = null;
+	function programarRemontaje() {
+		if (remontajeTimer) clearTimeout(remontajeTimer);
+		remontajeTimer = setTimeout(() => {
+			remontajeTimer = null;
+			void remountEngine();
+		}, 150);
+	}
+
 	async function remountEngine() {
 		if (!container) return;
 		mountToken++;
@@ -1102,7 +1120,7 @@
 
 		// Solo hace falta remontar si la hoja cruza la frontera de editable:
 		// es lo que cambia su geometría (aparece o desaparece el aviso).
-		if (esEditable(antes.estado) !== esEditable(estado)) void remountEngine();
+		if (esEditable(antes.estado) !== esEditable(estado)) programarRemontaje();
 	}
 
 	/**
@@ -1465,7 +1483,7 @@
 	 * `deleted_at` en el cierre, sus items y sus conceptos— y se quedó sin
 	 * invocar: no había forma de deshacer una generación de borradores
 	 * equivocada salvo entrar a la base. El servidor rechaza APROBADA y
-	 * FACTURADA, y el carril solo ofrece la acción sobre hojas editables.
+	 * PAGADA, y el carril solo ofrece la acción sobre hojas editables.
 	 */
 	async function eliminarCierreActivo() {
 		const cierre = cierreAEliminar;
@@ -2041,6 +2059,14 @@
 	</svg>
 {/snippet}
 
+{#snippet icoEstadoLote()}
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+		<rect x="3" y="3" width="7" height="7" rx="1.5" />
+		<rect x="3" y="14" width="7" height="7" rx="1.5" />
+		<path d="M14 6h7M14 17h7M18 3l3 3-3 3M18 14l3 3-3 3" />
+	</svg>
+{/snippet}
+
 {#snippet icoEstado()}
 	<svg
 		width="15"
@@ -2260,6 +2286,15 @@
 				panelTone: 'dark',
 				panelWidth: 300,
 				destacar: destacarEstado
+			},
+			{
+				id: 'estado-lote',
+				label: 'Cambiar estado en lote',
+				hint: 'Elige un estado y marca las hojas del periodo que quieres mover a él, cada una desde el suyo.',
+				icon: icoEstadoLote,
+				disabled: indice.length === 0 || !!accionEnCurso,
+				disabledHint: indice.length === 0 ? 'No hay hojas en este periodo.' : undefined,
+				onSelect: () => (modalEstadoLote = true)
 			}
 		]}
 	/>
@@ -2268,6 +2303,19 @@
 	     una acción corre, ninguna otra debe poder empezar. -->
 	<UniverActionOverlay accion={accionEnCurso} />
 </div>
+
+<ModalEstadoLote
+	open={modalEstadoLote}
+	hojas={indice}
+	{anio}
+	{mes}
+	areas={$authStore.user?.area ?? null}
+	preseleccion={cierreActivo ? [cierreActivo] : []}
+	oncerrar={() => (modalEstadoLote = false)}
+	onaplicado={(cambios) => {
+		for (const c of cambios) aplicarEstado(c.id, c.estado, c.version);
+	}}
+/>
 
 {#if previewAbierto && documentoPreview}
 	<PreviewCanvasModal

@@ -35,12 +35,14 @@
 <script lang="ts">
 	import { onMount, onDestroy, tick } from 'svelte';
 	import { goto } from '$app/navigation';
+	import { urlListado } from '$lib/stores/volverLiquidaciones';
 	import { page } from '$app/stores';
 	import { apiClient } from '$lib/api/apiClient';
 	import { authStore } from '$lib/stores/auth';
 	import { confirmar, confirmarEliminacion } from '$lib/stores/confirm';
 	import { toast } from 'svelte-sonner';
 	import Skeleton from '$lib/components/Skeleton.svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import {
 		autoguardadoAPI,
 		liquidacionesServiciosAPI,
@@ -88,13 +90,11 @@
 	/// `onClose` dejaria el boton «Volver» sin destino.
 	$: empotrado = !!onClose;
 
-	const BACK_URL = '/dashboard/liquidaciones-servicios';
-
 	/// El editor no sabe donde vive. En una ruta suelta «volver» es navegar;
 	/// dentro del canvas es cerrar el overlay, y navegar tiraria el engine.
 	function salir() {
 		if (onClose) onClose();
-		else goto(BACK_URL);
+		else goto(urlListado());
 	}
 
 	// ─── TYPES ──────────────────────────────────────────────────
@@ -2590,8 +2590,7 @@
 			</div>
 		</header>
 		<div class="pdf-loading-body">
-			<div class="pdf-loading-spinner"></div>
-			<div class="pdf-loading-text">Cargando liquidación…</div>
+			<CargaMascota texto="Cargando liquidación…" />
 		</div>
 	</div>
 {:else if loadingLiq}
@@ -5395,10 +5394,7 @@
 
 			<div class="historial-body">
 				{#if historialLoading}
-					<div class="historial-loading">
-						<div class="historial-spinner"></div>
-						<span>Cargando historial…</span>
-					</div>
+					<CargaMascota texto="Cargando historial…" />
 				{:else if historialData.length === 0}
 					<div class="historial-empty">
 						<div class="historial-empty-icon" aria-hidden="true">
@@ -6135,29 +6131,7 @@
 		flex: 1;
 		display: flex;
 		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 18px;
 		background: #b0b8c2;
-	}
-	.pdf-loading-spinner {
-		width: 40px;
-		height: 40px;
-		border: 4px solid rgba(255, 255, 255, 0.25);
-		border-top-color: #fff;
-		border-radius: 50%;
-		animation: pdfSpin 0.8s linear infinite;
-	}
-	.pdf-loading-text {
-		font-size: 14px;
-		font-weight: 600;
-		color: rgba(255, 255, 255, 0.85);
-		letter-spacing: 0.02em;
-	}
-	@keyframes pdfSpin {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 
 	/* ─ ERROR FALLBACK ─ */
@@ -8734,29 +8708,6 @@
 		overflow-y: auto;
 		flex: 1;
 		min-height: 0;
-	}
-	.historial-loading {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.75rem;
-		padding: 3rem 0;
-		color: #64748b;
-		font-size: 0.88rem;
-		font-family: var(--font-sans);
-	}
-	.historial-spinner {
-		width: 22px;
-		height: 22px;
-		border: 2.5px solid rgba(234, 88, 12, 0.15);
-		border-top-color: #ea580c;
-		border-radius: 50%;
-		animation: histSpin 0.7s linear infinite;
-	}
-	@keyframes histSpin {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 	.historial-empty {
 		text-align: center;

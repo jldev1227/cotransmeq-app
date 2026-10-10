@@ -554,10 +554,15 @@ export const liquidacionesTercerosDescuentosAPI = {
 	 * atómico a propósito — con 80 cierres, revertir los 79 buenos porque
 	 * el último falló no ayuda a nadie.
 	 */
+	/**
+	 * Con `desde`: todas las hojas del periodo en ese estado.
+	 * Con `ids`: solo esas hojas, cada una desde su estado actual.
+	 */
 	async cambiarEstadoLote(params: {
 		anio: number;
 		mes: number;
-		desde: string;
+		desde?: string;
+		ids?: string[];
 		hacia: string;
 		motivo?: string | null;
 	}): Promise<{

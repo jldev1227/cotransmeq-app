@@ -47,8 +47,18 @@
 	    { id: 'sync', label: 'Sincronizar con nómina', hint: '…', icon: iconSync,
 	      onSelect: () => sincronizar(), disabled: !!accionEnCurso },
 	    { type: 'sep' },
-	    { id: 'estado', label: 'Estado', icon: iconCheck, panel: panelEstado }
+	    { id: 'estado', label: 'Estado', icon: iconCheck, panel: panelEstado },
+	    { id: 'factura', label: 'Facturación', icon: iconFactura, menu: [
+	      { id: 'crear', label: 'Crear factura', badge: 3, onSelect: crear },
+	      { id: 'asociar', label: 'Asociar…', panel: panelAsociar }
+	    ] }
 	  ]} />
+
+	MENÚS: un item con `menu` agrupa acciones de la misma familia detrás de un
+	solo icono (avanzar estado, facturación, devolver…). El flyout las lista
+	con su nombre, una línea de ayuda y —si está apagada— el motivo, así que
+	no se pierde nada de lo que decía el popover de cada botón suelto. Una
+	entrada con `panel` cambia el menú por ese panel, con «‹ Volver».
 -->
 <script lang="ts" module>
 	import type { Snippet } from 'svelte';
@@ -91,6 +101,25 @@
 		 * para que el ojo caiga donde hay que hacer clic.
 		 */
 		destacar?: boolean;
+		/// Agrupa varias acciones detrás de este icono. Ver «MENÚS» arriba.
+		menu?: RailMenuEntry[];
+	}
+
+	/** Entrada de un menú del carril. Mismo contrato que una acción suelta. */
+	export interface RailMenuEntry {
+		id: string;
+		label: string;
+		hint?: string;
+		icon?: Snippet;
+		/// `danger` pinta la entrada en rojo: retroceder estados, quitar.
+		tone?: 'default' | 'danger';
+		disabled?: boolean;
+		disabledHint?: string;
+		badge?: string | number | null;
+		onSelect?: () => void;
+		/// Abre este panel dentro del mismo flyout en vez de ejecutar.
+		panel?: Snippet;
+		panelWidth?: number;
 	}
 
 	export interface RailSeparator {
@@ -148,10 +177,14 @@
 		return i.type !== 'sep';
 	}
 
+	/// Entrada de menú cuyo panel se está mostrando dentro del flyout.
+	let subpanel = $state<string | null>(null);
+
 	function activar(it: RailAction) {
 		if (it.disabled || it.busy) return;
-		if (it.panel) {
+		if (it.panel || it.menu) {
 			abierto = abierto === it.id ? null : it.id;
+			subpanel = null;
 			return;
 		}
 		abierto = null;
@@ -173,7 +206,25 @@
 	}
 
 	function alTeclado(e: KeyboardEvent) {
-		if (e.key === 'Escape' && abierto) abierto = null;
+		if (e.key !== 'Escape' || !abierto) return;
+		/// Escape primero sale del panel interno; el segundo cierra el menú.
+		if (subpanel) subpanel = null;
+		else abierto = null;
+	}
+
+	function elegir(e: RailMenuEntry) {
+		if (e.disabled) return;
+		if (e.panel) {
+			subpanel = e.id;
+			return;
+		}
+		abierto = null;
+		subpanel = null;
+		e.onSelect?.();
+	}
+
+	function hayBadge(b: string | number | null | undefined) {
+		return b != null && b !== '' && b !== 0;
 	}
 </script>
 
@@ -191,8 +242,8 @@
 					class:rail-on={abierto === it.id}
 					class:rail-destacado={it.destacar}
 					aria-label={it.label}
-					aria-haspopup={it.panel ? 'dialog' : undefined}
-					aria-expanded={it.panel ? abierto === it.id : undefined}
+					aria-haspopup={it.menu ? 'menu' : it.panel ? 'dialog' : undefined}
+					aria-expanded={it.panel || it.menu ? abierto === it.id : undefined}
 					disabled={it.disabled || it.busy}
 					onclick={() => activar(it)}
 				>
@@ -201,8 +252,11 @@
 					{:else}
 						{@render it.icon()}
 					{/if}
-					{#if it.badge != null && it.badge !== '' && it.badge !== 0}
+					{#if hayBadge(it.badge)}
 						<span class="rail-badge">{it.badge}</span>
+					{/if}
+					{#if it.menu}
+						<span class="rail-caret" aria-hidden="true"></span>
 					{/if}
 				</button>
 
@@ -217,6 +271,61 @@
 						<span>{it.hint}</span>
 					{/if}
 				</div>
+
+				{#if it.menu && abierto === it.id}
+					{@const entrada = it.menu.find((m) => m.id === subpanel && m.panel)}
+					{#if entrada?.panel}
+						<div
+							class="rail-panel rail-panel-light"
+							role="dialog"
+							aria-label={entrada.label}
+							style="width:{entrada.panelWidth ?? 320}px"
+						>
+							<div class="rail-menu-volver">
+								<button type="button" onclick={() => (subpanel = null)}>‹ {it.label}</button>
+								<strong>{entrada.label}</strong>
+							</div>
+							{@render entrada.panel()}
+						</div>
+					{:else}
+						<div
+							class="rail-panel rail-panel-light rail-menu"
+							role="menu"
+							aria-label={it.label}
+							style="width:{it.panelWidth ?? 300}px"
+						>
+							<p class="rail-menu-titulo">{it.label}</p>
+							{#each it.menu as e (e.id)}
+								<button
+									type="button"
+									role="menuitem"
+									class="rail-menu-item"
+									class:rail-menu-peligro={e.tone === 'danger'}
+									disabled={e.disabled}
+									aria-disabled={e.disabled}
+									onclick={() => elegir(e)}
+								>
+									{#if e.icon}
+										<span class="rail-menu-ico" aria-hidden="true">{@render e.icon()}</span>
+									{/if}
+									<span class="rail-menu-txt">
+										<strong>{e.label}</strong>
+										{#if e.disabled && e.disabledHint}
+											<small>{e.disabledHint}</small>
+										{:else if e.hint}
+											<small>{e.hint}</small>
+										{/if}
+									</span>
+									{#if hayBadge(e.badge)}
+										<span class="rail-menu-badge">{e.badge}</span>
+									{:else if e.panel}
+										<span class="rail-menu-flecha" aria-hidden="true">›</span>
+									{/if}
+								</button>
+							{/each}
+						</div>
+					{/if}
+				{/if}
 
 				{#if it.panel && abierto === it.id}
 					<div
@@ -491,6 +600,141 @@
 		background: var(--bg-charcoal-deep);
 		border: 1px solid rgba(255, 255, 255, 0.14);
 		color: #e2e8f0;
+	}
+
+	/* Marca de «tiene menú»: un triángulo en la esquina, como las
+	   herramientas agrupadas de Figma o Photoshop. */
+	.rail-caret {
+		position: absolute;
+		right: 4px;
+		bottom: 4px;
+		width: 0;
+		height: 0;
+		border-left: 4px solid transparent;
+		border-bottom: 4px solid currentColor;
+		opacity: 0.7;
+		pointer-events: none;
+	}
+
+	/* ─── Menú ──────────────────────────────────────────────────────── */
+	.rail-menu {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+		padding: 8px;
+	}
+	.rail-menu-titulo {
+		margin: 2px 8px 6px;
+		font-size: 10px;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: #64748b;
+	}
+	.rail-menu-item {
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		width: 100%;
+		padding: 8px;
+		border: 0;
+		border-radius: 10px;
+		background: transparent;
+		text-align: left;
+		color: #0f172a;
+		cursor: pointer;
+		transition: background 0.12s;
+	}
+	.rail-menu-item:hover:not(:disabled) {
+		background: #f1f5f9;
+	}
+	.rail-menu-item:focus-visible {
+		outline: 2px solid var(--accion);
+		outline-offset: -2px;
+	}
+	.rail-menu-item:disabled {
+		cursor: not-allowed;
+	}
+	.rail-menu-item:disabled .rail-menu-ico,
+	.rail-menu-item:disabled strong {
+		opacity: 0.45;
+	}
+	.rail-menu-ico {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		flex: none;
+		width: 30px;
+		height: 30px;
+		border-radius: 9px;
+		background: #f1f5f9;
+		color: #334155;
+	}
+	.rail-menu-ico :global(svg) {
+		width: 16px;
+		height: 16px;
+	}
+	.rail-menu-peligro .rail-menu-ico {
+		background: #fef2f2;
+		color: #b42318;
+	}
+	.rail-menu-peligro strong {
+		color: #b42318;
+	}
+	.rail-menu-txt {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		flex: 1;
+		min-width: 0;
+	}
+	.rail-menu-txt strong {
+		font-size: 13px;
+		font-weight: 600;
+	}
+	.rail-menu-txt small {
+		font-size: 11px;
+		line-height: 1.35;
+		color: #64748b;
+	}
+	.rail-menu-badge {
+		flex: none;
+		min-width: 22px;
+		height: 22px;
+		padding: 0 6px;
+		border-radius: 999px;
+		background: var(--accion);
+		color: #fff;
+		font-size: 11px;
+		font-weight: 800;
+		line-height: 22px;
+		text-align: center;
+	}
+	.rail-menu-flecha {
+		flex: none;
+		font-size: 18px;
+		color: #94a3b8;
+	}
+	.rail-menu-volver {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+		margin: -4px 0 10px;
+		padding-bottom: 8px;
+		border-bottom: 1px solid #e2e8f0;
+	}
+	.rail-menu-volver button {
+		padding: 4px 8px;
+		border: 0;
+		border-radius: 8px;
+		background: #f1f5f9;
+		font-size: 12px;
+		font-weight: 600;
+		color: #334155;
+		cursor: pointer;
+	}
+	.rail-menu-volver strong {
+		font-size: 13px;
 	}
 
 	@media (max-width: 720px) {

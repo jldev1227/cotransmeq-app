@@ -4,8 +4,14 @@
 	import { quintOut } from 'svelte/easing';
 	import { goto } from '$app/navigation';
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
+	import EstadoPunto from '$lib/components/listing/EstadoPunto.svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
+	import { mascota } from '$lib/mascot';
 	import { page } from '$app/stores';
 	import { browser } from '$app/environment';
+	import { recordarListado } from '$lib/stores/volverLiquidaciones';
 	import { authStore } from '$lib/stores/auth';
 	import { socketUtils } from '$lib/socket';
 	import MultiSelectFilter from '$lib/components/ui/MultiSelectFilter.svelte';
@@ -121,6 +127,9 @@
 	let listLoading = $state(false);
 	let listError = $state('');
 	let listPage = $state(1);
+	/// Filas por página; `0` es «Todas». Va en la URL como `filas`.
+	const OPCIONES_FILAS = [15, 25, 50, 100, 0];
+	let listPorPagina = $state(15);
 	let listTotal = $state(0);
 	let listBusqueda = $state('');
 	let listEstado = $state<EstadoLiquidacionServicio | ''>('');
@@ -223,6 +232,7 @@
 			colFilterFactura.join(','),
 			colFilterLiquidador.join(','),
 			colFilterPlacas.join(','),
+			listPorPagina,
 			listPage
 		].join('|');
 	}
@@ -593,6 +603,7 @@
 
 		// 5) Habilitar reactivos de URL-sync + fetch (orden crítico).
 		hidratado = true;
+		recordarListado($page.url.pathname + $page.url.search);
 	});
 
 	onDestroy(() => {
@@ -772,7 +783,7 @@
 		try {
 			const filtros: Record<string, any> = {
 				page: listPage,
-				limit: 15,
+				limit: listPorPagina,
 				/// El backend limita los autoguardados al autor, salvo que la sesión sea administrativa.
 				incluir_no_confirmadas: true
 			};
@@ -985,6 +996,7 @@
 				params.set('dir', listSortDir);
 			}
 			if (listPage > 1) params.set('pagina', String(listPage));
+			if (listPorPagina !== 15) params.set('filas', String(listPorPagina));
 		} else if (facturasTab === 'facturas') {
 			const s = facturasBusqueda.trim();
 			if (s) params.set('busqueda', s);
@@ -1003,6 +1015,7 @@
 		const target = qs
 			? `/dashboard/liquidaciones-servicios?${qs}`
 			: '/dashboard/liquidaciones-servicios';
+		recordarListado(target);
 		goto(target, { replaceState: true, noScroll: true, keepFocus: true });
 	}
 
@@ -1050,6 +1063,9 @@
 				listSortDir = params.get('dir') === 'asc' ? 'asc' : 'desc';
 			}
 			listPage = paginaValida;
+			/// `has` antes de convertir: `Number(null)` es 0, que es «Todas».
+			const urlFilas = params.has('filas') ? Number(params.get('filas')) : NaN;
+			if (OPCIONES_FILAS.includes(urlFilas)) listPorPagina = urlFilas;
 		} else if (facturasTab === 'facturas') {
 			if (urlBusqueda) facturasBusqueda = urlBusqueda;
 			const urlEstado = params.get('estado');
@@ -1521,6 +1537,7 @@
 		void colFilterPlacas;
 		void listSortBy;
 		void listSortDir;
+		void listPorPagina;
 		void listPage;
 		void facturasPage;
 		void tercerosPage;
@@ -1570,6 +1587,7 @@
 		void colFilterFactura;
 		void colFilterLiquidador;
 		void colFilterPlacas;
+		void listPorPagina;
 		void listPage;
 
 		const filterKey = keyLiquidaciones().split('|').slice(0, -1).join('|');
@@ -1664,19 +1682,201 @@
 		terceros: $cacheLiquidaciones.terceros.pendientes,
 		configuracion: $cacheLiquidaciones.configuracion.pendientes
 	});
+
+	// ── Cabecera y tabla (presentación) ─────────────────────────────────
+	const DESCRIPCION_TAB: Record<string, string> = {
+		liquidaciones: 'Liquidación mensual de los servicios de transporte por cliente, de borrador a facturada.',
+		facturas: 'Facturas emitidas a partir de liquidaciones aprobadas.',
+		terceros: 'Ítems liquidados a vehículos de propietarios externos y lo que le queda a la empresa.',
+		configuracion: 'Tarifas, liquidadores y operadoras con que se arman las liquidaciones.'
+	};
+
+	/** Estados que se muestran como conteo en la cabecera, en orden de flujo. */
+	const ESTADOS_RESUMEN: EstadoLiquidacionServicio[] = [
+		'BORRADOR',
+		'LIQUIDADA',
+		'APROBADA',
+		'FACTURADA'
+	];
+
+	/// Tocar un conteo filtra por ese estado; tocarlo otra vez, o «Liquidaciones»,
+	/// lo quita. Usa el mismo filtro de columna que el desplegable de Estado.
+	function elegirEstadoResumen(clave: string) {
+		colFilterEstado =
+			clave === 'todas' || (colFilterEstado.length === 1 && colFilterEstado[0] === clave)
+				? []
+				: [clave];
+		filtrar();
+	}
+
+	function limpiarFiltrosLiquidaciones() {
+		listBusqueda = '';
+		listMes = '';
+		listAnio = '';
+		listSortBy = '';
+		listSortDir = 'desc';
+		colFilterConsecutivo = [];
+		colFilterCliente = [];
+		colFilterPeriodo = [];
+		colFilterEstado = [];
+		colFilterFactura = [];
+		colFilterLiquidador = [];
+		colFilterPlacas = [];
+		filtrar();
+	}
+
+	function fechaHoraCorta(iso: string | null | undefined): string {
+		if (!iso) return '—';
+		const d = new Date(iso);
+		return (
+			d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' }) +
+			' · ' +
+			d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', hour12: false })
+		);
+	}
 </script>
 
 <svelte:head>
 	<title>Liquidaciones de Servicios · Cotransmeq</title>
 </svelte:head>
 
-<div
-	class="page-wrap min-h-screen p-4 md:p-6"
-	style="background-color: var(--bg-base);"
-	in:fly={{ y: 20, duration: 500, easing: quintOut }}
->
-	<!-- Sub-tabs (editorial pill) -->
-	<div class="mb-5 flex flex-wrap items-center gap-1.5" in:fade={{ duration: 300 }}>
+<div class="dir-pagina lq-pagina" in:fade={{ duration: 400 }}>
+	<!-- Una sola cabecera para las cuatro pestañas, como extractos y los
+	     directorios. Antes cada pestaña pintaba su propia tarjeta de título y
+	     los conteos salían dos veces (chips arriba y seis tarjetas debajo). -->
+	<header class="page-card dir-cabecera" style="padding: 1.25rem 1.5rem;">
+		<div class="dir-cabecera-texto">
+			<h1 class="dir-titulo">Liquidaciones de servicios</h1>
+			<p class="dir-desc">{DESCRIPCION_TAB[facturasTab]}</p>
+
+			{#if facturasTab === 'liquidaciones'}
+				{@const m = listMetadata}
+				<div class="dir-conteos lq-resumen">
+					<div class="lq-monto">
+						<span class="lq-monto-etiqueta">Monto total</span>
+						<!-- Del servidor y con TODOS los filtros (búsqueda, cliente, columnas,
+						     estado), sobre todas las páginas. Antes, con un filtro activo, aquí
+						     iba la suma de la página visible presentada como total. -->
+						<strong class="lq-monto-valor">{COP(m.globalTotal)}</strong>
+						<small
+							>{m.globalCount.toLocaleString('es-CO')}
+							{m.globalCount === 1 ? 'liquidación' : 'liquidaciones'}{hasActiveFilter ||
+							listMes ||
+							listAnio
+								? ' con los filtros aplicados'
+								: ''}</small
+						>
+					</div>
+					<ResumenConteos
+						conteos={[
+							{
+								clave: 'todas',
+								etiqueta: 'Liquidaciones',
+								valor: Object.values(m.estadoCounts).reduce((a, b) => a + (b || 0), 0)
+							},
+							...ESTADOS_RESUMEN.map((e) => ({
+								clave: e,
+								etiqueta: getEstadoBadge(e).label + 's',
+								valor: m.estadoCounts[e] || 0,
+								color: getEstadoBadge(e).text
+							}))
+						]}
+						activo={colFilterEstado.length === 1 ? colFilterEstado[0] : null}
+						onElegir={elegirEstadoResumen}
+					/>
+				</div>
+			{:else if facturasTab === 'facturas'}
+				<div class="dir-conteos lq-resumen">
+					<div class="lq-monto">
+						<span class="lq-monto-etiqueta">Total facturado</span>
+						<strong class="lq-monto-valor">{COP(facturasMetadata.globalTotal)}</strong>
+						<small>{facturasMetadata.globalLiquidaciones} liquidaciones facturadas</small>
+					</div>
+					<ResumenConteos
+						conteos={[
+							{ clave: '', etiqueta: 'Facturas', valor: facturasMetadata.globalCount },
+							{
+								clave: 'ACTIVA',
+								etiqueta: 'Activas',
+								valor: facturasMetadata.estadoCounts.ACTIVA ?? 0,
+								color: '#16a34a'
+							},
+							{
+								clave: 'ANULADA',
+								etiqueta: 'Anuladas',
+								valor: facturasMetadata.estadoCounts.ANULADA ?? 0,
+								color: '#dc2626'
+							}
+						]}
+						activo={facturasEstado || null}
+						onElegir={(c) => {
+							facturasEstado = facturasEstado === c ? '' : (c as 'ACTIVA' | 'ANULADA');
+							filtrarFacturas();
+						}}
+					/>
+				</div>
+			{:else if facturasTab === 'terceros'}
+				<div class="dir-conteos lq-resumen">
+					<div class="lq-monto">
+						<span class="lq-monto-etiqueta">Valor a liquidar</span>
+						<strong class="lq-monto-valor">{COP(tercerosMetadata.globalLiquidar)}</strong>
+						<small
+							>{tercerosMetadata.globalCount} registros · {tercerosMetadata.globalClientes}
+							{tercerosMetadata.globalClientes === 1 ? 'cliente' : 'clientes'}</small
+						>
+					</div>
+					<dl class="lq-cifras">
+						<div>
+							<dt>Facturado</dt>
+							<dd>{COP(tercerosMetadata.globalFacturado)}</dd>
+						</div>
+						<div>
+							<dt>Administración</dt>
+							<dd>{COP(tercerosMetadata.globalAdmon)}</dd>
+						</div>
+						<div>
+							<dt>Ingreso empresa</dt>
+							<dd>{COP(tercerosMetadata.globalIngresoEmpresa)}</dd>
+						</div>
+					</dl>
+				</div>
+			{/if}
+		</div>
+
+		<div class="dir-cabecera-acciones">
+			<!-- El canvas no es una pestaña: es una pantalla completa con su
+			     propio layout, así que abrirlo es navegar. -->
+			{#if isAdmin || isFacturacion}
+				<a
+					href="/dashboard/liquidaciones-servicios/canvas"
+					class="btn-secondary"
+					title="Ver el histórico como hoja de cálculo y facturar desde ahí"
+				>
+					<Table2 class="h-4 w-4" />
+					Canvas
+				</a>
+			{/if}
+			{#if facturasTab === 'liquidaciones'}
+				{#if (isFull || isLimited) && (isFacturacion || isAdmin)}
+					<button data-tour="liq-btn-facturar" onclick={abrirModalFacturar} class="btn-secondary">
+						<Receipt class="h-4 w-4" />
+						Facturar
+					</button>
+				{/if}
+				{#if isFull}
+					<button onclick={irNuevaLiquidacion} class="btn-primary">
+						<Plus class="h-4 w-4" />
+						Nueva liquidación
+					</button>
+				{/if}
+			{/if}
+		</div>
+	</header>
+
+	<!-- Pestañas con la forma de `TabsVista`. No se usa el componente porque
+	     cada pestaña lleva además el aviso de cambios llegados por socket
+	     mientras no estaba a la vista, y los `data-tour` de la guía. -->
+	<div class="lq-tabs" role="tablist" aria-label="Vistas de liquidaciones">
 		{#snippet tabBtn(
 			id: 'liquidaciones' | 'facturas' | 'terceros' | 'configuracion',
 			label: string,
@@ -1684,24 +1884,18 @@
 		)}
 			{@const Icono = icon}
 			<button
+				type="button"
+				role="tab"
 				data-tour={`liq-tab-${id}`}
+				class="lq-tab"
+				class:activa={facturasTab === id}
+				aria-selected={facturasTab === id}
 				onclick={() => cambiarTab(id)}
-				class="apple-transition inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-semibold"
-				style="background-color: {facturasTab === id
-					? 'var(--accion)'
-					: 'var(--bg-surface)'}; color: {facturasTab === id
-					? '#fff'
-					: 'var(--text-muted)'}; border: 1px solid {facturasTab === id
-					? 'var(--accion)'
-					: 'var(--border-subtle)'};"
 			>
 				<Icono class="h-3.5 w-3.5" />
 				{label}
-				<!-- Eventos llegados mientras este tab NO estaba a la vista.
-				     Es lo que avisa de que hay algo nuevo sin obligar a
-				     refetchear los cuatro tabs por cada socket. -->
 				{#if pendientesPorTab[id] > 0 && facturasTab !== id}
-					<span class="tab-badge" title="{pendientesPorTab[id]} cambio(s) sin ver">
+					<span class="lq-tab-badge" title="{pendientesPorTab[id]} cambio(s) sin ver">
 						{pendientesPorTab[id]}
 					</span>
 				{/if}
@@ -1716,358 +1910,103 @@
 		{#if isAdmin || isOperaciones}
 			{@render tabBtn('configuracion', 'Configuración', Settings)}
 		{/if}
-
-		<!-- El canvas no es un tab: es una pantalla completa con su propio
-		     layout (sin sidebar ni header), así que abrirlo es navegar, no
-		     cambiar de pestaña. Va separado a la derecha por eso mismo. -->
-		{#if isAdmin || isFacturacion}
-			<a
-				href="/dashboard/liquidaciones-servicios/canvas"
-				class="apple-transition ml-auto inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-semibold"
-				style="background-color: var(--bg-surface); color: var(--text-muted); border: 1px solid var(--border-subtle);"
-				title="Ver el histórico como hoja de cálculo y facturar desde ahí"
-			>
-				<Table2 class="h-3.5 w-3.5" />
-				Canvas
-			</a>
-		{/if}
 	</div>
 
-	<!-- Feed de eventos de socket. Vive fuera del `{#if}` de tabs a
+	<!-- Feed de eventos de socket. Vive fuera del `{#if}` de pestañas a
 	     propósito: un evento de Facturas tiene que verse aunque estés en
-	     Liquidaciones, que es justo lo que antes se perdía. -->
-	<!-- Sin botón de recargar: el listado se revalida solo por socket
-	     (`liquidacion-servicio-created/updated/deleted`), así que el botón
-	     solo servía para repetir una petición que ya se había hecho sola. -->
-	<div class="flex items-start gap-2">
-		<div class="min-w-0 flex-1">
-			<SocketEventLogBar onVer={irAEvento} />
-		</div>
-	</div>
+	     Liquidaciones. -->
+	<SocketEventLogBar onVer={irAEvento} />
 
 	{#if facturasTab === 'liquidaciones'}
-		<!-- Header (page-card editorial) -->
-		<div
-			class="page-card mb-4"
-			style="padding: 1.25rem 1.5rem;"
-			in:fly={{ y: 12, duration: 400, easing: quintOut }}
-		>
-			<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-				<!-- Título -->
-				<div class="flex items-center gap-3">
-					<div>
-						<div class="flex items-center gap-2">
-							<h1
-								class="font-display text-2xl"
-								style="color: var(--bg-charcoal); font-weight: 800;"
-							>
-								Liquidaciones de Servicios
-							</h1>
-							<!-- Aquí había un chip «En vivo» pintado a mano, sin mirar el socket:
-							     decía «En vivo» también con la conexión caída. El estado real lo
-							     muestra el header, junto al nombre de la sección. -->
-						</div>
-						<p class="text-xs" style="color: var(--text-muted);">
-							Gestión y seguimiento de liquidaciones de servicios de transporte
-						</p>
-					</div>
-				</div>
-
-				<!-- Stats chips — hidden below xl (redundantes con las Stat Cards de abajo) -->
-				<div class="hidden flex-wrap items-center gap-2 xl:flex">
-					<span
-						class="inline-flex items-center gap-1.5 rounded-full border border-[var(--border-subtle)] bg-white px-3 py-1 text-xs font-semibold"
-						style="color: var(--text-secondary);"
-					>
-						<span class="h-1.5 w-1.5 rounded-full bg-zinc-400"></span>
-						{listMetadata.globalCount} Total
-					</span>
-					<span
-						class="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-white px-3 py-1 text-xs font-semibold text-blue-700"
-					>
-						<span class="h-1.5 w-1.5 rounded-full bg-blue-500"></span>
-						{listMetadata.estadoCounts['LIQUIDADA'] || 0} Liquidadas
-					</span>
-					<span
-						class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
-						style="background: rgba(234, 88, 12,0.10); color: var(--orange-700); border: 1px solid rgba(234, 88, 12,0.30);"
-					>
-						<span class="h-1.5 w-1.5 rounded-full bg-orange-500"></span>
-						{listMetadata.estadoCounts['APROBADA'] || 0} Aprobadas
-					</span>
-					<span
-						class="inline-flex items-center gap-1.5 rounded-full border border-purple-200 bg-white px-3 py-1 text-xs font-semibold text-purple-700"
-					>
-						<span class="h-1.5 w-1.5 rounded-full bg-purple-500"></span>
-						{listMetadata.estadoCounts['FACTURADA'] || 0} Facturadas
-					</span>
-					{#if hasActiveFilter}
-						<span
-							class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
-							style="background: rgba(37,99,235,0.08); color: #2563eb; border: 1px solid rgba(37,99,235,0.30);"
-						>
-							<Filter class="h-3 w-3" />
-							{listTotal} resultado{listTotal !== 1 ? 's' : ''}
-						</span>
-					{/if}
-				</div>
-
-				<!-- Actions — full-width buttons on mobile/tablet, shrink on xl -->
-				<div class="flex items-center gap-2 xl:shrink-0">
-					{#if (isFull || isLimited) && (isFacturacion || isAdmin)}
-						<button
-							data-tour="liq-btn-facturar"
-							onclick={abrirModalFacturar}
-							class="btn-secondary apple-transition flex-1 xl:flex-none"
-						>
-							<Receipt class="h-4 w-4" />
-							Facturar
-						</button>
-					{/if}
-					{#if isFull}
-						<button
-							onclick={irNuevaLiquidacion}
-							class="btn-primary apple-transition flex-1 xl:flex-none"
-						>
-							<Plus class="h-4 w-4" />
-							Nueva Liquidación
-						</button>
-					{/if}
-				</div>
+		<div class="dir-filtros" in:fly={{ y: 8, duration: 300, easing: quintOut }}>
+			<div class="dir-filtros-buscador">
+				<BuscadorLista
+					bind:valor={listBusqueda}
+					onBuscar={() => {}}
+					placeholder="Consecutivo, factura, cliente, placa, OSI…"
+					etiqueta="Buscar liquidaciones"
+				/>
 			</div>
-		</div>
-
-		<!-- Filtros -->
-		<div class="filter-panel mb-4" in:fly={{ y: 8, duration: 400, delay: 80, easing: quintOut }}>
-			<div class="filter-panel-header">
-				<span class="filter-panel-title">Filtros</span>
-				{#if hasActiveFilter}
-					<span class="filter-count">
-						{listTotal} resultado{listTotal !== 1 ? 's' : ''}
-					</span>
-				{/if}
-			</div>
-			<div class="filter-grid-4">
-				<div class="filter-field" style="grid-column: span 2;">
-					<label class="filter-field-label" for="liq-search">Búsqueda</label>
-					<input
-						id="liq-search"
-						type="search"
-						bind:value={listBusqueda}
-						onkeydown={onSearchKeyDown}
-						placeholder="Consecutivo, factura, cliente, placa, OSI…"
-					/>
-				</div>
-				<div class="filter-field">
-					<label class="filter-field-label" for="liq-mes">Mes</label>
-					<select id="liq-mes" bind:value={listMes} onchange={filtrar}>
-						<option value="">Todos los meses</option>
-						{#each MESES as m}<option value={m}>{m}</option>{/each}
-					</select>
-				</div>
-				<div class="filter-field">
-					<label class="filter-field-label" for="liq-anio">Año</label>
-					<select id="liq-anio" bind:value={listAnio} onchange={filtrar}>
-						<option value="">Todos los años</option>
-						{#each YEARS as y}<option value={y}>{y}</option>{/each}
-					</select>
-				</div>
-			</div>
-			{#if hasActiveFilter}
-				<div class="filter-actions">
-					<button
-						class="filter-clear"
-						onclick={() => {
-							listBusqueda = '';
-							listMes = '';
-							listAnio = '';
-							listSortBy = '';
-							listSortDir = 'desc';
-							colFilterConsecutivo = [];
-							colFilterCliente = [];
-							colFilterPeriodo = [];
-							colFilterEstado = [];
-							colFilterFactura = [];
-							colFilterLiquidador = [];
-							colFilterPlacas = [];
-							filtrar();
-						}}
-					>
-						<X class="h-3.5 w-3.5" />
-						Limpiar filtros
-					</button>
-				</div>
+			<label class="lq-select">
+				<span>Mes</span>
+				<select bind:value={listMes} onchange={filtrar}>
+					<option value="">Todos</option>
+					{#each MESES as m}<option value={m}>{m}</option>{/each}
+				</select>
+			</label>
+			<label class="lq-select">
+				<span>Año</span>
+				<select bind:value={listAnio} onchange={filtrar}>
+					<option value="">Todos</option>
+					{#each YEARS as y}<option value={y}>{y}</option>{/each}
+				</select>
+			</label>
+			{#if hasActiveFilter || listMes || listAnio}
+				<button type="button" class="btn-secondary" onclick={limpiarFiltrosLiquidaciones}>
+					<X class="h-3.5 w-3.5" />
+					Limpiar
+				</button>
 			{/if}
 		</div>
 
-		<!-- Stats Cards -->
-		{#if !listLoading}
-			{@const filteredTotal = filteredLiquidaciones.reduce((s, l) => s + (l.total || 0), 0)}
-			{@const filteredBorrador = filteredLiquidaciones.filter(
-				(l) => l.estado === 'BORRADOR'
-			).length}
-			{@const filteredLiquidada = filteredLiquidaciones.filter(
-				(l) => l.estado === 'LIQUIDADA'
-			).length}
-			{@const filteredAprobada = filteredLiquidaciones.filter(
-				(l) => l.estado === 'APROBADA'
-			).length}
-			{@const filteredFacturada = filteredLiquidaciones.filter(
-				(l) => l.estado === 'FACTURADA'
-			).length}
-			{@const m = listMetadata}
-			{@const showFiltered = hasActiveFilter}
-			<div
-				class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6"
-				in:fly={{ y: 8, duration: 400, delay: 150, easing: quintOut }}
-			>
-				<div class="stat-card">
-					<p class="stat-label">Monto Total</p>
-					<p class="stat-value font-mono-meta" style="font-size: 1.05rem;">
-						{COP(showFiltered ? filteredTotal : m.globalTotal)}
-					</p>
-					{#if showFiltered}<p
-							class="font-mono-meta mt-0.5 text-[10px]"
-							style="color: var(--text-very-muted);"
-						>
-							General: {COP(m.globalTotal)}
-						</p>{/if}
-				</div>
-				<div class="stat-card">
-					<p class="stat-label">Registros</p>
-					<p class="stat-value">{showFiltered ? listTotal : m.globalCount}</p>
-					{#if showFiltered}<p
-							class="font-mono-meta mt-0.5 text-[10px]"
-							style="color: var(--text-very-muted);"
-						>
-							General: {m.globalCount}
-						</p>{/if}
-				</div>
-				<div class="stat-card">
-					<p class="stat-label">Borrador</p>
-					<p class="stat-value" style="color: var(--text-muted);">
-						{showFiltered ? filteredBorrador : m.estadoCounts['BORRADOR'] || 0}
-					</p>
-					{#if showFiltered}<p
-							class="font-mono-meta mt-0.5 text-[10px]"
-							style="color: var(--text-very-muted);"
-						>
-							General: {m.estadoCounts['BORRADOR'] || 0}
-						</p>{/if}
-				</div>
-				<div class="stat-card">
-					<p class="stat-label">Liquidadas</p>
-					<p class="stat-value" style="color: #2563eb;">
-						{showFiltered ? filteredLiquidada : m.estadoCounts['LIQUIDADA'] || 0}
-					</p>
-					{#if showFiltered}<p
-							class="font-mono-meta mt-0.5 text-[10px]"
-							style="color: var(--text-very-muted);"
-						>
-							General: {m.estadoCounts['LIQUIDADA'] || 0}
-						</p>{/if}
-				</div>
-				<div class="stat-card">
-					<p class="stat-label">Aprobadas</p>
-					<p class="stat-value" style="color: var(--orange-600);">
-						{showFiltered ? filteredAprobada : m.estadoCounts['APROBADA'] || 0}
-					</p>
-					{#if showFiltered}<p
-							class="font-mono-meta mt-0.5 text-[10px]"
-							style="color: var(--text-very-muted);"
-						>
-							General: {m.estadoCounts['APROBADA'] || 0}
-						</p>{/if}
-				</div>
-				<div class="stat-card">
-					<p class="stat-label">Facturadas</p>
-					<p class="stat-value" style="color: #7e22ce;">
-						{showFiltered ? filteredFacturada : m.estadoCounts['FACTURADA'] || 0}
-					</p>
-					{#if showFiltered}<p
-							class="font-mono-meta mt-0.5 text-[10px]"
-							style="color: var(--text-very-muted);"
-						>
-							General: {m.estadoCounts['FACTURADA'] || 0}
-						</p>{/if}
-				</div>
-			</div>
-		{/if}
-
-		<!-- Canvas Table -->
-		<div class="table-card" in:fly={{ y: 12, duration: 400, delay: 200, easing: quintOut }}>
+		<div class="lq-marco" in:fly={{ y: 12, duration: 400, delay: 60, easing: quintOut }}>
 			{#if listLoading}
-				<div class="flex items-center justify-center py-20" in:fade>
-					<div class="flex flex-col items-center gap-3">
-						<div class="spinner" style="width: 2.5rem; height: 2.5rem; border-width: 4px;"></div>
-						<p class="text-sm" style="color: var(--text-muted);">Cargando liquidaciones...</p>
-					</div>
-				</div>
+				<CargaMascota texto="Cargando liquidaciones…" />
 			{:else if listError}
-				<div class="alert alert-error m-4" in:fade>
-					<AlertCircle class="h-5 w-5" />
-					<div class="flex-1">
-						<p class="text-sm font-semibold">{listError}</p>
-						<button
-							onclick={() => cargarListado()}
-							class="apple-transition mt-2 rounded-lg px-3 py-1.5 text-xs font-semibold"
-							style="background: rgba(220,38,38,0.10); color: #991B1B;">Reintentar</button
-						>
-					</div>
+				<div class="dir-vacio">
+					<img src={mascota('advertencia').src} alt="" width="418" height="418" />
+					<h3>No se pudieron cargar</h3>
+					<p>{listError}</p>
+					<button type="button" class="btn-secondary" onclick={() => cargarListado()}
+						>Reintentar</button
+					>
 				</div>
 			{:else if liquidaciones.length === 0}
-				<div
-					class="flex flex-col items-center justify-center gap-4 p-16"
-					style="background: var(--bg-surface);"
-					in:fade
-				>
-					<div
-						class="flex h-16 w-16 items-center justify-center rounded-2xl"
-						style="background: rgba(234, 88, 12,0.08);"
-					>
-						<FileText class="h-7 w-7" style="color: var(--orange-500);" />
-					</div>
-					<div class="text-center">
-						<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
-							No hay liquidaciones registradas
-						</h3>
-						<p class="mt-1 text-sm" style="color: var(--text-muted);">
-							Crea una nueva haciendo clic en el botón superior
-						</p>
-					</div>
-					{#if isFull}
-						<button onclick={irNuevaLiquidacion} class="btn-primary apple-transition">
+				<div class="dir-vacio">
+					<img
+						src={mascota(hasActiveFilter ? 'vacio' : 'exito').src}
+						alt=""
+						width="418"
+						height="418"
+					/>
+					<h3>{hasActiveFilter ? 'Sin resultados' : 'Todavía no hay liquidaciones'}</h3>
+					<p>
+						{hasActiveFilter
+							? 'Ninguna liquidación coincide con estos filtros.'
+							: 'Las liquidaciones de servicios aparecen aquí con su estado, su factura y su total.'}
+					</p>
+					{#if hasActiveFilter}
+						<button type="button" class="btn-secondary" onclick={limpiarFiltrosLiquidaciones}
+							>Limpiar filtros</button
+						>
+					{:else if isFull}
+						<button onclick={irNuevaLiquidacion} class="btn-primary">
 							<Plus class="h-4 w-4" />
-							Nueva Liquidación
+							Nueva liquidación
 						</button>
 					{/if}
 				</div>
 			{:else}
-				<!-- ═══ DESKTOP TABLE (hidden on mobile) ═══ -->
-				<div class="hidden overflow-x-auto xl:block">
-					<table class="w-full" style="min-width:1400px">
-						<thead class="table-header sticky top-0 z-20">
+				<!-- ═══ Tabla, o tarjetas si el contenedor es angosto (ver `.lq-marco`) ═══ -->
+				<div class="lq-scroll lq-vista-tabla">
+					<table class="lq-tabla" style="min-width: 1040px">
+						<thead>
 							<tr>
-								<th class="text-left" style="min-width:100px">
-									<span class="flex items-center gap-1">
-										<button
-											type="button"
-											class="group apple-transition inline-flex items-center gap-1 hover:text-[var(--text-primary)]"
-											onclick={() => toggleSort('consecutivo')}
-										>
-											Consecutivo
-											<span
-												class="transition-colors {listSortBy === 'consecutivo'
-													? 'text-orange-500'
-													: 'text-zinc-300 group-hover:text-zinc-400'}"
-											>
-												{#if listSortBy === 'consecutivo' && listSortDir === 'desc'}
-													<ChevronDown class="h-3.5 w-3.5" />
-												{:else}
-													<ChevronUp class="h-3.5 w-3.5" />
-												{/if}
-											</span>
-										</button>
+								{#snippet cabeceraOrden(campo: string, etiqueta: string)}
+									<button type="button" class="lq-th-btn" onclick={() => toggleSort(campo)}>
+										{etiqueta}
+										<span class="lq-orden" class:lq-orden--activo={listSortBy === campo}>
+											{#if listSortBy === campo && listSortDir === 'desc'}
+												<ChevronDown class="h-3.5 w-3.5" />
+											{:else}
+												<ChevronUp class="h-3.5 w-3.5" />
+											{/if}
+										</span>
+									</button>
+								{/snippet}
+								<th style="min-width: 120px">
+									<span class="lq-th">
+										{@render cabeceraOrden('consecutivo', 'Consecutivo')}
 										<MultiSelectFilter
 											bind:selected={colFilterConsecutivo}
 											options={uniqueConsecutivos}
@@ -2078,26 +2017,9 @@
 										/>
 									</span>
 								</th>
-								<th class="text-left" style="min-width:160px">
-									<span class="flex items-center gap-1">
-										<button
-											type="button"
-											class="group apple-transition inline-flex items-center gap-1 hover:text-[var(--text-primary)]"
-											onclick={() => toggleSort('cliente')}
-										>
-											Cliente
-											<span
-												class="transition-colors {listSortBy === 'cliente'
-													? 'text-orange-500'
-													: 'text-zinc-300 group-hover:text-zinc-400'}"
-											>
-												{#if listSortBy === 'cliente' && listSortDir === 'desc'}
-													<ChevronDown class="h-3.5 w-3.5" />
-												{:else}
-													<ChevronUp class="h-3.5 w-3.5" />
-												{/if}
-											</span>
-										</button>
+								<th style="min-width: 220px">
+									<span class="lq-th">
+										{@render cabeceraOrden('cliente', 'Cliente')}
 										<MultiSelectFilter
 											bind:selected={colFilterCliente}
 											options={uniqueClientes}
@@ -2108,26 +2030,9 @@
 										/>
 									</span>
 								</th>
-								<th class="text-left" style="min-width:120px">
-									<span class="flex items-center gap-1">
-										<button
-											type="button"
-											class="group apple-transition inline-flex items-center gap-1 hover:text-[var(--text-primary)]"
-											onclick={() => toggleSort('periodo')}
-										>
-											Periodo
-											<span
-												class="transition-colors {listSortBy === 'periodo'
-													? 'text-orange-500'
-													: 'text-zinc-300 group-hover:text-zinc-400'}"
-											>
-												{#if listSortBy === 'periodo' && listSortDir === 'desc'}
-													<ChevronDown class="h-3.5 w-3.5" />
-												{:else}
-													<ChevronUp class="h-3.5 w-3.5" />
-												{/if}
-											</span>
-										</button>
+								<th style="min-width: 130px">
+									<span class="lq-th">
+										{@render cabeceraOrden('periodo', 'Periodo')}
 										<MultiSelectFilter
 											bind:selected={colFilterPeriodo}
 											options={uniquePeriodos}
@@ -2137,26 +2042,9 @@
 										/>
 									</span>
 								</th>
-								<th class="text-center" style="min-width:100px">
-									<span class="flex items-center justify-center gap-1">
-										<button
-											type="button"
-											class="group apple-transition inline-flex items-center gap-1 hover:text-[var(--text-primary)]"
-											onclick={() => toggleSort('estado')}
-										>
-											Estado
-											<span
-												class="transition-colors {listSortBy === 'estado'
-													? 'text-orange-500'
-													: 'text-zinc-300 group-hover:text-zinc-400'}"
-											>
-												{#if listSortBy === 'estado' && listSortDir === 'desc'}
-													<ChevronDown class="h-3.5 w-3.5" />
-												{:else}
-													<ChevronUp class="h-3.5 w-3.5" />
-												{/if}
-											</span>
-										</button>
+								<th style="min-width: 130px">
+									<span class="lq-th">
+										{@render cabeceraOrden('estado', 'Estado')}
 										<MultiSelectFilter
 											bind:selected={colFilterEstado}
 											options={uniqueEstados}
@@ -2167,9 +2055,9 @@
 										/>
 									</span>
 								</th>
-								<th class="text-center" style="min-width:110px">
-									<span class="flex items-center justify-center gap-1">
-										Factura
+								<th style="min-width: 120px">
+									<span class="lq-th">
+										{@render cabeceraOrden('factura', 'Factura')}
 										<MultiSelectFilter
 											bind:selected={colFilterFactura}
 											options={uniqueFacturas}
@@ -2180,44 +2068,13 @@
 										/>
 									</span>
 								</th>
-								<th class="text-center" style="min-width:70px">3° Liq.</th>
-								<th class="text-right" style="min-width:120px">
-									<button
-										type="button"
-										class="group apple-transition inline-flex w-full cursor-pointer items-center justify-end gap-1 text-right select-none hover:text-[var(--text-primary)]"
-										onclick={() => toggleSort('total')}
-									>
-										Total
-										<span
-											class="transition-colors {listSortBy === 'total'
-												? 'text-orange-500'
-												: 'text-zinc-300 group-hover:text-zinc-400'}"
-										>
-											{#if listSortBy === 'total' && listSortDir === 'desc'}
-												<ChevronDown class="h-3.5 w-3.5" />
-											{:else}
-												<ChevronUp class="h-3.5 w-3.5" />
-											{/if}
-										</span>
-									</button>
+								<th style="min-width: 90px">{@render cabeceraOrden('tercero', '3° liq.')}</th>
+								<th class="lq-num" style="min-width: 140px">
+									<span class="lq-th lq-th--fin">{@render cabeceraOrden('total', 'Total')}</span>
 								</th>
-								<th class="text-center" style="min-width:60px">Items</th>
-								<th class="text-left" style="min-width:120px">
-									<span class="flex items-center gap-1">
-										Liquidador
-										<MultiSelectFilter
-											bind:selected={colFilterLiquidador}
-											options={uniqueLiquidadores}
-											placeholder="Todos"
-											searchable
-											iconOnly
-											on:change={filtrar}
-										/>
-									</span>
-								</th>
-								<th class="text-left" style="min-width:110px">
-									<span class="flex items-center gap-1">
-										Placas
+								<th style="min-width: 150px">
+									<span class="lq-th">
+										Contenido
 										<MultiSelectFilter
 											bind:selected={colFilterPlacas}
 											options={uniquePlacas}
@@ -2228,205 +2085,118 @@
 										/>
 									</span>
 								</th>
-								<th class="text-left" style="min-width:130px">
-									<button
-										type="button"
-										class="group apple-transition inline-flex cursor-pointer items-center gap-1 select-none hover:text-[var(--text-primary)]"
-										onclick={() => toggleSort('fecha')}
-									>
-										Fecha
-										<span
-											class="transition-colors {listSortBy === 'fecha'
-												? 'text-orange-500'
-												: 'text-zinc-300 group-hover:text-zinc-400'}"
-										>
-											{#if listSortBy === 'fecha' && listSortDir === 'desc'}
-												<ChevronDown class="h-3.5 w-3.5" />
-											{:else}
-												<ChevronUp class="h-3.5 w-3.5" />
-											{/if}
-										</span>
-									</button>
+								<th style="min-width: 170px">
+									<span class="lq-th">
+										{@render cabeceraOrden('fecha', 'Liquidador · fecha')}
+										<MultiSelectFilter
+											bind:selected={colFilterLiquidador}
+											options={uniqueLiquidadores}
+											placeholder="Todos"
+											searchable
+											iconOnly
+											on:change={filtrar}
+										/>
+									</span>
 								</th>
-								<th class="text-center" style="min-width:200px">Acciones</th>
+								<th style="width: 64px"></th>
 							</tr>
 						</thead>
-						<tbody class="divide-y divide-[var(--border-subtle)]">
+						<tbody>
 							{#each filteredLiquidaciones as liq (liq.id)}
 								{@const badge = getEstadoBadge(liq.estado)}
 								{@const facturaInfo = facturaInfoMap[liq.id]}
-								{@const isNew = highlightedIds[liq.id] === 'created'}
-								{@const isUpdated = highlightedIds[liq.id] === 'updated'}
 								{@const itemsTotal = liq.total_items || 0}
-								{@const isUnconfirmed = !liq.confirmada_at}
+								{@const nPlacas = liq.placas?.length ?? 0}
 								<tr
-									class="table-row {isNew
-										? 'border-l-4 border-l-[var(--orange-500)] !bg-[rgba(234, 88, 12,0.08)]'
-										: ''} {isUpdated
-										? 'border-l-4 border-l-[#2563EB] !bg-[rgba(37,99,235,0.08)]'
-										: ''}"
+									class:lq-fila--nueva={highlightedIds[liq.id] === 'created'}
+									class:lq-fila--actualizada={highlightedIds[liq.id] === 'updated'}
 								>
-									<td class="px-4 py-3 text-left text-xs">
-										<span class="font-mono-meta text-[12px]" style="color: var(--orange-700);">
-											{liq.consecutivo}
-										</span>
+									<td><span class="lq-consecutivo">{liq.consecutivo}</span></td>
+									<td>
+										<span class="lq-texto" title={liq.cliente?.nombre || ''}
+											>{liq.cliente?.nombre || '—'}</span
+										>
 									</td>
-									<td
-										class="max-w-[160px] truncate px-4 py-3 text-left text-xs"
-										style="color: var(--text-secondary);"
-										title={liq.cliente?.nombre || ''}>{liq.cliente?.nombre || '—'}</td
-									>
-									<td
-										class="font-mono-meta px-4 py-3 text-left text-xs"
-										style="color: var(--text-secondary); font-size: 0.7rem;"
-										>{getMesLabel(liq.mes)} {liq.anio}</td
-									>
-									<td class="px-4 py-3 text-center text-xs">
-										{#if isUnconfirmed}
-											<span
-												class="status-pill"
-												style="background: rgba(245,158,11,0.14); color: #B45309;"
-												title="Existe por autoguardado, pero el usuario todavía no pulsó Guardar"
-												>Sin guardar</span
-											>
+									<td class="lq-nowrap">{getMesLabel(liq.mes)} {liq.anio}</td>
+									<td>
+										{#if !liq.confirmada_at}
+											<span title="Existe por autoguardado, pero nadie pulsó Guardar">
+												<EstadoPunto etiqueta="Sin guardar" color="#d97706" />
+											</span>
 										{:else}
-											<span class="status-pill" style="background:{badge.bg};color:{badge.text}"
-												>{liq.estado}</span
-											>
+											<EstadoPunto
+												etiqueta={badge.label}
+												color={badge.text}
+												apagado={liq.estado === 'ANULADA'}
+											/>
 										{/if}
 									</td>
-									<td class="px-4 py-3 text-center text-xs">
+									<td>
 										{#if facturaInfo}
-											<span
-												class="font-mono-meta inline-block rounded-md px-2 py-0.5 text-[11px]"
-												style="background: rgba(168,85,247,0.10); color: #7E22CE;"
-												>{facturaInfo.numero_factura}</span
-											>
+											<span class="lq-mono lq-factura">{facturaInfo.numero_factura}</span>
 										{:else}
-											<span style="color: var(--text-very-muted);">—</span>
+											<span class="dir-nulo">—</span>
 										{/if}
 									</td>
-									<td class="px-4 py-3 text-center text-xs">
-										{#if liq.tercero_liquidado}
-											<span
-												class="font-mono-meta inline-block rounded-md px-2 py-0.5 text-[10px]"
-												style="background: rgba(234, 88, 12,0.10); color: var(--orange-700);"
-												>Sí</span
-											>
-										{:else}
-											<span
-												class="font-mono-meta inline-block rounded-md px-2 py-0.5 text-[10px]"
-												style="background: rgba(220,38,38,0.08); color: #DC2626;">No</span
-											>
-										{/if}
+									<td>
+										<EstadoPunto
+											etiqueta={liq.tercero_liquidado ? 'Sí' : 'No'}
+											color={liq.tercero_liquidado ? '#16a34a' : '#94a3b8'}
+											apagado={!liq.tercero_liquidado}
+										/>
 									</td>
-									<td
-										class="font-mono-meta px-4 py-3 text-right text-[12px] font-bold"
-										style="color: var(--orange-700);">{COP(liq.total || 0)}</td
-									>
-									<td class="px-4 py-3 text-center text-[11px]">
-										{#if itemsTotal === 0}
-											<span class="font-mono-meta" style="color: var(--text-very-muted);">—</span>
-										{:else}
-											<!-- svelte-ignore a11y_no_static_element_interactions -->
-											<div
-												class="relative inline-flex items-center gap-1"
-												role="button"
-												tabindex="0"
-												onmouseenter={(e) => mostrarPopoverItems(e, liq.id)}
-												onmouseleave={ocultarPopoverItems}
-												onfocus={(e) => mostrarPopoverItems(e, liq.id)}
-												onblur={ocultarPopoverItems}
-											>
+									<td class="lq-num"><span class="lq-total">{COP(liq.total || 0)}</span></td>
+									<td>
+										<div class="lq-chips">
+											{#if itemsTotal > 0}
+												<!-- svelte-ignore a11y_no_static_element_interactions -->
 												<span
-													class="font-mono-meta inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-semibold"
-													style="background: rgba(234, 88, 12,0.08); color: var(--orange-700);"
+													class="lq-chip"
+													role="button"
+													tabindex="0"
+													onmouseenter={(e) => mostrarPopoverItems(e, liq.id)}
+													onmouseleave={ocultarPopoverItems}
+													onfocus={(e) => mostrarPopoverItems(e, liq.id)}
+													onblur={ocultarPopoverItems}
 												>
 													<Hash class="h-3 w-3" />
 													{itemsTotal}
-													{itemsTotal === 1 ? 'item' : 'items'}
+													{itemsTotal === 1 ? 'ítem' : 'ítems'}
 												</span>
-												{#if itemsTotal > 4}
-													<span
-														class="font-mono-meta inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold"
-														style="background: rgba(37,99,235,0.10); color: #2563eb; border: 1px dashed rgba(37,99,235,0.30);"
-														title="{itemsTotal - 4} items adicionales"
-													>
-														+{itemsTotal - 4}
-													</span>
-												{/if}
-											</div>
-										{/if}
-									</td>
-									<td
-										class="px-4 py-3 text-left text-xs whitespace-nowrap"
-										style="color: var(--text-secondary);"
-										>{liq.liquidado_por?.nombre || liq.creado_por?.nombre || '—'}</td
-									>
-									<td class="px-4 py-3 text-left text-xs">
-										{#if liq.placas && liq.placas.length > 0}
-											<div class="relative inline-block">
+											{/if}
+											{#if nPlacas > 0}
 												<!-- svelte-ignore a11y_no_static_element_interactions -->
 												<span
-													class="font-mono-meta apple-transition inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-0.5 text-[10px]"
-													style="background: rgba(234, 88, 12,0.08); color: var(--orange-700);"
+													class="lq-chip"
 													onmouseenter={(e) => {
-														const rect = (e.target as HTMLElement).getBoundingClientRect();
+														const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 														popoverPlacasPos = { top: rect.bottom + 4, left: rect.left };
 														popoverPlacas = liq.placas ?? [];
 														popoverPlacasVisible = true;
 													}}
-													onmouseleave={() => {
-														popoverPlacasVisible = false;
-													}}
+													onmouseleave={() => (popoverPlacasVisible = false)}
 												>
-													<svg
-														class="h-3 w-3"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															stroke-width="2"
-															d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-														/>
-													</svg>
-													{liq.placas.length}
-													{liq.placas.length === 1 ? 'placa' : 'placas'}
+													<Truck class="h-3 w-3" />
+													{nPlacas}
+													{nPlacas === 1 ? 'placa' : 'placas'}
 												</span>
-											</div>
-										{:else}
-											<span class="text-zinc-400">—</span>
-										{/if}
-									</td>
-									<td
-										class="px-4 py-3 text-left text-xs whitespace-nowrap"
-										style="color: var(--text-muted);"
-									>
-										<span class="font-mono-meta text-[10px]">
-											{liq.created_at
-												? new Date(liq.created_at).toLocaleDateString('es-CO', {
-														day: 'numeric',
-														month: 'short'
-													}) +
-													' ' +
-													new Date(liq.created_at).toLocaleTimeString('es-CO', {
-														hour: '2-digit',
-														minute: '2-digit',
-														hour12: false
-													})
-												: '—'}
-										</span>
-									</td>
-									<td class="px-4 py-3 text-center whitespace-nowrap">
-										<div class="flex items-center justify-center">
-											<AccionesDropdown
-												etiqueta="Acciones de {liq.consecutivo}"
-												acciones={accionesDeLiquidacion(liq)}
-											/>
+											{/if}
+											{#if itemsTotal === 0 && nPlacas === 0}
+												<span class="dir-nulo">—</span>
+											{/if}
 										</div>
+									</td>
+									<td>
+										<div class="dir-celda dir-celda--fecha">
+											<span>{liq.liquidado_por?.nombre || liq.creado_por?.nombre || '—'}</span>
+											<small>{fechaHoraCorta(liq.created_at)}</small>
+										</div>
+									</td>
+									<td class="lq-acciones">
+										<AccionesDropdown
+											etiqueta="Acciones de {liq.consecutivo}"
+											acciones={accionesDeLiquidacion(liq)}
+										/>
 									</td>
 								</tr>
 							{/each}
@@ -2434,178 +2204,72 @@
 					</table>
 				</div>
 
-				<!-- ═══ MOBILE CARDS (shown on mobile only) ═══ -->
-				<div class="flex flex-col gap-3 p-3 xl:hidden">
+				<!-- ═══ Tarjetas: una por liquidación ═══ -->
+				<ul class="lq-tarjetas lq-vista-tarjetas">
 					{#each filteredLiquidaciones as liq (liq.id)}
 						{@const badge = getEstadoBadge(liq.estado)}
 						{@const facturaInfo = facturaInfoMap[liq.id]}
-						{@const isNew = highlightedIds[liq.id] === 'created'}
-						{@const isUpdated = highlightedIds[liq.id] === 'updated'}
-						{@const isUnconfirmed = !liq.confirmada_at}
-						<div
-							class="list-card flex-col items-stretch"
-							style="border-left: 4px solid {isNew
-								? 'var(--orange-500)'
-								: isUpdated
-									? '#2563EB'
-									: 'var(--border-subtle)'};"
+						<li
+							class="lq-tarjeta"
+							class:lq-fila--nueva={highlightedIds[liq.id] === 'created'}
+							class:lq-fila--actualizada={highlightedIds[liq.id] === 'updated'}
 						>
-							<!-- Card header -->
-							<div
-								class="flex items-center justify-between"
-								style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 0.6rem; margin-bottom: 0.6rem;"
-							>
-								<div class="flex items-center gap-2">
-									<span class="font-mono-meta text-[12px]" style="color: var(--orange-700);"
-										>{liq.consecutivo}</span
-									>
-									{#if isUnconfirmed}
-										<span
-											class="status-pill"
-											style="background: rgba(245,158,11,0.14); color: #B45309;">Sin guardar</span
-										>
+							<div class="lq-tarjeta-cabeza">
+								<div class="lq-tarjeta-titulo">
+									<span class="lq-consecutivo">{liq.consecutivo}</span>
+									{#if !liq.confirmada_at}
+										<EstadoPunto etiqueta="Sin guardar" color="#d97706" />
 									{:else}
-										<span class="status-pill" style="background:{badge.bg};color:{badge.text}"
-											>{liq.estado}</span
-										>
+										<EstadoPunto etiqueta={badge.label} color={badge.text} />
 									{/if}
 								</div>
-								<span
-									class="font-mono-meta text-right text-[12px] font-bold"
-									style="color: var(--orange-700);">{COP(liq.total || 0)}</span
-								>
-							</div>
-							<!-- Card body -->
-							<div class="space-y-1.5">
-								<div class="flex items-center justify-between">
-									<span class="font-mono-meta text-[10px]" style="color: var(--text-very-muted);"
-										>CLIENTE</span
-									>
-									<span
-										class="max-w-[60%] truncate text-right text-xs font-medium"
-										style="color: var(--text-primary);">{liq.cliente?.nombre || '—'}</span
-									>
-								</div>
-								<div class="flex items-center justify-between">
-									<span class="font-mono-meta text-[10px]" style="color: var(--text-very-muted);"
-										>PERIODO</span
-									>
-									<span class="font-mono-meta text-[10px]" style="color: var(--text-secondary);"
-										>{getMesLabel(liq.mes)} {liq.anio}</span
-									>
-								</div>
-								<div class="flex items-center justify-between">
-									<span class="font-mono-meta text-[10px]" style="color: var(--text-very-muted);"
-										>FACTURA</span
-									>
-									{#if facturaInfo}
-										<span
-											class="font-mono-meta inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px]"
-											style="background: rgba(168,85,247,0.10); color: #7E22CE;"
-										>
-											<Receipt class="h-3 w-3" />
-											{facturaInfo.numero_factura}
-										</span>
-									{:else}
-										<span class="font-mono-meta text-[10px]" style="color: var(--text-very-muted);"
-											>—</span
-										>
-									{/if}
-								</div>
-								<div class="flex items-center justify-between">
-									<span class="font-mono-meta text-[10px]" style="color: var(--text-very-muted);"
-										>3° LIQ.</span
-									>
-									{#if liq.tercero_liquidado}
-										<span
-											class="font-mono-meta inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px]"
-											style="background: rgba(234, 88, 12,0.10); color: var(--orange-700);"
-										>
-											<CheckCircle2 class="h-3 w-3" />
-											Sí
-										</span>
-									{:else}
-										<span
-											class="font-mono-meta inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px]"
-											style="background: rgba(220,38,38,0.08); color: #DC2626;"
-										>
-											<X class="h-3 w-3" />
-											No
-										</span>
-									{/if}
-								</div>
-								<div class="flex items-center justify-between">
-									<span class="font-mono-meta text-[10px]" style="color: var(--text-very-muted);"
-										>ITEMS</span
-									>
-									<div class="flex items-center gap-1">
-										<span
-											class="font-mono-meta inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-semibold"
-											style="background: rgba(234, 88, 12,0.10); color: var(--orange-700);"
-										>
-											<Hash class="h-3 w-3" />
-											{liq.total_items || 0}
-										</span>
-										{#if (liq.total_items || 0) > 4}
-											<span
-												class="font-mono-meta inline-flex items-center rounded-md px-1.5 py-0.5 text-[10px] font-bold"
-												style="background: rgba(37,99,235,0.10); color: #2563eb; border: 1px dashed rgba(37,99,235,0.30);"
-											>
-												+{(liq.total_items || 0) - 4}
-											</span>
-										{/if}
-									</div>
-								</div>
-								<div class="flex items-center justify-between">
-									<span class="font-mono-meta text-[10px]" style="color: var(--text-very-muted);"
-										>LIQUIDADOR</span
-									>
-									<span class="text-[11px]" style="color: var(--text-secondary);"
-										>{liq.liquidado_por?.nombre || liq.creado_por?.nombre || '—'}</span
-									>
-								</div>
-								<div class="flex items-center justify-between">
-									<span class="font-mono-meta text-[10px]" style="color: var(--text-very-muted);"
-										>FECHA</span
-									>
-									<span class="font-mono-meta text-[10px]" style="color: var(--text-muted);">
-										{liq.created_at
-											? new Date(liq.created_at).toLocaleDateString('es-CO', {
-													day: 'numeric',
-													month: 'short'
-												}) +
-												' ' +
-												new Date(liq.created_at).toLocaleTimeString('es-CO', {
-													hour: '2-digit',
-													minute: '2-digit',
-													hour12: false
-												})
-											: '—'}
-									</span>
-								</div>
-							</div>
-							<!-- Card actions: el mismo menú que la tabla. Antes eran dos
-							     listas de botones distintas y la de móvil se quedaba atrás
-							     cada vez que se tocaba la otra. -->
-							<div
-								class="mt-2 flex items-center justify-end"
-								style="border-top: 1px solid var(--border-subtle); padding-top: 0.6rem;"
-							>
 								<AccionesDropdown
 									etiqueta="Acciones de {liq.consecutivo}"
 									acciones={accionesDeLiquidacion(liq)}
 								/>
 							</div>
-						</div>
+							<p class="lq-tarjeta-cliente">{liq.cliente?.nombre || '—'}</p>
+							<dl class="lq-tarjeta-datos">
+								<div>
+									<dt>Periodo</dt>
+									<dd>{getMesLabel(liq.mes)} {liq.anio}</dd>
+								</div>
+								<div>
+									<dt>Total</dt>
+									<dd class="lq-total">{COP(liq.total || 0)}</dd>
+								</div>
+								<div>
+									<dt>Factura</dt>
+									<dd class="lq-mono">{facturaInfo?.numero_factura ?? '—'}</dd>
+								</div>
+								<div>
+									<dt>3° liq.</dt>
+									<dd>{liq.tercero_liquidado ? 'Sí' : 'No'}</dd>
+								</div>
+								<div>
+									<dt>Contenido</dt>
+									<dd>
+										{liq.total_items || 0}
+										{(liq.total_items || 0) === 1 ? 'ítem' : 'ítems'} · {liq.placas?.length ?? 0}
+										{(liq.placas?.length ?? 0) === 1 ? 'placa' : 'placas'}
+									</dd>
+								</div>
+								<div>
+									<dt>Liquidador</dt>
+									<dd>{liq.liquidado_por?.nombre || liq.creado_por?.nombre || '—'}</dd>
+								</div>
+							</dl>
+						</li>
 					{/each}
-				</div>
+				</ul>
 			{/if}
 
-			<!-- Pagination -->
 			<PaginadorLista
 				pagina={listPage}
 				total={listTotal}
-				porPagina={15}
+				porPagina={listPorPagina}
+				opcionesPorPagina={OPCIONES_FILAS}
+				onCambiarPorPagina={(n) => (listPorPagina = n)}
 				cargando={listLoading}
 				nombreItems="liquidaciones"
 				onCambiar={irPagina}
@@ -2616,362 +2280,195 @@
 		{#if popoverPlacasVisible}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
-				class="fixed z-50 rounded-lg p-2"
-				style="top:{popoverPlacasPos.top}px;left:{popoverPlacasPos.left}px; background: var(--bg-surface); border: 1px solid var(--border-default); box-shadow: var(--shadow-card-hover);"
-				onmouseenter={() => {
-					popoverPlacasVisible = true;
-				}}
-				onmouseleave={() => {
-					popoverPlacasVisible = false;
-				}}
+				class="lq-popover"
+				style="top:{popoverPlacasPos.top}px;left:{popoverPlacasPos.left}px;"
+				onmouseenter={() => (popoverPlacasVisible = true)}
+				onmouseleave={() => (popoverPlacasVisible = false)}
 			>
-				<p class="font-mono-meta mb-1 px-1 text-[10px]" style="color: var(--text-very-muted);">
-					Placas
-				</p>
+				<p class="lq-popover-titulo">Placas</p>
 				{#each popoverPlacas as placa}
-					<div
-						class="font-mono-meta rounded px-2 py-1 text-[11px]"
-						style="color: var(--text-secondary);"
-					>
-						{placa}
-					</div>
+					<div class="lq-popover-placa">{placa}</div>
 				{/each}
 			</div>
 		{/if}
 
-		<!-- Items popover (lazy loaded) -->
+		<!-- Items popover (carga perezosa) -->
 		{#if popoverItemsVisible}
 			<!-- svelte-ignore a11y_no_static_element_interactions -->
 			<div
 				role="tooltip"
-				class="fixed z-50 rounded-lg p-2.5"
-				style="top:{popoverItemsPos.top}px;left:{popoverItemsPos.left}px; min-width: 320px; max-width: 420px; max-height: 360px; overflow-y: auto; background: var(--bg-surface); border: 1px solid var(--border-default); box-shadow: var(--shadow-card-hover);"
+				class="lq-popover lq-popover--ancho"
+				style="top:{popoverItemsPos.top}px;left:{popoverItemsPos.left}px;"
 				onmouseenter={mantenerPopoverItems}
 				onmouseleave={ocultarPopoverItems}
 			>
-				<div class="mb-1.5 flex items-center justify-between px-1">
-					<p class="font-mono-meta text-[10px]" style="color: var(--text-very-muted);">
-						Items de la liquidación
-					</p>
-					<span
-						class="font-mono-meta rounded-full px-1.5 py-0.5 text-[9px] font-bold"
-						style="background: rgba(234, 88, 12,0.10); color: var(--orange-700);"
-					>
-						{popoverItems.length}
-					</span>
+				<div class="lq-popover-cabeza">
+					<p class="lq-popover-titulo">Ítems de la liquidación</p>
+					<span class="lq-popover-cuenta">{popoverItems.length}</span>
 				</div>
 				{#if popoverItemsLoading}
 					<div class="flex items-center justify-center py-4">
 						<div class="spinner" style="width: 1.25rem; height: 1.25rem; border-width: 2px;"></div>
 					</div>
 				{:else if popoverItems.length === 0}
-					<p class="font-mono-meta px-2 py-2 text-[11px]" style="color: var(--text-very-muted);">
-						No hay items para mostrar
-					</p>
+					<p class="lq-popover-vacio">No hay ítems para mostrar</p>
 				{:else}
-					<div class="space-y-1">
+					<ul class="lq-popover-items">
 						{#each popoverItems as it, idx}
-							<div
-								class="flex items-center gap-2 rounded-md px-2 py-1.5"
-								style="background: rgba(234, 88, 12,0.04); border: 1px solid var(--border-subtle);"
-							>
-								<span
-									class="font-mono-meta inline-flex h-5 min-w-[24px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold"
-									style="background: rgba(234, 88, 12,0.10); color: var(--orange-700);"
-								>
-									{idx + 1}
-								</span>
+							<li>
+								<span class="lq-popover-n">{idx + 1}</span>
 								<div class="min-w-0 flex-1">
-									<div class="flex items-center gap-1.5">
-										<span
-											class="font-mono-meta text-[11px] font-bold"
-											style="color: var(--orange-700);">{it.placa}</span
+									<p class="lq-popover-linea">
+										<strong>{it.placa}</strong>
+										<span title={it.recorrido || it.tipo_servicio}
+											>{it.recorrido || it.tipo_servicio}</span
 										>
-										<span class="font-mono-meta text-[9px]" style="color: var(--text-very-muted);"
-											>·</span
-										>
-										<span
-											class="font-mono-meta truncate text-[10px]"
-											style="color: var(--text-secondary);"
-											title={it.recorrido || it.tipo_servicio}
-										>
-											{it.recorrido || it.tipo_servicio}
-										</span>
-									</div>
-									<div class="flex items-center gap-1.5">
-										<span class="font-mono-meta text-[9px]" style="color: var(--text-very-muted);"
-											>{it.tipo_servicio}</span
-										>
-										<span class="font-mono-meta text-[9px]" style="color: var(--text-very-muted);"
-											>·</span
-										>
-										<span
-											class="font-mono-meta text-[9px] font-semibold"
-											style="color: var(--text-secondary);"
-										>
-											{it.cantidad}× · {COP(it.valor_final || it.subtotal || 0)}
-										</span>
-									</div>
+									</p>
+									<p class="lq-popover-sub">
+										{it.tipo_servicio} · {it.cantidad}× · {COP(it.valor_final || it.subtotal || 0)}
+									</p>
 								</div>
-							</div>
+							</li>
 						{/each}
-					</div>
+					</ul>
 				{/if}
 			</div>
 		{/if}
 	{:else if facturasTab === 'facturas'}
-		<!-- Header (page-card editorial) -->
-		<div
-			data-tour="liq-facturas"
-			class="page-card mb-4"
-			style="padding: 1.25rem 1.5rem;"
-			in:fly={{ y: 12, duration: 400, easing: quintOut }}
-		>
-			<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-				<div class="flex items-center gap-3">
-					<div>
-						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 800;">
-							Facturas de Liquidaciones
-						</h1>
-						<p class="text-xs" style="color: var(--text-muted);">
-							Gestión de facturas emitidas a partir de liquidaciones aprobadas
-						</p>
-					</div>
-				</div>
-			</div>
-		</div>
-
-		<!-- Filtros -->
-		<div class="filter-panel mb-4" in:fly={{ y: 8, duration: 400, delay: 80, easing: quintOut }}>
-			<div class="filter-panel-header">
-				<span class="filter-panel-title">Filtros</span>
-				{#if facturasBusqueda || facturasEstado}
-					<span class="filter-count">
-						{facturasTotal} resultado{facturasTotal !== 1 ? 's' : ''}
-					</span>
-				{/if}
-			</div>
-			<div class="filter-grid">
-				<div class="filter-field">
-					<label class="filter-field-label" for="fac-search">Búsqueda</label>
-					<input
-						id="fac-search"
-						type="text"
-						bind:value={facturasBusqueda}
-						placeholder="N° factura, cliente…"
-					/>
-				</div>
-				<div class="filter-field">
-					<label class="filter-field-label" for="fac-estado">Estado</label>
-					<select id="fac-estado" bind:value={facturasEstado}>
-						<option value="">Todos los estados</option>
-						<option value="ACTIVA">Activa</option>
-						<option value="ANULADA">Anulada</option>
-					</select>
-				</div>
+		<div class="dir-filtros" data-tour="liq-facturas" in:fly={{ y: 8, duration: 300, easing: quintOut }}>
+			<div class="dir-filtros-buscador">
+				<BuscadorLista
+					bind:valor={facturasBusqueda}
+					onBuscar={() => {}}
+					placeholder="N° factura, cliente…"
+					etiqueta="Buscar facturas"
+				/>
 			</div>
 			{#if facturasBusqueda || facturasEstado}
-				<div class="filter-actions">
-					<button
-						class="filter-clear"
-						onclick={() => {
-							facturasBusqueda = '';
-							facturasEstado = '';
-							filtrarFacturas();
-						}}
-					>
-						<X class="h-3.5 w-3.5" />
-						Limpiar filtros
-					</button>
-				</div>
+				<button
+					type="button"
+					class="btn-secondary"
+					onclick={() => {
+						facturasBusqueda = '';
+						facturasEstado = '';
+						filtrarFacturas();
+					}}
+				>
+					<X class="h-3.5 w-3.5" />
+					Limpiar
+				</button>
 			{/if}
 		</div>
 
-		<!-- Stats Cards.
-		     Igual que en Terceros: los valores vienen de `facturasMetadata`
-		     (servidor, todos los registros del filtro) y no de
-		     `facturas.reduce(...)`, que solo veía las 15 de la página. -->
-		{#if !facturasLoading && facturas.length > 0}
-			<div
-				class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4"
-				in:fly={{ y: 8, duration: 400, delay: 150, easing: quintOut }}
-			>
-				<div class="stat-card">
-					<p class="stat-label">Total Facturado</p>
-					<p
-						class="stat-value font-mono-meta"
-						style="font-size: 1.05rem; color: var(--bg-charcoal);"
-					>
-						{COP(facturasMetadata.globalTotal)}
-					</p>
-					<p class="stat-sub">{facturasMetadata.globalCount} factura(s)</p>
-				</div>
-				<div class="stat-card">
-					<p class="stat-label">Liquidaciones</p>
-					<p class="stat-value" style="color: var(--bg-charcoal);">
-						{facturasMetadata.globalLiquidaciones}
-					</p>
-				</div>
-				<div class="stat-card">
-					<p class="stat-label">Activas</p>
-					<p class="stat-value" style="color: var(--orange-600);">
-						{facturasMetadata.estadoCounts.ACTIVA ?? 0}
-					</p>
-				</div>
-				<div class="stat-card">
-					<p class="stat-label">Anuladas</p>
-					<p class="stat-value" style="color: #DC2626;">
-						{facturasMetadata.estadoCounts.ANULADA ?? 0}
-					</p>
-				</div>
-			</div>
-		{/if}
-
-		<!-- Canvas Table -->
-		<div class="table-card" in:fly={{ y: 12, duration: 400, delay: 200, easing: quintOut }}>
+		<div class="lq-marco" in:fly={{ y: 12, duration: 400, delay: 60, easing: quintOut }}>
 			{#if facturasLoading}
-				<div class="flex items-center justify-center py-20" in:fade>
-					<div class="flex flex-col items-center gap-3">
-						<div class="spinner" style="width: 2.5rem; height: 2.5rem; border-width: 4px;"></div>
-						<p class="text-sm" style="color: var(--text-muted);">Cargando facturas…</p>
-					</div>
-				</div>
+				<CargaMascota texto="Cargando facturas…" />
 			{:else if facturas.length === 0}
-				<div class="flex flex-col items-center justify-center gap-4 p-16" in:fade>
-					<div
-						class="flex h-16 w-16 items-center justify-center rounded-2xl"
-						style="background: rgba(234, 88, 12,0.08);"
-					>
-						<Receipt class="h-7 w-7" style="color: var(--orange-500);" />
-					</div>
-					<div class="text-center">
-						<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
-							No se encontraron facturas
-						</h3>
-						<p class="mt-1 text-sm" style="color: var(--text-muted);">
-							Ajusta los filtros o crea nuevas liquidaciones para facturar
-						</p>
-					</div>
+				<div class="dir-vacio">
+					<img src={mascota('vacio').src} alt="" width="418" height="418" />
+					<h3>Sin facturas</h3>
+					<p>
+						{facturasBusqueda || facturasEstado
+							? 'Ninguna factura coincide con estos filtros.'
+							: 'Las facturas emitidas desde liquidaciones aprobadas aparecen aquí.'}
+					</p>
 				</div>
 			{:else}
-				<div class="overflow-x-auto">
-					<table class="w-full" style="min-width:1000px">
-						<thead class="table-header">
+				<div class="lq-scroll">
+					<table class="lq-tabla" style="min-width: 1000px">
+						<thead>
 							<tr>
-								<th class="text-left" style="min-width:110px">N° Factura</th>
-								<th class="text-left" style="min-width:120px">Fecha</th>
-								<th class="text-center" style="min-width:100px">Liquidaciones</th>
-								<th class="text-right" style="min-width:130px">Total</th>
-								<th class="text-center" style="min-width:90px">Estado</th>
-								<th class="text-left" style="min-width:120px">Facturado por</th>
-								<th class="text-left" style="min-width:150px">Observaciones</th>
-								<th class="text-center" style="min-width:120px">Acciones</th>
+								<th style="min-width: 130px">N° factura</th>
+								<th style="min-width: 130px">Fecha</th>
+								<th style="min-width: 220px">Liquidaciones</th>
+								<th class="lq-num" style="min-width: 140px">Total</th>
+								<th style="min-width: 110px">Estado</th>
+								<th style="min-width: 150px">Facturado por</th>
+								<th style="min-width: 180px">Observaciones</th>
+								<th style="width: 120px"></th>
 							</tr>
 						</thead>
-						<tbody class="divide-y divide-[var(--border-subtle)]">
+						<tbody>
 							{#each facturas as fac (fac.id)}
-								<tr class="table-row">
-									<td class="px-4 py-3 text-left text-xs">
-										<span class="font-mono-meta text-[12px] font-bold" style="color: #7E22CE;"
-											>{fac.numero_factura}</span
-										>
-									</td>
-									<td
-										class="font-mono-meta px-4 py-3 text-left text-xs whitespace-nowrap"
-										style="color: var(--text-secondary); font-size: 0.7rem;"
-										>{fac.fecha_facturacion
+								<tr>
+									<td><span class="lq-mono lq-factura lq-fuerte">{fac.numero_factura}</span></td>
+									<td class="lq-nowrap">
+										{fac.fecha_facturacion
 											? new Date(fac.fecha_facturacion).toLocaleDateString('es-CO', {
 													day: 'numeric',
 													month: 'short',
 													year: 'numeric'
 												})
-											: '—'}</td
-									>
-									<td
-										class="font-mono-meta px-4 py-3 text-center text-[11px]"
-										style="color: var(--text-secondary); max-width: 360px;"
-									>
-										<div class="flex flex-wrap items-center justify-center gap-1.5">
+											: '—'}
+									</td>
+									<td>
+										<div class="lq-chips">
 											{#each fac.items.slice(0, CONSECUTIVOS_VISIBLE_LIMIT) as f}
-												<span class="status-pill" style="background: #dbeafe; color: #2563eb;"
-													>{f.liquidacion?.consecutivo}</span
-												>
+												<span class="lq-chip lq-mono">{f.liquidacion?.consecutivo}</span>
 											{/each}
 											{#if fac.items.length > CONSECUTIVOS_VISIBLE_LIMIT}
 												<!-- svelte-ignore a11y_no_static_element_interactions -->
-												<div
-													class="relative inline-block"
+												<span
+													class="lq-chip lq-chip--mas"
 													role="button"
 													tabindex="0"
+													title="Ver {fac.items.length -
+														CONSECUTIVOS_VISIBLE_LIMIT} liquidaciones más"
 													onmouseenter={(e) => mostrarPopoverConsecutivos(e, fac)}
 													onmouseleave={ocultarPopoverConsecutivos}
 													onfocus={(e) => mostrarPopoverConsecutivos(e, fac)}
 													onblur={ocultarPopoverConsecutivos}
 												>
-													<span
-														class="status-pill apple-transition inline-flex cursor-pointer items-center gap-1 font-bold"
-														style="background: rgba(37,99,235,0.08); color: #2563eb; border: 1px dashed rgba(37,99,235,0.40);"
-														title="Ver {fac.items.length -
-															CONSECUTIVOS_VISIBLE_LIMIT} liquidaciones adicionales"
-													>
-														<Plus class="h-3 w-3" />
-														{fac.items.length - CONSECUTIVOS_VISIBLE_LIMIT}
-													</span>
-												</div>
+													+{fac.items.length - CONSECUTIVOS_VISIBLE_LIMIT}
+												</span>
 											{/if}
 										</div>
 									</td>
-									<td
-										class="font-mono-meta px-4 py-3 text-right text-[12px] font-bold"
-										style="color: var(--orange-700);">{COP(fac.valor_total || 0)}</td
-									>
-									<td class="px-4 py-3 text-center text-xs">
-										{#if fac.estado === 'ACTIVA'}
-											<span
-												class="status-pill"
-												style="background: rgba(234, 88, 12,0.10); color: var(--orange-700);"
-												>Activa</span
-											>
-										{:else}
-											<span
-												class="status-pill"
-												style="background: rgba(220,38,38,0.08); color: #B91C1C;">Anulada</span
-											>
-										{/if}
+									<td class="lq-num"><span class="lq-total">{COP(fac.valor_total || 0)}</span></td>
+									<td>
+										<EstadoPunto
+											etiqueta={fac.estado === 'ACTIVA' ? 'Activa' : 'Anulada'}
+											color={fac.estado === 'ACTIVA' ? '#16a34a' : '#dc2626'}
+											apagado={fac.estado !== 'ACTIVA'}
+										/>
 									</td>
-									<td class="px-4 py-3 text-left text-xs" style="color: var(--text-secondary);"
-										>{fac.facturado_por?.nombre || '—'}</td
-									>
-									<td
-										class="max-w-[150px] truncate px-4 py-3 text-left text-xs"
-										style="color: var(--text-secondary);"
-										title={fac.observaciones || ''}>{fac.observaciones || '—'}</td
-									>
-									<td class="px-4 py-3 text-center whitespace-nowrap">
-										<div class="flex items-center justify-center gap-1">
+									<td>{fac.facturado_por?.nombre || '—'}</td>
+									<td>
+										<span class="lq-texto lq-muted" title={fac.observaciones || ''}
+											>{fac.observaciones || '—'}</span
+										>
+									</td>
+									<td class="lq-acciones">
+										<div class="lq-botones">
 											<button
-												class="apple-transition rounded-lg p-1.5 transition-colors hover:bg-[rgba(234, 88, 12,0.08)]"
-												style="color: var(--text-muted);"
+												type="button"
+												class="lq-icono"
 												title="Ver detalle"
+												aria-label="Ver detalle de la factura {fac.numero_factura}"
 												onclick={() => verDetalleFactura(fac.id)}
 											>
-												<Eye class="h-3.5 w-3.5" />
+												<Eye class="h-4 w-4" />
 											</button>
 											{#if fac.estado === 'ACTIVA'}
 												<button
-													class="apple-transition rounded-md px-2 py-1 text-[10px] font-semibold"
-													style="background: rgba(220,38,38,0.08); color: #B91C1C;"
-													onclick={() => abrirAnularFactura(fac)}>Anular</button
+													type="button"
+													class="lq-icono lq-icono--peligro"
+													title="Anular"
+													aria-label="Anular la factura {fac.numero_factura}"
+													onclick={() => abrirAnularFactura(fac)}
 												>
+													<Ban class="h-4 w-4" />
+												</button>
 											{/if}
 											{#if fac.estado === 'ANULADA' && (isAdmin || isFacturacion)}
 												<button
-													class="apple-transition rounded-lg p-1.5 transition-colors hover:bg-[rgba(220,38,38,0.08)]"
-													style="color: var(--text-muted);"
+													type="button"
+													class="lq-icono lq-icono--peligro"
 													title="Eliminar"
+													aria-label="Eliminar la factura {fac.numero_factura}"
 													onclick={() => abrirEliminarFactura(fac)}
 												>
-													<Trash2 class="h-3.5 w-3.5" />
+													<Trash2 class="h-4 w-4" />
 												</button>
 											{/if}
 										</div>
@@ -2982,39 +2479,28 @@
 					</table>
 				</div>
 
-				<!-- Consecutivos popover (additional liquidaciones) -->
 				{#if popoverConsecutivosVisible}
 					<!-- svelte-ignore a11y_no_static_element_interactions -->
 					<div
 						role="tooltip"
-						class="fixed z-50 rounded-lg p-2.5"
-						style="top:{popoverConsecutivosPos.top}px;left:{popoverConsecutivosPos.left}px; min-width: 200px; max-width: 320px; max-height: 320px; overflow-y: auto; background: var(--bg-surface); border: 1px solid var(--border-default); box-shadow: var(--shadow-card-hover);"
+						class="lq-popover"
+						style="top:{popoverConsecutivosPos.top}px;left:{popoverConsecutivosPos.left}px; max-width: 320px;"
 						onmouseenter={mantenerPopoverConsecutivos}
 						onmouseleave={ocultarPopoverConsecutivos}
 					>
-						<div class="mb-1.5 flex items-center justify-between px-1">
-							<p class="font-mono-meta text-[10px]" style="color: var(--text-very-muted);">
-								Liquidaciones adicionales
-							</p>
-							<span
-								class="font-mono-meta rounded-full px-1.5 py-0.5 text-[9px] font-bold"
-								style="background: rgba(37,99,235,0.10); color: #2563eb;"
-							>
-								{popoverConsecutivos.length}
-							</span>
+						<div class="lq-popover-cabeza">
+							<p class="lq-popover-titulo">Liquidaciones adicionales</p>
+							<span class="lq-popover-cuenta">{popoverConsecutivos.length}</span>
 						</div>
-						<div class="flex flex-wrap gap-1.5 px-1">
+						<div class="lq-chips">
 							{#each popoverConsecutivos as consecutivo}
-								<span class="status-pill" style="background: #dbeafe; color: #2563eb;">
-									{consecutivo}
-								</span>
+								<span class="lq-chip lq-mono">{consecutivo}</span>
 							{/each}
 						</div>
 					</div>
 				{/if}
 			{/if}
 
-			<!-- Pagination -->
 			<PaginadorLista
 				pagina={facturasPage}
 				total={facturasTotal}
@@ -3025,311 +2511,142 @@
 			/>
 		</div>
 	{:else if facturasTab === 'terceros'}
-		<!-- TERCEROS HISTORIAL SUB-TAB — Canvas style like Recargos -->
-
-		<!-- Header (page-card editorial) -->
-		<div
-			class="page-card mb-4"
-			style="padding: 1.25rem 1.5rem;"
-			in:fly={{ y: 12, duration: 400, easing: quintOut }}
-		>
-			<div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-				<div class="flex items-center gap-3">
-					<div>
-						<h1 class="font-display text-2xl" style="color: var(--bg-charcoal); font-weight: 800;">
-							Historial Liquidaciones de Terceros
-						</h1>
-						<p class="text-xs" style="color: var(--text-muted);">
-							Detalle de liquidaciones asociadas a propietarios externos
-						</p>
-					</div>
-				</div>
+		<div class="dir-filtros" in:fly={{ y: 8, duration: 300, easing: quintOut }}>
+			<div class="dir-filtros-buscador">
+				<BuscadorLista
+					bind:valor={tercerosBusqueda}
+					onBuscar={() => {}}
+					placeholder="Consecutivo, tercero, recorrido…"
+					etiqueta="Buscar ítems de terceros"
+				/>
 			</div>
-		</div>
-
-		<!-- Filtros -->
-		<div class="filter-panel mb-4" in:fly={{ y: 8, duration: 400, delay: 80, easing: quintOut }}>
-			<div class="filter-panel-header">
-				<span class="filter-panel-title">Filtros</span>
-				<span class="filter-count">{tercerosTotal} resultado{tercerosTotal !== 1 ? 's' : ''}</span>
-			</div>
-			<div class="filter-grid-4">
-				<div class="filter-field">
-					<label class="filter-field-label" for="ter-search">Búsqueda</label>
-					<input
-						id="ter-search"
-						type="search"
-						bind:value={tercerosBusqueda}
-						placeholder="Consecutivo, tercero, recorrido…"
-					/>
-				</div>
-				<div class="filter-field">
-					<label class="filter-field-label" for="ter-placa">Placa</label>
-					<div class="relative">
-						<input id="ter-placa" type="text" bind:value={tercerosPlaca} placeholder="ABC123" />
-						{#if tercerosLoading}
-							<div class="absolute top-1/2 right-3 -translate-y-1/2">
-								<div class="spinner" style="width: 1rem; height: 1rem; border-width: 2px;"></div>
-							</div>
-						{/if}
-					</div>
-				</div>
-				<div class="filter-field">
-					<label class="filter-field-label" for="ter-mes">Mes</label>
-					<select id="ter-mes" bind:value={tercerosMes}>
-						<option value="">Todos los meses</option>
-						{#each MESES as m, i}<option value={i + 1}>{m}</option>{/each}
-					</select>
-				</div>
-				<div class="filter-field">
-					<label class="filter-field-label" for="ter-anio">Año</label>
-					<input
-						id="ter-anio"
-						type="number"
-						bind:value={tercerosAnio}
-						min="2020"
-						max="2030"
-						placeholder="2026"
-					/>
-				</div>
-			</div>
-			<div class="filter-actions">
-				<button
-					class="filter-clear"
-					onclick={() => {
-						tercerosBusqueda = '';
-						tercerosPlaca = '';
-						tercerosMes = '';
-						tercerosAnio = new Date().getFullYear();
-						filtrarTerceros();
-					}}
-				>
-					<X class="h-3.5 w-3.5" />
-					Limpiar filtros
-				</button>
-			</div>
-		</div>
-
-		<!-- Stats Panel Terceros.
-		     Los valores salen de `tercerosMetadata`, que el servidor calcula
-		     sobre TODOS los registros del filtro. Antes eran
-		     `tercerosItems.reduce(...)`, o sea la PÁGINA (limit 50): las
-		     cifras cambiaban al paginar aunque el filtro fuera el mismo. -->
-		{#if !tercerosLoading && tercerosItems.length > 0}
-			<div
-				class="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5"
-				in:fly={{ y: 8, duration: 400, delay: 150, easing: quintOut }}
+			<label class="lq-select">
+				<span>Placa</span>
+				<input
+					class="lq-placa"
+					type="text"
+					bind:value={tercerosPlaca}
+					placeholder="ABC123"
+					aria-label="Filtrar por placa"
+				/>
+			</label>
+			<label class="lq-select">
+				<span>Mes</span>
+				<select bind:value={tercerosMes}>
+					<option value="">Todos</option>
+					{#each MESES as m, i}<option value={i + 1}>{m}</option>{/each}
+				</select>
+			</label>
+			<label class="lq-select">
+				<span>Año</span>
+				<select bind:value={tercerosAnio}>
+					<option value="">Todos</option>
+					{#each YEARS as y}<option value={y}>{y}</option>{/each}
+				</select>
+			</label>
+			<button
+				type="button"
+				class="btn-secondary"
+				onclick={() => {
+					tercerosBusqueda = '';
+					tercerosPlaca = '';
+					tercerosMes = '';
+					tercerosAnio = new Date().getFullYear();
+					filtrarTerceros();
+				}}
 			>
-				<div class="stat-card">
-					<p class="stat-label">Registros</p>
-					<p class="stat-value" style="color: var(--bg-charcoal);">
-						{tercerosMetadata.globalCount}
-					</p>
-					<p class="stat-sub">
-						{tercerosItems.length} en esta página · {tercerosMetadata.globalClientes} cliente(s)
-					</p>
-				</div>
-				<div class="stat-card">
-					<p class="stat-label">Total Facturado</p>
-					<p class="stat-value font-mono-meta" style="font-size: 1.05rem; color: #2563EB;">
-						{COP(tercerosMetadata.globalFacturado)}
-					</p>
-				</div>
-				<div class="stat-card">
-					<p class="stat-label">Admon Total</p>
-					<p class="stat-value font-mono-meta" style="font-size: 1.05rem; color: #B45309;">
-						{COP(tercerosMetadata.globalAdmon)}
-					</p>
-				</div>
-				<div class="stat-card">
-					<p class="stat-label">V/Liquidar</p>
-					<p
-						class="stat-value font-mono-meta"
-						style="font-size: 1.05rem; color: var(--orange-600);"
-					>
-						{COP(tercerosMetadata.globalLiquidar)}
-					</p>
-				</div>
-				<div class="stat-card">
-					<p class="stat-label">Ing. Cotransmeq</p>
-					<p class="stat-value font-mono-meta" style="font-size: 1.05rem; color: #7E22CE;">
-						{COP(tercerosMetadata.globalIngresoEmpresa)}
-					</p>
-				</div>
-			</div>
-		{/if}
+				<X class="h-3.5 w-3.5" />
+				Limpiar
+			</button>
+		</div>
 
-		<!-- Canvas Table -->
-		<div class="table-card" in:fly={{ y: 12, duration: 400, delay: 200, easing: quintOut }}>
+		<div class="lq-marco" in:fly={{ y: 12, duration: 400, delay: 60, easing: quintOut }}>
 			{#if tercerosLoading}
-				<div class="flex items-center justify-center py-20" in:fade>
-					<div class="flex flex-col items-center gap-3">
-						<div class="spinner" style="width: 2.5rem; height: 2.5rem; border-width: 4px;"></div>
-						<p class="text-sm" style="color: var(--text-muted);">Cargando terceros...</p>
-					</div>
-				</div>
+				<CargaMascota texto="Cargando terceros…" />
 			{:else if tercerosItems.length === 0}
-				<div class="flex flex-col items-center justify-center gap-4 p-16" in:fade>
-					<div
-						class="flex h-16 w-16 items-center justify-center rounded-2xl"
-						style="background: rgba(234, 88, 12,0.08);"
-					>
-						<Users class="h-7 w-7" style="color: var(--orange-500);" />
-					</div>
-					<div class="text-center">
-						<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
-							No se encontraron items de terceros
-						</h3>
-						<p class="mt-1 text-sm" style="color: var(--text-muted);">
-							Ajusta los filtros o crea liquidaciones con items de terceros
-						</p>
-					</div>
+				<div class="dir-vacio">
+					<img src={mascota('vacio').src} alt="" width="418" height="418" />
+					<h3>Sin ítems de terceros</h3>
+					<p>Ajusta los filtros o crea liquidaciones con ítems de vehículos de terceros.</p>
 				</div>
 			{:else}
-				<div class="overflow-x-auto">
-					<table class="w-full" style="min-width:1600px">
-						<thead class="table-header">
+				<div class="lq-scroll">
+					<table class="lq-tabla lq-tabla--densa" style="min-width: 1500px">
+						<thead>
 							<tr>
-								<th class="text-center" style="min-width:40px">#</th>
-								<th class="text-left" style="min-width:100px">Consecutivo</th>
-								<th class="text-left" style="min-width:150px">Cliente</th>
-								<th class="text-left" style="min-width:90px">Placa</th>
-								<th class="text-left" style="min-width:110px">N° Planilla</th>
-								<th class="text-left" style="min-width:180px">Tercero (Propietario)</th>
-								<th class="text-left" style="min-width:200px">Recorrido</th>
-								<th class="text-left" style="min-width:110px">Fechas</th>
-								<th class="text-right" style="min-width:100px">V/Unidad</th>
-								<th class="text-right" style="min-width:110px">Total Fact.</th>
-								<th class="text-right" style="min-width:100px">Admon $</th>
-								<th class="text-right" style="min-width:110px">V/Liquidar</th>
-								<th class="text-right" style="min-width:120px">Ing. Cotransmeq</th>
-								<th class="text-center" style="min-width:110px">N° Factura</th>
+								<th class="lq-num" style="width: 48px">#</th>
+								<th style="min-width: 190px">Liquidación</th>
+								<th style="min-width: 120px">Placa · planilla</th>
+								<th style="min-width: 190px">Tercero (propietario)</th>
+								<th style="min-width: 220px">Recorrido</th>
+								<th class="lq-num" style="min-width: 110px">V/unidad</th>
+								<th class="lq-num" style="min-width: 120px">Total fact.</th>
+								<th class="lq-num" style="min-width: 110px">Admon</th>
+								<th class="lq-num" style="min-width: 120px">V/liquidar</th>
+								<th class="lq-num" style="min-width: 130px">Ing. empresa</th>
+								<th style="min-width: 120px">Factura</th>
 							</tr>
 						</thead>
-						<tbody class="divide-y divide-[var(--border-subtle)]">
+						<tbody>
 							{#each tercerosItems as item, idx}
-								{@const facItem = item.liquidacion?.factura_items?.[0]}
-								{@const numFactura = facItem?.factura?.numero_factura || ''}
-								<tr class="table-row {numFactura ? '!bg-[rgba(234, 88, 12,0.04)]' : ''}">
-									<td
-										class="font-mono-meta px-3 py-2 text-center text-[10px]"
-										style="color: var(--text-very-muted);">{(tercerosPage - 1) * 50 + idx + 1}</td
-									>
-									<td class="px-3 py-2 text-left text-xs">
-										<span
-											class="font-mono-meta text-[12px] font-bold"
-											style="color: var(--orange-700);"
-											>{item.liquidacion?.consecutivo || '—'}</span
+								{@const numFactura = item.liquidacion?.factura_items?.[0]?.factura?.numero_factura || ''}
+								<tr>
+									<td class="lq-num lq-muted">{(tercerosPage - 1) * 50 + idx + 1}</td>
+									<td>
+										<div class="dir-celda">
+											<span class="lq-consecutivo">{item.liquidacion?.consecutivo || '—'}</span>
+											<small title={item.liquidacion?.cliente?.nombre || ''}
+												>{item.liquidacion?.cliente?.nombre || '—'}</small
+											>
+										</div>
+									</td>
+									<td>
+										<div class="dir-celda">
+											<span class="lq-placa-texto">{item.placa}</span>
+											<small class="lq-mono">{item.item?.numero_planilla || 'sin planilla'}</small>
+										</div>
+									</td>
+									<td>
+										<span class="lq-texto" title={item.tercero?.nombre_completo || ''}
+											>{item.tercero?.nombre_completo || '—'}</span
 										>
 									</td>
-									<td
-										class="max-w-[150px] truncate px-3 py-2 text-left text-xs"
-										style="color: var(--text-secondary);"
-										title={item.liquidacion?.cliente?.nombre || ''}
-										>{item.liquidacion?.cliente?.nombre || '—'}</td
-									>
-									<td
-										class="px-3 py-2 text-left text-xs font-bold"
-										style="color: var(--text-primary);">{item.placa}</td
-									>
-									<td
-										class="font-mono-meta px-3 py-2 text-left text-[11px]"
-										style="color: var(--text-secondary);">{item.item?.numero_planilla || '—'}</td
-									>
-									<td
-										class="max-w-[180px] truncate px-3 py-2 text-left text-xs"
-										style="color: var(--text-secondary);"
-										title={item.tercero?.nombre_completo || ''}
-										>{item.tercero?.nombre_completo || '—'}</td
-									>
-									<td
-										class="max-w-[200px] truncate px-3 py-2 text-left text-xs"
-										style="color: var(--text-secondary);"
-										title={item.recorrido}>{item.recorrido}</td
-									>
-									<td
-										class="px-3 py-2 text-left text-xs whitespace-nowrap"
-										style="color: var(--text-secondary);">{item.fechas}</td
-									>
-									<td
-										class="font-mono-meta px-3 py-2 text-right text-[11px] font-semibold"
-										style="color: var(--text-primary);">{COP(item.valor_unitario)}</td
-									>
-									<td
-										class="font-mono-meta px-3 py-2 text-right text-[11px] font-semibold"
-										style="color: var(--text-primary);">{COP(item.total_facturado)}</td
-									>
-									<td
-										class="font-mono-meta px-3 py-2 text-right text-[11px]"
-										style="color: var(--text-muted);">{COP(item.valor_admin)}</td
-									>
-									<td
-										class="font-mono-meta px-3 py-2 text-right text-[11px] font-bold"
-										style="color: var(--orange-700);">{COP(item.valor_liquidar)}</td
-									>
-									<td
-										class="font-mono-meta px-3 py-2 text-right text-[11px] font-bold"
-										style="color: var(--orange-700);">{COP(item.ingreso_empresa)}</td
-									>
-									<td class="px-3 py-2 text-center text-xs">
+									<td>
+										<div class="dir-celda">
+											<span class="lq-texto" title={item.recorrido}>{item.recorrido}</span>
+											<small>{item.fechas}</small>
+										</div>
+									</td>
+									<td class="lq-num lq-mono">{COP(item.valor_unitario)}</td>
+									<td class="lq-num lq-mono">{COP(item.total_facturado)}</td>
+									<td class="lq-num lq-mono lq-muted">{COP(item.valor_admin)}</td>
+									<td class="lq-num"><span class="lq-total">{COP(item.valor_liquidar)}</span></td>
+									<td class="lq-num lq-mono">{COP(item.ingreso_empresa)}</td>
+									<td>
 										{#if numFactura}
-											<span
-												class="font-mono-meta inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px]"
-												style="background: rgba(234, 88, 12,0.10); color: var(--orange-700);"
-											>
-												<Receipt class="h-3 w-3" />
-												{numFactura}
-											</span>
+											<span class="lq-mono lq-factura">{numFactura}</span>
 										{:else}
-											<span
-												class="font-mono-meta text-[10px]"
-												style="color: var(--text-very-muted);">Sin factura</span
-											>
+											<EstadoPunto etiqueta="Sin factura" color="#94a3b8" apagado />
 										{/if}
 									</td>
 								</tr>
 							{/each}
-
-							<!-- Totals Row -->
-							<tr style="background: rgba(234, 88, 12,0.10);">
-								<td colspan="8" class="px-3 py-2">
-									<span class="font-mono-meta text-[10px]" style="color: var(--text-secondary);"
-										>Totales página</span
-									>
-								</td>
-								<td
-									class="font-mono-meta px-3 py-2 text-right text-[11px] font-bold"
-									style="color: var(--orange-800);"
-									>{COP(tercerosItems.reduce((s, i) => s + i.valor_unitario, 0))}</td
-								>
-								<td
-									class="font-mono-meta px-3 py-2 text-right text-[11px] font-bold"
-									style="color: var(--orange-800);"
-									>{COP(tercerosItems.reduce((s, i) => s + i.total_facturado, 0))}</td
-								>
-								<td
-									class="font-mono-meta px-3 py-2 text-right text-[11px] font-bold"
-									style="color: var(--orange-800);"
-									>{COP(tercerosItems.reduce((s, i) => s + i.valor_admin, 0))}</td
-								>
-								<td
-									class="font-mono-meta px-3 py-2 text-right text-[11px] font-bold"
-									style="color: var(--orange-800);"
-									>{COP(tercerosItems.reduce((s, i) => s + i.valor_liquidar, 0))}</td
-								>
-								<td
-									class="font-mono-meta px-3 py-2 text-right text-[11px] font-bold"
-									style="color: var(--orange-800);"
-									>{COP(tercerosItems.reduce((s, i) => s + i.ingreso_empresa, 0))}</td
-								>
-								<td class="px-3 py-2"></td>
-							</tr>
 						</tbody>
+						<tfoot>
+							<tr>
+								<td colspan="5">Totales de la página</td>
+								<td class="lq-num">{COP(tercerosItems.reduce((s, i) => s + i.valor_unitario, 0))}</td>
+								<td class="lq-num">{COP(tercerosItems.reduce((s, i) => s + i.total_facturado, 0))}</td>
+								<td class="lq-num">{COP(tercerosItems.reduce((s, i) => s + i.valor_admin, 0))}</td>
+								<td class="lq-num">{COP(tercerosItems.reduce((s, i) => s + i.valor_liquidar, 0))}</td>
+								<td class="lq-num">{COP(tercerosItems.reduce((s, i) => s + i.ingreso_empresa, 0))}</td>
+								<td></td>
+							</tr>
+						</tfoot>
 					</table>
 				</div>
 			{/if}
 
-			<!-- Pagination -->
 			<PaginadorLista
 				pagina={tercerosPage}
 				total={tercerosTotal}
@@ -4075,10 +3392,7 @@
 			</div>
 			<div style="padding: 1.25rem 1.5rem;">
 				{#if historialLoading}
-					<div class="flex flex-col items-center justify-center gap-3 py-12">
-						<div class="spinner" style="width: 2rem; height: 2rem; border-width: 3px;"></div>
-						<p class="text-sm" style="color: var(--text-muted);">Cargando historial...</p>
-					</div>
+					<CargaMascota texto="Cargando historial…" />
 				{:else if historialData.length === 0}
 					<div class="py-12 text-center" style="color: var(--text-muted);">
 						No hay registros de historial.
@@ -4206,37 +3520,526 @@
 />
 
 <style>
-	.page-wrap {
-		background: var(--bg-base);
+	/* ── Cáscara: misma que extractos y los directorios (`dir-*` de app.css) ── */
+	.lq-pagina {
+		height: auto;
 		min-height: 100%;
 	}
+	.lq-resumen {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.75rem 1.5rem;
+	}
+	.lq-monto {
+		display: flex;
+		flex-direction: column;
+		padding-right: 1.5rem;
+		border-right: 1px solid var(--border-subtle);
+	}
+	.lq-monto-etiqueta {
+		font-size: 0.66rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.lq-monto-valor {
+		font-family: var(--font-display);
+		font-size: 1.45rem;
+		font-weight: 800;
+		letter-spacing: -0.02em;
+		font-variant-numeric: tabular-nums;
+		color: var(--text-primary);
+	}
+	.lq-monto small {
+		font-size: 0.76rem;
+		color: var(--text-muted);
+	}
+	@media (max-width: 640px) {
+		.lq-monto {
+			padding-right: 0;
+			border-right: 0;
+		}
+	}
+	.lq-cifras {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem 1.5rem;
+		margin: 0;
+	}
+	.lq-cifras dt {
+		font-size: 0.66rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.lq-cifras dd {
+		margin: 0;
+		font-size: 0.95rem;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+		color: var(--text-primary);
+	}
 
+	/* ── Pestañas: la forma de `TabsVista` (variante clara) ── */
+	.lq-tabs {
+		display: flex;
+		gap: 4px;
+		overflow-x: auto;
+		scrollbar-width: none;
+		border-bottom: 1.5px solid var(--border-default);
+		flex-shrink: 0;
+	}
+	.lq-tabs::-webkit-scrollbar {
+		display: none;
+	}
+	.lq-tab {
+		flex-shrink: 0;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		margin-bottom: -1.5px;
+		padding: 10px 14px;
+		border: 1.5px solid transparent;
+		border-bottom: 0;
+		border-radius: 12px 12px 0 0;
+		background: transparent;
+		font: inherit;
+		font-size: 13px;
+		font-weight: 700;
+		color: var(--text-muted);
+		cursor: pointer;
+		transition:
+			color 0.15s,
+			background 0.15s;
+	}
+	.lq-tab:hover {
+		color: var(--text-primary);
+		background: var(--bg-base);
+	}
+	.lq-tab.activa {
+		background: var(--bg-surface);
+		border-color: var(--border-default);
+		color: var(--bg-charcoal-deep);
+		box-shadow: inset 0 3px 0 var(--accion);
+	}
+	.lq-tab:focus-visible {
+		outline: 2px solid var(--accion);
+		outline-offset: -2px;
+	}
+	.lq-tab-badge {
+		min-width: 20px;
+		height: 20px;
+		padding: 0 6px;
+		display: inline-grid;
+		place-items: center;
+		border-radius: 999px;
+		background: var(--emerald-600);
+		color: #fff;
+		font-size: 11px;
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+	}
 
-	/* ── Badge de eventos pendientes en la pestaña ────────── */
-	.tab-badge {
+	/* ── Filtros en línea ── */
+	.lq-select {
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		font-size: 0.8rem;
+		font-weight: 700;
+		color: var(--text-secondary);
+	}
+	.lq-select select,
+	.lq-select input {
+		padding: 0.4rem 0.6rem;
+		border: 1.5px solid var(--border-default);
+		border-radius: 10px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font: inherit;
+		font-size: 0.82rem;
+		font-weight: 500;
+	}
+	.lq-placa {
+		width: 7.5rem;
+		text-transform: uppercase;
+	}
+
+	/* ── Tabla: los mismos tokens que `TablaLista` ── */
+	/* Tabla o tarjetas según el ancho del PROPIO contenedor, no de la ventana:
+	   con la barra lateral abierta, una ventana de 1300 px deja ~1000 px de
+	   tabla, y el corte por `xl:` mostraba la tabla con scroll lateral. */
+	.lq-marco {
+		container-type: inline-size;
+		display: flex;
+		flex-direction: column;
+		background: var(--bg-surface);
+		border: 1px solid var(--border-subtle);
+		border-radius: 22px;
+		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
+		overflow: hidden;
+	}
+	.lq-scroll {
+		overflow-x: auto;
+	}
+	.lq-tabla {
+		width: 100%;
+		border-collapse: collapse;
+		font-size: 0.82rem;
+	}
+	.lq-tabla thead th {
+		position: sticky;
+		top: 0;
+		z-index: 2;
+		padding: 0.7rem 1.1rem;
+		background: var(--bg-base);
+		border-bottom: 1px solid var(--border-subtle);
+		text-align: left;
+		white-space: nowrap;
+		font-size: 0.66rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.lq-th {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.25rem;
+	}
+	.lq-th--fin {
+		justify-content: flex-end;
+		width: 100%;
+	}
+	.lq-th-btn {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		padding: 0;
+		border: 0;
+		background: none;
+		font: inherit;
+		color: inherit;
+		letter-spacing: inherit;
+		text-transform: inherit;
+		cursor: pointer;
+	}
+	.lq-th-btn:hover {
+		color: var(--text-primary);
+	}
+	.lq-orden {
+		display: inline-flex;
+		opacity: 0.35;
+	}
+	.lq-orden--activo {
+		opacity: 1;
+		color: var(--accion);
+	}
+	.lq-tabla tbody tr {
+		border-bottom: 1px solid var(--border-subtle);
+		transition: background-color 0.15s;
+	}
+	.lq-tabla tbody tr:last-child {
+		border-bottom: 0;
+	}
+	.lq-tabla tbody tr:hover {
+		background: color-mix(in srgb, var(--text-primary) 2.5%, transparent);
+	}
+	.lq-tabla td {
+		height: 60px;
+		padding: 0.6rem 1.1rem;
+		vertical-align: middle;
+		color: var(--text-primary);
+	}
+	.lq-tabla--densa td {
+		height: 54px;
+		padding: 0.5rem 0.9rem;
+	}
+	.lq-tabla--densa thead th {
+		padding: 0.65rem 0.9rem;
+	}
+	.lq-tabla .lq-num {
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+	}
+	.lq-tabla tfoot td {
+		height: auto;
+		padding: 0.75rem 0.9rem;
+		border-top: 1.5px solid var(--border-default);
+		background: var(--bg-base);
+		font-size: 0.78rem;
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+		color: var(--text-primary);
+	}
+	.lq-acciones {
+		width: 1%;
+		text-align: right;
+		white-space: nowrap;
+	}
+	/* Filas que acaban de llegar por socket: un filo a la izquierda y un tinte. */
+	.lq-fila--nueva {
+		background: color-mix(in srgb, var(--accion) 7%, transparent);
+		box-shadow: inset 3px 0 0 var(--accion);
+	}
+	.lq-fila--actualizada {
+		background: rgba(37, 99, 235, 0.06);
+		box-shadow: inset 3px 0 0 #2563eb;
+	}
+
+	/* ── Contenido de las celdas ── */
+	.lq-consecutivo {
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+		letter-spacing: 0.01em;
+		color: var(--text-primary);
+	}
+	.lq-texto {
+		display: block;
+		max-width: 16rem;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.lq-nowrap {
+		white-space: nowrap;
+	}
+	.lq-mono {
+		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-size: 0.8rem;
+		letter-spacing: 0.01em;
+	}
+	.lq-muted {
+		color: var(--text-muted);
+	}
+	.lq-fuerte {
+		font-weight: 800;
+	}
+	.lq-factura {
+		color: var(--text-secondary);
+	}
+	.lq-total {
+		font-weight: 800;
+		font-variant-numeric: tabular-nums;
+		color: var(--text-primary);
+	}
+	.lq-placa-texto {
+		font-weight: 800;
+		letter-spacing: 0.06em;
+	}
+	.lq-chips {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 4px;
+	}
+	.lq-chip {
+		display: inline-flex;
+		align-items: center;
+		gap: 4px;
+		padding: 2px 8px;
+		border-radius: 999px;
+		border: 1px solid var(--border-subtle);
+		background: var(--bg-base);
+		font-size: 0.74rem;
+		font-weight: 600;
+		color: var(--text-secondary);
+		white-space: nowrap;
+		cursor: default;
+	}
+	.lq-chip[role='button'] {
+		cursor: pointer;
+	}
+	.lq-chip--mas {
+		border-style: dashed;
+		color: var(--text-muted);
+	}
+	.lq-botones {
+		display: inline-flex;
+		gap: 2px;
+	}
+	.lq-icono {
 		display: inline-flex;
 		align-items: center;
 		justify-content: center;
-		min-width: 1.05rem;
-		height: 1.05rem;
-		padding: 0 0.25rem;
-		border-radius: 9999px;
-		background: var(--orange-600);
-		color: #fff;
-		font-size: 0.625rem;
-		font-weight: 700;
-		font-variant-numeric: tabular-nums;
-		line-height: 1;
+		width: 32px;
+		height: 32px;
+		border: 0;
+		border-radius: 10px;
+		background: transparent;
+		color: var(--text-muted);
+		cursor: pointer;
+		transition:
+			background 0.15s,
+			color 0.15s;
+	}
+	.lq-icono:hover {
+		background: var(--bg-base);
+		color: var(--text-primary);
+	}
+	.lq-icono--peligro:hover {
+		background: #fef2f2;
+		color: #b91c1c;
 	}
 
-	/* Segunda línea de una stat card: contexto del número de arriba
-	   (cuántos hay en esta página, cuántos clientes…). */
-	.stat-sub {
-		margin-top: 0.15rem;
-		font-size: 0.65rem;
+	.lq-vista-tarjetas {
+		display: none;
+	}
+	@container (max-width: 1000px) {
+		.lq-vista-tabla {
+			display: none;
+		}
+		.lq-vista-tarjetas {
+			display: flex;
+		}
+	}
+
+	/* ── Tarjetas ── */
+	.lq-tarjetas {
+		flex-direction: column;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.lq-tarjeta {
+		padding: 0.9rem 1rem;
+		border-bottom: 1px solid var(--border-subtle);
+	}
+	.lq-tarjeta-cabeza {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+	}
+	.lq-tarjeta-titulo {
+		display: flex;
+		align-items: center;
+		gap: 0.75rem;
+	}
+	.lq-tarjeta-cliente {
+		margin: 0.2rem 0 0.6rem;
+		font-size: 0.86rem;
+		color: var(--text-secondary);
+	}
+	.lq-tarjeta-datos {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+		gap: 0.4rem 1rem;
+		margin: 0;
+	}
+	.lq-tarjeta-datos dt {
+		font-size: 0.62rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-very-muted);
+	}
+	.lq-tarjeta-datos dd {
+		margin: 0;
+		font-size: 0.84rem;
+		color: var(--text-primary);
+	}
+
+	/* ── Popovers de ítems, placas y consecutivos ── */
+	.lq-popover {
+		position: fixed;
+		z-index: 50;
+		min-width: 180px;
+		max-height: 360px;
+		overflow-y: auto;
+		padding: 0.65rem;
+		border-radius: 14px;
+		border: 1px solid var(--border-default);
+		background: var(--bg-surface);
+		box-shadow: var(--shadow-card-hover);
+	}
+	.lq-popover--ancho {
+		min-width: 320px;
+		max-width: 420px;
+	}
+	.lq-popover-cabeza {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		margin-bottom: 0.4rem;
+	}
+	.lq-popover-titulo {
+		margin: 0 0 0.25rem;
+		font-size: 0.64rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
 		color: var(--text-muted);
 	}
-
+	.lq-popover-cuenta {
+		padding: 1px 7px;
+		border-radius: 999px;
+		background: var(--bg-base);
+		font-size: 0.7rem;
+		font-weight: 800;
+		color: var(--text-secondary);
+	}
+	.lq-popover-placa {
+		padding: 0.25rem 0.4rem;
+		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+		font-size: 0.8rem;
+		font-weight: 700;
+		letter-spacing: 0.04em;
+		color: var(--text-secondary);
+	}
+	.lq-popover-vacio {
+		margin: 0;
+		padding: 0.5rem;
+		font-size: 0.8rem;
+		color: var(--text-muted);
+	}
+	.lq-popover-items {
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.lq-popover-items li {
+		display: flex;
+		align-items: center;
+		gap: 0.55rem;
+		padding: 0.4rem 0.5rem;
+		border-radius: 10px;
+		background: var(--bg-base);
+	}
+	.lq-popover-n {
+		display: inline-grid;
+		place-items: center;
+		min-width: 22px;
+		height: 22px;
+		border-radius: 999px;
+		background: var(--bg-surface);
+		font-size: 0.68rem;
+		font-weight: 800;
+		color: var(--text-muted);
+	}
+	.lq-popover-linea {
+		display: flex;
+		gap: 0.4rem;
+		margin: 0;
+		font-size: 0.8rem;
+		min-width: 0;
+	}
+	.lq-popover-linea span {
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+		color: var(--text-secondary);
+	}
+	.lq-popover-sub {
+		margin: 0;
+		font-size: 0.72rem;
+		color: var(--text-muted);
+	}
 	/* ── Modales (estructura) ─────────────────────────────── */
 	.modal-bg {
 		position: fixed;

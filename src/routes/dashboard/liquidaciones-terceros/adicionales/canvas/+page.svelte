@@ -910,7 +910,7 @@
 	bind:container
 	{loading}
 	error={loadError}
-	loadingLabel="Cargando adicionales de {anio}..."
+	loadingLabel="Cargando adicionales de {anio}…"
 	onRetry={loadInicial}
 	errorLabel="Reintentar"
 />

@@ -25,6 +25,13 @@
 		nombreItems?: string;
 		/** Sin borde superior ni fondo: para paginadores fuera de una tabla. */
 		suelto?: boolean;
+		/**
+		 * Tamaños de página que se ofrecen; `0` es «Todas». Sin esto (o sin
+		 * `onCambiarPorPagina`) no se pinta el selector y el paginador queda
+		 * como siempre en las demás pantallas.
+		 */
+		opcionesPorPagina?: number[];
+		onCambiarPorPagina?: (porPagina: number) => void;
 	}
 
 	let {
@@ -34,12 +41,18 @@
 		onCambiar,
 		cargando = false,
 		nombreItems = 'registros',
-		suelto = false
+		suelto = false,
+		opcionesPorPagina,
+		onCambiarPorPagina
 	}: Props = $props();
 
-	const totalPaginas = $derived(Math.max(1, Math.ceil(total / Math.max(1, porPagina))));
-	const desde = $derived(total === 0 ? 0 : (pagina - 1) * porPagina + 1);
-	const hasta = $derived(Math.min(pagina * porPagina, total));
+	/// `porPagina = 0` es «Todas»: una sola página con todo.
+	const todas = $derived(porPagina <= 0);
+	const tamano = $derived(todas ? Math.max(1, total) : porPagina);
+	const totalPaginas = $derived(Math.max(1, Math.ceil(total / tamano)));
+	const desde = $derived(total === 0 ? 0 : (pagina - 1) * tamano + 1);
+	const hasta = $derived(Math.min(pagina * tamano, total));
+	const conSelector = $derived(!!opcionesPorPagina?.length && !!onCambiarPorPagina);
 
 	/**
 	 * Ventana de páginas alrededor de la actual: cinco botones centrados en ella,
@@ -68,11 +81,28 @@
      mismo y dice cuántos hay. Los botones solo cuando hay a dónde ir. -->
 {#if total > 0}
 	<nav class="paginador" class:suelto aria-label="Paginación">
-		<p class="rango">
-			<span class="fuerte">{desde}–{hasta}</span> de
-			<span class="fuerte">{total.toLocaleString('es-CO')}</span>
-			{nombreItems}
-		</p>
+		<div class="izquierda">
+			<p class="rango">
+				<span class="fuerte">{desde}–{hasta}</span> de
+				<span class="fuerte">{total.toLocaleString('es-CO')}</span>
+				{nombreItems}
+			</p>
+			{#if conSelector}
+				<label class="filas">
+					<span>Filas</span>
+					<select
+						value={String(porPagina)}
+						disabled={cargando}
+						onchange={(e) =>
+							onCambiarPorPagina?.(Number((e.currentTarget as HTMLSelectElement).value))}
+					>
+						{#each opcionesPorPagina ?? [] as n (n)}
+							<option value={String(n)}>{n === 0 ? 'Todas' : n}</option>
+						{/each}
+					</select>
+				</label>
+			{/if}
+		</div>
 
 		{#if totalPaginas > 1}
 			<div class="botones">
@@ -147,6 +177,30 @@
 		background: transparent;
 	}
 
+	.izquierda {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.5rem 1rem;
+	}
+	.filas {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		font-size: 0.8125rem;
+		color: var(--text-muted);
+	}
+	.filas select {
+		height: 2.25rem;
+		padding: 0 0.5rem;
+		border: 1.5px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface, #fff);
+		color: var(--bg-charcoal-deep);
+		font: inherit;
+		font-weight: 700;
+		cursor: pointer;
+	}
 	.rango {
 		margin: 0;
 		font-size: 0.8125rem;

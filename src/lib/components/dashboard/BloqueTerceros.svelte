@@ -27,8 +27,8 @@
 		etiquetas={datos.terceros_mes_a_mes.map((m: any) => mesCorto(m.anio, m.mes))}
 		series={[
 			{
-				etiqueta: 'Facturadas (pagadas)',
-				datos: datos.terceros_mes_a_mes.map((m: any) => m.facturada)
+				etiqueta: 'Pagadas',
+				datos: datos.terceros_mes_a_mes.map((m: any) => m.pagada)
 			},
 			{
 				etiqueta: 'Aprobadas (por pagar)',
@@ -49,7 +49,7 @@
 
 <Tarjeta
 	titulo="Previstas para pagar"
-	subtitulo="Cierres aprobados que aún no están marcados como facturados (pagados)"
+	subtitulo="Cierres aprobados que aún no están marcados como pagados"
 	columnas={4}
 	tono={datos.previstas_pagar.total ? 'alerta' : 'normal'}
 	enlace="/dashboard/liquidaciones-terceros"

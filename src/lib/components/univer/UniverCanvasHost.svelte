@@ -20,6 +20,7 @@
 -->
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 
 	interface Props {
 		container: HTMLDivElement | null;
@@ -50,8 +51,8 @@
 			{#if loadingSnippet}
 				{@render loadingSnippet()}
 			{:else}
-				<div class="univer-spinner-lg"></div>
-				<span>{loadingLabel}</span>
+				<!-- La misma espera de mascota que el resto del panel. -->
+				<CargaMascota texto={loadingLabel} />
 			{/if}
 		</div>
 	{:else if error}
@@ -140,7 +141,7 @@
 		pointer-events: auto;
 	}
 	.univer-overlay-loading {
-		background: rgba(255, 255, 255, 0.85);
+		background: rgba(255, 255, 255, 0.92);
 		backdrop-filter: blur(4px);
 		color: #374151;
 	}
@@ -148,19 +149,6 @@
 		background: rgba(254, 242, 242, 0.95);
 		backdrop-filter: blur(4px);
 		color: #b91c1c;
-	}
-	.univer-spinner-lg {
-		width: 36px;
-		height: 36px;
-		border: 3px solid rgba(234, 88, 12, 0.2);
-		border-top-color: #ea580c;
-		border-radius: 50%;
-		animation: univer-spin-lg 0.7s linear infinite;
-	}
-	@keyframes univer-spin-lg {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 	.univer-btn-retry {
 		padding: 8px 16px;

@@ -11,6 +11,7 @@
 	} from '$lib/types/servicios';
 	import { toast } from '$lib/stores/toast';
 	import PopoverChip from '$lib/components/ui/PopoverChip.svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 
 	type Props = {
 		servicios: ServicioConRelaciones[];
@@ -634,10 +635,7 @@
 		</div>
 
 		{#if loadingInicial}
-			<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12">
-				<div class="spinner"></div>
-				<p class="text-sm text-[#64748b]">Cargando lote inicial de servicios…</p>
-			</div>
+			<CargaMascota texto="Cargando lote inicial de servicios…" />
 		{:else if servicios.length === 0}
 			<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12 text-center">
 				<div

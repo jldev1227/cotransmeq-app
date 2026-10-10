@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { liquidacionesTercerosDescuentosAPI } from '$lib/api/liquidaciones-terceros-descuentos';
@@ -126,8 +127,8 @@
 
 	{#if loading}
 		<div class="state-box">
-			<div class="spinner"></div>
-			<p>Cargando liquidacion...</p>
+			<!-- Tarjeta clara: la mascota y su texto no se leen sobre el fondo oscuro del visor. -->
+			<div class="state-card"><CargaMascota texto="Cargando liquidación…" /></div>
 		</div>
 	{:else if loadError}
 		<div class="state-box error">
@@ -225,21 +226,14 @@
 		color: #fff;
 		font-size: 14px;
 	}
+	.state-card {
+		width: min(22rem, 100%);
+		border-radius: 20px;
+		background: var(--au-bg, #effbf5);
+		box-shadow: 0 18px 40px rgba(0, 0, 0, 0.25);
+	}
 	.state-box.error p {
 		color: #fca5a5;
 		font-weight: 600;
-	}
-	.spinner {
-		width: 36px;
-		height: 36px;
-		border: 3px solid rgba(255, 255, 255, 0.2);
-		border-top-color: #fff;
-		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
-	}
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 </style>

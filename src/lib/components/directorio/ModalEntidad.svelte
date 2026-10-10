@@ -11,6 +11,7 @@
 	import { quintOut } from 'svelte/easing';
 	import { X } from 'lucide-svelte';
 	import TabsVista from '$lib/components/ui/TabsVista.svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { confirmar } from '$lib/stores/confirm';
 	import { formularioAbierto } from '$lib/stores/formularioAbierto';
 
@@ -150,10 +151,7 @@
 
 				<div class="de-body" role="tabpanel">
 					{#if cargando}
-						<div class="de-cargando" aria-live="polite">
-							<span class="de-spinner de-spinner-oscuro" aria-hidden="true"></span>
-							Cargando…
-						</div>
+						<CargaMascota texto="Cargando…" />
 					{:else}
 						{@render children(tabActiva)}
 					{/if}
@@ -306,15 +304,6 @@
 		overflow-y: auto;
 		padding: 22px;
 	}
-	.de-cargando {
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		gap: 10px;
-		min-height: 200px;
-		color: var(--text-muted);
-		font-size: 14px;
-	}
 
 	.de-footer {
 		flex-shrink: 0;
@@ -373,10 +362,6 @@
 		border: 2px solid rgba(255, 255, 255, 0.4);
 		border-top-color: #fff;
 		animation: de-giro 0.7s linear infinite;
-	}
-	.de-spinner-oscuro {
-		border-color: var(--border-default);
-		border-top-color: var(--accion);
 	}
 	@keyframes de-giro {
 		to {

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { onMount, onDestroy } from 'svelte';
 	import { authStore } from '$lib/stores/auth';
 	import { socketUtils } from '$lib/socket';
@@ -476,11 +477,8 @@
 
 	<!-- Tabla -->
 	{#if loading}
-		<div class="table-card flex items-center justify-center py-20">
-			<div class="flex flex-col items-center gap-3">
-				<div class="spinner"></div>
-				<p class="text-sm text-[var(--text-muted)]">Cargando configuraciones...</p>
-			</div>
+		<div class="table-card">
+			<CargaMascota texto="Cargando configuraciones…" />
 		</div>
 	{:else if filtered.length === 0}
 		<div class="table-card flex flex-col items-center justify-center py-20 text-center">

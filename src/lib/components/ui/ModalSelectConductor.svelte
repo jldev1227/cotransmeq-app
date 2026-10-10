@@ -3,6 +3,7 @@
 	import { cubicOut } from 'svelte/easing';
 	import { tick } from 'svelte';
 	import { apiClient } from '$lib/api/apiClient';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 
 	export let isOpen = false;
 	export let selectedValue: string = '';
@@ -181,10 +182,7 @@
 				<!-- List -->
 				<div class="max-h-[60vh] overflow-y-auto" bind:this={listContainer}>
 					{#if loading}
-						<div class="flex flex-col items-center justify-center py-12 text-center">
-							<div class="spinner"></div>
-							<p class="mt-3 text-sm font-medium text-gray-500">Cargando conductores...</p>
-						</div>
+						<CargaMascota texto="Cargando conductores…" />
 					{:else if filteredItems.length === 0}
 						<div class="flex flex-col items-center justify-center py-12 text-center">
 							<div class="mb-3 rounded-full bg-gray-100 p-3 text-gray-400">
@@ -246,17 +244,3 @@
 		</div>
 	</div>
 {/if}
-
-<style>
-	.spinner {
-		width: 32px;
-		height: 32px;
-		border: 3px solid #e2e8f0;
-		border-top-color: #c2410c;
-		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
-	}
-	@keyframes spin {
-		to { transform: rotate(360deg); }
-	}
-</style>

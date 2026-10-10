@@ -65,6 +65,7 @@
 			BORRADOR: { bg: 'rgba(0,0,0,0.04)', text: '#4a4a4a', border: 'rgba(0,0,0,0.10)', label: 'Borrador' },
 			LIQUIDADA: { bg: 'rgba(59,130,246,0.08)', text: '#1d4ed8', border: 'rgba(59,130,246,0.25)', label: 'Liquidada' },
 			APROBADA: { bg: 'rgba(249, 115, 22, 0.10)', text: '#047857', border: 'rgba(249, 115, 22, 0.28)', label: 'Aprobada' },
+			PAGADA: { bg: 'rgba(15,64,37,0.10)', text: '#0f4025', border: 'rgba(15,64,37,0.28)', label: 'Pagada' },
 			FACTURADA: { bg: 'rgba(139,92,246,0.10)', text: '#6d28d9', border: 'rgba(139,92,246,0.28)', label: 'Facturada' },
 			ANULADA: { bg: 'rgba(220,38,38,0.06)', text: '#b91c1c', border: 'rgba(220,38,38,0.25)', label: 'Anulada' }
 		};

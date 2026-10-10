@@ -37,6 +37,7 @@
 	import { toast } from 'svelte-sonner';
 	import { authStore } from '$lib/stores/auth';
 	import { mascota } from '$lib/mascot';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { Search, ChevronRight, RefreshCw, Trash2 } from 'lucide-svelte';
 	import { MisFormulariosError, misFormulariosAPI } from '$lib/api/mis-formularios';
 	import type { PortalAssignmentCard, PortalListMeta } from '$lib/api/formularios-portal';
@@ -381,10 +382,7 @@
 	{/if}
 
 	{#if cargando}
-		<div class="mis-estado">
-			<span class="spinner" aria-hidden="true"></span>
-			<p>Cargando tus formularios…</p>
-		</div>
+		<CargaMascota texto="Cargando tus formularios…" />
 	{:else if error && asignaciones.length === 0}
 		{@const img = mascota('advertencia')}
 		<div class="mis-estado">

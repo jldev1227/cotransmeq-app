@@ -3,6 +3,7 @@
 	import type { LiquidacionServicio } from '$lib/api/liquidaciones-servicios';
 	import { facturacionLiquidacionesAPI } from '$lib/api/facturacionLiquidaciones';
 	import ModalBase from '$lib/components/ui/ModalBase.svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 
 	export let open = false;
 	export let liquidaciones: LiquidacionServicio[] = [];
@@ -155,9 +156,8 @@
 
 		<!-- Tabla de selección -->
 		{#if loading}
-			<div class="mf-card empty">
-				<span class="spinner-sm spinner-dark"></span>
-				<p style="margin-top:8px">Cargando liquidaciones facturables…</p>
+			<div class="mf-card">
+				<CargaMascota texto="Cargando liquidaciones facturables…" />
 			</div>
 		{:else if facturables.length === 0}
 			<div class="mf-card empty">
@@ -314,10 +314,6 @@
 		display: inline-block; width: 14px; height: 14px;
 		border: 2px solid rgba(255,255,255,0.3); border-top-color: white;
 		border-radius: 50%; animation: spin 0.6s linear infinite;
-	}
-	.spinner-dark {
-		border-color: var(--border-default);
-		border-top-color: var(--bg-charcoal-deep);
 	}
 	@keyframes spin { to { transform: rotate(360deg); } }
 	.empty { text-align: center; padding: 30px; color: var(--text-muted); }

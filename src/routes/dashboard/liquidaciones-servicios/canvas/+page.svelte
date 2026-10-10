@@ -1425,157 +1425,192 @@
 				onSelect: () => (solicitudEditor = { modo: 'crear', id: null })
 			},
 			{
-				id: 'preview',
-				label: 'Ver vista previa',
+				id: 'abrir',
+				label: 'Abrir liquidación',
 				hint:
 					seleccionLiq.length === 1
-						? `Abre la vista previa de ${seleccionLiq[0].consecutivo}.`
-						: 'También se abre pulsando 👁 VER en la primera columna.',
+						? `Vista previa o edición de ${seleccionLiq[0].consecutivo}.`
+						: 'Selecciona una fila para verla o editarla.',
 				icon: icoVer,
-				disabled: seleccionLiq.length !== 1 || !!solicitudEditor,
-				disabledHint:
-					seleccionLiq.length === 0
-						? 'Selecciona una fila, o pulsa 👁 VER en la columna de acciones.'
-						: 'La vista previa es de una sola liquidación; hay varias seleccionadas.',
-				onSelect: () => {
-					if (seleccionLiq.length === 1)
-						solicitudEditor = { modo: 'ver', id: seleccionLiq[0].id };
-				}
-			},
-			{
-				id: 'editar',
-				label: 'Editar',
-				hint:
-					seleccionLiq.length === 1
-						? `Abre ${seleccionLiq[0].consecutivo} para editarla, sin salir del canvas.`
-						: 'Selecciona una liquidación en BORRADOR para editarla.',
-				icon: icoEditar,
-				disabled: !editable || !!solicitudEditor,
-				disabledHint: motivoNoEditable,
-				onSelect: () => {
-					if (editable) solicitudEditor = { modo: 'editar', id: seleccionLiq[0].id };
-				}
+				menu: [
+					{
+						id: 'preview',
+						label: 'Ver vista previa',
+						hint:
+							seleccionLiq.length === 1
+								? `Abre la vista previa de ${seleccionLiq[0].consecutivo}.`
+								: 'También se abre pulsando 👁 VER en la primera columna.',
+						icon: icoVer,
+						disabled: seleccionLiq.length !== 1 || !!solicitudEditor,
+						disabledHint:
+							seleccionLiq.length === 0
+								? 'Selecciona una fila, o pulsa 👁 VER en la columna de acciones.'
+								: 'La vista previa es de una sola liquidación; hay varias seleccionadas.',
+						onSelect: () => {
+							if (seleccionLiq.length === 1)
+								solicitudEditor = { modo: 'ver', id: seleccionLiq[0].id };
+						}
+					},
+					{
+						id: 'editar',
+						label: 'Editar',
+						hint:
+							seleccionLiq.length === 1
+								? `Abre ${seleccionLiq[0].consecutivo} para editarla, sin salir del canvas.`
+								: 'Selecciona una liquidación en BORRADOR para editarla.',
+						icon: icoEditar,
+						disabled: !editable || !!solicitudEditor,
+						disabledHint: motivoNoEditable,
+						onSelect: () => {
+							if (editable) solicitudEditor = { modo: 'editar', id: seleccionLiq[0].id };
+						}
+					}
+				]
 			},
 			{ type: 'sep' },
 			{
-				id: 'liquidar',
-				label: 'Liquidar',
-				hint: `Pasa a LIQUIDADA las ${borradores.length} fila(s) en BORRADOR de la selección.`,
+				id: 'avanzar',
+				label: 'Avanzar estado',
+				hint: 'Liquidar los borradores o aprobar las liquidadas de la selección.',
 				icon: icoAprobar,
 				tone: 'green',
-				badge: borradores.length || null,
-				disabled: borradores.length === 0 || !canLiquidar || !!accionEnCurso,
-				disabledHint: !canLiquidar
-					? 'Liquidar requiere área de Administración u Operaciones.'
-					: seleccionLiq.length === 0
-						? 'Selecciona filas en la hoja para empezar.'
-						: 'Ninguna de las liquidaciones seleccionadas está en BORRADOR.',
-				onSelect: liquidarSeleccion
+				badge: borradores.length + aprobables.length || null,
+				menu: [
+					{
+						id: 'liquidar',
+						label: 'Liquidar',
+						hint: `Pasa a LIQUIDADA las ${borradores.length} fila(s) en BORRADOR de la selección.`,
+						icon: icoLiquidar,
+						badge: borradores.length || null,
+						disabled: borradores.length === 0 || !canLiquidar || !!accionEnCurso,
+						disabledHint: !canLiquidar
+							? 'Liquidar requiere área de Administración u Operaciones.'
+							: seleccionLiq.length === 0
+								? 'Selecciona filas en la hoja para empezar.'
+								: 'Ninguna de las liquidaciones seleccionadas está en BORRADOR.',
+						onSelect: liquidarSeleccion
+					},
+					{
+						id: 'aprobar',
+						label: 'Aprobar liquidaciones',
+						hint: `Pasa a APROBADA las ${aprobables.length} fila(s) en LIQUIDADA de la selección.`,
+						icon: icoAprobar,
+						badge: aprobables.length || null,
+						disabled: aprobables.length === 0 || !canAprobar || !!accionEnCurso,
+						disabledHint: !canAprobar
+							? 'Solo Administración puede aprobar liquidaciones.'
+							: seleccionLiq.length === 0
+								? 'Selecciona filas en la hoja para empezar.'
+								: 'Ninguna de las liquidaciones seleccionadas está en LIQUIDADA.',
+						onSelect: aprobarSeleccion
+					}
+				]
 			},
 			{
-				id: 'aprobar',
-				label: 'Aprobar liquidaciones',
-				hint: `Pasa a APROBADA las ${aprobables.length} fila(s) en LIQUIDADA de la selección.`,
-				icon: icoAprobar,
-				tone: 'green',
-				badge: aprobables.length || null,
-				disabled: aprobables.length === 0 || !canAprobar || !!accionEnCurso,
-				disabledHint: !canAprobar
-					? 'Solo Administración puede aprobar liquidaciones.'
-					: seleccionLiq.length === 0
-						? 'Selecciona filas en la hoja para empezar.'
-						: 'Ninguna de las liquidaciones seleccionadas está en LIQUIDADA.',
-				onSelect: aprobarSeleccion
-			},
-			{
-				id: 'facturar',
-				label: 'Crear factura',
-				hint: `Crea una factura nueva con las ${aprobadas.length} liquidación(es) APROBADAS de la selección.`,
+				id: 'facturacion',
+				label: 'Facturación',
+				hint: 'Crear una factura, asociar a una existente o quitar de su factura.',
 				icon: icoFactura,
-				tone: 'green',
-				badge: aprobadas.length || null,
-				disabled: aprobadas.length === 0 || !canFacturar || !!accionEnCurso,
-				disabledHint: !canFacturar
-					? 'Facturar requiere área de Facturación o Administración.'
-					: seleccionLiq.length === 0
-						? 'Selecciona filas en la hoja para empezar.'
-						: 'Ninguna de las liquidaciones seleccionadas está APROBADA.',
-				onSelect: abrirFacturar
-			},
-			{
-				id: 'asociar',
-				label: 'Asociar a factura existente',
-				hint: `Engancha las ${facturables.length} liquidación(es) facturables a una factura ya creada.`,
-				icon: icoAsociar,
 				tone: 'blue',
-				disabled: facturables.length === 0 || !canFacturar || !!accionEnCurso,
-				disabledHint: !canFacturar
-					? 'Facturar requiere área de Facturación o Administración.'
-					: seleccionLiq.length === 0
-						? 'Selecciona filas en la hoja para empezar.'
-						: 'Ninguna de las filas seleccionadas está en LIQUIDADA o APROBADA.',
-				panel: panelAsociar,
-				panelWidth: 340
+				badge: aprobadas.length || null,
+				menu: [
+					{
+						id: 'facturar',
+						label: 'Crear factura',
+						hint: `Crea una factura nueva con las ${aprobadas.length} liquidación(es) APROBADAS de la selección.`,
+						icon: icoFactura,
+						badge: aprobadas.length || null,
+						disabled: aprobadas.length === 0 || !canFacturar || !!accionEnCurso,
+						disabledHint: !canFacturar
+							? 'Facturar requiere área de Facturación o Administración.'
+							: seleccionLiq.length === 0
+								? 'Selecciona filas en la hoja para empezar.'
+								: 'Ninguna de las liquidaciones seleccionadas está APROBADA.',
+						onSelect: abrirFacturar
+					},
+					{
+						id: 'asociar',
+						label: 'Asociar a factura existente',
+						hint: `Engancha las ${facturables.length} liquidación(es) facturables a una factura ya creada.`,
+						icon: icoAsociar,
+						disabled: facturables.length === 0 || !canFacturar || !!accionEnCurso,
+						disabledHint: !canFacturar
+							? 'Facturar requiere área de Facturación o Administración.'
+							: seleccionLiq.length === 0
+								? 'Selecciona filas en la hoja para empezar.'
+								: 'Ninguna de las filas seleccionadas está en LIQUIDADA o APROBADA.',
+						panel: panelAsociar,
+						panelWidth: 340
+					},
+					{
+						id: 'desasociar',
+						tone: 'danger',
+						label: 'Quitar de su factura',
+						hint: `Devuelve a LIQUIDADA las ${yaFacturadas.length} liquidación(es) facturadas de la selección y recalcula el total de su factura.`,
+						icon: icoDesasociar,
+						disabled: yaFacturadas.length === 0 || !canFacturar || !!accionEnCurso,
+						disabledHint: !canFacturar
+							? 'Facturar requiere área de Facturación o Administración.'
+							: seleccionLiq.length === 0
+								? 'Selecciona filas en la hoja para empezar.'
+								: 'Ninguna de las filas seleccionadas está facturada.',
+						onSelect: desasociarSeleccion
+					}
+				]
 			},
 			{
-				id: 'desasociar',
-				label: 'Quitar de su factura',
-				hint: `Devuelve a LIQUIDADA las ${yaFacturadas.length} liquidación(es) facturadas de la selección y recalcula el total de su factura.`,
-				icon: icoDesasociar,
-				tone: 'red',
-				disabled: yaFacturadas.length === 0 || !canFacturar || !!accionEnCurso,
-				disabledHint: !canFacturar
-					? 'Facturar requiere área de Facturación o Administración.'
-					: seleccionLiq.length === 0
-						? 'Selecciona filas en la hoja para empezar.'
-						: 'Ninguna de las filas seleccionadas está facturada.',
-				onSelect: desasociarSeleccion
-			},
-			{
-				id: 'devolver-aprobada',
-				label: 'Devolver a aprobada',
-				hint: facturadaUnica
-					? `Saca ${facturadaUnica.consecutivo} de su factura y la deja APROBADA.`
-					: 'Selecciona una liquidación FACTURADA.',
-				icon: icoDesasociar,
-				tone: 'red',
-				disabled: !facturadaUnica || !canRevertirALiquidada || !!accionEnCurso,
-				disabledHint: !canRevertirALiquidada
-					? 'Solo Administración puede devolver una facturada a aprobada.'
-					: seleccionLiq.length > 1
-						? 'Se hace de una en una; hay varias seleccionadas.'
-						: 'Selecciona una liquidación FACTURADA.',
-				onSelect: devolverAAprobada
-			},
-			{
-				id: 'reversar-aprobacion',
-				label: 'Reversar aprobación',
-				hint: `Devuelve a LIQUIDADA las ${reversables.length} fila(s) APROBADAS de la selección.`,
-				icon: icoDesasociar,
-				tone: 'red',
-				badge: reversables.length || null,
-				disabled: reversables.length === 0 || !canRevertirALiquidada || !!accionEnCurso,
-				disabledHint: !canRevertirALiquidada
-					? 'Solo Administración puede reversar una aprobación.'
-					: seleccionLiq.length === 0
-						? 'Selecciona filas en la hoja para empezar.'
-						: 'Ninguna de las liquidaciones seleccionadas está APROBADA.',
-				onSelect: reversarAprobacionSeleccion
-			},
-			{
-				id: 'devolver-borrador',
-				label: 'Devolver a borrador',
-				hint: `Devuelve a BORRADOR las ${devolvibles.length} fila(s) en LIQUIDADA de la selección.`,
-				icon: icoDesasociar,
-				tone: 'red',
-				badge: devolvibles.length || null,
-				disabled: devolvibles.length === 0 || !canRevertirABorrador || !!accionEnCurso,
-				disabledHint: !canRevertirABorrador
-					? 'Devolver a borrador requiere área de Administración u Operaciones.'
-					: seleccionLiq.length === 0
-						? 'Selecciona filas en la hoja para empezar.'
-						: 'Ninguna de las liquidaciones seleccionadas está en LIQUIDADA.',
-				onSelect: devolverABorradorSeleccion
+				id: 'devolver',
+				label: 'Devolver estado',
+				hint: 'Deshacer un paso: de facturada a aprobada, de aprobada a liquidada o de liquidada a borrador.',
+				icon: icoDeshacer,
+				menu: [
+					{
+						id: 'devolver-aprobada',
+						tone: 'danger',
+						label: 'Devolver a aprobada',
+						hint: facturadaUnica
+							? `Saca ${facturadaUnica.consecutivo} de su factura y la deja APROBADA.`
+							: 'Selecciona una liquidación FACTURADA.',
+						icon: icoDeshacer,
+						disabled: !facturadaUnica || !canRevertirALiquidada || !!accionEnCurso,
+						disabledHint: !canRevertirALiquidada
+							? 'Solo Administración puede devolver una facturada a aprobada.'
+							: seleccionLiq.length > 1
+								? 'Se hace de una en una; hay varias seleccionadas.'
+								: 'Selecciona una liquidación FACTURADA.',
+						onSelect: devolverAAprobada
+					},
+					{
+						id: 'reversar-aprobacion',
+						tone: 'danger',
+						label: 'Reversar aprobación',
+						hint: `Devuelve a LIQUIDADA las ${reversables.length} fila(s) APROBADAS de la selección.`,
+						icon: icoDeshacer,
+						badge: reversables.length || null,
+						disabled: reversables.length === 0 || !canRevertirALiquidada || !!accionEnCurso,
+						disabledHint: !canRevertirALiquidada
+							? 'Solo Administración puede reversar una aprobación.'
+							: seleccionLiq.length === 0
+								? 'Selecciona filas en la hoja para empezar.'
+								: 'Ninguna de las liquidaciones seleccionadas está APROBADA.',
+						onSelect: reversarAprobacionSeleccion
+					},
+					{
+						id: 'devolver-borrador',
+						tone: 'danger',
+						label: 'Devolver a borrador',
+						hint: `Devuelve a BORRADOR las ${devolvibles.length} fila(s) en LIQUIDADA de la selección.`,
+						icon: icoDeshacer,
+						badge: devolvibles.length || null,
+						disabled: devolvibles.length === 0 || !canRevertirABorrador || !!accionEnCurso,
+						disabledHint: !canRevertirABorrador
+							? 'Devolver a borrador requiere área de Administración u Operaciones.'
+							: seleccionLiq.length === 0
+								? 'Selecciona filas en la hoja para empezar.'
+								: 'Ninguna de las liquidaciones seleccionadas está en LIQUIDADA.',
+						onSelect: devolverABorradorSeleccion
+					}
+				]
 			},
 			{
 				id: 'eliminar',
@@ -1594,22 +1629,32 @@
 			},
 			{ type: 'sep' },
 			{
-				id: 'config',
-				label: 'Configuración del liquidador',
-				hint: 'Salario base, porcentajes y valores por defecto del cálculo.',
+				id: 'configuracion',
+				label: 'Configuración',
+				hint: 'Valores del liquidador y catálogo de operadoras.',
 				icon: icoEngranaje,
 				disabled: !canConfigurar,
 				disabledHint: 'Solo Administración u Operaciones pueden ver la configuración.',
-				onSelect: () => (modalConfig = true)
-			},
-			{
-				id: 'operadoras',
-				label: 'Operadoras',
-				hint: 'Añadir o retirar operadoras del desplegable del formulario.',
-				icon: icoEngranaje,
-				disabled: !canConfigurar,
-				disabledHint: 'Solo Administración u Operaciones administran el catálogo.',
-				onSelect: () => (modalOperadoras = true)
+				menu: [
+					{
+						id: 'config',
+						label: 'Configuración del liquidador',
+						hint: 'Salario base, porcentajes y valores por defecto del cálculo.',
+						icon: icoCalculadora,
+						disabled: !canConfigurar,
+						disabledHint: 'Solo Administración u Operaciones pueden ver la configuración.',
+						onSelect: () => (modalConfig = true)
+					},
+					{
+						id: 'operadoras',
+						label: 'Operadoras',
+						hint: 'Añadir o retirar operadoras del desplegable del formulario.',
+						icon: icoOperadora,
+						disabled: !canConfigurar,
+						disabledHint: 'Solo Administración u Operaciones administran el catálogo.',
+						onSelect: () => (modalOperadoras = true)
+					}
+				]
 			},
 			{
 				id: 'recargar',
@@ -1732,6 +1777,34 @@
 			{/if}
 		{/if}
 	</div>
+{/snippet}
+
+{#snippet icoLiquidar()}
+	<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+		<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+		<path d="M14 2v6h6M9 15l2 2 4-4" />
+	</svg>
+{/snippet}
+
+{#snippet icoDeshacer()}
+	<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+		<path d="M9 14 4 9l5-5" />
+		<path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11" />
+	</svg>
+{/snippet}
+
+{#snippet icoCalculadora()}
+	<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+		<rect x="5" y="2" width="14" height="20" rx="2" />
+		<path d="M8 6h8M8 11h.01M12 11h.01M16 11h.01M8 15h.01M12 15h.01M16 15h.01M8 19h8" />
+	</svg>
+{/snippet}
+
+{#snippet icoOperadora()}
+	<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+		<path d="M3 21h18M5 21V7l7-4 7 4v14" />
+		<path d="M9 21v-6h6v6M9 10h.01M15 10h.01" />
+	</svg>
 {/snippet}
 
 {#snippet icoNueva()}

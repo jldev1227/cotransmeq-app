@@ -22,6 +22,7 @@
 	import { checkAccess } from '$lib/config/permissions';
 	import { isTokenExpired, getTimeUntilExpiration } from '$lib/utils/jwt';
 	import { toast } from 'svelte-sonner';
+	import AuthLoading from '$lib/components/auth/AuthLoading.svelte';
 
 	interface Props {
 		moduleId: string;
@@ -87,44 +88,7 @@
 {#if ready && user}
 	{@render children?.()}
 {:else}
-	<div class="univer-guard-loading">
-		<div class="univer-guard-logo">
-			<img src="/android-chrome-192x192.png" alt="Cotransmeq" width="64" height="64" />
-		</div>
-		<h1>Cotransmeq</h1>
-		<p>{ready ? 'Verificando permisos…' : 'Cargando sesión…'}</p>
-	</div>
+	<!-- La pantalla de espera estándar (mascota, logo y barra), la misma que
+	     pinta el panel al hidratar la sesión. -->
+	<AuthLoading texto={ready ? 'Verificando permisos…' : 'Cargando sesión…'} />
 {/if}
-
-<style>
-	.univer-guard-loading {
-		position: fixed;
-		inset: 0;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 12px;
-		background: #f8fafc;
-		color: #0f172a;
-	}
-	.univer-guard-logo {
-		width: 64px;
-		height: 64px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: 16px;
-		box-shadow: 0 8px 24px rgba(234, 88, 12, 0.25);
-	}
-	h1 {
-		margin: 0;
-		font-size: 24px;
-		font-weight: 600;
-	}
-	p {
-		margin: 0;
-		font-size: 13px;
-		color: #64748b;
-	}
-</style>

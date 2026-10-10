@@ -8,10 +8,16 @@
  * estado indebido. Aun así, cambiar una obliga a cambiar la otra.
  */
 
+/**
+ * PAGADA reemplaza a FACTURADA (oct-2026): con terceros factura el
+ * propietario y la empresa le paga. FACTURADA queda solo como estado
+ * heredado de filas sin migrar: se lee, se bloquea y se puede anular.
+ */
 export type EstadoCierre =
 	| 'BORRADOR'
 	| 'LIQUIDADA'
 	| 'APROBADA'
+	| 'PAGADA'
 	| 'FACTURADA'
 	| 'ANULADA'
 	| 'REEMPLAZADA';
@@ -19,14 +25,36 @@ export type EstadoCierre =
 export const TRANSICIONES: Record<string, EstadoCierre[]> = {
 	BORRADOR: ['LIQUIDADA', 'ANULADA'],
 	LIQUIDADA: ['APROBADA', 'BORRADOR', 'ANULADA'],
-	APROBADA: ['LIQUIDADA', 'ANULADA', 'FACTURADA'],
+	APROBADA: ['LIQUIDADA', 'ANULADA', 'PAGADA'],
+	PAGADA: ['ANULADA'],
+	/// Heredado: solo se puede anular. Las filas se migran a PAGADA.
 	FACTURADA: ['ANULADA'],
 	ANULADA: [],
 	REEMPLAZADA: ['BORRADOR']
 };
 
 /** Estados a los que solo puede llevar Administración. */
-export const ESTADOS_QUE_EXIGEN_ADMIN: EstadoCierre[] = ['APROBADA', 'FACTURADA'];
+export const ESTADOS_QUE_EXIGEN_ADMIN: EstadoCierre[] = ['APROBADA', 'PAGADA'];
+
+/**
+ * Puerta de atrás de Administración, como en nómina: PAGADA → APROBADA para
+ * corregir una hoja marcada pagada por error sin anularla.
+ * ESPEJO de `TRANSICIONES_ADMIN` en `cierre-estado.service.ts`.
+ */
+export const TRANSICIONES_ADMIN: Record<string, EstadoCierre[]> = {
+	PAGADA: ['APROBADA']
+};
+
+/** Salir de estos estados también es de Administración. */
+export const ESTADOS_SALIDA_ADMIN: string[] = ['APROBADA', 'PAGADA', 'FACTURADA'];
+
+/** Destinos que existen desde `estadoActual`, con o sin la puerta de atrás. */
+export function destinosPosibles(estadoActual: string, admin: boolean): EstadoCierre[] {
+	const base = TRANSICIONES[estadoActual] ?? [];
+	if (!admin) return base;
+	const extra = (TRANSICIONES_ADMIN[estadoActual] ?? []).filter((e) => !base.includes(e));
+	return [...base, ...extra];
+}
 
 /** Estados que exigen escribir un motivo antes de confirmar. */
 export const ESTADOS_QUE_EXIGEN_MOTIVO: EstadoCierre[] = ['ANULADA'];
@@ -47,8 +75,8 @@ export function transicionesPermitidas(
 	areas: string | string[] | null | undefined
 ): EstadoCierre[] {
 	const admin = esAdmin(areas);
-	if (estadoActual === 'APROBADA' && !admin) return [];
-	const posibles = TRANSICIONES[estadoActual] ?? [];
+	if (ESTADOS_SALIDA_ADMIN.includes(estadoActual) && !admin) return [];
+	const posibles = destinosPosibles(estadoActual, admin);
 	return admin ? posibles : posibles.filter((e) => !ESTADOS_QUE_EXIGEN_ADMIN.includes(e));
 }
 
@@ -64,6 +92,7 @@ const ETIQUETAS: Record<EstadoCierre, { etiqueta: string; tono: AccionEstado['to
 	BORRADOR: { etiqueta: 'Devolver a borrador', tono: 'neutro' },
 	LIQUIDADA: { etiqueta: 'Liquidar', tono: 'primario' },
 	APROBADA: { etiqueta: 'Aprobar', tono: 'primario' },
+	PAGADA: { etiqueta: 'Marcar pagada', tono: 'primario' },
 	FACTURADA: { etiqueta: 'Marcar facturada', tono: 'primario' },
 	ANULADA: { etiqueta: 'Anular', tono: 'peligro' },
 	REEMPLAZADA: { etiqueta: 'Reemplazar', tono: 'neutro' }
@@ -96,6 +125,7 @@ export const COLOR_HOJA_POR_ESTADO: Record<string, string> = {
 	BORRADOR: '#94A3B8', // pizarra
 	LIQUIDADA: '#2563EB', // azul
 	APROBADA: '#ea580c', // verde
+	PAGADA: '#0F4025', // verde profundo, el mismo de nómina
 	FACTURADA: '#7C3AED', // violeta
 	ANULADA: '#DC2626', // rojo
 	REEMPLAZADA: '#D97706' // ámbar
@@ -135,6 +165,8 @@ export function claseBadgeEstado(estado: string): string {
 			return 'bg-blue-50 text-blue-700 ring-1 ring-blue-300';
 		case 'APROBADA':
 			return 'bg-orange-50 text-orange-700 ring-1 ring-orange-300';
+		case 'PAGADA':
+			return 'bg-emerald-900/10 text-emerald-900 ring-1 ring-emerald-900/20';
 		case 'FACTURADA':
 			return 'bg-violet-50 text-violet-700 ring-1 ring-violet-300';
 		case 'ANULADA':

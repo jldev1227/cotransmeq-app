@@ -8,6 +8,7 @@
 	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 	import TabsVista from '$lib/components/ui/TabsVista.svelte';
 	import Dato from '$lib/components/directorio/Dato.svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 
 	export let isOpen = false;
 	export let recargoId: string | null = null;
@@ -307,12 +308,18 @@
 			return;
 		}
 
-		// Construir URL del adjunto desde el backend
-		const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:4000';
-		const archivoUrl = `${baseUrl}/api/documentos/ver/${encodeURIComponent(recargo.planilla_s3key)}`;
-
-		// Abrir en nueva pestaña
-		window.open(archivoUrl, '_blank');
+		/// Con URL firmada y no con `/api/documentos/ver/<key>`: esa ruta ahora
+		/// pide sesión y una pestaña nueva no lleva el token. La pestaña se abre
+		/// antes del `await` para que el navegador no la trate como popup.
+		const pestana = window.open('', '_blank');
+		const url = await getPresignedUrl(recargo.planilla_s3key);
+		if (!url) {
+			pestana?.close();
+			alert('No se pudo abrir la planilla. Intenta de nuevo.');
+			return;
+		}
+		if (pestana) pestana.location.href = url;
+		else window.open(url, '_blank');
 	}
 
 	// Computed values
@@ -449,10 +456,7 @@
 	{/snippet}
 
 	{#if isLoadingData}
-		<div class="vr-estado" aria-live="polite">
-			<span class="vr-spinner" aria-hidden="true"></span>
-			<p>Cargando información...</p>
-		</div>
+		<CargaMascota texto="Cargando información del recargo…" />
 	{:else if error}
 		<div class="vr-estado vr-estado--error" role="alert">
 			<CircleAlert size={28} strokeWidth={2} />

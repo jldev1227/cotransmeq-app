@@ -3,6 +3,7 @@
 	import { bonoConfigVisualAPI, type BonoConfigVisualItem } from '$lib/api/apiClient';
 	import { toast } from 'svelte-sonner';
 	import ModalBase from '$lib/components/ui/ModalBase.svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 
 	type Props = {
 		open: boolean;
@@ -157,10 +158,7 @@
 	{/if}
 
 	{#if loading}
-		<div class="empty-state">
-			<div class="spinner"></div>
-			<p class="text-sm" style="color: var(--text-muted);">Cargando configuraciones…</p>
-		</div>
+		<CargaMascota texto="Cargando configuraciones de bonos…" />
 	{:else if items.length === 0}
 		<div class="empty-state">
 			<div class="empty-icon">📋</div>
@@ -432,19 +430,6 @@
 	.empty-icon {
 		font-size: 36px;
 		opacity: 0.5;
-	}
-	.spinner {
-		width: 24px;
-		height: 24px;
-		border: 3px solid color-mix(in srgb, var(--accion) 20%, transparent);
-		border-top-color: var(--accion);
-		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
-	}
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
 	}
 	.error-msg {
 		background: #fef2f2;

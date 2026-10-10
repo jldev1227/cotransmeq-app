@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -686,9 +687,8 @@
 	</header>
 
 	{#if isLoading}
-		<div class="ev-card ev-cargando">
-			<span class="ev-spinner" aria-hidden="true"></span>
-			Cargando evaluación…
+		<div class="ev-card">
+			<CargaMascota texto="Cargando evaluación…" />
 		</div>
 	{:else if error}
 		<div class="ev-aviso ev-aviso--error" role="alert">
@@ -798,10 +798,7 @@
 				{/if}
 
 				{#if isLoadingDetalle}
-					<div class="ev-cargando">
-						<span class="ev-spinner" aria-hidden="true"></span>
-						Cargando el detalle…
-					</div>
+					<CargaMascota texto="Cargando el detalle…" />
 				{/if}
 
 				{#if editandoRespuestas}
@@ -1282,10 +1279,7 @@
 						</header>
 
 						{#if isLoadingResultados}
-							<div class="ev-cargando">
-								<span class="ev-spinner" aria-hidden="true"></span>
-								Cargando respuestas…
-							</div>
+							<CargaMascota texto="Cargando respuestas…" />
 						{:else if resultados.length === 0}
 							{@const img = mascota('vacio')}
 							<div class="ev-vacio">

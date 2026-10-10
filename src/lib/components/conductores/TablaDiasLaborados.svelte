@@ -18,6 +18,7 @@
 	import ModalConfirmarEliminarSegmento from './ModalConfirmarEliminarSegmento.svelte';
 	import ModalEditarRegistro from './ModalEditarRegistro.svelte';
 	import ModalConfirmarEliminarRegistro from './ModalConfirmarEliminarRegistro.svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 
 	export type TipoDia = 'LABORADO' | 'DISPONIBLE' | 'DESCANSO' | 'MANTENIMIENTO';
 
@@ -1435,10 +1436,7 @@
 		</div>
 
 		{#if loading}
-			<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12">
-				<div class="h-10 w-10 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"></div>
-				<p class="text-sm" style="color: var(--text-muted);">Cargando recorridos…</p>
-			</div>
+			<CargaMascota texto="Cargando recorridos…" />
 		{:else if filasFiltradas.length === 0}
 			<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12 text-center">
 				<div

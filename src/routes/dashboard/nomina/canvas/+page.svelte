@@ -2151,7 +2151,7 @@
 			bind:container
 			{loading}
 			error={loadError}
-			loadingLabel="Cargando nómina de {MESES[mes - 1]} {anio}..."
+			loadingLabel="Cargando nómina de {MESES[mes - 1]} {anio}…"
 			onRetry={loadInicial}
 			errorLabel="Reintentar"
 		/>

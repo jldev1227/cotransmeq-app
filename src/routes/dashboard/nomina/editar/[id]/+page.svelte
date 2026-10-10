@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { obtenerLiquidacionPorId, editarLiquidacion } from '$lib/api/nomina';
@@ -124,12 +125,7 @@
 </svelte:head>
 
 {#if loadingData}
-	<div class="flex min-h-screen items-center justify-center">
-		<div class="text-center">
-			<div class="spinner mx-auto mb-4"></div>
-			<p class="text-sm text-[var(--text-muted)]">Cargando liquidación...</p>
-		</div>
-	</div>
+	<CargaMascota texto="Cargando liquidación…" tamano="pantalla" />
 {:else if liquidacion}
 	{@const estado = getEstadoConfig(liquidacion.estado)}
 

@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { createEventDispatcher, onMount } from 'svelte';
+	import { createEventDispatcher } from 'svelte';
 	export let selected: string[] = [];
 	export let options: string[] = [];
 	export let placeholder = 'Todos';
@@ -27,22 +27,45 @@
 		dispatch('change', selected);
 	}
 
+	const ANCHO = 260;
+	const ALTO = 300;
+
 	function openDropdown() {
 		open = !open;
 		searchInput = '';
 		if (open && triggerEl) {
 			const rect = triggerEl.getBoundingClientRect();
 			const spaceBelow = window.innerHeight - rect.bottom;
-			const spaceRight = window.innerWidth - rect.left;
-			let top = rect.bottom + 2;
+			let top = rect.bottom + 6;
 			let left = rect.left;
-			// If not enough space below, open upward
-			if (spaceBelow < 220) top = rect.top - 220;
-			// If not enough space to the right, align right edge
-			if (spaceRight < 200) left = rect.right - 200;
-			dropdownStyle = `position:fixed;top:${top}px;left:${left}px;z-index:9999;`;
+			// Sin espacio debajo, abre hacia arriba.
+			if (spaceBelow < ALTO) top = Math.max(8, rect.top - ALTO - 6);
+			// Sin espacio a la derecha, se alinea por el borde derecho del botón.
+			if (left + ANCHO > window.innerWidth - 8) left = Math.max(8, rect.right - ANCHO);
+			dropdownStyle = `top:${top}px;left:${left}px;width:${ANCHO}px;`;
 		}
 	}
+
+	/**
+	 * Lleva el menú a `<body>`. Con `position: fixed` no bastaba: un ancestro
+	 * con `transform`, `filter` o `container-type` (la tabla de liquidaciones
+	 * usa una container query) pasa a ser su referencia, y su `overflow`
+	 * lo recortaba. Además, dentro de un `<th>` heredaba mayúsculas y tracking.
+	 */
+	function portal(nodo: HTMLElement) {
+		document.body.appendChild(nodo);
+		return { destroy: () => nodo.remove() };
+	}
+
+	/// Al hacer scroll el botón se mueve y el menú fijo se quedaría flotando
+	/// lejos de su columna: se cierra, como un `<select>` nativo.
+	function alDesplazar(e: Event) {
+		if (!open) return;
+		const t = e.target as Node | null;
+		if (t && menuEl?.contains(t)) return;
+		open = false;
+	}
+	let menuEl: HTMLElement | null = null;
 
 	$: filteredOptions = searchable && searchInput
 		? options.filter((o) => labelFn(o).toLowerCase().includes(searchInput.toLowerCase()))
@@ -90,9 +113,10 @@
 	{/if}
 
 	{#if open}
-		<button type="button" class="fixed inset-0 z-[9998]" aria-label="Cerrar" on:click={() => (open = false)}></button>
+		<div use:portal class="msf-capa">
+		<button type="button" class="msf-fondo" aria-label="Cerrar" on:click={() => (open = false)}></button>
 
-		<div class="min-w-[180px] rounded border border-gray-200 bg-white shadow-lg" style={dropdownStyle}>
+		<div class="msf-menu" style={dropdownStyle} bind:this={menuEl}>
 
 			{#if searchable}
 				<div class="border-b border-gray-100 p-1.5">
@@ -106,7 +130,7 @@
 				</div>
 			{/if}
 
-			<div class="max-h-48 overflow-y-auto">
+			<div class="msf-lista">
 				{#if selected.length > 0}
 					<button
 						type="button"
@@ -135,5 +159,53 @@
 				{/if}
 			</div>
 		</div>
+		</div>
 	{/if}
 </div>
+
+<svelte:window
+	on:scroll|capture={alDesplazar}
+	on:resize={() => (open = false)}
+	on:keydown={(e) => e.key === 'Escape' && (open = false)}
+/>
+
+<style>
+	.msf-capa {
+		position: fixed;
+		inset: 0;
+		z-index: 10030;
+		pointer-events: none;
+	}
+	.msf-fondo {
+		position: absolute;
+		inset: 0;
+		border: 0;
+		background: transparent;
+		pointer-events: auto;
+		cursor: default;
+	}
+	.msf-menu {
+		position: fixed;
+		max-height: 300px;
+		display: flex;
+		flex-direction: column;
+		overflow: hidden;
+		border-radius: 12px;
+		border: 1px solid var(--border-default, #e5e7eb);
+		background: var(--bg-surface, #fff);
+		box-shadow: 0 12px 32px rgba(0, 0, 0, 0.14);
+		pointer-events: auto;
+		/* No hereda el estilo de la cabecera de tabla donde vive el botón. */
+		text-transform: none;
+		letter-spacing: normal;
+		font-weight: 400;
+		text-align: left;
+		white-space: normal;
+	}
+	.msf-lista {
+		flex: 1;
+		min-height: 0;
+		overflow-y: auto;
+		padding: 4px 0;
+	}
+</style>

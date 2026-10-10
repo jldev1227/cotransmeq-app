@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { onMount, onDestroy, untrack } from 'svelte';
 	import { page } from '$app/state';
 	import { browser } from '$app/environment';
@@ -2150,12 +2151,7 @@
 			</div>
 		{/if}
 		{#if loading && recargos.length === 0}
-			<div class="flex h-96 items-center justify-center">
-				<div class="text-center">
-					<div class="spinner mx-auto mb-4"></div>
-					<p class="text-[var(--text-muted)]">Cargando recargos...</p>
-				</div>
-			</div>
+			<CargaMascota texto="Cargando recargos…" />
 		{:else if error && recargos.length === 0}
 			<div class="flex h-96 flex-col items-center justify-center gap-3">
 				<p class="text-[#991B1B]">{error}</p>

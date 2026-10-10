@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { confirmar, confirmarEliminacion } from '$lib/stores/confirm';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	/**
 	 * Canvas de PRIMAS de nómina.
 	 *
@@ -633,12 +634,7 @@
 	<!-- Tabla de primas -->
 	<div class="table-card">
 		{#if loadingPrimas}
-			<div class="flex items-center justify-center py-16">
-				<div class="text-center">
-					<div class="spinner mx-auto mb-4"></div>
-					<p class="text-[var(--text-muted)]">Cargando primas...</p>
-				</div>
-			</div>
+			<CargaMascota texto="Cargando primas…" />
 		{:else if primas.length === 0}
 			<div class="py-16 text-center">
 				<div
@@ -897,13 +893,7 @@
 			<!-- Body -->
 			<div class="flex-1 overflow-y-auto bg-white p-6">
 				{#if previewPrimasLoading}
-					<div class="flex flex-col items-center justify-center py-12">
-						<div
-							class="spinner mb-4"
-							style="border-top-color: #F59E0B; border-color: rgba(245,158,11,0.20);"
-						></div>
-						<p class="text-sm text-[var(--text-muted)]">Cargando datos de conductores...</p>
-					</div>
+					<CargaMascota texto="Cargando datos de conductores…" />
 				{:else if sendPrimasComplete}
 					<div class="space-y-3">
 						<div

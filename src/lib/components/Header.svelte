@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { createEventDispatcher, onMount, onDestroy } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
-	import { goto } from '$app/navigation';
+	import { goto, replaceState } from '$app/navigation';
 	import SessionTimer from './SessionTimer.svelte';
 	import AsistenteDisparador from './asistente/AsistenteDisparador.svelte';
 	import { notificacionesStore } from '$lib/stores/notificaciones';
@@ -11,6 +11,8 @@
 	import { sidebarStore } from '$lib/stores/sidebar';
 	import type { Notificacion } from '$lib/api/notificaciones';
 	import ModalNotificaciones from '$lib/components/notificaciones/ModalNotificaciones.svelte';
+	import { rutaDeNotificacion } from '$lib/notificaciones/rutaNotificacion';
+	import { sincronizarWebPush } from '$lib/notificaciones/webPush';
 
 	const dispatch = createEventDispatcher();
 
@@ -95,11 +97,25 @@
 		notificacionesStore.cargar();
 		notificacionesStore.iniciarPolling();
 		socketUtils.on('nueva-notificacion', handleNuevaNotificacion);
+		navigator.serviceWorker?.addEventListener('message', handleMensajeSW);
+		/// Si el permiso ya estaba concedido, re-registra el navegador con el
+		/// usuario de esta sesión (puede ser otro que el de ayer en este equipo).
+		void sincronizarWebPush();
+		/// Ventana abierta desde un aviso con la app cerrada: el service worker
+		/// deja el id en el hash para marcarla como leída al llegar.
+		const aviso = /^#aviso=([\w-]+)$/.exec(window.location.hash)?.[1];
+		if (aviso) {
+			void notificacionesStore.marcarLeida(aviso);
+			replaceState(window.location.pathname + window.location.search, {});
+		}
 	});
 
 	onDestroy(() => {
 		notificacionesStore.detenerPolling();
 		socketUtils.off('nueva-notificacion', handleNuevaNotificacion);
+		if (typeof navigator !== 'undefined') {
+			navigator.serviceWorker?.removeEventListener('message', handleMensajeSW);
+		}
 	});
 
 	function handleLogout() {
@@ -117,46 +133,23 @@
 		/// Marcarla como leída lo hace `ModalNotificaciones` antes de llamar aquí.
 		showAllNotifications = false;
 
-		// Navegar según referencia_tipo
-		if (notif.referencia_id) {
-			if (notif.referencia_tipo === 'servicio') {
-				goto(`/dashboard/servicios/${notif.referencia_id}`);
-			} else if (notif.referencia_tipo?.startsWith('nomina_desprendible_firmado')) {
-				const [, anio, mes, desde] = notif.referencia_tipo.split(':');
-				const params = new URLSearchParams({
-					liquidacion: notif.referencia_id,
-					preview: '1'
-				});
-				if (anio && mes && desde) {
-					params.set('anio', anio);
-					params.set('mes', mes);
-					params.set('desde', desde);
-				}
-				// Recarga completa a propósito: si el usuario ya tenía abierto este
-				// mismo canvas, SvelteKit conservaría el componente y su caché podría
-				// seguir mostrando el PDF anterior a la firma.
-				window.location.assign(`/dashboard/nomina/canvas?${params.toString()}`);
-			} else if (notif.referencia_tipo === 'preoperacional') {
-				goto(`/dashboard/formularios/envios/${notif.referencia_id}`);
-			} else if (notif.referencia_tipo?.startsWith('dias_laborados:')) {
-				/// Recorridos del conductor ese día (`dias_laborados:<fecha>`, la referencia es el conductor).
-				const fecha = notif.referencia_tipo.split(':')[1];
-				const params = new URLSearchParams({ desde: fecha, hasta: fecha, conductor: notif.referencia_id });
-				goto(`/dashboard/conductores/recorridos?${params.toString()}`);
-			} else if (notif.referencia_tipo === 'viatico_anticipo') {
-				goto(`/dashboard/viaticos?anticipo=${notif.referencia_id}`);
-			} else if (notif.referencia_tipo === 'viatico_solicitud') {
-				goto(`/dashboard/viaticos?solicitud=${notif.referencia_id}`);
-			} else if (notif.referencia_tipo === 'solicitud_web') {
-				goto(`/dashboard/solicitudes?solicitud=${notif.referencia_id}`);
-			} else if (notif.referencia_tipo === 'ACCION_CORRECTIVA') {
-				goto(`/dashboard/acciones-correctivas/${notif.referencia_id}`);
-			} else if (notif.tipo.startsWith('FACTURA_')) {
-				goto('/dashboard/liquidaciones-servicios?tab=facturas');
-			} else if (notif.tipo.startsWith('LIQUIDACION_')) {
-				goto('/dashboard/liquidaciones-servicios');
-			}
-		}
+		/// La ruta la decide `rutaDeNotificacion`, la misma que usa el service
+		/// worker al pulsar el aviso del sistema.
+		const ruta = rutaDeNotificacion(notif);
+		if (!ruta) return;
+		if (ruta.recargaCompleta) window.location.assign(ruta.url);
+		else goto(ruta.url);
+	}
+
+	/**
+	 * Aviso del sistema pulsado con la app ya abierta: el service worker enfoca
+	 * esta pestaña y manda la notificación aquí para marcarla y navegar.
+	 */
+	function handleMensajeSW(event: MessageEvent) {
+		if (event.data?.type !== 'ABRIR_NOTIFICACION') return;
+		const notif = event.data.notificacion as Notificacion;
+		if (notif.id) void notificacionesStore.marcarLeida(notif.id);
+		void handleNotifClick(notif);
 	}
 
 	function abrirTodasNotificaciones() {

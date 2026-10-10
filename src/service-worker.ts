@@ -31,6 +31,7 @@
  */
 
 import { build, files, version } from '$service-worker';
+import { rutaDeNotificacion } from '$lib/notificaciones/rutaNotificacion';
 
 /// El nombre incluye la versión del build: al desplegar, las cachés viejas se
 /// vuelven inalcanzables y se borran en `activate`.
@@ -201,3 +202,89 @@ sw.addEventListener('fetch', (event) => {
 sw.addEventListener('message', (event) => {
 	if (event.data?.type === 'SKIP_WAITING') void sw.skipWaiting();
 });
+
+// ── Web Push: avisos de la campana del dashboard ────────────────────────
+
+/** Lo que manda `web-push.service.ts` del backend. */
+interface AvisoPush {
+	id: string | null;
+	tipo: string;
+	titulo: string;
+	mensaje: string;
+	referencia_id: string | null;
+	referencia_tipo: string | null;
+	created_at: string;
+	forzar?: boolean;
+}
+
+/** ¿Hay una pestaña del dashboard visible y con el foco? */
+async function dashboardALaVista(): Promise<boolean> {
+	const ventanas = await sw.clients.matchAll({ type: 'window', includeUncontrolled: true });
+	return ventanas.some(
+		(c) =>
+			c.focused &&
+			c.visibilityState === 'visible' &&
+			new URL(c.url).pathname.startsWith('/dashboard')
+	);
+}
+
+sw.addEventListener('push', (event) => {
+	let aviso: AvisoPush;
+	try {
+		aviso = event.data?.json() as AvisoPush;
+	} catch {
+		return;
+	}
+	if (!aviso?.titulo) return;
+
+	event.waitUntil(
+		(async () => {
+			/// Si el usuario está mirando el dashboard, la campana ya lo avisa por
+			/// socket: un aviso del sistema encima sería ruido. Chrome permite no
+			/// mostrar nada cuando la pestaña tiene el foco.
+			if (!aviso.forzar && (await dashboardALaVista())) return;
+
+			await sw.registration.showNotification(aviso.titulo, {
+				body: aviso.mensaje,
+				icon: '/android-chrome-192x192.png',
+				badge: '/favicon-32x32.png',
+				/// Mismo id → reemplaza en vez de apilar si llega dos veces.
+				tag: aviso.id ?? undefined,
+				/// Sin esto, un aviso con el mismo `tag` reemplaza al anterior en
+				/// silencio: ni sonido ni tira en pantalla.
+				renotify: !!aviso.id,
+				silent: false,
+				timestamp: new Date(aviso.created_at).getTime(),
+				data: aviso,
+				lang: 'es-CO'
+			} as NotificationOptions);
+		})()
+	);
+});
+
+sw.addEventListener('notificationclick', (event) => {
+	event.notification.close();
+	const aviso = event.notification.data as AvisoPush | undefined;
+	if (!aviso) return;
+
+	event.waitUntil(
+		(async () => {
+			const ventanas = await sw.clients.matchAll({ type: 'window', includeUncontrolled: true });
+			const dashboard = ventanas.find((c) => new URL(c.url).pathname.startsWith('/dashboard'));
+
+			if (dashboard) {
+				/// La app ya está abierta: se enfoca y ella marca la notificación y
+				/// navega (con `goto`, sin recargar lo que tenga a medias).
+				await dashboard.focus();
+				dashboard.postMessage({ type: 'ABRIR_NOTIFICACION', notificacion: aviso });
+				return;
+			}
+
+			/// App cerrada: se abre la pantalla de destino. El id va en el hash
+			/// para que el Header la marque como leída al cargar.
+			const destino = rutaDeNotificacion(aviso)?.url ?? '/dashboard';
+			await sw.clients.openWindow(aviso.id ? `${destino}#aviso=${aviso.id}` : destino);
+		})()
+	);
+});
+

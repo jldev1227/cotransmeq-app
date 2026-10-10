@@ -36,6 +36,34 @@ export interface TerceroWithCerts {
 		tipo_certificado: { nombre: string; codigo: string } | null;
 	}>;
 	_count: { certificados_archivo: number };
+	/** Último correo enviado con sus certificados; `null` si nunca se le envió. */
+	ultimo_envio?: { emitido_at: string; email_destino: string; tipo_envio: string } | null;
+}
+
+/** Filtros del listado; el envío masivo usa los mismos (sin página). */
+export interface FiltrosCertificados {
+	search?: string;
+	anio?: number;
+	tipo?: string;
+	correo?: 'con' | 'sin';
+}
+
+export interface ListadoTercerosCertificados {
+	success: boolean;
+	terceros: TerceroWithCerts[];
+	total: number;
+	page: number;
+	totalPages: number;
+	conteos: { terceros: number; con_correo: number; sin_correo: number; certificados: number };
+	anios: number[];
+	tipos: string[];
+}
+
+export interface ResultadoEnvioMasivo {
+	tercero_id: string;
+	status: 'sent' | 'skipped' | 'error';
+	reason?: string;
+	error?: string;
 }
 
 export interface CertificacionEnvio {
@@ -114,8 +142,8 @@ export const certificadosAdminAPI = {
 };
 
 export const certificadosTerceroAPI = {
-	getTercerosWithCertificados: (params: { search?: string; page?: number; limit?: number }) =>
-		apiClient.get<{ success: boolean; terceros: TerceroWithCerts[]; total: number; page: number; totalPages: number }>(
+	getTercerosWithCertificados: (params: FiltrosCertificados & { page?: number; limit?: number }) =>
+		apiClient.get<ListadoTercerosCertificados>(
 			'/api/certificados-tributarios/terceros-con-certificados',
 			{ params }
 		),
@@ -128,8 +156,17 @@ export const certificadosTerceroAPI = {
 	enviarEmail: (data: { tercero_id: string; certificado_ids: string[]; email_destino: string; mensaje_personalizado?: string }) =>
 		apiClient.post('/api/certificados-tributarios/enviar-email', data),
 
-	enviarMasivo: (data: { tercero_ids: string[]; mensaje_personalizado?: string }) =>
-		apiClient.post('/api/certificados-tributarios/enviar-masivo', data),
+	/** Con `filtros` el servidor envía a TODOS los que coinciden (con correo), no a una página. */
+	enviarMasivo: (
+		data: { mensaje_personalizado?: string } & (
+			| { tercero_ids: string[] }
+			| { filtros: FiltrosCertificados }
+		)
+	) =>
+		apiClient.post<{ success: boolean; resultados: ResultadoEnvioMasivo[] }>(
+			'/api/certificados-tributarios/enviar-masivo',
+			data
+		),
 
 	getEnvios: (params: { page?: number; limit?: number }) =>
 		apiClient.get<{ success: boolean; envios: CertificacionEnvio[]; total: number; page: number; totalPages: number }>(

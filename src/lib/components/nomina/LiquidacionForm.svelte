@@ -3,6 +3,7 @@
 	import { obtenerConductores, obtenerVehiculos, obtenerEmpresas, obtenerConfiguraciones } from '$lib/api/nomina';
 	import type { Conductor, Vehiculo, Empresa, ConfiguracionLiquidacion, CreateLiquidacionPayload } from '$lib/types/nomina';
 	import { ChevronLeft, ChevronRight, Save, Plus, Trash2, Calendar, Users, Truck } from 'lucide-svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 
 	export let mode: 'create' | 'edit' = 'create';
 	export let initialData: any = null;
@@ -258,12 +259,7 @@
 </script>
 
 {#if loadingData}
-	<div class="flex min-h-screen items-center justify-center">
-		<div class="text-center">
-			<div class="spinner mx-auto mb-4"></div>
-			<p class="text-sm text-[var(--text-muted)]">Cargando datos...</p>
-		</div>
-	</div>
+	<CargaMascota texto="Cargando datos de la liquidación…" tamano="pantalla" />
 {:else}
 	<div class="mx-auto max-w-7xl">
 		<!-- Header -->

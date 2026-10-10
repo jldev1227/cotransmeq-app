@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
@@ -672,10 +673,7 @@
 	</div>
 
 	{#if isLoading}
-		<div class="page-card flex items-center justify-center gap-3 py-16" in:fade={{ duration: 320 }}>
-			<div class="spinner"></div>
-			<p class="text-sm" style="color: var(--text-muted);">Cargando conductor…</p>
-		</div>
+		<CargaMascota texto="Cargando conductor…" tamano="pantalla" />
 	{:else if error && !conductor}
 		<div
 			class="page-card flex flex-col items-center gap-3 py-12 text-center"

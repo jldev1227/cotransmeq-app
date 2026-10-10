@@ -29,6 +29,7 @@
 	import RecargosPreview from './RecargosPreview.svelte';
 	import RecargosDesgloseModal from './RecargosDesgloseModal.svelte';
 	import RecorridosSincronizadosModal from './RecorridosSincronizadosModal.svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 
 	// Props
 	export let mode: 'create' | 'edit' = 'create';
@@ -1960,12 +1961,7 @@
 </script>
 
 {#if loadingData}
-	<div class="flex min-h-[60vh] items-center justify-center">
-		<div class="text-center">
-			<div class="spinner mx-auto"></div>
-			<p class="mt-3 text-sm text-[var(--text-muted)]">Cargando datos...</p>
-		</div>
-	</div>
+	<CargaMascota texto="Cargando datos de la liquidación…" tamano="pantalla" />
 {:else}
 	<div class="mx-auto px-4 py-6">
 		<!-- Header -->

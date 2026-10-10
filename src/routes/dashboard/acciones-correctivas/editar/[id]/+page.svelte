@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { page } from '$app/stores';
 	import { sidebarStore } from '$lib/stores/sidebar';
 	import { goto } from '$app/navigation';
@@ -88,10 +89,7 @@
 
 	<main class="page-main" in:fly={{ y: 20, duration: 400, easing: quintOut, delay: 100 }}>
 		{#if isLoading}
-			<div class="state-block" in:fade={{ duration: 200 }}>
-				<span class="spinner-lg"></span>
-				<p class="state-text">Cargando acción…</p>
-			</div>
+			<CargaMascota texto="Cargando acción…" />
 		{:else if accion}
 			<FormularioAccion
 				bind:this={formularioAccion}
@@ -253,14 +251,6 @@
 		border-radius: 50%;
 		animation: spin 0.8s linear infinite;
 		display: inline-block;
-	}
-	.spinner-lg {
-		width: 36px;
-		height: 36px;
-		border: 3px solid rgba(234, 88, 12, 0.15);
-		border-top-color: var(--accent);
-		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
 	}
 
 	.page-main {

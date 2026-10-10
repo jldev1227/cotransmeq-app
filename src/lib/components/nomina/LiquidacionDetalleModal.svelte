@@ -17,6 +17,7 @@
 	} from 'lucide-svelte';
 	import { abrirDesprendible } from '$lib/editor/canvas/desprendible-nomina';
 	import { generarPdfInteresesCesantias } from '$lib/utils/pdfInteresesCesantias';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 
 	export let liquidacionId: string;
 	export let show = false;
@@ -339,13 +340,7 @@
 			tabindex="0"
 		>
 			{#if loading}
-				<!-- Loading -->
-				<div class="flex flex-col items-center justify-center py-20">
-					<div
-						class="mb-4 h-12 w-12 animate-spin rounded-full border-4 border-emerald-500 border-t-transparent"
-					></div>
-					<p class="text-gray-600">Cargando liquidación...</p>
-				</div>
+				<CargaMascota texto="Cargando liquidación…" />
 			{:else if !liquidacion}
 				<div class="py-20 text-center">
 					<p class="text-gray-500">No se pudo cargar la liquidación</p>

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
+	import { desuscribirAlCerrarSesion } from '$lib/notificaciones/webPush';
 	import { authStore } from '$lib/stores/auth';
 	import { socketStore, socketManager } from '$lib/socket';
 	import { sidebarStore } from '$lib/stores/sidebar';
@@ -158,6 +159,10 @@
 	}
 
 	function handleLogout() {
+		/// Solo el cierre de sesión explícito apaga los avisos de este navegador.
+		/// Si la sesión expira sola, el usuario sigue recibiéndolos: es justo
+		/// cuando no tiene la app abierta.
+		desuscribirAlCerrarSesion();
 		authStore.logout();
 	}
 </script>

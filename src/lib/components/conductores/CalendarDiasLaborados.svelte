@@ -5,6 +5,7 @@
 	import { obtenerFestivosCompletos } from '$lib/utils/festivosColombia';
 	import { toast } from '$lib/stores/toast';
 	import { apiClient } from '$lib/api/apiClient';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 
 	export type TipoDia = 'LABORADO' | 'DISPONIBLE' | 'DESCANSO' | 'MANTENIMIENTO';
 
@@ -215,10 +216,7 @@
 	<div class="flex min-h-0 flex-1 gap-3">
 		<div class="flex min-h-0 min-w-0 flex-1 flex-col">
 			{#if loading}
-				<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12">
-					<div class="h-10 w-10 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"></div>
-					<p class="text-sm text-gray-500">Cargando días laborados...</p>
-				</div>
+				<CargaMascota texto="Cargando días laborados…" />
 			{:else}
 				<div class="glass soft-shadow flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-gray-200/50">
 					<!-- Header del calendario -->

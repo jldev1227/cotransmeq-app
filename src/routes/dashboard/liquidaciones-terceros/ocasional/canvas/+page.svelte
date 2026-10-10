@@ -1327,7 +1327,7 @@
 			bind:container
 			{loading}
 			error={loadError}
-			loadingLabel="Cargando liquidaciones ocasionales de {anio}..."
+			loadingLabel="Cargando liquidaciones ocasionales de {anio}…"
 			onRetry={loadInicial}
 			errorLabel="Reintentar"
 		/>

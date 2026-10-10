@@ -1429,7 +1429,7 @@
 			bind:container
 			{loading}
 			error={loadError}
-			loadingLabel="Cargando ingresos de {anio}..."
+			loadingLabel="Cargando ingresos de {anio}…"
 			onRetry={loadInicial}
 			errorLabel="Reintentar"
 		/>

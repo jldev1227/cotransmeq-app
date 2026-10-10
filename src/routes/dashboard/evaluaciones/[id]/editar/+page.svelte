@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { fade, fly } from 'svelte/transition';
@@ -349,9 +350,8 @@
 	{/if}
 
 	{#if isLoading}
-		<div class="ev-card ev-cargando">
-			<span class="ev-spinner" aria-hidden="true"></span>
-			Cargando evaluación…
+		<div class="ev-card">
+			<CargaMascota texto="Cargando evaluación…" />
 		</div>
 	{:else}
 		<div class="ev-grid-form" in:fly={{ y: 12, duration: 400, delay: 80 }}>

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
@@ -171,24 +172,6 @@
 		}
 	}
 
-	.fm-loading {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 12px;
-		padding: 4rem 2rem;
-		color: var(--fm-muted);
-	}
-	.spinner {
-		width: 32px;
-		height: 32px;
-		border: 3px solid var(--fm-border);
-		border-top-color: var(--fm-text);
-		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
-	}
-	@keyframes spin { to { transform: rotate(360deg); } }
 
 	:global(.fm-card) {
 		border: 1px solid var(--fm-border);
@@ -475,10 +458,7 @@
 </style>
 
 {#if isLoading}
-	<div class="fm-detail fm-loading">
-		<div class="spinner"></div>
-		<p>Cargando acción...</p>
-	</div>
+	<CargaMascota texto="Cargando acción…" tamano="pantalla" />
 {:else if accion}
 	<!-- Fixed page header -->
 	<header class="page-header {collapsed ? 'page-header-collapsed' : ''}" in:fade={{ duration: 400 }}>

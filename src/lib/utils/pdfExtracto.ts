@@ -110,7 +110,7 @@ export function docExtracto(
 				margin: [4, 4, 4, 2],
 				stack: [
 					imagenes.mintransporte
-						? { image: 'mintransporte', fit: [150, 48] }
+						? { image: 'mintransporte', fit: [260, 54] }
 						: { text: 'Mintransporte', bold: true },
 					{ text: `Código: ${e.codigo_formato}`, fontSize: 6.5, color: GRIS, margin: [0, 2, 0, 0] }
 				]

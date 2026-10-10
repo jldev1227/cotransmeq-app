@@ -1,5 +1,6 @@
 <script lang="ts" generics="T extends { id?: string | number }">
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 
 	interface Column {
 		key: string;
@@ -95,10 +96,7 @@
 
 <div class="table-card">
 	{#if isLoading}
-		<div class="empty" role="status">
-			<div class="spinner"></div>
-			<p>Cargando...</p>
-		</div>
+		<CargaMascota texto="Cargando…" />
 	{:else if data.length === 0}
 		<div class="empty" role="status">
 			<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
@@ -413,18 +411,5 @@
 	.empty p {
 		font-size: 13px;
 		margin: 0;
-	}
-
-	.spinner {
-		width: 32px;
-		height: 32px;
-		border: 3px solid #e5e7eb;
-		border-top-color: var(--accent, #ea580c);
-		border-radius: 50%;
-		animation: spin 0.7s linear infinite;
-	}
-
-	@keyframes spin {
-		to { transform: rotate(360deg); }
 	}
 </style>

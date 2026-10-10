@@ -3,6 +3,7 @@
 	import { fly, fade } from 'svelte/transition';
 	import { browser } from '$app/environment';
 	import CustomCalendar from '$lib/components/common/CustomCalendar.svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import DrawerDetalleServicio from './DrawerDetalleServicio.svelte';
 	import { obtenerFestivosCompletos } from '$lib/utils/festivosColombia';
 	import { getEstadoColor, getEstadoText, type EstadoServicio, type ServicioConRelaciones } from '$lib/types/servicios';
@@ -295,10 +296,7 @@
 	<div class="flex min-h-0 flex-1 gap-3">
 		<div class="flex min-h-0 min-w-0 flex-1 flex-col">
 			{#if loading}
-			<div class="flex flex-1 flex-col items-center justify-center gap-3 p-12">
-				<div class="h-10 w-10 animate-spin rounded-full border-4 border-orange-500 border-t-transparent"></div>
-				<p class="text-sm text-gray-500">Cargando servicios del mes...</p>
-			</div>
+				<CargaMascota texto="Cargando servicios del mes…" />
 			{:else}
 				<CustomCalendar
 					{mes}

@@ -34,6 +34,7 @@
 		CalendarDays
 	} from 'lucide-svelte';
 	import ModalBase from '$lib/components/ui/ModalBase.svelte';
+	import AvisosNavegador from './AvisosNavegador.svelte';
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 	import { mascota } from '$lib/mascot';
 	import { notificacionesApi, type Notificacion } from '$lib/api/notificaciones';
@@ -180,6 +181,8 @@
 			</button>
 		{/if}
 	{/snippet}
+
+	<AvisosNavegador />
 
 	{#if cargando && notifs.length === 0}
 		<ul class="nt-lista" aria-busy="true">

@@ -43,6 +43,7 @@
 	import ModalBase from '../ui/ModalBase.svelte';
 	import Campo from '../directorio/Campo.svelte';
 	import { municipios } from '$lib/stores/municipios';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 
 	// Props
 	export let isOpen = false;
@@ -1728,10 +1729,7 @@
 	{/snippet}
 
 	{#if isLoadingData}
-		<div class="rf-cargando" aria-live="polite">
-			<span class="rf-spinner" aria-hidden="true"></span>
-			<p>Cargando datos del recargo...</p>
-		</div>
+		<CargaMascota texto="Cargando datos del recargo…" />
 	{:else if activeTab === 'informacion'}
 		<!-- Tab: Información Principal -->
 		<div class="rf" transition:fade={{ duration: 200 }}>
@@ -3218,27 +3216,6 @@
 		min-width: 0;
 	}
 
-	.rf-cargando {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 12px;
-		min-height: 240px;
-		color: var(--text-muted);
-		font-size: 14px;
-	}
-	.rf-cargando p {
-		margin: 0;
-	}
-	.rf-spinner {
-		width: 36px;
-		height: 36px;
-		border-radius: 999px;
-		border: 3px solid var(--border-default);
-		border-top-color: var(--accion);
-		animation: rf-giro 0.7s linear infinite;
-	}
 	:global(.rf-spin) {
 		animation: rf-giro 0.8s linear infinite;
 	}

@@ -1,4 +1,5 @@
 <script lang="ts">
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { onMount } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { authStore } from '$lib/stores/auth';
@@ -194,10 +195,7 @@
 
 <div class="dir-pagina perfil">
 	{#if loading}
-		<div class="perfil-cargando">
-			<div class="perfil-spinner" aria-hidden="true"></div>
-			<p>Cargando perfil…</p>
-		</div>
+		<CargaMascota texto="Cargando perfil…" tamano="pantalla" />
 	{:else if user}
 		<!-- Cabecera: la identidad sobre el verde de marca, como el menú lateral -->
 		<header class="perfil-hero" in:fade={{ duration: 300 }}>

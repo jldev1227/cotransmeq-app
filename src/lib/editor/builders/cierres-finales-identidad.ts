@@ -54,6 +54,7 @@ export interface CierreHoja {
 export const ESTADOS_SOLO_LECTURA = new Set([
 	'LIQUIDADA',
 	'APROBADA',
+	'PAGADA',
 	'FACTURADA',
 	'ANULADA',
 	'REEMPLAZADA'
