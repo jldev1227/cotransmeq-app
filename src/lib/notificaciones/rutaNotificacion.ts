@@ -50,7 +50,11 @@ export function rutaDeNotificacion(n: NotificacionNavegable): RutaNotificacion |
 	if (ref === 'viatico_solicitud') return { url: `/dashboard/viaticos?solicitud=${id}` };
 	if (ref === 'solicitud_web') return { url: `/dashboard/solicitudes?solicitud=${id}` };
 	if (ref === 'ACCION_CORRECTIVA') return { url: `/dashboard/acciones-correctivas/${id}` };
-	if (n.tipo.startsWith('FACTURA_')) return { url: '/dashboard/liquidaciones-servicios?tab=facturas' };
+	/// Vencimiento de un documento del vehículo (`docveh:<categoría>:<vence>:<umbral>`):
+	/// la referencia es el vehículo; abre su ficha en la pestaña Documentos.
+	if (ref.startsWith('docveh:')) return { url: `/dashboard/flota?vehiculo=${id}&tab=documentos` };
+	if (n.tipo.startsWith('FACTURA_'))
+		return { url: '/dashboard/liquidaciones-servicios?tab=facturas' };
 	if (n.tipo.startsWith('LIQUIDACION_')) return { url: '/dashboard/liquidaciones-servicios' };
 	return null;
 }

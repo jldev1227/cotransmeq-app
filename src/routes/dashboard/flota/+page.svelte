@@ -215,6 +215,21 @@
 		(a.placa ?? '').localeCompare(b.placa ?? '', 'es', { numeric: true });
 
 	let detalleId = $state<string | null>(null);
+	let detalleTab = $state('general');
+
+	/// `?vehiculo=<id>&tab=documentos` abre la ficha: así llegan los avisos de
+	/// vencimiento (campana y notificación del sistema). Se consume y se quita
+	/// de la URL para que recargar no la vuelva a abrir.
+	$effect(() => {
+		const id = page.url.searchParams.get('vehiculo');
+		if (!id) return;
+		detalleTab = page.url.searchParams.get('tab') ?? 'general';
+		detalleId = id;
+		const limpia = new URL(page.url);
+		limpia.searchParams.delete('vehiculo');
+		limpia.searchParams.delete('tab');
+		void goto(limpia, { replaceState: true, noScroll: true, keepFocus: true });
+	});
 
 	const vehiculosFiltrados = $derived(
 		vehiculos.filter((v) => {
@@ -751,7 +766,11 @@
 <ModalDetalleVehiculo
 	open={detalleId !== null}
 	vehiculoId={detalleId}
-	onclose={() => (detalleId = null)}
+	tabInicial={detalleTab}
+	onclose={() => {
+		detalleId = null;
+		detalleTab = 'general';
+	}}
 	oneditar={puedeEditar
 		? (id) => {
 				detalleId = null;

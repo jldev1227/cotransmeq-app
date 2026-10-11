@@ -3,6 +3,9 @@
 	import Dato from '$lib/components/directorio/Dato.svelte';
 	import { vehiculosAPI } from '$lib/api/apiClient';
 	import { errorDeApi, avisarErrorGuardado } from '$lib/components/directorio/formulario';
+	import DocumentosVehiculo from './DocumentosVehiculo.svelte';
+	import VisorDocumentoVehiculo from './VisorDocumentoVehiculo.svelte';
+	import type { DocumentoVehiculo } from '$lib/api/vehiculosDocumentos';
 
 	/** Ficha de consulta de un vehículo, con el estilo de la app móvil. */
 	interface Props {
@@ -11,9 +14,14 @@
 		onclose: () => void;
 		/** Sin él no se ofrece «Editar» (usuario de solo lectura). */
 		oneditar?: (id: string) => void;
+		/** Pestaña con la que abre (p. ej. `documentos` desde un aviso de vencimiento). */
+		tabInicial?: string;
 	}
 
-	let { open, vehiculoId, onclose, oneditar }: Props = $props();
+	let { open, vehiculoId, onclose, oneditar, tabInicial = 'general' }: Props = $props();
+
+	/// Documento abierto en el visor, encima de la ficha.
+	let visor = $state<{ doc: DocumentoVehiculo; titulo: string } | null>(null);
 
 	const ESTADOS: Record<string, { etiqueta: string; color: string }> = {
 		disponible: { etiqueta: 'Disponible', color: '#4ade80' },
@@ -30,7 +38,7 @@
 
 	$effect(() => {
 		if (!open || !vehiculoId) return;
-		tab = 'general';
+		tab = tabInicial;
 		void cargar(vehiculoId);
 	});
 
@@ -58,13 +66,18 @@
 	{open}
 	eyebrow="VEHÍCULO"
 	title={v?.placa ?? 'Vehículo'}
-	iniciales={v?.placa ? String(v.placa).replace(/[^A-Za-z]/g, '').slice(0, 3) : null}
+	iniciales={v?.placa
+		? String(v.placa)
+				.replace(/[^A-Za-z]/g, '')
+				.slice(0, 3)
+		: null}
 	subtitle={v ? [v.marca, v.linea, v.modelo].filter(Boolean).join(' · ') || null : null}
 	estado={v ? (ESTADOS[String(v.estado).toLowerCase()] ?? null) : null}
 	tabs={[
 		{ id: 'general', label: 'General' },
 		{ id: 'tecnico', label: 'Ficha técnica' },
-		{ id: 'propietario', label: 'Propietario' }
+		{ id: 'propietario', label: 'Propietario' },
+		{ id: 'documentos', label: 'Documentos' }
 	]}
 	bind:tabActiva={tab}
 	{cargando}
@@ -90,6 +103,15 @@
 					<Dato etiqueta="Número de chasis" valor={v.numero_chasis} mono />
 					<Dato etiqueta="Kilometraje" valor={km(v.kilometraje)} mono />
 					<Dato etiqueta="Fecha de matrícula" valor={v.fecha_matricula} />
+				{:else if activa === 'documentos'}
+					<!-- Fuera de la rejilla de datos: ocupa todo el ancho. -->
+					<div class="md-completo">
+						<DocumentosVehiculo
+							vehiculoId={v.id}
+							puedeEditar={!!oneditar}
+							onver={(doc, titulo) => (visor = { doc, titulo })}
+						/>
+					</div>
 				{:else}
 					<Dato etiqueta="Propietario" valor={v.propietario_nombre} completo />
 					<Dato etiqueta="Identificación" valor={v.propietario_identificacion} mono />
@@ -106,3 +128,16 @@
 		{/if}
 	{/snippet}
 </ModalDetalle>
+
+<VisorDocumentoVehiculo
+	{vehiculoId}
+	doc={visor?.doc ?? null}
+	titulo={visor?.titulo ?? ''}
+	oncerrar={() => (visor = null)}
+/>
+
+<style>
+	.md-completo {
+		grid-column: 1 / -1;
+	}
+</style>

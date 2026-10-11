@@ -31,7 +31,8 @@
 		ReceiptText,
 		Route,
 		ClipboardCheck,
-		CalendarDays
+		CalendarDays,
+		FileWarning
 	} from 'lucide-svelte';
 	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 	import AvisosNavegador from './AvisosNavegador.svelte';
@@ -104,14 +105,19 @@
 		ACTIVIDAD_PESV_VENCIDA: { icono: CalendarClock, tono: 'rojo', etiqueta: 'PESV' },
 		LIQUIDACION_FACTURADA: { icono: ReceiptText, tono: 'verde', etiqueta: 'Facturación' },
 		FACTURA_ANULADA: { icono: Receipt, tono: 'rojo', etiqueta: 'Facturación' },
-		ACCION_CORRECTIVA_RECORDATORIO: { icono: AlarmClock, tono: 'ambar', etiqueta: 'Acción correctiva' }
+		ACCION_CORRECTIVA_RECORDATORIO: {
+			icono: AlarmClock,
+			tono: 'ambar',
+			etiqueta: 'Acción correctiva'
+		}
 	};
 	/// Las GENERAL se distinguen por su referencia: sin esto, los avisos de
 	/// servicio caían en la campana genérica.
 	const POR_REFERENCIA: Record<string, { icono: ComponentType; tono: Tono; etiqueta: string }> = {
 		servicio: { icono: Route, tono: 'azul', etiqueta: 'Servicio' },
 		preoperacional: { icono: ClipboardCheck, tono: 'verde', etiqueta: 'Preoperacional' },
-		dias_laborados: { icono: CalendarDays, tono: 'azul', etiqueta: 'Días laborados' }
+		dias_laborados: { icono: CalendarDays, tono: 'azul', etiqueta: 'Días laborados' },
+		docveh: { icono: FileWarning, tono: 'ambar', etiqueta: 'Documentos del vehículo' }
 	};
 	const tipoDe = (n: Notificacion) =>
 		TIPOS[n.tipo] ??
@@ -189,7 +195,9 @@
 			{#each Array(5) as _, i (i)}
 				<li class="nt-fila nt-fila--esqueleto">
 					<span class="nt-icono nt-esq"></span>
-					<span class="nt-texto"><span class="nt-esq nt-esq--l"></span><span class="nt-esq nt-esq--c"></span></span>
+					<span class="nt-texto"
+						><span class="nt-esq nt-esq--l"></span><span class="nt-esq nt-esq--c"></span></span
+					>
 				</li>
 			{/each}
 		</ul>
