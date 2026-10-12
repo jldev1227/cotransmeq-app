@@ -52,8 +52,18 @@
 		else openPanel();
 	}
 
+	/**
+	 * ⌘K / Ctrl K abre y cierra este chat.
+	 *
+	 * Es el mismo atajo del asistente de la cabecera, y en el detalle del cierre
+	 * se abrían los dos a la vez. Aquí gana el chat del cierre: es lo propio de
+	 * la pantalla, y el asistente sigue a un clic en la cabecera. El
+	 * `preventDefault` es la señal: este oyente va en `document`, corre antes
+	 * que el de `window` del asistente, y el asistente ignora un ⌘K ya
+	 * atendido (ver `AsistenteDisparador`).
+	 */
 	function handleKeydown(e: KeyboardEvent) {
-		if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+		if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
 			e.preventDefault();
 			toggle();
 		}
@@ -137,7 +147,8 @@
 		? 'pointer-events-none opacity-0'
 		: 'opacity-100'}"
 	aria-label="Abrir chat de liquidaci&oacute;n"
-	title="Abrir chat de liquidaci&oacute;n"
+	aria-keyshortcuts="Meta+K Control+K"
+	title="Abrir chat de liquidaci&oacute;n (⌘K / Ctrl K)"
 >
 	<svg
 		class="h-6 w-6 text-white"

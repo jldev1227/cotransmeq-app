@@ -10,24 +10,47 @@
 	import TablaLista from '$lib/components/listing/TablaLista.svelte';
 	import CeldaIdentidad from '$lib/components/listing/CeldaIdentidad.svelte';
 	import AccionesFila from '$lib/components/listing/AccionesFila.svelte';
+	import EstadoPunto from '$lib/components/listing/EstadoPunto.svelte';
+	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
+	import SegmentosFiltro from '$lib/components/listing/SegmentosFiltro.svelte';
+	import TabsVista from '$lib/components/ui/TabsVista.svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
+	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
+	import ModalEditarUsuario from '$lib/components/usuarios/ModalEditarUsuario.svelte';
+	import ModalPermisosModulos from '$lib/components/usuarios/ModalPermisosModulos.svelte';
+	import ModalInvitarUsuario from '$lib/components/usuarios/ModalInvitarUsuario.svelte';
+	import ModalNuevoUsuario from '$lib/components/usuarios/ModalNuevoUsuario.svelte';
 	import { mascota } from '$lib/mascot';
-	import { Clock, Pencil, ShieldCheck } from 'lucide-svelte';
+	import {
+		Ban,
+		CircleCheck,
+		Clock,
+		Lock,
+		MailPlus,
+		Pencil,
+		Power,
+		RefreshCw,
+		ShieldCheck,
+		UserPlus,
+		X
+	} from 'lucide-svelte';
 	import type { ColumnDef } from '@tanstack/table-core';
 	import { onMount, onDestroy, untrack } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
-	import { quintOut } from 'svelte/easing';
 	import { toast } from 'svelte-sonner';
 	import { usuariosAPI, type Usuario, hasBonosPlanilla } from '$lib/api/usuarios';
 	import { sesionesAPI, type Sesion } from '$lib/api/sesiones';
 	import { apiClient } from '$lib/api/apiClient';
 	import { authStore } from '$lib/stores/auth';
-	import { AREA_LABELS, type Area, type AccessLevel } from '$lib/config/permissions';
-	import PermisosRutasPicker from '$lib/components/permisos/PermisosRutasPicker.svelte';
+	import { AREA_LABELS, type Area } from '$lib/config/permissions';
 	import { socketManager, socketUtils } from '$lib/socket';
 
 	// ─── Estado unificado ────────────────────────────────────────────────
 	let usuarios = $state<Usuario[]>([]);
 	let loading = $state(true);
+	/// Un fallo de carga se queda a la vista con «Reintentar». Antes solo
+	/// saltaba un aviso y la lista se pintaba vacía, como si no hubiera nadie.
+	let errorUsuarios = $state<string | null>(null);
 	let onlineIds = $state(new Set<string>());
 	/**
 	 * Filtros de la página, y con ellos la URL.
@@ -44,35 +67,15 @@
 	type FiltroBonos = 'TODOS' | 'CON_PERMISO' | 'SIN_PERMISO';
 	type TabUsuarios = 'equipo' | 'sesiones' | 'invitaciones' | 'permisos';
 
-	const TABS: Array<{ key: TabUsuarios; label: string }> = [
-		{ key: 'equipo', label: 'Equipo' },
-		{ key: 'sesiones', label: 'Sesiones' },
-		{ key: 'invitaciones', label: 'Invitaciones' },
-		{ key: 'permisos', label: 'Permisos' }
-	];
-
-	/**
-	 * Roles que ofrece el alta manual. Son los valores del enum
-	 * `enum_users_role` del backend; el label es solo para leerlos.
-	 *
-	 * El rol NO reemplaza a las áreas: quien decide a qué módulos entra
-	 * alguien es `area` (y, si se afina, `permisos_rutas`). Aquí se elige
-	 * porque `POST /api/usuarios` lo acepta y su default —`usuario`— no
-	 * siempre es el que toca.
-	 */
-	const ROLES: Array<{ value: string; label: string }> = [
-		{ value: 'usuario', label: 'Usuario' },
-		{ value: 'admin', label: 'Administrador' },
-		{ value: 'liquidador', label: 'Liquidador' },
-		{ value: 'facturador', label: 'Facturador' },
-		{ value: 'aprobador', label: 'Aprobador' },
-		{ value: 'gestor_flota', label: 'Gestor de flota' },
-		{ value: 'gestor_nomina', label: 'Gestor de nómina' },
-		{ value: 'gestor_servicio', label: 'Gestor de servicios' },
-		{ value: 'gestor_planillas', label: 'Gestor de planillas' },
-		{ value: 'kilometraje', label: 'Kilometraje' },
-		{ value: 'consulta', label: 'Consulta' }
-	];
+	/// Una sola cabecera para las cuatro pestañas, como en liquidaciones: la
+	/// descripción y los conteos cambian con la pestaña abierta.
+	const DESCRIPCION_TAB: Record<TabUsuarios, string> = {
+		equipo: 'Quién entra a la plataforma, con qué áreas y quién está conectado ahora.',
+		sesiones:
+			'Sesiones abiertas y cerradas de cada persona; las activas se pueden cerrar desde aquí.',
+		invitaciones: 'Invitaciones enviadas por correo y en qué quedó cada una.',
+		permisos: 'Permisos individuales que no dependen del área, como registrar bonos de planilla.'
+	};
 
 	const DEFS = {
 		/// La pestaña es un filtro más: sin ella en la URL, «mándame las
@@ -121,19 +124,24 @@
 		if (tab !== 'permisos') bonosSeleccionados = new Set();
 	}
 
-	/// Cuántos filtros de usuarios hay puestos. Los de la sección de sesiones
-	/// van aparte: tienen su propio botón de limpiar.
-	const filtrosActivos = $derived(
-		contarActivos(DEFS, filtros, [
-			'tab',
-			'sesion',
-			'qSesion',
-			'usuario',
-			'paginaSesiones',
-			'qBonos',
-			'bonos'
-		])
-	);
+	/// Los filtros que NO son de la pestaña Equipo: los de sesiones y bonos
+	/// tienen su propio control y no cuentan ni se limpian desde aquí.
+	const AJENOS_A_EQUIPO = [
+		'tab',
+		'sesion',
+		'qSesion',
+		'usuario',
+		'paginaSesiones',
+		'qBonos',
+		'bonos'
+	] as const;
+
+	/// Cuántos filtros de usuarios hay puestos.
+	const filtrosActivos = $derived(contarActivos(DEFS, filtros, [...AJENOS_A_EQUIPO]));
+
+	function limpiarFiltrosEquipo() {
+		filtros = limpiar(DEFS, filtros, [...AJENOS_A_EQUIPO]);
+	}
 
 	const filteredUsuarios = $derived(
 		usuarios.filter((u) => {
@@ -157,6 +165,7 @@
 	// ─── Sesiones ────────────────────────────────────────────────────────
 	let sesiones = $state<Sesion[]>([]);
 	let loadingSesiones = $state(true);
+	let errorSesiones = $state<string | null>(null);
 
 	/**
 	 * Cuántas sesiones se traen y cuántas se pintan de golpe.
@@ -224,47 +233,19 @@
 	}
 	let invitaciones = $state<Invitacion[]>([]);
 	let loadingInv = $state(true);
+	let errorInv = $state<string | null>(null);
 	let modalInvAbierto = $state(false);
-	let enviandoInv = $state(false);
-	let formCorreo = $state('');
-	let formAreas = $state<string[]>([]);
-	let formCargo = $state('');
-	let errorInv = $state('');
 
 	const invitacionesPendientes = $derived(invitaciones.filter((i) => i.estado === 'pendiente'));
 
 	// ─── Alta manual ─────────────────────────────────────────────────────
-	// Alternativa a la invitación: en vez de mandar un correo y esperar a que
-	// la persona elija su contraseña, se la crea aquí ya lista. Hace falta
-	// para quien no tiene correo corporativo, para quien tiene que poder
-	// entrar hoy, y para no depender de que un correo no caiga en spam.
-	//
-	// Va contra `POST /api/usuarios`, que ya existía en el backend (con
-	// `authMiddleware + requireAdmin`) pero no tenía ninguna pantalla que lo
-	// usara: el alta manual solo se podía hacer con curl.
+	// El formulario y sus reglas viven en `ModalNuevoUsuario`; aquí solo se
+	// abre y se recarga la lista al terminar.
 	let modalNuevoAbierto = $state(false);
-	let creandoNuevo = $state(false);
-	let nuevoNombre = $state('');
-	let nuevoCorreo = $state('');
-	let nuevoPassword = $state('');
-	let nuevoPasswordConfirm = $state('');
-	let nuevoTelefono = $state('');
-	let nuevoCargo = $state('');
-	let nuevoRole = $state('usuario');
-	let nuevoAreas = $state<string[]>([]);
-	let verPasswordNuevo = $state(false);
-	let errorNuevo = $state('');
 
 	// ─── Modales CRUD ───────────────────────────────────────────────────
 	let showEditModal = $state(false);
 	let editUsuario = $state<Usuario | null>(null);
-	let editNombre = $state('');
-	let editCorreo = $state('');
-	let editTelefono = $state('');
-	let editAreas = $state<string[]>([]);
-	/// Lista blanca por ruta del usuario editado. `null` = manda el área.
-	let editPermisosRutas = $state<Record<string, AccessLevel> | null>(null);
-	let savingEdit = $state(false);
 
 	let showConfirmModal = $state(false);
 	let confirmUsuario = $state<Usuario | null>(null);
@@ -273,23 +254,9 @@
 
 	let showPermisosModal = $state(false);
 	let permisosUsuario = $state<Usuario | null>(null);
-	let savingPermisos = $state(false);
 
 	let detailUsuario = $state<Usuario | null>(null);
 	let detailSesiones = $state<Sesion[]>([]);
-
-	const modulosDisponibles = [
-		{ id: 'flota', label: 'Flota' },
-		{ id: 'conductores', label: 'Conductores' },
-		{ id: 'servicios', label: 'Servicios' },
-		{ id: 'recargos', label: 'Recargos' },
-		{ id: 'clientes', label: 'Clientes' },
-		{ id: 'asistencias', label: 'Asistencias' },
-		{ id: 'acciones-correctivas', label: 'Acciones C/P' },
-		{ id: 'evaluaciones', label: 'Evaluaciones' },
-		{ id: 'nomina', label: 'Nómina' },
-		{ id: 'usuarios', label: 'Usuarios' }
-	];
 
 	// ─── Carga inicial ───────────────────────────────────────────────────
 	/// Función de baja; antes se usaba `off('usuario-deshabilitado')` sin
@@ -322,8 +289,10 @@
 	async function cargarUsuarios() {
 		try {
 			loading = true;
+			errorUsuarios = null;
 			usuarios = await usuariosAPI.listar();
 		} catch {
+			errorUsuarios = 'No se pudo cargar la lista de usuarios.';
 			toast.error('Error al cargar la lista de usuarios');
 		} finally {
 			loading = false;
@@ -347,7 +316,52 @@
 		{ id: 'acciones', header: '', enableSorting: false, size: 130 }
 	];
 
+	/// Una sesión por fila. Sin `accessorKey`: todas las celdas las pinta el
+	/// snippet y `TablaLista` no intenta leer un valor plano.
+	const COLUMNAS_SESIONES: ColumnDef<Sesion, any>[] = [
+		{ id: 'usuario', header: 'Usuario', enableSorting: false },
+		{ id: 'area', header: 'Área', enableSorting: false, size: 150 },
+		{ id: 'dispositivo', header: 'Dispositivo', enableSorting: false, size: 170 },
+		{ id: 'actividad', header: 'Actividad', enableSorting: false, size: 230 },
+		{ id: 'estado', header: 'Estado', enableSorting: false, size: 150 },
+		{ id: 'acciones', header: '', enableSorting: false, size: 64 }
+	];
+
+	const COLUMNAS_INVITACIONES: ColumnDef<Invitacion, any>[] = [
+		{ id: 'correo', header: 'Invitado', enableSorting: false },
+		{ id: 'areas', header: 'Áreas', enableSorting: false, size: 220 },
+		{ id: 'enviada', header: 'Enviada', enableSorting: false, size: 200 },
+		{ id: 'estado', header: 'Estado', enableSorting: false, size: 130 },
+		{ id: 'acciones', header: '', enableSorting: false, size: 100 }
+	];
+
+	const COLUMNAS_BONOS: ColumnDef<Usuario, any>[] = [
+		{ id: 'usuario', header: 'Usuario', enableSorting: false },
+		{ id: 'cargo', header: 'Cargo', enableSorting: false, size: 220 },
+		{ id: 'permiso', header: 'Bonos de planilla', enableSorting: false, size: 170 }
+	];
+
 	const STATUS_COLOR = { online: '#16a34a', offline: '#94a3b8', inactive: '#b42318' } as const;
+
+	/// Estado de una invitación: punto y palabra, como el resto de estados de
+	/// las listas. Los colores son de semáforo (literales), no de la marca.
+	const ESTADO_INV: Record<string, { etiqueta: string; color: string; apagado?: boolean }> = {
+		pendiente: { etiqueta: 'Pendiente', color: '#d97706' },
+		aceptada: { etiqueta: 'Aceptada', color: STATUS_COLOR.online },
+		expirada: { etiqueta: 'Expirada', color: '#dc2626' },
+		revocada: { etiqueta: 'Revocada', color: STATUS_COLOR.offline, apagado: true },
+		reemplazada: { etiqueta: 'Reemplazada', color: STATUS_COLOR.offline, apagado: true }
+	};
+
+	function estadoInv(estado: string) {
+		return (
+			ESTADO_INV[estado] ?? {
+				etiqueta: estado ? estado.charAt(0).toUpperCase() + estado.slice(1) : 'Sin estado',
+				color: STATUS_COLOR.offline,
+				apagado: true
+			}
+		);
+	}
 
 	function statusOf(u: Usuario): 'online' | 'inactive' | 'offline' {
 		if (u.activo === false) return 'inactive';
@@ -399,59 +413,136 @@
 		});
 	}
 
-	function estadoInvBadge(estado: string) {
-		const m: Record<string, string> = {
-			pendiente: 'estado-pill--amber',
-			aceptada: 'estado-pill--emerald',
-			expirada: 'estado-pill--red',
-			revocada: 'estado-pill--gray',
-			reemplazada: 'estado-pill--gray'
-		};
-		return m[estado] ?? 'estado-pill--gray';
+	// ─── Cabecera: conteos y filtros a la vista ─────────────────────────
+	/// Los conteos de cada pestaña van en la cabecera y filtran al pulsarlos;
+	/// antes eran los contadores de los chips de cada sección. Cuentan sobre
+	/// todo lo cargado, no sobre lo filtrado: son el estado del equipo.
+	const conteos = $derived.by(() => {
+		switch (filtros.tab) {
+			case 'equipo':
+				return [
+					{ clave: 'TODOS', etiqueta: 'Total', valor: usuarios.length },
+					{
+						clave: 'EN_LINEA',
+						etiqueta: 'En línea',
+						valor: enLineaCount,
+						color: STATUS_COLOR.online
+					},
+					{ clave: 'ACTIVOS', etiqueta: 'Activos', valor: activosCount },
+					{
+						clave: 'INACTIVOS',
+						etiqueta: 'Inactivos',
+						valor: inactivosCount,
+						color: STATUS_COLOR.inactive
+					}
+				];
+			case 'sesiones':
+				return [
+					{ clave: 'todas', etiqueta: 'Total', valor: sesiones.length },
+					{
+						clave: 'activas',
+						etiqueta: 'Activas',
+						valor: activasCount,
+						color: STATUS_COLOR.online
+					},
+					{
+						clave: 'cerradas',
+						etiqueta: 'Cerradas',
+						valor: sesiones.length - activasCount,
+						color: STATUS_COLOR.offline
+					}
+				];
+			case 'invitaciones':
+				return [
+					{ clave: 'todas', etiqueta: 'Total', valor: invitaciones.length },
+					...Object.entries(ESTADO_INV)
+						.map(([clave, e]) => ({
+							clave,
+							etiqueta: e.etiqueta + 's',
+							valor: invitaciones.filter((i) => i.estado === clave).length,
+							color: e.color
+						}))
+						/// Las pendientes siempre: son las que piden hacer algo.
+						.filter((c) => c.valor > 0 || c.clave === 'pendiente')
+				];
+			case 'permisos':
+				return isAdminUser
+					? [
+							{ clave: 'TODOS', etiqueta: 'Total equipo', valor: usuarios.length },
+							{
+								clave: 'CON_PERMISO',
+								etiqueta: 'Con permiso',
+								valor: totalConPermiso,
+								color: STATUS_COLOR.online
+							},
+							{
+								clave: 'SIN_PERMISO',
+								etiqueta: 'Sin permiso',
+								valor: totalSinPermiso,
+								color: STATUS_COLOR.offline
+							}
+						]
+					: [];
+		}
+	});
+
+	const conteoActivo = $derived(
+		filtros.tab === 'equipo'
+			? filtros.estado === 'TODOS'
+				? null
+				: filtros.estado
+			: filtros.tab === 'sesiones'
+				? filtros.sesion
+				: filtros.tab === 'permisos'
+					? filtros.bonos === 'TODOS'
+						? null
+						: filtros.bonos
+					: null
+	);
+
+	/// Pulsar un conteo filtra por él; pulsar otra vez el puesto lo quita.
+	/// Invitaciones no tiene filtro de estado, así que allí no son botones.
+	function elegirConteo(clave: string) {
+		if (filtros.tab === 'equipo') {
+			filtros.estado = (filtros.estado === clave ? 'TODOS' : clave) as EstadoUsuario;
+		} else if (filtros.tab === 'sesiones') {
+			filtros.sesion = clave as FiltroSesion;
+		} else if (filtros.tab === 'permisos') {
+			filtros.bonos = (filtros.bonos === clave ? 'TODOS' : clave) as FiltroBonos;
+		}
 	}
+
+	const SEGMENTOS_ESTADO = [
+		{ valor: 'TODOS', etiqueta: 'Todos' },
+		{ valor: 'EN_LINEA', etiqueta: 'En línea', punto: STATUS_COLOR.online },
+		{ valor: 'ACTIVOS', etiqueta: 'Activos' },
+		{ valor: 'INACTIVOS', etiqueta: 'Inactivos', punto: STATUS_COLOR.inactive }
+	];
+	const SEGMENTOS_SESION = [
+		{ valor: 'activas', etiqueta: 'Activas', punto: STATUS_COLOR.online },
+		{ valor: 'cerradas', etiqueta: 'Cerradas', punto: STATUS_COLOR.offline },
+		{ valor: 'todas', etiqueta: 'Todas' }
+	];
+	const SEGMENTOS_BONOS = [
+		{ valor: 'TODOS', etiqueta: 'Todos' },
+		{ valor: 'CON_PERMISO', etiqueta: 'Con permiso', punto: STATUS_COLOR.online },
+		{ valor: 'SIN_PERMISO', etiqueta: 'Sin permiso' }
+	];
 
 	// ─── Gestión usuarios ───────────────────────────────────────────────
-	function abrirEditModal(usuario: Usuario, e?: Event) {
-		e?.stopPropagation();
+	function abrirEditModal(usuario: Usuario) {
 		editUsuario = usuario;
-		editNombre = usuario.nombre;
-		editCorreo = usuario.correo;
-		editTelefono = usuario.telefono || '';
-		editAreas = Array.isArray(usuario.area)
-			? [...usuario.area]
-			: usuario.area
-				? [usuario.area as string]
-				: [];
-		editPermisosRutas = usuario.permisos_rutas ?? null;
 		showEditModal = true;
 	}
+
+	/// El usuario se conserva al cerrar: el modal anima la salida con su
+	/// contenido todavía a la vista.
 	function cerrarEditModal() {
 		showEditModal = false;
-		editUsuario = null;
 	}
 
-	async function guardarEdit() {
-		if (!editUsuario) return;
-		savingEdit = true;
-		try {
-			const updated = await usuariosAPI.actualizar(editUsuario.id, {
-				nombre: editNombre,
-				correo: editCorreo,
-				telefono: editTelefono,
-				area: editAreas,
-				// `{}` y `null` significan lo mismo («manda el área»); se normaliza
-				// para no dejar objetos vacíos que luego cueste distinguir.
-				permisos_rutas:
-					editPermisosRutas && Object.keys(editPermisosRutas).length > 0 ? editPermisosRutas : null
-			});
-			usuarios = usuarios.map((u) => (u.id === updated.id ? updated : u));
-			toast.success(`${editNombre} actualizado correctamente`);
-			cerrarEditModal();
-		} catch (err: any) {
-			toast.error(err?.response?.data?.error || 'Error al actualizar usuario');
-		} finally {
-			savingEdit = false;
-		}
+	function alGuardarUsuario(actualizado: Usuario) {
+		usuarios = usuarios.map((u) => (u.id === actualizado.id ? actualizado : u));
 	}
 
 	function abrirConfirmToggle(usuario: Usuario, e?: Event) {
@@ -462,25 +553,25 @@
 	}
 	function cerrarConfirmModal() {
 		showConfirmModal = false;
-		confirmUsuario = null;
 	}
 
 	async function confirmarToggle() {
 		if (!confirmUsuario) return;
 		savingToggle = true;
 		const nuevoEstado = confirmAction === 'enable';
+		const objetivo = confirmUsuario;
 		try {
-			const updated = await usuariosAPI.toggleActivo(confirmUsuario.id, nuevoEstado);
+			const updated = await usuariosAPI.toggleActivo(objetivo.id, nuevoEstado);
 			usuarios = usuarios.map((u) => (u.id === updated.id ? updated : u));
 			if (!nuevoEstado) {
 				// Cerrar las sesiones activas del usuario deshabilitado
 				sesiones = sesiones.map((s) =>
-					s.usuario_id === confirmUsuario!.id && s.is_active
+					s.usuario_id === objetivo.id && s.is_active
 						? { ...s, is_active: false, closed_at: new Date().toISOString() }
 						: s
 				);
 			}
-			toast.success(`${confirmUsuario.nombre} ${nuevoEstado ? 'habilitado' : 'deshabilitado'}`);
+			toast.success(`${objetivo.nombre} ${nuevoEstado ? 'habilitado' : 'deshabilitado'}`);
 			cerrarConfirmModal();
 		} catch {
 			toast.error('Error al cambiar estado del usuario');
@@ -489,49 +580,12 @@
 		}
 	}
 
-	function abrirPermisos(usuario: Usuario, e?: Event) {
-		e?.stopPropagation();
-		const permisosCompletos: Record<string, boolean> = {};
-		for (const modulo of modulosDisponibles)
-			permisosCompletos[modulo.id] = usuario.permisos?.[modulo.id] ?? false;
-		permisosUsuario = { ...usuario, permisos: permisosCompletos };
+	function abrirPermisos(usuario: Usuario) {
+		permisosUsuario = usuario;
 		showPermisosModal = true;
 	}
 	function cerrarPermisosModal() {
 		showPermisosModal = false;
-		permisosUsuario = null;
-	}
-	function togglePermiso(moduloId: string) {
-		if (!permisosUsuario?.permisos) return;
-		permisosUsuario = {
-			...permisosUsuario,
-			permisos: { ...permisosUsuario.permisos, [moduloId]: !permisosUsuario.permisos[moduloId] }
-		};
-	}
-	function toggleTodos(valor: boolean) {
-		if (!permisosUsuario) return;
-		const nuevosPermisos: Record<string, boolean> = {};
-		for (const modulo of modulosDisponibles) nuevosPermisos[modulo.id] = valor;
-		permisosUsuario = { ...permisosUsuario, permisos: nuevosPermisos };
-	}
-	async function guardarPermisos() {
-		if (!permisosUsuario?.permisos) return;
-		savingPermisos = true;
-		try {
-			const updated = await usuariosAPI.actualizarPermisos(
-				permisosUsuario.id,
-				permisosUsuario.permisos
-			);
-			usuarios = usuarios.map((u) => (u.id === updated.id ? updated : u));
-			if (currentUser && permisosUsuario.id === currentUser.id)
-				authStore.updateUserPermisos(permisosUsuario.permisos as any);
-			toast.success(`Permisos de ${permisosUsuario.nombre} actualizados`);
-			cerrarPermisosModal();
-		} catch {
-			toast.error('Error al guardar permisos');
-		} finally {
-			savingPermisos = false;
-		}
 	}
 
 	// ─── Detalle lateral de usuario ─────────────────────────────────────
@@ -548,12 +602,23 @@
 		detailUsuario = null;
 	}
 
+	/// Filtros de la pestaña Sesiones que vacían la lista. El de estado
+	/// (activas / cerradas) no entra: es la vista, no un filtro que estorbe.
+	const hayFiltrosSesiones = $derived(!!filtros.qSesion.trim() || !!filtros.usuario);
+
+	function limpiarFiltrosSesiones() {
+		filtros.qSesion = '';
+		limpiarFocoSesiones();
+	}
+
 	// ─── Sesiones ───────────────────────────────────────────────────────
 	async function cargarSesiones() {
 		try {
 			loadingSesiones = true;
+			errorSesiones = null;
 			sesiones = await sesionesAPI.listar({ limit: LIMITE_SESIONES });
 		} catch {
+			errorSesiones = 'No se pudieron cargar las sesiones.';
 			toast.error('Error al cargar las sesiones');
 		} finally {
 			loadingSesiones = false;
@@ -600,49 +665,18 @@
 	async function cargarInvitaciones() {
 		try {
 			loadingInv = true;
+			errorInv = null;
 			const res = await apiClient.get('/api/invitaciones');
 			invitaciones = res.data;
 		} catch {
+			errorInv = 'No se pudieron cargar las invitaciones.';
 			toast.error('Error cargando invitaciones');
 		} finally {
 			loadingInv = false;
 		}
 	}
 	function abrirModalInv() {
-		formCorreo = '';
-		formAreas = [];
-		formCargo = '';
-		errorInv = '';
 		modalInvAbierto = true;
-	}
-	function toggleAreaInv(v: string) {
-		formAreas = formAreas.includes(v) ? formAreas.filter((a) => a !== v) : [...formAreas, v];
-	}
-	async function enviarInvitacion() {
-		errorInv = '';
-		if (!formCorreo) {
-			errorInv = 'Ingresa un correo';
-			return;
-		}
-		if (formAreas.length === 0) {
-			errorInv = 'Selecciona al menos un área';
-			return;
-		}
-		try {
-			enviandoInv = true;
-			await apiClient.post('/api/invitaciones', {
-				correo: formCorreo,
-				area: formAreas,
-				cargo: formCargo || undefined
-			});
-			toast.success('Invitación enviada');
-			modalInvAbierto = false;
-			cargarInvitaciones();
-		} catch (e: any) {
-			errorInv = e?.response?.data?.error || 'Error enviando invitación';
-		} finally {
-			enviandoInv = false;
-		}
 	}
 	async function revocarInvitacion(id: string) {
 		try {
@@ -669,72 +703,7 @@
 
 	// ─── Alta manual ────────────────────────────────────────────────────
 	function abrirModalNuevo() {
-		nuevoNombre = '';
-		nuevoCorreo = '';
-		nuevoPassword = '';
-		nuevoPasswordConfirm = '';
-		nuevoTelefono = '';
-		nuevoCargo = '';
-		nuevoRole = 'usuario';
-		nuevoAreas = [];
-		verPasswordNuevo = false;
-		errorNuevo = '';
 		modalNuevoAbierto = true;
-	}
-	function toggleAreaNuevo(v: string) {
-		nuevoAreas = nuevoAreas.includes(v) ? nuevoAreas.filter((a) => a !== v) : [...nuevoAreas, v];
-	}
-	async function crearUsuario() {
-		errorNuevo = '';
-
-		// Las mismas reglas que aplica `createUsuarioSchema` en el backend. Se
-		// repiten aquí para avisar sin ir y volver, no para sustituirlo: el
-		// backend las vuelve a aplicar porque esta pantalla no es la única
-		// forma de llegar a la ruta.
-		if (nuevoNombre.trim().length < 2) {
-			errorNuevo = 'El nombre debe tener al menos 2 caracteres';
-			return;
-		}
-		if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(nuevoCorreo.trim())) {
-			errorNuevo = 'Ingresa un correo electrónico válido';
-			return;
-		}
-		if (nuevoPassword.length < 6) {
-			errorNuevo = 'La contraseña debe tener al menos 6 caracteres';
-			return;
-		}
-		if (nuevoPassword !== nuevoPasswordConfirm) {
-			errorNuevo = 'Las contraseñas no coinciden';
-			return;
-		}
-		if (nuevoAreas.length === 0) {
-			errorNuevo = 'Selecciona al menos un área';
-			return;
-		}
-
-		try {
-			creandoNuevo = true;
-			await apiClient.post('/api/usuarios', {
-				nombre: nuevoNombre.trim(),
-				correo: nuevoCorreo.trim().toLowerCase(),
-				password: nuevoPassword,
-				telefono: nuevoTelefono.trim() || undefined,
-				cargo: nuevoCargo.trim() || undefined,
-				role: nuevoRole,
-				area: nuevoAreas
-			});
-			toast.success(`Usuario ${nuevoNombre.trim()} creado`);
-			modalNuevoAbierto = false;
-			cargarUsuarios();
-		} catch (e: any) {
-			// El 409 de correo duplicado trae el detalle en `message`; el 400 de
-			// zod, en `error`. Sin este orden el duplicado sale como «Datos
-			// inválidos», que no dice cuál es el problema.
-			errorNuevo =
-				e?.response?.data?.message || e?.response?.data?.error || 'No se pudo crear el usuario';
-		} finally {
-			creandoNuevo = false;
-		}
 	}
 
 	// ─── Permiso individual: bonos de planilla ───────────────────
@@ -776,6 +745,14 @@
 	const totalConPermiso = $derived(usuarios.filter((u) => hasBonosPlanilla(u)).length);
 	const totalSinPermiso = $derived(usuarios.length - totalConPermiso);
 
+	/// Filtros de la pestaña Permisos que pueden dejar la lista vacía.
+	const hayFiltrosBonos = $derived(!!filtros.qBonos.trim() || filtros.bonos !== 'TODOS');
+
+	function limpiarFiltrosBonos() {
+		filtros.qBonos = '';
+		filtros.bonos = 'TODOS';
+	}
+
 	/**
 	 * Selección de usuarios para el permiso de bonos.
 	 *
@@ -783,6 +760,9 @@
 	 * reasignárselo a sí mismo. Ese truco —`x = x`— funcionaba en Svelte 4,
 	 * pero aquí asignar la MISMA referencia no repinta: las casillas y el
 	 * contador «N seleccionados» se habrían quedado clavados.
+	 *
+	 * Pulsar la fila marca o desmarca, como pulsaba la tarjeta de antes; la
+	 * casilla de la cabecera de la tabla marca todos los del filtro.
 	 */
 	function toggleSeleccionBonos(userId: string) {
 		const siguiente = new Set(bonosSeleccionados);
@@ -791,6 +771,14 @@
 		bonosSeleccionados = siguiente;
 	}
 
+	/**
+	 * «Seleccionar todos los del filtro», en la barra de acciones.
+	 *
+	 * Hace lo mismo que la casilla de la cabecera de la tabla, pero en el
+	 * móvil la tabla pasa a tarjetas y la cabecera no se ve: sin esta casilla
+	 * no habría forma de marcarlos todos. Con todos marcados, la desmarca
+	 * entera; si no, deja marcados exactamente los del filtro.
+	 */
 	function seleccionarTodosBonos() {
 		if (bonosSeleccionados.size === usuariosBonos.length) {
 			bonosSeleccionados = new Set();
@@ -846,157 +834,115 @@
 
 <svelte:head><title>Equipo · Cotransmeq</title></svelte:head>
 
-<div class="usuarios-page" in:fly={{ y: 20, duration: 500, easing: quintOut }}>
-	<!-- ═══ BARRA DE PÁGINA ═══
-	     Título, acciones y pestañas. Antes era un hero editorial con párrafo y
-	     una franja de seis métricas: ~250 px que empujaban el contenido fuera
-	     de pantalla. Las métricas no se pierden — Total/En línea/Activos/
-	     Inactivos son los contadores de los chips de Equipo, y Sesiones e
-	     Invitaciones son los badges de sus pestañas, que es donde el número
-	     sirve para decidir adónde ir.
-	-->
-	<header class="page-toolbar" in:fade={{ duration: 400 }}>
-		<div class="toolbar-top">
-			<div class="toolbar-title">
-				<h1>Personas y accesos</h1>
-			</div>
+<!-- Carga y error de cada pestaña, dentro del mismo marco blanco que la tabla
+     para que la página no salte al llegar los datos. -->
+{#snippet bloqueCarga(mensaje: string)}
+	<div class="usr-marco">
+		<CargaMascota texto={mensaje} />
+	</div>
+{/snippet}
 
-			<div class="toolbar-actions">
-				<button class="btn-secondary" onclick={abrirModalNuevo}>
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z"
-						/>
-					</svg>
-					Nuevo usuario
-				</button>
-				<button class="btn-primary" onclick={abrirModalInv}>
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M18 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM3 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 019.374 21c-2.331 0-4.512-.645-6.374-1.766z"
-						/>
-					</svg>
-					Invitar usuario
-				</button>
-			</div>
+{#snippet bloqueError(mensaje: string, reintentar: () => void)}
+	{@const img = mascota('advertencia')}
+	<div class="usr-marco">
+		<div class="dir-vacio" role="alert">
+			<img src={img.src} alt={img.alt} width="418" height="418" />
+			<h3>No se pudo cargar</h3>
+			<p>{mensaje} Revisa la conexión e inténtalo de nuevo.</p>
+			<button class="btn-secondary" onclick={reintentar}>Reintentar</button>
+		</div>
+	</div>
+{/snippet}
+
+<div class="dir-pagina usr-pagina" in:fade={{ duration: 400 }}>
+	<!-- ── CABECERA: título, conteos de la pestaña y acciones ─────── -->
+	<header class="page-card dir-cabecera" style="padding: 1.25rem 1.5rem;">
+		<div class="dir-cabecera-texto">
+			<h1 class="dir-titulo">Personas y accesos</h1>
+			<p class="dir-desc">{DESCRIPCION_TAB[filtros.tab]}</p>
+			{#if conteos.length > 0}
+				<div class="dir-conteos">
+					<ResumenConteos
+						{conteos}
+						activo={conteoActivo}
+						onElegir={filtros.tab === 'invitaciones' ? undefined : elegirConteo}
+					/>
+				</div>
+			{/if}
 		</div>
 
-		<div class="tabs" role="tablist" aria-label="Secciones de equipo">
-			{#each TABS as t (t.key)}
-				{@const badge =
-					t.key === 'sesiones'
-						? activasCount
-						: t.key === 'invitaciones'
-							? invitacionesPendientes.length
-							: 0}
-				<button
-					class="tab"
-					class:tab--active={filtros.tab === t.key}
-					role="tab"
-					aria-selected={filtros.tab === t.key}
-					onclick={() => cambiarTab(t.key)}
-				>
-					{t.label}
-					{#if badge > 0}<span class="tab-badge">{badge}</span>{/if}
-				</button>
-			{/each}
+		<div class="dir-cabecera-acciones">
+			<button class="btn-secondary" onclick={abrirModalNuevo}>
+				<UserPlus strokeWidth={2} aria-hidden="true" />
+				Nuevo usuario
+			</button>
+			<button class="btn-primary" onclick={abrirModalInv}>
+				<MailPlus strokeWidth={2} aria-hidden="true" />
+				Invitar usuario
+			</button>
 		</div>
 	</header>
 
+	<!-- Las dos cifras que piden atención (sesiones activas, invitaciones
+	     pendientes) van además en la pestaña: se ven sin entrar. -->
+	<div in:fly={{ y: 12, duration: 400, delay: 60 }}>
+		<TabsVista
+			tabs={[
+				{ id: 'equipo', label: 'Equipo' },
+				{ id: 'sesiones', label: 'Sesiones', cuenta: activasCount || null },
+				{
+					id: 'invitaciones',
+					label: 'Invitaciones',
+					cuenta: invitacionesPendientes.length || null
+				},
+				{ id: 'permisos', label: 'Permisos' }
+			]}
+			activa={filtros.tab}
+			etiqueta="Secciones de equipo"
+			onCambiar={(t) => cambiarTab(t as TabUsuarios)}
+		/>
+	</div>
+
 	{#if filtros.tab === 'equipo'}
-		<section class="section">
-			<div class="filters-bar">
-				<BuscadorLista
-					bind:valor={filtros.q}
-					onBuscar={(termino) => (filtros.q = termino)}
-					placeholder="Buscar por nombre, correo o cargo…"
-				/>
-
-				<!-- El contador va dentro del chip que filtra por ese mismo estado.
-				     Antes vivía en una franja aparte del hero, que repetía la
-				     palabra «Activos» a dos centímetros del chip «Activos» y no
-				     se podía pulsar. -->
-				<div class="filter-group">
-					{#each [{ k: 'TODOS', l: 'Todos', n: usuarios.length }, { k: 'EN_LINEA', l: 'En línea', n: enLineaCount }, { k: 'ACTIVOS', l: 'Activos', n: activosCount }, { k: 'INACTIVOS', l: 'Inactivos', n: inactivosCount }] as f}
-						<button
-							class="chip"
-							class:chip--active={filtros.estado === f.k}
-							onclick={() => (filtros.estado = f.k as typeof filtros.estado)}
-						>
-							{#if f.k === 'EN_LINEA'}<span class="chip-dot chip-dot--emerald" aria-hidden="true"
-								></span>{/if}
-							{f.l}
-							<span class="chip-count">{f.n}</span>
-						</button>
-					{/each}
+		<section class="usr-seccion" in:fly={{ y: 8, duration: 300 }}>
+			<div class="dir-filtros">
+				<div class="dir-filtros-buscador">
+					<BuscadorLista
+						bind:valor={filtros.q}
+						onBuscar={(termino) => (filtros.q = termino)}
+						placeholder="Buscar por nombre, correo o cargo…"
+						etiqueta="Buscar usuarios"
+					/>
 				</div>
-
-				<select bind:value={filtros.area} class="select">
-					<option value="">Todas las áreas</option>
-					{#each Object.entries(AREA_LABELS) as [key, label]}
-						<option value={key}>{label}</option>
-					{/each}
-				</select>
-
+				<SegmentosFiltro
+					etiqueta="Estado"
+					opciones={SEGMENTOS_ESTADO}
+					valor={filtros.estado}
+					onCambiar={(v) => (filtros.estado = v as EstadoUsuario)}
+				/>
+				<label class="usr-select">
+					<span>Área</span>
+					<select bind:value={filtros.area}>
+						<option value="">Todas</option>
+						{#each Object.entries(AREA_LABELS) as [key, label] (key)}
+							<option value={key}>{label}</option>
+						{/each}
+					</select>
+				</label>
 				{#if filtrosActivos > 0}
-					<button
-						class="clear-btn"
-						onclick={() =>
-							(filtros = limpiar(DEFS, filtros, [
-								'tab',
-								'sesion',
-								'qSesion',
-								'usuario',
-								'paginaSesiones',
-								'qBonos',
-								'bonos'
-							]))}
-					>
-						<svg
-							class="h-3.5 w-3.5"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-							stroke-width="2"
-						>
-							<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-						</svg>
+					<button class="btn-secondary usr-btn-sm" onclick={limpiarFiltrosEquipo}>
+						<X strokeWidth={2} aria-hidden="true" />
 						Limpiar
 					</button>
 				{/if}
 			</div>
 
 			{#if loading}
-				<div class="state-block">
-					<div class="spin-ring" aria-hidden="true"></div>
-					<p>Cargando equipo…</p>
-				</div>
-			{:else if filteredUsuarios.length === 0}
-				<div class="empty-state" in:fade>
-					<div class="empty-icon" aria-hidden="true">
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.4">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"
-							/>
-						</svg>
-					</div>
-					<h3>Sin resultados</h3>
-					<p>Ajusta los filtros o invita a un nuevo miembro al equipo.</p>
-					<button class="btn-primary" onclick={abrirModalInv}>
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-						</svg>
-						Invitar usuario
-					</button>
-				</div>
+				{@render bloqueCarga('Cargando equipo…')}
+			{:else if errorUsuarios}
+				{@render bloqueError(errorUsuarios, cargarUsuarios)}
 			{:else}
-				<div class="dir-lista" in:fade={{ duration: 300 }}>
+				<div class="dir-lista">
 					<TablaLista
 						columnas={COLUMNAS_EQUIPO}
 						datos={filteredUsuarios}
@@ -1047,8 +993,12 @@
 										class="user-status-toggle"
 										class:user-status-toggle--on={u.activo !== false}
 										class:user-status-toggle--off={u.activo === false}
+										role="switch"
+										aria-checked={u.activo !== false}
 										title={u.activo !== false ? 'Deshabilitar usuario' : 'Habilitar usuario'}
-										aria-label={u.activo !== false ? 'Deshabilitar' : 'Habilitar'}
+										aria-label={u.activo !== false
+											? `Deshabilitar a ${u.nombre}`
+											: `Habilitar a ${u.nombre}`}
 										disabled={u.id === currentUser?.id}
 										onclick={(e) => abrirConfirmToggle(u, e)}
 									>
@@ -1085,8 +1035,22 @@
 							{@const img = mascota('vacio')}
 							<div class="dir-vacio">
 								<img src={img.src} alt={img.alt} width="418" height="418" />
-								<h3>Sin resultados</h3>
-								<p>Ajusta los filtros o invita a un nuevo miembro al equipo.</p>
+								<h3>No hay usuarios</h3>
+								<p>
+									{filtrosActivos > 0
+										? 'No se encontraron usuarios con los filtros aplicados.'
+										: 'Invita al primer miembro del equipo o créale la cuenta a mano.'}
+								</p>
+								{#if filtrosActivos > 0}
+									<button class="btn-secondary" onclick={limpiarFiltrosEquipo}>
+										Limpiar filtros
+									</button>
+								{:else}
+									<button class="btn-primary" onclick={abrirModalInv}>
+										<MailPlus strokeWidth={2} aria-hidden="true" />
+										Invitar usuario
+									</button>
+								{/if}
 							</div>
 						{/snippet}
 					</TablaLista>
@@ -1096,25 +1060,19 @@
 	{/if}
 
 	{#if filtros.tab === 'sesiones'}
-		<section class="section">
+		<section class="usr-seccion" in:fly={{ y: 8, duration: 300 }}>
 			{#if detailUsuario}
 				<div class="foco-usuario">
 					<p>
 						Sesiones de <strong>{detailUsuario.nombre}</strong>.
-						<button class="link-btn" onclick={limpiarFocoSesiones}>Ver todas</button>
+						<button class="usr-enlace" onclick={limpiarFocoSesiones}>Ver todas</button>
 					</p>
 					<button
-						class="btn-secondary btn-secondary--sm"
+						class="btn-secondary usr-btn-sm"
 						onclick={() => cerrarTodasUsuario(detailUsuario!.id, detailUsuario!.nombre)}
 						disabled={!detailSesiones.some((s) => s.is_active)}
 					>
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
-							/>
-						</svg>
+						<Ban strokeWidth={2} aria-hidden="true" />
 						Cerrar todas
 					</button>
 				</div>
@@ -1127,209 +1085,137 @@
 				</p>
 			{/if}
 
-			<div class="filters-bar">
-				<BuscadorLista
-					bind:valor={filtros.qSesion}
-					onBuscar={(termino) => (filtros.qSesion = termino)}
-					placeholder="Buscar por usuario, correo o IP…"
-				/>
-
-				<div class="filter-group">
-					{#each [{ k: 'activas', l: 'Activas', n: activasCount }, { k: 'cerradas', l: 'Cerradas', n: sesiones.length - activasCount }, { k: 'todas', l: 'Todas', n: sesiones.length }] as f}
-						<button
-							class="chip"
-							class:chip--active={filtros.sesion === f.k}
-							onclick={() => (filtros.sesion = f.k as typeof filtros.sesion)}
-						>
-							{f.l}
-							<span class="chip-count">{f.n}</span>
-						</button>
-					{/each}
+			<div class="dir-filtros">
+				<div class="dir-filtros-buscador">
+					<BuscadorLista
+						bind:valor={filtros.qSesion}
+						onBuscar={(termino) => (filtros.qSesion = termino)}
+						placeholder="Buscar por usuario, correo o IP…"
+						etiqueta="Buscar sesiones"
+					/>
 				</div>
+				<SegmentosFiltro
+					etiqueta="Sesiones"
+					opciones={SEGMENTOS_SESION}
+					valor={filtros.sesion}
+					onCambiar={(v) => (filtros.sesion = v as FiltroSesion)}
+				/>
 			</div>
 
 			{#if loadingSesiones}
-				<div class="state-block">
-					<div class="spin-ring" aria-hidden="true"></div>
-					<p>Cargando sesiones…</p>
-				</div>
-			{:else if sesionesVisibles.length === 0}
-				<div class="state-block" in:fade>
-					<p>
-						{filtros.sesion === 'activas'
-							? 'No hay sesiones activas en este momento.'
-							: 'No hay sesiones que coincidan con los filtros.'}
-					</p>
-				</div>
+				{@render bloqueCarga('Cargando sesiones…')}
+			{:else if errorSesiones}
+				{@render bloqueError(errorSesiones, cargarSesiones)}
 			{:else}
-				<div class="sessions-list">
-					{#each sesionesPaginadas as s, i (s.id)}
-						<div
-							class="session-card session-card--{s.is_active ? 'active' : 'closed'}"
-							in:fly={{ y: 8, duration: 220, delay: Math.min(i * 18, 280), easing: quintOut }}
-						>
-							<div class="session-main">
-								<div class="session-avatar">
-									{initials(s.usuario?.nombre || '?')}
-									<span
-										class="session-dot session-dot--{s.is_active ? 'active' : 'closed'}"
-										aria-hidden="true"
-									></span>
+				<div class="dir-lista">
+					<TablaLista
+						columnas={COLUMNAS_SESIONES}
+						datos={sesionesPaginadas}
+						claveFila={(s) => s.id}
+						etiqueta="Sesiones de usuarios"
+					>
+						{#snippet celda({ columnaId, fila: s })}
+							{#if columnaId === 'usuario'}
+								<CeldaIdentidad
+									titulo={s.usuario?.nombre || '—'}
+									subtitulo={s.usuario?.correo ?? undefined}
+									iniciales={initials(s.usuario?.nombre || '?')}
+									punto={s.is_active ? STATUS_COLOR.online : STATUS_COLOR.offline}
+								/>
+							{:else if columnaId === 'area'}
+								{#if s.usuario?.area}
+									<span class="dir-celda"
+										>{AREA_LABELS[s.usuario.area as Area] ?? s.usuario.area}</span
+									>
+								{:else}
+									<span class="dir-nulo">—</span>
+								{/if}
+							{:else if columnaId === 'dispositivo'}
+								<div class="dir-celda">
+									<span>
+										{parseBrowser(s.user_agent)}{#if parseOS(s.user_agent)}
+											· {parseOS(s.user_agent)}{/if}
+									</span>
+									{#if s.ip}<small class="usr-mono">{s.ip}</small>{/if}
 								</div>
-								<div class="session-text">
-									<div class="session-row">
-										<strong>{s.usuario?.nombre || '—'}</strong>
-										<span class="session-mail">{s.usuario?.correo ?? ''}</span>
-									</div>
-									<div class="session-meta">
-										{#if s.usuario?.area}
-											<span class="meta-item">
-												<svg
-													class="h-3 w-3"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-													stroke-width="2"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"
-													/>
-												</svg>
-												{AREA_LABELS[s.usuario.area as Area] ?? s.usuario.area}
-											</span>
-										{/if}
-										<span class="meta-item">
-											<svg
-												class="h-3 w-3"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-												stroke-width="2"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													d="M9 17.25v1.007a3 3 0 01-.879 2.122L7.5 21h9l-.621-.621A3 3 0 0115 18.257V17.25m6-12V15a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 15V5.25m18 0A2.25 2.25 0 0018.75 3H5.25A2.25 2.25 0 003 5.25m18 0V12a2.25 2.25 0 01-2.25 2.25H5.25A2.25 2.25 0 013 12V5.25"
-												/>
-											</svg>
-											{parseBrowser(s.user_agent)}
-										</span>
-										{#if parseOS(s.user_agent)}
-											<span class="meta-item">
-												<svg
-													class="h-3 w-3"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-													stroke-width="2"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21"
-													/>
-												</svg>
-												{parseOS(s.user_agent)}
-											</span>
-										{/if}
-										{#if s.ip}
-											<span class="meta-item">
-												<svg
-													class="h-3 w-3"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-													stroke-width="2"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418"
-													/>
-												</svg>
-												<span class="mono">{s.ip}</span>
-											</span>
-										{/if}
-										{#if s.remember_me}
-											<span
-												class="meta-item meta-item--emerald"
-												title="Sesión persistente (recordar sesión)"
-											>
-												<svg
-													class="h-3 w-3"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-													stroke-width="2"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z"
-													/>
-												</svg>
-												persistente
-											</span>
-										{/if}
-									</div>
-								</div>
-							</div>
-
-							<div class="session-side">
-								<div class="session-time">
+							{:else if columnaId === 'actividad'}
+								<!-- Duración y expiración las mostraba la tabla de
+								     `/dashboard/sesiones`, que ahora redirige aquí. -->
+								<div class="dir-celda dir-celda--fecha">
 									{#if s.is_active}
-										<span class="estado-pill estado-pill--emerald">
-											<span class="pulse-dot" aria-hidden="true"></span>Activa
-										</span>
-										<small>Inicio: {formatDate(s.created_at)}</small>
+										<span>Inicio: {formatDate(s.created_at)}</span>
 										<small>Última act.: {formatDate(s.last_activity)}</small>
-										<!-- Duración y expiración las mostraba la tabla de
-									     `/dashboard/sesiones`, que ahora redirige aquí. -->
-										<small>Duración: {s.duracion_texto || '—'}</small>
 										<small>Expira: {formatDate(s.token_expiry)}</small>
+									{:else if s.closed_at}
+										<span>Cerrada: {formatDate(s.closed_at)}</span>
 									{:else}
-										<span class="estado-pill estado-pill--gray">Cerrada</span>
-										<small>Duración: {s.duracion_texto || '—'}</small>
-										{#if s.closed_at}<small>Cerrada: {formatDate(s.closed_at)}</small>{/if}
+										<span class="dir-nulo">—</span>
 									{/if}
 								</div>
-								{#if s.is_active}
-									<button
-										class="icon-btn icon-btn--danger"
-										title="Cerrar esta sesión"
-										aria-label="Cerrar sesión de {s.usuario?.nombre}"
-										onclick={() => cerrarSesion(s.id)}
-									>
-										<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												d="M5.636 5.636a9 9 0 1012.728 0M12 3v9"
-											/>
-										</svg>
+							{:else if columnaId === 'estado'}
+								<div class="dir-celda">
+									<EstadoPunto
+										etiqueta={s.is_active ? 'Activa' : 'Cerrada'}
+										color={s.is_active ? STATUS_COLOR.online : STATUS_COLOR.offline}
+										apagado={!s.is_active}
+									/>
+									<small>Duración: {s.duracion_texto || '—'}</small>
+									{#if s.remember_me}
+										<small title="Sesión persistente (recordar sesión)">Persistente</small>
+									{/if}
+								</div>
+							{:else if columnaId === 'acciones'}
+								<AccionesFila
+									acciones={[
+										{
+											id: 'cerrar',
+											etiqueta: `Cerrar sesión de ${s.usuario?.nombre ?? 'este usuario'}`,
+											icono: Power,
+											peligrosa: true,
+											oculta: !s.is_active,
+											onClick: () => cerrarSesion(s.id)
+										}
+									]}
+								/>
+							{/if}
+						{/snippet}
+
+						{#snippet vacio()}
+							{@const img = mascota('vacio')}
+							<div class="dir-vacio">
+								<img src={img.src} alt={img.alt} width="418" height="418" />
+								<h3>Sin sesiones</h3>
+								<p>
+									{filtros.sesion === 'activas' && !hayFiltrosSesiones
+										? 'No hay sesiones activas en este momento.'
+										: 'No hay sesiones que coincidan con los filtros.'}
+								</p>
+								{#if hayFiltrosSesiones}
+									<button class="btn-secondary" onclick={limpiarFiltrosSesiones}>
+										Limpiar filtros
 									</button>
 								{/if}
 							</div>
-						</div>
-					{/each}
+						{/snippet}
+					</TablaLista>
 				</div>
 
-				<PaginadorLista
-					pagina={filtros.paginaSesiones}
-					total={sesionesVisibles.length}
-					porPagina={POR_PAGINA_SESIONES}
-					onCambiar={(p) => (filtros.paginaSesiones = p)}
-					cargando={loadingSesiones}
-					nombreItems="sesiones"
-				/>
+				{#if sesionesVisibles.length > 0}
+					<PaginadorLista
+						pagina={filtros.paginaSesiones}
+						total={sesionesVisibles.length}
+						porPagina={POR_PAGINA_SESIONES}
+						onCambiar={(p) => (filtros.paginaSesiones = p)}
+						cargando={loadingSesiones}
+						nombreItems="sesiones"
+					/>
+				{/if}
 			{/if}
 		</section>
 	{/if}
 
 	{#if filtros.tab === 'permisos'}
-		<section class="section">
+		<section class="usr-seccion" in:fly={{ y: 8, duration: 300 }}>
 			<p class="tab-nota">
 				Otorga o revoca el permiso individual <strong>bonos-planilla</strong> a uno o varios
 				usuarios. Solo quienes tengan este permiso activo pueden marcar y guardar bonos
@@ -1339,208 +1225,153 @@
 			</p>
 
 			{#if !isAdminUser}
-				<div class="alert-block">
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z"
-						/>
-					</svg>
+				<div class="alert-block" role="note">
+					<Lock size={20} strokeWidth={1.8} aria-hidden="true" />
 					<p>
 						Esta sección solo es visible para administradores. Si necesitas gestionar este permiso,
 						contacta a un administrador del sistema.
 					</p>
 				</div>
 			{:else}
-				<!-- Los tres números que había aquí (Con permiso / Sin permiso /
-			     Total equipo) son ahora los contadores de los chips: la misma
-			     cifra, en el control que filtra por ella. -->
-				<div class="filters-bar">
-					<BuscadorLista
-						bind:valor={filtros.qBonos}
-						onBuscar={(termino) => (filtros.qBonos = termino)}
-						placeholder="Buscar usuario por nombre, correo o cargo…"
-						etiqueta="Buscar usuarios por permiso de bonos"
-					/>
-
-					<div class="filter-group">
-						{#each [{ k: 'TODOS', l: 'Todos', n: usuarios.length }, { k: 'CON_PERMISO', l: 'Con permiso', n: totalConPermiso }, { k: 'SIN_PERMISO', l: 'Sin permiso', n: totalSinPermiso }] as f}
-							<button
-								class="chip"
-								class:chip--active={filtros.bonos === f.k}
-								onclick={() => (filtros.bonos = f.k as typeof filtros.bonos)}
-							>
-								{#if f.k === 'CON_PERMISO'}<span
-										class="chip-dot chip-dot--emerald"
-										aria-hidden="true"
-									></span>{/if}
-								{f.l}
-								<span class="chip-count">{f.n}</span>
-							</button>
-						{/each}
-					</div>
-
-					{#if bonosSeleccionados.size > 0}
-						<span class="bonos-selected-count">
-							{bonosSeleccionados.size} seleccionado{bonosSeleccionados.size !== 1 ? 's' : ''}
-						</span>
-						<button
-							class="btn-secondary btn-secondary--sm"
-							disabled={guardandoBonos}
-							onclick={() => (bonosSeleccionados = new Set())}
-						>
-							<svg
-								class="h-3.5 w-3.5"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-								stroke-width="2"
-								><path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M6 18L18 6M6 6l12 12"
-								/></svg
-							>
-							Limpiar selección
-						</button>
-					{/if}
-				</div>
-
-				<!-- Acciones masivas (siempre visibles, pero se aplican a la selección o al filtro) -->
-				<div class="bonos-bulk-actions">
-					<button
-						type="button"
-						class="btn-primary btn-bonos-grant"
-						disabled={guardandoBonos}
-						onclick={() => setBonosPlanilla(true)}
-					>
-						<svg
-							class="h-3.5 w-3.5"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-							stroke-width="2"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-							/>
-						</svg>
-						Otorgar permiso
-						{#if bonosSeleccionados.size > 0}
-							<span class="bonos-btn-count">({bonosSeleccionados.size})</span>
-						{:else if usuariosBonos.length > 0}
-							<span class="bonos-btn-count">({usuariosBonos.length} del filtro)</span>
-						{/if}
-					</button>
-					<button
-						type="button"
-						class="btn-bonos-revoke"
-						disabled={guardandoBonos}
-						onclick={() => setBonosPlanilla(false)}
-					>
-						<svg
-							class="h-3.5 w-3.5"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-							stroke-width="2"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
-							/>
-						</svg>
-						Revocar permiso
-						{#if bonosSeleccionados.size > 0}
-							<span class="bonos-btn-count">({bonosSeleccionados.size})</span>
-						{:else if usuariosBonos.length > 0}
-							<span class="bonos-btn-count">({usuariosBonos.length} del filtro)</span>
-						{/if}
-					</button>
-
-					<label class="bonos-select-all">
-						<input
-							type="checkbox"
-							checked={bonosSeleccionados.size > 0 &&
-								bonosSeleccionados.size === usuariosBonos.length}
-							indeterminate={bonosSeleccionados.size > 0 &&
-								bonosSeleccionados.size < usuariosBonos.length}
-							onchange={seleccionarTodosBonos}
+				<div class="dir-filtros">
+					<div class="dir-filtros-buscador">
+						<BuscadorLista
+							bind:valor={filtros.qBonos}
+							onBuscar={(termino) => (filtros.qBonos = termino)}
+							placeholder="Buscar usuario por nombre, correo o cargo…"
+							etiqueta="Buscar usuarios por permiso de bonos"
 						/>
-						<span>Seleccionar todos los del filtro</span>
-					</label>
+					</div>
+					<SegmentosFiltro
+						etiqueta="Permiso"
+						opciones={SEGMENTOS_BONOS}
+						valor={filtros.bonos}
+						onCambiar={(v) => (filtros.bonos = v as FiltroBonos)}
+					/>
 				</div>
 
-				<!-- Lista de usuarios con su estado de permiso -->
-				{#if loading}
-					<div class="state-block">
-						<div class="spin-ring" aria-hidden="true"></div>
-						<p>Cargando equipo…</p>
-					</div>
-				{:else if usuariosBonos.length === 0}
-					<div class="state-block" in:fade>
-						<p>No hay usuarios que coincidan con los filtros.</p>
-					</div>
-				{:else}
-					<div class="bonos-grid">
-						{#each usuariosBonos as u, i (u.id)}
-							{@const hasPerm = hasBonosPlanilla(u)}
-							{@const isSel = bonosSeleccionados.has(u.id)}
-							<label
-								class="bonos-card"
-								class:bonos-card--active={hasPerm}
-								class:bonos-card--selected={isSel}
-								in:fly={{ y: 6, duration: 220, delay: Math.min(i * 18, 240), easing: quintOut }}
-							>
-								<input
-									type="checkbox"
-									checked={isSel}
-									onchange={() => toggleSeleccionBonos(u.id)}
-									class="bonos-card-check"
-								/>
-								<div
-									class="bonos-card-avatar avatar avatar--{u.activo === false
-										? 'inactive'
-										: 'online'}"
+				<!-- Acciones masivas: siempre a la vista. Se aplican a la selección
+				     o, si no hay, a todos los del filtro (previa confirmación). -->
+				<div class="usr-bonos-barra">
+					<div class="usr-bonos-seleccion">
+						<label class="usr-bonos-todos">
+							<input
+								type="checkbox"
+								checked={bonosSeleccionados.size > 0 &&
+									bonosSeleccionados.size === usuariosBonos.length}
+								indeterminate={bonosSeleccionados.size > 0 &&
+									bonosSeleccionados.size < usuariosBonos.length}
+								disabled={guardandoBonos || usuariosBonos.length === 0}
+								onchange={seleccionarTodosBonos}
+							/>
+							Seleccionar todos los del filtro
+						</label>
+						<p class="usr-bonos-texto">
+							{#if bonosSeleccionados.size > 0}
+								<strong>
+									{bonosSeleccionados.size} seleccionado{bonosSeleccionados.size !== 1 ? 's' : ''}
+								</strong>
+								·
+								<button
+									class="usr-enlace"
+									disabled={guardandoBonos}
+									onclick={() => (bonosSeleccionados = new Set())}
 								>
-									<span>{initials(u.nombre)}</span>
-								</div>
-								<div class="bonos-card-text">
-									<div class="bonos-card-row">
-										<strong>{u.nombre}</strong>
+									Limpiar selección
+								</button>
+							{:else}
+								Marca usuarios en la lista o aplica el cambio a todos los del filtro.
+							{/if}
+						</p>
+					</div>
+					<div class="usr-bonos-acciones">
+						<button
+							type="button"
+							class="btn-secondary usr-btn-sm usr-btn-revocar"
+							disabled={guardandoBonos}
+							onclick={() => setBonosPlanilla(false)}
+						>
+							<Ban strokeWidth={2} aria-hidden="true" />
+							Revocar permiso
+							{#if bonosSeleccionados.size > 0}
+								<span class="usr-btn-cuenta">({bonosSeleccionados.size})</span>
+							{:else if usuariosBonos.length > 0}
+								<span class="usr-btn-cuenta">({usuariosBonos.length} del filtro)</span>
+							{/if}
+						</button>
+						<button
+							type="button"
+							class="btn-primary usr-btn-sm"
+							disabled={guardandoBonos}
+							onclick={() => setBonosPlanilla(true)}
+						>
+							<CircleCheck strokeWidth={2} aria-hidden="true" />
+							Otorgar permiso
+							{#if bonosSeleccionados.size > 0}
+								<span class="usr-btn-cuenta">({bonosSeleccionados.size})</span>
+							{:else if usuariosBonos.length > 0}
+								<span class="usr-btn-cuenta">({usuariosBonos.length} del filtro)</span>
+							{/if}
+						</button>
+					</div>
+				</div>
+
+				{#if loading}
+					{@render bloqueCarga('Cargando equipo…')}
+				{:else if errorUsuarios}
+					{@render bloqueError(errorUsuarios, cargarUsuarios)}
+				{:else}
+					<div class="dir-lista">
+						<TablaLista
+							columnas={COLUMNAS_BONOS}
+							datos={usuariosBonos}
+							claveFila={(u) => u.id}
+							onFila={(u) => toggleSeleccionBonos(u.id)}
+							etiqueta="Permiso de bonos de planilla por usuario"
+							seleccion={bonosSeleccionados}
+							onSeleccion={(ids) => (bonosSeleccionados = ids)}
+						>
+							{#snippet celda({ columnaId, fila: u })}
+								{#if columnaId === 'usuario'}
+									<div class="flex items-center gap-2">
+										<CeldaIdentidad
+											titulo={u.nombre}
+											subtitulo={u.correo}
+											iniciales={initials(u.nombre)}
+											tono={u.activo === false ? '#94a3b8' : undefined}
+										/>
 										{#if u.id === currentUser?.id}<span class="badge-self">tú</span>{/if}
 									</div>
-									<span class="bonos-card-mail">{u.correo}</span>
-									{#if u.cargo}<span class="bonos-card-cargo">{u.cargo}</span>{/if}
-								</div>
-								<div class="bonos-card-state">
-									{#if hasPerm}
-										<span class="bonos-pill bonos-pill--emerald">
-											<svg
-												class="h-3 w-3"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-												stroke-width="2.5"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													d="M4.5 12.75l6 6 9-13.5"
-												/>
-											</svg>
-											Con permiso
-										</span>
+								{:else if columnaId === 'cargo'}
+									{#if u.cargo}
+										<span class="dir-celda">{u.cargo}</span>
 									{:else}
-										<span class="bonos-pill bonos-pill--gray">Sin permiso</span>
+										<span class="dir-nulo">—</span>
+									{/if}
+								{:else if columnaId === 'permiso'}
+									{@const tiene = hasBonosPlanilla(u)}
+									<EstadoPunto
+										etiqueta={tiene ? 'Con permiso' : 'Sin permiso'}
+										color={tiene ? STATUS_COLOR.online : STATUS_COLOR.offline}
+										apagado={!tiene}
+									/>
+								{/if}
+							{/snippet}
+
+							{#snippet vacio()}
+								{@const img = mascota('vacio')}
+								<div class="dir-vacio">
+									<img src={img.src} alt={img.alt} width="418" height="418" />
+									<h3>Sin usuarios</h3>
+									<p>No hay usuarios que coincidan con los filtros.</p>
+									{#if hayFiltrosBonos}
+										<button class="btn-secondary" onclick={limpiarFiltrosBonos}>
+											Limpiar filtros
+										</button>
 									{/if}
 								</div>
-							</label>
-						{/each}
+							{/snippet}
+						</TablaLista>
 					</div>
 				{/if}
 			{/if}
@@ -1548,1107 +1379,228 @@
 	{/if}
 
 	{#if filtros.tab === 'invitaciones'}
-		<section class="section">
+		<section class="usr-seccion" in:fly={{ y: 8, duration: 300 }}>
 			{#if loadingInv}
-				<div class="state-block">
-					<div class="spin-ring" aria-hidden="true"></div>
-					<p>Cargando invitaciones…</p>
-				</div>
-			{:else if invitaciones.length === 0}
-				<div class="empty-state" in:fade>
-					<div class="empty-icon" aria-hidden="true">
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.4">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
-							/>
-						</svg>
-					</div>
-					<h3>Sin invitaciones enviadas</h3>
-					<p>Invita a nuevos miembros por correo electrónico con sus áreas asignadas.</p>
-					<button class="btn-primary" onclick={abrirModalInv}>
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-						</svg>
-						Enviar primera invitación
-					</button>
-				</div>
+				{@render bloqueCarga('Cargando invitaciones…')}
+			{:else if errorInv}
+				{@render bloqueError(errorInv, cargarInvitaciones)}
 			{:else}
-				<div class="inv-list">
-					{#each invitaciones as inv, i (inv.id)}
-						<div
-							class="inv-card inv-card--{inv.estado}"
-							in:fly={{ y: 8, duration: 220, delay: Math.min(i * 20, 300), easing: quintOut }}
-						>
-							<div class="inv-main">
-								<div class="inv-icon" aria-hidden="true">
-									<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-										<path
-											stroke-linecap="round"
-											stroke-linejoin="round"
-											d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
-										/>
-									</svg>
-								</div>
-								<div class="inv-text">
-									<strong class="inv-correo">{inv.correo}</strong>
-									{#if inv.cargo}<span class="inv-cargo">{inv.cargo}</span>{/if}
-									<div class="inv-areas">
-										{#each inv.area as a}
-											<span class="area-chip area-chip--sm">{AREA_LABELS[a as Area] ?? a}</span>
-										{/each}
+				<div class="dir-lista">
+					<TablaLista
+						columnas={COLUMNAS_INVITACIONES}
+						datos={invitaciones}
+						claveFila={(inv) => inv.id}
+						etiqueta="Invitaciones enviadas"
+					>
+						{#snippet celda({ columnaId, fila: inv })}
+							{#if columnaId === 'correo'}
+								<CeldaIdentidad
+									titulo={inv.correo}
+									subtitulo={inv.cargo ?? undefined}
+									iniciales={initials(inv.correo)}
+								/>
+							{:else if columnaId === 'areas'}
+								{#if inv.area?.length}
+									<div class="dir-celda">
+										<span>{inv.area.map((a) => AREA_LABELS[a as Area] ?? a).join(' · ')}</span>
 									</div>
-									<small class="inv-by">
-										Enviada por {inv.invitado_por?.nombre ?? '—'} · {formatDate(inv.created_at)}
-									</small>
-								</div>
-							</div>
-							<div class="inv-side">
-								<span class="estado-pill {estadoInvBadge(inv.estado)}">{inv.estado}</span>
-								{#if inv.estado === 'pendiente'}
-									<div class="inv-actions">
-										<button
-											class="link-btn"
-											title="Reenviar invitación"
-											onclick={() => reenviarInvitacion(inv)}
-										>
-											<svg
-												class="h-3.5 w-3.5"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-												stroke-width="2"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"
-												/>
-											</svg>
-											Reenviar
-										</button>
-										<button
-											class="link-btn link-btn--danger"
-											title="Revocar invitación"
-											onclick={() => revocarInvitacion(inv.id)}
-										>
-											<svg
-												class="h-3.5 w-3.5"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-												stroke-width="2"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													d="M6 18L18 6M6 6l12 12"
-												/>
-											</svg>
-											Revocar
-										</button>
-									</div>
+								{:else}
+									<span class="dir-nulo">—</span>
 								{/if}
+							{:else if columnaId === 'enviada'}
+								<div class="dir-celda dir-celda--fecha">
+									<span>{formatDate(inv.created_at)}</span>
+									<small>por {inv.invitado_por?.nombre ?? '—'}</small>
+								</div>
+							{:else if columnaId === 'estado'}
+								{@const e = estadoInv(inv.estado)}
+								<EstadoPunto etiqueta={e.etiqueta} color={e.color} apagado={e.apagado} />
+							{:else if columnaId === 'acciones'}
+								<AccionesFila
+									acciones={[
+										{
+											id: 'reenviar',
+											etiqueta: 'Reenviar invitación',
+											icono: RefreshCw,
+											oculta: inv.estado !== 'pendiente',
+											onClick: () => reenviarInvitacion(inv)
+										},
+										{
+											id: 'revocar',
+											etiqueta: 'Revocar invitación',
+											icono: X,
+											peligrosa: true,
+											oculta: inv.estado !== 'pendiente',
+											onClick: () => revocarInvitacion(inv.id)
+										}
+									]}
+								/>
+							{/if}
+						{/snippet}
+
+						{#snippet vacio()}
+							{@const img = mascota('vacio')}
+							<div class="dir-vacio">
+								<img src={img.src} alt={img.alt} width="418" height="418" />
+								<h3>Sin invitaciones enviadas</h3>
+								<p>Invita a nuevos miembros por correo electrónico con sus áreas asignadas.</p>
+								<button class="btn-primary" onclick={abrirModalInv}>
+									<MailPlus strokeWidth={2} aria-hidden="true" />
+									Enviar primera invitación
+								</button>
 							</div>
-						</div>
-					{/each}
+						{/snippet}
+					</TablaLista>
 				</div>
 			{/if}
 		</section>
 	{/if}
 </div>
 
-<!-- ══════════════════════════════════════════════════════════════════════
-     MODAL: Editar usuario
-     ══════════════════════════════════════════════════════════════════════ -->
-{#if showEditModal && editUsuario}
-	<div
-		class="modal-backdrop"
-		onclick={cerrarEditModal}
-		onkeydown={(e) => e.key === 'Escape' && cerrarEditModal()}
-		role="presentation"
-		transition:fade={{ duration: 200 }}
-	>
-		<div
-			class="modal modal--lg"
-			onclick={(e) => e.stopPropagation()}
-			onkeydown={(e) => e.stopPropagation()}
-			role="dialog"
-			tabindex="-1"
-			aria-modal="true"
-			aria-labelledby="edit-user-title"
-			transition:fly={{ y: 24, duration: 280, easing: quintOut }}
-		>
-			<header class="modal-head">
-				<div>
-					<span class="eyebrow">Editar miembro</span>
-					<h2 id="edit-user-title">Editar usuario</h2>
-				</div>
-				<button class="modal-close" onclick={cerrarEditModal} aria-label="Cerrar">
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</header>
+<ModalEditarUsuario
+	open={showEditModal}
+	usuario={editUsuario}
+	oncerrar={cerrarEditModal}
+	onguardado={alGuardarUsuario}
+/>
 
-			<form
-				onsubmit={(e) => {
-					e.preventDefault();
-					guardarEdit();
-				}}
-				class="modal-form"
-			>
-				<div class="field">
-					<label for="edit-nombre" class="field-label">Nombre completo</label>
-					<input id="edit-nombre" type="text" bind:value={editNombre} required class="input" />
-				</div>
-				<div class="field-grid">
-					<div class="field">
-						<label for="edit-correo" class="field-label">Correo</label>
-						<input id="edit-correo" type="email" bind:value={editCorreo} required class="input" />
-					</div>
-					<div class="field">
-						<label for="edit-telefono" class="field-label">Teléfono</label>
-						<input
-							id="edit-telefono"
-							type="tel"
-							bind:value={editTelefono}
-							class="input"
-							placeholder="3001234567"
-						/>
-					</div>
-				</div>
-				<div class="field">
-					<span class="field-label">Áreas</span>
-					<div class="area-picker">
-						{#each Object.entries(AREA_LABELS) as [key, label]}
-							<button
-								type="button"
-								class="area-pill"
-								class:area-pill--active={editAreas.includes(key)}
-								onclick={() =>
-									(editAreas = editAreas.includes(key)
-										? editAreas.filter((a) => a !== key)
-										: [...editAreas, key])}
-							>
-								{label}
-							</button>
-						{/each}
-					</div>
-				</div>
-				<div class="field">
-					<span class="field-label">Permisos por ruta</span>
-					<PermisosRutasPicker
-						idPrefix="editar"
-						areas={editAreas}
-						role={editUsuario.role ?? 'usuario'}
-						valor={editPermisosRutas}
-						onchange={(v) => (editPermisosRutas = v)}
-					/>
-				</div>
-				<footer class="modal-foot">
-					<button type="button" class="btn-secondary" onclick={cerrarEditModal}>Cancelar</button>
-					<button type="submit" class="btn-primary" disabled={savingEdit}>
-						{#if savingEdit}
-							<svg class="spin" viewBox="0 0 24 24" fill="none">
-								<circle
-									cx="12"
-									cy="12"
-									r="10"
-									stroke="currentColor"
-									stroke-width="3"
-									opacity="0.25"
-								/>
-								<path
-									d="M4 12a8 8 0 018-8v0"
-									stroke="currentColor"
-									stroke-width="3"
-									stroke-linecap="round"
-								/>
-							</svg>
-							Guardando…
-						{:else}
-							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-							</svg>
-							Guardar cambios
-						{/if}
-					</button>
-				</footer>
-			</form>
-		</div>
-	</div>
-{/if}
+<!-- Habilitar / deshabilitar: la tarjeta de confirmación de la app, con
+     su propio estado de carga. Sigue abierta hasta que responde el servidor,
+     como el modal que reemplaza. -->
+<ConfirmDialog
+	open={showConfirmModal}
+	tone={confirmAction === 'disable' ? 'danger' : 'success'}
+	eyebrow={confirmAction === 'disable' ? 'DESHABILITAR ACCESO' : 'HABILITAR ACCESO'}
+	title={confirmAction === 'disable' ? 'Deshabilitar usuario' : 'Habilitar usuario'}
+	message={!confirmUsuario
+		? ''
+		: confirmAction === 'disable'
+			? `¿Deshabilitar a ${confirmUsuario.nombre}? Se cerrarán todas sus sesiones activas y no podrá ingresar al sistema.`
+			: `¿Habilitar nuevamente a ${confirmUsuario.nombre}? Volverá a tener acceso al sistema con sus permisos actuales.`}
+	confirmText={confirmAction === 'disable' ? 'Sí, deshabilitar' : 'Sí, habilitar'}
+	loading={savingToggle}
+	loadingText={confirmAction === 'disable' ? 'Deshabilitando…' : 'Habilitando…'}
+	onconfirm={confirmarToggle}
+	oncancel={cerrarConfirmModal}
+/>
 
-<!-- ══════════════════════════════════════════════════════════════════════
-     MODAL: Confirmar enable/disable
-     ══════════════════════════════════════════════════════════════════════ -->
-{#if showConfirmModal && confirmUsuario}
-	<div
-		class="modal-backdrop"
-		onclick={cerrarConfirmModal}
-		onkeydown={(e) => e.key === 'Escape' && cerrarConfirmModal()}
-		role="presentation"
-		transition:fade={{ duration: 200 }}
-	>
-		<div
-			class="modal modal--sm"
-			onclick={(e) => e.stopPropagation()}
-			onkeydown={(e) => e.stopPropagation()}
-			role="alertdialog"
-			tabindex="-1"
-			aria-modal="true"
-			aria-labelledby="confirm-toggle-title"
-			transition:fly={{ y: 20, duration: 240, easing: quintOut }}
-		>
-			<div
-				class="modal-icon"
-				class:modal-icon--danger={confirmAction === 'disable'}
-				class:modal-icon--emerald={confirmAction === 'enable'}
-				aria-hidden="true"
-			>
-				{#if confirmAction === 'disable'}
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"
-						/>
-					</svg>
-				{:else}
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-						/>
-					</svg>
-				{/if}
-			</div>
-			<span class="eyebrow eyebrow--center">
-				{confirmAction === 'disable' ? 'Deshabilitar acceso' : 'Habilitar acceso'}
-			</span>
-			<h3 id="confirm-toggle-title" class="modal-title">
-				{confirmAction === 'disable' ? 'Deshabilitar usuario' : 'Habilitar usuario'}
-			</h3>
-			<p class="modal-desc">
-				{#if confirmAction === 'disable'}
-					¿Deshabilitar a <strong>{confirmUsuario.nombre}</strong>? Se cerrarán todas sus sesiones
-					activas y no podrá ingresar al sistema.
-				{:else}
-					¿Habilitar nuevamente a <strong>{confirmUsuario.nombre}</strong>? Volverá a tener acceso
-					al sistema con sus permisos actuales.
-				{/if}
-			</p>
-			<footer class="modal-foot">
-				<button class="btn-secondary" onclick={cerrarConfirmModal}>Cancelar</button>
-				<button
-					class={confirmAction === 'disable' ? 'btn-danger' : 'btn-primary'}
-					disabled={savingToggle}
-					onclick={confirmarToggle}
-				>
-					{#if savingToggle}
-						<svg class="spin" viewBox="0 0 24 24" fill="none">
-							<circle
-								cx="12"
-								cy="12"
-								r="10"
-								stroke="currentColor"
-								stroke-width="3"
-								opacity="0.25"
-							/>
-							<path
-								d="M4 12a8 8 0 018-8v0"
-								stroke="currentColor"
-								stroke-width="3"
-								stroke-linecap="round"
-							/>
-						</svg>
-					{/if}
-					{confirmAction === 'disable' ? 'Sí, deshabilitar' : 'Sí, habilitar'}
-				</button>
-			</footer>
-		</div>
-	</div>
-{/if}
+<ModalPermisosModulos
+	open={showPermisosModal}
+	usuario={permisosUsuario}
+	oncerrar={cerrarPermisosModal}
+	onguardado={alGuardarUsuario}
+/>
 
-<!-- ══════════════════════════════════════════════════════════════════════
-     MODAL: Permisos
-     ══════════════════════════════════════════════════════════════════════ -->
-{#if showPermisosModal && permisosUsuario}
-	<div
-		class="modal-backdrop"
-		onclick={cerrarPermisosModal}
-		onkeydown={(e) => e.key === 'Escape' && cerrarPermisosModal()}
-		role="presentation"
-		transition:fade={{ duration: 200 }}
-	>
-		<div
-			class="modal modal--md"
-			onclick={(e) => e.stopPropagation()}
-			onkeydown={(e) => e.stopPropagation()}
-			role="dialog"
-			tabindex="-1"
-			aria-modal="true"
-			aria-labelledby="permisos-title"
-			transition:fly={{ y: 24, duration: 280, easing: quintOut }}
-		>
-			<header class="modal-head">
-				<div>
-					<span class="eyebrow">Permisos por módulo</span>
-					<h2 id="permisos-title">{permisosUsuario.nombre}</h2>
-				</div>
-				<button class="modal-close" onclick={cerrarPermisosModal} aria-label="Cerrar">
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</header>
+<ModalInvitarUsuario
+	open={modalInvAbierto}
+	oncerrar={() => (modalInvAbierto = false)}
+	onenviada={cargarInvitaciones}
+/>
 
-			<div class="perm-bulk">
-				<span class="perm-bulk-label">Acciones rápidas</span>
-				<div class="perm-bulk-btns">
-					<button type="button" class="chip chip--sm" onclick={() => toggleTodos(true)}
-						>Habilitar todos</button
-					>
-					<button type="button" class="chip chip--sm" onclick={() => toggleTodos(false)}
-						>Deshabilitar todos</button
-					>
-				</div>
-			</div>
-
-			<div class="perm-grid">
-				{#each modulosDisponibles as modulo}
-					{@const activo = permisosUsuario.permisos?.[modulo.id] === true}
-					<button
-						type="button"
-						class="perm-row"
-						class:perm-row--active={activo}
-						onclick={() => togglePermiso(modulo.id)}
-					>
-						<span class="perm-row-label">{modulo.label}</span>
-						<span
-							class="user-status-toggle"
-							class:user-status-toggle--on={activo}
-							class:user-status-toggle--off={!activo}
-							aria-hidden="true"
-						>
-							<span class="user-status-knob"></span>
-						</span>
-					</button>
-				{/each}
-			</div>
-
-			<footer class="modal-foot">
-				<button class="btn-secondary" onclick={cerrarPermisosModal}>Cancelar</button>
-				<button class="btn-primary" disabled={savingPermisos} onclick={guardarPermisos}>
-					{#if savingPermisos}
-						<svg class="spin" viewBox="0 0 24 24" fill="none">
-							<circle
-								cx="12"
-								cy="12"
-								r="10"
-								stroke="currentColor"
-								stroke-width="3"
-								opacity="0.25"
-							/>
-							<path
-								d="M4 12a8 8 0 018-8v0"
-								stroke="currentColor"
-								stroke-width="3"
-								stroke-linecap="round"
-							/>
-						</svg>
-					{/if}
-					Guardar permisos
-				</button>
-			</footer>
-		</div>
-	</div>
-{/if}
-
-<!-- ══════════════════════════════════════════════════════════════════════
-     MODAL: Invitar usuario
-     ══════════════════════════════════════════════════════════════════════ -->
-{#if modalInvAbierto}
-	<div
-		class="modal-backdrop"
-		onclick={() => (modalInvAbierto = false)}
-		onkeydown={(e) => e.key === 'Escape' && (modalInvAbierto = false)}
-		role="presentation"
-		transition:fade={{ duration: 200 }}
-	>
-		<div
-			class="modal modal--md"
-			onclick={(e) => e.stopPropagation()}
-			onkeydown={(e) => e.stopPropagation()}
-			role="dialog"
-			tabindex="-1"
-			aria-modal="true"
-			aria-labelledby="invite-title"
-			transition:fly={{ y: 24, duration: 280, easing: quintOut }}
-		>
-			<header class="modal-head">
-				<div>
-					<span class="eyebrow">Nueva invitación</span>
-					<h2 id="invite-title">Invitar usuario</h2>
-				</div>
-				<button class="modal-close" onclick={() => (modalInvAbierto = false)} aria-label="Cerrar">
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</header>
-
-			<form
-				onsubmit={(e) => {
-					e.preventDefault();
-					enviarInvitacion();
-				}}
-				class="modal-form"
-			>
-				<div class="field">
-					<label for="inv-correo" class="field-label">
-						Correo electrónico <span class="field-required">*</span>
-					</label>
-					<input
-						id="inv-correo"
-						type="email"
-						bind:value={formCorreo}
-						class="input"
-						placeholder="usuario@empresa.com"
-					/>
-				</div>
-				<div class="field">
-					<label for="inv-cargo" class="field-label"
-						>Cargo <span class="muted-inline">(opcional)</span></label
-					>
-					<input
-						id="inv-cargo"
-						type="text"
-						bind:value={formCargo}
-						class="input"
-						placeholder="Ej: Coordinador de operaciones"
-					/>
-				</div>
-				<div class="field">
-					<span class="field-label">
-						Áreas <span class="field-required">*</span>
-					</span>
-					<div class="area-picker">
-						{#each Object.entries(AREA_LABELS) as [key, label]}
-							<button
-								type="button"
-								class="area-pill"
-								class:area-pill--active={formAreas.includes(key)}
-								onclick={() => toggleAreaInv(key)}
-							>
-								{label}
-							</button>
-						{/each}
-					</div>
-				</div>
-
-				{#if errorInv}
-					<div class="alert alert-error" in:fly={{ y: -8, duration: 200 }}>
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
-							/>
-						</svg>
-						<strong>{errorInv}</strong>
-					</div>
-				{/if}
-
-				<footer class="modal-foot">
-					<button type="button" class="btn-secondary" onclick={() => (modalInvAbierto = false)}
-						>Cancelar</button
-					>
-					<button type="submit" class="btn-primary" disabled={enviandoInv}>
-						{#if enviandoInv}
-							<svg class="spin" viewBox="0 0 24 24" fill="none">
-								<circle
-									cx="12"
-									cy="12"
-									r="10"
-									stroke="currentColor"
-									stroke-width="3"
-									opacity="0.25"
-								/>
-								<path
-									d="M4 12a8 8 0 018-8v0"
-									stroke="currentColor"
-									stroke-width="3"
-									stroke-linecap="round"
-								/>
-							</svg>
-							Enviando…
-						{:else}
-							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
-								/>
-							</svg>
-							Enviar invitación
-						{/if}
-					</button>
-				</footer>
-			</form>
-		</div>
-	</div>
-{/if}
-
-{#if modalNuevoAbierto}
-	<div
-		class="modal-backdrop"
-		onclick={() => (modalNuevoAbierto = false)}
-		onkeydown={(e) => e.key === 'Escape' && (modalNuevoAbierto = false)}
-		role="presentation"
-		transition:fade={{ duration: 200 }}
-	>
-		<div
-			class="modal modal--md"
-			onclick={(e) => e.stopPropagation()}
-			onkeydown={(e) => e.stopPropagation()}
-			role="dialog"
-			tabindex="-1"
-			aria-modal="true"
-			aria-labelledby="nuevo-title"
-			transition:fly={{ y: 24, duration: 280, easing: quintOut }}
-		>
-			<header class="modal-head">
-				<div>
-					<span class="eyebrow">Alta manual</span>
-					<h2 id="nuevo-title">Nuevo usuario</h2>
-				</div>
-				<button class="modal-close" onclick={() => (modalNuevoAbierto = false)} aria-label="Cerrar">
-					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</header>
-
-			<form
-				onsubmit={(e) => {
-					e.preventDefault();
-					crearUsuario();
-				}}
-				class="modal-form"
-			>
-				<p class="modal-nota">
-					La cuenta queda creada y lista para entrar con la contraseña que escribas aquí. No se
-					envía ningún correo: díselo tú. Si prefieres que la elija esa persona, usa
-					<strong>Invitar usuario</strong>.
-				</p>
-
-				<div class="field">
-					<label for="nuevo-nombre" class="field-label">
-						Nombre completo <span class="field-required">*</span>
-					</label>
-					<input
-						id="nuevo-nombre"
-						type="text"
-						bind:value={nuevoNombre}
-						class="input"
-						autocomplete="off"
-						placeholder="Ej: María Fernanda Ríos"
-					/>
-				</div>
-
-				<div class="field">
-					<label for="nuevo-correo" class="field-label">
-						Correo electrónico <span class="field-required">*</span>
-					</label>
-					<input
-						id="nuevo-correo"
-						type="email"
-						bind:value={nuevoCorreo}
-						class="input"
-						autocomplete="off"
-						placeholder="usuario@empresa.com"
-					/>
-				</div>
-
-				<div class="field-row">
-					<div class="field">
-						<label for="nuevo-password" class="field-label">
-							Contraseña <span class="field-required">*</span>
-						</label>
-						<input
-							id="nuevo-password"
-							type={verPasswordNuevo ? 'text' : 'password'}
-							bind:value={nuevoPassword}
-							class="input"
-							autocomplete="new-password"
-							placeholder="Mínimo 6 caracteres"
-						/>
-					</div>
-					<div class="field">
-						<label for="nuevo-password-2" class="field-label">
-							Confirmar <span class="field-required">*</span>
-						</label>
-						<input
-							id="nuevo-password-2"
-							type={verPasswordNuevo ? 'text' : 'password'}
-							bind:value={nuevoPasswordConfirm}
-							class="input"
-							autocomplete="new-password"
-							placeholder="Repite la contraseña"
-						/>
-					</div>
-				</div>
-				<label class="check-inline">
-					<input type="checkbox" bind:checked={verPasswordNuevo} />
-					Ver contraseña
-				</label>
-
-				<div class="field-row">
-					<div class="field">
-						<label for="nuevo-telefono" class="field-label"
-							>Teléfono <span class="muted-inline">(opcional)</span></label
-						>
-						<input
-							id="nuevo-telefono"
-							type="tel"
-							bind:value={nuevoTelefono}
-							class="input"
-							placeholder="Ej: 320 000 0000"
-						/>
-					</div>
-					<div class="field">
-						<label for="nuevo-cargo" class="field-label"
-							>Cargo <span class="muted-inline">(opcional)</span></label
-						>
-						<input
-							id="nuevo-cargo"
-							type="text"
-							bind:value={nuevoCargo}
-							class="input"
-							placeholder="Ej: Coordinador de operaciones"
-						/>
-					</div>
-				</div>
-
-				<div class="field">
-					<label for="nuevo-role" class="field-label">Rol</label>
-					<select id="nuevo-role" bind:value={nuevoRole} class="input">
-						{#each ROLES as r (r.value)}
-							<option value={r.value}>{r.label}</option>
-						{/each}
-					</select>
-				</div>
-
-				<div class="field">
-					<span class="field-label">
-						Áreas <span class="field-required">*</span>
-					</span>
-					<div class="area-picker">
-						{#each Object.entries(AREA_LABELS) as [key, label]}
-							<button
-								type="button"
-								class="area-pill"
-								class:area-pill--active={nuevoAreas.includes(key)}
-								onclick={() => toggleAreaNuevo(key)}
-							>
-								{label}
-							</button>
-						{/each}
-					</div>
-				</div>
-
-				{#if errorNuevo}
-					<div class="alert alert-error" in:fly={{ y: -8, duration: 200 }}>
-						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"
-							/>
-						</svg>
-						<strong>{errorNuevo}</strong>
-					</div>
-				{/if}
-
-				<footer class="modal-foot">
-					<button type="button" class="btn-secondary" onclick={() => (modalNuevoAbierto = false)}
-						>Cancelar</button
-					>
-					<button type="submit" class="btn-primary" disabled={creandoNuevo}>
-						{#if creandoNuevo}
-							<svg class="spin" viewBox="0 0 24 24" fill="none">
-								<circle
-									cx="12"
-									cy="12"
-									r="10"
-									stroke="currentColor"
-									stroke-width="3"
-									opacity="0.25"
-								/>
-								<path
-									d="M4 12a8 8 0 018-8v0"
-									stroke="currentColor"
-									stroke-width="3"
-									stroke-linecap="round"
-								/>
-							</svg>
-							Creando…
-						{:else}
-							<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-								<path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-							</svg>
-							Crear usuario
-						{/if}
-					</button>
-				</footer>
-			</form>
-		</div>
-	</div>
-{/if}
+<ModalNuevoUsuario
+	open={modalNuevoAbierto}
+	oncerrar={() => (modalNuevoAbierto = false)}
+	oncreado={cargarUsuarios}
+/>
 
 <style>
-	/* ═══════════════════════════════════════════════════════════════
-	   PAGE BASE
-	   ═══════════════════════════════════════════════════════════════ */
-	.usuarios-page {
-		min-height: 100vh;
-		background: #fcfcfb;
-		font-family: var(--font-sans);
-		color: #0f172a;
-		padding: 1.5rem 1.25rem 3rem;
-		display: flex;
-		flex-direction: column;
-		gap: 1.5rem;
+	/* La página crece con su contenido: las listas no tienen scroll propio. */
+	.usr-pagina {
+		height: auto;
+		min-height: 100%;
 	}
 
-	/* ═══════════════════════════════════════════════════════════════
-	   TYPOGRAPHY
-	   ═══════════════════════════════════════════════════════════════ */
-	.eyebrow {
-		display: inline-block;
-		font-size: 0.7rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.12em;
-		color: #16a34a;
-		background: rgba(234, 88, 12, 0.08);
-		padding: 0.3rem 0.75rem;
-		border-radius: 6px;
-		font-family: var(--font-sans);
-	}
-	.eyebrow--center {
-		display: block;
-		text-align: center;
-		margin: 0 auto 0.5rem;
-		width: fit-content;
-	}
-	h1,
-	h2,
-	h3 {
-		font-family: var(--font-display);
-		color: #0f172a;
-		letter-spacing: -0.01em;
-	}
-	.mono {
-		font-family: var(--font-sans);
-	}
-	.muted-inline {
-		color: #94a3b8;
-		font-weight: 400;
-		font-size: 0.78rem;
-	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   BARRA DE PÁGINA — título, acciones y pestañas
-	   ═══════════════════════════════════════════════════════════════ */
-	.page-toolbar {
-		background: var(--bg-surface);
-		border: 1px solid var(--border-subtle);
-		border-radius: 16px;
-		padding: 0.85rem 1rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.75rem;
-		box-shadow: var(--shadow-card);
-	}
-	.toolbar-top {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
-	}
-	.toolbar-title {
-		display: flex;
-		align-items: center;
-		gap: 0.65rem;
-		min-width: 0;
-	}
-	.toolbar-title h1 {
-		font-size: 1.25rem;
-		font-weight: 500;
-		line-height: 1.2;
-		margin: 0;
-	}
-	.toolbar-actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.6rem;
-		flex-shrink: 0;
-	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   PESTAÑAS
-	   ═══════════════════════════════════════════════════════════════ */
-	.tabs {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.25rem;
-		padding-top: 0.75rem;
-		border-top: 1px solid var(--border-subtle);
-	}
-	.tab {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.45rem 0.9rem;
-		font-family: inherit;
-		font-size: 0.82rem;
-		font-weight: 600;
-		color: var(--text-muted);
-		background: transparent;
-		border: none;
-		border-radius: 9px;
-		cursor: pointer;
-		transition: all 0.2s var(--ease-apple);
-	}
-	.tab:not(.tab--active):hover {
-		color: var(--text-primary);
-		background: var(--bg-base);
-	}
-	/* `:not(.tab--active)` arriba y no un `.tab--active` a secas: `.tab:hover`
-	   pesa más que `.tab--active` en especificidad, así que pasar el ratón por
-	   encima de la pestaña abierta la despintaba y parecía que se había
-	   cerrado. */
-	.tab--active {
-		background: var(--bg-charcoal);
-		color: #fff;
-	}
-	/* El badge avisa de cuántas sesiones activas o invitaciones pendientes hay
-	   sin tener que entrar a mirar: por eso esas dos cifras siguen estando en
-	   la cáscara y no dentro de su propia pestaña. */
-	.tab-badge {
-		min-width: 1.15rem;
-		padding: 0 0.35rem;
-		font-family: var(--font-sans);
-		font-size: 0.65rem;
-		font-weight: 700;
-		line-height: 1.15rem;
-		text-align: center;
-		border-radius: 999px;
-		background: rgba(234, 88, 12, 0.14);
-		color: var(--emerald-700);
-	}
-	.tab--active .tab-badge {
-		background: rgba(255, 255, 255, 0.18);
-		color: #fff;
-	}
-
-	/* Nota de pestaña: es texto corrido, por eso sí lleva tope de ancho. */
-	.tab-nota {
-		font-size: 0.85rem;
-		line-height: 1.5;
-		color: var(--text-secondary);
-		margin: 0;
-		max-width: 44rem;
-	}
-	.tab-nota--aviso {
-		padding: 0.6rem 0.85rem;
-		border-radius: 10px;
-		background: rgba(245, 158, 11, 0.08);
-		border: 1px solid rgba(245, 158, 11, 0.22);
-		color: #92400e;
-	}
-
-	/* Barra de foco: aparece al llegar desde «ver sesiones» de una tarjeta. */
-	.foco-usuario {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.75rem;
-		padding: 0.6rem 0.85rem;
-		border-radius: 12px;
-		background: rgba(234, 88, 12, 0.06);
-		border: 1px solid rgba(234, 88, 12, 0.2);
-	}
-	.foco-usuario p {
-		margin: 0;
-		font-size: 0.85rem;
-		color: var(--text-secondary);
-	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   SECCIÓN — cuerpo de cada pestaña
-	   ═══════════════════════════════════════════════════════════════ */
-	.section {
+	.usr-seccion {
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
 	}
-	/* ═══════════════════════════════════════════════════════════════
-	   FILTERS BAR
-	   ═══════════════════════════════════════════════════════════════ */
-	.filters-bar {
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.06);
-		border-radius: 16px;
-		padding: 0.85rem;
-		display: flex;
-		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.75rem;
+
+	/* Marco de la carga y del error: el mismo de `TablaLista`, para que el
+	   cambio a la tabla no mueva nada. */
+	.usr-marco {
+		background: var(--bg-surface);
+		border: 1px solid var(--border-subtle);
+		border-radius: 22px;
 		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
 	}
 
-	.filter-group {
-		display: flex;
-		gap: 0.35rem;
-		padding: 0.25rem;
-		background: #fcfcfb;
-		border: 1px solid rgba(0, 0, 0, 0.06);
-		border-radius: 12px;
-	}
-	.chip {
+	/* Desplegable con su etiqueta, como «Mes» en liquidaciones. */
+	.usr-select {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.35rem;
-		padding: 0.4rem 0.8rem;
-		font-family: inherit;
-		font-size: 0.78rem;
-		font-weight: 600;
-		color: #33423d;
-		background: transparent;
-		border: none;
-		border-radius: 8px;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.chip:hover {
-		color: #0f172a;
-	}
-	.chip--active {
-		background: white;
-		color: #014339;
-		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-	}
-	.chip--sm {
-		padding: 0.35rem 0.7rem;
-		font-size: 0.75rem;
-	}
-	.chip-count {
-		font-family: var(--font-sans);
-		font-size: 0.7rem;
+		gap: 6px;
+		font-size: 0.8rem;
 		font-weight: 700;
-		padding: 0 0.4rem;
-		min-width: 1.4rem;
-		text-align: center;
-		background: rgba(0, 0, 0, 0.06);
-		border-radius: 4px;
-		color: #64748b;
+		color: var(--text-secondary);
 	}
-	.chip--active .chip-count {
-		background: rgba(234, 88, 12, 0.12);
-		color: #075c49;
-	}
-	.chip-dot {
-		width: 7px;
-		height: 7px;
-		border-radius: 50%;
-	}
-	.chip-dot--emerald {
-		background: #16a34a;
-	}
-
-	.select {
-		padding: 0.55rem 0.85rem;
-		font-family: inherit;
+	.usr-select select {
+		min-height: 40px;
+		padding: 0.4rem 0.6rem;
+		border: 1.5px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font: inherit;
 		font-size: 0.82rem;
-		color: #0f172a;
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.1);
-		border-radius: 10px;
-		outline: none;
-		transition: all 0.2s;
-		min-width: 160px;
-	}
-	.select:focus {
-		border-color: rgba(234, 88, 12, 0.4);
-		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1);
+		font-weight: 500;
 	}
 
-	.clear-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.35rem;
-		padding: 0.45rem 0.75rem;
-		font-family: inherit;
+	/* Variante compacta de los botones globales, para barras de filtros. */
+	.usr-btn-sm {
+		min-height: 38px;
+		padding: 0 0.85rem;
+		border-radius: 12px;
 		font-size: 0.78rem;
+	}
+	.usr-btn-cuenta {
 		font-weight: 600;
-		color: #64748b;
-		background: transparent;
-		border: 1px solid rgba(0, 0, 0, 0.1);
-		border-radius: 10px;
-		cursor: pointer;
-		transition: all 0.2s;
+		opacity: 0.85;
 	}
-	.clear-btn:hover {
-		color: #dc2626;
+	/* Revocar quita un permiso: rojo literal (semáforo), no el de la marca. */
+	.usr-btn-revocar {
+		color: #b42318;
 		border-color: rgba(220, 38, 38, 0.3);
-		background: rgba(220, 38, 38, 0.04);
 	}
+	.usr-btn-revocar:hover:not(:disabled) {
+		background: rgba(220, 38, 38, 0.06);
+		border-color: #dc2626;
+	}
+
+	.usr-enlace {
+		padding: 0.15rem 0.3rem;
+		border: none;
+		border-radius: 6px;
+		background: none;
+		color: var(--emerald-700);
+		font: inherit;
+		font-weight: 700;
+		cursor: pointer;
+	}
+	.usr-enlace:hover:not(:disabled) {
+		background: var(--au-tint, #ddf7ea);
+	}
+	.usr-enlace:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+
+	.usr-mono {
+		font-variant-numeric: tabular-nums;
+	}
+
 	.badge-self {
-		font-family: var(--font-sans);
 		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
-		color: #075c49;
-		background: rgba(234, 88, 12, 0.1);
+		color: var(--emerald-800);
+		background: var(--au-tint, #ddf7ea);
 		padding: 0.1rem 0.4rem;
 		border-radius: 4px;
 	}
 
-	/* Avatar */
-	.avatar {
-		position: relative;
-		flex-shrink: 0;
-		width: 44px;
-		height: 44px;
-		border-radius: 14px;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-family: var(--font-sans);
-		font-size: 0.85rem;
-		font-weight: 700;
-		letter-spacing: 0.04em;
-	}
-	@keyframes pulse-online {
-		0%,
-		100% {
-			box-shadow: 0 0 0 0 rgba(234, 88, 12, 0.4);
-		}
-		50% {
-			box-shadow: 0 0 0 4px rgba(234, 88, 12, 0);
-		}
-	}
-
-	/* Status toggle (enable/disable) */
+	/* Interruptor de habilitado en la lista del equipo. */
 	.user-status-toggle {
 		position: relative;
 		flex-shrink: 0;
@@ -2663,12 +1615,16 @@
 		cursor: pointer;
 		transition: background 0.2s;
 	}
+	.user-status-toggle:focus-visible {
+		outline: 2px solid var(--accion);
+		outline-offset: 2px;
+	}
 	.user-status-toggle:disabled {
 		opacity: 0.4;
 		cursor: not-allowed;
 	}
 	.user-status-toggle--on {
-		background: linear-gradient(135deg, #16a34a, #087a57);
+		background: var(--accion);
 	}
 	.user-status-toggle--off {
 		background: #d1d5db;
@@ -2686,710 +1642,53 @@
 	.user-status-toggle--on .user-status-knob {
 		transform: translateX(16px);
 	}
-	.area-chip {
-		font-family: var(--font-sans);
-		font-size: 0.66rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.04em;
-		color: #1e40af;
-		background: rgba(59, 130, 246, 0.08);
-		padding: 0.18rem 0.5rem;
-		border-radius: 5px;
-	}
-	.area-chip--sm {
-		font-size: 0.62rem;
-		padding: 0.15rem 0.4rem;
-	}
-	.icon-btn {
-		width: 30px;
-		height: 30px;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		background: transparent;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 8px;
-		color: #64748b;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.icon-btn svg {
-		width: 14px;
-		height: 14px;
-	}
-	.icon-btn:hover {
-		color: #16a34a;
-		border-color: rgba(234, 88, 12, 0.3);
-		background: rgba(234, 88, 12, 0.06);
-	}
-	.icon-btn--danger:hover {
-		color: #dc2626;
-		border-color: rgba(220, 38, 38, 0.3);
-		background: rgba(220, 38, 38, 0.06);
-	}
 
-	/* ═══════════════════════════════════════════════════════════════
-	   SESSIONS LIST
-	   ═══════════════════════════════════════════════════════════════ */
-	.sessions-list {
-		display: flex;
-		flex-direction: column;
-		gap: 0.6rem;
-	}
-	.session-card {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 16px;
-		padding: 0.9rem 1.1rem;
-		transition: all 0.2s;
-	}
-	.session-card:hover {
-		border-color: rgba(234, 88, 12, 0.2);
-	}
-	.session-main {
-		display: flex;
-		align-items: center;
-		gap: 0.85rem;
-		flex: 1;
-		min-width: 0;
-	}
-	.session-avatar {
-		position: relative;
-		flex-shrink: 0;
-		width: 40px;
-		height: 40px;
-		border-radius: 12px;
-		background: linear-gradient(135deg, rgba(234, 88, 12, 0.14), rgba(8, 122, 87, 0.18));
-		color: #014339;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-family: var(--font-sans);
-		font-size: 0.78rem;
-		font-weight: 700;
-	}
-	.session-dot {
-		position: absolute;
-		bottom: -1px;
-		right: -1px;
-		width: 11px;
-		height: 11px;
-		border-radius: 50%;
-		border: 2.5px solid white;
-	}
-	.session-text {
-		flex: 1;
-		min-width: 0;
-	}
-	.session-row {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-		flex-wrap: wrap;
-	}
-	.session-row strong {
-		font-size: 0.92rem;
-		color: #0f172a;
-		font-weight: 600;
-	}
-	.session-mail {
-		font-size: 0.78rem;
-		color: #64748b;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.session-meta {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.85rem;
-		margin-top: 0.25rem;
-	}
-	.meta-item {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
-		font-size: 0.74rem;
-		color: #64748b;
-	}
-	.meta-item svg {
-		color: #94a3b8;
-		flex-shrink: 0;
-	}
-	.meta-item--emerald {
-		color: #075c49;
-	}
-	.meta-item--emerald svg {
-		color: #16a34a;
-	}
-	.session-side {
-		display: flex;
-		align-items: center;
-		gap: 0.85rem;
-		flex-shrink: 0;
-	}
-	.session-time {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: 0.15rem;
-	}
-	.session-time small {
-		font-size: 0.7rem;
-		color: #64748b;
-		font-family: var(--font-sans);
-	}
-
-	/* Pulse para sesiones activas */
-	.pulse-dot {
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		background: #16a34a;
-		display: inline-block;
-		margin-right: 0.35rem;
-		animation: pulse 1.5s ease-in-out infinite;
-	}
-	@keyframes pulse {
-		0%,
-		100% {
-			opacity: 1;
-		}
-		50% {
-			opacity: 0.4;
-		}
-	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   INVITATIONS LIST
-	   ═══════════════════════════════════════════════════════════════ */
-	.inv-list {
-		display: flex;
-		flex-direction: column;
-		gap: 0.6rem;
-	}
-	.inv-card {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem;
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 16px;
-		padding: 1rem 1.1rem;
-		transition: all 0.2s;
-	}
-	.inv-card:hover {
-		border-color: rgba(234, 88, 12, 0.2);
-	}
-	.inv-main {
-		display: flex;
-		align-items: flex-start;
-		gap: 0.85rem;
-		flex: 1;
-		min-width: 0;
-	}
-	.inv-icon {
-		flex-shrink: 0;
-		width: 38px;
-		height: 38px;
-		border-radius: 12px;
-		background: linear-gradient(135deg, rgba(245, 158, 11, 0.14), rgba(217, 119, 6, 0.18));
-		color: #92400e;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-	}
-	.inv-icon svg {
-		width: 18px;
-		height: 18px;
-	}
-	.inv-text {
-		display: flex;
-		flex-direction: column;
-		gap: 0.3rem;
-		min-width: 0;
-	}
-	.inv-correo {
-		font-size: 0.92rem;
-		color: #0f172a;
-		font-weight: 600;
-	}
-	.inv-cargo {
-		font-size: 0.78rem;
-		color: #33423d;
-	}
-	.inv-areas {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.3rem;
-		margin-top: 0.15rem;
-	}
-	.inv-by {
-		font-size: 0.72rem;
-		color: #94a3b8;
-		margin-top: 0.15rem;
-	}
-	.inv-side {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-end;
-		gap: 0.5rem;
-		flex-shrink: 0;
-	}
-	.inv-actions {
-		display: flex;
-		gap: 0.4rem;
-	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   ESTADO PILLS
-	   ═══════════════════════════════════════════════════════════════ */
-	.estado-pill {
-		display: inline-flex;
-		align-items: center;
-		font-family: var(--font-sans);
-		font-size: 0.66rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		padding: 0.25rem 0.55rem;
-		border-radius: 5px;
-		white-space: nowrap;
-	}
-	.estado-pill--emerald {
-		color: #075c49;
-		background: rgba(234, 88, 12, 0.1);
-	}
-	.estado-pill--amber {
-		color: #b45309;
-		background: rgba(245, 158, 11, 0.1);
-	}
-	.estado-pill--red {
-		color: #b91c1c;
-		background: rgba(239, 68, 68, 0.1);
-	}
-	.estado-pill--gray {
-		color: #64748b;
-		background: rgba(0, 0, 0, 0.06);
-	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   ESTADOS GENERALES
-	   ═══════════════════════════════════════════════════════════════ */
-	.state-block {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 0.85rem;
-		padding: 3rem 1.5rem;
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.06);
-		border-radius: 20px;
-		color: #64748b;
-		font-size: 0.88rem;
-	}
-	.spin-ring {
-		width: 30px;
-		height: 30px;
-		border: 2.5px solid rgba(234, 88, 12, 0.15);
-		border-top-color: #16a34a;
-		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
-	}
-	@keyframes spin {
-		to {
-			transform: rotate(360deg);
-		}
-	}
-	.empty-state {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 0.5rem;
-		padding: 3rem 1.5rem;
-		background: white;
-		border: 1px dashed rgba(0, 0, 0, 0.12);
-		border-radius: 24px;
-		text-align: center;
-	}
-	.empty-state h3 {
-		font-size: 1.3rem;
-		font-weight: 500;
-		margin: 0.25rem 0 0;
-	}
-	.empty-state p {
-		font-size: 0.88rem;
-		color: #33423d;
-		max-width: 420px;
-		margin: 0 0 1rem;
-		line-height: 1.55;
-	}
-	.empty-icon {
-		width: 64px;
-		height: 64px;
-		border-radius: 50%;
-		background: linear-gradient(135deg, rgba(234, 88, 12, 0.08), rgba(8, 122, 87, 0.12));
-		color: #16a34a;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		margin-bottom: 0.4rem;
-		box-shadow: 0 6px 20px rgba(234, 88, 12, 0.12);
-	}
-	.empty-icon svg {
-		width: 28px;
-		height: 28px;
-	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   ALERT
-	   ═══════════════════════════════════════════════════════════════ */
-	.alert {
-		display: flex;
-		align-items: center;
-		gap: 0.75rem;
-		padding: 0.8rem 1rem;
-		border-radius: 12px;
+	/* Nota de pestaña: es texto corrido, por eso sí lleva tope de ancho. */
+	.tab-nota {
 		font-size: 0.85rem;
-	}
-	.alert-error {
-		background: rgba(220, 38, 38, 0.06);
-		border: 1px solid rgba(220, 38, 38, 0.2);
-		color: #991b1b;
-	}
-	.alert-error svg {
-		width: 18px;
-		height: 18px;
-		flex-shrink: 0;
-		color: #dc2626;
-	}
-	.alert strong {
-		font-weight: 600;
-	}
-	.btn-secondary--sm {
-		min-height: 34px;
-		padding: 0.45rem 0.85rem;
-		font-size: 0.78rem;
-	}
-	.spin {
-		width: 14px;
-		height: 14px;
-		animation: spin 0.8s linear infinite;
-	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   LINK BUTTONS (reenviar, revocar, ver todas)
-	   ═══════════════════════════════════════════════════════════════ */
-	.link-btn {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.3rem;
-		font-size: 0.75rem;
-		font-weight: 600;
-		color: #16a34a;
-		background: none;
-		border: none;
-		padding: 0.25rem 0.4rem;
-		border-radius: 6px;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.link-btn:hover {
-		background: rgba(234, 88, 12, 0.08);
-	}
-	.link-btn--danger {
-		color: #dc2626;
-	}
-	.link-btn--danger:hover {
-		background: rgba(220, 38, 38, 0.06);
-	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   MODALES
-	   ═══════════════════════════════════════════════════════════════ */
-	.modal-backdrop {
-		position: fixed;
-		inset: 0;
-		z-index: 60;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 1rem;
-		background: linear-gradient(135deg, rgba(15, 23, 42, 0.4), rgba(20, 83, 45, 0.55));
-		backdrop-filter: blur(8px) saturate(120%);
-		-webkit-backdrop-filter: blur(8px) saturate(120%);
-		overflow-y: auto;
-	}
-	.modal {
-		width: 100%;
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.06);
-		border-radius: 24px;
-		padding: 1.5rem 1.5rem 1.25rem;
-		box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-	}
-	.modal--sm {
-		max-width: 420px;
-	}
-	.modal--md {
-		max-width: 560px;
-	}
-	/* El editor de permisos por ruta es una tabla de módulo × nivel: a 560px las
-	   filas rompen en dos líneas y se pierde la lectura de un vistazo. El
-	   `margin-block: auto` evita que se corte por arriba cuando crece más que la
-	   ventana, porque el backdrop centra con flex y además hace scroll. */
-	.modal--lg {
-		max-width: 780px;
-		margin-block: auto;
-	}
-	.modal-head {
-		display: flex;
-		align-items: flex-start;
-		justify-content: space-between;
-		gap: 1rem;
-	}
-	.modal-head h2 {
-		font-size: 1.4rem;
-		font-weight: 500;
-		margin: 0.35rem 0 0;
-		color: #0f172a;
-	}
-	.modal-title {
-		font-size: 1.3rem;
-		font-weight: 800;
-		margin: 0.35rem 0 0;
-		color: #0f172a;
-		font-family: var(--font-display);
-		letter-spacing: -0.02em;
-	}
-	.modal-desc {
-		font-size: 0.9rem;
-		line-height: 1.6;
-		color: #33423d;
+		line-height: 1.5;
+		color: var(--text-secondary);
 		margin: 0;
+		max-width: 44rem;
 	}
-	.modal-desc strong {
-		color: #0f172a;
-		font-weight: 600;
-	}
-	.modal-close {
-		flex-shrink: 0;
-		width: 32px;
-		height: 32px;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		background: transparent;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 8px;
-		color: #64748b;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.modal-close svg {
-		width: 16px;
-		height: 16px;
-	}
-	.modal-close:hover {
-		color: #0f172a;
-		border-color: rgba(0, 0, 0, 0.2);
-	}
-	.modal-icon {
-		width: 56px;
-		height: 56px;
-		border-radius: 50%;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		margin: 0 auto 0.5rem;
-	}
-	.modal-icon svg {
-		width: 26px;
-		height: 26px;
-	}
-	.modal-icon--danger {
-		background: rgba(220, 38, 38, 0.08);
-		color: #dc2626;
-		border: 1px solid rgba(220, 38, 38, 0.15);
-	}
-	.modal-icon--emerald {
-		background: linear-gradient(135deg, #16a34a, #087a57);
-		color: white;
-		box-shadow: 0 8px 24px rgba(234, 88, 12, 0.3);
-	}
-	.modal-form {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-	}
-	.modal-foot {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.6rem;
-		justify-content: flex-end;
-		padding-top: 1rem;
-		border-top: 1px solid rgba(0, 0, 0, 0.06);
-		margin-top: 0.25rem;
-	}
-
-	/* Form fields */
-	.field {
-		display: flex;
-		flex-direction: column;
-		gap: 0.4rem;
-	}
-	.field-grid {
-		display: grid;
-		grid-template-columns: 1fr;
-		gap: 1rem;
-	}
-	@media (min-width: 540px) {
-		.field-grid {
-			grid-template-columns: repeat(2, 1fr);
-		}
-	}
-	.field-label {
-		font-size: 0.78rem;
-		font-weight: 600;
-		color: #0f172a;
-	}
-	.field-required {
-		color: #dc2626;
-		margin-left: 0.1rem;
-	}
-	.input {
-		width: 100%;
+	.tab-nota--aviso {
 		padding: 0.6rem 0.85rem;
-		font-family: inherit;
-		font-size: 0.88rem;
-		color: #0f172a;
-		background: #fcfcfb;
-		border: 1px solid rgba(0, 0, 0, 0.1);
-		border-radius: 10px;
-		outline: none;
-		transition: all 0.2s;
-	}
-	.input::placeholder {
-		color: #94a3b8;
-	}
-	.input:focus {
-		background: white;
-		border-color: rgba(234, 88, 12, 0.4);
-		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1);
+		border-radius: 12px;
+		background: rgba(245, 158, 11, 0.08);
+		border: 1px solid rgba(245, 158, 11, 0.22);
+		color: #92400e;
 	}
 
-	/* Area picker (chips) */
-	.area-picker {
+	/* Barra de foco: aparece al llegar desde «ver sesiones» de una fila. */
+	.foco-usuario {
 		display: flex;
 		flex-wrap: wrap;
-		gap: 0.4rem;
-	}
-	.area-pill {
-		font-family: var(--font-sans);
-		font-size: 0.78rem;
-		font-weight: 600;
-		color: #33423d;
-		background: #fcfcfb;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		padding: 0.45rem 0.85rem;
-		border-radius: 10px;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.area-pill:hover {
-		border-color: rgba(0, 0, 0, 0.15);
-		color: #0f172a;
-	}
-	.area-pill--active {
-		background: linear-gradient(135deg, rgba(234, 88, 12, 0.1), rgba(8, 122, 87, 0.14));
-		color: #014339;
-		border-color: rgba(234, 88, 12, 0.35);
-	}
-
-	/* Permisos */
-	.perm-bulk {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 0.85rem 1rem;
-		background: #fcfcfb;
-		border-radius: 12px;
-		border: 1px solid rgba(0, 0, 0, 0.06);
-	}
-	.perm-bulk-label {
-		font-family: var(--font-sans);
-		font-size: 0.7rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: #64748b;
-	}
-	.perm-bulk-btns {
-		display: flex;
-		gap: 0.4rem;
-	}
-	.perm-grid {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: 0.5rem;
-		max-height: 360px;
-		overflow-y: auto;
-		padding: 0.25rem;
-	}
-	.perm-row {
-		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		gap: 0.75rem;
-		padding: 0.7rem 0.9rem;
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 12px;
-		cursor: pointer;
-		transition: all 0.2s;
-		text-align: left;
-		font-family: inherit;
+		padding: 0.6rem 0.85rem;
+		border-radius: 14px;
+		background: var(--au-tint, #ddf7ea);
+		border: 1px solid var(--border-default);
 	}
-	.perm-row:hover {
-		border-color: rgba(0, 0, 0, 0.15);
-	}
-	.perm-row--active {
-		background: linear-gradient(135deg, rgba(234, 88, 12, 0.06), rgba(8, 122, 87, 0.1));
-		border-color: rgba(234, 88, 12, 0.25);
-	}
-	.perm-row-label {
+	.foco-usuario p {
+		margin: 0;
 		font-size: 0.85rem;
-		font-weight: 500;
-		color: #0f172a;
+		color: var(--text-secondary);
 	}
 
-	/* ═══════════════════════════════════════════════════════════════
-	   PERMISO DE BONOS — sección de otorgamiento individual
-	   ═══════════════════════════════════════════════════════════════ */
+	/* Aviso de sección restringida: ámbar, es un semáforo. */
 	.alert-block {
 		display: flex;
 		align-items: flex-start;
 		gap: 0.75rem;
 		padding: 1rem 1.25rem;
 		border-radius: 14px;
-		background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), rgba(245, 158, 11, 0.03));
+		background: rgba(245, 158, 11, 0.08);
 		border: 1px solid rgba(245, 158, 11, 0.25);
 		color: #92400e;
 	}
-	.alert-block svg {
-		width: 20px;
-		height: 20px;
+	.alert-block :global(svg) {
 		flex-shrink: 0;
 		margin-top: 2px;
 	}
@@ -3399,233 +1698,56 @@
 		line-height: 1.5;
 	}
 
-	.bonos-bulk-actions {
+	/* Acciones masivas del permiso de bonos. */
+	.usr-bonos-barra {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.5rem;
-		padding: 0.875rem 1.25rem;
-		border-radius: 12px;
-		background: var(--bg-base, #fafaf9);
-		border: 1px solid var(--border-subtle, #f0f0ee);
-		margin: 0 0 1rem 0;
+		justify-content: space-between;
+		gap: 0.6rem 1rem;
+		padding: 0.6rem 0.75rem 0.6rem 1rem;
+		border-radius: 16px;
+		background: var(--bg-surface);
+		border: 1px solid var(--border-subtle);
 	}
-
-	.btn-bonos-grant {
-		min-height: 34px;
-		padding: 0.5rem 0.875rem;
-		font-size: 0.75rem;
-	}
-	.btn-bonos-revoke {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.5rem 0.875rem;
-		border-radius: 10px;
-		font-size: 0.75rem;
-		font-weight: 600;
-		border: 1px solid transparent;
-		cursor: pointer;
-		transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-	}
-	.btn-bonos-revoke {
-		background: white;
-		color: #b91c1c;
-		border-color: rgba(220, 38, 38, 0.3);
-	}
-	.btn-bonos-revoke:hover:not(:disabled) {
-		background: rgba(220, 38, 38, 0.06);
-		border-color: #dc2626;
-	}
-	.btn-bonos-revoke:disabled {
-		opacity: 0.5;
-		cursor: not-allowed;
-	}
-	.bonos-btn-count {
-		opacity: 0.85;
-		font-weight: 500;
-	}
-
-	.bonos-select-all {
-		margin-left: auto;
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		font-size: 0.75rem;
-		color: var(--text-secondary, #4b5563);
-		cursor: pointer;
-		user-select: none;
-	}
-	.bonos-select-all input {
-		accent-color: #16a34a;
-	}
-
-	.bonos-selected-count {
-		display: inline-flex;
-		align-items: center;
-		padding: 0.25rem 0.625rem;
-		border-radius: 999px;
-		background: rgba(234, 88, 12, 0.08);
-		color: #075c49;
-		font-size: 0.6875rem;
-		font-weight: 600;
-		border: 1px solid rgba(234, 88, 12, 0.2);
-	}
-
-	.bonos-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-		gap: 0.625rem;
-	}
-
-	.bonos-card {
-		position: relative;
+	.usr-bonos-seleccion {
 		display: flex;
+		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.75rem;
-		padding: 0.875rem 1rem;
-		border-radius: 14px;
-		background: var(--bg-surface, #ffffff);
-		border: 1.5px solid var(--border-subtle, #f0f0ee);
-		cursor: pointer;
-		transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-	}
-	.bonos-card:hover {
-		border-color: rgba(234, 88, 12, 0.35);
-		transform: translateY(-1px);
-		box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
-	}
-	.bonos-card--active {
-		background: linear-gradient(135deg, rgba(234, 88, 12, 0.04), rgba(234, 88, 12, 0.01));
-		border-color: rgba(234, 88, 12, 0.35);
-	}
-	.bonos-card--selected {
-		background: linear-gradient(135deg, rgba(59, 130, 246, 0.06), rgba(59, 130, 246, 0.02));
-		border-color: #3b82f6;
-		box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-	}
-	.bonos-card-check {
-		flex-shrink: 0;
-		width: 16px;
-		height: 16px;
-		accent-color: #3b82f6;
-		cursor: pointer;
-	}
-	.bonos-card-avatar {
-		flex-shrink: 0;
-		width: 40px;
-		height: 40px;
-		border-radius: 50%;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 0.875rem;
-		font-weight: 600;
-		color: white;
-		position: relative;
-	}
-	.bonos-card-avatar.avatar--online {
-		background: linear-gradient(135deg, #16a34a, #087a57);
-	}
-	.bonos-card-avatar.avatar--inactive {
-		background: linear-gradient(135deg, #9ca3af, #6b7280);
-		opacity: 0.7;
-	}
-	.bonos-card-text {
-		flex: 1;
+		gap: 0.4rem 1rem;
 		min-width: 0;
 	}
-	.bonos-card-row {
-		display: flex;
-		align-items: center;
-		gap: 0.4rem;
-	}
-	.bonos-card-row strong {
-		font-size: 0.8125rem;
-		color: var(--text-primary, #0f172a);
-		font-weight: 600;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-	}
-	.bonos-card-mail {
-		display: block;
-		font-size: 0.6875rem;
-		color: var(--text-very-muted, #9ca3af);
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		font-family: var(--font-mono);
-	}
-	.bonos-card-cargo {
-		display: block;
-		font-size: 0.6875rem;
-		color: var(--text-muted, #6b7280);
-		font-style: italic;
-	}
-	.bonos-card-state {
-		flex-shrink: 0;
-	}
-	.bonos-pill {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.25rem;
-		padding: 0.25rem 0.625rem;
-		border-radius: 999px;
-		font-size: 0.6875rem;
-		font-weight: 600;
-		white-space: nowrap;
-	}
-	.bonos-pill--emerald {
-		background: rgba(234, 88, 12, 0.1);
-		color: #075c49;
-		border: 1px solid rgba(234, 88, 12, 0.3);
-	}
-	.bonos-pill--gray {
-		background: rgba(156, 163, 175, 0.1);
-		color: #6b7280;
-		border: 1px solid rgba(156, 163, 175, 0.25);
-	}
-	.bonos-pill--emerald svg {
-		color: #087a57;
-	}
-
-	/* Nota explicativa dentro del modal de alta manual: dice en una línea en
-	   qué se diferencia de invitar, que es la duda que aparece al abrirlo. */
-	.modal-nota {
-		margin: 0;
-		padding: 0.7rem 0.85rem;
-		font-size: 0.8rem;
-		line-height: 1.55;
-		color: #33423d;
-		background: rgba(0, 0, 0, 0.025);
-		border: 1px solid rgba(0, 0, 0, 0.07);
-		border-radius: 10px;
-	}
-	/* Dos campos por fila; en móvil se apilan solos. */
-	.field-row {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 0.85rem;
-	}
-	@media (max-width: 560px) {
-		.field-row {
-			grid-template-columns: 1fr;
-		}
-	}
-	.check-inline {
+	.usr-bonos-todos {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.45rem;
-		margin-top: -0.35rem;
+		min-height: 38px;
 		font-size: 0.8rem;
-		color: #33423d;
+		font-weight: 600;
+		color: var(--text-secondary);
 		cursor: pointer;
 		user-select: none;
 	}
-	.check-inline input {
-		width: 0.95rem;
-		height: 0.95rem;
+	.usr-bonos-todos input {
+		width: 1rem;
+		height: 1rem;
+		accent-color: var(--accion);
 		cursor: pointer;
+	}
+	.usr-bonos-todos input:disabled {
+		cursor: not-allowed;
+	}
+	.usr-bonos-texto {
+		margin: 0;
+		font-size: 0.8rem;
+		color: var(--text-muted);
+	}
+	.usr-bonos-texto strong {
+		color: var(--text-primary);
+	}
+	.usr-bonos-acciones {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
 	}
 </style>

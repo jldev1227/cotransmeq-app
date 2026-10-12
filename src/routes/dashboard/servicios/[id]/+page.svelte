@@ -3,6 +3,9 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { User } from 'lucide-svelte';
+	import { listadoServicios } from '$lib/stores/volverListado';
+	import { toast } from '$lib/stores/toast';
 	import { fade } from 'svelte/transition';
 	import mapboxgl from 'mapbox-gl';
 	import 'mapbox-gl/dist/mapbox-gl.css';
@@ -60,6 +63,16 @@
 	// ─── STORE ────────────────────────────────────────────────────
 
 	$: servicio = $servicioDetalleStore.servicio;
+
+	/// Foto del conductor con respaldo: la URL firmada puede expirar o el
+	/// archivo ya no existir. Se reinicia al cambiar de foto (otro servicio).
+	let fotoConductorRota = false;
+	$: fotoConductor = servicio?.conductor?.foto_signed_url ?? null;
+	$: (fotoConductor, (fotoConductorRota = false));
+	$: inicialesConductor = [servicio?.conductor?.nombre, servicio?.conductor?.apellido]
+		.map((p) => (p ?? '').trim().charAt(0))
+		.join('')
+		.toUpperCase();
 	$: loading = $servicioDetalleStore.loading;
 	$: error = $servicioDetalleStore.error;
 
@@ -1405,13 +1418,13 @@
 			let t = servicio.share_token;
 			if (!t) t = (await serviciosStore.generarShareToken(servicio.id)) ?? undefined;
 			if (!t) {
-				alert('Error al generar enlace');
+				toast.error('No se pudo generar el enlace para compartir');
 				return;
 			}
 			generatedShareUrl = `${window.location.origin}/public/servicio/${t}`;
 			showShareModal = true;
 		} catch {
-			alert('Error al compartir');
+			toast.error('No se pudo compartir el servicio');
 		}
 	}
 	function cerrarCompartir() {
@@ -1427,7 +1440,9 @@
 				copySuccess = false;
 			}, 2000);
 		} catch {
-			alert('Error al copiar');
+			/// El portapapeles falla sin foco o sin permiso; el enlace sigue
+			/// visible en el modal para copiarlo a mano.
+			toast.error('No se pudo copiar el enlace', { description: 'Selecciónalo y cópialo a mano.' });
 		}
 	}
 
@@ -1483,7 +1498,7 @@
 					</svg>
 				</div>
 				<p class="mb-4 text-gray-600">{error}</p>
-				<button onclick={() => goto('/dashboard/servicios')} class="btn-primary apple-transition">
+				<button onclick={() => goto(listadoServicios.url())} class="btn-primary apple-transition">
 					Volver
 				</button>
 			</div>
@@ -1494,7 +1509,7 @@
 			<button
 				onclick={() => {
 					isNavigating = true;
-					goto('/dashboard/servicios');
+					goto(listadoServicios.url());
 				}}
 				disabled={isNavigating}
 				aria-label="Volver a servicios"
@@ -2005,15 +2020,22 @@
 
 						<div class="detalle-seccion"><h2 class="detalle-seccion-titulo">Conductor</h2></div>
 						<div class="detalle-card detalle-persona">
-							{#if servicio.conductor?.foto_signed_url}
+							<!-- La URL firmada puede haber expirado o el archivo ya no estar:
+							     si la imagen falla, se muestran las iniciales. -->
+							{#if servicio.conductor?.foto_signed_url && !fotoConductorRota}
 								<img
 									src={servicio.conductor.foto_signed_url}
 									alt={servicio.conductor.nombre}
 									class="detalle-avatar object-cover"
+									onerror={() => (fotoConductorRota = true)}
 								/>
-							{:else if servicio.conductor}
-								<div class="detalle-avatar detalle-avatar--iniciales">
-									{servicio.conductor.nombre.charAt(0)}{servicio.conductor.apellido.charAt(0)}
+							{:else if inicialesConductor}
+								<div class="detalle-avatar detalle-avatar--iniciales" aria-hidden="true">
+									{inicialesConductor}
+								</div>
+							{:else}
+								<div class="detalle-avatar detalle-avatar--iniciales" aria-hidden="true">
+									<User size={20} />
 								</div>
 							{/if}
 							<div class="min-w-0 flex-1">

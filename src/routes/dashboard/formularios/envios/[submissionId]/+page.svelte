@@ -11,6 +11,7 @@
 -->
 <script lang="ts">
 	import { confirmarEliminacion } from '$lib/stores/confirm';
+	import { listadoEnvios, listadoFormularios } from '$lib/stores/volverListado';
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { toast } from 'svelte-sonner';
@@ -90,6 +91,17 @@
 	}
 
 	onMount(cargar);
+
+	/// Las migas vuelven al catálogo y a la pestaña de envíos con los filtros
+	/// con los que se salió (formato, estado, fechas, búsqueda). Antes volvían
+	/// a las rutas peladas y había que rehacer el filtro para abrir el
+	/// siguiente envío. Se leen al montar: viven en sessionStorage.
+	let urlCatalogo = $state('/dashboard/formularios');
+	let urlEnvios = $state('/dashboard/formularios?vista=envios');
+	onMount(() => {
+		urlCatalogo = listadoFormularios.url();
+		urlEnvios = listadoEnvios.url();
+	});
 
 	async function anular() {
 		if (motivo.trim().length < 10) {
@@ -241,9 +253,9 @@
 
 <div class="pagina">
 	<nav class="migas" aria-label="Ruta">
-		<a href="/dashboard/formularios">Formularios</a>
+		<a href={urlCatalogo}>Formularios</a>
 		<span aria-hidden="true">›</span>
-		<a href="/dashboard/formularios/envios">Envíos</a>
+		<a href={urlEnvios}>Envíos</a>
 		<span aria-hidden="true">›</span>
 		<span>Detalle</span>
 	</nav>

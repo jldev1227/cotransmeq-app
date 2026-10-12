@@ -271,28 +271,32 @@
 			const firmas: any[] = [];
 			let firmaOrigen: 'prima' | 'nomina' | null = null;
 
+			// 1) PRIORIDAD: Firma propia de la prima (vía endpoint enriquecido del dashboard)
+			//    Este endpoint usa auth de admin, por lo que funciona aunque no haya
+			//    sesión de portal del conductor. El backend aplica fallback automático
+			//    a firma de nómina del mismo conductor del mismo mes/año (±1 mes).
+			let firmaEnriquecida: Awaited<ReturnType<typeof obtenerPrimaFirmaEnriquecida>>;
 			try {
-				// 1) PRIORIDAD: Firma propia de la prima (vía endpoint enriquecido del dashboard)
-				//    Este endpoint usa auth de admin, por lo que funciona aunque no haya
-				//    sesión de portal del conductor. El backend aplica fallback automático
-				//    a firma de nómina del mismo conductor del mismo mes/año (±1 mes).
-				try {
-					const firmaEnriquecida: any = await obtenerPrimaFirmaEnriquecida(p.id);
-					if (firmaEnriquecida?.presignedUrl) {
-						firmas.push({
-							presignedUrl: firmaEnriquecida.presignedUrl,
-							fecha_firma: firmaEnriquecida.fecha_firma
-						});
-						firmaOrigen = firmaEnriquecida.origen || 'prima';
-					}
-				} catch (e) {
-					console.warn(
-						'[Prima PDF] No se pudo obtener firma de prima vía endpoint enriquecido (admin):',
-						e
-					);
-				}
-			} catch (e) {
-				console.warn('No se pudo obtener firma para la prima:', e);
+				firmaEnriquecida = await obtenerPrimaFirmaEnriquecida(p.id);
+			} catch (e: any) {
+				/// Sin firma el endpoint responde `data: null`; una excepción es que
+				/// NO se sabe si la hay. Antes el error iba a la consola y el PDF
+				/// salía sin firma con el aviso «el conductor aún no ha firmado»,
+				/// que podía ser falso: mejor no emitirlo y dejar reintentar.
+				toast.error('No se pudo consultar la firma de la prima', {
+					description:
+						(e?.response?.data?.message || e?.message || 'Error de red') +
+						'. El PDF no se generó: podría salir sin la firma del conductor.',
+					action: { label: 'Reintentar', onClick: () => handleDescargarPdfPrima(p) }
+				});
+				return;
+			}
+			if (firmaEnriquecida?.presignedUrl) {
+				firmas.push({
+					presignedUrl: firmaEnriquecida.presignedUrl,
+					fecha_firma: firmaEnriquecida.fecha_firma
+				});
+				firmaOrigen = firmaEnriquecida.origen || 'prima';
 			}
 
 			await generarPdfPrima(p, firmas);

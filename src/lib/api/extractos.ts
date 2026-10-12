@@ -329,12 +329,36 @@ export const extractosAPI = {
 };
 
 /** Validación pública: sin sesión, por el código del QR. */
+/**
+ * Error de la validación pública. `noEncontrado` distingue «ese código no
+ * existe» de «no se pudo consultar» (sin señal, servidor caído): a quien
+ * valida en la vía no se le puede decir que rechace un extracto auténtico
+ * porque el celular se quedó sin datos.
+ */
+export class ErrorValidacionExtracto extends Error {
+	constructor(
+		message: string,
+		readonly noEncontrado: boolean
+	) {
+		super(message);
+	}
+}
+
 export async function validarExtractoPublico(codigo: string): Promise<ExtractoPublico> {
 	const API = (import.meta.env.VITE_API_URL as string) || '';
 	const base = API.endsWith('/') ? API.slice(0, -1) : API;
-	const res = await fetch(`${base}/api/public/extractos/${encodeURIComponent(codigo)}`);
+	let res: Response;
+	try {
+		res = await fetch(`${base}/api/public/extractos/${encodeURIComponent(codigo)}`);
+	} catch {
+		throw new ErrorValidacionExtracto('Sin conexión con el servidor', false);
+	}
 	const json = await res.json().catch(() => null);
-	if (!res.ok) throw new Error(json?.message || 'No se pudo validar el extracto');
+	if (!res.ok)
+		throw new ErrorValidacionExtracto(
+			json?.message || 'No se pudo validar el extracto',
+			res.status === 404
+		);
 	return json.data as ExtractoPublico;
 }
 

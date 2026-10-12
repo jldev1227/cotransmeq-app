@@ -6,7 +6,7 @@
 	import {
 		asistenciasAPI,
 		type FormularioAsistencia,
-		type RespuestaAsistencia
+		type ConfirmacionAsistencia
 	} from '$lib/api/asistencias';
 	import { getDeviceFingerprint } from '$lib/utils/fingerprint';
 	import SignatureCanvas from '$lib/components/asistencias/SignatureCanvas.svelte';
@@ -15,7 +15,9 @@
 	let token = '';
 	let formulario: FormularioAsistencia | null = null;
 	let yaRespondio = false;
-	let miRespuesta: RespuestaAsistencia | null = null;
+	/// Solo nombre y fecha: la verificación pública ya no devuelve documento,
+	/// teléfono ni firma (los entregaba sin sesión a quien tuviera el QR).
+	let confirmacion: ConfirmacionAsistencia | null = null;
 	let deviceFingerprint = '';
 	let isLoading = true;
 	let isSubmitting = false;
@@ -50,7 +52,7 @@
 	};
 
 	onMount(async () => {
-		token = $page.params.token;
+		token = $page.params.token ?? '';
 
 		// Obtener fingerprint del dispositivo
 		deviceFingerprint = await getDeviceFingerprint();
@@ -65,22 +67,11 @@
 			// Primero verificar si ya respondió (antes de cargar el formulario completo)
 			const verificacion = await asistenciasAPI.verificarRespuesta(token, deviceFingerprint);
 
-			yaRespondio = verificacion.yaRespondio;
-			miRespuesta = verificacion.respuesta || null;
+			yaRespondio = verificacion.respondido;
+			confirmacion = verificacion.respondido ? verificacion : null;
 
 			// Obtener formulario
 			formulario = await asistenciasAPI.obtenerFormularioPorToken(token);
-
-			// Si ya respondió, cargar sus datos
-			if (miRespuesta) {
-				nombreCompleto = miRespuesta.nombre_completo;
-				numeroDocumento = miRespuesta.numero_documento;
-				cargo = miRespuesta.cargo;
-				numeroTelefono = miRespuesta.numero_telefono;
-				perteneceComite = miRespuesta.pertenece_comite;
-				nombreComite = miRespuesta.nombre_comite || '';
-				firma = miRespuesta.firma;
-			}
 		} catch (error: any) {
 			toast.error(error.message || 'Formulario no encontrado');
 		} finally {
@@ -488,7 +479,7 @@
 
 				<!-- COLUMNA DERECHA: Formulario o Estado "Ya Respondió" -->
 				<div>
-					{#if yaRespondio && miRespuesta}
+					{#if yaRespondio && confirmacion}
 						<!-- Ya respondió - Mensaje amigable -->
 						<div
 							class="glass soft-shadow space-y-6 rounded-2xl border border-gray-200/50 bg-white p-8"
@@ -530,7 +521,7 @@
 										/>
 									</svg>
 									<span>
-										Enviado el {new Date(miRespuesta.created_at).toLocaleDateString('es-CO', {
+										Enviado el {new Date(confirmacion.fecha ?? '').toLocaleDateString('es-CO', {
 											day: 'numeric',
 											month: 'long',
 											year: 'numeric',
@@ -547,11 +538,11 @@
 									<div class="w-full border-t border-gray-200"></div>
 								</div>
 								<div class="relative flex justify-center text-sm">
-									<span class="bg-white px-4 text-gray-500">Tus datos registrados</span>
+									<span class="bg-white px-4 text-gray-500">Firma registrada a nombre de</span>
 								</div>
 							</div>
 
-							<!-- Datos registrados con diseño mejorado -->
+							<!-- Solo el nombre: la verificación pública no devuelve más datos -->
 							<div class="space-y-4">
 								<!-- Nombre -->
 								<div
@@ -578,184 +569,9 @@
 												Nombre Completo
 											</p>
 											<p class="mt-1 text-lg font-semibold text-gray-900">
-												{miRespuesta.nombre_completo}
+												{confirmacion.nombre}
 											</p>
 										</div>
-									</div>
-								</div>
-
-								<!-- Documento y Teléfono -->
-								<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-									<div
-										class="group rounded-xl bg-gradient-to-br from-blue-50 to-blue-100/50 p-5 transition-all hover:shadow-md"
-									>
-										<div class="flex items-start gap-3">
-											<div class="mt-0.5 rounded-lg bg-white p-2 shadow-sm">
-												<svg
-													class="h-5 w-5 text-blue-600"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2"
-													/>
-												</svg>
-											</div>
-											<div class="flex-1">
-												<p class="text-xs font-medium tracking-wider text-blue-600 uppercase">
-													Documento
-												</p>
-												<p class="mt-1 text-base font-semibold text-gray-900">
-													{miRespuesta.numero_documento}
-												</p>
-											</div>
-										</div>
-									</div>
-
-									<div
-										class="group rounded-xl bg-gradient-to-br from-purple-50 to-purple-100/50 p-5 transition-all hover:shadow-md"
-									>
-										<div class="flex items-start gap-3">
-											<div class="mt-0.5 rounded-lg bg-white p-2 shadow-sm">
-												<svg
-													class="h-5 w-5 text-purple-600"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
-													/>
-												</svg>
-											</div>
-											<div class="flex-1">
-												<p class="text-xs font-medium tracking-wider text-purple-600 uppercase">
-													Teléfono
-												</p>
-												<p class="mt-1 text-base font-semibold text-gray-900">
-													{miRespuesta.numero_telefono}
-												</p>
-											</div>
-										</div>
-									</div>
-								</div>
-
-								<!-- Cargo -->
-								<div
-									class="group rounded-xl bg-gradient-to-br from-amber-50 to-amber-100/50 p-5 transition-all hover:shadow-md"
-								>
-									<div class="flex items-start gap-3">
-										<div class="mt-0.5 rounded-lg bg-white p-2 shadow-sm">
-											<svg
-												class="h-5 w-5 text-amber-600"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-												/>
-											</svg>
-										</div>
-										<div class="flex-1">
-											<p class="text-xs font-medium tracking-wider text-amber-600 uppercase">
-												Cargo
-											</p>
-											<p class="mt-1 text-base font-semibold text-gray-900">{miRespuesta.cargo}</p>
-										</div>
-									</div>
-								</div>
-
-								<!-- ¿Pertenece a Comité? -->
-								{#if miRespuesta.pertenece_comite !== null && miRespuesta.pertenece_comite !== undefined}
-									<div
-										class="group rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100/50 p-5 transition-all hover:shadow-md"
-									>
-										<div class="flex items-start gap-3">
-											<div class="mt-0.5 rounded-lg bg-white p-2 shadow-sm">
-												<svg
-													class="h-5 w-5 text-emerald-600"
-													fill="none"
-													stroke="currentColor"
-													viewBox="0 0 24 24"
-												>
-													<path
-														stroke-linecap="round"
-														stroke-linejoin="round"
-														stroke-width="2"
-														d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"
-													/>
-												</svg>
-											</div>
-											<div class="flex-1">
-												<p class="text-xs font-medium tracking-wider text-emerald-600 uppercase">
-													¿Pertenece a Comité?
-												</p>
-												<div class="mt-1.5 flex flex-wrap items-center gap-2">
-													{#if miRespuesta.pertenece_comite === true}
-														<span
-															class="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700"
-														>
-															<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-																<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-															</svg>
-															Sí
-														</span>
-														{#if miRespuesta.nombre_comite}
-															<span class="text-sm font-semibold text-gray-900">
-																{miRespuesta.nombre_comite}
-															</span>
-														{/if}
-													{:else}
-														<span
-															class="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-700"
-														>
-															<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5">
-																<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-															</svg>
-															No
-														</span>
-													{/if}
-												</div>
-											</div>
-										</div>
-									</div>
-								{/if}
-
-								<!-- Firma -->
-								<div class="rounded-xl bg-gradient-to-br from-orange-50 to-orange-100/50 p-5">
-									<div class="mb-3 flex items-center gap-2">
-										<div class="rounded-lg bg-white p-2 shadow-sm">
-											<svg
-												class="h-5 w-5 text-orange-600"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-												/>
-											</svg>
-										</div>
-										<p class="text-xs font-medium tracking-wider text-orange-600 uppercase">
-											Firma Digital
-										</p>
-									</div>
-									<div class="overflow-hidden rounded-lg border-2 border-white bg-white shadow-sm">
-										<img src={miRespuesta.firma} alt="Firma" class="w-full" />
 									</div>
 								</div>
 							</div>

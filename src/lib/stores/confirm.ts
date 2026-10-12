@@ -23,8 +23,22 @@ export interface ConfirmOptions {
 	cancelText?: string | null;
 }
 
+/** Campo de texto del diálogo de `pedirTexto()`. */
+export interface EntradaTexto {
+	label: string;
+	placeholder?: string;
+	valorInicial?: string;
+	/** `false` permite aceptar vacío. Por defecto el botón espera texto. */
+	requerido?: boolean;
+	maxLength?: number;
+}
+
+export interface TextoOptions extends Omit<ConfirmOptions, 'cancelText'>, EntradaTexto {}
+
 interface Pendiente extends ConfirmOptions {
-	resolve: (ok: boolean) => void;
+	entrada?: EntradaTexto;
+	/** `texto` solo llega desde el diálogo de `pedirTexto()`. */
+	resolve: (ok: boolean, texto?: string) => void;
 }
 
 export const confirmActual = writable<Pendiente | null>(null);
@@ -34,22 +48,46 @@ export const confirmActual = writable<Pendiente | null>(null);
 /// equivocado.
 let abierta: Pendiente | null = null;
 
-export function confirmar(opciones: ConfirmOptions): Promise<boolean> {
+function abrir<T>(
+	opciones: Omit<Pendiente, 'resolve'>,
+	alResolver: (ok: boolean, texto?: string) => T
+): Promise<T> {
 	abierta?.resolve(false);
-	return new Promise<boolean>((resolve) => {
+	return new Promise<T>((resolve) => {
 		const pendiente: Pendiente = {
 			...opciones,
-			resolve: (ok) => {
+			resolve: (ok, texto) => {
 				if (abierta === pendiente) {
 					abierta = null;
 					confirmActual.set(null);
 				}
-				resolve(ok);
+				resolve(alResolver(ok, texto));
 			}
 		};
 		abierta = pendiente;
 		confirmActual.set(pendiente);
 	});
+}
+
+export function confirmar(opciones: ConfirmOptions): Promise<boolean> {
+	return abrir(opciones, (ok) => ok);
+}
+
+/**
+ * Pide un texto corto —un motivo, una observación— con la misma tarjeta de
+ * `confirmar()`. Devuelve el texto sin espacios sobrantes, o `null` si se
+ * canceló.
+ *
+ * Reemplaza a `window.prompt()`: además de bloquear la pestaña, el nativo es
+ * de una sola línea, no deja ver lo escrito en un motivo largo y Chrome lo
+ * puede silenciar para siempre igual que a `confirm()`.
+ */
+export function pedirTexto(opciones: TextoOptions): Promise<string | null> {
+	const { label, placeholder, valorInicial, requerido, maxLength, ...resto } = opciones;
+	return abrir(
+		{ ...resto, entrada: { label, placeholder, valorInicial, requerido, maxLength } },
+		(ok, texto) => (ok ? (texto ?? '').trim() : null)
+	);
 }
 
 /** Atajo para acciones destructivas: eliminar, anular, descartar. */

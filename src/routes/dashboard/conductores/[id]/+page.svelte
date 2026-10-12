@@ -3,6 +3,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	import { listadoConductores } from '$lib/stores/volverListado';
 	import { fade, fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import Cropper, { type OnCropCompleteEvent } from 'svelte-easy-crop';
@@ -11,8 +12,17 @@
 	import { socketUtils } from '$lib/socket';
 	import { toast } from 'svelte-sonner';
 	import ReadonlyField from '$lib/components/ReadonlyField.svelte';
+	import DocumentosConductor from '$lib/components/conductores/DocumentosConductor.svelte';
 
-	type TabType = 'personal' | 'laboral' | 'seguridad' | 'licencia';
+	/// Destino del «Volver» y de la miga: el listado con los filtros y la página
+	/// de donde se vino. Se lee al montar: vive en sessionStorage, que el render
+	/// del servidor no tiene.
+	let urlListado = '/dashboard/conductores';
+	onMount(() => {
+		urlListado = listadoConductores.url();
+	});
+
+	type TabType ='personal' | 'laboral' | 'seguridad' | 'licencia' | 'documentos';
 	type EstadoType = 'ACTIVO' | 'INACTIVO' | 'VACACIONES' | 'INCAPACITADO' | 'RETIRADO' | 'servicio';
 	type SedeType = '' | 'YOPAL' | 'VILLANUEVA' | 'TAURAMENA';
 	type GeneroType = '' | 'M' | 'F' | 'MASCULINO' | 'FEMENINO' | 'OTRO';
@@ -100,6 +110,11 @@
 			id: 'licencia',
 			label: 'Licencia',
 			icon: 'M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2'
+		},
+		{
+			id: 'documentos',
+			label: 'Documentos',
+			icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'
 		}
 	];
 
@@ -181,6 +196,10 @@
 		{
 			id: 'licencia',
 			description: 'Categoría y fecha de vencimiento de la licencia de conducción.'
+		},
+		{
+			id: 'documentos',
+			description: 'Hoja de vida documental: licencia, exámenes, cursos y soportes, con su vigencia.'
 		}
 	];
 
@@ -190,6 +209,10 @@
 	let modalAbierto = false;
 	let error: string | null = null;
 	let activeTab: TabType = 'personal';
+	/// `?tab=documentos` abre esa pestaña (ahí lleva el aviso de vencimiento),
+	/// también si la ficha ya estaba abierta y solo cambió la URL.
+	$: tabDeUrl = $page.url.searchParams.get('tab');
+	$: if (tabDeUrl === 'documentos') activeTab = 'documentos';
 
 	let formData: ConductorForm = emptyForm();
 
@@ -326,7 +349,9 @@
 			personal: count(['nombre', 'apellido', 'numero_identificacion', 'email', 'telefono']),
 			laboral: count(['cargo', 'fecha_ingreso', 'salario_base', 'estado', 'sede_trabajo']),
 			seguridad: count(['eps', 'fondo_pension', 'arl']),
-			licencia: count(['categoria_licencia', 'vencimiento_licencia'])
+			licencia: count(['categoria_licencia', 'vencimiento_licencia']),
+			/// Sin contador: su estado es el semáforo de la propia pestaña.
+			documentos: { done: 0, total: 0 }
 		};
 	}
 
@@ -460,6 +485,19 @@
 
 	function requestTabChange(tab: TabType) {
 		activeTab = tab;
+	}
+
+	/// Tras subir o corregir la licencia en Documentos: su fecha y categoría
+	/// también viven en la ficha. Sin `isLoading`, que desmontaría la pestaña.
+	async function refrescarFicha() {
+		if (!conductorId) return;
+		try {
+			const response = await conductoresAPI.getById(conductorId);
+			conductor = response.data.data || response.data;
+			if (conductor) formData = toForm(conductor);
+		} catch {
+			// La pestaña ya confirmó el guardado; la ficha se pone al día al recargar.
+		}
 	}
 
 	function handleFileSelect(event: Event) {
@@ -659,14 +697,14 @@
 			type="button"
 			class="btn-icon"
 			aria-label="Volver al listado"
-			on:click={() => goto('/dashboard/conductores')}
+			on:click={() => goto(urlListado)}
 		>
 			<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
 				<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
 			</svg>
 		</button>
 		<span class="cond-miga">
-			<a href="/dashboard/conductores">Conductores</a>
+			<a href={urlListado}>Conductores</a>
 			<span aria-hidden="true">/</span>
 			<strong>{fullName || 'Cargando…'}</strong>
 		</span>
@@ -1046,12 +1084,12 @@
 									</svg>
 								</span>
 								<span class="whitespace-nowrap">{tab.label}</span>
-								<span
+								{#if completion.total}<span
 									class="rounded-full px-1.5 py-0.5 text-[10px] font-bold"
 									style={`background: ${pct === 100 ? 'rgba(234, 88, 12,0.12)' : 'rgba(0,0,0,0.04)'}; color: ${pct === 100 ? 'var(--orange-800)' : 'var(--text-muted)'};`}
 								>
 									{completion.done}/{completion.total}
-								</span>
+								</span>{/if}
 							</button>
 						{/each}
 					</div>
@@ -1076,6 +1114,7 @@
 							{FIELD_GROUPS.find((g) => g.id === activeTab)?.id === 'licencia'
 								? 'Licencia de Conducción'
 								: ''}
+							{activeTab === 'documentos' ? 'Documentos' : ''}
 						</h2>
 						<p class="text-xs" style="color: var(--text-muted);">
 							{FIELD_GROUPS.find((g) => g.id === activeTab)?.description}
@@ -1316,10 +1355,13 @@
 								</label>
 								
 									<ReadonlyField value={formatDate(conductor.vencimiento_licencia)} />
-								
-								
+
+
 							</div>
 						</div>
+					{:else if activeTab === 'documentos'}
+						<!-- Subir la licencia cambia su fecha en la ficha: se refresca para que la tarjeta y la pestaña Licencia no queden viejas. -->
+						<DocumentosConductor conductorId={conductor.id} oncambio={refrescarFicha} />
 					{/if}
 
 					

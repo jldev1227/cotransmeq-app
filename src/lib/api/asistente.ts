@@ -1,10 +1,9 @@
 import { get } from 'svelte/store';
 import { browser } from '$app/environment';
 import { authStore } from '$lib/stores/auth';
-
-const API_BASE = browser
-	? (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:4000'
-	: 'http://localhost:4000';
+/// Con la sesión vencida, el asistente lleva al login como el resto del
+/// dashboard; antes solo pintaba «Tu sesión expiró» y dejaba al usuario dentro.
+import { fetchConSesion } from './fetchConSesion';
 
 export interface MensajeAsistente {
 	rol: 'usuario' | 'asistente';
@@ -46,7 +45,7 @@ function token(): string {
 /** ¿Hay asistente en este servidor? (variables de Azure configuradas). */
 export async function asistenteDisponible(): Promise<boolean> {
 	try {
-		const res = await fetch(`${API_BASE}/api/asistente/estado`, {
+		const res = await fetchConSesion('/api/asistente/estado', {
 			headers: { Authorization: `Bearer ${token()}` }
 		});
 		if (!res.ok) return false;
@@ -68,7 +67,7 @@ export async function conversarConAsistente(
 	onEvento: (e: EventoAsistente) => void,
 	signal: AbortSignal
 ): Promise<void> {
-	const res = await fetch(`${API_BASE}/api/asistente/chat`, {
+	const res = await fetchConSesion('/api/asistente/chat', {
 		method: 'POST',
 		headers: {
 			'Content-Type': 'application/json',

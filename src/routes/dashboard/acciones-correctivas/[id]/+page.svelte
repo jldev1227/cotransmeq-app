@@ -10,6 +10,8 @@
 		type AccionCorrectivaPreventiva
 	} from '$lib/api/acciones-correctivas';
 	import { sidebarStore } from '$lib/stores/sidebar';
+	import { listadoAcciones } from '$lib/stores/volverListado';
+	import { mascota } from '$lib/mascot';
 	import {
 		MATRICES_ACTUALIZAR,
 		etiquetaTipoHallazgo,
@@ -22,24 +24,33 @@
 
 	let accion: AccionCorrectivaPreventiva | null = null;
 	let isLoading = true;
+	let errorCarga: string | null = null;
 	let id = '';
 	$: collapsed = $sidebarStore;
 
+	/// Destino del «Volver»: el listado con los filtros y la página con los que
+	/// se salió. Se lee al montar porque vive en sessionStorage, que el render
+	/// del servidor no tiene.
+	let urlListado = '/dashboard/acciones-correctivas';
+
 	onMount(async () => {
+		urlListado = listadoAcciones.url();
 		id = $page.params.id ?? '';
 		await cargarAccion();
 	});
 
+	/// Antes, si la carga fallaba, la página saltaba sola al listado a los 2 s:
+	/// el aviso apenas se leía y no había forma de reintentar. Ahora el error
+	/// se queda en pantalla con «Reintentar» y «Volver».
 	async function cargarAccion() {
 		isLoading = true;
+		errorCarga = null;
 		try {
 			accion = await accionesCorrectivasAPI.obtener(id);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : 'Error al cargar la acción';
+			errorCarga = message;
 			toast.error(message);
-			setTimeout(() => {
-				goto('/dashboard/acciones-correctivas');
-			}, 2000);
 		} finally {
 			isLoading = false;
 		}
@@ -464,7 +475,7 @@
 	<header class="page-header {collapsed ? 'page-header-collapsed' : ''}" in:fade={{ duration: 400 }}>
 		<div class="page-header-inner">
 			<div class="header-left">
-				<button on:click={() => goto('/dashboard/acciones-correctivas')} class="btn-back" aria-label="Volver al listado" title="Volver al listado">
+				<button on:click={() => goto(urlListado)} class="btn-back" aria-label="Volver al listado" title="Volver al listado">
 					<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
 				</button>
 				<div class="header-title-group">
@@ -789,11 +800,26 @@
 
 		<!-- Footer -->
 		<footer class="detail-footer" in:fly={{ y: 20, delay: 700 }}>
-			<a href="/dashboard/acciones-correctivas" class="btn-footer-back">
+			<a href={urlListado} class="btn-footer-back">
 				<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
 				Volver al listado
 			</a>
 			<span class="fm-muted-text fm-small">ID: <span class="fm-mono">{accion.id}</span></span>
 		</footer>
+	</div>
+{:else}
+	{@const img = mascota('advertencia')}
+	<div class="p-6">
+		<div class="page-card dir-vacio" role="alert">
+			<img src={img.src} alt={img.alt} width="418" height="418" />
+			<h3>No pudimos abrir la acción</h3>
+			<p>{errorCarga ?? 'La acción no existe o ya no está disponible.'}</p>
+			<div class="flex flex-wrap justify-center gap-2">
+				<button type="button" class="btn-secondary" on:click={() => goto(urlListado)}>
+					Volver al listado
+				</button>
+				<button type="button" class="btn-primary" on:click={cargarAccion}>Reintentar</button>
+			</div>
+		</div>
 	</div>
 {/if}

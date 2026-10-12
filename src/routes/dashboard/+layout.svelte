@@ -158,12 +158,15 @@
 		sidebarStore.toggle();
 	}
 
-	function handleLogout() {
+	async function handleLogout() {
 		/// Solo el cierre de sesión explícito apaga los avisos de este navegador.
 		/// Si la sesión expira sola, el usuario sigue recibiéndolos: es justo
 		/// cuando no tiene la app abierta.
-		desuscribirAlCerrarSesion();
-		authStore.logout();
+		///
+		/// En este orden: la desuscripción necesita la sesión viva, y
+		/// `cerrarSesion` la cierra en el backend. Las dos tienen plazo corto.
+		await desuscribirAlCerrarSesion();
+		await authStore.cerrarSesion();
 	}
 </script>
 

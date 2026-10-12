@@ -39,6 +39,7 @@
 	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import ModalFormularioAsistencia from '$lib/components/asistencias/ModalFormularioAsistencia.svelte';
 	import { confirmarEliminacion } from '$lib/stores/confirm';
+	import { listadoAsistencias } from '$lib/stores/volverListado';
 	import { mascota } from '$lib/mascot';
 	import { socketUtils } from '$lib/socket';
 	import { coincide } from '$lib/listing/texto';
@@ -60,6 +61,13 @@
 	let respuestas = $state<RespuestaAsistencia[]>([]);
 	let cargando = $state(true);
 
+	/// «Asistencias» vuelve al listado con los filtros y la página con los que
+	/// se salió. Se lee al montar: vive en sessionStorage, que el servidor no tiene.
+	let urlListado = $state('/dashboard/asistencias');
+	onMount(() => {
+		urlListado = listadoAsistencias.url();
+	});
+
 	async function cargar() {
 		cargando = true;
 		try {
@@ -71,7 +79,7 @@
 			respuestas = r;
 		} catch (error: any) {
 			toast.error(error?.message || 'No se pudo cargar la asistencia');
-			goto('/dashboard/asistencias');
+			goto(listadoAsistencias.url());
 		} finally {
 			cargando = false;
 		}
@@ -287,7 +295,7 @@
 	<div class="dir-pagina" in:fade={{ duration: 300 }}>
 		<header class="page-card dir-cabecera" style="padding: 1.25rem 1.5rem;">
 			<div class="dir-cabecera-texto">
-				<a class="as-volver" href="/dashboard/asistencias">
+				<a class="as-volver" href={urlListado}>
 					<ChevronLeft size={16} strokeWidth={2.4} />
 					Asistencias
 				</a>

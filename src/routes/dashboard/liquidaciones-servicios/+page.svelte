@@ -7,6 +7,7 @@
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
 	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
 	import EstadoPunto from '$lib/components/listing/EstadoPunto.svelte';
+	import ModalTrazabilidad from '$lib/components/liquidaciones/ModalTrazabilidad.svelte';
 	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import { mascota } from '$lib/mascot';
 	import { page } from '$app/stores';
@@ -57,6 +58,8 @@
 		type FacturaInfoMap,
 		type FacturaLiquidacion
 	} from '$lib/api/facturacionLiquidaciones';
+	import { ESTADO_CARTERA } from '$lib/api/cartera';
+	import { fechaCorta } from '$lib/pagos/medios';
 	import ModalFacturar from '$lib/components/ModalFacturar.svelte';
 	import ModalRevertirFacturada from '$lib/components/ModalRevertirFacturada.svelte';
 	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
@@ -330,7 +333,9 @@
 	let historialLoading = $state(false);
 	let historialData = $state<import('$lib/api/liquidaciones-servicios').HistorialEstado[]>([]);
 	let historialLiqConsecutivo = $state('');
-	let historialExpandedId = $state<string | null>(null);
+	let historialLiqId = $state<string | null>(null);
+	let historialError = $state<string | null>(null);
+	let excelHistorialCargando = $state(false);
 
 	let facturarModalOpen = $state(false);
 	let facturarPreselected = $state<string[]>([]);
@@ -458,9 +463,9 @@
 		try {
 			const d = await liquidacionesServiciosAPI.actualizarConfigLiquidador(configForm);
 			configData = d;
-			alert('✅ Configuracion guardada');
+			toast.success('Configuración guardada');
 		} catch (e: any) {
-			alert(e.message || 'Error guardando config');
+			toast.error(e.message || 'No se pudo guardar la configuración');
 		} finally {
 			configSaving = false;
 		}
@@ -552,6 +557,15 @@
 	const isAdmin = $derived(userAreas.includes('administracion'));
 	const isFacturacion = $derived(userAreas.includes('facturacion'));
 	const isOperaciones = $derived(userAreas.includes('operaciones'));
+	/// El enlace a los abonos solo se ofrece a quien puede abrir Cartera.
+	const puedeVerCartera = $derived(
+		checkAccess(
+			$authStore.user?.role,
+			$authStore.user?.area,
+			'cartera',
+			$authStore.user?.permisos_rutas
+		).allowed
+	);
 	const canLiquidar = $derived(isFull); // admin + operaciones: borrador → liquidada
 	const canAprobar = $derived(isAdmin); // solo admin: liquidada → aprobada
 	const canAnular = $derived(isAdmin); // solo admin: anular liquidaciones
@@ -1147,7 +1161,7 @@
 		try {
 			detailLiq = await liquidacionesServiciosAPI.obtenerPorId(id);
 		} catch (err: any) {
-			alert(err.message || 'Error al cargar liquidacion');
+			toast.error(err.message || 'No se pudo cargar la liquidación');
 			detailModal = false;
 		} finally {
 			detailLoading = false;
@@ -1167,7 +1181,7 @@
 			deleteModalOpen = false;
 			deleteTargetLiq = null;
 		} catch (err: any) {
-			alert(err.message || 'Error');
+			toast.error(err.message || 'No se pudo eliminar la liquidación');
 		} finally {
 			deleting = false;
 			const { [id]: _, ...resto } = eliminandoIds;
@@ -1194,9 +1208,9 @@
 				err?.response?.data?.error ?? err?.data?.error ?? err?.message ?? 'Error al cambiar estado';
 
 			if (status === 403) {
-				alert(`⛔ Sin permisos: ${mensaje}`);
+				toast.error('Sin permisos para cambiar el estado', { description: mensaje });
 			} else {
-				alert(mensaje);
+				toast.error(mensaje);
 			}
 		}
 	}
@@ -1351,7 +1365,7 @@
 
 	async function confirmarAnulacion() {
 		if (!anularMotivo.trim()) {
-			alert('Debes indicar el motivo de la anulacion');
+			toast.warning('Indica el motivo de la anulación');
 			return;
 		}
 		await cambiarEstadoLiq(anularTargetId, 'ANULADA', anularMotivo.trim());
@@ -1362,26 +1376,46 @@
 
 	async function abrirHistorial(liqId: string, consecutivo: string) {
 		historialLiqConsecutivo = consecutivo;
-		historialExpandedId = null;
+		historialLiqId = liqId;
 		historialModalOpen = true;
+		await cargarHistorialLiq();
+	}
+
+	/// Un fallo de red ya no se ve como «sin registros»: el modal lo dice y
+	/// ofrece reintentar.
+	async function cargarHistorialLiq() {
+		if (!historialLiqId) return;
 		historialLoading = true;
+		historialError = null;
 		try {
-			historialData = await liquidacionesServiciosAPI.obtenerHistorial(liqId);
+			historialData = await liquidacionesServiciosAPI.obtenerHistorial(historialLiqId);
 		} catch (e: any) {
-			alert(e.message || 'Error cargando historial');
+			historialError = e?.message || 'No se pudo cargar la trazabilidad';
 			historialData = [];
 		} finally {
 			historialLoading = false;
 		}
 	}
 
-	function getAccionLabel(accion: string | null): { label: string; icon: string; color: string } {
-		const map: Record<string, { label: string; icon: string; color: string }> = {
-			creacion: { label: 'Creación', icon: '🆕', color: '#16a34a' },
-			edicion: { label: 'Edición', icon: '✏️', color: '#2563eb' },
-			cambio_estado: { label: 'Cambio de estado', icon: '🔄', color: '#d97706' }
-		};
-		return map[accion || ''] || map.cambio_estado;
+	async function descargarExcelHistorial() {
+		if (!historialLiqId || excelHistorialCargando) return;
+		excelHistorialCargando = true;
+		try {
+			const { blob, nombre } = await liquidacionesServiciosAPI.descargarExcel(historialLiqId);
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = nombre;
+			document.body.appendChild(a);
+			a.click();
+			URL.revokeObjectURL(url);
+			document.body.removeChild(a);
+			toast.success('Excel descargado', { description: nombre });
+		} catch (e: any) {
+			toast.error(e?.message || 'No se pudo generar el Excel de la liquidación');
+		} finally {
+			excelHistorialCargando = false;
+		}
 	}
 
 	function getEstadoBadge(estado: EstadoLiquidacionServicio) {
@@ -1412,7 +1446,7 @@
 			});
 			facturablesParaFacturar = res.liquidaciones;
 		} catch (err: any) {
-			alert(err.message || 'Error cargando liquidaciones facturables');
+			toast.error(err.message || 'No se pudieron cargar las liquidaciones facturables');
 			facturablesParaFacturar = [];
 		} finally {
 			facturablesLoading = false;
@@ -1470,7 +1504,7 @@
 		try {
 			detalleFactura = await facturacionLiquidacionesAPI.obtenerPorId(id);
 		} catch (err: any) {
-			alert(err.message || 'Error');
+			toast.error(err.message || 'No se pudo cargar la factura');
 		}
 	}
 
@@ -1490,7 +1524,7 @@
 			cargarFacturas();
 			cargarListado();
 		} catch (err: any) {
-			alert(err.response?.data?.error || err.message || 'Error');
+			toast.error(err.response?.data?.error || err.message || 'No se pudo anular la factura');
 		} finally {
 			anulandoFactura = false;
 		}
@@ -1510,7 +1544,7 @@
 			eliminarFacturaTarget = null;
 			cargarFacturas();
 		} catch (err: any) {
-			alert(err.response?.data?.error || err.message || 'Error al eliminar factura');
+			toast.error(err.response?.data?.error || err.message || 'No se pudo eliminar la factura');
 		} finally {
 			eliminandoFactura = false;
 		}
@@ -2383,6 +2417,7 @@
 								<th style="min-width: 220px">Liquidaciones</th>
 								<th class="lq-num" style="min-width: 140px">Total</th>
 								<th style="min-width: 110px">Estado</th>
+								<th class="lq-num" style="min-width: 150px">Saldo · cobro</th>
 								<th style="min-width: 150px">Facturado por</th>
 								<th style="min-width: 180px">Observaciones</th>
 								<th style="width: 120px"></th>
@@ -2431,6 +2466,22 @@
 											color={fac.estado === 'ACTIVA' ? '#16a34a' : '#dc2626'}
 											apagado={fac.estado !== 'ACTIVA'}
 										/>
+									</td>
+									<!-- Cartera: saldo y estado de cobro que calcula el backend. -->
+									<td class="lq-num">
+										{#if fac.cartera}
+											<div class="lq-cobro">
+												<span class="lq-total">{COP(fac.cartera.saldo)}</span>
+												<EstadoPunto
+													etiqueta={ESTADO_CARTERA[fac.cartera.estado].etiqueta +
+														(fac.cartera.estado === 'vencida' ? ` · ${fac.cartera.dias_vencida} d` : '')}
+													color={ESTADO_CARTERA[fac.cartera.estado].color}
+													apagado={fac.cartera.estado === 'pagada'}
+												/>
+											</div>
+										{:else}
+											<span class="lq-muted">—</span>
+										{/if}
 									</td>
 									<td>{fac.facturado_por?.nombre || '—'}</td>
 									<td>
@@ -3209,6 +3260,36 @@
 						</p>
 					</div>
 
+					{#if detalleFactura.fecha_emision}
+						<div class="factura-detail-cell">
+							<span class="factura-detail-label">Emisión · vence</span>
+							<p class="factura-detail-value">
+								{fechaCorta(detalleFactura.fecha_emision)} · {fechaCorta(
+									detalleFactura.fecha_vencimiento
+								)}
+								<span class="lq-muted">({detalleFactura.plazo_dias} días)</span>
+							</p>
+						</div>
+					{/if}
+
+					{#if detalleFactura.cartera}
+						<div class="factura-detail-cell">
+							<span class="factura-detail-label">Saldo por cobrar</span>
+							<p class="factura-detail-value">
+								{COP(detalleFactura.cartera.saldo)}
+								<EstadoPunto
+									etiqueta={ESTADO_CARTERA[detalleFactura.cartera.estado].etiqueta}
+									color={ESTADO_CARTERA[detalleFactura.cartera.estado].color}
+								/>
+							</p>
+							{#if puedeVerCartera}
+								<a class="lq-enlace" href="/dashboard/cartera?vista=facturas&estado=todas&q={encodeURIComponent(detalleFactura.numero_factura)}">
+									Abonos en Cartera →
+								</a>
+							{/if}
+						</div>
+					{/if}
+
 					{#if detalleFactura.anulado_por}
 						<div class="factura-detail-cell">
 							<span class="factura-detail-label">Anulado por</span>
@@ -3374,140 +3455,17 @@
 />
 
 <!-- MODAL: HISTORIAL DE MODIFICACIONES -->
-{#if historialModalOpen}
-	<div class="modal-bg" onclick={(e) => { if (e.target === e.currentTarget) historialModalOpen = false; }}>
-		<div class="modal-box" style="max-width:720px">
-			<div class="modal-hd">
-				<div class="flex items-center gap-2">
-					<History class="h-4 w-4" style="color: var(--orange-500);" />
-					<h3 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
-						Historial — <span class="font-mono-meta" style="color: var(--orange-700);"
-							>#{historialLiqConsecutivo}</span
-						>
-					</h3>
-				</div>
-				<button class="btn-icon" onclick={() => (historialModalOpen = false)}>
-					<X class="h-3.5 w-3.5" />
-				</button>
-			</div>
-			<div style="padding: 1.25rem 1.5rem;">
-				{#if historialLoading}
-					<CargaMascota texto="Cargando historial…" />
-				{:else if historialData.length === 0}
-					<div class="py-12 text-center" style="color: var(--text-muted);">
-						No hay registros de historial.
-					</div>
-				{:else}
-					<div class="historial-timeline">
-						{#each historialData as entry, i}
-							{@const info = getAccionLabel(entry.accion)}
-							<div class="historial-entry">
-								<div class="historial-dot" style="background: {info.color}; color: white;">
-									<span class="text-base">{info.icon}</span>
-								</div>
-								<div class="historial-content">
-									<div class="flex flex-wrap items-center gap-2">
-										<span
-											class="font-mono-meta"
-											style="background:{info.color}15;color:{info.color};border:1px solid {info.color}33; padding: 0.2rem 0.55rem; border-radius: 5px; font-size: 10px;"
-											>{info.label}</span
-										>
-										{#if entry.estado_anterior && entry.estado_nuevo && entry.estado_anterior !== entry.estado_nuevo}
-											<span class="text-xs" style="color: var(--text-secondary);">
-												<span class="font-mono-meta" style="color: var(--text-muted);"
-													>{entry.estado_anterior}</span
-												>
-												→
-												<strong class="font-mono-meta" style="color: var(--text-primary);"
-													>{entry.estado_nuevo}</strong
-												>
-											</span>
-										{:else if entry.estado_nuevo}
-											<span class="text-xs" style="color: var(--text-secondary);">
-												Estado: <strong class="font-mono-meta">{entry.estado_nuevo}</strong>
-											</span>
-										{/if}
-									</div>
-									<div
-										class="font-mono-meta mt-1 text-[10px]"
-										style="color: var(--text-very-muted);"
-									>
-										{entry.usuario?.nombre || 'Sistema'} — {new Date(
-											entry.created_at
-										).toLocaleString('es-CO')}
-									</div>
-									{#if entry.motivo}
-										<div
-											class="mt-1 text-xs"
-											style="color: #B45309; background: rgba(245,158,11,0.06); border: 1px solid rgba(245,158,11,0.20); border-radius: 8px; padding: 0.4rem 0.6rem;"
-										>
-											💬 {entry.motivo}
-										</div>
-									{/if}
-									{#if entry.snapshot}
-										<button
-											class="btn-ghost apple-transition"
-											style="font-size: 11px; margin-top: 0.35rem;"
-											onclick={() =>
-												(historialExpandedId = historialExpandedId === entry.id ? null : entry.id)}
-										>
-											{historialExpandedId === entry.id ? '▼ Ocultar snapshot' : '▶ Ver snapshot'}
-										</button>
-										{#if historialExpandedId === entry.id}
-											<div class="snapshot-box">
-												<div class="snapshot-summary">
-													<span>📄 Items: <strong>{entry.snapshot.items?.length ?? 0}</strong></span
-													>
-													<span
-														>💰 Total: <strong class="font-mono-meta"
-															>${(entry.snapshot.valor_total ?? 0).toLocaleString('es-CO')}</strong
-														></span
-													>
-													{#if entry.snapshot.empresa}<span>🏢 {entry.snapshot.empresa}</span>{/if}
-													{#if entry.snapshot.ruta}<span>🛣 {entry.snapshot.ruta}</span>{/if}
-												</div>
-												{#if entry.snapshot.items?.length}
-													<div class="mt-2 overflow-x-auto">
-														<table class="snapshot-table">
-															<thead>
-																<tr>
-																	<th>Placa</th>
-																	<th>Recorrido</th>
-																	<th>Tipo</th>
-																	<th>Cant</th>
-																	<th>Valor</th>
-																</tr>
-															</thead>
-															<tbody>
-																{#each entry.snapshot.items as item}
-																	<tr>
-																		<td>{item.placa || '-'}</td>
-																		<td>{item.recorrido || item.nombre_recorrido || '-'}</td>
-																		<td>{item.tipo_servicio || '-'}</td>
-																		<td>{item.cantidad ?? '-'}</td>
-																		<td class="font-mono-meta"
-																			>${(item.valor_unitario ?? item.valor ?? 0).toLocaleString(
-																				'es-CO'
-																			)}</td
-																		>
-																	</tr>
-																{/each}
-															</tbody>
-														</table>
-													</div>
-												{/if}
-											</div>
-										{/if}
-									{/if}
-								</div>
-							</div>
-						{/each}
-					</div>
-				{/if}
-			</div>
-		</div>
-	</div>
-{/if}
+<ModalTrazabilidad
+	open={historialModalOpen}
+	consecutivo={historialLiqConsecutivo || null}
+	historial={historialData}
+	cargando={historialLoading}
+	error={historialError}
+	oncerrar={() => (historialModalOpen = false)}
+	onReintentar={cargarHistorialLiq}
+	onExcel={descargarExcelHistorial}
+	excelCargando={excelHistorialCargando}
+/>
 
 <!-- Catálogo de operadoras. Se abre desde la pestaña de Configuración, que ya
      está restringida a Administración u Operaciones. `onCambios` recarga la
@@ -3814,6 +3772,19 @@
 	}
 	.lq-muted {
 		color: var(--text-muted);
+	}
+	.lq-cobro {
+		display: inline-flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: 2px;
+	}
+	.lq-enlace {
+		display: inline-block;
+		margin-top: 4px;
+		font-size: 0.78rem;
+		font-weight: 700;
+		color: var(--accion);
 	}
 	.lq-fuerte {
 		font-weight: 800;
@@ -4450,77 +4421,4 @@
 		border-top: 1px dashed var(--border-subtle);
 	}
 
-	/* ── Historial (timeline editorial) ──────────────────── */
-	.historial-timeline {
-		display: flex;
-		flex-direction: column;
-		gap: 0;
-	}
-	.historial-entry {
-		display: flex;
-		gap: 0.85rem;
-		position: relative;
-		padding-bottom: 1.25rem;
-	}
-	.historial-entry:not(:last-child)::before {
-		content: '';
-		position: absolute;
-		left: 0.95rem;
-		top: 2rem;
-		bottom: 0;
-		width: 2px;
-		background: var(--border-subtle);
-	}
-	.historial-dot {
-		width: 2rem;
-		height: 2rem;
-		border-radius: 50%;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		font-size: 0.85rem;
-		flex-shrink: 0;
-		color: #fff;
-		box-shadow: 0 0 0 3px var(--bg-surface);
-	}
-	.historial-content {
-		flex: 1;
-		min-width: 0;
-		padding-top: 0.15rem;
-	}
-	.snapshot-box {
-		background: var(--bg-base);
-		border: 1px solid var(--border-subtle);
-		border-radius: 10px;
-		padding: 0.75rem 0.9rem;
-		margin-top: 0.5rem;
-	}
-	.snapshot-summary {
-		display: flex;
-		gap: 1rem;
-		flex-wrap: wrap;
-		font-size: 0.75rem;
-		color: var(--text-secondary);
-	}
-	.snapshot-table {
-		width: 100%;
-		border-collapse: collapse;
-		font-size: 0.7rem;
-	}
-	.snapshot-table th {
-		background: rgba(0, 0, 0, 0.04);
-		padding: 0.3rem 0.5rem;
-		text-align: left;
-		font-weight: 700;
-		font-family: var(--font-sans);
-		font-size: 0.65rem;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: var(--text-muted);
-	}
-	.snapshot-table td {
-		padding: 0.3rem 0.5rem;
-		border-bottom: 1px solid var(--border-subtle);
-		color: var(--text-secondary);
-	}
 </style>

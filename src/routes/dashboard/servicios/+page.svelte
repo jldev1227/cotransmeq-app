@@ -22,8 +22,10 @@
 		X
 	} from 'lucide-svelte';
 	import { authStore } from '$lib/stores/auth';
+	import { fetchConSesion } from '$lib/api/fetchConSesion';
 	import { onMount, onDestroy, untrack } from 'svelte';
-	import { goto, replaceState } from '$app/navigation';
+	import { afterNavigate, goto, replaceState } from '$app/navigation';
+	import { listadoServicios } from '$lib/stores/volverListado';
 	import { page as pageState } from '$app/state';
 	import { browser } from '$app/environment';
 	import { fade, fly } from 'svelte/transition';
@@ -526,6 +528,12 @@
 		}
 	}
 
+	/// Cada URL en la que se asienta el listado (al entrar y con cada filtro,
+	/// página o vista) queda como destino del «Volver» del detalle.
+	afterNavigate(({ to }) => {
+		if (to?.url) listadoServicios.recordar(to.url.pathname + to.url.search);
+	});
+
 	function cambiarVista(vista: VistaActiva) {
 		vistaActiva = vista;
 		syncUrl();
@@ -550,10 +558,6 @@
 	}
 
 	async function fetchCanvasPage(page: number, tokenActual: number) {
-		const baseURL = import.meta.env.VITE_API_URL;
-		const token = localStorage.getItem('transmeralda_token');
-		const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
-
 		const params = new URLSearchParams({ page: String(page), limit: String(CANVAS_PAGE_SIZE) });
 		if (filtroEstado) params.set('estado', filtroEstado);
 		if (busqueda?.trim()) params.set('search', busqueda.trim());
@@ -566,7 +570,8 @@
 		if (filtroFechaHasta) params.set('fecha_hasta', filtroFechaHasta);
 		if (filtroFechaDesde || filtroFechaHasta) params.set('campo_fecha', campoFecha);
 
-		const res = await fetch(`${baseURL}/api/servicios?${params.toString()}`, { headers });
+		/// `fetchConSesion` pone la base, el token y el 401 como `apiClient`.
+		const res = await fetchConSesion(`/api/servicios?${params.toString()}`);
 		if (!res.ok) throw new Error(`Error ${res.status} al cargar página ${page}`);
 		const json = await res.json();
 		if (!json.success) throw new Error(json.message || 'Error al cargar servicios');
@@ -764,15 +769,26 @@
 
 	function handleBusquedaChange() {
 		if (!inicializado) return;
-		clearTimeout(busquedaTimeout);
+		if (busquedaTimeout) clearTimeout(busquedaTimeout);
 		busquedaTimeout = setTimeout(() => {
 			paginaActual = 1;
 			cargarServicios();
 		}, 500);
 	}
 
+	/// Solo reacciona a un CAMBIO del texto. Antes también se disparaba al
+	/// marcar la página como inicializada: medio segundo después de abrir (o de
+	/// volver del detalle) llevaba a la página 1 y descartaba `pagina` de la URL.
+	let ultimaBusqueda: string | null = null;
 	$effect(() => {
-		if (inicializado && busqueda !== undefined) handleBusquedaChange();
+		const termino = busqueda ?? '';
+		if (!inicializado) return;
+		if (ultimaBusqueda === null || termino === ultimaBusqueda) {
+			ultimaBusqueda = termino;
+			return;
+		}
+		ultimaBusqueda = termino;
+		handleBusquedaChange();
 	});
 
 	function handleEstadoChange() {
@@ -900,16 +916,18 @@
 			if (!token) {
 				token = (await serviciosStore.generarShareToken(servicio.id)) ?? undefined;
 				if (!token) {
-					alert('Error al generar enlace compartible');
+					toast.error('No se pudo generar el enlace para compartir');
 					return;
 				}
 			}
 			const shareUrl = `${window.location.origin}/public/servicio/${token}`;
 			await navigator.clipboard.writeText(shareUrl);
-			alert('✅ Enlace copiado al portapapeles!\n\n' + shareUrl);
+			/// El enlace va en la descripción para poder verlo (y comprobar a qué
+			/// servicio apunta) sin pegarlo en otro sitio.
+			toast.success('Enlace copiado al portapapeles', { description: shareUrl });
 		} catch (error) {
 			console.error('Error compartiendo servicio:', error);
-			alert('Error al compartir servicio');
+			toast.error('No se pudo compartir el servicio');
 		}
 	}
 
@@ -938,11 +956,7 @@
 
 	async function handleDescargarRutograma(servicio: ServicioConRelaciones) {
 		try {
-			const token = localStorage.getItem('transmeralda_token');
-			const baseURL = import.meta.env.VITE_API_URL;
-			const response = await fetch(`${baseURL}/api/servicios/${servicio.id}/rutograma`, {
-				headers: { Authorization: `Bearer ${token}` }
-			});
+			const response = await fetchConSesion(`/api/servicios/${servicio.id}/rutograma`);
 			if (!response.ok) {
 				const errorData = await response.json().catch(() => null);
 				throw new Error(errorData?.message || `Error ${response.status}`);
@@ -1195,7 +1209,6 @@
 					valor={vehiculoSeleccionado}
 					placeholder="Todos los vehículos"
 					placeholderBusqueda="Buscar vehículo por placa o marca…"
-					icono="truck"
 					onSeleccionar={(v) => {
 						vehiculoSeleccionado = v;
 						handleSelectChange();
@@ -1213,7 +1226,6 @@
 					valor={clienteSeleccionado}
 					placeholder="Todos los clientes"
 					placeholderBusqueda="Buscar cliente por nombre o NIT…"
-					icono="building"
 					onSeleccionar={(v) => {
 						clienteSeleccionado = v;
 						handleSelectChange();

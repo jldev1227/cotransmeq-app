@@ -66,6 +66,7 @@
 		if (pathname.startsWith('/dashboard/evaluaciones')) return 'evaluaciones';
 		if (pathname.startsWith('/dashboard/salidas-nc')) return 'salidas-nc';
 		if (pathname.startsWith('/dashboard/viaticos')) return 'viaticos';
+		if (pathname.startsWith('/dashboard/combustible')) return 'combustible';
 		/// Antes que `/dashboard/formularios`: `startsWith` no distingue prefijos
 		/// que se solapan, pero estas dos rutas no lo hacen. Se deja junto por
 		/// legibilidad.

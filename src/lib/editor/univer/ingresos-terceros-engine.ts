@@ -121,7 +121,9 @@ function repintarFila(
 ): void {
 	const { desde, hasta } = COLS_RESALTADO;
 
-	let inicioTramo = desde;
+	/// `number` explícito: `COLS_RESALTADO` es `as const` y sin anotar el tipo
+	/// quedaría el literal de `desde`, que no admite la reasignación del bucle.
+	let inicioTramo: number = desde;
 	let colorTramo = fondoFilaIngresos({ ...estado, columna: desde });
 
 	const volcar = (fin: number) => {

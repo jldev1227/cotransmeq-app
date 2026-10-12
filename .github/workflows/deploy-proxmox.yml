@@ -15,7 +15,35 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Antes de desplegar: cero errores de tipos. Corre en un runner de GitHub, no
+  # en el self-hosted del servidor, para no competir por CPU y RAM con
+  # producción (svelte-check sobre todo el proyecto pide varios GB). Si falla,
+  # `deploy` no arranca y la versión viva no se toca.
+  verificar:
+    name: Tipos (svelte-check)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          # La misma major que la imagen (`node:22-bookworm-slim`).
+          node-version: 22
+          cache: npm
+
+      - name: Dependencias
+        run: npm ci
+
+      - name: Tipos
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: |
+          npx svelte-kit sync
+          npx svelte-check --tsconfig ./tsconfig.json --threshold error
+
   deploy:
+    needs: verificar
     runs-on: [self-hosted, linux, x64, cotransmeq-ct123, cotransmeq-app]
     timeout-minutes: 90
     environment: production

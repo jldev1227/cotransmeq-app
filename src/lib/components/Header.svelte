@@ -254,6 +254,12 @@
 			<!-- Session Timer (opcional) -->
 			<SessionTimer showTimer={showSessionTimer} />
 
+			<!-- Asistente en móvil y tablet: el campo completo del centro solo
+			     existe en escritorio, así que aquí va solo el ícono. -->
+			<div class="lg:hidden">
+				<AsistenteDisparador compacto />
+			</div>
+
 			<!-- Notifications -->
 			<div class="relative notifications-menu">
 				<button

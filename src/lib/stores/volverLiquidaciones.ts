@@ -1,30 +1,10 @@
 /**
  * Última URL del listado de liquidaciones de servicios, con sus filtros.
- *
- * El listado ya escribe búsqueda, filtros, orden y página en la URL; pero el
- * «Volver» del detalle y del editor navegaba a la ruta pelada y el usuario
- * tenía que buscar otra vez el mismo cliente cada vez que entraba y salía.
- * Va en sessionStorage para que sobreviva a recargar el detalle y no se
- * cruce entre pestañas del navegador.
+ * Ver `volverListado.ts`: es la misma memoria que usan los demás listados.
  */
-const BASE = '/dashboard/liquidaciones-servicios';
-const CLAVE = 'liquidaciones-servicios:listado';
+import { memoriaListado } from './volverListado';
 
-export function recordarListado(url: string): void {
-	if (!url.startsWith(BASE)) return;
-	try {
-		sessionStorage.setItem(CLAVE, url);
-	} catch {
-		/* modo privado o storage bloqueado: se vuelve al listado sin filtros */
-	}
-}
+const memoria = memoriaListado('/dashboard/liquidaciones-servicios');
 
-export function urlListado(): string {
-	try {
-		const url = sessionStorage.getItem(CLAVE);
-		if (url && (url === BASE || url.startsWith(BASE + '?'))) return url;
-	} catch {
-		/* idem */
-	}
-	return BASE;
-}
+export const recordarListado = (url: string): void => memoria.recordar(url);
+export const urlListado = (): string => memoria.url();

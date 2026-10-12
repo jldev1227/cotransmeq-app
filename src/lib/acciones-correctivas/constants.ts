@@ -353,7 +353,9 @@ export function inicializarMatricesDesdeRegistro(
 	const seleccion = partes.filter(
 		(p) => (MATRIZ_KEYS as readonly string[]).includes(p) && p !== 'Otros'
 	);
-	const otrosPartes = partes.filter((p) => !MATRIZ_KEYS.includes(p) || p.startsWith('Otros:'));
+	const otrosPartes = partes.filter(
+		(p) => !(MATRIZ_KEYS as readonly string[]).includes(p) || p.startsWith('Otros:')
+	);
 	let otrosDetalle = otrosPartes
 		.map((p) => (p.startsWith('Otros:') ? p.replace(/^Otros:\s*/, '') : p))
 		.filter(Boolean)

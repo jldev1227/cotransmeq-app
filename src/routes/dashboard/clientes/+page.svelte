@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { fade, fly, scale } from 'svelte/transition';
+	import { listadoClientes } from '$lib/stores/volverListado';
 	import { clientesAPI } from '$lib/api/apiClient';
 	import { socketUtils } from '$lib/socket';
 	import { authStore } from '$lib/stores/auth';
@@ -110,6 +111,12 @@
 
 	let filtros = $state<FiltrosClientes>(estadoUrl.leer(page.url));
 	let mostrarFiltros = $state(false);
+
+	/// Cada URL en la que se asienta el listado queda como destino del
+	/// «Volver» de la ficha del cliente.
+	afterNavigate(({ to }) => {
+		if (to?.url) listadoClientes.recordar(to.url.pathname + to.url.search);
+	});
 
 	let showDeleteModal = $state(false);
 	let clienteToDelete = $state<Cliente | null>(null);

@@ -395,7 +395,7 @@
 		seccion !== 'ADICIONAL' && filas.some((c) => c.concepto === nombreNormalizado)
 	);
 	const puedeAgregar = $derived(
-		trabajando
+		trabajando || seccion === 'ITEM'
 			? false
 			: seccion === 'ADICIONAL'
 				? !!recorrido.trim() && Number(valorUnitario) > 0
@@ -436,7 +436,11 @@
 	}
 
 	async function agregar() {
-		if (!puedeAgregar) return;
+		/// «Items» es de solo lectura (se quitan y se devuelven, no se crean
+		/// aquí): su formulario ni se pinta. Sin este corte, `seccion` llegaría
+		/// tal cual como `tipo` y el backend respondería 400 —solo admite
+		/// GASTO_OPERATIVO y ANTICIPO—; con él TypeScript también lo sabe.
+		if (!puedeAgregar || seccion === 'ITEM') return;
 		trabajando = true;
 		error = '';
 		try {

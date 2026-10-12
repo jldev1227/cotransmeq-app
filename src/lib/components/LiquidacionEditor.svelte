@@ -43,6 +43,13 @@
 	import { toast } from 'svelte-sonner';
 	import Skeleton from '$lib/components/Skeleton.svelte';
 	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
+	import ModalTrazabilidad from '$lib/components/liquidaciones/ModalTrazabilidad.svelte';
+	/// El punto de estado del visor usa el semáforo del listado: `getEstadoBadge`
+	/// pinta tres estados en naranja de marca y en un punto no se distinguen.
+	import { COLOR_ESTADO } from '$lib/liquidaciones/trazabilidad';
+	import CabeceraVistaPrevia, {
+		type HitoVistaPrevia
+	} from '$lib/components/liquidaciones/CabeceraVistaPrevia.svelte';
 	import {
 		autoguardadoAPI,
 		liquidacionesServiciosAPI,
@@ -347,7 +354,9 @@
 	let historialModalOpen = false;
 	let historialData: HistorialEstado[] = [];
 	let historialLoading = false;
-	let csvLoading = false;
+	/// Distinto de «sin registros»: si la carga falla, el modal lo dice y deja reintentar.
+	let historialError: string | null = null;
+	let excelLoading = false;
 	let loadError = '';
 
 	// Cliente searchable select
@@ -1056,35 +1065,43 @@
 	async function abrirHistorial() {
 		if (!editingId) return;
 		historialModalOpen = true;
+		await cargarHistorial();
+	}
+
+	async function cargarHistorial() {
+		if (!editingId) return;
 		historialLoading = true;
+		historialError = null;
 		try {
 			historialData = await liquidacionesServiciosAPI.obtenerHistorial(editingId);
 		} catch (e) {
-			console.error('Error cargando historial', e);
+			historialError = e instanceof Error ? e.message : 'No se pudo cargar la trazabilidad';
 			historialData = [];
 		} finally {
 			historialLoading = false;
 		}
 	}
 
-	// Obtener CSV
-	async function obtenerCSV() {
-		if (!editingId) return;
-		csvLoading = true;
+	/// El botón decía «CSV» y bajaba un .xlsx, y si fallaba no avisaba nada.
+	/// Ahora dice lo que es y el nombre del archivo lo pone el servidor.
+	async function descargarExcel() {
+		if (!editingId || excelLoading) return;
+		excelLoading = true;
 		try {
-			const blob = await liquidacionesServiciosAPI.obtenerCSV(editingId);
+			const { blob, nombre } = await liquidacionesServiciosAPI.descargarExcel(editingId);
 			const url = window.URL.createObjectURL(blob);
 			const a = document.createElement('a');
 			a.href = url;
-			a.download = 'Liquidacion_' + (hdr.consecutivo || editingId) + '.xlsx';
+			a.download = nombre;
 			document.body.appendChild(a);
 			a.click();
 			window.URL.revokeObjectURL(url);
 			document.body.removeChild(a);
+			toast.success('Excel descargado', { description: nombre });
 		} catch (e) {
-			console.error('Error descargando Excel', e);
+			toast.error(e instanceof Error ? e.message : 'No se pudo generar el Excel de la liquidación');
 		} finally {
-			csvLoading = false;
+			excelLoading = false;
 		}
 	}
 
@@ -1097,6 +1114,47 @@
 			ANULADA: { bg: 'rgba(220, 38, 38, 0.08)', text: '#dc2626', border: 'rgba(220, 38, 38, 0.25)', label: 'Anulada' }
 		};
 		return map[estado] || map.BORRADOR;
+	}
+
+	/// Hitos de la trazabilidad que la cabecera del visor muestra junto al
+	/// estado. Recibe los datos como argumentos para que el bloque que la llama
+	/// se recalcule cuando cambian (este componente está en modo legacy).
+	function hitosVistaPrevia(
+		estado: string,
+		fLiq: string | null,
+		porLiq: { nombre: string } | null,
+		fApr: string | null,
+		porApr: { nombre: string } | null,
+		fFac: string | null
+	): HitoVistaPrevia[] {
+		const hitos: HitoVistaPrevia[] = [];
+		if (fLiq && ['LIQUIDADA', 'APROBADA', 'FACTURADA'].includes(estado))
+			hitos.push({
+				etiqueta: 'Liquidada',
+				fecha: fmtFecha(fLiq),
+				corta: fmtFechaShort(fLiq),
+				por: porLiq?.nombre ?? null
+			});
+		if (fApr && ['APROBADA', 'FACTURADA'].includes(estado))
+			hitos.push({
+				etiqueta: 'Aprobada',
+				fecha: fmtFecha(fApr),
+				corta: fmtFechaShort(fApr),
+				por: porApr?.nombre ?? null
+			});
+		if (fFac && estado === 'FACTURADA')
+			hitos.push({ etiqueta: 'Facturada', fecha: fmtFecha(fFac), corta: fmtFechaShort(fFac) });
+		return hitos;
+	}
+
+	/// «OCTUBRE» + 2026 → «Octubre 2026», como se lee en el resto del dashboard.
+	function periodoLegible(
+		mes: string | number | null | undefined,
+		anio: string | number | null | undefined
+	): string {
+		const nombre = typeof mes === 'number' ? (MESES[mes - 1] ?? '') : (mes ?? '');
+		const legible = nombre ? nombre.charAt(0).toUpperCase() + nombre.slice(1).toLowerCase() : '';
+		return [legible, anio].filter(Boolean).join(' ');
 	}
 
 	function fmtFecha(s: string | null | undefined) {
@@ -2558,37 +2616,22 @@
 {#if loadingLiq && viewMode}
 	<!-- PDF VIEW LOADING STATE -->
 	<div class="pdf-wrap">
-		<header class="pdf-bar">
-			<div class="pdf-bar-inner">
-				<div class="pdf-bar-brand">
-					<div class="pdf-bar-headings">
-						<h1 class="pdf-bar-title">
-							Cargando documento
-							<span class="liq-loading-dots" aria-hidden="true">
-								<span></span><span></span><span></span>
-							</span>
-						</h1>
-						<p class="pdf-bar-sub">
-							Vista previa del documento oficial
-							<span class="pdf-bar-eyebrow">OP-FR-07 · LIQUIDACIÓN DE SERVICIOS</span>
-						</p>
-					</div>
-				</div>
-				<button class="liq-loading-back" on:click={() => salir()}>
-					<svg
-						width="14"
-						height="14"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg
-					>
-					<span>Volver al Listado</span>
-				</button>
-			</div>
-		</header>
+		<CabeceraVistaPrevia
+			cargando
+			hoja="liquidacion"
+			verTerceros={false}
+			consecutivo={null}
+			periodo=""
+			cliente={null}
+			estado={null}
+			zoom={pdfZoom}
+			volverEtiqueta={empotrado ? 'Cerrar' : 'Volver al listado'}
+			onHoja={() => {}}
+			onZoom={() => {}}
+			onAjustar={() => {}}
+			onVolver={salir}
+			onImprimir={() => {}}
+		/>
 		<div class="pdf-loading-body">
 			<CargaMascota texto="Cargando liquidación…" />
 		</div>
@@ -4262,355 +4305,44 @@
 	<!-- PREVIEW / PDF VIEW                                           -->
 	<!-- ═══════════════════════════════════════════════════════════ -->
 	<div class="pdf-wrap">
-		<header class="pdf-bar">
-			<div class="pdf-bar-inner">
-				<div class="pdf-bar-brand">
-					<div class="pdf-bar-headings">
-						<h1 class="pdf-bar-title">
-							{previewPage === 'liquidacion'
-								? 'Liquidación de Servicios'
-								: previewPage === 'recargos'
-									? 'Recargos (Horas)'
-									: previewPage === 'terceros'
-										? 'Liquidación de Terceros'
-										: 'Liquidador de Recargos'}
-							<div class="estado-bar-status">
-								<span class="estado-badge estado-badge-{liqEstado.toLowerCase()}"
-									>{badge.label}</span
-								>
-							</div>
-						</h1>
-						<p class="pdf-bar-sub">
-							{hdr.consecutivo || 'Sin consecutivo'} · {hdr.mes}
-							{hdr.anio} · {selectedCliente?.nombre || 'Sin cliente'}
-							<span class="pdf-bar-eyebrow">
-								{previewPage === 'liquidacion'
-									? 'OP-FR-07 · LIQUIDACIÓN DE SERVICIOS'
-									: previewPage === 'recargos'
-										? 'OP-FR-06 · RECARGOS (HORAS)'
-										: previewPage === 'terceros'
-											? 'GAF-FR-11 · TERCEROS'
-											: 'OP-FR-06 · LIQUIDADOR DE RECARGOS'}
-							</span>
-						</p>
-					</div>
-				</div>
-
-				<div class="pdf-bar-tools">
-					<!-- Page tabs (Hoja 1-4) -->
-					<div class="page-tabs" role="tablist" aria-label="Hojas del documento">
-						<button
-							class="ptab"
-							class:active={previewPage === 'liquidacion'}
-							on:click={() => (previewPage = 'liquidacion')}
-							role="tab"
-							aria-selected={previewPage === 'liquidacion'}
-						>
-							<span class="ptab-num">1</span>
-							<span class="ptab-full">Hoja 1 · Liquidación</span>
-							<span class="ptab-short">Hoja 1</span>
-						</button>
-						<button
-							class="ptab"
-							class:active={previewPage === 'recargos'}
-							on:click={() => (previewPage = 'recargos')}
-							role="tab"
-							aria-selected={previewPage === 'recargos'}
-						>
-							<span class="ptab-num">2</span>
-							<span class="ptab-full">Hoja 2 · Recargos</span>
-							<span class="ptab-short">Hoja 2</span>
-						</button>
-						<button
-							class="ptab"
-							class:active={previewPage === 'liquidador'}
-							on:click={() => (previewPage = 'liquidador')}
-							role="tab"
-							aria-selected={previewPage === 'liquidador'}
-						>
-							<span class="ptab-num">3</span>
-							<span class="ptab-full">Hoja 3 · Liquidador</span>
-							<span class="ptab-short">Hoja 3</span>
-						</button>
-						{#if canSeeTerceros}
-							<button
-								class="ptab"
-								class:active={previewPage === 'terceros'}
-								on:click={() => (previewPage = 'terceros')}
-								role="tab"
-								aria-selected={previewPage === 'terceros'}
-							>
-								<span class="ptab-num">4</span>
-								<span class="ptab-full">Hoja 4 · Terceros</span>
-								<span class="ptab-short">Hoja 4</span>
-							</button>
-						{/if}
-					</div>
-
-					<!-- Zoom controls -->
-					<div class="zoom-controls" aria-label="Controles de zoom">
-						<button
-							class="zoom-btn"
-							on:click={() => (pdfZoom = Math.max(0.3, pdfZoom - 0.05))}
-							title="Reducir zoom"
-							aria-label="Reducir zoom"
-						>
-							−
-						</button>
-						<span class="zoom-label">{Math.round(pdfZoom * 100)}%</span>
-						<button
-							class="zoom-btn"
-							on:click={() => (pdfZoom = Math.min(2.5, pdfZoom + 0.05))}
-							title="Aumentar zoom"
-							aria-label="Aumentar zoom"
-						>
-							+
-						</button>
-						<button
-							class="zoom-btn zoom-reset"
-							on:click={() => (pdfZoom = 1)}
-							title="Restablecer zoom al 100%"
-							aria-label="Restablecer zoom al 100%"
-						>
-							<svg
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								><path d="M1 4v6h6" /><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" /></svg
-							>
-						</button>
-						<button
-							class="zoom-btn zoom-fit"
-							on:click={fitToViewport}
-							title="Ajustar al ancho de la pantalla"
-							aria-label="Ajustar al ancho de la pantalla"
-						>
-							<svg
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="2"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								><path d="M4 8V4h4" /><path d="M20 8V4h-4" /><path d="M4 16v4h4" /><path
-									d="M20 16v4h-4"
-								/></svg
-							>
-						</button>
-					</div>
-
-					<!-- Action buttons -->
-					<button
-						class="liq-loading-back"
-						on:click={() => {
-							if (viewMode && editId) {
-								salir();
-							} else {
-								setView('editor');
-							}
-						}}
-					>
-						<svg
-							width="14"
-							height="14"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"><path d="M15 18l-6-6 6-6" /></svg
-						>
-						<span>{viewMode ? 'Volver' : 'Editar'}</span>
-					</button>
-					<button class="btn-primary liq-btn-primary pdf-bar-print" on:click={handlePrint}>
-						<svg
-							width="14"
-							height="14"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							><path d="M6 9V2h12v7" /><rect x="6" y="14" width="12" height="8" /><path
-								d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"
-							/></svg
-						>
-						<span class="pbtn-label-full">Imprimir / PDF</span>
-						<span class="pbtn-label-short">PDF</span>
-					</button>
-				</div>
-			</div>
-		</header>
-
-		<!-- ── ESTADO BAR (trazabilidad) ── -->
-		{#if editingId}
-			<div class="estado-bar no-print">
-				<div class="estado-info-stack">
-					<!-- {#if liqFechaLiquidacion && ['BORRADOR', 'LIQUIDADA', 'APROBADA', 'FACTURADA'].includes(liqEstado)}
-					<span
-						class="estado-info"
-						title="Creada: {fmtFecha()}{liqCreadoPor
-							? ' por ' + creadaPor.nombre
-							: ''}"
-					>
-						<span class="estado-info-icon" aria-hidden="true">
-							<svg
-								width="14"
-								height="14"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="1.8"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path
-									d="M14 2v6h6"
-								/><path d="M9 14l2 2 4-4" /></svg
-							>
-						</span>
-						<span class="estado-info-short">{fmtFechaShort(liqFechaLiquidacion)}</span>
-						<span class="estado-info-full">
-							Liquidada: <strong>{fmtFecha(liqFechaLiquidacion)}</strong>{#if liqLiquidadoPor}{' '} Por:
-								<strong>{liqLiquidadoPor.nombre}</strong>{/if}
-						</span>
-					</span>
-				{/if} -->
-					{#if liqFechaLiquidacion && ['LIQUIDADA', 'APROBADA', 'FACTURADA'].includes(liqEstado)}
-						<span
-							class="estado-info"
-							title="Liquidada: {fmtFecha(liqFechaLiquidacion)}{liqLiquidadoPor
-								? ' por ' + liqLiquidadoPor.nombre
-								: ''}"
-						>
-							<span class="estado-info-icon" aria-hidden="true">
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="1.8"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path
-										d="M14 2v6h6"
-									/><path d="M9 14l2 2 4-4" /></svg
-								>
-							</span>
-							<span class="estado-info-short">{fmtFechaShort(liqFechaLiquidacion)}</span>
-							<span class="estado-info-full">
-								Liquidada: <strong>{fmtFecha(liqFechaLiquidacion)}</strong
-								>{#if liqLiquidadoPor}{' '} Por:
-									<strong>{liqLiquidadoPor.nombre}</strong>{/if}
-							</span>
-						</span>
-					{/if}
-					{#if liqFechaAprobacion && ['APROBADA', 'FACTURADA'].includes(liqEstado)}
-						<span
-							class="estado-info"
-							title="Aprobada: {fmtFecha(liqFechaAprobacion)}{liqAprobadoPor
-								? ' por ' + liqAprobadoPor.nombre
-								: ''}"
-						>
-							<span class="estado-info-icon" aria-hidden="true">
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="1.8"
-									stroke-linecap="round"
-									stroke-linejoin="round"><path d="M20 6L9 17l-5-5" /></svg
-								>
-							</span>
-							<span class="estado-info-short">{fmtFechaShort(liqFechaAprobacion)}</span>
-							<span class="estado-info-full">
-								Aprobada: <strong>{fmtFecha(liqFechaAprobacion)}</strong>{#if liqAprobadoPor}{' '} Por:
-									<strong>{liqAprobadoPor.nombre}</strong>{/if}
-							</span>
-						</span>
-					{/if}
-					{#if liqFechaFacturacion && liqEstado === 'FACTURADA'}
-						<span class="estado-info" title="Facturada: {fmtFecha(liqFechaFacturacion)}">
-							<span class="estado-info-icon" aria-hidden="true">
-								<svg
-									width="14"
-									height="14"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									stroke-width="1.8"
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z" /><line
-										x1="3"
-										y1="6"
-										x2="21"
-										y2="6"
-									/><path d="M16 10a4 4 0 0 1-8 0" /></svg
-								>
-							</span>
-							<span class="estado-info-short">{fmtFechaShort(liqFechaFacturacion)}</span>
-							<span class="estado-info-full"
-								>Facturada: <strong>{fmtFecha(liqFechaFacturacion)}</strong></span
-							>
-						</span>
-					{/if}
-				</div>
-
-				<div class="estado-bar-actions">
-					<button
-						class="btn-secondary liq-btn-secondary estado-btn"
-						on:click={obtenerCSV}
-						disabled={csvLoading}
-						title="Obtener CSV (Excel)"
-					>
-						<svg
-							width="14"
-							height="14"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path
-								d="M14 2v6h6"
-							/><path d="M12 18v-6" /><path d="M9 15h6" /></svg
-						>
-						<span>{csvLoading ? 'Generando…' : 'Obtener CSV'}</span>
-					</button>
-					<button
-						class="btn-primary liq-btn-primary estado-btn"
-						disabled={historialLoading}
-						on:click={abrirHistorial}
-						title="Ver trazabilidad de estados"
-					>
-						<svg
-							width="14"
-							height="14"
-							viewBox="0 0 24 24"
-							fill="none"
-							stroke="currentColor"
-							stroke-width="2"
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg
-						>
-						<span>Trazabilidad</span>
-					</button>
-				</div>
-			</div>
-		{/if}
+		<CabeceraVistaPrevia
+			hoja={previewPage}
+			verTerceros={canSeeTerceros}
+			consecutivo={hdr.consecutivo || null}
+			periodo={periodoLegible(hdr.mes, hdr.anio)}
+			cliente={selectedCliente?.nombre || null}
+			estado={{
+				etiqueta: badge.label,
+				color: COLOR_ESTADO[liqEstado] ?? badge.text,
+				apagado: liqEstado === 'ANULADA'
+			}}
+			zoom={pdfZoom}
+			volverEtiqueta={viewMode && editId
+				? empotrado
+					? 'Cerrar'
+					: 'Volver al listado'
+				: 'Volver al editor'}
+			hitos={editingId
+				? hitosVistaPrevia(
+						liqEstado,
+						liqFechaLiquidacion,
+						liqLiquidadoPor,
+						liqFechaAprobacion,
+						liqAprobadoPor,
+						liqFechaFacturacion
+					)
+				: []}
+			conAcciones={!!editingId}
+			excelCargando={excelLoading}
+			historialCargando={historialLoading}
+			onHoja={(h) => (previewPage = h)}
+			onZoom={(z) => (pdfZoom = z)}
+			onAjustar={fitToViewport}
+			onVolver={() => (viewMode && editId ? salir() : setView('editor'))}
+			onImprimir={handlePrint}
+			onExcel={descargarExcel}
+			onHistorial={abrirHistorial}
+		/>
 
 		<!-- LETTER PORTRAIT — HOJA 1: LIQUIDACIÓN (vertical) -->
 		<!-- A4 HOJA 1: LIQUIDACIÓN -->
@@ -5353,183 +5085,17 @@
 {/if}
 
 <!-- ═══ HISTORIAL / TRAZABILIDAD MODAL ═══ -->
-{#if historialModalOpen}
-	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
-	<div class="historial-overlay" on:click|self={() => (historialModalOpen = false)}>
-		<div class="historial-modal" role="dialog" aria-modal="true" aria-labelledby="historial-title">
-			<header class="historial-hd">
-				<div class="historial-hd-icon" aria-hidden="true">
-					<svg
-						width="22"
-						height="22"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="1.8"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						><circle cx="12" cy="12" r="10" /><polyline
-							points="12 6 12 12 16 14"
-						/></svg
-					>
-				</div>
-				<div class="historial-hd-text">
-					<span class="historial-eyebrow">OP-FR-07 · TRAZABILIDAD</span>
-					<h2 id="historial-title" class="historial-title">Trazabilidad de Estados</h2>
-					<p class="historial-sub">Historial cronológico de cambios de esta liquidación</p>
-				</div>
-				<button class="historial-close" on:click={() => (historialModalOpen = false)} aria-label="Cerrar modal">
-					<svg
-						width="16"
-						height="16"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12" /></svg
-					>
-				</button>
-			</header>
-
-			<div class="historial-body">
-				{#if historialLoading}
-					<CargaMascota texto="Cargando historial…" />
-				{:else if historialData.length === 0}
-					<div class="historial-empty">
-						<div class="historial-empty-icon" aria-hidden="true">
-							<svg
-								width="36"
-								height="36"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								stroke-width="1.6"
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path
-									d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"
-								/></svg
-							>
-						</div>
-						<p>No hay registros de cambios de estado</p>
-						<span class="historial-empty-sub">Cuando se produzcan transiciones se mostrarán aquí</span>
-					</div>
-				{:else}
-					<div class="historial-timeline">
-						{#each historialData as h, i}
-							{@const badge = getEstadoBadge(h.estado_nuevo)}
-							<div class="historial-entry" class:historial-entry-first={i === 0}>
-								<div class="historial-dot historial-dot-{h.estado_nuevo.toLowerCase()}" aria-hidden="true">
-									<svg
-										width="10"
-										height="10"
-										viewBox="0 0 24 24"
-										fill="none"
-										stroke="currentColor"
-										stroke-width="3"
-										stroke-linecap="round"
-										stroke-linejoin="round"
-										><path d="M20 6L9 17l-5-5" /></svg
-									>
-								</div>
-								<div class="historial-card">
-									<div class="historial-card-top">
-										<div class="historial-transition">
-											{#if h.estado_anterior}
-												{@const prev = getEstadoBadge(h.estado_anterior)}
-												<span class="estado-badge estado-badge-{h.estado_anterior.toLowerCase()} historial-tag"
-													>{prev.label}</span
-												>
-												<svg
-													class="historial-arrow"
-													width="12"
-													height="12"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2.4"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													aria-hidden="true"
-													><path d="M5 12h14" /><path d="M12 5l7 7-7 7" /></svg
-												>
-											{/if}
-											<span class="estado-badge estado-badge-{h.estado_nuevo.toLowerCase()} historial-tag"
-												>{badge.label}</span
-											>
-										</div>
-										<span class="historial-fecha">{fmtFecha(h.created_at)}</span>
-									</div>
-									{#if h.usuario}
-										<div class="historial-user">
-											<span class="historial-user-icon" aria-hidden="true">
-												<svg
-													width="12"
-													height="12"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" /><circle
-														cx="12"
-														cy="7"
-														r="4"
-													/></svg
-												>
-											</span>
-											<span>{h.usuario.nombre || h.usuario.correo}</span>
-										</div>
-									{/if}
-									{#if h.motivo}
-										<div class="historial-motivo">
-											<span class="historial-user-icon" aria-hidden="true">
-												<svg
-													width="12"
-													height="12"
-													viewBox="0 0 24 24"
-													fill="none"
-													stroke="currentColor"
-													stroke-width="2"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></svg
-												>
-											</span>
-											<span>{h.motivo}</span>
-										</div>
-									{/if}
-								</div>
-							</div>
-						{/each}
-					</div>
-				{/if}
-			</div>
-
-			<footer class="historial-ft">
-				<button
-					class="btn-secondary liq-btn-secondary historial-ft-btn"
-					on:click={() => (historialModalOpen = false)}
-				>
-					<svg
-						width="14"
-						height="14"
-						viewBox="0 0 24 24"
-						fill="none"
-						stroke="currentColor"
-						stroke-width="2"
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						><path d="M15 18l-6-6 6-6" /></svg
-					>
-					<span>Cerrar</span>
-				</button>
-			</footer>
-		</div>
-	</div>
-{/if}
+<ModalTrazabilidad
+	open={historialModalOpen}
+	consecutivo={hdr.consecutivo || null}
+	historial={historialData}
+	cargando={historialLoading}
+	error={historialError}
+	oncerrar={() => (historialModalOpen = false)}
+	onReintentar={cargarHistorial}
+	onExcel={descargarExcel}
+	excelCargando={excelLoading}
+/>
 
 <!-- ═══ SUCCESS ANIMATION OVERLAY ═══ -->
 {#if showSuccessAnim}
@@ -5615,7 +5181,6 @@
 		{/each}
 	</div>
 {/if}
-
 
 <style>
 	.consec-ok {
@@ -5848,26 +5413,6 @@
 		line-height: 1.5;
 	}
 
-	/* Dots animados (loading) — pulse naranja brand */
-	.liq-loading-dots {
-		display: inline-flex;
-		gap: 0.2rem;
-		margin-left: 0.25rem;
-	}
-	.liq-loading-dots > span {
-		width: 6px;
-		height: 6px;
-		border-radius: 50%;
-		background: #ea580c;
-		opacity: 0.35;
-		animation: liq-loading-pulse 1.2s infinite;
-	}
-	.liq-loading-dots > span:nth-child(2) {
-		animation-delay: 0.2s;
-	}
-	.liq-loading-dots > span:nth-child(3) {
-		animation-delay: 0.4s;
-	}
 	@keyframes liq-loading-pulse {
 		0%,
 		60%,
@@ -6042,23 +5587,6 @@
 		gap: 0.75rem;
 		flex-wrap: wrap;
 	}
-	.liq-btn-primary {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.7rem 1.25rem;
-		font-size: 0.88rem;
-		cursor: pointer;
-	}
-
-	.liq-btn-secondary {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		padding: 0.7rem 1.25rem;
-		font-size: 0.88rem;
-		cursor: pointer;
-	}
 
 	/* Responsive — tablet ≤ 1279px */
 	@media (max-width: 1279px) {
@@ -6119,11 +5647,7 @@
 			flex-direction: column;
 			width: 100%;
 		}
-		.liq-btn-primary,
-		.liq-btn-secondary {
-			width: 100%;
-			justify-content: center;
-		}
+		
 	}
 
 	/* ─ PDF VIEW LOADING ─ */
@@ -6185,10 +5709,9 @@
 	.pdf-wrap {
 		position: fixed;
 		inset: 0;
-		background: #b8c0cc;
-		background-image:
-			radial-gradient(circle at 0% 0%, rgba(234, 88, 12, 0.06) 0%, transparent 50%),
-			radial-gradient(circle at 100% 100%, rgba(234, 88, 12, 0.05) 0%, transparent 55%);
+		/* El «escritorio» bajo las hojas: el neutro de la marca. La pestaña
+		   activa de `CabeceraVistaPrevia` usa el mismo color para verse abierta. */
+		background: var(--color-gray-100);
 		z-index: 200;
 		display: flex;
 		flex-direction: column;
@@ -6196,239 +5719,6 @@
 		font-family: var(--font-sans);
 	}
 
-	/* ═══════════════════════════════════════════════════════════════
-	   PDF / PREVIEW TOOLBAR — alineado con landing-cotransmeq-design-system
-	   (off-white + naranja brand + verde bosque + Geist único)
-	   Reemplaza el antiguo dark theme y restos de transmeralda.
-	   ═══════════════════════════════════════════════════════════════ */
-	.pdf-bar {
-		flex-shrink: 0;
-		background: rgba(255, 255, 255, 0.82);
-		backdrop-filter: blur(20px) saturate(180%);
-		-webkit-backdrop-filter: blur(20px) saturate(180%);
-		border-bottom: 1px solid rgba(15, 23, 42, 0.08);
-		box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.04);
-		padding: 0.85rem 1.5rem;
-		display: flex;
-		align-items: center;
-		gap: 1rem;
-		font-family: var(--font-sans);
-	}
-	.pdf-bar-inner {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1.5rem;
-		width: 100%;
-		min-width: 0;
-	}
-	.pdf-bar-brand {
-		display: flex;
-		align-items: center;
-		gap: 0.85rem;
-		min-width: 0;
-		flex: 1 1 auto;
-	}
-	.pdf-bar-logo {
-		height: 44px;
-		width: 44px;
-		object-fit: contain;
-		background: #f6f6f3;
-		border: 1px solid rgba(15, 23, 42, 0.06);
-		border-radius: 12px;
-		padding: 5px;
-		flex-shrink: 0;
-	}
-	.pdf-bar-headings {
-		min-width: 0;
-		flex: 1 1 auto;
-	}
-	.pdf-bar-eyebrow {
-		display: inline-block;
-		font-size: 0.65rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.12em;
-		color: #c2410c;
-		background: rgba(234, 88, 12, 0.08);
-		padding: 0.22rem 0.6rem;
-		border-radius: 9999px;
-		font-family: var(--font-sans);
-		margin-bottom: 0.3rem;
-		white-space: nowrap;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		max-width: 100%;
-	}
-	.pdf-bar-title {
-		display: flex;
-		align-items: center;
-		gap: 6px;
-		font-family: var(--font-sans);
-		font-weight: 700;
-		font-size: clamp(1.05rem, 1.8vw, 1.35rem);
-		line-height: 1.2;
-		color: #0f172a;
-		margin: 0.05rem 0 0.1rem;
-		letter-spacing: -0.01em;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-	.pdf-bar-sub {
-		display: flex;
-		align-items: center;
-		gap: 4px;
-		font-size: 0.78rem;
-		color: #64748b;
-		margin: 0;
-		line-height: 1.4;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	/* Tools cluster (tabs + zoom + buttons) */
-	.pdf-bar-tools {
-		display: flex;
-		align-items: center;
-		gap: 0.6rem;
-		flex-shrink: 0;
-		flex-wrap: wrap;
-		justify-content: flex-end;
-	}
-
-	/* Page tabs (Hoja 1-4) */
-	.page-tabs {
-		display: flex;
-		gap: 0.2rem;
-		background: #f6f6f3;
-		border: 1px solid rgba(15, 23, 42, 0.06);
-		border-radius: 10px;
-		padding: 0.2rem;
-	}
-	.ptab {
-		border: none;
-		background: transparent;
-		color: #64748b;
-		padding: 0.45rem 0.85rem;
-		font-size: 0.78rem;
-		font-weight: 600;
-		font-family: inherit;
-		border-radius: 8px;
-		cursor: pointer;
-		transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-		white-space: nowrap;
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-	}
-	.ptab:hover {
-		color: #0f172a;
-		background: rgba(234, 88, 12, 0.06);
-	}
-	.ptab.active {
-		background: var(--accion);
-		color: white;
-		box-shadow: var(--shadow-btn);
-	}
-	.ptab.active .ptab-num {
-		background: rgba(255, 255, 255, 0.25);
-		color: white;
-	}
-	.ptab-num {
-		display: none;
-		font-family: var(--font-sans);
-		font-size: 0.65rem;
-		font-weight: 700;
-		background: rgba(15, 23, 42, 0.06);
-		color: #64748b;
-		min-width: 18px;
-		height: 18px;
-		padding: 0 0.3rem;
-		border-radius: 4px;
-		align-items: center;
-		justify-content: center;
-	}
-	/* Tab labels: full by default, short on mobile */
-	.ptab-short {
-		display: none;
-	}
-	.ptab-full {
-		display: inline;
-	}
-
-	/* Zoom controls */
-	.zoom-controls {
-		display: flex;
-		align-items: center;
-		gap: 0.2rem;
-		background: white;
-		border: 1px solid rgba(15, 23, 42, 0.08);
-		border-radius: 10px;
-		padding: 0.2rem;
-	}
-	.zoom-btn {
-		border: none;
-		background: transparent;
-		color: #0f172a;
-		width: 28px;
-		height: 28px;
-		border-radius: 7px;
-		cursor: pointer;
-		font-size: 15px;
-		font-weight: 700;
-		font-family: inherit;
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		transition: all 0.2s;
-	}
-	.zoom-btn:hover {
-		background: rgba(234, 88, 12, 0.08);
-		color: #c2410c;
-	}
-	.zoom-label {
-		font-family: var(--font-sans);
-		font-size: 0.72rem;
-		font-weight: 700;
-		color: #0f172a;
-		font-variant-numeric: tabular-nums;
-		min-width: 42px;
-		text-align: center;
-		letter-spacing: 0.02em;
-	}
-	.zoom-reset,
-	.zoom-fit {
-		font-size: 13px;
-	}
-
-	/* Print button (gradient naranja brand) */
-	.pdf-bar-print {
-		padding: 0.6rem 1rem;
-	}
-	.pbtn-icon,
-	.pbtn-label-short {
-		display: none;
-	}
-	.pbtn-label-full {
-		display: inline;
-	}
-
-	/* Legacy classes (kept for backwards compat with old markup if any) */
-	.pbtn {
-		border: none;
-		border-radius: 10px;
-		padding: 9px 18px;
-		font-weight: 600;
-		font-size: 12.5px;
-		cursor: pointer;
-		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-		display: inline-flex;
-		align-items: center;
-		gap: 7px;
-		font-family: var(--font-sans);
-	}
 	.pbtn-back {
 		background: #ffffff;
 		color: #0f172a;
@@ -6447,15 +5737,6 @@
 	.pbtn-print:hover {
 		transform: translateY(-1px);
 		box-shadow: 0 6px 20px rgba(234, 88, 12, 0.40);
-	}
-	.zoom-fit {
-		font-size: 14px;
-		background: rgba(234, 88, 12, 0.08) !important;
-		border: 1px solid rgba(234, 88, 12, 0.20) !important;
-		color: #c2410c !important;
-	}
-	.zoom-fit:hover {
-		background: rgba(234, 88, 12, 0.16) !important;
 	}
 
 	.pdf-body {
@@ -6482,7 +5763,9 @@
 		font-size: 8.8pt;
 		line-height: 1.35;
 		font-family: var(--font-sans);
-		box-shadow: 0 8px 50px rgba(0, 0, 0, 0.3);
+		box-shadow:
+			0 1px 2px rgba(23, 32, 29, 0.06),
+			0 12px 32px rgba(23, 32, 29, 0.12);
 		border-radius: 2px;
 	}
 	/* ─ A4 LANDSCAPE (idéntico a transmeralda) ─ */
@@ -6494,7 +5777,9 @@
 		font-size: 8pt;
 		line-height: 1.3;
 		font-family: var(--font-sans);
-		box-shadow: 0 8px 50px rgba(0, 0, 0, 0.3);
+		box-shadow:
+			0 1px 2px rgba(23, 32, 29, 0.06),
+			0 12px 32px rgba(23, 32, 29, 0.12);
 		border-radius: 2px;
 	}
 	/* legacy alias portrait (alias, igual a .page en transmeralda) */
@@ -6506,7 +5791,9 @@
 		font-size: 8.8pt;
 		line-height: 1.35;
 		font-family: var(--font-sans);
-		box-shadow: 0 8px 50px rgba(0, 0, 0, 0.3);
+		box-shadow:
+			0 1px 2px rgba(23, 32, 29, 0.06),
+			0 12px 32px rgba(23, 32, 29, 0.12);
 		border-radius: 2px;
 	}
 	/* ─ LETTER PORTRAIT (HOJA 1 — Liquidación de Servicios) ─
@@ -6521,7 +5808,9 @@
 		font-size: 7.6pt;
 		line-height: 1.32;
 		font-family: var(--font-sans);
-		box-shadow: 0 8px 50px rgba(0, 0, 0, 0.3);
+		box-shadow:
+			0 1px 2px rgba(23, 32, 29, 0.06),
+			0 12px 32px rgba(23, 32, 29, 0.12);
 		border-radius: 2px;
 		overflow: hidden;
 	}
@@ -7258,7 +6547,9 @@
 		font-size: 8pt;
 		line-height: 1.3;
 		font-family: var(--font-sans);
-		box-shadow: 0 8px 50px rgba(0, 0, 0, 0.3);
+		box-shadow:
+			0 1px 2px rgba(23, 32, 29, 0.06),
+			0 12px 32px rgba(23, 32, 29, 0.12);
 		border-radius: 2px;
 	}
 
@@ -7493,71 +6784,11 @@
 			gap: 16px;
 		}
 
-		/* PDF bar: allow wrap */
-		.pdf-bar {
-			padding: 0.7rem 1rem;
-		}
-		.pdf-bar-inner {
-			gap: 1rem;
-		}
-		.pdf-bar-logo {
-			height: 38px;
-			width: 38px;
-		}
-		.pdf-bar-title {
-			font-size: 1.05rem;
-		}
-		.pdf-bar-sub {
-			font-size: 0.72rem;
-		}
-		.pdf-bar-tools {
-			gap: 0.5rem;
-		}
-		/* Page tabs: show short labels, scroll horizontally */
-		.page-tabs {
-			order: 3;
-			width: 100%;
-			overflow-x: auto;
-			flex-wrap: nowrap;
-			justify-content: flex-start;
-			-webkit-overflow-scrolling: touch;
-			scrollbar-width: thin;
-		}
-		.ptab {
-			font-size: 0.72rem;
-			padding: 0.4rem 0.7rem;
-			white-space: nowrap;
-			flex-shrink: 0;
-		}
-		/* Compact zoom & action buttons on tablet */
-		.zoom-controls {
-			margin-left: auto;
-		}
-		.zoom-btn {
-			width: 30px;
-			height: 30px;
-		}
-		.zoom-label {
-			min-width: 38px;
-			font-size: 0.7rem;
-		}
-		.pdf-bar-print {
-			padding: 0.55rem 0.85rem;
-			font-size: 0.82rem;
-		}
-
-		/* Estado bar: allow wrap */
-		.estado-bar {
-			padding: 0.7rem 0.9rem;
-			gap: 1rem;
-		}
 		.estado-badge {
 			padding: 0.28rem 0.6rem;
 			font-size: 0.72rem;
 		}
-		.estado-info {
-			font-size: 0.75rem;
-		}
+		
 	}
 
 	/* ═══════════════════════════════════════════════════════════ */
@@ -7575,135 +6806,12 @@
 			margin-bottom: 4px;
 		}
 
-		/* PDF bar: stack everything */
-		.pdf-bar {
-			padding: 0.65rem 0.85rem;
-		}
-		.pdf-bar-inner {
-			flex-direction: column;
-			align-items: stretch;
-			gap: 0.65rem;
-		}
-		.pdf-bar-logo {
-			height: 32px;
-			width: 32px;
-		}
-		.pdf-bar-eyebrow {
-			font-size: 0.6rem;
-		}
-		.pdf-bar-title {
-			font-size: 0.95rem;
-		}
-		.pdf-bar-sub {
-			font-size: 0.7rem;
-		}
-		.pdf-bar-tools {
-			width: 100%;
-			justify-content: flex-start;
-		}
-		/* Tabs: numbered + short labels, scrollable */
-		.page-tabs {
-			width: 100%;
-			overflow-x: auto;
-			flex-wrap: nowrap;
-			justify-content: flex-start;
-			-webkit-overflow-scrolling: touch;
-		}
-		.ptab {
-			font-size: 0.7rem;
-			padding: 0.4rem 0.65rem;
-			white-space: nowrap;
-			flex-shrink: 0;
-			display: inline-flex;
-			align-items: center;
-			gap: 0.3rem;
-		}
-		.ptab-full {
-			display: none;
-		}
-		.ptab-short {
-			display: inline;
-		}
-		.ptab-num {
-			display: inline-flex;
-			align-items: center;
-			justify-content: center;
-			min-width: 16px;
-			height: 16px;
-			padding: 0 0.25rem;
-			border-radius: 50%;
-			font-size: 0.6rem;
-			font-weight: 800;
-		}
-		.zoom-controls {
-			margin-left: auto;
-		}
-		.zoom-btn {
-			width: 30px;
-			height: 30px;
-		}
-		.pdf-bar-print {
-			padding: 0.5rem 0.75rem;
-			font-size: 0.78rem;
-		}
-		/* Show short label on mobile */
-		.pbtn-label-full {
-			display: none;
-		}
-		.pbtn-label-short {
-			display: inline;
-		}
-
-		/* Estado bar: stack + compact mobile */
-		.estado-bar {
-			padding: 0.65rem 0.75rem;
-			gap: 0.6rem;
-			border-radius: 12px;
-		}
-		.estado-bar-status {
-			width: 100%;
-			flex-direction: row;
-			align-items: center;
-			gap: 0.6rem;
-		}
 		.estado-eyebrow {
 			font-size: 0.55rem;
 		}
 		.estado-badge {
 			padding: 0.25rem 0.55rem;
 			font-size: 0.68rem;
-		}
-		/* Info stack: tighter, hide long text, show short dates */
-		.estado-info-stack {
-			gap: 0.35rem 0.6rem;
-			width: 100%;
-			min-width: 0;
-		}
-		.estado-info {
-			font-size: 0.7rem;
-			gap: 0.35rem;
-		}
-		.estado-info-full {
-			display: none;
-		}
-		.estado-info-short {
-			display: inline;
-		}
-		.estado-info-icon {
-			width: 20px;
-			height: 20px;
-		}
-		.estado-info-icon svg {
-			width: 11px;
-			height: 11px;
-		}
-		/* Action buttons: full-width on mobile */
-		.estado-bar-actions {
-			width: 100%;
-		}
-		.estado-btn {
-			flex: 1;
-			justify-content: center;
 		}
 
 		/* PDF body: floating document viewer — keep A4 size, allow free pan/zoom */
@@ -7762,24 +6870,6 @@
 			font-size: 12.5px;
 		}
 
-		.historial-modal {
-			width: 94vw;
-			max-height: 86vh;
-			border-radius: 16px;
-		}
-		.historial-hd {
-			padding: 16px 18px 12px;
-		}
-		.historial-body {
-			padding: 16px 18px;
-		}
-		.historial-ft {
-			padding: 12px 18px 14px;
-		}
-		.historial-timeline {
-			padding-left: 20px;
-		}
-
 		/* PDF page (A4 297mm): force smaller on mobile */
 		.page {
 			padding: 8mm 6mm 8mm;
@@ -7807,16 +6897,6 @@
 
 	/* ═══════════════════════════════════════════════════════════ */
 	/* RESPONSIVE — SMALL MOBILE (≤ 480px)                          */
-	/* ═══════════════════════════════════════════════════════════ */
-	@media (max-width: 480px) {
-		.historial-card-top {
-			flex-direction: column;
-			align-items: flex-start;
-		}
-		.historial-fecha {
-			font-size: 10.5px;
-		}
-	}
 
 	@media print {
 		/* ── Named pages: HOJA 1 vertical (Letter portrait), HOJA 2-4 horizontal (A4 landscape) ── */
@@ -7863,10 +6943,6 @@
 			display: block !important;
 		}
 
-		/* Hide toolbar, modals, non-print UI */
-		.pdf-bar {
-			display: none !important;
-		}
 		.print-modal-overlay {
 			display: none !important;
 		}
@@ -8424,22 +7500,6 @@
 		}
 	}
 
-	/* ═══════════════════════════════════════════════════════════════
-	   ESTADO BAR — trazabilidad editorial
-	   (eyebrow + badge semántico + Heroicons + liq-btn-* del skill)
-	   ═══════════════════════════════════════════════════════════════ */
-	.estado-bar {
-		display: flex;
-		align-items: center;
-		gap: 1.25rem;
-		flex-wrap: wrap;
-		background: white;
-		border: 1px solid rgba(15, 23, 42, 0.08);
-		padding: 0.85rem 1.1rem;
-		margin: 0 0 0.85rem;
-		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
-	}
-
 	/* Bloque izquierdo: eyebrow + badge */
 	.estado-eyebrow {
 		display: inline-block;
@@ -8505,95 +7565,6 @@
 		border: 1px solid rgba(220, 38, 38, 0.25);
 	}
 
-	/* Centro: info stack (fechas + autores) */
-	.estado-info-stack {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.4rem 1rem;
-		align-items: center;
-		flex: 1 1 auto;
-		min-width: 0;
-	}
-	.estado-info {
-		font-size: 0.8rem;
-		color: #64748b;
-		display: inline-flex;
-		align-items: center;
-		gap: 0.45rem;
-		min-width: 0;
-		font-family: var(--font-sans);
-	}
-	.estado-info strong {
-		color: #0f172a;
-		font-weight: 600;
-	}
-	.estado-info-icon {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 24px;
-		height: 24px;
-		border-radius: 7px;
-		background: rgba(234, 88, 12, 0.1);
-		color: #c2410c;
-		flex-shrink: 0;
-	}
-	.estado-info-icon svg {
-		width: 13px;
-		height: 13px;
-	}
-	.estado-info-short {
-		display: none;
-		font-family: var(--font-sans);
-		font-size: 0.72rem;
-		color: #0f172a;
-		font-weight: 600;
-		letter-spacing: 0.02em;
-		font-variant-numeric: tabular-nums;
-	}
-	.estado-info-full {
-		display: inline;
-		min-width: 0;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	/* Derecha: acciones */
-	.estado-bar-actions {
-		flex-shrink: 0;
-		display: flex;
-		gap: 0.5rem;
-		flex-wrap: wrap;
-	}
-	.estado-btn {
-		padding: 0.55rem 0.85rem !important;
-		font-size: 0.8rem !important;
-	}
-	.estado-btn:disabled {
-		opacity: 0.55;
-		cursor: not-allowed;
-		transform: none !important;
-		box-shadow: none !important;
-	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   HISTORIAL / TRAZABILIDAD MODAL — editorial
-	   (eyebrow + h2 + Heroicons + estado-badge semántico)
-	   ═══════════════════════════════════════════════════════════════ */
-	.historial-overlay {
-		position: fixed;
-		inset: 0;
-		z-index: 10000;
-		background: rgba(15, 23, 42, 0.45);
-		backdrop-filter: blur(8px);
-		-webkit-backdrop-filter: blur(8px);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		padding: 1.5rem;
-		animation: histFadeIn 0.2s ease;
-	}
 	@keyframes histFadeIn {
 		from {
 			opacity: 0;
@@ -8602,20 +7573,7 @@
 			opacity: 1;
 		}
 	}
-	.historial-modal {
-		background: #fff;
-		border: 1px solid rgba(15, 23, 42, 0.08);
-		border-radius: 24px;
-		width: 620px;
-		max-width: 100%;
-		max-height: 86vh;
-		display: flex;
-		flex-direction: column;
-		box-shadow: 0 25px 60px rgba(15, 23, 42, 0.25), 0 4px 24px rgba(0, 0, 0, 0.08);
-		animation: histPop 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-		overflow: hidden;
-		font-family: var(--font-sans);
-	}
+	
 	@keyframes histPop {
 		from {
 			opacity: 0;
@@ -8625,275 +7583,6 @@
 			opacity: 1;
 			transform: scale(1) translateY(0);
 		}
-	}
-
-	/* Header */
-	.historial-hd {
-		display: flex;
-		align-items: flex-start;
-		gap: 1rem;
-		padding: 1.5rem 1.5rem 1.25rem;
-		border-bottom: 1px solid rgba(15, 23, 42, 0.06);
-	}
-	.historial-hd-icon {
-		width: 48px;
-		height: 48px;
-		border-radius: 14px;
-		background: linear-gradient(135deg, #ea580c, #c2410c);
-		color: #fff;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		flex-shrink: 0;
-		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.30);
-	}
-	.historial-hd-text {
-		min-width: 0;
-		flex: 1 1 auto;
-	}
-	.historial-eyebrow {
-		display: inline-block;
-		width: fit-content;
-		font-size: 0.65rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.12em;
-		color: #c2410c;
-		background: rgba(234, 88, 12, 0.08);
-		padding: 0.2rem 0.55rem;
-		border-radius: 9999px;
-		font-family: var(--font-sans);
-		margin-bottom: 0.4rem;
-	}
-	.historial-title {
-		font-family: var(--font-sans);
-		font-weight: 700;
-		font-size: 1.4rem;
-		line-height: 1.25;
-		color: #0f172a;
-		margin: 0;
-		letter-spacing: -0.01em;
-	}
-	.historial-sub {
-		font-size: 0.82rem;
-		color: #64748b;
-		margin: 0.2rem 0 0;
-		line-height: 1.5;
-	}
-	.historial-close {
-		margin-left: auto;
-		background: #f6f6f3;
-		border: 1px solid rgba(15, 23, 42, 0.08);
-		border-radius: 10px;
-		width: 36px;
-		height: 36px;
-		cursor: pointer;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		color: #64748b;
-		transition: all 0.2s;
-		flex-shrink: 0;
-	}
-	.historial-close:hover {
-		background: rgba(220, 38, 38, 0.08);
-		border-color: rgba(220, 38, 38, 0.20);
-		color: #dc2626;
-		transform: rotate(90deg);
-	}
-
-	/* Body */
-	.historial-body {
-		padding: 1.5rem 1.5rem;
-		overflow-y: auto;
-		flex: 1;
-		min-height: 0;
-	}
-	.historial-empty {
-		text-align: center;
-		padding: 3rem 1rem;
-		color: #94a3b8;
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 0.5rem;
-	}
-	.historial-empty-icon {
-		width: 64px;
-		height: 64px;
-		border-radius: 50%;
-		background: rgba(234, 88, 12, 0.08);
-		color: #c2410c;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		margin-bottom: 0.5rem;
-	}
-	.historial-empty p {
-		margin: 0;
-		font-size: 0.95rem;
-		font-weight: 600;
-		color: #64748b;
-		font-family: var(--font-sans);
-	}
-	.historial-empty-sub {
-		font-size: 0.78rem;
-		color: #94a3b8;
-		max-width: 280px;
-		line-height: 1.5;
-	}
-
-	/* Timeline */
-	.historial-timeline {
-		position: relative;
-		padding-left: 1.65rem;
-	}
-	.historial-timeline::before {
-		content: '';
-		position: absolute;
-		left: 0.5rem;
-		top: 0.75rem;
-		bottom: 0.75rem;
-		width: 2px;
-		background: linear-gradient(180deg, rgba(234, 88, 12, 0.35), rgba(234, 88, 12, 0.08));
-		border-radius: 1px;
-	}
-	.historial-entry {
-		position: relative;
-		margin-bottom: 0.85rem;
-	}
-	.historial-entry:last-child {
-		margin-bottom: 0;
-	}
-	.historial-dot {
-		position: absolute;
-		left: -1.65rem;
-		top: 0.75rem;
-		width: 1.1rem;
-		height: 1.1rem;
-		border-radius: 50%;
-		border: 2px solid #fff;
-		box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.06);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		color: #fff;
-	}
-	.historial-dot-borrador {
-		background: #64748b;
-	}
-	.historial-dot-liquidada {
-		background: #c2410c;
-	}
-	.historial-dot-aprobada {
-		background: #c2410c;
-	}
-	.historial-dot-facturada {
-		background: #c2410c;
-	}
-	.historial-dot-anulada {
-		background: #dc2626;
-	}
-	.historial-entry-first .historial-dot {
-		width: 1.35rem;
-		height: 1.35rem;
-		left: -1.725rem;
-		top: 0.65rem;
-		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.18);
-	}
-
-	/* Card de cada entrada */
-	.historial-card {
-		background: #f6f6f3;
-		border: 1px solid rgba(15, 23, 42, 0.06);
-		border-radius: 14px;
-		padding: 0.85rem 1rem;
-		display: flex;
-		flex-direction: column;
-		gap: 0.45rem;
-		transition: all 0.2s;
-	}
-	.historial-card:hover {
-		border-color: rgba(234, 88, 12, 0.25);
-		box-shadow: 0 2px 12px rgba(234, 88, 12, 0.06);
-	}
-	.historial-entry-first .historial-card {
-		background: white;
-		border: 1px solid rgba(234, 88, 12, 0.30);
-		box-shadow: 0 2px 12px rgba(234, 88, 12, 0.08);
-	}
-	.historial-card-top {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 0.6rem;
-		flex-wrap: wrap;
-	}
-	.historial-transition {
-		display: flex;
-		align-items: center;
-		gap: 0.45rem;
-		flex-wrap: wrap;
-	}
-	.historial-tag {
-		padding: 0.22rem 0.55rem !important;
-		font-size: 0.68rem !important;
-	}
-	.historial-arrow {
-		color: #94a3b8;
-		flex-shrink: 0;
-	}
-	.historial-fecha {
-		font-family: var(--font-sans);
-		font-size: 0.7rem;
-		color: #64748b;
-		white-space: nowrap;
-		letter-spacing: 0.02em;
-		font-variant-numeric: tabular-nums;
-	}
-	.historial-user {
-		font-size: 0.78rem;
-		color: #64748b;
-		display: inline-flex;
-		align-items: center;
-		gap: 0.4rem;
-		font-family: var(--font-sans);
-	}
-	.historial-user-icon {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		width: 20px;
-		height: 20px;
-		border-radius: 6px;
-		background: rgba(234, 88, 12, 0.10);
-		color: #c2410c;
-		flex-shrink: 0;
-	}
-	.historial-motivo {
-		font-size: 0.78rem;
-		color: #64748b;
-		font-style: italic;
-		padding: 0.5rem 0.7rem;
-		background: white;
-		border-left: 2px solid rgba(234, 88, 12, 0.35);
-		border-radius: 0 8px 8px 0;
-		display: flex;
-		align-items: flex-start;
-		gap: 0.45rem;
-		line-height: 1.5;
-	}
-
-	/* Footer */
-	.historial-ft {
-		padding: 1rem 1.5rem 1.25rem;
-		display: flex;
-		justify-content: flex-end;
-		border-top: 1px solid rgba(15, 23, 42, 0.06);
-		background: #f6f6f3;
-	}
-	.historial-ft-btn {
-		padding: 0.6rem 1rem !important;
 	}
 
 	/* ═══════════════════════════════════════════════════════════

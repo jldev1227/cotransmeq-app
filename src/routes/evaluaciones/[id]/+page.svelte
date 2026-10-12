@@ -7,12 +7,7 @@
 	import { dndzone } from 'svelte-dnd-action';
 	import { flip } from 'svelte/animate';
 	import PastillaTipo from '$lib/components/evaluaciones/PastillaTipo.svelte';
-	import {
-		acierto,
-		porcentaje,
-		tonoPuntaje,
-		pluralPreguntas
-	} from '$lib/components/evaluaciones/tipos';
+	import { tonoPuntaje } from '$lib/components/evaluaciones/tipos';
 	import { mascota } from '$lib/mascot';
 	import SopaLetras from '$lib/components/evaluaciones/SopaLetras.svelte';
 	import {
@@ -49,16 +44,13 @@
 		opciones: Opcion[];
 		relacionIzq: string[];
 		relacionDer: string[];
-		respuestaCorrecta?: number;
 		/** Sopa de letras: cuadrícula y lista de palabras, sin ubicaciones. */
-		/// Antes de responder llega sin ubicaciones; en el resultado, completa.
 		configuracion?: ConfigSopaPublica | ConfigSopa | null;
 	}
 
 	interface Opcion {
 		id: string;
 		texto: string;
-		esCorrecta?: boolean;
 	}
 
 	interface DndItem {
@@ -97,10 +89,29 @@
 	let signaturePad: SignaturePad | null = null;
 	let firmaData: string | null = null;
 
+	/**
+	 * Lo que devuelven `responder` y `verificar` desde oct-2026: la nota y
+	 * nada más. Antes traían el resultado entero con la evaluación y su clave
+	 * (`esCorrecta`, `respuestaCorrecta`, dónde estaba cada palabra de la sopa):
+	 * respondiendo una vez con datos de prueba se sacaba la clave. Por eso esta
+	 * página ya no muestra la revisión pregunta por pregunta.
+	 */
+	interface ResultadoPublico {
+		respondido: true;
+		nombre: string;
+		fecha: string;
+		puntaje_total: number;
+		puntaje_maximo: number;
+		porcentaje: number;
+		aprobado: boolean;
+		aciertos: number;
+		total_preguntas: number;
+	}
+
 	// Resultado
-	let resultado: any = null;
+	let resultado: ResultadoPublico | null = null;
 	let yaRespondio = false;
-	let miResultado: any = null;
+	let miResultado: ResultadoPublico | null = null;
 
 	// Errores y Toast
 	let errores: Record<string, string> = {};
@@ -117,12 +128,6 @@
 	$: evaluacionId = $page.params.id;
 	$: totalPreguntas = evaluacion?.preguntas.length || 0;
 	$: progreso = currentStep === 0 ? 0 : (currentStep / (totalPreguntas + 1)) * 100;
-	// La evaluación que se carga para responder viene sin la clave (`esCorrecta`,
-	// `respuestaCorrecta`). La revisión la toma del resultado que devuelven
-	// `responder` y `verificar`, que traen la evaluación completa.
-	$: preguntasRevision = (miResultado?.evaluacion?.preguntas ??
-		evaluacion?.preguntas ??
-		[]) as Pregunta[];
 
 	onMount(async () => {
 		// Generar fingerprint del dispositivo
@@ -145,13 +150,6 @@
 				if (data.success && data.data) {
 					yaRespondio = true;
 					miResultado = data.data;
-					// Cargar los datos del usuario que ya respondió
-					nombre_completo = miResultado.nombre_completo;
-					numero_documento = miResultado.numero_documento;
-					cargo = miResultado.cargo;
-					correo = miResultado.correo;
-					telefono = miResultado.telefono;
-					firmaData = miResultado.firma;
 				}
 			}
 		} catch (error) {
@@ -532,7 +530,11 @@
 				miResultado = data.data;
 				mostrarToast('¡Evaluación completada exitosamente!', 'success');
 			} else {
-				mostrarToast(data.errors?.[0]?.message || 'Error al enviar la evaluación', 'error');
+				// `message`: firma requerida, límite de intentos (429) o evaluación no encontrada.
+				mostrarToast(
+					data.message || data.errors?.[0]?.message || 'Error al enviar la evaluación',
+					'error'
+				);
 			}
 		} catch (err: any) {
 			console.error('Error:', err);
@@ -631,7 +633,7 @@
 				</div>
 			</section>
 		{:else if yaRespondio && miResultado}
-			{@const tono = tonoPuntaje(miResultado.puntaje_total, puntajeMaximo)}
+			{@const tono = tonoPuntaje(miResultado.puntaje_total, miResultado.puntaje_maximo)}
 			<div class="pe-flujo" in:fade={{ duration: 200 }}>
 				<section class="ev-hero pe-hero">
 					<span class="ev-orbe ev-orbe--grande" aria-hidden="true"></span>
@@ -653,10 +655,10 @@
 						<div class="ev-nota-grande ev-nota--{tono} pe-nota-grande">
 							<strong
 								>{miResultado.puntaje_total}<span class="pe-nota-de">
-									/ {puntajeMaximo}</span
+									/ {miResultado.puntaje_maximo}</span
 								></strong
 							>
-							<span>{porcentaje(miResultado.puntaje_total, puntajeMaximo)} % de acierto</span>
+							<span>{Math.round(miResultado.porcentaje)} % de acierto</span>
 						</div>
 					</div>
 				</section>
@@ -668,287 +670,48 @@
 							<dl class="pe-datos">
 								<div>
 									<dt>Nombre</dt>
-									<dd>{miResultado.nombre_completo}</dd>
+									<dd>{miResultado.nombre}</dd>
 								</div>
 								<div>
-									<dt>Documento</dt>
-									<dd>{miResultado.numero_documento}</dd>
-								</div>
-								<div>
-									<dt>Cargo</dt>
-									<dd>{miResultado.cargo}</dd>
-								</div>
-								<div>
-									<dt>Correo</dt>
-									<dd class="pe-dd-largo">{miResultado.correo}</dd>
-								</div>
-								<div>
-									<dt>Teléfono</dt>
-									<dd>{miResultado.telefono}</dd>
+									<dt>Enviada</dt>
+									<dd>
+										{new Date(miResultado.fecha).toLocaleString('es-CO', {
+											day: 'numeric',
+											month: 'long',
+											year: 'numeric',
+											hour: '2-digit',
+											minute: '2-digit'
+										})}
+									</dd>
 								</div>
 							</dl>
 						</section>
-						{#if miResultado.firma}
-							<section class="ev-card">
-								<h2 class="ev-card-titulo">Firma <small>Capturada al terminar</small></h2>
-								<img class="ev-firma" src={miResultado.firma} alt="Tu firma" />
-							</section>
-						{/if}
 					</aside>
 
 					<section class="ev-card">
-						<header class="ev-card-cab">
-							<h2 class="ev-card-titulo">
-								Tus respuestas
-								<small>{pluralPreguntas(preguntasRevision.length)}</small>
-							</h2>
-						</header>
-						<div class="ev-respuestas pe-respuestas">
-							{#each preguntasRevision as pregunta, index (pregunta.id)}
-								{@const respuesta = miResultado.respuestas.find(
-									(r: any) => r.preguntaId === pregunta.id
-								)}
-								{@const obtenido = respuesta?.puntaje ?? 0}
-								{@const estado = acierto(obtenido, pregunta.puntaje)}
-								<article class="ev-resp ev-resp--{estado}">
-									<header class="ev-resp-cab">
-										<span class="ev-resp-num">{index + 1}</span>
-										<PastillaTipo tipo={pregunta.tipo} />
-										<span
-											class="ev-resp-pts ev-nota--{estado === 'correcta'
-												? 'alto'
-												: estado === 'parcial'
-													? 'medio'
-													: 'bajo'}"
-										>
-											{obtenido} / {pregunta.puntaje} pts
-										</span>
-									</header>
-									<p class="ev-resp-pregunta">{pregunta.texto}</p>
-									<div class="ev-resp-cuerpo">
-										<span class="ev-resp-etiqueta">Tu respuesta</span>
-										{#if !respuesta}
-											<p class="ev-resp-vacia">Sin respuesta</p>
-										{:else if pregunta.tipo === 'TEXTO'}
-											{#if respuesta.valor_texto}
-												<p class="ev-resp-valor">{respuesta.valor_texto}</p>
-											{:else}
-												<p class="ev-resp-vacia">Sin respuesta</p>
-											{/if}
-											<p class="ev-resp-nota">Respuesta abierta · calificada automáticamente.</p>
-										{:else if pregunta.tipo === 'NUMERICA'}
-											<p class="ev-resp-valor">
-												<strong>{respuesta.valor_numero ?? 'Sin respuesta'}</strong>
-											</p>
-											{#if estado !== 'correcta' && pregunta.respuestaCorrecta !== undefined && pregunta.respuestaCorrecta !== null}
-												<p class="ev-resp-nota">
-													Respuesta correcta: <strong>{pregunta.respuestaCorrecta}</strong>
-												</p>
-											{/if}
-										{:else if pregunta.tipo === 'VERDADERO_FALSO'}
-											{#if typeof respuesta.valor_numero === 'number'}
-												<ul class="ev-resp-lista">
-													<li
-														class="ev-resp-item"
-														class:ev-resp-item--ok={estado === 'correcta'}
-														class:ev-resp-item--mal={estado !== 'correcta'}
-													>
-														<span
-															class="ev-resp-icono {estado === 'correcta'
-																? 'ev-resp-icono--ok'
-																: 'ev-resp-icono--mal'}"
-															aria-hidden="true"
-														>
-															{#if estado === 'correcta'}
-																<svg
-																	viewBox="0 0 24 24"
-																	fill="none"
-																	stroke="currentColor"
-																	stroke-width="3"
-																	><path
-																		stroke-linecap="round"
-																		stroke-linejoin="round"
-																		d="M5 13l4 4L19 7"
-																	/></svg
-																>
-															{:else}
-																<svg
-																	viewBox="0 0 24 24"
-																	fill="none"
-																	stroke="currentColor"
-																	stroke-width="3"
-																	><path
-																		stroke-linecap="round"
-																		stroke-linejoin="round"
-																		d="M6 18L18 6M6 6l12 12"
-																	/></svg
-																>
-															{/if}
-														</span>
-														{respuesta.valor_numero === 1 ? 'Verdadero' : 'Falso'}
-													</li>
-												</ul>
-												{#if estado !== 'correcta' && pregunta.respuestaCorrecta !== undefined && pregunta.respuestaCorrecta !== null}
-													<p class="ev-resp-nota">
-														Respuesta correcta: <strong
-															>{pregunta.respuestaCorrecta === 1 ? 'Verdadero' : 'Falso'}</strong
-														>
-													</p>
-												{/if}
-											{:else}
-												<p class="ev-resp-vacia">Sin respuesta</p>
-											{/if}
-										{:else if pregunta.tipo === 'SOPA_LETRAS'}
-											{#if pregunta.configuracion?.cuadricula?.length}
-												<SopaLetras
-													compacta
-													cuadricula={pregunta.configuracion.cuadricula}
-													palabras={palabrasDeSopa(pregunta.configuracion)}
-													trazos={Array.isArray(respuesta.relacion) ? respuesta.relacion : []}
-												/>
-											{/if}
-											<p class="ev-resp-nota">
-												{(respuesta.opcionesIds ?? []).length} de {pregunta.configuracion?.palabras
-													.length ?? 0} palabras encontradas
-											</p>
-										{:else if pregunta.tipo === 'RELACION'}
-											{@const relaciones = Array.isArray(respuesta.relacion)
-												? respuesta.relacion
-												: []}
-											{#if relaciones.length > 0}
-												<ul class="ev-resp-lista">
-													{#each relaciones as rel}
-														{@const idx = pregunta.relacionIzq.indexOf(rel.izq)}
-														{@const ok = idx !== -1 && pregunta.relacionDer[idx] === rel.der}
-														<li
-															class="ev-resp-item"
-															class:ev-resp-item--ok={ok}
-															class:ev-resp-item--mal={!ok}
-														>
-															<span
-																class="ev-resp-icono {ok
-																	? 'ev-resp-icono--ok'
-																	: 'ev-resp-icono--mal'}"
-																aria-hidden="true"
-															>
-																{#if ok}
-																	<svg
-																		viewBox="0 0 24 24"
-																		fill="none"
-																		stroke="currentColor"
-																		stroke-width="3"
-																		><path
-																			stroke-linecap="round"
-																			stroke-linejoin="round"
-																			d="M5 13l4 4L19 7"
-																		/></svg
-																	>
-																{:else}
-																	<svg
-																		viewBox="0 0 24 24"
-																		fill="none"
-																		stroke="currentColor"
-																		stroke-width="3"
-																		><path
-																			stroke-linecap="round"
-																			stroke-linejoin="round"
-																			d="M6 18L18 6M6 6l12 12"
-																		/></svg
-																	>
-																{/if}
-															</span>
-															<span class="ev-resp-par">
-																<span class="ev-resp-par-lado">{rel.izq}</span>
-																<svg
-																	viewBox="0 0 24 24"
-																	fill="none"
-																	stroke="currentColor"
-																	stroke-width="2"
-																	aria-hidden="true"
-																	><path
-																		stroke-linecap="round"
-																		stroke-linejoin="round"
-																		d="M14 5l7 7m0 0l-7 7m7-7H3"
-																	/></svg
-																>
-																<span class="ev-resp-par-lado">{rel.der}</span>
-															</span>
-														</li>
-													{/each}
-												</ul>
-											{:else}
-												<p class="ev-resp-vacia">Sin respuesta</p>
-											{/if}
-										{:else}
-											{@const marcadas = Array.isArray(respuesta.opcionesIds)
-												? respuesta.opcionesIds
-												: []}
-											{#if marcadas.length > 0}
-												<ul class="ev-resp-lista">
-													{#each pregunta.opciones as opcion (opcion.id)}
-														{@const marcada = marcadas.includes(opcion.id)}
-														{#if marcada}
-															<li
-																class="ev-resp-item"
-																class:ev-resp-item--ok={opcion.esCorrecta}
-																class:ev-resp-item--mal={!opcion.esCorrecta}
-															>
-																<span
-																	class="ev-resp-icono {opcion.esCorrecta
-																		? 'ev-resp-icono--ok'
-																		: 'ev-resp-icono--mal'}"
-																	aria-hidden="true"
-																>
-																	{#if opcion.esCorrecta}
-																		<svg
-																			viewBox="0 0 24 24"
-																			fill="none"
-																			stroke="currentColor"
-																			stroke-width="3"
-																			><path
-																				stroke-linecap="round"
-																				stroke-linejoin="round"
-																				d="M5 13l4 4L19 7"
-																			/></svg
-																		>
-																	{:else}
-																		<svg
-																			viewBox="0 0 24 24"
-																			fill="none"
-																			stroke="currentColor"
-																			stroke-width="3"
-																			><path
-																				stroke-linecap="round"
-																				stroke-linejoin="round"
-																				d="M6 18L18 6M6 6l12 12"
-																			/></svg
-																		>
-																	{/if}
-																</span>
-																{opcion.texto}
-															</li>
-														{:else if opcion.esCorrecta}
-															<li class="ev-resp-item ev-resp-item--omitida">
-																<span
-																	class="ev-resp-icono ev-resp-icono--omitida"
-																	aria-hidden="true"
-																></span>
-																<span>
-																	{opcion.texto}
-																	<span class="ev-resp-nota">· correcta, no marcada</span>
-																</span>
-															</li>
-														{/if}
-													{/each}
-												</ul>
-											{:else}
-												<p class="ev-resp-vacia">Sin respuesta</p>
-											{/if}
-										{/if}
-									</div>
-								</article>
-							{/each}
-						</div>
+						<h2 class="ev-card-titulo">Tu resultado</h2>
+						<dl class="pe-datos">
+							<div>
+								<dt>Estado</dt>
+								<dd>{miResultado.aprobado ? 'Aprobada' : 'No aprobada'}</dd>
+							</div>
+							<div>
+								<dt>Preguntas acertadas</dt>
+								<dd>{miResultado.aciertos} de {miResultado.total_preguntas}</dd>
+							</div>
+							<div>
+								<dt>Puntaje</dt>
+								<dd>
+									{miResultado.puntaje_total} de {miResultado.puntaje_maximo} puntos ({miResultado.porcentaje.toLocaleString(
+										'es-CO'
+									)} %)
+								</dd>
+							</div>
+						</dl>
+						<p class="ev-resp-nota">
+							Las respuestas correctas no se muestran aquí. Si tienes dudas sobre tu resultado,
+							consúltalo con quien dirigió la capacitación.
+						</p>
 					</section>
 				</div>
 			</div>
@@ -1978,9 +1741,6 @@
 		font-size: 0.9rem;
 		font-weight: 600;
 		color: var(--au-text);
-	}
-	.pe-dd-largo {
-		overflow-wrap: anywhere;
 	}
 	.pe-paso-desc,
 	.pe-ayuda {

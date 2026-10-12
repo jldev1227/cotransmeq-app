@@ -88,6 +88,8 @@ export function describeLoginError(error: any): string {
 
 function createAuthStore() {
 	const { subscribe, set, update } = writable<AuthState>(initialState);
+	/// Un doble clic en «Cerrar sesión» mandaría dos avisos al backend.
+	let cerrandoSesion = false;
 
 	return {
 		subscribe,
@@ -217,6 +219,35 @@ function createAuthStore() {
 
 				return false;
 			}
+		},
+
+		/**
+		 * Cierre de sesión pedido por el usuario (el botón «Cerrar sesión»).
+		 *
+		 * Antes de borrar el token avisa al backend (`POST /api/auth/logout`)
+		 * para que su fila de `sesiones` quede cerrada: solo se borraba el token
+		 * local y la sesión seguía activa en el servidor —contando como abierta
+		 * en Usuarios y aceptando el JWT si alguien lo había copiado—.
+		 *
+		 * El aviso no frena la salida: plazo corto y cualquier error se ignora.
+		 * Los cierres que no pide el usuario (401, token vencido, sesión cerrada
+		 * por un administrador) siguen yendo a `logout()` directamente: la sesión
+		 * ya no vale y el backend respondería otro 401.
+		 */
+		async cerrarSesion(): Promise<void> {
+			if (cerrandoSesion) return;
+			cerrandoSesion = true;
+			try {
+				if (browser && localStorage.getItem('transmeralda_token')) {
+					const { authAPI } = await import('$lib/api/apiClient');
+					await authAPI.logout().catch(() => undefined);
+				}
+			} catch {
+				/// Ni un fallo al cargar el cliente debe dejar al usuario dentro.
+			} finally {
+				cerrandoSesion = false;
+			}
+			this.logout();
 		},
 
 		// Función de logout

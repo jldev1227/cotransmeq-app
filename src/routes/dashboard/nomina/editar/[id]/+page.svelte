@@ -4,6 +4,7 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
 	import { obtenerLiquidacionPorId, editarLiquidacion } from '$lib/api/nomina';
+	import { listadoNomina } from '$lib/stores/volverListado';
 	import { toast } from 'svelte-sonner';
 	import LiquidacionFormComplete from '$lib/components/nomina/LiquidacionFormComplete.svelte';
 	import type { Liquidacion } from '$lib/types/nomina';
@@ -18,6 +19,30 @@
 		await cargarLiquidacion();
 	});
 
+	/**
+	 * Canvas del periodo de esta liquidación.
+	 *
+	 * Antes «Volver» iba a `/dashboard/nomina`, que redirige al canvas del MES
+	 * EN CURSO: editar una liquidación de junio dejaba en octubre. Si el canvas
+	 * que se dejó atrás es de este mismo periodo, se vuelve a él tal cual (con
+	 * su corte o su rango y la hoja que estaba abierta); si no —se llegó por un
+	 * enlace—, al mes en que termina el periodo, con su hoja abierta.
+	 */
+	function urlVolver(): string {
+		const recordada = listadoNomina.url();
+		const fin = liquidacion?.periodo_fin?.slice(0, 10);
+		if (!fin) return recordada;
+		const [anio, mes] = fin.split('-').map(Number);
+		if (!anio || !mes) return recordada;
+		const params = new URLSearchParams(recordada.split('?')[1] ?? '');
+		if (Number(params.get('anio')) === anio && Number(params.get('mes')) === mes) {
+			return recordada;
+		}
+		const destino = new URLSearchParams({ anio: String(anio), mes: String(mes) });
+		if (liquidacion?.id) destino.set('liquidacion', liquidacion.id);
+		return `/dashboard/nomina/canvas?${destino}`;
+	}
+
 	async function cargarLiquidacion() {
 		try {
 			loadingData = true;
@@ -26,7 +51,7 @@
 		} catch (error: any) {
 			console.error('Error cargando liquidación:', error);
 			toast.error('Error al cargar la liquidación');
-			goto('/dashboard/nomina');
+			goto(listadoNomina.url());
 		} finally {
 			loadingData = false;
 		}
@@ -37,7 +62,7 @@
 			loading = true;
 			await editarLiquidacion(liquidacionId ?? '', data);
 			toast.success('Liquidación actualizada correctamente');
-			goto('/dashboard/nomina');
+			goto(urlVolver());
 		} catch (error: any) {
 			console.error('Error actualizando liquidación:', error);
 			toast.error(error.response?.data?.message || 'Error al actualizar la liquidación');
@@ -139,7 +164,7 @@
 				<!-- Izquierda: Conductor + documento -->
 				<div class="flex items-center gap-3">
 					<button
-						on:click={() => goto('/dashboard/nomina')}
+						on:click={() => goto(urlVolver())}
 						class="apple-transition flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border-default)] bg-white text-[var(--text-muted)] hover:border-[var(--border-emphasis)] hover:bg-[var(--bg-base)] hover:text-[var(--text-primary)]"
 						title="Volver al listado"
 					>
@@ -285,7 +310,7 @@
 	<div class="py-12 text-center">
 		<p class="text-[var(--text-muted)]">No se encontró la liquidación</p>
 		<button
-			on:click={() => goto('/dashboard/nomina')}
+			on:click={() => goto(urlVolver())}
 			class="btn-primary apple-transition mt-4"
 		>
 			Volver al listado

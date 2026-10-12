@@ -46,6 +46,16 @@
 	import type { CicloEficacia, EvidenciaEficacia } from '$lib/api/acciones-correctivas';
 	import { step5Store } from '$lib/stores/acciones-correctivas';
 
+	/// En el formulario `''` es «sin elegir» en los selects de resultado y de
+	/// ubicación; al guardar se convierte en `undefined` (ver `ciclosValidos` y
+	/// `evidenciasValidas`). El tipo de la API no admite `''`, de ahí estos dos.
+	type CicloEficaciaForm = Omit<CicloEficacia, 'resultado_ciclo'> & {
+		resultado_ciclo?: CicloEficacia['resultado_ciclo'] | '';
+	};
+	type EvidenciaEficaciaForm = Omit<EvidenciaEficacia, 'estado_ubicacion'> & {
+		estado_ubicacion?: EvidenciaEficacia['estado_ubicacion'] | '';
+	};
+
 	type CausaForm = {
 		orden: number;
 		analisis_causa: string;
@@ -186,12 +196,12 @@
 	let fecha_limite_evaluacion_eficacia =
 		accion?.fecha_limite_evaluacion_eficacia?.split('T')[0] || '';
 	let criterio_evaluacion_eficacia = accion?.criterio_evaluacion_eficacia || '';
-	let ciclosEficacia: CicloEficacia[] =
+	let ciclosEficacia: CicloEficaciaForm[] =
 		accion?.ciclos_eficacia && accion.ciclos_eficacia.length > 0
 			? accion.ciclos_eficacia.map((c) => ({
 					...c,
 					fecha_seguimiento: c.fecha_seguimiento?.split('T')[0] || '',
-					resultado_ciclo: c.resultado_ciclo || ('' as any),
+					resultado_ciclo: c.resultado_ciclo || '',
 					criterios_cumplidos: Array.isArray(c.criterios_cumplidos)
 						? (c.criterios_cumplidos as string[])
 						: []
@@ -200,7 +210,7 @@
 
 	let evaluaciones_eficacia: EvaluacionEficacia[] = accion?.evaluaciones_eficacia || [];
 
-	let evidenciasEficacia: EvidenciaEficacia[] =
+	let evidenciasEficacia: EvidenciaEficaciaForm[] =
 		accion?.evidencias_eficacia && accion.evidencias_eficacia.length > 0
 			? accion.evidencias_eficacia.map((e) => ({
 					...e,
@@ -704,9 +714,9 @@
 			causas: CausaForm[];
 			fecha_limite_evaluacion_eficacia: string;
 			criterio_evaluacion_eficacia: string;
-			ciclosEficacia: CicloEficacia[];
+			ciclosEficacia: CicloEficaciaForm[];
 			evaluaciones_eficacia: EvaluacionEficacia[];
-			evidenciasEficacia: EvidenciaEficacia[];
+			evidenciasEficacia: EvidenciaEficaciaForm[];
 			evaluacion_cierre_eficaz: string;
 			aplica_reapertura: boolean;
 			fecha_reapertura: string;
@@ -1094,7 +1104,7 @@
 					{#each FUENTES_HALLAZGO as fuente}
 						<option value={fuente}>{fuente}</option>
 					{/each}
-					{#if fuente_genero_hallazgo && !FUENTES_HALLAZGO.includes(fuente_genero_hallazgo)}
+					{#if fuente_genero_hallazgo && !(FUENTES_HALLAZGO as readonly string[]).includes(fuente_genero_hallazgo)}
 						<option value={fuente_genero_hallazgo}>{fuente_genero_hallazgo}</option>
 					{/if}
 				</select>

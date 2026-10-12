@@ -322,6 +322,10 @@ export interface ConfiguracionSalario {
 	administracion: number;
 	prueba_antigeno_covid: number;
 	prestaciones_sociales: number;
+	/** Umbral de horas ordinarias para días normales. Configurable por fecha. Default 10.33 */
+	jornada_normal_horas: number;
+	/** Umbral de horas ordinarias para domingos/festivos. Configurable por fecha. Default 7.33 */
+	jornada_festiva_horas: number;
 	sede: 'YOPAL' | 'VILLANUEVA' | 'TAURAMENA' | null;
 	creado_por_id: string | null;
 	created_at: string;
@@ -354,6 +358,8 @@ export interface CrearConfiguracionSalarioDTO {
 	administracion?: number;
 	prueba_antigeno_covid?: number;
 	prestaciones_sociales?: number;
+	jornada_normal_horas?: number;
+	jornada_festiva_horas?: number;
 	sede?: 'YOPAL' | 'VILLANUEVA' | 'TAURAMENA' | null;
 }
 
@@ -372,6 +378,8 @@ export interface ActualizarConfiguracionSalarioDTO {
 	administracion?: number;
 	prueba_antigeno_covid?: number;
 	prestaciones_sociales?: number;
+	jornada_normal_horas?: number;
+	jornada_festiva_horas?: number;
 	sede?: 'YOPAL' | 'VILLANUEVA' | 'TAURAMENA' | null;
 }
 

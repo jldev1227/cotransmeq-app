@@ -16,6 +16,7 @@
 	} from '$lib/components/evaluaciones/tipos';
 	import '$lib/components/evaluaciones/evaluaciones.css';
 	import { authHeaders } from '$lib/api/evaluaciones';
+	import { fetchConSesion } from '$lib/api/fetchConSesion';
 
 	interface Pregunta {
 		id?: string;
@@ -68,10 +69,9 @@
 		isLoading = true;
 		error = null;
 		try {
-			const response = await fetch(
-				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}`,
-				{ headers: authHeaders() }
-			);
+			const response = await fetchConSesion(`/api/evaluaciones/${evaluacionId}`, {
+				headers: authHeaders()
+			});
 			const data = await response.json();
 			if (data.success) {
 				const evaluacion = data.data;
@@ -271,19 +271,16 @@
 		error = null;
 
 		try {
-			const response = await fetch(
-				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}`,
-				{
-					method: 'PUT',
-					headers: { 'Content-Type': 'application/json', ...authHeaders() },
-					body: JSON.stringify({
-						titulo,
-						descripcion: descripcion.trim() || null,
-						requiere_firma,
-						preguntas
-					})
-				}
-			);
+			const response = await fetchConSesion(`/api/evaluaciones/${evaluacionId}`, {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json', ...authHeaders() },
+				body: JSON.stringify({
+					titulo,
+					descripcion: descripcion.trim() || null,
+					requiere_firma,
+					preguntas
+				})
+			});
 
 			const data = await response.json();
 

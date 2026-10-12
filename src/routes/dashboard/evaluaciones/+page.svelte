@@ -1,7 +1,14 @@
 <script lang="ts">
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { fade, fly } from 'svelte/transition';
-	import { getEvaluaciones, deleteEvaluacion, type Evaluacion } from '$lib/api/evaluaciones';
+	import { toast } from 'svelte-sonner';
+	import {
+		getEvaluaciones,
+		deleteEvaluacion,
+		mensajeErrorEvaluaciones,
+		type Evaluacion
+	} from '$lib/api/evaluaciones';
+	import { listadoEvaluaciones } from '$lib/stores/volverListado';
 	import TablaLista from '$lib/components/listing/TablaLista.svelte';
 	import type { ColumnDef, SortingState } from '@tanstack/table-core';
 	import { page } from '$app/state';
@@ -86,6 +93,16 @@
 	let evaluaciones = $state<Evaluacion[]>([]);
 	let isLoading = $state(false);
 	let totalRows = $state(0);
+	/// Antes un fallo de carga solo iba a la consola y la tabla vacía decía
+	/// «No hay evaluaciones creadas»: con el servidor caído parecía que se
+	/// hubieran borrado todas.
+	let errorCarga = $state<string | null>(null);
+
+	/// Cada URL en la que se asienta el listado (búsqueda, orden, página)
+	/// queda como destino del «Volver» del detalle.
+	afterNavigate(({ to }) => {
+		if (to?.url) listadoEvaluaciones.recordar(to.url.pathname + to.url.search);
+	});
 
 	/** Evaluación pendiente de confirmar su borrado; `null` cierra el modal. */
 	let aEliminar = $state<{ id: string; titulo: string } | null>(null);
@@ -102,8 +119,14 @@
 		filtros = { ...filtros, [clave]: valor, pagina: 1 };
 	}
 
+	/// Solo se pinta la respuesta de la última petición: al pasar rápido de
+	/// página, una respuesta lenta de la anterior pisaba a la buena.
+	let ultimaPeticion = 0;
+
 	async function loadEvaluaciones() {
+		const peticion = ++ultimaPeticion;
 		isLoading = true;
+		errorCarga = null;
 		try {
 			const response = await getEvaluaciones({
 				page: filtros.pagina,
@@ -112,15 +135,21 @@
 				sortBy: filtros.orden as 'titulo' | 'created_at',
 				sortOrder: filtros.dir as 'asc' | 'desc'
 			});
+			if (peticion !== ultimaPeticion) return;
 
 			if (response.success) {
 				evaluaciones = response.data;
 				totalRows = response.meta?.total ?? response.data.length;
+			} else {
+				errorCarga = 'El servidor no devolvió las evaluaciones.';
+				toast.error(errorCarga);
 			}
 		} catch (err) {
-			console.error('Error al cargar evaluaciones:', err);
+			if (peticion !== ultimaPeticion) return;
+			errorCarga = mensajeErrorEvaluaciones(err, 'No se pudieron cargar las evaluaciones');
+			toast.error(errorCarga);
 		} finally {
-			isLoading = false;
+			if (peticion === ultimaPeticion) isLoading = false;
 		}
 	}
 
@@ -156,9 +185,16 @@
 		eliminando = true;
 		try {
 			const r = await deleteEvaluacion(aEliminar.id);
-			if (r.success) loadEvaluaciones();
+			if (r.success) {
+				toast.success('Evaluación eliminada');
+				loadEvaluaciones();
+			} else {
+				toast.error('No se pudo eliminar la evaluación');
+			}
 		} catch (err) {
-			console.error('Error al eliminar:', err);
+			/// Antes solo iba a la consola: el modal se cerraba y la evaluación
+			/// seguía en la tabla sin que nadie supiera por qué.
+			toast.error(mensajeErrorEvaluaciones(err, 'No se pudo eliminar la evaluación'));
 		} finally {
 			eliminando = false;
 			aEliminar = null;
@@ -240,105 +276,118 @@
 
 	<!-- ── LISTA ─────────────────────────────────────────────── -->
 	<div class="dir-lista" in:fly={{ y: 12, duration: 400, delay: 150 }}>
-		<div class="dir-lista-scroll">
-			<TablaLista
-				columnas={COLUMNAS}
-				datos={evaluaciones}
-				claveFila={(f) => f.id}
-				cargando={isLoading}
-				orden={ordenTabla}
-				onOrdenar={aplicarOrden}
-				onFila={(f) => navigateToDetalle(f.id)}
-				etiqueta="Evaluaciones registradas"
-			>
-				{#snippet celda({ columnaId, fila, valor })}
-					{#if columnaId === 'titulo'}
-						<!-- Con ancho máximo: la descripción va en una línea sin cortes y, en
+		{#if errorCarga && evaluaciones.length === 0}
+			{@const img = mascota('advertencia')}
+			<div class="page-card dir-vacio" role="alert">
+				<img src={img.src} alt={img.alt} width="418" height="418" />
+				<h3>No pudimos cargar las evaluaciones</h3>
+				<p>{errorCarga}</p>
+				<button class="btn-secondary" onclick={loadEvaluaciones} disabled={isLoading}>
+					{isLoading ? 'Reintentando…' : 'Reintentar'}
+				</button>
+			</div>
+		{:else}
+			<div class="dir-lista-scroll">
+				<TablaLista
+					columnas={COLUMNAS}
+					datos={evaluaciones}
+					claveFila={(f) => f.id}
+					cargando={isLoading}
+					orden={ordenTabla}
+					onOrdenar={aplicarOrden}
+					onFila={(f) => navigateToDetalle(f.id)}
+					etiqueta="Evaluaciones registradas"
+				>
+					{#snippet celda({ columnaId, fila, valor })}
+						{#if columnaId === 'titulo'}
+							<!-- Con ancho máximo: la descripción va en una línea sin cortes y, en
 						     una tabla de anchura automática, ese texto sin saltos hacía crecer
 						     la columna hasta sacar las demás de la pantalla. -->
-						<div class="eval-identidad">
-							<CeldaIdentidad titulo={fila.titulo} subtitulo={fila.descripcion ?? undefined} />
-						</div>
-					{:else if columnaId === 'tipos'}
-						{@const tipos = tiposDe(fila)}
-						<div class="eval-tipos">
-							{#each tipos.slice(0, 3) as tipo (tipo)}
-								<PastillaTipo {tipo} corta />
-							{/each}
-							{#if tipos.length > 3}<span class="eval-tipos-mas">+{tipos.length - 3}</span>{/if}
-							{#if tipos.length === 0}<span class="dir-nulo">Sin preguntas</span>{/if}
-						</div>
-					{:else if columnaId === 'preguntas'}
-						<div class="dir-celda">
-							<span>{pluralPreguntas(fila.preguntas.length)}</span>
-							<small>{pluralPuntos(calcularPuntajeTotal(fila))}</small>
-						</div>
-					{:else if columnaId === 'firma'}
-						{#if fila.requiere_firma}
-							<EstadoPunto etiqueta="Requerida" color="#ea580c" />
+							<div class="eval-identidad">
+								<CeldaIdentidad titulo={fila.titulo} subtitulo={fila.descripcion ?? undefined} />
+							</div>
+						{:else if columnaId === 'tipos'}
+							{@const tipos = tiposDe(fila)}
+							<div class="eval-tipos">
+								{#each tipos.slice(0, 3) as tipo (tipo)}
+									<PastillaTipo {tipo} corta />
+								{/each}
+								{#if tipos.length > 3}<span class="eval-tipos-mas">+{tipos.length - 3}</span>{/if}
+								{#if tipos.length === 0}<span class="dir-nulo">Sin preguntas</span>{/if}
+							</div>
+						{:else if columnaId === 'preguntas'}
+							<div class="dir-celda">
+								<span>{pluralPreguntas(fila.preguntas.length)}</span>
+								<small>{pluralPuntos(calcularPuntajeTotal(fila))}</small>
+							</div>
+						{:else if columnaId === 'firma'}
+							{#if fila.requiere_firma}
+								<EstadoPunto etiqueta="Requerida" color="#ea580c" />
+							{:else}
+								<EstadoPunto etiqueta="No aplica" color="#64748b" apagado />
+							{/if}
+						{:else if columnaId === 'created_at'}
+							<span class="dir-celda dir-celda--fecha">{formatDate(fila.created_at)}</span>
+						{:else if columnaId === 'acciones'}
+							<AccionesFila
+								acciones={[
+									{
+										id: 'ver',
+										etiqueta: 'Ver detalle',
+										icono: Eye,
+										onClick: () => navigateToDetalle(fila.id)
+									},
+									{
+										id: 'editar',
+										etiqueta: 'Editar',
+										icono: Pencil,
+										onClick: () => goto(`/dashboard/evaluaciones/${fila.id}/editar`)
+									},
+									{
+										id: 'eliminar',
+										etiqueta: 'Eliminar',
+										icono: Trash2,
+										onClick: () => pedirEliminar(fila.id, fila.titulo || ''),
+										peligrosa: true
+									}
+								]}
+							/>
 						{:else}
-							<EstadoPunto etiqueta="No aplica" color="#64748b" apagado />
+							{valor ?? ''}
 						{/if}
-					{:else if columnaId === 'created_at'}
-						<span class="dir-celda dir-celda--fecha">{formatDate(fila.created_at)}</span>
-					{:else if columnaId === 'acciones'}
-						<AccionesFila
-							acciones={[
-								{
-									id: 'ver',
-									etiqueta: 'Ver detalle',
-									icono: Eye,
-									onClick: () => navigateToDetalle(fila.id)
-								},
-								{
-									id: 'editar',
-									etiqueta: 'Editar',
-									icono: Pencil,
-									onClick: () => goto(`/dashboard/evaluaciones/${fila.id}/editar`)
-								},
-								{
-									id: 'eliminar',
-									etiqueta: 'Eliminar',
-									icono: Trash2,
-									onClick: () => pedirEliminar(fila.id, fila.titulo || ''),
-									peligrosa: true
-								}
-							]}
-						/>
-					{:else}
-						{valor ?? ''}
-					{/if}
-				{/snippet}
+					{/snippet}
 
-				{#snippet vacio()}
-					{@const img = mascota('vacio')}
-					<div class="dir-vacio">
-						<img src={img.src} alt={img.alt} width="418" height="418" />
-						<h3>{filtros.q ? 'Sin resultados' : 'No hay evaluaciones creadas'}</h3>
-						<p>
-							{filtros.q
-								? 'Ninguna evaluación coincide con la búsqueda.'
-								: 'Crea la primera evaluación para aplicarla al personal.'}
-						</p>
-						{#if filtros.q}
-							<button class="btn-secondary" onclick={clearSearch}>Limpiar búsqueda</button>
-						{:else}
-							<button class="btn-primary" onclick={navigateToCrear}>Crear primera evaluación</button
-							>
-						{/if}
-					</div>
-				{/snippet}
-			</TablaLista>
-		</div>
+					{#snippet vacio()}
+						{@const img = mascota('vacio')}
+						<div class="dir-vacio">
+							<img src={img.src} alt={img.alt} width="418" height="418" />
+							<h3>{filtros.q ? 'Sin resultados' : 'No hay evaluaciones creadas'}</h3>
+							<p>
+								{filtros.q
+									? 'Ninguna evaluación coincide con la búsqueda.'
+									: 'Crea la primera evaluación para aplicarla al personal.'}
+							</p>
+							{#if filtros.q}
+								<button class="btn-secondary" onclick={clearSearch}>Limpiar búsqueda</button>
+							{:else}
+								<button class="btn-primary" onclick={navigateToCrear}
+									>Crear primera evaluación</button
+								>
+							{/if}
+						</div>
+					{/snippet}
+				</TablaLista>
+			</div>
 
-		<PaginadorLista
-			pagina={filtros.pagina}
-			total={totalRows}
-			porPagina={POR_PAGINA}
-			cargando={isLoading}
-			nombreItems="evaluaciones"
-			onCambiar={handlePageChange}
-		/>
+			<PaginadorLista
+				pagina={filtros.pagina}
+				total={totalRows}
+				porPagina={POR_PAGINA}
+				cargando={isLoading}
+				nombreItems="evaluaciones"
+				onCambiar={handlePageChange}
+			/>
+		{/if}
 	</div>
 </div>
 

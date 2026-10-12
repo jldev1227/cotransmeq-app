@@ -1,7 +1,6 @@
 <script lang="ts">
-	import { confirmar } from '$lib/stores/confirm';
-	import { onMount } from 'svelte';
-	import { page } from '$app/stores';
+	import { untrack } from 'svelte';
+	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
 	import { fly, fade } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
@@ -19,7 +18,12 @@
 		type TipoFormularioSarlaft
 	} from '$lib/api/sarlaft';
 	import SarlaftRespuestas from '$lib/sarlaft/SarlaftRespuestas.svelte';
+	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
+	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
+	import { mascota } from '$lib/mascot';
+	import { listadoSarlaft } from '$lib/stores/volverListado';
 	import { toast } from 'svelte-sonner';
+	import { confirmar } from '$lib/stores/confirm';
 
 	let detalle = $state<SarlaftFormularioDetalle | null>(null);
 	let isLoading = $state(true);
@@ -33,6 +37,13 @@
 	let editConcepto = $state('');
 	let editObservaciones = $state('');
 	let saving = $state(false);
+
+	/// Vuelve al listado con los filtros con los que se salió de él (búsqueda,
+	/// tipo, estado, orden y página). Antes iba a la ruta pelada y había que
+	/// filtrar otra vez después de cada formulario revisado.
+	function volver() {
+		goto(listadoSarlaft.url());
+	}
 
 	const tipoCliente = $derived.by(() => {
 		if (!detalle) return null;
@@ -76,20 +87,41 @@
 		};
 	});
 
+	/// Las cifras del formulario, en las mismas pastillas que los conteos de
+	/// los listados. No filtran nada: son solo lectura.
+	const conteosResumen = $derived([
+		{ clave: 'secciones', etiqueta: 'Secciones', valor: detallesResumen.secciones },
+		{ clave: 'campos', etiqueta: 'Campos', valor: detallesResumen.campos },
+		{ clave: 'tablas', etiqueta: 'Tablas', valor: detallesResumen.tablas },
+		{ clave: 'docs', etiqueta: 'Documentos', valor: detallesResumen.docs },
+		{
+			clave: 'enviado',
+			etiqueta: 'Enviado',
+			valor: detalle ? tiempoRelativo(detalle.fecha_envio) : '—'
+		}
+	]);
+
+	/// Turno de la última carga: al pasar de un formulario a otro, una
+	/// respuesta lenta del anterior podía pintar sus datos sobre el nuevo.
+	let turnoCarga = 0;
+
 	async function load(id: string) {
+		const turno = ++turnoCarga;
 		isLoading = true;
 		error = null;
 		try {
 			const fetched = await sarlaftAPI.obtenerDetalle(id);
+			if (turno !== turnoCarga) return;
 			detalle = fetched;
 			editEstado = fetched.estado;
 			editConcepto = fetched.evaluacion_concepto ?? '';
 			editObservaciones = fetched.evaluacion_observaciones ?? '';
 		} catch (err: any) {
+			if (turno !== turnoCarga) return;
 			error = err?.response?.data?.error || err?.message || 'Error al cargar el detalle';
 			if (error) toast.error(error);
 		} finally {
-			isLoading = false;
+			if (turno === turnoCarga) isLoading = false;
 		}
 	}
 
@@ -107,7 +139,9 @@
 			document.body.removeChild(link);
 			toast.success(`Descarga iniciada: ${nombre}`);
 		} catch (err: any) {
-			toast.error(`Error al descargar ${nombre}: ${err?.response?.data?.error || err?.message || 'Error desconocido'}`);
+			toast.error(
+				`Error al descargar ${nombre}: ${err?.response?.data?.error || err?.message || 'Error desconocido'}`
+			);
 		} finally {
 			downloading = { ...downloading, [documentoId]: false };
 		}
@@ -120,7 +154,9 @@
 			const filename = await sarlaftAPI.descargarPDF(detalle.id);
 			toast.success(`PDF descargado: ${filename}`);
 		} catch (err: any) {
-			toast.error(`Error al descargar PDF: ${err?.response?.data?.error || err?.message || 'Error desconocido'}`);
+			toast.error(
+				`Error al descargar PDF: ${err?.response?.data?.error || err?.message || 'Error desconocido'}`
+			);
 		} finally {
 			downloadingPdf = false;
 		}
@@ -133,7 +169,9 @@
 			const filename = await sarlaftAPI.descargarEvidencia(detalle.id);
 			toast.success(`Evidencia descargada: ${filename}`);
 		} catch (err: any) {
-			toast.error(`Error al descargar evidencia: ${err?.response?.data?.error || err?.message || 'Error desconocido'}`);
+			toast.error(
+				`Error al descargar evidencia: ${err?.response?.data?.error || err?.message || 'Error desconocido'}`
+			);
 		} finally {
 			downloadingZip = false;
 		}
@@ -150,8 +188,7 @@
 		// se sobrescribe, pero la nueva queda archivada y numerada. Se confirma
 		// antes para que no ocurra por un clic accidental en el selector.
 		if (emiteVersionDocumental) {
-			const etiqueta =
-				ESTADO_LABELS[editEstado as EstadoSarlaft]?.label ?? editEstado;
+			const etiqueta = ESTADO_LABELS[editEstado as EstadoSarlaft]?.label ?? editEstado;
 			const versionNueva = (detalle.documentos_generados?.length ?? 0) + 1;
 			const ok = await confirmar({
 				title: `¿Registrar el resultado "${etiqueta}"?`,
@@ -265,9 +302,11 @@
 		return formatFechaLarga(iso);
 	}
 
+	/// `page` de `$app/state` (no el store legacy de `$app/stores`, que no
+	/// propaga bien en modo runes). Solo el id suscribe el efecto.
 	$effect(() => {
-		const id = $page.params.id;
-		if (id) load(id);
+		const id = page.params.id;
+		if (id) untrack(() => load(id));
 	});
 </script>
 
@@ -275,146 +314,138 @@
 	<title>{detalle ? `${detalle.radicado} · SARLAFT` : 'Cargando…'}</title>
 </svelte:head>
 
-<div class="sarlaft-page" in:fly={{ y: 20, duration: 500, easing: quintOut }}>
-	<!-- Back link -->
-	<button class="back-link" onclick={() => goto('/dashboard/sarlaft')}>
-		<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-			<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-		</svg>
-		Volver al listado
-	</button>
-
-	{#if isLoading}
-		<div class="state-block" in:fade>
-			<div class="spin-ring" aria-hidden="true"></div>
-			<p>Cargando detalle del formulario…</p>
-		</div>
-	{:else if error || !detalle}
-		<div class="alert alert-error" in:fade>
-			<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-				<path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-			</svg>
-			<div class="alert-body">
-				<strong>No pudimos cargar el detalle.</strong>
-				<span>{error ?? 'Formulario no encontrado.'}</span>
+{#if isLoading}
+	<CargaMascota tamano="pantalla" texto="Cargando el formulario…" />
+{:else if error || !detalle}
+	{@const img = mascota('advertencia')}
+	<div class="dir-pagina sl-pagina" in:fade={{ duration: 300 }}>
+		<div class="page-card">
+			<div class="dir-vacio">
+				<img src={img.src} alt={img.alt} width="418" height="418" />
+				<h3>No pudimos cargar el formulario</h3>
+				<p>{error ?? 'Formulario no encontrado.'}</p>
+				<div class="sl-error-acciones">
+					<button
+						type="button"
+						class="btn-secondary"
+						onclick={() => page.params.id && load(page.params.id)}
+					>
+						Reintentar
+					</button>
+					<button type="button" class="btn-primary" onclick={volver}>Volver al listado</button>
+				</div>
 			</div>
-			<button class="btn-secondary btn-secondary--sm" onclick={() => $page.params.id && load($page.params.id)}>
-				Reintentar
-			</button>
 		</div>
-	{:else}
-		{@const estado = ESTADO_LABELS[detalle.estado]}
-
-		<!-- ═══ HERO DEL FORMULARIO ═══ -->
-		<header class="page-hero" in:fade={{ duration: 400 }}>
-			<div class="hero-top">
-				<div class="hero-left">
-					<div class="hero-text">
-						<div class="hero-tags">
-							<span class="radicado-pill">{detalle.radicado}</span>
-							<span class="codigo-pill">{detalle.codigo_formulario} · v{detalle.version}</span>
-							<span
-								class="estado-pill"
-								style="background-color: {estado.bg}; color: {estado.color}; border-color: {estado.border}"
-							>
-								<span class="estado-dot" style="background-color: {estado.dot}"></span>
-								{estado.label}
-							</span>
-						</div>
-						<h1>{detalle.nombre_completo ?? 'Sin nombre'}</h1>
-						<div class="hero-meta">
-							<span class="meta-item">
-								<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12a8.25 8.25 0 1016.5 0 8.25 8.25 0 00-16.5 0zM12 6v6l3.75 2.25" />
-								</svg>
-								{TIPO_FORMULARIO_LABELS[detalle.tipo_formulario]}
-							</span>
-							{#if tipoCliente}
-								<span class="meta-sep">·</span>
-								<span class="meta-item">
-									<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-									</svg>
-									{tipoCliente}
-								</span>
-							{/if}
-							{#if detalle.numero_documento}
-								<span class="meta-sep">·</span>
-								<span class="meta-item">
-									<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5zm6-10.125a1.875 1.875 0 11-3.75 0 1.875 1.875 0 013.75 0z" />
-									</svg>
-									<span class="mono">{detalle.tipo_documento ?? 'Doc'}: {detalle.numero_documento}</span>
-								</span>
-							{/if}
-							{#if detalle.correo}
-								<span class="meta-sep">·</span>
-								<a href={`mailto:${detalle.correo}`} class="meta-item meta-item--link">
-									<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-									</svg>
-									{detalle.correo}
-								</a>
-							{/if}
-							{#if detalle.telefono}
-								<span class="meta-sep">·</span>
-								<span class="meta-item">
-									<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
-									</svg>
-									<span class="mono">{detalle.telefono}</span>
-								</span>
-							{/if}
-						</div>
-					</div>
+	</div>
+{:else}
+	{@const estado = ESTADO_LABELS[detalle.estado]}
+	<!-- Cáscara de los directorios (`dir-*` de app.css), como el detalle de
+	     asistencias: volver, etiquetas, título, datos y cifras en la cabecera;
+	     las descargas, en sus acciones. -->
+	<div class="dir-pagina sl-pagina" in:fade={{ duration: 300 }}>
+		<header class="page-card dir-cabecera" style="padding: 1.25rem 1.5rem;">
+			<div class="dir-cabecera-texto">
+				<button type="button" class="sl-volver" onclick={volver}>
+					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.4">
+						<path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+					</svg>
+					SARLAFT
+				</button>
+				<div class="sl-etiquetas">
+					<span class="radicado-pill">{detalle.radicado}</span>
+					<span class="codigo-pill">{detalle.codigo_formulario} · v{detalle.version}</span>
+					<span
+						class="estado-pill"
+						style="background-color: {estado.bg}; color: {estado.color}; border-color: {estado.border}"
+					>
+						<span class="estado-dot" style="background-color: {estado.dot}"></span>
+						{estado.label}
+					</span>
+				</div>
+				<h1 class="dir-titulo">{detalle.nombre_completo ?? 'Sin nombre'}</h1>
+				<p class="dir-desc sl-meta">
+					<span class="meta-item">{TIPO_FORMULARIO_LABELS[detalle.tipo_formulario]}</span>
+					{#if tipoCliente}
+						<span class="meta-item">{tipoCliente}</span>
+					{/if}
+					{#if detalle.numero_documento}
+						<span class="meta-item"
+							>{detalle.tipo_documento ?? 'Doc'}: {detalle.numero_documento}</span
+						>
+					{/if}
+					{#if detalle.correo}
+						<a href={`mailto:${detalle.correo}`} class="meta-item meta-item--link">
+							{detalle.correo}
+						</a>
+					{/if}
+					{#if detalle.telefono}
+						<span class="meta-item">{detalle.telefono}</span>
+					{/if}
+				</p>
+				<div class="dir-conteos">
+					<ResumenConteos conteos={conteosResumen} />
 				</div>
 			</div>
 
-			<!-- Stats inline -->
-			<div class="hero-stats">
-				<div class="stat-item">
-					<span class="stat-label">Secciones</span>
-					<span class="stat-value">{detallesResumen.secciones}</span>
-				</div>
-				<span class="stat-sep">·</span>
-				<div class="stat-item">
-					<span class="stat-label">Campos</span>
-					<span class="stat-value">{detallesResumen.campos}</span>
-				</div>
-				<span class="stat-sep">·</span>
-				<div class="stat-item">
-					<span class="stat-label">Tablas</span>
-					<span class="stat-value">{detallesResumen.tablas}</span>
-				</div>
-				<span class="stat-sep">·</span>
-				<div class="stat-item">
-					<svg class="h-3.5 w-3.5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" />
-					</svg>
-					<span class="stat-label">Documentos</span>
-					<span class="stat-value">{detallesResumen.docs}</span>
-				</div>
-				<span class="stat-sep">·</span>
-				<div class="stat-item">
-					<svg class="h-3.5 w-3.5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-					</svg>
-					<span class="stat-label">Enviado</span>
-					<span class="stat-value stat-value--text">{tiempoRelativo(detalle.fecha_envio)}</span>
-				</div>
+			<div class="dir-cabecera-acciones">
+				<button
+					type="button"
+					class="btn-secondary"
+					onclick={handleDescargarPDF}
+					disabled={downloadingPdf}
+					title="PDF con las respuestas y la firma"
+				>
+					{#if downloadingPdf}
+						<span class="sl-giro" aria-hidden="true"></span>
+						Generando…
+					{:else}
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+							/>
+						</svg>
+						Descargar PDF
+					{/if}
+				</button>
+				<button
+					type="button"
+					class="btn-secondary"
+					onclick={handleDescargarZip}
+					disabled={downloadingZip}
+					title="ZIP con todo: el PDF y los adjuntos originales"
+				>
+					{#if downloadingZip}
+						<span class="sl-giro" aria-hidden="true"></span>
+						Empaquetando…
+					{:else}
+						<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z"
+							/>
+						</svg>
+						Descargar ZIP
+					{/if}
+				</button>
 			</div>
 		</header>
 
-		<!-- ═══ LAYOUT 2 COLUMNAS ═══ -->
-		<div class="layout-grid">
-			<!-- COL IZQ: Respuestas -->
-			<section class="col-main">
-				<header class="col-head">
-					<div>
-						<span class="eyebrow">Snapshot del formulario</span>
-						<h2>Respuestas del titular</h2>
-						<p>Información capturada al momento del envío. Solo lectura, refleja la versión final radicada.</p>
-					</div>
+		<!-- Dos columnas fluidas, sin punto de ruptura: el lateral pide 22rem y
+		     las respuestas 34rem; cuando no caben las dos, el lateral baja solo.
+		     Antes era un `@media (min-width: 1024px)` atado al viewport, que no
+		     se entera de si la barra lateral del dashboard está abierta. -->
+		<div class="sl-columnas">
+			<section class="sl-principal">
+				<header class="sl-principal-cab">
+					<span class="sl-eyebrow">Snapshot del formulario</span>
+					<h2>Respuestas del titular</h2>
+					<p>
+						Información capturada al momento del envío. Solo lectura, refleja la versión final
+						radicada.
+					</p>
 				</header>
 				<div class="respuestas-wrap" in:fade={{ duration: 400, delay: 100 }}>
 					<SarlaftRespuestas
@@ -426,100 +457,23 @@
 				</div>
 			</section>
 
-			<!-- COL DER: Sidebar con documentos + evaluación + metadata -->
-			<aside class="col-side">
-				<!-- Exportar / Descargar -->
-				<section class="side-card" in:fly={{ y: 12, duration: 320, delay: 40, easing: quintOut }}>
-					<header class="side-head">
-						<div>
-							<span class="eyebrow">Exportar</span>
-							<h3>Descargar evidencia</h3>
-						</div>
-					</header>
-					<div class="side-body">
-						<p class="side-help">
-							Genera el PDF con las respuestas + firma, o descarga un ZIP con todo (PDF + adjuntos originales).
-						</p>
-						<div class="export-grid">
-							<button
-								type="button"
-								class="export-btn"
-								onclick={handleDescargarPDF}
-								disabled={downloadingPdf}
-							>
-								{#if downloadingPdf}
-									<div class="spin-ring spin-ring--sm"></div>
-									Generando…
-								{:else}
-									<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-									</svg>
-									Descargar PDF
-								{/if}
-							</button>
-							<button
-								type="button"
-								class="export-btn export-btn--zip"
-								onclick={handleDescargarZip}
-								disabled={downloadingZip}
-							>
-								{#if downloadingZip}
-									<div class="spin-ring spin-ring--sm"></div>
-									Empaquetando…
-								{:else}
-									<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M20.25 7.5l-.625 10.632a2.25 2.25 0 01-2.247 2.118H6.622a2.25 2.25 0 01-2.247-2.118L3.75 7.5M10 11.25h4M3.375 7.5h17.25c.621 0 1.125-.504 1.125-1.125v-1.5c0-.621-.504-1.125-1.125-1.125H3.375c-.621 0-1.125.504-1.125 1.125v1.5c0 .621.504 1.125 1.125 1.125z" />
-									</svg>
-									Descargar ZIP
-								{/if}
-							</button>
-						</div>
-						{#if contacto}
-							<div class="export-contacto">
-								<span class="eyebrow eyebrow--mini">Canal de notificación</span>
-								<p class="contacto-texto">
-									Se notificó a <strong>{contacto.area_responsable}</strong>
-									{#if contacto.emails.length > 0}
-										(<span class="mono">{contacto.emails.join(', ')}</span>)
-									{/if}
-								</p>
-								<div class="contacto-actions">
-									<a class="contacto-link" href={telLink(contacto)} aria-label="Llamar al área">
-										<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
-										</svg>
-										{contacto.telefono_principal}
-									</a>
-									<a class="contacto-link" href={waLink(contacto)} target="_blank" rel="noopener noreferrer" aria-label="Contactar por WhatsApp">
-										<svg fill="currentColor" viewBox="0 0 24 24" stroke="none">
-											<path d="M20.52 3.48A11.93 11.93 0 0012 0C5.37 0 0 5.37 0 12a11.94 11.94 0 001.64 6L0 24l6.18-1.62A11.93 11.93 0 0012 24c6.63 0 12-5.37 12-12 0-3.19-1.24-6.19-3.48-8.52zM12 22a9.94 9.94 0 01-5.07-1.39l-.36-.21-3.67.96.98-3.58-.23-.37A9.94 9.94 0 0112 22zm5.51-7.46c-.3-.15-1.78-.88-2.05-.98s-.47-.15-.67.15-.77.98-.95 1.18-.35.22-.65.07a8.18 8.18 0 01-2.41-1.49 9.06 9.06 0 01-1.67-2.08c-.17-.3 0-.46.13-.61s.3-.35.45-.52.2-.3.3-.5.05-.37-.02-.52-.67-1.62-.92-2.22-.49-.51-.67-.52H7.43a1.16 1.16 0 00-.85.4 3.55 3.55 0 00-1.1 2.64c0 1.55 1.13 3.05 1.29 3.27s2.22 3.4 5.4 4.77a18.5 18.5 0 001.8.67 4.34 4.34 0 002 .13 3.27 3.27 0 002.15-1.52 2.66 2.66 0 00.19-1.52c-.08-.13-.28-.21-.58-.36z"/>
-										</svg>
-										WhatsApp
-									</a>
-									<a class="contacto-link" href={mailtoLink(contacto)} aria-label="Enviar correo al área">
-										<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75" />
-										</svg>
-										Correo
-									</a>
-								</div>
-							</div>
-						{/if}
-					</div>
-				</section>
-
+			<!-- Lateral: anexos, documento controlado, evaluación, canal y trazabilidad -->
+			<aside class="sl-lateral">
 				<!-- Documentos -->
-				<section class="side-card" in:fly={{ y: 12, duration: 320, delay: 80, easing: quintOut }}>
-					<header class="side-head">
+				<section
+					class="page-card sl-tarjeta"
+					in:fly={{ y: 12, duration: 320, delay: 40, easing: quintOut }}
+				>
+					<header class="sl-tarjeta-cab">
 						<div>
-							<span class="eyebrow">Anexos</span>
+							<span class="sl-eyebrow">Anexos</span>
 							<h3>Documentos adjuntos</h3>
 						</div>
 						<span class="badge-count">
 							{detalle.documentos?.length ?? 0}
 						</span>
 					</header>
-					<div class="side-body">
+					<div class="sl-tarjeta-cuerpo">
 						{#if detalle.documentos && detalle.documentos.length > 0}
 							<div class="docs-list">
 								{#each detalle.documentos as doc (doc.id)}
@@ -531,30 +485,54 @@
 									>
 										<div class="doc-icon" aria-hidden="true">
 											{#if doc.mime_type === 'application/pdf'}
-												<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+												<svg
+													fill="none"
+													stroke="currentColor"
+													viewBox="0 0 24 24"
+													stroke-width="1.8"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+													/>
 												</svg>
 											{:else}
-												<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M2.25 18.75h15a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v10.5A2.25 2.25 0 006 18.75z" />
+												<svg
+													fill="none"
+													stroke="currentColor"
+													viewBox="0 0 24 24"
+													stroke-width="1.8"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M2.25 18.75h15a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v10.5A2.25 2.25 0 006 18.75z"
+													/>
 												</svg>
 											{/if}
 										</div>
 										<div class="doc-info">
-											<p class="doc-tipo">{TIPO_DOCUMENTO_LABELS[doc.tipo_documento] ?? doc.tipo_documento}</p>
-											<p class="doc-name mono">{doc.nombre_archivo}</p>
+											<p class="doc-tipo">
+												{TIPO_DOCUMENTO_LABELS[doc.tipo_documento] ?? doc.tipo_documento}
+											</p>
+											<p class="doc-name">{doc.nombre_archivo}</p>
 											<p class="doc-meta">
-												<span class="mono">{formatBytes(doc.tamano_bytes)}</span>
+												<span>{formatBytes(doc.tamano_bytes)}</span>
 												<span class="doc-sep">·</span>
 												<span>{formatFecha(doc.created_at)}</span>
 											</p>
 										</div>
 										<div class="doc-action" aria-hidden="true">
 											{#if downloading[doc.id]}
-												<div class="spin-ring spin-ring--sm"></div>
+												<span class="sl-giro"></span>
 											{:else}
 												<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-													<path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"
+													/>
 												</svg>
 											{/if}
 										</div>
@@ -562,12 +540,7 @@
 								{/each}
 							</div>
 						{:else}
-							<div class="empty-mini">
-								<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.4">
-									<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25M9.75 9h4.5m-4.5 3.75h4.5M9.75 16.5h4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-								</svg>
-								<p>No hay documentos adjuntos</p>
-							</div>
+							<p class="sl-vacio-mini">No hay documentos adjuntos.</p>
 						{/if}
 					</div>
 				</section>
@@ -576,15 +549,18 @@
 				     Solo aparece en los formatos que lo producen; los otros
 				     cuatro siguen mostrando únicamente el PDF de respuestas. -->
 				{#if documentosGenerados.length > 0}
-					<section class="side-card" in:fly={{ y: 12, duration: 320, delay: 120, easing: quintOut }}>
-						<header class="side-head">
+					<section
+						class="page-card sl-tarjeta"
+						in:fly={{ y: 12, duration: 320, delay: 80, easing: quintOut }}
+					>
+						<header class="sl-tarjeta-cab">
 							<div>
-								<span class="eyebrow">Formato controlado</span>
+								<span class="sl-eyebrow">Formato controlado</span>
 								<h3>Documento generado</h3>
 							</div>
 							<span class="badge-count">{documentosGenerados.length}</span>
 						</header>
-						<div class="side-body">
+						<div class="sl-tarjeta-cuerpo">
 							<ul class="version-list">
 								{#each documentosGenerados as doc (doc.id)}
 									<li class="version-item">
@@ -620,7 +596,7 @@
 										</dl>
 										<div class="version-hash">
 											<span class="hash-label">SHA-256 del PDF</span>
-											<code class="mono">{doc.pdf_sha256}</code>
+											<code>{doc.pdf_sha256}</code>
 										</div>
 
 										{#if doc.entregas.length > 0}
@@ -630,10 +606,10 @@
 														<span class="entrega-canal">{CANAL_LABELS[e.canal] ?? e.canal}</span>
 														<span class="entrega-estado entrega-{e.estado}">{e.estado}</span>
 														{#if e.destinatario}
-															<span class="entrega-dest mono">{e.destinatario}</span>
+															<span class="entrega-dest">{e.destinatario}</span>
 														{/if}
 														{#if e.provider_message_id}
-															<span class="entrega-msgid mono" title="Provider message ID">
+															<span class="entrega-msgid" title="Provider message ID">
 																{e.provider_message_id}
 															</span>
 														{/if}
@@ -646,7 +622,8 @@
 										{/if}
 
 										<button
-											class="btn-ghost btn-block"
+											type="button"
+											class="btn-secondary sl-boton-version"
 											disabled={descargandoVersion[doc.id]}
 											onclick={() => handleDescargarVersion(doc.id, doc.version_documento)}
 										>
@@ -656,18 +633,21 @@
 								{/each}
 							</ul>
 							<p class="version-nota">
-								Cada versión es inmutable. La versión 1 es la que recibió y firmó el
-								declarante; cada decisión final emite una nueva sin modificar las anteriores.
+								Cada versión es inmutable. La versión 1 es la que recibió y firmó el declarante;
+								cada decisión final emite una nueva sin modificar las anteriores.
 							</p>
 						</div>
 					</section>
 				{/if}
 
 				<!-- Evaluación interna -->
-				<section class="side-card" in:fly={{ y: 12, duration: 320, delay: 140, easing: quintOut }}>
-					<header class="side-head">
+				<section
+					class="page-card sl-tarjeta"
+					in:fly={{ y: 12, duration: 320, delay: 120, easing: quintOut }}
+				>
+					<header class="sl-tarjeta-cab">
 						<div>
-							<span class="eyebrow">Concepto del Oficial</span>
+							<span class="sl-eyebrow">Concepto del Oficial</span>
 							<h3>Evaluación interna</h3>
 						</div>
 						{#if detalle.evaluado_por}
@@ -676,11 +656,11 @@
 							</span>
 						{/if}
 					</header>
-					<div class="side-body">
+					<div class="sl-tarjeta-cuerpo">
 						<div class="eval-form">
 							<div class="field">
 								<label for="eval-estado" class="field-label">Estado</label>
-								<select id="eval-estado" bind:value={editEstado} class="select">
+								<select id="eval-estado" bind:value={editEstado} class="campo">
 									<option value="">— Seleccionar —</option>
 									<option value="recibido">Recibido</option>
 									<option value="en_revision">En revisión</option>
@@ -697,7 +677,7 @@
 									type="text"
 									bind:value={editConcepto}
 									placeholder="Ej. Validación satisfactoria"
-									class="input"
+									class="campo"
 								/>
 							</div>
 							<div class="field">
@@ -707,36 +687,53 @@
 									bind:value={editObservaciones}
 									rows="3"
 									placeholder="Notas para el expediente, alertas, próximos pasos…"
-									class="input textarea"
+									class="campo campo--texto"
 								></textarea>
 							</div>
 
 							{#if detalle.evaluado_at}
 								<div class="eval-meta">
-									<svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+									<svg
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+										stroke-width="2"
+										aria-hidden="true"
+									>
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+										/>
 									</svg>
-									<span>Última evaluación: <strong class="mono">{formatFecha(detalle.evaluado_at)}</strong></span>
+									<span>Última evaluación: <strong>{formatFecha(detalle.evaluado_at)}</strong></span
+									>
 								</div>
 							{/if}
 
 							{#if emiteVersionDocumental}
 								<p class="eval-aviso">
-									Al guardar se emitirá una versión documental nueva con este
-									resultado marcado. La versión recibida no se modifica.
+									Al guardar se emitirá una versión documental nueva con este resultado marcado. La
+									versión recibida no se modifica.
 								</p>
 							{/if}
 
-							<button class="btn-primary btn-block" disabled={saving || !editEstado} onclick={guardarEvaluacion}>
+							<button
+								type="button"
+								class="btn-primary sl-bloque"
+								disabled={saving || !editEstado}
+								onclick={guardarEvaluacion}
+							>
 								{#if saving}
-									<svg class="spin" viewBox="0 0 24 24" fill="none">
-										<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25" />
-										<path d="M4 12a8 8 0 018-8v0" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
-									</svg>
+									<span class="sl-giro" aria-hidden="true"></span>
 									Guardando…
 								{:else}
 									<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-										<path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M4.5 12.75l6 6 9-13.5"
+										/>
 									</svg>
 									Guardar evaluación
 								{/if}
@@ -745,187 +742,205 @@
 					</div>
 				</section>
 
+				<!-- Canal de notificación: a quién se avisó del radicado. Antes iba
+				     dentro de «Exportar», que ahora son los botones de la cabecera. -->
+				{#if contacto}
+					<section
+						class="page-card sl-tarjeta"
+						in:fly={{ y: 12, duration: 320, delay: 160, easing: quintOut }}
+					>
+						<header class="sl-tarjeta-cab">
+							<div>
+								<span class="sl-eyebrow">Notificación</span>
+								<h3>Canal de notificación</h3>
+							</div>
+						</header>
+						<div class="sl-tarjeta-cuerpo">
+							<p class="contacto-texto">
+								Se notificó a <strong>{contacto.area_responsable}</strong>
+								{#if contacto.emails.length > 0}
+									(<span>{contacto.emails.join(', ')}</span>)
+								{/if}
+							</p>
+							<div class="contacto-actions">
+								<a class="contacto-link" href={telLink(contacto)} aria-label="Llamar al área">
+									<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z"
+										/>
+									</svg>
+									{contacto.telefono_principal}
+								</a>
+								<a
+									class="contacto-link"
+									href={waLink(contacto)}
+									target="_blank"
+									rel="noopener noreferrer"
+									aria-label="Contactar por WhatsApp"
+								>
+									<svg fill="currentColor" viewBox="0 0 24 24" stroke="none">
+										<path
+											d="M20.52 3.48A11.93 11.93 0 0012 0C5.37 0 0 5.37 0 12a11.94 11.94 0 001.64 6L0 24l6.18-1.62A11.93 11.93 0 0012 24c6.63 0 12-5.37 12-12 0-3.19-1.24-6.19-3.48-8.52zM12 22a9.94 9.94 0 01-5.07-1.39l-.36-.21-3.67.96.98-3.58-.23-.37A9.94 9.94 0 0112 22zm5.51-7.46c-.3-.15-1.78-.88-2.05-.98s-.47-.15-.67.15-.77.98-.95 1.18-.35.22-.65.07a8.18 8.18 0 01-2.41-1.49 9.06 9.06 0 01-1.67-2.08c-.17-.3 0-.46.13-.61s.3-.35.45-.52.2-.3.3-.5.05-.37-.02-.52-.67-1.62-.92-2.22-.49-.51-.67-.52H7.43a1.16 1.16 0 00-.85.4 3.55 3.55 0 00-1.1 2.64c0 1.55 1.13 3.05 1.29 3.27s2.22 3.4 5.4 4.77a18.5 18.5 0 001.8.67 4.34 4.34 0 002 .13 3.27 3.27 0 002.15-1.52 2.66 2.66 0 00.19-1.52c-.08-.13-.28-.21-.58-.36z"
+										/>
+									</svg>
+									WhatsApp
+								</a>
+								<a
+									class="contacto-link"
+									href={mailtoLink(contacto)}
+									aria-label="Enviar correo al área"
+								>
+									<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+										<path
+											stroke-linecap="round"
+											stroke-linejoin="round"
+											d="M21.75 6.75v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25m19.5 0v.243a2.25 2.25 0 01-1.07 1.916l-7.5 4.615a2.25 2.25 0 01-2.36 0L3.32 8.91a2.25 2.25 0 01-1.07-1.916V6.75"
+										/>
+									</svg>
+									Correo
+								</a>
+							</div>
+						</div>
+					</section>
+				{/if}
+
 				<!-- Metadata técnica -->
-				<details class="side-card side-card--meta" in:fly={{ y: 12, duration: 320, delay: 200, easing: quintOut }}>
-					<summary class="side-head side-head--summary">
+				<details
+					class="page-card sl-tarjeta sl-tarjeta--meta"
+					in:fly={{ y: 12, duration: 320, delay: 200, easing: quintOut }}
+				>
+					<summary class="sl-tarjeta-cab sl-tarjeta-cab--resumen">
 						<div>
-							<span class="eyebrow">Trazabilidad</span>
+							<span class="sl-eyebrow">Trazabilidad</span>
 							<h3>Detalles técnicos</h3>
 						</div>
-						<svg class="h-4 w-4 chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-							<path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+						<svg
+							class="chevron"
+							fill="none"
+							stroke="currentColor"
+							viewBox="0 0 24 24"
+							stroke-width="2"
+							aria-hidden="true"
+						>
+							<path
+								stroke-linecap="round"
+								stroke-linejoin="round"
+								d="M19.5 8.25l-7.5 7.5-7.5-7.5"
+							/>
 						</svg>
 					</summary>
-					<div class="side-body">
+					<div class="sl-tarjeta-cuerpo">
 						<dl class="tech-list">
 							{#if detalle.ip_origen}
 								<div>
 									<dt>IP de origen</dt>
-									<dd class="mono">{detalle.ip_origen}</dd>
+									<dd>{detalle.ip_origen}</dd>
 								</div>
 							{/if}
 							{#if detalle.user_agent}
 								<div>
 									<dt>User-Agent</dt>
-									<dd class="mono ua">{detalle.user_agent}</dd>
+									<dd class="ua">{detalle.user_agent}</dd>
 								</div>
 							{/if}
 							{#if detalle.referer}
 								<div>
 									<dt>Referer</dt>
-									<dd class="mono ua">{detalle.referer}</dd>
+									<dd class="ua">{detalle.referer}</dd>
 								</div>
 							{/if}
 							<div>
 								<dt>ID interno</dt>
-								<dd class="mono mono--sm">{detalle.id}</dd>
+								<dd class="tech-id">{detalle.id}</dd>
 							</div>
 						</dl>
 					</div>
 				</details>
 			</aside>
 		</div>
-	{/if}
-</div>
+	</div>
+{/if}
 
 <style>
-	/* ═══════════════════════════════════════════════════════════════
-	   PAGE BASE
-	   ═══════════════════════════════════════════════════════════════ */
-	.sarlaft-page {
-		min-height: 100vh;
-		background: #fcfcfb;
-		font-family: var(--font-sans);
-		color: #1e293b;
-		padding: 1.5rem 1.25rem 3rem;
+	/* La ficha crece con su contenido y la página desplaza entera: el
+	   `height: 100%` de `.dir-pagina` es para listados con scroll propio. */
+	.sl-pagina {
+		height: auto;
+		min-height: 100%;
+	}
+
+	.sl-error-acciones {
 		display: flex;
-		flex-direction: column;
-		gap: 1.25rem;
+		flex-wrap: wrap;
+		justify-content: center;
+		gap: 0.5rem;
+		margin-top: 0.25rem;
 	}
 
-	/* ═══════════════════════════════════════════════════════════════
-	   TYPOGRAPHY
-	   ═══════════════════════════════════════════════════════════════ */
-	.eyebrow {
-		display: inline-block;
-		font-family: var(--font-mono);
-		font-size: 0.65rem;
-		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.12em;
-		color: #ea580c;
-		background: rgba(234, 88, 12, 0.08);
-		padding: 0.2rem 0.55rem;
-		border-radius: 4px;
-	}
-	h1,
-	h2,
-	h3 {
-		font-family: var(--font-sans);
-		color: #0f172a;
-		letter-spacing: -0.01em;
-	}
-	.mono {
-		font-family: var(--font-mono);
-	}
-	.mono--sm {
-		font-size: 0.7rem;
-		color: #64748b;
-	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   BACK LINK
-	   ═══════════════════════════════════════════════════════════════ */
-	.back-link {
+	/* ═══ Cabecera ═══ */
+	.sl-volver {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.4rem;
+		gap: 0.2rem;
+		width: fit-content;
+		margin-bottom: 0.25rem;
+		padding: 0;
 		background: none;
 		border: none;
-		color: #64748b;
-		font-size: 0.82rem;
-		font-weight: 500;
-		cursor: pointer;
-		padding: 0.3rem 0;
-		transition: color 0.2s;
 		font-family: inherit;
-		width: fit-content;
+		font-size: 0.8rem;
+		font-weight: 700;
+		color: var(--text-muted);
+		cursor: pointer;
 	}
-	.back-link:hover {
-		color: #ea580c;
+	.sl-volver:hover {
+		color: var(--emerald-500);
 	}
-	.back-link svg {
-		width: 14px;
-		height: 14px;
+	.sl-volver svg {
+		width: 16px;
+		height: 16px;
 	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   HERO
-	   ═══════════════════════════════════════════════════════════════ */
-	.page-hero {
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.06);
-		border-radius: 24px;
-		padding: 1.5rem 1.75rem 1.25rem;
-		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
-	}
-	.hero-top {
-		margin-bottom: 1.25rem;
-	}
-	.hero-left {
-		display: flex;
-		gap: 1rem;
-		align-items: flex-start;
-	}
-	.hero-icon {
-		flex-shrink: 0;
-	}
-	.hero-text {
-		flex: 1;
-		min-width: 0;
-		display: flex;
-		flex-direction: column;
-		gap: 0.45rem;
-	}
-	.hero-tags {
+	.sl-etiquetas {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.45rem;
+		gap: 0.4rem;
 	}
 	.radicado-pill {
 		display: inline-flex;
-		font-family: var(--font-mono);
-		font-size: 0.78rem;
+		font-size: 0.74rem;
 		font-weight: 700;
-		color: #ea580c;
-		background: rgba(234, 88, 12, 0.1);
-		padding: 0.25rem 0.65rem;
+		color: var(--emerald-700);
+		background: var(--au-tint);
+		padding: 0.22rem 0.6rem;
 		border-radius: 6px;
 		letter-spacing: 0.04em;
 	}
 	.codigo-pill {
 		display: inline-flex;
-		font-family: var(--font-mono);
 		font-size: 0.68rem;
 		font-weight: 600;
-		color: #64748b;
-		background: rgba(0, 0, 0, 0.04);
-		padding: 0.25rem 0.55rem;
-		border-radius: 5px;
+		color: var(--text-muted);
+		background: var(--bg-base);
+		border: 1px solid var(--border-subtle);
+		padding: 0.2rem 0.55rem;
+		border-radius: 6px;
 		letter-spacing: 0.04em;
 	}
+	/* Pastilla del estado: es un semáforo, sus colores vienen de
+	   `ESTADO_LABELS` y no de la marca. */
 	.estado-pill {
 		display: inline-flex;
 		align-items: center;
 		gap: 0.4rem;
-		font-family: var(--font-mono);
-		font-size: 0.7rem;
+		font-size: 0.66rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
-		padding: 0.25rem 0.6rem;
-		border-radius: 5px;
+		padding: 0.22rem 0.55rem;
+		border-radius: 6px;
 		border: 1px solid;
 	}
 	.estado-dot {
@@ -934,107 +949,68 @@
 		border-radius: 50%;
 	}
 
-	.hero-text h1 {
-		font-size: clamp(1.5rem, 3.5vw, 1.95rem);
-		font-weight: 500;
-		line-height: 1.15;
-		margin: 0;
-	}
-	.hero-meta {
+	/* Datos del declarante: separados por un punto que pone el CSS, así no
+	   queda un «·» colgando al final de la línea cuando envuelven. */
+	.sl-meta {
 		display: flex;
 		flex-wrap: wrap;
 		align-items: center;
-		gap: 0.4rem;
-		font-size: 0.78rem;
-		color: #64748b;
+		gap: 0.15rem 0;
 	}
 	.meta-item {
 		display: inline-flex;
 		align-items: center;
-		gap: 0.3rem;
 	}
-	.meta-item svg {
-		color: #94a3b8;
-		flex-shrink: 0;
+	.meta-item + .meta-item::before {
+		content: '·';
+		margin: 0 0.45rem;
+		color: var(--text-very-muted);
 	}
 	.meta-item--link {
-		color: #ea580c;
+		color: var(--emerald-500);
 		text-decoration: none;
-		transition: color 0.2s;
 	}
 	.meta-item--link:hover {
-		color: #9a3412;
 		text-decoration: underline;
 	}
-	.meta-sep {
-		color: #cbd5e1;
-	}
 
-	/* Hero stats */
-	.hero-stats {
+	/* ═══ Columnas ═══ */
+	.sl-columnas {
 		display: flex;
 		flex-wrap: wrap;
-		align-items: center;
-		gap: 0.65rem;
-		padding-top: 1rem;
-		border-top: 1px solid rgba(0, 0, 0, 0.06);
-		font-family: var(--font-mono);
-	}
-	.stat-item {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.45rem;
-	}
-	.stat-label {
-		font-size: 0.7rem;
-		font-weight: 600;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: #64748b;
-	}
-	.stat-value {
-		font-size: 0.95rem;
-		font-weight: 700;
-		color: #0f172a;
-	}
-	.stat-value--text {
-		font-size: 0.82rem;
-		font-weight: 600;
-	}
-	.stat-sep {
-		color: #cbd5e1;
-	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   LAYOUT 2 COLUMNAS
-	   ═══════════════════════════════════════════════════════════════ */
-	.layout-grid {
-		display: grid;
-		grid-template-columns: 1fr;
+		align-items: flex-start;
 		gap: 1.25rem;
 	}
-	@media (min-width: 1024px) {
-		.layout-grid {
-			grid-template-columns: minmax(0, 1fr) 380px;
-		}
-	}
-
-	.col-main {
+	/* El 999 hace que todo el espacio sobrante vaya a las respuestas y el
+	   lateral se quede en su base mientras quepan las dos columnas. */
+	.sl-principal {
+		flex: 999 1 34rem;
+		min-width: 0;
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
 	}
-	.col-head h2 {
-		font-size: 1.3rem;
-		font-weight: 500;
-		margin: 0.4rem 0 0.25rem;
-		color: #0f172a;
+	.sl-lateral {
+		flex: 1 1 22rem;
+		min-width: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
 	}
-	.col-head p {
+	.sl-principal-cab h2 {
+		font-family: var(--font-display);
+		font-size: 1.25rem;
+		font-weight: 800;
+		letter-spacing: -0.02em;
+		color: var(--text-primary);
+		margin: 0.3rem 0 0.2rem;
+	}
+	/* Texto corrido: tope de legibilidad, no de página. */
+	.sl-principal-cab p {
 		font-size: 0.82rem;
-		color: #475569;
+		color: var(--text-muted);
 		margin: 0;
-		max-width: 600px;
+		max-width: 44rem;
 		line-height: 1.5;
 	}
 	.respuestas-wrap {
@@ -1042,211 +1018,149 @@
 		flex-direction: column;
 	}
 
-	/* Sidebar */
-	.col-side {
-		display: flex;
-		flex-direction: column;
-		gap: 1rem;
+	.sl-eyebrow {
+		font-size: 0.66rem;
+		font-weight: 800;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--emerald-500);
 	}
 
-	/* Side cards */
-	.side-card {
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.06);
-		border-radius: 18px;
+	/* ═══ Tarjetas del lateral ═══ */
+	.sl-tarjeta {
+		padding: 0;
 		overflow: hidden;
-		box-shadow: 0 4px 24px rgba(0, 0, 0, 0.04);
 	}
-	.side-card--meta {
-		box-shadow: none;
-	}
-	.side-head {
+	.sl-tarjeta-cab {
 		display: flex;
 		align-items: flex-start;
 		justify-content: space-between;
 		gap: 0.75rem;
-		padding: 1rem 1.25rem;
-		background: linear-gradient(180deg, #fcfcfb 0%, white 100%);
-		border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+		padding: 1rem 1.25rem 0.85rem;
+		border-bottom: 1px solid var(--border-subtle);
 	}
-	.side-head h3 {
+	.sl-tarjeta-cab h3 {
+		font-family: var(--font-display);
 		font-size: 1rem;
-		font-weight: 500;
-		margin: 0.35rem 0 0;
-		color: #0f172a;
+		font-weight: 800;
+		letter-spacing: -0.02em;
+		color: var(--text-primary);
+		margin: 0.2rem 0 0;
 	}
-	.side-head--summary {
+	.sl-tarjeta-cab--resumen {
 		cursor: pointer;
 		list-style: none;
 		user-select: none;
-		transition: background 0.2s;
+		border-bottom: none;
 	}
-	.side-head--summary::-webkit-details-marker {
+	.sl-tarjeta-cab--resumen::-webkit-details-marker {
 		display: none;
 	}
-	.side-head--summary:hover {
-		background: #fcfcfb;
+	.sl-tarjeta-cab--resumen:hover {
+		background: var(--bg-base);
+	}
+	details[open] .sl-tarjeta-cab--resumen {
+		border-bottom: 1px solid var(--border-subtle);
 	}
 	.chevron {
-		color: #64748b;
+		width: 16px;
+		height: 16px;
+		color: var(--text-muted);
 		transition: transform 0.2s;
 		flex-shrink: 0;
+		align-self: center;
 	}
 	details[open] .chevron {
 		transform: rotate(180deg);
 	}
-	.side-body {
+	.sl-tarjeta-cuerpo {
 		padding: 1rem 1.25rem 1.25rem;
 	}
 	.evaluado-por {
-		font-size: 0.7rem;
-		color: #64748b;
-		font-family: var(--font-sans);
+		font-size: 0.72rem;
+		color: var(--text-muted);
 		text-align: right;
 	}
 	.evaluado-por strong {
-		color: #0f172a;
-		font-weight: 600;
+		color: var(--text-primary);
+		font-weight: 700;
+	}
+	.badge-count {
+		display: inline-flex;
+		align-items: center;
+		font-size: 0.72rem;
+		font-weight: 700;
+		color: var(--emerald-700);
+		background: var(--au-tint);
+		padding: 0.22rem 0.6rem;
+		border-radius: 999px;
+	}
+	.sl-vacio-mini {
+		margin: 0;
+		padding: 1rem;
+		text-align: center;
+		font-size: 0.8rem;
+		color: var(--text-muted);
+		background: var(--bg-base);
+		border: 1px dashed var(--border-default);
+		border-radius: 12px;
 	}
 
-	/* Docs list */
+	/* Giro pequeño DENTRO de un botón mientras trabaja (descargas y
+	   guardado): toma el color del texto, así sirve en las dos marcas. */
+	.sl-giro {
+		width: 14px;
+		height: 14px;
+		flex-shrink: 0;
+		border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+		border-top-color: currentColor;
+		border-radius: 50%;
+		animation: sl-girar 0.8s linear infinite;
+	}
+	@keyframes sl-girar {
+		to {
+			transform: rotate(360deg);
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.sl-giro {
+			animation-duration: 2.4s;
+		}
+	}
+
+	/* ═══ Documentos adjuntos ═══ */
 	.docs-list {
 		display: flex;
 		flex-direction: column;
 		gap: 0.5rem;
 	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   EXPORTAR / DESCARGAR
-	   ═══════════════════════════════════════════════════════════════ */
-	.side-help {
-		font-size: 0.8rem;
-		line-height: 1.55;
-		color: #475569;
-		margin: 0 0 0.85rem;
-	}
-	.export-grid {
-		display: grid;
-		grid-template-columns: 1fr 1fr;
-		gap: 0.5rem;
-		margin-bottom: 0.85rem;
-	}
-	.export-btn {
-		display: inline-flex;
-		align-items: center;
-		justify-content: center;
-		gap: 0.45rem;
-		padding: 0.6rem 0.8rem;
-		background: white;
-		color: #1e293b;
-		border: 1px solid rgba(0, 0, 0, 0.12);
-		border-radius: 10px;
-		font-family: inherit;
-		font-size: 0.8rem;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 0.2s;
-	}
-	.export-btn:hover:not(:disabled) {
-		background: #fcfcfb;
-		border-color: rgba(234, 88, 12, 0.4);
-		color: #9a3412;
-	}
-	.export-btn:disabled {
-		opacity: 0.6;
-		cursor: not-allowed;
-	}
-	.export-btn svg {
-		width: 16px;
-		height: 16px;
-		color: #ea580c;
-	}
-	.export-btn--zip {
-		background: rgba(234, 88, 12, 0.06);
-		border-color: rgba(234, 88, 12, 0.25);
-		color: #9a3412;
-	}
-	.export-btn--zip:hover:not(:disabled) {
-		background: rgba(234, 88, 12, 0.12);
-		border-color: #ea580c;
-	}
-	.export-contacto {
-		padding: 0.7rem 0.85rem;
-		background: #fcfcfb;
-		border: 1px solid rgba(0, 0, 0, 0.05);
-		border-radius: 10px;
-	}
-	.eyebrow--mini {
-		font-size: 0.6rem !important;
-		padding: 0.15rem 0.45rem !important;
-	}
-	.contacto-texto {
-		font-size: 0.78rem;
-		color: #475569;
-		line-height: 1.55;
-		margin: 0.4rem 0 0.6rem;
-		word-break: break-word;
-	}
-	.contacto-texto strong {
-		color: #0f172a;
-		font-weight: 700;
-	}
-	.contacto-texto .mono {
-		font-size: 0.72rem;
-		color: #9a3412;
-	}
-	.contacto-actions {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.4rem;
-	}
-	.contacto-link {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.35rem;
-		padding: 0.4rem 0.7rem;
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.08);
-		border-radius: 8px;
-		color: #1e293b;
-		text-decoration: none;
-		font-size: 0.75rem;
-		font-weight: 600;
-		transition: all 0.2s;
-	}
-	.contacto-link:hover {
-		border-color: rgba(234, 88, 12, 0.3);
-		color: #9a3412;
-		background: rgba(234, 88, 12, 0.05);
-	}
-	.contacto-link svg {
-		width: 14px;
-		height: 14px;
-		color: #ea580c;
-	}
 	.doc-row {
 		display: flex;
 		align-items: center;
 		gap: 0.75rem;
-		padding: 0.75rem 0.85rem;
-		background: #fcfcfb;
-		border: 1px solid rgba(0, 0, 0, 0.05);
+		width: 100%;
+		padding: 0.7rem 0.8rem;
+		background: var(--bg-base);
+		border: 1px solid var(--border-subtle);
 		border-radius: 12px;
 		cursor: pointer;
 		text-align: left;
 		font-family: inherit;
 		color: inherit;
-		transition: all 0.2s;
+		transition:
+			background-color 0.15s,
+			border-color 0.15s;
 	}
 	.doc-row:hover:not(:disabled) {
-		background: white;
-		border-color: rgba(234, 88, 12, 0.3);
-		transform: translateY(-1px);
+		background: var(--bg-surface);
+		border-color: var(--emerald-500);
 	}
 	.doc-row:disabled {
 		opacity: 0.6;
 		cursor: not-allowed;
 	}
+	/* Icono de archivo en rojo: es el color del tipo de documento, no de la
+	   marca, y se queda igual en las dos empresas. */
 	.doc-icon {
 		flex-shrink: 0;
 		width: 36px;
@@ -1268,29 +1182,26 @@
 	}
 	.doc-tipo {
 		font-size: 0.8rem;
-		font-weight: 600;
-		color: #0f172a;
-		margin: 0 0 0.15rem;
+		font-weight: 700;
+		color: var(--text-primary);
+		margin: 0 0 0.1rem;
 	}
 	.doc-name {
 		font-size: 0.72rem;
-		color: #475569;
-		margin: 0 0 0.2rem;
+		color: var(--text-secondary);
+		margin: 0 0 0.15rem;
 		overflow: hidden;
 		text-overflow: ellipsis;
 		white-space: nowrap;
 	}
 	.doc-meta {
 		font-size: 0.68rem;
-		color: #64748b;
+		color: var(--text-muted);
 		margin: 0;
-	}
-	.doc-meta .mono {
-		font-size: 0.68rem;
 	}
 	.doc-sep {
 		margin: 0 0.3rem;
-		color: #cbd5e1;
+		color: var(--text-very-muted);
 	}
 	.doc-action {
 		flex-shrink: 0;
@@ -1299,49 +1210,17 @@
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.06);
-		border-radius: 8px;
-		color: #ea580c;
+		background: var(--bg-surface);
+		border: 1px solid var(--border-default);
+		border-radius: 10px;
+		color: var(--emerald-500);
 	}
 	.doc-action svg {
 		width: 14px;
 		height: 14px;
 	}
-	.spin-ring--sm {
-		width: 14px;
-		height: 14px;
-		border: 2px solid rgba(234, 88, 12, 0.2);
-		border-top-color: #ea580c;
-		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
-	}
 
-	.empty-mini {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		gap: 0.5rem;
-		padding: 1.25rem 1rem;
-		text-align: center;
-		background: #fcfcfb;
-		border: 1px dashed rgba(0, 0, 0, 0.1);
-		border-radius: 12px;
-	}
-	.empty-mini svg {
-		width: 26px;
-		height: 26px;
-		color: #94a3b8;
-	}
-	.empty-mini p {
-		font-size: 0.8rem;
-		color: #64748b;
-		margin: 0;
-	}
-
-	/* Badge count */
-	/* ── Versiones documentales de la declaración de empresa de transporte ──
-	   Estilos propios del panel nuevo. No redefinen nada existente. */
+	/* ═══ Versiones documentales (declaración de empresa de transporte) ═══ */
 	.version-list {
 		list-style: none;
 		margin: 0;
@@ -1351,7 +1230,7 @@
 		gap: 12px;
 	}
 	.version-item {
-		border: 1px solid #e5e7eb;
+		border: 1px solid var(--border-default);
 		border-radius: 12px;
 		padding: 12px 14px;
 	}
@@ -1365,9 +1244,12 @@
 	.version-num {
 		font-size: 0.85rem;
 		font-weight: 700;
+		color: var(--text-primary);
 	}
+	/* Semáforo documental: azul recibida, violeta evaluada. Hex a propósito,
+	   iguales en las dos marcas. */
 	.version-estado {
-		font-size: 0.68rem;
+		font-size: 0.66rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
@@ -1392,12 +1274,13 @@
 	}
 	.version-meta dt {
 		font-size: 0.68rem;
-		color: #6b7280;
+		color: var(--text-muted);
 	}
 	.version-meta dd {
 		margin: 0;
 		font-size: 0.78rem;
 		font-weight: 600;
+		color: var(--text-primary);
 	}
 	.version-hash {
 		margin-bottom: 8px;
@@ -1405,7 +1288,7 @@
 	.hash-label {
 		display: block;
 		font-size: 0.68rem;
-		color: #6b7280;
+		color: var(--text-muted);
 		margin-bottom: 2px;
 	}
 	.version-hash code {
@@ -1455,7 +1338,7 @@
 	}
 	.entrega-dest,
 	.entrega-msgid {
-		color: #6b7280;
+		color: var(--text-muted);
 		font-size: 0.64rem;
 		word-break: break-all;
 	}
@@ -1465,49 +1348,16 @@
 	}
 	.version-nota {
 		font-size: 0.7rem;
-		color: #6b7280;
+		color: var(--text-muted);
 		margin: 10px 0 0;
 	}
-	.eval-aviso {
-		font-size: 0.72rem;
-		color: #92400e;
-		background: #fffbeb;
-		border: 1px solid #fde68a;
-		border-radius: 8px;
-		padding: 8px 10px;
-		margin: 0 0 10px;
-	}
-	.btn-ghost {
-		background: transparent;
-		border: 1px solid #d4d4d8;
-		border-radius: 8px;
-		padding: 7px 12px;
-		font-size: 0.78rem;
-		font-weight: 600;
-		cursor: pointer;
-		font-family: inherit;
-	}
-	.btn-ghost:hover:not(:disabled) {
-		background: #f4f4f5;
-	}
-	.btn-ghost:disabled {
-		opacity: 0.6;
-		cursor: not-allowed;
+	.sl-boton-version {
+		width: 100%;
+		min-height: 38px;
+		font-size: 0.8rem;
 	}
 
-	.badge-count {
-		display: inline-flex;
-		align-items: center;
-		font-family: var(--font-mono);
-		font-size: 0.7rem;
-		font-weight: 700;
-		color: #9a3412;
-		background: rgba(234, 88, 12, 0.1);
-		padding: 0.25rem 0.6rem;
-		border-radius: 5px;
-	}
-
-	/* Evaluación form */
+	/* ═══ Evaluación ═══ */
 	.eval-form {
 		display: flex;
 		flex-direction: column;
@@ -1519,64 +1369,121 @@
 		gap: 0.35rem;
 	}
 	.field-label {
-		font-family: var(--font-mono);
-		font-size: 0.68rem;
+		font-size: 0.8rem;
 		font-weight: 700;
-		text-transform: uppercase;
-		letter-spacing: 0.08em;
-		color: #64748b;
+		color: var(--text-secondary);
 	}
-	.input,
-	.select {
+	.campo {
 		width: 100%;
-		padding: 0.55rem 0.8rem;
+		min-height: 42px;
+		padding: 0.55rem 0.85rem;
 		font-family: inherit;
 		font-size: 0.85rem;
-		color: #1e293b;
-		background: #fcfcfb;
-		border: 1px solid rgba(0, 0, 0, 0.1);
-		border-radius: 10px;
+		color: var(--text-primary);
+		background: var(--bg-surface);
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
 		outline: none;
-		transition: all 0.2s;
+		box-sizing: border-box;
+		transition:
+			border-color 0.15s,
+			box-shadow 0.15s;
 	}
-	.input::placeholder {
-		color: #94a3b8;
+	.campo::placeholder {
+		color: var(--text-very-muted);
 	}
-	.input:focus,
-	.select:focus {
-		background: white;
-		border-color: rgba(234, 88, 12, 0.4);
-		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.1);
+	.campo:focus {
+		border-color: var(--emerald-500);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--emerald-500) 15%, transparent);
 	}
-	.textarea {
+	.campo--texto {
 		resize: vertical;
-		font-family: inherit;
 		line-height: 1.5;
 	}
 	.eval-meta {
-		display: inline-flex;
+		display: flex;
 		align-items: center;
 		gap: 0.4rem;
 		padding: 0.55rem 0.75rem;
-		background: rgba(234, 88, 12, 0.06);
-		border: 1px solid rgba(234, 88, 12, 0.15);
+		background: var(--au-tint);
 		border-radius: 10px;
 		font-size: 0.78rem;
-		color: #9a3412;
+		color: var(--text-secondary);
 	}
 	.eval-meta svg {
-		color: #ea580c;
+		width: 14px;
+		height: 14px;
+		color: var(--emerald-500);
 		flex-shrink: 0;
 	}
 	.eval-meta strong {
 		font-weight: 700;
+		color: var(--text-primary);
+	}
+	/* Aviso en ámbar: semáforo, igual en las dos marcas. */
+	.eval-aviso {
+		font-size: 0.72rem;
+		color: #92400e;
+		background: #fffbeb;
+		border: 1px solid #fde68a;
+		border-radius: 8px;
+		padding: 8px 10px;
+		margin: 0;
+	}
+	.sl-bloque {
+		width: 100%;
 	}
 
-	/* Tech list (details) */
+	/* ═══ Canal de notificación ═══ */
+	.contacto-texto {
+		font-size: 0.8rem;
+		color: var(--text-secondary);
+		line-height: 1.55;
+		margin: 0 0 0.7rem;
+		word-break: break-word;
+	}
+	.contacto-texto strong {
+		color: var(--text-primary);
+		font-weight: 700;
+	}
+	.contacto-actions {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.4rem;
+	}
+	.contacto-link {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.35rem;
+		padding: 0.45rem 0.75rem;
+		background: var(--bg-surface);
+		border: 1px solid var(--border-default);
+		border-radius: 10px;
+		color: var(--text-primary);
+		text-decoration: none;
+		font-size: 0.76rem;
+		font-weight: 700;
+		transition:
+			border-color 0.15s,
+			background-color 0.15s;
+	}
+	.contacto-link:hover {
+		border-color: var(--emerald-500);
+		background: var(--bg-base);
+	}
+	.contacto-link svg {
+		width: 14px;
+		height: 14px;
+		color: var(--emerald-500);
+	}
+
+	/* ═══ Detalles técnicos ═══ */
+	.sl-tarjeta--meta {
+		box-shadow: none;
+	}
 	.tech-list {
 		display: flex;
 		flex-direction: column;
-		gap: 0;
 		margin: 0;
 	}
 	.tech-list > div {
@@ -1584,117 +1491,30 @@
 		flex-direction: column;
 		gap: 0.15rem;
 		padding: 0.5rem 0;
-		border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+		border-bottom: 1px solid var(--border-subtle);
 	}
 	.tech-list > div:last-child {
 		border-bottom: none;
 	}
 	.tech-list dt {
-		font-family: var(--font-mono);
 		font-size: 0.62rem;
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.08em;
-		color: #64748b;
+		color: var(--text-muted);
 	}
 	.tech-list dd {
 		margin: 0;
 		font-size: 0.78rem;
-		color: #0f172a;
+		color: var(--text-primary);
 		word-break: break-all;
 	}
 	.tech-list dd.ua {
 		font-size: 0.72rem;
 		line-height: 1.5;
 	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   ESTADOS GENERALES
-	   ═══════════════════════════════════════════════════════════════ */
-	.state-block {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 0.85rem;
-		padding: 4rem 1.5rem;
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.06);
-		border-radius: 20px;
-		color: #64748b;
-		font-size: 0.88rem;
-	}
-	.spin-ring {
-		width: 30px;
-		height: 30px;
-		border: 2.5px solid rgba(234, 88, 12, 0.15);
-		border-top-color: #ea580c;
-		border-radius: 50%;
-		animation: spin 0.8s linear infinite;
-	}
-	@keyframes spin {
-		to { transform: rotate(360deg); }
-	}
-
-	/* ═══════════════════════════════════════════════════════════════
-	   ALERT
-	   ═══════════════════════════════════════════════════════════════ */
-	.alert {
-		display: flex;
-		align-items: center;
-		gap: 0.85rem;
-		padding: 0.95rem 1.1rem;
-		border-radius: 12px;
-		font-size: 0.88rem;
-	}
-	.alert-error {
-		background: rgba(220, 38, 38, 0.06);
-		border: 1px solid rgba(220, 38, 38, 0.2);
-		color: #991b1b;
-	}
-	.alert-error svg {
-		width: 20px;
-		height: 20px;
-		flex-shrink: 0;
-		color: #dc2626;
-	}
-	.alert-body {
-		flex: 1;
-		display: flex;
-		flex-direction: column;
-		gap: 0.15rem;
-	}
-	.alert-body strong {
-		font-weight: 700;
-	}
-	.alert-body span {
-		font-size: 0.82rem;
-		color: #b91c1c;
-	}
-	.btn-secondary--sm {
-		min-height: 34px;
-		padding: 0.45rem 0.85rem;
-		font-size: 0.78rem;
-	}
-	.btn-block {
-		width: 100%;
-	}
-	.spin {
-		width: 14px;
-		height: 14px;
-		animation: spin 0.8s linear infinite;
-	}
-
-	/* Card icon */
-	.card-icon {
-		width: 48px;
-		height: 48px;
-		border-radius: 14px;
-		background: linear-gradient(135deg, #ea580c, #c2410c);
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		color: white;
-		box-shadow: 0 4px 16px rgba(234, 88, 12, 0.3);
+	.tech-id {
+		font-size: 0.7rem;
+		color: var(--text-muted);
 	}
 </style>

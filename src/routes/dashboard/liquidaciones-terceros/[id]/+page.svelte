@@ -8,6 +8,8 @@
 	import PreviewTerceroPDF from '$lib/components/PreviewTerceroPDF.svelte';
 	import ChatLiquidacionFab from '$lib/components/chat/ChatLiquidacionFab.svelte';
 	import RecordatorioBanner from '$lib/components/chat/RecordatorioBanner.svelte';
+	import PagoCierreResumen from '$lib/components/liquidaciones-terceros/PagoCierreResumen.svelte';
+	import { authStore } from '$lib/stores/auth';
 
 	const MESES = [
 		'ENERO',
@@ -108,6 +110,14 @@
 				<span>{previewItem.mes ? MESES[previewItem.mes - 1] : ''} {previewItem.anio || ''}</span>
 				<span class="dot">·</span>
 				<span class="placa">{fmtPlaca(previewItem.placa)}</span>
+				{#if id && previewItem.estado}
+					<!-- PAGADA: fecha y medio del pago, o «sin registro» si es de antes. -->
+					<PagoCierreResumen
+						cierreId={id}
+						estado={previewItem.estado}
+						areas={$authStore.user?.area}
+					/>
+				{/if}
 			</div>
 		{/if}
 	</div>

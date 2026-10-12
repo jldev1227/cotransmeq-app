@@ -25,6 +25,9 @@
 		type EstadoCierre
 	} from '$lib/editor/builders/cierres-finales-estado';
 	import type { CierreHoja } from '$lib/editor/builders/cierres-finales-identidad';
+	import CamposPagoCierre from './CamposPagoCierre.svelte';
+	import { armarPago, pagoCompleto, type FormPago } from '$lib/api/liquidacionesTercerosPagos';
+	import { hoyColombia } from '$lib/pagos/medios';
 
 	type Hoja = Pick<CierreHoja, 'id' | 'placa' | 'tercero_nombre' | 'consecutivo'> & {
 		estado: string;
@@ -75,6 +78,14 @@
 	let busqueda = $state('');
 	let filtroEstado = $state<string>('todos');
 	let motivo = $state('');
+	/// PAGADA lleva fecha, medio, referencia y soporte: un mismo pago (una
+	/// transferencia, un lote del banco) para todas las hojas marcadas.
+	let formPago = $state<FormPago>({
+		fecha: hoyColombia(),
+		medio: 'TRANSFERENCIA',
+		referencia: '',
+		archivo: null
+	});
 	let enviando = $state(false);
 	let resultado = $state<{
 		ok: number;
@@ -86,6 +97,7 @@
 		if (!open) return;
 		resultado = null;
 		motivo = '';
+		formPago = { fecha: hoyColombia(), medio: 'TRANSFERENCIA', referencia: '', archivo: null };
 		busqueda = '';
 		filtroEstado = 'todos';
 		seleccion = new Set(preseleccion);
@@ -144,20 +156,27 @@
 
 	const destinoActual = $derived(DESTINOS.find((d) => d.estado === hacia)!);
 	const exigeMotivo = $derived(hacia === 'ANULADA');
+	const exigePago = $derived(hacia === 'PAGADA');
 	const puedeEnviar = $derived(
-		!enviando && seleccion.size > 0 && (!exigeMotivo || motivo.trim().length >= 5)
+		!enviando &&
+			seleccion.size > 0 &&
+			(!exigeMotivo || motivo.trim().length >= 5) &&
+			(!exigePago || pagoCompleto(formPago))
 	);
 
 	async function aplicar() {
 		if (!puedeEnviar) return;
 		enviando = true;
 		try {
+			/// El soporte se sube UNA vez y su clave viaja con todas las hojas.
+			const pago = exigePago ? await armarPago(formPago) : null;
 			const r = await liquidacionesTercerosDescuentosAPI.cambiarEstadoLote({
 				anio,
 				mes,
 				ids: [...seleccion],
 				hacia,
-				motivo: exigeMotivo ? motivo.trim() : undefined
+				motivo: exigeMotivo ? motivo.trim() : undefined,
+				pago
 			});
 			resultado = {
 				ok: r.cambiados.length,
@@ -233,6 +252,11 @@
 							placeholder="Queda en el historial de cada hoja."
 						></textarea>
 					</label>
+				{/if}
+				{#if exigePago}
+					<div class="el-pago">
+						<CamposPagoCierre bind:form={formPago} lote deshabilitado={enviando} />
+					</div>
 				{/if}
 			</section>
 
@@ -319,6 +343,9 @@
 </ModalBase>
 
 <style>
+	.el-pago {
+		margin-top: 12px;
+	}
 	.el {
 		display: flex;
 		flex-direction: column;

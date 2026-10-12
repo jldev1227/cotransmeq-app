@@ -4,6 +4,7 @@
 	import { facturacionLiquidacionesAPI } from '$lib/api/facturacionLiquidaciones';
 	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
+	import { fechaCorta, hoyColombia, sumarDias } from '$lib/pagos/medios';
 
 	export let open = false;
 	export let liquidaciones: LiquidacionServicio[] = [];
@@ -29,6 +30,14 @@
 	let error = '';
 	let searchText = '';
 
+	/// Condiciones de cobro (cartera). El valor sigue la suma de lo marcado
+	/// hasta que el usuario lo toca: entonces manda lo digitado, que es el
+	/// valor de la factura electrónica (puede diferir por redondeos o ajustes).
+	let valorFactura: number | null = null;
+	let valorEditado = false;
+	let fechaEmision = hoyColombia();
+	let plazoDias = 30;
+
 	// Initialize selection from preselected
 	$: if (open && preselectedIds.length > 0) {
 		selectedIds = new Set(preselectedIds);
@@ -48,6 +57,10 @@
 
 	$: selectedList = facturables.filter(l => selectedIds.has(l.id));
 	$: totalSelected = selectedList.reduce((s, l) => s + (l.total || 0), 0);
+	$: if (!valorEditado) valorFactura = Math.round(totalSelected * 100) / 100;
+	$: plazoValido = Number.isInteger(Number(plazoDias)) && plazoDias >= 0 && plazoDias <= 365;
+	$: vencimiento = fechaEmision && plazoValido ? sumarDias(fechaEmision, Number(plazoDias)) : '';
+	$: diferencia = valorEditado ? Number(valorFactura ?? 0) - totalSelected : 0;
 
 	function toggle(id: string) {
 		if (selectedIds.has(id)) {
@@ -76,6 +89,18 @@
 			error = 'Seleccione al menos una liquidación';
 			return;
 		}
+		if (!fechaEmision) {
+			error = 'Indique la fecha de emisión de la factura';
+			return;
+		}
+		if (!plazoValido) {
+			error = 'El plazo debe ser un número entero de días entre 0 y 365';
+			return;
+		}
+		if (valorEditado && (valorFactura == null || !(Number(valorFactura) >= 0))) {
+			error = 'El valor de la factura no es válido';
+			return;
+		}
 
 		saving = true;
 		try {
@@ -83,6 +108,10 @@
 				numero_factura: numeroFactura.trim(),
 				liquidacion_ids: [...selectedIds],
 				observaciones: observaciones.trim() || undefined,
+				/// Solo si se digitó: sin él, el backend usa la suma exacta.
+				valor_total: valorEditado ? Number(valorFactura) : undefined,
+				fecha_emision: fechaEmision,
+				plazo_dias: Number(plazoDias)
 			});
 			dispatch('created', { factura });
 			cerrar();
@@ -100,6 +129,9 @@
 		observaciones = '';
 		error = '';
 		searchText = '';
+		valorEditado = false;
+		fechaEmision = hoyColombia();
+		plazoDias = 30;
 		dispatch('close');
 	}
 </script>
@@ -140,6 +172,46 @@
 					bind:value={observaciones}
 					placeholder="Opcional..."
 				/>
+			</div>
+		</div>
+
+		<!-- Cobro: lo que lee Cartera para el saldo y las edades -->
+		<div class="mf-card form-row form-row--cobro">
+			<div class="field">
+				<label for="valor-factura">Valor de la factura</label>
+				<input
+					id="valor-factura"
+					type="number"
+					min="0"
+					step="0.01"
+					inputmode="decimal"
+					class="mf-input"
+					bind:value={valorFactura}
+					on:input={() => (valorEditado = true)}
+				/>
+				{#if valorEditado}
+					<small class="hint">
+						{diferencia === 0
+							? 'Igual a la suma de las liquidaciones.'
+							: `${diferencia > 0 ? '+' : '−'}${COP(Math.abs(diferencia))} frente a la suma.`}
+						<button type="button" class="link" on:click={() => (valorEditado = false)}>
+							Usar la suma
+						</button>
+					</small>
+				{:else}
+					<small class="hint">La suma de las liquidaciones marcadas.</small>
+				{/if}
+			</div>
+			<div class="field">
+				<label for="fecha-emision">Fecha de emisión</label>
+				<input id="fecha-emision" type="date" class="mf-input" bind:value={fechaEmision} />
+			</div>
+			<div class="field">
+				<label for="plazo-dias">Plazo (días)</label>
+				<input id="plazo-dias" type="number" min="0" max="365" step="1" class="mf-input" bind:value={plazoDias} />
+				<small class="hint"
+					>{vencimiento ? `Vence el ${fechaCorta(vencimiento)}` : 'Plazo inválido'}</small
+				>
 			</div>
 		</div>
 
@@ -269,6 +341,25 @@
 	}
 	.mf-input:disabled { background: var(--bg-base); color: var(--text-muted); }
 	.factura-input { font-family: var(--font-mono); font-weight: 700; letter-spacing: 0.5px; }
+	.form-row--cobro {
+		grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+	}
+	.hint {
+		display: block;
+		margin-top: 4px;
+		font-size: 11.5px;
+		color: var(--text-muted);
+	}
+	.link {
+		border: none;
+		background: none;
+		padding: 0;
+		margin-left: 4px;
+		font: inherit;
+		font-weight: 700;
+		color: var(--accion);
+		cursor: pointer;
+	}
 	.req { color: #b42318; }
 	.search-row { display: flex; gap: 10px; align-items: center; }
 	.search-input { flex: 1; }

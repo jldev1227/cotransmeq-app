@@ -116,15 +116,35 @@ npm run format    # prettier --write .
 npm run lint      # prettier --check . && eslint .
 ```
 
-`npm run check` arrastra errores preexistentes en pantallas antiguas del dashboard.
-Filtra por los archivos que tocaste en vez de leer el total:
+`svelte-check --threshold error` está en **cero errores** (11-oct-2026) y tiene
+que seguir así: el job `verificar` del workflow de despliegue
+(`.github/workflows/deploy-proxmox.yml`, en `ubuntu-latest`) lo corre antes de
+desplegar, y un error lo frena. Para mirar solo lo tuyo:
 
 ```bash
-npx svelte-check --tsconfig ./tsconfig.json --output machine 2>&1 | grep -i "<tu-archivo>"
+npx svelte-check --tsconfig ./tsconfig.json --threshold error --output machine 2>&1 | grep -i "<tu-archivo>"
 ```
+
+**Rastreo de errores (Sentry), opcional.** Solo con DSN, leído en tiempo de
+ejecución (`$env/dynamic`), así que se enciende sin recompilar: `PUBLIC_SENTRY_DSN`
+para el navegador (`hooks.client.ts`; sin él ni se descarga el SDK) y
+`SENTRY_DSN` para el servidor (`hooks.server.ts`). Opcionales
+`PUBLIC_SENTRY_ENVIRONMENT` / `SENTRY_ENVIRONMENT`. Se reportan los errores
+inesperados (5xx), sin cuerpos, cabeceras, cookies ni query. Ver `.env.example`.
 
 Si `node_modules/.bin/prettier` da «Permission denied», invócalo por Node:
 `node node_modules/prettier/bin/prettier.cjs --write <archivo>`.
+
+## Documentación
+
+La documentación técnica vive en `docs/` (índice en `docs/README.md`):
+arquitectura, rutas, autenticación y permisos, cliente de la API, componentes,
+listados, estado, tiempo real, portal del conductor, canvas, PDF, variables,
+pruebas y despliegue. La referencia de los endpoints está en el `docs/api/` del
+backend.
+
+**Un cambio de comportamiento lleva su cambio de documento en el mismo commit**,
+y en los dos repos.
 
 ## Listados: la URL es la fuente de verdad
 

@@ -13,6 +13,7 @@
 -->
 <script lang="ts">
 	import { confirmar } from '$lib/stores/confirm';
+	import { listadoFormularios } from '$lib/stores/volverListado';
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -176,7 +177,13 @@
 		return FMT_HORA.format(new Date(iso)).replace(/\s/g, '\u00a0');
 	}
 
+	/// La miga vuelve al catálogo con la búsqueda y la página con las que se
+	/// salió (`cat_q`, `cat_pagina`); antes volvía a la primera página sin
+	/// filtrar. Se lee al montar: vive en sessionStorage.
+	let urlCatalogo = $state('/dashboard/formularios');
+
 	onMount(() => {
+		urlCatalogo = listadoFormularios.url();
 		void cargar();
 		void cargarEnvios();
 	});
@@ -293,7 +300,7 @@
 
 <div class="pagina">
 	<nav class="migas" aria-label="Ruta">
-		<a href="/dashboard/formularios">Formularios</a>
+		<a href={urlCatalogo}>Formularios</a>
 		<span aria-hidden="true">›</span>
 		<span>{form?.code ?? '…'}</span>
 	</nav>

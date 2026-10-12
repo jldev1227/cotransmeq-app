@@ -1,5 +1,6 @@
 <script lang="ts">
-	import { confirmar, confirmarEliminacion } from '$lib/stores/confirm';
+	import { confirmar, confirmarEliminacion, pedirTexto } from '$lib/stores/confirm';
+	import { listadoNomina } from '$lib/stores/volverListado';
 	import { onMount, onDestroy, tick, untrack } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/stores';
@@ -731,6 +732,10 @@
 		}
 
 		window.history.replaceState({}, '', url);
+		/// Este canvas no pasa por `goto` al cambiar de periodo u hoja, así que
+		/// `afterNavigate` no lo vería: el «Volver» de la edición de una
+		/// liquidación se anota aquí, con el periodo y la hoja que se veían.
+		listadoNomina.recordar(url.pathname + url.search);
 	}
 
 	/// `replaceState` y no `goto`: cambiar de hoja no es navegar —no debe llenar
@@ -1187,12 +1192,22 @@
 			toast.warning('Este conductor todavía no tiene liquidación en el periodo.');
 			return;
 		}
+		/// Se fija antes de pedir el motivo: el motivo se escribe para la hoja
+		/// que se veía al abrir el diálogo, aunque luego cambie la pestaña activa.
+		const hoja = hojaActiva;
 		let motivo: string | null = null;
 		if (accion.exigeMotivo) {
-			motivo = window.prompt(`Motivo para ${accion.etiqueta.toLowerCase()}:`);
-			if (!motivo?.trim()) return;
+			motivo = await pedirTexto({
+				title: `${accion.etiqueta}: ${hoja.nombre}`,
+				message: 'El motivo queda en el historial de la liquidación.',
+				tone: accion.tono === 'peligro' ? 'danger' : 'warning',
+				label: 'Motivo',
+				placeholder: 'Por qué se hace este cambio',
+				confirmText: accion.etiqueta,
+				maxLength: 500
+			});
+			if (!motivo) return;
 		}
-		const hoja = hojaActiva;
 		await conOverlay(accion.etiqueta, hoja.nombre, async () => {
 			const r = await nominaCanvasAPI.cambiarEstado({
 				liquidacionId: hoja.liquidacionId!,

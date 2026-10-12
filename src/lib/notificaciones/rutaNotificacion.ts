@@ -40,6 +40,13 @@ export function rutaDeNotificacion(n: NotificacionNavegable): RutaNotificacion |
 		return { url: `/dashboard/nomina/canvas?${params.toString()}`, recargaCompleta: true };
 	}
 	if (ref === 'preoperacional') return { url: `/dashboard/formularios/envios/${id}` };
+	/// Preoperacional con ítems en «Malo», para mantenimiento: abre las novedades
+	/// en su propia pantalla, porque el envío completo es del módulo `formularios`,
+	/// que el área mantenimiento no tiene (desde allí salta quien sí lo tiene).
+	if (ref === 'preop_malo') return { url: `/dashboard/mantenimiento?preoperacional=${id}` };
+	/// Plan de mantenimiento vencido o próximo (`mant:<estado>:<km>:<fecha>`):
+	/// la referencia es el plan.
+	if (ref.startsWith('mant:')) return { url: `/dashboard/mantenimiento?plan=${id}` };
 	if (ref.startsWith('dias_laborados:')) {
 		/// Recorridos del conductor ese día (`dias_laborados:<fecha>`, la referencia es el conductor).
 		const fecha = ref.split(':')[1];
@@ -50,9 +57,16 @@ export function rutaDeNotificacion(n: NotificacionNavegable): RutaNotificacion |
 	if (ref === 'viatico_solicitud') return { url: `/dashboard/viaticos?solicitud=${id}` };
 	if (ref === 'solicitud_web') return { url: `/dashboard/solicitudes?solicitud=${id}` };
 	if (ref === 'ACCION_CORRECTIVA') return { url: `/dashboard/acciones-correctivas/${id}` };
+	/// Reporte de un incidente (`incidente`) y su recordatorio de los 15 días
+	/// (`incidente_investigacion_pendiente`): la referencia es el incidente.
+	if (ref === 'incidente' || ref === 'incidente_investigacion_pendiente')
+		return { url: `/dashboard/incidentes/${id}` };
 	/// Vencimiento de un documento del vehículo (`docveh:<categoría>:<vence>:<umbral>`):
 	/// la referencia es el vehículo; abre su ficha en la pestaña Documentos.
 	if (ref.startsWith('docveh:')) return { url: `/dashboard/flota?vehiculo=${id}&tab=documentos` };
+	/// Lo mismo para el conductor (`doccond:<categoría>:<vence>:<umbral>`): la
+	/// referencia es el conductor; abre su ficha en la pestaña Documentos.
+	if (ref.startsWith('doccond:')) return { url: `/dashboard/conductores/${id}?tab=documentos` };
 	if (n.tipo.startsWith('FACTURA_'))
 		return { url: '/dashboard/liquidaciones-servicios?tab=facturas' };
 	if (n.tipo.startsWith('LIQUIDACION_')) return { url: '/dashboard/liquidaciones-servicios' };

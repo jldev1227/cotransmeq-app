@@ -10,7 +10,8 @@
   import { accionesCorrectivasAPI } from '$lib/api/acciones-correctivas'
   import type { AccionCorrectivaPreventiva, ActionStatusGlobal } from '$lib/api/acciones-correctivas'
 
-  export let accion: AccionCorrectivaPreventiva
+  /// `null` al crear: no hay estado que calcular hasta que la acción exista.
+  export let accion: AccionCorrectivaPreventiva | null = null
   export let usuarioId: string | null = null
 
   $: auth = $authStore
@@ -134,7 +135,7 @@
 <div class="rounded-lg border border-gray-200 bg-white p-6 shadow-sm" transition:fly={{ y: 20 }}>
   <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
     <h2 class="text-lg font-semibold text-gray-900">5. Estado de la Acción</h2>
-    <span class="rounded-full border px-3 py-1 text-xs font-semibold {statusColors[store.estadoGeneral as string] || 'bg-gray-100 text-gray-700 border-gray-300'}">
+    <span class="rounded-full border px-3 py-1 text-xs font-semibold {statusColors[store.estadoGlobal] || 'bg-gray-100 text-gray-700 border-gray-300'}">
       {getEstadoGeneralLabel(store.estadoGlobal)}
     </span>
   </div>

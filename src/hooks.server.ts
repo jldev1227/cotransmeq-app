@@ -1,6 +1,40 @@
 import { redirect } from '@sveltejs/kit';
-import type { Handle } from '@sveltejs/kit';
+import type { Handle, HandleServerError } from '@sveltejs/kit';
+import { env as envPrivado } from '$env/dynamic/private';
 import { checkAccess, getAccessibleModules } from '$lib/config/permissions';
+
+/// Rastreo de errores (Sentry), OPCIONAL: solo con `SENTRY_DSN` en el entorno
+/// del servidor (el del navegador va aparte, con `PUBLIC_SENTRY_DSN`, en
+/// `hooks.client.ts`). Sin DSN el SDK ni se carga.
+const dsnServidor = envPrivado.SENTRY_DSN?.trim();
+const sentryServidor = dsnServidor
+	? import('@sentry/sveltekit')
+			.then((S) => {
+				S.init({
+					dsn: dsnServidor,
+					environment: envPrivado.SENTRY_ENVIRONMENT || process.env.NODE_ENV || 'production',
+					/// Las peticiones llevan la cookie del token y los formularios
+					/// datos personales: no sale nada de eso.
+					dataCollection: {
+						userInfo: false,
+						cookies: false,
+						httpHeaders: false,
+						httpBodies: [],
+						urlQueryParams: false
+					}
+				});
+				return S;
+			})
+			.catch(() => null)
+	: Promise.resolve(null);
+
+export const handleError: HandleServerError = async ({ error, event, status }) => {
+	// Lo que hace SvelteKit cuando no hay hook: dejar el error en el log.
+	console.error(error);
+	if (status < 500) return;
+	const S = await sentryServidor;
+	S?.captureException(error, { tags: { ruta: event.route.id ?? event.url.pathname } });
+};
 
 function decodeJwtPayload(token: string): any | null {
 	try {

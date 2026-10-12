@@ -13,6 +13,25 @@ export function authHeaders(): Record<string, string> {
 	return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
+/**
+ * Texto para el usuario a partir de un error de estas rutas.
+ *
+ * Llegan de dos formas: de `apiClient` (axios, con el cuerpo en
+ * `response.data`) y de los `fetch` sueltos de las páginas. Sin red, `fetch`
+ * lanza un «Failed to fetch» que no le dice nada a nadie.
+ */
+export function mensajeErrorEvaluaciones(err: unknown, porDefecto: string): string {
+	if (browser && !navigator.onLine) return 'Sin conexión a internet.';
+	const e = err as {
+		response?: { data?: { message?: string; error?: string } };
+		message?: string;
+	} | null;
+	const delServidor = e?.response?.data?.message || e?.response?.data?.error;
+	if (delServidor) return delServidor;
+	if (err instanceof TypeError) return `${porDefecto}: no hubo respuesta del servidor.`;
+	return e?.message || porDefecto;
+}
+
 export interface Evaluacion {
 	id: string;
 	titulo: string;

@@ -82,8 +82,10 @@
 	let descontarPensionSalario = false;
 	let descontarTransporte = false;
 	let redondearNetoArriba = false;
+	/// ±10 pesos, los mismos valores que pintan los botones de «Ajuste manual».
+	/// Al tipo le faltaban el -4 y el 4, y el botón «4» no tipaba.
 	let ajustePesos:
-		-10 | -9 | -8 | -7 | -6 | -5 | -3 | -2 | -1 | 0 | 1 | 2 | 3 | 5 | 6 | 7 | 8 | 9 | 10 = 0;
+		-10 | -9 | -8 | -7 | -6 | -5 | -4 | -3 | -2 | -1 | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 = 0;
 	let estadoLiquidacion: 'Pendiente' | 'Liquidado' = 'Pendiente';
 
 	// Períodos especiales

@@ -13,8 +13,9 @@
 	 * misma vista.
 	 */
 	import { page } from '$app/state';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { onMount, onDestroy, untrack } from 'svelte';
+	import { listadoAsistencias } from '$lib/stores/volverListado';
 	import { SvelteMap } from 'svelte/reactivity';
 	import { fade, fly } from 'svelte/transition';
 	import { toast } from 'svelte-sonner';
@@ -82,6 +83,12 @@
 	let filtros = $state<Filtros>(estadoUrl.leer(page.url));
 	$effect(() => {
 		estadoUrl.escribir(page.url, filtros);
+	});
+
+	/// Cada URL en la que se asienta el listado queda como destino del
+	/// «Volver» de las firmas de una asistencia.
+	afterNavigate(({ to }) => {
+		if (to?.url) listadoAsistencias.recordar(to.url.pathname + to.url.search);
 	});
 	const hayFiltros = $derived(!!filtros.q || filtros.estado !== 'all' || filtros.periodo !== 'todo');
 

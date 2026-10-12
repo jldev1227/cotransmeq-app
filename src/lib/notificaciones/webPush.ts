@@ -14,9 +14,9 @@
  * sesión, y `desuscribirAlCerrarSesion` la desactiva al salir.
  */
 import { browser } from '$app/environment';
+import { fetchConSesion } from '$lib/api/fetchConSesion';
 
-const API_URL = browser ? import.meta.env.VITE_API_URL : 'http://localhost:4000';
-const BASE = `${API_URL}/api/notificaciones/web-push`;
+const BASE = '/api/notificaciones/web-push';
 
 export type EstadoWebPush =
 	/** Navegador sin Service Worker / Push (Safari antiguo, http sin localhost…). */
@@ -50,7 +50,7 @@ export function webPushSoportado(): boolean {
 
 let clavePromesa: Promise<string | null> | null = null;
 function clavePublica(): Promise<string | null> {
-	clavePromesa ??= fetch(`${BASE}/clave`, { headers: headers() })
+	clavePromesa ??= fetchConSesion(`${BASE}/clave`, { headers: headers() })
 		.then((r) => (r.ok ? r.json() : { clave: null }))
 		.then((d: { clave: string | null }) => d.clave)
 		.catch(() => {
@@ -74,7 +74,7 @@ async function registro(): Promise<ServiceWorkerRegistration> {
 }
 
 async function guardar(sub: PushSubscription): Promise<void> {
-	const res = await fetch(`${BASE}/suscripcion`, {
+	const res = await fetchConSesion(`${BASE}/suscripcion`, {
 		method: 'POST',
 		headers: headers(),
 		body: JSON.stringify(sub.toJSON())
@@ -124,7 +124,7 @@ export async function desactivarWebPush(): Promise<EstadoWebPush> {
 	if (!webPushSoportado()) return 'no-soportado';
 	const sub = await (await registro()).pushManager.getSubscription();
 	if (sub) {
-		await fetch(`${BASE}/desuscribir`, {
+		await fetchConSesion(`${BASE}/desuscribir`, {
 			method: 'POST',
 			headers: headers(),
 			body: JSON.stringify({ endpoint: sub.endpoint })
@@ -148,31 +148,48 @@ export async function sincronizarWebPush(): Promise<void> {
 	}
 }
 
+const PLAZO_DESUSCRIBIR_MS = 2_000;
+
 /**
  * Antes de borrar el token: que el siguiente usuario de este equipo no reciba
  * los avisos del anterior. `keepalive` deja salir la petición aunque la
  * página navegue a `/login` enseguida.
+ *
+ * Devuelve una promesa para que el cierre de sesión la espere ANTES de cerrar
+ * la sesión en el backend: después, la desuscripción volvería con 401 y el
+ * navegador seguiría recibiendo avisos del usuario que salió. Nunca falla y
+ * nunca tarda más de `PLAZO_DESUSCRIBIR_MS`: `serviceWorker.ready` no se
+ * resuelve jamás si no hay service worker registrado.
  */
-export function desuscribirAlCerrarSesion(): void {
-	if (!webPushSoportado() || Notification.permission !== 'granted') return;
+export function desuscribirAlCerrarSesion(): Promise<void> {
+	if (!webPushSoportado() || Notification.permission !== 'granted') return Promise.resolve();
 	const h = headers();
-	void navigator.serviceWorker.ready
+	const desuscribir = navigator.serviceWorker.ready
 		.then((reg) => reg.pushManager.getSubscription())
-		.then((sub) => {
+		.then(async (sub) => {
 			if (!sub) return;
-			void fetch(`${BASE}/desuscribir`, {
+			/// `ignorar401`: si la sesión ya no vale, quien está saliendo no
+			/// necesita que lo manden al login por esto.
+			await fetchConSesion(`${BASE}/desuscribir`, {
 				method: 'POST',
 				headers: h,
 				body: JSON.stringify({ endpoint: sub.endpoint }),
-				keepalive: true
-			}).catch(() => {});
+				keepalive: true,
+				ignorar401: true
+			});
 		})
 		.catch(() => {});
+	const plazo = new Promise<void>((r) => setTimeout(r, PLAZO_DESUSCRIBIR_MS));
+	return Promise.race([desuscribir, plazo]);
 }
 
 /** Reenvía mi última notificación como aviso, para comprobar que llega. */
 export async function probarWebPush(): Promise<{ enviados: number; fallidos: number }> {
-	const res = await fetch(`${BASE}/prueba`, { method: 'POST', headers: headers(), body: '{}' });
+	const res = await fetchConSesion(`${BASE}/prueba`, {
+		method: 'POST',
+		headers: headers(),
+		body: '{}'
+	});
 	const body = await res.json().catch(() => ({}));
 	if (!res.ok) throw new Error(body?.error ?? 'No se pudo enviar la prueba');
 	return body;

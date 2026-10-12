@@ -26,6 +26,15 @@
 		claseBadgeEstado,
 		type AccionEstado
 	} from '$lib/editor/builders/cierres-finales-estado';
+	import {
+		armarPago,
+		pagoCompleto,
+		type DatosPago,
+		type FormPago
+	} from '$lib/api/liquidacionesTercerosPagos';
+	import { hoyColombia } from '$lib/pagos/medios';
+	import CamposPagoCierre from './CamposPagoCierre.svelte';
+	import PagoCierreResumen from './PagoCierreResumen.svelte';
 
 	interface CierreActivo {
 		id: string;
@@ -83,6 +92,17 @@
 	let confirmando = $state<AccionEstado | null>(null);
 	let motivo = $state('');
 
+	/// PAGADA pide fecha, medio, referencia y soporte antes de mandar nada:
+	/// el backend la rechaza sin fecha y medio.
+	let pagando = $state<AccionEstado | null>(null);
+	const formPagoVacio = (): FormPago => ({
+		fecha: hoyColombia(),
+		medio: 'TRANSFERENCIA',
+		referencia: '',
+		archivo: null
+	});
+	let formPago = $state<FormPago>(formPagoVacio());
+
 	let loteAbierto = $state(false);
 	let loteResultado = $state<{
 		total: number;
@@ -111,6 +131,7 @@
 		abierto = false;
 		confirmando = null;
 		motivo = '';
+		pagando = null;
 	}
 
 	/** Extrae el mensaje útil de un error de axios. */
@@ -118,11 +139,17 @@
 		return e?.response?.data?.error || e?.message || 'Error desconocido';
 	}
 
-	async function ejecutar(accion: AccionEstado) {
+	async function ejecutar(accion: AccionEstado, pago?: DatosPago) {
 		if (!cierre || enviando) return;
 
 		if (accion.exigeMotivo && !motivo.trim()) {
 			confirmando = accion;
+			abierto = false;
+			return;
+		}
+		if (accion.estado === 'PAGADA' && !pago) {
+			formPago = formPagoVacio();
+			pagando = accion;
 			abierto = false;
 			return;
 		}
@@ -134,7 +161,8 @@
 				cierre.id,
 				accion.estado,
 				motivo.trim() || undefined,
-				cierre.version
+				cierre.version,
+				pago ?? null
 			);
 			onCambiado?.({
 				id: cierre.id,
@@ -162,9 +190,27 @@
 			}
 			confirmando = null;
 			motivo = '';
+			pagando = null;
 		} finally {
 			enviando = false;
 		}
+	}
+
+	/// Sube el soporte (si lo hay) y marca PAGADA con los datos del pago.
+	async function confirmarPago() {
+		if (!pagando || enviando || !pagoCompleto(formPago)) return;
+		const accion = pagando;
+		let pago: DatosPago;
+		try {
+			enviando = true;
+			pago = await armarPago(formPago);
+		} catch (e: any) {
+			mensaje = { tono: 'error', texto: textoError(e) };
+			return;
+		} finally {
+			enviando = false;
+		}
+		await ejecutar(accion, pago);
 	}
 
 	async function ejecutarLote() {
@@ -243,6 +289,13 @@
 		<span class="ceh-badge {claseBadgeEstado(cierre.estado)}" title="Estado de la hoja activa">
 			{cierre.estado}
 		</span>
+		<!-- Cuándo y cómo se pagó (o «sin registro» en los PAGADA de antes). -->
+		<PagoCierreResumen
+			cierreId={cierre.id}
+			estado={cierre.estado}
+			{areas}
+			refresco={cierre.version}
+		/>
 
 		{#if acciones.length}
 			<div class="ceh-menu-wrap">
@@ -342,6 +395,41 @@
 					disabled={enviando || !motivo.trim()}
 				>
 					{enviando ? 'Aplicando…' : confirmando.etiqueta}
+				</button>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<!-- ── Datos del pago (PAGADA) ──────────────────────────────────────── -->
+{#if pagando && cierre}
+	<div
+		class="ceh-backdrop"
+		role="presentation"
+		onclick={(e) => {
+			if (e.target === e.currentTarget && !enviando) cerrarMenus();
+		}}
+	>
+		<div
+			class="ceh-dialog ceh-dialog-wide"
+			role="dialog"
+			aria-modal="true"
+			aria-label="Datos del pago"
+			tabindex="-1"
+		>
+			<h3>{pagando.etiqueta} · {cierre.placa}</h3>
+			<p class="ceh-dialog-sub">
+				Registra cuándo y cómo se le pagó al propietario. Queda en el cierre y en su historial.
+			</p>
+			<CamposPagoCierre bind:form={formPago} deshabilitado={enviando} />
+			<div class="ceh-dialog-actions">
+				<button class="btn-secondary" onclick={cerrarMenus} disabled={enviando}>Cancelar</button>
+				<button
+					class="btn-primary"
+					onclick={confirmarPago}
+					disabled={enviando || !pagoCompleto(formPago)}
+				>
+					{enviando ? 'Guardando…' : 'Marcar pagada'}
 				</button>
 			</div>
 		</div>

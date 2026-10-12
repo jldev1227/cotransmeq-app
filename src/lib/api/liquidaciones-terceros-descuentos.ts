@@ -534,14 +534,17 @@ export const liquidacionesTercerosDescuentosAPI = {
 		liquidacionTerceroId: string,
 		estado: string,
 		motivo?: string,
-		baseVersion?: number | null
+		baseVersion?: number | null,
+		/// Obligatorio para PAGADA: fecha y medio (ver `liquidacionesTercerosPagos.ts`).
+		pago?: import('./liquidacionesTercerosPagos').DatosPago | null
 	) {
 		const response = await apiClient.patch(
 			`/api/liquidaciones-terceros/${liquidacionTerceroId}/estado`,
 			{
 				estado,
 				motivo_anulacion: motivo,
-				...(baseVersion != null ? { base_version: baseVersion } : {})
+				...(baseVersion != null ? { base_version: baseVersion } : {}),
+				...(pago ? { pago } : {})
 			}
 		);
 		return response.data;
@@ -565,6 +568,8 @@ export const liquidacionesTercerosDescuentosAPI = {
 		ids?: string[];
 		hacia: string;
 		motivo?: string | null;
+		/** Mismo pago para todas las hojas. Obligatorio si `hacia` es PAGADA. */
+		pago?: import('./liquidacionesTercerosPagos').DatosPago | null;
 	}): Promise<{
 		total: number;
 		cambiados: Array<{

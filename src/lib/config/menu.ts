@@ -10,12 +10,14 @@
  */
 import type { ComponentType } from 'svelte';
 import {
+	BanknoteArrowDown,
 	BookUser,
 	Building2,
 	Calculator,
 	CalendarCheck,
 	ClipboardPen,
 	FileText,
+	Fuel,
 	HandCoins,
 	IdCard,
 	Inbox,
@@ -26,7 +28,9 @@ import {
 	ReceiptText,
 	Route,
 	ShieldCheck,
+	Siren,
 	Timer,
+	ToolCase,
 	TriangleAlert,
 	Truck,
 	UserCog,
@@ -60,6 +64,15 @@ export const MENU_ITEMS: MenuItem[] = [
 		icon: Truck,
 		badge: null,
 		href: '/dashboard/flota'
+	},
+	{
+		id: 'mantenimiento',
+		label: 'Mantenimiento',
+		/// La caja de herramientas del taller. La llave inglesa ya es de
+		/// «Acciones C/P», y las dos se confundían a este tamaño.
+		icon: ToolCase,
+		badge: null,
+		href: '/dashboard/mantenimiento'
 	},
 	{
 		id: 'conductores',
@@ -135,6 +148,15 @@ export const MENU_ITEMS: MenuItem[] = [
 		href: '/dashboard/acciones-correctivas'
 	},
 	{
+		id: 'incidentes',
+		label: 'Incidentes',
+		/// Accidentes, incidentes y casi-accidentes con su investigación. La
+		/// sirena y no el triángulo de alerta, que ya es de «Salidas NC».
+		icon: Siren,
+		badge: null,
+		href: '/dashboard/incidentes'
+	},
+	{
 		id: 'evaluaciones',
 		label: 'Evaluaciones',
 		/// Lista de criterios calificados. Sin portapapeles: ese glifo queda
@@ -157,6 +179,14 @@ export const MENU_ITEMS: MenuItem[] = [
 		icon: Receipt,
 		badge: null,
 		href: '/dashboard/viaticos'
+	},
+	{
+		id: 'combustible',
+		label: 'Combustible',
+		/// Tanqueos y rendimiento en km por galón de la flota.
+		icon: Fuel,
+		badge: null,
+		href: '/dashboard/combustible'
 	},
 	{
 		id: 'formularios',
@@ -211,6 +241,15 @@ export const MENU_ITEMS: MenuItem[] = [
 		/// listado de `/dashboard/liquidaciones-servicios` es la capa pre-Univer
 		/// y sigue accesible por url, pero ya no es la puerta del módulo.
 		href: '/dashboard/liquidaciones-servicios'
+	},
+	{
+		id: 'cartera',
+		label: 'Cartera',
+		/// Billete que ENTRA: lo que los clientes le deben a la empresa. «Liq.
+		/// Terceros» usa las monedas en la mano, que es lo que sale.
+		icon: BanknoteArrowDown,
+		badge: null,
+		href: '/dashboard/cartera'
 	},
 	{
 		id: 'liquidaciones-terceros',

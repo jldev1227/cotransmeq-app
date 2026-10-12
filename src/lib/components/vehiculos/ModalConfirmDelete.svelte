@@ -4,6 +4,7 @@
 	import { vehiculosAPI } from '$lib/api/apiClient';
 	import { socketUtils } from '$lib/socket';
 	import { flotaStore } from '$lib/stores/flota';
+	import { toast } from '$lib/stores/toast';
 
 	export let isOpen = false;
 	export let vehiculo: any = null;
@@ -58,7 +59,9 @@
 			cierreTimer = setTimeout(terminar, 2000);
 		} catch (error) {
 			console.error('Error al eliminar vehículo:', error);
-			alert('Error al eliminar el vehículo. Por favor, intente nuevamente.');
+			toast.error('No se pudo eliminar el vehículo', {
+				description: (error as Error)?.message || 'Intenta de nuevo.'
+			});
 		} finally {
 			isDeleting = false;
 		}

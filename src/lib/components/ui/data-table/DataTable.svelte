@@ -49,6 +49,12 @@
 		onSelectionChange?: (newSelected: Set<string | number>) => void;
 	} = $props();
 
+	/// Las columnas se indexan por nombre (`key: string`) y `T` solo garantiza
+	/// `id`: el acceso genérico pasa por aquí en vez de por `row[col.key]`.
+	function valorCelda(row: T, key: string): unknown {
+		return (row as Record<string, unknown>)[key] ?? '';
+	}
+
 	let sortField = $state<string | null>(null);
 	let sortDirection = $state<'asc' | 'desc'>('asc');
 
@@ -204,7 +210,7 @@
 								{#if col.render}
 									{@html col.render(row)}
 								{:else}
-									{row[col.key] ?? ''}
+									{valorCelda(row, col.key)}
 								{/if}
 							</td>
 						{/each}

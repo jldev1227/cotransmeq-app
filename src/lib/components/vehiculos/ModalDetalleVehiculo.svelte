@@ -4,6 +4,8 @@
 	import { vehiculosAPI } from '$lib/api/apiClient';
 	import { errorDeApi, avisarErrorGuardado } from '$lib/components/directorio/formulario';
 	import DocumentosVehiculo from './DocumentosVehiculo.svelte';
+	import MantenimientoVehiculo from '$lib/components/mantenimiento/MantenimientoVehiculo.svelte';
+	import { authStore } from '$lib/stores/auth';
 	import VisorDocumentoVehiculo from './VisorDocumentoVehiculo.svelte';
 	import type { DocumentoVehiculo } from '$lib/api/vehiculosDocumentos';
 
@@ -31,6 +33,12 @@
 		inactivo: { etiqueta: 'Inactivo', color: '#cbd5e1' },
 		desvinculado: { etiqueta: 'Desvinculado', color: '#fca5a5' }
 	};
+
+	/// La pestaña Mantenimiento solo para quien tiene ese módulo: la ficha la
+	/// ve todo el mundo (`flota` es general) y la API respondería 403.
+	const nivelMantenimiento = $derived(
+		$authStore.user ? authStore.getAccessLevel('mantenimiento') : null
+	);
 
 	let v = $state<any>(null);
 	let cargando = $state(false);
@@ -77,7 +85,8 @@
 		{ id: 'general', label: 'General' },
 		{ id: 'tecnico', label: 'Ficha técnica' },
 		{ id: 'propietario', label: 'Propietario' },
-		{ id: 'documentos', label: 'Documentos' }
+		{ id: 'documentos', label: 'Documentos' },
+		...(nivelMantenimiento ? [{ id: 'mantenimiento', label: 'Mantenimiento' }] : [])
 	]}
 	bind:tabActiva={tab}
 	{cargando}
@@ -110,6 +119,13 @@
 							vehiculoId={v.id}
 							puedeEditar={!!oneditar}
 							onver={(doc, titulo) => (visor = { doc, titulo })}
+						/>
+					</div>
+				{:else if activa === 'mantenimiento'}
+					<div class="md-completo">
+						<MantenimientoVehiculo
+							vehiculoId={v.id}
+							puedeEscribir={nivelMantenimiento === 'full'}
 						/>
 					</div>
 				{:else}

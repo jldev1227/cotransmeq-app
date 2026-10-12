@@ -5,6 +5,40 @@
   import { fade, fly, scale } from 'svelte/transition';
   import { elasticOut } from 'svelte/easing';
   import { portalSession, isAuthenticated, portalFetch } from '$lib/stores/portalStore';
+  import { toast } from 'svelte-sonner';
+
+  /**
+   * Aviso del portal en lugar del `alert()` nativo, que congelaba la pantalla
+   * y en Android se leía como un error del sistema.
+   *
+   * El conductor lo lee al sol y con el teléfono en una mano: dura más que en
+   * el dashboard, va sin la «x» de 20 px (se descarta deslizando o solo) y la
+   * acción, si la hay, mide 44 px como cualquier botón del portal.
+   */
+  function avisoPortal(
+    tipo: 'error' | 'warning' | 'success',
+    titulo: string,
+    opciones: { descripcion?: string; reintentar?: () => void } = {}
+  ) {
+    toast[tipo](titulo, {
+      description: opciones.descripcion,
+      duration: 8000,
+      closeButton: false,
+      class: 'aviso-portal',
+      action: opciones.reintentar
+        ? { label: 'Reintentar', onClick: opciones.reintentar }
+        : undefined
+    });
+  }
+
+  /// Sin red, `fetch` lanza un «Failed to fetch» que no le dice nada a nadie.
+  function explicarError(err: any, porDefecto: string): string {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return 'Sin conexión a internet. Conéctate e inténtalo de nuevo.';
+    }
+    if (err instanceof TypeError) return 'No hubo respuesta del servidor. Inténtalo de nuevo.';
+    return err?.message || err?.error || porDefecto;
+  }
 
   interface Desprendible {
     id: string;
@@ -265,7 +299,10 @@
         goto('/public/portal');
         return;
       }
-      alert(err.message || 'Error al generar PDF');
+      avisoPortal('error', 'No se pudo abrir el desprendible', {
+        descripcion: explicarError(err, 'Inténtalo de nuevo en un momento.'),
+        reintentar: () => verDesprendible(id)
+      });
     } finally {
       generandoPdf = null;
     }
@@ -312,11 +349,16 @@
         return;
       }
       if (err.status === 404) {
-        alert('La prima ya no está disponible.');
+        avisoPortal('warning', 'Esta prima ya no está disponible', {
+          descripcion: 'Actualizamos la lista.'
+        });
         await cargarDesprendibles();
         return;
       }
-      alert(err.message || 'Error al generar el PDF de la prima');
+      avisoPortal('error', 'No se pudo abrir la prima', {
+        descripcion: explicarError(err, 'Inténtalo de nuevo en un momento.'),
+        reintentar: () => verPrima(primaId)
+      });
     } finally {
       generandoPdfPrima = null;
     }
@@ -539,9 +581,13 @@
           }
         }
         cerrarFirmaModal();
-        alert(yaFirmadoMsg);
+        avisoPortal('success', yaFirmadoMsg);
       } else {
-        alert(err.message || 'Error al enviar la firma');
+        /// El modal sigue abierto con la firma dibujada: su propio botón
+        /// «Enviar» es el reintento, sin volver a firmar.
+        avisoPortal('error', 'No se pudo enviar la firma', {
+          descripcion: `${explicarError(err, 'Inténtalo de nuevo.')} Tu firma sigue en pantalla.`
+        });
       }
     } finally {
       firmaEnviando = false;
@@ -1350,6 +1396,21 @@
 {/if}
 
 <style>
+  /* Avisos del portal (ver `avisoPortal`): texto un punto más grande y la
+     acción a 44 px. Global porque el toast se pinta en el `<Toaster>` del
+     layout raíz, fuera de este componente; la clase lo limita al portal. */
+  :global([data-sonner-toast][data-styled='true'].tm-toast.aviso-portal [data-title]) {
+    font-size: 15px;
+  }
+  :global([data-sonner-toast][data-styled='true'].tm-toast.aviso-portal [data-description]) {
+    font-size: 14px;
+  }
+  :global([data-sonner-toast][data-styled='true'].tm-toast.aviso-portal [data-button]) {
+    min-height: 44px;
+    padding: 0 16px;
+    font-size: 14px;
+  }
+
   /* ═══ TOKENS — landing-transmeralda editorial ═══ */
   .desprendibles-page {
     --bg: #faf7f2;

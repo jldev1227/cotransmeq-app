@@ -15,16 +15,19 @@
 	export let maxRegistros = 12;
 	export let onEstadoChange: () => void = () => {};
 
-	const temaClasses = {
-		neutral: {
-			wrap: 'border-[var(--fm-border)] bg-[var(--fm-surface)]',
-			header: 'text-[var(--fm-text)]',
-			btn: 'bg-[var(--fm-text)] hover:bg-[var(--fm-text-secondary)]',
-			card: 'border-[var(--fm-border)] bg-[var(--fm-bg)]'
-		}
+	const neutral = {
+		wrap: 'border-[var(--fm-border)] bg-[var(--fm-surface)]',
+		header: 'text-[var(--fm-text)]',
+		btn: 'bg-[var(--fm-text)] hover:bg-[var(--fm-text-secondary)]',
+		card: 'border-[var(--fm-border)] bg-[var(--fm-bg)]'
 	};
-	temaClasses.amber = temaClasses.neutral;
-	temaClasses.slate = temaClasses.neutral;
+	/// Los tres temas comparten hoy la paleta neutra; se conservan como claves
+	/// porque las pantallas siguen pasando `tema` por nombre.
+	const temaClasses: Record<'amber' | 'slate' | 'neutral', typeof neutral> = {
+		neutral,
+		amber: neutral,
+		slate: neutral
+	};
 
 	$: clases = temaClasses[tema];
 

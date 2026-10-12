@@ -1,6 +1,8 @@
 import { browser } from '$app/environment';
 
-const API_URL = browser ? import.meta.env.VITE_API_URL : 'http://localhost:4000';
+/// Misma base que `apiClient`, con su respaldo: sin `VITE_API_URL` se pedía a
+/// `undefined/api/...`. Las rutas con sesión salen por `fetchConSesion`.
+import { API_BASE as API_URL, fetchConSesion } from './fetchConSesion';
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
 
@@ -126,6 +128,9 @@ class InduccionesAPI {
 	// ── CRUD ──────────────────────────────────────────────────────────────────
 
 	async crear(data: CreateInduccionInput): Promise<InduccionVisitante> {
+		/// `fetch` a secas: lo llama el registro público del visitante
+		/// (`/public/inducciones`), sin sesión del equipo. Un 401 aquí no es una
+		/// sesión vencida y no debe mandarlo al login del dashboard.
 		const response = await fetch(this.baseUrl, {
 			method: 'POST',
 			headers: await this.getAuthHeaders(),
@@ -153,7 +158,7 @@ class InduccionesAPI {
 
 		const url = params.toString() ? `${this.baseUrl}?${params}` : this.baseUrl;
 
-		const response = await fetch(url, {
+		const response = await fetchConSesion(url, {
 			headers: await this.getAuthHeaders()
 		});
 
@@ -169,7 +174,7 @@ class InduccionesAPI {
 	}
 
 	async obtenerPorId(id: string): Promise<InduccionVisitante> {
-		const response = await fetch(`${this.baseUrl}/${id}`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${id}`, {
 			headers: await this.getAuthHeaders()
 		});
 
@@ -188,7 +193,7 @@ class InduccionesAPI {
 	}
 
 	async actualizar(id: string, data: UpdateInduccionInput): Promise<InduccionVisitante> {
-		const response = await fetch(`${this.baseUrl}/${id}`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${id}`, {
 			method: 'PATCH',
 			headers: await this.getAuthHeaders(),
 			body: JSON.stringify(data)
@@ -204,7 +209,7 @@ class InduccionesAPI {
 	}
 
 	async eliminar(id: string): Promise<void> {
-		const response = await fetch(`${this.baseUrl}/${id}`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${id}`, {
 			method: 'DELETE',
 			headers: await this.getAuthHeaders()
 		});
@@ -217,7 +222,7 @@ class InduccionesAPI {
 	// ── Estadísticas ─────────────────────────────────────────────────────────
 
 	async obtenerEstadisticas(): Promise<EstadisticasInducciones> {
-		const response = await fetch(`${this.baseUrl}/estadisticas`, {
+		const response = await fetchConSesion(`${this.baseUrl}/estadisticas`, {
 			headers: await this.getAuthHeaders()
 		});
 
@@ -232,7 +237,7 @@ class InduccionesAPI {
 	// ── Exportación ───────────────────────────────────────────────────────────
 
 	async exportarExcel(id: string): Promise<Blob> {
-		const response = await fetch(`${this.baseUrl}/${id}/exportar/excel`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${id}/exportar/excel`, {
 			headers: await this.getAuthHeaders()
 		});
 
@@ -244,7 +249,7 @@ class InduccionesAPI {
 	}
 
 	async exportarPDF(id: string): Promise<Blob> {
-		const response = await fetch(`${this.baseUrl}/${id}/exportar/pdf`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${id}/exportar/pdf`, {
 			headers: await this.getAuthHeaders()
 		});
 

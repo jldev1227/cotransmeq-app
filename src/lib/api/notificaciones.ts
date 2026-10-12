@@ -1,6 +1,8 @@
 import { browser } from '$app/environment';
 
-const API_URL = browser ? import.meta.env.VITE_API_URL : 'http://localhost:4000';
+/// Misma base que `apiClient`, con su respaldo: sin `VITE_API_URL` se pedía a
+/// `undefined/api/...`. Las rutas con sesión salen por `fetchConSesion`.
+import { API_BASE as API_URL, fetchConSesion } from './fetchConSesion';
 
 export interface Notificacion {
 	id: string;
@@ -33,7 +35,7 @@ function getAuthHeaders(): Record<string, string> {
 
 export const notificacionesApi = {
 	async listar(page = 1, limit = 20): Promise<NotificacionesResponse> {
-		const res = await fetch(
+		const res = await fetchConSesion(
 			`${API_URL}/api/notificaciones?page=${page}&limit=${limit}`,
 			{ headers: getAuthHeaders() }
 		);
@@ -42,7 +44,7 @@ export const notificacionesApi = {
 	},
 
 	async contarNoLeidas(): Promise<number> {
-		const res = await fetch(
+		const res = await fetchConSesion(
 			`${API_URL}/api/notificaciones/no-leidas`,
 			{ headers: getAuthHeaders() }
 		);
@@ -52,7 +54,7 @@ export const notificacionesApi = {
 	},
 
 	async marcarLeida(id: string): Promise<void> {
-		const res = await fetch(
+		const res = await fetchConSesion(
 			`${API_URL}/api/notificaciones/${id}/leida`,
 			{ method: 'PATCH', headers: getAuthHeaders(), body: JSON.stringify({}) }
 		);
@@ -60,7 +62,7 @@ export const notificacionesApi = {
 	},
 
 	async marcarTodasLeidas(): Promise<void> {
-		const res = await fetch(
+		const res = await fetchConSesion(
 			`${API_URL}/api/notificaciones/marcar-todas`,
 			{ method: 'PATCH', headers: getAuthHeaders(), body: JSON.stringify({}) }
 		);

@@ -228,7 +228,7 @@ export function getEstadoBgColor(estado: string): string {
 /**
  * Formatear número de planilla con prefijo TM-
  */
-export function formatearNumeroPlanilla(numero: string | number | null): string {
+export function formatearNumeroPlanilla(numero: string | number | null | undefined): string {
 	if (!numero) return '';
 
 	const numStr = numero.toString();

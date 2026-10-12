@@ -16,7 +16,7 @@ import {
 } from '@univerjs/core';
 import type { FacturaLiquidacion } from '$lib/api/facturacionLiquidaciones';
 
-import { allBorders, colLetra, comoEnlace, comoTexto, contraste, fechaCorta, GREEN, MUTED, TEXT_DARK, TOTALES_BG, ZEBRA_BG } from './historial-comun';
+import { allBorders, colLetra, comoEnlace, comoTexto, contraste, fechaCorta, fechaDeCalendario, GREEN, MUTED, TEXT_DARK, TOTALES_BG, ZEBRA_BG } from './historial-comun';
 
 export const FACTURAS_SHEET_ID = 'hoja-facturas';
 
@@ -28,13 +28,18 @@ export const FCOL = {
 	LIQUIDACIONES: 4,
 	CONSECUTIVOS: 5,
 	VALOR_TOTAL: 6,
-	FACTURADO_POR: 7,
-	ANULADA_POR: 8,
-	MOTIVO: 9,
-	OBSERVACIONES: 10
+	/// Cartera: vencimiento, saldo y estado de cobro. Van junto al valor
+	/// porque es lo que se compara con él; el resto se corre a la derecha.
+	VENCE: 7,
+	SALDO: 8,
+	COBRO: 9,
+	FACTURADO_POR: 10,
+	ANULADA_POR: 11,
+	MOTIVO: 12,
+	OBSERVACIONES: 13
 } as const;
 
-export const FACTURAS_TOTAL_COLS = 11;
+export const FACTURAS_TOTAL_COLS = 14;
 
 const HEADERS = [
 	'#',
@@ -44,17 +49,29 @@ const HEADERS = [
 	'LIQ.',
 	'CONSECUTIVOS',
 	'VALOR TOTAL',
+	'VENCE',
+	'SALDO',
+	'COBRO',
 	'FACTURADO POR',
 	'ANULADA POR',
 	'MOTIVO ANULACIÓN',
 	'OBSERVACIONES'
 ];
 
-const WIDTHS = [44, 130, 104, 96, 56, 320, 130, 170, 170, 240, 240];
+const WIDTHS = [44, 130, 104, 96, 56, 320, 130, 104, 130, 120, 170, 170, 240, 240];
 
 const COLOR_ESTADO_FACTURA: Record<string, string> = {
 	ACTIVA: '#166534',
 	ANULADA: '#B91C1C'
+};
+
+/// Mismo semáforo que la página de Cartera (`ESTADO_CARTERA`), en hex: en
+/// cotransmeq la escala verde de Tailwind es naranja.
+const COBRO: Record<string, { etiqueta: string; color: string }> = {
+	pendiente: { etiqueta: 'Pendiente', color: '#2563EB' },
+	abonada: { etiqueta: 'Abonada', color: '#D97706' },
+	pagada: { etiqueta: 'Pagada', color: '#16A34A' },
+	vencida: { etiqueta: 'Vencida', color: '#DC2626' }
 };
 
 export interface FilaFactura {
@@ -117,6 +134,23 @@ export function filaFacturaCeldas(f: FacturaLiquidacion, zebra: boolean, num: nu
 		s: consecutivos ? comoEnlace(apagado(zebra)) : apagado(zebra)
 	};
 	fila[FCOL.VALOR_TOTAL] = { v: Number(f.valor_total) || 0, s: { ...money(zebra), bl: 1 } };
+	/// Una anulada no se cobra: sin `cartera` las tres quedan vacías.
+	const cobro = f.cartera ? COBRO[f.cartera.estado] : null;
+	fila[FCOL.VENCE] = {
+		v: f.cartera && f.fecha_vencimiento ? fechaDeCalendario(f.fecha_vencimiento) : '',
+		s: centrado(zebra)
+	};
+	fila[FCOL.SALDO] = f.cartera
+		? { v: f.cartera.saldo, s: money(zebra) }
+		: { v: '', s: apagado(zebra) };
+	fila[FCOL.COBRO] = cobro
+		? {
+				v:
+					cobro.etiqueta +
+					(f.cartera!.estado === 'vencida' ? ` ${f.cartera!.dias_vencida} d` : ''),
+				s: { ...centrado(zebra), bl: 1, cl: { rgb: cobro.color } }
+			}
+		: { v: '', s: apagado(zebra) };
 	fila[FCOL.FACTURADO_POR] = { v: f.facturado_por?.nombre ?? '', s: apagado(zebra) };
 	fila[FCOL.ANULADA_POR] = { v: f.anulado_por?.nombre ?? '', s: apagado(zebra) };
 	fila[FCOL.MOTIVO] = { v: f.motivo_anulacion ?? '', s: apagado(zebra) };

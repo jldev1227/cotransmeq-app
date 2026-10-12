@@ -41,25 +41,35 @@
 
 	async function loadData() {
 		loading = true;
-		try {
-			const [profileRes, sessionRes, firmaRes] = await Promise.all([
-				authAPI.getProfile(),
-				authAPI.getMySession(),
-				authAPI.getMyFirma()
-			]);
-			if (profileRes.data?.id) {
-				user = profileRes.data;
-			}
-			sesion = sessionRes.data?.sesion || null;
-			firmaSignedUrl = firmaRes.data?.firma_signed_url || null;
-		} catch (err: any) {
-			console.error('Error cargando perfil:', err);
-			if (err?.response?.status === 401) {
-				authStore.logout();
-			}
-		} finally {
-			loading = false;
+		/// Cada parte por su lado: con `Promise.all`, que fallara solo la firma
+		/// dejaba también sin sesión ni datos frescos, y el error iba únicamente
+		/// a la consola. La pantalla mostraba «sin sesión registrada» y «sin
+		/// firma» como si fueran ciertos.
+		const [profileRes, sessionRes, firmaRes] = await Promise.allSettled([
+			authAPI.getProfile(),
+			authAPI.getMySession(),
+			authAPI.getMyFirma()
+		]);
+		if (profileRes.status === 'fulfilled' && profileRes.value.data?.id) {
+			user = profileRes.value.data;
 		}
+		if (sessionRes.status === 'fulfilled') sesion = sessionRes.value.data?.sesion || null;
+		if (firmaRes.status === 'fulfilled') {
+			firmaSignedUrl = firmaRes.value.data?.firma_signed_url || null;
+		}
+		const fallos = [
+			{ r: profileRes, que: 'tus datos' },
+			{ r: sessionRes, que: 'la sesión' },
+			{ r: firmaRes, que: 'la firma' }
+		].filter((f) => f.r.status === 'rejected');
+		if (fallos.some((f) => (f.r as PromiseRejectedResult).reason?.response?.status === 401)) {
+			authStore.logout();
+		} else if (fallos.length) {
+			toast.error('No se pudo cargar parte del perfil', {
+				description: `Falló: ${fallos.map((f) => f.que).join(', ')}. Recarga la página para reintentar.`
+			});
+		}
+		loading = false;
 	}
 
 	function startEditProfile() {

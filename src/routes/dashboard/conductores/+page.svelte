@@ -1,7 +1,8 @@
 <script lang="ts">
 	import { onMount, onDestroy } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { browser } from '$app/environment';
+	import { listadoConductores } from '$lib/stores/volverListado';
 	import { fly, fade, scale } from 'svelte/transition';
 	import { page as pageState } from '$app/state';
 	import { conductoresAPI } from '$lib/api/apiClient';
@@ -117,6 +118,12 @@
 
 	let filtros = $state<FiltrosConductores>(estadoUrl.leer(pageState.url));
 	let mostrarFiltros = $state(false);
+
+	/// Cada URL en la que se asienta el listado queda como destino del
+	/// «Volver» del perfil del conductor.
+	afterNavigate(({ to }) => {
+		if (to?.url) listadoConductores.recordar(to.url.pathname + to.url.search);
+	});
 
 	/// Atajos de lectura, para no cambiar todo el marcado de golpe.
 	const vistaActual = $derived(filtros.vista_lista as VistaActual);

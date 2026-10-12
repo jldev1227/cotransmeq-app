@@ -32,6 +32,20 @@ export interface FacturaLiquidacion {
 	items: FacturaLiquidacionItem[];
 	created_at: string;
 	updated_at: string;
+	/// Condiciones de cobro (cartera). Opcionales: un backend anterior no las manda.
+	cliente_id?: string | null;
+	fecha_emision?: string | null;
+	plazo_dias?: number;
+	fecha_vencimiento?: string | null;
+	ajuste_valor?: number;
+	/** Saldo y estado de cobro. `null` en una factura anulada (no se cobra). */
+	cartera?: {
+		saldo: number;
+		aplicado: number;
+		estado: 'pendiente' | 'abonada' | 'pagada' | 'vencida';
+		dias_vencida: number;
+		abonos: number;
+	} | null;
 }
 
 export interface FacturaInfoMap {
@@ -73,6 +87,10 @@ export const facturacionLiquidacionesAPI = {
 		numero_factura: string;
 		liquidacion_ids: string[];
 		observaciones?: string;
+		/// Sin ellos: valor = suma de las liquidaciones, emisión hoy, 30 días.
+		valor_total?: number | null;
+		fecha_emision?: string | null;
+		plazo_dias?: number | null;
 	}): Promise<FacturaLiquidacion> {
 		const res = await apiClient.post<FacturaLiquidacion>(
 			'/api/facturacion-liquidaciones',
@@ -170,6 +188,26 @@ export const facturacionLiquidacionesAPI = {
 		const res = await apiClient.delete(
 			`/api/facturacion-liquidaciones/${facturaId}/items/${liquidacionId}`,
 			destino === 'APROBADA' ? { data: { destino } } : undefined
+		);
+		return res.data;
+	},
+
+	/**
+	 * Corrige valor, emisión, plazo o vencimiento. Misma operación que la de
+	 * cartera, por la puerta de facturación.
+	 */
+	async actualizarCondiciones(
+		id: string,
+		c: {
+			valor_total?: number | null;
+			fecha_emision?: string | null;
+			plazo_dias?: number | null;
+			fecha_vencimiento?: string | null;
+		}
+	): Promise<FacturaLiquidacion> {
+		const res = await apiClient.patch<FacturaLiquidacion>(
+			`/api/facturacion-liquidaciones/${id}/condiciones`,
+			c
 		);
 		return res.data;
 	},

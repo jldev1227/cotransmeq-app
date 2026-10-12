@@ -1560,8 +1560,9 @@ function writeImpuestoRow(ws: any, row: number, c: any, isSub: boolean) {
 		};
 		cell.alignment = { horizontal: cd.align, vertical: 'middle' };
 		cell.border = border();
+		// Ninguna de estas dos celdas es un porcentaje: el formato `PCT_FMT`
+		// que había aquí no podía aplicarse nunca (copiado de otra fila).
 		if (cd.money && typeof cd.v === 'number') cell.numFmt = COP_FMT;
-		else if (cd.pct && cd.v !== '') cell.numFmt = PCT_FMT;
 	});
 	ws.getRow(row).height = 16;
 }

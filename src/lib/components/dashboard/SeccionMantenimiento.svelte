@@ -1,10 +1,15 @@
 <script lang="ts">
 	/**
-	 * Sección «Mantenimiento»: estado de cada placa según su último
-	 * preoperacional, ítems que más fallan, mantenimientos del periodo,
-	 * kilometraje y documentos vencidos o por vencer.
+	 * Sección «Mantenimiento»: planes vencidos o próximos, estado de cada
+	 * placa según su último preoperacional, ítems que más fallan,
+	 * mantenimientos del periodo, kilometraje y documentos vencidos o por
+	 * vencer.
+	 *
+	 * Los enlaces que dependen de otro módulo llegan del backend en `null`
+	 * cuando quien mira no lo tiene (el área mantenimiento no tiene
+	 * `formularios`): así la sección no lleva a páginas que el guardia niega.
 	 */
-	import { AlertTriangle, FileWarning, Gauge, Wrench } from 'lucide-svelte';
+	import { AlertTriangle, FileWarning, Gauge, ToolCase, Wrench } from 'lucide-svelte';
 	import Tarjeta from './Tarjeta.svelte';
 	import Kpi from './Kpi.svelte';
 	import Grafica from './Grafica.svelte';
@@ -18,11 +23,42 @@
 	let { datos }: Props = $props();
 
 	const k = $derived(datos.kpis);
+	/// `planes` no existe en un backend anterior al módulo de mantenimiento.
+	const planes = $derived(datos.planes ?? null);
+	const restantePlan = (p: any) =>
+		[
+			p.km_restantes != null
+				? p.km_restantes <= 0
+					? `${numero(-p.km_restantes)} km de más`
+					: `faltan ${numero(p.km_restantes)} km`
+				: null,
+			p.dias_restantes != null
+				? p.dias_restantes < 0
+					? `hace ${-p.dias_restantes} d`
+					: p.dias_restantes === 0
+						? 'hoy'
+						: `en ${p.dias_restantes} d`
+				: null
+		]
+			.filter(Boolean)
+			.join(' · ');
 	const vencidos = $derived((datos.vencimientos.items as any[]).filter((d) => d.dias < 0));
 	const proximos = $derived((datos.vencimientos.items as any[]).filter((d) => d.dias >= 0));
 </script>
 
 <div class="sec-kpis">
+	{#if planes}
+		<Kpi
+			etiqueta="Planes vencidos"
+			valor={numero(planes.vencidos)}
+			detalle={`${numero(planes.proximos)} próximos · ${numero(planes.ordenes_abiertas)} órdenes abiertas`}
+			tono={planes.vencidos ? 'rojo' : planes.proximos ? 'ambar' : 'verde'}
+			icono={ToolCase}
+			href={planes.vencidos
+				? '/dashboard/mantenimiento?estado=vencido'
+				: '/dashboard/mantenimiento'}
+		/>
+	{/if}
 	<Kpi
 		etiqueta="Placas con novedades"
 		valor={numero(k.con_novedades)}
@@ -135,11 +171,43 @@
 		{/if}
 	</Tarjeta>
 
+	{#if planes && planes.items.length}
+		<Tarjeta
+			titulo="Planes por atender"
+			subtitulo="Vencidos y próximos (500 km o 15 días), el más urgente primero"
+			columnas={12}
+			tono={planes.vencidos ? 'alerta' : 'normal'}
+			enlace="/dashboard/mantenimiento?estado=alerta"
+		>
+			<ul class="sec-lista sec-lista--columnas">
+				{#each planes.items as p (p.id)}
+					<li>
+						<a href={p.enlace}>
+							<span class="sec-lista-titulo">{p.placa} · {p.nombre}</span>
+							<span class="sec-lista-sub"
+								>{p.orden_abierta
+									? `OT ${p.orden_abierta.consecutivo} abierta · `
+									: ''}{restantePlan(p)}</span
+							>
+						</a>
+						<span
+							class="sec-pastilla {p.estado === 'vencido'
+								? 'sec-pastilla--rojo'
+								: 'sec-pastilla--ambar'}">{p.estado === 'vencido' ? 'vencido' : 'próximo'}</span
+						>
+					</li>
+				{/each}
+			</ul>
+		</Tarjeta>
+	{/if}
+
 	<Tarjeta
 		titulo="Ítems que más fallan"
 		subtitulo="Respuestas en Malo en los preoperacionales del periodo"
 		columnas={4}
-		enlace="/dashboard/formularios?vista=envios"
+		enlace={datos.enlaces
+			? (datos.enlaces.envios ?? undefined)
+			: '/dashboard/formularios?vista=envios'}
 	>
 		<Ranking
 			items={datos.items_malos.map((i: any) => ({
@@ -357,6 +425,15 @@
 	.sec-ambar {
 		color: #9a6700;
 		font-weight: 800;
+	}
+	/* Planes por atender: a lo ancho de la sección, en columnas que fluyen. */
+	.sec-lista.sec-lista--columnas {
+		display: block;
+		columns: 3 18rem;
+		column-gap: 1.25rem;
+	}
+	.sec-lista--columnas li {
+		break-inside: avoid;
 	}
 	.sec-lista {
 		list-style: none;

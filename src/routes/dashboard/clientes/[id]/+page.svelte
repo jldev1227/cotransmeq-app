@@ -3,10 +3,14 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
+	/// «Volver» regresa al listado con los filtros y la página de donde se vino.
+	import { listadoClientes } from '$lib/stores/volverListado';
 	import { fade, fly, slide } from 'svelte/transition';
 	import { clientesAPI } from '$lib/api/apiClient';
 	import { toast } from 'svelte-sonner';
 	import ModalFormCliente from '$lib/components/clientes/ModalFormCliente.svelte';
+	import TarifasCliente from '$lib/components/clientes/TarifasCliente.svelte';
+	import { authStore } from '$lib/stores/auth';
 
 	// Constante para TipoCliente
 	const TipoCliente = {
@@ -76,7 +80,11 @@
 	/// Editar abre el mismo modal que crear (listado de clientes).
 	let modalAbierto = false;
 	let error: string | null = null;
-	let activeTab: 'info' | 'servicios' | 'actividad' = 'info';
+	let activeTab: 'info' | 'servicios' | 'actividad' | 'tarifas' = 'info';
+	/// Las tarifas son del módulo `liquidaciones-servicios`, no de `clientes`:
+	/// quien ve clientes sin ese módulo no tiene pestaña que le dé 403.
+	$: puedeVerTarifas =
+		!!$authStore.user && authStore.getAccessLevel('liquidaciones-servicios') !== null;
 
 	// Obtener ID del cliente de la URL
 	$: clienteId = $page.params.id as string;
@@ -179,7 +187,7 @@
 			<h3 class="mb-2 text-lg font-semibold text-gray-900">Error</h3>
 			<p class="mb-6 text-gray-600">{error}</p>
 			<button
-				on:click={() => goto('/dashboard/clientes')}
+				on:click={() => goto(listadoClientes.url())}
 				class="btn-primary"
 			>
 				Volver a Clientes
@@ -266,7 +274,7 @@
 						<div class="flex gap-2">
 							
 								<button
-									on:click={() => goto('/dashboard/clientes')}
+									on:click={() => goto(listadoClientes.url())}
 									class="btn-secondary"
 								>
 									← Volver
@@ -313,6 +321,17 @@
 							>
 								📊 Actividad
 							</button>
+							{#if puedeVerTarifas}
+								<button
+									on:click={() => (activeTab = 'tarifas')}
+									class="apple-transition flex-1 rounded-lg px-4 py-2 text-sm font-semibold {activeTab ===
+									'tarifas'
+										? 'bg-[var(--accion)] text-white'
+										: 'text-gray-600 hover:bg-gray-100'}"
+								>
+									💲 Tarifas
+								</button>
+							{/if}
 						</div>
 					</div>
 				</div>
@@ -705,6 +724,10 @@
 									<p class="mt-3 text-sm text-gray-600">No hay servicios registrados</p>
 								</div>
 							{/if}
+						</div>
+					{:else if activeTab === 'tarifas'}
+						<div in:fly={{ y: 20, duration: 400 }}>
+							<TarifasCliente clienteId={cliente.id} clienteNombre={cliente.nombre} />
 						</div>
 					{:else if activeTab === 'actividad'}
 						<div

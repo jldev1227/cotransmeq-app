@@ -12,7 +12,9 @@
   import { authStore } from '$lib/stores/auth'
   import type { AccionCorrectivaPreventiva } from '$lib/api/acciones-correctivas'
 
-  export let accion: AccionCorrectivaPreventiva
+  /// `null` al crear: la pestaña muestra igual la cadena de aprobación que
+  /// tocaría según el tipo de hallazgo, pero no se puede aprobar algo sin guardar.
+  export let accion: AccionCorrectivaPreventiva | null = null
   export let tipoHallazgoDetectado: string | undefined | null = ''
 
   let comentario = ''
@@ -59,6 +61,10 @@
   $: yaRechazado = store.approval?.estado === 'RECHAZADO'
 
   async function aprobar() {
+    if (!accion) {
+      toast.warning('Guarda la acción antes de aprobarla')
+      return
+    }
     try {
       await step4Store.aprobar(accion.id, comentario.trim() || undefined)
       toast.success('Aprobación registrada')
@@ -71,6 +77,10 @@
   async function rechazar() {
     if (!comentario.trim()) {
       toast.warning('Debe ingresar un comentario para rechazar')
+      return
+    }
+    if (!accion) {
+      toast.warning('Guarda la acción antes de rechazarla')
       return
     }
     try {

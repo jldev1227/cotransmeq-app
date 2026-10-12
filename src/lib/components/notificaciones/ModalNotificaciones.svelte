@@ -32,7 +32,8 @@
 		Route,
 		ClipboardCheck,
 		CalendarDays,
-		FileWarning
+		FileWarning,
+		IdCard
 	} from 'lucide-svelte';
 	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 	import AvisosNavegador from './AvisosNavegador.svelte';
@@ -117,7 +118,8 @@
 		servicio: { icono: Route, tono: 'azul', etiqueta: 'Servicio' },
 		preoperacional: { icono: ClipboardCheck, tono: 'verde', etiqueta: 'Preoperacional' },
 		dias_laborados: { icono: CalendarDays, tono: 'azul', etiqueta: 'Días laborados' },
-		docveh: { icono: FileWarning, tono: 'ambar', etiqueta: 'Documentos del vehículo' }
+		docveh: { icono: FileWarning, tono: 'ambar', etiqueta: 'Documentos del vehículo' },
+		doccond: { icono: IdCard, tono: 'ambar', etiqueta: 'Documentos del conductor' }
 	};
 	const tipoDe = (n: Notificacion) =>
 		TIPOS[n.tipo] ??

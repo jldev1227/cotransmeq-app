@@ -28,6 +28,7 @@
 	} from '$lib/types/servicios';
 	import { toast } from '$lib/stores/toast';
 	import { serviciosStore } from '$lib/stores/servicios';
+	import { fetchConSesion } from '$lib/api/fetchConSesion';
 
 	type CampoFecha = 'fecha_solicitud' | 'fecha_realizacion' | 'fecha_finalizacion';
 
@@ -160,11 +161,8 @@
 			if (filtros.vehiculoId) params.set('vehiculo_id', filtros.vehiculoId);
 			if (filtros.clienteId) params.set('cliente_id', filtros.clienteId);
 
-			const baseURL = import.meta.env.VITE_API_URL;
-			const token = localStorage.getItem('transmeralda_token');
-			const res = await fetch(`${baseURL}/api/servicios/calendar?${params}`, {
-				headers: token ? { Authorization: `Bearer ${token}` } : undefined
-			});
+			/// `fetchConSesion` pone la base, el token y el 401 como `apiClient`.
+			const res = await fetchConSesion(`/api/servicios/calendar?${params}`);
 
 			if (tokenActual !== fetchToken) return;
 			if (!res.ok) throw new Error(`Error ${res.status}`);
@@ -538,8 +536,9 @@
 		display: flex;
 		gap: 10px;
 		padding: 10px 12px;
+		/* Sin barra de color a la izquierda: el estado ya va escrito con su
+		   punto (`EstadoPunto`) dentro de la tarjeta. */
 		border: 1px solid var(--border-subtle);
-		border-left: 3px solid var(--c);
 		border-radius: 12px;
 		background: var(--bg-surface);
 		font: inherit;

@@ -9,13 +9,9 @@ import { goto } from '$app/navigation';
 // SvelteKit corre en ESM puro donde `require` no existe.
 import http from 'node:http';
 import https from 'node:https';
-
-// Resolver el baseURL en runtime: variable de entorno en el navegador,
-// fallback sensato a localhost:4000 (no usar dominios ficticios como
-// 'midominio.local' que causarían errores de DNS y loading infinito).
-const API_BASE = browser
-	? (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:4000'
-	: 'http://localhost:4000';
+/// La base y la salida por 401 viven en `fetchConSesion` para que los clientes
+/// con `fetch` propio hagan exactamente lo mismo que este.
+import { API_BASE, sesionVencida } from './fetchConSesion';
 
 // ═══════════════════════════════════════════════════════════════════════════
 //  Configuración de resiliencia de red
@@ -156,23 +152,18 @@ apiClient.interceptors.response.use(
 			originalRequest._retry = true;
 
 			/**
-			 * El portal del conductor (`/public/*`) no tiene sesión de dashboard.
+			 * Borra la sesión local y lleva a `/login?redirect=<ruta + consulta>`.
+			 * Antes se iba a `/login` a secas y, al volver a entrar, el usuario
+			 * aterrizaba en el inicio en vez de donde estaba.
 			 *
-			 * Se autentica con el token del magic link, así que cualquier petición
-			 * que se escape por este cliente sale sin `Authorization` y vuelve con
-			 * 401. Redirigir ahí sacaría al conductor del formulario que está
-			 * diligenciando por algo tan menor como un desplegable que no cargó.
-			 * El 401 se propaga y lo maneja quien llamó.
+			 * En el portal del conductor (`/public/*`) no hace nada: no tiene
+			 * sesión de dashboard. Se autentica con el token del magic link, así
+			 * que cualquier petición que se escape por este cliente sale sin
+			 * `Authorization` y vuelve con 401. Redirigir ahí sacaría al conductor
+			 * del formulario que está diligenciando por algo tan menor como un
+			 * desplegable que no cargó. El 401 se propaga y lo maneja quien llamó.
 			 */
-			const enPortalPublico = browser && window.location.pathname.startsWith('/public/');
-
-			if (browser && !enPortalPublico) {
-				localStorage.removeItem('transmeralda_token');
-				localStorage.removeItem('transmeralda_user');
-				document.cookie =
-					'transmeralda_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict';
-				window.location.href = '/login';
-			}
+			sesionVencida();
 
 			return Promise.reject(error);
 		}
@@ -273,9 +264,15 @@ export const authAPI = {
 	login: (correo: string, password: string, rememberMe?: boolean) =>
 		apiClient.post('/api/auth/login', { correo, password, rememberMe }, silent401()),
 
-	logout: () => apiClient.post('/api/auth/logout'),
-
-	refreshToken: () => apiClient.post('/api/auth/refresh'),
+	/**
+	 * Cierra en el backend la sesión de este token (la fila de `sesiones`).
+	 *
+	 * Solo para el cierre explícito (`authStore.cerrarSesion`), y antes de
+	 * borrar el token, que es el que identifica la sesión. Plazo corto y sin el
+	 * 401 del interceptor: salir no puede quedarse esperando a la red ni
+	 * convertirse en otra redirección.
+	 */
+	logout: () => apiClient.post('/api/auth/logout', {}, { ...silent401(), timeout: 3_000 }),
 
 	getProfile: () => apiClient.get('/api/auth/profile'),
 

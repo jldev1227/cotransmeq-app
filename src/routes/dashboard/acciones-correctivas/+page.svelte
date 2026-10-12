@@ -14,11 +14,13 @@
 	 * vista.
 	 */
 	import { page } from '$app/state';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
+	import { untrack } from 'svelte';
 	import { fade, fly } from 'svelte/transition';
 	import { toast } from 'svelte-sonner';
 	import { Plus, Trash2 } from 'lucide-svelte';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
+	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
 	import SegmentosFiltro from '$lib/components/listing/SegmentosFiltro.svelte';
 	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
@@ -27,19 +29,21 @@
 	import {
 		bandera,
 		limpiar as limpiarFiltrosDe,
+		numero,
 		opcion,
 		texto,
 		type DefinicionesFiltros
 	} from '$lib/listing/filtros';
 	import { confirmarEliminacion } from '$lib/stores/confirm';
+	import { listadoAcciones } from '$lib/stores/volverListado';
 	import { mascota } from '$lib/mascot';
 	import {
 		accionesCorrectivasAPI,
 		type AccionCorrectivaPreventiva,
-		type ActionStatusGlobal
+		type ActionStatusGlobal,
+		type ResumenAcciones
 	} from '$lib/api/acciones-correctivas';
 	import {
-		resumenRevision,
 		formatearDiasRelativo,
 		formatDate as formatDateCorta
 	} from '$lib/acciones-correctivas/dashboard-utils';
@@ -74,27 +78,62 @@
 		estado: string;
 		revision: string;
 		eliminadas: boolean;
+		pagina: number;
 	}
 	const DEFS: DefinicionesFiltros<FiltrosAcciones> = {
 		search: texto(),
 		estado: opcion(''),
 		revision: opcion(''),
-		eliminadas: bandera(false)
+		eliminadas: bandera(false),
+		pagina: numero(1)
 	};
 	const estadoUrl = crearEstadoUrl(DEFS);
 	let filtros = $state<FiltrosAcciones>(estadoUrl.leer(page.url));
 	$effect(() => {
 		estadoUrl.escribir(page.url, filtros);
 	});
+	/// Cambiar cualquier filtro vuelve a la página 1: la 3 de «Vencidas» no es
+	/// la 3 de «Todas». Se hace aquí, en el único sitio por donde cambian, y no
+	/// con un efecto que compare valores: ese efecto también vería «cambiada»
+	/// la página que llega en la URL al abrir un enlace y la borraría.
 	function ponerFiltro<K extends keyof FiltrosAcciones>(clave: K, valor: FiltrosAcciones[K]) {
-		filtros = { ...filtros, [clave]: valor };
+		filtros = { ...filtros, [clave]: valor, ...(clave === 'pagina' ? {} : { pagina: 1 }) };
 	}
 	const papelera = $derived(filtros.eliminadas);
 	const hayFiltros = $derived(!!filtros.search || !!filtros.estado || !!filtros.revision);
 
+	/// El campo de búsqueda lleva su propio estado: atado a `filtros.search`,
+	/// cada tecla cambiaba el filtro y lanzaba una petición sin esperar al
+	/// retardo del buscador.
+	let busqueda = $state(untrack(() => filtros.search));
+
+	/// Cada URL en la que se asienta el tablero (filtros, papelera, página)
+	/// queda como destino del «Volver» del detalle y de la edición.
+	afterNavigate(({ to }) => {
+		if (to?.url) listadoAcciones.recordar(to.url.pathname + to.url.search);
+	});
+
 	// ── Datos ────────────────────────────────────────────────────────────
+	/// 24 llena filas completas en la rejilla a 2, 3 y 4 columnas.
+	const POR_PAGINA = 24;
+	const RESUMEN_VACIO: ResumenAcciones = {
+		total_estados: 0,
+		por_estado: { EN_PROCESO: 0, VENCIDA: 0, CUMPLIDA: 0, REPLANTEADA: 0 },
+		proximas_vencer: 0,
+		revisiones: { vencidas: [], proximas: [] },
+		causas: { total: 0, en_proceso: 0, vencida: 0, cumplida: 0 },
+		por_tipo: {}
+	};
+
 	let acciones = $state<AccionCorrectivaPreventiva[]>([]);
+	/// Total del resultado en el servidor (todas las páginas), para el paginador.
+	let total = $state(0);
+	/// Conteos del tablero sobre todo el filtro. Antes se contaban en el cliente
+	/// sobre las 50 filas que se pedían, sin paginador: pasada la 50.ª acción,
+	/// «Total», «Vencidas» y los paneles de revisión dejaban de cuadrar.
+	let resumenServidor = $state<ResumenAcciones | null>(null);
 	let cargando = $state(true);
+	let errorCarga = $state<string | null>(null);
 	let highlightId = $state<string | null>(null);
 	let highlightTimer: ReturnType<typeof setTimeout> | undefined;
 	let expandirVencidas = $state(false);
@@ -108,102 +147,78 @@
 	$effect(() => {
 		void filtros.search;
 		void filtros.estado;
+		void filtros.revision;
 		void filtros.eliminadas;
+		void filtros.pagina;
 		void cargarAcciones();
 	});
 
+	/// Solo la respuesta de la última petición se pinta: al pasar rápido de
+	/// página, una respuesta lenta de la anterior pisaba a la buena.
+	let ultimaPeticion = 0;
+
 	async function cargarAcciones() {
+		const peticion = ++ultimaPeticion;
 		cargando = true;
+		errorCarga = null;
 		try {
 			const resultado = await accionesCorrectivasAPI.listar({
-				limit: 50,
+				page: filtros.pagina,
+				limit: POR_PAGINA,
 				sortBy: 'created_at',
 				sortOrder: 'desc',
 				...(filtros.search && { busqueda: filtros.search }),
 				...(filtros.estado && { estado_global: filtros.estado as ActionStatusGlobal }),
+				...((filtros.revision === 'vencidas' || filtros.revision === 'proximas') && {
+					revision: filtros.revision
+				}),
 				...(filtros.eliminadas && { incluir_eliminados: true })
 			});
+			if (peticion !== ultimaPeticion) return;
 			acciones = resultado.acciones;
+			total = resultado.total;
+			resumenServidor = resultado.resumen ?? RESUMEN_VACIO;
 			expandirVencidas = false;
 			expandirProximas = false;
 		} catch (error) {
-			toast.error(error instanceof Error ? error.message : 'No se pudieron cargar las acciones');
-			acciones = [];
+			if (peticion !== ultimaPeticion) return;
+			/// No se vacía la lista: sin datos, el aviso de error ocupa su lugar
+			/// en vez del «Todavía no hay acciones», que mentía; con datos de
+			/// antes, se quedan a la vista junto al aviso.
+			errorCarga = error instanceof Error ? error.message : 'No se pudieron cargar las acciones';
+			toast.error(errorCarga);
 		} finally {
-			cargando = false;
+			if (peticion === ultimaPeticion) cargando = false;
 		}
 	}
 
+	/// Una página que ya no existe (se borraron acciones, o el enlace traía una
+	/// de más) se recorta a la última. Solo con la respuesta en la mano: antes
+	/// de la primera carga `total` vale 0 y recortaría cualquier `?pagina=3`.
+	$effect(() => {
+		if (cargando || !resumenServidor) return;
+		const paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+		if (filtros.pagina > paginas) untrack(() => ponerFiltro('pagina', paginas));
+	});
+
 	// ── Indicadores ──────────────────────────────────────────────────────
-	const accionCounts = $derived.by(() => {
-		let enProceso = 0;
-		let vencida = 0;
-		let cumplida = 0;
-		let proxVencer = 0;
-		const ahora = Date.now();
-		const sieteDias = 7 * 24 * 60 * 60 * 1000;
-		for (const a of acciones) {
-			if (a.estado_global === 'EN_PROCESO') enProceso++;
-			else if (a.estado_global === 'VENCIDA') vencida++;
-			else if (a.estado_global === 'CUMPLIDA') cumplida++;
-			if (a.fecha_limite_cierre_accion) {
-				const diff = new Date(a.fecha_limite_cierre_accion).getTime() - ahora;
-				if (diff > 0 && diff < sieteDias) proxVencer++;
-			}
-		}
-		return { enProceso, vencida, cumplida, proxVencer, total: acciones.length };
+	const r = $derived(resumenServidor ?? RESUMEN_VACIO);
+	const accionCounts = $derived({
+		enProceso: r.por_estado.EN_PROCESO ?? 0,
+		vencida: r.por_estado.VENCIDA ?? 0,
+		cumplida: r.por_estado.CUMPLIDA ?? 0,
+		proxVencer: r.proximas_vencer,
+		total: r.total_estados
 	});
-
-	type AccionConRevision = AccionCorrectivaPreventiva & {
-		_revision: ReturnType<typeof resumenRevision>;
-	};
-	const conRevision = $derived<AccionConRevision[]>(
-		acciones.map((a) => ({ ...a, _revision: resumenRevision(a) }))
-	);
-	const revisionesVencidas = $derived(
-		conRevision
-			.filter((a) => a._revision.estado === 'vencida' || a._revision.estado === 'hoy')
-			.sort((a, b) => (a._revision.diasHasta ?? 0) - (b._revision.diasHasta ?? 0))
-	);
-	const revisionesProximas = $derived(
-		conRevision
-			.filter((a) => ['proxima', 'al-dia', 'sin-actividad'].includes(a._revision.estado))
-			.sort((a, b) => (a._revision.diasHasta ?? 999) - (b._revision.diasHasta ?? 999))
-	);
-
-	const accionesVisibles = $derived.by(() => {
-		if (!filtros.revision) return acciones;
-		const vencidas = new Set(revisionesVencidas.map((a) => a.id));
-		const proximas = new Set(revisionesProximas.map((a) => a.id));
-		return acciones.filter((a) =>
-			filtros.revision === 'vencidas' ? vencidas.has(a.id) : proximas.has(a.id)
-		);
+	const revisionesVencidas = $derived(r.revisiones.vencidas);
+	const revisionesProximas = $derived(r.revisiones.proximas);
+	const causasStats = $derived({
+		enProceso: r.causas.en_proceso,
+		vencida: r.causas.vencida,
+		cumplida: r.causas.cumplida,
+		total: r.causas.total
 	});
-
-	const causasStats = $derived.by(() => {
-		let enProceso = 0;
-		let vencida = 0;
-		let cumplida = 0;
-		let total = 0;
-		for (const a of acciones) {
-			for (const c of a.causas ?? []) {
-				total++;
-				if (c.estado_seguimiento === 'En Proceso') enProceso++;
-				else if (c.estado_seguimiento === 'Vencida') vencida++;
-				else if (c.estado_seguimiento === 'Cumplida') cumplida++;
-			}
-		}
-		return { enProceso, vencida, cumplida, total };
-	});
-
-	const tipos = $derived.by(() => {
-		const counts = new Map<string, number>();
-		for (const a of acciones) {
-			const tipo = a.tipo_accion_ejecutar || 'Sin tipo';
-			counts.set(tipo, (counts.get(tipo) ?? 0) + 1);
-		}
-		return [...counts.entries()].sort((a, b) => b[1] - a[1]);
-	});
+	const tipos = $derived(Object.entries(r.por_tipo).sort((a, b) => b[1] - a[1]));
 	const COLOR_TIPO: Record<string, string> = {
 		CORRECTIVA: AMBAR,
 		PREVENTIVA: '#8b5cf6',
@@ -231,8 +246,14 @@
 		{ clave: 'cumplida', etiqueta: 'Cumplidas', valor: causasStats.cumplida, color: VERDE }
 	]);
 
+	/// Conserva la papelera: «Limpiar filtros» dentro de ella sacaba de ella.
 	function limpiarFiltros() {
-		filtros = limpiarFiltrosDe(DEFS, filtros);
+		filtros = limpiarFiltrosDe(DEFS, filtros, ['eliminadas']);
+		busqueda = '';
+	}
+
+	function cambiarPagina(pagina: number) {
+		ponerFiltro('pagina', pagina);
 	}
 
 	// ── Acciones sobre una tarjeta ───────────────────────────────────────
@@ -246,7 +267,9 @@
 			highlightId = nueva.id;
 			clearTimeout(highlightTimer);
 			highlightTimer = setTimeout(() => (highlightId = null), 3000);
-			await cargarAcciones();
+			/// La copia es la más reciente: sale primera en la página 1.
+			if (filtros.pagina !== 1) ponerFiltro('pagina', 1);
+			else await cargarAcciones();
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : 'No se pudo duplicar', { id: 'duplicar' });
 		} finally {
@@ -362,7 +385,7 @@
 	<div class="dir-filtros" in:fly={{ y: 12, duration: 400, delay: 80 }}>
 		<div class="dir-filtros-buscador">
 			<BuscadorLista
-				bind:valor={filtros.search}
+				bind:valor={busqueda}
 				onBuscar={(t) => ponerFiltro('search', t)}
 				placeholder={papelera ? 'Buscar en la papelera…' : 'Número, hallazgo, responsable…'}
 				etiqueta="Buscar acciones"
@@ -384,8 +407,18 @@
 		{/if}
 	</div>
 
-	{#if cargando}
+	{#if cargando && !resumenServidor}
 		<CargaMascota texto={papelera ? 'Abriendo la papelera…' : 'Cargando acciones…'} />
+	{:else if errorCarga && acciones.length === 0}
+		{@const img = mascota('advertencia')}
+		<div class="page-card dir-vacio" role="alert">
+			<img src={img.src} alt={img.alt} width="418" height="418" />
+			<h3>No pudimos cargar las acciones</h3>
+			<p>{errorCarga}</p>
+			<button type="button" class="btn-secondary" onclick={() => cargarAcciones()}>
+				Reintentar
+			</button>
+		</div>
 	{:else}
 		{#if !papelera && (revisionesVencidas.length > 0 || revisionesProximas.length > 0)}
 			<!-- ── Seguimiento: lo que hay que revisar ya y lo que viene ── -->
@@ -407,12 +440,12 @@
 											class="ac-chip"
 											href="/dashboard/acciones-correctivas/{acc.id}"
 											title="{acc.responsable_ejecucion || 'Sin asignar'} · {panel.clave === 'vencidas'
-												? `última: ${acc._revision.ultimaFecha ? formatDateCorta(acc._revision.ultimaFecha) : '—'}`
-												: `próxima: ${acc._revision.proximaFecha ? formatDateCorta(acc._revision.proximaFecha) : '—'}`}"
+												? `última: ${acc.ultimaFecha ? formatDateCorta(acc.ultimaFecha) : '—'}`
+												: `próxima: ${acc.proximaFecha ? formatDateCorta(acc.proximaFecha) : '—'}`}"
 										>
 											<span class="ac-chip-num">{acc.accion_numero}</span>
-											<span class="ac-chip-tag" class:ac-chip-tag--sin={acc._revision.estado === 'sin-actividad'}>
-												{acc._revision.estado === 'sin-actividad' ? 'sin actividad' : formatearDiasRelativo(acc._revision.diasHasta)}
+											<span class="ac-chip-tag" class:ac-chip-tag--sin={acc.estado === 'sin-actividad'}>
+												{acc.estado === 'sin-actividad' ? 'sin actividad' : formatearDiasRelativo(acc.diasHasta)}
 											</span>
 										</a>
 									</li>
@@ -439,7 +472,7 @@
 			</section>
 		{/if}
 
-		{#if !papelera && acciones.length > 0 && (causasStats.total > 0 || tipos.length > 0)}
+		{#if !papelera && total > 0 && (causasStats.total > 0 || tipos.length > 0)}
 			<!-- ── Causas y reparto por tipo, en una sola franja ── -->
 			<section class="page-card ac-resumen" aria-label="Causas y tipos" in:fly={{ y: 12, duration: 400, delay: 160 }}>
 				{#if causasStats.total > 0}
@@ -453,7 +486,7 @@
 						<span class="ac-resumen-titulo">Por tipo de acción</span>
 						<ul class="ac-tipos">
 							{#each tipos as [tipo, n] (tipo)}
-								{@const pct = accionCounts.total ? Math.round((n / accionCounts.total) * 100) : 0}
+								{@const pct = total ? Math.round((n / total) * 100) : 0}
 								<li class="ac-tipo">
 									<span class="ac-tipo-nombre">{tipo}</span>
 									<span class="ac-tipo-barra" aria-label="{tipo}: {n} ({pct} %)">
@@ -470,18 +503,20 @@
 
 		<p class="ac-resultados" aria-live="polite">
 			{#if papelera}
-				Papelera · {acciones.length} {acciones.length === 1 ? 'acción' : 'acciones'}
+				Papelera · {total} {total === 1 ? 'acción' : 'acciones'}
 			{:else if filtros.revision}
-				{accionesVisibles.length} de {acciones.length} {acciones.length === 1 ? 'acción' : 'acciones'}
+				{total} {total === 1 ? 'acción' : 'acciones'} con revisión {filtros.revision === 'vencidas'
+					? 'vencida'
+					: 'próxima'}
 			{:else}
-				{acciones.length} {acciones.length === 1 ? 'acción' : 'acciones'}
+				{total} {total === 1 ? 'acción' : 'acciones'}
 			{/if}
 			{#if hayFiltros}
 				<button type="button" class="ac-limpiar" onclick={limpiarFiltros}>Limpiar filtros</button>
 			{/if}
 		</p>
 
-		{#if accionesVisibles.length === 0}
+		{#if acciones.length === 0}
 			{@const img = mascota(papelera || hayFiltros ? 'vacio' : 'espera')}
 			<div class="page-card dir-vacio">
 				<img src={img.src} alt={img.alt} width="418" height="418" />
@@ -506,7 +541,7 @@
 			</div>
 		{:else}
 			<div class="ac-rejilla" in:fly={{ y: 12, duration: 400, delay: 200 }}>
-				{#each accionesVisibles as accion (accion.id)}
+				{#each acciones as accion (accion.id)}
 					<AccionCard
 						{accion}
 						highlight={highlightId === accion.id}
@@ -519,6 +554,17 @@
 					/>
 				{/each}
 			</div>
+			{#if total > POR_PAGINA}
+				<PaginadorLista
+					pagina={filtros.pagina}
+					{total}
+					porPagina={POR_PAGINA}
+					onCambiar={cambiarPagina}
+					cargando={cargando}
+					nombreItems="acciones"
+					suelto
+				/>
+			{/if}
 		{/if}
 	{/if}
 </div>

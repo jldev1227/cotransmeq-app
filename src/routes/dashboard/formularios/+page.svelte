@@ -31,7 +31,8 @@
 	} from '$lib/listing/filtros';
 	import { onMount } from 'svelte';
 	import { fechaDeFormularioDe } from '$lib/formularios/fecha-diligenciamiento';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
+	import { listadoEnvios, listadoFormularios } from '$lib/stores/volverListado';
 	import { toast } from 'svelte-sonner';
 	import {
 		asignacionesFormularioAPI,
@@ -410,6 +411,16 @@
 	};
 
 	const estadoUrl = crearEstadoUrl(DEFS_URL);
+
+	/// Cada URL en la que se asienta la página queda como destino del «Volver»:
+	/// la del catálogo para el detalle de un formulario, la de envíos para el
+	/// detalle de un envío. Cada memoria acepta solo las de su pestaña.
+	afterNavigate(({ to }) => {
+		if (!to?.url) return;
+		const url = to.url.pathname + to.url.search;
+		listadoFormularios.recordar(url);
+		listadoEnvios.recordar(url);
+	});
 
 	function sincronizarUrl() {
 		estadoUrl.escribir(page.url, {

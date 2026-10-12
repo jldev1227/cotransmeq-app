@@ -1,6 +1,8 @@
 import { browser } from '$app/environment';
 
-const API_URL = browser ? import.meta.env.VITE_API_URL : 'http://localhost:4000';
+/// Misma base que `apiClient`, con su respaldo: sin `VITE_API_URL` se pedía a
+/// `undefined/api/...`. Las rutas con sesión salen por `fetchConSesion`.
+import { API_BASE as API_URL, fetchConSesion } from './fetchConSesion';
 
 export type TipoHallazgo =
 	| 'NC Mayor'
@@ -147,10 +149,14 @@ export interface AccionCorrectivaPreventiva {
 	proceso_origen_hallazgo?: string;
 	componente_elemento_referencia?: string;
 	fuente_genero_hallazgo?: string;
+	/** Texto libre cuando la fuente es «Otro» (columna propia en el backend). */
+	fuente_genero_hallazgo_otros?: string;
 	marco_legal_normativo?: string;
 	fecha_identificacion_hallazgo?: string; // ISO date
 	descripcion_hallazgo?: string;
 	tipo_hallazgo_detectado?: TipoHallazgo;
+	/** Texto libre cuando el tipo de hallazgo es «Otro». */
+	tipo_hallazgo_otros?: string;
 	variable_categoria_analisis?: string;
 
 	// Corrección inmediata
@@ -228,16 +234,28 @@ export interface AccionCorrectivaPreventiva {
 	};
 }
 
+/**
+ * Causa tal como se ENVÍA al crear/actualizar: sus seguimientos van sin `id`,
+ * `causa_id` ni `created_at`, que los pone el backend (`CausaAccionInput`).
+ */
+export type CausaAccionInput = Omit<CausaAccion, 'seguimientos'> & {
+	seguimientos?: (SeguimientoRegistro & { replanteo?: Replanteo })[];
+};
+
 export interface CreateAccionInput {
 	accion_numero: string;
 	lugar_sede?: string;
 	proceso_origen_hallazgo?: string;
 	componente_elemento_referencia?: string;
 	fuente_genero_hallazgo?: string;
+	fuente_genero_hallazgo_otros?: string;
 	marco_legal_normativo?: string;
 	fecha_identificacion_hallazgo?: string;
+	/** Fecha de registro elegida en el formulario (puede ser anterior a hoy). */
+	created_at?: string;
 	descripcion_hallazgo?: string;
 	tipo_hallazgo_detectado?: TipoHallazgo;
+	tipo_hallazgo_otros?: string;
 	variable_categoria_analisis?: string;
 	aplica_correccion_inmediata?: boolean;
 	justificacion_no_correccion?: string;
@@ -249,7 +267,7 @@ export interface CreateAccionInput {
 	matriz_a_actualizar?: string;
 	replanteo_correccion?: Replanteo;
 	tipo_accion_ejecutar?: TipoAccion;
-	causas?: CausaAccion[];
+	causas?: CausaAccionInput[];
 	seguimientos_correccion?: SeguimientoRegistro[];
 	fecha_limite_evaluacion_eficacia?: string;
 	ciclos_eficacia?: CicloEficacia[];
@@ -286,6 +304,35 @@ export interface ListarAccionesFiltros {
 	sortOrder?: 'asc' | 'desc';
 	ultimos_90_dias?: boolean;
 	incluir_eliminados?: boolean;
+	/** Panel de revisión del tablero; se calcula por fila en el servidor. */
+	revision?: 'vencidas' | 'proximas';
+}
+
+/** Un chip de los paneles «Vencidas de revisión» / «Próximas revisiones». */
+export interface RevisionPendiente {
+	id: string;
+	accion_numero: string;
+	responsable_ejecucion: string | null;
+	ultimaFecha: string | null;
+	proximaFecha: string | null;
+	diasHasta: number | null;
+	estado: 'vencida' | 'hoy' | 'proxima' | 'al-dia' | 'cerrada' | 'sin-actividad';
+}
+
+/**
+ * Conteos del tablero sobre TODO el filtro, no sobre la página.
+ *
+ * Estado y revisión son facetas: cada conteo se calcula con todos los
+ * filtros menos el suyo (ver `acciones-correctivas.revision.ts` del backend).
+ */
+export interface ResumenAcciones {
+	/** Acciones que cumplen todo salvo el estado: el «Total» de los conteos. */
+	total_estados: number;
+	por_estado: Record<ActionStatusGlobal, number>;
+	proximas_vencer: number;
+	revisiones: { vencidas: RevisionPendiente[]; proximas: RevisionPendiente[] };
+	causas: { total: number; en_proceso: number; vencida: number; cumplida: number };
+	por_tipo: Record<string, number>;
 }
 
 export interface ListarAccionesResponse {
@@ -294,6 +341,7 @@ export interface ListarAccionesResponse {
 	page: number;
 	limit: number;
 	totalPages: number;
+	resumen: ResumenAcciones;
 }
 
 export interface EstadisticasAcciones {
@@ -320,7 +368,7 @@ class AccionesCorrectivasAPI {
 	// ============================================
 
 	async crear(data: CreateAccionInput): Promise<AccionCorrectivaPreventiva> {
-		const response = await fetch(this.baseUrl, {
+		const response = await fetchConSesion(this.baseUrl, {
 			method: 'POST',
 			headers: await this.getAuthHeaders(),
 			body: JSON.stringify(data)
@@ -351,10 +399,11 @@ class AccionesCorrectivasAPI {
 		if (filtros.sortOrder) params.append('sortOrder', filtros.sortOrder);
 		if (filtros.ultimos_90_dias) params.append('ultimos_90_dias', 'true');
 		if (filtros.incluir_eliminados) params.append('incluir_eliminados', 'true');
+		if (filtros.revision) params.append('revision', filtros.revision);
 
 		const url = params.toString() ? `${this.baseUrl}?${params}` : this.baseUrl;
 
-		const response = await fetch(url, {
+		const response = await fetchConSesion(url, {
 			headers: await this.getAuthHeaders()
 		});
 
@@ -367,7 +416,7 @@ class AccionesCorrectivasAPI {
 	}
 
 	async obtenerPorId(id: string): Promise<AccionCorrectivaPreventiva> {
-		const response = await fetch(`${this.baseUrl}/${id}`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${id}`, {
 			headers: await this.getAuthHeaders()
 		});
 
@@ -385,7 +434,7 @@ class AccionesCorrectivasAPI {
 	}
 
 	async obtenerPorNumero(accion_numero: string): Promise<AccionCorrectivaPreventiva> {
-		const response = await fetch(`${this.baseUrl}/numero/${accion_numero}`, {
+		const response = await fetchConSesion(`${this.baseUrl}/numero/${accion_numero}`, {
 			headers: await this.getAuthHeaders()
 		});
 
@@ -398,7 +447,7 @@ class AccionesCorrectivasAPI {
 	}
 
 	async actualizar(id: string, data: UpdateAccionInput): Promise<AccionCorrectivaPreventiva> {
-		const response = await fetch(`${this.baseUrl}/${id}`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${id}`, {
 			method: 'PUT',
 			headers: await this.getAuthHeaders(),
 			body: JSON.stringify(data)
@@ -415,7 +464,7 @@ class AccionesCorrectivasAPI {
 
 
 	async duplicar(id: string): Promise<AccionCorrectivaPreventiva> {
-		const response = await fetch(`${this.baseUrl}/${id}/duplicar`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${id}/duplicar`, {
 			method: 'POST',
 			headers: await this.getAuthHeaders(),
 			body: '{}'
@@ -435,7 +484,7 @@ class AccionesCorrectivasAPI {
 		formData.append('file', file);
 
 		const token = browser ? localStorage.getItem('transmeralda_token') : null;
-		const response = await fetch(`${this.baseUrl}/upload`, {
+		const response = await fetchConSesion(`${this.baseUrl}/upload`, {
 			method: 'POST',
 			headers: {
 				...(token && { Authorization: `Bearer ${token}` })
@@ -453,7 +502,7 @@ class AccionesCorrectivasAPI {
 	}
 
 	async eliminar(id: string): Promise<void> {
-		const response = await fetch(`${this.baseUrl}/${id}`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${id}`, {
 			method: 'DELETE',
 			headers: await this.getAuthHeaders()
 		});
@@ -465,7 +514,7 @@ class AccionesCorrectivasAPI {
 	}
 
 	async restaurar(id: string): Promise<AccionCorrectivaPreventiva> {
-		const response = await fetch(`${this.baseUrl}/${id}/restaurar`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${id}/restaurar`, {
 			method: 'POST',
 			headers: await this.getAuthHeaders(),
 			body: '{}'
@@ -481,7 +530,7 @@ class AccionesCorrectivasAPI {
 	}
 
 	async eliminarPermanente(id: string): Promise<void> {
-		const response = await fetch(`${this.baseUrl}/${id}/permanente`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${id}/permanente`, {
 			method: 'DELETE',
 			headers: await this.getAuthHeaders()
 		});
@@ -497,7 +546,7 @@ class AccionesCorrectivasAPI {
 	// ============================================
 
 	async obtenerEstadisticas(): Promise<EstadisticasAcciones> {
-		const response = await fetch(`${this.baseUrl}/estadisticas`, {
+		const response = await fetchConSesion(`${this.baseUrl}/estadisticas`, {
 			headers: await this.getAuthHeaders()
 		});
 
@@ -514,7 +563,7 @@ class AccionesCorrectivasAPI {
 	// ============================================
 
 	async exportarPDF(id: string): Promise<Blob> {
-		const response = await fetch(`${this.baseUrl}/${id}/exportar-pdf`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${id}/exportar-pdf`, {
 			headers: await this.getAuthHeaders()
 		});
 
@@ -556,7 +605,7 @@ class AccionesCorrectivasAPI {
 			estado_seguimiento?: EstadoSeguimiento;
 		}
 	): Promise<CausaAccion> {
-		const response = await fetch(`${this.baseUrl}/${accionId}/causas`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${accionId}/causas`, {
 			method: 'POST',
 			headers: await this.getAuthHeaders(),
 			body: JSON.stringify(data)
@@ -592,7 +641,7 @@ class AccionesCorrectivasAPI {
 			sugerencia_ia?: any;
 		}
 	): Promise<CausaAccion> {
-		const response = await fetch(`${this.baseUrl}/${accionId}/causas/${causaId}`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${accionId}/causas/${causaId}`, {
 			method: 'PUT',
 			headers: await this.getAuthHeaders(),
 			body: JSON.stringify(data)
@@ -620,7 +669,7 @@ class AccionesCorrectivasAPI {
 		lugar_sede?: string;
 		proceso_origen?: string;
 	}): Promise<any> {
-		const response = await fetch(`${this.baseUrl}/sugerencias-ia`, {
+		const response = await fetchConSesion(`${this.baseUrl}/sugerencias-ia`, {
 			method: 'POST',
 			headers: await this.getAuthHeaders(),
 			body: JSON.stringify(data)
@@ -640,7 +689,7 @@ class AccionesCorrectivasAPI {
 	// ============================================
 
 	async listarSeguimientosCausa(accionId: string, causaId: string): Promise<SeguimientoCausa[]> {
-		const response = await fetch(`${this.baseUrl}/${accionId}/causas/${causaId}/seguimientos`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${accionId}/causas/${causaId}/seguimientos`, {
 			headers: await this.getAuthHeaders()
 		});
 
@@ -663,7 +712,7 @@ class AccionesCorrectivasAPI {
 			evaluacion_eficaz?: EvaluacionCierre;
 		}
 	): Promise<SeguimientoCausa> {
-		const response = await fetch(`${this.baseUrl}/${accionId}/causas/${causaId}/seguimientos`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${accionId}/causas/${causaId}/seguimientos`, {
 			method: 'POST',
 			headers: await this.getAuthHeaders(),
 			body: JSON.stringify(data)
@@ -694,7 +743,7 @@ class AccionesCorrectivasAPI {
 		rolEsperado: string | null;
 		approval: AprobacionAccion | null;
 	}> {
-		const response = await fetch(`${this.baseUrl}/${accionId}/aprobaciones`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${accionId}/aprobaciones`, {
 			headers: await this.getAuthHeaders()
 		});
 		if (!response.ok) {
@@ -708,7 +757,7 @@ class AccionesCorrectivasAPI {
 		accionId: string,
 		comentario?: string
 	): Promise<AprobacionAccion> {
-		const response = await fetch(`${this.baseUrl}/${accionId}/aprobaciones/aprobar`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${accionId}/aprobaciones/aprobar`, {
 			method: 'POST',
 			headers: await this.getAuthHeaders(),
 			body: JSON.stringify({ comentario })
@@ -725,7 +774,7 @@ class AccionesCorrectivasAPI {
 		accionId: string,
 		comentario: string
 	): Promise<AprobacionAccion> {
-		const response = await fetch(`${this.baseUrl}/${accionId}/aprobaciones/rechazar`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${accionId}/aprobaciones/rechazar`, {
 			method: 'POST',
 			headers: await this.getAuthHeaders(),
 			body: JSON.stringify({ comentario })
@@ -739,7 +788,7 @@ class AccionesCorrectivasAPI {
 	}
 
 	async resetAprobacion(accionId: string): Promise<void> {
-		const response = await fetch(`${this.baseUrl}/${accionId}/aprobaciones/reset`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${accionId}/aprobaciones/reset`, {
 			method: 'POST',
 			headers: await this.getAuthHeaders(),
 			body: JSON.stringify({})
@@ -758,7 +807,7 @@ class AccionesCorrectivasAPI {
 		estado_anterior: string;
 		estado_nuevo: string;
 	}> {
-		const response = await fetch(`${this.baseUrl}/${accionId}/calcular-estado`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${accionId}/calcular-estado`, {
 			method: 'POST',
 			headers: await this.getAuthHeaders(),
 			body: JSON.stringify({})
@@ -779,7 +828,7 @@ class AccionesCorrectivasAPI {
 			observaciones?: string;
 		}
 	): Promise<AccionCorrectivaPreventiva> {
-		const response = await fetch(`${this.baseUrl}/${accionId}/estado-global`, {
+		const response = await fetchConSesion(`${this.baseUrl}/${accionId}/estado-global`, {
 			method: 'POST',
 			headers: await this.getAuthHeaders(),
 			body: JSON.stringify(data)

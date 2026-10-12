@@ -115,11 +115,16 @@
 	// ─── LIFECYCLE ────────────────────────────────────────────────
 
 	onMount(async () => {
+		/// El mapa ocupa la pantalla entera: sin esto el gesto de arrastrarlo
+		/// en el celular desplaza la página. Vivía en el layout de /public y
+		/// dejaba sin scroll a todas las demás páginas públicas.
+		document.body.style.overflow = 'hidden';
 		await cargarServicio();
 		if (servicio) initMap();
 	});
 
 	onDestroy(() => {
+		if (typeof document !== 'undefined') document.body.style.overflow = '';
 		[...distracomMarkers, ...peajeMarkers, ...paradaMarkers].forEach((m) => m.remove());
 		map?.remove();
 	});

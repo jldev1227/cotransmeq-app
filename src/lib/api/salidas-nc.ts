@@ -1,6 +1,8 @@
 import { browser } from '$app/environment';
 
-const API_URL = browser ? import.meta.env.VITE_API_URL : 'http://localhost:4000';
+/// Misma base que `apiClient`, con su respaldo: sin `VITE_API_URL` se pedía a
+/// `undefined/api/...`. Las rutas con sesión salen por `fetchConSesion`.
+import { API_BASE as API_URL, fetchConSesion } from './fetchConSesion';
 
 // ── Enums ──
 export type ClasificacionNC = 'CRITICA' | 'MAYOR' | 'MENOR';
@@ -258,7 +260,7 @@ export const salidasNCAPI = {
 			if (val !== undefined && val !== '') params.set(key, String(val));
 		});
 
-		const res = await fetch(`${API_URL}/api/salidas-nc?${params.toString()}`, {
+		const res = await fetchConSesion(`${API_URL}/api/salidas-nc?${params.toString()}`, {
 			headers: getAuthHeaders()
 		});
 		const json = await res.json();
@@ -267,7 +269,7 @@ export const salidasNCAPI = {
 	},
 
 	async obtenerPorId(id: string): Promise<SalidaNoConforme> {
-		const res = await fetch(`${API_URL}/api/salidas-nc/${id}`, {
+		const res = await fetchConSesion(`${API_URL}/api/salidas-nc/${id}`, {
 			headers: getAuthHeaders()
 		});
 		const json = await res.json();
@@ -276,7 +278,7 @@ export const salidasNCAPI = {
 	},
 
 	async crear(data: CreateSalidaNCInput): Promise<SalidaNoConforme> {
-		const res = await fetch(`${API_URL}/api/salidas-nc`, {
+		const res = await fetchConSesion(`${API_URL}/api/salidas-nc`, {
 			method: 'POST',
 			headers: getAuthHeaders(),
 			body: JSON.stringify(data)
@@ -287,7 +289,7 @@ export const salidasNCAPI = {
 	},
 
 	async actualizar(id: string, data: Partial<CreateSalidaNCInput>): Promise<SalidaNoConforme> {
-		const res = await fetch(`${API_URL}/api/salidas-nc/${id}`, {
+		const res = await fetchConSesion(`${API_URL}/api/salidas-nc/${id}`, {
 			method: 'PUT',
 			headers: getAuthHeaders(),
 			body: JSON.stringify(data)
@@ -298,7 +300,7 @@ export const salidasNCAPI = {
 	},
 
 	async eliminar(id: string): Promise<void> {
-		const res = await fetch(`${API_URL}/api/salidas-nc/${id}`, {
+		const res = await fetchConSesion(`${API_URL}/api/salidas-nc/${id}`, {
 			method: 'DELETE',
 			headers: getAuthHeaders()
 		});
@@ -307,7 +309,7 @@ export const salidasNCAPI = {
 	},
 
 	async estadisticas(): Promise<EstadisticasSNC> {
-		const res = await fetch(`${API_URL}/api/salidas-nc/estadisticas`, {
+		const res = await fetchConSesion(`${API_URL}/api/salidas-nc/estadisticas`, {
 			headers: getAuthHeaders()
 		});
 		const json = await res.json();
@@ -316,7 +318,7 @@ export const salidasNCAPI = {
 	},
 
 	async siguienteNumero(): Promise<number> {
-		const res = await fetch(`${API_URL}/api/salidas-nc/siguiente-numero`, {
+		const res = await fetchConSesion(`${API_URL}/api/salidas-nc/siguiente-numero`, {
 			headers: getAuthHeaders()
 		});
 		const json = await res.json();
@@ -325,7 +327,7 @@ export const salidasNCAPI = {
 	},
 
 	async descargarPDF(id: string, numeroSnc: number): Promise<void> {
-		const res = await fetch(`${API_URL}/api/salidas-nc/${id}/pdf`, {
+		const res = await fetchConSesion(`${API_URL}/api/salidas-nc/${id}/pdf`, {
 			headers: getAuthHeaders()
 		});
 		if (!res.ok) {

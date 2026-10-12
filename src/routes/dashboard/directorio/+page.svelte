@@ -1,6 +1,17 @@
 <script lang="ts">
 	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
+	import ModalBase from '$lib/components/ui/ModalBase.svelte';
+	import TablaLista from '$lib/components/listing/TablaLista.svelte';
+	import CeldaIdentidad from '$lib/components/listing/CeldaIdentidad.svelte';
+	import EstadoPunto from '$lib/components/listing/EstadoPunto.svelte';
+	import AccionesFila from '$lib/components/listing/AccionesFila.svelte';
+	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
+	import SegmentosFiltro from '$lib/components/listing/SegmentosFiltro.svelte';
+	import { mascota } from '$lib/mascot';
 	import { onMount, onDestroy } from 'svelte';
+	import { fade } from 'svelte/transition';
+	import { Mail, Plus, Ban } from 'lucide-svelte';
+	import type { ColumnDef } from '@tanstack/table-core';
 	import { apiClient } from '$lib/api/apiClient';
 	import { usuariosAPI } from '$lib/api/usuarios';
 	import { socketUtils } from '$lib/socket';
@@ -8,6 +19,10 @@
 	import { toast } from '$lib/stores/toast';
 	import { AREA_LABELS, checkAccess, type AccessLevel, type Area } from '$lib/config/permissions';
 	import PermisosRutasPicker from '$lib/components/permisos/PermisosRutasPicker.svelte';
+
+	/// Pantalla huérfana: no está en el menú y `/dashboard/usuarios` (Equipo)
+	/// cubre lo mismo —presencia, invitaciones y alta manual—. Se conserva con
+	/// la cáscara actual mientras se decide retirarla; no le añadas funciones.
 
 	// ─── Tipos ────────────────────────────────────────────────────────────────
 	interface UsuarioPresencia {
@@ -41,6 +56,10 @@
 	let onlineIds = $state(new Set<string>());
 	let cargando = $state(true);
 	let cargandoInv = $state(true);
+	/// Sin estos dos, un fallo de red pintaba «No hay usuarios registrados»,
+	/// que no es lo mismo que no poder leerlos.
+	let errorUsuarios = $state<string | null>(null);
+	let errorInv = $state<string | null>(null);
 	let tabActiva = $state<'usuarios' | 'invitaciones'>('usuarios');
 
 	// Modal invitar
@@ -85,6 +104,53 @@
 		{ value: 'kilometraje', label: 'Kilometraje' }
 	];
 
+	/// Semáforos en hex: cotransmeq remapea `emerald-*` a naranja y «en línea»
+	/// tiene que seguir leyéndose como verde.
+	const COLOR_EN_LINEA = '#16a34a';
+	const COLOR_DESCONECTADO = '#9ca3af';
+	const COLOR_ERROR = '#dc2626';
+	const COLOR_PENDIENTE = '#d97706';
+
+	const COLUMNAS_USUARIOS: ColumnDef<UsuarioPresencia, any>[] = [
+		{ id: 'usuario', header: 'Usuario' },
+		{ id: 'areas', header: 'Área(s)' },
+		{ id: 'cargo', header: 'Cargo' },
+		{ id: 'acceso', header: 'Último acceso' },
+		{ id: 'estado', header: 'Estado', size: 150 }
+	];
+
+	const COLUMNAS_INVITACIONES: ColumnDef<Invitacion, any>[] = [
+		{ id: 'correo', header: 'Correo invitado' },
+		{ id: 'areas', header: 'Área(s)' },
+		{ id: 'invitador', header: 'Invitado por' },
+		{ id: 'enviada', header: 'Enviada' },
+		{ id: 'estado', header: 'Estado', size: 140 },
+		{ id: 'acciones', header: '', size: 80 }
+	];
+
+	const pendientes = $derived(invitaciones.filter((i) => i.estado === 'pendiente').length);
+
+	const conteos = $derived([
+		{ clave: 'usuarios', etiqueta: 'Usuarios', valor: usuarios.length },
+		{
+			clave: 'en-linea',
+			etiqueta: 'En línea',
+			valor: usuarios.filter((u) => u.en_linea).length,
+			color: COLOR_EN_LINEA
+		},
+		{
+			clave: 'pendientes',
+			etiqueta: 'Invitaciones pendientes',
+			valor: pendientes,
+			color: COLOR_PENDIENTE
+		}
+	]);
+
+	const PESTANAS = $derived([
+		{ valor: 'usuarios', etiqueta: `Usuarios${usuarios.length ? ` (${usuarios.length})` : ''}` },
+		{ valor: 'invitaciones', etiqueta: `Invitaciones${pendientes ? ` (${pendientes})` : ''}` }
+	]);
+
 	// ─── Nivel de acceso propio ───────────────────────────────────────────────
 	/// La página se pinta también para quien la tiene en `read` (vía lista blanca
 	/// de rutas): en ese caso se ve el directorio, pero no las acciones que
@@ -105,8 +171,10 @@
 			const res = await apiClient.get('/api/usuarios/presencia');
 			usuarios = res.data;
 			onlineIds = new Set(usuarios.filter((u) => u.en_linea).map((u) => u.id));
+			errorUsuarios = null;
 		} catch (e) {
 			toast.error('Error cargando usuarios');
+			errorUsuarios = 'No se pudo cargar la lista de usuarios.';
 		} finally {
 			cargando = false;
 		}
@@ -117,8 +185,10 @@
 			cargandoInv = true;
 			const res = await apiClient.get('/api/invitaciones');
 			invitaciones = res.data;
+			errorInv = null;
 		} catch {
 			toast.error('Error cargando invitaciones');
+			errorInv = 'No se pudieron cargar las invitaciones.';
 		} finally {
 			cargandoInv = false;
 		}
@@ -286,92 +356,71 @@
 		}).format(new Date(fecha));
 	}
 
-	function estadoInvBadge(estado: string) {
-		const map: Record<string, string> = {
-			pendiente: 'bg-yellow-100 text-yellow-700',
-			aceptada: 'bg-green-100 text-green-700',
-			expirada: 'bg-red-100 text-red-700',
-			revocada: 'bg-gray-100 text-gray-500',
-			reemplazada: 'bg-gray-100 text-gray-500'
-		};
-		return map[estado] ?? 'bg-gray-100 text-gray-500';
+	/// Mismo reparto de colores que tenían las pastillas: pendiente en ámbar,
+	/// aceptada en verde, expirada en rojo y el resto apagado.
+	function estadoInvitacion(estado: string): { color: string; apagado: boolean } {
+		switch (estado) {
+			case 'pendiente':
+				return { color: COLOR_PENDIENTE, apagado: false };
+			case 'aceptada':
+				return { color: COLOR_EN_LINEA, apagado: false };
+			case 'expirada':
+				return { color: COLOR_ERROR, apagado: false };
+			default:
+				return { color: COLOR_DESCONECTADO, apagado: true };
+		}
 	}
 
-	/** Cierra el modal solo si el clic cayó en el backdrop, no dentro de la caja. */
-	function cerrarSiBackdrop(e: MouseEvent, cerrar: () => void) {
-		if (e.target === e.currentTarget) cerrar();
+	function etiquetaArea(a: string): string {
+		return AREA_LABELS[a as Area] ?? a;
 	}
 </script>
 
 <svelte:head><title>Equipo · Cotransmeq</title></svelte:head>
 
-<!-- ─── Encabezado ─────────────────────────────────────────────────────── -->
-<div class="space-y-6">
-	<div class="flex flex-wrap items-center justify-between gap-3">
-		<div>
-			<h1 class="text-2xl font-bold text-gray-900">Equipo</h1>
-			<p class="mt-1 text-sm text-gray-500">Usuarios del sistema, áreas y estado de presencia</p>
+<div class="dir-pagina eq-pagina" in:fade={{ duration: 400 }}>
+	<!-- ─── Cabecera ─────────────────────────────────────────────────────── -->
+	<header class="page-card dir-cabecera" style="padding: 1.25rem 1.5rem;">
+		<div class="dir-cabecera-texto">
+			<h1 class="dir-titulo">Equipo</h1>
+			<p class="dir-desc">Usuarios del sistema, áreas y estado de presencia.</p>
+			{#if !cargando}
+				<div class="dir-conteos">
+					<ResumenConteos {conteos} />
+				</div>
+			{/if}
 		</div>
-		{#if puedeEscribir}
-			<div class="flex flex-wrap items-center gap-2">
-				<button
-					onclick={abrirModal}
-					class="btn-secondary inline-flex items-center gap-2"
-				>
-					<svg
-						class="h-4 w-4"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-						/>
-					</svg>
+		<div class="dir-cabecera-acciones">
+			{#if puedeEscribir}
+				<button onclick={abrirModal} class="btn-secondary">
+					<Mail class="h-4 w-4" />
 					Invitar por correo
 				</button>
-				<button
-					onclick={abrirModalCrear}
-					class="btn-primary inline-flex items-center gap-2"
-				>
-					<svg
-						class="h-4 w-4"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4" />
-					</svg>
+				<button onclick={abrirModalCrear} class="btn-primary">
+					<Plus class="h-4 w-4" />
 					Crear manualmente
 				</button>
-			</div>
-		{:else if nivelDirectorio}
-			<span class="rounded-full bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700">
-				Solo consulta
-			</span>
-		{/if}
-	</div>
+			{:else if nivelDirectorio}
+				<span class="eq-solo-consulta">Solo consulta</span>
+			{/if}
+		</div>
+	</header>
 
 	<!-- Los dos caminos de alta se confunden con facilidad; que la diferencia
 	     (quién pone la contraseña) esté escrita evita crear cuentas a mano
 	     cuando lo que se quería era mandar una invitación. -->
 	{#if puedeEscribir}
-		<div class="flex flex-wrap gap-3 rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm">
-			<div class="min-w-[16rem] flex-1">
-				<p class="font-semibold text-gray-800">Invitar por correo</p>
-				<p class="mt-0.5 text-xs leading-relaxed text-gray-500">
+		<div class="page-card eq-caminos">
+			<div>
+				<p class="eq-camino-titulo">Invitar por correo</p>
+				<p class="eq-camino-texto">
 					Se envía un enlace y <strong>el propio usuario elige su contraseña</strong>. No existe
 					cuenta hasta que acepte la invitación.
 				</p>
 			</div>
-			<div class="hidden w-px bg-gray-200 sm:block"></div>
-			<div class="min-w-[16rem] flex-1">
-				<p class="font-semibold text-gray-800">Crear manualmente</p>
-				<p class="mt-0.5 text-xs leading-relaxed text-gray-500">
+			<div>
+				<p class="eq-camino-titulo">Crear manualmente</p>
+				<p class="eq-camino-texto">
 					<strong>Tú pones la contraseña</strong> y se la entregas. La cuenta queda activa al instante,
 					con las áreas y los permisos por ruta que le definas.
 				</p>
@@ -379,117 +428,80 @@
 		</div>
 	{/if}
 
-	<!-- ─── Tabs ──────────────────────────────────────────────────────────── -->
-	<div class="border-b border-gray-200">
-		<nav class="-mb-px flex gap-6">
-			{#each [{ id: 'usuarios', label: 'Usuarios', count: usuarios.length }, { id: 'invitaciones', label: 'Invitaciones', count: invitaciones.filter((i) => i.estado === 'pendiente').length }] as tab}
-				<button
-					onclick={() => (tabActiva = tab.id as 'usuarios' | 'invitaciones')}
-					class="flex items-center gap-2 border-b-2 pb-3 text-sm font-medium transition-colors
-						{tabActiva === tab.id
-						? 'border-orange-600 text-orange-600'
-						: 'border-transparent text-gray-500 hover:text-gray-700'}"
-				>
-					{tab.label}
-					{#if tab.count > 0}
-						<span
-							class="rounded-full px-2 py-0.5 text-xs
-							{tabActiva === tab.id ? 'bg-orange-100 text-orange-700' : 'bg-gray-100 text-gray-600'}"
-						>
-							{tab.count}
-						</span>
-					{/if}
-				</button>
-			{/each}
-		</nav>
+	<!-- ─── Pestañas ──────────────────────────────────────────────────────── -->
+	<div class="dir-filtros">
+		<SegmentosFiltro
+			etiqueta="Ver"
+			opciones={PESTANAS}
+			valor={tabActiva}
+			onCambiar={(v) => (tabActiva = v as 'usuarios' | 'invitaciones')}
+		/>
 	</div>
 
 	<!-- ─── Tab Usuarios ──────────────────────────────────────────────────── -->
+	<!-- `TablaLista` lleva el scroll horizontal dentro de su marco y en el
+	     móvil apila cada fila como tarjeta: la tabla anterior, con
+	     `overflow-hidden`, cortaba las columnas de la derecha en un teléfono. -->
 	{#if tabActiva === 'usuarios'}
 		{#if cargando}
-			<CargaMascota texto="Cargando usuarios…" />
+			<div class="page-card eq-marco">
+				<CargaMascota texto="Cargando usuarios…" />
+			</div>
+		{:else if errorUsuarios && usuarios.length === 0}
+			{@const img = mascota('advertencia')}
+			<div class="page-card dir-vacio">
+				<img src={img.src} alt={img.alt} width="418" height="418" />
+				<h3>No se pudo cargar el equipo</h3>
+				<p>{errorUsuarios} Revisa la conexión e inténtalo de nuevo.</p>
+				<button class="btn-secondary" onclick={cargarUsuarios}>Reintentar</button>
+			</div>
 		{:else}
-			<div class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-				<table class="w-full text-sm">
-					<thead class="bg-gray-50">
-						<tr>
-							<th class="px-4 py-3 text-left font-semibold text-gray-600">Usuario</th>
-							<th class="px-4 py-3 text-left font-semibold text-gray-600">Área(s)</th>
-							<th class="px-4 py-3 text-left font-semibold text-gray-600">Cargo</th>
-							<th class="px-4 py-3 text-left font-semibold text-gray-600">Último acceso</th>
-							<th class="px-4 py-3 text-left font-semibold text-gray-600">Estado</th>
-						</tr>
-					</thead>
-					<tbody class="divide-y divide-gray-100">
-						{#each usuarios as u (u.id)}
-							<tr class="transition-colors hover:bg-gray-50">
-								<td class="px-4 py-3">
-									<div class="flex items-center gap-3">
-										<div class="relative flex-shrink-0">
-											<div
-												class="flex h-9 w-9 items-center justify-center rounded-full bg-orange-100 text-sm font-bold text-orange-700"
-											>
-												{u.nombre.charAt(0).toUpperCase()}
-											</div>
-											<span
-												class="absolute -right-0.5 -bottom-0.5 h-3 w-3 rounded-full border-2 border-white
-												{u.en_linea ? 'bg-orange-500' : 'bg-gray-300'}"
-											>
-											</span>
-										</div>
-										<div>
-											<p class="font-medium text-gray-900">{u.nombre}</p>
-											<p class="text-xs text-gray-400">{u.correo}</p>
-										</div>
-									</div>
-								</td>
-								<td class="px-4 py-3">
-									{#if u.area?.length}
-										<div class="flex flex-wrap gap-1">
-											{#each u.area as a}
-												<span
-													class="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700"
-												>
-													{AREA_LABELS[a as Area] ?? a}
-												</span>
-											{/each}
-										</div>
-									{:else}
-										<span class="text-gray-400">—</span>
-									{/if}
-								</td>
-								<td class="px-4 py-3 text-gray-600">{u.cargo ?? '—'}</td>
-								<td class="px-4 py-3 text-xs text-gray-500">{formatFecha(u.ultimo_acceso)}</td>
-								<td class="px-4 py-3">
-									{#if u.en_linea}
-										<span
-											class="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-1 text-xs font-medium text-orange-700"
-										>
-											<span class="h-1.5 w-1.5 animate-pulse rounded-full bg-orange-500"></span>
-											En línea
-										</span>
-									{:else if !u.activo}
-										<span
-											class="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-600"
-										>
-											Inactivo
-										</span>
-									{:else}
-										<span
-											class="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-500"
-										>
-											<span class="h-1.5 w-1.5 rounded-full bg-gray-400"></span>
-											Desconectado
-										</span>
-									{/if}
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-				{#if usuarios.length === 0}
-					<div class="py-12 text-center text-gray-400">No hay usuarios registrados</div>
-				{/if}
+			<div class="dir-lista">
+				<TablaLista
+					columnas={COLUMNAS_USUARIOS}
+					datos={usuarios}
+					claveFila={(u) => u.id}
+					etiqueta="Usuarios del sistema"
+				>
+					{#snippet celda({ columnaId, fila: u })}
+						{#if columnaId === 'usuario'}
+							<CeldaIdentidad
+								titulo={u.nombre}
+								subtitulo={u.correo}
+								punto={u.en_linea ? COLOR_EN_LINEA : COLOR_DESCONECTADO}
+							/>
+						{:else if columnaId === 'areas'}
+							{#if u.area?.length}
+								<div class="eq-areas">
+									{#each u.area as a}<span class="eq-area-pill">{etiquetaArea(a)}</span>{/each}
+								</div>
+							{:else}
+								<span class="dir-nulo">—</span>
+							{/if}
+						{:else if columnaId === 'cargo'}
+							{#if u.cargo}<span>{u.cargo}</span>{:else}<span class="dir-nulo">—</span>{/if}
+						{:else if columnaId === 'acceso'}
+							<span class="dir-celda--fecha">{formatFecha(u.ultimo_acceso)}</span>
+						{:else if columnaId === 'estado'}
+							{#if u.en_linea}
+								<EstadoPunto etiqueta="En línea" color={COLOR_EN_LINEA} />
+							{:else if !u.activo}
+								<EstadoPunto etiqueta="Inactivo" color={COLOR_ERROR} />
+							{:else}
+								<EstadoPunto etiqueta="Desconectado" color={COLOR_DESCONECTADO} apagado />
+							{/if}
+						{/if}
+					{/snippet}
+
+					{#snippet vacio()}
+						{@const img = mascota('vacio')}
+						<div class="dir-vacio">
+							<img src={img.src} alt={img.alt} width="418" height="418" />
+							<h3>No hay usuarios registrados</h3>
+							<p>Cuando alguien acepte una invitación o se cree a mano, aparecerá aquí.</p>
+						</div>
+					{/snippet}
+				</TablaLista>
 			</div>
 		{/if}
 	{/if}
@@ -497,406 +509,510 @@
 	<!-- ─── Tab Invitaciones ──────────────────────────────────────────────── -->
 	{#if tabActiva === 'invitaciones'}
 		{#if cargandoInv}
-			<CargaMascota texto="Cargando invitaciones…" />
+			<div class="page-card eq-marco">
+				<CargaMascota texto="Cargando invitaciones…" />
+			</div>
+		{:else if errorInv && invitaciones.length === 0}
+			{@const img = mascota('advertencia')}
+			<div class="page-card dir-vacio">
+				<img src={img.src} alt={img.alt} width="418" height="418" />
+				<h3>No se pudieron cargar las invitaciones</h3>
+				<p>{errorInv} Revisa la conexión e inténtalo de nuevo.</p>
+				<button class="btn-secondary" onclick={cargarInvitaciones}>Reintentar</button>
+			</div>
 		{:else}
-			<div class="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm">
-				<table class="w-full text-sm">
-					<thead class="bg-gray-50">
-						<tr>
-							<th class="px-4 py-3 text-left font-semibold text-gray-600">Correo invitado</th>
-							<th class="px-4 py-3 text-left font-semibold text-gray-600">Área(s)</th>
-							<th class="px-4 py-3 text-left font-semibold text-gray-600">Invitado por</th>
-							<th class="px-4 py-3 text-left font-semibold text-gray-600">Enviada</th>
-							<th class="px-4 py-3 text-left font-semibold text-gray-600">Estado</th>
-							<th class="px-4 py-3"></th>
-						</tr>
-					</thead>
-					<tbody class="divide-y divide-gray-100">
-						{#each invitaciones as inv (inv.id)}
-							<tr class="transition-colors hover:bg-gray-50">
-								<td class="px-4 py-3 font-medium text-gray-800">{inv.correo}</td>
-								<td class="px-4 py-3">
-									<div class="flex flex-wrap gap-1">
-										{#each inv.area as a}
-											<span
-												class="rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700"
-											>
-												{AREA_LABELS[a as Area] ?? a}
-											</span>
-										{/each}
-									</div>
-								</td>
-								<td class="px-4 py-3 text-gray-600">{inv.invitado_por?.nombre ?? '—'}</td>
-								<td class="px-4 py-3 text-xs text-gray-500">{formatFecha(inv.created_at)}</td>
-								<td class="px-4 py-3">
-									<span
-										class="rounded-full px-2.5 py-1 text-xs font-semibold capitalize {estadoInvBadge(
-											inv.estado
-										)}"
-									>
-										{inv.estado}
-									</span>
-								</td>
-								<td class="px-4 py-3 text-right">
-									{#if inv.estado === 'pendiente' && puedeEscribir}
-										<button
-											onclick={() => revocarInvitacion(inv.id)}
-											class="rounded-lg px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50"
-										>
-											Revocar
-										</button>
-									{/if}
-								</td>
-							</tr>
-						{/each}
-					</tbody>
-				</table>
-				{#if invitaciones.length === 0}
-					<div class="py-12 text-center text-gray-400">No se han enviado invitaciones aún</div>
-				{/if}
+			<div class="dir-lista">
+				<TablaLista
+					columnas={COLUMNAS_INVITACIONES}
+					datos={invitaciones}
+					claveFila={(i) => i.id}
+					etiqueta="Invitaciones enviadas"
+				>
+					{#snippet celda({ columnaId, fila: inv })}
+						{#if columnaId === 'correo'}
+							<div class="dir-celda">
+								<span class="eq-correo">{inv.correo}</span>
+								{#if inv.cargo}<small>{inv.cargo}</small>{/if}
+							</div>
+						{:else if columnaId === 'areas'}
+							<div class="eq-areas">
+								{#each inv.area as a}<span class="eq-area-pill">{etiquetaArea(a)}</span>{/each}
+							</div>
+						{:else if columnaId === 'invitador'}
+							{#if inv.invitado_por?.nombre}
+								<span>{inv.invitado_por.nombre}</span>
+							{:else}
+								<span class="dir-nulo">—</span>
+							{/if}
+						{:else if columnaId === 'enviada'}
+							<span class="dir-celda--fecha">{formatFecha(inv.created_at)}</span>
+						{:else if columnaId === 'estado'}
+							{@const est = estadoInvitacion(inv.estado)}
+							<EstadoPunto
+								etiqueta={inv.estado.charAt(0).toUpperCase() + inv.estado.slice(1)}
+								color={est.color}
+								apagado={est.apagado}
+							/>
+						{:else if columnaId === 'acciones'}
+							<AccionesFila
+								acciones={[
+									{
+										id: 'revocar',
+										etiqueta: 'Revocar',
+										icono: Ban,
+										onClick: () => revocarInvitacion(inv.id),
+										peligrosa: true,
+										oculta: !(inv.estado === 'pendiente' && puedeEscribir)
+									}
+								]}
+							/>
+						{/if}
+					{/snippet}
+
+					{#snippet vacio()}
+						{@const img = mascota('vacio')}
+						<div class="dir-vacio">
+							<img src={img.src} alt={img.alt} width="418" height="418" />
+							<h3>No se han enviado invitaciones aún</h3>
+							<p>Las invitaciones por correo aparecen aquí hasta que se aceptan o vencen.</p>
+						</div>
+					{/snippet}
+				</TablaLista>
 			</div>
 		{/if}
 	{/if}
 </div>
 
 <!-- ─── Modal Invitar ──────────────────────────────────────────────────────── -->
-{#if modalAbierto}
-	<div
-		class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-		onclick={(e) => cerrarSiBackdrop(e, () => (modalAbierto = false))}
-		onkeydown={(e) => e.key === 'Escape' && (modalAbierto = false)}
-		role="dialog"
-		aria-modal="true"
-		aria-label="Invitar usuario"
-		tabindex="-1"
-	>
-		<div class="w-full max-w-md rounded-2xl bg-white shadow-xl">
-			<!-- Header -->
-			<div class="flex items-start justify-between border-b border-gray-100 px-6 py-4">
-				<div>
-					<h2 class="text-lg font-bold text-gray-900">Invitar usuario</h2>
-					<p class="mt-0.5 text-xs text-gray-500">
-						Recibirá un enlace por correo y <strong>elegirá su propia contraseña</strong>.
-					</p>
-				</div>
-				<button
-					onclick={() => (modalAbierto = false)}
-					aria-label="Cerrar modal"
-					class="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-				>
-					<svg
-						class="h-5 w-5"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-						stroke-width="2"
+<ModalBase
+	open={modalAbierto}
+	eyebrow="Equipo"
+	title="Invitar usuario"
+	subtitle="Recibirá un enlace por correo y elegirá su propia contraseña."
+	tamano="sm"
+	cerrarAlFondo={false}
+	bloqueado={enviando}
+	oncerrar={() => (modalAbierto = false)}
+>
+	<div class="eq-form">
+		<!-- Correo -->
+		<div class="eq-campo">
+			<label for="inv-correo">Correo electrónico <span class="eq-req">*</span></label>
+			<input
+				id="inv-correo"
+				type="email"
+				bind:value={formCorreo}
+				placeholder="usuario@empresa.com"
+				class="eq-input"
+			/>
+		</div>
+
+		<!-- Áreas -->
+		<div class="eq-campo">
+			<p class="eq-etiqueta">Área(s) <span class="eq-req">*</span></p>
+			<div class="eq-areas-opciones">
+				{#each AREAS as area (area.value)}
+					<button
+						type="button"
+						onclick={() => toggleArea(area.value)}
+						class="eq-area"
+						class:eq-area--activa={formAreas.includes(area.value)}
+						aria-pressed={formAreas.includes(area.value)}
 					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</div>
-
-			<!-- Body -->
-			<div class="space-y-4 px-6 py-5">
-				<!-- Correo -->
-				<div>
-					<label class="mb-1.5 block text-sm font-medium text-gray-700" for="inv-correo">
-						Correo electrónico <span class="text-red-500">*</span>
-					</label>
-					<input
-						id="inv-correo"
-						type="email"
-						bind:value={formCorreo}
-						placeholder="usuario@empresa.com"
-						class="w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 transition outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-					/>
-				</div>
-
-				<!-- Áreas -->
-				<div>
-					<p class="mb-2 text-sm font-medium text-gray-700">
-						Área(s) <span class="text-red-500">*</span>
-					</p>
-					<div class="flex flex-wrap gap-2">
-						{#each AREAS as area}
-							<button
-								type="button"
-								onclick={() => toggleArea(area.value)}
-								class="rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors
-									{formAreas.includes(area.value)
-									? 'border-orange-500 bg-orange-50 text-orange-700'
-									: 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'}"
-							>
-								{area.label}
-							</button>
-						{/each}
-					</div>
-				</div>
-
-				<!-- Cargo (opcional) -->
-				<div>
-					<label class="mb-1.5 block text-sm font-medium text-gray-700" for="inv-cargo">
-						Cargo <span class="font-normal text-gray-400">(opcional)</span>
-					</label>
-					<input
-						id="inv-cargo"
-						type="text"
-						bind:value={formCargo}
-						placeholder="Ej: Analista de operaciones"
-						class="w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 transition outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-					/>
-				</div>
-
-				{#if errorModal}
-					<p class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{errorModal}</p>
-				{/if}
-			</div>
-
-			<!-- Footer -->
-			<div class="flex justify-end gap-3 border-t border-gray-100 px-6 py-4">
-				<button
-					onclick={() => (modalAbierto = false)}
-					class="btn-secondary"
-				>
-					Cancelar
-				</button>
-				<button
-					onclick={enviarInvitacion}
-					disabled={enviando}
-					class="btn-primary inline-flex items-center gap-2"
-				>
-					{#if enviando}
-						<div
-							class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-						></div>
-					{/if}
-					Enviar invitación
-				</button>
+						{area.label}
+					</button>
+				{/each}
 			</div>
 		</div>
+
+		<!-- Cargo (opcional) -->
+		<div class="eq-campo">
+			<label for="inv-cargo">Cargo <span class="eq-opcional">(opcional)</span></label>
+			<input
+				id="inv-cargo"
+				type="text"
+				bind:value={formCargo}
+				placeholder="Ej: Analista de operaciones"
+				class="eq-input"
+			/>
+		</div>
+
+		{#if errorModal}
+			<p class="eq-error" role="alert">{errorModal}</p>
+		{/if}
 	</div>
-{/if}
+
+	{#snippet pie()}
+		<button onclick={() => (modalAbierto = false)} disabled={enviando} class="btn-secondary">
+			Cancelar
+		</button>
+		<button onclick={enviarInvitacion} disabled={enviando} class="btn-primary">
+			{#if enviando}
+				<span class="spinner eq-spinner" aria-hidden="true"></span>
+				Enviando…
+			{:else}
+				Enviar invitación
+			{/if}
+		</button>
+	{/snippet}
+</ModalBase>
 
 <!-- ─── Modal Crear manualmente ────────────────────────────────────────────── -->
-{#if modalCrearAbierto}
-	<div
-		class="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/40 p-4"
-		onclick={(e) => cerrarSiBackdrop(e, () => (modalCrearAbierto = false))}
-		onkeydown={(e) => e.key === 'Escape' && (modalCrearAbierto = false)}
-		role="dialog"
-		aria-modal="true"
-		aria-label="Crear usuario manualmente"
-		tabindex="-1"
-	>
-		<div class="my-8 w-full max-w-3xl rounded-2xl bg-white shadow-xl">
-			<!-- Header -->
-			<div class="flex items-start justify-between border-b border-gray-100 px-6 py-4">
-				<div>
-					<h2 class="text-lg font-bold text-gray-900">Crear usuario manualmente</h2>
-					<p class="mt-0.5 text-xs text-gray-500">
-						<strong>Tú defines la contraseña</strong> y se la entregas. La cuenta queda activa de inmediato
-						— no se envía ninguna invitación.
-					</p>
-				</div>
-				<button
-					onclick={() => (modalCrearAbierto = false)}
-					aria-label="Cerrar modal"
-					class="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
-				>
-					<svg
-						class="h-5 w-5"
-						fill="none"
-						viewBox="0 0 24 24"
-						stroke="currentColor"
-						stroke-width="2"
-					>
-						<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
+<ModalBase
+	open={modalCrearAbierto}
+	eyebrow="Equipo"
+	title="Crear usuario manualmente"
+	subtitle="Tú defines la contraseña y se la entregas. La cuenta queda activa de inmediato — no se envía ninguna invitación."
+	tamano="lg"
+	cerrarAlFondo={false}
+	bloqueado={creando}
+	oncerrar={() => (modalCrearAbierto = false)}
+>
+	<div class="eq-form">
+		<div class="eq-rejilla">
+			<div class="eq-campo">
+				<label for="new-nombre">Nombre completo <span class="eq-req">*</span></label>
+				<input
+					id="new-nombre"
+					type="text"
+					bind:value={nuevoNombre}
+					placeholder="Ej: Jeffrey Rodríguez"
+					class="eq-input"
+				/>
 			</div>
-
-			<!-- Body -->
-			<div class="space-y-5 px-6 py-5">
-				<div
-					class="grid gap-4"
-					style="grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));"
-				>
-					<div>
-						<label class="mb-1.5 block text-sm font-medium text-gray-700" for="new-nombre">
-							Nombre completo <span class="text-red-500">*</span>
-						</label>
-						<input
-							id="new-nombre"
-							type="text"
-							bind:value={nuevoNombre}
-							placeholder="Ej: Jeffrey Rodríguez"
-							class="w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 transition outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-						/>
-					</div>
-					<div>
-						<label class="mb-1.5 block text-sm font-medium text-gray-700" for="new-correo">
-							Correo electrónico <span class="text-red-500">*</span>
-						</label>
-						<input
-							id="new-correo"
-							type="email"
-							bind:value={nuevoCorreo}
-							placeholder="usuario@empresa.com"
-							class="w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 transition outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-						/>
-					</div>
-					<div>
-						<label class="mb-1.5 block text-sm font-medium text-gray-700" for="new-telefono">
-							Teléfono <span class="font-normal text-gray-400">(opcional)</span>
-						</label>
-						<input
-							id="new-telefono"
-							type="tel"
-							bind:value={nuevoTelefono}
-							placeholder="3001234567"
-							class="w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 transition outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-						/>
-					</div>
-					<div>
-						<label class="mb-1.5 block text-sm font-medium text-gray-700" for="new-cargo">
-							Cargo <span class="font-normal text-gray-400">(opcional)</span>
-						</label>
-						<input
-							id="new-cargo"
-							type="text"
-							bind:value={nuevoCargo}
-							placeholder="Ej: Técnico de mantenimiento"
-							class="w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 transition outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-						/>
-					</div>
-				</div>
-
-				<!-- Contraseña -->
-				<fieldset class="rounded-xl border border-gray-200 p-4">
-					<legend class="px-1.5 text-xs font-semibold tracking-wide text-gray-500 uppercase">
-						Contraseña
-					</legend>
-					<div
-						class="grid gap-4"
-						style="grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));"
-					>
-						<div>
-							<label class="mb-1.5 block text-sm font-medium text-gray-700" for="new-pass">
-								Contraseña <span class="text-red-500">*</span>
-							</label>
-							<input
-								id="new-pass"
-								type={mostrarPassword ? 'text' : 'password'}
-								bind:value={nuevoPassword}
-								autocomplete="new-password"
-								placeholder="Mínimo 8 caracteres"
-								class="w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 transition outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-							/>
-						</div>
-						<div>
-							<label class="mb-1.5 block text-sm font-medium text-gray-700" for="new-pass2">
-								Confirmar contraseña <span class="text-red-500">*</span>
-							</label>
-							<input
-								id="new-pass2"
-								type={mostrarPassword ? 'text' : 'password'}
-								bind:value={nuevoPassword2}
-								autocomplete="new-password"
-								placeholder="Repite la contraseña"
-								class="w-full rounded-xl border px-3.5 py-2.5 text-sm text-gray-900 transition outline-none focus:ring-2 focus:ring-orange-100
-									{nuevoPassword2 && nuevoPassword !== nuevoPassword2
-									? 'border-red-300'
-									: 'border-gray-300 focus:border-orange-500'}"
-							/>
-						</div>
-					</div>
-					<label class="mt-3 flex items-center gap-2 text-sm text-gray-600">
-						<input type="checkbox" bind:checked={mostrarPassword} class="rounded border-gray-300" />
-						Mostrar contraseña
-					</label>
-					{#if nuevoPassword2 && nuevoPassword !== nuevoPassword2}
-						<p class="mt-2 text-xs font-medium text-red-600">Las contraseñas no coinciden.</p>
-					{/if}
-				</fieldset>
-
-				<!-- Rol -->
-				<div style="max-width: 20rem;">
-					<label class="mb-1.5 block text-sm font-medium text-gray-700" for="new-role">Rol</label>
-					<select
-						id="new-role"
-						bind:value={nuevoRole}
-						class="w-full rounded-xl border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 transition outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
-					>
-						{#each ROLES as rol}
-							<option value={rol.value}>{rol.label}</option>
-						{/each}
-					</select>
-					{#if nuevoRole === 'admin'}
-						<p class="mt-1.5 text-xs text-blue-700">
-							Los administradores conservan acceso total: los permisos por ruta no se les aplican.
-						</p>
-					{/if}
-				</div>
-
-				<!-- Áreas -->
-				<div>
-					<p class="mb-2 text-sm font-medium text-gray-700">
-						Área(s) <span class="text-red-500">*</span>
-					</p>
-					<div class="flex flex-wrap gap-2">
-						{#each AREAS as area}
-							<button
-								type="button"
-								onclick={() => toggleAreaNuevo(area.value)}
-								class="rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors
-									{nuevoAreas.includes(area.value)
-									? 'border-orange-500 bg-orange-50 text-orange-700'
-									: 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'}"
-							>
-								{area.label}
-							</button>
-						{/each}
-					</div>
-				</div>
-
-				<!-- Permisos por ruta -->
-				<div>
-					<p class="mb-2 text-sm font-medium text-gray-700">Permisos por ruta</p>
-					<PermisosRutasPicker
-						idPrefix="crear"
-						areas={nuevoAreas}
-						role={nuevoRole}
-						valor={nuevoPermisosRutas}
-						onchange={(v) => (nuevoPermisosRutas = v)}
-					/>
-				</div>
-
-				{#if errorCrear}
-					<p class="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{errorCrear}</p>
-				{/if}
+			<div class="eq-campo">
+				<label for="new-correo">Correo electrónico <span class="eq-req">*</span></label>
+				<input
+					id="new-correo"
+					type="email"
+					bind:value={nuevoCorreo}
+					placeholder="usuario@empresa.com"
+					class="eq-input"
+				/>
 			</div>
-
-			<!-- Footer -->
-			<div class="flex justify-end gap-3 border-t border-gray-100 px-6 py-4">
-				<button
-					onclick={() => (modalCrearAbierto = false)}
-					class="btn-secondary"
-				>
-					Cancelar
-				</button>
-				<button
-					onclick={crearUsuario}
-					disabled={creando}
-					class="btn-primary inline-flex items-center gap-2"
-				>
-					{#if creando}
-						<div
-							class="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
-						></div>
-					{/if}
-					Crear usuario
-				</button>
+			<div class="eq-campo">
+				<label for="new-telefono">Teléfono <span class="eq-opcional">(opcional)</span></label>
+				<input
+					id="new-telefono"
+					type="tel"
+					bind:value={nuevoTelefono}
+					placeholder="3001234567"
+					class="eq-input"
+				/>
+			</div>
+			<div class="eq-campo">
+				<label for="new-cargo">Cargo <span class="eq-opcional">(opcional)</span></label>
+				<input
+					id="new-cargo"
+					type="text"
+					bind:value={nuevoCargo}
+					placeholder="Ej: Técnico de mantenimiento"
+					class="eq-input"
+				/>
 			</div>
 		</div>
+
+		<!-- Contraseña -->
+		<fieldset class="eq-grupo">
+			<legend>Contraseña</legend>
+			<div class="eq-rejilla">
+				<div class="eq-campo">
+					<label for="new-pass">Contraseña <span class="eq-req">*</span></label>
+					<input
+						id="new-pass"
+						type={mostrarPassword ? 'text' : 'password'}
+						bind:value={nuevoPassword}
+						autocomplete="new-password"
+						placeholder="Mínimo 8 caracteres"
+						class="eq-input"
+					/>
+				</div>
+				<div class="eq-campo">
+					<label for="new-pass2">Confirmar contraseña <span class="eq-req">*</span></label>
+					<input
+						id="new-pass2"
+						type={mostrarPassword ? 'text' : 'password'}
+						bind:value={nuevoPassword2}
+						autocomplete="new-password"
+						placeholder="Repite la contraseña"
+						class="eq-input"
+						aria-invalid={!!nuevoPassword2 && nuevoPassword !== nuevoPassword2}
+					/>
+				</div>
+			</div>
+			<label class="eq-check">
+				<input type="checkbox" bind:checked={mostrarPassword} />
+				Mostrar contraseña
+			</label>
+			{#if nuevoPassword2 && nuevoPassword !== nuevoPassword2}
+				<p class="eq-error-linea">Las contraseñas no coinciden.</p>
+			{/if}
+		</fieldset>
+
+		<!-- Rol -->
+		<!-- 20rem es la medida del propio control, no un tope de página. -->
+		<div class="eq-campo" style="max-width: 20rem;">
+			<label for="new-role">Rol</label>
+			<select id="new-role" bind:value={nuevoRole} class="eq-input">
+				{#each ROLES as rol (rol.value)}
+					<option value={rol.value}>{rol.label}</option>
+				{/each}
+			</select>
+			{#if nuevoRole === 'admin'}
+				<p class="eq-ayuda">
+					Los administradores conservan acceso total: los permisos por ruta no se les aplican.
+				</p>
+			{/if}
+		</div>
+
+		<!-- Áreas -->
+		<div class="eq-campo">
+			<p class="eq-etiqueta">Área(s) <span class="eq-req">*</span></p>
+			<div class="eq-areas-opciones">
+				{#each AREAS as area (area.value)}
+					<button
+						type="button"
+						onclick={() => toggleAreaNuevo(area.value)}
+						class="eq-area"
+						class:eq-area--activa={nuevoAreas.includes(area.value)}
+						aria-pressed={nuevoAreas.includes(area.value)}
+					>
+						{area.label}
+					</button>
+				{/each}
+			</div>
+		</div>
+
+		<!-- Permisos por ruta -->
+		<div class="eq-campo">
+			<p class="eq-etiqueta">Permisos por ruta</p>
+			<PermisosRutasPicker
+				idPrefix="crear"
+				areas={nuevoAreas}
+				role={nuevoRole}
+				valor={nuevoPermisosRutas}
+				onchange={(v) => (nuevoPermisosRutas = v)}
+			/>
+		</div>
+
+		{#if errorCrear}
+			<p class="eq-error" role="alert">{errorCrear}</p>
+		{/if}
 	</div>
-{/if}
+
+	{#snippet pie()}
+		<button onclick={() => (modalCrearAbierto = false)} disabled={creando} class="btn-secondary">
+			Cancelar
+		</button>
+		<button onclick={crearUsuario} disabled={creando} class="btn-primary">
+			{#if creando}
+				<span class="spinner eq-spinner" aria-hidden="true"></span>
+				Creando…
+			{:else}
+				Crear usuario
+			{/if}
+		</button>
+	{/snippet}
+</ModalBase>
+
+<style>
+	/* La página crece con su contenido: no es una lista con scroll propio. */
+	.eq-pagina {
+		height: auto;
+		min-height: 100%;
+	}
+	.eq-marco {
+		padding: 0;
+	}
+	.eq-solo-consulta {
+		padding: 0.35rem 0.75rem;
+		border-radius: 999px;
+		background: rgba(37, 99, 235, 0.08);
+		color: #1d4ed8;
+		font-size: 0.75rem;
+		font-weight: 700;
+	}
+
+	/* Las dos formas de alta, lado a lado si caben. */
+	.eq-caminos {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+		gap: 0.75rem 1.5rem;
+		padding: 1rem 1.25rem;
+	}
+	.eq-camino-titulo {
+		margin: 0;
+		font-size: 0.85rem;
+		font-weight: 700;
+		color: var(--text-primary);
+	}
+	.eq-camino-texto {
+		margin: 0.15rem 0 0;
+		font-size: 0.78rem;
+		line-height: 1.5;
+		color: var(--text-muted);
+	}
+
+	/* ── Celdas ── */
+	.eq-areas {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.25rem;
+	}
+	.eq-area-pill {
+		padding: 0.1rem 0.5rem;
+		border-radius: 6px;
+		background: var(--bg-base);
+		border: 1px solid var(--border-subtle);
+		color: var(--text-secondary);
+		font-size: 0.72rem;
+		font-weight: 600;
+		white-space: nowrap;
+	}
+	.eq-correo {
+		font-weight: 700;
+		overflow-wrap: anywhere;
+	}
+
+	/* ── Formularios de los modales (mismo control que `.de-input`) ── */
+	.eq-form {
+		display: flex;
+		flex-direction: column;
+		gap: 1.1rem;
+	}
+	.eq-rejilla {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+		gap: 1rem;
+	}
+	.eq-campo {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		min-width: 0;
+	}
+	.eq-campo > label,
+	.eq-etiqueta {
+		margin: 0;
+		color: var(--text-secondary);
+		font-size: 13px;
+		font-weight: 700;
+	}
+	.eq-req {
+		color: #dc2626;
+	}
+	.eq-opcional {
+		font-weight: 400;
+		color: var(--text-very-muted);
+	}
+	.eq-input {
+		width: 100%;
+		min-height: 42px;
+		padding: 9px 12px;
+		border: 1px solid var(--border-default);
+		border-radius: 12px;
+		background: var(--bg-surface);
+		color: var(--text-primary);
+		font: inherit;
+		font-size: 14px;
+		transition:
+			border-color 0.15s,
+			box-shadow 0.15s;
+	}
+	.eq-input::placeholder {
+		color: var(--text-very-muted);
+		opacity: 1;
+	}
+	.eq-input:focus {
+		outline: none;
+		border-color: var(--accion);
+		box-shadow: 0 0 0 3px color-mix(in srgb, var(--accion) 18%, transparent);
+	}
+	.eq-input[aria-invalid='true'] {
+		border-color: #dc2626;
+		background: #fff8f7;
+	}
+	.eq-areas-opciones {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+	.eq-area {
+		padding: 0.4rem 0.75rem;
+		border: 1px solid var(--border-default);
+		border-radius: 10px;
+		background: var(--bg-surface);
+		color: var(--text-secondary);
+		font: inherit;
+		font-size: 0.82rem;
+		font-weight: 600;
+		cursor: pointer;
+		transition:
+			border-color 0.15s,
+			background-color 0.15s;
+	}
+	.eq-area:hover {
+		border-color: var(--text-very-muted);
+	}
+	.eq-area--activa,
+	.eq-area--activa:hover {
+		border-color: var(--accion);
+		background: var(--au-tint);
+		color: var(--emerald-800);
+	}
+	.eq-grupo {
+		margin: 0;
+		padding: 0.9rem 1rem 1rem;
+		border: 1px solid var(--border-subtle);
+		border-radius: 14px;
+	}
+	.eq-grupo legend {
+		padding: 0 0.35rem;
+		font-size: 0.68rem;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.eq-check {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-top: 0.75rem;
+		font-size: 0.85rem;
+		color: var(--text-secondary);
+	}
+	.eq-check input {
+		width: 16px;
+		height: 16px;
+		accent-color: var(--accion);
+	}
+	.eq-ayuda {
+		margin: 0;
+		font-size: 12px;
+		color: #1d4ed8;
+	}
+	.eq-error-linea {
+		margin: 0.5rem 0 0;
+		font-size: 12px;
+		font-weight: 600;
+		color: #b42318;
+	}
+	.eq-error {
+		margin: 0;
+		padding: 0.55rem 0.75rem;
+		border-radius: 10px;
+		background: #fef2f2;
+		color: #b42318;
+		font-size: 0.85rem;
+	}
+
+	/* Spinner del botón mientras se envía: el global, a tamaño de texto. */
+	.eq-spinner {
+		width: 14px;
+		height: 14px;
+		border-width: 2px;
+		border-color: rgba(255, 255, 255, 0.35);
+		border-top-color: white;
+	}
+</style>

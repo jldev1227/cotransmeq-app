@@ -9,6 +9,7 @@
 	import TabsVista from '$lib/components/ui/TabsVista.svelte';
 	import Dato from '$lib/components/directorio/Dato.svelte';
 	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
+	import { toast } from '$lib/stores/toast';
 
 	export let isOpen = false;
 	export let recargoId: string | null = null;
@@ -276,7 +277,7 @@
 	} // Función para descargar archivo
 	async function descargarArchivoExistente() {
 		if (!recargo?.planilla_s3key) {
-			alert('No hay planilla asociada a este recargo');
+			toast.warning('Este recargo no tiene planilla adjunta');
 			return;
 		}
 
@@ -284,7 +285,7 @@
 		if (url) {
 			window.open(url, '_blank');
 		} else {
-			alert('No se pudo obtener el enlace de descarga de la planilla');
+			toast.error('No se pudo obtener el enlace de descarga de la planilla');
 		}
 	}
 
@@ -304,7 +305,7 @@
 	// Función para visualizar el PDF o la imagen adjunta
 	async function visualizarArchivo() {
 		if (!recargo?.planilla_s3key) {
-			alert('No hay planilla asociada a este recargo');
+			toast.warning('Este recargo no tiene planilla adjunta');
 			return;
 		}
 
@@ -315,7 +316,7 @@
 		const url = await getPresignedUrl(recargo.planilla_s3key);
 		if (!url) {
 			pestana?.close();
-			alert('No se pudo abrir la planilla. Intenta de nuevo.');
+			toast.error('No se pudo abrir la planilla', { description: 'Intenta de nuevo.' });
 			return;
 		}
 		if (pestana) pestana.location.href = url;

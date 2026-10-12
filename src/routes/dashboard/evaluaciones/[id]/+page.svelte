@@ -28,9 +28,12 @@
 	import {
 		authHeaders,
 		actualizarRespuestasResultado,
+		mensajeErrorEvaluaciones,
 		obtenerResultado
 	} from '$lib/api/evaluaciones';
+	import { fetchConSesion } from '$lib/api/fetchConSesion';
 	import { authStore } from '$lib/stores/auth';
+	import { listadoEvaluaciones } from '$lib/stores/volverListado';
 
 	interface Evaluacion {
 		id: string;
@@ -100,6 +103,9 @@
 	let isLoading = false;
 	let isLoadingResultados = false;
 	let error: string | null = null;
+	/// Antes un fallo al traer las respuestas solo iba a la consola y el panel
+	/// decía «Sin respuestas aún»: parecía que nadie hubiera respondido.
+	let errorResultados: string | null = null;
 	let nuevosResultadosCount = 0;
 	/**
 	 * Respuesta que se está mirando en detalle.
@@ -164,19 +170,21 @@
 		isLoading = true;
 		error = null;
 		try {
-			const response = await fetch(
-				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}`,
-				{ headers: authHeaders() }
-			);
-			const data = await response.json();
-			if (data.success) {
+			const response = await fetchConSesion(`/api/evaluaciones/${evaluacionId}`, {
+				headers: authHeaders()
+			});
+			const data = await response.json().catch(() => ({}));
+			if (response.ok && data.success) {
 				evaluacion = data.data;
 			} else {
-				error = 'Error al cargar la evaluación';
+				error =
+					data.message ||
+					(response.status === 404
+						? 'La evaluación no existe o fue eliminada.'
+						: 'No se pudo cargar la evaluación.');
 			}
 		} catch (err: any) {
-			error = err.message || 'Error al cargar la evaluación';
-			console.error('Error:', err);
+			error = mensajeErrorEvaluaciones(err, 'No se pudo cargar la evaluación');
 		} finally {
 			isLoading = false;
 		}
@@ -184,27 +192,31 @@
 
 	async function loadResultados() {
 		isLoadingResultados = true;
+		errorResultados = null;
 		try {
-			const response = await fetch(
-				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}/resultados`,
-				{ headers: authHeaders() }
-			);
-
-			if (!response.ok) {
-				const errorText = await response.text();
-				console.error('Error response:', errorText);
-				return;
-			}
-
-			const data = await response.json();
-			if (data.success) {
+			const response = await fetchConSesion(`/api/evaluaciones/${evaluacionId}/resultados`, {
+				headers: authHeaders()
+			});
+			const data = await response.json().catch(() => ({}));
+			if (response.ok && data.success) {
 				resultados = data.data;
+			} else {
+				const mensaje: string = data.message || 'No se pudieron cargar las respuestas.';
+				errorResultados = mensaje;
+				toast.error(mensaje);
 			}
 		} catch (err: any) {
-			console.error('Error:', err);
+			const mensaje = mensajeErrorEvaluaciones(err, 'No se pudieron cargar las respuestas');
+			errorResultados = mensaje;
+			toast.error(mensaje);
 		} finally {
 			isLoadingResultados = false;
 		}
+	}
+
+	function reintentarCarga() {
+		loadEvaluacion();
+		loadResultados();
 	}
 
 	let isLoadingDetalle = false;
@@ -437,22 +449,19 @@
 		if (!evaluacion) return;
 		eliminando = true;
 		try {
-			const response = await fetch(
-				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}`,
-				{
-					method: 'DELETE',
-					headers: authHeaders()
-				}
-			);
+			const response = await fetchConSesion(`/api/evaluaciones/${evaluacionId}`, {
+				method: 'DELETE',
+				headers: authHeaders()
+			});
 			if (response.ok) {
 				toast.success('Evaluación eliminada correctamente');
-				goto('/dashboard/evaluaciones');
+				goto(listadoEvaluaciones.url());
 			} else {
-				toast.error('Error al eliminar la evaluación');
+				const data = await response.json().catch(() => ({}));
+				toast.error(data.message || 'No se pudo eliminar la evaluación');
 			}
 		} catch (err) {
-			console.error('Error:', err);
-			toast.error('Error al eliminar la evaluación');
+			toast.error(mensajeErrorEvaluaciones(err, 'No se pudo eliminar la evaluación'));
 		} finally {
 			eliminando = false;
 			confirmarEliminar = false;
@@ -482,10 +491,9 @@
 
 		try {
 			toast.loading('Generando PDF...');
-			const response = await fetch(
-				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}/exportar-pdf`,
-				{ headers: authHeaders() }
-			);
+			const response = await fetchConSesion(`/api/evaluaciones/${evaluacionId}/exportar-pdf`, {
+				headers: authHeaders()
+			});
 
 			if (!response.ok) {
 				throw new Error('Error al generar el PDF');
@@ -509,8 +517,8 @@
 
 		try {
 			toast.loading('Generando PDF...');
-			const response = await fetch(
-				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}/resultados/${resultadoId}/exportar-pdf`,
+			const response = await fetchConSesion(
+				`/api/evaluaciones/${evaluacionId}/resultados/${resultadoId}/exportar-pdf`,
 				{ headers: authHeaders() }
 			);
 
@@ -536,10 +544,9 @@
 
 		try {
 			toast.loading('Generando PDF...');
-			const response = await fetch(
-				`${import.meta.env.VITE_API_URL}/api/evaluaciones/${evaluacionId}/exportar-zip`,
-				{ headers: authHeaders() }
-			);
+			const response = await fetchConSesion(`/api/evaluaciones/${evaluacionId}/exportar-zip`, {
+				headers: authHeaders()
+			});
 
 			if (!response.ok) {
 				throw new Error('Error al generar el PDF');
@@ -579,7 +586,7 @@
 			<button
 				type="button"
 				class="ev-hero-volver"
-				on:click={() => goto('/dashboard/evaluaciones')}
+				on:click={() => goto(listadoEvaluaciones.url())}
 				aria-label="Volver a evaluaciones"
 			>
 				<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -691,15 +698,23 @@
 			<CargaMascota texto="Cargando evaluación…" />
 		</div>
 	{:else if error}
-		<div class="ev-aviso ev-aviso--error" role="alert">
-			<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-				<path
-					stroke-linecap="round"
-					stroke-linejoin="round"
-					d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-				/>
-			</svg>
-			{error}
+		{@const img = mascota('advertencia')}
+		<div class="ev-card">
+			<div class="dir-vacio" role="alert">
+				<img src={img.src} alt={img.alt} width="418" height="418" />
+				<h3>No pudimos abrir la evaluación</h3>
+				<p>{error}</p>
+				<div class="flex flex-wrap justify-center gap-2">
+					<button
+						type="button"
+						class="btn-secondary"
+						on:click={() => goto(listadoEvaluaciones.url())}
+					>
+						Volver a evaluaciones
+					</button>
+					<button type="button" class="btn-primary" on:click={reintentarCarga}>Reintentar</button>
+				</div>
+			</div>
 		</div>
 	{:else if evaluacion}
 		{#if resultadoSeleccionado}
@@ -1261,9 +1276,11 @@
 							<h2 class="ev-card-titulo">
 								Resultados
 								<small>
-									{resultados.length === 0
-										? 'Nadie ha respondido todavía'
-										: `${resultados.length} ${resultados.length === 1 ? 'respuesta' : 'respuestas'} · las más recientes primero`}
+									{errorResultados && resultados.length === 0
+										? 'No se pudieron cargar'
+										: resultados.length === 0
+											? 'Nadie ha respondido todavía'
+											: `${resultados.length} ${resultados.length === 1 ? 'respuesta' : 'respuestas'} · las más recientes primero`}
 								</small>
 							</h2>
 							{#if nuevosResultadosCount > 0}
@@ -1280,6 +1297,16 @@
 
 						{#if isLoadingResultados}
 							<CargaMascota texto="Cargando respuestas…" />
+						{:else if errorResultados && resultados.length === 0}
+							{@const img = mascota('advertencia')}
+							<div class="ev-vacio" role="alert">
+								<img src={img.src} alt={img.alt} width="418" height="418" />
+								<h3>No pudimos cargar las respuestas</h3>
+								<p>{errorResultados}</p>
+								<button type="button" class="btn-secondary" on:click={loadResultados}>
+									Reintentar
+								</button>
+							</div>
 						{:else if resultados.length === 0}
 							{@const img = mascota('vacio')}
 							<div class="ev-vacio">

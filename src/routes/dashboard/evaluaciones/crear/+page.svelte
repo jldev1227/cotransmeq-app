@@ -15,6 +15,7 @@
 	} from '$lib/components/evaluaciones/tipos';
 	import '$lib/components/evaluaciones/evaluaciones.css';
 	import { authHeaders } from '$lib/api/evaluaciones';
+	import { fetchConSesion } from '$lib/api/fetchConSesion';
 
 	interface Pregunta {
 		texto: string;
@@ -240,7 +241,7 @@
 		error = null;
 
 		try {
-			const response = await fetch(`${import.meta.env.VITE_API_URL}/api/evaluaciones`, {
+			const response = await fetchConSesion(`/api/evaluaciones`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json', ...authHeaders() },
 				body: JSON.stringify({

@@ -1,6 +1,8 @@
 import { browser } from '$app/environment';
 
-const API_URL = browser ? import.meta.env.VITE_API_URL : 'http://localhost:4000';
+/// Misma base que `apiClient`, con su respaldo: sin `VITE_API_URL` se pedía a
+/// `undefined/api/...`. Las rutas con sesión salen por `fetchConSesion`.
+import { API_BASE as API_URL, fetchConSesion } from './fetchConSesion';
 
 export type TipoEvento =
 	| 'capacitacion'
@@ -53,6 +55,17 @@ export interface RespuestaAsistencia {
 	user_agent: string;
 	device_fingerprint: string;
 	created_at: string;
+}
+
+/**
+ * Lo que devuelve la verificación pública del QR: si este dispositivo ya
+ * firmó, a nombre de quién y cuándo. Desde oct-2026 no trae documento,
+ * teléfono, firma ni nada más de la firma guardada.
+ */
+export interface ConfirmacionAsistencia {
+	respondido: boolean;
+	nombre: string | null;
+	fecha: string | null;
 }
 
 export interface CreateFormularioInput {
@@ -144,7 +157,7 @@ class AsistenciasAPI {
 	// ============================================
 
 	async crearFormulario(data: CreateFormularioInput): Promise<FormularioAsistencia> {
-		const response = await fetch(`${this.baseUrl}/formularios`, {
+		const response = await fetchConSesion(`${this.baseUrl}/formularios`, {
 			method: 'POST',
 			headers: await this.getAuthHeaders(),
 			body: JSON.stringify(data)
@@ -182,7 +195,7 @@ class AsistenciasAPI {
 			sortOrder
 		});
 
-		const response = await fetch(`${this.baseUrl}/formularios?${queryParams}`, {
+		const response = await fetchConSesion(`${this.baseUrl}/formularios?${queryParams}`, {
 			headers: await this.getAuthHeaders()
 		});
 
@@ -201,7 +214,7 @@ class AsistenciasAPI {
 		const qs = queryFiltros(params).toString();
 		const url = `${this.baseUrl}/formularios/ids${qs ? `?${qs}` : ''}`;
 
-		const response = await fetch(url, {
+		const response = await fetchConSesion(url, {
 			headers: await this.getAuthHeaders()
 		});
 
@@ -215,7 +228,7 @@ class AsistenciasAPI {
 
 	// Activar o cerrar varios formularios a la vez; devuelve cuántos cambiaron.
 	async cambiarEstado(ids: string[], activo: boolean): Promise<number> {
-		const response = await fetch(`${this.baseUrl}/formularios/estado`, {
+		const response = await fetchConSesion(`${this.baseUrl}/formularios/estado`, {
 			method: 'PATCH',
 			headers: await this.getAuthHeaders(),
 			body: JSON.stringify({ ids, activo })
@@ -231,7 +244,7 @@ class AsistenciasAPI {
 	}
 
 	async obtenerFormularioPorId(id: string): Promise<FormularioAsistencia> {
-		const response = await fetch(`${this.baseUrl}/formularios/${id}`, {
+		const response = await fetchConSesion(`${this.baseUrl}/formularios/${id}`, {
 			headers: await this.getAuthHeaders()
 		});
 
@@ -252,7 +265,7 @@ class AsistenciasAPI {
 		id: string,
 		data: UpdateFormularioInput
 	): Promise<FormularioAsistencia> {
-		const response = await fetch(`${this.baseUrl}/formularios/${id}`, {
+		const response = await fetchConSesion(`${this.baseUrl}/formularios/${id}`, {
 			method: 'PUT',
 			headers: await this.getAuthHeaders(),
 			body: JSON.stringify(data)
@@ -268,7 +281,7 @@ class AsistenciasAPI {
 	}
 
 	async eliminarFormulario(id: string): Promise<void> {
-		const response = await fetch(`${this.baseUrl}/formularios/${id}`, {
+		const response = await fetchConSesion(`${this.baseUrl}/formularios/${id}`, {
 			method: 'DELETE',
 			headers: await this.getAuthHeaders()
 		});
@@ -279,7 +292,7 @@ class AsistenciasAPI {
 	}
 
 	async obtenerRespuestas(formularioId: string): Promise<RespuestaAsistencia[]> {
-		const response = await fetch(`${this.baseUrl}/formularios/${formularioId}/respuestas`, {
+		const response = await fetchConSesion(`${this.baseUrl}/formularios/${formularioId}/respuestas`, {
 			headers: await this.getAuthHeaders()
 		});
 
@@ -294,6 +307,8 @@ class AsistenciasAPI {
 	// ============================================
 	// RUTAS PÚBLICAS (Sin auth)
 	// ============================================
+	/// `fetch` a secas y no `fetchConSesion`: las usa la pantalla pública de
+	/// asistencia, sin sesión del equipo; un 401 no debe llevar al login.
 
 	async obtenerFormularioPorToken(token: string): Promise<FormularioAsistencia> {
 		const response = await fetch(`${this.publicUrl}/${token}`, {
@@ -312,7 +327,7 @@ class AsistenciasAPI {
 	async verificarRespuesta(
 		token: string,
 		deviceFingerprint: string
-	): Promise<{ yaRespondio: boolean; respuesta?: RespuestaAsistencia }> {
+	): Promise<ConfirmacionAsistencia> {
 		const response = await fetch(
 			`${this.publicUrl}/${token}/verificar?device_fingerprint=${encodeURIComponent(deviceFingerprint)}`,
 			{
@@ -346,7 +361,7 @@ class AsistenciasAPI {
 
 	// Exportar respuestas a Excel
 	async exportarRespuestas(formularioId: string): Promise<Blob> {
-		const response = await fetch(`${this.baseUrl}/formularios/${formularioId}/exportar`, {
+		const response = await fetchConSesion(`${this.baseUrl}/formularios/${formularioId}/exportar`, {
 			headers: await this.getAuthHeaders()
 		});
 
@@ -359,7 +374,7 @@ class AsistenciasAPI {
 
 	// Exportar respuestas a PDF
 	async exportarPDF(formularioId: string): Promise<Blob> {
-		const response = await fetch(`${this.baseUrl}/formularios/${formularioId}/exportar-pdf`, {
+		const response = await fetchConSesion(`${this.baseUrl}/formularios/${formularioId}/exportar-pdf`, {
 			headers: await this.getAuthHeaders()
 		});
 
@@ -378,7 +393,7 @@ class AsistenciasAPI {
 		const qs = queryParams.toString();
 		const url = `${this.baseUrl}/formularios/exportar-todas-pdf${qs ? `?${qs}` : ''}`;
 
-		const response = await fetch(url, {
+		const response = await fetchConSesion(url, {
 			headers: await this.getAuthHeaders()
 		});
 
@@ -392,7 +407,7 @@ class AsistenciasAPI {
 
 	// Exportar formularios SELECCIONADOS a un ZIP
 	async exportarSeleccionadosPDFs(ids: string[], jobId?: string): Promise<Blob> {
-		const response = await fetch(`${this.baseUrl}/formularios/exportar-seleccionados-pdf`, {
+		const response = await fetchConSesion(`${this.baseUrl}/formularios/exportar-seleccionados-pdf`, {
 			method: 'POST',
 			headers: await this.getAuthHeaders(),
 			body: JSON.stringify({ ids, jobId })
@@ -407,7 +422,7 @@ class AsistenciasAPI {
 	}
 
 	async eliminarRespuestas(ids: string[]): Promise<{ deleted: number }> {
-		const response = await fetch(`${this.baseUrl}/respuestas`, {
+		const response = await fetchConSesion(`${this.baseUrl}/respuestas`, {
 			method: 'DELETE',
 			headers: await this.getAuthHeaders(),
 			body: JSON.stringify({ ids })

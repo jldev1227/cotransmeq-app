@@ -2,6 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import type { ConceptoDescuento } from '$lib/api/liquidaciones-terceros-descuentos';
+	import { toast } from '$lib/stores/toast';
 	import firmaCamiloUrl from '$lib/assets/Firma Camilo Cepeda.jpg';
 
 	export let item: any;
@@ -454,11 +455,9 @@
 			setTimeout(() => URL.revokeObjectURL(url), 60000);
 		} catch (err: any) {
 			console.error('Error generando PDF:', err);
-			alert(
-				'Error generando PDF: ' +
-					(err?.message || err) +
-					'\nUsando print del navegador como fallback.'
-			);
+			toast.error('No se pudo generar el PDF en el servidor', {
+				description: `${err?.message || err}. Se abre la impresión del navegador en su lugar.`
+			});
 			window.print();
 		} finally {
 			pdfLoading = false;

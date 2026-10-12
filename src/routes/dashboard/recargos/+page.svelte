@@ -30,11 +30,27 @@
 	import { toast } from 'svelte-sonner';
 	import MultiSelectFilter from '$lib/components/ui/MultiSelectFilter.svelte';
 	import ModalConfirmarRestaurar from '$lib/components/modals/ModalConfirmarRestaurar.svelte';
-	import { texto, numero, opcion, lista, leerDeParams, contarActivos, limpiar } from '$lib/listing/filtros';
+	import {
+		texto,
+		numero,
+		opcion,
+		lista,
+		leerDeParams,
+		contarActivos,
+		limpiar
+	} from '$lib/listing/filtros';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
 	import { coincide } from '$lib/listing/texto';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
+	import ResumenConteos from '$lib/components/listing/ResumenConteos.svelte';
+	import SegmentosFiltro from '$lib/components/listing/SegmentosFiltro.svelte';
+	import BarraSeleccion, {
+		type AccionSeleccion
+	} from '$lib/components/listing/BarraSeleccion.svelte';
+	import { mascota } from '$lib/mascot';
+	import { MediaQuery } from 'svelte/reactivity';
+	import { Copy, Eye, Pencil, RefreshCw, RotateCcw, Tags, Trash2 } from 'lucide-svelte';
 
 	/**
 	 * Filtros de la página, y con ellos la URL.
@@ -64,17 +80,18 @@
 	};
 	const estadoUrl = crearEstadoUrl(DEFS);
 
-	let filtros = $state(leerDeParams(DEFS, new URLSearchParams(browser ? window.location.search : '')));
+	let filtros = $state(
+		leerDeParams(DEFS, new URLSearchParams(browser ? window.location.search : ''))
+	);
 
 	// State
 	let selectedRows = $state(new Set<string>());
 	let sortField = $state('');
-	let sortDirection : 'asc' | 'desc' = $state('asc');
+	let sortDirection: 'asc' | 'desc' = $state('asc');
 
 	// Highlight states - para resaltar recargos nuevos o actualizados
 	let recentlyCreated = $state(new Set<string>());
 	let recentlyUpdated = $state(new Set<string>());
-
 
 	// Modal states
 	let modalFormIsOpen = $state(false);
@@ -83,7 +100,7 @@
 	let modalEstadoIsOpen = $state(false);
 	let modalRestaurarIsOpen = $state(false);
 	let modalImportarTransmeraldaIsOpen = $state(false);
-	let selectedRecargoId : string | null = $state(null);
+	let selectedRecargoId: string | null = $state(null);
 	let deleteLoading = $state(false);
 	let restoredLoading = $state(false);
 	let estadoLoading = $state(false);
@@ -142,10 +159,10 @@
 	// `recargo-recalculado`, y el preview endpoint (vía `cargarPreviewParaRecargos`).
 	const valoresPagarByRecargo = $derived($valoresPagarByRecargoStore);
 	// Conjunto de recargos cuya petición de preview está en vuelo (para mostrar spinner).
-	let recargosCargandoValor : Set<string> = $state(new Set());
+	let recargosCargandoValor: Set<string> = $state(new Set());
 	// Conjunto de recargos para los que ya se intentó cargar y no aparecieron
 	// en el preview (sin recargos monetizables en el período).
-	let recargosSinValor : Set<string> = $state(new Set());
+	let recargosSinValor: Set<string> = $state(new Set());
 
 	function fmtCOP(v: number | null | undefined): string {
 		const n = Number(v) || 0;
@@ -258,43 +275,55 @@
 	// Columns dinámicas según mes/año
 	const daysInMonth = $derived(getDaysInMonth(filtros.mes, filtros.anio));
 	// Días festivos del mes/año seleccionado (array de números: ej. [1, 6, 19, ...])
-	const diasFestivosMes = $derived(obtenerFestivosCompletos(filtros.anio)
-		.filter((f) => f.mes === filtros.mes)
-		.map((f) => f.dia));
-	const uniqueEmpresas = $derived([
-		...new Set(recargos.map((r) => r.empresa?.nombre).filter((n): n is string => Boolean(n)))
-	].sort());
-	const uniqueConductores = $derived([
-		...new Set(
-			recargos
-				.map((r) => `${r.conductor?.nombre || ''} ${r.conductor?.apellido || ''}`.trim())
-				.filter(Boolean)
-		)
-	].sort());
-	const uniqueVehiculos = $derived([
-		...new Set(recargos.map((r) => r.vehiculo?.placa).filter((v): v is string => Boolean(v)))
-	].sort());
+	const diasFestivosMes = $derived(
+		obtenerFestivosCompletos(filtros.anio)
+			.filter((f) => f.mes === filtros.mes)
+			.map((f) => f.dia)
+	);
+	const uniqueEmpresas = $derived(
+		[
+			...new Set(recargos.map((r) => r.empresa?.nombre).filter((n): n is string => Boolean(n)))
+		].sort()
+	);
+	const uniqueConductores = $derived(
+		[
+			...new Set(
+				recargos
+					.map((r) => `${r.conductor?.nombre || ''} ${r.conductor?.apellido || ''}`.trim())
+					.filter(Boolean)
+			)
+		].sort()
+	);
+	const uniqueVehiculos = $derived(
+		[
+			...new Set(recargos.map((r) => r.vehiculo?.placa).filter((v): v is string => Boolean(v)))
+		].sort()
+	);
 	const uniqueEstados = $derived([...new Set(recargos.map((r) => r.estado).filter(Boolean))]);
-	const uniquePlanillas = $derived([
-		...new Set(recargos.map((r) => r.numero_planilla).filter((p): p is string => Boolean(p)))
-	].sort());
+	const uniquePlanillas = $derived(
+		[
+			...new Set(recargos.map((r) => r.numero_planilla).filter((p): p is string => Boolean(p)))
+		].sort()
+	);
 
-	const dayColumns = $derived(Array.from({ length: daysInMonth }, (_, i) => {
-		const day = i + 1;
-		const isSunday = esDomingo(day, filtros.mes, filtros.anio);
-		const isFestivo = diasFestivosMes.includes(day);
+	const dayColumns = $derived(
+		Array.from({ length: daysInMonth }, (_, i) => {
+			const day = i + 1;
+			const isSunday = esDomingo(day, filtros.mes, filtros.anio);
+			const isFestivo = diasFestivosMes.includes(day);
 
-		return {
-			key: `day_${day}`,
-			label: day.toString(),
-			day: day,
-			isDayColumn: true,
-			isSunday: isSunday,
-			isFestivo: isFestivo,
-			bgColor: isFestivo ? 'bg-orange-50' : isSunday ? 'bg-red-50' : '',
-			width: '60px'
-		};
-	}));
+			return {
+				key: `day_${day}`,
+				label: day.toString(),
+				day: day,
+				isDayColumn: true,
+				isSunday: isSunday,
+				isFestivo: isFestivo,
+				bgColor: isFestivo ? 'bg-orange-50' : isSunday ? 'bg-red-50' : '',
+				width: '60px'
+			};
+		})
+	);
 
 	// Columnas fijas
 	// `stickyLeft` = offset acumulado desde el borde izquierdo para que
@@ -395,46 +424,48 @@
 	const columns: any[] = $derived([...fixedColumns, ...dayColumns, ...totalColumns]);
 
 	// Filtered data
-	const filteredRecargos = $derived(recargos.filter((recargo) => {
-		/// `coincide` exige todas las palabras en cualquiera de los campos y
-		/// pasa por alto las tildes, así que «munoz alaskan» encuentra a Muñoz
-		/// con esa placa. El `includes` anterior era de una sola palabra y
-		/// literal: teclear el nombre y el apellido no encontraba nada.
-		if (
-			!coincide(filtros.search, [
-				`${recargo.conductor?.nombre || ''} ${recargo.conductor?.apellido || ''}`,
-				recargo.vehiculo?.placa,
-				recargo.empresa?.nombre,
-				recargo.numero_planilla
-			])
-		) {
-			return false;
-		}
+	const filteredRecargos = $derived(
+		recargos.filter((recargo) => {
+			/// `coincide` exige todas las palabras en cualquiera de los campos y
+			/// pasa por alto las tildes, así que «munoz alaskan» encuentra a Muñoz
+			/// con esa placa. El `includes` anterior era de una sola palabra y
+			/// literal: teclear el nombre y el apellido no encontraba nada.
+			if (
+				!coincide(filtros.search, [
+					`${recargo.conductor?.nombre || ''} ${recargo.conductor?.apellido || ''}`,
+					recargo.vehiculo?.placa,
+					recargo.empresa?.nombre,
+					recargo.numero_planilla
+				])
+			) {
+				return false;
+			}
 
-		// Filtros específicos
-		if (filtros.conductor.length > 0) {
-			const nombre =
-				`${recargo.conductor?.nombre || ''} ${recargo.conductor?.apellido || ''}`.trim();
-			if (!filtros.conductor.includes(nombre)) return false;
-		}
+			// Filtros específicos
+			if (filtros.conductor.length > 0) {
+				const nombre =
+					`${recargo.conductor?.nombre || ''} ${recargo.conductor?.apellido || ''}`.trim();
+				if (!filtros.conductor.includes(nombre)) return false;
+			}
 
-		if (filtros.planilla.length > 0) {
-			if (!filtros.planilla.includes(recargo?.numero_planilla ?? '')) return false;
-		}
+			if (filtros.planilla.length > 0) {
+				if (!filtros.planilla.includes(recargo?.numero_planilla ?? '')) return false;
+			}
 
-		if (filtros.vehiculo.length > 0) {
-			if (!filtros.vehiculo.includes(recargo.vehiculo?.placa ?? '')) return false;
-		}
+			if (filtros.vehiculo.length > 0) {
+				if (!filtros.vehiculo.includes(recargo.vehiculo?.placa ?? '')) return false;
+			}
 
-		if (filtros.empresa.length > 0) {
-			if (!filtros.empresa.includes(recargo.empresa?.nombre ?? '')) return false;
-		}
-		if (filtros.estado.length > 0) {
-			if (!filtros.estado.includes(recargo.estado)) return false;
-		}
+			if (filtros.empresa.length > 0) {
+				if (!filtros.empresa.includes(recargo.empresa?.nombre ?? '')) return false;
+			}
+			if (filtros.estado.length > 0) {
+				if (!filtros.estado.includes(recargo.estado)) return false;
+			}
 
-		return true;
-	}));
+			return true;
+		})
+	);
 
 	/**
 	 * Cuántos filtros están puestos, ignorando mes, año y tamaño de página.
@@ -457,10 +488,12 @@
 
 	// Paginated data
 	const totalPages = $derived(Math.max(1, Math.ceil(filteredRecargos.length / filtros.porPagina)));
-	const paginatedRecargos = $derived(filteredRecargos.slice(
-		(filtros.pagina - 1) * filtros.porPagina,
-		filtros.pagina * filtros.porPagina
-	));
+	const paginatedRecargos = $derived(
+		filteredRecargos.slice(
+			(filtros.pagina - 1) * filtros.porPagina,
+			filtros.pagina * filtros.porPagina
+		)
+	);
 
 	/**
 	 * Vuelve a la página 1 cuando cambia lo que se está mirando.
@@ -579,6 +612,160 @@
 	// derivan del filtro: el backend lo recalcula cada vez que cambia
 	// mes/año o cualquier filtro del query.
 	const totalValorPagar = $derived($recargosStore.meta?.total_valor_pagar ?? 0);
+
+	/**
+	 * Conteos de la cabecera: planillas del mes y cuántas hay en cada estado.
+	 *
+	 * Cuentan sobre TODO lo cargado del mes, no sobre lo filtrado: son el estado
+	 * del periodo, como en Flota. Pulsar uno filtra por ese estado con el mismo
+	 * filtro que el desplegable de la columna «Estado», así que los dos se ven
+	 * de acuerdo. «Facturada» toma el color de la marca porque su pastilla en
+	 * la tabla (`bg-emerald-500`) también lo hace en cada empresa.
+	 */
+	const ORDEN_ESTADOS = ['pendiente', 'liquidada', 'facturada', 'encontrada', 'no_esta'];
+	const COLOR_ESTADO: Record<string, string> = {
+		pendiente: '#f59e0b',
+		liquidada: '#a855f7',
+		facturada: 'var(--emerald-500)',
+		encontrada: '#06b6d4',
+		no_esta: '#ef4444',
+		noesta: '#ef4444',
+		'no-esta': '#ef4444'
+	};
+	const conteosEstado = $derived.by(() => {
+		const porEstado = new Map<string, number>();
+		for (const r of recargos) {
+			if (r.estado) porEstado.set(r.estado, (porEstado.get(r.estado) ?? 0) + 1);
+		}
+		const posicion = (e: string) => {
+			const i = ORDEN_ESTADOS.indexOf(e.toLowerCase());
+			return i === -1 ? ORDEN_ESTADOS.length : i;
+		};
+		return [
+			{
+				clave: 'todos',
+				etiqueta: verEliminados ? 'Eliminados' : 'Planillas',
+				valor: recargos.length
+			},
+			...[...porEstado.entries()]
+				.sort(([a], [b]) => posicion(a) - posicion(b))
+				.map(([estado, n]) => ({
+					clave: estado,
+					etiqueta: getEstadoLabel(estado),
+					valor: n,
+					color: COLOR_ESTADO[estado.toLowerCase()] ?? '#9ca3af'
+				}))
+		];
+	});
+	const estadoResumenActivo = $derived(filtros.estado.length === 1 ? filtros.estado[0] : null);
+
+	function filtrarPorEstado(clave: string) {
+		filtros.estado = clave === 'todos' || estadoResumenActivo === clave ? [] : [clave];
+	}
+
+	/// Activos y eliminados son dos consultas distintas al servidor; el segmento
+	/// solo dispara la que corresponde si de verdad cambia de vista.
+	function cambiarVista(vista: string) {
+		if (vista === 'eliminados' && !verEliminados) void handleListDeleted();
+		else if (vista === 'activos' && verEliminados) void handleListActivos();
+	}
+
+	/**
+	 * Acciones sobre la selección, en la barra flotante común a los listados.
+	 *
+	 * Son las mismas que antes vivían sueltas junto al buscador y en la cabecera
+	 * (copiar, recalcular, cambiar estado, eliminar, restaurar), con las mismas
+	 * guardas de rol: quien solo consulta puede copiar y nada más, y la vista de
+	 * eliminados solo ofrece restaurar.
+	 */
+	const accionesSeleccion = $derived.by((): AccionSeleccion[] => {
+		if (verEliminados) {
+			return isReadOnly
+				? []
+				: [
+						{
+							id: 'restaurar',
+							etiqueta: 'Restaurar',
+							icono: RotateCcw,
+							tono: 'primario',
+							onClick: () => (modalRestaurarIsOpen = true)
+						}
+					];
+		}
+		const acciones: AccionSeleccion[] = [
+			{
+				id: 'copiar',
+				etiqueta: 'Copiar',
+				icono: Copy,
+				tono: 'neutro',
+				onClick: handleCopySelectedRows
+			}
+		];
+		if (!isKilometrajeRole && !isReadOnly && !bulkRecalcRunning) {
+			acciones.push({
+				id: 'recalcular',
+				etiqueta: 'Recalcular',
+				icono: RefreshCw,
+				tono: 'neutro',
+				onClick: handleRecalcularSeleccionados
+			});
+		}
+		if (!isReadOnly) {
+			acciones.push(
+				{
+					id: 'estado',
+					etiqueta: 'Cambiar estado',
+					icono: Tags,
+					tono: 'primario',
+					onClick: () => (modalEstadoIsOpen = true)
+				},
+				{
+					id: 'eliminar',
+					etiqueta: 'Eliminar',
+					icono: Trash2,
+					tono: 'peligro',
+					onClick: handleDeleteSelected
+				}
+			);
+		}
+		return acciones;
+	});
+
+	/// Por debajo de 768 px la planilla se ve en tarjetas. Con `MediaQuery` se
+	/// pinta UNA de las dos vistas: esconder la otra con CSS dejaría en el DOM
+	/// hasta 200 filas × 45 columnas que nadie ve.
+	const esMovil = new MediaQuery('(max-width: 767.98px)', false);
+
+	/// Ancho visible del marco de la tabla. El estado vacío vive en una celda que
+	/// abarca las ~45 columnas (más de 3.000 px): sin pegarla a la izquierda con
+	/// este ancho, la mascota quedaba centrada fuera de la vista.
+	let anchoTabla = $state(0);
+
+	const todasMarcadas = $derived(
+		paginatedRecargos.length > 0 && selectedRows.size === paginatedRecargos.length
+	);
+
+	/**
+	 * Teclado en filas y tarjetas: Enter o Espacio hacen lo mismo que el clic
+	 * (marcar o desmarcar). Antes la fila solo respondía al ratón.
+	 *
+	 * Solo cuando el foco está en la fila misma: un Enter sobre «Ver» o
+	 * «Editar» es de ese botón y no debe marcar además la planilla.
+	 */
+	function alTeclaFila(e: KeyboardEvent, id: string) {
+		if (e.target !== e.currentTarget) return;
+		if (e.key !== 'Enter' && e.key !== ' ') return;
+		e.preventDefault();
+		handleSelectRow(id);
+	}
+
+	/// Días con horas (o disponibilidad) de una planilla, en orden, para la
+	/// tira de días de la tarjeta móvil.
+	function diasTrabajados(recargo: any): any[] {
+		return (recargo.dias_laborales ?? [])
+			.filter((d: any) => d.disponibilidad || toNumber(d.total_horas) > 0)
+			.sort((a: any, b: any) => a.dia - b.dia);
+	}
 
 	// Dispara la carga del preview monetario para cada (conductor, mes, año)
 	// presente en `paginatedRecargos`. Agrupa por la cache key para no repetir
@@ -707,11 +894,11 @@
 			const idsToRestored = Array.from(selectedRows);
 
 			if (idsToRestored.length === 1) {
-				// Eliminar un solo recargo
+				// Restaurar un solo recargo
 				await recargosApi.restaurar(idsToRestored[0]);
-				toast.success('Recargo eliminado correctamente');
+				toast.success('Recargo restaurado correctamente');
 			} else {
-				// Eliminar múltiples recargos
+				// Restaurar múltiples recargos
 				const result = await recargosApi.restaurarMultiple(idsToRestored);
 				toast.success(`${result.eliminados} recargo(s) restaurado(s) correctamente`);
 			}
@@ -817,15 +1004,11 @@
 			if (recalculoBatchId && newRecargoIds.length > 0) {
 				const ok = bulkRecalcStore.iniciar(recalculoBatchId, newRecargoIds);
 				if (ok) {
-					toast.info(
-						`Recalculando ${newRecargoIds.length} planilla(s) en segundo plano.`
-					);
+					toast.info(`Recalculando ${newRecargoIds.length} planilla(s) en segundo plano.`);
 				}
 			}
 		} else if (omitidas || errores) {
-			toast.warning(
-				`Importación sin nuevos registros: ${omitidas} omitidas, ${errores} con error`
-			);
+			toast.warning(`Importación sin nuevos registros: ${omitidas} omitidas, ${errores} con error`);
 		} else {
 			toast.info('No se importaron planillas');
 		}
@@ -1221,9 +1404,11 @@
 
 	const bulkRecalc = $derived($bulkRecalcStore);
 	const bulkRecalcRunning = $derived(bulkRecalc?.status === 'running');
-	const bulkRecalcProgress = $derived(bulkRecalc && bulkRecalc.total > 0
+	const bulkRecalcProgress = $derived(
+		bulkRecalc && bulkRecalc.total > 0
 			? Math.round((bulkRecalc.processed / bulkRecalc.total) * 100)
-			: 0);
+			: 0
+	);
 
 	// Si hay un bulk activo, deshabilitar el resto de acciones
 	// sensibles: cambio de mes/año, búsqueda, y creación de nuevo
@@ -1546,7 +1731,11 @@
 		if (!browser || !mesAnioInicializado) return;
 		if (urlSyncTimer) clearTimeout(urlSyncTimer);
 		urlSyncTimer = setTimeout(
-			() => estadoUrl.escribir(untrack(() => page.url), untrack(() => filtros)),
+			() =>
+				estadoUrl.escribir(
+					untrack(() => page.url),
+					untrack(() => filtros)
+				),
 			URL_SYNC_DEBOUNCE_MS
 		);
 	});
@@ -1581,98 +1770,82 @@
 	<title>Recargos - Cotransmeq</title>
 </svelte:head>
 
-<div
-	class="min-h-screen p-4 md:p-6"
-	style="background-color: var(--bg-base);"
-	in:fly={{ y: 20, duration: 500, easing: quintOut }}
->
-	<!-- Header -->
-	<div class="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-		<div>
-			<span class="eyebrow mb-2.5">DASHBOARD / RECARGOS</span>
-			<h1
-				class="font-display text-2xl font-normal tracking-tight text-[var(--bg-charcoal)] md:text-3xl"
+<!-- Estado vacío compartido por la tabla de escritorio y las tarjetas de móvil. -->
+{#snippet vacioRecargos()}
+	{@const img = mascota('vacio')}
+	{@const periodo = `${getNombreMes(filtros.mes).toLowerCase()} de ${filtros.anio}`}
+	<div class="dir-vacio">
+		<img src={img.src} alt={img.alt} width="418" height="418" />
+		<h3>{verEliminados ? 'No hay recargos eliminados' : 'No hay recargos'}</h3>
+		<p>
+			{#if filtrosActivos > 0}
+				No se encontraron planillas de {periodo} con los filtros aplicados.
+			{:else if verEliminados}
+				Ninguna planilla de {periodo} está marcada como eliminada.
+			{:else}
+				Aún no hay planillas registradas en {periodo}.
+			{/if}
+		</p>
+		{#if filtrosActivos > 0}
+			<button type="button" onclick={limpiarFiltros} class="btn-secondary">Limpiar filtros</button>
+		{:else if !verEliminados && !isKilometrajeRole && !isReadOnly}
+			<button
+				type="button"
+				onclick={handleOpenFormModal}
+				disabled={bloqueoPorRecalc}
+				class="btn-primary">Nuevo recargo</button
 			>
-				Recargos de Planillas
-			</h1>
-			<p class="mt-1 text-sm text-[var(--text-secondary)]">
-				Gestión de horas extras y recargos mensuales
+		{/if}
+	</div>
+{/snippet}
+
+<div
+	class="dir-pagina rec-pagina"
+	class:rec-pagina--con-barra={selectedRows.size > 0}
+	in:fade={{ duration: 400 }}
+>
+	<!-- ── CABECERA: título, conteos del mes y acciones ───────── -->
+	<header class="page-card dir-cabecera" style="padding: 1.25rem 1.5rem;">
+		<div class="dir-cabecera-texto">
+			<h1 class="dir-titulo">Recargos de planillas</h1>
+			<p class="dir-desc">
+				Horas extra y recargos de {getNombreMes(filtros.mes).toLowerCase()} de {filtros.anio}.
 			</p>
+			{#if recargos.length > 0}
+				<div class="dir-conteos">
+					<ResumenConteos
+						conteos={conteosEstado}
+						activo={estadoResumenActivo}
+						onElegir={filtrarPorEstado}
+					/>
+				</div>
+			{/if}
 		</div>
 
-		<!-- `flex-wrap`: en móvil el selector de mes va en su propia línea y los
-		     botones debajo; antes esta fila desbordaba la pantalla. -->
-		<div class="flex flex-wrap items-center gap-2">
-			<!-- Botón Recalcular (bulk de los seleccionados) -->
-			{#if !isKilometrajeRole && !isReadOnly && selectedRows.size > 0}
-				{#if bulkRecalcRunning}
-					<div
-						class="flex items-center gap-2 rounded-xl border border-[rgba(99,102,241,0.25)] bg-gradient-to-r from-[rgba(99,102,241,0.08)] to-[rgba(79,70,229,0.06)] px-3 py-1.5"
-						title="Recálculo bulk en curso. No se puede cambiar de mes ni crear nuevos recargos hasta que termine."
-					>
-						<svg
-							class="h-3.5 w-3.5 animate-spin"
-							style="color: #4F46E5;"
-							xmlns="http://www.w3.org/2000/svg"
-							fill="none"
-							viewBox="0 0 24 24"
-						>
-							<circle
-								class="opacity-25"
-								cx="12"
-								cy="12"
-								r="10"
-								stroke="currentColor"
-								stroke-width="4"
-							></circle>
-							<path
-								class="opacity-75"
-								fill="currentColor"
-								d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-							></path>
-						</svg>
-						<div class="flex min-w-[120px] flex-col">
-							<div
-								class="font-mono-meta flex items-center justify-between gap-2"
-								style="font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #4338CA;"
-							>
-								<span>Recalculando</span>
-								<span>{bulkRecalc?.processed ?? 0}/{bulkRecalc?.total ?? 0}</span>
-							</div>
-							<div
-								class="mt-1 h-1 w-full overflow-hidden rounded-full"
-								style="background-color: rgba(99, 102, 241, 0.12);"
-							>
-								<div
-									class="h-full rounded-full transition-all duration-300"
-									style="width: {bulkRecalcProgress}%; background: linear-gradient(90deg, #6366F1, #4F46E5);"
-								></div>
-							</div>
+		<!-- `flex-wrap` (de `.dir-cabecera-acciones`): en móvil el selector de mes
+		     va en su propia línea y los botones debajo. -->
+		<div class="dir-cabecera-acciones">
+			<!-- Progreso del recálculo masivo. Antes solo se veía con filas marcadas;
+			     ahora también al reanudarlo tras recargar la página, cuando la
+			     selección ya no existe pero el servidor sigue trabajando. -->
+			{#if bulkRecalcRunning && !isKilometrajeRole && !isReadOnly}
+				<div
+					class="rec-recalc"
+					role="status"
+					aria-live="polite"
+					title="Recálculo en curso. No se puede cambiar de mes ni crear recargos hasta que termine."
+				>
+					<span class="rec-recalc-punto" aria-hidden="true"></span>
+					<div class="rec-recalc-cuerpo">
+						<div class="rec-recalc-texto">
+							<span>Recalculando</span>
+							<span>{bulkRecalc?.processed ?? 0}/{bulkRecalc?.total ?? 0}</span>
+						</div>
+						<div class="rec-recalc-barra" aria-hidden="true">
+							<span style="width: {bulkRecalcProgress}%"></span>
 						</div>
 					</div>
-				{:else}
-					<button
-						onclick={handleRecalcularSeleccionados}
-						class="btn-primary apple-transition"
-						title="Recalcula los {selectedRows.size} recargo(s) seleccionado(s) con la config salarial y los % de tipos vigentes por día"
-					>
-						<svg
-							class="h-3.5 w-3.5"
-							xmlns="http://www.w3.org/2000/svg"
-							fill="none"
-							viewBox="0 0 24 24"
-							stroke="currentColor"
-							stroke-width="2"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-							/>
-						</svg>
-						Recalcular {selectedRows.size}
-					</button>
-				{/if}
+				</div>
 			{/if}
 
 			<!-- Navegación Mes/Año -->
@@ -1699,6 +1872,7 @@
 				<div class="flex min-w-0 flex-1 items-center gap-2">
 					<select
 						bind:value={filtros.mes}
+						aria-label="Mes"
 						class="input-glow h-9 min-w-0 flex-1 rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm font-medium sm:flex-none"
 					>
 						{#each Array.from({ length: 12 }, (_, i) => i + 1) as mes}
@@ -1709,6 +1883,7 @@
 					<input
 						type="number"
 						bind:value={filtros.anio}
+						aria-label="Año"
 						class="input-glow h-9 w-20 rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm font-medium"
 						min="2020"
 						max="2030"
@@ -1732,7 +1907,10 @@
 			</div>
 
 			<!-- Botón Configuración -->
-			<a href="/dashboard/recargos/configuracion" class="btn-secondary apple-transition flex-1 justify-center whitespace-nowrap sm:flex-none">
+			<a
+				href="/dashboard/recargos/configuracion"
+				class="btn-secondary apple-transition flex-1 justify-center whitespace-nowrap sm:flex-none"
+			>
 				<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 					<path
 						stroke-linecap="round"
@@ -1770,11 +1948,15 @@
 					</svg>
 					Nuevo Recargo
 				</button>
-				<!-- svelte-ignore a11y_consider_explicit_label -->
+				<!-- Deshabilitado mientras se genera: un segundo clic pedía el mismo
+				     PDF otra vez y lo descargaba dos veces. -->
 				<button
 					onclick={getReportePdf}
-					class="btn-icon apple-transition"
-					title="Descargar reporte PDF"
+					disabled={reporteLoading}
+					aria-busy={reporteLoading}
+					class="btn-icon apple-transition disabled:cursor-wait disabled:opacity-50"
+					title={reporteLoading ? 'Generando reporte…' : 'Descargar reporte PDF'}
+					aria-label="Descargar reporte PDF"
 				>
 					<svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
 						><path
@@ -1788,7 +1970,9 @@
 					onclick={() => (modalImportarTransmeraldaIsOpen = true)}
 					disabled={bloqueoPorRecalc}
 					class="btn-primary apple-transition"
-					title="Importar recargos desde Transmeralda (mismo schema, otra base de datos) para {getNombreMes(filtros.mes)} {filtros.anio}"
+					title="Importar recargos desde Transmeralda (mismo schema, otra base de datos) para {getNombreMes(
+						filtros.mes
+					)} {filtros.anio}"
 				>
 					<svg
 						class="h-4 w-4"
@@ -1807,50 +1991,20 @@
 				</button>
 			{/if}
 		</div>
-	</div>
+	</header>
 
-	<!-- Filtros y búsqueda -->
-	<div class="mb-4 flex flex-col gap-4 md:flex-row">
-		<!-- Search -->
-		<div class="flex-1">
-			<div class="relative">
-				<BuscadorLista
-					bind:valor={filtros.search}
-					onBuscar={(termino) => (filtros.search = termino)}
-					placeholder="Buscar por conductor, vehículo, empresa o planilla..."
-				/>
-				<!-- El indicador de carga NO deshabilita el campo: el filtrado es
-				     local, así que se puede seguir escribiendo mientras llega el
-				     mes del servidor y los resultados aparecen filtrados de una. -->
-				{#if loading}
-					<div
-						class="pointer-events-none absolute top-1/2 right-9 -translate-y-1/2"
-						title="Cargando datos del servidor…"
-					>
-						<svg
-							class="h-4 w-4 animate-spin"
-							style="color: var(--emerald-500);"
-							xmlns="http://www.w3.org/2000/svg"
-							fill="none"
-							viewBox="0 0 24 24"
-						>
-							<circle
-								class="opacity-25"
-								cx="12"
-								cy="12"
-								r="10"
-								stroke="currentColor"
-								stroke-width="4"
-							></circle>
-							<path
-								class="opacity-75"
-								fill="currentColor"
-								d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-							></path>
-						</svg>
-					</div>
-				{/if}
-			</div>
+	<!-- ── FILTROS A LA VISTA: buscador, vista y tamaño de página ── -->
+	<!-- El buscador NO se deshabilita mientras carga: el filtrado es local, así
+	     que se puede seguir escribiendo mientras llega el mes del servidor. El
+	     aviso de «Actualizando…» lo da la propia tabla. -->
+	<div class="dir-filtros">
+		<div class="dir-filtros-buscador">
+			<BuscadorLista
+				bind:valor={filtros.search}
+				onBuscar={(termino) => (filtros.search = termino)}
+				placeholder="Conductor, placa, empresa o planilla…"
+				etiqueta="Buscar recargos"
+			/>
 		</div>
 
 		<!-- Filtro: Solo importados de Transmeralda (después del search) -->
@@ -1867,103 +2021,29 @@
 			<option value="no">📤 Solo nativas de Cotransmeq</option>
 		</select>
 
-		{#if !verEliminados}
-			<!-- Listar eliminadas -->
-			<button
-				onclick={handleListDeleted}
-				class="btn-secondary apple-transition"
-			>
-				Ver eliminados
-			</button>
-		{:else}
-			<!-- Ver activos -->
-			<button onclick={handleListActivos} class="btn-primary apple-transition">
-				Ver Activos
-			</button>
-		{/if}
+		<SegmentosFiltro
+			etiqueta="Vista"
+			opciones={[
+				{ valor: 'activos', etiqueta: 'Activos' },
+				{ valor: 'eliminados', etiqueta: 'Eliminados', punto: '#ef4444' }
+			]}
+			valor={verEliminados ? 'eliminados' : 'activos'}
+			onCambiar={cambiarVista}
+		/>
 
-		<!-- Actions y paginación -->
-		<div class="flex items-center gap-3">
-			{#if !verEliminados}
-				{#if selectedRows.size > 0}
-					<button
-						onclick={handleUnselectRow}
-						class="btn-secondary apple-transition"
-						>Deseleccionar</button
-					>
-					<button
-						onclick={handleCopySelectedRows}
-						class="btn-secondary apple-transition"
-					>
-						Copiar seleccionados
-					</button>
-				{/if}
-
-				{#if selectedRows.size > 0 && !isReadOnly}
-					<div class="flex items-center gap-2">
-						<span class="font-mono-meta text-xs text-[var(--text-muted)]"
-							>{selectedRows.size} sel.</span
-						>
-						<button
-							onclick={() => (modalEstadoIsOpen = true)}
-							class="btn-primary apple-transition"
-						>
-							<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-								/>
-							</svg>
-							Cambiar estado
-						</button>
-						<button
-							onclick={handleDeleteSelected}
-							class="btn-danger apple-transition"
-						>
-							Eliminar
-						</button>
-					</div>
-				{/if}
-			{:else if selectedRows.size > 0 && !isReadOnly}
-				<button
-					onclick={() => (modalRestaurarIsOpen = true)}
-					class="btn-primary apple-transition"
-				>
-					<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path
-							stroke-linecap="round"
-							stroke-linejoin="round"
-							stroke-width="2"
-							d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-						/>
-					</svg>
-					Restaurar
-				</button>
-			{/if}
-
-			<!-- Selector de tamaño de página (sin "Todas": el backend limita a 200 máx) -->
-			<div class="flex items-center gap-2">
-				<label
-					class="font-mono-meta text-[0.65rem] text-[var(--text-muted)]"
-					for="items-per-page-select">Mostrar</label
-				>
-				<select
-					id="items-per-page-select"
-					bind:value={filtros.porPagina}
-					class="input-glow h-9 rounded-lg border border-[var(--border-default)] bg-white px-3 py-1.5 text-sm font-semibold"
-				>
-					<!-- Valores numéricos, no cadenas: el tamaño de página viaja
-					     en la URL y `parseInt` sobre un `<option value="50">`
-					     era el paso intermedio que ya no hace falta. -->
-					<option value={200}>200</option>
-					<option value={100}>100</option>
-					<option value={50}>50</option>
-					<option value={20}>20</option>
-				</select>
-			</div>
-		</div>
+		<!-- Tamaño de página (sin "Todas": el backend limita a 200 máx) -->
+		<label class="rec-por-pagina" for="items-per-page-select">
+			<span>Mostrar</span>
+			<!-- Valores numéricos, no cadenas: el tamaño de página viaja en la URL
+			     y `parseInt` sobre un `<option value="50">` era el paso intermedio
+			     que ya no hace falta. -->
+			<select id="items-per-page-select" bind:value={filtros.porPagina}>
+				<option value={200}>200</option>
+				<option value={100}>100</option>
+				<option value={50}>50</option>
+				<option value={20}>20</option>
+			</select>
+		</label>
 	</div>
 
 	<!-- Stats Panel -->
@@ -1971,7 +2051,7 @@
 		<!-- Cifras del mes en una sola franja. Antes eran ocho tarjetas con
 		     icono que ocupaban una fila entera en escritorio y cuatro en móvil;
 		     aquí cada cifra es etiqueta + número y el total va destacado. -->
-		<div class="rec-cifras page-card mb-4" transition:fade={{ duration: 200 }}>
+		<div class="rec-cifras page-card" transition:fade={{ duration: 200 }}>
 			<div class="rec-cifra">
 				<span class="rec-cifra-label">Planillas</span>
 				<span class="rec-cifra-valor">{stats.totalPlanillas}</span>
@@ -1997,7 +2077,9 @@
 				<span class="rec-cifra-valor">{stats.totalExtras.toFixed(1)}</span>
 			</div>
 			<div class="rec-cifra">
-				<span class="rec-cifra-label" title="Recargo nocturno + recargo dominical">Recargos RN+RD</span>
+				<span class="rec-cifra-label" title="Recargo nocturno + recargo dominical"
+					>Recargos RN+RD</span
+				>
 				<span class="rec-cifra-valor">{stats.totalRecargos.toFixed(1)}</span>
 			</div>
 			<div class="rec-cifra rec-cifra--total">
@@ -2007,7 +2089,7 @@
 		</div>
 
 		<!-- Desglose detallado -->
-		<div class="hint-card mb-4">
+		<div class="hint-card">
 			<div class="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs">
 				<span class="font-mono-meta text-[var(--emerald-700)]">DESGLOSE</span>
 				<span class="flex items-center gap-1.5 text-[var(--text-secondary)]">
@@ -2113,60 +2195,285 @@
 		</div>
 	{/if}
 
-	<!-- Canvas Table -->
-	<div class="table-card relative">
-		<!-- Indicador flotante de "actualizando" cuando ya hay datos
-		     previos en pantalla. NO bloquea la interacción: el usuario
-		     puede seguir scrolleando, seleccionando, etc. mientras el
-		     server responde. Solo se ve cuando loading=true y ya hay
-		     al menos un recargo cargado. -->
+	<!-- ── PLANILLA: tabla en escritorio, tarjetas en móvil ───── -->
+	<div class="table-card rec-marco">
+		<!-- Aviso de "actualizando" cuando ya hay datos previos en pantalla. NO
+		     bloquea la interacción: se puede seguir desplazando y marcando
+		     mientras el servidor responde. -->
 		{#if loading && recargos.length > 0}
-			<div
-				class="pointer-events-none absolute top-3 right-3 z-30 flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-				style="background: rgba(255,255,255,0.92); border: 1px solid var(--border-subtle); box-shadow: 0 2px 8px rgba(0,0,0,0.06); color: var(--emerald-700);"
-				role="status"
-				aria-live="polite"
-			>
-				<svg
-					class="h-3 w-3 animate-spin"
-					xmlns="http://www.w3.org/2000/svg"
-					fill="none"
-					viewBox="0 0 24 24"
-				>
-					<circle
-						class="opacity-25"
-						cx="12"
-						cy="12"
-						r="10"
-						stroke="currentColor"
-						stroke-width="4"
-					></circle>
-					<path
-						class="opacity-75"
-						fill="currentColor"
-						d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-					></path>
-				</svg>
+			<div class="rec-actualizando" role="status" aria-live="polite">
+				<span class="rec-actualizando-punto" aria-hidden="true"></span>
 				Actualizando…
 			</div>
 		{/if}
 		{#if loading && recargos.length === 0}
-			<CargaMascota texto="Cargando recargos…" />
+			<CargaMascota texto="Cargando recargos de {getNombreMes(filtros.mes).toLowerCase()}…" />
 		{:else if error && recargos.length === 0}
-			<div class="flex h-96 flex-col items-center justify-center gap-3">
-				<p class="text-[#991B1B]">{error}</p>
+			{@const img = mascota('advertencia')}
+			<div class="dir-vacio">
+				<img src={img.src} alt={img.alt} width="418" height="418" />
+				<h3>No se pudieron cargar los recargos</h3>
+				<p>{error}</p>
 				<button
+					type="button"
 					onclick={() => recargosStore.fetchRecargos()}
 					class="btn-secondary apple-transition"
 				>
 					Reintentar
 				</button>
 			</div>
+		{:else if esMovil.current}
+			<!-- ── Móvil: una tarjeta por planilla ── -->
+			<div
+				class="rec-movil transition-opacity duration-200"
+				class:opacity-60={loading}
+				class:pointer-events-none={loading}
+			>
+				<div class="rec-movil-barra">
+					<label class="rec-movil-todos">
+						<input
+							type="checkbox"
+							checked={todasMarcadas}
+							disabled={paginatedRecargos.length === 0}
+							onchange={handleSelectAll}
+						/>
+						Seleccionar página
+					</label>
+				</div>
+				<!-- Los filtros por columna viven en la cabecera de la tabla; sin
+				     tabla se ofrecen aquí, con el mismo componente y el mismo estado. -->
+				<div class="rec-movil-filtros" role="group" aria-label="Filtros por columna">
+					<div class="rec-movil-filtro">
+						<span>Empresa</span>
+						<MultiSelectFilter
+							bind:selected={filtros.empresa}
+							options={uniqueEmpresas}
+							placeholder="Todas"
+							searchable
+						/>
+					</div>
+					<div class="rec-movil-filtro">
+						<span>Planilla</span>
+						<MultiSelectFilter
+							bind:selected={filtros.planilla}
+							options={uniquePlanillas}
+							placeholder="Todas"
+							searchable
+						/>
+					</div>
+					<div class="rec-movil-filtro">
+						<span>Vehículo</span>
+						<MultiSelectFilter
+							bind:selected={filtros.vehiculo}
+							options={uniqueVehiculos}
+							placeholder="Todos"
+							searchable
+						/>
+					</div>
+					<div class="rec-movil-filtro">
+						<span>Conductor</span>
+						<MultiSelectFilter
+							bind:selected={filtros.conductor}
+							options={uniqueConductores}
+							placeholder="Todos"
+							searchable
+						/>
+					</div>
+					<div class="rec-movil-filtro">
+						<span>Estado</span>
+						<MultiSelectFilter
+							bind:selected={filtros.estado}
+							options={uniqueEstados}
+							placeholder="Todos"
+							labelFn={getEstadoLabel}
+						/>
+					</div>
+				</div>
+
+				{#if paginatedRecargos.length === 0}
+					{@render vacioRecargos()}
+				{:else}
+					<ul class="rec-tarjetas">
+						{#each paginatedRecargos as recargo (recargo.id)}
+							{@const isSelected = selectedRows.has(recargo.id)}
+							{@const isDeleted = !!recargo?.deleted_at}
+							{@const nombreConductor =
+								`${recargo.conductor?.nombre || ''} ${recargo.conductor?.apellido || ''}`.trim()}
+							{@const planilla = formatearNumeroPlanilla(recargo.numero_planilla ?? null)}
+							<li>
+								<!-- La tarjeta entera marca la planilla, como la fila de la tabla. -->
+								<div
+									class="rec-tarjeta {idsEnPulso.has(recargo.id) ? 'bulk-recalc-pulse' : ''}"
+									class:rec-tarjeta--marcada={isSelected}
+									class:rec-tarjeta--nueva={recentlyCreated.has(recargo.id)}
+									class:rec-tarjeta--actualizada={recentlyUpdated.has(recargo.id)}
+									class:rec-tarjeta--eliminada={isDeleted}
+									role="button"
+									tabindex="0"
+									aria-pressed={isSelected}
+									onclick={() => handleSelectRow(recargo.id)}
+									onkeydown={(e) => alTeclaFila(e, recargo.id)}
+								>
+									<div class="rec-tarjeta-cabeza">
+										<input
+											type="checkbox"
+											tabindex="-1"
+											checked={isSelected}
+											onclick={(e) => e.stopPropagation()}
+											onchange={() => handleSelectRow(recargo.id)}
+											aria-label="Seleccionar planilla {planilla}"
+										/>
+										<div class="rec-tarjeta-id">
+											<span class="rec-tarjeta-planilla">
+												{planilla || 'Sin número'}
+												{#if recargo.tiene_documento}
+													<svg
+														class="h-3.5 w-3.5"
+														fill="currentColor"
+														viewBox="0 0 24 24"
+														role="img"
+														aria-label="Documento cargado"
+													>
+														<path
+															d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM6 20V4h7v5h5v11H6z"
+														/>
+														<path d="M8 12h8v2H8zm0 4h8v2H8z" />
+													</svg>
+												{/if}
+												<!-- En la tarjeta no hay hover: el origen va en el título. -->
+												{#if recargo.imported_from_transmeralda}
+													<span
+														class="rec-tarjeta-tm"
+														title="Planilla trasladada desde Transmeralda"
+														aria-label="Planilla trasladada desde Transmeralda">TM</span
+													>
+												{/if}
+											</span>
+											<strong>{nombreConductor || 'Sin conductor'}</strong>
+											<small
+												>{recargo.vehiculo?.placa || 'Sin placa'} · {recargo.empresa?.nombre ||
+													'Sin empresa'}</small
+											>
+										</div>
+										<span class="status-pill {getEstadoColor(recargo.estado)}">
+											{getEstadoLabel(recargo.estado)}
+										</span>
+									</div>
+
+									{#if diasTrabajados(recargo).length > 0}
+										<ul class="rec-tarjeta-dias" aria-label="Días con horas">
+											{#each diasTrabajados(recargo) as dia (dia.dia)}
+												<li
+													class="rec-dia {dia.disponibilidad
+														? 'border-blue-300 bg-blue-100 text-blue-800'
+														: getDayChipColor(dia)}"
+													title={dia.disponibilidad
+														? `Día ${dia.dia}: disponible`
+														: `Día ${dia.dia}: ${toNumber(dia.total_horas).toFixed(1)} h`}
+												>
+													<span>{dia.dia}</span>
+													<small
+														>{dia.disponibilidad
+															? 'D'
+															: toNumber(dia.total_horas).toFixed(1)}</small
+													>
+												</li>
+											{/each}
+										</ul>
+									{/if}
+
+									<dl class="rec-tarjeta-cifras">
+										<div>
+											<dt>Horas</dt>
+											<dd>{toNumber(recargo.total_horas).toFixed(1)}</dd>
+										</div>
+										<div>
+											<dt>KM</dt>
+											<dd>{calcularKmRecorridos(recargo).toFixed(1)}</dd>
+										</div>
+										<div>
+											<dt>HED</dt>
+											<dd>{toNumber(recargo.total_hed).toFixed(1)}</dd>
+										</div>
+										<div>
+											<dt>HEN</dt>
+											<dd>{toNumber(recargo.total_hen).toFixed(1)}</dd>
+										</div>
+										<div>
+											<dt>HEFD</dt>
+											<dd>{toNumber(recargo.total_hefd).toFixed(1)}</dd>
+										</div>
+										<div>
+											<dt>HEFN</dt>
+											<dd>{toNumber(recargo.total_hefn).toFixed(1)}</dd>
+										</div>
+										<div>
+											<dt>RNDF</dt>
+											<dd>{toNumber(recargo.total_rndf).toFixed(1)}</dd>
+										</div>
+										<div>
+											<dt>RN</dt>
+											<dd>{toNumber(recargo.total_rn).toFixed(1)}</dd>
+										</div>
+										<div>
+											<dt>RD</dt>
+											<dd>{toNumber(recargo.total_rd).toFixed(1)}</dd>
+										</div>
+									</dl>
+
+									<div class="rec-tarjeta-pie">
+										<div class="rec-tarjeta-valor">
+											<span>Valor a pagar</span>
+											{#if recargosCargandoValor.has(recargo.id)}
+												<span class="rec-esqueleto" aria-hidden="true"></span>
+												<span class="sr-only">Calculando</span>
+											{:else if recargo.id in valoresPagarByRecargo}
+												<strong>{fmtCOP(valoresPagarByRecargo[recargo.id])}</strong>
+											{:else}
+												<strong class="rec-tarjeta-valor--nulo">—</strong>
+											{/if}
+										</div>
+										<div class="rec-tarjeta-acciones">
+											<button
+												type="button"
+												class="btn-icon"
+												onclick={(e) => {
+													e.stopPropagation();
+													handleViewRecargo(recargo.id);
+												}}
+												aria-label="Ver detalles"
+												title="Ver detalles"
+											>
+												<Eye size={16} />
+											</button>
+											{#if !isReadOnly}
+												<button
+													type="button"
+													class="btn-icon"
+													onclick={(e) => {
+														e.stopPropagation();
+														handleEditRecargo(recargo.id);
+													}}
+													aria-label="Editar"
+													title="Editar"
+												>
+													<Pencil size={16} />
+												</button>
+											{/if}
+										</div>
+									</div>
+								</div>
+							</li>
+						{/each}
+					</ul>
+				{/if}
+			</div>
 		{:else}
 			<div
 				class="rec-tabla overflow-x-auto transition-opacity duration-200"
 				class:opacity-60={loading}
 				class:pointer-events-none={loading}
+				bind:clientWidth={anchoTabla}
 			>
 				<table class="w-full border-collapse" style="table-layout: fixed;">
 					<!-- Header -->
@@ -2192,9 +2499,11 @@
 									{#if column.key === 'select'}
 										<input
 											type="checkbox"
-											checked={selectedRows.size === paginatedRecargos.length &&
-												paginatedRecargos.length > 0}
+											checked={todasMarcadas}
 											onchange={handleSelectAll}
+											aria-label={todasMarcadas
+												? 'Quitar la selección de esta página'
+												: 'Seleccionar todos los de esta página'}
 											class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--border-default)] accent-[var(--emerald-500)]"
 										/>
 									{:else}
@@ -2253,16 +2562,23 @@
 
 							{@const isDeleted = !!recargo?.deleted_at}
 
+							<!-- Clic, Enter o Espacio marcan la planilla; «Ver» y «Editar» tienen
+							     sus propios botones. La casilla sale del orden de tabulación
+							     porque la fila ya es el control. -->
 							<tr
-								class="table-row cursor-pointer border-b border-[var(--border-subtle)]
+								class="rec-fila table-row cursor-pointer border-b border-[var(--border-subtle)]
 								{getEstadoBgColor(recargo.estado)}
-								{isNew ? 'border-l-4 border-l-[var(--emerald-500)] bg-[rgba(22, 163, 74,0.06)]' : ''}
+								{isNew ? 'bg-[rgba(22, 163, 74,0.06)] border-l-4 border-l-[var(--emerald-500)]' : ''}
 								{isUpdated ? 'border-l-4 border-l-[#2563EB] bg-[rgba(37,99,235,0.06)]' : ''}
 								{isSelected ? 'border-l-4 border-l-[var(--emerald-600)]' : ''}
 								{isDeleted ? 'border-l-4 border-l-[#EF4444] bg-[rgba(239,68,68,0.04)] opacity-75' : ''}
 								{isRecalcing ? 'bulk-recalc-pulse' : ''}"
 								transition:fade={{ duration: 200 }}
+								role="button"
+								tabindex="0"
+								aria-pressed={isSelected}
 								onclick={() => handleSelectRow(recargo.id)}
+								onkeydown={(e) => alTeclaFila(e, recargo.id)}
 							>
 								{#each columns as column, index}
 									<td
@@ -2297,9 +2613,13 @@
 												{/if}
 												<input
 													type="checkbox"
+													tabindex="-1"
 													checked={selectedRows.has(recargo.id)}
 													onclick={(e) => e.stopPropagation()}
 													onchange={() => handleSelectRow(recargo.id)}
+													aria-label="Seleccionar planilla {formatearNumeroPlanilla(
+														recargo.numero_planilla ?? null
+													)}"
 													class="h-3.5 w-3.5 cursor-pointer rounded border-[var(--border-default)] accent-[var(--emerald-500)]"
 												/>
 											</div>
@@ -2343,26 +2663,14 @@
 											</span>
 										{:else if column.key === 'valor_pagar'}
 											{#if recargosCargandoValor.has(recargo.id)}
-												<div
-													class="flex items-center justify-center gap-1.5 text-[var(--text-very-muted)]"
-												>
-													<svg class="h-3 w-3 animate-spin" fill="none" viewBox="0 0 24 24">
-														<circle
-															class="opacity-25"
-															cx="12"
-															cy="12"
-															r="10"
-															stroke="currentColor"
-															stroke-width="4"
-														/>
-														<path
-															class="opacity-75"
-															fill="currentColor"
-															d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-														/>
-													</svg>
-													<span class="text-[10px]">···</span>
-												</div>
+												<!-- Esqueleto en vez de un spinner por celda: con 200 filas
+												     eran 200 ruedas girando a la vez. -->
+												<span
+													class="rec-esqueleto rec-esqueleto--claro"
+													title="Calculando valor a pagar"
+													aria-hidden="true"
+												></span>
+												<span class="sr-only">Calculando</span>
 											{:else if recargo.id in valoresPagarByRecargo}
 												<span
 													class="font-mono-meta font-bold text-white"
@@ -2380,11 +2688,12 @@
 											<div class="flex gap-1">
 												<button
 													onclick={(e) => {
-												e.stopPropagation();
-												handleViewRecargo(recargo.id);
-											}}
+														e.stopPropagation();
+														handleViewRecargo(recargo.id);
+													}}
 													class="apple-transition rounded-md p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-base)] hover:text-[var(--emerald-600)]"
 													title="Ver detalles"
+													aria-label="Ver detalles"
 												>
 													<svg
 														class="h-3.5 w-3.5"
@@ -2409,11 +2718,12 @@
 												{#if !isReadOnly}
 													<button
 														onclick={(e) => {
-												e.stopPropagation();
-												handleEditRecargo(recargo.id);
-											}}
+															e.stopPropagation();
+															handleEditRecargo(recargo.id);
+														}}
 														class="apple-transition rounded-md p-1.5 text-[var(--text-muted)] hover:bg-[var(--bg-base)] hover:text-[var(--emerald-600)]"
 														title="Editar"
+														aria-label="Editar"
 													>
 														<svg
 															class="h-3.5 w-3.5"
@@ -2436,30 +2746,30 @@
 												<span class="font-mono-meta text-[0.7rem] text-[var(--emerald-700)]"
 													>{getCellValue(recargo, column)}</span
 												>
-											{#if recargo.imported_from_transmeralda}
-												<span
-													onmouseenter={(e) => showTmPopover(e, recargo)}
-													onmouseleave={hideTmPopover}
-													class="inline-flex cursor-help items-center gap-0.5 rounded-md px-1.5 py-0.5"
-													style="font-size: 0.55rem; font-weight: 700; color: #FFFFFF; background: linear-gradient(135deg, #166534, #14532d); border: 1px solid #14532d; letter-spacing: 0.05em; line-height: 1.3;"
-													aria-label="Planilla trasladada desde Transmeralda"
-												>
-													<svg
-														class="h-2.5 w-2.5"
-														fill="none"
-														stroke="currentColor"
-														viewBox="0 0 24 24"
-														stroke-width="3"
+												{#if recargo.imported_from_transmeralda}
+													<span
+														onmouseenter={(e) => showTmPopover(e, recargo)}
+														onmouseleave={hideTmPopover}
+														class="inline-flex cursor-help items-center gap-0.5 rounded-md px-1.5 py-0.5"
+														style="font-size: 0.55rem; font-weight: 700; color: #FFFFFF; background: linear-gradient(135deg, #166534, #14532d); border: 1px solid #14532d; letter-spacing: 0.05em; line-height: 1.3;"
+														aria-label="Planilla trasladada desde Transmeralda"
 													>
-														<path
-															stroke-linecap="round"
-															stroke-linejoin="round"
-															d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-														/>
-													</svg>
-													TM
-												</span>
-											{/if}
+														<svg
+															class="h-2.5 w-2.5"
+															fill="none"
+															stroke="currentColor"
+															viewBox="0 0 24 24"
+															stroke-width="3"
+														>
+															<path
+																stroke-linecap="round"
+																stroke-linejoin="round"
+																d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+															/>
+														</svg>
+														TM
+													</span>
+												{/if}
 												{#if recargo.tiene_documento}
 													<span
 														title="Documento cargado"
@@ -2480,33 +2790,52 @@
 									</td>
 								{/each}
 							</tr>
+						{:else}
+							<!-- La cabecera se queda: sus desplegables son los filtros por
+							     columna, y sin ella no habría cómo quitar el que dejó la
+							     lista vacía. -->
+							<tr>
+								<td colspan={columns.length} class="rec-td-vacio">
+									<div
+										class="rec-vacio-fijo"
+										style="width: {anchoTabla ? `${anchoTabla}px` : '100%'};"
+									>
+										{@render vacioRecargos()}
+									</div>
+								</td>
+							</tr>
 						{/each}
 
 						<!-- Totals Row -->
-						<tr class="sticky bottom-0 font-semibold" style="background: rgba(22, 163, 74, 0.08);">
-							{#each columns as column}
-								<td
-									class="border border-[var(--border-subtle)] px-2 py-2 text-[var(--text-primary)] {column.key ===
-										'empresa' ||
-									column.key === 'numero_planilla' ||
-									column.key === 'vehiculo' ||
-									column.key === 'conductor'
-										? 'text-left'
-										: 'text-center'} text-xs"
-									style="width: {column.width}; min-width: {column.width}; {(column as any).fixed
-										? `position: sticky; left: ${(column as any).stickyLeft}; z-index: 10; background: rgba(22, 163, 74, 0.08);`
-										: 'background: rgba(22, 163, 74, 0.08);'}"
-								>
-									{#if column.key === 'valor_pagar'}
-										<span class="font-mono-meta font-bold text-[var(--emerald-700)]">
-											{fmtCOP(totalValorPagar)}
-										</span>
-									{:else if column.key !== 'select' && column.key !== 'acciones'}
-										{getCellValue(totalsRow, column)}
-									{/if}
-								</td>
-							{/each}
-						</tr>
+						{#if paginatedRecargos.length > 0}
+							<tr
+								class="sticky bottom-0 font-semibold"
+								style="background: rgba(22, 163, 74, 0.08);"
+							>
+								{#each columns as column}
+									<td
+										class="border border-[var(--border-subtle)] px-2 py-2 text-[var(--text-primary)] {column.key ===
+											'empresa' ||
+										column.key === 'numero_planilla' ||
+										column.key === 'vehiculo' ||
+										column.key === 'conductor'
+											? 'text-left'
+											: 'text-center'} text-xs"
+										style="width: {column.width}; min-width: {column.width}; {(column as any).fixed
+											? `position: sticky; left: ${(column as any).stickyLeft}; z-index: 10; background: rgba(22, 163, 74, 0.08);`
+											: 'background: rgba(22, 163, 74, 0.08);'}"
+									>
+										{#if column.key === 'valor_pagar'}
+											<span class="font-mono-meta font-bold text-[var(--emerald-700)]">
+												{fmtCOP(totalValorPagar)}
+											</span>
+										{:else if column.key !== 'select' && column.key !== 'acciones'}
+											{getCellValue(totalsRow, column)}
+										{/if}
+									</td>
+								{/each}
+							</tr>
+						{/if}
 					</tbody>
 				</table>
 			</div>
@@ -2518,7 +2847,7 @@
 	     `PaginadorLista` muestra cinco alrededor de la actual, más los saltos
 	     al principio y al final. -->
 	{#if !loading && filteredRecargos.length > 0}
-		<div class="mt-4 overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-white">
+		<div class="overflow-hidden rounded-xl border border-[var(--border-subtle)] bg-white">
 			{#if totalPages > 1}
 				<PaginadorLista
 					pagina={filtros.pagina}
@@ -2539,6 +2868,14 @@
 			{/if}
 		</div>
 	{/if}
+
+	<!-- Acciones masivas: la misma barra flotante que en los directorios. -->
+	<BarraSeleccion
+		cantidad={selectedRows.size}
+		nombreItems={selectedRows.size === 1 ? 'recargo' : 'recargos'}
+		acciones={accionesSeleccion}
+		onLimpiar={handleUnselectRow}
+	/>
 </div>
 
 <!-- Modales -->
@@ -2577,7 +2914,7 @@
 		title="Restaurar recargo(s)?"
 		message="Esta acción marcará el recargo como restaurado. Los datos se mostraran en el sistema como activos."
 		itemCount={selectedRows.size}
-		loading={deleteLoading}
+		loading={restoredLoading}
 		on:confirm={handleConfirmRestored}
 		on:cancel={() => (modalRestaurarIsOpen = false)}
 	/>
@@ -2629,13 +2966,10 @@
 				<strong style="color: #6EE7B7; display: block; margin-bottom: 2px;">
 					Trasladado de Transmeralda
 				</strong>
-				Esta planilla fue importada desde la base de datos de
-				Transmeralda{#if tmPopover.recargo.imported_from_transmeralda_at}
+				Esta planilla fue importada desde la base de datos de Transmeralda{#if tmPopover.recargo.imported_from_transmeralda_at}
 					el{' '}
 					<strong>
-						{new Date(
-							tmPopover.recargo.imported_from_transmeralda_at
-						).toLocaleDateString('es-CO', {
+						{new Date(tmPopover.recargo.imported_from_transmeralda_at).toLocaleDateString('es-CO', {
 							day: '2-digit',
 							month: 'short',
 							year: 'numeric',
@@ -2647,7 +2981,7 @@
 		</div>
 		<!-- Flechita del popover -->
 		<span
-			class="absolute left-1/2 top-full h-2 w-2 -translate-x-1/2 -translate-y-1/2 rotate-45"
+			class="absolute top-full left-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rotate-45"
 			style="background-color: #1F2937;"
 		></span>
 	</div>
@@ -2719,16 +3053,389 @@
 		}
 	}
 
-	/* ── Tabla en móvil: sin columnas ni cabecera pegadas ──
-	   Con la cabecera y cinco columnas fijas, en una pantalla de 390 px no
-	   quedaba sitio para el contenido: se desplazaba sobre sí mismo y no se
-	   podía leer. El desplazamiento horizontal normal es lo que funciona. */
-	@media (max-width: 767.98px) {
-		.rec-tabla :global(thead),
-		.rec-tabla :global(th),
-		.rec-tabla :global(td),
-		.rec-tabla :global(tr) {
-			position: static !important;
+	/* ── Página ──
+	   Crece con su contenido (cifras, planilla y paginador), como servicios:
+	   el `height: 100%` de `.dir-pagina` es para listas con scroll propio. */
+	.rec-pagina {
+		height: auto;
+		min-height: 100%;
+	}
+	/* Con filas marcadas, la barra flotante tapaba el paginador y la fila de
+	   totales: se deja sitio debajo. */
+	.rec-pagina--con-barra {
+		padding-bottom: 6.5rem;
+	}
+
+	/* ── Recálculo masivo en curso ──
+	   Índigo, como el pulso de las filas que se están recalculando. */
+	.rec-recalc {
+		display: flex;
+		align-items: center;
+		gap: 0.6rem;
+		padding: 0.4rem 0.75rem;
+		border-radius: 12px;
+		border: 1px solid rgba(99, 102, 241, 0.25);
+		background: linear-gradient(90deg, rgba(99, 102, 241, 0.08), rgba(79, 70, 229, 0.06));
+	}
+	.rec-recalc-punto {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		flex-shrink: 0;
+		background: #4f46e5;
+		animation: rec-latido 1.2s ease-in-out infinite;
+	}
+	.rec-recalc-cuerpo {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		min-width: 120px;
+	}
+	.rec-recalc-texto {
+		display: flex;
+		justify-content: space-between;
+		gap: 0.5rem;
+		font-size: 0.6rem;
+		font-weight: 700;
+		letter-spacing: 0.06em;
+		text-transform: uppercase;
+		color: #4338ca;
+	}
+	.rec-recalc-barra {
+		height: 4px;
+		border-radius: 999px;
+		overflow: hidden;
+		background: rgba(99, 102, 241, 0.12);
+	}
+	.rec-recalc-barra span {
+		display: block;
+		height: 100%;
+		border-radius: 999px;
+		background: linear-gradient(90deg, #6366f1, #4f46e5);
+		transition: width 0.3s ease;
+	}
+
+	/* ── Fila de filtros ── */
+	.rec-por-pagina {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-left: auto;
+	}
+	.rec-por-pagina span {
+		font-size: 0.65rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.rec-por-pagina select {
+		height: 2.25rem;
+		padding: 0 0.75rem;
+		border-radius: 10px;
+		border: 1px solid var(--border-default);
+		background: var(--bg-surface);
+		font-size: 0.85rem;
+		font-weight: 600;
+		color: var(--text-primary);
+	}
+	.rec-por-pagina select:focus-visible {
+		outline: 2px solid var(--emerald-500);
+		outline-offset: 1px;
+	}
+
+	/* ── Marco de la planilla ── */
+	.rec-marco {
+		position: relative;
+	}
+	.rec-actualizando {
+		position: absolute;
+		top: 0.75rem;
+		right: 0.75rem;
+		z-index: 30;
+		display: inline-flex;
+		align-items: center;
+		gap: 0.4rem;
+		padding: 0.25rem 0.65rem;
+		border-radius: 999px;
+		border: 1px solid var(--border-subtle);
+		background: rgba(255, 255, 255, 0.92);
+		box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+		font-size: 11px;
+		font-weight: 600;
+		color: var(--emerald-700);
+		pointer-events: none;
+	}
+	.rec-actualizando-punto {
+		width: 7px;
+		height: 7px;
+		border-radius: 50%;
+		background: var(--emerald-500);
+		animation: rec-latido 1.2s ease-in-out infinite;
+	}
+	.rec-fila:focus-visible {
+		outline: 2px solid var(--emerald-500);
+		outline-offset: -2px;
+	}
+
+	/* Vacío dentro de la tabla: la celda abarca todas las columnas y su
+	   contenido se pega al borde izquierdo con el ancho visible. */
+	.rec-td-vacio {
+		padding: 0;
+		border: none;
+	}
+	.rec-vacio-fijo {
+		position: sticky;
+		left: 0;
+	}
+
+	/* Valor que se está calculando: esqueleto en lugar de un spinner. */
+	.rec-esqueleto {
+		display: inline-block;
+		width: 4.5rem;
+		height: 0.7rem;
+		border-radius: 5px;
+		vertical-align: middle;
+		background: var(--border-default);
+		animation: rec-latido 1.2s ease-in-out infinite;
+	}
+	.rec-esqueleto--claro {
+		background: rgba(255, 255, 255, 0.35);
+	}
+
+	/* ── Móvil: tarjetas ──
+	   La planilla tiene ~45 columnas (31 de días); en 390 px solo se podía
+	   recorrer de lado sin ver a quién pertenecía cada fila. La tarjeta pone
+	   arriba quién (planilla, conductor, placa, empresa) y debajo los días y
+	   las cifras. */
+	.rec-movil {
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+		padding: 0.85rem;
+	}
+	.rec-movil-barra {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+	}
+	.rec-movil-todos {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		min-height: 44px;
+		font-size: 0.8rem;
+		font-weight: 600;
+		color: var(--text-secondary);
+	}
+	.rec-movil-todos input,
+	.rec-tarjeta-cabeza input {
+		width: 18px;
+		height: 18px;
+		accent-color: var(--emerald-500);
+	}
+	.rec-movil-filtros {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+		gap: 0.5rem;
+	}
+	.rec-movil-filtro {
+		display: flex;
+		flex-direction: column;
+		gap: 0.25rem;
+		min-width: 0;
+	}
+	.rec-movil-filtro > span {
+		font-size: 0.6rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.rec-tarjetas {
+		display: flex;
+		flex-direction: column;
+		gap: 0.6rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.rec-tarjeta {
+		display: flex;
+		flex-direction: column;
+		gap: 0.65rem;
+		padding: 0.85rem;
+		border-radius: 16px;
+		border: 1px solid var(--border-subtle);
+		border-left-width: 4px;
+		background: var(--bg-surface);
+		cursor: pointer;
+		transition:
+			background-color 0.15s ease,
+			border-color 0.15s ease;
+	}
+	.rec-tarjeta:focus-visible {
+		outline: 2px solid var(--emerald-500);
+		outline-offset: 2px;
+	}
+	.rec-tarjeta--marcada {
+		border-left-color: var(--emerald-600);
+		background: color-mix(in srgb, var(--emerald-500) 7%, var(--bg-surface));
+	}
+	.rec-tarjeta--nueva {
+		border-left-color: var(--emerald-500);
+	}
+	.rec-tarjeta--actualizada {
+		border-left-color: #2563eb;
+	}
+	.rec-tarjeta--eliminada {
+		border-left-color: #ef4444;
+		background: rgba(239, 68, 68, 0.04);
+	}
+	.rec-tarjeta-cabeza {
+		display: flex;
+		align-items: flex-start;
+		gap: 0.65rem;
+	}
+	.rec-tarjeta-cabeza input {
+		margin-top: 0.15rem;
+		flex-shrink: 0;
+	}
+	.rec-tarjeta-id {
+		display: flex;
+		flex-direction: column;
+		gap: 1px;
+		flex: 1;
+		min-width: 0;
+	}
+	.rec-tarjeta-planilla {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.3rem;
+		font-family: var(--font-mono, monospace);
+		font-size: 0.7rem;
+		color: var(--emerald-700);
+	}
+	/* Mismo distintivo que la columna «N° Planilla» de la tabla. */
+	.rec-tarjeta-tm {
+		padding: 0.05rem 0.35rem;
+		border-radius: 6px;
+		border: 1px solid #14532d;
+		background: linear-gradient(135deg, #166534, #14532d);
+		color: #fff;
+		font-size: 0.55rem;
+		font-weight: 700;
+		letter-spacing: 0.05em;
+	}
+	.rec-tarjeta-id strong {
+		font-size: 0.9rem;
+		font-weight: 700;
+		color: var(--text-primary);
+		overflow-wrap: anywhere;
+	}
+	.rec-tarjeta-id small {
+		font-size: 0.75rem;
+		color: var(--text-muted);
+		overflow-wrap: anywhere;
+	}
+	.rec-tarjeta-dias {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+	.rec-dia {
+		display: inline-flex;
+		flex-direction: column;
+		align-items: center;
+		min-width: 2.4rem;
+		padding: 0.15rem 0.3rem;
+		border-radius: 8px;
+		border-width: 1px;
+		line-height: 1.15;
+	}
+	.rec-dia span {
+		font-size: 0.6rem;
+		font-weight: 700;
+		opacity: 0.7;
+	}
+	.rec-dia small {
+		font-size: 0.72rem;
+		font-weight: 700;
+	}
+	.rec-tarjeta-cifras {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(4.25rem, 1fr));
+		gap: 0.35rem 0.5rem;
+		margin: 0;
+	}
+	.rec-tarjeta-cifras div {
+		display: flex;
+		flex-direction: column;
+	}
+	.rec-tarjeta-cifras dt {
+		font-size: 0.58rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-very-muted);
+	}
+	.rec-tarjeta-cifras dd {
+		margin: 0;
+		font-size: 0.85rem;
+		font-weight: 700;
+		color: var(--text-primary);
+	}
+	.rec-tarjeta-pie {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 0.75rem;
+		padding-top: 0.6rem;
+		border-top: 1px dashed var(--border-subtle);
+	}
+	.rec-tarjeta-valor {
+		display: flex;
+		flex-direction: column;
+		gap: 2px;
+	}
+	.rec-tarjeta-valor > span:first-child {
+		font-size: 0.6rem;
+		font-weight: 700;
+		letter-spacing: 0.1em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.rec-tarjeta-valor strong {
+		font-size: 1rem;
+		font-weight: 800;
+		color: var(--emerald-800);
+	}
+	.rec-tarjeta-valor strong.rec-tarjeta-valor--nulo {
+		color: var(--text-very-muted);
+	}
+	.rec-tarjeta-acciones {
+		display: flex;
+		gap: 0.4rem;
+	}
+	/* Objetivos táctiles de 44 px en móvil. */
+	.rec-tarjeta-acciones .btn-icon {
+		width: 44px;
+		height: 44px;
+	}
+
+	@keyframes rec-latido {
+		50% {
+			opacity: 0.4;
+		}
+	}
+	@media (prefers-reduced-motion: reduce) {
+		.rec-recalc-punto,
+		.rec-actualizando-punto,
+		.rec-esqueleto {
+			animation: none;
 		}
 	}
 

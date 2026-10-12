@@ -3,7 +3,10 @@
 	import { page } from '$app/stores';
 	import { sidebarStore } from '$lib/stores/sidebar';
 	import { goto } from '$app/navigation';
+	import { onMount } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import { listadoAcciones } from '$lib/stores/volverListado';
+	import { mascota } from '$lib/mascot';
 	import { fade, fly } from 'svelte/transition';
 	import { quintOut } from 'svelte/easing';
 	import FormularioAccion from '$lib/components/acciones-correctivas/FormularioAccion.svelte';
@@ -14,32 +17,45 @@
 
 	let accion = $state<AccionCorrectivaPreventiva | null>(null);
 	let isLoading = $state(true);
+	let errorCarga = $state<string | null>(null);
 	let id = $state('');
 
 	let formularioAccion: any = $state(null);
 	let isSubmitting = $state(false);
 
+	/// Destino del «Volver» y de «Cancelar»: el listado con sus filtros. Se lee
+	/// al montar porque vive en sessionStorage, que el render del servidor no tiene.
+	let urlListado = $state('/dashboard/acciones-correctivas');
+	onMount(() => {
+		urlListado = listadoAcciones.url();
+	});
+
 	async function handleGuardado() {
 		toast.success('Acción actualizada exitosamente');
-		goto('/dashboard/acciones-correctivas');
+		goto(listadoAcciones.url());
+	}
+
+	/// Antes, si la carga fallaba, la página saltaba sola al listado a los 2 s:
+	/// el aviso apenas se leía y no había forma de reintentar. Ahora el error
+	/// se queda en pantalla con «Reintentar» y «Volver».
+	async function cargar(idAccion: string) {
+		isLoading = true;
+		errorCarga = null;
+		try {
+			accion = await accionesCorrectivasAPI.obtener(idAccion);
+		} catch (error) {
+			const message = error instanceof Error ? error.message : 'Error al cargar la acción';
+			errorCarga = message;
+			toast.error(message);
+		} finally {
+			isLoading = false;
+		}
 	}
 
 	$effect(() => {
 		const newId = $page.params.id ?? '';
 		id = newId;
-		(async () => {
-			try {
-				accion = await accionesCorrectivasAPI.obtener(newId);
-			} catch (error) {
-				const message = error instanceof Error ? error.message : 'Error al cargar la acción';
-				toast.error(message);
-				setTimeout(() => {
-					goto('/dashboard/acciones-correctivas');
-				}, 2000);
-			} finally {
-				isLoading = false;
-			}
-		})();
+		void cargar(newId);
 	});
 </script>
 
@@ -52,7 +68,7 @@
 	>
 		<div class="page-header-inner">
 			<div class="page-header-left">
-				<button class="back-btn" onclick={() => goto('/dashboard/acciones-correctivas')} aria-label="Volver al listado">
+				<button class="back-btn" onclick={() => goto(urlListado)} aria-label="Volver al listado">
 					<svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
 						<path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
 					</svg>
@@ -99,8 +115,17 @@
 				onGuardado={handleGuardado}
 			/>
 		{:else}
-			<div class="state-block" in:fade={{ duration: 200 }}>
-				<p class="state-text">No se encontró la acción solicitada.</p>
+			{@const img = mascota('advertencia')}
+			<div class="page-card dir-vacio" role="alert" in:fade={{ duration: 200 }}>
+				<img src={img.src} alt={img.alt} width="418" height="418" />
+				<h3>No pudimos abrir la acción</h3>
+				<p>{errorCarga ?? 'La acción no existe o ya no está disponible.'}</p>
+				<div class="flex flex-wrap justify-center gap-2">
+					<button type="button" class="btn-secondary" onclick={() => goto(urlListado)}>
+						Volver al listado
+					</button>
+					<button type="button" class="btn-primary" onclick={() => cargar(id)}>Reintentar</button>
+				</div>
 			</div>
 		{/if}
 	</main>
@@ -255,20 +280,6 @@
 
 	.page-main {
 		padding: 1.5rem 1.5rem 3rem;
-	}
-
-	.state-block {
-		display: flex;
-		flex-direction: column;
-		align-items: center;
-		justify-content: center;
-		gap: 0.85rem;
-		padding: 4rem 1rem;
-		color: var(--text-muted);
-	}
-	.state-text {
-		font-size: 0.9rem;
-		margin: 0;
 	}
 
 	@keyframes spin {

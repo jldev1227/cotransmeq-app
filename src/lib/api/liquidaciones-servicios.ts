@@ -1,6 +1,8 @@
 import { browser } from '$app/environment';
 
-const API_URL = browser ? import.meta.env.VITE_API_URL : 'http://localhost:4000';
+/// Misma base que `apiClient`, con su respaldo: sin `VITE_API_URL` se pedía a
+/// `undefined/api/...`. Las rutas con sesión salen por `fetchConSesion`.
+import { API_BASE as API_URL, fetchConSesion } from './fetchConSesion';
 
 // ═══ Tipos ═══
 
@@ -411,7 +413,7 @@ export const liquidacionesServiciosAPI = {
 		if (operadora) params.set('operadora', operadora);
 		if (anio) params.set('anio', String(anio));
 
-		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/tarifas?${params.toString()}`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-servicios/tarifas?${params.toString()}`, {
 			headers: getAuthHeaders()
 		});
 		if (!res.ok) {
@@ -422,7 +424,7 @@ export const liquidacionesServiciosAPI = {
 	},
 
 	async crearTarifa(data: TarifaInput): Promise<TarifaServicio> {
-		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/tarifas`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-servicios/tarifas`, {
 			method: 'POST',
 			headers: getAuthHeaders(),
 			body: JSON.stringify(data)
@@ -433,7 +435,7 @@ export const liquidacionesServiciosAPI = {
 	},
 
 	async actualizarTarifa(id: string, data: Partial<TarifaInput>): Promise<TarifaServicio> {
-		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/tarifas/${id}`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-servicios/tarifas/${id}`, {
 			method: 'PUT',
 			headers: getAuthHeaders(),
 			body: JSON.stringify(data)
@@ -444,7 +446,7 @@ export const liquidacionesServiciosAPI = {
 	},
 
 	async eliminarTarifa(id: string): Promise<void> {
-		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/tarifas/${id}`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-servicios/tarifas/${id}`, {
 			method: 'DELETE',
 			headers: getAuthHeaders()
 		});
@@ -474,7 +476,7 @@ export const liquidacionesServiciosAPI = {
 			params.set('tarifa_id', tarifa_id);
 		}
 
-		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/preview?${params.toString()}`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-servicios/preview?${params.toString()}`, {
 			headers: getAuthHeaders()
 		});
 		const json = await res.json();
@@ -494,7 +496,7 @@ export const liquidacionesServiciosAPI = {
 			anio: String(anio)
 		});
 
-		const res = await fetch(
+		const res = await fetchConSesion(
 			`${API_URL}/api/liquidaciones-servicios/servicios-disponibles?${params.toString()}`,
 			{ headers: getAuthHeaders() }
 		);
@@ -527,7 +529,7 @@ export const liquidacionesServiciosAPI = {
 			if (val !== undefined && val !== '') params.set(key, String(val));
 		});
 
-		const res = await fetch(`${API_URL}/api/liquidaciones-servicios?${params.toString()}`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-servicios?${params.toString()}`, {
 			headers: getAuthHeaders()
 		});
 		const json = await res.json();
@@ -536,7 +538,7 @@ export const liquidacionesServiciosAPI = {
 	},
 
 	async crear(data: CrearLiquidacionInput): Promise<LiquidacionServicio> {
-		const res = await fetch(`${API_URL}/api/liquidaciones-servicios`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-servicios`, {
 			method: 'POST',
 			headers: getAuthHeaders(),
 			body: JSON.stringify(data)
@@ -547,7 +549,7 @@ export const liquidacionesServiciosAPI = {
 	},
 
 	async obtenerPorId(id: string): Promise<LiquidacionServicio> {
-		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/${id}`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-servicios/${id}`, {
 			headers: getAuthHeaders()
 		});
 		const json = await res.json();
@@ -563,7 +565,7 @@ export const liquidacionesServiciosAPI = {
 		id: string,
 		data: CrearLiquidacionInput
 	): Promise<LiquidacionServicio & { factura_recalculada?: FacturaRecalculada | null }> {
-		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/${id}`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-servicios/${id}`, {
 			method: 'PUT',
 			headers: getAuthHeaders(),
 			body: JSON.stringify(data)
@@ -574,7 +576,7 @@ export const liquidacionesServiciosAPI = {
 	},
 
 	async eliminar(id: string): Promise<void> {
-		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/${id}`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-servicios/${id}`, {
 			method: 'DELETE',
 			headers: getAuthHeaders()
 		});
@@ -591,7 +593,7 @@ export const liquidacionesServiciosAPI = {
 	): Promise<LiquidacionServicio> {
 		const body: any = { estado };
 		if (motivo_anulacion) body.motivo_anulacion = motivo_anulacion;
-		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/${id}/estado`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-servicios/${id}/estado`, {
 			method: 'PATCH',
 			headers: getAuthHeaders(),
 			body: JSON.stringify(body)
@@ -615,7 +617,7 @@ export const liquidacionesServiciosAPI = {
 		por_estado: { estado: EstadoLiquidacionServicio; cantidad: number }[];
 		monto_total: number;
 	}> {
-		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/estadisticas`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-servicios/estadisticas`, {
 			headers: getAuthHeaders()
 		});
 		const json = await res.json();
@@ -624,7 +626,7 @@ export const liquidacionesServiciosAPI = {
 	},
 
 	async obtenerTiposRecargo(): Promise<TipoRecargo[]> {
-		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/tipos-recargo`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-servicios/tipos-recargo`, {
 			headers: getAuthHeaders()
 		});
 		const json = await res.json();
@@ -633,7 +635,7 @@ export const liquidacionesServiciosAPI = {
 	},
 
 	async obtenerHistorial(liquidacionId: string): Promise<HistorialEstado[]> {
-		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/${liquidacionId}/historial`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-servicios/${liquidacionId}/historial`, {
 			headers: getAuthHeaders()
 		});
 		const json = await res.json();
@@ -641,22 +643,35 @@ export const liquidacionesServiciosAPI = {
 		return json;
 	},
 
-	async obtenerCSV(liquidacionId: string): Promise<Blob> {
-		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/${liquidacionId}/csv`, {
+	/**
+	 * Excel de la liquidación (liquidación, recargos y trazabilidad). La ruta
+	 * sigue siendo `/csv` para no romper enlaces viejos, aunque desde 2025
+	 * devuelve un .xlsx. El nombre lo pone el servidor: consecutivo, cliente y
+	 * periodo.
+	 */
+	async descargarExcel(liquidacionId: string): Promise<{ blob: Blob; nombre: string }> {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-servicios/${liquidacionId}/csv`, {
 			headers: getAuthHeaders()
 		});
 
 		if (!res.ok) {
-			const json = await res.json();
-			throw new Error(json.error || 'Error al obtener Excel');
+			const json = await res.json().catch(() => null);
+			throw new Error(
+				json?.error ||
+					(res.status === 404
+						? 'La liquidación no existe o está en la papelera'
+						: 'No se pudo generar el Excel de la liquidación')
+			);
 		}
-		return await res.blob();
+		const disposicion = res.headers.get('Content-Disposition') ?? '';
+		const nombre = /filename="?([^";]+)"?/i.exec(disposicion)?.[1] ?? `Liquidacion_${liquidacionId}.xlsx`;
+		return { blob: await res.blob(), nombre };
 	},
 
 	// ── Configuración Liquidador de Servicios ──
 
 	async obtenerConfigLiquidador(): Promise<ConfigLiquidadorServicio> {
-		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/config-liquidador`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-servicios/config-liquidador`, {
 			headers: getAuthHeaders()
 		});
 		const json = await res.json();
@@ -667,7 +682,7 @@ export const liquidacionesServiciosAPI = {
 	async actualizarConfigLiquidador(
 		data: Partial<Omit<ConfigLiquidadorServicio, 'id'>>
 	): Promise<ConfigLiquidadorServicio> {
-		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/config-liquidador`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-servicios/config-liquidador`, {
 			method: 'PUT',
 			headers: getAuthHeaders(),
 			body: JSON.stringify(data)
@@ -679,7 +694,7 @@ export const liquidacionesServiciosAPI = {
 
 	async checkConsecutivo(consecutivo: string, excludeId?: string): Promise<{ available: boolean }> {
 		const qs = excludeId ? `?excludeId=${excludeId}` : '';
-		const res = await fetch(
+		const res = await fetchConSesion(
 			`${API_URL}/api/liquidaciones-servicios/check-consecutivo/${encodeURIComponent(consecutivo)}${qs}`,
 			{
 				headers: getAuthHeaders()
@@ -765,7 +780,7 @@ export const liquidacionesTercerosAPI = {
 		for (const [k, v] of Object.entries(filtros)) {
 			if (v !== '' && v !== undefined && v !== null) params.set(k, String(v));
 		}
-		const res = await fetch(`${API_URL}/api/liquidaciones-terceros?${params}`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-terceros?${params}`, {
 			headers: getAuthHeaders()
 		});
 		const json = await res.json();
@@ -774,7 +789,7 @@ export const liquidacionesTercerosAPI = {
 	},
 
 	async migrar(): Promise<any> {
-		const res = await fetch(`${API_URL}/api/liquidaciones-terceros/migrar`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-terceros/migrar`, {
 			method: 'POST',
 			headers: getAuthHeaders()
 		});
@@ -841,7 +856,7 @@ export const autoguardadoAPI = {
 			base_version?: number | null;
 		}
 	): Promise<RespuestaAutoguardado> {
-		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/autoguardado`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-servicios/autoguardado`, {
 			method: 'POST',
 			headers: getAuthHeaders(),
 			body: JSON.stringify(body)
@@ -862,7 +877,7 @@ export const autoguardadoAPI = {
 	 * `liquidacionId = null` es el borrador «nuevo» del usuario.
 	 */
 	async guardarDraft(liquidacionId: string | null, payload: unknown): Promise<{ ok: boolean }> {
-		const res = await fetch(`${API_URL}/api/liquidaciones-servicios/draft`, {
+		const res = await fetchConSesion(`${API_URL}/api/liquidaciones-servicios/draft`, {
 			method: 'POST',
 			headers: getAuthHeaders(),
 			body: JSON.stringify({ liquidacion_id: liquidacionId, payload })
@@ -879,7 +894,7 @@ export const autoguardadoAPI = {
 		const ruta = liquidacionId
 			? `/api/liquidaciones-servicios/${liquidacionId}/draft`
 			: '/api/liquidaciones-servicios/draft';
-		const res = await fetch(`${API_URL}${ruta}`, { headers: getAuthHeaders() });
+		const res = await fetchConSesion(`${API_URL}${ruta}`, { headers: getAuthHeaders() });
 		const json = await res.json();
 		if (!res.ok) throw new Error(json.error || 'Error al leer el borrador');
 		return json;
@@ -889,7 +904,7 @@ export const autoguardadoAPI = {
 		const ruta = liquidacionId
 			? `/api/liquidaciones-servicios/${liquidacionId}/draft`
 			: '/api/liquidaciones-servicios/draft';
-		await fetch(`${API_URL}${ruta}`, { method: 'DELETE', headers: getAuthHeaders() });
+		await fetchConSesion(`${API_URL}${ruta}`, { method: 'DELETE', headers: getAuthHeaders() });
 	},
 
 	/**
@@ -903,7 +918,7 @@ export const autoguardadoAPI = {
 	 */
 	guardarAlSalir(body: unknown): void {
 		try {
-			void fetch(`${API_URL}/api/liquidaciones-servicios/autoguardado`, {
+			void fetchConSesion(`${API_URL}/api/liquidaciones-servicios/autoguardado`, {
 				method: 'POST',
 				headers: getAuthHeaders(),
 				body: JSON.stringify(body),
@@ -929,7 +944,7 @@ export const operadorasAPI = {
 	 */
 	async listar(incluirInactivas = false): Promise<Operadora[]> {
 		const params = incluirInactivas ? '?incluir_inactivas=true' : '';
-		const res = await fetch(`${API_URL}/api/operadoras${params}`, {
+		const res = await fetchConSesion(`${API_URL}/api/operadoras${params}`, {
 			headers: getAuthHeaders()
 		});
 		const json = await res.json();
@@ -938,7 +953,7 @@ export const operadorasAPI = {
 	},
 
 	async crear(data: { codigo: string; nombre: string; orden?: number }): Promise<Operadora> {
-		const res = await fetch(`${API_URL}/api/operadoras`, {
+		const res = await fetchConSesion(`${API_URL}/api/operadoras`, {
 			method: 'POST',
 			headers: getAuthHeaders(),
 			body: JSON.stringify(data)
@@ -952,7 +967,7 @@ export const operadorasAPI = {
 		id: string,
 		data: Partial<Pick<Operadora, 'codigo' | 'nombre' | 'activo' | 'orden'>>
 	): Promise<Operadora> {
-		const res = await fetch(`${API_URL}/api/operadoras/${id}`, {
+		const res = await fetchConSesion(`${API_URL}/api/operadoras/${id}`, {
 			method: 'PUT',
 			headers: getAuthHeaders(),
 			body: JSON.stringify(data)
@@ -973,7 +988,7 @@ export const operadorasAPI = {
 	async eliminar(
 		id: string
 	): Promise<{ accion: 'eliminada' | 'desactivada'; liquidaciones: number }> {
-		const res = await fetch(`${API_URL}/api/operadoras/${id}`, {
+		const res = await fetchConSesion(`${API_URL}/api/operadoras/${id}`, {
 			method: 'DELETE',
 			headers: getAuthHeaders()
 		});

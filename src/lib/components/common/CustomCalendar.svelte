@@ -14,6 +14,7 @@
 	 */
 	import type { FestivoColombiano } from '$lib/utils/festivosColombia';
 	import { getEstadoColor, getEstadoText, type ServicioConRelaciones } from '$lib/types/servicios';
+	import EstadoPunto from '$lib/components/listing/EstadoPunto.svelte';
 
 	type Props = {
 		mes: number;
@@ -110,6 +111,7 @@
 			onEventClick(s);
 		}}
 	>
+		<span class="cc-punto" aria-hidden="true"></span>
 		{#if h}<span class="cc-hora">{h}</span>{/if}
 		<span class="cc-resumen">{resumen(s)}</span>
 	</button>
@@ -200,7 +202,14 @@
 								<span class="cc-hora">{hora(s) ?? '—'}</span>
 								<span class="cc-agenda-texto">
 									<strong>{ruta(s)}</strong>
-									<small>{getEstadoText(s.estado)} · {resumen(s)}</small>
+									<small>
+										<EstadoPunto
+											etiqueta={getEstadoText(s.estado)}
+											color={getEstadoColor(s.estado)}
+											apagado={s.estado === 'cancelado'}
+										/>
+										<span>· {resumen(s)}</span>
+									</small>
 								</span>
 							</button>
 						{/each}
@@ -342,7 +351,6 @@
 		min-width: 0;
 		padding: 3px 6px;
 		border: 0;
-		border-left: 3px solid var(--c);
 		border-radius: 6px;
 		background: color-mix(in srgb, var(--c) 11%, var(--bg-surface));
 		font: inherit;
@@ -360,6 +368,15 @@
 	.cc-tira:focus-visible {
 		outline: 2px solid var(--c);
 		outline-offset: 1px;
+	}
+	/* El estado en la tira del mes: el fondo teñido y un punto, como el
+	   `EstadoPunto` de los listados. Era una barra gruesa a la izquierda. */
+	.cc-punto {
+		flex-shrink: 0;
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: var(--c);
 	}
 	.cc-tira--apagada {
 		opacity: 0.6;
@@ -444,7 +461,6 @@
 		gap: 10px;
 		padding: 8px 10px;
 		border: 1px solid var(--border-subtle);
-		border-left: 3px solid var(--c);
 		border-radius: 10px;
 		background: var(--bg-surface);
 		font: inherit;
@@ -466,7 +482,12 @@
 		font-size: 0.84rem;
 		color: var(--text-primary);
 	}
+	/* El estado va como en los listados (punto + etiqueta), no como barra lateral. */
 	.cc-agenda-texto small {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: center;
+		gap: 0.35rem;
 		font-size: 0.74rem;
 		color: var(--text-muted);
 	}
