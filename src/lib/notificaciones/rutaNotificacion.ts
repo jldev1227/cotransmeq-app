@@ -29,6 +29,7 @@ export function rutaDeNotificacion(n: NotificacionNavegable): RutaNotificacion |
 	if (!id) return null;
 
 	if (ref === 'servicio') return { url: `/dashboard/servicios/${id}` };
+	if (ref === 'extracto') return { url: `/dashboard/extractos?extracto=${id}` };
 	if (ref.startsWith('nomina_desprendible_firmado')) {
 		const [, anio, mes, desde] = ref.split(':');
 		const params = new URLSearchParams({ liquidacion: id, preview: '1' });
@@ -55,6 +56,9 @@ export function rutaDeNotificacion(n: NotificacionNavegable): RutaNotificacion |
 	}
 	if (ref === 'viatico_anticipo') return { url: `/dashboard/viaticos?anticipo=${id}` };
 	if (ref === 'viatico_solicitud') return { url: `/dashboard/viaticos?solicitud=${id}` };
+	/// Saldo bajo del fondo de operaciones: la referencia es el propio usuario,
+	/// no hay registro que abrir; el resumen de viáticos muestra el fondo arriba.
+	if (ref === 'viatico_fondo') return { url: '/dashboard/viaticos' };
 	if (ref === 'solicitud_web') return { url: `/dashboard/solicitudes?solicitud=${id}` };
 	if (ref === 'ACCION_CORRECTIVA') return { url: `/dashboard/acciones-correctivas/${id}` };
 	/// Reporte de un incidente (`incidente`) y su recordatorio de los 15 días
@@ -67,8 +71,22 @@ export function rutaDeNotificacion(n: NotificacionNavegable): RutaNotificacion |
 	/// Lo mismo para el conductor (`doccond:<categoría>:<vence>:<umbral>`): la
 	/// referencia es el conductor; abre su ficha en la pestaña Documentos.
 	if (ref.startsWith('doccond:')) return { url: `/dashboard/conductores/${id}?tab=documentos` };
-	if (n.tipo.startsWith('FACTURA_'))
+	/// Factura creada o anulada (`factura:<número>`, desde el 11-oct-2026): la
+	/// pestaña Facturas filtrada por ese número. La referencia es la factura,
+	/// pero la lista busca por número, no por id.
+	if (ref.startsWith('factura:')) {
+		const numero = ref.slice('factura:'.length);
+		const params = new URLSearchParams({ tab: 'facturas', busqueda: numero });
+		return { url: `/dashboard/liquidaciones-servicios?${params.toString()}` };
+	}
+	/// Avisos de factura anteriores a esa huella: solo se sabe la pestaña.
+	/// `LIQUIDACION_FACTURADA` va ANTES del caso genérico `LIQUIDACION_*`, que
+	/// la atrapaba y la mandaba a la pestaña de liquidaciones.
+	if (n.tipo.startsWith('FACTURA_') || n.tipo === 'LIQUIDACION_FACTURADA')
 		return { url: '/dashboard/liquidaciones-servicios?tab=facturas' };
-	if (n.tipo.startsWith('LIQUIDACION_')) return { url: '/dashboard/liquidaciones-servicios' };
+	/// Liquidación de servicios creada, pendiente, aprobada o anulada: la
+	/// referencia es la liquidación; se abre en modo lectura, como desde la lista.
+	if (n.tipo.startsWith('LIQUIDACION_'))
+		return { url: `/dashboard/liquidaciones-servicios/${id}?mode=view` };
 	return null;
 }

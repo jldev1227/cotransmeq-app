@@ -116,6 +116,7 @@
 	/// servicio caían en la campana genérica.
 	const POR_REFERENCIA: Record<string, { icono: ComponentType; tono: Tono; etiqueta: string }> = {
 		servicio: { icono: Route, tono: 'azul', etiqueta: 'Servicio' },
+		extracto: { icono: FilePlus2, tono: 'verde', etiqueta: 'Extracto FUEC' },
 		preoperacional: { icono: ClipboardCheck, tono: 'verde', etiqueta: 'Preoperacional' },
 		dias_laborados: { icono: CalendarDays, tono: 'azul', etiqueta: 'Días laborados' },
 		docveh: { icono: FileWarning, tono: 'ambar', etiqueta: 'Documentos del vehículo' },

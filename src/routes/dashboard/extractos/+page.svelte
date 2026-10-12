@@ -11,6 +11,7 @@
 	 * Misma cáscara que los directorios (`dir-*` de app.css y `listing/`).
 	 */
 	import { page } from '$app/state';
+	import { afterNavigate } from '$app/navigation';
 	import { fade, fly } from 'svelte/transition';
 	import { toast } from 'svelte-sonner';
 	import type { ColumnDef } from '@tanstack/table-core';
@@ -192,6 +193,17 @@
 	let base = $state<Extracto | null>(null);
 	let detalle = $state<Extracto | null>(null);
 	let modalDetalle = $state(false);
+	let ultimoAvisoId: string | null = null;
+
+	/// La campana enlaza al FUEC por id, aunque no esté en la página actual del listado.
+	afterNavigate(({ to }) => {
+		const id = to?.url.searchParams.get('extracto');
+		if (!id || id === ultimoAvisoId) return;
+		ultimoAvisoId = id;
+		void extractosAPI.detalle(id)
+			.then((e) => { detalle = e; modalDetalle = true; })
+			.catch((error) => toast.error(error instanceof Error ? error.message : 'No se pudo abrir el FUEC'));
+	});
 
 	async function abrirNuevo(desde: Extracto | null = null) {
 		const o = opciones ?? (await cargarOpciones());

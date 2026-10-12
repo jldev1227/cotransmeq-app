@@ -286,7 +286,36 @@ notificaciones y el contador de no leídas. El `Header`, al montar:
 
 Al pulsar una, `rutaDeNotificacion`
 ([rutaNotificacion.ts](../src/lib/notificaciones/rutaNotificacion.ts)) decide
-a qué pantalla llevar según el tipo y la referencia. Marcar como leída es
+a qué pantalla llevar según el tipo y la referencia:
+
+| Aviso (`tipo` · `referencia_tipo`) | `referencia_id` | Abre |
+|---|---|---|
+| `GENERAL` · `servicio` | servicio | `/dashboard/servicios/<id>` |
+| `GENERAL` · `extracto` | FUEC | `/dashboard/extractos?extracto=<id>` (abre el detalle) |
+| `GENERAL` · `preoperacional` | envío | `/dashboard/formularios/envios/<id>` |
+| `GENERAL` · `preop_malo` | envío | `/dashboard/mantenimiento?preoperacional=<id>` |
+| `GENERAL` · `mant:<estado>:<km>:<fecha>` | plan | `/dashboard/mantenimiento?plan=<id>` |
+| `GENERAL` · `dias_laborados:<fecha>` | conductor | `/dashboard/conductores/recorridos?desde=&hasta=&conductor=` |
+| `GENERAL` · `nomina_desprendible_firmado:<año>:<mes>:<desde>` | liquidación de nómina | `/dashboard/nomina/canvas?liquidacion=&preview=1…` (recarga completa) |
+| `GENERAL` · `docveh:<categoría>:<vence>:<umbral>` | vehículo | `/dashboard/flota?vehiculo=<id>&tab=documentos` |
+| `GENERAL` · `doccond:<categoría>:<vence>:<umbral>` | conductor | `/dashboard/conductores/<id>?tab=documentos` |
+| `GENERAL` · `solicitud_web` | solicitud | `/dashboard/solicitudes?solicitud=<id>` |
+| `GENERAL` · `incidente` / `incidente_investigacion_pendiente` | incidente | `/dashboard/incidentes/<id>` |
+| `GENERAL` · `viatico_anticipo` / `viatico_solicitud` | anticipo / solicitud | `/dashboard/viaticos?anticipo=` / `?solicitud=` |
+| `GENERAL` · `viatico_fondo` | el usuario | `/dashboard/viaticos` (el fondo va arriba del resumen) |
+| `ACCION_CORRECTIVA_*` · `ACCION_CORRECTIVA` | acción | `/dashboard/acciones-correctivas/<id>` |
+| `LIQUIDACION_FACTURADA` / `FACTURA_ANULADA` · `factura:<número>` | factura | `/dashboard/liquidaciones-servicios?tab=facturas&busqueda=<número>` |
+| `LIQUIDACION_FACTURADA` / `FACTURA_ANULADA` sin huella (anteriores al 11-oct-2026) | factura | `/dashboard/liquidaciones-servicios?tab=facturas` |
+| `LIQUIDACION_CREADA` / `_PENDIENTE` / `_ACTUALIZADA` / `_ANULADA` | liquidación de servicios | `/dashboard/liquidaciones-servicios/<id>?mode=view` |
+| `ACTIVIDAD_PESV_*` | actividad | nada: el módulo PESV ya no existe |
+
+Se revisó a mano el 11-oct-2026 pulsando un aviso de cada tipo; antes la
+factura creada caía en la pestaña de liquidaciones (el caso genérico
+`LIQUIDACION_*` atrapaba a `LIQUIDACION_FACTURADA`), las liquidaciones abrían la
+lista entera y el saldo del fondo de viáticos no llevaba a ningún sitio.
+[`tests/ruta-notificacion.test.ts`](../tests/ruta-notificacion.test.ts) lo fija.
+
+Marcar como leída es
 `PATCH /api/notificaciones/:id/leida` (y `/marcar-todas`). El cliente HTTP de la
 campana ([api/notificaciones.ts](../src/lib/api/notificaciones.ts)) usa
 `fetch` directo, ver [cliente-api.md](./cliente-api.md#otras-formas-de-llamar-al-backend).
