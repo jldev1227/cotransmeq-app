@@ -44,7 +44,7 @@ Todas exigen sesión administrativa. Las que no están en el menú se marcan.
 | `/dashboard` | Panel de inicio: el backend decide qué secciones ve el usuario (operaciones, HSEQ, talento humano, contabilidad, facturación, mantenimiento) y el periodo vive en la URL. | Ninguno: basta la sesión (`dashboard` es `general`). | `dashboard` |
 | `/dashboard/actividad` | Registro de actividad del equipo con filtros por persona, módulo, acción, área y fechas. Fuera del menú. | `actividad` (general) | `actividad` |
 | `/dashboard/perfil` | Mi perfil: datos de contacto, firma, sesión actual, contraseña, enlace de la app móvil y conexiones con Claude o ChatGPT (tokens del MCP). Fuera del menú. | `perfil` (siempre accesible) | `auth`, `app-usuarios`, `mcp` |
-| `/dashboard/usuarios` | «Equipo»: usuarios, sesiones, invitaciones y la pestaña de permisos (`bonos-planilla`). | `usuarios` | `usuarios`, `sesiones`, `invitaciones` |
+| `/dashboard/usuarios` | «Equipo»: usuarios, sesiones, invitaciones, permisos (`bonos-planilla`) y accesos a la app móvil (`?tab=app-movil`, solo rol admin). | `usuarios` | `usuarios`, `sesiones`, `invitaciones` |
 | `/dashboard/directorio` | Pantalla huérfana: presencia, invitaciones y alta manual, lo mismo que cubre «Equipo». Fuera del menú; su propio código pide no añadirle funciones. | `directorio` | `usuarios`, `invitaciones` |
 
 ### Flota, conductores y operación

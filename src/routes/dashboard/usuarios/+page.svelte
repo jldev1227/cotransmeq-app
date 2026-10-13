@@ -39,7 +39,7 @@
 	import { fade, fly } from 'svelte/transition';
 	import { toast } from 'svelte-sonner';
 	import { usuariosAPI, type Usuario, hasBonosPlanilla } from '$lib/api/usuarios';
-	import { sesionesAPI, type Sesion } from '$lib/api/sesiones';
+	import { sesionesAPI, type Sesion, type ActividadMovil } from '$lib/api/sesiones';
 	import { apiClient } from '$lib/api/apiClient';
 	import { authStore } from '$lib/stores/auth';
 	import { AREA_LABELS, type Area } from '$lib/config/permissions';
@@ -65,12 +65,14 @@
 	type EstadoUsuario = 'TODOS' | 'ACTIVOS' | 'INACTIVOS' | 'EN_LINEA';
 	type FiltroSesion = 'activas' | 'cerradas' | 'todas';
 	type FiltroBonos = 'TODOS' | 'CON_PERMISO' | 'SIN_PERMISO';
-	type TabUsuarios = 'equipo' | 'sesiones' | 'invitaciones' | 'permisos';
+	type TabUsuarios = 'equipo' | 'sesiones' | 'app-movil' | 'invitaciones' | 'permisos';
+	type FiltroMovil = 'todos' | 'en_linea' | 'historial';
 
 	/// Una sola cabecera para las cuatro pestañas, como en liquidaciones: la
 	/// descripción y los conteos cambian con la pestaña abierta.
 	const DESCRIPCION_TAB: Record<TabUsuarios, string> = {
 		equipo: 'Quién entra a la plataforma, con qué áreas y quién está conectado ahora.',
+		'app-movil': 'Accesos a la app de gestión y de conductores, con presencia en tiempo real.',
 		sesiones:
 			'Sesiones abiertas y cerradas de cada persona; las activas se pueden cerrar desde aquí.',
 		invitaciones: 'Invitaciones enviadas por correo y en qué quedó cada una.',
@@ -89,6 +91,9 @@
 		qSesion: texto(),
 		usuario: texto(),
 		paginaSesiones: numero(1),
+		qMovil: texto(),
+		estadoMovil: opcion<FiltroMovil>('todos'),
+		paginaMovil: numero(1),
 		/// Permiso de bonos
 		qBonos: texto(),
 		bonos: opcion<FiltroBonos>('TODOS')
@@ -132,6 +137,9 @@
 		'qSesion',
 		'usuario',
 		'paginaSesiones',
+		'qMovil',
+		'estadoMovil',
+		'paginaMovil',
 		'qBonos',
 		'bonos'
 	] as const;
@@ -220,6 +228,65 @@
 		if (filtros.paginaSesiones < 1) filtros.paginaSesiones = 1;
 	});
 
+	// ─── Actividad de la app móvil ───────────────────────────────────────
+	let actividadMovil = $state<ActividadMovil[]>([]);
+	let loadingMovil = $state(false);
+	let errorMovil = $state<string | null>(null);
+	const soloAdmin = $derived($authStore.user?.role === 'admin' || $authStore.user?.rol === 'admin');
+	const POR_PAGINA_MOVIL = 20;
+	const actividadVisible = $derived(
+		actividadMovil.filter((a) => {
+			if (filtros.estadoMovil === 'en_linea' && !a.en_linea) return false;
+			if (filtros.estadoMovil === 'historial' && a.en_linea) return false;
+			return coincide(filtros.qMovil, [a.nombre, a.correo, a.kind, a.platform]);
+		})
+	);
+	const actividadPaginada = $derived(
+		actividadVisible.slice((filtros.paginaMovil - 1) * POR_PAGINA_MOVIL, filtros.paginaMovil * POR_PAGINA_MOVIL)
+	);
+	let claveMovil = untrack(() => `${filtros.estadoMovil}|${filtros.qMovil}`);
+	$effect(() => {
+		const clave = `${filtros.estadoMovil}|${filtros.qMovil}`;
+		if (clave !== claveMovil) {
+			claveMovil = clave;
+			filtros.paginaMovil = 1;
+		}
+	});
+	$effect(() => {
+		if (!soloAdmin && filtros.tab === 'app-movil') filtros.tab = 'equipo';
+	});
+	$effect(() => {
+		if (loadingMovil) return;
+		const maxPagina = Math.max(1, Math.ceil(actividadVisible.length / POR_PAGINA_MOVIL));
+		if (filtros.paginaMovil > maxPagina) filtros.paginaMovil = maxPagina;
+		if (filtros.paginaMovil < 1) filtros.paginaMovil = 1;
+	});
+	let peticionMovil = 0;
+	async function cargarActividadMovil() {
+		if (!soloAdmin) return;
+		const peticion = ++peticionMovil;
+		try {
+			loadingMovil = actividadMovil.length === 0;
+			errorMovil = null;
+			const filas = await sesionesAPI.actividadMovil();
+			if (peticion === peticionMovil) actividadMovil = filas;
+		} catch {
+			if (peticion === peticionMovil) errorMovil = 'No se pudieron cargar los accesos móviles.';
+		} finally {
+			if (peticion === peticionMovil) loadingMovil = false;
+		}
+	}
+	function onActividadMovil() {
+		void cargarActividadMovil();
+	}
+	const COLUMNAS_MOVIL: ColumnDef<ActividadMovil, any>[] = [
+		{ id: 'persona', header: 'Persona', enableSorting: false },
+		{ id: 'tipo', header: 'Acceso', enableSorting: false, size: 140 },
+		{ id: 'dispositivo', header: 'Dispositivo', enableSorting: false, size: 130 },
+		{ id: 'actividad', header: 'Actividad', enableSorting: false, size: 220 },
+		{ id: 'estado', header: 'Estado', enableSorting: false, size: 140 }
+	];
+
 	// ─── Invitaciones ────────────────────────────────────────────────────
 	interface Invitacion {
 		id: string;
@@ -262,9 +329,14 @@
 	/// Función de baja; antes se usaba `off('usuario-deshabilitado')` sin
 	/// handler, que da de baja también los listeners de otros módulos.
 	let bajaDeshabilitado: (() => void) | undefined;
+	let bajaReconectarMovil: (() => void) | undefined;
 
 	onMount(async () => {
-		await Promise.all([cargarUsuarios(), cargarSesiones(), cargarInvitaciones()]);
+		if (soloAdmin) {
+			socketUtils.on('mobile-presence:changed', onActividadMovil);
+			bajaReconectarMovil = socketUtils.onReconnect(onActividadMovil);
+		}
+		await Promise.all([cargarUsuarios(), cargarSesiones(), cargarInvitaciones(), ...(soloAdmin ? [cargarActividadMovil()] : [])]);
 		const user = $authStore.user;
 		if (user?.id) socketUtils.emit('join-dashboard', user.id);
 		socketUtils.on('usuarios-online', onOnline);
@@ -279,6 +351,8 @@
 	onDestroy(() => {
 		socketUtils.emit('leave-dashboard');
 		socketUtils.off('usuarios-online', onOnline);
+		socketUtils.off('mobile-presence:changed', onActividadMovil);
+		bajaReconectarMovil?.();
 		bajaDeshabilitado?.();
 	});
 
@@ -452,6 +526,14 @@
 						color: STATUS_COLOR.offline
 					}
 				];
+			case 'app-movil':
+				return soloAdmin
+					? [
+						{ clave: 'todos', etiqueta: 'Con acceso', valor: actividadMovil.length },
+						{ clave: 'en_linea', etiqueta: 'En línea', valor: actividadMovil.filter((a) => a.en_linea).length, color: STATUS_COLOR.online },
+						{ clave: 'historial', etiqueta: 'Fuera de línea', valor: actividadMovil.filter((a) => !a.en_linea).length, color: STATUS_COLOR.offline }
+					]
+					: [];
 			case 'invitaciones':
 				return [
 					{ clave: 'todas', etiqueta: 'Total', valor: invitaciones.length },
@@ -493,6 +575,8 @@
 				: filtros.estado
 			: filtros.tab === 'sesiones'
 				? filtros.sesion
+				: filtros.tab === 'app-movil'
+					? filtros.estadoMovil
 				: filtros.tab === 'permisos'
 					? filtros.bonos === 'TODOS'
 						? null
@@ -507,6 +591,8 @@
 			filtros.estado = (filtros.estado === clave ? 'TODOS' : clave) as EstadoUsuario;
 		} else if (filtros.tab === 'sesiones') {
 			filtros.sesion = clave as FiltroSesion;
+		} else if (filtros.tab === 'app-movil') {
+			filtros.estadoMovil = clave as FiltroMovil;
 		} else if (filtros.tab === 'permisos') {
 			filtros.bonos = (filtros.bonos === clave ? 'TODOS' : clave) as FiltroBonos;
 		}
@@ -890,6 +976,7 @@
 			tabs={[
 				{ id: 'equipo', label: 'Equipo' },
 				{ id: 'sesiones', label: 'Sesiones', cuenta: activasCount || null },
+				...(soloAdmin ? [{ id: 'app-movil', label: 'App móvil', cuenta: actividadMovil.filter((a) => a.en_linea).length || null }] : []),
 				{
 					id: 'invitaciones',
 					label: 'Invitaciones',
@@ -1209,6 +1296,68 @@
 						cargando={loadingSesiones}
 						nombreItems="sesiones"
 					/>
+				{/if}
+			{/if}
+		</section>
+	{/if}
+
+	{#if filtros.tab === 'app-movil' && soloAdmin}
+		<section class="usr-seccion" in:fly={{ y: 8, duration: 300 }}>
+			<div class="dir-filtros">
+				<div class="dir-filtros-buscador">
+					<BuscadorLista
+						bind:valor={filtros.qMovil}
+						onBuscar={(termino) => (filtros.qMovil = termino)}
+						placeholder="Buscar por nombre, correo o tipo de acceso…"
+						etiqueta="Buscar accesos móviles"
+					/>
+				</div>
+				<SegmentosFiltro
+					etiqueta="Presencia móvil"
+					opciones={[
+						{ valor: 'todos', etiqueta: 'Todos' },
+						{ valor: 'en_linea', etiqueta: 'En línea', punto: STATUS_COLOR.online },
+						{ valor: 'historial', etiqueta: 'Fuera de línea' }
+					]}
+					valor={filtros.estadoMovil}
+					onCambiar={(v) => (filtros.estadoMovil = v as FiltroMovil)}
+				/>
+				<button class="btn-secondary usr-btn-sm" onclick={cargarActividadMovil} aria-label="Actualizar accesos móviles">
+					<RefreshCw size={16} strokeWidth={2} aria-hidden="true" /> Actualizar
+				</button>
+			</div>
+			<p class="tab-nota">En línea significa que la app está abierta y conectada. Último acceso indica la conexión móvil más reciente.</p>
+			{#if loadingMovil}
+				{@render bloqueCarga('Cargando accesos móviles…')}
+			{:else if errorMovil}
+				{@render bloqueError(errorMovil, cargarActividadMovil)}
+			{:else}
+				<div class="dir-lista">
+					<TablaLista columnas={COLUMNAS_MOVIL} datos={actividadPaginada} claveFila={(a) => `${a.kind}:${a.id}`} etiqueta="Accesos a la app móvil">
+						{#snippet celda({ columnaId, fila: a })}
+							{#if columnaId === 'persona'}
+								<CeldaIdentidad titulo={a.nombre} subtitulo={a.correo ?? undefined} iniciales={initials(a.nombre)} punto={a.en_linea ? STATUS_COLOR.online : STATUS_COLOR.offline} />
+							{:else if columnaId === 'tipo'}
+								<span class="dir-celda">{a.kind === 'conductor' ? 'Conductor' : 'Gestión'}</span>
+							{:else if columnaId === 'dispositivo'}
+								<span class="dir-celda">{a.platform === 'ios' ? 'iOS' : a.platform === 'android' ? 'Android' : 'Desconocido'}</span>
+							{:else if columnaId === 'actividad'}
+								<div class="dir-celda dir-celda--fecha">
+									<span>Último: {formatDate(a.last_seen_at)}</span>
+									<small>Primero: {formatDate(a.first_seen_at)}</small>
+									<small>Conexiones: {a.sessions_count}</small>
+								</div>
+							{:else if columnaId === 'estado'}
+								<EstadoPunto etiqueta={a.en_linea ? 'En línea' : 'Fuera de línea'} color={a.en_linea ? STATUS_COLOR.online : STATUS_COLOR.offline} apagado={!a.en_linea} />
+							{/if}
+						{/snippet}
+						{#snippet vacio()}
+							<div class="dir-vacio"><h3>Sin accesos móviles</h3><p>No hay personas que coincidan con el filtro.</p></div>
+						{/snippet}
+					</TablaLista>
+				</div>
+				{#if actividadVisible.length > 0}
+					<PaginadorLista pagina={filtros.paginaMovil} total={actividadVisible.length} porPagina={POR_PAGINA_MOVIL} onCambiar={(p) => (filtros.paginaMovil = p)} cargando={loadingMovil} nombreItems="personas" />
 				{/if}
 			{/if}
 		</section>

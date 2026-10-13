@@ -65,6 +65,7 @@ nada. Estas son las salas:
 |---|---|---|---|---|
 | Todo el dashboard (al conectar y al cambiar de usuario) | `socket.ts` | `join-dashboard` | `user-<id>` | `nueva-notificacion`, `sesion-cerrada`, progreso de colas (`borrador:*`, `envio-liq:*`), `asistencias:export:progress`, y `recargo-recalculado` y `recargos-bulk-recalc:*` del recálculo masivo |
 | `/dashboard/usuarios`, `/dashboard/directorio` | `socket.ts` | `join-dashboard` al montar, `leave-dashboard` al salir | (presencia global) | `usuarios-online` |
+| `/dashboard/usuarios?tab=app-movil` | `socket.ts` | Reconsulta `GET /api/sesiones/app-movil` al reconectar | (presencia móvil) | `mobile-presence:changed`, sin datos personales; solo el rol admin puede leer la API |
 | `/dashboard/evaluaciones/[id]` | `socket.ts` | `join-evaluacion` / `leave-evaluacion` | `evaluacion-<id>` | `nueva-respuesta`, `respuesta-actualizada` |
 | Canvas de nómina, recorridos, cierres finales, adicionales, ocasional e ingresos | `socketClient.ts` vía `createSheetSession` | `sheet:join`, `sheet:active`, `sheet:leave` | `sheet:<scope>:<año>` (adicionales, ocasional, ingresos) o `sheet:<scope>:<año>:<mes>` (nómina, recorridos, cierres finales) | `sheet:*` y `envio-liquidacion:actualizado` |
 | Canvas del historial de liquidaciones de servicios | `socketClient.ts` vía `createHistorialSession` | `sheet:join` con scope `servicios-historial` | `sheet:servicios-historial` (global: el año es una vista) | `sheet:presence`; el resto son eventos globales |

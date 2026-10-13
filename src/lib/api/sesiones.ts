@@ -23,7 +23,25 @@ export interface Sesion {
 	};
 }
 
+export interface ActividadMovil {
+	kind: 'usuario' | 'conductor';
+	id: string;
+	nombre: string;
+	correo: string | null;
+	area: string[];
+	platform: string | null;
+	first_seen_at: string;
+	last_seen_at: string;
+	sessions_count: number;
+	en_linea: boolean;
+}
+
 export const sesionesAPI = {
+	async actividadMovil(): Promise<ActividadMovil[]> {
+		const response = await apiClient.get('/api/sesiones/app-movil');
+		return response.data;
+	},
+
 	async listar(params?: { activas?: boolean; usuarioId?: string; limit?: number }): Promise<Sesion[]> {
 		const query = new URLSearchParams();
 		if (params?.activas !== undefined) query.set('activas', String(params.activas));
