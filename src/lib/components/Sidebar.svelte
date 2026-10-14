@@ -8,6 +8,7 @@
 	import { checkAccess } from '$lib/config/permissions';
 	import { mobileDrawerStore } from '$lib/stores/mobileDrawer';
 	import { MENU_ITEMS, type MenuItem } from '$lib/config/menu';
+	import { getActiveSectionFromPath } from '$lib/config/sidebarActive';
 	import SidebarIcon, {
 		SIDEBAR_ICON_SIZE,
 		SIDEBAR_ICON_STROKE
@@ -36,7 +37,7 @@
 	});
 
 	// Determinar sección activa basada en la URL actual
-	$: activeSection = getActiveSectionFromPath($page.url.pathname);
+	$: activeSection = getActiveSectionFromPath($page.url.pathname, MENU_ITEMS);
 
 
 	// Filtrar items del menú según permisos del usuario
@@ -54,43 +55,6 @@
 		);
 		return allowed;
 	});
-
-	function getActiveSectionFromPath(pathname: string): string {
-		// if (pathname === '/dashboard') return 'dashboard';
-		if (pathname.startsWith('/dashboard/flota')) return 'flota';
-		if (pathname.startsWith('/dashboard/conductores')) return 'conductores';
-		if (pathname.startsWith('/dashboard/servicios')) return 'servicios';
-		if (pathname.startsWith('/dashboard/recargos')) return 'recargos';
-		if (pathname.startsWith('/dashboard/asistencias')) return 'asistencias';
-		if (pathname.startsWith('/dashboard/acciones-correctivas')) return 'acciones-correctivas';
-		if (pathname.startsWith('/dashboard/evaluaciones')) return 'evaluaciones';
-		if (pathname.startsWith('/dashboard/salidas-nc')) return 'salidas-nc';
-		if (pathname.startsWith('/dashboard/viaticos')) return 'viaticos';
-		if (pathname.startsWith('/dashboard/combustible')) return 'combustible';
-		/// Antes que `/dashboard/formularios`: `startsWith` no distingue prefijos
-		/// que se solapan, pero estas dos rutas no lo hacen. Se deja junto por
-		/// legibilidad.
-		if (pathname.startsWith('/dashboard/mis-formularios')) return 'mis-formularios';
-		if (pathname.startsWith('/dashboard/formularios')) return 'formularios';
-		if (pathname.startsWith('/dashboard/clientes')) return 'clientes';
-		if (pathname.startsWith('/dashboard/sarlaft')) return 'sarlaft';
-		if (pathname.startsWith('/dashboard/nomina')) return 'nomina';
-		// if (pathname.startsWith('/dashboard/extractos')) return 'extractos';
-		if (pathname.startsWith('/dashboard/liquidaciones-servicios')) return 'liquidaciones-servicios';
-		// Todas las rutas de terceros (incluidos ambos canvas) resaltan la
-		// única entrada del menú: «Liq. Terceros».
-		if (pathname.startsWith('/dashboard/liquidaciones-terceros')) return 'liquidaciones-terceros';
-		if (pathname.startsWith('/dashboard/sarlaft')) return 'SARLAFT + PTEE';
-		if (pathname.startsWith('/dashboard/certificados')) return 'certificados';
-		if (pathname.startsWith('/dashboard/terceros')) return 'terceros';
-		if (pathname.startsWith('/dashboard/usuarios')) return 'usuarios';
-		if (pathname.startsWith('/dashboard/sesiones')) return 'usuarios';
-		if (pathname.startsWith('/dashboard/directorio')) return 'usuarios';
-		if (pathname.startsWith('/dashboard/perfil')) return 'perfil';
-		if (pathname.startsWith('/dashboard/actividad')) return 'dashboard';
-		if (pathname === '/dashboard' || pathname === '/dashboard/') return 'dashboard';
-		return 'servicios';
-	}
 
 	function handleMenuClick(item: MenuItem) {
 		goto(item.href);
@@ -130,6 +94,7 @@
 						background-color: {activeSection === item.id ? 'rgba(255,255,255,0.14)' : 'transparent'};
 						border: 1px solid {activeSection === item.id ? 'rgba(255,255,255,0.28)' : 'transparent'};"
 					data-tour={`nav-${item.id}`}
+					aria-current={activeSection === item.id ? 'page' : undefined}
 					on:click={() => handleMenuClick(item)}
 					in:fly={{ x: -30, duration: 400, delay: index * 50 + 300 }}
 					title={isCollapsed ? item.label : undefined}
@@ -218,6 +183,7 @@
 							background-color: {activeSection === item.id ? 'rgba(255,255,255,0.14)' : 'transparent'};
 							border: 1px solid {activeSection === item.id ? 'rgba(255,255,255,0.28)' : 'transparent'};"
 						data-tour={`nav-${item.id}`}
+						aria-current={activeSection === item.id ? 'page' : undefined}
 						on:click={() => handleMenuClick(item)}
 					>
 						<SidebarIcon icon={item.icon} active={activeSection === item.id} />
