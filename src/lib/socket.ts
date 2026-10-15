@@ -14,10 +14,17 @@ import { writable } from 'svelte/store';
  * - `inactivo`     no hay sesión; no se intenta conectar
  * - `conectando`   primer intento de esta sesión
  * - `conectado`    hay canal
- * - `reconectando` se perdió el canal y se está reintentando (sigue solo)
+ * - `reconectando` se perdió el canal y se está reintentando
+ * - `desconectado` fallaron 3 reintentos; sigue el reintento automático cada 5 s
  * - `rechazado`    el servidor rechazó el handshake; reintentar NO arregla nada
  */
-export type EstadoSocket = 'inactivo' | 'conectando' | 'conectado' | 'reconectando' | 'rechazado';
+export type EstadoSocket =
+	| 'inactivo'
+	| 'conectando'
+	| 'conectado'
+	| 'reconectando'
+	| 'desconectado'
+	| 'rechazado';
 
 export interface SocketState {
 	/** Se mantiene por compatibilidad: media aplicación lo consume. */
@@ -41,27 +48,18 @@ const ESTADO_INICIAL: SocketState = {
 // Estado del socket
 export const socketStore = writable<SocketState>({ ...ESTADO_INICIAL });
 
-/** Primer escalón del backoff. */
-const RECONEXION_DELAY = 1_000;
-
-/**
- * Techo del backoff.
- *
- * Con el valor por defecto (5 s) y reintentos infinitos, cien pestañas
- * abiertas martillean el backend cada cinco segundos mientras esté caído.
- * Diez segundos con jitter reparte esos intentos y sigue siendo lo bastante
- * rápido para que la vuelta se note al instante.
- */
-const RECONEXION_DELAY_MAX = 10_000;
+/** Cadencia corta para detectar pronto la vuelta del backend sin detener reintentos. */
+const RECONEXION_DELAY = 5_000;
+const RECONEXION_DELAY_MAX = 5_000;
+const MAX_REINTENTOS_ANTES_DE_MARCAR_DESCONECTADO = 3;
 
 /**
  * Cuánto se espera a que el handshake responda.
  *
- * El defecto son 20 s. Con la red caída —no rechazada: caída, sin RST— cada
- * ciclo de reintento se comía esos 20 s antes de darse por perdido, así que
- * el backoff avanzaba a paso de tortuga justo cuando más falta hacía.
+ * Limitar a 5 s el intento evita que una red caída sin respuesta retrase el
+ * siguiente reintento más que la cadencia configurada.
  */
-const HANDSHAKE_TIMEOUT = 10_000;
+const HANDSHAKE_TIMEOUT = 5_000;
 
 /** El servidor rechaza el handshake con este texto cuando el token no vale. */
 const RECHAZO_AUTH = /unauthorized/i;
@@ -216,23 +214,15 @@ class SocketManager {
 			this.socket = io(import.meta.env.VITE_API_URL, {
 				autoConnect: true,
 				reconnection: true,
-				/// Antes eran 5.
-				///
-				/// Con `reconnectionDelay` de 1 s y el techo por defecto de 5 s,
-				/// los cinco intentos se agotaban en unos 15 segundos. Cualquier
-				/// parada del backend más larga que eso —un deploy, el `tsx watch`
-				/// recompilando, el contenedor rearrancando, un `pg` que tarda en
-				/// aceptar conexiones— dejaba al cliente desconectado PARA SIEMPRE:
-				/// socket.io emitía `reconnect_failed` y no volvía a intentarlo
-				/// nunca más. El backend volvía a estar arriba, el rótulo seguía
-				/// diciendo «Sin conexión» y la única salida era recargar la
-				/// página. Ese es exactamente el fallo que se reportaba.
+				/// No se agotan los reintentos: tras tres fallidos el estado visible
+				/// pasa a «Sin conexión», pero el cliente sigue sondeando cada 5 s y
+				/// se recupera solo cuando el backend vuelve.
 				reconnectionAttempts: Infinity,
 				reconnectionDelay: RECONEXION_DELAY,
 				reconnectionDelayMax: RECONEXION_DELAY_MAX,
-				// Jitter: sin él todos los clientes reintentan en el mismo
-				// milisegundo y le caen encima al backend justo al arrancar.
-				randomizationFactor: 0.5,
+				// Un jitter leve conserva la cadencia de 5 s y reparte clientes que
+				// quedaron desconectados al mismo tiempo.
+				randomizationFactor: 0.1,
 				timeout: HANDSHAKE_TIMEOUT,
 				/// Función, NO objeto: socket.io la vuelve a invocar en cada
 				/// intento. Con `auth: { token: authStore.getToken() }` el token
@@ -423,11 +413,16 @@ class SocketManager {
 			socketStore.update((state) => ({
 				...state,
 				connected: false,
-				estado: 'reconectando',
-				intentos: state.intentos + 1,
-				// El aviso solo se enciende cuando ya se ha insistido un poco:
-				// un corte de un segundo no tiene por qué alarmar a nadie.
-				error: state.intentos + 1 >= 3 ? 'No se pudo conectar al servidor' : state.error
+				estado:
+					state.estado === 'desconectado' ||
+					state.intentos >= MAX_REINTENTOS_ANTES_DE_MARCAR_DESCONECTADO
+						? 'desconectado'
+						: 'reconectando',
+				error:
+					state.estado === 'desconectado' ||
+					state.intentos >= MAX_REINTENTOS_ANTES_DE_MARCAR_DESCONECTADO
+						? 'Sin conexión tras 3 reintentos; se seguirá intentando cada 5 segundos'
+						: state.error
 			}));
 		});
 
@@ -435,7 +430,11 @@ class SocketManager {
 		/// se anuncian los intentos. Sirve para que la UI pueda decir «intento
 		/// 4» en vez de un «Sin conexión» mudo.
 		socket.io.on('reconnect_attempt', (intento: number) => {
-			socketStore.update((state) => ({ ...state, estado: 'reconectando', intentos: intento }));
+			socketStore.update((state) => ({
+				...state,
+				estado: state.estado === 'desconectado' ? 'desconectado' : 'reconectando',
+				intentos: intento
+			}));
 		});
 
 		/// Con `reconnectionAttempts: Infinity` esto no debería dispararse nunca.

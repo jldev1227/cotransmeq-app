@@ -29,7 +29,6 @@
 		RotateCcw as IcoRestaurar
 	} from 'lucide-svelte';
 	import ModalFormConductor from '$lib/components/conductores/ModalFormConductor.svelte';
-	import ModalDetalleConductor from '$lib/components/conductores/ModalDetalleConductor.svelte';
 	import type { SortingState } from '@tanstack/table-core';
 	import type { ColumnDef } from '@tanstack/table-core';
 	import { crearListingStore } from '$lib/listing/listingStore';
@@ -605,7 +604,6 @@
 	}
 
 	/// Ficha de consulta: la fila abre la ficha; la página completa sigue a un clic.
-	let detalleId = $state<string | null>(null);
 
 	onMount(() => {
 		/// Enlaces viejos a `/agregar` llegan aquí con `?nuevo=1`.
@@ -915,7 +913,7 @@
 				datos={conductores}
 				claveFila={(c) => c.id}
 				cargando={isLoading}
-				onFila={(c) => (detalleId = c.id)}
+				onFila={(c) => goto(`/dashboard/conductores/${c.id}`)}
 				orden={ordenTabla}
 				onOrdenar={aplicarOrden}
 				seleccion={conductoresSeleccionados}
@@ -972,7 +970,7 @@
 									id: 'ver',
 									etiqueta: 'Ver detalle',
 									icono: Eye,
-									onClick: () => (detalleId = c.id)
+									onClick: () => goto(`/dashboard/conductores/${c.id}`)
 								},
 								{
 									id: 'ocultar',
@@ -1369,17 +1367,6 @@
 	{/if}
 </div>
 
-<ModalDetalleConductor
-	open={detalleId !== null}
-	conductorId={detalleId}
-	onclose={() => (detalleId = null)}
-	oneditar={puedeEditar
-		? (id) => {
-				detalleId = null;
-				abrirFormulario(id);
-			}
-		: undefined}
-/>
 <ModalFormConductor
 	open={modalConductor.abierto}
 	conductorId={modalConductor.id}

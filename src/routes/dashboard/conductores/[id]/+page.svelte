@@ -13,6 +13,7 @@
 	import { toast } from 'svelte-sonner';
 	import ReadonlyField from '$lib/components/ReadonlyField.svelte';
 	import DocumentosConductor from '$lib/components/conductores/DocumentosConductor.svelte';
+	import AnaliticaIndividual from '$lib/components/directorio/AnaliticaIndividual.svelte';
 
 	/// Destino del «Volver» y de la miga: el listado con los filtros y la página
 	/// de donde se vino. Se lee al montar: vive en sessionStorage, que el render
@@ -22,7 +23,7 @@
 		urlListado = listadoConductores.url();
 	});
 
-	type TabType ='personal' | 'laboral' | 'seguridad' | 'licencia' | 'documentos';
+	type TabType = 'personal' | 'laboral' | 'seguridad' | 'licencia' | 'documentos' | 'actividad';
 	type EstadoType = 'ACTIVO' | 'INACTIVO' | 'VACACIONES' | 'INCAPACITADO' | 'RETIRADO' | 'servicio';
 	type SedeType = '' | 'YOPAL' | 'VILLANUEVA' | 'TAURAMENA';
 	type GeneroType = '' | 'M' | 'F' | 'MASCULINO' | 'FEMENINO' | 'OTRO';
@@ -115,6 +116,11 @@
 			id: 'documentos',
 			label: 'Documentos',
 			icon: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z'
+		},
+		{
+			id: 'actividad',
+			label: 'Actividad',
+			icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z'
 		}
 	];
 
@@ -200,6 +206,10 @@
 		{
 			id: 'documentos',
 			description: 'Hoja de vida documental: licencia, exámenes, cursos y soportes, con su vigencia.'
+		},
+		{
+			id: 'actividad',
+			description: 'Jornadas, nómina, recargos, formularios, asistencias, evaluaciones y FUEC del período.'
 		}
 	];
 
@@ -208,11 +218,13 @@
 	/// Editar abre el mismo modal que crear (listado de conductores).
 	let modalAbierto = false;
 	let error: string | null = null;
-	let activeTab: TabType = 'personal';
-	/// `?tab=documentos` abre esa pestaña (ahí lleva el aviso de vencimiento),
-	/// también si la ficha ya estaba abierta y solo cambió la URL.
+	let activeTab: TabType = 'actividad';
+	/// `?tab=` abre cualquiera de las secciones disponibles y también reacciona
+	/// si la ficha ya estaba abierta y solo cambió la URL.
 	$: tabDeUrl = $page.url.searchParams.get('tab');
-	$: if (tabDeUrl === 'documentos') activeTab = 'documentos';
+	$: activeTab = tabDeUrl && TABS.some((item) => item.id === tabDeUrl)
+		? tabDeUrl as TabType
+		: 'actividad';
 
 	let formData: ConductorForm = emptyForm();
 
@@ -350,8 +362,9 @@
 			laboral: count(['cargo', 'fecha_ingreso', 'salario_base', 'estado', 'sede_trabajo']),
 			seguridad: count(['eps', 'fondo_pension', 'arl']),
 			licencia: count(['categoria_licencia', 'vencimiento_licencia']),
-			/// Sin contador: su estado es el semáforo de la propia pestaña.
-			documentos: { done: 0, total: 0 }
+			/// Estas secciones presentan su propio estado e indicadores.
+			documentos: { done: 0, total: 0 },
+			actividad: { done: 0, total: 0 }
 		};
 	}
 
@@ -364,7 +377,7 @@
 	function getEstadoPill(tone: string): string {
 		const map: Record<string, string> = {
 			emerald:
-				'background: rgba(234, 88, 12,0.10); color: var(--orange-800); border: 1px solid rgba(234, 88, 12,0.25);',
+				'background: rgba(7, 150, 101,0.10); color: var(--emerald-800); border: 1px solid rgba(7, 150, 101,0.25);',
 			slate:
 				'background: rgba(100,116,139,0.10); color: #334155; border: 1px solid rgba(100,116,139,0.22);',
 			sky: 'background: rgba(14,165,233,0.10); color: #075985; border: 1px solid rgba(14,165,233,0.25);',
@@ -484,7 +497,10 @@
 	}
 
 	function requestTabChange(tab: TabType) {
-		activeTab = tab;
+		const url = new URL($page.url);
+		if (tab === 'actividad') url.searchParams.delete('tab');
+		else url.searchParams.set('tab', tab);
+		void goto(url, { keepFocus: true, noScroll: true });
 	}
 
 	/// Tras subir o corregir la licencia en Documentos: su fecha y categoría
@@ -687,7 +703,7 @@
 />
 
 <svelte:head>
-	<title>{fullName || 'Conductor'} · Perfil — Cotransmeq</title>
+	<title>{fullName || 'Conductor'} · Perfil — Transmeralda</title>
 </svelte:head>
 
 <div class="cond-pagina" style="background-color: var(--bg-base);">
@@ -893,7 +909,9 @@
 						<div class="cond-cifra">
 							<dt>Ingreso</dt>
 							<dd>
-								{conductor.fecha_ingreso ? formatDate(conductor.fecha_ingreso).split(' de ')[2] : '—'}
+								{conductor.fecha_ingreso
+									? formatDate(conductor.fecha_ingreso).split(' de ')[2]
+									: '—'}
 							</dd>
 						</div>
 						<div class="cond-cifra">
@@ -1016,7 +1034,10 @@
 			</aside>
 
 			<!-- ═══ CONTENIDO PRINCIPAL (columna derecha) ═══ -->
-			<section class="cond-main space-y-5" in:fly={{ y: 16, duration: 480, easing: quintOut, delay: 120 }}>
+			<section
+				class="cond-main space-y-5"
+				in:fly={{ y: 16, duration: 480, easing: quintOut, delay: 120 }}
+			>
 				<!-- Barra de acciones de edición -->
 				<div
 					class="page-card flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
@@ -1066,12 +1087,12 @@
 								role="tab"
 								aria-selected={isActive}
 								class="cond-tab group inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold transition-all"
-								style={`background: ${isActive ? 'linear-gradient(135deg, rgba(234, 88, 12,0.10), rgba(234, 88, 12,0.10))' : 'transparent'}; color: ${isActive ? 'var(--orange-800)' : 'var(--text-secondary)'}; border: 1px solid ${isActive ? 'rgba(234, 88, 12,0.25)' : 'transparent'};`}
+								style={`background: ${isActive ? 'linear-gradient(135deg, rgba(7, 150, 101,0.10), rgba(8, 122, 87,0.10))' : 'transparent'}; color: ${isActive ? 'var(--emerald-800)' : 'var(--text-secondary)'}; border: 1px solid ${isActive ? 'rgba(7, 150, 101,0.25)' : 'transparent'};`}
 								on:click={() => requestTabChange(tab.id)}
 							>
 								<span
 									class="flex h-6 w-6 items-center justify-center rounded-md"
-									style={`background: ${isActive ? 'linear-gradient(135deg, #ea580c, #c2410c)' : 'rgba(234, 88, 12,0.08)'}; color: ${isActive ? 'white' : 'var(--orange-700)'};`}
+									style={`background: ${isActive ? 'linear-gradient(135deg, #079665, #087a57)' : 'rgba(7, 150, 101,0.08)'}; color: ${isActive ? 'white' : 'var(--emerald-700)'};`}
 								>
 									<svg
 										class="h-3.5 w-3.5"
@@ -1086,7 +1107,7 @@
 								<span class="whitespace-nowrap">{tab.label}</span>
 								{#if completion.total}<span
 									class="rounded-full px-1.5 py-0.5 text-[10px] font-bold"
-									style={`background: ${pct === 100 ? 'rgba(234, 88, 12,0.12)' : 'rgba(0,0,0,0.04)'}; color: ${pct === 100 ? 'var(--orange-800)' : 'var(--text-muted)'};`}
+									style={`background: ${pct === 100 ? 'rgba(7, 150, 101,0.12)' : 'rgba(0,0,0,0.04)'}; color: ${pct === 100 ? 'var(--emerald-800)' : 'var(--text-muted)'};`}
 								>
 									{completion.done}/{completion.total}
 								</span>{/if}
@@ -1098,7 +1119,7 @@
 				<!-- Form -->
 				<div class="page-card" style="padding: 1.5rem;">
 					<div class="mb-5 flex flex-col gap-1">
-						<p class="font-mono-meta" style="color: var(--orange-700); font-size: 0.6rem;">
+						<p class="font-mono-meta" style="color: var(--emerald-700); font-size: 0.6rem;">
 							Sección activa
 						</p>
 						<h2 class="font-display text-lg" style="color: var(--bg-charcoal); font-weight: 800;">
@@ -1115,6 +1136,7 @@
 								? 'Licencia de Conducción'
 								: ''}
 							{activeTab === 'documentos' ? 'Documentos' : ''}
+							{activeTab === 'actividad' ? 'Actividad y analítica' : ''}
 						</h2>
 						<p class="text-xs" style="color: var(--text-muted);">
 							{FIELD_GROUPS.find((g) => g.id === activeTab)?.description}
@@ -1362,6 +1384,8 @@
 					{:else if activeTab === 'documentos'}
 						<!-- Subir la licencia cambia su fecha en la ficha: se refresca para que la tarjeta y la pestaña Licencia no queden viejas. -->
 						<DocumentosConductor conductorId={conductor.id} oncambio={refrescarFicha} />
+					{:else if activeTab === 'actividad'}
+						<AnaliticaIndividual tipo="conductor" entidadId={conductor.id} />
 					{/if}
 
 					
@@ -1384,7 +1408,7 @@
 		<button
 			type="button"
 			class="absolute inset-0 cursor-default border-0 p-0"
-			style="background: linear-gradient(135deg, rgba(15, 23, 42,0.40), rgba(20, 83, 45,0.55)); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);"
+			style="background: linear-gradient(135deg, rgba(23, 32, 29,0.40), rgba(1, 67, 57,0.55)); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);"
 			aria-label="Cerrar"
 			on:click={() => (confirmDeletePhoto = false)}
 			transition:fade={{ duration: 180 }}
@@ -1455,7 +1479,7 @@
 		<button
 			type="button"
 			class="absolute inset-0 cursor-default border-0 p-0"
-			style="background: linear-gradient(135deg, rgba(15, 23, 42,0.55), rgba(20, 83, 45,0.65)); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);"
+			style="background: linear-gradient(135deg, rgba(23, 32, 29,0.55), rgba(1, 67, 57,0.65)); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);"
 			aria-label="Cerrar"
 			on:click={handleCloseCropModal}
 			transition:fade={{ duration: 200 }}
@@ -1470,7 +1494,7 @@
 				style="border-bottom: 1px solid var(--border-subtle);"
 			>
 				<div>
-					<p class="font-mono-meta" style="color: var(--orange-700); font-size: 0.6rem;">
+					<p class="font-mono-meta" style="color: var(--emerald-700); font-size: 0.6rem;">
 						Foto de perfil
 					</p>
 					<h3
@@ -1501,7 +1525,7 @@
 			</div>
 			<div
 				class="relative mx-6 mt-5 overflow-hidden rounded-2xl"
-				style="height: 360px; background: #0f172a;"
+				style="height: 360px; background: #17201d;"
 			>
 				<Cropper
 					image={imageSrc}
@@ -1515,7 +1539,7 @@
 				{#if photoSuccess}
 					<div
 						class="pointer-events-none absolute inset-0 flex items-center justify-center"
-						style="background: rgba(234, 88, 12,0.45); backdrop-filter: blur(2px);"
+						style="background: rgba(7, 150, 101,0.45); backdrop-filter: blur(2px);"
 						transition:fade={{ duration: 220 }}
 					>
 						<div
@@ -1524,7 +1548,7 @@
 						>
 							<svg
 								class="h-8 w-8"
-								style="color: var(--orange-600);"
+								style="color: var(--emerald-600);"
 								fill="none"
 								stroke="currentColor"
 								viewBox="0 0 24 24"
@@ -2163,8 +2187,8 @@
 	}
 	.block-input:focus {
 		outline: none;
-		border-color: var(--orange-500);
-		box-shadow: 0 0 0 3px rgba(234, 88, 12, 0.12);
+		border-color: var(--emerald-500);
+		box-shadow: 0 0 0 3px rgba(7, 150, 101, 0.12);
 	}
 	.block-input::placeholder {
 		color: var(--text-very-muted);
@@ -2203,18 +2227,18 @@
 		width: 16px;
 		height: 16px;
 		border-radius: 50%;
-		background: linear-gradient(135deg, #ea580c, #c2410c);
+		background: linear-gradient(135deg, #079665, #087a57);
 		cursor: pointer;
 		border: 2px solid white;
-		box-shadow: 0 2px 6px rgba(234, 88, 12, 0.4);
+		box-shadow: 0 2px 6px rgba(7, 150, 101, 0.4);
 	}
 	.crop-range::-moz-range-thumb {
 		width: 16px;
 		height: 16px;
 		border-radius: 50%;
-		background: linear-gradient(135deg, #ea580c, #c2410c);
+		background: linear-gradient(135deg, #079665, #087a57);
 		cursor: pointer;
 		border: 2px solid white;
-		box-shadow: 0 2px 6px rgba(234, 88, 12, 0.4);
+		box-shadow: 0 2px 6px rgba(7, 150, 101, 0.4);
 	}
 </style>

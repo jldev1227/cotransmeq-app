@@ -3,6 +3,7 @@
 	import Dato from '$lib/components/directorio/Dato.svelte';
 	import { conductoresAPI } from '$lib/api/apiClient';
 	import { errorDeApi, avisarErrorGuardado } from '$lib/components/directorio/formulario';
+	import AnaliticaIndividual from '$lib/components/directorio/AnaliticaIndividual.svelte';
 
 	/**
 	 * Ficha de consulta de un conductor, con el estilo de la app móvil. La ficha
@@ -101,6 +102,7 @@
 	tabs={[
 		{ id: 'personal', label: 'Personal' },
 		{ id: 'laboral', label: 'Laboral' },
+			{ id: 'actividad', label: 'Actividad' },
 		{ id: 'seguridad', label: 'Seguridad social' },
 		{ id: 'licencia', label: 'Licencia' }
 	]}
@@ -110,7 +112,10 @@
 >
 	{#snippet children(activa)}
 		{#if c}
-			<div class="md-grid">
+			{#if activa === 'actividad' && conductorId}
+				<AnaliticaIndividual tipo="conductor" entidadId={conductorId} />
+			{:else}
+				<div class="md-grid">
 				{#if activa === 'personal'}
 					<Dato
 						etiqueta="Tipo de identificación"
@@ -137,7 +142,8 @@
 					<Dato etiqueta="Categoría" valor={c.categoria_licencia} />
 					<Dato etiqueta="Vencimiento" valor={fecha(c.vencimiento_licencia)} />
 				{/if}
-			</div>
+				</div>
+			{/if}
 		{/if}
 	{/snippet}
 

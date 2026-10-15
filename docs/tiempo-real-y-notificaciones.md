@@ -154,10 +154,10 @@ estrategia:
 
 | Ajuste | Valor | Por qué |
 |---|---|---|
-| `reconnectionAttempts` | `Infinity` | Con 5 (o 10) intentos se rendían en 15 s (o un minuto): un despliegue o un `tsx watch` recompilando dejaban el cliente muerto hasta recargar. |
-| `reconnectionDelay` / `reconnectionDelayMax` | 1 s / 10 s | Con el techo de 5 s, cien pestañas martilleaban el backend caído. |
-| `randomizationFactor` | 0,5 | Jitter: que no reintenten todos en el mismo milisegundo al arrancar el backend. |
-| `timeout` (handshake) | 10 s | El defecto de 20 s frenaba el backoff cuando la red caía sin respuesta. |
+| `reconnectionAttempts` | `Infinity` | Tras 3 reintentos fallidos el indicador pasa a «Sin conexión», pero los reintentos siguen hasta recuperar el canal. |
+| `reconnectionDelay` / `reconnectionDelayMax` | 5 s / 5 s | Cadencia rápida y constante para volver a detectar el backend. |
+| `randomizationFactor` | 0,1 | Jitter leve para repartir clientes sin alejarse de los 5 s. |
+| `timeout` (handshake) | 5 s | Limita una conexión que no responde para poder iniciar el siguiente ciclo. |
 
 Además:
 
@@ -178,13 +178,16 @@ Además:
   pierde hasta recargar.
 
 **Lo que ve el usuario.** `socketStore` expone `estado` (`inactivo`,
-`conectando`, `conectado`, `reconectando`, `rechazado`), `intentos` y
+`conectando`, `conectado`, `reconectando`, `desconectado`, `rechazado`), `intentos` y
 `ultimaConexion`. El chip «En vivo» del `Header` pinta ese estado con colores
 de semáforo fijos en hex, a propósito fuera de la paleta: aquí `emerald-*` se
 remapea a naranja, que sirve para la marca pero no para decir «conectado». A
 partir del tercer intento fallido muestra el error; «Reintentar» llama a
-`socketManager.reconectar()`, que tira la conexión y levanta otra. En móvil lo
-mismo sale como aviso en el layout.
+`socketManager.reconectar()`, que tira la conexión y levanta otra. Tras tres
+intentos fallidos, el header marca «Sin conexión» y conserva el reintento
+manual; el cliente continúa intentando cada 5 s para recuperarse automáticamente
+cuando vuelva el backend. El rechazo de autenticación permanece separado y no
+se reintenta hasta renovar la sesión.
 
 ## Alta y baja de listeners
 

@@ -458,7 +458,11 @@
 			</section>
 
 			<!-- Lateral: anexos, documento controlado, evaluación, canal y trazabilidad -->
-			<aside class="sl-lateral">
+			<aside class="sl-lateral" aria-label="Gestión del expediente">
+				<div class="sl-lateral-cab">
+					<span class="sl-eyebrow">Expediente</span>
+					<h2>Gestión y soportes</h2>
+				</div>
 				<!-- Documentos -->
 				<section
 					class="page-card sl-tarjeta"
@@ -869,6 +873,7 @@
 	.sl-pagina {
 		height: auto;
 		min-height: 100%;
+		container-type: inline-size;
 	}
 
 	.sl-error-acciones {
@@ -996,6 +1001,30 @@
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
+	}
+	.sl-lateral > * {
+		flex: 0 0 auto;
+	}
+	.sl-lateral-cab h2 {
+		font-family: var(--font-display);
+		font-size: 1.25rem;
+		font-weight: 800;
+		letter-spacing: -0.02em;
+		color: var(--text-primary);
+		margin: 0.3rem 0 0;
+	}
+	/* El panel permanece accesible mientras se leen respuestas extensas.
+	   Su propio scroll evita que los últimos controles queden fuera de pantalla. */
+	@container (min-width: 58rem) {
+		.sl-lateral {
+			position: sticky;
+			top: 5rem;
+			max-height: calc(100dvh - 6rem);
+			overflow-y: auto;
+			overscroll-behavior: contain;
+			scrollbar-width: thin;
+			padding-right: 0.35rem;
+		}
 	}
 	.sl-principal-cab h2 {
 		font-family: var(--font-display);

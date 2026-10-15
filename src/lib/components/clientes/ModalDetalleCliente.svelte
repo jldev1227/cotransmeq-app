@@ -3,6 +3,7 @@
 	import Dato from '$lib/components/directorio/Dato.svelte';
 	import { clientesAPI } from '$lib/api/apiClient';
 	import { errorDeApi, avisarErrorGuardado } from '$lib/components/directorio/formulario';
+	import AnaliticaIndividual from '$lib/components/directorio/AnaliticaIndividual.svelte';
 
 	/**
 	 * Ficha de consulta de un cliente, con el estilo de la app móvil. Los
@@ -59,6 +60,7 @@
 	subtitle={c?.nit ? `${esEmpresa ? 'NIT' : 'C.C.'} ${c.nit}` : null}
 	tabs={[
 		{ id: 'identificacion', label: 'Identificación' },
+			{ id: 'actividad', label: 'Actividad' },
 		{ id: 'contacto', label: 'Contacto' },
 		{ id: 'condiciones', label: 'Condiciones' }
 	]}
@@ -68,7 +70,10 @@
 >
 	{#snippet children(activa)}
 		{#if c}
-			<div class="md-grid">
+			{#if activa === 'actividad' && clienteId}
+				<AnaliticaIndividual tipo="cliente" entidadId={clienteId} />
+			{:else}
+				<div class="md-grid">
 				{#if activa === 'identificacion'}
 					<Dato etiqueta="Tipo" valor={esEmpresa ? 'Empresa' : 'Persona natural'} />
 					<Dato etiqueta={esEmpresa ? 'NIT' : 'Documento'} valor={c.nit} mono />
@@ -82,6 +87,8 @@
 					<Dato etiqueta="Teléfono" valor={c.telefono} mono />
 					<Dato etiqueta="Correo electrónico" valor={c.correo} />
 					<Dato etiqueta="Dirección" valor={c.direccion} completo />
+					<Dato etiqueta="Municipio sede" valor={c.municipio_sede} />
+					<Dato etiqueta="Departamento sede" valor={c.departamento_sede} />
 				{:else}
 					<Dato etiqueta="Requiere OSI" valor={siNo(c.requiere_osi)} />
 					<Dato etiqueta="Paga recargos" valor={siNo(c.paga_recargos)} />
@@ -90,7 +97,8 @@
 						<Dato etiqueta="Recargos" valor={c._count.recargos ?? 0} mono />
 					{/if}
 				{/if}
-			</div>
+				</div>
+			{/if}
 		{/if}
 	{/snippet}
 

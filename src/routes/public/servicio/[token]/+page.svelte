@@ -579,9 +579,14 @@
 			container: 'map',
 			style: 'mapbox://styles/mapbox/outdoors-v12',
 			center: [originLng, originLat],
-			zoom: 12
+			zoom: 12,
+			projection: 'mercator',
+			pitch: 0,
+			maxPitch: 0,
+			dragRotate: false,
+			touchPitch: false
 		});
-		map.addControl(new mapboxgl.NavigationControl(), 'top-right');
+		map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'top-right');
 		map.on('load', () => {
 			if (!map || !servicio) return;
 
@@ -640,7 +645,7 @@
 				type: 'line',
 				source: 'route',
 				layout: { 'line-join': 'round', 'line-cap': 'round' },
-				paint: { 'line-color': '#f97316', 'line-width': 4, 'line-opacity': 0.8 }
+				paint: { 'line-color': '#2563eb', 'line-width': 4, 'line-opacity': 0.8 }
 			});
 
 			// Distracom es sincrónico — aparece de inmediato sin bloquear

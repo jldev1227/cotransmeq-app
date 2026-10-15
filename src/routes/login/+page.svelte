@@ -60,6 +60,33 @@
 		if (raw.startsWith('/dashboard/nomina')) return null;
 		return raw;
 	});
+	const modulosCompartibles: Record<string, string> = {
+		mantenimiento: 'Mantenimiento',
+		incidentes: 'Incidentes',
+		servicios: 'Servicios',
+		flota: 'Flota',
+		conductores: 'Conductores',
+		clientes: 'Clientes',
+		terceros: 'Terceros',
+		nomina: 'Nómina',
+		fuec: 'FUEC',
+		equipo: 'Equipo',
+		capacitaciones: 'Capacitaciones'
+	};
+	// El crawler llega al login sin cookie. Solo mostramos el nombre público del módulo.
+	const moduloCompartido = $derived.by(() => {
+		const raw = $page.url.searchParams.get('redirect');
+		if (!raw?.startsWith('/dashboard/') || raw.startsWith('//')) return null;
+		return modulosCompartibles[raw.split(/[?#]/, 1)[0].split('/')[2]] ?? 'Panel';
+	});
+	const tituloCompartido = $derived(
+		moduloCompartido ? `${moduloCompartido} — Cotransmeq S.A.S` : 'Iniciar sesión — Cotransmeq S.A.S'
+	);
+	const descripcionCompartida = $derived(
+		moduloCompartido
+			? `Accede al módulo de ${moduloCompartido.toLowerCase()} de Cotransmeq S.A.S. Inicia sesión para ver el contenido.`
+			: 'Acceso al sistema de gestión integral de Cotransmeq S.A.S.'
+	);
 
 	const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -166,8 +193,11 @@
 </script>
 
 <svelte:head>
-	<title>Iniciar sesión — Cotransmeq S.A.S</title>
-	<meta name="description" content="Acceso al sistema de gestión integral de Cotransmeq S.A.S." />
+	<title>{tituloCompartido}</title>
+	<meta name="description" content={descripcionCompartida} />
+	<meta property="og:title" content={tituloCompartido} />
+	<meta property="og:description" content={descripcionCompartida} />
+	<meta property="og:type" content="website" />
 </svelte:head>
 
 {#if !ready}

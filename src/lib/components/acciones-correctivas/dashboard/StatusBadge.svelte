@@ -2,6 +2,10 @@
 	export let estado: string;
 
 	const config: Record<string, { cls: string; label: string }> = {
+		EN_PROCESO: { cls: 'proceso', label: 'En proceso' },
+		CUMPLIDA: { cls: 'cumplida', label: 'Cumplida' },
+		VENCIDA: { cls: 'vencida', label: 'Vencida' },
+		REPLANTEADA: { cls: 'proceso', label: 'Replanteada' },
 		'En Proceso': { cls: 'proceso', label: 'En proceso' },
 		Cumplidas: { cls: 'cumplida', label: 'Cumplida' },
 		Vencidas: { cls: 'vencida', label: 'Vencida' }

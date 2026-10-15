@@ -14,6 +14,7 @@
 	import { vehiculosAPI } from '$lib/api/apiClient';
 	import { socketUtils } from '$lib/socket';
 	import { flotaStore } from '$lib/stores/flota';
+	import { tercerosAPI } from '$lib/api/terceros';
 
 	/**
 	 * Crear y editar un vehículo: el mismo modal para los dos casos, con el
@@ -82,7 +83,8 @@
 		kilometraje: 'tecnico',
 		fecha_matricula: 'tecnico',
 		propietario_nombre: 'propietario',
-		propietario_identificacion: 'propietario'
+		propietario_identificacion: 'propietario',
+		tercero_propietario_id: 'propietario'
 	};
 
 	const vacio = () => ({
@@ -102,7 +104,8 @@
 		kilometraje: '',
 		fecha_matricula: '',
 		propietario_nombre: '',
-		propietario_identificacion: ''
+		propietario_identificacion: '',
+		tercero_propietario_id: ''
 	});
 
 	let form = $state(vacio());
@@ -112,6 +115,7 @@
 	let tab = $state('general');
 	let cargando = $state(false);
 	let guardando = $state(false);
+	let terceros = $state<any[]>([]);
 
 	const editando = $derived(Boolean(vehiculoId));
 	const sucio = $derived(hayCambios(form, JSON.parse(original)));
@@ -126,7 +130,30 @@
 		form = base;
 		original = JSON.stringify(base);
 		if (vehiculoId) void cargar(vehiculoId);
+		void cargarTerceros();
 	});
+
+	async function cargarTerceros() {
+		try {
+			const primera = await tercerosAPI.listar({ page: 1, limit: 100, sortBy: 'nombre_completo', sortOrder: 'asc' });
+			const paginas = await Promise.all(
+				Array.from({ length: Math.max(0, primera.pagination.pages - 1) }, (_, i) =>
+					tercerosAPI.listar({ page: i + 2, limit: 100, sortBy: 'nombre_completo', sortOrder: 'asc' })
+				)
+			);
+			terceros = [primera.data, ...paginas.map((pagina) => pagina.data)].flat();
+		} catch {
+			terceros = [];
+		}
+	}
+
+	function seleccionarPropietario(event: Event) {
+		form.tercero_propietario_id = (event.currentTarget as HTMLSelectElement).value;
+		const tercero = terceros.find((item) => item.id === form.tercero_propietario_id);
+		if (!tercero) return;
+		form.propietario_nombre = tercero.nombre_completo ?? '';
+		form.propietario_identificacion = tercero.identificacion ?? '';
+	}
 
 	async function cargar(id: string) {
 		cargando = true;
@@ -182,6 +209,7 @@
 		}
 		p.placa = form.placa.trim().toUpperCase();
 		if (p.kilometraje !== undefined) p.kilometraje = Math.round(Number(form.kilometraje));
+		p.tercero_propietario_id = form.tercero_propietario_id || null;
 		return p;
 	}
 
@@ -379,6 +407,14 @@
 					<input id="v-matricula" class="de-input" type="date" bind:value={form.fecha_matricula} />
 				</Campo>
 			{:else}
+				<Campo id="v-tercero-prop" label="Tercero propietario" completo ayuda="Los cierres ya generados conservan su propietario histórico.">
+					<select id="v-tercero-prop" class="de-input" bind:value={form.tercero_propietario_id} onchange={seleccionarPropietario}>
+						<option value="">Sin tercero vinculado</option>
+						{#each terceros as tercero (tercero.id)}
+							<option value={tercero.id}>{tercero.nombre_completo}{tercero.identificacion ? ` · ${tercero.identificacion}` : ''}</option>
+						{/each}
+					</select>
+				</Campo>
 				<Campo id="v-prop-nombre" label="Nombre del propietario" completo>
 					<input
 						id="v-prop-nombre"

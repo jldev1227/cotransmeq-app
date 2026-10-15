@@ -448,8 +448,16 @@
 		<div class="inc-rejilla">
 			<!-- ── Reporte ── -->
 			<section class="page-card inc-card">
-				<h2>Reporte</h2>
-				<dl class="inc-datos">
+				<div class="inc-card-cab">
+					<div>
+						<p class="inc-seccion-kicker">01 · Registro del evento</p>
+						<h2>Reporte</h2>
+					</div>
+				</div>
+				<div class="inc-reporte-grid">
+					<div class="inc-reporte-grupo">
+						<h3>Contexto y consecuencias</h3>
+						<dl class="inc-datos">
 					<dt>Gravedad</dt>
 					<dd>
 						{inc.severidad
@@ -471,6 +479,11 @@
 					<dd>{TRAYECTO_LABELS[inc.trayecto]}</dd>
 					{#if claseEvento}<dt>Clase</dt>
 						<dd>{claseEvento}</dd>{/if}
+						</dl>
+					</div>
+					<div class="inc-reporte-grupo">
+						<h3>Personas y servicio</h3>
+						<dl class="inc-datos">
 					<dt>Vehículo</dt>
 					<dd>
 						{inc.vehiculo
@@ -492,6 +505,11 @@
 								: ''}
 						{:else}—{/if}
 					</dd>
+						</dl>
+					</div>
+					<div class="inc-reporte-grupo">
+						<h3>Gestión del reporte</h3>
+						<dl class="inc-datos">
 					<dt>Autoridad</dt>
 					<dd>
 						{inc.autoridad ?? '—'}{inc.numero_informe
@@ -507,8 +525,13 @@
 							{ dateStyle: 'medium', timeStyle: 'short' }
 						)}
 					</dd>
-				</dl>
-				<p class="inc-descripcion">{inc.descripcion}</p>
+						</dl>
+					</div>
+				</div>
+				<div class="inc-relato">
+					<h3>Descripción de lo ocurrido</h3>
+					<p class="inc-descripcion">{inc.descripcion}</p>
+				</div>
 				{#if inc.terceros.length}
 					<h3>Terceros involucrados</h3>
 					<ul class="inc-terceros">
@@ -529,7 +552,10 @@
 			<!-- ── Evidencias ── -->
 			<section class="page-card inc-card">
 				<div class="inc-card-cab">
-					<h2>Evidencias</h2>
+					<div>
+						<p class="inc-seccion-kicker">02 · Soportes</p>
+						<h2>Evidencias <span class="inc-contador">{inc.evidencias.length}</span></h2>
+					</div>
 					{#if puedeEscribir && reporteEditable}
 						<label class="btn-secondary inc-btn-mini" class:inc-deshabilitado={subiendo}>
 							<Paperclip size={14} />
@@ -590,7 +616,10 @@
 			<!-- ── Investigación ── -->
 			<section class="page-card inc-card inc-card--ancha">
 				<div class="inc-card-cab">
-					<h2>Investigación</h2>
+					<div>
+						<p class="inc-seccion-kicker">03 · Análisis</p>
+						<h2>Investigación</h2>
+					</div>
 					{#if investigacionAbierta && puedeEscribir}
 						<button
 							class="btn-primary inc-btn-mini"
@@ -783,7 +812,10 @@
 			<!-- ── Acciones correctivas ── -->
 			<section class="page-card inc-card">
 				<div class="inc-card-cab">
-					<h2>Acciones correctivas</h2>
+					<div>
+						<p class="inc-seccion-kicker">04 · Seguimiento</p>
+						<h2>Acciones correctivas <span class="inc-contador">{inc.acciones_vinculadas.length}</span></h2>
+					</div>
 					{#if investigacionAbierta && puedeCrearAccion}
 						<button class="btn-secondary inc-btn-mini" onclick={() => (modalAccion = true)}
 							><Plus size={14} /> Crear o vincular</button
@@ -832,6 +864,7 @@
 
 			<!-- ── Cierre ── -->
 			<section class="page-card inc-card">
+				<p class="inc-seccion-kicker">05 · Resolución</p>
 				<h2>Cierre</h2>
 				{#if inc.estado === 'CERRADO'}
 					<dl class="inc-datos">
@@ -1004,7 +1037,7 @@
 	}
 	.inc-rejilla {
 		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+		grid-template-columns: minmax(0, 1fr);
 		gap: 1rem;
 		align-items: start;
 	}
@@ -1016,6 +1049,56 @@
 	}
 	.inc-card--ancha {
 		grid-column: 1 / -1;
+	}
+	.inc-reporte-grid {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+		gap: 1rem;
+	}
+	.inc-reporte-grupo {
+		min-width: 0;
+		padding: 1rem;
+		border: 1px solid var(--border-subtle);
+		border-radius: 14px;
+		background: var(--bg-base);
+	}
+	.inc-reporte-grupo h3 {
+		margin: 0 0 0.85rem;
+	}
+	.inc-reporte-grupo .inc-datos {
+		display: block;
+	}
+	.inc-reporte-grupo .inc-datos dt {
+		margin-top: 0.75rem;
+		font-size: 0.75rem;
+	}
+	.inc-reporte-grupo .inc-datos dd {
+		margin-top: 0.15rem;
+		font-weight: 600;
+	}
+	.inc-relato {
+		padding-top: 0.25rem;
+	}
+	.inc-relato h3 {
+		margin: 0 0 0.5rem;
+	}
+	.inc-seccion-kicker {
+		margin: 0 0 0.25rem;
+		font-size: 0.7rem;
+		font-weight: 800;
+		letter-spacing: 0.09em;
+		text-transform: uppercase;
+		color: var(--text-muted);
+	}
+	.inc-contador {
+		margin-left: 0.35rem;
+		padding: 0.15rem 0.5rem;
+		border-radius: 999px;
+		background: var(--bg-base);
+		font-family: inherit;
+		font-size: 0.72rem;
+		vertical-align: middle;
+		color: var(--text-secondary);
 	}
 	.inc-card h2 {
 		margin: 0;
@@ -1049,7 +1132,7 @@
 	}
 	.inc-datos {
 		display: grid;
-		grid-template-columns: minmax(8rem, auto) 1fr;
+		grid-template-columns: minmax(6rem, 0.7fr) minmax(0, 1fr);
 		gap: 0.4rem 1rem;
 		margin: 0;
 		font-size: 0.86rem;
@@ -1076,7 +1159,6 @@
 	}
 	.inc-descripcion {
 		margin: 0;
-		max-width: 44rem;
 		padding: 0.75rem 0.9rem;
 		border-radius: 12px;
 		background: var(--bg-base);
@@ -1117,6 +1199,10 @@
 		border: 1px solid var(--border-subtle);
 		border-radius: 12px;
 		color: var(--text-secondary);
+	}
+	.inc-evidencias {
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
 	}
 	.inc-evidencias li div,
 	.inc-acciones li div {

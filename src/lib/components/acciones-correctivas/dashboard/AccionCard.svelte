@@ -66,13 +66,13 @@
 
 <article
 	class="card"
-	class:card-vencida={!isDeleted && accion.estado_accion === 'Vencidas'}
+	class:card-vencida={!isDeleted && (accion.estado_global === 'VENCIDA' || accion.estado_accion === 'Vencidas')}
 	class:card-highlight={highlight}
 	class:card-deleted={isDeleted}
 >
 	<div class="card-head">
 		<div class="head-left">
-			<span class="accion-num">{accion.accion_numero || 'Sin número'}</span>
+			<a class="accion-num" href="/dashboard/acciones-correctivas/{accion.id}">{accion.accion_numero || 'Sin número'}</a>
 			{#if !isDeleted}
 				<RiskDot nivel={accion.valoracion_riesgo || ''} />
 			{/if}
@@ -80,9 +80,13 @@
 		{#if isDeleted}
 			<span class="badge-deleted">Eliminada</span>
 		{:else}
-			<StatusBadge estado={accion.estado_accion || ''} />
+			<StatusBadge estado={accion.estado_global || accion.estado_accion || 'EN_PROCESO'} />
 		{/if}
 	</div>
+
+	<a class="description" href="/dashboard/acciones-correctivas/{accion.id}" title={accion.descripcion_hallazgo || 'Sin descripción'}>
+		{accion.descripcion_hallazgo || 'Sin descripción'}
+	</a>
 
 	<div class="tags">
 		<span class="tag" style="background: {tipoStyle.bg}; color: {tipoStyle.color}">
@@ -90,10 +94,6 @@
 		</span>
 		<span class="tag tag-neutral">{accion.tipo_hallazgo_detectado || 'Sin clasificar'}</span>
 	</div>
-
-	<p class="description" title={accion.descripcion_hallazgo || 'Sin descripción'}>
-		{accion.descripcion_hallazgo || 'Sin descripción'}
-	</p>
 
 	{#if accion.causas && accion.causas.length > 0}
 		<CausasDots causas={accion.causas} />
@@ -167,6 +167,7 @@
 					class="act-btn act-btn-restore"
 					class:act-btn-loading={loadingAction === 'restaurar'}
 					title="Restaurar acción"
+					aria-label="Restaurar acción {accion.accion_numero || 'sin número'}"
 					on:click={handleRestaurar}
 					disabled={loadingAction === 'restaurar'}
 				>
@@ -180,6 +181,7 @@
 					class="act-btn act-btn-delete-perm"
 					class:act-btn-loading={loadingAction === 'eliminar-permanente'}
 					title="Eliminar permanentemente"
+					aria-label="Eliminar permanentemente {accion.accion_numero || 'sin número'}"
 					on:click={handleEliminarPermanente}
 					disabled={loadingAction === 'eliminar-permanente'}
 				>
@@ -191,15 +193,18 @@
 				</button>
 			{:else}
 				<button
-					class="act-btn"
+					class="act-btn act-btn-primary"
 					title="Ver detalle"
+					aria-label="Ver detalle {accion.accion_numero || 'sin número'}"
 					on:click={() => goto(`/dashboard/acciones-correctivas/${accion.id}`)}
 				>
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+					<span>Ver detalle</span>
 				</button>
 				<button
 					class="act-btn"
 					title="Editar"
+					aria-label="Editar {accion.accion_numero || 'sin número'}"
 					on:click={() => goto(`/dashboard/acciones-correctivas/editar/${accion.id}`)}
 				>
 					<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -208,6 +213,7 @@
 					class="act-btn"
 					class:act-btn-loading={loadingAction === 'duplicar'}
 					title="Duplicar acción"
+					aria-label="Duplicar acción {accion.accion_numero || 'sin número'}"
 					on:click={handleDuplicar}
 					disabled={loadingAction === 'duplicar'}
 				>
@@ -221,6 +227,7 @@
 					class="act-btn act-btn-delete"
 					class:act-btn-loading={loadingAction === 'eliminar'}
 					title="Mover a papelera"
+					aria-label="Mover a papelera {accion.accion_numero || 'sin número'}"
 					on:click={handleEliminar}
 					disabled={loadingAction === 'eliminar'}
 				>
@@ -234,6 +241,7 @@
 					class="act-btn"
 					class:act-btn-loading={loadingAction === 'pdf'}
 					title="Exportar PDF"
+					aria-label="Exportar PDF {accion.accion_numero || 'sin número'}"
 					on:click={handleExportPDF}
 					disabled={loadingAction === 'pdf'}
 				>
@@ -253,10 +261,10 @@
 		background: var(--surface);
 		border: 1px solid var(--border);
 		border-radius: 16px;
-		padding: 0.85rem 0.95rem;
+		padding: 0.75rem 0.8rem;
 		display: flex;
 		flex-direction: column;
-		gap: 0.6rem;
+		gap: 0.45rem;
 		min-width: 0;
 		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 		cursor: default;
@@ -314,7 +322,9 @@
 		color: var(--text-primary);
 		font-variant-numeric: tabular-nums;
 		letter-spacing: 0.02em;
+		text-decoration: none;
 	}
+	.accion-num:hover { color: var(--accent-hover); text-decoration: underline; }
 
 	/* Una sola línea: la segunda etiqueta se corta antes que abrir otra fila. */
 	.tags { display: flex; flex-wrap: nowrap; gap: 0.3rem; min-width: 0; }
@@ -336,9 +346,12 @@
 	.tag-neutral { background: var(--tag-bg); color: var(--text-muted); }
 
 	.description {
-		font-size: 0.82rem;
-		color: var(--text-secondary);
-		line-height: 1.5;
+		margin: 0;
+		font-size: 0.84rem;
+		font-weight: 700;
+		color: var(--text-primary);
+		line-height: 1.4;
+		text-decoration: none;
 		display: -webkit-box;
 		-webkit-line-clamp: 2;
 		line-clamp: 2;
@@ -348,6 +361,7 @@
 		   de aplicar y la descripción crecía hasta cuatro. */
 		flex: none;
 	}
+	.description:hover { color: var(--accent-hover); }
 
 	.card-meta { display: flex; align-items: center; gap: 0.4rem; }
 	.meta-location {
@@ -363,14 +377,19 @@
 	   tarjetas estrechas, los iconos aplastaban al responsable. */
 	.card-footer {
 		border-top: 1px solid var(--border);
-		padding-top: 0.65rem;
+		padding-top: 0.5rem;
 		display: flex;
 		flex-direction: column;
 		align-items: stretch;
-		gap: 0.6rem;
+		gap: 0.4rem;
 		margin-top: auto;
 	}
-	.footer-left { display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+	.footer-left {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 0.35rem;
+		min-width: 0;
+	}
 	.fecha {
 		display: flex;
 		align-items: center;
@@ -378,6 +397,13 @@
 		font-size: 0.75rem;
 		color: var(--text-muted);
 		font-variant-numeric: tabular-nums;
+		min-width: 0;
+	}
+	.fecha, .revision {
+		grid-column: 1 / -1;
+		padding: 0.3rem 0.45rem;
+		border-radius: 8px;
+		background: var(--tag-bg);
 	}
 	.fecha-urgente { color: #b91c1c; }
 	.sin-fecha { font-style: italic; opacity: 0.6; }
@@ -457,6 +483,7 @@
 		font-size: 0.75rem;
 		color: var(--text-muted);
 		overflow: hidden;
+		min-width: 0;
 	}
 	.responsable span {
 		white-space: nowrap;
@@ -471,6 +498,7 @@
 		color: var(--text-muted);
 		opacity: 0.75;
 		overflow: hidden;
+		min-width: 0;
 	}
 	.creado-por span {
 		white-space: nowrap;
@@ -497,9 +525,13 @@
 		font-size: 0.5rem;
 	}
 
-	.actions { display: flex; gap: 0.3rem; flex-shrink: 0; }
+	.actions {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) repeat(4, 32px);
+		gap: 0.25rem;
+		min-width: 0;
+	}
 	.act-btn {
-		flex: 1;
 		min-width: 0;
 		height: 32px;
 		display: flex;
@@ -512,6 +544,14 @@
 		cursor: pointer;
 		transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 	}
+	.act-btn-primary {
+		gap: 0.4rem;
+		background: var(--tag-bg);
+		color: var(--text-primary);
+		font-size: 0.75rem;
+		font-weight: 700;
+	}
+	.card-deleted .actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 	.act-btn:hover {
 		border-color: rgba(234, 88, 12, 0.3);
 		background: rgba(234, 88, 12, 0.06);

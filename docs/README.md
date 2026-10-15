@@ -30,6 +30,7 @@ coincide, manda el código y hay que corregir el documento.
 **Interfaz**
 
 - [componentes-y-estilos.md](./componentes-y-estilos.md) — Tailwind, colores, regla de ancho y componentes compartidos.
+- [fichas-individuales.md](./fichas-individuales.md) — indicadores por período para conductores, vehículos, clientes y terceros.
 - [listados-y-filtros.md](./listados-y-filtros.md) — filtros, paginación y búsqueda con la URL como fuente de verdad.
 - [estado-y-stores.md](./estado-y-stores.md) — stores, persistencia y las trampas de runes.
 - [tiempo-real-y-notificaciones.md](./tiempo-real-y-notificaciones.md) — Socket.IO, presencia, campana y Web Push.

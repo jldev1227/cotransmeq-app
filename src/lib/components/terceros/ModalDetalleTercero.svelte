@@ -3,6 +3,7 @@
 	import Dato from '$lib/components/directorio/Dato.svelte';
 	import { tercerosAPI } from '$lib/api/terceros';
 	import { errorDeApi, avisarErrorGuardado } from '$lib/components/directorio/formulario';
+	import AnaliticaIndividual from '$lib/components/directorio/AnaliticaIndividual.svelte';
 
 	/** Ficha de consulta de un tercero, con el estilo de la app móvil. */
 	interface Props {
@@ -68,6 +69,7 @@
 	subtitle={t?.identificacion ?? (t ? 'Sin identificación' : null)}
 	tabs={[
 		{ id: 'identificacion', label: 'Identificación' },
+			{ id: 'actividad', label: 'Actividad' },
 		{ id: 'contacto', label: 'Contacto' },
 		{ id: 'notas', label: 'Notas' }
 	]}
@@ -77,7 +79,10 @@
 >
 	{#snippet children(activa)}
 		{#if t}
-			<div class="md-grid">
+			{#if activa === 'actividad' && terceroId}
+				<AnaliticaIndividual tipo="tercero" entidadId={terceroId} />
+			{:else}
+				<div class="md-grid">
 				{#if activa === 'identificacion'}
 					<Dato etiqueta="Tipo de tercero" valor={TIPOS[t.tipo_persona] ?? t.tipo_persona} />
 					<Dato
@@ -94,7 +99,8 @@
 				{:else}
 					<Dato etiqueta="Notas" valor={t.notas} completo />
 				{/if}
-			</div>
+				</div>
+			{/if}
 		{/if}
 	{/snippet}
 

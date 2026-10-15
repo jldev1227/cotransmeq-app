@@ -89,6 +89,12 @@ recalcula con su copia del mapa.
 
 ## El guardia del servidor
 
+Los enlaces privados compartidos por WhatsApp llegan sin cookie al guardia y
+terminan en el login. El login usa el parámetro `redirect` para mostrar en su
+HTML inicial el título y la descripción pública del módulo en la vista previa
+(Open Graph), sin publicar datos del registro. Tras autenticarse se abre la
+ruta original.
+
 El `handle` de [hooks.server.ts](../src/hooks.server.ts) solo actúa en
 `/dashboard/**` y solo en cargas completas de página (no hay cargas de servidor,
 así que la navegación de cliente no pasa por él).
@@ -99,7 +105,7 @@ así que la navegación de cliente no pasa por él).
    sus filtros al pasar por el login.
 3. Decodifica el payload **sin verificar la firma** y mira `exp`. Si no se
    puede leer, venció o no trae `area` como lista, borra la cookie y manda a
-   `/login` (esta vez sin `redirect`).
+   `/login?redirect=<ruta + consulta>` para conservar el enlace solicitado.
 4. Resuelve el módulo por el primer segmento tras `/dashboard` y llama a
    `checkAccess(role, area, módulo, payload.permisos_rutas)`. Como el token no
    trae `permisos_rutas`, aquí siempre mandan las áreas.

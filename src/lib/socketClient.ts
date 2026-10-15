@@ -14,9 +14,9 @@ const listenersReconexion = new Set<() => void>()
 /** ¿Hubo ya una conexión buena? Distingue conectar de RE-conectar. */
 let huboConexion = false
 
-const RECONEXION_DELAY = 1_000
-const RECONEXION_DELAY_MAX = 10_000
-const HANDSHAKE_TIMEOUT = 10_000
+const RECONEXION_DELAY = 5_000
+const RECONEXION_DELAY_MAX = 5_000
+const HANDSHAKE_TIMEOUT = 5_000
 const RECHAZO_AUTH = /unauthorized/i
 
 const TOKEN_KEY = 'transmeralda_token'
@@ -148,19 +148,12 @@ export function connectSocket(token?: string): Socket {
 		reconnection: true,
 		reconnectionDelay: RECONEXION_DELAY,
 		reconnectionDelayMax: RECONEXION_DELAY_MAX,
-		/// Antes eran 10 intentos.
-		///
-		/// Con el escalonado de socket.io eso es poco más de un minuto: si el
-		/// backend tardaba más en volver —un deploy, el contenedor rearrancando,
-		/// el `tsx watch` recompilando— el cliente emitía `reconnect_failed` y
-		/// NO volvía a intentarlo jamás. El canvas se quedaba mudo con el
-		/// servidor ya levantado y sin más pista que la consola.
+		/// Los reintentos no se agotan. El dashboard marca la desconexión tras
+		/// tres fallos, mientras este socket sigue buscando al servidor cada 5 s.
 		reconnectionAttempts: Infinity,
-		// Jitter: sin él todos los clientes reintentan en el mismo milisegundo
-		// y le caen encima al backend justo cuando acaba de arrancar.
-		randomizationFactor: 0.5,
-		// El defecto son 20 s. Con la red caída (sin RST) cada ciclo se comía
-		// esos 20 s antes de darse por perdido.
+		// Un jitter leve conserva la cadencia de 5 s y reparte los clientes.
+		randomizationFactor: 0.1,
+		// Evita que una red caída sin respuesta retrase demasiado el siguiente intento.
 		timeout: HANDSHAKE_TIMEOUT,
 		/// Función, NO objeto: socket.io la vuelve a invocar en CADA intento de
 		/// reconexión. Con `auth: { token: t }` el token quedaba congelado en la

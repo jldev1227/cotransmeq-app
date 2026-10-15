@@ -786,8 +786,9 @@
 	}
 	.ac-rejilla {
 		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
-		gap: 1rem;
+		grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));
+		gap: 0.75rem;
+		align-items: start;
 		padding-bottom: 1rem;
 	}
 </style>

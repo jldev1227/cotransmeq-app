@@ -45,7 +45,9 @@
 		cedula: 'identificacion',
 		telefono: 'contacto',
 		correo: 'contacto',
-		direccion: 'contacto'
+		direccion: 'contacto',
+		municipio_sede: 'contacto',
+		departamento_sede: 'contacto'
 	};
 
 	const vacio = () => ({
@@ -57,6 +59,8 @@
 		telefono: '',
 		correo: '',
 		direccion: '',
+		municipio_sede: '',
+		departamento_sede: '',
 		requiere_osi: false,
 		paga_recargos: false
 	});
@@ -98,6 +102,8 @@
 				telefono: c.telefono ?? '',
 				correo: c.correo ?? '',
 				direccion: c.direccion ?? '',
+				municipio_sede: c.municipio_sede ?? '',
+				departamento_sede: c.departamento_sede ?? '',
 				requiere_osi: Boolean(c.requiere_osi),
 				paga_recargos: Boolean(c.paga_recargos)
 			};
@@ -144,6 +150,8 @@
 			telefono: textoONull(form.telefono),
 			correo: textoONull(form.correo),
 			direccion: textoONull(form.direccion),
+			municipio_sede: textoONull(form.municipio_sede),
+			departamento_sede: textoONull(form.departamento_sede),
 			requiere_osi: form.requiere_osi,
 			paga_recargos: form.paga_recargos
 		};
@@ -316,6 +324,12 @@
 						bind:value={form.direccion}
 						aria-invalid={inv('direccion')}
 					></textarea>
+				</Campo>
+				<Campo id="cl-municipio" label="Municipio de la sede principal">
+					<input id="cl-municipio" placeholder="Ej. Yopal" class="de-input" bind:value={form.municipio_sede} />
+				</Campo>
+				<Campo id="cl-departamento" label="Departamento de la sede principal">
+					<input id="cl-departamento" placeholder="Ej. Casanare" class="de-input" bind:value={form.departamento_sede} />
 				</Campo>
 			{:else}
 				<label class="opcion de-full" class:activa={form.requiere_osi}>

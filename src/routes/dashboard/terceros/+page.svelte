@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { goto } from '$app/navigation';
 	import { authStore } from '$lib/stores/auth';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
@@ -25,7 +26,6 @@
 	import { quintOut } from 'svelte/easing';
 	import { tercerosAPI, type Tercero, type TerceroCounts } from '$lib/api/terceros';
 	import ModalFormTercero from '$lib/components/terceros/ModalFormTercero.svelte';
-	import ModalDetalleTercero from '$lib/components/terceros/ModalDetalleTercero.svelte';
 	import ConfirmDialog from '$lib/components/ui/ConfirmDialog.svelte';
 	import { toast } from 'svelte-sonner';
 
@@ -100,9 +100,6 @@
 	let showImportModal = $state(false);
 	let isImporting = $state(false);
 	let importResult = $state<{ importados: number; duplicados: number; total: number } | null>(null);
-
-	/// Ficha de consulta abierta (id del tercero) o `null`.
-	let detalleId = $state<string | null>(null);
 
 	const hasActiveFilter = $derived(filtros.q.trim() !== '' || filtros.tipo !== 'TODOS');
 
@@ -303,7 +300,7 @@
 	}
 
 	function openDetail(t: Tercero) {
-		detalleId = t.id;
+		void goto(`/dashboard/terceros/${t.id}`);
 	}
 </script>
 
@@ -502,19 +499,6 @@
 	terceroId={modalTercero.id}
 	onclose={() => (modalTercero = { abierto: false, id: null })}
 	onguardado={() => cargar(true)}
-/>
-
-<!-- Ficha de consulta: la misma de flota, conductores y clientes. -->
-<ModalDetalleTercero
-	open={detalleId !== null}
-	terceroId={detalleId}
-	onclose={() => (detalleId = null)}
-	oneditar={puedeEditar
-		? (id) => {
-				detalleId = null;
-				modalTercero = { abierto: true, id };
-			}
-		: undefined}
 />
 
 <!-- ══════════════════════════════════════════════════════════════

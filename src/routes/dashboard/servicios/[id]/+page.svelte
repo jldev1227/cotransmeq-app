@@ -940,7 +940,7 @@
 				'line-width': 4,
 				'line-opacity': 0.9
 			}
-		});
+		}, map.getLayer('route') ? 'route' : undefined);
 	}
 
 	function removeTraficoLayer() {
@@ -1256,7 +1256,12 @@
 				container: 'map',
 				style: 'mapbox://styles/mapbox/outdoors-v12',
 				center: [oLng, oLat],
-				zoom: 11
+				zoom: 11,
+				projection: 'mercator',
+				pitch: 0,
+				maxPitch: 0,
+				dragRotate: false,
+				touchPitch: false
 			});
 			map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'bottom-right');
 			map.on('load', () => {
@@ -1313,7 +1318,7 @@
 					type: 'line',
 					source: 'route',
 					layout: { 'line-join': 'round', 'line-cap': 'round' },
-					paint: { 'line-color': '#15803d', 'line-width': 5, 'line-opacity': 0.8 }
+					paint: { 'line-color': '#2563eb', 'line-width': 5, 'line-opacity': 0.8 }
 				});
 			}
 

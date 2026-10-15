@@ -58,7 +58,7 @@ Todas exigen sesión administrativa. Las que no están en el menú se marcan.
 | `/dashboard/conductores/[id]` | Ficha del conductor con sus documentos. | `conductores` | `conductores`, `conductores-documentos`, `viaticos` |
 | `/dashboard/conductores/recorridos` | Canvas de recorridos (Univer): un libro por corte, una hoja por conductor, una fila por recorrido; alimenta bonos y pernoctes. Se abre desde Conductores. | Servidor: `conductores`. Canvas: `recorridos`. Marcar bonos exige además `bonos-planilla`. | `recorridos-canvas`, `dias-laborados`, `liquidaciones` (configuraciones de liquidación) |
 | `/dashboard/servicios` | Servicios en lista, calendario o canvas; alta y edición en modal, ticket. | `servicios` | `servicios` |
-| `/dashboard/servicios/[id]` | Detalle del servicio con mapa (Mapbox y estaciones Distracom), ejecución del conductor y enlace para compartir. | `servicios` | `servicios` |
+| `/dashboard/servicios/[id]` | Detalle del servicio con mapa (Mapbox y estaciones Distracom), ruta azul (`#2563eb`) entre origen y destino dibujada sobre el tráfico, y ejecución del conductor y enlace para compartir. | `servicios` | `servicios` |
 | `/dashboard/recargos` | Planillas de recargos del mes, con la importación de planillas desde la base de Transmeralda (vista previa, alta de vehículos y empresas que falten, sincronización de conductores). | `recargos` | `recargos` (rutas `importar-desde-transmeralda`), `liquidaciones` (vista previa de recargos) |
 | `/dashboard/recargos/configuracion` | Configuración de salarios para recargos. | `recargos` | `recargos` |
 | `/dashboard/viaticos` | Anticipos a conductores, su legalización y los gastos de la empresa. | `viaticos` | `viaticos` |
@@ -76,18 +76,20 @@ Todas exigen sesión administrativa. Las que no están en el menú se marcan.
 | `/dashboard/sarlaft` | Bandeja de formularios SARLAFT + PTEE (aquí con códigos `GC-FR-04`, `GC-FR-05`, `GC-FR-06`…; ver [sarlaft.ts](../src/lib/api/sarlaft.ts)). | `sarlaft` | `formularios-sarlaft` |
 | `/dashboard/sarlaft/[id]` | Revisión de un formulario SARLAFT. | `sarlaft` | `formularios-sarlaft` |
 
+En la ficha SARLAFT, el panel de gestión y soportes permanece visible al recorrer las respuestas en escritorio; sus tarjetas conservan la altura y, si exceden la pantalla, se desplazan dentro del panel. Los campos de respuestas usan fondos neutros. En pantallas estrechas el panel queda debajo de las respuestas.
+
 ### HSEQ y formularios
 
 | Ruta | Pantalla | Módulo | API |
 |---|---|---|---|
 | `/dashboard/asistencias` | Formularios de asistencia (eventos y capacitaciones). | `asistencias` | `asistencias` |
 | `/dashboard/asistencias/[id]/respuestas` | Firmas recibidas en un formulario de asistencia. | `asistencias` | `asistencias` |
-| `/dashboard/acciones-correctivas` | Tablero de acciones correctivas y preventivas. | `acciones-correctivas` | `acciones-correctivas` |
+| `/dashboard/acciones-correctivas` | Tablero de acciones correctivas y preventivas; rejilla compacta y fluida de tarjetas con hallazgo, estado, seguimiento y acceso al detalle. | `acciones-correctivas` | `acciones-correctivas` |
 | `/dashboard/acciones-correctivas/crear` | Alta de una acción. | `acciones-correctivas` | `acciones-correctivas` |
 | `/dashboard/acciones-correctivas/[id]` | Detalle de una acción. | `acciones-correctivas` | `acciones-correctivas` |
 | `/dashboard/acciones-correctivas/editar/[id]` | Edición de una acción. | `acciones-correctivas` | `acciones-correctivas` |
 | `/dashboard/incidentes` | Accidentes, incidentes y casi accidentes, con plazos e indicadores. | `incidentes` | `incidentes` |
-| `/dashboard/incidentes/[id]` | Detalle: reporte, investigación (Res. 1401 de 2007) y acciones. | `incidentes` | `incidentes`, `viaticos` |
+| `/dashboard/incidentes/[id]` | Detalle de ancho completo en secuencia: reporte agrupado por contexto, personas y gestión; evidencias, investigación (Res. 1401 de 2007), acciones y cierre. | `incidentes` | `incidentes`, `viaticos` |
 | `/dashboard/evaluaciones` | Evaluaciones de conductores. | `evaluaciones` | `evaluaciones` |
 | `/dashboard/evaluaciones/crear` | Crear una evaluación. | `evaluaciones` | `evaluaciones` |
 | `/dashboard/evaluaciones/[id]` | Detalle con resultados y exportación a PDF o ZIP. | `evaluaciones` | `evaluaciones` |

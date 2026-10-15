@@ -8,6 +8,7 @@
 	import { authStore } from '$lib/stores/auth';
 	import VisorDocumentoVehiculo from './VisorDocumentoVehiculo.svelte';
 	import type { DocumentoVehiculo } from '$lib/api/vehiculosDocumentos';
+	import AnaliticaIndividual from '$lib/components/directorio/AnaliticaIndividual.svelte';
 
 	/** Ficha de consulta de un vehículo, con el estilo de la app móvil. */
 	interface Props {
@@ -83,6 +84,7 @@
 	estado={v ? (ESTADOS[String(v.estado).toLowerCase()] ?? null) : null}
 	tabs={[
 		{ id: 'general', label: 'General' },
+			{ id: 'actividad', label: 'Actividad' },
 		{ id: 'tecnico', label: 'Ficha técnica' },
 		{ id: 'propietario', label: 'Propietario' },
 		{ id: 'documentos', label: 'Documentos' },
@@ -94,7 +96,10 @@
 >
 	{#snippet children(activa)}
 		{#if v}
-			<div class="md-grid">
+			{#if activa === 'actividad' && vehiculoId}
+				<AnaliticaIndividual tipo="vehiculo" entidadId={vehiculoId} />
+			{:else}
+				<div class="md-grid">
 				{#if activa === 'general'}
 					<Dato etiqueta="Placa" valor={v.placa} mono />
 					<Dato etiqueta="Clase" valor={v.clase_vehiculo} />
@@ -132,7 +137,8 @@
 					<Dato etiqueta="Propietario" valor={v.propietario_nombre} completo />
 					<Dato etiqueta="Identificación" valor={v.propietario_identificacion} mono />
 				{/if}
-			</div>
+				</div>
+			{/if}
 		{/if}
 	{/snippet}
 

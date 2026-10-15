@@ -101,7 +101,7 @@ export const handle: Handle = async ({ event, resolve }) => {
 		// Token inválido, expirado o formato viejo (sin area) → limpiar y mandar a login
 		if (!payload || !Array.isArray(payload.area)) {
 			cookies.delete('transmeralda_token', { path: '/' });
-			throw redirect(302, '/login');
+			throw redirect(302, `/login?redirect=${encodeURIComponent(url.pathname + url.search)}`);
 		}
 
 		const userArea = payload.area;

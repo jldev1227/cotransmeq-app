@@ -450,8 +450,8 @@
 	   SECTION
 	   ═══════════════════════════════════════════════════════════════ */
 	.seccion {
-		background: white;
-		border: 1px solid rgba(0, 0, 0, 0.06);
+		background: var(--bg-surface);
+		border: 1px solid var(--border-subtle);
 		border-radius: 20px;
 		overflow: hidden;
 	}
@@ -462,8 +462,8 @@
 		justify-content: space-between;
 		gap: 1rem;
 		padding: 1.1rem 1.25rem;
-		background: linear-gradient(180deg, #f7faf8 0%, white 100%);
-		border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+		background: var(--bg-surface);
+		border-bottom: 1px solid var(--border-subtle);
 	}
 	.seccion-head-text {
 		flex: 1;
@@ -476,7 +476,7 @@
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
 		color: #f97316;
-		background: rgba(249, 115, 22, 0.08);
+		background: var(--bg-base);
 		padding: 0.18rem 0.55rem;
 		border-radius: 4px;
 		margin-bottom: 0.4rem;
@@ -524,22 +524,22 @@
 		flex-direction: column;
 		gap: 0.25rem;
 		padding: 0.7rem 0.85rem;
-		background: #f7faf8;
+		background: var(--bg-base);
 		border-radius: 10px;
 		border-left: 2px solid transparent;
 		transition: all 0.2s;
 	}
 	.campo:hover {
-		background: white;
-		border-color: rgba(0, 0, 0, 0.08);
+		background: var(--bg-surface);
+		border-color: var(--border-default);
 	}
 	.campo--destacado {
-		background: rgba(249, 115, 22, 0.05);
-		border-left-color: #f97316;
+		background: var(--bg-base);
+		border-left-color: var(--border-default);
 	}
 	.campo--destacado:hover {
-		background: rgba(249, 115, 22, 0.08);
-		border-left-color: #f97316;
+		background: var(--bg-surface);
+		border-left-color: var(--border-default);
 	}
 
 	.campo dt {
@@ -608,8 +608,8 @@
 	}
 	.pill-yes {
 		color: #c2410c;
-		background: rgba(249, 115, 22, 0.1);
-		border-color: rgba(249, 115, 22, 0.25);
+		background: var(--bg-base);
+		border-color: var(--border-default);
 	}
 	.pill-no {
 		color: #475569;
@@ -627,7 +627,7 @@
 		grid-column: 1 / -1;
 	}
 	.firma-imagen-wrap {
-		background: #f7faf8;
+		background: var(--bg-base);
 		border: 1px solid rgba(0, 0, 0, 0.08);
 		border-bottom: 2px solid #1e293b;
 		border-radius: 8px;
@@ -709,7 +709,7 @@
 	   TABLAS REPETIBLES
 	   ═══════════════════════════════════════════════════════════════ */
 	.tabla-bloque {
-		background: #f7faf8;
+		background: var(--bg-base);
 		border: 1px solid rgba(0, 0, 0, 0.06);
 		border-radius: 14px;
 		overflow: hidden;
@@ -732,7 +732,7 @@
 		width: 32px;
 		height: 32px;
 		border-radius: 8px;
-		background: rgba(249, 115, 22, 0.1);
+		background: var(--bg-base);
 		color: #f97316;
 		display: flex;
 		align-items: center;
@@ -768,7 +768,7 @@
 		font-size: 0.68rem;
 		font-weight: 700;
 		color: #9a3412;
-		background: rgba(249, 115, 22, 0.1);
+		background: var(--bg-base);
 		padding: 0.25rem 0.55rem;
 		border-radius: 5px;
 	}
@@ -804,6 +804,6 @@
 		color: #1e293b;
 	}
 	tbody tr:hover {
-		background: rgba(249, 115, 22, 0.03);
+		background: var(--bg-base);
 	}
 </style>

@@ -7,7 +7,6 @@
 	import { authStore } from '$lib/stores/auth';
 	import { toast } from 'svelte-sonner';
 	import ModalFormVehiculo from '$lib/components/vehiculos/ModalFormVehiculo.svelte';
-	import ModalDetalleVehiculo from '$lib/components/vehiculos/ModalDetalleVehiculo.svelte';
 	import ModalConfirmDelete from '$lib/components/vehiculos/ModalConfirmDelete.svelte';
 	import FilterDrawer from '$lib/components/ui/FilterDrawer.svelte';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
@@ -214,21 +213,13 @@
 	const porPlaca = (a: Vehiculo, b: Vehiculo) =>
 		(a.placa ?? '').localeCompare(b.placa ?? '', 'es', { numeric: true });
 
-	let detalleId = $state<string | null>(null);
-	let detalleTab = $state('general');
-
-	/// `?vehiculo=<id>&tab=documentos` abre la ficha: así llegan los avisos de
-	/// vencimiento (campana y notificación del sistema). Se consume y se quita
-	/// de la URL para que recargar no la vuelva a abrir.
+	/// Los avisos antiguos todavía enlazan con `?vehiculo=<id>`; se conservan,
+	/// pero ahora aterrizan en la página individual.
 	$effect(() => {
 		const id = page.url.searchParams.get('vehiculo');
 		if (!id) return;
-		detalleTab = page.url.searchParams.get('tab') ?? 'general';
-		detalleId = id;
-		const limpia = new URL(page.url);
-		limpia.searchParams.delete('vehiculo');
-		limpia.searchParams.delete('tab');
-		void goto(limpia, { replaceState: true, noScroll: true, keepFocus: true });
+		const tab = page.url.searchParams.get('tab');
+		void goto(`/dashboard/flota/${id}${tab ? `?tab=${encodeURIComponent(tab)}` : ''}`, { replaceState: true });
 	});
 
 	const vehiculosFiltrados = $derived(
@@ -660,7 +651,7 @@
 				datos={vehiculosVisibles}
 				claveFila={(v) => v.id}
 				cargando={isLoading}
-				onFila={(v) => (detalleId = v.id)}
+				onFila={(v) => goto(`/dashboard/flota/${v.id}`)}
 				etiqueta="Vehículos de la flota"
 				orden={ordenTabla}
 				onOrdenar={(o) => (ordenTabla = o.length ? o : [{ id: 'vehiculo', desc: false }])}
@@ -702,7 +693,7 @@
 									id: 'ver',
 									etiqueta: 'Ver detalle',
 									icono: Eye,
-									onClick: () => (detalleId = v.id)
+									onClick: () => goto(`/dashboard/flota/${v.id}`)
 								},
 								{
 									id: 'editar',
@@ -763,21 +754,6 @@
 
 </div>
 
-<ModalDetalleVehiculo
-	open={detalleId !== null}
-	vehiculoId={detalleId}
-	tabInicial={detalleTab}
-	onclose={() => {
-		detalleId = null;
-		detalleTab = 'general';
-	}}
-	oneditar={puedeEditar
-		? (id) => {
-				detalleId = null;
-				openModal(id);
-			}
-		: undefined}
-/>
 <ModalFormVehiculo
 	open={isModalOpen}
 	vehiculoId={selectedVehiculoId}

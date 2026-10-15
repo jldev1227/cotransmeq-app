@@ -81,7 +81,12 @@ routes/…/canvas/
   contexto (dónde estoy, quién más está, si hay algo sin guardar) y
   [UniverSideRail](../src/lib/components/univer/UniverSideRail.svelte) las
   acciones; [UniverActionOverlay](../src/lib/components/univer/UniverActionOverlay.svelte)
-  tapa canvas y carril mientras dura una acción larga del carril.
+  tapa canvas y carril mientras dura una acción larga del carril. Los menús,
+  paneles y tooltips del carril se desplazan hacia arriba cuando no caben
+  debajo del botón dentro del viewport. El tooltip del asistente
+  se ancla por abajo y mantiene su altura natural para contener el texto. La lista de
+  acciones del carril tiene desplazamiento vertical; el asistente permanece
+  visible al pie y los flotantes se posicionan fuera del área desplazable.
 - El engine se crea en `onMount` con un **token de montaje**: el montaje es
   asíncrono y cambiar de año dos veces seguidas solaparía un montaje con un
   desmontaje; si al volver de un `await` el token ya no es el suyo, aborta. Al

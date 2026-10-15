@@ -29,11 +29,14 @@
 	// mientras el estado del socket se anunciaba con un toast centrado que
 	// tapaba contenido. En el header se ve siempre, sin robar sitio.
 	//
-	// El toast sigue existiendo en `dashboard/+layout.svelte` para móvil, donde
-	// el header va justo de ancho y no cabe este indicador.
+	// En móvil también vive en el header: el estado se compacta para no tapar
+	// contenido ni depender de una capa flotante.
 	$: socketEstado = $socketStore.estado;
 	$: socketIntentos = $socketStore.intentos;
-	$: socketProblema = socketEstado === 'reconectando' || socketEstado === 'rechazado';
+	$: socketProblema =
+		socketEstado === 'reconectando' ||
+		socketEstado === 'desconectado' ||
+		socketEstado === 'rechazado';
 
 	/// Colores de semáforo escritos a mano y NO tomados de la paleta.
 	///
@@ -45,7 +48,7 @@
 			? '#15803d'
 			: socketEstado === 'reconectando'
 				? '#d97706'
-				: socketEstado === 'rechazado'
+				: socketEstado === 'rechazado' || socketEstado === 'desconectado'
 					? '#dc2626'
 					: '#94a3b8';
 
@@ -56,7 +59,7 @@
 				? 'Conectando'
 				: socketEstado === 'reconectando'
 					? 'Reconectando'
-					: socketEstado === 'rechazado'
+					: socketEstado === 'desconectado' || socketEstado === 'rechazado'
 						? 'Sin conexión'
 						: '';
 
@@ -71,10 +74,12 @@
 				? 'Estableciendo la conexión en tiempo real...'
 				: socketEstado === 'reconectando'
 					? 'Se perdió la conexión en tiempo real. Se reintenta solo; los cambios de otros usuarios pueden tardar en aparecer.'
-					: socketEstado === 'rechazado'
-						? ($socketStore.error ??
-							'Tu sesión no es válida para la conexión en tiempo real. Vuelve a iniciar sesión.')
-						: '';
+					: socketEstado === 'desconectado'
+						? 'La conexión no se recuperó después de 3 reintentos. Se seguirá intentando automáticamente cada 5 segundos.'
+						: socketEstado === 'rechazado'
+							? ($socketStore.error ??
+								'Tu sesión no es válida para la conexión en tiempo real. Vuelve a iniciar sesión.')
+							: '';
 
 	let showAllNotifications = false;
 
@@ -189,6 +194,56 @@
 				{/if}
 			</button>
 
+			<!-- Estado compacto en la barra para móvil, con reintento accesible. -->
+			{#if socketEstado !== 'inactivo'}
+				<div
+					class="ml-2 inline-flex min-w-0 shrink items-center gap-1.5 rounded-full px-1.5 py-1 lg:hidden"
+					style="background:rgba(255,255,255,0.08);"
+					role="status"
+					aria-live="polite"
+					title={socketDetalle}
+				>
+					<span class="relative flex h-2 w-2 shrink-0" aria-hidden="true">
+						{#if socketEstado === 'reconectando'}
+							<span class="absolute inline-flex h-full w-full animate-ping rounded-full opacity-75" style="background:{socketColor}"></span>
+						{/if}
+						<span
+							class="relative inline-flex h-2 w-2 rounded-full"
+							style="background:{socketColor}"
+						></span>
+					</span>
+					<span
+						class="min-w-0 max-w-16 truncate text-[10px] font-medium"
+						style="color:{socketProblema ? socketColor : 'rgba(255,255,255,0.78)'}"
+					>
+						{socketEstado === 'reconectando' ? 'Reintentando' : socketTexto}
+					</span>
+					{#if socketProblema}
+						<button
+							type="button"
+							class="apple-transition flex h-6 w-6 shrink-0 items-center justify-center rounded-full hover:opacity-70"
+							style="color:{socketColor}"
+							title="Reintentar conexión"
+							aria-label="Reintentar conexión en tiempo real"
+							on:click={() => socketManager.reconectar()}
+						>
+							<svg
+								fill="none"
+								stroke="currentColor"
+								viewBox="0 0 24 24"
+								stroke-width="1.8"
+								aria-hidden="true"
+							>
+								<path
+									stroke-linecap="round"
+									stroke-linejoin="round"
+									d="M20 7v5h-5M4 17v-5h5m-4.5-3a8 8 0 0113.8-3L20 12M4 12l1.7 3a8 8 0 0013.8-3"
+								/>
+							</svg>
+						</button>
+					{/if}
+				</div>
+			{/if}
 		</div>
 
 		<!-- Centro (solo escritorio): el asistente de IA. Ocupa el sitio del antiguo
@@ -196,7 +251,7 @@
 		     datos y explica la app. Mismo atajo (⌘K). -->
 		<div class="hidden min-w-0 flex-1 items-center justify-center px-4 lg:flex" in:fade={{ duration: 600, delay: 450 }}>
 			<AsistenteDisparador />
-			<!-- Conexión en tiempo real, tras el asistente (en móvil lo cubre el toast del layout) -->
+			<!-- Conexión en tiempo real, tras el asistente -->
 			{#if socketEstado !== 'inactivo'}
 				<div
 					class="ml-3 hidden shrink-0 items-center gap-2 border-l pl-3 lg:flex"

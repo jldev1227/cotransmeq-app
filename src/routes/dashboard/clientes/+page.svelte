@@ -27,7 +27,6 @@
 		RotateCcw as IcoRestaurar
 	} from 'lucide-svelte';
 	import ModalFormCliente from '$lib/components/clientes/ModalFormCliente.svelte';
-	import ModalDetalleCliente from '$lib/components/clientes/ModalDetalleCliente.svelte';
 	import type { SortingState } from '@tanstack/table-core';
 	import { page as pageState } from '$app/state';
 	import type { ColumnDef } from '@tanstack/table-core';
@@ -407,7 +406,6 @@
 	}
 
 	/// Ficha de consulta: la fila abre la ficha; la página completa sigue a un clic.
-	let detalleId = $state<string | null>(null);
 
 	onMount(() => {
 		/// Enlaces viejos a `/agregar` llegan aquí con `?nuevo=1`.
@@ -652,7 +650,7 @@
 				datos={clientes}
 				claveFila={(c) => c.id}
 				cargando={isLoading}
-				onFila={(c) => (detalleId = c.id)}
+				onFila={(c) => goto(`/dashboard/clientes/${c.id}`)}
 				orden={ordenTabla}
 				onOrdenar={aplicarOrden}
 				seleccion={clientesSeleccionados}
@@ -703,7 +701,7 @@
 									id: 'ver',
 									etiqueta: 'Ver detalle',
 									icono: Eye,
-									onClick: () => (detalleId = c.id)
+									onClick: () => goto(`/dashboard/clientes/${c.id}`)
 								},
 								{
 									id: 'eliminar',
@@ -792,17 +790,6 @@
 	oncancel={() => (showDeleteModal = false)}
 />
 
-<ModalDetalleCliente
-	open={detalleId !== null}
-	clienteId={detalleId}
-	onclose={() => (detalleId = null)}
-	oneditar={puedeEditar
-		? (id) => {
-				detalleId = null;
-				abrirFormulario(id);
-			}
-		: undefined}
-/>
 <ModalFormCliente
 	open={modalCliente.abierto}
 	clienteId={modalCliente.id}

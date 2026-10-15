@@ -223,6 +223,48 @@
 		e.onSelect?.();
 	}
 
+	/** Posiciona los flotantes fuera del área desplazable y dentro del viewport. */
+	function ajustarFlotante(node: HTMLElement) {
+		let frame = 0;
+		const ajustar = () => {
+			cancelAnimationFrame(frame);
+			frame = requestAnimationFrame(() => {
+				const slot = node.parentElement;
+				if (!slot) return;
+				const ancla = slot.getBoundingClientRect();
+				const viewport = window.visualViewport;
+				const superior = (viewport?.offsetTop ?? 0) + 8;
+				const inferior = (viewport?.offsetTop ?? 0) + (viewport?.height ?? window.innerHeight) - 8;
+				const arriba = node.classList.contains('rail-tip-pie')
+					? ancla.bottom - node.offsetHeight
+					: ancla.top;
+				node.style.left = `${Math.max(8, ancla.left - node.offsetWidth - 8)}px`;
+				node.style.top = `${Math.max(superior, Math.min(arriba, inferior - node.offsetHeight))}px`;
+				node.style.bottom = 'auto';
+			});
+		};
+		const slot = node.parentElement;
+		slot?.addEventListener('pointerenter', ajustar);
+		slot?.addEventListener('focusin', ajustar);
+		window.addEventListener('resize', ajustar);
+		window.addEventListener('scroll', ajustar, true);
+		window.visualViewport?.addEventListener('resize', ajustar);
+		const observer = new ResizeObserver(ajustar);
+		observer.observe(node);
+		ajustar();
+		return {
+			destroy() {
+				cancelAnimationFrame(frame);
+				observer.disconnect();
+				slot?.removeEventListener('pointerenter', ajustar);
+				slot?.removeEventListener('focusin', ajustar);
+				window.removeEventListener('resize', ajustar);
+				window.removeEventListener('scroll', ajustar, true);
+				window.visualViewport?.removeEventListener('resize', ajustar);
+			}
+		};
+	}
+
 	function hayBadge(b: string | number | null | undefined) {
 		return b != null && b !== '' && b !== 0;
 	}
@@ -231,6 +273,7 @@
 <svelte:window onpointerdown={alPunteroFuera} onkeydown={alTeclado} />
 
 <div class="rail" data-rail role="toolbar" aria-label={ariaLabel} aria-orientation="vertical">
+	<div class="rail-actions">
 	{#each items as it, i (esAccion(it) ? it.id : (it.id ?? `sep-${i}`))}
 		{#if !esAccion(it)}
 			<div class="rail-sep" role="separator"></div>
@@ -263,7 +306,7 @@
 				<!-- El popover del carril: sustituye al texto que llevaría el botón
 				     en el header. Se oculta mientras el flyout está abierto, o se
 				     solaparían sobre la misma esquina. -->
-				<div class="rail-tip" role="tooltip">
+				<div class="rail-tip" role="tooltip" use:ajustarFlotante>
 					<strong>{it.label}</strong>
 					{#if it.disabled && it.disabledHint}
 						<span>{it.disabledHint}</span>
@@ -277,6 +320,7 @@
 					{#if entrada?.panel}
 						<div
 							class="rail-panel rail-panel-light"
+							use:ajustarFlotante
 							role="dialog"
 							aria-label={entrada.label}
 							style="width:{entrada.panelWidth ?? 320}px"
@@ -290,6 +334,7 @@
 					{:else}
 						<div
 							class="rail-panel rail-panel-light rail-menu"
+							use:ajustarFlotante
 							role="menu"
 							aria-label={it.label}
 							style="width:{it.panelWidth ?? 300}px"
@@ -330,6 +375,7 @@
 				{#if it.panel && abierto === it.id}
 					<div
 						class="rail-panel rail-panel-{it.panelTone ?? 'light'}"
+						use:ajustarFlotante
 						role="dialog"
 						aria-label={it.label}
 						style="width:{it.panelWidth ?? 320}px"
@@ -340,6 +386,7 @@
 			</div>
 		{/if}
 	{/each}
+	</div>
 
 	{#if asistente}
 		<div class="rail-sep rail-sep-pie" role="separator"></div>
@@ -355,7 +402,7 @@
 			>
 				<Sparkles size={19} strokeWidth={1.8} aria-hidden="true" />
 			</button>
-			<div class="rail-tip rail-tip-pie" role="tooltip">
+			<div class="rail-tip rail-tip-pie" role="tooltip" use:ajustarFlotante>
 				<strong>Asistente</strong>
 				<span>Pregunta por los datos de esta pantalla (⌘K)</span>
 			</div>
@@ -384,18 +431,26 @@
 		/* Por encima del canvas para que el popover no quede recortado por el
 		   `overflow:hidden` del host de Univer. */
 		z-index: 20;
-		/* Sin overflow: los popovers salen por la izquierda del carril. */
 		overflow: visible;
 	}
 
-	/* El asistente cierra el carril por abajo, separado del resto de acciones. */
-	.rail-sep-pie {
-		margin-top: auto;
+	.rail-actions {
+		flex: 1 1 auto;
+		min-height: 0;
+		width: 100%;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 4px;
+		overflow-y: auto;
+		overflow-x: hidden;
+		scrollbar-width: thin;
+		scrollbar-color: rgba(255, 255, 255, 0.35) transparent;
 	}
-	/* Su popover crece hacia arriba: abajo no hay sitio. */
-	.rail-tip-pie {
-		top: auto;
-		bottom: 0;
+
+	/* El asistente permanece visible al pie mientras las acciones se desplazan. */
+	.rail-sep-pie {
+		margin-top: 5px;
 	}
 
 	.rail-sep {
@@ -533,9 +588,7 @@
 	   título. Creciendo hacia abajo desde el borde superior del botón, el
 	   padding del carril garantiza que siempre quede dentro. */
 	.rail-tip {
-		position: absolute;
-		top: 0;
-		right: calc(100% + 8px);
+		position: fixed;
 		display: flex;
 		flex-direction: column;
 		gap: 2px;
@@ -578,9 +631,7 @@
 
 	/* ─── Flyout ────────────────────────────────────────────────────── */
 	.rail-panel {
-		position: absolute;
-		top: 0;
-		right: calc(100% + 8px);
+		position: fixed;
 		max-height: min(70vh, 560px);
 		/* `visible` y no `auto`: los menús desplegables de los controles que
 		   se alojan aquí son `position:absolute` y un `overflow:auto` los
