@@ -269,6 +269,8 @@
 
 	// ─── DATA CATALOGS ──────────────────────────────────────────
 	let clientes: ClienteBasico[] = [];
+	let clientesError = false;
+	let clientesCargando = false;
 	let vehiculos: Vehiculo[] = [];
 	let tiposRecargo: TipoRecargo[] = [];
 
@@ -993,10 +995,10 @@
 	);
 
 	async function cargarCatalogos() {
+		void cargarClientes();
 		try {
-			const [clientesRes, vehiculosRes, tiposRes, firmantesRes, tercerosRes, operadorasRes] =
+			const [vehiculosRes, tiposRes, firmantesRes, tercerosRes, operadorasRes] =
 				await Promise.all([
-					apiClient.get<{ data: ClienteBasico[] }>('/api/empresas/basicos'),
 					apiClient.get<{ data: Vehiculo[] }>('/api/vehiculos', { params: { incluir_ocultos: 'true' } }),
 					liquidacionesServiciosAPI.obtenerTiposRecargo(),
 					usuariosAPI.firmantes().catch(() => [] as Firmante[]),
@@ -1009,7 +1011,6 @@
 					/// sería peor que no poder cambiarla.
 					operadorasAPI.listar(true).catch(() => [] as Operadora[])
 				]);
-			clientes = clientesRes.data?.data || [];
 			vehiculos = vehiculosRes.data?.data || [];
 			tiposRecargo = tiposRes || [];
 			firmaGerencia = firmantesRes.find((f: Firmante) => f.cargo === 'Gerencia') || null;
@@ -1037,6 +1038,20 @@
 			}
 		} catch {
 			/* usar defaults hardcoded si falla */
+		}
+	}
+
+	async function cargarClientes() {
+		clientesCargando = true;
+		clientesError = false;
+		try {
+			const response = await apiClient.get<{ data: ClienteBasico[] }>('/api/empresas/basicos');
+			clientes = response.data?.data || [];
+		} catch (error) {
+			console.error('Error cargando clientes', error);
+			clientesError = true;
+		} finally {
+			clientesCargando = false;
 		}
 	}
 
@@ -3127,7 +3142,11 @@
 										/>
 										{#if clienteDropdown && clienteSearch.length > 0}
 											<div class="ss-dropdown">
-												{#if clientesFiltrados.length === 0}
+												{#if clientesCargando}
+													<div class="ss-empty">Cargando clientes...</div>
+												{:else if clientesError}
+													<div class="ss-empty">No se pudieron cargar los clientes. <button type="button" on:click={cargarClientes}>Reintentar</button></div>
+												{:else if clientesFiltrados.length === 0}
 													<div class="ss-empty">Sin resultados</div>
 												{:else}
 													{#each clientesFiltrados as c, ci}
