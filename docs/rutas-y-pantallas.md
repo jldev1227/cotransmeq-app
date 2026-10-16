@@ -82,17 +82,17 @@ En la ficha SARLAFT, el panel de gestión y soportes permanece visible al recorr
 
 | Ruta | Pantalla | Módulo | API |
 |---|---|---|---|
-| `/dashboard/asistencias` | Formularios de asistencia (eventos y capacitaciones). | `asistencias` | `asistencias` |
-| `/dashboard/asistencias/[id]/respuestas` | Firmas recibidas en un formulario de asistencia. | `asistencias` | `asistencias` |
+| `/dashboard/asistencias` | Formularios de asistencia (eventos y capacitaciones) con QR público para firmar, marcado con el sello corporativo. | `asistencias` | `asistencias` |
+| `/dashboard/asistencias/[id]/respuestas` | Firmas recibidas, detalle del evento y acción para compartir su QR público. | `asistencias` | `asistencias` |
 | `/dashboard/acciones-correctivas` | Tablero de acciones correctivas y preventivas; rejilla compacta y fluida de tarjetas con hallazgo, estado, seguimiento y acceso al detalle. | `acciones-correctivas` | `acciones-correctivas` |
 | `/dashboard/acciones-correctivas/crear` | Alta de una acción. | `acciones-correctivas` | `acciones-correctivas` |
 | `/dashboard/acciones-correctivas/[id]` | Detalle de una acción. | `acciones-correctivas` | `acciones-correctivas` |
 | `/dashboard/acciones-correctivas/editar/[id]` | Edición de una acción. | `acciones-correctivas` | `acciones-correctivas` |
 | `/dashboard/incidentes` | Accidentes, incidentes y casi accidentes, con plazos e indicadores. | `incidentes` | `incidentes` |
 | `/dashboard/incidentes/[id]` | Detalle de ancho completo en secuencia: reporte agrupado por contexto, personas y gestión; evidencias, investigación (Res. 1401 de 2007), acciones y cierre. | `incidentes` | `incidentes`, `viaticos` |
-| `/dashboard/evaluaciones` | Evaluaciones de conductores. | `evaluaciones` | `evaluaciones` |
+| `/dashboard/evaluaciones` | Evaluaciones de conductores con acceso a compartir su QR público, marcado con el sello corporativo. | `evaluaciones` | `evaluaciones` |
 | `/dashboard/evaluaciones/crear` | Crear una evaluación. | `evaluaciones` | `evaluaciones` |
-| `/dashboard/evaluaciones/[id]` | Detalle con resultados y exportación a PDF o ZIP. | `evaluaciones` | `evaluaciones` |
+| `/dashboard/evaluaciones/[id]` | Detalle con resultados, exportación a PDF o ZIP y acción para compartir el QR público. | `evaluaciones` | `evaluaciones` |
 | `/dashboard/evaluaciones/[id]/editar` | Editar una evaluación. | `evaluaciones` | `evaluaciones` |
 | `/dashboard/salidas-nc` | Registro de salidas no conformes (ISO 9001, 8.7). | `salidas-nc` | `salidas-nc` |
 | `/dashboard/formularios` | Formularios dinámicos: catálogo, explorador de envíos (`?vista=envios`) y lo asignado al usuario. | `formularios` | `formularios-dinamicos` |

@@ -1342,6 +1342,11 @@
 		gap: 1rem;
 		grid-template-columns: repeat(auto-fill, minmax(min(100%, 19rem), 1fr));
 	}
+	@media (min-width: 1280px) {
+		.conf-tarjetas {
+			grid-template-columns: repeat(3, minmax(0, 1fr));
+		}
+	}
 	.conf-tarjeta {
 		padding: 1rem 1.1rem;
 		transition:

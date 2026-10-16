@@ -70,14 +70,9 @@ Reglas que no se negocian:
   `ESCALA_PREVIEW = 1.35`) y, solo para el PDF, la regla
   `@page { size: letter landscape; … }`.
 
-> **Fallo abierto en este repo.** [exportar-pdf.ts](../src/lib/components/liquidaciones-terceros/preview/exportar-pdf.ts)
-> todavía apunta a `/assets/logo_transmeralda-264.webp` y
-> `/assets/sello-firma-terceros.webp`, que aquí no existen (los de Cotransmeq
-> son `logo_nombre.webp` y `sello-firma-terceros.jpg`). Si la descarga falla,
-> el exportador quita la imagen en vez de abortar, así que el PDF suelto de la
-> vista previa sale sin logo ni sello. El ZIP y el envío por correo no lo
-> sufren: componen con [componer-hojas.ts](../src/lib/components/liquidaciones-terceros/preview/componer-hojas.ts),
-> que sí usa las rutas de aquí.
+El exportador individual y el de lotes usan las rutas locales de marca:
+`logo_nombre.webp` para la cabecera y `sello-firma-terceros.webp` para el sello.
+La misma imagen se usa en nómina y en la liquidación regular del tercero.
 
 En los envíos de formularios, el bloque `@media print` de
 `documento-envio.css.ts` sirve a las dos salidas: el PDF del servidor (Chromium
@@ -242,8 +237,8 @@ la página 1. Las páginas de detalle (recargos por empresa, días sin recargo y
 control de días OP-FR-03) usan las piezas `cabeceraSeccion`, `firmaConductor` y
 `pieDocumento` del mismo archivo. Lo que cambia por empresa llega en
 `MARCA_DISENO`, dentro de `pdfDesprendible.ts`: aquí verde bosque `#14532D` de
-fondo, acento naranja `#F97316`, `logo_nombre_white.webp`, la mascota y
-`sello-firma-terceros.jpg`, con la razón social SERVICIOS Y TRANSPORTES
+fondo, acento naranja `#F97316`, `logo_nombre_white.webp`, la mascota y el sello
+corporativo generado desde el logo (`sello-firma-terceros.webp`), con la razón social SERVICIOS Y TRANSPORTES
 COTRANSMEQ S.A.S. `pdfDesprendibleDiseno.ts` es idéntico en los dos repos.
 
 Detalles que ya mordieron:

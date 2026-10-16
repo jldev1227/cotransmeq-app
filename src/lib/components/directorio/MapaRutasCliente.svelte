@@ -21,8 +21,21 @@
 		latitud?: number | null;
 		longitud?: number | null;
 	}
-	interface Props { rutas: Ruta[]; zonas: Zona[]; historico: boolean; }
-	let { rutas, zonas, historico }: Props = $props();
+	interface Props {
+		rutas: Ruta[];
+		zonas: Zona[];
+		historico: boolean;
+		entidad?: 'cliente' | 'conductor' | 'vehiculo';
+	}
+	let { rutas, zonas, historico, entidad = 'cliente' }: Props = $props();
+	const etiquetaEntidad = $derived(
+		entidad === 'vehiculo' ? 'del vehículo' : entidad === 'conductor' ? 'del conductor' : 'del cliente'
+	);
+	const textoSinZonas = $derived(
+		historico
+			? 'Todavía no hay zonas registradas en el historial.'
+			: `No hay zonas registradas para ${entidad === 'vehiculo' ? 'este vehículo' : entidad === 'conductor' ? 'este conductor' : 'este cliente'} en el período. Ajusta las fechas para consultar otro período.`
+	);
 	let contenedor = $state<HTMLDivElement>();
 	let mapa: mapboxgl.Map | null = null;
 	let montado = $state(false);
@@ -79,14 +92,14 @@
 					geometry: { type: 'Point', coordinates }
 				};
 			});
-			mapa!.addSource('zonas-cliente', {
+			mapa!.addSource('zonas-frecuentes', {
 				type: 'geojson',
 				data: { type: 'FeatureCollection', features }
 			});
 			mapa!.addLayer({
 				id: 'zona-frecuencia-halo',
 				type: 'circle',
-				source: 'zonas-cliente',
+				source: 'zonas-frecuentes',
 				paint: {
 					'circle-radius': ['interpolate', ['linear'], ['get', 'servicios'], 1, 15, 4, 23, 10, 31, 25, 40],
 					'circle-color': '#078a62',
@@ -99,7 +112,7 @@
 			mapa!.addLayer({
 				id: 'zona-frecuencia-punto',
 				type: 'circle',
-				source: 'zonas-cliente',
+				source: 'zonas-frecuentes',
 				paint: {
 					'circle-radius': ['interpolate', ['linear'], ['get', 'servicios'], 1, 5, 4, 8, 10, 11, 25, 15],
 					'circle-color': '#087a57',
@@ -110,7 +123,7 @@
 			mapa!.addLayer({
 				id: 'zona-frecuencia-etiqueta',
 				type: 'symbol',
-				source: 'zonas-cliente',
+				source: 'zonas-frecuentes',
 				layout: {
 					'text-field': ['to-string', ['get', 'servicios']],
 					'text-size': 11,
@@ -157,9 +170,9 @@
 						geometry: { type: 'LineString', coordinates: [origen, destino] }
 					};
 				});
-				mapa!.addSource('rutas-cliente', { type: 'geojson', data: { type: 'FeatureCollection', features: lineas } });
+				mapa!.addSource('rutas-servicios', { type: 'geojson', data: { type: 'FeatureCollection', features: lineas } });
 				mapa!.addLayer({
-					id: 'rutas-cliente', type: 'line', source: 'rutas-cliente',
+					id: 'rutas-servicios', type: 'line', source: 'rutas-servicios',
 					paint: { 'line-color': '#2563eb', 'line-width': 2, 'line-opacity': 0.5, 'line-dasharray': [2, 2] }
 				});
 			}
@@ -175,7 +188,7 @@
 	{#if !token}
 		<div class="sin-mapa"><MapPin size={20} /><strong>Mapbox no está configurado</strong><span>Completa VITE_MAPBOX_ACCESS_TOKEN para habilitar el mapa.</span></div>
 	{:else}
-		<div class="mapa" bind:this={contenedor} aria-label="Mapa Mapbox de zonas frecuentes del cliente"></div>
+		<div class="mapa" bind:this={contenedor} aria-label={`Mapa Mapbox de zonas frecuentes ${etiquetaEntidad}`}></div>
 	{/if}
 	<div class="mapa-pie">
 		<div><Route size={15} /><span>{historico ? 'Cobertura histórica' : rutasVisibles.length + ' rutas del período'}</span></div>
@@ -188,7 +201,7 @@
 			{/each}
 		</div>
 	{:else}
-		<div class="sin-zonas">{historico ? 'Todavía no hay zonas registradas en el historial.' : 'No hay zonas registradas en este período. Ajusta las fechas o consulta el histórico.'}</div>
+		<div class="sin-zonas">{textoSinZonas}</div>
 	{/if}
 </div>
 

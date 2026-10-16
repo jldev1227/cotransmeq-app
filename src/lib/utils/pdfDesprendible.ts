@@ -38,7 +38,7 @@ const MARCA_DISENO: Omit<MarcaDesprendible, 'razonSocial' | 'nit' | 'logo' | 'ma
 	fondoSuave: '#FFF7ED',
 	logoUrl: '/assets/logo_nombre_white.webp',
 	mascotaUrl: '/mascot/trabajando.webp',
-	selloUrl: '/assets/sello-firma-terceros.jpg'
+	selloUrl: '/assets/sello-firma-terceros.webp'
 };
 
 function formatCurrency(value: number | string | null | undefined): string {

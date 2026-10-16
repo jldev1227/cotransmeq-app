@@ -319,8 +319,8 @@
 					<img
 						class="sig-img"
 						data-rol="sello"
-						src="/assets/sello-firma-terceros.jpg"
-						alt="Sello de Transportes y Servicios Esmeralda S.A.S."
+						src="/assets/sello-firma-terceros.webp"
+						alt="Sello de Servicios y Transportes Cotransmeq S.A.S."
 					/>
 				{/if}
 				<div class="sig-line">&nbsp;</div>

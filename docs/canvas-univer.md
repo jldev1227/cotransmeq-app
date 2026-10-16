@@ -47,6 +47,10 @@ URL. Entre canvas se navega con el «Ir a…» del toolbar
 (`SelectorCanvasNomina`, `SelectorCanvasTerceros`), que es un `<select>` y no
 botones porque la cabecera recorta en silencio lo que desborda.
 
+En Recorridos, las pestañas y el selector del toolbar se ordenan A–Z por nombre
+y apellido. El servidor conserva su orden de respuesta por apellido; la página
+ordena el DTO antes de montar el libro, sin cambiar la persistencia.
+
 ## Cómo se monta una página de canvas
 
 ```

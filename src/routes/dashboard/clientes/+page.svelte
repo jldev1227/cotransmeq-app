@@ -37,6 +37,7 @@
 		contarActivos,
 		firma,
 		limpiar as limpiarFiltrosDe,
+		bandera,
 		numero,
 		opcion,
 		texto,
@@ -77,6 +78,14 @@
 		deletedAt?: string | null;
 	}
 
+	interface ResumenClientes {
+		total: number;
+		empresas: number;
+		personas: number;
+		conOSI: number;
+		conRecargos: number;
+	}
+
 	/**
 	 * Filtros de la página.
 	 *
@@ -92,6 +101,8 @@
 		tipo: string;
 		/** `activos` | `ocultos`. */
 		vista: string;
+		requiere_osi: boolean;
+		paga_recargos: boolean;
 		pagina: number;
 	}
 
@@ -101,12 +112,17 @@
 		q: texto(),
 		tipo: opcion('TODOS'),
 		vista: opcion('activos'),
+		requiere_osi: bandera(),
+		paga_recargos: bandera(),
 		pagina: numero(1),
 		orden: opcion('asc')
 	};
 
 	const estadoUrl = crearEstadoUrl(DEFS);
 	const listaClientes = crearListingStore<Cliente>();
+	/// La caché de filas es por firma; guardamos el resumen igual para que al
+	/// volver a un filtro no se pinte el conteo de la búsqueda anterior.
+	let resumenesPorFirma = $state<Record<string, ResumenClientes>>({});
 
 	let filtros = $state<FiltrosClientes>(estadoUrl.leer(page.url));
 	let mostrarFiltros = $state(false);
@@ -196,7 +212,13 @@
 					}
 				]
 			: []),
-		...(filtros.q.trim() ? [{ key: 'q', label: 'Búsqueda', value: `"${filtros.q.trim()}"` }] : [])
+		...(filtros.q.trim() ? [{ key: 'q', label: 'Búsqueda', value: `"${filtros.q.trim()}"` }] : []),
+		...(filtros.requiere_osi
+			? [{ key: 'requiere_osi', label: 'Condición', value: 'Con OSI' }]
+			: []),
+		...(filtros.paga_recargos
+			? [{ key: 'paga_recargos', label: 'Condición', value: 'Pagan recargos' }]
+			: [])
 	]);
 
 	/// La página no cuenta como filtro y la búsqueda tiene su propio campo.
@@ -213,13 +235,20 @@
 	const isLoading = $derived($listaClientes._?.cargando ?? false);
 	const error = $derived($listaClientes._?.error || null);
 	const totalClientes = $derived($listaClientes._?.total ?? 0);
+	/// Todos los filtros entran en la firma porque cambian tanto los resultados
+	/// paginados como el contexto en que se calcularon las facetas.
+	const firmaDatos = $derived(firma(DEFS, filtros));
+	const resumenClientes = $derived(resumenesPorFirma[firmaDatos] ?? null);
 
 	const stats = $derived({
-		total: totalClientes || clientes.length,
-		empresas: clientes.filter((c) => c.tipo === TipoCliente.EMPRESA).length,
-		personas: clientes.filter((c) => c.tipo === TipoCliente.PERSONA_NATURAL).length,
-		conOSI: clientes.filter((c) => c.requiere_osi).length,
-		conRecargos: clientes.filter((c) => c.paga_recargos).length
+		total: resumenClientes?.total ?? (totalClientes || clientes.length),
+		empresas:
+			resumenClientes?.empresas ?? clientes.filter((c) => c.tipo === TipoCliente.EMPRESA).length,
+		personas:
+			resumenClientes?.personas ??
+			clientes.filter((c) => c.tipo === TipoCliente.PERSONA_NATURAL).length,
+		conOSI: resumenClientes?.conOSI ?? clientes.filter((c) => c.requiere_osi).length,
+		conRecargos: resumenClientes?.conRecargos ?? clientes.filter((c) => c.paga_recargos).length
 	});
 
 	/**
@@ -231,30 +260,35 @@
 	 * las dos ramas mandan lo mismo.
 	 */
 	async function traerClientes(): Promise<{ items: Cliente[]; total: number }> {
+		const filtrosConsulta = { ...filtros };
+		const firmaConsulta = firma(DEFS, filtrosConsulta);
 		const params = {
-			page: filtros.pagina,
+			page: filtrosConsulta.pagina,
 			limit: POR_PAGINA,
-			search: filtros.q.trim() || undefined,
-			tipo: filtros.tipo !== 'TODOS' ? filtros.tipo : undefined
-	,
-			orden: filtros.orden === 'desc' ? 'desc' : 'asc'
+			search: filtrosConsulta.q.trim() || undefined,
+			tipo: filtrosConsulta.tipo !== 'TODOS' ? filtrosConsulta.tipo : undefined,
+			requiere_osi: filtrosConsulta.requiere_osi ? 'true' : undefined,
+			paga_recargos: filtrosConsulta.paga_recargos ? 'true' : undefined,
+			orden: filtrosConsulta.orden === 'desc' ? 'desc' : 'asc'
 		};
 
 		const res =
-			filtros.vista === 'papelera'
+			filtrosConsulta.vista === 'papelera'
 				? await clientesAPI.getPapelera(params)
-				: filtros.vista === 'ocultos'
+				: filtrosConsulta.vista === 'ocultos'
 					? await clientesAPI.getOcultos(params)
 					: await clientesAPI.getAll(params);
 
 		const cuerpo = res.data ?? {};
 		const items: Cliente[] = cuerpo.data ?? (Array.isArray(cuerpo) ? cuerpo : []);
+		if (cuerpo.resumen) {
+			resumenesPorFirma = {
+				...resumenesPorFirma,
+				[firmaConsulta]: cuerpo.resumen as ResumenClientes
+			};
+		}
 		return { items, total: cuerpo.pagination?.total ?? items.length };
 	}
-
-	/// Aquí sí entran todos los filtros: cualquiera de ellos cambia lo que el
-	/// servidor devuelve, así que la caché de una combinación no vale para otra.
-	const firmaDatos = $derived(firma(DEFS, filtros));
 
 	async function cargar(forzar = false) {
 		if (forzar) listaClientes.invalidar();
@@ -360,9 +394,34 @@
 		{ clave: 'osi', etiqueta: 'Con OSI', valor: stats.conOSI, color: '#f59e0b' },
 		{ clave: 'recargos', etiqueta: 'Pagan recargos', valor: stats.conRecargos, color: '#a855f7' }
 	]);
+	const conteosActivos = $derived([
+		...(filtros.tipo === 'TODOS' ? [] : [filtros.tipo]),
+		...(filtros.requiere_osi ? ['osi'] : []),
+		...(filtros.paga_recargos ? ['recargos'] : []),
+		...(filtros.tipo === 'TODOS' && !filtros.requiere_osi && !filtros.paga_recargos
+			? ['TODOS']
+			: [])
+	]);
 
 	function filtrarPorConteo(clave: string) {
-		if (clave === 'osi' || clave === 'recargos') return;
+		if (clave === 'osi') {
+			ponerFiltro('requiere_osi', !filtros.requiere_osi);
+			return;
+		}
+		if (clave === 'recargos') {
+			ponerFiltro('paga_recargos', !filtros.paga_recargos);
+			return;
+		}
+		if (clave === 'TODOS') {
+			filtros = {
+				...filtros,
+				tipo: 'TODOS',
+				requiere_osi: false,
+				paga_recargos: false,
+				pagina: 1
+			};
+			return;
+		}
 		ponerFiltro('tipo', filtros.tipo === clave ? 'TODOS' : clave);
 	}
 
@@ -451,7 +510,7 @@
 			<div class="dir-conteos">
 				<ResumenConteos
 					{conteos}
-					activo={filtros.tipo === 'TODOS' ? null : filtros.tipo}
+					activos={conteosActivos}
 					onElegir={filtrarPorConteo}
 				/>
 			</div>

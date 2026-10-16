@@ -56,7 +56,7 @@
 	import { createSheetSession, type SheetSession } from '$lib/editor/canvas/sheet-session.svelte';
 	import {
 		conductorIdDeSheetId,
-		ordenAlfabetico,
+		ordenNombreApellido,
 		posicionDeInsercion
 	} from '$lib/editor/builders/recorridos-identidad';
 	import { conductoresSelectAPI, type ConductorSelectItem } from '$lib/api/apiClient';
@@ -347,10 +347,12 @@
 	}
 
 	/**
-	 * Mezcla en el DTO las hojas abiertas a mano, en su sitio alfabético.
+	 * Mezcla las hojas abiertas a mano y ordena el libro por nombre completo.
 	 *
 	 * Las que el servidor ya trae —porque se les guardó una fila— dejan de
-	 * ser extra: si no, al recargar habría dos hojas del mismo conductor.
+	 * ser extra: si no, al recargar habría dos hojas del mismo conductor. El
+	 * servidor ordena por apellido para sus respuestas; en este canvas el orden
+	 * de trabajo pedido por Operaciones es nombre y luego apellido, A–Z.
 	 */
 	function conHojasExtra(d: RecorridosPeriodoDTO): RecorridosPeriodoDTO {
 		const clave = `${d.desde}_${d.hasta}`;
@@ -359,9 +361,11 @@
 			claveHojasExtra = clave;
 		}
 		hojasExtra = hojasExtra.filter((x) => !d.hojas.some((h) => h.conductor_id === x.conductor_id));
-		if (!hojasExtra.length) return d;
 		const hojas = [...d.hojas];
 		for (const x of hojasExtra) hojas.splice(posicionDeInsercion(hojas, x), 0, x);
+		hojas.sort((a, b) =>
+			ordenNombreApellido(a).localeCompare(ordenNombreApellido(b), 'es', { sensitivity: 'base' })
+		);
 		return { ...d, hojas };
 	}
 
@@ -391,7 +395,11 @@
 					!q ||
 					`${c.nombre} ${c.apellido} ${c.numero_identificacion ?? ''}`.toLowerCase().includes(q)
 			)
-			.sort((a, b) => ordenAlfabetico(a).localeCompare(ordenAlfabetico(b), 'es'));
+			.sort((a, b) =>
+				ordenNombreApellido(a).localeCompare(ordenNombreApellido(b), 'es', {
+					sensitivity: 'base'
+				})
+			);
 	});
 
 	/** Espejo de `nombreHojaConductor` del servidor: mismo nombre de pestaña. */

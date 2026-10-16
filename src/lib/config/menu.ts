@@ -66,15 +66,6 @@ export const MENU_ITEMS: MenuItem[] = [
 		href: '/dashboard/flota'
 	},
 	{
-		id: 'mantenimiento',
-		label: 'Mantenimiento',
-		/// La caja de herramientas del taller. La llave inglesa ya es de
-		/// «Acciones C/P», y las dos se confundían a este tamaño.
-		icon: ToolCase,
-		badge: null,
-		href: '/dashboard/mantenimiento'
-	},
-	{
 		id: 'conductores',
 		label: 'Conductores',
 		/// Licencia, no «personas»: `Users` era la silueta genérica y competía
@@ -82,6 +73,20 @@ export const MENU_ITEMS: MenuItem[] = [
 		icon: IdCard,
 		badge: null,
 		href: '/dashboard/conductores'
+	},
+	{
+		id: 'clientes',
+		label: 'Clientes',
+		icon: Building2,
+		badge: null,
+		href: '/dashboard/clientes'
+	},
+	{
+		id: 'terceros',
+		label: 'Terceros',
+		icon: BookUser,
+		badge: null,
+		href: '/dashboard/terceros'
 	},
 	{
 		id: 'servicios',
@@ -105,23 +110,46 @@ export const MENU_ITEMS: MenuItem[] = [
 		href: '/dashboard/recargos'
 	},
 	{
-		id: 'clientes',
-		label: 'Clientes',
-		icon: Building2,
+		id: 'extractos',
+		label: 'Extractos',
+		icon: FileText,
 		badge: null,
-		href: '/dashboard/clientes'
+		href: '/dashboard/extractos'
 	},
 	{
-		id: 'sarlaft',
-		label: 'SARLAFT / PTEE',
-		/// Lupa sobre documento: el módulo es debida diligencia sobre terceros,
-		/// no el archivo genérico que sugería el icono de documento.
-		/// SARLAFT/PTEE es cumplimiento y prevención de riesgo, no búsqueda
-		/// documental. `FileSearch` además se confundía con `FileStack`.
-		icon: ShieldCheck,
+		id: 'nomina',
+		label: 'Nómina',
+		icon: Wallet,
 		badge: null,
-		href: '/dashboard/sarlaft'
+		/// El módulo ya no tiene listado: su puerta es el canvas.
+		href: '/dashboard/nomina/canvas'
 	},
+	{
+		id: 'liquidaciones-servicios',
+		label: 'Liq. Servicios',
+		icon: ReceiptText,
+		badge: null,
+		/// Entra directo al canvas de historial, igual que «Liq. Terceros»: el
+		/// listado de `/dashboard/liquidaciones-servicios` es la capa pre-Univer
+		/// y sigue accesible por url, pero ya no es la puerta del módulo.
+		href: '/dashboard/liquidaciones-servicios'
+	},
+	{
+		id: 'liquidaciones-terceros',
+		label: 'Liq. Terceros',
+		/// «Liq. Servicios» y «Liq. Terceros» llevaban el mismo recibo, así que
+		/// colapsado el menú eran indistinguibles. Terceros es el pago que sale
+		/// hacia afuera; de ahí las monedas en la mano.
+		icon: HandCoins,
+		badge: null,
+		href: '/dashboard/liquidaciones-terceros'
+	},
+	// «Liq. Terceros — Adicionales» se eliminó del menú: el canvas de
+	// adicionales se abre desde el selector «Ir a…» del toolbar del canvas
+	// de cierres, que es a donde /dashboard/liquidaciones-terceros redirige.
+	// OJO: el moduleId `liquidaciones-terceros-adicionales` SIGUE existiendo en
+	// `config/permissions.ts` porque el `+layout@.svelte` del canvas se lo pasa
+	// a `UniverAuthGuard`, y `checkAccess` deniega todo moduleId desconocido.
 	{
 		id: 'solicitudes',
 		label: 'Solicitudes web',
@@ -139,24 +167,6 @@ export const MENU_ITEMS: MenuItem[] = [
 		href: '/dashboard/asistencias'
 	},
 	{
-		id: 'acciones-correctivas',
-		label: 'Acciones C/P',
-		/// Antes compartía escudo con PESV y los dos se leían como «seguridad».
-		/// Una acción correctiva es una reparación: la llave inglesa lo separa.
-		icon: Wrench,
-		badge: null,
-		href: '/dashboard/acciones-correctivas'
-	},
-	{
-		id: 'incidentes',
-		label: 'Incidentes',
-		/// Accidentes, incidentes y casi-accidentes con su investigación. La
-		/// sirena y no el triángulo de alerta, que ya es de «Salidas NC».
-		icon: Siren,
-		badge: null,
-		href: '/dashboard/incidentes'
-	},
-	{
 		id: 'evaluaciones',
 		label: 'Evaluaciones',
 		/// Lista de criterios calificados. Sin portapapeles: ese glifo queda
@@ -166,27 +176,15 @@ export const MENU_ITEMS: MenuItem[] = [
 		href: '/dashboard/evaluaciones'
 	},
 	{
-		id: 'salidas-nc',
-		label: 'Salidas NC',
-		icon: TriangleAlert,
+		id: 'sarlaft',
+		label: 'SARLAFT / PTEE',
+		/// Lupa sobre documento: el módulo es debida diligencia sobre terceros,
+		/// no el archivo genérico que sugería el icono de documento.
+		/// SARLAFT/PTEE es cumplimiento y prevención de riesgo, no búsqueda
+		/// documental. `FileSearch` además se confundía con `FileStack`.
+		icon: ShieldCheck,
 		badge: null,
-		href: '/dashboard/salidas-nc'
-	},
-	{
-		id: 'viaticos',
-		label: 'Viáticos',
-		/// Anticipos a conductores y los gastos con que los legalizan.
-		icon: Receipt,
-		badge: null,
-		href: '/dashboard/viaticos'
-	},
-	{
-		id: 'combustible',
-		label: 'Combustible',
-		/// Tanqueos y rendimiento en km por galón de la flota.
-		icon: Fuel,
-		badge: null,
-		href: '/dashboard/combustible'
+		href: '/dashboard/sarlaft'
 	},
 	{
 		id: 'formularios',
@@ -218,29 +216,54 @@ export const MENU_ITEMS: MenuItem[] = [
 		href: '/dashboard/mis-formularios'
 	},
 	{
-		id: 'nomina',
-		label: 'Nómina',
-		icon: Wallet,
+		id: 'viaticos',
+		label: 'Viáticos',
+		/// Anticipos a conductores y los gastos con que los legalizan.
+		icon: Receipt,
 		badge: null,
-		/// El módulo ya no tiene listado: su puerta es el canvas.
-		href: '/dashboard/nomina/canvas'
+		href: '/dashboard/viaticos'
 	},
 	{
-		id: 'extractos',
-		label: 'Extractos',
-		icon: FileText,
+		id: 'mantenimiento',
+		label: 'Mantenimiento',
+		/// La caja de herramientas del taller. La llave inglesa ya es de
+		/// «Acciones C/P», y las dos se confundían a este tamaño.
+		icon: ToolCase,
 		badge: null,
-		href: '/dashboard/extractos'
+		href: '/dashboard/mantenimiento'
 	},
 	{
-		id: 'liquidaciones-servicios',
-		label: 'Liq. Servicios',
-		icon: ReceiptText,
+		id: 'acciones-correctivas',
+		label: 'Acciones C/P',
+		/// Antes compartía escudo con PESV y los dos se leían como «seguridad».
+		/// Una acción correctiva es una reparación: la llave inglesa lo separa.
+		icon: Wrench,
 		badge: null,
-		/// Entra directo al canvas de historial, igual que «Liq. Terceros»: el
-		/// listado de `/dashboard/liquidaciones-servicios` es la capa pre-Univer
-		/// y sigue accesible por url, pero ya no es la puerta del módulo.
-		href: '/dashboard/liquidaciones-servicios'
+		href: '/dashboard/acciones-correctivas'
+	},
+	{
+		id: 'salidas-nc',
+		label: 'Salidas NC',
+		icon: TriangleAlert,
+		badge: null,
+		href: '/dashboard/salidas-nc'
+	},
+	{
+		id: 'incidentes',
+		label: 'Incidentes',
+		/// Accidentes, incidentes y casi-accidentes con su investigación. La
+		/// sirena y no el triángulo de alerta, que ya es de «Salidas NC».
+		icon: Siren,
+		badge: null,
+		href: '/dashboard/incidentes'
+	},
+	{
+		id: 'combustible',
+		label: 'Combustible',
+		/// Tanqueos y rendimiento en km por galón de la flota.
+		icon: Fuel,
+		badge: null,
+		href: '/dashboard/combustible'
 	},
 	{
 		id: 'cartera',
@@ -252,34 +275,11 @@ export const MENU_ITEMS: MenuItem[] = [
 		href: '/dashboard/cartera'
 	},
 	{
-		id: 'liquidaciones-terceros',
-		label: 'Liq. Terceros',
-		/// «Liq. Servicios» y «Liq. Terceros» llevaban el mismo recibo, así que
-		/// colapsado el menú eran indistinguibles. Terceros es el pago que sale
-		/// hacia afuera; de ahí las monedas en la mano.
-		icon: HandCoins,
-		badge: null,
-		href: '/dashboard/liquidaciones-terceros'
-	},
-	// «Liq. Terceros — Adicionales» se eliminó del menú: el canvas de
-	// adicionales se abre desde el selector «Ir a…» del toolbar del canvas
-	// de cierres, que es a donde /dashboard/liquidaciones-terceros redirige.
-	// OJO: el moduleId `liquidaciones-terceros-adicionales` SIGUE existiendo en
-	// `config/permissions.ts` porque el `+layout@.svelte` del canvas se lo pasa
-	// a `UniverAuthGuard`, y `checkAccess` deniega todo moduleId desconocido.
-	{
 		id: 'certificados',
 		label: 'Certificados',
 		icon: Calculator,
 		badge: null,
 		href: '/dashboard/certificados'
-	},
-	{
-		id: 'terceros',
-		label: 'Terceros',
-		icon: BookUser,
-		badge: null,
-		href: '/dashboard/terceros'
 	},
 	{
 		id: 'usuarios',

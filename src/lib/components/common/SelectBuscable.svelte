@@ -14,6 +14,7 @@
 		valor: string | null;
 		placeholder?: string;
 		placeholderBusqueda?: string;
+		ariaLabel?: string;
 		deshabilitado?: boolean;
 		onSeleccionar: (valor: string | null) => void;
 	};
@@ -23,6 +24,7 @@
 		valor,
 		placeholder = 'Seleccionar…',
 		placeholderBusqueda = 'Buscar…',
+		ariaLabel,
 		deshabilitado = false,
 		onSeleccionar
 	}: Props = $props();
@@ -118,6 +120,7 @@
 		}}
 		onkeydown={handleKeydown}
 		role="combobox"
+		aria-label={ariaLabel}
 		aria-expanded={abierto}
 		aria-controls={dropdownId}
 		aria-haspopup="listbox"

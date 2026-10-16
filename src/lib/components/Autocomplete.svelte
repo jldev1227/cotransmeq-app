@@ -9,6 +9,9 @@
   export let options: AutocompleteOption[] = [];
   export let placeholder: string = '🔍 Buscar...';
   export let disabled: boolean = false;
+  export let maxLength: number | undefined = undefined;
+  /** Conserva lo escrito aunque no exista en el catálogo, para campos sugeridos pero editables. */
+  export let allowCustomValue: boolean = false;
   /**
    * Tope de opciones dibujadas. `0` = sin tope, que es el valor por defecto.
    *
@@ -39,6 +42,7 @@
   let highlighted: number = 0;
   let inputEl: HTMLInputElement;
   let dropdownEl: HTMLDivElement;
+  const dropdownId = `autocomplete-${Math.random().toString(36).slice(2, 9)}`;
 
   // Clave: distingue "el usuario está escribiendo" de "el padre cambió `value`"
   let isTyping: boolean = false;
@@ -99,7 +103,7 @@
   // (es decir, el usuario no está escribiendo y el valor es distinto al último que ya sincronizamos)
   $: if (!isTyping && value !== lastSyncedValue) {
     const match = options.find(o => o.id === value);
-    query = match ? match.label : '';
+    query = match ? match.label : allowCustomValue ? value : '';
     lastSyncedValue = value;
   }
 
@@ -115,11 +119,15 @@
     if (value) {
       const match = options.find(o => o.id === value);
       if (!match || match.label !== query) {
-        value = '';
-        lastSyncedValue = '';
+        value = allowCustomValue ? query : '';
+        lastSyncedValue = value;
         dispatch('change', query);
       }
     } else {
+      if (allowCustomValue) {
+        value = query;
+        lastSyncedValue = query;
+      }
       dispatch('change', query);
     }
   }
@@ -238,7 +246,7 @@
       // Si al perder foco hay un valor seleccionado, restaurar el label
       if (value) {
         const match = options.find(o => o.id === value);
-        query = match ? match.label : '';
+        query = match ? match.label : allowCustomValue ? value : '';
         lastSyncedValue = value;
       } else {
         // Si no hay selección, vaciar el input
@@ -267,6 +275,7 @@
       e.preventDefault();
       const sel = filtered[highlighted];
       if (sel) setSelected(sel);
+      else if (allowCustomValue && query.trim()) open = false;
     } else if (e.key === 'Escape') {
       open = false;
     }
@@ -313,6 +322,7 @@
       aria-label={ariaLabel || undefined}
       {placeholder}
       {disabled}
+      maxlength={maxLength}
       value={query}
       on:input={handleInput}
       on:focus={handleFocus}
@@ -323,6 +333,7 @@
       autocomplete="off"
       role="combobox"
       aria-expanded={open}
+      aria-controls={dropdownId}
       aria-autocomplete="list"
     />
     {#if value}
@@ -338,6 +349,7 @@
   {#if open && filtered.length > 0}
     <div
       bind:this={dropdownEl}
+      id={dropdownId}
       class="autocomplete-dropdown placement-{dropdownPlacement}"
       style={dropdownStyle}
       role="listbox"
@@ -373,10 +385,17 @@
   {:else if open && q && filtered.length === 0}
     <div
       bind:this={dropdownEl}
+      id={dropdownId}
       class="autocomplete-dropdown placement-{dropdownPlacement}"
       style={dropdownStyle}
     >
-      <div class="autocomplete-empty">Sin resultados para "{query}"</div>
+      <div class="autocomplete-empty">
+        {#if allowCustomValue}
+          Sin coincidencias. Se conservará el texto escrito.
+        {:else}
+          Sin resultados para "{query}"
+        {/if}
+      </div>
     </div>
   {/if}
 </div>

@@ -24,11 +24,11 @@
 		CheckCheck,
 		Download,
 		Eye,
-		Link2,
 		Pencil,
 		Plus,
 		Power,
 		PowerOff,
+		QrCode,
 		Trash2
 	} from 'lucide-svelte';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
@@ -41,6 +41,7 @@
 	import PaginadorLista from '$lib/components/listing/PaginadorLista.svelte';
 	import BarraSeleccion from '$lib/components/listing/BarraSeleccion.svelte';
 	import ModalFormularioAsistencia from '$lib/components/asistencias/ModalFormularioAsistencia.svelte';
+	import ModalCompartirQR from '$lib/components/common/ModalCompartirQR.svelte';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
 	import { numero, opcion, texto, valoresPorDefecto, type DefinicionesFiltros } from '$lib/listing/filtros';
 	import { confirmarEliminacion } from '$lib/stores/confirm';
@@ -360,6 +361,7 @@
 	// ── Acciones por fila ────────────────────────────────────────────────
 	let modalAbierto = $state(false);
 	let formularioEnEdicion = $state<FormularioAsistencia | null>(null);
+	let qrCompartir = $state<{ titulo: string; url: string } | null>(null);
 
 	function abrirNuevo() {
 		formularioEnEdicion = null;
@@ -372,13 +374,11 @@
 	function verRespuestas(f: FormularioAsistencia) {
 		goto(`/dashboard/asistencias/${f.id}/respuestas`);
 	}
-	async function copiarEnlace(f: FormularioAsistencia) {
-		try {
-			await navigator.clipboard.writeText(asistenciasAPI.generarUrlPublica(f.token));
-			toast.success('Enlace para firmar copiado');
-		} catch {
-			toast.error('No se pudo copiar el enlace');
-		}
+	function abrirQR(f: FormularioAsistencia) {
+		qrCompartir = {
+			titulo: 'Asistencia · ' + f.tematica,
+			url: asistenciasAPI.generarUrlPublica(f.token)
+		};
 	}
 	async function alternarActivo(f: FormularioAsistencia) {
 		try {
@@ -580,7 +580,7 @@
 							visibles={2}
 							acciones={[
 								{ id: 'ver', etiqueta: 'Ver firmas', icono: Eye, onClick: () => verRespuestas(f) },
-								{ id: 'enlace', etiqueta: 'Copiar enlace para firmar', icono: Link2, onClick: () => copiarEnlace(f) },
+								{ id: 'qr', etiqueta: 'Compartir QR para firmar', icono: QrCode, onClick: () => abrirQR(f) },
 								{ id: 'editar', etiqueta: 'Editar', icono: Pencil, onClick: () => abrirEdicion(f) },
 								{
 									id: 'activo',
@@ -684,6 +684,14 @@
 	formulario={formularioEnEdicion}
 	oncerrar={() => (modalAbierto = false)}
 	onguardado={recargar}
+/>
+
+<ModalCompartirQR
+	open={qrCompartir !== null}
+	titulo={qrCompartir?.titulo ?? ''}
+	url={qrCompartir?.url ?? ''}
+	selloSrc="/assets/sello-firma-terceros.webp"
+	oncerrar={() => (qrCompartir = null)}
 />
 
 <style>

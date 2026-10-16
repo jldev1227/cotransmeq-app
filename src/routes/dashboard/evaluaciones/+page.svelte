@@ -20,9 +20,10 @@
 	import EstadoPunto from '$lib/components/listing/EstadoPunto.svelte';
 	import PastillaTipo from '$lib/components/evaluaciones/PastillaTipo.svelte';
 	import ModalConfirmar from '$lib/components/evaluaciones/ModalConfirmar.svelte';
+	import ModalCompartirQR from '$lib/components/common/ModalCompartirQR.svelte';
 	import { pluralPreguntas, pluralPuntos } from '$lib/components/evaluaciones/tipos';
 	import { mascota } from '$lib/mascot';
-	import { Eye, Pencil, Trash2 } from 'lucide-svelte';
+	import { Eye, Pencil, QrCode, Trash2 } from 'lucide-svelte';
 	import { crearEstadoUrl } from '$lib/listing/urlState';
 	import { numero, opcion, texto, type DefinicionesFiltros } from '$lib/listing/filtros';
 
@@ -107,6 +108,7 @@
 	/** Evaluación pendiente de confirmar su borrado; `null` cierra el modal. */
 	let aEliminar = $state<{ id: string; titulo: string } | null>(null);
 	let eliminando = $state(false);
+	let qrCompartir = $state<{ titulo: string; url: string } | null>(null);
 
 	$effect(() => {
 		estadoUrl.escribir(page.url, filtros);
@@ -174,6 +176,13 @@
 
 	function navigateToDetalle(id: string) {
 		goto(`/dashboard/evaluaciones/${id}`);
+	}
+
+	function abrirQR(evaluacion: Evaluacion) {
+		qrCompartir = {
+			titulo: evaluacion.titulo,
+			url: new URL(`/evaluaciones/${evaluacion.id}`, window.location.origin).toString()
+		};
 	}
 
 	function pedirEliminar(id: string, titulo: string) {
@@ -338,6 +347,12 @@
 										onClick: () => navigateToDetalle(fila.id)
 									},
 									{
+										id: 'qr',
+										etiqueta: 'Compartir QR de la evaluación',
+										icono: QrCode,
+										onClick: () => abrirQR(fila)
+									},
+									{
 										id: 'editar',
 										etiqueta: 'Editar',
 										icono: Pencil,
@@ -401,6 +416,14 @@
 		onCancelar={() => (aEliminar = null)}
 	/>
 {/if}
+
+<ModalCompartirQR
+	open={qrCompartir !== null}
+	titulo={qrCompartir?.titulo ?? ''}
+	url={qrCompartir?.url ?? ''}
+	selloSrc="/assets/sello-firma-terceros.webp"
+	oncerrar={() => (qrCompartir = null)}
+/>
 
 <style>
 	.eval-identidad {

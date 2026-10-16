@@ -33,6 +33,11 @@ export function ordenAlfabetico(c: { apellido: string; nombre: string }): string
 	return `${c.apellido} ${c.nombre}`.trim();
 }
 
+/** Clave de presentación del canvas: nombre y luego apellido, de A a Z. */
+export function ordenNombreApellido(c: { nombre: string; apellido: string }): string {
+	return `${c.nombre} ${c.apellido}`.trim();
+}
+
 /**
  * Posición en la que insertar una hoja nueva para mantener el orden.
  *

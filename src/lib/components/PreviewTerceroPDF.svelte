@@ -3,7 +3,7 @@
 	import { goto } from '$app/navigation';
 	import type { ConceptoDescuento } from '$lib/api/liquidaciones-terceros-descuentos';
 	import { toast } from '$lib/stores/toast';
-	import firmaCamiloUrl from '$lib/assets/Firma Camilo Cepeda.jpg';
+	import sello from '$lib/assets/sello-firma-terceros.webp';
 
 	export let item: any;
 
@@ -194,10 +194,10 @@
 		}
 	}
 
-	async function getFirmaBase64(path: string): Promise<string> {
+	async function getSelloBase64(path: string): Promise<string> {
 		try {
 			const res = await fetch(path);
-			if (!res.ok) throw new Error(`firma fetch failed: ${path}`);
+			if (!res.ok) throw new Error(`sello fetch failed: ${path}`);
 			const blob = await res.blob();
 			return await new Promise<string>((resolve, reject) => {
 				const reader = new FileReader();
@@ -206,7 +206,7 @@
 				reader.readAsDataURL(blob);
 			});
 		} catch (e) {
-			console.warn(`No se pudo cargar la firma (${path}), continuando sin ella:`, e);
+			console.warn(`No se pudo cargar el sello (${path}), continuando sin él:`, e);
 			return '';
 		}
 	}
@@ -245,7 +245,7 @@
 		const title = `Liquidacion ${item?.consecutivo || ''} ${item?.placa || ''}`.trim();
 
 		const logoDataUrl = await getLogoBase64();
-		const firmaCamiloDataUrl = await getFirmaBase64(firmaCamiloUrl);
+		const selloDataUrl = await getSelloBase64(sello);
 
 		const clone = pageEl.cloneNode(true) as HTMLElement;
 		clone.querySelectorAll('img[src*="/assets/logo_nombre.webp"]').forEach((img) => {
@@ -253,11 +253,11 @@
 				(img as HTMLImageElement).src = logoDataUrl;
 			}
 		});
-		clone.querySelectorAll('img[data-firma="camilo"]').forEach((img) => {
-			if (firmaCamiloDataUrl) {
-				(img as HTMLImageElement).src = firmaCamiloDataUrl;
+		clone.querySelectorAll('img[data-rol="sello"]').forEach((img) => {
+			if (selloDataUrl) {
+				(img as HTMLImageElement).src = selloDataUrl;
 			} else {
-				// Si no se carga la firma, ocultamos la imagen para que no quede roto
+				// Si no se carga el sello, ocultamos la imagen para que no quede roto.
 				(img as HTMLImageElement).style.display = 'none';
 			}
 		});
@@ -1269,9 +1269,9 @@
 						{#if item.estado && item.estado !== 'BORRADOR'}
 							<img
 								class="sig-img"
-								data-firma="camilo"
-								src={firmaCamiloUrl}
-								alt="Firma Camilo Cepeda"
+							data-rol="sello"
+							src={sello}
+							alt="Sello de Servicios y Transportes Cotransmeq S.A.S."
 							/>
 						{/if}
 						<div class="sig-line">&nbsp;</div>

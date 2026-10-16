@@ -1351,11 +1351,14 @@
 	}
 
 	// ─── CLIENTE SEARCHABLE SELECT ──────────────────────────────
-	$: clientesFiltrados = clientes.filter((c) => {
-		if (!clienteSearch) return true;
-		const q = clienteSearch.toLowerCase();
-		return c.nombre.toLowerCase().includes(q) || (c.nit || '').toLowerCase().includes(q);
-	});
+	const compararNombreCliente = new Intl.Collator('es', { sensitivity: 'base', numeric: true });
+	$: clientesFiltrados = clientes
+		.filter((c) => {
+			if (!clienteSearch) return true;
+			const q = clienteSearch.toLowerCase();
+			return c.nombre.toLowerCase().includes(q) || (c.nit || '').toLowerCase().includes(q);
+		})
+		.sort((a, b) => compararNombreCliente.compare(a.nombre, b.nombre));
 	$: (clienteSearch, (clienteHighlight = 0));
 
 	function selectCliente(c: ClienteBasico) {

@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/stores';
 	import { fade, fly } from 'svelte/transition';
+	import { quintOut } from 'svelte/easing';
 	import { toast } from 'svelte-sonner';
 	import {
 		asistenciasAPI,
@@ -196,13 +197,13 @@
 	<title>{formulario?.tematica || 'Formulario de Asistencia'} - Cotransmeq</title>
 </svelte:head>
 
-<div class="min-h-screen bg-gradient-to-br from-gray-50 to-orange-50/30 p-4 py-12">
+<div class="min-h-screen bg-[#F5F7F6] p-4 py-8 font-sans text-[#1A1A1A] antialiased sm:px-6 sm:py-10">
 	{#if isLoading}
 		<!-- Loading -->
 		<div class="flex items-center justify-center py-20">
 			<div class="text-center">
 				<svg
-					class="mx-auto h-12 w-12 animate-spin text-orange-600"
+					class="mx-auto h-10 w-10 animate-spin text-[#166534]"
 					fill="none"
 					viewBox="0 0 24 24"
 				>
@@ -212,7 +213,7 @@
 						cy="12"
 						r="10"
 						stroke="currentColor"
-						stroke-width="4"
+						stroke-width="3"
 					/>
 					<path
 						class="opacity-75"
@@ -220,100 +221,106 @@
 						d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
 					/>
 				</svg>
-				<p class="mt-4 text-gray-600">Cargando formulario...</p>
+				<p class="mt-4 font-mono text-sm text-[#6B6B6B]">Cargando formulario…</p>
 			</div>
 		</div>
 	{:else if !formulario}
 		<!-- Error -->
 		<div class="mx-auto max-w-2xl" in:fade={{ duration: 300 }}>
-			<div
-				class="glass soft-shadow rounded-2xl border border-gray-200/50 bg-white p-12 text-center"
-			>
-				<svg
-					class="mx-auto h-16 w-16 text-red-500"
-					fill="none"
-					stroke="currentColor"
-					viewBox="0 0 24 24"
+			<div class="soft-shadow rounded-3xl border border-black/8 bg-white p-12 text-center">
+				<div
+					class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[rgba(239,68,68,0.06)]"
 				>
-					<path
-						stroke-linecap="round"
-						stroke-linejoin="round"
-						stroke-width="2"
-						d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-					/>
-				</svg>
-				<h2 class="mt-4 text-2xl font-bold text-gray-900">Formulario no encontrado</h2>
-				<p class="mt-2 text-gray-600">
+					<svg
+						class="h-8 w-8 text-red-600"
+						fill="none"
+						stroke="currentColor"
+						viewBox="0 0 24 24"
+						stroke-width="1.8"
+					>
+						<path
+							stroke-linecap="round"
+							stroke-linejoin="round"
+							d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+						/>
+					</svg>
+				</div>
+				<h2 class="mt-5 font-display text-2xl font-medium text-[#0F1F1A]">
+					Formulario no encontrado
+				</h2>
+				<p class="mt-2 text-sm text-[#6B6B6B]">
 					El enlace puede estar incorrecto o el formulario ya no está disponible.
 				</p>
 			</div>
 		</div>
 	{:else}
 		<!-- Formulario -->
-		<div in:fade={{ duration: 600 }}>
-			<!-- Header con título -->
-			<div class="mb-6 text-center">
-				<div class="mb-4 flex justify-center">
-					<div
-						class="soft-shadow flex h-16 w-16 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-500 to-orange-600"
-					>
-						<svg class="h-8 w-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								stroke-width="2"
-								d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-							/>
-						</svg>
-					</div>
-				</div>
-				<h1 class="text-3xl font-bold text-gray-900">{formulario.tematica}</h1>
-			</div>
-
+		<div class="mx-auto w-full max-w-5xl" in:fly={{ y: 20, duration: 500, easing: quintOut }}>
 			<!-- Grid: Información + Formulario -->
-			<div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
-				<!-- COLUMNA IZQUIERDA: Información del Evento -->
-				<div
-					class="rounded-xl border border-gray-200 bg-gradient-to-br from-gray-50 to-gray-100/50 p-6"
-				>
-					<h2 class="mb-4 flex items-center gap-2 text-lg font-bold text-gray-900">
+			<div class="grid grid-cols-1 gap-5 lg:grid-cols-5">
+				<!-- COLUMNA IZQUIERDA: Información del Evento (2/5) -->
+				<aside class="soft-shadow rounded-3xl border border-black/8 bg-white p-5 sm:p-6 lg:col-span-2">
+					<header class="mb-4 border-b border-black/8 pb-4">
+						<div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+							<img
+								src="/assets/logo_nombre.webp"
+								alt="Cotransmeq"
+								class="h-9 w-auto shrink-0"
+								loading="eager"
+								decoding="async"
+							/>
+							<span class="eyebrow shrink-0">Registro de Asistencia</span>
+						</div>
+						<h1
+							class="break-words font-display text-lg font-medium leading-snug tracking-tight text-[#0F1F1A] sm:text-xl"
+						>
+							{formulario.tematica}
+						</h1>
+					</header>
+					<h2 class="mb-5 flex items-center gap-2 font-display text-lg font-medium text-[#0F1F1A]">
 						<svg
-							class="h-5 w-5 text-orange-600"
+							class="h-5 w-5 text-[#166534]"
 							fill="none"
 							stroke="currentColor"
 							viewBox="0 0 24 24"
+							stroke-width="1.8"
 						>
 							<path
 								stroke-linecap="round"
 								stroke-linejoin="round"
-								stroke-width="2"
 								d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
 							/>
 						</svg>
 						Información del Evento
 					</h2>
-					<div class="grid grid-cols-1 gap-4 text-left">
+					<dl class="space-y-4">
 						<!-- Tipo de Evento -->
 						{#if formulario.tipo_evento}
 							<div class="flex items-start gap-3">
-								<div class="flex-shrink-0 rounded-lg bg-purple-100 p-2">
+								<div
+									class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f0fdf4] text-[#166534]"
+								>
 									<svg
-										class="h-5 w-5 text-purple-600"
+										class="h-4 w-4"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
+										stroke-width="1.8"
 									>
 										<path
 											stroke-linecap="round"
 											stroke-linejoin="round"
-											stroke-width="2"
 											d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
 										/>
 									</svg>
 								</div>
-								<div>
-									<p class="text-xs font-medium text-gray-500 uppercase">Tipo de Evento</p>
-									<p class="text-sm font-semibold text-gray-900">
+								<div class="min-w-0 flex-1">
+									<dt
+										class="font-mono text-[0.65rem] font-bold tracking-wider text-[#6B6B6B] uppercase"
+									>
+										Tipo de Evento
+									</dt>
+									<dd class="mt-0.5 text-sm font-semibold text-[#1A1A1A]">
 										{#if formulario.tipo_evento === 'capacitacion'}Capacitación
 										{:else if formulario.tipo_evento === 'asesoria'}Asesoría
 										{:else if formulario.tipo_evento === 'charla'}Charla
@@ -324,57 +331,71 @@
 												'Otro'}
 										{:else}Capacitación
 										{/if}
-									</p>
+									</dd>
 								</div>
 							</div>
 						{/if}
 
 						<!-- Fecha -->
 						<div class="flex items-start gap-3">
-							<div class="flex-shrink-0 rounded-lg bg-blue-100 p-2">
+							<div
+								class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f0fdf4] text-[#166534]"
+							>
 								<svg
-									class="h-5 w-5 text-blue-600"
+									class="h-4 w-4"
 									fill="none"
 									stroke="currentColor"
 									viewBox="0 0 24 24"
+									stroke-width="1.8"
 								>
 									<path
 										stroke-linecap="round"
 										stroke-linejoin="round"
-										stroke-width="2"
 										d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
 									/>
 								</svg>
 							</div>
-							<div>
-								<p class="text-xs font-medium text-gray-500 uppercase">Fecha</p>
-								<p class="text-sm font-semibold text-gray-900">{formatFecha(formulario.fecha)}</p>
+							<div class="min-w-0 flex-1">
+								<dt
+									class="font-mono text-[0.65rem] font-bold tracking-wider text-[#6B6B6B] uppercase"
+								>
+									Fecha
+								</dt>
+								<dd class="mt-0.5 text-sm font-semibold text-[#1A1A1A]">
+									{formatFecha(formulario.fecha)}
+								</dd>
 							</div>
 						</div>
 
 						<!-- Horario -->
 						{#if formulario.hora_inicio || formulario.hora_finalizacion}
 							<div class="flex items-start gap-3">
-								<div class="flex-shrink-0 rounded-lg bg-amber-100 p-2">
+								<div
+									class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f0fdf4] text-[#166534]"
+								>
 									<svg
-										class="h-5 w-5 text-amber-600"
+										class="h-4 w-4"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
+										stroke-width="1.8"
 									>
 										<path
 											stroke-linecap="round"
 											stroke-linejoin="round"
-											stroke-width="2"
 											d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
 										/>
 									</svg>
 								</div>
-								<div>
-									<p class="text-xs font-medium text-gray-500 uppercase">Horario</p>
-									<p class="text-sm font-semibold text-gray-900">
-										{formulario.hora_inicio || '--:--'} - {formulario.hora_finalizacion || '--:--'}
-									</p>
+								<div class="min-w-0 flex-1">
+									<dt
+										class="font-mono text-[0.65rem] font-bold tracking-wider text-[#6B6B6B] uppercase"
+									>
+										Horario
+									</dt>
+									<dd class="mt-0.5 font-mono text-sm font-semibold text-[#1A1A1A]">
+										{formulario.hora_inicio || '--:--'} – {formulario.hora_finalizacion || '--:--'}
+									</dd>
 								</div>
 							</div>
 						{/if}
@@ -382,31 +403,37 @@
 						<!-- Duración -->
 						{#if formulario.duracion_minutos}
 							<div class="flex items-start gap-3">
-								<div class="flex-shrink-0 rounded-lg bg-indigo-100 p-2">
+								<div
+									class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f0fdf4] text-[#166534]"
+								>
 									<svg
-										class="h-5 w-5 text-indigo-600"
+										class="h-4 w-4"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
+										stroke-width="1.8"
 									>
 										<path
 											stroke-linecap="round"
 											stroke-linejoin="round"
-											stroke-width="2"
 											d="M13 10V3L4 14h7v7l9-11h-7z"
 										/>
 									</svg>
 								</div>
-								<div>
-									<p class="text-xs font-medium text-gray-500 uppercase">Duración</p>
-									<p class="text-sm font-semibold text-gray-900">
+								<div class="min-w-0 flex-1">
+									<dt
+										class="font-mono text-[0.65rem] font-bold tracking-wider text-[#6B6B6B] uppercase"
+									>
+										Duración
+									</dt>
+									<dd class="mt-0.5 text-sm font-semibold text-[#1A1A1A]">
 										{#if formulario.duracion_minutos >= 60}
 											{Math.floor(formulario.duracion_minutos / 60)}h {formulario.duracion_minutos %
 												60}m
 										{:else}
 											{formulario.duracion_minutos}m
 										{/if}
-									</p>
+									</dd>
 								</div>
 							</div>
 						{/if}
@@ -414,30 +441,37 @@
 						<!-- Lugar -->
 						{#if formulario.lugar_sede}
 							<div class="flex items-start gap-3">
-								<div class="flex-shrink-0 rounded-lg bg-orange-100 p-2">
+								<div
+									class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f0fdf4] text-[#166534]"
+								>
 									<svg
-										class="h-5 w-5 text-orange-600"
+										class="h-4 w-4"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
+										stroke-width="1.8"
 									>
 										<path
 											stroke-linecap="round"
 											stroke-linejoin="round"
-											stroke-width="2"
 											d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
 										/>
 										<path
 											stroke-linecap="round"
 											stroke-linejoin="round"
-											stroke-width="2"
 											d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
 										/>
 									</svg>
 								</div>
-								<div>
-									<p class="text-xs font-medium text-gray-500 uppercase">Lugar / Sede</p>
-									<p class="text-sm font-semibold text-gray-900">{formulario.lugar_sede}</p>
+								<div class="min-w-0 flex-1">
+									<dt
+										class="font-mono text-[0.65rem] font-bold tracking-wider text-[#6B6B6B] uppercase"
+									>
+										Lugar / Sede
+									</dt>
+									<dd class="mt-0.5 text-sm font-semibold text-[#1A1A1A]">
+										{formulario.lugar_sede}
+									</dd>
 								</div>
 							</div>
 						{/if}
@@ -445,82 +479,101 @@
 						<!-- Instructor -->
 						{#if formulario.nombre_instructor}
 							<div class="flex items-start gap-3">
-								<div class="flex-shrink-0 rounded-lg bg-rose-100 p-2">
+								<div
+									class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f0fdf4] text-[#166534]"
+								>
 									<svg
-										class="h-5 w-5 text-rose-600"
+										class="h-4 w-4"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
+										stroke-width="1.8"
 									>
 										<path
 											stroke-linecap="round"
 											stroke-linejoin="round"
-											stroke-width="2"
 											d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
 										/>
 									</svg>
 								</div>
-								<div>
-									<p class="text-xs font-medium text-gray-500 uppercase">Instructor</p>
-									<p class="text-sm font-semibold text-gray-900">{formulario.nombre_instructor}</p>
+								<div class="min-w-0 flex-1">
+									<dt
+										class="font-mono text-[0.65rem] font-bold tracking-wider text-[#6B6B6B] uppercase"
+									>
+										Instructor
+									</dt>
+									<dd class="mt-0.5 text-sm font-semibold text-[#1A1A1A]">
+										{formulario.nombre_instructor}
+									</dd>
 								</div>
 							</div>
 						{/if}
-					</div>
+					</dl>
 
 					<!-- Objetivo -->
 					{#if formulario.objetivo}
-						<div class="mt-4 border-t border-gray-200 pt-4">
-							<p class="mb-2 text-xs font-medium text-gray-500 uppercase">Objetivo del Evento</p>
-							<p class="text-sm leading-relaxed text-gray-700">{formulario.objetivo}</p>
+						<div class="mt-5 border-t border-black/8 pt-5">
+							<p
+								class="mb-2 font-mono text-[0.65rem] font-bold tracking-wider text-[#6B6B6B] uppercase"
+							>
+								Objetivo del Evento
+							</p>
+							<p class="text-sm leading-relaxed text-[#4A4A4A]">{formulario.objetivo}</p>
 						</div>
 					{/if}
-				</div>
+				</aside>
 
-				<!-- COLUMNA DERECHA: Formulario o Estado "Ya Respondió" -->
-				<div>
+				<!-- COLUMNA DERECHA: Formulario o Estado "Ya Respondió" (3/5) -->
+				<div class="lg:col-span-3">
 					{#if yaRespondio && confirmacion}
-						<!-- Ya respondió - Mensaje amigable -->
+						<!-- Ya respondió - Card de confirmación estilo landing -->
 						<div
-							class="glass soft-shadow space-y-6 rounded-2xl border border-gray-200/50 bg-white p-8"
-							in:fly={{ y: 20, duration: 400 }}
+							class="soft-shadow rounded-3xl border border-black/8 bg-white p-5 sm:p-8 lg:p-10"
+							in:fly={{ y: 20, duration: 500, easing: quintOut }}
 						>
-							<!-- Icono de éxito -->
-							<div class="text-center">
-								<div class="mb-4 flex justify-center">
-									<div class="relative">
-										<div
-											class="absolute inset-0 animate-ping rounded-full bg-orange-400 opacity-20"
-										></div>
-										<div class="relative rounded-full bg-orange-100 p-6">
-											<svg class="h-16 w-16 text-orange-600" fill="none" viewBox="0 0 24 24">
-												<path
-													stroke="currentColor"
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-												/>
-											</svg>
-										</div>
-									</div>
+							<!-- Icono de éxito circular estilo confirm-icon -->
+							<div class="mb-6 flex flex-col items-center text-center">
+								<div
+									class="mb-5 flex h-[72px] w-[72px] items-center justify-center rounded-full"
+									style="background: linear-gradient(135deg, #22c55e, #166534); box-shadow: 0 8px 24px rgba(22, 101, 52, 0.22);"
+								>
+									<svg
+										class="h-9 w-9 text-white"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+										stroke-width="2.2"
+									>
+										<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+									</svg>
 								</div>
-								<h2 class="text-3xl font-bold text-gray-900">¡Gracias por tu participación!</h2>
-								<p class="mt-3 text-lg text-gray-600">
-									Ya has enviado tu respuesta para este formulario
+								<h2
+									class="font-display text-[2rem] font-medium text-[#0F1F1A]"
+									style="line-height: 1.2"
+								>
+									¡Gracias por tu participación!
+								</h2>
+								<p class="mt-3 text-[0.95rem] text-[#4A4A4A]">
+									Ya has enviado tu respuesta para este formulario.
 								</p>
 								<div
-									class="mt-4 inline-flex items-center gap-2 rounded-full bg-orange-50 px-4 py-2 text-sm text-orange-700"
+									class="mt-4 inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[0.78rem] font-semibold text-[#166534]"
+									style="background: rgba(22, 101, 52, 0.08);"
 								>
-									<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<svg
+										class="h-3.5 w-3.5"
+										fill="none"
+										stroke="currentColor"
+										viewBox="0 0 24 24"
+										stroke-width="2"
+									>
 										<path
 											stroke-linecap="round"
 											stroke-linejoin="round"
-											stroke-width="2"
 											d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
 										/>
 									</svg>
-									<span>
+									<span class="font-mono">
 										Enviado el {new Date(confirmacion.fecha ?? '').toLocaleDateString('es-CO', {
 											day: 'numeric',
 											month: 'long',
@@ -532,69 +585,61 @@
 								</div>
 							</div>
 
-							<!-- Divider -->
-							<div class="relative py-4">
-								<div class="absolute inset-0 flex items-center">
-									<div class="w-full border-t border-gray-200"></div>
-								</div>
-								<div class="relative flex justify-center text-sm">
-									<span class="bg-white px-4 text-gray-500">Firma registrada a nombre de</span>
-								</div>
+							<!-- Divider con label -->
+							<div class="relative my-6 flex items-center">
+								<div class="flex-1 border-t border-black/8"></div>
+								<span
+									class="px-3 font-mono text-[0.7rem] font-bold tracking-wider text-[#6B6B6B] uppercase"
+								>
+									Firma registrada a nombre de
+								</span>
+								<div class="flex-1 border-t border-black/8"></div>
 							</div>
 
 							<!-- Solo el nombre: la verificación pública no devuelve más datos -->
-							<div class="space-y-4">
-								<!-- Nombre -->
-								<div
-									class="group rounded-xl bg-gradient-to-br from-gray-50 to-gray-100/50 p-5 transition-all hover:shadow-md"
-								>
-									<div class="flex items-start gap-3">
-										<div class="mt-0.5 rounded-lg bg-white p-2 shadow-sm">
-											<svg
-												class="h-5 w-5 text-gray-600"
-												fill="none"
-												stroke="currentColor"
-												viewBox="0 0 24 24"
-											>
-												<path
-													stroke-linecap="round"
-													stroke-linejoin="round"
-													stroke-width="2"
-													d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-												/>
-											</svg>
-										</div>
-										<div class="flex-1">
-											<p class="text-xs font-medium tracking-wider text-gray-500 uppercase">
-												Nombre Completo
-											</p>
-											<p class="mt-1 text-lg font-semibold text-gray-900">
-												{confirmacion.nombre}
-											</p>
-										</div>
-									</div>
+							<dl
+								class="mb-5 space-y-0 rounded-2xl border border-black/6 p-5"
+								style="background: #F5F7F6;"
+							>
+								<div class="flex flex-col">
+									<dt
+										class="font-mono text-[0.7rem] font-bold tracking-wider text-[#6B6B6B] uppercase"
+									>
+										Nombre Completo
+									</dt>
+									<dd class="mt-1 text-[0.95rem] font-medium text-[#0F1F1A]">
+										{confirmacion.nombre}
+									</dd>
 								</div>
-							</div>
+							</dl>
 
-							<!-- Mensaje informativo -->
-							<div class="mt-6 rounded-xl border border-blue-200 bg-blue-50 p-4">
+							<!-- Mensaje informativo estilo instructivo-hint -->
+							<div
+								class="rounded-2xl p-4"
+								style="background: linear-gradient(135deg, rgba(22, 101, 52, 0.04), rgba(22, 101, 52, 0.08)); border: 1px solid rgba(22, 101, 52, 0.15);"
+							>
 								<div class="flex gap-3">
 									<svg
-										class="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-600"
+										class="mt-0.5 h-5 w-5 shrink-0 text-[#166534]"
 										fill="none"
 										stroke="currentColor"
 										viewBox="0 0 24 24"
+										stroke-width="1.8"
 									>
 										<path
 											stroke-linecap="round"
 											stroke-linejoin="round"
-											stroke-width="2"
 											d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
 										/>
 									</svg>
-									<div class="flex-1">
-										<h4 class="font-semibold text-blue-900">Respuesta registrada exitosamente</h4>
-										<p class="mt-1 text-sm text-blue-700">
+									<div>
+										<span
+											class="mb-1.5 inline-block font-mono text-[0.6rem] font-bold tracking-wider text-[#166534] uppercase"
+											style="background: white; padding: 0.15rem 0.5rem; border-radius: 4px;"
+										>
+											Información
+										</span>
+										<p class="mt-1 text-[0.85rem] leading-relaxed text-[#166534]">
 											Tu información ha sido guardada correctamente. No es necesario volver a enviar
 											el formulario.
 										</p>
@@ -606,12 +651,23 @@
 						<!-- Formulario de entrada -->
 						<form
 							on:submit|preventDefault={handleSubmit}
-							class="glass soft-shadow space-y-6 rounded-2xl border border-gray-200/50 bg-white p-8"
-							in:fly={{ y: 20, duration: 400 }}
+							class="soft-shadow space-y-5 rounded-3xl border border-black/8 bg-white p-5 sm:p-8 lg:p-10"
+							in:fly={{ y: 20, duration: 500, easing: quintOut }}
 						>
+							<!-- Header del formulario -->
+							<div class="mb-2">
+								<span class="eyebrow">Tu Información</span>
+								<h3 class="mt-2 font-display text-xl font-medium text-[#0F1F1A]">
+									Completa el registro
+								</h3>
+							</div>
+
 							<!-- Nombre Completo -->
 							<div>
-								<label for="nombre" class="mb-1 block text-sm font-medium text-gray-700">
+								<label
+									for="nombre"
+									class="mb-1.5 block text-[0.78rem] font-semibold text-[#0F1F1A]"
+								>
 									Nombre Completo <span class="text-red-500">*</span>
 								</label>
 								<input
@@ -619,13 +675,13 @@
 									type="text"
 									bind:value={nombreCompleto}
 									placeholder="Ej: Juan Pérez González"
-									class="input-glow w-full rounded-xl border {errors.nombreCompleto
-										? 'border-red-300'
-										: 'border-gray-200'} px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/50 focus:outline-none"
+									class="input-glow apple-transition w-full rounded-xl border px-3.5 py-2.5 text-sm text-[#0F1F1A] placeholder-[#9A9A9A] focus:outline-none {errors.nombreCompleto
+										? 'border-[rgba(220,38,38,0.4)] bg-[rgba(220,38,38,0.03)]'
+										: 'border-black/12 bg-white'}"
 									disabled={isSubmitting}
 								/>
 								{#if errors.nombreCompleto}
-									<p class="mt-1 text-sm text-red-500" transition:fade={{ duration: 200 }}>
+									<p class="mt-1 text-[0.72rem] text-[#B91C1C]" transition:fade={{ duration: 200 }}>
 										{errors.nombreCompleto}
 									</p>
 								{/if}
@@ -634,7 +690,10 @@
 							<!-- Documento y Teléfono -->
 							<div class="grid grid-cols-1 gap-4 md:grid-cols-2">
 								<div>
-									<label for="documento" class="mb-1 block text-sm font-medium text-gray-700">
+									<label
+										for="documento"
+										class="mb-1.5 block text-[0.78rem] font-semibold text-[#0F1F1A]"
+									>
 										Número de Documento <span class="text-red-500">*</span>
 									</label>
 									<input
@@ -642,20 +701,26 @@
 										type="text"
 										bind:value={numeroDocumento}
 										placeholder="Ej: 1234567890"
-										class="input-glow w-full rounded-xl border {errors.numeroDocumento
-											? 'border-red-300'
-											: 'border-gray-200'} px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/50 focus:outline-none"
+										class="input-glow apple-transition w-full rounded-xl border px-3.5 py-2.5 text-sm text-[#0F1F1A] placeholder-[#9A9A9A] focus:outline-none {errors.numeroDocumento
+											? 'border-[rgba(220,38,38,0.4)] bg-[rgba(220,38,38,0.03)]'
+											: 'border-black/12 bg-white'}"
 										disabled={isSubmitting}
 									/>
 									{#if errors.numeroDocumento}
-										<p class="mt-1 text-sm text-red-500" transition:fade={{ duration: 200 }}>
+										<p
+											class="mt-1 text-[0.72rem] text-[#B91C1C]"
+											transition:fade={{ duration: 200 }}
+										>
 											{errors.numeroDocumento}
 										</p>
 									{/if}
 								</div>
 
 								<div>
-									<label for="telefono" class="mb-1 block text-sm font-medium text-gray-700">
+									<label
+										for="telefono"
+										class="mb-1.5 block text-[0.78rem] font-semibold text-[#0F1F1A]"
+									>
 										Número de Teléfono <span class="text-red-500">*</span>
 									</label>
 									<input
@@ -663,13 +728,16 @@
 										type="tel"
 										bind:value={numeroTelefono}
 										placeholder="Ej: 3001234567"
-										class="input-glow w-full rounded-xl border {errors.numeroTelefono
-											? 'border-red-300'
-											: 'border-gray-200'} px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/50 focus:outline-none"
+										class="input-glow apple-transition w-full rounded-xl border px-3.5 py-2.5 text-sm text-[#0F1F1A] placeholder-[#9A9A9A] focus:outline-none {errors.numeroTelefono
+											? 'border-[rgba(220,38,38,0.4)] bg-[rgba(220,38,38,0.03)]'
+											: 'border-black/12 bg-white'}"
 										disabled={isSubmitting}
 									/>
 									{#if errors.numeroTelefono}
-										<p class="mt-1 text-sm text-red-500" transition:fade={{ duration: 200 }}>
+										<p
+											class="mt-1 text-[0.72rem] text-[#B91C1C]"
+											transition:fade={{ duration: 200 }}
+										>
 											{errors.numeroTelefono}
 										</p>
 									{/if}
@@ -678,21 +746,21 @@
 
 							<!-- Cargo -->
 							<div>
-								<label for="cargo" class="mb-1 block text-sm font-medium text-gray-700">
+								<label for="cargo" class="mb-1.5 block text-[0.78rem] font-semibold text-[#0F1F1A]">
 									Cargo <span class="text-red-500">*</span>
 								</label>
 								<input
 									id="cargo"
 									type="text"
 									bind:value={cargo}
-									placeholder="Ej: Conductor, Mecánico, Supervisor..."
-									class="input-glow w-full rounded-xl border {errors.cargo
-										? 'border-red-300'
-										: 'border-gray-200'} px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/50 focus:outline-none"
+									placeholder="Ej: Conductor, Mecánico, Supervisor…"
+									class="input-glow apple-transition w-full rounded-xl border px-3.5 py-2.5 text-sm text-[#0F1F1A] placeholder-[#9A9A9A] focus:outline-none {errors.cargo
+										? 'border-[rgba(220,38,38,0.4)] bg-[rgba(220,38,38,0.03)]'
+										: 'border-black/12 bg-white'}"
 									disabled={isSubmitting}
 								/>
 								{#if errors.cargo}
-									<p class="mt-1 text-sm text-red-500" transition:fade={{ duration: 200 }}>
+									<p class="mt-1 text-[0.72rem] text-[#B91C1C]" transition:fade={{ duration: 200 }}>
 										{errors.cargo}
 									</p>
 								{/if}
@@ -700,20 +768,27 @@
 
 							<!-- ¿Pertenece a Comité? -->
 							<fieldset>
-								<legend class="mb-1.5 block text-sm font-medium text-gray-700">
+								<legend class="mb-2 block text-[0.78rem] font-semibold text-[#0F1F1A]">
 									¿Pertenece a algún comité?
-									<span class="font-normal text-gray-400">(opcional)</span>
+									<span class="ml-1 font-normal text-[#9A9A9A]">(opcional)</span>
 								</legend>
-								<div class="grid grid-cols-2 gap-3">
+								<div class="flex gap-2">
 									<button
 										type="button"
 										on:click={() => (perteneceComite = true)}
 										disabled={isSubmitting}
-										class="apple-transition flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium {perteneceComite === true
-											? 'border-orange-500 bg-orange-50 text-orange-700'
-											: 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}"
+										class="apple-transition flex flex-1 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold {perteneceComite ===
+										true
+											? 'border-[#166534] bg-[#f0fdf4] text-[#166534]'
+											: 'border-black/12 bg-white text-[#4A4A4A] hover:border-black/20'}"
 									>
-										<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+										<svg
+											class="h-4 w-4"
+											fill="none"
+											stroke="currentColor"
+											viewBox="0 0 24 24"
+											stroke-width="2"
+										>
 											<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
 										</svg>
 										Sí
@@ -722,12 +797,23 @@
 										type="button"
 										on:click={() => (perteneceComite = false)}
 										disabled={isSubmitting}
-										class="apple-transition flex items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium {perteneceComite === false
-											? 'border-gray-400 bg-gray-100 text-gray-800'
-											: 'border-gray-200 bg-white text-gray-600 hover:border-gray-300'}"
+										class="apple-transition flex flex-1 items-center justify-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-semibold {perteneceComite ===
+										false
+											? 'border-black/30 bg-black/5 text-[#1A1A1A]'
+											: 'border-black/12 bg-white text-[#4A4A4A] hover:border-black/20'}"
 									>
-										<svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
-											<path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+										<svg
+											class="h-4 w-4"
+											fill="none"
+											stroke="currentColor"
+											viewBox="0 0 24 24"
+											stroke-width="2"
+										>
+											<path
+												stroke-linecap="round"
+												stroke-linejoin="round"
+												d="M6 18L18 6M6 6l12 12"
+											/>
 										</svg>
 										No
 									</button>
@@ -737,15 +823,18 @@
 							<!-- Selección de Comité (solo si perteneceComite es true) -->
 							{#if perteneceComite === true}
 								<div transition:fly={{ y: -10, duration: 300 }}>
-									<label for="comite" class="mb-1 block text-sm font-medium text-gray-700">
+									<label
+										for="comite"
+										class="mb-1.5 block text-[0.78rem] font-semibold text-[#0F1F1A]"
+									>
 										Seleccione el comité <span class="text-red-500">*</span>
 									</label>
 									<select
 										id="comite"
 										bind:value={nombreComite}
-										class="input-glow w-full rounded-xl border {errors.nombreComite
-											? 'border-red-300'
-											: 'border-gray-200'} px-3 py-2 focus:border-orange-400 focus:ring-2 focus:ring-orange-400/50 focus:outline-none"
+										class="input-glow apple-transition w-full rounded-xl border px-3.5 py-2.5 text-sm text-[#0F1F1A] focus:outline-none {errors.nombreComite
+											? 'border-[rgba(220,38,38,0.4)] bg-[rgba(220,38,38,0.03)]'
+											: 'border-black/12 bg-white'}"
 										disabled={isSubmitting}
 									>
 										<option value="">-- Seleccione un comité --</option>
@@ -754,7 +843,10 @@
 										{/each}
 									</select>
 									{#if errors.nombreComite}
-										<p class="mt-1 text-sm text-red-500" transition:fade={{ duration: 200 }}>
+										<p
+											class="mt-1 text-[0.72rem] text-[#B91C1C]"
+											transition:fade={{ duration: 200 }}
+										>
 											{errors.nombreComite}
 										</p>
 									{/if}
@@ -764,27 +856,18 @@
 							<!-- Firma -->
 							<SignatureCanvas bind:value={firma} error={errors.firma} disabled={isSubmitting} />
 
-							<!-- Submit Button -->
-							<div class="pt-4">
-								<button
-									type="submit"
-									class="btn-primary apple-transition flex w-full items-center justify-center gap-3 disabled:cursor-not-allowed"
-									disabled={isSubmitting}
-								>
+							<!-- Submit: botón primario global (estilo app) -->
+							<div class="pt-2">
+								<button type="submit" class="btn-primary w-full" disabled={isSubmitting}>
 									{#if isSubmitting}
-										<svg
-											class="h-5 w-5 animate-spin"
-											fill="none"
-											viewBox="0 0 24 24"
-											stroke="currentColor"
-										>
+										<svg class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
 											<circle
 												class="opacity-25"
 												cx="12"
 												cy="12"
 												r="10"
 												stroke="currentColor"
-												stroke-width="4"
+												stroke-width="3"
 											/>
 											<path
 												class="opacity-75"
@@ -792,15 +875,16 @@
 												d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
 											/>
 										</svg>
-										<span>Enviando...</span>
+										<span>Enviando…</span>
 									{:else}
-										<svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path
-												stroke-linecap="round"
-												stroke-linejoin="round"
-												stroke-width="2"
-												d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-											/>
+										<svg
+											class="h-4 w-4"
+											fill="none"
+											stroke="currentColor"
+											viewBox="0 0 24 24"
+											stroke-width="2"
+										>
+											<path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
 										</svg>
 										<span>Enviar Respuesta</span>
 									{/if}
@@ -812,11 +896,11 @@
 			</div>
 
 			<!-- Footer -->
-			<div class="mt-8 text-center">
-				<p class="text-sm text-gray-500">
-					Powered by <span class="font-semibold text-orange-600">Cotransmeq</span>
+			<footer class="mt-10 text-center">
+				<p class="font-mono text-[0.7rem] tracking-wider text-[#9A9A9A] uppercase">
+					Powered by <span class="font-bold text-[#166534]">Cotransmeq</span>
 				</p>
-			</div>
+			</footer>
 		</div>
 	{/if}
 </div>

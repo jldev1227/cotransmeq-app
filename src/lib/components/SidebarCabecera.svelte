@@ -32,6 +32,7 @@
 		flex-shrink: 0;
 		display: flex;
 		align-items: center;
+		justify-content: center;
 		height: 4rem; /* = h-16 de la barra superior */
 		padding: 0 1.25rem;
 		background: linear-gradient(160deg, var(--au-dark-2) 0%, var(--au-dark) 100%);

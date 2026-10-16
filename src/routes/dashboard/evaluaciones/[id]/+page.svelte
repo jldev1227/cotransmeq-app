@@ -17,6 +17,8 @@
 		type TrazoSopa
 	} from '$lib/components/evaluaciones/tipos';
 	import ModalConfirmar from '$lib/components/evaluaciones/ModalConfirmar.svelte';
+	import ModalCompartirQR from '$lib/components/common/ModalCompartirQR.svelte';
+	import { QrCode } from 'lucide-svelte';
 	import {
 		acierto,
 		iniciales,
@@ -119,6 +121,7 @@
 	/** Confirmación de borrado de la evaluación. */
 	let confirmarEliminar = false;
 	let eliminando = false;
+	let qrCompartir: { titulo: string; url: string } | null = null;
 
 	$: evaluacionId = $page.params.id;
 	$: puntajeMaximo = evaluacion ? evaluacion.preguntas.reduce((s, p) => s + p.puntaje, 0) : 0;
@@ -445,6 +448,14 @@
 		toast.success('Enlace copiado al portapapeles');
 	}
 
+	function abrirQR() {
+		if (!evaluacion) return;
+		qrCompartir = {
+			titulo: evaluacion.titulo,
+			url: `${window.location.origin}/evaluaciones/${evaluacionId}`
+		};
+	}
+
 	async function eliminarEvaluacion() {
 		if (!evaluacion) return;
 		eliminando = true;
@@ -673,6 +684,15 @@
 						/>
 					</svg>
 					Copiar enlace
+				</button>
+				<button
+					type="button"
+					class="ev-hero-btn"
+					on:click={abrirQR}
+					title="Compartir QR público"
+				>
+					<QrCode size={16} strokeWidth={2} />
+					Compartir QR
 				</button>
 				<button
 					type="button"
@@ -1451,6 +1471,14 @@
 		onCancelar={() => (confirmarEliminar = false)}
 	/>
 {/if}
+
+<ModalCompartirQR
+	open={qrCompartir !== null}
+	titulo={qrCompartir?.titulo ?? ''}
+	url={qrCompartir?.url ?? ''}
+	selloSrc="/assets/sello-firma-terceros.webp"
+	oncerrar={() => (qrCompartir = null)}
+/>
 
 <style>
 	.ev-detalle-respuesta {

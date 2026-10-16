@@ -25,6 +25,7 @@
 		Link2,
 		Pencil,
 		PenLine,
+		QrCode,
 		Trash2
 	} from 'lucide-svelte';
 	import BuscadorLista from '$lib/components/listing/BuscadorLista.svelte';
@@ -38,6 +39,7 @@
 	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 	import CargaMascota from '$lib/components/ui/CargaMascota.svelte';
 	import ModalFormularioAsistencia from '$lib/components/asistencias/ModalFormularioAsistencia.svelte';
+	import ModalCompartirQR from '$lib/components/common/ModalCompartirQR.svelte';
 	import { confirmarEliminacion } from '$lib/stores/confirm';
 	import { listadoAsistencias } from '$lib/stores/volverListado';
 	import { mascota } from '$lib/mascot';
@@ -60,6 +62,7 @@
 	let formulario = $state<FormularioAsistencia | null>(null);
 	let respuestas = $state<RespuestaAsistencia[]>([]);
 	let cargando = $state(true);
+	let qrCompartir = $state(false);
 
 	/// «Asistencias» vuelve al listado con los filtros y la página con los que
 	/// se salió. Se lee al montar: vive en sessionStorage, que el servidor no tiene.
@@ -321,6 +324,10 @@
 			</div>
 
 			<div class="dir-cabecera-acciones">
+				<button type="button" class="btn-secondary" onclick={() => (qrCompartir = true)}>
+					<QrCode size={16} strokeWidth={2} />
+					Compartir QR
+				</button>
 				<button type="button" class="btn-secondary" onclick={copiarEnlace} title="Enlace público para firmar">
 					<Link2 size={16} strokeWidth={2} />
 					Copiar enlace
@@ -565,6 +572,14 @@
 	{formulario}
 	oncerrar={() => (editando = false)}
 	onguardado={(f) => (formulario = { ...formulario, ...f })}
+/>
+
+<ModalCompartirQR
+	open={qrCompartir}
+	titulo={formulario?.tematica ?? 'Asistencia'}
+	url={formulario ? asistenciasAPI.generarUrlPublica(formulario.token) : ''}
+	selloSrc="/assets/sello-firma-terceros.webp"
+	oncerrar={() => (qrCompartir = false)}
 />
 
 <style>

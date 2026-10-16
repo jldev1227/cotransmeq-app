@@ -20,10 +20,12 @@
 		conteos: Conteo[];
 		/** Clave del conteo cuyo filtro está activo. */
 		activo?: string | null;
+		/** Claves de filtros independientes activos. */
+		activos?: string[];
 		onElegir?: (clave: string) => void;
 	}
 
-	let { conteos, activo = null, onElegir }: Props = $props();
+	let { conteos, activo = null, activos, onElegir }: Props = $props();
 </script>
 
 <div class="conteos" role={onElegir ? 'group' : undefined}>
@@ -32,9 +34,9 @@
 			<button
 				type="button"
 				class="conteo conteo--boton"
-				class:conteo--activo={activo === c.clave}
+				class:conteo--activo={activos ? activos.includes(c.clave) : activo === c.clave}
 				onclick={() => onElegir(c.clave)}
-				aria-pressed={activo === c.clave}
+				aria-pressed={activos ? activos.includes(c.clave) : activo === c.clave}
 			>
 				{#if c.color}<span class="punto" style="background:{c.color}" aria-hidden="true"
 					></span>{/if}

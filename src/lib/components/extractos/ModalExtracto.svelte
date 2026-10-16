@@ -10,6 +10,8 @@
 	 */
 	import { untrack } from 'svelte';
 	import { toast } from 'svelte-sonner';
+	import Autocomplete, { type AutocompleteOption } from '$lib/components/Autocomplete.svelte';
+	import SelectBuscable from '$lib/components/common/SelectBuscable.svelte';
 	import ModalBase from '$lib/components/ui/ModalBase.svelte';
 	import {
 		extractosAPI,
@@ -67,6 +69,39 @@
 	let enviando = $state(false);
 
 	const NUEVO = '__nuevo__';
+	const normalizarBusqueda = (texto: string) =>
+		texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+	const ordenarPorNombre = new Intl.Collator('es', { sensitivity: 'base', numeric: true });
+	function busquedaContratante(c: Contratante) {
+		const texto = `${c.nombre} ${c.nit ?? ''} ${c.numero_contrato ?? ''}`;
+		return `${texto} ${normalizarBusqueda(texto)}`;
+	}
+	const opcionesContratante = $derived([
+		...[...opciones.contratantes]
+			.sort((a, b) => ordenarPorNombre.compare(a.nombre, b.nombre))
+			.map((c) => ({
+				value: c.id,
+				label: c.nombre,
+				labelSecundario: [
+					c.nit ? `NIT ${c.nit}` : null,
+					c.numero_contrato ? `Contrato ${c.numero_contrato}` : null
+				]
+					.filter(Boolean)
+					.join(' · '),
+				searchLabel: busquedaContratante(c)
+			})),
+		{
+			value: NUEVO,
+			label: '+ Nuevo contratante…',
+			searchLabel: 'nuevo contratante crear agregar'
+		}
+	]);
+	const sugerenciasObjeto: AutocompleteOption[] = $derived(
+		opciones.catalogos.OBJETO.map((o) => ({ id: o.texto, label: o.texto }))
+	);
+	const sugerenciasOrigenDestino: AutocompleteOption[] = $derived(
+		opciones.catalogos.ORIGEN_DESTINO.map((o) => ({ id: o.texto, label: o.texto }))
+	);
 
 	$effect(() => {
 		if (!open) return;
@@ -138,8 +173,13 @@
 		respDireccion = c.responsable.direccion ?? '';
 	}
 
-	function elegirContratante(e: Event) {
-		const id = (e.currentTarget as HTMLSelectElement).value;
+	function elegirContratante(id: string | null) {
+		if (!id) {
+			contratanteId = '';
+			contratanteNombre = contratanteNit = contrato = '';
+			respNombre = respCedula = respTelefono = respDireccion = '';
+			return;
+		}
 		if (id === NUEVO) {
 			contratanteId = NUEVO;
 			contratanteNombre = contratanteNit = contrato = '';
@@ -287,18 +327,17 @@
 		<section class="fx-bloque">
 			<h3>Contratante y contrato</h3>
 			<div class="fx-grid">
-				<label class="fx-campo fx-ancho2">
+				<div class="fx-campo fx-ancho2">
 					<span>Contratante <b>*</b></span>
-					<select class="fx-input" value={contratanteId} onchange={elegirContratante}>
-						<option value="">— Elegir —</option>
-						{#each opciones.contratantes as c (c.id)}
-							<option value={c.id}
-								>{c.nombre}{c.numero_contrato ? ` · contrato ${c.numero_contrato}` : ''}</option
-							>
-						{/each}
-						<option value={NUEVO}>+ Nuevo contratante…</option>
-					</select>
-				</label>
+					<SelectBuscable
+						opciones={opcionesContratante}
+						valor={contratanteId || null}
+						ariaLabel="Contratante"
+						placeholder="— Elegir contratante —"
+						placeholderBusqueda="Buscar por nombre, NIT o contrato…"
+						onSeleccionar={elegirContratante}
+					/>
+				</div>
 				{#if contratanteId === NUEVO}
 					<label class="fx-campo fx-ancho2">
 						<span>Nombre del contratante <b>*</b></span>
@@ -325,24 +364,25 @@
 				</label>
 				<label class="fx-campo fx-ancho4">
 					<span>Objeto del contrato <b>*</b></span>
-					<input class="fx-input" bind:value={objeto} list="fx-objetos" maxlength="2000" />
-					<datalist id="fx-objetos">
-						{#each opciones.catalogos.OBJETO as o (o.id)}<option value={o.texto}></option>{/each}
-					</datalist>
+					<Autocomplete
+						bind:value={objeto}
+						options={sugerenciasObjeto}
+						allowCustomValue
+						ariaLabel="Objeto del contrato"
+						maxLength={2000}
+						placeholder="Escribe o busca en el histórico…"
+					/>
 				</label>
 				<label class="fx-campo fx-ancho4">
 					<span>Origen - destino <b>*</b></span>
-					<input
-						class="fx-input"
+					<Autocomplete
 						bind:value={origenDestino}
-						list="fx-origenes"
-						maxlength="500"
-						placeholder="YOPAL Y SUS VEREDAS ALEDAÑAS CASANARE - OROCUE … (VICEVERSA)"
+						options={sugerenciasOrigenDestino}
+						allowCustomValue
+						ariaLabel="Origen y destino"
+						maxLength={500}
+						placeholder="Escribe o busca en el histórico…"
 					/>
-					<datalist id="fx-origenes">
-						{#each opciones.catalogos.ORIGEN_DESTINO as o (o.id)}<option value={o.texto}
-							></option>{/each}
-					</datalist>
 				</label>
 			</div>
 		</section>

@@ -365,7 +365,11 @@
 	};
 
 	const uniqueConsecutivos = $derived(listMetadata.consecutivos || []);
-	const uniqueClientes = $derived(listMetadata.clientes.map((c) => c.nombre));
+	const uniqueClientes = $derived(
+		listMetadata.clientes
+			.map((c) => c.nombre)
+			.sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base', numeric: true }))
+	);
 	const uniquePeriodos = $derived((listMetadata.periodos || []).map((p) => `${getMesLabel(p.mes)} ${p.anio}`));
 	const uniqueEstados = $derived(listMetadata.estados || []);
 	const uniqueFacturas = $derived(listMetadata.facturas || []);

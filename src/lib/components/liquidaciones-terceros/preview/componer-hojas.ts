@@ -51,7 +51,7 @@ export async function logoDataUrl(): Promise<string> {
 }
 
 
-const SELLO_URL = '/assets/sello-firma-terceros.jpg';
+const SELLO_URL = '/assets/sello-firma-terceros.webp';
 let selloCache: string | null = null;
 
 /**
@@ -61,11 +61,9 @@ let selloCache: string | null = null;
  * y una ruta relativa no resolvería contra nada. Se cachea porque en un lote de
  * cuarenta hojas se pide cuarenta veces.
  *
- * Es la copia REDUCIDA del sello (560px, ~29 KB) y no el original de 1536px y
- * 2,3 MB que usan el editor viejo y el PDF del correo: aquí se incrusta en el
- * HTML de CADA hoja, y con el grande un ZIP de cuarenta habría mandado más de
- * cien megas al servidor. A la escala a la que se imprime —58px de alto— no se
- * distingue.
+ * Es la copia optimizada del sello (640px, ~123 KB), no el PNG de 1254px que
+ * usa la vista previa antigua. Se incrusta en cada hoja y conserva resolución
+ * suficiente a la escala de impresión (58px de alto).
  */
 async function selloDataUrl(): Promise<string> {
 	try {

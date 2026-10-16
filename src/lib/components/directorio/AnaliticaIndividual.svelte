@@ -250,7 +250,7 @@
 					<span>{historico ? 'Aún no hay actividad registrada para este cliente.' : modo === 'rango' ? 'Ajusta las fechas para consultar otro período.' : 'Usa las flechas o cambia el tipo de período para consultar otras fechas.'}</span>
 				</div>
 			{/if}
-		<div class="metricas">
+		<div class="metricas" class:metricas--seis={tipo === 'conductor' || tipo === 'vehiculo'}>
 			{#each Object.entries(datos.resumen) as [clave, valor]}
 				<article>
 					<span>{ETIQUETAS[clave] ?? clave.replaceAll('_', ' ')}</span>
@@ -329,13 +329,21 @@
 			</div>
 		{/if}
 
-		{#if tipo === 'cliente'}
+		{#if tipo === 'cliente' || tipo === 'conductor' || tipo === 'vehiculo'}
 			<div class="bloque mapa-bloque">
 				<div class="mapa-cabecera">
-					<div><h4>Zonas frecuentes del cliente</h4><p>Ubicaciones agrupadas a partir de los orígenes y destinos de sus servicios.</p></div>
+					<div>
+						<h4>Zonas frecuentes {tipo === 'cliente' ? 'del cliente' : tipo === 'conductor' ? 'del conductor' : 'del vehículo'}</h4>
+						<p>Ubicaciones agrupadas a partir de los orígenes y destinos de sus servicios.</p>
+					</div>
 					<span class="mapa-periodo">{historico ? 'Histórico' : tituloPeriodo}</span>
 				</div>
-				<MapaRutasCliente rutas={datos.rutas ?? []} zonas={datos.zonas ?? []} {historico} />
+				<MapaRutasCliente
+					rutas={datos.rutas ?? []}
+					zonas={datos.zonas ?? []}
+					entidad={tipo === 'cliente' ? 'cliente' : tipo === 'conductor' ? 'conductor' : 'vehiculo'}
+					{historico}
+				/>
 			</div>
 		{/if}
 
@@ -436,6 +444,19 @@
 	.metricas article { min-width: 0; padding: 14px; border: 1px solid var(--border-subtle); border-radius: 15px; background: var(--bg-surface); }
 	.metricas span { display: block; min-height: 30px; color: var(--text-muted); font-size: 11px; font-weight: 800; line-height: 1.3; text-transform: uppercase; letter-spacing: .035em; }
 	.metricas strong { display: block; margin-top: 7px; color: var(--text-primary); font-size: 20px; line-height: 1.1; overflow-wrap: anywhere; }
+	/* Seis columnas dan lectura rápida en escritorio; la rejilla se reduce con el ancho disponible. */
+	.metricas--seis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+	.metricas--seis article { padding: 12px; }
+	.metricas--seis strong { font-size: clamp(15px, 1.1vw, 18px); }
+	@media (min-width: 640px) {
+		.metricas--seis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+	}
+	@media (min-width: 1024px) {
+		.metricas--seis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+	}
+	@media (min-width: 1440px) {
+		.metricas--seis { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+	}
 	.aviso { display: flex; align-items: flex-start; gap: 9px; padding: 11px 13px; border: 1px solid #fcd34d; border-radius: 13px; color: #92400e; background: #fffbeb; font-size: 13px; }
 	.aviso div { display: grid; gap: 2px; }
 	.aviso span { text-transform: capitalize; }
