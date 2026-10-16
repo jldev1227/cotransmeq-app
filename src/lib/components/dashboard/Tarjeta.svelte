@@ -36,12 +36,16 @@
 			<h3 class="tj-titulo">{titulo}</h3>
 			{#if subtitulo}<p class="tj-sub">{subtitulo}</p>{/if}
 		</div>
-		{#if extra}{@render extra()}{/if}
-		{#if enlace}
-			<a class="tj-enlace" href={enlace}>
-				{enlaceTexto}
-				<ArrowUpRight size={14} strokeWidth={2.4} />
-			</a>
+		{#if extra || enlace}
+			<div class="tj-acciones">
+				{#if extra}{@render extra()}{/if}
+				{#if enlace}
+					<a class="tj-enlace" href={enlace}>
+						{enlaceTexto}
+						<ArrowUpRight size={14} strokeWidth={2.4} />
+					</a>
+				{/if}
+			</div>
 		{/if}
 	</header>
 	<div class="tj-cuerpo">
@@ -74,6 +78,14 @@
 	}
 	.tj-cab-texto {
 		min-width: 0;
+	}
+	.tj-acciones {
+		display: flex;
+		flex-direction: row;
+		align-items: center;
+		justify-content: flex-end;
+		gap: 0.35rem;
+		flex-shrink: 0;
 	}
 	.tj-titulo {
 		margin: 0;

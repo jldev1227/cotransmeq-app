@@ -80,6 +80,7 @@
 <style>
 	.ps {
 		overflow: hidden;
+		margin-bottom: 0.85rem;
 	}
 	.ps-cabecera {
 		display: flex;

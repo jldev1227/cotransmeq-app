@@ -12,6 +12,7 @@
 	import { AlertTriangle, FileWarning, Gauge, ToolCase, Wrench } from 'lucide-svelte';
 	import Tarjeta from './Tarjeta.svelte';
 	import Kpi from './Kpi.svelte';
+	import PanelSugerencias from './PanelSugerencias.svelte';
 	import Grafica from './Grafica.svelte';
 	import Ranking from './Ranking.svelte';
 	import { numero, fechaCorta } from '$lib/dashboard/formato';
@@ -44,7 +45,86 @@
 			.join(' · ');
 	const vencidos = $derived((datos.vencimientos.items as any[]).filter((d) => d.dias < 0));
 	const proximos = $derived((datos.vencimientos.items as any[]).filter((d) => d.dias >= 0));
+
+	const sugerencias = $derived.by(() => {
+		const items: Array<{
+			id: string;
+			prioridad: 'critica' | 'alta' | 'oportunidad' | 'info';
+			titulo: string;
+			evidencia: string;
+			accion: string;
+			enlace?: string;
+		}> = [];
+		const planesVencidos = Number(planes?.vencidos ?? k.planes_vencidos ?? 0);
+		const planesProximos = Number(planes?.proximos ?? k.planes_proximos ?? 0);
+		const documentosVencidos = Number(k.documentos_vencidos ?? vencidos.length);
+		const documentosProximos = Number(k.documentos_proximos ?? proximos.length);
+
+		if (planesVencidos > 0)
+			items.push({
+				id: 'mantenimiento-planes-vencidos',
+				prioridad: 'critica',
+				titulo: `${numero(planesVencidos)} planes de mantenimiento están vencidos`,
+				evidencia:
+					'El kilometraje o la fecha programada ya superó el intervalo definido para esas placas.',
+				accion:
+					'Programa las órdenes pendientes y valida si algún vehículo debe salir temporalmente de servicio.',
+				enlace: '/dashboard/mantenimiento?estado=vencido'
+			});
+
+		if (documentosVencidos > 0)
+			items.push({
+				id: 'mantenimiento-documentos-vencidos',
+				prioridad: 'critica',
+				titulo: `${numero(documentosVencidos)} documentos de vehículos ya están vencidos`,
+				evidencia: 'La consulta incluye SOAT, tecnomecánica, pólizas y tarjetas de operación.',
+				accion: 'Gestiona las renovaciones y confirma la vigencia antes de asignar estas placas.',
+				enlace: '/dashboard/flota'
+			});
+
+		if (Number(k.con_novedades) > 0)
+			items.push({
+				id: 'mantenimiento-novedades-vehiculos',
+				prioridad: 'alta',
+				titulo: `${numero(k.con_novedades)} placas tienen novedades en su último preoperacional`,
+				evidencia:
+					'Hay respuestas marcadas como malas que pueden requerir revisión o una orden de trabajo.',
+				accion:
+					'Revisa las observaciones y prioriza las placas con fallas que afectan la seguridad.',
+				enlace: '/dashboard/flota'
+			});
+
+		if (planesProximos > 0)
+			items.push({
+				id: 'mantenimiento-planes-proximos',
+				prioridad: 'oportunidad',
+				titulo: `${numero(planesProximos)} planes de mantenimiento vencerán pronto`,
+				evidencia:
+					'Están dentro del umbral de 500 km o 15 días definido para anticipar el servicio.',
+				accion:
+					'Coordina las citas con la disponibilidad de la flota para evitar paradas no planeadas.',
+				enlace: '/dashboard/mantenimiento?estado=alerta'
+			});
+
+		if (documentosProximos > 0)
+			items.push({
+				id: 'mantenimiento-documentos-proximos',
+				prioridad: 'oportunidad',
+				titulo: `${numero(documentosProximos)} documentos vencerán en los próximos ${datos.vencimientos.proximos_dias} días`,
+				evidencia: 'La fecha de vencimiento ya está dentro de la ventana de seguimiento.',
+				accion: 'Inicia la renovación con anticipación para mantener disponibles las placas.',
+				enlace: '/dashboard/flota'
+			});
+
+		return items.slice(0, 5);
+	});
 </script>
+
+<PanelSugerencias
+	titulo="Acciones sugeridas para Mantenimiento"
+	bajada="Señales calculadas con los datos operativos de esta sección para el período seleccionado."
+	items={sugerencias}
+/>
 
 <div class="sec-kpis">
 	{#if planes}

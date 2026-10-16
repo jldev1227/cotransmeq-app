@@ -9,6 +9,7 @@
 	import { confirmar } from '$lib/stores/confirm';
 	import Tarjeta from './Tarjeta.svelte';
 	import Kpi from './Kpi.svelte';
+	import PanelSugerencias from './PanelSugerencias.svelte';
 	import Grafica from './Grafica.svelte';
 	import Ranking from './Ranking.svelte';
 	import { numero, pesos, pesosCortos, fechaCorta } from '$lib/dashboard/formato';
@@ -94,7 +95,88 @@
 			aplicando = false;
 		}
 	}
+
+	const sugerencias = $derived.by(() => {
+		const items: Array<{
+			id: string;
+			prioridad: 'critica' | 'alta' | 'oportunidad' | 'info';
+			titulo: string;
+			evidencia: string;
+			accion: string;
+			enlace?: string;
+		}> = [];
+		const licenciasVencidas = Number(k.licencias_vencidas ?? 0);
+		const licenciasProximas = Number(k.licencias_proximas ?? 0);
+		const sinContrato = Number(k.activos_sin_contrato ?? 0);
+		const social = datos.seguridad_social?.sin_dato ?? {};
+		const camposSocialPendientes =
+			Number(social.eps ?? 0) + Number(social.fondo_pension ?? 0) + Number(social.arl ?? 0);
+
+		if (licenciasVencidas > 0)
+			items.push({
+				id: 'talento-licencias-vencidas',
+				prioridad: 'critica',
+				titulo: `${numero(licenciasVencidas)} licencias de conducción están vencidas`,
+				evidencia:
+					'Los conductores vinculados con licencia vencida requieren actualización antes de conducir.',
+				accion: 'Gestiona la renovación y confirma la nueva fecha en cada ficha.',
+				enlace: '/dashboard/conductores'
+			});
+
+		if (Number(k.con_pendientes) > 0 || sinContrato > 0)
+			items.push({
+				id: 'talento-fichas-incompletas',
+				prioridad: 'alta',
+				titulo: `${numero(Number(k.con_pendientes ?? 0) + sinContrato)} fichas requieren completar información laboral`,
+				evidencia: `${numero(k.con_pendientes)} vinculados tienen datos pendientes${sinContrato ? ` y ${numero(sinContrato)} conductores activos no tienen contrato o fecha de ingreso` : ''}.`,
+				accion:
+					'Completa los datos pendientes para mantener al día la información contractual del equipo.',
+				enlace: '/dashboard/conductores'
+			});
+
+		if (camposSocialPendientes > 0)
+			items.push({
+				id: 'talento-seguridad-social',
+				prioridad: 'alta',
+				titulo: `${numero(camposSocialPendientes)} campos de seguridad social están pendientes`,
+				evidencia: `${numero(social.eps)} sin EPS · ${numero(social.fondo_pension)} sin fondo de pensión · ${numero(social.arl)} sin ARL.`,
+				accion:
+					'Completa EPS, fondo y ARL en las fichas para facilitar la gestión de nómina y afiliaciones.',
+				enlace: '/dashboard/conductores'
+			});
+
+		const alertasDescanso = Number(k.alertas_descanso ?? 0);
+		if (alertasDescanso > 0)
+			items.push({
+				id: 'talento-descansos-pendientes',
+				prioridad: 'critica',
+				titulo: `${numero(alertasDescanso)} conductores superan el ciclo de descanso 21-9`,
+				evidencia:
+					'Los recorridos muestran jornadas acumuladas sin un descanso registrado dentro del ciclo.',
+				accion: 'Revisa la programación y coordina los descansos con operaciones.',
+				enlace: '/dashboard/conductores/recorridos'
+			});
+
+		if (licenciasProximas > 0)
+			items.push({
+				id: 'talento-licencias-proximas',
+				prioridad: 'oportunidad',
+				titulo: `${numero(licenciasProximas)} licencias vencerán en los próximos ${datos.licencias.proximos_dias} días`,
+				evidencia:
+					'Estas licencias todavía están vigentes, pero requieren seguimiento para evitar vencimientos.',
+				accion: 'Notifica a los conductores y solicita con anticipación el soporte renovado.',
+				enlace: '/dashboard/conductores'
+			});
+
+		return items.slice(0, 5);
+	});
 </script>
+
+<PanelSugerencias
+	titulo="Acciones sugeridas para Talento humano"
+	bajada="Señales calculadas con los datos operativos de esta sección para el período seleccionado."
+	items={sugerencias}
+/>
 
 <div class="sec-kpis">
 	<Kpi

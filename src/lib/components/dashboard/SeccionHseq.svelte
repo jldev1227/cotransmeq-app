@@ -6,6 +6,7 @@
 	import { AlertTriangle, BedDouble, ClipboardCheck, Users } from 'lucide-svelte';
 	import Tarjeta from './Tarjeta.svelte';
 	import Kpi from './Kpi.svelte';
+	import PanelSugerencias from './PanelSugerencias.svelte';
 	import Grafica from './Grafica.svelte';
 	import Ranking from './Ranking.svelte';
 	import { numero, fechaCorta, horaDelDia, horas } from '$lib/dashboard/formato';
@@ -36,7 +37,76 @@
 	function rangoHoras(p: { desde: number; hasta: number } | null): string {
 		return p ? `${horaDelDia(p.desde)} – ${horaDelDia(p.hasta)}` : '—';
 	}
+
+	const sugerencias = $derived.by(() => {
+		const items: Array<{
+			id: string;
+			prioridad: 'critica' | 'alta' | 'oportunidad' | 'info';
+			titulo: string;
+			evidencia: string;
+			accion: string;
+			enlace?: string;
+		}> = [];
+		const sinPreoperacional = sinPreop.length;
+		if (sinPreoperacional > 0)
+			items.push({
+				id: 'hseq-sin-preoperacional',
+				prioridad: 'critica',
+				titulo: `${numero(sinPreoperacional)} conductores en servicio siguen sin preoperacional de hoy`,
+				evidencia:
+					'El registro previo al recorrido ayuda a detectar novedades de salud y seguridad antes de iniciar la jornada.',
+				accion:
+					'Contacta a los conductores pendientes y confirma el diligenciamiento antes de continuar el servicio.',
+				enlace: '/dashboard/conductores?estado=servicio'
+			});
+
+		const descanso = Number(datos.descansos?.resumen?.alerta ?? k.alertas_descanso ?? 0);
+		if (descanso > 0)
+			items.push({
+				id: 'hseq-descansos-vencidos',
+				prioridad: 'critica',
+				titulo: `${numero(descanso)} conductores superan el ciclo de descanso 21-9`,
+				evidencia:
+					'Los recorridos recientes muestran conductores que completaron más de 21 días sin un descanso registrado.',
+				accion:
+					'Revisa el ciclo y programa el descanso pendiente para reducir el riesgo de fatiga.',
+				enlace: '/dashboard/conductores/recorridos'
+			});
+
+		const fatigaAlta = Number(datos.fatiga?.resumen?.alto ?? 0);
+		if (fatigaAlta > 0)
+			items.push({
+				id: 'hseq-riesgo-fatiga-alto',
+				prioridad: 'critica',
+				titulo: `${numero(fatigaAlta)} conductores aparecen con riesgo alto de fatiga`,
+				evidencia:
+					'Se combinan jornadas extensas, rachas sin descanso y horas de sueño reportadas en el periodo.',
+				accion:
+					'Valida las jornadas y el descanso de estas personas antes de asignarles nuevos recorridos.',
+				enlace: '/dashboard/recargos'
+			});
+
+		const porDescansar = Number(datos.descansos?.resumen?.por_descansar ?? 0);
+		if (porDescansar > 0)
+			items.push({
+				id: 'hseq-descanso-proximo',
+				prioridad: 'oportunidad',
+				titulo: `${numero(porDescansar)} conductores se acercan al límite de descanso`,
+				evidencia:
+					'Todavía están dentro del ciclo, pero una nueva programación podría llevarlos a excederlo.',
+				accion: 'Anticipa los turnos de descanso al organizar los próximos servicios.',
+				enlace: '/dashboard/conductores/recorridos'
+			});
+
+		return items.slice(0, 5);
+	});
 </script>
+
+<PanelSugerencias
+	titulo="Acciones sugeridas para HSEQ"
+	bajada="Señales calculadas con los datos operativos de esta sección para el período seleccionado."
+	items={sugerencias}
+/>
 
 <div class="sec-kpis">
 	<Kpi

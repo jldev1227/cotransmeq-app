@@ -6,6 +6,7 @@
 	import { BookUser, UserX, Wallet } from 'lucide-svelte';
 	import Tarjeta from './Tarjeta.svelte';
 	import Kpi from './Kpi.svelte';
+	import PanelSugerencias from './PanelSugerencias.svelte';
 	import BloqueTerceros from './BloqueTerceros.svelte';
 	import { numero, pesosCortos } from '$lib/dashboard/formato';
 
@@ -14,7 +15,52 @@
 	}
 	let { datos }: Props = $props();
 	const k = $derived(datos.kpis);
+
+	const sugerencias = $derived.by(() => {
+		const items: Array<{
+			id: string;
+			prioridad: 'critica' | 'alta' | 'oportunidad' | 'info';
+			titulo: string;
+			evidencia: string;
+			accion: string;
+			enlace?: string;
+		}> = [];
+		const sinIdentificacion = Number(k.sin_identificacion ?? 0);
+		const sinContacto = Number(k.sin_contacto ?? 0);
+		const sinAmbos = Number(k.sin_ambos ?? 0);
+
+		if (sinIdentificacion > 0 || sinContacto > 0)
+			items.push({
+				id: 'contabilidad-terceros-incompletos',
+				prioridad: sinAmbos > 0 ? 'alta' : 'oportunidad',
+				titulo: 'Hay terceros activos con datos de identificación o contacto pendientes',
+				evidencia: `${numero(sinIdentificacion)} sin NIT o cédula · ${numero(sinContacto)} sin teléfono ni correo${sinAmbos ? ` · ${numero(sinAmbos)} tienen ambas brechas` : ''}.`,
+				accion:
+					'Completa sus fichas para emitir certificados, notificar pagos y conciliar liquidaciones.',
+				enlace: '/dashboard/terceros'
+			});
+
+		const previstos = datos.previstas_pagar;
+		if (Number(previstos?.total ?? 0) > 0)
+			items.push({
+				id: 'contabilidad-pagos-pendientes',
+				prioridad: 'alta',
+				titulo: `${numero(previstos.total)} cierres aprobados esperan pago a terceros`,
+				evidencia: `${pesosCortos(previstos.valor)} están aprobados y todavía no aparecen como pagados.`,
+				accion:
+					'Programa los pagos y registra su confirmación para mantener conciliado el saldo pendiente.',
+				enlace: '/dashboard/liquidaciones-terceros'
+			});
+
+		return items;
+	});
 </script>
+
+<PanelSugerencias
+	titulo="Acciones sugeridas para Contabilidad"
+	bajada="Señales calculadas con los datos operativos de esta sección para el período seleccionado."
+	items={sugerencias}
+/>
 
 <div class="sec-kpis">
 	<Kpi

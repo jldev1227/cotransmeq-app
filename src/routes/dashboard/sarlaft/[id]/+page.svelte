@@ -31,7 +31,6 @@
 	let downloading = $state<Record<string, boolean>>({});
 	let downloadingPdf = $state(false);
 	let downloadingZip = $state(false);
-
 	// Estado de edición
 	let editEstado = $state<EstadoSarlaft | ''>('');
 	let editConcepto = $state('');
@@ -458,7 +457,10 @@
 			</section>
 
 			<!-- Lateral: anexos, documento controlado, evaluación, canal y trazabilidad -->
-			<aside class="sl-lateral" aria-label="Gestión del expediente">
+			<aside
+				class="sl-lateral"
+				aria-label="Gestión del expediente"
+			>
 				<div class="sl-lateral-cab">
 					<span class="sl-eyebrow">Expediente</span>
 					<h2>Gestión y soportes</h2>
@@ -811,30 +813,16 @@
 				{/if}
 
 				<!-- Metadata técnica -->
-				<details
+				<section
 					class="page-card sl-tarjeta sl-tarjeta--meta"
 					in:fly={{ y: 12, duration: 320, delay: 200, easing: quintOut }}
 				>
-					<summary class="sl-tarjeta-cab sl-tarjeta-cab--resumen">
+					<div class="sl-tarjeta-cab">
 						<div>
 							<span class="sl-eyebrow">Trazabilidad</span>
 							<h3>Detalles técnicos</h3>
 						</div>
-						<svg
-							class="chevron"
-							fill="none"
-							stroke="currentColor"
-							viewBox="0 0 24 24"
-							stroke-width="2"
-							aria-hidden="true"
-						>
-							<path
-								stroke-linecap="round"
-								stroke-linejoin="round"
-								d="M19.5 8.25l-7.5 7.5-7.5-7.5"
-							/>
-						</svg>
-					</summary>
+					</div>
 					<div class="sl-tarjeta-cuerpo">
 						<dl class="tech-list">
 							{#if detalle.ip_origen}
@@ -861,7 +849,7 @@
 							</div>
 						</dl>
 					</div>
-				</details>
+				</section>
 			</aside>
 		</div>
 	</div>
@@ -981,26 +969,22 @@
 
 	/* ═══ Columnas ═══ */
 	.sl-columnas {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-start;
+		display: grid;
+		grid-template-columns: minmax(0, 1fr);
+		align-items: start;
 		gap: 1.25rem;
 	}
-	/* El 999 hace que todo el espacio sobrante vaya a las respuestas y el
-	   lateral se quede en su base mientras quepan las dos columnas. */
 	.sl-principal {
-		flex: 999 1 34rem;
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
 		gap: 1rem;
 	}
 	.sl-lateral {
-		flex: 1 1 22rem;
 		min-width: 0;
 		display: flex;
 		flex-direction: column;
-		gap: 1rem;
+		gap: 0.5rem;
 	}
 	.sl-lateral > * {
 		flex: 0 0 auto;
@@ -1013,17 +997,10 @@
 		color: var(--text-primary);
 		margin: 0.3rem 0 0;
 	}
-	/* El panel permanece accesible mientras se leen respuestas extensas.
-	   Su propio scroll evita que los últimos controles queden fuera de pantalla. */
-	@container (min-width: 58rem) {
-		.sl-lateral {
-			position: sticky;
-			top: 5rem;
-			max-height: calc(100dvh - 6rem);
-			overflow-y: auto;
-			overscroll-behavior: contain;
-			scrollbar-width: thin;
-			padding-right: 0.35rem;
+	/* La grilla usa el ancho real del contenido para respetar el sidebar del dashboard. */
+	@container (min-width: 50rem) {
+		.sl-columnas {
+			grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem);
 		}
 	}
 	.sl-principal-cab h2 {
@@ -1075,32 +1052,6 @@
 		letter-spacing: -0.02em;
 		color: var(--text-primary);
 		margin: 0.2rem 0 0;
-	}
-	.sl-tarjeta-cab--resumen {
-		cursor: pointer;
-		list-style: none;
-		user-select: none;
-		border-bottom: none;
-	}
-	.sl-tarjeta-cab--resumen::-webkit-details-marker {
-		display: none;
-	}
-	.sl-tarjeta-cab--resumen:hover {
-		background: var(--bg-base);
-	}
-	details[open] .sl-tarjeta-cab--resumen {
-		border-bottom: 1px solid var(--border-subtle);
-	}
-	.chevron {
-		width: 16px;
-		height: 16px;
-		color: var(--text-muted);
-		transition: transform 0.2s;
-		flex-shrink: 0;
-		align-self: center;
-	}
-	details[open] .chevron {
-		transform: rotate(180deg);
 	}
 	.sl-tarjeta-cuerpo {
 		padding: 1rem 1.25rem 1.25rem;
@@ -1169,7 +1120,7 @@
 		gap: 0.75rem;
 		width: 100%;
 		padding: 0.7rem 0.8rem;
-		background: var(--bg-base);
+		background: #fafafa;
 		border: 1px solid var(--border-subtle);
 		border-radius: 12px;
 		cursor: pointer;
@@ -1181,7 +1132,7 @@
 			border-color 0.15s;
 	}
 	.doc-row:hover:not(:disabled) {
-		background: var(--bg-surface);
+		background: #f6f6f6;
 		border-color: var(--emerald-500);
 	}
 	.doc-row:disabled {

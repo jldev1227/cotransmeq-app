@@ -476,7 +476,7 @@
 		text-transform: uppercase;
 		letter-spacing: 0.12em;
 		color: #f97316;
-		background: var(--bg-base);
+		background: #fafafa;
 		padding: 0.18rem 0.55rem;
 		border-radius: 4px;
 		margin-bottom: 0.4rem;
@@ -524,7 +524,7 @@
 		flex-direction: column;
 		gap: 0.25rem;
 		padding: 0.7rem 0.85rem;
-		background: var(--bg-base);
+		background: #fafafa;
 		border-radius: 10px;
 		border-left: 2px solid transparent;
 		transition: all 0.2s;
@@ -534,7 +534,7 @@
 		border-color: var(--border-default);
 	}
 	.campo--destacado {
-		background: var(--bg-base);
+		background: #fafafa;
 		border-left-color: var(--border-default);
 	}
 	.campo--destacado:hover {
@@ -608,7 +608,7 @@
 	}
 	.pill-yes {
 		color: #c2410c;
-		background: var(--bg-base);
+		background: #fafafa;
 		border-color: var(--border-default);
 	}
 	.pill-no {
@@ -627,7 +627,7 @@
 		grid-column: 1 / -1;
 	}
 	.firma-imagen-wrap {
-		background: var(--bg-base);
+		background: #fafafa;
 		border: 1px solid rgba(0, 0, 0, 0.08);
 		border-bottom: 2px solid #1e293b;
 		border-radius: 8px;
@@ -709,7 +709,7 @@
 	   TABLAS REPETIBLES
 	   ═══════════════════════════════════════════════════════════════ */
 	.tabla-bloque {
-		background: var(--bg-base);
+		background: #fafafa;
 		border: 1px solid rgba(0, 0, 0, 0.06);
 		border-radius: 14px;
 		overflow: hidden;
@@ -732,7 +732,7 @@
 		width: 32px;
 		height: 32px;
 		border-radius: 8px;
-		background: var(--bg-base);
+		background: #fafafa;
 		color: #f97316;
 		display: flex;
 		align-items: center;
@@ -768,7 +768,7 @@
 		font-size: 0.68rem;
 		font-weight: 700;
 		color: #9a3412;
-		background: var(--bg-base);
+		background: #fafafa;
 		padding: 0.25rem 0.55rem;
 		border-radius: 5px;
 	}
@@ -804,6 +804,6 @@
 		color: #1e293b;
 	}
 	tbody tr:hover {
-		background: var(--bg-base);
+		background: #fafafa;
 	}
 </style>
