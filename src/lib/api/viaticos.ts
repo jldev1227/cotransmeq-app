@@ -311,7 +311,8 @@ export function etiquetaSaldo(s: Pick<Saldo, 'saldo_bajo' | 'agotado'>): string 
 // ── Tablero y gastos que asume la empresa ───────────────────────────────
 
 export type Agrupacion = 'dia' | 'semana' | 'mes';
-export type CategoriaGasto = 'OFICINA' | 'MANTENIMIENTO' | 'CONDUCTOR' | 'BANCARIO' | 'OTRO';
+export type CategoriaGasto =
+	'OFICINA' | 'MANTENIMIENTO' | 'CONDUCTOR' | 'BANCARIO' | 'PROFESIONAL' | 'OTRO';
 export type MetodoGasto = 'TRANSFERENCIA' | 'RETIRO_TARJETA' | 'EFECTIVO' | 'DEBITO_AUTOMATICO';
 /** Quién reconoce el gasto: la empresa o el tercero propietario de la placa. */
 export type AsumeGasto = 'EMPRESA' | 'TERCERO';
@@ -321,6 +322,7 @@ export const CATEGORIA_LABELS: Record<CategoriaGasto, string> = {
 	MANTENIMIENTO: 'Mantenimiento de vehículo',
 	CONDUCTOR: 'A un conductor',
 	BANCARIO: 'Bancario (4x1000, cuota de manejo)',
+	PROFESIONAL: 'Servicios profesionales',
 	OTRO: 'Otro'
 };
 export const METODO_GASTO_LABELS: Record<MetodoGasto, string> = {

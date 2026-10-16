@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { resolve } from '$app/paths';
 	/**
 	 * Sección «Operaciones». Arriba lo del periodo (servicios, hora de
 	 * realización, clientes); abajo lo de AHORA (quién está en servicio, qué
@@ -12,25 +13,97 @@
 	import Kpi from './Kpi.svelte';
 	import Grafica from './Grafica.svelte';
 	import Ranking from './Ranking.svelte';
+	import PanelSugerencias from './PanelSugerencias.svelte';
 	import { numero, pesos, pesosCortos, fechaCorta, horaDelDia } from '$lib/dashboard/formato';
 	import { diaCorto, mesCorto } from '$lib/dashboard/periodo';
 
 	interface Props {
-		datos: any;
+		datos: unknown;
 	}
-	let { datos }: Props = $props();
-
-	const k = $derived(datos.kpis);
-	const porDia = $derived(
-		datos.servicios_por_dia as Array<{
+	interface RangoHoras {
+		desde: number;
+		hasta: number;
+	}
+	interface DatosOperaciones {
+		kpis: {
+			servicios: number;
+			por_estado: Array<{ cantidad: number; etiqueta: string }>;
+			ahora: {
+				conductores_en_servicio: number;
+				conductores_programados: number;
+				conductores_disponibles: number;
+				vehiculos_en_servicio: number;
+				vehiculos_programados: number;
+				vehiculos_disponibles: number;
+			};
+		};
+		servicios_por_dia: Array<{
 			fecha: string;
 			realizados: number;
 			planificados: number;
 			en_curso: number;
 			cancelados: number;
-		}>
-	);
+		}>;
+		clientes_frecuentes: Array<{ nombre: string; servicios: number; enlace: string }>;
+		sin_cerrar: {
+			dias: number;
+			total: number;
+			items: Array<{
+				id: string;
+				enlace: string;
+				cliente: string | null;
+				conductor: string | null;
+				placa: string | null;
+				fecha_realizacion: string;
+				dias: number;
+			}>;
+		};
+		planillas_sin_dias?: {
+			total: number;
+			items: Array<{
+				id: string;
+				enlace: string;
+				conductor: string;
+				placa: string;
+				cliente: string | null;
+				anio: number;
+				mes: number;
+			}>;
+		};
+		liquidaciones_pendientes?: {
+			por_estado: Array<{ estado: string; cantidad: number; valor: number }>;
+			ultimas: Array<{
+				id: string;
+				enlace: string;
+				consecutivo: string;
+				cliente: string | null;
+				anio: number;
+				mes: number;
+				total: number;
+				estado: string;
+			}>;
+		};
+		hora_realizacion: {
+			promedio: { etiqueta: string } | null;
+			pico: RangoHoras | null;
+			distribucion: number[];
+		};
+		horas_laboradas?: {
+			pico: RangoHoras | null;
+			jornadas: number;
+			fuente: string;
+			cobertura: number[];
+		};
+	}
+	let { datos: datosCrudos }: Props = $props();
+	const datos = $derived(datosCrudos as DatosOperaciones);
+
+	const k = $derived(datos.kpis);
+	const porDia = $derived(datos.servicios_por_dia);
 	const horasLabel = Array.from({ length: 24 }, (_, h) => horaDelDia(h));
+	// Los enlaces llegan como strings de rutas internas; el tipo generado solo acepta literales.
+	const resolverRuta = resolve as unknown as (enlace: string) => string;
+	const resolverEnlace = (enlace: string) => resolverRuta(enlace);
 	const ESTADO_LIQ: Record<string, string> = {
 		BORRADOR: 'Borrador',
 		LIQUIDADA: 'Por aprobar',
@@ -40,15 +113,78 @@
 	function rangoHoras(p: { desde: number; hasta: number } | null): string {
 		return p ? `${horaDelDia(p.desde)} – ${horaDelDia(p.hasta)}` : '—';
 	}
+
+	const sugerencias = $derived.by(() => {
+		const items: Array<{
+			id: string;
+			prioridad: 'critica' | 'alta' | 'oportunidad';
+			titulo: string;
+			evidencia: string;
+			accion: string;
+			enlace: string;
+		}> = [];
+		const sinCerrar = Number(datos.sin_cerrar?.total ?? 0);
+		if (sinCerrar > 0)
+			items.push({
+				id: 'servicios-sin-cerrar',
+				prioridad: 'critica' as const,
+				titulo: `${numero(sinCerrar)} ${sinCerrar === 1 ? 'servicio lleva' : 'servicios llevan'} más de ${numero(datos.sin_cerrar.dias)} días en curso`,
+				evidencia:
+					'El cierre tardío retrasa la liquidación y puede dejar recorridos o novedades sin conciliar.',
+				accion: 'Confirma con el responsable si el servicio terminó y ciérralo con sus soportes.',
+				enlace: '/dashboard/servicios?estado=en_curso'
+			});
+
+		const planillas = Number(datos.planillas_sin_dias?.total ?? 0);
+		if (planillas > 0)
+			items.push({
+				id: 'planillas-sin-dias',
+				prioridad: 'alta' as const,
+				titulo: `${numero(planillas)} ${planillas === 1 ? 'planilla no tiene' : 'planillas no tienen'} días registrados`,
+				evidencia:
+					'Una hoja pendiente sin días deja incompleto el cálculo de recargos y el costo de la jornada.',
+				accion: 'Completa los días o marca la hoja como no aplicable antes del cierre de nómina.',
+				enlace: '/dashboard/recargos?estado=pendiente'
+			});
+
+		const liquidaciones = datos.liquidaciones_pendientes?.por_estado ?? [];
+		const aprobadas = liquidaciones.find((e) => e.estado === 'APROBADA');
+		const liquidadas = liquidaciones.find((e) => e.estado === 'LIQUIDADA');
+		if (aprobadas && aprobadas.cantidad > 0)
+			items.push({
+				id: 'servicios-por-facturar',
+				prioridad: 'alta' as const,
+				titulo: `${numero(aprobadas.cantidad)} liquidaciones aprobadas esperan factura`,
+				evidencia: `${pesosCortos(aprobadas.valor)} ya están valorizados y pueden seguir al proceso de facturación.`,
+				accion: 'Relaciona las facturas para reducir el saldo de servicios pendientes de cobrar.',
+				enlace: '/dashboard/liquidaciones-servicios?estado=APROBADA'
+			});
+		if (liquidadas && liquidadas.cantidad > 0)
+			items.push({
+				id: 'servicios-por-aprobar',
+				prioridad: 'oportunidad' as const,
+				titulo: `${numero(liquidadas.cantidad)} liquidaciones esperan aprobación`,
+				evidencia: `${pesosCortos(liquidadas.valor)} no avanzan todavía a facturación.`,
+				accion: 'Revisa los soportes y aprueba las hojas listas para continuar el ciclo.',
+				enlace: '/dashboard/liquidaciones-servicios?estado=LIQUIDADA'
+			});
+
+		return items.slice(0, 4);
+	});
 </script>
+
+<PanelSugerencias
+	titulo="Acciones sugeridas para Operaciones"
+	bajada="Señales calculadas con los servicios, planillas y liquidaciones visibles en este periodo."
+	items={sugerencias}
+/>
 
 <div class="sec-kpis">
 	<Kpi
 		etiqueta="Servicios del periodo"
 		valor={numero(k.servicios)}
-		detalle={k.por_estado
-			.map((e: any) => `${e.cantidad} ${e.etiqueta.toLowerCase()}`)
-			.join(' · ') || 'Sin servicios'}
+		detalle={k.por_estado.map((e) => `${e.cantidad} ${e.etiqueta.toLowerCase()}`).join(' · ') ||
+			'Sin servicios'}
 		tono="verde"
 		icono={Truck}
 		href="/dashboard/servicios"
@@ -103,7 +239,7 @@
 		enlace="/dashboard/clientes"
 	>
 		<Ranking
-			items={datos.clientes_frecuentes.map((c: any) => ({
+			items={datos.clientes_frecuentes.map((c) => ({
 				etiqueta: c.nombre,
 				valor: c.servicios,
 				href: c.enlace
@@ -132,7 +268,8 @@
 			<ul class="sec-lista">
 				{#each datos.sin_cerrar.items.slice(0, 8) as s (s.id)}
 					<li>
-						<a href={s.enlace}>
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- URL de backend normalizada por resolverEnlace. -->
+						<a href={resolverEnlace(s.enlace)}>
 							<span class="sec-lista-titulo">{s.cliente ?? 'Sin cliente'}</span>
 							<span class="sec-lista-sub"
 								>{s.conductor ?? 'Sin conductor'}{s.placa ? ` · ${s.placa}` : ''} · {fechaCorta(
@@ -166,7 +303,8 @@
 				<ul class="sec-lista">
 					{#each datos.planillas_sin_dias.items.slice(0, 8) as p (p.id)}
 						<li>
-							<a href={p.enlace}>
+							<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- URL de backend normalizada por resolverEnlace. -->
+							<a href={resolverEnlace(p.enlace)}>
 								<span class="sec-lista-titulo">{p.conductor}</span>
 								<span class="sec-lista-sub"
 									>{p.placa} · {p.cliente ?? 'Sin cliente'} · {mesCorto(p.anio, p.mes)}</span
@@ -187,19 +325,25 @@
 			columnas={datos.planillas_sin_dias ? 4 : 6}
 			enlace="/dashboard/liquidaciones-servicios"
 		>
+			<!-- eslint-disable svelte/no-navigation-without-resolve -->
 			<div class="sec-estados">
 				{#each datos.liquidaciones_pendientes.por_estado as e (e.estado)}
-					<a class="sec-estado" href={`/dashboard/liquidaciones-servicios?estado=${e.estado}`}>
+					<a
+						class="sec-estado"
+						href={resolverEnlace(`/dashboard/liquidaciones-servicios?estado=${e.estado}`)}
+					>
 						<span class="sec-estado-n">{numero(e.cantidad)}</span>
 						<span class="sec-estado-etq">{ESTADO_LIQ[e.estado] ?? e.estado}</span>
 						<span class="sec-estado-valor">{pesosCortos(e.valor)}</span>
 					</a>
 				{/each}
 			</div>
+			<!-- eslint-enable svelte/no-navigation-without-resolve -->
 			<ul class="sec-lista sec-lista--compacta">
 				{#each datos.liquidaciones_pendientes.ultimas.slice(0, 5) as l (l.id)}
 					<li>
-						<a href={l.enlace}>
+						<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -- URL de backend normalizada por resolverEnlace. -->
+						<a href={resolverEnlace(l.enlace)}>
 							<span class="sec-lista-titulo">{l.consecutivo} · {l.cliente ?? 'Sin cliente'}</span>
 							<span class="sec-lista-sub">{mesCorto(l.anio, l.mes)} · {pesos(l.total)}</span>
 						</a>
