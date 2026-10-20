@@ -60,11 +60,11 @@
 
 	const noLeidas = $derived($notificacionesStore.noLeidas);
 
-	async function cargar() {
+	async function cargar(paginaSolicitada: number) {
 		cargando = true;
 		error = false;
 		try {
-			const res = await notificacionesApi.listar(pagina, POR_PAGINA);
+			const res = await notificacionesApi.listar(paginaSolicitada, POR_PAGINA);
 			notifs = res.notificaciones;
 			total = res.total;
 		} catch {
@@ -78,7 +78,8 @@
 	$effect(() => {
 		if (!open) return;
 		pagina = 1;
-		void cargar();
+		/// Pasar la página explícita evita que el efecto se suscriba a `pagina` al abrir.
+		void cargar(1);
 	});
 
 	async function marcarTodas() {
@@ -209,7 +210,7 @@
 		<div class="nt-vacio">
 			<img src={img.src} alt={img.alt} width="418" height="418" />
 			<h3>No pudimos cargar las notificaciones</h3>
-			<button type="button" class="btn-secondary" onclick={cargar}>Reintentar</button>
+			<button type="button" class="btn-secondary" onclick={() => cargar(pagina)}>Reintentar</button>
 		</div>
 	{:else if notifs.length === 0}
 		{@const img = mascota('exito')}
@@ -266,7 +267,7 @@
 					suelto
 					onCambiar={(p) => {
 						pagina = p;
-						void cargar();
+						void cargar(p);
 					}}
 				/>
 			</div>
