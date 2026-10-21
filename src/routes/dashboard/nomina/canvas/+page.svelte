@@ -59,6 +59,7 @@
 	import SnapshotPanel from '$lib/components/univer/SnapshotPanel.svelte';
 	import ModalDesprendible from '$lib/components/nomina/ModalDesprendible.svelte';
 	import UniverToolbar from '$lib/components/univer/UniverToolbar.svelte';
+	import UniverSelect from '$lib/components/univer/UniverSelect.svelte';
 	import SelectorCanvasNomina from '$lib/components/univer/SelectorCanvasNomina.svelte';
 	import SelectorHojaNomina from '$lib/components/univer/SelectorHojaNomina.svelte';
 	import ModalEnviarDesprendibles from '$lib/components/univer/ModalEnviarDesprendibles.svelte';
@@ -1964,16 +1965,18 @@
 		-->
 		<label class="univer-year-picker" title="Cómo se define el periodo del libro">
 			<span>Periodo</span>
-			<select
+			<UniverSelect
 				value={rango ? 'rango' : 'corte'}
-				onchange={(e) => {
-					if ((e.currentTarget as HTMLSelectElement).value === 'rango') activarRango();
+				options={[
+					{ value: 'corte', label: 'Corte' },
+					{ value: 'rango', label: 'Rango' }
+				]}
+				ariaLabel="Definir el periodo por corte o por rango"
+				onchange={(valor) => {
+					if (valor === 'rango') activarRango();
 					else void cambiarPeriodo(anio, mes, corte);
 				}}
-			>
-				<option value="corte">Corte</option>
-				<option value="rango">Rango</option>
-			</select>
+			/>
 		</label>
 
 		{#if rango}
@@ -2020,43 +2023,33 @@
 		{:else}
 			<label class="univer-year-picker">
 				<span>Año</span>
-				<select
+				<UniverSelect
 					value={anio}
-					onchange={(e) =>
-						cambiarPeriodo(Number((e.currentTarget as HTMLSelectElement).value), mes, corte)}
-				>
-					{#each anios as a (a)}
-						<option value={a}>{a}</option>
-					{/each}
-				</select>
+					options={anios.map((a) => ({ value: a, label: String(a) }))}
+					ariaLabel="Año de nómina"
+					onchange={(valor) => cambiarPeriodo(Number(valor), mes, corte)}
+				/>
 			</label>
 
-			<select
-				class="univer-month-picker"
+			<UniverSelect
 				value={mes}
-				onchange={(e) =>
-					cambiarPeriodo(anio, Number((e.currentTarget as HTMLSelectElement).value), corte)}
+				options={MESES.map((nombre, i) => ({ value: i + 1, label: nombre }))}
+				ariaLabel="Mes de nómina"
+				onchange={(valor) => cambiarPeriodo(anio, Number(valor), corte)}
 				title="Mes de nómina"
-			>
-				{#each MESES as nombre, i (nombre)}
-					<option value={i + 1}>{nombre}</option>
-				{/each}
-			</select>
+			/>
 
 			<!-- El corte va a la vista porque el 21→20 está deducido de los Excel,
 			     no de una regla escrita: si algún mes se liquida distinto, se
 			     cambia aquí en vez de tocar código. -->
 			<label class="univer-year-picker" title="Día en que empieza el periodo">
 				<span>Corte</span>
-				<select
+				<UniverSelect
 					value={corte}
-					onchange={(e) =>
-						cambiarPeriodo(anio, mes, Number((e.currentTarget as HTMLSelectElement).value))}
-				>
-					{#each [1, 15, 16, 20, 21, 25, 26] as d (d)}
-						<option value={d}>{d}</option>
-					{/each}
-				</select>
+					options={[1, 15, 16, 20, 21, 25, 26].map((d) => ({ value: d, label: String(d) }))}
+					ariaLabel="Día inicial del corte"
+					onchange={(valor) => cambiarPeriodo(anio, mes, Number(valor))}
+				/>
 			</label>
 		{/if}
 

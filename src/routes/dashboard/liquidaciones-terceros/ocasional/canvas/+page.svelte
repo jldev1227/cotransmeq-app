@@ -23,6 +23,7 @@
 	import { attachOcasionalCellChangeAdapter } from '$lib/editor/univer/adapters/cell-change-ocasional';
 	import { clearOcasionalBindings } from '$lib/editor/business/ocasional-cell-binding';
 	import UniverToolbar from '$lib/components/univer/UniverToolbar.svelte';
+	import UniverSelect from '$lib/components/univer/UniverSelect.svelte';
 	import UniverCanvasHost from '$lib/components/univer/UniverCanvasHost.svelte';
 	import UniverSideRail from '$lib/components/univer/UniverSideRail.svelte';
 	import ItemsDisponiblesOcasionalModal from '$lib/components/liquidaciones-terceros/ItemsDisponiblesOcasionalModal.svelte';
@@ -1192,30 +1193,24 @@
 	{#snippet actions()}
 		<label class="univer-year-picker">
 			<span>Año</span>
-			<select
+			<UniverSelect
 				value={anio}
-				onchange={(e) => cambiarAnio(Number((e.currentTarget as HTMLSelectElement).value))}
-			>
-				{#each anios as a (a)}
-					<option value={a}>{a}</option>
-				{/each}
-			</select>
+				options={anios.map((a) => ({ value: a, label: String(a) }))}
+				ariaLabel="Año de liquidaciones ocasionales"
+				onchange={(valor) => cambiarAnio(Number(valor))}
+			/>
 		</label>
 
-		<select
-			class="univer-month-picker"
+		<UniverSelect
 			value={mesActivo}
-			onchange={(e) => irAMes(Number((e.currentTarget as HTMLSelectElement).value))}
+			options={MESES.map((nombre, i) => ({
+				value: i + 1,
+				label: `${nombre}${porMes.get(i + 1)?.cabecera ? '' : ' (vacío)'}${mesesSucios.has(i + 1) ? ' •' : ''}`
+			}))}
+			ariaLabel="Mes de liquidaciones ocasionales"
+			onchange={(valor) => irAMes(Number(valor))}
 			title="Ir al mes"
-		>
-			{#each MESES as nombre, i (nombre)}
-				<option value={i + 1}>
-					{nombre}{porMes.get(i + 1)?.cabecera ? '' : ' (vacío)'}{mesesSucios.has(i + 1)
-						? ' •'
-						: ''}
-				</option>
-			{/each}
-		</select>
+		/>
 
 		<!-- Las ACCIONES viven en el carril derecho, no aquí.
 		     Eran ocho botones en una fila que se recorta en silencio al

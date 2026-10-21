@@ -7,7 +7,7 @@
 	al de cierres, la navegación entre ellos se quedó sin hogar. Este selector
 	la devuelve, y desde CUALQUIERA de los cuatro, no solo desde cierres.
 
-	POR QUÉ UN <select> Y NO BOTONES: el lado derecho del toolbar va justo de
+	POR QUÉ UN SELECTOR COMPACTO Y NO BOTONES: el lado derecho del toolbar va justo de
 	espacio y `.univer-shell-header` recorta con `overflow: hidden` SIN
 	scrollbar — lo que desborda desaparece en silencio.
 
@@ -18,6 +18,7 @@
 -->
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import UniverSelect from './UniverSelect.svelte';
 
 	type Canvas = 'cierres' | 'ocasional' | 'adicionales' | 'ingresos';
 
@@ -62,11 +63,8 @@
 		(Object.keys(RUTAS) as Canvas[]).filter((c) => c !== actual)
 	);
 
-	async function elegir(e: Event) {
-		const sel = e.currentTarget as HTMLSelectElement;
-		const valor = sel.value;
-		// Vuelve a mostrar el placeholder aunque se cancele el salto.
-		sel.value = '';
+	async function elegir(valorCrudo: string | number) {
+		const valor = String(valorCrudo);
 		if (!valor) return;
 
 		if (extra && valor === extra.value) {
@@ -81,17 +79,16 @@
 	}
 </script>
 
-<select
-	class="univer-month-picker"
+<UniverSelect
 	value=""
+	placeholder="Ir a…"
+	ariaLabel="Ir a otro canvas de liquidaciones de terceros"
 	title="Abrir otro canvas del módulo con este mismo periodo"
+	options={[
+		...destinos.map((d) => ({ value: d, label: ETIQUETAS[d] })),
+		...(extra
+			? [{ value: extra.value, label: extra.label, disabled: extra.disabled }]
+			: [])
+	]}
 	onchange={elegir}
->
-	<option value="" disabled>Ir a…</option>
-	{#each destinos as d (d)}
-		<option value={d}>{ETIQUETAS[d]}</option>
-	{/each}
-	{#if extra}
-		<option value={extra.value} disabled={extra.disabled}>{extra.label}</option>
-	{/if}
-</select>
+/>

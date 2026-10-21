@@ -43,6 +43,7 @@
 		type SheetPatchApplied
 	} from '$lib/editor/canvas/sheet-session.svelte';
 	import UniverToolbar from '$lib/components/univer/UniverToolbar.svelte';
+	import UniverSelect from '$lib/components/univer/UniverSelect.svelte';
 	import UniverCanvasHost from '$lib/components/univer/UniverCanvasHost.svelte';
 	import PresenceAvatars from '$lib/components/PresenceAvatars.svelte';
 	import AutosaveIndicator from '$lib/components/AutosaveIndicator.svelte';
@@ -760,28 +761,24 @@
 	{#snippet actions()}
 		<label class="univer-year-picker">
 			<span>Año</span>
-			<select
+			<UniverSelect
 				value={anio}
-				onchange={(e) => cambiarAnio(Number((e.currentTarget as HTMLSelectElement).value))}
-			>
-				{#each anios as a (a)}
-					<option value={a}>{a}</option>
-				{/each}
-			</select>
+				options={anios.map((a) => ({ value: a, label: String(a) }))}
+				ariaLabel="Año de adicionales"
+				onchange={(valor) => cambiarAnio(Number(valor))}
+			/>
 		</label>
 
-		<select
-			class="univer-month-picker"
+		<UniverSelect
 			value={mesActivo}
-			onchange={(e) => irAMes(Number((e.currentTarget as HTMLSelectElement).value))}
+			options={MESES.map((nombre, i) => ({
+				value: i + 1,
+				label: `${nombre}${mesesSucios.has(i + 1) ? ' •' : ''}`
+			}))}
+			ariaLabel="Mes de adicionales"
+			onchange={(valor) => irAMes(Number(valor))}
 			title="Ir al mes"
-		>
-			{#each MESES as nombre, i (nombre)}
-				<option value={i + 1}>
-					{nombre}{mesesSucios.has(i + 1) ? ' •' : ''}
-				</option>
-			{/each}
-		</select>
+		/>
 
 		<button
 			class="univer-btn univer-btn-dark"

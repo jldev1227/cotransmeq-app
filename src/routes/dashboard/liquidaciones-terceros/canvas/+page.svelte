@@ -62,6 +62,7 @@
 	import { esEditable, nombresUnicos } from '$lib/editor/builders/cierres-finales-identidad';
 	import { colorDeHoja } from '$lib/editor/builders/cierres-finales-estado';
 	import UniverToolbar from '$lib/components/univer/UniverToolbar.svelte';
+	import UniverSelect from '$lib/components/univer/UniverSelect.svelte';
 	import UniverCanvasHost from '$lib/components/univer/UniverCanvasHost.svelte';
 	import UniverSideRail from '$lib/components/univer/UniverSideRail.svelte';
 	import UniverActionOverlay, {
@@ -1858,26 +1859,21 @@
 	{#snippet actions()}
 		<label class="univer-year-picker">
 			<span>Año</span>
-			<select
+			<UniverSelect
 				value={anio}
-				onchange={(e) => cambiarPeriodo(Number((e.currentTarget as HTMLSelectElement).value), mes)}
-			>
-				{#each anios as a (a)}
-					<option value={a}>{a}</option>
-				{/each}
-			</select>
+				options={anios.map((a) => ({ value: a, label: String(a) }))}
+				ariaLabel="Año de cierres finales"
+				onchange={(valor) => cambiarPeriodo(Number(valor), mes)}
+			/>
 		</label>
 
-		<select
-			class="univer-month-picker"
+		<UniverSelect
 			value={mes}
-			onchange={(e) => cambiarPeriodo(anio, Number((e.currentTarget as HTMLSelectElement).value))}
+			options={MESES.map((nombre, i) => ({ value: i + 1, label: nombre }))}
+			ariaLabel="Mes de cierres finales"
+			onchange={(valor) => cambiarPeriodo(anio, Number(valor))}
 			title="Cambiar de periodo (remonta el libro)"
-		>
-			{#each MESES as nombre, i (nombre)}
-				<option value={i + 1}>{nombre}</option>
-			{/each}
-		</select>
+		/>
 
 		<div class="univer-divider-v"></div>
 

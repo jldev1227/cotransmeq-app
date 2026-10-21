@@ -93,6 +93,7 @@
 	import { filaDeAncla, numeroDeCapa } from '$lib/editor/business/zona-libre';
 	import { authStore } from '$lib/stores/auth';
 	import UniverToolbar from '$lib/components/univer/UniverToolbar.svelte';
+	import UniverSelect from '$lib/components/univer/UniverSelect.svelte';
 	import UniverCanvasHost from '$lib/components/univer/UniverCanvasHost.svelte';
 	import UniverSideRail from '$lib/components/univer/UniverSideRail.svelte';
 	import ModalFilasIngresos from '$lib/components/univer/ModalFilasIngresos.svelte';
@@ -1288,39 +1289,35 @@
 	{#snippet actions()}
 		<label class="univer-year-picker">
 			<span>Año</span>
-			<select
+			<UniverSelect
 				value={anio}
-				onchange={(e) => cambiarAnio(Number((e.currentTarget as HTMLSelectElement).value))}
-			>
-				{#each anios as a (a)}
-					<option value={a}>{a}</option>
-				{/each}
-			</select>
+				options={anios.map((a) => ({ value: a, label: String(a) }))}
+				ariaLabel="Año de ingresos"
+				onchange={(valor) => cambiarAnio(Number(valor))}
+			/>
 		</label>
 
-		<select
-			class="univer-month-picker"
+		<UniverSelect
 			value={mesActivo}
-			onchange={(e) => irAMes(Number((e.currentTarget as HTMLSelectElement).value))}
+			options={MESES.map((nombre, i) => ({
+				value: i + 1,
+				label: `${nombre}${mesesSucios.has(i + 1) ? ' •' : ''}`
+			}))}
+			ariaLabel="Mes de ingresos"
+			onchange={(valor) => irAMes(Number(valor))}
 			title="Ir al mes"
-		>
-			{#each MESES as nombre, i (nombre)}
-				<option value={i + 1}>
-					{nombre}{mesesSucios.has(i + 1) ? ' •' : ''}
-				</option>
-			{/each}
-		</select>
+		/>
 
-		<select
-			class="univer-month-picker"
+		<UniverSelect
 			value={hojaActiva}
-			onchange={(e) =>
-				irAMes(mesActivo, (e.currentTarget as HTMLSelectElement).value as HojaIngreso)}
+			options={[
+				{ value: 'INGRESOS', label: 'Otros ingresos' },
+				{ value: 'ADICIONALES', label: 'Adicionales' }
+			]}
+			ariaLabel="Hoja de ingresos"
+			onchange={(valor) => irAMes(mesActivo, String(valor) as HojaIngreso)}
 			title="Ir a la hoja"
-		>
-			<option value="INGRESOS">Otros ingresos</option>
-			<option value="ADICIONALES">Adicionales</option>
-		</select>
+		/>
 
 		<!-- Los tres porcentajes de la cabecera del mes. Van aquí y no en la
 		     hoja porque son de TODO el documento: cada uno entra en las fórmulas

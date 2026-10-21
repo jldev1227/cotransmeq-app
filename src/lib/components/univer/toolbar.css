@@ -154,11 +154,9 @@
 	background: var(--accion-hover);
 }
 
-/* ── Selectores de periodo ────────────────────────────────────────────
-   Estaban DUPLICADOS en el <style> scoped de cada canvas, así que una
-   página que usara estas clases sin copiarlas las renderizaba sin estilo:
-   el `<span>` de la etiqueta salía en color heredado sobre el fondo
-   oscuro del toolbar, es decir invisible. Aquí van una sola vez. */
+/* ── Etiquetas de los selectores de periodo ──────────────────────────
+   El control y su menú viven en `UniverSelect`; aquí solo se alinea la
+   etiqueta («Año», «Corte»…) con el disparador compartido. */
 .univer-year-picker {
 	display: inline-flex;
 	align-items: center;
@@ -169,23 +167,6 @@
 	text-transform: uppercase;
 	letter-spacing: 0.06em;
 	white-space: nowrap;
-}
-
-.univer-year-picker select,
-.univer-month-picker {
-	background: rgba(255, 255, 255, 0.08);
-	color: #fff;
-	border: 1px solid rgba(255, 255, 255, 0.16);
-	border-radius: 10px;
-	padding: 0.3rem 0.5rem;
-	font-size: 0.78rem;
-	font-weight: 600;
-	cursor: pointer;
-}
-
-.univer-year-picker select:hover,
-.univer-month-picker:hover {
-	border-color: rgba(255, 255, 255, 0.32);
 }
 
 /*
@@ -426,10 +407,6 @@
 	}
 	.univer-btn {
 		padding: 6px 10px;
-	}
-	.univer-year-picker select,
-	.univer-month-picker {
-		padding: 0.28rem 0.4rem;
 	}
 }
 

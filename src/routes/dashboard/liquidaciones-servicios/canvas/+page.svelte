@@ -26,6 +26,7 @@
 	import { toast } from 'svelte-sonner';
 
 	import UniverToolbar from '$lib/components/univer/UniverToolbar.svelte';
+	import UniverSelect from '$lib/components/univer/UniverSelect.svelte';
 	import UniverCanvasHost from '$lib/components/univer/UniverCanvasHost.svelte';
 	import UniverSideRail from '$lib/components/univer/UniverSideRail.svelte';
 	import UniverActionOverlay, {
@@ -1334,20 +1335,21 @@
 	inerte={!!solicitudEditor}
 >
 	{#snippet actions()}
-		<select
-			class="hs-select"
+		<UniverSelect
 			value={anio}
-			onchange={(e) => {
-				const v = (e.currentTarget as HTMLSelectElement).value;
+			options={[
+				{ value: '', label: 'Todo el histórico' },
+				...Array.from({ length: 4 }, (_, i) => {
+					const y = new Date().getFullYear() - i;
+					return { value: String(y), label: String(y) };
+				})
+			]}
+			ariaLabel="Filtrar liquidaciones por año"
+			onchange={(valor) => {
+				const v = String(valor);
 				goto(v ? `?anio=${v}` : '?', { replaceState: true, noScroll: true }).then(loadInicial);
 			}}
-			aria-label="Filtrar por año"
-		>
-			<option value="">Todo el histórico</option>
-			{#each Array.from({ length: 4 }, (_, i) => new Date().getFullYear() - i) as y}
-				<option value={String(y)}>{y}</option>
-			{/each}
-		</select>
+		/>
 
 		{#if seleccionLiq.length > 0}
 			<span class="univer-badge">
@@ -1886,20 +1888,6 @@
 		min-height: 0;
 		display: flex;
 		flex-direction: column;
-	}
-
-	.hs-select {
-		height: 30px;
-		border-radius: 6px;
-		border: 1px solid rgba(255, 255, 255, 0.25);
-		background: rgba(255, 255, 255, 0.1);
-		color: #fff;
-		font-size: 12px;
-		padding: 0 8px;
-		cursor: pointer;
-	}
-	.hs-select option {
-		color: #0f172a;
 	}
 
 	.hs-conexion {
