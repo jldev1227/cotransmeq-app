@@ -44,7 +44,7 @@ export function htmlRecuperacion(enlace: string, nombre?: string | null, logoUrl
 		eyebrow: 'Tu cuenta',
 		titulo: 'Restablece tu contraseña',
 		subtitulo: 'Un enlace de un solo uso para elegir una nueva.',
-		mascota: 'saludando',
+		mascota: 'correo-enviado',
 		saludo: saludo ? `Hola, <strong>${saludo}</strong>.` : 'Hola.',
 		parrafos: [
 			`Recibimos una solicitud para restablecer la contraseña de tu cuenta en el sistema de gestión de ${EMPRESA}. Usa el botón para elegir una nueva.`

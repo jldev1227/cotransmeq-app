@@ -44,6 +44,8 @@ ninguna sesión; ver [rutas-y-pantallas.md](./rutas-y-pantallas.md#páginas-púb
   la barra (`entradaDirectaAlLogin()`: el documento con que arrancó la pestaña
   fue `/` o `/login`, sin referrer del mismo origen y fuera de la PWA
   instalada). Un login administrativo correcto borra la marca.
+- **Correo.** Antes de enviar el login se recortan los espacios y se convierte
+  a minúsculas; el backend repite la normalización antes de buscar la cuenta.
 - **«Recordarme en este dispositivo»** solo recuerda el correo
   (`remember_me`, `remembered_email`). No se envía `rememberMe` al backend, así
   que el token dura siempre 30 días (el backend daría 90 con ese flag).
@@ -412,7 +414,8 @@ contraseña la escribe el backend.
    15 min) y por IP (15 cada 15 min).
 2. Esa ruta pregunta al backend si la cuenta existe
    (`POST /api/auth/recuperacion/lookup`), firma el enlace y lo manda por
-   Resend. El token es `v1.<payload>.<firma>`: HMAC-SHA256 con
+   Resend con la imagen PNG `correo-enviado` servida desde `/mascot/png/`. El
+   token es `v1.<payload>.<firma>`: HMAC-SHA256 con
    `PASSWORD_RECOVERY_SECRET` (mínimo 32 caracteres, solo del front), con
    correo, `jti` y caducidad de 30 minutos. Si el backend no responde se manda
    igual: el último paso lo rechazaría.

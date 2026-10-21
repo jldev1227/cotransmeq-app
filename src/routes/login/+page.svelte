@@ -147,21 +147,21 @@
 		// El error anterior solo se limpia al reintentar, nunca por teclear.
 		formError = null;
 
-		const correoLimpio = correo.trim();
-		if (!correoLimpio || !password) {
+		const correoNormalizado = correo.trim().toLowerCase();
+		if (!correoNormalizado || !password) {
 			formError = 'Ingresa tu correo y tu contraseña para continuar.';
 			return;
 		}
 
 		if (remember) {
 			localStorage.setItem('remember_me', 'true');
-			localStorage.setItem('remembered_email', correoLimpio);
+			localStorage.setItem('remembered_email', correoNormalizado);
 		} else {
 			localStorage.removeItem('remember_me');
 			localStorage.removeItem('remembered_email');
 		}
 
-		const success = await authStore.login(correoLimpio, password);
+		const success = await authStore.login(correoNormalizado, password);
 
 		if (!success) {
 			// Se muestra el detalle que devolvió la API y el formulario queda
