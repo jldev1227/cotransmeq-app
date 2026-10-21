@@ -33,6 +33,7 @@
 
 	let abierto = $state(false);
 	let cursor = $state(0);
+	let contenedor = $state<HTMLDivElement | null>(null);
 	let trigger = $state<HTMLButtonElement | null>(null);
 
 	const indiceSeleccionado = $derived(options.findIndex((o) => String(o.value) === String(value)));
@@ -68,6 +69,11 @@
 		void onchange(opcion.value);
 	}
 
+	function cerrarSiEsFuera(e: PointerEvent) {
+		if (!abierto || !contenedor || e.composedPath().includes(contenedor)) return;
+		cerrar();
+	}
+
 	function teclas(e: KeyboardEvent) {
 		if (disabled) return;
 		if (!abierto && ['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) {
@@ -100,7 +106,9 @@
 	}
 </script>
 
-<div class="univer-select {className}" class:univer-select--open={abierto}>
+<svelte:window onpointerdown={cerrarSiEsFuera} />
+
+<div bind:this={contenedor} class="univer-select {className}" class:univer-select--open={abierto}>
 	<button
 		bind:this={trigger}
 		type="button"
@@ -122,7 +130,6 @@
 	</button>
 
 	{#if abierto}
-		<div class="univer-select__outside" role="presentation" onclick={() => cerrar()}></div>
 		<div class="univer-select__menu" role="listbox" aria-label={ariaLabel}>
 			{#each options as opcion, i (`${opcion.value}-${i}`)}
 				<button
@@ -219,12 +226,6 @@
 
 	.univer-select__placeholder {
 		color: rgba(255, 255, 255, 0.72);
-	}
-
-	.univer-select__outside {
-		position: fixed;
-		inset: 0;
-		z-index: 60;
 	}
 
 	.univer-select__menu {
